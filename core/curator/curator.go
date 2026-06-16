@@ -1,7 +1,6 @@
-// Package curator drives the Memory port around a conversation turn: it recalls
-// background to prime the backend before a turn and records the turn afterwards.
-// It is the default, minimal implementation of the curation seam
-// (contracts.CurationHook); a richer Orchestrator plugin can replace it later.
+// Package curator drives the Memory port around a turn: it recalls background to
+// prime the backend before a turn and records the turn afterwards. It is the
+// default, minimal implementation of the curation seam (contracts.CurationHook).
 package curator
 
 import (
@@ -83,21 +82,34 @@ func (c *Curator) Observe(ctx context.Context, p contracts.Prompt, reply string)
 	})
 }
 
-// Consolidate satisfies contracts.CurationHook. The default curator keeps a
-// bounded rolling transcript inline (see Observe) and has nothing to consolidate
-// yet; a future Orchestrator plugin overrides this with summarisation/pruning.
+// Consolidate satisfies contracts.CurationHook. The default keeps a bounded
+// rolling transcript inline (see Observe), so there is nothing to consolidate; a
+// richer hook overrides this with summarisation/pruning.
 func (c *Curator) Consolidate(ctx context.Context) error { return nil }
 
 var _ contracts.CurationHook = (*Curator)(nil)
 
+// Transcript line budgets (in runes) for the inbound message and the reply.
+const (
+	maxContentChars = 100
+	maxReplyChars   = 200
+)
+
+// turnLine renders one transcript line. The author and content are
+// attacker-controlled (a display name, a message), so their " → " separators are
+// defanged to "->" — collapsing whitespace already strips newlines — so a turn
+// can't forge extra "author → reply" turns inside its own line.
 func turnLine(author, content, reply string) string {
-	return fmt.Sprintf("- %s: %s → %s", author, oneline(content, 100), oneline(reply, 200))
+	author = strings.ReplaceAll(oneline(author, maxContentChars), "→", "->")
+	content = strings.ReplaceAll(oneline(content, maxContentChars), "→", "->")
+	return fmt.Sprintf("- %s: %s → %s", author, content, oneline(reply, maxReplyChars))
 }
 
+// oneline collapses s to a single space-separated line capped at max runes.
 func oneline(s string, max int) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if len(s) > max {
-		s = s[:max] + "…"
+	if r := []rune(s); len(r) > max {
+		s = string(r[:max]) + "…"
 	}
 	return s
 }

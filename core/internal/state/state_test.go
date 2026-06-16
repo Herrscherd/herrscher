@@ -3,6 +3,7 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -149,5 +150,26 @@ func TestSessionProjectRoundTrips(t *testing.T) {
 	got, ok := reloaded.FindSession("x")
 	if !ok || got.Project != "myproj" {
 		t.Fatalf("project not persisted: %+v", got)
+	}
+}
+
+func TestBoundGateways(t *testing.T) {
+	cases := []struct {
+		name string
+		sess Session
+		want []string
+	}{
+		{"explicit", Session{Gateways: []string{"terminal"}}, []string{"terminal"}},
+		{"both", Session{Gateways: []string{"discord", "terminal"}}, []string{"discord", "terminal"}},
+		{"legacy with channel", Session{ChannelID: "c1"}, []string{"discord"}},
+		{"empty no channel", Session{}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.sess.BoundGateways()
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("BoundGateways() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

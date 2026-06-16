@@ -13,6 +13,7 @@ func TestLoadEnvFile(t *testing.T) {
 		"\n" +
 		"DCTL_TEST_TOKEN=abc.def-ghi\n" +
 		"export DCTL_TEST_EXPORTED=fromfile\n" +
+		"export\tDCTL_TEST_TABEXPORT=tabbed\n" +
 		`DCTL_TEST_QUOTED="a b c"` + "\n" +
 		"DCTL_TEST_EQUALS=k=v=w\n" +
 		"   DCTL_TEST_SPACED   =  trimmed  \n" +
@@ -21,7 +22,7 @@ func TestLoadEnvFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, k := range []string{
-		"DCTL_TEST_TOKEN", "DCTL_TEST_EXPORTED", "DCTL_TEST_QUOTED",
+		"DCTL_TEST_TOKEN", "DCTL_TEST_EXPORTED", "DCTL_TEST_TABEXPORT", "DCTL_TEST_QUOTED",
 		"DCTL_TEST_EQUALS", "DCTL_TEST_SPACED", "DCTL_TEST_COMMENTED",
 	} {
 		os.Unsetenv(k)
@@ -33,6 +34,7 @@ func TestLoadEnvFile(t *testing.T) {
 	cases := map[string]string{
 		"DCTL_TEST_TOKEN":     "abc.def-ghi",
 		"DCTL_TEST_EXPORTED":  "fromfile", // leading `export ` stripped
+		"DCTL_TEST_TABEXPORT": "tabbed",   // `export\t` (tab) stripped too
 		"DCTL_TEST_QUOTED":    "a b c",    // surrounding quotes stripped, space preserved
 		"DCTL_TEST_EQUALS":    "k=v=w",    // only the first '=' splits
 		"DCTL_TEST_SPACED":    "trimmed",  // key and value trimmed

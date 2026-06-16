@@ -59,6 +59,12 @@ func TestResolveStackExtrasDeduped(t *testing.T) {
 	}
 }
 
+func TestResolveStackRejectsFlagLikeExtra(t *testing.T) {
+	if _, err := resolveStack(map[string]string{"gateway": "discord"}, []string{"-insecure"}); err == nil {
+		t.Fatal("expected error for flag-like --with value")
+	}
+}
+
 func TestResolveStackUnknownKind(t *testing.T) {
 	if _, err := resolveStack(map[string]string{"gateway": "bogus"}, nil); err == nil {
 		t.Fatal("expected error for unknown kind")

@@ -126,7 +126,8 @@ func resolveHost(explicit string) (string, error) {
 // rebuild applies the manifest change: go get the module (on add), then build.
 func rebuild(dir, sub, module string) int {
 	if sub == "add" {
-		if code := run(dir, "go", "get", module); code != 0 {
+		// `--` stops a module path that begins with `-` being read as a flag.
+		if code := run(dir, "go", "get", "--", module); code != 0 {
 			return code
 		}
 	}

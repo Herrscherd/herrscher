@@ -92,6 +92,23 @@ func removePlugin(src, module string) (string, bool, error) {
 	return strings.Join(out, "\n"), changed, nil
 }
 
+// setPlugins replaces the whole managed region with blank imports for exactly
+// the given modules, in order. It is the bulk counterpart to add/removePlugin,
+// used by `herrscher init` to stamp a chosen stack from scratch.
+func setPlugins(src string, modules []string) (string, error) {
+	lines := strings.Split(src, "\n")
+	_, begin, end, err := region(src)
+	if err != nil {
+		return src, err
+	}
+	out := append([]string{}, lines[:begin+1]...)
+	for _, m := range modules {
+		out = append(out, importLine(m))
+	}
+	out = append(out, lines[end:]...)
+	return strings.Join(out, "\n"), nil
+}
+
 // region returns the lines strictly between the markers, plus their indices.
 func region(src string) (lines []string, begin, end int, err error) {
 	all := strings.Split(src, "\n")

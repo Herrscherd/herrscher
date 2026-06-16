@@ -46,6 +46,8 @@ func main() {
 
 	// Management verbs need no Discord client; dispatch them first.
 	switch cmd {
+	case "init":
+		os.Exit(manage.InitCmd(args))
 	case "plugin":
 		os.Exit(manage.PluginCmd(args))
 	case "update":
@@ -243,6 +245,12 @@ func usage() {
                                               restart it, or update = (git pull +)
                                               rebuild from --source (default cwd)
                                               then restart — run after a merge
+  herrscher init [--gateway K] [--backend K] [--memory K] [--orchestrator K]
+               [--with MODULE] [--list] [--no-build]
+                                              compose the plugin stack from scratch
+                                              (default: discord+claude+obsidian+
+                                              orchestrator), seed .env, then build;
+                                              kind "none" drops a category
   herrscher plugin <list|add|remove> [module]  edit the compiled-in plugin set and rebuild
   herrscher update                            bump every compiled-in plugin and rebuild
   herrscher install [-- ARGS]                 build the host then run its service install

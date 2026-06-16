@@ -16,7 +16,7 @@ func UpdateCmd(args []string) int {
 	hostDir := fs.String("host", "", "path to the host module")
 	noBuild := fs.Bool("no-build", false, "go get -u the plugins but skip tidy/build")
 	if err := fs.Parse(args); err != nil {
-		return 2
+		return parseExit(err)
 	}
 
 	dir, err := resolveHost(*hostDir)
@@ -63,7 +63,7 @@ func InstallCmd(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	hostDir := fs.String("host", "", "path to the host module")
 	if err := fs.Parse(args); err != nil {
-		return 2
+		return parseExit(err)
 	}
 	passthrough := fs.Args()
 

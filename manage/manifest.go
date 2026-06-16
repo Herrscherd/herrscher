@@ -116,8 +116,14 @@ func region(src string) (lines []string, begin, end int, err error) {
 	for i, line := range all {
 		switch strings.TrimSpace(line) {
 		case beginMarker:
+			if begin >= 0 {
+				return nil, begin, end, fmt.Errorf("duplicate %q marker", beginMarker)
+			}
 			begin = i
 		case endMarker:
+			if end >= 0 {
+				return nil, begin, end, fmt.Errorf("duplicate %q marker", endMarker)
+			}
 			end = i
 		}
 	}

@@ -5,12 +5,24 @@
 package manage
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
+
+// parseExit reports the exit code for a flag.Parse error: 0 when the user asked
+// for help (-h/--help), 2 for a genuine parse error. Callers use it so help is a
+// success, not a usage failure.
+func parseExit(err error) int {
+	if errors.Is(err, flag.ErrHelp) {
+		return 0
+	}
+	return 2
+}
 
 // PluginCmd lists, adds or removes a compiled-in plugin in the managed plugins.go,
 // rebuilding the binary on a change.
@@ -29,7 +41,7 @@ func PluginCmd(args []string) int {
 	rem := args[1:]
 	for len(rem) > 0 {
 		if err := fs.Parse(rem); err != nil {
-			return 2
+			return parseExit(err)
 		}
 		rem = fs.Args()
 		if len(rem) == 0 {
@@ -141,7 +153,7 @@ func run(dir string, name string, args ...string) int {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	fmt.Fprintf(os.Stderr, "+ %s %v\n", name, args)
+	fmt.Fprintln(os.Stderr, "+ "+strings.Join(append([]string{name}, args...), " "))
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s failed: %v\n", name, err)
 		return 1

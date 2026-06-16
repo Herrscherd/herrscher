@@ -7,15 +7,15 @@ model, and posts the answer back — streaming tool activity and cost as it goes
 Every session can run in its own git worktree, so an agent works on real code in
 isolation.
 
-This is the **umbrella repo**: it holds no code of its own, only an overview and
-symlinks to the member repos. Check the family out side by side and you can browse
-the whole platform from one place.
+This is the **single binary**: the agnostic domain (`core`), the composition root
+and daemon, and the plugin-management CLI all live here in one module. The
+swappable edges — the channel gateway and the model backend — stay in their own
+repos and are compiled in.
 
-> Built as a **polyrepo family** wired with hexagonal architecture: a narrow
-> contract package in the middle, interchangeable edges (the channel, the model),
-> an agnostic domain, and a host that bolts them together. Swapping Discord for
-> Slack, or Claude for another model, is a one-file wiring change — never a domain
-> rewrite.
+> Built with hexagonal architecture: a narrow contract package in the middle,
+> interchangeable edges (the channel, the model), an agnostic domain, and a host
+> that bolts them together. Swapping Discord for Slack, or Claude for another
+> model, is a one-file wiring change — never a domain rewrite.
 
 ---
 
@@ -30,7 +30,7 @@ the whole platform from one place.
 - [Session lifecycle](#session-lifecycle)
 - [Installation](#installation)
 - [CLI reference](#cli-reference)
-- [Managing plugins](#managing-plugins-the-herrscher-cli)
+- [Managing plugins](#managing-plugins-the-plugin--update--install-verbs)
 - [Layout & wiring](#layout--wiring)
 - [Configuration](#configuration)
 - [Roadmap](#roadmap)
@@ -51,8 +51,8 @@ Two facts hold the whole design together:
    implement, and contains zero platform-specific mechanics. No "Discord", no
    "Claude" — just neutral ports and types.
 2. **All dependency arrows point toward `contracts`.** The core depends on no
-   edge; the edges depend on no core. Only the host (`herrscherd`) ever sees both
-   concrete types at once, in a single wiring file.
+   edge; the edges depend on no core. Only the host (the binary's `main`) ever
+   sees both concrete types at once, in a single wiring file.
 
 ---
 
@@ -75,7 +75,7 @@ flowchart TB
 
     CONTRACTS{{"<b>contracts</b><br/>ports + neutral types<br/>zero deps · zero logic"}}
     CORE["<b>core</b><br/>the agnostic domain<br/>sessions · worktrees · supervision"]
-    HOST["<b>herrscherd</b><br/>the only main()<br/>composition root + daemon"]
+    HOST["<b>herrscher</b><br/>the only main()<br/>composition root + daemon"]
 
     GW       -- implements --> CONTRACTS
     BE       -- implements --> CONTRACTS
@@ -128,8 +128,8 @@ a blank import and a rebuild, no domain change.
 ```mermaid
 flowchart LR
     A["author a plugin<br/>(implements a contracts port)"]
-    B["add blank import<br/>in herrscherd/plugins.go<br/>between the markers"]
-    C["go build -o herrscherd ."]
+    B["add blank import<br/>in plugins.go<br/>between the markers"]
+    C["go build -o herrscher ."]
     D["plugin self-registers<br/>via init() → contracts.Default"]
     E["host discovers it<br/>at startup"]
     A --> B --> C --> D --> E
@@ -143,21 +143,21 @@ falls back to plain text instead of crashing.
 
 ## The members
 
-The umbrella tracks only the **agnostic skeleton** — the parts that know neither a
-channel nor a model. They live under the `@herrscher/` scope as symlinks:
+This repo holds the **binary** and everything agnostic that ships inside it. One
+external module stays separate by design: `contracts`, so third-party plugins can
+import the ports without pulling in the host.
 
-| Symlink | Repo | Role |
-|---------|------|------|
-| `@herrscher/contracts/` | [herrscher-contracts] | The ports: interfaces + neutral types. Zero deps, zero logic. |
-| `@herrscher/core/` | [herrscher-core] | The agnostic domain: sessions, channels, worktrees, supervision. |
-| `@herrscher/herrscherd/` | [herrscherd] | The composition root + CLI — the only binary, the daemon. |
+| Location | Repo | Role |
+|----------|------|------|
+| `core/` (this repo) | — | The agnostic domain: sessions, channels, worktrees, supervision. |
+| `main.go`, `serve.go`, … (this repo) | — | The composition root + Discord CLI — the daemon. |
+| `manage/` (this repo) | — | The plugin-composition CLI (`plugin` / `update` / `install`). |
+| external module | [herrscher-contracts] | The ports: interfaces + neutral types. Zero deps, zero logic. |
 
 [herrscher-contracts]: https://github.com/Herrscherd/herrscher-contracts
-[herrscher-core]: https://github.com/Herrscherd/herrscher-core
-[herrscherd]: https://github.com/Herrscherd/herrscherd
 
 The **edges** are interchangeable plugins, each its own repo, **not** part of the
-umbrella — they are the official Gateway and Backend listed in the table above.
+binary's module — they are the official Gateway and Backend listed in the table above.
 [`dctl`] is not a family member either: it is an external dependency, the
 low-level Discord REST/WebSocket client the gateway consumes (currently being
 rewritten from scratch).
@@ -216,13 +216,13 @@ install as a service; it supervises one **`bridge`** child process per session.
 
 ```mermaid
 flowchart TB
-    START(["herrscherd serve"]) --> INIT["load state.json · seed allowlist<br/>build supervisor + command handler<br/>register slash commands with the gateway"]
+    START(["herrscher serve"]) --> INIT["load state.json · seed allowlist<br/>build supervisor + command handler<br/>register slash commands with the gateway"]
     INIT --> HEALTH["start /health endpoint<br/>+ ping loop (30s) + status embed (60s)"]
     INIT --> LOOP{"reconnect loop<br/>Source.Run(ctx)"}
     LOOP -->|InboundCommand| DISPATCH["dispatch off-loop (goroutine)<br/>so one slow op can't stall others"]
     DISPATCH --> CMDS["/session create·close·list·who·allow<br/>/set home·workspace·source<br/>/workspace list·remotes<br/>/allow · /service restart·update"]
     CMDS -->|/session create| SUP["supervisor.Start(session)"]
-    SUP --> CHILD["spawn child:<br/>herrscherd bridge -c CHANNEL --cmd ...<br/>(in the session worktree)"]
+    SUP --> CHILD["spawn child:<br/>herrscher bridge -c CHANNEL --cmd ...<br/>(in the session worktree)"]
     CHILD -->|exits| RESTART["restart in 3s"] --> CHILD
     LOOP -->|gateway error| RECON["reconnect in 3s"] --> LOOP
 ```
@@ -231,7 +231,7 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    P(["herrscherd bridge -c CHANNEL"]) --> READ["Read(channel, 100, lastID)<br/>every --i seconds"]
+    P(["herrscher bridge -c CHANNEL"]) --> READ["Read(channel, 100, lastID)<br/>every --i seconds"]
     READ --> EACH{"for each new message"}
     EACH -->|bot author| SKIP1["skip (no loops)"] --> EACH
     EACH -->|not allowed| SKIP2["journal author, skip"] --> EACH
@@ -286,8 +286,8 @@ stateDiagram-v2
 ```bash
 # clone the whole family next to each other
 mkdir herrscher-dev && cd herrscher-dev
-for r in herrscher herrscher-contracts herrscher-core herrscherd \
-         herrscher-cli herrscher-discord-gateway herrscher-claude-backend dctl; do
+for r in herrscher herrscher-contracts \
+         herrscher-discord-gateway herrscher-claude-backend dctl; do
   git clone https://github.com/Herrscherd/$r.git
 done
 ```
@@ -295,8 +295,8 @@ done
 ### Build the single binary
 
 ```bash
-cd herrscherd
-go build -o herrscherd .          # the only binary; plugins are compiled in
+cd herrscher
+go build -o herrscher .          # the only binary; plugins are compiled in
 ```
 
 ### Run it directly (foreground)
@@ -305,7 +305,7 @@ go build -o herrscherd .          # the only binary; plugins are compiled in
 export DISCORD_BOT_TOKEN=...      # required
 export DCTL_OWNER_ID=...          # optional: seeds the allowlist with you
 
-./herrscherd serve --health-addr :8787
+./herrscher serve --health-addr :8787
 ```
 
 Then in Discord: `/set home #your-category`, `/session create name:hello`, and
@@ -313,11 +313,11 @@ start talking in the session channel.
 
 ### Install as a boot-started service (recommended)
 
-`herrscherd service install` writes a native service for your OS and a `0600`
+`herrscher service install` writes a native service for your OS and a `0600`
 secrets template — it never bakes the token into the unit file.
 
 ```bash
-./herrscherd service install \
+./herrscher service install \
   --cmd "claude --model claude-opus-4-8 --effort low" \
   --health-addr :8787
 ```
@@ -326,7 +326,7 @@ secrets template — it never bakes the token into the unit file.
 |----|-----------------|
 | **Linux** | systemd **user** unit `~/.config/systemd/user/dctl.service` (`Restart=always`), enables it, runs `loginctl enable-linger` so it survives logout |
 | **macOS** | launchd LaunchAgent `~/Library/LaunchAgents/com.vskstudio.dctl.plist` (`RunAtLoad`, `KeepAlive`) |
-| **Windows** | a Task Scheduler task `dctl` (on-logon trigger) wrapping `herrscherd serve` |
+| **Windows** | a Task Scheduler task `dctl` (on-logon trigger) wrapping `herrscher serve` |
 
 It also scaffolds (never clobbering existing files):
 
@@ -338,16 +338,16 @@ Then fill the token and (re)start:
 
 ```bash
 $EDITOR ~/.config/dctl/dctl.env      # set DISCORD_BOT_TOKEN
-./herrscherd service restart
-./herrscherd service status
+./herrscher service restart
+./herrscher service status
 ```
 
 ### Update an installed service
 
 ```bash
-cd herrscherd
-./herrscherd service update           # git pull --ff-only, rebuild the installed binary, restart
-./herrscherd service update --no-pull # rebuild from local source only
+cd herrscher
+./herrscher service update           # git pull --ff-only, rebuild the installed binary, restart
+./herrscher service update --no-pull # rebuild from local source only
 ```
 
 `service update` rebuilds the **installed** binary (not the one you invoked) and
@@ -357,14 +357,14 @@ daemon being killed mid-restart.
 ### Uninstall
 
 ```bash
-./herrscherd service uninstall        # disable + remove the unit (leaves your config/secrets)
+./herrscher service uninstall        # disable + remove the unit (leaves your config/secrets)
 ```
 
 ---
 
 ## CLI reference
 
-`herrscherd <command>`. The daemon doubles as a token-frugal Discord CLI; output
+`herrscher <command>`. The daemon doubles as a token-frugal Discord CLI; output
 is deliberately minimal (ids and one-line messages) so an agent reading stdout
 spends few tokens.
 
@@ -387,13 +387,11 @@ channel), `DCTL_OWNER_ID` (seed allowlist), `DCTL_STATE_DIR` (state dir, default
 
 ---
 
-## Managing plugins (the `herrscher` CLI)
+## Managing plugins (the `plugin` / `update` / `install` verbs)
 
-A separate facade CLI — [herrscher-cli] — manages the host's plugin composition.
-It does **not** run the runtime; it edits `herrscherd/plugins.go` (the blank-import
-list between the `herrscher:plugins` / `herrscher:end` markers) and rebuilds.
-
-[herrscher-cli]: https://github.com/Herrscherd/herrscher-cli
+The same binary manages its own plugin composition (the `manage/` package). These
+verbs do **not** run the runtime; they edit `plugins.go` (the blank-import list
+between the `herrscher:plugins` / `herrscher:end` markers) and rebuild.
 
 ```bash
 herrscher plugin list                              # compiled-in plugins
@@ -404,35 +402,32 @@ herrscher install -- --health-addr :8787           # build the host, then delega
 ```
 
 `herrscher update` refreshes the **plugin** modules (the counterpart to
-`herrscherd service update`, which pulls the host's own source). `herrscher
-install` builds the binary then forwards everything after `--` to `herrscherd
+`herrscher service update`, which pulls the host's own source). `herrscher
+install` builds the binary then forwards everything after `--` to `herrscher
 service install` — it never reimplements the systemd/launchd glue.
 
 ---
 
 ## Layout & wiring
 
-Each member is its own Go module with its own `go.mod`. In development they are
-stitched together with `replace` directives at sibling paths, so the repos must
+The binary is one Go module (`core/`, `manage/`, and the root `main` package).
+The contracts module and the edge plugins are separate modules, stitched in
+during development with `replace` directives at sibling paths, so the repos must
 sit side by side:
 
 ```
 herrscher-dev/
-├── herrscher/                 ← you are here (symlinks + this README)
-│   └── @herrscher/            ← the agnostic skeleton
-│       ├── contracts/   → ../../herrscher-contracts
-│       ├── core/        → ../../herrscher-core
-│       └── herrscherd/  → ../../herrscherd
-├── herrscher-contracts/
-├── herrscher-core/
-├── herrscherd/                ← the only main(); imports core + plugins + dctl
-├── herrscher-cli/             ← plugin-composition facade (separate)
-├── herrscher-discord-gateway/ ← Gateway plugin (not in the umbrella)
-├── herrscher-claude-backend/  ← Backend plugin (not in the umbrella)
+├── herrscher/                 ← the only main(); core + manage + plugins.go (this repo)
+│   ├── core/                  ← the agnostic domain
+│   └── manage/                ← the plugin-composition CLI
+├── herrscher-contracts/       ← the ports (separate module)
+├── herrscher-discord-gateway/ ← Gateway plugin (separate module)
+├── herrscher-claude-backend/  ← Backend plugin (separate module)
 └── dctl/                      ← external dependency (Discord client, being rewritten)
 ```
 
-The symlinks resolve only when the siblings are checked out alongside this repo.
+The `replace` directives resolve only when the siblings are checked out alongside
+this repo.
 
 ---
 
@@ -453,7 +448,7 @@ never live in the unit.
   "owner": "",
   "home": { "id": "category_or_forum_id", "type": "category" },
   "workspace": "/path/to/projects",
-  "source": "/path/to/herrscherd/checkout"
+  "source": "/path/to/herrscher/checkout"
 }
 ```
 

@@ -63,6 +63,8 @@ func main() {
 		err = runChannel(ctx, client, args)
 	case "serve":
 		err = runServe(ctx, client, token, args)
+	case "session":
+		err = runSession(ctx, args)
 	case "service":
 		err = runService(ctx, args)
 	case "-h", "--help", "help":
@@ -210,10 +212,14 @@ func usage() {
                                               request
   herrscher serve [--health-addr :8787] [--status-channel ID] [--state FILE] [--env-file PATH]
                                               always-on Gateway daemon: bot online
-                                              24/7, slash commands (/set home,
-                                              /session, /allow), supervises one
+                                              24/7, supervises one
                                               bridge per session; --env-file loads
                                               secrets from a file (used by service)
+  herrscher session <create|close|list|who> [--name N] [--project P] [--clone R]
+               [--cmd '…'] [--backend stream|oneshot] [--shared] [--force]
+                                              manage sessions: create a bridged
+                                              channel + worktree + backend, close
+                                              one, or list/inspect active ones
   herrscher service <install|uninstall|status|restart|update> [--health-addr ADDR]
                [--env-file PATH] [--source DIR] [--no-pull]
                                               manage the serve daemon: install it
@@ -227,6 +233,6 @@ func usage() {
   herrscher install [-- ARGS]                 build the host then run its service install
 
 env: DISCORD_BOT_TOKEN (required), DISCORD_CHANNEL_ID (default channel)
-     DCTL_OWNER_ID (seed allowlist), DCTL_STATE_DIR (state dir)
+     DCTL_OWNER_ID (instance-id fallback), DCTL_STATE_DIR (state dir)
 `)
 }

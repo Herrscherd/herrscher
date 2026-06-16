@@ -175,15 +175,39 @@ that makes the host pure glue and the core blind to Discord.
 
 ## Scope
 
-**In scope now:** the `contracts` builder/type, the `core/cli` registry+dispatch, the
-`GatewaySet.Commands` field, host collection+binding, migrating the host/domain verbs
-to the new API, and the gateway plugin declaring its channel verbs through it.
+Decision (2026-06-16): **the legacy slash abstraction is deleted now, not deferred.**
+Carrying two command systems is worse than a temporary regression. Accepted
+consequence: **Discord slash commands stop working** until the later dctl/gateway
+phase rebinds them; during that window the daemon is driven **only by the CLI**. A
+temporary non-building `contracts`/`core` while consumers migrate is also accepted.
 
-**Out of scope (gated on Memory, per prior decision):** evacuating the legacy slash
-types out of `contracts` into the gateway plugin, moving slash registration down into
-`dctl`, and routing real `/slash` through the unified `Cmd` set. The old slash path
-keeps working untouched until then; this design only *adds* the unified API and the
-CLI format and uses it natively in `core`.
+**In scope now:**
+
+1. Add the neutral `Cmd` builder/type to `contracts`.
+2. Add the `core/cli` registry + dispatch (native, agnostic).
+3. **Delete** the legacy slash types from `contracts`: `Command`, `CommandData`,
+   `CommandResponse`, `Responder`, `InboundCommand`, `CommandKind`/`Kind*`, and
+   `CommandRegistrar` (slash registration surface).
+4. **Rewrite** every `core/internal/manager` handler (`session`/`set`/`service`/
+   `workspace`/`allow`) from the `func(ctx, contracts.Command) contracts.CommandResponse`
+   shape onto a `Cmd` whose `Run` is `func(ctx, Input) error` — output to stdout, the
+   slash-only mechanics dropped (`Private`, `Responder` ack-then-edit, autocomplete
+   `Suggest`, menu `ChoicePick`).
+5. **Strip** the slash dispatch loop from `core/host/serve.go` (the
+   `InboundCommand`/`Responder`/`ChoicePick`/`Suggest` plumbing).
+6. Host (glue) builds the registry from the core-native commands + `manage`
+   (`plugin`/`update`/`install`), binds the CLI format, dispatches `os.Args[1:]`.
+
+**Kept working:** the per-session **bridge** loop (read → backend → reply → persist).
+Its only slash-ish coupling is the optional permission-menu via `MenuRouter`/`Choice`
+— a *channel* capability, not a command type. Those stay for now; the bridge degrades
+to plain text where they're absent (already its behaviour).
+
+**Out of scope (gated on Memory / later dctl phase):** moving slash *registration*
+into `dctl`, the gateway binding slash names → the declared `Cmd`s, and re-enabling
+Discord slash on top of the unified API. The channel verbs (`send`/`read`/`channel`…)
+and the session/allow commands re-surface as gateway-owned bindings then; for now they
+exist only as core-native `Cmd`s reachable from the CLI.
 
 ## Risks / open questions
 

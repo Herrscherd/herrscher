@@ -47,9 +47,12 @@ its own; it collects and wires.
 
 ### 1. `contracts` — the declaration (neutral)
 
-A new `contracts/command_cli.go` (name TBD during impl; must not collide with the
-existing `Command` slash type in `command.go`, which is the *old* slash abstraction
-slated to converge later). Proposed shape:
+A new `contracts/command_cli.go`. This is **the** command concept contracts
+proposes — neutral, format-agnostic. (The legacy slash types in `command.go` —
+`Command`, `CommandData`, `Responder`, `InboundCommand` — are Discord-domain code
+that mislives in contracts; they are left untouched here and evacuated later, so the
+new type just needs a Go-level name that doesn't clash with the legacy `Command`
+while both files coexist.) Proposed shape:
 
 ```go
 // Cmd is one declared command: a namespaced name, its params, and the handler.
@@ -152,6 +155,12 @@ herrscher allow list --user 123
 No second declaration of `allow list`. The slash format is a parser+presenter the
 gateway plugin owns; it reuses the one `Cmd`.
 
+**Future direction (post-Memory, not now):** the slash *registration* lifecycle
+(add/remove/update of Discord application commands) moves down into `dctl` itself —
+the low-level Discord client owns that mechanic. The gateway plugin then just **binds
+names → functions** (slash command name → the declared `Cmd`), without owning the
+registration plumbing. This is also when the legacy slash types leave `contracts`.
+
 ## Migration of the existing verbs
 
 | Verb(s) | Today | After |
@@ -170,15 +179,16 @@ that makes the host pure glue and the core blind to Discord.
 `GatewaySet.Commands` field, host collection+binding, migrating the host/domain verbs
 to the new API, and the gateway plugin declaring its channel verbs through it.
 
-**Out of scope (gated on Memory, per prior decision):** retiring the old
-`contracts/command.go` slash abstraction and routing `/slash` through the unified
-`Cmd` set inside the gateway plugin. The old slash path keeps working untouched until
-then; this design only *adds* the unified API and the CLI format.
+**Out of scope (gated on Memory, per prior decision):** evacuating the legacy slash
+types out of `contracts` into the gateway plugin, moving slash registration down into
+`dctl`, and routing real `/slash` through the unified `Cmd` set. The old slash path
+keeps working untouched until then; this design only *adds* the unified API and the
+CLI format and uses it natively in `core`.
 
 ## Risks / open questions
 
-- **Naming collision** in `contracts`: the existing `Command` (slash) vs the new
-  command type. Pick a non-colliding name now (`Cmd`?) and rename at convergence.
+- **Go-level name** for the new type while the legacy `Command` still sits in
+  `contracts/command.go` (they coexist until the slash evacuation). Proposed: `Cmd`.
 - **Param model fidelity**: argv flags are flat; slash options nest (groups/
   subcommands). The `Path` slice models the nesting for both; confirm it's enough
   for the real slash trees (`/session create name:x shared:true`).

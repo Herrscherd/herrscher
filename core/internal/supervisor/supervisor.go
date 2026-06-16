@@ -13,11 +13,11 @@ import (
 
 // Supervisor manages one child `herrscher bridge` process per session.
 type Supervisor struct {
-	ctx       context.Context
-	selfBin   string // path to the herrscher binary (os.Executable)
-	PartDir   string // participants journal dir; empty disables --participants
-	mu        sync.Mutex
-	cancels   map[string]context.CancelFunc
+	ctx     context.Context
+	selfBin string // path to the herrscher binary (os.Executable)
+	PartDir string // participants journal dir; empty disables --participants
+	mu      sync.Mutex
+	cancels map[string]context.CancelFunc
 }
 
 // bridgeArgs builds the child `herrscher bridge` argv for sess.

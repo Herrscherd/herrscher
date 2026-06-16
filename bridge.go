@@ -55,7 +55,7 @@ func runBridge(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	mem := buildMemory(ctx)
+	mem := buildMemory(ctx, *verbose)
 	if mem != nil {
 		defer mem.Close()
 	}
@@ -78,20 +78,24 @@ func runBridge(ctx context.Context, args []string) error {
 // or returns nil when none is compiled in or its config is unset. Memory is
 // optional: a config/instantiation failure disables it (logged) rather than
 // blocking the bridge, so a vault is opt-in via its plugin's env (OBSIDIAN_VAULT).
-func buildMemory(ctx context.Context) contracts.Memory {
+func buildMemory(ctx context.Context, verbose bool) contracts.Memory {
+	disabled := func(kind string, err error) contracts.Memory {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "herrscher bridge: memory %q disabled: %v\n", kind, err)
+		}
+		return nil
+	}
 	for _, p := range contracts.Default.Memories() {
 		if p.Memory == nil {
 			continue
 		}
 		cfg, err := contracts.Resolve(p.Manifest.Config, os.Getenv)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "memory %q disabled: %v\n", p.Manifest.Kind, err)
-			return nil
+			return disabled(p.Manifest.Kind, err)
 		}
 		mem, err := p.Memory(ctx, cfg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "memory %q disabled: %v\n", p.Manifest.Kind, err)
-			return nil
+			return disabled(p.Manifest.Kind, err)
 		}
 		return mem
 	}

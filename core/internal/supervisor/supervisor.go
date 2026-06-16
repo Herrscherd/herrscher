@@ -16,22 +16,18 @@ type Supervisor struct {
 	ctx       context.Context
 	selfBin   string // path to the dctl binary (os.Executable)
 	PartDir   string // participants journal dir; empty disables --participants
-	StatePath string // daemon state.json; empty disables allowlist enforcement
 	mu        sync.Mutex
 	cancels   map[string]context.CancelFunc
 }
 
 // bridgeArgs builds the child `dctl bridge` argv for sess.
 func (s *Supervisor) bridgeArgs(sess state.Session) []string {
-	args := []string{"bridge", "-c", sess.ChannelID, "--cmd", sess.Cmd}
+	args := []string{"bridge", "-c", sess.ChannelID, "--cmd", sess.Cmd, "--session", sess.Name}
 	if sess.Backend != "" && sess.Backend != "stream" {
 		args = append(args, "--backend", sess.Backend)
 	}
 	if s.PartDir != "" {
 		args = append(args, "--participants", state.ParticipantsPath(s.PartDir, sess.Name))
-	}
-	if s.StatePath != "" {
-		args = append(args, "--allow-state", s.StatePath, "--allow-session", sess.Name)
 	}
 	return args
 }

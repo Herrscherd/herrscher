@@ -441,6 +441,12 @@ appears on screen — and upserts them into `.env` (existing keys preserved). Pa
 `--yes`, any stack flag, or run non-interactively (a service/CI pipe) to skip the
 wizard and take the flags/defaults silently.
 
+When `init` finds **no source checkout** (the common case for a pacman-installed
+binary, whose plugins are already compiled in) it runs in **config-only** mode:
+it skips the plugin menu and the rebuild, collecting only the gateway secrets and
+writing them to `$HERRSCHER_ENV_FILE` (else `./.env`), then points you at
+`herrscherd serve`.
+
 ```bash
 herrscher init                                     # interactive wizard on a tty, else default stack
 herrscher init --yes                               # the default stack, no prompts, then build

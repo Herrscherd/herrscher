@@ -91,16 +91,28 @@ func (h *Handler) setSource(in contracts.Command) contracts.CommandResponse {
 	if info, err := os.Stat(abs); err != nil || !info.IsDir() {
 		return errf("not a directory: %s", abs)
 	}
-	// A dctl checkout has go.mod at its root and cmd/dctl/; reject anything else
-	// so a later /service update never runs `go build` in an unrelated tree.
-	if fi, err := os.Stat(filepath.Join(abs, "go.mod")); err != nil || fi.IsDir() {
-		return errf("not a dctl source checkout (no go.mod): %s", abs)
-	}
-	if fi, err := os.Stat(filepath.Join(abs, "cmd", "dctl")); err != nil || !fi.IsDir() {
-		return errf("not a dctl source checkout (no cmd/dctl): %s", abs)
+	// A herrscher checkout has go.mod declaring module github.com/Herrscherd/herrscher;
+	// reject anything else so a later /service update never runs `go build` in an
+	// unrelated tree.
+	if !isHerrscherCheckout(abs) {
+		return errf("not a herrscher source checkout: %s", abs)
 	}
 	if err := h.st.SetSource(abs); err != nil {
 		return errf("save failed: %v", err)
 	}
 	return contracts.CommandResponse{Content: fmt.Sprintf("🛠️ Source set to `%s`.", abs), Private: true}
+}
+
+// isHerrscherCheckout reports whether dir holds the herrscher module's go.mod.
+func isHerrscherCheckout(dir string) bool {
+	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == "module github.com/Herrscherd/herrscher" {
+			return true
+		}
+	}
+	return false
 }

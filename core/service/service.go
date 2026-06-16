@@ -229,19 +229,23 @@ func RestartDetached(ctx context.Context, c Config) error {
 	return Restart(ctx, c)
 }
 
-// validateSource confirms src looks like a dctl checkout (has go.mod and
-// cmd/dctl), so a build never runs `go build` in an unrelated directory.
+// validateSource confirms src is the herrscher module root (a go.mod declaring
+// module github.com/Herrscherd/herrscher), so a build never runs `go build` in an
+// unrelated directory.
 func validateSource(src string) error {
 	if src == "" {
 		return errors.New("no source dir set")
 	}
-	if fi, err := os.Stat(filepath.Join(src, "go.mod")); err != nil || fi.IsDir() {
-		return fmt.Errorf("not a dctl source checkout (no go.mod): %s", src)
+	data, err := os.ReadFile(filepath.Join(src, "go.mod"))
+	if err != nil {
+		return fmt.Errorf("not a herrscher source checkout (no go.mod): %s", src)
 	}
-	if fi, err := os.Stat(filepath.Join(src, "cmd", "dctl")); err != nil || !fi.IsDir() {
-		return fmt.Errorf("not a dctl source checkout (no cmd/dctl): %s", src)
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == "module github.com/Herrscherd/herrscher" {
+			return nil
+		}
 	}
-	return nil
+	return fmt.Errorf("not a herrscher source checkout (wrong module): %s", src)
 }
 
 // Pull fast-forwards the source checkout. --ff-only fails loudly rather than
@@ -256,9 +260,9 @@ func Pull(ctx context.Context, src string) error {
 	return nil
 }
 
-// Build compiles the dctl binary from src to binPath. `go build -o` writes a new
-// file and renames it into place, so replacing the live binary is safe while the
-// daemon runs (the restart then picks up the new file).
+// Build compiles the herrscher binary from src to binPath. `go build -o` writes a
+// new file and renames it into place, so replacing the live binary is safe while
+// the daemon runs (the restart then picks up the new file).
 func Build(ctx context.Context, src, binPath string) error {
 	if err := validateSource(src); err != nil {
 		return err
@@ -266,7 +270,7 @@ func Build(ctx context.Context, src, binPath string) error {
 	if _, err := exec.LookPath("go"); err != nil {
 		return fmt.Errorf("go toolchain not found in PATH")
 	}
-	if out, err := runCapture(ctx, src, "go", "build", "-o", binPath, "./cmd/dctl"); err != nil {
+	if out, err := runCapture(ctx, src, "go", "build", "-o", binPath, "."); err != nil {
 		return fmt.Errorf("go build: %s", out)
 	}
 	return nil

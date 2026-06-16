@@ -657,9 +657,9 @@ func TestValidateSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := validateSource(src); err == nil {
-		t.Fatal("dir without cmd/dctl must fail")
+		t.Fatal("dir whose go.mod is not the herrscher module must fail")
 	}
-	if err := os.MkdirAll(filepath.Join(src, "cmd", "dctl"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "go.mod"), []byte("module github.com/Herrscherd/herrscher\n\ngo 1.23\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := validateSource(src); err != nil {

@@ -1117,7 +1117,7 @@ func TestSetSourceRejectsNonCheckout(t *testing.T) {
 	dir := t.TempDir() // no go.mod
 	r := h.Handle(context.Background(), it("owner", "set", "source",
 		contracts.Option{Name: "path", Value: dir}))
-	if !r.Private || !strings.Contains(r.Content, "go.mod") {
+	if !r.Private || !strings.Contains(r.Content, "checkout") {
 		t.Fatalf("expected rejection for non-checkout: %q", r.Content)
 	}
 	if st.SourceDir() != "" {
@@ -1128,10 +1128,7 @@ func TestSetSourceRejectsNonCheckout(t *testing.T) {
 func TestSetSourceAcceptsCheckout(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	dir := t.TempDir()
-	if err := os.WriteFile(dir+"/go.mod", []byte("module x\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(dir+"/cmd/dctl", 0o755); err != nil {
+	if err := os.WriteFile(dir+"/go.mod", []byte("module github.com/Herrscherd/herrscher\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	h.Handle(context.Background(), it("owner", "set", "source",

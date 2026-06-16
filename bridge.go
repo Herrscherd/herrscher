@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"os"
 
 	claude "github.com/Herrscherd/herrscher-claude-backend"
 	"github.com/Herrscherd/herrscher-contracts"
@@ -25,8 +24,7 @@ func runBridge(ctx context.Context, args []string) error {
 	interval := fs.Int("i", 5, "poll interval in seconds")
 	state := fs.String("state", "", "file to persist the last-seen message id across restarts")
 	participants := fs.String("participants", "", "append-only journal of message authors for /session who")
-	allowState := fs.String("allow-state", "", "daemon state.json read per-message to enforce the session allowlist (empty = no enforcement)")
-	allowSession := fs.String("allow-session", "", "session name used with --allow-state to resolve the per-session allowlist")
+	session := fs.String("session", "", "session name (scopes the participant journal and attachment dir)")
 	after := fs.String("after", "", "seed start id for the first run (state file wins once it exists)")
 	verbose := fs.Bool("v", false, "log activity to stderr")
 	progress := fs.String("progress", "full", "live activity feedback level: off | actions | full")
@@ -51,10 +49,7 @@ func runBridge(ctx context.Context, args []string) error {
 	// Registry-driven wiring, like serve: instantiate the gateway plugin's
 	// GatewaySet from runtime config rather than hand-wiring Discord. The bridge
 	// loop needs the channel reader and the outbound messaging port.
-	set, err := buildGateway(ctx, contracts.PluginConfig{Settings: map[string]string{
-		"token":   os.Getenv("DISCORD_BOT_TOKEN"),
-		"channel": os.Getenv("DISCORD_CHANNEL_ID"),
-	}})
+	set, err := buildGateway(ctx)
 	if err != nil {
 		return err
 	}
@@ -64,8 +59,7 @@ func runBridge(ctx context.Context, args []string) error {
 		Interval:      *interval,
 		State:         *state,
 		Participants:  *participants,
-		AllowState:    *allowState,
-		Session:       *allowSession,
+		Session:       *session,
 		After:         *after,
 		Verbose:       *verbose,
 		Progress:      *progress,

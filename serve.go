@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/Herrscherd/dctl"
-	claude "github.com/Herrscherd/herrscher-claude-backend"
 	"github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/host"
@@ -68,20 +67,11 @@ func runServe(ctx context.Context, c *dctl.Client, token string, args []string) 
 	// contracts.Default from its init() (blank import in plugins.go); here we build
 	// the first gateway's GatewaySet from runtime config. Adding a gateway is a
 	// blank import + rebuild — no code change here.
-	deps, err := buildGateway(ctx, contracts.PluginConfig{Settings: map[string]string{
-		"token":   token,
-		"channel": os.Getenv("DISCORD_CHANNEL_ID"),
-	}})
+	deps, err := buildGateway(ctx)
 	if err != nil {
 		return err
 	}
 	deps.Gateway = contracts.Degrade(deps.Gateway)
-	// The cmd autocomplete catalog is model-specific, so the binary supplies it
-	// from the claude backend — core stays agnostic.
-	bin := *defaultCmd
-	if f := strings.Fields(*defaultCmd); len(f) > 0 {
-		bin = f[0]
-	}
 	return host.Run(ctx, deps, host.Options{
 		StatePath:     *statePath,
 		DefaultCmd:    *defaultCmd,
@@ -92,18 +82,63 @@ func runServe(ctx context.Context, c *dctl.Client, token string, args []string) 
 		Home:          home,
 		Workspace:     cfg.Workspace,
 		Source:        cfg.Source,
-		CmdPresets:    claude.CommandPresets(bin),
 	})
+}
+
+// runSession dispatches the operator `session` commands (create/close/list/who)
+// through the core CLI registry. It builds the same gateway + handler deps the
+// daemon uses from config.json + env, so a session created here matches one the
+// daemon supervises.
+func runSession(ctx context.Context, args []string) error {
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		return err
+	}
+	deps, err := buildGateway(ctx)
+	if err != nil {
+		return err
+	}
+	var home *host.HomeRef
+	if cfg.Home != nil && cfg.Home.ID != "" {
+		home = &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
+	}
+	reg, err := host.NewRegistry(ctx, deps, host.Options{
+		StatePath:  host.DefaultStatePath(),
+		DefaultCmd: or(cfg.Cmd, "claude"),
+		InstanceID: or(os.Getenv("DCTL_INSTANCE_ID"), cfg.Instance),
+		Owner:      or(os.Getenv("DCTL_OWNER_ID"), cfg.Owner),
+		Home:       home,
+		Workspace:  cfg.Workspace,
+		Source:     cfg.Source,
+	})
+	if err != nil {
+		return err
+	}
+	out, err := reg.Dispatch(ctx, append([]string{"session"}, args...))
+	if err != nil {
+		return err
+	}
+	if out != "" {
+		fmt.Println(out)
+	}
+	return nil
 }
 
 // buildGateway instantiates the first registered gateway plugin's GatewaySet
 // from cfg. It iterates contracts.Default.Gateways() so the daemon is driven by
 // the registry, not by hand-wired plugin types: a blank import in plugins.go is
 // all it takes for a new gateway to be picked up here.
-func buildGateway(ctx context.Context, cfg contracts.PluginConfig) (host.Deps, error) {
+func buildGateway(ctx context.Context) (host.Deps, error) {
 	for _, p := range contracts.Default.Gateways() {
 		if p.Gateway == nil {
 			continue
+		}
+		// The plugin declares its config surface in its Manifest; the host resolves
+		// it generically from the environment and rejects a missing required value.
+		// This is why the host needs no Discord-specific key knowledge here.
+		cfg, err := contracts.Resolve(p.Manifest.Config, os.Getenv)
+		if err != nil {
+			return host.Deps{}, fmt.Errorf("gateway %q: %w", p.Manifest.Kind, err)
 		}
 		set, err := p.Gateway(ctx, cfg)
 		if err != nil {

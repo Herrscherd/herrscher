@@ -212,6 +212,14 @@ session (`InjectChoice`). Otherwise it degrades to a plain-text prompt.
 The same binary runs in two shapes. **`serve`** is the always-on daemon you
 install as a service; it supervises one **`bridge`** child process per session.
 
+> **Command surface (current):** session and service commands now run through the
+> operator **CLI** (`herrscher session create|close|list|who`, `herrscher service
+> restart|update`) dispatched by a neutral `contracts.Cmd` registry, not Discord
+> slash commands. The `serve` daemon supervises sessions and serves health; it no
+> longer dispatches slash interactions. Discord slash binding (and the `set` /
+> `allow` / `workspace` surfaces) is being re-platformed and returns in the dctl
+> phase. The slash-flavoured diagrams below describe that future shape.
+
 ### `serve` — the always-on daemon
 
 ```mermaid

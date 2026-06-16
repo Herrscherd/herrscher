@@ -25,7 +25,24 @@ type Session struct {
 	Worktree  string `json:"worktree,omitempty"` // abs path; empty for a shared session
 	Project   string `json:"project,omitempty"`  // workspace sub-dir the session started from
 
+	// Gateways binds the session to a set of gateway kinds (e.g. "discord",
+	// "terminal"). Empty means "legacy": a session with a ChannelID is Discord.
+	Gateways []string `json:"gateways,omitempty"`
+
 	Participants []string `json:"participants,omitempty"` // observed authors (cache; journal is source of truth)
+}
+
+// BoundGateways returns the gateway kinds this session is bound to. When the
+// stored set is empty it falls back to the legacy rule: a session with a
+// ChannelID is a Discord session; one without is bound to nothing.
+func (s Session) BoundGateways() []string {
+	if len(s.Gateways) > 0 {
+		return s.Gateways
+	}
+	if s.ChannelID != "" {
+		return []string{"discord"}
+	}
+	return nil
 }
 
 // State is the daemon's persisted configuration. All access is mutex-guarded.

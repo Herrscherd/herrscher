@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher/core/curator"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -57,10 +56,10 @@ type Options struct {
 }
 
 // Run links the channel to the backend until ctx is cancelled. newBackend builds
-// the model edge for the resolved channel, keeping core model-agnostic. mem is
-// the optional Memory port (nil when no memory plugin is wired): when present the
-// curator recalls background to prime each turn and records the turn afterwards.
-func Run(ctx context.Context, p contracts.ChannelReader, gw contracts.Gateway, newBackend BackendFactory, mem contracts.Memory, o Options) error {
+// the model edge for the resolved channel, keeping core model-agnostic. orch is
+// the optional Orchestrator port (nil when none is wired): when present it primes
+// each turn with recalled background and records the turn afterwards.
+func Run(ctx context.Context, p contracts.ChannelReader, gw contracts.Gateway, newBackend BackendFactory, orch contracts.Orchestrator, o Options) error {
 	if !p.Enabled() {
 		return ErrDisabled
 	}
@@ -111,9 +110,8 @@ func Run(ctx context.Context, p contracts.ChannelReader, gw contracts.Gateway, n
 	// whole run: ch is fixed and gw does not depend on it.
 	conv := contracts.Conversation{Gateway: "discord", ID: ch}
 
-	// cur is nil (a no-op) unless a Memory plugin and a session name are both
-	// present, so the turn loop below can call it unconditionally.
-	cur := curator.New(mem, o.Session)
+	// orch may be nil (no orchestrator compiled in); the turn loop guards every
+	// call so it stays a no-op in that case.
 
 	resp, err := newBackend(ch)
 	if err != nil {
@@ -192,9 +190,13 @@ func Run(ctx context.Context, p contracts.ChannelReader, gw contracts.Gateway, n
 				onEvent = pv.add
 			}
 
+			var memCtx string
+			if orch != nil {
+				memCtx = orch.Context(ctx)
+			}
 			prompt := contracts.Prompt{
 				Content:     m.Content,
-				Context:     cur.Context(ctx),
+				Context:     memCtx,
 				Author:      m.AuthorName,
 				MessageID:   m.ID,
 				ChannelID:   m.ChannelID,
@@ -217,8 +219,10 @@ func Run(ctx context.Context, p contracts.ChannelReader, gw contracts.Gateway, n
 				continue
 			}
 			postResult(ctx, p, gw, conv, m.ID, out, resp, o)
-			if rerr := cur.Observe(ctx, prompt, out); rerr != nil {
-				logf(o.Verbose, "memory record error: %v", rerr) // best-effort: never break the loop
+			if orch != nil {
+				if rerr := orch.Observe(ctx, prompt, out); rerr != nil {
+					logf(o.Verbose, "memory record error: %v", rerr) // best-effort: never break the loop
+				}
 			}
 			if pv != nil {
 				pv.finish(err != nil)

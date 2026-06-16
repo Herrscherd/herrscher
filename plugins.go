@@ -13,5 +13,6 @@ import (
 	_ "github.com/Herrscherd/herrscher-claude-backend"
 	_ "github.com/Herrscherd/herrscher-discord-gateway"
 	_ "github.com/Herrscherd/herrscher-obsidian-memory"
+	_ "github.com/Herrscherd/herrscher-orchestrator"
 	// herrscher:end
 )

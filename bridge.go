@@ -59,7 +59,11 @@ func runBridge(ctx context.Context, args []string) error {
 	if mem != nil {
 		defer mem.Close()
 	}
-	return bridge.Run(ctx, set.Reader, contracts.Degrade(set.Gateway), newBackend, mem, bridge.Options{
+	orch := buildOrchestrator(ctx, mem, *session, *verbose)
+	if orch != nil {
+		defer orch.Close()
+	}
+	return bridge.Run(ctx, set.Reader, contracts.Degrade(set.Gateway), newBackend, orch, bridge.Options{
 		Channel:       *ch,
 		Ensure:        *ensure,
 		Interval:      *interval,
@@ -98,6 +102,39 @@ func buildMemory(ctx context.Context, verbose bool) contracts.Memory {
 			return disabled(p.Manifest.Kind, err)
 		}
 		return mem
+	}
+	return nil
+}
+
+// buildOrchestrator instantiates the first registered orchestrator plugin over
+// mem (the conversation-policy edge), or returns nil when none is compiled in.
+// The session name is threaded through the config bag (key "session") since it is
+// runtime state, not env config. A config/instantiation failure disables it
+// (logged) rather than blocking the bridge.
+func buildOrchestrator(ctx context.Context, mem contracts.Memory, session string, verbose bool) contracts.Orchestrator {
+	disabled := func(kind string, err error) contracts.Orchestrator {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "herrscher bridge: orchestrator %q disabled: %v\n", kind, err)
+		}
+		return nil
+	}
+	for _, p := range contracts.Default.Orchestrators() {
+		if p.Orchestrator == nil {
+			continue
+		}
+		cfg, err := contracts.Resolve(p.Manifest.Config, os.Getenv)
+		if err != nil {
+			return disabled(p.Manifest.Kind, err)
+		}
+		if cfg.Settings == nil {
+			cfg.Settings = map[string]string{}
+		}
+		cfg.Settings["session"] = session
+		orch, err := p.Orchestrator(ctx, cfg, mem)
+		if err != nil {
+			return disabled(p.Manifest.Kind, err)
+		}
+		return orch
 	}
 	return nil
 }

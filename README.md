@@ -25,7 +25,7 @@ channel nor a model. They live under the `@herrscher/` scope:
 |---------|------|------|--------|
 | `@herrscher/contracts/` | herrscher-contracts | The ports: interfaces + neutral types. Zero deps, zero logic. | [↗](@herrscher/contracts/README.md) |
 | `@herrscher/core/` | herrscher-core | The agnostic domain: sessions, channels, worktrees, supervision. | [↗](@herrscher/core/README.md) |
-| `@herrscher/host/` | herrscher-host | The composition root + CLI — the only binary. | [↗](@herrscher/host/README.md) |
+| `@herrscher/herrscherd/` | herrscherd | The composition root + CLI — the only binary, the daemon. | [↗](@herrscher/herrscherd/README.md) |
 
 ## The official plugins
 
@@ -62,18 +62,18 @@ low-level Discord REST/WebSocket client that the gateway consumes.
         └──────────┬──────────┴─────────┴────────────────────┘
                    │
           ┌────────────────────┐
-          │        host         │   the only main(); imports core + the plugins + dctl
+          │     herrscherd      │   the only main(); imports core + the plugins + dctl
           └────────────────────┘
 ```
 
 **The golden rule:** dependency arrows only ever point *toward* `contracts`. The
 core depends on no edge; the edges depend on no core; only the host knows the
 concrete types of both. That is what lets you swap Discord for Slack, or Claude for
-another model, by editing one wiring file in `host` — never the domain.
+another model, by editing one wiring file in `herrscherd` — never the domain.
 
 For the full architecture, the CLI, and the exact wiring code, read
-**[@herrscher/host/README.md](@herrscher/host/README.md)** — it is the canonical
-entry point.
+**[@herrscher/herrscherd/README.md](@herrscher/herrscherd/README.md)** — it is the
+canonical entry point.
 
 ---
 
@@ -87,12 +87,12 @@ all the repos must sit side by side under the same parent:
 dev/
 ├── herrscher/                 ← you are here (symlinks + this README)
 │   └── @herrscher/            ← the agnostic skeleton
-│       ├── contracts/  → ../../herrscher-contracts
-│       ├── core/       → ../../herrscher-core
-│       └── host/       → ../../herrscher-host
+│       ├── contracts/   → ../../herrscher-contracts
+│       ├── core/        → ../../herrscher-core
+│       └── herrscherd/  → ../../herrscherd
 ├── herrscher-contracts/
 ├── herrscher-core/
-├── herrscher-host/
+├── herrscherd/
 ├── herrscher-discord-gateway/ ← plugin (not in the umbrella)
 ├── herrscher-claude-backend/  ← plugin (not in the umbrella)
 └── dctl/                      ← external dependency
@@ -105,14 +105,14 @@ The symlinks resolve only when the siblings are checked out alongside this repo.
 ## Quick start
 
 ```bash
-# build the single binary from the host module (siblings must be alongside)
-cd ../herrscher-host && go build -o dctl .
+# build the single binary from the herrscherd module (siblings must be alongside)
+cd ../herrscherd && go build -o herrscherd .
 
 export DISCORD_BOT_TOKEN=...
-./dctl serve --health-addr :8787
+./herrscherd serve --health-addr :8787
 ```
 
-See [@herrscher/host/README.md](@herrscher/host/README.md) for every CLI subcommand
+See [@herrscher/herrscherd/README.md](@herrscher/herrscherd/README.md) for every CLI subcommand
 (`serve`, `bridge`, `service`, `channel`, …) and the configuration layering.
 
 ---

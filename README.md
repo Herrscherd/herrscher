@@ -434,10 +434,18 @@ orchestrator). With no flags it writes the batteries-included **default stack**:
 clobbering an existing one), then `go get`s each module, `go mod tidy`s and
 rebuilds. If the build fails it restores the original `plugins.go`.
 
+**Interactive wizard.** Run on a terminal with no stack flags, `herrscher init`
+prompts for each category (pick a kind or `none`) then reads the active gateway's
+secrets — the Discord bot token is read with **echo disabled**, so it never
+appears on screen — and upserts them into `.env` (existing keys preserved). Pass
+`--yes`, any stack flag, or run non-interactively (a service/CI pipe) to skip the
+wizard and take the flags/defaults silently.
+
 ```bash
-herrscher init                                     # the default stack, then build
+herrscher init                                     # interactive wizard on a tty, else default stack
+herrscher init --yes                               # the default stack, no prompts, then build
 herrscher init --list                              # print the module catalog and exit
-herrscher init --memory none --orchestrator none   # drop a category ("none")
+herrscher init --memory none --orchestrator none   # drop a category ("none"), no wizard
 herrscher init --backend claude --with github.com/acme/extra-plugin   # pin an extra module
 herrscher init --no-build                           # rewrite plugins.go + seed .env only
 ```
@@ -445,7 +453,7 @@ herrscher init --no-build                           # rewrite plugins.go + seed 
 Flags: `--gateway/--backend/--memory/--orchestrator K` choose the kind for a
 category (or `none` to drop it), `--with MODULE` pins an extra module path
 verbatim (repeatable), `--list` prints the catalog, `--no-build` stops after
-writing `plugins.go`.
+writing `plugins.go`, `--yes` skips the wizard.
 
 ### `plugin` / `update` / `install`
 

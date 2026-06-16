@@ -132,11 +132,14 @@ func usage() {
                                               rebuild from --source (default cwd)
                                               then restart — run after a merge
   herrscher init [--gateway K] [--backend K] [--memory K] [--orchestrator K]
-               [--with MODULE] [--list] [--no-build]
+               [--with MODULE] [--list] [--no-build] [--yes]
                                               compose the plugin stack from scratch
                                               (default: discord+claude+obsidian+
                                               orchestrator), seed .env, then build;
-                                              kind "none" drops a category
+                                              kind "none" drops a category. On a
+                                              terminal with no stack flags it runs
+                                              an interactive wizard (pick plugins,
+                                              enter secrets); --yes forces defaults
   herrscher plugin <list|add|remove> [module]  edit the compiled-in plugin set and rebuild
   herrscher update                            bump every compiled-in plugin and rebuild
   herrscher install [-- ARGS]                 build the host then run its service install

@@ -9,8 +9,11 @@ isolation.
 
 This is the **single binary**: the agnostic domain (`core`), the composition root
 and daemon, and the plugin-management CLI all live here in one module. The
-swappable edges — the channel gateway and the model backend — stay in their own
-repos and are compiled in.
+swappable edges — the channel gateway, the model backend, memory and the
+orchestrator — stay in their own repos and are compiled in. The host itself is
+**gateway-agnostic**: it imports zero `dctl` (the concrete Discord client) and
+drives chat platforms only through the contracts `Gateway` port — an invariant
+guarded by purity tests (`TestHostPurity`, `TestCorePurity`).
 
 > Built with hexagonal architecture: a narrow contract package in the middle,
 > interchangeable edges (the channel, the model), an agnostic domain, and a host
@@ -30,7 +33,7 @@ repos and are compiled in.
 - [Session lifecycle](#session-lifecycle)
 - [Installation](#installation)
 - [CLI reference](#cli-reference)
-- [Managing plugins](#managing-plugins-the-plugin--update--install-verbs)
+- [Managing plugins](#managing-plugins-the-init--plugin--update--install-verbs)
 - [Layout & wiring](#layout--wiring)
 - [Configuration](#configuration)
 - [Roadmap](#roadmap)
@@ -68,9 +71,9 @@ flowchart TB
         BE["🧠 <b>Backend</b><br/>herrscher-claude-backend<br/><i>Claude ⇄ ports</i>"]
     end
 
-    subgraph planned["PLANNED · declared, ports TBD"]
-        MEM["🗄️ <b>Memory</b><br/>recall / persistence"]
-        ORCH["🪢 <b>Orchestrator</b><br/>multi-agent routing"]
+    subgraph plugins_aux["AUX EDGES · recall + policy"]
+        MEM["🗄️ <b>Memory</b><br/>herrscher-obsidian-memory<br/><i>recall / persistence</i>"]
+        ORCH["🪢 <b>Orchestrator</b><br/>herrscher-orchestrator<br/><i>conversation policy</i>"]
     end
 
     CONTRACTS{{"<b>contracts</b><br/>ports + neutral types<br/>zero deps · zero logic"}}
@@ -79,21 +82,26 @@ flowchart TB
 
     GW       -- implements --> CONTRACTS
     BE       -- implements --> CONTRACTS
-    MEM      -. will implement .-> CONTRACTS
-    ORCH     -. will implement .-> CONTRACTS
+    MEM      -- implements --> CONTRACTS
+    ORCH     -- implements --> CONTRACTS
     CORE     -- consumes   --> CONTRACTS
     HOST     -- wires      --> CORE
     HOST     -- "blank-imports + rebuilds" --> GW
     HOST     -- "blank-imports + rebuilds" --> BE
+    HOST     -- "blank-imports + rebuilds" --> MEM
+    HOST     -- "blank-imports + rebuilds" --> ORCH
 
     classDef hub fill:#1f2937,stroke:#f59e0b,stroke-width:3px,color:#fff;
-    classDef plan fill:#374151,stroke:#6b7280,stroke-dasharray:4,color:#cbd5e1;
     class CONTRACTS hub;
-    class MEM,ORCH plan;
 ```
 
 **The golden rule** is the arrows above: everything points *in* toward
 `contracts`. That is what makes the edges swappable and the domain stable.
+Neither the host nor `core` ever imports a concrete adapter: there is no `dctl`
+anywhere in this module — it lives only in the Discord gateway plugin. The host
+talks to every chat platform through the contracts `Gateway` port, and that
+invariant is enforced by `TestHostPurity` (root) and `TestCorePurity` (`core/`),
+which fail the build if a concrete client ever leaks in.
 
 ---
 
@@ -113,17 +121,18 @@ what it needs at startup and instantiates it with live config.
 |----------|------|---------|--------|-----------------|
 | 🔌 **Gateway** | channel (inbound) | `Gateway`, `ChannelSource`, `ChannelReader`, `ChannelAdmin`, `CommandRegistrar`, `Prober`, `MenuRouter`, `Responder` | ✅ live | [herrscher-discord-gateway] |
 | 🧠 **Backend** | model (outbound) | `Backend` (+ `ChoiceAware`, `ChoiceInjector`) | ✅ live | [herrscher-claude-backend] |
-| 🗄️ **Memory** | recall / persistence | *declared; port TBD* | 🚧 planned | — |
-| 🪢 **Orchestrator** | multi-agent routing | *declared; port TBD* | 🚧 planned | — |
+| 🗄️ **Memory** | recall / persistence | `Memory` | ✅ live | [herrscher-obsidian-memory] |
+| 🪢 **Orchestrator** | conversation policy | `Orchestrator` | ✅ live | [herrscher-orchestrator] |
 
 [herrscher-discord-gateway]: https://github.com/Herrscherd/herrscher-discord-gateway
 [herrscher-claude-backend]: https://github.com/Herrscherd/herrscher-claude-backend
+[herrscher-obsidian-memory]: https://github.com/Herrscherd/herrscher-obsidian-memory
+[herrscher-orchestrator]: https://github.com/Herrscherd/herrscher-orchestrator
 
-**Gateway** and **Backend** are fully implemented and shipping. **Memory** and
-**Orchestrator** are reserved seats at the table: the category constants exist in
-`contracts`, the architecture is shaped to receive them, but their port interfaces
-are not designed yet. When they land, they plug in exactly like the other two —
-a blank import and a rebuild, no domain change.
+All four categories have an official plugin. **Orchestrator** is a
+conversation-policy port; the default stack ships the published
+`herrscher-orchestrator` module (the `basic` kind). Every plugin plugs in the
+same way — a blank import and a rebuild, no domain change.
 
 ```mermaid
 flowchart LR
@@ -150,17 +159,19 @@ import the ports without pulling in the host.
 | Location | Repo | Role |
 |----------|------|------|
 | `core/` (this repo) | — | The agnostic domain: sessions, channels, worktrees, supervision. |
-| `main.go`, `serve.go`, … (this repo) | — | The composition root + Discord CLI — the daemon. |
-| `manage/` (this repo) | — | The plugin-composition CLI (`plugin` / `update` / `install`). |
+| `main.go`, `serve.go`, … (this repo) | — | The composition root and daemon — gateway-agnostic, drives platforms only through the `Gateway` port. |
+| `manage/` (this repo) | — | The plugin-composition CLI (`init` / `plugin` / `update` / `install`). |
 | external module | [herrscher-contracts] | The ports: interfaces + neutral types. Zero deps, zero logic. |
 
 [herrscher-contracts]: https://github.com/Herrscherd/herrscher-contracts
 
 The **edges** are interchangeable plugins, each its own repo, **not** part of the
-binary's module — they are the official Gateway and Backend listed in the table above.
-[`dctl`] is not a family member either: it is an external dependency, the
-pure, dependency-free Discord REST client (v10) the gateway consumes — no
-gateway socket, no CLI, just on-demand HTTP.
+binary's module — they are the official Gateway, Backend, Memory and Orchestrator
+listed in the table above. [`dctl`] is not a family member either: it is the
+pure, dependency-free Discord REST client (v10) the **gateway plugin** consumes —
+no gateway socket, no CLI, just on-demand HTTP. The host never imports it (it
+shows up only as an *indirect* dependency, pulled in transitively by the gateway
+plugin).
 
 [`dctl`]: https://github.com/Herrscherd/dctl
 
@@ -286,19 +297,17 @@ stateDiagram-v2
 
 ### Prerequisites
 
-- Go 1.23+
-- A Discord bot token (the official Gateway is Discord)
-- All family repos checked out **side by side** (the dev build uses `replace`
-  directives pointing at the siblings).
+- Go 1.25+
+- A Discord bot token (the default Gateway is Discord)
 
 ```bash
-# clone the whole family next to each other
-mkdir herrscher-dev && cd herrscher-dev
-for r in herrscher herrscher-contracts \
-         herrscher-discord-gateway herrscher-claude-backend dctl; do
-  git clone https://github.com/Herrscherd/$r.git
-done
+# a fresh clone builds on its own — go.mod points at published, tagged
+# modules from github.com/Herrscherd, so the proxy resolves the plugins.
+git clone https://github.com/Herrscherd/herrscher.git
 ```
+
+(For cross-repo development against local checkouts, see [Layout &
+wiring](#layout--wiring) — use a `go.work` workspace, not `replace` directives.)
 
 ### Build the single binary
 
@@ -306,6 +315,17 @@ done
 cd herrscher
 go build -o herrscher .          # the only binary; plugins are compiled in
 ```
+
+### Install system-wide (Arch / pacman)
+
+The repo ships a `PKGBUILD`, so on Arch-based systems you can build and install
+under pacman management:
+
+```bash
+makepkg -si                      # builds and installs /usr/bin/herrscherd
+```
+
+The packaged binary is named `herrscherd`.
 
 ### Run it directly (foreground)
 
@@ -372,34 +392,62 @@ daemon being killed mid-restart.
 
 ## CLI reference
 
-`herrscher <command>`. The daemon doubles as a token-frugal Discord CLI; output
-is deliberately minimal (ids and one-line messages) so an agent reading stdout
-spends few tokens.
+`herrscher <command>`. Output is deliberately minimal (ids and one-line
+messages) so an agent reading stdout spends few tokens. The host exposes no raw
+channel verbs of its own — all chat I/O goes through the active gateway plugin's
+`Gateway` port; the low-level Discord poking lives in `dctl`, consumed by the
+gateway plugin alone.
 
 | Command | What it does |
 |---------|--------------|
-| `serve [--config PATH] [--state FILE] [--health-addr ADDR] [--status-channel ID] [--env-file PATH] [--instance SLUG] [--cmd '…']` | The always-on Gateway daemon. Slash commands, per-session bridge supervision, health endpoint. |
+| `serve [--config PATH] [--state FILE] [--health-addr ADDR] [--status-channel ID] [--env-file PATH] [--instance SLUG] [--cmd '…']` | The always-on Gateway daemon: per-session bridge supervision, health endpoint. |
 | `bridge -c CHANNEL [--cmd '…'] [--backend stream\|oneshot] [--model M] [-i 5] [--state FILE] [--progress off\|actions\|full] …` | One channel ⇄ one backend poll loop. Normally spawned by `serve`, runnable standalone. |
+| `session <create\|close\|list\|who> [--name N] [--project P] [--clone R] [--cmd '…'] [--backend stream\|oneshot] [--shared] [--force]` | Manage sessions: create a bridged channel + worktree + backend, close one, or list/inspect active ones. |
 | `service <install\|uninstall\|status\|restart\|update> [--cmd '…'] [--health-addr ADDR] [--env-file PATH] [--source DIR] [--no-pull]` | Manage the daemon as a native OS service (see [Installation](#installation)). |
-| `channel <list\|create [--forum]\|post <forum_id> <title> <content>\|delete\|ensure> [--guild ID]` | Manage channels directly. |
-| `send  [-c CHANNEL] <text>` | Post a message; prints its id. |
-| `reply [-c CHANNEL] <message_id> <text>` | Reply in a thread; prints reply id. |
-| `read  [-c CHANNEL] [-n 20] [--after ID]` | Recent messages, one per line (`id  author  text`). |
-| `watch [-c CHANNEL] [-i 10] [--after ID]` | Stream new messages forever. |
-| `react [-c CHANNEL] <message_id> <emoji>` | Add a reaction. |
-| `thread [-c CHANNEL] <message_id> <name>` | Open a real thread off a message. |
 
-**Environment:** `DISCORD_BOT_TOKEN` (required), `DISCORD_CHANNEL_ID` (default
-channel), `DCTL_OWNER_ID` (seed allowlist), `DCTL_STATE_DIR` (state dir, default
-`~/.config/dctl`), `DCTL_INSTANCE_ID` (namespace slug for shared resources).
+The host self-management verbs — `init`, `plugin`, `update`, `install` — compose
+and maintain the compiled-in plugin set; see [Managing
+plugins](#managing-plugins-the-init--plugin--update--install-verbs).
+
+**Environment:** the **active gateway plugin declares its own required vars** (the
+Discord gateway needs `DISCORD_BOT_TOKEN`); the host resolves them generically.
+Common ones: `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID` (default channel),
+`DCTL_OWNER_ID` (seed allowlist), `DCTL_STATE_DIR` (state dir, default
+`~/.config/dctl`), `DCTL_INSTANCE_ID` (namespace slug for shared resources). All
+of these can be supplied via the root `.env` (see [Configuration](#configuration)).
 
 ---
 
-## Managing plugins (the `plugin` / `update` / `install` verbs)
+## Managing plugins (the `init` / `plugin` / `update` / `install` verbs)
 
 The same binary manages its own plugin composition (the `manage/` package). These
 verbs do **not** run the runtime; they edit `plugins.go` (the blank-import list
 between the `herrscher:plugins` / `herrscher:end` markers) and rebuild.
+
+### `init` — compose the stack from a catalog
+
+`herrscher init` builds a fresh plugin stack from a built-in **catalog** of
+published modules, picking **one kind per category** (gateway / backend / memory /
+orchestrator). With no flags it writes the batteries-included **default stack**:
+`discord` + `claude` + `obsidian` + `orchestrator` (`basic`). It rewrites
+`plugins.go` to exactly that set, seeds a `.env` from `.env.example` (never
+clobbering an existing one), then `go get`s each module, `go mod tidy`s and
+rebuilds. If the build fails it restores the original `plugins.go`.
+
+```bash
+herrscher init                                     # the default stack, then build
+herrscher init --list                              # print the module catalog and exit
+herrscher init --memory none --orchestrator none   # drop a category ("none")
+herrscher init --backend claude --with github.com/acme/extra-plugin   # pin an extra module
+herrscher init --no-build                           # rewrite plugins.go + seed .env only
+```
+
+Flags: `--gateway/--backend/--memory/--orchestrator K` choose the kind for a
+category (or `none` to drop it), `--with MODULE` pins an extra module path
+verbatim (repeatable), `--list` prints the catalog, `--no-build` stops after
+writing `plugins.go`.
+
+### `plugin` / `update` / `install`
 
 ```bash
 herrscher plugin list                              # compiled-in plugins
@@ -419,23 +467,31 @@ service install` — it never reimplements the systemd/launchd glue.
 ## Layout & wiring
 
 The binary is one Go module (`core/`, `manage/`, and the root `main` package).
-The contracts module and the edge plugins are separate modules, stitched in
-during development with `replace` directives at sibling paths, so the repos must
-sit side by side:
+The contracts module and the edge plugins are separate modules. There are **no
+`replace` directives**: the committed `go.mod` references **published, tagged
+modules** from `github.com/Herrscherd`, so a fresh clone builds straight from the
+module proxy with nothing checked out beside it.
+
+For local multi-repo development you stitch the siblings together with a **`go.work`
+workspace** (untracked) instead of replaces:
 
 ```
 herrscher-dev/
+├── go.work                    ← `go work use ./herrscher ./herrscher-contracts …` (local only)
 ├── herrscher/                 ← the only main(); core + manage + plugins.go (this repo)
 │   ├── core/                  ← the agnostic domain
 │   └── manage/                ← the plugin-composition CLI
 ├── herrscher-contracts/       ← the ports (separate module)
 ├── herrscher-discord-gateway/ ← Gateway plugin (separate module)
 ├── herrscher-claude-backend/  ← Backend plugin (separate module)
-└── dctl/                      ← external dependency (pure Discord REST client)
+├── herrscher-obsidian-memory/ ← Memory plugin (separate module)
+├── herrscher-orchestrator/    ← Orchestrator plugin (separate module)
+└── dctl/                      ← the gateway plugin's Discord REST client
 ```
 
-The `replace` directives resolve only when the siblings are checked out alongside
-this repo.
+The workspace redirects the published module paths to the local checkouts while
+you hack across repos; remove it (or `GOWORK=off`) to build against the tagged
+releases exactly as a fresh clone would.
 
 ---
 
@@ -444,6 +500,20 @@ this repo.
 Precedence, highest first: **CLI flag → environment → `config.json` → built-in
 default**. The service sources secrets from a separate `0600` env file so they
 never live in the unit.
+
+### The root `.env`
+
+At startup the host auto-loads a project-root **`.env`** so every command — and
+every plugin's config resolution — sees its vars without an explicit
+`--env-file`. A real environment variable always wins over the file. The path is
+overridable with **`$HERRSCHER_ENV_FILE`**; it is resolved to an absolute path and
+re-exported, so each `bridge` subprocess (which runs with its working directory
+set to a per-session worktree) loads the *same* file rather than a stray `.env`
+sitting in that tree. The implicit `./.env` is best-effort (a missing file is not
+an error), while an explicit `$HERRSCHER_ENV_FILE` is authoritative — a load
+failure there is fatal. A `.env.example` ships as a fill-in skeleton; `herrscher
+init` seeds `.env` from it. Which keys are required depends on the active gateway
+plugin (the Discord gateway needs `DISCORD_BOT_TOKEN`).
 
 `~/.config/dctl/config.json`:
 
@@ -469,10 +539,11 @@ never live in the unit.
 
 ## Roadmap
 
-- **Memory plugins** — a `Memory` port for recall/persistence across sessions
-  (category already declared in `contracts`).
-- **Orchestrator plugins** — an `Orchestrator` port for multi-agent routing
-  (category already declared in `contracts`).
+- **Discord slash binding** — re-platforming the session/service surface back onto
+  Discord slash commands (returning in the dctl phase; see [The two run
+  modes](#the-two-run-modes)).
+- **More catalog kinds** — additional gateway/backend/memory/orchestrator modules
+  in the `herrscher init` catalog beyond the current defaults.
 - **Distributed transport** — the in-process registry (`Manifest`, factories) is
   shaped so the channel/model/domain split can later run over **NATS/gRPC** as a
   wiring change, not a rewrite.

@@ -1,12 +1,14 @@
 // Command herrscher is the composition root and CLI for a Herrscher host: it wires
-// the registered gateway/backend plugins and the core (bridge/serve) into one
-// binary. It exposes the always-on daemon (serve/bridge/service), the host
-// self-management verbs (plugin/update/install), and the low-level channel verbs
-// (send/reply/read/watch/react/thread/channel). Output is deliberately minimal
-// (ids and one-line messages, no JSON) so an LLM driving it spends few tokens.
+// the registered gateway/backend/orchestrator plugins and the core into one
+// binary. It exposes the always-on daemon (serve/bridge/service), the session
+// verbs, and the host self-management verbs (init/plugin/update/install). It
+// stays gateway-agnostic: it never imports a concrete chat adapter (dctl lives
+// in the discord-gateway plugin), driving platforms only through the contracts
+// gateway port. Output is deliberately minimal so an LLM driving it spends few
+// tokens.
 //
-// Config (env): DISCORD_BOT_TOKEN (required for the channel verbs), DISCORD_CHANNEL_ID
-// (default channel; overridable per-call with -c/--channel).
+// Config (env): the active gateway plugin declares its own required vars (the
+// discord gateway needs DISCORD_BOT_TOKEN); the host resolves them generically.
 package main
 
 import (

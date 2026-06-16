@@ -30,11 +30,11 @@ type HomeRef struct {
 // default for knobs, live state.json for the declarative runtime fields).
 type Config struct {
 	// Daemon knobs (precedence: explicit flag > env > this > built-in default).
-	Cmd           string   `json:"cmd"`           // base bridged command for new sessions
-	HealthAddr    string   `json:"healthAddr"`    // serve --health-addr ("" disables)
-	StatusChannel string   `json:"statusChannel"`         // self-updating status embed channel
-	Instance      string   `json:"instance"`              // per-daemon instance slug
-	Owner         string   `json:"owner"`                 // Discord user id seeded into the allowlist
+	Cmd           string `json:"cmd"`           // base bridged command for new sessions
+	HealthAddr    string `json:"healthAddr"`    // serve --health-addr ("" disables)
+	StatusChannel string `json:"statusChannel"` // self-updating status embed channel
+	Instance      string `json:"instance"`      // per-daemon instance slug
+	Owner         string `json:"owner"`         // Discord user id seeded into the allowlist
 	// Stale threshold for `session clean`: sessions inactive longer than this
 	// many days are reported as stale. 0 disables stale detection. Unset (zero)
 	// means the built-in default (14) is applied by the caller.

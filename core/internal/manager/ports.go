@@ -3,7 +3,6 @@ package manager
 import (
 	"context"
 
-	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -31,10 +30,9 @@ type worktrees interface {
 	Remove(repo, name string, force bool) error
 }
 
-// forges lists/clones remote repos via gh/glab (see internal/forge).
+// forges clones a remote repo into the workspace via gh/glab (see internal/forge),
+// so a session can pick the repo its backend works on.
 type forges interface {
-	Available() (github, gitlab bool)
-	List(ctx context.Context) ([]forge.Repo, error)
 	Clone(ctx context.Context, spec, workspace string) (projectDir string, err error)
 }
 

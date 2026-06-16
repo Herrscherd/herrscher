@@ -42,11 +42,3 @@ func repoFor(workspace, project string) string {
 	}
 	return filepath.Join(workspace, project)
 }
-
-// normalizeUserID strips a Discord mention wrapper (<@id> / <@!id>) to the bare id.
-func normalizeUserID(s string) string {
-	s = strings.TrimPrefix(s, "<@")
-	s = strings.TrimPrefix(s, "!")
-	s = strings.TrimSuffix(s, ">")
-	return s
-}

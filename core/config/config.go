@@ -34,7 +34,7 @@ type Config struct {
 	HealthAddr    string `json:"healthAddr"`    // serve --health-addr ("" disables)
 	StatusChannel string `json:"statusChannel"` // self-updating status embed channel
 	Instance      string `json:"instance"`      // per-daemon instance slug
-	Owner         string `json:"owner"`         // Discord user id seeded into the allowlist
+	Owner         string `json:"owner"`         // owner id; per-daemon instance-id fallback
 	// Stale threshold for `session clean`: sessions inactive longer than this
 	// many days are reported as stale. 0 disables stale detection. Unset (zero)
 	// means the built-in default (14) is applied by the caller.
@@ -120,7 +120,7 @@ func Template(cmd, healthAddr string) string {
   // "" = legacy non-namespaced mode.
   "instance": "",
 
-  // Discord user id seeded into the allowlist on first run (like DCTL_OWNER_ID).
+  // Owner id; the per-daemon instance-id fallback (like DCTL_OWNER_ID).
   "owner": "",
 
   // "session clean" stale threshold in days: sessions with no message for longer

@@ -3,13 +3,10 @@ package manager
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os"
 	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -78,17 +75,11 @@ func (f *fakeWT) Remove(repo, name string, force bool) error {
 }
 
 type fakeForge struct {
-	repos    []forge.Repo
 	cloneDir string
 	cloneErr error
 	cloned   []string // specs passed to Clone
-	gh, gl   bool
 }
 
-func (f *fakeForge) Available() (bool, bool) { return f.gh, f.gl }
-func (f *fakeForge) List(ctx context.Context) ([]forge.Repo, error) {
-	return f.repos, nil
-}
 func (f *fakeForge) Clone(ctx context.Context, spec, workspace string) (string, error) {
 	f.cloned = append(f.cloned, spec)
 	if f.cloneErr != nil {
@@ -122,82 +113,27 @@ func newTestHandlerWithUpdater(t *testing.T, homeType string) (*Handler, *fakeUp
 	d := &fakeDiscord{homeType: homeType}
 	sup := &fakeSup{}
 	wt := &fakeWT{path: "/wt/x"}
-	fg := &fakeForge{gh: true}
+	fg := &fakeForge{}
 	up := &fakeUpdater{version: "abc1234"}
 	st := state.NewState(t.TempDir() + "/s.json")
-	st.AddAllow("owner")
-	return NewHandler(d, sup, wt, fg, up, st, "claude", t.TempDir(), nil), up, d, sup, wt, fg, st
+	return NewHandler(d, sup, wt, fg, up, st, "claude", t.TempDir()), up, d, sup, wt, fg, st
 }
 
-func it(user, cmd string, sub string, opts ...contracts.Option) contracts.Command {
-	data := contracts.CommandData{Name: cmd}
-	if sub != "" {
-		data.Options = []contracts.Option{{Name: sub, Type: contracts.OptSubcommand, Options: opts}}
-	} else {
-		data.Options = opts
+// args builds a command Input from name/value pairs (flags carry "true").
+func args(kv ...string) contracts.Input {
+	m := map[string]string{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		m[kv[i]] = kv[i+1]
 	}
-	return contracts.Command{Invoker: user, Data: data}
-}
-
-func TestSlowClassifiesNetworkCommands(t *testing.T) {
-	h, _, _, _, _, _ := newTestHandler(t, "category")
-	slow := []contracts.Command{
-		it("u", "session", "create"),
-		it("u", "session", "close"),
-		it("u", "workspace", "remotes"),
-	}
-	for _, in := range slow {
-		if !h.Slow(in) {
-			t.Errorf("expected Slow=true for %s/%s", in.Data.Name, in.Data.Options[0].Name)
-		}
-	}
-	fast := []contracts.Command{
-		it("u", "session", "list"),
-		it("u", "workspace", "list"),
-		it("u", "set", "home"),
-		it("u", "allow", "list"),
-	}
-	for _, in := range fast {
-		if h.Slow(in) {
-			t.Errorf("expected Slow=false for %s/%s", in.Data.Name, in.Data.Options[0].Name)
-		}
-	}
-}
-
-func TestHandlerDeniesNonAllowlisted(t *testing.T) {
-	h, _, _, _, _, _ := newTestHandler(t, "")
-	r := h.Handle(context.Background(), it("intruder", "session", "list"))
-	if !r.Private || r.Content == "" {
-		t.Fatalf("expected ephemeral denial, got %+v", r)
-	}
-	if r.Content != "⛔ Not authorized." {
-		t.Fatalf("expected denial message, got %q", r.Content)
-	}
-}
-
-func TestSetHomeDetectsCategory(t *testing.T) {
-	h, _, _, _, _, st := newTestHandler(t, "category")
-	h.Handle(context.Background(), it("owner", "set", "home",
-		contracts.Option{Name: "channel", Value: "cat1"}))
-	if st.Home.ID != "cat1" || st.Home.Type != "category" {
-		t.Fatalf("home wrong: %+v", st.Home)
-	}
-}
-
-func TestSetHomeDetectsForum(t *testing.T) {
-	h, _, _, _, _, st := newTestHandler(t, "forum")
-	h.Handle(context.Background(), it("owner", "set", "home",
-		contracts.Option{Name: "channel", Value: "f1"}))
-	if st.Home.Type != "forum" {
-		t.Fatalf("expected forum, got %+v", st.Home)
-	}
+	return contracts.Input{Args: m}
 }
 
 func TestSessionCreateText(t *testing.T) {
 	h, d, sup, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	h.Handle(context.Background(), it("owner", "session", "create",
-		contracts.Option{Name: "name", Value: "demo"}))
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
+		t.Fatal(err)
+	}
 	if len(d.created) != 1 || d.created[0] != "demo" {
 		t.Fatalf("expected channel created: %+v", d.created)
 	}
@@ -211,7 +147,7 @@ func TestSessionCreateText(t *testing.T) {
 	if !ok || sess.Worktree != "/wt/x" {
 		t.Fatalf("session not persisted with worktree: %+v", sess)
 	}
-	// No backend: option given → defaults to the persistent stream-json backend.
+	// No backend option given → defaults to the persistent stream-json backend.
 	if sess.Backend != "stream" {
 		t.Fatalf("expected default backend stream, got %q", sess.Backend)
 	}
@@ -220,9 +156,9 @@ func TestSessionCreateText(t *testing.T) {
 func TestSessionCreateShared(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	h.Handle(context.Background(), it("owner", "session", "create",
-		contracts.Option{Name: "name", Value: "demo"},
-		contracts.Option{Name: "shared", Value: true}))
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "shared", "true")); err != nil {
+		t.Fatal(err)
+	}
 	if len(wt.created) != 0 {
 		t.Fatalf("shared session should not create a worktree: %+v", wt.created)
 	}
@@ -232,16 +168,13 @@ func TestSessionCreateShared(t *testing.T) {
 	}
 }
 
-// Names that slugify to nothing usable (no letters/digits) are still rejected
-// outright — nothing is created.
+// Names that slugify to nothing usable (no letters/digits) are rejected outright.
 func TestSessionCreateRejectsUnsafeName(t *testing.T) {
 	for _, name := range []string{"..", "/", "---", "   ", "🙂", ""} {
 		h, d, _, wt, _, st := newTestHandler(t, "")
 		st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-		r := h.Handle(context.Background(), it("owner", "session", "create",
-			contracts.Option{Name: "name", Value: name}))
-		if !r.Private || r.Content == "" {
-			t.Fatalf("name %q: expected ephemeral rejection, got %+v", name, r)
+		if _, err := h.sessionCreateRun(context.Background(), args("name", name)); err == nil {
+			t.Fatalf("name %q: expected rejection", name)
 		}
 		if len(wt.created) != 0 || len(d.created) != 0 {
 			t.Fatalf("name %q: nothing should be created on rejection (wt=%v ch=%v)", name, wt.created, d.created)
@@ -252,8 +185,7 @@ func TestSessionCreateRejectsUnsafeName(t *testing.T) {
 	}
 }
 
-// Unsafe-looking but non-empty names are slugified into a safe slug and the
-// session is created under that slug — no traversal, no spaces, no metachars.
+// Unsafe-looking but non-empty names are slugified into a safe slug.
 func TestSessionCreateSlugifiesName(t *testing.T) {
 	cases := map[string]string{
 		"../escape":   "escape",
@@ -266,8 +198,9 @@ func TestSessionCreateSlugifiesName(t *testing.T) {
 	for raw, want := range cases {
 		h, _, _, _, _, st := newTestHandler(t, "")
 		st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-		h.Handle(context.Background(), it("owner", "session", "create",
-			contracts.Option{Name: "name", Value: raw}))
+		if _, err := h.sessionCreateRun(context.Background(), args("name", raw)); err != nil {
+			t.Fatalf("name %q: %v", raw, err)
+		}
 		if _, ok := st.FindSession(want); !ok {
 			t.Fatalf("name %q: expected session under slug %q, sessions=%+v", raw, want, st.SnapshotSessions())
 		}
@@ -277,27 +210,27 @@ func TestSessionCreateSlugifiesName(t *testing.T) {
 func TestSessionCreateAcceptsSafeName(t *testing.T) {
 	h, d, _, _, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	r := h.Handle(context.Background(), it("owner", "session", "create",
-		contracts.Option{Name: "name", Value: "feat_login-2"}))
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "feat_login-2")); err != nil {
+		t.Fatalf("safe name should be accepted: %v", err)
+	}
 	if len(d.created) != 1 {
-		t.Fatalf("safe name should be accepted: %+v / %q", d.created, r.Content)
+		t.Fatalf("safe name should be accepted: %+v", d.created)
 	}
 }
 
 func TestSessionCreateRequiresHome(t *testing.T) {
 	h, _, _, _, _, _ := newTestHandler(t, "")
-	r := h.Handle(context.Background(), it("owner", "session", "create",
-		contracts.Option{Name: "name", Value: "demo"}))
-	if !r.Private {
-		t.Fatal("expected ephemeral error when home unset")
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err == nil {
+		t.Fatal("expected error when home unset")
 	}
 }
 
 func TestSessionCreateForum(t *testing.T) {
 	h, d, sup, _, _, st := newTestHandler(t, "forum")
 	st.SetHome(state.HomeRef{ID: "forum1", Type: "forum"})
-	h.Handle(context.Background(), it("owner", "session", "create",
-		contracts.Option{Name: "name", Value: "topic"}))
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "topic")); err != nil {
+		t.Fatal(err)
+	}
 	if len(d.created) != 1 || d.created[0] != "forum:topic" {
 		t.Fatalf("expected forum post: %+v", d.created)
 	}
@@ -453,17 +386,17 @@ func TestSessionCreateBanner(t *testing.T) {
 			h, d, _, wt, _, st := newTestHandler(t, tc.homeType)
 			wt.path = tc.wtPath
 			st.SetHome(tc.homeRef)
-			opts := []contracts.Option{{Name: "name", Value: "demo"}}
+			in := args("name", "demo")
 			if tc.shared {
-				opts = append(opts, contracts.Option{Name: "shared", Value: true})
+				in.Args["shared"] = "true"
 			}
-			r := h.Handle(context.Background(), it("owner", "session", "create", opts...))
-			if !r.Private {
-				t.Fatalf("reply must be ephemeral: %+v", r)
+			reply, err := h.sessionCreateRun(context.Background(), in)
+			if err != nil {
+				t.Fatalf("create failed: %v", err)
 			}
 			for _, s := range tc.wantReply {
-				if !strings.Contains(r.Content, s) {
-					t.Errorf("reply missing %q\n--- got ---\n%s", s, r.Content)
+				if !strings.Contains(reply, s) {
+					t.Errorf("reply missing %q\n--- got ---\n%s", s, reply)
 				}
 			}
 			if len(d.sent) != 1 {
@@ -489,10 +422,12 @@ func TestSessionCreateSendFailureDoesNotFail(t *testing.T) {
 	h, d, sup, _, _, st := newTestHandler(t, "")
 	d.sendErr = errors.New("discord 500")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	r := h.Handle(context.Background(), it("owner", "session", "create",
-		contracts.Option{Name: "name", Value: "demo"}))
-	if !strings.Contains(r.Content, "✅ Running on") {
-		t.Fatalf("create must still succeed when Send fails, got: %q", r.Content)
+	reply, err := h.sessionCreateRun(context.Background(), args("name", "demo"))
+	if err != nil {
+		t.Fatalf("create must still succeed when Send fails: %v", err)
+	}
+	if !strings.Contains(reply, "✅ Running on") {
+		t.Fatalf("unexpected reply: %q", reply)
 	}
 	if _, ok := st.FindSession("demo"); !ok {
 		t.Fatal("session must remain persisted despite Send failure")
@@ -509,8 +444,9 @@ func TestSessionCloseStopsAndArchives(t *testing.T) {
 	h, d, sup, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
 	st.AddSession(state.Session{Name: "demo", ChannelID: "ch9", Type: "text", Worktree: "/wt/x"})
-	h.Handle(context.Background(), it("owner", "session", "close",
-		contracts.Option{Name: "name", Value: "demo"}))
+	if _, err := h.sessionCloseRun(context.Background(), args("name", "demo")); err != nil {
+		t.Fatal(err)
+	}
 	if len(sup.stopped) != 1 || len(d.archived) != 1 || len(wt.removed) != 1 {
 		t.Fatalf("expected stop+archive+wt-remove: %+v %+v %+v", sup.stopped, d.archived, wt.removed)
 	}
@@ -523,10 +459,8 @@ func TestSessionCloseDirtyRefusedWithoutForce(t *testing.T) {
 	h, d, _, wt, _, st := newTestHandler(t, "")
 	wt.removeErr = errors.New(`worktree "demo" has uncommitted changes`)
 	st.AddSession(state.Session{Name: "demo", ChannelID: "ch9", Type: "text", Worktree: "/wt/x"})
-	r := h.Handle(context.Background(), it("owner", "session", "close",
-		contracts.Option{Name: "name", Value: "demo"}))
-	if !r.Private {
-		t.Fatal("expected ephemeral refusal")
+	if _, err := h.sessionCloseRun(context.Background(), args("name", "demo")); err == nil {
+		t.Fatal("expected refusal")
 	}
 	if len(d.archived) != 0 {
 		t.Fatal("must not archive when worktree removal refused")
@@ -540,9 +474,9 @@ func TestSessionCloseDirtyForced(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	wt.removeErr = errors.New("dirty")
 	st.AddSession(state.Session{Name: "demo", ChannelID: "ch9", Type: "text", Worktree: "/wt/x"})
-	h.Handle(context.Background(), it("owner", "session", "close",
-		contracts.Option{Name: "name", Value: "demo"},
-		contracts.Option{Name: "force", Value: true}))
+	if _, err := h.sessionCloseRun(context.Background(), args("name", "demo", "force", "true")); err != nil {
+		t.Fatal(err)
+	}
 	if len(wt.removed) != 1 {
 		t.Fatalf("force should remove worktree: %+v", wt.removed)
 	}
@@ -590,12 +524,12 @@ func TestSessionCreateUsesQualifiedTitle(t *testing.T) {
 			h, d, _, _, _, st := newTestHandler(t, tt.homeType)
 			st.InstanceID = tt.instanceID
 			st.SetHome(tt.setHome)
-			h.Handle(context.Background(), it("owner", "session", "create",
-				contracts.Option{Name: "name", Value: tt.logical}))
+			if _, err := h.sessionCreateRun(context.Background(), args("name", tt.logical)); err != nil {
+				t.Fatal(err)
+			}
 			if len(d.created) != 1 || d.created[0] != tt.wantTitle {
 				t.Fatalf("created titles = %+v, want [%q]", d.created, tt.wantTitle)
 			}
-			// State key stays the logical name.
 			if _, ok := st.FindSession(tt.logical); !ok {
 				t.Fatalf("session must be keyed by logical name %q", tt.logical)
 			}
@@ -604,16 +538,14 @@ func TestSessionCreateUsesQualifiedTitle(t *testing.T) {
 }
 
 func TestSessionCloseOnlyTouchesOwnSession(t *testing.T) {
-	// Two instances each own a logically-identical "foo" with distinct channel
-	// ids. Closing on instance "bob" must archive only bob's channel.
 	h, d, sup, wt, _, st := newTestHandler(t, "")
 	st.InstanceID = "bob"
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	// bob's own session, keyed by logical name, pointing at bob's channel.
 	st.AddSession(state.Session{Name: "foo", ChannelID: "bob-foo-ch", Type: "text", Worktree: "/wt/bob"})
 
-	h.Handle(context.Background(), it("owner", "session", "close",
-		contracts.Option{Name: "name", Value: "foo"}))
+	if _, err := h.sessionCloseRun(context.Background(), args("name", "foo")); err != nil {
+		t.Fatal(err)
+	}
 
 	if len(d.archived) != 1 || d.archived[0] != "bob-foo-ch" {
 		t.Fatalf("close must archive only bob's channel, got %+v", d.archived)
@@ -630,39 +562,13 @@ func TestSessionCloseOnlyTouchesOwnSession(t *testing.T) {
 }
 
 func TestSessionCloseUnknownNameIsNoop(t *testing.T) {
-	// Closing a name absent from this instance's state touches nothing — it
-	// cannot reach another instance's resources.
 	h, d, sup, _, _, st := newTestHandler(t, "")
 	st.InstanceID = "bob"
-	r := h.Handle(context.Background(), it("owner", "session", "close",
-		contracts.Option{Name: "name", Value: "alice-only"}))
-	if !r.Private {
-		t.Fatal("expected ephemeral error for unknown session")
+	if _, err := h.sessionCloseRun(context.Background(), args("name", "alice-only")); err == nil {
+		t.Fatal("expected error for unknown session")
 	}
 	if len(d.archived) != 0 || len(sup.stopped) != 0 {
 		t.Fatalf("unknown close must be a no-op, got archived=%+v stopped=%+v", d.archived, sup.stopped)
-	}
-}
-
-func TestSetWorkspacePersists(t *testing.T) {
-	h, _, _, _, _, st := newTestHandler(t, "")
-	dir := t.TempDir()
-	r := h.Handle(context.Background(), it("owner", "set", "workspace",
-		contracts.Option{Name: "path", Value: dir}))
-	if r.Content == "" || !r.Private {
-		t.Fatalf("expected ephemeral confirmation, got %+v", r)
-	}
-	if st.Workspace != dir {
-		t.Fatalf("workspace not set: %q", st.Workspace)
-	}
-}
-
-func TestSetWorkspaceRejectsMissingDir(t *testing.T) {
-	h, _, _, _, _, st := newTestHandler(t, "")
-	h.Handle(context.Background(), it("owner", "set", "workspace",
-		contracts.Option{Name: "path", Value: "/no/such/dir/here"}))
-	if st.Workspace != "" {
-		t.Fatalf("missing dir should not be saved, got %q", st.Workspace)
 	}
 }
 
@@ -670,9 +576,9 @@ func TestSessionCreateUsesWorkspaceProject(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
 	_ = st.SetWorkspace("/ws")
-	h.Handle(context.Background(), it("owner", "session", "create",
-		contracts.Option{Name: "name", Value: "demo"},
-		contracts.Option{Name: "project", Value: "myproj"}))
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "project", "myproj")); err != nil {
+		t.Fatal(err)
+	}
 	if len(wt.createdRepos) != 1 || wt.createdRepos[0] != "/ws/myproj" {
 		t.Fatalf("expected Create on /ws/myproj, got %+v", wt.createdRepos)
 	}
@@ -686,10 +592,8 @@ func TestSessionCreateRequiresProjectWhenWorkspaceSet(t *testing.T) {
 	h, d, _, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
 	_ = st.SetWorkspace("/ws")
-	r := h.Handle(context.Background(), it("owner", "session", "create",
-		contracts.Option{Name: "name", Value: "demo"}))
-	if !r.Private || r.Content == "" {
-		t.Fatalf("expected error asking for project, got %+v", r)
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err == nil {
+		t.Fatal("expected error asking for project")
 	}
 	if len(wt.created) != 0 || len(d.created) != 0 {
 		t.Fatalf("nothing should be created: wt=%v ch=%v", wt.created, d.created)
@@ -701,31 +605,11 @@ func TestSessionCreateRejectsProjectTraversal(t *testing.T) {
 		h, d, _, wt, _, st := newTestHandler(t, "")
 		st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
 		_ = st.SetWorkspace("/ws")
-		r := h.Handle(context.Background(), it("owner", "session", "create",
-			contracts.Option{Name: "name", Value: "demo"},
-			contracts.Option{Name: "project", Value: p}))
-		if !r.Private || r.Content == "" {
-			t.Fatalf("project %q: expected rejection, got %+v", p, r)
+		if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "project", p)); err == nil {
+			t.Fatalf("project %q: expected rejection", p)
 		}
 		if len(wt.created) != 0 || len(d.created) != 0 {
 			t.Fatalf("project %q: nothing should be created", p)
-		}
-	}
-}
-
-// acClose builds a /session close autocomplete interaction with `typed` in the
-// focused name option.
-func acClose(user, typed string) contracts.Command {
-	in := it(user, "session", "close",
-		contracts.Option{Name: "name", Value: typed, Focused: true})
-	return in
-}
-
-func seedSessions(t *testing.T, st *state.State, names ...string) {
-	t.Helper()
-	for _, n := range names {
-		if err := st.AddSession(state.Session{Name: n, ChannelID: "c-" + n, Type: "text"}); err != nil {
-			t.Fatal(err)
 		}
 	}
 }
@@ -734,8 +618,9 @@ func TestSessionCreateLegacyNoWorkspace(t *testing.T) {
 	// No workspace set → legacy behaviour: repo is "" (WorkspaceRoot), still works.
 	h, d, _, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	h.Handle(context.Background(), it("owner", "session", "create",
-		contracts.Option{Name: "name", Value: "demo"}))
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
+		t.Fatal(err)
+	}
 	if len(d.created) != 1 || len(wt.created) != 1 {
 		t.Fatalf("legacy create should still work: ch=%v wt=%v", d.created, wt.created)
 	}
@@ -745,8 +630,9 @@ func TestSessionCloseUsesProjectRepo(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	_ = st.SetWorkspace("/ws")
 	st.AddSession(state.Session{Name: "demo", ChannelID: "ch9", Type: "text", Worktree: "/ws/myproj/.dctl-sessions/demo", Project: "myproj"})
-	h.Handle(context.Background(), it("owner", "session", "close",
-		contracts.Option{Name: "name", Value: "demo"}))
+	if _, err := h.sessionCloseRun(context.Background(), args("name", "demo")); err != nil {
+		t.Fatal(err)
+	}
 	if len(wt.removed) != 1 {
 		t.Fatalf("expected worktree removed: %+v", wt.removed)
 	}
@@ -757,9 +643,9 @@ func TestSessionCreateClonesThenUsesProject(t *testing.T) {
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
 	_ = st.SetWorkspace("/ws")
 	fg.cloneDir = "/ws/app"
-	h.Handle(context.Background(), it("owner", "session", "create",
-		contracts.Option{Name: "name", Value: "demo"},
-		contracts.Option{Name: "clone", Value: "me/app"}))
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "clone", "me/app")); err != nil {
+		t.Fatal(err)
+	}
 	if len(fg.cloned) != 1 || fg.cloned[0] != "me/app" {
 		t.Fatalf("expected clone of me/app, got %+v", fg.cloned)
 	}
@@ -777,109 +663,23 @@ func TestSessionCreateCloneErrorSurfaces(t *testing.T) {
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
 	_ = st.SetWorkspace("/ws")
 	fg.cloneErr = errors.New("auth required")
-	r := h.Handle(context.Background(), it("owner", "session", "create",
-		contracts.Option{Name: "name", Value: "demo"},
-		contracts.Option{Name: "clone", Value: "me/app"}))
-	if !r.Private || r.Content == "" {
-		t.Fatalf("expected ephemeral clone error, got %+v", r)
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "clone", "me/app")); err == nil {
+		t.Fatal("expected clone error")
 	}
 	if len(wt.created) != 0 || len(d.created) != 0 {
 		t.Fatalf("nothing should be created after clone failure")
 	}
 }
 
-func TestWorkspaceListShowsGitProjects(t *testing.T) {
+func TestSessionListEmptyAndPopulated(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	ws := t.TempDir()
-	// proj1 is a git repo; plain is a normal dir; file is not a dir.
-	if err := os.MkdirAll(ws+"/proj1/.git", 0o755); err != nil {
-		t.Fatal(err)
+	if out, err := h.sessionListRun(context.Background(), args()); err != nil || !strings.Contains(out, "No active sessions") {
+		t.Fatalf("empty list: out=%q err=%v", out, err)
 	}
-	if err := os.MkdirAll(ws+"/plain", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	_ = st.SetWorkspace(ws)
-	r := h.Handle(context.Background(), it("owner", "workspace", "list"))
-	if !strings.Contains(r.Content, "proj1") {
-		t.Fatalf("expected proj1 listed, got %q", r.Content)
-	}
-	if strings.Contains(r.Content, "plain") {
-		t.Fatalf("non-git dir should not be listed, got %q", r.Content)
-	}
-}
-
-func TestWorkspaceListErrorsWithoutWorkspace(t *testing.T) {
-	h, _, _, _, _, _ := newTestHandler(t, "")
-	r := h.Handle(context.Background(), it("owner", "workspace", "list"))
-	if !r.Private || r.Content == "" {
-		t.Fatalf("expected error when no workspace set, got %+v", r)
-	}
-}
-
-func TestWorkspaceRemotesLists(t *testing.T) {
-	h, _, _, _, fg, _ := newTestHandler(t, "")
-	fg.gh = true
-	fg.repos = []forge.Repo{{FullName: "me/app", Forge: "github"}}
-	r := h.Handle(context.Background(), it("owner", "workspace", "remotes"))
-	if !strings.Contains(r.Content, "me/app") || !strings.Contains(r.Content, "github") {
-		t.Fatalf("expected labeled remote, got %q", r.Content)
-	}
-}
-
-func TestWorkspaceRemotesNoForge(t *testing.T) {
-	h, _, _, _, fg, _ := newTestHandler(t, "")
-	fg.gh, fg.gl = false, false
-	r := h.Handle(context.Background(), it("owner", "workspace", "remotes"))
-	if !strings.Contains(r.Content, "gh/glab") {
-		t.Fatalf("expected no-forge message, got %q", r.Content)
-	}
-}
-
-// itGroup builds an interaction for a sub-command GROUP (type 2) → sub (type 1).
-func itGroup(user, cmd, group, sub string, opts ...contracts.Option) contracts.Command {
-	inner := contracts.Option{Name: sub, Type: contracts.OptSubcommand, Options: opts}
-	data := contracts.CommandData{
-		Name:    cmd,
-		Options: []contracts.Option{{Name: group, Type: contracts.OptSubcommandGroup, Options: []contracts.Option{inner}}},
-	}
-	return contracts.Command{Invoker: user, Data: data}
-}
-
-func TestSessionAllowAddListRemove(t *testing.T) {
-	h, _, _, _, _, st := newTestHandler(t, "")
 	st.AddSession(state.Session{Name: "demo", ChannelID: "c1", Type: "text"})
-
-	r := h.Handle(context.Background(), itGroup("owner", "session", "allow", "add",
-		contracts.Option{Name: "name", Value: "demo"},
-		contracts.Option{Name: "user", Value: "u1"}))
-	if r.Content == "" || !r.Private {
-		t.Fatalf("expected ephemeral confirmation, got %+v", r)
-	}
-	if !st.SessionAllowed("demo", "u1") {
-		t.Fatal("u1 should now be allowed on demo")
-	}
-
-	r = h.Handle(context.Background(), itGroup("owner", "session", "allow", "list",
-		contracts.Option{Name: "name", Value: "demo"}))
-	if !strings.Contains(r.Content, "u1") {
-		t.Fatalf("list should mention u1: %q", r.Content)
-	}
-
-	h.Handle(context.Background(), itGroup("owner", "session", "allow", "remove",
-		contracts.Option{Name: "name", Value: "demo"},
-		contracts.Option{Name: "user", Value: "u1"}))
-	if st.SessionAllowed("demo", "u1") {
-		t.Fatal("u1 should be removed")
-	}
-}
-
-func TestSessionAllowMissingSession(t *testing.T) {
-	h, _, _, _, _, _ := newTestHandler(t, "")
-	r := h.Handle(context.Background(), itGroup("owner", "session", "allow", "add",
-		contracts.Option{Name: "name", Value: "ghost"},
-		contracts.Option{Name: "user", Value: "u1"}))
-	if !r.Private || !strings.Contains(r.Content, "ghost") {
-		t.Fatalf("expected ephemeral 'no session' error, got %+v", r)
+	out, err := h.sessionListRun(context.Background(), args())
+	if err != nil || !strings.Contains(out, "demo") {
+		t.Fatalf("populated list should mention demo: out=%q err=%v", out, err)
 	}
 }
 
@@ -890,20 +690,24 @@ func TestSessionWhoListsParticipants(t *testing.T) {
 	state.AppendParticipant(jp, "h1")
 	state.AppendParticipant(jp, "h2")
 
-	r := h.Handle(context.Background(), it("owner", "session", "who",
-		contracts.Option{Name: "name", Value: "demo"}))
-	if !strings.Contains(r.Content, "h1") || !strings.Contains(r.Content, "h2") {
-		t.Fatalf("who should list both participants: %q", r.Content)
+	out, err := h.sessionWhoRun(context.Background(), args("name", "demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "h1") || !strings.Contains(out, "h2") {
+		t.Fatalf("who should list both participants: %q", out)
 	}
 }
 
 func TestSessionWhoEmpty(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	st.AddSession(state.Session{Name: "demo", ChannelID: "c1", Type: "text"})
-	r := h.Handle(context.Background(), it("owner", "session", "who",
-		contracts.Option{Name: "name", Value: "demo"}))
-	if !strings.Contains(r.Content, "Personne") {
-		t.Fatalf("empty who should say nobody wrote yet: %q", r.Content)
+	out, err := h.sessionWhoRun(context.Background(), args("name", "demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "Personne") {
+		t.Fatalf("empty who should say nobody wrote yet: %q", out)
 	}
 }
 
@@ -913,188 +717,53 @@ func TestSessionClosePurgesParticipants(t *testing.T) {
 	st.AddSession(state.Session{Name: "demo", ChannelID: "ch9", Type: "text", Worktree: "/wt/x"})
 	jp := state.ParticipantsPath(h.PartDir(), "demo")
 	state.AppendParticipant(jp, "h1")
-	h.Handle(context.Background(), it("owner", "session", "close",
-		contracts.Option{Name: "name", Value: "demo"}))
+	if _, err := h.sessionCloseRun(context.Background(), args("name", "demo")); err != nil {
+		t.Fatal(err)
+	}
 	if got := state.ReadParticipants(jp); len(got) != 0 {
 		t.Fatalf("close must purge the participants journal, got %+v", got)
 	}
 }
 
-func TestAutocompleteSuggestsMatchingSessions(t *testing.T) {
-	h, _, _, _, _, st := newTestHandler(t, "")
-	seedSessions(t, st, "prospector", "payments", "frontend")
-	got := h.Autocomplete(context.Background(), acClose("owner", "p"))
-	if len(got) != 2 {
-		t.Fatalf("expected 2 matches (prospector, payments), got %d: %+v", len(got), got)
-	}
-	// Sorted: payments before prospector.
-	if got[0].Label != "payments" || got[1].Label != "prospector" {
-		t.Fatalf("expected sorted [payments, prospector], got %+v", got)
-	}
-	if got[0].Value != "payments" {
-		t.Fatalf("value should equal name, got %q", got[0].Value)
-	}
-}
-
-func TestAutocompleteEmptyTypedReturnsAll(t *testing.T) {
-	h, _, _, _, _, st := newTestHandler(t, "")
-	seedSessions(t, st, "a", "b")
-	if got := h.Autocomplete(context.Background(), acClose("owner", "")); len(got) != 2 {
-		t.Fatalf("empty query should list all sessions, got %+v", got)
-	}
-}
-
-func TestAutocompleteClone(t *testing.T) {
-	h, _, _, _, fg, st := newTestHandler(t, "")
-	st.SetWorkspace(t.TempDir())
-	fg.repos = []forge.Repo{{FullName: "me/app"}, {FullName: "acme/api"}, {FullName: "me/site"}}
-	in := it("owner", "session", "create",
-		contracts.Option{Name: "clone", Value: "ap", Focused: true})
-	got := h.Autocomplete(context.Background(), in)
-	names := []string{}
-	for _, c := range got {
-		names = append(names, c.Value)
-	}
-	// "ap" matches "me/app" and "acme/api" (substring), not "me/site".
-	if len(got) != 2 || names[0] != "me/app" || names[1] != "acme/api" {
-		t.Fatalf("expected app+api, got %+v", names)
-	}
-}
-
-func TestAutocompleteProject(t *testing.T) {
-	ws := t.TempDir()
-	for _, p := range []string{"alpha", "beta"} {
-		if err := os.MkdirAll(ws+"/"+p+"/.git", 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetWorkspace(ws)
-	in := it("owner", "session", "create",
-		contracts.Option{Name: "project", Value: "alp", Focused: true})
-	got := h.Autocomplete(context.Background(), in)
-	if len(got) != 1 || got[0].Value != "alpha" {
-		t.Fatalf("expected alpha, got %+v", got)
-	}
-}
-
-// testPresets stands in for a backend-injected cmd catalog (e.g. claude's model ×
-// effort matrix). Core holds no model-specific presets of its own.
-var testPresets = []contracts.Choice{
-	{Label: "Opus 4.8 · high", Value: "claude --model claude-opus-4-8 --effort high"},
-	{Label: "Haiku 4.5 · low", Value: "claude --model claude-haiku-4-5 --effort low"},
-}
-
-func newTestHandlerWithPresets(t *testing.T, presets []contracts.Choice) *Handler {
-	d := &fakeDiscord{}
-	sup := &fakeSup{}
-	wt := &fakeWT{path: "/wt/x"}
-	fg := &fakeForge{gh: true}
-	up := &fakeUpdater{version: "abc1234"}
-	st := state.NewState(t.TempDir() + "/s.json")
-	st.AddAllow("owner")
-	return NewHandler(d, sup, wt, fg, up, st, "claude", t.TempDir(), presets)
-}
-
-func TestAutocompleteCmdSuggestsDefaultThenPresets(t *testing.T) {
-	h := newTestHandlerWithPresets(t, testPresets)
-	in := it("owner", "session", "create",
-		contracts.Option{Name: "cmd", Value: "", Focused: true})
-	got := h.Autocomplete(context.Background(), in)
-	// Configured default leads, then the injected presets follow.
-	if len(got) == 0 || got[0].Value != "claude" {
-		t.Fatalf("default cmd must lead, got %+v", got)
-	}
-	if len(got) < 2 {
-		t.Fatalf("expected default + injected presets, got only %d", len(got))
-	}
-	if len(got) > 25 {
-		t.Fatalf("must respect Discord's 25-choice cap, got %d", len(got))
-	}
-	for _, c := range got {
-		if len(c.Value) > 100 || len(c.Label) > 100 {
-			t.Fatalf("choice exceeds Discord 100-char limit: %+v", c)
-		}
-	}
-}
-
-func TestAutocompleteCmdFiltersByPartial(t *testing.T) {
-	h := newTestHandlerWithPresets(t, testPresets)
-	in := it("owner", "session", "create",
-		contracts.Option{Name: "cmd", Value: "haiku", Focused: true})
-	got := h.Autocomplete(context.Background(), in)
-	if len(got) == 0 {
-		t.Fatal("typing 'haiku' should match the Haiku preset")
-	}
-	for _, c := range got {
-		if !strings.Contains(strings.ToLower(c.Label+" "+c.Value), "haiku") {
-			t.Fatalf("partial 'haiku' returned a non-matching choice: %+v", c)
-		}
-	}
-}
-
-func TestAutocompleteDeniesNonAllowlisted(t *testing.T) {
-	h, _, _, _, _, st := newTestHandler(t, "")
-	seedSessions(t, st, "secret")
-	if got := h.Autocomplete(context.Background(), acClose("intruder", "s")); got != nil {
-		t.Fatalf("non-allowlisted user must get no suggestions, got %+v", got)
-	}
-}
-
-func TestAutocompleteIgnoresCreateName(t *testing.T) {
-	h, _, _, _, _, st := newTestHandler(t, "")
-	seedSessions(t, st, "x")
-	// A create-subcommand focused name must NOT be autocompleted (only
-	// project/clone/cmd on create, and name on close, are wired).
-	in := it("owner", "session", "create",
-		contracts.Option{Name: "name", Value: "x", Focused: true})
-	if got := h.Autocomplete(context.Background(), in); got != nil {
-		t.Fatalf("create→name is not wired, got %+v", got)
-	}
-}
-
-func TestFilterSessionChoicesCapsAt25(t *testing.T) {
-	sessions := make([]state.Session, 30)
-	for i := range sessions {
-		sessions[i] = state.Session{Name: string(rune('a'+i%26)) + fmt.Sprintf("%02d", i)}
-	}
-	if got := filterSessionChoices(sessions, ""); len(got) != maxAutocompleteChoices {
-		t.Fatalf("expected cap at %d, got %d", maxAutocompleteChoices, len(got))
-	}
-}
-
 func TestServiceRestart(t *testing.T) {
 	h, up, _, _, _, _, _ := newTestHandlerWithUpdater(t, "")
-	r := h.Handle(context.Background(), it("owner", "service", "restart"))
+	out, err := h.serviceRestartRun(context.Background(), args())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if up.restarts != 1 {
 		t.Fatalf("expected 1 restart, got %d", up.restarts)
 	}
 	if len(up.builds) != 0 {
 		t.Fatalf("restart must not build, got %+v", up.builds)
 	}
-	if !strings.Contains(r.Content, "Restarting") {
-		t.Fatalf("unexpected reply: %q", r.Content)
+	if !strings.Contains(out, "Restarting") {
+		t.Fatalf("unexpected reply: %q", out)
 	}
 }
 
 func TestServiceUpdatePullsBuildsRestarts(t *testing.T) {
 	h, up, _, _, _, _, _ := newTestHandlerWithUpdater(t, "")
-	r := h.Handle(context.Background(), it("owner", "service", "update"))
+	out, err := h.serviceUpdateRun(context.Background(), args())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(up.builds) != 1 || up.builds[0] != true {
 		t.Fatalf("expected one build with pull=true, got %+v", up.builds)
 	}
 	if up.restarts != 1 {
 		t.Fatalf("expected restart after build, got %d", up.restarts)
 	}
-	if !strings.Contains(r.Content, "abc1234") {
-		t.Fatalf("reply should mention version: %q", r.Content)
+	if !strings.Contains(out, "abc1234") {
+		t.Fatalf("reply should mention version: %q", out)
 	}
 }
 
 func TestServiceUpdateNoPull(t *testing.T) {
 	h, up, _, _, _, _, _ := newTestHandlerWithUpdater(t, "")
-	h.Handle(context.Background(), it("owner", "service", "update",
-		contracts.Option{Name: "no_pull", Value: true}))
+	if _, err := h.serviceUpdateRun(context.Background(), args("no_pull", "true")); err != nil {
+		t.Fatal(err)
+	}
 	if len(up.builds) != 1 || up.builds[0] != false {
 		t.Fatalf("expected build with pull=false, got %+v", up.builds)
 	}
@@ -1103,37 +772,10 @@ func TestServiceUpdateNoPull(t *testing.T) {
 func TestServiceUpdateBuildFailsNoRestart(t *testing.T) {
 	h, up, _, _, _, _, _ := newTestHandlerWithUpdater(t, "")
 	up.buildErr = errors.New("compile boom")
-	r := h.Handle(context.Background(), it("owner", "service", "update"))
+	if _, err := h.serviceUpdateRun(context.Background(), args()); err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("expected build error surfaced, got %v", err)
+	}
 	if up.restarts != 0 {
 		t.Fatalf("must not restart when build fails")
-	}
-	if !r.Private || !strings.Contains(r.Content, "boom") {
-		t.Fatalf("expected build error surfaced: %q", r.Content)
-	}
-}
-
-func TestSetSourceRejectsNonCheckout(t *testing.T) {
-	h, _, _, _, _, st := newTestHandler(t, "")
-	dir := t.TempDir() // no go.mod
-	r := h.Handle(context.Background(), it("owner", "set", "source",
-		contracts.Option{Name: "path", Value: dir}))
-	if !r.Private || !strings.Contains(r.Content, "checkout") {
-		t.Fatalf("expected rejection for non-checkout: %q", r.Content)
-	}
-	if st.SourceDir() != "" {
-		t.Fatalf("source should not be set, got %q", st.SourceDir())
-	}
-}
-
-func TestSetSourceAcceptsCheckout(t *testing.T) {
-	h, _, _, _, _, st := newTestHandler(t, "")
-	dir := t.TempDir()
-	if err := os.WriteFile(dir+"/go.mod", []byte("module github.com/Herrscherd/herrscher\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	h.Handle(context.Background(), it("owner", "set", "source",
-		contracts.Option{Name: "path", Value: dir}))
-	if st.SourceDir() != dir {
-		t.Fatalf("expected source %q, got %q", dir, st.SourceDir())
 	}
 }

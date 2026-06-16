@@ -19,16 +19,11 @@ func TestBridgeArgsIncludeParticipants(t *testing.T) {
 	}
 }
 
-func TestBridgeArgsIncludeAllowlist(t *testing.T) {
+func TestBridgeArgsIncludeSession(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/bin/dctl")
-	s.StatePath = "/var/dctl/state.json"
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1"})
-	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "--allow-state /var/dctl/state.json") {
-		t.Fatalf("expected --allow-state <state.json> in args: %v", args)
-	}
-	if !strings.Contains(joined, "--allow-session demo") {
-		t.Fatalf("expected --allow-session <name> in args: %v", args)
+	if !strings.Contains(strings.Join(args, " "), "--session demo") {
+		t.Fatalf("expected --session <name> in args: %v", args)
 	}
 }
 
@@ -47,13 +42,5 @@ func TestBridgeArgsNoBackendWhenStream(t *testing.T) {
 		if strings.Contains(strings.Join(args, " "), "--backend") {
 			t.Fatalf("no --backend expected for backend %q: %v", b, args)
 		}
-	}
-}
-
-func TestBridgeArgsNoAllowlistWhenStatePathEmpty(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/dctl")
-	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1"})
-	if strings.Contains(strings.Join(args, " "), "--allow-state") {
-		t.Fatalf("no --allow-state expected when StatePath is empty: %v", args)
 	}
 }

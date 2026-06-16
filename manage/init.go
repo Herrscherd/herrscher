@@ -55,7 +55,7 @@ func InitCmd(args []string) int {
 	var extras multiFlag
 	fs.Var(&extras, "with", "pin an extra module path verbatim (repeatable)")
 	if err := fs.Parse(args); err != nil {
-		return 2
+		return parseExit(err)
 	}
 
 	if *list {

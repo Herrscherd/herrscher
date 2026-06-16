@@ -15,10 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
 
-	"github.com/Herrscherd/dctl"
 	"github.com/Herrscherd/herrscher/manage"
 )
 
@@ -71,30 +68,17 @@ func main() {
 		os.Exit(manage.InstallCmd(args))
 	}
 
-	token := os.Getenv("DISCORD_BOT_TOKEN")
-	client := dctl.New(token, os.Getenv("DISCORD_CHANNEL_ID"))
 	ctx := context.Background()
 
+	// The host stays gateway-agnostic: it never builds a Discord (dctl) client.
+	// Every runtime verb drives the registered gateway plugin via the contracts
+	// port; raw channel poking lives in the dctl library, not in this binary.
 	var err error
 	switch cmd {
-	case "send":
-		err = runSend(ctx, client, args)
-	case "reply":
-		err = runReply(ctx, client, args)
-	case "read":
-		err = runRead(ctx, client, args)
-	case "watch":
-		err = runWatch(ctx, client, args)
 	case "bridge":
 		err = runBridge(ctx, args)
-	case "react":
-		err = runReact(ctx, client, args)
-	case "thread":
-		err = runThread(ctx, client, args)
-	case "channel":
-		err = runChannel(ctx, client, args)
 	case "serve":
-		err = runServe(ctx, client, token, args)
+		err = runServe(ctx, args)
 	case "session":
 		err = runSession(ctx, args)
 	case "service":
@@ -113,103 +97,6 @@ func main() {
 	}
 }
 
-func runSend(ctx context.Context, c *dctl.Client, args []string) error {
-	fs := flag.NewFlagSet("send", flag.ExitOnError)
-	ch := channelFlag(fs)
-	fs.Parse(args)
-	text := strings.TrimSpace(strings.Join(fs.Args(), " "))
-	if text == "" {
-		return fmt.Errorf("usage: herrscher send [-c CHANNEL] <text>")
-	}
-	msg, err := c.Messages().Send(ctx, *ch, text)
-	if err != nil {
-		return err
-	}
-	fmt.Println(msg.ID)
-	return nil
-}
-
-func runReply(ctx context.Context, c *dctl.Client, args []string) error {
-	fs := flag.NewFlagSet("reply", flag.ExitOnError)
-	ch := channelFlag(fs)
-	fs.Parse(args)
-	rest := fs.Args()
-	if len(rest) < 2 {
-		return fmt.Errorf("usage: herrscher reply [-c CHANNEL] <message_id> <text>")
-	}
-	text := strings.TrimSpace(strings.Join(rest[1:], " "))
-	msg, err := c.Messages().Reply(ctx, *ch, rest[0], text)
-	if err != nil {
-		return err
-	}
-	fmt.Println(msg.ID)
-	return nil
-}
-
-func runRead(ctx context.Context, c *dctl.Client, args []string) error {
-	fs := flag.NewFlagSet("read", flag.ExitOnError)
-	ch := channelFlag(fs)
-	n := fs.Int("n", 20, "number of recent messages (1-100)")
-	after := fs.String("after", "", "only messages newer than this id")
-	fs.Parse(args)
-	msgs, err := c.Messages().Read(ctx, *ch, *n, *after)
-	if err != nil {
-		return err
-	}
-	for _, m := range msgs {
-		fmt.Println(line(m))
-	}
-	return nil
-}
-
-func runWatch(ctx context.Context, c *dctl.Client, args []string) error {
-	fs := flag.NewFlagSet("watch", flag.ExitOnError)
-	ch := channelFlag(fs)
-	interval := fs.Int("i", 10, "poll interval in seconds")
-	after := fs.String("after", "", "start watching after this id")
-	fs.Parse(args)
-	last := *after
-	for {
-		msgs, err := c.Messages().Read(ctx, *ch, 100, last)
-		if err != nil {
-			return err
-		}
-		for _, m := range msgs {
-			fmt.Println(line(m))
-			last = m.ID
-		}
-		time.Sleep(time.Duration(*interval) * time.Second)
-	}
-}
-
-func runReact(ctx context.Context, c *dctl.Client, args []string) error {
-	fs := flag.NewFlagSet("react", flag.ExitOnError)
-	ch := channelFlag(fs)
-	fs.Parse(args)
-	rest := fs.Args()
-	if len(rest) < 2 {
-		return fmt.Errorf("usage: herrscher react [-c CHANNEL] <message_id> <emoji>")
-	}
-	return c.Reactions().Add(ctx, *ch, rest[0], rest[1])
-}
-
-func runThread(ctx context.Context, c *dctl.Client, args []string) error {
-	fs := flag.NewFlagSet("thread", flag.ExitOnError)
-	ch := channelFlag(fs)
-	fs.Parse(args)
-	rest := fs.Args()
-	if len(rest) < 2 {
-		return fmt.Errorf("usage: herrscher thread [-c CHANNEL] <message_id> <name>")
-	}
-	name := strings.TrimSpace(strings.Join(rest[1:], " "))
-	t, err := c.Threads().Start(ctx, *ch, rest[0], name)
-	if err != nil {
-		return err
-	}
-	fmt.Println(t.ID)
-	return nil
-}
-
 // channelFlag registers -c/--channel on fs and returns the bound pointer.
 func channelFlag(fs *flag.FlagSet) *string {
 	ch := fs.String("channel", "", "channel id (default: DISCORD_CHANNEL_ID)")
@@ -217,31 +104,13 @@ func channelFlag(fs *flag.FlagSet) *string {
 	return ch
 }
 
-// line renders one message as a single tab-separated row, content flattened to
-// one line — the most compact form an agent can still parse (id, author, text).
-func line(m dctl.Message) string {
-	content := strings.ReplaceAll(m.Content, "\n", " ")
-	return m.ID + "\t" + m.Author.Username + "\t" + content
-}
-
 func usage() {
-	fmt.Fprint(os.Stderr, `herrscher — Discord bot CLI + host
+	fmt.Fprint(os.Stderr, `herrscher — modular Discord<->Claude harness host
 
-  herrscher send  [-c CHANNEL] <text>              post a message, prints its id
-  herrscher reply [-c CHANNEL] <message_id> <text> reply in thread, prints reply id
-  herrscher read  [-c CHANNEL] [-n 20] [--after ID]  recent messages, one per line
-  herrscher watch [-c CHANNEL] [-i 10] [--after ID]  stream new messages forever
   herrscher bridge --cmd '<command>' [-i 5] [--state FILE]
                                               link the channel to a command:
                                               run it per human message, post its
                                               stdout back (e.g. a Claude session)
-  herrscher react  [-c CHANNEL] <message_id> <emoji>  add a reaction (e.g. 👀)
-  herrscher thread [-c CHANNEL] <message_id> <name>  open a real thread off a message
-  herrscher channel <list|create|post|delete|ensure> [args] [--guild ID]
-                                              manage channels: create [--forum] a
-                                              channel, post <forum_id> <title>
-                                              <content> a forum thread, delete on
-                                              request
   herrscher serve [--health-addr :8787] [--status-channel ID] [--state FILE] [--env-file PATH]
                                               always-on Gateway daemon: bot online
                                               24/7, supervises one

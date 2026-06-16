@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Herrscherd/dctl"
 	"github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/host"
@@ -22,7 +21,7 @@ func or(a, b string) string {
 	return b
 }
 
-func runServe(ctx context.Context, c *dctl.Client, token string, args []string) error {
+func runServe(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	// --config is read up front (before Parse) so config.json can seed the other
 	// flags' defaults; it's still registered for --help and validation.
@@ -42,17 +41,12 @@ func runServe(ctx context.Context, c *dctl.Client, token string, args []string) 
 	envFile := fs.String("env-file", "", "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `dctl service`)")
 	fs.Parse(args)
 	if *envFile != "" {
-		// Load secrets in Go rather than via a shell/batch wrapper, then rebuild
-		// the client from the now-populated environment (main built its client
-		// before this file was read).
+		// Load secrets in Go rather than via a shell/batch wrapper, so the gateway
+		// plugin's config resolution below sees them (the service passes its file
+		// here; the implicit ./.env was already loaded in main).
 		if err := loadEnvFile(*envFile); err != nil {
 			return err
 		}
-		token = os.Getenv("DISCORD_BOT_TOKEN")
-		c = dctl.New(token, os.Getenv("DISCORD_CHANNEL_ID"))
-	}
-	if !c.Enabled() {
-		return fmt.Errorf("discord: bot token disabled (set DISCORD_BOT_TOKEN)")
 	}
 	// Owner: env DCTL_OWNER_ID wins over config.json (the owner id is kept in
 	// env alongside the token), then config seeds it for declarative setups.

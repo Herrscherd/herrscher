@@ -65,23 +65,47 @@ func InitCmd(args []string) int {
 		return 0
 	}
 
+	// Resolve the host source BEFORE prompting, so we never ask for input we then
+	// throw away. Two modes:
+	//   compose  — a source checkout is present: pick the stack, rewrite
+	//              plugins.go, seed secrets, rebuild.
+	//   config   — an installed binary (no source): the plugin set is already
+	//              compiled in, so we only collect secrets into the env file.
+	dir, hostErr := resolveHost(*hostDir)
+	compose := hostErr == nil
+	interactive := !*yes && !stackFlagsSet(fs) && isTerminal(os.Stdin) && isTerminal(os.Stderr)
+
 	choices := map[string]string{
 		"gateway":      *gateway,
 		"backend":      *backend,
 		"memory":       *memory,
 		"orchestrator": *orchestrator,
 	}
-
-	// Run the wizard on an interactive terminal when no stack flags were given.
-	// --yes (or scripted/non-tty use) takes the flags/defaults silently instead.
 	var secrets map[string]string
-	if !*yes && !stackFlagsSet(fs) && isTerminal(os.Stdin) && isTerminal(os.Stderr) {
-		wc, ws, err := runWizard()
+	if interactive {
+		wc, ws, err := runWizard(compose)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
-		choices, secrets = wc, ws
+		secrets = ws
+		if compose {
+			choices = wc
+		}
+	}
+
+	// Config-only mode: the binary already carries its plugins, so there is
+	// nothing to recompose or rebuild — just persist the secrets and point the
+	// operator at `serve`.
+	if !compose {
+		path := envTarget()
+		n, err := writeSecretsTo(path, secrets)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "write secrets: %v\n", err)
+			return 1
+		}
+		summaryConfig(path, n)
+		return 0
 	}
 
 	modules, err := resolveStack(choices, extras)
@@ -90,11 +114,6 @@ func InitCmd(args []string) int {
 		return 2
 	}
 
-	dir, err := resolveHost(*hostDir)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
 	manifest := filepath.Join(dir, "plugins.go")
 	src, err := os.ReadFile(manifest)
 	if err != nil {
@@ -110,11 +129,9 @@ func InitCmd(args []string) int {
 		fmt.Fprintf(os.Stderr, "write %s: %v\n", manifest, err)
 		return 1
 	}
-	for _, m := range modules {
-		fmt.Printf("stack: %s\n", m)
-	}
+	summaryStack(modules)
 	seedEnv(dir)
-	if n, err := writeSecrets(dir, secrets); err != nil {
+	if n, err := writeSecretsTo(filepath.Join(dir, ".env"), secrets); err != nil {
 		fmt.Fprintf(os.Stderr, "write secrets: %v\n", err)
 	} else if n > 0 {
 		fmt.Printf("wrote %d secret(s) to .env\n", n)
@@ -200,14 +217,28 @@ func stackFlagsSet(fs *flag.FlagSet) bool {
 	return set
 }
 
-// writeSecrets upserts KEY=VALUE pairs into dir/.env (created 0600 if absent),
-// preserving every other line and overwriting only the keys we set. Values are
-// never printed. Returns the number of keys written.
-func writeSecrets(dir string, secrets map[string]string) (int, error) {
+// envTarget is where config-only mode persists secrets: $HERRSCHER_ENV_FILE if
+// the operator pinned one, else a .env in the current directory.
+func envTarget() string {
+	if p := os.Getenv("HERRSCHER_ENV_FILE"); p != "" {
+		return p
+	}
+	return ".env"
+}
+
+// writeSecretsTo upserts KEY=VALUE pairs into the env file at path (created 0600
+// if absent, parent dirs made as needed), preserving every other line and
+// overwriting only the keys we set. Values are never printed. Returns the number
+// of keys written.
+func writeSecretsTo(path string, secrets map[string]string) (int, error) {
 	if len(secrets) == 0 {
 		return 0, nil
 	}
-	path := filepath.Join(dir, ".env")
+	if dir := filepath.Dir(path); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return 0, err
+		}
+	}
 	var lines []string
 	if b, err := os.ReadFile(path); err == nil {
 		lines = strings.Split(strings.TrimRight(string(b), "\n"), "\n")

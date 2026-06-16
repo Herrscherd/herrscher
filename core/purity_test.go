@@ -28,6 +28,7 @@ func TestCorePurity(t *testing.T) {
 			t.Fatalf("%s: %v", r, err)
 		}
 		imports := append(append([]string{}, pkg.Imports...), pkg.TestImports...)
+		imports = append(imports, pkg.XTestImports...)
 		for _, imp := range imports {
 			for _, bad := range forbidden {
 				if imp == bad || strings.HasPrefix(imp, bad+"/") {

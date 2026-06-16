@@ -105,7 +105,7 @@ func InitCmd(args []string) int {
 		return 0
 	}
 	for _, m := range modules {
-		if code := run(dir, "go", "get", m); code != 0 {
+		if code := run(dir, "go", "get", "--", m); code != 0 {
 			return code
 		}
 	}
@@ -138,6 +138,10 @@ func resolveStack(choices map[string]string, extras []string) ([]string, error) 
 		add(module)
 	}
 	for _, m := range extras {
+		// Reject paths that would be read as flags by `go get` (e.g. -insecure).
+		if m == "" || m[0] == '-' {
+			return nil, fmt.Errorf("invalid module path %q", m)
+		}
 		add(m)
 	}
 	if len(modules) == 0 {
@@ -158,9 +162,11 @@ func seedEnv(dir string) {
 	if err != nil {
 		return
 	}
-	if err := os.WriteFile(dst, src, 0o600); err == nil {
-		fmt.Printf("seeded %s from .env.example — fill in your secrets\n", dst)
+	if err := os.WriteFile(dst, src, 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "seed %s: %v\n", dst, err)
+		return
 	}
+	fmt.Printf("seeded %s from .env.example — fill in your secrets\n", dst)
 }
 
 func printCatalog() {

@@ -14,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -30,15 +31,29 @@ func main() {
 	// Auto-load a project-root .env so every command (and every plugin's config
 	// resolution) sees its vars without an explicit --env-file. Real environment
 	// wins over the file, and the daemon propagates os.Environ() to each bridge
-	// subprocess, so one .env floods gateway/backend/memory alike. $HERRSCHER_ENV_FILE
-	// overrides the path; a missing file is not an error.
-	envPath := ".env"
-	if p := os.Getenv("HERRSCHER_ENV_FILE"); p != "" {
-		envPath = p
+	// subprocess, so one .env floods gateway/backend/memory alike.
+	//
+	// $HERRSCHER_ENV_FILE overrides the path. We resolve to an ABSOLUTE path and
+	// re-export it so bridge subprocesses — which run with cmd.Dir set to a
+	// per-session worktree — load the *same* file, not a stray .env that happens
+	// to sit in that worktree (which would be an env-injection vector). An
+	// explicit $HERRSCHER_ENV_FILE is authoritative, so a load failure there is
+	// fatal; the implicit ./.env is best-effort (a missing or unreadable file
+	// must not break management verbs that need no secrets).
+	envPath, explicit := os.Getenv("HERRSCHER_ENV_FILE"), true
+	if envPath == "" {
+		envPath, explicit = ".env", false
 	}
+	if abs, err := filepath.Abs(envPath); err == nil {
+		envPath = abs
+	}
+	os.Setenv("HERRSCHER_ENV_FILE", envPath)
 	if err := loadEnvFile(envPath); err != nil {
-		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
-		os.Exit(1)
+		if explicit {
+			fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
+			os.Exit(1)
+		}
+		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error()+" (continuing)")
 	}
 
 	cmd := os.Args[1]

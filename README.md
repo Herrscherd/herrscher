@@ -18,16 +18,28 @@ model), an agnostic domain, and a host that bolts them together.
 
 ## The members
 
+The umbrella tracks only the **agnostic skeleton** — the parts that know neither a
+channel nor a model. They live under the `@herrscher/` scope:
+
 | Symlink | Repo | Role | README |
 |---------|------|------|--------|
-| `contracts/` | herrscher-contracts | The ports: interfaces + neutral types. Zero deps, zero logic. | [↗](contracts/README.md) |
-| `core/` | herrscher-core | The agnostic domain: sessions, channels, worktrees, supervision. | [↗](core/README.md) |
-| `claude-backend/` | herrscher-claude-backend | The model edge: speaks Claude stream-json. | [↗](claude-backend/README.md) |
-| `discord/` | herrscher-discord-gateway | The channel edge: adapts Discord (via `dctl`). | [↗](discord/README.md) |
-| `host/` | herrscher-host | The composition root + CLI — the only binary. | [↗](host/README.md) |
+| `@herrscher/contracts/` | herrscher-contracts | The ports: interfaces + neutral types. Zero deps, zero logic. | [↗](@herrscher/contracts/README.md) |
+| `@herrscher/core/` | herrscher-core | The agnostic domain: sessions, channels, worktrees, supervision. | [↗](@herrscher/core/README.md) |
+| `@herrscher/host/` | herrscher-host | The composition root + CLI — the only binary. | [↗](@herrscher/host/README.md) |
 
-`dctl` is **not** part of the family: it is an external dependency — the low-level
-Discord REST/WebSocket client that the gateway consumes.
+## The official plugins
+
+The two edges are **not** part of the umbrella — they are interchangeable plugins,
+each its own repo, compiled into the host on demand (blank import + rebuild, the
+xcaddy pattern). These are the official ones:
+
+| Repo | Edge | Role |
+|------|------|------|
+| [herrscher-discord-gateway](https://github.com/Akayashuu/herrscher-discord-gateway) | channel | Adapts Discord to the `Gateway` port (via `dctl`). |
+| [herrscher-claude-backend](https://github.com/Akayashuu/herrscher-claude-backend) | model | Speaks Claude stream-json behind the `Backend` port. |
+
+`dctl` is **not** part of the family either: it is an external dependency — the
+low-level Discord REST/WebSocket client that the gateway consumes.
 
 ---
 
@@ -44,12 +56,13 @@ Discord REST/WebSocket client that the gateway consumes.
 ┌───────────────────┐  ┌──────────────┐ │            ┌────────────────────────┐
 │ discord (gateway) │  │     core     │ │            │    claude-backend      │
 │ Discord ⇄ ports   │  │  the domain  │ │            │   Claude ⇄ Backend     │
-└───────────────────┘  └──────────────┘ │            └────────────────────────┘
-        ▲                     ▲          │                    ▲
-        └──────────┬──────────┴──────────┴────────────────────┘
+│ (plugin)          │  └──────────────┘ │            │   (plugin)             │
+└───────────────────┘         ▲         │            └────────────────────────┘
+        ▲                     │         │                    ▲
+        └──────────┬──────────┴─────────┴────────────────────┘
                    │
           ┌────────────────────┐
-          │        host         │   the only main(); imports all of the above + dctl
+          │        host         │   the only main(); imports core + the plugins + dctl
           └────────────────────┘
 ```
 
@@ -59,7 +72,8 @@ concrete types of both. That is what lets you swap Discord for Slack, or Claude 
 another model, by editing one wiring file in `host` — never the domain.
 
 For the full architecture, the CLI, and the exact wiring code, read
-**[host/README.md](host/README.md)** — it is the canonical entry point.
+**[@herrscher/host/README.md](@herrscher/host/README.md)** — it is the canonical
+entry point.
 
 ---
 
@@ -67,23 +81,24 @@ For the full architecture, the CLI, and the exact wiring code, read
 
 Each member is its own Go module with its own `go.mod`. During development they are
 stitched together with `replace` directives pointing at the sibling directories, so
-all five repos must sit side by side under the same parent:
+all the repos must sit side by side under the same parent:
 
 ```
 dev/
 ├── herrscher/                 ← you are here (symlinks + this README)
+│   └── @herrscher/            ← the agnostic skeleton
+│       ├── contracts/  → ../../herrscher-contracts
+│       ├── core/       → ../../herrscher-core
+│       └── host/       → ../../herrscher-host
 ├── herrscher-contracts/
 ├── herrscher-core/
-├── herrscher-claude-backend/
-├── herrscher-discord-gateway/
 ├── herrscher-host/
+├── herrscher-discord-gateway/ ← plugin (not in the umbrella)
+├── herrscher-claude-backend/  ← plugin (not in the umbrella)
 └── dctl/                      ← external dependency
 ```
 
-The symlinks (`contracts → ../herrscher-contracts`, `core → ../herrscher-core`,
-`claude-backend → ../herrscher-claude-backend`, `discord →
-../herrscher-discord-gateway`, `host → ../herrscher-host`) resolve only when the
-siblings are checked out alongside this repo.
+The symlinks resolve only when the siblings are checked out alongside this repo.
 
 ---
 
@@ -97,8 +112,8 @@ export DISCORD_BOT_TOKEN=...
 ./dctl serve --health-addr :8787
 ```
 
-See [host/README.md](host/README.md) for every CLI subcommand (`serve`, `bridge`,
-`service`, `channel`, …) and the configuration layering.
+See [@herrscher/host/README.md](@herrscher/host/README.md) for every CLI subcommand
+(`serve`, `bridge`, `service`, `channel`, …) and the configuration layering.
 
 ---
 

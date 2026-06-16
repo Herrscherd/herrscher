@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // The module catalog: one entry per category, mapping a short kind to its
@@ -48,6 +49,7 @@ func InitCmd(args []string) int {
 	hostDir := fs.String("host", "", "path to the host module")
 	noBuild := fs.Bool("no-build", false, "write plugins.go but skip go get/build")
 	list := fs.Bool("list", false, "list the module catalog and exit")
+	yes := fs.Bool("yes", false, "skip the interactive wizard; use flags/defaults")
 	gateway := fs.String("gateway", defaultStack["gateway"], "gateway module kind (or none)")
 	backend := fs.String("backend", defaultStack["backend"], "backend module kind (or none)")
 	memory := fs.String("memory", defaultStack["memory"], "memory module kind (or none)")
@@ -69,6 +71,19 @@ func InitCmd(args []string) int {
 		"memory":       *memory,
 		"orchestrator": *orchestrator,
 	}
+
+	// Run the wizard on an interactive terminal when no stack flags were given.
+	// --yes (or scripted/non-tty use) takes the flags/defaults silently instead.
+	var secrets map[string]string
+	if !*yes && !stackFlagsSet(fs) && isTerminal(os.Stdin) && isTerminal(os.Stderr) {
+		wc, ws, err := runWizard()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		choices, secrets = wc, ws
+	}
+
 	modules, err := resolveStack(choices, extras)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -99,6 +114,11 @@ func InitCmd(args []string) int {
 		fmt.Printf("stack: %s\n", m)
 	}
 	seedEnv(dir)
+	if n, err := writeSecrets(dir, secrets); err != nil {
+		fmt.Fprintf(os.Stderr, "write secrets: %v\n", err)
+	} else if n > 0 {
+		fmt.Printf("wrote %d secret(s) to .env\n", n)
+	}
 
 	if *noBuild {
 		fmt.Println("wrote plugins.go (--no-build); run `go mod tidy && go build` in the host to apply")
@@ -164,6 +184,57 @@ func resolveStack(choices map[string]string, extras []string) ([]string, error) 
 		return nil, fmt.Errorf("empty stack: every category was set to none")
 	}
 	return modules, nil
+}
+
+// stackFlagsSet reports whether the user explicitly passed any stack-shaping
+// flag. When they did, init honours those flags and skips the wizard so
+// scripted invocations stay deterministic.
+func stackFlagsSet(fs *flag.FlagSet) bool {
+	set := false
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "gateway", "backend", "memory", "orchestrator", "with":
+			set = true
+		}
+	})
+	return set
+}
+
+// writeSecrets upserts KEY=VALUE pairs into dir/.env (created 0600 if absent),
+// preserving every other line and overwriting only the keys we set. Values are
+// never printed. Returns the number of keys written.
+func writeSecrets(dir string, secrets map[string]string) (int, error) {
+	if len(secrets) == 0 {
+		return 0, nil
+	}
+	path := filepath.Join(dir, ".env")
+	var lines []string
+	if b, err := os.ReadFile(path); err == nil {
+		lines = strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+	}
+	done := map[string]bool{}
+	for i, ln := range lines {
+		key := ln
+		if eq := strings.IndexByte(ln, '='); eq >= 0 {
+			key = strings.TrimSpace(strings.TrimPrefix(ln[:eq], "export "))
+		}
+		if v, ok := secrets[key]; ok {
+			lines[i] = key + "=" + v
+			done[key] = true
+		}
+	}
+	keys := make([]string, 0, len(secrets))
+	for k := range secrets {
+		if !done[k] {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		lines = append(lines, k+"="+secrets[k])
+	}
+	out := strings.Join(lines, "\n") + "\n"
+	return len(secrets), os.WriteFile(path, []byte(out), 0o600)
 }
 
 // seedEnv copies .env.example to .env when no .env exists yet, so a fresh host

@@ -53,6 +53,18 @@ func TestScanLegacyBareValueBecomesPick(t *testing.T) {
 	}
 }
 
+func TestScanRejectsMalformedJSONLine(t *testing.T) {
+	r := strings.NewReader(`{"t":"chunk","text":` + "\n")
+	called := false
+	err := ScanEvents(r, func(Event) error { called = true; return nil })
+	if err == nil {
+		t.Fatal("ScanEvents returned nil for a malformed JSON line, want an error")
+	}
+	if called {
+		t.Fatal("fn was called for a malformed JSON line, want it skipped as a protocol error")
+	}
+}
+
 func TestScanSkipsBlankLines(t *testing.T) {
 	r := strings.NewReader("\n  \n{\"t\":\"pick\",\"value\":\"1\"}\n\n")
 	count := 0

@@ -78,14 +78,19 @@ func (r *runner) emit(e control.Event) {
 }
 
 // emitBackend maps a backend progress event onto the bus vocabulary: assistant
-// text becomes a chunk, a tool invocation becomes a status line. Other kinds
-// (result/reset) carry no transcript text and are dropped.
+// text becomes a chunk, a tool invocation becomes a status line, a mid-turn
+// reset is signalled so consumers discard the aborted partial turn. Other kinds
+// (e.g. result) carry no transcript text and are dropped, as is an empty status.
 func (r *runner) emitBackend(ev contracts.BackendEvent) {
 	switch ev.Kind {
 	case "text":
 		r.emit(control.Event{T: "chunk", Text: ev.Detail})
 	case "tool":
-		r.emit(control.Event{T: "status", Text: strings.TrimSpace(ev.Tool + " " + ev.Detail)})
+		if text := strings.TrimSpace(ev.Tool + " " + ev.Detail); text != "" {
+			r.emit(control.Event{T: "status", Text: text})
+		}
+	case "reset":
+		r.emit(control.Event{T: "reset"})
 	}
 }
 
@@ -124,6 +129,8 @@ func (r *runner) handle(ctx context.Context, m contracts.Message) {
 		}
 		pv = newProgressView(post, r.o.Progress, r.o.ProgressKeep, time.Now())
 	}
+	// Progress gates only the Discord progress view; the sink always taps
+	// every backend event so the bus transcript is independent of Progress.
 	onEvent := func(ev contracts.BackendEvent) {
 		if pv != nil {
 			pv.add(ev)
@@ -157,6 +164,7 @@ func (r *runner) handle(ctx context.Context, m contracts.Message) {
 		}
 		_ = r.p.Unreact(ctx, r.ch, m.ID, ackEmoji)
 		_ = r.gw.React(ctx, r.conv, contracts.MessageID(m.ID), failEmoji)
+		r.emit(control.Event{T: "reply", Done: true})
 		return
 	}
 	postResult(ctx, r.p, r.gw, r.conv, m.ID, out, r.resp, r.o)

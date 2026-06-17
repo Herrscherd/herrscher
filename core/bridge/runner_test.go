@@ -43,8 +43,8 @@ func (*fakeGateway) Menu(context.Context, contracts.Conversation, contracts.Mess
 	return nil
 }
 
-// fakeReader is a ChannelReader whose methods handle never reaches when
-// Progress is "off" (no UpsertStatusMessage) and there are no attachments.
+// fakeReader is a ChannelReader for handle tests: UpsertStatusMessage is
+// unreached when Progress is off; Unreact/Read are simple no-ops.
 type fakeReader struct{}
 
 func (fakeReader) Enabled() bool          { return true }
@@ -97,6 +97,33 @@ func TestHandleEmitsTurnEvents(t *testing.T) {
 		if sink.events[i] != want[i] {
 			t.Errorf("event %d = %+v, want %+v", i, sink.events[i], want[i])
 		}
+	}
+}
+
+func TestEmitBackendMapping(t *testing.T) {
+	cases := []struct {
+		name string
+		ev   contracts.BackendEvent
+		want []control.Event
+	}{
+		{"tool", contracts.BackendEvent{Kind: "tool", Tool: "Edit", Detail: "file.go"}, []control.Event{{T: "status", Text: "Edit file.go"}}},
+		{"reset", contracts.BackendEvent{Kind: "reset"}, []control.Event{{T: "reset"}}},
+		{"result drops", contracts.BackendEvent{Kind: "result", Detail: "ignored"}, nil},
+		{"empty tool drops", contracts.BackendEvent{Kind: "tool"}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sink := &fakeSink{}
+			(&runner{sink: sink}).emitBackend(c.ev)
+			if len(sink.events) != len(c.want) {
+				t.Fatalf("emitted %+v, want %+v", sink.events, c.want)
+			}
+			for i := range c.want {
+				if sink.events[i] != c.want[i] {
+					t.Errorf("event %d = %+v, want %+v", i, sink.events[i], c.want[i])
+				}
+			}
+		})
 	}
 }
 

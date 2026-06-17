@@ -55,11 +55,145 @@ type Options struct {
 	ControlSocket string // unix socket the daemon forwards select-menu clicks to (empty = numeric-reply fallback only)
 }
 
+// runner carries the per-session state the turn handler needs. Run builds one
+// and calls handle for each inbound message; extracting it keeps Run a thin
+// loop and makes a single turn unit-testable.
+type runner struct {
+	p    contracts.ChannelReader
+	gw   contracts.Gateway
+	resp contracts.Backend
+	orch contracts.Orchestrator
+	conv contracts.Conversation
+	ch   string
+	o    Options
+	seen map[string]bool
+	sink EventSink
+}
+
+// emit forwards e to the sink when one is configured; a nil sink is a no-op.
+func (r *runner) emit(e control.Event) {
+	if r.sink != nil {
+		r.sink.Emit(e)
+	}
+}
+
+// emitBackend maps a backend progress event onto the bus vocabulary: assistant
+// text becomes a chunk, a tool invocation becomes a status line, a mid-turn
+// reset is signalled so consumers discard the aborted partial turn. Other kinds
+// (e.g. result) carry no transcript text and are dropped, as is an empty status.
+func (r *runner) emitBackend(ev contracts.BackendEvent) {
+	switch ev.Kind {
+	case "text":
+		r.emit(control.Event{T: "chunk", Text: ev.Detail})
+	case "tool":
+		if text := strings.TrimSpace(ev.Tool + " " + ev.Detail); text != "" {
+			r.emit(control.Event{T: "status", Text: text})
+		}
+	case "reset":
+		r.emit(control.Event{T: "reset"})
+	}
+}
+
+// handle processes one inbound message: acknowledge, run the backend turn, post
+// the reply, and record the turn. It is a no-op for bot messages (including our
+// own) so the bridge never answers itself.
+func (r *runner) handle(ctx context.Context, m contracts.Message) {
+	if m.AuthorBot {
+		return // never answer a bot (incl. ourselves) → no loops
+	}
+	if !r.seen[m.AuthorID] {
+		r.seen[m.AuthorID] = true
+		recordParticipant(r.o.Participants, m.AuthorID)
+	}
+	logf(r.o.Verbose, "<%s> %s", m.AuthorName, oneline(m.Content))
+	r.emit(control.Event{T: "human", Who: m.AuthorName, Text: m.Content})
+
+	// Pull any image attachments down to local files so the backend can
+	// reference them. Best-effort: a download failure never drops a turn.
+	var atts []string
+	if len(m.Attachments) > 0 {
+		var derr error
+		atts, derr = downloadImages(ctx, nil, m, attachmentDir(r.o.Session))
+		if derr != nil {
+			logf(r.o.Verbose, "attachment download error: %v", derr)
+		}
+	}
+	// Acknowledge immediately so the human sees the message was picked up while
+	// the (slow) command runs. Best-effort: ignore if we lack Add Reactions.
+	_ = r.gw.React(ctx, r.conv, contracts.MessageID(m.ID), ackEmoji)
+
+	var pv *progressView
+	if r.o.Progress != "off" {
+		post := func(id, content string) (string, error) {
+			return r.p.UpsertStatusMessage(ctx, r.ch, id, content)
+		}
+		pv = newProgressView(post, r.o.Progress, r.o.ProgressKeep, time.Now())
+	}
+	// Progress gates only the Discord progress view; the sink always taps
+	// every backend event so the bus transcript is independent of Progress.
+	onEvent := func(ev contracts.BackendEvent) {
+		if pv != nil {
+			pv.add(ev)
+		}
+		r.emitBackend(ev)
+	}
+
+	var memCtx string
+	if r.orch != nil {
+		memCtx = r.orch.Context(ctx)
+	}
+	prompt := contracts.Prompt{
+		Content:     m.Content,
+		Context:     memCtx,
+		Author:      m.AuthorName,
+		MessageID:   m.ID,
+		ChannelID:   m.ChannelID,
+		Attachments: atts,
+	}
+	out, err := r.resp.Respond(ctx, prompt, onEvent)
+	// The backend has read the files during the (now-finished) turn, so they can
+	// go. Keeping them would slowly fill the temp dir.
+	removeFiles(atts)
+	if err != nil && out == "" {
+		out = "⚠️ " + err.Error()
+	}
+	out = strings.TrimSpace(out)
+	if out == "" {
+		if pv != nil {
+			pv.finish(true)
+		}
+		_ = r.p.Unreact(ctx, r.ch, m.ID, ackEmoji)
+		_ = r.gw.React(ctx, r.conv, contracts.MessageID(m.ID), failEmoji)
+		r.emit(control.Event{T: "reply", Done: true})
+		return
+	}
+	postResult(ctx, r.p, r.gw, r.conv, m.ID, out, r.resp, r.o)
+	r.emit(control.Event{T: "reply", Text: out, Done: true})
+	if r.orch != nil {
+		if rerr := r.orch.Observe(ctx, prompt, out); rerr != nil {
+			logf(r.o.Verbose, "memory record error: %v", rerr) // best-effort: never break the loop
+		}
+	}
+	if pv != nil {
+		pv.finish(err != nil)
+	}
+	// Swap the "seen" mark for a "done" mark once the answer is posted.
+	_ = r.p.Unreact(ctx, r.ch, m.ID, ackEmoji)
+	_ = r.gw.React(ctx, r.conv, contracts.MessageID(m.ID), doneEmoji)
+}
+
+// EventSink receives structured turn events for an out-of-band consumer (the
+// TUI hub, in a later phase). Discord posting is independent of the sink; a nil
+// sink simply disables emission, so the bridge behaves exactly as before.
+type EventSink interface {
+	Emit(control.Event)
+}
+
 // Run links the channel to the backend until ctx is cancelled. newBackend builds
 // the model edge for the resolved channel, keeping core model-agnostic. orch is
 // the optional Orchestrator port (nil when none is wired): when present it primes
 // each turn with recalled background and records the turn afterwards.
-func Run(ctx context.Context, p contracts.ChannelReader, gw contracts.Gateway, newBackend BackendFactory, orch contracts.Orchestrator, o Options) error {
+func Run(ctx context.Context, p contracts.ChannelReader, gw contracts.Gateway, newBackend BackendFactory, orch contracts.Orchestrator, sink EventSink, o Options) error {
 	if !p.Enabled() {
 		return ErrDisabled
 	}
@@ -144,8 +278,17 @@ func Run(ctx context.Context, p contracts.ChannelReader, gw contracts.Gateway, n
 		}
 	}
 
-	// Authors already journaled this run; skip the dedup-read for repeats.
-	seen := map[string]bool{}
+	r := &runner{
+		p:    p,
+		gw:   gw,
+		resp: resp,
+		orch: orch,
+		conv: conv,
+		ch:   ch,
+		o:    o,
+		seen: map[string]bool{}, // authors journaled this run; skip the dedup-read for repeats
+		sink: sink,
+	}
 
 	for {
 		msgs, err := p.Read(ctx, ch, 100, last)
@@ -157,79 +300,7 @@ func Run(ctx context.Context, p contracts.ChannelReader, gw contracts.Gateway, n
 		for _, m := range msgs {
 			last = m.ID
 			persist(o.State, last)
-			if m.AuthorBot {
-				continue // never answer a bot (incl. ourselves) → no loops
-			}
-			if !seen[m.AuthorID] {
-				seen[m.AuthorID] = true
-				recordParticipant(o.Participants, m.AuthorID)
-			}
-			logf(o.Verbose, "<%s> %s", m.AuthorName, oneline(m.Content))
-			// Pull any image attachments down to local files so the backend can
-			// reference them. Best-effort: a download failure never drops a turn.
-			var atts []string
-			if len(m.Attachments) > 0 {
-				var derr error
-				atts, derr = downloadImages(ctx, nil, m, attachmentDir(o.Session))
-				if derr != nil {
-					logf(o.Verbose, "attachment download error: %v", derr)
-				}
-			}
-			// Acknowledge immediately so the human sees the message was picked
-			// up while the (slow) command runs. Best-effort: ignore if the bot
-			// lacks Add Reactions.
-			_ = gw.React(ctx, conv, contracts.MessageID(m.ID), ackEmoji)
-
-			var pv *progressView
-			var onEvent func(contracts.BackendEvent)
-			if o.Progress != "off" {
-				post := func(id, content string) (string, error) {
-					return p.UpsertStatusMessage(ctx, ch, id, content)
-				}
-				pv = newProgressView(post, o.Progress, o.ProgressKeep, time.Now())
-				onEvent = pv.add
-			}
-
-			var memCtx string
-			if orch != nil {
-				memCtx = orch.Context(ctx)
-			}
-			prompt := contracts.Prompt{
-				Content:     m.Content,
-				Context:     memCtx,
-				Author:      m.AuthorName,
-				MessageID:   m.ID,
-				ChannelID:   m.ChannelID,
-				Attachments: atts,
-			}
-			out, err := resp.Respond(ctx, prompt, onEvent)
-			// The backend has read the files during the (now-finished) turn, so
-			// they can go. Keeping them would slowly fill the temp dir.
-			removeFiles(atts)
-			if err != nil && out == "" {
-				out = "⚠️ " + err.Error()
-			}
-			out = strings.TrimSpace(out)
-			if out == "" {
-				if pv != nil {
-					pv.finish(true)
-				}
-				_ = p.Unreact(ctx, ch, m.ID, ackEmoji)
-				_ = gw.React(ctx, conv, contracts.MessageID(m.ID), failEmoji)
-				continue
-			}
-			postResult(ctx, p, gw, conv, m.ID, out, resp, o)
-			if orch != nil {
-				if rerr := orch.Observe(ctx, prompt, out); rerr != nil {
-					logf(o.Verbose, "memory record error: %v", rerr) // best-effort: never break the loop
-				}
-			}
-			if pv != nil {
-				pv.finish(err != nil)
-			}
-			// Swap the "seen" mark for a "done" mark once the answer is posted.
-			_ = p.Unreact(ctx, ch, m.ID, ackEmoji)
-			_ = gw.React(ctx, conv, contracts.MessageID(m.ID), doneEmoji)
+			r.handle(ctx, m)
 		}
 		time.Sleep(time.Duration(o.Interval) * time.Second)
 	}

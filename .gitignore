@@ -7,3 +7,4 @@
 
 # local secrets, auto-loaded at startup (see .env.example)
 /.env
+.superpowers/

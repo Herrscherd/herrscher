@@ -67,6 +67,26 @@ type runner struct {
 	ch   string
 	o    Options
 	seen map[string]bool
+	sink EventSink
+}
+
+// emit forwards e to the sink when one is configured; a nil sink is a no-op.
+func (r *runner) emit(e control.Event) {
+	if r.sink != nil {
+		r.sink.Emit(e)
+	}
+}
+
+// emitBackend maps a backend progress event onto the bus vocabulary: assistant
+// text becomes a chunk, a tool invocation becomes a status line. Other kinds
+// (result/reset) carry no transcript text and are dropped.
+func (r *runner) emitBackend(ev contracts.BackendEvent) {
+	switch ev.Kind {
+	case "text":
+		r.emit(control.Event{T: "chunk", Text: ev.Detail})
+	case "tool":
+		r.emit(control.Event{T: "status", Text: strings.TrimSpace(ev.Tool + " " + ev.Detail)})
+	}
 }
 
 // handle processes one inbound message: acknowledge, run the backend turn, post
@@ -81,6 +101,7 @@ func (r *runner) handle(ctx context.Context, m contracts.Message) {
 		recordParticipant(r.o.Participants, m.AuthorID)
 	}
 	logf(r.o.Verbose, "<%s> %s", m.AuthorName, oneline(m.Content))
+	r.emit(control.Event{T: "human", Who: m.AuthorName, Text: m.Content})
 
 	// Pull any image attachments down to local files so the backend can
 	// reference them. Best-effort: a download failure never drops a turn.
@@ -97,13 +118,17 @@ func (r *runner) handle(ctx context.Context, m contracts.Message) {
 	_ = r.gw.React(ctx, r.conv, contracts.MessageID(m.ID), ackEmoji)
 
 	var pv *progressView
-	var onEvent func(contracts.BackendEvent)
 	if r.o.Progress != "off" {
 		post := func(id, content string) (string, error) {
 			return r.p.UpsertStatusMessage(ctx, r.ch, id, content)
 		}
 		pv = newProgressView(post, r.o.Progress, r.o.ProgressKeep, time.Now())
-		onEvent = pv.add
+	}
+	onEvent := func(ev contracts.BackendEvent) {
+		if pv != nil {
+			pv.add(ev)
+		}
+		r.emitBackend(ev)
 	}
 
 	var memCtx string
@@ -135,6 +160,7 @@ func (r *runner) handle(ctx context.Context, m contracts.Message) {
 		return
 	}
 	postResult(ctx, r.p, r.gw, r.conv, m.ID, out, r.resp, r.o)
+	r.emit(control.Event{T: "reply", Text: out, Done: true})
 	if r.orch != nil {
 		if rerr := r.orch.Observe(ctx, prompt, out); rerr != nil {
 			logf(r.o.Verbose, "memory record error: %v", rerr) // best-effort: never break the loop
@@ -253,6 +279,7 @@ func Run(ctx context.Context, p contracts.ChannelReader, gw contracts.Gateway, n
 		ch:   ch,
 		o:    o,
 		seen: map[string]bool{}, // authors journaled this run; skip the dedup-read for repeats
+		sink: sink,
 	}
 
 	for {

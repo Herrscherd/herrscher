@@ -63,7 +63,7 @@ func runBridge(ctx context.Context, args []string) error {
 	if orch != nil {
 		defer orch.Close()
 	}
-	return bridge.Run(ctx, set.Reader, contracts.Degrade(set.Gateway), newBackend, orch, bridge.Options{
+	return bridge.Run(ctx, set.Reader, contracts.Degrade(set.Gateway), newBackend, orch, nil, bridge.Options{
 		Channel:       *ch,
 		Ensure:        *ensure,
 		Interval:      *interval,

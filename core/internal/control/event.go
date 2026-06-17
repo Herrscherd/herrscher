@@ -11,9 +11,11 @@ import (
 // (human/status/chunk/reply) for a consumer to render; a consumer injects
 // input/pick down to the bridge. One Event encodes to exactly one JSON line.
 //
+// chunk carries assistant prose; status carries a tool/progress line.
+//
 //	{"t":"human","who":"alice","text":"refactor the env loader"}
-//	{"t":"chunk","text":"reading envfile.go"}
-//	{"t":"status","text":"proposing 3 changes"}
+//	{"t":"status","text":"reading envfile.go"}
+//	{"t":"chunk","text":"proposing 3 changes"}
 //	{"t":"reply","text":"done","done":true}
 //	{"t":"input","who":"terminal","text":"apply them"}
 //	{"t":"pick","value":"2"}

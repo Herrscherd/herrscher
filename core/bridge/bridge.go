@@ -191,10 +191,6 @@ func (r *runner) handle(ctx context.Context, m contracts.Message) {
 // the optional Orchestrator port (nil when none is wired): when present it primes
 // each turn with recalled background and records the turn afterwards.
 func Run(ctx context.Context, p contracts.ChannelReader, gw contracts.Gateway, newBackend BackendFactory, orch contracts.Orchestrator, sink contracts.EventSink, o Options) error {
-	if !p.Enabled() {
-		return ErrDisabled
-	}
-
 	switch o.Progress {
 	case "", "off", "actions", "full":
 	default:
@@ -202,6 +198,16 @@ func Run(ctx context.Context, p contracts.ChannelReader, gw contracts.Gateway, n
 	}
 	if o.Progress == "" {
 		o.Progress = "full"
+	}
+
+	// Pure-runner mode: no gateway polling, no posting. The daemon hub owns all
+	// gateway I/O; the bridge only runs the backend over the control socket.
+	if o.HubSocket != "" {
+		return runHub(ctx, newBackend, orch, o)
+	}
+
+	if !p.Enabled() {
+		return ErrDisabled
 	}
 
 	// No channel configured anywhere → create (or reuse) a default one so the

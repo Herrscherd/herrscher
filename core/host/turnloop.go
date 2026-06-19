@@ -233,6 +233,7 @@ func gatewayChannel(g contracts.GatewaySet) string {
 // re-binds to a fresh Conn whenever the bridge reconnects (after a crash +
 // supervisor restart). It blocks until ctx is cancelled.
 func RunSession(ctx context.Context, name string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string) {
+	defer acc.Close() // own the acceptor: close the listener + remove the socket on shutdown
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
 	d := newSessionDriver(name, gws, toBridge, fromBridge)

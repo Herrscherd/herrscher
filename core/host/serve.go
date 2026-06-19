@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	control "github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -188,4 +189,61 @@ func Run(ctx context.Context, d Deps, o Options) error {
 	fmt.Fprintln(os.Stderr, "dctl serve: supervising sessions; bot online.")
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+// RunHub is the multi-gateway daemon: it supervises one pure-runner bridge per
+// session and drives each session's turns over a control Acceptor, fanning
+// events out to every bound gateway. gws are the gateway sets the daemon owns
+// (built from the registry by the caller). It supersedes Run for the
+// pure-runner topology.
+func RunHub(ctx context.Context, gws []Deps, o Options) error {
+	st, err := state.LoadState(o.StatePath)
+	if err != nil {
+		return fmt.Errorf("load state: %w", err)
+	}
+	var home *state.HomeRef
+	if o.Home != nil {
+		home = &state.HomeRef{ID: o.Home.ID, Type: o.Home.Type}
+	}
+	st.ApplyDefaults(home, o.Workspace, o.Source)
+
+	self, _ := os.Executable()
+	partDir := filepath.Dir(o.StatePath)
+	sup := supervisor.NewSupervisor(ctx, self)
+	sup.PartDir = partDir
+
+	for _, sess := range st.SnapshotSessions() {
+		acc, err := control.Accept(control.SocketPath(sess.Name))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "dctl serve: session %q: control socket: %v\n", sess.Name, err)
+			continue
+		}
+		bound := boundGateways(gws, sess.BoundGateways())
+		go RunSession(ctx, sess.Name, bound, acc)
+		_ = sup.Start(sess)
+	}
+
+	for _, p := range contracts.Default.Plugins() {
+		fmt.Fprintf(os.Stderr, "dctl serve: plugin %s (%s)\n", p.Manifest.Kind, p.Manifest.Category)
+	}
+	fmt.Fprintln(os.Stderr, "dctl serve: hub up; supervising sessions.")
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// boundGateways selects, from all built gateway sets, those whose kind is in the
+// session's bound set. A bound kind that wasn't built is skipped (its config was
+// absent).
+func boundGateways(all []Deps, kinds []string) []Deps {
+	want := map[string]bool{}
+	for _, k := range kinds {
+		want[k] = true
+	}
+	var out []Deps
+	for _, g := range all {
+		if g.Gateway != nil && want[g.Gateway.Manifest().Kind] {
+			out = append(out, g)
+		}
+	}
+	return out
 }

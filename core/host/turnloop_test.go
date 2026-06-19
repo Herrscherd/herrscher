@@ -329,6 +329,45 @@ func TestRunSessionReconnectsAndResumes(t *testing.T) {
 	gotInput(t, c2, "q2")
 }
 
+// TestRunSessionReconnectsAfterCompletedTurn covers the case the reconnect test
+// above does not: the bridge dies while the driver is IDLE (the previous turn
+// already finished), then a new input arrives. The driver must accept the
+// reconnecting bridge and deliver the new input.
+func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
+	a := &fanRecorder{}
+	a.feed("q1")
+	sock := tmpSock(t)
+	acc, err := acceptCtl(sock)
+	if err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	defer acc.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go RunSession(ctx, "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "")
+
+	// First bridge: gets q1, completes the turn with reply{done}, then dies while
+	// the driver is idle.
+	c1 := dialCtl(t, sock)
+	gotInput(t, c1, "q1")
+	if err := c1.Write(contracts.Event{T: "reply", Text: "r1", Done: true}); err != nil {
+		t.Fatalf("write reply: %v", err)
+	}
+	waitFor(t, func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return len(a.posted) == 1
+	}, "first turn completed (reply posted)")
+	c1.Close()
+
+	// New bridge connects (supervisor restart); a new input must flow.
+	a.feed("q2")
+	c2 := dialCtl(t, sock)
+	defer c2.Close()
+	gotInput(t, c2, "q2")
+}
+
 func tmpSock(t *testing.T) string { t.Helper(); return filepath.Join(t.TempDir(), "h.sock") }
 func acceptCtl(sock string) (*control.Acceptor, error) { return control.Accept(sock) }
 func dialCtl(t *testing.T, sock string) *control.Conn {

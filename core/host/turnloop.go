@@ -15,13 +15,6 @@ import (
 // inbound lines.
 var pollInterval = 50 * time.Millisecond
 
-// hangupT is an internal signal serveConn injects into fromBridge when a
-// bridge connection ends, so awaitTurn abandons the in-flight turn and the FIFO
-// resumes with the next input on reconnect. Its T value is deliberately not a
-// bus event the bridge ever emits, so it cannot be confused with a backend
-// "reset" (which is a mid-turn progress event the turn survives).
-const hangupT = "__hangup"
-
 // sessionDriver owns one session's turn lifecycle: it polls every bound
 // gateway's Reader for inbound messages, serializes them through a FIFO, writes
 // one input frame to the bridge per turn, and fans the bridge's reply events out
@@ -35,6 +28,12 @@ type sessionDriver struct {
 	from      <-chan contracts.Event
 	queue     chan contracts.Event
 	renderers map[string]*gatewayRenderer
+
+	// hangup signals that the current connection ended so an in-flight turn is
+	// abandoned and the FIFO resumes on reconnect. It is buffered (1) and written
+	// non-blockingly by serveConn, so a disconnect while the driver is idle can
+	// never wedge serveConn (and thus the reconnect accept loop).
+	hangup chan struct{}
 
 	// participants is the journal path for /session who (empty = disabled). The
 	// daemon owns gateway I/O now, so it records authors here as it polls them.
@@ -51,6 +50,7 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		from:      fromBridge,
 		queue:     make(chan contracts.Event, 64),
 		renderers: map[string]*gatewayRenderer{},
+		hangup:    make(chan struct{}, 1),
 		seen:      map[string]bool{},
 	}
 }
@@ -150,9 +150,8 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 	}
 }
 
-// pump dequeues one input at a time, writes it to the bridge, then blocks
-// fanning the bridge's events out until that turn's reply{done} — this is the
-// FIFO serialization.
+// pump dequeues one input at a time and runs it as a turn — this is the FIFO
+// serialization: the next frame is not dequeued until the current turn ends.
 func (d *sessionDriver) pump(ctx context.Context) {
 	for {
 		select {
@@ -164,14 +163,28 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			if ev.T == "input" {
 				d.fanOut(ctx, contracts.Event{T: "human", Who: ev.Who, Text: ev.Text})
 			}
-			select {
-			case d.toBridge <- ev:
-			case <-ctx.Done():
-				return
-			}
-			d.awaitTurn(ctx)
+			d.runTurn(ctx, ev)
 		}
 	}
+}
+
+// runTurn hands one frame to the bridge and fans its events out until the turn's
+// reply{done}. A stale hangup left by a disconnect that happened between turns is
+// drained first so it cannot abort this turn; the send then races the hangup so a
+// disconnect before the frame is handed off abandons the turn instead of blocking.
+func (d *sessionDriver) runTurn(ctx context.Context, ev contracts.Event) {
+	select {
+	case <-d.hangup:
+	default:
+	}
+	select {
+	case d.toBridge <- ev:
+	case <-d.hangup:
+		return
+	case <-ctx.Done():
+		return
+	}
+	d.awaitTurn(ctx)
 }
 
 // awaitTurn fans every event for the current turn to all bound gateways and
@@ -184,12 +197,11 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case <-d.hangup:
+			return // bridge connection ended; abandon this turn
 		case e, ok := <-d.from:
 			if !ok {
 				return // bridge connection lost; abandon this turn
-			}
-			if e.T == hangupT {
-				return // bridge connection ended; abandon this turn
 			}
 			d.fanOut(ctx, e)
 			if e.T == "reply" && e.Done {
@@ -250,7 +262,7 @@ func RunSession(ctx context.Context, name string, gws []contracts.GatewaySet, ac
 			if !ok {
 				return
 			}
-			serveConn(ctx, conn, toBridge, fromBridge)
+			serveConn(ctx, conn, toBridge, fromBridge, d.hangup)
 		}
 	}
 }
@@ -258,17 +270,18 @@ func RunSession(ctx context.Context, name string, gws []contracts.GatewaySet, ac
 // serveConn shuttles frames between the driver and one bridge connection until
 // the connection closes or ctx is cancelled. The reader goroutine forwards the
 // bridge's events into fromBridge; the writer drains toBridge to the conn.
-func serveConn(ctx context.Context, conn *control.Conn, toBridge <-chan contracts.Event, fromBridge chan<- contracts.Event) {
+func serveConn(ctx context.Context, conn *control.Conn, toBridge <-chan contracts.Event, fromBridge chan<- contracts.Event, hangup chan<- struct{}) {
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer conn.Close()
 	// When this connection ends, tell the driver to abandon any in-flight turn so
-	// the next queued input flows to the reconnecting bridge. fromBridge persists
-	// across reconnects, so a plain channel close can't signal this.
+	// the next queued input flows to the reconnecting bridge. The send is
+	// non-blocking onto a buffered channel: the driver may be idle (no turn to
+	// abandon), and blocking here would wedge the reconnect accept loop.
 	defer func() {
 		select {
-		case fromBridge <- contracts.Event{T: hangupT}:
-		case <-ctx.Done():
+		case hangup <- struct{}{}:
+		default:
 		}
 	}()
 

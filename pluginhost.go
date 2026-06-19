@@ -48,6 +48,11 @@ func runPluginHost(ctx context.Context, args []string) error {
 		return fmt.Errorf("plugin-host: no memory plugin registered")
 	}
 
+	// Local cancel so the heartbeat and GracefulStop goroutines also unwind when
+	// Serve returns on its own (e.g. a listener error), not only on parent ctx.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return err

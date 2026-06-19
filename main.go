@@ -83,6 +83,8 @@ func main() {
 		err = runServe(ctx, args)
 	case "session":
 		err = runSession(ctx, args)
+	case "agent":
+		err = runAgent(ctx, args)
 	case "service":
 		err = runService(ctx, args)
 	case "plugin-host":
@@ -121,10 +123,17 @@ func usage() {
                                               bridge per session; --env-file loads
                                               secrets from a file (used by service)
   herrscher session <create|close|list|who> [--name N] [--project P] [--clone R]
-               [--cmd '…'] [--backend stream|oneshot] [--shared] [--force]
+               [--cmd '…'] [--backend stream|oneshot] [--shared] [--agent NAME] [--force]
                                               manage sessions: create a bridged
-                                              channel + worktree + backend, close
-                                              one, or list/inspect active ones
+                                              channel + worktree + backend
+                                              (optionally provisioned from an
+                                              agent), close one, or list/inspect
+                                              active ones
+  herrscher agent <create|list> [--name N] [--soul '…'] [--mcp '…']
+                                              manage durable companion agents: a
+                                              home with persona + MCP + zero-prompt
+                                              settings, materialized into a session
+                                              worktree via session create --agent
   herrscher service <install|uninstall|status|restart|update> [--health-addr ADDR]
                [--env-file PATH] [--source DIR] [--no-pull]
                                               manage the serve daemon: install it

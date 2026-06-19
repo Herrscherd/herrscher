@@ -94,3 +94,33 @@ func TestConnConcurrentWrites(t *testing.T) {
 		t.Fatalf("got %d events, want %d (interleaved write corruption?)", got, n)
 	}
 }
+
+func TestAcceptorYieldsSecondConnAfterFirstCloses(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "rc.sock")
+	acc, err := control.Accept(sock)
+	if err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	defer acc.Close()
+
+	c1, err := control.Dial(sock)
+	if err != nil {
+		t.Fatalf("Dial 1: %v", err)
+	}
+	<-acc.Conns()
+	c1.Close() // simulate a bridge crash
+
+	c2, err := control.Dial(sock)
+	if err != nil {
+		t.Fatalf("Dial 2 (reconnect): %v", err)
+	}
+	defer c2.Close()
+	select {
+	case sc := <-acc.Conns():
+		if sc == nil {
+			t.Fatal("second conn is nil")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("acceptor did not yield a second conn after reconnect")
+	}
+}

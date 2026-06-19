@@ -15,12 +15,13 @@ import (
 // fanRecorder is a gateway+reader+sink that records what the hub fans to it and
 // can feed inbound lines.
 type fanRecorder struct {
-	mu      sync.Mutex
-	inbound []contracts.Message
-	emitted []contracts.Event
-	posted  []string
-	upserts int
-	sink    bool // implements EventSink when true
+	mu       sync.Mutex
+	inbound  []contracts.Message
+	emitted  []contracts.Event
+	posted   []string
+	upserts  int
+	statuses []string // content of each UpsertStatusMessage (the live progress view)
+	sink     bool     // implements EventSink when true
 }
 
 func (f *fanRecorder) feed(text string) {
@@ -47,10 +48,11 @@ func (f *fanRecorder) Read(context.Context, string, int, string) ([]contracts.Me
 	return out, nil
 }
 func (f *fanRecorder) Unreact(context.Context, string, string, string) error { return nil }
-func (f *fanRecorder) UpsertStatusMessage(context.Context, string, string, string) (string, error) {
+func (f *fanRecorder) UpsertStatusMessage(_ context.Context, _, _, content string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.upserts++
+	f.statuses = append(f.statuses, content)
 	return "", nil
 }
 func (f *fanRecorder) Manifest() contracts.Manifest { return contracts.Manifest{Kind: "rec"} }

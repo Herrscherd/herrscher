@@ -6,7 +6,7 @@ package bridge
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/Herrscherd/herrscher-contracts"
 )
@@ -19,11 +19,10 @@ import (
 type BackendFactory func(channelID string) (contracts.Backend, error)
 
 // Options configures one bridge run (parsed from CLI flags by the binary). In
-// pure-runner mode the bridge only needs the channel to key its backend, the
-// progress level for its event stream, and the hub socket to dial.
+// pure-runner mode the bridge only needs the channel to key its backend and the
+// hub socket to dial; the progress level is decided host-side by the renderer.
 type Options struct {
-	Channel  string
-	Progress string // "off" | "actions" | "full" (default "full")
+	Channel string
 	// HubSocket selects pure-runner (hub) mode: the bridge dials this socket,
 	// reads input/pick frames from the daemon hub, and emits turn events back.
 	HubSocket string
@@ -32,13 +31,8 @@ type Options struct {
 // Run is the bridge entry point: a pure backend runner. It requires a hub socket
 // (the daemon hub owns all gateway I/O) and drives the backend over it.
 func Run(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, o Options) error {
-	switch o.Progress {
-	case "", "off", "actions", "full":
-	default:
-		return fmt.Errorf("invalid --progress %q (want off|actions|full)", o.Progress)
-	}
 	if o.HubSocket == "" {
-		return fmt.Errorf("bridge requires --hub-socket (pure-runner mode)")
+		return errors.New("bridge requires --hub-socket (pure-runner mode)")
 	}
 	return runHub(ctx, newBackend, orch, o)
 }

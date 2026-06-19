@@ -25,7 +25,6 @@ func runBridge(ctx context.Context, args []string) error {
 	model := fs.String("model", "", "model for the persistent claude session (e.g. claude-haiku-4-5-20251001)")
 	session := fs.String("session", "", "session name (scopes the orchestrator/attachment dir)")
 	verbose := fs.Bool("v", false, "log activity to stderr")
-	progress := fs.String("progress", "full", "live activity feedback level: off | actions | full")
 	backend := fs.String("backend", "", "responder backend: stream (default) | oneshot")
 	hubSocket := fs.String("hub-socket", "", "unix socket of the daemon hub: when set, run as a pure backend runner (no gateway polling)")
 	fs.Parse(args)
@@ -53,7 +52,6 @@ func runBridge(ctx context.Context, args []string) error {
 	}
 	return bridge.Run(ctx, newBackend, orch, bridge.Options{
 		Channel:   *ch,
-		Progress:  *progress,
 		HubSocket: *hubSocket,
 	})
 }

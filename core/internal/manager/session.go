@@ -101,6 +101,13 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 		worktree = path // "" means non-git fallback
 	}
+	// rollbackWorktree removes the worktree we just made when a later step fails;
+	// the removal error is logged but never masks the original failure.
+	rollbackWorktree := func() {
+		if rmErr := h.wt.Remove(repo, name, true); rmErr != nil {
+			fmt.Fprintf(os.Stderr, "herrscher: worktree rollback for %q failed: %v\n", name, rmErr)
+		}
+	}
 	// Agent provisioning: an agent companion needs a disposable, isolated worktree
 	// (session close removes it), so reject shared/non-git, then materialize the
 	// agent's persona + MCP + settings into it before anything outward (channel)
@@ -111,15 +118,11 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 		a, found := h.agents.Get(agentName)
 		if !found {
-			if rmErr := h.wt.Remove(repo, name, true); rmErr != nil {
-				fmt.Fprintf(os.Stderr, "herrscher: worktree rollback for %q failed: %v\n", name, rmErr)
-			}
+			rollbackWorktree()
 			return "", fmt.Errorf("unknown agent %q — create it with `agent create %s`", agentName, agentName)
 		}
 		if err := a.Materialize(worktree); err != nil {
-			if rmErr := h.wt.Remove(repo, name, true); rmErr != nil {
-				fmt.Fprintf(os.Stderr, "herrscher: worktree rollback for %q failed: %v\n", name, rmErr)
-			}
+			rollbackWorktree()
 			return "", fmt.Errorf("provision agent %q: %v", agentName, err)
 		}
 	}
@@ -131,18 +134,14 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	case "category":
 		chID, err := h.d.CreateUnder(ctx, home.ID, title)
 		if err != nil {
-			if rmErr := h.wt.Remove(repo, name, true); rmErr != nil { // roll back the worktree we just made
-				fmt.Fprintf(os.Stderr, "herrscher: worktree rollback for %q failed: %v\n", name, rmErr)
-			}
+			rollbackWorktree()
 			return "", fmt.Errorf("create channel: %v", err)
 		}
 		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Worktree: worktree, Project: project, Agent: agentName, Gateways: gateways}
 	case "forum":
 		chID, err := h.d.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
-			if rmErr := h.wt.Remove(repo, name, true); rmErr != nil {
-				fmt.Fprintf(os.Stderr, "herrscher: worktree rollback for %q failed: %v\n", name, rmErr)
-			}
+			rollbackWorktree()
 			return "", fmt.Errorf("create forum post: %v", err)
 		}
 		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Worktree: worktree, Project: project, Agent: agentName, Gateways: gateways}

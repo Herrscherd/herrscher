@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -14,7 +13,7 @@ type Handler struct {
 	wt         worktrees
 	fg         forges
 	up         updater
-	agents     *agent.Store
+	agents     agentStore
 	st         *state.State
 	defaultCmd string
 	partDir    string // dir holding participants/<name>.log journals
@@ -24,7 +23,7 @@ type Handler struct {
 // session is created without an explicit cmd. partDir is the directory under
 // which per-session participant journals live (participants/<name>.log). agents
 // owns the durable agent homes used to provision sessions.
-func NewHandler(d discord, sup supervisor, wt worktrees, fg forges, up updater, agents *agent.Store, st *state.State, defaultCmd, partDir string) *Handler {
+func NewHandler(d discord, sup supervisor, wt worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string) *Handler {
 	return &Handler{d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir}
 }
 
@@ -32,4 +31,4 @@ func NewHandler(d discord, sup supervisor, wt worktrees, fg forges, up updater, 
 func (h *Handler) PartDir() string { return h.partDir }
 
 // Agents returns the durable agent store (used by tests/wiring).
-func (h *Handler) Agents() *agent.Store { return h.agents }
+func (h *Handler) Agents() agentStore { return h.agents }

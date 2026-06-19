@@ -247,27 +247,29 @@ brings up the **terminal gateway**: an in-process Bubbletea TUI that is a
 first-class gateway peer of Discord (quitting it stops the daemon). A background
 service (no TTY) runs headless with only the remote gateways.
 
-> **Command surface (current):** session and service commands now run through the
-> operator **CLI** (`herrscher session create|close|list|who`, `herrscher service
-> restart|update`) dispatched by a neutral `contracts.Cmd` registry, not Discord
-> slash commands. The `serve` daemon supervises sessions and serves health; it no
-> longer dispatches slash interactions. Discord slash binding (and the `set` /
-> `allow` / `workspace` surfaces) is being re-platformed and returns in the dctl
-> phase. The slash-flavoured diagrams below describe that future shape.
+> **Command surface (current):** operator commands run through a neutral
+> `contracts.Cmd` registry, reachable two ways. The operator **CLI** (`herrscher
+> session create|close|list|who`, `herrscher service restart|update`, `herrscher
+> set home|source`) dispatches them directly. The **Discord gateway** binds the
+> same commands as slash commands: it translates each interaction into a neutral
+> argv and dispatches it through the `contracts.SessionControl` seam, so the core
+> never learns the Discord command surface. All slash handling (including the
+> `/allow` permission lists) lives in the gateway plugin; the daemon only ever
+> sees neutral argv.
 
 ### `serve` — the always-on daemon
 
 ```mermaid
 flowchart TB
-    START(["herrscher serve"]) --> INIT["load state.json · seed allowlist<br/>build supervisor + command handler<br/>register slash commands with the gateway"]
+    START(["herrscher serve"]) --> INIT["load state.json · seed allowlist<br/>build supervisor + command registry<br/>build the multi-gateway hub (host.RunHub)"]
     INIT --> HEALTH["start /health endpoint<br/>+ ping loop (30s) + status embed (60s)"]
-    INIT --> LOOP{"reconnect loop<br/>Source.Run(ctx)"}
-    LOOP -->|InboundCommand| DISPATCH["dispatch off-loop (goroutine)<br/>so one slow op can't stall others"]
-    DISPATCH --> CMDS["/session create·close·list·who·allow<br/>/set home·workspace·source<br/>/workspace list·remotes<br/>/allow · /service restart·update"]
-    CMDS -->|/session create| SUP["supervisor.Start(session)"]
+    INIT --> BIND["bind each gateway · BindSessionControl(hub)<br/>(Discord registers its slash tree itself)"]
+    INIT --> LIVE["bring persisted sessions live<br/>(control socket + RunSession loop each)"]
+    BIND -->|neutral argv| DISPATCH["hub.Dispatch(argv) — serialized<br/>reg.Dispatch + reconcile live set"]
+    DISPATCH --> CMDS["session create·close·list·who<br/>set home·source · service restart·update"]
+    CMDS -->|session create| SUP["supervisor.Start(session)"]
     SUP --> CHILD["spawn child:<br/>herrscher bridge -c CHANNEL --cmd ...<br/>(in the session worktree)"]
     CHILD -->|exits| RESTART["restart in 3s"] --> CHILD
-    LOOP -->|gateway error| RECON["reconnect in 3s"] --> LOOP
 ```
 
 ### `bridge` — the pure-runner backend loop
@@ -578,9 +580,6 @@ plugin (the Discord gateway needs `DISCORD_BOT_TOKEN`).
 
 ## Roadmap
 
-- **Discord slash binding** — re-platforming the session/service surface back onto
-  Discord slash commands (returning in the dctl phase; see [The two run
-  modes](#the-two-run-modes)).
 - **More catalog kinds** — additional gateway/backend/memory/orchestrator modules
   in the `herrscher init` catalog beyond the current defaults.
 - **Distributed transport** — the in-process registry (`Manifest`, factories) is

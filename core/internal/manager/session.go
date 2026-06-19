@@ -66,6 +66,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if backend == "" {
 		backend = "stream" // default backend: persistent claude stream-json
 	}
+	agentName, _ := in.Lookup("agent")
 	gwList, _ := in.Lookup("gateways")
 	gateways := ParseGateways(gwList, in.Bool("terminal_only"))
 	ws := h.st.WorkspaceRoot()
@@ -100,6 +101,28 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 		worktree = path // "" means non-git fallback
 	}
+	// Agent provisioning: an agent companion needs a disposable, isolated worktree
+	// (session close removes it), so reject shared/non-git, then materialize the
+	// agent's persona + MCP + settings into it before anything outward (channel)
+	// is created.
+	if agentName != "" {
+		if shared || worktree == "" {
+			return "", fmt.Errorf("session create with agent %q needs an isolated git worktree (use a git repo and drop shared:true)", agentName)
+		}
+		a, found := h.agents.Get(agentName)
+		if !found {
+			if rmErr := h.wt.Remove(repo, name, true); rmErr != nil {
+				fmt.Fprintf(os.Stderr, "herrscher: worktree rollback for %q failed: %v\n", name, rmErr)
+			}
+			return "", fmt.Errorf("unknown agent %q — create it with `agent create %s`", agentName, agentName)
+		}
+		if err := a.Materialize(worktree); err != nil {
+			if rmErr := h.wt.Remove(repo, name, true); rmErr != nil {
+				fmt.Fprintf(os.Stderr, "herrscher: worktree rollback for %q failed: %v\n", name, rmErr)
+			}
+			return "", fmt.Errorf("provision agent %q: %v", agentName, err)
+		}
+	}
 	// Logical name stays the state/worktree key; the qualified name namespaces
 	// the Discord title so daemons sharing a home stay distinguishable.
 	title := h.st.QualifiedName(name)
@@ -113,7 +136,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			}
 			return "", fmt.Errorf("create channel: %v", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Worktree: worktree, Project: project, Gateways: gateways}
+		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Worktree: worktree, Project: project, Agent: agentName, Gateways: gateways}
 	case "forum":
 		chID, err := h.d.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
@@ -122,7 +145,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			}
 			return "", fmt.Errorf("create forum post: %v", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Worktree: worktree, Project: project, Gateways: gateways}
+		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Worktree: worktree, Project: project, Agent: agentName, Gateways: gateways}
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}

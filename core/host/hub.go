@@ -28,8 +28,9 @@ type hub struct {
 	partDir string
 	reg     *cli.Registry
 
-	mu   sync.Mutex
-	live map[string]context.CancelFunc // session name → cancel its RunSession
+	dispatchMu sync.Mutex // serializes operator commands (and their reconcile)
+	mu         sync.Mutex
+	live       map[string]context.CancelFunc // session name → cancel its RunSession
 }
 
 func newHub(ctx context.Context, st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry) *hub {
@@ -95,7 +96,12 @@ func (h *hub) reconcile() {
 
 // Dispatch runs an operator command and reconciles the live set so a session
 // create/close takes effect immediately. It implements contracts.SessionControl.
+// Commands are serialized: gateways can deliver interactions concurrently, and
+// running create/close (plus the reconcile that follows) one at a time keeps the
+// existence checks and the live set consistent.
 func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
+	h.dispatchMu.Lock()
+	defer h.dispatchMu.Unlock()
 	out, err := h.reg.Dispatch(ctx, args)
 	h.reconcile()
 	return out, err

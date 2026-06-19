@@ -33,6 +33,7 @@ func runBridge(ctx context.Context, args []string) error {
 	progressKeep := fs.Bool("progress-keep", false, "keep the full progress list instead of collapsing to a one-line summary")
 	backend := fs.String("backend", "", "responder backend: stream (default) | oneshot")
 	controlSocket := fs.String("control-socket", "", "unix socket the daemon forwards select-menu clicks to (set by the daemon)")
+	hubSocket := fs.String("hub-socket", "", "unix socket of the daemon hub: when set, run as a pure backend runner (no gateway polling)")
 	fs.Parse(args)
 
 	// The backend is the model edge: core never knows which model answers. The
@@ -75,6 +76,7 @@ func runBridge(ctx context.Context, args []string) error {
 		Progress:      *progress,
 		ProgressKeep:  *progressKeep,
 		ControlSocket: *controlSocket,
+		HubSocket:     *hubSocket,
 	})
 }
 

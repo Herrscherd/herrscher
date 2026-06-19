@@ -30,6 +30,15 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Help("list the participants observed in a session").
 			Param("name", "session name", true).
 			Do(h.sessionWhoRun),
+		contracts.New("agent", "create").
+			Help("create a durable companion agent (persona + MCP + zero-prompt settings)").
+			Param("name", "agent name (slugified to a safe slug)", true).
+			Param("soul", "persona text written to SOUL.md (layered as .claude/CLAUDE.md)", false).
+			Param("mcp", "stdio MCP server command line, e.g. 'neublox serve --project {{WORKTREE}}'", false).
+			Do(h.agentCreateRun),
+		contracts.New("agent", "list").
+			Help("list durable companion agents").
+			Do(h.agentListRun),
 		contracts.New("set", "home").
 			Help("set the category/forum that holds session channels").
 			Param("channel", "category or forum channel id", true).

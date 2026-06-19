@@ -3,11 +3,11 @@ module github.com/Herrscherd/herrscher
 go 1.25.0
 
 require (
-	github.com/Herrscherd/herrscher-claude-backend v0.1.0
+	github.com/Herrscherd/herrscher-claude-backend v0.1.1
 	github.com/Herrscherd/herrscher-contracts v0.1.4
 	github.com/Herrscherd/herrscher-discord-gateway v0.2.1
-	github.com/Herrscherd/herrscher-obsidian-memory v0.1.0
-	github.com/Herrscherd/herrscher-orchestrator v0.1.0
+	github.com/Herrscherd/herrscher-obsidian-memory v0.1.1
+	github.com/Herrscherd/herrscher-orchestrator v0.1.1
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0

@@ -95,10 +95,15 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 		return Agent{}, fmt.Errorf("invalid agent name %q", name)
 	}
 	home := filepath.Join(s.root, name)
-	if _, err := os.Stat(home); err == nil {
-		return Agent{}, fmt.Errorf("agent %q already exists", name)
+	if err := os.MkdirAll(s.root, 0o755); err != nil {
+		return Agent{}, fmt.Errorf("create agents root: %w", err)
 	}
-	if err := os.MkdirAll(home, 0o755); err != nil {
+	// os.Mkdir is the atomic claim: it fails with EEXIST if the home already
+	// exists, avoiding a Stat/MkdirAll TOCTOU between concurrent creates.
+	if err := os.Mkdir(home, 0o755); err != nil {
+		if os.IsExist(err) {
+			return Agent{}, fmt.Errorf("agent %q already exists", name)
+		}
 		return Agent{}, fmt.Errorf("create agent home: %w", err)
 	}
 	created := false

@@ -3,8 +3,18 @@ package manager
 import (
 	"context"
 
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
+
+// agentStore owns durable companion agent homes. The Handler depends on this
+// port (not the concrete *agent.Store) so routing stays testable, like every
+// other dependency.
+type agentStore interface {
+	Create(spec agent.CreateSpec) (agent.Agent, error)
+	Get(name string) (agent.Agent, bool)
+	List() ([]agent.Agent, error)
+}
 
 // discord is the subset of Client the Handler needs (injected so routing is testable).
 type discord interface {

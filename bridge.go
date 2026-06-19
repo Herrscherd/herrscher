@@ -22,12 +22,9 @@ func runBridge(ctx context.Context, args []string) error {
 	cmdStr := fs.String("cmd", "", "base command (default 'claude' in stream mode; the per-message program in one-shot mode)")
 	stream := fs.Bool("stream", true, "legacy: only consulted when --backend is unset; --stream=false selects the one-shot backend")
 	model := fs.String("model", "", "model for the persistent claude session (e.g. claude-haiku-4-5-20251001)")
-	interval := fs.Int("i", 5, "poll interval in seconds")
-	state := fs.String("state", "", "file to persist the last-seen message id across restarts")
-	session := fs.String("session", "", "session name (scopes the participant journal and attachment dir)")
+	session := fs.String("session", "", "session name (scopes the orchestrator/attachment dir)")
 	verbose := fs.Bool("v", false, "log activity to stderr")
 	progress := fs.String("progress", "full", "live activity feedback level: off | actions | full")
-	progressKeep := fs.Bool("progress-keep", false, "keep the full progress list instead of collapsing to a one-line summary")
 	backend := fs.String("backend", "", "responder backend: stream (default) | oneshot")
 	hubSocket := fs.String("hub-socket", "", "unix socket of the daemon hub: when set, run as a pure backend runner (no gateway polling)")
 	fs.Parse(args)
@@ -54,14 +51,9 @@ func runBridge(ctx context.Context, args []string) error {
 		defer orch.Close()
 	}
 	return bridge.Run(ctx, newBackend, orch, bridge.Options{
-		Channel:      *ch,
-		Interval:     *interval,
-		State:        *state,
-		Session:      *session,
-		Verbose:      *verbose,
-		Progress:     *progress,
-		ProgressKeep: *progressKeep,
-		HubSocket:    *hubSocket,
+		Channel:   *ch,
+		Progress:  *progress,
+		HubSocket: *hubSocket,
 	})
 }
 

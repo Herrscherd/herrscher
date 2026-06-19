@@ -18,15 +18,12 @@ import (
 // channel can be created inside Run.
 type BackendFactory func(channelID string) (contracts.Backend, error)
 
-// Options configures one bridge run (parsed from CLI flags by the binary).
+// Options configures one bridge run (parsed from CLI flags by the binary). In
+// pure-runner mode the bridge only needs the channel to key its backend, the
+// progress level for its event stream, and the hub socket to dial.
 type Options struct {
-	Channel      string
-	Interval     int
-	State        string
-	Session      string // session name (used to scope attachments)
-	Verbose      bool
-	Progress     string // "off" | "actions" | "full" (default "full")
-	ProgressKeep bool   // keep the full running list instead of collapsing to a summary
+	Channel  string
+	Progress string // "off" | "actions" | "full" (default "full")
 	// HubSocket selects pure-runner (hub) mode: the bridge dials this socket,
 	// reads input/pick frames from the daemon hub, and emits turn events back.
 	HubSocket string

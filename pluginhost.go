@@ -47,6 +47,10 @@ func runPluginHost(ctx context.Context, args []string) error {
 	if real == nil {
 		return fmt.Errorf("plugin-host: no memory plugin registered")
 	}
+	// The plugin-host owns the real Memory: it builds it once, serves it to every
+	// client, and closes it once on shutdown. Client proxies only close their own
+	// gRPC connection, never the shared object.
+	defer real.Close()
 
 	// Local cancel so the heartbeat and GracefulStop goroutines also unwind when
 	// Serve returns on its own (e.g. a listener error), not only on parent ctx.

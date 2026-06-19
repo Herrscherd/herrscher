@@ -53,6 +53,10 @@ type Options struct {
 	Progress      string // "off" | "actions" | "full" (default "full")
 	ProgressKeep  bool   // keep the full running list instead of collapsing to a summary
 	ControlSocket string // unix socket the daemon forwards select-menu clicks to (empty = numeric-reply fallback only)
+	// HubSocket, when set, selects pure-runner (hub) mode: the bridge dials this
+	// socket, reads input/pick frames from the daemon hub, and emits turn events
+	// back instead of polling a gateway. Empty selects the legacy polling path.
+	HubSocket string
 }
 
 // runner carries the per-session state the turn handler needs. Run builds one

@@ -21,30 +21,31 @@ type Conn struct {
 func newConn(c net.Conn) *Conn { return &Conn{c: c} }
 
 // Write sends one Event as a JSON line.
-func (k *Conn) Write(e contracts.Event) error {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	return WriteEvent(k.c, e)
+func (c *Conn) Write(e contracts.Event) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return WriteEvent(c.c, e)
 }
 
 // Emit satisfies contracts.EventSink so the bridge can hand a Conn directly to
 // its turn loop as the event sink. A write error is dropped: emission is
 // best-effort and the hub's read side detects a dead conn independently.
-func (k *Conn) Emit(e contracts.Event) { _ = k.Write(e) }
+func (c *Conn) Emit(e contracts.Event) { _ = c.Write(e) }
 
 // Scan reads events until the peer closes the connection or fn returns an error,
 // calling fn for each. A clean peer close (io.EOF) yields nil; fn's error (or a
 // malformed-line / read error) is returned otherwise.
-func (k *Conn) Scan(fn func(contracts.Event) error) error {
-	return ScanEvents(k.c, fn)
+func (c *Conn) Scan(fn func(contracts.Event) error) error {
+	return ScanEvents(c.c, fn)
 }
 
-func (k *Conn) Close() error { return k.c.Close() }
+func (c *Conn) Close() error { return c.c.Close() }
 
 // Acceptor listens on a control socket and yields one persistent Conn per
 // dialing bridge, keeping each connection open for the session's life.
 type Acceptor struct {
 	ln    net.Listener
+	path  string
 	conns chan *Conn
 }
 
@@ -56,7 +57,7 @@ func Accept(path string) (*Acceptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &Acceptor{ln: ln, conns: make(chan *Conn, 1)}
+	a := &Acceptor{ln: ln, path: path, conns: make(chan *Conn, 1)}
 	go a.loop()
 	return a, nil
 }
@@ -75,9 +76,10 @@ func (a *Acceptor) loop() {
 // Conns yields each bridge connection; it closes when the Acceptor is closed.
 func (a *Acceptor) Conns() <-chan *Conn { return a.conns }
 
+// Close stops listening and removes the socket file.
 func (a *Acceptor) Close() error {
 	err := a.ln.Close()
-	_ = os.Remove(a.ln.Addr().String())
+	_ = os.Remove(a.path)
 	return err
 }
 

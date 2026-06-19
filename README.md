@@ -426,7 +426,7 @@ gateway plugin alone.
 | Command | What it does |
 |---------|--------------|
 | `serve [--config PATH] [--state FILE] [--health-addr ADDR] [--status-channel ID] [--env-file PATH] [--instance SLUG] [--cmd '…']` | The always-on Gateway daemon: per-session bridge supervision, health endpoint. |
-| `bridge -c CHANNEL --hub-socket SOCK [--cmd '…'] [--backend stream\|oneshot] [--model M] [--session N] [--progress off\|actions\|full] …` | One pure-runner backend over the daemon's control socket. Normally spawned by `serve`. |
+| `bridge -c CHANNEL --hub-socket SOCK [--cmd '…'] [--backend stream\|oneshot] [--model M] [--session N] …` | One pure-runner backend over the daemon's control socket. Normally spawned by `serve`. |
 | `session <create\|close\|list\|who> [--name N] [--project P] [--clone R] [--cmd '…'] [--backend stream\|oneshot] [--shared] [--force]` | Manage sessions: create a bridged channel + worktree + backend, close one, or list/inspect active ones. |
 | `service <install\|uninstall\|status\|restart\|update> [--cmd '…'] [--health-addr ADDR] [--env-file PATH] [--source DIR] [--no-pull]` | Manage the daemon as a native OS service (see [Installation](#installation)). |
 

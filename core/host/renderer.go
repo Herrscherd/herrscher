@@ -53,7 +53,8 @@ func (r *gatewayRenderer) handle(ctx context.Context, e contracts.Event) {
 		}
 	case "status":
 		if r.pv != nil {
-			r.pv.add(contracts.BackendEvent{Kind: "tool", Detail: e.Text})
+			tool, detail := splitTool(e.Text)
+			r.pv.add(contracts.BackendEvent{Kind: "tool", Tool: tool, Detail: detail})
 		}
 	case "chunk":
 		if r.pv != nil {
@@ -77,6 +78,17 @@ func (r *gatewayRenderer) handle(ctx context.Context, e contracts.Event) {
 			}
 		}
 	}
+}
+
+// splitTool recovers the tool name and detail from a status line the bridge
+// emitted as "Tool Detail" (see bridge.emitBackendEvent), so the progress view
+// can group and icon by tool name rather than collapsing everything under "".
+func splitTool(s string) (tool, detail string) {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, ' '); i >= 0 {
+		return s[:i], strings.TrimSpace(s[i+1:])
+	}
+	return s, ""
 }
 
 // chunk splits s into pieces no longer than max, preferring to break on a

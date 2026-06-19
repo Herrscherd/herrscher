@@ -226,6 +226,11 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 }
 
 func startRemotePluginHosts(ctx context.Context, self string, remote map[contracts.Category]bool) {
+	for c := range remote {
+		if c != contracts.CategoryMemory {
+			fmt.Fprintf(os.Stderr, "dctl serve: HERRSCHER_REMOTE=%q not yet supported (only memory); it stays in-process\n", c)
+		}
+	}
 	if !remote[contracts.CategoryMemory] {
 		return
 	}

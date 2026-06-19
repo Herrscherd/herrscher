@@ -9,6 +9,7 @@ import (
 	claude "github.com/Herrscherd/herrscher-claude-backend"
 	"github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
+	"github.com/Herrscherd/herrscher/core/host"
 )
 
 // runBridge runs a pure backend runner against the daemon hub: it dials the hub
@@ -67,21 +68,12 @@ func buildMemory(ctx context.Context, verbose bool) contracts.Memory {
 		}
 		return nil
 	}
-	for _, p := range contracts.Default.Memories() {
-		if p.Memory == nil {
-			continue
-		}
-		cfg, err := contracts.Resolve(p.Manifest.Config, os.Getenv)
-		if err != nil {
-			return disabled(p.Manifest.Kind, err)
-		}
-		mem, err := p.Memory(ctx, cfg)
-		if err != nil {
-			return disabled(p.Manifest.Kind, err)
-		}
-		return mem
+	r := host.NewResolver(remoteCategories(), os.Getenv("HERRSCHER_NATS"))
+	mem, err := r.Memory(ctx, contracts.Default.Memories(), os.Getenv)
+	if err != nil {
+		return disabled("memory", err)
 	}
-	return nil
+	return mem
 }
 
 // buildOrchestrator instantiates the first registered orchestrator plugin over

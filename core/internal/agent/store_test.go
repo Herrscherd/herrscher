@@ -63,11 +63,17 @@ func TestStoreCreateDefaultSoulAndNoMCP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	soul, _ := os.ReadFile(filepath.Join(a.Home, "SOUL.md"))
+	soul, err := os.ReadFile(filepath.Join(a.Home, "SOUL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(soul), "companion") {
 		t.Fatalf("default soul not seeded:\n%s", soul)
 	}
-	mcp, _ := os.ReadFile(filepath.Join(a.Home, "mcp.json"))
+	mcp, err := os.ReadFile(filepath.Join(a.Home, "mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(mcp), `"mcpServers"`) || strings.Contains(string(mcp), "stdio") {
 		t.Fatalf("expected empty mcpServers, got:\n%s", mcp)
 	}
@@ -104,11 +110,14 @@ func TestStoreGetAndList(t *testing.T) {
 	if a, ok := s.Get("a"); !ok || a.Name != "a" {
 		t.Fatalf("Get a = %+v ok=%v", a, ok)
 	}
+	if _, ok := s.Get("../x"); ok {
+		t.Fatal("Get must reject traversal names")
+	}
 }
 
 func TestStoreCreateRejectsBadName(t *testing.T) {
 	s := NewStore(t.TempDir())
-	for _, n := range []string{"", "a/b", "..", "../x"} {
+	for _, n := range []string{"", ".", "a/b", "..", "../x"} {
 		if _, err := s.Create(CreateSpec{Name: n}); err == nil {
 			t.Fatalf("name %q should be rejected", n)
 		}

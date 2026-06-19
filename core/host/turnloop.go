@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -26,20 +27,22 @@ const hangupT = "__hangup"
 // session's control connection (a *control.Conn in production; channels in
 // tests).
 type sessionDriver struct {
-	name     string
-	gateways []contracts.GatewaySet
-	toBridge chan<- contracts.Event
-	from     <-chan contracts.Event
-	queue    chan contracts.Event
+	name      string
+	gateways  []contracts.GatewaySet
+	toBridge  chan<- contracts.Event
+	from      <-chan contracts.Event
+	queue     chan contracts.Event
+	renderers map[string]*gatewayRenderer
 }
 
 func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event) *sessionDriver {
 	return &sessionDriver{
-		name:     name,
-		gateways: gws,
-		toBridge: toBridge,
-		from:     fromBridge,
-		queue:    make(chan contracts.Event, 64),
+		name:      name,
+		gateways:  gws,
+		toBridge:  toBridge,
+		from:      fromBridge,
+		queue:     make(chan contracts.Event, 64),
+		renderers: map[string]*gatewayRenderer{},
 	}
 }
 
@@ -132,14 +135,18 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) {
 // posted through the Gateway port (the host renderer added in M5 enriches the
 // non-EventSink path).
 func (d *sessionDriver) fanOut(ctx context.Context, e contracts.Event) {
-	for _, g := range d.gateways {
+	for i, g := range d.gateways {
 		if sink, ok := g.Gateway.(contracts.EventSink); ok {
 			sink.Emit(e)
 			continue
 		}
-		if e.T == "reply" && e.Done && e.Text != "" {
-			_, _ = g.Gateway.Post(ctx, contracts.Conversation{Gateway: g.Gateway.Manifest().Kind, ID: gatewayChannel(g)}, e.Text)
+		key := strconv.Itoa(i) + ":" + g.Gateway.Manifest().Kind
+		r := d.renderers[key]
+		if r == nil {
+			r = newGatewayRenderer(g.Gateway, g.Reader, gatewayChannel(g), "full")
+			d.renderers[key] = r
 		}
+		r.handle(ctx, e)
 	}
 }
 

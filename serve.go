@@ -107,6 +107,18 @@ func runServe(ctx context.Context, args []string) error {
 // daemon uses from config.json + env, so a session created here matches one the
 // daemon supervises.
 func runSession(ctx context.Context, args []string) error {
+	return runRegistryVerb(ctx, "session", args)
+}
+
+func runAgent(ctx context.Context, args []string) error {
+	return runRegistryVerb(ctx, "agent", args)
+}
+
+// runRegistryVerb builds the operator registry (the same one the daemon serves)
+// and dispatches a single top-level verb through it, printing any output. Both
+// session and agent verbs share this so the binary and the gateways drive an
+// identical command surface.
+func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
 		return err
@@ -131,7 +143,7 @@ func runSession(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	out, err := reg.Dispatch(ctx, append([]string{"session"}, args...))
+	out, err := reg.Dispatch(ctx, append([]string{verb}, args...))
 	if err != nil {
 		return err
 	}

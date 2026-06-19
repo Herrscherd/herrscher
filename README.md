@@ -345,11 +345,12 @@ An agent home lives at **`<stateDir>/agents/<name>/`**, where `<stateDir>` is
 | `mcp.json` | an optional stdio MCP server declaration |
 | `settings.json` | zero-prompt Claude settings (auto-enable project MCP servers, `acceptEdits`, an allow-list) |
 
-Create and list agents through a gateway (slash commands on the Discord gateway):
+Create and list agents from the operator binary or through a gateway (the Discord
+gateway binds the same verbs as `/agent create` / `/agent list`):
 
 ```text
-/agent create name:<name> [soul:<persona text>] [mcp:'neublox serve --project {{WORKTREE}}']
-/agent list
+herrscher agent create --name <name> [--soul '<persona text>'] [--mcp 'neublox serve --project {{WORKTREE}}']
+herrscher agent list
 ```
 
 `soul:` seeds the persona; `mcp:` is a stdio MCP server command line whose first
@@ -369,13 +370,6 @@ Claude Code auto-reads from its working directory:
 Because the materialized files live inside the disposable worktree, an agent
 companion always needs an **isolated git worktree**: `--agent` is rejected with
 `shared:true` or a non-git project.
-
-> **Agent verbs are gateway-only.** `agent create` and `agent list` are registered
-> in the same `contracts.Cmd` registry as the session verbs but are *not* routed
-> as a top-level `herrscher` binary verb — they are reached through a gateway (the
-> Discord gateway binds them as `/agent create` / `/agent list`). From the operator
-> binary you provision an agent into a session with `session create … --agent NAME`;
-> there is no `herrscher agent` CLI subcommand.
 
 ---
 
@@ -489,6 +483,7 @@ gateway plugin alone.
 | `serve [--config PATH] [--state FILE] [--health-addr ADDR] [--status-channel ID] [--env-file PATH] [--instance SLUG] [--cmd '…']` | The always-on Gateway daemon: per-session bridge supervision, health endpoint. |
 | `bridge -c CHANNEL --hub-socket SOCK [--cmd '…'] [--backend stream\|oneshot] [--model M] [--session N] …` | One pure-runner backend over the daemon's control socket. Normally spawned by `serve`. |
 | `session <create\|close\|list\|who> [--name N] [--project P] [--clone R] [--cmd '…'] [--backend stream\|oneshot] [--shared] [--agent NAME] [--force]` | Manage sessions: create a bridged channel + worktree + backend (optionally provisioned from a durable [agent](#durable-agents)), close one, or list/inspect active ones. |
+| `agent <create\|list> [--name N] [--soul '…'] [--mcp '…']` | Manage durable companion [agents](#durable-agents): a home with persona + MCP + zero-prompt settings, materialized into a session worktree via `session create --agent`. |
 | `service <install\|uninstall\|status\|restart\|update> [--cmd '…'] [--health-addr ADDR] [--env-file PATH] [--source DIR] [--no-pull]` | Manage the daemon as a native OS service (see [Installation](#installation)). |
 
 The host self-management verbs — `init`, `plugin`, `update`, `install` — compose

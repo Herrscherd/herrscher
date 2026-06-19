@@ -62,7 +62,7 @@ func parseMCP(cmdline string) (name string, srv mcpServer, ok bool) {
 // prompt), and (when present) the agent's MCP namespace allow-listed. The
 // worktree is disposable and isolated, so a permissive mode is safe.
 func buildSettings(serverName string) ([]byte, error) {
-	allow := []string{}
+	var allow []string
 	if serverName != "" {
 		allow = append(allow, "mcp__"+serverName+"__*")
 	}
@@ -81,11 +81,17 @@ func buildSettings(serverName string) ([]byte, error) {
 	}, "", "  ")
 }
 
+// validateName rejects agent names that are empty, ".", or could traverse out of
+// the store root (contain a path separator or "..").
+func validateName(name string) bool {
+	return name != "" && name != "." && !strings.ContainsAny(name, `/\`) && !strings.Contains(name, "..")
+}
+
 // Create writes a new agent home and seeds its three source files. It errors if
 // the name is unsafe or the agent already exists.
 func (s *Store) Create(spec CreateSpec) (Agent, error) {
 	name := spec.Name
-	if name == "" || strings.ContainsAny(name, `/\`) || strings.Contains(name, "..") {
+	if !validateName(name) {
 		return Agent{}, fmt.Errorf("invalid agent name %q", name)
 	}
 	home := filepath.Join(s.root, name)
@@ -95,6 +101,12 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 	if err := os.MkdirAll(home, 0o755); err != nil {
 		return Agent{}, fmt.Errorf("create agent home: %w", err)
 	}
+	created := false
+	defer func() {
+		if !created {
+			_ = os.RemoveAll(home)
+		}
+	}()
 
 	soul := spec.Soul
 	if soul == "" {
@@ -129,11 +141,15 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 			return Agent{}, fmt.Errorf("write %s: %w", f.name, err)
 		}
 	}
+	created = true
 	return Agent{Name: name, Home: home}, nil
 }
 
 // Get returns the agent named name, or false if no such home directory exists.
 func (s *Store) Get(name string) (Agent, bool) {
+	if !validateName(name) {
+		return Agent{}, false
+	}
 	home := filepath.Join(s.root, name)
 	info, err := os.Stat(home)
 	if err != nil || !info.IsDir() {

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -22,7 +23,8 @@ type Supervisor struct {
 
 // bridgeArgs builds the child `herrscher bridge` argv for sess.
 func (s *Supervisor) bridgeArgs(sess state.Session) []string {
-	args := []string{"bridge", "-c", sess.ChannelID, "--cmd", sess.Cmd, "--session", sess.Name}
+	args := []string{"bridge", "-c", sess.ChannelID, "--cmd", sess.Cmd, "--session", sess.Name,
+		"--hub-socket", control.SocketPath(sess.Name)}
 	if sess.Backend != "" && sess.Backend != "stream" {
 		args = append(args, "--backend", sess.Backend)
 	}

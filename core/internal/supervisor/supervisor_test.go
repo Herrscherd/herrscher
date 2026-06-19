@@ -8,6 +8,15 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
+func TestBridgeArgsIncludesHubSocket(t *testing.T) {
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1", Cmd: "claude"})
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--hub-socket") {
+		t.Fatalf("bridgeArgs missing --hub-socket: %v", args)
+	}
+}
+
 func TestBridgeArgsIncludeParticipants(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/bin/dctl")
 	s.PartDir = "/var/dctl"

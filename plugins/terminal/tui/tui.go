@@ -22,6 +22,7 @@ var (
 	humanStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
 	statusStyle = lipgloss.NewStyle().Faint(true)
 	replyStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	costStyle   = lipgloss.NewStyle().Faint(true)
 )
 
 // eventMsg wraps a gateway event for the Bubbletea update loop.
@@ -116,9 +117,21 @@ func (m *model) renderEvent(e contracts.Event) {
 		if e.Text != "" {
 			m.append(replyStyle.Render(e.Text))
 		}
+		if e.Cost > 0 {
+			m.append(costStyle.Render(formatCost(e.Cost)))
+		}
 	case "reset":
 		m.append(statusStyle.Render("· (turn reset)"))
 	}
+}
+
+// formatCost renders a turn's USD cost, matching the host progress summary:
+// sub-cent costs get four decimals, larger ones two.
+func formatCost(c float64) string {
+	if c < 0.01 {
+		return fmt.Sprintf("$%.4f", c)
+	}
+	return fmt.Sprintf("$%.2f", c)
 }
 
 func (m *model) append(line string) {

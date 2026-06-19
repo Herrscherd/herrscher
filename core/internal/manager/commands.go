@@ -30,6 +30,14 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Help("list the participants observed in a session").
 			Param("name", "session name", true).
 			Do(h.sessionWhoRun),
+		contracts.New("set", "home").
+			Help("set the category/forum that holds session channels").
+			Param("channel", "category or forum channel id", true).
+			Do(h.setHomeRun),
+		contracts.New("set", "source").
+			Help("set the source checkout `service update` builds from").
+			Param("path", "absolute path to the source checkout", true).
+			Do(h.setSourceRun),
 		contracts.New("service", "restart").
 			Help("restart the daemon").
 			Do(h.serviceRestartRun),

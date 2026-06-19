@@ -8,7 +8,6 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	control "github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -159,22 +158,37 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	partDir := filepath.Dir(o.StatePath) // participants/<name>.log lives beside state.json
 	sup := supervisor.NewSupervisor(ctx, self)
 
-	for _, sess := range st.SnapshotSessions() {
-		acc, err := control.Accept(control.SocketPath(sess.Name))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "dctl serve: session %q: control socket: %v\n", sess.Name, err)
-			continue
-		}
-		bound := boundGateways(gws, sess.BoundGateways())
-		go RunSession(ctx, sess.Name, bound, acc, state.ParticipantsPath(partDir, sess.Name))
-		_ = sup.Start(sess)
-	}
-	h.SetSessions(len(st.SnapshotSessions()))
-
 	instID, err := resolveInstanceID(st, o.InstanceID, o.Owner)
 	if err != nil {
 		return fmt.Errorf("resolve instance id: %w", err)
 	}
+
+	// The hub owns the live session set and the runtime command seam: the boot
+	// loop and any gateway-driven create/close both go through it, so a session
+	// added at runtime is wired exactly like one loaded here. The handler behind
+	// the registry uses the first gateway's channel admin to create/archive
+	// session channels.
+	reg, err := buildRegistry(ctx, Deps{Admin: firstAdmin(gws)}, o, st, sup, instID)
+	if err != nil {
+		return fmt.Errorf("build command registry: %w", err)
+	}
+	hb := newHub(ctx, st, sup, gws, partDir, reg)
+
+	for _, sess := range st.SnapshotSessions() {
+		hb.goLive(sess)
+		_ = sup.Start(sess)
+	}
+	h.SetSessions(len(st.SnapshotSessions()))
+
+	// Hand the runtime session controller to any gateway that drives the session
+	// lifecycle itself (e.g. slash commands). Only the neutral SessionControl
+	// crosses the boundary, so the core never learns the gateway's platform.
+	for _, g := range gws {
+		if rcv, ok := g.Gateway.(contracts.SessionControlReceiver); ok {
+			rcv.BindSessionControl(hb)
+		}
+	}
+
 	if instID != "" {
 		fmt.Fprintf(os.Stderr, "dctl serve: instance %q\n", instID)
 	}
@@ -210,6 +224,17 @@ func firstProber(gws []Deps) contracts.Prober {
 	for _, g := range gws {
 		if g.Prober != nil {
 			return g.Prober
+		}
+	}
+	return nil
+}
+
+// firstAdmin returns the first gateway's ChannelAdmin (nil if none expose one),
+// used by the session commands to create/archive session channels.
+func firstAdmin(gws []Deps) contracts.ChannelAdmin {
+	for _, g := range gws {
+		if g.Admin != nil {
+			return g.Admin
 		}
 	}
 	return nil

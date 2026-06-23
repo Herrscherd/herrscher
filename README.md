@@ -513,6 +513,8 @@ Common ones: `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID` (default channel),
 `DCTL_OWNER_ID` (seed allowlist), `DCTL_STATE_DIR` (state dir, default
 `~/.config/dctl`), `DCTL_INSTANCE_ID` (namespace slug for shared resources). All
 of these can be supplied via the root `.env` (see [Configuration](#configuration)).
+Operator logging: `HERRSCHER_LOG` sets the structured (`log/slog`) level on stderr
+— `debug|info|warn|error`, default `info`; the bridge's `-v` flag forces `debug`.
 Remote transport (opt-in, see [Roadmap](#roadmap)): `HERRSCHER_REMOTE` —
 comma-separated categories to run out-of-process (e.g. `memory`; unset ⇒ all
 in-process) — and `HERRSCHER_NATS` — the NATS URL (default `nats://127.0.0.1:4222`).

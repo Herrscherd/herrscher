@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
+	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/service"
@@ -111,7 +113,7 @@ func DefaultStatePath() string {
 //   - On a fresh state (no id) with a non-empty resolved id and NO sessions, the
 //     id is frozen (persisted). If sessions already exist, the daemon stays in
 //     legacy (empty) mode so pre-existing sessions are never orphaned.
-func resolveInstanceID(st *state.State, optID, ownerID string) (string, error) {
+func resolveInstanceID(st *state.State, optID, ownerID string, log *slog.Logger) (string, error) {
 	resolved, err := instanceid.Resolve(optID, ownerID)
 	if err != nil {
 		return "", err
@@ -128,8 +130,8 @@ func resolveInstanceID(st *state.State, optID, ownerID string) (string, error) {
 	}
 	if len(st.SnapshotSessions()) > 0 {
 		// Legacy sessions exist; stay non-namespaced so they keep working.
-		fmt.Fprintf(os.Stderr, "dctl serve: %d legacy session(s) present; staying in non-namespaced mode\n",
-			len(st.SnapshotSessions()))
+		log.Warn("legacy sessions present; staying in non-namespaced mode",
+			"sessions", len(st.SnapshotSessions()))
 		return "", nil
 	}
 	if err := st.SetInstanceID(resolved); err != nil {
@@ -145,6 +147,10 @@ func resolveInstanceID(st *state.State, optID, ownerID string) (string, error) {
 // registry by the caller). Command dispatch no longer runs here —
 // session/service commands run through the operator CLI (see NewRegistry).
 func RunHub(ctx context.Context, gws []Deps, o Options) error {
+	// base carries no component so each subsystem attaches its own; log is the
+	// serve composition root's own child.
+	base := obs.Stderr(false)
+	log := base.With("component", "serve")
 	h := health.NewHealth(time.Now())
 
 	st, err := state.LoadState(o.StatePath)
@@ -160,11 +166,12 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	st.ApplyDefaults(home, o.Workspace, o.Source)
 
 	self, _ := os.Executable()
-	startRemotePluginHosts(ctx, self, o.RemoteCategories)
+	startRemotePluginHosts(ctx, self, o.RemoteCategories, base)
 	partDir := filepath.Dir(o.StatePath) // participants/<name>.log lives beside state.json
 	sup := supervisor.NewSupervisor(ctx, self)
+	sup.SetLogger(base)
 
-	instID, err := resolveInstanceID(st, o.InstanceID, o.Owner)
+	instID, err := resolveInstanceID(st, o.InstanceID, o.Owner, log)
 	if err != nil {
 		return fmt.Errorf("resolve instance id: %w", err)
 	}
@@ -196,14 +203,14 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	}
 
 	if instID != "" {
-		fmt.Fprintf(os.Stderr, "dctl serve: instance %q\n", instID)
+		log.Info("instance resolved", "instance", instID)
 	}
 
 	// Plugin discovery: report the plugins compiled into this binary. Each
 	// self-registers into contracts.Default from its init() (xcaddy pattern), so
 	// adding a gateway or backend is a blank import + rebuild.
 	for _, p := range contracts.Default.Plugins() {
-		fmt.Fprintf(os.Stderr, "dctl serve: plugin %s (%s)\n", p.Manifest.Kind, p.Manifest.Category)
+		log.Info("plugin compiled in", "kind", p.Manifest.Kind, "category", p.Manifest.Category)
 	}
 
 	// Liveness uses the first gateway exposing each port (e.g. Discord): ping a
@@ -220,15 +227,20 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 		}
 	}
 
-	fmt.Fprintln(os.Stderr, "dctl serve: hub up; supervising sessions; bot online.")
+	log.Info("hub up; supervising sessions; bot online")
 	<-ctx.Done()
 	return ctx.Err()
 }
 
-func startRemotePluginHosts(ctx context.Context, self string, remote map[contracts.Category]bool) {
+// remoteHostRestartDelay is the fixed pause before a crashed remote plugin-host
+// is restarted. (Stage A2 replaces it with exponential backoff + jitter.)
+const remoteHostRestartDelay = 3 * time.Second
+
+func startRemotePluginHosts(ctx context.Context, self string, remote map[contracts.Category]bool, log *slog.Logger) {
+	log = log.With("component", "plugin-host", "category", "memory")
 	for c := range remote {
 		if c != contracts.CategoryMemory {
-			fmt.Fprintf(os.Stderr, "dctl serve: HERRSCHER_REMOTE=%q not yet supported (only memory); it stays in-process\n", c)
+			log.Warn("remote category not yet supported; staying in-process", "category", c)
 		}
 	}
 	if !remote[contracts.CategoryMemory] {
@@ -246,11 +258,11 @@ func startRemotePluginHosts(ctx context.Context, self string, remote map[contrac
 			if ctx.Err() != nil {
 				return
 			}
-			fmt.Fprintln(os.Stderr, "dctl serve: memory plugin-host exited, restarting in 3s")
+			log.Warn("memory plugin-host exited, restarting", "delay", remoteHostRestartDelay)
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(3 * time.Second):
+			case <-time.After(remoteHostRestartDelay):
 			}
 		}
 	}()

@@ -2,15 +2,20 @@ package supervisor
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"sync"
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
+
+// restartDelay is the fixed pause before a crashed bridge is restarted. (Stage
+// A2 replaces it with exponential backoff + jitter.)
+const restartDelay = 3 * time.Second
 
 // Supervisor manages one child `herrscher bridge` process per session.
 type Supervisor struct {
@@ -18,6 +23,10 @@ type Supervisor struct {
 	selfBin string // path to the herrscher binary (os.Executable)
 	mu      sync.Mutex
 	cancels map[string]context.CancelFunc
+	log     *slog.Logger
+	// sleep is the restart-backoff timer seam; defaults to time.After so tests
+	// can drive the restart loop without real wall-clock waits.
+	sleep func(time.Duration) <-chan time.Time
 }
 
 // bridgeArgs builds the child `herrscher bridge` argv for sess.
@@ -38,9 +47,22 @@ func (s *Supervisor) bridgeArgs(sess state.Session) []string {
 	return args
 }
 
-// NewSupervisor builds a Supervisor bound to ctx.
+// NewSupervisor builds a Supervisor bound to ctx. It logs through a quiet
+// default until SetLogger installs the daemon's operator logger.
 func NewSupervisor(ctx context.Context, selfBin string) *Supervisor {
-	return &Supervisor{ctx: ctx, selfBin: selfBin, cancels: map[string]context.CancelFunc{}}
+	return &Supervisor{
+		ctx:     ctx,
+		selfBin: selfBin,
+		cancels: map[string]context.CancelFunc{},
+		log:     obs.NewLogger(os.Stderr, slog.LevelInfo),
+		sleep:   time.After,
+	}
+}
+
+// SetLogger installs the operator logger the supervisor logs restart events
+// through (component=supervisor is attached for filtering).
+func (s *Supervisor) SetLogger(l *slog.Logger) {
+	s.log = l.With("component", "supervisor")
 }
 
 // Start launches a supervised bridge for sess (idempotent per name).
@@ -82,11 +104,11 @@ func (s *Supervisor) runLoop(ctx context.Context, sess state.Session) {
 		if ctx.Err() != nil {
 			return
 		}
-		fmt.Fprintf(os.Stderr, "supervisor: bridge %q exited, restarting in 3s\n", sess.Name)
+		s.log.Warn("bridge exited, restarting", "session", sess.Name, "delay", restartDelay)
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(3 * time.Second):
+		case <-s.sleep(restartDelay):
 		}
 	}
 }

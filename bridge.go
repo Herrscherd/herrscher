@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
+	"log/slog"
 	"os"
 
 	claude "github.com/Herrscherd/herrscher-claude-backend"
@@ -45,11 +45,12 @@ func runBridge(ctx context.Context, args []string) error {
 		})
 	}
 
-	mem := buildMemory(ctx, *verbose)
+	log := host.Logger(*verbose).With("component", "bridge", "session", *session)
+	mem := buildMemory(ctx, log)
 	if mem != nil {
 		defer mem.Close()
 	}
-	orch := buildOrchestrator(ctx, mem, *session, *project, *agent, *verbose)
+	orch := buildOrchestrator(ctx, mem, *session, *project, *agent, log)
 	if orch != nil {
 		defer orch.Close()
 	}
@@ -63,11 +64,9 @@ func runBridge(ctx context.Context, args []string) error {
 // or returns nil when none is compiled in or its config is unset. Memory is
 // optional: a config/instantiation failure disables it (logged) rather than
 // blocking the bridge, so a vault is opt-in via its plugin's env (OBSIDIAN_VAULT).
-func buildMemory(ctx context.Context, verbose bool) contracts.Memory {
+func buildMemory(ctx context.Context, log *slog.Logger) contracts.Memory {
 	disabled := func(kind string, err error) contracts.Memory {
-		if verbose {
-			fmt.Fprintf(os.Stderr, "herrscher bridge: memory %q disabled: %v\n", kind, err)
-		}
+		log.Debug("memory disabled", "kind", kind, "err", err)
 		return nil
 	}
 	r := host.NewResolver(remoteCategories(), os.Getenv("HERRSCHER_NATS"))
@@ -83,11 +82,9 @@ func buildMemory(ctx context.Context, verbose bool) contracts.Memory {
 // The session name is threaded through the config bag (key "session") since it is
 // runtime state, not env config. A config/instantiation failure disables it
 // (logged) rather than blocking the bridge.
-func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, project, agent string, verbose bool) contracts.Orchestrator {
+func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, project, agent string, log *slog.Logger) contracts.Orchestrator {
 	disabled := func(kind string, err error) contracts.Orchestrator {
-		if verbose {
-			fmt.Fprintf(os.Stderr, "herrscher bridge: orchestrator %q disabled: %v\n", kind, err)
-		}
+		log.Debug("orchestrator disabled", "kind", kind, "err", err)
 		return nil
 	}
 	for _, p := range contracts.Default.Orchestrators() {

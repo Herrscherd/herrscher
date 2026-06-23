@@ -10,11 +10,13 @@ the next.
   supervisor (`core/internal/supervisor/supervisor.go:24-38`) and into the orchestrator config
   (`bridge.go:105-112`), and `herrscher-orchestrator` recalls shared+private into the context
   (`orchestrator.go:59`, `contracts.RecallScoped`). This works today.
-- The **write/consolidate** path exists but is **never activated**. The `Learner`
-  (`herrscher-orchestrator/learner.go:43-87`) can extract facts/skills and persist them via
-  `RecordShared`/`RecordPrivate`, but the bridge never configures `memory.extractor`,
-  `memory.journal`, or `memory.consolidate-every`; `extractor_registry.go` is empty. So `Consolidate()`
-  is always a no-op and nothing is ever learned beyond the raw session transcript.
+- The **write/consolidate** path exists upstream but is **never activated from the host**. The
+  `Learner` (`herrscher-orchestrator/learner.go`) extracts facts/skills and persists them via
+  `RecordShared`/`RecordPrivate`, the extractor registry is in place
+  (`herrscher-orchestrator/extractor_registry.go`), and `register.go` already builds a `Learner` when
+  the host names a registered extractor — but the **bridge never sets** `memory.extractor`,
+  `memory.journal`, or `memory.consolidate-every`. So `lookupExtractor("")` returns nil, the plain
+  `Curator` is built, and nothing is ever learned beyond the raw session transcript.
 
 The goal of this spec is to make agents actually **learn**: turn the dormant Learner into a real,
 configured, scoped consolidation loop.
@@ -33,26 +35,37 @@ stage is not done until `herrscher` exercises it end to end.
 
 ---
 
-## Stage B1 — Extractor registry: a pluggable, declarative extractor
+## Stage B1 — Extractor registry: a pluggable, declarative extractor — **shipped (orchestrator v0.1.3)**
 
-**Goal:** make the `Extractor` selectable by config instead of requiring a source patch. Today
-`herrscher-orchestrator/extractor_registry.go` is empty and `lookupExtractor()` (`register.go:31`)
-finds nothing, so a `Learner` can never be built.
+**Goal:** make the `Extractor` selectable by config instead of requiring a source patch, so a `Learner`
+can be built without a source change to this open plugin.
 
-**Scope** (`herrscher-orchestrator`)
-- Define a registry keyed by name (mirroring how backends/gateways register), and register at least
-  one real default extractor — a deterministic, dependency-free one (e.g. a heuristic/marker-based
-  extractor that pulls explicitly-tagged "fact:" / "skill:" lines from the journal). This gives an
-  end-to-end learnable path without requiring an LLM call in tests.
-- `register.go` resolves `cfg.Get("memory.extractor")` to a registered extractor; an unknown name is a
-  clear startup error (not a silent no-op).
-- Keep the interface open for a future LLM-backed extractor, but do not implement one here.
+**What shipped** (`herrscher-orchestrator`, v0.1.3 — pinned by `herrscher/go.mod`)
+- A registry keyed by name (`extractor_registry.go`: `RegisterExtractor` / `lookupExtractor`),
+  mirroring how backends/gateways register: a blank import runs an `init()` that registers an
+  extractor, and `register.go` looks it up by name at construction time.
+- `register.go` resolves `cfg.Get("memory.extractor")`: a registered name builds a `Learner`, an
+  empty or **unknown** name **fails open to the plain `Curator`** (no learning) rather than erroring.
+  This is deliberate — the host stays unaffected when the closed curation plugin is absent, and there
+  is no default extractor to fall back to (see below).
+- **No default extractor is shipped.** The extractor — the heuristics that decide *what is worth
+  remembering* — is the **closed part of the moat**; this open plugin defines only the `Extractor`
+  seam (`learner.go`) and the registry. A concrete extractor is plugged in by blank import elsewhere.
+  The interface stays open for a future LLM-backed extractor.
 
-**Acceptance / tests**
-- Registering and looking up the default extractor by name returns it; an unknown name returns a
-  descriptive error.
-- The default extractor, given a sample journal containing tagged lines, returns the expected
-  shared-fact and private-skill candidates (table test), and ignores untagged noise.
+**Design note (deviation from the original draft).** An earlier draft of this stage called for a
+deterministic marker-based default extractor and a startup *error* on an unknown name. The shipped
+v0.1.3 chose **fail-open-to-`Curator`** instead, keeping this plugin extractor-free so the curation
+heuristics live entirely in the closed module. The host-side stages below therefore register a
+**fake** extractor in tests to exercise the `Learner` path — exactly as the orchestrator's own
+`extractor_registry_test.go` does — rather than relying on a built-in one.
+
+**Acceptance / tests** (in `herrscher-orchestrator`, green at v0.1.3)
+- Registering an extractor and naming it via `memory.extractor` builds a `*Learner`
+  (`TestRegisterBuildsLearnerWhenExtractorRegistered`).
+- No extractor named → plain `*Curator` (`TestRegisterFallsBackToCuratorWithoutExtractor`).
+- Unknown extractor name → plain `*Curator`, not an error
+  (`TestRegisterIgnoresUnknownExtractorName`).
 - Module CI green.
 
 ---

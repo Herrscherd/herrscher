@@ -1,10 +1,14 @@
 package supervisor
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -51,6 +55,37 @@ func TestBridgeArgsOmitsScopeWhenUnset(t *testing.T) {
 	joined := strings.Join(args, " ")
 	if strings.Contains(joined, "--project") || strings.Contains(joined, "--agent") {
 		t.Fatalf("no scope flags expected when project/agent unset: %v", args)
+	}
+}
+
+// TestRunLoopLogsRestartAsStructuredWarn drives one crash-restart cycle and
+// asserts the restart line is a structured slog record (level=warn, session
+// field) routed through the injected logger — not a raw fmt.Fprintf string.
+func TestRunLoopLogsRestartAsStructuredWarn(t *testing.T) {
+	var buf bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// A binary that cannot start makes cmd.Run() return immediately, exercising
+	// the restart path without spawning a real bridge.
+	s := NewSupervisor(ctx, "/herrscher/does-not-exist")
+	s.SetLogger(obs.NewLogger(&buf, slog.LevelDebug))
+	// Cancel on the first backoff sleep so the loop logs exactly once then exits.
+	s.sleep = func(time.Duration) <-chan time.Time {
+		cancel()
+		ch := make(chan time.Time, 1)
+		ch <- time.Time{}
+		return ch
+	}
+
+	s.runLoop(ctx, state.Session{Name: "demo"})
+
+	out := buf.String()
+	if !strings.Contains(out, "level=WARN") {
+		t.Fatalf("expected a warn-level restart record, got %q", out)
+	}
+	if !strings.Contains(out, "session=demo") {
+		t.Fatalf("expected a session field on the restart record, got %q", out)
 	}
 }
 

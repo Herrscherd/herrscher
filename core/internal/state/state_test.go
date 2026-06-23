@@ -153,6 +153,22 @@ func TestSessionProjectRoundTrips(t *testing.T) {
 	}
 }
 
+func TestSessionLearningConfigRoundTrips(t *testing.T) {
+	p := t.TempDir() + "/s.json"
+	s := NewState(p)
+	if err := s.AddSession(Session{
+		Name: "x", ChannelID: "c",
+		Extractor: "roblox", Journal: ".neublox/calls.log", ConsolidateEvery: 5,
+	}); err != nil {
+		t.Fatalf("AddSession: %v", err)
+	}
+	reloaded, _ := LoadState(p)
+	got, ok := reloaded.FindSession("x")
+	if !ok || got.Extractor != "roblox" || got.Journal != ".neublox/calls.log" || got.ConsolidateEvery != 5 {
+		t.Fatalf("learning config not persisted: %+v", got)
+	}
+}
+
 func TestBoundGateways(t *testing.T) {
 	cases := []struct {
 		name string

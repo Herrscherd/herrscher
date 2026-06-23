@@ -9,6 +9,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
+	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
@@ -53,7 +54,7 @@ func NewRegistry(ctx context.Context, d Deps, o Options) (*cli.Registry, error) 
 	}
 	st.ApplyDefaults(home, o.Workspace, o.Source)
 
-	instID, err := resolveInstanceID(st, o.InstanceID, o.Owner)
+	instID, err := resolveInstanceID(st, o.InstanceID, o.Owner, obs.Stderr(false))
 	if err != nil {
 		return nil, err
 	}

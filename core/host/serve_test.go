@@ -1,8 +1,11 @@
 package host
 
 import (
+	"io"
+	"log/slog"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -70,7 +73,7 @@ func TestResolveInstanceID(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			got, err := resolveInstanceID(st, tt.optID, tt.ownerID)
+			got, err := resolveInstanceID(st, tt.optID, tt.ownerID, obs.NewLogger(io.Discard, slog.LevelInfo))
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
 			}

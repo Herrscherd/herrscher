@@ -234,19 +234,23 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 }
 
 func startRemotePluginHosts(ctx context.Context, self string, remote map[contracts.Category]bool, log *slog.Logger) {
-	log = log.With("component", "plugin-host", "category", "memory")
+	base := log.With("component", "plugin-host")
 	for c := range remote {
-		if c != contracts.CategoryMemory {
-			log.Warn("remote category not yet supported; staying in-process", "category", c)
+		if !SupportedRemoteCategory(c) {
+			base.Warn("remote category not yet supported; staying in-process", "category", c)
+			continue
 		}
+		startRemotePluginHost(ctx, self, c, base.With("category", string(c)))
 	}
-	if !remote[contracts.CategoryMemory] {
-		return
-	}
+}
+
+// startRemotePluginHost supervises one out-of-process plugin-host for cat,
+// restarting it with backoff (Stage A2) whenever it exits while ctx is live.
+func startRemotePluginHost(ctx context.Context, self string, cat contracts.Category, log *slog.Logger) {
 	go func() {
 		bo := obs.RestartBackoff()
 		for ctx.Err() == nil {
-			cmd := exec.CommandContext(ctx, self, "plugin-host", "--category", "memory", "--instance", "memory-0")
+			cmd := exec.CommandContext(ctx, self, "plugin-host", "--category", string(cat), "--instance", string(cat)+"-0")
 			if url := os.Getenv("HERRSCHER_NATS"); url != "" {
 				cmd.Args = append(cmd.Args, "--nats", url)
 			}
@@ -258,7 +262,7 @@ func startRemotePluginHosts(ctx context.Context, self string, remote map[contrac
 				return
 			}
 			delay := bo.Next(time.Since(start))
-			log.Warn("memory plugin-host exited, restarting", "delay", delay)
+			log.Warn("plugin-host exited, restarting", "delay", delay)
 			select {
 			case <-ctx.Done():
 				return

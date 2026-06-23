@@ -87,7 +87,9 @@ func (r *Resolver) Memory(ctx context.Context, plugins []contracts.Plugin, geten
 			continue
 		}
 		if r.isRemote(contracts.CategoryMemory) {
-			return r.resolveMemoryWithRetry(ctx, p)
+			p := p
+			return resolveRemoteWithRetry(r, ctx, contracts.CategoryMemory,
+				func(c context.Context) (contracts.Memory, error) { return r.dialMemory(c, p) })
 		}
 		cfg, err := contracts.Resolve(p.Manifest.Config, getenv)
 		if err != nil {
@@ -115,10 +117,14 @@ func (e *RemoteResolveError) Error() string {
 
 func (e *RemoteResolveError) Unwrap() error { return e.Err }
 
-// resolveMemoryWithRetry dials the remote memory proxy, retrying transient
+// resolveRemoteWithRetry dials a remote category's proxy, retrying transient
 // failures on the Stage A2 backoff until either an attempt succeeds, the attempt
-// cap is hit, the total budget elapses, or ctx is cancelled.
-func (r *Resolver) resolveMemoryWithRetry(ctx context.Context, p contracts.Plugin) (contracts.Memory, error) {
+// cap is hit, the total budget elapses, or ctx is cancelled. It is generic over
+// the port type so every remote category reuses the same retry/timeout/metrics
+// machinery via its own one-shot dial; memory is the only caller today
+// (orchestrator and backend join it in later Spec C stages).
+func resolveRemoteWithRetry[T any](r *Resolver, ctx context.Context, cat contracts.Category, dial func(context.Context) (T, error)) (T, error) {
+	var zero T
 	start := r.now()
 	bo := &obs.Backoff{Base: retryBackoffBase, Factor: 2, Max: retryBackoffMax, Jitter: 0.2}
 	var lastErr error
@@ -128,20 +134,20 @@ func (r *Resolver) resolveMemoryWithRetry(ctx context.Context, p contracts.Plugi
 		r.metrics.RemoteAttempt()
 		attemptStart := r.now()
 		actx, cancel := context.WithTimeout(ctx, r.attemptTimeout)
-		mem, err := r.dialMemory(actx, p)
+		v, err := dial(actx)
 		cancel()
 		r.metrics.RemoteLatency(r.now().Sub(attemptStart))
 		if err == nil {
 			if attempt > 1 {
-				r.log.Debug("remote resolve recovered", "category", contracts.CategoryMemory, "attempt", attempt)
+				r.log.Debug("remote resolve recovered", "category", cat, "attempt", attempt)
 			}
-			return mem, nil
+			return v, nil
 		}
 		lastErr = err
 		if attempt >= r.retryAttempts || r.now().Sub(start) >= r.retryBudget || ctx.Err() != nil {
 			break
 		}
-		r.log.Debug("remote resolve attempt failed", "category", contracts.CategoryMemory, "attempt", attempt, "err", err)
+		r.log.Debug("remote resolve attempt failed", "category", cat, "attempt", attempt, "err", err)
 		select {
 		case <-ctx.Done():
 			lastErr = ctx.Err()
@@ -150,8 +156,8 @@ func (r *Resolver) resolveMemoryWithRetry(ctx context.Context, p contracts.Plugi
 	}
 	r.metrics.RemoteFailure()
 	elapsed := r.now().Sub(start)
-	r.log.Warn("remote resolve gave up", "category", contracts.CategoryMemory, "attempts", attempt, "elapsed", elapsed, "err", lastErr)
-	return nil, &RemoteResolveError{Category: contracts.CategoryMemory, Attempts: attempt, Elapsed: elapsed, Err: lastErr}
+	r.log.Warn("remote resolve gave up", "category", cat, "attempts", attempt, "elapsed", elapsed, "err", lastErr)
+	return zero, &RemoteResolveError{Category: cat, Attempts: attempt, Elapsed: elapsed, Err: lastErr}
 }
 
 func (r *Resolver) natsURL() string {

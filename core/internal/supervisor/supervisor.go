@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"time"
 
@@ -43,6 +44,17 @@ func (s *Supervisor) bridgeArgs(sess state.Session) []string {
 	}
 	if sess.Backend != "" && sess.Backend != "stream" {
 		args = append(args, "--backend", sess.Backend)
+	}
+	// P1 write side (opt-in): thread the learning config so the bridge builds a
+	// Learner instead of the plain Curator. Only when set, like the scope above.
+	if sess.Extractor != "" {
+		args = append(args, "--extractor", sess.Extractor)
+	}
+	if sess.Journal != "" {
+		args = append(args, "--journal", sess.Journal)
+	}
+	if sess.ConsolidateEvery > 0 {
+		args = append(args, "--consolidate-every", strconv.Itoa(sess.ConsolidateEvery))
 	}
 	return args
 }

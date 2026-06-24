@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"strconv"
 
 	claude "github.com/Herrscherd/herrscher-claude-backend"
 	"github.com/Herrscherd/herrscher-contracts"
@@ -30,6 +31,9 @@ func runBridge(ctx context.Context, args []string) error {
 	verbose := fs.Bool("v", false, "log activity to stderr")
 	backend := fs.String("backend", "", "responder backend: stream (default) | oneshot")
 	hubSocket := fs.String("hub-socket", "", "unix socket of the daemon hub: when set, run as a pure backend runner (no gateway polling)")
+	extractor := fs.String("extractor", "", "name of a registered curation extractor — enables the P1 learning loop (empty = plain Curator, no learning)")
+	journal := fs.String("journal", "", "path to the call journal Consolidate reads (worktree-relative ok); only used with --extractor")
+	consolidateEvery := fs.Int("consolidate-every", 0, "run Consolidate every N turns (0 = manual only); only used with --extractor")
 	fs.Parse(args)
 
 	// The backend is the model edge: core never knows which model answers. The
@@ -50,7 +54,8 @@ func runBridge(ctx context.Context, args []string) error {
 	if mem != nil {
 		defer mem.Close()
 	}
-	orch := buildOrchestrator(ctx, mem, *session, *project, *agent, log)
+	orch := buildOrchestrator(ctx, mem, *session, *project, *agent,
+		learnConfig{extractor: *extractor, journal: *journal, consolidateEvery: *consolidateEvery}, log)
 	if orch != nil {
 		defer orch.Close()
 	}
@@ -78,12 +83,21 @@ func buildMemory(ctx context.Context, log *slog.Logger) contracts.Memory {
 	return mem
 }
 
+// learnConfig is the opt-in P1 write side: when extractor names a registered
+// curation extractor, the orchestrator builds a Learner that runs Consolidate
+// over journal every `every` turns. A zero value keeps the plain Curator.
+type learnConfig struct {
+	extractor        string
+	journal          string
+	consolidateEvery int
+}
+
 // buildOrchestrator instantiates the first registered orchestrator plugin over
 // mem (the conversation-policy edge), or returns nil when none is compiled in.
 // The session name is threaded through the config bag (key "session") since it is
 // runtime state, not env config. A config/instantiation failure disables it
 // (logged) rather than blocking the bridge.
-func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, project, agent string, log *slog.Logger) contracts.Orchestrator {
+func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, project, agent string, learn learnConfig, log *slog.Logger) contracts.Orchestrator {
 	disabled := func(kind string, err error) contracts.Orchestrator {
 		log.Debug("orchestrator disabled", "kind", kind, "err", err)
 		return nil
@@ -107,6 +121,19 @@ func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, proje
 		}
 		if agent != "" {
 			cfg.Settings["memory.agent"] = agent
+		}
+		// P1 write side (opt-in): naming a registered extractor flips the
+		// orchestrator from the plain Curator to a learning Learner; journal and
+		// cadence feed its Consolidate. Threaded only when set so an unconfigured
+		// bridge is byte-for-byte unchanged.
+		if learn.extractor != "" {
+			cfg.Settings["memory.extractor"] = learn.extractor
+		}
+		if learn.journal != "" {
+			cfg.Settings["memory.journal"] = learn.journal
+		}
+		if learn.consolidateEvery > 0 {
+			cfg.Settings["memory.consolidate-every"] = strconv.Itoa(learn.consolidateEvery)
 		}
 		orch, err := p.Orchestrator(ctx, cfg, mem)
 		if err != nil {

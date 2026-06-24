@@ -26,6 +26,14 @@ type Session struct {
 	Project   string `json:"project,omitempty"`  // workspace sub-dir the session started from
 	Agent     string `json:"agent,omitempty"`    // durable agent this session was provisioned from ("" = none)
 
+	// Learning config (P1 write side, opt-in). Extractor names a registered
+	// curation extractor; empty keeps the plain Curator (no learning). Journal
+	// is the call-journal path Consolidate reads (worktree-relative is fine).
+	// ConsolidateEvery runs Consolidate every N turns (0 = manual only).
+	Extractor        string `json:"extractor,omitempty"`
+	Journal          string `json:"journal,omitempty"`
+	ConsolidateEvery int    `json:"consolidateEvery,omitempty"`
+
 	// Gateways binds the session to a set of gateway kinds (e.g. "discord",
 	// "terminal"). Empty means "legacy": a session with a ChannelID is Discord.
 	Gateways []string `json:"gateways,omitempty"`

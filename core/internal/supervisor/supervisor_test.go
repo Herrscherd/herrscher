@@ -60,6 +60,34 @@ func TestBridgeArgsOmitsScopeWhenUnset(t *testing.T) {
 	}
 }
 
+func TestBridgeArgsThreadsLearningConfig(t *testing.T) {
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	args := s.bridgeArgs(state.Session{
+		Name: "demo", ChannelID: "c1",
+		Extractor: "roblox", Journal: ".neublox/calls.log", ConsolidateEvery: 5,
+	})
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--extractor roblox") {
+		t.Fatalf("expected --extractor for the learning loop: %v", args)
+	}
+	if !strings.Contains(joined, "--journal .neublox/calls.log") {
+		t.Fatalf("expected --journal for the consolidation input: %v", args)
+	}
+	if !strings.Contains(joined, "--consolidate-every 5") {
+		t.Fatalf("expected --consolidate-every for the cadence: %v", args)
+	}
+}
+
+func TestBridgeArgsOmitsLearningConfigWhenUnset(t *testing.T) {
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1"})
+	joined := strings.Join(args, " ")
+	if strings.Contains(joined, "--extractor") || strings.Contains(joined, "--journal") ||
+		strings.Contains(joined, "--consolidate-every") {
+		t.Fatalf("no learning flags expected when extractor/journal/cadence unset: %v", args)
+	}
+}
+
 // TestRunLoopLogsRestartAsStructuredWarn drives one crash-restart cycle and
 // asserts the restart line is a structured slog record (level=warn, session
 // field) routed through the injected logger — not a raw fmt.Fprintf string.

@@ -10,6 +10,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	transport "github.com/Herrscherd/herrscher-transport"
+	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/grpc"
 )
@@ -22,10 +23,15 @@ func runPluginHost(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *category != string(contracts.CategoryMemory) {
+	if !host.SupportedRemoteCategory(contracts.Category(*category)) {
 		return fmt.Errorf("plugin-host: unsupported category %q", *category)
 	}
 
+	// memory is the only category SupportedRemoteCategory admits today, so the
+	// host serves the Memory port directly below. Registering another remote
+	// category (Spec C2+) means branching here on *category to serve its
+	// skeleton — the gate alone would otherwise admit a category this body
+	// cannot honor.
 	var (
 		real     contracts.Memory
 		manifest contracts.Manifest

@@ -1,5 +1,7 @@
 /dctl
 /dctl.exe
+/herrscher
+/herrscher.exe
 *.test
 
 # per-session git worktrees created by `dctl serve`

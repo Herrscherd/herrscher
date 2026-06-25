@@ -16,6 +16,24 @@ import (
 // inbound lines.
 var pollInterval = 50 * time.Millisecond
 
+// Acknowledgement reactions the driver places on a human message so the operator
+// sees, in Discord itself, that the bot received it (👀), answered it (✅), or
+// abandoned the turn (❌). Best-effort and only on gateways advertising Reactions.
+const (
+	reactSeen  = "👀"
+	reactDone  = "✅"
+	reactError = "❌"
+)
+
+// inbound is one queued frame plus where to acknowledge it with reactions. msg is
+// empty for picks (which carry no human message to react on).
+type inbound struct {
+	ev   contracts.Event
+	conv contracts.Conversation
+	gw   contracts.Gateway
+	msg  contracts.MessageID
+}
+
 // sessionDriver owns one session's turn lifecycle: it polls every bound
 // gateway's Reader for inbound messages, serializes them through a FIFO, writes
 // one input frame to the bridge per turn, and fans the bridge's reply events out
@@ -23,11 +41,15 @@ var pollInterval = 50 * time.Millisecond
 // session's control connection (a *control.Conn in production; channels in
 // tests).
 type sessionDriver struct {
-	name      string
+	name string
+	// channel is the session's own channel: the driver polls it and posts to it,
+	// so each session uses its own channel rather than the gateway's global
+	// default. Empty falls back to the reader's DefaultChannel (legacy/tests).
+	channel   string
 	gateways  []contracts.GatewaySet
 	toBridge  chan<- contracts.Event
 	from      <-chan contracts.Event
-	queue     chan contracts.Event
+	queue     chan inbound
 	renderers map[string]*gatewayRenderer
 
 	// hangup signals that the current connection ended so an in-flight turn is
@@ -52,7 +74,7 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		gateways:  gws,
 		toBridge:  toBridge,
 		from:      fromBridge,
-		queue:     make(chan contracts.Event, 64),
+		queue:     make(chan inbound, 64),
 		renderers: map[string]*gatewayRenderer{},
 		hangup:    make(chan struct{}, 1),
 		seen:      map[string]bool{},
@@ -77,7 +99,7 @@ func (d *sessionDriver) journal(authorID string) {
 // Pick injects a routed select-menu value into this session's turn queue. The
 // bridge answers it out-of-band (serialized with turns) and emits a reply.
 func (d *sessionDriver) Pick(value string) {
-	d.queue <- contracts.Event{T: "pick", Value: value}
+	d.queue <- inbound{ev: contracts.Event{T: "pick", Value: value}}
 }
 
 // sessionRegistry maps live session names to their driver so an out-of-band
@@ -117,16 +139,29 @@ func Pick(session, value string) bool {
 func (d *sessionDriver) run(ctx context.Context) {
 	for _, g := range d.gateways {
 		if g.Reader != nil {
-			go d.poll(ctx, g.Reader)
+			go d.poll(ctx, g)
 		}
 	}
 	d.pump(ctx)
 }
 
 // poll reads one gateway's inbound messages and enqueues them as input frames.
-func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
-	ch := r.DefaultChannel()
+func (d *sessionDriver) poll(ctx context.Context, g contracts.GatewaySet) {
+	r := g.Reader
+	conv := contracts.Conversation{Gateway: g.Gateway.Manifest().Kind, ID: d.channel}
+	ch := d.channel
+	if ch == "" {
+		ch = r.DefaultChannel()
+		conv.ID = ch
+	}
 	var last string
+	// With a session channel bound, start after the current history so a daemon
+	// restart doesn't replay past messages as fresh turns.
+	if d.channel != "" {
+		if msgs, err := r.Read(ctx, ch, 1, ""); err == nil && len(msgs) > 0 {
+			last = msgs[len(msgs)-1].ID
+		}
+	}
 	for {
 		if ctx.Err() != nil {
 			return
@@ -139,8 +174,15 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 				}
 				last = m.ID
 				d.journal(m.AuthorID)
+				// 👀: the message is received and queued; ✅/❌ follows when its turn ends.
+				d.react(ctx, g.Gateway, conv, contracts.MessageID(m.ID), reactSeen)
 				select {
-				case d.queue <- contracts.Event{T: "input", Who: m.AuthorName, Text: m.Content}:
+				case d.queue <- inbound{
+					ev:   contracts.Event{T: "input", Who: m.AuthorName, Text: m.Content},
+					conv: conv,
+					gw:   g.Gateway,
+					msg:  contracts.MessageID(m.ID),
+				}:
 				case <-ctx.Done():
 					return
 				}
@@ -161,13 +203,13 @@ func (d *sessionDriver) pump(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case ev := <-d.queue:
+		case item := <-d.queue:
 			// A pick is answered out-of-band by the bridge; only a real input
 			// opens a turn (and a progress view) on the bound gateways.
-			if ev.T == "input" {
-				d.fanOut(ctx, contracts.Event{T: "human", Who: ev.Who, Text: ev.Text})
+			if item.ev.T == "input" {
+				d.fanOut(ctx, contracts.Event{T: "human", Who: item.ev.Who, Text: item.ev.Text})
 			}
-			d.runTurn(ctx, ev)
+			d.runTurn(ctx, item)
 		}
 	}
 }
@@ -176,19 +218,40 @@ func (d *sessionDriver) pump(ctx context.Context) {
 // reply{done}. A stale hangup left by a disconnect that happened between turns is
 // drained first so it cannot abort this turn; the send then races the hangup so a
 // disconnect before the frame is handed off abandons the turn instead of blocking.
-func (d *sessionDriver) runTurn(ctx context.Context, ev contracts.Event) {
+func (d *sessionDriver) runTurn(ctx context.Context, item inbound) {
 	select {
 	case <-d.hangup:
 	default:
 	}
 	select {
-	case d.toBridge <- ev:
+	case d.toBridge <- item.ev:
 	case <-d.hangup:
+		d.ack(ctx, item, false)
 		return
 	case <-ctx.Done():
 		return
 	}
-	d.awaitTurn(ctx)
+	d.ack(ctx, item, d.awaitTurn(ctx))
+}
+
+// react places one emoji on a human message, best-effort, and only when the
+// gateway advertises the Reactions capability (so a non-reacting gateway — the
+// terminal — is skipped without error).
+func (d *sessionDriver) react(ctx context.Context, gw contracts.Gateway, conv contracts.Conversation, msg contracts.MessageID, emoji string) {
+	if gw == nil || msg == "" || !gw.Manifest().Capabilities.Reactions {
+		return
+	}
+	_ = gw.React(ctx, conv, msg, emoji)
+}
+
+// ack marks a handled human message with a terminal reaction: ✅ when the turn
+// completed, ❌ when it was abandoned. Picks (no msg) are skipped.
+func (d *sessionDriver) ack(ctx context.Context, item inbound, completed bool) {
+	emoji := reactDone
+	if !completed {
+		emoji = reactError
+	}
+	d.react(ctx, item.gw, item.conv, item.msg, emoji)
 }
 
 // awaitTurn fans every event for the current turn to all bound gateways and
@@ -196,25 +259,25 @@ func (d *sessionDriver) runTurn(ctx context.Context, ev contracts.Event) {
 // hangup signals the in-flight turn was abandoned on a bridge disconnect). A
 // backend "reset" is a mid-turn progress event: it is fanned out and the turn
 // continues.
-func (d *sessionDriver) awaitTurn(ctx context.Context) {
+func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 	d.metrics.TurnStarted()
 	for {
 		select {
 		case <-ctx.Done():
 			d.metrics.TurnAbandoned()
-			return
+			return false
 		case <-d.hangup:
 			d.metrics.TurnAbandoned()
-			return // bridge connection ended; abandon this turn
+			return false // bridge connection ended; abandon this turn
 		case e, ok := <-d.from:
 			if !ok {
 				d.metrics.TurnAbandoned()
-				return // bridge connection lost; abandon this turn
+				return false // bridge connection lost; abandon this turn
 			}
 			d.fanOut(ctx, e)
 			if e.T == "reply" && e.Done {
 				d.metrics.TurnCompleted()
-				return
+				return true
 			}
 		}
 	}
@@ -233,7 +296,7 @@ func (d *sessionDriver) fanOut(ctx context.Context, e contracts.Event) {
 		key := strconv.Itoa(i) + ":" + g.Gateway.Manifest().Kind
 		r := d.renderers[key]
 		if r == nil {
-			r = newGatewayRenderer(g.Gateway, g.Reader, gatewayChannel(g), "full")
+			r = newGatewayRenderer(g.Gateway, g.Reader, d.renderChannel(g), "full")
 			d.renderers[key] = r
 		}
 		r.handle(ctx, e)
@@ -249,15 +312,25 @@ func gatewayChannel(g contracts.GatewaySet) string {
 	return ""
 }
 
+// renderChannel is where this session posts: its own bound channel when set,
+// else the gateway's default (legacy/tests).
+func (d *sessionDriver) renderChannel(g contracts.GatewaySet) string {
+	if d.channel != "" {
+		return d.channel
+	}
+	return gatewayChannel(g)
+}
+
 // RunSession drives one session against a control Acceptor: it bridges the
 // persistent Conn (input frames out, event frames in) to a sessionDriver, and
 // re-binds to a fresh Conn whenever the bridge reconnects (after a crash +
 // supervisor restart). It blocks until ctx is cancelled.
-func RunSession(ctx context.Context, name string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry) {
+func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry) {
 	defer acc.Close() // own the acceptor: close the listener + remove the socket on shutdown
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
 	d := newSessionDriver(name, gws, toBridge, fromBridge)
+	d.channel = channel
 	d.participants = participants
 	d.metrics = m
 	registerDriver(name, d)

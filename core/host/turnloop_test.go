@@ -15,13 +15,16 @@ import (
 // fanRecorder is a gateway+reader+sink that records what the hub fans to it and
 // can feed inbound lines.
 type fanRecorder struct {
-	mu       sync.Mutex
-	inbound  []contracts.Message
-	emitted  []contracts.Event
-	posted   []string
-	upserts  int
-	statuses []string // content of each UpsertStatusMessage (the live progress view)
-	sink     bool     // implements EventSink when true
+	mu          sync.Mutex
+	inbound     []contracts.Message
+	emitted     []contracts.Event
+	posted      []string
+	upserts     int
+	statuses    []string // content of each UpsertStatusMessage (the live progress view)
+	sink        bool     // implements EventSink when true
+	readChannel string   // last channel id passed to Read
+	reactions   bool     // advertises the Reactions capability when true
+	reacts      []string // "<msgID>:<emoji>" for each React call
 }
 
 func (f *fanRecorder) feed(text string) {
@@ -40,9 +43,10 @@ func (f *fanRecorder) DefaultChannel() string { return "c" }
 func (f *fanRecorder) EnsureChannel(context.Context, string, string) (contracts.Channel, error) {
 	return contracts.Channel{ID: "c"}, nil
 }
-func (f *fanRecorder) Read(context.Context, string, int, string) ([]contracts.Message, error) {
+func (f *fanRecorder) Read(_ context.Context, channelID string, _ int, _ string) ([]contracts.Message, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.readChannel = channelID
 	out := f.inbound
 	f.inbound = nil
 	return out, nil
@@ -55,7 +59,9 @@ func (f *fanRecorder) UpsertStatusMessage(_ context.Context, _, _, content strin
 	f.statuses = append(f.statuses, content)
 	return "", nil
 }
-func (f *fanRecorder) Manifest() contracts.Manifest { return contracts.Manifest{Kind: "rec"} }
+func (f *fanRecorder) Manifest() contracts.Manifest {
+	return contracts.Manifest{Kind: "rec", Capabilities: contracts.Capabilities{Reactions: f.reactions}}
+}
 func (f *fanRecorder) Post(_ context.Context, _ contracts.Conversation, text string) (contracts.MessageID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -65,7 +71,10 @@ func (f *fanRecorder) Post(_ context.Context, _ contracts.Conversation, text str
 func (f *fanRecorder) Reply(_ context.Context, _ contracts.Conversation, _ contracts.MessageID, text string) (contracts.MessageID, error) {
 	return f.Post(nil, contracts.Conversation{}, text)
 }
-func (f *fanRecorder) React(context.Context, contracts.Conversation, contracts.MessageID, string) error {
+func (f *fanRecorder) React(_ context.Context, _ contracts.Conversation, msg contracts.MessageID, emoji string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reacts = append(f.reacts, string(msg)+":"+emoji)
 	return nil
 }
 func (f *fanRecorder) Menu(context.Context, contracts.Conversation, contracts.MessageID, string, []contracts.Choice) error {
@@ -118,6 +127,65 @@ func TestDriverFanOutToAllBoundGateways(t *testing.T) {
 		defer b.mu.Unlock()
 		return len(a.posted) == 1 && a.posted[0] == "world" && len(b.posted) == 1 && b.posted[0] == "world"
 	}, "reply fanned to both gateways")
+}
+
+// TestDriverPollsSessionChannel proves a session with its own channel bound is
+// polled on THAT channel, not the gateway's global DefaultChannel ("c"). This
+// guards the regression where the daemon read the empty global channel for every
+// session, so the bot never saw messages in a session's own channel.
+func TestDriverPollsSessionChannel(t *testing.T) {
+	a := &fanRecorder{}
+	toBridge := make(chan contracts.Event, 4)
+	fromBridge := make(chan contracts.Event, 4)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+	d.channel = "sess-chan"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go d.run(ctx)
+
+	waitFor(t, func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.readChannel == "sess-chan"
+	}, "driver polls the session's own channel, not the gateway default")
+}
+
+// TestDriverReactsOnReceiveAndComplete proves the driver acknowledges a human
+// message with 👀 when it is received and ✅ once its turn completes, on a gateway
+// that advertises the Reactions capability.
+func TestDriverReactsOnReceiveAndComplete(t *testing.T) {
+	a := &fanRecorder{reactions: true}
+	a.feed("hi")
+	toBridge := make(chan contracts.Event, 4)
+	fromBridge := make(chan contracts.Event, 4)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go d.run(ctx)
+
+	hasReact := func(want string) bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		for _, r := range a.reacts {
+			if r == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	waitFor(t, func() bool { return hasReact("m:" + reactSeen) }, "👀 reaction on receive")
+
+	select {
+	case <-toBridge:
+	case <-time.After(time.Second):
+		t.Fatal("driver did not pump input to bridge")
+	}
+	fromBridge <- contracts.Event{T: "reply", Text: "ok", Done: true}
+
+	waitFor(t, func() bool { return hasReact("m:" + reactDone) }, "✅ reaction on completion")
 }
 
 // TestDriverProgressViewOpensAtTurnStart proves the non-EventSink renderer opens
@@ -187,7 +255,7 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	defer acc.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, "pickreg", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil)
+	go RunSession(ctx, "pickreg", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil)
 
 	waitFor(t, func() bool { return Pick("pickreg", "1") }, "Pick routes to the live session")
 	if Pick("does-not-exist", "1") {
@@ -316,7 +384,7 @@ func TestRunSessionReconnectsAndResumes(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil)
+	go RunSession(ctx, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil)
 
 	// First bridge connects, gets the input, then dies before replying.
 	c1 := dialCtl(t, sock)
@@ -347,7 +415,7 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil)
+	go RunSession(ctx, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil)
 
 	// First bridge: gets q1, completes the turn with reply{done}, then dies while
 	// the driver is idle.

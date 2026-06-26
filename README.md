@@ -124,7 +124,7 @@ can opt into running as a **separate process** over the NATS/gRPC transport (see
 
 | Category | Edge | Port(s) | Status | Official plugin |
 |----------|------|---------|--------|-----------------|
-| 🔌 **Gateway** | channel (inbound) | `Gateway`, `ChannelSource`, `ChannelReader`, `ChannelAdmin`, `CommandRegistrar`, `Prober`, `MenuRouter`, `Responder`, `EventSink` (smart gateways) | ✅ live | [herrscher-discord-gateway], in-tree `terminal` |
+| 🔌 **Gateway** | channel (inbound) | `Gateway`, `ChannelSource`, `ChannelReader`, `ChannelAdmin`, `CommandRegistrar`, `Prober`, `MenuRouter`, `Responder`, `EventSink` (smart gateways), `Foreground` (a gateway that owns the main thread, e.g. a TUI) | ✅ live | [herrscher-discord-gateway], in-tree `terminal` |
 | 🧠 **Backend** | model (outbound) | `Backend` (+ `ChoiceAware`, `ChoiceInjector`) | ✅ live | [herrscher-claude-backend] |
 | 🗄️ **Memory** | recall / persistence | `Memory` | ✅ live | [herrscher-obsidian-memory] |
 | 🪢 **Orchestrator** | conversation policy | `Orchestrator` | ✅ live | [herrscher-orchestrator] |
@@ -139,12 +139,18 @@ conversation-policy port; the default stack ships the published
 `herrscher-orchestrator` module (the `basic` kind). Every plugin plugs in the
 same way — a blank import and a rebuild, no domain change.
 
-Gateways come in two flavours. A plain gateway exposes only the read/post ports
-and is driven by the host-side renderer. A **smart gateway** also implements
-`EventSink` and renders the live turn stream itself — the in-tree **`terminal`**
-gateway (`plugins/terminal`) is one: a Bubbletea TUI that `serve` brings up in
-the foreground as a first-class peer of Discord, so the terminal is a real
-gateway, not a debug console.
+Gateways come in two flavours. A plain gateway exposes only the read/post ports;
+for it the host posts **only the final reply** (chunked), with no platform-
+specific dressing. A **smart gateway** also implements `EventSink`, receives the
+raw turn-event stream, and renders it itself (live progress, emojis, summary).
+Both shipped gateways are smart: the in-tree **`terminal`** gateway
+(`plugins/terminal`) is a Bubbletea TUI that `serve` brings up in the foreground
+as a first-class peer of Discord, and the **Discord** gateway renders its own
+progress message, ⏳ acknowledgement, and summary via DCTL. Rich, platform-
+specific presentation lives in the gateway — never in the host: the host only
+emits **abstract semantic events** (turn received, reply, mid-turn reset, and an
+`abandoned` signal when a turn ends without a reply), and each gateway decides
+how to display them. The host never picks an emoji or reaction itself.
 
 ```mermaid
 flowchart LR
@@ -197,7 +203,9 @@ hands one input frame per turn to a **pure-runner bridge** over a persistent
 control socket. The bridge talks only to the backend; it streams the turn's
 events back over the same socket, and the hub fans them out to every bound
 gateway. One turn is active at a time: the next queued input is sent only after
-the current turn's terminal `reply{done}`.
+the current turn ends — either its terminal `reply{done}`, or an abandonment
+(bridge disconnect or shutdown), which fans out an abstract `abandoned` signal so
+smart gateways can finalize their live acknowledgement.
 
 ```mermaid
 sequenceDiagram
@@ -220,19 +228,20 @@ sequenceDiagram
         M-->>BE: tool calls · text · cost
         BE-->>BR: onEvent(BackendEvent)
         BR-->>HUB: chunk / status events
-        HUB->>GW: fan out to every bound gateway<br/>(EventSink renders itself; others via host renderer)
+        HUB->>GW: fan out to every bound gateway<br/>(smart gateway renders itself; plain gateway gets the final reply only)
     end
     M-->>BE: final answer (+ total cost)
     BE-->>BR: output string
     BR-->>HUB: reply{Done:true, Cost}
-    HUB->>GW: post final reply (split to 2000 chars)<br/>+ cost in the progress summary
+    HUB->>GW: deliver reply event<br/>(smart: rendered in-gateway; plain: posted, split to 2000)
     GW->>CH: shows the reply
     Note over HUB: turn ends → next FIFO input may start
 ```
 
-A **smart gateway** (the terminal) implements `EventSink` and renders the live
-event stream itself; a non-`EventSink` gateway (Discord) is driven by the
-host-side renderer, which posts the enriched progress message and final reply.
+A **smart gateway** (both Discord and the terminal) implements `EventSink` and
+renders the live event stream itself — progress, emojis, and a cost summary. For
+a plain gateway the host only posts the final reply, chunked; it adds no
+platform-specific presentation, keeping the host gateway-agnostic.
 
 If the model hits a permission prompt mid-turn, the backend exposes a
 `PendingChoice`; when the `MenuRouter` capability is present, the gateway posts a
@@ -247,10 +256,12 @@ FIFO (`Pick`), and the bridge injects the choice into the live session
 The same binary runs in two shapes. **`serve`** is the always-on daemon (the
 multi-gateway **hub**, `host.RunHub`) you install as a service; it owns all
 gateway I/O and supervises one pure-runner **`bridge`** child process per
-session. When `serve` runs in the foreground on an interactive TTY, it also
-brings up the **terminal gateway**: an in-process Bubbletea TUI that is a
-first-class gateway peer of Discord (quitting it stops the daemon). A background
-service (no TTY) runs headless with only the remote gateways.
+session. When `serve` runs on an interactive TTY, it also runs the one bound
+gateway that implements the `Foreground` capability on the main thread — the
+in-tree **terminal gateway** by default, an in-process Bubbletea TUI that is a
+first-class gateway peer of Discord (quitting it stops the daemon). `serve` never
+imports a concrete frontend: any plugin can implement `Foreground` and replace
+the default. A background service (no TTY) runs headless, hub-driven only.
 
 > **Command surface (current):** operator commands run through a neutral
 > `contracts.Cmd` registry, reachable two ways. The operator **CLI** (`herrscher

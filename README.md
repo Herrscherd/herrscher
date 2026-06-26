@@ -203,7 +203,9 @@ hands one input frame per turn to a **pure-runner bridge** over a persistent
 control socket. The bridge talks only to the backend; it streams the turn's
 events back over the same socket, and the hub fans them out to every bound
 gateway. One turn is active at a time: the next queued input is sent only after
-the current turn's terminal `reply{done}`.
+the current turn ends — either its terminal `reply{done}`, or an abandonment
+(bridge disconnect or shutdown), which fans out an abstract `abandoned` signal so
+smart gateways can finalize their live acknowledgement.
 
 ```mermaid
 sequenceDiagram

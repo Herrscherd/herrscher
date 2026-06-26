@@ -1,7 +1,8 @@
-// Package tui renders the terminal gateway's live event stream and captures the
-// operator's input, driving the active terminal gateway. It is the gateway's
-// frontend: the daemon hub treats the terminal gateway like any other; the TUI
-// is what makes that gateway a human-usable pane.
+// Package tui renders a gateway's live event stream and captures the operator's
+// input, driving it through the narrow Backend interface. It is the terminal
+// gateway's frontend: the daemon hub treats that gateway like any other; the TUI
+// is what makes it a human-usable pane. Depending on Backend (not the concrete
+// gateway) keeps this package importable by the gateway without a cycle.
 package tui
 
 import (
@@ -15,8 +16,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher/plugins/terminal"
 )
+
+// Backend is the narrow view of the terminal gateway the TUI drives: it reads
+// outbound events to render and submits the lines the operator types. Taking an
+// interface (rather than the concrete gateway) keeps this package free of any
+// dependency on the terminal plugin, so the gateway can own its frontend without
+// an import cycle.
+type Backend interface {
+	Frontend() <-chan contracts.Event
+	Submit(text string)
+}
 
 var (
 	humanStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
@@ -29,21 +39,17 @@ var (
 type eventMsg contracts.Event
 
 type model struct {
-	tm    *terminal.Terminal
+	tm    Backend
 	vp    viewport.Model
 	input textinput.Model
 	lines []string
 	ready bool
 }
 
-// Run starts the TUI bound to the active terminal gateway, blocking until the
-// user quits; quitting cancels ctx (wired by the caller) so the daemon shuts
-// down cleanly. Returns nil if no terminal gateway was instantiated.
-func Run(ctx context.Context, cancel context.CancelFunc) error {
-	tm := terminal.Active()
-	if tm == nil {
-		return nil
-	}
+// Run starts the TUI bound to the given gateway backend, blocking until the user
+// quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
+// cleanly.
+func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
 	in := textinput.New()
 	in.Placeholder = "type a message…"
 	in.Focus()

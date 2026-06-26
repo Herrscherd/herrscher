@@ -12,7 +12,6 @@ import (
 	"github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/host"
-	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
 // or returns a if non-empty, else b — used to layer config.json defaults under
@@ -59,18 +58,26 @@ func runServe(ctx context.Context, args []string) error {
 		home = &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
 	}
 
-	// Registry-driven wiring: the daemon instantiates the gateway from the plugin
-	// registry rather than hand-wiring Discord. Each plugin self-registered into
-	// contracts.Default from its init() (blank import in plugins.go); here we build
-	// the first gateway's GatewaySet from runtime config. Adding a gateway is a
-	// blank import + rebuild — no code change here.
+	// Registry-driven wiring: the daemon instantiates every gateway from the
+	// plugin registry rather than hand-wiring Discord. Each plugin self-registered
+	// into contracts.Default from its init() (blank import in plugins.go); here we
+	// build each one's GatewaySet from runtime config. Adding a gateway is a blank
+	// import + rebuild — no code change here.
 	hub, err := host.BuildHub(ctx, contracts.Default.Gateways(), os.Getenv)
 	if err != nil {
 		return err
 	}
 	var gws []host.Deps
+	// A gateway may own the process's main thread (a TUI). We detect it on the
+	// raw gateway before Degrade wraps it, and the composition root stays
+	// gateway-agnostic: it runs whichever bound gateway implements Foreground
+	// rather than importing a concrete frontend.
+	var fg contracts.Foreground
 	for _, kind := range hub.Kinds() {
 		if set, ok := hub.Get(kind); ok {
+			if f, ok := set.Gateway.(contracts.Foreground); ok && fg == nil {
+				fg = f
+			}
 			set.Gateway = contracts.Degrade(set.Gateway)
 			gws = append(gws, set)
 		}
@@ -90,14 +97,15 @@ func runServe(ctx context.Context, args []string) error {
 		RemoteCategories: remoteCategories(),
 	}
 
-	// Foreground + interactive TTY → run the TUI as the terminal gateway's
-	// frontend; quitting it cancels ctx and stops the daemon. Background service
-	// (no TTY) → headless, terminal gateway absent, only remote gateways run.
-	if term.IsTerminal(int(os.Stdout.Fd())) {
+	// A bound foreground gateway + interactive TTY → run it on the main thread;
+	// quitting it cancels ctx and stops the daemon. No foreground gateway, or a
+	// background service (no TTY) → headless: the hub drives every gateway and
+	// nothing takes over the foreground.
+	if fg != nil && term.IsTerminal(int(os.Stdout.Fd())) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		go func() { _ = host.RunHub(ctx, gws, opts) }()
-		return tui.Run(ctx, cancel)
+		return fg.RunForeground(ctx, cancel)
 	}
 	return host.RunHub(ctx, gws, opts)
 }

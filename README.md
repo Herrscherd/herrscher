@@ -124,7 +124,7 @@ can opt into running as a **separate process** over the NATS/gRPC transport (see
 
 | Category | Edge | Port(s) | Status | Official plugin |
 |----------|------|---------|--------|-----------------|
-| 🔌 **Gateway** | channel (inbound) | `Gateway`, `ChannelSource`, `ChannelReader`, `ChannelAdmin`, `CommandRegistrar`, `Prober`, `MenuRouter`, `Responder`, `EventSink` (smart gateways) | ✅ live | [herrscher-discord-gateway], in-tree `terminal` |
+| 🔌 **Gateway** | channel (inbound) | `Gateway`, `ChannelSource`, `ChannelReader`, `ChannelAdmin`, `CommandRegistrar`, `Prober`, `MenuRouter`, `Responder`, `EventSink` (smart gateways), `Foreground` (a gateway that owns the main thread, e.g. a TUI) | ✅ live | [herrscher-discord-gateway], in-tree `terminal` |
 | 🧠 **Backend** | model (outbound) | `Backend` (+ `ChoiceAware`, `ChoiceInjector`) | ✅ live | [herrscher-claude-backend] |
 | 🗄️ **Memory** | recall / persistence | `Memory` | ✅ live | [herrscher-obsidian-memory] |
 | 🪢 **Orchestrator** | conversation policy | `Orchestrator` | ✅ live | [herrscher-orchestrator] |
@@ -256,10 +256,12 @@ FIFO (`Pick`), and the bridge injects the choice into the live session
 The same binary runs in two shapes. **`serve`** is the always-on daemon (the
 multi-gateway **hub**, `host.RunHub`) you install as a service; it owns all
 gateway I/O and supervises one pure-runner **`bridge`** child process per
-session. When `serve` runs in the foreground on an interactive TTY, it also
-brings up the **terminal gateway**: an in-process Bubbletea TUI that is a
-first-class gateway peer of Discord (quitting it stops the daemon). A background
-service (no TTY) runs headless with only the remote gateways.
+session. When `serve` runs on an interactive TTY, it also runs the one bound
+gateway that implements the `Foreground` capability on the main thread — the
+in-tree **terminal gateway** by default, an in-process Bubbletea TUI that is a
+first-class gateway peer of Discord (quitting it stops the daemon). `serve` never
+imports a concrete frontend: any plugin can implement `Foreground` and replace
+the default. A background service (no TTY) runs headless, hub-driven only.
 
 > **Command surface (current):** operator commands run through a neutral
 > `contracts.Cmd` registry, reachable two ways. The operator **CLI** (`herrscher

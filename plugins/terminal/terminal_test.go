@@ -7,6 +7,19 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
+// The gateway the factory builds must expose the Foreground capability, since
+// serve discovers the bound gateway to run on the main thread through that
+// interface (not a concrete import). Guards against silently dropping it.
+func TestGatewaySetExposesForeground(t *testing.T) {
+	set, err := newGatewaySet(context.Background(), contracts.PluginConfig{})
+	if err != nil {
+		t.Fatalf("newGatewaySet: %v", err)
+	}
+	if _, ok := set.Gateway.(contracts.Foreground); !ok {
+		t.Fatal("terminal gateway must implement contracts.Foreground")
+	}
+}
+
 func TestReadDrainsSubmittedLines(t *testing.T) {
 	tm := New()
 	tm.Submit("hello")

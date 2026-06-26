@@ -22,6 +22,18 @@ func TestRenderEventShowsCost(t *testing.T) {
 	}
 }
 
+// An abandoned turn (bridge disconnect/shutdown, no reply) must surface in the
+// transcript so it doesn't read as still pending.
+func TestRenderEventMarksAbandoned(t *testing.T) {
+	m := &model{}
+	m.renderEvent(contracts.Event{T: "abandoned"})
+
+	joined := strings.Join(m.lines, "\n")
+	if !strings.Contains(joined, "abandoned") {
+		t.Fatalf("abandoned turn not surfaced: %q", joined)
+	}
+}
+
 // A free turn (no cost) must not append a bogus $0.00 line.
 func TestRenderEventOmitsZeroCost(t *testing.T) {
 	m := &model{}

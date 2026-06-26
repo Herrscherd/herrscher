@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
 // ChannelID is the fixed conversation id the terminal gateway uses (single
@@ -29,27 +30,8 @@ func init() {
 	})
 }
 
-// active holds the instance built by the factory so the TUI (constructed in the
-// host's serve loop) can bind to the very gateway the hub drives. The daemon
-// builds at most one terminal gateway per process.
-var (
-	activeMu sync.Mutex
-	active   *Terminal
-)
-
-// Active returns the terminal gateway built for this process, or nil if the
-// terminal gateway was not instantiated (e.g. no TTY / not registered).
-func Active() *Terminal {
-	activeMu.Lock()
-	defer activeMu.Unlock()
-	return active
-}
-
 func newGatewaySet(ctx context.Context, cfg contracts.PluginConfig) (contracts.GatewaySet, error) {
 	tm := New()
-	activeMu.Lock()
-	active = tm
-	activeMu.Unlock()
 	return contracts.GatewaySet{Gateway: tm, Reader: tm}, nil
 }
 
@@ -67,7 +49,17 @@ var (
 	_ contracts.Gateway       = (*Terminal)(nil)
 	_ contracts.ChannelReader = (*Terminal)(nil)
 	_ contracts.EventSink     = (*Terminal)(nil)
+	_ contracts.Foreground    = (*Terminal)(nil)
 )
+
+// RunForeground satisfies contracts.Foreground: the terminal gateway owns the
+// process's main thread by running its Bubbletea TUI, blocking until the user
+// quits (which calls cancel to tear the daemon down) or ctx is cancelled. The
+// composition root runs this for the one bound gateway that implements
+// Foreground, on an interactive TTY only.
+func (t *Terminal) RunForeground(ctx context.Context, cancel context.CancelFunc) error {
+	return tui.Run(ctx, cancel, t)
+}
 
 // New builds an unbound terminal gateway.
 func New() *Terminal {

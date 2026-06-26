@@ -122,6 +122,11 @@ func (m *model) renderEvent(e contracts.Event) {
 		}
 	case "reset":
 		m.append(statusStyle.Render("· (turn reset)"))
+	case "abandoned":
+		// The turn ended without a reply (bridge disconnect or shutdown). Mark it
+		// so the transcript doesn't read as still pending; the host left how to
+		// present it to the gateway.
+		m.append(statusStyle.Render("· (turn abandoned)"))
 	}
 }
 

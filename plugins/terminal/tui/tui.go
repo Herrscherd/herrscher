@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -27,12 +28,14 @@ type RoutedEvent struct {
 
 // Backend is the narrow view of the terminal gateway the TUI drives: it reads
 // routed outbound events to render, submits the lines the operator types into a
-// specific channel, and enumerates the hub's sessions for tab labels. Taking an
-// interface keeps this package free of any dependency on the terminal plugin.
+// specific channel, enumerates the hub's sessions for tab labels, and dispatches
+// operator slash-commands to the hub. Taking an interface keeps this package
+// free of any dependency on the terminal plugin.
 type Backend interface {
 	Frontend() <-chan RoutedEvent
 	Submit(channel, text string)
 	Sessions() []contracts.SessionInfo
+	Dispatch(args []string) (string, error)
 }
 
 var (
@@ -51,6 +54,14 @@ type tab struct {
 }
 
 type eventMsg RoutedEvent
+
+// tickMsg fires on a periodic timer so the TUI refreshes tabs from the hub.
+type tickMsg struct{}
+
+// tickCmd returns a command that fires tickMsg after ~1 second.
+func tickCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} })
+}
 
 type model struct {
 	tm     Backend
@@ -83,8 +94,34 @@ func (m *model) ensureTab(channel string) *tab {
 	return tb
 }
 
+// removeTab drops a tab and fixes the active selection.
+func (m *model) removeTab(channel string) {
+	if _, ok := m.tabs[channel]; !ok {
+		return
+	}
+	delete(m.tabs, channel)
+	out := m.order[:0]
+	for _, ch := range m.order {
+		if ch != channel {
+			out = append(out, ch)
+		}
+	}
+	m.order = out
+	if m.active == channel {
+		m.active = ""
+		if len(m.order) > 0 {
+			m.active = m.order[0]
+		}
+		m.syncViewport()
+	}
+}
+
 // route delivers a routed event to its tab, marking inactive tabs unread.
 func (m *model) route(re RoutedEvent) {
+	if re.Event.T == "closed" {
+		m.removeTab(re.Conv.ID)
+		return
+	}
 	tb := m.ensureTab(re.Conv.ID)
 	before := len(tb.lines)
 	m.renderInto(tb, re.Event)
@@ -94,6 +131,59 @@ func (m *model) route(re RoutedEvent) {
 	if tb.channel == m.active {
 		m.syncViewport()
 	}
+}
+
+// syncTabs reconciles tabs against the hub's session list: it creates tabs for
+// new sessions, labels them by name, and drops tabs whose session is gone.
+func (m *model) syncTabs() {
+	infos := m.tm.Sessions()
+	if infos == nil {
+		return
+	}
+	live := map[string]bool{}
+	for _, s := range infos {
+		live[s.ChannelID] = true
+		tb := m.ensureTab(s.ChannelID)
+		if s.Name != "" {
+			tb.label = s.Name
+		}
+	}
+	for _, ch := range append([]string(nil), m.order...) {
+		if !live[ch] {
+			m.removeTab(ch)
+		}
+	}
+}
+
+// handleEnter dispatches a /command or submits a prompt to the active tab.
+func (m *model) handleEnter() {
+	text := strings.TrimSpace(m.input.Value())
+	if text == "" {
+		return
+	}
+	m.input.Reset()
+	if strings.HasPrefix(text, "/") {
+		args := strings.Fields(strings.TrimPrefix(text, "/"))
+		out, err := m.tm.Dispatch(args)
+		m.syncTabs()
+		tb := m.tabs[m.active]
+		if tb != nil {
+			line := out
+			if err != nil {
+				line = "error: " + err.Error()
+			}
+			tb.lines = append(tb.lines, statusStyle.Render("· "+line))
+			m.syncViewport()
+		}
+		return
+	}
+	if m.active == "" {
+		return
+	}
+	m.tm.Submit(m.active, text)
+	tb := m.tabs[m.active]
+	tb.lines = append(tb.lines, humanStyle.Render("you ")+text)
+	m.syncViewport()
 }
 
 func (m *model) switchTab(delta int) {
@@ -197,7 +287,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
 	return err
 }
 
-func (m *model) Init() tea.Cmd { return textinput.Blink }
+func (m *model) Init() tea.Cmd { return tea.Batch(textinput.Blink, tickCmd()) }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -222,17 +312,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.switchTab(-1)
 			return m, nil
 		case tea.KeyEnter:
-			text := strings.TrimSpace(m.input.Value())
-			if text != "" && m.active != "" {
-				m.tm.Submit(m.active, text)
-				tb := m.tabs[m.active]
-				tb.lines = append(tb.lines, humanStyle.Render("you ")+text)
-				m.syncViewport()
-				m.input.Reset()
-			}
+			m.handleEnter()
 		}
 	case eventMsg:
 		m.route(RoutedEvent(msg))
+	case tickMsg:
+		m.syncTabs()
+		return m, tickCmd()
 	}
 	var cmds []tea.Cmd
 	var c tea.Cmd

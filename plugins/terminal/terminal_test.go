@@ -115,3 +115,56 @@ func TestGatewaySetExposesAdmin(t *testing.T) {
 		t.Fatal("terminal GatewaySet must expose ChannelAdmin")
 	}
 }
+
+// fakeSessionControl is a minimal contracts.SessionControl for Dispatch tests.
+type fakeSessionControl struct {
+	lastArgs []string
+}
+
+func (f *fakeSessionControl) Dispatch(_ context.Context, args []string) (string, error) {
+	f.lastArgs = args
+	return "ok", nil
+}
+
+func (f *fakeSessionControl) Sessions() []contracts.SessionInfo { return nil }
+
+func TestDispatchDefaultsSessionCreateToTerminal(t *testing.T) {
+	tm := New()
+	fake := &fakeSessionControl{}
+	tm.BindSessionControl(fake)
+	if _, err := tm.Dispatch([]string{"session", "create", "--name", "x"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range fake.lastArgs {
+		if a == "--terminal_only" {
+			return
+		}
+	}
+	t.Fatalf("--terminal_only not appended: %v", fake.lastArgs)
+}
+
+func TestDispatchRespectsExplicitGateways(t *testing.T) {
+	tm := New()
+	fake := &fakeSessionControl{}
+	tm.BindSessionControl(fake)
+	if _, err := tm.Dispatch([]string{"session", "create", "--name", "x", "--gateways", "discord"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range fake.lastArgs {
+		if a == "--terminal_only" {
+			t.Fatalf("--terminal_only must NOT be appended when --gateways given: %v", fake.lastArgs)
+		}
+	}
+}
+
+func TestDispatchPassesThroughNonCreate(t *testing.T) {
+	tm := New()
+	fake := &fakeSessionControl{}
+	tm.BindSessionControl(fake)
+	if _, err := tm.Dispatch([]string{"session", "list"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.lastArgs) != 2 || fake.lastArgs[0] != "session" || fake.lastArgs[1] != "list" {
+		t.Fatalf("args changed for non-create: %v", fake.lastArgs)
+	}
+}

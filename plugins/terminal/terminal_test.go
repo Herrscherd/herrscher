@@ -74,8 +74,12 @@ func TestPostEmitsReplyEvent(t *testing.T) {
 	if _, err := tm.Post(context.Background(), contracts.Conversation{Gateway: "terminal", ID: "terminal"}, "hi"); err != nil {
 		t.Fatalf("Post: %v", err)
 	}
-	if re := <-got; re.Event.T != "reply" {
+	re := <-got
+	if re.Event.T != "reply" {
 		t.Fatalf("Post emitted %+v, want reply", re)
+	}
+	if re.Event.Text != "hi" {
+		t.Fatalf("Post reply text = %q, want %q", re.Event.Text, "hi")
 	}
 }
 

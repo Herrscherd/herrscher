@@ -65,3 +65,65 @@ func TestRenderEventMarksAbandonedPerTab(t *testing.T) {
 		t.Fatal("abandoned not surfaced")
 	}
 }
+
+// fakeBackend satisfies the Backend interface for unit tests.
+type fakeBackend struct {
+	dispatched [][]string
+	sessions   []contracts.SessionInfo
+	fe         chan RoutedEvent
+}
+
+func (f *fakeBackend) Frontend() <-chan RoutedEvent        { return f.fe }
+func (f *fakeBackend) Submit(string, string)               {}
+func (f *fakeBackend) Sessions() []contracts.SessionInfo   { return f.sessions }
+func (f *fakeBackend) Dispatch(args []string) (string, error) {
+	f.dispatched = append(f.dispatched, args)
+	return "ok", nil
+}
+
+func TestSlashLineDispatches(t *testing.T) {
+	f := &fakeBackend{}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.input.SetValue("/session list")
+	m.handleEnter()
+	if len(f.dispatched) != 1 || f.dispatched[0][0] != "session" {
+		t.Fatalf("slash line not dispatched: %+v", f.dispatched)
+	}
+}
+
+func TestPlainLineSubmits(t *testing.T) {
+	f := &fakeBackend{}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.input.SetValue("hello world")
+	m.handleEnter()
+	if len(f.dispatched) != 0 {
+		t.Fatalf("plain line must not dispatch: %+v", f.dispatched)
+	}
+}
+
+func TestClosedEventRemovesTab(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.ensureTab("a")
+	m.ensureTab("b")
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: "closed"}})
+	if _, ok := m.tabs["b"]; ok {
+		t.Fatal("closed event must remove tab b")
+	}
+	for _, ch := range m.order {
+		if ch == "b" {
+			t.Fatal("closed tab still in order")
+		}
+	}
+}
+
+func TestSyncTabsFromSessions(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "alpha", ChannelID: "terminal/alpha-1"}}}
+	m := newModel(f)
+	m.syncTabs()
+	tb, ok := m.tabs["terminal/alpha-1"]
+	if !ok || tb.label != "alpha" {
+		t.Fatalf("tab not synced/labelled from Sessions(): %+v", m.tabs)
+	}
+}

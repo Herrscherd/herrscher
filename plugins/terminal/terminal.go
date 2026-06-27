@@ -8,6 +8,7 @@ package terminal
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -194,6 +195,37 @@ func (t *Terminal) Control() contracts.SessionControl {
 	t.ctrlMu.Lock()
 	defer t.ctrlMu.Unlock()
 	return t.ctrl
+}
+
+// withTerminalDefault ensures that a "session create" command without an
+// explicit gateway selector binds to the terminal, so TUI-created sessions
+// always appear as tabs. An explicit --gateways or --terminal_only flag is
+// respected and passed through unchanged.
+func withTerminalDefault(args []string) []string {
+	if len(args) < 2 || args[0] != "session" || args[1] != "create" {
+		return args
+	}
+	for _, a := range args {
+		if a == "--gateways" || strings.HasPrefix(a, "--gateways=") ||
+			a == "--terminal_only" || strings.HasPrefix(a, "--terminal_only=") ||
+			strings.HasPrefix(a, "terminal_only:") {
+			return args
+		}
+	}
+	out := make([]string, len(args), len(args)+1)
+	copy(out, args)
+	return append(out, "--terminal_only")
+}
+
+// Dispatch forwards an operator argv to the bound SessionControl, prepending
+// --terminal_only when creating a session without an explicit gateway selector
+// so TUI-created sessions bind to this terminal and appear as tabs.
+func (t *Terminal) Dispatch(args []string) (string, error) {
+	c := t.Control()
+	if c == nil {
+		return "", fmt.Errorf("session control not bound")
+	}
+	return c.Dispatch(context.Background(), withTerminalDefault(args))
 }
 
 // --- contracts.ChannelAdmin: synthetic, terminal-local channels ---

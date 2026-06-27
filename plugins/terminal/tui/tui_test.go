@@ -59,6 +59,16 @@ func TestRenderEventShowsCostPerTab(t *testing.T) {
 	}
 }
 
+func TestRenderEventOmitsZeroCost(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "done", Done: true}})
+	for _, l := range m.tabs["a"].lines {
+		if strings.Contains(l, "$") {
+			t.Fatalf("zero-cost turn must not show a cost line; got %q", l)
+		}
+	}
+}
+
 func TestRenderEventMarksAbandonedPerTab(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "abandoned"}})

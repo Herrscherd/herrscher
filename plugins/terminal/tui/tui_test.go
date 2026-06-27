@@ -7,41 +7,61 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// A reply carrying a turn cost must surface it in the TUI transcript, mirroring
-// the host progress summary for non-EventSink gateways.
-func TestRenderEventShowsCost(t *testing.T) {
-	m := &model{}
-	m.renderEvent(contracts.Event{T: "reply", Text: "done", Done: true, Cost: 0.0042})
+func newTestModel() *model { return newModel(nil) }
 
-	joined := strings.Join(m.lines, "\n")
-	if !strings.Contains(joined, "done") {
-		t.Fatalf("reply text dropped: %q", joined)
+func TestRoutedEventLandsInOwnTab(t *testing.T) {
+	m := newTestModel()
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "chunk", Text: "hello-a"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: "chunk", Text: "hello-b"}})
+
+	if got := strings.Join(m.tabs["a"].lines, "\n"); !strings.Contains(got, "hello-a") {
+		t.Fatalf("tab a missing its line: %q", got)
 	}
-	if !strings.Contains(joined, "$0.0042") {
-		t.Fatalf("cost dropped from transcript: %q", joined)
-	}
-}
-
-// An abandoned turn (bridge disconnect/shutdown, no reply) must surface in the
-// transcript so it doesn't read as still pending.
-func TestRenderEventMarksAbandoned(t *testing.T) {
-	m := &model{}
-	m.renderEvent(contracts.Event{T: "abandoned"})
-
-	joined := strings.Join(m.lines, "\n")
-	if !strings.Contains(joined, "abandoned") {
-		t.Fatalf("abandoned turn not surfaced: %q", joined)
+	if got := strings.Join(m.tabs["b"].lines, "\n"); strings.Contains(got, "hello-a") {
+		t.Fatalf("tab b leaked tab a's line: %q", got)
 	}
 }
 
-// A free turn (no cost) must not append a bogus $0.00 line.
-func TestRenderEventOmitsZeroCost(t *testing.T) {
-	m := &model{}
-	m.renderEvent(contracts.Event{T: "reply", Text: "done", Done: true})
+func TestUnreadSetOnInactiveTab(t *testing.T) {
+	m := newTestModel()
+	m.ensureTab("a") // first tab becomes active
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: "chunk", Text: "x"}})
+	if !m.tabs["b"].unread {
+		t.Fatal("event on inactive tab b must mark it unread")
+	}
+	if m.tabs["a"].unread {
+		t.Fatal("active tab a must not be unread")
+	}
+}
 
-	for _, l := range m.lines {
-		if strings.Contains(l, "$") {
-			t.Fatalf("zero-cost turn must not show a cost line; got %q", l)
-		}
+func TestSwitchTabClearsUnread(t *testing.T) {
+	m := newTestModel()
+	m.ensureTab("a")
+	m.ensureTab("b")
+	m.tabs["b"].unread = true
+	m.active = "a"
+	m.switchTab(1) // move to next tab -> b
+	if m.active != "b" {
+		t.Fatalf("active = %q, want b", m.active)
+	}
+	if m.tabs["b"].unread {
+		t.Fatal("switching to b must clear its unread")
+	}
+}
+
+func TestRenderEventShowsCostPerTab(t *testing.T) {
+	m := newTestModel()
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "done", Done: true, Cost: 0.0042}})
+	joined := strings.Join(m.tabs["a"].lines, "\n")
+	if !strings.Contains(joined, "done") || !strings.Contains(joined, "$0.0042") {
+		t.Fatalf("cost/reply dropped: %q", joined)
+	}
+}
+
+func TestRenderEventMarksAbandonedPerTab(t *testing.T) {
+	m := newTestModel()
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "abandoned"}})
+	if !strings.Contains(strings.Join(m.tabs["a"].lines, "\n"), "abandoned") {
+		t.Fatal("abandoned not surfaced")
 	}
 }

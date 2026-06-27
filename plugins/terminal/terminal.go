@@ -9,6 +9,7 @@ package terminal
 import (
 	"context"
 	"strconv"
+	"strings"
 	"sync"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -32,7 +33,7 @@ func init() {
 
 func newGatewaySet(ctx context.Context, cfg contracts.PluginConfig) (contracts.GatewaySet, error) {
 	tm := New()
-	return contracts.GatewaySet{Gateway: tm, Reader: tm}, nil
+	return contracts.GatewaySet{Gateway: tm, Reader: tm, Admin: tm}, nil
 }
 
 // Terminal is the in-process terminal gateway. Typed lines arrive via Submit
@@ -50,11 +51,13 @@ type Terminal struct {
 }
 
 var (
-	_ contracts.Gateway         = (*Terminal)(nil)
-	_ contracts.ChannelReader   = (*Terminal)(nil)
-	_ contracts.EventSink       = (*Terminal)(nil)
-	_ contracts.RoutedEventSink = (*Terminal)(nil)
-	_ contracts.Foreground      = (*Terminal)(nil)
+	_ contracts.Gateway               = (*Terminal)(nil)
+	_ contracts.ChannelReader         = (*Terminal)(nil)
+	_ contracts.EventSink             = (*Terminal)(nil)
+	_ contracts.RoutedEventSink       = (*Terminal)(nil)
+	_ contracts.Foreground            = (*Terminal)(nil)
+	_ contracts.ChannelAdmin          = (*Terminal)(nil)
+	_ contracts.SessionControlReceiver = (*Terminal)(nil)
 )
 
 // RunForeground satisfies contracts.Foreground: the terminal gateway owns the
@@ -176,4 +179,62 @@ func (t *Terminal) Sessions() []contracts.SessionInfo {
 		return nil
 	}
 	return c.Sessions()
+}
+
+// BindSessionControl stores the hub controller so the TUI can drive the session
+// lifecycle (create/close/list) and enumerate sessions for tab labels.
+func (t *Terminal) BindSessionControl(c contracts.SessionControl) {
+	t.ctrlMu.Lock()
+	t.ctrl = c
+	t.ctrlMu.Unlock()
+}
+
+// Control exposes the bound SessionControl to the TUI (nil before bind).
+func (t *Terminal) Control() contracts.SessionControl {
+	t.ctrlMu.Lock()
+	defer t.ctrlMu.Unlock()
+	return t.ctrl
+}
+
+// --- contracts.ChannelAdmin: synthetic, terminal-local channels ---
+
+func (t *Terminal) Kind(_ context.Context, _ string) (string, error) { return "text", nil }
+
+func (t *Terminal) CreateUnder(_ context.Context, _, name string) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.nextID++
+	return "terminal/" + slug(name) + "-" + strconv.Itoa(t.nextID), nil
+}
+
+func (t *Terminal) ForumPost(ctx context.Context, parentID, name, _ string) (string, error) {
+	return t.CreateUnder(ctx, parentID, name)
+}
+
+func (t *Terminal) Archive(_ context.Context, id string) error {
+	t.EmitTo(contracts.Conversation{Gateway: "terminal", ID: id}, contracts.Event{T: "closed"})
+	return nil
+}
+
+func (t *Terminal) Send(_ context.Context, channelID, content string) error {
+	t.EmitTo(contracts.Conversation{Gateway: "terminal", ID: channelID}, contracts.Event{T: "status", Text: content})
+	return nil
+}
+
+// slug lowercases and replaces unsafe runes so a channel id stays path-safe.
+func slug(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "session"
+	}
+	return out
 }

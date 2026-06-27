@@ -304,6 +304,17 @@ flowchart TB
 ```
 
 The bridge does **no** gateway I/O: it never reads a channel, posts, or reacts.
+
+### Terminal TUI — multi-session tabbed interface
+
+When `serve` runs on an interactive TTY with no Discord configured, the in-tree
+terminal gateway (a Bubbletea TUI) brings multiple sessions online as a tabbed
+interface. Each session bound to the terminal appears as a tab; use `Tab` and
+`Shift+Tab` to switch between them. When a background tab receives output from
+the model, it displays a bullet marker (`•`) to indicate unread activity; switching
+to that tab clears the marker. Create sessions via the CLI (`herrscher session
+create --name foo --gateways terminal`) or operator commands, and they appear
+immediately as new tabs.
 It is a stateless backend runner driven entirely by the hub's input frames. The
 hub owns the FIFO and connection lifecycle, so if the bridge crashes the
 supervisor restarts it and it re-dials the same socket, resuming with the next

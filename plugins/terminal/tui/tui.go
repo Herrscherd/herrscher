@@ -45,12 +45,14 @@ var (
 	costStyle   = lipgloss.NewStyle().Faint(true)
 )
 
-// tab is one session's pane: its transcript and unread flag.
+// tab is one session's pane: its transcript, unread flag, busy state, and last cost.
 type tab struct {
-	channel string
-	label   string
-	lines   []string
-	unread  bool
+	channel  string
+	label    string
+	lines    []string
+	unread   bool
+	busy     bool
+	lastCost float64
 }
 
 type eventMsg RoutedEvent
@@ -206,10 +208,18 @@ func (m *model) switchTab(delta int) {
 func (m *model) renderInto(tb *tab, e contracts.Event) {
 	switch e.T {
 	case "chunk":
+		tb.busy = true
 		tb.lines = append(tb.lines, e.Text)
 	case "status":
+		tb.busy = true
 		tb.lines = append(tb.lines, statusStyle.Render("· "+e.Text))
 	case "reply":
+		if e.Done {
+			tb.busy = false
+			if e.Cost > 0 {
+				tb.lastCost = e.Cost
+			}
+		}
 		if e.Text != "" {
 			tb.lines = append(tb.lines, replyStyle.Render(e.Text))
 		}
@@ -236,7 +246,7 @@ func (m *model) syncViewport() {
 	m.vp.GotoBottom()
 }
 
-// tabBar renders the tab strip: active tab highlighted, unread marked with •.
+// tabBar renders the tab strip: active tab highlighted, unread marked with •, busy with ⟳.
 func (m *model) tabBar() string {
 	var b strings.Builder
 	for _, ch := range m.order {
@@ -245,6 +255,9 @@ func (m *model) tabBar() string {
 		if tb.unread {
 			name = "•" + name
 		}
+		if tb.busy {
+			name = "⟳" + name
+		}
 		if ch == m.active {
 			b.WriteString(humanStyle.Render("[" + name + "] "))
 		} else {
@@ -252,6 +265,23 @@ func (m *model) tabBar() string {
 		}
 	}
 	return b.String()
+}
+
+// footer renders the status/cost line for the active tab.
+func (m *model) footer() string {
+	tb := m.tabs[m.active]
+	if tb == nil {
+		return ""
+	}
+	state := statusStyle.Render("· idle")
+	if tb.busy {
+		state = humanStyle.Render("⟳ working")
+	}
+	cost := ""
+	if tb.lastCost > 0 {
+		cost = "  " + costStyle.Render("last "+formatCost(tb.lastCost))
+	}
+	return state + cost
 }
 
 // formatCost renders a turn's USD cost, matching the host progress summary:
@@ -293,12 +323,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		if !m.ready {
-			m.vp = viewport.New(msg.Width, msg.Height-4)
+			m.vp = viewport.New(msg.Width, msg.Height-5)
 			m.ready = true
 			m.syncViewport()
 		} else {
 			m.vp.Width = msg.Width
-			m.vp.Height = msg.Height - 4
+			m.vp.Height = msg.Height - 5
+			m.syncViewport()
 		}
 		m.input.Width = msg.Width - 2
 	case tea.KeyMsg:
@@ -333,5 +364,5 @@ func (m *model) View() string {
 	if !m.ready {
 		return "starting…"
 	}
-	return fmt.Sprintf("%s\n%s\n%s", m.tabBar(), m.vp.View(), m.input.View())
+	return fmt.Sprintf("%s\n%s\n%s\n%s", m.tabBar(), m.vp.View(), m.footer(), m.input.View())
 }

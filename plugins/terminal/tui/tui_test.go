@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
@@ -125,5 +126,33 @@ func TestSyncTabsFromSessions(t *testing.T) {
 	tb, ok := m.tabs["terminal/alpha-1"]
 	if !ok || tb.label != "alpha" {
 		t.Fatalf("tab not synced/labelled from Sessions(): %+v", m.tabs)
+	}
+}
+
+func TestTabBusyLifecycle(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "status", Text: "working"}})
+	if !m.tabs["a"].busy {
+		t.Fatal("status must mark tab busy")
+	}
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "done", Done: true, Cost: 0.01}})
+	if m.tabs["a"].busy {
+		t.Fatal("done reply must clear busy")
+	}
+	if m.tabs["a"].lastCost != 0.01 {
+		t.Fatalf("lastCost = %v", m.tabs["a"].lastCost)
+	}
+}
+
+func TestResizeSyncsViewport(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.ensureTab("a")
+	m.tabs["a"].lines = []string{"line1", "line2", "line3"}
+	// Simulate init WindowSizeMsg
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	// Simulate resize WindowSizeMsg (the else branch)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	if m.vp.Width != 100 || m.vp.Height != 25 {
+		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 25)", m.vp.Width, m.vp.Height)
 	}
 }

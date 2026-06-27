@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -75,5 +76,42 @@ func TestPostEmitsReplyEvent(t *testing.T) {
 	}
 	if re := <-got; re.Event.T != "reply" {
 		t.Fatalf("Post emitted %+v, want reply", re)
+	}
+}
+
+func TestTerminalImplementsChannelAdmin(t *testing.T) {
+	var _ contracts.ChannelAdmin = New()
+}
+
+func TestCreateUnderMintsUniqueChannels(t *testing.T) {
+	tm := New()
+	a, err := tm.CreateUnder(context.Background(), "home", "Alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := tm.CreateUnder(context.Background(), "home", "Alpha")
+	if a == b {
+		t.Fatalf("CreateUnder must mint unique ids, got %q twice", a)
+	}
+	if !strings.HasPrefix(a, "terminal/") {
+		t.Fatalf("channel id %q must be terminal-namespaced", a)
+	}
+}
+
+func TestArchiveEmitsCloseToTab(t *testing.T) {
+	tm := New()
+	got := make(chan tui.RoutedEvent, 1)
+	go func() { got <- <-tm.Frontend() }()
+	_ = tm.Archive(context.Background(), "terminal/x")
+	re := <-got
+	if re.Conv.ID != "terminal/x" || re.Event.T != "closed" {
+		t.Fatalf("Archive must emit a 'closed' event to the tab: %+v", re)
+	}
+}
+
+func TestGatewaySetExposesAdmin(t *testing.T) {
+	set, _ := newGatewaySet(context.Background(), contracts.PluginConfig{})
+	if set.Admin == nil {
+		t.Fatal("terminal GatewaySet must expose ChannelAdmin")
 	}
 }

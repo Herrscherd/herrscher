@@ -49,16 +49,16 @@ type Terminal struct {
 	out     chan tui.RoutedEvent
 
 	ctrlMu sync.Mutex
-	ctrl   contracts.SessionControl // set by BindSessionControl (Task 6); nil-safe here
+	ctrl   contracts.SessionControl // set by BindSessionControl; nil-safe here
 }
 
 var (
-	_ contracts.Gateway               = (*Terminal)(nil)
-	_ contracts.ChannelReader         = (*Terminal)(nil)
-	_ contracts.EventSink             = (*Terminal)(nil)
-	_ contracts.RoutedEventSink       = (*Terminal)(nil)
-	_ contracts.Foreground            = (*Terminal)(nil)
-	_ contracts.ChannelAdmin          = (*Terminal)(nil)
+	_ contracts.Gateway                = (*Terminal)(nil)
+	_ contracts.ChannelReader          = (*Terminal)(nil)
+	_ contracts.EventSink              = (*Terminal)(nil)
+	_ contracts.RoutedEventSink        = (*Terminal)(nil)
+	_ contracts.Foreground             = (*Terminal)(nil)
+	_ contracts.ChannelAdmin           = (*Terminal)(nil)
 	_ contracts.SessionControlReceiver = (*Terminal)(nil)
 )
 
@@ -201,7 +201,7 @@ func (t *Terminal) EmitTo(conv contracts.Conversation, e contracts.Event) {
 // --- contracts.EventSink ---
 
 // Emit (legacy EventSink) routes to the default single channel. The hub calls
-// this when it sees only EventSink; RoutedEventSink takes priority (Task 2).
+// this when it sees only EventSink; RoutedEventSink takes priority.
 func (t *Terminal) Emit(e contracts.Event) {
 	t.emit(tui.RoutedEvent{Conv: contracts.Conversation{Gateway: "terminal", ID: ChannelID}, Event: e})
 }

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func newTestModel() *model { return newModel(nil) }
@@ -84,9 +84,9 @@ type fakeBackend struct {
 	fe         chan RoutedEvent
 }
 
-func (f *fakeBackend) Frontend() <-chan RoutedEvent        { return f.fe }
-func (f *fakeBackend) Submit(string, string)               {}
-func (f *fakeBackend) Sessions() []contracts.SessionInfo   { return f.sessions }
+func (f *fakeBackend) Frontend() <-chan RoutedEvent      { return f.fe }
+func (f *fakeBackend) Submit(string, string)             {}
+func (f *fakeBackend) Sessions() []contracts.SessionInfo { return f.sessions }
 func (f *fakeBackend) Dispatch(args []string) (string, error) {
 	f.dispatched = append(f.dispatched, args)
 	return "ok", nil
@@ -158,9 +158,8 @@ func TestResizeSyncsViewport(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.ensureTab("a")
 	m.tabs["a"].lines = []string{"line1", "line2", "line3"}
-	// Simulate init WindowSizeMsg
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	// Simulate resize WindowSizeMsg (the else branch)
+	// second size message exercises the resize (else) branch
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	if m.vp.Width != 100 || m.vp.Height != 25 {
 		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 25)", m.vp.Width, m.vp.Height)

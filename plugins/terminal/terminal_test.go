@@ -35,7 +35,6 @@ func TestReadDrainsPerChannel(t *testing.T) {
 	if len(b) != 1 || b[0].Content != "world" {
 		t.Fatalf("chB Read = %+v", b)
 	}
-	// drained
 	if a2, _ := tm.Read(context.Background(), "chA", 100, ""); len(a2) != 0 {
 		t.Fatalf("chA second Read = %+v, want empty", a2)
 	}

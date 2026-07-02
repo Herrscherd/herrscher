@@ -66,8 +66,10 @@ herrscher-llm-extractor/
   extractor.go           // LLMExtractor: implements orchestrator.Extractor
   backend.go             // lazy backend acquisition from the contracts registry
   prompt.go              // extraction prompt + JSON schema instructions
-  parse.go               // tolerant JSON → []Candidate, stable key + provenance
+  candidate.go           // tolerant JSON → []Candidate, stable key + provenance
   register.go            // init(): RegisterExtractor("llm", …)
+  defaults.go            // defaultThreshold=0.6, defaultMax=8 tuning constants
+  doc.go                 // package overview
   *_test.go
 ```
 
@@ -133,11 +135,11 @@ func lazyBackend() (contracts.Backend, error) {
 This keeps the extractor a pure blank-import plugin: **no orchestrator, contracts,
 or core code changes** — only the host's plugin list and config.
 
-### 4. Extraction contract (prompt.go → parse.go)
+### 4. Extraction contract (prompt.go → candidate.go)
 
 The prompt instructs the model to return a JSON array of candidates, mirroring
 the memory-writing guidance herrscher already follows (one fact per node,
-`**Why:** / **How to apply:**` for decision/feedback kinds, link liberally):
+`**Why:** / **How to apply:**` for decision kinds, link liberally):
 
 ```json
 [{

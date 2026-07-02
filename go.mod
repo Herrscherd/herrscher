@@ -6,6 +6,7 @@ require (
 	github.com/Herrscherd/herrscher-claude-backend v0.1.1
 	github.com/Herrscherd/herrscher-contracts v0.1.9
 	github.com/Herrscherd/herrscher-discord-gateway v0.2.3
+	github.com/Herrscherd/herrscher-llm-extractor v0.1.0
 	github.com/Herrscherd/herrscher-obsidian-memory v0.1.1
 	github.com/Herrscherd/herrscher-orchestrator v0.1.4
 	github.com/Herrscherd/herrscher-transport v0.1.5
@@ -20,7 +21,6 @@ require (
 
 require (
 	github.com/Herrscherd/dctl v1.1.0 // indirect
-	github.com/Herrscherd/herrscher-llm-extractor v0.1.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.1 // indirect

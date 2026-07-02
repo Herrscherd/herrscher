@@ -58,9 +58,12 @@ the `MemoryScope` roots the orchestrator uses exist from turn one.
 - No vault-per-agent physical split (see Decisions).
 - No Obsidian plugin/theme install — just a minimal `.obsidian/` so the app opens
   the folder as a vault without prompting.
-- No rework of `scaffold.Init`'s wider spine (Organization/Domain/Repo/Server) —
-  D only reconciles its **Project-node key** to `contracts.ProjectKey`. The rest
-  of `Init` is out of scope and stays as-is.
+- No change to `scaffold.Init` at all. It is runtime-dead (zero non-test call
+  sites) and its keys are deliberately org-aware (`<org>/<project>/index`), which
+  `contracts.ProjectKey` (org-blind `projects/<name>`) would contradict. Runtime
+  correctness comes from the orchestrator + bridge provisioner sharing the key
+  helpers, not from `Init`; reconciling `Init` would break its org hierarchy for
+  no runtime gain.
 
 ## Design
 
@@ -75,8 +78,10 @@ func AgentKey(name string) string   { return "agents/" + name }
 ```
 
 The orchestrator's `register.go` replaces its inline `"projects/"+name` /
-`"agents/"+name` literals with these calls. `scaffold.Init` uses `ProjectKey` for
-the project node it writes (dropping the `projets/.../index` form for that node).
+`"agents/"+name` literals with these calls. `scaffold.Init` is **not** touched
+(see Non-goals): its org-aware keys are intentional and it has no runtime call
+site, so the drift that matters — the one the live orchestrator and provisioner
+share — is eliminated entirely by both using these helpers.
 
 ### 2. `EnsureVault` (obsidian-memory)
 
@@ -95,7 +100,7 @@ func EnsureVault(root string) (*ObsidianMemory, error)
 - `New` stays open-only/strict (no `.obsidian/` writes); `EnsureVault` is the
   create-or-open superset the manifest/host uses.
 
-### 3. Root-node provisioners (obsidian-memory)
+### 3. Root-node provisioners (obsidian-memory + contracts)
 
 Two tiny idempotent scaffolds, modeled on `scaffold.Init`'s non-overwriting
 `ensure` (create only when absent, never clobber):
@@ -108,6 +113,20 @@ func (m *ObsidianMemory) EnsureAgent(ctx context.Context, key, title string) err
 func (m *ObsidianMemory) EnsureProject(ctx context.Context, key, title string) error
 ```
 
+These satisfy a new **optional** capability interface in contracts, so the host
+can provision through the `contracts.Memory` port without importing the obsidian
+package concretely (a remote memory proxy may legitimately not implement it):
+
+```go
+// Provisioner is an optional Memory capability: ensuring the scope-root nodes a
+// MemoryScope points at exist before any Record/Recall runs against them.
+// Node-creating implementations satisfy it; callers type-assert.
+type Provisioner interface {
+	EnsureProject(ctx context.Context, key, title string) error
+	EnsureAgent(ctx context.Context, key, title string) error
+}
+```
+
 Callers pass `contracts.AgentKey(name)` / `contracts.ProjectKey(name)`, so the
 nodes land exactly where the orchestrator's scope will look. This makes
 `MemoryScope{Project, Agent}` valid immediately — B can record and A can recall
@@ -115,45 +134,56 @@ from turn one.
 
 ### 4. Manifest / config change (obsidian-memory)
 
-Relax `register.go`: `vault` becomes **not Required**, defaulting to the shared
-`~/.herrscher/memory` (host-resolved). The plugin factory calls `EnsureVault`
-instead of `New`, so a missing directory/config is provisioned rather than
-erroring, and the vault opens as an Obsidian vault.
+Relax `register.go`: `vault` becomes **not Required**. When `OBSIDIAN_VAULT` is
+unset the plugin factory defaults the root to the shared `~/.herrscher/memory`
+(expanded from `$HOME` in the factory, since a static manifest `Default` cannot
+expand `~`). The factory calls `EnsureVault` instead of `New`, so a missing
+directory/config is provisioned rather than erroring, and the vault opens as an
+Obsidian vault. Keeping the default in the factory means the host needs **no**
+path change — `buildMemory` still passes `os.Getenv` unchanged.
 
 ### 5. Core wiring (herrscher)
 
-- **Memory construction** (`bridge.go` `buildMemory` → `resolver.Memory`):
-  default the vault path to `~/.herrscher/memory` when `OBSIDIAN_VAULT` is unset.
-  Since the plugin factory now calls `EnsureVault`, constructing memory
-  provisions the shared vault idempotently.
-- **`agent create <name>`** (`core/internal/agent/store.go` `Create`, alongside
-  the existing SOUL.md/mcp.json seeding): open the shared vault and call
-  `EnsureAgent(contracts.AgentKey(name), <name>)` so the agent root exists before
-  any session.
-- **session create** (`core/internal/manager/session.go`, where `project`/`agent`
-  are derived and threaded to the bridge): call
-  `EnsureProject(contracts.ProjectKey(project), project)` so the shared project
-  root exists for that session's scope.
+Provisioning is wired at **bridge startup**, not in the daemon. The daemon never
+builds a `Memory`; the per-session bridge subprocess does (`bridge.go:66`,
+`buildMemory` → `resolver.Memory`), and it already receives the session's
+`project`/`agent` as flags (threaded on to `buildOrchestrator`). So one seam in
+the bridge covers both roots, keeps `core/internal/*` free of any memory
+construction, and guarantees the roots exist before the orchestrator's first
+`RecallScoped`/`RecordShared`.
+
+- **Memory construction is unchanged.** Because the obsidian factory now calls
+  `EnsureVault` and defaults the path, `buildMemory` provisions the shared vault
+  idempotently with no edit to `bridge.go`'s `buildMemory`.
+- **Scope-root provisioning** (`bridge.go` `Run`, immediately after
+  `mem := buildMemory(...)`): if `mem` is non-nil and implements
+  `contracts.Provisioner`, call `EnsureProject(contracts.ProjectKey(project),
+  project)` when `project != ""` and `EnsureAgent(contracts.AgentKey(agent),
+  agent)` when `agent != ""`. Type-assertion keeps `bridge.go` plugin-agnostic
+  (a remote memory proxy that lacks the capability is simply skipped); errors are
+  logged best-effort and never block the bridge, matching `buildMemory`'s
+  optional-memory contract.
 - The orchestrator (read/write side) is unchanged beyond adopting the key helpers;
-  its `Curator.Context` / `Learner` now find the roots they always assumed.
+  its `Curator.Context` / `Learner` now find the roots they always assumed — and
+  because the bridge provisions with the *same* `project`/`agent` flags the
+  orchestrator derives its scope from, the keys cannot drift.
 
 ## Interfaces changed
 
 | Symbol | Repo | Change |
 |--------|------|--------|
 | `ProjectKey`, `AgentKey` | contracts | new scope-key helpers (single source of truth) |
+| `Provisioner` | contracts | new optional Memory capability (`EnsureProject`/`EnsureAgent`) |
 | scope derivation | orchestrator | uses `ProjectKey`/`AgentKey` instead of inline literals |
 | `EnsureVault` | obsidian-memory | new create-or-open constructor (+ `.obsidian/` config) |
-| `EnsureAgent` | obsidian-memory | new idempotent Agent-root scaffold |
-| `EnsureProject` | obsidian-memory | new idempotent Project-root scaffold |
-| `scaffold.Init` project key | obsidian-memory | uses `ProjectKey` (drops `projets/.../index` for that node) |
-| manifest `vault` | obsidian-memory | Required → optional + host default `~/.herrscher/memory` |
-| plugin factory | obsidian-memory | calls `EnsureVault` not `New` |
-| `agent create` | core | ensures shared vault + Agent root under `~/.herrscher/memory` |
-| session create | core | ensures Project root for the session scope |
+| `EnsureAgent` | obsidian-memory | new idempotent Agent-root scaffold (implements `Provisioner`) |
+| `EnsureProject` | obsidian-memory | new idempotent Project-root scaffold (implements `Provisioner`) |
+| manifest `vault` | obsidian-memory | Required → optional; factory defaults `~/.herrscher/memory` + calls `EnsureVault` |
+| bridge scope provisioning | core (host) | after `buildMemory`, type-asserts `Provisioner` and ensures the session's Project + Agent roots |
 
-No breaking change to `New` or the `Memory` port; the manifest relaxation only
-widens what configs are accepted.
+No breaking change to `New` or the `Memory` port; `Provisioner` is a separate
+optional interface (type-asserted, never added to `Memory`), and the manifest
+relaxation only widens what configs are accepted.
 
 ## Version bumps (release order, user-gated)
 
@@ -175,6 +205,9 @@ create). Each is additive/patch; concrete versions confirmed at release time.
 - After `EnsureVault` + `EnsureProject` + `EnsureAgent`, a
   `MemoryScope{Project, Agent}` round-trips through
   `RecordShared`/`RecordPrivate`/`RecallScoped` with no missing-root error.
-- Manifest resolves with no `OBSIDIAN_VAULT` set (host default applied).
-- Core: `agent create` leaves an `agents/<name>` node in the shared vault; a
-  session create leaves a `projects/<name>` node.
+- Manifest resolves with no `OBSIDIAN_VAULT` set (factory default applied); the
+  factory returns a working, `.obsidian/`-initialised vault at `~/.herrscher/memory`.
+- Bridge: a `*ObsidianMemory` satisfies `contracts.Provisioner` (compile-time
+  assertion + a round-trip test that `EnsureProject`/`EnsureAgent` through the
+  interface leave `projects/<name>`/`agents/<name>` nodes the orchestrator's scope
+  then resolves).

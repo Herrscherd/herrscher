@@ -10,8 +10,11 @@ targets, so the skill's method was kept and its TS mechanics dropped.
 
 ## Gate
 
-- `go vet ./...` clean, `go test ./...` green in both repos (contracts 30, obsidian 31).
-- No CI workflow exists in either repo — nothing to satisfy beyond the local gate.
+- `go vet ./...` clean, `go test ./...` green in both repos (contracts 30, obsidian 33).
+- CI: **correction** — `herrscher-contracts` already has a GitHub Actions
+  workflow (`.github/workflows/ci.yml`, a `test` job running vet + test); an
+  earlier note here claimed "no CI in either repo", which was a false negative
+  from a mis-parsed `ls`. `herrscher-obsidian-memory` had none.
 
 ## Applied (safe fixes — doc only, committed)
 
@@ -24,7 +27,7 @@ targets, so the skill's method was kept and its TS mechanics dropped.
 
 | Axe | Résultat |
 |-----|----------|
-| CI | No workflow present. Proposal: add a minimal Go CI (build+vet+test) — see below. |
+| CI | contracts already has a `test` (vet+test) workflow; obsidian has none. Proposal P2: give obsidian a matching workflow. |
 | Architecture | Sound. `KindDomain` additive; `in-domain` link (navigation) + `Meta["domain"]` tag (filtering) is deliberate dual representation, not redundancy. `domaines/` namespace consistent with `projets/`. |
 | Performance | No regression. Added branches are O(1); `matchesQuery` gains one map insert. `Search` remains an O(files) full walk — pre-existing, tracked as chantier A. |
 | Code quality | `projNode` promoted to a variable to carry conditional `Meta` — clean and necessary. |
@@ -53,11 +56,12 @@ pattern.
 `Org` for consistency. Severity: low (single-project domains, the common case,
 work today). Adds ~4 lines + a multi-project test.
 
-### P2 — no CI (feature)
+### P2 — obsidian has no CI (feature)
 
-Neither repo has a GitHub Actions workflow. A minimal
-`build + go vet + go test` on push/PR would make "respect des CI" a real gate.
-Severity: low, but cheap and high-value for a multi-repo platform.
+`herrscher-obsidian-memory` has no GitHub Actions workflow (contracts already
+has one). A matching `build + vet + test -race` on push/PR makes "respect des
+CI" a real gate there too. Severity: low, cheap, high-value for a multi-repo
+platform.
 
 ## Nothing found on
 

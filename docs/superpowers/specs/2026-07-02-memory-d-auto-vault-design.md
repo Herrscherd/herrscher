@@ -1,117 +1,180 @@
 # Memory D — Auto-vault provisioning
 
 **Date:** 2026-07-02
-**Status:** Design (approved for spec)
+**Status:** Design (approved for spec; decisions locked 2026-07-02)
 **PR order:** 4 of 4 (C → B → A → D)
-**Repos touched:** `herrscher-obsidian-memory`, `core`
+**Repos touched:** `herrscher-contracts`, `herrscher-obsidian-memory`, `herrscher-orchestrator`, `core` (host)
 
 ## Context
 
-The Obsidian memory plugin requires a pre-existing vault: its manifest declares
-`vault` / `OBSIDIAN_VAULT` as **Required** (`register.go`), and `New(root)`
-expects the directory to exist. So today a human must create the vault before
-herrscher can remember anything — contradicting "herrscher gère sa propre
-mémoire tout seul."
+herrscher is supposed to manage its own memory with no manual setup, but two gaps
+break that today:
 
-Meanwhile the durable-Agent model (see the Neublox design notes) puts an agent's
-home at `~/.herrscher/agents/<name>/` with a `memory/` subtree that must survive
-session teardown (worktrees are deleted on `session close`, so memory lives in
-the agent home, not the worktree).
+1. **The vault does not open as an Obsidian vault.** `New(root)` already
+   `MkdirAll`s the directory (so the folder is auto-created), but it never writes
+   an `.obsidian/` app config, and the manifest still marks `vault` /
+   `OBSIDIAN_VAULT` as **Required** (`register.go`). So a human must both point at
+   a path and hand-initialize it before the Obsidian app will open it.
+
+2. **The scope roots never exist at runtime.** The orchestrator derives a
+   `MemoryScope` per turn keyed `projects/<name>` + `agents/<name>`
+   (`herrscher-orchestrator/register.go`), but:
+   - `scaffold.Init` writes the project node at `projets/<name>/index` (French
+     prefix, `/index` suffix) — a **different key** — and it is **never called at
+     runtime** (zero non-test call sites).
+   - **Nothing** ever creates a `KindAgent` node.
+   So `RecallScoped`/`RecordShared`/`RecordPrivate` look up roots that don't
+   exist; `Links`/`Recall` fail on the missing file and the orchestrator silently
+   swallows the error (`orchestrator.go` `Curator.Context`). Auto-capture (B) and
+   ranked recall (A) are therefore dead on arrival until the roots are provisioned
+   *and* keyed consistently.
+
+The durable-Agent model keeps an agent's home outside worktrees (worktrees are
+deleted on `session close`), so memory must live under `~/.herrscher/`, not in a
+worktree.
 
 ## Goal
 
-herrscher **creates and scaffolds** its own Obsidian vault on first use — no
-manual `OBSIDIAN_VAULT` setup — and the vault opens cleanly in the Obsidian app.
+herrscher **creates, scaffolds, and provisions** its own Obsidian vault on first
+use — no manual `OBSIDIAN_VAULT`, the vault opens cleanly in the Obsidian app, and
+the `MemoryScope` roots the orchestrator uses exist from turn one.
+
+## Decisions locked
+
+- **Single shared vault** at `~/.herrscher/memory` — one graph for all agents,
+  with shared `KindProject` subtrees and private `KindAgent` subtrees per the
+  existing `MemoryScope`. No vault-per-agent (do not fragment the graph). The
+  shared path lives under `~/.herrscher`, so it survives worktree teardown.
+- **One source of truth for scope keys** — new `contracts.ProjectKey(name)` and
+  `contracts.AgentKey(name)` helpers, used by both the orchestrator (scope
+  derivation) and the provisioners (root creation). Standard scheme:
+  `projects/<name>` and `agents/<name>` (English, flat, no `/index`). This
+  permanently eliminates the projects/projets drift.
+- **End-to-end this PR** — wire provisioning into the real startup path
+  (`agent create` + session create), not just ship dormant plugin helpers.
 
 ## Non-goals
 
-- **No vault-per-agent.** One vault holds all agents, with shared (Project) and
-  private (Agent) subtrees per the existing `MemoryScope` — do not fragment the
-  graph. (Multi-vault physical split is explicitly rejected here.)
-- No Obsidian plugin/theme installation — just a minimal `.obsidian/` so the app
-  opens the folder as a vault without prompting.
+- No vault-per-agent physical split (see Decisions).
+- No Obsidian plugin/theme install — just a minimal `.obsidian/` so the app opens
+  the folder as a vault without prompting.
+- No rework of `scaffold.Init`'s wider spine (Organization/Domain/Repo/Server) —
+  D only reconciles its **Project-node key** to `contracts.ProjectKey`. The rest
+  of `Init` is out of scope and stays as-is.
 
 ## Design
 
-### 1. `EnsureVault` (obsidian-memory)
-
-Add a provisioning entry point that is idempotent and safe:
+### 1. Scope-key helpers (contracts)
 
 ```go
-// EnsureVault creates the vault directory if absent, writes a minimal
-// .obsidian/ app config so Obsidian opens it as a vault, and returns an opened
-// *ObsidianMemory. Existing vaults are opened untouched.
+// ProjectKey / AgentKey are the single source of truth for scope-root Keys, so
+// the orchestrator (which derives a MemoryScope) and the provisioners (which
+// create the root nodes) can never drift apart.
+func ProjectKey(name string) string { return "projects/" + name }
+func AgentKey(name string) string   { return "agents/" + name }
+```
+
+The orchestrator's `register.go` replaces its inline `"projects/"+name` /
+`"agents/"+name` literals with these calls. `scaffold.Init` uses `ProjectKey` for
+the project node it writes (dropping the `projets/.../index` form for that node).
+
+### 2. `EnsureVault` (obsidian-memory)
+
+```go
+// EnsureVault opens the vault at root (creating the directory if absent, as New
+// already does) and additionally writes a minimal .obsidian/ app config when it
+// is missing, so the Obsidian app opens the folder as a vault. Existing configs
+// are left untouched. Returns an opened *ObsidianMemory.
 func EnsureVault(root string) (*ObsidianMemory, error)
 ```
 
-- If `root` does not exist: `MkdirAll`, then write a minimal `.obsidian/app.json`
-  (+ empty `appearance.json`) so the Obsidian app treats it as a vault.
-- If `root` exists: behave exactly like `New(root)` today (open, never
-  overwrite config).
-- Reuses the existing `os.Root` sandboxing and flock — no new locking model.
+- Reuses `New`'s open path (MkdirAll + `os.Root` + flock) verbatim.
+- After opening, if `.obsidian/app.json` is absent, write a minimal `app.json`
+  (+ empty `appearance.json`) through the sandboxed `os.Root`. Idempotent: never
+  overwrites existing `.obsidian/` files.
+- `New` stays open-only/strict (no `.obsidian/` writes); `EnsureVault` is the
+  create-or-open superset the manifest/host uses.
 
-`New` stays as-is (open-only, strict); `EnsureVault` is the create-or-open
-superset that the manifest/host uses.
+### 3. Root-node provisioners (obsidian-memory)
 
-### 2. Scope-root scaffolding on first use
+Two tiny idempotent scaffolds, modeled on `scaffold.Init`'s non-overwriting
+`ensure` (create only when absent, never clobber):
 
-After the vault exists, ensure the P1 scope roots exist so
-`RecordShared`/`RecordPrivate`/`RecallScoped` have anchors:
+```go
+// EnsureAgent ensures the private KindAgent root node exists at key (idempotent).
+func (m *ObsidianMemory) EnsureAgent(ctx context.Context, key, title string) error
 
-- The shared `KindProject` node (`projet .../index`) — via existing `Init`.
-- The private `KindAgent` node for the current agent — a new tiny
-  `EnsureAgent(ctx, agentKey, title)` that `ensure`s a `KindAgent` node under
-  the agent home key (idempotent, non-overwriting like `Init`).
+// EnsureProject ensures the shared KindProject root node exists at key (idempotent).
+func (m *ObsidianMemory) EnsureProject(ctx context.Context, key, title string) error
+```
 
-This makes `MemoryScope{Project, Agent}` valid immediately, so B can record and
-A can recall from turn one.
+Callers pass `contracts.AgentKey(name)` / `contracts.ProjectKey(name)`, so the
+nodes land exactly where the orchestrator's scope will look. This makes
+`MemoryScope{Project, Agent}` valid immediately — B can record and A can recall
+from turn one.
 
-### 3. Manifest / config change (obsidian-memory)
+### 4. Manifest / config change (obsidian-memory)
 
-Relax `register.go`: `vault` becomes **not Required** with a default resolved by
-the host to the agent home (`~/.herrscher/agents/<name>/memory`). The plugin
-factory calls `EnsureVault` instead of `New`, so a missing directory is created
-rather than erroring.
+Relax `register.go`: `vault` becomes **not Required**, defaulting to the shared
+`~/.herrscher/memory` (host-resolved). The plugin factory calls `EnsureVault`
+instead of `New`, so a missing directory/config is provisioned rather than
+erroring, and the vault opens as an Obsidian vault.
 
-### 4. Core wiring (herrscher)
+### 5. Core wiring (herrscher)
 
-- On **agent create** (`agent create <name>` in the durable-Agent model), core
-  computes the vault path under the agent home and calls `EnsureVault` +
-  `EnsureAgent` so the vault and roots exist before any session runs.
-- The memory scope passed into a session (provisioning) names that vault's
-  Project + Agent roots — this is where D meets the existing `MemoryScope`
-  plumbing.
-- If the durable-Agent entity isn't built yet in core, D ships the plugin-side
-  `EnsureVault`/`EnsureAgent` + manifest relaxation first (usable via
-  `OBSIDIAN_VAULT` pointing at a not-yet-existing path), and the core
-  `agent create` wiring lands with the Agent entity work.
+- **Memory construction** (`bridge.go` `buildMemory` → `resolver.Memory`):
+  default the vault path to `~/.herrscher/memory` when `OBSIDIAN_VAULT` is unset.
+  Since the plugin factory now calls `EnsureVault`, constructing memory
+  provisions the shared vault idempotently.
+- **`agent create <name>`** (`core/internal/agent/store.go` `Create`, alongside
+  the existing SOUL.md/mcp.json seeding): open the shared vault and call
+  `EnsureAgent(contracts.AgentKey(name), <name>)` so the agent root exists before
+  any session.
+- **session create** (`core/internal/manager/session.go`, where `project`/`agent`
+  are derived and threaded to the bridge): call
+  `EnsureProject(contracts.ProjectKey(project), project)` so the shared project
+  root exists for that session's scope.
+- The orchestrator (read/write side) is unchanged beyond adopting the key helpers;
+  its `Curator.Context` / `Learner` now find the roots they always assumed.
 
 ## Interfaces changed
 
 | Symbol | Repo | Change |
 |--------|------|--------|
-| `EnsureVault` | obsidian-memory | new create-or-open constructor |
+| `ProjectKey`, `AgentKey` | contracts | new scope-key helpers (single source of truth) |
+| scope derivation | orchestrator | uses `ProjectKey`/`AgentKey` instead of inline literals |
+| `EnsureVault` | obsidian-memory | new create-or-open constructor (+ `.obsidian/` config) |
 | `EnsureAgent` | obsidian-memory | new idempotent Agent-root scaffold |
-| manifest `vault` | obsidian-memory | Required → optional + host default |
+| `EnsureProject` | obsidian-memory | new idempotent Project-root scaffold |
+| `scaffold.Init` project key | obsidian-memory | uses `ProjectKey` (drops `projets/.../index` for that node) |
+| manifest `vault` | obsidian-memory | Required → optional + host default `~/.herrscher/memory` |
 | plugin factory | obsidian-memory | calls `EnsureVault` not `New` |
-| agent create | core | ensures vault + roots under agent home |
+| `agent create` | core | ensures shared vault + Agent root under `~/.herrscher/memory` |
+| session create | core | ensures Project root for the session scope |
 
 No breaking change to `New` or the `Memory` port; the manifest relaxation only
 widens what configs are accepted.
+
+## Version bumps (release order, user-gated)
+
+contracts (adds key helpers) → obsidian-memory (EnsureVault/EnsureAgent/
+EnsureProject + manifest, requires new contracts) → orchestrator (adopts key
+helpers, requires new contracts) → host (bump all, wire agent create + session
+create). Each is additive/patch; concrete versions confirmed at release time.
 
 ## Testing
 
 - `EnsureVault` on a non-existent path creates the dir + `.obsidian/app.json`,
   returns a working memory; `Record`/`Recall` roundtrips.
 - `EnsureVault` on an existing vault leaves its `.obsidian/` untouched.
-- `EnsureAgent` twice creates the `KindAgent` node once (idempotent).
-- After `EnsureVault`+`Init`+`EnsureAgent`, a `MemoryScope{Project, Agent}`
-  round-trips through `RecordShared`/`RecordPrivate`/`RecallScoped`.
+- `EnsureAgent`/`EnsureProject` twice each create their node once (idempotent),
+  never clobbering an existing node's body.
+- `ProjectKey`/`AgentKey` are stable and match what `EnsureProject`/`EnsureAgent`
+  write and what the orchestrator derives (a single round-trip test asserting the
+  orchestrator's scope roots resolve to nodes that the provisioners created).
+- After `EnsureVault` + `EnsureProject` + `EnsureAgent`, a
+  `MemoryScope{Project, Agent}` round-trips through
+  `RecordShared`/`RecordPrivate`/`RecallScoped` with no missing-root error.
 - Manifest resolves with no `OBSIDIAN_VAULT` set (host default applied).
-
-## Open question (non-blocking)
-
-Vault location default: `~/.herrscher/agents/<name>/memory` (per-agent home) vs a
-single shared `~/.herrscher/memory` with agents as subtrees. Leaning shared
-single vault to honour the one-graph rule; confirm when the core Agent entity is
-specified.
+- Core: `agent create` leaves an `agents/<name>` node in the shared vault; a
+  session create leaves a `projects/<name>` node.

@@ -170,12 +170,21 @@ an `orchestrator.Candidate`:
 
 ### 5. Wiring in the host (`herrscher`)
 
-- Add a blank import of `herrscher-llm-extractor` to the host's generated
-  plugins list (next to the orchestrator import).
-- Set config: `memory.extractor = "llm"`, `memory.journal = <worktree>/.neublox/calls.log`,
-  `memory.consolidate-every = <N>` (e.g. 10). These already flow through
-  `register.go`; no host code beyond config + the import.
-- `HERRSCHER_CURATION_MODEL` optionally selects a cheaper curation model.
+The nudge is **already wired end to end** — nothing to build in core:
+
+`session create --extractor llm --journal <worktree>/.neublox/calls.log --consolidate-every N`
+→ `CreateSession.ConsolidateEvery`/`Extractor`/`Journal` (typed contract,
+`session_control.go`) → persisted in `state.Session` (`state.go`) → replayed by
+the supervisor (`supervisor.go`) → `memory.extractor`/`memory.journal`/
+`memory.consolidate-every` config (`bridge.go:160-166`) → `register.go` builds the
+`Learner` → `Observe` fires `Consolidate` every N turns.
+
+So the host needs exactly **one** code change: a blank import of
+`herrscher-llm-extractor` in the generated plugins list (next to the orchestrator
+import) so its `init()` registers `"llm"`. Everything else is runtime flags.
+
+- `HERRSCHER_CURATION_MODEL` optionally selects a cheaper curation model
+  (overrides the backend's `*_MODEL` env key inside `curationEnv`).
 
 ## Interfaces changed
 

@@ -66,6 +66,7 @@ func runBridge(ctx context.Context, args []string) error {
 	mem := buildMemory(ctx, log)
 	if mem != nil {
 		defer mem.Close()
+		provisionScope(ctx, mem, *project, *agent, log)
 	}
 	orch := buildOrchestrator(ctx, mem, *session, *project, *agent,
 		learnConfig{extractor: *extractor, journal: *journal, consolidateEvery: *consolidateEvery}, log)
@@ -96,6 +97,30 @@ func buildMemory(ctx context.Context, log *slog.Logger) contracts.Memory {
 		return disabled("memory", err)
 	}
 	return mem
+}
+
+// provisionScope ensures this session's memory scope roots exist before the first
+// turn, so B can record and A can recall from turn one. It is plugin-agnostic and
+// best-effort: memory implementations that can create nodes satisfy
+// contracts.Provisioner (the local obsidian vault does; a remote proxy may not
+// and is skipped). It keys the roots with the same contracts helpers the
+// orchestrator derives its scope from, so the keys cannot drift. Errors are
+// logged, never fatal — memory stays optional, matching buildMemory.
+func provisionScope(ctx context.Context, mem contracts.Memory, project, agent string, log *slog.Logger) {
+	p, ok := mem.(contracts.Provisioner)
+	if !ok {
+		return
+	}
+	if project != "" {
+		if err := p.EnsureProject(ctx, contracts.ProjectKey(project), project); err != nil {
+			log.Debug("ensure project root", "project", project, "err", err)
+		}
+	}
+	if agent != "" {
+		if err := p.EnsureAgent(ctx, contracts.AgentKey(agent), agent); err != nil {
+			log.Debug("ensure agent root", "agent", agent, "err", err)
+		}
+	}
 }
 
 // learnConfig is the opt-in P1 write side: when extractor names a registered

@@ -66,6 +66,7 @@ func runBridge(ctx context.Context, args []string) error {
 	mem := buildMemory(ctx, log)
 	if mem != nil {
 		defer mem.Close()
+		provisionScope(ctx, mem, *project, *agent, log)
 	}
 	orch := buildOrchestrator(ctx, mem, *session, *project, *agent,
 		learnConfig{extractor: *extractor, journal: *journal, consolidateEvery: *consolidateEvery}, log)
@@ -81,7 +82,9 @@ func runBridge(ctx context.Context, args []string) error {
 // buildMemory instantiates the first registered memory plugin from the registry,
 // or returns nil when none is compiled in or its config is unset. Memory is
 // optional: a config/instantiation failure disables it (logged) rather than
-// blocking the bridge, so a vault is opt-in via its plugin's env (OBSIDIAN_VAULT).
+// blocking the bridge. The vault self-provisions (its plugin defaults the path
+// and creates the folder), so no env is required; OBSIDIAN_VAULT only overrides
+// where it lives.
 func buildMemory(ctx context.Context, log *slog.Logger) contracts.Memory {
 	disabled := func(kind string, err error) contracts.Memory {
 		log.Debug("memory disabled", "kind", kind, "err", err)
@@ -96,6 +99,34 @@ func buildMemory(ctx context.Context, log *slog.Logger) contracts.Memory {
 		return disabled("memory", err)
 	}
 	return mem
+}
+
+// provisionScope ensures this session's memory scope roots exist before the first
+// turn, so B can record and A can recall from turn one. It is plugin-agnostic and
+// best-effort: memory implementations that can create nodes satisfy
+// contracts.Provisioner (the local obsidian vault does; a remote proxy may not
+// and is skipped). It keys the roots with the same contracts helpers the
+// orchestrator derives its scope from, so the keys cannot drift. Errors are
+// logged, never fatal — memory stays optional, matching buildMemory.
+func provisionScope(ctx context.Context, mem contracts.Memory, project, agent string, log *slog.Logger) {
+	p, ok := mem.(contracts.Provisioner)
+	if !ok {
+		return
+	}
+	// Warn, not Debug: reaching here means a memory that can create nodes is
+	// configured and a scope name was given, so a failure is unexpected and leaves
+	// the root missing — every later RecordShared/RecallScoped then fails on the
+	// absent node. Still non-fatal (memory is optional), but it must be visible.
+	if project != "" {
+		if err := p.EnsureProject(ctx, contracts.ProjectKey(project), project); err != nil {
+			log.Warn("ensure project root", "project", project, "err", err)
+		}
+	}
+	if agent != "" {
+		if err := p.EnsureAgent(ctx, contracts.AgentKey(agent), agent); err != nil {
+			log.Warn("ensure agent root", "agent", agent, "err", err)
+		}
+	}
 }
 
 // learnConfig is the opt-in P1 write side: when extractor names a registered

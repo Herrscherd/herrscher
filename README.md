@@ -415,6 +415,17 @@ Because the materialized files live inside the disposable worktree, an agent
 companion always needs an **isolated git worktree**: `--agent` is rejected with
 `shared:true` or a non-git project.
 
+### The vault (where memory lives)
+
+Durable memory is an **Obsidian vault** the memory plugin **auto-provisions** — no
+manual setup and no required env var. On first use it creates the vault directory
+and a minimal `.obsidian/` app config, so the folder opens directly as an Obsidian
+vault; existing config is never overwritten. By default it lives at
+**`~/.herrscher/memory`** — outside any session worktree, so it survives worktree
+teardown — and the optional **`OBSIDIAN_VAULT`** env var overrides the location.
+Memory stays optional: if no memory plugin is compiled in, the bridge just runs
+transcript-only.
+
 ### Memory scope (shared vs private)
 
 A session carries a **project** and (optionally) an **agent**, and the supervisor
@@ -425,8 +436,11 @@ agent of that game recalls (decisions, conventions, the studio tree) — and the
 orchestrator prepends the shared project memory and this agent's private skills
 before the rolling session transcript.
 
-Both are optional and backward-compatible: with no project the bridge omits the
-flags and the orchestrator falls back to transcript-only continuity. The policy
+Both scope roots (`projects/<project>/`, `agents/<agent>/`) are created in the
+vault at session start, so recall is well-defined from the first turn even before
+anything has been written. Both are optional and backward-compatible: with no
+project the bridge omits the flags and the orchestrator falls back to
+transcript-only continuity. The policy
 itself lives in [herrscher-contracts](https://github.com/Herrscherd/herrscher-contracts)
 (`MemoryScope`) and is applied by
 [herrscher-orchestrator](https://github.com/Herrscherd/herrscher-orchestrator).
@@ -599,7 +613,9 @@ plugins](#managing-plugins-the-init--plugin--update--install-verbs).
 Discord gateway needs `DISCORD_BOT_TOKEN`); the host resolves them generically.
 Common ones: `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID` (default channel),
 `DCTL_OWNER_ID` (seed allowlist), `DCTL_STATE_DIR` (state dir, default
-`~/.config/dctl`), `DCTL_INSTANCE_ID` (namespace slug for shared resources). All
+`~/.config/dctl`), `DCTL_INSTANCE_ID` (namespace slug for shared resources),
+`OBSIDIAN_VAULT` (memory vault path, optional — auto-provisioned at
+`~/.herrscher/memory` if unset). All
 of these can be supplied via the root `.env` (see [Configuration](#configuration)).
 Operator logging: `HERRSCHER_LOG` sets the structured (`log/slog`) level on stderr
 — `debug|info|warn|error`, default `info`; the bridge's `-v` flag forces `debug`.

@@ -32,7 +32,7 @@
 New repo `github.com/Herrscherd/herrscher-llm-extractor`, package `llmextractor`:
 
 - `go.mod` — module + requires + dev-only local `replace` directives.
-- `candidate.go` — JSON DTOs, `parseCandidates`, `extractJSONArray`, `mapKind`, `stableKey`, `slug`, `toNode`. The pure data core.
+- `candidate.go` — JSON DTOs, `parseCandidates`, `firstCandidateArray`, `toNode`, `mapKind`, `stableKey`, `slugOrHash`, `slug`. The pure data core.
 - `prompt.go` — `extractionPrompt` + the `instructions` constant.
 - `extractor.go` — `LLMExtractor`, `Option`, `New`, `Extract`, `resolveBackend`.
 - `backend.go` — `curationEnv`, `backendFrom`, `lazyBackend`. Registry-driven backend acquisition.

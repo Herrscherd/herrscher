@@ -95,11 +95,13 @@ type fakeWT struct {
 	removed      []string
 	path         string // "" → simulate shared fallback
 	removeErr    error  // simulate dirty worktree
+	createdBase  string // last base passed to Create
 }
 
-func (f *fakeWT) Create(repo, name string) (string, error) {
+func (f *fakeWT) Create(repo, name, base string) (string, error) {
 	f.createdRepos = append(f.createdRepos, repo)
 	f.created = append(f.created, name)
+	f.createdBase = base
 	return f.path, nil
 }
 func (f *fakeWT) Branch(name string) string { return "session/" + name }
@@ -188,6 +190,17 @@ func TestSessionCreateText(t *testing.T) {
 	// No backend option given → defaults to the persistent stream-json backend.
 	if sess.Backend != "stream" {
 		t.Fatalf("expected default backend stream, got %q", sess.Backend)
+	}
+}
+
+func TestSessionCreatePassesBaseToWorktree(t *testing.T) {
+	h, _, _, wt, _, st := newTestHandler(t, "")
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "beta", "base", "session/alpha")); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if wt.createdBase != "session/alpha" {
+		t.Fatalf("base not plumbed to worktree: %q", wt.createdBase)
 	}
 }
 

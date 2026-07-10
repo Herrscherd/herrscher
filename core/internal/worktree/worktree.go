@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -47,19 +48,61 @@ func (w *Worktreer) Branch(name string) string {
 	return "session/" + w.instanceID + "/" + name
 }
 
-// Create adds a worktree on branch session/<name> inside repo. Returns ("", nil)
-// when repo is not a git repo (caller falls back to a shared session).
-func (w *Worktreer) Create(repo, name string) (string, error) {
+// Create adds a worktree on branch session/<name> inside repo. When base is
+// non-empty, the new branch starts at that ref (e.g. "session/<A>") so the
+// worktree continues that tip without a merge; empty base keeps the default
+// (branch from HEAD). Returns ("", nil) when repo is not a git repo (caller
+// falls back to a shared session).
+func (w *Worktreer) Create(repo, name, base string) (string, error) {
 	if !w.isGitRepo(repo) {
 		return "", nil
 	}
+	// base is passed as a positional git arg; a leading "-" would let a
+	// caller-supplied ref be parsed as a git flag (option injection). The
+	// handoff path only ever passes safe "session/<A>" refs, but the
+	// operator-CLI base param is arbitrary, so guard here defense-in-depth.
+	if base != "" && strings.HasPrefix(base, "-") {
+		return "", fmt.Errorf("worktree: refusing base ref %q that looks like a flag", base)
+	}
 	p := w.Path(repo, name)
-	out, err := exec.CommandContext(w.ctx, "git", "-C", repo,
-		"worktree", "add", p, "-b", w.Branch(name)).CombinedOutput()
+	args := []string{"-C", repo, "worktree", "add", p, "-b", w.Branch(name)}
+	if base != "" {
+		args = append(args, base)
+	}
+	out, err := exec.CommandContext(w.ctx, "git", args...).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("worktree add: %s", strings.TrimSpace(string(out)))
 	}
 	return p, nil
+}
+
+// IsCleanAt reports whether the worktree at path has no uncommitted changes. An
+// error means the state can't be verified (missing dir, not a git repo) — the
+// caller must treat that as "not safe", never as clean.
+func (w *Worktreer) IsCleanAt(path string) (bool, error) {
+	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "status", "--porcelain").Output()
+	if err != nil {
+		return false, fmt.Errorf("cannot verify clean state of %q: %w", path, err)
+	}
+	return strings.TrimSpace(string(out)) == "", nil
+}
+
+// BranchExistsAt reports whether branch exists as a local ref, querying the
+// repo that contains path (an existing worktree dir inside that repo). Exit
+// code 1 from "show-ref --verify" means the ref is simply absent — that is
+// the normal "free to use" case, not an error. Any other failure (e.g. path
+// isn't a git repo at all, exit 128) is reported as an error so callers never
+// mistake "couldn't verify" for "free".
+func (w *Worktreer) BranchExistsAt(path, branch string) (bool, error) {
+	err := exec.CommandContext(w.ctx, "git", "-C", path, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run()
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, fmt.Errorf("cannot verify branch %q at %q: %w", branch, path, err)
 }
 
 // Remove removes the worktree. If it has uncommitted changes and !force, it
@@ -67,13 +110,13 @@ func (w *Worktreer) Create(repo, name string) (string, error) {
 func (w *Worktreer) Remove(repo, name string, force bool) error {
 	p := w.Path(repo, name)
 	if !force {
-		out, err := exec.CommandContext(w.ctx, "git", "-C", p, "status", "--porcelain").Output()
+		clean, err := w.IsCleanAt(p)
 		if err != nil {
-			// Can't verify the tree is clean (missing dir, not a git repo, git
-			// error): refuse rather than risk discarding work. force: bypasses.
-			return fmt.Errorf("worktree %q: cannot verify clean state (%v) — close with force:true to remove anyway", name, err)
+			// Can't verify the tree is clean: refuse rather than risk discarding
+			// work. force: bypasses.
+			return fmt.Errorf("worktree %q: %v — close with force:true to remove anyway", name, err)
 		}
-		if strings.TrimSpace(string(out)) != "" {
+		if !clean {
 			return fmt.Errorf("worktree %q has uncommitted changes", name)
 		}
 	}

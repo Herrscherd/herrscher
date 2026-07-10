@@ -38,7 +38,7 @@ type supervisor interface {
 // path ("" + nil error means "fall back to shared", e.g. not a git repo). The
 // repo root is passed per call so one Worktreer serves every project.
 type worktrees interface {
-	Create(repo, name string) (path string, err error)
+	Create(repo, name, base string) (path string, err error)
 	Branch(name string) string
 	Remove(repo, name string, force bool) error
 }

@@ -65,7 +65,7 @@ func initRepo(t *testing.T) string {
 func TestCreateUsesPassedRepo(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "")
-	path, err := w.Create(repo, "feat1")
+	path, err := w.Create(repo, "feat1", "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestCreateUsesPassedRepo(t *testing.T) {
 
 func TestCreateNonGitRepoFallsBack(t *testing.T) {
 	w := NewWorktreer(context.Background(), "")
-	path, err := w.Create(t.TempDir(), "feat1")
+	path, err := w.Create(t.TempDir(), "feat1", "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestCreateNonGitRepoFallsBack(t *testing.T) {
 func TestRemoveUsesPassedRepo(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "")
-	if _, err := w.Create(repo, "feat1"); err != nil {
+	if _, err := w.Create(repo, "feat1", ""); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	if err := w.Remove(repo, "feat1", false); err != nil {
@@ -100,5 +100,94 @@ func TestRemoveUsesPassedRepo(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(repo, ".dctl-sessions", "feat1")); !os.IsNotExist(err) {
 		t.Fatalf("worktree should be gone, stat err = %v", err)
+	}
+}
+
+func TestCreateWithBaseBranchesOffIt(t *testing.T) {
+	w := NewWorktreer(context.Background(), "")
+	repo := initRepo(t)
+	// Base worktree "alpha" gets a commit so its tip carries work.
+	pa, err := w.Create(repo, "alpha", "")
+	if err != nil {
+		t.Fatalf("create alpha: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pa, "f.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "."}, {"commit", "-qm", "work"}} {
+		if out, err := exec.Command("git", append([]string{"-C", pa}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
+	// beta branches off session/alpha and must inherit f.txt.
+	pb, err := w.Create(repo, "beta", "session/alpha")
+	if err != nil {
+		t.Fatalf("create beta on base: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(pb, "f.txt")); err != nil {
+		t.Fatalf("beta did not inherit alpha's committed work: %v", err)
+	}
+}
+
+func TestCreateRejectsFlagLikeBase(t *testing.T) {
+	w := NewWorktreer(context.Background(), "")
+	repo := initRepo(t)
+	path, err := w.Create(repo, "x", "--foo")
+	if err == nil {
+		t.Fatal("expected error for flag-like base, got nil")
+	}
+	if path != "" {
+		t.Fatalf("path = %q, want empty", path)
+	}
+	if _, err := os.Stat(w.Path(repo, "x")); !os.IsNotExist(err) {
+		t.Fatalf("worktree dir should not have been created, stat err = %v", err)
+	}
+}
+
+func TestBranchExistsAt(t *testing.T) {
+	w := NewWorktreer(context.Background(), "")
+	repo := initRepo(t)
+	pathAlpha, err := w.Create(repo, "alpha", "")
+	if err != nil {
+		t.Fatalf("create alpha: %v", err)
+	}
+	exists, err := w.BranchExistsAt(pathAlpha, "session/alpha")
+	if err != nil || !exists {
+		t.Fatalf("session/alpha should exist: exists=%v err=%v", exists, err)
+	}
+	exists, err = w.BranchExistsAt(pathAlpha, "session/nope")
+	if err != nil || exists {
+		t.Fatalf("session/nope should not exist: exists=%v err=%v", exists, err)
+	}
+}
+
+func TestBranchExistsAtNonRepoErrors(t *testing.T) {
+	w := NewWorktreer(context.Background(), "")
+	_, err := w.BranchExistsAt(t.TempDir(), "session/x")
+	if err == nil {
+		t.Fatal("expected error for non-repo path, got nil")
+	}
+}
+
+func TestIsCleanAt(t *testing.T) {
+	w := NewWorktreer(context.Background(), "")
+	repo := initRepo(t)
+	p, err := w.Create(repo, "alpha", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clean, err := w.IsCleanAt(p)
+	if err != nil || !clean {
+		t.Fatalf("fresh worktree should be clean: clean=%v err=%v", clean, err)
+	}
+	if err := os.WriteFile(filepath.Join(p, "dirty.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	clean, err = w.IsCleanAt(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clean {
+		t.Fatal("worktree with an untracked file should be dirty")
 	}
 }

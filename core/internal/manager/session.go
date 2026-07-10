@@ -117,7 +117,11 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	shared := in.Bool("shared")
 	var worktree string
 	if !shared {
-		path, err := h.wt.Create(repo, name)
+		base := ""
+		if b, ok := in.Lookup("base"); ok {
+			base = b
+		}
+		path, err := h.wt.Create(repo, name, base)
 		if err != nil {
 			return "", fmt.Errorf("worktree: %v", err)
 		}

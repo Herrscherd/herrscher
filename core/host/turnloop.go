@@ -84,6 +84,12 @@ func (d *sessionDriver) Pick(value string) {
 	d.queue <- contracts.Event{T: "pick", Value: value}
 }
 
+// Seed injects an opening input turn into this session's FIFO. A handoff uses it
+// to hand B its task the same way a human message would arrive.
+func (d *sessionDriver) Seed(task string) {
+	d.queue <- contracts.Event{T: "input", Who: "handoff", Text: task}
+}
+
 // sessionRegistry maps live session names to their driver so an out-of-band
 // input — a routed select-menu pick — can reach the right session's FIFO. It is
 // populated by RunSession for the session's lifetime.
@@ -114,6 +120,19 @@ func Pick(session, value string) bool {
 		return false
 	}
 	d.Pick(value)
+	return true
+}
+
+// Seed routes an opening task to the named session's driver, returning false when
+// no live session by that name is driving (mirror of Pick).
+func Seed(session, task string) bool {
+	sessionRegistry.mu.Lock()
+	d := sessionRegistry.m[session]
+	sessionRegistry.mu.Unlock()
+	if d == nil {
+		return false
+	}
+	d.Seed(task)
 	return true
 }
 

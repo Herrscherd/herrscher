@@ -104,7 +104,7 @@ func TestHubDispatchSetSource(t *testing.T) {
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
 	o := Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude"}
-	reg, err := buildRegistry(ctx, Deps{}, o, st, sup, "")
+	reg, _, err := buildRegistry(ctx, Deps{}, o, st, sup, "")
 	if err != nil {
 		t.Fatal(err)
 	}

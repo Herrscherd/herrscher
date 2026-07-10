@@ -16,12 +16,21 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
+// hostDeps surfaces pieces buildRegistry constructs internally that a caller may
+// need beyond the registry itself — the worktree manager and agent store the
+// boot-time Coordinator (Task 7/8) is built from. Kept minimal so the operator
+// CLI (NewRegistry), which has no Coordinator to wire, can ignore it.
+type hostDeps struct {
+	wt     *worktree.Worktreer
+	agents *agent.Store
+}
+
 // buildRegistry constructs the session/service command handler over a given
 // state + supervisor and registers its commands into a fresh CLI registry. The
 // daemon (RunHub) and the operator CLI (NewRegistry) share this so a session
 // created either way is built from identical deps. d.Admin supplies the channel
 // admin port; instID namespaces shared git/Discord resources.
-func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup *supervisor.Supervisor, instID string) (*cli.Registry, error) {
+func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup *supervisor.Supervisor, instID string) (*cli.Registry, hostDeps, error) {
 	partDir := filepath.Dir(o.StatePath)
 	wt := worktree.NewWorktreer(ctx, instID)
 	fg := forge.New()
@@ -33,10 +42,10 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	reg := &cli.Registry{}
 	for _, c := range hdl.Commands() {
 		if err := reg.Add(c); err != nil {
-			return nil, err
+			return nil, hostDeps{}, err
 		}
 	}
-	return reg, nil
+	return reg, hostDeps{wt: wt, agents: agents}, nil
 }
 
 // NewRegistry builds the operator CLI registry: it loads its own state +
@@ -61,5 +70,6 @@ func NewRegistry(ctx context.Context, d Deps, o Options) (*cli.Registry, error) 
 
 	self, _ := os.Executable()
 	sup := supervisor.NewSupervisor(ctx, self)
-	return buildRegistry(ctx, d, o, st, sup, instID)
+	reg, _, err := buildRegistry(ctx, d, o, st, sup, instID)
+	return reg, err
 }

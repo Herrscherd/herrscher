@@ -48,6 +48,12 @@ type sessionDriver struct {
 
 	// metrics records turn lifecycle counters (nil = no recording, e.g. in tests).
 	metrics *metrics.Registry
+
+	// coordinator is the Model-O handoff decision point: after a completed turn,
+	// maybeHandoff checks the reply for a handoff trailer and, when present,
+	// forwards the request here. nil in the short-lived operator CLI path and in
+	// tests that don't exercise handoff, where maybeHandoff simply no-ops.
+	coordinator contracts.Coordinator
 }
 
 func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event) *sessionDriver {
@@ -84,6 +90,12 @@ func (d *sessionDriver) Pick(value string) {
 	d.queue <- contracts.Event{T: "pick", Value: value}
 }
 
+// Seed injects an opening input turn into this session's FIFO. A handoff uses it
+// to hand B its task the same way a human message would arrive.
+func (d *sessionDriver) Seed(task string) {
+	d.queue <- contracts.Event{T: "input", Who: "handoff", Text: task}
+}
+
 // sessionRegistry maps live session names to their driver so an out-of-band
 // input — a routed select-menu pick — can reach the right session's FIFO. It is
 // populated by RunSession for the session's lifetime.
@@ -114,6 +126,19 @@ func Pick(session, value string) bool {
 		return false
 	}
 	d.Pick(value)
+	return true
+}
+
+// Seed routes an opening task to the named session's driver, returning false when
+// no live session by that name is driving (mirror of Pick).
+func Seed(session, task string) bool {
+	sessionRegistry.mu.Lock()
+	d := sessionRegistry.m[session]
+	sessionRegistry.mu.Unlock()
+	if d == nil {
+		return false
+	}
+	d.Seed(task)
 	return true
 }
 
@@ -246,9 +271,30 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 			d.fanOut(ctx, e)
 			if e.T == "reply" && e.Done {
 				d.metrics.TurnCompleted()
+				d.maybeHandoff(ctx, e.Text)
 				return true
 			}
 		}
+	}
+}
+
+// maybeHandoff runs the Model-O signal check after a completed turn: parse the
+// reply's trailer and, on a valid marker, hand the decision to the Coordinator.
+// A malformed marker is ignored; a coordinator refusal (unknown agent, dirty
+// source, create failure) is surfaced back into A's channel as a status event —
+// never a silent half-handoff.
+func (d *sessionDriver) maybeHandoff(ctx context.Context, reply string) {
+	if d.coordinator == nil {
+		return
+	}
+	toAgent, task, ok := parseHandoff(reply)
+	if !ok {
+		return
+	}
+	if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
+		FromSession: d.name, ToAgent: toAgent, Task: task,
+	}); err != nil {
+		d.fanOut(ctx, contracts.Event{T: "status", Text: "handoff refusé: " + err.Error()})
 	}
 }
 
@@ -302,8 +348,10 @@ func (d *sessionDriver) renderChannel(g contracts.GatewaySet) string {
 // RunSession drives one session against a control Acceptor: it bridges the
 // persistent Conn (input frames out, event frames in) to a sessionDriver, and
 // re-binds to a fresh Conn whenever the bridge reconnects (after a crash +
-// supervisor restart). It blocks until ctx is cancelled.
-func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry) {
+// supervisor restart). It blocks until ctx is cancelled. coord is the Model-O
+// handoff coordinator (nil in the short-lived operator CLI path, where a
+// completed turn's handoff trailer, if any, is simply ignored).
+func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator) {
 	defer acc.Close() // own the acceptor: close the listener + remove the socket on shutdown
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
@@ -311,6 +359,7 @@ func RunSession(ctx context.Context, name, channel string, gws []contracts.Gatew
 	d.channel = channel
 	d.participants = participants
 	d.metrics = m
+	d.coordinator = coord
 	registerDriver(name, d)
 	defer unregisterDriver(name)
 	go d.run(ctx)

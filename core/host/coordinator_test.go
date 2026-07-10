@@ -203,3 +203,149 @@ func TestSeedWithRetryHonoursCtxCancel(t *testing.T) {
 		t.Fatalf("expected exactly 1 seed attempt with pre-cancelled ctx, got %d", attempts)
 	}
 }
+
+func TestDelegateCreatesWorkerOnLeadBranchWithParent(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newTestCoordinator(cr, []string{"scripter"}, true,
+		[]state.Session{{Name: "lead", Project: "proj", Worktree: "/wt/lead"}}, &seeded)
+
+	worker, err := c.Delegate(context.Background(), contracts.DelegateRequest{
+		FromSession: "lead", ToAgent: "scripter", Task: "écris le module",
+	})
+	if err != nil {
+		t.Fatalf("delegate: %v", err)
+	}
+	if worker != "lead-scripter" {
+		t.Fatalf("nom worker inattendu: %q", worker)
+	}
+	if cr.spec.Base != "session/lead" {
+		t.Fatalf("worker pas branché sur le tip du lead: %q", cr.spec.Base)
+	}
+	if cr.spec.Parent != "lead" {
+		t.Fatalf("parent non posé sur le worker: %q", cr.spec.Parent)
+	}
+	if cr.spec.Agent != "scripter" {
+		t.Fatalf("agent worker inattendu: %q", cr.spec.Agent)
+	}
+	if len(seeded) != 1 || seeded[0] != "lead-scripter|écris le module" {
+		t.Fatalf("tâche non seedée au worker: %v", seeded)
+	}
+}
+
+func TestDelegateUnknownAgent(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newTestCoordinator(cr, nil, true,
+		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
+	if _, err := c.Delegate(context.Background(), contracts.DelegateRequest{
+		FromSession: "lead", ToAgent: "inconnu", Task: "x"}); err == nil {
+		t.Fatalf("agent inconnu devrait échouer")
+	}
+	if cr.spec.Name != "" {
+		t.Fatalf("aucune session ne devrait être créée")
+	}
+}
+
+func TestDelegateDirtyLeadRefused(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newTestCoordinator(cr, []string{"scripter"}, false,
+		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
+	if _, err := c.Delegate(context.Background(), contracts.DelegateRequest{
+		FromSession: "lead", ToAgent: "scripter", Task: "x"}); err == nil {
+		t.Fatalf("lead sale devrait être refusé")
+	}
+	if cr.spec.Name != "" {
+		t.Fatalf("aucune session ne devrait être créée sur lead sale")
+	}
+}
+
+func TestDelegateUnknownLead(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newTestCoordinator(cr, []string{"scripter"}, true, nil, &seeded)
+	if _, err := c.Delegate(context.Background(), contracts.DelegateRequest{
+		FromSession: "ghost", ToAgent: "scripter", Task: "x"}); err == nil {
+		t.Fatalf("lead inconnu devrait échouer")
+	}
+}
+
+func TestReportDeliversBranchRefAndSummaryToParent(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "worker", Worktree: "/wt/worker", Parent: "lead"},
+		}, &seeded)
+
+	parent, err := c.Report(context.Background(), contracts.ReportRequest{
+		FromSession: "worker", Summary: "module commité, 12 tests verts",
+	})
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if parent != "lead" {
+		t.Fatalf("parent inattendu: %q", parent)
+	}
+	if len(seeded) != 1 {
+		t.Fatalf("livraison attendue une fois, got %v", seeded)
+	}
+	if !strings.HasPrefix(seeded[0], "lead|") {
+		t.Fatalf("message livré à la mauvaise session: %q", seeded[0])
+	}
+	if !strings.Contains(seeded[0], "session/worker") || !strings.Contains(seeded[0], "12 tests verts") {
+		t.Fatalf("message de livraison incomplet: %q", seeded[0])
+	}
+}
+
+func TestReportWorkerWithoutParentErrors(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{{Name: "orphan", Worktree: "/wt/orphan"}}, &seeded)
+	if _, err := c.Report(context.Background(), contracts.ReportRequest{
+		FromSession: "orphan", Summary: "x"}); err == nil {
+		t.Fatalf("worker sans parent devrait échouer")
+	}
+	if len(seeded) != 0 {
+		t.Fatalf("rien ne devrait être livré: %v", seeded)
+	}
+}
+
+func TestReportUnknownWorkerErrors(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true, nil, &seeded)
+	if _, err := c.Report(context.Background(), contracts.ReportRequest{
+		FromSession: "ghost", Summary: "x"}); err == nil {
+		t.Fatalf("worker inconnu devrait échouer")
+	}
+}
+
+func TestReportParentGoneErrors(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{{Name: "worker", Worktree: "/wt/worker", Parent: "lead"}}, &seeded)
+	if _, err := c.Report(context.Background(), contracts.ReportRequest{
+		FromSession: "worker", Summary: "x"}); err == nil {
+		t.Fatalf("parent disparu devrait échouer")
+	}
+	if len(seeded) != 0 {
+		t.Fatalf("rien ne devrait être livré si le parent a disparu: %v", seeded)
+	}
+}
+
+func TestReportDirtyWorkerRefused(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, false, // worker sale
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "worker", Worktree: "/wt/worker", Parent: "lead"},
+		}, &seeded)
+	if _, err := c.Report(context.Background(), contracts.ReportRequest{
+		FromSession: "worker", Summary: "x"}); err == nil {
+		t.Fatalf("worker non commité devrait être refusé")
+	}
+	if len(seeded) != 0 {
+		t.Fatalf("rien ne devrait être livré depuis un worker sale: %v", seeded)
+	}
+}

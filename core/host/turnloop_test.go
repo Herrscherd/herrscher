@@ -549,14 +549,26 @@ func (r *routedRec) EmitTo(c contracts.Conversation, _ contracts.Event) {
 	r.convs = append(r.convs, c)
 }
 
-// recordingCoord is a fake contracts.Coordinator that records every Handoff
-// request it receives, so a test can assert whether (and with what) the driver
-// invoked it.
-type recordingCoord struct{ reqs []contracts.HandoffRequest }
+// recordingCoord is a fake contracts.Coordinator that records every request it
+// receives (handoff, delegate, report), so a test can assert whether (and with
+// what) the driver invoked it.
+type recordingCoord struct {
+	reqs      []contracts.HandoffRequest
+	delegates []contracts.DelegateRequest
+	reports   []contracts.ReportRequest
+}
 
 func (r *recordingCoord) Handoff(_ context.Context, req contracts.HandoffRequest) (string, error) {
 	r.reqs = append(r.reqs, req)
 	return req.ToAgent + "-s", nil
+}
+func (r *recordingCoord) Delegate(_ context.Context, req contracts.DelegateRequest) (string, error) {
+	r.delegates = append(r.delegates, req)
+	return req.ToAgent + "-w", nil
+}
+func (r *recordingCoord) Report(_ context.Context, req contracts.ReportRequest) (string, error) {
+	r.reports = append(r.reports, req)
+	return "lead", nil
 }
 
 // TestDriverInvokesCoordinatorOnHandoffTrailer proves a completed turn whose
@@ -596,11 +608,43 @@ func TestDriverNoHandoffWithoutTrailer(t *testing.T) {
 	}
 }
 
+// TestMaybeCoordinateDispatchesByTrailer proves the single post-turn hook routes
+// each trailer to the right coordinator method (done → delegate → handoff), and
+// a reply with no trailer invokes nothing.
+func TestMaybeCoordinateDispatchesByTrailer(t *testing.T) {
+	cases := []struct {
+		reply               string
+		wantH, wantD, wantR int
+	}{
+		{"texte\n⟢ handoff: scripter — tâche", 1, 0, 0},
+		{"texte\n⟢ delegate: scripter — tâche", 0, 1, 0},
+		{"texte\n⟢ done: fini, 12 tests verts", 0, 0, 1},
+		{"aucun trailer ici", 0, 0, 0},
+	}
+	for _, tc := range cases {
+		from := make(chan contracts.Event, 1)
+		d := newSessionDriver("sess", nil, make(chan contracts.Event, 1), from)
+		rc := &recordingCoord{}
+		d.coordinator = rc
+		d.maybeCoordinate(context.Background(), tc.reply)
+		if len(rc.reqs) != tc.wantH || len(rc.delegates) != tc.wantD || len(rc.reports) != tc.wantR {
+			t.Fatalf("reply %q → handoff=%d delegate=%d report=%d (voulu %d/%d/%d)",
+				tc.reply, len(rc.reqs), len(rc.delegates), len(rc.reports), tc.wantH, tc.wantD, tc.wantR)
+		}
+	}
+}
+
 // erroringCoord is a fake contracts.Coordinator whose Handoff always refuses,
 // so tests can observe how the driver surfaces a coordinator error.
 type erroringCoord struct{ err error }
 
 func (e *erroringCoord) Handoff(context.Context, contracts.HandoffRequest) (string, error) {
+	return "", e.err
+}
+func (e *erroringCoord) Delegate(context.Context, contracts.DelegateRequest) (string, error) {
+	return "", e.err
+}
+func (e *erroringCoord) Report(context.Context, contracts.ReportRequest) (string, error) {
 	return "", e.err
 }
 

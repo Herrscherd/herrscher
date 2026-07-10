@@ -47,19 +47,32 @@ n'ajoute **aucune surface MCP** et on ne change **pas** le contrat de la factory
 `Orchestrator`.
 
 ### D2 — Worktree : continuation de branche (option ②)
-B est créée sur la **branche `session/<A>`** (elle survit à la fermeture de A). B continue
-donc exactement le travail de A, **sans merge**. Contrainte assumée : le handoff **exige
-que A soit commité**. Si l'arbre de A est sale au moment du relais, le `Coordinator`
+B **continue le travail de A sans merge** en partant du **tip commité de `session/<A>`**.
+Réalisation (contrainte du worktreer, vérifiée) : `worktree.Create` fait toujours
+`git worktree add -b session/<name>` et ne sait pas réutiliser une branche existante ;
+et l'invariant « une session possède sa branche `session/<name>` » (Branch/banner/cleanup)
+doit tenir. Donc B obtient **sa propre branche `session/<B>` branchée sur `session/<A>`**
+(`git worktree add -b session/<B> session/<A>`), pas la branche de A littéralement. Même
+intention : B repart de tout le travail *commité* de A, sans merge, A et B coexistent, la
+branche de A survit. Cela suppose un nouveau champ **`Base`** sur `CreateSession` (défaut
+vide = comportement actuel) propagé jusqu'à `worktree.Create(repo, name, base)`.
+
+Contrainte assumée : le handoff **exige que A soit commité** (sinon le tip de `session/<A>`
+ne porte pas le travail). Si l'arbre de A est sale au moment du relais, le `Coordinator`
 **refuse** avec un message clair (miroir du garde existant « commit, or close with
-force:true » de `sessionCloseRun`). Rejeté : ① transporter le worktree vivant (non
-commité) — chirurgie du cycle de vie session↔worktree, YAGNI pour cette tranche ; ③
-swap de persona sur la même session — salit le scoping mémoire P1 (`agents/<agent>`
-change en cours de session) + le journal.
+force:true » de `sessionCloseRun`). Rejeté : réutilisation *littérale* de `session/<A>`
+(imposerait de fermer A d'abord + nom≠branche, casse l'invariant) ; ① transporter le
+worktree vivant (non commité) — chirurgie du cycle de vie session↔worktree, YAGNI pour
+cette tranche ; ③ swap de persona sur la même session — salit le scoping mémoire P1
+(`agents/<agent>` change en cours de session) + le journal.
 
 ### D3 — Contexte transféré : rien de neuf
 Le contexte durable circule **déjà** par le scope projet partagé de P1
 (`projects/<name>`, `RecordShared`/`RecallScoped`). La **tâche** (`Task`) seede le
-**prompt d'ouverture** de B. Aucun nouveau canal de contexte.
+**prompt d'ouverture** de B via le canal d'entrée existant : après `Create`, le host
+enfile un frame `{T:"input", Who:"handoff", Text: Task}` dans la queue du `sessionDriver`
+de B (`core/host/turnloop.go`, même chemin que les messages de gateway). Aucun nouveau
+canal de contexte.
 
 ### D4 — Marqueur de handoff : trailer unique validable
 L'agent exprime l'intention par **une ligne-trailer** en fin de réponse :
@@ -88,8 +101,8 @@ tour d'agent A ─▶ host (bridge/gatewayhub, boucle de tour)
                     │  a. résout le profil ToAgent (Store) ; inconnu → erreur
                     │  b. vérifie que le worktree de A est commité ; sale → refus
                     │  c. hub.Create(CreateSession{Agent:ToAgent, Project,
-                    │        base = branche session/<A>}) en seedant Task comme
-                    │        prompt d'ouverture de B
+                    │        Base: "session/<A>"}) → B sur session/<B> ⊂ session/<A>
+                    │  d. enfile {T:"input", Text: Task} dans la queue de B (seed)
                     ▼
               renvoie le nom de session de B ; A commite + ferme
 ```
@@ -111,8 +124,9 @@ tour d'agent A ─▶ host (bridge/gatewayhub, boucle de tour)
 2. Le host appelle `orch.Observe` (inchangé) puis `parseHandoff(reply)`.
 3. Marqueur valide → `Coordinator.Handoff(from=A, to=scripter, task=…)`.
 4. Le hub résout `scripter` (Store) ; vérifie que le worktree de A est commité ;
-   `hub.Create` B sur `session/<A>` avec `task` en prompt d'ouverture.
-5. B démarre sur la branche continuée ; A commite + ferme (branche conservée).
+   `hub.Create` B avec `Base: "session/<A>"` (→ `session/<B>` branchée sur le tip de A) ;
+   enfile `task` comme frame d'entrée d'ouverture de B.
+5. B démarre sur `session/<B>` (continuation de A) ; A commite + ferme (branche conservée).
 
 ## Gestion d'erreur
 - **Agent inconnu** → `Handoff` renvoie une erreur ; remontée dans le canal de A, pas de
@@ -124,16 +138,18 @@ tour d'agent A ─▶ host (bridge/gatewayhub, boucle de tour)
 ## Tests (fakes, pas de vrai backend LLM)
 - `parseHandoff` : trailer valide → `HandoffRequest` ; absent/malformé → `(_, false)` ;
   variations d'espaces/casse cadrées.
-- `Coordinator.Handoff` : crée B sur la branche `session/<A>` avec la tâche seedée
+- `Coordinator.Handoff` : appelle `Create` avec `Base == "session/<A>"` et enfile la tâche
   (worktreer/Store/hub fakes) ; renvoie le nom de B.
+- `worktree.Create` avec `base != ""` : la commande git porte `-b session/<B> session/<A>`
+  (fake exec/enregistreur d'args) ; `base == ""` → comportement actuel inchangé.
 - Garde « commité » : worktree de A sale → refus, aucune création.
 - Agent inconnu → erreur, aucune création.
-- Intégration boucle-de-tour : réponse avec trailer → une session B apparaît sur la
-  branche de A ; réponse sans trailer → aucune session créée.
+- Intégration boucle-de-tour : réponse avec trailer → une session B est créée avec la
+  tâche enfilée ; réponse sans trailer → aucune session créée.
 
 ## Critères d'acceptation
-- Une réponse d'agent portant le trailer de handoff crée une session B **sur la branche
-  de A**, seedée avec la tâche, sans merge.
+- Une réponse d'agent portant le trailer de handoff crée une session B **branchée sur le
+  tip commité de `session/<A>`** (`session/<B> ⊂ session/<A>`), seedée avec la tâche, sans merge.
 - A sale → refus clair ; agent inconnu → erreur ; marqueur malformé → ignoré + loggé.
 - Aucune surface MCP ajoutée ; contrat de la factory plugin `Orchestrator` inchangé.
 - `go test ./...` vert sur les repos touchés ; `gofmt` propre (CI herrscher).

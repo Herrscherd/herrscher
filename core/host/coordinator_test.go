@@ -181,3 +181,25 @@ func TestHandoffRollsBackOnSeedTimeout(t *testing.T) {
 		t.Fatalf("expected rollback close of alpha-scripter, got %v", closer.closed)
 	}
 }
+
+// TestSeedWithRetryHonoursCtxCancel pins seedWithRetry's ctx-awareness: with a
+// pre-cancelled ctx it must stop after exactly one seed attempt (the loop tries
+// c.seed once, then hits the <-ctx.Done() case on its first select). If the
+// ctx select were reverted to a plain sleep, this would instead run all
+// seedAttempts (50) tries — this test would then fail on the count assertion
+// instead of hanging for the full 50*100ms, so it stays fast either way.
+func TestSeedWithRetryHonoursCtxCancel(t *testing.T) {
+	var attempts int
+	seedFunc := func(sess, task string) bool { attempts++; return false }
+	c := newCoordinator(&fakeCreator{}, fakeAgents{}, fakeWTC{}, fakeSessions{}, &fakeCloser{}, seedFunc)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if ok := c.seedWithRetry(ctx, "b", "task"); ok {
+		t.Fatal("expected seedWithRetry to fail with a cancelled ctx")
+	}
+	if attempts != 1 {
+		t.Fatalf("expected exactly 1 seed attempt with pre-cancelled ctx, got %d", attempts)
+	}
+}

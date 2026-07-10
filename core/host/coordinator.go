@@ -111,7 +111,11 @@ func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest)
 		// B was created but never came live to receive the task: roll it back
 		// rather than leave an orphan worktree/branch/driver. force:true — B has
 		// no committed work of its own yet (it only carries A's base tip).
-		_, _ = c.closer.Close(ctx, bName, true)
+		// Use a ctx detached from cancellation: seedWithRetry can return false
+		// BECAUSE ctx was cancelled, and if Close ran with that same dead ctx its
+		// Archive/RemoveSession steps could bail early, leaving B's state row and
+		// channel behind despite the "rolled back" error below.
+		_, _ = c.closer.Close(context.WithoutCancel(ctx), bName, true)
 		return "", fmt.Errorf("handoff: session %q created but seeding timed out; rolled back", bName)
 	}
 	return bName, nil

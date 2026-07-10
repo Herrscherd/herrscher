@@ -21,6 +21,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("extractor", "name a registered curation extractor to enable the P1 learning loop (empty = no learning)", false).
 			Param("journal", "call-journal path Consolidate reads (worktree-relative ok); only used with extractor", false).
 			Param("consolidate_every", "run Consolidate every N turns (0 = manual only); only used with extractor", false).
+			Param("base", "existing ref the new worktree branches off (e.g. session/<A>); empty = fresh branch", false).
 			Do(h.sessionCreateRun),
 		contracts.New("session", "close").
 			Help("close a session: stop the bridge, remove the worktree, archive the channel").

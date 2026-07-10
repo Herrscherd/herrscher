@@ -38,12 +38,15 @@ func TestHubCreateMapsSpecToTypedInput(t *testing.T) {
 	h := hubWith(t, []string{"session", "create"}, &got)
 	if _, err := h.Create(context.Background(), contracts.CreateSession{
 		Name: "main", Project: "alpha", Gateways: []string{"discord", "terminal"},
-		TerminalOnly: true, Shared: true, Agent: "bishop", ConsolidateEvery: 3,
+		TerminalOnly: true, Shared: true, Agent: "bishop", ConsolidateEvery: 3, Base: "session/a",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if got.Get("name") != "main" || got.Get("project") != "alpha" || got.Get("agent") != "bishop" {
 		t.Fatalf("string fields not mapped: %+v", got.Args)
+	}
+	if got.Get("base") != "session/a" {
+		t.Fatalf("base not mapped: %q", got.Get("base"))
 	}
 	if got.Get("gateways") != "discord,terminal" {
 		t.Fatalf("gateways not joined: %q", got.Get("gateways"))
@@ -64,7 +67,7 @@ func TestHubCreateOmitsUnsetFields(t *testing.T) {
 	if _, err := h.Create(context.Background(), contracts.CreateSession{Name: "main"}); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"project", "gateways", "agent", "shared", "terminal_only", "consolidate_every"} {
+	for _, k := range []string{"project", "gateways", "agent", "shared", "terminal_only", "consolidate_every", "base"} {
 		if _, ok := got.Args[k]; ok {
 			t.Fatalf("unset field %q must be absent, got %q", k, got.Args[k])
 		}
@@ -101,7 +104,7 @@ func TestHubDispatchSetSource(t *testing.T) {
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
 	o := Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude"}
-	reg, err := buildRegistry(ctx, Deps{}, o, st, sup, "")
+	reg, _, err := buildRegistry(ctx, Deps{}, o, st, sup, "")
 	if err != nil {
 		t.Fatal(err)
 	}

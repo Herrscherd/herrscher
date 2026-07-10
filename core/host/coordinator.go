@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	seedAttempts         = 50
-	seedBackoff          = 100 * time.Millisecond
-	maxHandoffNameProbes = 100
+	seedAttempts       = 50
+	seedBackoff        = 100 * time.Millisecond
+	maxSpawnNameProbes = 100
 )
 
 // Small ports the coordinator depends on, each satisfied by an existing host
@@ -56,7 +56,13 @@ func newCoordinator(creator sessionCreator, agents agentLookup, wt cleanBrancher
 
 // findSession resolves a session by name in the current snapshot.
 func (c *coordinator) findSession(name string) (state.Session, bool) {
-	for _, s := range c.sessions.SnapshotSessions() {
+	return findByName(c.sessions.SnapshotSessions(), name)
+}
+
+// findByName resolves a session by name in an already-taken snapshot, so a
+// caller needing two lookups (worker + parent) reads both from one atomic view.
+func findByName(sessions []state.Session, name string) (state.Session, bool) {
+	for _, s := range sessions {
 		if s.Name == name {
 			return s, true
 		}
@@ -92,8 +98,8 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 		if !exists {
 			break
 		}
-		if n > maxHandoffNameProbes {
-			return "", fmt.Errorf("coordination: no free session name for %q after %d tries", base, maxHandoffNameProbes)
+		if n > maxSpawnNameProbes {
+			return "", fmt.Errorf("coordination: no free session name for %q after %d tries", base, maxSpawnNameProbes)
 		}
 		bName = fmt.Sprintf("%s-%d", base, n)
 	}
@@ -152,10 +158,12 @@ func (c *coordinator) Delegate(ctx context.Context, req contracts.DelegateReques
 // Report delivers a worker's completion to its lead: {session/<W> branch ref +
 // summary}. No merge, no teardown — W stays alive. Delivery reuses the same seed
 // channel as a session opening (Model O, host layer). Every guard runs before
-// the side effect: unknown worker, worker with no parent, or a parent no longer
-// present each fail with nothing delivered.
+// the side effect: unknown worker, worker with no parent, an uncommitted worker,
+// or a parent no longer present each fail with nothing delivered. Worker and
+// parent are resolved from one snapshot so the view is atomic.
 func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (string, error) {
-	from, ok := c.findSession(req.FromSession)
+	sessions := c.sessions.SnapshotSessions()
+	from, ok := findByName(sessions, req.FromSession)
 	if !ok {
 		return "", fmt.Errorf("report: unknown worker %q", req.FromSession)
 	}
@@ -172,7 +180,7 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	if !clean {
 		return "", fmt.Errorf("report refused: session %q has uncommitted changes — commit first", req.FromSession)
 	}
-	if _, ok := c.findSession(from.Parent); !ok {
+	if _, ok := findByName(sessions, from.Parent); !ok {
 		return "", fmt.Errorf("report: parent %q of %q not found", from.Parent, req.FromSession)
 	}
 	branch := c.wt.Branch(req.FromSession)

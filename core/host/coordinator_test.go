@@ -112,4 +112,7 @@ func TestHandoffUnknownSource(t *testing.T) {
 	}); err == nil {
 		t.Fatal("expected error for missing source session")
 	}
+	if cr.spec.Name != "" {
+		t.Fatal("no session should have been created")
+	}
 }

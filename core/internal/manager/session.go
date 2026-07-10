@@ -76,6 +76,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		backend = "stream" // default backend: persistent claude stream-json
 	}
 	agentName, _ := in.Lookup("agent")
+	parent, _ := in.Lookup("parent")
 	// P1 learning (opt-in): extractor names a registered curation extractor; the
 	// journal/cadence feed its Consolidate. Persisted on the session and threaded
 	// to the bridge by the supervisor, like project/agent scope.
@@ -163,14 +164,14 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			rollbackWorktree()
 			return "", fmt.Errorf("create channel: %v", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Worktree: worktree, Project: project, Agent: agentName, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
+		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Worktree: worktree, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
 	case "forum":
 		chID, err := h.d.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create forum post: %v", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Worktree: worktree, Project: project, Agent: agentName, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
+		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Worktree: worktree, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}

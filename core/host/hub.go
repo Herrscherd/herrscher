@@ -129,6 +129,7 @@ func (h *hub) Create(ctx context.Context, spec contracts.CreateSession) (string,
 	setStr("agent", spec.Agent)
 	setStr("extractor", spec.Extractor)
 	setStr("journal", spec.Journal)
+	setStr("base", spec.Base)
 	if len(spec.Gateways) > 0 {
 		args["gateways"] = strings.Join(spec.Gateways, ",")
 	}

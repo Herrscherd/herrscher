@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -56,6 +57,13 @@ func (w *Worktreer) Create(repo, name, base string) (string, error) {
 	if !w.isGitRepo(repo) {
 		return "", nil
 	}
+	// base is passed as a positional git arg; a leading "-" would let a
+	// caller-supplied ref be parsed as a git flag (option injection). The
+	// handoff path only ever passes safe "session/<A>" refs, but the
+	// operator-CLI base param is arbitrary, so guard here defense-in-depth.
+	if base != "" && strings.HasPrefix(base, "-") {
+		return "", fmt.Errorf("worktree: refusing base ref %q that looks like a flag", base)
+	}
 	p := w.Path(repo, name)
 	args := []string{"-C", repo, "worktree", "add", p, "-b", w.Branch(name)}
 	if base != "" {
@@ -77,6 +85,24 @@ func (w *Worktreer) IsCleanAt(path string) (bool, error) {
 		return false, fmt.Errorf("cannot verify clean state of %q: %w", path, err)
 	}
 	return strings.TrimSpace(string(out)) == "", nil
+}
+
+// BranchExistsAt reports whether branch exists as a local ref, querying the
+// repo that contains path (an existing worktree dir inside that repo). Exit
+// code 1 from "show-ref --verify" means the ref is simply absent — that is
+// the normal "free to use" case, not an error. Any other failure (e.g. path
+// isn't a git repo at all, exit 128) is reported as an error so callers never
+// mistake "couldn't verify" for "free".
+func (w *Worktreer) BranchExistsAt(path, branch string) (bool, error) {
+	err := exec.CommandContext(w.ctx, "git", "-C", path, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run()
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, fmt.Errorf("cannot verify branch %q at %q: %w", branch, path, err)
 }
 
 // Remove removes the worktree. If it has uncommitted changes and !force, it

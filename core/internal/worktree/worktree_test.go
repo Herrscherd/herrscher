@@ -129,6 +129,46 @@ func TestCreateWithBaseBranchesOffIt(t *testing.T) {
 	}
 }
 
+func TestCreateRejectsFlagLikeBase(t *testing.T) {
+	w := NewWorktreer(context.Background(), "")
+	repo := initRepo(t)
+	path, err := w.Create(repo, "x", "--foo")
+	if err == nil {
+		t.Fatal("expected error for flag-like base, got nil")
+	}
+	if path != "" {
+		t.Fatalf("path = %q, want empty", path)
+	}
+	if _, err := os.Stat(w.Path(repo, "x")); !os.IsNotExist(err) {
+		t.Fatalf("worktree dir should not have been created, stat err = %v", err)
+	}
+}
+
+func TestBranchExistsAt(t *testing.T) {
+	w := NewWorktreer(context.Background(), "")
+	repo := initRepo(t)
+	pathAlpha, err := w.Create(repo, "alpha", "")
+	if err != nil {
+		t.Fatalf("create alpha: %v", err)
+	}
+	exists, err := w.BranchExistsAt(pathAlpha, "session/alpha")
+	if err != nil || !exists {
+		t.Fatalf("session/alpha should exist: exists=%v err=%v", exists, err)
+	}
+	exists, err = w.BranchExistsAt(pathAlpha, "session/nope")
+	if err != nil || exists {
+		t.Fatalf("session/nope should not exist: exists=%v err=%v", exists, err)
+	}
+}
+
+func TestBranchExistsAtNonRepoErrors(t *testing.T) {
+	w := NewWorktreer(context.Background(), "")
+	_, err := w.BranchExistsAt(t.TempDir(), "session/x")
+	if err == nil {
+		t.Fatal("expected error for non-repo path, got nil")
+	}
+}
+
 func TestIsCleanAt(t *testing.T) {
 	w := NewWorktreer(context.Background(), "")
 	repo := initRepo(t)

@@ -39,6 +39,11 @@ type Session struct {
 	Gateways []string `json:"gateways,omitempty"`
 
 	Participants []string `json:"participants,omitempty"` // observed authors (cache; journal is source of truth)
+
+	// Parent names the lead session that delegated this one (result-back P3).
+	// Empty = no parent. The coordinator reads it to find the delivery target
+	// of this session's completion report (Report).
+	Parent string `json:"parent,omitempty"`
 }
 
 // BoundGateways returns the gateway kinds this session is bound to. When the

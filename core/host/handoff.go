@@ -11,9 +11,6 @@ const handoffMarker = "⟢ handoff:"
 // Returns ok=false when absent or malformed (empty agent/task, missing separator).
 func parseHandoff(reply string) (agent, task string, ok bool) {
 	lines := strings.Split(strings.TrimRight(reply, "\n \t"), "\n")
-	if len(lines) == 0 {
-		return "", "", false
-	}
 	last := strings.TrimSpace(lines[len(lines)-1])
 	if !strings.HasPrefix(last, handoffMarker) {
 		return "", "", false

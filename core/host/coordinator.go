@@ -86,7 +86,7 @@ func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest)
 	}); err != nil {
 		return "", fmt.Errorf("handoff: create %q: %w", bName, err)
 	}
-	if !c.seedWithRetry(bName, req.Task) {
+	if !c.seedWithRetry(ctx, bName, req.Task) {
 		return bName, fmt.Errorf("handoff: session %q created but seeding timed out", bName)
 	}
 	return bName, nil
@@ -95,12 +95,16 @@ func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest)
 // seedWithRetry waits for B's driver to register (goLive starts RunSession in a
 // goroutine) before enqueuing the task, bounded so a never-arriving session
 // surfaces as a timeout instead of hanging.
-func (c *coordinator) seedWithRetry(session, task string) bool {
+func (c *coordinator) seedWithRetry(ctx context.Context, session, task string) bool {
 	for i := 0; i < seedAttempts; i++ {
 		if c.seed(session, task) {
 			return true
 		}
-		time.Sleep(seedBackoff)
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(seedBackoff):
+		}
 	}
 	return false
 }

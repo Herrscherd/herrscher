@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -593,4 +594,41 @@ func TestDriverNoHandoffWithoutTrailer(t *testing.T) {
 	if len(rc.reqs) != 0 {
 		t.Fatalf("no handoff expected, got %d", len(rc.reqs))
 	}
+}
+
+// erroringCoord is a fake contracts.Coordinator whose Handoff always refuses,
+// so tests can observe how the driver surfaces a coordinator error.
+type erroringCoord struct{ err error }
+
+func (e *erroringCoord) Handoff(context.Context, contracts.HandoffRequest) (string, error) {
+	return "", e.err
+}
+
+// TestDriverSurfacesCoordinatorErrorAsStatus proves that when the Coordinator
+// refuses a handoff, the driver fans a "status" event carrying "handoff
+// refusé: <err>" to bound gateways instead of failing silently.
+func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
+	rec := &sinkRecorder{} // EventSink gateway: receives the full fanned-out stream
+	from := make(chan contracts.Event, 2)
+	d := newSessionDriver("alpha",
+		[]contracts.GatewaySet{{Gateway: rec}},
+		make(chan contracts.Event, 1), from)
+	d.coordinator = &erroringCoord{err: errors.New("boom")}
+
+	from <- contracts.Event{T: "reply", Done: true,
+		Text: "fait.\n⟢ handoff: scripter — finir le module"}
+	if ok := d.awaitTurn(context.Background()); !ok {
+		t.Fatal("awaitTurn should complete on reply{done}")
+	}
+
+	waitFor(t, func() bool {
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		for _, e := range rec.emitted {
+			if e.T == "status" && e.Text == "handoff refusé: boom" {
+				return true
+			}
+		}
+		return false
+	}, "status event carrying the coordinator's refusal fanned out")
 }

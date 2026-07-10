@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	seedAttempts = 50
-	seedBackoff  = 100 * time.Millisecond
+	seedAttempts         = 50
+	seedBackoff          = 100 * time.Millisecond
+	maxHandoffNameProbes = 100
 )
 
 // Small ports the coordinator depends on, each satisfied by an existing host
@@ -27,9 +28,13 @@ type agentLookup interface {
 type cleanBrancher interface {
 	IsCleanAt(path string) (bool, error)
 	Branch(name string) string
+	BranchExistsAt(path, branch string) (bool, error)
 }
 type sessionLister interface {
 	SnapshotSessions() []state.Session
+}
+type sessionCloser interface {
+	Close(ctx context.Context, name string, force bool) (string, error)
 }
 
 // coordinator implements contracts.Coordinator at the host layer: it sees every
@@ -41,11 +46,12 @@ type coordinator struct {
 	agents   agentLookup
 	wt       cleanBrancher
 	sessions sessionLister
+	closer   sessionCloser
 	seed     func(session, task string) bool
 }
 
-func newCoordinator(creator sessionCreator, agents agentLookup, wt cleanBrancher, sessions sessionLister, seed func(string, string) bool) *coordinator {
-	return &coordinator{creator: creator, agents: agents, wt: wt, sessions: sessions, seed: seed}
+func newCoordinator(creator sessionCreator, agents agentLookup, wt cleanBrancher, sessions sessionLister, closer sessionCloser, seed func(string, string) bool) *coordinator {
+	return &coordinator{creator: creator, agents: agents, wt: wt, sessions: sessions, closer: closer, seed: seed}
 }
 
 // Handoff creates B continuing FromSession's committed work, seeds Task as B's
@@ -77,7 +83,22 @@ func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest)
 		return "", fmt.Errorf("handoff refused: session %q has uncommitted changes — commit first", req.FromSession)
 	}
 
-	bName := req.FromSession + "-" + req.ToAgent
+	base := req.FromSession + "-" + req.ToAgent
+	bName := base
+	for n := 2; ; n++ {
+		exists, err := c.wt.BranchExistsAt(from.Worktree, c.wt.Branch(bName))
+		if err != nil {
+			return "", fmt.Errorf("handoff: %w", err)
+		}
+		if !exists {
+			break
+		}
+		if n > maxHandoffNameProbes {
+			return "", fmt.Errorf("handoff: no free session name for %q after %d tries", base, maxHandoffNameProbes)
+		}
+		bName = fmt.Sprintf("%s-%d", base, n)
+	}
+
 	if _, err := c.creator.Create(ctx, contracts.CreateSession{
 		Name:    bName,
 		Project: from.Project,
@@ -87,7 +108,11 @@ func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest)
 		return "", fmt.Errorf("handoff: create %q: %w", bName, err)
 	}
 	if !c.seedWithRetry(ctx, bName, req.Task) {
-		return bName, fmt.Errorf("handoff: session %q created but seeding timed out", bName)
+		// B was created but never came live to receive the task: roll it back
+		// rather than leave an orphan worktree/branch/driver. force:true — B has
+		// no committed work of its own yet (it only carries A's base tip).
+		_, _ = c.closer.Close(ctx, bName, true)
+		return "", fmt.Errorf("handoff: session %q created but seeding timed out; rolled back", bName)
 	}
 	return bName, nil
 }

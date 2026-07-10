@@ -195,7 +195,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	hb := newHub(ctx, st, sup, gws, partDir, reg, h.Metrics())
 	// Wired before the boot loop's goLive calls below, so the Coordinator is
 	// non-nil for every driver started at boot (Model O handoff hook).
-	hb.coordinator = newCoordinator(hb, deps.agents, deps.wt, st, Seed)
+	hb.coordinator = newCoordinator(hb, deps.agents, deps.wt, st, hb, Seed)
 
 	for _, sess := range st.SnapshotSessions() {
 		hb.goLive(sess)

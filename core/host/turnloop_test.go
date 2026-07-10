@@ -266,6 +266,29 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	}
 }
 
+// TestSeedEnqueuesInput proves Seed enqueues an input frame with handoff metadata
+// into the named session's FIFO, and returns false for an unknown session.
+func TestSeedEnqueuesInput(t *testing.T) {
+	d := newSessionDriver("beta", nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1))
+	registerDriver("beta", d)
+	defer unregisterDriver("beta")
+
+	if !Seed("beta", "finir le module") {
+		t.Fatal("Seed should return true for a live session")
+	}
+	select {
+	case ev := <-d.queue:
+		if ev.T != "input" || ev.Text != "finir le module" || ev.Who != "handoff" {
+			t.Fatalf("unexpected frame: %+v", ev)
+		}
+	default:
+		t.Fatal("no frame enqueued")
+	}
+	if Seed("ghost", "x") {
+		t.Fatal("Seed should return false for an unknown session")
+	}
+}
+
 // TestDriverJournalsParticipants proves the daemon driver records message
 // authors in the participants journal (the bridge no longer does), so
 // /session who keeps a source in pure-runner mode.

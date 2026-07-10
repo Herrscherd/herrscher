@@ -5,7 +5,8 @@
 > **générique OSS** (aucune connaissance métier Roblox/Neublox). Introduit le
 > premier round-trip lead↔worker : un lead délègue une sous-tâche et **reçoit** le
 > résultat — la brique que superviseur→workers et fan-out réutiliseront.
-> Date : 2026-07-10 · Statut : design validé.
+> Date : 2026-07-10 · Statut : livré (branche `feat/p3-delegate-result-back`,
+> CI-vert : gofmt/vet/`go test -race` OK sur herrscher et contracts).
 
 ## Contexte vérifié (source)
 

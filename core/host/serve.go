@@ -188,11 +188,14 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	// the registry creates/archives session channels through the channel admin of
 	// the gateway that owns the home, so a terminal home is never minted by Discord
 	// (nor vice-versa) when both gateways are present.
-	reg, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID)
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID)
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}
 	hb := newHub(ctx, st, sup, gws, partDir, reg, h.Metrics())
+	// Wired before the boot loop's goLive calls below, so the Coordinator is
+	// non-nil for every driver started at boot (Model O handoff hook).
+	hb.coordinator = newCoordinator(hb, deps.agents, deps.wt, st, Seed)
 
 	for _, sess := range st.SnapshotSessions() {
 		hb.goLive(sess)

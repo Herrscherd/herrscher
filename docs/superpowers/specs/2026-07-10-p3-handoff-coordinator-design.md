@@ -162,3 +162,22 @@ tour d'agent A ─▶ host (bridge/gatewayhub, boucle de tour)
 - Attente/agrégation de résultats (le handoff est un relais : A se termine, pas de join).
 - Toute décision de routage à **jugement LLM** côté coordinateur (ici le signal vient de
   l'agent ; un coordinateur à politique LLM est une évolution possible, hors tranche).
+
+## Addendum 2026-07-10 — durcissement post-revue
+
+Trois bords, initialement laissés hors tranche, ont été traités après la revue finale
+pour tenir l'exigence « 100 %, aucun follow-up différé » :
+
+- **Réutilisation de nom après fermeture de B.** `worktree.Remove` conserve la branche
+  `session/<name>` ; un nom déterministe (`<A>-<agent>`) rejouerait donc en collision.
+  Le `Coordinator` sonde désormais `BranchExistsAt` et choisit le premier nom libre
+  (`<A>-<agent>`, puis `-2`, `-3`… borné à `maxHandoffNameProbes`). Le relais reste
+  one-shot ; c'est seulement le **nommage** qui devient sûr en cas de rejeu.
+- **Orphelin sur timeout de seed.** Si B est créé mais ne s'enregistre jamais (driver
+  qui n'arrive pas), `Handoff` **annule B** (`Close(..., force:true)`, best-effort) et
+  renvoie un nom vide : plus d'état partiel laissé derrière.
+- **Argument `base` brut vers git.** `worktree.Create` **refuse** un `base` commençant
+  par `-` (anti-injection de flag), en défense de profondeur sur la surface CLI opérateur.
+
+Restent délibérément hors tranche (inchangés) : join/agrégation, superviseur→workers,
+fan-out, worktree ①, routage à jugement LLM.

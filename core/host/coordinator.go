@@ -54,47 +54,46 @@ func newCoordinator(creator sessionCreator, agents agentLookup, wt cleanBrancher
 	return &coordinator{creator: creator, agents: agents, wt: wt, sessions: sessions, closer: closer, seed: seed}
 }
 
-// Handoff creates B continuing FromSession's committed work, seeds Task as B's
-// opening turn, and returns B's name. Order matters: every guard runs before any
-// side effect, so a rejected handoff leaves nothing partial.
-func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest) (string, error) {
-	if _, ok := c.agents.Get(req.ToAgent); !ok {
-		return "", fmt.Errorf("handoff: unknown agent %q", req.ToAgent)
-	}
-	sessions := c.sessions.SnapshotSessions()
-	var from *state.Session
-	for i := range sessions {
-		if s := sessions[i]; s.Name == req.FromSession {
-			from = &s
-			break
+// findSession resolves a session by name in the current snapshot.
+func (c *coordinator) findSession(name string) (state.Session, bool) {
+	for _, s := range c.sessions.SnapshotSessions() {
+		if s.Name == name {
+			return s, true
 		}
 	}
-	if from == nil {
-		return "", fmt.Errorf("handoff: source session %q not found", req.FromSession)
-	}
+	return state.Session{}, false
+}
+
+// spawn creates a new session branched off `from`'s committed tip, seeds `task`
+// as its opening turn, and records `parent` on it (empty for a handoff, the
+// lead's name for a delegation). Order matters: every guard runs before any side
+// effect. The name is probed collision-free because worktree.Remove leaves the
+// session/<name> branch intact, so a reused deterministic name would collide.
+// On a seed timeout the fresh session is rolled back rather than left orphaned.
+func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, task, parent string) (string, error) {
 	if from.Worktree == "" {
-		return "", fmt.Errorf("handoff: source session %q has no isolated worktree to continue", req.FromSession)
+		return "", fmt.Errorf("coordination: source session %q has no isolated worktree to continue", from.Name)
 	}
 	clean, err := c.wt.IsCleanAt(from.Worktree)
 	if err != nil {
-		return "", fmt.Errorf("handoff: %w", err)
+		return "", fmt.Errorf("coordination: %w", err)
 	}
 	if !clean {
-		return "", fmt.Errorf("handoff refused: session %q has uncommitted changes — commit first", req.FromSession)
+		return "", fmt.Errorf("coordination refused: session %q has uncommitted changes — commit first", from.Name)
 	}
 
-	base := req.FromSession + "-" + req.ToAgent
+	base := from.Name + "-" + toAgent
 	bName := base
 	for n := 2; ; n++ {
 		exists, err := c.wt.BranchExistsAt(from.Worktree, c.wt.Branch(bName))
 		if err != nil {
-			return "", fmt.Errorf("handoff: %w", err)
+			return "", fmt.Errorf("coordination: %w", err)
 		}
 		if !exists {
 			break
 		}
 		if n > maxHandoffNameProbes {
-			return "", fmt.Errorf("handoff: no free session name for %q after %d tries", base, maxHandoffNameProbes)
+			return "", fmt.Errorf("coordination: no free session name for %q after %d tries", base, maxHandoffNameProbes)
 		}
 		bName = fmt.Sprintf("%s-%d", base, n)
 	}
@@ -102,23 +101,86 @@ func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest)
 	if _, err := c.creator.Create(ctx, contracts.CreateSession{
 		Name:    bName,
 		Project: from.Project,
-		Agent:   req.ToAgent,
-		Base:    c.wt.Branch(req.FromSession),
+		Agent:   toAgent,
+		Base:    c.wt.Branch(from.Name),
+		Parent:  parent,
 	}); err != nil {
-		return "", fmt.Errorf("handoff: create %q: %w", bName, err)
+		return "", fmt.Errorf("coordination: create %q: %w", bName, err)
 	}
-	if !c.seedWithRetry(ctx, bName, req.Task) {
-		// B was created but never came live to receive the task: roll it back
-		// rather than leave an orphan worktree/branch/driver. force:true — B has
-		// no committed work of its own yet (it only carries A's base tip).
+	if !c.seedWithRetry(ctx, bName, task) {
+		// The session was created but never came live to receive the task: roll it
+		// back rather than leave an orphan worktree/branch/driver. force:true — it
+		// has no committed work of its own yet (it only carries the base tip).
 		// Use a ctx detached from cancellation: seedWithRetry can return false
 		// BECAUSE ctx was cancelled, and if Close ran with that same dead ctx its
-		// Archive/RemoveSession steps could bail early, leaving B's state row and
+		// Archive/RemoveSession steps could bail early, leaving the state row and
 		// channel behind despite the "rolled back" error below.
 		_, _ = c.closer.Close(context.WithoutCancel(ctx), bName, true)
-		return "", fmt.Errorf("handoff: session %q created but seeding timed out; rolled back", bName)
+		return "", fmt.Errorf("coordination: session %q created but seeding timed out; rolled back", bName)
 	}
 	return bName, nil
+}
+
+// Handoff creates B continuing FromSession's committed work, seeds Task as B's
+// opening turn, and returns B's name. B has no parent — a handoff is a one-shot
+// relay: A finishes, there is no result-back.
+func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest) (string, error) {
+	if _, ok := c.agents.Get(req.ToAgent); !ok {
+		return "", fmt.Errorf("handoff: unknown agent %q", req.ToAgent)
+	}
+	from, ok := c.findSession(req.FromSession)
+	if !ok {
+		return "", fmt.Errorf("handoff: source session %q not found", req.FromSession)
+	}
+	return c.spawn(ctx, from, req.ToAgent, req.Task, "")
+}
+
+// Delegate creates a worker W off the lead's committed tip and records the lead
+// as W's parent for the result-back channel (Report). The key difference from a
+// handoff: parent is set, and the lead stays alive (spawn touches only W).
+func (c *coordinator) Delegate(ctx context.Context, req contracts.DelegateRequest) (string, error) {
+	if _, ok := c.agents.Get(req.ToAgent); !ok {
+		return "", fmt.Errorf("delegate: unknown agent %q", req.ToAgent)
+	}
+	from, ok := c.findSession(req.FromSession)
+	if !ok {
+		return "", fmt.Errorf("delegate: lead session %q not found", req.FromSession)
+	}
+	return c.spawn(ctx, from, req.ToAgent, req.Task, req.FromSession)
+}
+
+// Report delivers a worker's completion to its lead: {session/<W> branch ref +
+// summary}. No merge, no teardown — W stays alive. Delivery reuses the same seed
+// channel as a session opening (Model O, host layer). Every guard runs before
+// the side effect: unknown worker, worker with no parent, or a parent no longer
+// present each fail with nothing delivered.
+func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (string, error) {
+	from, ok := c.findSession(req.FromSession)
+	if !ok {
+		return "", fmt.Errorf("report: unknown worker %q", req.FromSession)
+	}
+	if from.Parent == "" {
+		return "", fmt.Errorf("report: session %q has no parent — nothing to deliver", req.FromSession)
+	}
+	// W must be committed: the delivered ref is session/<W>'s tip, so uncommitted
+	// work would hand the lead a branch that carries none of it. Refuse (mirrors
+	// spawn's clean guard). An empty worktree fails IsCleanAt, caught here too.
+	clean, err := c.wt.IsCleanAt(from.Worktree)
+	if err != nil {
+		return "", fmt.Errorf("report: %w", err)
+	}
+	if !clean {
+		return "", fmt.Errorf("report refused: session %q has uncommitted changes — commit first", req.FromSession)
+	}
+	if _, ok := c.findSession(from.Parent); !ok {
+		return "", fmt.Errorf("report: parent %q of %q not found", from.Parent, req.FromSession)
+	}
+	branch := c.wt.Branch(req.FromSession)
+	msg := fmt.Sprintf("%s a terminé sur %s — %s", req.FromSession, branch, req.Summary)
+	if !c.seedWithRetry(ctx, from.Parent, msg) {
+		return "", fmt.Errorf("report: delivery to parent %q timed out", from.Parent)
+	}
+	return from.Parent, nil
 }
 
 // seedWithRetry waits for B's driver to register (goLive starts RunSession in a

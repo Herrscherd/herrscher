@@ -32,6 +32,11 @@ type hub struct {
 	reg     *cli.Registry
 	metrics *metrics.Registry
 
+	// coordinator is the Model-O handoff decision point, given to every driven
+	// session's RunSession. Set in serve.go's RunHub after newHub, before the
+	// boot loop's goLive calls, so it is non-nil for every driver started here.
+	coordinator contracts.Coordinator
+
 	dispatchMu sync.Mutex // serializes operator commands (and their reconcile)
 	mu         sync.Mutex
 	live       map[string]context.CancelFunc // session name → cancel its RunSession
@@ -58,7 +63,7 @@ func (h *hub) goLive(sess state.Session) {
 	}
 	sctx, cancel := context.WithCancel(h.ctx)
 	bound := boundGateways(h.gws, sess.BoundGateways())
-	go RunSession(sctx, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics)
+	go RunSession(sctx, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator)
 	h.live[sess.Name] = cancel
 }
 

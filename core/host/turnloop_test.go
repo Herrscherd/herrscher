@@ -258,7 +258,7 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	defer acc.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, "pickreg", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil)
+	go RunSession(ctx, "pickreg", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil)
 
 	waitFor(t, func() bool { return Pick("pickreg", "1") }, "Pick routes to the live session")
 	if Pick("does-not-exist", "1") {
@@ -410,7 +410,7 @@ func TestRunSessionReconnectsAndResumes(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil)
+	go RunSession(ctx, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil)
 
 	// First bridge connects, gets the input, then dies before replying.
 	c1 := dialCtl(t, sock)
@@ -441,7 +441,7 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil)
+	go RunSession(ctx, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil)
 
 	// First bridge: gets q1, completes the turn with reply{done}, then dies while
 	// the driver is idle.
@@ -546,4 +546,51 @@ func (r *routedRec) Menu(context.Context, contracts.Conversation, contracts.Mess
 func (r *routedRec) Emit(contracts.Event) { r.plainCalls++ }
 func (r *routedRec) EmitTo(c contracts.Conversation, _ contracts.Event) {
 	r.convs = append(r.convs, c)
+}
+
+// recordingCoord is a fake contracts.Coordinator that records every Handoff
+// request it receives, so a test can assert whether (and with what) the driver
+// invoked it.
+type recordingCoord struct{ reqs []contracts.HandoffRequest }
+
+func (r *recordingCoord) Handoff(_ context.Context, req contracts.HandoffRequest) (string, error) {
+	r.reqs = append(r.reqs, req)
+	return req.ToAgent + "-s", nil
+}
+
+// TestDriverInvokesCoordinatorOnHandoffTrailer proves a completed turn whose
+// reply carries a well-formed handoff trailer invokes the Coordinator with a
+// request built from the driver's own name and the parsed agent/task.
+func TestDriverInvokesCoordinatorOnHandoffTrailer(t *testing.T) {
+	from := make(chan contracts.Event, 2)
+	d := newSessionDriver("alpha", nil, make(chan contracts.Event, 1), from)
+	rc := &recordingCoord{}
+	d.coordinator = rc
+
+	from <- contracts.Event{T: "reply", Done: true,
+		Text: "fait.\n⟢ handoff: scripter — finir le module"}
+	if ok := d.awaitTurn(context.Background()); !ok {
+		t.Fatal("awaitTurn should complete on reply{done}")
+	}
+	if len(rc.reqs) != 1 {
+		t.Fatalf("expected 1 handoff, got %d", len(rc.reqs))
+	}
+	got := rc.reqs[0]
+	if got.FromSession != "alpha" || got.ToAgent != "scripter" || got.Task != "finir le module" {
+		t.Fatalf("bad handoff request: %+v", got)
+	}
+}
+
+// TestDriverNoHandoffWithoutTrailer proves a normal reply (no handoff trailer)
+// never invokes the Coordinator.
+func TestDriverNoHandoffWithoutTrailer(t *testing.T) {
+	from := make(chan contracts.Event, 1)
+	d := newSessionDriver("alpha", nil, make(chan contracts.Event, 1), from)
+	rc := &recordingCoord{}
+	d.coordinator = rc
+	from <- contracts.Event{T: "reply", Done: true, Text: "réponse normale"}
+	_ = d.awaitTurn(context.Background())
+	if len(rc.reqs) != 0 {
+		t.Fatalf("no handoff expected, got %d", len(rc.reqs))
+	}
 }

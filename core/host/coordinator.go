@@ -55,9 +55,10 @@ func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest)
 	if _, ok := c.agents.Get(req.ToAgent); !ok {
 		return "", fmt.Errorf("handoff: unknown agent %q", req.ToAgent)
 	}
+	sessions := c.sessions.SnapshotSessions()
 	var from *state.Session
-	for i := range c.sessions.SnapshotSessions() {
-		if s := c.sessions.SnapshotSessions()[i]; s.Name == req.FromSession {
+	for i := range sessions {
+		if s := sessions[i]; s.Name == req.FromSession {
 			from = &s
 			break
 		}

@@ -204,6 +204,21 @@ func TestSessionCreatePassesBaseToWorktree(t *testing.T) {
 	}
 }
 
+func TestSessionCreatePersistsParent(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "")
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "worker", "parent", "lead")); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	sess, ok := st.FindSession("worker")
+	if !ok {
+		t.Fatalf("session worker introuvable")
+	}
+	if sess.Parent != "lead" {
+		t.Fatalf("parent non persisté: %q", sess.Parent)
+	}
+}
+
 func TestSessionCreateShared(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})

@@ -49,10 +49,11 @@ type sessionDriver struct {
 	// metrics records turn lifecycle counters (nil = no recording, e.g. in tests).
 	metrics *metrics.Registry
 
-	// coordinator is the Model-O handoff decision point: after a completed turn,
-	// maybeHandoff checks the reply for a handoff trailer and, when present,
-	// forwards the request here. nil in the short-lived operator CLI path and in
-	// tests that don't exercise handoff, where maybeHandoff simply no-ops.
+	// coordinator is the Model-O coordination decision point: after a completed
+	// turn, maybeCoordinate checks the reply for a done/delegate/handoff trailer
+	// and, when present, forwards the request here. nil in the short-lived
+	// operator CLI path and in tests that don't exercise coordination, where
+	// maybeCoordinate simply no-ops.
 	coordinator contracts.Coordinator
 }
 
@@ -271,30 +272,47 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 			d.fanOut(ctx, e)
 			if e.T == "reply" && e.Done {
 				d.metrics.TurnCompleted()
-				d.maybeHandoff(ctx, e.Text)
+				d.maybeCoordinate(ctx, e.Text)
 				return true
 			}
 		}
 	}
 }
 
-// maybeHandoff runs the Model-O signal check after a completed turn: parse the
-// reply's trailer and, on a valid marker, hand the decision to the Coordinator.
+// maybeCoordinate runs the Model-O signal check after a completed turn: inspect
+// the reply's trailer and, on a valid marker, hand the decision to the
+// Coordinator. A single trailer per turn: done wins over delegate over handoff.
 // A malformed marker is ignored; a coordinator refusal (unknown agent, dirty
-// source, create failure) is surfaced back into A's channel as a status event —
-// never a silent half-handoff.
-func (d *sessionDriver) maybeHandoff(ctx context.Context, reply string) {
+// source, missing parent, create failure) is surfaced back into the session's
+// channel as a status event — never a silent half-coordination.
+func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 	if d.coordinator == nil {
 		return
 	}
-	toAgent, task, ok := parseHandoff(reply)
-	if !ok {
+	if summary, ok := parseDone(reply); ok {
+		if parent, err := d.coordinator.Report(ctx, contracts.ReportRequest{
+			FromSession: d.name, Summary: summary,
+		}); err != nil {
+			d.fanOut(ctx, contracts.Event{T: "status", Text: "report refusé: " + err.Error()})
+		} else {
+			d.fanOut(ctx, contracts.Event{T: "status", Text: "rapport livré à " + parent})
+		}
 		return
 	}
-	if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
-		FromSession: d.name, ToAgent: toAgent, Task: task,
-	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: "status", Text: "handoff refusé: " + err.Error()})
+	if toAgent, task, ok := parseDelegate(reply); ok {
+		if _, err := d.coordinator.Delegate(ctx, contracts.DelegateRequest{
+			FromSession: d.name, ToAgent: toAgent, Task: task,
+		}); err != nil {
+			d.fanOut(ctx, contracts.Event{T: "status", Text: "delegate refusé: " + err.Error()})
+		}
+		return
+	}
+	if toAgent, task, ok := parseHandoff(reply); ok {
+		if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
+			FromSession: d.name, ToAgent: toAgent, Task: task,
+		}); err != nil {
+			d.fanOut(ctx, contracts.Event{T: "status", Text: "handoff refusé: " + err.Error()})
+		}
 	}
 }
 

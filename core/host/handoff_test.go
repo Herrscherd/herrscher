@@ -27,3 +27,39 @@ func TestParseHandoff(t *testing.T) {
 		})
 	}
 }
+
+func TestParseDelegate(t *testing.T) {
+	agent, task, ok := parseDelegate("blabla\n⟢ delegate: scripter — écris le module de vol")
+	if !ok || agent != "scripter" || task != "écris le module de vol" {
+		t.Fatalf("delegate valide mal parsé: %q %q %v", agent, task, ok)
+	}
+	if _, _, ok := parseDelegate("⟢ delegate: scripter"); ok {
+		t.Fatalf("delegate sans em-dash devrait échouer")
+	}
+	if _, _, ok := parseDelegate("⟢ delegate:  — tâche"); ok {
+		t.Fatalf("delegate sans agent devrait échouer")
+	}
+	if _, _, ok := parseDelegate("pas de trailer ici"); ok {
+		t.Fatalf("absence de trailer devrait échouer")
+	}
+	if _, _, ok := parseDelegate("⟢ handoff: scripter — x"); ok {
+		t.Fatalf("handoff ne doit pas matcher delegate")
+	}
+}
+
+func TestParseDone(t *testing.T) {
+	summary, ok := parseDone("j'ai fini\n⟢ done: module de vol commité, 12 tests verts")
+	if !ok || summary != "module de vol commité, 12 tests verts" {
+		t.Fatalf("done valide mal parsé: %q %v", summary, ok)
+	}
+	// pas d'em-dash requis : tout le corps est le résumé (même avec un tiret dedans)
+	if s, ok := parseDone("⟢ done: fait — et testé"); !ok || s != "fait — et testé" {
+		t.Fatalf("done avec tiret dans le corps: %q %v", s, ok)
+	}
+	if _, ok := parseDone("⟢ done:   "); ok {
+		t.Fatalf("done vide devrait échouer")
+	}
+	if _, ok := parseDone("pas de trailer"); ok {
+		t.Fatalf("absence de trailer devrait échouer")
+	}
+}

@@ -722,3 +722,27 @@ func TestDriverInvokesCoordinatorOnSealTrailer(t *testing.T) {
 		t.Fatalf("bad seal request: %+v", rc.seals[0])
 	}
 }
+
+// TestDriverInvokesCoordinatorOnFanOutTrailer proves a completed turn whose reply
+// carries a well-formed fanout trailer invokes FanOut with the driver's own name,
+// the parsed agent, and the parsed task list, and fans a "cohorte lancée" status.
+func TestDriverInvokesCoordinatorOnFanOutTrailer(t *testing.T) {
+	from := make(chan contracts.Event, 2)
+	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from)
+	rc := &recordingCoord{}
+	d.coordinator = rc
+
+	from <- contracts.Event{T: "reply", Done: true,
+		Text: "je lance.\n⟢ fanout: scripter — a ;; b"}
+	if ok := d.awaitTurn(context.Background()); !ok {
+		t.Fatal("awaitTurn should complete on reply{done}")
+	}
+	if len(rc.fanouts) != 1 {
+		t.Fatalf("expected 1 fanout, got %d", len(rc.fanouts))
+	}
+	got := rc.fanouts[0]
+	if got.FromSession != "lead" || got.ToAgent != "scripter" || len(got.Tasks) != 2 ||
+		got.Tasks[0] != "a" || got.Tasks[1] != "b" {
+		t.Fatalf("bad fanout request: %+v", got)
+	}
+}

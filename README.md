@@ -31,6 +31,7 @@ guarded by purity tests (`TestHostPurity`, `TestCorePurity`).
 - [How a message flows](#how-a-message-flows)
 - [The two run modes](#the-two-run-modes)
 - [Session lifecycle](#session-lifecycle)
+- [Inter-session coordination](#inter-session-coordination)
 - [Durable agents](#durable-agents)
   - [Memory scope (shared vs private)](#memory-scope-shared-vs-private)
   - [Learning (the write side)](#learning-the-write-side)
@@ -369,6 +370,43 @@ stateDiagram-v2
   worktree before the channel is created. This requires an isolated git worktree —
   it is rejected with `shared:true` or a non-git project. The session records
   which agent it was provisioned from (see [Durable agents](#durable-agents)).
+
+---
+
+## Inter-session coordination
+
+A session's agent can spin up, hand off to, and collect other sessions without
+any human in the loop. It signals an intent by ending its reply with a single
+**trailer** — one line, the reply's very last, prefixed with `⟢`. The hub parses
+that trailer after the turn and a deterministic coordinator executes it; each
+trailer maps one-to-one onto a method of the `Coordinator` port (in
+[herrscher-contracts]).
+
+| Trailer | Shape | Effect |
+|---------|-------|--------|
+| `⟢ done:` | `<summary>` | Report result back to the parent that delegated this session |
+| `⟢ delegate:` | `<agent> — <task>` | Spawn a worker on `agent`; the lead stays alive, the worker reports back with `⟢ done` |
+| `⟢ fanout:` | `<agent> — <task1> ;; <task2> …` | Spawn a whole cohort of workers on one agent, one per task |
+| `⟢ route:` | `<task>` | Let the **host** pick the best-matching agent by capability (see below) — no agent named |
+| `⟢ seal:` | `<N>` | Declare the expected cohort size, turning a best-effort join into a deterministic barrier at `N` |
+| `⟢ merge:` | `<worker>` | Merge a finished worker's worktree back into the lead's |
+| `⟢ handoff:` | `<agent> — <task>` | Hand the conversation to another agent (no result-back — a transfer, not a loan) |
+
+Exactly one trailer acts per turn: the hub checks them in priority order
+`done → delegate → fanout → route → seal → merge → handoff` and the first match
+wins. Every outcome is echoed as a session status (`routé vers …`,
+`cohorte scellée à N`, `merge traité pour …`, or `… refusé: <reason>`), so the
+transcript records what the coordination layer did.
+
+**Capability routing (`⟢ route:`) stays deterministic.** The host never asks an
+LLM which agent should handle a task — that would break the invariant that only
+agents judge. Instead each agent *declares* its own capabilities in an optional
+`TAGS` file in its home (whitespace/comma-separated tokens, e.g. `network lua
+roblox`). On `⟢ route:`, the host tokenizes the task text and picks the agent
+whose tags overlap it most; ties break to the lexicographically smallest name,
+and a task that matches no agent's tags is **refused** rather than sent to a
+default. The only judgment is the agent's own tags plus the lead's phrasing of
+the task — the host merely scores.
 
 ---
 

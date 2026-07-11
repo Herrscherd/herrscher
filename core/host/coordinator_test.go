@@ -609,3 +609,139 @@ func TestForgetRemovesWorkerKeepsCountConsistent(t *testing.T) {
 		t.Fatalf("pas de faux tous-livrés après purge: %q", seeded[1])
 	}
 }
+
+func TestSealRecordsExpected(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
+
+	lead, err := c.Seal(context.Background(), contracts.SealRequest{FromSession: "lead", Expected: 3})
+	if err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	if lead != "lead" {
+		t.Fatalf("seal should return the lead name, got %q", lead)
+	}
+	if c.expected["lead"] != 3 {
+		t.Fatalf("expected[lead] should be 3, got %d", c.expected["lead"])
+	}
+}
+
+func TestSealRefusesNonPositive(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
+
+	if _, err := c.Seal(context.Background(), contracts.SealRequest{FromSession: "lead", Expected: 0}); err == nil {
+		t.Fatal("seal with Expected=0 should be refused")
+	}
+	if _, ok := c.expected["lead"]; ok {
+		t.Fatal("refused seal must record nothing")
+	}
+}
+
+func TestSealRefusesBelowCurrentCohort(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "w1", Worktree: "/wt/w1", Parent: "lead"},
+			{Name: "w2", Worktree: "/wt/w2", Parent: "lead"},
+			{Name: "w3", Worktree: "/wt/w3", Parent: "lead"},
+		}, &seeded)
+
+	if _, err := c.Seal(context.Background(), contracts.SealRequest{FromSession: "lead", Expected: 2}); err == nil {
+		t.Fatal("seal below current cohort size (3) should be refused")
+	}
+	if _, ok := c.expected["lead"]; ok {
+		t.Fatal("refused seal must record nothing")
+	}
+}
+
+func TestSealUnknownLead(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true, nil, &seeded)
+	if _, err := c.Seal(context.Background(), contracts.SealRequest{FromSession: "ghost", Expected: 1}); err == nil {
+		t.Fatal("seal on unknown lead should be refused")
+	}
+}
+
+func TestReportUsesSealedTotal(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "w1", Worktree: "/wt/w1", Parent: "lead"},
+			{Name: "w2", Worktree: "/wt/w2", Parent: "lead"},
+			{Name: "w3", Worktree: "/wt/w3", Parent: "lead"},
+		}, &seeded)
+
+	if _, err := c.Seal(context.Background(), contracts.SealRequest{FromSession: "lead", Expected: 3}); err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	for _, w := range []string{"w1", "w2", "w3"} {
+		if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: w, Summary: "ok"}); err != nil {
+			t.Fatalf("report %s: %v", w, err)
+		}
+	}
+	if !strings.Contains(seeded[0], "(1/3)") || !strings.Contains(seeded[1], "(2/3)") {
+		t.Fatalf("sealed counts wrong: %v", seeded)
+	}
+	if !strings.Contains(seeded[2], "(3/3)") || !strings.Contains(seeded[2], "cohorte complète") {
+		t.Fatalf("sealed completion wrong: %q", seeded[2])
+	}
+}
+
+func TestReportSealedCompleteWording(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "w1", Worktree: "/wt/w1", Parent: "lead"},
+		}, &seeded)
+
+	if _, err := c.Seal(context.Background(), contracts.SealRequest{FromSession: "lead", Expected: 1}); err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w1", Summary: "ok"}); err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if !strings.Contains(seeded[0], "cohorte complète") {
+		t.Fatalf("sealed suffix should be 'cohorte complète': %q", seeded[0])
+	}
+	if strings.Contains(seeded[0], "tous les workers ont livré") {
+		t.Fatalf("sealed cohort must not use the best-effort wording: %q", seeded[0])
+	}
+}
+
+func TestReportUnsealedStaysBestEffort(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "w1", Worktree: "/wt/w1", Parent: "lead"},
+		}, &seeded)
+
+	if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w1", Summary: "ok"}); err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if !strings.Contains(seeded[0], "(1/1)") || !strings.Contains(seeded[0], "tous les workers ont livré") {
+		t.Fatalf("unsealed cohort must keep best-effort wording: %q", seeded[0])
+	}
+	if strings.Contains(seeded[0], "cohorte complète") {
+		t.Fatalf("unsealed cohort must not claim 'cohorte complète': %q", seeded[0])
+	}
+}
+
+func TestForgetPurgesSeal(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
+	if _, err := c.Seal(context.Background(), contracts.SealRequest{FromSession: "lead", Expected: 2}); err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	c.forget("lead")
+	if _, ok := c.expected["lead"]; ok {
+		t.Fatal("forget(lead) should purge expected[lead]")
+	}
+}

@@ -3,12 +3,14 @@ package host
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
 const (
@@ -30,6 +32,7 @@ type cleanBrancher interface {
 	IsCleanAt(path string) (bool, error)
 	Branch(name string) string
 	BranchExistsAt(path, branch string) (bool, error)
+	MergeInto(leadPath, branch string) (worktree.MergeOutcome, []string, error)
 }
 type sessionLister interface {
 	SnapshotSessions() []state.Session
@@ -215,6 +218,67 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 		return "", fmt.Errorf("report: delivery to parent %q timed out", from.Parent)
 	}
 	return from.Parent, nil
+}
+
+// Merge aggregates worker W's committed branch (session/<W>) into the lead's
+// worktree via a real git merge, then seeds the lead the outcome. Lead-initiated
+// (⟢ merge). Every guard runs before the side effect, on one atomic snapshot:
+// lead known → worker known → worker is a child of THIS lead → worker committed →
+// lead committed. Lead-clean is required so a conflict abort restores the lead's
+// worktree without discarding uncommitted lead work. A conflict is not an error:
+// MergeInto aborts (lead left clean) and the lead is seeded a diagnostic. W stays
+// alive; the join state (reported/mu) is deliberately untouched — delivery
+// tracking and aggregation are orthogonal.
+func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (string, error) {
+	sessions := c.sessions.SnapshotSessions()
+	lead, ok := findByName(sessions, req.FromSession)
+	if !ok {
+		return "", fmt.Errorf("merge: lead %q not found", req.FromSession)
+	}
+	worker, ok := findByName(sessions, req.Worker)
+	if !ok {
+		return "", fmt.Errorf("merge: worker %q not found", req.Worker)
+	}
+	if worker.Parent != req.FromSession {
+		return "", fmt.Errorf("merge refused: %q is not a worker of %q", req.Worker, req.FromSession)
+	}
+	// Worker must be committed: session/<W>'s tip is what gets merged, so
+	// uncommitted worker work would not be aggregated. Mirror the Report guard.
+	wClean, err := c.wt.IsCleanAt(worker.Worktree)
+	if err != nil {
+		return "", fmt.Errorf("merge: %w", err)
+	}
+	if !wClean {
+		return "", fmt.Errorf("merge refused: worker %q has uncommitted changes — commit first", req.Worker)
+	}
+	// Lead must be committed so a conflict abort restores it cleanly without
+	// clobbering uncommitted lead work.
+	lClean, err := c.wt.IsCleanAt(lead.Worktree)
+	if err != nil {
+		return "", fmt.Errorf("merge: %w", err)
+	}
+	if !lClean {
+		return "", fmt.Errorf("merge refused: lead %q has uncommitted changes — commit first", req.FromSession)
+	}
+
+	outcome, conflicts, err := c.wt.MergeInto(lead.Worktree, c.wt.Branch(req.Worker))
+	if err != nil {
+		return "", fmt.Errorf("merge: %w", err)
+	}
+	var msg string
+	switch outcome {
+	case worktree.MergeApplied:
+		msg = fmt.Sprintf("branche de %s mergée dans %s", req.Worker, req.FromSession)
+	case worktree.MergeUpToDate:
+		msg = fmt.Sprintf("%s déjà à jour dans %s", req.Worker, req.FromSession)
+	case worktree.MergeConflict:
+		msg = fmt.Sprintf("merge de %s refusé : conflit sur %s — résous manuellement",
+			req.Worker, strings.Join(conflicts, ", "))
+	}
+	if !c.seedWithRetry(ctx, req.FromSession, msg) {
+		return "", fmt.Errorf("merge: delivery to lead %q timed out", req.FromSession)
+	}
+	return req.FromSession, nil
 }
 
 // forget purge l'état de join d'une session qui se ferme. Deux effets : si `name`

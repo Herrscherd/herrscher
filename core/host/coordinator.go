@@ -325,6 +325,51 @@ func (c *coordinator) Seal(ctx context.Context, req contracts.SealRequest) (stri
 	return req.FromSession, nil
 }
 
+// FanOut spawns one worker per task — all children of FromSession off its
+// committed tip, all from ToAgent — then seals the cohort to its real size, the
+// batch counterpart of Delegate. Guards run before any spawn: unknown agent and
+// unknown lead fail with nothing created. Each task then goes through spawn, whose
+// own lead-clean guard means a dirty lead yields zero workers on the first task. A
+// spawn failure mid-batch is not rolled back: the workers already created are real
+// committed sessions, so FanOut stops, seals to what was actually spawned, and
+// returns those names alongside the error. The seal counts the lead's preexisting
+// children (from the guard snapshot) plus the workers spawned here.
+func (c *coordinator) FanOut(ctx context.Context, req contracts.FanOutRequest) ([]string, error) {
+	if _, ok := c.agents.Get(req.ToAgent); !ok {
+		return nil, fmt.Errorf("fanout: unknown agent %q", req.ToAgent)
+	}
+	sessions := c.sessions.SnapshotSessions()
+	lead, ok := findByName(sessions, req.FromSession)
+	if !ok {
+		return nil, fmt.Errorf("fanout: lead %q not found", req.FromSession)
+	}
+	if len(req.Tasks) == 0 {
+		return nil, fmt.Errorf("fanout: no tasks")
+	}
+	preexisting := 0
+	for _, s := range sessions {
+		if s.Parent == req.FromSession {
+			preexisting++
+		}
+	}
+	var spawned []string
+	var spawnErr error
+	for _, task := range req.Tasks {
+		name, err := c.spawn(ctx, lead, req.ToAgent, task, req.FromSession)
+		if err != nil {
+			spawnErr = err
+			break
+		}
+		spawned = append(spawned, name)
+	}
+	if len(spawned) > 0 {
+		c.mu.Lock()
+		c.expected[req.FromSession] = preexisting + len(spawned)
+		c.mu.Unlock()
+	}
+	return spawned, spawnErr
+}
+
 // forget purge l'état de join d'une session qui se ferme. Deux effets : si `name`
 // était un lead, sa cohorte est jetée (anti-fuite mémoire) ; si `name` était un
 // worker, il sort des livrés de son parent — sinon un worker livré puis fermé

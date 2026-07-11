@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -743,5 +744,159 @@ func TestForgetPurgesSeal(t *testing.T) {
 	c.forget("lead")
 	if _, ok := c.expected["lead"]; ok {
 		t.Fatal("forget(lead) should purge expected[lead]")
+	}
+}
+
+// nthFailCreator succeeds until (and excluding) the failAt-th Create call, then
+// returns an error — so a fan-out can be observed spawning some workers then
+// failing mid-batch. failAt is 1-based; failAt=2 fails the second Create.
+type nthFailCreator struct {
+	failAt int
+	n      int
+	last   contracts.CreateSession
+}
+
+func (c *nthFailCreator) Create(_ context.Context, s contracts.CreateSession) (string, error) {
+	c.n++
+	c.last = s
+	if c.n == c.failAt {
+		return "", fmt.Errorf("create boom at call %d", c.n)
+	}
+	return s.Name, nil
+}
+
+func TestFanOutSpawnsCohort(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newTestCoordinator(cr, []string{"scripter"}, true,
+		[]state.Session{{Name: "lead", Project: "proj", Worktree: "/wt/lead"}}, &seeded)
+
+	spawned, err := c.FanOut(context.Background(), contracts.FanOutRequest{
+		FromSession: "lead", ToAgent: "scripter", Tasks: []string{"t1", "t2", "t3"},
+	})
+	if err != nil {
+		t.Fatalf("fanout: %v", err)
+	}
+	if len(spawned) != 3 {
+		t.Fatalf("attendu 3 workers spawnés, got %v", spawned)
+	}
+	if len(seeded) != 3 {
+		t.Fatalf("attendu 3 tâches seedées, got %v", seeded)
+	}
+	for i, task := range []string{"t1", "t2", "t3"} {
+		if !strings.HasSuffix(seeded[i], "|"+task) {
+			t.Fatalf("tâche %d mal seedée: %q", i, seeded[i])
+		}
+	}
+}
+
+func TestFanOutSealsToCohortSize(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newTestCoordinator(cr, []string{"scripter"}, true,
+		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
+
+	if _, err := c.FanOut(context.Background(), contracts.FanOutRequest{
+		FromSession: "lead", ToAgent: "scripter", Tasks: []string{"a", "b", "c"},
+	}); err != nil {
+		t.Fatalf("fanout: %v", err)
+	}
+	if c.expected["lead"] != 3 {
+		t.Fatalf("cohorte devrait être scellée à 3, got %d", c.expected["lead"])
+	}
+}
+
+func TestFanOutUnknownAgent(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newTestCoordinator(cr, nil, true,
+		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
+	if _, err := c.FanOut(context.Background(), contracts.FanOutRequest{
+		FromSession: "lead", ToAgent: "ghost", Tasks: []string{"a"}}); err == nil {
+		t.Fatal("agent inconnu devrait échouer")
+	}
+	if cr.spec.Name != "" {
+		t.Fatal("aucune session ne devrait être créée")
+	}
+	if _, ok := c.expected["lead"]; ok {
+		t.Fatal("aucun scellage sur agent inconnu")
+	}
+}
+
+func TestFanOutLeadNotFound(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newTestCoordinator(cr, []string{"scripter"}, true, nil, &seeded)
+	if _, err := c.FanOut(context.Background(), contracts.FanOutRequest{
+		FromSession: "ghost", ToAgent: "scripter", Tasks: []string{"a"}}); err == nil {
+		t.Fatal("lead inconnu devrait échouer")
+	}
+}
+
+func TestFanOutNoTasks(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newTestCoordinator(cr, []string{"scripter"}, true,
+		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
+	if _, err := c.FanOut(context.Background(), contracts.FanOutRequest{
+		FromSession: "lead", ToAgent: "scripter", Tasks: nil}); err == nil {
+		t.Fatal("fanout sans tâche devrait échouer")
+	}
+}
+
+func TestFanOutDirtyLeadSpawnsNone(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newTestCoordinator(cr, []string{"scripter"}, false, // lead sale
+		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
+	spawned, err := c.FanOut(context.Background(), contracts.FanOutRequest{
+		FromSession: "lead", ToAgent: "scripter", Tasks: []string{"a", "b"}})
+	if err == nil {
+		t.Fatal("lead sale devrait faire échouer le premier spawn")
+	}
+	if len(spawned) != 0 {
+		t.Fatalf("aucun worker sur lead sale, got %v", spawned)
+	}
+	if _, ok := c.expected["lead"]; ok {
+		t.Fatal("aucun scellage quand rien n'est spawné")
+	}
+}
+
+func TestFanOutPartialSealsToSpawned(t *testing.T) {
+	cr := &nthFailCreator{failAt: 2} // le 2e Create échoue
+	var seeded []string
+	km := map[string]bool{"scripter": true}
+	seed := func(sess, task string) bool { seeded = append(seeded, sess+"|"+task); return true }
+	c := newCoordinator(cr, fakeAgents{known: km}, &fakeWTC{clean: true},
+		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}}, &fakeCloser{}, seed)
+
+	spawned, err := c.FanOut(context.Background(), contracts.FanOutRequest{
+		FromSession: "lead", ToAgent: "scripter", Tasks: []string{"a", "b", "c"}})
+	if err == nil {
+		t.Fatal("un échec de Create mid-lot doit remonter une erreur")
+	}
+	if len(spawned) != 1 {
+		t.Fatalf("un seul worker devrait survivre, got %v", spawned)
+	}
+	if c.expected["lead"] != 1 {
+		t.Fatalf("scellage devrait suivre le réel (1), got %d", c.expected["lead"])
+	}
+}
+
+func TestFanOutIncludesPreexistingCohort(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	c := newTestCoordinator(cr, []string{"scripter"}, true,
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "w0", Worktree: "/wt/w0", Parent: "lead"}, // 1 worker préexistant
+		}, &seeded)
+
+	if _, err := c.FanOut(context.Background(), contracts.FanOutRequest{
+		FromSession: "lead", ToAgent: "scripter", Tasks: []string{"a", "b"}}); err != nil {
+		t.Fatalf("fanout: %v", err)
+	}
+	if c.expected["lead"] != 3 { // 1 préexistant + 2 spawnés
+		t.Fatalf("cohorte devrait être scellée à 3 (1 préexistant + 2), got %d", c.expected["lead"])
 	}
 }

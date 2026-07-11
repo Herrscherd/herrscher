@@ -151,3 +151,27 @@ func TestParseFanOut(t *testing.T) {
 		}
 	}
 }
+
+func TestParseRoute(t *testing.T) {
+	cases := []struct {
+		name   string
+		reply  string
+		want   string
+		wantOK bool
+	}{
+		{"simple", "ok\n⟢ route: écris le module réseau", "écris le module réseau", true},
+		{"trim", "⟢ route:   tâche espacée  ", "tâche espacée", true},
+		{"empty body", "⟢ route:", "", false},
+		{"whitespace body", "⟢ route:    ", "", false},
+		{"no marker", "juste une réponse", "", false},
+		{"not last line", "⟢ route: x\ndu texte après", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := parseRoute(c.reply)
+			if ok != c.wantOK || got != c.want {
+				t.Fatalf("parseRoute(%q) = %q,%v want %q,%v", c.reply, got, ok, c.want, c.wantOK)
+			}
+		})
+	}
+}

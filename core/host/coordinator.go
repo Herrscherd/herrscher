@@ -55,12 +55,14 @@ type coordinator struct {
 
 	mu       sync.Mutex
 	reported map[string]map[string]bool // parent → { worker → true } livrés
+	expected map[string]int             // parent → N attendu (sous mu), figé par Seal
 }
 
 func newCoordinator(creator sessionCreator, agents agentLookup, wt cleanBrancher, sessions sessionLister, closer sessionCloser, seed func(string, string) bool) *coordinator {
 	return &coordinator{
 		creator: creator, agents: agents, wt: wt, sessions: sessions, closer: closer, seed: seed,
 		reported: map[string]map[string]bool{},
+		expected: map[string]int{},
 	}
 }
 
@@ -202,17 +204,29 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	done := len(c.reported[from.Parent])
 	c.mu.Unlock()
 
+	c.mu.Lock()
+	sealed, isSealed := c.expected[from.Parent]
+	c.mu.Unlock()
+
 	total := 0
-	for _, s := range sessions {
-		if s.Parent == from.Parent {
-			total++
+	if isSealed {
+		total = sealed
+	} else {
+		for _, s := range sessions {
+			if s.Parent == from.Parent {
+				total++
+			}
 		}
 	}
 
 	branch := c.wt.Branch(req.FromSession)
 	msg := fmt.Sprintf("%s a terminé sur %s (%d/%d) — %s", req.FromSession, branch, done, total, req.Summary)
 	if done >= total {
-		msg += " — tous les workers ont livré"
+		if isSealed {
+			msg += " — cohorte complète"
+		} else {
+			msg += " — tous les workers ont livré"
+		}
 	}
 	if !c.seedWithRetry(ctx, from.Parent, msg) {
 		return "", fmt.Errorf("report: delivery to parent %q timed out", from.Parent)
@@ -281,6 +295,36 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 	return req.FromSession, nil
 }
 
+// Seal records how many workers FromSession's cohort expects, turning the join's
+// best-effort "all delivered" into a deterministic barrier: once sealed, Report
+// reports "cohorte complète" only at done >= N. Guards run before any effect on
+// one atomic snapshot: lead known → N > 0 → N >= current cohort size (refusing an
+// under-seal at the source). Re-seal is last-wins. Seal does not seed into the
+// lead's turn — like Delegate it changes state and fans a status; the barrier
+// surfaces in later Report messages.
+func (c *coordinator) Seal(ctx context.Context, req contracts.SealRequest) (string, error) {
+	sessions := c.sessions.SnapshotSessions()
+	if _, ok := findByName(sessions, req.FromSession); !ok {
+		return "", fmt.Errorf("seal: lead %q not found", req.FromSession)
+	}
+	if req.Expected <= 0 {
+		return "", fmt.Errorf("seal refused: expected must be > 0")
+	}
+	cohort := 0
+	for _, s := range sessions {
+		if s.Parent == req.FromSession {
+			cohort++
+		}
+	}
+	if req.Expected < cohort {
+		return "", fmt.Errorf("seal refused: expected %d below current cohort size %d", req.Expected, cohort)
+	}
+	c.mu.Lock()
+	c.expected[req.FromSession] = req.Expected
+	c.mu.Unlock()
+	return req.FromSession, nil
+}
+
 // forget purge l'état de join d'une session qui se ferme. Deux effets : si `name`
 // était un lead, sa cohorte est jetée (anti-fuite mémoire) ; si `name` était un
 // worker, il sort des livrés de son parent — sinon un worker livré puis fermé
@@ -292,6 +336,7 @@ func (c *coordinator) forget(name string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.reported, name)
+	delete(c.expected, name)
 	for parent, workers := range c.reported {
 		delete(workers, name)
 		if len(workers) == 0 {

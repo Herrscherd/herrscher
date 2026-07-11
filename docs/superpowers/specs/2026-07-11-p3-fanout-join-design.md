@@ -4,7 +4,7 @@
 > herrscher, par-dessus le socle `Coordinator` (handoff, puis delegate + result-back).
 > Feature **générique OSS** (aucune connaissance métier Roblox/Neublox). Donne au lead
 > la capacité de suivre une **cohorte** de workers parallèles jusqu'à complétion.
-> Date : 2026-07-11 · Statut : design validé.
+> Date : 2026-07-11 · Statut : livré (code mergé-ready, CI verte, 100 tests).
 
 ## Contexte vérifié (source)
 

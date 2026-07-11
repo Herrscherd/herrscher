@@ -559,6 +559,7 @@ type recordingCoord struct {
 	merges    []contracts.MergeRequest
 	seals     []contracts.SealRequest
 	fanouts   []contracts.FanOutRequest
+	routes    []contracts.RouteRequest
 }
 
 func (r *recordingCoord) Handoff(_ context.Context, req contracts.HandoffRequest) (string, error) {
@@ -588,6 +589,10 @@ func (r *recordingCoord) FanOut(_ context.Context, req contracts.FanOutRequest) 
 		spawned[i] = req.ToAgent + "-w"
 	}
 	return spawned, nil
+}
+func (r *recordingCoord) Route(_ context.Context, req contracts.RouteRequest) (string, string, error) {
+	r.routes = append(r.routes, req)
+	return "netter", req.FromSession + "-netter", nil
 }
 
 // TestDriverInvokesCoordinatorOnHandoffTrailer proves a completed turn whose
@@ -675,6 +680,9 @@ func (e *erroringCoord) Seal(context.Context, contracts.SealRequest) (string, er
 func (e *erroringCoord) FanOut(context.Context, contracts.FanOutRequest) ([]string, error) {
 	return nil, e.err
 }
+func (e *erroringCoord) Route(context.Context, contracts.RouteRequest) (string, string, error) {
+	return "", "", e.err
+}
 
 // TestDriverSurfacesCoordinatorErrorAsStatus proves that when the Coordinator
 // refuses a handoff, the driver fans a "status" event carrying "handoff
@@ -744,5 +752,17 @@ func TestDriverInvokesCoordinatorOnFanOutTrailer(t *testing.T) {
 	if got.FromSession != "lead" || got.ToAgent != "scripter" || len(got.Tasks) != 2 ||
 		got.Tasks[0] != "a" || got.Tasks[1] != "b" {
 		t.Fatalf("bad fanout request: %+v", got)
+	}
+}
+
+func TestDriverInvokesCoordinatorOnRouteTrailer(t *testing.T) {
+	rc := &recordingCoord{}
+	d := &sessionDriver{name: "lead", coordinator: rc}
+	d.maybeCoordinate(context.Background(), "voici mon plan\n⟢ route: un module réseau")
+	if len(rc.routes) != 1 {
+		t.Fatalf("Route calls = %d, want 1", len(rc.routes))
+	}
+	if rc.routes[0].FromSession != "lead" || rc.routes[0].Task != "un module réseau" {
+		t.Fatalf("Route req = %+v", rc.routes[0])
 	}
 }

@@ -203,6 +203,9 @@ func (s *stubForgetCoord) Seal(context.Context, contracts.SealRequest) (string, 
 func (s *stubForgetCoord) FanOut(context.Context, contracts.FanOutRequest) ([]string, error) {
 	return nil, nil
 }
+func (s *stubForgetCoord) Route(context.Context, contracts.RouteRequest) (string, string, error) {
+	return "", "", nil
+}
 func (s *stubForgetCoord) forget(name string) { s.forgotten = append(s.forgotten, name) }
 
 func TestGoDeadCallsForget(t *testing.T) {

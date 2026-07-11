@@ -22,10 +22,17 @@ func (f *fakeCreator) Create(_ context.Context, s contracts.CreateSession) (stri
 	return s.Name, f.err
 }
 
-type fakeAgents struct{ known map[string]bool }
+type fakeAgents struct {
+	known  map[string]bool
+	roster []agent.Agent
+}
 
 func (f fakeAgents) Get(name string) (agent.Agent, bool) {
 	return agent.Agent{}, f.known[name]
+}
+
+func (f fakeAgents) List() ([]agent.Agent, error) {
+	return f.roster, nil
 }
 
 type fakeWTC struct {
@@ -439,6 +446,83 @@ func TestReportDoubleReportIdempotent(t *testing.T) {
 	}
 	if strings.Contains(seeded[1], "tous les workers ont livré") {
 		t.Fatalf("double report ne doit pas déclencher tous-livrés: %q", seeded[1])
+	}
+}
+
+func TestRoutePicksAndDelegates(t *testing.T) {
+	seeded := map[string]string{}
+	c := newCoordinator(
+		&fakeCreator{},
+		fakeAgents{roster: []agent.Agent{
+			{Name: "netter", Tags: []string{"network"}},
+			{Name: "scripter", Tags: []string{"lua"}},
+		}},
+		&fakeWTC{clean: true, branches: map[string]bool{}},
+		fakeSessions{list: []state.Session{
+			{Name: "lead", Worktree: "/wt/lead", Project: "p"},
+		}},
+		&fakeCloser{},
+		func(session, task string) bool { seeded[session] = task; return true },
+	)
+	agentName, session, err := c.Route(context.Background(), contracts.RouteRequest{
+		FromSession: "lead", Task: "un module network",
+	})
+	if err != nil {
+		t.Fatalf("Route: %v", err)
+	}
+	if agentName != "netter" {
+		t.Fatalf("chose %q, want netter", agentName)
+	}
+	if session != "lead-netter" {
+		t.Fatalf("session = %q, want lead-netter", session)
+	}
+	if seeded[session] != "un module network" {
+		t.Fatalf("worker not seeded the task: %v", seeded)
+	}
+}
+
+func TestRouteEmptyTaskRefused(t *testing.T) {
+	c := newCoordinator(&fakeCreator{}, fakeAgents{}, &fakeWTC{clean: true},
+		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
+		&fakeCloser{}, func(string, string) bool { return true })
+	if _, _, err := c.Route(context.Background(), contracts.RouteRequest{FromSession: "lead", Task: "  "}); err == nil {
+		t.Fatal("Route empty task = nil err, want refusal")
+	}
+}
+
+func TestRouteLeadNotFound(t *testing.T) {
+	c := newCoordinator(&fakeCreator{},
+		fakeAgents{roster: []agent.Agent{{Name: "netter", Tags: []string{"network"}}}},
+		&fakeWTC{clean: true}, fakeSessions{}, &fakeCloser{},
+		func(string, string) bool { return true })
+	if _, _, err := c.Route(context.Background(), contracts.RouteRequest{FromSession: "ghost", Task: "network"}); err == nil {
+		t.Fatal("Route unknown lead = nil err, want refusal")
+	}
+}
+
+func TestRouteNoMatchRefused(t *testing.T) {
+	c := newCoordinator(&fakeCreator{},
+		fakeAgents{roster: []agent.Agent{{Name: "scripter", Tags: []string{"lua"}}}},
+		&fakeWTC{clean: true, branches: map[string]bool{}},
+		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
+		&fakeCloser{}, func(string, string) bool { return true })
+	if _, _, err := c.Route(context.Background(), contracts.RouteRequest{FromSession: "lead", Task: "de la doc markdown"}); err == nil {
+		t.Fatal("Route no match = nil err, want refusal")
+	}
+}
+
+func TestRouteDirtyLeadSpawnsNone(t *testing.T) {
+	seeded := map[string]string{}
+	c := newCoordinator(&fakeCreator{},
+		fakeAgents{roster: []agent.Agent{{Name: "netter", Tags: []string{"network"}}}},
+		&fakeWTC{clean: false},
+		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
+		&fakeCloser{}, func(session, task string) bool { seeded[session] = task; return true })
+	if _, _, err := c.Route(context.Background(), contracts.RouteRequest{FromSession: "lead", Task: "network"}); err == nil {
+		t.Fatal("Route dirty lead = nil err, want refusal")
+	}
+	if len(seeded) != 0 {
+		t.Fatalf("dirty lead seeded a worker: %v", seeded)
 	}
 }
 

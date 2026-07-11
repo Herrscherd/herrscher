@@ -27,6 +27,7 @@ type sessionCreator interface {
 }
 type agentLookup interface {
 	Get(name string) (agent.Agent, bool)
+	List() ([]agent.Agent, error)
 }
 type cleanBrancher interface {
 	IsCleanAt(path string) (bool, error)
@@ -368,6 +369,37 @@ func (c *coordinator) FanOut(ctx context.Context, req contracts.FanOutRequest) (
 		c.mu.Unlock()
 	}
 	return spawned, spawnErr
+}
+
+// Route picks the best-matching agent for req.Task by a deterministic capability
+// score (pickAgent over the agent roster's declared tags — no LLM enters here,
+// Model O) and then delegates to it: the chosen worker is a child of the lead off
+// its committed tip, the lead stays alive (spawn with parent = lead, like
+// Delegate). Guards run before any spawn: an empty task, a missing lead, a roster
+// error, or no matching agent each fail with nothing created. spawn's own
+// lead-clean guard means a dirty lead yields no worker. Returns the chosen agent
+// and the worker's session.
+func (c *coordinator) Route(ctx context.Context, req contracts.RouteRequest) (string, string, error) {
+	if strings.TrimSpace(req.Task) == "" {
+		return "", "", fmt.Errorf("route: empty task")
+	}
+	from, ok := c.findSession(req.FromSession)
+	if !ok {
+		return "", "", fmt.Errorf("route: lead %q not found", req.FromSession)
+	}
+	roster, err := c.agents.List()
+	if err != nil {
+		return "", "", fmt.Errorf("route: %w", err)
+	}
+	chosen, ok := pickAgent(roster, req.Task)
+	if !ok {
+		return "", "", fmt.Errorf("route: no agent matches task")
+	}
+	session, err := c.spawn(ctx, from, chosen, req.Task, req.FromSession)
+	if err != nil {
+		return "", "", err
+	}
+	return chosen, session, nil
 }
 
 // forget purge l'état de join d'une session qui se ferme. Deux effets : si `name`

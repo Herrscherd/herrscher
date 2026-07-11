@@ -52,6 +52,14 @@ func TestPickAgentCaseAndPunctuationInsensitive(t *testing.T) {
 	}
 }
 
+func TestPickAgentMatchesAccentedTag(t *testing.T) {
+	// French-first codebase: an accented tag must match its accented task word.
+	roster := []agent.Agent{{Name: "netter", Tags: []string{"réseau"}}}
+	if got, ok := pickAgent(roster, "écris le module réseau"); !ok || got != "netter" {
+		t.Fatalf("pickAgent = %q,%v want netter,true", got, ok)
+	}
+}
+
 func TestPickAgentEmptyRosterRefuses(t *testing.T) {
 	if _, ok := pickAgent(nil, "n'importe quoi"); ok {
 		t.Fatal("pickAgent(nil) = ok, want !ok")

@@ -6,8 +6,8 @@ import (
 )
 
 // Coordination trailers: an agent signals an inter-session intent on a single
-// line at the very end of its reply. done has priority over delegate over seal
-// over merge over handoff when dispatched (see maybeCoordinate).
+// line at the very end of its reply. done has priority over delegate over fanout
+// over seal over merge over handoff when dispatched (see maybeCoordinate).
 const (
 	handoffMarker  = "⟢ handoff:"
 	delegateMarker = "⟢ delegate:"

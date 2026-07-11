@@ -221,13 +221,18 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 // était un lead, sa cohorte est jetée (anti-fuite mémoire) ; si `name` était un
 // worker, il sort des livrés de son parent — sinon un worker livré puis fermé
 // resterait compté dans `done` alors que `total` (frères vivants) a baissé, faussant
-// le « tous les workers ont livré ». Garde l'invariant done ≤ total.
+// le « tous les workers ont livré ». Garde l'invariant done ≤ total. Une cohorte
+// devenue vide après ce retrait est elle-même jetée, pour ne laisser aucune entrée
+// résiduelle sur un daemon longue durée.
 func (c *coordinator) forget(name string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.reported, name)
-	for _, workers := range c.reported {
+	for parent, workers := range c.reported {
 		delete(workers, name)
+		if len(workers) == 0 {
+			delete(c.reported, parent)
+		}
 	}
 }
 

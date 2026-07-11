@@ -180,3 +180,30 @@ func TestHubReconcileGoLiveGoDead(t *testing.T) {
 		t.Fatal("reconcile did not tear down the removed session")
 	}
 }
+
+// stubForgetCoord implémente contracts.Coordinator (uniquement ce dont goDead a
+// besoin via type-assert) ET forget, pour prouver le câblage.
+type stubForgetCoord struct{ forgotten []string }
+
+func (s *stubForgetCoord) Handoff(context.Context, contracts.HandoffRequest) (string, error) {
+	return "", nil
+}
+func (s *stubForgetCoord) Delegate(context.Context, contracts.DelegateRequest) (string, error) {
+	return "", nil
+}
+func (s *stubForgetCoord) Report(context.Context, contracts.ReportRequest) (string, error) {
+	return "", nil
+}
+func (s *stubForgetCoord) forget(name string) { s.forgotten = append(s.forgotten, name) }
+
+func TestGoDeadCallsForget(t *testing.T) {
+	stub := &stubForgetCoord{}
+	h := &hub{
+		coordinator: stub,
+		live:        map[string]context.CancelFunc{},
+	}
+	h.goDead("worker")
+	if len(stub.forgotten) != 1 || stub.forgotten[0] != "worker" {
+		t.Fatalf("goDead devrait appeler forget(\"worker\"): %v", stub.forgotten)
+	}
+}

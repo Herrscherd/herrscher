@@ -349,3 +349,125 @@ func TestReportDirtyWorkerRefused(t *testing.T) {
 		t.Fatalf("rien ne devrait être livré depuis un worker sale: %v", seeded)
 	}
 }
+
+func TestReportCountsSiblingProgress(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "w1", Worktree: "/wt/w1", Parent: "lead"},
+			{Name: "w2", Worktree: "/wt/w2", Parent: "lead"},
+			{Name: "w3", Worktree: "/wt/w3", Parent: "lead"},
+		}, &seeded)
+
+	for _, w := range []string{"w1", "w2", "w3"} {
+		if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: w, Summary: "ok"}); err != nil {
+			t.Fatalf("report %s: %v", w, err)
+		}
+	}
+	if len(seeded) != 3 {
+		t.Fatalf("3 livraisons attendues: %v", seeded)
+	}
+	if !strings.Contains(seeded[0], "(1/3)") {
+		t.Fatalf("premier compte faux: %q", seeded[0])
+	}
+	if !strings.Contains(seeded[1], "(2/3)") {
+		t.Fatalf("deuxième compte faux: %q", seeded[1])
+	}
+	if !strings.Contains(seeded[2], "(3/3)") || !strings.Contains(seeded[2], "tous les workers ont livré") {
+		t.Fatalf("dernier compte/suffixe faux: %q", seeded[2])
+	}
+}
+
+func TestReportAllDoneSuffixOnlyOnLast(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "w1", Worktree: "/wt/w1", Parent: "lead"},
+			{Name: "w2", Worktree: "/wt/w2", Parent: "lead"},
+		}, &seeded)
+
+	if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w1", Summary: "ok"}); err != nil {
+		t.Fatalf("report w1: %v", err)
+	}
+	if strings.Contains(seeded[0], "tous les workers ont livré") {
+		t.Fatalf("suffixe prématuré au 1er report: %q", seeded[0])
+	}
+	if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w2", Summary: "ok"}); err != nil {
+		t.Fatalf("report w2: %v", err)
+	}
+	if !strings.Contains(seeded[1], "tous les workers ont livré") {
+		t.Fatalf("suffixe absent au dernier report: %q", seeded[1])
+	}
+}
+
+func TestReportDoubleReportIdempotent(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "w1", Worktree: "/wt/w1", Parent: "lead"},
+			{Name: "w2", Worktree: "/wt/w2", Parent: "lead"},
+		}, &seeded)
+
+	for i := 0; i < 2; i++ {
+		if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w1", Summary: "ok"}); err != nil {
+			t.Fatalf("report w1 #%d: %v", i, err)
+		}
+	}
+	if !strings.Contains(seeded[1], "(1/2)") {
+		t.Fatalf("double report devrait rester (1/2): %q", seeded[1])
+	}
+	if strings.Contains(seeded[1], "tous les workers ont livré") {
+		t.Fatalf("double report ne doit pas déclencher tous-livrés: %q", seeded[1])
+	}
+}
+
+func TestForgetPurgesLeadCohort(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "w1", Worktree: "/wt/w1", Parent: "lead"},
+		}, &seeded)
+
+	if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w1", Summary: "ok"}); err != nil {
+		t.Fatalf("report w1: %v", err)
+	}
+	if len(c.reported["lead"]) == 0 {
+		t.Fatalf("cohorte du lead devrait être peuplée avant purge")
+	}
+	c.forget("lead")
+	if c.reported["lead"] != nil {
+		t.Fatalf("forget(lead) devrait jeter la cohorte, got %v", c.reported["lead"])
+	}
+}
+
+func TestForgetRemovesWorkerKeepsCountConsistent(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "w1", Worktree: "/wt/w1", Parent: "lead"},
+			{Name: "w2", Worktree: "/wt/w2", Parent: "lead"},
+		}, &seeded)
+
+	if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w1", Summary: "ok"}); err != nil {
+		t.Fatalf("report w1: %v", err)
+	}
+	c.forget("w1") // w1 se ferme après avoir livré
+	if c.reported["lead"]["w1"] {
+		t.Fatalf("forget(w1) devrait retirer w1 des livrés")
+	}
+	// w2 livre ensuite : done ne doit PAS compter le w1 périmé.
+	if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w2", Summary: "ok"}); err != nil {
+		t.Fatalf("report w2: %v", err)
+	}
+	if !strings.Contains(seeded[1], "(1/2)") {
+		t.Fatalf("w1 périmé ne doit pas gonfler done: %q", seeded[1])
+	}
+	if strings.Contains(seeded[1], "tous les workers ont livré") {
+		t.Fatalf("pas de faux tous-livrés après purge: %q", seeded[1])
+	}
+}

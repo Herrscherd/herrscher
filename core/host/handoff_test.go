@@ -63,3 +63,26 @@ func TestParseDone(t *testing.T) {
 		t.Fatalf("absence de trailer devrait échouer")
 	}
 }
+
+func TestParseMerge(t *testing.T) {
+	cases := []struct {
+		name       string
+		reply      string
+		wantWorker string
+		wantOK     bool
+	}{
+		{"valid", "doing the thing\n⟢ merge: worker-x", "worker-x", true},
+		{"trims spaces", "x\n⟢ merge:   worker-2  ", "worker-2", true},
+		{"empty body", "x\n⟢ merge:", "", false},
+		{"not last line", "⟢ merge: worker-x\nmore text", "", false},
+		{"different marker", "x\n⟢ done: summary", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w, ok := parseMerge(tc.reply)
+			if ok != tc.wantOK || w != tc.wantWorker {
+				t.Fatalf("parseMerge(%q) = (%q, %v), want (%q, %v)", tc.reply, w, ok, tc.wantWorker, tc.wantOK)
+			}
+		})
+	}
+}

@@ -3,12 +3,13 @@ package host
 import "strings"
 
 // Coordination trailers: an agent signals an inter-session intent on a single
-// line at the very end of its reply. done has priority over delegate over
-// handoff when dispatched (see maybeCoordinate).
+// line at the very end of its reply. done has priority over delegate over merge
+// over handoff when dispatched (see maybeCoordinate).
 const (
 	handoffMarker  = "⟢ handoff:"
 	delegateMarker = "⟢ delegate:"
 	doneMarker     = "⟢ done:"
+	mergeMarker    = "⟢ merge:"
 )
 
 // parseTrailer isolates the last non-empty line of reply and, if it starts with
@@ -63,6 +64,17 @@ func parseDelegate(reply string) (agent, task string, ok bool) {
 // not a report.
 func parseDone(reply string) (summary string, ok bool) {
 	body, ok := parseTrailer(reply, doneMarker)
+	if !ok || body == "" {
+		return "", false
+	}
+	return body, true
+}
+
+// parseMerge extracts a merge intent: "⟢ merge: <worker>". Like done and unlike
+// handoff/delegate, the whole body is a single token (the worker name) — no
+// em-dash split. An empty body is not a merge intent.
+func parseMerge(reply string) (worker string, ok bool) {
+	body, ok := parseTrailer(reply, mergeMarker)
 	if !ok || body == "" {
 		return "", false
 	}

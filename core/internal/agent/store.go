@@ -87,6 +87,27 @@ func validateName(name string) bool {
 	return name != "" && name != "." && !strings.ContainsAny(name, `/\`) && !strings.Contains(name, "..")
 }
 
+// readTags reads <home>/TAGS into a lowercased, de-duplicated token slice — the
+// agent's capability declaration for host-side routing. Tokens are separated by
+// whitespace or commas. A missing or unreadable file yields nil: an agent without
+// tags is valid (it is simply never auto-selected by routing).
+func readTags(home string) []string {
+	buf, err := os.ReadFile(filepath.Join(home, tagsFile))
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, tok := range strings.Fields(strings.ReplaceAll(string(buf), ",", " ")) {
+		t := strings.ToLower(tok)
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // Create writes a new agent home and seeds its three source files. It errors if
 // the name is unsafe or the agent already exists.
 func (s *Store) Create(spec CreateSpec) (Agent, error) {
@@ -160,7 +181,7 @@ func (s *Store) Get(name string) (Agent, bool) {
 	if err != nil || !info.IsDir() {
 		return Agent{}, false
 	}
-	return Agent{Name: name, Home: home}, true
+	return Agent{Name: name, Home: home, Tags: readTags(home)}, true
 }
 
 // List returns every agent home under the store root, sorted by name. A missing
@@ -178,7 +199,8 @@ func (s *Store) List() ([]Agent, error) {
 		if !e.IsDir() {
 			continue
 		}
-		out = append(out, Agent{Name: e.Name(), Home: filepath.Join(s.root, e.Name())})
+		home := filepath.Join(s.root, e.Name())
+		out = append(out, Agent{Name: e.Name(), Home: home, Tags: readTags(home)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil

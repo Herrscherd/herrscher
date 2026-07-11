@@ -65,26 +65,29 @@ func parseDelegate(reply string) (agent, task string, ok bool) {
 	return splitAgentTask(body)
 }
 
-// parseDone extracts a completion report: "⟢ done: <summary>". No em-dash — the
-// whole body is the summary (a worker may put dashes in it). An empty body is
-// not a report.
-func parseDone(reply string) (summary string, ok bool) {
-	body, ok := parseTrailer(reply, doneMarker)
+// parseSingleToken reads a trailer whose whole body is the payload — no em-dash
+// split (the body may itself contain dashes). A missing marker or an empty body
+// is not a match. Shared by the single-body trailers (done/merge/route).
+func parseSingleToken(reply, marker string) (body string, ok bool) {
+	body, ok = parseTrailer(reply, marker)
 	if !ok || body == "" {
 		return "", false
 	}
 	return body, true
 }
 
+// parseDone extracts a completion report: "⟢ done: <summary>". No em-dash — the
+// whole body is the summary (a worker may put dashes in it). An empty body is
+// not a report.
+func parseDone(reply string) (summary string, ok bool) {
+	return parseSingleToken(reply, doneMarker)
+}
+
 // parseMerge extracts a merge intent: "⟢ merge: <worker>". Like done and unlike
 // handoff/delegate, the whole body is a single token (the worker name) — no
 // em-dash split. An empty body is not a merge intent.
 func parseMerge(reply string) (worker string, ok bool) {
-	body, ok := parseTrailer(reply, mergeMarker)
-	if !ok || body == "" {
-		return "", false
-	}
-	return body, true
+	return parseSingleToken(reply, mergeMarker)
 }
 
 // parseSeal extracts a cohort-seal intent: "⟢ seal: <N>". The body is a single
@@ -142,9 +145,5 @@ func parseFanOut(reply string) (agent string, tasks []string, ok bool) {
 // NO agent is named — the host picks by capability match. The whole body is the
 // task (no em-dash split); an empty body is not a route.
 func parseRoute(reply string) (task string, ok bool) {
-	body, ok := parseTrailer(reply, routeMarker)
-	if !ok || body == "" {
-		return "", false
-	}
-	return body, true
+	return parseSingleToken(reply, routeMarker)
 }

@@ -119,7 +119,8 @@ const (
 // conflict it returns MergeConflict plus the conflicted file list and runs
 // `git merge --abort`, so leadPath is left clean either way. Any other git
 // failure is returned as an error (with a best-effort abort first, so a
-// half-started merge never lingers).
+// half-started merge never lingers); when err != nil the MergeOutcome is
+// undefined and callers must branch on err first.
 func (w *Worktreer) MergeInto(leadPath, branch string) (MergeOutcome, []string, error) {
 	pre, err := w.headAt(leadPath)
 	if err != nil {

@@ -558,6 +558,7 @@ type recordingCoord struct {
 	reports   []contracts.ReportRequest
 	merges    []contracts.MergeRequest
 	seals     []contracts.SealRequest
+	fanouts   []contracts.FanOutRequest
 }
 
 func (r *recordingCoord) Handoff(_ context.Context, req contracts.HandoffRequest) (string, error) {
@@ -579,6 +580,14 @@ func (r *recordingCoord) Merge(_ context.Context, req contracts.MergeRequest) (s
 func (r *recordingCoord) Seal(_ context.Context, req contracts.SealRequest) (string, error) {
 	r.seals = append(r.seals, req)
 	return req.FromSession, nil
+}
+func (r *recordingCoord) FanOut(_ context.Context, req contracts.FanOutRequest) ([]string, error) {
+	r.fanouts = append(r.fanouts, req)
+	spawned := make([]string, len(req.Tasks))
+	for i := range req.Tasks {
+		spawned[i] = req.ToAgent + "-w"
+	}
+	return spawned, nil
 }
 
 // TestDriverInvokesCoordinatorOnHandoffTrailer proves a completed turn whose
@@ -662,6 +671,9 @@ func (e *erroringCoord) Merge(context.Context, contracts.MergeRequest) (string, 
 }
 func (e *erroringCoord) Seal(context.Context, contracts.SealRequest) (string, error) {
 	return "", e.err
+}
+func (e *erroringCoord) FanOut(context.Context, contracts.FanOutRequest) ([]string, error) {
+	return nil, e.err
 }
 
 // TestDriverSurfacesCoordinatorErrorAsStatus proves that when the Coordinator

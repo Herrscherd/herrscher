@@ -20,6 +20,7 @@ const (
 	soulFile     = "SOUL.md"
 	mcpFile      = "mcp.json"
 	settingsFile = "settings.json"
+	tagsFile     = "TAGS"
 )
 
 // worktreeToken is replaced with the absolute worktree path when an agent is
@@ -31,7 +32,8 @@ const worktreeToken = "{{WORKTREE}}"
 // persona and provisioning files.
 type Agent struct {
 	Name string
-	Home string // absolute path to the agent's home directory
+	Home string   // absolute path to the agent's home directory
+	Tags []string // capability tokens from <home>/TAGS (nil when absent), for host routing
 }
 
 // Materialize provisions the agent into a session worktree by writing the three

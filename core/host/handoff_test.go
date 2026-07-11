@@ -63,3 +63,115 @@ func TestParseDone(t *testing.T) {
 		t.Fatalf("absence de trailer devrait échouer")
 	}
 }
+
+func TestParseMerge(t *testing.T) {
+	cases := []struct {
+		name       string
+		reply      string
+		wantWorker string
+		wantOK     bool
+	}{
+		{"valid", "doing the thing\n⟢ merge: worker-x", "worker-x", true},
+		{"trims spaces", "x\n⟢ merge:   worker-2  ", "worker-2", true},
+		{"empty body", "x\n⟢ merge:", "", false},
+		{"not last line", "⟢ merge: worker-x\nmore text", "", false},
+		{"different marker", "x\n⟢ done: summary", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w, ok := parseMerge(tc.reply)
+			if ok != tc.wantOK || w != tc.wantWorker {
+				t.Fatalf("parseMerge(%q) = (%q, %v), want (%q, %v)", tc.reply, w, ok, tc.wantWorker, tc.wantOK)
+			}
+		})
+	}
+}
+
+func TestParseSeal(t *testing.T) {
+	cases := []struct {
+		name   string
+		reply  string
+		wantN  int
+		wantOK bool
+	}{
+		{"valide", "je scelle.\n⟢ seal: 5", 5, true},
+		{"un", "⟢ seal: 1", 1, true},
+		{"zéro refusé", "⟢ seal: 0", 0, false},
+		{"négatif refusé", "⟢ seal: -2", 0, false},
+		{"non entier refusé", "⟢ seal: trois", 0, false},
+		{"corps vide refusé", "⟢ seal:", 0, false},
+		{"marker absent", "⟢ done: fini", 0, false},
+		{"pas en dernière ligne", "⟢ seal: 5\nautre chose", 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n, ok := parseSeal(tc.reply)
+			if ok != tc.wantOK || n != tc.wantN {
+				t.Fatalf("parseSeal(%q) = (%d,%v), want (%d,%v)", tc.reply, n, ok, tc.wantN, tc.wantOK)
+			}
+		})
+	}
+}
+
+func TestParseFanOut(t *testing.T) {
+	cases := []struct {
+		reply     string
+		wantAgent string
+		wantTasks []string
+		wantOK    bool
+	}{
+		{"txt\n⟢ fanout: alpha — t1 ;; t2 ;; t3", "alpha", []string{"t1", "t2", "t3"}, true},
+		{"txt\n⟢ fanout: alpha — seule tâche", "alpha", []string{"seule tâche"}, true},
+		{"txt\n⟢ fanout: alpha —  t1  ;;  t2 ", "alpha", []string{"t1", "t2"}, true},
+		{"txt\n⟢ fanout: alpha — t1 ;; ;; t2", "alpha", []string{"t1", "t2"}, true},
+		{"txt\n⟢ fanout:  — t1", "", nil, false},           // agent vide
+		{"txt\n⟢ fanout: alpha —", "", nil, false},         // aucune tâche
+		{"txt\n⟢ fanout: alpha — ;; ;;", "", nil, false},   // tâches toutes vides
+		{"txt\n⟢ fanout: sans separateur", "", nil, false}, // pas d'em-dash
+		{"aucun trailer", "", nil, false},
+	}
+	for _, tc := range cases {
+		agent, tasks, ok := parseFanOut(tc.reply)
+		if ok != tc.wantOK {
+			t.Fatalf("reply %q → ok=%v (voulu %v)", tc.reply, ok, tc.wantOK)
+		}
+		if !ok {
+			continue
+		}
+		if agent != tc.wantAgent {
+			t.Fatalf("reply %q → agent=%q (voulu %q)", tc.reply, agent, tc.wantAgent)
+		}
+		if len(tasks) != len(tc.wantTasks) {
+			t.Fatalf("reply %q → %d tâches (voulu %d): %v", tc.reply, len(tasks), len(tc.wantTasks), tasks)
+		}
+		for i := range tasks {
+			if tasks[i] != tc.wantTasks[i] {
+				t.Fatalf("reply %q → tâche %d = %q (voulu %q)", tc.reply, i, tasks[i], tc.wantTasks[i])
+			}
+		}
+	}
+}
+
+func TestParseRoute(t *testing.T) {
+	cases := []struct {
+		name   string
+		reply  string
+		want   string
+		wantOK bool
+	}{
+		{"simple", "ok\n⟢ route: écris le module réseau", "écris le module réseau", true},
+		{"trim", "⟢ route:   tâche espacée  ", "tâche espacée", true},
+		{"empty body", "⟢ route:", "", false},
+		{"whitespace body", "⟢ route:    ", "", false},
+		{"no marker", "juste une réponse", "", false},
+		{"not last line", "⟢ route: x\ndu texte après", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := parseRoute(c.reply)
+			if ok != c.wantOK || got != c.want {
+				t.Fatalf("parseRoute(%q) = %q,%v want %q,%v", c.reply, got, ok, c.want, c.wantOK)
+			}
+		})
+	}
+}

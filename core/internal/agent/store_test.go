@@ -123,3 +123,60 @@ func TestStoreCreateRejectsBadName(t *testing.T) {
 		}
 	}
 }
+
+func TestGetReadsTags(t *testing.T) {
+	root := t.TempDir()
+	s := NewStore(root)
+	if _, err := s.Create(CreateSpec{Name: "netter", Soul: "x"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "netter", "TAGS"), []byte("network, Sockets\nhttp"), 0o644); err != nil {
+		t.Fatalf("write TAGS: %v", err)
+	}
+	a, ok := s.Get("netter")
+	if !ok {
+		t.Fatal("Get netter = !ok")
+	}
+	got := strings.Join(a.Tags, ",")
+	if got != "network,sockets,http" {
+		t.Fatalf("Tags = %q, want network,sockets,http", got)
+	}
+}
+
+func TestGetNoTagsFileYieldsNil(t *testing.T) {
+	root := t.TempDir()
+	s := NewStore(root)
+	if _, err := s.Create(CreateSpec{Name: "bare", Soul: "x"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	a, ok := s.Get("bare")
+	if !ok || a.Tags != nil {
+		t.Fatalf("bare Tags = %v, want nil", a.Tags)
+	}
+}
+
+func TestListReadsTags(t *testing.T) {
+	root := t.TempDir()
+	s := NewStore(root)
+	for _, n := range []string{"a", "b"} {
+		if _, err := s.Create(CreateSpec{Name: n, Soul: "x"}); err != nil {
+			t.Fatalf("create %s: %v", n, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "a", "TAGS"), []byte("lua  roblox"), 0o644); err != nil {
+		t.Fatalf("write TAGS: %v", err)
+	}
+	list, err := s.List()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 2 || list[0].Name != "a" {
+		t.Fatalf("list = %+v", list)
+	}
+	if strings.Join(list[0].Tags, ",") != "lua,roblox" {
+		t.Fatalf("a.Tags = %v", list[0].Tags)
+	}
+	if list[1].Tags != nil {
+		t.Fatalf("b.Tags = %v, want nil", list[1].Tags)
+	}
+}

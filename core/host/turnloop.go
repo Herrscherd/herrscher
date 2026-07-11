@@ -308,12 +308,12 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 		return
 	}
 	if n, ok := parseSeal(reply); ok {
-		if lead, err := d.coordinator.Seal(ctx, contracts.SealRequest{
+		if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
 			FromSession: d.name, Expected: n,
 		}); err != nil {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "seal refusé: " + err.Error()})
 		} else {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "cohorte scellée pour " + lead})
+			d.fanOut(ctx, contracts.Event{T: "status", Text: "cohorte scellée à " + strconv.Itoa(n)})
 		}
 		return
 	}

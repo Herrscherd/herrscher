@@ -194,6 +194,9 @@ func (s *stubForgetCoord) Delegate(context.Context, contracts.DelegateRequest) (
 func (s *stubForgetCoord) Report(context.Context, contracts.ReportRequest) (string, error) {
 	return "", nil
 }
+func (s *stubForgetCoord) Merge(context.Context, contracts.MergeRequest) (string, error) {
+	return "", nil
+}
 func (s *stubForgetCoord) forget(name string) { s.forgotten = append(s.forgotten, name) }
 
 func TestGoDeadCallsForget(t *testing.T) {

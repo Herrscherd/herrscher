@@ -556,6 +556,7 @@ type recordingCoord struct {
 	reqs      []contracts.HandoffRequest
 	delegates []contracts.DelegateRequest
 	reports   []contracts.ReportRequest
+	merges    []contracts.MergeRequest
 }
 
 func (r *recordingCoord) Handoff(_ context.Context, req contracts.HandoffRequest) (string, error) {
@@ -568,6 +569,10 @@ func (r *recordingCoord) Delegate(_ context.Context, req contracts.DelegateReque
 }
 func (r *recordingCoord) Report(_ context.Context, req contracts.ReportRequest) (string, error) {
 	r.reports = append(r.reports, req)
+	return "lead", nil
+}
+func (r *recordingCoord) Merge(_ context.Context, req contracts.MergeRequest) (string, error) {
+	r.merges = append(r.merges, req)
 	return "lead", nil
 }
 
@@ -645,6 +650,9 @@ func (e *erroringCoord) Delegate(context.Context, contracts.DelegateRequest) (st
 	return "", e.err
 }
 func (e *erroringCoord) Report(context.Context, contracts.ReportRequest) (string, error) {
+	return "", e.err
+}
+func (e *erroringCoord) Merge(context.Context, contracts.MergeRequest) (string, error) {
 	return "", e.err
 }
 

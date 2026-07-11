@@ -42,6 +42,11 @@ type hub struct {
 	live       map[string]context.CancelFunc // session name → cancel its RunSession
 }
 
+// forgetter est satisfaite par *coordinator ; elle vit hors du port
+// contracts.Coordinator car forget est un détail host-interne (purge de l'état de
+// join), pas une capacité exposée aux gateways.
+type forgetter interface{ forget(string) }
+
 func newHub(ctx context.Context, st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry) *hub {
 	return &hub{ctx: ctx, st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: map[string]context.CancelFunc{}}
 }
@@ -76,6 +81,9 @@ func (h *hub) goDead(name string) {
 	h.mu.Unlock()
 	if cancel != nil {
 		cancel()
+	}
+	if f, ok := h.coordinator.(forgetter); ok {
+		f.forget(name)
 	}
 }
 

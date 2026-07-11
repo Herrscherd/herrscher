@@ -692,3 +692,21 @@ func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
 		return false
 	}, "status event carrying the coordinator's refusal fanned out")
 }
+
+func TestDriverInvokesCoordinatorOnSealTrailer(t *testing.T) {
+	from := make(chan contracts.Event, 2)
+	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from)
+	rc := &recordingCoord{}
+	d.coordinator = rc
+
+	from <- contracts.Event{T: "reply", Done: true, Text: "cohorte lancée.\n⟢ seal: 4"}
+	if ok := d.awaitTurn(context.Background()); !ok {
+		t.Fatal("awaitTurn should complete on reply{done}")
+	}
+	if len(rc.seals) != 1 {
+		t.Fatalf("expected 1 seal, got %d", len(rc.seals))
+	}
+	if rc.seals[0].FromSession != "lead" || rc.seals[0].Expected != 4 {
+		t.Fatalf("bad seal request: %+v", rc.seals[0])
+	}
+}

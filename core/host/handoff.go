@@ -7,7 +7,7 @@ import (
 
 // Coordination trailers: an agent signals an inter-session intent on a single
 // line at the very end of its reply. done has priority over delegate over fanout
-// over seal over merge over handoff when dispatched (see maybeCoordinate).
+// over route over seal over merge over handoff when dispatched (see maybeCoordinate).
 const (
 	handoffMarker  = "⟢ handoff:"
 	delegateMarker = "⟢ delegate:"
@@ -15,6 +15,7 @@ const (
 	sealMarker     = "⟢ seal:"
 	mergeMarker    = "⟢ merge:"
 	fanoutMarker   = "⟢ fanout:"
+	routeMarker    = "⟢ route:"
 )
 
 // parseTrailer isolates the last non-empty line of reply and, if it starts with
@@ -135,4 +136,15 @@ func parseFanOut(reply string) (agent string, tasks []string, ok bool) {
 		return "", nil, false
 	}
 	return splitAgentTasks(body)
+}
+
+// parseRoute extracts a routing intent: "⟢ route: <task>". Unlike delegate/handoff,
+// NO agent is named — the host picks by capability match. The whole body is the
+// task (no em-dash split); an empty body is not a route.
+func parseRoute(reply string) (task string, ok bool) {
+	body, ok := parseTrailer(reply, routeMarker)
+	if !ok || body == "" {
+		return "", false
+	}
+	return body, true
 }

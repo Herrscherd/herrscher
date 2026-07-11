@@ -83,6 +83,19 @@ func findByName(sessions []state.Session, name string) (state.Session, bool) {
 	return state.Session{}, false
 }
 
+// childCount returns how many sessions in the snapshot have parent as their
+// Parent — a lead's live cohort size. Report, Seal, and FanOut all count a
+// lead's children from the same snapshot, so they share this.
+func childCount(sessions []state.Session, parent string) int {
+	n := 0
+	for _, s := range sessions {
+		if s.Parent == parent {
+			n++
+		}
+	}
+	return n
+}
+
 // spawn creates a new session branched off `from`'s committed tip, seeds `task`
 // as its opening turn, and records `parent` on it (empty for a handoff, the
 // lead's name for a delegation). Order matters: every guard runs before any side
@@ -210,11 +223,7 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	if isSealed {
 		total = sealed
 	} else {
-		for _, s := range sessions {
-			if s.Parent == from.Parent {
-				total++
-			}
-		}
+		total = childCount(sessions, from.Parent)
 	}
 
 	branch := c.wt.Branch(req.FromSession)
@@ -308,12 +317,7 @@ func (c *coordinator) Seal(ctx context.Context, req contracts.SealRequest) (stri
 	if req.Expected <= 0 {
 		return "", fmt.Errorf("seal refused: expected must be > 0")
 	}
-	cohort := 0
-	for _, s := range sessions {
-		if s.Parent == req.FromSession {
-			cohort++
-		}
-	}
+	cohort := childCount(sessions, req.FromSession)
 	if req.Expected < cohort {
 		return "", fmt.Errorf("seal refused: expected %d below current cohort size %d", req.Expected, cohort)
 	}
@@ -344,12 +348,7 @@ func (c *coordinator) FanOut(ctx context.Context, req contracts.FanOutRequest) (
 	if len(req.Tasks) == 0 {
 		return nil, fmt.Errorf("fanout: no tasks")
 	}
-	preexisting := 0
-	for _, s := range sessions {
-		if s.Parent == req.FromSession {
-			preexisting++
-		}
-	}
+	preexisting := childCount(sessions, req.FromSession)
 	var spawned []string
 	var spawnErr error
 	for _, task := range req.Tasks {

@@ -556,6 +556,10 @@ type recordingCoord struct {
 	reqs      []contracts.HandoffRequest
 	delegates []contracts.DelegateRequest
 	reports   []contracts.ReportRequest
+	merges    []contracts.MergeRequest
+	seals     []contracts.SealRequest
+	fanouts   []contracts.FanOutRequest
+	routes    []contracts.RouteRequest
 }
 
 func (r *recordingCoord) Handoff(_ context.Context, req contracts.HandoffRequest) (string, error) {
@@ -569,6 +573,26 @@ func (r *recordingCoord) Delegate(_ context.Context, req contracts.DelegateReque
 func (r *recordingCoord) Report(_ context.Context, req contracts.ReportRequest) (string, error) {
 	r.reports = append(r.reports, req)
 	return "lead", nil
+}
+func (r *recordingCoord) Merge(_ context.Context, req contracts.MergeRequest) (string, error) {
+	r.merges = append(r.merges, req)
+	return "lead", nil
+}
+func (r *recordingCoord) Seal(_ context.Context, req contracts.SealRequest) (string, error) {
+	r.seals = append(r.seals, req)
+	return req.FromSession, nil
+}
+func (r *recordingCoord) FanOut(_ context.Context, req contracts.FanOutRequest) ([]string, error) {
+	r.fanouts = append(r.fanouts, req)
+	spawned := make([]string, len(req.Tasks))
+	for i := range req.Tasks {
+		spawned[i] = req.ToAgent + "-w"
+	}
+	return spawned, nil
+}
+func (r *recordingCoord) Route(_ context.Context, req contracts.RouteRequest) (string, string, error) {
+	r.routes = append(r.routes, req)
+	return "netter", req.FromSession + "-netter", nil
 }
 
 // TestDriverInvokesCoordinatorOnHandoffTrailer proves a completed turn whose
@@ -647,6 +671,18 @@ func (e *erroringCoord) Delegate(context.Context, contracts.DelegateRequest) (st
 func (e *erroringCoord) Report(context.Context, contracts.ReportRequest) (string, error) {
 	return "", e.err
 }
+func (e *erroringCoord) Merge(context.Context, contracts.MergeRequest) (string, error) {
+	return "", e.err
+}
+func (e *erroringCoord) Seal(context.Context, contracts.SealRequest) (string, error) {
+	return "", e.err
+}
+func (e *erroringCoord) FanOut(context.Context, contracts.FanOutRequest) ([]string, error) {
+	return nil, e.err
+}
+func (e *erroringCoord) Route(context.Context, contracts.RouteRequest) (string, string, error) {
+	return "", "", e.err
+}
 
 // TestDriverSurfacesCoordinatorErrorAsStatus proves that when the Coordinator
 // refuses a handoff, the driver fans a "status" event carrying "handoff
@@ -675,4 +711,58 @@ func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
 		}
 		return false
 	}, "status event carrying the coordinator's refusal fanned out")
+}
+
+func TestDriverInvokesCoordinatorOnSealTrailer(t *testing.T) {
+	from := make(chan contracts.Event, 2)
+	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from)
+	rc := &recordingCoord{}
+	d.coordinator = rc
+
+	from <- contracts.Event{T: "reply", Done: true, Text: "cohorte lancée.\n⟢ seal: 4"}
+	if ok := d.awaitTurn(context.Background()); !ok {
+		t.Fatal("awaitTurn should complete on reply{done}")
+	}
+	if len(rc.seals) != 1 {
+		t.Fatalf("expected 1 seal, got %d", len(rc.seals))
+	}
+	if rc.seals[0].FromSession != "lead" || rc.seals[0].Expected != 4 {
+		t.Fatalf("bad seal request: %+v", rc.seals[0])
+	}
+}
+
+// TestDriverInvokesCoordinatorOnFanOutTrailer proves a completed turn whose reply
+// carries a well-formed fanout trailer invokes FanOut with the driver's own name,
+// the parsed agent, and the parsed task list, and fans a "cohorte lancée" status.
+func TestDriverInvokesCoordinatorOnFanOutTrailer(t *testing.T) {
+	from := make(chan contracts.Event, 2)
+	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from)
+	rc := &recordingCoord{}
+	d.coordinator = rc
+
+	from <- contracts.Event{T: "reply", Done: true,
+		Text: "je lance.\n⟢ fanout: scripter — a ;; b"}
+	if ok := d.awaitTurn(context.Background()); !ok {
+		t.Fatal("awaitTurn should complete on reply{done}")
+	}
+	if len(rc.fanouts) != 1 {
+		t.Fatalf("expected 1 fanout, got %d", len(rc.fanouts))
+	}
+	got := rc.fanouts[0]
+	if got.FromSession != "lead" || got.ToAgent != "scripter" || len(got.Tasks) != 2 ||
+		got.Tasks[0] != "a" || got.Tasks[1] != "b" {
+		t.Fatalf("bad fanout request: %+v", got)
+	}
+}
+
+func TestDriverInvokesCoordinatorOnRouteTrailer(t *testing.T) {
+	rc := &recordingCoord{}
+	d := &sessionDriver{name: "lead", coordinator: rc}
+	d.maybeCoordinate(context.Background(), "voici mon plan\n⟢ route: un module réseau")
+	if len(rc.routes) != 1 {
+		t.Fatalf("Route calls = %d, want 1", len(rc.routes))
+	}
+	if rc.routes[0].FromSession != "lead" || rc.routes[0].Task != "un module réseau" {
+		t.Fatalf("Route req = %+v", rc.routes[0])
+	}
 }

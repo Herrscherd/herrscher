@@ -3,12 +3,14 @@ package host
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
 const (
@@ -25,11 +27,13 @@ type sessionCreator interface {
 }
 type agentLookup interface {
 	Get(name string) (agent.Agent, bool)
+	List() ([]agent.Agent, error)
 }
 type cleanBrancher interface {
 	IsCleanAt(path string) (bool, error)
 	Branch(name string) string
 	BranchExistsAt(path, branch string) (bool, error)
+	MergeInto(leadPath, branch string) (worktree.MergeOutcome, []string, error)
 }
 type sessionLister interface {
 	SnapshotSessions() []state.Session
@@ -52,12 +56,14 @@ type coordinator struct {
 
 	mu       sync.Mutex
 	reported map[string]map[string]bool // parent → { worker → true } livrés
+	expected map[string]int             // parent → N attendu (sous mu), figé par Seal
 }
 
 func newCoordinator(creator sessionCreator, agents agentLookup, wt cleanBrancher, sessions sessionLister, closer sessionCloser, seed func(string, string) bool) *coordinator {
 	return &coordinator{
 		creator: creator, agents: agents, wt: wt, sessions: sessions, closer: closer, seed: seed,
 		reported: map[string]map[string]bool{},
+		expected: map[string]int{},
 	}
 }
 
@@ -75,6 +81,19 @@ func findByName(sessions []state.Session, name string) (state.Session, bool) {
 		}
 	}
 	return state.Session{}, false
+}
+
+// childCount returns how many sessions in the snapshot have parent as their
+// Parent — a lead's live cohort size. Report, Seal, and FanOut all count a
+// lead's children from the same snapshot, so they share this.
+func childCount(sessions []state.Session, parent string) int {
+	n := 0
+	for _, s := range sessions {
+		if s.Parent == parent {
+			n++
+		}
+	}
+	return n
 }
 
 // spawn creates a new session branched off `from`'s committed tip, seeds `task`
@@ -197,24 +216,186 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	}
 	c.reported[from.Parent][req.FromSession] = true
 	done := len(c.reported[from.Parent])
+	sealed, isSealed := c.expected[from.Parent]
 	c.mu.Unlock()
 
 	total := 0
-	for _, s := range sessions {
-		if s.Parent == from.Parent {
-			total++
-		}
+	if isSealed {
+		total = sealed
+	} else {
+		total = childCount(sessions, from.Parent)
 	}
 
 	branch := c.wt.Branch(req.FromSession)
 	msg := fmt.Sprintf("%s a terminé sur %s (%d/%d) — %s", req.FromSession, branch, done, total, req.Summary)
 	if done >= total {
-		msg += " — tous les workers ont livré"
+		if isSealed {
+			msg += " — cohorte complète"
+		} else {
+			msg += " — tous les workers ont livré"
+		}
 	}
 	if !c.seedWithRetry(ctx, from.Parent, msg) {
 		return "", fmt.Errorf("report: delivery to parent %q timed out", from.Parent)
 	}
 	return from.Parent, nil
+}
+
+// Merge aggregates worker W's committed branch (session/<W>) into the lead's
+// worktree via a real git merge, then seeds the lead the outcome. Lead-initiated
+// (⟢ merge). Every guard runs before the side effect, on one atomic snapshot:
+// lead known → worker known → worker is a child of THIS lead → worker committed →
+// lead committed. Lead-clean is required so a conflict abort restores the lead's
+// worktree without discarding uncommitted lead work. A conflict is not an error:
+// MergeInto aborts (lead left clean) and the lead is seeded a diagnostic. W stays
+// alive; the join state (reported/mu) is deliberately untouched — delivery
+// tracking and aggregation are orthogonal.
+func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (string, error) {
+	sessions := c.sessions.SnapshotSessions()
+	lead, ok := findByName(sessions, req.FromSession)
+	if !ok {
+		return "", fmt.Errorf("merge: lead %q not found", req.FromSession)
+	}
+	worker, ok := findByName(sessions, req.Worker)
+	if !ok {
+		return "", fmt.Errorf("merge: worker %q not found", req.Worker)
+	}
+	if worker.Parent != req.FromSession {
+		return "", fmt.Errorf("merge refused: %q is not a worker of %q", req.Worker, req.FromSession)
+	}
+	// Worker must be committed: session/<W>'s tip is what gets merged, so
+	// uncommitted worker work would not be aggregated. Mirror the Report guard.
+	wClean, err := c.wt.IsCleanAt(worker.Worktree)
+	if err != nil {
+		return "", fmt.Errorf("merge: %w", err)
+	}
+	if !wClean {
+		return "", fmt.Errorf("merge refused: worker %q has uncommitted changes — commit first", req.Worker)
+	}
+	// Lead must be committed so a conflict abort restores it cleanly without
+	// clobbering uncommitted lead work.
+	lClean, err := c.wt.IsCleanAt(lead.Worktree)
+	if err != nil {
+		return "", fmt.Errorf("merge: %w", err)
+	}
+	if !lClean {
+		return "", fmt.Errorf("merge refused: lead %q has uncommitted changes — commit first", req.FromSession)
+	}
+
+	outcome, conflicts, err := c.wt.MergeInto(lead.Worktree, c.wt.Branch(req.Worker))
+	if err != nil {
+		return "", fmt.Errorf("merge: %w", err)
+	}
+	var msg string
+	switch outcome {
+	case worktree.MergeApplied:
+		msg = fmt.Sprintf("branche de %s mergée dans %s", req.Worker, req.FromSession)
+	case worktree.MergeUpToDate:
+		msg = fmt.Sprintf("%s déjà à jour dans %s", req.Worker, req.FromSession)
+	case worktree.MergeConflict:
+		msg = fmt.Sprintf("merge de %s refusé : conflit sur %s — résous manuellement",
+			req.Worker, strings.Join(conflicts, ", "))
+	}
+	if !c.seedWithRetry(ctx, req.FromSession, msg) {
+		return "", fmt.Errorf("merge: delivery to lead %q timed out", req.FromSession)
+	}
+	return req.FromSession, nil
+}
+
+// Seal records how many workers FromSession's cohort expects, turning the join's
+// best-effort "all delivered" into a deterministic barrier: once sealed, Report
+// reports "cohorte complète" only at done >= N. Guards run before any effect on
+// one atomic snapshot: lead known → N > 0 → N >= current cohort size (refusing an
+// under-seal at the source). Re-seal is last-wins. Seal does not seed into the
+// lead's turn — like Delegate it changes state and fans a status; the barrier
+// surfaces in later Report messages.
+func (c *coordinator) Seal(ctx context.Context, req contracts.SealRequest) (string, error) {
+	sessions := c.sessions.SnapshotSessions()
+	if _, ok := findByName(sessions, req.FromSession); !ok {
+		return "", fmt.Errorf("seal: lead %q not found", req.FromSession)
+	}
+	if req.Expected <= 0 {
+		return "", fmt.Errorf("seal refused: expected must be > 0")
+	}
+	cohort := childCount(sessions, req.FromSession)
+	if req.Expected < cohort {
+		return "", fmt.Errorf("seal refused: expected %d below current cohort size %d", req.Expected, cohort)
+	}
+	c.mu.Lock()
+	c.expected[req.FromSession] = req.Expected
+	c.mu.Unlock()
+	return req.FromSession, nil
+}
+
+// FanOut spawns one worker per task — all children of FromSession off its
+// committed tip, all from ToAgent — then seals the cohort to its real size, the
+// batch counterpart of Delegate. Guards run before any spawn: unknown agent and
+// unknown lead fail with nothing created. Each task then goes through spawn, whose
+// own lead-clean guard means a dirty lead yields zero workers on the first task. A
+// spawn failure mid-batch is not rolled back: the workers already created are real
+// committed sessions, so FanOut stops, seals to what was actually spawned, and
+// returns those names alongside the error. The seal counts the lead's preexisting
+// children (from the guard snapshot) plus the workers spawned here.
+func (c *coordinator) FanOut(ctx context.Context, req contracts.FanOutRequest) ([]string, error) {
+	if _, ok := c.agents.Get(req.ToAgent); !ok {
+		return nil, fmt.Errorf("fanout: unknown agent %q", req.ToAgent)
+	}
+	sessions := c.sessions.SnapshotSessions()
+	lead, ok := findByName(sessions, req.FromSession)
+	if !ok {
+		return nil, fmt.Errorf("fanout: lead %q not found", req.FromSession)
+	}
+	if len(req.Tasks) == 0 {
+		return nil, fmt.Errorf("fanout: no tasks")
+	}
+	preexisting := childCount(sessions, req.FromSession)
+	var spawned []string
+	var spawnErr error
+	for _, task := range req.Tasks {
+		name, err := c.spawn(ctx, lead, req.ToAgent, task, req.FromSession)
+		if err != nil {
+			spawnErr = err
+			break
+		}
+		spawned = append(spawned, name)
+	}
+	if len(spawned) > 0 {
+		c.mu.Lock()
+		c.expected[req.FromSession] = preexisting + len(spawned)
+		c.mu.Unlock()
+	}
+	return spawned, spawnErr
+}
+
+// Route picks the best-matching agent for req.Task by a deterministic capability
+// score (pickAgent over the agent roster's declared tags — no LLM enters here,
+// Model O) and then delegates to it: the chosen worker is a child of the lead off
+// its committed tip, the lead stays alive (spawn with parent = lead, like
+// Delegate). Guards run before any spawn: an empty task, a missing lead, a roster
+// error, or no matching agent each fail with nothing created. spawn's own
+// lead-clean guard means a dirty lead yields no worker. Returns the chosen agent
+// and the worker's session.
+func (c *coordinator) Route(ctx context.Context, req contracts.RouteRequest) (string, string, error) {
+	if strings.TrimSpace(req.Task) == "" {
+		return "", "", fmt.Errorf("route: empty task")
+	}
+	from, ok := c.findSession(req.FromSession)
+	if !ok {
+		return "", "", fmt.Errorf("route: lead %q not found", req.FromSession)
+	}
+	roster, err := c.agents.List()
+	if err != nil {
+		return "", "", fmt.Errorf("route: %w", err)
+	}
+	chosen, ok := pickAgent(roster, req.Task)
+	if !ok {
+		return "", "", fmt.Errorf("route: no agent matches task")
+	}
+	session, err := c.spawn(ctx, from, chosen, req.Task, req.FromSession)
+	if err != nil {
+		return "", "", err
+	}
+	return chosen, session, nil
 }
 
 // forget purge l'état de join d'une session qui se ferme. Deux effets : si `name`
@@ -228,6 +409,7 @@ func (c *coordinator) forget(name string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.reported, name)
+	delete(c.expected, name)
 	for parent, workers := range c.reported {
 		delete(workers, name)
 		if len(workers) == 0 {

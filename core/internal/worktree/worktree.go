@@ -105,6 +105,69 @@ func (w *Worktreer) BranchExistsAt(path, branch string) (bool, error) {
 	return false, fmt.Errorf("cannot verify branch %q at %q: %w", branch, path, err)
 }
 
+// MergeOutcome classifies a MergeInto result.
+type MergeOutcome int
+
+const (
+	MergeApplied  MergeOutcome = iota // a merge commit was created
+	MergeUpToDate                     // nothing to merge — branch already in lead
+	MergeConflict                     // conflict — the merge was aborted
+)
+
+// MergeInto runs `git -C leadPath merge --no-edit branch`. On success it reports
+// MergeApplied (a commit was created) or MergeUpToDate (HEAD unchanged). On a
+// conflict it returns MergeConflict plus the conflicted file list and runs
+// `git merge --abort`, so leadPath is left clean either way. Any other git
+// failure is returned as an error (with a best-effort abort first, so a
+// half-started merge never lingers); when err != nil the MergeOutcome is
+// undefined and callers must branch on err first.
+func (w *Worktreer) MergeInto(leadPath, branch string) (MergeOutcome, []string, error) {
+	pre, err := w.headAt(leadPath)
+	if err != nil {
+		return MergeConflict, nil, fmt.Errorf("merge: cannot read HEAD of %q: %w", leadPath, err)
+	}
+	out, mergeErr := exec.CommandContext(w.ctx, "git", "-C", leadPath, "merge", "--no-edit", branch).CombinedOutput()
+	if mergeErr == nil {
+		post, err := w.headAt(leadPath)
+		if err != nil {
+			return MergeApplied, nil, fmt.Errorf("merge: cannot read HEAD of %q after merge: %w", leadPath, err)
+		}
+		if post == pre {
+			return MergeUpToDate, nil, nil
+		}
+		return MergeApplied, nil, nil
+	}
+	// Merge failed. If files are in conflict, abort and report them cleanly.
+	conflicts := w.conflictFiles(leadPath)
+	_ = exec.CommandContext(w.ctx, "git", "-C", leadPath, "merge", "--abort").Run()
+	if len(conflicts) > 0 {
+		return MergeConflict, conflicts, nil
+	}
+	return MergeConflict, nil, fmt.Errorf("merge %s into %q: %s", branch, leadPath, strings.TrimSpace(string(out)))
+}
+
+// headAt returns the commit HEAD points to in the given worktree.
+func (w *Worktreer) headAt(path string) (string, error) {
+	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// conflictFiles lists paths currently in an unmerged (conflicted) state.
+func (w *Worktreer) conflictFiles(path string) []string {
+	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "diff", "--name-only", "--diff-filter=U").Output()
+	if err != nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(string(out))
+	if trimmed == "" {
+		return nil
+	}
+	return strings.Split(trimmed, "\n")
+}
+
 // Remove removes the worktree. If it has uncommitted changes and !force, it
 // refuses with the status. The branch session/<name> is always left intact.
 func (w *Worktreer) Remove(repo, name string, force bool) error {

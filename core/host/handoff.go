@@ -1,14 +1,18 @@
 package host
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Coordination trailers: an agent signals an inter-session intent on a single
-// line at the very end of its reply. done has priority over delegate over merge
-// over handoff when dispatched (see maybeCoordinate).
+// line at the very end of its reply. done has priority over delegate over seal
+// over merge over handoff when dispatched (see maybeCoordinate).
 const (
 	handoffMarker  = "⟢ handoff:"
 	delegateMarker = "⟢ delegate:"
 	doneMarker     = "⟢ done:"
+	sealMarker     = "⟢ seal:"
 	mergeMarker    = "⟢ merge:"
 )
 
@@ -79,4 +83,19 @@ func parseMerge(reply string) (worker string, ok bool) {
 		return "", false
 	}
 	return body, true
+}
+
+// parseSeal extracts a cohort-seal intent: "⟢ seal: <N>". The body is a single
+// positive integer (the expected worker count); a non-integer, a non-positive
+// value, or an empty body is not a seal.
+func parseSeal(reply string) (n int, ok bool) {
+	body, ok := parseTrailer(reply, sealMarker)
+	if !ok || body == "" {
+		return 0, false
+	}
+	v, err := strconv.Atoi(body)
+	if err != nil || v <= 0 {
+		return 0, false
+	}
+	return v, true
 }

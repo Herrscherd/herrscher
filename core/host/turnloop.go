@@ -281,7 +281,7 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 
 // maybeCoordinate runs the Model-O signal check after a completed turn: inspect
 // the reply's trailer and, on a valid marker, hand the decision to the
-// Coordinator. A single trailer per turn: done wins over delegate over merge over handoff.
+// Coordinator. A single trailer per turn: done wins over delegate over seal over merge over handoff.
 // A malformed marker is ignored; a coordinator refusal (unknown agent, dirty
 // source, missing parent, create failure) is surfaced back into the session's
 // channel as a status event — never a silent half-coordination.
@@ -304,6 +304,16 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 			FromSession: d.name, ToAgent: toAgent, Task: task,
 		}); err != nil {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "delegate refusé: " + err.Error()})
+		}
+		return
+	}
+	if n, ok := parseSeal(reply); ok {
+		if lead, err := d.coordinator.Seal(ctx, contracts.SealRequest{
+			FromSession: d.name, Expected: n,
+		}); err != nil {
+			d.fanOut(ctx, contracts.Event{T: "status", Text: "seal refusé: " + err.Error()})
+		} else {
+			d.fanOut(ctx, contracts.Event{T: "status", Text: "cohorte scellée pour " + lead})
 		}
 		return
 	}

@@ -557,6 +557,7 @@ type recordingCoord struct {
 	delegates []contracts.DelegateRequest
 	reports   []contracts.ReportRequest
 	merges    []contracts.MergeRequest
+	seals     []contracts.SealRequest
 }
 
 func (r *recordingCoord) Handoff(_ context.Context, req contracts.HandoffRequest) (string, error) {
@@ -574,6 +575,10 @@ func (r *recordingCoord) Report(_ context.Context, req contracts.ReportRequest) 
 func (r *recordingCoord) Merge(_ context.Context, req contracts.MergeRequest) (string, error) {
 	r.merges = append(r.merges, req)
 	return "lead", nil
+}
+func (r *recordingCoord) Seal(_ context.Context, req contracts.SealRequest) (string, error) {
+	r.seals = append(r.seals, req)
+	return req.FromSession, nil
 }
 
 // TestDriverInvokesCoordinatorOnHandoffTrailer proves a completed turn whose
@@ -653,6 +658,9 @@ func (e *erroringCoord) Report(context.Context, contracts.ReportRequest) (string
 	return "", e.err
 }
 func (e *erroringCoord) Merge(context.Context, contracts.MergeRequest) (string, error) {
+	return "", e.err
+}
+func (e *erroringCoord) Seal(context.Context, contracts.SealRequest) (string, error) {
 	return "", e.err
 }
 

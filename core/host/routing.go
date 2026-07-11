@@ -2,16 +2,20 @@ package host
 
 import (
 	"strings"
+	"unicode"
 
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
-// tokenizeTask lowercases task and splits it into a set of alphanumeric tokens —
-// the vocabulary a task's wording offers for matching against agent tags.
+// tokenizeTask lowercases task and splits it into a set of word tokens — the
+// vocabulary a task's wording offers for matching against agent tags. A word is a
+// run of Unicode letters or digits, so accented words (this codebase is
+// French-first) stay intact and match tags read verbatim from TAGS; splitting on
+// ASCII-only would fragment "réseau" and never match a "réseau" tag.
 func tokenizeTask(task string) map[string]bool {
 	set := map[string]bool{}
 	for _, tok := range strings.FieldsFunc(strings.ToLower(task), func(r rune) bool {
-		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
+		return !(unicode.IsLetter(r) || unicode.IsDigit(r))
 	}) {
 		set[tok] = true
 	}

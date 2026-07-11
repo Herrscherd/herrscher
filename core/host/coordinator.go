@@ -203,9 +203,6 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	}
 	c.reported[from.Parent][req.FromSession] = true
 	done := len(c.reported[from.Parent])
-	c.mu.Unlock()
-
-	c.mu.Lock()
 	sealed, isSealed := c.expected[from.Parent]
 	c.mu.Unlock()
 

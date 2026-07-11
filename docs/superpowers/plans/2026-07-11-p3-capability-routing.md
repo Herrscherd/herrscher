@@ -552,7 +552,7 @@ func TestRoutePicksAndDelegates(t *testing.T) {
 			{Name: "scripter", Tags: []string{"lua"}},
 		}},
 		&fakeWTC{clean: true, branches: map[string]bool{}},
-		fakeSessions{sessions: []state.Session{
+		fakeSessions{list: []state.Session{
 			{Name: "lead", Worktree: "/wt/lead", Project: "p"},
 		}},
 		&fakeCloser{},
@@ -577,7 +577,7 @@ func TestRoutePicksAndDelegates(t *testing.T) {
 
 func TestRouteEmptyTaskRefused(t *testing.T) {
 	c := newCoordinator(&fakeCreator{}, fakeAgents{}, &fakeWTC{clean: true},
-		fakeSessions{sessions: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
+		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
 		&fakeCloser{}, func(string, string) bool { return true })
 	if _, _, err := c.Route(context.Background(), contracts.RouteRequest{FromSession: "lead", Task: "  "}); err == nil {
 		t.Fatal("Route empty task = nil err, want refusal")
@@ -598,7 +598,7 @@ func TestRouteNoMatchRefused(t *testing.T) {
 	c := newCoordinator(&fakeCreator{},
 		fakeAgents{roster: []agent.Agent{{Name: "scripter", Tags: []string{"lua"}}}},
 		&fakeWTC{clean: true, branches: map[string]bool{}},
-		fakeSessions{sessions: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
+		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
 		&fakeCloser{}, func(string, string) bool { return true })
 	if _, _, err := c.Route(context.Background(), contracts.RouteRequest{FromSession: "lead", Task: "de la doc markdown"}); err == nil {
 		t.Fatal("Route no match = nil err, want refusal")
@@ -610,7 +610,7 @@ func TestRouteDirtyLeadSpawnsNone(t *testing.T) {
 	c := newCoordinator(&fakeCreator{},
 		fakeAgents{roster: []agent.Agent{{Name: "netter", Tags: []string{"network"}}}},
 		&fakeWTC{clean: false},
-		fakeSessions{sessions: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
+		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
 		&fakeCloser{}, func(session, task string) bool { seeded[session] = task; return true })
 	if _, _, err := c.Route(context.Background(), contracts.RouteRequest{FromSession: "lead", Task: "network"}); err == nil {
 		t.Fatal("Route dirty lead = nil err, want refusal")

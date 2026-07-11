@@ -86,3 +86,29 @@ func TestParseMerge(t *testing.T) {
 		})
 	}
 }
+
+func TestParseSeal(t *testing.T) {
+	cases := []struct {
+		name   string
+		reply  string
+		wantN  int
+		wantOK bool
+	}{
+		{"valide", "je scelle.\n⟢ seal: 5", 5, true},
+		{"un", "⟢ seal: 1", 1, true},
+		{"zéro refusé", "⟢ seal: 0", 0, false},
+		{"négatif refusé", "⟢ seal: -2", 0, false},
+		{"non entier refusé", "⟢ seal: trois", 0, false},
+		{"corps vide refusé", "⟢ seal:", 0, false},
+		{"marker absent", "⟢ done: fini", 0, false},
+		{"pas en dernière ligne", "⟢ seal: 5\nautre chose", 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n, ok := parseSeal(tc.reply)
+			if ok != tc.wantOK || n != tc.wantN {
+				t.Fatalf("parseSeal(%q) = (%d,%v), want (%d,%v)", tc.reply, n, ok, tc.wantN, tc.wantOK)
+			}
+		})
+	}
+}

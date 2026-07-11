@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -48,10 +49,16 @@ type coordinator struct {
 	sessions sessionLister
 	closer   sessionCloser
 	seed     func(session, task string) bool
+
+	mu       sync.Mutex
+	reported map[string]map[string]bool // parent → { worker → true } livrés
 }
 
 func newCoordinator(creator sessionCreator, agents agentLookup, wt cleanBrancher, sessions sessionLister, closer sessionCloser, seed func(string, string) bool) *coordinator {
-	return &coordinator{creator: creator, agents: agents, wt: wt, sessions: sessions, closer: closer, seed: seed}
+	return &coordinator{
+		creator: creator, agents: agents, wt: wt, sessions: sessions, closer: closer, seed: seed,
+		reported: map[string]map[string]bool{},
+	}
 }
 
 // findSession resolves a session by name in the current snapshot.
@@ -183,12 +190,50 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	if _, ok := findByName(sessions, from.Parent); !ok {
 		return "", fmt.Errorf("report: parent %q of %q not found", from.Parent, req.FromSession)
 	}
+
+	c.mu.Lock()
+	if c.reported[from.Parent] == nil {
+		c.reported[from.Parent] = map[string]bool{}
+	}
+	c.reported[from.Parent][req.FromSession] = true
+	done := len(c.reported[from.Parent])
+	c.mu.Unlock()
+
+	total := 0
+	for _, s := range sessions {
+		if s.Parent == from.Parent {
+			total++
+		}
+	}
+
 	branch := c.wt.Branch(req.FromSession)
-	msg := fmt.Sprintf("%s a terminé sur %s — %s", req.FromSession, branch, req.Summary)
+	msg := fmt.Sprintf("%s a terminé sur %s (%d/%d) — %s", req.FromSession, branch, done, total, req.Summary)
+	if done >= total {
+		msg += " — tous les workers ont livré"
+	}
 	if !c.seedWithRetry(ctx, from.Parent, msg) {
 		return "", fmt.Errorf("report: delivery to parent %q timed out", from.Parent)
 	}
 	return from.Parent, nil
+}
+
+// forget purge l'état de join d'une session qui se ferme. Deux effets : si `name`
+// était un lead, sa cohorte est jetée (anti-fuite mémoire) ; si `name` était un
+// worker, il sort des livrés de son parent — sinon un worker livré puis fermé
+// resterait compté dans `done` alors que `total` (frères vivants) a baissé, faussant
+// le « tous les workers ont livré ». Garde l'invariant done ≤ total. Une cohorte
+// devenue vide après ce retrait est elle-même jetée, pour ne laisser aucune entrée
+// résiduelle sur un daemon longue durée.
+func (c *coordinator) forget(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.reported, name)
+	for parent, workers := range c.reported {
+		delete(workers, name)
+		if len(workers) == 0 {
+			delete(c.reported, parent)
+		}
+	}
 }
 
 // seedWithRetry waits for B's driver to register (goLive starts RunSession in a

@@ -14,6 +14,7 @@ const (
 	doneMarker     = "⟢ done:"
 	sealMarker     = "⟢ seal:"
 	mergeMarker    = "⟢ merge:"
+	fanoutMarker   = "⟢ fanout:"
 )
 
 // parseTrailer isolates the last non-empty line of reply and, if it starts with
@@ -98,4 +99,40 @@ func parseSeal(reply string) (n int, ok bool) {
 		return 0, false
 	}
 	return v, true
+}
+
+// splitAgentTasks splits "<agent> — <task1> ;; <task2> ;; …" into the agent and
+// its task list: the em-dash separates agent from tasks, ";;" separates tasks.
+// Empty tasks (extra ";;") are dropped. ok=false when the agent is empty or no
+// non-empty task remains.
+func splitAgentTasks(body string) (agent string, tasks []string, ok bool) {
+	parts := strings.SplitN(body, "—", 2)
+	if len(parts) != 2 {
+		return "", nil, false
+	}
+	agent = strings.TrimSpace(parts[0])
+	if agent == "" {
+		return "", nil, false
+	}
+	for _, raw := range strings.Split(parts[1], ";;") {
+		if t := strings.TrimSpace(raw); t != "" {
+			tasks = append(tasks, t)
+		}
+	}
+	if len(tasks) == 0 {
+		return "", nil, false
+	}
+	return agent, tasks, true
+}
+
+// parseFanOut extracts a batch fan-out intent:
+// "⟢ fanout: <agent> — <task1> ;; <task2> ;; …". One agent, one or more tasks.
+// Returns ok=false when absent or malformed (empty agent, no non-empty task,
+// missing em-dash).
+func parseFanOut(reply string) (agent string, tasks []string, ok bool) {
+	body, ok := parseTrailer(reply, fanoutMarker)
+	if !ok {
+		return "", nil, false
+	}
+	return splitAgentTasks(body)
 }

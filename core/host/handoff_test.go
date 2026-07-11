@@ -112,3 +112,42 @@ func TestParseSeal(t *testing.T) {
 		})
 	}
 }
+
+func TestParseFanOut(t *testing.T) {
+	cases := []struct {
+		reply     string
+		wantAgent string
+		wantTasks []string
+		wantOK    bool
+	}{
+		{"txt\n⟢ fanout: alpha — t1 ;; t2 ;; t3", "alpha", []string{"t1", "t2", "t3"}, true},
+		{"txt\n⟢ fanout: alpha — seule tâche", "alpha", []string{"seule tâche"}, true},
+		{"txt\n⟢ fanout: alpha —  t1  ;;  t2 ", "alpha", []string{"t1", "t2"}, true},
+		{"txt\n⟢ fanout: alpha — t1 ;; ;; t2", "alpha", []string{"t1", "t2"}, true},
+		{"txt\n⟢ fanout:  — t1", "", nil, false},           // agent vide
+		{"txt\n⟢ fanout: alpha —", "", nil, false},         // aucune tâche
+		{"txt\n⟢ fanout: alpha — ;; ;;", "", nil, false},   // tâches toutes vides
+		{"txt\n⟢ fanout: sans separateur", "", nil, false}, // pas d'em-dash
+		{"aucun trailer", "", nil, false},
+	}
+	for _, tc := range cases {
+		agent, tasks, ok := parseFanOut(tc.reply)
+		if ok != tc.wantOK {
+			t.Fatalf("reply %q → ok=%v (voulu %v)", tc.reply, ok, tc.wantOK)
+		}
+		if !ok {
+			continue
+		}
+		if agent != tc.wantAgent {
+			t.Fatalf("reply %q → agent=%q (voulu %q)", tc.reply, agent, tc.wantAgent)
+		}
+		if len(tasks) != len(tc.wantTasks) {
+			t.Fatalf("reply %q → %d tâches (voulu %d): %v", tc.reply, len(tasks), len(tc.wantTasks), tasks)
+		}
+		for i := range tasks {
+			if tasks[i] != tc.wantTasks[i] {
+				t.Fatalf("reply %q → tâche %d = %q (voulu %q)", tc.reply, i, tasks[i], tc.wantTasks[i])
+			}
+		}
+	}
+}

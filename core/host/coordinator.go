@@ -217,6 +217,20 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	return from.Parent, nil
 }
 
+// forget purge l'état de join d'une session qui se ferme. Deux effets : si `name`
+// était un lead, sa cohorte est jetée (anti-fuite mémoire) ; si `name` était un
+// worker, il sort des livrés de son parent — sinon un worker livré puis fermé
+// resterait compté dans `done` alors que `total` (frères vivants) a baissé, faussant
+// le « tous les workers ont livré ». Garde l'invariant done ≤ total.
+func (c *coordinator) forget(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.reported, name)
+	for _, workers := range c.reported {
+		delete(workers, name)
+	}
+}
+
 // seedWithRetry waits for B's driver to register (goLive starts RunSession in a
 // goroutine) before enqueuing the task, bounded so a never-arriving session
 // surfaces as a timeout instead of hanging.

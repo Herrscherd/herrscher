@@ -31,6 +31,10 @@ func CommandSocketPath(instanceID string) string {
 	return filepath.Join(os.TempDir(), name+".sock")
 }
 
+// defaultCommandReadTimeout bounds how long a connection may take to send its
+// request line before the handler gives up.
+const defaultCommandReadTimeout = 10 * time.Second
+
 type cmdRequest struct {
 	Argv []string `json:"argv"`
 }
@@ -46,6 +50,10 @@ type cmdResponse struct {
 // command is disp's own concern (hub.Dispatch holds dispatchMu). Blocks until
 // ctx is done; intended to run in a goroutine.
 func serveCommandSocket(ctx context.Context, path string, disp dispatcher) {
+	serveCommandSocketWithTimeout(ctx, path, disp, defaultCommandReadTimeout)
+}
+
+func serveCommandSocketWithTimeout(ctx context.Context, path string, disp dispatcher, readTimeout time.Duration) {
 	_ = os.Remove(path)
 	ln, err := net.Listen("unix", path)
 	if err != nil {
@@ -67,16 +75,16 @@ func serveCommandSocket(ctx context.Context, path string, disp dispatcher) {
 		if err != nil {
 			return // listener closed (ctx done)
 		}
-		go handleCommandConn(ctx, c, disp)
+		go handleCommandConn(ctx, c, disp, readTimeout)
 	}
 }
 
 // handleCommandConn reads one request line, dispatches it, writes one response.
-func handleCommandConn(ctx context.Context, c net.Conn, disp dispatcher) {
+func handleCommandConn(ctx context.Context, c net.Conn, disp dispatcher, readTimeout time.Duration) {
 	defer c.Close()
 	// Bound the read so a peer that connects but never sends a line can't pin this
 	// goroutine open past shutdown. The legit client writes its request immediately.
-	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_ = c.SetReadDeadline(time.Now().Add(readTimeout))
 	line, err := bufio.NewReader(c).ReadBytes('\n')
 	var resp cmdResponse
 	var req cmdRequest

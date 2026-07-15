@@ -31,12 +31,9 @@ func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
 		return seedBackend{}, nil
 	}
 
-	st := state.NewState(t.TempDir() + "/state.json")
-	if err := st.AddSession(state.Session{Name: "solo", ChannelID: "channel"}); err != nil {
-		t.Fatal(err)
-	}
+	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &seedSpyOrchestrator{}
-	if _, err := runOneShotSeedWith(context.Background(), st, "solo", "tâche", spy); err != nil {
+	if _, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if !spy.consolidated {

@@ -107,16 +107,20 @@ func (a coordViewAdapter) CoordinationView(name string) (manager.CoordView, bool
 // coordination role (no cohort as a lead, no Parent as a worker) — a solo session.
 func (c *coordinator) CoordinationView(name string) (CoordinationView, bool) {
 	c.mu.Lock()
-	reported, hasReported := c.reported[name]
+	_, hasReported := c.reported[name]
 	expected, hasExpected := c.expected[name]
+	// Count under the lock: c.reported[name] is the coordinator's live inner map,
+	// which Report mutates under c.mu. Reading len() after Unlock would race
+	// (concurrent map read/write → runtime fatal).
+	reportedCount := len(c.reported[name])
 	c.mu.Unlock()
 	if hasReported || hasExpected {
 		return CoordinationView{
 			Role:     "lead",
 			Lead:     name,
-			Reported: len(reported),
+			Reported: reportedCount,
 			Expected: expected,
-			Complete: expected > 0 && len(reported) >= expected,
+			Complete: expected > 0 && reportedCount >= expected,
 		}, true
 	}
 	if sess, ok := c.findSession(name); ok && sess.Parent != "" {

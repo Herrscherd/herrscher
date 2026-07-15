@@ -122,6 +122,10 @@ func parse(c contracts.Cmd, rest []string) (contracts.Input, error) {
 	in := contracts.Input{Args: map[string]string{}}
 	for i := 0; i < len(rest); i++ {
 		tok := rest[i]
+		if tok == "--json" {
+			in.JSON = true
+			continue
+		}
 		if !strings.HasPrefix(tok, "--") {
 			in.Rest = append(in.Rest, tok)
 			continue

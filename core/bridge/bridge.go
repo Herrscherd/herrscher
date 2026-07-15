@@ -7,6 +7,7 @@ package bridge
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/Herrscherd/herrscher-contracts"
 )
@@ -35,4 +36,36 @@ func Run(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestr
 		return errors.New("bridge requires --hub-socket (pure-runner mode)")
 	}
 	return runHub(ctx, newBackend, orch, o)
+}
+
+// RunOneShot runs one backend turn in-process over event channels. It is the
+// bridge seam used by the operator's short-lived session seed path: no control
+// socket or gateway is involved, but the same backend turn machinery (including
+// orchestrator context/observation) is exercised.
+func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, channel string, in <-chan contracts.Event, out chan<- contracts.Event) error {
+	resp, err := newBackend(channel)
+	if err != nil {
+		return fmt.Errorf("backend: %w", err)
+	}
+	defer resp.Close()
+
+	select {
+	case ev := <-in:
+		runOneTurn(ctx, channelSink{ctx: ctx, out: out}, resp, orch, ev)
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+type channelSink struct {
+	ctx context.Context
+	out chan<- contracts.Event
+}
+
+func (s channelSink) Emit(e contracts.Event) {
+	select {
+	case s.out <- e:
+	case <-s.ctx.Done():
+	}
 }

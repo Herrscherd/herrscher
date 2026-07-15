@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -69,6 +70,52 @@ func TestSessionListUsesGatewayChannelRef(t *testing.T) {
 	want := d.ChannelRef("new-demo")
 	if !strings.Contains(out, want) {
 		t.Fatalf("list output %q must render the gateway channel ref %q", out, want)
+	}
+}
+
+func TestSessionListJSON(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	st.Sessions = []state.Session{
+		{Name: "alpha", Agent: "roblox", Parent: ""},
+		{Name: "beta", Agent: "roblox", Parent: "alpha"},
+	}
+	out, err := h.sessionListRun(context.Background(), contracts.Input{JSON: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("not JSON: %v (%q)", err, out)
+	}
+	if len(got) != 2 || got[1]["parent"] != "alpha" {
+		t.Fatalf("unexpected: %v", got)
+	}
+	// id is emitted and equals the (slug) name, so a consumer can match by id.
+	if got[0]["id"] != "alpha" || got[1]["id"] != "beta" {
+		t.Fatalf("id must equal name: %v", got)
+	}
+	// A root session omits parent entirely (omitempty), so it decodes to null/None
+	// rather than an empty-string parent.
+	if _, present := got[0]["parent"]; present {
+		t.Fatalf("root session must omit parent, got: %v", got[0])
+	}
+}
+
+func TestSessionWhoJSON(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	st.Sessions = []state.Session{{Name: "alpha", Agent: "roblox", Parent: "lead"}}
+	out, err := h.sessionWhoRun(context.Background(), contracts.Input{
+		Args: map[string]string{"name": "alpha"}, JSON: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("not JSON: %v (%q)", err, out)
+	}
+	if got["name"] != "alpha" || got["parent"] != "lead" {
+		t.Fatalf("unexpected: %v", got)
 	}
 }
 

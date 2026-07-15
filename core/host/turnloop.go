@@ -46,6 +46,9 @@ type sessionDriver struct {
 	participants string
 	seenMu       sync.Mutex
 	seen         map[string]bool
+	// pendingReply receives the reply text of the next completed turn. It is
+	// set by SeedAndWait before enqueueing a one-shot seed.
+	pendingReply chan string
 
 	// metrics records turn lifecycle counters (nil = no recording, e.g. in tests).
 	metrics *metrics.Registry
@@ -96,6 +99,34 @@ func (d *sessionDriver) Pick(value string) {
 // to hand B its task the same way a human message would arrive.
 func (d *sessionDriver) Seed(task string) {
 	d.queue <- contracts.Event{T: "input", Who: "handoff", Text: task}
+}
+
+// SeedAndWait injects an opening task and blocks until that turn's reply{done},
+// returning its text. ok is false if the turn is abandoned.
+func (d *sessionDriver) SeedAndWait(ctx context.Context, task string) (string, bool) {
+	reply := make(chan string, 1)
+	d.seenMu.Lock()
+	d.pendingReply = reply
+	d.seenMu.Unlock()
+	d.queue <- contracts.Event{T: "input", Who: "seed", Text: task}
+	select {
+	case r := <-reply:
+		return r, true
+	case <-ctx.Done():
+		d.seenMu.Lock()
+		d.pendingReply = nil
+		d.seenMu.Unlock()
+		// The reply may have landed at the same instant ctx expired; select picks
+		// a ready case at random, so drain once before declaring a timeout. reply
+		// is buffered (cap 1) and awaitTurn nils pendingReply under seenMu, so this
+		// is race-free: either the reply is already queued, or it never will be.
+		select {
+		case r := <-reply:
+			return r, true
+		default:
+			return "", false
+		}
+	}
 }
 
 // sessionRegistry maps live session names to their driver so an out-of-band
@@ -272,6 +303,12 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 			}
 			d.fanOut(ctx, e)
 			if e.T == "reply" && e.Done {
+				d.seenMu.Lock()
+				if d.pendingReply != nil {
+					d.pendingReply <- e.Text
+					d.pendingReply = nil
+				}
+				d.seenMu.Unlock()
 				d.metrics.TurnCompleted()
 				d.maybeCoordinate(ctx, e.Text)
 				return true

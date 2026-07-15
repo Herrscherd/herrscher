@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -29,6 +30,16 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 		t.Fatal(err)
 	}
 	return newHub(ctx, st, sup, nil, t.TempDir(), &r, nil)
+}
+
+func TestSessionSeedRegisteredRequiresNameAndTask(t *testing.T) {
+	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.Dispatch(context.Background(), []string{"session", "seed", "--name", "solo"}); err == nil || !strings.Contains(err.Error(), "missing required --task") {
+		t.Fatal("expected error: missing required --task")
+	}
 }
 
 // Create maps the typed CreateSession into the flags the session-create command

@@ -290,6 +290,41 @@ func TestSeedEnqueuesInput(t *testing.T) {
 	}
 }
 
+func TestSeedAndWaitReturnsReply(t *testing.T) {
+	toBridge := make(chan contracts.Event, 8)
+	from := make(chan contracts.Event, 8)
+	d := newSessionDriver("solo", nil, toBridge, from)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go d.pump(ctx)
+
+	go func() {
+		<-toBridge
+		from <- contracts.Event{T: "reply", Done: true, Text: "j'ai appris X"}
+	}()
+
+	reply, ok := d.SeedAndWait(ctx, "crée un ModuleScript Greeter")
+	if !ok || reply != "j'ai appris X" {
+		t.Fatalf("SeedAndWait = %q, %v; want %q, true", reply, ok, "j'ai appris X")
+	}
+}
+
+func TestSeedAndWaitAbandonOnCancel(t *testing.T) {
+	toBridge := make(chan contracts.Event, 8)
+	from := make(chan contracts.Event, 8)
+	d := newSessionDriver("solo", nil, toBridge, from)
+	ctx, cancel := context.WithCancel(context.Background())
+	go d.pump(ctx)
+	go func() {
+		<-toBridge
+		cancel()
+	}()
+
+	if _, ok := d.SeedAndWait(ctx, "tâche"); ok {
+		t.Fatal("expected ok=false on cancel")
+	}
+}
+
 // TestDriverJournalsParticipants proves the daemon driver records message
 // authors in the participants journal (the bridge no longer does), so
 // /session who keeps a source in pure-runner mode.

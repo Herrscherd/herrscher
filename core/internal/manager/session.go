@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +22,33 @@ const cloneTimeout = 10 * time.Minute
 // worktree and a supervised child process, so an unbounded create loop (e.g. a
 // script driving Dispatch) could exhaust process/disk resources.
 const maxSessions = 64
+
+type sessionJSON struct {
+	// Id is the addressable handle by-name ops accept; Name is already the
+	// persisted slug, so id == name. Emitted so a consumer can match a session by
+	// id (Neublox's get_session) without re-deriving the slug.
+	Id       string   `json:"id"`
+	Name     string   `json:"name"`
+	Agent    string   `json:"agent"`
+	Project  string   `json:"project"`
+	Status   string   `json:"status"`
+	Worktree string   `json:"worktree"`
+	Gateways []string `json:"gateways"`
+	// omitempty so a root session omits the key entirely, decoding to a real
+	// "no parent" (null/None) rather than an empty-string parent named "".
+	Parent string `json:"parent,omitempty"`
+}
+
+func sessionJSONRow(s state.Session) sessionJSON {
+	gateways := s.BoundGateways()
+	if gateways == nil {
+		gateways = []string{}
+	}
+	return sessionJSON{
+		Id: s.Name, Name: s.Name, Agent: s.Agent, Project: s.Project, Status: "running",
+		Worktree: s.Worktree, Gateways: gateways, Parent: s.Parent,
+	}
+}
 
 // sessionBanner renders the shared context body posted on session create.
 // worktree=="" means no isolated worktree was made; shared distinguishes an
@@ -213,8 +241,16 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 	return fmt.Sprintf("🗄️ Session **%s** closed.", name), nil
 }
 
-func (h *Handler) sessionListRun(_ context.Context, _ contracts.Input) (string, error) {
+func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string, error) {
 	sessions := h.st.SnapshotSessions()
+	if in.JSON {
+		rows := make([]sessionJSON, 0, len(sessions))
+		for _, s := range sessions {
+			rows = append(rows, sessionJSONRow(s))
+		}
+		b, err := json.Marshal(rows)
+		return string(b), err
+	}
 	if len(sessions) == 0 {
 		return "No active sessions.", nil
 	}
@@ -230,8 +266,13 @@ func (h *Handler) sessionWhoRun(_ context.Context, in contracts.Input) (string, 
 	if !ok {
 		return "", fmt.Errorf("missing name")
 	}
-	if _, exists := h.st.FindSession(name); !exists {
+	sess, exists := h.st.FindSession(name)
+	if !exists {
 		return "", fmt.Errorf("no session %q", name)
+	}
+	if in.JSON {
+		b, err := json.Marshal(sessionJSONRow(sess))
+		return string(b), err
 	}
 	ids := state.ReadParticipants(state.ParticipantsPath(h.partDir, name))
 	if len(ids) == 0 {

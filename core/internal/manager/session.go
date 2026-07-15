@@ -37,6 +37,18 @@ type sessionJSON struct {
 	// omitempty so a root session omits the key entirely, decoding to a real
 	// "no parent" (null/None) rather than an empty-string parent named "".
 	Parent string `json:"parent,omitempty"`
+	// Coordination is the session's join state, present only for sessions in a
+	// coordination cohort (omitempty → solo sessions omit the key entirely).
+	Coordination *coordinationJSON `json:"coordination,omitempty"`
+}
+
+// coordinationJSON is the wire shape of a session's join state in session list.
+type coordinationJSON struct {
+	Role     string `json:"role"`
+	Lead     string `json:"lead"`
+	Reported int    `json:"reported"`
+	Expected int    `json:"expected"`
+	Complete bool   `json:"complete"`
 }
 
 func sessionJSONRow(s state.Session) sessionJSON {
@@ -246,7 +258,16 @@ func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string,
 	if in.JSON {
 		rows := make([]sessionJSON, 0, len(sessions))
 		for _, s := range sessions {
-			rows = append(rows, sessionJSONRow(s))
+			row := sessionJSONRow(s)
+			if h.coord != nil {
+				if v, ok := h.coord.CoordinationView(s.Name); ok {
+					row.Coordination = &coordinationJSON{
+						Role: v.Role, Lead: v.Lead, Reported: v.Reported,
+						Expected: v.Expected, Complete: v.Complete,
+					}
+				}
+			}
+			rows = append(rows, row)
 		}
 		b, err := json.Marshal(rows)
 		return string(b), err

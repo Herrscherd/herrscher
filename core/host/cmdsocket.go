@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // dispatcher runs an operator command and returns its stdout. *hub satisfies it
@@ -51,6 +52,15 @@ func serveCommandSocket(ctx context.Context, path string, disp dispatcher) {
 		fmt.Fprintf(os.Stderr, "command socket: listen %s: %v\n", path, err)
 		return
 	}
+	// The socket dispatches arbitrary operator commands (hub.Dispatch), so restrict
+	// it to the owner: it sits in a world-writable temp dir, and unlike the session
+	// control socket it is an execution surface, not just a bridge.
+	if err := os.Chmod(path, 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "command socket: chmod %s: %v\n", path, err)
+		_ = ln.Close()
+		_ = os.Remove(path)
+		return
+	}
 	go func() { <-ctx.Done(); _ = ln.Close(); _ = os.Remove(path) }()
 	for {
 		c, err := ln.Accept()
@@ -64,6 +74,9 @@ func serveCommandSocket(ctx context.Context, path string, disp dispatcher) {
 // handleCommandConn reads one request line, dispatches it, writes one response.
 func handleCommandConn(ctx context.Context, c net.Conn, disp dispatcher) {
 	defer c.Close()
+	// Bound the read so a peer that connects but never sends a line can't pin this
+	// goroutine open past shutdown. The legit client writes its request immediately.
+	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	line, err := bufio.NewReader(c).ReadBytes('\n')
 	var resp cmdResponse
 	var req cmdRequest

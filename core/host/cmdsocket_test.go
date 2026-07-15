@@ -121,6 +121,47 @@ func TestCommandSocketRejectsMalformed(t *testing.T) {
 	}
 }
 
+func TestCommandSocketRestrictedToOwner(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cmd.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go serveCommandSocket(ctx, path, &fakeDispatcher{out: "unused"})
+	waitForSocket(t, path)
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	// The socket runs operator commands, so it must not be group/world reachable.
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("socket perm = %o, want 600", perm)
+	}
+}
+
+func TestCommandSocketClosesSilentConnection(t *testing.T) {
+	// A peer that connects but never sends its request line must not pin the
+	// handler goroutine: the read deadline closes it. Use a short deadline so the
+	// test doesn't wait the production bound.
+	path := filepath.Join(t.TempDir(), "cmd.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go serveCommandSocketWithTimeout(ctx, path, &fakeDispatcher{out: "unused"}, 50*time.Millisecond)
+	waitForSocket(t, path)
+
+	c, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+	// Send nothing. Once the deadline fires the handler returns and closes the
+	// conn, so our read unblocks (EOF) well within a generous bound.
+	_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+	buf := make([]byte, 1)
+	if _, err := c.Read(buf); err == nil {
+		t.Fatal("expected the server to close the silent connection, got data")
+	}
+}
+
 type errString string
 
 func (e errString) Error() string { return string(e) }

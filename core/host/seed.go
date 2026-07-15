@@ -143,12 +143,37 @@ func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend,
 	return nil, fmt.Errorf("no backend plugin registered")
 }
 
+// provisionSeedScope ensures the memory scope roots exist before a one-shot seed
+// turn, keyed with the same contracts helpers the orchestrator derives its scope
+// from so the keys cannot drift. It is the seed-path counterpart of the live
+// bridge's provisionScope: best-effort (memory stays optional) and skipped for
+// memories that cannot create nodes.
+func provisionSeedScope(ctx context.Context, mem contracts.Memory, project, agent string) {
+	p, ok := mem.(contracts.Provisioner)
+	if !ok {
+		return
+	}
+	if project != "" {
+		_ = p.EnsureProject(ctx, contracts.ProjectKey(project), project)
+	}
+	if agent != "" {
+		_ = p.EnsureAgent(ctx, contracts.AgentKey(agent), agent)
+	}
+}
+
 func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orchestrator, contracts.Memory, error) {
 	resolver := NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
 	mem, err := resolver.Memory(ctx, contracts.Default.Memories(), os.Getenv)
 	if err != nil {
 		return nil, nil, err
 	}
+	// Ensure the scope roots exist before the turn, mirroring the live bridge's
+	// provisionScope. Without this a one-shot seed against a fresh vault fails at
+	// the first Consolidate: RecordShared/RecordPrivate link candidates under the
+	// project/agent roots, and the obsidian vault errors when those parent notes
+	// are absent. Best-effort and plugin-agnostic — a memory that cannot create
+	// nodes simply does not satisfy Provisioner and is skipped.
+	provisionSeedScope(ctx, mem, sess.Project, sess.Agent)
 	orch, err := resolver.Orchestrator(ctx, contracts.Default.Orchestrators())
 	if err != nil {
 		if mem != nil {

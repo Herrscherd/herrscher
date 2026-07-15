@@ -23,8 +23,9 @@ import (
 // boot-time Coordinator (Task 7/8) is built from. Kept minimal so the operator
 // CLI (NewRegistry), which has no Coordinator to wire, can ignore it.
 type hostDeps struct {
-	wt     *worktree.Worktreer
-	agents *agent.Store
+	wt      *worktree.Worktreer
+	agents  *agent.Store
+	handler *manager.Handler
 }
 
 // buildRegistry constructs the session/service command handler over a given
@@ -64,7 +65,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	return reg, hostDeps{wt: wt, agents: agents}, nil
+	return reg, hostDeps{wt: wt, agents: agents, handler: hdl}, nil
 }
 
 // NewRegistry builds the operator CLI registry: it loads its own state +

@@ -116,7 +116,16 @@ func (d *sessionDriver) SeedAndWait(ctx context.Context, task string) (string, b
 		d.seenMu.Lock()
 		d.pendingReply = nil
 		d.seenMu.Unlock()
-		return "", false
+		// The reply may have landed at the same instant ctx expired; select picks
+		// a ready case at random, so drain once before declaring a timeout. reply
+		// is buffered (cap 1) and awaitTurn nils pendingReply under seenMu, so this
+		// is race-free: either the reply is already queued, or it never will be.
+		select {
+		case r := <-reply:
+			return r, true
+		default:
+			return "", false
+		}
 	}
 }
 

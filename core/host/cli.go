@@ -2,9 +2,11 @@ package host
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
@@ -44,6 +46,23 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		if err := reg.Add(c); err != nil {
 			return nil, hostDeps{}, err
 		}
+	}
+	if err := reg.Add(contracts.New("session", "seed").
+		Help("run one agent turn in a session and print the reply").
+		Param("name", "session name", true).
+		Param("task", "opening task", true).
+		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
+			reply, err := runOneShotSeed(cmdCtx, st, in.Get("name"), in.Get("task"))
+			if err != nil {
+				return "", err
+			}
+			if in.JSON {
+				b, err := json.Marshal(map[string]string{"session": in.Get("name"), "reply": reply})
+				return string(b), err
+			}
+			return reply, nil
+		})); err != nil {
+		return nil, hostDeps{}, err
 	}
 	return reg, hostDeps{wt: wt, agents: agents}, nil
 }

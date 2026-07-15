@@ -104,6 +104,25 @@ func TestDispatchReturnsHandlerOutput(t *testing.T) {
 	}
 }
 
+func TestDispatchGlobalJSONFlag(t *testing.T) {
+	r := &cli.Registry{}
+	var gotJSON bool
+	_ = r.Add(contracts.Cmd{
+		Path:   []string{"session", "list"},
+		Params: nil,
+		Run: func(ctx context.Context, in contracts.Input) (string, error) {
+			gotJSON = in.JSON
+			return "ok", nil
+		},
+	})
+	if _, err := r.Dispatch(context.Background(), []string{"session", "list", "--json"}); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if !gotJSON {
+		t.Fatal("expected in.JSON == true when --json passed")
+	}
+}
+
 func TestHelpRendersSortedUsage(t *testing.T) {
 	r := build(t,
 		contracts.New("set", "home").Help("set home").Param("channel", "", true).

@@ -101,6 +101,58 @@ func TestSessionListJSON(t *testing.T) {
 	}
 }
 
+type fakeCoordReader struct{ views map[string]CoordView }
+
+func (f fakeCoordReader) CoordinationView(name string) (CoordView, bool) {
+	v, ok := f.views[name]
+	return v, ok
+}
+
+func TestSessionListEmitsCoordination(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	st.Sessions = []state.Session{
+		{Name: "lead1", Agent: "roblox"},
+		{Name: "solo1", Agent: "roblox"},
+	}
+	h.SetCoordinationReader(fakeCoordReader{views: map[string]CoordView{
+		"lead1": {Role: "lead", Lead: "lead1", Reported: 2, Expected: 3, Complete: false},
+	}})
+	out, err := h.sessionListRun(context.Background(), contracts.Input{JSON: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatalf("not JSON: %v (%q)", err, out)
+	}
+	byName := map[string]map[string]any{}
+	for _, r := range rows {
+		byName[r["name"].(string)] = r
+	}
+	coord, ok := byName["lead1"]["coordination"].(map[string]any)
+	if !ok {
+		t.Fatalf("lead1 should carry coordination, got %v", byName["lead1"])
+	}
+	if coord["role"] != "lead" || coord["reported"].(float64) != 2 || coord["expected"].(float64) != 3 {
+		t.Fatalf("bad coordination: %v", coord)
+	}
+	if _, present := byName["solo1"]["coordination"]; present {
+		t.Fatalf("solo1 must omit coordination: %v", byName["solo1"])
+	}
+}
+
+func TestSessionListOmitsCoordinationWhenUnwired(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	st.Sessions = []state.Session{{Name: "s1", Agent: "roblox"}}
+	out, err := h.sessionListRun(context.Background(), contracts.Input{JSON: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "coordination") {
+		t.Fatalf("unwired handler must not emit coordination: %s", out)
+	}
+}
+
 func TestSessionWhoJSON(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{{Name: "alpha", Agent: "roblox", Parent: "lead"}}

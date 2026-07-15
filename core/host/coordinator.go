@@ -9,6 +9,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
@@ -83,6 +84,23 @@ type CoordinationView struct {
 	Reported int    // workers that delivered (lead only; 0 for a worker)
 	Expected int    // cohort size once sealed (lead only; 0 if unsealed)
 	Complete bool   // Expected>0 && Reported>=Expected
+}
+
+// coordViewAdapter bridges the coordinator's CoordinationView to the manager's
+// local coordinationReader interface (decouples manager from host types, no
+// import cycle). Wired daemon-side in serve.go so session list --json dispatched
+// through the live hub carries coordination.
+type coordViewAdapter struct{ c *coordinator }
+
+func (a coordViewAdapter) CoordinationView(name string) (manager.CoordView, bool) {
+	v, ok := a.c.CoordinationView(name)
+	if !ok {
+		return manager.CoordView{}, false
+	}
+	return manager.CoordView{
+		Role: v.Role, Lead: v.Lead, Reported: v.Reported,
+		Expected: v.Expected, Complete: v.Complete,
+	}, true
 }
 
 // CoordinationView projects name's join state. ok=false means the session has no

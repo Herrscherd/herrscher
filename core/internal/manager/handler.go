@@ -16,7 +16,7 @@ type Handler struct {
 	agents     agentStore
 	st         *state.State
 	defaultCmd string
-	partDir    string // dir holding participants/<name>.log journals
+	partDir    string             // dir holding participants/<name>.log journals
 	coord      coordinationReader // nil until wired; session list omits coordination when nil
 }
 

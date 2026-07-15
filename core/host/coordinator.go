@@ -9,6 +9,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
@@ -70,6 +71,58 @@ func newCoordinator(creator sessionCreator, agents agentLookup, wt cleanBrancher
 // findSession resolves a session by name in the current snapshot.
 func (c *coordinator) findSession(name string) (state.Session, bool) {
 	return findByName(c.sessions.SnapshotSessions(), name)
+}
+
+// CoordinationView is a read-only snapshot of a session's join state, projected
+// from the coordinator's in-memory maps for observability (Neublox reads it via
+// session list --json). It exposes only state the coordinator actually holds —
+// no invented phase: reported/expected are the join counters, complete is the
+// deterministic barrier (the same done>=N Report uses).
+type CoordinationView struct {
+	Role     string // "lead" | "worker"
+	Lead     string // cohort identity: a worker's Parent, or a lead's own name
+	Reported int    // workers that delivered (lead only; 0 for a worker)
+	Expected int    // cohort size once sealed (lead only; 0 if unsealed)
+	Complete bool   // Expected>0 && Reported>=Expected
+}
+
+// coordViewAdapter bridges the coordinator's CoordinationView to the manager's
+// local coordinationReader interface (decouples manager from host types, no
+// import cycle). Wired daemon-side in serve.go so session list --json dispatched
+// through the live hub carries coordination.
+type coordViewAdapter struct{ c *coordinator }
+
+func (a coordViewAdapter) CoordinationView(name string) (manager.CoordView, bool) {
+	v, ok := a.c.CoordinationView(name)
+	if !ok {
+		return manager.CoordView{}, false
+	}
+	return manager.CoordView{
+		Role: v.Role, Lead: v.Lead, Reported: v.Reported,
+		Expected: v.Expected, Complete: v.Complete,
+	}, true
+}
+
+// CoordinationView projects name's join state. ok=false means the session has no
+// coordination role (no cohort as a lead, no Parent as a worker) — a solo session.
+func (c *coordinator) CoordinationView(name string) (CoordinationView, bool) {
+	c.mu.Lock()
+	reported, hasReported := c.reported[name]
+	expected, hasExpected := c.expected[name]
+	c.mu.Unlock()
+	if hasReported || hasExpected {
+		return CoordinationView{
+			Role:     "lead",
+			Lead:     name,
+			Reported: len(reported),
+			Expected: expected,
+			Complete: expected > 0 && len(reported) >= expected,
+		}, true
+	}
+	if sess, ok := c.findSession(name); ok && sess.Parent != "" {
+		return CoordinationView{Role: "worker", Lead: sess.Parent}, true
+	}
+	return CoordinationView{}, false
 }
 
 // findByName resolves a session by name in an already-taken snapshot, so a

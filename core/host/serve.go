@@ -195,7 +195,16 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	hb := newHub(ctx, st, sup, gws, partDir, reg, h.Metrics())
 	// Wired before the boot loop's goLive calls below, so the Coordinator is
 	// non-nil for every driver started at boot (Model O handoff hook).
-	hb.coordinator = newCoordinator(hb, deps.agents, deps.wt, st, hb, Seed)
+	coord := newCoordinator(hb, deps.agents, deps.wt, st, hb, Seed)
+	hb.coordinator = coord
+
+	// Observability seam: the handler's session list --json carries each session's
+	// live coordination projection, and the command socket lets an external reader
+	// (Neublox) dispatch that command against THIS running hub — the only way to
+	// see in-memory coordinator state across the process boundary (a fresh CLI has
+	// no live coordinator). Read-only: the accessor never mutates coordinator state.
+	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
+	go serveCommandSocket(ctx, CommandSocketPath(instID), hb)
 
 	for _, sess := range st.SnapshotSessions() {
 		hb.goLive(sess)

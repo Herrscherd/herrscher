@@ -449,6 +449,51 @@ func TestReportDoubleReportIdempotent(t *testing.T) {
 	}
 }
 
+func TestCoordinationViewProjectsJoinState(t *testing.T) {
+	var seeded []string
+	c := newTestCoordinator(&fakeCreator{}, nil, true,
+		[]state.Session{
+			{Name: "lead", Worktree: "/wt/lead"},
+			{Name: "w1", Worktree: "/wt/w1", Parent: "lead"},
+			{Name: "w2", Worktree: "/wt/w2", Parent: "lead"},
+			{Name: "w3", Worktree: "/wt/w3", Parent: "lead"},
+		}, &seeded)
+
+	if _, err := c.Seal(context.Background(), contracts.SealRequest{FromSession: "lead", Expected: 3}); err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	for _, w := range []string{"w1", "w2"} {
+		if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: w, Summary: "ok"}); err != nil {
+			t.Fatalf("report %s: %v", w, err)
+		}
+	}
+
+	got, ok := c.CoordinationView("lead")
+	if !ok {
+		t.Fatal("lead should have a coordination view")
+	}
+	if got.Role != "lead" || got.Lead != "lead" || got.Reported != 2 || got.Expected != 3 || got.Complete {
+		t.Fatalf("got %+v, want lead reported=2 expected=3 complete=false", got)
+	}
+
+	if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w3", Summary: "ok"}); err != nil {
+		t.Fatalf("report w3: %v", err)
+	}
+	got, _ = c.CoordinationView("lead")
+	if got.Reported != 3 || !got.Complete {
+		t.Fatalf("after last report got %+v, want reported=3 complete=true", got)
+	}
+
+	wv, ok := c.CoordinationView("w1")
+	if !ok || wv.Role != "worker" || wv.Lead != "lead" {
+		t.Fatalf("worker view = %+v ok=%v, want worker lead=lead", wv, ok)
+	}
+
+	if _, ok := c.CoordinationView("nope"); ok {
+		t.Fatal("unknown session should have no view")
+	}
+}
+
 func TestRoutePicksAndDelegates(t *testing.T) {
 	seeded := map[string]string{}
 	c := newCoordinator(

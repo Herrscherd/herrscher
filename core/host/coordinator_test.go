@@ -494,6 +494,45 @@ func TestCoordinationViewProjectsJoinState(t *testing.T) {
 	}
 }
 
+// TestCoordinationViewConcurrentWithReport exercises the read path against a
+// concurrent Report so `go test -race` catches any unsynchronized access to the
+// coordinator's live reported/expected maps. CoordinationView must count under
+// c.mu, not after unlocking.
+func TestCoordinationViewConcurrentWithReport(t *testing.T) {
+	var seeded []string
+	workers := []state.Session{{Name: "lead", Worktree: "/wt/lead"}}
+	names := make([]string, 0, 32)
+	for i := 0; i < 32; i++ {
+		n := fmt.Sprintf("w%d", i)
+		names = append(names, n)
+		workers = append(workers, state.Session{Name: n, Worktree: "/wt/" + n, Parent: "lead"})
+	}
+	c := newTestCoordinator(&fakeCreator{}, nil, true, workers, &seeded)
+	if _, err := c.Seal(context.Background(), contracts.SealRequest{FromSession: "lead", Expected: len(names)}); err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for _, w := range names {
+			if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: w, Summary: "ok"}); err != nil {
+				t.Errorf("report %s: %v", w, err)
+				return
+			}
+		}
+	}()
+	for i := 0; i < 500; i++ {
+		c.CoordinationView("lead")
+	}
+	<-done
+
+	got, ok := c.CoordinationView("lead")
+	if !ok || got.Reported != len(names) || !got.Complete {
+		t.Fatalf("final view = %+v ok=%v, want reported=%d complete=true", got, ok, len(names))
+	}
+}
+
 func TestRoutePicksAndDelegates(t *testing.T) {
 	seeded := map[string]string{}
 	c := newCoordinator(

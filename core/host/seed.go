@@ -35,18 +35,14 @@ func runOneShotSeed(ctx context.Context, st *state.State, name, task string) (st
 	if mem != nil {
 		defer mem.Close()
 	}
-	return runOneShotSeedWith(ctx, st, name, task, orch)
+	return runOneShotSeedWith(ctx, sess, task, orch)
 }
 
 // runOneShotSeedWith mounts the same in-process bridge turn used by the daemon:
 // newSessionDriver owns the FIFO and SeedAndWait awaits reply{done}; bridge.RunOneShot
 // supplies the registered backend over channels. Unlike RunSession/goLive this
 // deliberately has no control socket, supervisor, or gateway binding.
-func runOneShotSeedWith(ctx context.Context, st *state.State, name, task string, orch contracts.Orchestrator) (string, error) {
-	sess, ok := st.FindSession(name)
-	if !ok {
-		return "", fmt.Errorf("no session %q", name)
-	}
+func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, orch contracts.Orchestrator) (string, error) {
 	if orch != nil {
 		defer orch.Close()
 	}
@@ -55,7 +51,7 @@ func runOneShotSeedWith(ctx context.Context, st *state.State, name, task string,
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, 8)
-	d := newSessionDriver(name, nil, toBridge, fromBridge)
+	d := newSessionDriver(sess.Name, nil, toBridge, fromBridge)
 	go d.pump(seedCtx)
 
 	var bridgeErr = make(chan error, 1)
@@ -89,6 +85,33 @@ func runOneShotSeedWith(ctx context.Context, st *state.State, name, task string,
 		}
 	}
 	return reply, nil
+}
+
+// ApplyOrchestratorScope threads a session's runtime scope into an orchestrator
+// plugin's config bag. It is the single source of truth for these Settings keys,
+// shared by the live bridge (bridge.go) and the one-shot seed so the two paths
+// cannot drift when a scope key is added or renamed. Empty optional values are
+// omitted so a plain/unconfigured run's config stays byte-for-byte unchanged.
+func ApplyOrchestratorScope(cfg *contracts.PluginConfig, session, project, agent, extractor, journal string, consolidateEvery int) {
+	if cfg.Settings == nil {
+		cfg.Settings = map[string]string{}
+	}
+	cfg.Settings["session"] = session
+	if project != "" {
+		cfg.Settings["memory.project"] = project
+	}
+	if agent != "" {
+		cfg.Settings["memory.agent"] = agent
+	}
+	if extractor != "" {
+		cfg.Settings["memory.extractor"] = extractor
+	}
+	if journal != "" {
+		cfg.Settings["memory.journal"] = journal
+	}
+	if consolidateEvery > 0 {
+		cfg.Settings["memory.consolidate-every"] = strconv.Itoa(consolidateEvery)
+	}
 }
 
 func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend, error) {
@@ -147,25 +170,7 @@ func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orches
 			}
 			return nil, nil, err
 		}
-		if cfg.Settings == nil {
-			cfg.Settings = map[string]string{}
-		}
-		cfg.Settings["session"] = sess.Name
-		if sess.Project != "" {
-			cfg.Settings["memory.project"] = sess.Project
-		}
-		if sess.Agent != "" {
-			cfg.Settings["memory.agent"] = sess.Agent
-		}
-		if sess.Extractor != "" {
-			cfg.Settings["memory.extractor"] = sess.Extractor
-		}
-		if sess.Journal != "" {
-			cfg.Settings["memory.journal"] = sess.Journal
-		}
-		if sess.ConsolidateEvery > 0 {
-			cfg.Settings["memory.consolidate-every"] = strconv.Itoa(sess.ConsolidateEvery)
-		}
+		ApplyOrchestratorScope(&cfg, sess.Name, sess.Project, sess.Agent, sess.Extractor, sess.Journal, sess.ConsolidateEvery)
 		orch, err := plugin.Orchestrator(ctx, cfg, mem)
 		if err != nil {
 			if mem != nil {

@@ -5,7 +5,6 @@ import (
 	"flag"
 	"log/slog"
 	"os"
-	"strconv"
 
 	claude "github.com/Herrscherd/herrscher-claude-backend"
 	"github.com/Herrscherd/herrscher-contracts"
@@ -171,31 +170,11 @@ func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, proje
 		if err != nil {
 			return disabled(p.Manifest.Kind, err)
 		}
-		if cfg.Settings == nil {
-			cfg.Settings = map[string]string{}
-		}
 		// Runtime state threaded through the config bag: the session scopes the
-		// rolling transcript; project/agent scope the shared/private memory (P1).
-		cfg.Settings["session"] = session
-		if project != "" {
-			cfg.Settings["memory.project"] = project
-		}
-		if agent != "" {
-			cfg.Settings["memory.agent"] = agent
-		}
-		// P1 write side (opt-in): naming a registered extractor flips the
-		// orchestrator from the plain Curator to a learning Learner; journal and
-		// cadence feed its Consolidate. Threaded only when set so an unconfigured
-		// bridge is byte-for-byte unchanged.
-		if learn.extractor != "" {
-			cfg.Settings["memory.extractor"] = learn.extractor
-		}
-		if learn.journal != "" {
-			cfg.Settings["memory.journal"] = learn.journal
-		}
-		if learn.consolidateEvery > 0 {
-			cfg.Settings["memory.consolidate-every"] = strconv.Itoa(learn.consolidateEvery)
-		}
+		// rolling transcript; project/agent scope the shared/private memory (P1);
+		// a set extractor/journal/cadence flips the orchestrator into a learning
+		// Learner. Shared with the one-shot seed path via ApplyOrchestratorScope.
+		host.ApplyOrchestratorScope(&cfg, session, project, agent, learn.extractor, learn.journal, learn.consolidateEvery)
 		orch, err := p.Orchestrator(ctx, cfg, mem)
 		if err != nil {
 			return disabled(p.Manifest.Kind, err)

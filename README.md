@@ -126,12 +126,14 @@ can opt into running as a **separate process** over the NATS/gRPC transport (see
 | Category | Edge | Port(s) | Status | Official plugin |
 |----------|------|---------|--------|-----------------|
 | 🔌 **Gateway** | channel (inbound) | `Gateway`, `ChannelSource`, `ChannelReader`, `ChannelAdmin`, `CommandRegistrar`, `Prober`, `MenuRouter`, `Responder`, `EventSink` (smart gateways), `Foreground` (a gateway that owns the main thread, e.g. a TUI) | ✅ live | [herrscher-discord-gateway], in-tree `terminal` |
-| 🧠 **Backend** | model (outbound) | `Backend` (+ `ChoiceAware`, `ChoiceInjector`) | ✅ live | [herrscher-claude-backend] |
+| 🧠 **Backend** | model (outbound) | `Backend` (+ `ChoiceAware`, `ChoiceInjector`) | ✅ live | [herrscher-claude-backend], [herrscher-codex-backend], [herrscher-cursor-backend] |
 | 🗄️ **Memory** | recall / persistence | `Memory` | ✅ live | [herrscher-obsidian-memory] |
 | 🪢 **Orchestrator** | conversation policy | `Orchestrator` | ✅ live | [herrscher-orchestrator] |
 
 [herrscher-discord-gateway]: https://github.com/Herrscherd/herrscher-discord-gateway
 [herrscher-claude-backend]: https://github.com/Herrscherd/herrscher-claude-backend
+[herrscher-codex-backend]: https://github.com/Herrscherd/herrscher-codex-backend
+[herrscher-cursor-backend]: https://github.com/Herrscherd/herrscher-cursor-backend
 [herrscher-obsidian-memory]: https://github.com/Herrscherd/herrscher-obsidian-memory
 [herrscher-orchestrator]: https://github.com/Herrscherd/herrscher-orchestrator
 

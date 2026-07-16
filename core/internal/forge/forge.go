@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
 
 // Repo is one remote repository discovered via a forge CLI.
@@ -109,7 +111,7 @@ func (c *Client) ghRepoList(ctx context.Context, owner ...string) ([]Repo, error
 	args = append(args, "--json", "nameWithOwner,sshUrl,description", "--limit", "100")
 	raw, err := c.r.run(ctx, "", "gh", args...)
 	if err != nil {
-		return nil, fmt.Errorf("gh repo list: %s", strings.TrimSpace(string(raw)))
+		return nil, fmt.Errorf("gh repo list: %s", redact.Output(raw))
 	}
 	var items []struct {
 		NameWithOwner string `json:"nameWithOwner"`
@@ -145,7 +147,7 @@ func (c *Client) ghOrgs(ctx context.Context) []string {
 func (c *Client) listGitLab(ctx context.Context) ([]Repo, error) {
 	raw, err := c.r.run(ctx, "", "glab", "repo", "list", "--output", "json")
 	if err != nil {
-		return nil, fmt.Errorf("glab repo list: %s", strings.TrimSpace(string(raw)))
+		return nil, fmt.Errorf("glab repo list: %s", redact.Output(raw))
 	}
 	var items []struct {
 		PathWithNamespace string `json:"path_with_namespace"`
@@ -198,7 +200,7 @@ func (c *Client) Clone(ctx context.Context, spec, workspace string) (string, err
 		if strings.Contains(msg, "already exists") {
 			return dir, nil
 		}
-		return "", fmt.Errorf("%s clone: %s", name, msg)
+		return "", fmt.Errorf("%s clone: %s", name, redact.Output(out))
 	}
 	return dir, nil
 }

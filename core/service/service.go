@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/Herrscherd/herrscher/core/config"
+	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
 
 // label / on-disk names shared by the planner and the docs.
@@ -255,7 +256,7 @@ func Pull(ctx context.Context, src string) error {
 		return err
 	}
 	if out, err := runCapture(ctx, src, "git", "pull", "--ff-only"); err != nil {
-		return fmt.Errorf("git pull: %s", out)
+		return fmt.Errorf("git pull: %s", redact.Output(out))
 	}
 	return nil
 }
@@ -271,7 +272,7 @@ func Build(ctx context.Context, src, binPath string) error {
 		return fmt.Errorf("go toolchain not found in PATH")
 	}
 	if out, err := runCapture(ctx, src, "go", "build", "-o", binPath, "."); err != nil {
-		return fmt.Errorf("go build: %s", out)
+		return fmt.Errorf("go build: %s", redact.Output(out))
 	}
 	return nil
 }
@@ -295,7 +296,7 @@ func Smoke(ctx context.Context, binPath string) error {
 		return errors.New("no binary path to smoke-test")
 	}
 	if out, err := runCapture(ctx, "", binPath, "--help"); err != nil {
-		return fmt.Errorf("new binary failed smoke test (%s --help): %s", binPath, strings.TrimSpace(string(out)))
+		return fmt.Errorf("new binary failed smoke test (%s --help): %s", binPath, redact.Output(out))
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package manage
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -11,7 +12,7 @@ import (
 // the host. This is the plugin-side counterpart to `herrscherd service update`
 // (which pulls the host's own source): here we refresh the blank-imported plugin
 // modules listed in plugins.go and re-tidy/rebuild the composition.
-func UpdateCmd(args []string) int {
+func UpdateCmd(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	hostDir := fs.String("host", "", "path to the host module")
 	noBuild := fs.Bool("no-build", false, "go get -u the plugins but skip tidy/build")
@@ -40,7 +41,7 @@ func UpdateCmd(args []string) int {
 	}
 
 	for _, m := range mods {
-		if code := run(dir, "go", "get", "-u", m); code != 0 {
+		if code := run(ctx, dir, "go", "get", "-u", m); code != 0 {
 			return code
 		}
 	}
@@ -48,10 +49,10 @@ func UpdateCmd(args []string) int {
 		fmt.Println("updated plugins (--no-build); run `go mod tidy && go build` in the host to apply")
 		return 0
 	}
-	if code := run(dir, "go", "mod", "tidy"); code != 0 {
+	if code := run(ctx, dir, "go", "mod", "tidy"); code != 0 {
 		return code
 	}
-	return run(dir, "go", "build", "./...")
+	return run(ctx, dir, "go", "build", "./...")
 }
 
 // installCmd builds the host binary from its current plugin composition, then
@@ -59,7 +60,7 @@ func UpdateCmd(args []string) int {
 // launchd / Task Scheduler). The CLI never reimplements that glue — it lives in
 // core/service, exposed by the host. Anything after `--` is forwarded verbatim
 // to the host's service install (e.g. --health-addr, --env-file, --cmd).
-func InstallCmd(args []string) int {
+func InstallCmd(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	hostDir := fs.String("host", "", "path to the host module")
 	if err := fs.Parse(args); err != nil {
@@ -73,7 +74,7 @@ func InstallCmd(args []string) int {
 		return 1
 	}
 
-	if code := run(dir, "go", "build", "-o", "herrscher", "."); code != 0 {
+	if code := run(ctx, dir, "go", "build", "-o", "herrscher", "."); code != 0 {
 		return code
 	}
 
@@ -85,5 +86,5 @@ func InstallCmd(args []string) int {
 		return 1
 	}
 	delegate := append([]string{"service", "install"}, passthrough...)
-	return run(dir, abs, delegate...)
+	return run(ctx, dir, abs, delegate...)
 }

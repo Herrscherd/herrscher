@@ -6,10 +6,11 @@ require (
 	github.com/Herrscherd/herrscher-claude-backend v0.1.1
 	github.com/Herrscherd/herrscher-contracts v0.1.13
 	github.com/Herrscherd/herrscher-discord-gateway v0.2.3
-	github.com/Herrscherd/herrscher-llm-extractor v0.1.1
+	github.com/Herrscherd/herrscher-llm-extractor v0.1.2
 	github.com/Herrscherd/herrscher-obsidian-memory v0.2.2
 	github.com/Herrscherd/herrscher-orchestrator v0.1.5
-	github.com/Herrscherd/herrscher-transport v0.1.5
+	github.com/Herrscherd/herrscher-transport v0.2.0
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
@@ -20,8 +21,7 @@ require (
 )
 
 require (
-	github.com/Herrscherd/dctl v1.1.0 // indirect
-	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/Herrscherd/dctl v1.2.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.1 // indirect

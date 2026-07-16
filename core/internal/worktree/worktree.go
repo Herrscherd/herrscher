@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
 
 // Worktreer manages git worktrees. It is repo-stateless: the repo root is passed
@@ -71,7 +73,7 @@ func (w *Worktreer) Create(repo, name, base string) (string, error) {
 	}
 	out, err := exec.CommandContext(w.ctx, "git", args...).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("worktree add: %s", strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("worktree add: %s", redact.Output(out))
 	}
 	return p, nil
 }
@@ -143,7 +145,7 @@ func (w *Worktreer) MergeInto(leadPath, branch string) (MergeOutcome, []string, 
 	if len(conflicts) > 0 {
 		return MergeConflict, conflicts, nil
 	}
-	return MergeConflict, nil, fmt.Errorf("merge %s into %q: %s", branch, leadPath, strings.TrimSpace(string(out)))
+	return MergeConflict, nil, fmt.Errorf("merge %s into %q: %s", branch, leadPath, redact.Output(out))
 }
 
 // headAt returns the commit HEAD points to in the given worktree.
@@ -189,7 +191,7 @@ func (w *Worktreer) Remove(repo, name string, force bool) error {
 	}
 	out, err := exec.CommandContext(w.ctx, "git", args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("worktree remove: %s", strings.TrimSpace(string(out)))
+		return fmt.Errorf("worktree remove: %s", redact.Output(out))
 	}
 	return nil
 }

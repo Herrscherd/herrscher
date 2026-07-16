@@ -140,7 +140,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			dir, err := h.fg.Clone(cctx, spec, ws)
 			cancel()
 			if err != nil {
-				return "", fmt.Errorf("clone: %v", err)
+				return "", fmt.Errorf("clone: %w", err)
 			}
 			project = filepath.Base(dir)
 		} else {
@@ -164,7 +164,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 		path, err := h.wt.Create(repo, name, base)
 		if err != nil {
-			return "", fmt.Errorf("worktree: %v", err)
+			return "", fmt.Errorf("worktree: %w", err)
 		}
 		worktree = path // "" means non-git fallback
 	}
@@ -190,7 +190,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 		if err := a.Materialize(worktree); err != nil {
 			rollbackWorktree()
-			return "", fmt.Errorf("provision agent %q: %v", agentName, err)
+			return "", fmt.Errorf("provision agent %q: %w", agentName, err)
 		}
 	}
 	// Logical name stays the state/worktree key; the qualified name namespaces
@@ -202,24 +202,24 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		chID, err := h.d.CreateUnder(ctx, home.ID, title)
 		if err != nil {
 			rollbackWorktree()
-			return "", fmt.Errorf("create channel: %v", err)
+			return "", fmt.Errorf("create channel: %w", err)
 		}
 		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Worktree: worktree, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
 	case "forum":
 		chID, err := h.d.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
 			rollbackWorktree()
-			return "", fmt.Errorf("create forum post: %v", err)
+			return "", fmt.Errorf("create forum post: %w", err)
 		}
 		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Worktree: worktree, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}
 	if err := h.st.AddSession(sess); err != nil {
-		return "", fmt.Errorf("persist: %v", err)
+		return "", fmt.Errorf("persist: %w", err)
 	}
 	if err := h.sup.Start(sess); err != nil {
-		return "", fmt.Errorf("start bridge: %v", err)
+		return "", fmt.Errorf("start bridge: %w", err)
 	}
 	banner := sessionBanner(repo, name, worktree, h.wt.Branch(name), cmd, shared)
 	_ = h.d.Send(ctx, sess.ChannelID, banner) // best-effort; reply is source of truth
@@ -240,14 +240,14 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 		force := in.Bool("force")
 		repo := repoFor(h.st.WorkspaceRoot(), sess.Project)
 		if err := h.wt.Remove(repo, name, force); err != nil {
-			return "", fmt.Errorf("%v — commit, or close with force:true to discard (branch session/%s is kept)", err, name)
+			return "", fmt.Errorf("%w — commit, or close with force:true to discard (branch session/%s is kept)", err, name)
 		}
 	}
 	if err := h.d.Archive(ctx, sess.ChannelID); err != nil {
-		return "", fmt.Errorf("archive: %v", err)
+		return "", fmt.Errorf("archive: %w", err)
 	}
 	if err := h.st.RemoveSession(name); err != nil {
-		return "", fmt.Errorf("persist: %v", err)
+		return "", fmt.Errorf("persist: %w", err)
 	}
 	_ = state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name))
 	return fmt.Sprintf("🗄️ Session **%s** closed.", name), nil

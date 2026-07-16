@@ -15,6 +15,14 @@ var gatewayKindRe = regexp.MustCompile(`^[a-z0-9_-]+$`)
 // An explicit list always wins; an empty list with terminalOnly yields
 // ["terminal"]; an empty list otherwise defaults to ["discord"].
 func ParseGateways(list string, terminalOnly bool) []string {
+	// Common path: no explicit list. Skip the split/dedup machinery and return
+	// the default straight away.
+	if strings.TrimSpace(list) == "" {
+		if terminalOnly {
+			return []string{"terminal"}
+		}
+		return []string{"discord"}
+	}
 	out := make([]string, 0, maxGateways)
 	seen := map[string]bool{}
 	for _, p := range strings.Split(list, ",") {

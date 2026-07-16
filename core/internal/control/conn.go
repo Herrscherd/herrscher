@@ -53,7 +53,7 @@ type Acceptor struct {
 // starts accepting bridge connections. Each appears on Conns().
 func Accept(path string) (*Acceptor, error) {
 	_ = os.Remove(path)
-	ln, err := net.Listen("unix", path)
+	ln, err := listenControl(path)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (a *Acceptor) Close() error {
 // Dial connects to the hub's control socket, returning a persistent Conn. The
 // bridge calls this at startup and again on each reconnect.
 func Dial(path string) (*Conn, error) {
-	c, err := net.Dial("unix", path)
+	c, err := dialControl(path)
 	if err != nil {
 		return nil, err
 	}

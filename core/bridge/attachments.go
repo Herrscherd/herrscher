@@ -59,10 +59,10 @@ func attachmentDir(session string) string {
 // local files and returns their paths in message order. Non-image, oversized,
 // and non-Discord-CDN attachments are skipped. Download is best-effort: the
 // successfully fetched paths are always returned, alongside the first fetch
-// error encountered (the rest are logged by being dropped) so a turn is never
+// error encountered (the rest are dropped) so a turn is never
 // lost over an image.
 func downloadImages(ctx context.Context, client *http.Client, m contracts.Message, dir string) ([]string, error) {
-	var imgs []contracts.Attachment
+	imgs := make([]contracts.Attachment, 0, maxImagesPerMessage)
 	for _, a := range m.Attachments {
 		// Skip oversized uploads before connecting: never stream one up to the cap
 		// only to discard it. Size 0 means "unknown" and falls through to the
@@ -84,7 +84,7 @@ func downloadImages(ctx context.Context, client *http.Client, m contracts.Messag
 	if client == nil {
 		client = http.DefaultClient
 	}
-	var paths []string
+	paths := make([]string, 0, len(imgs))
 	var firstErr error
 	for i, a := range imgs {
 		p, err := fetchOne(ctx, client, a, m.ID, i, dir)

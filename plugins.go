@@ -11,6 +11,8 @@ package main
 import (
 	// herrscher:plugins
 	_ "github.com/Herrscherd/herrscher-claude-backend"
+	_ "github.com/Herrscherd/herrscher-codex-backend"
+	_ "github.com/Herrscherd/herrscher-cursor-backend"
 	_ "github.com/Herrscherd/herrscher-discord-gateway"
 	_ "github.com/Herrscherd/herrscher-llm-extractor"
 	_ "github.com/Herrscherd/herrscher-obsidian-memory"

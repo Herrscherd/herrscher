@@ -1,5 +1,5 @@
 // Package terminal is the terminal gateway plugin: a chat gateway whose
-// "channel" is the local TUI. It self-registers like any gateway (init →
+// "channels" are tabs in the local TUI. It self-registers like any gateway (init →
 // contracts.Register) and implements Gateway + ChannelReader + EventSink so the
 // daemon hub drives it exactly like Discord — polling Read for typed lines and
 // fanning the live event stream to it via Emit. The TUI binds to the active
@@ -18,8 +18,7 @@ import (
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
-// ChannelID is the fixed conversation id the terminal gateway uses (single
-// local channel).
+// ChannelID is the default conversation id used by the terminal gateway.
 const ChannelID = "terminal"
 
 func init() {

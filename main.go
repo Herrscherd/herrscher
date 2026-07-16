@@ -59,22 +59,29 @@ func main() {
 	cmd := os.Args[1]
 	args := os.Args[2:]
 
-	// Cancel on Ctrl-C / SIGTERM so long child processes (go get/tidy/build in the
-	// management verbs, the daemon in the runtime verbs) stop cleanly.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
-	// Management verbs need no Discord client; dispatch them first.
+	// Management verbs need no Discord client; dispatch them first. They shell out
+	// to go get/tidy/build, so give them a context cancelled on Ctrl-C / SIGTERM to
+	// stop those children cleanly. The runtime verbs keep their own lifecycle
+	// (below), so signal handling stays scoped to management here.
 	switch cmd {
-	case "init":
-		os.Exit(manage.InitCmd(ctx, args))
-	case "plugin":
-		os.Exit(manage.PluginCmd(ctx, args))
-	case "update":
-		os.Exit(manage.UpdateCmd(ctx, args))
-	case "install":
-		os.Exit(manage.InstallCmd(ctx, args))
+	case "init", "plugin", "update", "install":
+		mctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		var code int
+		switch cmd {
+		case "init":
+			code = manage.InitCmd(mctx, args)
+		case "plugin":
+			code = manage.PluginCmd(mctx, args)
+		case "update":
+			code = manage.UpdateCmd(mctx, args)
+		case "install":
+			code = manage.InstallCmd(mctx, args)
+		}
+		stop()
+		os.Exit(code)
 	}
+
+	ctx := context.Background()
 
 	// The host stays gateway-agnostic: it never builds a Discord (dctl) client.
 	// Every runtime verb drives the registered gateway plugin via the contracts

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -15,20 +14,6 @@ import (
 // (hub.Dispatch), so the command socket reaches the live registry + coordinator.
 type dispatcher interface {
 	Dispatch(context.Context, []string) (string, error)
-}
-
-// CommandSocketPath is the daemon-level operator command socket. The daemon
-// accepts on it; an external reader (Neublox) dials it to run session list
-// against the LIVE hub — the only way to observe in-memory coordinator state
-// across the process boundary (a fresh CLI has no running coordinator). The path
-// is derived, mirroring control.SocketPath, so both sides compute it without
-// extra coordination state. instanceID namespaces daemons sharing a host.
-func CommandSocketPath(instanceID string) string {
-	name := "dctl-command"
-	if instanceID != "" {
-		name += "-" + instanceID
-	}
-	return filepath.Join(os.TempDir(), name+".sock")
 }
 
 // defaultCommandReadTimeout bounds how long a connection may take to send its
@@ -44,7 +29,7 @@ type cmdResponse struct {
 	Err *string `json:"err,omitempty"`
 }
 
-// serveCommandSocket accepts operator commands on a Unix socket and dispatches
+// serveCommandSocket accepts operator commands on a local socket and dispatches
 // each through disp. One connection = one JSON-line request {"argv":[...]} → one
 // JSON-line response {"ok":...} | {"err":...}. Serialization of the actual
 // command is disp's own concern (hub.Dispatch holds dispatchMu). Blocks until
@@ -55,18 +40,9 @@ func serveCommandSocket(ctx context.Context, path string, disp dispatcher) {
 
 func serveCommandSocketWithTimeout(ctx context.Context, path string, disp dispatcher, readTimeout time.Duration) {
 	_ = os.Remove(path)
-	ln, err := net.Listen("unix", path)
+	ln, err := listenCommandSocket(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "command socket: listen %s: %v\n", path, err)
-		return
-	}
-	// The socket dispatches arbitrary operator commands (hub.Dispatch), so restrict
-	// it to the owner: it sits in a world-writable temp dir, and unlike the session
-	// control socket it is an execution surface, not just a bridge.
-	if err := os.Chmod(path, 0o600); err != nil {
-		fmt.Fprintf(os.Stderr, "command socket: chmod %s: %v\n", path, err)
-		_ = ln.Close()
-		_ = os.Remove(path)
 		return
 	}
 	go func() { <-ctx.Done(); _ = ln.Close(); _ = os.Remove(path) }()

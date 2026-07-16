@@ -14,6 +14,8 @@ github.com/Herrscherd/herrscher-orchestrator v0.1.5 h1:NSze1173zXbTpqg0adgehPz01
 github.com/Herrscherd/herrscher-orchestrator v0.1.5/go.mod h1:zJwPSPeB6DWoKMkkCP9wb1pbc9xOub15NWUIvuOq6QU=
 github.com/Herrscherd/herrscher-transport v0.1.5 h1:Kafs2ASAKg7XVMOOubC90ADDKPpR4t3QctrfnBFfubI=
 github.com/Herrscherd/herrscher-transport v0.1.5/go.mod h1:bCt4DsxyzcI8uVdWfDegxydBpryqYk2ZSC/qsHXWAb0=
+github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
+github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
 github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=

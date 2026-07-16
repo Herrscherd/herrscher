@@ -1,6 +1,7 @@
 package manage
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -44,7 +45,7 @@ var defaultStack = map[string]string{
 // exactly that set, seeds a .env from .env.example, then go-gets and rebuilds.
 // Pass --gateway/--backend/--memory/--orchestrator to swap a category, the kind
 // "none" to drop one, or --with MODULE to pin an extra module verbatim.
-func InitCmd(args []string) int {
+func InitCmd(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	hostDir := fs.String("host", "", "path to the host module")
 	noBuild := fs.Bool("no-build", false, "write plugins.go but skip go get/build")
@@ -144,7 +145,7 @@ func InitCmd(args []string) int {
 
 	// If go get/tidy/build fails (e.g. an unresolvable module), restore the
 	// original plugins.go so a botched init doesn't leave the host uncompilable.
-	if code := buildStack(dir, modules); code != 0 {
+	if code := buildStack(ctx, dir, modules); code != 0 {
 		if werr := os.WriteFile(manifest, src, 0o644); werr != nil {
 			fmt.Fprintf(os.Stderr, "restore %s: %v\n", manifest, werr)
 		} else {
@@ -156,16 +157,16 @@ func InitCmd(args []string) int {
 }
 
 // buildStack go-gets each module then tidies and rebuilds the host.
-func buildStack(dir string, modules []string) int {
+func buildStack(ctx context.Context, dir string, modules []string) int {
 	for _, m := range modules {
-		if code := run(dir, "go", "get", "--", m); code != 0 {
+		if code := run(ctx, dir, "go", "get", "--", m); code != 0 {
 			return code
 		}
 	}
-	if code := run(dir, "go", "mod", "tidy"); code != 0 {
+	if code := run(ctx, dir, "go", "mod", "tidy"); code != 0 {
 		return code
 	}
-	return run(dir, "go", "build", "./...")
+	return run(ctx, dir, "go", "build", "./...")
 }
 
 // resolveStack turns per-category kind choices plus verbatim extras into an

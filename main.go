@@ -16,6 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 
 	"github.com/Herrscherd/herrscher/manage"
@@ -58,19 +59,22 @@ func main() {
 	cmd := os.Args[1]
 	args := os.Args[2:]
 
+	// Cancel on Ctrl-C / SIGTERM so long child processes (go get/tidy/build in the
+	// management verbs, the daemon in the runtime verbs) stop cleanly.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
 	// Management verbs need no Discord client; dispatch them first.
 	switch cmd {
 	case "init":
-		os.Exit(manage.InitCmd(args))
+		os.Exit(manage.InitCmd(ctx, args))
 	case "plugin":
-		os.Exit(manage.PluginCmd(args))
+		os.Exit(manage.PluginCmd(ctx, args))
 	case "update":
-		os.Exit(manage.UpdateCmd(args))
+		os.Exit(manage.UpdateCmd(ctx, args))
 	case "install":
-		os.Exit(manage.InstallCmd(args))
+		os.Exit(manage.InstallCmd(ctx, args))
 	}
-
-	ctx := context.Background()
 
 	// The host stays gateway-agnostic: it never builds a Discord (dctl) client.
 	// Every runtime verb drives the registered gateway plugin via the contracts

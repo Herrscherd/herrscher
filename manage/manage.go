@@ -5,6 +5,7 @@
 package manage
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -26,7 +27,7 @@ func parseExit(err error) int {
 
 // PluginCmd lists, adds or removes a compiled-in plugin in the managed plugins.go,
 // rebuilding the binary on a change.
-func PluginCmd(args []string) int {
+func PluginCmd(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("plugin", flag.ContinueOnError)
 	hostDir := fs.String("host", "", "path to the host module")
 	noBuild := fs.Bool("no-build", false, "edit plugins.go but skip go get/build")
@@ -105,7 +106,7 @@ func PluginCmd(args []string) int {
 			fmt.Println("skipped build (--no-build); run `go build` in the host to apply")
 			return 0
 		}
-		return rebuild(dir, sub, module)
+		return rebuild(ctx, dir, sub, module)
 
 	default:
 		fmt.Fprintf(os.Stderr, "unknown plugin subcommand %q\n", sub)
@@ -136,24 +137,31 @@ func resolveHost(explicit string) (string, error) {
 }
 
 // rebuild applies the manifest change: go get the module (on add), then build.
-func rebuild(dir, sub, module string) int {
+func rebuild(ctx context.Context, dir, sub, module string) int {
 	if sub == "add" {
 		// `--` stops a module path that begins with `-` being read as a flag.
-		if code := run(dir, "go", "get", "--", module); code != 0 {
+		if code := run(ctx, dir, "go", "get", "--", module); code != 0 {
 			return code
 		}
 	}
-	if code := run(dir, "go", "mod", "tidy"); code != 0 {
+	if code := run(ctx, dir, "go", "mod", "tidy"); code != 0 {
 		return code
 	}
-	return run(dir, "go", "build", "./...")
+	return run(ctx, dir, "go", "build", "./...")
 }
 
-func run(dir string, name string, args ...string) int {
-	cmd := exec.Command(name, args...)
+func run(ctx context.Context, dir string, name string, args ...string) int {
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	fmt.Fprintln(os.Stderr, "+ "+strings.Join(append([]string{name}, args...), " "))
+	var line strings.Builder
+	line.WriteString("+ ")
+	line.WriteString(name)
+	for _, a := range args {
+		line.WriteByte(' ')
+		line.WriteString(a)
+	}
+	fmt.Fprintln(os.Stderr, line.String())
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s failed: %v\n", name, err)
 		return 1

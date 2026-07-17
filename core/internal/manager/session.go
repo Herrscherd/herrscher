@@ -134,7 +134,12 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	gwList, _ := in.Lookup("gateways")
 	gateways := ParseGateways(gwList, in.Bool("terminal_only"))
 	ws := h.st.WorkspaceRoot()
-	project := ""
+	// Project is the logical label the caller assigns; Neublox filters workspace
+	// snapshots by it, so it must be recorded even in cwd mode. It doubles as a
+	// workspace sub-dir (steering the repo path) ONLY when a workspace root is
+	// configured — see repoFor. Always capture it up front; the clone path below
+	// overrides it with the cloned dir's basename.
+	project, _ := in.Lookup("project")
 	if ws != "" {
 		if spec, ok := in.Lookup("clone"); ok && spec != "" {
 			cctx, cancel := context.WithTimeout(ctx, cloneTimeout)
@@ -144,8 +149,6 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 				return "", fmt.Errorf("clone: %w", err)
 			}
 			project = filepath.Base(dir)
-		} else {
-			project, _ = in.Lookup("project")
 		}
 		if project == "" {
 			return "", fmt.Errorf("specify project: (see `workspace list`) or clone:")

@@ -7,7 +7,7 @@ import (
 )
 
 // sessionNameRe constrains a session name to a safe slug: it becomes both a
-// filesystem path (<repo>/.dctl-sessions/<name>) and a git branch
+// filesystem path (<repo>/.herrscher-sessions/<name>) and a git branch
 // (session/<name>), so anything outside this set could traverse directories or
 // forge odd refs even though the caller is allowlisted.
 var sessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -11,12 +12,21 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
 
+// sessionsDir is the per-repo directory that holds session worktrees.
+// legacySessionsDir is the pre-rename name; Path falls back to it so worktrees
+// created before the rename keep resolving.
+const (
+	sessionsDir       = ".herrscher-sessions"
+	legacySessionsDir = ".dctl-sessions"
+)
+
 // Worktreer manages git worktrees. It is repo-stateless: the repo root is passed
 // to each method, so one Worktreer serves every project in the workspace.
 // With a non-empty instanceID, worktrees live under
-// <repo>/.dctl-sessions/<instanceID>/<name> on branch session/<instanceID>/<name>;
-// with an empty instanceID (legacy) under <repo>/.dctl-sessions/<name> on
+// <repo>/.herrscher-sessions/<instanceID>/<name> on branch session/<instanceID>/<name>;
+// with an empty instanceID (legacy) under <repo>/.herrscher-sessions/<name> on
 // branch session/<name>, so multiple daemons sharing a repo never collide.
+// The legacy .dctl-sessions directory is still resolved for pre-rename worktrees.
 type Worktreer struct {
 	ctx        context.Context
 	instanceID string
@@ -33,12 +43,26 @@ func (w *Worktreer) isGitRepo(repo string) bool {
 }
 
 // Path returns the on-disk worktree directory for a logical session name inside
-// repo, namespaced by instanceID when set.
+// repo, namespaced by instanceID when set. If the current-name path is absent
+// but a legacy .dctl-sessions path exists, the legacy path is returned so
+// worktrees created before the rename keep resolving.
 func (w *Worktreer) Path(repo, name string) string {
-	if w.instanceID == "" {
-		return filepath.Join(repo, ".dctl-sessions", name)
+	p := w.pathIn(repo, sessionsDir, name)
+	if _, err := os.Stat(p); err != nil {
+		if legacy := w.pathIn(repo, legacySessionsDir, name); legacy != p {
+			if _, err := os.Stat(legacy); err == nil {
+				return legacy
+			}
+		}
 	}
-	return filepath.Join(repo, ".dctl-sessions", w.instanceID, name)
+	return p
+}
+
+func (w *Worktreer) pathIn(repo, dir, name string) string {
+	if w.instanceID == "" {
+		return filepath.Join(repo, dir, name)
+	}
+	return filepath.Join(repo, dir, w.instanceID, name)
 }
 
 // Branch returns the git branch backing a logical session name, namespaced by

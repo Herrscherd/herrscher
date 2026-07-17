@@ -20,14 +20,14 @@ func TestPathAndBranch(t *testing.T) {
 			name:       "namespaced",
 			instanceID: "alice",
 			session:    "foo",
-			wantPath:   filepath.Join("/repo", ".dctl-sessions", "alice", "foo"),
+			wantPath:   filepath.Join("/repo", ".herrscher-sessions", "alice", "foo"),
 			wantBranch: "session/alice/foo",
 		},
 		{
 			name:       "legacy-empty-id",
 			instanceID: "",
 			session:    "foo",
-			wantPath:   filepath.Join("/repo", ".dctl-sessions", "foo"),
+			wantPath:   filepath.Join("/repo", ".herrscher-sessions", "foo"),
 			wantBranch: "session/foo",
 		},
 	}
@@ -41,6 +41,25 @@ func TestPathAndBranch(t *testing.T) {
 				t.Fatalf("Branch = %q, want %q", got, tt.wantBranch)
 			}
 		})
+	}
+}
+
+func TestPathFallsBackToLegacyDir(t *testing.T) {
+	repo := t.TempDir()
+	w := NewWorktreer(context.Background(), "")
+
+	// No dir on disk yet: Path returns the current-name location.
+	if got, want := w.Path(repo, "feat1"), filepath.Join(repo, ".herrscher-sessions", "feat1"); got != want {
+		t.Fatalf("Path = %q, want current-name %q", got, want)
+	}
+
+	// A pre-existing legacy worktree dir is resolved instead.
+	legacy := filepath.Join(repo, ".dctl-sessions", "feat1")
+	if err := os.MkdirAll(legacy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.Path(repo, "feat1"); got != legacy {
+		t.Fatalf("Path = %q, want legacy %q", got, legacy)
 	}
 }
 
@@ -61,7 +80,7 @@ func initRepo(t *testing.T) string {
 	}
 	// Ignore the worktree scratch dir, mirroring the real repo's .gitignore, so
 	// git status on the main worktree isn't dirtied by nested worktree dirs.
-	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("/.dctl-sessions/\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("/.herrscher-sessions/\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{
@@ -168,7 +187,7 @@ func TestCreateUsesPassedRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	want := filepath.Join(repo, ".dctl-sessions", "feat1")
+	want := filepath.Join(repo, ".herrscher-sessions", "feat1")
 	if path != want {
 		t.Fatalf("path = %q, want %q", path, want)
 	}
@@ -197,7 +216,7 @@ func TestRemoveUsesPassedRepo(t *testing.T) {
 	if err := w.Remove(repo, "feat1", false); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(repo, ".dctl-sessions", "feat1")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(repo, ".herrscher-sessions", "feat1")); !os.IsNotExist(err) {
 		t.Fatalf("worktree should be gone, stat err = %v", err)
 	}
 }

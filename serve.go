@@ -123,6 +123,12 @@ func runAgent(ctx context.Context, args []string) error {
 	return runRegistryVerb(ctx, "agent", args)
 }
 
+// runMemory dispatche les commandes opérateur `memory` (locate/forget/record)
+// à travers le même registre CLI que la daemon sert.
+func runMemory(ctx context.Context, args []string) error {
+	return runRegistryVerb(ctx, "memory", args)
+}
+
 // runRegistryVerb builds the operator registry (the same one the daemon serves)
 // and dispatches a single top-level verb through it, printing any output. Both
 // session and agent verbs share this so the binary and the gateways drive an

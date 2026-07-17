@@ -96,6 +96,8 @@ func main() {
 		err = runSession(ctx, args)
 	case "agent":
 		err = runAgent(ctx, args)
+	case "memory":
+		err = runMemory(ctx, args)
 	case "service":
 		err = runService(ctx, args)
 	case "plugin-host":

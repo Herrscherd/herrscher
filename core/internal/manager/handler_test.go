@@ -303,6 +303,29 @@ func TestSessionCreatePassesBaseToWorktree(t *testing.T) {
 	}
 }
 
+// In cwd mode (no workspace root set) the session runs in the checkout root and
+// the project is a *logical label* — not a workspace sub-dir. The daemon still
+// passes --project (Neublox filters workspace snapshots by it), so herrscher must
+// persist and emit that label without moving the worktree into a project subdir.
+func TestSessionCreateCapturesProjectLabelInCwdMode(t *testing.T) {
+	h, _, _, wt, _, st := newTestHandler(t, "")
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "aaa", "project", "aaa")); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	sess, ok := st.FindSession("aaa")
+	if !ok {
+		t.Fatalf("session aaa introuvable")
+	}
+	if sess.Project != "aaa" {
+		t.Fatalf("project label not captured in cwd mode: %q", sess.Project)
+	}
+	// Worktree still resolved against the checkout root (repo arg ""), never ws/project.
+	if len(wt.createdRepos) != 1 || wt.createdRepos[0] != "" {
+		t.Fatalf("worktree repo must stay cwd (empty) in cwd mode: %+v", wt.createdRepos)
+	}
+}
+
 func TestSessionCreatePersistsParent(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})

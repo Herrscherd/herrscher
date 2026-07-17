@@ -39,6 +39,20 @@ func TestBridgeArgsIncludeBackend(t *testing.T) {
 	}
 }
 
+func TestBridgeArgsThreadsVendor(t *testing.T) {
+	s := NewSupervisor(context.Background(), "herrscher")
+	args := s.bridgeArgs(state.Session{Name: "w", ChannelID: "c", Vendor: "codex"})
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--vendor codex") {
+		t.Fatalf("args missing --vendor codex: %v", args)
+	}
+
+	args = s.bridgeArgs(state.Session{Name: "w", ChannelID: "c"})
+	if strings.Contains(strings.Join(args, " "), "--vendor") {
+		t.Fatalf("--vendor present for empty vendor: %v", args)
+	}
+}
+
 func TestBridgeArgsThreadsMemoryScope(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/bin/herrscher")
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1", Project: "obby", Agent: "roblox"})

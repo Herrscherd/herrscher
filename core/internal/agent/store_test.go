@@ -79,6 +79,27 @@ func TestStoreCreateDefaultSoulAndNoMCP(t *testing.T) {
 	}
 }
 
+func TestCreateStoresAndReadsCmd(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if _, err := s.Create(CreateSpec{Name: "b", Backend: "codex", Cmd: "codex --model gpt-5.6"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, ok := s.Get("b")
+	if !ok {
+		t.Fatal("agent not found")
+	}
+	if got.Cmd != "codex --model gpt-5.6" {
+		t.Fatalf("Cmd = %q, want codex --model gpt-5.6", got.Cmd)
+	}
+	if _, err := s.Create(CreateSpec{Name: "n"}); err != nil {
+		t.Fatalf("create n: %v", err)
+	}
+	n, _ := s.Get("n")
+	if n.Cmd != "" {
+		t.Fatalf("Cmd = %q, want empty", n.Cmd)
+	}
+}
+
 func TestStoreCreateBackendRoundTrip(t *testing.T) {
 	s := NewStore(t.TempDir())
 	a, err := s.Create(CreateSpec{Name: "codex-agent", Backend: "codex"})

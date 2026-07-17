@@ -114,8 +114,11 @@ func ApplyOrchestratorScope(cfg *contracts.PluginConfig, session, project, agent
 	}
 }
 
-func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend, error) {
-	desired := sess.Vendor
+// BuildBackend selects and constructs a backend by vendor. A remote resolver
+// backend wins when configured; otherwise the matching registered plugin is
+// built with the invocation, backend kind, and working directory settings.
+func BuildBackend(ctx context.Context, vendor, cmd, kind, dir string) (contracts.Backend, error) {
+	desired := vendor
 	if desired == "" {
 		desired = os.Getenv("HERRSCHER_BACKEND")
 	}
@@ -134,16 +137,23 @@ func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend,
 	if err != nil {
 		return nil, err
 	}
-	if sess.Cmd != "" {
-		cfg.Settings["cmd"] = sess.Cmd
+	if cfg.Settings == nil {
+		cfg.Settings = map[string]string{}
 	}
-	if sess.Backend != "" {
-		cfg.Settings["kind"] = sess.Backend
+	if cmd != "" {
+		cfg.Settings["cmd"] = cmd
 	}
-	if sess.Worktree != "" {
-		cfg.Settings["dir"] = sess.Worktree
+	if kind != "" {
+		cfg.Settings["kind"] = kind
+	}
+	if dir != "" {
+		cfg.Settings["dir"] = dir
 	}
 	return plugin.Backend(ctx, cfg)
+}
+
+func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend, error) {
+	return BuildBackend(ctx, sess.Vendor, sess.Cmd, sess.Backend, sess.Worktree)
 }
 
 func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin, error) {

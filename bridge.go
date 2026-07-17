@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 
-	claude "github.com/Herrscherd/herrscher-claude-backend"
 	"github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/host"
@@ -15,20 +14,22 @@ import (
 // runBridge runs a pure backend runner against the daemon hub: it dials the hub
 // control socket (--hub-socket), takes one input frame per turn, and streams the
 // backend's events back over the same connection — it does no gateway I/O itself.
-// The default backend is a persistent streaming Claude session keyed on the
-// channel id; --backend (stream|oneshot) and the claude flags below select and
-// configure it.
+// The backend is selected by --vendor from the plugin registry (Claude when
+// unset); --backend picks the kind (stream|oneshot) and --cmd the invocation.
 func runBridge(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("bridge", flag.ExitOnError)
 	ch := channelFlag(fs)
 	cmdStr := fs.String("cmd", "", "base command (default 'claude' in stream mode; the per-message program in one-shot mode)")
-	stream := fs.Bool("stream", true, "legacy: only consulted when --backend is unset; --stream=false selects the one-shot backend")
-	model := fs.String("model", "", "model for the persistent claude session (e.g. claude-haiku-4-5-20251001)")
+	// Accepted but ignored; kept so existing --stream/--model callers don't error.
+	// Kind is selected by --backend; the model now rides in --cmd (or CLAUDE_MODEL).
+	fs.Bool("stream", true, "deprecated, ignored (accepted for backward compatibility)")
+	fs.String("model", "", "deprecated, ignored — pass the model via --cmd (e.g. 'claude --model …')")
 	session := fs.String("session", "", "session name (scopes the orchestrator/attachment dir)")
 	project := fs.String("project", "", "project name — the shared memory scope (P1: every agent of this game recalls it)")
 	agent := fs.String("agent", "", "agent name — the private memory scope (P1: this agent's learned skills)")
 	verbose := fs.Bool("v", false, "log activity to stderr")
 	backend := fs.String("backend", "", "responder backend: stream (default) | oneshot")
+	vendor := fs.String("vendor", "", "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)")
 	hubSocket := fs.String("hub-socket", "", "unix socket of the daemon hub: when set, run as a pure backend runner (no gateway polling)")
 	extractor := fs.String("extractor", "", "name of a registered curation extractor — enables the P1 learning loop (empty = plain Curator, no learning)")
 	journal := fs.String("journal", "", "path to the call journal Consolidate reads (worktree-relative ok); only used with --extractor")
@@ -37,12 +38,9 @@ func runBridge(ctx context.Context, args []string) error {
 
 	log := host.Logger(*verbose).With("component", "bridge", "session", *session)
 
-	// The backend is the model edge: core never knows which model answers. The
-	// factory closes over the chosen claude config and is built per resolved
-	// channel (claude keys its persistent session on the channel id). When
+	// The backend is the model edge: core never knows which model answers. When
 	// HERRSCHER_REMOTE names "backend" the resolver returns an out-of-process
-	// streaming proxy instead; otherwise it returns (nil, nil) and we build the
-	// local claude backend exactly as before.
+	// proxy; otherwise the shared host factory selects the requested vendor.
 	br, err := newResolver(log)
 	if err != nil {
 		return err
@@ -53,13 +51,7 @@ func runBridge(ctx context.Context, args []string) error {
 		} else if be != nil {
 			return be, nil
 		}
-		return claude.NewBackend(ctx, claude.Config{
-			Kind:    *backend,
-			Stream:  *stream,
-			Cmd:     *cmdStr,
-			Model:   *model,
-			Verbose: *verbose,
-		})
+		return host.BuildBackend(ctx, *vendor, *cmdStr, *backend, "")
 	}
 
 	mem := buildMemory(ctx, log)

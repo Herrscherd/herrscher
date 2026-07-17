@@ -19,10 +19,10 @@ func TestAgentCreateAndList(t *testing.T) {
 		t.Fatalf("empty list: out=%q err=%v", out, err)
 	}
 
-	if _, err := h.agentCreateRun(context.Background(), args("name", "Roblox Dev", "soul", "PERSONA", "mcp", "neublox serve --project {{WORKTREE}}", "backend", "codex")); err != nil {
+	if _, err := h.agentCreateRun(context.Background(), args("name", "Roblox Dev", "soul", "PERSONA", "mcp", "neublox serve --project {{WORKTREE}}", "backend", "codex", "cmd", "codex --model gpt-5.6")); err != nil {
 		t.Fatal(err)
 	}
-	if a, ok := h.agents.Get("roblox-dev"); !ok || a.Backend != "codex" {
+	if a, ok := h.agents.Get("roblox-dev"); !ok || a.Backend != "codex" || a.Cmd != "codex --model gpt-5.6" {
 		t.Fatalf("agent should exist under slug roblox-dev")
 	}
 
@@ -89,6 +89,31 @@ func TestSessionCreateWithAgentMaterializes(t *testing.T) {
 	}
 	if sess.Vendor != "codex" {
 		t.Fatalf("session.Vendor = %q, want codex inherited from agent", sess.Vendor)
+	}
+}
+
+func TestSessionCreateInheritsAgentCmd(t *testing.T) {
+	h, _, _, wt, _, st := newTestHandler(t, "default-cmd")
+	wt.path = t.TempDir()
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if _, err := h.agents.Create(agent.CreateSpec{Name: "bob", Soul: "P", Backend: "codex", Cmd: "codex --model gpt-5.6"}); err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "s1", "agent", "bob")); err != nil {
+		t.Fatalf("create s1: %v", err)
+	}
+	s1, _ := st.FindSession("s1")
+	if s1.Cmd != "codex --model gpt-5.6" {
+		t.Fatalf("s1.Cmd = %q, want inherited agent cmd", s1.Cmd)
+	}
+
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "s2", "agent", "bob", "cmd", "claude")); err != nil {
+		t.Fatalf("create s2: %v", err)
+	}
+	s2, _ := st.FindSession("s2")
+	if s2.Cmd != "claude" {
+		t.Fatalf("s2.Cmd = %q, want explicit override", s2.Cmd)
 	}
 }
 

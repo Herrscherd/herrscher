@@ -127,21 +127,7 @@ func runPluginHost(ctx context.Context, args []string) error {
 // firstMemory builds the first registered memory plugin from its resolved env
 // config, returning it with its manifest for announcement.
 func firstMemory(ctx context.Context) (contracts.Memory, contracts.Manifest, error) {
-	for _, p := range contracts.Default.Memories() {
-		if p.Memory == nil {
-			continue
-		}
-		cfg, err := contracts.Resolve(p.Manifest.Config, os.Getenv)
-		if err != nil {
-			return nil, contracts.Manifest{}, fmt.Errorf("memory plugin-host: %w", err)
-		}
-		m, err := p.Memory(ctx, cfg)
-		if err != nil {
-			return nil, contracts.Manifest{}, fmt.Errorf("memory plugin-host: %w", err)
-		}
-		return m, p.Manifest, nil
-	}
-	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: no memory plugin registered")
+	return host.BuildFirstMemoryWithManifest(ctx)
 }
 
 // firstOrchestrator builds the first registered orchestrator plugin. The remote

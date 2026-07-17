@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -62,6 +63,92 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 				return string(b), err
 			}
 			return reply, nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
+	// memory locate/forget/record — surface d'exposition mémoire consommée par
+	// exec (voir docs/superpowers/specs/2026-07-17-memory-exposure-surface).
+	// Chaque commande construit la mémoire in-process et la ferme.
+	if err := reg.Add(contracts.New("memory", "locate").
+		Help("print openable URIs (obsidian://, file://) of a memory node's note").
+		Param("key", "node key", true).
+		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
+			mem, err := BuildFirstMemory(cmdCtx)
+			if err != nil {
+				return "", err
+			}
+			defer mem.Close()
+			loc, ok := mem.(contracts.Locator)
+			if !ok {
+				return "", fmt.Errorf("memory backend does not support locate")
+			}
+			l, err := loc.Locate(cmdCtx, in.Get("key"))
+			if err != nil {
+				return "", err
+			}
+			if in.JSON {
+				b, err := json.Marshal(l)
+				return string(b), err
+			}
+			if l.Obsidian != "" {
+				return l.Obsidian, nil
+			}
+			return l.File, nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
+	if err := reg.Add(contracts.New("memory", "forget").
+		Help("delete a memory node by key (idempotent)").
+		Param("key", "node key", true).
+		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
+			mem, err := BuildFirstMemory(cmdCtx)
+			if err != nil {
+				return "", err
+			}
+			defer mem.Close()
+			del, ok := mem.(contracts.Deleter)
+			if !ok {
+				return "", fmt.Errorf("memory backend does not support forget")
+			}
+			if err := del.Delete(cmdCtx, in.Get("key")); err != nil {
+				return "", err
+			}
+			return "forgotten " + in.Get("key"), nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
+	if err := reg.Add(contracts.New("memory", "record").
+		Help("upsert a memory node").
+		Param("key", "node key", true).
+		Param("kind", "node kind (decision, project, …)", true).
+		Param("title", "node title", false).
+		Param("body", "node body (markdown)", false).
+		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
+			mem, err := BuildFirstMemory(cmdCtx)
+			if err != nil {
+				return "", err
+			}
+			defer mem.Close()
+			kind := contracts.NodeKind(in.Get("kind"))
+			switch kind {
+			case contracts.KindOrganization, contracts.KindProject, contracts.KindRepo,
+				contracts.KindServer, contracts.KindArchitecture, contracts.KindProduction,
+				contracts.KindSession, contracts.KindDecision, contracts.KindUser,
+				contracts.KindAgent, contracts.KindDomain:
+				// ok
+			default:
+				return "", fmt.Errorf("memory record: unknown kind %q", in.Get("kind"))
+			}
+			n := contracts.Node{
+				Key:   in.Get("key"),
+				Kind:  kind,
+				Title: in.Get("title"),
+				Body:  in.Get("body"),
+			}
+			if err := mem.Record(cmdCtx, n); err != nil {
+				return "", err
+			}
+			return "recorded " + n.Key, nil
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}

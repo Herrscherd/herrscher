@@ -55,6 +55,32 @@ func TestSelectBackendVendorPrecedence(t *testing.T) {
 	}
 }
 
+func TestBuildBackendSelectsByVendor(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+
+	var built string
+	makePlugin := func(kind string) contracts.Plugin {
+		return contracts.Plugin{
+			Manifest: contracts.Manifest{Kind: kind, Category: contracts.CategoryBackend},
+			Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
+				built = kind
+				return seedBackend{}, nil
+			},
+		}
+	}
+	contracts.Default.Register(makePlugin("claude"))
+	contracts.Default.Register(makePlugin("codex"))
+
+	if _, err := BuildBackend(context.Background(), "codex", "codex --model gpt-5.6", "", ""); err != nil {
+		t.Fatalf("BuildBackend: %v", err)
+	}
+	if built != "codex" {
+		t.Fatalf("built %q, want codex", built)
+	}
+}
+
 type seedSpyOrchestrator struct {
 	consolidated bool
 	closed       bool

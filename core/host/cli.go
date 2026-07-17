@@ -129,9 +129,19 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 				return "", err
 			}
 			defer mem.Close()
+			kind := contracts.NodeKind(in.Get("kind"))
+			switch kind {
+			case contracts.KindOrganization, contracts.KindProject, contracts.KindRepo,
+				contracts.KindServer, contracts.KindArchitecture, contracts.KindProduction,
+				contracts.KindSession, contracts.KindDecision, contracts.KindUser,
+				contracts.KindAgent, contracts.KindDomain:
+				// ok
+			default:
+				return "", fmt.Errorf("memory record: unknown kind %q", in.Get("kind"))
+			}
 			n := contracts.Node{
 				Key:   in.Get("key"),
-				Kind:  contracts.NodeKind(in.Get("kind")),
+				Kind:  kind,
 				Title: in.Get("title"),
 				Body:  in.Get("body"),
 			}

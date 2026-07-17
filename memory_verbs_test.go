@@ -43,6 +43,14 @@ func TestMemoryLocateVerb(t *testing.T) {
 	}
 }
 
+func TestMemoryRecordRejectsUnknownKind(t *testing.T) {
+	t.Setenv("OBSIDIAN_VAULT", t.TempDir())
+	reg := mkReg(t)
+	if _, err := reg.Dispatch(context.Background(), []string{"memory", "record", "--key", "z", "--kind", "bogus"}); err == nil {
+		t.Fatal("expected error for unknown kind")
+	}
+}
+
 func TestMemoryForgetVerb(t *testing.T) {
 	t.Setenv("OBSIDIAN_VAULT", t.TempDir())
 	reg := mkReg(t)

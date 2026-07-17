@@ -33,6 +33,19 @@ func TestSessionCreatePersistsLearningConfig(t *testing.T) {
 	}
 }
 
+func TestSessionCreatePersistsVendor(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "")
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "vendor", "cursor")); err != nil {
+		t.Fatal(err)
+	}
+	sess, ok := st.FindSession("demo")
+	if !ok || sess.Vendor != "cursor" {
+		t.Fatalf("session Vendor = %q, ok=%v; want cursor", sess.Vendor, ok)
+	}
+}
+
 // TestSessionCreateRejectsBadConsolidateEvery guards the only parsed integer.
 func TestSessionCreateRejectsBadConsolidateEvery(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")

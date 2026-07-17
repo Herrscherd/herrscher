@@ -142,19 +142,20 @@ func (r *Resolver) Orchestrator(ctx context.Context, plugins []contracts.Plugin)
 // local backend (which closes over model config the resolver does not hold).
 // The remote proxy streams turn events over gRPC and surfaces a stream loss as a
 // Respond error so the turn loop abandons the in-flight turn.
-func (r *Resolver) Backend(ctx context.Context, plugins []contracts.Plugin) (contracts.Backend, error) {
+func (r *Resolver) Backend(ctx context.Context, plugins []contracts.Plugin, desired ...string) (contracts.Backend, error) {
 	if !r.isRemote(contracts.CategoryBackend) {
 		return nil, nil
 	}
-	for _, p := range plugins {
-		if p.Backend == nil {
-			continue
-		}
-		p := p
-		return resolveRemoteWithRetry(r, ctx, contracts.CategoryBackend,
-			func(c context.Context) (contracts.Backend, error) { return r.dialBackend(c, p) })
+	kind := ""
+	if len(desired) > 0 {
+		kind = desired[0]
 	}
-	return nil, nil
+	p, err := selectBackend(kind, plugins)
+	if err != nil {
+		return nil, err
+	}
+	return resolveRemoteWithRetry(r, ctx, contracts.CategoryBackend,
+		func(c context.Context) (contracts.Backend, error) { return r.dialBackend(c, p) })
 }
 
 // RemoteResolveError reports that a remote category could not be resolved within
@@ -291,7 +292,7 @@ func (r *Resolver) dialRemoteOrchestratorOnce(ctx context.Context, _ contracts.P
 // dialRemoteBackendOnce is one remote-resolve attempt for the backend: connect to
 // NATS, watch for a backend announcement, and dial its streaming gRPC proxy. Same
 // shape as the memory/orchestrator dials; ctx bounds the announcement wait.
-func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, _ contracts.Plugin) (contracts.Backend, error) {
+func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, p contracts.Plugin) (contracts.Backend, error) {
 	nc, err := nats.Connect(r.natsURL())
 	if err != nil {
 		return nil, err
@@ -310,7 +311,15 @@ func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, _ contracts.Plugin
 	}
 	for {
 		if bes := reg.Backends(); len(bes) > 0 {
-			return transport.DialBackend(ctx, bes[0], r.creds)
+			if p.Manifest.Kind == "" {
+				return transport.DialBackend(ctx, bes[0], r.creds)
+			}
+			for _, be := range bes {
+				if be.Manifest.Kind == p.Manifest.Kind {
+					return transport.DialBackend(ctx, be, r.creds)
+				}
+			}
+			return nil, fmt.Errorf("resolver: no remote backend announced for kind %q", p.Manifest.Kind)
 		}
 		select {
 		case <-seen:

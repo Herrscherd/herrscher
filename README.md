@@ -668,6 +668,20 @@ comma-separated categories to run out-of-process (`memory`, `orchestrator`,
 closed). With TLS unset the transport stays plaintext loopback, exactly as a
 single-host deployment.
 
+### `memory` — locate, forget, record memory nodes
+
+`herrscher memory <locate|forget|record> --key K [...]` drives the compiled-in
+memory plugin (e.g. `obsidian`) directly through the operator registry, one node
+at a time. Consommé par Neublox via exec (voir issue #44). `--json` prints the raw
+`contracts.Location` payload instead of a single URI. Uses `OBSIDIAN_VAULT` like
+the rest of the memory surface (see [Environment](#cli-reference) above).
+
+```bash
+herrscher memory record --key demo/fact --kind decision --title "Demo"
+herrscher memory locate --key demo/fact --json
+herrscher memory forget --key demo/fact
+```
+
 ---
 
 ## Managing plugins (the `init` / `plugin` / `update` / `install` verbs)

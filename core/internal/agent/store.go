@@ -22,9 +22,10 @@ func (s *Store) Root() string { return s.root }
 // optional stdio MCP server command line ("neublox serve --project {{WORKTREE}}")
 // whose first token names the server and is its command.
 type CreateSpec struct {
-	Name string
-	Soul string
-	MCP  string
+	Name    string
+	Soul    string
+	MCP     string
+	Backend string
 }
 
 // defaultSoul is the persona seeded when CreateSpec.Soul is empty. It is a
@@ -108,7 +109,15 @@ func readTags(home string) []string {
 	return out
 }
 
-// Create writes a new agent home and seeds its three source files. It errors if
+func readBackend(home string) string {
+	buf, err := os.ReadFile(filepath.Join(home, backendFile))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(buf))
+}
+
+// Create writes a new agent home and seeds its source files. It errors if
 // the name is unsafe or the agent already exists.
 func (s *Store) Create(spec CreateSpec) (Agent, error) {
 	name := spec.Name
@@ -162,13 +171,19 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 		{mcpFile, mcpBuf},
 		{settingsFile, settingsBuf},
 	}
+	if spec.Backend != "" {
+		files = append(files, struct {
+			name string
+			data []byte
+		}{backendFile, []byte(spec.Backend)})
+	}
 	for _, f := range files {
 		if err := os.WriteFile(filepath.Join(home, f.name), f.data, 0o644); err != nil {
 			return Agent{}, fmt.Errorf("write %s: %w", f.name, err)
 		}
 	}
 	created = true
-	return Agent{Name: name, Home: home}, nil
+	return Agent{Name: name, Home: home, Backend: spec.Backend}, nil
 }
 
 // Get returns the agent named name, or false if no such home directory exists.
@@ -181,7 +196,7 @@ func (s *Store) Get(name string) (Agent, bool) {
 	if err != nil || !info.IsDir() {
 		return Agent{}, false
 	}
-	return Agent{Name: name, Home: home, Tags: readTags(home)}, true
+	return Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home)}, true
 }
 
 // List returns every agent home under the store root, sorted by name. A missing
@@ -200,7 +215,7 @@ func (s *Store) List() ([]Agent, error) {
 			continue
 		}
 		home := filepath.Join(s.root, e.Name())
-		out = append(out, Agent{Name: e.Name(), Home: home, Tags: readTags(home)})
+		out = append(out, Agent{Name: e.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil

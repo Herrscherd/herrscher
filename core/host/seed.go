@@ -115,32 +115,50 @@ func ApplyOrchestratorScope(cfg *contracts.PluginConfig, session, project, agent
 }
 
 func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend, error) {
+	desired := sess.Vendor
+	if desired == "" {
+		desired = os.Getenv("HERRSCHER_BACKEND")
+	}
+	plugins := contracts.Default.Backends()
 	resolver := NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
-	if backend, err := resolver.Backend(ctx, contracts.Default.Backends()); err != nil {
+	if backend, err := resolver.Backend(ctx, plugins, desired); err != nil {
 		return nil, err
 	} else if backend != nil {
 		return backend, nil
 	}
-	for _, plugin := range contracts.Default.Backends() {
+	plugin, err := selectBackend(desired, plugins)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	if sess.Cmd != "" {
+		cfg.Settings["cmd"] = sess.Cmd
+	}
+	if sess.Backend != "" {
+		cfg.Settings["kind"] = sess.Backend
+	}
+	if sess.Worktree != "" {
+		cfg.Settings["dir"] = sess.Worktree
+	}
+	return plugin.Backend(ctx, cfg)
+}
+
+func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin, error) {
+	for _, plugin := range plugins {
 		if plugin.Backend == nil {
 			continue
 		}
-		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
-		if err != nil {
-			return nil, err
+		if desired == "" || plugin.Manifest.Kind == desired {
+			return plugin, nil
 		}
-		if sess.Cmd != "" {
-			cfg.Settings["cmd"] = sess.Cmd
-		}
-		if sess.Backend != "" {
-			cfg.Settings["kind"] = sess.Backend
-		}
-		if sess.Worktree != "" {
-			cfg.Settings["dir"] = sess.Worktree
-		}
-		return plugin.Backend(ctx, cfg)
 	}
-	return nil, fmt.Errorf("no backend plugin registered")
+	if desired != "" {
+		return contracts.Plugin{}, fmt.Errorf("unknown backend %q", desired)
+	}
+	return contracts.Plugin{}, fmt.Errorf("no backend plugin registered")
 }
 
 // provisionSeedScope ensures the memory scope roots exist before a one-shot seed

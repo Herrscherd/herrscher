@@ -79,6 +79,22 @@ func TestStoreCreateDefaultSoulAndNoMCP(t *testing.T) {
 	}
 }
 
+func TestStoreCreateBackendRoundTrip(t *testing.T) {
+	s := NewStore(t.TempDir())
+	a, err := s.Create(CreateSpec{Name: "codex-agent", Backend: "codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend, err := os.ReadFile(filepath.Join(a.Home, "backend"))
+	if err != nil || string(backend) != "codex" {
+		t.Fatalf("backend file = %q, err=%v", backend, err)
+	}
+	got, ok := s.Get("codex-agent")
+	if !ok || got.Backend != "codex" {
+		t.Fatalf("Get Backend = %q, ok=%v; want codex", got.Backend, ok)
+	}
+}
+
 func TestStoreCreateDuplicate(t *testing.T) {
 	s := NewStore(t.TempDir())
 	if _, err := s.Create(CreateSpec{Name: "x"}); err != nil {

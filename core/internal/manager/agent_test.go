@@ -19,10 +19,10 @@ func TestAgentCreateAndList(t *testing.T) {
 		t.Fatalf("empty list: out=%q err=%v", out, err)
 	}
 
-	if _, err := h.agentCreateRun(context.Background(), args("name", "Roblox Dev", "soul", "PERSONA", "mcp", "neublox serve --project {{WORKTREE}}")); err != nil {
+	if _, err := h.agentCreateRun(context.Background(), args("name", "Roblox Dev", "soul", "PERSONA", "mcp", "neublox serve --project {{WORKTREE}}", "backend", "codex")); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := h.agents.Get("roblox-dev"); !ok {
+	if a, ok := h.agents.Get("roblox-dev"); !ok || a.Backend != "codex" {
 		t.Fatalf("agent should exist under slug roblox-dev")
 	}
 
@@ -51,7 +51,7 @@ func TestSessionCreateWithAgentMaterializes(t *testing.T) {
 	worktreeDir := t.TempDir()
 	wt.path = worktreeDir
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	if _, err := h.agents.Create(agent.CreateSpec{Name: "roblox", Soul: "PERSONA", MCP: "neublox serve --project {{WORKTREE}}"}); err != nil {
+	if _, err := h.agents.Create(agent.CreateSpec{Name: "roblox", Soul: "PERSONA", MCP: "neublox serve --project {{WORKTREE}}", Backend: "codex"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -86,6 +86,9 @@ func TestSessionCreateWithAgentMaterializes(t *testing.T) {
 	sess, _ := st.FindSession("demo")
 	if sess.Agent != "roblox" {
 		t.Fatalf("session.Agent = %q, want roblox", sess.Agent)
+	}
+	if sess.Vendor != "codex" {
+		t.Fatalf("session.Vendor = %q, want codex inherited from agent", sess.Vendor)
 	}
 }
 

@@ -21,6 +21,7 @@ const (
 	mcpFile      = "mcp.json"
 	settingsFile = "settings.json"
 	tagsFile     = "TAGS"
+	backendFile  = "backend"
 )
 
 // worktreeToken is replaced with the absolute worktree path when an agent is
@@ -28,12 +29,13 @@ const (
 // working directory without knowing it in advance.
 const worktreeToken = "{{WORKTREE}}"
 
-// Agent is a durable companion: a name and the home directory that stores its
-// persona and provisioning files.
+// Agent is a durable companion: a name, backend vendor, and the home directory
+// that stores its persona and provisioning files.
 type Agent struct {
-	Name string
-	Home string   // absolute path to the agent's home directory
-	Tags []string // capability tokens from <home>/TAGS (nil when absent), for host routing
+	Name    string
+	Home    string   // absolute path to the agent's home directory
+	Tags    []string // capability tokens from <home>/TAGS (nil when absent), for host routing
+	Backend string   // backend vendor from <home>/backend, empty when absent
 }
 
 // Materialize provisions the agent into a session worktree by writing the three

@@ -22,6 +22,7 @@ type Session struct {
 	Type      string `json:"type"` // "text" | "forum"
 	Cmd       string `json:"cmd"`
 	Backend   string `json:"backend,omitempty"`  // bridge backend ("" or "stream" = stream-json default; "oneshot" = per-message cmd)
+	Vendor    string `json:"vendor,omitempty"`   // agent backend vendor ("claude", "codex", "cursor")
 	Worktree  string `json:"worktree,omitempty"` // abs path; empty for a shared session
 	Project   string `json:"project,omitempty"`  // workspace sub-dir the session started from
 	Agent     string `json:"agent,omitempty"`    // durable agent this session was provisioned from ("" = none)

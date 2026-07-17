@@ -14,6 +14,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("clone", "remote repo (owner/name) to clone into the workspace first", false).
 			Param("cmd", "bridged command (defaults to the configured cmd)", false).
 			Param("backend", "bridge backend: stream (default) | oneshot", false).
+			Param("vendor", "agent backend vendor: claude | codex | cursor", false).
 			Param("gateways", "comma-separated gateway kinds to bind (e.g. discord,terminal)", false).
 			Param("terminal_only", "bind the session to the terminal gateway only", false).
 			Param("shared", "run in the main checkout instead of an isolated worktree", false).
@@ -41,6 +42,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("name", "agent name (slugified to a safe slug)", true).
 			Param("soul", "persona text written to SOUL.md (layered as .claude/CLAUDE.md)", false).
 			Param("mcp", "stdio MCP server command line, e.g. 'neublox serve --project {{WORKTREE}}'", false).
+			Param("backend", "agent backend vendor: claude | codex | cursor", false).
 			Do(h.agentCreateRun),
 		contracts.New("agent", "list").
 			Help("list durable companion agents").

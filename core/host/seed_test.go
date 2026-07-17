@@ -2,11 +2,58 @@ package host
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
+
+func TestSelectBackendVendorPrecedence(t *testing.T) {
+	plugins := []contracts.Plugin{
+		{Manifest: contracts.Manifest{Kind: "claude"}, Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return seedBackend{}, nil }},
+		{Manifest: contracts.Manifest{Kind: "codex"}, Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return seedBackend{}, nil }},
+		{Manifest: contracts.Manifest{Kind: "cursor"}, Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return seedBackend{}, nil }},
+	}
+	tests := []struct {
+		name    string
+		session string
+		env     string
+		want    string
+		wantErr string
+	}{
+		{name: "explicit beats env", session: "cursor", env: "codex", want: "cursor"},
+		{name: "env beats fallback", env: "codex", want: "codex"},
+		{name: "fallback is first", want: "claude"},
+		{name: "unknown is an error", session: "gemini", env: "codex", wantErr: `unknown backend "gemini"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.env == "" {
+				_ = os.Unsetenv("HERRSCHER_BACKEND")
+			} else {
+				t.Setenv("HERRSCHER_BACKEND", tt.env)
+			}
+			desired := tt.session
+			if desired == "" {
+				desired = os.Getenv("HERRSCHER_BACKEND")
+			}
+			plugin, err := selectBackend(desired, plugins)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("selectBackend error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plugin.Manifest.Kind != tt.want {
+				t.Fatalf("selected kind = %q, want %q", plugin.Manifest.Kind, tt.want)
+			}
+		})
+	}
+}
 
 type seedSpyOrchestrator struct {
 	consolidated bool

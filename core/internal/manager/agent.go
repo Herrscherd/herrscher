@@ -23,7 +23,8 @@ func (h *Handler) agentCreateRun(_ context.Context, in contracts.Input) (string,
 	soul, _ := in.Lookup("soul")
 	mcp, _ := in.Lookup("mcp")
 	backend, _ := in.Lookup("backend")
-	a, err := h.agents.Create(agent.CreateSpec{Name: name, Soul: soul, MCP: mcp, Backend: backend})
+	cmd, _ := in.Lookup("cmd")
+	a, err := h.agents.Create(agent.CreateSpec{Name: name, Soul: soul, MCP: mcp, Backend: backend, Cmd: cmd})
 	if err != nil {
 		return "", err
 	}

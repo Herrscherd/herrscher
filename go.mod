@@ -57,3 +57,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
+
+replace github.com/Herrscherd/herrscher-contracts => /home/shan/dev/herrscher-contracts
+
+replace github.com/Herrscherd/herrscher-obsidian-memory => /home/shan/dev/herrscher-obsidian-memory

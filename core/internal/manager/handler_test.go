@@ -439,14 +439,14 @@ func TestSessionBanner(t *testing.T) {
 	}{
 		{
 			name:     "isolated",
-			worktree: "/home/me/proj/.dctl-sessions/demo",
+			worktree: "/home/me/proj/.herrscher-sessions/demo",
 			branch:   "session/demo",
 			shared:   false,
 			want: []string{
 				"🚀 Session **demo** ready.",
 				"Project: **proj** (`/home/me/proj`)",
 				"Mode: isolated worktree",
-				"Worktree: `/home/me/proj/.dctl-sessions/demo`",
+				"Worktree: `/home/me/proj/.herrscher-sessions/demo`",
 				"Branch: `session/demo`",
 				"Command: `claude`",
 			},
@@ -817,7 +817,7 @@ func TestSessionCreateLegacyNoWorkspace(t *testing.T) {
 func TestSessionCloseUsesProjectRepo(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	_ = st.SetWorkspace("/ws")
-	st.AddSession(state.Session{Name: "demo", ChannelID: "ch9", Type: "text", Worktree: "/ws/myproj/.dctl-sessions/demo", Project: "myproj"})
+	st.AddSession(state.Session{Name: "demo", ChannelID: "ch9", Type: "text", Worktree: "/ws/myproj/.herrscher-sessions/demo", Project: "myproj"})
 	if _, err := h.sessionCloseRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatal(err)
 	}

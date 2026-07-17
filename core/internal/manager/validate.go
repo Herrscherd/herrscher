@@ -35,9 +35,12 @@ func slugify(name string) string {
 var projectRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
 // repoFor resolves the git repo root a session operates on: the workspace root
-// when no project is set (legacy single-repo), else <workspace>/<project>.
+// when no project sub-dir applies, else <workspace>/<project>. A project names a
+// workspace sub-dir ONLY when a workspace root is configured; in cwd mode
+// (workspace == "") the session runs in the checkout root and the project is a
+// mere logical label, so it must never steer the repo path.
 func repoFor(workspace, project string) string {
-	if project == "" {
+	if workspace == "" || project == "" {
 		return workspace
 	}
 	return filepath.Join(workspace, project)

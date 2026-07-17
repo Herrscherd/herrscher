@@ -218,7 +218,7 @@ sequenceDiagram
     participant HUB as Hub session driver (core/host)
     participant BR as Bridge (pure runner)
     participant BE as Backend plugin
-    participant M as Model (Claude)
+    participant M as Model (per session vendor: claude/codex/cursor)
 
     U->>CH: types a message
     HUB->>GW: Read(channel, after=lastID)
@@ -428,18 +428,39 @@ An agent home lives at **`<stateDir>/agents/<name>/`**, where `<stateDir>` is
 | `SOUL.md` | the agent's persona (a default companion persona if none is given) |
 | `mcp.json` | an optional stdio MCP server declaration |
 | `settings.json` | zero-prompt Claude settings (auto-enable project MCP servers, `acceptEdits`, an allow-list) |
+| `backend` | optional backend vendor (`claude`\|`codex`\|`cursor`); absent = the daemon default |
+| `cmd` | optional default invocation carrying the model, e.g. `codex --model gpt-5.6` |
 
 Create and list agents from the operator binary or through a gateway (the Discord
 gateway binds the same verbs as `/agent create` / `/agent list`):
 
 ```text
-herrscher agent create --name <name> [--soul '<persona text>'] [--mcp 'neublox serve --project {{WORKTREE}}']
+herrscher agent create --name <name> [--soul '<persona text>'] [--mcp 'neublox serve --project {{WORKTREE}}'] \
+                       [--backend claude|codex|cursor] [--cmd 'codex --model gpt-5.6']
 herrscher agent list
 ```
 
 `soul:` seeds the persona; `mcp:` is a stdio MCP server command line whose first
 token is both the server name and its command. The literal `{{WORKTREE}}` is
 substituted with the session's worktree path at provision time.
+
+`backend:` pins the agent's **vendor** (which backend plugin answers) and `cmd:`
+its default **invocation** (the model rides in this string). Both are stored in
+the agent home and **inherited by every session and delegated worker** created
+from the agent — precedence for `cmd` is: an explicit `session create --cmd` >
+the agent's `cmd` > the daemon's configured default. Keep `cmd` and `backend`
+consistent (a `codex …` invocation with `--backend codex`); they are set
+together here, so this is natural.
+
+Because a delegated worker inherits its delegate agent's vendor+model, a single
+run can **mix backends**: an orchestrator agent on one model fans work out to
+builder agents on another.
+
+```text
+herrscher agent create --name orchestrator --backend claude --cmd 'claude --model claude-fable-5'
+herrscher agent create --name builder      --backend codex  --cmd 'codex --model gpt-5.6'
+# session create lead --agent orchestrator  → runs Fable; ⟢ delegate: builder … → the worker answers with gpt-5.6
+```
 
 **Provisioning into a session.** `session create … --agent NAME` (or `agent:NAME`
 on Discord) materializes the agent into the new session's worktree as the files
@@ -640,9 +661,9 @@ gateway plugin alone.
 | Command | What it does |
 |---------|--------------|
 | `serve [--config PATH] [--state FILE] [--health-addr ADDR] [--status-channel ID] [--env-file PATH] [--instance SLUG] [--cmd '…']` | The always-on Gateway daemon: per-session bridge supervision, health endpoint. |
-| `bridge -c CHANNEL --hub-socket SOCK [--cmd '…'] [--backend stream\|oneshot] [--model M] [--session N] [--project P] [--agent A] …` | One pure-runner backend over the daemon's control socket. Normally spawned by `serve`. `--project`/`--agent` set the [memory scope](#memory-scope-shared-vs-private) (the supervisor threads them from the session's own project/agent). |
-| `session <create\|close\|list\|who> [--name N] [--project P] [--clone R] [--cmd '…'] [--backend stream\|oneshot] [--shared] [--agent NAME] [--force]` | Manage sessions: create a bridged channel + worktree + backend (optionally provisioned from a durable [agent](#durable-agents)), close one, or list/inspect active ones. |
-| `agent <create\|list> [--name N] [--soul '…'] [--mcp '…']` | Manage durable companion [agents](#durable-agents): a home with persona + MCP + zero-prompt settings, materialized into a session worktree via `session create --agent`. |
+| `bridge -c CHANNEL --hub-socket SOCK [--cmd '…'] [--vendor claude\|codex\|cursor] [--backend stream\|oneshot] [--session N] [--project P] [--agent A] …` | One pure-runner backend over the daemon's control socket. Normally spawned by `serve`. `--vendor` selects the backend plugin (the supervisor threads it from the session's vendor); `--project`/`--agent` set the [memory scope](#memory-scope-shared-vs-private). (`--model` is deprecated/ignored — the model rides in `--cmd`.) |
+| `session <create\|close\|list\|who> [--name N] [--project P] [--clone R] [--cmd '…'] [--vendor claude\|codex\|cursor] [--backend stream\|oneshot] [--shared] [--agent NAME] [--force]` | Manage sessions: create a bridged channel + worktree + backend (optionally provisioned from a durable [agent](#durable-agents), whose `backend`/`cmd` are inherited when not given), close one, or list/inspect active ones. |
+| `agent <create\|list> [--name N] [--soul '…'] [--mcp '…'] [--backend claude\|codex\|cursor] [--cmd '…']` | Manage durable companion [agents](#durable-agents): a home with persona + MCP + zero-prompt settings and an optional pinned backend vendor + invocation, materialized into a session worktree via `session create --agent`. |
 | `service <install\|uninstall\|status\|restart\|update> [--cmd '…'] [--health-addr ADDR] [--env-file PATH] [--source DIR] [--no-pull]` | Manage the daemon as a native OS service (see [Installation](#installation)). |
 
 The host self-management verbs — `init`, `plugin`, `update`, `install` — compose

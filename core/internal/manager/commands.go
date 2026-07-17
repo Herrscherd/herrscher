@@ -43,6 +43,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("soul", "persona text written to SOUL.md (layered as .claude/CLAUDE.md)", false).
 			Param("mcp", "stdio MCP server command line, e.g. 'neublox serve --project {{WORKTREE}}'", false).
 			Param("backend", "agent backend vendor: claude | codex | cursor", false).
+			Param("cmd", "default invocation carrying the model, e.g. 'codex --model gpt-5.6'", false).
 			Do(h.agentCreateRun),
 		contracts.New("agent", "list").
 			Help("list durable companion agents").

@@ -108,8 +108,10 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		return "", fmt.Errorf("no home set — run `set home` first")
 	}
 	cmd := h.defaultCmd
+	cmdExplicit := false
 	if c, ok := in.Lookup("cmd"); ok && c != "" {
 		cmd = c
+		cmdExplicit = true
 	}
 	backend, _ := in.Lookup("backend")
 	if backend == "" {
@@ -194,6 +196,9 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 		if vendor == "" {
 			vendor = a.Backend
+		}
+		if !cmdExplicit && a.Cmd != "" {
+			cmd = a.Cmd
 		}
 		if err := a.Materialize(worktree); err != nil {
 			rollbackWorktree()

@@ -26,6 +26,7 @@ type CreateSpec struct {
 	Soul    string
 	MCP     string
 	Backend string
+	Cmd     string
 }
 
 // defaultSoul is the persona seeded when CreateSpec.Soul is empty. It is a
@@ -117,6 +118,14 @@ func readBackend(home string) string {
 	return strings.TrimSpace(string(buf))
 }
 
+func readCmd(home string) string {
+	buf, err := os.ReadFile(filepath.Join(home, cmdFile))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(buf))
+}
+
 // Create writes a new agent home and seeds its source files. It errors if
 // the name is unsafe or the agent already exists.
 func (s *Store) Create(spec CreateSpec) (Agent, error) {
@@ -177,13 +186,19 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 			data []byte
 		}{backendFile, []byte(spec.Backend)})
 	}
+	if spec.Cmd != "" {
+		files = append(files, struct {
+			name string
+			data []byte
+		}{cmdFile, []byte(spec.Cmd)})
+	}
 	for _, f := range files {
 		if err := os.WriteFile(filepath.Join(home, f.name), f.data, 0o644); err != nil {
 			return Agent{}, fmt.Errorf("write %s: %w", f.name, err)
 		}
 	}
 	created = true
-	return Agent{Name: name, Home: home, Backend: spec.Backend}, nil
+	return Agent{Name: name, Home: home, Backend: spec.Backend, Cmd: spec.Cmd}, nil
 }
 
 // Get returns the agent named name, or false if no such home directory exists.
@@ -196,7 +211,7 @@ func (s *Store) Get(name string) (Agent, bool) {
 	if err != nil || !info.IsDir() {
 		return Agent{}, false
 	}
-	return Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home)}, true
+	return Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home)}, true
 }
 
 // List returns every agent home under the store root, sorted by name. A missing
@@ -215,7 +230,7 @@ func (s *Store) List() ([]Agent, error) {
 			continue
 		}
 		home := filepath.Join(s.root, e.Name())
-		out = append(out, Agent{Name: e.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home)})
+		out = append(out, Agent{Name: e.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil

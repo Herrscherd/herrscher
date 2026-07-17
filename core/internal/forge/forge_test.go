@@ -12,6 +12,7 @@ import (
 // to distinguish e.g. `gh repo list` from `gh api user/orgs`).
 type fakeRunner struct {
 	calls     [][]string
+	envs      [][]string        // extra env passed per call, aligned with calls
 	out       map[string][]byte // keyed by first arg (e.g. "gh", "glab", "git")
 	outByArgs map[string][]byte // keyed by the full joined argv, takes precedence
 	err       map[string]error
@@ -25,15 +26,83 @@ func (f *fakeRunner) look(name string) error {
 	return f.lookErr[name]
 }
 
-func (f *fakeRunner) run(ctx context.Context, dir, name string, args ...string) ([]byte, error) {
+func (f *fakeRunner) run(ctx context.Context, dir string, env []string, name string, args ...string) ([]byte, error) {
 	argv := append([]string{name}, args...)
 	f.calls = append(f.calls, argv)
+	f.envs = append(f.envs, env)
 	if f.outByArgs != nil {
 		if out, ok := f.outByArgs[strings.Join(argv, " ")]; ok {
 			return out, f.err[name]
 		}
 	}
 	return f.out[name], f.err[name]
+}
+
+// lastEnv returns the extra env of the most recent call.
+func (f *fakeRunner) lastEnv() []string { return f.envs[len(f.envs)-1] }
+
+func hasEnv(env []string, key string) (string, bool) {
+	for _, kv := range env {
+		if strings.HasPrefix(kv, key+"=") {
+			return strings.TrimPrefix(kv, key+"="), true
+		}
+	}
+	return "", false
+}
+
+func TestCloneURLWithTokenUsesAskpass(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "ghp_secrettoken")
+	t.Setenv("GH_TOKEN", "")
+	r := &fakeRunner{}
+	c := &Client{r: r}
+	if _, err := c.Clone(context.Background(), "https://github.com/me/priv.git", "/ws"); err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	env := r.lastEnv()
+	if v, ok := hasEnv(env, "GIT_ASKPASS"); !ok || v == "" {
+		t.Fatalf("expected GIT_ASKPASS set to self, env=%v", env)
+	}
+	if v, ok := hasEnv(env, "HERRSCHER_GIT_ASKPASS"); !ok || v != "1" {
+		t.Fatalf("expected HERRSCHER_GIT_ASKPASS=1, env=%v", env)
+	}
+	if v, ok := hasEnv(env, "GIT_TERMINAL_PROMPT"); !ok || v != "0" {
+		t.Fatalf("expected GIT_TERMINAL_PROMPT=0, env=%v", env)
+	}
+	// The token must never leak into argv (visible in `ps`).
+	if joined := strings.Join(r.calls[0], " "); strings.Contains(joined, "ghp_secrettoken") {
+		t.Fatalf("token leaked into argv: %s", joined)
+	}
+}
+
+func TestCloneURLWithoutTokenFailsFastNoAskpass(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+	r := &fakeRunner{}
+	c := &Client{r: r}
+	if _, err := c.Clone(context.Background(), "https://github.com/me/pub.git", "/ws"); err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	env := r.lastEnv()
+	// No token → no askpass, but still fail-fast instead of hanging on a prompt.
+	if _, ok := hasEnv(env, "GIT_ASKPASS"); ok {
+		t.Fatalf("did not expect GIT_ASKPASS without a token, env=%v", env)
+	}
+	if v, ok := hasEnv(env, "GIT_TERMINAL_PROMPT"); !ok || v != "0" {
+		t.Fatalf("expected GIT_TERMINAL_PROMPT=0 even without token, env=%v", env)
+	}
+}
+
+func TestCloneOwnerNameNoGitEnv(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "ghp_secrettoken")
+	r := &fakeRunner{} // gh present
+	c := &Client{r: r}
+	if _, err := c.Clone(context.Background(), "me/app", "/ws"); err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	// gh reads GH_TOKEN itself; we don't build a git askpass env for its path.
+	if _, ok := hasEnv(r.lastEnv(), "GIT_ASKPASS"); ok {
+		t.Fatalf("gh path must not set GIT_ASKPASS, env=%v", r.lastEnv())
+	}
 }
 
 func TestAvailableReportsBothAbsent(t *testing.T) {

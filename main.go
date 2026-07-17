@@ -18,11 +18,34 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 
 	"github.com/Herrscherd/herrscher/manage"
 )
 
 func main() {
+	// GIT_ASKPASS re-entry: when forge.Clone authenticates a private HTTPS clone,
+	// it points git's GIT_ASKPASS at this same binary and sets the marker below.
+	// git then execs us with the credential prompt as argv[1] ("Username for…" /
+	// "Password for…"). Answer and exit BEFORE any .env load or verb dispatch —
+	// the token rides only the environment (GITHUB_TOKEN/GH_TOKEN), never argv or
+	// disk. This branch is self-contained on purpose: main can't import the
+	// internal forge package.
+	if os.Getenv("HERRSCHER_GIT_ASKPASS") == "1" {
+		prompt := ""
+		if len(os.Args) > 1 {
+			prompt = os.Args[1]
+		}
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "username") {
+			fmt.Println("x-access-token")
+		} else if t := os.Getenv("GITHUB_TOKEN"); t != "" {
+			fmt.Println(t)
+		} else {
+			fmt.Println(os.Getenv("GH_TOKEN"))
+		}
+		return
+	}
+
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)

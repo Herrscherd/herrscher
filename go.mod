@@ -5,11 +5,11 @@ go 1.25.0
 require (
 	github.com/Herrscherd/herrscher-claude-backend v0.1.2
 	github.com/Herrscherd/herrscher-codex-backend v0.1.0
-	github.com/Herrscherd/herrscher-contracts v0.1.14
+	github.com/Herrscherd/herrscher-contracts v0.1.15
 	github.com/Herrscherd/herrscher-cursor-backend v0.1.1
 	github.com/Herrscherd/herrscher-discord-gateway v0.2.4
 	github.com/Herrscherd/herrscher-llm-extractor v0.1.2
-	github.com/Herrscherd/herrscher-obsidian-memory v0.2.3
+	github.com/Herrscherd/herrscher-obsidian-memory v0.2.4
 	github.com/Herrscherd/herrscher-orchestrator v0.1.6
 	github.com/Herrscherd/herrscher-transport v0.2.0
 	github.com/Microsoft/go-winio v0.6.2
@@ -57,7 +57,3 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
-
-replace github.com/Herrscherd/herrscher-contracts => /home/shan/dev/herrscher-contracts
-
-replace github.com/Herrscherd/herrscher-obsidian-memory => /home/shan/dev/herrscher-obsidian-memory

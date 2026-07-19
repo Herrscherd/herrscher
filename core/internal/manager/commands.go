@@ -4,7 +4,7 @@ import contracts "github.com/Herrscherd/herrscher-contracts"
 
 // Commands returns the manager's command set as neutral contracts.Cmd values for
 // the CLI registry to dispatch. Each Run closes over the Handler's dependencies,
-// so the registry holding these stays agnostic of Discord, git, or the backend.
+// so the registry holding these stays agnostic of the gateway, git, or the backend.
 func (h *Handler) Commands() []contracts.Cmd {
 	return []contracts.Cmd{
 		contracts.New("session", "create").
@@ -15,7 +15,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("cmd", "bridged command (defaults to the configured cmd)", false).
 			Param("backend", "bridge backend: stream (default) | oneshot", false).
 			Param("vendor", "agent backend vendor: claude | codex | cursor", false).
-			Param("gateways", "comma-separated gateway kinds to bind (e.g. discord,terminal)", false).
+			Param("gateways", "comma-separated gateway kinds to bind (e.g. chat,terminal)", false).
 			Param("terminal_only", "bind the session to the terminal gateway only", false).
 			Param("shared", "run in the main checkout instead of an isolated worktree", false).
 			Param("agent", "provision the session from a durable agent (its persona + MCP + zero-prompt settings)", false).

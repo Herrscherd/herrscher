@@ -12,11 +12,11 @@ import (
 func TestWriteFileNeverOverwritesTemplate(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "dctl.env")
-	if err := os.WriteFile(path, []byte("DISCORD_BOT_TOKEN=real-secret\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("GW_TOKEN=real-secret\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// Template write against an existing file must be a no-op (preserve secrets).
-	if err := writeFile(FileWrite{Path: path, Content: envTemplate, Mode: 0o600, Template: true}); err != nil {
+	if err := writeFile(FileWrite{Path: path, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(path)
@@ -25,7 +25,7 @@ func TestWriteFileNeverOverwritesTemplate(t *testing.T) {
 	}
 	// A fresh path is created from the template.
 	fresh := filepath.Join(dir, "sub", "new.env")
-	if err := writeFile(FileWrite{Path: fresh, Content: envTemplate, Mode: 0o600, Template: true}); err != nil {
+	if err := writeFile(FileWrite{Path: fresh, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(fresh); err != nil {
@@ -41,6 +41,17 @@ func testConfig(goos string) Config {
 		User:       "me",
 		EnvFile:    "/home/me/.config/dctl/dctl.env",
 		HealthAddr: "127.0.0.1:8787",
+		EnvVars:    testEnvVars(),
+	}
+}
+
+// testEnvVars is a neutral secrets set standing in for what the plugin registry
+// would supply: one required gateway token plus the core owner id. No concrete
+// platform is named, matching the core's gateway-agnostic contract.
+func testEnvVars() []EnvVar {
+	return []EnvVar{
+		{Key: "GW_TOKEN", Help: "gateway token", Required: true},
+		{Key: "DCTL_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
 	}
 }
 
@@ -93,7 +104,7 @@ func TestLinuxPlan(t *testing.T) {
 	if !env.Template || env.Mode != 0o600 {
 		t.Fatalf("env file should be a 0600 template, got mode=%o template=%v", env.Mode, env.Template)
 	}
-	if strings.Contains(env.Content, "DISCORD_BOT_TOKEN=x") || !strings.Contains(env.Content, "DISCORD_BOT_TOKEN=") {
+	if strings.Contains(env.Content, "GW_TOKEN=x") || !strings.Contains(env.Content, "GW_TOKEN=") {
 		t.Errorf("env template should list the var with no value:\n%s", env.Content)
 	}
 	assertCmd(t, p, "systemctl --user enable --now dctl.service")
@@ -268,7 +279,7 @@ func TestConfigScaffoldInPlan(t *testing.T) {
 		}
 		// The comment may *name* the secrets (explaining they live elsewhere),
 		// but the file must never carry an actual secret assignment.
-		if strings.Contains(cfg.Content, "DISCORD_BOT_TOKEN=") {
+		if strings.Contains(cfg.Content, "GW_TOKEN=") {
 			t.Errorf("%s: config.json must not assign secrets", goos)
 		}
 	}
@@ -391,35 +402,41 @@ func TestSkipStartOmitsImmediateStart(t *testing.T) {
 	assertCmd(t, mp2, "launchctl load -w")
 }
 
-// TestEnvFileHasToken: the start decision hinges on a real, non-empty token —
-// the empty template and a comment line must read as "no token".
-func TestEnvFileHasToken(t *testing.T) {
+// TestEnvFileHasRequired: the start decision hinges on every required secret
+// being set to a real, non-empty value — the empty template and a comment line
+// must read as "not ready".
+func TestEnvFileHasRequired(t *testing.T) {
+	vars := testEnvVars()
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "absent.env")
-	if envFileHasToken(missing) {
-		t.Error("absent env file should report no token")
+	if envFileHasRequired(missing, vars) {
+		t.Error("absent env file should report not ready")
 	}
 	tmpl := filepath.Join(dir, "tmpl.env")
-	if err := os.WriteFile(tmpl, []byte(envTemplate), 0o600); err != nil {
+	if err := os.WriteFile(tmpl, []byte(renderEnvTemplate(vars)), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if envFileHasToken(tmpl) {
-		t.Error("empty template should report no token")
+	if envFileHasRequired(tmpl, vars) {
+		t.Error("empty template should report not ready")
 	}
 	filled := filepath.Join(dir, "filled.env")
-	if err := os.WriteFile(filled, []byte("# c\nDISCORD_BOT_TOKEN=  abc.def  \n"), 0o600); err != nil {
+	if err := os.WriteFile(filled, []byte("# c\nGW_TOKEN=  abc.def  \n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if !envFileHasToken(filled) {
-		t.Error("a filled token should be detected")
+	if !envFileHasRequired(filled, vars) {
+		t.Error("a filled required var should be detected")
 	}
-	// A commented-out token must not count.
+	// A commented-out required var must not count.
 	commented := filepath.Join(dir, "commented.env")
-	if err := os.WriteFile(commented, []byte("#DISCORD_BOT_TOKEN=abc\n"), 0o600); err != nil {
+	if err := os.WriteFile(commented, []byte("#GW_TOKEN=abc\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if envFileHasToken(commented) {
-		t.Error("commented token line should not count")
+	if envFileHasRequired(commented, vars) {
+		t.Error("commented required line should not count")
+	}
+	// With no required vars declared, any file (even absent) is ready.
+	if !envFileHasRequired(missing, []EnvVar{{Key: "OPTIONAL"}}) {
+		t.Error("no required vars should always report ready")
 	}
 }
 
@@ -431,8 +448,8 @@ func TestInstallSkipsStartWhenNoToken(t *testing.T) {
 	c := testConfig("linux")
 	c.EnvFile = filepath.Join(dir, "dctl.env") // does not exist yet
 	// Mirror what Install computes, then assert the plan it would run.
-	if envFileHasToken(c.EnvFile) {
-		t.Fatal("precondition: env file should have no token")
+	if envFileHasRequired(c.EnvFile, c.EnvVars) {
+		t.Fatal("precondition: env file should not be ready")
 	}
 	c.SkipStart = true
 	p, _ := BuildPlan(c)
@@ -446,17 +463,19 @@ func TestInstallSkipsStartWhenNoToken(t *testing.T) {
 // TestEnvTemplateCarriesNoValues guards the core secret-hygiene invariant: the
 // template lists each var but never a value, so installing can't leak a token.
 func TestEnvTemplateCarriesNoValues(t *testing.T) {
-	for _, key := range []string{"DISCORD_BOT_TOKEN", "DISCORD_CHANNEL_ID", "DCTL_OWNER_ID"} {
-		if !strings.Contains(envTemplate, key+"=\n") && !strings.HasSuffix(envTemplate, key+"=") {
-			t.Errorf("env template should declare %s with an empty value:\n%s", key, envTemplate)
+	vars := testEnvVars()
+	tmpl := renderEnvTemplate(vars)
+	for _, v := range vars {
+		if !strings.Contains(tmpl, v.Key+"=\n") && !strings.HasSuffix(tmpl, v.Key+"=") {
+			t.Errorf("env template should declare %s with an empty value:\n%s", v.Key, tmpl)
 		}
 	}
-	for _, line := range strings.Split(envTemplate, "\n") {
+	for _, line := range strings.Split(tmpl, "\n") {
 		if strings.HasPrefix(line, "#") || line == "" {
 			continue
 		}
 		if _, val, _ := strings.Cut(line, "="); strings.TrimSpace(val) != "" {
-			t.Errorf("env template line carries a value (would be a committed secret): %q", line)
+			t.Errorf("env template line carries a value (would be a committed secret): %q\n%s", line, tmpl)
 		}
 	}
 }
@@ -609,7 +628,7 @@ func TestWriteFileAppliesMode(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nested", "dctl.env")
-	if err := writeFile(FileWrite{Path: path, Content: envTemplate, Mode: 0o600, Template: true}); err != nil {
+	if err := writeFile(FileWrite{Path: path, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(path)

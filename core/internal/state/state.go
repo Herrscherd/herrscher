@@ -36,8 +36,9 @@ type Session struct {
 	Journal          string `json:"journal,omitempty"`
 	ConsolidateEvery int    `json:"consolidateEvery,omitempty"`
 
-	// Gateways binds the session to a set of gateway kinds (e.g. "discord",
-	// "terminal"). Empty means "legacy": a session with a ChannelID is Discord.
+	// Gateways binds the session to a set of gateway kinds (e.g. "chat",
+	// "terminal"). Empty means "legacy": a pre-multi-gateway session whose
+	// binding the host resolves from the gateways actually built (see IsLegacy).
 	Gateways []string `json:"gateways,omitempty"`
 
 	Participants []string `json:"participants,omitempty"` // observed authors (cache; journal is source of truth)
@@ -48,17 +49,20 @@ type Session struct {
 	Parent string `json:"parent,omitempty"`
 }
 
-// BoundGateways returns the gateway kinds this session is bound to. When the
-// stored set is empty it falls back to the legacy rule: a session with a
-// ChannelID is a Discord session; one without is bound to nothing.
+// BoundGateways returns the explicit gateway kinds this session is bound to, or
+// nil when it is legacy (no stored set). The state package stays platform-blind:
+// it never names a concrete gateway. A legacy session's effective binding is
+// resolved by the host against the gateways actually built (see IsLegacy).
 func (s Session) BoundGateways() []string {
-	if len(s.Gateways) > 0 {
-		return append([]string(nil), s.Gateways...)
-	}
-	if s.ChannelID != "" {
-		return []string{"discord"}
-	}
-	return nil
+	return append([]string(nil), s.Gateways...)
+}
+
+// IsLegacy reports whether this session predates explicit gateway binding: it
+// carries a channel but no stored gateway set. The host binds such a session to
+// the primary (non-terminal) gateways present, reproducing the original
+// single-gateway behavior without the core naming that gateway.
+func (s Session) IsLegacy() bool {
+	return len(s.Gateways) == 0 && s.ChannelID != ""
 }
 
 // State is the daemon's persisted configuration. All access is mutex-guarded.
@@ -261,7 +265,7 @@ func (s *State) SnapshotSessions() []Session {
 }
 
 // QualifiedName maps a logical session name to the name used on global resources
-// (Discord title): "<InstanceID>__<name>". In legacy mode (empty InstanceID) it
+// (channel title): "<InstanceID>__<name>". In legacy mode (empty InstanceID) it
 // returns the bare logical name, preserving pre-namespacing behavior.
 func (s *State) QualifiedName(name string) string {
 	s.mu.Lock()

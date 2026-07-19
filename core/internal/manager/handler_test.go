@@ -260,7 +260,7 @@ func newTestHandlerWithUpdater(t *testing.T, homeType string) (*Handler, *fakeUp
 	up := &fakeUpdater{version: "abc1234"}
 	st := state.NewState(t.TempDir() + "/s.json")
 	agents := agent.NewStore(t.TempDir())
-	return NewHandler(d, sup, wt, fg, up, agents, st, "claude", t.TempDir()), up, d, sup, wt, fg, st
+	return NewHandler(d, sup, wt, fg, up, agents, st, "claude", t.TempDir(), []string{"chat"}), up, d, sup, wt, fg, st
 }
 
 // args builds a command Input from name/value pairs (flags carry "true").
@@ -636,7 +636,7 @@ func TestSessionCreateBanner(t *testing.T) {
 
 func TestSessionCreateSendFailureDoesNotFail(t *testing.T) {
 	h, d, sup, _, _, st := newTestHandler(t, "")
-	d.sendErr = errors.New("discord 500")
+	d.sendErr = errors.New("gateway 500")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
 	reply, err := h.sessionCreateRun(context.Background(), args("name", "demo"))
 	if err != nil {
@@ -910,7 +910,7 @@ func TestSessionListNeutralForTerminalHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	if strings.Contains(out, "<#") {
-		t.Fatalf("terminal home list must not leak Discord mention syntax: %q", out)
+		t.Fatalf("terminal home list must not leak channel-mention syntax: %q", out)
 	}
 	if !strings.Contains(out, "terminal/alpha-1") {
 		t.Fatalf("list should show the bare channel id: %q", out)

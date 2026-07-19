@@ -3,7 +3,7 @@
 // rewrites it), so it is safe to comment and hand-edit — unlike state.json,
 // which the daemon rewrites atomically on every /set.
 //
-// Secrets never live here: DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID and any owner
+// Secrets never live here: gateway tokens/channel ids and any owner
 // token material stay in the 0600 env file. config.json carries only non-secret
 // knobs and declarative runtime defaults.
 package config
@@ -98,7 +98,7 @@ func Template(cmd, healthAddr string) string {
 	cmdJSON, _ := json.Marshal(cmd)
 	healthJSON, _ := json.Marshal(healthAddr)
 	return `// dctl config — declarative defaults the daemon reads at startup.
-// Secrets (DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID, owner token) are NOT here;
+// Secrets (gateway tokens/channel ids, owner token) are NOT here;
 // keep them in the 0600 env file (dctl.env). The daemon never rewrites this
 // file, so your comments and edits are safe.
 //
@@ -116,7 +116,7 @@ func Template(cmd, healthAddr string) string {
   // Self-updating status embed channel id; "" disables it.
   "statusChannel": "",
 
-  // Per-daemon instance slug namespacing shared Discord/git resources;
+  // Per-daemon instance slug namespacing shared gateway/git resources;
   // "" = legacy non-namespaced mode.
   "instance": "",
 

@@ -1,7 +1,7 @@
 // Package cli is the native, channel-agnostic command dispatcher. It holds
 // declared contracts.Cmd values keyed by their namespace Path and resolves an
 // argv invocation to one. It imports only contracts: a command's Run may close
-// over anything (a Discord client, a backend), but the registry never sees it.
+// over anything (a gateway client, a backend), but the registry never sees it.
 package cli
 
 import (

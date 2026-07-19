@@ -1,6 +1,6 @@
 // Package instanceid resolves and validates the per-daemon instance identifier
-// used to namespace global resources (git branches, worktree paths, Discord
-// titles) so multiple dctl daemons can share one Discord home.
+// used to namespace global resources (git branches, worktree paths, channel
+// titles) so multiple daemons can share one gateway home.
 package instanceid
 
 import (
@@ -18,7 +18,8 @@ func Validate(id string) bool {
 	return idRe.MatchString(id)
 }
 
-// Slugify derives a short instanceID from a Discord owner snowflake. It returns
+// Slugify derives a short instanceID from an owner identifier (e.g. a gateway
+// account snowflake). It returns
 // "u" + the last up-to-8 characters of owner, which keeps the result <=9 chars
 // and within the validation regex. An empty owner yields an empty string.
 func Slugify(owner string) string {

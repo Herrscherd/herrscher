@@ -108,10 +108,10 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	home := h.st.Home
 	admin := h.d
 	// A terminal-only session (the TUI's own tabs) is bound to the terminal
-	// gateway, not the operator's Discord home: route it through the terminal
+	// gateway, not the operator's home gateway: route it through the terminal
 	// admin and a synthetic terminal home so it becomes a local `terminal/…`
-	// channel with no Discord thread — working whether a Discord home is
-	// configured or none is set at all.
+	// channel with no remote thread — working whether a home is configured or
+	// none is set at all.
 	if terminalOnly && h.td != nil {
 		home = state.HomeRef{ID: "terminal", Type: "terminal"}
 		admin = h.td
@@ -146,7 +146,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		consolidateEvery = n
 	}
 	gwList, _ := in.Lookup("gateways")
-	gateways := ParseGateways(gwList, terminalOnly)
+	gateways := ParseGateways(gwList, terminalOnly, h.defaultGateways)
 	ws := h.st.WorkspaceRoot()
 	// Project is the logical label the caller assigns; Neublox filters workspace
 	// snapshots by it, so it must be recorded even in cwd mode. It doubles as a
@@ -220,7 +220,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 	}
 	// Logical name stays the state/worktree key; the qualified name namespaces
-	// the Discord title so daemons sharing a home stay distinguishable.
+	// the channel title so daemons sharing a home stay distinguishable.
 	title := h.st.QualifiedName(name)
 	// runDir is the child bridge's working directory: the isolated worktree when
 	// one was made, else the resolved repo (workspace root, optionally /project).
@@ -262,7 +262,8 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 
 // adminFor returns the channel admin that owns sess's channel: the terminal
 // admin for synthetic `terminal/…` channels (when a terminal gateway is bound),
-// else the Discord admin. This keeps close/list routing symmetric with create.
+// else the home gateway's admin. This keeps close/list routing symmetric with
+// create.
 func (h *Handler) adminFor(sess state.Session) channelAdmin {
 	if h.td != nil && strings.HasPrefix(sess.ChannelID, "terminal/") {
 		return h.td

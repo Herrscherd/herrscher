@@ -37,13 +37,12 @@ const maxAttachmentBytes = 10 << 20 // 10 MiB
 // author can't fan a single message into an unbounded number of fetches/files.
 const maxImagesPerMessage = 8
 
-// discordCDNHosts are the only hosts an attachment URL may point at. Discord
-// populates attachments[].url itself, but we still pin the host/scheme so a
-// future change (or a spoofed field) can't turn this into an SSRF primitive.
-var discordCDNHosts = map[string]bool{
-	"cdn.discordapp.com":   true,
-	"media.discordapp.net": true,
-}
+// allowedHosts is the SSRF allowlist for attachment downloads: the caller (the
+// gateway that produced the message) supplies the CDN hosts its attachments may
+// point at, so the core pins host/scheme without knowing any concrete platform.
+// A gateway populates attachments[].url itself, but we still pin it so a future
+// change (or a spoofed field) can't turn this into an SSRF primitive.
+type allowedHosts map[string]bool
 
 // attachmentDir is where downloaded images land, namespaced per session so
 // concurrent bridges don't collide.
@@ -57,11 +56,11 @@ func attachmentDir(session string) string {
 
 // downloadImages fetches up to maxImagesPerMessage image attachments on m to
 // local files and returns their paths in message order. Non-image, oversized,
-// and non-Discord-CDN attachments are skipped. Download is best-effort: the
-// successfully fetched paths are always returned, alongside the first fetch
-// error encountered (the rest are dropped) so a turn is never
-// lost over an image.
-func downloadImages(ctx context.Context, client *http.Client, m contracts.Message, dir string) ([]string, error) {
+// and off-allowlist attachments are skipped (hosts names the CDN hosts a URL may
+// point at). Download is best-effort: the successfully fetched paths are always
+// returned, alongside the first fetch error encountered (the rest are dropped)
+// so a turn is never lost over an image.
+func downloadImages(ctx context.Context, client *http.Client, m contracts.Message, dir string, hosts allowedHosts) ([]string, error) {
 	imgs := make([]contracts.Attachment, 0, maxImagesPerMessage)
 	for _, a := range m.Attachments {
 		// Skip oversized uploads before connecting: never stream one up to the cap
@@ -87,7 +86,7 @@ func downloadImages(ctx context.Context, client *http.Client, m contracts.Messag
 	paths := make([]string, 0, len(imgs))
 	var firstErr error
 	for i, a := range imgs {
-		p, err := fetchOne(ctx, client, a, m.ID, i, dir)
+		p, err := fetchOne(ctx, client, a, m.ID, i, dir, hosts)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
@@ -99,8 +98,8 @@ func downloadImages(ctx context.Context, client *http.Client, m contracts.Messag
 	return paths, firstErr
 }
 
-func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, msgID string, idx int, dir string) (string, error) {
-	if err := validateCDNURL(a.URL); err != nil {
+func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, msgID string, idx int, dir string, hosts allowedHosts) (string, error) {
+	if err := validateCDNURL(a.URL, hosts); err != nil {
 		return "", err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL, nil)
@@ -142,15 +141,15 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 	return dest, nil
 }
 
-// validateCDNURL pins an attachment URL to https on a known Discord CDN host,
-// rejecting anything else before it is fetched.
-func validateCDNURL(raw string) error {
+// validateCDNURL pins an attachment URL to https on one of the caller-supplied
+// allowlist hosts, rejecting anything else before it is fetched.
+func validateCDNURL(raw string, hosts allowedHosts) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return fmt.Errorf("attachment url %q: %w", raw, err)
 	}
-	if u.Scheme != "https" || !discordCDNHosts[u.Hostname()] {
-		return fmt.Errorf("attachment url %q: not a Discord CDN https url", raw)
+	if u.Scheme != "https" || !hosts[u.Hostname()] {
+		return fmt.Errorf("attachment url %q: not an allowed CDN https url", raw)
 	}
 	return nil
 }

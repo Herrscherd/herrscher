@@ -129,7 +129,7 @@ type model struct {
 // tab strip, the footer status line, and the input row (4), plus the help block and
 // the command palette when each is shown.
 func (m *model) chromeHeight() int {
-	h := 4
+	h := 6 // panel border (top+bottom) + brand row + tab strip + footer + input
 	if m.showHelp {
 		h += 4
 	}
@@ -139,12 +139,24 @@ func (m *model) chromeHeight() int {
 	return h
 }
 
+// innerWidth is the usable width inside the panel: the window minus the border
+// and horizontal padding lipgloss adds on each side. Every width-aligned row
+// (brand, tabs, input) and the viewport are sized to it so nothing overruns the
+// frame. Floored at 1 so a tiny terminal never yields a negative width.
+func (m *model) innerWidth() int {
+	w := m.width - 4
+	if w < 1 {
+		w = 1
+	}
+	return w
+}
+
 // applySize fits the viewport to the current window minus the chrome.
 func (m *model) applySize() {
 	if !m.ready {
 		return
 	}
-	m.vp.Width = m.width
+	m.vp.Width = m.innerWidth()
 	m.vp.Height = m.height - m.chromeHeight()
 }
 
@@ -258,6 +270,9 @@ func (m *model) handleEnter() tea.Cmd {
 	m.input.Reset()
 	if strings.HasPrefix(text, "/") {
 		args := strings.Fields(strings.TrimPrefix(text, "/"))
+		if len(args) == 0 {
+			return nil // a bare "/" is the palette prefix, not an empty command to run
+		}
 		return m.dispatchCmd(m.active, args)
 	}
 	if m.active == "" {
@@ -265,7 +280,7 @@ func (m *model) handleEnter() tea.Cmd {
 	}
 	m.tm.Submit(m.active, text)
 	tb := m.tabs[m.active]
-	tb.appendLine(humanStyle.Render("you ") + text)
+	tb.appendLine(humanStyle.Render(glyphYou+" you ") + text)
 	// Flip to the working state immediately, before any backend event, so the
 	// operator sees the message was taken (the "thinking" line is derived from this).
 	tb.busy = true
@@ -422,7 +437,7 @@ func (m *model) thinkingContent() string {
 	}
 	content := strings.Join(tb.lines, "\n")
 	if tb.busy && !tb.streamed {
-		line := workingStyle.Render(m.spinFrame() + " " + glyphThinking + " thinking…")
+		line := workingStyle.Render(m.spinFrame() + " thinking…")
 		if content != "" {
 			content += "\n" + line
 		} else {
@@ -449,7 +464,7 @@ func (m *model) brandRow() string {
 		noun = "session"
 	}
 	right := statusStyle.Render(fmt.Sprintf("%d %s · %s", len(m.order), noun, formatCost(m.totalCost())))
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		return left
 	}
@@ -479,7 +494,7 @@ func (m *model) tabStrip() string {
 			segs[i] = marker + inactiveTabStyle.Render(tb.label) + " "
 		}
 	}
-	return fitTabs(segs, active, m.width)
+	return fitTabs(segs, active, m.innerWidth())
 }
 
 // fitTabs joins tab segments, dropping whole tabs from the front (never past the
@@ -507,7 +522,7 @@ func (m *model) inputRow() string {
 		hint = statusStyle.Render("↑↓ navigate · Tab complete · Esc close")
 	}
 	in := m.input.View()
-	gap := m.width - lipgloss.Width(in) - lipgloss.Width(hint)
+	gap := m.innerWidth() - lipgloss.Width(in) - lipgloss.Width(hint)
 	if gap < 1 {
 		return in
 	}
@@ -593,7 +608,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.applySize()
 		}
-		m.input.Width = msg.Width - 2
+		m.input.Width = m.innerWidth() - 2
 		m.syncViewport()
 	case tea.KeyMsg:
 		m.flash = "" // any keypress clears a transient status
@@ -748,5 +763,7 @@ func (m *model) View() string {
 		parts = append(parts, m.helpView())
 	}
 	parts = append(parts, footer, m.inputRow())
-	return strings.Join(parts, "\n")
+	// The style width counts padding but not the border; width-2 gives a content
+	// wrap of innerWidth (each row is built to that) and a total of the full width.
+	return panelBorder.Width(m.width - 2).Render(strings.Join(parts, "\n"))
 }

@@ -13,7 +13,10 @@ swappable edges — the channel gateway, the model backend, memory and the
 orchestrator — stay in their own repos and are compiled in. The host itself is
 **gateway-agnostic**: it imports zero `dctl` (the concrete Discord client) and
 drives chat platforms only through the contracts `Gateway` port — an invariant
-guarded by purity tests (`TestHostPurity`, `TestCorePurity`).
+guarded by purity tests (`TestHostPurity`, `TestCorePurity`, and
+`TestCoreNamesNoConcretePlatform`, which greps every `core/` source file and
+fails the build if the literal name of a concrete platform appears anywhere —
+code, comment, or test fixture).
 
 > Built with hexagonal architecture: a narrow contract package in the middle,
 > interchangeable edges (the channel, the model), an agnostic domain, and a host
@@ -105,7 +108,14 @@ Neither the host nor `core` ever imports a concrete adapter: there is no `dctl`
 anywhere in this module — it lives only in the Discord gateway plugin. The host
 talks to every chat platform through the contracts `Gateway` port, and that
 invariant is enforced by `TestHostPurity` (root) and `TestCorePurity` (`core/`),
-which fail the build if a concrete client ever leaks in.
+which fail the build if a concrete client ever leaks in. `core` goes one step
+further: it may not even *name* a concrete platform. Gateway kinds are injected
+at the composition root and flow through `core` as opaque data — the daemon's
+default set, a session's bound kinds, the SSRF allowlist for attachment
+downloads, even the `.env` secrets template (rendered from each gateway
+manifest's declared vars) all stay platform-blind. `TestCoreNamesNoConcretePlatform`
+enforces this to the letter: it fails if the string `discord` appears anywhere
+under `core/`.
 
 ---
 
@@ -618,8 +628,11 @@ secrets template — it never bakes the token into the unit file.
 
 It also scaffolds (never clobbering existing files):
 
-- `~/.config/dctl/dctl.env` — the secrets file the service sources
-  (`DISCORD_BOT_TOKEN=`, `DISCORD_CHANNEL_ID=`, `DCTL_OWNER_ID=`)
+- `~/.config/dctl/dctl.env` — the secrets file the service sources. Its lines are
+  rendered from the compiled-in gateways' declared manifest vars plus the core
+  owner id, so the service package names no platform itself; with the default
+  Discord stack that yields `DISCORD_BOT_TOKEN=`, `DISCORD_CHANNEL_ID=`,
+  `DCTL_OWNER_ID=`
 - `~/.config/dctl/config.json` — the config template (see [Configuration](#configuration))
 
 Then fill the token and (re)start:

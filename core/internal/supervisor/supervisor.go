@@ -117,7 +117,12 @@ func (s *Supervisor) runLoop(ctx context.Context, sess state.Session) {
 			return
 		}
 		cmd := exec.CommandContext(ctx, s.selfBin, s.bridgeArgs(sess)...)
-		if sess.Worktree != "" {
+		// Dir is the resolved run directory (worktree, or workspace/project root);
+		// fall back to Worktree for sessions persisted before Dir existed. Empty
+		// leaves cmd.Dir unset so the child inherits the launcher's cwd.
+		if dir := sess.Dir; dir != "" {
+			cmd.Dir = dir
+		} else if sess.Worktree != "" {
 			cmd.Dir = sess.Worktree
 		}
 		cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr

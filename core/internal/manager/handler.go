@@ -9,6 +9,7 @@ import (
 // the CLI dispatches.
 type Handler struct {
 	d          channelAdmin
+	td         channelAdmin // terminal (TUI) admin; nil when no terminal gateway is bound
 	sup        supervisor
 	wt         worktrees
 	fg         forges
@@ -43,6 +44,11 @@ type coordinationReader interface {
 func NewHandler(d channelAdmin, sup supervisor, wt worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string) *Handler {
 	return &Handler{d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir}
 }
+
+// SetTerminalAdmin wires the terminal (TUI) channel admin used to route
+// terminal-only sessions to a local terminal channel instead of a Discord home.
+// nil-safe: until set, terminal-only sessions fall back to the Discord admin.
+func (h *Handler) SetTerminalAdmin(td channelAdmin) { h.td = td }
 
 // PartDir returns the participants journal directory (used by tests/wiring).
 func (h *Handler) PartDir() string { return h.partDir }

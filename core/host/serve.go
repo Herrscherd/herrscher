@@ -192,6 +192,12 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}
+	// Terminal-only sessions (the TUI's own tabs) route through the terminal
+	// gateway's admin, not the operator's Discord home — so they open as local
+	// `terminal/…` channels even when a Discord home is configured, or none is.
+	if ta := terminalAdmin(gws); ta != nil {
+		deps.handler.SetTerminalAdmin(ta)
+	}
 	hb := newHub(ctx, st, sup, gws, partDir, reg, h.Metrics())
 	// Wired before the boot loop's goLive calls below, so the Coordinator is
 	// non-nil for every driver started at boot (Model O handoff hook).
@@ -337,6 +343,21 @@ func adminForHome(gws []Deps, home state.HomeRef) contracts.ChannelAdmin {
 		}
 	}
 	return firstAdmin(gws)
+}
+
+// terminalAdmin returns the ChannelAdmin of the compiled-in terminal (TUI)
+// gateway, or nil when none is bound. The handler uses it to route terminal-only
+// sessions to a local `terminal/…` channel regardless of the configured home.
+func terminalAdmin(gws []Deps) contracts.ChannelAdmin {
+	for _, g := range gws {
+		if g.Admin == nil || g.Gateway == nil {
+			continue
+		}
+		if g.Gateway.Manifest().Kind == "terminal" {
+			return g.Admin
+		}
+	}
+	return nil
 }
 
 // firstReader returns the first gateway's ChannelReader (nil if none expose one).

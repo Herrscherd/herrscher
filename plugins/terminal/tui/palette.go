@@ -62,7 +62,9 @@ func (m *model) clampPal() {
 
 func (m *model) movePal(d int) { m.palIdx += d; m.clampPal() }
 
-// completePal fills the input with the selected command's name, ready for its args.
+// completePal fills the input with the selected command, pre-seeding its first
+// flag (e.g. "/session create --name ") so a discovering operator lands on the
+// value to type rather than having to know the flag name.
 func (m *model) completePal() {
 	fc := m.filtered()
 	if len(fc) == 0 {
@@ -71,7 +73,12 @@ func (m *model) completePal() {
 	if m.palIdx >= len(fc) {
 		m.palIdx = len(fc) - 1
 	}
-	m.input.SetValue("/" + fc[m.palIdx].Name + " ")
+	c := fc[m.palIdx]
+	val := "/" + c.Name + " "
+	if flag := strings.Fields(c.Args); len(flag) > 0 && strings.HasPrefix(flag[0], "--") {
+		val += flag[0] + " "
+	}
+	m.input.SetValue(val)
 	m.input.CursorEnd()
 }
 

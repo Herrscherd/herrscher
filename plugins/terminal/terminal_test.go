@@ -333,9 +333,12 @@ func TestEnsureDefaultSessionCreatesWhenOnlyDiscord(t *testing.T) {
 	}
 }
 
-// TestCommandsAdvertiseOnlyAllowedVerbs guards the palette↔Dispatch contract:
-// every command surfaced to the TUI must lead with a verb Dispatch accepts, so
-// the operator can never be shown a command that the gate would reject.
+// TestCommandsAdvertiseOnlyAllowedVerbs guards the palette↔Dispatch contract.
+// The table is hand-curated (this package cannot import core/internal/manager
+// to diff against the real registry), so the checks here stand in for that
+// cross-check: every command must lead with a verb Dispatch accepts, name a
+// verb+subcommand, and — because the CLI parser only accepts "--flag value"
+// pairs and silently drops positional tokens — advertise its args in flag form.
 func TestCommandsAdvertiseOnlyAllowedVerbs(t *testing.T) {
 	tm := &Terminal{}
 	cmds := tm.Commands()
@@ -343,9 +346,15 @@ func TestCommandsAdvertiseOnlyAllowedVerbs(t *testing.T) {
 		t.Fatal("Commands must advertise at least one command")
 	}
 	for _, c := range cmds {
-		verb := strings.Fields(c.Name)
-		if len(verb) == 0 || !terminalVerbs[verb[0]] {
+		parts := strings.Fields(c.Name)
+		if len(parts) < 2 {
+			t.Fatalf("command %q must be a verb + subcommand", c.Name)
+		}
+		if !terminalVerbs[parts[0]] {
 			t.Fatalf("command %q leads with a verb outside terminalVerbs", c.Name)
+		}
+		if c.Args != "" && !strings.Contains(c.Args, "--") {
+			t.Fatalf("command %q advertises positional args %q; the parser only accepts --flag form", c.Name, c.Args)
 		}
 	}
 }

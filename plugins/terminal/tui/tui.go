@@ -97,10 +97,7 @@ func tickCmd() tea.Cmd {
 // TUI is not repainting several times a second.
 type spinMsg struct{}
 
-const (
-	fastTick = 200 * time.Millisecond
-	slowTick = time.Second
-)
+const fastTick = 200 * time.Millisecond
 
 // spinTick returns a command that fires spinMsg after d.
 func spinTick(d time.Duration) tea.Cmd {
@@ -124,6 +121,8 @@ type model struct {
 	spin         int           // animation frame for the thinking spinner
 	cmds         []CommandSpec // palette command table, loaded from the backend
 	palIdx       int           // selected row in the open command palette
+	palWasOpen   bool          // palette open-state after the previous key, to skip idle re-fits
+	spinning     bool          // whether the animation timer is currently running
 }
 
 // chromeHeight is the number of non-viewport rows View renders: the brand row, the
@@ -569,7 +568,19 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(textinput.Blink, tickCmd(), spinTick(slowTick))
+	return tea.Batch(textinput.Blink, tickCmd())
+}
+
+// ensureSpin starts the animation timer if it is not already running. A turn
+// that just went busy calls it to begin animating; the guard means overlapping
+// events never stack duplicate tickers. The timer stops itself once idle, so an
+// idle TUI schedules no spin frames at all.
+func (m *model) ensureSpin() tea.Cmd {
+	if m.spinning {
+		return nil
+	}
+	m.spinning = true
+	return spinTick(fastTick)
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -628,7 +639,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.palIdx = 0
 				m.applySize()
 				m.syncViewport()
-				return m, cmd
+				return m, tea.Batch(cmd, m.ensureSpin())
 			case tea.KeyCtrlC:
 				return m, tea.Quit
 			}
@@ -643,7 +654,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.switchTab(-1)
 			return m, nil
 		case tea.KeyEnter:
-			return m, m.handleEnter()
+			return m, tea.Batch(m.handleEnter(), m.ensureSpin())
 		case tea.KeyCtrlW:
 			m.pendingClose = true
 			return m, nil
@@ -656,6 +667,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// PgUp/PgDn reach m.vp.Update(msg) below — not intercepted here.
 	case eventMsg:
 		m.route(RoutedEvent(msg))
+		// A chunk/status event may have flipped a tab busy; start animating.
+		return m, m.ensureSpin()
 	case dispatchResultMsg:
 		m.syncTabs()
 		line := msg.out
@@ -679,13 +692,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.syncTabs()
 		return m, tickCmd()
 	case spinMsg:
-		m.spin++
-		d := slowTick
-		if m.anyBusy() {
-			d = fastTick
-			m.syncViewport() // repaint the animated thinking line
+		if !m.anyBusy() {
+			m.spinning = false // nothing to animate; let the timer lapse
+			return m, nil
 		}
-		return m, spinTick(d)
+		m.spin++
+		m.syncViewport() // repaint the animated thinking line
+		return m, spinTick(fastTick)
 	}
 	var cmds []tea.Cmd
 	var c tea.Cmd
@@ -693,12 +706,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, c)
 	m.vp, c = m.vp.Update(msg)
 	cmds = append(cmds, c)
-	// Editing the query may have opened or closed the palette, changing the
-	// reserved chrome height; re-fit the viewport and clamp the selection.
+	// Editing the query can open/close the palette or change its match count,
+	// both of which change the reserved chrome height. Re-fit only while the
+	// palette is (or was just) open, so typing an ordinary message does not
+	// rebuild the viewport on every keystroke.
 	if _, ok := msg.(tea.KeyMsg); ok {
-		m.clampPal()
-		m.applySize()
-		m.syncViewport()
+		if m.paletteOpen() || m.palWasOpen {
+			m.clampPal()
+			m.applySize()
+			m.syncViewport()
+		}
+		m.palWasOpen = m.paletteOpen()
 	}
 	return m, tea.Batch(cmds...)
 }

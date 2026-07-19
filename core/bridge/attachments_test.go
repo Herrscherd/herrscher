@@ -134,8 +134,8 @@ func TestValidateCDNURL(t *testing.T) {
 		}
 	}
 	bad := []string{
-		"http://cdn.example.com/a.png",          // not https
-		"https://evil.com/a.png",                // wrong host
+		"http://cdn.example.com/a.png",           // not https
+		"https://evil.com/a.png",                 // wrong host
 		"https://cdn.example.com.evil.com/a.png", // suffix trick
 		"file:///etc/passwd",
 		"://bad",

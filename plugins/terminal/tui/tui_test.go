@@ -112,9 +112,9 @@ func (f *fakeBackend) Close(name string, force bool) (string, error) {
 }
 func (f *fakeBackend) Commands() []CommandSpec {
 	return []CommandSpec{
-		{Name: "session create", Args: "<name>", Desc: "start a session"},
+		{Name: "session create", Args: "--name <name>", Desc: "start a session"},
 		{Name: "session list", Desc: "list sessions"},
-		{Name: "agent create", Args: "<name>", Desc: "add an agent"},
+		{Name: "agent create", Args: "--name <name>", Desc: "add an agent"},
 	}
 }
 
@@ -426,10 +426,36 @@ func TestPaletteOpensAndCompletes(t *testing.T) {
 	if !m.paletteOpen() {
 		t.Fatal("typing / must open the palette")
 	}
-	// Tab completes the selected command into the input.
+	// Tab completes the selected command and pre-seeds its first flag, so the
+	// operator lands on the value to type.
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if !strings.HasPrefix(m.input.Value(), "/session create") {
-		t.Fatalf("Tab must complete the first match: got %q", m.input.Value())
+	if m.input.Value() != "/session create --name " {
+		t.Fatalf("Tab must complete and pre-seed the flag: got %q", m.input.Value())
+	}
+}
+
+func TestSpinnerStartsOnBusyStopsWhenIdle(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.ensureTab("a")
+	m.active = "a"
+	if m.spinning {
+		t.Fatal("spinner must be idle at rest — no timer scheduled when nothing animates")
+	}
+	// Submitting a message goes busy and must start the animation timer.
+	m.input.SetValue("hi")
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !m.spinning || cmd == nil {
+		t.Fatal("submit must flip busy and start the spinner")
+	}
+	// ensureSpin is idempotent: a concurrent busy event must not stack a timer.
+	if m.ensureSpin() != nil {
+		t.Fatal("ensureSpin must not schedule a second ticker while one runs")
+	}
+	// The turn completes; the next spin tick must stop the timer rather than reschedule.
+	m.tabs["a"].busy = false
+	_, cmd = m.Update(spinMsg{})
+	if m.spinning || cmd != nil {
+		t.Fatal("spinMsg while idle must stop the timer, scheduling no further frames")
 	}
 }
 

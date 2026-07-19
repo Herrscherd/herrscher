@@ -20,6 +20,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"golang.org/x/term"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/manage"
 )
 
@@ -44,11 +47,6 @@ func main() {
 			fmt.Println(os.Getenv("GH_TOKEN"))
 		}
 		return
-	}
-
-	if len(os.Args) < 2 {
-		usage()
-		os.Exit(2)
 	}
 
 	// Auto-load a project-root .env so every command (and every plugin's config
@@ -79,6 +77,25 @@ func main() {
 		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error()+" (continuing)")
 	}
 
+	ctx := context.Background()
+
+	// Bare `herrscher`: open the terminal TUI when we can — an interactive TTY
+	// plus a compiled-in terminal gateway, which runServe runs as its foreground
+	// (see serve.go). Otherwise fall back to help. We deliberately never start a
+	// background daemon from a bare, argument-less invocation, so `herrscher` in
+	// a script (piped/redirected, no TTY) just prints usage and exits.
+	if len(os.Args) < 2 {
+		if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
+			if err := runServe(ctx, nil); err != nil {
+				fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
+				os.Exit(1)
+			}
+			return
+		}
+		usage()
+		os.Exit(2)
+	}
+
 	cmd := os.Args[1]
 	args := os.Args[2:]
 
@@ -103,8 +120,6 @@ func main() {
 		stop()
 		os.Exit(code)
 	}
-
-	ctx := context.Background()
 
 	// The host stays gateway-agnostic: it never builds a Discord (dctl) client.
 	// Every runtime verb drives the registered gateway plugin via the contracts
@@ -146,52 +161,14 @@ func channelFlag(fs *flag.FlagSet) *string {
 	return ch
 }
 
-func usage() {
-	fmt.Fprint(os.Stderr, `herrscher — modular Discord<->Claude harness host
-
-  herrscher bridge --cmd '<command>' [-i 5] [--state FILE]
-                                              link the channel to a command:
-                                              run it per human message, post its
-                                              stdout back (e.g. a Claude session)
-  herrscher serve [--health-addr :8787] [--status-channel ID] [--state FILE] [--env-file PATH]
-                                              always-on Gateway daemon: bot online
-                                              24/7, supervises one
-                                              bridge per session; --env-file loads
-                                              secrets from a file (used by service)
-  herrscher session <create|close|list|who> [--name N] [--project P] [--clone R]
-               [--cmd '…'] [--backend stream|oneshot] [--shared] [--agent NAME] [--force]
-                                              manage sessions: create a bridged
-                                              channel + worktree + backend
-                                              (optionally provisioned from an
-                                              agent), close one, or list/inspect
-                                              active ones
-  herrscher agent <create|list> [--name N] [--soul '…'] [--mcp '…']
-                                              manage durable companion agents: a
-                                              home with persona + MCP + zero-prompt
-                                              settings, materialized into a session
-                                              worktree via session create --agent
-  herrscher service <install|uninstall|status|restart|update> [--health-addr ADDR]
-               [--env-file PATH] [--source DIR] [--no-pull]
-                                              manage the serve daemon: install it
-                                              as a boot-started native service
-                                              (systemd/launchd/Task Scheduler),
-                                              restart it, or update = (git pull +)
-                                              rebuild from --source (default cwd)
-                                              then restart — run after a merge
-  herrscher init [--gateway K] [--backend K] [--memory K] [--orchestrator K]
-               [--with MODULE] [--list] [--no-build] [--yes]
-                                              compose the plugin stack from scratch
-                                              (default: discord+claude+obsidian+
-                                              orchestrator), seed .env, then build;
-                                              kind "none" drops a category. On a
-                                              terminal with no stack flags it runs
-                                              an interactive wizard (pick plugins,
-                                              enter secrets); --yes forces defaults
-  herrscher plugin <list|add|remove> [module]  edit the compiled-in plugin set and rebuild
-  herrscher update                            bump every compiled-in plugin and rebuild
-  herrscher install [-- ARGS]                 build the host then run its service install
-
-env: DISCORD_BOT_TOKEN (required), DISCORD_CHANNEL_ID (default channel)
-     DCTL_OWNER_ID (instance-id fallback), DCTL_STATE_DIR (state dir)
-`)
+// hasTerminalGateway reports whether a terminal (TUI) gateway plugin is compiled
+// in, so a bare `herrscher` invocation knows it can open the TUI. It inspects the
+// plugin registry directly, without building the hub.
+func hasTerminalGateway() bool {
+	for _, p := range contracts.Default.Gateways() {
+		if p.Manifest.Kind == "terminal" {
+			return true
+		}
+	}
+	return false
 }

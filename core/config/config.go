@@ -16,6 +16,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/Herrscherd/herrscher/core/envx"
 )
 
 // HomeRef mirrors state.HomeRef so config.json can declare the session home
@@ -47,9 +49,10 @@ type Config struct {
 }
 
 // DefaultPath returns where the daemon looks for config.json. It sits beside
-// state.json: under $DCTL_STATE_DIR if set, else ~/.config/dctl.
+// state.json: under $HERRSCHER_STATE_DIR (legacy $DCTL_STATE_DIR) if set, else
+// ~/.config/dctl.
 func DefaultPath() string {
-	if d := os.Getenv("DCTL_STATE_DIR"); d != "" {
+	if d := envx.Get("STATE_DIR"); d != "" {
 		return filepath.Join(d, "config.json")
 	}
 	home, _ := os.UserHomeDir()
@@ -120,7 +123,7 @@ func Template(cmd, healthAddr string) string {
   // "" = legacy non-namespaced mode.
   "instance": "",
 
-  // Owner id; the per-daemon instance-id fallback (like DCTL_OWNER_ID).
+  // Owner id; the per-daemon instance-id fallback (like HERRSCHER_OWNER_ID).
   "owner": "",
 
   // "session clean" stale threshold in days: sessions with no message for longer

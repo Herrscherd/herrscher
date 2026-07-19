@@ -56,8 +56,8 @@ func runWizard(compose bool) (map[string]string, map[string]string, error) {
 		if v := promptLine(in, secretLabel(s, "DISCORD_CHANNEL_ID")); v != "" {
 			secrets["DISCORD_CHANNEL_ID"] = v
 		}
-		if v := promptLine(in, secretLabel(s, "DCTL_OWNER_ID")); v != "" {
-			secrets["DCTL_OWNER_ID"] = v
+		if v := promptLine(in, secretLabel(s, "HERRSCHER_OWNER_ID")); v != "" {
+			secrets["HERRSCHER_OWNER_ID"] = v
 		}
 	}
 	return choices, secrets, nil

@@ -8,7 +8,7 @@ import (
 )
 
 // loadEnvFile reads KEY=VALUE lines from path into the process environment so
-// the host's secrets (DISCORD_BOT_TOKEN, DCTL_OWNER_ID, …) need not be sourced
+// the host's secrets (DISCORD_BOT_TOKEN, HERRSCHER_OWNER_ID, …) need not be sourced
 // by a shell wrapper — herrscher auto-loads ./.env at startup (overridable with
 // $HERRSCHER_ENV_FILE) and the service passes its file via `herrscher serve
 // --env-file PATH`. Blank lines and `#` comments are skipped, an optional

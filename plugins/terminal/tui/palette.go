@@ -15,8 +15,11 @@ type CommandSpec struct {
 	Desc string
 }
 
-// filterCommands returns the commands whose Name contains the query (case-insensitive),
-// preserving order. An empty query returns every command.
+// filterCommands returns the palette matches for a query (case-insensitive),
+// preserving order. An empty query returns every command. A command matches
+// when its name contains the query (browsing) or the query has advanced into
+// that command's arguments (so a fully-typed command keeps highlighting its
+// own row instead of collapsing to "no match").
 func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 	query = strings.TrimSpace(strings.ToLower(query))
 	if query == "" {
@@ -24,7 +27,8 @@ func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 	}
 	var out []CommandSpec
 	for _, c := range cmds {
-		if strings.Contains(strings.ToLower(c.Name), query) {
+		name := strings.ToLower(c.Name)
+		if strings.Contains(name, query) || strings.HasPrefix(query, name+" ") {
 			out = append(out, c)
 		}
 	}

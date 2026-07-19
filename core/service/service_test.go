@@ -51,7 +51,7 @@ func testConfig(goos string) Config {
 func testEnvVars() []EnvVar {
 	return []EnvVar{
 		{Key: "GW_TOKEN", Help: "gateway token", Required: true},
-		{Key: "DCTL_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
+		{Key: "HERRSCHER_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
 	}
 }
 

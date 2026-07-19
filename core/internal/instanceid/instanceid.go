@@ -32,21 +32,21 @@ func Slugify(owner string) string {
 	return "u" + owner
 }
 
-// Resolve computes the instanceID from an explicit id (e.g. DCTL_INSTANCE_ID)
-// and a fallback owner snowflake (e.g. DCTL_OWNER_ID), per Spec §2:
+// Resolve computes the instanceID from an explicit id (e.g. HERRSCHER_INSTANCE_ID)
+// and a fallback owner snowflake (e.g. HERRSCHER_OWNER_ID), per Spec §2:
 //  1. explicit, when set, must be a valid slug or Resolve errors;
 //  2. otherwise the owner is slugified;
 //  3. otherwise "" (legacy, non-namespaced mode).
 func Resolve(explicit, owner string) (string, error) {
 	if explicit != "" {
 		if !Validate(explicit) {
-			return "", fmt.Errorf("invalid DCTL_INSTANCE_ID %q: want %s", explicit, idRe.String())
+			return "", fmt.Errorf("invalid HERRSCHER_INSTANCE_ID %q: want %s", explicit, idRe.String())
 		}
 		return explicit, nil
 	}
 	derived := Slugify(owner)
 	if derived != "" && !Validate(derived) {
-		return "", fmt.Errorf("invalid DCTL_OWNER_ID %q: derived id %q is not a valid slug", owner, derived)
+		return "", fmt.Errorf("invalid HERRSCHER_OWNER_ID %q: derived id %q is not a valid slug", owner, derived)
 	}
 	return derived, nil
 }

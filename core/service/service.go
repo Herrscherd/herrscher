@@ -112,7 +112,7 @@ func serveArgs(c Config) []string {
 // coreEnvVars are the secrets the host itself needs, independent of any gateway.
 // Gateway vars are appended from the plugin manifests (see DefaultConfig).
 var coreEnvVars = []EnvVar{
-	{Key: "DCTL_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
+	{Key: "HERRSCHER_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
 }
 
 // renderEnvTemplate builds the secrets file body from the declared env vars. A

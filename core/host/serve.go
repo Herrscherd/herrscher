@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
@@ -71,11 +72,12 @@ type Options struct {
 	StatusChannel string
 
 	// InstanceID is the explicit per-daemon namespace (-instance flag /
-	// DCTL_INSTANCE_ID). Empty falls back to DCTL_OWNER_ID, then legacy mode.
+	// HERRSCHER_INSTANCE_ID). Empty falls back to HERRSCHER_OWNER_ID, then legacy
+	// mode.
 	InstanceID string
 
 	// Declarative config.json defaults. Owner is the per-daemon instance-id
-	// fallback (env DCTL_OWNER_ID takes precedence, resolved by the caller).
+	// fallback (env HERRSCHER_OWNER_ID takes precedence, resolved by the caller).
 	// Home, Workspace and Source seed state in-memory only if unset, so a live
 	// /set always wins (see state.ApplyDefaults).
 	Owner     string
@@ -107,7 +109,7 @@ type HomeRef struct {
 
 // DefaultStatePath returns the default path to the daemon state file.
 func DefaultStatePath() string {
-	if d := os.Getenv("DCTL_STATE_DIR"); d != "" {
+	if d := envx.Get("STATE_DIR"); d != "" {
 		return filepath.Join(d, "state.json")
 	}
 	home, _ := os.UserHomeDir()

@@ -46,18 +46,18 @@ func (labeledAdmin) Send(context.Context, string, string) error { return nil }
 func (labeledAdmin) ChannelRef(id string) string                { return id }
 
 func TestAdminForHomeMatchesGatewayKind(t *testing.T) {
-	discord := Deps{Gateway: kindGateway{"discord"}, Admin: labeledAdmin{"discord"}}
+	chat := Deps{Gateway: kindGateway{"chat"}, Admin: labeledAdmin{"chat"}}
 	terminal := Deps{Gateway: kindGateway{"terminal"}, Admin: labeledAdmin{"terminal"}}
-	// Registration order puts Discord first, so firstAdmin would mis-route.
-	gws := []Deps{discord, terminal}
+	// Registration order puts chat first, so firstAdmin would mis-route.
+	gws := []Deps{chat, terminal}
 
 	for _, tc := range []struct {
 		homeType string
 		want     string
 	}{
 		{"terminal", "terminal"},
-		{"category", "discord"},
-		{"forum", "discord"},
+		{"category", "chat"},
+		{"forum", "chat"},
 	} {
 		got, ok := adminForHome(gws, state.HomeRef{ID: "h", Type: tc.homeType}).(labeledAdmin)
 		if !ok || got.id != tc.want {
@@ -68,10 +68,10 @@ func TestAdminForHomeMatchesGatewayKind(t *testing.T) {
 
 func TestAdminForHomeFallsBackToFirst(t *testing.T) {
 	// No gateway matches a terminal home → fall back to the only admin present.
-	gws := []Deps{{Gateway: kindGateway{"discord"}, Admin: labeledAdmin{"discord"}}}
+	gws := []Deps{{Gateway: kindGateway{"chat"}, Admin: labeledAdmin{"chat"}}}
 	got, ok := adminForHome(gws, state.HomeRef{ID: "h", Type: "terminal"}).(labeledAdmin)
-	if !ok || got.id != "discord" {
-		t.Fatalf("fallback routed to %+v, want admin %q", got, "discord")
+	if !ok || got.id != "chat" {
+		t.Fatalf("fallback routed to %+v, want admin %q", got, "chat")
 	}
 }
 

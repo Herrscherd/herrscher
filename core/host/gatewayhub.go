@@ -19,7 +19,7 @@ type GatewayHub struct {
 
 // BuildHub instantiates each gateway plugin in plugins. A plugin whose config
 // can't resolve, or whose factory errors, is skipped (its required vars are
-// absent — e.g. no Discord token — which must not stop other gateways from
+// absent — e.g. a missing gateway token — which must not stop other gateways from
 // running). If NO gateway builds, the aggregated per-gateway reasons are
 // returned so a single-gateway stack still fails fast with a clear message.
 func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string) (*GatewayHub, error) {

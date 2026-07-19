@@ -90,6 +90,11 @@ type Options struct {
 	// ForegroundBound is true when a foreground (TUI) gateway is bound to the
 	// process. Set by the caller (serve.go runServe) where fg != nil is computed.
 	ForegroundBound bool
+
+	// DefaultGateways is the primary gateway set a new session binds to when it
+	// names none. The caller derives it from the built gateways (the concrete
+	// platform kinds), so the manager package never names a gateway itself.
+	DefaultGateways []string
 }
 
 // HomeRef is the seed home channel from config.json: a channel id and its kind
@@ -186,15 +191,22 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	// loop and any gateway-driven create/close both go through it, so a session
 	// added at runtime is wired exactly like one loaded here. The handler behind
 	// the registry creates/archives session channels through the channel admin of
-	// the gateway that owns the home, so a terminal home is never minted by Discord
-	// (nor vice-versa) when both gateways are present.
+	// the gateway that owns the home, so a terminal home is never minted by a
+	// remote gateway (nor vice-versa) when both are present.
+	//
+	// The default gateway set a new session binds to is derived here from the
+	// built gateways — the concrete platform kinds live at the composition root,
+	// never inside the manager package.
+	if o.DefaultGateways == nil {
+		o.DefaultGateways = nonTerminalKinds(gws)
+	}
 	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID)
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}
 	// Terminal-only sessions (the TUI's own tabs) route through the terminal
-	// gateway's admin, not the operator's Discord home — so they open as local
-	// `terminal/…` channels even when a Discord home is configured, or none is.
+	// gateway's admin, not the operator's home gateway — so they open as local
+	// `terminal/…` channels even when a remote home is configured, or none is.
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
@@ -238,8 +250,8 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 		log.Info("plugin compiled in", "kind", p.Manifest.Kind, "category", p.Manifest.Category)
 	}
 
-	// Liveness uses the first gateway exposing each port (e.g. Discord): ping a
-	// Prober for reachability, and maintain the status embed via a Reader.
+	// Liveness uses the first gateway exposing each port: ping a Prober for
+	// reachability, and maintain the status embed via a Reader.
 	if o.HealthAddr != "" {
 		go serveHealth(ctx, o.HealthAddr, h)
 	}
@@ -258,8 +270,8 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 }
 
 // seedTerminalHome sets a terminal home when a foreground (TUI) gateway is bound
-// and no home is configured, so session create works with no Discord. It never
-// overwrites an existing home (a Discord setup keeps its category/forum).
+// and no home is configured, so session create works with no remote gateway. It
+// never overwrites an existing home (a remote setup keeps its category/forum).
 func seedTerminalHome(st *state.State, hasForeground bool) {
 	if !hasForeground || st.Home.ID != "" {
 		return
@@ -329,7 +341,7 @@ func firstAdmin(gws []Deps) contracts.ChannelAdmin {
 
 // adminForHome returns the ChannelAdmin of the gateway that owns the home, so a
 // session channel is minted on the same platform as its home. The terminal home
-// maps to the terminal gateway; a Discord category/forum home maps to a
+// maps to the terminal gateway; a category/forum home maps to a
 // non-terminal gateway. Falls back to the first available admin when no gateway
 // matches (e.g. an unset home, or only one admin present).
 func adminForHome(gws []Deps, home state.HomeRef) contracts.ChannelAdmin {
@@ -368,6 +380,36 @@ func firstReader(gws []Deps) contracts.ChannelReader {
 		}
 	}
 	return nil
+}
+
+// effectiveKinds returns the gateway kinds a session should bind to: its stored
+// set, or — for a legacy session (a channel but no stored set) — the primary
+// (non-terminal) gateways actually built. This reproduces the original
+// single-gateway routing for pre-multi-gateway state without the core naming
+// that gateway.
+func effectiveKinds(all []Deps, sess state.Session) []string {
+	if kinds := sess.BoundGateways(); len(kinds) > 0 {
+		return kinds
+	}
+	if sess.IsLegacy() {
+		return nonTerminalKinds(all)
+	}
+	return nil
+}
+
+// nonTerminalKinds lists the kinds of every built gateway that is not a terminal
+// (TUI) gateway — the "primary" gateways a session binds to by default.
+func nonTerminalKinds(all []Deps) []string {
+	var out []string
+	for _, g := range all {
+		if g.Gateway == nil {
+			continue
+		}
+		if g.Gateway.Manifest().Kind != "terminal" {
+			out = append(out, g.Gateway.Manifest().Kind)
+		}
+	}
+	return out
 }
 
 // boundGateways selects, from all built gateway sets, those whose kind is in the

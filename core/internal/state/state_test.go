@@ -176,8 +176,8 @@ func TestBoundGateways(t *testing.T) {
 		want []string
 	}{
 		{"explicit", Session{Gateways: []string{"terminal"}}, []string{"terminal"}},
-		{"both", Session{Gateways: []string{"discord", "terminal"}}, []string{"discord", "terminal"}},
-		{"legacy with channel", Session{ChannelID: "c1"}, []string{"discord"}},
+		{"both", Session{Gateways: []string{"chat", "terminal"}}, []string{"chat", "terminal"}},
+		{"legacy with channel is empty (host resolves)", Session{ChannelID: "c1"}, nil},
 		{"empty no channel", Session{}, nil},
 	}
 	for _, tc := range cases {
@@ -185,6 +185,25 @@ func TestBoundGateways(t *testing.T) {
 			got := tc.sess.BoundGateways()
 			if !slices.Equal(got, tc.want) {
 				t.Errorf("BoundGateways() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsLegacy(t *testing.T) {
+	cases := []struct {
+		name string
+		sess Session
+		want bool
+	}{
+		{"channel, no stored set", Session{ChannelID: "c1"}, true},
+		{"channel with stored set", Session{ChannelID: "c1", Gateways: []string{"chat"}}, false},
+		{"no channel", Session{}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.sess.IsLegacy(); got != tc.want {
+				t.Errorf("IsLegacy() = %v, want %v", got, tc.want)
 			}
 		})
 	}

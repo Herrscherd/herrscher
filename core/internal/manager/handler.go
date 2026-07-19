@@ -17,8 +17,12 @@ type Handler struct {
 	agents     agentStore
 	st         *state.State
 	defaultCmd string
-	partDir    string             // dir holding participants/<name>.log journals
-	coord      coordinationReader // nil until wired; session list omits coordination when nil
+	// defaultGateways is the primary gateway set a session binds to when it names
+	// none explicitly. The composition root injects the concrete platform kinds
+	// (e.g. from the built non-terminal gateways) so this package never does.
+	defaultGateways []string
+	partDir         string             // dir holding participants/<name>.log journals
+	coord           coordinationReader // nil until wired; session list omits coordination when nil
 }
 
 // CoordView mirrors host.CoordinationView so the manager stays decoupled from
@@ -41,13 +45,14 @@ type coordinationReader interface {
 // session is created without an explicit cmd. partDir is the directory under
 // which per-session participant journals live (participants/<name>.log). agents
 // owns the durable agent homes used to provision sessions.
-func NewHandler(d channelAdmin, sup supervisor, wt worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string) *Handler {
-	return &Handler{d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir}
+func NewHandler(d channelAdmin, sup supervisor, wt worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string) *Handler {
+	return &Handler{d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways}
 }
 
 // SetTerminalAdmin wires the terminal (TUI) channel admin used to route
-// terminal-only sessions to a local terminal channel instead of a Discord home.
-// nil-safe: until set, terminal-only sessions fall back to the Discord admin.
+// terminal-only sessions to a local terminal channel instead of the operator's
+// home gateway. nil-safe: until set, terminal-only sessions fall back to the
+// home gateway's admin.
 func (h *Handler) SetTerminalAdmin(td channelAdmin) { h.td = td }
 
 // PartDir returns the participants journal directory (used by tests/wiring).

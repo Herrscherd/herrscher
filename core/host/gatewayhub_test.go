@@ -39,12 +39,12 @@ func gw(kind string, fail bool) contracts.Plugin {
 }
 
 func TestBuildHubAll(t *testing.T) {
-	hub, err := BuildHub(context.Background(), []contracts.Plugin{gw("discord", false), gw("terminal", false)}, func(string) string { return "" })
+	hub, err := BuildHub(context.Background(), []contracts.Plugin{gw("chat", false), gw("terminal", false)}, func(string) string { return "" })
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := hub.Kinds(); len(got) != 2 || got[0] != "discord" || got[1] != "terminal" {
-		t.Fatalf("Kinds() = %v, want [discord terminal]", got)
+	if got := hub.Kinds(); len(got) != 2 || got[0] != "chat" || got[1] != "terminal" {
+		t.Fatalf("Kinds() = %v, want [chat terminal]", got)
 	}
 	if _, ok := hub.Get("terminal"); !ok {
 		t.Error("terminal gateway should be present")
@@ -52,7 +52,7 @@ func TestBuildHubAll(t *testing.T) {
 }
 
 func TestBuildHubToleratesFailure(t *testing.T) {
-	hub, err := BuildHub(context.Background(), []contracts.Plugin{gw("discord", true), gw("terminal", false)}, func(string) string { return "" })
+	hub, err := BuildHub(context.Background(), []contracts.Plugin{gw("chat", true), gw("terminal", false)}, func(string) string { return "" })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,14 +62,14 @@ func TestBuildHubToleratesFailure(t *testing.T) {
 }
 
 func TestBuildHubAllFailedAggregates(t *testing.T) {
-	_, err := BuildHub(context.Background(), []contracts.Plugin{gw("discord", true)}, func(string) string { return "" })
-	if err == nil || !strings.Contains(err.Error(), "discord") {
-		t.Fatalf("want aggregated error mentioning discord, got %v", err)
+	_, err := BuildHub(context.Background(), []contracts.Plugin{gw("chat", true)}, func(string) string { return "" })
+	if err == nil || !strings.Contains(err.Error(), "chat") {
+		t.Fatalf("want aggregated error mentioning chat, got %v", err)
 	}
 }
 
 func TestFirstReturnsRegistrationOrder(t *testing.T) {
-	hub, _ := BuildHub(context.Background(), []contracts.Plugin{gw("discord", false), gw("terminal", false)}, func(string) string { return "" })
+	hub, _ := BuildHub(context.Background(), []contracts.Plugin{gw("chat", false), gw("terminal", false)}, func(string) string { return "" })
 	set, ok := hub.First()
 	if !ok {
 		t.Fatal("First() should report a built set")

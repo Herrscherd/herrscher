@@ -12,16 +12,15 @@ import (
 	"github.com/Herrscherd/herrscher-contracts"
 )
 
-// allowTestHost registers srv's host as an accepted CDN host for the duration of
-// the test, so validateCDNURL passes against the local TLS server.
-func allowTestHost(t *testing.T, srv *httptest.Server) {
+// hostsFor returns an allowlist accepting srv's host, so the injected SSRF guard
+// passes against the local TLS server without the core naming any real CDN.
+func hostsFor(t *testing.T, srv *httptest.Server) allowedHosts {
 	t.Helper()
 	u, err := url.Parse(srv.URL)
 	if err != nil {
 		t.Fatalf("parse server url: %v", err)
 	}
-	discordCDNHosts[u.Hostname()] = true
-	t.Cleanup(func() { delete(discordCDNHosts, u.Hostname()) })
+	return allowedHosts{u.Hostname(): true}
 }
 
 func TestDownloadImagesFetchesOnlyImages(t *testing.T) {
@@ -29,7 +28,6 @@ func TestDownloadImagesFetchesOnlyImages(t *testing.T) {
 		_, _ = w.Write([]byte("PNGDATA"))
 	}))
 	defer srv.Close()
-	allowTestHost(t, srv)
 
 	dir := t.TempDir()
 	m := contracts.Message{
@@ -39,7 +37,7 @@ func TestDownloadImagesFetchesOnlyImages(t *testing.T) {
 			{Filename: "notes.txt", URL: srv.URL + "/notes.txt"},
 		},
 	}
-	paths, err := downloadImages(context.Background(), srv.Client(), m, dir)
+	paths, err := downloadImages(context.Background(), srv.Client(), m, dir, hostsFor(t, srv))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -60,7 +58,6 @@ func TestDownloadImagesOrderAndCollision(t *testing.T) {
 		_, _ = w.Write([]byte(r.URL.Path))
 	}))
 	defer srv.Close()
-	allowTestHost(t, srv)
 
 	m := contracts.Message{
 		ID: "7",
@@ -69,7 +66,7 @@ func TestDownloadImagesOrderAndCollision(t *testing.T) {
 			{Filename: "shot.png", URL: srv.URL + "/2"},
 		},
 	}
-	paths, err := downloadImages(context.Background(), srv.Client(), m, t.TempDir())
+	paths, err := downloadImages(context.Background(), srv.Client(), m, t.TempDir(), hostsFor(t, srv))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -94,7 +91,6 @@ func TestDownloadImagesHTTPError(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	}))
 	defer srv.Close()
-	allowTestHost(t, srv)
 
 	m := contracts.Message{
 		ID: "9",
@@ -103,7 +99,7 @@ func TestDownloadImagesHTTPError(t *testing.T) {
 			{Filename: "good.png", URL: srv.URL + "/good"},
 		},
 	}
-	paths, err := downloadImages(context.Background(), srv.Client(), m, t.TempDir())
+	paths, err := downloadImages(context.Background(), srv.Client(), m, t.TempDir(), hostsFor(t, srv))
 	if err == nil {
 		t.Fatal("want error from the 404 fetch")
 	}
@@ -112,38 +108,40 @@ func TestDownloadImagesHTTPError(t *testing.T) {
 	}
 }
 
-func TestDownloadImagesRejectsNonCDN(t *testing.T) {
+func TestDownloadImagesRejectsOffAllowlist(t *testing.T) {
 	m := contracts.Message{
 		ID: "1",
 		Attachments: []contracts.Attachment{
 			{Filename: "x.png", URL: "https://169.254.169.254/latest"},
 		},
 	}
-	paths, err := downloadImages(context.Background(), http.DefaultClient, m, t.TempDir())
+	hosts := allowedHosts{"cdn.example.com": true}
+	paths, err := downloadImages(context.Background(), http.DefaultClient, m, t.TempDir(), hosts)
 	if err == nil || len(paths) != 0 {
-		t.Fatalf("non-CDN url must be rejected, got paths=%v err=%v", paths, err)
+		t.Fatalf("off-allowlist url must be rejected, got paths=%v err=%v", paths, err)
 	}
 }
 
 func TestValidateCDNURL(t *testing.T) {
+	hosts := allowedHosts{"cdn.example.com": true, "media.example.com": true}
 	ok := []string{
-		"https://cdn.discordapp.com/attachments/1/2/a.png",
-		"https://media.discordapp.net/attachments/1/2/a.png",
+		"https://cdn.example.com/attachments/1/2/a.png",
+		"https://media.example.com/attachments/1/2/a.png",
 	}
 	for _, u := range ok {
-		if err := validateCDNURL(u); err != nil {
+		if err := validateCDNURL(u, hosts); err != nil {
 			t.Errorf("validateCDNURL(%q) = %v, want nil", u, err)
 		}
 	}
 	bad := []string{
-		"http://cdn.discordapp.com/a.png",           // not https
-		"https://evil.com/a.png",                    // wrong host
-		"https://cdn.discordapp.com.evil.com/a.png", // suffix trick
+		"http://cdn.example.com/a.png",          // not https
+		"https://evil.com/a.png",                // wrong host
+		"https://cdn.example.com.evil.com/a.png", // suffix trick
 		"file:///etc/passwd",
 		"://bad",
 	}
 	for _, u := range bad {
-		if err := validateCDNURL(u); err == nil {
+		if err := validateCDNURL(u, hosts); err == nil {
 			t.Errorf("validateCDNURL(%q) = nil, want error", u)
 		}
 	}
@@ -162,11 +160,10 @@ func TestFetchOneRemovesPartialFileOnCopyError(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	allowTestHost(t, srv)
 
 	dir := t.TempDir()
 	a := contracts.Attachment{Filename: "shot.png", URL: srv.URL + "/shot.png"}
-	if _, err := fetchOne(context.Background(), srv.Client(), a, "1", 0, dir); err == nil {
+	if _, err := fetchOne(context.Background(), srv.Client(), a, "1", 0, dir, hostsFor(t, srv)); err == nil {
 		t.Fatal("want copy error")
 	}
 	entries, _ := os.ReadDir(dir)
@@ -180,7 +177,6 @@ func TestDownloadImagesContextCancelled(t *testing.T) {
 		_, _ = w.Write([]byte("data"))
 	}))
 	defer srv.Close()
-	allowTestHost(t, srv)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // already cancelled before the fetch
@@ -188,7 +184,7 @@ func TestDownloadImagesContextCancelled(t *testing.T) {
 		ID:          "1",
 		Attachments: []contracts.Attachment{{Filename: "x.png", URL: srv.URL + "/x.png"}},
 	}
-	paths, err := downloadImages(ctx, srv.Client(), m, t.TempDir())
+	paths, err := downloadImages(ctx, srv.Client(), m, t.TempDir(), hostsFor(t, srv))
 	if err == nil || len(paths) != 0 {
 		t.Fatalf("cancelled ctx should abort the fetch, got paths=%v err=%v", paths, err)
 	}
@@ -208,11 +204,10 @@ func TestFetchOneSkipsOversizedBody(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	allowTestHost(t, srv)
 
 	dir := t.TempDir()
 	a := contracts.Attachment{Filename: "x.png", URL: srv.URL + "/x.png"}
-	p, err := fetchOne(context.Background(), srv.Client(), a, "1", 0, dir)
+	p, err := fetchOne(context.Background(), srv.Client(), a, "1", 0, dir, hostsFor(t, srv))
 	if err == nil {
 		t.Fatalf("want error for oversized body, got path %q", p)
 	}
@@ -229,13 +224,12 @@ func TestDownloadImagesSkipsDeclaredOversized(t *testing.T) {
 		_, _ = w.Write([]byte("x"))
 	}))
 	defer srv.Close()
-	allowTestHost(t, srv)
 
 	dir := t.TempDir()
 	m := contracts.Message{ID: "1", Attachments: []contracts.Attachment{
 		{Filename: "big.png", URL: srv.URL + "/big.png", Size: maxAttachmentBytes + 1},
 	}}
-	paths, err := downloadImages(context.Background(), srv.Client(), m, dir)
+	paths, err := downloadImages(context.Background(), srv.Client(), m, dir, hostsFor(t, srv))
 	if err != nil || paths != nil {
 		t.Fatalf("want nil/nil, got %v / %v", paths, err)
 	}
@@ -266,7 +260,6 @@ func TestDownloadImagesCapsCount(t *testing.T) {
 		_, _ = w.Write([]byte("x"))
 	}))
 	defer srv.Close()
-	allowTestHost(t, srv)
 
 	dir := t.TempDir()
 	var atts []contracts.Attachment
@@ -274,7 +267,7 @@ func TestDownloadImagesCapsCount(t *testing.T) {
 		atts = append(atts, contracts.Attachment{Filename: "x.png", URL: srv.URL + "/x.png"})
 	}
 	m := contracts.Message{ID: "1", Attachments: atts}
-	paths, err := downloadImages(context.Background(), srv.Client(), m, dir)
+	paths, err := downloadImages(context.Background(), srv.Client(), m, dir, hostsFor(t, srv))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -286,7 +279,7 @@ func TestDownloadImagesCapsCount(t *testing.T) {
 func TestDownloadImagesNoImagesNoDir(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "sub")
 	m := contracts.Message{ID: "1", Attachments: []contracts.Attachment{{Filename: "a.txt"}}}
-	paths, err := downloadImages(context.Background(), http.DefaultClient, m, dir)
+	paths, err := downloadImages(context.Background(), http.DefaultClient, m, dir, nil)
 	if err != nil || paths != nil {
 		t.Fatalf("want nil/nil, got %v / %v", paths, err)
 	}

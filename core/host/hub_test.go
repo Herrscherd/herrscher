@@ -48,7 +48,7 @@ func TestHubCreateMapsSpecToTypedInput(t *testing.T) {
 	var got contracts.Input
 	h := hubWith(t, []string{"session", "create"}, &got)
 	if _, err := h.Create(context.Background(), contracts.CreateSession{
-		Name: "main", Project: "alpha", Gateways: []string{"discord", "terminal"},
+		Name: "main", Project: "alpha", Gateways: []string{"chat", "terminal"},
 		TerminalOnly: true, Shared: true, Agent: "bishop", ConsolidateEvery: 3, Base: "session/a",
 	}); err != nil {
 		t.Fatal(err)
@@ -59,7 +59,7 @@ func TestHubCreateMapsSpecToTypedInput(t *testing.T) {
 	if got.Get("base") != "session/a" {
 		t.Fatalf("base not mapped: %q", got.Get("base"))
 	}
-	if got.Get("gateways") != "discord,terminal" {
+	if got.Get("gateways") != "chat,terminal" {
 		t.Fatalf("gateways not joined: %q", got.Get("gateways"))
 	}
 	if !got.Bool("terminal_only") || !got.Bool("shared") {
@@ -144,14 +144,14 @@ func TestHubSessionsSnapshot(t *testing.T) {
 	if got := h.Sessions(); len(got) != 0 {
 		t.Fatalf("empty hub should report no sessions, got %+v", got)
 	}
-	if err := h.st.AddSession(state.Session{Name: "demo", ChannelID: "c1", Type: "text", Gateways: []string{"discord"}}); err != nil {
+	if err := h.st.AddSession(state.Session{Name: "demo", ChannelID: "c1", Type: "text", Gateways: []string{"chat"}}); err != nil {
 		t.Fatal(err)
 	}
 	got := h.Sessions()
 	if len(got) != 1 || got[0].Name != "demo" || got[0].ChannelID != "c1" || got[0].Type != "text" {
 		t.Fatalf("unexpected snapshot: %+v", got)
 	}
-	if len(got[0].Gateways) != 1 || got[0].Gateways[0] != "discord" {
+	if len(got[0].Gateways) != 1 || got[0].Gateways[0] != "chat" {
 		t.Fatalf("gateways not surfaced: %+v", got[0].Gateways)
 	}
 }

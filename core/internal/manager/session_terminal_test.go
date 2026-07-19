@@ -73,11 +73,11 @@ func TestSessionCreateNoWorkspaceInheritsPwd(t *testing.T) {
 }
 
 // TestSessionCreateTerminalOnlyRoutesToTerminalAdmin verifies Point 3: with a
-// Discord home configured AND a terminal admin wired, a terminal_only session is
+// chat home configured AND a terminal admin wired, a terminal_only session is
 // minted through the terminal admin (local `terminal/…` channel), never the
-// Discord one. Close then archives it back through the terminal admin.
+// chat one. Close then archives it back through the terminal admin.
 func TestSessionCreateTerminalOnlyRoutesToTerminalAdmin(t *testing.T) {
-	h, discord, _, _, _, st := newTestHandler(t, "category")
+	h, chat, _, _, _, st := newTestHandler(t, "category")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
 	term := &fakeChannelAdmin{homeType: "terminal", idPrefix: "terminal/"}
 	h.SetTerminalAdmin(term)
@@ -89,8 +89,8 @@ func TestSessionCreateTerminalOnlyRoutesToTerminalAdmin(t *testing.T) {
 	if len(term.created) != 1 || term.created[0] != "main" {
 		t.Fatalf("terminal admin should mint the channel, got %+v", term.created)
 	}
-	if len(discord.created) != 0 {
-		t.Fatalf("Discord admin must not mint a terminal-only channel, got %+v", discord.created)
+	if len(chat.created) != 0 {
+		t.Fatalf("chat admin must not mint a terminal-only channel, got %+v", chat.created)
 	}
 
 	if _, err := h.sessionCloseRun(context.Background(), args("name", "main")); err != nil {
@@ -99,7 +99,7 @@ func TestSessionCreateTerminalOnlyRoutesToTerminalAdmin(t *testing.T) {
 	if len(term.archived) != 1 {
 		t.Fatalf("terminal admin should archive the channel, got %+v", term.archived)
 	}
-	if len(discord.archived) != 0 {
-		t.Fatalf("Discord admin must not archive a terminal-only channel, got %+v", discord.archived)
+	if len(chat.archived) != 0 {
+		t.Fatalf("chat admin must not archive a terminal-only channel, got %+v", chat.archived)
 	}
 }

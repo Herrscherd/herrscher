@@ -33,7 +33,7 @@ type hostDeps struct {
 // state + supervisor and registers its commands into a fresh CLI registry. The
 // daemon (RunHub) and the operator CLI (NewRegistry) share this so a session
 // created either way is built from identical deps. d.Admin supplies the channel
-// admin port; instID namespaces shared git/Discord resources.
+// admin port; instID namespaces shared git/gateway resources.
 func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup *supervisor.Supervisor, instID string) (*cli.Registry, hostDeps, error) {
 	partDir := filepath.Dir(o.StatePath)
 	wt := worktree.NewWorktreer(ctx, instID)
@@ -41,7 +41,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	upCfg, _ := service.DefaultConfig()
 	up := serviceUpdater{cfg: upCfg, st: st}
 	agents := agent.NewStore(filepath.Join(partDir, "agents"))
-	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir)
+	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
 
 	reg := &cli.Registry{}
 	for _, c := range hdl.Commands() {
@@ -177,6 +177,12 @@ func NewRegistry(ctx context.Context, d Deps, o Options) (*cli.Registry, error) 
 
 	self, _ := os.Executable()
 	sup := supervisor.NewSupervisor(ctx, self)
+	// The operator CLI builds one gateway; a session created here defaults to it
+	// (unless it is the terminal gateway). The concrete kind comes from the built
+	// gateway's manifest, so the manager package still never names a platform.
+	if o.DefaultGateways == nil {
+		o.DefaultGateways = nonTerminalKinds([]Deps{d})
+	}
 	reg, _, err := buildRegistry(ctx, d, o, st, sup, instID)
 	return reg, err
 }

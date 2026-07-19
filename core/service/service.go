@@ -5,7 +5,7 @@
 // The design separates a pure planner (BuildPlan / BuildUninstall, testable on
 // any OS) from the executor (Install / Uninstall, which writes files and runs
 // the platform commands). Secrets never live in the generated unit: every
-// platform sources an env file (mode 0600) that holds DISCORD_BOT_TOKEN et al.,
+// platform sources an env file (mode 0600) that holds the gateway secrets et al.,
 // and the planner only ever creates that file as an empty template — it never
 // overwrites an existing one and never echoes a token.
 package service
@@ -22,6 +22,7 @@ import (
 	"runtime"
 	"strings"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
@@ -46,6 +47,22 @@ type Config struct {
 
 	ConfigPath string // path to the declarative config.json scaffold (template)
 	DefaultCmd string // pre-fills the scaffold's "cmd" (from install --cmd)
+
+	// EnvVars are the secret env vars the daemon needs, declared by the compiled-in
+	// gateways (from their manifests) plus the core owner id. The planner renders
+	// the secrets template and the ready-to-start check from these, so the service
+	// package never names a concrete gateway's variables itself. DefaultConfig
+	// populates it from the plugin registry.
+	EnvVars []EnvVar
+}
+
+// EnvVar is one secret the daemon reads from its env file, sourced from a
+// gateway manifest's declared config. The planner turns each into a template
+// line; Required ones gate whether install starts the service immediately.
+type EnvVar struct {
+	Key      string // env var name (e.g. the gateway's token var)
+	Help     string // one-line comment rendered above the line
+	Required bool   // the daemon can't start until this is set
 }
 
 // FileWrite is one file the plan writes. Template files are written only when
@@ -92,17 +109,32 @@ func serveArgs(c Config) []string {
 	return append(args, c.ExtraArgs...)
 }
 
-const envTemplate = `# dctl daemon secrets — keep private (chmod 600), never commit.
-# Fill these in, then restart the service.
-DISCORD_BOT_TOKEN=
-DISCORD_CHANNEL_ID=
-DCTL_OWNER_ID=
-`
+// coreEnvVars are the secrets the host itself needs, independent of any gateway.
+// Gateway vars are appended from the plugin manifests (see DefaultConfig).
+var coreEnvVars = []EnvVar{
+	{Key: "DCTL_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
+}
+
+// renderEnvTemplate builds the secrets file body from the declared env vars. A
+// gateway's variables come from its manifest, so no concrete gateway is named
+// here. With no vars declared the file is just the header (still valid).
+func renderEnvTemplate(vars []EnvVar) string {
+	var b strings.Builder
+	b.WriteString("# dctl daemon secrets — keep private (chmod 600), never commit.\n")
+	b.WriteString("# Fill these in, then restart the service.\n")
+	for _, v := range vars {
+		if v.Help != "" {
+			fmt.Fprintf(&b, "# %s\n", v.Help)
+		}
+		fmt.Fprintf(&b, "%s=\n", v.Key)
+	}
+	return b.String()
+}
 
 // envFileWrite is the (always template, never-overwrite) secrets file shared by
-// every platform.
+// every platform. Its content is derived from c.EnvVars (gateway + core).
 func envFileWrite(c Config) FileWrite {
-	return FileWrite{Path: c.EnvFile, Content: envTemplate, Mode: 0o600, Template: true}
+	return FileWrite{Path: c.EnvFile, Content: renderEnvTemplate(c.EnvVars), Mode: 0o600, Template: true}
 }
 
 // BuildPlan returns the install plan for c's target OS. Every platform also
@@ -219,7 +251,7 @@ func Restart(ctx context.Context, c Config) error {
 func RestartDetached(ctx context.Context, c Config) error {
 	if goos(c) == "linux" {
 		// 3s, not 1s: the caller is mid-interaction and must finish editing its
-		// deferred reply (an HTTP round-trip to Discord) before systemd kills the
+		// deferred reply (an HTTP round-trip to the gateway) before systemd kills the
 		// unit's cgroup out from under it. 1s raced the reply; 3s clears it.
 		return runCommand(ctx, Command{Argv: []string{
 			"systemd-run", "--user", "--on-active=3",
@@ -367,7 +399,7 @@ func Update(ctx context.Context, c Config, src string, pull bool) error {
 func linuxPlan(c Config) Plan {
 	unit := filepath.Join(c.Home, ".config", "systemd", "user", linuxUnitName)
 	content := "[Unit]\n" +
-		"Description=dctl Discord daemon\n" +
+		"Description=dctl gateway daemon\n" +
 		"After=network-online.target\n" +
 		"Wants=network-online.target\n" +
 		// Don't retry forever if the daemon keeps failing (e.g. a bad token):
@@ -475,31 +507,46 @@ func xmlEscape(s string) string {
 // secrets live (when it's already running).
 func startNote(c Config, startCmd string) string {
 	if c.SkipStart {
-		return "installed and enabled at boot, but NOT started — set DISCORD_BOT_TOKEN in " +
+		return "installed and enabled at boot, but NOT started — fill the required secrets in " +
 			c.EnvFile + ", then: " + startCmd
 	}
 	return "running. Secrets live in " + c.EnvFile + "; edit it and restart to change them."
 }
 
-// envFileHasToken reports whether the env file already carries a non-empty
-// DISCORD_BOT_TOKEN, so install can start the service immediately instead of
-// configuring a crash-loop with an empty template.
-func envFileHasToken(path string) bool {
+// envFileHasRequired reports whether the env file already carries a non-empty
+// value for every Required env var, so install can start the service immediately
+// instead of configuring a crash-loop with an empty template. With no required
+// vars declared it returns true (nothing gates startup).
+func envFileHasRequired(path string, vars []EnvVar) bool {
+	required := map[string]bool{}
+	for _, v := range vars {
+		if v.Required {
+			required[v.Key] = true
+		}
+	}
+	if len(required) == 0 {
+		return true
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
+	set := map[string]bool{}
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if k, v, ok := strings.Cut(line, "="); ok &&
-			strings.TrimSpace(k) == "DISCORD_BOT_TOKEN" && strings.TrimSpace(v) != "" {
-			return true
+		if k, v, ok := strings.Cut(line, "="); ok && strings.TrimSpace(v) != "" {
+			set[strings.TrimSpace(k)] = true
 		}
 	}
-	return false
+	for k := range required {
+		if !set[k] {
+			return false
+		}
+	}
+	return true
 }
 
 // quoteArgv joins a binary path and its args for an ExecStart line, quoting the
@@ -562,15 +609,41 @@ func DefaultConfig() (Config, error) {
 		EnvFile:    filepath.Join(home, ".config", "dctl", "dctl.env"),
 		ConfigPath: filepath.Join(home, ".config", "dctl", "config.json"),
 		HealthAddr: "127.0.0.1:8787",
+		EnvVars:    registryEnvVars(),
 	}, nil
+}
+
+// registryEnvVars collects the env vars the daemon needs: every compiled-in
+// gateway's declared, env-bound settings (from its manifest) followed by the
+// core vars. The service package reads only the neutral contracts registry, so
+// it learns a gateway's variables without naming any platform.
+func registryEnvVars() []EnvVar {
+	var out []EnvVar
+	seen := map[string]bool{}
+	for _, p := range contracts.Default.Gateways() {
+		for _, s := range p.Manifest.Config {
+			if s.Env == "" || seen[s.Env] {
+				continue
+			}
+			seen[s.Env] = true
+			out = append(out, EnvVar{Key: s.Env, Help: s.Help, Required: s.Required})
+		}
+	}
+	for _, v := range coreEnvVars {
+		if !seen[v.Key] {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // Install runs the install plan for the current OS: it writes the unit/launcher
 // and secrets template, then enables and starts the service.
 func Install(ctx context.Context, c Config) error {
-	// Without a token the daemon exits immediately; starting it now would just
-	// crash-loop until the user edits the template. Configure boot-start only.
-	if !envFileHasToken(c.EnvFile) {
+	// Without its required secrets the daemon exits immediately; starting it now
+	// would just crash-loop until the user edits the template. Configure
+	// boot-start only.
+	if !envFileHasRequired(c.EnvFile, c.EnvVars) {
 		c.SkipStart = true
 	}
 	p, err := BuildPlan(c)

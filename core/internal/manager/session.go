@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -103,7 +104,18 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if n := len(h.st.SnapshotSessions()); n >= maxSessions {
 		return "", fmt.Errorf("session limit reached (%d) — close a session before creating another", maxSessions)
 	}
+	terminalOnly := in.Bool("terminal_only")
 	home := h.st.Home
+	admin := h.d
+	// A terminal-only session (the TUI's own tabs) is bound to the terminal
+	// gateway, not the operator's Discord home: route it through the terminal
+	// admin and a synthetic terminal home so it becomes a local `terminal/…`
+	// channel with no Discord thread — working whether a Discord home is
+	// configured or none is set at all.
+	if terminalOnly && h.td != nil {
+		home = state.HomeRef{ID: "terminal", Type: "terminal"}
+		admin = h.td
+	}
 	if home.ID == "" {
 		return "", fmt.Errorf("no home set — run `set home` first")
 	}
@@ -134,7 +146,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		consolidateEvery = n
 	}
 	gwList, _ := in.Lookup("gateways")
-	gateways := ParseGateways(gwList, in.Bool("terminal_only"))
+	gateways := ParseGateways(gwList, terminalOnly)
 	ws := h.st.WorkspaceRoot()
 	// Project is the logical label the caller assigns; Neublox filters workspace
 	// snapshots by it, so it must be recorded even in cwd mode. It doubles as a
@@ -152,10 +164,12 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			}
 			project = filepath.Base(dir)
 		}
-		if project == "" {
-			return "", fmt.Errorf("specify project: (see `workspace list`) or clone:")
-		}
-		if !projectRe.MatchString(project) {
+		// A session without a project is no longer an error: it runs rooted at the
+		// workspace root (repoFor with an empty project), and with no workspace root
+		// at the daemon's cwd — i.e. the directory `herrscher` was launched from.
+		// This is what lets the TUI auto-create its `main` tab and lets tabs be
+		// opened pwd-relative. A given project is still validated.
+		if project != "" && !projectRe.MatchString(project) {
 			return "", fmt.Errorf("invalid project %q — use a single name (no /, spaces, or ..)", project)
 		}
 	}
@@ -208,22 +222,30 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	// Logical name stays the state/worktree key; the qualified name namespaces
 	// the Discord title so daemons sharing a home stay distinguishable.
 	title := h.st.QualifiedName(name)
+	// runDir is the child bridge's working directory: the isolated worktree when
+	// one was made, else the resolved repo (workspace root, optionally /project).
+	// Empty means "inherit the launcher's cwd" — the pwd fallback for a session
+	// created with no workspace root configured.
+	runDir := worktree
+	if runDir == "" {
+		runDir = repo
+	}
 	var sess state.Session
 	switch home.Type {
 	case "category", "terminal":
-		chID, err := h.d.CreateUnder(ctx, home.ID, title)
+		chID, err := admin.CreateUnder(ctx, home.ID, title)
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create channel: %w", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
+		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
 	case "forum":
-		chID, err := h.d.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
+		chID, err := admin.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create forum post: %w", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
+		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}
@@ -234,8 +256,18 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		return "", fmt.Errorf("start bridge: %w", err)
 	}
 	banner := sessionBanner(repo, name, worktree, h.wt.Branch(name), cmd, shared)
-	_ = h.d.Send(ctx, sess.ChannelID, banner) // best-effort; reply is source of truth
-	return fmt.Sprintf("✅ Running on %s.\n\n%s", h.d.ChannelRef(sess.ChannelID), banner), nil
+	_ = admin.Send(ctx, sess.ChannelID, banner) // best-effort; reply is source of truth
+	return fmt.Sprintf("✅ Running on %s.\n\n%s", admin.ChannelRef(sess.ChannelID), banner), nil
+}
+
+// adminFor returns the channel admin that owns sess's channel: the terminal
+// admin for synthetic `terminal/…` channels (when a terminal gateway is bound),
+// else the Discord admin. This keeps close/list routing symmetric with create.
+func (h *Handler) adminFor(sess state.Session) channelAdmin {
+	if h.td != nil && strings.HasPrefix(sess.ChannelID, "terminal/") {
+		return h.td
+	}
+	return h.d
 }
 
 func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (string, error) {
@@ -255,7 +287,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 			return "", fmt.Errorf("%w — commit, or close with force:true to discard (branch session/%s is kept)", err, name)
 		}
 	}
-	if err := h.d.Archive(ctx, sess.ChannelID); err != nil {
+	if err := h.adminFor(sess).Archive(ctx, sess.ChannelID); err != nil {
 		return "", fmt.Errorf("archive: %w", err)
 	}
 	if err := h.st.RemoveSession(name); err != nil {
@@ -289,7 +321,7 @@ func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string,
 	}
 	out := "Active sessions:\n"
 	for _, s := range sessions {
-		out += fmt.Sprintf("• **%s** (%s) %s\n", s.Name, s.Type, h.d.ChannelRef(s.ChannelID))
+		out += fmt.Sprintf("• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
 	}
 	return out, nil
 }

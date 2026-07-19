@@ -19,6 +19,7 @@ type fakeChannelAdmin struct {
 	created  []string
 	archived []string
 	homeType string
+	idPrefix string // channel-id prefix for CreateUnder; "" defaults to "new-"
 	sent     []sentMsg
 	sendErr  error
 }
@@ -28,7 +29,11 @@ func (f *fakeChannelAdmin) Kind(ctx context.Context, id string) (string, error) 
 }
 func (f *fakeChannelAdmin) CreateUnder(ctx context.Context, parentID, name string) (string, error) {
 	f.created = append(f.created, name)
-	return "new-" + name, nil
+	prefix := f.idPrefix
+	if prefix == "" {
+		prefix = "new-"
+	}
+	return prefix + name, nil
 }
 func (f *fakeChannelAdmin) ForumPost(ctx context.Context, forumID, name, content string) (string, error) {
 	f.created = append(f.created, "forum:"+name)
@@ -799,15 +804,17 @@ func TestSessionCreateUsesWorkspaceProject(t *testing.T) {
 	}
 }
 
-func TestSessionCreateRequiresProjectWhenWorkspaceSet(t *testing.T) {
-	h, d, _, wt, _, st := newTestHandler(t, "")
+func TestSessionCreateNoProjectRootsAtWorkspaceRoot(t *testing.T) {
+	// pwd-relative rule: no --project with a workspace root is no longer an error;
+	// the session runs rooted at the workspace root (worktree carved from /ws).
+	h, _, _, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
 	_ = st.SetWorkspace("/ws")
-	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err == nil {
-		t.Fatal("expected error asking for project")
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
+		t.Fatalf("no-project create with workspace root should succeed, got: %v", err)
 	}
-	if len(wt.created) != 0 || len(d.created) != 0 {
-		t.Fatalf("nothing should be created: wt=%v ch=%v", wt.created, d.created)
+	if len(wt.createdRepos) != 1 || wt.createdRepos[0] != "/ws" {
+		t.Fatalf("expected Create rooted at /ws, got %+v", wt.createdRepos)
 	}
 }
 

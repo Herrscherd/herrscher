@@ -24,6 +24,7 @@ type Session struct {
 	Backend   string `json:"backend,omitempty"`  // bridge backend ("" or "stream" = stream-json default; "oneshot" = per-message cmd)
 	Vendor    string `json:"vendor,omitempty"`   // agent backend vendor ("claude", "codex", "cursor")
 	Worktree  string `json:"worktree,omitempty"` // abs path; empty for a shared session
+	Dir       string `json:"dir,omitempty"`      // bridge working dir; empty = inherit launcher cwd (pwd fallback)
 	Project   string `json:"project,omitempty"`  // workspace sub-dir the session started from
 	Agent     string `json:"agent,omitempty"`    // durable agent this session was provisioned from ("" = none)
 

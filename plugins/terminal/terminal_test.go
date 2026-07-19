@@ -332,3 +332,20 @@ func TestEnsureDefaultSessionCreatesWhenOnlyDiscord(t *testing.T) {
 		t.Fatalf("expected a typed Create when only discord session exists; got: %+v", fake.created)
 	}
 }
+
+// TestCommandsAdvertiseOnlyAllowedVerbs guards the palette↔Dispatch contract:
+// every command surfaced to the TUI must lead with a verb Dispatch accepts, so
+// the operator can never be shown a command that the gate would reject.
+func TestCommandsAdvertiseOnlyAllowedVerbs(t *testing.T) {
+	tm := &Terminal{}
+	cmds := tm.Commands()
+	if len(cmds) == 0 {
+		t.Fatal("Commands must advertise at least one command")
+	}
+	for _, c := range cmds {
+		verb := strings.Fields(c.Name)
+		if len(verb) == 0 || !terminalVerbs[verb[0]] {
+			t.Fatalf("command %q leads with a verb outside terminalVerbs", c.Name)
+		}
+	}
+}

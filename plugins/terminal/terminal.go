@@ -286,6 +286,20 @@ func withTerminalDefault(args []string) []string {
 // out of reach, so a future destructive verb can never be typed into a tab.
 var terminalVerbs = map[string]bool{"session": true, "agent": true}
 
+// Commands is the curated palette advertised to the TUI. Every entry's leading
+// verb is a member of terminalVerbs, so the palette can never surface a command
+// Dispatch would reject; terminal_test.go asserts this invariant.
+func (t *Terminal) Commands() []tui.CommandSpec {
+	return []tui.CommandSpec{
+		{Name: "session create", Args: "<name>", Desc: "start a new session tab"},
+		{Name: "session list", Desc: "list active sessions"},
+		{Name: "session who", Desc: "show who owns the current session"},
+		{Name: "session close", Args: "<name>", Desc: "close a session"},
+		{Name: "agent create", Args: "<name>", Desc: "add a companion agent"},
+		{Name: "agent list", Desc: "list companion agents"},
+	}
+}
+
 // Dispatch forwards an operator argv to the bound SessionControl, prepending
 // --terminal_only when creating a session without an explicit gateway selector
 // so TUI-created sessions bind to this terminal and appear as tabs. The first

@@ -39,23 +39,23 @@ type Backend interface {
 	// Close tears a session down by name through the typed control seam, so the
 	// UI's close action never assembles "session close" flag argv.
 	Close(name string, force bool) (string, error)
+	// Commands lists the operator commands the palette advertises, scoped to the
+	// verbs this backend will actually accept.
+	Commands() []CommandSpec
 }
 
-var (
-	humanStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	statusStyle = lipgloss.NewStyle().Faint(true)
-	replyStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	costStyle   = lipgloss.NewStyle().Faint(true)
-)
-
 // tab is one session's pane: its transcript, unread flag, busy state, last cost,
-// and a disconnected flag set when the last event was an "abandoned" turn.
+// and a disconnected flag set when the last event was an "abandoned" turn. streamed
+// records whether any chunk arrived during the current turn, so the final reply is
+// not rendered a second time (the duplicate fix) and the "thinking" indicator hides
+// once real output begins.
 type tab struct {
 	channel      string
 	label        string
 	lines        []string
 	unread       bool
 	busy         bool
+	streamed     bool
 	lastCost     float64
 	disconnected bool
 }
@@ -92,6 +92,21 @@ func tickCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
+// spinMsg fires the animation timer that advances the "thinking" spinner. It
+// runs fast (fastTick) while a session is busy and slow otherwise, so an idle
+// TUI is not repainting several times a second.
+type spinMsg struct{}
+
+const (
+	fastTick = 200 * time.Millisecond
+	slowTick = time.Second
+)
+
+// spinTick returns a command that fires spinMsg after d.
+func spinTick(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg { return spinMsg{} })
+}
+
 type model struct {
 	tm           Backend
 	vp           viewport.Model
@@ -104,16 +119,23 @@ type model struct {
 	pendingClose bool
 	width        int
 	height       int
-	flash        string // transient status shown when there is no active tab
-	tabSig       string // last reconciled session signature, to skip idle work
+	flash        string        // transient status shown when there is no active tab
+	tabSig       string        // last reconciled session signature, to skip idle work
+	spin         int           // animation frame for the thinking spinner
+	cmds         []CommandSpec // palette command table, loaded from the backend
+	palIdx       int           // selected row in the open command palette
 }
 
-// chromeHeight is the number of non-viewport rows View renders (tab bar, footer,
-// input, spacers) plus the help block when it is shown.
+// chromeHeight is the number of non-viewport rows View renders: the brand row, the
+// tab strip, the footer status line, and the input row (4), plus the help block and
+// the command palette when each is shown.
 func (m *model) chromeHeight() int {
-	h := 5
+	h := 4
 	if m.showHelp {
-		h += 3
+		h += 4
+	}
+	if m.paletteOpen() {
+		h += m.paletteHeight()
 	}
 	return h
 }
@@ -131,7 +153,11 @@ func newModel(tm Backend) *model {
 	in := textinput.New()
 	in.Placeholder = "type a message…"
 	in.Focus()
-	return &model{tm: tm, input: in, tabs: map[string]*tab{}}
+	m := &model{tm: tm, input: in, tabs: map[string]*tab{}}
+	if tm != nil {
+		m.cmds = tm.Commands()
+	}
+	return m
 }
 
 // ensureTab creates a tab for channel if missing, making the first tab active.
@@ -239,7 +265,12 @@ func (m *model) handleEnter() tea.Cmd {
 		return nil
 	}
 	m.tm.Submit(m.active, text)
-	m.tabs[m.active].appendLine(humanStyle.Render("you ") + text)
+	tb := m.tabs[m.active]
+	tb.appendLine(humanStyle.Render("you ") + text)
+	// Flip to the working state immediately, before any backend event, so the
+	// operator sees the message was taken (the "thinking" line is derived from this).
+	tb.busy = true
+	tb.streamed = false
 	m.syncViewport()
 	return nil
 }
@@ -318,26 +349,34 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	switch e.T {
 	case "chunk":
 		tb.busy = true
+		tb.streamed = true
 		tb.appendLine(e.Text)
 	case "status":
 		tb.busy = true
 		tb.appendLine(statusStyle.Render("· " + e.Text))
 	case "reply":
-		if e.Done {
-			tb.busy = false
-			if e.Cost > 0 {
-				tb.lastCost = e.Cost
-			}
-		}
-		if e.Text != "" {
+		// A streamed answer is already on screen from its chunks; rendering the
+		// final reply text again is the duplicate we are killing. The streamed
+		// flag holds whether or not the reply repeats the text, so a
+		// non-streaming backend still renders reply.Text exactly once.
+		if e.Text != "" && !tb.streamed {
 			tb.appendLine(replyStyle.Render(e.Text))
 		}
 		if e.Cost > 0 {
+			tb.lastCost = e.Cost
 			tb.appendLine(costStyle.Render(formatCost(e.Cost)))
 		}
+		if e.Done {
+			tb.busy = false
+			tb.streamed = false
+		}
 	case "reset":
+		tb.busy = false
+		tb.streamed = false
 		tb.appendLine(statusStyle.Render("· (turn reset)"))
 	case "abandoned":
+		tb.busy = false
+		tb.streamed = false
 		tb.disconnected = true
 		tb.appendLine(statusStyle.Render("· (turn abandoned)"))
 	}
@@ -347,8 +386,7 @@ func (m *model) syncViewport() {
 	if !m.ready {
 		return
 	}
-	tb := m.tabs[m.active]
-	if tb == nil {
+	if m.tabs[m.active] == nil {
 		m.vp.SetContent("")
 		return
 	}
@@ -356,31 +394,125 @@ func (m *model) syncViewport() {
 	// view is already there, so streaming output into the active tab does not
 	// defeat PgUp/PgDn scrollback mid-turn.
 	atBottom := m.vp.AtBottom()
-	m.vp.SetContent(strings.Join(tb.lines, "\n"))
+	m.vp.SetContent(m.thinkingContent())
 	if atBottom {
 		m.vp.GotoBottom()
 	}
 }
 
-// tabBar renders the tab strip: active tab highlighted, unread marked with •, busy with ⟳.
-func (m *model) tabBar() string {
-	var b strings.Builder
-	for _, ch := range m.order {
-		tb := m.tabs[ch]
-		name := tb.label
-		if tb.unread {
-			name = "•" + name
-		}
+// anyBusy reports whether any tab has a turn in flight, so the spinner can idle.
+func (m *model) anyBusy() bool {
+	for _, tb := range m.tabs {
 		if tb.busy {
-			name = "⟳" + name
-		}
-		if ch == m.active {
-			b.WriteString(humanStyle.Render("[" + name + "] "))
-		} else {
-			b.WriteString(statusStyle.Render(" " + name + " "))
+			return true
 		}
 	}
-	return b.String()
+	return false
+}
+
+func (m *model) spinFrame() string { return spinFrames[m.spin%len(spinFrames)] }
+
+// thinkingContent is the active tab's rendered transcript plus a derived, non-stored
+// "thinking" line, shown only when the turn is accepted but nothing has streamed back
+// yet. Because it is derived from state it appears the instant Enter is pressed and
+// disappears when the first chunk lands or the turn completes — it can never double.
+func (m *model) thinkingContent() string {
+	tb := m.tabs[m.active]
+	if tb == nil {
+		return ""
+	}
+	content := strings.Join(tb.lines, "\n")
+	if tb.busy && !tb.streamed {
+		line := workingStyle.Render(m.spinFrame() + " " + glyphThinking + " thinking…")
+		if content != "" {
+			content += "\n" + line
+		} else {
+			content = line
+		}
+	}
+	return content
+}
+
+// totalCost sums the last per-turn cost across tabs, for the brand-row summary.
+func (m *model) totalCost() float64 {
+	var sum float64
+	for _, tb := range m.tabs {
+		sum += tb.lastCost
+	}
+	return sum
+}
+
+// brandRow renders the brand on the left and the session/cost summary on the right.
+func (m *model) brandRow() string {
+	left := brandStyle.Render(glyphBrand + " HERRSCHER")
+	noun := "sessions"
+	if len(m.order) == 1 {
+		noun = "session"
+	}
+	right := statusStyle.Render(fmt.Sprintf("%d %s · %s", len(m.order), noun, formatCost(m.totalCost())))
+	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		return left
+	}
+	return left + strings.Repeat(" ", gap) + right
+}
+
+// tabStrip renders the session tabs: active tab highlighted with the brand glyph,
+// unread marked with •, busy with ⟳, left-truncated around the active tab when wide.
+func (m *model) tabStrip() string {
+	if len(m.order) == 0 {
+		return statusStyle.Render("no sessions — /session create <name>")
+	}
+	segs := make([]string, len(m.order))
+	active := 0
+	for i, ch := range m.order {
+		tb := m.tabs[ch]
+		marker := "  "
+		if tb.busy {
+			marker = workingStyle.Render(glyphBusy) + " "
+		} else if tb.unread {
+			marker = unreadStyle.Render(glyphUnread) + " "
+		}
+		if ch == m.active {
+			active = i
+			segs[i] = marker + activeTabStyle.Render(glyphBrand+" "+tb.label) + " "
+		} else {
+			segs[i] = marker + inactiveTabStyle.Render(tb.label) + " "
+		}
+	}
+	return fitTabs(segs, active, m.width)
+}
+
+// fitTabs joins tab segments, dropping whole tabs from the front (never past the
+// active one) until the active tab fits the width; a leading ‹ marks elision.
+func fitTabs(segs []string, active, width int) string {
+	start := 0
+	for {
+		joined := strings.Join(segs[start:], "")
+		prefix := ""
+		if start > 0 {
+			prefix = statusStyle.Render("‹ ")
+		}
+		if lipgloss.Width(prefix)+lipgloss.Width(joined) <= width || start >= active {
+			return prefix + joined
+		}
+		start++
+	}
+}
+
+// inputRow renders the prompt with a right-aligned command hint. The hint switches
+// to palette navigation keys while the palette is open.
+func (m *model) inputRow() string {
+	hint := statusStyle.Render("/ commands · ? help · Tab ⇄")
+	if m.paletteOpen() {
+		hint = statusStyle.Render("↑↓ navigate · Tab complete · Esc close")
+	}
+	in := m.input.View()
+	gap := m.width - lipgloss.Width(in) - lipgloss.Width(hint)
+	if gap < 1 {
+		return in
+	}
+	return in + strings.Repeat(" ", gap) + hint
 }
 
 // footer renders the status/cost line for the active tab.
@@ -394,7 +526,7 @@ func (m *model) footer() string {
 	}
 	state := statusStyle.Render("· idle")
 	if tb.busy {
-		state = humanStyle.Render("⟳ working")
+		return workingStyle.Render(glyphBusy + " working…")
 	}
 	cost := ""
 	if tb.lastCost > 0 {
@@ -436,7 +568,9 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
 	return err
 }
 
-func (m *model) Init() tea.Cmd { return tea.Batch(textinput.Blink, tickCmd()) }
+func (m *model) Init() tea.Cmd {
+	return tea.Batch(textinput.Blink, tickCmd(), spinTick(slowTick))
+}
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -467,6 +601,37 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Any other key cancels the close.
 			m.pendingClose = false
 			return m, nil
+		}
+		// While the command palette is open, arrow/Tab/Esc/Enter drive it instead
+		// of the normal bindings; other keys fall through to edit the query.
+		if m.paletteOpen() {
+			switch msg.Type {
+			case tea.KeyUp:
+				m.movePal(-1)
+				return m, nil
+			case tea.KeyDown:
+				m.movePal(1)
+				return m, nil
+			case tea.KeyTab:
+				m.completePal()
+				m.applySize()
+				m.syncViewport()
+				return m, nil
+			case tea.KeyEsc:
+				m.input.SetValue("")
+				m.palIdx = 0
+				m.applySize()
+				m.syncViewport()
+				return m, nil
+			case tea.KeyEnter:
+				cmd := m.handleEnter()
+				m.palIdx = 0
+				m.applySize()
+				m.syncViewport()
+				return m, cmd
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			}
 		}
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
@@ -513,6 +678,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		m.syncTabs()
 		return m, tickCmd()
+	case spinMsg:
+		m.spin++
+		d := slowTick
+		if m.anyBusy() {
+			d = fastTick
+			m.syncViewport() // repaint the animated thinking line
+		}
+		return m, spinTick(d)
 	}
 	var cmds []tea.Cmd
 	var c tea.Cmd
@@ -520,6 +693,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, c)
 	m.vp, c = m.vp.Update(msg)
 	cmds = append(cmds, c)
+	// Editing the query may have opened or closed the palette, changing the
+	// reserved chrome height; re-fit the viewport and clamp the selection.
+	if _, ok := msg.(tea.KeyMsg); ok {
+		m.clampPal()
+		m.applySize()
+		m.syncViewport()
+	}
 	return m, tea.Batch(cmds...)
 }
 
@@ -528,7 +708,8 @@ func (m *model) helpView() string {
 	lines := []string{
 		"Keys:  Tab / Shift+Tab  switch tab        Ctrl+W  close tab (y to confirm)",
 		"       PgUp / PgDn      scroll             ?       toggle this help",
-		"       Enter            submit / /cmd      Ctrl+C / Esc  quit",
+		"       /                command palette    Enter   submit / run /cmd",
+		"       ↑↓ Tab Esc       navigate palette   Ctrl+C  quit",
 	}
 	return statusStyle.Render(strings.Join(lines, "\n"))
 }
@@ -537,14 +718,17 @@ func (m *model) View() string {
 	if !m.ready {
 		return "starting…"
 	}
-	var parts []string
-	if m.showHelp {
-		parts = append(parts, m.helpView())
-	}
 	footer := m.footer()
 	if m.flash != "" {
 		footer = statusStyle.Render("· " + m.flash)
 	}
-	parts = append(parts, m.tabBar(), m.vp.View(), footer, m.input.View())
+	parts := []string{m.brandRow(), m.tabStrip(), m.vp.View()}
+	if m.paletteOpen() {
+		parts = append(parts, m.paletteView())
+	}
+	if m.showHelp {
+		parts = append(parts, m.helpView())
+	}
+	parts = append(parts, footer, m.inputRow())
 	return strings.Join(parts, "\n")
 }

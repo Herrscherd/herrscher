@@ -129,6 +129,20 @@ func TestSlashLineDispatches(t *testing.T) {
 	}
 }
 
+func TestBareSlashDoesNotDispatch(t *testing.T) {
+	f := &fakeBackend{}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.active = "a"
+	// A lone "/" is the palette prefix; pressing Enter on it must not dispatch an
+	// empty argv (which the hub rejects with `error: command ""` on startup).
+	m.input.SetValue("/")
+	runCmd(m.handleEnter())
+	if len(f.dispatched) != 0 {
+		t.Fatalf("bare / must not dispatch a command: %+v", f.dispatched)
+	}
+}
+
 func TestPlainLineSubmits(t *testing.T) {
 	f := &fakeBackend{}
 	m := newModel(f)
@@ -187,8 +201,10 @@ func TestResizeSyncsViewport(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	// second size message exercises the resize (else) branch
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	if m.vp.Width != 100 || m.vp.Height != 26 {
-		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 26)", m.vp.Width, m.vp.Height)
+	// The panel border trims 4 cols (border + padding, both sides) and 6 rows of
+	// chrome (border top/bottom, brand, tabs, footer, input).
+	if m.vp.Width != 96 || m.vp.Height != 24 {
+		t.Fatalf("resize: vp.Width=%d (want 96), vp.Height=%d (want 24)", m.vp.Width, m.vp.Height)
 	}
 }
 
@@ -389,14 +405,14 @@ func TestThinkingLineDerivedWhileBusyNoStream(t *testing.T) {
 	tb.busy = true
 	tb.streamed = false
 	// The thinking indicator is derived at render time, never stored in lines.
-	if tabLineCount(tb, glyphThinking) != 0 {
+	if tabLineCount(tb, "thinking") != 0 {
 		t.Fatal("thinking indicator must not be appended to tab.lines")
 	}
-	if !strings.Contains(m.thinkingContent(), glyphThinking) {
-		t.Fatal("thinkingContent must show the thinking glyph while busy and unstreamed")
+	if !strings.Contains(m.thinkingContent(), "thinking") {
+		t.Fatal("thinkingContent must show the thinking line while busy and unstreamed")
 	}
 	tb.streamed = true
-	if strings.Contains(m.thinkingContent(), glyphThinking) {
+	if strings.Contains(m.thinkingContent(), "thinking") {
 		t.Fatal("once streamed, the thinking line must disappear (the reply is arriving)")
 	}
 }

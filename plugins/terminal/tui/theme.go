@@ -27,8 +27,11 @@ var (
 	brandStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#56e1cd"))
 	workingStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffcf6b"))
 	unreadStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#b18cff"))
-	activeTabStyle   = lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.Color("#ffffff"))
-	inactiveTabStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#55647f"))
+	activeTabStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#d9f7f0")).Background(lipgloss.Color("#123a37")).Padding(0, 1)
+	inactiveTabStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#55647f")).Padding(0, 1)
+
+	// panelBorder frames the whole TUI as one rounded card, matching the mockup.
+	panelBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#33415c")).Padding(0, 1)
 
 	paletteBorder   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#56e1cd")).Padding(0, 1)
 	paletteSelStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#56e1cd"))

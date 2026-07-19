@@ -323,10 +323,21 @@ The bridge does **no** gateway I/O: it never reads a channel, posts, or reacts.
 When `serve` runs on an interactive TTY, the in-tree terminal gateway (a
 Bubbletea TUI) takes over the foreground and brings multiple sessions online as
 a tabbed interface; any configured Discord gateway keeps running headless in the
-background. Each session bound to the terminal appears as a tab; use `Tab` and
-`Shift+Tab` to switch between them. When a background tab receives output from
-the model, it displays a bullet marker (`•`) to indicate unread activity; switching
-to that tab clears the marker. 
+background. A brand row and a strip of session tabs sit across the top: each
+session bound to the terminal is a tab, and `Tab` / `Shift+Tab` switch between
+them. A background tab that receives model output shows a bullet marker (`•`)
+for unread activity; switching to it clears the marker.
+
+**Immediate feedback.** Pressing `Enter` echoes your line and flips the tab into
+a `thinking…` state on the spot — before the backend sends anything back — so
+you always know the message was taken. The indicator is derived from turn state
+rather than stored, so it disappears the instant the first output streams in and
+the reply is never rendered twice.
+
+**Command palette.** Typing `/` opens an inline palette of the commands the
+terminal accepts (session and agent verbs only). It filters as you type; `↑`/`↓`
+move the selection, `Tab` completes the highlighted command, and `Esc` closes
+it. This is the discoverable path to the slash-commands below.
 
 **Session management.** Create, list, and close sessions directly from the TUI
 using slash commands — no Discord required. Type `/session create --name foo` to
@@ -345,13 +356,17 @@ queued input. Authorization and message-id tracking live in the hub, not here.
 | Key | Action |
 |-----|--------|
 | `Tab` / `Shift+Tab` | Switch to next/previous session tab |
+| `/` | Open the command palette (filters as you type) |
+| `↑` / `↓` | Move the palette selection (while it is open) |
+| `Tab` | Complete the highlighted command (while the palette is open) |
 | `Enter` | Send the typed line to the active session (lines starting with `/` are run as commands) |
 | `Ctrl+W` then `y` | Close the active session (any other key cancels) |
 | `?` (empty input) | Toggle keybinding help overlay |
 | `PgUp` / `PgDn` | Scroll the active tab's transcript |
-| `Ctrl+C` / `Esc` | Quit the TUI (shuts down the daemon) |
+| `Esc` | Close the palette if open, otherwise quit the TUI |
+| `Ctrl+C` | Quit the TUI (shuts down the daemon) |
 
-Tab markers: `•` = unread background activity, `⟳` = streaming. Footer shows active session state (working/idle/disconnected) and last turn cost.
+Tab markers: `•` = unread background activity, `⟳` = a turn in flight. Footer shows active session state (working/idle/disconnected) and last turn cost.
 
 ---
 

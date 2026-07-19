@@ -291,11 +291,11 @@ var terminalVerbs = map[string]bool{"session": true, "agent": true}
 // Dispatch would reject; terminal_test.go asserts this invariant.
 func (t *Terminal) Commands() []tui.CommandSpec {
 	return []tui.CommandSpec{
-		{Name: "session create", Args: "<name>", Desc: "start a new session tab"},
+		{Name: "session create", Args: "--name <name>", Desc: "start a new session tab"},
 		{Name: "session list", Desc: "list active sessions"},
-		{Name: "session who", Desc: "show who owns the current session"},
-		{Name: "session close", Args: "<name>", Desc: "close a session"},
-		{Name: "agent create", Args: "<name>", Desc: "add a companion agent"},
+		{Name: "session who", Args: "--name <name>", Desc: "list a session's participants"},
+		{Name: "session close", Args: "--name <name>", Desc: "close a session"},
+		{Name: "agent create", Args: "--name <name>", Desc: "add a companion agent"},
 		{Name: "agent list", Desc: "list companion agents"},
 	}
 }

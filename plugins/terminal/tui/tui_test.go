@@ -110,6 +110,13 @@ func (f *fakeBackend) Close(name string, force bool) (string, error) {
 	f.closed = append(f.closed, closedSession{name: name, force: force})
 	return "ok", nil
 }
+func (f *fakeBackend) Commands() []CommandSpec {
+	return []CommandSpec{
+		{Name: "session create", Args: "<name>", Desc: "start a session"},
+		{Name: "session list", Desc: "list sessions"},
+		{Name: "agent create", Args: "<name>", Desc: "add an agent"},
+	}
+}
 
 func TestSlashLineDispatches(t *testing.T) {
 	f := &fakeBackend{}
@@ -180,8 +187,8 @@ func TestResizeSyncsViewport(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	// second size message exercises the resize (else) branch
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	if m.vp.Width != 100 || m.vp.Height != 25 {
-		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 25)", m.vp.Width, m.vp.Height)
+	if m.vp.Width != 100 || m.vp.Height != 26 {
+		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 26)", m.vp.Width, m.vp.Height)
 	}
 }
 
@@ -190,8 +197,8 @@ func TestHelpReducesViewportHeight(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	base := m.vp.Height
 	m.toggleHelp()
-	if m.vp.Height != base-3 {
-		t.Fatalf("help must shrink viewport by the 3-line help block: base=%d now=%d", base, m.vp.Height)
+	if m.vp.Height != base-4 {
+		t.Fatalf("help must shrink viewport by the 4-line help block: base=%d now=%d", base, m.vp.Height)
 	}
 	m.toggleHelp()
 	if m.vp.Height != base {
@@ -320,5 +327,120 @@ func TestPendingCloseOtherKeyCancels(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Fatalf("non-y key during pendingClose must return nil cmd, got %v", cmd)
+	}
+}
+
+// countLines counts how many times needle appears across a tab's rendered lines.
+func tabLineCount(tb *tab, needle string) int {
+	n := 0
+	for _, l := range tb.lines {
+		if strings.Contains(l, needle) {
+			n++
+		}
+	}
+	return n
+}
+
+func TestSubmitMarksBusyImmediately(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.ensureTab("a")
+	m.active = "a"
+	m.input.SetValue("hello")
+	runCmd(m.handleEnter())
+	tb := m.tabs["a"]
+	if !tb.busy {
+		t.Fatal("submit must mark the tab busy immediately, before any backend event")
+	}
+	if tb.streamed {
+		t.Fatal("submit must reset streamed so the thinking line shows until the first chunk")
+	}
+	if tabLineCount(tb, "hello") != 1 {
+		t.Fatalf("the submitted line must be echoed exactly once: %+v", tb.lines)
+	}
+}
+
+func TestStreamedReplyNotDuplicated(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.ensureTab("a")
+	// A streamed turn: chunk carries the text, the final reply repeats it.
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "chunk", Text: "the answer"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "the answer", Done: true}})
+	if got := tabLineCount(m.tabs["a"], "the answer"); got != 1 {
+		t.Fatalf("streamed reply must render once, not per-event: got %d\n%+v", got, m.tabs["a"].lines)
+	}
+	if m.tabs["a"].busy {
+		t.Fatal("done reply must clear busy")
+	}
+}
+
+func TestNonStreamedReplyRendersOnce(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.ensureTab("a")
+	// No chunk first: the reply is the only carrier of the text.
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "direct answer", Done: true}})
+	if got := tabLineCount(m.tabs["a"], "direct answer"); got != 1 {
+		t.Fatalf("non-streamed reply must render exactly once: got %d\n%+v", got, m.tabs["a"].lines)
+	}
+}
+
+func TestThinkingLineDerivedWhileBusyNoStream(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	tb := m.ensureTab("a")
+	tb.busy = true
+	tb.streamed = false
+	// The thinking indicator is derived at render time, never stored in lines.
+	if tabLineCount(tb, glyphThinking) != 0 {
+		t.Fatal("thinking indicator must not be appended to tab.lines")
+	}
+	if !strings.Contains(m.thinkingContent(), glyphThinking) {
+		t.Fatal("thinkingContent must show the thinking glyph while busy and unstreamed")
+	}
+	tb.streamed = true
+	if strings.Contains(m.thinkingContent(), glyphThinking) {
+		t.Fatal("once streamed, the thinking line must disappear (the reply is arriving)")
+	}
+}
+
+func TestAnyBusyReflectsTabs(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.ensureTab("a")
+	m.ensureTab("b")
+	if m.anyBusy() {
+		t.Fatal("no tab busy → anyBusy false")
+	}
+	m.tabs["b"].busy = true
+	if !m.anyBusy() {
+		t.Fatal("one busy tab → anyBusy true")
+	}
+}
+
+func TestPaletteOpensAndCompletes(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.ensureTab("a")
+	m.active = "a"
+	if m.paletteOpen() {
+		t.Fatal("palette must be closed with empty input")
+	}
+	// Typing "/" opens the palette.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	if !m.paletteOpen() {
+		t.Fatal("typing / must open the palette")
+	}
+	// Tab completes the selected command into the input.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if !strings.HasPrefix(m.input.Value(), "/session create") {
+		t.Fatalf("Tab must complete the first match: got %q", m.input.Value())
+	}
+}
+
+func TestPaletteEscClosesWithoutQuitting(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.input.SetValue("/session")
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatal("Esc while the palette is open must close it, not quit")
+	}
+	if m.paletteOpen() {
+		t.Fatalf("Esc must clear the query: got %q", m.input.Value())
 	}
 }

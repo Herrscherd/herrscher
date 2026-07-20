@@ -44,22 +44,19 @@ func TestPathAndBranch(t *testing.T) {
 	}
 }
 
-func TestPathFallsBackToLegacyDir(t *testing.T) {
+func TestPathAlwaysCurrentName(t *testing.T) {
 	repo := t.TempDir()
 	w := NewWorktreer(context.Background(), "")
+	want := filepath.Join(repo, ".herrscher-sessions", "feat1")
 
-	// No dir on disk yet: Path returns the current-name location.
-	if got, want := w.Path(repo, "feat1"), filepath.Join(repo, ".herrscher-sessions", "feat1"); got != want {
-		t.Fatalf("Path = %q, want current-name %q", got, want)
-	}
-
-	// A pre-existing legacy worktree dir is resolved instead.
-	legacy := filepath.Join(repo, ".dctl-sessions", "feat1")
-	if err := os.MkdirAll(legacy, 0o755); err != nil {
+	// Path is now pure: it no longer stats disk to fall back to a legacy sessions
+	// dir, so it always returns the current-name location. A stray dir on disk
+	// (whatever its name) can no longer change the answer.
+	if err := os.MkdirAll(filepath.Join(repo, ".stray-sessions", "feat1"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := w.Path(repo, "feat1"); got != legacy {
-		t.Fatalf("Path = %q, want legacy %q", got, legacy)
+	if got := w.Path(repo, "feat1"); got != want {
+		t.Fatalf("Path = %q, want current-name %q", got, want)
 	}
 }
 

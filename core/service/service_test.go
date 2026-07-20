@@ -11,7 +11,7 @@ import (
 
 func TestWriteFileNeverOverwritesTemplate(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "dctl.env")
+	path := filepath.Join(dir, "herrscher.env")
 	if err := os.WriteFile(path, []byte("GW_TOKEN=real-secret\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -36,10 +36,10 @@ func TestWriteFileNeverOverwritesTemplate(t *testing.T) {
 func testConfig(goos string) Config {
 	return Config{
 		GOOS:       goos,
-		BinPath:    "/home/me/.local/bin/dctl",
+		BinPath:    "/home/me/.local/bin/herrscher",
 		Home:       "/home/me",
 		User:       "me",
-		EnvFile:    "/home/me/.config/dctl/dctl.env",
+		EnvFile:    "/home/me/.config/herrscher/herrscher.env",
 		HealthAddr: "127.0.0.1:8787",
 		EnvVars:    testEnvVars(),
 	}
@@ -78,12 +78,12 @@ func TestLinuxPlan(t *testing.T) {
 		t.Fatalf("want unit + env file, got %d files", len(p.Files))
 	}
 	unit := p.Files[0]
-	if !strings.HasSuffix(unit.Path, "/.config/systemd/user/dctl.service") {
+	if !strings.HasSuffix(unit.Path, "/.config/systemd/user/herrscher.service") {
 		t.Fatalf("unit path = %s", unit.Path)
 	}
 	for _, want := range []string{
 		// The daemon loads the env file itself; the unit just passes --env-file.
-		"ExecStart=/home/me/.local/bin/dctl serve --env-file /home/me/.config/dctl/dctl.env",
+		"ExecStart=/home/me/.local/bin/herrscher serve --env-file /home/me/.config/herrscher/herrscher.env",
 		"Restart=always",
 		"StartLimitBurst=5", // cap restarts so a bad token can't spin forever
 		"WantedBy=default.target",
@@ -107,7 +107,7 @@ func TestLinuxPlan(t *testing.T) {
 	if strings.Contains(env.Content, "GW_TOKEN=x") || !strings.Contains(env.Content, "GW_TOKEN=") {
 		t.Errorf("env template should list the var with no value:\n%s", env.Content)
 	}
-	assertCmd(t, p, "systemctl --user enable --now dctl.service")
+	assertCmd(t, p, "systemctl --user enable --now herrscher.service")
 	assertCmd(t, p, "loginctl enable-linger me")
 }
 
@@ -117,17 +117,17 @@ func TestMacPlan(t *testing.T) {
 		t.Fatal(err)
 	}
 	plist := p.Files[0]
-	if !strings.HasSuffix(plist.Path, "/Library/LaunchAgents/com.vskstudio.dctl.plist") {
+	if !strings.HasSuffix(plist.Path, "/Library/LaunchAgents/com.vskstudio.herrscher.plist") {
 		t.Fatalf("plist path = %s", plist.Path)
 	}
 	for _, want := range []string{
-		"<key>Label</key><string>com.vskstudio.dctl</string>",
+		"<key>Label</key><string>com.vskstudio.herrscher</string>",
 		"<key>RunAtLoad</key><true/>",
-		// launchd execs dctl directly (no shell); each arg is its own <string>.
-		"<string>/home/me/.local/bin/dctl</string>",
+		// launchd execs herrscher directly (no shell); each arg is its own <string>.
+		"<string>/home/me/.local/bin/herrscher</string>",
 		"<string>serve</string>",
 		"<string>--env-file</string>",
-		"<string>/home/me/.config/dctl/dctl.env</string>",
+		"<string>/home/me/.config/herrscher/herrscher.env</string>",
 	} {
 		if !strings.Contains(plist.Content, want) {
 			t.Errorf("plist missing %q\n---\n%s", want, plist.Content)
@@ -135,32 +135,32 @@ func TestMacPlan(t *testing.T) {
 	}
 	// No shell wrapper anymore.
 	if strings.Contains(plist.Content, "/bin/sh") {
-		t.Errorf("plist should exec dctl directly, not via a shell:\n%s", plist.Content)
+		t.Errorf("plist should exec herrscher directly, not via a shell:\n%s", plist.Content)
 	}
 	assertCmd(t, p, "launchctl load -w")
 }
 
 func TestWindowsPlan(t *testing.T) {
 	c := testConfig("windows")
-	c.BinPath = `C:\Users\me\dctl.exe`
-	c.EnvFile = `C:\Users\me\.config\dctl\dctl.env`
+	c.BinPath = `C:\Users\me\herrscher.exe`
+	c.EnvFile = `C:\Users\me\.config\herrscher\herrscher.env`
 	c.Home = `C:\Users\me`
 	p, err := BuildPlan(c)
 	if err != nil {
 		t.Fatal(err)
 	}
 	launcher := p.Files[0]
-	if !strings.HasSuffix(launcher.Path, "dctl-serve.cmd") {
+	if !strings.HasSuffix(launcher.Path, "herrscher-serve.cmd") {
 		t.Fatalf("launcher path = %s", launcher.Path)
 	}
-	// The launcher just execs dctl with --env-file; no brittle for/f parsing.
-	if !strings.Contains(launcher.Content, `C:\Users\me\dctl.exe serve --env-file C:\Users\me\.config\dctl\dctl.env`) {
-		t.Errorf("launcher missing dctl invocation:\n%s", launcher.Content)
+	// The launcher just execs herrscher with --env-file; no brittle for/f parsing.
+	if !strings.Contains(launcher.Content, `C:\Users\me\herrscher.exe serve --env-file C:\Users\me\.config\herrscher\herrscher.env`) {
+		t.Errorf("launcher missing herrscher invocation:\n%s", launcher.Content)
 	}
 	if strings.Contains(launcher.Content, "for /f") {
 		t.Errorf("launcher should not parse the env file in batch anymore:\n%s", launcher.Content)
 	}
-	assertCmd(t, p, "schtasks /create /tn dctl /tr")
+	assertCmd(t, p, "schtasks /create /tn herrscher /tr")
 }
 
 func TestStatusToleratesInactive(t *testing.T) {
@@ -186,10 +186,10 @@ func TestUnsupportedOS(t *testing.T) {
 func TestQuoters(t *testing.T) {
 	// systemd: plain tokens pass through; spaces/quotes get double-quoted and
 	// backslashes & quotes escaped.
-	if got := systemdQuote("/usr/bin/dctl"); got != "/usr/bin/dctl" {
+	if got := systemdQuote("/usr/bin/herrscher"); got != "/usr/bin/herrscher" {
 		t.Errorf("systemdQuote plain = %q", got)
 	}
-	if got := systemdQuote(`/opt/My Apps/dctl`); got != `"/opt/My Apps/dctl"` {
+	if got := systemdQuote(`/opt/My Apps/herrscher`); got != `"/opt/My Apps/herrscher"` {
 		t.Errorf("systemdQuote spaces = %q", got)
 	}
 	if got := systemdQuote(`a"b\c`); got != `"a\"b\\c"` {
@@ -197,15 +197,15 @@ func TestQuoters(t *testing.T) {
 	}
 
 	// cmd: plain tokens pass through; spaces get double-quoted, embedded quotes doubled.
-	if got := cmdQuote(`C:\dctl.exe`); got != `C:\dctl.exe` {
+	if got := cmdQuote(`C:\herrscher.exe`); got != `C:\herrscher.exe` {
 		t.Errorf("cmdQuote plain = %q", got)
 	}
-	if got := cmdQuote(`C:\Program Files\dctl.exe`); got != `"C:\Program Files\dctl.exe"` {
+	if got := cmdQuote(`C:\Program Files\herrscher.exe`); got != `"C:\Program Files\herrscher.exe"` {
 		t.Errorf("cmdQuote spaces = %q", got)
 	}
 
 	// joinQuoted applies the quoter to bin and every arg.
-	if got := joinQuoted(systemdQuote, "/b/dctl", []string{"serve", "x y"}); got != `/b/dctl serve "x y"` {
+	if got := joinQuoted(systemdQuote, "/b/herrscher", []string{"serve", "x y"}); got != `/b/herrscher serve "x y"` {
 		t.Errorf("joinQuoted = %q", got)
 	}
 }
@@ -256,7 +256,7 @@ func TestConfigScaffoldInPlan(t *testing.T) {
 	const cmd = "claude --model claude-opus-4-8 --effort low"
 	for _, goos := range []string{"linux", "darwin", "windows"} {
 		c := testConfig(goos)
-		c.ConfigPath = "/home/me/.config/dctl/config.json"
+		c.ConfigPath = "/home/me/.config/herrscher/config.json"
 		c.DefaultCmd = cmd
 		p, err := BuildPlan(c)
 		if err != nil {
@@ -303,7 +303,7 @@ func TestInstalledBinPathReadsUnit(t *testing.T) {
 	home := t.TempDir()
 	c := testConfig("linux")
 	c.Home = home
-	c.BinPath = "/opt/dctl/dctl"
+	c.BinPath = "/opt/herrscher/herrscher"
 	unitDir := home + "/.config/systemd/user"
 	if err := os.MkdirAll(unitDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -313,12 +313,12 @@ func TestInstalledBinPathReadsUnit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(unitDir+"/dctl.service", []byte(p.Files[0].Content), 0o644); err != nil {
+	if err := os.WriteFile(unitDir+"/herrscher.service", []byte(p.Files[0].Content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got, ok := InstalledBinPath(c)
-	if !ok || got != "/opt/dctl/dctl" {
-		t.Fatalf("InstalledBinPath = %q, %v; want /opt/dctl/dctl, true", got, ok)
+	if !ok || got != "/opt/herrscher/herrscher" {
+		t.Fatalf("InstalledBinPath = %q, %v; want /opt/herrscher/herrscher, true", got, ok)
 	}
 	// Absent unit (fresh home) → not found, not a panic.
 	c2 := testConfig("linux")
@@ -330,9 +330,9 @@ func TestInstalledBinPathReadsUnit(t *testing.T) {
 
 func TestFirstToken(t *testing.T) {
 	cases := map[string]string{
-		"/usr/bin/dctl serve --x y": "/usr/bin/dctl",
-		`"/has space/dctl" serve`:   "/has space/dctl",
-		"/lone/dctl":                "/lone/dctl",
+		"/usr/bin/herrscher serve --x y": "/usr/bin/herrscher",
+		`"/has space/herrscher" serve`:   "/has space/herrscher",
+		"/lone/herrscher":                "/lone/herrscher",
 		"":                          "",
 	}
 	for in, want := range cases {
@@ -446,7 +446,7 @@ func TestEnvFileHasRequired(t *testing.T) {
 func TestInstallSkipsStartWhenNoToken(t *testing.T) {
 	dir := t.TempDir()
 	c := testConfig("linux")
-	c.EnvFile = filepath.Join(dir, "dctl.env") // does not exist yet
+	c.EnvFile = filepath.Join(dir, "herrscher.env") // does not exist yet
 	// Mirror what Install computes, then assert the plan it would run.
 	if envFileHasRequired(c.EnvFile, c.EnvVars) {
 		t.Fatal("precondition: env file should not be ready")
@@ -543,12 +543,12 @@ func TestMacRunStringIsXMLEscaped(t *testing.T) {
 // must quote the binary or cmd.exe splits the path mid-command.
 func TestWindowsBinPathQuotedWithSpaces(t *testing.T) {
 	c := testConfig("windows")
-	c.BinPath = `C:\Program Files\dctl\dctl.exe`
+	c.BinPath = `C:\Program Files\herrscher\herrscher.exe`
 	p, err := BuildPlan(c)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(p.Files[0].Content, `"C:\Program Files\dctl\dctl.exe" serve`) {
+	if !strings.Contains(p.Files[0].Content, `"C:\Program Files\herrscher\herrscher.exe" serve`) {
 		t.Errorf("launcher must quote a binary path with spaces:\n%s", p.Files[0].Content)
 	}
 }
@@ -557,9 +557,9 @@ func TestWindowsBinPathQuotedWithSpaces(t *testing.T) {
 // delete the file it installed (otherwise a stale unit lingers).
 func TestBuildUninstallRemovesArtifacts(t *testing.T) {
 	cases := map[string]string{
-		"linux":   "dctl.service",
-		"darwin":  "com.vskstudio.dctl.plist",
-		"windows": "dctl",
+		"linux":   "herrscher.service",
+		"darwin":  "com.vskstudio.herrscher.plist",
+		"windows": "herrscher",
 	}
 	for os, marker := range cases {
 		p, err := BuildUninstall(testConfig(os))
@@ -593,7 +593,7 @@ func TestDefaultConfig(t *testing.T) {
 	if !strings.HasPrefix(c.EnvFile, c.Home) {
 		t.Errorf("env file %q should live under home %q", c.EnvFile, c.Home)
 	}
-	if !strings.HasSuffix(c.EnvFile, filepath.Join("dctl", "dctl.env")) {
+	if !strings.HasSuffix(c.EnvFile, filepath.Join("herrscher", "herrscher.env")) {
 		t.Errorf("unexpected env file path %q", c.EnvFile)
 	}
 	if c.HealthAddr == "" {
@@ -627,7 +627,7 @@ func TestWriteFileAppliesMode(t *testing.T) {
 		t.Skip("unix file modes not meaningful on windows")
 	}
 	dir := t.TempDir()
-	path := filepath.Join(dir, "nested", "dctl.env")
+	path := filepath.Join(dir, "nested", "herrscher.env")
 	if err := writeFile(FileWrite{Path: path, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -645,9 +645,9 @@ func TestRestartCommandsPerOS(t *testing.T) {
 		goos string
 		want string // substring expected in the (last) restart command
 	}{
-		{"linux", "systemctl --user restart dctl.service"},
+		{"linux", "systemctl --user restart herrscher.service"},
 		{"darwin", "launchctl kickstart -k"},
-		{"windows", "schtasks /run /tn dctl"},
+		{"windows", "schtasks /run /tn herrscher"},
 	} {
 		cmds, err := RestartCommands(testConfig(tc.goos))
 		if err != nil {

@@ -63,7 +63,7 @@ func statusContent(instanceID string, snap health.HealthSnapshot) string {
 		prefix = "[" + instanceID + "] "
 	}
 	m := snap.Metrics
-	return fmt.Sprintf("%s%s **dctl %s** · uptime %s · ping %dms · %d sessions · turns %d done/%d abandoned · %d restarts",
+	return fmt.Sprintf("%s%s **herrscher %s** · uptime %s · ping %dms · %d sessions · turns %d done/%d abandoned · %d restarts",
 		prefix, dot, word, uptime, snap.PingMS, snap.Sessions, m.TurnsCompleted, m.TurnsAbandoned, m.BridgeRestarts)
 }
 

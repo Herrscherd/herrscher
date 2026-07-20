@@ -24,7 +24,7 @@ func TestBridgeArgsIncludesHubSocket(t *testing.T) {
 }
 
 func TestBridgeArgsIncludeSession(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/dctl")
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1"})
 	if !strings.Contains(strings.Join(args, " "), "--session demo") {
 		t.Fatalf("expected --session <name> in args: %v", args)
@@ -32,7 +32,7 @@ func TestBridgeArgsIncludeSession(t *testing.T) {
 }
 
 func TestBridgeArgsIncludeBackend(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/dctl")
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1", Backend: "oneshot"})
 	if !strings.Contains(strings.Join(args, " "), "--backend oneshot") {
 		t.Fatalf("expected --backend oneshot in args: %v", args)
@@ -217,7 +217,7 @@ func TestRunLoopResetsBackoffAfterHealthyRun(t *testing.T) {
 }
 
 func TestBridgeArgsNoBackendWhenStream(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/dctl")
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
 	for _, b := range []string{"", "stream"} {
 		args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1", Backend: b})
 		if strings.Contains(strings.Join(args, " "), "--backend") {

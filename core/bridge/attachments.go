@@ -51,7 +51,7 @@ func attachmentDir(session string) string {
 	if name == "" {
 		name = "default"
 	}
-	return filepath.Join(os.TempDir(), "dctl-attachments", sanitize(name))
+	return filepath.Join(os.TempDir(), "herrscher-attachments", sanitize(name))
 }
 
 // downloadImages fetches up to maxImagesPerMessage image attachments on m to

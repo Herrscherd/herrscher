@@ -333,7 +333,7 @@ func TestFirstToken(t *testing.T) {
 		"/usr/bin/herrscher serve --x y": "/usr/bin/herrscher",
 		`"/has space/herrscher" serve`:   "/has space/herrscher",
 		"/lone/herrscher":                "/lone/herrscher",
-		"":                          "",
+		"":                               "",
 	}
 	for in, want := range cases {
 		if got := firstToken(in); got != want {

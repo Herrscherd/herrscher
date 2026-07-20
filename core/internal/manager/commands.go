@@ -41,6 +41,11 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Help("list the participants observed in a session").
 			Param("name", "session name", true).
 			Do(h.sessionWhoRun),
+		contracts.New("session", "log").
+			Help("dump a session's recorded transcript (scrollback); --json for the app").
+			Param("name", "session name", true).
+			Param("limit", "max entries to return (default 200, newest kept)", false).
+			Do(h.sessionLogRun),
 		contracts.New("agent", "create").
 			Help("create a durable companion agent (persona + MCP + zero-prompt settings)").
 			Param("name", "agent name (slugified to a safe slug)", true).

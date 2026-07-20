@@ -24,6 +24,10 @@ var (
 	costStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#d0aa63"))            // cost
 	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#55647f"))            // dim
 
+	// scrollbackStyle marks replayed transcript lines seeded into a reopened tab,
+	// dimmed and faint so past context reads as distinct from live output.
+	scrollbackStyle = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("#55647f"))
+
 	brandStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#56e1cd"))
 	workingStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffcf6b"))
 	unreadStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#b18cff"))

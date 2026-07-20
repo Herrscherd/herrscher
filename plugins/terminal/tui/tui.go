@@ -188,7 +188,38 @@ func (m *model) ensureTab(channel string) *tab {
 	if m.active == "" {
 		m.active = channel
 	}
+	m.seedScrollback(tb)
 	return tb
+}
+
+// seedScrollback fills a freshly created tab with its recorded transcript, dimmed
+// so replayed history reads as past context distinct from live output. It is a
+// no-op when the backend is absent, the session name is not yet known, or no
+// history exists — a reopened tab is thus seeded before any live event arrives.
+func (m *model) seedScrollback(tb *tab) {
+	if m.tm == nil {
+		return
+	}
+	name := m.sessionName(tb.channel)
+	if name == "" {
+		return
+	}
+	for _, ln := range m.tm.Scrollback(name) {
+		tb.appendLine(scrollbackStyle.Render(scrollbackPrefix(ln.Role) + ln.Text))
+	}
+}
+
+// scrollbackPrefix labels a replayed line by its role, mirroring the live render
+// glyphs (you / agent) so seeded history looks like the conversation it replays.
+func scrollbackPrefix(role string) string {
+	switch role {
+	case "user":
+		return glyphYou + " you "
+	case "assistant":
+		return glyphAgent + " "
+	default:
+		return ""
+	}
 }
 
 // removeTab drops a tab and fixes the active selection.
@@ -251,7 +282,10 @@ func (m *model) syncTabs() {
 	m.tabSig = sig
 	live := map[string]bool{}
 	for _, s := range infos {
-		live[s.ChannelID] = true
+		live[s.ChannelID] = true // keep an already-open tab even once archived
+		if s.Archived {
+			continue // archived sessions never auto-open a tab (reopen via /resume)
+		}
 		tb := m.ensureTab(s.ChannelID)
 		if s.Name != "" {
 			tb.label = s.Name

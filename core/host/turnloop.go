@@ -63,6 +63,12 @@ type sessionDriver struct {
 	// persistResume folds a completed turn's backend resume token into durable
 	// state (nil = disabled, e.g. tests and the operator CLI path).
 	persistResume func(token string)
+
+	// emitTap, when set, receives every event the driver fans out — including on
+	// the seed path where gateways is nil. It feeds the daemon's events socket so
+	// an external reader (Neublox) sees the live thinking/status/chunk/reply
+	// stream. nil = no tap (CLI/tests).
+	emitTap func(contracts.Event)
 }
 
 func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event) *sessionDriver {
@@ -410,6 +416,9 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 // posted through the Gateway port, chunked. All rich, platform-specific rendering
 // lives in the gateway — the host only emits abstract semantic events.
 func (d *sessionDriver) fanOut(ctx context.Context, e contracts.Event) {
+	if d.emitTap != nil {
+		d.emitTap(e)
+	}
 	for i, g := range d.gateways {
 		if rs, ok := g.Gateway.(contracts.RoutedEventSink); ok {
 			rs.EmitTo(contracts.Conversation{

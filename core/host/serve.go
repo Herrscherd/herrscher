@@ -226,6 +226,14 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
 	go serveCommandSocket(ctx, CommandSocketPath(instID), hb)
 
+	// Live event stream: a sibling append-only socket carries every session's
+	// bus events (thinking/status/chunk/reply) as JSON lines to any external
+	// reader (Neublox). The seed path (Op::DispatchTask) taps its turns onto it
+	// via seedEventPublisher; absent a subscriber, Publish is a cheap no-op.
+	es := newEventSocket()
+	go serveEventsSocket(ctx, EventsSocketPath(instID), es)
+	seedEventPublisher = es.Publish
+
 	for _, sess := range st.SnapshotSessions() {
 		hb.goLive(sess)
 		_ = sup.Start(sess)

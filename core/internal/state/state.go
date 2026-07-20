@@ -28,6 +28,11 @@ type Session struct {
 	Project   string `json:"project,omitempty"`  // workspace sub-dir the session started from
 	Agent     string `json:"agent,omitempty"`    // durable agent this session was provisioned from ("" = none)
 
+	// ResumeToken is the backend's opaque resume id, folded in from each turn's
+	// reply so a restart can resume the conversation with --resume. Empty =
+	// start fresh.
+	ResumeToken string `json:"resumeToken,omitempty"`
+
 	// Learning config (P1 write side, opt-in). Extractor names a registered
 	// curation extractor; empty keeps the plain Curator (no learning). Journal
 	// is the call-journal path Consolidate reads (worktree-relative is fine).
@@ -206,6 +211,25 @@ func (s *State) RemoveSession(name string) error {
 	}
 	s.Sessions = out
 	return s.saveLocked()
+}
+
+// SetResumeToken records the backend resume token for the named session,
+// persisting only when it changes. Turns report the same id, so this avoids
+// rewriting state.json every turn. A missing session or an unchanged token is a
+// no-op.
+func (s *State) SetResumeToken(name, token string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Sessions {
+		if s.Sessions[i].Name == name {
+			if s.Sessions[i].ResumeToken == token {
+				return nil
+			}
+			s.Sessions[i].ResumeToken = token
+			return s.saveLocked()
+		}
+	}
+	return nil
 }
 
 // SetHome records the home ref and persists.

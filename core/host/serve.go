@@ -224,15 +224,20 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	// see in-memory coordinator state across the process boundary (a fresh CLI has
 	// no live coordinator). Read-only: the accessor never mutates coordinator state.
 	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
-	go serveCommandSocket(ctx, CommandSocketPath(instID), hb)
 
 	// Live event stream: a sibling append-only socket carries every session's
 	// bus events (thinking/status/chunk/reply) as JSON lines to any external
 	// reader (Neublox). The seed path (Op::DispatchTask) taps its turns onto it
 	// via seedEventPublisher; absent a subscriber, Publish is a cheap no-op.
+	// Wired BEFORE serveCommandSocket: that socket receives Op::DispatchTask,
+	// whose seed reads seedEventPublisher — publishing the assignment first
+	// happens-before the command goroutine starts, so the very first dispatched
+	// task already sees the tap (no race, no missed live stream).
 	es := newEventSocket()
 	go serveEventsSocket(ctx, EventsSocketPath(instID), es)
 	seedEventPublisher = es.Publish
+
+	go serveCommandSocket(ctx, CommandSocketPath(instID), hb)
 
 	for _, sess := range st.SnapshotSessions() {
 		hb.goLive(sess)

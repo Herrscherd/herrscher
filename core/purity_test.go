@@ -45,7 +45,7 @@ func TestCorePurity(t *testing.T) {
 // requires: the literal string "discord" must not appear ANYWHERE in core source
 // — not in code, not in comments, not in test fixtures. The core is
 // gateway-agnostic; a concrete platform's name is injected at the composition
-// root (the dctl binary), never hard-coded here. This guard walks every .go file
+// root (the herrscher binary), never hard-coded here. This guard walks every .go file
 // under core/ (excluding itself, which necessarily names the forbidden token to
 // forbid it) and fails on any case-insensitive match.
 func TestCoreNamesNoConcretePlatform(t *testing.T) {

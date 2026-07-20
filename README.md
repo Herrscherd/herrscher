@@ -454,7 +454,7 @@ is a long-lived directory holding its identity and provisioning files, so the sa
 persona can be dropped into a fresh worktree again and again.
 
 An agent home lives at **`<stateDir>/agents/<name>/`**, where `<stateDir>` is
-`$DCTL_STATE_DIR` if set, else `~/.config/dctl` (the directory holding
+`$HERRSCHER_STATE_DIR` if set, else `~/.config/herrscher` (the directory holding
 `state.json`). Each home seeds three source files:
 
 | File in the home | Purpose |
@@ -620,7 +620,7 @@ The packaged binary is named `herrscherd`.
 
 ```bash
 export DISCORD_BOT_TOKEN=...      # required
-export DCTL_OWNER_ID=...          # optional: seeds the allowlist with you
+export HERRSCHER_OWNER_ID=...          # optional: seeds the allowlist with you
 
 ./herrscher serve --health-addr :8787
 ```
@@ -646,23 +646,23 @@ secrets template — it never bakes the token into the unit file.
 
 | OS | What it creates |
 |----|-----------------|
-| **Linux** | systemd **user** unit `~/.config/systemd/user/dctl.service` (`Restart=always`), enables it, runs `loginctl enable-linger` so it survives logout |
-| **macOS** | launchd LaunchAgent `~/Library/LaunchAgents/com.vskstudio.dctl.plist` (`RunAtLoad`, `KeepAlive`) |
-| **Windows** | a Task Scheduler task `dctl` (on-logon trigger) wrapping `herrscher serve` |
+| **Linux** | systemd **user** unit `~/.config/systemd/user/herrscher.service` (`Restart=always`), enables it, runs `loginctl enable-linger` so it survives logout |
+| **macOS** | launchd LaunchAgent `~/Library/LaunchAgents/com.vskstudio.herrscher.plist` (`RunAtLoad`, `KeepAlive`) |
+| **Windows** | a Task Scheduler task `herrscher` (on-logon trigger) wrapping `herrscher serve` |
 
 It also scaffolds (never clobbering existing files):
 
-- `~/.config/dctl/dctl.env` — the secrets file the service sources. Its lines are
+- `~/.config/herrscher/herrscher.env` — the secrets file the service sources. Its lines are
   rendered from the compiled-in gateways' declared manifest vars plus the core
   owner id, so the service package names no platform itself; with the default
   Discord stack that yields `DISCORD_BOT_TOKEN=`, `DISCORD_CHANNEL_ID=`,
-  `DCTL_OWNER_ID=`
-- `~/.config/dctl/config.json` — the config template (see [Configuration](#configuration))
+  `HERRSCHER_OWNER_ID=`
+- `~/.config/herrscher/config.json` — the config template (see [Configuration](#configuration))
 
 Then fill the token and (re)start:
 
 ```bash
-$EDITOR ~/.config/dctl/dctl.env      # set DISCORD_BOT_TOKEN
+$EDITOR ~/.config/herrscher/herrscher.env      # set DISCORD_BOT_TOKEN
 ./herrscher service restart
 ./herrscher service status
 ```
@@ -710,8 +710,8 @@ plugins](#managing-plugins-the-init--plugin--update--install-verbs).
 **Environment:** the **active gateway plugin declares its own required vars** (the
 Discord gateway needs `DISCORD_BOT_TOKEN`); the host resolves them generically.
 Common ones: `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID` (default channel),
-`DCTL_OWNER_ID` (seed allowlist), `DCTL_STATE_DIR` (state dir, default
-`~/.config/dctl`), `DCTL_INSTANCE_ID` (namespace slug for shared resources),
+`HERRSCHER_OWNER_ID` (seed allowlist), `HERRSCHER_STATE_DIR` (state dir, default
+`~/.config/herrscher`), `HERRSCHER_INSTANCE_ID` (namespace slug for shared resources),
 `OBSIDIAN_VAULT` (memory vault path, optional — auto-provisioned at
 `~/.herrscher/memory` if unset). All
 of these can be supplied via the root `.env` (see [Configuration](#configuration)).
@@ -853,7 +853,7 @@ failure there is fatal. A `.env.example` ships as a fill-in skeleton; `herrscher
 init` seeds `.env` from it. Which keys are required depends on the active gateway
 plugin (the Discord gateway needs `DISCORD_BOT_TOKEN`).
 
-`~/.config/dctl/config.json`:
+`~/.config/herrscher/config.json`:
 
 ```json
 {

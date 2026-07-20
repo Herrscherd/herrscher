@@ -10,11 +10,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
-// runService installs/uninstalls/inspects the `dctl serve` daemon as a native
+// runService installs/uninstalls/inspects the `herrscher serve` daemon as a native
 // boot-started service (systemd user unit on Linux, launchd LaunchAgent on
 // macOS, Task Scheduler task on Windows).
 func runService(ctx context.Context, args []string) error {
-	const usage = "usage: dctl service <install|uninstall|status|restart|update> [--health-addr ADDR] [--env-file PATH] [--cmd 'claude …'] [--source DIR] [--no-pull]"
+	const usage = "usage: herrscher service <install|uninstall|status|restart|update> [--health-addr ADDR] [--env-file PATH] [--cmd 'claude …'] [--source DIR] [--no-pull]"
 	if len(args) == 0 {
 		return errors.New(usage)
 	}
@@ -22,7 +22,7 @@ func runService(ctx context.Context, args []string) error {
 	switch sub {
 	case "install", "uninstall", "status", "restart", "update":
 	default:
-		return fmt.Errorf("dctl service: unknown subcommand %q (want install|uninstall|status|restart|update)", sub)
+		return fmt.Errorf("herrscher service: unknown subcommand %q (want install|uninstall|status|restart|update)", sub)
 	}
 
 	cfg, err := service.DefaultConfig()
@@ -37,7 +37,7 @@ func runService(ctx context.Context, args []string) error {
 		if err := service.Restart(ctx, cfg); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "dctl service: restarted")
+		fmt.Fprintln(os.Stderr, "herrscher service: restarted")
 		return nil
 	case "update":
 		return runServiceUpdate(ctx, cfg, args[1:])
@@ -56,7 +56,7 @@ func runService(ctx context.Context, args []string) error {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return fmt.Errorf("dctl service %s: unexpected argument %q\n%s", sub, fs.Arg(0), usage)
+		return fmt.Errorf("herrscher service %s: unexpected argument %q\n%s", sub, fs.Arg(0), usage)
 	}
 	cfg.HealthAddr = *healthAddr
 	cfg.EnvFile = *envFile
@@ -73,42 +73,42 @@ func runService(ctx context.Context, args []string) error {
 		if err := service.Uninstall(ctx, cfg); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "dctl service: removed")
+		fmt.Fprintln(os.Stderr, "herrscher service: removed")
 		return nil
 	case "status":
 		return service.Status(ctx, cfg)
 	default:
-		return fmt.Errorf("dctl service: unknown subcommand %q (want install|uninstall|status)", sub)
+		return fmt.Errorf("herrscher service: unknown subcommand %q (want install|uninstall|status)", sub)
 	}
 }
 
-// runServiceUpdate handles `dctl service update [--source DIR] [--no-pull]`:
+// runServiceUpdate handles `herrscher service update [--source DIR] [--no-pull]`:
 // (git pull +) rebuild the binary from source, then restart the service. The
 // source defaults to the current directory — the natural spot to run it right
 // after a local merge.
 func runServiceUpdate(ctx context.Context, cfg service.Config, args []string) error {
 	cwd, _ := os.Getwd()
 	fs := flag.NewFlagSet("service update", flag.ContinueOnError)
-	source := fs.String("source", cwd, "path to the dctl source checkout to build from")
+	source := fs.String("source", cwd, "path to the herrscher source checkout to build from")
 	noPull := fs.Bool("no-pull", false, "skip `git pull --ff-only` before building")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return fmt.Errorf("dctl service update: unexpected argument %q", fs.Arg(0))
+		return fmt.Errorf("herrscher service update: unexpected argument %q", fs.Arg(0))
 	}
 	// cfg.BinPath is os.Executable() — the binary running this command. If that
 	// isn't the binary the installed service runs (e.g. invoked from a build
 	// dir), rebuild the installed one instead, so the update isn't a silent
 	// no-op on the daemon.
 	if installed, ok := service.InstalledBinPath(cfg); ok && installed != cfg.BinPath {
-		fmt.Fprintf(os.Stderr, "dctl service: rebuilding the installed binary %s (you ran %s)\n", installed, cfg.BinPath)
+		fmt.Fprintf(os.Stderr, "herrscher service: rebuilding the installed binary %s (you ran %s)\n", installed, cfg.BinPath)
 		cfg.BinPath = installed
 	}
 	if err := service.Update(ctx, cfg, *source, !*noPull); err != nil {
 		return err
 	}
 	v := service.SourceVersion(ctx, *source)
-	fmt.Fprintf(os.Stderr, "dctl service: rebuilt %s and restarted\n", v)
+	fmt.Fprintf(os.Stderr, "herrscher service: rebuilt %s and restarted\n", v)
 	return nil
 }

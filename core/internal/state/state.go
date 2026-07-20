@@ -77,7 +77,7 @@ type State struct {
 	Home            HomeRef    `json:"home"`
 	Repo            string     `json:"repo,omitempty"`      // legacy single-repo root; defaults to daemon cwd
 	Workspace       string     `json:"workspace,omitempty"` // abs path to the workspace root; preferred over Repo
-	Source          string     `json:"source,omitempty"`    // abs path to the dctl source checkout (for /service update)
+	Source          string     `json:"source,omitempty"`    // abs path to the herrscher source checkout (for /service update)
 	Sessions        []Session  `json:"sessions"`
 	StatusMessageID string     `json:"statusMessageID,omitempty"` // cached id of the status embed
 	InstanceID      string     `json:"instanceID,omitempty"`      // per-daemon namespace for global resources; "" = legacy
@@ -258,7 +258,7 @@ func (s *State) WorkspaceRoot() string {
 	return s.Repo
 }
 
-// SetSource records the dctl source-checkout path and persists.
+// SetSource records the herrscher source-checkout path and persists.
 func (s *State) SetSource(path string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -266,7 +266,7 @@ func (s *State) SetSource(path string) error {
 	return s.saveLocked()
 }
 
-// SourceDir returns the configured dctl source checkout, else "".
+// SourceDir returns the configured herrscher source checkout, else "".
 func (s *State) SourceDir() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()

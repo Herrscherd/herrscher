@@ -40,8 +40,8 @@ func runServe(ctx context.Context, args []string) error {
 	defaultCmd := fs.String("cmd", or(cfg.Cmd, "claude"), "default bridged base command for new sessions (stream-json mode adds -p and the stream flags)")
 	healthAddr := fs.String("health-addr", cfg.HealthAddr, "if set (e.g. :8787), serve GET /health")
 	statusChannel := fs.String("status-channel", cfg.StatusChannel, "if set, maintain a self-updating status embed there")
-	instanceID := fs.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID (legacy DCTL_INSTANCE_ID) then config.json")
-	envFile := fs.String("env-file", "", "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `dctl service`)")
+	instanceID := fs.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID then config.json")
+	envFile := fs.String("env-file", "", "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)")
 	fs.Parse(args)
 	if *envFile != "" {
 		// Load secrets in Go rather than via a shell/batch wrapper, so the gateway
@@ -51,7 +51,7 @@ func runServe(ctx context.Context, args []string) error {
 			return err
 		}
 	}
-	// Owner: env HERRSCHER_OWNER_ID (legacy DCTL_OWNER_ID) wins over config.json
+	// Owner: env HERRSCHER_OWNER_ID wins over config.json
 	// (the owner id is kept in env alongside the token), then config seeds it for
 	// declarative setups.
 	owner := or(envx.Get("OWNER_ID"), cfg.Owner)

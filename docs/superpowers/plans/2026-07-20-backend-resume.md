@@ -347,9 +347,9 @@ Expected: FAIL — `Session` has no field `ResumeToken`; `SetResumeToken` undefi
 
 In `state.go`, add to the `Session` struct (after the `Agent` field):
 ```go
-	// ResumeToken is the backend's opaque resume id (e.g. claude's stable
-	// session_id), folded in from each turn's reply so a restart can resume the
-	// conversation with --resume. Empty = start fresh.
+	// ResumeToken is the backend's opaque resume id, folded in from each turn's
+	// reply so a restart can resume the conversation with --resume. Empty =
+	// start fresh.
 	ResumeToken string `json:"resumeToken,omitempty"`
 ```
 
@@ -420,7 +420,7 @@ import (
 
 func TestBridgeArgsIncludesResume(t *testing.T) {
 	s := NewSupervisor(context.Background(), "herrscher")
-	args := s.bridgeArgs(state.Session{Name: "main", ChannelID: "c1", Cmd: "claude", ResumeToken: "sid-1"})
+	args := s.bridgeArgs(state.Session{Name: "main", ChannelID: "c1", Cmd: "run", ResumeToken: "sid-1"})
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "--resume sid-1") {
 		t.Fatalf("bridgeArgs must pass --resume sid-1; got %q", joined)
@@ -429,7 +429,7 @@ func TestBridgeArgsIncludesResume(t *testing.T) {
 
 func TestBridgeArgsOmitsResumeWhenEmpty(t *testing.T) {
 	s := NewSupervisor(context.Background(), "herrscher")
-	args := s.bridgeArgs(state.Session{Name: "main", ChannelID: "c1", Cmd: "claude"})
+	args := s.bridgeArgs(state.Session{Name: "main", ChannelID: "c1", Cmd: "run"})
 	if strings.Contains(strings.Join(args, " "), "--resume") {
 		t.Fatalf("no --resume expected for empty token; got %v", args)
 	}
@@ -482,7 +482,7 @@ In `core/host/seed_test.go:76`, change:
 ```
 In `bridge.go`, add the flag next to the other `fs.String` declarations:
 ```go
-	resume := fs.String("resume", "", "backend resume token (claude session id) to resume the conversation on start")
+	resume := fs.String("resume", "", "backend resume token to resume the conversation on start")
 ```
 and change the `BuildBackend` call inside `newBackend`:
 ```go

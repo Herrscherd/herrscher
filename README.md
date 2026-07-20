@@ -397,6 +397,15 @@ stateDiagram-v2
   worktree before the channel is created. This requires an isolated git worktree —
   it is rejected with `shared:true` or a non-git project. The session records
   which agent it was provisioned from (see [Durable agents](#durable-agents)).
+- **The conversation survives restarts.** Each session persists an opaque backend
+  *resume token* — the model process's own conversation id, folded in from every
+  turn's reply and rewritten only when it changes (no `state.json` churn). When the
+  supervisor respawns the bridge — after a crash, a `service restart`, or a reboot —
+  it passes that token back so the model **resumes the same conversation** instead
+  of starting cold. Core never sees a vendor: the token is an opaque `string`
+  carried through a neutral `ResumeAware` seam. Backends with no resume mechanism
+  fall back to a fresh start, and sessions created before the feature carry no
+  token and behave exactly as before.
 
 ---
 

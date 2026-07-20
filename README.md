@@ -11,8 +11,8 @@ This is the **single binary**: the agnostic domain (`core`), the composition roo
 and daemon, and the plugin-management CLI all live here in one module. The
 swappable edges — the channel gateway, the model backend, memory and the
 orchestrator — stay in their own repos and are compiled in. The host itself is
-**gateway-agnostic**: it imports zero `dctl` (the concrete Discord client) and
-drives chat platforms only through the contracts `Gateway` port — an invariant
+**gateway-agnostic**: it imports no concrete Discord client and drives chat
+platforms only through the contracts `Gateway` port — an invariant
 guarded by purity tests (`TestHostPurity`, `TestCorePurity`, and
 `TestCoreNamesNoConcretePlatform`, which greps every `core/` source file and
 fails the build if the literal name of a concrete platform appears anywhere —
@@ -104,8 +104,8 @@ flowchart TB
 
 **The golden rule** is the arrows above: everything points *in* toward
 `contracts`. That is what makes the edges swappable and the domain stable.
-Neither the host nor `core` ever imports a concrete adapter: there is no `dctl`
-anywhere in this module — it lives only in the Discord gateway plugin. The host
+Neither the host nor `core` ever imports a concrete adapter: no concrete Discord
+client appears anywhere in this module — it lives only in the Discord gateway plugin. The host
 talks to every chat platform through the contracts `Gateway` port, and that
 invariant is enforced by `TestHostPurity` (root) and `TestCorePurity` (`core/`),
 which fail the build if a concrete client ever leaks in. `core` goes one step
@@ -198,13 +198,11 @@ import the ports without pulling in the host.
 
 The **edges** are interchangeable plugins, each its own repo, **not** part of the
 binary's module — they are the official Gateway, Backend, Memory and Orchestrator
-listed in the table above. [`dctl`] is not a family member either: it is the
-pure, dependency-free Discord REST client (v10) the **gateway plugin** consumes —
-no gateway socket, no CLI, just on-demand HTTP. The host never imports it (it
-shows up only as an *indirect* dependency, pulled in transitively by the gateway
-plugin).
-
-[`dctl`]: https://github.com/Herrscherd/dctl
+listed in the table above. The **low-level Discord REST client** is not a family
+member either: it is the pure, dependency-free Discord REST client (v10) the
+**gateway plugin** consumes — no gateway socket, no CLI, just on-demand HTTP. The
+host never imports it (it shows up only as an *indirect* dependency, pulled in
+transitively by the gateway plugin).
 
 ---
 
@@ -711,8 +709,8 @@ daemon being killed mid-restart.
 `herrscher <command>`. Output is deliberately minimal (ids and one-line
 messages) so an agent reading stdout spends few tokens. The host exposes no raw
 channel verbs of its own — all chat I/O goes through the active gateway plugin's
-`Gateway` port; the low-level Discord poking lives in `dctl`, consumed by the
-gateway plugin alone.
+`Gateway` port; the low-level Discord poking lives in a separate REST client,
+consumed by the gateway plugin alone.
 
 | Command | What it does |
 |---------|--------------|
@@ -913,7 +911,7 @@ plugin (the Discord gateway needs `DISCORD_BOT_TOKEN`).
 
 ## A note on history
 
-The platform grew out of a Go monolith (`dctl`) that bridged Discord to a local
+The platform grew out of a Go monolith that bridged Discord to a local
 Claude. Herrscher is that monolith decomposed along its natural seams — channel,
 model, domain — so each can evolve independently. The contract shapes were chosen
 deliberately to make the eventual transport change (in-process → NATS/gRPC) a

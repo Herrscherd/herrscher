@@ -59,6 +59,10 @@ type sessionDriver struct {
 	// operator CLI path and in tests that don't exercise coordination, where
 	// maybeCoordinate simply no-ops.
 	coordinator contracts.Coordinator
+
+	// persistResume folds a completed turn's backend resume token into durable
+	// state (nil = disabled, e.g. tests and the operator CLI path).
+	persistResume func(token string)
 }
 
 func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event) *sessionDriver {
@@ -303,6 +307,9 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 			}
 			d.fanOut(ctx, e)
 			if e.T == "reply" && e.Done {
+				if d.persistResume != nil && e.Resume != "" {
+					d.persistResume(e.Resume)
+				}
 				d.seenMu.Lock()
 				if d.pendingReply != nil {
 					d.pendingReply <- e.Text
@@ -449,7 +456,7 @@ func (d *sessionDriver) renderChannel(g contracts.GatewaySet) string {
 // supervisor restart). It blocks until ctx is cancelled. coord is the Model-O
 // handoff coordinator (nil in the short-lived operator CLI path, where a
 // completed turn's handoff trailer, if any, is simply ignored).
-func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator) {
+func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string)) {
 	defer acc.Close() // own the acceptor: close the listener + remove the socket on shutdown
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
@@ -458,6 +465,7 @@ func RunSession(ctx context.Context, name, channel string, gws []contracts.Gatew
 	d.participants = participants
 	d.metrics = m
 	d.coordinator = coord
+	d.persistResume = persistResume
 	registerDriver(name, d)
 	defer unregisterDriver(name)
 	go d.run(ctx)

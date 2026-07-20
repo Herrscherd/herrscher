@@ -389,17 +389,27 @@ const sessionLogTranscriptCap = 200
 // {ts,role,text,cost}, oldest-first, capped. A never-run session has no file →
 // empty array, not an error (a fresh session legitimately has no history).
 func (h *Handler) sessionLogRun(_ context.Context, in contracts.Input) (string, error) {
-	name, ok := in.Lookup("name")
+	raw, ok := in.Lookup("name")
 	if !ok {
 		return "", fmt.Errorf("missing name")
 	}
-	cap := sessionLogTranscriptCap
-	if raw, ok := in.Lookup("limit"); ok {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
-			cap = n
+	// Sanitize like `session create`: slugify + validate. A crafted name such as
+	// "../../etc/passwd" thus can never traverse out of the transcripts dir, and
+	// an invalid or never-recorded name simply has no history → empty, not error.
+	name := slugify(raw)
+	if name == "" || !sessionNameRe.MatchString(name) {
+		if in.JSON {
+			return "[]", nil
+		}
+		return "No transcript yet.", nil
+	}
+	limit := sessionLogTranscriptCap
+	if lraw, ok := in.Lookup("limit"); ok {
+		if n, err := strconv.Atoi(lraw); err == nil && n > 0 {
+			limit = n
 		}
 	}
-	entries := state.ReadTranscript(state.TranscriptPath(h.partDir, name), cap)
+	entries := state.ReadTranscript(state.TranscriptPath(h.partDir, name), limit)
 	if in.JSON {
 		if entries == nil {
 			entries = []state.TranscriptEntry{} // marshal [] not null

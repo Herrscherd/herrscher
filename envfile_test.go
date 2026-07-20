@@ -8,22 +8,22 @@ import (
 
 func TestLoadEnvFile(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "dctl.env")
+	path := filepath.Join(dir, "herrscher.env")
 	content := "# a comment\n" +
 		"\n" +
-		"DCTL_TEST_TOKEN=abc.def-ghi\n" +
-		"export DCTL_TEST_EXPORTED=fromfile\n" +
-		"export\tDCTL_TEST_TABEXPORT=tabbed\n" +
-		`DCTL_TEST_QUOTED="a b c"` + "\n" +
-		"DCTL_TEST_EQUALS=k=v=w\n" +
-		"   DCTL_TEST_SPACED   =  trimmed  \n" +
-		"#DCTL_TEST_COMMENTED=nope\n"
+		"HERRSCHER_TEST_TOKEN=abc.def-ghi\n" +
+		"export HERRSCHER_TEST_EXPORTED=fromfile\n" +
+		"export\tHERRSCHER_TEST_TABEXPORT=tabbed\n" +
+		`HERRSCHER_TEST_QUOTED="a b c"` + "\n" +
+		"HERRSCHER_TEST_EQUALS=k=v=w\n" +
+		"   HERRSCHER_TEST_SPACED   =  trimmed  \n" +
+		"#HERRSCHER_TEST_COMMENTED=nope\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for _, k := range []string{
-		"DCTL_TEST_TOKEN", "DCTL_TEST_EXPORTED", "DCTL_TEST_TABEXPORT", "DCTL_TEST_QUOTED",
-		"DCTL_TEST_EQUALS", "DCTL_TEST_SPACED", "DCTL_TEST_COMMENTED",
+		"HERRSCHER_TEST_TOKEN", "HERRSCHER_TEST_EXPORTED", "HERRSCHER_TEST_TABEXPORT", "HERRSCHER_TEST_QUOTED",
+		"HERRSCHER_TEST_EQUALS", "HERRSCHER_TEST_SPACED", "HERRSCHER_TEST_COMMENTED",
 	} {
 		os.Unsetenv(k)
 		t.Cleanup(func() { os.Unsetenv(k) })
@@ -32,13 +32,13 @@ func TestLoadEnvFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string]string{
-		"DCTL_TEST_TOKEN":     "abc.def-ghi",
-		"DCTL_TEST_EXPORTED":  "fromfile", // leading `export ` stripped
-		"DCTL_TEST_TABEXPORT": "tabbed",   // `export\t` (tab) stripped too
-		"DCTL_TEST_QUOTED":    "a b c",    // surrounding quotes stripped, space preserved
-		"DCTL_TEST_EQUALS":    "k=v=w",    // only the first '=' splits
-		"DCTL_TEST_SPACED":    "trimmed",  // key and value trimmed
-		"DCTL_TEST_COMMENTED": "",         // commented line ignored
+		"HERRSCHER_TEST_TOKEN":     "abc.def-ghi",
+		"HERRSCHER_TEST_EXPORTED":  "fromfile", // leading `export ` stripped
+		"HERRSCHER_TEST_TABEXPORT": "tabbed",   // `export\t` (tab) stripped too
+		"HERRSCHER_TEST_QUOTED":    "a b c",    // surrounding quotes stripped, space preserved
+		"HERRSCHER_TEST_EQUALS":    "k=v=w",    // only the first '=' splits
+		"HERRSCHER_TEST_SPACED":    "trimmed",  // key and value trimmed
+		"HERRSCHER_TEST_COMMENTED": "",         // commented line ignored
 	}
 	for k, want := range cases {
 		if got := os.Getenv(k); got != want {
@@ -49,15 +49,15 @@ func TestLoadEnvFile(t *testing.T) {
 
 func TestLoadEnvFileRespectsExistingEnv(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "dctl.env")
-	if err := os.WriteFile(path, []byte("DCTL_TEST_PRESET=fromfile\n"), 0o600); err != nil {
+	path := filepath.Join(dir, "herrscher.env")
+	if err := os.WriteFile(path, []byte("HERRSCHER_TEST_PRESET=fromfile\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("DCTL_TEST_PRESET", "fromenv")
+	t.Setenv("HERRSCHER_TEST_PRESET", "fromenv")
 	if err := loadEnvFile(path); err != nil {
 		t.Fatal(err)
 	}
-	if got := os.Getenv("DCTL_TEST_PRESET"); got != "fromenv" {
+	if got := os.Getenv("HERRSCHER_TEST_PRESET"); got != "fromenv" {
 		t.Errorf("real env should win over the file, got %q", got)
 	}
 }

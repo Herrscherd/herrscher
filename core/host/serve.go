@@ -113,7 +113,7 @@ func DefaultStatePath() string {
 		return filepath.Join(d, "state.json")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "dctl", "state.json")
+	return filepath.Join(home, ".config", "herrscher", "state.json")
 }
 
 // resolveInstanceID computes and freezes the daemon's instanceID, per Spec §2/§8.

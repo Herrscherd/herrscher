@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -13,12 +12,7 @@ import (
 )
 
 // sessionsDir is the per-repo directory that holds session worktrees.
-// legacySessionsDir is the pre-rename name; Path falls back to it so worktrees
-// created before the rename keep resolving.
-const (
-	sessionsDir       = ".herrscher-sessions"
-	legacySessionsDir = ".dctl-sessions"
-)
+const sessionsDir = ".herrscher-sessions"
 
 // Worktreer manages git worktrees. It is repo-stateless: the repo root is passed
 // to each method, so one Worktreer serves every project in the workspace.
@@ -26,7 +20,6 @@ const (
 // <repo>/.herrscher-sessions/<instanceID>/<name> on branch session/<instanceID>/<name>;
 // with an empty instanceID (legacy) under <repo>/.herrscher-sessions/<name> on
 // branch session/<name>, so multiple daemons sharing a repo never collide.
-// The legacy .dctl-sessions directory is still resolved for pre-rename worktrees.
 type Worktreer struct {
 	ctx        context.Context
 	instanceID string
@@ -43,19 +36,9 @@ func (w *Worktreer) isGitRepo(repo string) bool {
 }
 
 // Path returns the on-disk worktree directory for a logical session name inside
-// repo, namespaced by instanceID when set. If the current-name path is absent
-// but a legacy .dctl-sessions path exists, the legacy path is returned so
-// worktrees created before the rename keep resolving.
+// repo, namespaced by instanceID when set.
 func (w *Worktreer) Path(repo, name string) string {
-	p := w.pathIn(repo, sessionsDir, name)
-	if _, err := os.Stat(p); err != nil {
-		if legacy := w.pathIn(repo, legacySessionsDir, name); legacy != p {
-			if _, err := os.Stat(legacy); err == nil {
-				return legacy
-			}
-		}
-	}
-	return p
+	return w.pathIn(repo, sessionsDir, name)
 }
 
 func (w *Worktreer) pathIn(repo, dir, name string) string {

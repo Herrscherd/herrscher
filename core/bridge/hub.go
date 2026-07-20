@@ -119,11 +119,14 @@ func runPick(ctx context.Context, sink contracts.EventSink, resp contracts.Backe
 	sink.Emit(contracts.Event{T: "reply", Text: strings.TrimSpace(out), Done: true})
 }
 
-// emitBackendEvent maps a backend progress event onto the bus vocabulary: text
-// → chunk, tool → status (dropped when empty), reset → reset; others (result)
-// carry no transcript and are dropped. Mirrors the relocated runner.emitBackend.
+// emitBackendEvent maps a backend progress event onto the bus vocabulary:
+// thinking → thinking, text → chunk, tool → status (dropped when empty), reset
+// → reset; others (result) carry no transcript and are dropped. Mirrors the
+// relocated runner.emitBackend.
 func emitBackendEvent(sink contracts.EventSink, be contracts.BackendEvent) {
 	switch be.Kind {
+	case "thinking":
+		sink.Emit(contracts.Event{T: "thinking", Text: be.Detail})
 	case "text":
 		sink.Emit(contracts.Event{T: "chunk", Text: be.Detail})
 	case "tool":

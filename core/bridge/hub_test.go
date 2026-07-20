@@ -54,6 +54,15 @@ func TestRunHubReplyCarriesCost(t *testing.T) {
 	}
 }
 
+func TestEmitBackendEventThinking(t *testing.T) {
+	sink := &recordSink{}
+	emitBackendEvent(sink, contracts.BackendEvent{Kind: "thinking", Detail: "je réfléchis"})
+	want := []contracts.Event{{T: "thinking", Text: "je réfléchis"}}
+	if len(sink.events) != len(want) || sink.events[0] != want[0] {
+		t.Fatalf("emitted %+v, want %+v", sink.events, want)
+	}
+}
+
 func TestRunHubOneTurn(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 2)

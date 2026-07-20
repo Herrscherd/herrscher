@@ -180,10 +180,12 @@ type closeCall struct {
 }
 
 type fakeSessionControl struct {
-	lastArgs []string
-	sessions []contracts.SessionInfo
-	created  []contracts.CreateSession
-	closed   []closeCall
+	lastArgs   []string
+	sessions   []contracts.SessionInfo
+	created    []contracts.CreateSession
+	closed     []closeCall
+	scrollback []contracts.ScrollbackLine
+	resumed    []string
 }
 
 func (f *fakeSessionControl) Dispatch(_ context.Context, args []string) (string, error) {
@@ -202,6 +204,15 @@ func (f *fakeSessionControl) Close(_ context.Context, name string, force bool) (
 }
 
 func (f *fakeSessionControl) Sessions() []contracts.SessionInfo { return f.sessions }
+
+func (f *fakeSessionControl) Scrollback(name string) []contracts.ScrollbackLine {
+	return f.scrollback
+}
+
+func (f *fakeSessionControl) Resume(name string) error {
+	f.resumed = append(f.resumed, name)
+	return nil
+}
 
 func TestDispatchDefaultsSessionCreateToTerminal(t *testing.T) {
 	tm := New()

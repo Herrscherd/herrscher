@@ -34,6 +34,7 @@ func runBridge(ctx context.Context, args []string) error {
 	extractor := fs.String("extractor", "", "name of a registered curation extractor — enables the P1 learning loop (empty = plain Curator, no learning)")
 	journal := fs.String("journal", "", "path to the call journal Consolidate reads (worktree-relative ok); only used with --extractor")
 	consolidateEvery := fs.Int("consolidate-every", 0, "run Consolidate every N turns (0 = manual only); only used with --extractor")
+	resume := fs.String("resume", "", "backend resume token to resume the conversation on start")
 	fs.Parse(args)
 
 	log := host.Logger(*verbose).With("component", "bridge", "session", *session)
@@ -51,7 +52,7 @@ func runBridge(ctx context.Context, args []string) error {
 		} else if be != nil {
 			return be, nil
 		}
-		return host.BuildBackend(ctx, *vendor, *cmdStr, *backend, "")
+		return host.BuildBackend(ctx, *vendor, *cmdStr, *backend, "", *resume)
 	}
 
 	mem := buildMemory(ctx, log)

@@ -73,7 +73,7 @@ func TestBuildBackendSelectsByVendor(t *testing.T) {
 	contracts.Default.Register(makePlugin("claude"))
 	contracts.Default.Register(makePlugin("codex"))
 
-	if _, err := BuildBackend(context.Background(), "codex", "codex --model gpt-5.6", "", ""); err != nil {
+	if _, err := BuildBackend(context.Background(), "codex", "codex --model gpt-5.6", "", "", ""); err != nil {
 		t.Fatalf("BuildBackend: %v", err)
 	}
 	if built != "codex" {

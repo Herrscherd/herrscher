@@ -324,8 +324,8 @@ func TestHelpReducesViewportHeight(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	base := m.vp.Height
 	m.toggleHelp()
-	if m.vp.Height != base-4 {
-		t.Fatalf("help must shrink viewport by the 4-line help block: base=%d now=%d", base, m.vp.Height)
+	if m.vp.Height != base-5 {
+		t.Fatalf("help must shrink viewport by the 5-line help block: base=%d now=%d", base, m.vp.Height)
 	}
 	m.toggleHelp()
 	if m.vp.Height != base {

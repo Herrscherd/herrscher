@@ -59,6 +59,9 @@ func (s *Supervisor) bridgeArgs(sess state.Session) []string {
 	if sess.ConsolidateEvery > 0 {
 		args = append(args, "--consolidate-every", strconv.Itoa(sess.ConsolidateEvery))
 	}
+	if sess.ResumeToken != "" {
+		args = append(args, "--resume", sess.ResumeToken)
+	}
 	return args
 }
 

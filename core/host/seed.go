@@ -117,7 +117,7 @@ func ApplyOrchestratorScope(cfg *contracts.PluginConfig, session, project, agent
 // BuildBackend selects and constructs a backend by vendor. A remote resolver
 // backend wins when configured; otherwise the matching registered plugin is
 // built with the invocation, backend kind, and working directory settings.
-func BuildBackend(ctx context.Context, vendor, cmd, kind, dir string) (contracts.Backend, error) {
+func BuildBackend(ctx context.Context, vendor, cmd, kind, dir, resume string) (contracts.Backend, error) {
 	desired := vendor
 	if desired == "" {
 		desired = os.Getenv("HERRSCHER_BACKEND")
@@ -149,11 +149,14 @@ func BuildBackend(ctx context.Context, vendor, cmd, kind, dir string) (contracts
 	if dir != "" {
 		cfg.Settings["dir"] = dir
 	}
+	if resume != "" {
+		cfg.Settings["resume"] = resume
+	}
 	return plugin.Backend(ctx, cfg)
 }
 
 func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend, error) {
-	return BuildBackend(ctx, sess.Vendor, sess.Cmd, sess.Backend, sess.Worktree)
+	return BuildBackend(ctx, sess.Vendor, sess.Cmd, sess.Backend, sess.Worktree, sess.ResumeToken)
 }
 
 func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin, error) {

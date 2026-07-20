@@ -133,6 +133,15 @@ type model struct {
 	resumeOpen bool                    // whether the /resume picker overlay is open
 	resumeIdx  int                     // selected row in the /resume picker
 	resumeRows []contracts.SessionInfo // picker rows, sorted by LastTs desc
+
+	tabHits []tabHit // clickable screen-X spans of the visible tabs, set each render
+}
+
+// tabHit is the horizontal screen-cell span [x0, x1) a rendered tab occupies on
+// the strip row, recorded so a mouse click can be mapped back to its session.
+type tabHit struct {
+	ch     string
+	x0, x1 int
 }
 
 // chromeHeight is the number of non-viewport rows View renders: the brand row, the
@@ -400,10 +409,35 @@ func (m *model) switchTab(delta int) {
 		}
 	}
 	idx = (idx + delta + len(m.order)) % len(m.order)
-	m.active = m.order[idx]
-	m.tabs[m.active].unread = false
+	m.activate(m.order[idx])
+}
+
+// activate focuses the tab for ch: it clears its unread marker and snaps the
+// viewport to its latest output. A no-op if ch is already active or unknown, so
+// re-clicking the current tab does not fight an in-progress scroll.
+func (m *model) activate(ch string) {
+	if ch == m.active || m.tabs[ch] == nil {
+		return
+	}
+	m.active = ch
+	m.tabs[ch].unread = false
 	m.syncViewport()
 	m.vp.GotoBottom() // a freshly switched-to tab starts at its latest output
+}
+
+// tabAt returns the session channel whose tab covers screen cell (x, y), or ""
+// if the click is not on the tab strip. The strip is the panel's third row
+// (border, brand, tabs); tabHits already carry absolute screen-X spans.
+func (m *model) tabAt(x, y int) string {
+	if y != tabStripScreenY {
+		return ""
+	}
+	for _, h := range m.tabHits {
+		if x >= h.x0 && x < h.x1 {
+			return h.ch
+		}
+	}
+	return ""
 }
 
 func (m *model) renderInto(tb *tab, e contracts.Event) {
@@ -522,9 +556,20 @@ func (m *model) brandRow() string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
+// Layout landmarks for mouse hit-testing, in absolute screen cells. The panel's
+// rounded border and horizontal padding shift content one cell in on each side,
+// so the first content column is 2; rows are border(0), brand(1), tabs(2).
+const (
+	tabStripContentX = 2
+	tabStripScreenY  = 2
+)
+
 // tabStrip renders the session tabs: active tab highlighted with the brand glyph,
-// unread marked with •, busy with ⟳, left-truncated around the active tab when wide.
+// unread marked with •, busy with ⟳, left-truncated around the active tab when
+// wide. It also records each visible tab's screen-X span in m.tabHits so a click
+// can be routed back to its session.
 func (m *model) tabStrip() string {
+	m.tabHits = m.tabHits[:0]
 	if len(m.order) == 0 {
 		return statusStyle.Render("no sessions — /session create <name>")
 	}
@@ -545,21 +590,32 @@ func (m *model) tabStrip() string {
 			segs[i] = marker + inactiveTabStyle.Render(tb.label) + " "
 		}
 	}
-	return fitTabs(segs, active, m.innerWidth())
+	start, prefix := fitTabs(segs, active, m.innerWidth())
+	// Map each visible segment to an absolute screen-X span: content starts at
+	// tabStripContentX, shifted right by the elision prefix ("‹ ") when present.
+	x := tabStripContentX + lipgloss.Width(prefix)
+	for i := start; i < len(segs); i++ {
+		w := lipgloss.Width(segs[i])
+		m.tabHits = append(m.tabHits, tabHit{ch: m.order[i], x0: x, x1: x + w})
+		x += w
+	}
+	return prefix + strings.Join(segs[start:], "")
 }
 
-// fitTabs joins tab segments, dropping whole tabs from the front (never past the
-// active one) until the active tab fits the width; a leading ‹ marks elision.
-func fitTabs(segs []string, active, width int) string {
+// fitTabs decides how many leading tab segments to drop, never past the active
+// one, until the active tab fits width; it returns the first visible index and
+// the leading ‹ prefix (empty when nothing is elided). The caller joins
+// segs[start:] behind prefix and records hitboxes from the same start.
+func fitTabs(segs []string, active, width int) (int, string) {
 	start := 0
 	for {
-		joined := strings.Join(segs[start:], "")
 		prefix := ""
 		if start > 0 {
 			prefix = statusStyle.Render("‹ ")
 		}
+		joined := strings.Join(segs[start:], "")
 		if lipgloss.Width(prefix)+lipgloss.Width(joined) <= width || start >= active {
-			return prefix + joined
+			return start, prefix
 		}
 		start++
 	}
@@ -614,7 +670,15 @@ func formatCost(c float64) string {
 // cleanly.
 func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
 	m := newModel(tm)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	// WithInput strips the terminal's in-band colour/cursor query responses before
+	// they reach the key parser (see filteredStdin); WithMouseCellMotion enables
+	// click-to-focus on the tab strip. filteredStdin embeds os.Stdin, so raw mode
+	// and TTY detection still apply to the real terminal.
+	p := tea.NewProgram(m,
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+		tea.WithInput(newFilteredStdin()),
+	)
 	go func() {
 		for {
 			select {
@@ -661,6 +725,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.input.Width = m.innerWidth() - 2
 		m.syncViewport()
+	case tea.MouseMsg:
+		// Left-click on the tab strip focuses that session; everything else
+		// (including wheel scroll) falls through to the viewport below.
+		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
+			if ch := m.tabAt(msg.X, msg.Y); ch != "" {
+				m.activate(ch)
+				return m, nil
+			}
+		}
 	case tea.KeyMsg:
 		m.flash = "" // any keypress clears a transient status
 		// Two-step close confirm: if waiting for confirmation, next key decides.

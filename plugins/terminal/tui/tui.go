@@ -129,6 +129,10 @@ type model struct {
 	palIdx       int           // selected row in the open command palette
 	palWasOpen   bool          // palette open-state after the previous key, to skip idle re-fits
 	spinning     bool          // whether the animation timer is currently running
+
+	resumeOpen bool                    // whether the /resume picker overlay is open
+	resumeIdx  int                     // selected row in the /resume picker
+	resumeRows []contracts.SessionInfo // picker rows, sorted by LastTs desc
 }
 
 // chromeHeight is the number of non-viewport rows View renders: the brand row, the
@@ -141,6 +145,9 @@ func (m *model) chromeHeight() int {
 	}
 	if m.paletteOpen() {
 		h += m.paletteHeight()
+	}
+	if m.resumeOpen {
+		h += m.resumeHeight()
 	}
 	return h
 }
@@ -312,6 +319,10 @@ func (m *model) handleEnter() tea.Cmd {
 		args := strings.Fields(strings.TrimPrefix(text, "/"))
 		if len(args) == 0 {
 			return nil // a bare "/" is the palette prefix, not an empty command to run
+		}
+		if args[0] == "resume" {
+			m.openResume() // TUI-local overlay, not a backend command
+			return nil
 		}
 		return m.dispatchCmd(m.active, args)
 	}
@@ -668,6 +679,32 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingClose = false
 			return m, nil
 		}
+		// The /resume picker is modal: arrows move the selection, Enter revives or
+		// focuses the chosen session, Esc closes it; every other key is swallowed.
+		if m.resumeOpen {
+			switch msg.Type {
+			case tea.KeyUp:
+				m.moveResume(-1)
+				return m, nil
+			case tea.KeyDown:
+				m.moveResume(1)
+				return m, nil
+			case tea.KeyEsc:
+				m.resumeOpen = false
+				m.applySize()
+				m.syncViewport()
+				return m, nil
+			case tea.KeyEnter:
+				cmd := m.chooseResume()
+				m.resumeOpen = false
+				m.applySize()
+				m.syncViewport()
+				return m, tea.Batch(cmd, m.ensureSpin())
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			}
+			return m, nil
+		}
 		// While the command palette is open, arrow/Tab/Esc/Enter drive it instead
 		// of the normal bindings; other keys fall through to edit the query.
 		if m.paletteOpen() {
@@ -798,6 +835,9 @@ func (m *model) View() string {
 	parts := []string{m.brandRow(), m.tabStrip(), m.vp.View()}
 	if m.paletteOpen() {
 		parts = append(parts, m.paletteView())
+	}
+	if m.resumeOpen {
+		parts = append(parts, m.resumeView())
 	}
 	if m.showHelp {
 		parts = append(parts, m.helpView())

@@ -198,6 +198,73 @@ func TestSyncTabsSkipsArchived(t *testing.T) {
 	}
 }
 
+func TestSlashResumeOpensPicker(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "c", Archived: true, Resumable: true}}}
+	m := newModel(f)
+	m.input.SetValue("/resume")
+	runCmd(m.handleEnter())
+	if !m.resumeOpen {
+		t.Fatal("/resume must open the picker")
+	}
+	if len(f.dispatched) != 0 {
+		t.Fatalf("/resume must not dispatch to backend: %+v", f.dispatched)
+	}
+}
+
+func TestResumePickerRevivesArchivedAndFocusesLive(t *testing.T) {
+	f := &fakeBackend{
+		sessions: []contracts.SessionInfo{
+			{Name: "live", ChannelID: "cl", LastTs: "2026-07-20T10:00:00Z"},
+			{Name: "arch", ChannelID: "ca", Archived: true, Resumable: true, LastTs: "2026-07-20T12:00:00Z"},
+		},
+		scrollback: map[string][]contracts.ScrollbackLine{
+			"arch": {{Role: "user", Text: "past"}},
+		},
+	}
+	m := newModel(f)
+
+	m.openResume()
+	if !m.resumeOpen {
+		t.Fatal("picker should be open")
+	}
+	// newest LastTs first → the archived row sorts to the top.
+	if len(m.resumeRows) != 2 || m.resumeRows[0].Name != "arch" {
+		t.Fatalf("rows not sorted by LastTs desc: %+v", m.resumeRows)
+	}
+
+	// Enter on the archived row revives it and opens+focuses its (seeded) tab.
+	cmd := m.chooseResume()
+	if m.active != "ca" {
+		t.Fatalf("archived choice must focus its tab; active=%q", m.active)
+	}
+	if _, ok := m.tabs["ca"]; !ok {
+		t.Fatal("archived choice must open a tab")
+	}
+	if got := strings.Join(m.tabs["ca"].lines, "\n"); !strings.Contains(got, "past") {
+		t.Fatalf("reopened tab not seeded with scrollback: %q", got)
+	}
+	runCmd(cmd)
+	if len(f.resumed) != 1 || f.resumed[0] != "arch" {
+		t.Fatalf("archived choice must call Resume: %+v", f.resumed)
+	}
+
+	// A live session with an existing tab: Enter focuses it, no second Resume.
+	m.openResume()
+	for i, r := range m.resumeRows {
+		if r.Name == "live" {
+			m.resumeIdx = i
+		}
+	}
+	cmd = m.chooseResume()
+	if m.active != "cl" {
+		t.Fatalf("live choice must focus its tab; active=%q", m.active)
+	}
+	runCmd(cmd)
+	if len(f.resumed) != 1 {
+		t.Fatalf("live choice must not call Resume: %+v", f.resumed)
+	}
+}
+
 func TestClosedEventRemovesTab(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.ensureTab("a")

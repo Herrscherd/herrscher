@@ -14,6 +14,12 @@ func TestSessionJSONRowStatus(t *testing.T) {
 	if r := sessionJSONRow(state.Session{Name: "a", Archived: true}); r.Status != "archived" {
 		t.Fatalf("archived row status = %q, want archived", r.Status)
 	}
+	if got := sessionJSONRow(state.Session{Name: "a", ResumeToken: "tok"}); !got.Resumable {
+		t.Fatalf("ResumeToken set → Resumable must be true")
+	}
+	if got := sessionJSONRow(state.Session{Name: "b"}); got.Resumable {
+		t.Fatalf("no ResumeToken → Resumable must be false")
+	}
 }
 
 // archive keeps the row + transcript + resume token and marks it archived;

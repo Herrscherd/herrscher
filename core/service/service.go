@@ -1,4 +1,4 @@
-// Package service installs the `dctl serve` daemon as a native, boot-started
+// Package service installs the `herrscher serve` daemon as a native, boot-started
 // background service on Linux (systemd user unit), macOS (launchd LaunchAgent),
 // and Windows (Task Scheduler onlogon task).
 //
@@ -29,20 +29,20 @@ import (
 
 // label / on-disk names shared by the planner and the docs.
 const (
-	linuxUnitName = "dctl.service"
-	macLabel      = "com.vskstudio.dctl"
-	winTaskName   = "dctl"
+	linuxUnitName = "herrscher.service"
+	macLabel      = "com.vskstudio.herrscher"
+	winTaskName   = "herrscher"
 )
 
 // Config describes the service to install.
 type Config struct {
 	GOOS       string   // target OS; "" => runtime.GOOS
-	BinPath    string   // absolute path to the dctl binary
+	BinPath    string   // absolute path to the herrscher binary
 	Home       string   // user home dir
 	User       string   // username (for loginctl enable-linger)
 	EnvFile    string   // path to the secrets env file (mode 0600)
 	HealthAddr string   // --health-addr value; "" omits the flag
-	ExtraArgs  []string // extra args appended to `dctl serve`
+	ExtraArgs  []string // extra args appended to `herrscher serve`
 	SkipStart  bool     // configure boot-start but don't start now (e.g. token not set yet)
 
 	ConfigPath string // path to the declarative config.json scaffold (template)
@@ -120,7 +120,7 @@ var coreEnvVars = []EnvVar{
 // here. With no vars declared the file is just the header (still valid).
 func renderEnvTemplate(vars []EnvVar) string {
 	var b strings.Builder
-	b.WriteString("# dctl daemon secrets — keep private (chmod 600), never commit.\n")
+	b.WriteString("# herrscher daemon secrets — keep private (chmod 600), never commit.\n")
 	b.WriteString("# Fill these in, then restart the service.\n")
 	for _, v := range vars {
 		if v.Help != "" {
@@ -227,7 +227,7 @@ func RestartCommands(c Config) ([]Command, error) {
 }
 
 // Restart restarts the service inline (for a separate caller process, e.g. the
-// `dctl service restart` CLI — never the daemon restarting itself).
+// `herrscher service restart` CLI — never the daemon restarting itself).
 func Restart(ctx context.Context, c Config) error {
 	cmds, err := RestartCommands(c)
 	if err != nil {
@@ -379,7 +379,7 @@ func firstToken(s string) string {
 }
 
 // Update pulls (optional), rebuilds, smoke-tests, and restarts the service
-// inline. Used by the `dctl service update` CLI (a separate process from the
+// inline. Used by the `herrscher service update` CLI (a separate process from the
 // daemon).
 func Update(ctx context.Context, c Config, src string, pull bool) error {
 	if pull {
@@ -399,7 +399,7 @@ func Update(ctx context.Context, c Config, src string, pull bool) error {
 func linuxPlan(c Config) Plan {
 	unit := filepath.Join(c.Home, ".config", "systemd", "user", linuxUnitName)
 	content := "[Unit]\n" +
-		"Description=dctl gateway daemon\n" +
+		"Description=herrscher gateway daemon\n" +
 		"After=network-online.target\n" +
 		"Wants=network-online.target\n" +
 		// Don't retry forever if the daemon keeps failing (e.g. a bad token):
@@ -439,8 +439,8 @@ func linuxPlan(c Config) Plan {
 
 func macPlan(c Config) Plan {
 	plist := filepath.Join(c.Home, "Library", "LaunchAgents", macLabel+".plist")
-	logPath := filepath.Join(c.Home, ".local", "state", "dctl", "dctl.log")
-	// No shell: launchd execs dctl directly and the daemon loads the env file
+	logPath := filepath.Join(c.Home, ".local", "state", "herrscher", "herrscher.log")
+	// No shell: launchd execs herrscher directly and the daemon loads the env file
 	// itself (serve --env-file). Each argument is its own array element, so
 	// spaces never split a token — just XML-escape each one.
 	argv := append([]string{c.BinPath}, serveArgs(c)...)
@@ -476,8 +476,8 @@ func macPlan(c Config) Plan {
 }
 
 func windowsPlan(c Config) Plan {
-	launcher := filepath.Join(c.Home, "AppData", "Local", "dctl", "dctl-serve.cmd")
-	// A tiny .cmd launcher just execs dctl; the daemon loads the env file itself
+	launcher := filepath.Join(c.Home, "AppData", "Local", "herrscher", "herrscher-serve.cmd")
+	// A tiny .cmd launcher just execs herrscher; the daemon loads the env file itself
 	// (serve --env-file), so there's no brittle `for /f` parsing and the task
 	// never carries the token. (schtasks /tr can't quote argv reliably, hence
 	// the wrapper file.)
@@ -489,7 +489,7 @@ func windowsPlan(c Config) Plan {
 			{Argv: []string{"schtasks", "/create", "/tn", winTaskName, "/tr", launcher, "/sc", "onlogon", "/rl", "limited", "/f"}},
 		},
 		// A logon-scheduled task only runs at the next sign-in, never on install.
-		Notes: []string{"Edit " + c.EnvFile + " with your token; the task runs dctl at your next logon (or run it now: schtasks /run /tn " + winTaskName + ")."},
+		Notes: []string{"Edit " + c.EnvFile + " with your token; the task runs herrscher at your next logon (or run it now: schtasks /run /tn " + winTaskName + ")."},
 	}
 }
 
@@ -592,7 +592,7 @@ func cmdQuote(s string) string {
 func DefaultConfig() (Config, error) {
 	bin, err := os.Executable()
 	if err != nil {
-		return Config{}, fmt.Errorf("locate dctl binary: %w", err)
+		return Config{}, fmt.Errorf("locate herrscher binary: %w", err)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -606,8 +606,8 @@ func DefaultConfig() (Config, error) {
 		BinPath:    bin,
 		Home:       home,
 		User:       uname,
-		EnvFile:    filepath.Join(home, ".config", "dctl", "dctl.env"),
-		ConfigPath: filepath.Join(home, ".config", "dctl", "config.json"),
+		EnvFile:    filepath.Join(home, ".config", "herrscher", "herrscher.env"),
+		ConfigPath: filepath.Join(home, ".config", "herrscher", "config.json"),
 		HealthAddr: "127.0.0.1:8787",
 		EnvVars:    registryEnvVars(),
 	}, nil
@@ -683,7 +683,7 @@ func runPlan(ctx context.Context, p Plan) error {
 		}
 	}
 	for _, n := range p.Notes {
-		fmt.Fprintln(os.Stderr, "dctl service: "+n)
+		fmt.Fprintln(os.Stderr, "herrscher service: "+n)
 	}
 	return nil
 }

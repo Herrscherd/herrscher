@@ -63,7 +63,7 @@ func (h *hub) goLive(sess state.Session) {
 	}
 	acc, err := control.Accept(control.SocketPath(sess.Name))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "dctl serve: session %q: control socket: %v\n", sess.Name, err)
+		fmt.Fprintf(os.Stderr, "herrscher serve: session %q: control socket: %v\n", sess.Name, err)
 		return
 	}
 	sctx, cancel := context.WithCancel(h.ctx)

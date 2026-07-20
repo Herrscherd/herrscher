@@ -1,12 +1,9 @@
-/dctl
-/dctl.exe
 /herrscher
 /herrscher.exe
 *.test
 
 # per-session git worktrees created by `herrscher serve`
 /.herrscher-sessions/
-/.dctl-sessions/
 
 # local secrets, auto-loaded at startup (see .env.example)
 /.env

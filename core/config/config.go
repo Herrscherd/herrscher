@@ -1,5 +1,5 @@
 // Package config loads the daemon's declarative defaults from a user-authored
-// ~/.config/dctl/config.json. The daemon only ever READS this file (it never
+// ~/.config/herrscher/config.json. The daemon only ever READS this file (it never
 // rewrites it), so it is safe to comment and hand-edit — unlike state.json,
 // which the daemon rewrites atomically on every /set.
 //
@@ -45,18 +45,18 @@ type Config struct {
 	// Declarative runtime defaults (precedence: live state.json > this > empty).
 	Home      *HomeRef `json:"home"`      // session home category/forum
 	Workspace string   `json:"workspace"` // workspace root holding projects
-	Source    string   `json:"source"`    // dctl source checkout for /service update
+	Source    string   `json:"source"`    // herrscher source checkout for /service update
 }
 
 // DefaultPath returns where the daemon looks for config.json. It sits beside
-// state.json: under $HERRSCHER_STATE_DIR (legacy $DCTL_STATE_DIR) if set, else
-// ~/.config/dctl.
+// state.json: under $HERRSCHER_STATE_DIR if set, else
+// ~/.config/herrscher.
 func DefaultPath() string {
 	if d := envx.Get("STATE_DIR"); d != "" {
 		return filepath.Join(d, "config.json")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "dctl", "config.json")
+	return filepath.Join(home, ".config", "herrscher", "config.json")
 }
 
 // Load reads and parses config.json. A missing file yields a zero Config and no
@@ -94,15 +94,15 @@ func stripComments(b []byte) []byte {
 }
 
 // Template returns a commented config.json scaffold. cmd pre-fills the "cmd"
-// value (from `dctl service install --cmd …`); empty leaves it "" so the daemon
+// value (from `herrscher service install --cmd …`); empty leaves it "" so the daemon
 // falls back to the built-in "claude" default. healthAddr pre-fills the
 // "healthAddr" value (the install --health-addr default).
 func Template(cmd, healthAddr string) string {
 	cmdJSON, _ := json.Marshal(cmd)
 	healthJSON, _ := json.Marshal(healthAddr)
-	return `// dctl config — declarative defaults the daemon reads at startup.
+	return `// herrscher config — declarative defaults the daemon reads at startup.
 // Secrets (gateway tokens/channel ids, owner token) are NOT here;
-// keep them in the 0600 env file (dctl.env). The daemon never rewrites this
+// keep them in the 0600 env file (herrscher.env). The daemon never rewrites this
 // file, so your comments and edits are safe.
 //
 // Precedence: CLI flag > env var > this file > built-in default.
@@ -138,7 +138,7 @@ func Template(cmd, healthAddr string) string {
   // A live "/set workspace …" overrides this.
   "workspace": "",
 
-  // dctl source checkout for "/service update" (absolute path).
+  // herrscher source checkout for "/service update" (absolute path).
   // A live "/set source …" overrides this.
   "source": ""
 }

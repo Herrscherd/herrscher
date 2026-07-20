@@ -191,14 +191,60 @@ func (h *hub) Sessions() []contracts.SessionInfo {
 	sessions := h.st.SnapshotSessions()
 	out := make([]contracts.SessionInfo, 0, len(sessions))
 	for _, s := range sessions {
+		lastTs := ""
+		if last := state.ReadTranscript(state.TranscriptPath(h.partDir, s.Name), 1); len(last) > 0 {
+			lastTs = last[len(last)-1].Ts
+		}
 		out = append(out, contracts.SessionInfo{
 			Name:      s.Name,
 			ChannelID: s.ChannelID,
 			Type:      s.Type,
 			Gateways:  s.BoundGateways(),
+			Vendor:    s.Vendor,
+			Project:   s.Project,
+			Archived:  s.Archived,
+			Resumable: s.ResumeToken != "",
+			LastTs:    lastTs,
 		})
 	}
 	return out
+}
+
+// scrollbackCap bounds how many transcript entries a reopened view replays.
+const scrollbackCap = 200
+
+// Scrollback returns the last recorded transcript lines for a session, mapped to
+// the neutral seam type. It implements contracts.SessionControl.
+func (h *hub) Scrollback(name string) []contracts.ScrollbackLine {
+	entries := state.ReadTranscript(state.TranscriptPath(h.partDir, name), scrollbackCap)
+	if len(entries) == 0 {
+		return nil
+	}
+	out := make([]contracts.ScrollbackLine, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, contracts.ScrollbackLine{Role: e.Role, Text: e.Text})
+	}
+	return out
+}
+
+// Resume revives an archived session: it unarchives it and brings it live (the
+// backend resumes from its stored token, and the supervisor restarts the
+// bridge). A live session is a no-op success. It implements
+// contracts.SessionControl.
+func (h *hub) Resume(name string) error {
+	sess, ok := h.st.FindSession(name)
+	if !ok {
+		return fmt.Errorf("no session %q", name)
+	}
+	if sess.Archived {
+		if err := h.st.SetArchived(name, false); err != nil {
+			return err
+		}
+		sess.Archived = false
+	}
+	h.goLive(sess)
+	_ = h.sup.Start(sess)
+	return nil
 }
 
 var _ contracts.SessionControl = (*hub)(nil)

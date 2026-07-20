@@ -163,6 +163,41 @@ func TestPlainLineSubmits(t *testing.T) {
 	}
 }
 
+func TestReopenedTabSeedsDimmedScrollback(t *testing.T) {
+	f := &fakeBackend{
+		sessions: []contracts.SessionInfo{{Name: "s", ChannelID: "c"}},
+		scrollback: map[string][]contracts.ScrollbackLine{
+			"s": {{Role: "user", Text: "old-q"}, {Role: "assistant", Text: "old-a"}},
+		},
+	}
+	m := newModel(f)
+	// Opening the tab (a live event on a not-yet-seen channel) must seed the
+	// recorded history first, then append the live line after it.
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: "chunk", Text: "live"}})
+	joined := strings.Join(m.tabs["c"].lines, "\n")
+	if !strings.Contains(joined, "old-q") || !strings.Contains(joined, "old-a") {
+		t.Fatalf("scrollback not seeded: %q", joined)
+	}
+	if qi, li := strings.Index(joined, "old-q"), strings.Index(joined, "live"); qi < 0 || li < 0 || qi > li {
+		t.Fatalf("scrollback must precede live output: %q", joined)
+	}
+}
+
+func TestSyncTabsSkipsArchived(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{
+		{Name: "live", ChannelID: "c1"},
+		{Name: "arch", ChannelID: "c2", Archived: true},
+	}}
+	m := newModel(f)
+	m.syncTabs()
+	if _, ok := m.tabs["c1"]; !ok {
+		t.Fatal("live session must get a tab")
+	}
+	if _, ok := m.tabs["c2"]; ok {
+		t.Fatal("archived session must not auto-open a tab")
+	}
+}
+
 func TestClosedEventRemovesTab(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.ensureTab("a")

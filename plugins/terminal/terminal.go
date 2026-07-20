@@ -295,6 +295,7 @@ func (t *Terminal) Commands() []tui.CommandSpec {
 		{Name: "session list", Desc: "list active sessions"},
 		{Name: "session who", Args: "--name <name>", Desc: "list a session's participants"},
 		{Name: "session close", Args: "--name <name>", Desc: "close a session"},
+		{Name: "session archive", Args: "--name <name>", Desc: "archive a session (keep it resumable)"},
 		{Name: "agent create", Args: "--name <name>", Desc: "add a companion agent"},
 		{Name: "agent list", Desc: "list companion agents"},
 	}

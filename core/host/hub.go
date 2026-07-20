@@ -106,8 +106,9 @@ func (h *hub) reconcile() {
 	}
 	h.mu.Unlock()
 	for _, n := range liveNames {
-		if _, ok := persisted[n]; !ok {
-			h.goDead(n)
+		s, ok := persisted[n]
+		if !ok || s.Archived {
+			h.goDead(n) // removed, or archived in place → stop driving it and free its socket
 		}
 	}
 	for _, s := range persisted {
@@ -191,10 +192,7 @@ func (h *hub) Sessions() []contracts.SessionInfo {
 	sessions := h.st.SnapshotSessions()
 	out := make([]contracts.SessionInfo, 0, len(sessions))
 	for _, s := range sessions {
-		lastTs := ""
-		if last := state.ReadTranscript(state.TranscriptPath(h.partDir, s.Name), 1); len(last) > 0 {
-			lastTs = last[len(last)-1].Ts
-		}
+		lastTs := state.ReadTranscriptLast(state.TranscriptPath(h.partDir, s.Name))
 		out = append(out, contracts.SessionInfo{
 			Name:      s.Name,
 			ChannelID: s.ChannelID,

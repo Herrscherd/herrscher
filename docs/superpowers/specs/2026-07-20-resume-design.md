@@ -103,25 +103,28 @@ type ResumeAware interface { ResumeToken() string }
 `streamResponder` implements it by returning `r.sess.sessID`.
 
 **OUT transport (the subtle part).** The backend lives in the **bridge child
-process** (`sup.Start(sess)`), not the daemon that owns `state.json`. Rather than
-extend `BackendEvent` (a second contract change), reuse the **participant-journal
-ownership model** (child writes a best-effort file, daemon reads — see
-`AppendParticipant`/`ReadParticipants`): after each turn the bridge (which holds
-the `contracts.Backend`) queries `ResumeAware.ResumeToken()` and, if non-empty
-and changed, writes it to a per-session **sidecar** `<stateDir>/resume/<name>`
-(O_CREATE|O_TRUNC, mkdir parent, never blocking). `ResumeAware` is therefore the
-**only** contract change.
+process** (`sup.Start(sess)`), not the daemon that owns `state.json`. The token
+rides the **existing hub event stream**, exactly like `Cost` already does: add a
+`Resume string` field to `contracts.Event`. In the bridge's `runOneTurn`
+(`core/bridge/hub.go`) — which holds the `contracts.Backend` — query
+`resp.(contracts.ResumeAware)` after the turn and set `Resume` on the terminal
+`reply{done}` event. The daemon's turn loop (`core/host/turnloop.go`,
+`awaitTurn`, where it already reads `e.Cost`) folds `e.Resume` into
+`state.Session.ResumeToken` via `SetResumeToken`, persisting **only on change** to
+avoid `state.json` churn. `ResumeAware` (contracts) + the `Event.Resume` field
+are the whole contract surface — no `BackendEvent` change.
 
-The daemon folds the sidecar into `state.Session.ResumeToken` when it next saves
-state — at minimum on archive/close and on a lightweight checkpoint — persisting
-**only on change** to avoid `state.json` churn. The sidecar is the durable live
-store; `state.json` is the folded-in copy. Purged with the transcript on real
-delete.
+**Why the token stays valid.** A claude stream-json `session_id` is **invariant
+across a conversation**: every turn reports the same id; it only changes when a
+brand-new session is started (no `--resume`). So the folded token is stable, the
+supervisor can pass `--resume <token>` at boot without staleness, and a
+bridge-process re-exec resumes the same id it already had.
 
-**On boot / resume.** `newSeedBackend` resolves the token as
-`sess.ResumeToken` else the sidecar `<stateDir>/resume/<name>` (covers a hard
-quit before the fold-in) → `Settings["resume"]` → a supervised session comes back
-up already resumed.
+**On boot / resume.** The supervisor's `bridgeArgs` appends
+`--resume <sess.ResumeToken>` when non-empty; the bridge CLI passes it into
+`BuildBackend` as `cfg.Settings["resume"]` → `Config.ResumeID`. A supervised
+session comes back up already resumed. (`newSeedBackend`, the one-shot seed path,
+likewise threads `sess.ResumeToken`.)
 
 **Per vendor**
 
@@ -195,8 +198,8 @@ conversations:
 - **Migration:** existing sessions lack `resumeToken`/transcript/`archived` (all
   `omitempty`) → today's behavior; `main` keeps working; recording + capture
   begin at the first turn.
-- **Purge:** removes the transcript file **and** the resume sidecar too (mirror
-  `RemoveParticipantJournal`) — no leak.
+- **Purge:** removes the transcript file too (mirror `RemoveParticipantJournal`)
+  — no leak.
 - **Multi-instance:** `instanceID` already separates daemons; resuming the same
   session from two instances is out of scope for v1.
 - **Transcript growth:** no rotation in v1, only the replay cap (known
@@ -217,7 +220,8 @@ conversations:
 
 ## Cross-repo release ordering
 
-1. **herrscher-contracts:** add `ResumeAware`. (Others depend on it.)
+1. **herrscher-contracts:** add `ResumeAware` interface + `Event.Resume` field.
+   (Others depend on it.)
 2. **backends** (claude first; codex/cursor stub `ResumeToken()` → `""`): consume
    the contract + `Settings["resume"]`.
 3. **herrscher:** `state.Session` fields, transcript recorder, token persistence,

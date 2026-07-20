@@ -69,7 +69,10 @@ func (h *hub) goLive(sess state.Session) {
 	sctx, cancel := context.WithCancel(h.ctx)
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
 	go RunSession(sctx, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
-		func(tok string) { _ = h.st.SetResumeToken(sess.Name, tok) })
+		func(tok string) { _ = h.st.SetResumeToken(sess.Name, tok) },
+		func(e state.TranscriptEntry) {
+			_ = state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e)
+		})
 	h.live[sess.Name] = cancel
 }
 

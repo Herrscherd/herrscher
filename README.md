@@ -276,8 +276,8 @@ the default. A background service (no TTY) runs headless, hub-driven only.
 
 > **Command surface (current):** operator commands run through a neutral
 > `contracts.Cmd` registry, reachable two ways. The operator **CLI** (`herrscher
-> session create|close|list|who`, `herrscher service restart|update`, `herrscher
-> set home|source`) dispatches them directly. The **Discord gateway** binds the
+> session create|close|list|who|archive|log`, `herrscher service restart|update`,
+> `herrscher set home|source`) dispatches them directly. The **Discord gateway** binds the
 > same commands as slash commands: it translates each interaction into a neutral
 > argv and dispatches it through the `contracts.SessionControl` seam, so the core
 > never learns the Discord command surface. All slash handling (including the

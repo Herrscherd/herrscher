@@ -57,8 +57,12 @@ func sessionJSONRow(s state.Session) sessionJSON {
 	if gateways == nil {
 		gateways = []string{}
 	}
+	status := "running"
+	if s.Archived {
+		status = "archived"
+	}
 	return sessionJSON{
-		Id: s.Name, Name: s.Name, Agent: s.Agent, Project: s.Project, Status: "running",
+		Id: s.Name, Name: s.Name, Agent: s.Agent, Project: s.Project, Status: status,
 		Worktree: s.Worktree, Gateways: gateways, Parent: s.Parent,
 	}
 }
@@ -295,7 +299,31 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 		return "", fmt.Errorf("persist: %w", err)
 	}
 	_ = state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name))
+	_ = state.RemoveTranscript(state.TranscriptPath(h.partDir, name))
 	return fmt.Sprintf("🗄️ Session **%s** closed.", name), nil
+}
+
+// sessionArchiveRun closes-but-keeps a session: it stops the supervised child
+// and archives the channel, but keeps the row + transcript + ResumeToken and
+// marks it archived so /resume can revive it (with backend context and
+// scrollback). The worktree is kept — archive is non-destructive.
+func (h *Handler) sessionArchiveRun(ctx context.Context, in contracts.Input) (string, error) {
+	name, ok := in.Lookup("name")
+	if !ok {
+		return "", fmt.Errorf("missing name")
+	}
+	sess, exists := h.st.FindSession(name)
+	if !exists {
+		return "", fmt.Errorf("no session %q", name)
+	}
+	_ = h.sup.Stop(name)
+	if err := h.adminFor(sess).Archive(ctx, sess.ChannelID); err != nil {
+		return "", fmt.Errorf("archive: %w", err)
+	}
+	if err := h.st.SetArchived(name, true); err != nil {
+		return "", fmt.Errorf("persist: %w", err)
+	}
+	return fmt.Sprintf("📦 Session **%s** archived — resume it from /resume.", name), nil
 }
 
 func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string, error) {

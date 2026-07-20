@@ -1,6 +1,8 @@
 package state
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -62,6 +64,79 @@ func TestReadTranscriptLast(t *testing.T) {
 	}
 	if got := ReadTranscriptLast(p); got != "tLAST" {
 		t.Fatalf("want last ts tLAST across a >64KB file, got %q", got)
+	}
+}
+
+// An entry far larger than any fixed scanner-token cap must round-trip intact,
+// not be silently dropped: bufio.Reader grows the line as needed.
+func TestReadTranscriptHandlesHugeLine(t *testing.T) {
+	dir := t.TempDir()
+	p := TranscriptPath(dir, "sess")
+	huge := strings.Repeat("z", 2<<20) // 2 MB, past the old 1 MB scanner cap
+	for _, e := range []TranscriptEntry{
+		{Ts: "t1", Role: "user", Text: "hi"},
+		{Ts: "t2", Role: "assistant", Text: huge},
+	} {
+		if err := AppendTranscript(p, e); err != nil {
+			t.Fatalf("append: %v", err)
+		}
+	}
+	all := ReadTranscript(p, 0)
+	if len(all) != 2 {
+		t.Fatalf("want 2 entries, got %d", len(all))
+	}
+	if len(all[1].Text) != len(huge) {
+		t.Fatalf("huge entry truncated: want %d bytes, got %d", len(huge), len(all[1].Text))
+	}
+}
+
+// A long-lived session must not grow its transcript without bound: once it crosses
+// transcriptMaxBytes, compaction rewrites it to its newest entries. The very last
+// entry always survives; older ones are dropped.
+func TestTranscriptCompactionBoundsGrowth(t *testing.T) {
+	dir := t.TempDir()
+	p := TranscriptPath(dir, "sess")
+	body := strings.Repeat("m", 5000)
+	const n = 1000 // ~5 MB raw, crossing the 4 MB trigger
+	for i := 0; i < n; i++ {
+		if err := AppendTranscript(p, TranscriptEntry{Ts: fmt.Sprintf("t%04d", i), Role: "user", Text: body}); err != nil {
+			t.Fatalf("append %d: %v", i, err)
+		}
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if fi.Size() > transcriptMaxBytes {
+		t.Fatalf("transcript not bounded: %d bytes > %d", fi.Size(), transcriptMaxBytes)
+	}
+	all := ReadTranscript(p, 0)
+	if len(all) == 0 {
+		t.Fatal("compaction dropped every entry")
+	}
+	if len(all) >= n {
+		t.Fatalf("compaction retained all %d entries, expected fewer", len(all))
+	}
+	if last := all[len(all)-1]; last.Ts != fmt.Sprintf("t%04d", n-1) {
+		t.Fatalf("newest entry lost: got %q", last.Ts)
+	}
+}
+
+// When the newest entry is larger than the tail window, ReadTranscriptLast must
+// fall back to a full read rather than return no timestamp.
+func TestReadTranscriptLastFallsBackPastTailWindow(t *testing.T) {
+	dir := t.TempDir()
+	p := TranscriptPath(dir, "sess")
+	if err := AppendTranscript(p, TranscriptEntry{Ts: "t1", Role: "user", Text: "hi"}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	// Final entry's own JSON exceeds the 64 KB tail window, so the tail scan finds
+	// only a partial (unparseable) line and the fallback must kick in.
+	if err := AppendTranscript(p, TranscriptEntry{Ts: "tHUGE", Role: "assistant", Text: strings.Repeat("y", 128*1024)}); err != nil {
+		t.Fatalf("append huge: %v", err)
+	}
+	if got := ReadTranscriptLast(p); got != "tHUGE" {
+		t.Fatalf("want tHUGE via fallback, got %q", got)
 	}
 }
 

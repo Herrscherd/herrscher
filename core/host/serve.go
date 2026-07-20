@@ -240,6 +240,9 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	go serveCommandSocket(ctx, CommandSocketPath(instID), hb)
 
 	for _, sess := range st.SnapshotSessions() {
+		if sess.Archived {
+			continue // archived sessions come back only on demand via /resume
+		}
 		hb.goLive(sess)
 		_ = sup.Start(sess)
 	}

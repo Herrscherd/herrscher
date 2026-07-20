@@ -90,10 +90,19 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 		out = "⚠️ " + err.Error()
 	}
 	out = strings.TrimSpace(out)
-	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost})
+	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Resume: resumeToken(resp)})
 	if orch != nil {
 		_ = orch.Observe(ctx, prompt, out)
 	}
+}
+
+// resumeToken reads a backend's opaque resume token when it is ResumeAware, so
+// the daemon can persist it for cross-restart --resume. "" when unsupported.
+func resumeToken(resp contracts.Backend) string {
+	if ra, ok := resp.(contracts.ResumeAware); ok {
+		return ra.ResumeToken()
+	}
+	return ""
 }
 
 // runPick answers a routed select-menu pick out-of-band (serialized with turns

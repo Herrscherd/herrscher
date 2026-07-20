@@ -64,6 +64,10 @@ type sessionDriver struct {
 	// state (nil = disabled, e.g. tests and the operator CLI path).
 	persistResume func(token string)
 
+	// record appends one transcript entry (nil = disabled, e.g. tests and the
+	// operator CLI path). Set by RunSession; the daemon is the single writer.
+	record func(state.TranscriptEntry)
+
 	// emitTap, when set, receives every event the driver fans out — including on
 	// the seed path where gateways is nil. It feeds the daemon's events socket so
 	// an external reader (Neublox) sees the live thinking/status/chunk/reply
@@ -97,6 +101,20 @@ func (d *sessionDriver) journal(authorID string) {
 	if first {
 		_, _ = state.AppendParticipant(d.participants, authorID)
 	}
+}
+
+// recordEntry appends one transcript turn-side, best-effort. Timestamp is set
+// here so both call sites stay one-liners.
+func (d *sessionDriver) recordEntry(role, text string, cost float64) {
+	if d.record == nil || text == "" {
+		return
+	}
+	d.record(state.TranscriptEntry{
+		Ts:   time.Now().UTC().Format(time.RFC3339),
+		Role: role,
+		Text: text,
+		Cost: cost,
+	})
 }
 
 // Pick injects a routed select-menu value into this session's turn queue. The
@@ -247,6 +265,7 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			// A pick is answered out-of-band by the bridge; only a real input
 			// opens a turn (and a progress view) on the bound gateways.
 			if ev.T == "input" {
+				d.recordEntry("user", ev.Text, 0)
 				d.fanOut(ctx, contracts.Event{T: "human", Who: ev.Who, Text: ev.Text})
 			}
 			d.runTurn(ctx, ev)
@@ -316,6 +335,7 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 				if d.persistResume != nil && e.Resume != "" {
 					d.persistResume(e.Resume)
 				}
+				d.recordEntry("assistant", e.Text, e.Cost)
 				d.seenMu.Lock()
 				if d.pendingReply != nil {
 					d.pendingReply <- e.Text
@@ -465,7 +485,7 @@ func (d *sessionDriver) renderChannel(g contracts.GatewaySet) string {
 // supervisor restart). It blocks until ctx is cancelled. coord is the Model-O
 // handoff coordinator (nil in the short-lived operator CLI path, where a
 // completed turn's handoff trailer, if any, is simply ignored).
-func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string)) {
+func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry)) {
 	defer acc.Close() // own the acceptor: close the listener + remove the socket on shutdown
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
@@ -475,6 +495,7 @@ func RunSession(ctx context.Context, name, channel string, gws []contracts.Gatew
 	d.metrics = m
 	d.coordinator = coord
 	d.persistResume = persistResume
+	d.record = record
 	registerDriver(name, d)
 	defer unregisterDriver(name)
 	go d.run(ctx)

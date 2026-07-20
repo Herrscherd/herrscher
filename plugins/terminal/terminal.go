@@ -243,6 +243,28 @@ func (t *Terminal) Sessions() []contracts.SessionInfo {
 	return c.Sessions()
 }
 
+// Scrollback returns a session's recorded history lines through the bound
+// SessionControl (nil until bound), so a reopened tab can seed its scrollback.
+func (t *Terminal) Scrollback(name string) []contracts.ScrollbackLine {
+	if c := t.Control(); c != nil {
+		return c.Scrollback(name)
+	}
+	return nil
+}
+
+// Resume revives an archived session by name through the bound SessionControl,
+// for the /resume picker.
+func (t *Terminal) Resume(name string) (string, error) {
+	c := t.Control()
+	if c == nil {
+		return "", fmt.Errorf("no session control")
+	}
+	if err := c.Resume(name); err != nil {
+		return "", err
+	}
+	return "resumed " + name, nil
+}
+
 // BindSessionControl stores the hub controller so the TUI can drive the session
 // lifecycle (create/close/list) and enumerate sessions for tab labels.
 func (t *Terminal) BindSessionControl(c contracts.SessionControl) {

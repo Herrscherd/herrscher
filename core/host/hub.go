@@ -111,6 +111,9 @@ func (h *hub) reconcile() {
 		}
 	}
 	for _, s := range persisted {
+		if s.Archived {
+			continue // archived sessions are revived only via hub.Resume
+		}
 		h.goLive(s)
 	}
 }

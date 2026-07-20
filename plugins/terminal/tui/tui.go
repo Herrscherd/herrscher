@@ -141,7 +141,7 @@ type model struct {
 func (m *model) chromeHeight() int {
 	h := 6 // panel border (top+bottom) + brand row + tab strip + footer + input
 	if m.showHelp {
-		h += 4
+		h += 5
 	}
 	if m.paletteOpen() {
 		h += m.paletteHeight()
@@ -820,6 +820,7 @@ func (m *model) helpView() string {
 		"       PgUp / PgDn      scroll             ?       toggle this help",
 		"       /                command palette    Enter   submit / run /cmd",
 		"       ↑↓ Tab Esc       navigate palette   Ctrl+C  quit",
+		"       /resume          reopen a session   ↑↓ Esc  navigate picker",
 	}
 	return statusStyle.Render(strings.Join(lines, "\n"))
 }

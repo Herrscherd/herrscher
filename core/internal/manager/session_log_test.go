@@ -69,3 +69,17 @@ func TestSessionLogRun_UnknownSessionIsEmptyArray(t *testing.T) {
 		t.Fatalf("want [] for unknown session, got %q", out)
 	}
 }
+
+// A crafted path-traversal name must never escape the transcripts dir: it has
+// no valid session slug, so the verb returns empty history without ever reading
+// a file outside partDir/transcripts.
+func TestSessionLogRun_TraversalNameIsEmpty(t *testing.T) {
+	h := &Handler{partDir: t.TempDir()}
+	out, err := h.sessionLogRun(context.Background(), contractsInputJSON("../../../etc/passwd"))
+	if err != nil {
+		t.Fatalf("crafted name must not error, got %v", err)
+	}
+	if out != "[]" {
+		t.Fatalf("want [] for traversal name, got %q", out)
+	}
+}

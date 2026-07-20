@@ -323,8 +323,9 @@ Bubbletea TUI) takes over the foreground and brings multiple sessions online as
 a tabbed interface; any configured Discord gateway keeps running headless in the
 background. A brand row and a strip of session tabs sit across the top: each
 session bound to the terminal is a tab, and `Tab` / `Shift+Tab` switch between
-them. A background tab that receives model output shows a bullet marker (`•`)
-for unread activity; switching to it clears the marker.
+them — or click a tab to jump straight to it. A background tab that receives
+model output shows a bullet marker (`•`) for unread activity; switching to it
+clears the marker.
 
 **Immediate feedback.** Pressing `Enter` echoes your line and flips the tab into
 a `thinking…` state on the spot — before the backend sends anything back — so
@@ -363,6 +364,7 @@ queued input. Authorization and message-id tracking live in the hub, not here.
 | Key | Action |
 |-----|--------|
 | `Tab` / `Shift+Tab` | Switch to next/previous session tab |
+| Click a tab | Switch straight to that session (mouse) |
 | `/` | Open the command palette (filters as you type) |
 | `↑` / `↓` | Move the palette / `/resume` picker selection (while it is open) |
 | `Tab` | Complete the highlighted command (while the palette is open) |
@@ -375,6 +377,8 @@ queued input. Authorization and message-id tracking live in the hub, not here.
 | `Ctrl+C` | Quit the TUI (shuts down the daemon) |
 
 Tab markers: `•` = unread background activity, `⟳` = a turn in flight. Footer shows active session state (working/idle/disconnected) and last turn cost.
+
+Because the TUI captures the mouse for click-to-switch, selecting text to copy needs the terminal's override modifier held down (usually `Shift`, `Option` on macOS/iTerm2).
 
 ---
 

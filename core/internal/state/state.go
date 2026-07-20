@@ -33,6 +33,11 @@ type Session struct {
 	// start fresh.
 	ResumeToken string `json:"resumeToken,omitempty"`
 
+	// Archived marks a session closed-but-kept (session archive): its row,
+	// transcript and ResumeToken are retained so /resume can revive it, but the
+	// boot loop does not auto-supervise it. Absent/false = live as today.
+	Archived bool `json:"archived,omitempty"`
+
 	// Learning config (P1 write side, opt-in). Extractor names a registered
 	// curation extractor; empty keeps the plain Curator (no learning). Journal
 	// is the call-journal path Consolidate reads (worktree-relative is fine).
@@ -226,6 +231,23 @@ func (s *State) SetResumeToken(name, token string) error {
 				return nil
 			}
 			s.Sessions[i].ResumeToken = token
+			return s.saveLocked()
+		}
+	}
+	return nil
+}
+
+// SetArchived sets a session's archived flag and persists only on change. An
+// unknown name is a no-op (best-effort, mirrors SetResumeToken).
+func (s *State) SetArchived(name string, archived bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Sessions {
+		if s.Sessions[i].Name == name {
+			if s.Sessions[i].Archived == archived {
+				return nil
+			}
+			s.Sessions[i].Archived = archived
 			return s.saveLocked()
 		}
 	}

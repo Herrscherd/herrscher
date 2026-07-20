@@ -2,6 +2,7 @@ package state
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -26,6 +27,41 @@ func TestTranscriptAppendReadCap(t *testing.T) {
 	}
 	if got := TranscriptPath(dir, "sess"); got != filepath.Join(dir, "transcripts", "sess.jsonl") {
 		t.Fatalf("path: %s", got)
+	}
+}
+
+func TestReadTranscriptLast(t *testing.T) {
+	dir := t.TempDir()
+	p := TranscriptPath(dir, "sess")
+	if got := ReadTranscriptLast(p); got != "" {
+		t.Fatalf("missing file must yield empty ts, got %q", got)
+	}
+	for _, e := range []TranscriptEntry{
+		{Ts: "t1", Role: "user", Text: "hi"},
+		{Ts: "t2", Role: "assistant", Text: "yo"},
+		{Ts: "t3", Role: "user", Text: "again"},
+	} {
+		if err := AppendTranscript(p, e); err != nil {
+			t.Fatalf("append: %v", err)
+		}
+	}
+	if got := ReadTranscriptLast(p); got != "t3" {
+		t.Fatalf("want last ts t3, got %q", got)
+	}
+
+	// A transcript larger than the tail window must still find the newest entry
+	// (the tail read starts mid-file, and the scan-from-end reaches the last line).
+	big := strings.Repeat("x", 4096)
+	for i := 0; i < 40; i++ {
+		if err := AppendTranscript(p, TranscriptEntry{Ts: "t3", Role: "assistant", Text: big}); err != nil {
+			t.Fatalf("append big: %v", err)
+		}
+	}
+	if err := AppendTranscript(p, TranscriptEntry{Ts: "tLAST", Role: "user", Text: "final"}); err != nil {
+		t.Fatalf("append final: %v", err)
+	}
+	if got := ReadTranscriptLast(p); got != "tLAST" {
+		t.Fatalf("want last ts tLAST across a >64KB file, got %q", got)
 	}
 }
 

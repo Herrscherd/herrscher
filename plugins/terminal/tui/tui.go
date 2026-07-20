@@ -42,6 +42,12 @@ type Backend interface {
 	// Commands lists the operator commands the palette advertises, scoped to the
 	// verbs this backend will actually accept.
 	Commands() []CommandSpec
+	// Scrollback returns a session's recorded history lines, so a reopened tab is
+	// seeded with the conversation before live events arrive. Empty when none.
+	Scrollback(name string) []contracts.ScrollbackLine
+	// Resume revives an archived session by name (backend resumed via its stored
+	// token), for the /resume picker. Returns a human-readable result or an error.
+	Resume(name string) (string, error)
 }
 
 // tab is one session's pane: its transcript, unread flag, busy state, last cost,

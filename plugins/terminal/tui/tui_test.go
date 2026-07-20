@@ -97,6 +97,8 @@ type fakeBackend struct {
 	closed     []closedSession
 	sessions   []contracts.SessionInfo
 	fe         chan RoutedEvent
+	scrollback map[string][]contracts.ScrollbackLine
+	resumed    []string
 }
 
 func (f *fakeBackend) Frontend() <-chan RoutedEvent      { return f.fe }
@@ -109,6 +111,13 @@ func (f *fakeBackend) Dispatch(args []string) (string, error) {
 func (f *fakeBackend) Close(name string, force bool) (string, error) {
 	f.closed = append(f.closed, closedSession{name: name, force: force})
 	return "ok", nil
+}
+func (f *fakeBackend) Scrollback(name string) []contracts.ScrollbackLine {
+	return f.scrollback[name]
+}
+func (f *fakeBackend) Resume(name string) (string, error) {
+	f.resumed = append(f.resumed, name)
+	return "resumed " + name, nil
 }
 func (f *fakeBackend) Commands() []CommandSpec {
 	return []CommandSpec{

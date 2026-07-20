@@ -30,6 +30,10 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("name", "session name", true).
 			Param("force", "discard uncommitted worktree changes", false).
 			Do(h.sessionCloseRun),
+		contracts.New("session", "archive").
+			Help("archive a session: stop the bridge, keep it resumable (row + transcript + resume token kept)").
+			Param("name", "session name", true).
+			Do(h.sessionArchiveRun),
 		contracts.New("session", "list").
 			Help("list active sessions").
 			Do(h.sessionListRun),

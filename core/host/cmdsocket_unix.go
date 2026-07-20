@@ -10,9 +10,20 @@ import (
 
 // CommandSocketPath is the daemon-level operator command socket.
 func CommandSocketPath(instanceID string) string {
-	name := "dctl-command.sock"
+	name := "herrscher-command.sock"
 	if instanceID != "" {
-		name = "dctl-command-" + instanceID + ".sock"
+		name = "herrscher-command-" + instanceID + ".sock"
+	}
+	return filepath.Join(os.TempDir(), name)
+}
+
+// EventsSocketPath is the daemon-level per-session events fan-out socket: a
+// sibling of the command socket (herrscher-command → herrscher-events). It is the path
+// Neublox's HerrscherEventSource connects to, derived there the same way.
+func EventsSocketPath(instanceID string) string {
+	name := "herrscher-events.sock"
+	if instanceID != "" {
+		name = "herrscher-events-" + instanceID + ".sock"
 	}
 	return filepath.Join(os.TempDir(), name)
 }

@@ -15,7 +15,7 @@ func TestSocketPathDeterministicAndSafe(t *testing.T) {
 		t.Fatalf("SocketPath not deterministic: %q vs %q", a, b)
 	}
 	base := filepath.Base(a)
-	stem := strings.TrimSuffix(strings.TrimPrefix(base, "dctl-control-"), ".sock")
+	stem := strings.TrimSuffix(strings.TrimPrefix(base, "herrscher-control-"), ".sock")
 	if stem == base || strings.ContainsAny(stem, " .") {
 		t.Fatalf("unsafe socket filename: %q (stem %q)", base, stem)
 	}

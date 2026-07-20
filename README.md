@@ -339,12 +339,21 @@ terminal accepts (session and agent verbs only). It filters as you type; `↑`/`
 move the selection, `Tab` completes the highlighted command, and `Esc` closes
 it. This is the discoverable path to the slash-commands below.
 
-**Session management.** Create, list, and close sessions directly from the TUI
-using slash commands — no Discord required. Type `/session create --name foo` to
-spin up a new session; it appears immediately as a new tab. Use `/session list`
-to see active sessions, and `/session close --name foo` to shut one down and remove
-its tab. Sessions are bound to the terminal and isolated by name; typing routes your
-input to the active session and streams replies into its pane.
+**Session management.** Create, list, close, and archive sessions directly from
+the TUI using slash commands — no Discord required. Type `/session create --name foo`
+to spin up a new session; it appears immediately as a new tab. Use `/session list`
+to see active sessions, `/session close --name foo` to shut one down and remove its
+tab, or `/session archive --name foo` to stop the bridge but **keep the session
+resumable** (its row, transcript, and resume token are retained). Sessions are bound
+to the terminal and isolated by name; typing routes your input to the active session
+and streams replies into its pane.
+
+**Scrollback & resume.** Every turn is recorded to a per-session transcript. When
+a tab (re)opens, its recent history replays as dimmed scrollback above the live
+stream, so context is never lost across a restart. Type `/resume` to open a picker
+of all sessions — live and archived — sorted by last activity: `↑`/`↓` select,
+`Enter` reopens a live session's tab or revives an archived one (the backend
+resumes from its stored token), `Esc` closes the picker.
 
 It is a stateless backend runner driven entirely by the hub's input frames. The
 hub owns the FIFO and connection lifecycle, so if the bridge crashes the
@@ -357,8 +366,9 @@ queued input. Authorization and message-id tracking live in the hub, not here.
 |-----|--------|
 | `Tab` / `Shift+Tab` | Switch to next/previous session tab |
 | `/` | Open the command palette (filters as you type) |
-| `↑` / `↓` | Move the palette selection (while it is open) |
+| `↑` / `↓` | Move the palette / `/resume` picker selection (while it is open) |
 | `Tab` | Complete the highlighted command (while the palette is open) |
+| `/resume` then `Enter` | Open the session picker: reopen a live tab or revive an archived session |
 | `Enter` | Send the typed line to the active session (lines starting with `/` are run as commands) |
 | `Ctrl+W` then `y` | Close the active session (any other key cancels) |
 | `?` (empty input) | Toggle keybinding help overlay |
@@ -382,14 +392,23 @@ stateDiagram-v2
     Worktree --> Channel: CreateUnder(home) or ForumPost(home)
     Channel --> Running: supervisor spawns the bridge child
     Running --> Running: restart w/ backoff+jitter if the bridge exits
+    Running --> Archived: /session archive name:x
+    Archived --> Running: /resume (revive from resume token)
     Running --> Closed: /session close name:x
-    Closed --> [*]: stop bridge · remove worktree · archive channel
+    Closed --> [*]: stop bridge · remove worktree · drop row + transcript
 ```
 
 - `project:` picks an existing repo from your workspace; `clone:` forges one
   first (gh/glab). `shared:true` skips the worktree and runs in the main checkout.
 - `/session close` refuses to delete a worktree with uncommitted work unless you
-  pass `force:true`.
+  pass `force:true`. Close is destructive: it removes the state row, worktree, and
+  the recorded transcript.
+- `/session archive` is the non-destructive counterpart: it stops the bridge but
+  keeps the row, worktree, transcript, and resume token, marking the session
+  archived. Archived sessions are skipped by the boot loop and the reconciler, so
+  they never respawn a backend on their own — they come back only on demand via the
+  TUI's `/resume` picker, which revives the backend from its stored resume token and
+  repaints the recorded scrollback.
 - `/session allow` and `/allow` gate who may *drive* a session; everyone else is
   observed (journaled for `/session who`) but never executes.
 - `agent:` (CLI `--agent NAME`) provisions the session from a **durable companion
@@ -699,7 +718,7 @@ gateway plugin alone.
 |---------|--------------|
 | `serve [--config PATH] [--state FILE] [--health-addr ADDR] [--status-channel ID] [--env-file PATH] [--instance SLUG] [--cmd '…']` | The always-on Gateway daemon: per-session bridge supervision, health endpoint. |
 | `bridge -c CHANNEL --hub-socket SOCK [--cmd '…'] [--vendor claude\|codex\|cursor] [--backend stream\|oneshot] [--session N] [--project P] [--agent A] …` | One pure-runner backend over the daemon's control socket. Normally spawned by `serve`. `--vendor` selects the backend plugin (the supervisor threads it from the session's vendor); `--project`/`--agent` set the [memory scope](#memory-scope-shared-vs-private). (`--model` is deprecated/ignored — the model rides in `--cmd`.) |
-| `session <create\|close\|list\|who> [--name N] [--project P] [--clone R] [--cmd '…'] [--vendor claude\|codex\|cursor] [--backend stream\|oneshot] [--shared] [--agent NAME] [--force]` | Manage sessions: create a bridged channel + worktree + backend (optionally provisioned from a durable [agent](#durable-agents), whose `backend`/`cmd` are inherited when not given), close one, or list/inspect active ones. |
+| `session <create\|close\|archive\|list\|who> [--name N] [--project P] [--clone R] [--cmd '…'] [--vendor claude\|codex\|cursor] [--backend stream\|oneshot] [--shared] [--agent NAME] [--force]` | Manage sessions: create a bridged channel + worktree + backend (optionally provisioned from a durable [agent](#durable-agents), whose `backend`/`cmd` are inherited when not given), close one (destructive — drops row + worktree + transcript), archive one (non-destructive — stops the bridge but keeps it resumable), or list/inspect active ones. |
 | `agent <create\|list> [--name N] [--soul '…'] [--mcp '…'] [--backend claude\|codex\|cursor] [--cmd '…']` | Manage durable companion [agents](#durable-agents): a home with persona + MCP + zero-prompt settings and an optional pinned backend vendor + invocation, materialized into a session worktree via `session create --agent`. |
 | `service <install\|uninstall\|status\|restart\|update> [--cmd '…'] [--health-addr ADDR] [--env-file PATH] [--source DIR] [--no-pull]` | Manage the daemon as a native OS service (see [Installation](#installation)). |
 

@@ -41,6 +41,10 @@ type sessionJSON struct {
 	// Coordination is the session's join state, present only for sessions in a
 	// coordination cohort (omitempty → solo sessions omit the key entirely).
 	Coordination *coordinationJSON `json:"coordination,omitempty"`
+	// Resumable is true when the session carries a backend resume token, i.e. an
+	// archived session that /resume (Neublox: Op::ResumeSession) can revive with
+	// its stored conversation. Mirrors herrscher-contracts SessionInfo.Resumable.
+	Resumable bool `json:"resumable"`
 }
 
 // coordinationJSON is the wire shape of a session's join state in session list.
@@ -64,6 +68,7 @@ func sessionJSONRow(s state.Session) sessionJSON {
 	return sessionJSON{
 		Id: s.Name, Name: s.Name, Agent: s.Agent, Project: s.Project, Status: status,
 		Worktree: s.Worktree, Gateways: gateways, Parent: s.Parent,
+		Resumable: s.ResumeToken != "",
 	}
 }
 
@@ -324,6 +329,33 @@ func (h *Handler) sessionArchiveRun(ctx context.Context, in contracts.Input) (st
 		return "", fmt.Errorf("persist: %w", err)
 	}
 	return fmt.Sprintf("📦 Session **%s** archived — resume it from /resume.", name), nil
+}
+
+// sessionResumeRun revives an archived session: it clears the archived flag and
+// restarts the supervised child. The session control socket is re-established by
+// the reconcile that follows every hub.Dispatch (reconcile brings non-archived
+// persisted sessions live); the supervised backend child is restarted here,
+// mirroring how sessionArchiveRun stops it. Modeled on hub.Resume
+// (core/host/hub.go) but host-agnostic. Name is NOT slugified: FindSession is the
+// guard (an existing session's name is already a persisted slug), exactly like
+// sessionArchiveRun.
+func (h *Handler) sessionResumeRun(_ context.Context, in contracts.Input) (string, error) {
+	name, ok := in.Lookup("name")
+	if !ok {
+		return "", fmt.Errorf("missing name")
+	}
+	sess, exists := h.st.FindSession(name)
+	if !exists {
+		return "", fmt.Errorf("no session %q", name)
+	}
+	if err := h.st.SetArchived(name, false); err != nil {
+		return "", fmt.Errorf("persist: %w", err)
+	}
+	sess.Archived = false
+	if err := h.sup.Start(sess); err != nil {
+		return "", fmt.Errorf("start: %w", err)
+	}
+	return fmt.Sprintf("⟲ Session **%s** resumed.", name), nil
 }
 
 func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string, error) {

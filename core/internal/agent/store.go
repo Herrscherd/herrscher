@@ -27,6 +27,7 @@ type CreateSpec struct {
 	MCP     string
 	Backend string
 	Cmd     string
+	Tags    []string
 }
 
 // defaultSoul is the persona seeded when CreateSpec.Soul is empty. It is a
@@ -192,13 +193,33 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 			data []byte
 		}{cmdFile, []byte(spec.Cmd)})
 	}
+	if len(spec.Tags) > 0 {
+		files = append(files, struct {
+			name string
+			data []byte
+		}{tagsFile, []byte(strings.Join(spec.Tags, " ") + "\n")})
+	}
 	for _, f := range files {
 		if err := os.WriteFile(filepath.Join(home, f.name), f.data, 0o644); err != nil {
 			return Agent{}, fmt.Errorf("write %s: %w", f.name, err)
 		}
 	}
 	created = true
-	return Agent{Name: name, Home: home, Backend: spec.Backend, Cmd: spec.Cmd}, nil
+	return Agent{Name: name, Home: home, Backend: spec.Backend, Cmd: spec.Cmd, Tags: readTags(home)}, nil
+}
+
+// SetSoul overwrites <home>/SOUL.md for an existing agent. It never creates a
+// home — an absent agent is an error (callers seed via Create). Homes are the
+// source of truth; an edited soul applies to the next session materialized.
+func (s *Store) SetSoul(name, soul string) error {
+	if !validateName(name) {
+		return fmt.Errorf("invalid agent name %q", name)
+	}
+	home := filepath.Join(s.root, name)
+	if info, err := os.Stat(home); err != nil || !info.IsDir() {
+		return fmt.Errorf("no agent %q", name)
+	}
+	return os.WriteFile(filepath.Join(home, soulFile), []byte(soul), 0o644)
 }
 
 // Get returns the agent named name, or false if no such home directory exists.

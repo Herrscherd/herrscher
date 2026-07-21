@@ -49,6 +49,11 @@ func main() {
 		return
 	}
 
+	if len(os.Args) == 2 && (os.Args[1] == "version" || os.Args[1] == "--version") {
+		fmt.Println(herrscherVersion())
+		return
+	}
+
 	// Auto-load a project-root .env so every command (and every plugin's config
 	// resolution) sees its vars without an explicit --env-file. Real environment
 	// wins over the file, and the daemon propagates os.Environ() to each bridge

@@ -44,6 +44,7 @@ func usage() {
 		"",
 		group("DÉMARRER",
 			row("herrscher", "open the multi-session terminal TUI"),
+			row("herrscher version", "print the build version"),
 			row("herrscher init", "compose the plugin stack + secrets (wizard)"),
 		),
 		"",

@@ -54,6 +54,77 @@ func attachmentDir(session string) string {
 	return filepath.Join(os.TempDir(), "herrscher-attachments", sanitize(name))
 }
 
+// ResolveAttachments turns a message's attachments into local image file paths a
+// backend can reference. file:// attachments are validated and passed through
+// (the gateway already staged them on local disk — e.g. the terminal TUI's
+// clipboard paste); every other (https CDN) attachment is downloaded through the
+// SSRF allowlist. Non-image, oversized, missing, off-allowlist, and beyond-cap
+// attachments are skipped so a turn is never lost over an image. Order is
+// preserved; at most maxImagesPerMessage images are resolved.
+//
+// It is the host-side entry point (the turnloop has the Message; the bridge only
+// sees Events), producing the paths carried in Event.Attachments.
+func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Message, session string, hosts map[string]bool) []string {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	dir := attachmentDir(session)
+	mkdirDone := false
+	out := make([]string, 0, maxImagesPerMessage)
+	n := 0
+	for i, a := range m.Attachments {
+		if !isImage(a) || (a.Size > 0 && a.Size > maxAttachmentBytes) {
+			continue
+		}
+		if n == maxImagesPerMessage {
+			break
+		}
+		n++
+		if strings.HasPrefix(a.URL, "file://") {
+			if p, err := localImagePath(a); err == nil {
+				out = append(out, p)
+			}
+			continue
+		}
+		if !mkdirDone {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				continue
+			}
+			mkdirDone = true
+		}
+		if p, err := fetchOne(ctx, client, a, m.ID, i, dir, hosts); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// localImagePath validates a file:// attachment already staged on local disk and
+// returns its path, rejecting non-file URLs, non-regular files, and oversized
+// ones so a crafted file:// url can't smuggle a device node or huge file into a
+// turn. The gateway owns the file's lifetime; the bridge only reads it.
+func localImagePath(a contracts.Attachment) (string, error) {
+	u, err := url.Parse(a.URL)
+	if err != nil || u.Scheme != "file" {
+		return "", fmt.Errorf("attachment %q: not a file url", a.URL)
+	}
+	p := u.Path
+	if p == "" {
+		p = strings.TrimPrefix(a.URL, "file://")
+	}
+	info, err := os.Stat(p)
+	if err != nil {
+		return "", fmt.Errorf("attachment %q: %w", a.URL, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("attachment %q: not a regular file", a.URL)
+	}
+	if info.Size() > maxAttachmentBytes {
+		return "", fmt.Errorf("attachment %q: exceeds %d bytes", a.URL, maxAttachmentBytes)
+	}
+	return p, nil
+}
+
 // downloadImages fetches up to maxImagesPerMessage image attachments on m to
 // local files and returns their paths in message order. Non-image, oversized,
 // and off-allowlist attachments are skipped (hosts names the CDN hosts a URL may

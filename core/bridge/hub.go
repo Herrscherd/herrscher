@@ -77,7 +77,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 	if orch != nil {
 		memCtx = orch.Context(ctx)
 	}
-	prompt := contracts.Prompt{Content: ev.Text, Context: memCtx, Author: ev.Who}
+	prompt := contracts.Prompt{Content: ev.Text, Context: memCtx, Author: ev.Who, Attachments: ev.Attachments}
 	var cost float64
 	onEvent := func(be contracts.BackendEvent) {
 		if be.Kind == "result" {

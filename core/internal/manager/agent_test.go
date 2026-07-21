@@ -2,14 +2,73 @@ package manager
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
+
+func TestAgentListJSON(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "")
+	if _, err := h.agentCreateRun(context.Background(),
+		args("name", "Roblox Dev", "soul", "PERSONA", "backend", "codex", "tags", "role:scripter luau")); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	out, err := h.agentListRun(context.Background(), contracts.Input{JSON: true})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	var got []struct {
+		Name    string   `json:"name"`
+		Tags    []string `json:"tags"`
+		Backend string   `json:"backend"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("unmarshal %q: %v", out, err)
+	}
+	if len(got) != 1 || got[0].Name != "roblox-dev" || got[0].Backend != "codex" {
+		t.Fatalf("unexpected: %+v", got)
+	}
+	found := false
+	for _, tag := range got[0].Tags {
+		if tag == "role:scripter" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("role:scripter tag missing: %+v", got[0].Tags)
+	}
+}
+
+func TestAgentShowJSON(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "")
+	if _, err := h.agentCreateRun(context.Background(),
+		args("name", "reviewer", "soul", "You review diffs.", "tags", "role:reviewer")); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	out, err := h.agentShowRun(context.Background(), contracts.Input{Args: map[string]string{"name": "reviewer"}, JSON: true})
+	if err != nil {
+		t.Fatalf("show: %v", err)
+	}
+	var got struct {
+		Name string `json:"name"`
+		Soul string `json:"soul"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("unmarshal %q: %v", out, err)
+	}
+	if got.Name != "reviewer" || !strings.Contains(got.Soul, "review diffs") {
+		t.Fatalf("unexpected: %+v", got)
+	}
+	if _, err := h.agentShowRun(context.Background(), contracts.Input{Args: map[string]string{"name": "nope"}}); err == nil {
+		t.Fatal("expected error for unknown agent")
+	}
+}
 
 func TestAgentCreateAndList(t *testing.T) {
 	h, _, _, _, _, _ := newTestHandler(t, "")

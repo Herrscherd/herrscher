@@ -77,8 +77,8 @@ func TestBootstrapWaitsForBindThenCreates(t *testing.T) {
 
 func TestReadDrainsPerChannel(t *testing.T) {
 	tm := New()
-	tm.Submit("chA", "hello")
-	tm.Submit("chB", "world")
+	tm.Submit("chA", "hello", nil)
+	tm.Submit("chB", "world", nil)
 
 	a, _ := tm.Read(context.Background(), "chA", 100, "")
 	if len(a) != 1 || a[0].Content != "hello" || a[0].ChannelID != "chA" {

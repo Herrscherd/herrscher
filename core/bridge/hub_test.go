@@ -3,6 +3,7 @@ package bridge
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -58,7 +59,7 @@ func TestEmitBackendEventThinking(t *testing.T) {
 	sink := &recordSink{}
 	emitBackendEvent(sink, contracts.BackendEvent{Kind: "thinking", Detail: "je réfléchis"})
 	want := []contracts.Event{{T: "thinking", Text: "je réfléchis"}}
-	if len(sink.events) != len(want) || sink.events[0] != want[0] {
+	if !reflect.DeepEqual(sink.events, want) {
 		t.Fatalf("emitted %+v, want %+v", sink.events, want)
 	}
 }
@@ -80,7 +81,7 @@ func TestRunHubOneTurn(t *testing.T) {
 		t.Fatalf("emitted %+v, want %+v", sink.events, want)
 	}
 	for i := range want {
-		if sink.events[i] != want[i] {
+		if !reflect.DeepEqual(sink.events[i], want[i]) {
 			t.Errorf("event %d = %+v, want %+v", i, sink.events[i], want[i])
 		}
 	}
@@ -94,7 +95,7 @@ func TestRunHubEmptyReplyStillTerminates(t *testing.T) {
 
 	runHubTurns(context.Background(), in, sink, fakeBackend{reply: ""}, nil)
 
-	if len(sink.events) == 0 || sink.events[len(sink.events)-1] != (contracts.Event{T: "reply", Done: true}) {
+	if len(sink.events) == 0 || !reflect.DeepEqual(sink.events[len(sink.events)-1], contracts.Event{T: "reply", Done: true}) {
 		t.Fatalf("empty reply must still emit a terminal reply{done}; got %+v", sink.events)
 	}
 }

@@ -50,6 +50,26 @@ type Backend interface {
 	Resume(name string) (string, error)
 }
 
+// roles label a transcript entry so the renderer maps it to a gutter + body style.
+const (
+	roleYou        = "you"
+	roleAgent      = "agent"
+	roleStatus     = "status"
+	roleCost       = "cost"
+	roleScrollback = "scrollback"
+)
+
+// entry is one logical unit of a tab's transcript: a role plus the unwrapped,
+// unstyled body text. Storing logical text (not pre-rendered lines) is what lets
+// the renderer re-wrap to the current width on every resize and coalesce a
+// streamed answer's chunks into one wrappable block. streaming marks an agent
+// entry still being extended by chunk events.
+type entry struct {
+	role      string
+	text      string
+	streaming bool
+}
+
 // tab is one session's pane: its transcript, unread flag, busy state, last cost,
 // and a disconnected flag set when the last event was an "abandoned" turn. streamed
 // records whether any chunk arrived during the current turn, so the final reply is
@@ -58,7 +78,7 @@ type Backend interface {
 type tab struct {
 	channel      string
 	label        string
-	lines        []string
+	entries      []entry
 	unread       bool
 	busy         bool
 	streamed     bool
@@ -70,13 +90,33 @@ type tab struct {
 // (streaming chunk events token-by-token) cannot grow memory without limit.
 const maxTabLines = 5000
 
-// appendLine adds a rendered line to the tab, dropping the oldest lines once the
-// transcript exceeds maxTabLines. Trimming reallocates so the backing array does
-// not pin the whole history in memory.
-func (tb *tab) appendLine(s string) {
-	tb.lines = append(tb.lines, s)
-	if len(tb.lines) > maxTabLines {
-		tb.lines = append([]string(nil), tb.lines[len(tb.lines)-maxTabLines:]...)
+// appendEntry adds a logical entry, dropping the oldest once the transcript
+// exceeds maxTabLines. Trimming reallocates so the backing array does not pin the
+// whole history in memory.
+func (tb *tab) appendEntry(e entry) {
+	tb.entries = append(tb.entries, e)
+	if len(tb.entries) > maxTabLines {
+		tb.entries = append([]entry(nil), tb.entries[len(tb.entries)-maxTabLines:]...)
+	}
+}
+
+// appendChunk coalesces streamed agent prose: it extends the current live agent
+// entry, or opens a new one when the previous entry is not an in-flight stream
+// (e.g. a status line interrupted it). The final wrap is thus over the whole
+// message, not per-token fragments.
+func (tb *tab) appendChunk(text string) {
+	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent && tb.entries[n-1].streaming {
+		tb.entries[n-1].text += text
+		return
+	}
+	tb.appendEntry(entry{role: roleAgent, text: text, streaming: true})
+}
+
+// endStream clears the streaming flag on the current agent entry so later chunks
+// (a new turn) open a fresh block instead of extending a finished answer.
+func (tb *tab) endStream() {
+	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent {
+		tb.entries[n-1].streaming = false
 	}
 }
 
@@ -221,7 +261,7 @@ func (m *model) seedScrollback(tb *tab) {
 		return
 	}
 	for _, ln := range m.tm.Scrollback(name) {
-		tb.appendLine(scrollbackStyle.Render(scrollbackPrefix(ln.Role) + ln.Text))
+		tb.appendEntry(entry{role: roleScrollback, text: scrollbackPrefix(ln.Role) + ln.Text})
 	}
 }
 
@@ -267,9 +307,9 @@ func (m *model) route(re RoutedEvent) {
 		return
 	}
 	tb := m.ensureTab(re.Conv.ID)
-	before := len(tb.lines)
+	before := len(tb.entries)
 	m.renderInto(tb, re.Event)
-	if len(tb.lines) != before && tb.channel != m.active {
+	if len(tb.entries) != before && tb.channel != m.active {
 		tb.unread = true
 	}
 	if tb.channel == m.active {
@@ -340,7 +380,8 @@ func (m *model) handleEnter() tea.Cmd {
 	}
 	m.tm.Submit(m.active, text)
 	tb := m.tabs[m.active]
-	tb.appendLine(humanStyle.Render(glyphYou+" you ") + text)
+	tb.endStream() // a new user turn closes any lingering agent block
+	tb.appendEntry(entry{role: roleYou, text: text})
 	// Flip to the working state immediately, before any backend event, so the
 	// operator sees the message was taken (the "thinking" line is derived from this).
 	tb.busy = true
@@ -449,21 +490,23 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	case "chunk":
 		tb.busy = true
 		tb.streamed = true
-		tb.appendLine(e.Text)
+		tb.appendChunk(e.Text)
 	case "status":
 		tb.busy = true
-		tb.appendLine(statusStyle.Render("· " + e.Text))
+		tb.endStream() // a tool line ends the current prose block
+		tb.appendEntry(entry{role: roleStatus, text: e.Text})
 	case "reply":
 		// A streamed answer is already on screen from its chunks; rendering the
 		// final reply text again is the duplicate we are killing. The streamed
 		// flag holds whether or not the reply repeats the text, so a
 		// non-streaming backend still renders reply.Text exactly once.
 		if e.Text != "" && !tb.streamed {
-			tb.appendLine(replyStyle.Render(e.Text))
+			tb.appendEntry(entry{role: roleAgent, text: e.Text})
 		}
+		tb.endStream()
 		if e.Cost > 0 {
 			tb.lastCost = e.Cost
-			tb.appendLine(costStyle.Render(formatCost(e.Cost)))
+			tb.appendEntry(entry{role: roleCost, text: formatCost(e.Cost)})
 		}
 		if e.Done {
 			tb.busy = false
@@ -472,12 +515,14 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	case "reset":
 		tb.busy = false
 		tb.streamed = false
-		tb.appendLine(statusStyle.Render("· (turn reset)"))
+		tb.endStream()
+		tb.appendEntry(entry{role: roleStatus, text: "(turn reset)"})
 	case "abandoned":
 		tb.busy = false
 		tb.streamed = false
 		tb.disconnected = true
-		tb.appendLine(statusStyle.Render("· (turn abandoned)"))
+		tb.endStream()
+		tb.appendEntry(entry{role: roleStatus, text: "(turn abandoned)"})
 	}
 }
 
@@ -520,7 +565,7 @@ func (m *model) thinkingContent() string {
 	if tb == nil {
 		return ""
 	}
-	content := strings.Join(tb.lines, "\n")
+	content := m.renderTranscript(tb, m.vp.Width)
 	if tb.busy && !tb.streamed {
 		line := workingStyle.Render(m.spinFrame() + " thinking…")
 		if content != "" {
@@ -846,7 +891,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tb = m.tabs[m.active]
 			}
 			if tb != nil {
-				tb.appendLine(statusStyle.Render("· " + line))
+				tb.appendEntry(entry{role: roleStatus, text: line})
 				m.syncViewport()
 			} else {
 				m.flash = line // no tab to render into — surface it standalone

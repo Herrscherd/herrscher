@@ -9,6 +9,7 @@ package terminal
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -136,9 +137,13 @@ func (t *Terminal) Submit(channel, text string, attachments []tui.Attachment) {
 		AuthorName: "you",
 	}
 	for _, a := range attachments {
+		// Build the file URL through url.URL so a path with spaces, '#', or '?'
+		// (all legal in a filename) is percent-encoded and round-trips intact —
+		// a raw "file://"+path concat would truncate at the first '#'/'?'.
+		fileURL := (&url.URL{Scheme: "file", Path: a.Path}).String()
 		msg.Attachments = append(msg.Attachments, contracts.Attachment{
 			Filename:    a.Name,
-			URL:         "file://" + a.Path,
+			URL:         fileURL,
 			ContentType: a.Mime,
 			Size:        int(a.Size),
 		})

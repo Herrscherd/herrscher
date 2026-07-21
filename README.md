@@ -333,6 +333,21 @@ you always know the message was taken. The indicator is derived from turn state
 rather than stored, so it disappears the instant the first output streams in and
 the reply is never rendered twice.
 
+**Composer.** The input is a multi-line composer: `Enter` submits the draft,
+`Alt+Enter` (or `Ctrl+J`) inserts a newline, and the box grows with the draft up
+to eight rows before it scrolls internally. The transcript word-wraps to the
+pane width (glyph-width aware), so long lines fold instead of being clipped and
+re-wrap on resize.
+
+**Attachments.** Send images to the agent without leaving the terminal: paste an
+image from the clipboard with `Ctrl+V`, or stage a local file with
+`/attach <path>`. Staged attachments show as chips above the composer and are
+echoed under your message once sent. The host hands them to the backend as image
+blocks (clipboard/`/attach` files travel as local `file://` paths; other
+gateways' CDN images download through an SSRF allowlist first). Clipboard paste
+uses `wl-paste`, so it needs a Wayland session with `wl-clipboard` installed;
+where that is unavailable, `Ctrl+V` falls back to pasting text.
+
 **Command palette.** Typing `/` opens an inline palette of the commands the
 terminal accepts (session and agent verbs only). It filters as you type; `↑`/`↓`
 move the selection, `Tab` completes the highlighted command, and `Esc` closes
@@ -369,7 +384,10 @@ queued input. Authorization and message-id tracking live in the hub, not here.
 | `↑` / `↓` | Move the palette / `/resume` picker selection (while it is open) |
 | `Tab` | Complete the highlighted command (while the palette is open) |
 | `/resume` then `Enter` | Open the session picker: reopen a live tab or revive an archived session |
-| `Enter` | Send the typed line to the active session (lines starting with `/` are run as commands) |
+| `Enter` | Submit the composer draft to the active session (lines starting with `/` are run as commands) |
+| `Alt+Enter` / `Ctrl+J` | Insert a newline in the composer instead of submitting |
+| `Ctrl+V` | Paste a clipboard image as an attachment (falls back to text paste when there is no image) |
+| `/attach <path>` | Stage a local file as an attachment for the next message |
 | `Ctrl+W` then `y` | Close the active session (any other key cancels) |
 | `?` (empty input) | Toggle keybinding help overlay |
 | `PgUp` / `PgDn` | Scroll the active tab's transcript |

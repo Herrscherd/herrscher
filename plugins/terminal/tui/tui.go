@@ -8,6 +8,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -70,6 +71,7 @@ type entry struct {
 	text        string
 	streaming   bool
 	attachments []Attachment // files echoed under a user turn (chips)
+	preview     string       // precomputed kitty graphics escape for image attachments; "" when unsupported or none
 }
 
 // tab is one session's pane: its transcript, unread flag, busy state, last cost,
@@ -183,6 +185,7 @@ type model struct {
 	clip      clipboard    // system clipboard reader for Ctrl+V image paste
 	pending   []Attachment // files staged for the next submit, shown as chips
 	attachSeq int          // monotonic counter for naming pasted temp files
+	kitty     bool         // terminal renders the kitty graphics protocol (inline image previews)
 
 	// tsCache memoizes the active tab's wrapped transcript so the animation tick
 	// (which repaints every fastTick while a turn is busy) does not re-wrap the
@@ -294,7 +297,7 @@ func newModel(tm Backend) *model {
 	in.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "ctrl+j"))
 	in.SetHeight(1)
 	in.Focus()
-	m := &model{tm: tm, input: in, tabs: map[string]*tab{}, clip: newClipboard()}
+	m := &model{tm: tm, input: in, tabs: map[string]*tab{}, clip: newClipboard(), kitty: supportsKitty(os.Getenv)}
 	if tm != nil {
 		m.cmds = tm.Commands()
 	}
@@ -457,7 +460,11 @@ func (m *model) handleEnter() tea.Cmd {
 	m.tm.Submit(m.active, text, atts)
 	tb := m.tabs[m.active]
 	tb.endStream() // a new user turn closes any lingering agent block
-	tb.appendEntry(entry{role: roleYou, text: text, attachments: atts})
+	e := entry{role: roleYou, text: text, attachments: atts}
+	if m.kitty {
+		e.preview = previewEscapes(atts) // inline image previews under the chips
+	}
+	tb.appendEntry(e)
 	// Flip to the working state immediately, before any backend event, so the
 	// operator sees the message was taken (the "thinking" line is derived from this).
 	tb.busy = true
@@ -505,6 +512,17 @@ func (m *model) stageAttachment(path string) {
 	m.pending = append(m.pending, att)
 	m.applySize()
 	m.syncViewport()
+}
+
+// removeLastPending drops the most recently staged attachment, returning whether
+// one was there to drop — so the Ctrl+U binding can fall through to the composer's
+// delete-to-line-start when nothing is staged.
+func (m *model) removeLastPending() bool {
+	if len(m.pending) == 0 {
+		return false
+	}
+	m.pending = m.pending[:len(m.pending)-1]
+	return true
 }
 
 // dispatchCmd runs an operator argv against the backend off the Update goroutine,
@@ -1026,6 +1044,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.pasteImage() {
 				return m, nil
 			}
+		case tea.KeyCtrlU:
+			// Unstage the last attachment; with none staged, fall through so the
+			// composer keeps its delete-to-line-start behaviour.
+			if m.removeLastPending() {
+				m.applySize() // the chip row may have just disappeared
+				m.syncViewport()
+				return m, nil
+			}
 		case tea.KeyCtrlW:
 			m.pendingClose = true
 			return m, nil
@@ -1127,7 +1153,7 @@ func (m *model) View() string {
 		parts = append(parts, m.helpView())
 	}
 	if chips := chipRow(m.pending); chips != "" {
-		parts = append(parts, chips)
+		parts = append(parts, chips+"  "+statusStyle.Render("⌃U remove"))
 	}
 	parts = append(parts, footer, m.inputRow())
 	// The style width counts padding but not the border; width-2 gives a content

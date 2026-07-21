@@ -34,7 +34,13 @@ func (m *model) renderTranscript(tb *tab, width int) string {
 func renderEntry(e entry, width int) string {
 	switch e.role {
 	case roleYou:
-		return block(youGutter, humanStyle.Render(glyphYou+" you"), e.text, humanBodyStyle, e.attachments, width)
+		out := block(youGutter, humanStyle.Render(glyphYou+" you"), e.text, humanBodyStyle, e.attachments, width)
+		if e.preview != "" {
+			// The kitty graphics escape sits on its own line under the chip; the
+			// terminal draws the image at the cursor. Non-kitty terminals ignore it.
+			out += "\n" + e.preview
+		}
+		return out
 	case roleAgent:
 		return block(agentGutter, replyStyle.Render(glyphAgent+" agent"), e.text, agentBodyStyle, nil, width)
 	case roleCost:

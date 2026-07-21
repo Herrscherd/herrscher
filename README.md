@@ -341,12 +341,16 @@ re-wrap on resize.
 
 **Attachments.** Send images to the agent without leaving the terminal: paste an
 image from the clipboard with `Ctrl+V`, or stage a local file with
-`/attach <path>`. Staged attachments show as chips above the composer and are
-echoed under your message once sent. The host hands them to the backend as image
-blocks (clipboard/`/attach` files travel as local `file://` paths; other
-gateways' CDN images download through an SSRF allowlist first). Clipboard paste
-uses `wl-paste`, so it needs a Wayland session with `wl-clipboard` installed;
-where that is unavailable, `Ctrl+V` falls back to pasting text.
+`/attach <path>`. Staged attachments show as chips above the composer; `Ctrl+U`
+removes the last one (with nothing staged it keeps the composer's
+delete-to-line-start). Chips are echoed under your message once sent, and on a
+kitty-graphics terminal (kitty, Ghostty, WezTerm) a PNG also renders as an inline
+preview beneath its chip — elsewhere the chip stands alone. The host hands the
+files to the backend as image blocks (clipboard/`/attach` files travel as local
+`file://` paths; other gateways' CDN images download through an SSRF allowlist
+first). Clipboard paste uses `wl-paste`, so it needs a Wayland session with
+`wl-clipboard` installed; where that is unavailable, `Ctrl+V` falls back to
+pasting text.
 
 **Command palette.** Typing `/` opens an inline palette of the commands the
 terminal accepts (session and agent verbs only). It filters as you type; `↑`/`↓`
@@ -388,6 +392,7 @@ queued input. Authorization and message-id tracking live in the hub, not here.
 | `Alt+Enter` / `Ctrl+J` | Insert a newline in the composer instead of submitting |
 | `Ctrl+V` | Paste a clipboard image as an attachment (falls back to text paste when there is no image) |
 | `/attach <path>` | Stage a local file as an attachment for the next message |
+| `Ctrl+U` | Remove the last staged attachment (falls through to delete-to-line-start when none staged) |
 | `Ctrl+W` then `y` | Close the active session (any other key cancels) |
 | `?` (empty input) | Toggle keybinding help overlay |
 | `PgUp` / `PgDn` | Scroll the active tab's transcript |

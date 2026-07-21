@@ -148,8 +148,14 @@ Each phase is independently shippable; Phase 4 is the only one that touches the 
 
 ## Open questions
 
-- Remove-attachment keybinding (`Ctrl+U` vs a dedicated key) — pick during Phase 3.
+- Remove-attachment keybinding (`Ctrl+U` vs a dedicated key) — **resolved:** `Ctrl+U` removes the
+  last staged attachment when one is staged, otherwise falls through to the composer's
+  delete-to-line-start (same fall-through pattern as `Ctrl+V`). Implemented in `tui.go`
+  (`removeLastPending`).
 - Whether the `human` fan-out event should also carry attachments (affects Discord echo) — defer;
   terminal-only for now.
 - Preview height cap and whether to preview on both send and agent-returned images (agent-returned
-  requires Event media both ways) — Phase 4 follow-up.
+  requires Event media both ways) — **partly resolved:** inline preview is emitted on *send* for
+  PNG attachments, capped at 10 rows (`previewRows`), via the kitty graphics protocol isolated in
+  `image.go` and gated on `supportsKitty` (kitty/Ghostty/WezTerm). Agent-returned image previews
+  remain a follow-up (needs Event media inbound).

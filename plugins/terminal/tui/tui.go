@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -153,7 +154,7 @@ func spinTick(d time.Duration) tea.Cmd {
 type model struct {
 	tm           Backend
 	vp           viewport.Model
-	input        textinput.Model
+	input        textarea.Model
 	tabs         map[string]*tab
 	order        []string
 	active       string
@@ -184,11 +185,42 @@ type tabHit struct {
 	x0, x1 int
 }
 
-// chromeHeight is the number of non-viewport rows View renders: the brand row, the
-// tab strip, the footer status line, and the input row (4), plus the help block and
-// the command palette when each is shown.
+// maxComposerLines caps how tall the multi-line composer grows before it scrolls
+// internally, so a long draft never eats the whole transcript.
+const maxComposerLines = 8
+
+// composerHeight is the current height of the input composer in rows (≥1). It
+// grows with the draft up to maxComposerLines.
+func (m *model) composerHeight() int {
+	if h := m.input.Height(); h >= 1 {
+		return h
+	}
+	return 1
+}
+
+// resizeComposer grows the composer with its content up to maxComposerLines and
+// re-fits the viewport whenever that height changes, so the transcript never
+// overlaps a multi-line draft.
+func (m *model) resizeComposer() {
+	h := m.input.LineCount()
+	if h < 1 {
+		h = 1
+	}
+	if h > maxComposerLines {
+		h = maxComposerLines
+	}
+	if h != m.input.Height() {
+		m.input.SetHeight(h)
+		m.applySize()
+		m.syncViewport()
+	}
+}
+
+// chromeHeight is the number of non-viewport rows View renders: the panel border
+// (top+bottom), brand row, tab strip, and footer (5), plus the composer's current
+// height, the help block, and the command palette when each is shown.
 func (m *model) chromeHeight() int {
-	h := 6 // panel border (top+bottom) + brand row + tab strip + footer + input
+	h := 5 + m.composerHeight()
 	if m.showHelp {
 		h += 5
 	}
@@ -223,8 +255,14 @@ func (m *model) applySize() {
 }
 
 func newModel(tm Backend) *model {
-	in := textinput.New()
+	in := textarea.New()
 	in.Placeholder = "type a message…"
+	in.Prompt = "" // the composer sits flush inside the panel; no per-line gutter
+	in.ShowLineNumbers = false
+	// Enter submits (intercepted in Update); a newline is an explicit Alt+Enter or
+	// Ctrl+J, since Shift+Enter is not reliably distinguishable across terminals.
+	in.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "ctrl+j"))
+	in.SetHeight(1)
 	in.Focus()
 	m := &model{tm: tm, input: in, tabs: map[string]*tab{}}
 	if tm != nil {
@@ -364,6 +402,7 @@ func (m *model) handleEnter() tea.Cmd {
 		return nil
 	}
 	m.input.Reset()
+	m.resizeComposer() // a submitted draft collapses the composer back to one row
 	if strings.HasPrefix(text, "/") {
 		args := strings.Fields(strings.TrimPrefix(text, "/"))
 		if len(args) == 0 {
@@ -666,19 +705,30 @@ func fitTabs(segs []string, active, width int) (int, string) {
 	}
 }
 
-// inputRow renders the prompt with a right-aligned command hint. The hint switches
-// to palette navigation keys while the palette is open.
+// inputRow renders the multi-line composer. The key hint lives on the status row
+// above it (see statusRow), since a growing composer can no longer share its line.
 func (m *model) inputRow() string {
-	hint := statusStyle.Render("/ commands · ? help · Tab ⇄")
+	return m.input.View()
+}
+
+// hintText is the right-aligned key cheatsheet, switching to palette navigation
+// keys while the palette is open.
+func (m *model) hintText() string {
 	if m.paletteOpen() {
-		hint = statusStyle.Render("↑↓ navigate · Tab complete · Esc close")
+		return statusStyle.Render("↑↓ navigate · Tab complete · Esc close")
 	}
-	in := m.input.View()
-	gap := m.innerWidth() - lipgloss.Width(in) - lipgloss.Width(hint)
+	return statusStyle.Render("/ cmds · ? help · Tab ⇄ · ⌥⏎ newline")
+}
+
+// statusRow is the footer status on the left and the key hint on the right,
+// separated to fill the panel width. left is already styled (footer or flash).
+func (m *model) statusRow(left string) string {
+	hint := m.hintText()
+	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(hint)
 	if gap < 1 {
-		return in
+		return left
 	}
-	return in + strings.Repeat(" ", gap) + hint
+	return left + strings.Repeat(" ", gap) + hint
 }
 
 // footer renders the status/cost line for the active tab.
@@ -743,7 +793,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(textinput.Blink, tickCmd())
+	return tea.Batch(textarea.Blink, tickCmd())
 }
 
 // ensureSpin starts the animation timer if it is not already running. A turn
@@ -768,7 +818,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.applySize()
 		}
-		m.input.Width = m.innerWidth() - 2
+		m.input.SetWidth(m.innerWidth())
 		m.syncViewport()
 	case tea.MouseMsg:
 		// Left-click on the tab strip focuses that session; everything else
@@ -864,6 +914,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.switchTab(-1)
 			return m, nil
 		case tea.KeyEnter:
+			if msg.Alt {
+				break // Alt+Enter falls through to the composer as a newline
+			}
 			return m, tea.Batch(m.handleEnter(), m.ensureSpin())
 		case tea.KeyCtrlW:
 			m.pendingClose = true
@@ -916,6 +969,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, c)
 	m.vp, c = m.vp.Update(msg)
 	cmds = append(cmds, c)
+	if _, ok := msg.(tea.KeyMsg); ok {
+		m.resizeComposer() // an edit may have added/removed a composer row
+	}
 	// Editing the query can open/close the palette or change its match count,
 	// both of which change the reserved chrome height. Re-fit only while the
 	// palette is (or was just) open, so typing an ordinary message does not
@@ -951,6 +1007,7 @@ func (m *model) View() string {
 	if m.flash != "" {
 		footer = statusStyle.Render("· " + m.flash)
 	}
+	footer = m.statusRow(footer)
 	parts := []string{m.brandRow(), m.tabStrip(), m.vp.View()}
 	if m.paletteOpen() {
 		parts = append(parts, m.paletteView())

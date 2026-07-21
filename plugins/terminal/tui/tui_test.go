@@ -99,10 +99,20 @@ type fakeBackend struct {
 	fe         chan RoutedEvent
 	scrollback map[string][]contracts.ScrollbackLine
 	resumed    []string
+	submitted  []submittedTurn
 }
 
-func (f *fakeBackend) Frontend() <-chan RoutedEvent      { return f.fe }
-func (f *fakeBackend) Submit(string, string)             {}
+// submittedTurn records a Submit call so tests can assert attachments were wired.
+type submittedTurn struct {
+	channel string
+	text    string
+	atts    []Attachment
+}
+
+func (f *fakeBackend) Frontend() <-chan RoutedEvent { return f.fe }
+func (f *fakeBackend) Submit(channel, text string, atts []Attachment) {
+	f.submitted = append(f.submitted, submittedTurn{channel: channel, text: text, atts: atts})
+}
 func (f *fakeBackend) Sessions() []contracts.SessionInfo { return f.sessions }
 func (f *fakeBackend) Dispatch(args []string) (string, error) {
 	f.dispatched = append(f.dispatched, args)

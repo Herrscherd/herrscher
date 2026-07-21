@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/bridge"
 	control "github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -40,6 +41,11 @@ type sessionDriver struct {
 	// non-blockingly by serveConn, so a disconnect while the driver is idle can
 	// never wedge serveConn (and thus the reconnect accept loop).
 	hangup chan struct{}
+
+	// attachHosts is the SSRF allowlist for downloading a message's CDN image
+	// attachments (nil = none allowed). file:// attachments — the terminal's
+	// clipboard paste — bypass it; only https CDN urls are pinned to it.
+	attachHosts map[string]bool
 
 	// participants is the journal path for /session who (empty = disabled). The
 	// daemon owns gateway I/O now, so it records authors here as it polls them.
@@ -101,6 +107,20 @@ func (d *sessionDriver) journal(authorID string) {
 	if first {
 		_, _ = state.AppendParticipant(d.participants, authorID)
 	}
+}
+
+// resolveAttachments turns an inbound message's attachments into local image
+// paths for the backend, resolved host-side (the bridge only sees Events). It is
+// a no-op fast path when a message carries no attachments — the overwhelmingly
+// common case — so an ordinary text turn pays nothing. file:// attachments (a
+// terminal clipboard paste) pass through; CDN https attachments download through
+// attachHosts (nil = none allowed, the safe default until a gateway wires its
+// allowlist).
+func (d *sessionDriver) resolveAttachments(ctx context.Context, m contracts.Message) []string {
+	if len(m.Attachments) == 0 {
+		return nil
+	}
+	return bridge.ResolveAttachments(ctx, nil, m, d.name, d.attachHosts)
 }
 
 // recordEntry appends one transcript turn-side, best-effort. Timestamp is set
@@ -239,8 +259,9 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 				}
 				last = m.ID
 				d.journal(m.AuthorID)
+				atts := d.resolveAttachments(ctx, m)
 				select {
-				case d.queue <- contracts.Event{T: "input", Who: m.AuthorName, Text: m.Content}:
+				case d.queue <- contracts.Event{T: "input", Who: m.AuthorName, Text: m.Content, Attachments: atts}:
 				case <-ctx.Done():
 					return
 				}

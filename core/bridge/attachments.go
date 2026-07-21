@@ -54,48 +54,85 @@ func attachmentDir(session string) string {
 	return filepath.Join(os.TempDir(), "herrscher-attachments", sanitize(name))
 }
 
-// downloadImages fetches up to maxImagesPerMessage image attachments on m to
-// local files and returns their paths in message order. Non-image, oversized,
-// and off-allowlist attachments are skipped (hosts names the CDN hosts a URL may
-// point at). Download is best-effort: the successfully fetched paths are always
-// returned, alongside the first fetch error encountered (the rest are dropped)
-// so a turn is never lost over an image.
-func downloadImages(ctx context.Context, client *http.Client, m contracts.Message, dir string, hosts allowedHosts) ([]string, error) {
-	imgs := make([]contracts.Attachment, 0, maxImagesPerMessage)
-	for _, a := range m.Attachments {
-		// Skip oversized uploads before connecting: never stream one up to the cap
-		// only to discard it. Size 0 means "unknown" and falls through to the
-		// streaming guard in fetchOne.
-		if !isImage(a) || (a.Size > 0 && a.Size > maxAttachmentBytes) {
-			continue
-		}
-		imgs = append(imgs, a)
-		if len(imgs) == maxImagesPerMessage {
-			break
-		}
-	}
-	if len(imgs) == 0 {
-		return nil, nil
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("attachment dir: %w", err)
-	}
+// ResolveAttachments turns a message's attachments into local image file paths a
+// backend can reference. file:// attachments are validated and passed through
+// (the gateway already staged them on local disk — e.g. the terminal TUI's
+// clipboard paste); every other (https CDN) attachment is downloaded through the
+// SSRF allowlist. Non-image, oversized, missing, off-allowlist, and beyond-cap
+// attachments are skipped so a turn is never lost over an image. Order is
+// preserved; at most maxImagesPerMessage images are resolved.
+//
+// It is the host-side entry point (the turnloop has the Message; the bridge only
+// sees Events), producing the paths carried in Event.Attachments.
+//
+// SECURITY: file:// passthrough trusts the producing gateway to have staged the
+// file itself — it is an arbitrary local-file read into the model context. Only
+// the local terminal gateway emits file:// URLs today. A gateway that forwards
+// attachment URLs influenced by a remote author must NOT emit file://; it must
+// use https so the SSRF allowlist applies.
+func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Message, session string, hosts map[string]bool) []string {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	paths := make([]string, 0, len(imgs))
-	var firstErr error
-	for i, a := range imgs {
-		p, err := fetchOne(ctx, client, a, m.ID, i, dir, hosts)
-		if err != nil {
-			if firstErr == nil {
-				firstErr = err
+	dir := attachmentDir(session)
+	mkdirDone := false
+	out := make([]string, 0, maxImagesPerMessage)
+	n := 0
+	for i, a := range m.Attachments {
+		if !isImage(a) || (a.Size > 0 && a.Size > maxAttachmentBytes) {
+			continue
+		}
+		if n == maxImagesPerMessage {
+			break
+		}
+		n++
+		if strings.HasPrefix(a.URL, "file://") {
+			if p, err := localImagePath(a); err == nil {
+				out = append(out, p)
 			}
 			continue
 		}
-		paths = append(paths, p)
+		if !mkdirDone {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				continue
+			}
+			mkdirDone = true
+		}
+		if p, err := fetchOne(ctx, client, a, m.ID, i, dir, hosts); err == nil {
+			out = append(out, p)
+		}
 	}
-	return paths, firstErr
+	return out
+}
+
+// localImagePath validates a file:// attachment already staged on local disk and
+// returns its path, rejecting non-file URLs, non-regular files, and oversized
+// ones so a crafted file:// url can't smuggle a device node or huge file into a
+// turn. The gateway owns the file's lifetime; the bridge only reads it.
+func localImagePath(a contracts.Attachment) (string, error) {
+	u, err := url.Parse(a.URL)
+	if err != nil || u.Scheme != "file" {
+		return "", fmt.Errorf("attachment %q: not a file url", a.URL)
+	}
+	// Pin to a local, host-less file URL so file://evil/etc/passwd (whose Path is
+	// /etc/passwd) can't slip through — a genuine local file URL has no host.
+	if u.Host != "" && u.Host != "localhost" {
+		return "", fmt.Errorf("attachment %q: file url must be host-less", a.URL)
+	}
+	if u.Path == "" {
+		return "", fmt.Errorf("attachment %q: empty file path", a.URL)
+	}
+	info, err := os.Stat(u.Path)
+	if err != nil {
+		return "", fmt.Errorf("attachment %q: %w", a.URL, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("attachment %q: not a regular file", a.URL)
+	}
+	if info.Size() > maxAttachmentBytes {
+		return "", fmt.Errorf("attachment %q: exceeds %d bytes", a.URL, maxAttachmentBytes)
+	}
+	return u.Path, nil
 }
 
 func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, msgID string, idx int, dir string, hosts allowedHosts) (string, error) {

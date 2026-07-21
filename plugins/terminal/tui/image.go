@@ -20,7 +20,7 @@ func previewEscapes(atts []Attachment) string {
 			continue
 		}
 		data, err := os.ReadFile(a.Path)
-		if err != nil || len(data) == 0 || int64(len(data)) > maxAttachmentBytes {
+		if err != nil || len(data) == 0 || len(data) > maxPreviewBytes {
 			continue
 		}
 		previews = append(previews, kittyPreview(data, previewRows))
@@ -31,6 +31,15 @@ func previewEscapes(atts []Attachment) string {
 // previewRows caps the inline image preview height so a tall image cannot push
 // the transcript off-screen (spec: bounded preview height).
 const previewRows = 10
+
+// maxPreviewBytes bounds the source size of an inline preview. The kitty escape
+// lives on its transcript line for the session, and the viewport re-scans every
+// line's width (ansi.StringWidth) on each repaint — once per streamed chunk and
+// per spinner frame while the tab is busy. A multi-MB base64 blob would make that
+// scan dominate the frame, so larger images fall back to the chip alone. Well
+// under maxAttachmentBytes (10 MiB): the attachment still reaches the agent full
+// size; only the local thumbnail is skipped.
+const maxPreviewBytes = 512 << 10
 
 // kittyChunkBytes is the max base64 payload per kitty APC escape. The protocol
 // requires transmission in chunks no larger than 4096 base64 bytes; each chunk

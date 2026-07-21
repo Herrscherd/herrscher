@@ -44,3 +44,19 @@ func TestPreviewEscapesEmptyWhenNoImages(t *testing.T) {
 		t.Fatalf("no images must yield no escape, got %q", out)
 	}
 }
+
+// TestPreviewEscapesSkipsLargeImages guards the inline-preview budget: an image
+// that is small enough to stage (≤ maxAttachmentBytes) but larger than
+// maxPreviewBytes must fall back to the chip alone, so its base64 blob is never
+// re-scanned by the viewport's per-repaint width computation.
+func TestPreviewEscapesSkipsLargeImages(t *testing.T) {
+	dir := t.TempDir()
+	big := filepath.Join(dir, "big.png")
+	if err := os.WriteFile(big, bytes.Repeat([]byte("x"), maxPreviewBytes+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	atts := []Attachment{{Name: "big.png", Path: big, Mime: "image/png", Size: maxPreviewBytes + 1}}
+	if out := previewEscapes(atts); out != "" {
+		t.Fatalf("an oversized image must not be previewed inline, got %d bytes of escape", len(out))
+	}
+}

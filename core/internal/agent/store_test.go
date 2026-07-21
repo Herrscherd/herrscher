@@ -8,6 +8,49 @@ import (
 	"testing"
 )
 
+func TestStoreCreateWritesTags(t *testing.T) {
+	s := NewStore(t.TempDir())
+	a, err := s.Create(CreateSpec{Name: "reviewer", Tags: []string{"role:reviewer", "review"}})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	buf, err := os.ReadFile(filepath.Join(a.Home, "TAGS"))
+	if err != nil {
+		t.Fatalf("read TAGS: %v", err)
+	}
+	if !strings.Contains(string(buf), "role:reviewer") {
+		t.Fatalf("TAGS missing role: %q", buf)
+	}
+	got, ok := s.Get("reviewer")
+	if !ok {
+		t.Fatal("get after create")
+	}
+	if len(got.Tags) != 2 || got.Tags[0] != "role:reviewer" {
+		t.Fatalf("tags round-trip: %+v", got.Tags)
+	}
+}
+
+func TestStoreSetSoul(t *testing.T) {
+	s := NewStore(t.TempDir())
+	a, err := s.Create(CreateSpec{Name: "reviewer", Soul: "old"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := s.SetSoul("reviewer", "new soul body"); err != nil {
+		t.Fatalf("set-soul: %v", err)
+	}
+	buf, err := os.ReadFile(filepath.Join(a.Home, "SOUL.md"))
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(buf) != "new soul body" {
+		t.Fatalf("soul not updated: %q", buf)
+	}
+	if err := s.SetSoul("ghost", "x"); err == nil {
+		t.Fatal("expected error for absent agent")
+	}
+}
+
 func TestStoreCreateSeedsFiles(t *testing.T) {
 	s := NewStore(t.TempDir())
 	a, err := s.Create(CreateSpec{Name: "roblox", Soul: "You are Roblox.", MCP: "neublox serve --project {{WORKTREE}}"})

@@ -14,6 +14,7 @@ type agentStore interface {
 	Create(spec agent.CreateSpec) (agent.Agent, error)
 	Get(name string) (agent.Agent, bool)
 	List() ([]agent.Agent, error)
+	SetSoul(name, soul string) error
 }
 
 // channelAdmin is the subset of a channel-admin client the Handler needs (injected so routing is testable).

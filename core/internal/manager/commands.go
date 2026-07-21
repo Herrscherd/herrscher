@@ -57,10 +57,20 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("mcp", "stdio MCP server command line, e.g. 'neublox serve --project {{WORKTREE}}'", false).
 			Param("backend", "agent backend vendor: claude | codex | cursor", false).
 			Param("cmd", "default invocation carrying the model, e.g. 'codex --model gpt-5.6'", false).
+			Param("tags", "space/comma-separated capability tokens (e.g. role:reviewer luau)", false).
 			Do(h.agentCreateRun),
 		contracts.New("agent", "list").
-			Help("list durable companion agents").
+			Help("list durable companion agents (--json for the catalog)").
 			Do(h.agentListRun),
+		contracts.New("agent", "show").
+			Help("show one agent's catalog record (name, tags, backend, soul); --json for Neublox").
+			Param("name", "agent name", true).
+			Do(h.agentShowRun),
+		contracts.New("agent", "set-soul").
+			Help("rewrite an agent's SOUL.md (applies to new sessions)").
+			Param("name", "agent name", true).
+			Param("soul", "new soul body", true).
+			Do(h.agentSetSoulRun),
 		contracts.New("set", "home").
 			Help("set the category/forum that holds session channels").
 			Param("channel", "category or forum channel id", true).

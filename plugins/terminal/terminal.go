@@ -122,18 +122,28 @@ func New() *Terminal {
 }
 
 // Submit enqueues a line the user typed in the TUI as an inbound message on the
-// given channel (the active tab's session channel).
-func (t *Terminal) Submit(channel, text string) {
+// given channel (the active tab's session channel). Staged attachments are carried
+// as file:// URLs so the host bridge reads them off local disk instead of a CDN.
+func (t *Terminal) Submit(channel, text string, attachments []tui.Attachment) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.nextID++
-	t.pending[channel] = append(t.pending[channel], contracts.Message{
+	msg := contracts.Message{
 		ID:         "t" + strconv.Itoa(t.nextID),
 		ChannelID:  channel,
 		Content:    text,
 		AuthorID:   "local",
 		AuthorName: "you",
-	})
+	}
+	for _, a := range attachments {
+		msg.Attachments = append(msg.Attachments, contracts.Attachment{
+			Filename:    a.Name,
+			URL:         "file://" + a.Path,
+			ContentType: a.Mime,
+			Size:        int(a.Size),
+		})
+	}
+	t.pending[channel] = append(t.pending[channel], msg)
 }
 
 // Frontend yields routed outbound events for the TUI to render.

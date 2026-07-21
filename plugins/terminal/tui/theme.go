@@ -38,6 +38,10 @@ var (
 	humanBodyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#d9d2ff"))
 	agentBodyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#c9f5ee"))
 
+	// chipStyle renders an attachment as a pill token above the composer and under
+	// the message that carried it.
+	chipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#d9f7f0")).Background(lipgloss.Color("#123a37")).Padding(0, 1)
+
 	brandStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#56e1cd"))
 	workingStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffcf6b"))
 	unreadStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#b18cff"))

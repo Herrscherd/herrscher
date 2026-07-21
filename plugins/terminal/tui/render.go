@@ -34,9 +34,9 @@ func (m *model) renderTranscript(tb *tab, width int) string {
 func renderEntry(e entry, width int) string {
 	switch e.role {
 	case roleYou:
-		return block(youGutter, humanStyle.Render(glyphYou+" you"), e.text, humanBodyStyle, width)
+		return block(youGutter, humanStyle.Render(glyphYou+" you"), e.text, humanBodyStyle, e.attachments, width)
 	case roleAgent:
-		return block(agentGutter, replyStyle.Render(glyphAgent+" agent"), e.text, agentBodyStyle, width)
+		return block(agentGutter, replyStyle.Render(glyphAgent+" agent"), e.text, agentBodyStyle, nil, width)
 	case roleCost:
 		return costStyle.Render(e.text)
 	case roleScrollback:
@@ -48,23 +48,26 @@ func renderEntry(e entry, width int) string {
 
 // block renders a message as a role-coloured spine: a header line, then the body
 // word-wrapped to width-2 (the "▎ " gutter) with every wrapped line prefixed by
-// the spine. An empty body yields just the header.
-func block(gutter lipgloss.Style, header, body string, bodyStyle lipgloss.Style, width int) string {
+// the spine, and finally any attachment chips on their own spined line. An empty
+// body with no attachments yields just the header.
+func block(gutter lipgloss.Style, header, body string, bodyStyle lipgloss.Style, atts []Attachment, width int) string {
 	bar := gutter.Render(glyphGutter)
-	hdr := bar + " " + header
-	if strings.TrimSpace(body) == "" {
-		return hdr
-	}
-	wrapWidth := width - 2
-	if wrapWidth < 1 {
-		wrapWidth = 1
-	}
-	wrapped := bodyStyle.Width(wrapWidth).Render(body)
 	var b strings.Builder
-	b.WriteString(hdr)
-	for _, ln := range strings.Split(wrapped, "\n") {
+	b.WriteString(bar + " " + header)
+	if strings.TrimSpace(body) != "" {
+		wrapWidth := width - 2
+		if wrapWidth < 1 {
+			wrapWidth = 1
+		}
+		wrapped := bodyStyle.Width(wrapWidth).Render(body)
+		for _, ln := range strings.Split(wrapped, "\n") {
+			b.WriteByte('\n')
+			b.WriteString(bar + " " + ln)
+		}
+	}
+	if chips := chipRow(atts); chips != "" {
 		b.WriteByte('\n')
-		b.WriteString(bar + " " + ln)
+		b.WriteString(bar + " " + chips)
 	}
 	return b.String()
 }

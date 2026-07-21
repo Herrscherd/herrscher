@@ -34,7 +34,7 @@ type RoutedEvent struct {
 // free of any dependency on the terminal plugin.
 type Backend interface {
 	Frontend() <-chan RoutedEvent
-	Submit(channel, text string)
+	Submit(channel, text string, attachments []Attachment)
 	Sessions() []contracts.SessionInfo
 	Dispatch(args []string) (string, error)
 	// Close tears a session down by name through the typed control seam, so the
@@ -66,9 +66,10 @@ const (
 // streamed answer's chunks into one wrappable block. streaming marks an agent
 // entry still being extended by chunk events.
 type entry struct {
-	role      string
-	text      string
-	streaming bool
+	role        string
+	text        string
+	streaming   bool
+	attachments []Attachment // files echoed under a user turn (chips)
 }
 
 // tab is one session's pane: its transcript, unread flag, busy state, last cost,
@@ -176,6 +177,10 @@ type model struct {
 	resumeRows []contracts.SessionInfo // picker rows, sorted by LastTs desc
 
 	tabHits []tabHit // clickable screen-X spans of the visible tabs, set each render
+
+	clip      clipboard    // system clipboard reader for Ctrl+V image paste
+	pending   []Attachment // files staged for the next submit, shown as chips
+	attachSeq int          // monotonic counter for naming pasted temp files
 }
 
 // tabHit is the horizontal screen-cell span [x0, x1) a rendered tab occupies on
@@ -221,6 +226,9 @@ func (m *model) resizeComposer() {
 // height, the help block, and the command palette when each is shown.
 func (m *model) chromeHeight() int {
 	h := 5 + m.composerHeight()
+	if len(m.pending) > 0 {
+		h++ // the staged-attachments chip row
+	}
 	if m.showHelp {
 		h += 5
 	}
@@ -264,7 +272,7 @@ func newModel(tm Backend) *model {
 	in.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "ctrl+j"))
 	in.SetHeight(1)
 	in.Focus()
-	m := &model{tm: tm, input: in, tabs: map[string]*tab{}}
+	m := &model{tm: tm, input: in, tabs: map[string]*tab{}, clip: newClipboard()}
 	if tm != nil {
 		m.cmds = tm.Commands()
 	}
@@ -398,7 +406,7 @@ func (m *model) syncTabs() {
 // its result is delivered back as a dispatchResultMsg.
 func (m *model) handleEnter() tea.Cmd {
 	text := strings.TrimSpace(m.input.Value())
-	if text == "" {
+	if text == "" && len(m.pending) == 0 {
 		return nil
 	}
 	m.input.Reset()
@@ -412,21 +420,69 @@ func (m *model) handleEnter() tea.Cmd {
 			m.openResume() // TUI-local overlay, not a backend command
 			return nil
 		}
+		if args[0] == "attach" {
+			m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
+			return nil
+		}
 		return m.dispatchCmd(m.active, args)
 	}
 	if m.active == "" {
 		return nil
 	}
-	m.tm.Submit(m.active, text)
+	atts := m.pending
+	m.pending = nil
+	m.applySize() // the chip row (if any) is gone now the draft is sent
+	m.tm.Submit(m.active, text, atts)
 	tb := m.tabs[m.active]
 	tb.endStream() // a new user turn closes any lingering agent block
-	tb.appendEntry(entry{role: roleYou, text: text})
+	tb.appendEntry(entry{role: roleYou, text: text, attachments: atts})
 	// Flip to the working state immediately, before any backend event, so the
 	// operator sees the message was taken (the "thinking" line is derived from this).
 	tb.busy = true
 	tb.streamed = false
 	m.syncViewport()
 	return nil
+}
+
+// pasteImage pulls an image off the system clipboard, stages it for the next
+// submit, and reports whether it consumed the paste. A clipboard holding no image
+// (or no clipboard tool) returns false, so Ctrl+V falls through to a text paste.
+func (m *model) pasteImage() bool {
+	if m.clip == nil {
+		return false
+	}
+	mime, ok := m.clip.ImageType()
+	if !ok {
+		return false
+	}
+	data, err := m.clip.ReadImage(mime)
+	if err != nil {
+		m.flash = "paste failed: " + err.Error()
+		return true // an image was on the clipboard; do not fall through to text
+	}
+	att, err := saveClipboardImage(data, mime, m.attachSeq)
+	if err != nil {
+		m.flash = err.Error()
+		return true
+	}
+	m.attachSeq++
+	m.pending = append(m.pending, att)
+	m.applySize() // the new chip row steals a viewport line
+	m.syncViewport()
+	return true
+}
+
+// stageAttachment resolves a /attach path to a staged file, surfacing any error
+// through the transient flash rather than the transcript.
+func (m *model) stageAttachment(path string) {
+	att, err := attachLocalFile(path)
+	if err != nil {
+		m.flash = err.Error()
+		return
+	}
+	m.pending = append(m.pending, att)
+	m.applySize()
+	m.syncViewport()
 }
 
 // dispatchCmd runs an operator argv against the backend off the Update goroutine,
@@ -918,6 +974,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break // Alt+Enter falls through to the composer as a newline
 			}
 			return m, tea.Batch(m.handleEnter(), m.ensureSpin())
+		case tea.KeyCtrlV:
+			// A clipboard image is staged as an attachment; anything else falls
+			// through to the composer so Ctrl+V still pastes text.
+			if m.pasteImage() {
+				return m, nil
+			}
 		case tea.KeyCtrlW:
 			m.pendingClose = true
 			return m, nil
@@ -1017,6 +1079,9 @@ func (m *model) View() string {
 	}
 	if m.showHelp {
 		parts = append(parts, m.helpView())
+	}
+	if chips := chipRow(m.pending); chips != "" {
+		parts = append(parts, chips)
 	}
 	parts = append(parts, footer, m.inputRow())
 	// The style width counts padding but not the border; width-2 gives a content

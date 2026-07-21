@@ -10,6 +10,9 @@ const (
 	glyphThinking = "◇"
 	glyphBusy     = "⟳"
 	glyphUnread   = "•"
+	// glyphGutter is the left bar drawn beside a message block, giving each turn a
+	// role-coloured spine (the Honkai/sci-fi vertical rhythm).
+	glyphGutter = "▎"
 )
 
 // spinFrames animate the "thinking" indicator; advanced on the fast working-tick.
@@ -27,6 +30,17 @@ var (
 	// scrollbackStyle marks replayed transcript lines seeded into a reopened tab,
 	// dimmed and faint so past context reads as distinct from live output.
 	scrollbackStyle = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("#55647f"))
+
+	// Message-block spines and bodies. The gutter carries the role accent; the body
+	// is a softened tint of it so wrapped prose reads calm under a vivid header.
+	youGutter      = lipgloss.NewStyle().Foreground(lipgloss.Color("#b18cff"))
+	agentGutter    = lipgloss.NewStyle().Foreground(lipgloss.Color("#56e1cd"))
+	humanBodyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#d9d2ff"))
+	agentBodyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#c9f5ee"))
+
+	// chipStyle renders an attachment as a pill token above the composer and under
+	// the message that carried it.
+	chipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#d9f7f0")).Background(lipgloss.Color("#123a37")).Padding(0, 1)
 
 	brandStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#56e1cd"))
 	workingStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffcf6b"))

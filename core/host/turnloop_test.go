@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -36,6 +37,12 @@ func (f *fanRecorder) feedFrom(text, authorID string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.inbound = append(f.inbound, contracts.Message{ID: "m", ChannelID: "c", Content: text, AuthorName: "you", AuthorID: authorID})
+}
+
+func (f *fanRecorder) feedMsg(m contracts.Message) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.inbound = append(f.inbound, m)
 }
 func (f *fanRecorder) Enabled() bool          { return true }
 func (f *fanRecorder) DefaultChannel() string { return "c" }
@@ -175,6 +182,36 @@ func TestDriverNonEventSinkPostsOnlyFinalReply(t *testing.T) {
 	defer a.mu.Unlock()
 	if a.upserts != 0 || len(a.statuses) != 0 {
 		t.Fatalf("non-EventSink gateway must not render progress; upserts=%d statuses=%v", a.upserts, a.statuses)
+	}
+}
+
+// TestDriverResolvesAttachmentsOntoInput proves the poll loop resolves a
+// message's file:// image attachment to a local path and carries it on the input
+// Event handed to the bridge, so the multimodal pipeline is wired end-to-end.
+func TestDriverResolvesAttachmentsOntoInput(t *testing.T) {
+	dir := t.TempDir()
+	img := filepath.Join(dir, "paste.png")
+	if err := os.WriteFile(img, []byte("PNG"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := &fanRecorder{}
+	a.feedMsg(contracts.Message{
+		ID: "m", ChannelID: "c", Content: "look", AuthorName: "you",
+		Attachments: []contracts.Attachment{{Filename: "paste.png", URL: "file://" + img, ContentType: "image/png"}},
+	})
+	toBridge := make(chan contracts.Event, 4)
+	fromBridge := make(chan contracts.Event, 4)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go d.run(ctx)
+
+	got := <-toBridge
+	if got.T != "input" || got.Text != "look" {
+		t.Fatalf("want input/look, got %+v", got)
+	}
+	if len(got.Attachments) != 1 || got.Attachments[0] != img {
+		t.Fatalf("input must carry the resolved attachment path %q, got %v", img, got.Attachments)
 	}
 }
 

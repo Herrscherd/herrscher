@@ -8,10 +8,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -33,7 +35,7 @@ type RoutedEvent struct {
 // free of any dependency on the terminal plugin.
 type Backend interface {
 	Frontend() <-chan RoutedEvent
-	Submit(channel, text string)
+	Submit(channel, text string, attachments []Attachment)
 	Sessions() []contracts.SessionInfo
 	Dispatch(args []string) (string, error)
 	// Close tears a session down by name through the typed control seam, so the
@@ -50,6 +52,28 @@ type Backend interface {
 	Resume(name string) (string, error)
 }
 
+// roles label a transcript entry so the renderer maps it to a gutter + body style.
+const (
+	roleYou        = "you"
+	roleAgent      = "agent"
+	roleStatus     = "status"
+	roleCost       = "cost"
+	roleScrollback = "scrollback"
+)
+
+// entry is one logical unit of a tab's transcript: a role plus the unwrapped,
+// unstyled body text. Storing logical text (not pre-rendered lines) is what lets
+// the renderer re-wrap to the current width on every resize and coalesce a
+// streamed answer's chunks into one wrappable block. streaming marks an agent
+// entry still being extended by chunk events.
+type entry struct {
+	role        string
+	text        string
+	streaming   bool
+	attachments []Attachment // files echoed under a user turn (chips)
+	preview     string       // precomputed kitty graphics escape for image attachments; "" when unsupported or none
+}
+
 // tab is one session's pane: its transcript, unread flag, busy state, last cost,
 // and a disconnected flag set when the last event was an "abandoned" turn. streamed
 // records whether any chunk arrived during the current turn, so the final reply is
@@ -58,7 +82,7 @@ type Backend interface {
 type tab struct {
 	channel      string
 	label        string
-	lines        []string
+	entries      []entry
 	unread       bool
 	busy         bool
 	streamed     bool
@@ -66,17 +90,39 @@ type tab struct {
 	disconnected bool
 }
 
-// maxTabLines bounds a tab's transcript so a long-lived or chatty session
-// (streaming chunk events token-by-token) cannot grow memory without limit.
+// maxTabLines bounds the number of logical entries a tab's transcript retains so
+// a long-lived session cannot grow memory without limit. It caps entry count, not
+// the size of any one entry: a streamed answer coalesces into a single entry (see
+// appendChunk) whose text grows for the duration of that turn.
 const maxTabLines = 5000
 
-// appendLine adds a rendered line to the tab, dropping the oldest lines once the
-// transcript exceeds maxTabLines. Trimming reallocates so the backing array does
-// not pin the whole history in memory.
-func (tb *tab) appendLine(s string) {
-	tb.lines = append(tb.lines, s)
-	if len(tb.lines) > maxTabLines {
-		tb.lines = append([]string(nil), tb.lines[len(tb.lines)-maxTabLines:]...)
+// appendEntry adds a logical entry, dropping the oldest once the transcript
+// exceeds maxTabLines. Trimming reallocates so the backing array does not pin the
+// whole history in memory.
+func (tb *tab) appendEntry(e entry) {
+	tb.entries = append(tb.entries, e)
+	if len(tb.entries) > maxTabLines {
+		tb.entries = append([]entry(nil), tb.entries[len(tb.entries)-maxTabLines:]...)
+	}
+}
+
+// appendChunk coalesces streamed agent prose: it extends the current live agent
+// entry, or opens a new one when the previous entry is not an in-flight stream
+// (e.g. a status line interrupted it). The final wrap is thus over the whole
+// message, not per-token fragments.
+func (tb *tab) appendChunk(text string) {
+	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent && tb.entries[n-1].streaming {
+		tb.entries[n-1].text += text
+		return
+	}
+	tb.appendEntry(entry{role: roleAgent, text: text, streaming: true})
+}
+
+// endStream clears the streaming flag on the current agent entry so later chunks
+// (a new turn) open a fresh block instead of extending a finished answer.
+func (tb *tab) endStream() {
+	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent {
+		tb.entries[n-1].streaming = false
 	}
 }
 
@@ -113,7 +159,7 @@ func spinTick(d time.Duration) tea.Cmd {
 type model struct {
 	tm           Backend
 	vp           viewport.Model
-	input        textinput.Model
+	input        textarea.Model
 	tabs         map[string]*tab
 	order        []string
 	active       string
@@ -135,6 +181,31 @@ type model struct {
 	resumeRows []contracts.SessionInfo // picker rows, sorted by LastTs desc
 
 	tabHits []tabHit // clickable screen-X spans of the visible tabs, set each render
+
+	clip      clipboard    // system clipboard reader for Ctrl+V image paste
+	pending   []Attachment // files staged for the next submit, shown as chips
+	attachSeq int          // monotonic counter for naming pasted temp files
+	kitty     bool         // terminal renders the kitty graphics protocol (inline image previews)
+
+	// tsCache memoizes the active tab's wrapped transcript so the animation tick
+	// (which repaints every fastTick while a turn is busy) does not re-wrap the
+	// whole history on each frame — only a real content or width change does.
+	tsCache transcriptCache
+}
+
+// transcriptCache holds the last rendered transcript and the key it was rendered
+// for. The key captures everything renderTranscript's output depends on: which
+// tab, the wrap width, the entry count, and the length + streaming state of the
+// last entry (the only one appendChunk mutates in place). A matching key means
+// the wrapped output is byte-identical, so it can be reused without re-wrapping.
+type transcriptCache struct {
+	ch      string
+	width   int
+	entries int
+	lastLen int
+	lastStr bool
+	out     string
+	valid   bool
 }
 
 // tabHit is the horizontal screen-cell span [x0, x1) a rendered tab occupies on
@@ -144,11 +215,45 @@ type tabHit struct {
 	x0, x1 int
 }
 
-// chromeHeight is the number of non-viewport rows View renders: the brand row, the
-// tab strip, the footer status line, and the input row (4), plus the help block and
-// the command palette when each is shown.
+// maxComposerLines caps how tall the multi-line composer grows before it scrolls
+// internally, so a long draft never eats the whole transcript.
+const maxComposerLines = 8
+
+// composerHeight is the current height of the input composer in rows (≥1). It
+// grows with the draft up to maxComposerLines.
+func (m *model) composerHeight() int {
+	if h := m.input.Height(); h >= 1 {
+		return h
+	}
+	return 1
+}
+
+// resizeComposer grows the composer with its content up to maxComposerLines and
+// re-fits the viewport whenever that height changes, so the transcript never
+// overlaps a multi-line draft.
+func (m *model) resizeComposer() {
+	h := m.input.LineCount()
+	if h < 1 {
+		h = 1
+	}
+	if h > maxComposerLines {
+		h = maxComposerLines
+	}
+	if h != m.input.Height() {
+		m.input.SetHeight(h)
+		m.applySize()
+		m.syncViewport()
+	}
+}
+
+// chromeHeight is the number of non-viewport rows View renders: the panel border
+// (top+bottom), brand row, tab strip, and footer (5), plus the composer's current
+// height, the help block, and the command palette when each is shown.
 func (m *model) chromeHeight() int {
-	h := 6 // panel border (top+bottom) + brand row + tab strip + footer + input
+	h := 5 + m.composerHeight()
+	if len(m.pending) > 0 {
+		h++ // the staged-attachments chip row
+	}
 	if m.showHelp {
 		h += 5
 	}
@@ -183,10 +288,16 @@ func (m *model) applySize() {
 }
 
 func newModel(tm Backend) *model {
-	in := textinput.New()
+	in := textarea.New()
 	in.Placeholder = "type a message…"
+	in.Prompt = "" // the composer sits flush inside the panel; no per-line gutter
+	in.ShowLineNumbers = false
+	// Enter submits (intercepted in Update); a newline is an explicit Alt+Enter or
+	// Ctrl+J, since Shift+Enter is not reliably distinguishable across terminals.
+	in.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "ctrl+j"))
+	in.SetHeight(1)
 	in.Focus()
-	m := &model{tm: tm, input: in, tabs: map[string]*tab{}}
+	m := &model{tm: tm, input: in, tabs: map[string]*tab{}, clip: newClipboard(), kitty: supportsKitty(os.Getenv)}
 	if tm != nil {
 		m.cmds = tm.Commands()
 	}
@@ -221,7 +332,7 @@ func (m *model) seedScrollback(tb *tab) {
 		return
 	}
 	for _, ln := range m.tm.Scrollback(name) {
-		tb.appendLine(scrollbackStyle.Render(scrollbackPrefix(ln.Role) + ln.Text))
+		tb.appendEntry(entry{role: roleScrollback, text: scrollbackPrefix(ln.Role) + ln.Text})
 	}
 }
 
@@ -267,9 +378,9 @@ func (m *model) route(re RoutedEvent) {
 		return
 	}
 	tb := m.ensureTab(re.Conv.ID)
-	before := len(tb.lines)
+	before := len(tb.entries)
 	m.renderInto(tb, re.Event)
-	if len(tb.lines) != before && tb.channel != m.active {
+	if len(tb.entries) != before && tb.channel != m.active {
 		tb.unread = true
 	}
 	if tb.channel == m.active {
@@ -320,10 +431,11 @@ func (m *model) syncTabs() {
 // its result is delivered back as a dispatchResultMsg.
 func (m *model) handleEnter() tea.Cmd {
 	text := strings.TrimSpace(m.input.Value())
-	if text == "" {
+	if text == "" && len(m.pending) == 0 {
 		return nil
 	}
 	m.input.Reset()
+	m.resizeComposer() // a submitted draft collapses the composer back to one row
 	if strings.HasPrefix(text, "/") {
 		args := strings.Fields(strings.TrimPrefix(text, "/"))
 		if len(args) == 0 {
@@ -333,20 +445,84 @@ func (m *model) handleEnter() tea.Cmd {
 			m.openResume() // TUI-local overlay, not a backend command
 			return nil
 		}
+		if args[0] == "attach" {
+			m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
+			return nil
+		}
 		return m.dispatchCmd(m.active, args)
 	}
 	if m.active == "" {
 		return nil
 	}
-	m.tm.Submit(m.active, text)
+	atts := m.pending
+	m.pending = nil
+	m.applySize() // the chip row (if any) is gone now the draft is sent
+	m.tm.Submit(m.active, text, atts)
 	tb := m.tabs[m.active]
-	tb.appendLine(humanStyle.Render(glyphYou+" you ") + text)
+	tb.endStream() // a new user turn closes any lingering agent block
+	e := entry{role: roleYou, text: text, attachments: atts}
+	if m.kitty {
+		e.preview = previewEscapes(atts) // inline image previews under the chips
+	}
+	tb.appendEntry(e)
 	// Flip to the working state immediately, before any backend event, so the
 	// operator sees the message was taken (the "thinking" line is derived from this).
 	tb.busy = true
 	tb.streamed = false
 	m.syncViewport()
 	return nil
+}
+
+// pasteImage pulls an image off the system clipboard, stages it for the next
+// submit, and reports whether it consumed the paste. A clipboard holding no image
+// (or no clipboard tool) returns false, so Ctrl+V falls through to a text paste.
+func (m *model) pasteImage() bool {
+	if m.clip == nil {
+		return false
+	}
+	mime, ok := m.clip.ImageType()
+	if !ok {
+		return false
+	}
+	data, err := m.clip.ReadImage(mime)
+	if err != nil {
+		m.flash = "paste failed: " + err.Error()
+		return true // an image was on the clipboard; do not fall through to text
+	}
+	att, err := saveClipboardImage(data, mime, m.attachSeq)
+	if err != nil {
+		m.flash = err.Error()
+		return true
+	}
+	m.attachSeq++
+	m.pending = append(m.pending, att)
+	m.applySize() // the new chip row steals a viewport line
+	m.syncViewport()
+	return true
+}
+
+// stageAttachment resolves a /attach path to a staged file, surfacing any error
+// through the transient flash rather than the transcript.
+func (m *model) stageAttachment(path string) {
+	att, err := attachLocalFile(path)
+	if err != nil {
+		m.flash = err.Error()
+		return
+	}
+	m.pending = append(m.pending, att)
+	m.applySize()
+	m.syncViewport()
+}
+
+// removeLastPending drops the most recently staged attachment, returning whether
+// one was there to drop — so the Ctrl+U binding can fall through to the composer's
+// delete-to-line-start when nothing is staged.
+func (m *model) removeLastPending() bool {
+	if len(m.pending) == 0 {
+		return false
+	}
+	m.pending = m.pending[:len(m.pending)-1]
+	return true
 }
 
 // dispatchCmd runs an operator argv against the backend off the Update goroutine,
@@ -449,21 +625,23 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	case "chunk":
 		tb.busy = true
 		tb.streamed = true
-		tb.appendLine(e.Text)
+		tb.appendChunk(e.Text)
 	case "status":
 		tb.busy = true
-		tb.appendLine(statusStyle.Render("· " + e.Text))
+		tb.endStream() // a tool line ends the current prose block
+		tb.appendEntry(entry{role: roleStatus, text: e.Text})
 	case "reply":
 		// A streamed answer is already on screen from its chunks; rendering the
 		// final reply text again is the duplicate we are killing. The streamed
 		// flag holds whether or not the reply repeats the text, so a
 		// non-streaming backend still renders reply.Text exactly once.
 		if e.Text != "" && !tb.streamed {
-			tb.appendLine(replyStyle.Render(e.Text))
+			tb.appendEntry(entry{role: roleAgent, text: e.Text})
 		}
+		tb.endStream()
 		if e.Cost > 0 {
 			tb.lastCost = e.Cost
-			tb.appendLine(costStyle.Render(formatCost(e.Cost)))
+			tb.appendEntry(entry{role: roleCost, text: formatCost(e.Cost)})
 		}
 		if e.Done {
 			tb.busy = false
@@ -472,12 +650,14 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	case "reset":
 		tb.busy = false
 		tb.streamed = false
-		tb.appendLine(statusStyle.Render("· (turn reset)"))
+		tb.endStream()
+		tb.appendEntry(entry{role: roleStatus, text: "(turn reset)"})
 	case "abandoned":
 		tb.busy = false
 		tb.streamed = false
 		tb.disconnected = true
-		tb.appendLine(statusStyle.Render("· (turn abandoned)"))
+		tb.endStream()
+		tb.appendEntry(entry{role: roleStatus, text: "(turn abandoned)"})
 	}
 }
 
@@ -520,7 +700,7 @@ func (m *model) thinkingContent() string {
 	if tb == nil {
 		return ""
 	}
-	content := strings.Join(tb.lines, "\n")
+	content := m.cachedTranscript(tb)
 	if tb.busy && !tb.streamed {
 		line := workingStyle.Render(m.spinFrame() + " thinking…")
 		if content != "" {
@@ -530,6 +710,30 @@ func (m *model) thinkingContent() string {
 		}
 	}
 	return content
+}
+
+// cachedTranscript returns the active tab's wrapped transcript, re-wrapping only
+// when the cache key changed since the last render. The heavy work (lipgloss
+// word-wrap over every entry) thus runs on a real content/width change, not on
+// every animation frame.
+func (m *model) cachedTranscript(tb *tab) string {
+	width := m.vp.Width
+	lastLen, lastStr := 0, false
+	if n := len(tb.entries); n > 0 {
+		lastLen = len(tb.entries[n-1].text)
+		lastStr = tb.entries[n-1].streaming
+	}
+	c := &m.tsCache
+	if c.valid && c.ch == tb.channel && c.width == width &&
+		c.entries == len(tb.entries) && c.lastLen == lastLen && c.lastStr == lastStr {
+		return c.out
+	}
+	out := m.renderTranscript(tb, width)
+	*c = transcriptCache{
+		ch: tb.channel, width: width, entries: len(tb.entries),
+		lastLen: lastLen, lastStr: lastStr, out: out, valid: true,
+	}
+	return out
 }
 
 // totalCost sums the last per-turn cost across tabs, for the brand-row summary.
@@ -621,19 +825,30 @@ func fitTabs(segs []string, active, width int) (int, string) {
 	}
 }
 
-// inputRow renders the prompt with a right-aligned command hint. The hint switches
-// to palette navigation keys while the palette is open.
+// inputRow renders the multi-line composer. The key hint lives on the status row
+// above it (see statusRow), since a growing composer can no longer share its line.
 func (m *model) inputRow() string {
-	hint := statusStyle.Render("/ commands · ? help · Tab ⇄")
+	return m.input.View()
+}
+
+// hintText is the right-aligned key cheatsheet, switching to palette navigation
+// keys while the palette is open.
+func (m *model) hintText() string {
 	if m.paletteOpen() {
-		hint = statusStyle.Render("↑↓ navigate · Tab complete · Esc close")
+		return statusStyle.Render("↑↓ navigate · Tab complete · Esc close")
 	}
-	in := m.input.View()
-	gap := m.innerWidth() - lipgloss.Width(in) - lipgloss.Width(hint)
+	return statusStyle.Render("/ cmds · ? help · Tab ⇄ · ⌥⏎ newline")
+}
+
+// statusRow is the footer status on the left and the key hint on the right,
+// separated to fill the panel width. left is already styled (footer or flash).
+func (m *model) statusRow(left string) string {
+	hint := m.hintText()
+	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(hint)
 	if gap < 1 {
-		return in
+		return left
 	}
-	return in + strings.Repeat(" ", gap) + hint
+	return left + strings.Repeat(" ", gap) + hint
 }
 
 // footer renders the status/cost line for the active tab.
@@ -698,7 +913,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(textinput.Blink, tickCmd())
+	return tea.Batch(textarea.Blink, tickCmd())
 }
 
 // ensureSpin starts the animation timer if it is not already running. A turn
@@ -723,7 +938,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.applySize()
 		}
-		m.input.Width = m.innerWidth() - 2
+		m.input.SetWidth(m.innerWidth())
 		m.syncViewport()
 	case tea.MouseMsg:
 		// Left-click on the tab strip focuses that session; everything else
@@ -819,7 +1034,24 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.switchTab(-1)
 			return m, nil
 		case tea.KeyEnter:
+			if msg.Alt {
+				break // Alt+Enter falls through to the composer as a newline
+			}
 			return m, tea.Batch(m.handleEnter(), m.ensureSpin())
+		case tea.KeyCtrlV:
+			// A clipboard image is staged as an attachment; anything else falls
+			// through to the composer so Ctrl+V still pastes text.
+			if m.pasteImage() {
+				return m, nil
+			}
+		case tea.KeyCtrlU:
+			// Unstage the last attachment; with none staged, fall through so the
+			// composer keeps its delete-to-line-start behaviour.
+			if m.removeLastPending() {
+				m.applySize() // the chip row may have just disappeared
+				m.syncViewport()
+				return m, nil
+			}
 		case tea.KeyCtrlW:
 			m.pendingClose = true
 			return m, nil
@@ -846,7 +1078,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tb = m.tabs[m.active]
 			}
 			if tb != nil {
-				tb.appendLine(statusStyle.Render("· " + line))
+				tb.appendEntry(entry{role: roleStatus, text: line})
 				m.syncViewport()
 			} else {
 				m.flash = line // no tab to render into — surface it standalone
@@ -871,6 +1103,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, c)
 	m.vp, c = m.vp.Update(msg)
 	cmds = append(cmds, c)
+	if _, ok := msg.(tea.KeyMsg); ok {
+		m.resizeComposer() // an edit may have added/removed a composer row
+	}
 	// Editing the query can open/close the palette or change its match count,
 	// both of which change the reserved chrome height. Re-fit only while the
 	// palette is (or was just) open, so typing an ordinary message does not
@@ -906,6 +1141,7 @@ func (m *model) View() string {
 	if m.flash != "" {
 		footer = statusStyle.Render("· " + m.flash)
 	}
+	footer = m.statusRow(footer)
 	parts := []string{m.brandRow(), m.tabStrip(), m.vp.View()}
 	if m.paletteOpen() {
 		parts = append(parts, m.paletteView())
@@ -915,6 +1151,9 @@ func (m *model) View() string {
 	}
 	if m.showHelp {
 		parts = append(parts, m.helpView())
+	}
+	if chips := chipRow(m.pending); chips != "" {
+		parts = append(parts, chips+"  "+statusStyle.Render("⌃U remove"))
 	}
 	parts = append(parts, footer, m.inputRow())
 	// The style width counts padding but not the border; width-2 gives a content

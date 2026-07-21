@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/Herrscherd/herrscher-claude-backend v0.1.3
 	github.com/Herrscherd/herrscher-codex-backend v0.1.1
-	github.com/Herrscherd/herrscher-contracts v0.1.17
+	github.com/Herrscherd/herrscher-contracts v0.1.18
 	github.com/Herrscherd/herrscher-cursor-backend v0.1.3
 	github.com/Herrscherd/herrscher-discord-gateway v0.2.4
 	github.com/Herrscherd/herrscher-llm-extractor v0.1.2

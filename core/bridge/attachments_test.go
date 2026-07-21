@@ -23,13 +23,14 @@ func hostsFor(t *testing.T, srv *httptest.Server) allowedHosts {
 	return allowedHosts{u.Hostname(): true}
 }
 
-func TestDownloadImagesFetchesOnlyImages(t *testing.T) {
+func TestResolveAttachmentsFetchesOnlyImages(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("PNGDATA"))
 	}))
 	defer srv.Close()
 
-	dir := t.TempDir()
+	sess := "fetch-only-images"
+	defer os.RemoveAll(attachmentDir(sess))
 	m := contracts.Message{
 		ID: "42",
 		Attachments: []contracts.Attachment{
@@ -37,10 +38,7 @@ func TestDownloadImagesFetchesOnlyImages(t *testing.T) {
 			{Filename: "notes.txt", URL: srv.URL + "/notes.txt"},
 		},
 	}
-	paths, err := downloadImages(context.Background(), srv.Client(), m, dir, hostsFor(t, srv))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	paths := ResolveAttachments(context.Background(), srv.Client(), m, sess, hostsFor(t, srv))
 	if len(paths) != 1 {
 		t.Fatalf("want 1 image path, got %d: %v", len(paths), paths)
 	}
@@ -53,12 +51,14 @@ func TestDownloadImagesFetchesOnlyImages(t *testing.T) {
 	}
 }
 
-func TestDownloadImagesOrderAndCollision(t *testing.T) {
+func TestResolveAttachmentsOrderAndCollision(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(r.URL.Path))
 	}))
 	defer srv.Close()
 
+	sess := "order-and-collision"
+	defer os.RemoveAll(attachmentDir(sess))
 	m := contracts.Message{
 		ID: "7",
 		Attachments: []contracts.Attachment{
@@ -66,10 +66,7 @@ func TestDownloadImagesOrderAndCollision(t *testing.T) {
 			{Filename: "shot.png", URL: srv.URL + "/2"},
 		},
 	}
-	paths, err := downloadImages(context.Background(), srv.Client(), m, t.TempDir(), hostsFor(t, srv))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	paths := ResolveAttachments(context.Background(), srv.Client(), m, sess, hostsFor(t, srv))
 	if len(paths) != 2 {
 		t.Fatalf("same-named images should not collide, got %v", paths)
 	}
@@ -82,7 +79,7 @@ func TestDownloadImagesOrderAndCollision(t *testing.T) {
 	}
 }
 
-func TestDownloadImagesHTTPError(t *testing.T) {
+func TestResolveAttachmentsHTTPError(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/bad" {
 			w.WriteHeader(http.StatusNotFound)
@@ -92,6 +89,8 @@ func TestDownloadImagesHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	sess := "http-error"
+	defer os.RemoveAll(attachmentDir(sess))
 	m := contracts.Message{
 		ID: "9",
 		Attachments: []contracts.Attachment{
@@ -99,26 +98,23 @@ func TestDownloadImagesHTTPError(t *testing.T) {
 			{Filename: "good.png", URL: srv.URL + "/good"},
 		},
 	}
-	paths, err := downloadImages(context.Background(), srv.Client(), m, t.TempDir(), hostsFor(t, srv))
-	if err == nil {
-		t.Fatal("want error from the 404 fetch")
-	}
-	if len(paths) != 1 { // the good one still comes through
+	// A failed fetch is dropped, not fatal: the good image still comes through.
+	paths := ResolveAttachments(context.Background(), srv.Client(), m, sess, hostsFor(t, srv))
+	if len(paths) != 1 {
 		t.Fatalf("want 1 surviving path, got %v", paths)
 	}
 }
 
-func TestDownloadImagesRejectsOffAllowlist(t *testing.T) {
+func TestResolveAttachmentsRejectsOffAllowlist(t *testing.T) {
 	m := contracts.Message{
 		ID: "1",
 		Attachments: []contracts.Attachment{
 			{Filename: "x.png", URL: "https://169.254.169.254/latest"},
 		},
 	}
-	hosts := allowedHosts{"cdn.example.com": true}
-	paths, err := downloadImages(context.Background(), http.DefaultClient, m, t.TempDir(), hosts)
-	if err == nil || len(paths) != 0 {
-		t.Fatalf("off-allowlist url must be rejected, got paths=%v err=%v", paths, err)
+	hosts := map[string]bool{"cdn.example.com": true}
+	if paths := ResolveAttachments(context.Background(), http.DefaultClient, m, "off-allowlist", hosts); len(paths) != 0 {
+		t.Fatalf("off-allowlist url must be rejected, got paths=%v", paths)
 	}
 }
 
@@ -172,21 +168,22 @@ func TestFetchOneRemovesPartialFileOnCopyError(t *testing.T) {
 	}
 }
 
-func TestDownloadImagesContextCancelled(t *testing.T) {
+func TestResolveAttachmentsContextCancelled(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("data"))
 	}))
 	defer srv.Close()
 
+	sess := "ctx-cancelled"
+	defer os.RemoveAll(attachmentDir(sess))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // already cancelled before the fetch
 	m := contracts.Message{
 		ID:          "1",
 		Attachments: []contracts.Attachment{{Filename: "x.png", URL: srv.URL + "/x.png"}},
 	}
-	paths, err := downloadImages(ctx, srv.Client(), m, t.TempDir(), hostsFor(t, srv))
-	if err == nil || len(paths) != 0 {
-		t.Fatalf("cancelled ctx should abort the fetch, got paths=%v err=%v", paths, err)
+	if paths := ResolveAttachments(ctx, srv.Client(), m, sess, hostsFor(t, srv)); len(paths) != 0 {
+		t.Fatalf("cancelled ctx should abort the fetch, got paths=%v", paths)
 	}
 }
 
@@ -216,7 +213,7 @@ func TestFetchOneSkipsOversizedBody(t *testing.T) {
 	}
 }
 
-func TestDownloadImagesSkipsDeclaredOversized(t *testing.T) {
+func TestResolveAttachmentsSkipsDeclaredOversized(t *testing.T) {
 	// An attachment whose declared Size exceeds the cap is never fetched.
 	called := false
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -225,13 +222,13 @@ func TestDownloadImagesSkipsDeclaredOversized(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	dir := t.TempDir()
+	sess := "declared-oversized"
+	defer os.RemoveAll(attachmentDir(sess))
 	m := contracts.Message{ID: "1", Attachments: []contracts.Attachment{
 		{Filename: "big.png", URL: srv.URL + "/big.png", Size: maxAttachmentBytes + 1},
 	}}
-	paths, err := downloadImages(context.Background(), srv.Client(), m, dir, hostsFor(t, srv))
-	if err != nil || paths != nil {
-		t.Fatalf("want nil/nil, got %v / %v", paths, err)
+	if paths := ResolveAttachments(context.Background(), srv.Client(), m, sess, hostsFor(t, srv)); len(paths) != 0 {
+		t.Fatalf("want no paths, got %v", paths)
 	}
 	if called {
 		t.Error("oversized attachment was fetched; pre-check should have skipped it")
@@ -255,33 +252,32 @@ func TestIsImagePrefersContentType(t *testing.T) {
 	}
 }
 
-func TestDownloadImagesCapsCount(t *testing.T) {
+func TestResolveAttachmentsCapsCount(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("x"))
 	}))
 	defer srv.Close()
 
-	dir := t.TempDir()
+	sess := "caps-count"
+	defer os.RemoveAll(attachmentDir(sess))
 	var atts []contracts.Attachment
 	for i := 0; i < maxImagesPerMessage+3; i++ {
 		atts = append(atts, contracts.Attachment{Filename: "x.png", URL: srv.URL + "/x.png"})
 	}
 	m := contracts.Message{ID: "1", Attachments: atts}
-	paths, err := downloadImages(context.Background(), srv.Client(), m, dir, hostsFor(t, srv))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	paths := ResolveAttachments(context.Background(), srv.Client(), m, sess, hostsFor(t, srv))
 	if len(paths) != maxImagesPerMessage {
 		t.Fatalf("want %d images (capped), got %d", maxImagesPerMessage, len(paths))
 	}
 }
 
-func TestDownloadImagesNoImagesNoDir(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "sub")
+func TestResolveAttachmentsNoImagesNoDir(t *testing.T) {
+	sess := "no-images-no-dir"
+	dir := attachmentDir(sess)
+	defer os.RemoveAll(dir)
 	m := contracts.Message{ID: "1", Attachments: []contracts.Attachment{{Filename: "a.txt"}}}
-	paths, err := downloadImages(context.Background(), http.DefaultClient, m, dir, nil)
-	if err != nil || paths != nil {
-		t.Fatalf("want nil/nil, got %v / %v", paths, err)
+	if paths := ResolveAttachments(context.Background(), http.DefaultClient, m, sess, nil); paths != nil && len(paths) != 0 {
+		t.Fatalf("want no paths, got %v", paths)
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("dir should not be created when there are no images")

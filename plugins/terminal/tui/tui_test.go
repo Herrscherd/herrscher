@@ -24,10 +24,10 @@ func TestRoutedEventLandsInOwnTab(t *testing.T) {
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "chunk", Text: "hello-a"}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: "chunk", Text: "hello-b"}})
 
-	if got := strings.Join(m.tabs["a"].lines, "\n"); !strings.Contains(got, "hello-a") {
+	if got := tabText(m.tabs["a"]); !strings.Contains(got, "hello-a") {
 		t.Fatalf("tab a missing its line: %q", got)
 	}
-	if got := strings.Join(m.tabs["b"].lines, "\n"); strings.Contains(got, "hello-a") {
+	if got := tabText(m.tabs["b"]); strings.Contains(got, "hello-a") {
 		t.Fatalf("tab b leaked tab a's line: %q", got)
 	}
 }
@@ -62,7 +62,7 @@ func TestSwitchTabClearsUnread(t *testing.T) {
 func TestRenderEventShowsCostPerTab(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "done", Done: true, Cost: 0.0042}})
-	joined := strings.Join(m.tabs["a"].lines, "\n")
+	joined := tabText(m.tabs["a"])
 	if !strings.Contains(joined, "done") || !strings.Contains(joined, "$0.0042") {
 		t.Fatalf("cost/reply dropped: %q", joined)
 	}
@@ -71,9 +71,9 @@ func TestRenderEventShowsCostPerTab(t *testing.T) {
 func TestRenderEventOmitsZeroCost(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "done", Done: true}})
-	for _, l := range m.tabs["a"].lines {
-		if strings.Contains(l, "$") {
-			t.Fatalf("zero-cost turn must not show a cost line; got %q", l)
+	for _, e := range m.tabs["a"].entries {
+		if strings.Contains(e.text, "$") {
+			t.Fatalf("zero-cost turn must not show a cost line; got %q", e.text)
 		}
 	}
 }
@@ -81,7 +81,7 @@ func TestRenderEventOmitsZeroCost(t *testing.T) {
 func TestRenderEventMarksAbandonedPerTab(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "abandoned"}})
-	if !strings.Contains(strings.Join(m.tabs["a"].lines, "\n"), "abandoned") {
+	if !strings.Contains(tabText(m.tabs["a"]), "abandoned") {
 		t.Fatal("abandoned not surfaced")
 	}
 }
@@ -99,10 +99,20 @@ type fakeBackend struct {
 	fe         chan RoutedEvent
 	scrollback map[string][]contracts.ScrollbackLine
 	resumed    []string
+	submitted  []submittedTurn
 }
 
-func (f *fakeBackend) Frontend() <-chan RoutedEvent      { return f.fe }
-func (f *fakeBackend) Submit(string, string)             {}
+// submittedTurn records a Submit call so tests can assert attachments were wired.
+type submittedTurn struct {
+	channel string
+	text    string
+	atts    []Attachment
+}
+
+func (f *fakeBackend) Frontend() <-chan RoutedEvent { return f.fe }
+func (f *fakeBackend) Submit(channel, text string, atts []Attachment) {
+	f.submitted = append(f.submitted, submittedTurn{channel: channel, text: text, atts: atts})
+}
 func (f *fakeBackend) Sessions() []contracts.SessionInfo { return f.sessions }
 func (f *fakeBackend) Dispatch(args []string) (string, error) {
 	f.dispatched = append(f.dispatched, args)
@@ -174,7 +184,7 @@ func TestReopenedTabSeedsDimmedScrollback(t *testing.T) {
 	// Opening the tab (a live event on a not-yet-seen channel) must seed the
 	// recorded history first, then append the live line after it.
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: "chunk", Text: "live"}})
-	joined := strings.Join(m.tabs["c"].lines, "\n")
+	joined := tabText(m.tabs["c"])
 	if !strings.Contains(joined, "old-q") || !strings.Contains(joined, "old-a") {
 		t.Fatalf("scrollback not seeded: %q", joined)
 	}
@@ -240,7 +250,7 @@ func TestResumePickerRevivesArchivedAndFocusesLive(t *testing.T) {
 	if _, ok := m.tabs["ca"]; !ok {
 		t.Fatal("archived choice must open a tab")
 	}
-	if got := strings.Join(m.tabs["ca"].lines, "\n"); !strings.Contains(got, "past") {
+	if got := tabText(m.tabs["ca"]); !strings.Contains(got, "past") {
 		t.Fatalf("reopened tab not seeded with scrollback: %q", got)
 	}
 	runCmd(cmd)
@@ -308,7 +318,7 @@ func TestTabBusyLifecycle(t *testing.T) {
 func TestResizeSyncsViewport(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.ensureTab("a")
-	m.tabs["a"].lines = []string{"line1", "line2", "line3"}
+	m.tabs["a"].entries = []entry{{role: roleAgent, text: "line1"}, {role: roleAgent, text: "line2"}, {role: roleAgent, text: "line3"}}
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	// second size message exercises the resize (else) branch
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -457,11 +467,21 @@ func TestPendingCloseOtherKeyCancels(t *testing.T) {
 	}
 }
 
-// countLines counts how many times needle appears across a tab's rendered lines.
+// tabText joins a tab's logical entry bodies, for substring assertions that used
+// to run over the old pre-rendered lines.
+func tabText(tb *tab) string {
+	parts := make([]string, len(tb.entries))
+	for i, e := range tb.entries {
+		parts[i] = e.text
+	}
+	return strings.Join(parts, "\n")
+}
+
+// tabLineCount counts how many entries contain needle in their body text.
 func tabLineCount(tb *tab, needle string) int {
 	n := 0
-	for _, l := range tb.lines {
-		if strings.Contains(l, needle) {
+	for _, e := range tb.entries {
+		if strings.Contains(e.text, needle) {
 			n++
 		}
 	}
@@ -482,7 +502,7 @@ func TestSubmitMarksBusyImmediately(t *testing.T) {
 		t.Fatal("submit must reset streamed so the thinking line shows until the first chunk")
 	}
 	if tabLineCount(tb, "hello") != 1 {
-		t.Fatalf("the submitted line must be echoed exactly once: %+v", tb.lines)
+		t.Fatalf("the submitted line must be echoed exactly once: %+v", tb.entries)
 	}
 }
 
@@ -493,7 +513,7 @@ func TestStreamedReplyNotDuplicated(t *testing.T) {
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "chunk", Text: "the answer"}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "the answer", Done: true}})
 	if got := tabLineCount(m.tabs["a"], "the answer"); got != 1 {
-		t.Fatalf("streamed reply must render once, not per-event: got %d\n%+v", got, m.tabs["a"].lines)
+		t.Fatalf("streamed reply must render once, not per-event: got %d\n%+v", got, m.tabs["a"].entries)
 	}
 	if m.tabs["a"].busy {
 		t.Fatal("done reply must clear busy")
@@ -506,7 +526,7 @@ func TestNonStreamedReplyRendersOnce(t *testing.T) {
 	// No chunk first: the reply is the only carrier of the text.
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "direct answer", Done: true}})
 	if got := tabLineCount(m.tabs["a"], "direct answer"); got != 1 {
-		t.Fatalf("non-streamed reply must render exactly once: got %d\n%+v", got, m.tabs["a"].lines)
+		t.Fatalf("non-streamed reply must render exactly once: got %d\n%+v", got, m.tabs["a"].entries)
 	}
 }
 

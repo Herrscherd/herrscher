@@ -64,6 +64,12 @@ func attachmentDir(session string) string {
 //
 // It is the host-side entry point (the turnloop has the Message; the bridge only
 // sees Events), producing the paths carried in Event.Attachments.
+//
+// SECURITY: file:// passthrough trusts the producing gateway to have staged the
+// file itself — it is an arbitrary local-file read into the model context. Only
+// the local terminal gateway emits file:// URLs today. A gateway that forwards
+// attachment URLs influenced by a remote author must NOT emit file://; it must
+// use https so the SSRF allowlist applies.
 func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Message, session string, hosts map[string]bool) []string {
 	if client == nil {
 		client = http.DefaultClient
@@ -108,11 +114,15 @@ func localImagePath(a contracts.Attachment) (string, error) {
 	if err != nil || u.Scheme != "file" {
 		return "", fmt.Errorf("attachment %q: not a file url", a.URL)
 	}
-	p := u.Path
-	if p == "" {
-		p = strings.TrimPrefix(a.URL, "file://")
+	// Pin to a local, host-less file URL so file://evil/etc/passwd (whose Path is
+	// /etc/passwd) can't slip through — a genuine local file URL has no host.
+	if u.Host != "" && u.Host != "localhost" {
+		return "", fmt.Errorf("attachment %q: file url must be host-less", a.URL)
 	}
-	info, err := os.Stat(p)
+	if u.Path == "" {
+		return "", fmt.Errorf("attachment %q: empty file path", a.URL)
+	}
+	info, err := os.Stat(u.Path)
 	if err != nil {
 		return "", fmt.Errorf("attachment %q: %w", a.URL, err)
 	}
@@ -122,51 +132,7 @@ func localImagePath(a contracts.Attachment) (string, error) {
 	if info.Size() > maxAttachmentBytes {
 		return "", fmt.Errorf("attachment %q: exceeds %d bytes", a.URL, maxAttachmentBytes)
 	}
-	return p, nil
-}
-
-// downloadImages fetches up to maxImagesPerMessage image attachments on m to
-// local files and returns their paths in message order. Non-image, oversized,
-// and off-allowlist attachments are skipped (hosts names the CDN hosts a URL may
-// point at). Download is best-effort: the successfully fetched paths are always
-// returned, alongside the first fetch error encountered (the rest are dropped)
-// so a turn is never lost over an image.
-func downloadImages(ctx context.Context, client *http.Client, m contracts.Message, dir string, hosts allowedHosts) ([]string, error) {
-	imgs := make([]contracts.Attachment, 0, maxImagesPerMessage)
-	for _, a := range m.Attachments {
-		// Skip oversized uploads before connecting: never stream one up to the cap
-		// only to discard it. Size 0 means "unknown" and falls through to the
-		// streaming guard in fetchOne.
-		if !isImage(a) || (a.Size > 0 && a.Size > maxAttachmentBytes) {
-			continue
-		}
-		imgs = append(imgs, a)
-		if len(imgs) == maxImagesPerMessage {
-			break
-		}
-	}
-	if len(imgs) == 0 {
-		return nil, nil
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("attachment dir: %w", err)
-	}
-	if client == nil {
-		client = http.DefaultClient
-	}
-	paths := make([]string, 0, len(imgs))
-	var firstErr error
-	for i, a := range imgs {
-		p, err := fetchOne(ctx, client, a, m.ID, i, dir, hosts)
-		if err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		paths = append(paths, p)
-	}
-	return paths, firstErr
+	return u.Path, nil
 }
 
 func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, msgID string, idx int, dir string, hosts allowedHosts) (string, error) {

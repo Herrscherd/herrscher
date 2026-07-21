@@ -61,6 +61,19 @@ func TestResolveAttachmentsSkipsNonImageFile(t *testing.T) {
 	}
 }
 
+// TestResolveAttachmentsRejectsHostedFileURL confirms a file url with a host
+// (file://evil/etc/passwd, whose Path is /etc/passwd) is rejected rather than
+// read — only a genuine host-less local file url passes.
+func TestResolveAttachmentsRejectsHostedFileURL(t *testing.T) {
+	m := contracts.Message{
+		ID:          "1",
+		Attachments: []contracts.Attachment{{Filename: "passwd", URL: "file://evil/etc/passwd", ContentType: "image/png"}},
+	}
+	if got := ResolveAttachments(context.Background(), nil, m, "sess", nil); len(got) != 0 {
+		t.Fatalf("hosted file url must be rejected, got %v", got)
+	}
+}
+
 // TestResolveAttachmentsMixed resolves a file:// image and a CDN image in order,
 // passing through the first and downloading the second.
 func TestResolveAttachmentsMixed(t *testing.T) {

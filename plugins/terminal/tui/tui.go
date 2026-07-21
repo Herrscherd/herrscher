@@ -88,8 +88,10 @@ type tab struct {
 	disconnected bool
 }
 
-// maxTabLines bounds a tab's transcript so a long-lived or chatty session
-// (streaming chunk events token-by-token) cannot grow memory without limit.
+// maxTabLines bounds the number of logical entries a tab's transcript retains so
+// a long-lived session cannot grow memory without limit. It caps entry count, not
+// the size of any one entry: a streamed answer coalesces into a single entry (see
+// appendChunk) whose text grows for the duration of that turn.
 const maxTabLines = 5000
 
 // appendEntry adds a logical entry, dropping the oldest once the transcript
@@ -181,6 +183,26 @@ type model struct {
 	clip      clipboard    // system clipboard reader for Ctrl+V image paste
 	pending   []Attachment // files staged for the next submit, shown as chips
 	attachSeq int          // monotonic counter for naming pasted temp files
+
+	// tsCache memoizes the active tab's wrapped transcript so the animation tick
+	// (which repaints every fastTick while a turn is busy) does not re-wrap the
+	// whole history on each frame — only a real content or width change does.
+	tsCache transcriptCache
+}
+
+// transcriptCache holds the last rendered transcript and the key it was rendered
+// for. The key captures everything renderTranscript's output depends on: which
+// tab, the wrap width, the entry count, and the length + streaming state of the
+// last entry (the only one appendChunk mutates in place). A matching key means
+// the wrapped output is byte-identical, so it can be reused without re-wrapping.
+type transcriptCache struct {
+	ch      string
+	width   int
+	entries int
+	lastLen int
+	lastStr bool
+	out     string
+	valid   bool
 }
 
 // tabHit is the horizontal screen-cell span [x0, x1) a rendered tab occupies on
@@ -660,7 +682,7 @@ func (m *model) thinkingContent() string {
 	if tb == nil {
 		return ""
 	}
-	content := m.renderTranscript(tb, m.vp.Width)
+	content := m.cachedTranscript(tb)
 	if tb.busy && !tb.streamed {
 		line := workingStyle.Render(m.spinFrame() + " thinking…")
 		if content != "" {
@@ -670,6 +692,30 @@ func (m *model) thinkingContent() string {
 		}
 	}
 	return content
+}
+
+// cachedTranscript returns the active tab's wrapped transcript, re-wrapping only
+// when the cache key changed since the last render. The heavy work (lipgloss
+// word-wrap over every entry) thus runs on a real content/width change, not on
+// every animation frame.
+func (m *model) cachedTranscript(tb *tab) string {
+	width := m.vp.Width
+	lastLen, lastStr := 0, false
+	if n := len(tb.entries); n > 0 {
+		lastLen = len(tb.entries[n-1].text)
+		lastStr = tb.entries[n-1].streaming
+	}
+	c := &m.tsCache
+	if c.valid && c.ch == tb.channel && c.width == width &&
+		c.entries == len(tb.entries) && c.lastLen == lastLen && c.lastStr == lastStr {
+		return c.out
+	}
+	out := m.renderTranscript(tb, width)
+	*c = transcriptCache{
+		ch: tb.channel, width: width, entries: len(tb.entries),
+		lastLen: lastLen, lastStr: lastStr, out: out, valid: true,
+	}
+	return out
 }
 
 // totalCost sums the last per-turn cost across tabs, for the brand-row summary.

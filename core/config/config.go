@@ -46,6 +46,16 @@ type Config struct {
 	Home      *HomeRef `json:"home"`      // session home category/forum
 	Workspace string   `json:"workspace"` // workspace root holding projects
 	Source    string   `json:"source"`    // herrscher source checkout for /service update
+
+	Skills *SkillsConfig `json:"skills,omitempty"`
+}
+
+// SkillsConfig configures cross-backend skill injection. A nil pointer, or a nil
+// Enabled, means the feature is on. Roots are extra skill roots appended after
+// the built-in workspace and global (~/.claude/skills) defaults.
+type SkillsConfig struct {
+	Enabled *bool    `json:"enabled,omitempty"`
+	Roots   []string `json:"roots,omitempty"`
 }
 
 // DefaultPath returns where the daemon looks for config.json. It sits beside

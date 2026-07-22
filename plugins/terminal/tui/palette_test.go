@@ -1,6 +1,39 @@
 package tui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// TestPaletteInlineRenderSelectedRow checks the palette renders inline (no border
+// box) with the selected row prefixed ❯ in the warm accent.
+func TestPaletteInlineRenderSelectedRow(t *testing.T) {
+	m := newTestModel() // nil backend → seeded with defaultCommands
+	m.input.SetValue("/")
+	m.palIdx = 0
+	out := m.paletteView()
+	if !strings.Contains(out, glyphCursor+" /clear") {
+		t.Fatalf("selected row must be prefixed %q in accent: %q", glyphCursor, out)
+	}
+	for _, box := range []string{"╭", "╮", "╰", "─", "│"} {
+		if strings.Contains(out, box) {
+			t.Fatalf("palette must be borderless, found %q: %q", box, out)
+		}
+	}
+}
+
+// TestDefaultCommandsIncludeClaudeSet checks the Claude command set is seeded.
+func TestDefaultCommandsIncludeClaudeSet(t *testing.T) {
+	have := map[string]bool{}
+	for _, c := range defaultCommands() {
+		have[c.Name] = true
+	}
+	for _, want := range []string{"clear", "help", "session switch", "session create", "resume"} {
+		if !have[want] {
+			t.Fatalf("default command set missing %q: %+v", want, defaultCommands())
+		}
+	}
+}
 
 func TestFilterCommands(t *testing.T) {
 	cmds := []CommandSpec{

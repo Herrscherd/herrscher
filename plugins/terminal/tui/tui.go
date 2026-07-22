@@ -50,6 +50,9 @@ type Backend interface {
 	// Resume revives an archived session by name (backend resumed via its stored
 	// token), for the /resume picker. Returns a human-readable result or an error.
 	Resume(name string) (string, error)
+	// Interrupt cancels a session's in-flight turn (esc-to-interrupt). Reports
+	// false when nothing was interrupted (no live turn by that name).
+	Interrupt(name string) bool
 }
 
 // roles label a transcript entry so the renderer maps it to a gutter + body style.
@@ -88,6 +91,8 @@ type tab struct {
 	streamed     bool
 	lastCost     float64
 	disconnected bool
+	tokens       int       // cumulative output tokens for the current turn
+	startedAt    time.Time // when the current turn began, for the elapsed-time hint
 }
 
 // maxTabLines bounds the number of logical entries a tab's transcript retains so
@@ -496,6 +501,8 @@ func (m *model) handleEnter() tea.Cmd {
 	// operator sees the message was taken (the "thinking" line is derived from this).
 	tb.busy = true
 	tb.streamed = false
+	tb.tokens = 0
+	tb.startedAt = time.Now()
 	m.syncViewport()
 	return nil
 }
@@ -681,6 +688,11 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	if e.T != "abandoned" {
 		tb.disconnected = false
 	}
+	// Tokens ride events as a cumulative output-token count; keep the latest so the
+	// spinner hint can show turn progress.
+	if e.Tokens > 0 {
+		tb.tokens = e.Tokens
+	}
 	switch e.T {
 	case "chunk":
 		tb.busy = true
@@ -839,6 +851,33 @@ func (m *model) footer() string {
 		return dimStyle.Render("· " + formatCost(tb.lastCost))
 	}
 	return ""
+}
+
+// spinnerHint renders the active turn's progress line in the Claude shape:
+// `✳ …(esc to interrupt · {n}s · ↑ {tokens} · ${cost})`. The token and cost
+// segments appear only once a count/cost has arrived, so an early turn shows just
+// the interrupt affordance and elapsed time.
+func (m *model) spinnerHint(tb *tab) string {
+	segs := []string{"esc to interrupt"}
+	if !tb.startedAt.IsZero() {
+		segs = append(segs, fmt.Sprintf("%ds", int(time.Since(tb.startedAt).Seconds())))
+	}
+	if tb.tokens > 0 {
+		segs = append(segs, "↑ "+formatTokens(tb.tokens))
+	}
+	if tb.lastCost > 0 {
+		segs = append(segs, formatCost(tb.lastCost))
+	}
+	return m.spinFrame() + " …(" + strings.Join(segs, " · ") + ")"
+}
+
+// formatTokens renders an output-token count compactly: sub-thousand counts as
+// their integer, thousands as "3.4k" (matching Claude's spinner).
+func formatTokens(n int) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+	return fmt.Sprintf("%.1fk", float64(n)/1000)
 }
 
 // formatCost renders a turn's USD cost, matching the host progress summary:
@@ -1053,7 +1092,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		switch msg.Type {
-		case tea.KeyCtrlC, tea.KeyEsc:
+		case tea.KeyEsc:
+			// Esc interrupts the active turn when one is in flight; only when the
+			// session is idle does it fall through to quit (matching Claude).
+			if tb := m.tabs[m.active]; tb != nil && tb.busy {
+				if name := m.sessionName(m.active); name != "" {
+					m.tm.Interrupt(name)
+				}
+				return m, nil
+			}
+			return m, tea.Quit
+		case tea.KeyCtrlC:
 			return m, tea.Quit
 		case tea.KeyTab:
 			m.switchTab(1)

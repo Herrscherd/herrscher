@@ -19,7 +19,7 @@ func TestThemeGlyphsAndFramesPresent(t *testing.T) {
 	}
 	for _, s := range []struct {
 		name   string
-		render func(string) string
+		render func(...string) string
 	}{
 		{"dim", dimStyle.Render}, {"user", userStyle.Render}, {"text", textStyle.Render},
 		{"green", greenStyle.Render}, {"sel", selStyle.Render}, {"spinner", spinnerStyle.Render},

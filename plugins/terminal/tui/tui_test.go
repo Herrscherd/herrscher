@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	tea "github.com/charmbracelet/bubbletea"
@@ -98,8 +99,9 @@ type fakeBackend struct {
 	sessions   []contracts.SessionInfo
 	fe         chan RoutedEvent
 	scrollback map[string][]contracts.ScrollbackLine
-	resumed    []string
-	submitted  []submittedTurn
+	resumed     []string
+	submitted   []submittedTurn
+	interrupted []string
 }
 
 // submittedTurn records a Submit call so tests can assert attachments were wired.
@@ -128,6 +130,10 @@ func (f *fakeBackend) Scrollback(name string) []contracts.ScrollbackLine {
 func (f *fakeBackend) Resume(name string) (string, error) {
 	f.resumed = append(f.resumed, name)
 	return "resumed " + name, nil
+}
+func (f *fakeBackend) Interrupt(name string) bool {
+	f.interrupted = append(f.interrupted, name)
+	return true
 }
 func (f *fakeBackend) Commands() []CommandSpec {
 	return []CommandSpec{
@@ -448,6 +454,75 @@ func TestHistoryRecallsLastPrompt(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	if m.input.Value() != "first message" {
 		t.Fatalf("↑ must recall last prompt, got %q", m.input.Value())
+	}
+}
+
+// TestSpinnerHintShowsTokensAndCost checks the active-turn spinner renders the
+// interrupt affordance, elapsed time, token count, and cost.
+func TestSpinnerHintShowsTokensAndCost(t *testing.T) {
+	m := newTestModel()
+	tb := &tab{
+		channel:   "a",
+		busy:      true,
+		tokens:    3400,
+		lastCost:  0.02,
+		startedAt: time.Now().Add(-5 * time.Second),
+	}
+	hint := m.spinnerHint(tb)
+	for _, want := range []string{"esc to interrupt", "5s", "↑ 3.4k", "$0.02"} {
+		if !strings.Contains(hint, want) {
+			t.Fatalf("spinner hint missing %q: %q", want, hint)
+		}
+	}
+}
+
+func TestFormatTokens(t *testing.T) {
+	cases := map[int]string{0: "0", 42: "42", 999: "999", 3400: "3.4k", 12000: "12.0k"}
+	for in, want := range cases {
+		if got := formatTokens(in); got != want {
+			t.Fatalf("formatTokens(%d) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestSessionSwitchOpensAndFocuses checks /session switch opens the picker and
+// Enter swaps the active transcript to the chosen session.
+func TestSessionSwitchOpensAndFocuses(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{
+		{Name: "one", ChannelID: "one"},
+		{Name: "two", ChannelID: "two"},
+	}}
+	m := newModel(f)
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m.ensureTab("one")
+	m.active = "one"
+	m.input.SetValue("/session switch")
+	runCmd(m.handleEnter())
+	if !m.switchOpen {
+		t.Fatal("/session switch must open the switcher")
+	}
+	m.switchIdx = 1 // select "two"
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.switchOpen {
+		t.Fatal("switcher must close after a selection")
+	}
+	if m.active != "two" {
+		t.Fatalf("switch must focus the chosen session, active = %q", m.active)
+	}
+}
+
+// TestEscInterruptsActiveTurn checks esc emits an interrupt for the active
+// session while a turn is in flight (instead of quitting).
+func TestEscInterruptsActiveTurn(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.active = "a"
+	m.ready = true
+	m.tabs["a"].busy = true
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if len(f.interrupted) != 1 || f.interrupted[0] != "a" {
+		t.Fatalf("esc during a turn must interrupt the active session: %+v", f.interrupted)
 	}
 }
 

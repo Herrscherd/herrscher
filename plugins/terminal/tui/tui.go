@@ -180,7 +180,15 @@ type model struct {
 	resumeIdx  int                     // selected row in the /resume picker
 	resumeRows []contracts.SessionInfo // picker rows, sorted by LastTs desc
 
-	tabHits []tabHit // clickable screen-X spans of the visible tabs, set each render
+	switchOpen bool                    // whether the /session switch picker is open
+	switchIdx  int                     // selected row in the switch picker
+	switchRows []contracts.SessionInfo // switch picker rows (open/known sessions)
+
+	choice    *PendingChoice // an active allow/deny permission menu, else nil
+	choiceIdx int            // selected row in the permission menu
+
+	history []string // ring of submitted prompts, for ↑/↓ recall
+	histIdx int      // cursor into history while recalling (len(history) == not recalling)
 
 	clip      clipboard    // system clipboard reader for Ctrl+V image paste
 	pending   []Attachment // files staged for the next submit, shown as chips
@@ -206,13 +214,6 @@ type transcriptCache struct {
 	lastStr bool
 	out     string
 	valid   bool
-}
-
-// tabHit is the horizontal screen-cell span [x0, x1) a rendered tab occupies on
-// the strip row, recorded so a mouse click can be mapped back to its session.
-type tabHit struct {
-	ch     string
-	x0, x1 int
 }
 
 // maxComposerLines caps how tall the multi-line composer grows before it scrolls
@@ -246,16 +247,17 @@ func (m *model) resizeComposer() {
 	}
 }
 
-// chromeHeight is the number of non-viewport rows View renders: the panel border
-// (top+bottom), brand row, tab strip, and footer (5), plus the composer's current
-// height, the help block, and the command palette when each is shown.
+// chromeHeight is the number of non-viewport rows View renders. The Claude flow
+// has no enclosing card and no tab strip: the fixed chrome is the status/spinner
+// row and the dim hint line (2), plus the composer's current height, and any
+// staged-chip row, shortcuts line, palette, or picker when each is shown.
 func (m *model) chromeHeight() int {
-	h := 5 + m.composerHeight()
+	h := 2 + m.composerHeight()
 	if len(m.pending) > 0 {
 		h++ // the staged-attachments chip row
 	}
 	if m.showHelp {
-		h += 5
+		h++ // the one-line shortcuts panel
 	}
 	if m.paletteOpen() {
 		h += m.paletteHeight()
@@ -263,19 +265,22 @@ func (m *model) chromeHeight() int {
 	if m.resumeOpen {
 		h += m.resumeHeight()
 	}
+	if m.switchOpen {
+		h += m.switchHeight()
+	}
+	if m.choice != nil {
+		h += m.choiceHeight()
+	}
 	return h
 }
 
-// innerWidth is the usable width inside the panel: the window minus the border
-// and horizontal padding lipgloss adds on each side. Every width-aligned row
-// (brand, tabs, input) and the viewport are sized to it so nothing overruns the
-// frame. Floored at 1 so a tiny terminal never yields a negative width.
+// innerWidth is the usable content width: the full window (no border, no card),
+// floored at 1 so a tiny terminal never yields a negative width.
 func (m *model) innerWidth() int {
-	w := m.width - 4
-	if w < 1 {
-		w = 1
+	if m.width < 1 {
+		return 1
 	}
-	return w
+	return m.width
 }
 
 // applySize fits the viewport to the current window minus the chrome.
@@ -337,13 +342,12 @@ func (m *model) seedScrollback(tb *tab) {
 }
 
 // scrollbackPrefix labels a replayed line by its role, mirroring the live render
-// glyphs (you / agent) so seeded history looks like the conversation it replays.
+// (a dim "> " prompt for user turns, bare prose for the agent) so seeded history
+// looks like the conversation it replays.
 func scrollbackPrefix(role string) string {
 	switch role {
 	case "user":
-		return glyphYou + " you "
-	case "assistant":
-		return glyphAgent + " "
+		return glyphPrompt + " "
 	default:
 		return ""
 	}
@@ -601,21 +605,6 @@ func (m *model) activate(ch string) {
 	m.vp.GotoBottom() // a freshly switched-to tab starts at its latest output
 }
 
-// tabAt returns the session channel whose tab covers screen cell (x, y), or ""
-// if the click is not on the tab strip. The strip is the panel's third row
-// (border, brand, tabs); tabHits already carry absolute screen-X spans.
-func (m *model) tabAt(x, y int) string {
-	if y != tabStripScreenY {
-		return ""
-	}
-	for _, h := range m.tabHits {
-		if x >= h.x0 && x < h.x1 {
-			return h.ch
-		}
-	}
-	return ""
-}
-
 func (m *model) renderInto(tb *tab, e contracts.Event) {
 	// Any non-abandoned event clears the disconnected marker.
 	if e.T != "abandoned" {
@@ -702,7 +691,7 @@ func (m *model) thinkingContent() string {
 	}
 	content := m.cachedTranscript(tb)
 	if tb.busy && !tb.streamed {
-		line := workingStyle.Render(m.spinFrame() + " thinking…")
+		line := spinnerStyle.Render(m.spinFrame() + " thinking…")
 		if content != "" {
 			content += "\n" + line
 		} else {
@@ -736,112 +725,23 @@ func (m *model) cachedTranscript(tb *tab) string {
 	return out
 }
 
-// totalCost sums the last per-turn cost across tabs, for the brand-row summary.
-func (m *model) totalCost() float64 {
-	var sum float64
-	for _, tb := range m.tabs {
-		sum += tb.lastCost
-	}
-	return sum
-}
-
-// brandRow renders the brand on the left and the session/cost summary on the right.
-func (m *model) brandRow() string {
-	left := brandStyle.Render(glyphBrand + " HERRSCHER")
-	noun := "sessions"
-	if len(m.order) == 1 {
-		noun = "session"
-	}
-	right := statusStyle.Render(fmt.Sprintf("%d %s · %s", len(m.order), noun, formatCost(m.totalCost())))
-	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 1 {
-		return left
-	}
-	return left + strings.Repeat(" ", gap) + right
-}
-
-// Layout landmarks for mouse hit-testing, in absolute screen cells. The panel's
-// rounded border and horizontal padding shift content one cell in on each side,
-// so the first content column is 2; rows are border(0), brand(1), tabs(2).
-const (
-	tabStripContentX = 2
-	tabStripScreenY  = 2
-)
-
-// tabStrip renders the session tabs: active tab highlighted with the brand glyph,
-// unread marked with •, busy with ⟳, left-truncated around the active tab when
-// wide. It also records each visible tab's screen-X span in m.tabHits so a click
-// can be routed back to its session.
-func (m *model) tabStrip() string {
-	m.tabHits = m.tabHits[:0]
-	if len(m.order) == 0 {
-		return statusStyle.Render("no sessions — /session create <name>")
-	}
-	segs := make([]string, len(m.order))
-	active := 0
-	for i, ch := range m.order {
-		tb := m.tabs[ch]
-		marker := "  "
-		if tb.busy {
-			marker = workingStyle.Render(glyphBusy) + " "
-		} else if tb.unread {
-			marker = unreadStyle.Render(glyphUnread) + " "
-		}
-		if ch == m.active {
-			active = i
-			segs[i] = marker + activeTabStyle.Render(glyphBrand+" "+tb.label) + " "
-		} else {
-			segs[i] = marker + inactiveTabStyle.Render(tb.label) + " "
-		}
-	}
-	start, prefix := fitTabs(segs, active, m.innerWidth())
-	// Map each visible segment to an absolute screen-X span: content starts at
-	// tabStripContentX, shifted right by the elision prefix ("‹ ") when present.
-	x := tabStripContentX + lipgloss.Width(prefix)
-	for i := start; i < len(segs); i++ {
-		w := lipgloss.Width(segs[i])
-		m.tabHits = append(m.tabHits, tabHit{ch: m.order[i], x0: x, x1: x + w})
-		x += w
-	}
-	return prefix + strings.Join(segs[start:], "")
-}
-
-// fitTabs decides how many leading tab segments to drop, never past the active
-// one, until the active tab fits width; it returns the first visible index and
-// the leading ‹ prefix (empty when nothing is elided). The caller joins
-// segs[start:] behind prefix and records hitboxes from the same start.
-func fitTabs(segs []string, active, width int) (int, string) {
-	start := 0
-	for {
-		prefix := ""
-		if start > 0 {
-			prefix = statusStyle.Render("‹ ")
-		}
-		joined := strings.Join(segs[start:], "")
-		if lipgloss.Width(prefix)+lipgloss.Width(joined) <= width || start >= active {
-			return start, prefix
-		}
-		start++
-	}
-}
-
 // inputRow renders the multi-line composer. The key hint lives on the status row
 // above it (see statusRow), since a growing composer can no longer share its line.
 func (m *model) inputRow() string {
 	return m.input.View()
 }
 
-// hintText is the right-aligned key cheatsheet, switching to palette navigation
-// keys while the palette is open.
+// hintText is the dim key cheatsheet under the composer, switching to menu
+// navigation keys while an inline menu is open.
 func (m *model) hintText() string {
 	if m.paletteOpen() {
-		return statusStyle.Render("↑↓ navigate · Tab complete · Esc close")
+		return dimStyle.Render("↑↓ navigate · Tab complete · Esc close")
 	}
-	return statusStyle.Render("/ cmds · ? help · Tab ⇄ · ⌥⏎ newline")
+	return dimStyle.Render("/ cmds · @ files · ? shortcuts · ⌥⏎ newline · esc interrupt")
 }
 
 // statusRow is the footer status on the left and the key hint on the right,
-// separated to fill the panel width. left is already styled (footer or flash).
+// separated to fill the width. left is already styled (footer or flash).
 func (m *model) statusRow(left string) string {
 	hint := m.hintText()
 	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(hint)
@@ -851,24 +751,23 @@ func (m *model) statusRow(left string) string {
 	return left + strings.Repeat(" ", gap) + hint
 }
 
-// footer renders the status/cost line for the active tab.
+// footer renders the spinner/status line for the active tab: a warm spinner hint
+// while busy, a dim disconnected/cost note otherwise.
 func (m *model) footer() string {
 	tb := m.tabs[m.active]
 	if tb == nil {
 		return ""
 	}
-	if tb.disconnected {
-		return statusStyle.Render("· disconnected")
-	}
-	state := statusStyle.Render("· idle")
 	if tb.busy {
-		return workingStyle.Render(glyphBusy + " working…")
+		return spinnerStyle.Render(m.spinnerHint(tb))
 	}
-	cost := ""
+	if tb.disconnected {
+		return dimStyle.Render("· disconnected")
+	}
 	if tb.lastCost > 0 {
-		cost = "  " + costStyle.Render("last "+formatCost(tb.lastCost))
+		return dimStyle.Render("· " + formatCost(tb.lastCost))
 	}
-	return state + cost
+	return ""
 }
 
 // formatCost renders a turn's USD cost, matching the host progress summary:
@@ -940,15 +839,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.input.SetWidth(m.innerWidth())
 		m.syncViewport()
-	case tea.MouseMsg:
-		// Left-click on the tab strip focuses that session; everything else
-		// (including wheel scroll) falls through to the viewport below.
-		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
-			if ch := m.tabAt(msg.X, msg.Y); ch != "" {
-				m.activate(ch)
-				return m, nil
-			}
-		}
 	case tea.KeyMsg:
 		m.flash = "" // any keypress clears a transient status
 		// Two-step close confirm: if waiting for confirmation, next key decides.
@@ -1121,16 +1011,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// helpView returns the key-binding cheat-sheet rendered as a faint status block.
+// helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	lines := []string{
-		"Keys:  Tab / Shift+Tab  switch tab        Ctrl+W  close tab (y to confirm)",
-		"       PgUp / PgDn      scroll             ?       toggle this help",
-		"       /                command palette    Enter   submit / run /cmd",
-		"       ↑↓ Tab Esc       navigate palette   Ctrl+C  quit",
-		"       /resume          reopen a session   ↑↓ Esc  navigate picker",
-	}
-	return statusStyle.Render(strings.Join(lines, "\n"))
+	return dimStyle.Render("↑↓ history/scroll · ⏎ send · ⌥⏎ newline · esc interrupt · ctrl+v paste image · / commands · @ files")
 }
 
 func (m *model) View() string {
@@ -1139,24 +1022,33 @@ func (m *model) View() string {
 	}
 	footer := m.footer()
 	if m.flash != "" {
-		footer = statusStyle.Render("· " + m.flash)
+		footer = dimStyle.Render("· " + m.flash)
 	}
 	footer = m.statusRow(footer)
-	parts := []string{m.brandRow(), m.tabStrip(), m.vp.View()}
+	// Full-width Claude flow: transcript → inline menu → status/spinner → input →
+	// hint. No enclosing card, no brand row, no permanent tab strip.
+	parts := []string{m.vp.View()}
+	if m.choice != nil {
+		parts = append(parts, m.choiceView())
+	}
 	if m.paletteOpen() {
 		parts = append(parts, m.paletteView())
 	}
+	if m.mentionOpen() {
+		parts = append(parts, m.mentionView())
+	}
 	if m.resumeOpen {
 		parts = append(parts, m.resumeView())
+	}
+	if m.switchOpen {
+		parts = append(parts, m.switchView())
 	}
 	if m.showHelp {
 		parts = append(parts, m.helpView())
 	}
 	if chips := chipRow(m.pending); chips != "" {
-		parts = append(parts, chips+"  "+statusStyle.Render("⌃U remove"))
+		parts = append(parts, chips+"  "+dimStyle.Render("⌃U remove"))
 	}
 	parts = append(parts, footer, m.inputRow())
-	// The style width counts padding but not the border; width-2 gives a content
-	// wrap of innerWidth (each row is built to that) and a total of the full width.
-	return panelBorder.Width(m.width - 2).Render(strings.Join(parts, "\n"))
+	return strings.Join(parts, "\n")
 }

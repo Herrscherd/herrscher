@@ -322,10 +322,10 @@ func TestResizeSyncsViewport(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	// second size message exercises the resize (else) branch
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	// The panel border trims 4 cols (border + padding, both sides) and 6 rows of
-	// chrome (border top/bottom, brand, tabs, footer, input).
-	if m.vp.Width != 96 || m.vp.Height != 24 {
-		t.Fatalf("resize: vp.Width=%d (want 96), vp.Height=%d (want 24)", m.vp.Width, m.vp.Height)
+	// The full-width flow uses the whole width and reserves 3 chrome rows: the
+	// status/spinner row, the composer (1), and the dim hint line.
+	if m.vp.Width != 100 || m.vp.Height != 27 {
+		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 27)", m.vp.Width, m.vp.Height)
 	}
 }
 
@@ -334,8 +334,8 @@ func TestHelpReducesViewportHeight(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	base := m.vp.Height
 	m.toggleHelp()
-	if m.vp.Height != base-5 {
-		t.Fatalf("help must shrink viewport by the 5-line help block: base=%d now=%d", base, m.vp.Height)
+	if m.vp.Height != base-1 {
+		t.Fatalf("shortcuts panel must shrink viewport by its one line: base=%d now=%d", base, m.vp.Height)
 	}
 	m.toggleHelp()
 	if m.vp.Height != base {

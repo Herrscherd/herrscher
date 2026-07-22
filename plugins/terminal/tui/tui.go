@@ -928,6 +928,55 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingClose = false
 			return m, nil
 		}
+		// The permission menu is modal and takes precedence: arrows move the
+		// selection, Enter submits the chosen option as a pick, Esc denies (selects
+		// the last, safe option); every other key is swallowed.
+		if m.choice != nil {
+			switch msg.Type {
+			case tea.KeyUp:
+				m.moveChoice(-1)
+				return m, nil
+			case tea.KeyDown:
+				m.moveChoice(1)
+				return m, nil
+			case tea.KeyEsc:
+				m.choiceIdx = len(m.choice.Options) - 1 // esc = the final deny row
+				m.chooseChoice()
+				return m, nil
+			case tea.KeyEnter:
+				m.chooseChoice()
+				return m, nil
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+		// The /session switch picker is modal: arrows move the selection, Enter
+		// focuses the chosen session, Esc closes it; every other key is swallowed.
+		if m.switchOpen {
+			switch msg.Type {
+			case tea.KeyUp:
+				m.moveSwitch(-1)
+				return m, nil
+			case tea.KeyDown:
+				m.moveSwitch(1)
+				return m, nil
+			case tea.KeyEsc:
+				m.switchOpen = false
+				m.applySize()
+				m.syncViewport()
+				return m, nil
+			case tea.KeyEnter:
+				m.chooseSwitch()
+				m.switchOpen = false
+				m.applySize()
+				m.syncViewport()
+				return m, m.ensureSpin()
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			}
+			return m, nil
+		}
 		// The /resume picker is modal: arrows move the selection, Enter revives or
 		// focuses the chosen session, Esc closes it; every other key is swallowed.
 		if m.resumeOpen {

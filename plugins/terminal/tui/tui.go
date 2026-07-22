@@ -187,6 +187,8 @@ type model struct {
 	choice    *PendingChoice // an active allow/deny permission menu, else nil
 	choiceIdx int            // selected row in the permission menu
 
+	mentionIdx int // selected row in the inline @ file-mention list
+
 	history []string // ring of submitted prompts, for ↑/↓ recall
 	histIdx int      // cursor into history while recalling (len(history) == not recalling)
 
@@ -261,6 +263,9 @@ func (m *model) chromeHeight() int {
 	}
 	if m.paletteOpen() {
 		h += m.paletteHeight()
+	}
+	if m.mentionOpen() {
+		h += m.mentionHeight()
 	}
 	if m.resumeOpen {
 		h += m.resumeHeight()
@@ -942,6 +947,24 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmd, m.ensureSpin())
 			case tea.KeyCtrlC:
 				return m, tea.Quit
+			}
+		}
+		// The inline @ file-mention list, when the cursor word is an @-mention with
+		// matches: arrows move the selection, Tab inserts the selected path as plain
+		// text; other keys fall through to keep editing the word.
+		if m.mentionOpen() {
+			switch msg.Type {
+			case tea.KeyUp:
+				m.moveMention(-1)
+				return m, nil
+			case tea.KeyDown:
+				m.moveMention(1)
+				return m, nil
+			case tea.KeyTab:
+				m.completeActiveMention()
+				m.applySize()
+				m.syncViewport()
+				return m, nil
 			}
 		}
 		switch msg.Type {

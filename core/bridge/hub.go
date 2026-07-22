@@ -8,6 +8,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
 // turnController holds the cancel func of the turn currently running so an
@@ -92,7 +93,8 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 		})
 	}()
 
-	runHubTurnsCtl(ctx, in, conn, resp, orch, ctrl)
+	eng := newSkillEngine(resp)
+	runHubTurnsCtl(ctx, in, conn, resp, orch, ctrl, eng)
 	return ctx.Err()
 }
 
@@ -102,12 +104,12 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 // sends the next input only after it sees this turn's reply{done}, and this
 // loop processes one frame at a time anyway.
 func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator) {
-	runHubTurnsCtl(ctx, in, sink, resp, orch, nil)
+	runHubTurnsCtl(ctx, in, sink, resp, orch, nil, nil)
 }
 
 // runHubTurnsCtl is runHubTurns with an explicit turnController so an interrupt
 // frame read out-of-band can cancel the in-flight turn.
-func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ctrl *turnController) {
+func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -120,7 +122,7 @@ func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contrac
 			case "pick":
 				runPick(ctx, sink, resp, ev.Value)
 			default: // "input" (and any human-origin frame)
-				runOneTurn(ctx, sink, resp, orch, ev, ctrl)
+				runOneTurn(ctx, sink, resp, orch, ev, ctrl, eng)
 			}
 		}
 	}
@@ -129,14 +131,14 @@ func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contrac
 // runOneTurn runs a single backend turn for an input frame, streaming chunk/
 // status events and a terminal reply{done}. An empty output still emits
 // reply{done} so the hub's FIFO can advance.
-func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController) {
+func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController, eng *skills.Engine) {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
 	var memCtx string
 	if orch != nil {
 		memCtx = orch.Context(turnCtx)
 	}
-	prompt := contracts.Prompt{Content: ev.Text, Context: memCtx, Author: ev.Who, Attachments: ev.Attachments}
+	prompt := contracts.Prompt{Content: ev.Text, Context: withSkills(memCtx, eng), Author: ev.Who, Attachments: ev.Attachments}
 	var cost float64
 	var outTok int
 	onEvent := func(be contracts.BackendEvent) {
@@ -154,10 +156,33 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 		out = "⚠️ " + err.Error()
 	}
 	out = strings.TrimSpace(out)
+	if eng != nil {
+		eng.Detect(out)
+	}
 	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, Resume: resumeToken(resp)})
 	if orch != nil {
 		_ = orch.Observe(ctx, prompt, out)
 	}
+}
+
+// withSkills appends the skill menu and any active-skill expansions to the
+// memory context. A nil engine (skills disabled / native backend) returns memCtx
+// unchanged.
+func withSkills(memCtx string, eng *skills.Engine) string {
+	if eng == nil {
+		return memCtx
+	}
+	parts := make([]string, 0, 3)
+	if memCtx != "" {
+		parts = append(parts, memCtx)
+	}
+	if menu := eng.Menu(); menu != "" {
+		parts = append(parts, menu)
+	}
+	if exp := eng.Expansions(); exp != "" {
+		parts = append(parts, exp)
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // resumeToken reads a backend's opaque resume token when it is ResumeAware, so

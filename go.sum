@@ -6,6 +6,8 @@ github.com/Herrscherd/herrscher-codex-backend v0.1.2 h1:Bpz9aHNspCN5D4yn6++5Qd6c
 github.com/Herrscherd/herrscher-codex-backend v0.1.2/go.mod h1:7QnVLNllTl84Ldk7GR3nNCkYN7INB2kJQf06EVzyXV8=
 github.com/Herrscherd/herrscher-contracts v0.2.0 h1:cxHw+7QNiYWxLM2SxIExNh9m3lDLpZNd0FQW2C85ENU=
 github.com/Herrscherd/herrscher-contracts v0.2.0/go.mod h1:LM6PwTwJwF4+uVjeqIGFhWZOaQbLPtUxyhjD9ji+NmI=
+github.com/Herrscherd/herrscher-contracts v0.2.1 h1:Oe0wm5819rygLXhD6eA8nWpbBibI7PVSsEXzVyuRPpU=
+github.com/Herrscherd/herrscher-contracts v0.2.1/go.mod h1:LM6PwTwJwF4+uVjeqIGFhWZOaQbLPtUxyhjD9ji+NmI=
 github.com/Herrscherd/herrscher-cursor-backend v0.1.4 h1:vD/LNiWxO1ls3y1NQtxlvUOWhTHk9YV4yaMTrLC/iEs=
 github.com/Herrscherd/herrscher-cursor-backend v0.1.4/go.mod h1:vB/mCVATufAARlucTXbkG/VF2cnGdv0/RSZhOBZgdio=
 github.com/Herrscherd/herrscher-discord-gateway v0.2.5 h1:QqwryuS4FyMq+1JbsVJBgW+EceBbqhIYbJgPbANatew=

@@ -19,6 +19,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
 // RoutedEvent is a turn event tagged with the conversation (session channel) it
@@ -189,6 +190,10 @@ type model struct {
 	switchIdx  int                     // selected row in the switch picker
 	switchRows []contracts.SessionInfo // switch picker rows (open/known sessions)
 
+	skillsOpen bool           // whether the /skills panel overlay is open
+	skillsIdx  int            // selected row in the /skills panel
+	skillsRows []skills.Skill // discovered skills, name-sorted
+
 	choice    *PendingChoice // an active allow/deny permission menu, else nil
 	choiceIdx int            // selected row in the permission menu
 
@@ -282,6 +287,9 @@ func (m *model) chromeHeight() int {
 	}
 	if m.switchOpen {
 		h += m.switchHeight()
+	}
+	if m.skillsOpen {
+		h += m.skillsHeight()
 	}
 	if m.choice != nil {
 		h += m.choiceHeight()
@@ -479,6 +487,10 @@ func (m *model) handleEnter() tea.Cmd {
 		}
 		if args[0] == "session" && len(args) >= 2 && args[1] == "switch" {
 			m.openSwitch() // TUI-local session switcher (invisible multi-session)
+			return nil
+		}
+		if args[0] == "skills" {
+			m.openSkills() // TUI-local read-only view of available skills
 			return nil
 		}
 		if args[0] == "attach" {
@@ -1021,6 +1033,26 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// The /skills panel is modal and read-only: arrows scroll the selection,
+		// Esc closes it; every other key is swallowed.
+		if m.skillsOpen {
+			switch msg.Type {
+			case tea.KeyUp:
+				m.moveSkills(-1)
+				return m, nil
+			case tea.KeyDown:
+				m.moveSkills(1)
+				return m, nil
+			case tea.KeyEsc, tea.KeyEnter:
+				m.skillsOpen = false
+				m.applySize()
+				m.syncViewport()
+				return m, nil
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			}
+			return m, nil
+		}
 		// The /resume picker is modal: arrows move the selection, Enter revives or
 		// focuses the chosen session, Esc closes it; every other key is swallowed.
 		if m.resumeOpen {
@@ -1248,6 +1280,9 @@ func (m *model) View() string {
 	}
 	if m.switchOpen {
 		parts = append(parts, m.switchView())
+	}
+	if m.skillsOpen {
+		parts = append(parts, m.skillsView())
 	}
 	if m.showHelp {
 		parts = append(parts, m.helpView())

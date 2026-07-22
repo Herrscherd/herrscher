@@ -93,6 +93,7 @@ func defaultCommands() []CommandSpec {
 		{Name: "session switch", Args: "<name>", Desc: "switch session"},
 		{Name: "session create", Args: "--name", Desc: "start a session"},
 		{Name: "resume", Args: "<name>", Desc: "reopen a session"},
+		{Name: "skills", Desc: "list available skills"},
 	}
 }
 

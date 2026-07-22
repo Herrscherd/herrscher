@@ -293,6 +293,10 @@ The neutral engine lives in the dependency-free `core/skills` package
 a `SKILL.md` you add or edit mid-session is picked up without restarting it;
 skills the model already activated stay active.
 
+In the terminal TUI, **`/skills`** opens a read-only panel listing the skills
+discovered under `~/.claude/skills` (plus any configured extra roots) — name and
+description per row, `↑↓` to scroll, `Esc` to close.
+
 **Config** (`~/.config/herrscher/config.json`, all optional):
 
 ```jsonc

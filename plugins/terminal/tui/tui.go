@@ -483,6 +483,7 @@ func (m *model) handleEnter() tea.Cmd {
 	atts := m.pending
 	m.pending = nil
 	m.applySize() // the chip row (if any) is gone now the draft is sent
+	m.recordHistory(text)
 	m.tm.Submit(m.active, text, atts)
 	tb := m.tabs[m.active]
 	tb.endStream() // a new user turn closes any lingering agent block
@@ -559,6 +560,41 @@ func (m *model) dispatchCmd(origin string, args []string) tea.Cmd {
 		out, err := tm.Dispatch(args)
 		return dispatchResultMsg{origin: origin, out: out, err: err}
 	}
+}
+
+// recordHistory appends a submitted prompt to the input-history ring and resets
+// the recall cursor to the end, so the next ↑ starts from the newest entry.
+func (m *model) recordHistory(text string) {
+	if text == "" {
+		return
+	}
+	// Skip a duplicate of the most recent entry so repeated sends don't stack.
+	if n := len(m.history); n == 0 || m.history[n-1] != text {
+		m.history = append(m.history, text)
+	}
+	m.histIdx = len(m.history)
+}
+
+// recallHistory moves the recall cursor by d (−1 = older, +1 = newer) and loads
+// that prompt into the composer. Moving past the newest entry restores an empty
+// draft. It reports whether it consumed the key (false when there is no history).
+func (m *model) recallHistory(d int) bool {
+	if len(m.history) == 0 {
+		return false
+	}
+	idx := m.histIdx + d
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(m.history) {
+		m.histIdx = len(m.history)
+		m.input.SetValue("")
+		return true
+	}
+	m.histIdx = idx
+	m.input.SetValue(m.history[idx])
+	m.input.CursorEnd()
+	return true
 }
 
 // clearActive wipes the active tab's transcript, the /clear conversation reset.
@@ -994,6 +1030,20 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.applySize() // the chip row may have just disappeared
 				m.syncViewport()
 				return m, nil
+			}
+		case tea.KeyUp:
+			// On an empty or already-recalling single-line composer, ↑ walks back
+			// through submitted prompts; otherwise it falls through to the composer.
+			if m.input.LineCount() <= 1 && (m.input.Value() == "" || m.histIdx < len(m.history)) {
+				if m.recallHistory(-1) {
+					return m, nil
+				}
+			}
+		case tea.KeyDown:
+			if m.input.LineCount() <= 1 && m.histIdx < len(m.history) {
+				if m.recallHistory(1) {
+					return m, nil
+				}
 			}
 		case tea.KeyCtrlW:
 			m.pendingClose = true

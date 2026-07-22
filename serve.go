@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/term"
@@ -105,6 +106,12 @@ func runServe(ctx context.Context, args []string) error {
 	// background service (no TTY) → headless: the hub drives every gateway and
 	// nothing takes over the foreground.
 	if fg != nil && term.IsTerminal(int(os.Stdout.Fd())) {
+		// The TUI owns the terminal; the background daemon (and libraries that
+		// write straight to os.Stderr) must not paint over its alt-screen. Route
+		// stderr to a log file beside state.json for the TUI's lifetime.
+		if restore, rerr := redirectStderr(filepath.Join(filepath.Dir(*statePath), "serve.log")); rerr == nil {
+			defer restore()
+		}
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		go func() { _ = host.RunHub(ctx, gws, opts) }()

@@ -769,8 +769,11 @@ Common ones: `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID` (default channel),
 `OBSIDIAN_VAULT` (memory vault path, optional — auto-provisioned at
 `~/.herrscher/memory` if unset). All
 of these can be supplied via the root `.env` (see [Configuration](#configuration)).
-Operator logging: `HERRSCHER_LOG` sets the structured (`log/slog`) level on stderr
+Operator logging: `HERRSCHER_LOG` sets the structured (`log/slog`) level
 — `debug|info|warn|error`, default `info`; the bridge's `-v` flag forces `debug`.
+Logs go to stderr, except when the terminal TUI owns the screen: there the daemon
+runs behind the TUI, so stderr (and any library that writes to it) is redirected to
+`serve.log` beside `state.json` to keep the alt-screen clean — `tail -f` it to watch.
 Remote transport (opt-in, see [Roadmap](#roadmap)): `HERRSCHER_REMOTE` —
 comma-separated categories to run out-of-process (`memory`, `orchestrator`,
 `backend`; unset ⇒ all in-process) — and `HERRSCHER_NATS` — the NATS URL (default

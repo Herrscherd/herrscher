@@ -65,11 +65,18 @@ func completeMention(input string, cursor int, match string) (string, int) {
 	return out, start + len(newWord)
 }
 
-// worktreeDir resolves the active session's worktree directory for @ completion.
-// SessionInfo carries no absolute path today, so this falls back to the gateway
-// process's working directory (the workspace root) — a graceful degrade, not a
-// blocker (see design §4.4 / §9).
+// worktreeDir resolves the active session's run directory for @ completion: the
+// session's own worktree/run dir (from SessionInfo.Dir), falling back to the
+// gateway process's working directory when the session inherits the launcher cwd
+// (e.g. a shared terminal session) or is not yet known.
 func (m *model) worktreeDir() string {
+	if name := m.sessionName(m.active); name != "" {
+		for _, s := range m.tm.Sessions() {
+			if s.Name == name && s.Dir != "" {
+				return s.Dir
+			}
+		}
+	}
 	if wd, err := os.Getwd(); err == nil {
 		return wd
 	}
@@ -91,16 +98,24 @@ func (m *model) mentionOpen() bool {
 }
 
 // mentionRows are the current @ completion matches (nil when not in a mention).
+// It is called several times per render, so the underlying directory listing is
+// memoized on the model keyed by dir+prefix — the ReadDir runs at most once per
+// distinct (dir, prefix) rather than once per call.
 func (m *model) mentionRows() []string {
 	_, prefix, ok := mentionWord(m.input.Value(), m.mentionCursor())
 	if !ok {
 		return nil
 	}
-	rows := mentionMatches(m.worktreeDir(), prefix)
-	if len(rows) > mentionMax {
-		rows = rows[:mentionMax]
+	key := m.worktreeDir() + "\x00" + prefix
+	if key != m.mentionCacheKey {
+		rows := mentionMatches(m.worktreeDir(), prefix)
+		if len(rows) > mentionMax {
+			rows = rows[:mentionMax]
+		}
+		m.mentionCacheKey = key
+		m.mentionCacheRows = rows
 	}
-	return rows
+	return m.mentionCacheRows
 }
 
 // clampMention keeps the selection index within the current match set.

@@ -2,12 +2,12 @@ github.com/Herrscherd/dctl v1.2.0 h1:IRsTXcTMKA/roqHcDXq8qHos4D9ZPoZkQEANAgqYz7A
 github.com/Herrscherd/dctl v1.2.0/go.mod h1:43yI1s+IzYjP0MPwkkN3rTKrBgXxqA2t7W6bkIjdiPA=
 github.com/Herrscherd/herrscher-claude-backend v0.2.0 h1:ll+GspbLyhQBZqVuA7bMDkUaHYqQQn1ARmOa3OTdRGg=
 github.com/Herrscherd/herrscher-claude-backend v0.2.0/go.mod h1:vic5F0z6fplAItgGcZy9wFsPo40doIQ1lneGmKKIyQ8=
-github.com/Herrscherd/herrscher-codex-backend v0.1.1 h1:Qbv5myT+8lig4y17Nxt/fQ2gS2EOPv4orpWms50O4Z0=
-github.com/Herrscherd/herrscher-codex-backend v0.1.1/go.mod h1:OIOKegkB0y8KYxxQ46P6F9xJZPx75DxoQdf4rmdx0As=
+github.com/Herrscherd/herrscher-codex-backend v0.1.2 h1:Bpz9aHNspCN5D4yn6++5Qd6cYhbNotd9fCdSUxno1oU=
+github.com/Herrscherd/herrscher-codex-backend v0.1.2/go.mod h1:7QnVLNllTl84Ldk7GR3nNCkYN7INB2kJQf06EVzyXV8=
 github.com/Herrscherd/herrscher-contracts v0.2.0 h1:cxHw+7QNiYWxLM2SxIExNh9m3lDLpZNd0FQW2C85ENU=
 github.com/Herrscherd/herrscher-contracts v0.2.0/go.mod h1:LM6PwTwJwF4+uVjeqIGFhWZOaQbLPtUxyhjD9ji+NmI=
-github.com/Herrscherd/herrscher-cursor-backend v0.1.3 h1:g354L2b7DilL2rLIShmV3hqoW1aYwXoN7020hgjhvOk=
-github.com/Herrscherd/herrscher-cursor-backend v0.1.3/go.mod h1:QIy9ct505BWmU4S1hw0jtLim/S+ewPM8S5Avitd5C94=
+github.com/Herrscherd/herrscher-cursor-backend v0.1.4 h1:vD/LNiWxO1ls3y1NQtxlvUOWhTHk9YV4yaMTrLC/iEs=
+github.com/Herrscherd/herrscher-cursor-backend v0.1.4/go.mod h1:vB/mCVATufAARlucTXbkG/VF2cnGdv0/RSZhOBZgdio=
 github.com/Herrscherd/herrscher-discord-gateway v0.2.4 h1:5FZVg4fFltCfwAScl5eE/fUQ5SW/N8AiCwyJaOL5xWU=
 github.com/Herrscherd/herrscher-discord-gateway v0.2.4/go.mod h1:QtMiJDmFn22q1tlgdOSbRyoDQqFTUahHHe13FJTbjuk=
 github.com/Herrscherd/herrscher-llm-extractor v0.1.2 h1:0ztkv0o26pev///tB02X8pr7cnhppVafmD9Em0BLFVc=

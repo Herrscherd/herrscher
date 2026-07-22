@@ -60,6 +60,13 @@ func (e *Engine) Detect(reply string) {
 	}
 }
 
+// Strip removes activation markers from a reply so the marker (an internal
+// model→engine signal) never reaches the human-visible message. Surrounding
+// whitespace left by a removed marker is collapsed.
+func (e *Engine) Strip(reply string) string {
+	return strings.TrimSpace(useMarker.ReplaceAllString(reply, ""))
+}
+
 // Expansions returns the bodies of all active skills, each fenced with its name
 // and absolute directory so the model can Read bundled files. A body that fails
 // to load is skipped. Returns "" when nothing is active.

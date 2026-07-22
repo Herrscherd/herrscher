@@ -158,6 +158,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 	out = strings.TrimSpace(out)
 	if eng != nil {
 		eng.Detect(out)
+		out = eng.Strip(out)
 	}
 	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, Resume: resumeToken(resp)})
 	if orch != nil {

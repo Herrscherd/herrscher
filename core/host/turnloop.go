@@ -143,6 +143,26 @@ func (d *sessionDriver) Pick(value string) {
 	d.queue <- contracts.Event{T: "pick", Value: value}
 }
 
+// interruptSendTimeout bounds how long an out-of-band interrupt send waits for
+// the connection writer before it is dropped (no bridge connected / no turn).
+const interruptSendTimeout = 2 * time.Second
+
+// Interrupt cancels the session's in-flight turn. Unlike Pick it bypasses the
+// FIFO queue — the turn pump is blocked awaiting the current turn's reply, so
+// the interrupt frame is written straight to the bridge connection (drained by
+// serveConn's writer independently of the pump). The bridge cancels the running
+// backend turn, which then emits its terminal reply and the turn ends. The send
+// runs detached with a timeout so a call with no bridge connected can't block or
+// leak the caller.
+func (d *sessionDriver) Interrupt() {
+	go func() {
+		select {
+		case d.toBridge <- contracts.Event{T: "interrupt"}:
+		case <-time.After(interruptSendTimeout):
+		}
+	}()
+}
+
 // Seed injects an opening input turn into this session's FIFO. A handoff uses it
 // to hand B its task the same way a human message would arrive.
 func (d *sessionDriver) Seed(task string) {
@@ -207,6 +227,19 @@ func Pick(session, value string) bool {
 		return false
 	}
 	d.Pick(value)
+	return true
+}
+
+// Interrupt cancels the in-flight turn of the named session, returning false
+// when no live session by that name is driving (mirror of Pick).
+func Interrupt(session string) bool {
+	sessionRegistry.mu.Lock()
+	d := sessionRegistry.m[session]
+	sessionRegistry.mu.Unlock()
+	if d == nil {
+		return false
+	}
+	d.Interrupt()
 	return true
 }
 

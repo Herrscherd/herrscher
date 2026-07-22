@@ -4,10 +4,53 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 )
+
+// turnController holds the cancel func of the turn currently running so an
+// out-of-band interrupt frame (read on the socket while the turn driver is
+// blocked in Respond) can cancel it. A nil *turnController is a no-op, so
+// callers that never interrupt (tests) can pass nil.
+type turnController struct {
+	mu     sync.Mutex
+	cancel context.CancelFunc
+}
+
+// begin derives a cancellable turn context and records its cancel; the returned
+// end func clears it (call on turn completion). On a nil controller it is a
+// pass-through.
+func (c *turnController) begin(parent context.Context) (context.Context, func()) {
+	if c == nil {
+		return parent, func() {}
+	}
+	ctx, cancel := context.WithCancel(parent)
+	c.mu.Lock()
+	c.cancel = cancel
+	c.mu.Unlock()
+	return ctx, func() {
+		c.mu.Lock()
+		if c.cancel != nil {
+			c.cancel()
+			c.cancel = nil
+		}
+		c.mu.Unlock()
+	}
+}
+
+// interrupt cancels the active turn, if any.
+func (c *turnController) interrupt() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	if c.cancel != nil {
+		c.cancel()
+	}
+	c.mu.Unlock()
+}
 
 // runHub is the pure-runner loop: it dials the hub control socket, reads input
 // frames, and drives the backend one turn at a time, emitting events back over
@@ -28,10 +71,18 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	// The hub frames inputs as JSON-line Events; surface them on a channel the
 	// turn driver consumes. Scan returns when the hub closes the conn (daemon
 	// gone or session closed) → the bridge exits and the supervisor decides.
+	ctrl := &turnController{}
 	in := make(chan contracts.Event)
 	go func() {
 		defer close(in)
 		_ = conn.Scan(func(e contracts.Event) error {
+			// An interrupt is handled out-of-band: the turn driver is blocked in
+			// Respond and cannot dequeue it, so cancel the active turn directly
+			// instead of forwarding it onto the FIFO input channel.
+			if e.T == "interrupt" {
+				ctrl.interrupt()
+				return nil
+			}
 			select {
 			case in <- e:
 				return nil
@@ -41,7 +92,7 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 		})
 	}()
 
-	runHubTurns(ctx, in, conn, resp, orch)
+	runHubTurnsCtl(ctx, in, conn, resp, orch, ctrl)
 	return ctx.Err()
 }
 
@@ -51,6 +102,12 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 // sends the next input only after it sees this turn's reply{done}, and this
 // loop processes one frame at a time anyway.
 func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator) {
+	runHubTurnsCtl(ctx, in, sink, resp, orch, nil)
+}
+
+// runHubTurnsCtl is runHubTurns with an explicit turnController so an interrupt
+// frame read out-of-band can cancel the in-flight turn.
+func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ctrl *turnController) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -63,7 +120,7 @@ func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.
 			case "pick":
 				runPick(ctx, sink, resp, ev.Value)
 			default: // "input" (and any human-origin frame)
-				runOneTurn(ctx, sink, resp, orch, ev)
+				runOneTurn(ctx, sink, resp, orch, ev, ctrl)
 			}
 		}
 	}
@@ -72,10 +129,12 @@ func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.
 // runOneTurn runs a single backend turn for an input frame, streaming chunk/
 // status events and a terminal reply{done}. An empty output still emits
 // reply{done} so the hub's FIFO can advance.
-func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ev contracts.Event) {
+func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController) {
+	turnCtx, endTurn := ctrl.begin(ctx)
+	defer endTurn()
 	var memCtx string
 	if orch != nil {
-		memCtx = orch.Context(ctx)
+		memCtx = orch.Context(turnCtx)
 	}
 	prompt := contracts.Prompt{Content: ev.Text, Context: memCtx, Author: ev.Who, Attachments: ev.Attachments}
 	var cost float64
@@ -90,7 +149,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 		}
 		emitBackendEvent(sink, be, outTok)
 	}
-	out, err := resp.Respond(ctx, prompt, onEvent)
+	out, err := resp.Respond(turnCtx, prompt, onEvent)
 	if err != nil && out == "" {
 		out = "⚠️ " + err.Error()
 	}

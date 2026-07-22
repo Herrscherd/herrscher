@@ -420,6 +420,37 @@ func TestQuestionMarkTypedWhenInputNonEmpty(t *testing.T) {
 	}
 }
 
+// TestShortcutsPanelListsClaudeKeys checks the shortcuts panel names the Claude
+// key affordances a returning user reaches for.
+func TestShortcutsPanelListsClaudeKeys(t *testing.T) {
+	m := newTestModel()
+	panel := m.helpView()
+	for _, want := range []string{"esc interrupt", "⌥⏎ newline", "/ commands", "@ files"} {
+		if !strings.Contains(panel, want) {
+			t.Fatalf("shortcuts panel missing %q: %q", want, panel)
+		}
+	}
+}
+
+// TestHistoryRecallsLastPrompt checks ↑ on an empty composer recalls the most
+// recently submitted prompt.
+func TestHistoryRecallsLastPrompt(t *testing.T) {
+	f := &fakeBackend{}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.active = "a"
+	m.ready = true
+	m.input.SetValue("first message")
+	runCmd(m.handleEnter())
+	if m.input.Value() != "" {
+		t.Fatalf("composer must clear after submit, got %q", m.input.Value())
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if m.input.Value() != "first message" {
+		t.Fatalf("↑ must recall last prompt, got %q", m.input.Value())
+	}
+}
+
 func TestPendingCloseCtrlCQuits(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.pendingClose = true

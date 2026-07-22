@@ -245,7 +245,7 @@ func (m *model) composerHeight() int {
 // re-fits the viewport whenever that height changes, so the transcript never
 // overlaps a multi-line draft.
 func (m *model) resizeComposer() {
-	h := m.input.LineCount()
+	h := displayRows(m.input.Value(), m.input.Width())
 	if h < 1 {
 		h = 1
 	}

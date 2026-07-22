@@ -82,37 +82,56 @@ func (m *model) completePal() {
 	m.input.CursorEnd()
 }
 
-// paletteView renders the filtered command list as a bordered box; empty when closed.
+// defaultCommands is the Claude-parity slash-command set the palette seeds with
+// when the backend advertises none: the conversation/session verbs a user who
+// knows Claude Code reaches for. The backend's own command list, when present,
+// takes precedence (see newModel).
+func defaultCommands() []CommandSpec {
+	return []CommandSpec{
+		{Name: "clear", Desc: "clear the conversation"},
+		{Name: "help", Desc: "show shortcuts"},
+		{Name: "session switch", Args: "<name>", Desc: "switch session"},
+		{Name: "session create", Args: "--name", Desc: "start a session"},
+		{Name: "resume", Args: "<name>", Desc: "reopen a session"},
+	}
+}
+
+// paletteView renders the filtered command list as an inline Claude menu: rows
+// directly under the input, the selected row prefixed ❯ in the warm accent,
+// descriptions dim, no border box. Empty when closed.
 func (m *model) paletteView() string {
 	if !m.paletteOpen() {
 		return ""
 	}
 	fc := m.filtered()
-	var b strings.Builder
-	b.WriteString(statusStyle.Render("commands"))
 	if len(fc) == 0 {
-		b.WriteString("\n" + statusStyle.Render("  (no match)"))
+		return dimStyle.Render("  (no match)")
 	}
+	var b strings.Builder
 	for i, c := range fc {
 		if i >= paletteMax {
-			b.WriteString("\n" + statusStyle.Render(fmt.Sprintf("  … +%d more", len(fc)-paletteMax)))
+			b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", len(fc)-paletteMax)))
 			break
 		}
-		row := "/" + c.Name
+		label := "/" + c.Name
 		if c.Args != "" {
-			row += " " + c.Args
+			label += " " + c.Args
 		}
+		var row string
 		if i == m.palIdx {
-			row = paletteSelStyle.Render(glyphYou + " " + row)
+			row = warmStyle.Render(glyphCursor + " " + label)
 		} else {
-			row = "  " + row
+			row = dimStyle.Render("  " + label)
 		}
 		if c.Desc != "" {
-			row += "  " + statusStyle.Render(c.Desc)
+			row += "  " + dimStyle.Render(c.Desc)
 		}
-		b.WriteString("\n" + row)
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(row)
 	}
-	return paletteBorder.Render(b.String())
+	return b.String()
 }
 
 // paletteHeight is the rendered row count of the open palette (0 when closed), so

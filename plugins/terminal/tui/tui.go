@@ -303,8 +303,13 @@ func newModel(tm Backend) *model {
 	in.SetHeight(1)
 	in.Focus()
 	m := &model{tm: tm, input: in, tabs: map[string]*tab{}, clip: newClipboard(), kitty: supportsKitty(os.Getenv)}
+	// Seed the palette with the Claude command set; a backend that advertises its
+	// own verbs overrides it.
+	m.cmds = defaultCommands()
 	if tm != nil {
-		m.cmds = tm.Commands()
+		if bc := tm.Commands(); len(bc) > 0 {
+			m.cmds = bc
+		}
 	}
 	return m
 }
@@ -449,6 +454,18 @@ func (m *model) handleEnter() tea.Cmd {
 			m.openResume() // TUI-local overlay, not a backend command
 			return nil
 		}
+		if args[0] == "clear" {
+			m.clearActive() // TUI-local: wipe the active transcript
+			return nil
+		}
+		if args[0] == "help" {
+			m.toggleHelp() // TUI-local: the shortcuts panel
+			return nil
+		}
+		if args[0] == "session" && len(args) >= 2 && args[1] == "switch" {
+			m.openSwitch() // TUI-local session switcher (invisible multi-session)
+			return nil
+		}
 		if args[0] == "attach" {
 			m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
 			return nil
@@ -539,8 +556,21 @@ func (m *model) dispatchCmd(origin string, args []string) tea.Cmd {
 	}
 }
 
-// toggleHelp flips the help overlay on/off, resizing the viewport so the help
-// block does not push the chrome off-screen.
+// clearActive wipes the active tab's transcript, the /clear conversation reset.
+// It leaves the session itself untouched — only the on-screen history is cleared.
+func (m *model) clearActive() {
+	tb := m.tabs[m.active]
+	if tb == nil {
+		return
+	}
+	tb.entries = nil
+	tb.streamed = false
+	m.tsCache.valid = false
+	m.syncViewport()
+}
+
+// toggleHelp flips the shortcuts panel on/off, resizing the viewport so the panel
+// does not push the chrome off-screen.
 func (m *model) toggleHelp() {
 	m.showHelp = !m.showHelp
 	m.applySize()

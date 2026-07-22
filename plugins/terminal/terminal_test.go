@@ -180,10 +180,10 @@ type closeCall struct {
 }
 
 type fakeSessionControl struct {
-	lastArgs   []string
-	sessions   []contracts.SessionInfo
-	created    []contracts.CreateSession
-	closed     []closeCall
+	lastArgs    []string
+	sessions    []contracts.SessionInfo
+	created     []contracts.CreateSession
+	closed      []closeCall
 	scrollback  []contracts.ScrollbackLine
 	resumed     []string
 	interrupted []string

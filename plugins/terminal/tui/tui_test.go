@@ -94,11 +94,11 @@ type closedSession struct {
 }
 
 type fakeBackend struct {
-	dispatched [][]string
-	closed     []closedSession
-	sessions   []contracts.SessionInfo
-	fe         chan RoutedEvent
-	scrollback map[string][]contracts.ScrollbackLine
+	dispatched  [][]string
+	closed      []closedSession
+	sessions    []contracts.SessionInfo
+	fe          chan RoutedEvent
+	scrollback  map[string][]contracts.ScrollbackLine
 	resumed     []string
 	submitted   []submittedTurn
 	interrupted []string

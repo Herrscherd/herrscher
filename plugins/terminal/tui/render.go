@@ -8,9 +8,9 @@ import (
 
 // renderTranscript turns a tab's logical entries into the styled, width-wrapped
 // string the viewport displays. It runs on every sync (and thus every resize),
-// so wrapping always matches the current width — the fix for the old
-// pre-rendered, never-re-wrapped lines. A blank line precedes each you/agent
-// block so turns breathe; status/cost/scrollback lines stay tight.
+// so wrapping always matches the current width. A blank line precedes each
+// you/agent block so turns breathe; tool/cost/scrollback lines stay tight — the
+// full-width Claude flow, with no enclosing card and no role-coloured spine.
 func (m *model) renderTranscript(tb *tab, width int) string {
 	if width < 1 {
 		width = 1
@@ -29,12 +29,16 @@ func (m *model) renderTranscript(tb *tab, width int) string {
 	return b.String()
 }
 
-// renderEntry styles one entry to the given content width. you/agent turns become
-// gutter blocks; status/cost/scrollback stay as dim single wrapped lines.
+// renderEntry styles one entry to the given content width, in the Claude shapes:
+// a user turn is a dim "> {text}" echo, agent prose is bare full-width text, a
+// tool status is a warm "● call" line with dim "  ⎿ result" continuations.
 func renderEntry(e entry, width int) string {
 	switch e.role {
 	case roleYou:
-		out := block(youGutter, humanStyle.Render(glyphYou+" you"), e.text, humanBodyStyle, e.attachments, width)
+		out := wrapWith(userStyle, glyphPrompt+" "+e.text, width)
+		if chips := chipRow(e.attachments); chips != "" {
+			out += "\n" + chips
+		}
 		if e.preview != "" {
 			// The kitty graphics escape sits on its own line under the chip; the
 			// terminal draws the image at the cursor. Non-kitty terminals ignore it.
@@ -42,44 +46,34 @@ func renderEntry(e entry, width int) string {
 		}
 		return out
 	case roleAgent:
-		return block(agentGutter, replyStyle.Render(glyphAgent+" agent"), e.text, agentBodyStyle, nil, width)
+		return wrapWith(textStyle, e.text, width)
+	case roleStatus:
+		return renderTool(e.text, width)
 	case roleCost:
-		return costStyle.Render(e.text)
+		return dimStyle.Render(e.text)
 	case roleScrollback:
 		return wrapWith(scrollbackStyle, e.text, width)
-	default: // roleStatus
-		return wrapWith(statusStyle, "· "+e.text, width)
+	default:
+		return wrapWith(dimStyle, e.text, width)
 	}
 }
 
-// block renders a message as a role-coloured spine: a header line, then the body
-// word-wrapped to width-2 (the "▎ " gutter) with every wrapped line prefixed by
-// the spine, and finally any attachment chips on their own spined line. An empty
-// body with no attachments yields just the header.
-func block(gutter lipgloss.Style, header, body string, bodyStyle lipgloss.Style, atts []Attachment, width int) string {
-	bar := gutter.Render(glyphGutter)
+// renderTool renders a tool status entry Claude-style: the first line as a warm
+// "● {call}" line, any following lines as dim "  ⎿ {result}" continuations. A
+// single-line status is just the "● " line.
+func renderTool(text string, width int) string {
+	lines := strings.Split(text, "\n")
 	var b strings.Builder
-	b.WriteString(bar + " " + header)
-	if strings.TrimSpace(body) != "" {
-		wrapWidth := width - 2
-		if wrapWidth < 1 {
-			wrapWidth = 1
-		}
-		wrapped := bodyStyle.Width(wrapWidth).Render(body)
-		for _, ln := range strings.Split(wrapped, "\n") {
-			b.WriteByte('\n')
-			b.WriteString(bar + " " + ln)
-		}
-	}
-	if chips := chipRow(atts); chips != "" {
+	b.WriteString(wrapWith(warmStyle, glyphTool+" "+lines[0], width))
+	for _, ln := range lines[1:] {
 		b.WriteByte('\n')
-		b.WriteString(bar + " " + chips)
+		b.WriteString(wrapWith(dimStyle, "  "+glyphResult+" "+ln, width))
 	}
 	return b.String()
 }
 
-// wrapWith word-wraps s to width under style, so a long status/scrollback line is
-// folded (glyph-width aware, via lipgloss) instead of clipped by the terminal.
+// wrapWith word-wraps s to width under style, so a long line is folded
+// (glyph-width aware, via lipgloss) instead of clipped by the terminal.
 func wrapWith(style lipgloss.Style, s string, width int) string {
 	if width < 1 {
 		width = 1

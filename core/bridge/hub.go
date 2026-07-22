@@ -134,6 +134,9 @@ func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contrac
 func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController, eng *skills.Engine) {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
+	if eng != nil {
+		eng.Refresh()
+	}
 	var memCtx string
 	if orch != nil {
 		memCtx = orch.Context(turnCtx)

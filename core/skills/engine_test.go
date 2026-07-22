@@ -43,6 +43,23 @@ func TestEngineStripRemovesMarkers(t *testing.T) {
 	}
 }
 
+func TestEngineRefreshPicksUpNewSkill(t *testing.T) {
+	repo := t.TempDir()
+	writeSkill(t, repo, "one", "name: one\ndescription: first\n", "ONE\n")
+	e := NewEngine([]string{repo})
+	e.Detect("<use-skill>one</use-skill>")
+
+	writeSkill(t, repo, "two", "name: two\ndescription: second\n", "TWO\n")
+	e.Refresh()
+
+	if !strings.Contains(e.Menu(), "two: second") {
+		t.Fatalf("refresh must surface the newly added skill:\n%s", e.Menu())
+	}
+	if !strings.Contains(e.Expansions(), "ONE") {
+		t.Fatalf("refresh must keep the already-active skill active:\n%s", e.Expansions())
+	}
+}
+
 func TestEngineUnknownMarkerIgnored(t *testing.T) {
 	e := NewEngine([]string{t.TempDir()})
 	e.Detect("<use-skill>nope</use-skill>")

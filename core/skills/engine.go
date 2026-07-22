@@ -13,6 +13,7 @@ var useMarker = regexp.MustCompile(`(?i)<\s*use-skill\s*>\s*([^<]+?)\s*<\s*/\s*u
 // skills and the set the model has activated. Menu is injected every turn (cheap
 // name+description lines); Expansions carries the full body of activated skills.
 type Engine struct {
+	roots  []string
 	byName map[string]Skill
 	order  []string
 	active map[string]bool
@@ -21,13 +22,30 @@ type Engine struct {
 // NewEngine discovers skills under roots and returns an engine over them. An
 // engine with no skills is a valid no-op (empty Menu/Expansions).
 func NewEngine(roots []string) *Engine {
-	e := &Engine{byName: map[string]Skill{}, active: map[string]bool{}}
-	for _, s := range Discover(roots) {
+	e := &Engine{roots: roots, active: map[string]bool{}}
+	e.load()
+	return e
+}
+
+// load (re-)discovers the skills under the engine's roots, replacing the menu.
+// The active set is preserved except for skills that have disappeared.
+func (e *Engine) load() {
+	e.byName = map[string]Skill{}
+	e.order = e.order[:0]
+	for _, s := range Discover(e.roots) {
 		e.byName[s.Name] = s
 		e.order = append(e.order, s.Name)
 	}
-	return e
+	for name := range e.active {
+		if _, ok := e.byName[name]; !ok {
+			delete(e.active, name)
+		}
+	}
 }
+
+// Refresh re-scans the roots so a SKILL.md added or edited mid-session is picked
+// up without restarting the session. Already-activated skills stay active.
+func (e *Engine) Refresh() { e.load() }
 
 // Menu renders the activation instruction and one line per discovered skill. It
 // returns "" when no skills exist so the caller injects nothing.

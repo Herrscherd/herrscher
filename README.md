@@ -289,7 +289,9 @@ Backends that load skills natively opt out via the `contracts.SkillNative`
 capability (`NativeSkills() bool`): the **claude** backend returns `true`, so the
 hub injects nothing and lets the CLI load skills itself — no double injection.
 The neutral engine lives in the dependency-free `core/skills` package
-(`Discover` + `Engine`).
+(`Discover` + `Engine`). The roots are re-scanned at the start of every turn, so
+a `SKILL.md` you add or edit mid-session is picked up without restarting it;
+skills the model already activated stay active.
 
 **Config** (`~/.config/herrscher/config.json`, all optional):
 

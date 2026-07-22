@@ -35,6 +35,14 @@ func TestEngineMenuDetectExpand(t *testing.T) {
 	}
 }
 
+func TestEngineStripRemovesMarkers(t *testing.T) {
+	e := NewEngine([]string{t.TempDir()})
+	got := e.Strip("here you go <use-skill> pdf-fill </use-skill>")
+	if got != "here you go" {
+		t.Fatalf("marker must be stripped from reply, got %q", got)
+	}
+}
+
 func TestEngineUnknownMarkerIgnored(t *testing.T) {
 	e := NewEngine([]string{t.TempDir()})
 	e.Detect("<use-skill>nope</use-skill>")

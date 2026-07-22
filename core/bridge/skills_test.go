@@ -16,7 +16,7 @@ type nativeBackend struct{}
 func (nativeBackend) Respond(context.Context, contracts.Prompt, func(contracts.BackendEvent)) (string, error) {
 	return "", nil
 }
-func (nativeBackend) Close() error      { return nil }
+func (nativeBackend) Close() error       { return nil }
 func (nativeBackend) NativeSkills() bool { return true }
 
 type plainBackend struct{}
@@ -76,7 +76,12 @@ func TestHubInjectsSkillMenuAndExpandsOnMarker(t *testing.T) {
 
 	resp := &captureBackend{reply: "ok <use-skill>demo</use-skill>"}
 
-	runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, eng)
+	sink := &recordSink{}
+	runOneTurn(context.Background(), sink, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, eng)
+	last := sink.events[len(sink.events)-1]
+	if last.T != "reply" || last.Text != "ok" {
+		t.Fatalf("marker must be stripped from the delivered reply, got %+v", last)
+	}
 	if !strings.Contains(resp.contexts[0], "demo: a demo") {
 		t.Fatalf("turn 1 context missing menu:\n%s", resp.contexts[0])
 	}

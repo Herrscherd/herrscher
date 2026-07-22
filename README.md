@@ -32,6 +32,7 @@ code, comment, or test fixture).
 - [The plugin model — four categories](#the-plugin-model--four-categories)
 - [The members](#the-members)
 - [How a message flows](#how-a-message-flows)
+- [Cross-backend skills](#cross-backend-skills)
 - [The two run modes](#the-two-run-modes)
 - [Session lifecycle](#session-lifecycle)
 - [Inter-session coordination](#inter-session-coordination)
@@ -259,6 +260,45 @@ If the model hits a permission prompt mid-turn, the backend exposes a
 **select menu** keyed to the session, the hub routes the click to the session's
 FIFO (`Pick`), and the bridge injects the choice into the live session
 (`InjectChoice`) out-of-band. Otherwise it degrades to a plain-text prompt.
+
+---
+
+## Cross-backend skills
+
+A **skill** is an Anthropic-format `SKILL.md` (frontmatter `name` + `description`,
+then a markdown body of instructions). Herrscher makes any such skill usable on
+**every** backend — including codex and cursor, which have no native skill loader
+— by replicating Claude's progressive disclosure at the bridge seam.
+
+Skills are discovered from two roots, repo-first so a project can override a
+global skill of the same name:
+
+1. `<workspace>/.claude/skills/<name>/SKILL.md` — the session's repo (the bridge
+   runs with `cwd = workspace`)
+2. `~/.claude/skills/<name>/SKILL.md` — user-global
+
+Each turn the hub (`core/bridge/hub.go:runOneTurn`) injects a cheap **menu** —
+one `name: description` line per skill — into the prompt context. When the model
+decides it needs one, it emits `<use-skill>NAME</use-skill>`; the engine detects
+that marker, **strips it from the delivered reply**, and on the next turn injects
+that skill's full body (fenced with its absolute directory, so the model can
+`Read` bundled resource files by path). The two-turn round trip mirrors Claude's
+native tool-call → tool-result.
+
+Backends that load skills natively opt out via the `contracts.SkillNative`
+capability (`NativeSkills() bool`): the **claude** backend returns `true`, so the
+hub injects nothing and lets the CLI load skills itself — no double injection.
+The neutral engine lives in the dependency-free `core/skills` package
+(`Discover` + `Engine`).
+
+**Config** (`~/.config/herrscher/config.json`, all optional):
+
+```jsonc
+"skills": {
+  "enabled": true,          // omit or true = on; false disables injection
+  "roots": ["/opt/team-skills"]  // extra roots, appended after the two defaults
+}
+```
 
 ---
 

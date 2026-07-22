@@ -895,12 +895,12 @@ func formatCost(c float64) string {
 func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
 	m := newModel(tm)
 	// WithInput strips the terminal's in-band colour/cursor query responses before
-	// they reach the key parser (see filteredStdin); WithMouseCellMotion enables
-	// click-to-focus on the tab strip. filteredStdin embeds os.Stdin, so raw mode
-	// and TTY detection still apply to the real terminal.
+	// they reach the key parser (see filteredStdin). filteredStdin embeds os.Stdin,
+	// so raw mode and TTY detection still apply to the real terminal. Mouse capture
+	// is deliberately left off: the Claude-style flow has no clickable tab strip, so
+	// capturing the mouse would only break the terminal's native text selection.
 	p := tea.NewProgram(m,
 		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
 		tea.WithInput(newFilteredStdin()),
 	)
 	go func() {

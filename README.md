@@ -316,22 +316,28 @@ flowchart TB
 
 The bridge does **no** gateway I/O: it never reads a channel, posts, or reacts.
 
-### Terminal TUI — multi-session tabbed interface
+### Terminal TUI — Claude-style multi-session flow
 
 When `serve` runs on an interactive TTY, the in-tree terminal gateway (a
-Bubbletea TUI) takes over the foreground and brings multiple sessions online as
-a tabbed interface; any configured Discord gateway keeps running headless in the
-background. A brand row and a strip of session tabs sit across the top: each
-session bound to the terminal is a tab, and `Tab` / `Shift+Tab` switch between
-them — or click a tab to jump straight to it. A background tab that receives
-model output shows a bullet marker (`•`) for unread activity; switching to it
-clears the marker.
+Bubbletea TUI) takes over the foreground; any configured Discord gateway keeps
+running headless in the background. The interface is a faithful copy of the
+Claude Code look: a borderless full-width message flow on a committed dark
+surface carried by a single warm accent, with no enclosing card. Your input is
+echoed as a dim `> …` line, agent prose renders bare full-width, and tool calls
+show as a warm `● Tool(input)` line with `⎿` result continuations.
 
-**Immediate feedback.** Pressing `Enter` echoes your line and flips the tab into
-a `thinking…` state on the spot — before the backend sends anything back — so
-you always know the message was taken. The indicator is derived from turn state
-rather than stored, so it disappears the instant the first output streams in and
-the reply is never rendered twice.
+Multiple sessions run at once but the switch is invisible — there is no
+permanent tab strip. `Tab` / `Shift+Tab` cycle sessions and `/session switch`
+opens a modal picker; a background session that receives output is flagged
+unread and clears the moment you switch to it.
+
+**Immediate feedback.** Pressing `Enter` echoes your line and flips the session
+into a working state on the spot — before the backend sends anything back — so
+you always know the message was taken. While a turn is in flight a spinner line
+renders the Claude progress shape: `✳ …(esc to interrupt · {n}s · ↑ {tokens} ·
+${cost})`, with the live output-token count and cost filled in as they arrive.
+Press `Esc` during a turn to interrupt it — the in-flight turn is cancelled and
+the conversation is preserved so the next message resumes it.
 
 **Composer.** The input is a multi-line composer: `Enter` submits the draft,
 `Alt+Enter` (or `Ctrl+J`) inserts a newline, and the box grows with the draft up
@@ -352,25 +358,27 @@ first). Clipboard paste uses `wl-paste`, so it needs a Wayland session with
 `wl-clipboard` installed; where that is unavailable, `Ctrl+V` falls back to
 pasting text.
 
-**Command palette.** Typing `/` opens an inline palette of the commands the
-terminal accepts (session and agent verbs only). It filters as you type; `↑`/`↓`
-move the selection, `Tab` completes the highlighted command, and `Esc` closes
-it. This is the discoverable path to the slash-commands below.
+**Command palette & mentions.** Typing `/` opens an inline borderless palette of
+the commands the terminal accepts (session and agent verbs only). It filters as
+you type; `↑`/`↓` move the selection, `Tab` completes the highlighted command,
+and `Esc` closes it. Typing `@` opens an inline file-mention list drawn from the
+session's worktree; `Tab` inserts the highlighted path as plain text (the backend
+resolves the mention). Press `?` on an empty composer for the shortcuts overlay.
 
 **Session management.** Create, list, close, and archive sessions directly from
 the TUI using slash commands — no Discord required. Type `/session create --name foo`
-to spin up a new session; it appears immediately as a new tab. Use `/session list`
-to see active sessions, `/session close --name foo` to shut one down and remove its
-tab, or `/session archive --name foo` to stop the bridge but **keep the session
-resumable** (its row, transcript, and resume token are retained). Sessions are bound
-to the terminal and isolated by name; typing routes your input to the active session
-and streams replies into its pane.
+to spin up a new session; it comes online immediately. Use `/session list`
+to see active sessions, `/session switch` to jump between them, `/session close
+--name foo` to shut one down, or `/session archive --name foo` to stop the bridge
+but **keep the session resumable** (its row, transcript, and resume token are
+retained). Sessions are bound to the terminal and isolated by name; typing routes
+your input to the active session and streams replies into its pane.
 
 **Scrollback & resume.** Every turn is recorded to a per-session transcript. When
-a tab (re)opens, its recent history replays as dimmed scrollback above the live
+a session (re)opens, its recent history replays as dimmed scrollback above the live
 stream, so context is never lost across a restart. Type `/resume` to open a picker
 of all sessions — live and archived — sorted by last activity: `↑`/`↓` select,
-`Enter` reopens a live session's tab or revives an archived one (the backend
+`Enter` reopens a live session or revives an archived one (the backend
 resumes from its stored token), `Esc` closes the picker.
 
 It is a stateless backend runner driven entirely by the hub's input frames. The
@@ -382,26 +390,28 @@ queued input. Authorization and message-id tracking live in the hub, not here.
 
 | Key | Action |
 |-----|--------|
-| `Tab` / `Shift+Tab` | Switch to next/previous session tab |
-| Click a tab | Switch straight to that session (mouse) |
+| `Tab` / `Shift+Tab` | Switch to next/previous session |
 | `/` | Open the command palette (filters as you type) |
-| `↑` / `↓` | Move the palette / `/resume` picker selection (while it is open) |
-| `Tab` | Complete the highlighted command (while the palette is open) |
-| `/resume` then `Enter` | Open the session picker: reopen a live tab or revive an archived session |
+| `@` | Open the file-mention list from the session's worktree |
+| `↑` / `↓` | Move the palette / mention / `/resume` selection while open; otherwise recall submitted prompts on an empty composer |
+| `Tab` | Complete the highlighted command or mention (while its list is open) |
+| `/resume` then `Enter` | Open the session picker: reopen a live session or revive an archived one |
 | `Enter` | Submit the composer draft to the active session (lines starting with `/` are run as commands) |
 | `Alt+Enter` / `Ctrl+J` | Insert a newline in the composer instead of submitting |
 | `Ctrl+V` | Paste a clipboard image as an attachment (falls back to text paste when there is no image) |
 | `/attach <path>` | Stage a local file as an attachment for the next message |
 | `Ctrl+U` | Remove the last staged attachment (falls through to delete-to-line-start when none staged) |
 | `Ctrl+W` then `y` | Close the active session (any other key cancels) |
-| `?` (empty input) | Toggle keybinding help overlay |
-| `PgUp` / `PgDn` | Scroll the active tab's transcript |
-| `Esc` | Close the palette if open, otherwise quit the TUI |
+| `?` (empty input) | Toggle the shortcuts overlay |
+| `PgUp` / `PgDn` | Scroll the active session's transcript |
+| `Esc` | Interrupt the in-flight turn, or close an open palette/picker; on an idle session, quit the TUI |
 | `Ctrl+C` | Quit the TUI (shuts down the daemon) |
 
-Tab markers: `•` = unread background activity, `⟳` = a turn in flight. Footer shows active session state (working/idle/disconnected) and last turn cost.
-
-Because the TUI captures the mouse for click-to-switch, selecting text to copy needs the terminal's override modifier held down (usually `Shift`, `Option` on macOS/iTerm2).
+The status line shows the active session state (working/idle/disconnected); a
+working turn renders the `✳ …(esc to interrupt · {n}s · ↑ {tokens} · ${cost})`
+spinner, and an idle session shows the last turn's cost. The mouse is left
+uncaptured, so selecting text to copy works with the terminal's native
+selection.
 
 ---
 

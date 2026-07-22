@@ -280,6 +280,16 @@ func (t *Terminal) Resume(name string) (string, error) {
 	return "resumed " + name, nil
 }
 
+// Interrupt cancels a session's in-flight turn through the bound SessionControl,
+// for esc-to-interrupt from the TUI. Reports false when no control is bound or
+// no live session by that name is driving.
+func (t *Terminal) Interrupt(name string) bool {
+	if c := t.Control(); c != nil {
+		return c.Interrupt(name)
+	}
+	return false
+}
+
 // BindSessionControl stores the hub controller so the TUI can drive the session
 // lifecycle (create/close/list) and enumerate sessions for tab labels.
 func (t *Terminal) BindSessionControl(c contracts.SessionControl) {

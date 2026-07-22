@@ -245,4 +245,10 @@ func (h *hub) Resume(name string) error {
 	return nil
 }
 
+// Interrupt cancels the named session's in-flight turn, delegating to the live
+// driver via the session registry. It implements contracts.SessionControl.
+func (h *hub) Interrupt(name string) bool {
+	return Interrupt(name)
+}
+
 var _ contracts.SessionControl = (*hub)(nil)

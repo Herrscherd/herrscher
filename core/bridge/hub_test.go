@@ -101,6 +101,48 @@ func TestRunOneTurn_StampsTokens(t *testing.T) {
 	}
 }
 
+// blockingBackend blocks in Respond until its turn ctx is cancelled, then
+// returns the ctx error — standing in for a claude turn that only stops on
+// interrupt.
+type blockingBackend struct{ started chan struct{} }
+
+func (b blockingBackend) Respond(ctx context.Context, _ contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
+	close(b.started)
+	<-ctx.Done()
+	return "", ctx.Err()
+}
+func (blockingBackend) Close() error { return nil }
+
+// TestInbound_InterruptCancelsTurn proves an interrupt (via the controller)
+// cancels an in-flight turn so it terminates with a reply instead of hanging.
+func TestInbound_InterruptCancelsTurn(t *testing.T) {
+	ctrl := &turnController{}
+	sink := &recordSink{}
+	in := make(chan contracts.Event)
+	be := blockingBackend{started: make(chan struct{})}
+
+	done := make(chan struct{})
+	go func() {
+		runHubTurnsCtl(context.Background(), in, sink, be, nil, ctrl)
+		close(done)
+	}()
+
+	in <- contracts.Event{T: "input", Text: "go"}
+	<-be.started // turn is now blocked in Respond
+	ctrl.interrupt()
+
+	close(in)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("interrupt did not cancel the in-flight turn")
+	}
+	last := sink.events[len(sink.events)-1]
+	if last.T != "reply" || !last.Done {
+		t.Fatalf("interrupted turn must still emit reply{done}; got %+v", last)
+	}
+}
+
 func TestRunHubOneTurn(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 2)

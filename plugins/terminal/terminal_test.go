@@ -184,8 +184,9 @@ type fakeSessionControl struct {
 	sessions   []contracts.SessionInfo
 	created    []contracts.CreateSession
 	closed     []closeCall
-	scrollback []contracts.ScrollbackLine
-	resumed    []string
+	scrollback  []contracts.ScrollbackLine
+	resumed     []string
+	interrupted []string
 }
 
 func (f *fakeSessionControl) Dispatch(_ context.Context, args []string) (string, error) {
@@ -212,6 +213,11 @@ func (f *fakeSessionControl) Scrollback(name string) []contracts.ScrollbackLine 
 func (f *fakeSessionControl) Resume(name string) error {
 	f.resumed = append(f.resumed, name)
 	return nil
+}
+
+func (f *fakeSessionControl) Interrupt(name string) bool {
+	f.interrupted = append(f.interrupted, name)
+	return true
 }
 
 func TestTerminalForwardsScrollbackAndResume(t *testing.T) {

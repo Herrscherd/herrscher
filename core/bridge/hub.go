@@ -79,18 +79,23 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 	}
 	prompt := contracts.Prompt{Content: ev.Text, Context: memCtx, Author: ev.Who, Attachments: ev.Attachments}
 	var cost float64
+	var outTok int
 	onEvent := func(be contracts.BackendEvent) {
-		if be.Kind == "result" {
+		switch be.Kind {
+		case "usage":
+			outTok = be.OutTokens
+		case "result":
 			cost = be.Cost
+			outTok = be.OutTokens
 		}
-		emitBackendEvent(sink, be)
+		emitBackendEvent(sink, be, outTok)
 	}
 	out, err := resp.Respond(ctx, prompt, onEvent)
 	if err != nil && out == "" {
 		out = "⚠️ " + err.Error()
 	}
 	out = strings.TrimSpace(out)
-	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Resume: resumeToken(resp)})
+	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, Resume: resumeToken(resp)})
 	if orch != nil {
 		_ = orch.Observe(ctx, prompt, out)
 	}
@@ -121,17 +126,19 @@ func runPick(ctx context.Context, sink contracts.EventSink, resp contracts.Backe
 
 // emitBackendEvent maps a backend progress event onto the bus vocabulary:
 // thinking → thinking, text → chunk, tool → status (dropped when empty), reset
-// → reset; others (result) carry no transcript and are dropped. Mirrors the
-// relocated runner.emitBackend.
-func emitBackendEvent(sink contracts.EventSink, be contracts.BackendEvent) {
+// → reset; usage and result carry no transcript and are dropped. The live
+// cumulative output-token count (tokens) rides on every rendered event so a
+// gateway can show a growing counter mid-turn. Mirrors the relocated
+// runner.emitBackend.
+func emitBackendEvent(sink contracts.EventSink, be contracts.BackendEvent, tokens int) {
 	switch be.Kind {
 	case "thinking":
-		sink.Emit(contracts.Event{T: "thinking", Text: be.Detail})
+		sink.Emit(contracts.Event{T: "thinking", Text: be.Detail, Tokens: tokens})
 	case "text":
-		sink.Emit(contracts.Event{T: "chunk", Text: be.Detail})
+		sink.Emit(contracts.Event{T: "chunk", Text: be.Detail, Tokens: tokens})
 	case "tool":
 		if text := strings.TrimSpace(be.Tool + " " + be.Detail); text != "" {
-			sink.Emit(contracts.Event{T: "status", Text: text})
+			sink.Emit(contracts.Event{T: "status", Text: text, Tokens: tokens})
 		}
 	case "reset":
 		sink.Emit(contracts.Event{T: "reset"})

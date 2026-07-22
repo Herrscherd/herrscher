@@ -57,10 +57,47 @@ func TestRunHubReplyCarriesCost(t *testing.T) {
 
 func TestEmitBackendEventThinking(t *testing.T) {
 	sink := &recordSink{}
-	emitBackendEvent(sink, contracts.BackendEvent{Kind: "thinking", Detail: "je réfléchis"})
+	emitBackendEvent(sink, contracts.BackendEvent{Kind: "thinking", Detail: "je réfléchis"}, 0)
 	want := []contracts.Event{{T: "thinking", Text: "je réfléchis"}}
 	if !reflect.DeepEqual(sink.events, want) {
 		t.Fatalf("emitted %+v, want %+v", sink.events, want)
+	}
+}
+
+// tokenBackend emits a live usage event, a text chunk, then a terminal result
+// carrying the final token count.
+type tokenBackend struct{ reply string }
+
+func (b tokenBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
+	onEvent(contracts.BackendEvent{Kind: "usage", InTokens: 10, OutTokens: 20})
+	onEvent(contracts.BackendEvent{Kind: "text", Detail: "working"})
+	onEvent(contracts.BackendEvent{Kind: "result", InTokens: 30, OutTokens: 55, Cost: 0.001})
+	return b.reply, nil
+}
+func (tokenBackend) Close() error { return nil }
+
+// TestRunOneTurn_StampsTokens proves the live token count rides on chunk events
+// and the final count lands on the terminal reply.
+func TestRunOneTurn_StampsTokens(t *testing.T) {
+	sink := &recordSink{}
+	in := make(chan contracts.Event, 1)
+	in <- contracts.Event{T: "input", Text: "go"}
+	close(in)
+
+	runHubTurns(context.Background(), in, sink, tokenBackend{reply: "done"}, nil)
+
+	var chunkTokens int
+	for _, e := range sink.events {
+		if e.T == "chunk" {
+			chunkTokens = e.Tokens
+		}
+	}
+	if chunkTokens != 20 {
+		t.Fatalf("chunk should carry live tokens 20; got %d", chunkTokens)
+	}
+	last := sink.events[len(sink.events)-1]
+	if last.T != "reply" || last.Tokens != 55 {
+		t.Fatalf("reply must carry final tokens 55; got %+v", last)
 	}
 }
 

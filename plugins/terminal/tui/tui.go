@@ -193,6 +193,11 @@ type model struct {
 	choiceIdx int            // selected row in the permission menu
 
 	mentionIdx int // selected row in the inline @ file-mention list
+	// mentionCache memoizes the last @-mention directory listing so the several
+	// mentionRows() calls per render (open/view/height/clamp) share one ReadDir
+	// instead of hitting the filesystem repeatedly. Keyed by "dir\x00prefix".
+	mentionCacheKey  string
+	mentionCacheRows []string
 
 	history []string // ring of submitted prompts, for ↑/↓ recall
 	histIdx int      // cursor into history while recalling (len(history) == not recalling)

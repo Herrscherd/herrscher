@@ -203,9 +203,20 @@ func (h *hub) Sessions() []contracts.SessionInfo {
 			Archived:  s.Archived,
 			Resumable: s.ResumeToken != "",
 			LastTs:    lastTs,
+			Dir:       sessionDir(s),
 		})
 	}
 	return out
+}
+
+// sessionDir resolves a session's run directory the way the supervisor does:
+// the explicit bridge Dir, else the worktree, else empty (inherit launcher cwd).
+// A gateway uses it as the base for @ file-mention completion.
+func sessionDir(s state.Session) string {
+	if s.Dir != "" {
+		return s.Dir
+	}
+	return s.Worktree
 }
 
 // scrollbackCap bounds how many transcript entries a reopened view replays.

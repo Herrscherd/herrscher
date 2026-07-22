@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 // TestMentionComplete verifies that, given a worktree listing, completing an
@@ -33,6 +35,30 @@ func TestMentionComplete(t *testing.T) {
 	}
 	if cur != len(out) {
 		t.Fatalf("cursor = %d, want %d", cur, len(out))
+	}
+}
+
+// TestWorktreeDirPrefersSessionDir uses the active session's own run directory
+// (SessionInfo.Dir) as the @-mention base, not the process cwd.
+func TestWorktreeDirPrefersSessionDir(t *testing.T) {
+	dir := t.TempDir()
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a", Dir: dir}}}
+	m := newModel(f)
+	m.ensureTab("a") // active channel "a" maps to session "a"
+	if got := m.worktreeDir(); got != dir {
+		t.Fatalf("worktreeDir = %q, want the session dir %q", got, dir)
+	}
+}
+
+// TestWorktreeDirFallsBackToCwd degrades to the process cwd when the active
+// session carries no Dir (a shared session inheriting the launcher cwd).
+func TestWorktreeDirFallsBackToCwd(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
+	m := newModel(f)
+	m.ensureTab("a")
+	wd, _ := os.Getwd()
+	if got := m.worktreeDir(); got != wd {
+		t.Fatalf("worktreeDir = %q, want cwd %q", got, wd)
 	}
 }
 

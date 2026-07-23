@@ -41,6 +41,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	upCfg, _ := service.DefaultConfig()
 	up := serviceUpdater{cfg: upCfg, st: st}
 	agents := agent.NewStore(filepath.Join(partDir, "agents"))
+	ensureCodexAgent(agents)
 	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
 
 	reg := &cli.Registry{}

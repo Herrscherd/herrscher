@@ -77,7 +77,7 @@ func TestHubInjectsSkillMenuAndExpandsOnMarker(t *testing.T) {
 	resp := &captureBackend{reply: "ok <use-skill>demo</use-skill>"}
 
 	sink := &recordSink{}
-	runOneTurn(context.Background(), sink, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, eng)
+	runOneTurn(context.Background(), sink, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, eng, nil)
 	last := sink.events[len(sink.events)-1]
 	if last.T != "reply" || last.Text != "ok" {
 		t.Fatalf("marker must be stripped from the delivered reply, got %+v", last)
@@ -89,7 +89,7 @@ func TestHubInjectsSkillMenuAndExpandsOnMarker(t *testing.T) {
 		t.Fatalf("turn 1 must not carry body yet:\n%s", resp.contexts[0])
 	}
 
-	runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "again"}, nil, eng)
+	runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "again"}, nil, eng, nil)
 	if !strings.Contains(resp.contexts[1], "DEMO BODY") {
 		t.Fatalf("turn 2 context missing expanded body:\n%s", resp.contexts[1])
 	}
@@ -97,7 +97,7 @@ func TestHubInjectsSkillMenuAndExpandsOnMarker(t *testing.T) {
 
 func TestHubSkipsInjectionWhenEngineNil(t *testing.T) {
 	resp := &captureBackend{reply: "ok"}
-	runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, nil)
+	runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, nil, nil)
 	if resp.contexts[0] != "" {
 		t.Fatalf("nil engine must leave context empty, got %q", resp.contexts[0])
 	}

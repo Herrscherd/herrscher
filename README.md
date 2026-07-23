@@ -39,6 +39,7 @@ code, comment, or test fixture).
 - [Durable agents](#durable-agents)
   - [Memory scope (shared vs private)](#memory-scope-shared-vs-private)
   - [Learning (the write side)](#learning-the-write-side)
+- [Conscious memory (the model drives it)](#conscious-memory-the-model-drives-it)
 - [Installation](#installation)
 - [CLI reference](#cli-reference)
 - [Managing plugins](#managing-plugins-the-init--plugin--update--install-verbs)
@@ -679,6 +680,45 @@ Policy:
 - **Idempotent.** `Consolidate` re-runs every N turns over the same journal, but
   a per-session `seen` set skips already-persisted keys — so re-running adds no
   duplicate facts/skills, and is a no-op when nothing new is extracted.
+
+### Conscious memory (the model drives it)
+
+Recall and learning above are *automatic* — the orchestrator injects and
+consolidates on the model's behalf. **Conscious memory** closes the loop by
+making every backend (claude, codex, cursor) *aware* it has this memory and able
+to drive it in-band, so the vault becomes a place the agent can deliberately
+**go and search**, not just passively receive.
+
+Every turn the orchestrator frames the recalled digest in a compact, always-on
+affordance, so the model knows the capability exists even when memory is empty:
+
+```text
+<memory>
+This is your persistent memory (session · project · agent), recalled across
+sessions. Search it any time by emitting <recall>your query</recall> — its hits
+arrive next turn. Store a durable fact with <remember>the fact</remember>.
+{recalled digest…}
+{results of your last <recall>, if any}
+</memory>
+```
+
+The model then acts by emitting two markers, detected at the same `runOneTurn`
+seam as `<use-skill>` and **stripped from the reply** so the human never sees
+them (via the optional `contracts.TurnReactor` capability the `Curator`
+implements):
+
+- **`<recall>query</recall>`** — searches memory (scoped `RecallRelevant`, or a
+  ranked `Search` with no scope) and surfaces the top-k hits in the **next**
+  turn's `<memory>` block, the same two-turn round trip as skills expansion.
+- **`<remember>fact</remember>`** — stores a durable fact immediately, shared
+  under the project root (or the session node with no scope), keyed by a slug of
+  the fact so re-remembering updates in place instead of duplicating.
+
+Backend-agnostic by construction: because it lives in the orchestrator seam, no
+backend can opt out and none needs native support. All memory calls are
+best-effort — a failed search or write never breaks the turn — and recall hits
+are defanged (`writeNode`) just like injected memory, since shared memory is
+multi-writer and attacker-influenced.
 
 ---
 

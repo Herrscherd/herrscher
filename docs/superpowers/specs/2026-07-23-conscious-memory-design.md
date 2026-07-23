@@ -1,7 +1,7 @@
 # Conscious Memory — design
 
 **Date:** 2026-07-23
-**Status:** approved (design), pending spec review
+**Status:** shipped — contracts v0.2.3, orchestrator v0.1.7, herrscher v0.1.34
 **Goal:** Make every backend (claude, codex, cursor) *aware* it has a persistent
 Obsidian memory it can actively **search** and **write to** — not just receive a
 passive injected digest.

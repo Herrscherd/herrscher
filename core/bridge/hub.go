@@ -163,6 +163,9 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 		eng.Detect(out)
 		out = eng.Strip(out)
 	}
+	if tr, ok := orch.(contracts.TurnReactor); ok {
+		out = tr.React(turnCtx, out)
+	}
 	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, Resume: resumeToken(resp)})
 	if orch != nil {
 		_ = orch.Observe(ctx, prompt, out)

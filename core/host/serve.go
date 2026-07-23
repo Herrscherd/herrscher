@@ -183,6 +183,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	sup := supervisor.NewSupervisor(ctx, self)
 	sup.SetLogger(base)
 	sup.SetMetrics(h.Metrics())
+	sup.SetAgentsRoot(filepath.Join(partDir, "agents"))
 
 	instID, err := resolveInstanceID(st, o.InstanceID, o.Owner, log)
 	if err != nil {
@@ -206,6 +207,10 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}
+	// Only the daemon spawns delegates, so seed the default Codex agent here rather
+	// than in buildRegistry — an operator CLI command must not write agent homes as
+	// a side effect of building its registry.
+	ensureCodexAgent(deps.agents)
 	// Terminal-only sessions (the TUI's own tabs) route through the terminal
 	// gateway's admin, not the operator's home gateway — so they open as local
 	// `terminal/…` channels even when a remote home is configured, or none is.

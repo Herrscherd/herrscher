@@ -68,6 +68,7 @@ func runBridge(ctx context.Context, args []string) error {
 	return bridge.Run(ctx, newBackend, orch, bridge.Options{
 		Channel:   *ch,
 		HubSocket: *hubSocket,
+		Roster:    host.NewRoster(host.DefaultAgentsRoot()),
 	})
 }
 

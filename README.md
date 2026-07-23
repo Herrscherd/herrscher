@@ -36,6 +36,7 @@ code, comment, or test fixture).
 - [The two run modes](#the-two-run-modes)
 - [Session lifecycle](#session-lifecycle)
 - [Inter-session coordination](#inter-session-coordination)
+  - [Conscious cross-model delegation](#conscious-cross-model-delegation-the-model-knows-its-roster)
 - [Durable agents](#durable-agents)
   - [Memory scope (shared vs private)](#memory-scope-shared-vs-private)
   - [Learning (the write side)](#learning-the-write-side)
@@ -544,6 +545,25 @@ whose tags overlap it most; ties break to the lexicographically smallest name,
 and a task that matches no agent's tags is **refused** rather than sent to a
 default. The only judgment is the agent's own tags plus the lead's phrasing of
 the task — the host merely scores.
+
+### Conscious cross-model delegation (the model knows its roster)
+
+The coordination trailers above only fire if the model *knows they exist*. So,
+like conscious memory and cross-backend skills, Herrscher frames the capability
+in the prompt: every turn the bridge injects a compact `<delegation>` block
+listing the agents this session may delegate to (name · backend · tags) and the
+two trigger trailers (`⟢ delegate: <agent> — <mission>`, `⟢ route: <mission>`).
+The model is thus aware it can hand a whole mission to another **backend** — the
+worker runs autonomously on its own vendor (e.g. **Codex**) in its own isolated,
+committed worktree and reports back into the lead's turn asynchronously, so the
+lead keeps talking to the human meanwhile.
+
+The roster is read from the agent homes under `<stateDir>/agents/`, so it is the
+same set the coordinator can actually spawn. A **default `codex` agent** (backend
+`codex`, tags `refactor tests mechanical`) is auto-provisioned on daemon start so
+delegation works out of the box; it is created only when absent — a manual
+`agent create --backend codex …` (or a prior boot) is never overwritten. With no
+agents at all, the `<delegation>` block is omitted entirely and nothing changes.
 
 ---
 

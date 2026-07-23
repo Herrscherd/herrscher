@@ -965,6 +965,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.applySize()
 		}
 		m.input.SetWidth(m.innerWidth())
+		m.resizeComposer() // re-wrap the draft to the new width so it never clips
 		m.syncViewport()
 	case tea.KeyMsg:
 		m.flash = "" // any keypress clears a transient status

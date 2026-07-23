@@ -94,7 +94,7 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	}()
 
 	eng := newSkillEngine(resp)
-	runHubTurnsCtl(ctx, in, conn, resp, orch, ctrl, eng)
+	runHubTurnsCtl(ctx, in, conn, resp, orch, ctrl, eng, o.Roster)
 	return ctx.Err()
 }
 
@@ -104,12 +104,12 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 // sends the next input only after it sees this turn's reply{done}, and this
 // loop processes one frame at a time anyway.
 func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator) {
-	runHubTurnsCtl(ctx, in, sink, resp, orch, nil, nil)
+	runHubTurnsCtl(ctx, in, sink, resp, orch, nil, nil, nil)
 }
 
 // runHubTurnsCtl is runHubTurns with an explicit turnController so an interrupt
 // frame read out-of-band can cancel the in-flight turn.
-func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine) {
+func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine, roster contracts.RosterProvider) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -122,7 +122,7 @@ func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contrac
 			case "pick":
 				runPick(ctx, sink, resp, ev.Value)
 			default: // "input" (and any human-origin frame)
-				runOneTurn(ctx, sink, resp, orch, ev, ctrl, eng)
+				runOneTurn(ctx, sink, resp, orch, ev, ctrl, eng, roster)
 			}
 		}
 	}
@@ -131,7 +131,7 @@ func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contrac
 // runOneTurn runs a single backend turn for an input frame, streaming chunk/
 // status events and a terminal reply{done}. An empty output still emits
 // reply{done} so the hub's FIFO can advance.
-func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController, eng *skills.Engine) {
+func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController, eng *skills.Engine, roster contracts.RosterProvider) {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
 	if eng != nil {
@@ -141,7 +141,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 	if orch != nil {
 		memCtx = orch.Context(turnCtx)
 	}
-	prompt := contracts.Prompt{Content: ev.Text, Context: withSkills(memCtx, eng), Author: ev.Who, Attachments: ev.Attachments}
+	prompt := contracts.Prompt{Content: ev.Text, Context: withDelegation(withSkills(memCtx, eng), roster), Author: ev.Who, Attachments: ev.Attachments}
 	var cost float64
 	var outTok int
 	onEvent := func(be contracts.BackendEvent) {

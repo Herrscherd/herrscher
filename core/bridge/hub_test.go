@@ -123,7 +123,7 @@ func TestInbound_InterruptCancelsTurn(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		runHubTurnsCtl(context.Background(), in, sink, be, nil, ctrl, nil)
+		runHubTurnsCtl(context.Background(), in, sink, be, nil, ctrl, nil, nil)
 		close(done)
 	}()
 

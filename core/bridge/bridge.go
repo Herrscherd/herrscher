@@ -27,6 +27,9 @@ type Options struct {
 	// HubSocket selects pure-runner (hub) mode: the bridge dials this socket,
 	// reads input/pick frames from the daemon hub, and emits turn events back.
 	HubSocket string
+	// Roster lists the agents this session may delegate to (optional). When nil or
+	// empty, no delegation affordance is injected.
+	Roster contracts.RosterProvider
 }
 
 // Run is the bridge entry point: a pure backend runner. It requires a hub socket
@@ -51,7 +54,7 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 
 	select {
 	case ev := <-in:
-		runOneTurn(ctx, channelSink{ctx: ctx, out: out}, resp, orch, ev, nil, newSkillEngine(resp))
+		runOneTurn(ctx, channelSink{ctx: ctx, out: out}, resp, orch, ev, nil, newSkillEngine(resp), nil)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

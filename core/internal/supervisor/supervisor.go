@@ -28,6 +28,10 @@ type Supervisor struct {
 	now   func() time.Time
 	// metrics records bridge-restart counts (nil = no recording, e.g. in tests).
 	metrics *metrics.Registry
+	// agentsRoot is the directory holding agent homes, passed to each bridge so its
+	// delegation roster matches the store the coordinator spawns from (which honours
+	// the daemon's --state override). Empty = the bridge falls back to its default.
+	agentsRoot string
 }
 
 // bridgeArgs builds the child `herrscher bridge` argv for sess.
@@ -62,6 +66,9 @@ func (s *Supervisor) bridgeArgs(sess state.Session) []string {
 	if sess.ResumeToken != "" {
 		args = append(args, "--resume", sess.ResumeToken)
 	}
+	if s.agentsRoot != "" {
+		args = append(args, "--agents-root", s.agentsRoot)
+	}
 	return args
 }
 
@@ -87,6 +94,13 @@ func (s *Supervisor) SetLogger(l *slog.Logger) {
 // SetMetrics installs the registry the supervisor records bridge restarts into.
 func (s *Supervisor) SetMetrics(m *metrics.Registry) {
 	s.metrics = m
+}
+
+// SetAgentsRoot records the agent-home directory threaded to each spawned bridge
+// as --agents-root, so a bridge's delegation roster is read from the same store
+// the daemon manages even under a non-default --state path.
+func (s *Supervisor) SetAgentsRoot(root string) {
+	s.agentsRoot = root
 }
 
 // Start launches a supervised bridge for sess (idempotent per name).

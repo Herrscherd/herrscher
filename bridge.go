@@ -31,6 +31,7 @@ func runBridge(ctx context.Context, args []string) error {
 	backend := fs.String("backend", "", "responder backend: stream (default) | oneshot")
 	vendor := fs.String("vendor", "", "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)")
 	hubSocket := fs.String("hub-socket", "", "unix socket of the daemon hub: when set, run as a pure backend runner (no gateway polling)")
+	agentsRoot := fs.String("agents-root", "", "directory holding agent homes for the delegation roster (empty = the daemon default beside state.json)")
 	extractor := fs.String("extractor", "", "name of a registered curation extractor — enables the P1 learning loop (empty = plain Curator, no learning)")
 	journal := fs.String("journal", "", "path to the call journal Consolidate reads (worktree-relative ok); only used with --extractor")
 	consolidateEvery := fs.Int("consolidate-every", 0, "run Consolidate every N turns (0 = manual only); only used with --extractor")
@@ -65,10 +66,14 @@ func runBridge(ctx context.Context, args []string) error {
 	if orch != nil {
 		defer orch.Close()
 	}
+	rosterRoot := *agentsRoot
+	if rosterRoot == "" {
+		rosterRoot = host.DefaultAgentsRoot()
+	}
 	return bridge.Run(ctx, newBackend, orch, bridge.Options{
 		Channel:   *ch,
 		HubSocket: *hubSocket,
-		Roster:    host.NewRoster(host.DefaultAgentsRoot()),
+		Roster:    host.NewRoster(rosterRoot),
 	})
 }
 

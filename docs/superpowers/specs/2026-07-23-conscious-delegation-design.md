@@ -1,7 +1,7 @@
 # Conscious cross-model Delegation — design
 
 **Date:** 2026-07-23
-**Status:** approved (design)
+**Status:** shipped — contracts v0.2.4, herrscher v0.1.36
 **Goal:** Make the running model *aware* it can hand a full mission to another
 backend (Codex) and get the result back asynchronously — by framing the
 delegation machinery that **already exists** (`coordinator`, `⟢` trailer

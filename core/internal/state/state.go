@@ -237,6 +237,26 @@ func (s *State) SetResumeToken(name, token string) error {
 	return nil
 }
 
+// SetBackendTarget re-points a live session's backend: it rewrites Vendor and the
+// opaque Cmd string (which carries model+effort) and clears the resume token,
+// which is backend-specific and meaningless once the vendor/model changes. The
+// caller restarts the supervised child so the new values take effect. Returns
+// false when no session matches name.
+func (s *State) SetBackendTarget(name, vendor, cmd string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Sessions {
+		if s.Sessions[i].Name == name {
+			s.Sessions[i].Vendor = vendor
+			s.Sessions[i].Cmd = cmd
+			s.Sessions[i].ResumeToken = ""
+			s.saveLocked()
+			return true
+		}
+	}
+	return false
+}
+
 // SetArchived sets a session's archived flag and persists only on change. An
 // unknown name is a no-op (best-effort, mirrors SetResumeToken).
 func (s *State) SetArchived(name string, archived bool) error {

@@ -358,6 +358,65 @@ func (h *Handler) sessionResumeRun(_ context.Context, in contracts.Input) (strin
 	return fmt.Sprintf("⟲ Session **%s** resumed.", name), nil
 }
 
+// sessionSwitchRun re-targets a live session's vendor/model/effort under the
+// same id. It always rewrites the persisted backend (SetBackendTarget, which
+// also clears the resume token so the new backend starts a fresh thread). With
+// handoff != "none" it also stops the running child, restarts it on the new
+// Cmd/Vendor, and injects a context seed built from the prior transcript so the
+// new backend picks up the conversation. Name is NOT slugified: FindSession is
+// the guard, exactly like sessionResumeRun.
+func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (string, error) {
+	name, ok := in.Lookup("name")
+	if !ok {
+		return "", fmt.Errorf("missing name")
+	}
+	vendor := in.Get("vendor")
+	cmd := in.Get("cmd")
+	handoff := in.Get("handoff")
+	if handoff == "" {
+		handoff = "none"
+	}
+	if _, exists := h.st.FindSession(name); !exists {
+		return "", fmt.Errorf("no session %q", name)
+	}
+	if !h.st.SetBackendTarget(name, vendor, cmd) {
+		return "", fmt.Errorf("no session %q", name)
+	}
+	if handoff == "none" {
+		return fmt.Sprintf("session %s re-ciblée sur %s (sans reprise)", name, vendor), nil
+	}
+	// Re-target a running backend: stop, then start with the new Cmd/Vendor.
+	_ = h.sup.Stop(name)
+	sess, _ := h.st.FindSession(name) // re-read: Vendor/Cmd/ResumeToken just changed
+	if err := h.sup.Start(sess); err != nil {
+		return "", fmt.Errorf("redémarrage backend: %w", err)
+	}
+	seedText := buildHandoffSeed(
+		state.ReadTranscript(state.TranscriptPath(h.partDir, name), sessionLogTranscriptCap),
+		handoff,
+	)
+	if seedText != "" && h.seed != nil {
+		h.injectSeed(ctx, name, seedText)
+	}
+	return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s)", name, vendor, handoff), nil
+}
+
+// injectSeed retries the live-session seed: the restarted bridge registers its
+// driver asynchronously, so the first attempt can land before it is live. Mirrors
+// the coordinator's seed-with-retry (bounded, non-fatal on failure).
+func (h *Handler) injectSeed(ctx context.Context, name, task string) {
+	for attempt := 0; attempt < 20; attempt++ {
+		if h.seed(name, task) {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(150 * time.Millisecond):
+		}
+	}
+}
+
 func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string, error) {
 	sessions := h.st.SnapshotSessions()
 	if in.JSON {

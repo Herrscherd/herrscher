@@ -23,6 +23,9 @@ type Handler struct {
 	defaultGateways []string
 	partDir         string             // dir holding participants/<name>.log journals
 	coord           coordinationReader // nil until wired; session list omits coordination when nil
+	// seed injects an opening turn into a live session (the same path handoff uses).
+	// nil in the operator CLI (no live drivers); the daemon wires host.Seed.
+	seed func(name, task string) bool
 }
 
 // CoordView mirrors host.CoordinationView so the manager stays decoupled from
@@ -61,6 +64,10 @@ func (h *Handler) PartDir() string { return h.partDir }
 // SetCoordinationReader wires the join-state source used to enrich session list.
 // nil-safe: until set, session list omits the coordination field.
 func (h *Handler) SetCoordinationReader(r coordinationReader) { h.coord = r }
+
+// SetSeeder wires the live-session seed injector (host.Seed). The daemon calls
+// this; the operator CLI leaves it nil (switch --handoff none still works).
+func (h *Handler) SetSeeder(fn func(name, task string) bool) { h.seed = fn }
 
 // Agents returns the durable agent store (used by tests/wiring).
 func (h *Handler) Agents() agentStore { return h.agents }

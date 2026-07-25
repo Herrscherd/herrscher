@@ -376,20 +376,29 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	if handoff == "" {
 		handoff = "none"
 	}
-	if _, exists := h.st.FindSession(name); !exists {
+	prior, exists := h.st.FindSession(name)
+	if !exists {
 		return "", fmt.Errorf("no session %q", name)
 	}
+	// Capture the prior backend so we can roll back if the restart fails: rolling
+	// back to the old vendor makes the old resume token valid again.
+	oldVendor, oldCmd, oldToken := prior.Vendor, prior.Cmd, prior.ResumeToken
 	if !h.st.SetBackendTarget(name, vendor, cmd) {
 		return "", fmt.Errorf("no session %q", name)
 	}
-	if handoff == "none" {
-		return fmt.Sprintf("session %s re-ciblée sur %s (sans reprise)", name, vendor), nil
-	}
-	// Re-target a running backend: stop, then start with the new Cmd/Vendor.
+	// Re-target the running backend for ALL handoff modes so the new Cmd/Vendor
+	// actually takes effect (the child was spawned eagerly on the old Cmd). Only
+	// the seed step below is conditional.
 	_ = h.sup.Stop(name)
 	sess, _ := h.st.FindSession(name) // re-read: Vendor/Cmd/ResumeToken just changed
 	if err := h.sup.Start(sess); err != nil {
-		return "", fmt.Errorf("redémarrage backend: %w", err)
+		if rbErr := h.rollbackSwitch(name, oldVendor, oldCmd, oldToken); rbErr != nil {
+			return "", fmt.Errorf("redémarrage backend: %w; rollback échoué, session %s hors service: %v", err, name, rbErr)
+		}
+		return "", fmt.Errorf("redémarrage backend: %w (session %s restaurée sur %s)", err, name, oldVendor)
+	}
+	if handoff == "none" {
+		return fmt.Sprintf("session %s re-ciblée sur %s (sans reprise)", name, vendor), nil
 	}
 	seedText := buildHandoffSeed(
 		state.ReadTranscript(state.TranscriptPath(h.partDir, name), sessionLogTranscriptCap),
@@ -415,6 +424,19 @@ func (h *Handler) injectSeed(ctx context.Context, name, task string) {
 		case <-time.After(150 * time.Millisecond):
 		}
 	}
+}
+
+// rollbackSwitch restores a session to its prior backend after a failed restart:
+// it re-points the persisted target to the old vendor/cmd, restores the old resume
+// token (valid again now that the vendor is back), and restarts the old backend so
+// the thread is live again. A non-nil return means the rollback restart also failed
+// and the session is down.
+func (h *Handler) rollbackSwitch(name, oldVendor, oldCmd, oldToken string) error {
+	h.st.SetBackendTarget(name, oldVendor, oldCmd) // also clears the token
+	_ = h.st.SetResumeToken(name, oldToken)        // restore it
+	_ = h.sup.Stop(name)
+	sess, _ := h.st.FindSession(name)
+	return h.sup.Start(sess)
 }
 
 func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string, error) {

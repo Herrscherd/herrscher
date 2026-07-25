@@ -404,26 +404,30 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 		state.ReadTranscript(state.TranscriptPath(h.partDir, name), sessionLogTranscriptCap),
 		handoff,
 	)
-	if seedText != "" && h.seed != nil {
-		h.injectSeed(ctx, name, seedText)
+	if seedText != "" && h.seed != nil && !h.injectSeed(ctx, name, seedText) {
+		// Restart succeeded but the seed never landed: report honestly rather
+		// than claiming a handoff the new backend never received.
+		return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s non confirmée)", name, vendor, handoff), nil
 	}
 	return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s)", name, vendor, handoff), nil
 }
 
 // injectSeed retries the live-session seed: the restarted bridge registers its
 // driver asynchronously, so the first attempt can land before it is live. Mirrors
-// the coordinator's seed-with-retry (bounded, non-fatal on failure).
-func (h *Handler) injectSeed(ctx context.Context, name, task string) {
+// the coordinator's seed-with-retry (bounded). Returns true once the seed lands,
+// false if every attempt failed or the context was cancelled.
+func (h *Handler) injectSeed(ctx context.Context, name, task string) bool {
 	for attempt := 0; attempt < 20; attempt++ {
 		if h.seed(name, task) {
-			return
+			return true
 		}
 		select {
 		case <-ctx.Done():
-			return
+			return false
 		case <-time.After(150 * time.Millisecond):
 		}
 	}
+	return false
 }
 
 // rollbackSwitch restores a session to its prior backend after a failed restart:

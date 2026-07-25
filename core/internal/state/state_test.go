@@ -190,6 +190,33 @@ func TestBoundGateways(t *testing.T) {
 	}
 }
 
+func TestSetBackendTargetRewritesVendorCmdAndClearsResume(t *testing.T) {
+	dir := t.TempDir()
+	st, err := LoadState(filepath.Join(dir, "state.json"))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	st.AddSession(Session{Name: "alpha", Vendor: "claude", Cmd: "claude --model claude-opus-4-8 --effort high", ResumeToken: "tok-abc"})
+
+	if !st.SetBackendTarget("alpha", "codex", "codex --model gpt-5-codex") {
+		t.Fatal("expected SetBackendTarget to report a match")
+	}
+
+	got, ok := st.FindSession("alpha")
+	if !ok {
+		t.Fatal("session vanished")
+	}
+	if got.Vendor != "codex" || got.Cmd != "codex --model gpt-5-codex" {
+		t.Fatalf("vendor/cmd not rewritten: %+v", got)
+	}
+	if got.ResumeToken != "" {
+		t.Fatalf("resume token must be cleared, got %q", got.ResumeToken)
+	}
+	if st.SetBackendTarget("ghost", "claude", "claude") {
+		t.Fatal("unknown session must return false")
+	}
+}
+
 func TestIsLegacy(t *testing.T) {
 	cases := []struct {
 		name string

@@ -358,6 +358,91 @@ func (h *Handler) sessionResumeRun(_ context.Context, in contracts.Input) (strin
 	return fmt.Sprintf("⟲ Session **%s** resumed.", name), nil
 }
 
+// sessionSwitchRun re-targets a live session's vendor/model/effort under the
+// same id. It always rewrites the persisted backend (SetBackendTarget, which
+// also clears the resume token so the new backend starts a fresh thread). With
+// handoff != "none" it also stops the running child, restarts it on the new
+// Cmd/Vendor, and injects a context seed built from the prior transcript so the
+// new backend picks up the conversation. Name is NOT slugified: FindSession is
+// the guard, exactly like sessionResumeRun.
+func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (string, error) {
+	name, ok := in.Lookup("name")
+	if !ok {
+		return "", fmt.Errorf("missing name")
+	}
+	vendor := in.Get("vendor")
+	cmd := in.Get("cmd")
+	handoff := in.Get("handoff")
+	if handoff == "" {
+		handoff = "none"
+	}
+	prior, exists := h.st.FindSession(name)
+	if !exists {
+		return "", fmt.Errorf("no session %q", name)
+	}
+	// Capture the prior backend so we can roll back if the restart fails: rolling
+	// back to the old vendor makes the old resume token valid again.
+	oldVendor, oldCmd, oldToken := prior.Vendor, prior.Cmd, prior.ResumeToken
+	if !h.st.SetBackendTarget(name, vendor, cmd) {
+		return "", fmt.Errorf("no session %q", name)
+	}
+	// Re-target the running backend for ALL handoff modes so the new Cmd/Vendor
+	// actually takes effect (the child was spawned eagerly on the old Cmd). Only
+	// the seed step below is conditional.
+	_ = h.sup.Stop(name)
+	sess, _ := h.st.FindSession(name) // re-read: Vendor/Cmd/ResumeToken just changed
+	if err := h.sup.Start(sess); err != nil {
+		if rbErr := h.rollbackSwitch(name, oldVendor, oldCmd, oldToken); rbErr != nil {
+			return "", fmt.Errorf("redémarrage backend: %w; rollback échoué, session %s hors service: %v", err, name, rbErr)
+		}
+		return "", fmt.Errorf("redémarrage backend: %w (session %s restaurée sur %s)", err, name, oldVendor)
+	}
+	if handoff == "none" {
+		return fmt.Sprintf("session %s re-ciblée sur %s (sans reprise)", name, vendor), nil
+	}
+	seedText := buildHandoffSeed(
+		state.ReadTranscript(state.TranscriptPath(h.partDir, name), sessionLogTranscriptCap),
+		handoff,
+	)
+	if seedText != "" && h.seed != nil && !h.injectSeed(ctx, name, seedText) {
+		// Restart succeeded but the seed never landed: report honestly rather
+		// than claiming a handoff the new backend never received.
+		return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s non confirmée)", name, vendor, handoff), nil
+	}
+	return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s)", name, vendor, handoff), nil
+}
+
+// injectSeed retries the live-session seed: the restarted bridge registers its
+// driver asynchronously, so the first attempt can land before it is live. Mirrors
+// the coordinator's seed-with-retry (bounded). Returns true once the seed lands,
+// false if every attempt failed or the context was cancelled.
+func (h *Handler) injectSeed(ctx context.Context, name, task string) bool {
+	for attempt := 0; attempt < 20; attempt++ {
+		if h.seed(name, task) {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(150 * time.Millisecond):
+		}
+	}
+	return false
+}
+
+// rollbackSwitch restores a session to its prior backend after a failed restart:
+// it re-points the persisted target to the old vendor/cmd, restores the old resume
+// token (valid again now that the vendor is back), and restarts the old backend so
+// the thread is live again. A non-nil return means the rollback restart also failed
+// and the session is down.
+func (h *Handler) rollbackSwitch(name, oldVendor, oldCmd, oldToken string) error {
+	h.st.SetBackendTarget(name, oldVendor, oldCmd) // also clears the token
+	_ = h.st.SetResumeToken(name, oldToken)        // restore it
+	_ = h.sup.Stop(name)
+	sess, _ := h.st.FindSession(name)
+	return h.sup.Start(sess)
+}
+
 func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string, error) {
 	sessions := h.st.SnapshotSessions()
 	if in.JSON {

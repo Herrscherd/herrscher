@@ -50,6 +50,13 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Help("resume an archived session: clear archived + restart the bridge (revives with its stored transcript + resume token)").
 			Param("name", "session name", true).
 			Do(h.sessionResumeRun),
+		contracts.New("session", "switch").
+			Help("re-target a live session's vendor/model/effort under the same id").
+			Param("name", "session name", true).
+			Param("vendor", "backend vendor", true).
+			Param("cmd", "backend invocation (carries model+effort)", true).
+			Param("handoff", "none|full|summary context handoff", false).
+			Do(h.sessionSwitchRun),
 		contracts.New("agent", "create").
 			Help("create a durable companion agent (persona + MCP + zero-prompt settings)").
 			Param("name", "agent name (slugified to a safe slug)", true).

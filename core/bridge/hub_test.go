@@ -57,7 +57,7 @@ func TestRunHubReplyCarriesCost(t *testing.T) {
 
 func TestEmitBackendEventThinking(t *testing.T) {
 	sink := &recordSink{}
-	emitBackendEvent(sink, contracts.BackendEvent{Kind: "thinking", Detail: "je réfléchis"}, 0)
+	emitBackendEvent(sink, contracts.BackendEvent{Kind: "thinking", Detail: "je réfléchis"}, 0, 0, 0, 0)
 	want := []contracts.Event{{T: "thinking", Text: "je réfléchis"}}
 	if !reflect.DeepEqual(sink.events, want) {
 		t.Fatalf("emitted %+v, want %+v", sink.events, want)
@@ -98,6 +98,34 @@ func TestRunOneTurn_StampsTokens(t *testing.T) {
 	last := sink.events[len(sink.events)-1]
 	if last.T != "reply" || last.Tokens != 55 {
 		t.Fatalf("reply must carry final tokens 55; got %+v", last)
+	}
+}
+
+// cacheBackend emits a terminal result carrying the full token breakdown
+// (input/output + prompt-cache read/creation).
+type cacheBackend struct{ reply string }
+
+func (b cacheBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
+	onEvent(contracts.BackendEvent{Kind: "usage", InTokens: 10, OutTokens: 20, CacheRead: 12, CacheCreate: 3})
+	onEvent(contracts.BackendEvent{Kind: "text", Detail: "working"})
+	onEvent(contracts.BackendEvent{Kind: "result", InTokens: 30, OutTokens: 55, CacheRead: 12, CacheCreate: 3, Cost: 0.001})
+	return b.reply, nil
+}
+func (cacheBackend) Close() error { return nil }
+
+// TestRunOneTurn_StampsTokenBreakdown proves the reply carries the full token
+// breakdown (input/cache), not just output.
+func TestRunOneTurn_StampsTokenBreakdown(t *testing.T) {
+	sink := &recordSink{}
+	in := make(chan contracts.Event, 1)
+	in <- contracts.Event{T: "input", Text: "go"}
+	close(in)
+
+	runHubTurns(context.Background(), in, sink, cacheBackend{reply: "done"}, nil)
+
+	last := sink.events[len(sink.events)-1]
+	if last.T != "reply" || last.TokensIn != 30 || last.CacheRead != 12 || last.CacheCreate != 3 {
+		t.Fatalf("reply must carry token breakdown; got %+v", last)
 	}
 }
 

@@ -143,16 +143,19 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 	}
 	prompt := contracts.Prompt{Content: ev.Text, Context: withDelegation(withSkills(memCtx, eng), roster), Author: ev.Who, Attachments: ev.Attachments}
 	var cost float64
-	var outTok int
+	var outTok, inTok, cacheRd, cacheCr int
 	onEvent := func(be contracts.BackendEvent) {
 		switch be.Kind {
-		case "usage":
+		case "usage", "result":
 			outTok = be.OutTokens
-		case "result":
-			cost = be.Cost
-			outTok = be.OutTokens
+			inTok = be.InTokens
+			cacheRd = be.CacheRead
+			cacheCr = be.CacheCreate
+			if be.Kind == "result" {
+				cost = be.Cost
+			}
 		}
-		emitBackendEvent(sink, be, outTok)
+		emitBackendEvent(sink, be, outTok, inTok, cacheRd, cacheCr)
 	}
 	out, err := resp.Respond(turnCtx, prompt, onEvent)
 	if err != nil && out == "" {
@@ -166,7 +169,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 	if tr, ok := orch.(contracts.TurnReactor); ok {
 		out = tr.React(turnCtx, out)
 	}
-	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, Resume: resumeToken(resp)})
+	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, TokensIn: inTok, CacheRead: cacheRd, CacheCreate: cacheCr, Resume: resumeToken(resp)})
 	if orch != nil {
 		_ = orch.Observe(ctx, prompt, out)
 	}
@@ -221,15 +224,15 @@ func runPick(ctx context.Context, sink contracts.EventSink, resp contracts.Backe
 // cumulative output-token count (tokens) rides on every rendered event so a
 // gateway can show a growing counter mid-turn. Mirrors the relocated
 // runner.emitBackend.
-func emitBackendEvent(sink contracts.EventSink, be contracts.BackendEvent, tokens int) {
+func emitBackendEvent(sink contracts.EventSink, be contracts.BackendEvent, tokens, tokensIn, cacheRead, cacheCreate int) {
 	switch be.Kind {
 	case "thinking":
-		sink.Emit(contracts.Event{T: "thinking", Text: be.Detail, Tokens: tokens})
+		sink.Emit(contracts.Event{T: "thinking", Text: be.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 	case "text":
-		sink.Emit(contracts.Event{T: "chunk", Text: be.Detail, Tokens: tokens})
+		sink.Emit(contracts.Event{T: "chunk", Text: be.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 	case "tool":
 		if text := strings.TrimSpace(be.Tool + " " + be.Detail); text != "" {
-			sink.Emit(contracts.Event{T: "status", Text: text, Tokens: tokens})
+			sink.Emit(contracts.Event{T: "status", Text: text, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 		}
 	case "reset":
 		sink.Emit(contracts.Event{T: "reset"})

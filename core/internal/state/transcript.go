@@ -17,6 +17,15 @@ type TranscriptEntry struct {
 	Text string  `json:"text"`
 	Cost float64 `json:"cost,omitempty"`
 	Kind string  `json:"kind,omitempty"` // reserved (tool calls)
+	// Per-turn usage, present on assistant entries. TokensOut is the turn's
+	// output tokens; TokensIn the input; CacheRead/CacheCreate the prompt-cache
+	// read/creation tokens; DurMs the turn's wall-clock duration in ms. All
+	// omitempty so user turns and pre-usage transcripts stay compact.
+	TokensIn    int `json:"tokens_in,omitempty"`
+	TokensOut   int `json:"tokens_out,omitempty"`
+	CacheRead   int `json:"cache_read,omitempty"`
+	CacheCreate int `json:"cache_create,omitempty"`
+	DurMs       int `json:"dur_ms,omitempty"`
 }
 
 // TranscriptPath returns the transcript path for session name under dir

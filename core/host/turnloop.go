@@ -123,17 +123,28 @@ func (d *sessionDriver) resolveAttachments(ctx context.Context, m contracts.Mess
 	return bridge.ResolveAttachments(ctx, nil, m, d.name, d.attachHosts)
 }
 
+// turnUsage carries the per-turn accounting persisted alongside an assistant
+// entry. Zero value = a user turn (or a backend that reports no usage).
+type turnUsage struct {
+	InTokens, OutTokens, CacheRead, CacheCreate, DurMs int
+}
+
 // recordEntry appends one transcript turn-side, best-effort. Timestamp is set
 // here so both call sites stay one-liners.
-func (d *sessionDriver) recordEntry(role, text string, cost float64) {
+func (d *sessionDriver) recordEntry(role, text string, cost float64, u turnUsage) {
 	if d.record == nil || text == "" {
 		return
 	}
 	d.record(state.TranscriptEntry{
-		Ts:   time.Now().UTC().Format(time.RFC3339),
-		Role: role,
-		Text: text,
-		Cost: cost,
+		Ts:          time.Now().UTC().Format(time.RFC3339),
+		Role:        role,
+		Text:        text,
+		Cost:        cost,
+		TokensIn:    u.InTokens,
+		TokensOut:   u.OutTokens,
+		CacheRead:   u.CacheRead,
+		CacheCreate: u.CacheCreate,
+		DurMs:       u.DurMs,
 	})
 }
 
@@ -319,7 +330,7 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			// A pick is answered out-of-band by the bridge; only a real input
 			// opens a turn (and a progress view) on the bound gateways.
 			if ev.T == "input" {
-				d.recordEntry("user", ev.Text, 0)
+				d.recordEntry("user", ev.Text, 0, turnUsage{})
 				d.fanOut(ctx, contracts.Event{T: "human", Who: ev.Who, Text: ev.Text})
 			}
 			d.runTurn(ctx, ev)
@@ -371,6 +382,7 @@ func (d *sessionDriver) abandon(ctx context.Context, ev contracts.Event) {
 // continues.
 func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 	d.metrics.TurnStarted()
+	turnStart := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
@@ -389,7 +401,13 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 				if d.persistResume != nil && e.Resume != "" {
 					d.persistResume(e.Resume)
 				}
-				d.recordEntry("assistant", e.Text, e.Cost)
+				d.recordEntry("assistant", e.Text, e.Cost, turnUsage{
+					InTokens:    e.TokensIn,
+					OutTokens:   e.Tokens,
+					CacheRead:   e.CacheRead,
+					CacheCreate: e.CacheCreate,
+					DurMs:       int(time.Since(turnStart).Milliseconds()),
+				})
 				d.seenMu.Lock()
 				if d.pendingReply != nil {
 					d.pendingReply <- e.Text

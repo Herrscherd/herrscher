@@ -8,6 +8,18 @@ import (
 	"testing"
 )
 
+func TestTranscriptEntryPersistsUsage(t *testing.T) {
+	dir := t.TempDir()
+	p := TranscriptPath(dir, "s1")
+	if err := AppendTranscript(p, TranscriptEntry{Ts: "2026-07-26T00:00:00Z", Role: "assistant", Text: "ok", Cost: 0.004, TokensIn: 30, TokensOut: 55, CacheRead: 12, CacheCreate: 3, DurMs: 4200}); err != nil {
+		t.Fatal(err)
+	}
+	got := ReadTranscript(p, -1)
+	if len(got) != 1 || got[0].TokensOut != 55 || got[0].CacheRead != 12 || got[0].DurMs != 4200 {
+		t.Fatalf("usage not persisted: %+v", got)
+	}
+}
+
 func TestTranscriptAppendReadCap(t *testing.T) {
 	dir := t.TempDir()
 	p := TranscriptPath(dir, "sess")

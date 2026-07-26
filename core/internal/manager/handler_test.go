@@ -106,6 +106,50 @@ func TestSessionListJSON(t *testing.T) {
 	}
 }
 
+// TestSessionListAggregatesUsage proves session list --json rolls the transcript
+// up into a per-session usage aggregate (turns, tokens, cache, cost, start) and
+// surfaces the real objective (last user turn) as task, so the app renders live
+// activity instead of placeholder dashes.
+func TestSessionListAggregatesUsage(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	st.Sessions = []state.Session{{Name: "alpha", Agent: "roblox"}}
+	p := state.TranscriptPath(h.PartDir(), "alpha")
+	for _, e := range []state.TranscriptEntry{
+		{Ts: "2026-07-26T00:00:00Z", Role: "user", Text: "build a tower"},
+		{Ts: "2026-07-26T00:00:05Z", Role: "assistant", Text: "done", Cost: 0.02, TokensIn: 30, TokensOut: 55, CacheRead: 12, CacheCreate: 3, DurMs: 4200},
+		{Ts: "2026-07-26T00:01:00Z", Role: "user", Text: "now add a door"},
+		{Ts: "2026-07-26T00:01:08Z", Role: "assistant", Text: "ok", Cost: 0.03, TokensIn: 40, TokensOut: 60, CacheRead: 5, CacheCreate: 1, DurMs: 8000},
+	} {
+		if err := state.AppendTranscript(p, e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := h.sessionListRun(context.Background(), contracts.Input{JSON: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows []sessionJSON
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatalf("not JSON: %v (%q)", err, out)
+	}
+	if len(rows) != 1 || rows[0].Usage == nil {
+		t.Fatalf("want usage present: %+v", rows)
+	}
+	u := rows[0].Usage
+	if u.Turns != 2 || u.TokensOut != 115 || u.TokensIn != 70 || u.CacheRead != 17 || u.CacheCreate != 4 {
+		t.Fatalf("aggregate wrong: %+v", u)
+	}
+	if u.Cost < 0.049 || u.Cost > 0.051 {
+		t.Fatalf("cost aggregate wrong: %v", u.Cost)
+	}
+	if u.StartedAt != "2026-07-26T00:00:00Z" {
+		t.Fatalf("started_at wrong: %q", u.StartedAt)
+	}
+	if rows[0].Task != "now add a door" {
+		t.Fatalf("task should be last user text, got: %q", rows[0].Task)
+	}
+}
+
 type fakeCoordReader struct{ views map[string]CoordView }
 
 func (f fakeCoordReader) CoordinationView(name string) (CoordView, bool) {

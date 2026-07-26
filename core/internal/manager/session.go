@@ -45,6 +45,68 @@ type sessionJSON struct {
 	// archived session that /resume (Neublox: Op::ResumeSession) can revive with
 	// its stored conversation. Mirrors herrscher-contracts SessionInfo.Resumable.
 	Resumable bool `json:"resumable"`
+	// Usage rolls the session's transcript up into a live activity aggregate
+	// (turns, token breakdown, prompt-cache, cost, start time). Nil — omitted —
+	// when the session has never run a turn, so a fresh/idle session honestly
+	// carries no usage rather than a zeroed one.
+	Usage *usageJSON `json:"usage,omitempty"`
+	// Task is the session's real current objective: the text of its last user
+	// turn. Empty (omitted) when nothing has been dispatched yet, so the app can
+	// render an honest empty state instead of echoing the session name.
+	Task string `json:"task,omitempty"`
+}
+
+// usageJSON is the wire shape of a session's rolled-up usage. Fields are snake_case
+// to match the transcript wire (tokens_in, cache_read); the Neublox daemon's
+// SessionUsage aliases them and re-serializes camelCase for the app.
+type usageJSON struct {
+	Cost        float64 `json:"cost,omitempty"`
+	TokensIn    int     `json:"tokens_in,omitempty"`
+	TokensOut   int     `json:"tokens_out,omitempty"`
+	CacheRead   int     `json:"cache_read,omitempty"`
+	CacheCreate int     `json:"cache_create,omitempty"`
+	Turns       int     `json:"turns,omitempty"`
+	StartedAt   string  `json:"started_at,omitempty"`
+}
+
+// aggregateUsage folds a session's transcript into its usage aggregate and its
+// current objective. Turns/tokens/cost sum over assistant entries; StartedAt is
+// the first entry's timestamp; task is the last user entry's text. Returns
+// (nil, "") for an empty transcript so an idle session omits usage entirely.
+func aggregateUsage(entries []state.TranscriptEntry) (*usageJSON, string) {
+	if len(entries) == 0 {
+		return nil, ""
+	}
+	u := &usageJSON{StartedAt: entries[0].Ts}
+	var task string
+	for _, e := range entries {
+		switch e.Role {
+		case "assistant":
+			u.Turns++
+			u.Cost += e.Cost
+			u.TokensIn += e.TokensIn
+			u.TokensOut += e.TokensOut
+			u.CacheRead += e.CacheRead
+			u.CacheCreate += e.CacheCreate
+		case "user":
+			task = e.Text
+		}
+	}
+	return u, task
+}
+
+// attachUsage reads the session's transcript and stamps its usage aggregate and
+// current objective onto row. Best-effort: a missing transcript leaves row's
+// Usage nil (honest "no activity yet"). Kept off sessionJSONRow, which is pure
+// and Handler-free, since the transcript lives under h.partDir.
+func (h *Handler) attachUsage(row *sessionJSON) {
+	entries := state.ReadTranscript(state.TranscriptPath(h.partDir, row.Name), 0)
+	if u, task := aggregateUsage(entries); u != nil {
+		row.Usage = u
+		if task != "" {
+			row.Task = task
+		}
+	}
 }
 
 // coordinationJSON is the wire shape of a session's join state in session list.
@@ -449,6 +511,7 @@ func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string,
 		rows := make([]sessionJSON, 0, len(sessions))
 		for _, s := range sessions {
 			row := sessionJSONRow(s)
+			h.attachUsage(&row)
 			if h.coord != nil {
 				if v, ok := h.coord.CoordinationView(s.Name); ok {
 					row.Coordination = &coordinationJSON{
@@ -482,7 +545,9 @@ func (h *Handler) sessionWhoRun(_ context.Context, in contracts.Input) (string, 
 		return "", fmt.Errorf("no session %q", name)
 	}
 	if in.JSON {
-		b, err := json.Marshal(sessionJSONRow(sess))
+		row := sessionJSONRow(sess)
+		h.attachUsage(&row)
+		b, err := json.Marshal(row)
 		return string(b), err
 	}
 	ids := state.ReadParticipants(state.ParticipantsPath(h.partDir, name))

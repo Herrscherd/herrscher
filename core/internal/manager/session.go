@@ -166,6 +166,119 @@ func (h *Handler) attachUsage(row *sessionJSON) {
 	}
 }
 
+// budgetPatch carries the caps a set-budget command wants to change. A nil
+// pointer means "leave unchanged"; a non-nil pointer to 0 means "uncap".
+type budgetPatch struct {
+	costCap        *float64
+	tokenCap       *uint64
+	cohortCostCap  *float64
+	cohortTokenCap *uint64
+}
+
+func fptr(f float64) *float64 { return &f }
+func uptr(u uint64) *uint64   { return &u }
+
+// applyBudget writes the patched caps onto the session, then re-evaluates the
+// pause: if the session's current usage no longer exceeds any active cap, the
+// PausedReason clears (this is the resume mechanism). curCost/curTokens are the
+// session's current folded usage.
+func applyBudget(s state.Session, p budgetPatch, curCost float64, curTokens uint64) state.Session {
+	if p.costCap != nil {
+		s.CostCap = *p.costCap
+	}
+	if p.tokenCap != nil {
+		s.TokenCap = *p.tokenCap
+	}
+	if p.cohortCostCap != nil {
+		s.CohortCostCap = *p.cohortCostCap
+	}
+	if p.cohortTokenCap != nil {
+		s.CohortTokenCap = *p.cohortTokenCap
+	}
+	// Re-evaluate the session-level pause against the new caps. Cohort re-eval
+	// is done by the caller when scope == cohort (it holds all members).
+	if s.PausedReason == "cost" && (s.CostCap == 0 || curCost < s.CostCap) {
+		s.PausedReason = ""
+	}
+	if s.PausedReason == "tokens" && (s.TokenCap == 0 || curTokens < s.TokenCap) {
+		s.PausedReason = ""
+	}
+	return s
+}
+
+// sessionSetBudgetRun sets or clears budget caps on a live session, or on every
+// member of its cohort when scope=="cohort". Only params actually supplied
+// (non-empty) are patched; raising a cap past current usage clears a matching
+// PausedReason so the session resumes.
+func (h *Handler) sessionSetBudgetRun(ctx context.Context, in contracts.Input) (string, error) {
+	name, ok := in.Lookup("name")
+	if !ok {
+		return "", fmt.Errorf("missing name")
+	}
+	sess, ok := h.st.FindSession(name)
+	if !ok {
+		return "", fmt.Errorf("session %q not found", name)
+	}
+	patch := budgetPatch{}
+	if v, ok := in.Lookup("cost_cap"); ok && v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return "", fmt.Errorf("invalid cost_cap %q", v)
+		}
+		patch.costCap = fptr(f)
+	}
+	if v, ok := in.Lookup("token_cap"); ok && v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return "", fmt.Errorf("invalid token_cap %q", v)
+		}
+		patch.tokenCap = uptr(uint64(n))
+	}
+	if v, ok := in.Lookup("cohort_cost_cap"); ok && v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return "", fmt.Errorf("invalid cohort_cost_cap %q", v)
+		}
+		patch.cohortCostCap = fptr(f)
+	}
+	if v, ok := in.Lookup("cohort_token_cap"); ok && v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return "", fmt.Errorf("invalid cohort_token_cap %q", v)
+		}
+		patch.cohortTokenCap = uptr(uint64(n))
+	}
+	usageFor := func(s state.Session) (float64, uint64) {
+		entries := state.ReadTranscript(state.TranscriptPath(h.partDir, s.Name), 0)
+		u, _ := aggregateUsage(entries)
+		if u == nil {
+			return 0, 0
+		}
+		return u.Cost, uint64(u.TokensIn + u.TokensOut)
+	}
+	targets := []state.Session{sess}
+	scope, _ := in.Lookup("scope")
+	if scope == "cohort" {
+		targets = cohortMembers(sess, h.st.SnapshotSessions())
+	}
+	for _, t := range targets {
+		c, tk := usageFor(t)
+		cc, ctk := cohortTotals(t, h.st.SnapshotSessions(), usageFor)
+		updated := applyBudget(t, patch, c, tk)
+		// Cohort-level pause re-eval against the (possibly) new cohort caps.
+		if updated.PausedReason == "cohort_cost" && (updated.CohortCostCap == 0 || cc < updated.CohortCostCap) {
+			updated.PausedReason = ""
+		}
+		if updated.PausedReason == "cohort_tokens" && (updated.CohortTokenCap == 0 || ctk < updated.CohortTokenCap) {
+			updated.PausedReason = ""
+		}
+		if err := h.st.SetBudget(updated.Name, updated.CostCap, updated.TokenCap, updated.CohortCostCap, updated.CohortTokenCap, updated.PausedReason); err != nil {
+			return "", fmt.Errorf("persist budget for %q: %w", updated.Name, err)
+		}
+	}
+	return fmt.Sprintf("✅ budget updated for %d session(s)", len(targets)), nil
+}
+
 // stampBudget copies the session's persisted caps + paused reason onto the row's
 // usage. If the row has no usage yet (no transcript), it synthesises an empty one
 // so caps + paused_reason still reach the app.
@@ -296,6 +409,37 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	}
 	gwList, _ := in.Lookup("gateways")
 	gateways := ParseGateways(gwList, terminalOnly, h.defaultGateways)
+	// Budget caps (0 = uncapped). Mirrors consolidate_every's guarded parse.
+	var costCap, cohortCostCap float64
+	var tokenCap, cohortTokenCap uint64
+	if v, ok := in.Lookup("cost_cap"); ok && v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return "", fmt.Errorf("invalid cost_cap %q", v)
+		}
+		costCap = f
+	}
+	if v, ok := in.Lookup("token_cap"); ok && v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return "", fmt.Errorf("invalid token_cap %q — use a non-negative integer", v)
+		}
+		tokenCap = uint64(n)
+	}
+	if v, ok := in.Lookup("cohort_cost_cap"); ok && v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return "", fmt.Errorf("invalid cohort_cost_cap %q", v)
+		}
+		cohortCostCap = f
+	}
+	if v, ok := in.Lookup("cohort_token_cap"); ok && v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return "", fmt.Errorf("invalid cohort_token_cap %q — use a non-negative integer", v)
+		}
+		cohortTokenCap = uint64(n)
+	}
 	ws := h.st.WorkspaceRoot()
 	// Project is the logical label the caller assigns; Neublox filters workspace
 	// snapshots by it, so it must be recorded even in cwd mode. It doubles as a
@@ -387,14 +531,14 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			rollbackWorktree()
 			return "", fmt.Errorf("create channel: %w", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
+		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
 	case "forum":
 		chID, err := admin.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create forum post: %w", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
+		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}

@@ -62,3 +62,50 @@ func (g *SessionBudgetGate) CheckAfterTurn(session string) string {
 	}
 	return reason
 }
+
+// cohortMembers returns every session in the parent forest that target belongs
+// to: the root ancestor and everything transitively reachable from it via
+// Parent. Same traversal as cohortTotals, but collects the Session values
+// instead of folding usage. Cycles are cut with a visited set, mirroring
+// cohortTotals' guard.
+func cohortMembers(target state.Session, all []state.Session) []state.Session {
+	byName := make(map[string]state.Session, len(all))
+	children := make(map[string][]string, len(all))
+	for _, s := range all {
+		byName[s.Name] = s
+		if s.Parent != "" && s.Parent != s.Name {
+			children[s.Parent] = append(children[s.Parent], s.Name)
+		}
+	}
+	// Climb to the root ancestor.
+	root := target
+	seen := map[string]bool{root.Name: true}
+	for root.Parent != "" && root.Parent != root.Name {
+		p, ok := byName[root.Parent]
+		if !ok || seen[p.Name] {
+			break
+		}
+		seen[p.Name] = true
+		root = p
+	}
+	// Walk the whole subtree from root, collecting members.
+	var members []state.Session
+	visited := map[string]bool{}
+	var walk func(name string)
+	walk = func(name string) {
+		if visited[name] {
+			return
+		}
+		visited[name] = true
+		s, ok := byName[name]
+		if !ok {
+			return
+		}
+		members = append(members, s)
+		for _, ch := range children[name] {
+			walk(ch)
+		}
+	}
+	walk(root.Name)
+	return members
+}

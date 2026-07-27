@@ -67,12 +67,69 @@ type usageJSON struct {
 	CacheCreate int     `json:"cache_create,omitempty"`
 	Turns       int     `json:"turns,omitempty"`
 	StartedAt   string  `json:"started_at,omitempty"`
+	// Budget caps in effect for this session (0 = uncapped) + the reason it is
+	// currently paused, if any. Carried so the app can render progress bands.
+	CostCap        float64 `json:"cost_cap,omitempty"`
+	TokenCap       uint64  `json:"token_cap,omitempty"`
+	CohortCostCap  float64 `json:"cohort_cost_cap,omitempty"`
+	CohortTokenCap uint64  `json:"cohort_token_cap,omitempty"`
+	PausedReason   string  `json:"paused_reason,omitempty"`
 }
 
 // aggregateUsage folds a session's transcript into its usage aggregate and its
 // current objective. Turns/tokens/cost sum over assistant entries; StartedAt is
 // the first entry's timestamp; task is the last user entry's text. Returns
 // (nil, "") for an empty transcript so an idle session omits usage entirely.
+// cohortTotals sums usage across the parent forest that `target` belongs to:
+// the root ancestor and every session transitively reachable from it via Parent.
+// usageFor returns (cost, tokens) for a single session. Cycles are cut with a
+// visited set. A solo session (no parent, no children) folds to just itself.
+func cohortTotals(target state.Session, all []state.Session,
+	usageFor func(state.Session) (float64, uint64)) (float64, uint64) {
+	byName := make(map[string]state.Session, len(all))
+	children := make(map[string][]string, len(all))
+	for _, s := range all {
+		byName[s.Name] = s
+		if s.Parent != "" && s.Parent != s.Name {
+			children[s.Parent] = append(children[s.Parent], s.Name)
+		}
+	}
+	// Climb to the root ancestor.
+	root := target
+	seen := map[string]bool{root.Name: true}
+	for root.Parent != "" && root.Parent != root.Name {
+		p, ok := byName[root.Parent]
+		if !ok || seen[p.Name] {
+			break
+		}
+		seen[p.Name] = true
+		root = p
+	}
+	// Walk the whole subtree from root.
+	var totalCost float64
+	var totalTokens uint64
+	visited := map[string]bool{}
+	var walk func(name string)
+	walk = func(name string) {
+		if visited[name] {
+			return
+		}
+		visited[name] = true
+		s, ok := byName[name]
+		if !ok {
+			return
+		}
+		c, tk := usageFor(s)
+		totalCost += c
+		totalTokens += tk
+		for _, ch := range children[name] {
+			walk(ch)
+		}
+	}
+	walk(root.Name)
+	return totalCost, totalTokens
+}
+
 func aggregateUsage(entries []state.TranscriptEntry) (*usageJSON, string) {
 	if len(entries) == 0 {
 		return nil, ""
@@ -109,6 +166,137 @@ func (h *Handler) attachUsage(row *sessionJSON) {
 	}
 }
 
+// budgetPatch carries the caps a set-budget command wants to change. A nil
+// pointer means "leave unchanged"; a non-nil pointer to 0 means "uncap".
+type budgetPatch struct {
+	costCap        *float64
+	tokenCap       *uint64
+	cohortCostCap  *float64
+	cohortTokenCap *uint64
+}
+
+func fptr(f float64) *float64 { return &f }
+func uptr(u uint64) *uint64   { return &u }
+
+// applyBudget writes the patched caps onto the session, then re-evaluates the
+// pause: if the session's current usage no longer exceeds any active cap, the
+// PausedReason clears (this is the resume mechanism). curCost/curTokens are the
+// session's current folded usage.
+func applyBudget(s state.Session, p budgetPatch, curCost float64, curTokens uint64) state.Session {
+	if p.costCap != nil {
+		s.CostCap = *p.costCap
+	}
+	if p.tokenCap != nil {
+		s.TokenCap = *p.tokenCap
+	}
+	if p.cohortCostCap != nil {
+		s.CohortCostCap = *p.cohortCostCap
+	}
+	if p.cohortTokenCap != nil {
+		s.CohortTokenCap = *p.cohortTokenCap
+	}
+	// Re-evaluate the session-level pause against the new caps. Cohort re-eval
+	// is done by the caller when scope == cohort (it holds all members).
+	if s.PausedReason == "cost" && (s.CostCap == 0 || curCost < s.CostCap) {
+		s.PausedReason = ""
+	}
+	if s.PausedReason == "tokens" && (s.TokenCap == 0 || curTokens < s.TokenCap) {
+		s.PausedReason = ""
+	}
+	return s
+}
+
+// sessionSetBudgetRun sets or clears budget caps on a live session, or on every
+// member of its cohort when scope=="cohort". Only params actually supplied
+// (non-empty) are patched; raising a cap past current usage clears a matching
+// PausedReason so the session resumes.
+func (h *Handler) sessionSetBudgetRun(ctx context.Context, in contracts.Input) (string, error) {
+	name, ok := in.Lookup("name")
+	if !ok {
+		return "", fmt.Errorf("missing name")
+	}
+	sess, ok := h.st.FindSession(name)
+	if !ok {
+		return "", fmt.Errorf("session %q not found", name)
+	}
+	patch := budgetPatch{}
+	if v, ok := in.Lookup("cost_cap"); ok && v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return "", fmt.Errorf("invalid cost_cap %q", v)
+		}
+		patch.costCap = fptr(f)
+	}
+	if v, ok := in.Lookup("token_cap"); ok && v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return "", fmt.Errorf("invalid token_cap %q", v)
+		}
+		patch.tokenCap = uptr(uint64(n))
+	}
+	if v, ok := in.Lookup("cohort_cost_cap"); ok && v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return "", fmt.Errorf("invalid cohort_cost_cap %q", v)
+		}
+		patch.cohortCostCap = fptr(f)
+	}
+	if v, ok := in.Lookup("cohort_token_cap"); ok && v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return "", fmt.Errorf("invalid cohort_token_cap %q", v)
+		}
+		patch.cohortTokenCap = uptr(uint64(n))
+	}
+	usageFor := func(s state.Session) (float64, uint64) {
+		entries := state.ReadTranscript(state.TranscriptPath(h.partDir, s.Name), 0)
+		u, _ := aggregateUsage(entries)
+		if u == nil {
+			return 0, 0
+		}
+		return u.Cost, uint64(u.TokensIn + u.TokensOut)
+	}
+	targets := []state.Session{sess}
+	scope, _ := in.Lookup("scope")
+	if scope == "cohort" {
+		targets = cohortMembers(sess, h.st.SnapshotSessions())
+	}
+	for _, t := range targets {
+		c, tk := usageFor(t)
+		cc, ctk := cohortTotals(t, h.st.SnapshotSessions(), usageFor)
+		updated := applyBudget(t, patch, c, tk)
+		// Cohort-level pause re-eval against the (possibly) new cohort caps.
+		if updated.PausedReason == "cohort_cost" && (updated.CohortCostCap == 0 || cc < updated.CohortCostCap) {
+			updated.PausedReason = ""
+		}
+		if updated.PausedReason == "cohort_tokens" && (updated.CohortTokenCap == 0 || ctk < updated.CohortTokenCap) {
+			updated.PausedReason = ""
+		}
+		if err := h.st.SetBudget(updated.Name, updated.CostCap, updated.TokenCap, updated.CohortCostCap, updated.CohortTokenCap, updated.PausedReason); err != nil {
+			return "", fmt.Errorf("persist budget for %q: %w", updated.Name, err)
+		}
+	}
+	return fmt.Sprintf("✅ budget updated for %d session(s)", len(targets)), nil
+}
+
+// stampBudget copies the session's persisted caps + paused reason onto the row's
+// usage. If the row has no usage yet (no transcript), it synthesises an empty one
+// so caps + paused_reason still reach the app.
+func (h *Handler) stampBudget(row *sessionJSON, s state.Session) {
+	if s.CostCap == 0 && s.TokenCap == 0 && s.CohortCostCap == 0 &&
+		s.CohortTokenCap == 0 && s.PausedReason == "" {
+		return
+	}
+	if row.Usage == nil {
+		row.Usage = &usageJSON{}
+	}
+	row.Usage.CostCap = s.CostCap
+	row.Usage.TokenCap = s.TokenCap
+	row.Usage.CohortCostCap = s.CohortCostCap
+	row.Usage.CohortTokenCap = s.CohortTokenCap
+	row.Usage.PausedReason = s.PausedReason
+}
+
 // coordinationJSON is the wire shape of a session's join state in session list.
 type coordinationJSON struct {
 	Role     string `json:"role"`
@@ -124,6 +312,9 @@ func sessionJSONRow(s state.Session) sessionJSON {
 		gateways = []string{}
 	}
 	status := "running"
+	if s.PausedReason != "" {
+		status = "paused"
+	}
 	if s.Archived {
 		status = "archived"
 	}
@@ -218,6 +409,37 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	}
 	gwList, _ := in.Lookup("gateways")
 	gateways := ParseGateways(gwList, terminalOnly, h.defaultGateways)
+	// Budget caps (0 = uncapped). Mirrors consolidate_every's guarded parse.
+	var costCap, cohortCostCap float64
+	var tokenCap, cohortTokenCap uint64
+	if v, ok := in.Lookup("cost_cap"); ok && v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return "", fmt.Errorf("invalid cost_cap %q", v)
+		}
+		costCap = f
+	}
+	if v, ok := in.Lookup("token_cap"); ok && v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return "", fmt.Errorf("invalid token_cap %q — use a non-negative integer", v)
+		}
+		tokenCap = uint64(n)
+	}
+	if v, ok := in.Lookup("cohort_cost_cap"); ok && v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return "", fmt.Errorf("invalid cohort_cost_cap %q", v)
+		}
+		cohortCostCap = f
+	}
+	if v, ok := in.Lookup("cohort_token_cap"); ok && v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return "", fmt.Errorf("invalid cohort_token_cap %q — use a non-negative integer", v)
+		}
+		cohortTokenCap = uint64(n)
+	}
 	ws := h.st.WorkspaceRoot()
 	// Project is the logical label the caller assigns; Neublox filters workspace
 	// snapshots by it, so it must be recorded even in cwd mode. It doubles as a
@@ -309,14 +531,14 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			rollbackWorktree()
 			return "", fmt.Errorf("create channel: %w", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
+		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
 	case "forum":
 		chID, err := admin.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create forum post: %w", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery}
+		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}
@@ -512,6 +734,7 @@ func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string,
 		for _, s := range sessions {
 			row := sessionJSONRow(s)
 			h.attachUsage(&row)
+			h.stampBudget(&row, s)
 			if h.coord != nil {
 				if v, ok := h.coord.CoordinationView(s.Name); ok {
 					row.Coordination = &coordinationJSON{

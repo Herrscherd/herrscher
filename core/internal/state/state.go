@@ -57,6 +57,15 @@ type Session struct {
 	// Empty = no parent. The coordinator reads it to find the delivery target
 	// of this session's completion report (Report).
 	Parent string `json:"parent,omitempty"`
+
+	// Budget caps (0 = uncapped), persisted from contracts.CreateSession.
+	CostCap        float64 `json:"cost_cap,omitempty"`
+	TokenCap       uint64  `json:"token_cap,omitempty"`
+	CohortCostCap  float64 `json:"cohort_cost_cap,omitempty"`
+	CohortTokenCap uint64  `json:"cohort_token_cap,omitempty"`
+	// PausedReason is non-empty when the session was halted by a budget cap:
+	// "cost" | "tokens" | "cohort_cost" | "cohort_tokens". Cleared on resume.
+	PausedReason string `json:"paused_reason,omitempty"`
 }
 
 // BoundGateways returns the explicit gateway kinds this session is bound to, or
@@ -231,6 +240,43 @@ func (s *State) SetResumeToken(name, token string) error {
 				return nil
 			}
 			s.Sessions[i].ResumeToken = token
+			return s.saveLocked()
+		}
+	}
+	return nil
+}
+
+// SetPausedReason records why a session halted on a budget cap ("" clears it,
+// resuming the session). Mirrors SetResumeToken's locking + persistence.
+func (s *State) SetPausedReason(name, reason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Sessions {
+		if s.Sessions[i].Name == name {
+			if s.Sessions[i].PausedReason == reason {
+				return nil
+			}
+			s.Sessions[i].PausedReason = reason
+			return s.saveLocked()
+		}
+	}
+	return nil
+}
+
+// SetBudget persists the budget caps and paused reason for the named session
+// in one write. Mirrors SetResumeToken/SetPausedReason's locking + persistence.
+// Used by session set-budget so raising a cap (which clears PausedReason)
+// survives restart. A missing session is a no-op.
+func (s *State) SetBudget(name string, costCap float64, tokenCap uint64, cohortCostCap float64, cohortTokenCap uint64, pausedReason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Sessions {
+		if s.Sessions[i].Name == name {
+			s.Sessions[i].CostCap = costCap
+			s.Sessions[i].TokenCap = tokenCap
+			s.Sessions[i].CohortCostCap = cohortCostCap
+			s.Sessions[i].CohortTokenCap = cohortTokenCap
+			s.Sessions[i].PausedReason = pausedReason
 			return s.saveLocked()
 		}
 	}

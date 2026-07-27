@@ -30,28 +30,6 @@ type noBudgetGate struct{}
 
 func (noBudgetGate) CheckAfterTurn(string) string { return "" }
 
-// budgetReason returns the reason a session must pause AFTER the current turn,
-// or "" if it may continue. Session caps are checked before cohort caps so a
-// session-level trip names its own unit. A zero cap means uncapped.
-func budgetReason(sessionCost float64, sessionTokens uint64,
-	costCap float64, tokenCap uint64,
-	cohortCost float64, cohortTokens uint64,
-	cohortCostCap float64, cohortTokenCap uint64) string {
-	if costCap > 0 && sessionCost >= costCap {
-		return "cost"
-	}
-	if tokenCap > 0 && sessionTokens >= tokenCap {
-		return "tokens"
-	}
-	if cohortCostCap > 0 && cohortCost >= cohortCostCap {
-		return "cohort_cost"
-	}
-	if cohortTokenCap > 0 && cohortTokens >= cohortTokenCap {
-		return "cohort_tokens"
-	}
-	return ""
-}
-
 // sessionDriver owns one session's turn lifecycle: it polls every bound
 // gateway's Reader for inbound messages, serializes them through a FIFO, writes
 // one input frame to the bridge per turn, and fans the bridge's reply events out
@@ -611,7 +589,7 @@ func (d *sessionDriver) renderChannel(g contracts.GatewaySet) string {
 // supervisor restart). It blocks until ctx is cancelled. coord is the Model-O
 // handoff coordinator (nil in the short-lived operator CLI path, where a
 // completed turn's handoff trailer, if any, is simply ignored).
-func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry)) {
+func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry), gate budgetGate) {
 	defer acc.Close() // own the acceptor: close the listener + remove the socket on shutdown
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
@@ -622,6 +600,9 @@ func RunSession(ctx context.Context, name, channel string, gws []contracts.Gatew
 	d.coordinator = coord
 	d.persistResume = persistResume
 	d.record = record
+	if gate != nil {
+		d.gate = gate
+	}
 	registerDriver(name, d)
 	defer unregisterDriver(name)
 	go d.run(ctx)

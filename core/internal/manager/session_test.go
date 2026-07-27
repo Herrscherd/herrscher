@@ -32,3 +32,33 @@ func TestAttachUsage_StampsCapsAndReason(t *testing.T) {
 		t.Fatalf("paused_reason = %q, want cost", row.Usage.PausedReason)
 	}
 }
+
+func TestCohortTotals_SumsParentForest(t *testing.T) {
+	all := []state.Session{
+		{Name: "lead"},
+		{Name: "w1", Parent: "lead"},
+		{Name: "w2", Parent: "lead"},
+		{Name: "other"},
+	}
+	usage := map[string]struct {
+		c float64
+		t uint64
+	}{"lead": {1, 10}, "w1": {2, 20}, "w2": {3, 30}, "other": {99, 990}}
+	cost, tokens := cohortTotals(all[1], all, func(s state.Session) (float64, uint64) {
+		u := usage[s.Name]
+		return u.c, u.t
+	})
+	if cost != 6 || tokens != 60 {
+		t.Fatalf("cohort totals = %v/%v, want 6/60", cost, tokens)
+	}
+}
+
+func TestCohortTotals_SoloSessionIsItself(t *testing.T) {
+	all := []state.Session{{Name: "solo"}}
+	cost, tokens := cohortTotals(all[0], all, func(s state.Session) (float64, uint64) {
+		return 4, 40
+	})
+	if cost != 4 || tokens != 40 {
+		t.Fatalf("solo cohort = %v/%v, want 4/40", cost, tokens)
+	}
+}

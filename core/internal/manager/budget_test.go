@@ -8,17 +8,17 @@ import (
 
 func TestBudgetReason(t *testing.T) {
 	cases := []struct {
-		name                                       string
-		sc                                         float64
-		st                                         uint64
-		cc, ctk                                    float64 // caps
-		tkCap                                      uint64
-		coc, coctk                                 float64 // cohort totals + caps unused fields below
-		cohortCost                                 float64
-		cohortTokens                               uint64
-		cohortCostCap                              float64
-		cohortTokenCap                             uint64
-		want                                       string
+		name           string
+		sc             float64
+		st             uint64
+		cc, ctk        float64 // caps
+		tkCap          uint64
+		coc, coctk     float64 // cohort totals + caps unused fields below
+		cohortCost     float64
+		cohortTokens   uint64
+		cohortCostCap  float64
+		cohortTokenCap uint64
+		want           string
 	}{
 		{name: "under all caps", sc: 1, st: 100, cc: 5, tkCap: 1000, want: ""},
 		{name: "cost cap tripped", sc: 6, st: 100, cc: 5, tkCap: 1000, want: "cost"},

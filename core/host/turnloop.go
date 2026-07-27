@@ -192,14 +192,16 @@ func (d *sessionDriver) Interrupt() {
 	}()
 }
 
-// emitPaused records that the session halted on a budget cap. It sends a paused
-// status event downstream; persistence of PausedReason is the gate's job (it
-// already wrote it in CheckAfterTurn before returning the reason).
-func (d *sessionDriver) emitPaused(reason string) {
-	select {
-	case d.toBridge <- contracts.Event{T: "paused", Text: reason}:
-	default:
-	}
+// emitPaused records that the session halted on a budget cap. It fans a paused
+// event out through the same path as every other subscriber-visible frame
+// (fanOut -> emitTap + gateways), so LIVE subscribers (the app) see the pause
+// immediately instead of only picking it up on the next status poll.
+// Persistence of PausedReason is the gate's job (it already wrote it in
+// CheckAfterTurn before returning the reason). The backend bridge has no
+// consumer for a "paused" frame (checked: nothing reads T=="paused" off
+// fromBridge), so this does not also write to d.toBridge.
+func (d *sessionDriver) emitPaused(ctx context.Context, reason string) {
+	d.fanOut(ctx, contracts.Event{T: "paused", Text: reason})
 }
 
 // Seed injects an opening input turn into this session's FIFO. A handoff uses it
@@ -365,7 +367,15 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			// took effect after the pick was queued.
 			if ev.T == "input" {
 				if reason := d.gate.CheckAfterTurn(d.name); reason != "" {
-					d.emitPaused(reason)
+					d.emitPaused(ctx, reason)
+					// The dequeued input is refused here, not re-queued: there is
+					// no auto-replay path for a budget-pause resume (resume only
+					// clears PausedReason; nothing re-injects this turn), so
+					// pushing ev back onto d.queue would spin forever — dequeue,
+					// still over budget, re-emit, re-queue. Instead, tell the
+					// subscriber this specific input was dropped so it is not a
+					// silent loss: the user must resend after raising the cap.
+					d.fanOut(ctx, contracts.Event{T: "status", Text: "tour refusé — plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
 					continue
 				}
 				d.recordEntry("user", ev.Text, 0, turnUsage{})
@@ -454,7 +464,7 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 				d.seenMu.Unlock()
 				d.metrics.TurnCompleted()
 				if reason := d.gate.CheckAfterTurn(d.name); reason != "" {
-					d.emitPaused(reason)
+					d.emitPaused(ctx, reason)
 					return true // stop this turn; the next dispatch is refused while paused
 				}
 				d.maybeCoordinate(ctx, e.Text)

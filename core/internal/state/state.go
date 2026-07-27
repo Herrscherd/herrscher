@@ -263,6 +263,26 @@ func (s *State) SetPausedReason(name, reason string) error {
 	return nil
 }
 
+// SetBudget persists the budget caps and paused reason for the named session
+// in one write. Mirrors SetResumeToken/SetPausedReason's locking + persistence.
+// Used by session set-budget so raising a cap (which clears PausedReason)
+// survives restart. A missing session is a no-op.
+func (s *State) SetBudget(name string, costCap float64, tokenCap uint64, cohortCostCap float64, cohortTokenCap uint64, pausedReason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Sessions {
+		if s.Sessions[i].Name == name {
+			s.Sessions[i].CostCap = costCap
+			s.Sessions[i].TokenCap = tokenCap
+			s.Sessions[i].CohortCostCap = cohortCostCap
+			s.Sessions[i].CohortTokenCap = cohortTokenCap
+			s.Sessions[i].PausedReason = pausedReason
+			return s.saveLocked()
+		}
+	}
+	return nil
+}
+
 // SetBackendTarget re-points a live session's backend: it rewrites Vendor and the
 // opaque Cmd string (which carries model+effort) and clears the resume token,
 // which is backend-specific and meaningless once the vendor/model changes. The

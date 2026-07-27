@@ -217,6 +217,35 @@ func TestSetBackendTargetRewritesVendorCmdAndClearsResume(t *testing.T) {
 	}
 }
 
+func TestSetBudgetWritesAllFieldsAndPersists(t *testing.T) {
+	dir := t.TempDir()
+	st, err := LoadState(filepath.Join(dir, "state.json"))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	st.AddSession(Session{Name: "alpha", CostCap: 5, PausedReason: "cost"})
+
+	if err := st.SetBudget("alpha", 20, 1000, 30, 2000, ""); err != nil {
+		t.Fatalf("SetBudget: %v", err)
+	}
+
+	got, ok := st.FindSession("alpha")
+	if !ok {
+		t.Fatal("session vanished")
+	}
+	if got.CostCap != 20 || got.TokenCap != 1000 || got.CohortCostCap != 30 || got.CohortTokenCap != 2000 {
+		t.Fatalf("caps not written: %+v", got)
+	}
+	if got.PausedReason != "" {
+		t.Fatalf("paused reason = %q, want cleared", got.PausedReason)
+	}
+
+	// Unknown session is a no-op, not an error.
+	if err := st.SetBudget("ghost", 1, 1, 1, 1, "cost"); err != nil {
+		t.Fatalf("SetBudget on unknown session should be a no-op, got err: %v", err)
+	}
+}
+
 func TestIsLegacy(t *testing.T) {
 	cases := []struct {
 		name string

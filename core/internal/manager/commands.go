@@ -24,6 +24,10 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("consolidate_every", "run Consolidate every N turns (0 = manual only); only used with extractor", false).
 			Param("base", "existing ref the new worktree branches off (e.g. session/<A>); empty = fresh branch", false).
 			Param("parent", "lead session that delegated this one (result-back P3); empty = none", false).
+			Param("cost_cap", "pause this session after spending this many USD (0 = uncapped)", false).
+			Param("token_cap", "pause this session after this many total tokens (0 = uncapped)", false).
+			Param("cohort_cost_cap", "pause the whole cohort after this many USD (0 = uncapped)", false).
+			Param("cohort_token_cap", "pause the whole cohort after this many tokens (0 = uncapped)", false).
 			Do(h.sessionCreateRun),
 		contracts.New("session", "close").
 			Help("close a session: stop the bridge, remove the worktree, archive the channel").
@@ -57,6 +61,15 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("cmd", "backend invocation (carries model+effort)", true).
 			Param("handoff", "none|full|summary context handoff", false).
 			Do(h.sessionSwitchRun),
+		contracts.New("session", "set-budget").
+			Help("set or clear budget caps on a live session (or its cohort); raising a cap resumes a paused session").
+			Param("name", "session name", true).
+			Param("cost_cap", "USD cap (0 = uncapped)", false).
+			Param("token_cap", "token cap (0 = uncapped)", false).
+			Param("cohort_cost_cap", "cohort USD cap (0 = uncapped)", false).
+			Param("cohort_token_cap", "cohort token cap (0 = uncapped)", false).
+			Param("scope", "session (default) | cohort", false).
+			Do(h.sessionSetBudgetRun),
 		contracts.New("agent", "create").
 			Help("create a durable companion agent (persona + MCP + zero-prompt settings)").
 			Param("name", "agent name (slugified to a safe slug)", true).

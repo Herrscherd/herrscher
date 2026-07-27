@@ -356,8 +356,18 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			return
 		case ev := <-d.queue:
 			// A pick is answered out-of-band by the bridge; only a real input
-			// opens a turn (and a progress view) on the bound gateways.
+			// opens a turn (and a progress view) on the bound gateways. Gate
+			// only that turn-opening path: an input event that finds the
+			// session over budget is refused here, before any turn opens, so
+			// a tripped cap actually stops further spend. Picks are not
+			// gated — they answer an in-flight or already-rendered turn, not
+			// open a new one, so they must not be blocked by a pause that
+			// took effect after the pick was queued.
 			if ev.T == "input" {
+				if reason := d.gate.CheckAfterTurn(d.name); reason != "" {
+					d.emitPaused(reason)
+					continue
+				}
 				d.recordEntry("user", ev.Text, 0, turnUsage{})
 				d.fanOut(ctx, contracts.Event{T: "human", Who: ev.Who, Text: ev.Text})
 			}

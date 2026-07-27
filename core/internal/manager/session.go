@@ -67,6 +67,13 @@ type usageJSON struct {
 	CacheCreate int     `json:"cache_create,omitempty"`
 	Turns       int     `json:"turns,omitempty"`
 	StartedAt   string  `json:"started_at,omitempty"`
+	// Budget caps in effect for this session (0 = uncapped) + the reason it is
+	// currently paused, if any. Carried so the app can render progress bands.
+	CostCap        float64 `json:"cost_cap,omitempty"`
+	TokenCap       uint64  `json:"token_cap,omitempty"`
+	CohortCostCap  float64 `json:"cohort_cost_cap,omitempty"`
+	CohortTokenCap uint64  `json:"cohort_token_cap,omitempty"`
+	PausedReason   string  `json:"paused_reason,omitempty"`
 }
 
 // aggregateUsage folds a session's transcript into its usage aggregate and its
@@ -109,6 +116,24 @@ func (h *Handler) attachUsage(row *sessionJSON) {
 	}
 }
 
+// stampBudget copies the session's persisted caps + paused reason onto the row's
+// usage. If the row has no usage yet (no transcript), it synthesises an empty one
+// so caps + paused_reason still reach the app.
+func (h *Handler) stampBudget(row *sessionJSON, s state.Session) {
+	if s.CostCap == 0 && s.TokenCap == 0 && s.CohortCostCap == 0 &&
+		s.CohortTokenCap == 0 && s.PausedReason == "" {
+		return
+	}
+	if row.Usage == nil {
+		row.Usage = &usageJSON{}
+	}
+	row.Usage.CostCap = s.CostCap
+	row.Usage.TokenCap = s.TokenCap
+	row.Usage.CohortCostCap = s.CohortCostCap
+	row.Usage.CohortTokenCap = s.CohortTokenCap
+	row.Usage.PausedReason = s.PausedReason
+}
+
 // coordinationJSON is the wire shape of a session's join state in session list.
 type coordinationJSON struct {
 	Role     string `json:"role"`
@@ -124,6 +149,9 @@ func sessionJSONRow(s state.Session) sessionJSON {
 		gateways = []string{}
 	}
 	status := "running"
+	if s.PausedReason != "" {
+		status = "paused"
+	}
 	if s.Archived {
 		status = "archived"
 	}
@@ -512,6 +540,7 @@ func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string,
 		for _, s := range sessions {
 			row := sessionJSONRow(s)
 			h.attachUsage(&row)
+			h.stampBudget(&row, s)
 			if h.coord != nil {
 				if v, ok := h.coord.CoordinationView(s.Name); ok {
 					row.Coordination = &coordinationJSON{

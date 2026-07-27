@@ -80,6 +80,56 @@ type usageJSON struct {
 // current objective. Turns/tokens/cost sum over assistant entries; StartedAt is
 // the first entry's timestamp; task is the last user entry's text. Returns
 // (nil, "") for an empty transcript so an idle session omits usage entirely.
+// cohortTotals sums usage across the parent forest that `target` belongs to:
+// the root ancestor and every session transitively reachable from it via Parent.
+// usageFor returns (cost, tokens) for a single session. Cycles are cut with a
+// visited set. A solo session (no parent, no children) folds to just itself.
+func cohortTotals(target state.Session, all []state.Session,
+	usageFor func(state.Session) (float64, uint64)) (float64, uint64) {
+	byName := make(map[string]state.Session, len(all))
+	children := make(map[string][]string, len(all))
+	for _, s := range all {
+		byName[s.Name] = s
+		if s.Parent != "" && s.Parent != s.Name {
+			children[s.Parent] = append(children[s.Parent], s.Name)
+		}
+	}
+	// Climb to the root ancestor.
+	root := target
+	seen := map[string]bool{root.Name: true}
+	for root.Parent != "" && root.Parent != root.Name {
+		p, ok := byName[root.Parent]
+		if !ok || seen[p.Name] {
+			break
+		}
+		seen[p.Name] = true
+		root = p
+	}
+	// Walk the whole subtree from root.
+	var totalCost float64
+	var totalTokens uint64
+	visited := map[string]bool{}
+	var walk func(name string)
+	walk = func(name string) {
+		if visited[name] {
+			return
+		}
+		visited[name] = true
+		s, ok := byName[name]
+		if !ok {
+			return
+		}
+		c, tk := usageFor(s)
+		totalCost += c
+		totalTokens += tk
+		for _, ch := range children[name] {
+			walk(ch)
+		}
+	}
+	walk(root.Name)
+	return totalCost, totalTokens
+}
+
 func aggregateUsage(entries []state.TranscriptEntry) (*usageJSON, string) {
 	if len(entries) == 0 {
 		return nil, ""

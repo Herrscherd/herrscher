@@ -57,6 +57,15 @@ type Session struct {
 	// Empty = no parent. The coordinator reads it to find the delivery target
 	// of this session's completion report (Report).
 	Parent string `json:"parent,omitempty"`
+
+	// Budget caps (0 = uncapped), persisted from contracts.CreateSession.
+	CostCap        float64 `json:"cost_cap,omitempty"`
+	TokenCap       uint64  `json:"token_cap,omitempty"`
+	CohortCostCap  float64 `json:"cohort_cost_cap,omitempty"`
+	CohortTokenCap uint64  `json:"cohort_token_cap,omitempty"`
+	// PausedReason is non-empty when the session was halted by a budget cap:
+	// "cost" | "tokens" | "cohort_cost" | "cohort_tokens". Cleared on resume.
+	PausedReason string `json:"paused_reason,omitempty"`
 }
 
 // BoundGateways returns the explicit gateway kinds this session is bound to, or

@@ -246,6 +246,23 @@ func (s *State) SetResumeToken(name, token string) error {
 	return nil
 }
 
+// SetPausedReason records why a session halted on a budget cap ("" clears it,
+// resuming the session). Mirrors SetResumeToken's locking + persistence.
+func (s *State) SetPausedReason(name, reason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Sessions {
+		if s.Sessions[i].Name == name {
+			if s.Sessions[i].PausedReason == reason {
+				return nil
+			}
+			s.Sessions[i].PausedReason = reason
+			return s.saveLocked()
+		}
+	}
+	return nil
+}
+
 // SetBackendTarget re-points a live session's backend: it rewrites Vendor and the
 // opaque Cmd string (which carries model+effort) and clears the resume token,
 // which is backend-specific and meaningless once the vendor/model changes. The

@@ -218,6 +218,10 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 		deps.handler.SetTerminalAdmin(ta)
 	}
 	hb := newHub(ctx, st, sup, gws, partDir, reg, h.Metrics())
+	// Concrete budget-cap enforcement: built from the manager Handler (owner of
+	// aggregateUsage/cohortTotals + state.State), injected via the host's private
+	// budgetGate seam so goLive's RunSession drivers actually pause on cap.
+	hb.gate = deps.handler.BudgetGate()
 	// Wired before the boot loop's goLive calls below, so the Coordinator is
 	// non-nil for every driver started at boot (Model O handoff hook).
 	coord := newCoordinator(hb, deps.agents, deps.wt, st, hb, Seed)

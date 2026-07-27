@@ -18,6 +18,18 @@ import (
 // inbound lines.
 var pollInterval = 50 * time.Millisecond
 
+// budgetGate decides, at a turn boundary, whether a session has exhausted its
+// budget and persists the paused reason when it has. Injected so the turn loop
+// can be tested without a live manager. Returns the paused reason ("" = continue).
+type budgetGate interface {
+	CheckAfterTurn(session string) string
+}
+
+// noBudgetGate is the default when no caps are configured.
+type noBudgetGate struct{}
+
+func (noBudgetGate) CheckAfterTurn(string) string { return "" }
+
 // sessionDriver owns one session's turn lifecycle: it polls every bound
 // gateway's Reader for inbound messages, serializes them through a FIFO, writes
 // one input frame to the bridge per turn, and fans the bridge's reply events out
@@ -79,6 +91,11 @@ type sessionDriver struct {
 	// an external reader (Neublox) sees the live thinking/status/chunk/reply
 	// stream. nil = no tap (CLI/tests).
 	emitTap func(contracts.Event)
+
+	// gate decides, after each completed turn, whether the session must pause on
+	// a budget cap. Defaults to noBudgetGate{} (never trips) so behavior is
+	// unchanged until a concrete gate is wired in.
+	gate budgetGate
 }
 
 func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event) *sessionDriver {
@@ -91,6 +108,7 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		renderers: map[string]*gatewayRenderer{},
 		hangup:    make(chan struct{}, 1),
 		seen:      map[string]bool{},
+		gate:      noBudgetGate{},
 	}
 }
 
@@ -172,6 +190,18 @@ func (d *sessionDriver) Interrupt() {
 		case <-time.After(interruptSendTimeout):
 		}
 	}()
+}
+
+// emitPaused records that the session halted on a budget cap. It fans a paused
+// event out through the same path as every other subscriber-visible frame
+// (fanOut -> emitTap + gateways), so LIVE subscribers (the app) see the pause
+// immediately instead of only picking it up on the next status poll.
+// Persistence of PausedReason is the gate's job (it already wrote it in
+// CheckAfterTurn before returning the reason). The backend bridge has no
+// consumer for a "paused" frame (checked: nothing reads T=="paused" off
+// fromBridge), so this does not also write to d.toBridge.
+func (d *sessionDriver) emitPaused(ctx context.Context, reason string) {
+	d.fanOut(ctx, contracts.Event{T: "paused", Text: reason})
 }
 
 // Seed injects an opening input turn into this session's FIFO. A handoff uses it
@@ -328,8 +358,26 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			return
 		case ev := <-d.queue:
 			// A pick is answered out-of-band by the bridge; only a real input
-			// opens a turn (and a progress view) on the bound gateways.
+			// opens a turn (and a progress view) on the bound gateways. Gate
+			// only that turn-opening path: an input event that finds the
+			// session over budget is refused here, before any turn opens, so
+			// a tripped cap actually stops further spend. Picks are not
+			// gated — they answer an in-flight or already-rendered turn, not
+			// open a new one, so they must not be blocked by a pause that
+			// took effect after the pick was queued.
 			if ev.T == "input" {
+				if reason := d.gate.CheckAfterTurn(d.name); reason != "" {
+					d.emitPaused(ctx, reason)
+					// The dequeued input is refused here, not re-queued: there is
+					// no auto-replay path for a budget-pause resume (resume only
+					// clears PausedReason; nothing re-injects this turn), so
+					// pushing ev back onto d.queue would spin forever — dequeue,
+					// still over budget, re-emit, re-queue. Instead, tell the
+					// subscriber this specific input was dropped so it is not a
+					// silent loss: the user must resend after raising the cap.
+					d.fanOut(ctx, contracts.Event{T: "status", Text: "tour refusé — plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
+					continue
+				}
 				d.recordEntry("user", ev.Text, 0, turnUsage{})
 				d.fanOut(ctx, contracts.Event{T: "human", Who: ev.Who, Text: ev.Text})
 			}
@@ -415,6 +463,10 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 				}
 				d.seenMu.Unlock()
 				d.metrics.TurnCompleted()
+				if reason := d.gate.CheckAfterTurn(d.name); reason != "" {
+					d.emitPaused(ctx, reason)
+					return true // stop this turn; the next dispatch is refused while paused
+				}
 				d.maybeCoordinate(ctx, e.Text)
 				return true
 			}
@@ -557,7 +609,7 @@ func (d *sessionDriver) renderChannel(g contracts.GatewaySet) string {
 // supervisor restart). It blocks until ctx is cancelled. coord is the Model-O
 // handoff coordinator (nil in the short-lived operator CLI path, where a
 // completed turn's handoff trailer, if any, is simply ignored).
-func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry)) {
+func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry), gate budgetGate) {
 	defer acc.Close() // own the acceptor: close the listener + remove the socket on shutdown
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
@@ -568,6 +620,9 @@ func RunSession(ctx context.Context, name, channel string, gws []contracts.Gatew
 	d.coordinator = coord
 	d.persistResume = persistResume
 	d.record = record
+	if gate != nil {
+		d.gate = gate
+	}
 	registerDriver(name, d)
 	defer unregisterDriver(name)
 	go d.run(ctx)

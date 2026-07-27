@@ -37,6 +37,11 @@ type hub struct {
 	// boot loop's goLive calls, so it is non-nil for every driver started here.
 	coordinator contracts.Coordinator
 
+	// gate decides, after each completed turn, whether a session must pause on a
+	// budget cap. nil (the operator CLI never sets it) preserves the
+	// noBudgetGate{} default RunSession/newSessionDriver falls back to.
+	gate budgetGate
+
 	dispatchMu sync.Mutex // serializes operator commands (and their reconcile)
 	mu         sync.Mutex
 	live       map[string]context.CancelFunc // session name → cancel its RunSession
@@ -72,7 +77,7 @@ func (h *hub) goLive(sess state.Session) {
 		func(tok string) { _ = h.st.SetResumeToken(sess.Name, tok) },
 		func(e state.TranscriptEntry) {
 			_ = state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e)
-		})
+		}, h.gate)
 	h.live[sess.Name] = cancel
 }
 

@@ -18,6 +18,40 @@ import (
 // inbound lines.
 var pollInterval = 50 * time.Millisecond
 
+// budgetGate decides, at a turn boundary, whether a session has exhausted its
+// budget and persists the paused reason when it has. Injected so the turn loop
+// can be tested without a live manager. Returns the paused reason ("" = continue).
+type budgetGate interface {
+	CheckAfterTurn(session string) string
+}
+
+// noBudgetGate is the default when no caps are configured.
+type noBudgetGate struct{}
+
+func (noBudgetGate) CheckAfterTurn(string) string { return "" }
+
+// budgetReason returns the reason a session must pause AFTER the current turn,
+// or "" if it may continue. Session caps are checked before cohort caps so a
+// session-level trip names its own unit. A zero cap means uncapped.
+func budgetReason(sessionCost float64, sessionTokens uint64,
+	costCap float64, tokenCap uint64,
+	cohortCost float64, cohortTokens uint64,
+	cohortCostCap float64, cohortTokenCap uint64) string {
+	if costCap > 0 && sessionCost >= costCap {
+		return "cost"
+	}
+	if tokenCap > 0 && sessionTokens >= tokenCap {
+		return "tokens"
+	}
+	if cohortCostCap > 0 && cohortCost >= cohortCostCap {
+		return "cohort_cost"
+	}
+	if cohortTokenCap > 0 && cohortTokens >= cohortTokenCap {
+		return "cohort_tokens"
+	}
+	return ""
+}
+
 // sessionDriver owns one session's turn lifecycle: it polls every bound
 // gateway's Reader for inbound messages, serializes them through a FIFO, writes
 // one input frame to the bridge per turn, and fans the bridge's reply events out
@@ -79,6 +113,11 @@ type sessionDriver struct {
 	// an external reader (Neublox) sees the live thinking/status/chunk/reply
 	// stream. nil = no tap (CLI/tests).
 	emitTap func(contracts.Event)
+
+	// gate decides, after each completed turn, whether the session must pause on
+	// a budget cap. Defaults to noBudgetGate{} (never trips) so behavior is
+	// unchanged until a concrete gate is wired in.
+	gate budgetGate
 }
 
 func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event) *sessionDriver {
@@ -91,6 +130,7 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		renderers: map[string]*gatewayRenderer{},
 		hangup:    make(chan struct{}, 1),
 		seen:      map[string]bool{},
+		gate:      noBudgetGate{},
 	}
 }
 
@@ -172,6 +212,16 @@ func (d *sessionDriver) Interrupt() {
 		case <-time.After(interruptSendTimeout):
 		}
 	}()
+}
+
+// emitPaused records that the session halted on a budget cap. It sends a paused
+// status event downstream; persistence of PausedReason is the gate's job (it
+// already wrote it in CheckAfterTurn before returning the reason).
+func (d *sessionDriver) emitPaused(reason string) {
+	select {
+	case d.toBridge <- contracts.Event{T: "paused", Text: reason}:
+	default:
+	}
 }
 
 // Seed injects an opening input turn into this session's FIFO. A handoff uses it
@@ -415,6 +465,10 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 				}
 				d.seenMu.Unlock()
 				d.metrics.TurnCompleted()
+				if reason := d.gate.CheckAfterTurn(d.name); reason != "" {
+					d.emitPaused(reason)
+					return true // stop this turn; the next dispatch is refused while paused
+				}
 				d.maybeCoordinate(ctx, e.Text)
 				return true
 			}

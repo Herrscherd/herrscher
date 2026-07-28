@@ -34,8 +34,13 @@ func renderCodexMCP(raw []byte, worktree string) ([]byte, error) {
 
 	var out strings.Builder
 	for i, name := range names {
+		if strings.TrimSpace(name) == "" {
+			return nil, fmt.Errorf("empty MCP server name in mcp.json")
+		}
 		server := config.MCPServers[name]
-		if server.Type != "stdio" {
+		// Claude's .mcp.json treats stdio as the default transport and commonly
+		// omits "type"; accept an empty type as stdio rather than rejecting.
+		if server.Type != "" && server.Type != "stdio" {
 			return nil, fmt.Errorf("unsupported MCP transport %q for server %q", server.Type, name)
 		}
 		if strings.TrimSpace(server.Command) == "" {

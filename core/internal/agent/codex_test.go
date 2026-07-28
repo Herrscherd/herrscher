@@ -39,6 +39,16 @@ command = "zeta"
 `,
 		},
 		{
+			name: "treats a type-less server as stdio",
+			raw:  `{"mcpServers":{"roblox":{"command":"mcp"}}}`,
+			want: "[mcp_servers.roblox]\ncommand = \"mcp\"\n",
+		},
+		{
+			name:    "rejects an empty server name",
+			raw:     `{"mcpServers":{"":{"type":"stdio","command":"mcp"}}}`,
+			wantErr: "empty MCP server name",
+		},
+		{
 			name:    "rejects malformed JSON",
 			raw:     `{`,
 			wantErr: "mcp.json",

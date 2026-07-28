@@ -237,12 +237,16 @@ func (c *coordinator) Delegate(ctx context.Context, req contracts.DelegateReques
 	if !ok {
 		return "", fmt.Errorf("delegate: lead session %q not found", req.FromSession)
 	}
+	// vendor and cmd are the lead's invocation. Inherit them only when the
+	// target declares no backend of its own — otherwise a target with its own
+	// Backend but no Cmd would run that backend with the lead's foreign command
+	// line (e.g. a codex worker driven by a `claude …` invocation).
 	vendor, cmd := "", ""
 	if target.Backend == "" {
 		vendor = from.Vendor
-	}
-	if target.Cmd == "" {
-		cmd = from.Cmd
+		if target.Cmd == "" {
+			cmd = from.Cmd
+		}
 	}
 	return c.spawn(ctx, from, req.ToAgent, req.Task, req.FromSession, vendor, cmd)
 }

@@ -40,12 +40,14 @@ type Agent struct {
 	Cmd     string   // default invocation from <home>/cmd, empty when absent
 }
 
-// Materialize provisions the agent into a session worktree by writing the three
-// files Claude Code reads from its working directory:
+// Materialize provisions the agent into a session worktree by writing the files
+// Claude Code and Codex read from its working directory:
 //
 //	<worktree>/.mcp.json             (from <home>/mcp.json)
 //	<worktree>/.claude/settings.json (from <home>/settings.json)
 //	<worktree>/.claude/CLAUDE.md     (from <home>/SOUL.md — the layered persona)
+//	<worktree>/AGENTS.md             (from <home>/SOUL.md)
+//	<worktree>/.codex/config.toml    (converted from <home>/mcp.json)
 //
 // Any worktreeToken in a source file is replaced with the worktree path.
 func (a Agent) Materialize(worktree string) error {
@@ -53,10 +55,15 @@ func (a Agent) Materialize(worktree string) error {
 	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
 		return fmt.Errorf("create .claude dir: %w", err)
 	}
+	codexDir := filepath.Join(worktree, ".codex")
+	if err := os.MkdirAll(codexDir, 0o755); err != nil {
+		return fmt.Errorf("create .codex dir: %w", err)
+	}
 	copies := []struct{ src, dst string }{
 		{filepath.Join(a.Home, mcpFile), filepath.Join(worktree, ".mcp.json")},
 		{filepath.Join(a.Home, settingsFile), filepath.Join(claudeDir, "settings.json")},
 		{filepath.Join(a.Home, soulFile), filepath.Join(claudeDir, "CLAUDE.md")},
+		{filepath.Join(a.Home, soulFile), filepath.Join(worktree, "AGENTS.md")},
 	}
 	for _, c := range copies {
 		buf, err := os.ReadFile(c.src)
@@ -67,6 +74,17 @@ func (a Agent) Materialize(worktree string) error {
 		if err := os.WriteFile(c.dst, []byte(out), 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", c.dst, err)
 		}
+	}
+	mcp, err := os.ReadFile(filepath.Join(a.Home, mcpFile))
+	if err != nil {
+		return fmt.Errorf("read %s: %w", mcpFile, err)
+	}
+	codexConfig, err := renderCodexMCP(mcp, worktree)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), codexConfig, 0o644); err != nil {
+		return fmt.Errorf("write config.toml: %w", err)
 	}
 	return nil
 }

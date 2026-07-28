@@ -86,7 +86,10 @@ func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, or
 		name := sess.Name
 		d.emitTap = func(e contracts.Event) { seedEventPublisher(name, e) }
 	}
-	go d.pump(seedCtx)
+	pumpCtx, pumpCancel := context.WithCancel(seedCtx)
+	defer pumpCancel()
+	pumpDone := make(chan struct{})
+	go func() { defer close(pumpDone); d.pump(pumpCtx) }()
 
 	var bridgeErr = make(chan error, 1)
 	go func() {
@@ -114,6 +117,12 @@ func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, or
 		return "", err
 	}
 	if coord != nil {
+		// The seed turn ran with a nil coordinator so the pump never re-enters
+		// the dispatch mutex mid-turn; coordination happens here instead. Stop
+		// the pump and join it before writing d.coordinator, so the field is
+		// never read (turnloop) and written (here) from two goroutines at once.
+		pumpCancel()
+		<-pumpDone
 		d.coordinator = coord
 		d.maybeCoordinate(seedCtx, reply)
 	}

@@ -26,11 +26,29 @@ var oneShotBackendFactory = newSeedBackend
 // one process-wide daemon owns the socket, so a package var is sufficient.
 var seedEventPublisher func(session string, e contracts.Event)
 
+type seedCommandForwarder func(context.Context, string, []string) (string, bool, error)
+
+// runOneShotSeedCommand sends an operator-process seed to the running daemon
+// when one is available, because that process owns the live Coordinator. A
+// daemon-side invocation already has coord and runs locally. With neither a
+// daemon nor a coordinator it falls back to the historical uncoordinated
+// one-shot behavior.
+func runOneShotSeedCommand(ctx context.Context, st *state.State, name, task string, coord contracts.Coordinator, instID string, forward seedCommandForwarder) (string, error) {
+	if coord == nil && forward != nil {
+		if reply, handled, err := forward(ctx, CommandSocketPath(instID), []string{
+			"session", "seed", "--name", name, "--task", task,
+		}); handled {
+			return reply, err
+		}
+	}
+	return runOneShotSeed(ctx, st, name, task, coord)
+}
+
 // runOneShotSeed builds the session-scoped orchestrator and delegates to the
 // testable one-shot runner. Resolver.Orchestrator supplies a remote proxy when
 // requested; otherwise the local plugin receives the session name and the
 // persisted extractor/journal/cadence config in its PluginConfig.
-func runOneShotSeed(ctx context.Context, st *state.State, name, task string) (string, error) {
+func runOneShotSeed(ctx context.Context, st *state.State, name, task string, coord contracts.Coordinator) (string, error) {
 	sess, ok := st.FindSession(name)
 	if !ok {
 		return "", fmt.Errorf("no session %q", name)
@@ -42,14 +60,14 @@ func runOneShotSeed(ctx context.Context, st *state.State, name, task string) (st
 	if mem != nil {
 		defer mem.Close()
 	}
-	return runOneShotSeedWith(ctx, sess, task, orch)
+	return runOneShotSeedWith(ctx, sess, task, orch, coord)
 }
 
 // runOneShotSeedWith mounts the same in-process bridge turn used by the daemon:
 // newSessionDriver owns the FIFO and SeedAndWait awaits reply{done}; bridge.RunOneShot
 // supplies the registered backend over channels. Unlike RunSession/goLive this
 // deliberately has no control socket, supervisor, or gateway binding.
-func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, orch contracts.Orchestrator) (string, error) {
+func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, orch contracts.Orchestrator, coord contracts.Coordinator) (string, error) {
 	if orch != nil {
 		defer orch.Close()
 	}
@@ -92,6 +110,10 @@ func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, or
 	}
 	if err := <-bridgeErr; err != nil {
 		return "", err
+	}
+	if coord != nil {
+		d.coordinator = coord
+		d.maybeCoordinate(seedCtx, reply)
 	}
 	if orch != nil {
 		if err := orch.Consolidate(seedCtx); err != nil {

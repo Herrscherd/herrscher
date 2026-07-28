@@ -29,6 +29,45 @@ type cmdResponse struct {
 	Err *string `json:"err,omitempty"`
 }
 
+// dispatchLiveCommand attempts one request against the running daemon. A dial
+// miss is reported as handled=false so a short-lived operator process can keep
+// its historical local fallback; once connected, protocol/dispatch failures
+// are authoritative and returned to the caller.
+func dispatchLiveCommand(ctx context.Context, path string, argv []string) (string, bool, error) {
+	dialCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	conn, err := dialCommandSocket(dialCtx, path)
+	if err != nil {
+		return "", false, nil
+	}
+	defer conn.Close()
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
+	}
+	b, err := json.Marshal(cmdRequest{Argv: argv})
+	if err != nil {
+		return "", true, err
+	}
+	if _, err := conn.Write(append(b, '\n')); err != nil {
+		return "", true, err
+	}
+	line, err := bufio.NewReader(conn).ReadBytes('\n')
+	if err != nil && len(line) == 0 {
+		return "", true, err
+	}
+	var resp cmdResponse
+	if err := json.Unmarshal(line, &resp); err != nil {
+		return "", true, fmt.Errorf("command socket: decode response: %w", err)
+	}
+	if resp.Err != nil {
+		return "", true, fmt.Errorf("%s", *resp.Err)
+	}
+	if resp.Ok == nil {
+		return "", true, fmt.Errorf("command socket: empty response")
+	}
+	return *resp.Ok, true, nil
+}
+
 // serveCommandSocket accepts operator commands on a local socket and dispatches
 // each through disp. One connection = one JSON-line request {"argv":[...]} → one
 // JSON-line response {"ok":...} | {"err":...}. Serialization of the actual

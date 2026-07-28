@@ -24,7 +24,7 @@ const (
 // component (*hub, *agent.Store, *worktree.Worktreer, *state.State). Kept tiny so
 // Handoff is testable with fakes and no real git/session machinery.
 type sessionCreator interface {
-	Create(context.Context, contracts.CreateSession) (string, error)
+	CreateCoordinated(context.Context, contracts.CreateSession, string) (string, error)
 }
 type agentLookup interface {
 	Get(name string) (agent.Agent, bool)
@@ -159,7 +159,7 @@ func childCount(sessions []state.Session, parent string) int {
 // effect. The name is probed collision-free because worktree.Remove leaves the
 // session/<name> branch intact, so a reused deterministic name would collide.
 // On a seed timeout the fresh session is rolled back rather than left orphaned.
-func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, task, parent string) (string, error) {
+func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, task, parent, vendor, cmd string) (string, error) {
 	if from.Worktree == "" {
 		return "", fmt.Errorf("coordination: source session %q has no isolated worktree to continue", from.Name)
 	}
@@ -187,13 +187,14 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 		bName = fmt.Sprintf("%s-%d", base, n)
 	}
 
-	if _, err := c.creator.Create(ctx, contracts.CreateSession{
+	if _, err := c.creator.CreateCoordinated(ctx, contracts.CreateSession{
 		Name:    bName,
 		Project: from.Project,
+		Cmd:     cmd,
 		Agent:   toAgent,
 		Base:    c.wt.Branch(from.Name),
 		Parent:  parent,
-	}); err != nil {
+	}, vendor); err != nil {
 		return "", fmt.Errorf("coordination: create %q: %w", bName, err)
 	}
 	if !c.seedWithRetry(ctx, bName, task) {
@@ -221,21 +222,29 @@ func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest)
 	if !ok {
 		return "", fmt.Errorf("handoff: source session %q not found", req.FromSession)
 	}
-	return c.spawn(ctx, from, req.ToAgent, req.Task, "")
+	return c.spawn(ctx, from, req.ToAgent, req.Task, "", "", "")
 }
 
 // Delegate creates a worker W off the lead's committed tip and records the lead
 // as W's parent for the result-back channel (Report). The key difference from a
 // handoff: parent is set, and the lead stays alive (spawn touches only W).
 func (c *coordinator) Delegate(ctx context.Context, req contracts.DelegateRequest) (string, error) {
-	if _, ok := c.agents.Get(req.ToAgent); !ok {
+	target, ok := c.agents.Get(req.ToAgent)
+	if !ok {
 		return "", fmt.Errorf("delegate: unknown agent %q", req.ToAgent)
 	}
 	from, ok := c.findSession(req.FromSession)
 	if !ok {
 		return "", fmt.Errorf("delegate: lead session %q not found", req.FromSession)
 	}
-	return c.spawn(ctx, from, req.ToAgent, req.Task, req.FromSession)
+	vendor, cmd := "", ""
+	if target.Backend == "" {
+		vendor = from.Vendor
+	}
+	if target.Cmd == "" {
+		cmd = from.Cmd
+	}
+	return c.spawn(ctx, from, req.ToAgent, req.Task, req.FromSession, vendor, cmd)
 }
 
 // Report delivers a worker's completion to its lead: {session/<W> branch ref +
@@ -409,7 +418,7 @@ func (c *coordinator) FanOut(ctx context.Context, req contracts.FanOutRequest) (
 	var spawned []string
 	var spawnErr error
 	for _, task := range req.Tasks {
-		name, err := c.spawn(ctx, lead, req.ToAgent, task, req.FromSession)
+		name, err := c.spawn(ctx, lead, req.ToAgent, task, req.FromSession, "", "")
 		if err != nil {
 			spawnErr = err
 			break
@@ -448,7 +457,7 @@ func (c *coordinator) Route(ctx context.Context, req contracts.RouteRequest) (st
 	if !ok {
 		return "", "", fmt.Errorf("route: no agent matches task")
 	}
-	session, err := c.spawn(ctx, from, chosen, req.Task, req.FromSession)
+	session, err := c.spawn(ctx, from, chosen, req.Task, req.FromSession, "", "")
 	if err != nil {
 		return "", "", err
 	}

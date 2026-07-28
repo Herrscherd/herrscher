@@ -13,8 +13,9 @@ import (
 )
 
 type fakeCreator struct {
-	spec contracts.CreateSession
-	err  error
+	spec   contracts.CreateSession
+	vendor string
+	err    error
 }
 
 func (f *fakeCreator) Create(_ context.Context, s contracts.CreateSession) (string, error) {
@@ -22,12 +23,22 @@ func (f *fakeCreator) Create(_ context.Context, s contracts.CreateSession) (stri
 	return s.Name, f.err
 }
 
+func (f *fakeCreator) CreateCoordinated(_ context.Context, s contracts.CreateSession, vendor string) (string, error) {
+	f.spec = s
+	f.vendor = vendor
+	return s.Name, f.err
+}
+
 type fakeAgents struct {
-	known  map[string]bool
-	roster []agent.Agent
+	known    map[string]bool
+	profiles map[string]agent.Agent
+	roster   []agent.Agent
 }
 
 func (f fakeAgents) Get(name string) (agent.Agent, bool) {
+	if a, ok := f.profiles[name]; ok {
+		return a, true
+	}
 	return agent.Agent{}, f.known[name]
 }
 
@@ -255,6 +266,82 @@ func TestDelegateCreatesWorkerOnLeadBranchWithParent(t *testing.T) {
 	}
 	if len(seeded) != 1 || seeded[0] != "lead-scripter|écris le module" {
 		t.Fatalf("tâche non seedée au worker: %v", seeded)
+	}
+}
+
+func TestDelegateInheritsCodexTargetFromLeadWithoutAgentOverride(t *testing.T) {
+	cr := &fakeCreator{}
+	var seeded []string
+	parentCmd := "codex --model gpt-5.6-terra --effort medium"
+	c := newCoordinator(
+		cr,
+		fakeAgents{profiles: map[string]agent.Agent{"scripter": {Name: "scripter"}}},
+		&fakeWTC{clean: true},
+		fakeSessions{list: []state.Session{{
+			Name: "orchestrator", Project: "test", Worktree: "/wt/orchestrator",
+			Vendor: "codex", Cmd: parentCmd,
+		}}},
+		&fakeCloser{},
+		func(sess, task string) bool {
+			seeded = append(seeded, sess+"|"+task)
+			return true
+		},
+	)
+
+	if _, err := c.Delegate(context.Background(), contracts.DelegateRequest{
+		FromSession: "orchestrator", ToAgent: "scripter", Task: "inspect",
+	}); err != nil {
+		t.Fatalf("delegate: %v", err)
+	}
+	if cr.vendor != "codex" || cr.spec.Cmd != parentCmd {
+		t.Fatalf("worker target = vendor %q cmd %q, want inherited codex target %q", cr.vendor, cr.spec.Cmd, parentCmd)
+	}
+}
+
+func TestDelegatePreservesExplicitAgentTargetOverride(t *testing.T) {
+	cr := &fakeCreator{}
+	c := newCoordinator(
+		cr,
+		fakeAgents{profiles: map[string]agent.Agent{"scripter": {
+			Name: "scripter", Backend: "claude", Cmd: "claude --model sonnet",
+		}}},
+		&fakeWTC{clean: true},
+		fakeSessions{list: []state.Session{{
+			Name: "orchestrator", Worktree: "/wt/orchestrator",
+			Vendor: "codex", Cmd: "codex --model gpt-5.6-terra --effort medium",
+		}}},
+		&fakeCloser{},
+		func(string, string) bool { return true },
+	)
+
+	if _, err := c.Delegate(context.Background(), contracts.DelegateRequest{
+		FromSession: "orchestrator", ToAgent: "scripter", Task: "inspect",
+	}); err != nil {
+		t.Fatalf("delegate: %v", err)
+	}
+	if cr.vendor != "" || cr.spec.Cmd != "" {
+		t.Fatalf("coordinator overrode explicit agent target: vendor %q cmd %q", cr.vendor, cr.spec.Cmd)
+	}
+}
+
+func TestDelegateKeepsClaudeDefaultsWhenNoParentTarget(t *testing.T) {
+	cr := &fakeCreator{}
+	c := newCoordinator(
+		cr,
+		fakeAgents{profiles: map[string]agent.Agent{"scripter": {Name: "scripter"}}},
+		&fakeWTC{clean: true},
+		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
+		&fakeCloser{},
+		func(string, string) bool { return true },
+	)
+
+	if _, err := c.Delegate(context.Background(), contracts.DelegateRequest{
+		FromSession: "lead", ToAgent: "scripter", Task: "inspect",
+	}); err != nil {
+		t.Fatalf("delegate: %v", err)
+	}
+	if cr.vendor != "" || cr.spec.Cmd != "" {
+		t.Fatalf("default Claude target should stay implicit, got vendor %q cmd %q", cr.vendor, cr.spec.Cmd)
 	}
 }
 
@@ -924,7 +1011,7 @@ type nthFailCreator struct {
 	last   contracts.CreateSession
 }
 
-func (c *nthFailCreator) Create(_ context.Context, s contracts.CreateSession) (string, error) {
+func (c *nthFailCreator) CreateCoordinated(_ context.Context, s contracts.CreateSession, _ string) (string, error) {
 	c.n++
 	c.last = s
 	if c.n == c.failAt {

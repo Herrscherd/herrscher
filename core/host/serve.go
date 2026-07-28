@@ -226,6 +226,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	// non-nil for every driver started at boot (Model O handoff hook).
 	coord := newCoordinator(hb, deps.agents, deps.wt, st, hb, Seed)
 	hb.coordinator = coord
+	deps.seedCoord.coord = coord
 
 	// Observability seam: the handler's session list --json carries each session's
 	// live coordination projection, and the command socket lets an external reader

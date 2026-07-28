@@ -33,6 +33,7 @@ type channelAdmin interface {
 type supervisor interface {
 	Start(s state.Session) error
 	Stop(name string) error
+	Restart(s state.Session) error
 }
 
 // worktrees owns per-session git worktree lifecycle. Create returns the worktree

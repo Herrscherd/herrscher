@@ -21,6 +21,7 @@ type Supervisor struct {
 	selfBin string // path to the herrscher binary (os.Executable)
 	mu      sync.Mutex
 	cancels map[string]context.CancelFunc
+	dones   map[string]chan struct{}
 	log     *slog.Logger
 	// sleep and now are clock seams (default time.After / time.Now) so tests can
 	// drive the restart loop and its backoff without real wall-clock waits.
@@ -32,6 +33,9 @@ type Supervisor struct {
 	// delegation roster matches the store the coordinator spawns from (which honours
 	// the daemon's --state override). Empty = the bridge falls back to its default.
 	agentsRoot string
+	// runBridge is the process boundary. Tests replace it with a controlled
+	// runner so restart ordering can be asserted without launching a real agent.
+	runBridge func(context.Context, state.Session)
 }
 
 // bridgeArgs builds the child `herrscher bridge` argv for sess.
@@ -75,14 +79,17 @@ func (s *Supervisor) bridgeArgs(sess state.Session) []string {
 // NewSupervisor builds a Supervisor bound to ctx. It logs through a quiet
 // default until SetLogger installs the daemon's operator logger.
 func NewSupervisor(ctx context.Context, selfBin string) *Supervisor {
-	return &Supervisor{
+	s := &Supervisor{
 		ctx:     ctx,
 		selfBin: selfBin,
 		cancels: map[string]context.CancelFunc{},
+		dones:   map[string]chan struct{}{},
 		log:     obs.NewLogger(os.Stderr, slog.LevelInfo),
 		sleep:   time.After,
 		now:     time.Now,
 	}
+	s.runBridge = s.runBridgeCommand
+	return s
 }
 
 // SetLogger installs the operator logger the supervisor logs restart events
@@ -111,20 +118,45 @@ func (s *Supervisor) Start(sess state.Session) error {
 		return nil
 	}
 	cctx, cancel := context.WithCancel(s.ctx)
+	done := make(chan struct{})
 	s.cancels[sess.Name] = cancel
-	go s.runLoop(cctx, sess)
+	s.dones[sess.Name] = done
+	go func() {
+		defer close(done)
+		s.runLoop(cctx, sess)
+	}()
 	return nil
 }
 
-// Stop terminates the bridge for name.
+// Stop terminates the bridge for name and waits for its process loop to exit.
+// Returning only after done is what makes a same-name replacement exclusive:
+// the old backend cannot remain connected while the new one starts.
 func (s *Supervisor) Stop(name string) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if cancel, ok := s.cancels[name]; ok {
-		cancel()
-		delete(s.cancels, name)
+	cancel, ok := s.cancels[name]
+	done := s.dones[name]
+	s.mu.Unlock()
+	if !ok {
+		return nil
 	}
+	cancel()
+	<-done
+	s.mu.Lock()
+	if s.dones[name] == done {
+		delete(s.cancels, name)
+		delete(s.dones, name)
+	}
+	s.mu.Unlock()
 	return nil
+}
+
+// Restart synchronously replaces only sess.Name. The old process loop is fully
+// stopped before the replacement is launched with sess's current Cmd/Vendor.
+func (s *Supervisor) Restart(sess state.Session) error {
+	if err := s.Stop(sess.Name); err != nil {
+		return err
+	}
+	return s.Start(sess)
 }
 
 func (s *Supervisor) runLoop(ctx context.Context, sess state.Session) {
@@ -133,19 +165,8 @@ func (s *Supervisor) runLoop(ctx context.Context, sess state.Session) {
 		if ctx.Err() != nil {
 			return
 		}
-		cmd := exec.CommandContext(ctx, s.selfBin, s.bridgeArgs(sess)...)
-		// Dir is the resolved run directory (worktree, or workspace/project root);
-		// fall back to Worktree for sessions persisted before Dir existed. Empty
-		// leaves cmd.Dir unset so the child inherits the launcher's cwd.
-		if dir := sess.Dir; dir != "" {
-			cmd.Dir = dir
-		} else if sess.Worktree != "" {
-			cmd.Dir = sess.Worktree
-		}
-		cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
-		cmd.Env = os.Environ()
 		start := s.now()
-		_ = cmd.Run() // returns on exit or ctx cancel
+		s.runBridge(ctx, sess)
 		if ctx.Err() != nil {
 			return
 		}
@@ -158,4 +179,19 @@ func (s *Supervisor) runLoop(ctx context.Context, sess state.Session) {
 		case <-s.sleep(delay):
 		}
 	}
+}
+
+func (s *Supervisor) runBridgeCommand(ctx context.Context, sess state.Session) {
+	cmd := exec.CommandContext(ctx, s.selfBin, s.bridgeArgs(sess)...)
+	// Dir is the resolved run directory (worktree, or workspace/project root);
+	// fall back to Worktree for sessions persisted before Dir existed. Empty
+	// leaves cmd.Dir unset so the child inherits the launcher's cwd.
+	if dir := sess.Dir; dir != "" {
+		cmd.Dir = dir
+	} else if sess.Worktree != "" {
+		cmd.Dir = sess.Worktree
+	}
+	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
+	cmd.Env = os.Environ()
+	_ = cmd.Run() // returns on exit or ctx cancel
 }

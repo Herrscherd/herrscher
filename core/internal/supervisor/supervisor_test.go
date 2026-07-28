@@ -23,6 +23,66 @@ func TestBridgeArgsIncludesHubSocket(t *testing.T) {
 	}
 }
 
+func TestRestartWaitsForOldBridgeAndStartsTargetedSession(t *testing.T) {
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	oldStarted := make(chan struct{})
+	allowOldExit := make(chan struct{})
+	oldExited := make(chan struct{})
+	newStarted := make(chan state.Session, 1)
+	s.runBridge = func(ctx context.Context, sess state.Session) {
+		if sess.Cmd == "claude" {
+			close(oldStarted)
+			<-ctx.Done()
+			<-allowOldExit
+			close(oldExited)
+			return
+		}
+		newStarted <- sess
+		<-ctx.Done()
+	}
+
+	if err := s.Start(state.Session{Name: "worker", Vendor: "claude", Cmd: "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	<-oldStarted
+
+	restarted := make(chan error, 1)
+	go func() {
+		restarted <- s.Restart(state.Session{
+			Name: "worker", Vendor: "codex", Cmd: "codex --model gpt-5.6-terra",
+		})
+	}()
+
+	select {
+	case got := <-newStarted:
+		t.Fatalf("new bridge started before old bridge exited: %+v", got)
+	case err := <-restarted:
+		t.Fatalf("Restart returned before old bridge exited: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(allowOldExit)
+	if err := <-restarted; err != nil {
+		t.Fatalf("Restart: %v", err)
+	}
+	select {
+	case <-oldExited:
+	default:
+		t.Fatal("Restart returned while the old bridge was still active")
+	}
+	select {
+	case got := <-newStarted:
+		if got.Vendor != "codex" || got.Cmd != "codex --model gpt-5.6-terra" {
+			t.Fatalf("replacement bridge target = %+v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("replacement bridge did not start")
+	}
+	if err := s.Stop("worker"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestBridgeArgsIncludeSession(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/bin/herrscher")
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1"})

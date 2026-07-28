@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -78,6 +79,43 @@ func TestBuildBackendSelectsByVendor(t *testing.T) {
 	}
 	if built != "codex" {
 		t.Fatalf("built %q, want codex", built)
+	}
+}
+
+func TestNewSeedBackendResolvesRelativeWorktreeOnce(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+
+	relative := filepath.Join(".herrscher-sessions", "instance", "worker")
+	worker := filepath.Join(t.TempDir(), relative)
+	if err := os.MkdirAll(worker, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(worker); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(original) })
+
+	var gotDir string
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "codex", Category: contracts.CategoryBackend},
+		Backend: func(_ context.Context, cfg contracts.PluginConfig) (contracts.Backend, error) {
+			gotDir = cfg.Settings["dir"]
+			return seedBackend{}, nil
+		},
+	})
+
+	sess := state.Session{Vendor: "codex", Worktree: relative}
+	if _, err := newSeedBackend(context.Background(), sess); err != nil {
+		t.Fatalf("newSeedBackend: %v", err)
+	}
+	if gotDir != worker {
+		t.Fatalf("backend dir = %q, want already-resolved absolute cwd %q", gotDir, worker)
 	}
 }
 

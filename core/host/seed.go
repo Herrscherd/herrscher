@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -192,7 +194,36 @@ func BuildBackend(ctx context.Context, vendor, cmd, kind, dir, resume string) (c
 }
 
 func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend, error) {
-	return BuildBackend(ctx, sess.Vendor, sess.Cmd, sess.Backend, sess.Worktree, sess.ResumeToken)
+	dir := sess.Dir
+	if dir == "" {
+		dir = sess.Worktree
+	}
+	return BuildBackend(ctx, sess.Vendor, sess.Cmd, sess.Backend, resolveBackendDir(dir), sess.ResumeToken)
+}
+
+// resolveBackendDir upgrades persisted relative session directories at the
+// backend boundary. A supervised bridge may already be running inside that
+// relative directory, so detect that suffix before joining it to cwd; otherwise
+// the path would be applied twice (…/worker/…/worker).
+func resolveBackendDir(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	dir = filepath.Clean(dir)
+	if filepath.IsAbs(dir) {
+		return dir
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return dir
+	}
+	cwd = filepath.Clean(cwd)
+	suffix := string(os.PathSeparator) + dir
+	if (os.PathSeparator == '\\' && strings.HasSuffix(strings.ToLower(cwd), strings.ToLower(suffix))) ||
+		(os.PathSeparator != '\\' && strings.HasSuffix(cwd, suffix)) {
+		return cwd
+	}
+	return filepath.Join(cwd, dir)
 }
 
 func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin, error) {

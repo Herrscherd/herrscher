@@ -59,6 +59,11 @@ func TestSessionSwitchNoneRestartsWithoutSeed(t *testing.T) {
 	if len(sup.stopped) != 1 || len(sup.started) != 1 {
 		t.Fatalf("handoff=none must restart the backend once, got stop=%v start=%v", sup.stopped, sup.started)
 	}
+	if len(sup.restarted) != 1 || sup.restarted[0].Name != "beta" ||
+		sup.restarted[0].Vendor != "codex" ||
+		sup.restarted[0].Cmd != "codex --model gpt-5-codex" {
+		t.Fatalf("switch must atomically replace only beta with the persisted target, got %+v", sup.restarted)
+	}
 	if sup.startedCmds[0] != "codex --model gpt-5-codex" {
 		t.Fatalf("restart must use the new Cmd, got %q", sup.startedCmds[0])
 	}

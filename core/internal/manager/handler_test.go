@@ -235,7 +235,8 @@ func TestSessionCreateUsesGatewayChannelRef(t *testing.T) {
 type fakeSup struct {
 	started, stopped []string
 	startedCmds      []string // Cmd of each session passed to Start, in order
-	startErrs        []error  // scripted errors, popped one per Start call (nil-padded)
+	restarted        []state.Session
+	startErrs        []error // scripted errors, popped one per Start call (nil-padded)
 }
 
 func (f *fakeSup) Start(s state.Session) error {
@@ -249,6 +250,13 @@ func (f *fakeSup) Start(s state.Session) error {
 	return nil
 }
 func (f *fakeSup) Stop(name string) error { f.stopped = append(f.stopped, name); return nil }
+func (f *fakeSup) Restart(s state.Session) error {
+	f.restarted = append(f.restarted, s)
+	if err := f.Stop(s.Name); err != nil {
+		return err
+	}
+	return f.Start(s)
+}
 
 type fakeWT struct {
 	createdRepos []string // repo arg captured per Create

@@ -151,6 +151,18 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 // registry seam (no argv assembly), then reconciles so the new session is live.
 // It implements contracts.SessionControl.
 func (h *hub) Create(ctx context.Context, spec contracts.CreateSession) (string, error) {
+	return h.create(ctx, spec, "")
+}
+
+// CreateCoordinated is the coordinator's internal creation seam. Vendor is kept
+// separate from the public contracts.CreateSession so ordinary SessionControl
+// callers retain their existing API while delegated workers can inherit a lead's
+// backend target.
+func (h *hub) CreateCoordinated(ctx context.Context, spec contracts.CreateSession, vendor string) (string, error) {
+	return h.create(ctx, spec, vendor)
+}
+
+func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor string) (string, error) {
 	args := map[string]string{"name": spec.Name}
 	setStr := func(k, v string) {
 		if v != "" {
@@ -161,6 +173,7 @@ func (h *hub) Create(ctx context.Context, spec contracts.CreateSession) (string,
 	setStr("clone", spec.Clone)
 	setStr("cmd", spec.Cmd)
 	setStr("backend", spec.Backend)
+	setStr("vendor", vendor)
 	setStr("agent", spec.Agent)
 	setStr("extractor", spec.Extractor)
 	setStr("journal", spec.Journal)

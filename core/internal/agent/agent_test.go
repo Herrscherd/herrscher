@@ -38,6 +38,25 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 	if string(claude) != "PERSONA" {
 		t.Fatalf("CLAUDE.md = %q", claude)
 	}
+
+	agents, err := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read AGENTS.md: %v", err)
+	}
+	if string(agents) != "PERSONA" {
+		t.Fatalf("AGENTS.md = %q", agents)
+	}
+
+	codex, err := os.ReadFile(filepath.Join(wt, ".codex", "config.toml"))
+	if err != nil {
+		t.Fatalf("read .codex/config.toml: %v", err)
+	}
+	escapedWorktree := strings.ReplaceAll(wt, `\`, `\\`)
+	if !strings.Contains(string(codex), "[mcp_servers.neublox]") ||
+		!strings.Contains(string(codex), `command = "neublox"`) ||
+		!strings.Contains(string(codex), escapedWorktree) {
+		t.Fatalf("unexpected Codex config:\n%s", codex)
+	}
 }
 
 func TestMaterializeMissingHomeErrors(t *testing.T) {

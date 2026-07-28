@@ -39,7 +39,7 @@ type hub struct {
 
 	dispatchMu sync.Mutex // serializes operator commands (and their reconcile)
 	mu         sync.Mutex
-	live       map[string]context.CancelFunc // session name → cancel its RunSession
+	live       map[string]liveSession // session name → owned RunSession lifetime
 }
 
 // forgetter est satisfaite par *coordinator ; elle vit hors du port
@@ -47,8 +47,13 @@ type hub struct {
 // join), pas une capacité exposée aux gateways.
 type forgetter interface{ forget(string) }
 
+type liveSession struct {
+	cancel context.CancelFunc
+	done   <-chan struct{}
+}
+
 func newHub(ctx context.Context, st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry) *hub {
-	return &hub{ctx: ctx, st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: map[string]context.CancelFunc{}}
+	return &hub{ctx: ctx, st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: map[string]liveSession{}}
 }
 
 // goLive wires a session into the running hub: it opens the control-socket
@@ -68,24 +73,31 @@ func (h *hub) goLive(sess state.Session) {
 	}
 	sctx, cancel := context.WithCancel(h.ctx)
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
-	go RunSession(sctx, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
-		func(tok string) { _ = h.st.SetResumeToken(sess.Name, tok) },
-		func(e state.TranscriptEntry) {
-			_ = state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e)
-		})
-	h.live[sess.Name] = cancel
+	done := make(chan struct{})
+	h.live[sess.Name] = liveSession{cancel: cancel, done: done}
+	go func() {
+		defer close(done)
+		runSessionIdentified(sctx, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
+			func(tok string) { _ = h.st.SetResumeToken(sess.Name, tok) },
+			func(e state.TranscriptEntry) {
+				_ = state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e)
+			},
+			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent})
+	}()
 }
 
 // goDead cancels a session's RunSession loop (which closes its acceptor and
-// removes the socket). The supervisor was already stopped by the close handler.
+// removes the socket), and waits for teardown before releasing the reusable
+// session name. The supervisor was already stopped by the close handler.
 func (h *hub) goDead(name string) {
 	h.mu.Lock()
-	cancel := h.live[name]
-	delete(h.live, name)
-	h.mu.Unlock()
-	if cancel != nil {
-		cancel()
+	live, ok := h.live[name]
+	if ok {
+		live.cancel()
+		<-live.done
+		delete(h.live, name)
 	}
+	h.mu.Unlock()
 	if f, ok := h.coordinator.(forgetter); ok {
 		f.forget(name)
 	}
@@ -194,15 +206,16 @@ func (h *hub) Sessions() []contracts.SessionInfo {
 	for _, s := range sessions {
 		lastTs := state.ReadTranscriptLast(state.TranscriptPath(h.partDir, s.Name))
 		out = append(out, contracts.SessionInfo{
-			Name:      s.Name,
-			ChannelID: s.ChannelID,
-			Type:      s.Type,
-			Gateways:  s.BoundGateways(),
-			Vendor:    s.Vendor,
-			Project:   s.Project,
-			Archived:  s.Archived,
-			Resumable: s.ResumeToken != "",
-			LastTs:    lastTs,
+			Name:        s.Name,
+			Incarnation: s.Incarnation,
+			ChannelID:   s.ChannelID,
+			Type:        s.Type,
+			Gateways:    s.BoundGateways(),
+			Vendor:      s.Vendor,
+			Project:     s.Project,
+			Archived:    s.Archived,
+			Resumable:   s.ResumeToken != "",
+			LastTs:      lastTs,
 		})
 	}
 	return out

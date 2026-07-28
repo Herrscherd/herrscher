@@ -31,6 +31,10 @@ var seedEventPublisher func(session string, e contracts.Event)
 // requested; otherwise the local plugin receives the session name and the
 // persisted extractor/journal/cadence config in its PluginConfig.
 func runOneShotSeed(ctx context.Context, st *state.State, name, task string) (string, error) {
+	return runOneShotSeedID(ctx, st, name, task, newTurnID())
+}
+
+func runOneShotSeedID(ctx context.Context, st *state.State, name, task, turnID string) (string, error) {
 	sess, ok := st.FindSession(name)
 	if !ok {
 		return "", fmt.Errorf("no session %q", name)
@@ -42,7 +46,7 @@ func runOneShotSeed(ctx context.Context, st *state.State, name, task string) (st
 	if mem != nil {
 		defer mem.Close()
 	}
-	return runOneShotSeedWith(ctx, sess, task, orch)
+	return runOneShotSeedWithID(ctx, sess, task, turnID, orch)
 }
 
 // runOneShotSeedWith mounts the same in-process bridge turn used by the daemon:
@@ -50,6 +54,10 @@ func runOneShotSeed(ctx context.Context, st *state.State, name, task string) (st
 // supplies the registered backend over channels. Unlike RunSession/goLive this
 // deliberately has no control socket, supervisor, or gateway binding.
 func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, orch contracts.Orchestrator) (string, error) {
+	return runOneShotSeedWithID(ctx, sess, task, newTurnID(), orch)
+}
+
+func runOneShotSeedWithID(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator) (string, error) {
 	if orch != nil {
 		defer orch.Close()
 	}
@@ -59,6 +67,8 @@ func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, or
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, 8)
 	d := newSessionDriver(sess.Name, nil, toBridge, fromBridge)
+	d.incarnation = sess.Incarnation
+	d.agent = sess.Agent
 	// Tap the seed turn onto the daemon's events socket (when one is serving) so
 	// the app sees live thinking/status/chunk/reply. The seed path binds no
 	// gateways, so this tap is the only way its events escape the process.
@@ -79,7 +89,7 @@ func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, or
 		}
 	}()
 
-	reply, ok := d.SeedAndWait(seedCtx, task)
+	reply, ok := d.SeedAndWaitWithTurnID(seedCtx, task, turnID)
 	if !ok {
 		select {
 		case err := <-bridgeErr:

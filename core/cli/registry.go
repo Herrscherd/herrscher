@@ -36,9 +36,10 @@ func (r *Registry) Add(c contracts.Cmd) error {
 
 // Dispatch resolves args to the command whose Path is the longest prefix of
 // args, parses the remainder into an Input (--flag value pairs into Args; a
-// flag declared as an optional param with no following value is treated as the
-// bool "true"; anything left over goes to Rest), checks required params, and
-// runs it. It returns the handler's output string.
+// valueless optional boolean param becomes "true", while an optional
+// ValueRequired param still needs a following value; anything left over goes to
+// Rest), checks required params, and runs it. It returns the handler's output
+// string.
 func (r *Registry) Dispatch(ctx context.Context, args []string) (string, error) {
 	cmd, rest := r.match(args)
 	if cmd == nil {
@@ -135,15 +136,15 @@ func parse(c contracts.Cmd, rest []string) (contracts.Input, error) {
 		if !ok {
 			return in, fmt.Errorf("%s: unknown flag --%s", strings.Join(c.Path, " "), name)
 		}
-		// A value follows unless the next token is itself a flag; a valueless
-		// optional flag is a bool set to "true".
+		// A value follows unless the next token is itself a flag. Only an
+		// optional boolean param may be valueless.
 		if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
 			in.Args[name] = rest[i+1]
 			i++
-		} else if !p.Required {
-			in.Args[name] = "true"
-		} else {
+		} else if p.Required || p.ValueRequired {
 			return in, fmt.Errorf("%s: flag --%s needs a value", strings.Join(c.Path, " "), name)
+		} else {
+			in.Args[name] = "true"
 		}
 	}
 	for _, p := range c.Params {
@@ -164,6 +165,8 @@ func (r *Registry) Help() string {
 		for _, p := range c.Params {
 			if p.Required {
 				line += " --" + p.Name + " <" + p.Name + ">"
+			} else if p.ValueRequired {
+				line += " [--" + p.Name + " <" + p.Name + ">]"
 			} else {
 				line += " [--" + p.Name + "]"
 			}

@@ -12,18 +12,12 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// wireEvent is one per-session event line emitted on the events socket. Its JSON
-// shape is the contract consumed by Neublox's HerrscherEventSource
-// (session,t,who,text,value,done,cost) — the session tag lets a single socket
-// carry every session's stream, one JSON object per line.
+// wireEvent is one per-session event line emitted on the events socket. Embedding
+// the contract event keeps every current and future event field intact while the
+// session tag lets one socket carry every session's stream.
 type wireEvent struct {
-	Session string  `json:"session"`
-	T       string  `json:"t"`
-	Who     string  `json:"who,omitempty"`
-	Text    string  `json:"text,omitempty"`
-	Value   string  `json:"value,omitempty"`
-	Done    bool    `json:"done,omitempty"`
-	Cost    float64 `json:"cost,omitempty"`
+	Session string `json:"session"`
+	contracts.Event
 }
 
 // marshalSessionEvent renders one bus event as a newline-terminated JSON line
@@ -32,12 +26,7 @@ type wireEvent struct {
 func marshalSessionEvent(session string, e contracts.Event) ([]byte, error) {
 	b, err := json.Marshal(wireEvent{
 		Session: session,
-		T:       e.T,
-		Who:     e.Who,
-		Text:    e.Text,
-		Value:   e.Value,
-		Done:    e.Done,
-		Cost:    e.Cost,
+		Event:   e,
 	})
 	if err != nil {
 		return nil, err

@@ -1,6 +1,7 @@
 package state
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,17 +17,20 @@ type HomeRef struct {
 
 // Session is one bridged channel/post supervised by the daemon.
 type Session struct {
-	ID        string `json:"id,omitempty"` // stable logical id, decoupled from Name and ChannelID
-	Name      string `json:"name"`
-	ChannelID string `json:"channelID"`
-	Type      string `json:"type"` // "text" | "forum"
-	Cmd       string `json:"cmd"`
-	Backend   string `json:"backend,omitempty"`  // bridge backend ("" or "stream" = stream-json default; "oneshot" = per-message cmd)
-	Vendor    string `json:"vendor,omitempty"`   // agent backend vendor ("claude", "codex", "cursor")
-	Worktree  string `json:"worktree,omitempty"` // abs path; empty for a shared session
-	Dir       string `json:"dir,omitempty"`      // bridge working dir; empty = inherit launcher cwd (pwd fallback)
-	Project   string `json:"project,omitempty"`  // workspace sub-dir the session started from
-	Agent     string `json:"agent,omitempty"`    // durable agent this session was provisioned from ("" = none)
+	ID string `json:"id,omitempty"` // stable logical id, decoupled from Name and ChannelID
+	// Incarnation is an opaque identity for this specific persisted session
+	// object. Closing and recreating the same Name generates a different value.
+	Incarnation string `json:"incarnation,omitempty"`
+	Name        string `json:"name"`
+	ChannelID   string `json:"channelID"`
+	Type        string `json:"type"` // "text" | "forum"
+	Cmd         string `json:"cmd"`
+	Backend     string `json:"backend,omitempty"`  // bridge backend ("" or "stream" = stream-json default; "oneshot" = per-message cmd)
+	Vendor      string `json:"vendor,omitempty"`   // agent backend vendor ("claude", "codex", "cursor")
+	Worktree    string `json:"worktree,omitempty"` // abs path; empty for a shared session
+	Dir         string `json:"dir,omitempty"`      // bridge working dir; empty = inherit launcher cwd (pwd fallback)
+	Project     string `json:"project,omitempty"`  // workspace sub-dir the session started from
+	Agent       string `json:"agent,omitempty"`    // durable agent this session was provisioned from ("" = none)
 
 	// ResumeToken is the backend's opaque resume id, folded in from each turn's
 	// reply so a restart can resume the conversation with --resume. Empty =
@@ -135,6 +139,11 @@ func LoadState(path string) (*State, error) {
 			seen[s.Sessions[i].ID] = true
 		}
 	}
+	if s.ensureSessionIncarnationsLocked() {
+		if err := s.saveLocked(); err != nil {
+			return nil, fmt.Errorf("persist session incarnation backfill: %w", err)
+		}
+	}
 	return s, nil
 }
 
@@ -150,6 +159,32 @@ func newSessionID(name string, existing map[string]bool) string {
 	return id
 }
 
+func newSessionIncarnation(existing map[string]bool) string {
+	for {
+		id := "inc_" + rand.Text()
+		if !existing[id] {
+			return id
+		}
+	}
+}
+
+// ensureSessionIncarnationsLocked assigns a unique incarnation to every
+// session. The caller must hold s.mu.
+func (s *State) ensureSessionIncarnationsLocked() bool {
+	incarnations := map[string]bool{}
+	dirty := false
+	for i := range s.Sessions {
+		incarnation := s.Sessions[i].Incarnation
+		if incarnation == "" || incarnations[incarnation] {
+			incarnation = newSessionIncarnation(incarnations)
+			s.Sessions[i].Incarnation = incarnation
+			dirty = true
+		}
+		incarnations[incarnation] = true
+	}
+	return dirty
+}
+
 // Save atomically writes state to its path.
 func (s *State) Save() error {
 	s.mu.Lock()
@@ -158,6 +193,7 @@ func (s *State) Save() error {
 }
 
 func (s *State) saveLocked() error {
+	s.ensureSessionIncarnationsLocked()
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}
@@ -200,6 +236,9 @@ func (s *State) AddSession(sess Session) error {
 		}
 		sess.ID = newSessionID(sess.Name, seen)
 	}
+	// AddSession always creates a new persisted object. Never let a caller
+	// accidentally reuse the identity of a removed session with the same name.
+	sess.Incarnation = ""
 	s.Sessions = append(s.Sessions, sess)
 	return s.saveLocked()
 }

@@ -25,7 +25,10 @@ var pollInterval = 50 * time.Millisecond
 // session's control connection (a *control.Conn in production; channels in
 // tests).
 type sessionDriver struct {
-	name string
+	name         string
+	incarnation  string
+	agent        string
+	activeTurnID string
 	// channel is the session's own channel: the driver polls it and posts to it,
 	// so each session uses its own channel rather than the gateway's global
 	// default. Empty falls back to the reader's DefaultChannel (legacy/tests).
@@ -146,17 +149,22 @@ func (d *sessionDriver) Pick(value string) {
 // Seed injects an opening input turn into this session's FIFO. A handoff uses it
 // to hand B its task the same way a human message would arrive.
 func (d *sessionDriver) Seed(task string) {
-	d.queue <- contracts.Event{T: "input", Who: "handoff", Text: task}
+	d.queue <- contracts.Event{T: "input", Who: "handoff", Text: task, TurnID: newTurnID()}
 }
 
 // SeedAndWait injects an opening task and blocks until that turn's reply{done},
 // returning its text. ok is false if the turn is abandoned.
 func (d *sessionDriver) SeedAndWait(ctx context.Context, task string) (string, bool) {
+	return d.SeedAndWaitWithTurnID(ctx, task, newTurnID())
+}
+
+// SeedAndWaitWithTurnID is SeedAndWait with a caller-supplied turn identity.
+func (d *sessionDriver) SeedAndWaitWithTurnID(ctx context.Context, task, turnID string) (string, bool) {
 	reply := make(chan string, 1)
 	d.seenMu.Lock()
 	d.pendingReply = reply
 	d.seenMu.Unlock()
-	d.queue <- contracts.Event{T: "input", Who: "seed", Text: task}
+	d.queue <- contracts.Event{T: "input", Who: "seed", Text: task, TurnID: turnID}
 	select {
 	case r := <-reply:
 		return r, true
@@ -191,9 +199,11 @@ func registerDriver(name string, d *sessionDriver) {
 	sessionRegistry.mu.Unlock()
 }
 
-func unregisterDriver(name string) {
+func unregisterDriver(name string, d *sessionDriver) {
 	sessionRegistry.mu.Lock()
-	delete(sessionRegistry.m, name)
+	if sessionRegistry.m[name] == d {
+		delete(sessionRegistry.m, name)
+	}
 	sessionRegistry.mu.Unlock()
 }
 
@@ -286,10 +296,22 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			// A pick is answered out-of-band by the bridge; only a real input
 			// opens a turn (and a progress view) on the bound gateways.
 			if ev.T == "input" {
+				if ev.TurnID == "" {
+					ev.TurnID = newTurnID()
+				}
+				ev.SessionIncarnation = d.incarnation
+				ev.Agent = d.agent
+				d.activeTurnID = ev.TurnID
 				d.recordEntry("user", ev.Text, 0)
 				d.fanOut(ctx, contracts.Event{T: "human", Who: ev.Who, Text: ev.Text})
+			} else {
+				ev.SessionIncarnation = ""
+				ev.TurnID = ""
+				ev.Agent = ""
+				d.activeTurnID = ""
 			}
 			d.runTurn(ctx, ev)
+			d.activeTurnID = ""
 		}
 	}
 }
@@ -457,6 +479,15 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 // posted through the Gateway port, chunked. All rich, platform-specific rendering
 // lives in the gateway — the host only emits abstract semantic events.
 func (d *sessionDriver) fanOut(ctx context.Context, e contracts.Event) {
+	if d.activeTurnID != "" {
+		e.SessionIncarnation = d.incarnation
+		e.TurnID = d.activeTurnID
+		e.Agent = d.agent
+	} else {
+		e.SessionIncarnation = ""
+		e.TurnID = ""
+		e.Agent = ""
+	}
 	if d.emitTap != nil {
 		d.emitTap(e)
 	}
@@ -506,11 +537,22 @@ func (d *sessionDriver) renderChannel(g contracts.GatewaySet) string {
 // supervisor restart). It blocks until ctx is cancelled. coord is the Model-O
 // handoff coordinator (nil in the short-lived operator CLI path, where a
 // completed turn's handoff trailer, if any, is simply ignored).
+type sessionIdentity struct {
+	incarnation string
+	agent       string
+}
+
 func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry)) {
+	runSessionIdentified(ctx, name, channel, gws, acc, participants, m, coord, persistResume, record, sessionIdentity{})
+}
+
+func runSessionIdentified(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry), identity sessionIdentity) {
 	defer acc.Close() // own the acceptor: close the listener + remove the socket on shutdown
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
 	d := newSessionDriver(name, gws, toBridge, fromBridge)
+	d.incarnation = identity.incarnation
+	d.agent = identity.agent
 	d.channel = channel
 	d.participants = participants
 	d.metrics = m
@@ -518,7 +560,7 @@ func RunSession(ctx context.Context, name, channel string, gws []contracts.Gatew
 	d.persistResume = persistResume
 	d.record = record
 	registerDriver(name, d)
-	defer unregisterDriver(name)
+	defer unregisterDriver(name, d)
 	go d.run(ctx)
 
 	for {

@@ -309,7 +309,7 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 func TestSeedEnqueuesInput(t *testing.T) {
 	d := newSessionDriver("beta", nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1))
 	registerDriver("beta", d)
-	defer unregisterDriver("beta")
+	defer unregisterDriver("beta", d)
 
 	if !Seed("beta", "finir le module") {
 		t.Fatal("Seed should return true for a live session")

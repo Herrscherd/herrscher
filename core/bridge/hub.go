@@ -73,6 +73,7 @@ func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.
 // status events and a terminal reply{done}. An empty output still emits
 // reply{done} so the hub's FIFO can advance.
 func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ev contracts.Event) {
+	sink = turnEventSink{EventSink: sink, identity: ev}
 	var memCtx string
 	if orch != nil {
 		memCtx = orch.Context(ctx)
@@ -94,6 +95,18 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 	if orch != nil {
 		_ = orch.Observe(ctx, prompt, out)
 	}
+}
+
+type turnEventSink struct {
+	contracts.EventSink
+	identity contracts.Event
+}
+
+func (s turnEventSink) Emit(e contracts.Event) {
+	e.SessionIncarnation = s.identity.SessionIncarnation
+	e.TurnID = s.identity.TurnID
+	e.Agent = s.identity.Agent
+	s.EventSink.Emit(e)
 }
 
 // resumeToken reads a backend's opaque resume token when it is ResumeAware, so

@@ -87,6 +87,29 @@ func TestRunHubOneTurn(t *testing.T) {
 	}
 }
 
+func TestRunHubTurnEventsPreserveInputIdentity(t *testing.T) {
+	sink := &recordSink{}
+	in := make(chan contracts.Event, 1)
+	in <- contracts.Event{
+		T: "input", Text: "go",
+		SessionIncarnation: "incarnation-a",
+		TurnID:             "turn-a",
+		Agent:              "reviewer",
+	}
+	close(in)
+
+	runHubTurns(context.Background(), in, sink, fakeBackend{reply: "done"}, nil)
+
+	if len(sink.events) != 2 {
+		t.Fatalf("events = %+v, want chunk + reply", sink.events)
+	}
+	for _, event := range sink.events {
+		if event.SessionIncarnation != "incarnation-a" || event.TurnID != "turn-a" || event.Agent != "reviewer" {
+			t.Fatalf("%s lost input identity: %+v", event.T, event)
+		}
+	}
+}
+
 func TestRunHubEmptyReplyStillTerminates(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)

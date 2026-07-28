@@ -670,12 +670,10 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	if !h.st.SetBackendTarget(name, vendor, cmd) {
 		return "", fmt.Errorf("no session %q", name)
 	}
-	// Re-target the running backend for ALL handoff modes so the new Cmd/Vendor
-	// actually takes effect (the child was spawned eagerly on the old Cmd). Only
-	// the seed step below is conditional.
-	_ = h.sup.Stop(name)
 	sess, _ := h.st.FindSession(name) // re-read: Vendor/Cmd/ResumeToken just changed
-	if err := h.sup.Start(sess); err != nil {
+	// Replace the targeted bridge synchronously for ALL handoff modes so the old
+	// process is gone before the new Cmd/Vendor starts. Only seeding is optional.
+	if err := h.sup.Restart(sess); err != nil {
 		if rbErr := h.rollbackSwitch(name, oldVendor, oldCmd, oldToken); rbErr != nil {
 			return "", fmt.Errorf("redémarrage backend: %w; rollback échoué, session %s hors service: %v", err, name, rbErr)
 		}
@@ -722,9 +720,8 @@ func (h *Handler) injectSeed(ctx context.Context, name, task string) bool {
 func (h *Handler) rollbackSwitch(name, oldVendor, oldCmd, oldToken string) error {
 	h.st.SetBackendTarget(name, oldVendor, oldCmd) // also clears the token
 	_ = h.st.SetResumeToken(name, oldToken)        // restore it
-	_ = h.sup.Stop(name)
 	sess, _ := h.st.FindSession(name)
-	return h.sup.Start(sess)
+	return h.sup.Restart(sess)
 }
 
 func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string, error) {

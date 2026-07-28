@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -81,6 +82,43 @@ func TestBuildBackendSelectsByVendor(t *testing.T) {
 	}
 }
 
+func TestNewSeedBackendResolvesRelativeWorktreeOnce(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+
+	relative := filepath.Join(".herrscher-sessions", "instance", "worker")
+	worker := filepath.Join(t.TempDir(), relative)
+	if err := os.MkdirAll(worker, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(worker); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(original) })
+
+	var gotDir string
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "codex", Category: contracts.CategoryBackend},
+		Backend: func(_ context.Context, cfg contracts.PluginConfig) (contracts.Backend, error) {
+			gotDir = cfg.Settings["dir"]
+			return seedBackend{}, nil
+		},
+	})
+
+	sess := state.Session{Vendor: "codex", Worktree: relative}
+	if _, err := newSeedBackend(context.Background(), sess); err != nil {
+		t.Fatalf("newSeedBackend: %v", err)
+	}
+	if gotDir != worker {
+		t.Fatalf("backend dir = %q, want already-resolved absolute cwd %q", gotDir, worker)
+	}
+}
+
 type seedSpyOrchestrator struct {
 	consolidated bool
 	closed       bool
@@ -106,7 +144,7 @@ func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &seedSpyOrchestrator{}
-	if _, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy); err != nil {
+	if _, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy, nil); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if !spy.consolidated {
@@ -117,9 +155,70 @@ func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
 	}
 }
 
-type seedBackend struct{}
+func TestRunOneShotSeedWithCoordinatesDelegateTrailer(t *testing.T) {
+	old := oneShotBackendFactory
+	t.Cleanup(func() { oneShotBackendFactory = old })
+	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+		return seedBackend{reply: "travail préparé\n⟢ delegate: roblox-scripter — inspection en lecture seule"}, nil
+	}
 
-func (seedBackend) Respond(context.Context, contracts.Prompt, func(contracts.BackendEvent)) (string, error) {
+	sess := state.Session{Name: "orchestrator", ChannelID: "channel"}
+	coord := &recordingCoord{}
+	if _, err := runOneShotSeedWith(context.Background(), sess, "délègue", nil, coord); err != nil {
+		t.Fatalf("runOneShotSeedWith: %v", err)
+	}
+	if len(coord.delegates) != 1 {
+		t.Fatalf("delegate calls = %d, want 1", len(coord.delegates))
+	}
+	want := contracts.DelegateRequest{
+		FromSession: "orchestrator",
+		ToAgent:     "roblox-scripter",
+		Task:        "inspection en lecture seule",
+	}
+	if got := coord.delegates[0]; got != want {
+		t.Fatalf("delegate request = %+v, want %+v", got, want)
+	}
+}
+
+func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
+	var gotPath string
+	var gotArgv []string
+	forward := func(_ context.Context, path string, argv []string) (string, bool, error) {
+		gotPath = path
+		gotArgv = append([]string(nil), argv...)
+		return "réponse live", true, nil
+	}
+
+	got, err := runOneShotSeedCommand(
+		context.Background(), nil, "orchestrator", "lecture seule",
+		nil, "instance-test", forward,
+	)
+	if err != nil {
+		t.Fatalf("runOneShotSeedCommand: %v", err)
+	}
+	if got != "réponse live" {
+		t.Fatalf("reply = %q, want %q", got, "réponse live")
+	}
+	if want := CommandSocketPath("instance-test"); gotPath != want {
+		t.Fatalf("command path = %q, want %q", gotPath, want)
+	}
+	wantArgv := []string{"session", "seed", "--name", "orchestrator", "--task", "lecture seule"}
+	if len(gotArgv) != len(wantArgv) {
+		t.Fatalf("argv = %v, want %v", gotArgv, wantArgv)
+	}
+	for i := range wantArgv {
+		if gotArgv[i] != wantArgv[i] {
+			t.Fatalf("argv = %v, want %v", gotArgv, wantArgv)
+		}
+	}
+}
+
+type seedBackend struct{ reply string }
+
+func (b seedBackend) Respond(context.Context, contracts.Prompt, func(contracts.BackendEvent)) (string, error) {
+	if b.reply != "" {
+		return b.reply, nil
+	}
 	return "reply", nil
 }
 func (seedBackend) Close() error { return nil }

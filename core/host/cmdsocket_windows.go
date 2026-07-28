@@ -3,6 +3,7 @@
 package host
 
 import (
+	"context"
 	"net"
 
 	"github.com/Microsoft/go-winio"
@@ -29,4 +30,8 @@ func listenCommandSocket(path string) (net.Listener, error) {
 	return winio.ListenPipe(path, &winio.PipeConfig{
 		SecurityDescriptor: "D:P(A;;GA;;;OW)",
 	})
+}
+
+func dialCommandSocket(ctx context.Context, path string) (net.Conn, error) {
+	return winio.DialPipeContext(ctx, path)
 }

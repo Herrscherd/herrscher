@@ -130,6 +130,15 @@ func (h *hub) reconcile() {
 // running create/close (plus the reconcile that follows) one at a time keeps the
 // existence checks and the live set consistent.
 func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
+	// A seed turn may synchronously emit a coordination trailer. Delegate then
+	// re-enters this hub through Create, which owns dispatchMu for its actual
+	// state mutation. Do not hold the same non-reentrant mutex around the outer
+	// model turn or Delegate deadlocks before it can create the worker. Seed
+	// itself does not mutate the live set; any coordination operation performs
+	// its own locked mutation and reconcile.
+	if len(args) >= 2 && args[0] == "session" && args[1] == "seed" {
+		return h.reg.Dispatch(ctx, args)
+	}
 	h.dispatchMu.Lock()
 	defer h.dispatchMu.Unlock()
 	out, err := h.reg.Dispatch(ctx, args)
@@ -142,6 +151,18 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 // registry seam (no argv assembly), then reconciles so the new session is live.
 // It implements contracts.SessionControl.
 func (h *hub) Create(ctx context.Context, spec contracts.CreateSession) (string, error) {
+	return h.create(ctx, spec, "")
+}
+
+// CreateCoordinated is the coordinator's internal creation seam. Vendor is kept
+// separate from the public contracts.CreateSession so ordinary SessionControl
+// callers retain their existing API while delegated workers can inherit a lead's
+// backend target.
+func (h *hub) CreateCoordinated(ctx context.Context, spec contracts.CreateSession, vendor string) (string, error) {
+	return h.create(ctx, spec, vendor)
+}
+
+func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor string) (string, error) {
 	args := map[string]string{"name": spec.Name}
 	setStr := func(k, v string) {
 		if v != "" {
@@ -152,6 +173,7 @@ func (h *hub) Create(ctx context.Context, spec contracts.CreateSession) (string,
 	setStr("clone", spec.Clone)
 	setStr("cmd", spec.Cmd)
 	setStr("backend", spec.Backend)
+	setStr("vendor", vendor)
 	setStr("agent", spec.Agent)
 	setStr("extractor", spec.Extractor)
 	setStr("journal", spec.Journal)

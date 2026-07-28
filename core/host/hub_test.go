@@ -151,6 +151,10 @@ func TestHubSessionsSnapshot(t *testing.T) {
 	if len(got) != 1 || got[0].Name != "demo" || got[0].ChannelID != "c1" || got[0].Type != "text" {
 		t.Fatalf("unexpected snapshot: %+v", got)
 	}
+	persisted, ok := h.st.FindSession("demo")
+	if !ok || persisted.Incarnation == "" || got[0].Incarnation != persisted.Incarnation {
+		t.Fatalf("incarnation not surfaced: persisted=%+v snapshot=%+v", persisted, got[0])
+	}
 	if len(got[0].Gateways) != 1 || got[0].Gateways[0] != "chat" {
 		t.Fatalf("gateways not surfaced: %+v", got[0].Gateways)
 	}
@@ -223,7 +227,7 @@ func TestGoDeadCallsForget(t *testing.T) {
 	stub := &stubForgetCoord{}
 	h := &hub{
 		coordinator: stub,
-		live:        map[string]context.CancelFunc{},
+		live:        map[string]liveSession{},
 	}
 	h.goDead("worker")
 	if len(stub.forgotten) != 1 || stub.forgotten[0] != "worker" {

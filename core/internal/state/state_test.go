@@ -1,6 +1,7 @@
 package state
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -24,6 +25,110 @@ func TestLoadStateBackfillsSessionID(t *testing.T) {
 	}
 	if s.ID == "" {
 		t.Fatalf("legacy session should get a generated ID")
+	}
+}
+
+func TestLoadStateBackfillsAndPersistsSessionIncarnation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	legacy := `{"sessions":[{"name":"alpha","channelID":"123","type":"text","cmd":"claude"}]}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstSession, ok := first.FindSession("alpha")
+	if !ok {
+		t.Fatal("session alpha missing after first load")
+	}
+	if firstSession.Incarnation == "" {
+		t.Fatal("legacy session should get a non-empty incarnation")
+	}
+	persistedBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted struct {
+		Sessions []Session `json:"sessions"`
+	}
+	if err := json.Unmarshal(persistedBytes, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if len(persisted.Sessions) != 1 || persisted.Sessions[0].Incarnation != firstSession.Incarnation {
+		t.Fatalf("backfilled incarnation was not persisted: disk=%+v memory=%q", persisted.Sessions, firstSession.Incarnation)
+	}
+
+	second, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondSession, ok := second.FindSession("alpha")
+	if !ok {
+		t.Fatal("session alpha missing after reload")
+	}
+	if secondSession.Incarnation != firstSession.Incarnation {
+		t.Fatalf("incarnation changed across reload: first=%q second=%q", firstSession.Incarnation, secondSession.Incarnation)
+	}
+}
+
+func TestSessionIncarnationIsStableUntilRecreation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	st := NewState(path)
+	if err := st.AddSession(Session{Name: "alpha", ChannelID: "c1"}); err != nil {
+		t.Fatal(err)
+	}
+	first, ok := st.FindSession("alpha")
+	if !ok || first.Incarnation == "" {
+		t.Fatalf("new session incarnation = %q, want non-empty", first.Incarnation)
+	}
+
+	reloaded, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stable, ok := reloaded.FindSession("alpha")
+	if !ok || stable.Incarnation != first.Incarnation {
+		t.Fatalf("incarnation after reload = %q, want %q", stable.Incarnation, first.Incarnation)
+	}
+
+	if err := reloaded.RemoveSession("alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if err := reloaded.AddSession(Session{
+		Name: "alpha", ChannelID: "c2",
+		Incarnation: first.Incarnation,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	recreated, ok := reloaded.FindSession("alpha")
+	if !ok || recreated.Incarnation == "" {
+		t.Fatalf("recreated session incarnation = %q, want non-empty", recreated.Incarnation)
+	}
+	if recreated.Incarnation == first.Incarnation {
+		t.Fatalf("recreated session reused incarnation %q", recreated.Incarnation)
+	}
+}
+
+func TestSaveEnsuresEveryPersistedSessionHasIncarnation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	st := NewState(path)
+	st.Sessions = []Session{{Name: "direct", ChannelID: "c1"}}
+	if err := st.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if st.Sessions[0].Incarnation == "" {
+		t.Fatal("Save left an in-memory session without an incarnation")
+	}
+
+	reloaded, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	persisted, ok := reloaded.FindSession("direct")
+	if !ok || persisted.Incarnation != st.Sessions[0].Incarnation {
+		t.Fatalf("persisted incarnation = %q, in-memory = %q", persisted.Incarnation, st.Sessions[0].Incarnation)
 	}
 }
 

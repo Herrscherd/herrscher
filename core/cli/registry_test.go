@@ -96,6 +96,23 @@ func TestDispatchBoolFlagAndRest(t *testing.T) {
 	}
 }
 
+func TestDispatchOptionalValueParamRequiresValueWhenPresent(t *testing.T) {
+	r := build(t, contracts.New("session", "seed").
+		ValueParam("turn_id", "", false).
+		Do(func(_ context.Context, in contracts.Input) (string, error) {
+			return in.Get("turn_id"), nil
+		}))
+
+	if _, err := r.Dispatch(context.Background(), []string{"session", "seed", "--turn_id"}); err == nil ||
+		!strings.Contains(err.Error(), "flag --turn_id needs a value") {
+		t.Fatalf("valueless optional parameter error = %v", err)
+	}
+	got, err := r.Dispatch(context.Background(), []string{"session", "seed", "--turn_id", "true"})
+	if err != nil || got != "true" {
+		t.Fatalf("explicit value true = %q, %v; want preserved", got, err)
+	}
+}
+
 func TestDispatchReturnsHandlerOutput(t *testing.T) {
 	r := build(t, leaf("session", "list"))
 	out, err := r.Dispatch(context.Background(), []string{"session", "list"})

@@ -3,6 +3,7 @@
 package host
 
 import (
+	"context"
 	"net"
 	"os"
 	"path/filepath"
@@ -39,4 +40,9 @@ func listenCommandSocket(path string) (net.Listener, error) {
 		return nil, err
 	}
 	return l, nil
+}
+
+func dialCommandSocket(ctx context.Context, path string) (net.Conn, error) {
+	var d net.Dialer
+	return d.DialContext(ctx, "unix", path)
 }

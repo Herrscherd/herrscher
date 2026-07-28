@@ -24,9 +24,14 @@ import (
 // boot-time Coordinator (Task 7/8) is built from. Kept minimal so the operator
 // CLI (NewRegistry), which has no Coordinator to wire, can ignore it.
 type hostDeps struct {
-	wt      *worktree.Worktreer
-	agents  *agent.Store
-	handler *manager.Handler
+	wt        *worktree.Worktreer
+	agents    *agent.Store
+	handler   *manager.Handler
+	seedCoord *coordinatorSlot
+}
+
+type coordinatorSlot struct {
+	coord contracts.Coordinator
 }
 
 // buildRegistry constructs the session/service command handler over a given
@@ -43,6 +48,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	agents := agent.NewStore(filepath.Join(partDir, "agents"))
 	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
 	hdl.SetSeeder(Seed) // host.Seed: live-session injection for `session switch` handoff
+	seedCoord := &coordinatorSlot{}
 
 	reg := &cli.Registry{}
 	for _, c := range hdl.Commands() {
@@ -55,7 +61,10 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		Param("name", "session name", true).
 		Param("task", "opening task", true).
 		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
-			reply, err := runOneShotSeed(cmdCtx, st, in.Get("name"), in.Get("task"))
+			reply, err := runOneShotSeedCommand(
+				cmdCtx, st, in.Get("name"), in.Get("task"),
+				seedCoord.coord, instID, dispatchLiveCommand,
+			)
 			if err != nil {
 				return "", err
 			}
@@ -153,7 +162,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	return reg, hostDeps{wt: wt, agents: agents, handler: hdl}, nil
+	return reg, hostDeps{wt: wt, agents: agents, handler: hdl, seedCoord: seedCoord}, nil
 }
 
 // NewRegistry builds the operator CLI registry: it loads its own state +

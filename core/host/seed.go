@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -26,11 +28,29 @@ var oneShotBackendFactory = newSeedBackend
 // one process-wide daemon owns the socket, so a package var is sufficient.
 var seedEventPublisher func(session string, e contracts.Event)
 
+type seedCommandForwarder func(context.Context, string, []string) (string, bool, error)
+
+// runOneShotSeedCommand sends an operator-process seed to the running daemon
+// when one is available, because that process owns the live Coordinator. A
+// daemon-side invocation already has coord and runs locally. With neither a
+// daemon nor a coordinator it falls back to the historical uncoordinated
+// one-shot behavior.
+func runOneShotSeedCommand(ctx context.Context, st *state.State, name, task string, coord contracts.Coordinator, instID string, forward seedCommandForwarder) (string, error) {
+	if coord == nil && forward != nil {
+		if reply, handled, err := forward(ctx, CommandSocketPath(instID), []string{
+			"session", "seed", "--name", name, "--task", task,
+		}); handled {
+			return reply, err
+		}
+	}
+	return runOneShotSeed(ctx, st, name, task, coord)
+}
+
 // runOneShotSeed builds the session-scoped orchestrator and delegates to the
 // testable one-shot runner. Resolver.Orchestrator supplies a remote proxy when
 // requested; otherwise the local plugin receives the session name and the
 // persisted extractor/journal/cadence config in its PluginConfig.
-func runOneShotSeed(ctx context.Context, st *state.State, name, task string) (string, error) {
+func runOneShotSeed(ctx context.Context, st *state.State, name, task string, coord contracts.Coordinator) (string, error) {
 	sess, ok := st.FindSession(name)
 	if !ok {
 		return "", fmt.Errorf("no session %q", name)
@@ -42,14 +62,14 @@ func runOneShotSeed(ctx context.Context, st *state.State, name, task string) (st
 	if mem != nil {
 		defer mem.Close()
 	}
-	return runOneShotSeedWith(ctx, sess, task, orch)
+	return runOneShotSeedWith(ctx, sess, task, orch, coord)
 }
 
 // runOneShotSeedWith mounts the same in-process bridge turn used by the daemon:
 // newSessionDriver owns the FIFO and SeedAndWait awaits reply{done}; bridge.RunOneShot
 // supplies the registered backend over channels. Unlike RunSession/goLive this
 // deliberately has no control socket, supervisor, or gateway binding.
-func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, orch contracts.Orchestrator) (string, error) {
+func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, orch contracts.Orchestrator, coord contracts.Coordinator) (string, error) {
 	if orch != nil {
 		defer orch.Close()
 	}
@@ -92,6 +112,10 @@ func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, or
 	}
 	if err := <-bridgeErr; err != nil {
 		return "", err
+	}
+	if coord != nil {
+		d.coordinator = coord
+		d.maybeCoordinate(seedCtx, reply)
 	}
 	if orch != nil {
 		if err := orch.Consolidate(seedCtx); err != nil {
@@ -170,7 +194,36 @@ func BuildBackend(ctx context.Context, vendor, cmd, kind, dir, resume string) (c
 }
 
 func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend, error) {
-	return BuildBackend(ctx, sess.Vendor, sess.Cmd, sess.Backend, sess.Worktree, sess.ResumeToken)
+	dir := sess.Dir
+	if dir == "" {
+		dir = sess.Worktree
+	}
+	return BuildBackend(ctx, sess.Vendor, sess.Cmd, sess.Backend, resolveBackendDir(dir), sess.ResumeToken)
+}
+
+// resolveBackendDir upgrades persisted relative session directories at the
+// backend boundary. A supervised bridge may already be running inside that
+// relative directory, so detect that suffix before joining it to cwd; otherwise
+// the path would be applied twice (…/worker/…/worker).
+func resolveBackendDir(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	dir = filepath.Clean(dir)
+	if filepath.IsAbs(dir) {
+		return dir
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return dir
+	}
+	cwd = filepath.Clean(cwd)
+	suffix := string(os.PathSeparator) + dir
+	if (os.PathSeparator == '\\' && strings.HasSuffix(strings.ToLower(cwd), strings.ToLower(suffix))) ||
+		(os.PathSeparator != '\\' && strings.HasSuffix(cwd, suffix)) {
+		return cwd
+	}
+	return filepath.Join(cwd, dir)
 }
 
 func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin, error) {

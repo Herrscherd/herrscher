@@ -41,6 +41,32 @@ func TestMarshalSessionEventPreservesCompleteEventIdentity(t *testing.T) {
 	}
 }
 
+func TestEventSocketMarshalsNestedCoordinationUnchanged(t *testing.T) {
+	want := contracts.CoordinationEvent{
+		Kind:          "delegated",
+		SourceSession: "lead",
+		TargetSession: "roblox-scripter-w",
+		Agent:         "roblox-scripter",
+		Summary:       "modifier les nametags",
+	}
+	line, err := marshalSessionEvent("lead", contracts.Event{
+		T: "reply", Text: "Je délègue.", Done: true, Coordination: &want,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Session      string                       `json:"session"`
+		Coordination *contracts.CoordinationEvent `json:"coordination"`
+	}
+	if err := json.Unmarshal(line, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Session != "lead" || got.Coordination == nil || *got.Coordination != want {
+		t.Fatalf("wire coordination = %+v, want %+v", got.Coordination, want)
+	}
+}
+
 func TestEventSocketPreservesFIFOAndTurnIdentity(t *testing.T) {
 	server, client := net.Pipe()
 	es := newEventSocket()

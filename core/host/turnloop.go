@@ -373,8 +373,9 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 				d.metrics.TurnAbandoned()
 				return false // bridge connection lost; abandon this turn
 			}
-			d.fanOut(ctx, e)
 			if e.T == "reply" && e.Done {
+				e.Coordination = d.maybeCoordinate(ctx, e.Text)
+				d.fanOut(ctx, e)
 				if d.persistResume != nil && e.Resume != "" {
 					d.persistResume(e.Resume)
 				}
@@ -386,9 +387,9 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 				}
 				d.seenMu.Unlock()
 				d.metrics.TurnCompleted()
-				d.maybeCoordinate(ctx, e.Text)
 				return true
 			}
+			d.fanOut(ctx, e)
 		}
 	}
 }
@@ -399,27 +400,42 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 // A malformed marker is ignored; a coordinator refusal (unknown agent, dirty
 // source, missing parent, create failure) is surfaced back into the session's
 // channel as a status event — never a silent half-coordination.
-func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
+func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *contracts.CoordinationEvent {
 	if d.coordinator == nil {
-		return
+		return nil
 	}
 	if summary, ok := parseDone(reply); ok {
 		if parent, err := d.coordinator.Report(ctx, contracts.ReportRequest{
 			FromSession: d.name, Summary: summary,
 		}); err != nil {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "report refusé: " + err.Error()})
+			return &contracts.CoordinationEvent{
+				Kind: "report_failed", SourceSession: d.name,
+				Summary: sanitizeCoordinationError(err),
+			}
 		} else {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "rapport livré à " + parent})
+			return &contracts.CoordinationEvent{
+				Kind: "reported", SourceSession: d.name,
+				ParentSession: parent, Summary: summary,
+			}
 		}
-		return
 	}
 	if toAgent, task, ok := parseDelegate(reply); ok {
-		if _, err := d.coordinator.Delegate(ctx, contracts.DelegateRequest{
+		target, err := d.coordinator.Delegate(ctx, contracts.DelegateRequest{
 			FromSession: d.name, ToAgent: toAgent, Task: task,
-		}); err != nil {
+		})
+		if err != nil {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "delegate refusé: " + err.Error()})
+			return &contracts.CoordinationEvent{
+				Kind: "delegate_failed", SourceSession: d.name,
+				Agent: toAgent, Summary: sanitizeCoordinationError(err),
+			}
 		}
-		return
+		return &contracts.CoordinationEvent{
+			Kind: "delegated", SourceSession: d.name,
+			TargetSession: target, Agent: toAgent,
+		}
 	}
 	if toAgent, tasks, ok := parseFanOut(reply); ok {
 		if spawned, err := d.coordinator.FanOut(ctx, contracts.FanOutRequest{
@@ -431,7 +447,7 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 			d.fanOut(ctx, contracts.Event{T: "status",
 				Text: "cohorte lancée : " + strconv.Itoa(len(spawned)) + " workers (" + strings.Join(spawned, ", ") + ")"})
 		}
-		return
+		return nil
 	}
 	if task, ok := parseRoute(reply); ok {
 		if toAgent, session, err := d.coordinator.Route(ctx, contracts.RouteRequest{
@@ -441,7 +457,7 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 		} else {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "routé vers " + toAgent + " : " + session})
 		}
-		return
+		return nil
 	}
 	if n, ok := parseSeal(reply); ok {
 		if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
@@ -451,7 +467,7 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 		} else {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "cohorte scellée à " + strconv.Itoa(n)})
 		}
-		return
+		return nil
 	}
 	if worker, ok := parseMerge(reply); ok {
 		if lead, err := d.coordinator.Merge(ctx, contracts.MergeRequest{
@@ -461,7 +477,7 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 		} else {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "merge traité pour " + lead})
 		}
-		return
+		return nil
 	}
 	if toAgent, task, ok := parseHandoff(reply); ok {
 		if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
@@ -470,6 +486,16 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "handoff refusé: " + err.Error()})
 		}
 	}
+	return nil
+}
+
+func sanitizeCoordinationError(err error) string {
+	const max = 160
+	s := strings.Join(strings.Fields(err.Error()), " ")
+	if len(s) > max {
+		s = s[:max]
+	}
+	return s
 }
 
 // fanOut delivers one turn event to every bound gateway: a gateway implementing

@@ -79,7 +79,31 @@ func (identitySeedBackend) Respond(_ context.Context, _ contracts.Prompt, onEven
 }
 func (identitySeedBackend) Close() error { return nil }
 
-func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contracts.Event) {
+type delegateSeedBackend struct{}
+
+func (delegateSeedBackend) Respond(_ context.Context, _ contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
+	return "Je délègue.\n⟢ delegate: roblox-scripter — Inspecte PlayerNameTags en lecture seule.", nil
+}
+func (delegateSeedBackend) Close() error { return nil }
+
+// reentrantSeedCoordinator models the daemon coordinator's lock shape:
+// Delegate eventually calls hub.Create, which must be able to acquire
+// dispatchMu while the outer session-seed command is still awaiting its reply.
+type reentrantSeedCoordinator struct {
+	*recordingCoord
+	hub *hub
+}
+
+func (c *reentrantSeedCoordinator) Delegate(_ context.Context, req contracts.DelegateRequest) (string, error) {
+	if !c.hub.dispatchMu.TryLock() {
+		return "", errors.New("session seed retained dispatchMu during nested coordination")
+	}
+	c.hub.dispatchMu.Unlock()
+	c.delegates = append(c.delegates, req)
+	return "orchestrator-roblox-scripter-9", nil
+}
+
+func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contracts.Event, context.Context) {
 	t.Helper()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "state.json")
@@ -95,26 +119,26 @@ func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contra
 	}
 
 	oldFactory := oneShotBackendFactory
-	oldPublisher := seedEventPublisher
 	var events []contracts.Event
 	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
 		return identitySeedBackend{}, nil
 	}
-	seedEventPublisher = func(_ string, e contracts.Event) { events = append(events, e) }
 	t.Cleanup(func() {
 		oneShotBackendFactory = oldFactory
-		seedEventPublisher = oldPublisher
 	})
-	return reg, sess, &events
+	ctx = withOneShotSeedRuntime(ctx, oneShotSeedRuntime{
+		publish: func(_ string, event contracts.Event) { events = append(events, event) },
+	})
+	return reg, sess, &events, ctx
 }
 
-func dispatchCommandPipe(t *testing.T, disp dispatcher, argv []string) cmdResponse {
+func dispatchCommandPipe(t *testing.T, ctx context.Context, disp dispatcher, argv []string) cmdResponse {
 	t.Helper()
 	server, client := net.Pipe()
 	defer client.Close()
 	done := make(chan struct{})
 	go func() {
-		handleCommandConn(context.Background(), server, disp, time.Second)
+		handleCommandConn(ctx, server, disp, time.Second)
 		close(done)
 	}()
 
@@ -153,8 +177,7 @@ func assertSeedEventIdentity(t *testing.T, events []contracts.Event, sess state.
 }
 
 func TestSeedTurnIDRoundTripsThroughShellAndCommandSocket(t *testing.T) {
-	reg, sess, events := identitySeedRegistry(t)
-	ctx := context.Background()
+	reg, sess, events, ctx := identitySeedRegistry(t)
 
 	const shellTurnID = "shell.turn-01"
 	out, err := reg.Dispatch(ctx, []string{
@@ -167,7 +190,7 @@ func TestSeedTurnIDRoundTripsThroughShellAndCommandSocket(t *testing.T) {
 
 	*events = nil
 	const socketTurnID = "socket_turn-02"
-	response := dispatchCommandPipe(t, reg, []string{
+	response := dispatchCommandPipe(t, ctx, reg, []string{
 		"session", "seed", "--name", "solo", "--task", "second", "--turn_id", socketTurnID,
 	})
 	if response.Err != nil {
@@ -179,9 +202,84 @@ func TestSeedTurnIDRoundTripsThroughShellAndCommandSocket(t *testing.T) {
 	assertSeedEventIdentity(t, *events, sess, socketTurnID)
 }
 
+func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	partDir := t.TempDir()
+	statePath := filepath.Join(partDir, "state.json")
+	st := state.NewState(statePath)
+	if err := st.AddSession(state.Session{
+		Name: "orchestrator", ChannelID: "channel", Agent: "orchestrator",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: statePath}, st, sup, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newHub(ctx, st, sup, nil, partDir, reg, nil)
+	coord := &reentrantSeedCoordinator{recordingCoord: &recordingCoord{}, hub: h}
+	h.coordinator = coord
+
+	oldFactory := oneShotBackendFactory
+	var events []contracts.Event
+	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+		return delegateSeedBackend{}, nil
+	}
+	h.eventPublisher = func(_ string, event contracts.Event) {
+		events = append(events, event)
+	}
+	t.Cleanup(func() {
+		oneShotBackendFactory = oldFactory
+	})
+
+	reply, err := h.Dispatch(ctx, []string{
+		"session", "seed",
+		"--name", "orchestrator",
+		"--task", "Délègue une inspection strictement en lecture seule.",
+		"--turn_id", "turn-live-safe",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply != "Je délègue.\n⟢ delegate: roblox-scripter — Inspecte PlayerNameTags en lecture seule." {
+		t.Fatalf("seed reply = %q", reply)
+	}
+	if len(coord.delegates) != 1 {
+		t.Fatalf("delegate calls = %+v, want exactly one", coord.delegates)
+	}
+
+	var terminal *contracts.Event
+	for i := range events {
+		if events[i].T == "reply" && events[i].Done {
+			terminal = &events[i]
+		}
+	}
+	if terminal == nil || terminal.Coordination == nil {
+		t.Fatalf("terminal seed event coordination = %+v, want delegated outcome", terminal)
+	}
+	if terminal.Coordination.Kind != "delegated" ||
+		terminal.Coordination.SourceSession != "orchestrator" ||
+		terminal.Coordination.TargetSession != "orchestrator-roblox-scripter-9" ||
+		terminal.Coordination.Agent != "roblox-scripter" {
+		t.Fatalf("terminal coordination = %+v", terminal.Coordination)
+	}
+
+	transcript := state.ReadTranscript(state.TranscriptPath(partDir, "orchestrator"), 0)
+	if len(transcript) != 2 ||
+		transcript[0].Role != "user" ||
+		transcript[0].Text != "Délègue une inspection strictement en lecture seule." ||
+		transcript[1].Role != "assistant" ||
+		transcript[1].Text != reply {
+		t.Fatalf("daemon seed transcript = %+v, want exact user/assistant turn", transcript)
+	}
+}
+
 func TestSeedCommandSocketReportsInvalidTurnIDClearly(t *testing.T) {
-	reg, _, _ := identitySeedRegistry(t)
-	response := dispatchCommandPipe(t, reg, []string{
+	reg, _, _, ctx := identitySeedRegistry(t)
+	response := dispatchCommandPipe(t, ctx, reg, []string{
 		"session", "seed", "--name", "solo", "--task", "bad", "--turn_id", "not safe",
 	})
 	if response.Err == nil || !strings.Contains(*response.Err, "invalid turn_id") {
@@ -190,7 +288,7 @@ func TestSeedCommandSocketReportsInvalidTurnIDClearly(t *testing.T) {
 }
 
 func TestSeedRequiresValueAfterTurnIDFlag(t *testing.T) {
-	reg, _, _ := identitySeedRegistry(t)
+	reg, _, _, ctx := identitySeedRegistry(t)
 
 	if _, err := reg.Dispatch(context.Background(), []string{
 		"session", "seed", "--name", "solo", "--task", "bad", "--turn_id",
@@ -198,7 +296,7 @@ func TestSeedRequiresValueAfterTurnIDFlag(t *testing.T) {
 		t.Fatalf("shell valueless turn_id error = %v", err)
 	}
 
-	response := dispatchCommandPipe(t, reg, []string{
+	response := dispatchCommandPipe(t, ctx, reg, []string{
 		"session", "seed", "--name", "solo", "--task", "bad", "--turn_id",
 	})
 	if response.Err == nil || !strings.Contains(*response.Err, "flag --turn_id needs a value") {

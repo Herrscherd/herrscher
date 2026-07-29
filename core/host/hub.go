@@ -36,6 +36,9 @@ type hub struct {
 	// session's RunSession. Set in serve.go's RunHub after newHub, before the
 	// boot loop's goLive calls, so it is non-nil for every driver started here.
 	coordinator contracts.Coordinator
+	// eventPublisher is the daemon event-socket tap used by request-scoped
+	// one-shot seeds. It is bound once at boot before the command socket starts.
+	eventPublisher func(session string, event contracts.Event)
 
 	dispatchMu sync.Mutex // serializes operator commands (and their reconcile)
 	mu         sync.Mutex
@@ -133,15 +136,35 @@ func (h *hub) reconcile() {
 
 // Dispatch runs an operator command and reconciles the live set so a session
 // create/close takes effect immediately. It implements contracts.SessionControl.
-// Commands are serialized: gateways can deliver interactions concurrently, and
-// running create/close (plus the reconcile that follows) one at a time keeps the
-// existence checks and the live set consistent.
+// Mutating commands are serialized: gateways can deliver interactions
+// concurrently, and running create/close (plus the reconcile that follows) one
+// at a time keeps the existence checks and the live set consistent.
+//
+// A session seed is deliberately outside dispatchMu. Its completed reply can
+// coordinate back into this hub (Delegate → Create, for example), and holding
+// the non-reentrant mutation lock across that turn would deadlock. Nested typed
+// mutations still acquire dispatchMu themselves and perform their own reconcile.
 func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
+	if isSessionSeedCommand(args) {
+		runtime := oneShotSeedRuntime{
+			coordinator: h.coordinator,
+			publish:     h.eventPublisher,
+			record: func(session string, entry state.TranscriptEntry) {
+				_ = state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry)
+			},
+		}
+		return h.reg.Dispatch(withOneShotSeedRuntime(ctx, runtime), args)
+	}
+
 	h.dispatchMu.Lock()
 	defer h.dispatchMu.Unlock()
 	out, err := h.reg.Dispatch(ctx, args)
 	h.reconcile()
 	return out, err
+}
+
+func isSessionSeedCommand(args []string) bool {
+	return len(args) >= 2 && args[0] == "session" && args[1] == "seed"
 }
 
 // Create starts a session from a typed spec. It maps CreateSession into the

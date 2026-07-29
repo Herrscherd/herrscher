@@ -585,6 +585,7 @@ An agent home lives at **`<stateDir>/agents/<name>/`**, where `<stateDir>` is
 | `settings.json` | zero-prompt Claude settings (auto-enable project MCP servers, `acceptEdits`, an allow-list) |
 | `backend` | optional backend vendor (`claude`\|`codex`\|`cursor`); absent = the daemon default |
 | `cmd` | optional default invocation carrying the model, e.g. `codex --model gpt-5.6` |
+| `TAGS` | optional routing tokens (one per line) used by the host for agent selection |
 
 Create and list agents from the operator binary or through a gateway (the Discord
 gateway binds the same verbs as `/agent create` / `/agent list`):
@@ -622,8 +623,8 @@ on Discord) materializes the agent into the new session's worktree as the files
 Claude Code auto-reads from its working directory:
 
 ```text
-<home>/SOUL.md       → <worktree>/.claude/CLAUDE.md
-<home>/mcp.json      → <worktree>/.mcp.json
+<home>/SOUL.md       → <worktree>/.claude/CLAUDE.md, <worktree>/AGENTS.md
+<home>/mcp.json      → <worktree>/.mcp.json, <worktree>/.codex/config.toml
 <home>/settings.json → <worktree>/.claude/settings.json
 ```
 

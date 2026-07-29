@@ -67,6 +67,45 @@ func TestEventSocketMarshalsNestedCoordinationUnchanged(t *testing.T) {
 	}
 }
 
+func TestEventSocketPrioritizesCoordinationWhenTelemetryQueueFull(t *testing.T) {
+	server, client := net.Pipe()
+	sub := &subscriber{conn: server, ch: make(chan []byte, subscriberBuffer)}
+	es := newEventSocket()
+	es.subs[sub] = struct{}{}
+	t.Cleanup(func() {
+		es.closeAll()
+		_ = client.Close()
+	})
+
+	for range subscriberBuffer {
+		es.Publish("lead", contracts.Event{T: "chunk", Text: "backlog"})
+	}
+	want := contracts.CoordinationEvent{
+		Kind:          "delegated",
+		SourceSession: "lead",
+		TargetSession: "worker",
+	}
+	es.Publish("lead", contracts.Event{
+		T: "reply", Done: true, Coordination: &want,
+	})
+
+	go es.serve(sub)
+	_ = client.SetReadDeadline(time.Now().Add(time.Second))
+	line, err := bufio.NewReader(client).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read prioritized event: %v", err)
+	}
+	var got struct {
+		Coordination *contracts.CoordinationEvent `json:"coordination"`
+	}
+	if err := json.Unmarshal(line, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Coordination == nil || *got.Coordination != want {
+		t.Fatalf("first delivered event coordination = %+v, want %+v", got.Coordination, want)
+	}
+}
+
 func TestEventSocketPreservesFIFOAndTurnIdentity(t *testing.T) {
 	server, client := net.Pipe()
 	es := newEventSocket()

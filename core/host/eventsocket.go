@@ -50,18 +50,20 @@ const publishWriteTimeout = 2 * time.Second
 // concurrent Publish calls (from different session turns) never write to the
 // same socket at once and can never corrupt the line framing.
 type subscriber struct {
-	conn net.Conn
-	ch   chan []byte
+	conn       net.Conn
+	ch         chan []byte
+	priorityMu sync.Mutex
+	priority   [][]byte
 }
 
 // eventSocket is the daemon-level append-only fan-out socket: every subscriber
-// that connects receives one JSON line per published event. Publish is
-// best-effort and NON-BLOCKING — it does a buffered, non-blocking hand-off to
-// each subscriber's writer goroutine and never touches the network itself, so a
-// stalled reader can neither delay the driver turn that called Publish nor block
-// any other session (the earlier design wrote to sockets under the shared lock,
-// injecting the write timeout into live turns cross-session). A nil *eventSocket's
-// Publish is a no-op, so the CLI/seed path with no socket keeps its behaviour.
+// that connects receives JSON event lines. Publish is NON-BLOCKING and never
+// touches the network itself. Ordinary telemetry uses a bounded best-effort
+// queue, while authoritative coordination frames use a reliable priority queue.
+// A stalled reader therefore cannot delay the driver turn or another session,
+// and progress pressure cannot discard the terminal coordination outcome. A nil
+// *eventSocket's Publish is a no-op, so the CLI/seed path with no socket keeps
+// its behaviour.
 type eventSocket struct {
 	mu   sync.Mutex
 	subs map[*subscriber]struct{}
@@ -88,10 +90,58 @@ func (s *eventSocket) serve(sub *subscriber) {
 		s.remove(sub)
 		_ = sub.conn.Close()
 	}()
-	for line := range sub.ch {
+	for {
+		line, ok := sub.next()
+		if !ok {
+			return
+		}
 		_ = sub.conn.SetWriteDeadline(time.Now().Add(publishWriteTimeout))
 		if _, err := sub.conn.Write(line); err != nil {
 			return
+		}
+	}
+}
+
+// enqueuePriority retains an authoritative line outside the bounded telemetry
+// queue, then wakes the subscriber writer. When telemetry already fills ch, one
+// stale telemetry line is evicted to make room for the wake-up; priority lines
+// themselves are never discarded by queue pressure.
+func (sub *subscriber) enqueuePriority(line []byte) {
+	sub.priorityMu.Lock()
+	sub.priority = append(sub.priority, line)
+	sub.priorityMu.Unlock()
+
+	select {
+	case sub.ch <- nil:
+	default:
+		select {
+		case <-sub.ch:
+		default:
+		}
+		sub.ch <- nil
+	}
+}
+
+// next returns authoritative lines before ordinary telemetry. A nil telemetry
+// entry is only a wake-up inserted by enqueuePriority.
+func (sub *subscriber) next() ([]byte, bool) {
+	for {
+		sub.priorityMu.Lock()
+		if len(sub.priority) > 0 {
+			line := sub.priority[0]
+			sub.priority[0] = nil
+			sub.priority = sub.priority[1:]
+			sub.priorityMu.Unlock()
+			return line, true
+		}
+		sub.priorityMu.Unlock()
+
+		line, ok := <-sub.ch
+		if !ok {
+			return nil, false
+		}
+		if line != nil {
+			return line, true
 		}
 	}
 }
@@ -108,9 +158,10 @@ func (s *eventSocket) remove(sub *subscriber) {
 	s.mu.Unlock()
 }
 
-// Publish hands the event to every subscriber's queue without blocking: a full
-// queue means that reader is too slow and the line is dropped for it. Safe to
-// call on a nil receiver. Never performs I/O.
+// Publish hands the event to every subscriber without blocking. Authoritative
+// coordination frames use a priority queue and are retained under telemetry
+// pressure; ordinary events remain best-effort and are dropped when the bounded
+// telemetry queue is full. Safe to call on a nil receiver. Never performs I/O.
 func (s *eventSocket) Publish(session string, e contracts.Event) {
 	if s == nil {
 		return
@@ -122,6 +173,10 @@ func (s *eventSocket) Publish(session string, e contracts.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for sub := range s.subs {
+		if e.Coordination != nil {
+			sub.enqueuePriority(line)
+			continue
+		}
 		select {
 		case sub.ch <- line:
 		default:

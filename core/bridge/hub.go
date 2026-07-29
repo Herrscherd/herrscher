@@ -137,6 +137,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 	if eng != nil {
 		eng.Refresh()
 	}
+	sink = turnEventSink{EventSink: sink, identity: ev}
 	var memCtx string
 	if orch != nil {
 		memCtx = orch.Context(turnCtx)
@@ -193,6 +194,21 @@ func withSkills(memCtx string, eng *skills.Engine) string {
 		parts = append(parts, exp)
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+// turnEventSink stamps every event a turn emits with the turn's authoritative
+// identity (session incarnation, turn id, agent) taken from the input frame, so
+// the hub fan-out and downstream consumers can attribute events unambiguously.
+type turnEventSink struct {
+	contracts.EventSink
+	identity contracts.Event
+}
+
+func (s turnEventSink) Emit(e contracts.Event) {
+	e.SessionIncarnation = s.identity.SessionIncarnation
+	e.TurnID = s.identity.TurnID
+	e.Agent = s.identity.Agent
+	s.EventSink.Emit(e)
 }
 
 // resumeToken reads a backend's opaque resume token when it is ResumeAware, so

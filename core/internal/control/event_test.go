@@ -11,7 +11,10 @@ import (
 
 func TestWriteThenScanRoundTrip(t *testing.T) {
 	want := []contracts.Event{
-		{T: "human", Who: "alice", Text: "refactor the env loader"},
+		{
+			T: "human", Who: "alice", Text: "refactor the env loader",
+			SessionIncarnation: "incarnation-a", TurnID: "turn-a", Agent: "reviewer",
+		},
 		{T: "status", Text: "reading envfile.go"},
 		{T: "chunk", Text: "proposing 3 changes"},
 		{T: "reply", Text: "done", Done: true},

@@ -1,11 +1,14 @@
 package worktree
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Herrscherd/herrscher/core/internal/redact"
@@ -198,7 +201,162 @@ func (w *Worktreer) Remove(repo, name string, force bool) error {
 	}
 	out, err := exec.CommandContext(w.ctx, "git", args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("worktree remove: %s", redact.Output(out))
+		removeErr := fmt.Errorf("worktree remove: %s", redact.Output(out))
+		if force {
+			recovered, recoverErr := w.recoverEmptyOrphan(repo, name)
+			if recoverErr != nil {
+				return fmt.Errorf("%v; empty-orphan recovery: %w", removeErr, recoverErr)
+			}
+			if recovered {
+				return nil
+			}
+		}
+		return removeErr
 	}
 	return nil
+}
+
+// recoverEmptyOrphan handles the partial Windows failure where `git worktree
+// remove` already deleted its registration and contents, but a process-held
+// directory handle prevented the now-empty root directory from being removed.
+// It removes exactly one validated empty session directory, never recursively.
+func (w *Worktreer) recoverEmptyOrphan(repo, name string) (bool, error) {
+	path, ok := w.validSessionChild(repo, name)
+	if !ok {
+		return false, nil
+	}
+	registered, err := w.registeredWorktree(repo, path)
+	if err != nil {
+		return false, err
+	}
+	if registered {
+		return false, nil
+	}
+	entries, err := os.ReadDir(path)
+	switch {
+	case os.IsNotExist(err):
+		return true, nil
+	case err != nil:
+		return false, fmt.Errorf("inspect %q: %w", path, err)
+	case len(entries) != 0:
+		return false, nil
+	}
+	// Revalidate after the external git/list/read operations so a path swapped
+	// for a link in the meantime is never handed directly to os.Remove.
+	revalidated, ok := w.validSessionChild(repo, name)
+	if !ok || !samePath(revalidated, path) {
+		return false, nil
+	}
+	if err := os.Remove(path); err != nil {
+		return false, fmt.Errorf("remove empty orphan %q: %w", path, err)
+	}
+	return true, nil
+}
+
+func (w *Worktreer) validSessionChild(repo, name string) (string, bool) {
+	if !validPathComponent(name) ||
+		(w.instanceID != "" && !validPathComponent(w.instanceID)) {
+		return "", false
+	}
+	repo, err := filepath.Abs(repo)
+	if err != nil {
+		return "", false
+	}
+	resolvedRepo, err := resolveExistingPath(repo)
+	if err != nil {
+		return "", false
+	}
+
+	root := filepath.Join(repo, sessionsDir)
+	expectedRoot := filepath.Join(resolvedRepo, sessionsDir)
+	if w.instanceID != "" {
+		root = filepath.Join(root, w.instanceID)
+		expectedRoot = filepath.Join(expectedRoot, w.instanceID)
+	}
+	resolvedRoot, err := resolveExistingPath(root)
+	if err != nil || !samePath(resolvedRoot, expectedRoot) {
+		return "", false
+	}
+
+	path := filepath.Join(root, name)
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return path, true
+	}
+	if err != nil || info.Mode()&os.ModeSymlink != 0 {
+		return "", false
+	}
+	resolvedPath, err := resolveExistingPath(path)
+	if err != nil || !samePath(resolvedPath, filepath.Join(resolvedRoot, name)) {
+		return "", false
+	}
+	return path, true
+}
+
+func validPathComponent(value string) bool {
+	return value != "" &&
+		value != "." &&
+		value != ".." &&
+		filepath.Base(value) == value
+}
+
+func (w *Worktreer) registeredWorktree(repo, target string) (bool, error) {
+	out, err := exec.CommandContext(
+		w.ctx,
+		"git", "-C", repo, "worktree", "list", "--porcelain", "-z",
+	).CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("list registered worktrees: %s", redact.Output(out))
+	}
+	rawTarget := target
+	target, err = canonicalPathForComparison(target)
+	if err != nil {
+		return false, fmt.Errorf("resolve target worktree path %q: %w", rawTarget, err)
+	}
+	for _, field := range bytes.Split(out, []byte{0}) {
+		const prefix = "worktree "
+		if !bytes.HasPrefix(field, []byte(prefix)) {
+			continue
+		}
+		path, err := canonicalPathForComparison(
+			filepath.FromSlash(string(field[len(prefix):])),
+		)
+		if err != nil {
+			return false, fmt.Errorf("resolve registered worktree path: %w", err)
+		}
+		if samePath(path, target) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// canonicalPathForComparison resolves links in an existing path. When only the
+// final component is absent (as can happen after a partial worktree removal),
+// it resolves the parent and then restores that final component.
+func canonicalPathForComparison(path string) (string, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := resolveExistingPath(path)
+	if err == nil {
+		return resolved, nil
+	}
+	if !os.IsNotExist(err) {
+		return "", err
+	}
+	parent, err := resolveExistingPath(filepath.Dir(path))
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(parent, filepath.Base(path)), nil
+}
+
+func samePath(a, b string) bool {
+	a, b = filepath.Clean(a), filepath.Clean(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }

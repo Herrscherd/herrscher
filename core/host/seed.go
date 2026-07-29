@@ -21,12 +21,27 @@ const seedTurnTimeout = 120 * time.Second
 // registered local backend with the session's backend settings.
 var oneShotBackendFactory = newSeedBackend
 
-// seedEventPublisher, when set at daemon boot (RunHub wires it to the events
-// socket), taps every seed-turn event onto that socket keyed by session. nil in
-// the operator CLI path and in tests — the seed then runs with no external
-// event stream, exactly as before. It mirrors the oneShotBackendFactory seam:
-// one process-wide daemon owns the socket, so a package var is sufficient.
-var seedEventPublisher func(session string, e contracts.Event)
+// oneShotSeedRuntime carries the live daemon-only dependencies of a session
+// seed. The operator CLI dispatches the same registry command without this
+// request-scoped value, preserving its short-lived, coordination-free path.
+// Keeping these dependencies on the command context avoids process-global
+// mutable state when multiple seed requests overlap.
+type oneShotSeedRuntime struct {
+	coordinator contracts.Coordinator
+	publish     func(session string, event contracts.Event)
+	record      func(session string, entry state.TranscriptEntry)
+}
+
+type oneShotSeedRuntimeKey struct{}
+
+func withOneShotSeedRuntime(ctx context.Context, runtime oneShotSeedRuntime) context.Context {
+	return context.WithValue(ctx, oneShotSeedRuntimeKey{}, runtime)
+}
+
+func oneShotSeedRuntimeFrom(ctx context.Context) oneShotSeedRuntime {
+	runtime, _ := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
+	return runtime
+}
 
 type seedCommandForwarder func(context.Context, string, []string) (string, bool, error)
 
@@ -35,22 +50,40 @@ type seedCommandForwarder func(context.Context, string, []string) (string, bool,
 // daemon-side invocation already has coord and runs locally. With neither a
 // daemon nor a coordinator it falls back to the historical uncoordinated
 // one-shot behavior.
-func runOneShotSeedCommand(ctx context.Context, st *state.State, name, task string, coord contracts.Coordinator, instID string, forward seedCommandForwarder) (string, error) {
-	if coord == nil && forward != nil {
+func runOneShotSeedCommand(ctx context.Context, st *state.State, name, task, turnID string, runtime oneShotSeedRuntime, coord contracts.Coordinator, instID string, forward seedCommandForwarder) (string, error) {
+	// The coordinator can reach a seed two ways: the daemon path delivers it on
+	// the request-scoped runtime (hub.Dispatch injects it via context), while a
+	// boot-time slot (seedCoord) is the local fallback. Fold the slot into the
+	// runtime so the seed runner always finds it in one place.
+	if runtime.coordinator == nil {
+		runtime.coordinator = coord
+	}
+	// No coordinator in this process (the operator CLI) → forward to the running
+	// daemon, which owns the live Coordinator. The resolved turn identity travels
+	// with the forward so both processes stamp the same turn.
+	if runtime.coordinator == nil && forward != nil {
 		if reply, handled, err := forward(ctx, CommandSocketPath(instID), []string{
-			"session", "seed", "--name", name, "--task", task,
+			"session", "seed", "--name", name, "--task", task, "--turn_id", turnID,
 		}); handled {
 			return reply, err
 		}
 	}
-	return runOneShotSeed(ctx, st, name, task, coord)
+	return runOneShotSeedIDWithRuntime(ctx, st, name, task, turnID, runtime)
 }
 
 // runOneShotSeed builds the session-scoped orchestrator and delegates to the
 // testable one-shot runner. Resolver.Orchestrator supplies a remote proxy when
 // requested; otherwise the local plugin receives the session name and the
 // persisted extractor/journal/cadence config in its PluginConfig.
-func runOneShotSeed(ctx context.Context, st *state.State, name, task string, coord contracts.Coordinator) (string, error) {
+func runOneShotSeed(ctx context.Context, st *state.State, name, task string) (string, error) {
+	return runOneShotSeedID(ctx, st, name, task, newTurnID())
+}
+
+func runOneShotSeedID(ctx context.Context, st *state.State, name, task, turnID string) (string, error) {
+	return runOneShotSeedIDWithRuntime(ctx, st, name, task, turnID, oneShotSeedRuntime{})
+}
+
+func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, task, turnID string, runtime oneShotSeedRuntime) (string, error) {
 	sess, ok := st.FindSession(name)
 	if !ok {
 		return "", fmt.Errorf("no session %q", name)
@@ -62,14 +95,22 @@ func runOneShotSeed(ctx context.Context, st *state.State, name, task string, coo
 	if mem != nil {
 		defer mem.Close()
 	}
-	return runOneShotSeedWith(ctx, sess, task, orch, coord)
+	return runOneShotSeedWithIDRuntime(ctx, sess, task, turnID, orch, runtime)
 }
 
 // runOneShotSeedWith mounts the same in-process bridge turn used by the daemon:
 // newSessionDriver owns the FIFO and SeedAndWait awaits reply{done}; bridge.RunOneShot
 // supplies the registered backend over channels. Unlike RunSession/goLive this
 // deliberately has no control socket, supervisor, or gateway binding.
-func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, orch contracts.Orchestrator, coord contracts.Coordinator) (string, error) {
+func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, orch contracts.Orchestrator) (string, error) {
+	return runOneShotSeedWithID(ctx, sess, task, newTurnID(), orch)
+}
+
+func runOneShotSeedWithID(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator) (string, error) {
+	return runOneShotSeedWithIDRuntime(ctx, sess, task, turnID, orch, oneShotSeedRuntime{})
+}
+
+func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator, runtime oneShotSeedRuntime) (string, error) {
 	if orch != nil {
 		defer orch.Close()
 	}
@@ -79,12 +120,21 @@ func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, or
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, 8)
 	d := newSessionDriver(sess.Name, nil, toBridge, fromBridge)
+	d.incarnation = sess.Incarnation
+	d.agent = sess.Agent
+	// The seed turn deliberately runs with a NIL coordinator so the pump
+	// goroutine never reads d.coordinator while this turn writes it. Coordination
+	// is applied after the pump is stopped and joined (see below).
+	if runtime.record != nil {
+		name := sess.Name
+		d.record = func(entry state.TranscriptEntry) { runtime.record(name, entry) }
+	}
 	// Tap the seed turn onto the daemon's events socket (when one is serving) so
 	// the app sees live thinking/status/chunk/reply. The seed path binds no
 	// gateways, so this tap is the only way its events escape the process.
-	if seedEventPublisher != nil {
+	if runtime.publish != nil {
 		name := sess.Name
-		d.emitTap = func(e contracts.Event) { seedEventPublisher(name, e) }
+		d.emitTap = func(e contracts.Event) { runtime.publish(name, e) }
 	}
 	pumpCtx, pumpCancel := context.WithCancel(seedCtx)
 	defer pumpCancel()
@@ -102,7 +152,7 @@ func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, or
 		}
 	}()
 
-	reply, ok := d.SeedAndWait(seedCtx, task)
+	reply, ok := d.SeedAndWaitWithTurnID(seedCtx, task, turnID)
 	if !ok {
 		select {
 		case err := <-bridgeErr:
@@ -116,15 +166,25 @@ func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, or
 	if err := <-bridgeErr; err != nil {
 		return "", err
 	}
-	if coord != nil {
+	if runtime.coordinator != nil {
 		// The seed turn ran with a nil coordinator so the pump never re-enters
 		// the dispatch mutex mid-turn; coordination happens here instead. Stop
 		// the pump and join it before writing d.coordinator, so the field is
 		// never read (turnloop) and written (here) from two goroutines at once.
 		pumpCancel()
 		<-pumpDone
-		d.coordinator = coord
-		d.maybeCoordinate(seedCtx, reply)
+		d.coordinator = runtime.coordinator
+		// activeTurnID is stamped onto anything fanned out below so status/reply
+		// events carry this turn's identity, matching the live path.
+		d.activeTurnID = turnID
+		// The reply already fanned out during the turn carried no Coordination
+		// (the turn ran coordinator-free). Re-emit the terminal reply with the
+		// coordination outcome so live subscribers still see it, mirroring the
+		// live path where awaitTurn stamps Coordination onto the reply.
+		if coordination := d.maybeCoordinate(seedCtx, reply); coordination != nil {
+			d.fanOut(seedCtx, contracts.Event{T: "reply", Done: true, Text: reply, Coordination: coordination})
+		}
+		d.activeTurnID = ""
 	}
 	if orch != nil {
 		if err := orch.Consolidate(seedCtx); err != nil {

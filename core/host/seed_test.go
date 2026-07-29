@@ -144,7 +144,7 @@ func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &seedSpyOrchestrator{}
-	if _, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy, nil); err != nil {
+	if _, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if !spy.consolidated {
@@ -164,8 +164,8 @@ func TestRunOneShotSeedWithCoordinatesDelegateTrailer(t *testing.T) {
 
 	sess := state.Session{Name: "orchestrator", ChannelID: "channel"}
 	coord := &recordingCoord{}
-	if _, err := runOneShotSeedWith(context.Background(), sess, "délègue", nil, coord); err != nil {
-		t.Fatalf("runOneShotSeedWith: %v", err)
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), nil, oneShotSeedRuntime{coordinator: coord}); err != nil {
+		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
 	}
 	if len(coord.delegates) != 1 {
 		t.Fatalf("delegate calls = %d, want 1", len(coord.delegates))
@@ -191,7 +191,7 @@ func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 
 	got, err := runOneShotSeedCommand(
 		context.Background(), nil, "orchestrator", "lecture seule",
-		nil, "instance-test", forward,
+		"turn-test", oneShotSeedRuntime{}, nil, "instance-test", forward,
 	)
 	if err != nil {
 		t.Fatalf("runOneShotSeedCommand: %v", err)
@@ -202,7 +202,7 @@ func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 	if want := CommandSocketPath("instance-test"); gotPath != want {
 		t.Fatalf("command path = %q, want %q", gotPath, want)
 	}
-	wantArgv := []string{"session", "seed", "--name", "orchestrator", "--task", "lecture seule"}
+	wantArgv := []string{"session", "seed", "--name", "orchestrator", "--task", "lecture seule", "--turn_id", "turn-test"}
 	if len(gotArgv) != len(wantArgv) {
 		t.Fatalf("argv = %v, want %v", gotArgv, wantArgv)
 	}

@@ -36,6 +36,9 @@ type hub struct {
 	// session's RunSession. Set in serve.go's RunHub after newHub, before the
 	// boot loop's goLive calls, so it is non-nil for every driver started here.
 	coordinator contracts.Coordinator
+	// eventPublisher is the daemon event-socket tap used by request-scoped
+	// one-shot seeds. It is bound once at boot before the command socket starts.
+	eventPublisher func(session string, event contracts.Event)
 
 	// gate decides, after each completed turn, whether a session must pause on a
 	// budget cap. nil (the operator CLI never sets it) preserves the
@@ -44,7 +47,7 @@ type hub struct {
 
 	dispatchMu sync.Mutex // serializes operator commands (and their reconcile)
 	mu         sync.Mutex
-	live       map[string]context.CancelFunc // session name → cancel its RunSession
+	live       map[string]liveSession // session name → owned RunSession lifetime
 }
 
 // forgetter est satisfaite par *coordinator ; elle vit hors du port
@@ -52,8 +55,13 @@ type hub struct {
 // join), pas une capacité exposée aux gateways.
 type forgetter interface{ forget(string) }
 
+type liveSession struct {
+	cancel context.CancelFunc
+	done   <-chan struct{}
+}
+
 func newHub(ctx context.Context, st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry) *hub {
-	return &hub{ctx: ctx, st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: map[string]context.CancelFunc{}}
+	return &hub{ctx: ctx, st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: map[string]liveSession{}}
 }
 
 // goLive wires a session into the running hub: it opens the control-socket
@@ -73,24 +81,31 @@ func (h *hub) goLive(sess state.Session) {
 	}
 	sctx, cancel := context.WithCancel(h.ctx)
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
-	go RunSession(sctx, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
-		func(tok string) { _ = h.st.SetResumeToken(sess.Name, tok) },
-		func(e state.TranscriptEntry) {
-			_ = state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e)
-		}, h.gate)
-	h.live[sess.Name] = cancel
+	done := make(chan struct{})
+	h.live[sess.Name] = liveSession{cancel: cancel, done: done}
+	go func() {
+		defer close(done)
+		runSessionIdentified(sctx, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
+			func(tok string) { _ = h.st.SetResumeToken(sess.Name, tok) },
+			func(e state.TranscriptEntry) {
+				_ = state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e)
+			},
+			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent}, h.gate)
+	}()
 }
 
 // goDead cancels a session's RunSession loop (which closes its acceptor and
-// removes the socket). The supervisor was already stopped by the close handler.
+// removes the socket), and waits for teardown before releasing the reusable
+// session name. The supervisor was already stopped by the close handler.
 func (h *hub) goDead(name string) {
 	h.mu.Lock()
-	cancel := h.live[name]
-	delete(h.live, name)
-	h.mu.Unlock()
-	if cancel != nil {
-		cancel()
+	live, ok := h.live[name]
+	if ok {
+		live.cancel()
+		<-live.done
+		delete(h.live, name)
 	}
+	h.mu.Unlock()
 	if f, ok := h.coordinator.(forgetter); ok {
 		f.forget(name)
 	}
@@ -126,24 +141,44 @@ func (h *hub) reconcile() {
 
 // Dispatch runs an operator command and reconciles the live set so a session
 // create/close takes effect immediately. It implements contracts.SessionControl.
-// Commands are serialized: gateways can deliver interactions concurrently, and
-// running create/close (plus the reconcile that follows) one at a time keeps the
-// existence checks and the live set consistent.
+// Mutating commands are serialized: gateways can deliver interactions
+// concurrently, and running create/close (plus the reconcile that follows) one
+// at a time keeps the existence checks and the live set consistent.
+//
+// A session seed is deliberately outside dispatchMu. Its completed reply can
+// coordinate back into this hub (Delegate → Create, for example), and holding
+// the non-reentrant mutation lock across that turn would deadlock. Nested typed
+// mutations still acquire dispatchMu themselves and perform their own reconcile.
 func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 	// A seed turn may synchronously emit a coordination trailer. Delegate then
 	// re-enters this hub through Create, which owns dispatchMu for its actual
 	// state mutation. Do not hold the same non-reentrant mutex around the outer
 	// model turn or Delegate deadlocks before it can create the worker. Seed
 	// itself does not mutate the live set; any coordination operation performs
-	// its own locked mutation and reconcile.
-	if len(args) >= 2 && args[0] == "session" && args[1] == "seed" {
-		return h.reg.Dispatch(ctx, args)
+	// its own locked mutation and reconcile. The one-shot seed runtime carries
+	// the live coordinator (plus event-publish and transcript-record taps) to the
+	// seed runner via context.
+	if isSessionSeedCommand(args) {
+		runtime := oneShotSeedRuntime{
+			coordinator: h.coordinator,
+			publish:     h.eventPublisher,
+			record: func(session string, entry state.TranscriptEntry) {
+				_ = state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry)
+			},
+		}
+		return h.reg.Dispatch(withOneShotSeedRuntime(ctx, runtime), args)
 	}
+
+
 	h.dispatchMu.Lock()
 	defer h.dispatchMu.Unlock()
 	out, err := h.reg.Dispatch(ctx, args)
 	h.reconcile()
 	return out, err
+}
+
+func isSessionSeedCommand(args []string) bool {
+	return len(args) >= 2 && args[0] == "session" && args[1] == "seed"
 }
 
 // Create starts a session from a typed spec. It maps CreateSession into the
@@ -221,16 +256,17 @@ func (h *hub) Sessions() []contracts.SessionInfo {
 	for _, s := range sessions {
 		lastTs := state.ReadTranscriptLast(state.TranscriptPath(h.partDir, s.Name))
 		out = append(out, contracts.SessionInfo{
-			Name:      s.Name,
-			ChannelID: s.ChannelID,
-			Type:      s.Type,
-			Gateways:  s.BoundGateways(),
-			Vendor:    s.Vendor,
-			Project:   s.Project,
-			Archived:  s.Archived,
-			Resumable: s.ResumeToken != "",
-			LastTs:    lastTs,
-			Dir:       sessionDir(s),
+			Name:        s.Name,
+			Incarnation: s.Incarnation,
+			ChannelID:   s.ChannelID,
+			Type:        s.Type,
+			Gateways:    s.BoundGateways(),
+			Vendor:      s.Vendor,
+			Project:     s.Project,
+			Archived:    s.Archived,
+			Resumable:   s.ResumeToken != "",
+			LastTs:      lastTs,
+			Dir:         sessionDir(s),
 		})
 	}
 	return out

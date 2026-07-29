@@ -60,9 +60,16 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		Help("run one agent turn in a session and print the reply").
 		Param("name", "session name", true).
 		Param("task", "opening task", true).
+		ValueParam("turn_id", "optional caller-supplied turn identity", false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
+			rawTurnID, supplied := in.Lookup("turn_id")
+			turnID, err := resolveTurnID(rawTurnID, supplied)
+			if err != nil {
+				return "", err
+			}
 			reply, err := runOneShotSeedCommand(
 				cmdCtx, st, in.Get("name"), in.Get("task"),
+				turnID, oneShotSeedRuntimeFrom(cmdCtx),
 				seedCoord.coord, instID, dispatchLiveCommand,
 			)
 			if err != nil {

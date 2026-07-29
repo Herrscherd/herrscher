@@ -37,7 +37,10 @@ func (noBudgetGate) CheckAfterTurn(string) string { return "" }
 // session's control connection (a *control.Conn in production; channels in
 // tests).
 type sessionDriver struct {
-	name string
+	name         string
+	incarnation  string
+	agent        string
+	activeTurnID string
 	// channel is the session's own channel: the driver polls it and posts to it,
 	// so each session uses its own channel rather than the gateway's global
 	// default. Empty falls back to the reader's DefaultChannel (legacy/tests).
@@ -207,17 +210,22 @@ func (d *sessionDriver) emitPaused(ctx context.Context, reason string) {
 // Seed injects an opening input turn into this session's FIFO. A handoff uses it
 // to hand B its task the same way a human message would arrive.
 func (d *sessionDriver) Seed(task string) {
-	d.queue <- contracts.Event{T: "input", Who: "handoff", Text: task}
+	d.queue <- contracts.Event{T: "input", Who: "handoff", Text: task, TurnID: newTurnID()}
 }
 
 // SeedAndWait injects an opening task and blocks until that turn's reply{done},
 // returning its text. ok is false if the turn is abandoned.
 func (d *sessionDriver) SeedAndWait(ctx context.Context, task string) (string, bool) {
+	return d.SeedAndWaitWithTurnID(ctx, task, newTurnID())
+}
+
+// SeedAndWaitWithTurnID is SeedAndWait with a caller-supplied turn identity.
+func (d *sessionDriver) SeedAndWaitWithTurnID(ctx context.Context, task, turnID string) (string, bool) {
 	reply := make(chan string, 1)
 	d.seenMu.Lock()
 	d.pendingReply = reply
 	d.seenMu.Unlock()
-	d.queue <- contracts.Event{T: "input", Who: "seed", Text: task}
+	d.queue <- contracts.Event{T: "input", Who: "seed", Text: task, TurnID: turnID}
 	select {
 	case r := <-reply:
 		return r, true
@@ -252,9 +260,11 @@ func registerDriver(name string, d *sessionDriver) {
 	sessionRegistry.mu.Unlock()
 }
 
-func unregisterDriver(name string) {
+func unregisterDriver(name string, d *sessionDriver) {
 	sessionRegistry.mu.Lock()
-	delete(sessionRegistry.m, name)
+	if sessionRegistry.m[name] == d {
+		delete(sessionRegistry.m, name)
+	}
 	sessionRegistry.mu.Unlock()
 }
 
@@ -378,10 +388,22 @@ func (d *sessionDriver) pump(ctx context.Context) {
 					d.fanOut(ctx, contracts.Event{T: "status", Text: "tour refusé — plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
 					continue
 				}
+				if ev.TurnID == "" {
+					ev.TurnID = newTurnID()
+				}
+				ev.SessionIncarnation = d.incarnation
+				ev.Agent = d.agent
+				d.activeTurnID = ev.TurnID
 				d.recordEntry("user", ev.Text, 0, turnUsage{})
 				d.fanOut(ctx, contracts.Event{T: "human", Who: ev.Who, Text: ev.Text})
+			} else {
+				ev.SessionIncarnation = ""
+				ev.TurnID = ""
+				ev.Agent = ""
+				d.activeTurnID = ""
 			}
 			d.runTurn(ctx, ev)
+			d.activeTurnID = ""
 		}
 	}
 }
@@ -444,8 +466,9 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 				d.metrics.TurnAbandoned()
 				return false // bridge connection lost; abandon this turn
 			}
-			d.fanOut(ctx, e)
 			if e.T == "reply" && e.Done {
+				e.Coordination = d.maybeCoordinate(ctx, e.Text)
+				d.fanOut(ctx, e)
 				if d.persistResume != nil && e.Resume != "" {
 					d.persistResume(e.Resume)
 				}
@@ -467,9 +490,9 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 					d.emitPaused(ctx, reason)
 					return true // stop this turn; the next dispatch is refused while paused
 				}
-				d.maybeCoordinate(ctx, e.Text)
 				return true
 			}
+			d.fanOut(ctx, e)
 		}
 	}
 }
@@ -480,27 +503,42 @@ func (d *sessionDriver) awaitTurn(ctx context.Context) bool {
 // A malformed marker is ignored; a coordinator refusal (unknown agent, dirty
 // source, missing parent, create failure) is surfaced back into the session's
 // channel as a status event — never a silent half-coordination.
-func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
+func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *contracts.CoordinationEvent {
 	if d.coordinator == nil {
-		return
+		return nil
 	}
 	if summary, ok := parseDone(reply); ok {
 		if parent, err := d.coordinator.Report(ctx, contracts.ReportRequest{
 			FromSession: d.name, Summary: summary,
 		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "report refusé: " + err.Error()})
+			d.fanOut(ctx, contracts.Event{T: "status", Text: "report refusé"})
+			return &contracts.CoordinationEvent{
+				Kind: "report_failed", SourceSession: d.name,
+				Summary: sanitizeCoordinationError(err),
+			}
 		} else {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "rapport livré à " + parent})
+			return &contracts.CoordinationEvent{
+				Kind: "reported", SourceSession: d.name,
+				ParentSession: parent, Summary: summary,
+			}
 		}
-		return
 	}
 	if toAgent, task, ok := parseDelegate(reply); ok {
-		if _, err := d.coordinator.Delegate(ctx, contracts.DelegateRequest{
+		target, err := d.coordinator.Delegate(ctx, contracts.DelegateRequest{
 			FromSession: d.name, ToAgent: toAgent, Task: task,
-		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "delegate refusé: " + err.Error()})
+		})
+		if err != nil {
+			d.fanOut(ctx, contracts.Event{T: "status", Text: "delegate refusé"})
+			return &contracts.CoordinationEvent{
+				Kind: "delegate_failed", SourceSession: d.name,
+				Agent: toAgent, Summary: sanitizeCoordinationError(err),
+			}
 		}
-		return
+		return &contracts.CoordinationEvent{
+			Kind: "delegated", SourceSession: d.name,
+			TargetSession: target, Agent: toAgent,
+		}
 	}
 	if toAgent, tasks, ok := parseFanOut(reply); ok {
 		if spawned, err := d.coordinator.FanOut(ctx, contracts.FanOutRequest{
@@ -512,7 +550,7 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 			d.fanOut(ctx, contracts.Event{T: "status",
 				Text: "cohorte lancée : " + strconv.Itoa(len(spawned)) + " workers (" + strings.Join(spawned, ", ") + ")"})
 		}
-		return
+		return nil
 	}
 	if task, ok := parseRoute(reply); ok {
 		if toAgent, session, err := d.coordinator.Route(ctx, contracts.RouteRequest{
@@ -522,7 +560,7 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 		} else {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "routé vers " + toAgent + " : " + session})
 		}
-		return
+		return nil
 	}
 	if n, ok := parseSeal(reply); ok {
 		if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
@@ -532,7 +570,7 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 		} else {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "cohorte scellée à " + strconv.Itoa(n)})
 		}
-		return
+		return nil
 	}
 	if worker, ok := parseMerge(reply); ok {
 		if lead, err := d.coordinator.Merge(ctx, contracts.MergeRequest{
@@ -542,7 +580,7 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 		} else {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "merge traité pour " + lead})
 		}
-		return
+		return nil
 	}
 	if toAgent, task, ok := parseHandoff(reply); ok {
 		if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
@@ -551,6 +589,16 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 			d.fanOut(ctx, contracts.Event{T: "status", Text: "handoff refusé: " + err.Error()})
 		}
 	}
+	return nil
+}
+
+func sanitizeCoordinationError(err error) string {
+	const max = 160
+	s := strings.Join(strings.Fields(err.Error()), " ")
+	if len(s) > max {
+		s = s[:max]
+	}
+	return s
 }
 
 // fanOut delivers one turn event to every bound gateway: a gateway implementing
@@ -560,6 +608,15 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) {
 // posted through the Gateway port, chunked. All rich, platform-specific rendering
 // lives in the gateway — the host only emits abstract semantic events.
 func (d *sessionDriver) fanOut(ctx context.Context, e contracts.Event) {
+	if d.activeTurnID != "" {
+		e.SessionIncarnation = d.incarnation
+		e.TurnID = d.activeTurnID
+		e.Agent = d.agent
+	} else {
+		e.SessionIncarnation = ""
+		e.TurnID = ""
+		e.Agent = ""
+	}
 	if d.emitTap != nil {
 		d.emitTap(e)
 	}
@@ -609,11 +666,22 @@ func (d *sessionDriver) renderChannel(g contracts.GatewaySet) string {
 // supervisor restart). It blocks until ctx is cancelled. coord is the Model-O
 // handoff coordinator (nil in the short-lived operator CLI path, where a
 // completed turn's handoff trailer, if any, is simply ignored).
+type sessionIdentity struct {
+	incarnation string
+	agent       string
+}
+
 func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry), gate budgetGate) {
+	runSessionIdentified(ctx, name, channel, gws, acc, participants, m, coord, persistResume, record, sessionIdentity{}, gate)
+}
+
+func runSessionIdentified(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry), identity sessionIdentity, gate budgetGate) {
 	defer acc.Close() // own the acceptor: close the listener + remove the socket on shutdown
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
 	d := newSessionDriver(name, gws, toBridge, fromBridge)
+	d.incarnation = identity.incarnation
+	d.agent = identity.agent
 	d.channel = channel
 	d.participants = participants
 	d.metrics = m
@@ -624,7 +692,7 @@ func RunSession(ctx context.Context, name, channel string, gws []contracts.Gatew
 		d.gate = gate
 	}
 	registerDriver(name, d)
-	defer unregisterDriver(name)
+	defer unregisterDriver(name, d)
 	go d.run(ctx)
 
 	for {

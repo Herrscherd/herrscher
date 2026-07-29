@@ -60,7 +60,8 @@ func attachmentDir(session string) string {
 // clipboard paste); every other (https CDN) attachment is downloaded through the
 // SSRF allowlist. Non-image, oversized, missing, off-allowlist, and beyond-cap
 // attachments are skipped so a turn is never lost over an image. Order is
-// preserved; at most maxImagesPerMessage images are resolved.
+// preserved; at most maxImagesPerMessage images are attempted (a candidate that
+// fails to resolve still counts against the cap).
 //
 // It is the host-side entry point (the turnloop has the Message; the bridge only
 // sees Events), producing the paths carried in Event.Attachments.

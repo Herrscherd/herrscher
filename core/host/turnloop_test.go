@@ -891,6 +891,48 @@ func TestSanitizeCoordinationErrorTruncatesTo160Bytes(t *testing.T) {
 	}
 }
 
+func TestCoordinationRefusalStatusUsesStablePublicLabel(t *testing.T) {
+	tests := []struct {
+		name       string
+		reply      string
+		wantStatus string
+		wantKind   string
+	}{
+		{
+			name:       "delegation",
+			reply:      "Je délègue.\n⟢ delegate: scripter — corriger",
+			wantStatus: "delegate refusé",
+			wantKind:   "delegate_failed",
+		},
+		{
+			name:       "report",
+			reply:      "Terminé.\n⟢ done: corrigé",
+			wantStatus: "report refusé",
+			wantKind:   "report_failed",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newSessionDriver("worker", nil, nil, nil)
+			d.coordinator = &erroringCoord{
+				err: errors.New("sensitive " + strings.Repeat("x", 200)),
+			}
+			var emitted []contracts.Event
+			d.emitTap = func(e contracts.Event) { emitted = append(emitted, e) }
+
+			outcome := d.maybeCoordinate(context.Background(), tc.reply)
+
+			if len(emitted) != 1 || emitted[0].T != "status" || emitted[0].Text != tc.wantStatus {
+				t.Fatalf("public status = %+v, want %q", emitted, tc.wantStatus)
+			}
+			wantSummary := "sensitive " + strings.Repeat("x", 150)
+			if outcome == nil || outcome.Kind != tc.wantKind || outcome.Summary != wantSummary {
+				t.Fatalf("typed outcome = %+v, want kind %q and bounded diagnostic", outcome, tc.wantKind)
+			}
+		})
+	}
+}
+
 // TestDriverSurfacesCoordinatorErrorAsStatus proves that when the Coordinator
 // refuses a handoff, the driver fans a "status" event carrying "handoff
 // refusé: <err>" to bound gateways instead of failing silently.

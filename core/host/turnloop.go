@@ -408,7 +408,7 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *cont
 		if parent, err := d.coordinator.Report(ctx, contracts.ReportRequest{
 			FromSession: d.name, Summary: summary,
 		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "report refusé: " + err.Error()})
+			d.fanOut(ctx, contracts.Event{T: "status", Text: "report refusé"})
 			return &contracts.CoordinationEvent{
 				Kind: "report_failed", SourceSession: d.name,
 				Summary: sanitizeCoordinationError(err),
@@ -426,7 +426,7 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *cont
 			FromSession: d.name, ToAgent: toAgent, Task: task,
 		})
 		if err != nil {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "delegate refusé: " + err.Error()})
+			d.fanOut(ctx, contracts.Event{T: "status", Text: "delegate refusé"})
 			return &contracts.CoordinationEvent{
 				Kind: "delegate_failed", SourceSession: d.name,
 				Agent: toAgent, Summary: sanitizeCoordinationError(err),

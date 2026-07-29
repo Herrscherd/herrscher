@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -754,6 +755,140 @@ func (e *erroringCoord) FanOut(context.Context, contracts.FanOutRequest) ([]stri
 }
 func (e *erroringCoord) Route(context.Context, contracts.RouteRequest) (string, string, error) {
 	return "", "", e.err
+}
+
+func TestTerminalReplyCarriesAcceptedDelegationBeforeSeedRelease(t *testing.T) {
+	from := make(chan contracts.Event, 1)
+	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from)
+	d.agent = "orchestrator"
+	d.activeTurnID = "turn-user"
+	d.coordinator = &recordingCoord{}
+	var emitted []contracts.Event
+	replyCh := make(chan string, 1)
+	releasedBeforeTerminal := false
+	d.emitTap = func(e contracts.Event) {
+		if e.T == "reply" && e.Done {
+			select {
+			case <-replyCh:
+				releasedBeforeTerminal = true
+			default:
+			}
+		}
+		emitted = append(emitted, e)
+	}
+	d.pendingReply = replyCh
+
+	from <- contracts.Event{T: "reply", Done: true,
+		Text: "Je délègue.\n⟢ delegate: roblox-scripter — modifier les nametags"}
+	if !d.awaitTurn(context.Background()) {
+		t.Fatal("turn abandoned")
+	}
+
+	last := emitted[len(emitted)-1]
+	want := contracts.CoordinationEvent{
+		Kind: "delegated", SourceSession: "lead",
+		TargetSession: "roblox-scripter-w", Agent: "roblox-scripter",
+	}
+	if last.Coordination == nil || *last.Coordination != want {
+		t.Fatalf("coordination = %+v, want %+v", last.Coordination, want)
+	}
+	if releasedBeforeTerminal {
+		t.Fatal("seed response was released before terminal publication")
+	}
+	select {
+	case <-replyCh:
+	default:
+		t.Fatal("seed response was not released after coordination")
+	}
+}
+
+func TestTerminalReplyCarriesCoordinationOutcomesBeforeSeedRelease(t *testing.T) {
+	tests := []struct {
+		name        string
+		session     string
+		coordinator contracts.Coordinator
+		reply       string
+		want        contracts.CoordinationEvent
+	}{
+		{
+			name:        "delegation refusal",
+			session:     "lead",
+			coordinator: &erroringCoord{err: errors.New("boom")},
+			reply:       "Je délègue.\n⟢ delegate: roblox-scripter — modifier les nametags",
+			want: contracts.CoordinationEvent{
+				Kind: "delegate_failed", SourceSession: "lead",
+				Agent: "roblox-scripter", Summary: "boom",
+			},
+		},
+		{
+			name:        "worker report",
+			session:     "roblox-scripter-w",
+			coordinator: &recordingCoord{},
+			reply:       "Terminé.\n⟢ done: nametags corrigés",
+			want: contracts.CoordinationEvent{
+				Kind: "reported", SourceSession: "roblox-scripter-w",
+				ParentSession: "lead", Summary: "nametags corrigés",
+			},
+		},
+		{
+			name:        "report refusal",
+			session:     "roblox-scripter-w",
+			coordinator: &erroringCoord{err: errors.New("  report\n refused\tby lead  ")},
+			reply:       "Terminé.\n⟢ done: nametags corrigés",
+			want: contracts.CoordinationEvent{
+				Kind: "report_failed", SourceSession: "roblox-scripter-w",
+				Summary: "report refused by lead",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			from := make(chan contracts.Event, 1)
+			d := newSessionDriver(tc.session, nil, make(chan contracts.Event, 1), from)
+			d.coordinator = tc.coordinator
+			var terminal contracts.Event
+			replyCh := make(chan string, 1)
+			releasedBeforeTerminal := false
+			d.emitTap = func(e contracts.Event) {
+				if e.T != "reply" || !e.Done {
+					return
+				}
+				select {
+				case <-replyCh:
+					releasedBeforeTerminal = true
+				default:
+				}
+				terminal = e
+			}
+			d.pendingReply = replyCh
+
+			from <- contracts.Event{T: "reply", Done: true, Text: tc.reply}
+			if !d.awaitTurn(context.Background()) {
+				t.Fatal("turn abandoned")
+			}
+
+			if terminal.Coordination == nil || *terminal.Coordination != tc.want {
+				t.Fatalf("coordination = %+v, want %+v", terminal.Coordination, tc.want)
+			}
+			if releasedBeforeTerminal {
+				t.Fatal("seed response was released before terminal publication")
+			}
+			select {
+			case <-replyCh:
+			default:
+				t.Fatal("seed response was not released after coordination")
+			}
+		})
+	}
+}
+
+func TestSanitizeCoordinationErrorTruncatesTo160Bytes(t *testing.T) {
+	got := sanitizeCoordinationError(errors.New(strings.Repeat("x", 161)))
+	want := strings.Repeat("x", 160)
+	if got != want {
+		t.Fatalf("sanitizeCoordinationError() length = %d, want 160", len(got))
+	}
 }
 
 // TestDriverSurfacesCoordinatorErrorAsStatus proves that when the Coordinator

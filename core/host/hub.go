@@ -169,7 +169,6 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 		return h.reg.Dispatch(withOneShotSeedRuntime(ctx, runtime), args)
 	}
 
-
 	h.dispatchMu.Lock()
 	defer h.dispatchMu.Unlock()
 	out, err := h.reg.Dispatch(ctx, args)

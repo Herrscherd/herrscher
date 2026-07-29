@@ -19,12 +19,27 @@ const seedTurnTimeout = 120 * time.Second
 // registered local backend with the session's backend settings.
 var oneShotBackendFactory = newSeedBackend
 
-// seedEventPublisher, when set at daemon boot (RunHub wires it to the events
-// socket), taps every seed-turn event onto that socket keyed by session. nil in
-// the operator CLI path and in tests — the seed then runs with no external
-// event stream, exactly as before. It mirrors the oneShotBackendFactory seam:
-// one process-wide daemon owns the socket, so a package var is sufficient.
-var seedEventPublisher func(session string, e contracts.Event)
+// oneShotSeedRuntime carries the live daemon-only dependencies of a session
+// seed. The operator CLI dispatches the same registry command without this
+// request-scoped value, preserving its short-lived, coordination-free path.
+// Keeping these dependencies on the command context avoids process-global
+// mutable state when multiple seed requests overlap.
+type oneShotSeedRuntime struct {
+	coordinator contracts.Coordinator
+	publish     func(session string, event contracts.Event)
+	record      func(session string, entry state.TranscriptEntry)
+}
+
+type oneShotSeedRuntimeKey struct{}
+
+func withOneShotSeedRuntime(ctx context.Context, runtime oneShotSeedRuntime) context.Context {
+	return context.WithValue(ctx, oneShotSeedRuntimeKey{}, runtime)
+}
+
+func oneShotSeedRuntimeFrom(ctx context.Context) oneShotSeedRuntime {
+	runtime, _ := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
+	return runtime
+}
 
 // runOneShotSeed builds the session-scoped orchestrator and delegates to the
 // testable one-shot runner. Resolver.Orchestrator supplies a remote proxy when
@@ -35,6 +50,10 @@ func runOneShotSeed(ctx context.Context, st *state.State, name, task string) (st
 }
 
 func runOneShotSeedID(ctx context.Context, st *state.State, name, task, turnID string) (string, error) {
+	return runOneShotSeedIDWithRuntime(ctx, st, name, task, turnID, oneShotSeedRuntime{})
+}
+
+func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, task, turnID string, runtime oneShotSeedRuntime) (string, error) {
 	sess, ok := st.FindSession(name)
 	if !ok {
 		return "", fmt.Errorf("no session %q", name)
@@ -46,7 +65,7 @@ func runOneShotSeedID(ctx context.Context, st *state.State, name, task, turnID s
 	if mem != nil {
 		defer mem.Close()
 	}
-	return runOneShotSeedWithID(ctx, sess, task, turnID, orch)
+	return runOneShotSeedWithIDRuntime(ctx, sess, task, turnID, orch, runtime)
 }
 
 // runOneShotSeedWith mounts the same in-process bridge turn used by the daemon:
@@ -58,6 +77,10 @@ func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, or
 }
 
 func runOneShotSeedWithID(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator) (string, error) {
+	return runOneShotSeedWithIDRuntime(ctx, sess, task, turnID, orch, oneShotSeedRuntime{})
+}
+
+func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator, runtime oneShotSeedRuntime) (string, error) {
 	if orch != nil {
 		defer orch.Close()
 	}
@@ -69,12 +92,17 @@ func runOneShotSeedWithID(ctx context.Context, sess state.Session, task, turnID 
 	d := newSessionDriver(sess.Name, nil, toBridge, fromBridge)
 	d.incarnation = sess.Incarnation
 	d.agent = sess.Agent
+	d.coordinator = runtime.coordinator
+	if runtime.record != nil {
+		name := sess.Name
+		d.record = func(entry state.TranscriptEntry) { runtime.record(name, entry) }
+	}
 	// Tap the seed turn onto the daemon's events socket (when one is serving) so
 	// the app sees live thinking/status/chunk/reply. The seed path binds no
 	// gateways, so this tap is the only way its events escape the process.
-	if seedEventPublisher != nil {
+	if runtime.publish != nil {
 		name := sess.Name
-		d.emitTap = func(e contracts.Event) { seedEventPublisher(name, e) }
+		d.emitTap = func(e contracts.Event) { runtime.publish(name, e) }
 	}
 	go d.pump(seedCtx)
 

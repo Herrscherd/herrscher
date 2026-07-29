@@ -60,7 +60,14 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			if err != nil {
 				return "", err
 			}
-			reply, err := runOneShotSeedID(cmdCtx, st, in.Get("name"), in.Get("task"), turnID)
+			reply, err := runOneShotSeedIDWithRuntime(
+				cmdCtx,
+				st,
+				in.Get("name"),
+				in.Get("task"),
+				turnID,
+				oneShotSeedRuntimeFrom(cmdCtx),
+			)
 			if err != nil {
 				return "", err
 			}

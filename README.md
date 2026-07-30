@@ -711,6 +711,20 @@ Policy:
   in-memory retry queue (deduped by key) that is drained at the top of each later
   pass; it is never truncated in place or silently discarded. One over-budget
   candidate never aborts the batch or skips the sweep.
+- **Semantic merge (umbrellas).** Deduplication by session key leaves
+  near-duplicate facts phrased differently under different keys. After the sweep,
+  an opt-in best-effort **merge** pass groups eligible nodes by domain and hands
+  each large-enough group to a `Merger` — the same optional seam the closed
+  extractor implements, discovered by type-assertion — which fuses overlapping
+  fragments into a single **umbrella** node. Applying an umbrella is reversible:
+  the fused node is a new node, and each original is labeled (`mergedInto`),
+  archived, and linked (`merged-into`) to it — never deleted or overwritten, and
+  the staleness sweep skips it so a fold is never reactivated. The pass is off by
+  default (`merge-min-nodes` / `MEMORY_MERGE_MIN` = 0) and configurable by
+  trigger threshold, target set (`merge-target`: stale / active / all), and a
+  per-group cap (`merge-max`). A malformed proposal (empty, fewer than two
+  originals, or a key that would overwrite an existing node) is rejected and
+  logged without dropping the valid proposals beside it.
 
 ### Staleness (the decay side)
 

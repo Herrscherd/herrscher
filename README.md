@@ -792,6 +792,13 @@ the pass.
   second trigger for the existing reversible passes. Off by default
   (`idle-days` / `MEMORY_IDLE_DAYS` ≤ 0); the quiet-period gate defaults to
   `idle-hours` / `MEMORY_IDLE_HOURS` = 2.
+- **Raw-session archival tier (G7).** With `MEMORY_RAW_ARCHIVE` enabled, the
+  learner archives every turn as an untruncated raw node (`KindTranscript`,
+  keyed `raw/<session>/<seq>`) — a full-text-searchable transcript store. Raw
+  nodes are hidden from ordinary recall and from the curator's sweep/merge/
+  promote passes (they surface only via `Query.IncludeRaw`), so the distilled
+  memory is unaffected. Retrieve them with `memory search --text "…" --raw`.
+  The write is best-effort (never breaks a turn) and off by default.
 
 ### Conscious memory (the model drives it)
 

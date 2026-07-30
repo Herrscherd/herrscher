@@ -83,12 +83,16 @@ When `<home>/USER.md` exists (read it once; `os.IsNotExist` → treat as absent)
 - Write `<worktree>/.claude/USER.md` from it, with `worktreeToken` substituted —
   the standalone artifact.
 - `CLAUDE.md` = `SOUL.md` content + a trailing import line so Claude Code
-  auto-loads the profile as a separate file:
+  auto-loads the profile as a separate file. The import is `@USER.md` (bare
+  sibling), not `@.claude/USER.md`: Claude Code resolves relative imports
+  against the importing file's own directory, and CLAUDE.md already lives in
+  `.claude/`, so a `.claude/` prefix would point at the nonexistent
+  `.claude/.claude/USER.md`.
 
   ```
   <SOUL.md contents>
 
-  @.claude/USER.md
+  @USER.md
   ```
 
 - `AGENTS.md` = `SOUL.md` content + the `USER.md` content inlined under a
@@ -127,7 +131,7 @@ runes, not bytes, are counted.
 write allowed; `SetUser` on a missing agent → error and no file created.
 
 **agent (`Materialize`):** with `USER.md` present → `.claude/USER.md` written,
-`CLAUDE.md` contains the `@.claude/USER.md` import after the soul, `AGENTS.md`
+`CLAUDE.md` contains the `@USER.md` import after the soul, `AGENTS.md`
 contains the inlined `# User` section; `worktreeToken` substituted. Without
 `USER.md` → `CLAUDE.md` and `AGENTS.md` equal the soul verbatim (regression).
 

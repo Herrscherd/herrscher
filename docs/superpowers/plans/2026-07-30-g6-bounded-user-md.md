@@ -14,7 +14,7 @@
 - Default USER.md budget = **1500** runes; a limit **`<= 0` disables** the check.
 - The budget error is `*contracts.BudgetError`, matchable with `errors.As`.
 - `USER.md` **absent is valid**: `Materialize` then emits `CLAUDE.md` and `AGENTS.md` byte-identical to today (soul verbatim) — regression-locked.
-- Materialization strings are exact: `CLAUDE.md` ends with the line `@.claude/USER.md`; `AGENTS.md` inlines under a `# User` heading.
+- Materialization strings are exact: `CLAUDE.md` ends with the line `@USER.md` (bare sibling — Claude Code resolves relative imports against CLAUDE.md's own `.claude/` dir, so no `.claude/` prefix); `AGENTS.md` inlines under a `# User` heading.
 - **Ports only, policy not engine**: no new storage; budget lives in `contracts`.
 - `SetUser` overwrites (reversible); it never hard-deletes.
 - The contracts change is **additive** → new tag `v0.2.8`. `core/internal/agent` is part of the host module and ships with the host (no obsidian tag).
@@ -342,7 +342,7 @@ func TestMaterializeWithUserProfile(t *testing.T) {
 		t.Fatalf("worktree token not substituted: %q", user)
 	}
 	claude, _ := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
-	if !strings.Contains(string(claude), "# Soul") || !strings.Contains(string(claude), "@.claude/USER.md") {
+	if !strings.Contains(string(claude), "# Soul") || !strings.Contains(string(claude), "@USER.md") {
 		t.Fatalf("CLAUDE.md missing soul or import: %q", claude)
 	}
 	agents, _ := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
@@ -416,7 +416,7 @@ Replace the body of `Materialize` (from the `copies` block onward) so `CLAUDE.md
 		if err := os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), 0o644); err != nil {
 			return fmt.Errorf("write .claude/USER.md: %w", err)
 		}
-		claudeMd = soulOut + "\n\n@.claude/USER.md\n"
+		claudeMd = soulOut + "\n\n@USER.md\n"
 		agentsMd = soulOut + "\n\n# User\n\n" + userOut
 	}
 

@@ -142,8 +142,14 @@ func TestMaterializeWithUserProfile(t *testing.T) {
 		t.Fatalf("worktree token not substituted: %q", user)
 	}
 	claude, _ := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
-	if !strings.Contains(string(claude), "# Soul") || !strings.Contains(string(claude), "@.claude/USER.md") {
+	// The import must be @USER.md (sibling), not @.claude/USER.md: Claude Code
+	// resolves relative imports against CLAUDE.md's own .claude/ directory, so a
+	// .claude/ prefix would point at the nonexistent .claude/.claude/USER.md.
+	if !strings.Contains(string(claude), "# Soul") || !strings.Contains(string(claude), "@USER.md") {
 		t.Fatalf("CLAUDE.md missing soul or import: %q", claude)
+	}
+	if strings.Contains(string(claude), "@.claude/USER.md") {
+		t.Fatalf("CLAUDE.md uses wrong import path @.claude/USER.md: %q", claude)
 	}
 	agents, _ := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
 	if !strings.Contains(string(agents), "# User") || !strings.Contains(string(agents), "user works at "+wt) {

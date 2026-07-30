@@ -52,9 +52,14 @@ profile, distinct from `MEMORY.md` (facts) and the skills layer.
 - No new field on `Agent` — `USER.md`, like `SOUL.md`, is read at materialize
   time, not cached on the struct.
 
-### 2. Enforcement (`herrscher-contracts` → v0.2.10, additive)
+### 2. Enforcement (`herrscher-contracts` — already shipped in v0.2.9)
 
-Add a shared helper so the budget policy has one canonical home:
+**Update 2026-07-30:** `contracts.EnforceBudget` already exists in the released
+v0.2.9 (it landed alongside G3, verified in `v0.2.9:budget.go`). G6 therefore
+needs **no contracts change and no new tag** — the host already depends on
+v0.2.9 and can call it directly. This slice is host-only.
+
+The canonical helper (for reference):
 
 ```go
 // EnforceBudget returns a *BudgetError when body exceeds limit runes.
@@ -138,10 +143,11 @@ contains the inlined `# User` section; `worktreeToken` substituted. Without
 
 ## Release footprint
 
-- `herrscher-contracts` → **v0.2.10** (adds `EnforceBudget`; additive, on top of
-  the current v0.2.9). Push tag, then bump the host `go.mod`.
+- `herrscher-contracts` — **no change**. `EnforceBudget` already ships in the
+  released v0.2.9 (the host already depends on it). No contracts tag, no
+  `go.mod` bump, no `go.work` overlay.
 - `core/internal/agent` is part of the host module → shipped with the host; no
-  obsidian tag this slice (obsidian keeps v0.2.7).
+  obsidian tag this slice (obsidian keeps v0.2.7). **G6 is host-only.**
 
 ## Out of scope (YAGNI)
 

@@ -160,18 +160,27 @@ Behavior:
 a sweep error is logged/swallowed, never returned, so consolidation and the
 turn loop are unaffected (invariant: learning never breaks a turn).
 
-### 4. host — env configuration
+### 4. env configuration (orchestrator plugin `register.go`)
 
-Add `Curator.StalenessFromEnv(get func(string) string) (staleAfter, archiveAfter time.Duration, ok bool)`
-(or a small free function mirroring G6's `UserBudgetFromEnv`), parsing:
+Env is wired **inside the orchestrator plugin**, not host code — mirroring how
+the obsidian plugin reads `OBSIDIAN_NODE_BUDGET` in its own `register.go`. The
+host builds the local orchestrator through the plugin factory at
+`core/host/seed.go:298`, where `contracts.Resolve(plugin.Manifest.Config,
+os.Getenv)` already resolves every manifest-declared `Setting.Env` into the
+`cfg` bag the factory receives. So G3 only:
 
-- `AGENT_STALE_DAYS` → `staleAfter` (days, integer).
-- `AGENT_ARCHIVE_DAYS` → `archiveAfter` (days, integer).
+1. Adds two `Setting`s to the orchestrator `Manifest.Config`:
+   - `{Key: "stale-days", Env: "AGENT_STALE_DAYS", Help: "..."}`
+   - `{Key: "archive-days", Env: "AGENT_ARCHIVE_DAYS", Help: "..."}`
+2. In the `Orchestrator` factory, parses `cfg.Get("stale-days")` /
+   `cfg.Get("archive-days")` (integer days → `time.Duration`) and calls
+   `SetStaleness(staleAfter, archiveAfter)` on the returned `*Curator` (both
+   the `NewLearner` and `NewScoped` paths return one).
 
-Unset/unparseable → keep the built-in defaults **30 days / 90 days**. A value
-`<= 0` disables that transition (nodes never reach that state). The host calls
-`SetStaleness` where it constructs the orchestrator/Learner, exactly as G6
-wires `SetUserBudget` in `core/host/cli.go`.
+Unset/unparseable → keep the built-in defaults **30 days / 90 days** (set in
+the `Curator` constructor). A value `<= 0` disables that transition (nodes
+never reach that state). **The host itself needs no code change** — only the
+`go.mod` version bump for the new orchestrator/contracts/obsidian tags.
 
 ## Testing
 

@@ -46,6 +46,9 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	upCfg, _ := service.DefaultConfig()
 	up := serviceUpdater{cfg: upCfg, st: st}
 	agents := agent.NewStore(filepath.Join(partDir, "agents"))
+	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
+		agents.SetUserBudget(n)
+	}
 	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
 	hdl.SetSeeder(Seed) // host.Seed: live-session injection for `session switch` handoff
 	seedCoord := &coordinatorSlot{}

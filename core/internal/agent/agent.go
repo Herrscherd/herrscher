@@ -56,7 +56,13 @@ type Agent struct {
 //	<worktree>/.claude/settings.json (from <home>/settings.json)
 //	<worktree>/.claude/CLAUDE.md     (from <home>/SOUL.md — the layered persona)
 //	<worktree>/AGENTS.md             (from <home>/SOUL.md)
+//	<worktree>/.claude/USER.md       (from <home>/USER.md, when present)
 //	<worktree>/.codex/config.toml    (converted from <home>/mcp.json)
+//
+// When <home>/USER.md exists, it is also referenced from CLAUDE.md via a
+// Claude Code @import and inlined into AGENTS.md (Codex has no import
+// mechanism). Without a USER.md, CLAUDE.md and AGENTS.md are byte-identical
+// to SOUL.md.
 //
 // Any worktreeToken in a source file is replaced with the worktree path.
 func (a Agent) Materialize(worktree string) error {
@@ -71,13 +77,11 @@ func (a Agent) Materialize(worktree string) error {
 	if err := os.MkdirAll(codexDir, 0o755); err != nil {
 		return fmt.Errorf("create .codex dir: %w", err)
 	}
-	copies := []struct{ src, dst string }{
+	// Files copied verbatim (token-substituted): mcp + settings.
+	for _, c := range []struct{ src, dst string }{
 		{filepath.Join(a.Home, mcpFile), filepath.Join(worktree, ".mcp.json")},
 		{filepath.Join(a.Home, settingsFile), filepath.Join(claudeDir, "settings.json")},
-		{filepath.Join(a.Home, soulFile), filepath.Join(claudeDir, "CLAUDE.md")},
-		{filepath.Join(a.Home, soulFile), filepath.Join(worktree, "AGENTS.md")},
-	}
-	for _, c := range copies {
+	} {
 		buf, err := os.ReadFile(c.src)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", filepath.Base(c.src), err)
@@ -87,6 +91,36 @@ func (a Agent) Materialize(worktree string) error {
 			return fmt.Errorf("write %s: %w", c.dst, err)
 		}
 	}
+
+	// Persona (SOUL.md) → CLAUDE.md + AGENTS.md, optionally augmented with the
+	// user profile (USER.md). Absent USER.md leaves both byte-identical to soul.
+	soul, err := os.ReadFile(filepath.Join(a.Home, soulFile))
+	if err != nil {
+		return fmt.Errorf("read %s: %w", soulFile, err)
+	}
+	soulOut := strings.ReplaceAll(string(soul), worktreeToken, worktree)
+	claudeMd, agentsMd := soulOut, soulOut
+
+	userRaw, uErr := os.ReadFile(filepath.Join(a.Home, userFile))
+	if uErr != nil && !os.IsNotExist(uErr) {
+		return fmt.Errorf("read %s: %w", userFile, uErr)
+	}
+	if uErr == nil {
+		userOut := strings.ReplaceAll(string(userRaw), worktreeToken, worktree)
+		if err := os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), 0o644); err != nil {
+			return fmt.Errorf("write .claude/USER.md: %w", err)
+		}
+		claudeMd = soulOut + "\n\n@.claude/USER.md\n"
+		agentsMd = soulOut + "\n\n# User\n\n" + userOut
+	}
+
+	if err := os.WriteFile(filepath.Join(claudeDir, "CLAUDE.md"), []byte(claudeMd), 0o644); err != nil {
+		return fmt.Errorf("write .claude/CLAUDE.md: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(worktree, "AGENTS.md"), []byte(agentsMd), 0o644); err != nil {
+		return fmt.Errorf("write AGENTS.md: %w", err)
+	}
+
 	mcp, err := os.ReadFile(filepath.Join(a.Home, mcpFile))
 	if err != nil {
 		return fmt.Errorf("read %s: %w", mcpFile, err)

@@ -19,6 +19,7 @@ import (
 // File names inside an agent home (the durable source of truth).
 const (
 	soulFile     = "SOUL.md"
+	userFile     = "USER.md"
 	mcpFile      = "mcp.json"
 	settingsFile = "settings.json"
 	tagsFile     = "TAGS"

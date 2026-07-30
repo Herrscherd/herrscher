@@ -2,10 +2,13 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func TestStoreCreateWritesTags(t *testing.T) {
@@ -204,6 +207,60 @@ func TestStoreCreateRejectsBadName(t *testing.T) {
 	}
 }
 
+func TestSetUserRejectsOverBudget(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if _, err := s.Create(CreateSpec{Name: "alice", Soul: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	s.SetUserBudget(50)
+	err := s.SetUser("alice", strings.Repeat("é", 100)) // 100 runes / 200 bytes
+	var be *contracts.BudgetError
+	if !errors.As(err, &be) {
+		t.Fatalf("want *contracts.BudgetError, got %T (%v)", err, err)
+	}
+	if be.Runes != 100 || be.Limit != 50 {
+		t.Fatalf("got Runes=%d Limit=%d", be.Runes, be.Limit)
+	}
+	if _, err := os.Stat(filepath.Join(s.Root(), "alice", "USER.md")); !os.IsNotExist(err) {
+		t.Fatal("USER.md must not be written when over budget")
+	}
+}
+
+func TestSetUserWritesUnderBudget(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if _, err := s.Create(CreateSpec{Name: "alice", Soul: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetUser("alice", "prefers Go"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(s.Root(), "alice", "USER.md"))
+	if err != nil || string(got) != "prefers Go" {
+		t.Fatalf("got %q err %v", got, err)
+	}
+}
+
+func TestSetUserZeroBudgetDisablesCheck(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if _, err := s.Create(CreateSpec{Name: "alice", Soul: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	s.SetUserBudget(0)
+	if err := s.SetUser("alice", strings.Repeat("x", 5000)); err != nil {
+		t.Fatalf("zero budget should disable, got %v", err)
+	}
+}
+
+func TestSetUserMissingAgentErrors(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.SetUser("ghost", "x"); err == nil {
+		t.Fatal("want error for missing agent")
+	}
+	if _, err := os.Stat(filepath.Join(s.Root(), "ghost")); !os.IsNotExist(err) {
+		t.Fatal("SetUser must not create a home")
+	}
+}
+
 func TestGetReadsTags(t *testing.T) {
 	root := t.TempDir()
 	s := NewStore(root)
@@ -258,5 +315,28 @@ func TestListReadsTags(t *testing.T) {
 	}
 	if list[1].Tags != nil {
 		t.Fatalf("b.Tags = %v, want nil", list[1].Tags)
+	}
+}
+
+func TestUserBudgetFromEnv(t *testing.T) {
+	cases := []struct {
+		name string
+		val  string
+		want int
+		ok   bool
+	}{
+		{"unset", "", 0, false},
+		{"valid", "1200", 1200, true},
+		{"zero", "0", 0, true},
+		{"garbage", "abc", 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			get := func(string) string { return c.val }
+			got, ok := UserBudgetFromEnv(get)
+			if got != c.want || ok != c.ok {
+				t.Fatalf("got (%d,%v) want (%d,%v)", got, ok, c.want, c.ok)
+			}
+		})
 	}
 }

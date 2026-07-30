@@ -6,14 +6,43 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
+// defaultUserBudget bounds USER.md in runes; SetUserBudget overrides it.
+const defaultUserBudget = 1500
+
 // Store owns the directory holding every agent home: <root>/<name>/.
-type Store struct{ root string }
+type Store struct {
+	root       string
+	userBudget int
+}
 
 // NewStore returns a Store rooted at root (created lazily on first Create).
-func NewStore(root string) *Store { return &Store{root: root} }
+func NewStore(root string) *Store { return &Store{root: root, userBudget: defaultUserBudget} }
+
+// SetUserBudget overrides the per-agent USER.md rune budget. A value <= 0
+// disables the check (see contracts.EnforceBudget).
+func (s *Store) SetUserBudget(runes int) { s.userBudget = runes }
+
+// UserBudgetFromEnv parses AGENT_USER_BUDGET via get (os.Getenv in production).
+// It returns (0, false) when the variable is unset or not an integer, so the
+// caller keeps the default budget; a valid value (including 0, which disables
+// the check) returns (n, true).
+func UserBudgetFromEnv(get func(string) string) (int, bool) {
+	v := get("AGENT_USER_BUDGET")
+	if v == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
 
 // Root returns the directory under which agent homes live.
 func (s *Store) Root() string { return s.root }
@@ -24,6 +53,7 @@ func (s *Store) Root() string { return s.root }
 type CreateSpec struct {
 	Name    string
 	Soul    string
+	User    string
 	MCP     string
 	Backend string
 	Cmd     string
@@ -181,6 +211,12 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 		{mcpFile, mcpBuf},
 		{settingsFile, settingsBuf},
 	}
+	if spec.User != "" {
+		files = append(files, struct {
+			name string
+			data []byte
+		}{userFile, []byte(spec.User)})
+	}
 	if spec.Backend != "" {
 		files = append(files, struct {
 			name string
@@ -220,6 +256,23 @@ func (s *Store) SetSoul(name, soul string) error {
 		return fmt.Errorf("no agent %q", name)
 	}
 	return os.WriteFile(filepath.Join(home, soulFile), []byte(soul), 0o644)
+}
+
+// SetUser overwrites <home>/USER.md for an existing agent, rejecting content
+// over the store's user budget (contracts.EnforceBudget) before touching disk.
+// It never creates a home — an absent agent is an error.
+func (s *Store) SetUser(name, text string) error {
+	if !validateName(name) {
+		return fmt.Errorf("invalid agent name %q", name)
+	}
+	home := filepath.Join(s.root, name)
+	if info, err := os.Stat(home); err != nil || !info.IsDir() {
+		return fmt.Errorf("no agent %q", name)
+	}
+	if err := contracts.EnforceBudget("user:"+name, text, s.userBudget); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(home, userFile), []byte(text), 0o644)
 }
 
 // Get returns the agent named name, or false if no such home directory exists.

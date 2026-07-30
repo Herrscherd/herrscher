@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	orchestrator "github.com/Herrscherd/herrscher-orchestrator"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
@@ -169,6 +170,24 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 				return "", err
 			}
 			return "recorded " + n.Key, nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
+	if err := reg.Add(contracts.New("memory", "restore").
+		Help("reactivate an archived (or merged) memory node by key").
+		Param("key", "node key", true).
+		ValueParam("force", "detach from its umbrella if the node was merged (true/false)", false).
+		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
+			mem, err := BuildFirstMemory(cmdCtx)
+			if err != nil {
+				return "", err
+			}
+			defer mem.Close()
+			force := in.Get("force") == "true"
+			if err := orchestrator.Restore(cmdCtx, mem, in.Get("key"), orchestrator.Force(force)); err != nil {
+				return "", err
+			}
+			return "restored " + in.Get("key"), nil
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}

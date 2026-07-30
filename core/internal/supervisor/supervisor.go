@@ -20,13 +20,15 @@ type Supervisor struct {
 	ctx     context.Context
 	selfBin string // path to the herrscher binary (os.Executable)
 	mu      sync.Mutex
-	cancels map[string]context.CancelFunc
-	dones   map[string]chan struct{}
+	runs    map[string]*supervisedRun
 	log     *slog.Logger
 	// sleep and now are clock seams (default time.After / time.Now) so tests can
 	// drive the restart loop and its backoff without real wall-clock waits.
 	sleep func(time.Duration) <-chan time.Time
 	now   func() time.Time
+	// run is the supervised-loop seam. Production points it at runLoop; tests
+	// can hold teardown at a deterministic boundary without spawning a process.
+	run func(context.Context, state.Session)
 	// metrics records bridge-restart counts (nil = no recording, e.g. in tests).
 	metrics *metrics.Registry
 	// agentsRoot is the directory holding agent homes, passed to each bridge so its
@@ -36,6 +38,12 @@ type Supervisor struct {
 	// runBridge is the process boundary. Tests replace it with a controlled
 	// runner so restart ordering can be asserted without launching a real agent.
 	runBridge func(context.Context, state.Session)
+}
+
+type supervisedRun struct {
+	cancel   context.CancelFunc
+	done     chan struct{}
+	stopping bool
 }
 
 // bridgeArgs builds the child `herrscher bridge` argv for sess.
@@ -82,13 +90,13 @@ func NewSupervisor(ctx context.Context, selfBin string) *Supervisor {
 	s := &Supervisor{
 		ctx:     ctx,
 		selfBin: selfBin,
-		cancels: map[string]context.CancelFunc{},
-		dones:   map[string]chan struct{}{},
+		runs:    map[string]*supervisedRun{},
 		log:     obs.NewLogger(os.Stderr, slog.LevelInfo),
 		sleep:   time.After,
 		now:     time.Now,
 	}
 	s.runBridge = s.runBridgeCommand
+	s.run = s.runLoop
 	return s
 }
 
@@ -112,39 +120,53 @@ func (s *Supervisor) SetAgentsRoot(root string) {
 
 // Start launches a supervised bridge for sess (idempotent per name).
 func (s *Supervisor) Start(sess state.Session) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, running := s.cancels[sess.Name]; running {
-		return nil
+	for {
+		s.mu.Lock()
+		run, running := s.runs[sess.Name]
+		switch {
+		case !running:
+			cctx, cancel := context.WithCancel(s.ctx)
+			run = &supervisedRun{cancel: cancel, done: make(chan struct{})}
+			s.runs[sess.Name] = run
+			s.mu.Unlock()
+			go func() {
+				defer close(run.done)
+				s.run(cctx, sess)
+			}()
+			return nil
+		case !run.stopping:
+			s.mu.Unlock()
+			return nil
+		default:
+			s.mu.Unlock()
+			<-run.done
+			s.mu.Lock()
+			if s.runs[sess.Name] == run {
+				delete(s.runs, sess.Name)
+			}
+			s.mu.Unlock()
+		}
 	}
-	cctx, cancel := context.WithCancel(s.ctx)
-	done := make(chan struct{})
-	s.cancels[sess.Name] = cancel
-	s.dones[sess.Name] = done
-	go func() {
-		defer close(done)
-		s.runLoop(cctx, sess)
-	}()
-	return nil
 }
 
-// Stop terminates the bridge for name and waits for its process loop to exit.
-// Returning only after done is what makes a same-name replacement exclusive:
-// the old backend cannot remain connected while the new one starts.
+// Stop terminates the bridge for name and waits until its supervised loop has
+// returned. Callers may safely remove the bridge's working directory after Stop.
 func (s *Supervisor) Stop(name string) error {
 	s.mu.Lock()
-	cancel, ok := s.cancels[name]
-	done := s.dones[name]
-	s.mu.Unlock()
+	run, ok := s.runs[name]
 	if !ok {
+		s.mu.Unlock()
 		return nil
 	}
-	cancel()
-	<-done
+	run.stopping = true
+	run.cancel()
+	s.mu.Unlock()
+
+	<-run.done
+
 	s.mu.Lock()
-	if s.dones[name] == done {
-		delete(s.cancels, name)
-		delete(s.dones, name)
+	if s.runs[name] == run {
+		delete(s.runs, name)
 	}
 	s.mu.Unlock()
 	return nil
@@ -183,6 +205,7 @@ func (s *Supervisor) runLoop(ctx context.Context, sess state.Session) {
 
 func (s *Supervisor) runBridgeCommand(ctx context.Context, sess state.Session) {
 	cmd := exec.CommandContext(ctx, s.selfBin, s.bridgeArgs(sess)...)
+	configureBridgeCommand(cmd)
 	// Dir is the resolved run directory (worktree, or workspace/project root);
 	// fall back to Worktree for sessions persisted before Dir existed. Empty
 	// leaves cmd.Dir unset so the child inherits the launcher's cwd.

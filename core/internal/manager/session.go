@@ -28,13 +28,14 @@ type sessionJSON struct {
 	// Id is the addressable handle by-name ops accept; Name is already the
 	// persisted slug, so id == name. Emitted so a consumer can match a session by
 	// id (Neublox's get_session) without re-deriving the slug.
-	Id       string   `json:"id"`
-	Name     string   `json:"name"`
-	Agent    string   `json:"agent"`
-	Project  string   `json:"project"`
-	Status   string   `json:"status"`
-	Worktree string   `json:"worktree"`
-	Gateways []string `json:"gateways"`
+	Id          string   `json:"id"`
+	Incarnation string   `json:"incarnation"`
+	Name        string   `json:"name"`
+	Agent       string   `json:"agent"`
+	Project     string   `json:"project"`
+	Status      string   `json:"status"`
+	Worktree    string   `json:"worktree"`
+	Gateways    []string `json:"gateways"`
 	// omitempty so a root session omits the key entirely, decoding to a real
 	// "no parent" (null/None) rather than an empty-string parent named "".
 	Parent string `json:"parent,omitempty"`
@@ -319,7 +320,7 @@ func sessionJSONRow(s state.Session) sessionJSON {
 		status = "archived"
 	}
 	return sessionJSON{
-		Id: s.Name, Name: s.Name, Agent: s.Agent, Project: s.Project, Status: status,
+		Id: s.Name, Incarnation: s.Incarnation, Name: s.Name, Agent: s.Agent, Project: s.Project, Status: status,
 		Worktree: s.Worktree, Gateways: gateways, Parent: s.Parent,
 		Resumable: s.ResumeToken != "",
 	}

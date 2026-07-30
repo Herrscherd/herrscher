@@ -17,12 +17,18 @@
 - Materialization strings are exact: `CLAUDE.md` ends with the line `@USER.md` (bare sibling — Claude Code resolves relative imports against CLAUDE.md's own `.claude/` dir, so no `.claude/` prefix); `AGENTS.md` inlines under a `# User` heading.
 - **Ports only, policy not engine**: no new storage; budget lives in `contracts`.
 - `SetUser` overwrites (reversible); it never hard-deletes.
-- The contracts change is **additive** → new tag `v0.2.10` (on top of the current released v0.2.9). `core/internal/agent` is part of the host module and ships with the host (no obsidian tag).
-- **Dev workspace:** a `go.work` overlay makes the host build against the local contracts HEAD during implementation. Release wiring (tag contracts v0.2.10, bump host `go.mod`, remove `go.work`) is out of plan scope — main agent, after review. Enforcement site in obsidian is **not** migrated in this slice.
+- **`contracts.EnforceBudget` already ships in the released v0.2.9** (verified 2026-07-30 in `v0.2.9:budget.go`; the host already depends on v0.2.9). G6 needs **no contracts change, no new tag, no `go.work` overlay** — it is host-only. Tasks 0 and 1 below are already satisfied and are SKIPPED; execution starts at Task 2.
+- `core/internal/agent` is part of the host module and ships with the host (no obsidian tag). Enforcement site in obsidian is **not** migrated in this slice.
 
 ---
 
-## Task 0: Dev workspace overlay (main agent, setup)
+## Task 0: Dev workspace overlay (main agent, setup) — SKIPPED (not needed)
+
+**SKIPPED 2026-07-30:** `EnforceBudget` is already in the released contracts
+v0.2.9 that the host depends on, so no local-HEAD overlay is required. The
+original steps are retained below for the record only.
+
+
 
 **Files:**
 - Create: `<host-worktree>/go.work` (untracked, dev-only)
@@ -54,7 +60,12 @@ Expected: builds (contracts resolves to local HEAD).
 
 ---
 
-## Task 1: contracts.EnforceBudget helper
+## Task 1: contracts.EnforceBudget helper — ALREADY SHIPPED (v0.2.9), SKIPPED
+
+**ALREADY SHIPPED 2026-07-30:** `EnforceBudget` (with these exact semantics and
+tests) is present in the released contracts v0.2.9. Verified in `v0.2.9:budget.go`.
+No work needed; execution starts at Task 2. Original task text retained below for
+the record only.
 
 **Repo:** `/home/shan/dev/herrscher-contracts` (branch `feat/g6-user-budget` off `master`, currently at v0.2.9).
 
@@ -551,11 +562,11 @@ git commit -m "feat(host): wire AGENT_USER_BUDGET into agent store (G6)"
 
 ## Release wiring (out of plan scope — main agent, after review)
 
-1. Tag contracts: on the contracts `feat/g6-user-budget` branch, rebase onto `origin/master` if needed, fast-forward `master`, `git tag -a v0.2.10 -m "G6: EnforceBudget helper"`, push master + tag.
-2. Bump the host: `GOWORK=off go get github.com/Herrscherd/herrscher-contracts@v0.2.10 && GOWORK=off go mod tidy`.
-3. Remove the dev overlay: `rm go.work`.
-4. Verify: `GOWORK=off go build ./... && GOWORK=off go test ./...` (full host suite green).
-5. Commit the host `go.mod`/`go.sum` bump.
+**No contracts release for G6** — `EnforceBudget` already ships in v0.2.9. G6 is
+host-only, so there is no cross-module tag/bump dance:
+
+1. Verify the full host suite green: `GOWORK=off go build ./... && GOWORK=off go test ./...`.
+2. Finish the branch via `superpowers:finishing-a-development-branch` (PR against master).
 
 ## Notes
 

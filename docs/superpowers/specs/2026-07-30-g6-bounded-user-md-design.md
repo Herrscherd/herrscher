@@ -28,10 +28,11 @@ profile, distinct from `MEMORY.md` (facts) and the skills layer.
   `SOUL.md`/`mcp.json`/`settings.json` (+ optional `TAGS`/`backend`/`cmd`).
   `SetSoul(name, soul)` overwrites `SOUL.md` for an existing home; it never
   creates one. `Get`/`List` read home metadata.
-- G1 shipped: `contracts.BudgetError{Key, Runes, Limit}` (contracts v0.2.7);
-  obsidian enforces it inline in `recordUnlocked` (rune count, `limit<=0`
-  disables). The rune-count + typed-error policy currently lives only in
-  obsidian.
+- G1 shipped: `contracts.BudgetError{Key, Runes, Limit}` (shipped in contracts
+  v0.2.9 alongside G3); obsidian enforces it inline in `recordUnlocked` (rune
+  count, `limit<=0` disables). The rune-count + typed-error policy currently
+  lives only in obsidian. Current released floors: contracts **v0.2.9**,
+  obsidian **v0.2.7**, orchestrator **v0.1.12**.
 
 ## Design
 
@@ -51,7 +52,7 @@ profile, distinct from `MEMORY.md` (facts) and the skills layer.
 - No new field on `Agent` — `USER.md`, like `SOUL.md`, is read at materialize
   time, not cached on the struct.
 
-### 2. Enforcement (`herrscher-contracts` → v0.2.8, additive)
+### 2. Enforcement (`herrscher-contracts` → v0.2.10, additive)
 
 Add a shared helper so the budget policy has one canonical home:
 
@@ -137,10 +138,10 @@ contains the inlined `# User` section; `worktreeToken` substituted. Without
 
 ## Release footprint
 
-- `herrscher-contracts` → **v0.2.8** (adds `EnforceBudget`; additive). Push
-  tag, then bump the host `go.mod`.
+- `herrscher-contracts` → **v0.2.10** (adds `EnforceBudget`; additive, on top of
+  the current v0.2.9). Push tag, then bump the host `go.mod`.
 - `core/internal/agent` is part of the host module → shipped with the host; no
-  obsidian tag this slice (obsidian keeps v0.2.6).
+  obsidian tag this slice (obsidian keeps v0.2.7).
 
 ## Out of scope (YAGNI)
 

@@ -17,8 +17,8 @@
 - Materialization strings are exact: `CLAUDE.md` ends with the line `@USER.md` (bare sibling — Claude Code resolves relative imports against CLAUDE.md's own `.claude/` dir, so no `.claude/` prefix); `AGENTS.md` inlines under a `# User` heading.
 - **Ports only, policy not engine**: no new storage; budget lives in `contracts`.
 - `SetUser` overwrites (reversible); it never hard-deletes.
-- The contracts change is **additive** → new tag `v0.2.8`. `core/internal/agent` is part of the host module and ships with the host (no obsidian tag).
-- **Dev workspace:** a `go.work` overlay makes the host build against the local contracts HEAD during implementation. Release wiring (tag contracts v0.2.8, bump host `go.mod`, remove `go.work`) is out of plan scope — main agent, after review. Enforcement site in obsidian is **not** migrated in this slice.
+- The contracts change is **additive** → new tag `v0.2.10` (on top of the current released v0.2.9). `core/internal/agent` is part of the host module and ships with the host (no obsidian tag).
+- **Dev workspace:** a `go.work` overlay makes the host build against the local contracts HEAD during implementation. Release wiring (tag contracts v0.2.10, bump host `go.mod`, remove `go.work`) is out of plan scope — main agent, after review. Enforcement site in obsidian is **not** migrated in this slice.
 
 ---
 
@@ -56,7 +56,7 @@ Expected: builds (contracts resolves to local HEAD).
 
 ## Task 1: contracts.EnforceBudget helper
 
-**Repo:** `/home/shan/dev/herrscher-contracts` (branch `feat/g6-user-budget` off `master`/v0.2.7).
+**Repo:** `/home/shan/dev/herrscher-contracts` (branch `feat/g6-user-budget` off `master`, currently at v0.2.9).
 
 **Files:**
 - Modify: `budget.go`
@@ -551,8 +551,8 @@ git commit -m "feat(host): wire AGENT_USER_BUDGET into agent store (G6)"
 
 ## Release wiring (out of plan scope — main agent, after review)
 
-1. Tag contracts: on the contracts `feat/g6-user-budget` branch, rebase onto `origin/master` if needed, fast-forward `master`, `git tag -a v0.2.8 -m "G6: EnforceBudget helper"`, push master + tag.
-2. Bump the host: `GOWORK=off go get github.com/Herrscherd/herrscher-contracts@v0.2.8 && GOWORK=off go mod tidy`.
+1. Tag contracts: on the contracts `feat/g6-user-budget` branch, rebase onto `origin/master` if needed, fast-forward `master`, `git tag -a v0.2.10 -m "G6: EnforceBudget helper"`, push master + tag.
+2. Bump the host: `GOWORK=off go get github.com/Herrscherd/herrscher-contracts@v0.2.10 && GOWORK=off go mod tidy`.
 3. Remove the dev overlay: `rm go.work`.
 4. Verify: `GOWORK=off go build ./... && GOWORK=off go test ./...` (full host suite green).
 5. Commit the host `go.mod`/`go.sum` bump.

@@ -110,7 +110,10 @@ func (a Agent) Materialize(worktree string) error {
 		if err := os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), 0o644); err != nil {
 			return fmt.Errorf("write .claude/USER.md: %w", err)
 		}
-		claudeMd = soulOut + "\n\n@.claude/USER.md\n"
+		// @USER.md, not @.claude/USER.md: Claude Code resolves relative imports
+		// against the importing file's own directory, and CLAUDE.md already lives
+		// in .claude/, so the profile is its sibling.
+		claudeMd = soulOut + "\n\n@USER.md\n"
 		agentsMd = soulOut + "\n\n# User\n\n" + userOut
 	}
 

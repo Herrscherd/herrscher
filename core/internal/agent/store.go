@@ -269,7 +269,7 @@ func (s *Store) SetUser(name, text string) error {
 	if info, err := os.Stat(home); err != nil || !info.IsDir() {
 		return fmt.Errorf("no agent %q", name)
 	}
-	if err := contracts.EnforceBudget(name, text, s.userBudget); err != nil {
+	if err := contracts.EnforceBudget("user:"+name, text, s.userBudget); err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(home, userFile), []byte(text), 0o644)

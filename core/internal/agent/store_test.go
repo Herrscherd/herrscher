@@ -317,3 +317,26 @@ func TestListReadsTags(t *testing.T) {
 		t.Fatalf("b.Tags = %v, want nil", list[1].Tags)
 	}
 }
+
+func TestUserBudgetFromEnv(t *testing.T) {
+	cases := []struct {
+		name string
+		val  string
+		want int
+		ok   bool
+	}{
+		{"unset", "", 0, false},
+		{"valid", "1200", 1200, true},
+		{"zero", "0", 0, true},
+		{"garbage", "abc", 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			get := func(string) string { return c.val }
+			got, ok := UserBudgetFromEnv(get)
+			if got != c.want || ok != c.ok {
+				t.Fatalf("got (%d,%v) want (%d,%v)", got, ok, c.want, c.ok)
+			}
+		})
+	}
+}

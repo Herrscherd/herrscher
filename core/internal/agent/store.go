@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -26,6 +27,22 @@ func NewStore(root string) *Store { return &Store{root: root, userBudget: defaul
 // SetUserBudget overrides the per-agent USER.md rune budget. A value <= 0
 // disables the check (see contracts.EnforceBudget).
 func (s *Store) SetUserBudget(runes int) { s.userBudget = runes }
+
+// UserBudgetFromEnv parses AGENT_USER_BUDGET via get (os.Getenv in production).
+// It returns (0, false) when the variable is unset or not an integer, so the
+// caller keeps the default budget; a valid value (including 0, which disables
+// the check) returns (n, true).
+func UserBudgetFromEnv(get func(string) string) (int, bool) {
+	v := get("AGENT_USER_BUDGET")
+	if v == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
 
 // Root returns the directory under which agent homes live.
 func (s *Store) Root() string { return s.root }

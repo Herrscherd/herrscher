@@ -40,6 +40,7 @@ code, comment, or test fixture).
 - [Durable agents](#durable-agents)
   - [Memory scope (shared vs private)](#memory-scope-shared-vs-private)
   - [Learning (the write side)](#learning-the-write-side)
+  - [Staleness (the decay side)](#staleness-the-decay-side)
 - [Conscious memory (the model drives it)](#conscious-memory-the-model-drives-it)
 - [Installation](#installation)
 - [CLI reference](#cli-reference)
@@ -700,6 +701,27 @@ Policy:
 - **Idempotent.** `Consolidate` re-runs every N turns over the same journal, but
   a per-session `seen` set skips already-persisted keys — so re-running adds no
   duplicate facts/skills, and is a no-op when nothing new is extracted.
+
+### Staleness (the decay side)
+
+Left alone, a growing graph accumulates facts forever. **Staleness** is the
+counterweight: at the end of every `Consolidate` pass the orchestrator runs a
+best-effort **sweep** that ages each node through a deterministic, LLM-free
+lifecycle — `active → stale → archived` — derived purely from how long since the
+node was last seen.
+
+- **`lastSeen`** is stamped on every write and bumped whenever a node is
+  re-observed, so touching a fact keeps it fresh; an archived node that is
+  written again is **reactivated** on the next sweep.
+- **Archived** nodes are hidden from ordinary recall and search but stay on
+  disk — nothing is moved or deleted, so decay is fully reversible.
+- Windows default to **30 days** to stale and **90 days** to archived, overridable
+  per deployment via `AGENT_STALE_DAYS` / `AGENT_ARCHIVE_DAYS` (integer days; a
+  value `≤ 0` disables that transition).
+
+The sweep is off the turn's critical path and never fails a turn: a sweep error
+is swallowed by `Consolidate`, and a single node's write failure no longer aborts
+the pass.
 
 ### Conscious memory (the model drives it)
 

@@ -147,3 +147,60 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 		t.Fatalf("non-owned user file must remain dirty:\n%s", status)
 	}
 }
+
+func TestMaterializeWithUserProfile(t *testing.T) {
+	home := t.TempDir()
+	os.WriteFile(filepath.Join(home, "SOUL.md"), []byte("# Soul"), 0o644)
+	os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o644)
+	os.WriteFile(filepath.Join(home, "settings.json"), []byte(`{}`), 0o644)
+	os.WriteFile(filepath.Join(home, "USER.md"), []byte("user works at {{WORKTREE}}"), 0o644)
+
+	wt := t.TempDir()
+	a := Agent{Name: "alice", Home: home}
+	if err := a.Materialize(wt); err != nil {
+		t.Fatal(err)
+	}
+
+	user, err := os.ReadFile(filepath.Join(wt, ".claude", "USER.md"))
+	if err != nil {
+		t.Fatalf("read .claude/USER.md: %v", err)
+	}
+	if string(user) != "user works at "+wt {
+		t.Fatalf("worktree token not substituted: %q", user)
+	}
+	claude, _ := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
+	// The import must be @USER.md (sibling), not @.claude/USER.md: Claude Code
+	// resolves relative imports against CLAUDE.md's own .claude/ directory, so a
+	// .claude/ prefix would point at the nonexistent .claude/.claude/USER.md.
+	if !strings.Contains(string(claude), "# Soul") || !strings.Contains(string(claude), "@USER.md") {
+		t.Fatalf("CLAUDE.md missing soul or import: %q", claude)
+	}
+	if strings.Contains(string(claude), "@.claude/USER.md") {
+		t.Fatalf("CLAUDE.md uses wrong import path @.claude/USER.md: %q", claude)
+	}
+	agents, _ := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
+	if !strings.Contains(string(agents), "# User") || !strings.Contains(string(agents), "user works at "+wt) {
+		t.Fatalf("AGENTS.md missing inlined user: %q", agents)
+	}
+}
+
+func TestMaterializeWithoutUserProfileUnchanged(t *testing.T) {
+	home := t.TempDir()
+	os.WriteFile(filepath.Join(home, "SOUL.md"), []byte("# Soul"), 0o644)
+	os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o644)
+	os.WriteFile(filepath.Join(home, "settings.json"), []byte(`{}`), 0o644)
+
+	wt := t.TempDir()
+	a := Agent{Name: "alice", Home: home}
+	if err := a.Materialize(wt); err != nil {
+		t.Fatal(err)
+	}
+	claude, _ := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
+	agents, _ := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
+	if string(claude) != "# Soul" || string(agents) != "# Soul" {
+		t.Fatalf("no-profile output must equal soul verbatim: claude=%q agents=%q", claude, agents)
+	}
+	if _, err := os.Stat(filepath.Join(wt, ".claude", "USER.md")); !os.IsNotExist(err) {
+		t.Fatal(".claude/USER.md must not exist without a home USER.md")
+	}
+}

@@ -775,6 +775,23 @@ the pass.
   with its own copy. The pass is off by default (`promote-min-age-days` ≤ 0) and
   never fails a turn (a promotion error is swallowed by `Consolidate`, and one
   node's failure never aborts the rest of the pass).
+- **Inactivity-triggered curator.** The passes above fire on the *per-turn*
+  cadence (`consolidate-every` N turns). A busy session consolidates often; a
+  session that goes quiet mid-thought would otherwise never fold, promote, or
+  decay until the next turn — which may be days away. G5 adds a second, purely
+  *time*-based trigger: the learner runs one background consolidation once a
+  session has been idle, gated by a pure predicate `now − lastRun ≥ idle-days`
+  **and** `now − lastActivity ≥ idle-hours` (both inclusive). It is discovered
+  by the host as an optional `Start(ctx)` capability — `contracts.Orchestrator`
+  is unchanged — and polls on its own goroutine bound to the bridge context, so
+  it is torn down automatically on session exit. The idle pass never blocks a
+  turn: it single-flights against the turn path with a non-blocking `TryLock`
+  (skipping the tick on contention rather than waiting), and the activity clock
+  is stamped under a separate lightweight lock so a turn-path `Observe` never
+  waits on a slow background consolidation. It adds no new write path — only a
+  second trigger for the existing reversible passes. Off by default
+  (`idle-days` / `MEMORY_IDLE_DAYS` ≤ 0); the quiet-period gate defaults to
+  `idle-hours` / `MEMORY_IDLE_HOURS` = 2.
 
 ### Conscious memory (the model drives it)
 

@@ -144,7 +144,18 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 	if err != nil {
 		return "", fmt.Errorf("attachment request %s: %w", a.Filename, err)
 	}
-	resp, err := client.Do(req)
+	// Pinning only the initial URL is not enough: the default client follows
+	// redirects blindly, so an allowlisted CDN that 302s to an internal host
+	// would defeat the SSRF pin. Re-validate every hop against the allowlist
+	// (on a copy, so the caller's shared client is left untouched).
+	pinned := *client
+	pinned.CheckRedirect = func(r *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("download %s: too many redirects", a.Filename)
+		}
+		return validateCDNURL(r.URL.String(), hosts)
+	}
+	resp, err := pinned.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("download %s: %w", a.Filename, err)
 	}

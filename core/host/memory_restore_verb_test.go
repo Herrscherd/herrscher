@@ -103,6 +103,34 @@ func TestMemoryRestoreVerbForceDetachesMergedOriginal(t *testing.T) {
 	}
 }
 
+// TestMemoryRestoreVerbBareForceDetaches covers the documented bare-flag idiom
+// (`--force` with no following value), which the README advertises. The verb
+// declares force as a valueless Param, so a bare --force must toggle it on.
+func TestMemoryRestoreVerbBareForceDetaches(t *testing.T) {
+	currentRestoreMem = &restoreVerbMem{nodes: map[string]contracts.Node{
+		"facts/a": {Key: "facts/a", Meta: map[string]string{
+			orchestrator.MetaMergedInto: "facts/u",
+			contracts.MetaState:         contracts.StateArchived,
+			contracts.MetaLastSeen:      "2020-01-01T00:00:00Z",
+		}},
+	}}
+	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := reg.Dispatch(context.Background(), []string{"memory", "restore", "--key", "facts/a", "--force"})
+	if err != nil {
+		t.Fatalf("dispatch with bare --force: %v", err)
+	}
+	if out != "restored facts/a" {
+		t.Errorf("output = %q, want %q", out, "restored facts/a")
+	}
+	got := currentRestoreMem.nodes["facts/a"]
+	if got.Meta[contracts.MetaState] != contracts.StateActive || got.Meta[orchestrator.MetaMergedInto] != "" {
+		t.Fatalf("bare-force restore did not detach: %+v", got.Meta)
+	}
+}
+
 func TestMemoryRestoreVerbUnknownKeyErrors(t *testing.T) {
 	currentRestoreMem = &restoreVerbMem{nodes: map[string]contracts.Node{}}
 	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})

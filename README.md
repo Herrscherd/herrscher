@@ -747,6 +747,17 @@ The sweep is off the turn's critical path and never fails a turn: a sweep error
 is swallowed by `Consolidate`, and a single node's write failure no longer aborts
 the pass.
 
+- **Audit + restore (reversible-archive).** Because archiving and merging only
+  *label* nodes, every transition is reversible. Each `Consolidate` pass appends
+  an **append-only report** node (`reports/<timestamp>`, nanosecond-keyed so
+  back-to-back passes never overwrite) listing the sweep/merge/restore
+  transitions it applied — on by default, configurable via `report-enabled` /
+  `MEMORY_REPORT_ENABLED` and `report-prefix` / `MEMORY_REPORT_PREFIX`. The
+  operator reactivates any archived or merged node with `herrscher memory
+  restore --key K [--force]` (see the `memory` CLI verb below): it clears the
+  archived/merged state and refreshes `lastSeen`, refusing a merged original
+  unless `--force` also detaches it from its umbrella.
+
 ### Conscious memory (the model drives it)
 
 Recall and learning above are *automatic* — the orchestrator injects and
@@ -935,19 +946,30 @@ comma-separated categories to run out-of-process (`memory`, `orchestrator`,
 closed). With TLS unset the transport stays plaintext loopback, exactly as a
 single-host deployment.
 
-### `memory` — locate, forget, record memory nodes
+### `memory` — locate, forget, record, restore memory nodes
 
-`herrscher memory <locate|forget|record> --key K [...]` drives the compiled-in
-memory plugin (e.g. `obsidian`) directly through the operator registry, one node
-at a time. Consommé par Neublox via exec (voir issue #44). `--json` prints the raw
-`contracts.Location` payload instead of a single URI. Uses `OBSIDIAN_VAULT` like
-the rest of the memory surface (see [Environment](#cli-reference) above).
+`herrscher memory <locate|forget|record|restore> --key K [...]` drives the
+compiled-in memory plugin (e.g. `obsidian`) directly through the operator
+registry, one node at a time. Consommé par Neublox via exec (voir issue #44).
+`--json` prints the raw `contracts.Location` payload instead of a single URI.
+Uses `OBSIDIAN_VAULT` like the rest of the memory surface (see
+[Environment](#cli-reference) above).
 
 ```bash
 herrscher memory record --key demo/fact --kind decision --title "Demo"
 herrscher memory locate --key demo/fact --json
 herrscher memory forget --key demo/fact
+herrscher memory restore --key demo/fact              # reactivate an archived node
+herrscher memory restore --key demo/fact --force      # detach a merged node from its umbrella
 ```
+
+`restore` is the operator side of the **reversible-archive** guarantee (G4):
+staleness-archiving and semantic merges only *label* nodes, never delete them,
+so `restore` clears the archived/merged state and refreshes `lastSeen`. It
+refuses a merged original unless `--force` is passed (which also detaches it
+from its umbrella). Every learning pass also appends an append-only **report**
+node (`reports/<timestamp>`, `report-enabled`/`report-prefix` config) auditing
+the state transitions it applied.
 
 ---
 

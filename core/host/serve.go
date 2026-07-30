@@ -237,15 +237,13 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 
 	// Live event stream: a sibling append-only socket carries every session's
 	// bus events (thinking/status/chunk/reply) as JSON lines to any external
-	// reader (Neublox). The seed path (Op::DispatchTask) taps its turns onto it
-	// via seedEventPublisher; absent a subscriber, Publish is a cheap no-op.
-	// Wired BEFORE serveCommandSocket: that socket receives Op::DispatchTask,
-	// whose seed reads seedEventPublisher — publishing the assignment first
-	// happens-before the command goroutine starts, so the very first dispatched
+	// reader (Neublox). The seed path (Op::DispatchTask) receives this publisher
+	// in its request-scoped daemon runtime; absent a subscriber, Publish is a
+	// cheap no-op. Bind it BEFORE serveCommandSocket so the very first dispatched
 	// task already sees the tap (no race, no missed live stream).
 	es := newEventSocket()
 	go serveEventsSocket(ctx, EventsSocketPath(instID), es)
-	seedEventPublisher = es.Publish
+	hb.eventPublisher = es.Publish
 
 	go serveCommandSocket(ctx, CommandSocketPath(instID), hb)
 

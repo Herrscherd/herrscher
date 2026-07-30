@@ -549,9 +549,9 @@ func envFileHasRequired(path string, vars []EnvVar) bool {
 	return true
 }
 
-// quoteArgv joins a binary path and its args for an ExecStart line, quoting the
-// command line, applying quote to the binary and every argument so a path or
-// value containing spaces or metacharacters survives the target's parser.
+// joinQuoted joins a binary path and its args for an ExecStart line, applying
+// quote to the binary and every argument so a path or value containing spaces
+// or metacharacters survives the target's parser.
 func joinQuoted(quote func(string) string, bin string, args []string) string {
 	parts := make([]string, 0, len(args)+1)
 	parts = append(parts, quote(bin))

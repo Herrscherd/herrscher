@@ -1,12 +1,36 @@
 package agent
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// TestJSONStringInnerEscapes pins the Windows-path guarantee: a worktree path
+// with backslashes or a quote must be escaped so it stays valid inside a JSON
+// string value. On POSIX the path is unchanged (no escaping needed), which is
+// why materialize's JSON output was accidentally valid before this fix.
+func TestJSONStringInnerEscapes(t *testing.T) {
+	cases := map[string]string{
+		`/home/me/wt`:    `/home/me/wt`,
+		`C:\Users\me\wt`: `C:\\Users\\me\\wt`,
+		`C:\a\b"c`:       `C:\\a\\b\"c`,
+		"/tab\tpath":     `/tab\tpath`,
+	}
+	for in, want := range cases {
+		if got := jsonStringInner(in); got != want {
+			t.Errorf("jsonStringInner(%q) = %q, want %q", in, got, want)
+		}
+		// The escaped inner must round-trip as a JSON string back to the input.
+		var out string
+		if err := json.Unmarshal([]byte(`"`+jsonStringInner(in)+`"`), &out); err != nil || out != in {
+			t.Errorf("round-trip %q: got %q err=%v", in, out, err)
+		}
+	}
+}
 
 func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 	s := NewStore(t.TempDir())
@@ -25,6 +49,9 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 	}
 	if !strings.Contains(string(mcp), wt) {
 		t.Fatalf("worktree path not injected:\n%s", mcp)
+	}
+	if !json.Valid(mcp) {
+		t.Fatalf("materialized .mcp.json is not valid JSON:\n%s", mcp)
 	}
 	if !strings.Contains(string(mcp), `"neublox"`) {
 		t.Fatalf("neublox server missing:\n%s", mcp)

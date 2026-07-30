@@ -9,6 +9,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -31,6 +32,17 @@ const (
 // materialized, so an agent's mcp.json can point a server at the session's
 // working directory without knowing it in advance.
 const worktreeToken = "{{WORKTREE}}"
+
+// jsonStringInner returns s escaped for embedding inside a JSON string literal,
+// without the surrounding quotes — so a worktree path with backslashes (Windows)
+// or a quote can be spliced into a JSON template's string value and stay valid.
+func jsonStringInner(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return s
+	}
+	return string(b[1 : len(b)-1])
+}
 
 var materializedGitExcludes = []string{
 	"/AGENTS.md",
@@ -77,16 +89,28 @@ func (a Agent) Materialize(worktree string) error {
 	if err := os.MkdirAll(codexDir, 0o755); err != nil {
 		return fmt.Errorf("create .codex dir: %w", err)
 	}
-	// Files copied verbatim (token-substituted): mcp + settings.
-	for _, c := range []struct{ src, dst string }{
-		{filepath.Join(a.Home, mcpFile), filepath.Join(worktree, ".mcp.json")},
-		{filepath.Join(a.Home, settingsFile), filepath.Join(claudeDir, "settings.json")},
-	} {
+	// jsonDst marks a destination whose worktree token lives inside a JSON
+	// string: the path must be JSON-escaped, or a Windows worktree (backslashes)
+	// or one with a quote would produce invalid JSON. The Codex TOML path is
+	// escaped separately by renderCodexMCP. CLAUDE.md/AGENTS.md (markdown, raw
+	// path) are composed below so USER.md can augment them.
+	copies := []struct {
+		src, dst string
+		jsonDst  bool
+	}{
+		{filepath.Join(a.Home, mcpFile), filepath.Join(worktree, ".mcp.json"), true},
+		{filepath.Join(a.Home, settingsFile), filepath.Join(claudeDir, "settings.json"), true},
+	}
+	for _, c := range copies {
 		buf, err := os.ReadFile(c.src)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", filepath.Base(c.src), err)
 		}
-		out := strings.ReplaceAll(string(buf), worktreeToken, worktree)
+		repl := worktree
+		if c.jsonDst {
+			repl = jsonStringInner(worktree)
+		}
+		out := strings.ReplaceAll(string(buf), worktreeToken, repl)
 		if err := os.WriteFile(c.dst, []byte(out), 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", c.dst, err)
 		}

@@ -118,6 +118,30 @@ func TestResolveAttachmentsRejectsOffAllowlist(t *testing.T) {
 	}
 }
 
+// TestResolveAttachmentsRejectsRedirectOffAllowlist pins the redirect defence:
+// an allowlisted CDN that 302s to an off-allowlist (e.g. internal) host must not
+// be followed, or the SSRF allowlist would be a paper wall.
+func TestResolveAttachmentsRejectsRedirectOffAllowlist(t *testing.T) {
+	cdn := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 302 to a link-local metadata address — an off-allowlist host the guard
+		// must refuse to follow (and never actually contact).
+		http.Redirect(w, r, "https://169.254.169.254/latest", http.StatusFound)
+	}))
+	defer cdn.Close()
+
+	sess := "redirect-off-allowlist"
+	defer os.RemoveAll(attachmentDir(sess))
+	m := contracts.Message{
+		ID:          "1",
+		Attachments: []contracts.Attachment{{Filename: "x.png", URL: cdn.URL + "/x.png"}},
+	}
+	// Only the CDN host is on the allowlist; the redirect target is not, so the
+	// hop must be refused before the internal host is ever contacted.
+	if paths := ResolveAttachments(context.Background(), cdn.Client(), m, sess, hostsFor(t, cdn)); len(paths) != 0 {
+		t.Fatalf("redirect to off-allowlist host must be rejected, got paths=%v", paths)
+	}
+}
+
 func TestValidateCDNURL(t *testing.T) {
 	hosts := allowedHosts{"cdn.example.com": true, "media.example.com": true}
 	ok := []string{

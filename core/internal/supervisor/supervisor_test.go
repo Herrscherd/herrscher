@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -79,6 +80,93 @@ func TestRestartWaitsForOldBridgeAndStartsTargetedSession(t *testing.T) {
 		t.Fatal("replacement bridge did not start")
 	}
 	if err := s.Stop("worker"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStopWaitsForRunLoopCompletionWithoutHoldingMutex(t *testing.T) {
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	started := make(chan struct{})
+	cancelled := make(chan struct{})
+	release := make(chan struct{})
+	replacementStarted := make(chan struct{})
+	var runCount atomic.Int32
+	s.run = func(ctx context.Context, _ state.Session) {
+		switch runCount.Add(1) {
+		case 1:
+			close(started)
+			<-ctx.Done()
+			close(cancelled)
+			<-release
+		case 2:
+			close(replacementStarted)
+			<-ctx.Done()
+		default:
+			panic("unexpected extra supervised run")
+		}
+	}
+
+	if err := s.Start(state.Session{Name: "demo"}); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+
+	stopped := make(chan error, 1)
+	go func() { stopped <- s.Stop("demo") }()
+	<-cancelled
+
+	select {
+	case err := <-stopped:
+		t.Fatalf("Stop returned before runLoop completed: %v", err)
+	default:
+	}
+
+	// Stop must not hold the supervisor mutex while waiting.
+	otherStopped := make(chan error, 1)
+	go func() { otherStopped <- s.Stop("other") }()
+	select {
+	case err := <-otherStopped:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Stop held supervisor.mu while waiting for runLoop")
+	}
+
+	// A concurrent Start for the same name must wait for the stopping run, then
+	// launch a replacement. Returning idempotent success here would lose the
+	// requested start when Stop removes the old run.
+	startReturned := make(chan error, 1)
+	go func() { startReturned <- s.Start(state.Session{Name: "demo"}) }()
+	select {
+	case err := <-startReturned:
+		t.Fatalf("Start returned while the previous run was still stopping: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(release)
+	select {
+	case err := <-stopped:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Stop did not return after runLoop completed")
+	}
+	select {
+	case err := <-startReturned:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Start did not return after the previous run completed")
+	}
+	select {
+	case <-replacementStarted:
+	case <-time.After(time.Second):
+		t.Fatal("Start did not launch a replacement run")
+	}
+	if err := s.Stop("demo"); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -218,6 +218,177 @@ func TestRemoveUsesPassedRepo(t *testing.T) {
 	}
 }
 
+func TestRemoveForceRecoversEmptyUnregisteredWorktree(t *testing.T) {
+	repo := initRepo(t)
+	w := NewWorktreer(context.Background(), "")
+	path := w.Path(repo, "orphan")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.Remove(repo, "orphan", true); err != nil {
+		t.Fatalf("Remove should recover an empty orphan: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("empty orphan should be gone, stat err = %v", err)
+	}
+}
+
+func TestRemoveDoesNotRecoverEmptyOrphanWithoutForce(t *testing.T) {
+	repo := initRepo(t)
+	w := NewWorktreer(context.Background(), "")
+	path := w.Path(repo, "orphan")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.Remove(repo, "orphan", false); err == nil {
+		t.Fatal("non-force remove must reject an unregistered orphan")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("non-force remove deleted the orphan: %v", err)
+	}
+}
+
+func TestRemoveForceDoesNotRecoverNonEmptyOrphan(t *testing.T) {
+	repo := initRepo(t)
+	w := NewWorktreer(context.Background(), "")
+	path := w.Path(repo, "orphan")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	keep := filepath.Join(path, "keep.txt")
+	if err := os.WriteFile(keep, []byte("preserve"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.Remove(repo, "orphan", true); err == nil {
+		t.Fatal("force remove must reject a non-empty unregistered directory")
+	}
+	if got, err := os.ReadFile(keep); err != nil || string(got) != "preserve" {
+		t.Fatalf("non-empty orphan was changed: got=%q err=%v", got, err)
+	}
+}
+
+func TestRemoveForceDoesNotRecoverPathOutsideSessionRoot(t *testing.T) {
+	repo := initRepo(t)
+	w := NewWorktreer(context.Background(), "")
+	name := filepath.Join("..", "outside")
+	path := w.Path(repo, name)
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.Remove(repo, name, true); err == nil {
+		t.Fatal("force remove must reject a path outside the session root")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("outside directory was deleted: %v", err)
+	}
+}
+
+func TestRemoveForceRejectsTraversingInstanceID(t *testing.T) {
+	repo := initRepo(t)
+	outsideRoot := filepath.Join(filepath.Dir(repo), "outside-instance-root")
+	path := filepath.Join(outsideRoot, "orphan")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	instanceID := filepath.Join("..", "..", filepath.Base(outsideRoot))
+	w := NewWorktreer(context.Background(), instanceID)
+	if got := filepath.Clean(w.Path(repo, "orphan")); got != filepath.Clean(path) {
+		t.Fatalf("test setup: traversing path = %q, want %q", got, path)
+	}
+
+	if err := w.Remove(repo, "orphan", true); err == nil {
+		t.Fatal("force remove must reject a traversing instance ID")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("directory outside the session root was deleted: %v", err)
+	}
+}
+
+func TestRemoveForceRejectsLinkedSessionsRoot(t *testing.T) {
+	repo := initRepo(t)
+	externalRoot := t.TempDir()
+	path := filepath.Join(externalRoot, "orphan")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	makeDirectoryLink(t, filepath.Join(repo, sessionsDir), externalRoot)
+	w := NewWorktreer(context.Background(), "")
+
+	if err := w.Remove(repo, "orphan", true); err == nil {
+		t.Fatal("force remove must reject a linked sessions root")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("directory behind the linked sessions root was deleted: %v", err)
+	}
+}
+
+func TestRemoveForceRejectsLinkedInstanceRoot(t *testing.T) {
+	repo := initRepo(t)
+	externalRoot := t.TempDir()
+	path := filepath.Join(externalRoot, "orphan")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sessionsRoot := filepath.Join(repo, sessionsDir)
+	if err := os.Mkdir(sessionsRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	makeDirectoryLink(t, filepath.Join(sessionsRoot, "instance"), externalRoot)
+	w := NewWorktreer(context.Background(), "instance")
+
+	if err := w.Remove(repo, "orphan", true); err == nil {
+		t.Fatal("force remove must reject a linked instance root")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("directory behind the linked instance root was deleted: %v", err)
+	}
+}
+
+func TestRecoverEmptyOrphanRejectsRegisteredWorktree(t *testing.T) {
+	repo := initRepo(t)
+	w := NewWorktreer(context.Background(), "")
+	path, err := w.Create(repo, "registered", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recovered, err := w.recoverEmptyOrphan(repo, "registered")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered {
+		t.Fatal("registered worktree must never be treated as an orphan")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("registered worktree was deleted: %v", err)
+	}
+}
+
+func TestRegisteredWorktreeRecognizesLinkedRepoAlias(t *testing.T) {
+	repo := initRepo(t)
+	w := NewWorktreer(context.Background(), "")
+	if _, err := w.Create(repo, "registered", ""); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(t.TempDir(), "repo-alias")
+	makeDirectoryLink(t, alias, repo)
+	if _, err := os.Stat(w.Path(alias, "registered")); err != nil {
+		t.Fatalf("test setup: registered worktree through alias: %v", err)
+	}
+
+	registered, err := w.registeredWorktree(alias, w.Path(alias, "registered"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !registered {
+		t.Fatal("registered worktree must be recognized through a linked repo alias")
+	}
+}
+
 func TestCreateWithBaseBranchesOffIt(t *testing.T) {
 	w := NewWorktreer(context.Background(), "")
 	repo := initRepo(t)

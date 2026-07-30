@@ -176,15 +176,15 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	if err := reg.Add(contracts.New("memory", "restore").
 		Help("reactivate an archived (or merged) memory node by key").
 		Param("key", "node key", true).
-		ValueParam("force", "detach from its umbrella if the node was merged (true/false)", false).
+		Param("force", "detach from its umbrella if the node was merged", false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
 			mem, err := BuildFirstMemory(cmdCtx)
 			if err != nil {
 				return "", err
 			}
 			defer mem.Close()
-			force := in.Get("force") == "true"
-			if err := orchestrator.Restore(cmdCtx, mem, in.Get("key"), orchestrator.Force(force)); err != nil {
+			force := in.Bool("force")
+			if _, err := orchestrator.Restore(cmdCtx, mem, in.Get("key"), orchestrator.Force(force)); err != nil {
 				return "", err
 			}
 			return "restored " + in.Get("key"), nil

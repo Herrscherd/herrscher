@@ -147,11 +147,14 @@ deliberately folded into its umbrella.
 Three new `Setting`s in the orchestrator manifest, read in the factory's Learner
 branch and pushed via a new `SetMerge`:
 
+Setting keys are bare (matching the existing `stale-days` / `archive-days`
+declared settings, read via `cfg.Get("merge-min-nodes")` etc.):
+
 | Setting key | Env | Default | Meaning |
 |---|---|---|---|
-| `memory.merge-min-nodes` | `MEMORY_MERGE_MIN` | `0` (off) | min candidates in a domain group to wake the merger; `0` disables G2 cleanly. |
-| `memory.merge-target` | `MEMORY_MERGE_TARGET` | `stale` | which nodes to consider: `stale` / `active` / `all`. Unknown value → `stale`. |
-| `memory.merge-max` | `MEMORY_MERGE_MAX` | `40` | cap on nodes handed to the merger per group (bounds LLM cost / prompt size). `<=0` → default 40. |
+| `merge-min-nodes` | `MEMORY_MERGE_MIN` | `0` (off) | min candidates in a domain group to wake the merger; `0` disables G2 cleanly. |
+| `merge-target` | `MEMORY_MERGE_TARGET` | `stale` | which nodes to consider: `stale` / `active` / `all`. Unknown value → `stale`. |
+| `merge-max` | `MEMORY_MERGE_MAX` | `40` | cap on nodes handed to the merger per group (bounds LLM cost / prompt size). `<=0` → default 40. |
 
 ```go
 // SetMerge configures the G2 merge pass. minNodes <= 0 disables the pass.

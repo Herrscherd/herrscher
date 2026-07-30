@@ -16,6 +16,10 @@ import (
 // orchestrator.Restore relies on.
 type restoreVerbMem struct {
 	nodes map[string]contracts.Node
+	// lastQuery captures the most recent contracts.Query passed to Search, so
+	// tests can assert on how the `memory search` verb built it (e.g.
+	// IncludeRaw for --raw).
+	lastQuery contracts.Query
 }
 
 func (m *restoreVerbMem) Recall(_ context.Context, key string, _ int) (contracts.Subgraph, error) {
@@ -29,8 +33,13 @@ func (m *restoreVerbMem) Record(_ context.Context, n contracts.Node) error {
 	m.nodes[n.Key] = n
 	return nil
 }
-func (m *restoreVerbMem) Search(context.Context, contracts.Query) ([]contracts.Node, error) {
-	return nil, nil
+func (m *restoreVerbMem) Search(_ context.Context, q contracts.Query) ([]contracts.Node, error) {
+	m.lastQuery = q
+	var hits []contracts.Node
+	for _, n := range m.nodes {
+		hits = append(hits, n)
+	}
+	return hits, nil
 }
 func (m *restoreVerbMem) Links(context.Context, string, string, string) error { return nil }
 func (m *restoreVerbMem) Close() error                                        { return nil }

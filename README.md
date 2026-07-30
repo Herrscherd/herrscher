@@ -757,6 +757,24 @@ the pass.
   restore --key K [--force]` (see the `memory` CLI verb below): it clears the
   archived/merged state and refreshes `lastSeen`, refusing a merged original
   unless `--force` also detaches it from its umbrella.
+- **Cross-agent promotion.** Because the graph is a multi-agent scoped store —
+  private `agents/<agent>/…` nodes alongside shared `projects/<project>/…` — a
+  skill one agent learns can be lifted into the shared project scope so every
+  agent inherits it. After the merge, an opt-in best-effort **promote** pass
+  (order `sweep → merge → promote → report`) copies each eligible agent-scoped
+  node into `projects/<project>/…` under a key that drops the agent segment
+  (`agents/a/skills/x` → `projects/p/skills/x`; same-tail skills from different
+  agents dedup onto one shared node). Eligibility is deterministic and LLM-free:
+  the node must be active (not archived, not already merged or promoted) and
+  *durable* — its `lastSeen` must exceed its `capturedAt` by at least
+  `promote-min-age-days` / `MEMORY_PROMOTE_MIN_AGE_DAYS`, so a skill is shared
+  only after it has proven repeatedly useful to its origin agent. Promotion is
+  reversible and additive: the shared copy is a new node, the original is
+  preserved, labeled (`promotedTo`) and linked (`promoted-to`), and — carrying
+  that terminal label — is excluded from any later merge so it is never re-fused
+  with its own copy. The pass is off by default (`promote-min-age-days` ≤ 0) and
+  never fails a turn (a promotion error is swallowed by `Consolidate`, and one
+  node's failure never aborts the rest of the pass).
 
 ### Conscious memory (the model drives it)
 

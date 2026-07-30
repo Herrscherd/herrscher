@@ -702,6 +702,15 @@ Policy:
 - **Idempotent.** `Consolidate` re-runs every N turns over the same journal, but
   a per-session `seen` set skips already-persisted keys — so re-running adds no
   duplicate facts/skills, and is a no-op when nothing new is extracted.
+- **Forced consolidation.** When a node exceeds the per-node rune budget
+  (`OBSIDIAN_NODE_BUDGET`), `Record` refuses it with a `BudgetError`. Rather than
+  drop the fact, the learner asks a `Consolidator` — an optional seam the closed
+  extractor also implements, discovered by type-assertion, no new config — to
+  shrink the candidate to fit and retries the write once. A candidate that has no
+  consolidator, or that still will not fit, is logged (`WARN`) and held on an
+  in-memory retry queue (deduped by key) that is drained at the top of each later
+  pass; it is never truncated in place or silently discarded. One over-budget
+  candidate never aborts the batch or skips the sweep.
 
 ### Staleness (the decay side)
 

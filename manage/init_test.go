@@ -26,10 +26,12 @@ func TestResolveStackDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
+		inTree[0],
 		catalog["gateway"]["discord"],
 		catalog["backend"]["claude"],
 		catalog["memory"]["obsidian"],
 		catalog["orchestrator"]["basic"],
+		catalog["extractor"]["llm"],
 	}
 	if !reflect.DeepEqual(mods, want) {
 		t.Fatalf("got %v, want %v", mods, want)
@@ -42,8 +44,9 @@ func TestResolveStackNoneDropsCategory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(mods) != 1 || mods[0] != catalog["gateway"]["discord"] {
-		t.Fatalf("unexpected: %v", mods)
+	want := []string{inTree[0], catalog["gateway"]["discord"]}
+	if !reflect.DeepEqual(mods, want) {
+		t.Fatalf("got %v, want %v", mods, want)
 	}
 }
 
@@ -53,7 +56,7 @@ func TestResolveStackExtrasDeduped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{catalog["gateway"]["discord"], "example.com/x"}
+	want := []string{inTree[0], catalog["gateway"]["discord"], "example.com/x"}
 	if !reflect.DeepEqual(mods, want) {
 		t.Fatalf("got %v, want %v", mods, want)
 	}
@@ -71,9 +74,30 @@ func TestResolveStackUnknownKind(t *testing.T) {
 	}
 }
 
-func TestResolveStackEmpty(t *testing.T) {
-	choices := map[string]string{"gateway": "none", "backend": "none", "memory": "none", "orchestrator": "none"}
-	if _, err := resolveStack(choices, nil); err == nil {
-		t.Fatal("expected error for empty stack")
+// An all-"none" stack is no longer empty: the in-tree terminal gateway is always
+// compiled in, so the host still has a usable front end and `init` must not fail.
+func TestResolveStackAllNoneKeepsInTree(t *testing.T) {
+	choices := map[string]string{"gateway": "none", "backend": "none", "memory": "none", "orchestrator": "none", "extractor": "none"}
+	mods, err := resolveStack(choices, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	if !reflect.DeepEqual(mods, inTree) {
+		t.Fatalf("got %v, want %v", mods, inTree)
+	}
+}
+
+// The in-tree terminal gateway must survive every recomposition — dropping it
+// would silently remove the only front end that needs no Discord token.
+func TestResolveStackAlwaysKeepsTerminal(t *testing.T) {
+	mods, err := resolveStack(map[string]string{"gateway": "discord"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range mods {
+		if m == inTree[0] {
+			return
+		}
+	}
+	t.Fatalf("in-tree terminal gateway missing from %v", mods)
 }

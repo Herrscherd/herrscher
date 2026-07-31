@@ -19,6 +19,8 @@ var catalog = map[string]map[string]string{
 	},
 	"backend": {
 		"claude": "github.com/Herrscherd/herrscher-claude-backend",
+		"codex":  "github.com/Herrscherd/herrscher-codex-backend",
+		"cursor": "github.com/Herrscherd/herrscher-cursor-backend",
 	},
 	"memory": {
 		"obsidian": "github.com/Herrscherd/herrscher-obsidian-memory",
@@ -26,18 +28,31 @@ var catalog = map[string]map[string]string{
 	"orchestrator": {
 		"basic": "github.com/Herrscherd/herrscher-orchestrator",
 	},
+	"extractor": {
+		"llm": "github.com/Herrscherd/herrscher-llm-extractor",
+	},
 }
 
+// inTree lists plugins that live inside the host module itself. They are always
+// blank-imported — dropping them would silently remove a compiled-in gateway —
+// and they are never `go get`-ed, since they are not external modules.
+var inTree = []string{"github.com/Herrscherd/herrscher/plugins/terminal"}
+
+// hostModule is this module's own path; inTree entries carry it as a prefix.
+const hostModule = "github.com/Herrscherd/herrscher"
+
 // categories is the fixed order a stack is composed and printed in.
-var categories = []string{"gateway", "backend", "memory", "orchestrator"}
+var categories = []string{"gateway", "backend", "memory", "orchestrator", "extractor"}
 
 // defaultStack is the batteries-included composition: a Discord gateway, the
-// Claude backend, Obsidian-backed memory and the basic multi-agent orchestrator.
+// Claude backend, Obsidian-backed memory, the basic multi-agent orchestrator and
+// the LLM extractor that turns that orchestrator into a Learner.
 var defaultStack = map[string]string{
 	"gateway":      "discord",
 	"backend":      "claude",
 	"memory":       "obsidian",
 	"orchestrator": "basic",
+	"extractor":    "llm",
 }
 
 // InitCmd composes the host's plugin stack from scratch: it picks one module per
@@ -55,6 +70,7 @@ func InitCmd(ctx context.Context, args []string) int {
 	backend := fs.String("backend", defaultStack["backend"], "backend module kind (or none)")
 	memory := fs.String("memory", defaultStack["memory"], "memory module kind (or none)")
 	orchestrator := fs.String("orchestrator", defaultStack["orchestrator"], "orchestrator module kind (or none)")
+	extractor := fs.String("extractor", defaultStack["extractor"], "extractor module kind (or none)")
 	var extras multiFlag
 	fs.Var(&extras, "with", "pin an extra module path verbatim (repeatable)")
 	if err := fs.Parse(args); err != nil {
@@ -81,6 +97,7 @@ func InitCmd(ctx context.Context, args []string) int {
 		"backend":      *backend,
 		"memory":       *memory,
 		"orchestrator": *orchestrator,
+		"extractor":    *extractor,
 	}
 	var secrets map[string]string
 	if interactive {
@@ -159,6 +176,10 @@ func InitCmd(ctx context.Context, args []string) int {
 // buildStack go-gets each module then tidies and rebuilds the host.
 func buildStack(ctx context.Context, dir string, modules []string) int {
 	for _, m := range modules {
+		// In-tree plugins live in this module; `go get` would reject them.
+		if m == hostModule || strings.HasPrefix(m, hostModule+"/") {
+			continue
+		}
 		if code := run(ctx, dir, "go", "get", "--", m); code != 0 {
 			return code
 		}
@@ -179,6 +200,9 @@ func resolveStack(choices map[string]string, extras []string) ([]string, error) 
 			seen[m] = true
 			modules = append(modules, m)
 		}
+	}
+	for _, m := range inTree {
+		add(m)
 	}
 	for _, cat := range categories {
 		kind := choices[cat]

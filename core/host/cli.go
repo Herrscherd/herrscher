@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	orchestrator "github.com/Herrscherd/herrscher-orchestrator"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
@@ -169,6 +172,59 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 				return "", err
 			}
 			return "recorded " + n.Key, nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
+	if err := reg.Add(contracts.New("memory", "restore").
+		Help("reactivate an archived (or merged) memory node by key").
+		Param("key", "node key", true).
+		Param("force", "detach from its umbrella if the node was merged", false).
+		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
+			mem, err := BuildFirstMemory(cmdCtx)
+			if err != nil {
+				return "", err
+			}
+			defer mem.Close()
+			force := in.Bool("force")
+			if _, err := orchestrator.Restore(cmdCtx, mem, in.Get("key"), orchestrator.Force(force)); err != nil {
+				return "", err
+			}
+			return "restored " + in.Get("key"), nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
+	if err := reg.Add(contracts.New("memory", "search").
+		Help("full-text search the memory vault; --raw also searches the raw per-turn transcript tier (G7)").
+		Param("text", "query text", true).
+		Param("raw", "include raw per-turn transcript chunks (G7 archival tier)", false).
+		Param("limit", "max hits (default 10)", false).
+		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
+			mem, err := BuildFirstMemory(cmdCtx)
+			if err != nil {
+				return "", err
+			}
+			defer mem.Close()
+			limit := 10
+			if v, err := strconv.Atoi(in.Get("limit")); err == nil && v > 0 {
+				limit = v
+			}
+			hits, err := mem.Search(cmdCtx, contracts.Query{
+				Text:       in.Get("text"),
+				Ranked:     true,
+				Limit:      limit,
+				IncludeRaw: in.Bool("raw"),
+			})
+			if err != nil {
+				return "", err
+			}
+			if len(hits) == 0 {
+				return "no matches", nil
+			}
+			var b strings.Builder
+			for _, n := range hits {
+				fmt.Fprintf(&b, "%s\t[%s]\t%s\n", n.Key, n.Kind, n.Title)
+			}
+			return strings.TrimRight(b.String(), "\n"), nil
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}

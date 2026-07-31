@@ -747,6 +747,59 @@ The sweep is off the turn's critical path and never fails a turn: a sweep error
 is swallowed by `Consolidate`, and a single node's write failure no longer aborts
 the pass.
 
+- **Audit + restore (reversible-archive).** Because archiving and merging only
+  *label* nodes, every transition is reversible. Each `Consolidate` pass appends
+  an **append-only report** node (`reports/<timestamp>`, nanosecond-keyed so
+  back-to-back passes never overwrite) listing the sweep/merge/restore
+  transitions it applied — on by default, configurable via `report-enabled` /
+  `MEMORY_REPORT_ENABLED` and `report-prefix` / `MEMORY_REPORT_PREFIX`. The
+  operator reactivates any archived or merged node with `herrscher memory
+  restore --key K [--force]` (see the `memory` CLI verb below): it clears the
+  archived/merged state and refreshes `lastSeen`, refusing a merged original
+  unless `--force` also detaches it from its umbrella.
+- **Cross-agent promotion.** Because the graph is a multi-agent scoped store —
+  private `agents/<agent>/…` nodes alongside shared `projects/<project>/…` — a
+  skill one agent learns can be lifted into the shared project scope so every
+  agent inherits it. After the merge, an opt-in best-effort **promote** pass
+  (order `sweep → merge → promote → report`) copies each eligible agent-scoped
+  node into `projects/<project>/…` under a key that drops the agent segment
+  (`agents/a/skills/x` → `projects/p/skills/x`; same-tail skills from different
+  agents dedup onto one shared node). Eligibility is deterministic and LLM-free:
+  the node must be active (not archived, not already merged or promoted) and
+  *durable* — its `lastSeen` must exceed its `capturedAt` by at least
+  `promote-min-age-days` / `MEMORY_PROMOTE_MIN_AGE_DAYS`, so a skill is shared
+  only after it has proven repeatedly useful to its origin agent. Promotion is
+  reversible and additive: the shared copy is a new node, the original is
+  preserved, labeled (`promotedTo`) and linked (`promoted-to`), and — carrying
+  that terminal label — is excluded from any later merge so it is never re-fused
+  with its own copy. The pass is off by default (`promote-min-age-days` ≤ 0) and
+  never fails a turn (a promotion error is swallowed by `Consolidate`, and one
+  node's failure never aborts the rest of the pass).
+- **Inactivity-triggered curator.** The passes above fire on the *per-turn*
+  cadence (`consolidate-every` N turns). A busy session consolidates often; a
+  session that goes quiet mid-thought would otherwise never fold, promote, or
+  decay until the next turn — which may be days away. G5 adds a second, purely
+  *time*-based trigger: the learner runs one background consolidation once a
+  session has been idle, gated by a pure predicate `now − lastRun ≥ idle-days`
+  **and** `now − lastActivity ≥ idle-hours` (both inclusive). It is discovered
+  by the host as an optional `Start(ctx)` capability — `contracts.Orchestrator`
+  is unchanged — and polls on its own goroutine bound to the bridge context, so
+  it is torn down automatically on session exit. The idle pass never blocks a
+  turn: it single-flights against the turn path with a non-blocking `TryLock`
+  (skipping the tick on contention rather than waiting), and the activity clock
+  is stamped under a separate lightweight lock so a turn-path `Observe` never
+  waits on a slow background consolidation. It adds no new write path — only a
+  second trigger for the existing reversible passes. Off by default
+  (`idle-days` / `MEMORY_IDLE_DAYS` ≤ 0); the quiet-period gate defaults to
+  `idle-hours` / `MEMORY_IDLE_HOURS` = 2.
+- **Raw-session archival tier (G7).** With `MEMORY_RAW_ARCHIVE` enabled, the
+  learner archives every turn as an untruncated raw node (`KindTranscript`,
+  keyed `raw/<session>/<seq>`) — a full-text-searchable transcript store. Raw
+  nodes are hidden from ordinary recall and from the curator's sweep/merge/
+  promote passes (they surface only via `Query.IncludeRaw`), so the distilled
+  memory is unaffected. Retrieve them with `memory search --text "…" --raw`.
+  The write is best-effort (never breaks a turn) and off by default.
+
 ### Conscious memory (the model drives it)
 
 Recall and learning above are *automatic* — the orchestrator injects and
@@ -935,19 +988,30 @@ comma-separated categories to run out-of-process (`memory`, `orchestrator`,
 closed). With TLS unset the transport stays plaintext loopback, exactly as a
 single-host deployment.
 
-### `memory` — locate, forget, record memory nodes
+### `memory` — locate, forget, record, restore memory nodes
 
-`herrscher memory <locate|forget|record> --key K [...]` drives the compiled-in
-memory plugin (e.g. `obsidian`) directly through the operator registry, one node
-at a time. Consommé par Neublox via exec (voir issue #44). `--json` prints the raw
-`contracts.Location` payload instead of a single URI. Uses `OBSIDIAN_VAULT` like
-the rest of the memory surface (see [Environment](#cli-reference) above).
+`herrscher memory <locate|forget|record|restore> --key K [...]` drives the
+compiled-in memory plugin (e.g. `obsidian`) directly through the operator
+registry, one node at a time. Consommé par Neublox via exec (voir issue #44).
+`--json` prints the raw `contracts.Location` payload instead of a single URI.
+Uses `OBSIDIAN_VAULT` like the rest of the memory surface (see
+[Environment](#cli-reference) above).
 
 ```bash
 herrscher memory record --key demo/fact --kind decision --title "Demo"
 herrscher memory locate --key demo/fact --json
 herrscher memory forget --key demo/fact
+herrscher memory restore --key demo/fact              # reactivate an archived node
+herrscher memory restore --key demo/fact --force      # detach a merged node from its umbrella
 ```
+
+`restore` is the operator side of the **reversible-archive** guarantee (G4):
+staleness-archiving and semantic merges only *label* nodes, never delete them,
+so `restore` clears the archived/merged state and refreshes `lastSeen`. It
+refuses a merged original unless `--force` is passed (which also detaches it
+from its umbrella). Every learning pass also appends an append-only **report**
+node (`reports/<timestamp>`, `report-enabled`/`report-prefix` config) auditing
+the state transitions it applied.
 
 ---
 

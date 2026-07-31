@@ -1003,13 +1003,17 @@ herrscher memory locate --key demo/fact --json
 herrscher memory forget --key demo/fact
 herrscher memory restore --key demo/fact              # reactivate an archived node
 herrscher memory restore --key demo/fact --force      # detach a merged node from its umbrella
+herrscher memory unlink --from demo/a --to demo/b     # remove the edge demo/a → demo/b
 ```
 
 `restore` is the operator side of the **reversible-archive** guarantee (G4):
 staleness-archiving and semantic merges only *label* nodes, never delete them,
 so `restore` clears the archived/merged state and refreshes `lastSeen`. It
 refuses a merged original unless `--force` is passed (which also detaches it
-from its umbrella). Every learning pass also appends an append-only **report**
+from its umbrella). `unlink` is the inverse of an auto-created link — its main
+use is detaching a force-restored node from the residual `merged-into` edge, and
+it excises the `[[to|rel]]` wikilink surgically, leaving surrounding prose intact.
+Every learning pass also appends an append-only **report**
 node (`reports/<timestamp>`, `report-enabled`/`report-prefix` config) auditing
 the state transitions it applied.
 

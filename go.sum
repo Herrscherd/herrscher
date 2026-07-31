@@ -18,6 +18,8 @@ github.com/Herrscherd/herrscher-obsidian-memory v0.2.9 h1:Qev90YychHwh8g4N22bK+M
 github.com/Herrscherd/herrscher-obsidian-memory v0.2.9/go.mod h1:7uMUvkC0YZt+ZIaoeqX4995cKo4gOqYKOrFTIB4D7tg=
 github.com/Herrscherd/herrscher-obsidian-memory v0.2.10 h1:Q/9/t9DukOvDAfknqPOdlOwaO2dNfBWxzEbMSGzpqE8=
 github.com/Herrscherd/herrscher-obsidian-memory v0.2.10/go.mod h1:GAP6fkBn3edhYEaxmA/NRfz6L93LmyIjoprdYaK5S50=
+github.com/Herrscherd/herrscher-obsidian-memory v0.2.11 h1:DhMQIOCX6YBYBYM9tU2TMSe6M4ULLASmY3sZpUeDUME=
+github.com/Herrscherd/herrscher-obsidian-memory v0.2.11/go.mod h1:GAP6fkBn3edhYEaxmA/NRfz6L93LmyIjoprdYaK5S50=
 github.com/Herrscherd/herrscher-orchestrator v0.1.19 h1:VW64KI0zbQOsmLMmi4SrSRowQszIVTmTNyTo3ZuHPOs=
 github.com/Herrscherd/herrscher-orchestrator v0.1.19/go.mod h1:e0hi+R14073oS4r7tqmjdo8sgAAA+g2vYmXPVOwd13k=
 github.com/Herrscherd/herrscher-orchestrator v0.1.20 h1:ixpqVjEv8BD6soxmXP/Hy661rMK5R2M34rOS1SWuu2M=

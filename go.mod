@@ -9,7 +9,7 @@ require (
 	github.com/Herrscherd/herrscher-cursor-backend v0.1.4
 	github.com/Herrscherd/herrscher-discord-gateway v0.2.5
 	github.com/Herrscherd/herrscher-llm-extractor v0.1.2
-	github.com/Herrscherd/herrscher-obsidian-memory v0.2.10
+	github.com/Herrscherd/herrscher-obsidian-memory v0.2.11
 	github.com/Herrscherd/herrscher-orchestrator v0.1.20
 	github.com/Herrscherd/herrscher-transport v0.2.1
 	github.com/Microsoft/go-winio v0.6.2

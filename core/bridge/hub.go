@@ -11,6 +11,9 @@ import (
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
+// errPrefix marks a backend failure surfaced to the human as reply text.
+const errPrefix = "⚠️ "
+
 // turnController holds the cancel func of the turn currently running so an
 // out-of-band interrupt frame (read on the socket while the turn driver is
 // blocked in Respond) can cancel it. A nil *turnController is a no-op, so
@@ -160,7 +163,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 	}
 	out, err := resp.Respond(turnCtx, prompt, onEvent)
 	if err != nil && out == "" {
-		out = "⚠️ " + err.Error()
+		out = errPrefix + err.Error()
 	}
 	out = strings.TrimSpace(out)
 	if eng != nil {
@@ -229,7 +232,7 @@ func runPick(ctx context.Context, sink contracts.EventSink, resp contracts.Backe
 	}
 	out, err := inj.InjectChoice(ctx, value)
 	if err != nil {
-		out = "⚠️ " + err.Error()
+		out = errPrefix + err.Error()
 	}
 	sink.Emit(contracts.Event{T: "reply", Text: strings.TrimSpace(out), Done: true})
 }

@@ -193,6 +193,23 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
+	if err := reg.Add(contracts.New("memory", "unlink").
+		Help("remove the edge from→to between two memory nodes").
+		Param("from", "source node key", true).
+		Param("to", "target node key", true).
+		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
+			mem, err := BuildFirstMemory(cmdCtx)
+			if err != nil {
+				return "", err
+			}
+			defer mem.Close()
+			if err := mem.Unlink(cmdCtx, in.Get("from"), in.Get("to")); err != nil {
+				return "", err
+			}
+			return "unlinked " + in.Get("from") + " -> " + in.Get("to"), nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
 	if err := reg.Add(contracts.New("memory", "search").
 		Help("full-text search the memory vault; --raw also searches the raw per-turn transcript tier (G7)").
 		Param("text", "query text", true).

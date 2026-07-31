@@ -78,6 +78,18 @@ func (m *recMemory) Links(_ context.Context, from, to, rel string) error {
 	return nil
 }
 
+func (m *recMemory) Unlink(_ context.Context, from, to string) error {
+	kept := m.links[:0:0]
+	for _, l := range m.links {
+		if l.from == from && l.to == to {
+			continue
+		}
+		kept = append(kept, l)
+	}
+	m.links = kept
+	return nil
+}
+
 func (m *recMemory) Close() error { return nil }
 
 // linksFrom returns the edges hung under root — i.e. the scoped consolidation

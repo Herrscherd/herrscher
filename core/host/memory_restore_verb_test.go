@@ -20,6 +20,9 @@ type restoreVerbMem struct {
 	// tests can assert on how the `memory search` verb built it (e.g.
 	// IncludeRaw for --raw).
 	lastQuery contracts.Query
+	// lastUnlink captures the most recent (from, to) passed to Unlink, so the
+	// `memory unlink` verb test can assert dispatch.
+	lastUnlink [2]string
 }
 
 func (m *restoreVerbMem) Recall(_ context.Context, key string, _ int) (contracts.Subgraph, error) {
@@ -42,6 +45,10 @@ func (m *restoreVerbMem) Search(_ context.Context, q contracts.Query) ([]contrac
 	return hits, nil
 }
 func (m *restoreVerbMem) Links(context.Context, string, string, string) error { return nil }
+func (m *restoreVerbMem) Unlink(_ context.Context, from, to string) error {
+	m.lastUnlink = [2]string{from, to}
+	return nil
+}
 func (m *restoreVerbMem) Close() error                                        { return nil }
 
 // currentRestoreMem is swapped by each test before building a registry.
@@ -137,6 +144,24 @@ func TestMemoryRestoreVerbBareForceDetaches(t *testing.T) {
 	got := currentRestoreMem.nodes["facts/a"]
 	if got.Meta[contracts.MetaState] != contracts.StateActive || got.Meta[orchestrator.MetaMergedInto] != "" {
 		t.Fatalf("bare-force restore did not detach: %+v", got.Meta)
+	}
+}
+
+func TestMemoryUnlinkVerbDispatchesToMemory(t *testing.T) {
+	currentRestoreMem = &restoreVerbMem{nodes: map[string]contracts.Node{}}
+	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := reg.Dispatch(context.Background(), []string{"memory", "unlink", "--from", "facts/a", "--to", "facts/b"})
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if out != "unlinked facts/a -> facts/b" {
+		t.Errorf("output = %q, want %q", out, "unlinked facts/a -> facts/b")
+	}
+	if currentRestoreMem.lastUnlink != [2]string{"facts/a", "facts/b"} {
+		t.Errorf("Unlink not dispatched, got %+v", currentRestoreMem.lastUnlink)
 	}
 }
 

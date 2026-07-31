@@ -6,6 +6,8 @@ github.com/Herrscherd/herrscher-codex-backend v0.1.2 h1:Bpz9aHNspCN5D4yn6++5Qd6c
 github.com/Herrscherd/herrscher-codex-backend v0.1.2/go.mod h1:7QnVLNllTl84Ldk7GR3nNCkYN7INB2kJQf06EVzyXV8=
 github.com/Herrscherd/herrscher-contracts v0.2.11 h1:d9NB5JcZC8Udwhulii99KGI8mzcCnD7Lkc131QPpbgw=
 github.com/Herrscherd/herrscher-contracts v0.2.11/go.mod h1:LM6PwTwJwF4+uVjeqIGFhWZOaQbLPtUxyhjD9ji+NmI=
+github.com/Herrscherd/herrscher-contracts v0.2.12 h1:yAVVRIxN8/azMCSCJnuVx2OY6ft7eMBYA6+3DV20IVY=
+github.com/Herrscherd/herrscher-contracts v0.2.12/go.mod h1:LM6PwTwJwF4+uVjeqIGFhWZOaQbLPtUxyhjD9ji+NmI=
 github.com/Herrscherd/herrscher-cursor-backend v0.1.4 h1:vD/LNiWxO1ls3y1NQtxlvUOWhTHk9YV4yaMTrLC/iEs=
 github.com/Herrscherd/herrscher-cursor-backend v0.1.4/go.mod h1:vB/mCVATufAARlucTXbkG/VF2cnGdv0/RSZhOBZgdio=
 github.com/Herrscherd/herrscher-discord-gateway v0.2.5 h1:QqwryuS4FyMq+1JbsVJBgW+EceBbqhIYbJgPbANatew=
@@ -14,10 +16,16 @@ github.com/Herrscherd/herrscher-llm-extractor v0.1.2 h1:0ztkv0o26pev///tB02X8pr7
 github.com/Herrscherd/herrscher-llm-extractor v0.1.2/go.mod h1:LzIfv/F8DfuRyNwa5DEThOq/BSB/+8haT6xGEiaHdhs=
 github.com/Herrscherd/herrscher-obsidian-memory v0.2.9 h1:Qev90YychHwh8g4N22bK+M/ZaGH+R+GrKYhRUv0y75U=
 github.com/Herrscherd/herrscher-obsidian-memory v0.2.9/go.mod h1:7uMUvkC0YZt+ZIaoeqX4995cKo4gOqYKOrFTIB4D7tg=
+github.com/Herrscherd/herrscher-obsidian-memory v0.2.10 h1:Q/9/t9DukOvDAfknqPOdlOwaO2dNfBWxzEbMSGzpqE8=
+github.com/Herrscherd/herrscher-obsidian-memory v0.2.10/go.mod h1:GAP6fkBn3edhYEaxmA/NRfz6L93LmyIjoprdYaK5S50=
 github.com/Herrscherd/herrscher-orchestrator v0.1.19 h1:VW64KI0zbQOsmLMmi4SrSRowQszIVTmTNyTo3ZuHPOs=
 github.com/Herrscherd/herrscher-orchestrator v0.1.19/go.mod h1:e0hi+R14073oS4r7tqmjdo8sgAAA+g2vYmXPVOwd13k=
+github.com/Herrscherd/herrscher-orchestrator v0.1.20 h1:ixpqVjEv8BD6soxmXP/Hy661rMK5R2M34rOS1SWuu2M=
+github.com/Herrscherd/herrscher-orchestrator v0.1.20/go.mod h1:vc9JgC1V1Qc2Cq7ce6w8bTag9V4wBW0hubmN/Qvc9Bk=
 github.com/Herrscherd/herrscher-transport v0.2.0 h1:oaeRAtKLyJVlG+8QSNq1TuPY86wSEetKNH9K9zRhnXw=
 github.com/Herrscherd/herrscher-transport v0.2.0/go.mod h1:bCt4DsxyzcI8uVdWfDegxydBpryqYk2ZSC/qsHXWAb0=
+github.com/Herrscherd/herrscher-transport v0.2.1 h1:xWHly61aBaVI27TpW2EpFfOqp8LcbUyVfnpbHorII8o=
+github.com/Herrscherd/herrscher-transport v0.2.1/go.mod h1:6li0IhdB2xDLrqxoB3/u6umRSB0soQbXTHATyXn1a5A=
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=

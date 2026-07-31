@@ -273,7 +273,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	// self-registers into contracts.Default from its init() (xcaddy pattern), so
 	// adding a gateway or backend is a blank import + rebuild.
 	for _, p := range contracts.Default.Plugins() {
-		log.Info("plugin compiled in", "kind", p.Manifest.Kind, "category", p.Manifest.Category)
+		log.Info("plugin compiled in", "kind", p.Manifest.Kind, "category", p.Manifest.Category, "status", p.Manifest.Status)
 	}
 
 	// Liveness uses the first gateway exposing each port: ping a Prober for

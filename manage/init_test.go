@@ -1,6 +1,7 @@
 package manage
 
 import (
+	"flag"
 	"reflect"
 	"testing"
 )
@@ -100,4 +101,33 @@ func TestResolveStackAlwaysKeepsTerminal(t *testing.T) {
 		}
 	}
 	t.Fatalf("in-tree terminal gateway missing from %v", mods)
+}
+
+// Every flag that shapes the resolved stack must suppress the wizard —
+// otherwise the wizard's answers silently overwrite what the operator asked
+// for. --extractor was omitted from that set once; this pins the whole list.
+func TestStackFlagsSetCoversEveryStackFlag(t *testing.T) {
+	for _, name := range []string{"gateway", "backend", "memory", "orchestrator", "extractor", "with"} {
+		fs := flag.NewFlagSet("init", flag.ContinueOnError)
+		fs.String("gateway", "", "")
+		fs.String("backend", "", "")
+		fs.String("memory", "", "")
+		fs.String("orchestrator", "", "")
+		fs.String("extractor", "", "")
+		fs.String("with", "", "")
+		if err := fs.Parse([]string{"-" + name, "x"}); err != nil {
+			t.Fatalf("parse -%s: %v", name, err)
+		}
+		if !stackFlagsSet(fs) {
+			t.Errorf("stackFlagsSet false after -%s: the wizard would overwrite it", name)
+		}
+	}
+	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	fs.String("gateway", "", "")
+	if err := fs.Parse(nil); err != nil {
+		t.Fatal(err)
+	}
+	if stackFlagsSet(fs) {
+		t.Error("stackFlagsSet true with no flags passed")
+	}
 }

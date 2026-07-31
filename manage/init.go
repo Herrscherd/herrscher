@@ -235,7 +235,10 @@ func stackFlagsSet(fs *flag.FlagSet) bool {
 	set := false
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
-		case "gateway", "backend", "memory", "orchestrator", "with":
+		// extractor belongs here for the same reason as the rest: it shapes the
+		// resolved stack, so passing it must pin the stack, not hand it to a
+		// wizard that would overwrite the choice.
+		case "gateway", "backend", "memory", "orchestrator", "extractor", "with":
 			set = true
 		}
 	})

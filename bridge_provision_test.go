@@ -23,6 +23,7 @@ func (m *recordingMem) Search(context.Context, contracts.Query) ([]contracts.Nod
 	return nil, nil
 }
 func (m *recordingMem) Links(context.Context, string, string, string) error { return nil }
+func (m *recordingMem) Unlink(context.Context, string, string) error        { return nil }
 func (m *recordingMem) Close() error                                        { return nil }
 func (m *recordingMem) EnsureProject(_ context.Context, key, title string) error {
 	m.projects = append(m.projects, [2]string{key, title})

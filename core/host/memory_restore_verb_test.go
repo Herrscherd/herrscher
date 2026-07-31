@@ -49,7 +49,7 @@ func (m *restoreVerbMem) Unlink(_ context.Context, from, to string) error {
 	m.lastUnlink = [2]string{from, to}
 	return nil
 }
-func (m *restoreVerbMem) Close() error                                        { return nil }
+func (m *restoreVerbMem) Close() error { return nil }
 
 // currentRestoreMem is swapped by each test before building a registry.
 // Registered exactly once below (init) as the package's only fake memory

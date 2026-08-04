@@ -16,6 +16,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("cmd", "bridged command (defaults to the configured cmd)", false).
 			Param("backend", "bridge backend: stream (default) | oneshot", false).
 			Param("vendor", "agent backend vendor: claude | codex | cursor", false).
+			Param("model", "catalog model id (see `herrscher models list`); empty = use cmd as-is", false).
 			Param("gateways", "comma-separated gateway kinds to bind (e.g. chat,terminal)", false).
 			Param("terminal_only", "bind the session to the terminal gateway only", false).
 			Param("shared", "run in the main checkout instead of an isolated worktree", false).
@@ -60,6 +61,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("name", "session name", true).
 			Param("vendor", "backend vendor", true).
 			Param("cmd", "backend invocation (carries model+effort)", true).
+			Param("model", "catalog model id (see `herrscher models list`); omit to keep the session's current model, pass empty to clear it", false).
 			Param("handoff", "none|full|summary context handoff", false).
 			Do(h.sessionSwitchRun),
 		contracts.New("session", "set-budget").

@@ -13,3 +13,6 @@
 # local-dev Go workspace (resolves the unmerged gateway branch); never committed
 /go.work
 /go.work.sum
+
+# atomic-write scratch files (state.json.tmp, transcript .tmp); never committed
+*.tmp

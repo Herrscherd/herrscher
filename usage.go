@@ -52,6 +52,7 @@ func usage() {
 			row("session <create|close|list|who>", "bridged channel + worktree + backend"),
 			row("agent   <create|list>", "durable companion agents (persona/MCP)"),
 			row("memory  <locate|forget|record>", "inspect/edit the memory graph"),
+			row("models  list", "list the models the compiled backends offer"),
 		),
 		"",
 		group("DAEMON & SERVICE",
@@ -70,6 +71,8 @@ func usage() {
 		"",
 		"  " + hint.Render("env: DISCORD_BOT_TOKEN (required), DISCORD_USER_ID (the user the bot obeys)"),
 		"  " + hint.Render("     HERRSCHER_OWNER_ID (instance-id fallback), HERRSCHER_STATE_DIR (state dir)"),
+		"  " + hint.Render("     HERRSCHER_ROUTE_POLICY=gateway-only (n'offre que les modèles passerelle)"),
+		"  " + hint.Render("     NEUBLOX_GATEWAY_URL + NEUBLOX_GATEWAY_TOKEN (les deux, sinon une session passerelle échoue)"),
 	}
 
 	fmt.Fprintln(os.Stderr, strings.Join(blocks, "\n"))

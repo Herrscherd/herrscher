@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -56,7 +57,7 @@ func TestSelectBackendVendorPrecedence(t *testing.T) {
 	}
 }
 
-func TestBuildBackendSelectsByVendor(t *testing.T) {
+func TestBuildBackendForSelectsByVendor(t *testing.T) {
 	saved := contracts.Default
 	t.Cleanup(func() { contracts.Default = saved })
 	contracts.Default = contracts.Registry{}
@@ -74,8 +75,8 @@ func TestBuildBackendSelectsByVendor(t *testing.T) {
 	contracts.Default.Register(makePlugin("claude"))
 	contracts.Default.Register(makePlugin("codex"))
 
-	if _, err := BuildBackend(context.Background(), "codex", "codex --model gpt-5.6", "", "", ""); err != nil {
-		t.Fatalf("BuildBackend: %v", err)
+	if _, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "codex", Cmd: "codex --model gpt-5.6"}); err != nil {
+		t.Fatalf("BuildBackendFor: %v", err)
 	}
 	if built != "codex" {
 		t.Fatalf("built %q, want codex", built)
@@ -210,6 +211,51 @@ func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 		if gotArgv[i] != wantArgv[i] {
 			t.Fatalf("argv = %v, want %v", gotArgv, wantArgv)
 		}
+	}
+}
+
+// TestNewSeedBackendPropagatesSessionModelID pins the connective line in
+// newSeedBackend that copies sess.ModelID into BackendRequest.ModelID. A
+// session naming a gateway-route model must reach BuildBackendFor's
+// credential-resolution path and, with no gateway credentials in the
+// environment, fail closed with the gateway error — proving the ID actually
+// arrived, not just that some error occurred. If that line were reverted to
+// ModelID: "", the request would take the legacy path instead and this model
+// lookup would never happen.
+func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{
+			Kind:     "codex",
+			Category: contracts.CategoryBackend,
+			Models: []contracts.ModelSpec{
+				{ID: "gpt-gateway", Label: "GPT Gateway", Arg: "gpt-gateway", Route: contracts.RouteGateway},
+			},
+		},
+		Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
+			return seedBackend{}, nil
+		},
+	})
+	t.Setenv("HERRSCHER_ROUTE_POLICY", "")
+	t.Setenv("NEUBLOX_GATEWAY_URL", "")
+	t.Setenv("NEUBLOX_GATEWAY_TOKEN", "")
+
+	sess := state.Session{Vendor: "codex", ModelID: "gpt-gateway"}
+	_, err := newSeedBackend(context.Background(), sess)
+	if err == nil {
+		t.Fatal("newSeedBackend succeeded with a gateway-route model and no gateway credentials; want fail-closed error")
+	}
+	if !strings.Contains(err.Error(), "gateway") {
+		t.Fatalf("error does not indicate the gateway credential path was reached: %v", err)
+	}
+
+	// Sanity: without a ModelID the same session takes the legacy path and
+	// succeeds, since the registered plugin needs no route resolution.
+	legacy := state.Session{Vendor: "codex"}
+	if _, err := newSeedBackend(context.Background(), legacy); err != nil {
+		t.Fatalf("legacy path (no ModelID) failed: %v", err)
 	}
 }
 

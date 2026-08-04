@@ -182,6 +182,10 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	partDir := filepath.Dir(o.StatePath) // participants/<name>.log lives beside state.json
 	sup := supervisor.NewSupervisor(ctx, self)
 	sup.SetLogger(base)
+	// The daemon scrubbed the gateway pair from its own environment (see
+	// CaptureGatewayCreds); hand it back to the bridge — the same trusted binary,
+	// and the process that actually builds backends — through its environment.
+	sup.SetBridgeEnv(GatewayEnvPairs())
 	sup.SetMetrics(h.Metrics())
 	sup.SetAgentsRoot(filepath.Join(partDir, "agents"))
 

@@ -35,6 +35,13 @@ type Supervisor struct {
 	// delegation roster matches the store the coordinator spawns from (which honours
 	// the daemon's --state override). Empty = the bridge falls back to its default.
 	agentsRoot string
+	// bridgeEnv is extra KEY=VALUE entries added to each bridge child's
+	// environment, on top of os.Environ(). The daemon strips the gateway
+	// credentials from its own environment at startup so they cannot leak into a
+	// vendor CLI; the bridge — the same trusted binary, and the process that
+	// actually builds backends — gets them back this way. Deliberately NOT argv:
+	// /proc/<pid>/cmdline is world readable.
+	bridgeEnv []string
 	// runBridge is the process boundary. Tests replace it with a controlled
 	// runner so restart ordering can be asserted without launching a real agent.
 	runBridge func(context.Context, state.Session)
@@ -125,6 +132,14 @@ func (s *Supervisor) SetAgentsRoot(root string) {
 	s.agentsRoot = root
 }
 
+// SetBridgeEnv records extra KEY=VALUE entries handed to every bridge child on
+// top of the inherited environment. The composition root passes the captured
+// gateway credentials here (see host.GatewayEnvPairs), which the daemon removed
+// from its own environment so no vendor CLI can read them.
+func (s *Supervisor) SetBridgeEnv(kv []string) {
+	s.bridgeEnv = append([]string(nil), kv...)
+}
+
 // Start launches a supervised bridge for sess (idempotent per name).
 func (s *Supervisor) Start(sess state.Session) error {
 	for {
@@ -211,6 +226,16 @@ func (s *Supervisor) runLoop(ctx context.Context, sess state.Session) {
 }
 
 func (s *Supervisor) runBridgeCommand(ctx context.Context, sess state.Session) {
+	cmd := s.bridgeCommand(ctx, sess)
+	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
+	_ = cmd.Run() // returns on exit or ctx cancel
+}
+
+// bridgeCommand builds the child process for sess: argv, working directory and
+// environment. Split out of runBridgeCommand so a test can assert what the
+// child would receive — in particular that the gateway credentials ride the
+// environment and never argv.
+func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, s.selfBin, s.bridgeArgs(sess)...)
 	configureBridgeCommand(cmd)
 	// Dir is the resolved run directory (worktree, or workspace/project root);
@@ -221,7 +246,6 @@ func (s *Supervisor) runBridgeCommand(ctx context.Context, sess state.Session) {
 	} else if sess.Worktree != "" {
 		cmd.Dir = sess.Worktree
 	}
-	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
-	cmd.Env = os.Environ()
-	_ = cmd.Run() // returns on exit or ctx cancel
+	cmd.Env = append(os.Environ(), s.bridgeEnv...)
+	return cmd
 }

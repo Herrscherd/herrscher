@@ -288,6 +288,9 @@ func NewRegistry(ctx context.Context, d Deps, o Options) (*cli.Registry, error) 
 
 	self, _ := os.Executable()
 	sup := supervisor.NewSupervisor(ctx, self)
+	// `session switch` restarts a bridge from this process too, so it needs the
+	// same trusted hand-off of the captured gateway pair the daemon does.
+	sup.SetBridgeEnv(GatewayEnvPairs())
 	// The operator CLI builds one gateway; a session created here defaults to it
 	// (unless it is the terminal gateway). The concrete kind comes from the built
 	// gateway's manifest, so the manager package still never names a platform.

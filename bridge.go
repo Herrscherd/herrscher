@@ -32,6 +32,14 @@ func runBridge(ctx context.Context, args []string) error {
 	consolidateEvery := fs.Int("consolidate-every", 0, "run Consolidate every N turns (0 = manual only); only used with --extractor")
 	fs.Parse(args)
 
+	// The bridge is the process that actually builds backends, so it needs the
+	// gateway pair the supervisor handed it in its environment — and must scrub
+	// it from that environment before spawning any vendor CLI. main() already
+	// captures for every path; this is the load-bearing call for the supervised
+	// child, kept here so the bridge cannot lose it if main's dispatch changes.
+	// Idempotent.
+	host.CaptureGatewayCreds()
+
 	log := host.Logger(*verbose).With("component", "bridge", "session", *session)
 
 	// The backend is the model edge: core never knows which model answers. When

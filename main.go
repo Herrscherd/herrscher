@@ -23,6 +23,7 @@ import (
 	"golang.org/x/term"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/manage"
 )
 
@@ -81,6 +82,16 @@ func main() {
 		}
 		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error()+" (continuing)")
 	}
+
+	// Capture the Neublox gateway pair and REMOVE it from this process's
+	// environment, before any verb runs. It is a product credential on a shared
+	// paid account; leaving it in the environment would propagate it to every
+	// vendor CLI a session spawns (backends spawn with MergeEnv(os.Environ(),
+	// env)), handing a prompt-injectable coding agent `env | grep NEUBLOX`. This
+	// is the earliest point common to every path — daemon, operator CLI, and the
+	// supervised `herrscher bridge` child, which re-captures what the supervisor
+	// hands it. It must run AFTER the .env load above, which may define the pair.
+	host.CaptureGatewayCreds()
 
 	ctx := context.Background()
 
@@ -141,6 +152,8 @@ func main() {
 		err = runAgent(ctx, args)
 	case "memory":
 		err = runMemory(ctx, args)
+	case "models":
+		err = runModels(ctx, args)
 	case "service":
 		err = runService(ctx, args)
 	case "plugin-host":

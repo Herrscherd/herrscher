@@ -397,6 +397,12 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	}
 	agentName, _ := in.Lookup("agent")
 	vendor, _ := in.Lookup("vendor")
+	modelID, _ := in.Lookup("model")
+	// Validate at creation: an unknown or policy-excluded id persisted here would
+	// only surface much later, as an opaque spawn failure on the first turn.
+	if err := h.checkModel(vendor, modelID); err != nil {
+		return "", err
+	}
 	parent, _ := in.Lookup("parent")
 	// P1 learning (opt-in): extractor names a registered curation extractor; the
 	// journal/cadence feed its Consolidate. Persisted on the session and threaded
@@ -533,21 +539,21 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		// The conversation already exists — bind to it rather than creating a
 		// channel. This is what lets a gateway start a session in the channel the
 		// operator is already talking in.
-		sess = state.Session{Name: name, ChannelID: adopted, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
+		sess = state.Session{Name: name, ChannelID: adopted, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
 	case home.Type == "category", home.Type == "terminal":
 		chID, err := admin.CreateUnder(ctx, home.ID, title)
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create channel: %w", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
+		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
 	case home.Type == "forum":
 		chID, err := admin.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create forum post: %w", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
+		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}
@@ -673,17 +679,34 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	if !exists {
 		return "", fmt.Errorf("no session %q", name)
 	}
+	// An ABSENT --model keeps the session's current model; only an explicitly
+	// supplied value retargets it (and an explicit empty value clears it back to
+	// the legacy cmd-carries-the-model path). Re-targeting just --cmd must not
+	// silently drop a gateway session off the routed path — that would degrade
+	// away from the safe direction.
+	modelID := prior.ModelID
+	if v, supplied := in.Lookup("model"); supplied {
+		modelID = v
+	}
+	// Validate the EFFECTIVE pair, not just an explicitly supplied model: a
+	// --vendor change on its own strands the RETAINED model on a backend that
+	// does not own it, and the spawn would then inject the owning vendor's
+	// variables into a CLI that ignores them — the turn running on the machine's
+	// own login while the session still reads gateway-routed.
+	if err := h.checkModel(vendor, modelID); err != nil {
+		return "", err
+	}
 	// Capture the prior backend so we can roll back if the restart fails: rolling
 	// back to the old vendor makes the old resume token valid again.
-	oldVendor, oldCmd, oldToken := prior.Vendor, prior.Cmd, prior.ResumeToken
-	if !h.st.SetBackendTarget(name, vendor, cmd) {
+	oldVendor, oldCmd, oldModelID, oldToken := prior.Vendor, prior.Cmd, prior.ModelID, prior.ResumeToken
+	if !h.st.SetBackendTarget(name, vendor, cmd, modelID) {
 		return "", fmt.Errorf("no session %q", name)
 	}
-	sess, _ := h.st.FindSession(name) // re-read: Vendor/Cmd/ResumeToken just changed
+	sess, _ := h.st.FindSession(name) // re-read: Vendor/Cmd/ModelID/ResumeToken just changed
 	// Replace the targeted bridge synchronously for ALL handoff modes so the old
 	// process is gone before the new Cmd/Vendor starts. Only seeding is optional.
 	if err := h.sup.Restart(sess); err != nil {
-		if rbErr := h.rollbackSwitch(name, oldVendor, oldCmd, oldToken); rbErr != nil {
+		if rbErr := h.rollbackSwitch(name, oldVendor, oldCmd, oldModelID, oldToken); rbErr != nil {
 			return "", fmt.Errorf("redémarrage backend: %w; rollback échoué, session %s hors service: %v", err, name, rbErr)
 		}
 		return "", fmt.Errorf("redémarrage backend: %w (session %s restaurée sur %s)", err, name, oldVendor)
@@ -726,9 +749,9 @@ func (h *Handler) injectSeed(ctx context.Context, name, task string) bool {
 // token (valid again now that the vendor is back), and restarts the old backend so
 // the thread is live again. A non-nil return means the rollback restart also failed
 // and the session is down.
-func (h *Handler) rollbackSwitch(name, oldVendor, oldCmd, oldToken string) error {
-	h.st.SetBackendTarget(name, oldVendor, oldCmd) // also clears the token
-	_ = h.st.SetResumeToken(name, oldToken)        // restore it
+func (h *Handler) rollbackSwitch(name, oldVendor, oldCmd, oldModelID, oldToken string) error {
+	h.st.SetBackendTarget(name, oldVendor, oldCmd, oldModelID) // also clears the token
+	_ = h.st.SetResumeToken(name, oldToken)                    // restore it
 	sess, _ := h.st.FindSession(name)
 	return h.sup.Restart(sess)
 }

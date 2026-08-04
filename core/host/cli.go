@@ -54,10 +54,28 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	}
 	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
 	hdl.SetSeeder(Seed) // host.Seed: live-session injection for `session switch` handoff
+	// Reject an unknown/policy-excluded --model, or one owned by a backend other
+	// than --vendor, at create/switch rather than on the first spawn. Uses the
+	// same lookup + policy the spawn choke point does.
+	hdl.SetModelValidator(func(vendor, modelID string) error {
+		entry, err := LookupModel(contracts.Default.Backends(), ResolvePolicy(os.Getenv), modelID)
+		if err != nil {
+			return err
+		}
+		if vendor != "" && vendor != entry.Vendor {
+			return fmt.Errorf("model %q belongs to backend %q, but backend %q was requested — pick a model offered by %q or switch the vendor", modelID, entry.Vendor, vendor, vendor)
+		}
+		return nil
+	})
 	seedCoord := &coordinatorSlot{}
 
 	reg := &cli.Registry{}
 	for _, c := range hdl.Commands() {
+		if err := reg.Add(c); err != nil {
+			return nil, hostDeps{}, err
+		}
+	}
+	for _, c := range ModelsCommands() {
 		if err := reg.Add(c); err != nil {
 			return nil, hostDeps{}, err
 		}
@@ -270,6 +288,9 @@ func NewRegistry(ctx context.Context, d Deps, o Options) (*cli.Registry, error) 
 
 	self, _ := os.Executable()
 	sup := supervisor.NewSupervisor(ctx, self)
+	// `session switch` restarts a bridge from this process too, so it needs the
+	// same trusted hand-off of the captured gateway pair the daemon does.
+	sup.SetBridgeEnv(GatewayEnvPairs())
 	// The operator CLI builds one gateway; a session created here defaults to it
 	// (unless it is the terminal gateway). The concrete kind comes from the built
 	// gateway's manifest, so the manager package still never names a platform.

@@ -19,24 +19,48 @@ import (
 // inbound lines.
 var pollInterval = 50 * time.Millisecond
 
-// budgetGate answers the two budget questions the turn loop asks: at a turn
-// boundary, whether the session has exhausted its budget (persisting the paused
-// reason when it has), and at turn start, how much token headroom the turn has.
-// Injected so the turn loop can be tested without a live manager.
+// budgetGate answers, in one call, both budget questions the turn loop asks: the
+// reason the session must pause ("" = it may run, and the gate has persisted the
+// reason when it is not), and how many tokens the turn about to start may spend
+// before a token cap trips (capped false = no token cap). One call rather than
+// two because both answers come from the same transcript fold, and the loop asks
+// them at the same instants. Injected so the turn loop can be tested without a
+// live manager.
 type budgetGate interface {
-	// CheckAfterTurn returns the paused reason ("" = continue).
-	CheckAfterTurn(session string) string
-	// TokenHeadroom returns how many tokens the turn may spend before a token cap
-	// trips, and whether any token cap applies. Read once per turn: re-deriving it
-	// per event would re-read the transcript hundreds of times a turn.
-	TokenHeadroom(session string) (uint64, bool)
+	Check(session string) (reason string, headroom uint64, capped bool)
 }
 
 // noBudgetGate is the default when no caps are configured.
 type noBudgetGate struct{}
 
-func (noBudgetGate) CheckAfterTurn(string) string        { return "" }
-func (noBudgetGate) TokenHeadroom(string) (uint64, bool) { return 0, false }
+func (noBudgetGate) Check(string) (string, uint64, bool) { return "", 0, false }
+
+// tokenGuard watches one turn's live token counter against the headroom read
+// when the turn was dispatched, so a runaway turn is cut mid-flight instead of
+// only being caught at a boundary it has already blown past. The zero value
+// watches nothing — that is what a pick gets, and what a session with no token
+// cap gets.
+type tokenGuard struct {
+	headroom uint64
+	capped   bool
+	cut      bool
+}
+
+// trips reports whether this event is the one that takes the turn past its
+// headroom, and how much the turn has spent. It answers true at most once per
+// turn: the cut is already under way after the first, and repeating it would
+// flood the view with the same status.
+func (g *tokenGuard) trips(e contracts.Event) (uint64, bool) {
+	if !g.capped || g.cut {
+		return 0, false
+	}
+	spent := turnTokens(e)
+	if spent == 0 || spent < g.headroom {
+		return spent, false
+	}
+	g.cut = true
+	return spent, true
+}
 
 // sessionDriver owns one session's turn lifecycle: it polls every bound
 // gateway's Reader for inbound messages, serializes them through a FIFO, writes
@@ -207,8 +231,8 @@ func (d *sessionDriver) Interrupt() {
 // event out through the same path as every other subscriber-visible frame
 // (fanOut -> emitTap + gateways), so LIVE subscribers (the app) see the pause
 // immediately instead of only picking it up on the next status poll.
-// Persistence of PausedReason is the gate's job (it already wrote it in
-// CheckAfterTurn before returning the reason). The backend bridge has no
+// Persistence of PausedReason is the gate's job (it already wrote it in Check
+// before returning the reason). The backend bridge has no
 // consumer for a "paused" frame (checked: nothing reads T=="paused" off
 // fromBridge), so this does not also write to d.toBridge.
 func (d *sessionDriver) emitPaused(ctx context.Context, reason string) {
@@ -441,8 +465,13 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			// gated — they answer an in-flight or already-rendered turn, not
 			// open a new one, so they must not be blocked by a pause that
 			// took effect after the pick was queued.
+			// Only a real input turn is budget-watched: a pick answers a turn
+			// that is already rendered, and cutting it would leave that turn
+			// unanswered. So a pick keeps the zero guard.
+			var guard tokenGuard
 			if ev.T == "input" {
-				if reason := d.gate.CheckAfterTurn(d.name); reason != "" {
+				reason, headroom, capped := d.gate.Check(d.name)
+				if reason != "" {
 					d.emitPaused(ctx, reason)
 					// The dequeued input is refused here, not re-queued: there is
 					// no auto-replay path for a budget-pause resume (resume only
@@ -454,6 +483,7 @@ func (d *sessionDriver) pump(ctx context.Context) {
 					d.fanOut(ctx, contracts.Event{T: "status", Text: "tour refusé — plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
 					continue
 				}
+				guard = tokenGuard{headroom: headroom, capped: capped}
 				if ev.TurnID == "" {
 					ev.TurnID = newTurnID()
 				}
@@ -468,7 +498,7 @@ func (d *sessionDriver) pump(ctx context.Context) {
 				ev.Agent = ""
 				d.activeTurnID = ""
 			}
-			d.runTurn(ctx, ev)
+			d.runTurn(ctx, ev, guard)
 			d.activeTurnID = ""
 		}
 	}
@@ -480,7 +510,7 @@ func (d *sessionDriver) pump(ctx context.Context) {
 // disconnect before the frame is handed off abandons the turn instead of blocking.
 // A turn that ends without a reply (bridge disconnect or shutdown) emits an
 // abstract "abandoned" signal so EventSink gateways can finalize.
-func (d *sessionDriver) runTurn(ctx context.Context, ev contracts.Event) {
+func (d *sessionDriver) runTurn(ctx context.Context, ev contracts.Event, guard tokenGuard) {
 	select {
 	case <-d.hangup:
 	default:
@@ -494,9 +524,7 @@ func (d *sessionDriver) runTurn(ctx context.Context, ev contracts.Event) {
 		d.abandon(ctx, ev)
 		return
 	}
-	// Only a real input turn is budget-watched: a pick answers a turn that is
-	// already rendered, and cutting it would leave that turn unanswered.
-	if !d.awaitTurn(ctx, ev.T == "input") {
+	if !d.awaitTurn(ctx, guard) {
 		d.abandon(ctx, ev)
 	}
 }
@@ -517,17 +545,11 @@ func (d *sessionDriver) abandon(ctx context.Context, ev contracts.Event) {
 // returns true on reply{done}, or false when the turn is abandoned (ctx
 // cancelled, the bridge closed, or a hangup signals a bridge disconnect). A
 // backend "reset" is a mid-turn progress event: it is fanned out and the turn
-// continues. When budgeted, the turn's live token counter is watched against the
-// headroom read at turn start and the turn is interrupted the moment it would
-// spend past the cap.
-func (d *sessionDriver) awaitTurn(ctx context.Context, budgeted bool) bool {
+// continues. guard watches the turn's live token counter and interrupts the turn
+// the moment it would spend past its cap.
+func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 	d.metrics.TurnStarted()
 	turnStart := time.Now()
-	var headroom uint64
-	var capped, cut bool
-	if budgeted {
-		headroom, capped = d.gate.TokenHeadroom(d.name)
-	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -561,18 +583,17 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, budgeted bool) bool {
 				}
 				d.seenMu.Unlock()
 				d.metrics.TurnCompleted()
-				if reason := d.gate.CheckAfterTurn(d.name); reason != "" {
+				if reason, _, _ := d.gate.Check(d.name); reason != "" {
 					d.emitPaused(ctx, reason)
 					return true // stop this turn; the next dispatch is refused while paused
 				}
 				return true
 			}
 			d.fanOut(ctx, e)
-			if spent := turnTokens(e); capped && !cut && spent > 0 && spent >= headroom {
-				cut = true
+			if spent, over := guard.trips(e); over {
 				d.Interrupt()
 				d.fanOut(ctx, contracts.Event{T: "status", Text: "tour interrompu — plafond de tokens atteint (" +
-					strconv.FormatUint(spent, 10) + " tokens sur ce tour, marge " + strconv.FormatUint(headroom, 10) + ")"})
+					strconv.FormatUint(spent, 10) + " tokens sur ce tour, marge " + strconv.FormatUint(guard.headroom, 10) + ")"})
 			}
 		}
 	}

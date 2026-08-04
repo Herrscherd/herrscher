@@ -2,8 +2,10 @@ package bridge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -332,18 +334,26 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 	n, copyErr := io.Copy(f, io.LimitReader(resp.Body, maxAttachmentBytes+1))
 	closeErr := f.Close()
 	if copyErr != nil {
-		os.Remove(dest) // don't leave a truncated image behind
-		return "", fmt.Errorf("download %s: %w", a.Filename, copyErr)
+		return discardPartial(dest, fmt.Errorf("download %s: %w", a.Filename, copyErr))
 	}
 	if closeErr != nil {
-		os.Remove(dest)
-		return "", fmt.Errorf("write %s: %w", dest, closeErr)
+		return discardPartial(dest, fmt.Errorf("write %s: %w", dest, closeErr))
 	}
 	if n > maxAttachmentBytes {
-		os.Remove(dest)
-		return "", fmt.Errorf("download %s: exceeds %d bytes", a.Filename, maxAttachmentBytes)
+		return discardPartial(dest, fmt.Errorf("download %s: exceeds %d bytes", a.Filename, maxAttachmentBytes))
 	}
 	return dest, nil
+}
+
+// discardPartial deletes a half-written download and hands back the failure that
+// caused it. The removal's own error is logged rather than swallowed: what is
+// left behind is a truncated image sitting in the session's attachment dir, and
+// the next turn would happily hand it to the backend as if it were whole.
+func discardPartial(dest string, err error) (string, error) {
+	if rmErr := os.Remove(dest); rmErr != nil && !errors.Is(rmErr, fs.ErrNotExist) {
+		logger.Warn("could not remove a partial attachment download", "path", dest, "err", rmErr)
+	}
+	return "", err
 }
 
 // validateCDNURL pins an attachment URL to https on one of the caller-supplied

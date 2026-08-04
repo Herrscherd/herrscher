@@ -60,11 +60,11 @@ func (c *turnController) interrupt() {
 // frames, and drives the backend one turn at a time, emitting events back over
 // the same connection. ctx cancellation returns its error.
 func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, o Options) error {
-	resp, err := newBackend(o.Channel)
+	backend, err := newBackend(o.Channel)
 	if err != nil {
 		return fmt.Errorf("backend: %w", err)
 	}
-	defer resp.Close()
+	defer backend.Close()
 
 	conn, err := control.Dial(o.HubSocket)
 	if err != nil {
@@ -96,8 +96,8 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 		})
 	}()
 
-	eng := newSkillEngine(resp)
-	runHubTurnsCtl(ctx, in, conn, resp, orch, ctrl, eng, o.Roster)
+	eng := newSkillEngine(backend)
+	runHubTurnsCtl(ctx, in, conn, backend, orch, ctrl, eng, o.Roster)
 	return ctx.Err()
 }
 
@@ -106,13 +106,13 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 // in-memory channel + sink without a real socket. FIFO is inherent: the hub
 // sends the next input only after it sees this turn's reply{done}, and this
 // loop processes one frame at a time anyway.
-func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator) {
-	runHubTurnsCtl(ctx, in, sink, resp, orch, nil, nil, nil)
+func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator) {
+	runHubTurnsCtl(ctx, in, sink, backend, orch, nil, nil, nil)
 }
 
 // runHubTurnsCtl is runHubTurns with an explicit turnController so an interrupt
 // frame read out-of-band can cancel the in-flight turn.
-func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine, roster contracts.RosterProvider) {
+func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine, roster contracts.RosterProvider) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -123,9 +123,9 @@ func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contrac
 			}
 			switch ev.T {
 			case "pick":
-				runPick(ctx, sink, resp, ev.Value)
+				runPick(ctx, sink, backend, ev.Value)
 			default: // "input" (and any human-origin frame)
-				runOneTurn(ctx, sink, resp, orch, ev, ctrl, eng, roster)
+				runOneTurn(ctx, sink, backend, orch, ev, ctrl, eng, roster)
 			}
 		}
 	}
@@ -134,7 +134,7 @@ func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contrac
 // runOneTurn runs a single backend turn for an input frame, streaming chunk/
 // status events and a terminal reply{done}. An empty output still emits
 // reply{done} so the hub's FIFO can advance.
-func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController, eng *skills.Engine, roster contracts.RosterProvider) {
+func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController, eng *skills.Engine, roster contracts.RosterProvider) {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
 	if eng != nil {
@@ -176,9 +176,17 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 		}
 		emitBackendEvent(sink, be, outTok, inTok, cacheRd, cacheCr)
 	}
-	out, err := resp.Respond(turnCtx, prompt, onEvent)
-	if err != nil && out == "" {
-		out = errPrefix + err.Error()
+	out, err := backend.Respond(turnCtx, prompt, onEvent)
+	if err != nil {
+		// Partial output is kept as the reply — work the backend did produce is
+		// worth more to the human than an error banner — but the failure itself
+		// must not vanish: a truncated reply is indistinguishable from a complete
+		// one, so the reason is at least in the operator log.
+		if out == "" {
+			out = errPrefix + err.Error()
+		} else {
+			logger.Warn("backend failed after partial output; keeping what it produced", "err", err, "chars", len(out))
+		}
 	}
 	out = strings.TrimSpace(out)
 	if eng != nil {
@@ -188,9 +196,14 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 	if tr, ok := orch.(contracts.TurnReactor); ok {
 		out = tr.React(turnCtx, out)
 	}
-	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, TokensIn: inTok, CacheRead: cacheRd, CacheCreate: cacheCr, Resume: resumeToken(resp)})
+	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, TokensIn: inTok, CacheRead: cacheRd, CacheCreate: cacheCr, Resume: resumeToken(backend)})
 	if orch != nil {
-		_ = orch.Observe(ctx, prompt, out)
+		// Not fatal to the turn (the human already has the reply), but a failed
+		// observe means this turn never reached memory — silently forgetting is
+		// exactly the kind of thing an operator needs told.
+		if err := orch.Observe(ctx, prompt, out); err != nil {
+			logger.Warn("memory observe failed; this turn was not recorded to memory", "err", err)
+		}
 	}
 }
 
@@ -231,8 +244,8 @@ func (s turnEventSink) Emit(e contracts.Event) {
 
 // resumeToken reads a backend's opaque resume token when it is ResumeAware, so
 // the daemon can persist it for cross-restart --resume. "" when unsupported.
-func resumeToken(resp contracts.Backend) string {
-	if ra, ok := resp.(contracts.ResumeAware); ok {
+func resumeToken(backend contracts.Backend) string {
+	if ra, ok := backend.(contracts.ResumeAware); ok {
 		return ra.ResumeToken()
 	}
 	return ""
@@ -240,8 +253,8 @@ func resumeToken(resp contracts.Backend) string {
 
 // runPick answers a routed select-menu pick out-of-band (serialized with turns
 // by runHubTurns), emitting whatever the backend produces as a reply{done}.
-func runPick(ctx context.Context, sink contracts.EventSink, resp contracts.Backend, value string) {
-	inj, ok := resp.(contracts.ChoiceInjector)
+func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, value string) {
+	inj, ok := backend.(contracts.ChoiceInjector)
 	if !ok {
 		return
 	}

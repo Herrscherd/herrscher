@@ -70,7 +70,7 @@ func TestRouteStepRefusesAHalfGatewayPair(t *testing.T) {
 			if err == nil {
 				t.Fatal("a half gateway pair was accepted")
 			}
-			if !strings.Contains(err.Error(), "incomplet") {
+			if !strings.Contains(err.Error(), "incomplete") {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
@@ -120,7 +120,7 @@ func TestRouteStepSkipsTheModelQuestionInComposeMode(t *testing.T) {
 // Clearing is distinct from keeping: it must write an empty value, since
 // writeSecretsTo upserts by key and an absent key keeps the old default.
 func TestRouteStepClearsTheDefaultModel(t *testing.T) {
-	got, err := routeStep(style{}, answers("1", "aucun"), fakeCatalog, routeCurrent{model: "local-opus"}, true)
+	got, err := routeStep(style{}, answers("1", "none"), fakeCatalog, routeCurrent{model: "local-opus"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}

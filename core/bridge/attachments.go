@@ -363,7 +363,8 @@ func validateCDNURL(raw string, hosts allowedHosts) error {
 	if err != nil {
 		return fmt.Errorf("attachment url %q: %w", raw, err)
 	}
-	if u.Scheme != "https" || !hosts[u.Hostname()] {
+	// A host name is case-insensitive; the allowlist is keyed lowercase.
+	if u.Scheme != "https" || !hosts[strings.ToLower(u.Hostname())] {
 		return fmt.Errorf("attachment url %q: not an allowed CDN https url", raw)
 	}
 	return nil

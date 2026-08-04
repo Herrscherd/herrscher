@@ -22,7 +22,7 @@ func isTerminal(f *os.File) bool {
 // per-category choices and a secret map to persist. Every line is read through a
 // single bufio.Reader so the masked-secret reader (which toggles terminal echo)
 // shares the buffer and loses no input between prompts.
-func runWizard(compose bool) (map[string]string, map[string]string, error) {
+func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string, map[string]string, error) {
 	s := newStyle()
 	in := bufio.NewReader(os.Stdin)
 	choices := map[string]string{}
@@ -60,12 +60,22 @@ func runWizard(compose bool) (map[string]string, map[string]string, error) {
 			secrets["HERRSCHER_OWNER_ID"] = v
 		}
 	}
+
+	// Routing comes last: under gateway-only it asks for credentials, and there is
+	// no point collecting those before the operator has committed to a stack.
+	route, err := routeStep(s, in, cat, cur, !compose)
+	if err != nil {
+		return nil, nil, err
+	}
+	for k, v := range route {
+		secrets[k] = v
+	}
 	return choices, secrets, nil
 }
 
 // secretLabel renders an aligned, dimmed key followed by the prompt arrow.
 func secretLabel(s style, key string) string {
-	return fmt.Sprintf("    %-20s %s ", key, s.wrap(s.dim, "›"))
+	return fmt.Sprintf("    %-21s %s ", key, s.wrap(s.dim, "›"))
 }
 
 // chooseKind prints the catalog for one category (plus a "none" entry) and reads

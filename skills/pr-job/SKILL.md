@@ -8,6 +8,11 @@ description: Use when a task arrives from chat and must end as a pull request â€
 You are working in this session's own git worktree. The job ends with a pull
 request, not with a message saying the work is done.
 
+Everything you do happens inside the current turn. Nothing keeps running once
+you stop replying â€” there is no background job and no timer. So either finish
+the step and show the result, or say what blocks you and end on a question.
+"I've started looking into it, I'll get back to you" is a turn that did nothing.
+
 ## 1. Understand before touching anything
 
 Read the request and every screenshot attached to it. The screenshots are the

@@ -379,7 +379,10 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		home = state.HomeRef{ID: "terminal", Type: "terminal"}
 		admin = h.td
 	}
-	if home.ID == "" {
+	adopted, _ := in.Lookup("channel_id")
+	// Adopting an existing conversation needs no home: the caller already knows
+	// where the session must live, so there is nothing to create under.
+	if home.ID == "" && adopted == "" {
 		return "", fmt.Errorf("no home set — run `set home` first")
 	}
 	cmd := h.defaultCmd
@@ -525,15 +528,20 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		runDir = repo
 	}
 	var sess state.Session
-	switch home.Type {
-	case "category", "terminal":
+	switch {
+	case adopted != "":
+		// The conversation already exists — bind to it rather than creating a
+		// channel. This is what lets a gateway start a session in the channel the
+		// operator is already talking in.
+		sess = state.Session{Name: name, ChannelID: adopted, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
+	case home.Type == "category", home.Type == "terminal":
 		chID, err := admin.CreateUnder(ctx, home.ID, title)
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create channel: %w", err)
 		}
 		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
-	case "forum":
+	case home.Type == "forum":
 		chID, err := admin.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
 			rollbackWorktree()

@@ -52,3 +52,19 @@ func TestDiscoverMissingRootIsSkipped(t *testing.T) {
 		t.Fatalf("missing root should yield no skills, got %+v", got)
 	}
 }
+
+// TestPRJobSkillIsDiscoverable pins the repo's own playbook: a gateway names
+// "pr-job" as the default playbook in a new session's opening turn, so the skill
+// must exist here and be discoverable under the repo skills root.
+func TestPRJobSkillIsDiscoverable(t *testing.T) {
+	got := Discover([]string{"../../skills"})
+	for _, s := range got {
+		if s.Name == "pr-job" {
+			if s.Description == "" {
+				t.Fatal("pr-job has no description — the menu would show a blank line")
+			}
+			return
+		}
+	}
+	t.Fatalf("pr-job not discovered in %+v", got)
+}

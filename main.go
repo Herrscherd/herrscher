@@ -161,7 +161,7 @@ func main() {
 
 // channelFlag registers -c/--channel on fs and returns the bound pointer.
 func channelFlag(fs *flag.FlagSet) *string {
-	ch := fs.String("channel", "", "channel id (default: DISCORD_CHANNEL_ID)")
+	ch := fs.String("channel", "", "conversation id this bridge answers in")
 	fs.StringVar(ch, "c", "", "channel id (shorthand)")
 	return ch
 }

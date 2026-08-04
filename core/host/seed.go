@@ -307,7 +307,7 @@ func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend,
 		Kind:    sess.Backend,
 		Dir:     resolveBackendDir(dir),
 		Resume:  sess.ResumeToken,
-		ModelID: "",
+		ModelID: sess.ModelID,
 	})
 }
 

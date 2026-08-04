@@ -307,6 +307,20 @@ func Seed(session, task string) bool {
 	return true
 }
 
+// Submit injects one inbound message into the named session's turn queue,
+// returning false when no live session by that name is driving (mirror of Pick).
+// It is the push counterpart of the driver's own poll loop: a gateway that
+// receives messages by push calls this instead of being polled.
+func Submit(session string, in contracts.Inbound) bool {
+	sessionRegistry.mu.Lock()
+	d := sessionRegistry.m[session]
+	sessionRegistry.mu.Unlock()
+	if d == nil {
+		return false
+	}
+	return d.submit(context.Background(), in)
+}
+
 // run starts the pollers and the turn pump; it blocks until ctx is cancelled.
 func (d *sessionDriver) run(ctx context.Context) {
 	for _, g := range d.gateways {
@@ -342,11 +356,13 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 					continue
 				}
 				last = m.ID
-				d.journal(m.AuthorID)
-				atts := d.resolveAttachments(ctx, m)
-				select {
-				case d.queue <- contracts.Event{T: "input", Who: m.AuthorName, Text: m.Content, Attachments: atts}:
-				case <-ctx.Done():
+				if !d.submit(ctx, contracts.Inbound{
+					Author:      m.AuthorName,
+					AuthorID:    m.AuthorID,
+					Text:        m.Content,
+					Attachments: m.Attachments,
+					MessageID:   contracts.MessageID(m.ID),
+				}) {
 					return
 				}
 			}
@@ -356,6 +372,28 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 			return
 		case <-time.After(pollInterval):
 		}
+	}
+}
+
+// submit records the author, resolves the message's attachments host-side, and
+// enqueues one input frame. It is the single body behind both inbound paths: the
+// poller (a gateway the core pulls from) and SessionControl.Submit (a gateway
+// that pushes). It reports false only when ctx was cancelled while enqueueing,
+// which is the poller's signal to stop.
+func (d *sessionDriver) submit(ctx context.Context, in contracts.Inbound) bool {
+	d.journal(in.AuthorID)
+	atts := d.resolveAttachments(ctx, contracts.Message{
+		ID:          string(in.MessageID),
+		Content:     in.Text,
+		AuthorID:    in.AuthorID,
+		AuthorName:  in.Author,
+		Attachments: in.Attachments,
+	})
+	select {
+	case d.queue <- contracts.Event{T: "input", Who: in.Author, Text: in.Text, Attachments: atts}:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 

@@ -5,9 +5,9 @@ go 1.25.0
 require (
 	github.com/Herrscherd/herrscher-claude-backend v0.2.2
 	github.com/Herrscherd/herrscher-codex-backend v0.1.4
-	github.com/Herrscherd/herrscher-contracts v0.2.13
+	github.com/Herrscherd/herrscher-contracts v0.2.14
 	github.com/Herrscherd/herrscher-cursor-backend v0.1.5
-	github.com/Herrscherd/herrscher-discord-gateway v0.2.6
+	github.com/Herrscherd/herrscher-discord-gateway v0.3.0
 	github.com/Herrscherd/herrscher-llm-extractor v0.1.3
 	github.com/Herrscherd/herrscher-obsidian-memory v0.2.12
 	github.com/Herrscherd/herrscher-orchestrator v0.1.21
@@ -57,5 +57,3 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
-
-replace github.com/Herrscherd/herrscher-contracts => /tmp/wt-contracts

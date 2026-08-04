@@ -54,11 +54,18 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	}
 	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
 	hdl.SetSeeder(Seed) // host.Seed: live-session injection for `session switch` handoff
-	// Reject an unknown/policy-excluded --model at create/switch rather than on
-	// the first spawn. Uses the same lookup + policy the spawn choke point does.
-	hdl.SetModelValidator(func(modelID string) error {
-		_, err := LookupModel(contracts.Default.Backends(), ResolvePolicy(os.Getenv), modelID)
-		return err
+	// Reject an unknown/policy-excluded --model, or one owned by a backend other
+	// than --vendor, at create/switch rather than on the first spawn. Uses the
+	// same lookup + policy the spawn choke point does.
+	hdl.SetModelValidator(func(vendor, modelID string) error {
+		entry, err := LookupModel(contracts.Default.Backends(), ResolvePolicy(os.Getenv), modelID)
+		if err != nil {
+			return err
+		}
+		if vendor != "" && vendor != entry.Vendor {
+			return fmt.Errorf("model %q belongs to backend %q, but backend %q was requested — pick a model offered by %q or switch the vendor", modelID, entry.Vendor, vendor, vendor)
+		}
+		return nil
 	})
 	seedCoord := &coordinatorSlot{}
 

@@ -261,6 +261,45 @@ func TestBuildBackendForSetsModelSettingOnGatewayRoute(t *testing.T) {
 	}
 }
 
+// A session whose --vendor disagrees with the model's owning backend used to
+// spawn the REQUESTED vendor with the OTHER vendor's environment: codex ignores
+// ANTHROPIC_*, never gets a gateway CODEX_HOME, and runs the turn on the
+// machine's own ChatGPT login while the session still reads gateway-routed.
+// `session switch --vendor codex` on a gateway session reaches exactly this.
+func TestBuildBackendForRejectsVendorModelMismatch(t *testing.T) {
+	var cfg contracts.PluginConfig
+	gatewayPlugin(t, &cfg) // registers "claude" owning "gw-opus"
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "codex", Category: contracts.CategoryBackend},
+		Backend: func(_ context.Context, c contracts.PluginConfig) (contracts.Backend, error) {
+			cfg = c
+			return seedBackend{}, nil
+		},
+	})
+
+	_, err := BuildBackendFor(context.Background(), BackendRequest{
+		Vendor: "codex", Cmd: "codex", ModelID: "gw-opus",
+	})
+	if err == nil {
+		t.Fatal("a codex spawn carrying a claude model was accepted; it would run on the machine's own login")
+	}
+	if !strings.Contains(err.Error(), "codex") || !strings.Contains(err.Error(), "gw-opus") {
+		t.Fatalf("error names neither the vendor nor the model: %v", err)
+	}
+}
+
+// Non-regression: an explicit vendor that AGREES with the model's owner is the
+// normal case and must still build.
+func TestBuildBackendForAcceptsMatchingVendor(t *testing.T) {
+	var cfg contracts.PluginConfig
+	nativePlugin(t, &cfg)
+	if _, err := BuildBackendFor(context.Background(), BackendRequest{
+		Vendor: "claude", Cmd: "claude", ModelID: "native-opus",
+	}); err != nil {
+		t.Fatalf("matching vendor+model rejected: %v", err)
+	}
+}
+
 // fakeRemoteResolver stands in for a configured HERRSCHER_REMOTE=backend.
 type fakeRemoteResolver struct{ called bool }
 

@@ -267,6 +267,13 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 		}
 		if desired == "" {
 			desired = entry.Vendor
+		} else if desired != entry.Vendor {
+			// The requested vendor decides which plugin is built, but the spawn
+			// environment is keyed off the model's OWNING vendor. Letting them
+			// disagree spawns e.g. codex with ANTHROPIC_* it ignores: no gateway
+			// redirection at all, the turn silently running on the machine's own
+			// vendor login while the session still reads gateway-routed.
+			return nil, fmt.Errorf("model %q belongs to backend %q, but backend %q was requested — pick a model offered by %q or switch the vendor", req.ModelID, entry.Vendor, desired, desired)
 		}
 		if spawnEnv, err = spawnEnvFor(entry, os.Getenv); err != nil {
 			return nil, err

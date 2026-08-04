@@ -1089,3 +1089,33 @@ func TestServiceUpdateBuildFailsNoRestart(t *testing.T) {
 		t.Fatalf("must not restart when build fails")
 	}
 }
+
+func TestSessionCreateAdoptsAnExistingChannel(t *testing.T) {
+	h, d, sup, _, _, st := newTestHandler(t, "")
+	// No home configured at all: adopting a conversation must not need one.
+	out, err := h.sessionCreateRun(context.Background(), args("name", "ch-123", "channel_id", "123", "shared", "true"))
+	if err != nil {
+		t.Fatalf("create with channel_id failed: %v", err)
+	}
+	if len(d.created) != 0 {
+		t.Fatalf("adopting a channel still created one: %+v", d.created)
+	}
+	sess, ok := st.FindSession("ch-123")
+	if !ok || sess.ChannelID != "123" || sess.Type != "text" {
+		t.Fatalf("session not bound to the adopted channel: %+v ok=%v", sess, ok)
+	}
+	if len(sup.started) != 1 {
+		t.Fatalf("bridge not started: %+v", sup.started)
+	}
+	if out == "" {
+		t.Fatal("create returned no banner")
+	}
+}
+
+func TestSessionCreateWithoutChannelIDStillNeedsAHome(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "")
+	_, err := h.sessionCreateRun(context.Background(), args("name", "plain", "shared", "true"))
+	if err == nil || !strings.Contains(err.Error(), "no home set") {
+		t.Fatalf("err = %v, want the existing no-home error", err)
+	}
+}

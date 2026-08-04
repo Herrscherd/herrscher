@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	control "github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
@@ -203,6 +205,7 @@ func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor s
 			args[k] = v
 		}
 	}
+	setStr("channel_id", spec.ChannelID)
 	setStr("project", spec.Project)
 	setStr("clone", spec.Clone)
 	setStr("cmd", spec.Cmd)
@@ -322,6 +325,59 @@ func (h *hub) Resume(name string) error {
 // driver via the session registry. It implements contracts.SessionControl.
 func (h *hub) Interrupt(name string) bool {
 	return Interrupt(name)
+}
+
+// Submit injects one inbound message into the named session's turn queue,
+// delegating to the live driver via the session registry. It implements
+// contracts.SessionControl.
+func (h *hub) Submit(name string, in contracts.Inbound) bool {
+	return Submit(name, in)
+}
+
+// Pick answers the named session's pending choice, delegating to the live driver
+// via the session registry. It implements contracts.SessionControl.
+func (h *hub) Pick(name, value string) bool {
+	return Pick(name, value)
+}
+
+// Repos lists the targets a session can be created on: the workspace
+// sub-directories already checked out, plus whatever the configured forge can
+// clone. Forge failures (no gh/glab, no auth) are not fatal — the local list is
+// still useful on its own. It implements contracts.SessionControl.
+func (h *hub) Repos(ctx context.Context) ([]contracts.RepoRef, error) {
+	out := workspaceRepos(h.st.WorkspaceRoot())
+	repos, err := forge.New().List(ctx)
+	if err != nil {
+		return out, nil
+	}
+	for _, r := range repos {
+		out = append(out, contracts.RepoRef{Name: r.FullName, Description: r.Desc})
+	}
+	return out, nil
+}
+
+// workspaceRepos lists the immediate sub-directories of the workspace that are
+// git checkouts, as local RepoRefs. A missing or unreadable workspace yields
+// none rather than an error: the forge list alone is still a usable answer.
+func workspaceRepos(workspace string) []contracts.RepoRef {
+	if workspace == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(workspace)
+	if err != nil {
+		return nil
+	}
+	var out []contracts.RepoRef
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(workspace, e.Name(), ".git")); err != nil {
+			continue
+		}
+		out = append(out, contracts.RepoRef{Name: e.Name(), Description: "workspace checkout", Local: true})
+	}
+	return out
 }
 
 var _ contracts.SessionControl = (*hub)(nil)

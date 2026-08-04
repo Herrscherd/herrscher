@@ -1015,3 +1015,42 @@ func TestDriverInvokesCoordinatorOnRouteTrailer(t *testing.T) {
 		t.Fatalf("Route req = %+v", rc.routes[0])
 	}
 }
+
+func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
+	d := newSessionDriver("s1", nil, nil, nil)
+	registerDriver("s1", d)
+	defer unregisterDriver("s1", d)
+
+	if !Submit("s1", contracts.Inbound{Author: "leo", Text: "fix the login bug"}) {
+		t.Fatal("Submit reported no live session for a registered driver")
+	}
+	select {
+	case ev := <-d.queue:
+		if ev.T != "input" || ev.Who != "leo" || ev.Text != "fix the login bug" {
+			t.Fatalf("queued %+v, want an input frame from leo", ev)
+		}
+	default:
+		t.Fatal("Submit queued nothing")
+	}
+}
+
+func TestSubmitOnUnknownSessionReportsFalse(t *testing.T) {
+	if Submit("nobody-home", contracts.Inbound{Text: "hi"}) {
+		t.Fatal("Submit reported success for an unregistered session")
+	}
+}
+
+func TestSubmitJournalsTheAuthor(t *testing.T) {
+	dir := t.TempDir()
+	d := newSessionDriver("s2", nil, nil, nil)
+	d.participants = filepath.Join(dir, "participants")
+	registerDriver("s2", d)
+	defer unregisterDriver("s2", d)
+
+	Submit("s2", contracts.Inbound{Author: "leo", AuthorID: "42", Text: "hi"})
+	<-d.queue
+	b, err := os.ReadFile(d.participants)
+	if err != nil || !strings.Contains(string(b), "42") {
+		t.Fatalf("author id not journalled: %q err=%v", b, err)
+	}
+}

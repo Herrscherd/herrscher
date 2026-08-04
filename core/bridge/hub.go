@@ -150,14 +150,29 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, resp contracts.Ba
 	var outTok, inTok, cacheRd, cacheCr int
 	onEvent := func(be contracts.BackendEvent) {
 		switch be.Kind {
-		case "usage", "result":
+		case "usage":
+			// A usage event reports ONE assistant message, not the turn so far: an
+			// agentic turn emits one per message. Output tokens therefore add up
+			// across the turn — without the sum, the live counter would bounce
+			// around the last message's size instead of growing, and the host's
+			// mid-turn budget guard would never see a runaway turn.
+			//
+			// Input and cache counts stay last-wins: each message reports its whole
+			// prompt, so summing them would count the same context once per message.
+			// The latest is the live context size, which is what a counter wants.
+			outTok += be.OutTokens
+			inTok = be.InTokens
+			cacheRd = be.CacheRead
+			cacheCr = be.CacheCreate
+		case "result":
+			// The terminal result carries the turn's authoritative totals, so it
+			// replaces the running sum rather than adding to it. This is what lands
+			// on the transcript entry the budget gate later folds.
 			outTok = be.OutTokens
 			inTok = be.InTokens
 			cacheRd = be.CacheRead
 			cacheCr = be.CacheCreate
-			if be.Kind == "result" {
-				cost = be.Cost
-			}
+			cost = be.Cost
 		}
 		emitBackendEvent(sink, be, outTok, inTok, cacheRd, cacheCr)
 	}

@@ -2,9 +2,73 @@ package host
 
 import (
 	"fmt"
+	"os"
+	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts"
 )
+
+// The pair the app hands the daemon, from the Neublox account token. These are
+// PRODUCT credentials on a SHARED paid account — they must never reach a
+// vendor CLI child, whose agent has a shell and is prompt-injectable.
+const (
+	EnvGatewayURL   = "NEUBLOX_GATEWAY_URL"
+	EnvGatewayToken = "NEUBLOX_GATEWAY_TOKEN"
+)
+
+// capturedGateway holds the pair read once at startup, after which the two
+// variables are removed from this process's environment.
+var capturedGateway struct {
+	mu       sync.Mutex
+	url      string
+	token    string
+	captured bool
+}
+
+// CaptureGatewayCreds reads the gateway pair from the process environment,
+// stores it in-process, and UNSETS both variables.
+//
+// Without this the pair propagates daemon → bridge → vendor CLI unconditionally
+// on EVERY route, because the backends spawn with MergeEnv(os.Environ(), env).
+// A coding agent inside any session could then read the product's shared paid
+// credential out of its own environment, from a session never routed to the
+// gateway at all.
+//
+// Idempotent: a second call keeps the first capture, so a process that captures
+// at more than one entry point (main + runBridge) does not lose the value.
+func CaptureGatewayCreds() {
+	captureGatewayCreds(os.Getenv, os.Unsetenv)
+}
+
+func captureGatewayCreds(getenv func(string) string, unsetenv func(string) error) {
+	capturedGateway.mu.Lock()
+	defer capturedGateway.mu.Unlock()
+	if !capturedGateway.captured {
+		capturedGateway.url, capturedGateway.token = getenv(EnvGatewayURL), getenv(EnvGatewayToken)
+		capturedGateway.captured = true
+	}
+	// Unset unconditionally: a re-entrant call must still scrub a pair that
+	// reappeared (an .env reload, a test) rather than leave it for a child.
+	_ = unsetenv(EnvGatewayURL)
+	_ = unsetenv(EnvGatewayToken)
+}
+
+// GatewayEnvPairs returns the captured pair as KEY=VALUE entries, for the
+// environment of a TRUSTED child only — `herrscher bridge`, which is this same
+// binary and captures-and-unsets at its own startup before building a backend.
+// Never for a vendor CLI, and never on argv: /proc/<pid>/cmdline is world
+// readable. Empty when nothing was captured.
+func GatewayEnvPairs() []string {
+	capturedGateway.mu.Lock()
+	defer capturedGateway.mu.Unlock()
+	if capturedGateway.url == "" || capturedGateway.token == "" {
+		return nil
+	}
+	return []string{
+		EnvGatewayURL + "=" + capturedGateway.url,
+		EnvGatewayToken + "=" + capturedGateway.token,
+	}
+}
 
 // gatewayEnvFor translates a credential pair into environment variables,
 // according to the protocol the vendor's CLI speaks.
@@ -41,11 +105,19 @@ func gatewayEnvFor(vendor string, creds contracts.GatewayCreds, modelArg string)
 	}
 }
 
-// loadGatewayCreds reads the pair from the daemon's environment. The app sets
-// it when launching herrscher, from the Neublox account token. A lone half is
-// an error, by construction of NewGatewayCreds.
+// loadGatewayCreds resolves the pair. Once CaptureGatewayCreds has run — the
+// production path, at process startup — the variables are gone from the
+// environment and the captured value is the only source. getenv stays as a
+// seam for tests (and for a process that never captured). A lone half is an
+// error, by construction of NewGatewayCreds.
 func loadGatewayCreds(getenv func(string) string) (contracts.GatewayCreds, error) {
-	return contracts.NewGatewayCreds(getenv("NEUBLOX_GATEWAY_URL"), getenv("NEUBLOX_GATEWAY_TOKEN"))
+	capturedGateway.mu.Lock()
+	captured, url, token := capturedGateway.captured, capturedGateway.url, capturedGateway.token
+	capturedGateway.mu.Unlock()
+	if captured {
+		return contracts.NewGatewayCreds(url, token)
+	}
+	return contracts.NewGatewayCreds(getenv(EnvGatewayURL), getenv(EnvGatewayToken))
 }
 
 // spawnEnvFor computes the variables to inject for a catalog entry.

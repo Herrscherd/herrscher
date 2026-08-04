@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -61,7 +62,96 @@ func TestGatewayEnvUnknownVendorIsEmpty(t *testing.T) {
 	}
 }
 
+// resetGatewayCapture clears the process-wide capture around a test, so one
+// test's capture cannot leak into the getenv-seam tests that follow.
+func resetGatewayCapture(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		capturedGateway.mu.Lock()
+		capturedGateway.url, capturedGateway.token, capturedGateway.captured = "", "", false
+		capturedGateway.mu.Unlock()
+	})
+}
+
+// THE LEAK. The pair used to be read live from the environment and never
+// removed, so it rode os.Environ() into every vendor CLI on every route. A
+// coding agent has a shell: `env | grep NEUBLOX` handed it the product's shared
+// paid credential from a session never routed to the gateway.
+func TestCaptureGatewayCredsRemovesThePairFromTheEnvironment(t *testing.T) {
+	resetGatewayCapture(t)
+	env := map[string]string{EnvGatewayURL: "https://gw", EnvGatewayToken: "tok"}
+	unset := []string{}
+	captureGatewayCreds(
+		func(k string) string { return env[k] },
+		func(k string) error { unset = append(unset, k); delete(env, k); return nil },
+	)
+	for _, k := range []string{EnvGatewayURL, EnvGatewayToken} {
+		if _, still := env[k]; still {
+			t.Errorf("%s survived the capture: it would propagate to every child", k)
+		}
+	}
+	if len(unset) != 2 {
+		t.Errorf("unset %v, want both variables", unset)
+	}
+	// And the captured value is now the ONLY source: an empty getenv must still
+	// resolve, or every gateway spawn fails after the scrub.
+	creds, err := loadGatewayCreds(func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("loadGatewayCreds after capture: %v", err)
+	}
+	if creds.BaseURL() != "https://gw" || creds.Token() != "tok" {
+		t.Fatalf("captured creds = %q %q", creds.BaseURL(), creds.Token())
+	}
+}
+
+// The pair must be re-offered to the trusted bridge child through its
+// ENVIRONMENT — the bridge is the process that builds backends.
+func TestGatewayEnvPairsCarriesTheCapturedPair(t *testing.T) {
+	resetGatewayCapture(t)
+	env := map[string]string{EnvGatewayURL: "https://gw", EnvGatewayToken: "tok"}
+	captureGatewayCreds(func(k string) string { return env[k] }, func(k string) error { delete(env, k); return nil })
+
+	got := GatewayEnvPairs()
+	want := []string{EnvGatewayURL + "=https://gw", EnvGatewayToken + "=tok"}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("GatewayEnvPairs() = %v, want %v", got, want)
+	}
+}
+
+func TestGatewayEnvPairsEmptyWithoutCredentials(t *testing.T) {
+	resetGatewayCapture(t)
+	captureGatewayCreds(func(string) string { return "" }, func(string) error { return nil })
+	if got := GatewayEnvPairs(); len(got) != 0 {
+		t.Fatalf("GatewayEnvPairs() = %v, want empty", got)
+	}
+}
+
+// Defence in depth: the environment a NATIVE-route child is actually spawned
+// with (backends use MergeEnv(os.Environ(), env)) must contain neither variable
+// after the capture. This is the assertion that fails if anything ever puts
+// them back.
+func TestNativeSpawnEnvironmentCarriesNoGatewayVariables(t *testing.T) {
+	resetGatewayCapture(t)
+	t.Setenv(EnvGatewayURL, "https://gw")
+	t.Setenv(EnvGatewayToken, "tok")
+	CaptureGatewayCreds()
+
+	spawnEnv, err := spawnEnvFor(CatalogEntry{
+		Vendor:    "claude",
+		ModelSpec: contracts.ModelSpec{ID: "m", Label: "M", Arg: "m", Route: contracts.RouteNative},
+	}, os.Getenv)
+	if err != nil {
+		t.Fatalf("spawnEnvFor(native): %v", err)
+	}
+	for _, kv := range contracts.MergeEnv(os.Environ(), spawnEnv) {
+		if strings.HasPrefix(kv, EnvGatewayURL+"=") || strings.HasPrefix(kv, EnvGatewayToken+"=") {
+			t.Fatalf("a native-route child would be spawned with %q — the product credential leaks to the vendor CLI", kv)
+		}
+	}
+}
+
 func TestLoadGatewayCredsRefusesHalfConfig(t *testing.T) {
+	resetGatewayCapture(t)
 	half := func(k string) string {
 		if k == "NEUBLOX_GATEWAY_URL" {
 			return "https://gw"
@@ -74,6 +164,7 @@ func TestLoadGatewayCredsRefusesHalfConfig(t *testing.T) {
 }
 
 func TestLoadGatewayCredsAcceptsFullConfig(t *testing.T) {
+	resetGatewayCapture(t)
 	full := func(k string) string {
 		switch k {
 		case "NEUBLOX_GATEWAY_URL":

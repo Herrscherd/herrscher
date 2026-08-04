@@ -101,6 +101,49 @@ func TestRunOneTurn_StampsTokens(t *testing.T) {
 	}
 }
 
+// agenticBackend is a turn made of several assistant messages, the way a turn
+// with tool calls actually streams: each message reports its OWN usage, never
+// the turn so far.
+type agenticBackend struct{ reply string }
+
+func (b agenticBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
+	for i := 0; i < 3; i++ {
+		onEvent(contracts.BackendEvent{Kind: "usage", InTokens: 100, OutTokens: 20})
+		onEvent(contracts.BackendEvent{Kind: "text", Detail: "step"})
+	}
+	onEvent(contracts.BackendEvent{Kind: "result", InTokens: 300, OutTokens: 60, Cost: 0.002})
+	return b.reply, nil
+}
+func (agenticBackend) Close() error { return nil }
+
+// TestRunOneTurn_AccumulatesUsageAcrossMessages proves the live output count
+// grows over a multi-message turn instead of tracking the last message's size.
+// Without the sum, a turn that streams thirty 20-token messages would forever
+// report 20, and the host's mid-turn budget guard — which compares that number
+// to the turn's headroom — would never see the runaway it exists to cut.
+func TestRunOneTurn_AccumulatesUsageAcrossMessages(t *testing.T) {
+	sink := &recordSink{}
+	in := make(chan contracts.Event, 1)
+	in <- contracts.Event{T: "input", Text: "go"}
+	close(in)
+
+	runHubTurns(context.Background(), in, sink, agenticBackend{reply: "done"}, nil)
+
+	var chunks []int
+	for _, e := range sink.events {
+		if e.T == "chunk" {
+			chunks = append(chunks, e.Tokens)
+		}
+	}
+	if want := []int{20, 40, 60}; !reflect.DeepEqual(chunks, want) {
+		t.Fatalf("live output tokens = %v, want %v (a running sum)", chunks, want)
+	}
+	last := sink.events[len(sink.events)-1]
+	if last.T != "reply" || last.Tokens != 60 || last.TokensIn != 300 {
+		t.Fatalf("reply must carry the result's authoritative totals, not the sum; got %+v", last)
+	}
+}
+
 // cacheBackend emits a terminal result carrying the full token breakdown
 // (input/output + prompt-cache read/creation).
 type cacheBackend struct{ reply string }

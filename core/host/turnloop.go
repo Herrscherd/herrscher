@@ -91,7 +91,9 @@ type sessionDriver struct {
 
 	// attachHosts is the SSRF allowlist for downloading a message's CDN image
 	// attachments (nil = none allowed). file:// attachments — the terminal's
-	// clipboard paste — bypass it; only https CDN urls are pinned to it.
+	// clipboard paste — bypass it; only https CDN urls are pinned to it. It is
+	// built from the manifests of this session's own gateways, so the component
+	// that produced an attachment url is the one that vouched for its host.
 	attachHosts map[string]bool
 
 	// participants is the journal path for /session who (empty = disabled). The
@@ -144,7 +146,38 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		hangup:    make(chan struct{}, 1),
 		seen:      map[string]bool{},
 		gate:      noBudgetGate{},
+
+		attachHosts: attachmentHosts(gws),
 	}
+}
+
+// attachmentHosts collects the CDN hosts this session's gateways vouch for. A
+// gateway is the only thing that knows where its own attachments are served
+// from, and it says so in its manifest; the driver reads it off the gateways it
+// already holds rather than having a list threaded down from config.
+//
+// The result is the allowlist every https attachment download is pinned to, so
+// an empty one means nothing is downloaded — which is what a session whose
+// gateways declare no hosts (the terminal, whose clipboard pastes are file://
+// and bypass this entirely) should get.
+func attachmentHosts(gws []contracts.GatewaySet) map[string]bool {
+	var hosts map[string]bool
+	for _, g := range gws {
+		if g.Gateway == nil {
+			continue
+		}
+		for _, h := range g.Gateway.Manifest().AttachmentHosts {
+			h = strings.ToLower(strings.TrimSpace(h))
+			if h == "" {
+				continue
+			}
+			if hosts == nil {
+				hosts = map[string]bool{}
+			}
+			hosts[h] = true
+		}
+	}
+	return hosts
 }
 
 // journal records a message author in the participants journal (idempotent,

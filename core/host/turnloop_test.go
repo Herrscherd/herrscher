@@ -27,6 +27,7 @@ type fanRecorder struct {
 	statuses    []string // content of each UpsertStatusMessage (the live progress view)
 	sink        bool     // implements EventSink when true
 	readChannel string   // last channel id passed to Read
+	hosts       []string // what the manifest declares as AttachmentHosts
 }
 
 func (f *fanRecorder) feed(text string) {
@@ -67,7 +68,9 @@ func (f *fanRecorder) UpsertStatusMessage(_ context.Context, _, _, content strin
 	f.statuses = append(f.statuses, content)
 	return "", nil
 }
-func (f *fanRecorder) Manifest() contracts.Manifest { return contracts.Manifest{Kind: "rec"} }
+func (f *fanRecorder) Manifest() contracts.Manifest {
+	return contracts.Manifest{Kind: "rec", AttachmentHosts: f.hosts}
+}
 func (f *fanRecorder) Post(_ context.Context, _ contracts.Conversation, text string) (contracts.MessageID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

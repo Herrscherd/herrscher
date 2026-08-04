@@ -13,8 +13,9 @@ import (
 // daemon resolves a session's bound gateways through it instead of hand-wiring a
 // single gateway. Kinds() preserves registration order.
 type GatewayHub struct {
-	sets  map[string]contracts.GatewaySet
-	order []string
+	sets     map[string]contracts.GatewaySet
+	order    []string
+	failures []string
 }
 
 // BuildHub instantiates each gateway plugin in plugins. A plugin whose config
@@ -22,6 +23,9 @@ type GatewayHub struct {
 // absent — e.g. a missing gateway token — which must not stop other gateways from
 // running). If NO gateway builds, the aggregated per-gateway reasons are
 // returned so a single-gateway stack still fails fast with a clear message.
+// Every skip is also recorded on the hub (Failures) so the daemon can report a
+// gateway that dropped out — a stale token silently costing you a whole edge is
+// worse than a noisy line at boot.
 func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string) (*GatewayHub, error) {
 	h := &GatewayHub{sets: map[string]contracts.GatewaySet{}}
 	var failures []string
@@ -55,11 +59,16 @@ func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(strin
 		}
 		return nil, fmt.Errorf("no gateway available: %s", strings.Join(failures, "; "))
 	}
+	h.failures = failures
 	return h, nil
 }
 
 // Kinds returns the built gateway kinds in registration order.
 func (h *GatewayHub) Kinds() []string { return append([]string(nil), h.order...) }
+
+// Failures returns one "kind: reason" line per gateway that did not build, for
+// the caller to log. It is empty when every registered gateway came up.
+func (h *GatewayHub) Failures() []string { return append([]string(nil), h.failures...) }
 
 // Get returns the GatewaySet for a kind and whether it was built.
 func (h *GatewayHub) Get(kind string) (contracts.GatewaySet, bool) {

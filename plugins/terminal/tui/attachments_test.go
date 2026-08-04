@@ -101,7 +101,10 @@ func TestSubmitCarriesAttachments(t *testing.T) {
 	}
 }
 
-// TestAttachCommandStagesFile verifies /attach <path> stages an existing local file.
+// TestAttachCommandStagesFile verifies /attach <path> copies an existing local
+// file into the staging dir rather than pointing at it: the host only accepts a
+// file:// attachment from under that tree, and a copy also pins the bytes as they
+// were when attached.
 func TestAttachCommandStagesFile(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "diagram.png")
@@ -115,7 +118,22 @@ func TestAttachCommandStagesFile(t *testing.T) {
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if len(m.pending) != 1 || m.pending[0].Path != p {
+	if len(m.pending) != 1 {
 		t.Fatalf("/attach must stage the file, pending=%+v", m.pending)
+	}
+	got := m.pending[0]
+	t.Cleanup(func() { os.Remove(got.Path) })
+	if filepath.Dir(got.Path) != attachmentDir() {
+		t.Errorf("staged path %s is not under %s", got.Path, attachmentDir())
+	}
+	if got.Name != "diagram.png" {
+		t.Errorf("chip name = %q, want the original basename", got.Name)
+	}
+	if b, err := os.ReadFile(got.Path); err != nil || string(b) != "img" {
+		t.Errorf("staged copy content = %q err=%v", b, err)
+	}
+	// The original must be left alone — /attach reads, it does not move.
+	if _, err := os.Stat(p); err != nil {
+		t.Errorf("original file must survive /attach: %v", err)
 	}
 }

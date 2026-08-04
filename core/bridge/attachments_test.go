@@ -2,12 +2,14 @@ package bridge
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Herrscherd/herrscher-contracts"
 )
@@ -305,6 +307,81 @@ func TestResolveAttachmentsNoImagesNoDir(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("dir should not be created when there are no images")
+	}
+}
+
+// TestResolveAttachmentsTightModes pins the permissions on the staging tree: it
+// lives in a world-writable temp dir, so a downloaded image must not be readable
+// (or its name even listable) by another user on the box.
+func TestResolveAttachmentsTightModes(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("PNGDATA"))
+	}))
+	defer srv.Close()
+
+	sess := "tight-modes"
+	defer os.RemoveAll(attachmentDir(sess))
+	m := contracts.Message{ID: "1", Attachments: []contracts.Attachment{
+		{Filename: "x.png", URL: srv.URL + "/x.png"},
+	}}
+	paths := ResolveAttachments(context.Background(), srv.Client(), m, sess, hostsFor(t, srv))
+	if len(paths) != 1 {
+		t.Fatalf("want 1 path, got %v", paths)
+	}
+	di, err := os.Stat(attachmentDir(sess))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := di.Mode().Perm(); got != 0o700 {
+		t.Errorf("staging dir mode = %o, want 700", got)
+	}
+	fi, err := os.Stat(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fi.Mode().Perm(); got != 0o600 {
+		t.Errorf("downloaded image mode = %o, want 600", got)
+	}
+}
+
+// TestPinnedDialRefusesNonRoutableAddress closes DNS rebinding: an allowlisted
+// name that resolves to a loopback or private address is refused at dial time,
+// after the allowlist check has already passed.
+func TestPinnedDialRefusesNonRoutableAddress(t *testing.T) {
+	dial := pinnedDial(&net.Dialer{Timeout: 2 * time.Second})
+	if _, err := dial(context.Background(), "tcp", "localhost:80"); err == nil {
+		t.Fatal("a name resolving to loopback must not be dialled")
+	}
+}
+
+// TestPinnedDialAllowsIPLiteral confirms the guard exempts an address the
+// allowlist already pinned exactly: there is no name to rebind, and this is what
+// keeps the httptest servers above reachable.
+func TestPinnedDialAllowsIPLiteral(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	c, err := pinnedDial(&net.Dialer{Timeout: 2 * time.Second})(context.Background(), "tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatalf("ip literal must be dialled as given: %v", err)
+	}
+	_ = c.Close()
+}
+
+func TestRoutable(t *testing.T) {
+	no := []string{"127.0.0.1", "::1", "10.0.0.1", "192.168.1.1", "172.16.0.1",
+		"169.254.169.254", "0.0.0.0", "fe80::1", "ff02::1", "100.64.0.1"}
+	for _, s := range no {
+		if routable(net.ParseIP(s)) {
+			t.Errorf("routable(%s) = true, want false", s)
+		}
+	}
+	for _, s := range []string{"1.1.1.1", "93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946", "99.0.0.1", "128.0.0.1"} {
+		if !routable(net.ParseIP(s)) {
+			t.Errorf("routable(%s) = false, want true", s)
+		}
 	}
 }
 

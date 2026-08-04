@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -51,7 +52,14 @@ func TestSessionModelIDAbsentInLegacyStateFile(t *testing.T) {
 }
 
 func TestSetBackendTargetWritesModelID(t *testing.T) {
-	s := &State{Sessions: []Session{{Name: "s", Vendor: "claude", Cmd: "claude", ResumeToken: "old"}}}
+	// A State with an empty path persists to "./.tmp" and then fails to rename
+	// it into place, littering the package directory (the artifact was even
+	// committed once). Give it a real path under t.TempDir() so the save lands.
+	s, err := LoadState(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	s.Sessions = []Session{{Name: "s", Vendor: "claude", Cmd: "claude", ResumeToken: "old"}}
 	s.SetBackendTarget("s", "codex", "codex --model gpt-5.5", "gpt-5.5")
 	got := s.Sessions[0]
 	if got.ModelID != "gpt-5.5" {

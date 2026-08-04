@@ -16,29 +16,55 @@ import (
 	"github.com/Herrscherd/herrscher-contracts"
 )
 
-// imageExts are the filename extensions treated as images when an attachment
-// carries no content-type.
-var imageExts = map[string]bool{
+// supportedExts are the filename extensions accepted when an attachment carries
+// no content-type: images to look at, documents to read. It is an allowlist, so
+// an archive or a binary is skipped rather than staged on the operator's disk.
+var supportedExts = map[string]bool{
 	".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
 	".webp": true, ".bmp": true,
+	".pdf": true, ".txt": true, ".md": true, ".markdown": true,
+	".csv": true, ".tsv": true, ".log": true, ".json": true,
+	".yaml": true, ".yml": true, ".toml": true, ".xml": true,
 }
 
-// isImage prefers the declared content-type and falls back to the filename
-// extension, so an image with an odd or missing extension is still recognized.
-func isImage(a contracts.Attachment) bool {
+// supportedTypes are the non-text, non-image media types accepted by name. Any
+// text/* or image/* type is accepted by prefix instead.
+var supportedTypes = map[string]bool{
+	"application/pdf": true, "application/json": true,
+	"application/xml": true, "application/toml": true,
+	"application/x-yaml": true, "application/yaml": true,
+}
+
+// supported reports whether the bridge will resolve an attachment. It prefers the
+// declared content-type and falls back to the filename extension, so a file with
+// an odd or missing extension is still recognized.
+func supported(a contracts.Attachment) bool {
 	if a.ContentType != "" {
-		return strings.HasPrefix(strings.ToLower(a.ContentType), "image/")
+		return supportedType(a.ContentType)
 	}
-	return imageExts[strings.ToLower(filepath.Ext(a.Filename))]
+	return supportedExts[strings.ToLower(filepath.Ext(a.Filename))]
 }
 
-// maxAttachmentBytes bounds a single downloaded image. Anything larger is
+func supportedType(ct string) bool {
+	ct = strings.ToLower(strings.TrimSpace(ct))
+	// "text/plain; charset=utf-8" — the parameters say nothing about whether we
+	// can handle the type, and they break an exact match.
+	if i := strings.IndexByte(ct, ';'); i >= 0 {
+		ct = strings.TrimSpace(ct[:i])
+	}
+	if strings.HasPrefix(ct, "image/") || strings.HasPrefix(ct, "text/") {
+		return true
+	}
+	return supportedTypes[ct]
+}
+
+// maxAttachmentBytes bounds a single downloaded attachment. Anything larger is
 // skipped: the bridge must never let an oversized upload stall or OOM a turn.
 const maxAttachmentBytes = 10 << 20 // 10 MiB
 
-// maxImagesPerMessage caps how many images one message can pull down, so an
+// maxAttachmentsPerMessage caps how many files one message can pull down, so an
 // author can't fan a single message into an unbounded number of fetches/files.
-const maxImagesPerMessage = 8
+const maxAttachmentsPerMessage = 8
 
 // allowedHosts is the SSRF allowlist for attachment downloads: the caller (the
 // gateway that produced the message) supplies the CDN hosts its attachments may
@@ -54,8 +80,8 @@ type allowedHosts map[string]bool
 // so a gateway names the same tree the core enforces instead of guessing at it.
 func StagingRoot() string { return filepath.Join(os.TempDir(), "herrscher-attachments") }
 
-// attachmentDir is where downloaded images land, namespaced per session so
-// concurrent bridges don't collide.
+// attachmentDir is where downloads land, namespaced per session so concurrent
+// bridges don't collide.
 func attachmentDir(session string) string {
 	name := session
 	if name == "" {
@@ -64,14 +90,15 @@ func attachmentDir(session string) string {
 	return filepath.Join(StagingRoot(), sanitize(name))
 }
 
-// ResolveAttachments turns a message's attachments into local image file paths a
-// backend can reference. file:// attachments are validated and passed through
-// (the gateway already staged them on local disk — e.g. the terminal TUI's
-// clipboard paste); every other (https CDN) attachment is downloaded through the
-// SSRF allowlist. Non-image, oversized, missing, off-allowlist, and beyond-cap
-// attachments are skipped so a turn is never lost over an image. Order is
-// preserved; at most maxImagesPerMessage images are attempted (a candidate that
-// fails to resolve still counts against the cap).
+// ResolveAttachments turns a message's attachments into local file paths a
+// backend can reference — images to look at, PDFs and text to read. file://
+// attachments are validated and passed through (the gateway already staged them
+// on local disk — e.g. the terminal TUI's clipboard paste); every other (https
+// CDN) attachment is downloaded through the SSRF allowlist. Unsupported,
+// oversized, missing, off-allowlist, and beyond-cap attachments are skipped so a
+// turn is never lost over a file. Order is preserved; at most
+// maxAttachmentsPerMessage files are attempted (a candidate that fails to resolve
+// still counts against the cap).
 //
 // It is the host-side entry point (the turnloop has the Message; the bridge only
 // sees Events), producing the paths carried in Event.Attachments.
@@ -80,7 +107,9 @@ func attachmentDir(session string) string {
 // it is pinned to the staging root — a gateway must copy a file there before it
 // can name it, and a path outside is refused. A gateway that forwards attachment
 // URLs influenced by a remote author must still use https rather than staging
-// whatever it is handed, so the SSRF allowlist applies.
+// whatever it is handed, so the SSRF allowlist applies. What a resolved file
+// *contains* is untrusted either way: the backend is handed a path, and the text
+// inside a document an author uploaded is that author's words, not instructions.
 func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Message, session string, hosts map[string]bool) []string {
 	if client == nil {
 		client = http.DefaultClient
@@ -88,18 +117,18 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 	client = pinnedClient(client, hosts)
 	dir := attachmentDir(session)
 	mkdirDone := false
-	out := make([]string, 0, maxImagesPerMessage)
+	out := make([]string, 0, maxAttachmentsPerMessage)
 	n := 0
 	for i, a := range m.Attachments {
-		if !isImage(a) || (a.Size > 0 && a.Size > maxAttachmentBytes) {
+		if !supported(a) || (a.Size > 0 && a.Size > maxAttachmentBytes) {
 			continue
 		}
-		if n == maxImagesPerMessage {
+		if n == maxAttachmentsPerMessage {
 			break
 		}
 		n++
 		if strings.HasPrefix(a.URL, "file://") {
-			if p, err := localImagePath(a); err == nil {
+			if p, err := localAttachmentPath(a); err == nil {
 				out = append(out, p)
 			}
 			continue
@@ -119,11 +148,11 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 	return out
 }
 
-// localImagePath validates a file:// attachment already staged on local disk and
-// returns its path, rejecting non-file URLs, non-regular files, and oversized
-// ones so a crafted file:// url can't smuggle a device node or huge file into a
-// turn. The gateway owns the file's lifetime; the bridge only reads it.
-func localImagePath(a contracts.Attachment) (string, error) {
+// localAttachmentPath validates a file:// attachment already staged on local
+// disk and returns its path, rejecting non-file URLs, non-regular files, and
+// oversized ones so a crafted file:// url can't smuggle a device node or huge
+// file into a turn. The gateway owns the file's lifetime; the bridge only reads it.
+func localAttachmentPath(a contracts.Attachment) (string, error) {
 	u, err := url.Parse(a.URL)
 	if err != nil || u.Scheme != "file" {
 		return "", fmt.Errorf("attachment %q: not a file url", a.URL)

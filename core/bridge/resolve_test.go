@@ -66,15 +66,31 @@ func TestResolveAttachmentsSkipsMissingFile(t *testing.T) {
 	}
 }
 
-// TestResolveAttachmentsSkipsNonImageFile drops a file:// url that is not an image.
-func TestResolveAttachmentsSkipsNonImageFile(t *testing.T) {
-	txt := stagedFile(t, "notes.txt", "hi")
+// TestResolveAttachmentsSkipsUnsupportedFile drops a staged file:// url whose
+// type the model can do nothing with.
+func TestResolveAttachmentsSkipsUnsupportedFile(t *testing.T) {
+	zip := stagedFile(t, "bundle.zip", "PK")
 	m := contracts.Message{
 		ID:          "1",
-		Attachments: []contracts.Attachment{{Filename: "notes.txt", URL: "file://" + txt}},
+		Attachments: []contracts.Attachment{{Filename: "bundle.zip", URL: "file://" + zip}},
 	}
 	if got := ResolveAttachments(context.Background(), nil, m, "sess", nil); len(got) != 0 {
-		t.Fatalf("non-image file must be skipped, got %v", got)
+		t.Fatalf("unsupported file must be skipped, got %v", got)
+	}
+}
+
+// TestResolveAttachmentsPassesThroughStagedDocument confirms a document staged by
+// a gateway reaches the backend the same way an image does — the path is what the
+// backend gets, and it reads the file itself.
+func TestResolveAttachmentsPassesThroughStagedDocument(t *testing.T) {
+	doc := stagedFile(t, "spec.pdf", "%PDF-1.7")
+	m := contracts.Message{
+		ID:          "1",
+		Attachments: []contracts.Attachment{{Filename: "spec.pdf", URL: "file://" + doc, ContentType: "application/pdf"}},
+	}
+	got := ResolveAttachments(context.Background(), nil, m, "sess", nil)
+	if len(got) != 1 || got[0] != doc {
+		t.Fatalf("staged pdf must pass through by path, got %v", got)
 	}
 }
 

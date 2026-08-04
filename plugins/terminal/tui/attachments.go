@@ -121,6 +121,9 @@ func mimeExt(mime string) string {
 	return ".bin"
 }
 
+// mimeByExt names what /attach staged. An extension it doesn't know yields "",
+// and the host falls back to the extension itself — so this only has to cover
+// what is worth naming, not everything that can be attached.
 func mimeByExt(path string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".png":
@@ -131,6 +134,16 @@ func mimeByExt(path string) string {
 		return "image/webp"
 	case ".gif":
 		return "image/gif"
+	case ".pdf":
+		return "application/pdf"
+	case ".txt", ".log":
+		return "text/plain"
+	case ".md", ".markdown":
+		return "text/markdown"
+	case ".csv":
+		return "text/csv"
+	case ".json":
+		return "application/json"
 	}
 	return ""
 }

@@ -1,6 +1,8 @@
 package manager
 
 import (
+	"fmt"
+
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -32,6 +34,42 @@ type Handler struct {
 	// this package cannot import host (host imports it).
 	// nil = no catalog wired, every id passes.
 	validateModel func(vendor, modelID string) error
+	// gatewayOnly reports whether the active route policy forbids native spawns.
+	// The composition root wires host.ResolvePolicy; nil = unrestricted, which is
+	// the internal build and the pre-policy behaviour.
+	gatewayOnly func() bool
+}
+
+// SetGatewayOnly wires the active route policy. Under gateway-only every turn
+// must run on the product's account, so the two ways of escaping the catalog
+// have to be closed at the command:
+//
+//   - an explicit `cmd` is a free-form argv the catalog never sees. It can name
+//     any binary and any `--model`, so it bills our account for something the
+//     operator never selected, and it bypasses the policy outright.
+//   - no `model` at all skips the catalog lookup entirely, so the spawn gets no
+//     gateway environment and runs on the machine's own vendor login — silently,
+//     while the session reads as gateway-routed.
+//
+// Both are legitimate on the internal build, where the machine's own login IS
+// the intended account. This is why the check is policy-gated rather than
+// unconditional.
+func (h *Handler) SetGatewayOnly(fn func() bool) { h.gatewayOnly = fn }
+
+// checkSpawnSource refuses the two escapes above. It is deliberately separate
+// from checkModel: that one validates a supplied id, this one constrains what
+// may be supplied at all.
+func (h *Handler) checkSpawnSource(cmdExplicit bool, modelID string) error {
+	if h.gatewayOnly == nil || !h.gatewayOnly() {
+		return nil
+	}
+	if cmdExplicit {
+		return fmt.Errorf("an explicit cmd is refused under the gateway-only route policy: it bypasses the model catalog — select a model instead")
+	}
+	if modelID == "" {
+		return fmt.Errorf("a model is required under the gateway-only route policy: without one the session would spawn on this machine's own vendor login")
+	}
+	return nil
 }
 
 // SetModelValidator wires the catalog check applied to `--vendor`/`--model` on

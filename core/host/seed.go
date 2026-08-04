@@ -233,6 +233,17 @@ type BackendRequest struct {
 	ModelID string // empty = session predates the catalog, legacy path
 }
 
+// remoteBackendResolver is the remote-resolution seam BuildBackendFor consults.
+type remoteBackendResolver interface {
+	Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, error)
+}
+
+// newBackendResolver builds that resolver. A package variable so tests can
+// drive the remote branch without a live announcement bus.
+var newBackendResolver = func() remoteBackendResolver {
+	return NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
+}
+
 // BuildBackendFor selects and constructs a backend. A remote resolver backend
 // wins when configured; otherwise the matching registered plugin is built
 // with the invocation, kind, working directory — and, if a ModelID is
@@ -261,10 +272,16 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 		}
 	}
 
-	resolver := NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
-	if backend, err := resolver.Backend(ctx, plugins, desired); err != nil {
+	if backend, err := newBackendResolver().Backend(ctx, plugins, desired); err != nil {
 		return nil, err
 	} else if backend != nil {
+		// A remote proxy is built from its announcement: there is no seam to hand
+		// it the spawn environment resolved just above. Returning it would drop
+		// the gateway credentials and run the turn on the machine's own vendor
+		// login. Refuse explicitly instead of degrading silently.
+		if len(spawnEnv) > 0 {
+			return nil, fmt.Errorf("model %q needs a gateway spawn environment, which the remote backend resolver cannot carry — unset HERRSCHER_REMOTE=backend or pick a native model", req.ModelID)
+		}
 		return backend, nil
 	}
 	plugin, err := selectBackend(desired, plugins)

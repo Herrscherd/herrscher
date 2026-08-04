@@ -70,6 +70,12 @@ func runServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	// A gateway that failed to build is skipped so the others still run, but it
+	// must not vanish silently: a revoked token takes the whole edge offline and
+	// the only symptom would be a bot that never answers.
+	for _, f := range hub.Failures() {
+		fmt.Fprintln(os.Stderr, "herrscher: gateway unavailable: "+f)
+	}
 	var gws []host.Deps
 	// A gateway may own the process's main thread (a TUI). We detect it on the
 	// raw gateway before Degrade wraps it, and the composition root stays

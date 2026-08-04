@@ -25,31 +25,39 @@ func hostsFor(t *testing.T, srv *httptest.Server) allowedHosts {
 	return allowedHosts{u.Hostname(): true}
 }
 
-func TestResolveAttachmentsFetchesOnlyImages(t *testing.T) {
+// TestResolveAttachmentsFetchesSupportedTypes verifies images and documents are
+// both downloaded — the model can look at one and read the other — while a file
+// type it can do nothing with is skipped instead of staged.
+func TestResolveAttachmentsFetchesSupportedTypes(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("PNGDATA"))
+		_, _ = w.Write([]byte("DATA" + r.URL.Path))
 	}))
 	defer srv.Close()
 
-	sess := "fetch-only-images"
+	sess := "fetch-supported-types"
 	defer os.RemoveAll(attachmentDir(sess))
 	m := contracts.Message{
 		ID: "42",
 		Attachments: []contracts.Attachment{
 			{Filename: "shot.png", URL: srv.URL + "/shot.png"},
-			{Filename: "notes.txt", URL: srv.URL + "/notes.txt"},
+			{Filename: "spec.pdf", URL: srv.URL + "/spec.pdf", ContentType: "application/pdf"},
+			{Filename: "notes.txt", URL: srv.URL + "/notes.txt", ContentType: "text/plain; charset=utf-8"},
+			{Filename: "archive.zip", URL: srv.URL + "/archive.zip", ContentType: "application/zip"},
 		},
 	}
 	paths := ResolveAttachments(context.Background(), srv.Client(), m, sess, hostsFor(t, srv))
-	if len(paths) != 1 {
-		t.Fatalf("want 1 image path, got %d: %v", len(paths), paths)
+	if len(paths) != 3 {
+		t.Fatalf("want image+pdf+text and no archive, got %d: %v", len(paths), paths)
 	}
-	if filepath.Base(paths[0]) != "42-0-shot.png" {
-		t.Errorf("unexpected dest name: %s", paths[0])
+	want := []string{"42-0-shot.png", "42-1-spec.pdf", "42-2-notes.txt"}
+	for i, w := range want {
+		if got := filepath.Base(paths[i]); got != w {
+			t.Errorf("path %d = %s, want %s", i, got, w)
+		}
 	}
-	b, err := os.ReadFile(paths[0])
-	if err != nil || string(b) != "PNGDATA" {
-		t.Errorf("downloaded content = %q, err=%v", b, err)
+	b, err := os.ReadFile(paths[1])
+	if err != nil || string(b) != "DATA/spec.pdf" {
+		t.Errorf("downloaded pdf content = %q, err=%v", b, err)
 	}
 }
 
@@ -261,7 +269,7 @@ func TestResolveAttachmentsSkipsDeclaredOversized(t *testing.T) {
 	}
 }
 
-func TestIsImagePrefersContentType(t *testing.T) {
+func TestSupportedPrefersContentType(t *testing.T) {
 	cases := []struct {
 		a    contracts.Attachment
 		want bool
@@ -269,11 +277,19 @@ func TestIsImagePrefersContentType(t *testing.T) {
 		{contracts.Attachment{Filename: "x.dat", ContentType: "image/png"}, true},
 		{contracts.Attachment{Filename: "x.png", ContentType: "application/octet-stream"}, false},
 		{contracts.Attachment{Filename: "x.jpeg"}, true},
-		{contracts.Attachment{Filename: "x.txt"}, false},
+		{contracts.Attachment{Filename: "x.txt"}, true},
+		{contracts.Attachment{Filename: "x.pdf"}, true},
+		{contracts.Attachment{Filename: "notes", ContentType: "text/plain; charset=utf-8"}, true},
+		{contracts.Attachment{Filename: "x.md", ContentType: "TEXT/MARKDOWN"}, true},
+		// A declared type the model can do nothing with wins over a friendly name.
+		{contracts.Attachment{Filename: "x.pdf", ContentType: "application/zip"}, false},
+		{contracts.Attachment{Filename: "x.zip"}, false},
+		{contracts.Attachment{Filename: "x.exe"}, false},
+		{contracts.Attachment{Filename: "noext"}, false},
 	}
 	for _, c := range cases {
-		if got := isImage(c.a); got != c.want {
-			t.Errorf("isImage(%+v) = %v, want %v", c.a, got, c.want)
+		if got := supported(c.a); got != c.want {
+			t.Errorf("supported(%+v) = %v, want %v", c.a, got, c.want)
 		}
 	}
 }
@@ -287,26 +303,26 @@ func TestResolveAttachmentsCapsCount(t *testing.T) {
 	sess := "caps-count"
 	defer os.RemoveAll(attachmentDir(sess))
 	var atts []contracts.Attachment
-	for i := 0; i < maxImagesPerMessage+3; i++ {
+	for i := 0; i < maxAttachmentsPerMessage+3; i++ {
 		atts = append(atts, contracts.Attachment{Filename: "x.png", URL: srv.URL + "/x.png"})
 	}
 	m := contracts.Message{ID: "1", Attachments: atts}
 	paths := ResolveAttachments(context.Background(), srv.Client(), m, sess, hostsFor(t, srv))
-	if len(paths) != maxImagesPerMessage {
-		t.Fatalf("want %d images (capped), got %d", maxImagesPerMessage, len(paths))
+	if len(paths) != maxAttachmentsPerMessage {
+		t.Fatalf("want %d images (capped), got %d", maxAttachmentsPerMessage, len(paths))
 	}
 }
 
-func TestResolveAttachmentsNoImagesNoDir(t *testing.T) {
-	sess := "no-images-no-dir"
+func TestResolveAttachmentsNothingToResolveNoDir(t *testing.T) {
+	sess := "nothing-to-resolve-no-dir"
 	dir := attachmentDir(sess)
 	defer os.RemoveAll(dir)
-	m := contracts.Message{ID: "1", Attachments: []contracts.Attachment{{Filename: "a.txt"}}}
+	m := contracts.Message{ID: "1", Attachments: []contracts.Attachment{{Filename: "a.zip"}}}
 	if paths := ResolveAttachments(context.Background(), http.DefaultClient, m, sess, nil); paths != nil && len(paths) != 0 {
 		t.Fatalf("want no paths, got %v", paths)
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Errorf("dir should not be created when there are no images")
+		t.Errorf("dir should not be created when nothing resolves")
 	}
 }
 

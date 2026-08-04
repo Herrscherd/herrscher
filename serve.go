@@ -61,6 +61,10 @@ func runServe(ctx context.Context, args []string) error {
 		home = &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
 	}
 
+	// The playbooks ship inside the binary; put them on disk before any session
+	// can be told to follow one.
+	installShippedSkills()
+
 	// Registry-driven wiring: the daemon instantiates every gateway from the
 	// plugin registry rather than hand-wiring Discord. Each plugin self-registered
 	// into contracts.Default from its init() (blank import in plugins.go); here we

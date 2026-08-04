@@ -11,6 +11,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/bridge"
 	control "github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
+	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -340,9 +341,29 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 	var last string
 	// With a session channel bound, start after the current history so a daemon
 	// restart doesn't replay past messages as fresh turns.
+	//
+	// An empty cursor means "read from the start of the channel", so a failed
+	// first read must be retried rather than accepted: a restart that hits the
+	// platform's rate limit would otherwise answer every message still in the
+	// channel, weeks-old ones included. Only a successful read settles it — an
+	// empty channel legitimately leaves the cursor empty, there is nothing to
+	// skip past.
 	if d.channel != "" {
-		if msgs, err := r.Read(ctx, ch, 1, ""); err == nil && len(msgs) > 0 {
-			last = msgs[len(msgs)-1].ID
+		log := obs.Stderr(false).With("component", "poll", "session", d.name, "channel", ch)
+		for delay := time.Second; ; delay = min(2*delay, 30*time.Second) {
+			msgs, err := r.Read(ctx, ch, 1, "")
+			if err == nil {
+				if len(msgs) > 0 {
+					last = msgs[len(msgs)-1].ID
+				}
+				break
+			}
+			log.Warn("cursor init failed; retrying rather than replaying history", "err", err, "retry_in", delay)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(delay):
+			}
 		}
 	}
 	for {

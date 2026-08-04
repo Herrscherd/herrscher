@@ -373,3 +373,22 @@ func TestBridgeArgsNoBackendWhenStream(t *testing.T) {
 		}
 	}
 }
+
+// TestBridgeArgsThreadsModelID pins the flag that carries a session's catalog
+// model into the supervised child. Without it, `serve` → Start → bridge builds
+// its backend with ModelID:"" and the routing choke point is skipped entirely:
+// a gateway-routed session then spawns bare, i.e. on the machine's own vendor
+// login. Every other supervised path (create, switch/Restart, resume) goes
+// through here, so this flag is the whole reachability of the feature.
+func TestBridgeArgsThreadsModelID(t *testing.T) {
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1", ModelID: "gw-claude-opus-5"})
+	if !strings.Contains(strings.Join(args, " "), "--model gw-claude-opus-5") {
+		t.Fatalf("expected --model to carry the catalog model id: %v", args)
+	}
+
+	args = s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1"})
+	if strings.Contains(strings.Join(args, " "), "--model") {
+		t.Fatalf("--model present for a legacy session with no model: %v", args)
+	}
+}

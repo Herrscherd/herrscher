@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -19,23 +20,16 @@ import (
 func runBridge(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("bridge", flag.ExitOnError)
 	ch := channelFlag(fs)
-	cmdStr := fs.String("cmd", "", "base command (default 'claude' in stream mode; the per-message program in one-shot mode)")
-	// Accepted but ignored; kept so existing --stream/--model callers don't error.
-	// Kind is selected by --backend; the model now rides in --cmd (or CLAUDE_MODEL).
-	fs.Bool("stream", true, "deprecated, ignored (accepted for backward compatibility)")
-	fs.String("model", "", "deprecated, ignored — pass the model via --cmd (e.g. 'claude --model …')")
+	backendFlags := declareBackendFlags(fs)
 	session := fs.String("session", "", "session name (scopes the orchestrator/attachment dir)")
 	project := fs.String("project", "", "project name — the shared memory scope (P1: every agent of this game recalls it)")
 	agent := fs.String("agent", "", "agent name — the private memory scope (P1: this agent's learned skills)")
 	verbose := fs.Bool("v", false, "log activity to stderr")
-	backend := fs.String("backend", "", "responder backend: stream (default) | oneshot")
-	vendor := fs.String("vendor", "", "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)")
 	hubSocket := fs.String("hub-socket", "", "unix socket of the daemon hub: when set, run as a pure backend runner (no gateway polling)")
 	agentsRoot := fs.String("agents-root", "", "directory holding agent homes for the delegation roster (empty = the daemon default beside state.json)")
 	extractor := fs.String("extractor", "", "name of a registered curation extractor — enables the P1 learning loop (empty = plain Curator, no learning)")
 	journal := fs.String("journal", "", "path to the call journal Consolidate reads (worktree-relative ok); only used with --extractor")
 	consolidateEvery := fs.Int("consolidate-every", 0, "run Consolidate every N turns (0 = manual only); only used with --extractor")
-	resume := fs.String("resume", "", "backend resume token to resume the conversation on start")
 	fs.Parse(args)
 
 	log := host.Logger(*verbose).With("component", "bridge", "session", *session)
@@ -48,14 +42,7 @@ func runBridge(ctx context.Context, args []string) error {
 		return err
 	}
 	newBackend := func(channelID string) (contracts.Backend, error) {
-		if be, err := br.Backend(ctx, contracts.Default.Backends()); err != nil {
-			return nil, err
-		} else if be != nil {
-			return be, nil
-		}
-		return host.BuildBackendFor(ctx, host.BackendRequest{
-			Vendor: *vendor, Cmd: *cmdStr, Kind: *backend, Resume: *resume,
-		})
+		return newBackendFor(ctx, br, backendFlags.request())
 	}
 
 	mem := buildMemory(ctx, log)
@@ -77,6 +64,75 @@ func runBridge(ctx context.Context, args []string) error {
 		HubSocket: *hubSocket,
 		Roster:    host.NewRoster(rosterRoot),
 	})
+}
+
+// backendFlags holds the bridge flags that select and configure the backend.
+// Grouped (rather than five loose pointers inside runBridge) so the mapping
+// from flag names to host.BackendRequest is testable — in particular --model,
+// without which a gateway-routed session spawns bare.
+type backendFlags struct {
+	cmd     *string
+	kind    *string
+	vendor  *string
+	resume  *string
+	modelID *string
+}
+
+// declareBackendFlags registers the backend flags on fs.
+func declareBackendFlags(fs *flag.FlagSet) backendFlags {
+	f := backendFlags{
+		cmd:    fs.String("cmd", "", "base command (default 'claude' in stream mode; the per-message program in one-shot mode)"),
+		kind:   fs.String("backend", "", "responder backend: stream (default) | oneshot"),
+		vendor: fs.String("vendor", "", "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)"),
+		resume: fs.String("resume", "", "backend resume token to resume the conversation on start"),
+		// --model used to be accepted-and-ignored. It is reclaimed here with a
+		// real meaning: a catalog model id, resolved at the spawn choke point so
+		// a gateway-routed model gets its credentials (or fails closed). Only the
+		// supervisor spawns `herrscher bridge`, and it never passed the old flag,
+		// so nothing relied on the ignore. A raw CLI model name (e.g. "sonnet")
+		// now errors as an unknown model instead of being silently dropped —
+		// pass those through --cmd, as before.
+		modelID: fs.String("model", "", "catalog model id (see `herrscher models list`); empty = legacy path, the model rides in --cmd"),
+	}
+	// Accepted but ignored; kept so existing --stream callers don't error.
+	// The kind is selected by --backend.
+	fs.Bool("stream", true, "deprecated, ignored (accepted for backward compatibility)")
+	return f
+}
+
+// request maps the parsed flags onto the host's spawn request.
+func (f backendFlags) request() host.BackendRequest {
+	return host.BackendRequest{
+		Vendor: *f.vendor, Cmd: *f.cmd, Kind: *f.kind, Resume: *f.resume, ModelID: *f.modelID,
+	}
+}
+
+// backendResolver is the remote-resolution seam newBackendFor consults
+// (*host.Resolver in production; a fake in tests).
+type backendResolver interface {
+	Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, error)
+}
+
+// newBackendFor builds the bridge's backend. An out-of-process proxy wins when
+// HERRSCHER_REMOTE names "backend" — but ONLY for a session with no catalog
+// model: the proxy is built from the announcement alone and there is no way to
+// hand it the spawn environment a routed model may require, so it would drop
+// gateway credentials silently and run on the machine's own vendor login.
+// Naming a model with a remote backend is therefore refused, loudly, rather
+// than degraded. Without a remote backend the shared host factory resolves the
+// model and injects whatever its route needs.
+func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
+	be, err := br.Backend(ctx, contracts.Default.Backends())
+	if err != nil {
+		return nil, err
+	}
+	if be != nil {
+		if req.ModelID != "" {
+			return nil, fmt.Errorf("model %q cannot be routed through the remote backend resolver (HERRSCHER_REMOTE=backend): the proxy cannot carry the model's spawn environment", req.ModelID)
+		}
+		return be, nil
+	}
+	return host.BuildBackendFor(ctx, req)
 }
 
 // buildMemory instantiates the first registered memory plugin from the registry,

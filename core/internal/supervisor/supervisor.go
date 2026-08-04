@@ -64,6 +64,13 @@ func (s *Supervisor) bridgeArgs(sess state.Session) []string {
 	if sess.Vendor != "" {
 		args = append(args, "--vendor", sess.Vendor)
 	}
+	// The catalog model id is what makes the bridge's spawn go through the
+	// routing choke point (host.BuildBackendFor). Without it a gateway-routed
+	// session would spawn bare, i.e. on the machine's own vendor login — the
+	// exact silence the routing feature exists to prevent.
+	if sess.ModelID != "" {
+		args = append(args, "--model", sess.ModelID)
+	}
 	// P1 write side (opt-in): thread the learning config so the bridge builds a
 	// Learner instead of the plain Curator. Only when set, like the scope above.
 	if sess.Extractor != "" {

@@ -1,0 +1,17 @@
+{
+  "home": {
+    "id": "",
+    "type": ""
+  },
+  "sessions": [
+    {
+      "incarnation": "inc_PDBFR55PZORVAIRFDROEPFZZIC",
+      "name": "s",
+      "channelID": "",
+      "type": "",
+      "cmd": "codex --model gpt-5.5",
+      "vendor": "codex",
+      "modelId": "gpt-5.5"
+    }
+  ]
+}

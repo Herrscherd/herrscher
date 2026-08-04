@@ -260,6 +260,14 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 	// rather than on the first turn.
 	var spawnEnv map[string]string
 	var modelArg string
+	// Defence in depth: the manager already refuses a modelless session under
+	// gateway-only, but it is not the only caller here — a legacy state.json, a
+	// seed, or a future verb can reach this with no model. A modelless spawn gets
+	// no gateway environment, i.e. it runs on the machine's own vendor login,
+	// which is precisely what gateway-only exists to forbid.
+	if req.ModelID == "" && ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly {
+		return nil, fmt.Errorf("the gateway-only route policy forbids a spawn with no model: it would run on this machine's own vendor login")
+	}
 	if req.ModelID != "" {
 		entry, err := LookupModel(plugins, ResolvePolicy(os.Getenv), req.ModelID)
 		if err != nil {

@@ -71,6 +71,8 @@ func usage() {
 		"",
 		"  " + hint.Render("env: DISCORD_BOT_TOKEN (required), DISCORD_CHANNEL_ID (default channel)"),
 		"  " + hint.Render("     HERRSCHER_OWNER_ID (instance-id fallback), HERRSCHER_STATE_DIR (state dir)"),
+		"  " + hint.Render("     HERRSCHER_ROUTE_POLICY=gateway-only (n'offre que les modèles passerelle)"),
+		"  " + hint.Render("     NEUBLOX_GATEWAY_URL + NEUBLOX_GATEWAY_TOKEN (les deux, sinon une session passerelle échoue)"),
 	}
 
 	fmt.Fprintln(os.Stderr, strings.Join(blocks, "\n"))

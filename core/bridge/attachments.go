@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/Herrscherd/herrscher-contracts"
 )
@@ -44,6 +47,13 @@ const maxImagesPerMessage = 8
 // change (or a spoofed field) can't turn this into an SSRF primitive.
 type allowedHosts map[string]bool
 
+// StagingRoot is the one tree an attachment may live in on local disk. Every
+// gateway that hands the host a local file stages it under here, and the bridge's
+// own downloads land here too, so "the gateway staged this file" is an invariant
+// the core can check rather than a promise it has to take on faith. It is exported
+// so a gateway names the same tree the core enforces instead of guessing at it.
+func StagingRoot() string { return filepath.Join(os.TempDir(), "herrscher-attachments") }
+
 // attachmentDir is where downloaded images land, namespaced per session so
 // concurrent bridges don't collide.
 func attachmentDir(session string) string {
@@ -51,7 +61,7 @@ func attachmentDir(session string) string {
 	if name == "" {
 		name = "default"
 	}
-	return filepath.Join(os.TempDir(), "herrscher-attachments", sanitize(name))
+	return filepath.Join(StagingRoot(), sanitize(name))
 }
 
 // ResolveAttachments turns a message's attachments into local image file paths a
@@ -66,15 +76,16 @@ func attachmentDir(session string) string {
 // It is the host-side entry point (the turnloop has the Message; the bridge only
 // sees Events), producing the paths carried in Event.Attachments.
 //
-// SECURITY: file:// passthrough trusts the producing gateway to have staged the
-// file itself — it is an arbitrary local-file read into the model context. Only
-// the local terminal gateway emits file:// URLs today. A gateway that forwards
-// attachment URLs influenced by a remote author must NOT emit file://; it must
-// use https so the SSRF allowlist applies.
+// SECURITY: a file:// attachment is a local-file read into the model context, so
+// it is pinned to the staging root — a gateway must copy a file there before it
+// can name it, and a path outside is refused. A gateway that forwards attachment
+// URLs influenced by a remote author must still use https rather than staging
+// whatever it is handed, so the SSRF allowlist applies.
 func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Message, session string, hosts map[string]bool) []string {
 	if client == nil {
 		client = http.DefaultClient
 	}
+	client = pinnedClient(client, hosts)
 	dir := attachmentDir(session)
 	mkdirDone := false
 	out := make([]string, 0, maxImagesPerMessage)
@@ -94,7 +105,9 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 			continue
 		}
 		if !mkdirDone {
-			if err := os.MkdirAll(dir, 0o755); err != nil {
+			// 0700: a downloaded attachment is one operator's private material, and
+			// the staging tree lives in a world-writable temp dir.
+			if err := os.MkdirAll(dir, 0o700); err != nil {
 				continue
 			}
 			mkdirDone = true
@@ -123,7 +136,11 @@ func localImagePath(a contracts.Attachment) (string, error) {
 	if u.Path == "" {
 		return "", fmt.Errorf("attachment %q: empty file path", a.URL)
 	}
-	info, err := os.Stat(u.Path)
+	path, err := stagedPath(u.Path)
+	if err != nil {
+		return "", fmt.Errorf("attachment %q: %w", a.URL, err)
+	}
+	info, err := os.Stat(path)
 	if err != nil {
 		return "", fmt.Errorf("attachment %q: %w", a.URL, err)
 	}
@@ -133,7 +150,126 @@ func localImagePath(a contracts.Attachment) (string, error) {
 	if info.Size() > maxAttachmentBytes {
 		return "", fmt.Errorf("attachment %q: exceeds %d bytes", a.URL, maxAttachmentBytes)
 	}
-	return u.Path, nil
+	return path, nil
+}
+
+// stagedPath confirms a local path really sits inside the staging root and
+// returns it resolved. Symlinks are resolved on both sides before comparing:
+// /tmp is itself a symlink on macOS, and a symlink planted inside the staging
+// tree would otherwise read any file on the machine into the model's context.
+func stagedPath(p string) (string, error) {
+	root, err := filepath.EvalSymlinks(StagingRoot())
+	if err != nil {
+		return "", fmt.Errorf("staging root: %w", err)
+	}
+	real, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(root, real)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s is not staged under %s", p, root)
+	}
+	return real, nil
+}
+
+// pinnedClient returns a copy of client — the caller's shared client is left
+// untouched — that enforces the allowlist all the way down to the socket.
+//
+// Two holes are closed. Redirects: the default client follows them blindly, so an
+// allowlisted CDN that 302s to an internal host would defeat the pin; every hop is
+// re-validated. And the name/address gap: validateCDNURL checks a *name*, while
+// the connection goes to whatever that name resolves to — which DNS can answer
+// differently the second time, or answer 127.0.0.1 the first. The dialer resolves
+// once, refuses anything not publicly routable, and connects to the exact address
+// it checked.
+//
+// A caller supplying a RoundTripper that is not an *http.Transport owns its own
+// dialing and keeps it: there is no dialer to wrap. Only the tests do that.
+func pinnedClient(client *http.Client, hosts allowedHosts) *http.Client {
+	pinned := *client
+	pinned.CheckRedirect = func(r *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("too many redirects")
+		}
+		return validateCDNURL(r.URL.String(), hosts)
+	}
+	tr, ok := pinned.Transport.(*http.Transport)
+	if ok || pinned.Transport == nil {
+		if tr == nil {
+			tr, _ = http.DefaultTransport.(*http.Transport)
+		}
+		if tr != nil {
+			pinned.Transport = pinnedTransport(tr)
+		}
+	}
+	return &pinned
+}
+
+// pinnedTransports memoizes the wrapped transport per source transport. Without
+// it every message with an attachment would get a freshly cloned transport, hence
+// a fresh connection pool: no reuse, and a set of idle sockets left to time out.
+var pinnedTransports sync.Map // *http.Transport -> *http.Transport
+
+func pinnedTransport(src *http.Transport) *http.Transport {
+	if v, ok := pinnedTransports.Load(src); ok {
+		return v.(*http.Transport)
+	}
+	tr := src.Clone()
+	tr.DialContext = pinnedDial(&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second})
+	v, _ := pinnedTransports.LoadOrStore(src, tr)
+	return v.(*http.Transport)
+}
+
+// pinnedDial resolves the host itself and dials the literal address it approved,
+// so no second lookup can land the connection somewhere else.
+func pinnedDial(d *net.Dialer) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		// An allowlist entry that is already a literal IP was pinned exactly: there
+		// is no name left to re-resolve, so there is nothing to rebind. Whoever put
+		// an address in the allowlist meant that address.
+		if net.ParseIP(host) != nil {
+			return d.DialContext(ctx, network, addr)
+		}
+		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+		last := fmt.Errorf("attachment host %q has no routable address", host)
+		for _, ip := range ips {
+			if !routable(ip.IP) {
+				last = fmt.Errorf("attachment host %q resolves to %s, which is not routable", host, ip.IP)
+				continue
+			}
+			c, err := d.DialContext(ctx, network, net.JoinHostPort(ip.IP.String(), port))
+			if err == nil {
+				return c, nil
+			}
+			last = err
+		}
+		return nil, last
+	}
+}
+
+// routable reports whether ip is an address on the public internet — the only
+// kind a CDN legitimately lives on. Loopback, private, link-local, carrier-NAT
+// and multicast are where an SSRF wants to land, never where an attachment is.
+func routable(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() {
+		return false
+	}
+	// 100.64.0.0/10 is neither private nor public: behind carrier NAT it reaches
+	// other tenants of the same ISP, and Go does not count it as private.
+	if v4 := ip.To4(); v4 != nil && v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127 {
+		return false
+	}
+	return true
 }
 
 func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, msgID string, idx int, dir string, hosts allowedHosts) (string, error) {
@@ -144,18 +280,7 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 	if err != nil {
 		return "", fmt.Errorf("attachment request %s: %w", a.Filename, err)
 	}
-	// Pinning only the initial URL is not enough: the default client follows
-	// redirects blindly, so an allowlisted CDN that 302s to an internal host
-	// would defeat the SSRF pin. Re-validate every hop against the allowlist
-	// (on a copy, so the caller's shared client is left untouched).
-	pinned := *client
-	pinned.CheckRedirect = func(r *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return fmt.Errorf("download %s: too many redirects", a.Filename)
-		}
-		return validateCDNURL(r.URL.String(), hosts)
-	}
-	resp, err := pinned.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("download %s: %w", a.Filename, err)
 	}
@@ -166,7 +291,9 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 	// Include the per-message index so two same-named images on one message don't
 	// clobber each other (msgID alone collides within a message).
 	dest := filepath.Join(dir, fmt.Sprintf("%s-%d-%s", msgID, idx, sanitize(a.Filename)))
-	f, err := os.Create(dest)
+	// 0600 rather than os.Create's 0666&umask: this is one operator's material
+	// sitting in a directory every user on the machine can walk into.
+	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("create %s: %w", dest, err)
 	}

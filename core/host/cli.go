@@ -57,6 +57,9 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	// Reject an unknown/policy-excluded --model, or one owned by a backend other
 	// than --vendor, at create/switch rather than on the first spawn. Uses the
 	// same lookup + policy the spawn choke point does.
+	// The route policy itself, so the manager can refuse the two ways of escaping
+	// the catalog (a free-form cmd, or no model at all) without importing host.
+	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly })
 	hdl.SetModelValidator(func(vendor, modelID string) error {
 		entry, err := LookupModel(contracts.Default.Backends(), ResolvePolicy(os.Getenv), modelID)
 		if err != nil {

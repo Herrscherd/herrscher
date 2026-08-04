@@ -141,6 +141,8 @@ func main() {
 		err = runAgent(ctx, args)
 	case "memory":
 		err = runMemory(ctx, args)
+	case "models":
+		err = runModels(ctx, args)
 	case "service":
 		err = runService(ctx, args)
 	case "plugin-host":

@@ -138,6 +138,12 @@ func runMemory(ctx context.Context, args []string) error {
 	return runRegistryVerb(ctx, "memory", args)
 }
 
+// runModels dispatches the operator `models` commands (list) through the same
+// CLI registry the daemon serves.
+func runModels(ctx context.Context, args []string) error {
+	return runRegistryVerb(ctx, "models", args)
+}
+
 // runRegistryVerb builds the operator registry (the same one the daemon serves)
 // and dispatches a single top-level verb through it, printing any output. Both
 // session and agent verbs share this so the binary and the gateways drive an

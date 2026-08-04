@@ -62,6 +62,11 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			return nil, hostDeps{}, err
 		}
 	}
+	for _, c := range ModelsCommands() {
+		if err := reg.Add(c); err != nil {
+			return nil, hostDeps{}, err
+		}
+	}
 	if err := reg.Add(contracts.New("session", "seed").
 		Help("run one agent turn in a session and print the reply").
 		Param("name", "session name", true).

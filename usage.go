@@ -68,7 +68,7 @@ func usage() {
 		"",
 		"  " + hint.Render("Run `herrscher <command> --help` for flags and options."),
 		"",
-		"  " + hint.Render("env: DISCORD_BOT_TOKEN (required), DISCORD_CHANNEL_ID (default channel)"),
+		"  " + hint.Render("env: DISCORD_BOT_TOKEN (required), DISCORD_USER_ID (the user the bot obeys)"),
 		"  " + hint.Render("     HERRSCHER_OWNER_ID (instance-id fallback), HERRSCHER_STATE_DIR (state dir)"),
 	}
 

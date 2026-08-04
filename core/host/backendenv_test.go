@@ -222,6 +222,21 @@ func TestBuildBackendForRejectsUnknownModel(t *testing.T) {
 	}
 }
 
+// Defence in depth behind the manager's own refusal: the choke point has other
+// callers (a legacy state.json, a seed, a future verb). A modelless spawn gets
+// no gateway environment, so under gateway-only it would run on this machine's
+// own vendor login — the exact outcome the policy exists to forbid.
+func TestBuildBackendForRefusesAModellessSpawnUnderGatewayOnly(t *testing.T) {
+	t.Setenv("HERRSCHER_ROUTE_POLICY", "gateway-only")
+	_, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "claude", Cmd: "claude"})
+	if err == nil {
+		t.Fatal("BuildBackendFor spawned with no model under gateway-only — it would run on the local login")
+	}
+	if !strings.Contains(err.Error(), "gateway-only") {
+		t.Fatalf("error does not name the policy that refused it: %v", err)
+	}
+}
+
 func TestBuildBackendForWithoutModelIDKeepsLegacyPath(t *testing.T) {
 	// Sessions created before this change have no ModelID. They must
 	// continue to start on their Cmd alone.

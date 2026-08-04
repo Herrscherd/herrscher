@@ -403,6 +403,9 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if err := h.checkModel(vendor, modelID); err != nil {
 		return "", err
 	}
+	if err := h.checkSpawnSource(cmdExplicit, modelID); err != nil {
+		return "", err
+	}
 	parent, _ := in.Lookup("parent")
 	// P1 learning (opt-in): extractor names a registered curation extractor; the
 	// journal/cadence feed its Consolidate. Persisted on the session and threaded
@@ -670,7 +673,8 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 		return "", fmt.Errorf("missing name")
 	}
 	vendor := in.Get("vendor")
-	cmd := in.Get("cmd")
+	cmd, cmdSupplied := in.Lookup("cmd")
+	cmdSupplied = cmdSupplied && cmd != ""
 	handoff := in.Get("handoff")
 	if handoff == "" {
 		handoff = "none"
@@ -694,6 +698,12 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	// variables into a CLI that ignores them — the turn running on the machine's
 	// own login while the session still reads gateway-routed.
 	if err := h.checkModel(vendor, modelID); err != nil {
+		return "", err
+	}
+	// Same escapes as at creation. `cmdSupplied` is the switch's own notion of
+	// explicit: an absent --cmd keeps the session's current one, which the policy
+	// already vetted when the session was created.
+	if err := h.checkSpawnSource(cmdSupplied, modelID); err != nil {
 		return "", err
 	}
 	// Capture the prior backend so we can roll back if the restart fails: rolling

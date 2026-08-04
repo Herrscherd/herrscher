@@ -737,7 +737,7 @@ func TestDriverInvokesCoordinatorOnHandoffTrailer(t *testing.T) {
 
 	from <- contracts.Event{T: "reply", Done: true,
 		Text: "fait.\n⟢ handoff: scripter — finir le module"}
-	if ok := d.awaitTurn(context.Background()); !ok {
+	if ok := d.awaitTurn(context.Background(), true); !ok {
 		t.Fatal("awaitTurn should complete on reply{done}")
 	}
 	if len(rc.reqs) != 1 {
@@ -757,7 +757,7 @@ func TestDriverNoHandoffWithoutTrailer(t *testing.T) {
 	rc := &recordingCoord{}
 	d.coordinator = rc
 	from <- contracts.Event{T: "reply", Done: true, Text: "réponse normale"}
-	_ = d.awaitTurn(context.Background())
+	_ = d.awaitTurn(context.Background(), true)
 	if len(rc.reqs) != 0 {
 		t.Fatalf("no handoff expected, got %d", len(rc.reqs))
 	}
@@ -838,7 +838,7 @@ func TestTerminalReplyCarriesAcceptedDelegationBeforeSeedRelease(t *testing.T) {
 
 	from <- contracts.Event{T: "reply", Done: true,
 		Text: "Je délègue.\n⟢ delegate: roblox-scripter — modifier les nametags"}
-	if !d.awaitTurn(context.Background()) {
+	if !d.awaitTurn(context.Background(), true) {
 		t.Fatal("turn abandoned")
 	}
 
@@ -922,7 +922,7 @@ func TestTerminalReplyCarriesCoordinationOutcomesBeforeSeedRelease(t *testing.T)
 			d.pendingReply = replyCh
 
 			from <- contracts.Event{T: "reply", Done: true, Text: tc.reply}
-			if !d.awaitTurn(context.Background()) {
+			if !d.awaitTurn(context.Background(), true) {
 				t.Fatal("turn abandoned")
 			}
 
@@ -1004,7 +1004,7 @@ func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
 
 	from <- contracts.Event{T: "reply", Done: true,
 		Text: "fait.\n⟢ handoff: scripter — finir le module"}
-	if ok := d.awaitTurn(context.Background()); !ok {
+	if ok := d.awaitTurn(context.Background(), true); !ok {
 		t.Fatal("awaitTurn should complete on reply{done}")
 	}
 
@@ -1027,7 +1027,7 @@ func TestDriverInvokesCoordinatorOnSealTrailer(t *testing.T) {
 	d.coordinator = rc
 
 	from <- contracts.Event{T: "reply", Done: true, Text: "cohorte lancée.\n⟢ seal: 4"}
-	if ok := d.awaitTurn(context.Background()); !ok {
+	if ok := d.awaitTurn(context.Background(), true); !ok {
 		t.Fatal("awaitTurn should complete on reply{done}")
 	}
 	if len(rc.seals) != 1 {
@@ -1049,7 +1049,7 @@ func TestDriverInvokesCoordinatorOnFanOutTrailer(t *testing.T) {
 
 	from <- contracts.Event{T: "reply", Done: true,
 		Text: "je lance.\n⟢ fanout: scripter — a ;; b"}
-	if ok := d.awaitTurn(context.Background()); !ok {
+	if ok := d.awaitTurn(context.Background(), true); !ok {
 		t.Fatal("awaitTurn should complete on reply{done}")
 	}
 	if len(rc.fanouts) != 1 {

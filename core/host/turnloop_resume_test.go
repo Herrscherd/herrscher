@@ -14,7 +14,7 @@ func TestAwaitTurnPersistsResumeToken(t *testing.T) {
 	d.persistResume = func(tok string) { got = tok }
 
 	from <- contracts.Event{T: "reply", Text: "ok", Done: true, Resume: "sid-1"}
-	if !d.awaitTurn(context.Background()) {
+	if !d.awaitTurn(context.Background(), true) {
 		t.Fatal("awaitTurn should return true on reply{done}")
 	}
 	if got != "sid-1" {
@@ -29,7 +29,7 @@ func TestAwaitTurnSkipsEmptyResumeToken(t *testing.T) {
 	d.persistResume = func(string) { called = true }
 
 	from <- contracts.Event{T: "reply", Text: "ok", Done: true} // no Resume
-	_ = d.awaitTurn(context.Background())
+	_ = d.awaitTurn(context.Background(), true)
 	if called {
 		t.Fatal("persistResume must not fire for an empty token")
 	}

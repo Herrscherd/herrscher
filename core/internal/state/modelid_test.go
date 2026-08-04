@@ -32,6 +32,24 @@ func TestSessionModelIDOmittedWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestSessionModelIDAbsentInLegacyStateFile(t *testing.T) {
+	// A state.json written by a build that predates ModelID has no "modelId"
+	// key at all. It must unmarshal cleanly with ModelID == "", not error and
+	// not invent a value — this is what lets an old daemon's session survive
+	// being read by a new binary.
+	const legacy = `{"name":"s","vendor":"claude","cmd":"claude","resumeToken":"tok-1"}`
+	var sess Session
+	if err := json.Unmarshal([]byte(legacy), &sess); err != nil {
+		t.Fatalf("unmarshal legacy state.json: %v", err)
+	}
+	if sess.ModelID != "" {
+		t.Fatalf("ModelID = %q, want empty for a pre-catalog state.json", sess.ModelID)
+	}
+	if sess.Name != "s" || sess.Vendor != "claude" || sess.Cmd != "claude" || sess.ResumeToken != "tok-1" {
+		t.Fatalf("other fields not preserved: %+v", sess)
+	}
+}
+
 func TestSetBackendTargetWritesModelID(t *testing.T) {
 	s := &State{Sessions: []Session{{Name: "s", Vendor: "claude", Cmd: "claude", ResumeToken: "old"}}}
 	s.SetBackendTarget("s", "codex", "codex --model gpt-5.5", "gpt-5.5")

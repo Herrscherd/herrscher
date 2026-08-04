@@ -150,3 +150,104 @@ func TestBuildBackendForWithoutModelIDKeepsLegacyPath(t *testing.T) {
 		t.Fatalf("legacy path (no ModelID) failed: %v", err)
 	}
 }
+
+// gatewayPlugin registers a single claude backend offering one gateway-routed
+// model, capturing the PluginConfig it is built with.
+func gatewayPlugin(t *testing.T, gotCfg *contracts.PluginConfig) {
+	t.Helper()
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{
+			Kind: "claude", Category: contracts.CategoryBackend,
+			Models: []contracts.ModelSpec{{
+				ID: "gw-opus", Label: "GW Opus", Arg: "opus", Route: contracts.RouteGateway,
+			}},
+		},
+		Backend: func(_ context.Context, cfg contracts.PluginConfig) (contracts.Backend, error) {
+			*gotCfg = cfg
+			return seedBackend{}, nil
+		},
+	})
+	t.Setenv("NEUBLOX_GATEWAY_URL", "https://gw.neublox.xyz")
+	t.Setenv("NEUBLOX_GATEWAY_TOKEN", "tok-123")
+}
+
+// TestBuildBackendForInjectsResolvedGatewayEnv pins the ONE line that actually
+// delivers the gateway credentials to the plugin:
+//
+//	cfg.Settings["env"] = contracts.EncodeEnvSetting(spawnEnv)
+//
+// Every other gateway test covers a failure path, so deleting that assignment
+// left the suite green while the spawned CLI silently ran on the machine's own
+// claude.ai login — precisely the outcome the routing feature exists to stop.
+func TestBuildBackendForInjectsResolvedGatewayEnv(t *testing.T) {
+	var cfg contracts.PluginConfig
+	gatewayPlugin(t, &cfg)
+
+	if _, err := BuildBackendFor(context.Background(), BackendRequest{
+		Cmd: "claude", ModelID: "gw-opus",
+	}); err != nil {
+		t.Fatalf("BuildBackendFor: %v", err)
+	}
+	raw, ok := cfg.Settings["env"]
+	if !ok {
+		t.Fatal(`no "env" setting handed to the plugin: the gateway credentials never reached the backend`)
+	}
+	env := contracts.ParseEnvSetting(raw)
+	if env["ANTHROPIC_BASE_URL"] != "https://gw.neublox.xyz" {
+		t.Errorf("ANTHROPIC_BASE_URL = %q", env["ANTHROPIC_BASE_URL"])
+	}
+	if env["ANTHROPIC_AUTH_TOKEN"] != "tok-123" {
+		t.Errorf("ANTHROPIC_AUTH_TOKEN = %q", env["ANTHROPIC_AUTH_TOKEN"])
+	}
+	if env["ANTHROPIC_MODEL"] != "opus" {
+		t.Errorf("ANTHROPIC_MODEL = %q", env["ANTHROPIC_MODEL"])
+	}
+}
+
+// fakeRemoteResolver stands in for a configured HERRSCHER_REMOTE=backend.
+type fakeRemoteResolver struct{ called bool }
+
+func (f *fakeRemoteResolver) Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, error) {
+	f.called = true
+	return seedBackend{}, nil
+}
+
+// A remote proxy is built from its announcement: there is no seam to hand it the
+// spawn environment. Returning it would drop the gateway credentials silently.
+func TestBuildBackendForRefusesGatewayModelWithRemoteBackend(t *testing.T) {
+	var cfg contracts.PluginConfig
+	gatewayPlugin(t, &cfg)
+	savedResolver := newBackendResolver
+	t.Cleanup(func() { newBackendResolver = savedResolver })
+	fake := &fakeRemoteResolver{}
+	newBackendResolver = func() remoteBackendResolver { return fake }
+
+	_, err := BuildBackendFor(context.Background(), BackendRequest{Cmd: "claude", ModelID: "gw-opus"})
+	if err == nil {
+		t.Fatal("a gateway model resolved through the remote backend resolver must be refused, not silently stripped of its credentials")
+	}
+	if !strings.Contains(err.Error(), "gw-opus") {
+		t.Fatalf("error does not name the model: %v", err)
+	}
+	if !fake.called {
+		t.Fatal("the remote resolver seam was never consulted; the test proves nothing")
+	}
+}
+
+// Non-regression: a session with no model still gets the remote backend.
+func TestBuildBackendForKeepsRemoteBackendWithoutModel(t *testing.T) {
+	savedResolver := newBackendResolver
+	t.Cleanup(func() { newBackendResolver = savedResolver })
+	newBackendResolver = func() remoteBackendResolver { return &fakeRemoteResolver{} }
+
+	be, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "claude", Cmd: "claude"})
+	if err != nil {
+		t.Fatalf("BuildBackendFor: %v", err)
+	}
+	if be == nil {
+		t.Fatal("remote backend not returned")
+	}
+}

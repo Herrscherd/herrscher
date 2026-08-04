@@ -61,6 +61,27 @@ func TestBuildHubToleratesFailure(t *testing.T) {
 	}
 }
 
+// A tolerated failure must still be reportable: the daemon logs Failures() so a
+// gateway that dropped out (revoked token, missing config) is visible instead of
+// silently absent.
+func TestBuildHubReportsToleratedFailures(t *testing.T) {
+	hub, err := BuildHub(context.Background(), []contracts.Plugin{gw("chat", true), gw("terminal", false)}, func(string) string { return "" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := hub.Failures()
+	if len(got) != 1 || !strings.Contains(got[0], "chat") || !strings.Contains(got[0], "boom") {
+		t.Fatalf("Failures() = %v, want one line naming chat and its cause", got)
+	}
+	clean, err := BuildHub(context.Background(), []contracts.Plugin{gw("terminal", false)}, func(string) string { return "" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := clean.Failures(); len(got) != 0 {
+		t.Errorf("Failures() = %v, want none when every gateway built", got)
+	}
+}
+
 func TestBuildHubAllFailedAggregates(t *testing.T) {
 	_, err := BuildHub(context.Background(), []contracts.Plugin{gw("chat", true)}, func(string) string { return "" })
 	if err == nil || !strings.Contains(err.Error(), "chat") {

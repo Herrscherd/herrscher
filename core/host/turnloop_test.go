@@ -153,6 +153,51 @@ func TestDriverPollsSessionChannel(t *testing.T) {
 	}, "driver polls the session's own channel, not the gateway default")
 }
 
+// failingReader fails the first n reads, then behaves like its fanRecorder. It
+// stands in for a platform that rate-limits a restarting daemon.
+type failingReader struct {
+	fanRecorder
+	left int
+}
+
+func (f *failingReader) Read(ctx context.Context, channelID string, limit int, after string) ([]contracts.Message, error) {
+	f.mu.Lock()
+	if f.left > 0 {
+		f.left--
+		f.mu.Unlock()
+		return nil, errors.New("429 rate limited")
+	}
+	f.mu.Unlock()
+	return f.fanRecorder.Read(ctx, channelID, limit, after)
+}
+
+// TestDriverDoesNotReplayHistoryWhenCursorInitFails proves a failed first read
+// is retried instead of being taken for an empty channel. The cursor is what
+// keeps a restart from re-answering what is already in the channel: accepting
+// the failure would leave it empty, and the next read would hand the whole
+// history to the bridge as fresh turns — the bug where the bot woke up and
+// replied to two-week-old messages.
+func TestDriverDoesNotReplayHistoryWhenCursorInitFails(t *testing.T) {
+	a := &failingReader{left: 1}
+	a.feed("marrant tu fonctionne encore?") // already answered weeks ago
+	toBridge := make(chan contracts.Event, 4)
+	fromBridge := make(chan contracts.Event, 4)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+	d.channel = "sess-chan"
+
+	// Retries back off from one second, so the whole history is still unread
+	// when the poll loop would otherwise have submitted it.
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	go d.run(ctx)
+
+	select {
+	case in := <-toBridge:
+		t.Fatalf("history replayed as a fresh turn: %+v", in)
+	case <-ctx.Done():
+	}
+}
+
 // TestDriverNonEventSinkPostsOnlyFinalReply proves that a gateway that does NOT
 // implement EventSink receives only the final reply through Post: mid-turn
 // status/chunk events render nothing on the host side (rendering is now the

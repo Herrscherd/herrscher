@@ -54,7 +54,7 @@ func currentRoute() routeCurrent {
 func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askModel bool) (map[string]string, error) {
 	out := map[string]string{}
 
-	fmt.Fprintf(os.Stderr, "\n  %s  %s\n", s.wrap(s.bold+s.cyan, "routage"), s.wrap(s.dim, "où tournent les tours d'agent"))
+	fmt.Fprintf(os.Stderr, "\n  %s  %s\n", s.wrap(s.bold+s.cyan, "routing"), s.wrap(s.dim, "where agent turns run"))
 	policy, err := choosePolicy(s, in, cur.policy)
 	if err != nil {
 		return nil, err
@@ -72,13 +72,13 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 	}
 
 	if !askModel {
-		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "modèle par défaut : relancez `herrscher init` après la reconstruction pour le choisir"))
+		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "default model: run `herrscher init` again after the rebuild to pick one"))
 		return out, nil
 	}
 
 	entries, err := cat(policy)
 	if err != nil {
-		return nil, fmt.Errorf("catalogue de modèles: %w", err)
+		return nil, fmt.Errorf("model catalog: %w", err)
 	}
 	model, err := chooseDefaultModel(s, in, entries, cur.model)
 	if err != nil {
@@ -89,7 +89,7 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 	// key, so an absent key would silently keep the old one.
 	out[host.EnvDefaultModel] = model
 	if model == "" && policy == contracts.PolicyGatewayOnly {
-		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.red, "sans modèle par défaut, chaque `session create` devra passer --model (obligatoire sous gateway-only)"))
+		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.red, "with no default model, every `session create` must pass --model, which gateway-only requires"))
 	}
 	return out, nil
 }
@@ -101,21 +101,21 @@ var policyChoices = []struct {
 	label  string
 	help   string
 }{
-	{contracts.PolicyAll, "all", "les modèles locaux et passerelle (build interne)"},
-	{contracts.PolicyGatewayOnly, "gateway-only", "uniquement la passerelle du produit (build public)"},
+	{contracts.PolicyAll, "all", "native and gateway models (internal build)"},
+	{contracts.PolicyGatewayOnly, "gateway-only", "the product gateway only (public build)"},
 }
 
 // choosePolicy reads the route policy: empty keeps the current one, otherwise a
 // 1-based index or the policy name itself.
 func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contracts.RoutePolicy, error) {
-	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "politique de route"))
+	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "route policy"))
 	for i, c := range policyChoices {
 		// Pad the plain label, then colour it: an ANSI wrap adds invisible bytes
 		// that %-14s would count, shifting every following column.
 		name, tag := fmt.Sprintf("%-14s", c.label), fmt.Sprintf("%-8s", "")
 		if c.policy == cur {
 			name = s.wrap(s.green, name)
-			tag = s.wrap(s.dim, fmt.Sprintf("%-8s", "actuel"))
+			tag = s.wrap(s.dim, fmt.Sprintf("%-8s", "current"))
 		}
 		fmt.Fprintf(os.Stderr, "    %s %s %s %s\n", s.wrap(s.dim, strconv.Itoa(i+1)), name, tag, s.wrap(s.dim, c.help))
 	}
@@ -126,7 +126,7 @@ func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contrac
 	}
 	if n, err := strconv.Atoi(ans); err == nil {
 		if n < 1 || n > len(policyChoices) {
-			return "", fmt.Errorf("politique de route: choix hors plage: %d", n)
+			return "", fmt.Errorf("route policy: choice out of range: %d", n)
 		}
 		return policyChoices[n-1].policy, nil
 	}
@@ -135,7 +135,7 @@ func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contrac
 			return c.policy, nil
 		}
 	}
-	return "", fmt.Errorf("politique de route inconnue %q", ans)
+	return "", fmt.Errorf("unknown route policy %q", ans)
 }
 
 // askGatewayCreds reads the gateway URL and token. Both or neither: a base URL
@@ -144,11 +144,11 @@ func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contrac
 // the gateway-only policy exists to forbid. When a complete pair is already
 // configured, empty answers keep it.
 func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, error) {
-	note := "les deux sont requis"
+	note := "both are required"
 	if have {
-		note = "déjà configurés — entrée pour garder"
+		note = "already set — enter to keep"
 	}
-	fmt.Fprintf(os.Stderr, "  %s  %s\n", s.wrap(s.bold, "passerelle · identifiants"), s.wrap(s.dim, "("+note+", le jeton est masqué)"))
+	fmt.Fprintf(os.Stderr, "  %s  %s\n", s.wrap(s.bold, "gateway · credentials"), s.wrap(s.dim, "("+note+"; token entry is hidden)"))
 
 	url := promptLine(in, secretLabel(s, host.EnvGatewayURL))
 	token, err := readSecret(in, secretLabel(s, host.EnvGatewayToken))
@@ -159,11 +159,11 @@ func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, e
 	switch {
 	case url == "" && token == "":
 		if !have {
-			return nil, fmt.Errorf("gateway-only sans identifiants de passerelle: toute session échouerait au démarrage — renseignez %s et %s", host.EnvGatewayURL, host.EnvGatewayToken)
+			return nil, fmt.Errorf("gateway-only with no gateway credentials: every session would fail to start — set %s and %s", host.EnvGatewayURL, host.EnvGatewayToken)
 		}
 		return nil, nil
 	case url == "" || token == "":
-		return nil, fmt.Errorf("identifiants de passerelle incomplets: %s et %s vont ensemble — l'un sans l'autre ferait tourner les tours sur le compte de cette machine", host.EnvGatewayURL, host.EnvGatewayToken)
+		return nil, fmt.Errorf("incomplete gateway credentials: %s and %s go together — one without the other would run turns on this machine's own account", host.EnvGatewayURL, host.EnvGatewayToken)
 	}
 	return map[string]string{host.EnvGatewayURL: url, host.EnvGatewayToken: token}, nil
 }
@@ -172,28 +172,26 @@ func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, e
 // session gets when it names none. The last entry clears the default.
 func chooseDefaultModel(s style, in *bufio.Reader, entries []host.CatalogEntry, cur string) (string, error) {
 	if len(entries) == 0 {
-		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "modèle par défaut : aucun backend compilé n'offre de modèle sous cette politique"))
+		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "default model: no compiled backend offers one under this policy"))
 		return "", nil
 	}
-	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "modèle par défaut"))
+	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "default model"))
 	for i, e := range entries {
-		label := e.ID
-		if e.Label != "" {
-			label = fmt.Sprintf("%-24s %s", e.ID, s.wrap(s.dim, e.Label))
-		}
-		tag := ""
+		// Colour the id alone: wrapping the id AND the already-dimmed label in one
+		// green span would end at the label's own reset, colouring half a row.
+		id, tag := fmt.Sprintf("%-24s", e.ID), ""
 		if e.ID == cur {
-			label, tag = s.wrap(s.green, label), s.wrap(s.dim, "  actuel")
+			id, tag = s.wrap(s.green, id), s.wrap(s.dim, "  current")
 		}
-		fmt.Fprintf(os.Stderr, "    %s %s%s\n", s.wrap(s.dim, strconv.Itoa(i+1)), label, tag)
+		fmt.Fprintf(os.Stderr, "    %s %s %s%s\n", s.wrap(s.dim, strconv.Itoa(i+1)), id, s.wrap(s.dim, e.Label), tag)
 	}
-	fmt.Fprintf(os.Stderr, "    %s %s\n", s.wrap(s.dim, strconv.Itoa(len(entries)+1)), "aucun")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", s.wrap(s.dim, strconv.Itoa(len(entries)+1)), "none")
 
 	ans := promptLine(in, "  "+s.wrap(s.dim, "›")+" ")
 	switch {
 	case ans == "":
 		return cur, nil
-	case ans == "aucun", ans == "none":
+	case ans == "none":
 		return "", nil
 	}
 	if n, err := strconv.Atoi(ans); err == nil {
@@ -203,12 +201,12 @@ func chooseDefaultModel(s style, in *bufio.Reader, entries []host.CatalogEntry, 
 		case n == len(entries)+1:
 			return "", nil
 		}
-		return "", fmt.Errorf("modèle par défaut: choix hors plage: %d", n)
+		return "", fmt.Errorf("default model: choice out of range: %d", n)
 	}
 	for _, e := range entries {
 		if e.ID == ans {
 			return ans, nil
 		}
 	}
-	return "", fmt.Errorf("modèle inconnu %q (non offert sous cette politique)", ans)
+	return "", fmt.Errorf("unknown model %q (not offered under this policy)", ans)
 }

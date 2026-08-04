@@ -57,7 +57,8 @@ var defaultStack = map[string]string{
 
 // InitCmd composes the host's plugin stack from scratch: it picks one module per
 // category (defaulting to the batteries-included stack), rewrites plugins.go to
-// exactly that set, seeds a .env from .env.example, then go-gets and rebuilds.
+// exactly that set, seeds a .env from .env.example, asks where agent turns run
+// (route policy, gateway credentials, default model), then go-gets and rebuilds.
 // Pass --gateway/--backend/--memory/--orchestrator to swap a category, the kind
 // "none" to drop one, or --with MODULE to pin an extra module verbatim.
 func InitCmd(ctx context.Context, args []string) int {
@@ -101,7 +102,7 @@ func InitCmd(ctx context.Context, args []string) int {
 	}
 	var secrets map[string]string
 	if interactive {
-		wc, ws, err := runWizard(compose)
+		wc, ws, err := runWizard(compose, liveCatalog, currentRoute())
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
@@ -113,7 +114,7 @@ func InitCmd(ctx context.Context, args []string) int {
 	}
 
 	// Config-only mode: the binary already carries its plugins, so there is
-	// nothing to recompose or rebuild — just persist the secrets and point the
+	// nothing to recompose or rebuild — just persist the settings and point the
 	// operator at `serve`.
 	if !compose {
 		path := envTarget()
@@ -152,7 +153,7 @@ func InitCmd(ctx context.Context, args []string) int {
 	if n, err := writeSecretsTo(filepath.Join(dir, ".env"), secrets); err != nil {
 		fmt.Fprintf(os.Stderr, "write secrets: %v\n", err)
 	} else if n > 0 {
-		fmt.Printf("wrote %d secret(s) to .env\n", n)
+		fmt.Printf("wrote %d setting(s) to .env\n", n)
 	}
 
 	if *noBuild {

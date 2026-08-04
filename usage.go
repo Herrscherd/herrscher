@@ -73,6 +73,8 @@ func usage() {
 		"  " + hint.Render("     HERRSCHER_OWNER_ID (instance-id fallback), HERRSCHER_STATE_DIR (state dir)"),
 		"  " + hint.Render("     HERRSCHER_ROUTE_POLICY=gateway-only (n'offre que les modèles passerelle)"),
 		"  " + hint.Render("     NEUBLOX_GATEWAY_URL + NEUBLOX_GATEWAY_TOKEN (les deux, sinon une session passerelle échoue)"),
+		"  " + hint.Render("     HERRSCHER_DEFAULT_MODEL (modèle pris quand `session create` n'en nomme aucun)"),
+		"  " + hint.Render("     `herrscher init` pose ces trois questions — pas besoin de les écrire à la main"),
 	}
 
 	fmt.Fprintln(os.Stderr, strings.Join(blocks, "\n"))

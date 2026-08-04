@@ -60,6 +60,10 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	// The route policy itself, so the manager can refuse the two ways of escaping
 	// the catalog (a free-form cmd, or no model at all) without importing host.
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly })
+	// The model a session gets when it names none, as chosen at `herrscher init`.
+	// Read once here rather than per-create: the daemon's environment is fixed for
+	// its lifetime, and a mid-flight change would silently repoint live sessions.
+	hdl.SetDefaultModel(os.Getenv(EnvDefaultModel))
 	hdl.SetModelValidator(func(vendor, modelID string) error {
 		entry, err := LookupModel(contracts.Default.Backends(), ResolvePolicy(os.Getenv), modelID)
 		if err != nil {

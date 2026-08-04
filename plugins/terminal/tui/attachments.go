@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/bridge"
 )
 
 // Attachment is a file staged to send with the next message (and echoed under the
@@ -21,10 +23,12 @@ type Attachment struct {
 // pasted image the host would reject never gets queued in the first place.
 const maxAttachmentBytes = 10 << 20 // 10 MiB
 
-// attachmentDir is where pasted images are written, mirroring the bridge's
-// per-gateway namespacing under the OS temp dir.
+// attachmentDir is where staged files are written: the bridge's staging root,
+// namespaced for this gateway. The root comes from the bridge rather than a copy
+// of the path here, because the bridge refuses any file:// attachment from
+// outside it.
 func attachmentDir() string {
-	return filepath.Join(os.TempDir(), "herrscher-attachments", "terminal")
+	return filepath.Join(bridge.StagingRoot(), "terminal")
 }
 
 // saveClipboardImage writes clipboard image bytes to a fresh temp file and returns
@@ -36,21 +40,34 @@ func saveClipboardImage(data []byte, mime string, seq int) (Attachment, error) {
 	if int64(len(data)) > maxAttachmentBytes {
 		return Attachment{}, fmt.Errorf("pasted image exceeds %d MiB", maxAttachmentBytes>>20)
 	}
-	dir := attachmentDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return Attachment{}, err
-	}
 	name := fmt.Sprintf("paste-%d%s", seq, mimeExt(mime))
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	path, err := stage(name, data)
+	if err != nil {
 		return Attachment{}, err
 	}
 	return Attachment{Name: name, Path: path, Mime: mime, Size: int64(len(data))}, nil
 }
 
+// stage writes bytes into the staging dir under the given name and returns the
+// path. The host only accepts a file:// attachment from under this tree, so
+// staging is what makes a file nameable at all — and the modes are tight because
+// the tree lives in a world-writable temp dir.
+func stage(name string, data []byte) (string, error) {
+	dir := attachmentDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
 // attachLocalFile stages an existing local file for /attach, validating it is a
-// regular file within the size cap and resolving ~ and relative paths.
-func attachLocalFile(path string) (Attachment, error) {
+// regular file within the size cap and resolving ~ and relative paths. seq
+// disambiguates two attachments sharing a basename.
+func attachLocalFile(path string, seq int) (Attachment, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return Attachment{}, fmt.Errorf("usage: /attach <path>")
@@ -74,7 +91,20 @@ func attachLocalFile(path string) (Attachment, error) {
 	if err != nil {
 		abs = path
 	}
-	return Attachment{Name: filepath.Base(abs), Path: abs, Mime: mimeByExt(abs), Size: info.Size()}, nil
+	// Copy rather than point at the original. The host refuses a file:// path from
+	// outside the staging tree — "the gateway staged this" is something it checks,
+	// not something it takes our word for — and a copy also means the turn reads
+	// what was attached rather than whatever the file became while it queued.
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
+	}
+	name := filepath.Base(abs)
+	staged, err := stage(fmt.Sprintf("%d-%s", seq, name), data)
+	if err != nil {
+		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
+	}
+	return Attachment{Name: name, Path: staged, Mime: mimeByExt(abs), Size: info.Size()}, nil
 }
 
 func mimeExt(mime string) string {

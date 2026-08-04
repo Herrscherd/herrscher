@@ -11,14 +11,35 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
+// stagedFile writes a file inside the staging root — the only tree the bridge
+// accepts a file:// attachment from, so a gateway has to copy a file there before
+// it can name one. It returns the path with symlinks resolved, which is what
+// ResolveAttachments hands back.
+func stagedFile(t *testing.T, name, content string) string {
+	t.Helper()
+	if err := os.MkdirAll(StagingRoot(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := os.MkdirTemp(StagingRoot(), "test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	real, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return real
+}
+
 // TestResolveAttachmentsFilePassthrough verifies a staged file:// image is passed
 // through by path without any network fetch.
 func TestResolveAttachmentsFilePassthrough(t *testing.T) {
-	dir := t.TempDir()
-	img := filepath.Join(dir, "paste-0.png")
-	if err := os.WriteFile(img, []byte("PNG"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	img := stagedFile(t, "paste-0.png", "PNG")
 	m := contracts.Message{
 		ID: "1",
 		Attachments: []contracts.Attachment{
@@ -47,17 +68,52 @@ func TestResolveAttachmentsSkipsMissingFile(t *testing.T) {
 
 // TestResolveAttachmentsSkipsNonImageFile drops a file:// url that is not an image.
 func TestResolveAttachmentsSkipsNonImageFile(t *testing.T) {
-	dir := t.TempDir()
-	txt := filepath.Join(dir, "notes.txt")
-	if err := os.WriteFile(txt, []byte("hi"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	txt := stagedFile(t, "notes.txt", "hi")
 	m := contracts.Message{
 		ID:          "1",
 		Attachments: []contracts.Attachment{{Filename: "notes.txt", URL: "file://" + txt}},
 	}
 	if got := ResolveAttachments(context.Background(), nil, m, "sess", nil); len(got) != 0 {
 		t.Fatalf("non-image file must be skipped, got %v", got)
+	}
+}
+
+// TestResolveAttachmentsRejectsUnstagedFile confirms a file:// url naming a real
+// image outside the staging tree is refused: a gateway has to copy a file in
+// before it can name it, so a compromised one cannot read arbitrary local files
+// into the model context.
+func TestResolveAttachmentsRejectsUnstagedFile(t *testing.T) {
+	img := filepath.Join(t.TempDir(), "secret.png")
+	if err := os.WriteFile(img, []byte("PNG"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := contracts.Message{
+		ID:          "1",
+		Attachments: []contracts.Attachment{{Filename: "secret.png", URL: "file://" + img, ContentType: "image/png"}},
+	}
+	if got := ResolveAttachments(context.Background(), nil, m, "sess", nil); len(got) != 0 {
+		t.Fatalf("unstaged file must be refused, got %v", got)
+	}
+}
+
+// TestResolveAttachmentsRejectsSymlinkOutOfStaging confirms containment is checked
+// after symlinks resolve, so a link planted inside the staging tree cannot be used
+// to name a file outside it.
+func TestResolveAttachmentsRejectsSymlinkOutOfStaging(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "secret.png")
+	if err := os.WriteFile(outside, []byte("PNG"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Dir(stagedFile(t, "anchor", "x")) + "/link.png"
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+	m := contracts.Message{
+		ID:          "1",
+		Attachments: []contracts.Attachment{{Filename: "link.png", URL: "file://" + link, ContentType: "image/png"}},
+	}
+	if got := ResolveAttachments(context.Background(), nil, m, "sess", nil); len(got) != 0 {
+		t.Fatalf("symlink out of the staging tree must be refused, got %v", got)
 	}
 }
 
@@ -82,11 +138,7 @@ func TestResolveAttachmentsMixed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	dir := t.TempDir()
-	local := filepath.Join(dir, "local.png")
-	if err := os.WriteFile(local, []byte("LOCAL"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	local := stagedFile(t, "local.png", "LOCAL")
 	m := contracts.Message{
 		ID: "7",
 		Attachments: []contracts.Attachment{

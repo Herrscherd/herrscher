@@ -579,10 +579,11 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, budgeted bool) bool {
 }
 
 // turnTokens reads what an event says the running turn has spent so far. The
-// bridge stamps the backend's latest cumulative usage onto every rendered event,
-// so this is a total, not a per-event delta — the caller compares it to the
-// headroom directly instead of accumulating. A backend that reports no usage
-// leaves the counts at zero and never trips the guard.
+// bridge accumulates the backend's usage over the turn and stamps the running
+// totals onto every rendered event, so this is a total, not a per-event delta —
+// the caller compares it to the headroom directly instead of accumulating again.
+// A backend that reports no usage (codex, cursor) leaves the counts at zero and
+// never trips the guard: for those, caps stay boundary-only.
 func turnTokens(e contracts.Event) uint64 {
 	n := 0
 	if e.Tokens > 0 {

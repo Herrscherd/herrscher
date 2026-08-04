@@ -207,6 +207,60 @@ func TestBuildBackendForInjectsResolvedGatewayEnv(t *testing.T) {
 	}
 }
 
+// nativePlugin registers a single claude backend offering one native-routed
+// model, capturing the PluginConfig it is built with.
+func nativePlugin(t *testing.T, gotCfg *contracts.PluginConfig) {
+	t.Helper()
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{
+			Kind: "claude", Category: contracts.CategoryBackend,
+			Models: []contracts.ModelSpec{{
+				ID: "native-opus", Label: "Opus", Arg: "opus", Route: contracts.RouteNative,
+			}},
+		},
+		Backend: func(_ context.Context, cfg contracts.PluginConfig) (contracts.Backend, error) {
+			*gotCfg = cfg
+			return seedBackend{}, nil
+		},
+	})
+}
+
+// The catalog's Arg is the model the CLI must actually be told to run. Every
+// backend declares a "model" setting and plumbs cfg.Get("model") into its
+// options, so the setting — not the environment — is the authoritative path.
+// Without it the native route selects NO model at all, and the codex gateway
+// route runs codex's default model billed to our account.
+func TestBuildBackendForSetsModelSettingOnNativeRoute(t *testing.T) {
+	var cfg contracts.PluginConfig
+	nativePlugin(t, &cfg)
+
+	if _, err := BuildBackendFor(context.Background(), BackendRequest{
+		Cmd: "claude", ModelID: "native-opus",
+	}); err != nil {
+		t.Fatalf("BuildBackendFor: %v", err)
+	}
+	if got := cfg.Settings["model"]; got != "opus" {
+		t.Fatalf(`cfg.Settings["model"] = %q, want "opus" — the resolved model never reached the backend`, got)
+	}
+}
+
+func TestBuildBackendForSetsModelSettingOnGatewayRoute(t *testing.T) {
+	var cfg contracts.PluginConfig
+	gatewayPlugin(t, &cfg)
+
+	if _, err := BuildBackendFor(context.Background(), BackendRequest{
+		Cmd: "claude", ModelID: "gw-opus",
+	}); err != nil {
+		t.Fatalf("BuildBackendFor: %v", err)
+	}
+	if got := cfg.Settings["model"]; got != "opus" {
+		t.Fatalf(`cfg.Settings["model"] = %q, want "opus"`, got)
+	}
+}
+
 // fakeRemoteResolver stands in for a configured HERRSCHER_REMOTE=backend.
 type fakeRemoteResolver struct{ called bool }
 

@@ -21,7 +21,11 @@ func gatewayEnvFor(vendor string, creds contracts.GatewayCreds, modelArg string)
 		return map[string]string{
 			contracts.EnvAnthropicBaseURL:   creds.BaseURL(),
 			contracts.EnvAnthropicAuthToken: creds.Token(),
-			"ANTHROPIC_MODEL":               modelArg,
+			// Belt and braces only: an explicit --model flag beats ANTHROPIC_MODEL
+			// in the claude CLI's precedence order, and BuildBackendFor always
+			// passes the same Arg as the "model" plugin setting, which is the flag.
+			// This is the default for a spawn that somehow loses the setting.
+			"ANTHROPIC_MODEL": modelArg,
 		}
 	case "codex":
 		// OpenAI protocol. The codex CLI additionally requires a provider

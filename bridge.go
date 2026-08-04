@@ -53,7 +53,9 @@ func runBridge(ctx context.Context, args []string) error {
 		} else if be != nil {
 			return be, nil
 		}
-		return host.BuildBackend(ctx, *vendor, *cmdStr, *backend, "", *resume)
+		return host.BuildBackendFor(ctx, host.BackendRequest{
+			Vendor: *vendor, Cmd: *cmdStr, Kind: *backend, Resume: *resume,
+		})
 	}
 
 	mem := buildMemory(ctx, log)

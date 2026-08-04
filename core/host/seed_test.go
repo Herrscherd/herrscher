@@ -56,7 +56,7 @@ func TestSelectBackendVendorPrecedence(t *testing.T) {
 	}
 }
 
-func TestBuildBackendSelectsByVendor(t *testing.T) {
+func TestBuildBackendForSelectsByVendor(t *testing.T) {
 	saved := contracts.Default
 	t.Cleanup(func() { contracts.Default = saved })
 	contracts.Default = contracts.Registry{}
@@ -74,8 +74,8 @@ func TestBuildBackendSelectsByVendor(t *testing.T) {
 	contracts.Default.Register(makePlugin("claude"))
 	contracts.Default.Register(makePlugin("codex"))
 
-	if _, err := BuildBackend(context.Background(), "codex", "codex --model gpt-5.6", "", "", ""); err != nil {
-		t.Fatalf("BuildBackend: %v", err)
+	if _, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "codex", Cmd: "codex --model gpt-5.6"}); err != nil {
+		t.Fatalf("BuildBackendFor: %v", err)
 	}
 	if built != "codex" {
 		t.Fatalf("built %q, want codex", built)

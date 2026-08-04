@@ -39,10 +39,10 @@ func TestBudgetReason(t *testing.T) {
 	}
 }
 
-// TestSessionBudgetGate_CheckAfterTurn proves the concrete gate re-derives usage
+// TestSessionBudgetGate_CheckTrips proves the concrete gate re-derives usage
 // from the transcript fold (single source of truth) and persists PausedReason
 // when a cap trips, so a paused session comes back paused across reloads.
-func TestSessionBudgetGate_CheckAfterTurn(t *testing.T) {
+func TestSessionBudgetGate_CheckTrips(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{{Name: "game", CostCap: 5}}
 	if err := state.AppendTranscript(state.TranscriptPath(h.PartDir(), "game"), state.TranscriptEntry{
@@ -52,7 +52,7 @@ func TestSessionBudgetGate_CheckAfterTurn(t *testing.T) {
 	}
 
 	gate := h.BudgetGate()
-	reason := gate.CheckAfterTurn("game")
+	reason, _, _ := gate.Check("game")
 	if reason != "cost" {
 		t.Fatalf("reason = %q, want %q", reason, "cost")
 	}
@@ -62,11 +62,11 @@ func TestSessionBudgetGate_CheckAfterTurn(t *testing.T) {
 	}
 }
 
-// TestSessionBudgetGate_TokenHeadroom proves the headroom the host watches
+// TestSessionBudgetGate_CheckHeadroom proves the headroom the host watches
 // mid-turn is what the cap leaves after the transcript's already-spent tokens,
 // that the tightest of the session and cohort caps wins, and that a session
 // with no token cap reports no cap at all.
-func TestSessionBudgetGate_TokenHeadroom(t *testing.T) {
+func TestSessionBudgetGate_CheckHeadroom(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{
 		{Name: "parent", TokenCap: 1000, CohortTokenCap: 1200},
@@ -89,22 +89,22 @@ func TestSessionBudgetGate_TokenHeadroom(t *testing.T) {
 
 	// child spent 500 of its own 1000 cap; the cohort spent 800 of 1200. The
 	// cohort's 400 is tighter than the session's 500, so it is what the turn gets.
-	got, capped := gate.TokenHeadroom("child")
+	_, got, capped := gate.Check("child")
 	if !capped || got != 400 {
-		t.Fatalf("TokenHeadroom(child) = (%d, %v), want (400, true)", got, capped)
+		t.Fatalf("Check(child) headroom = (%d, %v), want (400, true)", got, capped)
 	}
-	if got, capped := gate.TokenHeadroom("free"); capped || got != 0 {
-		t.Fatalf("TokenHeadroom(free) = (%d, %v), want (0, false)", got, capped)
+	if _, got, capped := gate.Check("free"); capped || got != 0 {
+		t.Fatalf("Check(free) headroom = (%d, %v), want (0, false)", got, capped)
 	}
-	if got, capped := gate.TokenHeadroom("ghost"); capped || got != 0 {
-		t.Fatalf("TokenHeadroom of an unknown session = (%d, %v), want (0, false)", got, capped)
+	if _, got, capped := gate.Check("ghost"); capped || got != 0 {
+		t.Fatalf("Check of an unknown session = (%d, %v), want (0, false)", got, capped)
 	}
 }
 
-// TestSessionBudgetGate_TokenHeadroomFloorsAtZero proves a session already past
-// its cap reports no headroom rather than wrapping the unsigned subtraction into
-// an enormous one.
-func TestSessionBudgetGate_TokenHeadroomFloorsAtZero(t *testing.T) {
+// TestSessionBudgetGate_HeadroomFloorsAtZero proves a session already past its
+// cap reports no headroom rather than wrapping the unsigned subtraction into an
+// enormous one.
+func TestSessionBudgetGate_HeadroomFloorsAtZero(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{{Name: "spent", TokenCap: 100}}
 	if err := state.AppendTranscript(state.TranscriptPath(h.PartDir(), "spent"), state.TranscriptEntry{
@@ -112,9 +112,9 @@ func TestSessionBudgetGate_TokenHeadroomFloorsAtZero(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	got, capped := h.BudgetGate().TokenHeadroom("spent")
+	_, got, capped := h.BudgetGate().Check("spent")
 	if !capped || got != 0 {
-		t.Fatalf("TokenHeadroom over cap = (%d, %v), want (0, true)", got, capped)
+		t.Fatalf("headroom over cap = (%d, %v), want (0, true)", got, capped)
 	}
 }
 
@@ -130,7 +130,7 @@ func TestSessionBudgetGate_UncappedNeverTrips(t *testing.T) {
 	}
 
 	gate := h.BudgetGate()
-	reason := gate.CheckAfterTurn("free")
+	reason, _, _ := gate.Check("free")
 	if reason != "" {
 		t.Fatalf("reason = %q, want empty", reason)
 	}

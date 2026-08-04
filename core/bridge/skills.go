@@ -23,11 +23,17 @@ func skillRoots(cwd string, extra []string) []string {
 // newSkillEngine builds the per-session skill engine, or returns nil when skills
 // are disabled: the backend loads skills natively (contracts.SkillNative), or
 // config turns the feature off. A nil engine means the hub injects nothing.
-func newSkillEngine(resp contracts.Backend) *skills.Engine {
-	if n, ok := resp.(contracts.SkillNative); ok && n.NativeSkills() {
+func newSkillEngine(backend contracts.Backend) *skills.Engine {
+	if n, ok := backend.(contracts.SkillNative); ok && n.NativeSkills() {
 		return nil
 	}
-	cfg, _ := config.Load(config.DefaultPath())
+	// A missing config is not an error (Load returns the zero Config), so an
+	// error here means the file is there but malformed — and silently ignoring it
+	// would ignore a skills.enabled:false the operator meant to be honored.
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		logger.Warn("config unreadable; falling back to default skill roots", "err", err)
+	}
 	var extra []string
 	if cfg.Skills != nil {
 		if cfg.Skills.Enabled != nil && !*cfg.Skills.Enabled {

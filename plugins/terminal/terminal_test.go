@@ -220,6 +220,14 @@ func (f *fakeSessionControl) Interrupt(name string) bool {
 	return true
 }
 
+// The terminal drives sessions by dispatch, not by pushing inbound messages, so
+// the push half of the seam is inert here — present only to satisfy the port.
+func (f *fakeSessionControl) Submit(string, contracts.Inbound) bool { return true }
+func (f *fakeSessionControl) Pick(string, string) bool              { return true }
+func (f *fakeSessionControl) Repos(context.Context) ([]contracts.RepoRef, error) {
+	return nil, nil
+}
+
 func TestTerminalForwardsScrollbackAndResume(t *testing.T) {
 	tm := New()
 	fake := &fakeSessionControl{scrollback: []contracts.ScrollbackLine{{Role: "user", Text: "hi"}}}

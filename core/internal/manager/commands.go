@@ -10,6 +10,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 		contracts.New("session", "create").
 			Help("create a session: a bridged channel + isolated worktree + backend").
 			Param("name", "session name (slugified to a safe slug)", true).
+			Param("channel_id", "adopt this existing conversation instead of creating a channel (no home needed)", false).
 			Param("project", "workspace sub-dir the backend works on", false).
 			Param("clone", "remote repo (owner/name) to clone into the workspace first", false).
 			Param("cmd", "bridged command (defaults to the configured cmd)", false).

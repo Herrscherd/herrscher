@@ -62,6 +62,62 @@ func TestSessionBudgetGate_CheckAfterTurn(t *testing.T) {
 	}
 }
 
+// TestSessionBudgetGate_TokenHeadroom proves the headroom the host watches
+// mid-turn is what the cap leaves after the transcript's already-spent tokens,
+// that the tightest of the session and cohort caps wins, and that a session
+// with no token cap reports no cap at all.
+func TestSessionBudgetGate_TokenHeadroom(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	st.Sessions = []state.Session{
+		{Name: "parent", TokenCap: 1000, CohortTokenCap: 1200},
+		{Name: "child", Parent: "parent", TokenCap: 1000, CohortTokenCap: 1200},
+		{Name: "free"},
+	}
+	for _, s := range []struct {
+		name string
+		in   int
+		out  int
+	}{{"parent", 200, 100}, {"child", 400, 100}} {
+		if err := state.AppendTranscript(state.TranscriptPath(h.PartDir(), s.name), state.TranscriptEntry{
+			Ts: "2026-08-04T00:00:00Z", Role: "assistant", Text: "done", TokensIn: s.in, TokensOut: s.out,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	gate := h.BudgetGate()
+
+	// child spent 500 of its own 1000 cap; the cohort spent 800 of 1200. The
+	// cohort's 400 is tighter than the session's 500, so it is what the turn gets.
+	got, capped := gate.TokenHeadroom("child")
+	if !capped || got != 400 {
+		t.Fatalf("TokenHeadroom(child) = (%d, %v), want (400, true)", got, capped)
+	}
+	if got, capped := gate.TokenHeadroom("free"); capped || got != 0 {
+		t.Fatalf("TokenHeadroom(free) = (%d, %v), want (0, false)", got, capped)
+	}
+	if got, capped := gate.TokenHeadroom("ghost"); capped || got != 0 {
+		t.Fatalf("TokenHeadroom of an unknown session = (%d, %v), want (0, false)", got, capped)
+	}
+}
+
+// TestSessionBudgetGate_TokenHeadroomFloorsAtZero proves a session already past
+// its cap reports no headroom rather than wrapping the unsigned subtraction into
+// an enormous one.
+func TestSessionBudgetGate_TokenHeadroomFloorsAtZero(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	st.Sessions = []state.Session{{Name: "spent", TokenCap: 100}}
+	if err := state.AppendTranscript(state.TranscriptPath(h.PartDir(), "spent"), state.TranscriptEntry{
+		Ts: "2026-08-04T00:00:00Z", Role: "assistant", Text: "done", TokensIn: 500, TokensOut: 500,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, capped := h.BudgetGate().TokenHeadroom("spent")
+	if !capped || got != 0 {
+		t.Fatalf("TokenHeadroom over cap = (%d, %v), want (0, true)", got, capped)
+	}
+}
+
 // TestSessionBudgetGate_UncappedNeverTrips proves a session with no caps
 // configured never pauses and never gets a PausedReason written.
 func TestSessionBudgetGate_UncappedNeverTrips(t *testing.T) {

@@ -259,6 +259,7 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 	// policy-excluded model must fail early, with a message that names it,
 	// rather than on the first turn.
 	var spawnEnv map[string]string
+	var modelArg string
 	if req.ModelID != "" {
 		entry, err := LookupModel(plugins, ResolvePolicy(os.Getenv), req.ModelID)
 		if err != nil {
@@ -270,6 +271,7 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 		if spawnEnv, err = spawnEnvFor(entry, os.Getenv); err != nil {
 			return nil, err
 		}
+		modelArg = entry.Arg
 	}
 
 	if backend, err := newBackendResolver().Backend(ctx, plugins, desired); err != nil {
@@ -306,6 +308,15 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 	}
 	if req.Resume != "" {
 		cfg.Settings["resume"] = req.Resume
+	}
+	// The catalog's Arg is what actually selects the model: every backend
+	// declares a "model" setting and passes cfg.Get("model") to its CLI as an
+	// explicit flag. Without this the native route selects no model at all and
+	// the codex gateway route runs codex's default model — billed to us.
+	// Only set when a model was resolved, so a legacy session keeps whatever
+	// the backend's own env binding (CLAUDE_MODEL, …) resolved.
+	if modelArg != "" {
+		cfg.Settings["model"] = modelArg
 	}
 	if len(spawnEnv) > 0 {
 		cfg.Settings["env"] = contracts.EncodeEnvSetting(spawnEnv)

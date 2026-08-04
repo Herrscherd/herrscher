@@ -37,8 +37,8 @@ func TestRouteStepDefaultsToTheInternalBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got[envRoutePolicy] != string(contracts.PolicyAll) {
-		t.Fatalf("policy = %q, want all", got[envRoutePolicy])
+	if got[host.EnvRoutePolicy] != string(contracts.PolicyAll) {
+		t.Fatalf("policy = %q, want all", got[host.EnvRoutePolicy])
 	}
 	if _, asked := got[host.EnvGatewayToken]; asked {
 		t.Fatal("asked for gateway credentials on the internal build")
@@ -82,15 +82,15 @@ func TestRouteStepWritesTheGatewayPairAndModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got[envRoutePolicy] != string(contracts.PolicyGatewayOnly) {
-		t.Fatalf("policy = %q", got[envRoutePolicy])
+	if got[host.EnvRoutePolicy] != string(contracts.PolicyGatewayOnly) {
+		t.Fatalf("policy = %q", got[host.EnvRoutePolicy])
 	}
 	if got[host.EnvGatewayURL] != "https://gw.example" || got[host.EnvGatewayToken] != "secret" {
 		t.Fatalf("gateway pair not persisted: %v", got)
 	}
 	// The native model must not be offered here, so index 1 is a gateway one.
-	if got[envDefaultModel] != "gw-opus" {
-		t.Fatalf("default model = %q, want the first GATEWAY model", got[envDefaultModel])
+	if got[host.EnvDefaultModel] != "gw-opus" {
+		t.Fatalf("default model = %q, want the first GATEWAY model", got[host.EnvDefaultModel])
 	}
 }
 
@@ -112,7 +112,7 @@ func TestRouteStepSkipsTheModelQuestionInComposeMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, asked := got[envDefaultModel]; asked {
+	if _, asked := got[host.EnvDefaultModel]; asked {
 		t.Fatal("offered a default model from a stack that is about to be replaced")
 	}
 }
@@ -124,9 +124,29 @@ func TestRouteStepClearsTheDefaultModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, present := got[envDefaultModel]
+	v, present := got[host.EnvDefaultModel]
 	if !present || v != "" {
 		t.Fatalf("default model = %q present=%v, want an explicit empty value", v, present)
+	}
+}
+
+// The wizard must render the catalog in the order it is given — the same
+// (vendor, id) order `models list` and the app selector show. Re-sorting here
+// would make "pick 2" mean two different models on two surfaces.
+func TestRouteStepKeepsTheCatalogOrder(t *testing.T) {
+	// Vendor-grouped, so a sort by id alone would reorder these.
+	grouped := func(contracts.RoutePolicy) ([]host.CatalogEntry, error) {
+		return []host.CatalogEntry{
+			{Vendor: "claude", ModelSpec: contracts.ModelSpec{ID: "z-claude"}},
+			{Vendor: "codex", ModelSpec: contracts.ModelSpec{ID: "a-codex"}},
+		}, nil
+	}
+	got, err := routeStep(style{}, answers("1", "2"), grouped, routeCurrent{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[host.EnvDefaultModel] != "a-codex" {
+		t.Fatalf("entry 2 = %q, want the catalog's second entry", got[host.EnvDefaultModel])
 	}
 }
 

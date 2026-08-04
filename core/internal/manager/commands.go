@@ -60,7 +60,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("name", "session name", true).
 			Param("vendor", "backend vendor", true).
 			Param("cmd", "backend invocation (carries model+effort)", true).
-			Param("model", "catalog model id (see `herrscher models list`)", false).
+			Param("model", "catalog model id (see `herrscher models list`); omit to keep the session's current model, pass empty to clear it", false).
 			Param("handoff", "none|full|summary context handoff", false).
 			Do(h.sessionSwitchRun),
 		contracts.New("session", "set-budget").

@@ -54,6 +54,12 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	}
 	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
 	hdl.SetSeeder(Seed) // host.Seed: live-session injection for `session switch` handoff
+	// Reject an unknown/policy-excluded --model at create/switch rather than on
+	// the first spawn. Uses the same lookup + policy the spawn choke point does.
+	hdl.SetModelValidator(func(modelID string) error {
+		_, err := LookupModel(contracts.Default.Backends(), ResolvePolicy(os.Getenv), modelID)
+		return err
+	})
 	seedCoord := &coordinatorSlot{}
 
 	reg := &cli.Registry{}

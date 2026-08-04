@@ -395,6 +395,11 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	agentName, _ := in.Lookup("agent")
 	vendor, _ := in.Lookup("vendor")
 	modelID, _ := in.Lookup("model")
+	// Validate at creation: an unknown or policy-excluded id persisted here would
+	// only surface much later, as an opaque spawn failure on the first turn.
+	if err := h.checkModel(modelID); err != nil {
+		return "", err
+	}
 	parent, _ := in.Lookup("parent")
 	// P1 learning (opt-in): extractor names a registered curation extractor; the
 	// journal/cadence feed its Consolidate. Persisted on the session and threaded
@@ -658,7 +663,6 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	}
 	vendor := in.Get("vendor")
 	cmd := in.Get("cmd")
-	modelID := in.Get("model")
 	handoff := in.Get("handoff")
 	if handoff == "" {
 		handoff = "none"
@@ -666,6 +670,18 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	prior, exists := h.st.FindSession(name)
 	if !exists {
 		return "", fmt.Errorf("no session %q", name)
+	}
+	// An ABSENT --model keeps the session's current model; only an explicitly
+	// supplied value retargets it (and an explicit empty value clears it back to
+	// the legacy cmd-carries-the-model path). Re-targeting just --cmd must not
+	// silently drop a gateway session off the routed path — that would degrade
+	// away from the safe direction.
+	modelID := prior.ModelID
+	if v, supplied := in.Lookup("model"); supplied {
+		if err := h.checkModel(v); err != nil {
+			return "", err
+		}
+		modelID = v
 	}
 	// Capture the prior backend so we can roll back if the restart fails: rolling
 	// back to the old vendor makes the old resume token valid again.

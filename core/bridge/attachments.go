@@ -98,9 +98,11 @@ func attachmentDir(session string) string {
 // on local disk — e.g. the terminal TUI's clipboard paste); every other (https
 // CDN) attachment is downloaded through the SSRF allowlist. Unsupported,
 // oversized, missing, off-allowlist, and beyond-cap attachments are skipped so a
-// turn is never lost over a file. Order is preserved; at most
-// maxAttachmentsPerMessage files are attempted (a candidate that fails to resolve
-// still counts against the cap).
+// turn is never lost over a file — but every skip is logged with its reason: an
+// attachment that vanishes without a word is how an empty allowlist went
+// unnoticed long enough to drop every screenshot ever sent. Order is preserved;
+// at most maxAttachmentsPerMessage files are attempted (a candidate that fails to
+// resolve still counts against the cap).
 //
 // It is the host-side entry point (the turnloop has the Message; the bridge only
 // sees Events), producing the paths carried in Event.Attachments.
@@ -122,30 +124,46 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 	out := make([]string, 0, maxAttachmentsPerMessage)
 	n := 0
 	for i, a := range m.Attachments {
-		if !supported(a) || (a.Size > 0 && a.Size > maxAttachmentBytes) {
+		if !supported(a) {
+			logger.Warn("attachment skipped: not a type the model can be handed",
+				"file", a.Filename, "type", a.ContentType)
+			continue
+		}
+		if a.Size > 0 && a.Size > maxAttachmentBytes {
+			logger.Warn("attachment skipped: bigger than the cap",
+				"file", a.Filename, "bytes", a.Size, "cap", maxAttachmentBytes)
 			continue
 		}
 		if n == maxAttachmentsPerMessage {
+			logger.Warn("attachments past the per-message cap were skipped",
+				"cap", maxAttachmentsPerMessage, "first_skipped", a.Filename)
 			break
 		}
 		n++
 		if strings.HasPrefix(a.URL, "file://") {
-			if p, err := localAttachmentPath(a); err == nil {
-				out = append(out, p)
+			p, err := localAttachmentPath(a)
+			if err != nil {
+				logger.Warn("attachment skipped", "file", a.Filename, "err", err)
+				continue
 			}
+			out = append(out, p)
 			continue
 		}
 		if !mkdirDone {
 			// 0700: a downloaded attachment is one operator's private material, and
 			// the staging tree lives in a world-writable temp dir.
 			if err := os.MkdirAll(dir, 0o700); err != nil {
+				logger.Warn("no attachment can be staged for this turn", "dir", dir, "err", err)
 				continue
 			}
 			mkdirDone = true
 		}
-		if p, err := fetchOne(ctx, client, a, m.ID, i, dir, hosts); err == nil {
-			out = append(out, p)
+		p, err := fetchOne(ctx, client, a, m.ID, i, dir, hosts)
+		if err != nil {
+			logger.Warn("attachment skipped", "file", a.Filename, "err", err)
+			continue
 		}
+		out = append(out, p)
 	}
 	return out
 }
@@ -361,13 +379,24 @@ func discardPartial(dest string, err error) (string, error) {
 func validateCDNURL(raw string, hosts allowedHosts) error {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("attachment url %q: %w", raw, err)
+		return fmt.Errorf("attachment url %q: %w", unsigned(raw), err)
 	}
 	// A host name is case-insensitive; the allowlist is keyed lowercase.
 	if u.Scheme != "https" || !hosts[strings.ToLower(u.Hostname())] {
-		return fmt.Errorf("attachment url %q: not an allowed CDN https url", raw)
+		return fmt.Errorf("attachment url %q: not an allowed CDN https url", unsigned(raw))
 	}
 	return nil
+}
+
+// unsigned drops a url's query before it goes into an error. A CDN commonly
+// signs its links (`…/shot.png?ex=…&is=…&hm=…`) and that signature hands the
+// file to whoever holds it — these errors are logged, and a log line is read by
+// more people and kept longer than the link was ever meant to live.
+func unsigned(raw string) string {
+	if i := strings.IndexByte(raw, '?'); i >= 0 {
+		return raw[:i]
+	}
+	return raw
 }
 
 // sanitize keeps a path component to a safe, flat token so a crafted filename or

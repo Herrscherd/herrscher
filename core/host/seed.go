@@ -221,15 +221,46 @@ func ApplyOrchestratorScope(cfg *contracts.PluginConfig, session, project, agent
 	}
 }
 
-// BuildBackend selects and constructs a backend by vendor. A remote resolver
-// backend wins when configured; otherwise the matching registered plugin is
-// built with the invocation, backend kind, and working directory settings.
-func BuildBackend(ctx context.Context, vendor, cmd, kind, dir, resume string) (contracts.Backend, error) {
-	desired := vendor
+// BackendRequest is everything building a backend needs. It used to be six
+// positional parameters; routing would have added a seventh, which made call
+// sites unreadable.
+type BackendRequest struct {
+	Vendor  string
+	Cmd     string
+	Kind    string
+	Dir     string
+	Resume  string
+	ModelID string // empty = session predates the catalog, legacy path
+}
+
+// BuildBackendFor selects and constructs a backend. A remote resolver backend
+// wins when configured; otherwise the matching registered plugin is built
+// with the invocation, kind, working directory — and, if a ModelID is
+// supplied, the environment variables its route requires.
+func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend, error) {
+	desired := req.Vendor
 	if desired == "" {
 		desired = os.Getenv("HERRSCHER_BACKEND")
 	}
 	plugins := contracts.Default.Backends()
+
+	// Resolve the model BEFORE touching the remote resolver: an unknown or
+	// policy-excluded model must fail early, with a message that names it,
+	// rather than on the first turn.
+	var spawnEnv map[string]string
+	if req.ModelID != "" {
+		entry, err := LookupModel(plugins, ResolvePolicy(os.Getenv), req.ModelID)
+		if err != nil {
+			return nil, err
+		}
+		if desired == "" {
+			desired = entry.Vendor
+		}
+		if spawnEnv, err = spawnEnvFor(entry, os.Getenv); err != nil {
+			return nil, err
+		}
+	}
+
 	resolver := NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
 	if backend, err := resolver.Backend(ctx, plugins, desired); err != nil {
 		return nil, err
@@ -247,17 +278,20 @@ func BuildBackend(ctx context.Context, vendor, cmd, kind, dir, resume string) (c
 	if cfg.Settings == nil {
 		cfg.Settings = map[string]string{}
 	}
-	if cmd != "" {
-		cfg.Settings["cmd"] = cmd
+	if req.Cmd != "" {
+		cfg.Settings["cmd"] = req.Cmd
 	}
-	if kind != "" {
-		cfg.Settings["kind"] = kind
+	if req.Kind != "" {
+		cfg.Settings["kind"] = req.Kind
 	}
-	if dir != "" {
-		cfg.Settings["dir"] = dir
+	if req.Dir != "" {
+		cfg.Settings["dir"] = req.Dir
 	}
-	if resume != "" {
-		cfg.Settings["resume"] = resume
+	if req.Resume != "" {
+		cfg.Settings["resume"] = req.Resume
+	}
+	if len(spawnEnv) > 0 {
+		cfg.Settings["env"] = contracts.EncodeEnvSetting(spawnEnv)
 	}
 	return plugin.Backend(ctx, cfg)
 }
@@ -267,7 +301,14 @@ func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend,
 	if dir == "" {
 		dir = sess.Worktree
 	}
-	return BuildBackend(ctx, sess.Vendor, sess.Cmd, sess.Backend, resolveBackendDir(dir), sess.ResumeToken)
+	return BuildBackendFor(ctx, BackendRequest{
+		Vendor:  sess.Vendor,
+		Cmd:     sess.Cmd,
+		Kind:    sess.Backend,
+		Dir:     resolveBackendDir(dir),
+		Resume:  sess.ResumeToken,
+		ModelID: "",
+	})
 }
 
 // resolveBackendDir upgrades persisted relative session directories at the

@@ -25,17 +25,17 @@ type Session struct {
 	ChannelID   string `json:"channelID"`
 	Type        string `json:"type"` // "text" | "forum"
 	Cmd         string `json:"cmd"`
-	Backend     string `json:"backend,omitempty"`  // bridge backend ("" or "stream" = stream-json default; "oneshot" = per-message cmd)
-	Vendor      string `json:"vendor,omitempty"`   // agent backend vendor ("claude", "codex", "cursor")
+	Backend     string `json:"backend,omitempty"` // bridge backend ("" or "stream" = stream-json default; "oneshot" = per-message cmd)
+	Vendor      string `json:"vendor,omitempty"`  // agent backend vendor ("claude", "codex", "cursor")
 	// ModelID is the catalog identifier of the chosen model. Unlike Cmd, which is
 	// an opaque invocation string, it lets a resume look up the model's ROUTE —
 	// so we know whether gateway credentials need to be re-injected. Empty for
 	// sessions created before the catalog existed.
-	ModelID string `json:"modelId,omitempty"`
-	Worktree    string `json:"worktree,omitempty"` // abs path; empty for a shared session
-	Dir         string `json:"dir,omitempty"`      // bridge working dir; empty = inherit launcher cwd (pwd fallback)
-	Project     string `json:"project,omitempty"`  // workspace sub-dir the session started from
-	Agent       string `json:"agent,omitempty"`    // durable agent this session was provisioned from ("" = none)
+	ModelID  string `json:"modelId,omitempty"`
+	Worktree string `json:"worktree,omitempty"` // abs path; empty for a shared session
+	Dir      string `json:"dir,omitempty"`      // bridge working dir; empty = inherit launcher cwd (pwd fallback)
+	Project  string `json:"project,omitempty"`  // workspace sub-dir the session started from
+	Agent    string `json:"agent,omitempty"`    // durable agent this session was provisioned from ("" = none)
 
 	// ResumeToken is the backend's opaque resume id, folded in from each turn's
 	// reply so a restart can resume the conversation with --resume. Empty =

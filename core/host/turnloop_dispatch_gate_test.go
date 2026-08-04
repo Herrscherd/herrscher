@@ -10,19 +10,16 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// fixedGate is a test-local fake budgetGate: CheckAfterTurn always returns a
-// fixed reason, simulating a session already over budget before the next turn is
-// dispatched, and TokenHeadroom returns a fixed headroom (capped=false by
-// default, i.e. no token cap configured).
+// fixedGate is a test-local fake budgetGate: it always answers the same reason
+// (non-empty = a session already over budget before the next turn is dispatched)
+// and the same headroom (capped=false by default, i.e. no token cap configured).
 type fixedGate struct {
 	reason   string
 	headroom uint64
 	capped   bool
 }
 
-func (g fixedGate) CheckAfterTurn(string) string { return g.reason }
-
-func (g fixedGate) TokenHeadroom(string) (uint64, bool) { return g.headroom, g.capped }
+func (g fixedGate) Check(string) (string, uint64, bool) { return g.reason, g.headroom, g.capped }
 
 // TestDispatchRefusedWhilePaused proves the dispatch point — not just the
 // post-turn check — refuses to open a new turn when the gate reports the

@@ -44,7 +44,7 @@ type SessionBudgetGate struct {
 
 // BudgetGate returns a gate bound to this handler's session store + transcript
 // dir. The returned *SessionBudgetGate satisfies host's (private) budgetGate
-// interface structurally via CheckAfterTurn and TokenHeadroom.
+// interface structurally via Check.
 func (h *Handler) BudgetGate() *SessionBudgetGate { return &SessionBudgetGate{h: h} }
 
 // usageFor folds one session's transcript into (cost, tokens). Every budget
@@ -59,49 +59,40 @@ func (g *SessionBudgetGate) usageFor(s state.Session) (float64, uint64) {
 	return u.Cost, uint64(u.TokensIn + u.TokensOut)
 }
 
-// TokenHeadroom reports how many tokens the session may still spend before its
-// tightest token cap trips, and whether a token cap applies at all. The host
-// reads it once at turn start and watches the turn's live counter against it, so
-// a single runaway turn is cut mid-flight instead of only being caught at a
-// boundary it has already blown past. Nothing is persisted here: CheckAfterTurn
-// remains the only writer of PausedReason, and it runs at the end of the very
-// turn this headroom interrupts.
-//
-// Cost has no equivalent: a backend reports cost only in its terminal result
-// event, so there is no mid-turn number to compare a cost cap against.
-func (g *SessionBudgetGate) TokenHeadroom(session string) (uint64, bool) {
-	sess, ok := g.h.st.FindSession(session)
-	if !ok || (sess.TokenCap == 0 && sess.CohortTokenCap == 0) {
-		return 0, false
-	}
-	headroom := ^uint64(0)
-	if sess.TokenCap > 0 {
-		_, spent := g.usageFor(sess)
-		headroom = min(headroom, remaining(sess.TokenCap, spent))
-	}
-	if sess.CohortTokenCap > 0 {
-		_, spent := cohortTotals(sess, g.h.st.SnapshotSessions(), g.usageFor)
-		headroom = min(headroom, remaining(sess.CohortTokenCap, spent))
-	}
-	return headroom, true
-}
-
-// CheckAfterTurn returns the reason the session must pause after the current
-// turn ("" = continue). On a trip it persists PausedReason so the session comes
+// Check answers both budget questions from one transcript fold: the reason the
+// session must pause ("" = it may run), and — for the turn about to start — how
+// many tokens it may spend before a token cap trips, with capped false when no
+// token cap applies. On a trip it persists PausedReason so the session comes
 // back paused across reloads. Reason vocabulary: cost|tokens|cohort_cost|cohort_tokens.
-func (g *SessionBudgetGate) CheckAfterTurn(session string) string {
+//
+// The headroom is what the host watches the live counter against, so a single
+// runaway turn is cut mid-flight instead of only being caught at a boundary it
+// has already blown past. Cost has no equivalent: a backend reports cost only in
+// its terminal result event, so there is no mid-turn number to compare a cost
+// cap against.
+func (g *SessionBudgetGate) Check(session string) (reason string, headroom uint64, capped bool) {
 	h := g.h
 	sess, ok := h.st.FindSession(session)
 	if !ok {
-		return ""
+		return "", 0, false
 	}
 	sc, stk := g.usageFor(sess)
 	cc, ctk := cohortTotals(sess, h.st.SnapshotSessions(), g.usageFor)
-	reason := budgetReason(sc, stk, sess.CostCap, sess.TokenCap, cc, ctk, sess.CohortCostCap, sess.CohortTokenCap)
+	reason = budgetReason(sc, stk, sess.CostCap, sess.TokenCap, cc, ctk, sess.CohortCostCap, sess.CohortTokenCap)
 	if reason != "" {
 		_ = h.st.SetPausedReason(session, reason)
 	}
-	return reason
+	headroom = ^uint64(0)
+	if sess.TokenCap > 0 {
+		headroom, capped = min(headroom, remaining(sess.TokenCap, stk)), true
+	}
+	if sess.CohortTokenCap > 0 {
+		headroom, capped = min(headroom, remaining(sess.CohortTokenCap, ctk)), true
+	}
+	if !capped {
+		headroom = 0
+	}
+	return reason, headroom, capped
 }
 
 // cohortMembers returns every session in the parent forest that target belongs

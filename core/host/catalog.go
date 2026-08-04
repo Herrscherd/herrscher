@@ -66,7 +66,13 @@ func LookupModel(plugins []contracts.Plugin, policy contracts.RoutePolicy, model
 			return e, nil
 		}
 	}
-	return CatalogEntry{}, fmt.Errorf("unknown model %q (not offered under route policy %q)", modelID, policy)
+	// PolicyAll is the zero value (""), which would render as an empty quoted
+	// string in an error the user now sees at `session create` time.
+	name := string(policy)
+	if name == "" {
+		name = "all"
+	}
+	return CatalogEntry{}, fmt.Errorf("unknown model %q (not offered under route policy %q)", modelID, name)
 }
 
 // ResolvePolicy reads the route policy from the environment. Missing or

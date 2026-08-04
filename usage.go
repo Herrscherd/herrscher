@@ -52,6 +52,7 @@ func usage() {
 			row("session <create|close|list|who>", "bridged channel + worktree + backend"),
 			row("agent   <create|list>", "durable companion agents (persona/MCP)"),
 			row("memory  <locate|forget|record>", "inspect/edit the memory graph"),
+			row("models  list", "list the models the compiled backends offer"),
 		),
 		"",
 		group("DAEMON & SERVICE",

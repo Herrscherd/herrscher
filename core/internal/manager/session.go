@@ -738,7 +738,7 @@ func (h *Handler) injectSeed(ctx context.Context, name, task string) bool {
 // and the session is down.
 func (h *Handler) rollbackSwitch(name, oldVendor, oldCmd, oldModelID, oldToken string) error {
 	h.st.SetBackendTarget(name, oldVendor, oldCmd, oldModelID) // also clears the token
-	_ = h.st.SetResumeToken(name, oldToken)        // restore it
+	_ = h.st.SetResumeToken(name, oldToken)                    // restore it
 	sess, _ := h.st.FindSession(name)
 	return h.sup.Restart(sess)
 }

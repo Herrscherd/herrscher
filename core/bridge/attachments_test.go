@@ -157,6 +157,8 @@ func TestValidateCDNURL(t *testing.T) {
 	ok := []string{
 		"https://cdn.example.com/attachments/1/2/a.png",
 		"https://media.example.com/attachments/1/2/a.png",
+		// A host name is case-insensitive, and the allowlist is a map lookup.
+		"https://CDN.Example.COM/attachments/1/2/a.png",
 	}
 	for _, u := range ok {
 		if err := validateCDNURL(u, hosts); err != nil {

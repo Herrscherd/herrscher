@@ -53,8 +53,8 @@ func runWizard(compose bool) (map[string]string, map[string]string, error) {
 		if tok != "" {
 			secrets["DISCORD_BOT_TOKEN"] = tok
 		}
-		if v := promptLine(in, secretLabel(s, "DISCORD_CHANNEL_ID")); v != "" {
-			secrets["DISCORD_CHANNEL_ID"] = v
+		if v := promptLine(in, secretLabel(s, "DISCORD_USER_ID")); v != "" {
+			secrets["DISCORD_USER_ID"] = v
 		}
 		if v := promptLine(in, secretLabel(s, "HERRSCHER_OWNER_ID")); v != "" {
 			secrets["HERRSCHER_OWNER_ID"] = v

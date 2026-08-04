@@ -59,3 +59,9 @@ require (
 )
 
 replace github.com/Herrscherd/herrscher-contracts => ../herrscher-contracts
+
+replace github.com/Herrscherd/herrscher-claude-backend => ../herrscher-claude-backend
+
+replace github.com/Herrscherd/herrscher-codex-backend => ../herrscher-codex-backend
+
+replace github.com/Herrscherd/herrscher-cursor-backend => ../herrscher-cursor-backend

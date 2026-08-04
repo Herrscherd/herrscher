@@ -75,13 +75,21 @@ func LookupModel(plugins []contracts.Plugin, policy contracts.RoutePolicy, model
 	return CatalogEntry{}, fmt.Errorf("unknown model %q (not offered under route policy %q)", modelID, name)
 }
 
+// EnvRoutePolicy selects which models are offered; EnvDefaultModel names the one
+// a session gets when it creates without --model. Both are written by
+// `herrscher init` and read here, so the wizard and the daemon cannot drift.
+const (
+	EnvRoutePolicy  = "HERRSCHER_ROUTE_POLICY"
+	EnvDefaultModel = "HERRSCHER_DEFAULT_MODEL"
+)
+
 // ResolvePolicy reads the route policy from the environment. Missing or
 // unrecognized, it falls back to PolicyAll — the behavior that predates this
 // change. This setting is set by the app when it launches the daemon, not by
 // the user: hardening it into a fatal error would break a daemon started by
 // hand.
 func ResolvePolicy(getenv func(string) string) contracts.RoutePolicy {
-	if getenv("HERRSCHER_ROUTE_POLICY") == string(contracts.PolicyGatewayOnly) {
+	if getenv(EnvRoutePolicy) == string(contracts.PolicyGatewayOnly) {
 		return contracts.PolicyGatewayOnly
 	}
 	return contracts.PolicyAll

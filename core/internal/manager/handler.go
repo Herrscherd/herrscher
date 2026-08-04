@@ -38,6 +38,33 @@ type Handler struct {
 	// The composition root wires host.ResolvePolicy; nil = unrestricted, which is
 	// the internal build and the pre-policy behaviour.
 	gatewayOnly func() bool
+	// defaultModel is the catalog id a session gets when it names none, chosen at
+	// `herrscher init`. Empty = no default, the pre-existing behaviour.
+	defaultModel string
+}
+
+// SetDefaultModel wires the operator's configured default. It is a fallback,
+// never an override: an explicit --model always wins.
+func (h *Handler) SetDefaultModel(id string) { h.defaultModel = id }
+
+// resolveModel fills in the configured default when a create names no model.
+//
+// Two cases deliberately keep an empty id rather than take the default:
+//
+//   - an explicit cmd, which carries its own invocation. Adding a model to it
+//     would hand the spawn a gateway environment for a model the argv does not
+//     name, so the session would report one model and run another.
+//   - a vendor the default does not belong to. The default is a preference, so
+//     an explicit --vendor outranks it; validation would otherwise reject a
+//     command the operator wrote correctly.
+func (h *Handler) resolveModel(modelID, vendor string, cmdExplicit bool) string {
+	if modelID != "" || h.defaultModel == "" || cmdExplicit {
+		return modelID
+	}
+	if vendor != "" && h.checkModel(vendor, h.defaultModel) != nil {
+		return ""
+	}
+	return h.defaultModel
 }
 
 // SetGatewayOnly wires the active route policy. Under gateway-only every turn

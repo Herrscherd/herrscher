@@ -56,9 +56,9 @@ func summaryConfig(path string, n int) {
 	s := newStyle()
 	fmt.Fprintln(os.Stderr)
 	if n > 0 {
-		fmt.Fprintf(os.Stderr, "  %s wrote %d secret(s) to %s\n", s.wrap(s.green, "✓"), n, s.wrap(s.bold, path))
+		fmt.Fprintf(os.Stderr, "  %s wrote %d setting(s) to %s\n", s.wrap(s.green, "✓"), n, s.wrap(s.bold, path))
 	} else {
-		fmt.Fprintf(os.Stderr, "  %s no secrets entered; %s left unchanged\n", s.wrap(s.dim, "·"), path)
+		fmt.Fprintf(os.Stderr, "  %s nothing entered; %s left unchanged\n", s.wrap(s.dim, "·"), path)
 	}
 	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "the installed binary already has its plugins compiled in."))
 	fmt.Fprintf(os.Stderr, "  start it with:  %s\n\n", s.wrap(s.bold, "herrscherd serve"))

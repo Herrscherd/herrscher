@@ -398,6 +398,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	agentName, _ := in.Lookup("agent")
 	vendor, _ := in.Lookup("vendor")
 	modelID, _ := in.Lookup("model")
+	modelID = h.resolveModel(modelID, vendor, cmdExplicit)
 	// Validate at creation: an unknown or policy-excluded id persisted here would
 	// only surface much later, as an opaque spawn failure on the first turn.
 	if err := h.checkModel(vendor, modelID); err != nil {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/bridge"
 	control "github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -235,9 +236,21 @@ func TestDriverNonEventSinkPostsOnlyFinalReply(t *testing.T) {
 // message's file:// image attachment to a local path and carries it on the input
 // Event handed to the bridge, so the multimodal pipeline is wired end-to-end.
 func TestDriverResolvesAttachmentsOntoInput(t *testing.T) {
-	dir := t.TempDir()
+	// The image has to live under the bridge's staging root: that is the only tree
+	// a file:// attachment may come from, the same way a real gateway stages one.
+	if err := os.MkdirAll(bridge.StagingRoot(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := os.MkdirTemp(bridge.StagingRoot(), "turnloop-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	img := filepath.Join(dir, "paste.png")
-	if err := os.WriteFile(img, []byte("PNG"), 0o644); err != nil {
+	if err := os.WriteFile(img, []byte("PNG"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if img, err = filepath.EvalSymlinks(img); err != nil {
 		t.Fatal(err)
 	}
 	a := &fanRecorder{}

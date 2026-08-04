@@ -555,11 +555,12 @@ func (m *model) pasteImage() bool {
 // stageAttachment resolves a /attach path to a staged file, surfacing any error
 // through the transient flash rather than the transcript.
 func (m *model) stageAttachment(path string) {
-	att, err := attachLocalFile(path)
+	att, err := attachLocalFile(path, m.attachSeq)
 	if err != nil {
 		m.flash = err.Error()
 		return
 	}
+	m.attachSeq++
 	m.pending = append(m.pending, att)
 	m.applySize()
 	m.syncViewport()

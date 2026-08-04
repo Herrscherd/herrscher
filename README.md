@@ -13,6 +13,7 @@ Docs live in [Herrscherd/herrscher-docs](https://github.com/Herrscherd/herrscher
 - **Learning** — opt-in consolidation of a session's work into scoped nodes, with aging, semantic merge, cross-agent promotion, and fully reversible archiving. → `architecture/learning`
 - **Multi-agent delegation across vendors** — an agent ends a turn with a `⟢` trailer to delegate, fan out, route, merge, or hand off; workers inherit their agent's vendor, so one run can mix Claude, Codex, and Cursor. → `architecture/coordination`
 - **Any front end** — Discord, the in-tree terminal TUI, or your own gateway plugin behind the same neutral port. → `plugins/gateway`, `plugins/terminal`
+- **Model routing** — each backend declares the models it offers in its manifest, so the catalog is queryable without instantiating anything. A route policy picks which of them a build may use: `all` runs on this machine's own vendor logins, `gateway-only` runs every turn through a gateway you supply and refuses the two ways around the catalog (a free-form `--cmd`, or a session with no model at all).
 
 Also: cross-backend skills (`SKILL.md` works on every backend) → `guide/skills`, and per-node memory budgets → `guide/budgets`.
 
@@ -24,9 +25,11 @@ Requires Go 1.25+.
 git clone https://github.com/Herrscherd/herrscher.git
 cd herrscher
 go build -o herrscher .    # the only binary; plugins are compiled in
-./herrscher init           # compose the plugin stack, seed config
+./herrscher init           # compose the plugin stack, seed config, choose routing
 ./herrscher                # opens the terminal TUI
 ```
+
+`init` ends by asking where agent turns run: the route policy, the gateway credentials `gateway-only` requires (both halves or neither — a base URL without a token would redirect the CLI while it keeps authenticating as this machine's own account), and the model a session gets when it names none. It writes them to `.env`; `herrscher models list` shows what the active policy offers.
 
 **No Discord token is needed for the terminal path** — the in-tree terminal gateway is a first-class gateway, so you can create, drive, and resume sessions entirely from your shell. A Discord token is only required if you enable the Discord gateway. For a boot-started service, an Arch `PKGBUILD`, and the rest, see `guide/installation` and `guide/service`.
 

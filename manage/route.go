@@ -4,19 +4,10 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/host"
-)
-
-// The env keys the routing step persists, alongside host.EnvGatewayURL and
-// host.EnvGatewayToken. They live in the same .env as the rest of the config so
-// there is a single source of truth for where a turn runs.
-const (
-	envRoutePolicy  = host.EnvRoutePolicy
-	envDefaultModel = host.EnvDefaultModel
 )
 
 // catalogFn resolves the models offered under a policy. Injected so the wizard
@@ -47,14 +38,15 @@ type routeCurrent struct {
 func currentRoute() routeCurrent {
 	return routeCurrent{
 		policy:   host.ResolvePolicy(os.Getenv),
-		model:    os.Getenv(envDefaultModel),
+		model:    os.Getenv(host.EnvDefaultModel),
 		haveCred: len(host.GatewayEnvPairs()) > 0,
 	}
 }
 
 // routeStep asks where agent turns run: the route policy, the gateway
 // credentials it requires, and the model a session gets when it names none. It
-// returns the env keys to persist; an empty result means "keep what is there".
+// returns the env keys to persist. The gateway pair is absent from that map when
+// the operator kept an already-configured one, so it is never rewritten.
 //
 // askModel is false in compose mode, where the plugin stack is about to be
 // rewritten and rebuilt: the models this binary can enumerate belong to the old
@@ -67,7 +59,7 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 	if err != nil {
 		return nil, err
 	}
-	out[envRoutePolicy] = string(policy)
+	out[host.EnvRoutePolicy] = string(policy)
 
 	if policy == contracts.PolicyGatewayOnly {
 		creds, err := askGatewayCreds(s, in, cur.haveCred)
@@ -95,7 +87,7 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 	// An empty value is written on purpose rather than skipped: it is how an
 	// operator CLEARS a default they previously set. writeSecretsTo upserts by
 	// key, so an absent key would silently keep the old one.
-	out[envDefaultModel] = model
+	out[host.EnvDefaultModel] = model
 	if model == "" && policy == contracts.PolicyGatewayOnly {
 		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.red, "sans modèle par défaut, chaque `session create` devra passer --model (obligatoire sous gateway-only)"))
 	}
@@ -183,8 +175,6 @@ func chooseDefaultModel(s style, in *bufio.Reader, entries []host.CatalogEntry, 
 		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "modèle par défaut : aucun backend compilé n'offre de modèle sous cette politique"))
 		return "", nil
 	}
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })
-
 	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "modèle par défaut"))
 	for i, e := range entries {
 		label := e.ID

@@ -19,18 +19,17 @@ func gatewayEnvFor(vendor string, creds contracts.GatewayCreds, modelArg string)
 		// subscription OAuth in the claude CLI's precedence order, which
 		// guarantees the session runs on our account, not the user's.
 		return map[string]string{
-			"ANTHROPIC_BASE_URL":   creds.BaseURL(),
-			"ANTHROPIC_AUTH_TOKEN": creds.Token(),
-			"ANTHROPIC_MODEL":      modelArg,
+			contracts.EnvAnthropicBaseURL:   creds.BaseURL(),
+			contracts.EnvAnthropicAuthToken: creds.Token(),
+			"ANTHROPIC_MODEL":               modelArg,
 		}
 	case "codex":
 		// OpenAI protocol. The codex CLI additionally requires a provider
-		// declared in TOML with wire_api = "chat" (Task 10); these variables
-		// aren't sufficient alone, but they carry the token that provider
-		// references.
+		// declared in TOML with wire_api = "responses"; these variables aren't
+		// sufficient alone, but they carry the token that provider references.
 		return map[string]string{
-			"OPENAI_BASE_URL": creds.BaseURL(),
-			"NEUBLOX_TOKEN":   creds.Token(),
+			contracts.EnvOpenAIBaseURL: creds.BaseURL(),
+			contracts.EnvNeubloxToken:  creds.Token(),
 		}
 	default:
 		// cursor and any future vendor that cannot be redirected.

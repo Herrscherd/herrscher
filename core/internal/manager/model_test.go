@@ -13,7 +13,7 @@ import (
 // knownModels wires a validator accepting exactly the given ids, mirroring what
 // the composition root builds from host.LookupModel + the route policy.
 func knownModels(h *Handler, ids ...string) {
-	h.SetModelValidator(func(modelID string) error {
+	h.SetModelValidator(func(_ string, modelID string) error {
 		for _, id := range ids {
 			if id == modelID {
 				return nil
@@ -21,6 +21,98 @@ func knownModels(h *Handler, ids ...string) {
 		}
 		return errors.New("unknown model " + strconv.Quote(modelID))
 	})
+}
+
+// ownedModels wires a vendor-aware validator, mirroring what the composition
+// root builds from host.LookupModel: the catalog knows which backend declares
+// each model, so a vendor that does not own it is refused.
+func ownedModels(h *Handler, owner map[string]string) {
+	h.SetModelValidator(func(vendor, modelID string) error {
+		own, ok := owner[modelID]
+		if !ok {
+			return errors.New("unknown model " + strconv.Quote(modelID))
+		}
+		if vendor != "" && vendor != own {
+			return errors.New("model " + strconv.Quote(modelID) + " belongs to backend " +
+				strconv.Quote(own) + ", not " + strconv.Quote(vendor))
+		}
+		return nil
+	})
+}
+
+// TestSessionCreateRejectsVendorModelMismatch: --vendor wins when the backend
+// is selected, but the spawn environment is keyed off the model's OWNING
+// vendor. A mismatch spawns codex with ANTHROPIC_* it ignores — the turn runs
+// on the machine's own ChatGPT login while the session reads gateway-routed.
+func TestSessionCreateRejectsVendorModelMismatch(t *testing.T) {
+	h, _, sup, _, _, st := newTestHandler(t, "")
+	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+
+	_, err := h.sessionCreateRun(context.Background(), args(
+		"name", "demo", "vendor", "codex", "model", "gw-claude-opus-5"))
+	if err == nil {
+		t.Fatal("create accepted a codex session carrying a claude model")
+	}
+	if !strings.Contains(err.Error(), "codex") || !strings.Contains(err.Error(), "gw-claude-opus-5") {
+		t.Fatalf("error names neither the vendor nor the model: %v", err)
+	}
+	if _, ok := st.FindSession("demo"); ok {
+		t.Fatal("session persisted despite the vendor/model mismatch")
+	}
+	if len(sup.started) != 0 {
+		t.Fatalf("bridge started despite the mismatch: %v", sup.started)
+	}
+}
+
+// The reported path: `session switch --vendor codex` on a gateway session with
+// no --model. The model is RETAINED, so the pair only becomes inconsistent
+// because the vendor moved — validating the supplied model alone misses it.
+func TestSessionSwitchRejectsVendorMismatchOnRetainedModel(t *testing.T) {
+	h, _, sup, _, _, st := newTestHandler(t, "category")
+	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
+	if err := st.AddSession(state.Session{
+		Name: "alpha", Vendor: "claude", Cmd: "claude", ModelID: "gw-claude-opus-5",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.SetSeeder(func(string, string) bool { return true })
+
+	_, err := h.sessionSwitchRun(context.Background(), args(
+		"name", "alpha", "vendor", "codex", "cmd", "codex", "handoff", "none"))
+	if err == nil {
+		t.Fatal("switch to codex kept a claude model: the session would silently run on the local login")
+	}
+	if !strings.Contains(err.Error(), "codex") || !strings.Contains(err.Error(), "gw-claude-opus-5") {
+		t.Fatalf("error names neither the vendor nor the model: %v", err)
+	}
+	if got, _ := st.FindSession("alpha"); got.Vendor != "claude" || got.ModelID != "gw-claude-opus-5" {
+		t.Fatalf("state mutated on a refused switch: %+v", got)
+	}
+	if len(sup.restarted) != 0 {
+		t.Fatalf("restarted on a refused switch: %+v", sup.restarted)
+	}
+}
+
+// Non-regression: switching vendor AND model together, consistently, still works.
+func TestSessionSwitchAcceptsMatchingVendorAndModel(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude", "gpt-5.5": "codex"})
+	if err := st.AddSession(state.Session{
+		Name: "alpha", Vendor: "claude", Cmd: "claude", ModelID: "gw-claude-opus-5",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.SetSeeder(func(string, string) bool { return true })
+
+	if _, err := h.sessionSwitchRun(context.Background(), args(
+		"name", "alpha", "vendor", "codex", "cmd", "codex", "model", "gpt-5.5", "handoff", "none",
+	)); err != nil {
+		t.Fatalf("consistent vendor+model switch refused: %v", err)
+	}
+	if got, _ := st.FindSession("alpha"); got.Vendor != "codex" || got.ModelID != "gpt-5.5" {
+		t.Fatalf("switch not applied: %+v", got)
+	}
 }
 
 // TestSessionCreatePersistsModelID pins the `ModelID: modelID` field on the

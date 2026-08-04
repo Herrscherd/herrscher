@@ -27,24 +27,27 @@ type Handler struct {
 	// nil in the operator CLI (no live drivers); the daemon wires host.Seed.
 	seed func(name, task string) bool
 	// validateModel resolves a catalog model id under the active route policy and
-	// returns a naming error when it is unknown or excluded. The composition root
-	// wires host.LookupModel; this package cannot import host (host imports it).
+	// returns a naming error when it is unknown, excluded, or owned by a backend
+	// other than the requested vendor. The composition root wires host.LookupModel;
+	// this package cannot import host (host imports it).
 	// nil = no catalog wired, every id passes.
-	validateModel func(modelID string) error
+	validateModel func(vendor, modelID string) error
 }
 
-// SetModelValidator wires the catalog check applied to `--model` on session
-// create/switch, so a typo or a policy-excluded id fails at the command instead
-// of much later, as an opaque spawn failure.
-func (h *Handler) SetModelValidator(fn func(modelID string) error) { h.validateModel = fn }
+// SetModelValidator wires the catalog check applied to `--vendor`/`--model` on
+// session create/switch, so a typo, a policy-excluded id, or a vendor that does
+// not own the model fails at the command instead of much later, as an opaque
+// spawn failure — or worse, as a turn silently run on the machine's own login.
+func (h *Handler) SetModelValidator(fn func(vendor, modelID string) error) { h.validateModel = fn }
 
-// checkModel validates a supplied model id. An empty id is the legacy path (the
-// model rides in cmd) and is always accepted.
-func (h *Handler) checkModel(modelID string) error {
+// checkModel validates a supplied vendor/model pair. An empty id is the legacy
+// path (the model rides in cmd) and is always accepted; an empty vendor means
+// "whichever backend owns the model", which the catalog resolves.
+func (h *Handler) checkModel(vendor, modelID string) error {
 	if modelID == "" || h.validateModel == nil {
 		return nil
 	}
-	return h.validateModel(modelID)
+	return h.validateModel(vendor, modelID)
 }
 
 // CoordView mirrors host.CoordinationView so the manager stays decoupled from

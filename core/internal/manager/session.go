@@ -397,7 +397,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	modelID, _ := in.Lookup("model")
 	// Validate at creation: an unknown or policy-excluded id persisted here would
 	// only surface much later, as an opaque spawn failure on the first turn.
-	if err := h.checkModel(modelID); err != nil {
+	if err := h.checkModel(vendor, modelID); err != nil {
 		return "", err
 	}
 	parent, _ := in.Lookup("parent")
@@ -678,10 +678,15 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	// away from the safe direction.
 	modelID := prior.ModelID
 	if v, supplied := in.Lookup("model"); supplied {
-		if err := h.checkModel(v); err != nil {
-			return "", err
-		}
 		modelID = v
+	}
+	// Validate the EFFECTIVE pair, not just an explicitly supplied model: a
+	// --vendor change on its own strands the RETAINED model on a backend that
+	// does not own it, and the spawn would then inject the owning vendor's
+	// variables into a CLI that ignores them — the turn running on the machine's
+	// own login while the session still reads gateway-routed.
+	if err := h.checkModel(vendor, modelID); err != nil {
+		return "", err
 	}
 	// Capture the prior backend so we can roll back if the restart fails: rolling
 	// back to the old vendor makes the old resume token valid again.

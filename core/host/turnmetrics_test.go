@@ -21,11 +21,11 @@ func TestTurnMetricsCountStartCompleteAbandon(t *testing.T) {
 
 	// A turn that completes: the bridge emits reply{done}.
 	fromBridge <- contracts.Event{T: "reply", Text: "ok", Done: true}
-	d.awaitTurn(context.Background(), true)
+	d.awaitTurn(context.Background(), tokenGuard{})
 
 	// A turn that is abandoned: the bridge connection hangs up mid-turn.
 	d.hangup <- struct{}{}
-	d.awaitTurn(context.Background(), true)
+	d.awaitTurn(context.Background(), tokenGuard{})
 
 	s := m.Snapshot()
 	if s.TurnsStarted != 2 {

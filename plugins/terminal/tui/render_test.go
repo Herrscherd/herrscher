@@ -34,12 +34,83 @@ func TestAgentEntryRendersBare(t *testing.T) {
 // TestToolEntryRendersBulletAndResult checks a tool status renders `● {call}` and
 // its continuation line as `  ⎿ {summary}`.
 func TestToolEntryRendersBulletAndResult(t *testing.T) {
-	out := renderEntry(entry{role: roleStatus, text: "Bash(ls build/)\nremoved 3 files"}, 60)
+	out := renderEntry(entry{role: roleTool, text: "Bash(ls build/)\nremoved 3 files"}, 60)
 	if !strings.Contains(out, glyphTool+" Bash(ls build/)") {
 		t.Fatalf("tool call must render `● Bash(ls build/)`: %q", out)
 	}
 	if !strings.Contains(out, glyphResult+" removed 3 files") {
 		t.Fatalf("tool result must render `⎿ removed 3 files`: %q", out)
+	}
+}
+
+// TestToolVerbSplitsKnownTools checks the closed vocabulary: a known first word
+// yields its family and the rest of the line, an unknown one keeps the line whole.
+func TestToolVerbSplitsKnownTools(t *testing.T) {
+	cases := []struct {
+		in        string
+		fam, rest string
+	}{
+		{"Read core/parse.go", familyRead, "core/parse.go"},
+		{"bash go test ./...", familyRun, "go test ./..."},
+		{"Grep errPrefix core/", familySearch, "errPrefix core/"},
+		{"WebFetch https://x.dev", familyWeb, "https://x.dev"},
+		{"Task review the diff", familyAgent, "review the diff"},
+		{"Edit core/parse.go", familyWrite, "core/parse.go"},
+		// Not a tool: the line must survive intact rather than lose its first word.
+		{"Reading the envfile", "", "Reading the envfile"},
+		{"bash", familyRun, ""},
+		{"", "", ""},
+		{"   ", "", ""},
+	}
+	for _, c := range cases {
+		fam, rest := toolVerb(c.in)
+		if fam != c.fam || rest != c.rest {
+			t.Errorf("toolVerb(%q) = (%q, %q), want (%q, %q)", c.in, fam, rest, c.fam, c.rest)
+		}
+	}
+}
+
+// TestTypedToolRendersItsFamilyGlyph checks a recognised tool gets its family's
+// mark and an unrecognised one falls back to the generic bullet.
+func TestTypedToolRendersItsFamilyGlyph(t *testing.T) {
+	out := renderEntry(entry{role: roleTool, text: "Read core/parse.go"}, 60)
+	if !strings.Contains(out, familyGlyphs[familyRead]) {
+		t.Fatalf("a read must carry the read glyph: %q", out)
+	}
+	if !strings.Contains(out, "core/parse.go") {
+		t.Fatalf("a tool line must keep its target: %q", out)
+	}
+	unknown := renderEntry(entry{role: roleTool, text: "pondering deeply"}, 60)
+	if !strings.Contains(unknown, glyphTool+" pondering deeply") {
+		t.Fatalf("an unknown tool falls back to the generic bullet: %q", unknown)
+	}
+}
+
+// TestRoleGlyphsAreDistinct is the point of having roles at all: reasoning, a
+// notice and an error must not render as the same line the way they used to.
+func TestRoleGlyphsAreDistinct(t *testing.T) {
+	think := renderEntry(entry{role: roleThinking, text: "weighing two options"}, 60)
+	notice := renderEntry(entry{role: roleNotice, text: "turn reset"}, 60)
+	fail := renderEntry(entry{role: roleError, text: "exit status 1"}, 60)
+	if !strings.Contains(think, glyphThinking) {
+		t.Fatalf("reasoning must carry its glyph: %q", think)
+	}
+	if !strings.Contains(notice, glyphNotice+" turn reset") {
+		t.Fatalf("a notice must carry its glyph: %q", notice)
+	}
+	if !strings.Contains(fail, glyphError+" exit status 1") {
+		t.Fatalf("an error must carry its glyph: %q", fail)
+	}
+}
+
+// TestStatusRoleSplitsErrorsFromTools locks the one distinction the bus does not
+// make for us: tool calls and host errors arrive on the same event.
+func TestStatusRoleSplitsErrorsFromTools(t *testing.T) {
+	if got := statusRole("Read core/parse.go"); got != roleTool {
+		t.Fatalf("a tool line is a tool: %q", got)
+	}
+	if got := statusRole(hostErrPrefix + "the worktree is dirty"); got != roleError {
+		t.Fatalf("a host-flagged line is an error: %q", got)
 	}
 }
 
@@ -84,7 +155,7 @@ func TestChunkCoalescingRendersOneBlock(t *testing.T) {
 	}
 	// A status line between streams breaks the block; the next chunk opens a new one.
 	tb.endStream()
-	tb.appendEntry(entry{role: roleStatus, text: "tool"})
+	tb.appendEntry(entry{role: roleTool, text: "tool"})
 	tb.appendChunk("again")
 	if len(tb.entries) != 3 {
 		t.Fatalf("interrupted stream must open a fresh block: %d entries", len(tb.entries))

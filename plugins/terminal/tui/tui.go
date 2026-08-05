@@ -56,14 +56,34 @@ type Backend interface {
 	Interrupt(name string) bool
 }
 
-// roles label a transcript entry so the renderer maps it to a gutter + body style.
+// roles label a transcript entry so the renderer maps it to a gutter + body
+// style. They exist to separate intents the bus flattens together: the wire has
+// one "status" event for a tool call, a turn reset and a host error alike, and
+// rendering all three the same way is what made the transcript unreadable.
 const (
 	roleYou        = "you"
 	roleAgent      = "agent"
-	roleStatus     = "status"
+	roleThinking   = "thinking"
+	roleTool       = "tool"
+	roleNotice     = "notice"
+	roleError      = "error"
 	roleCost       = "cost"
 	roleScrollback = "scrollback"
 )
+
+// hostErrPrefix marks a status line the host has already flagged as an error.
+// core/bridge owns the marker (errPrefix there) and keeps it unexported, so the
+// coupling is this constant: a mismatch costs the error its colour, nothing more.
+const hostErrPrefix = "⚠️ "
+
+// statusRole classifies a status line: the bus carries tool calls and host
+// errors on the same event, told apart only by the host's marker.
+func statusRole(text string) string {
+	if strings.HasPrefix(strings.TrimSpace(text), hostErrPrefix) {
+		return roleError
+	}
+	return roleTool
+}
 
 // entry is one logical unit of a tab's transcript: a role plus the unwrapped,
 // unstyled body text. Storing logical text (not pre-rendered lines) is what lets
@@ -716,10 +736,16 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 		tb.busy = true
 		tb.streamed = true
 		tb.appendChunk(e.Text)
+	case "thinking":
+		// The bus has always emitted these (hub.emitBackendEvent); the TUI used to
+		// drop them on the floor, so the agent's reasoning never reached the screen.
+		tb.busy = true
+		tb.endStream()
+		tb.appendEntry(entry{role: roleThinking, text: e.Text})
 	case "status":
 		tb.busy = true
 		tb.endStream() // a tool line ends the current prose block
-		tb.appendEntry(entry{role: roleStatus, text: e.Text})
+		tb.appendEntry(entry{role: statusRole(e.Text), text: e.Text})
 	case "reply":
 		// A streamed answer is already on screen from its chunks; rendering the
 		// final reply text again is the duplicate we are killing. The streamed
@@ -741,13 +767,13 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 		tb.busy = false
 		tb.streamed = false
 		tb.endStream()
-		tb.appendEntry(entry{role: roleStatus, text: "(turn reset)"})
+		tb.appendEntry(entry{role: roleNotice, text: "turn reset"})
 	case "abandoned":
 		tb.busy = false
 		tb.streamed = false
 		tb.disconnected = true
 		tb.endStream()
-		tb.appendEntry(entry{role: roleStatus, text: "(turn abandoned)"})
+		tb.appendEntry(entry{role: roleNotice, text: "turn abandoned"})
 	}
 }
 
@@ -1198,9 +1224,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.ensureSpin()
 	case dispatchResultMsg:
 		m.syncTabs()
-		line := msg.out
+		line, role := msg.out, roleNotice
 		if msg.err != nil {
-			line = "error: " + msg.err.Error()
+			line, role = msg.err.Error(), roleError
 		}
 		if line != "" {
 			tb := m.tabs[msg.origin]
@@ -1208,7 +1234,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tb = m.tabs[m.active]
 			}
 			if tb != nil {
-				tb.appendEntry(entry{role: roleStatus, text: line})
+				tb.appendEntry(entry{role: role, text: line})
 				m.syncViewport()
 			} else {
 				m.flash = line // no tab to render into — surface it standalone

@@ -6,12 +6,35 @@ import "github.com/charmbracelet/lipgloss"
 // language is one edit. There is no message-block spine and no brand/tab glyph:
 // the flow is full-width prose, marked only by a dim prompt and tool bullets.
 const (
-	glyphTool   = "●" // a tool-call line
-	glyphResult = "⎿" // a tool-result / continuation line
-	glyphPrompt = ">" // the user echo and composer prompt
-	glyphCursor = "❯" // the selected row in an inline menu
-	glyphUnread = "•" // an unread background session, shown only in the switch picker
+	glyphTool     = "●" // a tool-call line of an unrecognised tool
+	glyphResult   = "⎿" // a tool-result / continuation line
+	glyphPrompt   = ">" // the user echo and composer prompt
+	glyphCursor   = "❯" // the selected row in an inline menu
+	glyphUnread   = "•" // an unread background session, shown only in the switch picker
+	glyphThinking = "✳" // a reasoning summary
+	glyphNotice   = "·" // a turn reset / abandoned marker
+	glyphError    = "✗" // a failed command or an error surfaced by the host
 )
+
+// familyGlyphs give each tool family its own mark, so scanning the gutter reads
+// as what the agent did rather than as one undifferentiated column.
+var familyGlyphs = map[string]string{
+	familyRead:   "◇",
+	familyWrite:  "◈",
+	familyRun:    "▸",
+	familySearch: "⌕",
+	familyWeb:    "⌖",
+	familyAgent:  "◆",
+}
+
+// familyGlyph is the mark for a tool family, falling back to the generic tool
+// bullet for a line whose tool could not be recognised.
+func familyGlyph(family string) string {
+	if g, ok := familyGlyphs[family]; ok {
+		return g
+	}
+	return glyphTool
+}
 
 // spinFrames animate the working indicator, a Claude-style rotating asterisk set
 // advanced on the fast working-tick.
@@ -40,6 +63,9 @@ var (
 	redStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(colRed))                                         // errors / removals
 	selStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent)).Background(lipgloss.Color(colSelBg)) // selected menu row
 	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent))                                      // the working spinner + hint
+
+	toolStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent))           // a tool call line
+	thinkingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colDim)).Italic(true) // a reasoning summary
 
 	// scrollbackStyle marks replayed transcript lines seeded into a reopened tab,
 	// dimmed and faint so past context reads as distinct from live output.

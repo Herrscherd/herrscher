@@ -593,9 +593,9 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 		return "", fmt.Errorf("no session %q", name)
 	}
 	_ = h.sup.Stop(name)
+	repo := repoFor(h.st.WorkspaceRoot(), sess.Project)
 	if sess.Worktree != "" {
 		force := in.Bool("force")
-		repo := repoFor(h.st.WorkspaceRoot(), sess.Project)
 		if err := h.wt.Remove(repo, name, force); err != nil {
 			// The session survives this failure, so its bridge has to survive it
 			// too. Stopping the bridge is the first thing close does — it has to
@@ -614,8 +614,13 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 	note := h.tidyChannel(ctx, sess)
 	if err := h.st.RemoveSession(name); err != nil {
 		// Same reasoning as the worktree failure above: the row is still there, so
-		// the bridge that serves it must be too. The worktree is gone by now, but a
-		// session that answers from its repo root beats one that answers nowhere.
+		// the bridge that serves it must be too. But the worktree is gone by now,
+		// and a bridge is spawned with its session's directory as its working
+		// directory — restarting it on a path that was just deleted would crash it
+		// on a loop, which is the failure this whole change exists to remove. Point
+		// the revived bridge at the repo instead: a session answering from the repo
+		// root beats one answering nowhere.
+		sess.Worktree, sess.Dir = "", repo
 		_ = h.sup.Start(sess)
 		return "", fmt.Errorf("persist: %w", err)
 	}

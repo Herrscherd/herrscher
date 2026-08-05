@@ -107,7 +107,7 @@ func (h *hub) goLive(sess state.Session) {
 // on a loop until the daemon is restarted. Stop is idempotent, so the handlers
 // that already stop the bridge lose nothing by us stopping it again.
 func (h *hub) goDead(name string) {
-	if h.sup != nil {
+	if h.sup != nil { // a hub built without one (tests of the teardown seam alone)
 		_ = h.sup.Stop(name)
 	}
 	h.mu.Lock()

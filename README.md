@@ -35,7 +35,7 @@ go build -o herrscher .    # the only binary; plugins are compiled in
 
 ## Plugins
 
-Plugins compile **into** the binary (the xcaddy pattern): add a blank import, rebuild.
+Plugins compile **into** the binary (the xcaddy pattern): add a blank import, rebuild. `herrscher update` bumps every compiled-in plugin, rebuilds, and reinstalls the binary — restart the service afterwards to run it.
 
 | Category | Port | Official plugin |
 |----------|------|-----------------|

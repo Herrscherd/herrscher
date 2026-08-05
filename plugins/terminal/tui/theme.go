@@ -52,6 +52,7 @@ const (
 	colAccent  = "#6fd0e8" // cyan: the machine's own voice — tools, chrome, spinner
 	colViolet  = "#9d8cf0" // violet: reasoning and the structure of prose
 	colGreen   = "#5fbf8f"
+	colWarn    = "#e2b04a" // the middle context palier: worth planning around, not yet urgent
 	colRed     = "#e04760" // the Herrscher red: errors, removals, the alarm palier
 	colSelBg   = "#16202e"
 )
@@ -64,6 +65,7 @@ var (
 	userStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(colDim))    // the dim user echo
 	greenStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(colGreen))  // success / additions
 	redStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(colRed))    // errors / removals
+	warnStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(colWarn))   // a measurement approaching its ceiling
 	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent)) // the working spinner + hint
 
 	toolStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent))              // a tool call line

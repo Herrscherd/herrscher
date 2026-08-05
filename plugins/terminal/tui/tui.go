@@ -114,6 +114,9 @@ type tab struct {
 	disconnected bool
 	tokens       int       // cumulative output tokens for the current turn
 	startedAt    time.Time // when the current turn began, for the elapsed-time hint
+	costTotal    float64   // every turn's cost since the tab opened (lastCost is one turn's)
+	ctxTokens    int       // the last prompt actually sent: input + cache read + cache creation
+	openedAt     time.Time // when the tab opened, for the session-age segment
 }
 
 // maxTabLines bounds the number of logical entries a tab's transcript retains so
@@ -362,7 +365,7 @@ func (m *model) ensureTab(channel string) *tab {
 	if tb, ok := m.tabs[channel]; ok {
 		return tb
 	}
-	tb := &tab{channel: channel, label: channel}
+	tb := &tab{channel: channel, label: channel, openedAt: time.Now()}
 	m.tabs[channel] = tb
 	m.order = append(m.order, channel)
 	if m.active == "" {
@@ -731,6 +734,11 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	if e.Tokens > 0 {
 		tb.tokens = e.Tokens
 	}
+	// The size of the prompt actually sent is the one measurement of context
+	// occupancy on the wire; the window it fills is not, hence contextLimit.
+	if used := e.TokensIn + e.CacheRead + e.CacheCreate; used > 0 {
+		tb.ctxTokens = used
+	}
 	switch e.T {
 	case "chunk":
 		tb.busy = true
@@ -757,6 +765,7 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 		tb.endStream()
 		if e.Cost > 0 {
 			tb.lastCost = e.Cost
+			tb.costTotal += e.Cost
 			tb.appendEntry(entry{role: roleCost, text: formatCost(e.Cost)})
 		}
 		if e.Done {
@@ -881,8 +890,8 @@ func (m *model) statusRow(left string) string {
 	return left + strings.Repeat(" ", gap) + hint
 }
 
-// footer renders the spinner/status line for the active tab: a warm spinner hint
-// while busy, a dim disconnected/cost note otherwise.
+// footer renders the status line for the active tab: the spinner hint while a
+// turn is in flight, otherwise the session's status bar.
 func (m *model) footer() string {
 	tb := m.tabs[m.active]
 	if tb == nil {
@@ -894,10 +903,7 @@ func (m *model) footer() string {
 	if tb.disconnected {
 		return dimStyle.Render("· disconnected")
 	}
-	if tb.lastCost > 0 {
-		return dimStyle.Render("· " + formatCost(tb.lastCost))
-	}
-	return ""
+	return m.statusBar(tb, m.innerWidth())
 }
 
 // spinnerHint renders the active turn's progress line in the Claude shape:

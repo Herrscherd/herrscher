@@ -284,12 +284,12 @@ func (m *model) resizeComposer() {
 	}
 }
 
-// chromeHeight is the number of non-viewport rows View renders. The Claude flow
-// has no enclosing card and no tab strip: the fixed chrome is the status/spinner
-// row and the dim hint line (2), plus the composer's current height, and any
-// staged-chip row, shortcuts line, palette, or picker when each is shown.
+// chromeHeight is the number of non-viewport rows View renders: the banner, the
+// separator above the composer, the status/spinner row and the row bubbletea
+// itself takes (4), plus the composer's current height, and any staged-chip row,
+// shortcuts line, palette, or picker when each is shown.
 func (m *model) chromeHeight() int {
-	h := 2 + m.composerHeight()
+	h := 4 + m.composerHeight()
 	if len(m.pending) > 0 {
 		h++ // the staged-attachments chip row
 	}
@@ -816,6 +816,9 @@ func (m *model) thinkingContent() string {
 	if tb == nil {
 		return ""
 	}
+	if len(tb.entries) == 0 && !tb.busy {
+		return m.emptyState(m.vp.Width)
+	}
 	content := m.cachedTranscript(tb)
 	if tb.busy && !tb.streamed {
 		line := spinnerStyle.Render(m.spinFrame() + " thinking…")
@@ -1291,9 +1294,10 @@ func (m *model) View() string {
 		footer = dimStyle.Render("· " + m.flash)
 	}
 	footer = m.statusRow(footer)
-	// Full-width Claude flow: transcript → inline menu → status/spinner → input →
-	// hint. No enclosing card, no brand row, no permanent tab strip.
-	parts := []string{m.vp.View()}
+	// banner → transcript → inline menu → rule → status/spinner → input. The
+	// banner says which session you are in, the rule keeps a long answer from
+	// running into what you are typing.
+	parts := []string{m.bannerRow(), m.vp.View()}
 	if m.choice != nil {
 		parts = append(parts, m.choiceView())
 	}
@@ -1318,6 +1322,6 @@ func (m *model) View() string {
 	if chips := chipRow(m.pending); chips != "" {
 		parts = append(parts, chips+"  "+dimStyle.Render("⌃U remove"))
 	}
-	parts = append(parts, footer, m.inputRow())
+	parts = append(parts, m.separatorRow(), footer, m.inputRow())
 	return strings.Join(parts, "\n")
 }

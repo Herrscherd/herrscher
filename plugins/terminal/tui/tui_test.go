@@ -328,10 +328,10 @@ func TestResizeSyncsViewport(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	// second size message exercises the resize (else) branch
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	// The full-width flow uses the whole width and reserves 3 chrome rows: the
-	// status/spinner row, the composer (1), and the dim hint line.
-	if m.vp.Width != 100 || m.vp.Height != 27 {
-		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 27)", m.vp.Width, m.vp.Height)
+	// The flow uses the whole width and reserves 5 chrome rows: the banner, the
+	// separator, the status/spinner row, the composer (1), and the hint line.
+	if m.vp.Width != 100 || m.vp.Height != 25 {
+		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 25)", m.vp.Width, m.vp.Height)
 	}
 }
 
@@ -721,5 +721,67 @@ func TestPaletteEscClosesWithoutQuitting(t *testing.T) {
 	}
 	if m.paletteOpen() {
 		t.Fatalf("Esc must clear the query: got %q", m.input.Value())
+	}
+}
+
+// TestThinkingEventReachesTheTranscript is a regression test: the bus has always
+// emitted thinking events and renderInto had no case for them, so the agent's
+// reasoning was dropped on the floor rather than shown.
+func TestThinkingEventReachesTheTranscript(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: "thinking", Text: "weighing two options"})
+	if len(tb.entries) != 1 || tb.entries[0].role != roleThinking {
+		t.Fatalf("a thinking event must append a thinking entry: %+v", tb.entries)
+	}
+	if tb.entries[0].text != "weighing two options" {
+		t.Fatalf("thinking text = %q", tb.entries[0].text)
+	}
+}
+
+// TestHostErrorRendersAsAnError checks a status line the host has flagged is not
+// filed alongside ordinary tool calls.
+func TestHostErrorRendersAsAnError(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: "status", Text: hostErrPrefix + "the worktree is dirty"})
+	m.renderInto(tb, contracts.Event{T: "status", Text: "Read core/parse.go"})
+	if tb.entries[0].role != roleError {
+		t.Fatalf("a flagged line must be an error, got %q", tb.entries[0].role)
+	}
+	if tb.entries[1].role != roleTool {
+		t.Fatalf("a tool line must stay a tool, got %q", tb.entries[1].role)
+	}
+}
+
+// TestHostFailureOnReplyRendersAsAnError is where host failures actually arrive:
+// core/bridge marks the *reply* when a backend fails with no output, not a status
+// event. Rendered as prose it would go through the markdown engine and read as an
+// ordinary answer.
+func TestHostFailureOnReplyRendersAsAnError(t *testing.T) {
+	m := newTestModel()
+	m.route(RoutedEvent{
+		Conv:  contracts.Conversation{ID: "a"},
+		Event: contracts.Event{T: "reply", Done: true, Text: hostErrPrefix + "backend exited 1"},
+	})
+	entries := m.tabs["a"].entries
+	if len(entries) != 1 || entries[0].role != roleError {
+		t.Fatalf("a marked reply must render as an error: %+v", entries)
+	}
+	if entries[0].text != "backend exited 1" {
+		t.Fatalf("the marker must be stripped, the glyph carries it: %q", entries[0].text)
+	}
+}
+
+// TestEmptyThinkingIsDropped keeps a reasoning event with no text from opening a
+// blank entry: the hub drops empty tool lines but not empty thinking ones.
+func TestEmptyThinkingIsDropped(t *testing.T) {
+	m := newTestModel()
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "thinking", Text: "  "}})
+	if n := len(m.tabs["a"].entries); n != 0 {
+		t.Fatalf("an empty thinking event must add no entry, got %d", n)
+	}
+	if !m.tabs["a"].busy {
+		t.Fatal("it must still mark the turn busy")
 	}
 }

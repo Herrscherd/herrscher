@@ -120,7 +120,7 @@ func (m *model) paletteView() string {
 		}
 		var row string
 		if i == m.palIdx {
-			row = warmStyle.Render(glyphCursor + " " + label)
+			row = accentStyle.Render(glyphCursor + " " + label)
 		} else {
 			row = dimStyle.Render("  " + label)
 		}

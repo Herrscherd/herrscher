@@ -158,7 +158,7 @@ func (m *model) mentionView() string {
 	for i, p := range rows {
 		var row string
 		if i == m.mentionIdx {
-			row = warmStyle.Render(glyphCursor + " @" + p)
+			row = accentStyle.Render(glyphCursor + " @" + p)
 		} else {
 			row = dimStyle.Render("  @" + p)
 		}

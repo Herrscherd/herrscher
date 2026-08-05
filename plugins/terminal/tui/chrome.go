@@ -5,6 +5,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // The chrome is the frame around the transcript: a banner naming the terminal and
@@ -95,4 +96,14 @@ func (m *model) emptyState(width int) string {
 		lines[i] = truncate(ln, width)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// truncate clips s to width columns. Callers pass already-styled text, so the
+// clip must be aware of escape sequences and of wide glyphs alike — cutting mid
+// escape would leak the sequence onto the screen as text.
+func truncate(s string, width int) string {
+	if width < 1 || lipgloss.Width(s) <= width {
+		return s
+	}
+	return ansi.Truncate(s, width, "")
 }

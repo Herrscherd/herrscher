@@ -46,15 +46,14 @@ var spinFrames = []string{"✳", "✵", "✶", "✷", "✸", "✹"}
 // on limited terminals); role is also carried by glyph and position, so a
 // downsampled terminal stays legible.
 const (
-	colSurface = "#0a0d14"
-	colText    = "#c6d0e0"
-	colDim     = "#56637a"
-	colAccent  = "#6fd0e8" // cyan: the machine's own voice — tools, chrome, spinner
-	colViolet  = "#9d8cf0" // violet: reasoning and the structure of prose
-	colGreen   = "#5fbf8f"
-	colWarn    = "#e2b04a" // the middle context palier: worth planning around, not yet urgent
-	colRed     = "#e04760" // the Herrscher red: errors, removals, the alarm palier
-	colSelBg   = "#16202e"
+	colText   = "#c6d0e0"
+	colDim    = "#56637a"
+	colAccent = "#6fd0e8" // cyan: the machine's own voice — tools, chrome, spinner
+	colViolet = "#9d8cf0" // violet: reasoning and the structure of prose
+	colGreen  = "#5fbf8f"
+	colWarn   = "#e2b04a" // the middle context palier: worth planning around, not yet urgent
+	colRed    = "#e04760" // the Herrscher red: errors, removals, the alarm palier
+	colSelBg  = "#16202e"
 )
 
 // Styles are role-named so every render site references a role, not a raw colour.

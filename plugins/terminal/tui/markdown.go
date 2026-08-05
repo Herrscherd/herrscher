@@ -6,7 +6,6 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/glamour/styles"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // The agent writes markdown — headings, lists, inline spans, fenced code. Until
@@ -124,21 +123,6 @@ func renderDiff(body string, width int) string {
 		out[i] = style.Render(truncate(ln, width))
 	}
 	return strings.Join(out, "\n")
-}
-
-// truncate clips s to width columns, glyph-width aware.
-func truncate(s string, width int) string {
-	if width < 1 || lipgloss.Width(s) <= width {
-		return s
-	}
-	var b strings.Builder
-	for _, r := range s {
-		if lipgloss.Width(b.String()+string(r)) > width {
-			break
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
 }
 
 // renderGlamour runs prose through the markdown engine. Anything the engine

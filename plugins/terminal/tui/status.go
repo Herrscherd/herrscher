@@ -95,27 +95,20 @@ func formatLimit(n int) string {
 // statusBar is the idle footer for a tab: who this session is, how full its
 // context is, what it has cost and how long it has been open. Under narrowStatus
 // columns it keeps the session and the context and drops the rest.
+// It reads the hub's record for the *active* session, so it is the active tab's
+// bar; the footer is its only caller.
 func (m *model) statusBar(tb *tab, width int) string {
-	ctx := ""
-	vendor := ""
-	if s, ok := m.activeInfo(); ok {
-		vendor = s.Vendor
-	}
-	if tb.ctxTokens > 0 {
-		ctx = renderContext(tb.ctxTokens, vendor)
-	}
+	info, known := m.activeInfo()
 
 	segs := []string{dimStyle.Render(tb.label)}
-	if width >= narrowStatus {
-		if s, ok := m.activeInfo(); ok {
-			for _, f := range []string{s.Project, s.Vendor} {
-				if f != "" {
-					segs = append(segs, dimStyle.Render(f))
-				}
+	if width >= narrowStatus && known {
+		for _, f := range []string{info.Project, info.Vendor} {
+			if f != "" {
+				segs = append(segs, dimStyle.Render(f))
 			}
 		}
 	}
-	if ctx != "" {
+	if ctx := renderContext(tb.ctxTokens, info.Vendor); ctx != "" {
 		segs = append(segs, ctx)
 	}
 	if width >= narrowStatus {

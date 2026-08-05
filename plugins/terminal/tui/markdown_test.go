@@ -56,3 +56,57 @@ func TestMarkdownRewrapsOnWidth(t *testing.T) {
 		}
 	}
 }
+
+// TestDiffBlockColoursItsLineClasses locks the one place colour carries meaning
+// rather than syntax: an addition, a removal and a hunk header must not render
+// alike, and chroma must not get its hands on them.
+func TestDiffBlockColoursItsLineClasses(t *testing.T) {
+	in := "before:\n```diff\n@@ -1,2 +1,2 @@\n-old line\n+new line\n context\n```\nafter."
+	out := renderEntry(entry{role: roleAgent, text: in}, 60)
+	add := greenStyle.Render("+new line")
+	del := redStyle.Render("-old line")
+	if !strings.Contains(out, add) {
+		t.Errorf("an added line must render green: %q", out)
+	}
+	if !strings.Contains(out, del) {
+		t.Errorf("a removed line must render red: %q", out)
+	}
+	if !strings.Contains(out, dimStyle.Render("@@ -1,2 +1,2 @@")) {
+		t.Errorf("a hunk header must render dim: %q", out)
+	}
+	for _, want := range []string{"before", "after"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("prose around the diff must survive (%q): %q", want, out)
+		}
+	}
+}
+
+// TestNonDiffBlockKeepsTheEngine checks the interception is narrow: a go block
+// still goes through glamour, so only diffs take the hand-rendered path.
+func TestNonDiffBlockKeepsTheEngine(t *testing.T) {
+	segs := splitDiffs("```go\n-not a removal\n```")
+	if len(segs) != 1 || segs[0].diff {
+		t.Fatalf("a go block must stay one prose segment, got %+v", segs)
+	}
+}
+
+// TestUnclosedDiffFenceTakesTheRest guards the streaming case: a fence that has
+// not closed yet still renders as a diff rather than leaking its marker.
+func TestUnclosedDiffFenceTakesTheRest(t *testing.T) {
+	segs := splitDiffs("look:\n```diff\n+half a line")
+	if len(segs) != 2 || !segs[1].diff || segs[1].text != "+half a line" {
+		t.Fatalf("an unclosed diff fence must take the rest: %+v", segs)
+	}
+}
+
+// TestDiffLineIsClippedNotWrapped keeps a folded diff line from losing the +/-
+// that says what it is.
+func TestDiffLineIsClippedNotWrapped(t *testing.T) {
+	out := renderDiff("+"+strings.Repeat("x", 80), 20)
+	if strings.Contains(out, "\n") {
+		t.Fatalf("a diff line must be clipped, not folded: %q", out)
+	}
+	if w := lipgloss.Width(out); w > 20 {
+		t.Fatalf("clipped diff line width %d exceeds 20: %q", w, out)
+	}
+}

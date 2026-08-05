@@ -37,7 +37,12 @@ func renderEntry(e entry, width int) string {
 	case roleYou:
 		return renderYou(e, width)
 	case roleAgent:
-		return wrapWith(textStyle, e.text, width)
+		// A block still arriving is incomplete markdown — an unclosed fence would
+		// swallow the rest of the message — so it stays raw until endStream.
+		if e.streaming {
+			return wrapWith(textStyle, e.text, width)
+		}
+		return renderMarkdown(e.text, width)
 	case roleThinking:
 		return wrapWith(thinkingStyle, glyphThinking+" "+e.text, width)
 	case roleTool:

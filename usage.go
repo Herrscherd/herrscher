@@ -63,7 +63,7 @@ func usage() {
 		"",
 		group("SETUP & MAINTENANCE",
 			row("plugin  <list|add|remove>", "edit the compiled-in plugin set + rebuild"),
-			row("update", "bump every plugin + rebuild"),
+			row("update", "bump every plugin + rebuild + reinstall"),
 			row("install", "build then run the service install"),
 		),
 		"",

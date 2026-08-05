@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -294,7 +295,11 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 		}
 	}
 
-	log.Info("hub up; supervising sessions; bot online")
+	// Naming the gateways that are actually up, rather than announcing an edge is
+	// online: this line used to say "bot online" whatever had failed to build, so
+	// the one log an operator reads after a restart confirmed a gateway that was
+	// not there.
+	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
 	<-ctx.Done()
 	return ctx.Err()
 }
@@ -429,6 +434,18 @@ func effectiveKinds(all []Deps, sess state.Session) []string {
 
 // nonTerminalKinds lists the kinds of every built gateway that is not a terminal
 // (TUI) gateway — the "primary" gateways a session binds to by default.
+// kindsOf names every gateway the daemon ended up with, terminal included — the
+// operator's one line of proof about what is serving.
+func kindsOf(all []Deps) []string {
+	out := make([]string, 0, len(all))
+	for _, g := range all {
+		if g.Gateway != nil {
+			out = append(out, g.Gateway.Manifest().Kind)
+		}
+	}
+	return out
+}
+
 func nonTerminalKinds(all []Deps) []string {
 	var out []string
 	for _, g := range all {

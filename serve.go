@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/term"
 
@@ -77,6 +78,18 @@ func runServe(ctx context.Context, args []string) error {
 	// A gateway that failed to build is skipped so the others still run, but it
 	// must not vanish silently: a revoked token takes the whole edge offline and
 	// the only symptom would be a bot that never answers.
+	//
+	// First it gets a second chance. At boot the daemon races the machine's own
+	// network, and a factory that could not resolve a name will succeed a few
+	// seconds later — while the process itself stayed up, so nothing restarted it
+	// and the edge stayed dark until somebody noticed. Nothing is supervising
+	// sessions yet at this point, so the waiting costs a slower start and nothing
+	// else.
+	hub.AwaitPending(ctx, os.Getenv, host.GatewayRetryWindow, func(failures []string, in time.Duration) {
+		for _, f := range failures {
+			fmt.Fprintf(os.Stderr, "herrscher: gateway not up yet: %s; retrying in %s\n", f, in)
+		}
+	})
 	for _, f := range hub.Failures() {
 		fmt.Fprintln(os.Stderr, "herrscher: gateway unavailable: "+f)
 	}

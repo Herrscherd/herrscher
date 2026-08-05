@@ -16,12 +16,13 @@ import (
 type sentMsg struct{ channelID, content string }
 
 type fakeChannelAdmin struct {
-	created  []string
-	archived []string
-	homeType string
-	idPrefix string // channel-id prefix for CreateUnder; "" defaults to "new-"
-	sent     []sentMsg
-	sendErr  error
+	created    []string
+	archived   []string
+	homeType   string
+	idPrefix   string // channel-id prefix for CreateUnder; "" defaults to "new-"
+	sent       []sentMsg
+	sendErr    error
+	archiveErr error
 }
 
 func (f *fakeChannelAdmin) Kind(ctx context.Context, id string) (string, error) {
@@ -40,6 +41,9 @@ func (f *fakeChannelAdmin) ForumPost(ctx context.Context, forumID, name, content
 	return "post-" + name, nil
 }
 func (f *fakeChannelAdmin) Archive(ctx context.Context, id string) error {
+	if f.archiveErr != nil {
+		return f.archiveErr
+	}
 	f.archived = append(f.archived, id)
 	return nil
 }
@@ -724,7 +728,7 @@ func TestSessionCreateSendFailureDoesNotFail(t *testing.T) {
 func TestSessionCloseStopsAndArchives(t *testing.T) {
 	h, d, sup, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	st.AddSession(state.Session{Name: "demo", ChannelID: "ch9", Type: "text", Worktree: "/wt/x"})
+	st.AddSession(state.Session{Owned: true, Name: "demo", ChannelID: "ch9", Type: "text", Worktree: "/wt/x"})
 	if _, err := h.sessionCloseRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatal(err)
 	}
@@ -822,7 +826,7 @@ func TestSessionCloseOnlyTouchesOwnSession(t *testing.T) {
 	h, d, sup, wt, _, st := newTestHandler(t, "")
 	st.InstanceID = "bob"
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	st.AddSession(state.Session{Name: "foo", ChannelID: "bob-foo-ch", Type: "text", Worktree: "/wt/bob"})
+	st.AddSession(state.Session{Owned: true, Name: "foo", ChannelID: "bob-foo-ch", Type: "text", Worktree: "/wt/bob"})
 
 	if _, err := h.sessionCloseRun(context.Background(), args("name", "foo")); err != nil {
 		t.Fatal(err)
@@ -1117,5 +1121,107 @@ func TestSessionCreateWithoutChannelIDStillNeedsAHome(t *testing.T) {
 	_, err := h.sessionCreateRun(context.Background(), args("name", "plain", "shared", "true"))
 	if err == nil || !strings.Contains(err.Error(), "no home set") {
 		t.Fatalf("err = %v, want the existing no-home error", err)
+	}
+}
+
+// Putting a channel away can mean deleting it. A session started in a
+// conversation that already existed is a guest there: the channel belongs to the
+// people who were already talking in it, and closing the session must leave it
+// standing.
+func TestClosingAGuestSessionLeavesTheChannelAlone(t *testing.T) {
+	h, d, sup, wt, _, st := newTestHandler(t, "")
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	st.AddSession(state.Session{Name: "ch-42", ChannelID: "42", Type: "text", Worktree: "/wt/x"})
+
+	out, err := h.sessionCloseRun(context.Background(), args("name", "ch-42"))
+	if err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if len(d.archived) != 0 {
+		t.Fatalf("archived %v, want the operator's own channel untouched", d.archived)
+	}
+	// Everything else still happened.
+	if len(sup.stopped) != 1 || len(wt.removed) != 1 {
+		t.Fatalf("stopped=%v removed=%v, want the session actually closed", sup.stopped, wt.removed)
+	}
+	if _, ok := st.FindSession("ch-42"); ok {
+		t.Fatal("the session should be gone")
+	}
+	if !strings.Contains(out, "closed") {
+		t.Fatalf("out = %q", out)
+	}
+}
+
+// A row written before the flag existed counts as a guest: a channel left behind
+// is a nuisance, a channel deleted is not recoverable.
+func TestASessionFromBeforeTheFlagIsTreatedAsAGuest(t *testing.T) {
+	h, d, _, _, _, st := newTestHandler(t, "")
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	st.AddSession(state.Session{Name: "old", ChannelID: "ch-old", Type: "text"})
+
+	if _, err := h.sessionCloseRun(context.Background(), args("name", "old")); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if len(d.archived) != 0 {
+		t.Fatalf("archived %v, want an unmarked row left alone", d.archived)
+	}
+}
+
+// The bridge is stopped and the worktree is gone by the time the channel is
+// tidied. Refusing to finish there left a session that could never be closed —
+// a missing permission was enough to strand it for good.
+func TestAChannelThatCannotBeTidiedDoesNotStrandTheSession(t *testing.T) {
+	h, d, _, _, _, st := newTestHandler(t, "")
+	d.archiveErr = errors.New("archive channel: 403: Missing Permissions")
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	st.AddSession(state.Session{Owned: true, Name: "demo", ChannelID: "ch9", Type: "text", Worktree: "/wt/x"})
+
+	out, err := h.sessionCloseRun(context.Background(), args("name", "demo"))
+	if err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if _, ok := st.FindSession("demo"); ok {
+		t.Fatal("the session must be closed even when the channel could not be")
+	}
+	// Silence would leave an open channel nobody knows about.
+	if !strings.Contains(out, "Missing Permissions") {
+		t.Fatalf("out = %q, want the reason said out loud", out)
+	}
+}
+
+// A session that created its own channel still gets it tidied away.
+func TestASessionTidiesTheChannelItCreated(t *testing.T) {
+	h, d, _, _, _, st := newTestHandler(t, "")
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	st.AddSession(state.Session{Owned: true, Name: "own", ChannelID: "new-own", Type: "text"})
+
+	if _, err := h.sessionCloseRun(context.Background(), args("name", "own")); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if len(d.archived) != 1 || d.archived[0] != "new-own" {
+		t.Fatalf("archived = %v, want the session's own channel", d.archived)
+	}
+}
+
+// `session create` in a channel that already exists marks the session a guest;
+// creating its own channel marks it owner. The flag is what close reads.
+func TestCreateMarksWhoOwnsTheChannel(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "mine")); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	mine, _ := st.FindSession("mine")
+	if !mine.Owned {
+		t.Fatal("a session that created its channel owns it")
+	}
+
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "guest", "channel_id", "99")); err != nil {
+		t.Fatalf("create adopted: %v", err)
+	}
+	guest, _ := st.FindSession("guest")
+	if guest.Owned {
+		t.Fatal("a session bound to an existing channel does not own it")
 	}
 }

@@ -22,9 +22,9 @@ var (
 	mdWidth    int
 )
 
-// mdStyle is the dark style with glamour's own framing removed: no page margin,
-// no leading and trailing blank line, and our text colour on the body. Every
-// transcript entry is already positioned by the transcript renderer, so the
+// mdStyle is the dark style with glamour's own framing removed — no page margin,
+// no leading and trailing blank line — and its headings pulled onto the palette.
+// Every transcript entry is already positioned by the transcript renderer, so the
 // engine must contribute structure and nothing else.
 func mdStyle() ansi.StyleConfig {
 	s := styles.DarkStyleConfig
@@ -37,9 +37,9 @@ func mdStyle() ansi.StyleConfig {
 	// size of a transcript and defeats any substring search over it; the
 	// difference on screen is a shade of grey.
 	s.Document.Color = nil
-	s.Heading.Color = strPtr(colAccent)
+	s.Heading.Color = strPtr(colViolet)
 	s.H1.BackgroundColor = nil
-	s.H1.Color = strPtr(colAccent)
+	s.H1.Color = strPtr(colViolet)
 	s.CodeBlock.Margin = &zero
 	return s
 }

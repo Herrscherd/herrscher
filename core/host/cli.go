@@ -305,5 +305,13 @@ func NewRegistry(ctx context.Context, d Deps, o Options) (*cli.Registry, error) 
 		o.DefaultGateways = nonTerminalKinds([]Deps{d})
 	}
 	reg, _, err := buildRegistry(ctx, d, o, st, sup, instID)
-	return reg, err
+	if err != nil {
+		return nil, err
+	}
+	// This is the operator process, not the daemon: it holds its own copy of the
+	// state and must not decide alone what the live sessions are. Installed here
+	// rather than in buildRegistry, which the daemon shares — the daemon would be
+	// asking itself.
+	forwardSessionCommands(reg, instID, dispatchLiveCommand)
+	return reg, nil
 }

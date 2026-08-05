@@ -54,9 +54,8 @@ const (
 // context only. Everything else is useful; those two are necessary.
 const narrowStatus = 60
 
-// contextRatio is how full the context window is, in [0,1].
-func contextRatio(used int, vendor string) float64 {
-	limit := contextLimit(vendor)
+// contextRatio is how full a window of the given size is, in [0,1].
+func contextRatio(used, limit int) float64 {
 	if used <= 0 || limit <= 0 {
 		return 0
 	}
@@ -66,14 +65,15 @@ func contextRatio(used int, vendor string) float64 {
 	return 1
 }
 
-// renderContext renders the occupancy as `42k/200k`, coloured by palier.
+// renderContext renders the occupancy as `42k/200k`, coloured by palier. The
+// limit is resolved once: it reads the environment, and this runs every frame.
 func renderContext(used int, vendor string) string {
 	if used <= 0 {
 		return ""
 	}
 	limit := contextLimit(vendor)
 	text := fmt.Sprintf("%s/%s", formatTokens(used), formatLimit(limit))
-	switch r := contextRatio(used, vendor); {
+	switch r := contextRatio(used, limit); {
 	case r >= ctxAlarm:
 		return redStyle.Render(text)
 	case r >= ctxWarn:

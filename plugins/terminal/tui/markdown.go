@@ -148,8 +148,8 @@ func renderGlamour(text string, width int) string {
 		return wrapWith(textStyle, text, width)
 	}
 	// glamour pads every line out to the wrap width and frames the document with
-	// blank lines. The transcript owns its own spacing and the viewport draws on
-	// a coloured surface, so that padding would paint a rectangle: strip it.
+	// blank lines. The transcript owns its own spacing, and trailing padding
+	// breaks the terminal's native text selection: strip both.
 	lines := strings.Split(out, "\n")
 	for i, ln := range lines {
 		lines[i] = strings.TrimRight(ln, " ")

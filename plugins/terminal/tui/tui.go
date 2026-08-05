@@ -3,6 +3,12 @@
 // gateway's frontend: the daemon hub treats that gateway like any other; the TUI
 // is what makes it a human-usable pane. Depending on Backend (not the concrete
 // gateway) keeps this package importable by the gateway without a cycle.
+//
+// Rendering is split by concern: tui.go maps bus events onto transcript roles,
+// render.go draws one entry per role, markdown.go runs the agent's prose through
+// the markdown engine (and its diffs by hand), chrome.go frames the flow, and
+// status.go derives what the session has cost and how full its context is. The
+// palette lives in theme.go, so no render site names a colour.
 package tui
 
 import (
@@ -71,15 +77,28 @@ const (
 	roleScrollback = "scrollback"
 )
 
-// hostErrPrefix marks a status line the host has already flagged as an error.
-// core/bridge owns the marker (errPrefix there) and keeps it unexported, so the
-// coupling is this constant: a mismatch costs the error its colour, nothing more.
+// hostErrPrefix marks text the host has already flagged as a failure. core/bridge
+// owns the marker (errPrefix there) and keeps it unexported, so the coupling is
+// this constant: a mismatch costs the error its colour, nothing more.
 const hostErrPrefix = "⚠️ "
+
+// hostError reports whether text is a host-flagged failure, and returns it with
+// the marker removed: the error role renders its own glyph, and two markers on
+// one line read as noise. The host attaches the marker to a reply (a backend that
+// failed with no output) — status lines are tools — but the check is cheap and
+// the same on both paths.
+func hostError(text string) (string, bool) {
+	trimmed := strings.TrimSpace(text)
+	if rest, ok := strings.CutPrefix(trimmed, hostErrPrefix); ok {
+		return strings.TrimSpace(rest), true
+	}
+	return text, false
+}
 
 // statusRole classifies a status line: the bus carries tool calls and host
 // errors on the same event, told apart only by the host's marker.
 func statusRole(text string) string {
-	if strings.HasPrefix(strings.TrimSpace(text), hostErrPrefix) {
+	if _, isErr := hostError(text); isErr {
 		return roleError
 	}
 	return roleTool
@@ -747,20 +766,32 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	case "thinking":
 		// The bus has always emitted these (hub.emitBackendEvent); the TUI used to
 		// drop them on the floor, so the agent's reasoning never reached the screen.
+		// Unlike a tool line the hub does not drop the empty ones, so we do.
 		tb.busy = true
+		if strings.TrimSpace(e.Text) == "" {
+			break
+		}
 		tb.endStream()
 		tb.appendEntry(entry{role: roleThinking, text: e.Text})
 	case "status":
 		tb.busy = true
 		tb.endStream() // a tool line ends the current prose block
-		tb.appendEntry(entry{role: statusRole(e.Text), text: e.Text})
+		text, _ := hostError(e.Text)
+		tb.appendEntry(entry{role: statusRole(e.Text), text: text})
 	case "reply":
 		// A streamed answer is already on screen from its chunks; rendering the
 		// final reply text again is the duplicate we are killing. The streamed
 		// flag holds whether or not the reply repeats the text, so a
 		// non-streaming backend still renders reply.Text exactly once.
 		if e.Text != "" && !tb.streamed {
-			tb.appendEntry(entry{role: roleAgent, text: e.Text})
+			// A backend that failed with no output arrives here, not on a status
+			// event: the host marks the reply itself. Rendered as prose it would
+			// go through the markdown engine and read as an ordinary answer.
+			if text, isErr := hostError(e.Text); isErr {
+				tb.appendEntry(entry{role: roleError, text: text})
+			} else {
+				tb.appendEntry(entry{role: roleAgent, text: e.Text})
+			}
 		}
 		tb.endStream()
 		if e.Cost > 0 {
@@ -881,11 +912,15 @@ func (m *model) hintText() string {
 
 // statusRow is the footer status on the left and the key hint on the right,
 // separated to fill the width. left is already styled (footer or flash).
+//
+// The result is clipped to one row: the status bar grows with the session (name,
+// project, cost, context, age) and a row that wrapped would push every line below
+// it down, which chromeHeight has no way to account for.
 func (m *model) statusRow(left string) string {
 	hint := m.hintText()
 	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(hint)
 	if gap < 1 {
-		return left
+		return truncate(left, m.innerWidth())
 	}
 	return left + strings.Repeat(" ", gap) + hint
 }

@@ -753,3 +753,35 @@ func TestHostErrorRendersAsAnError(t *testing.T) {
 		t.Fatalf("a tool line must stay a tool, got %q", tb.entries[1].role)
 	}
 }
+
+// TestHostFailureOnReplyRendersAsAnError is where host failures actually arrive:
+// core/bridge marks the *reply* when a backend fails with no output, not a status
+// event. Rendered as prose it would go through the markdown engine and read as an
+// ordinary answer.
+func TestHostFailureOnReplyRendersAsAnError(t *testing.T) {
+	m := newTestModel()
+	m.route(RoutedEvent{
+		Conv:  contracts.Conversation{ID: "a"},
+		Event: contracts.Event{T: "reply", Done: true, Text: hostErrPrefix + "backend exited 1"},
+	})
+	entries := m.tabs["a"].entries
+	if len(entries) != 1 || entries[0].role != roleError {
+		t.Fatalf("a marked reply must render as an error: %+v", entries)
+	}
+	if entries[0].text != "backend exited 1" {
+		t.Fatalf("the marker must be stripped, the glyph carries it: %q", entries[0].text)
+	}
+}
+
+// TestEmptyThinkingIsDropped keeps a reasoning event with no text from opening a
+// blank entry: the hub drops empty tool lines but not empty thinking ones.
+func TestEmptyThinkingIsDropped(t *testing.T) {
+	m := newTestModel()
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "thinking", Text: "  "}})
+	if n := len(m.tabs["a"].entries); n != 0 {
+		t.Fatalf("an empty thinking event must add no entry, got %d", n)
+	}
+	if !m.tabs["a"].busy {
+		t.Fatal("it must still mark the turn busy")
+	}
+}

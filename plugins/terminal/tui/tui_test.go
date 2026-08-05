@@ -328,10 +328,10 @@ func TestResizeSyncsViewport(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	// second size message exercises the resize (else) branch
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	// The full-width flow uses the whole width and reserves 3 chrome rows: the
-	// status/spinner row, the composer (1), and the dim hint line.
-	if m.vp.Width != 100 || m.vp.Height != 27 {
-		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 27)", m.vp.Width, m.vp.Height)
+	// The flow uses the whole width and reserves 5 chrome rows: the banner, the
+	// separator, the status/spinner row, the composer (1), and the hint line.
+	if m.vp.Width != 100 || m.vp.Height != 25 {
+		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 25)", m.vp.Width, m.vp.Height)
 	}
 }
 

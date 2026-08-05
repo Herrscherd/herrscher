@@ -47,6 +47,14 @@ type Session struct {
 	// boot loop does not auto-supervise it. Absent/false = live as today.
 	Archived bool `json:"archived,omitempty"`
 
+	// Owned marks a channel this session created, and may therefore tidy away
+	// when it closes. A session started in a conversation that already existed
+	// binds to it instead, and that channel belongs to the people who were
+	// already talking in it — closing the session must leave it alone. Absent on
+	// a row written before this field existed, which is the safe direction: the
+	// worst outcome is a channel left behind.
+	Owned bool `json:"owned,omitempty"`
+
 	// Learning config (P1 write side, opt-in). Extractor names a registered
 	// curation extractor; empty keeps the plain Curator (no learning). Journal
 	// is the call-journal path Consolidate reads (worktree-relative is fine).

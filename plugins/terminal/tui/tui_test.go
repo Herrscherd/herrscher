@@ -723,3 +723,33 @@ func TestPaletteEscClosesWithoutQuitting(t *testing.T) {
 		t.Fatalf("Esc must clear the query: got %q", m.input.Value())
 	}
 }
+
+// TestThinkingEventReachesTheTranscript is a regression test: the bus has always
+// emitted thinking events and renderInto had no case for them, so the agent's
+// reasoning was dropped on the floor rather than shown.
+func TestThinkingEventReachesTheTranscript(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: "thinking", Text: "weighing two options"})
+	if len(tb.entries) != 1 || tb.entries[0].role != roleThinking {
+		t.Fatalf("a thinking event must append a thinking entry: %+v", tb.entries)
+	}
+	if tb.entries[0].text != "weighing two options" {
+		t.Fatalf("thinking text = %q", tb.entries[0].text)
+	}
+}
+
+// TestHostErrorRendersAsAnError checks a status line the host has flagged is not
+// filed alongside ordinary tool calls.
+func TestHostErrorRendersAsAnError(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: "status", Text: hostErrPrefix + "the worktree is dirty"})
+	m.renderInto(tb, contracts.Event{T: "status", Text: "Read core/parse.go"})
+	if tb.entries[0].role != roleError {
+		t.Fatalf("a flagged line must be an error, got %q", tb.entries[0].role)
+	}
+	if tb.entries[1].role != roleTool {
+		t.Fatalf("a tool line must stay a tool, got %q", tb.entries[1].role)
+	}
+}

@@ -81,6 +81,24 @@ func (r *Registry) Run(ctx context.Context, path []string, in contracts.Input) (
 	return cmd.Run(ctx, in)
 }
 
+// Runner is a command's handler, named so a caller can wrap one.
+type Runner func(context.Context, contracts.Input) (string, error)
+
+// Intercept wraps the handler of every registered command whose Path starts with
+// prefix. wrap receives the command as declared and its current handler, and
+// returns the handler to run in its place; returning next leaves the command
+// untouched. Commands added afterwards are not wrapped, so a caller installs its
+// interceptors once the registry is complete.
+func (r *Registry) Intercept(prefix []string, wrap func(cmd contracts.Cmd, next Runner) Runner) {
+	for i := range r.cmds {
+		c := &r.cmds[i]
+		if len(c.Path) < len(prefix) || !hasPrefix(c.Path, prefix) {
+			continue
+		}
+		c.Run = wrap(*c, c.Run)
+	}
+}
+
 // match finds the command whose Path is the longest prefix of args.
 func (r *Registry) match(args []string) (*contracts.Cmd, []string) {
 	var best *contracts.Cmd

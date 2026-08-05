@@ -74,7 +74,7 @@ func (m *model) skillsView() string {
 			row += " — " + s.Description
 		}
 		if i == m.skillsIdx {
-			b.WriteString("\n" + warmStyle.Render(glyphCursor+" "+row))
+			b.WriteString("\n" + accentStyle.Render(glyphCursor+" "+row))
 		} else {
 			b.WriteString("\n" + dimStyle.Render("  "+row))
 		}

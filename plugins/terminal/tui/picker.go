@@ -99,7 +99,7 @@ func (m *model) resumeView() string {
 		}
 		row := strings.Join(cols, " · ")
 		if i == m.resumeIdx {
-			row = warmStyle.Render(glyphCursor + " " + row)
+			row = accentStyle.Render(glyphCursor + " " + row)
 		} else {
 			row = dimStyle.Render("  " + row)
 		}
@@ -180,7 +180,7 @@ func (m *model) switchView() string {
 			label += " " + glyphUnread
 		}
 		if i == m.switchIdx {
-			b.WriteString("\n" + warmStyle.Render(glyphCursor+" "+label))
+			b.WriteString("\n" + accentStyle.Render(glyphCursor+" "+label))
 		} else {
 			b.WriteString("\n" + dimStyle.Render("  "+label))
 		}
@@ -266,14 +266,14 @@ func (m *model) choiceView() string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(warmStyle.Render(glyphTool + " " + m.choice.Question))
+	b.WriteString(accentStyle.Render(glyphTool + " " + m.choice.Question))
 	for i, o := range m.choice.Options {
 		label := fmt.Sprintf("%d. %s", i+1, o.Label)
 		if i == len(m.choice.Options)-1 {
 			label += "  (esc)"
 		}
 		if i == m.choiceIdx {
-			b.WriteString("\n" + warmStyle.Render(glyphCursor+" "+label))
+			b.WriteString("\n" + accentStyle.Render(glyphCursor+" "+label))
 		} else {
 			b.WriteString("\n" + dimStyle.Render("  "+label))
 		}

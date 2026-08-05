@@ -3,6 +3,12 @@
 // gateway's frontend: the daemon hub treats that gateway like any other; the TUI
 // is what makes it a human-usable pane. Depending on Backend (not the concrete
 // gateway) keeps this package importable by the gateway without a cycle.
+//
+// Rendering is split by concern: tui.go maps bus events onto transcript roles,
+// render.go draws one entry per role, markdown.go runs the agent's prose through
+// the markdown engine (and its diffs by hand), chrome.go frames the flow, and
+// status.go derives what the session has cost and how full its context is. The
+// palette lives in theme.go, so no render site names a colour.
 package tui
 
 import (
@@ -56,14 +62,47 @@ type Backend interface {
 	Interrupt(name string) bool
 }
 
-// roles label a transcript entry so the renderer maps it to a gutter + body style.
+// roles label a transcript entry so the renderer maps it to a gutter + body
+// style. They exist to separate intents the bus flattens together: the wire has
+// one "status" event for a tool call, a turn reset and a host error alike, and
+// rendering all three the same way is what made the transcript unreadable.
 const (
 	roleYou        = "you"
 	roleAgent      = "agent"
-	roleStatus     = "status"
+	roleThinking   = "thinking"
+	roleTool       = "tool"
+	roleNotice     = "notice"
+	roleError      = "error"
 	roleCost       = "cost"
 	roleScrollback = "scrollback"
 )
+
+// hostErrPrefix marks text the host has already flagged as a failure. core/bridge
+// owns the marker (errPrefix there) and keeps it unexported, so the coupling is
+// this constant: a mismatch costs the error its colour, nothing more.
+const hostErrPrefix = "⚠️ "
+
+// hostError reports whether text is a host-flagged failure, and returns it with
+// the marker removed: the error role renders its own glyph, and two markers on
+// one line read as noise. The host attaches the marker to a reply (a backend that
+// failed with no output) — status lines are tools — but the check is cheap and
+// the same on both paths.
+func hostError(text string) (string, bool) {
+	trimmed := strings.TrimSpace(text)
+	if rest, ok := strings.CutPrefix(trimmed, hostErrPrefix); ok {
+		return strings.TrimSpace(rest), true
+	}
+	return text, false
+}
+
+// statusRole classifies a status line: the bus carries tool calls and host
+// errors on the same event, told apart only by the host's marker.
+func statusRole(text string) string {
+	if _, isErr := hostError(text); isErr {
+		return roleError
+	}
+	return roleTool
+}
 
 // entry is one logical unit of a tab's transcript: a role plus the unwrapped,
 // unstyled body text. Storing logical text (not pre-rendered lines) is what lets
@@ -94,6 +133,9 @@ type tab struct {
 	disconnected bool
 	tokens       int       // cumulative output tokens for the current turn
 	startedAt    time.Time // when the current turn began, for the elapsed-time hint
+	costTotal    float64   // every turn's cost since the tab opened (lastCost is one turn's)
+	ctxTokens    int       // the last prompt actually sent: input + cache read + cache creation
+	openedAt     time.Time // when the tab opened, for the session-age segment
 }
 
 // maxTabLines bounds the number of logical entries a tab's transcript retains so
@@ -264,12 +306,12 @@ func (m *model) resizeComposer() {
 	}
 }
 
-// chromeHeight is the number of non-viewport rows View renders. The Claude flow
-// has no enclosing card and no tab strip: the fixed chrome is the status/spinner
-// row and the dim hint line (2), plus the composer's current height, and any
-// staged-chip row, shortcuts line, palette, or picker when each is shown.
+// chromeHeight is the number of non-viewport rows View renders: the banner, the
+// separator above the composer, the status/spinner row and the row bubbletea
+// itself takes (4), plus the composer's current height, and any staged-chip row,
+// shortcuts line, palette, or picker when each is shown.
 func (m *model) chromeHeight() int {
-	h := 2 + m.composerHeight()
+	h := 4 + m.composerHeight()
 	if len(m.pending) > 0 {
 		h++ // the staged-attachments chip row
 	}
@@ -342,7 +384,7 @@ func (m *model) ensureTab(channel string) *tab {
 	if tb, ok := m.tabs[channel]; ok {
 		return tb
 	}
-	tb := &tab{channel: channel, label: channel}
+	tb := &tab{channel: channel, label: channel, openedAt: time.Now()}
 	m.tabs[channel] = tb
 	m.order = append(m.order, channel)
 	if m.active == "" {
@@ -711,26 +753,50 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	if e.Tokens > 0 {
 		tb.tokens = e.Tokens
 	}
+	// The size of the prompt actually sent is the one measurement of context
+	// occupancy on the wire; the window it fills is not, hence contextLimit.
+	if used := e.TokensIn + e.CacheRead + e.CacheCreate; used > 0 {
+		tb.ctxTokens = used
+	}
 	switch e.T {
 	case "chunk":
 		tb.busy = true
 		tb.streamed = true
 		tb.appendChunk(e.Text)
+	case "thinking":
+		// The bus has always emitted these (hub.emitBackendEvent); the TUI used to
+		// drop them on the floor, so the agent's reasoning never reached the screen.
+		// Unlike a tool line the hub does not drop the empty ones, so we do.
+		tb.busy = true
+		if strings.TrimSpace(e.Text) == "" {
+			break
+		}
+		tb.endStream()
+		tb.appendEntry(entry{role: roleThinking, text: e.Text})
 	case "status":
 		tb.busy = true
 		tb.endStream() // a tool line ends the current prose block
-		tb.appendEntry(entry{role: roleStatus, text: e.Text})
+		text, _ := hostError(e.Text)
+		tb.appendEntry(entry{role: statusRole(e.Text), text: text})
 	case "reply":
 		// A streamed answer is already on screen from its chunks; rendering the
 		// final reply text again is the duplicate we are killing. The streamed
 		// flag holds whether or not the reply repeats the text, so a
 		// non-streaming backend still renders reply.Text exactly once.
 		if e.Text != "" && !tb.streamed {
-			tb.appendEntry(entry{role: roleAgent, text: e.Text})
+			// A backend that failed with no output arrives here, not on a status
+			// event: the host marks the reply itself. Rendered as prose it would
+			// go through the markdown engine and read as an ordinary answer.
+			if text, isErr := hostError(e.Text); isErr {
+				tb.appendEntry(entry{role: roleError, text: text})
+			} else {
+				tb.appendEntry(entry{role: roleAgent, text: e.Text})
+			}
 		}
 		tb.endStream()
 		if e.Cost > 0 {
 			tb.lastCost = e.Cost
+			tb.costTotal += e.Cost
 			tb.appendEntry(entry{role: roleCost, text: formatCost(e.Cost)})
 		}
 		if e.Done {
@@ -741,13 +807,13 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 		tb.busy = false
 		tb.streamed = false
 		tb.endStream()
-		tb.appendEntry(entry{role: roleStatus, text: "(turn reset)"})
+		tb.appendEntry(entry{role: roleNotice, text: "turn reset"})
 	case "abandoned":
 		tb.busy = false
 		tb.streamed = false
 		tb.disconnected = true
 		tb.endStream()
-		tb.appendEntry(entry{role: roleStatus, text: "(turn abandoned)"})
+		tb.appendEntry(entry{role: roleNotice, text: "turn abandoned"})
 	}
 }
 
@@ -789,6 +855,9 @@ func (m *model) thinkingContent() string {
 	tb := m.tabs[m.active]
 	if tb == nil {
 		return ""
+	}
+	if len(tb.entries) == 0 && !tb.busy {
+		return m.emptyState(m.vp.Width)
 	}
 	content := m.cachedTranscript(tb)
 	if tb.busy && !tb.streamed {
@@ -843,17 +912,21 @@ func (m *model) hintText() string {
 
 // statusRow is the footer status on the left and the key hint on the right,
 // separated to fill the width. left is already styled (footer or flash).
+//
+// The result is clipped to one row: the status bar grows with the session (name,
+// project, cost, context, age) and a row that wrapped would push every line below
+// it down, which chromeHeight has no way to account for.
 func (m *model) statusRow(left string) string {
 	hint := m.hintText()
 	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(hint)
 	if gap < 1 {
-		return left
+		return truncate(left, m.innerWidth())
 	}
 	return left + strings.Repeat(" ", gap) + hint
 }
 
-// footer renders the spinner/status line for the active tab: a warm spinner hint
-// while busy, a dim disconnected/cost note otherwise.
+// footer renders the status line for the active tab: the spinner hint while a
+// turn is in flight, otherwise the session's status bar.
 func (m *model) footer() string {
 	tb := m.tabs[m.active]
 	if tb == nil {
@@ -865,10 +938,7 @@ func (m *model) footer() string {
 	if tb.disconnected {
 		return dimStyle.Render("· disconnected")
 	}
-	if tb.lastCost > 0 {
-		return dimStyle.Render("· " + formatCost(tb.lastCost))
-	}
-	return ""
+	return m.statusBar(tb, m.innerWidth())
 }
 
 // spinnerHint renders the active turn's progress line in the Claude shape:
@@ -1198,9 +1268,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.ensureSpin()
 	case dispatchResultMsg:
 		m.syncTabs()
-		line := msg.out
+		line, role := msg.out, roleNotice
 		if msg.err != nil {
-			line = "error: " + msg.err.Error()
+			line, role = msg.err.Error(), roleError
 		}
 		if line != "" {
 			tb := m.tabs[msg.origin]
@@ -1208,7 +1278,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tb = m.tabs[m.active]
 			}
 			if tb != nil {
-				tb.appendEntry(entry{role: roleStatus, text: line})
+				tb.appendEntry(entry{role: role, text: line})
 				m.syncViewport()
 			} else {
 				m.flash = line // no tab to render into — surface it standalone
@@ -1265,9 +1335,10 @@ func (m *model) View() string {
 		footer = dimStyle.Render("· " + m.flash)
 	}
 	footer = m.statusRow(footer)
-	// Full-width Claude flow: transcript → inline menu → status/spinner → input →
-	// hint. No enclosing card, no brand row, no permanent tab strip.
-	parts := []string{m.vp.View()}
+	// banner → transcript → inline menu → rule → status/spinner → input. The
+	// banner says which session you are in, the rule keeps a long answer from
+	// running into what you are typing.
+	parts := []string{m.bannerRow(), m.vp.View()}
 	if m.choice != nil {
 		parts = append(parts, m.choiceView())
 	}
@@ -1292,6 +1363,6 @@ func (m *model) View() string {
 	if chips := chipRow(m.pending); chips != "" {
 		parts = append(parts, chips+"  "+dimStyle.Render("⌃U remove"))
 	}
-	parts = append(parts, footer, m.inputRow())
+	parts = append(parts, m.separatorRow(), footer, m.inputRow())
 	return strings.Join(parts, "\n")
 }

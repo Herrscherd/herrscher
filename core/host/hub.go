@@ -96,10 +96,20 @@ func (h *hub) goLive(sess state.Session) {
 	}()
 }
 
-// goDead cancels a session's RunSession loop (which closes its acceptor and
-// removes the socket), and waits for teardown before releasing the reusable
-// session name. The supervisor was already stopped by the close handler.
+// goDead stops the session's supervised bridge, cancels its RunSession loop
+// (which closes the acceptor and removes the socket), and waits for teardown
+// before releasing the reusable session name.
+//
+// Stopping the bridge here rather than trusting the close handler to have done
+// it is what keeps a removed session from leaving a process behind: the
+// supervisor's restart loop holds its session by value and respawns forever, so
+// a bridge outliving its socket dials a path that no longer exists and crashes
+// on a loop until the daemon is restarted. Stop is idempotent, so the handlers
+// that already stop the bridge lose nothing by us stopping it again.
 func (h *hub) goDead(name string) {
+	if h.sup != nil {
+		_ = h.sup.Stop(name)
+	}
 	h.mu.Lock()
 	live, ok := h.live[name]
 	if ok {

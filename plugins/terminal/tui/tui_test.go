@@ -431,7 +431,9 @@ func TestQuestionMarkTypedWhenInputNonEmpty(t *testing.T) {
 func TestShortcutsPanelListsClaudeKeys(t *testing.T) {
 	m := newTestModel()
 	panel := m.helpView()
-	for _, want := range []string{"esc interrupt", "⌥⏎ newline", "/ commands", "@ files"} {
+	// The panel advertises the backslash, not the chords: it is the gesture that
+	// works on every terminal, and the chords still work for anyone who has them.
+	for _, want := range []string{"esc interrupt", `\⏎ newline`, "/ commands", "@ files"} {
 		if !strings.Contains(panel, want) {
 			t.Fatalf("shortcuts panel missing %q: %q", want, panel)
 		}

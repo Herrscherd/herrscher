@@ -26,12 +26,26 @@ func (m *model) bannerRow() string {
 		return truncate(left, m.innerWidth())
 	}
 	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(strip)
-	if gap < 2 {
-		// No room for both: the tabs win — which session you are typing into
-		// matters more than the name of the program you already launched.
-		return truncate(strip, m.innerWidth())
+	if gap >= 2 {
+		return left + strings.Repeat(" ", gap) + strip
 	}
-	return left + strings.Repeat(" ", gap) + strip
+	// No room for both: the tabs win — which session you are typing into matters
+	// more than the name of the program you already launched. And if even the
+	// strip does not fit, clipping it would cut from the right and could drop the
+	// active tab entirely, so fall back to the active tab alone.
+	if lipgloss.Width(strip) <= m.innerWidth() {
+		return strip
+	}
+	return truncate(m.activeMark(), m.innerWidth())
+}
+
+// activeMark is the active tab's mark alone — the last thing the banner gives up.
+func (m *model) activeMark() string {
+	tb := m.tabs[m.active]
+	if tb == nil {
+		return ""
+	}
+	return accentStyle.Render(glyphCursor + " " + tb.label)
 }
 
 // tabStrip renders one mark per open session: the active one accented and led by

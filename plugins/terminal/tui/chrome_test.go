@@ -90,3 +90,36 @@ func TestChromeHeightCountsTheBannerAndRule(t *testing.T) {
 		t.Fatalf("View renders %d rows, budget is %d", rows, want)
 	}
 }
+
+// TestStatusRowIsClippedToOneLine is the layout invariant chromeHeight depends
+// on: the status bar grows with the session, and a row that wrapped would push
+// every line under it down by one with nothing accounting for it.
+func TestStatusRowIsClippedToOneLine(t *testing.T) {
+	m := newTestModel()
+	m.width = 30
+	row := m.statusRow(dimStyle.Render(strings.Repeat("very-long-session-name ", 10)))
+	if strings.Contains(row, "\n") {
+		t.Fatalf("the status row must stay one line: %q", row)
+	}
+	if w := lipgloss.Width(row); w > 30 {
+		t.Fatalf("status row width %d exceeds 30", w)
+	}
+}
+
+// TestNarrowBannerKeepsTheActiveTab guards the reduction order: clipping the
+// strip cuts from the right, which would drop the very tab you are typing into.
+func TestNarrowBannerKeepsTheActiveTab(t *testing.T) {
+	m := newTestModel()
+	m.width = 18
+	for _, ch := range []string{"alpha-session", "beta-session", "gamma-session"} {
+		m.ensureTab(ch)
+	}
+	m.active = "gamma-session"
+	out := m.bannerRow()
+	if !strings.Contains(out, "gamma") {
+		t.Fatalf("a banner too narrow for the strip must keep the active tab: %q", out)
+	}
+	if w := lipgloss.Width(out); w > 18 {
+		t.Fatalf("banner width %d exceeds 18: %q", w, out)
+	}
+}

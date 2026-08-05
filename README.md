@@ -12,7 +12,7 @@ Docs live in [Herrscherd/herrscher-docs](https://github.com/Herrscherd/herrscher
 - **Persistent memory** — an auto-provisioned Obsidian vault, scoped shared-per-project and private-per-agent, recalled before every turn. → `architecture/memory`
 - **Learning** — opt-in consolidation of a session's work into scoped nodes, with aging, semantic merge, cross-agent promotion, and fully reversible archiving. → `architecture/learning`
 - **Multi-agent delegation across vendors** — an agent ends a turn with a `⟢` trailer to delegate, fan out, route, merge, or hand off; workers inherit their agent's vendor, so one run can mix Claude, Codex, and Cursor. → `architecture/coordination`
-- **Any front end** — Discord, the in-tree terminal TUI, or your own gateway plugin behind the same neutral port. → `plugins/gateway`, `plugins/terminal`
+- **Any front end** — Discord, the in-tree terminal TUI, or your own gateway plugin behind the same neutral port. The TUI renders several sessions as live tabs, types each event by role (reasoning, tool family, notice, error), renders the agent's markdown and diffs, and carries a status bar with the session's cumulative cost and how full its context window is. → `plugins/gateway`, `plugins/terminal`
 - **Model routing** — each backend declares the models it offers in its manifest, so the catalog is queryable without instantiating anything. A route policy picks which of them a build may use: `all` runs on this machine's own vendor logins, `gateway-only` runs every turn through a gateway you supply and refuses the two ways around the catalog (a free-form `--cmd`, or a session with no model at all).
 
 Also: cross-backend skills (`SKILL.md` works on every backend) → `guide/skills`, and per-node memory budgets → `guide/budgets`.

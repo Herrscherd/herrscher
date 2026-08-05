@@ -550,14 +550,14 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			rollbackWorktree()
 			return "", fmt.Errorf("create channel: %w", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
+		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
 	case home.Type == "forum":
 		chID, err := admin.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create forum post: %w", err)
 		}
-		sess = state.Session{Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
+		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}
@@ -600,15 +600,17 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 			return "", fmt.Errorf("%w — commit, or close with force:true to discard (branch session/%s is kept)", err, name)
 		}
 	}
-	if err := h.adminFor(sess).Archive(ctx, sess.ChannelID); err != nil {
-		return "", fmt.Errorf("archive: %w", err)
-	}
+	// Tidying the channel away is the last, cosmetic step, and only for a channel
+	// this session created. The bridge is stopped and the worktree is already
+	// gone by now: refusing to finish here would leave a session that can never
+	// be closed, over a channel.
+	note := h.tidyChannel(ctx, sess)
 	if err := h.st.RemoveSession(name); err != nil {
 		return "", fmt.Errorf("persist: %w", err)
 	}
 	_ = state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name))
 	_ = state.RemoveTranscript(state.TranscriptPath(h.partDir, name))
-	return fmt.Sprintf("🗄️ Session **%s** closed.", name), nil
+	return fmt.Sprintf("🗄️ Session **%s** closed.%s", name, note), nil
 }
 
 // sessionArchiveRun closes-but-keeps a session: it stops the supervised child
@@ -625,13 +627,35 @@ func (h *Handler) sessionArchiveRun(ctx context.Context, in contracts.Input) (st
 		return "", fmt.Errorf("no session %q", name)
 	}
 	_ = h.sup.Stop(name)
-	if err := h.adminFor(sess).Archive(ctx, sess.ChannelID); err != nil {
-		return "", fmt.Errorf("archive: %w", err)
-	}
+	note := h.tidyChannel(ctx, sess)
 	if err := h.st.SetArchived(name, true); err != nil {
 		return "", fmt.Errorf("persist: %w", err)
 	}
-	return fmt.Sprintf("📦 Session **%s** archived — resume it from /resume.", name), nil
+	return fmt.Sprintf("📦 Session **%s** archived — resume it from /resume.%s", name, note), nil
+}
+
+// tidyChannel puts away the channel a session is leaving, and returns what to
+// tell the operator about it — empty when there is nothing to say.
+//
+// It only touches a channel this session created. Putting a channel away can
+// mean deleting it, and a session started in a conversation that already existed
+// is a guest there: that channel belongs to the people who were already talking
+// in it, and it outlives the session. A row from before the flag existed counts
+// as a guest too — a channel left behind is a nuisance, a channel deleted is not
+// recoverable.
+//
+// A failure is reported, never fatal. The caller has already stopped the bridge
+// and removed the worktree; refusing to finish over a channel would leave a
+// session that can never be closed, which is exactly what a missing permission
+// used to cause.
+func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
+	if !sess.Owned {
+		return ""
+	}
+	if err := h.adminFor(sess).Archive(ctx, sess.ChannelID); err != nil {
+		return fmt.Sprintf("\n⚠️ le salon est resté ouvert : %v", err)
+	}
+	return ""
 }
 
 // sessionResumeRun revives an archived session: it clears the archived flag and

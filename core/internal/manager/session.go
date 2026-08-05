@@ -597,6 +597,13 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 		force := in.Bool("force")
 		repo := repoFor(h.st.WorkspaceRoot(), sess.Project)
 		if err := h.wt.Remove(repo, name, force); err != nil {
+			// The session survives this failure, so its bridge has to survive it
+			// too. Stopping the bridge is the first thing close does — it has to
+			// be, the worktree cannot be removed from under a running process —
+			// but nothing else ever restarts one: a session left stopped stays
+			// listed, keeps its control socket, and silently swallows every
+			// message sent to it until the daemon is restarted.
+			_ = h.sup.Start(sess)
 			return "", fmt.Errorf("%w — commit, or close with force:true to discard (branch session/%s is kept)", err, name)
 		}
 	}
@@ -606,6 +613,10 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 	// be closed, over a channel.
 	note := h.tidyChannel(ctx, sess)
 	if err := h.st.RemoveSession(name); err != nil {
+		// Same reasoning as the worktree failure above: the row is still there, so
+		// the bridge that serves it must be too. The worktree is gone by now, but a
+		// session that answers from its repo root beats one that answers nowhere.
+		_ = h.sup.Start(sess)
 		return "", fmt.Errorf("persist: %w", err)
 	}
 	_ = state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name))

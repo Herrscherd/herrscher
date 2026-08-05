@@ -52,7 +52,21 @@ func UpdateCmd(ctx context.Context, args []string) int {
 	if code := run(ctx, dir, "go", "mod", "tidy"); code != 0 {
 		return code
 	}
-	return run(ctx, dir, "go", "build", "./...")
+	// Build every package first: it is the compile check that says the bumped
+	// plugins still fit together, and it fails before anything replaces the
+	// binary the machine is running.
+	if code := run(ctx, dir, "go", "build", "./..."); code != 0 {
+		return code
+	}
+	// Then install. `go build ./...` compiles the host and throws the result
+	// away, which is why an update used to report success and change nothing
+	// about the binary on PATH. Installing the module root is what actually
+	// replaces it.
+	if code := run(ctx, dir, "go", "install", "."); code != 0 {
+		return code
+	}
+	fmt.Println("updated plugins and reinstalled the host; restart the service to run it")
+	return 0
 }
 
 // installCmd builds the host binary from its current plugin composition, then

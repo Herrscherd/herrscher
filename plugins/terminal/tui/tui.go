@@ -362,9 +362,11 @@ func newModel(tm Backend) *model {
 	in.Placeholder = "type a message…"
 	in.Prompt = "" // the composer sits flush inside the panel; no per-line gutter
 	in.ShowLineNumbers = false
-	// Enter submits (intercepted in Update); a newline is an explicit Alt+Enter or
-	// Ctrl+J, since Shift+Enter is not reliably distinguishable across terminals.
-	in.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "ctrl+j"))
+	// Enter submits (intercepted in Update); a newline is an explicit chord. Both
+	// modified-Enter forms are bound because which one survives depends on the
+	// terminal, and neither is guaranteed — a trailing backslash (continueLine)
+	// is the fallback that needs nothing from the terminal.
+	in.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "shift+enter", "ctrl+j"))
 	in.SetHeight(1)
 	in.Focus()
 	m := &model{tm: tm, input: in, tabs: map[string]*tab{}, clip: newClipboard(), kitty: supportsKitty(os.Getenv)}
@@ -503,6 +505,25 @@ func (m *model) syncTabs() {
 // slash command runs in a returned tea.Cmd (off the Update goroutine) so a slow
 // dispatch — e.g. a clone against an unreachable host — never freezes the TUI;
 // its result is delivered back as a dispatchResultMsg.
+// continueLine implements the backslash convention: a draft ending in a lone
+// backslash treats Enter as a line break rather than a send, replacing the
+// backslash with the newline. It reports whether it consumed the key.
+//
+// The modified-Enter chords are the better gesture when the terminal delivers
+// them, but plenty do not — Alt+Enter is eaten by the window manager, and
+// Shift+Enter is indistinguishable from Enter unless the terminal speaks an
+// extended keyboard protocol. A trailing backslash needs nothing from the
+// terminal at all, which is why every shell settled on it.
+func (m *model) continueLine() bool {
+	val := m.input.Value()
+	if !strings.HasSuffix(val, `\`) || strings.HasSuffix(val, `\\`) {
+		return false
+	}
+	m.input.SetValue(strings.TrimSuffix(val, `\`) + "\n")
+	m.resizeComposer()
+	return true
+}
+
 func (m *model) handleEnter() tea.Cmd {
 	text := strings.TrimSpace(m.input.Value())
 	if text == "" && len(m.pending) == 0 {
@@ -907,7 +928,7 @@ func (m *model) hintText() string {
 	if m.paletteOpen() {
 		return dimStyle.Render("↑↓ navigate · Tab complete · Esc close")
 	}
-	return dimStyle.Render("/ cmds · @ files · ? shortcuts · ⌥⏎ newline · esc interrupt")
+	return dimStyle.Render("/ cmds · @ files · ? shortcuts · \\⏎ newline · esc interrupt")
 }
 
 // statusRow is the footer status on the left and the key hint on the right,
@@ -1223,6 +1244,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Alt {
 				break // Alt+Enter falls through to the composer as a newline
 			}
+			if m.continueLine() {
+				return m, nil
+			}
 			return m, tea.Batch(m.handleEnter(), m.ensureSpin())
 		case tea.KeyCtrlV:
 			// A clipboard image is staged as an attachment; anything else falls
@@ -1323,7 +1347,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	return dimStyle.Render("↑↓ history/scroll · ⏎ send · ⌥⏎ newline · esc interrupt · ctrl+v paste image · / commands · @ files")
+	return dimStyle.Render("↑↓ history/scroll · ⏎ send · \\⏎ newline · esc interrupt · ctrl+v paste image · / commands · @ files")
 }
 
 func (m *model) View() string {

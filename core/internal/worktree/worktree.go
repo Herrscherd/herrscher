@@ -77,9 +77,20 @@ func (w *Worktreer) Create(repo, name, base string) (string, error) {
 		return "", fmt.Errorf("worktree: refusing base ref %q that looks like a flag", base)
 	}
 	p := w.Path(repo, name)
-	args := []string{"-C", repo, "worktree", "add", p, "-b", w.Branch(name)}
-	if base != "" {
-		args = append(args, base)
+	// Closing a session removes its worktree but keeps its branch — the branch is
+	// where the committed, unmerged work lives, and deleting it would throw that
+	// away. So a name that comes back finds its branch already there. Check it out
+	// instead of asking for a new one: a session named after a channel is exactly
+	// the case that comes back, and it should return to its own work rather than
+	// refuse to start. base only decides where a *new* branch begins; a branch
+	// that already exists carries its own history.
+	branch := w.Branch(name)
+	args := []string{"-C", repo, "worktree", "add", p, branch}
+	if exists, err := w.BranchExistsAt(repo, branch); err != nil || !exists {
+		args = []string{"-C", repo, "worktree", "add", p, "-b", branch}
+		if base != "" {
+			args = append(args, base)
+		}
 	}
 	out, err := exec.CommandContext(w.ctx, "git", args...).CombinedOutput()
 	if err != nil {

@@ -477,3 +477,77 @@ func TestIsCleanAt(t *testing.T) {
 		t.Fatal("worktree with an untracked file should be dirty")
 	}
 }
+
+// Closing a session keeps its branch, because that is where the committed work
+// is. Creating the session again used to die on "a branch named … already
+// exists" — and a session named after a channel is precisely the one that comes
+// back to the same name.
+func TestASessionThatComesBackReturnsToItsBranch(t *testing.T) {
+	repo := initRepo(t)
+	w := NewWorktreer(context.Background(), "inst")
+
+	p, err := w.Create(repo, "ch-1", "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(p, "work.txt"), []byte("done"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "."}, {"commit", "-m", "the work"}} {
+		if out, err := exec.Command("git", append([]string{"-C", p}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := w.Remove(repo, "ch-1", false); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+
+	p2, err := w.Create(repo, "ch-1", "")
+	if err != nil {
+		t.Fatalf("Create again: %v", err)
+	}
+	// Back on the same branch, with the commit still there.
+	if _, err := os.Stat(filepath.Join(p2, "work.txt")); err != nil {
+		t.Fatalf("the work did not come back: %v", err)
+	}
+}
+
+// A name never used before still gets a fresh branch off the base it was given.
+func TestANewSessionStillBranchesFromItsBase(t *testing.T) {
+	repo := initRepo(t)
+	w := NewWorktreer(context.Background(), "inst")
+
+	first, err := w.Create(repo, "a", "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(first, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "."}, {"commit", "-m", "a"}} {
+		if out, err := exec.Command("git", append([]string{"-C", first}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	second, err := w.Create(repo, "b", w.Branch("a"))
+	if err != nil {
+		t.Fatalf("Create with base: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(second, "a.txt")); err != nil {
+		t.Fatalf("the handoff did not continue the base tip: %v", err)
+	}
+}
+
+// The branch a live session is sitting on cannot be handed to a second worktree.
+// That is a real conflict, and it must be reported rather than papered over.
+func TestABranchAlreadyCheckedOutIsStillAnError(t *testing.T) {
+	repo := initRepo(t)
+	w := NewWorktreer(context.Background(), "inst")
+	if _, err := w.Create(repo, "live", ""); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := w.Create(repo, "live", ""); err == nil {
+		t.Fatal("want an error: the branch is checked out by the live session")
+	}
+}

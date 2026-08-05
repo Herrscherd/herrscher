@@ -194,6 +194,16 @@ func (s *Supervisor) Stop(name string) error {
 	return nil
 }
 
+// Running reports whether a supervised loop is currently held for name. It is
+// the one question an operator (or a test) can ask about a bridge that is not
+// answering: whether the daemon still believes it is running one.
+func (s *Supervisor) Running(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	run, ok := s.runs[name]
+	return ok && !run.stopping
+}
+
 // Restart synchronously replaces only sess.Name. The old process loop is fully
 // stopped before the replacement is launched with sess's current Cmd/Vendor.
 func (s *Supervisor) Restart(sess state.Session) error {

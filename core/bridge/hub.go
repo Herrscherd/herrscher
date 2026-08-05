@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/control"
@@ -56,6 +57,39 @@ func (c *turnController) interrupt() {
 	c.mu.Unlock()
 }
 
+// hubDialWindow is how long a bridge waits for its control socket to appear
+// before giving up. The daemon starts the supervised bridge and opens the socket
+// from two different places — a session create or resume starts the child, and
+// the reconcile that follows opens the socket — so a fresh bridge routinely
+// reaches its socket first. Without a wait it dies on the spot and comes back
+// only through the restart backoff, which is a crash in the log and a session
+// that answers nothing for the first second of its life.
+const hubDialWindow = 10 * time.Second
+
+// hubDialInterval paces the retries inside that window.
+const hubDialInterval = 100 * time.Millisecond
+
+// dialHub connects to the hub control socket, waiting for it to appear. It
+// returns as soon as the socket answers, and gives up at hubDialWindow so a
+// bridge whose daemon is truly gone still exits and lets the supervisor decide.
+func dialHub(ctx context.Context, path string) (*control.Conn, error) {
+	deadline := time.Now().Add(hubDialWindow)
+	for {
+		conn, err := control.Dial(path)
+		if err == nil {
+			return conn, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("dial hub socket %s: %w", path, err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(hubDialInterval):
+		}
+	}
+}
+
 // runHub is the pure-runner loop: it dials the hub control socket, reads input
 // frames, and drives the backend one turn at a time, emitting events back over
 // the same connection. ctx cancellation returns its error.
@@ -66,9 +100,9 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	}
 	defer backend.Close()
 
-	conn, err := control.Dial(o.HubSocket)
+	conn, err := dialHub(ctx, o.HubSocket)
 	if err != nil {
-		return fmt.Errorf("dial hub socket %s: %w", o.HubSocket, err)
+		return err
 	}
 	defer conn.Close()
 

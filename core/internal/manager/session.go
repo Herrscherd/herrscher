@@ -397,6 +397,13 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		if adopted != "" {
 			return "", fmt.Errorf("pass either channel_id or under, not both: one adopts a conversation that exists, the other creates one")
 		}
+		// terminal_only already answered the question `under` asks: the session
+		// lives in the TUI's own tabs, where there is no container to create it in.
+		// Left to fall through, the terminal admin would answer "text" for any id
+		// and the refusal below would blame the channel for the wrong reason.
+		if terminalOnly {
+			return "", fmt.Errorf("terminal_only and under contradict each other: one keeps the session in the terminal, the other puts it in a gateway container")
+		}
 		kind, err := admin.Kind(ctx, under)
 		if err != nil {
 			return "", fmt.Errorf("inspect channel: %v", err)

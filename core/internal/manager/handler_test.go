@@ -687,6 +687,19 @@ func TestSessionCreateUnderRejectsAPlainChannel(t *testing.T) {
 	}
 }
 
+// A terminal-only session has no gateway container to live under, and the
+// terminal admin answers "text" for every id — so without an explicit refusal
+// the operator would be told their category is a plain channel.
+func TestSessionCreateRefusesUnderWithTerminalOnly(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	_ = st.SetHome(state.HomeRef{ID: "home-cat", Type: "category"})
+
+	_, err := h.sessionCreateRun(context.Background(), args("name", "clash", "under", "a-cat", "terminal_only", "true", "shared", "true"))
+	if err == nil || !strings.Contains(err.Error(), "terminal_only") {
+		t.Fatalf("err = %v, want the contradiction named", err)
+	}
+}
+
 func TestSessionCreateRefusesUnderWithChannelID(t *testing.T) {
 	h, d, _, _, _, st := newTestHandler(t, "category")
 	_ = st.SetHome(state.HomeRef{ID: "home-cat", Type: "category"})

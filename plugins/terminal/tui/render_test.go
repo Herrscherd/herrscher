@@ -7,12 +7,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// TestUserEntryRendersDimPrompt checks a user turn renders as a dim "> {text}"
-// echo with no gutter spine.
-func TestUserEntryRendersDimPrompt(t *testing.T) {
+// TestUserEntryIsFramed checks a user turn renders as its own ruled block: the
+// request is what a reader scrolls back to find, and a dim row among hundreds is
+// not findable.
+func TestUserEntryIsFramed(t *testing.T) {
 	out := renderEntry(entry{role: roleYou, text: "hello there"}, 40)
-	if !strings.Contains(out, glyphPrompt+" hello there") {
-		t.Fatalf("user entry must render `> hello there`: %q", out)
+	if !strings.Contains(out, glyphCursor+" hello there") {
+		t.Fatalf("user entry must render its request: %q", out)
+	}
+	lines := strings.Split(out, "\n")
+	if len(lines) != 3 || !strings.Contains(lines[0], ruleChar) || !strings.Contains(lines[2], ruleChar) {
+		t.Fatalf("user entry must be ruled above and below: %q", out)
 	}
 	if strings.Contains(out, glyphTool) || strings.Contains(out, "▎") {
 		t.Fatalf("user entry must carry no tool/gutter glyph: %q", out)
@@ -98,8 +103,10 @@ func TestRoleGlyphsAreDistinct(t *testing.T) {
 	if !strings.Contains(notice, glyphNotice+" turn reset") {
 		t.Fatalf("a notice must carry its glyph: %q", notice)
 	}
-	if !strings.Contains(fail, glyphError+" exit status 1") {
-		t.Fatalf("an error must carry its glyph: %q", fail)
+	// The error's glyph titles its rule rather than sitting beside the text: the
+	// whole block is the error, not just its first line.
+	if !strings.Contains(fail, glyphError) || !strings.Contains(fail, "exit status 1") {
+		t.Fatalf("an error must carry its glyph and its text: %q", fail)
 	}
 }
 

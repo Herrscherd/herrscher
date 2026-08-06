@@ -62,6 +62,16 @@ func runServe(ctx context.Context, args []string) error {
 		home = &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
 	}
 
+	// Claim the state file before anything observable happens — before a gateway
+	// is dialled, a skill is written, or a session is adopted. A second daemon on
+	// the same state answers every message twice, so it must be refused while the
+	// refusal is still just an error message.
+	unlock, err := host.LockState(*statePath)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
 	// The playbooks ship inside the binary; put them on disk before any session
 	// can be told to follow one.
 	installShippedSkills()

@@ -928,7 +928,7 @@ func (m *model) hintText() string {
 	if m.paletteOpen() {
 		return dimStyle.Render("↑↓ navigate · Tab complete · Esc close")
 	}
-	return dimStyle.Render("/ cmds · @ files · ? shortcuts · \\⏎ newline · esc interrupt")
+	return dimStyle.Render("/ cmds · @ files · ? shortcuts · ⇧⏎ newline · esc interrupt")
 }
 
 // statusRow is the footer status on the left and the key hint on the right,
@@ -1005,11 +1005,21 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
 	m := newModel(tm)
 	// WithInput strips the terminal's in-band colour/cursor query responses before
 	// they reach the key parser (see filteredStdin). filteredStdin embeds os.Stdin,
-	// so raw mode and TTY detection still apply to the real terminal. Mouse capture
-	// is deliberately left off: the Claude-style flow has no clickable tab strip, so
-	// capturing the mouse would only break the terminal's native text selection.
+	// so raw mode and TTY detection still apply to the real terminal.
+	//
+	// The mouse is captured for one reason: the alt screen has no scrollback, so
+	// without wheel events there is no way at all to look back at a long turn.
+	// The cost is the terminal's own click-drag selection, which every terminal
+	// gives back under Shift — named in the help so it is not a discovery.
+	//
+	// The keyboard protocol is asked for before the program starts drawing and
+	// released after it stops, so a crash between them cannot leave the terminal
+	// reporting keys nobody translates any more.
+	os.Stdout.WriteString(enhancedKeysOn)
+	defer os.Stdout.WriteString(enhancedKeysOff)
 	p := tea.NewProgram(m,
 		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
 		tea.WithInput(newFilteredStdin()),
 	)
 	go func() {
@@ -1277,6 +1287,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case tea.KeyCtrlW:
+			// Ctrl+W deletes the previous word in every editor and every shell,
+			// and a composer that swallowed it to offer closing the tab made
+			// writing a sentence a trap. It only reaches the tab when there is
+			// no word behind the cursor to delete.
+			if m.input.Value() != "" {
+				break
+			}
 			m.pendingClose = true
 			return m, nil
 		case tea.KeyRunes:
@@ -1347,7 +1364,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	return dimStyle.Render("↑↓ history/scroll · ⏎ send · \\⏎ newline · esc interrupt · ctrl+v paste image · / commands · @ files")
+	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · esc interrupt · ctrl+v paste image · / commands · @ files")
 }
 
 func (m *model) View() string {

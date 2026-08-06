@@ -257,7 +257,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 			continue // archived sessions come back only on demand via /resume
 		}
 		hb.goLive(sess)
-		_ = sup.Start(sess)
+		sup.Start(sess)
 	}
 	h.SetSessions(len(st.SnapshotSessions()))
 

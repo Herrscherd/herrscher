@@ -240,26 +240,32 @@ type fakeSup struct {
 	started, stopped []string
 	startedCmds      []string // Cmd of each session passed to Start, in order
 	restarted        []state.Session
-	startErrs        []error // scripted errors, popped one per Start call (nil-padded)
+	stopErrs         []error // scripted errors, popped one per Stop call (nil-padded)
 }
 
-func (f *fakeSup) Start(s state.Session) error {
+func (f *fakeSup) Start(s state.Session) {
 	f.started = append(f.started, s.Name)
 	f.startedCmds = append(f.startedCmds, s.Cmd)
-	if len(f.startErrs) > 0 {
-		err := f.startErrs[0]
-		f.startErrs = f.startErrs[1:]
+}
+
+// Stop is where a scripted failure goes, because Stop is the only half of a
+// restart that can fail: Start hands a goroutine to the run loop and returns.
+func (f *fakeSup) Stop(name string) error {
+	f.stopped = append(f.stopped, name)
+	if len(f.stopErrs) > 0 {
+		err := f.stopErrs[0]
+		f.stopErrs = f.stopErrs[1:]
 		return err
 	}
 	return nil
 }
-func (f *fakeSup) Stop(name string) error { f.stopped = append(f.stopped, name); return nil }
 func (f *fakeSup) Restart(s state.Session) error {
 	f.restarted = append(f.restarted, s)
 	if err := f.Stop(s.Name); err != nil {
 		return err
 	}
-	return f.Start(s)
+	f.Start(s)
+	return nil
 }
 
 type fakeWT struct {

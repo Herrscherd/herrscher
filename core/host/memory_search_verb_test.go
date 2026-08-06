@@ -14,9 +14,9 @@ import (
 // memory_restore_verb_test.go) so BuildFirstMemory's "first registered
 // memory plugin" contract stays deterministic.
 func TestMemorySearchVerbReturnsFormattedHits(t *testing.T) {
-	currentRestoreMem = &restoreVerbMem{nodes: map[string]contracts.Node{
+	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
 		"facts/a": {Key: "facts/a", Kind: contracts.KindDecision, Title: "Some Decision"},
-	}}
+	}})
 	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func TestMemorySearchVerbReturnsFormattedHits(t *testing.T) {
 // contracts.Query.IncludeRaw = true, and that it defaults to false without
 // the flag.
 func TestMemorySearchVerbRawFlag(t *testing.T) {
-	currentRestoreMem = &restoreVerbMem{nodes: map[string]contracts.Node{}}
+	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{}})
 	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)

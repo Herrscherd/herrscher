@@ -572,9 +572,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if err := h.st.AddSession(sess); err != nil {
 		return "", fmt.Errorf("persist: %w", err)
 	}
-	if err := h.sup.Start(sess); err != nil {
-		return "", fmt.Errorf("start bridge: %w", err)
-	}
+	h.sup.Start(sess)
 	banner := sessionBanner(repo, name, worktree, h.wt.Branch(name), cmd, shared)
 	_ = admin.Send(ctx, sess.ChannelID, banner) // best-effort; reply is source of truth
 	return fmt.Sprintf("✅ Running on %s.\n\n%s", admin.ChannelRef(sess.ChannelID), banner), nil
@@ -611,7 +609,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 			// but nothing else ever restarts one: a session left stopped stays
 			// listed, keeps its control socket, and silently swallows every
 			// message sent to it until the daemon is restarted.
-			_ = h.sup.Start(sess)
+			h.sup.Start(sess)
 			return "", fmt.Errorf("%w — commit, or close with force:true to discard (branch session/%s is kept)", err, name)
 		}
 	}
@@ -629,7 +627,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 		// the revived bridge at the repo instead: a session answering from the repo
 		// root beats one answering nowhere.
 		sess.Worktree, sess.Dir = "", repo
-		_ = h.sup.Start(sess)
+		h.sup.Start(sess)
 		return "", fmt.Errorf("persist: %w", err)
 	}
 	_ = state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name))
@@ -703,9 +701,7 @@ func (h *Handler) sessionResumeRun(_ context.Context, in contracts.Input) (strin
 		return "", fmt.Errorf("persist: %w", err)
 	}
 	sess.Archived = false
-	if err := h.sup.Start(sess); err != nil {
-		return "", fmt.Errorf("start: %w", err)
-	}
+	h.sup.Start(sess)
 	return fmt.Sprintf("⟲ Session **%s** resumed.", name), nil
 }
 

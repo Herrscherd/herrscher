@@ -431,9 +431,10 @@ func TestQuestionMarkTypedWhenInputNonEmpty(t *testing.T) {
 func TestShortcutsPanelListsClaudeKeys(t *testing.T) {
 	m := newTestModel()
 	panel := m.helpView()
-	// The panel advertises the backslash, not the chords: it is the gesture that
-	// works on every terminal, and the chords still work for anyone who has them.
-	for _, want := range []string{"esc interrupt", `\⏎ newline`, "/ commands", "@ files"} {
+	// Shift+Enter first — it is the gesture people arrive with — but the
+	// backslash stays named beside it, since it is the one that needs nothing
+	// from the terminal.
+	for _, want := range []string{"esc interrupt", `⇧⏎ or \⏎ newline`, "/ commands", "@ files"} {
 		if !strings.Contains(panel, want) {
 			t.Fatalf("shortcuts panel missing %q: %q", want, panel)
 		}

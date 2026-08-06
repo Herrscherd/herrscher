@@ -330,7 +330,7 @@ func sessionJSONRow(s state.Session) sessionJSON {
 // worktree=="" means no isolated worktree was made; shared distinguishes an
 // explicit shared:true run (main checkout) from a non-git fallback. branch is
 // the real (possibly instanceID-namespaced) branch produced by the worktreer.
-func sessionBanner(repo, name, worktree, branch, cmd string, shared bool) string {
+func sessionBanner(repo, name, worktree, branch, cmd, modelID string, shared bool) string {
 	b := fmt.Sprintf("🚀 Session **%s** ready.\n", name)
 	if repo == "" {
 		b += "• Project: **(cwd)**\n"
@@ -349,6 +349,14 @@ func sessionBanner(repo, name, worktree, branch, cmd string, shared bool) string
 		b += "• Mode: shared (not a git repo)\n"
 	}
 	b += fmt.Sprintf("• Command: `%s`", cmd)
+	// The command is the configured base invocation, which usually already carries
+	// a --model of its own; a session created with an explicit model appends its
+	// own flag on top and that one is what runs. Printing the command alone made
+	// the banner name the model the session was NOT using — the operator asked for
+	// Opus 5 and read Opus 4.8 back. Name the model that actually applies.
+	if modelID != "" {
+		b += fmt.Sprintf("\n• Model: `%s`", modelID)
+	}
 	return b
 }
 
@@ -380,6 +388,27 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		admin = h.td
 	}
 	adopted, _ := in.Lookup("channel_id")
+	// The home is where session channels go by default, and for a long time it was
+	// the only place they could go: a session opened from a conversation in another
+	// server surfaced in the home instead, which reads as the daemon wandering off
+	// on its own. `under` is how a caller says "here" — the container this work
+	// belongs under — without moving the home for everybody else.
+	if under, ok := in.Lookup("under"); ok && under != "" {
+		if adopted != "" {
+			return "", fmt.Errorf("pass either channel_id or under, not both: one adopts a conversation that exists, the other creates one")
+		}
+		kind, err := admin.Kind(ctx, under)
+		if err != nil {
+			return "", fmt.Errorf("inspect channel: %v", err)
+		}
+		// Same rule as `set home`, and for the same reason: these are the two kinds
+		// a channel can be created under. A plain text channel is a conversation,
+		// not a container — adopt it with channel_id instead of creating inside it.
+		if kind != "category" && kind != "forum" {
+			return "", fmt.Errorf("channel %s is %q — under must be a category or forum (to run in an existing conversation, pass channel_id)", under, kind)
+		}
+		home = state.HomeRef{ID: under, Type: kind}
+	}
 	// Adopting an existing conversation needs no home: the caller already knows
 	// where the session must live, so there is nothing to create under.
 	if home.ID == "" && adopted == "" {
@@ -573,7 +602,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		return "", fmt.Errorf("persist: %w", err)
 	}
 	h.sup.Start(sess)
-	banner := sessionBanner(repo, name, worktree, h.wt.Branch(name), cmd, shared)
+	banner := sessionBanner(repo, name, worktree, h.wt.Branch(name), cmd, modelID, shared)
 	_ = admin.Send(ctx, sess.ChannelID, banner) // best-effort; reply is source of truth
 	return fmt.Sprintf("✅ Running on %s.\n\n%s", admin.ChannelRef(sess.ChannelID), banner), nil
 }

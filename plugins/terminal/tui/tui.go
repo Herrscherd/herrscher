@@ -1030,7 +1030,10 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
 	//
 	// The keyboard protocol is asked for before the program starts drawing and
 	// released after it stops, so a crash between them cannot leave the terminal
-	// reporting keys nobody translates any more.
+	// reporting keys nobody translates any more. This push covers the main screen;
+	// the alternate screen this TUI lives on has its own stack and gets its own
+	// push from Init (see enableEnhancedKeys), which is the one that makes
+	// Shift+Enter actually arrive.
 	os.Stdout.WriteString(enhancedKeysOn)
 	defer os.Stdout.WriteString(enhancedKeysOff)
 	p := tea.NewProgram(m,
@@ -1057,7 +1060,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, tickCmd())
+	return tea.Batch(textarea.Blink, tickCmd(), enableEnhancedKeys)
 }
 
 // ensureSpin starts the animation timer if it is not already running. A turn

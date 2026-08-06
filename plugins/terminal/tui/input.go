@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Shift+Enter is the gesture every chat UI teaches, and a plain terminal cannot
@@ -24,6 +26,22 @@ const (
 	enhancedKeysOn  = "\x1b[>1u"
 	enhancedKeysOff = "\x1b[<u"
 )
+
+// enableEnhancedKeys asks for the protocol again once the program is running.
+// The stack the push lands on is per-screen: a push made on the main screen is
+// not in effect on the alternate screen, and this TUI spends its whole life on
+// the alternate one. Asking only before tea.NewProgram — which is where the
+// alt-screen switch happens — therefore had Shift+Enter working nowhere, on
+// terminals that implement the protocol perfectly.
+//
+// It stays a plain stdout write rather than a rendered frame because it is a
+// request to the terminal, not output: it draws nothing, and Bubble Tea has no
+// seam for sending one. The pre-program push is kept as well, so the main
+// screen is left in the same state whichever screen a terminal scopes to.
+func enableEnhancedKeys() tea.Msg {
+	os.Stdout.WriteString(enhancedKeysOn)
+	return nil
+}
 
 // legacyKey renders one `CSI <code>;<mods> u` report as the bytes Bubble Tea's
 // parser expects for that key. seq is the whole sequence including the leading

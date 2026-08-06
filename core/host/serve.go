@@ -242,10 +242,12 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 
 	// Live event stream: a sibling append-only socket carries every session's
 	// bus events (thinking/status/chunk/reply) as JSON lines to any external
-	// reader (Neublox). The seed path (Op::DispatchTask) receives this publisher
-	// in its request-scoped daemon runtime; absent a subscriber, Publish is a
-	// cheap no-op. Bind it BEFORE serveCommandSocket so the very first dispatched
-	// task already sees the tap (no race, no missed live stream).
+	// reader (an attached terminal, Neublox). Every driven session's turn driver
+	// taps it through goLive, and the seed path (Op::DispatchTask) receives it in
+	// its request-scoped daemon runtime; absent a subscriber, Publish is a cheap
+	// no-op. Bind it BEFORE serveCommandSocket and BEFORE the boot loop below, so
+	// the very first dispatched task and the first driver started already see the
+	// tap (no race, no missed live stream).
 	es := newEventSocket()
 	go serveEventsSocket(ctx, EventsSocketPath(instID), es)
 	hb.eventPublisher = es.Publish

@@ -31,7 +31,7 @@ type channelAdmin interface {
 
 // supervisor starts/stops the bridge process backing a session.
 type supervisor interface {
-	Start(s state.Session) error
+	Start(s state.Session)
 	Stop(name string) error
 	Restart(s state.Session) error
 }

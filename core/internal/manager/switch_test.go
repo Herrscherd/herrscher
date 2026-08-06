@@ -83,8 +83,8 @@ func TestSessionSwitchRollsBackOnStartFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.SetSeeder(func(name, task string) bool { return true })
-	// First Start (the new backend) fails; the rollback Start (old backend) succeeds.
-	sup.startErrs = []error{errors.New("boom")}
+	// The first restart (to the new backend) fails; the rollback restart succeeds.
+	sup.stopErrs = []error{errors.New("boom")}
 
 	_, err := h.sessionSwitchRun(context.Background(), args(
 		"name", "gamma", "vendor", "codex", "cmd", "codex --model gpt-5-codex", "handoff", "none",
@@ -100,11 +100,13 @@ func TestSessionSwitchRollsBackOnStartFailure(t *testing.T) {
 	if got.ResumeToken != "tok-old" {
 		t.Fatalf("resume token not restored: %q", got.ResumeToken)
 	}
-	// Two Start calls: the failed new backend, then the successful old-backend restart.
-	if len(sup.started) != 2 {
-		t.Fatalf("expected 2 Start calls (failed + rollback), got %v", sup.started)
+	// One Start call: the failed restart never got past Stop, so the only bridge
+	// launched is the rollback's — and it must carry the old Cmd, or the session
+	// is left running the backend the switch was rolled back from.
+	if len(sup.started) != 1 {
+		t.Fatalf("expected 1 Start call (the rollback only), got %v", sup.started)
 	}
-	if sup.startedCmds[1] != "claude --model claude-opus-4-8" {
-		t.Fatalf("rollback restart must use the old Cmd, got %q", sup.startedCmds[1])
+	if sup.startedCmds[0] != "claude --model claude-opus-4-8" {
+		t.Fatalf("rollback restart must use the old Cmd, got %q", sup.startedCmds[0])
 	}
 }

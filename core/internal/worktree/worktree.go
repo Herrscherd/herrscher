@@ -85,6 +85,18 @@ func (w *Worktreer) Create(repo, name, base string) (string, error) {
 	// refuse to start. base only decides where a *new* branch begins; a branch
 	// that already exists carries its own history.
 	branch := w.Branch(name)
+	// The same reasoning applies to the directory. Closing a session removes its
+	// worktree, but a crash, a kill, or a daemon restart mid-session leaves the
+	// directory registered and on its branch — and then the session that comes
+	// back is refused by `worktree add` on the grounds that its own worktree is
+	// in the way. Reuse it: a registered worktree already on the right branch is
+	// not an obstacle to the session, it *is* the session.
+	switch reusable, err := w.reusable(repo, p, branch); {
+	case err != nil:
+		return "", err
+	case reusable:
+		return p, nil
+	}
 	args := []string{"-C", repo, "worktree", "add", p, branch}
 	if exists, err := w.BranchExistsAt(repo, branch); err != nil || !exists {
 		args = []string{"-C", repo, "worktree", "add", p, "-b", branch}
@@ -97,6 +109,83 @@ func (w *Worktreer) Create(repo, name, base string) (string, error) {
 		return "", fmt.Errorf("worktree add: %s", redact.Output(out))
 	}
 	return p, nil
+}
+
+// PreExisting reports whether a worktree for this session is already on disk, so
+// a caller that rolls back on a later failure removes only what it created. A
+// state it cannot verify counts as pre-existing: the cost of being wrong that
+// way is a worktree left behind, and the cost of being wrong the other way is
+// deleting a session's uncommitted work.
+func (w *Worktreer) PreExisting(repo, name string) bool {
+	p := w.Path(repo, name)
+	if _, err := os.Lstat(p); err != nil {
+		return !os.IsNotExist(err)
+	}
+	registered, err := w.registeredWorktree(repo, p)
+	if err != nil {
+		return true
+	}
+	return registered
+}
+
+// reusable reports whether the worktree at path can be handed back to a session
+// asking for branch, and repairs the states that are merely stale.
+//
+// It never deletes anything with content. A directory sitting where the worktree
+// belongs, but which git does not know, is someone else's — reporting that is
+// the whole value of the check, since removing it is how a session would eat
+// work nobody asked it to touch.
+func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
+	registered, err := w.registeredWorktree(repo, path)
+	if err != nil {
+		return false, err
+	}
+	_, statErr := os.Lstat(path)
+	missing := os.IsNotExist(statErr)
+
+	if !registered {
+		if statErr != nil && !missing {
+			return false, fmt.Errorf("inspect %q: %w", path, statErr)
+		}
+		if !missing {
+			return false, fmt.Errorf(
+				"%q already exists and is not a git worktree — move it aside to start this session", path)
+		}
+		return false, nil
+	}
+
+	// Registered but gone from disk: a worktree removed by hand, or a session
+	// directory lost with the filesystem under it. git holds the registration and
+	// would refuse the add on its own record alone, so drop the record.
+	if missing {
+		if out, err := exec.CommandContext(w.ctx, "git", "-C", repo, "worktree", "prune").CombinedOutput(); err != nil {
+			return false, fmt.Errorf("worktree prune: %s", redact.Output(out))
+		}
+		return false, nil
+	}
+	if statErr != nil {
+		return false, fmt.Errorf("inspect %q: %w", path, statErr)
+	}
+
+	at, err := w.branchAt(path)
+	if err != nil {
+		return false, err
+	}
+	if at != branch {
+		return false, fmt.Errorf(
+			"worktree %q is on branch %q, not %q — the session cannot take it over", path, at, branch)
+	}
+	return true, nil
+}
+
+// branchAt names the branch checked out in an existing worktree. A detached HEAD
+// has no branch to compare against, which is reported rather than guessed at.
+func (w *Worktreer) branchAt(path string) (string, error) {
+	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "symbolic-ref", "--short", "HEAD").Output()
+	if err != nil {
+		return "", fmt.Errorf("cannot read the branch checked out at %q (detached HEAD?): %w", path, err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // IsCleanAt reports whether the worktree at path has no uncommitted changes. An
@@ -342,26 +431,33 @@ func (w *Worktreer) registeredWorktree(repo, target string) (bool, error) {
 	return false, nil
 }
 
-// canonicalPathForComparison resolves links in an existing path. When only the
-// final component is absent (as can happen after a partial worktree removal),
-// it resolves the parent and then restores that final component.
+// canonicalPathForComparison resolves links in the part of a path that exists,
+// then restores the components that do not. Any number of trailing components
+// may be absent: the sessions directory itself does not exist before the repo's
+// first session, and a partial removal can take more than the leaf with it.
 func canonicalPathForComparison(path string) (string, error) {
 	path, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
 	}
-	resolved, err := resolveExistingPath(path)
-	if err == nil {
-		return resolved, nil
+	var absent []string
+	for {
+		resolved, err := resolveExistingPath(path)
+		if err == nil {
+			return filepath.Join(append([]string{resolved}, absent...)...), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			// The root itself does not resolve: nothing of this path exists, so
+			// there is nothing to canonicalise and the path stands for itself.
+			return filepath.Join(append([]string{path}, absent...)...), nil
+		}
+		absent = append([]string{filepath.Base(path)}, absent...)
+		path = parent
 	}
-	if !os.IsNotExist(err) {
-		return "", err
-	}
-	parent, err := resolveExistingPath(filepath.Dir(path))
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(parent, filepath.Base(path)), nil
 }
 
 func samePath(a, b string) bool {

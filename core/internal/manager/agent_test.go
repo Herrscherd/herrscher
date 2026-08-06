@@ -223,3 +223,21 @@ func TestSessionCreateNoAgentUnchanged(t *testing.T) {
 		t.Fatalf("session.Agent should be empty, got %q", sess.Agent)
 	}
 }
+
+// A session that comes back reuses the worktree it left behind. If creating it
+// then fails, the rollback must leave that worktree alone: it holds work from
+// before this call, and removing it (forced, so even uncommitted) would destroy
+// exactly what reuse exists to preserve.
+func TestSessionCreateDoesNotRollBackAReusedWorktree(t *testing.T) {
+	h, _, _, wt, _, st := newTestHandler(t, "")
+	wt.path = t.TempDir()
+	wt.preExisting = true
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "agent", "ghost")); err == nil {
+		t.Fatal("expected error for unknown agent")
+	}
+	if len(wt.removed) != 0 {
+		t.Fatalf("a reused worktree is not the rollback's to remove: %+v", wt.removed)
+	}
+}

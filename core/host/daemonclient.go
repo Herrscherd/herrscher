@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 // The daemon already speaks to other processes through two local sockets: a
@@ -27,6 +29,26 @@ import (
 type DaemonEvent struct {
 	Session string `json:"session"`
 	contracts.Event
+}
+
+// ServedInstanceID reports the instance id the daemon serving statePath actually
+// namespaces its sockets with, so a client can find them. The daemon freezes that
+// id into the state file at boot — resolving it from the owner when no --instance
+// was passed, and staying legacy (empty) when pre-existing sessions would be
+// orphaned. A client that only knows its own flag therefore guesses wrong every
+// time the two disagree, and dials a socket path nothing listens on.
+//
+// The stored id wins; optID is only the fallback for a state file that cannot be
+// read (no daemon has booted here yet, in which case nothing is listening either).
+func ServedInstanceID(statePath, optID string) string {
+	st, err := state.LoadState(statePath)
+	if err != nil {
+		return optID
+	}
+	if st.InstanceID != "" {
+		return st.InstanceID
+	}
+	return optID
 }
 
 // DaemonDispatch runs one operator command inside the running daemon and returns

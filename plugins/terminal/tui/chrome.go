@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/charmbracelet/lipgloss"
@@ -93,23 +94,102 @@ func (m *model) activeInfo() (contracts.SessionInfo, bool) {
 // with the two things you need on arrival: which session this is, and what you
 // can press. It renders inside the viewport, so it costs no chrome height.
 func (m *model) emptyState(width int) string {
-	lines := []string{accentStyle.Render(brand)}
-	if s, ok := m.activeInfo(); ok {
-		var facts []string
-		for _, f := range []string{s.Name, s.Project, s.Vendor} {
-			if f != "" {
-				facts = append(facts, f)
-			}
+	lines := []string{accentStyle.Render(brand), ""}
+	lines = append(lines, m.sessionFacts()...)
+	lines = append(lines, m.otherSessions()...)
+	lines = append(lines, "", shortcutRow())
+	out := make([]string, 0, len(lines))
+	for _, ln := range lines {
+		// Each section brings its own leading blank so it can be dropped whole. Two
+		// of them meeting — a hub that does not know this tab yet, so no facts
+		// between the brand and the session list — must still read as one gap.
+		if ln == "" && len(out) > 0 && out[len(out)-1] == "" {
+			continue
 		}
-		if len(facts) > 0 {
-			lines = append(lines, dimStyle.Render(strings.Join(facts, " · ")))
+		out = append(out, truncate(ln, width))
+	}
+	return strings.Join(out, "\n")
+}
+
+// factWidth pads a fact's label so the values line up in a column. A pair of
+// ragged lines reads as prose; an aligned pair reads as a record, which is what
+// this is.
+const factWidth = 10
+
+// fact renders one labelled line of the arrival record.
+func fact(label, value string) string {
+	return dimStyle.Render("  "+label+strings.Repeat(" ", max(1, factWidth-len(label)))) +
+		textStyle.Render(value)
+}
+
+// sessionFacts is what this tab is: its session, where it works, and since when.
+// A hub that does not know the tab yields nothing rather than a row of blanks.
+func (m *model) sessionFacts() []string {
+	s, ok := m.activeInfo()
+	if !ok {
+		return nil
+	}
+	var out []string
+	if s.Name != "" {
+		out = append(out, fact("session", s.Name))
+	}
+	if where := joinNonEmpty(s.Project, s.Vendor); where != "" {
+		out = append(out, fact("repo", where))
+	}
+	if tb := m.tabs[m.active]; tb != nil && !tb.openedAt.IsZero() {
+		out = append(out, fact("open", formatDuration(time.Since(tb.openedAt))))
+	}
+	return out
+}
+
+// maxOtherSessions bounds the list of other open sessions. The point of the list
+// is that you can see there are others and switch to one, not that you can read
+// them all: past a handful it stops being a glance and starts being a page.
+const maxOtherSessions = 5
+
+// otherSessions lists the tabs this one is not, so a fresh tab says what else is
+// running rather than implying nothing is. It renders nothing at all when this
+// is the only session — an empty heading is worse than no heading.
+func (m *model) otherSessions() []string {
+	var rows []string
+	for _, ch := range m.order {
+		if len(rows) >= maxOtherSessions {
+			break
+		}
+		if ch == m.active {
+			continue
+		}
+		tb := m.tabs[ch]
+		if tb == nil {
+			continue
+		}
+		mark := "  "
+		if tb.unread {
+			mark = " " + glyphUnread
+		}
+		rows = append(rows, dimStyle.Render("  "+mark+" "+tb.label))
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	return append([]string{"", dimStyle.Render("  other sessions")}, rows...)
+}
+
+// shortcutRow is the two things a reader needs before typing: how to reach the
+// commands, and how to get out of a turn.
+func shortcutRow() string {
+	return dimStyle.Render("  /  commands   @  files   Tab  switch session   esc  interrupt")
+}
+
+// joinNonEmpty joins the parts that have something to say with a separating dot.
+func joinNonEmpty(parts ...string) string {
+	var kept []string
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
 		}
 	}
-	lines = append(lines, "", dimStyle.Render("type a message · / commands · @ files · Tab switches session"))
-	for i, ln := range lines {
-		lines[i] = truncate(ln, width)
-	}
-	return strings.Join(lines, "\n")
+	return strings.Join(kept, " · ")
 }
 
 // truncate clips s to width columns. Callers pass already-styled text, so the

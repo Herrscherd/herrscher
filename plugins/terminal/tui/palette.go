@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -82,18 +83,79 @@ func (m *model) completePal() {
 	m.input.CursorEnd()
 }
 
-// defaultCommands is the Claude-parity slash-command set the palette seeds with
-// when the backend advertises none: the conversation/session verbs a user who
-// knows Claude Code reaches for. The backend's own command list, when present,
-// takes precedence (see newModel).
-func defaultCommands() []CommandSpec {
+// ParseCommandSpecs turns the daemon's `commands --json` answer into palette
+// entries, keeping only those whose leading verb allow accepts (a nil allow
+// keeps everything). A frontend that asks the daemon what it dispatches cannot
+// fall behind it, which a list re-typed here always eventually does.
+//
+// The required params become the entry's Args, in declaration order, since those
+// are what the operator must supply; the optional ones are many (session create
+// alone declares twenty) and would make every row unreadable.
+func ParseCommandSpecs(raw []byte, allow func(verb string) bool) ([]CommandSpec, error) {
+	var specs []struct {
+		Path   []string `json:"path"`
+		Help   string   `json:"help"`
+		Params []struct {
+			Name     string `json:"Name"`
+			Required bool   `json:"Required"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(raw, &specs); err != nil {
+		return nil, err
+	}
+	out := make([]CommandSpec, 0, len(specs))
+	for _, s := range specs {
+		if len(s.Path) == 0 || (allow != nil && !allow(s.Path[0])) {
+			continue
+		}
+		c := CommandSpec{Name: strings.Join(s.Path, " "), Desc: s.Help}
+		var args []string
+		for _, p := range s.Params {
+			if p.Required {
+				args = append(args, "--"+p.Name+" <"+p.Name+">")
+			}
+		}
+		c.Args = strings.Join(args, " ")
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+// mergeCommands puts the frontend's own verbs in front of the daemon's and drops
+// any duplicate the daemon also declares. The local ones used to be replaced
+// outright the moment a backend advertised a single command, which is how a
+// palette lost /help and /clear by connecting to a daemon.
+func mergeCommands(local, remote []CommandSpec) []CommandSpec {
+	seen := make(map[string]bool, len(local))
+	out := make([]CommandSpec, 0, len(local)+len(remote))
+	for _, c := range local {
+		seen[c.Name] = true
+		out = append(out, c)
+	}
+	for _, c := range remote {
+		if !seen[c.Name] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// localCommands are the verbs the TUI answers itself, without the daemon: they
+// open an overlay or edit the view, and there is nothing on the other side of
+// the socket to run them. They lead the palette because they are the ones with
+// no other way in — every daemon verb can also be typed at a shell.
+//
+// This list must stay in step with the branches handleEnter intercepts;
+// palette_test.go asserts that each one is actually handled locally.
+func localCommands() []CommandSpec {
 	return []CommandSpec{
-		{Name: "clear", Desc: "clear the conversation"},
-		{Name: "help", Desc: "show shortcuts"},
-		{Name: "session switch", Args: "<name>", Desc: "switch session"},
-		{Name: "session create", Args: "--name", Desc: "start a session"},
-		{Name: "resume", Args: "<name>", Desc: "reopen a session"},
+		{Name: "help", Desc: "show the shortcuts"},
+		{Name: "clear", Desc: "clear this tab's transcript"},
+		{Name: "session switch", Desc: "switch between live sessions"},
+		{Name: "resume", Desc: "reopen an archived session"},
+		{Name: "usage", Desc: "cost, tokens and context for this session"},
 		{Name: "skills", Desc: "list available skills"},
+		{Name: "attach", Args: "<path>", Desc: "stage a local file with the next message"},
 	}
 }
 
@@ -114,15 +176,19 @@ func (m *model) paletteView() string {
 			b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", len(fc)-paletteMax)))
 			break
 		}
+		// The name is the thing being chosen and the args are a reminder of what
+		// it will ask for; drawing both dim made every row one grey smear, and a
+		// menu you have to read word by word is a menu you stop opening.
 		label := "/" + c.Name
-		if c.Args != "" {
-			label += " " + c.Args
-		}
 		var row string
-		if i == m.palIdx {
+		switch {
+		case i == m.palIdx:
 			row = accentStyle.Render(glyphCursor + " " + label)
-		} else {
-			row = dimStyle.Render("  " + label)
+		default:
+			row = textStyle.Render("  " + label)
+		}
+		if c.Args != "" {
+			row += dimStyle.Render(" " + c.Args)
 		}
 		if c.Desc != "" {
 			row += "  " + dimStyle.Render(c.Desc)

@@ -223,6 +223,7 @@ type model struct {
 	palIdx       int           // selected row in the open command palette
 	palWasOpen   bool          // palette open-state after the previous key, to skip idle re-fits
 	spinning     bool          // whether the animation timer is currently running
+	composerRows int           // composer height the layout is built around, in rows
 
 	resumeOpen bool                    // whether the /resume picker overlay is open
 	resumeIdx  int                     // selected row in the /resume picker
@@ -281,16 +282,19 @@ const maxComposerLines = 8
 
 // composerHeight is the current height of the input composer in rows (≥1). It
 // grows with the draft up to maxComposerLines.
+//
+// It reads composerRows and not the widget: the widget is held permanently at
+// maxComposerLines and inputRow trims what it draws. See newModel.
 func (m *model) composerHeight() int {
-	if h := m.input.Height(); h >= 1 {
-		return h
+	if m.composerRows >= 1 {
+		return m.composerRows
 	}
 	return 1
 }
 
-// resizeComposer grows the composer with its content up to maxComposerLines and
-// re-fits the viewport whenever that height changes, so the transcript never
-// overlaps a multi-line draft.
+// resizeComposer records the height the draft needs, up to maxComposerLines, and
+// re-fits the viewport when that height changed, so the transcript never overlaps
+// a multi-line draft. The widget's own height is never touched.
 func (m *model) resizeComposer() {
 	h := displayRows(m.input.Value(), m.input.Width())
 	if h < 1 {
@@ -299,8 +303,8 @@ func (m *model) resizeComposer() {
 	if h > maxComposerLines {
 		h = maxComposerLines
 	}
-	if h != m.input.Height() {
-		m.input.SetHeight(h)
+	if h != m.composerRows {
+		m.composerRows = h
 		m.applySize()
 		m.syncViewport()
 	}
@@ -367,9 +371,16 @@ func newModel(tm Backend) *model {
 	// terminal, and neither is guaranteed — a trailing backslash (continueLine)
 	// is the fallback that needs nothing from the terminal.
 	in.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "shift+enter", "ctrl+j"))
-	in.SetHeight(1)
+	// The widget is held at its full allowance for life and inputRow trims the
+	// rows it draws, because a textarea that is resized to fit its draft scrolls
+	// its own inner viewport the moment an edit puts the cursor below the last
+	// row it can currently show — and growing the box afterwards does not undo
+	// that scroll. That is what ate the first line of every two-line message:
+	// what you had just typed sat on top, with a blank row under it and the line
+	// above it gone. A box that is already tall enough never scrolls.
+	in.SetHeight(maxComposerLines)
 	in.Focus()
-	m := &model{tm: tm, input: in, tabs: map[string]*tab{}, clip: newClipboard(), kitty: supportsKitty(os.Getenv)}
+	m := &model{tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), kitty: supportsKitty(os.Getenv)}
 	// The palette is the frontend's own verbs followed by the daemon's. The
 	// backend used to replace the list outright, which meant connecting to a
 	// daemon cost the operator /help, /clear and every other local overlay.
@@ -934,8 +945,17 @@ func (m *model) cachedTranscript(tb *tab) string {
 
 // inputRow renders the multi-line composer. The key hint lives on the status row
 // above it (see statusRow), since a growing composer can no longer share its line.
+// inputRow draws the composer, cut to the rows its draft actually needs. The
+// widget always renders maxComposerLines of them (see newModel) and pads the
+// unused ones, so the trim is what makes the box appear to grow with the text.
+// Past the cap the two heights meet and nothing is cut, which is where the
+// widget's own scrolling takes over.
 func (m *model) inputRow() string {
-	return m.input.View()
+	lines := strings.Split(m.input.View(), "\n")
+	if h := m.composerHeight(); h < len(lines) {
+		lines = lines[:h]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // hintText is the dim key cheatsheet under the composer, switching to menu

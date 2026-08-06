@@ -15,7 +15,7 @@ Docs live in [Herrscherd/herrscher-docs](https://github.com/Herrscherd/herrscher
 - **Any front end** — Discord, the in-tree terminal TUI, or your own gateway plugin behind the same neutral port. The TUI renders several sessions as live tabs, frames each request, answer and error between titled rules so a turn keeps its shape when colour does not survive, types each event by role (reasoning, tool family, notice, error), renders the agent's markdown and diffs, and carries a status bar with the session's cumulative cost and a gauge of how full its context window is. → `plugins/gateway`, `plugins/terminal`
 - **Model routing** — each backend declares the models it offers in its manifest, so the catalog is queryable without instantiating anything. A route policy picks which of them a build may use: `all` runs on this machine's own vendor logins, `gateway-only` runs every turn through a gateway you supply and refuses the two ways around the catalog (a free-form `--cmd`, or a session with no model at all).
 
-Also: cross-backend skills (`SKILL.md` works on every backend) → `guide/skills`, and per-node memory budgets → `guide/budgets`.
+Also: cross-backend skills (`SKILL.md` works on every backend), including the playbooks the binary ships with and installs into `~/.claude/skills` on first run — existing files are never overwritten, so yours stay yours → `guide/skills`; and per-node memory budgets → `guide/budgets`.
 
 ## Install & run
 

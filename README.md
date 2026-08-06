@@ -26,8 +26,10 @@ git clone https://github.com/Herrscherd/herrscher.git
 cd herrscher
 go build -o herrscher .    # the only binary; plugins are compiled in
 ./herrscher init           # compose the plugin stack, seed config, choose routing
-./herrscher                # opens the terminal TUI
+./herrscher                # serves, with the terminal TUI in the foreground
 ```
+
+One daemon per state file. A bare `herrscher` on a TTY **serves** — it does not attach to a daemon already running, so starting one next to the service would answer every message twice and bill it twice. That is refused now, naming the process that holds the state; use `--state` if you really want a separate world.
 
 `init` ends by asking where agent turns run: the route policy, the gateway credentials `gateway-only` requires (both halves or neither — a base URL without a token would redirect the CLI while it keeps authenticating as this machine's own account), and the model a session gets when it names none. It writes them to `.env`; `herrscher models list` shows what the active policy offers.
 

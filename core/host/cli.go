@@ -330,6 +330,22 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
+	// Registered last, so it describes a complete registry. A frontend that draws
+	// its own command menu asks for this instead of keeping a copy of the verb
+	// list beside the daemon's — a copy drifts silently, and the drift shows up as
+	// a palette that offers a fraction of what the daemon would accept.
+	if err := reg.Add(contracts.New("commands").
+		Help("list every command this daemon dispatches, with its params").
+		Do(func(_ context.Context, in contracts.Input) (string, error) {
+			specs := reg.Specs()
+			if in.JSON {
+				b, err := json.Marshal(specs)
+				return string(b), err
+			}
+			return reg.Help(), nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
 	return reg, hostDeps{wt: wt, agents: agents, handler: hdl, seedCoord: seedCoord}, nil
 }
 

@@ -370,13 +370,12 @@ func newModel(tm Backend) *model {
 	in.SetHeight(1)
 	in.Focus()
 	m := &model{tm: tm, input: in, tabs: map[string]*tab{}, clip: newClipboard(), kitty: supportsKitty(os.Getenv)}
-	// Seed the palette with the Claude command set; a backend that advertises its
-	// own verbs overrides it.
-	m.cmds = defaultCommands()
+	// The palette is the frontend's own verbs followed by the daemon's. The
+	// backend used to replace the list outright, which meant connecting to a
+	// daemon cost the operator /help, /clear and every other local overlay.
+	m.cmds = localCommands()
 	if tm != nil {
-		if bc := tm.Commands(); len(bc) > 0 {
-			m.cmds = bc
-		}
+		m.cmds = mergeCommands(m.cmds, tm.Commands())
 	}
 	return m
 }
@@ -396,10 +395,15 @@ func (m *model) ensureTab(channel string) *tab {
 	return tb
 }
 
-// seedScrollback fills a freshly created tab with its recorded transcript, dimmed
-// so replayed history reads as past context distinct from live output. It is a
-// no-op when the backend is absent, the session name is not yet known, or no
-// history exists — a reopened tab is thus seeded before any live event arrives.
+// seedScrollback fills a freshly created tab with its recorded transcript. Every
+// replayed line used to collapse into one faint role, which made a resumed
+// session open on a wall of unreadable grey — the history is the conversation,
+// and it deserves the same shape the live turns get. So a replayed line is
+// rendered as what it is, and the one thing marked as past is the boundary.
+//
+// It is a no-op when the backend is absent, the session name is not yet known,
+// or no history exists — a reopened tab is thus seeded before any live event
+// arrives.
 func (m *model) seedScrollback(tb *tab) {
 	if m.tm == nil {
 		return
@@ -408,21 +412,26 @@ func (m *model) seedScrollback(tb *tab) {
 	if name == "" {
 		return
 	}
-	for _, ln := range m.tm.Scrollback(name) {
-		tb.appendEntry(entry{role: roleScrollback, text: scrollbackPrefix(ln.Role) + ln.Text})
+	lines := m.tm.Scrollback(name)
+	if len(lines) == 0 {
+		return
 	}
+	for _, ln := range lines {
+		tb.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
+	}
+	// One rule under the replay, not a mark on every line: the reader needs to
+	// know where the past stops, and that is a single fact about a single place.
+	tb.appendEntry(entry{role: roleScrollback, text: "earlier"})
 }
 
-// scrollbackPrefix labels a replayed line by its role, mirroring the live render
-// (a dim "> " prompt for user turns, bare prose for the agent) so seeded history
-// looks like the conversation it replays.
-func scrollbackPrefix(role string) string {
-	switch role {
-	case "user":
-		return glyphPrompt + " "
-	default:
-		return ""
+// scrollbackRole maps a recorded line's role onto the transcript's own. The wire
+// records only "user" and "assistant"; anything else is prose from the agent
+// side, which is the safer of the two to be wrong about.
+func scrollbackRole(role string) string {
+	if role == "user" {
+		return roleYou
 	}
+	return roleAgent
 }
 
 // removeTab drops a tab and fixes the active selection.
@@ -550,6 +559,13 @@ func (m *model) handleEnter() tea.Cmd {
 		}
 		if args[0] == "session" && len(args) >= 2 && args[1] == "switch" {
 			m.openSwitch() // TUI-local session switcher (invisible multi-session)
+			return nil
+		}
+		if args[0] == "usage" {
+			if tb := m.tabs[m.active]; tb != nil {
+				tb.appendEntry(entry{role: roleNotice, text: m.usageReport(tb)})
+				m.syncViewport()
+			}
 			return nil
 		}
 		if args[0] == "skills" {

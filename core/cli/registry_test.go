@@ -192,3 +192,32 @@ func TestRunChecksRequiredParams(t *testing.T) {
 		t.Fatal("Run must reject missing required param")
 	}
 }
+
+// TestSpecsDescribeTheWholeRegistry: the palette is derived from this, so a
+// command missing here is a command an operator cannot discover.
+func TestSpecsDescribeTheWholeRegistry(t *testing.T) {
+	var r cli.Registry
+	must := func(err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	okRun := func(context.Context, contracts.Input) (string, error) { return "", nil }
+	must(r.Add(contracts.New("zulu").Help("last").Do(okRun)))
+	must(r.Add(contracts.New("alpha", "one").
+		Help("first").
+		Param("name", "who", true).
+		Do(okRun)))
+
+	specs := r.Specs()
+	if len(specs) != 2 {
+		t.Fatalf("Specs = %+v, want both commands", specs)
+	}
+	// Sorted by path, so a menu built from this is stable between boots.
+	if got := strings.Join(specs[0].Path, " "); got != "alpha one" {
+		t.Fatalf("first spec = %q, want the alphabetical one", got)
+	}
+	if specs[0].Help != "first" || len(specs[0].Params) != 1 || specs[0].Params[0].Name != "name" {
+		t.Fatalf("spec dropped declared shape: %+v", specs[0])
+	}
+}

@@ -187,10 +187,16 @@ type fakeSessionControl struct {
 	scrollback  []contracts.ScrollbackLine
 	resumed     []string
 	interrupted []string
+	// commandsJSON is what a `commands --json` dispatch answers, so a test can
+	// stand in for the daemon registry the palette is now derived from.
+	commandsJSON string
 }
 
 func (f *fakeSessionControl) Dispatch(_ context.Context, args []string) (string, error) {
 	f.lastArgs = args
+	if len(args) > 0 && args[0] == "commands" {
+		return f.commandsJSON, nil
+	}
 	return "ok", nil
 }
 
@@ -382,28 +388,48 @@ func TestEnsureDefaultSessionCreatesWhenOnlyDiscord(t *testing.T) {
 	}
 }
 
-// TestCommandsAdvertiseOnlyAllowedVerbs guards the palette↔Dispatch contract.
-// The table is hand-curated (this package cannot import core/internal/manager
-// to diff against the real registry), so the checks here stand in for that
-// cross-check: every command must lead with a verb Dispatch accepts, name a
-// verb+subcommand, and — because the CLI parser only accepts "--flag value"
-// pairs and silently drops positional tokens — advertise its args in flag form.
+// TestCommandsAdvertiseOnlyAllowedVerbs guards the palette↔Dispatch contract:
+// whatever the daemon answers, the palette may only carry verbs Dispatch would
+// accept — otherwise the menu offers rows that error the moment they are picked.
+// The registry is faked here because the point is the filtering, not the list.
 func TestCommandsAdvertiseOnlyAllowedVerbs(t *testing.T) {
-	tm := &Terminal{}
+	tm := New()
+	fake := &fakeSessionControl{commandsJSON: `[
+		{"path":["session","create"],"help":"start a session","params":[{"Name":"name","Required":true}]},
+		{"path":["memory","list"],"help":"list memories"},
+		{"path":["service","restart"],"help":"restart the daemon"},
+		{"path":["set","home"],"help":"rewrite routing"}
+	]`}
+	tm.BindSessionControl(fake)
 	cmds := tm.Commands()
 	if len(cmds) == 0 {
 		t.Fatal("Commands must advertise at least one command")
 	}
 	for _, c := range cmds {
 		parts := strings.Fields(c.Name)
-		if len(parts) < 2 {
-			t.Fatalf("command %q must be a verb + subcommand", c.Name)
-		}
 		if !terminalVerbs[parts[0]] {
 			t.Fatalf("command %q leads with a verb outside terminalVerbs", c.Name)
 		}
+		// The CLI parser only accepts "--flag value" pairs and silently drops
+		// positional tokens, so an advertised arg that is not a flag is a trap.
 		if c.Args != "" && !strings.Contains(c.Args, "--") {
 			t.Fatalf("command %q advertises positional args %q; the parser only accepts --flag form", c.Name, c.Args)
 		}
+	}
+	for _, gone := range []string{"service restart", "set home"} {
+		for _, c := range cmds {
+			if c.Name == gone {
+				t.Fatalf("%q must never reach the palette", gone)
+			}
+		}
+	}
+}
+
+// TestCommandsWithoutABoundControlAreEmpty: a frontend that cannot reach the
+// registry must show no daemon rows rather than a list typed here, which would
+// be the drift this indirection exists to remove.
+func TestCommandsWithoutABoundControlAreEmpty(t *testing.T) {
+	if cmds := New().Commands(); len(cmds) != 0 {
+		t.Fatalf("unbound Commands = %+v, want none", cmds)
 	}
 }

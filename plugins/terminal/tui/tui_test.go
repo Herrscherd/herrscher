@@ -683,7 +683,9 @@ func TestPaletteOpensAndCompletes(t *testing.T) {
 		t.Fatal("typing / must open the palette")
 	}
 	// Tab completes the selected command and pre-seeds its first flag, so the
-	// operator lands on the value to type.
+	// operator lands on the value to type. Narrow to a command that has one:
+	// the palette now leads with the local overlays, which take no flags.
+	m.input.SetValue("/session create")
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if m.input.Value() != "/session create --name " {
 		t.Fatalf("Tab must complete and pre-seed the flag: got %q", m.input.Value())

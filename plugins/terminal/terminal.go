@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -327,25 +328,67 @@ func withTerminalDefault(args []string) []string {
 }
 
 // terminalVerbs is the allow-list of command groups reachable from the TUI. The
-// terminal drives session lifecycle and its companion agents; daemon-management
-// verbs (service restart/update — which would tear down the host the TUI runs
-// in — and set home/source, which rewrites its routing config) are deliberately
-// out of reach, so a future destructive verb can never be typed into a tab.
-var terminalVerbs = map[string]bool{"session": true, "agent": true}
+// terminal drives session lifecycle and its companion agents, reads and edits
+// the memory vault, and reads the model catalog. Daemon-management verbs are
+// deliberately out of reach — service restart/update would tear down the host
+// the TUI runs in, and set home/source rewrites its routing config — so a
+// future destructive verb in either group can never be typed into a tab.
+//
+// The gate is by group, not by command, which is why membership has to be
+// judged on the whole group: memory's most destructive verb is `forget`, and
+// `memory restore` undoes it; models only lists.
+var terminalVerbs = map[string]bool{
+	"session": true,
+	"agent":   true,
+	"memory":  true,
+	"models":  true,
+}
 
-// Commands is the curated palette advertised to the TUI. Every entry's leading
-// verb is a member of terminalVerbs, so the palette can never surface a command
-// Dispatch would reject; terminal_test.go asserts this invariant.
-func (t *Terminal) Commands() []tui.CommandSpec {
-	return []tui.CommandSpec{
-		{Name: "session create", Args: "--name <name>", Desc: "start a new session tab"},
-		{Name: "session list", Desc: "list active sessions"},
-		{Name: "session who", Args: "--name <name>", Desc: "list a session's participants"},
-		{Name: "session close", Args: "--name <name>", Desc: "close a session"},
-		{Name: "session archive", Args: "--name <name>", Desc: "archive a session (keep it resumable)"},
-		{Name: "agent create", Args: "--name <name>", Desc: "add a companion agent"},
-		{Name: "agent list", Desc: "list companion agents"},
+// OperatorVerb reports whether a command's leading verb is reachable from a
+// terminal frontend. It is exported because the attached frontend talks to the
+// same daemon over a socket and must draw the same palette — two copies of this
+// judgement would be two chances to disagree about what a tab may run.
+func OperatorVerb(verb string) bool { return terminalVerbs[verb] }
+
+// allowedVerbs lists the allow-list for an error an operator has to act on.
+func allowedVerbs() string {
+	out := make([]string, 0, len(terminalVerbs))
+	for v := range terminalVerbs {
+		out = append(out, v)
 	}
+	sort.Strings(out)
+	return strings.Join(out, ", ")
+}
+
+// Commands is the palette advertised to the TUI: the daemon's own registry,
+// filtered to the verbs Dispatch accepts. Asking the registry rather than
+// re-typing a list here is what keeps the two in step — the hand-kept version
+// offered seven of the twenty-odd commands the terminal would have run.
+//
+// A registry that cannot be reached (control not bound yet) yields no palette
+// rather than a stale one: the local verbs still stand on their own.
+func (t *Terminal) Commands() []tui.CommandSpec {
+	t.ctrlMu.Lock()
+	c, ctx := t.ctrl, t.baseCtx
+	t.ctrlMu.Unlock()
+	if c == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	// Straight to the control seam, not through t.Dispatch: the gate below is
+	// about what an operator may type, and this is the frontend asking what the
+	// gate will let through.
+	out, err := c.Dispatch(ctx, []string{"commands", "--json"})
+	if err != nil {
+		return nil
+	}
+	specs, err := tui.ParseCommandSpecs([]byte(out), func(verb string) bool { return terminalVerbs[verb] })
+	if err != nil {
+		return nil
+	}
+	return specs
 }
 
 // Dispatch forwards an operator argv to the bound SessionControl, prepending
@@ -358,7 +401,7 @@ func (t *Terminal) Dispatch(args []string) (string, error) {
 		if len(args) > 0 {
 			verb = args[0]
 		}
-		return "", fmt.Errorf("command %q is not available from the terminal (allowed: session, agent)", verb)
+		return "", fmt.Errorf("command %q is not available from the terminal (allowed: %s)", verb, allowedVerbs())
 	}
 	t.ctrlMu.Lock()
 	c, ctx := t.ctrl, t.baseCtx

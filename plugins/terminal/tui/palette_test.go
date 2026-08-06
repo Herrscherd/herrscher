@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -8,9 +9,9 @@ import (
 // TestPaletteInlineRenderSelectedRow checks the palette renders inline (no border
 // box) with the selected row prefixed ❯ in the warm accent.
 func TestPaletteInlineRenderSelectedRow(t *testing.T) {
-	m := newTestModel() // nil backend → seeded with defaultCommands
+	m := newTestModel() // nil backend → seeded with localCommands
 	m.input.SetValue("/")
-	m.palIdx = 0
+	m.palIdx = 1 // /clear: the row after the leading /help
 	out := m.paletteView()
 	if !strings.Contains(out, glyphCursor+" /clear") {
 		t.Fatalf("selected row must be prefixed %q in accent: %q", glyphCursor, out)
@@ -22,16 +23,63 @@ func TestPaletteInlineRenderSelectedRow(t *testing.T) {
 	}
 }
 
-// TestDefaultCommandsIncludeClaudeSet checks the Claude command set is seeded.
-func TestDefaultCommandsIncludeClaudeSet(t *testing.T) {
-	have := map[string]bool{}
-	for _, c := range defaultCommands() {
-		have[c.Name] = true
+// TestLocalCommandsAreAllHandledLocally: every verb in localCommands claims to
+// need no daemon, so each must be intercepted by handleEnter. One that is only
+// advertised would reach dispatchCmd and come back "unknown command".
+func TestLocalCommandsAreAllHandledLocally(t *testing.T) {
+	src, err := os.ReadFile("tui.go")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, want := range []string{"clear", "help", "session switch", "session create", "resume"} {
-		if !have[want] {
-			t.Fatalf("default command set missing %q: %+v", want, defaultCommands())
+	for _, c := range localCommands() {
+		verb := strings.Fields(c.Name)[0]
+		if !strings.Contains(string(src), `args[0] == "`+verb+`"`) {
+			t.Errorf("/%s is advertised as local but handleEnter never intercepts %q", c.Name, verb)
 		}
+	}
+}
+
+// TestMergeCommandsKeepsTheLocalOnes: a backend advertising commands used to
+// replace the palette outright, so connecting to a daemon cost the operator
+// /help, /clear and every other overlay.
+func TestMergeCommandsKeepsTheLocalOnes(t *testing.T) {
+	got := mergeCommands(localCommands(), []CommandSpec{
+		{Name: "session create"},
+		{Name: "help", Desc: "the daemon's own help"},
+	})
+	have := map[string]string{}
+	for _, c := range got {
+		if _, dup := have[c.Name]; dup {
+			t.Fatalf("duplicate row %q", c.Name)
+		}
+		have[c.Name] = c.Desc
+	}
+	for _, want := range []string{"clear", "help", "session switch", "resume", "session create"} {
+		if _, ok := have[want]; !ok {
+			t.Fatalf("merged palette missing %q: %+v", want, got)
+		}
+	}
+	if have["help"] == "the daemon's own help" {
+		t.Error("a daemon command must not shadow the local one it collides with")
+	}
+}
+
+// TestParseCommandSpecsFiltersAndFlags checks the daemon's answer becomes rows
+// the CLI parser would actually accept: required params only, in --flag form.
+func TestParseCommandSpecsFiltersAndFlags(t *testing.T) {
+	raw := []byte(`[
+		{"path":["session","create"],"help":"start","params":[{"Name":"name","Required":true},{"Name":"repo","Required":false}]},
+		{"path":["service","restart"],"help":"nope"}
+	]`)
+	got, err := ParseCommandSpecs(raw, func(v string) bool { return v == "session" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %+v, want only the session row", got)
+	}
+	if got[0].Name != "session create" || got[0].Args != "--name <name>" || got[0].Desc != "start" {
+		t.Fatalf("row = %+v", got[0])
 	}
 }
 

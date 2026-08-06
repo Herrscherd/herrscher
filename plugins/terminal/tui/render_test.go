@@ -7,17 +7,21 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// TestUserEntryIsFramed checks a user turn renders as its own ruled block: the
-// request is what a reader scrolls back to find, and a dim row among hundreds is
-// not findable.
-func TestUserEntryIsFramed(t *testing.T) {
+// TestUserEntryIsOneUnruledRow checks a user turn costs exactly the rows its text
+// needs. It used to be framed between two rules, which meant a one-word message
+// took four rows for one character — and a frame drawn around every turn marks
+// nothing. The glyph and the colour are what tell it apart.
+func TestUserEntryIsOneUnruledRow(t *testing.T) {
 	out := renderEntry(entry{role: roleYou, text: "hello there"}, 40)
 	if !strings.Contains(out, glyphCursor+" hello there") {
 		t.Fatalf("user entry must render its request: %q", out)
 	}
 	lines := strings.Split(out, "\n")
-	if len(lines) != 3 || !strings.Contains(lines[0], ruleChar) || !strings.Contains(lines[2], ruleChar) {
-		t.Fatalf("user entry must be ruled above and below: %q", out)
+	if len(lines) != 1 {
+		t.Fatalf("a one-line request must take one row, got %d: %q", len(lines), out)
+	}
+	if strings.Contains(out, strings.Repeat(ruleChar, 4)) {
+		t.Fatalf("user entry must carry no rule: %q", out)
 	}
 	if strings.Contains(out, glyphTool) || strings.Contains(out, "▎") {
 		t.Fatalf("user entry must carry no tool/gutter glyph: %q", out)

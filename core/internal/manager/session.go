@@ -484,11 +484,16 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	// Worktree isolation by default; shared:true runs in the main checkout.
 	shared := in.Bool("shared")
 	var worktree string
+	// A session that comes back reuses the worktree it left behind, so the
+	// rollback below has to know which of the two happened: removing a reused
+	// worktree would throw away work that predates this call entirely.
+	reusedWorktree := false
 	if !shared {
 		base := ""
 		if b, ok := in.Lookup("base"); ok {
 			base = b
 		}
+		reusedWorktree = h.wt.PreExisting(repo, name)
 		path, err := h.wt.Create(repo, name, base)
 		if err != nil {
 			return "", fmt.Errorf("worktree: %w", err)
@@ -498,6 +503,9 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	// rollbackWorktree removes the worktree we just made when a later step fails;
 	// the removal error is logged but never masks the original failure.
 	rollbackWorktree := func() {
+		if reusedWorktree {
+			return
+		}
 		if rmErr := h.wt.Remove(repo, name, true); rmErr != nil {
 			fmt.Fprintf(os.Stderr, "herrscher: worktree rollback for %q failed: %v\n", name, rmErr)
 		}

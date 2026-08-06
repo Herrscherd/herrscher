@@ -269,6 +269,7 @@ type fakeWT struct {
 	path         string // "" → simulate shared fallback
 	removeErr    error  // simulate dirty worktree
 	createdBase  string // last base passed to Create
+	preExisting  bool   // the worktree was already on disk, so Create reuses it
 }
 
 func (f *fakeWT) Create(repo, name, base string) (string, error) {
@@ -277,7 +278,8 @@ func (f *fakeWT) Create(repo, name, base string) (string, error) {
 	f.createdBase = base
 	return f.path, nil
 }
-func (f *fakeWT) Branch(name string) string { return "session/" + name }
+func (f *fakeWT) PreExisting(repo, name string) bool { return f.preExisting }
+func (f *fakeWT) Branch(name string) string          { return "session/" + name }
 func (f *fakeWT) Remove(repo, name string, force bool) error {
 	if f.removeErr != nil && !force {
 		return f.removeErr

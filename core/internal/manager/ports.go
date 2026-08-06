@@ -41,6 +41,9 @@ type supervisor interface {
 // repo root is passed per call so one Worktreer serves every project.
 type worktrees interface {
 	Create(repo, name, base string) (path string, err error)
+	// PreExisting says whether Create would reuse a worktree rather than make
+	// one, which is what tells a rollback whether the worktree is its to remove.
+	PreExisting(repo, name string) bool
 	Branch(name string) string
 	Remove(repo, name string, force bool) error
 }

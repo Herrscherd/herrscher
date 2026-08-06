@@ -539,15 +539,18 @@ func TestANewSessionStillBranchesFromItsBase(t *testing.T) {
 	}
 }
 
-// The branch a live session is sitting on cannot be handed to a second worktree.
-// That is a real conflict, and it must be reported rather than papered over.
+// A branch already checked out somewhere else cannot be handed to a session's
+// worktree. That is a real conflict — two trees on one branch — and it must be
+// reported rather than papered over.
+//
+// Note what is *not* a conflict: the same session asking twice. Its worktree is
+// its own, and reusing it is the point of TestCreateReusesTheSessionsOwnWorktree.
 func TestABranchAlreadyCheckedOutIsStillAnError(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "inst")
-	if _, err := w.Create(repo, "live", ""); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
+	gitAt(t, repo, "worktree", "add", filepath.Join(t.TempDir(), "elsewhere"), "-b", w.Branch("live"))
+
 	if _, err := w.Create(repo, "live", ""); err == nil {
-		t.Fatal("want an error: the branch is checked out by the live session")
+		t.Fatal("want an error: the branch is checked out by another worktree")
 	}
 }

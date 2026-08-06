@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -86,6 +87,76 @@ func TestResolveAttachmentsOrderAndCollision(t *testing.T) {
 	// Order must follow message order (load-bearing for withAttachments numbering).
 	if b, _ := os.ReadFile(paths[0]); string(b) != "/1" {
 		t.Errorf("first path content = %q, want /1", b)
+	}
+}
+
+// TestResolveAttachmentsOrderAndCollision fetches two attachments that finish in
+// whatever order they finish. This one makes the first arrive last: downloads run
+// concurrently, so completion order says nothing about message order — and message
+// order is what withAttachments numbers the files by.
+func TestResolveAttachmentsOrderSurvivesASlowFirstFetch(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/1" {
+			time.Sleep(80 * time.Millisecond)
+		}
+		_, _ = w.Write([]byte(r.URL.Path))
+	}))
+	defer srv.Close()
+
+	sess := "slow-first"
+	defer os.RemoveAll(attachmentDir(sess))
+	m := contracts.Message{
+		ID: "9",
+		Attachments: []contracts.Attachment{
+			{Filename: "a.png", URL: srv.URL + "/1"},
+			{Filename: "b.png", URL: srv.URL + "/2"},
+			{Filename: "c.png", URL: srv.URL + "/3"},
+		},
+	}
+	paths := ResolveAttachments(context.Background(), srv.Client(), m, sess, hostsFor(t, srv))
+	if len(paths) != 3 {
+		t.Fatalf("got %d paths, want 3: %v", len(paths), paths)
+	}
+	for i, want := range []string{"/1", "/2", "/3"} {
+		if b, _ := os.ReadFile(paths[i]); string(b) != want {
+			t.Errorf("paths[%d] content = %q, want %q", i, b, want)
+		}
+	}
+}
+
+// The point of fetching concurrently: a turn waits for the slowest attachment,
+// not for the sum of them. Eight downloads that each sleep 60ms would take
+// almost half a second in sequence.
+func TestResolveAttachmentsFetchesConcurrently(t *testing.T) {
+	const delay = 60 * time.Millisecond
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(delay)
+		_, _ = w.Write([]byte(r.URL.Path))
+	}))
+	defer srv.Close()
+
+	sess := "concurrent"
+	defer os.RemoveAll(attachmentDir(sess))
+	m := contracts.Message{ID: "10"}
+	for i := 0; i < maxAttachmentsPerMessage; i++ {
+		m.Attachments = append(m.Attachments, contracts.Attachment{
+			Filename: fmt.Sprintf("f%d.png", i),
+			URL:      fmt.Sprintf("%s/%d", srv.URL, i),
+		})
+	}
+
+	start := time.Now()
+	paths := ResolveAttachments(context.Background(), srv.Client(), m, sess, hostsFor(t, srv))
+	elapsed := time.Since(start)
+
+	if len(paths) != maxAttachmentsPerMessage {
+		t.Fatalf("got %d paths, want %d", len(paths), maxAttachmentsPerMessage)
+	}
+	// Half the sequential total is a wide margin: eight in parallel should land in
+	// roughly one delay, and this still fails if they run one after another.
+	if limit := delay * maxAttachmentsPerMessage / 2; elapsed > limit {
+		t.Fatalf("%d attachments took %v, more than %v — they are not overlapping",
+			maxAttachmentsPerMessage, elapsed, limit)
 	}
 }
 

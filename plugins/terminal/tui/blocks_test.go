@@ -7,17 +7,18 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// A finished answer is framed: a titled rule opens it, a plain one closes it.
-// Colour alone used to carry the distinction, and colour is the one channel a
-// terminal is free to take away.
-func TestAgentAnswerIsFramed(t *testing.T) {
+// An answer announces itself with a titled rule and then stops ruling. Colour
+// alone used to carry the distinction, and colour is the one channel a terminal
+// is free to take away — but a closing rule on every turn said nothing the next
+// speaker's rule did not, and cost a row each time.
+func TestAgentAnswerOpensWithARuleAndIsNotClosed(t *testing.T) {
 	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 60)
 	lines := strings.Split(out, "\n")
 	if !strings.Contains(lines[0], agentTitle) {
 		t.Fatalf("the opening rule must name whose voice this is: %q", lines[0])
 	}
-	if last := lines[len(lines)-1]; strings.Contains(last, agentTitle) || !strings.Contains(last, ruleChar) {
-		t.Fatalf("the closing rule must be a plain rule: %q", last)
+	if last := lines[len(lines)-1]; strings.Contains(last, strings.Repeat(ruleChar, 4)) {
+		t.Fatalf("a finished answer must not be closed off by a rule: %q", last)
 	}
 	if !strings.Contains(out, blockIndent+"the answer") {
 		t.Fatalf("the body must sit in the block gutter: %q", out)

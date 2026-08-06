@@ -58,7 +58,10 @@ func renderEntry(e entry, width int) string {
 	case roleCost:
 		return indent(dimStyle.Render(e.text))
 	case roleScrollback:
-		return wrapWith(scrollbackStyle, e.text, width)
+		// Not a line of the conversation: the mark under the replayed history
+		// saying the live session starts here. Replayed turns themselves are
+		// rendered as the turns they are.
+		return titledRule(scrollbackStyle, e.text, width)
 	default:
 		return indent(wrapWith(dimStyle, e.text, body))
 	}

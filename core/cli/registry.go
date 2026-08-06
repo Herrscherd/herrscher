@@ -175,6 +175,28 @@ func parse(c contracts.Cmd, rest []string) (contracts.Input, error) {
 	return in, nil
 }
 
+// Spec is one command's declared shape, without its Run. Help() renders the same
+// facts as a paragraph for a human; a frontend that draws its own menu needs them
+// apart, and handing it the contracts.Cmd would hand it the closure too.
+type Spec struct {
+	Path   []string          `json:"path"`
+	Help   string            `json:"help,omitempty"`
+	Params []contracts.Param `json:"params,omitempty"`
+}
+
+// Specs returns every registered command's shape, sorted by path. It exists so a
+// frontend's command menu is derived from what the daemon actually dispatches
+// rather than re-typed beside it: a hand-kept list is a list that silently falls
+// behind, which is how a palette ends up advertising seven of twenty-nine verbs.
+func (r *Registry) Specs() []Spec {
+	out := make([]Spec, 0, len(r.cmds))
+	for _, c := range r.cmds {
+		out = append(out, Spec{Path: c.Path, Help: c.Help, Params: c.Params})
+	}
+	sort.Slice(out, func(i, j int) bool { return key(out[i].Path) < key(out[j].Path) })
+	return out
+}
+
 // Help renders one usage line per command, sorted by path, for the root help.
 func (r *Registry) Help() string {
 	lines := make([]string, 0, len(r.cmds))

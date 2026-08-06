@@ -9,6 +9,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/plugins/terminal"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
@@ -265,14 +266,18 @@ func (a *attachedDaemon) Scrollback(name string) []contracts.ScrollbackLine {
 	return lines
 }
 
+// Commands asks the daemon what it dispatches and keeps the verbs a terminal
+// may run. The in-process frontend answers the same question the same way, so
+// attaching to a daemon and being one show the same palette — which is the whole
+// promise of the attached window.
 func (a *attachedDaemon) Commands() []tui.CommandSpec {
-	return []tui.CommandSpec{
-		{Name: "session create", Args: "--name <name>", Desc: "start a new session tab"},
-		{Name: "session list", Desc: "list active sessions"},
-		{Name: "session who", Args: "--name <name>", Desc: "list a session's participants"},
-		{Name: "session close", Args: "--name <name>", Desc: "close a session"},
-		{Name: "session archive", Args: "--name <name>", Desc: "archive a session (keep it resumable)"},
-		{Name: "agent create", Args: "--name <name>", Desc: "add a companion agent"},
-		{Name: "agent list", Desc: "list companion agents"},
+	out, err := a.dispatch([]string{"commands", "--json"})
+	if err != nil {
+		return nil
 	}
+	specs, err := tui.ParseCommandSpecs([]byte(out), terminal.OperatorVerb)
+	if err != nil {
+		return nil
+	}
+	return specs
 }

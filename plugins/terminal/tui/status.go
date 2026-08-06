@@ -148,6 +148,43 @@ func (m *model) statusBar(tb *tab, width int) string {
 	return strings.Join(segs, statusSep)
 }
 
+// usageReport is what /usage answers: the status bar's numbers, spelled out. The
+// bar has to fit on one row and so says everything by abbreviation; a session
+// worth asking about is one where the operator wants the counts named — which
+// window, how full, what it has cost, how long it has run.
+//
+// It writes into the transcript rather than an overlay because it is a reading
+// taken at a moment: an overlay would keep showing that moment after it passed,
+// and scrolling back to compare two readings is the point of asking twice.
+func (m *model) usageReport(tb *tab) string {
+	info, known := m.activeInfo()
+	vendor := ""
+	if known {
+		vendor = info.Vendor
+	}
+	limit := contextLimit(vendor)
+	lines := []string{"usage — " + tb.label}
+	if vendor != "" {
+		lines = append(lines, "  model    "+vendor)
+	}
+	if known && info.Project != "" {
+		lines = append(lines, "  project  "+info.Project)
+	}
+	if tb.ctxTokens > 0 {
+		r := contextRatio(tb.ctxTokens, limit)
+		lines = append(lines, fmt.Sprintf("  context  %s / %s  (%d%%)", formatTokens(tb.ctxTokens), formatLimit(limit), int(r*100)))
+	} else {
+		lines = append(lines, "  context  no measurement yet")
+	}
+	if tb.costTotal > 0 {
+		lines = append(lines, "  cost     "+formatCost(tb.costTotal)+"  since this tab opened")
+	}
+	if !tb.openedAt.IsZero() {
+		lines = append(lines, "  open     "+formatDuration(time.Since(tb.openedAt)))
+	}
+	return strings.Join(lines, "\n")
+}
+
 // statusSep divides the bar's segments. A pipe rather than the interpunct the
 // bar used: the segments are now measurements of different kinds sitting side by
 // side, and a rule between them reads as a table where a dot reads as a list.

@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // TestPaletteInlineRenderSelectedRow checks the palette renders inline (no border
@@ -20,6 +23,52 @@ func TestPaletteInlineRenderSelectedRow(t *testing.T) {
 		if strings.Contains(out, box) {
 			t.Fatalf("palette must be borderless, found %q: %q", box, out)
 		}
+	}
+}
+
+// TestPaletteWindowFollowsTheSelection is the regression for a palette that
+// truncated at paletteMax from the head: every command past the sixth was
+// unreachable with ↑↓, so a daemon advertising thirty verbs showed six.
+func TestPaletteWindowFollowsTheSelection(t *testing.T) {
+	for _, tc := range []struct{ n, sel, wantStart, wantEnd int }{
+		{n: 4, sel: 2, wantStart: 0, wantEnd: 4},     // fits: no window at all
+		{n: 30, sel: 0, wantStart: 0, wantEnd: 6},    // top: the first rows stay put
+		{n: 30, sel: 5, wantStart: 0, wantEnd: 6},    // still on the last visible row
+		{n: 30, sel: 6, wantStart: 1, wantEnd: 7},    // one past it: slide by one
+		{n: 30, sel: 29, wantStart: 24, wantEnd: 30}, // bottom: clamped, never past the end
+	} {
+		start, end := paletteWindow(tc.n, tc.sel, paletteMax)
+		if start != tc.wantStart || end != tc.wantEnd {
+			t.Fatalf("n=%d sel=%d: got [%d,%d), want [%d,%d)", tc.n, tc.sel, start, end, tc.wantStart, tc.wantEnd)
+		}
+		if tc.sel < start || tc.sel >= end {
+			t.Fatalf("n=%d sel=%d fell outside the drawn window [%d,%d)", tc.n, tc.sel, start, end)
+		}
+	}
+}
+
+// TestPaletteViewShowsALateSelection: the window has to reach the view, not just
+// the helper — the selected row must be drawn however far down the list it is.
+func TestPaletteViewShowsALateSelection(t *testing.T) {
+	m := newTestModel()
+	m.cmds = nil
+	for i := 0; i < 30; i++ {
+		m.cmds = append(m.cmds, CommandSpec{Name: fmt.Sprintf("verb%02d", i)})
+	}
+	m.input.SetValue("/")
+	m.palIdx = 27
+	out := m.paletteView()
+	if !strings.Contains(out, glyphCursor+" /verb27") {
+		t.Fatalf("a late selection must be drawn: %q", out)
+	}
+	if strings.Contains(out, "/verb00") {
+		t.Fatalf("the window must have scrolled past the head: %q", out)
+	}
+	if !strings.Contains(out, "28/30") {
+		t.Fatalf("a windowed palette must say where the cursor is: %q", out)
+	}
+	if h := lipgloss.Height(out); h != paletteMax+1 {
+		t.Fatalf("palette height %d, want %d rows plus the counter", h, paletteMax+1)
 	}
 }
 

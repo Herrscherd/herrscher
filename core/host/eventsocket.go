@@ -166,6 +166,16 @@ func (s *eventSocket) Publish(session string, e contracts.Event) {
 	if s == nil {
 		return
 	}
+	// Every driven session now taps this on every event, so the ordinary case is
+	// a daemon with nobody attached and a chunk arriving per token. Marshalling
+	// each of those into a line no one will read is the one cost the fan-out can
+	// impose on the turn path, so it is skipped before it is paid.
+	s.mu.Lock()
+	idle := len(s.subs) == 0
+	s.mu.Unlock()
+	if idle {
+		return
+	}
 	line, err := marshalSessionEvent(session, e)
 	if err != nil {
 		return

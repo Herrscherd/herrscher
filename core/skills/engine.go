@@ -17,12 +17,18 @@ type Engine struct {
 	byName map[string]Skill
 	order  []string
 	active map[string]bool
+	// byPath is the last scan keyed by SKILL.md path, so a rescan can tell an
+	// unchanged file from an edited one; bodies caches the stripped body of every
+	// skill whose body has been expanded at least once. Both are dropped for a
+	// file that changed or disappeared, and only for those.
+	byPath map[string]Skill
+	bodies map[string]string
 }
 
 // NewEngine discovers skills under roots and returns an engine over them. An
 // engine with no skills is a valid no-op (empty Menu/Expansions).
 func NewEngine(roots []string) *Engine {
-	e := &Engine{roots: roots, active: map[string]bool{}}
+	e := &Engine{roots: roots, active: map[string]bool{}, bodies: map[string]string{}}
 	e.load()
 	return e
 }
@@ -30,11 +36,25 @@ func NewEngine(roots []string) *Engine {
 // load (re-)discovers the skills under the engine's roots, replacing the menu.
 // The active set is preserved except for skills that have disappeared.
 func (e *Engine) load() {
+	found, reread := discover(e.roots, e.byPath)
 	e.byName = map[string]Skill{}
+	e.byPath = make(map[string]Skill, len(found))
 	e.order = e.order[:0]
-	for _, s := range Discover(e.roots) {
+	for _, s := range found {
 		e.byName[s.Name] = s
+		e.byPath[s.bodyPath] = s
 		e.order = append(e.order, s.Name)
+	}
+	// A body cached from a file that has since been edited would be handed to the
+	// model as the skill's current instructions, which is worse than not caching
+	// at all; one whose skill has vanished would just never be evicted.
+	for _, p := range reread {
+		delete(e.bodies, p)
+	}
+	for p := range e.bodies {
+		if _, ok := e.byPath[p]; !ok {
+			delete(e.bodies, p)
+		}
 	}
 	for name := range e.active {
 		if _, ok := e.byName[name]; !ok {
@@ -95,9 +115,13 @@ func (e *Engine) Expansions() string {
 			continue
 		}
 		s := e.byName[name]
-		body, err := s.Body()
-		if err != nil {
-			continue
+		body, ok := e.bodies[s.bodyPath]
+		if !ok {
+			var err error
+			if body, err = s.Body(); err != nil {
+				continue
+			}
+			e.bodies[s.bodyPath] = body
 		}
 		b.WriteString("<skill name=\"")
 		b.WriteString(name)

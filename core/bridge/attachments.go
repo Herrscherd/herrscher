@@ -121,7 +121,14 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 	client = pinnedClient(client, hosts)
 	dir := attachmentDir(session)
 	mkdirDone := false
-	out := make([]string, 0, maxAttachmentsPerMessage)
+	// slots holds one entry per accepted candidate, in message order, so a
+	// download that finishes first does not reorder the turn's attachments. A
+	// candidate that fails to resolve leaves its slot empty and is dropped at the
+	// end rather than shifting the ones after it. It is a fixed array, not a
+	// growing slice: a concurrent fetch holds an index into it, and an append that
+	// reallocated would leave that write in a discarded backing array.
+	var slots [maxAttachmentsPerMessage]string
+	var fetches sync.WaitGroup
 	n := 0
 	for i, a := range m.Attachments {
 		if !supported(a) {
@@ -139,6 +146,7 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 				"cap", maxAttachmentsPerMessage, "first_skipped", a.Filename)
 			break
 		}
+		slot := n
 		n++
 		if strings.HasPrefix(a.URL, "file://") {
 			p, err := localAttachmentPath(a)
@@ -146,7 +154,7 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 				logger.Warn("attachment skipped", "file", a.Filename, "err", err)
 				continue
 			}
-			out = append(out, p)
+			slots[slot] = p
 			continue
 		}
 		if !mkdirDone {
@@ -158,12 +166,29 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 			}
 			mkdirDone = true
 		}
-		p, err := fetchOne(ctx, client, a, m.ID, i, dir, hosts)
-		if err != nil {
-			logger.Warn("attachment skipped", "file", a.Filename, "err", err)
-			continue
+		// Download in parallel: the cap is eight attachments of up to ten megabytes
+		// each, and fetching them one after another made the turn wait for the sum
+		// of eight round trips before the model saw the first image. Each fetch
+		// writes only its own slot, so no lock is needed; the count is bounded by
+		// the per-message cap, so no worker pool is either.
+		fetches.Add(1)
+		go func(slot, i int, a contracts.Attachment) {
+			defer fetches.Done()
+			p, err := fetchOne(ctx, client, a, m.ID, i, dir, hosts)
+			if err != nil {
+				logger.Warn("attachment skipped", "file", a.Filename, "err", err)
+				return
+			}
+			slots[slot] = p
+		}(slot, i, a)
+	}
+	fetches.Wait()
+
+	out := make([]string, 0, n)
+	for _, p := range slots[:n] {
+		if p != "" {
+			out = append(out, p)
 		}
-		out = append(out, p)
 	}
 	return out
 }

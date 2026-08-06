@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"os"
 	"strings"
+	"time"
 )
 
 // Skill is one discovered SKILL.md: its frontmatter name/description, the
@@ -18,6 +19,16 @@ type Skill struct {
 	Description string
 	Dir         string
 	bodyPath    string
+	stamp       fileStamp
+}
+
+// fileStamp identifies a version of a SKILL.md cheaply enough to check on every
+// turn. Modification time alone would miss a rewrite landing inside the clock's
+// resolution; size alone would miss an edit that kept the length. Together they
+// are what a rescan compares instead of reading the file again.
+type fileStamp struct {
+	mod  time.Time
+	size int64
 }
 
 // Body reads the skill's markdown body, with the leading --- frontmatter block

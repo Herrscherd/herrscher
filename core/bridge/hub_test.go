@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,7 +213,77 @@ func TestInbound_InterruptCancelsTurn(t *testing.T) {
 	if last.T != "reply" || !last.Done {
 		t.Fatalf("interrupted turn must still emit reply{done}; got %+v", last)
 	}
+	// Esc used to answer "⚠️ context canceled", which reads as the tool breaking
+	// rather than obeying.
+	if last.Text != interruptNotice {
+		t.Fatalf("an interrupted turn must read as interrupted; got %q", last.Text)
+	}
 }
+
+// partialBackend produces some output, then blocks until its turn ctx is
+// cancelled and reports both.
+type partialBackend struct{ started chan struct{} }
+
+func (b partialBackend) Respond(ctx context.Context, _ contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
+	close(b.started)
+	<-ctx.Done()
+	return "half a thought", ctx.Err()
+}
+func (partialBackend) Close() error { return nil }
+
+// TestInterruptKeepsPartialOutput: stopping a turn must not throw away what the
+// backend already produced — the work is worth more than the fact it was cut —
+// but the reply must say it was cut, or a truncated answer reads as a complete
+// one.
+func TestInterruptKeepsPartialOutput(t *testing.T) {
+	ctrl := &turnController{}
+	sink := &recordSink{}
+	in := make(chan contracts.Event)
+	be := partialBackend{started: make(chan struct{})}
+
+	done := make(chan struct{})
+	go func() {
+		runHubTurnsCtl(context.Background(), in, sink, be, nil, ctrl, nil, nil)
+		close(done)
+	}()
+
+	in <- contracts.Event{T: "input", Text: "go"}
+	<-be.started
+	ctrl.interrupt()
+	close(in)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("interrupt did not cancel the in-flight turn")
+	}
+
+	last := sink.events[len(sink.events)-1]
+	if !strings.Contains(last.Text, "half a thought") {
+		t.Fatalf("partial output must survive the interrupt; got %q", last.Text)
+	}
+	if !strings.Contains(last.Text, interruptNotice) {
+		t.Fatalf("a cut-short reply must say so; got %q", last.Text)
+	}
+}
+
+// TestBackendFailureStillReadsAsAFailure guards the other side of the switch: a
+// turn nobody interrupted must keep its error banner rather than being excused
+// as an interruption.
+func TestBackendFailureStillReadsAsAFailure(t *testing.T) {
+	sink := &recordSink{}
+	runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, nil)
+	last := sink.events[len(sink.events)-1]
+	if !strings.HasPrefix(last.Text, errPrefix) {
+		t.Fatalf("an uninterrupted failure must keep its banner; got %q", last.Text)
+	}
+}
+
+type errBackend struct{}
+
+func (errBackend) Respond(context.Context, contracts.Prompt, func(contracts.BackendEvent)) (string, error) {
+	return "", errors.New("backend exploded")
+}
+func (errBackend) Close() error { return nil }
 
 func TestRunHubOneTurn(t *testing.T) {
 	sink := &recordSink{}

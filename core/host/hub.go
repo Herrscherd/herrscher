@@ -38,8 +38,10 @@ type hub struct {
 	// session's RunSession. Set in serve.go's RunHub after newHub, before the
 	// boot loop's goLive calls, so it is non-nil for every driver started here.
 	coordinator contracts.Coordinator
-	// eventPublisher is the daemon event-socket tap used by request-scoped
-	// one-shot seeds. It is bound once at boot before the command socket starts.
+	// eventPublisher is the daemon event-socket tap. Every driven session's
+	// turn driver fans its events here, as does the request-scoped one-shot
+	// seed path, so an attached reader sees the same live stream a gateway
+	// does. It is bound once at boot before the command socket starts.
 	eventPublisher func(session string, event contracts.Event)
 
 	// gate decides, after each completed turn, whether a session must pause on a
@@ -64,6 +66,18 @@ type liveSession struct {
 
 func newHub(ctx context.Context, st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry) *hub {
 	return &hub{ctx: ctx, st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: map[string]liveSession{}}
+}
+
+// eventTap binds a session name to the daemon's event publisher so the turn
+// driver, which knows only its own events, can hand them over already addressed.
+// A nil publisher (the operator CLI, tests) yields a nil tap rather than a
+// closure that calls nothing, so the driver's own nil check stays the one place
+// the absence is decided.
+func eventTap(publish func(string, contracts.Event), session string) func(contracts.Event) {
+	if publish == nil {
+		return nil
+	}
+	return func(e contracts.Event) { publish(session, e) }
 }
 
 // goLive wires a session into the running hub: it opens the control-socket
@@ -104,6 +118,7 @@ func (h *hub) goLive(sess state.Session) {
 					fmt.Fprintf(os.Stderr, "herrscher serve: session %q: transcript entry dropped: %v\n", sess.Name, err)
 				}
 			},
+			eventTap(h.eventPublisher, sess.Name),
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent}, h.gate)
 	}()
 }

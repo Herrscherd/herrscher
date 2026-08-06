@@ -74,7 +74,11 @@ func runServe(ctx context.Context, args []string) error {
 		// frontend needs. Attach instead of refusing. Off a terminal there is no
 		// TUI to attach, so the refusal stands.
 		if term.IsTerminal(int(os.Stdout.Fd())) {
-			aerr := runAttached(ctx, *instanceID)
+			// Not *instanceID: the daemon that holds the lock named its sockets
+			// after the id it froze in this very state file, which is resolved
+			// from the owner when no --instance was passed. Ours is usually
+			// empty, and an empty id composes a socket path nobody listens on.
+			aerr := runAttached(ctx, host.ServedInstanceID(*statePath, *instanceID))
 			if aerr == nil {
 				return nil
 			}

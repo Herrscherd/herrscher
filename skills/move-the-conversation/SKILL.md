@@ -57,9 +57,10 @@ bound to, so it is how you open a fresh channel for a piece of work.
 to silence an error; if a close is refused because the tree is dirty, say so and
 let the operator decide.
 
-Do not start a second daemon to "open" a session. A bare `herrscher` on a TTY
-serves — it does not attach — so a second one is a second world with its own
-state, which is the opposite of what was asked.
+Do not pass `--state` to "open" a session in a new window: that starts a second
+daemon with its own world, which is the opposite of what was asked. A bare
+`herrscher` on a TTY already attaches to the running daemon and shows its
+sessions as tabs.
 
 ## Opening work in another harness
 

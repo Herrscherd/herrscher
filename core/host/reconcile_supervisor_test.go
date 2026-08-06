@@ -25,9 +25,7 @@ func TestReconcileStopsTheBridgeOfARemovedSession(t *testing.T) {
 	if err := st.AddSession(sess); err != nil {
 		t.Fatal(err)
 	}
-	if err := sup.Start(sess); err != nil {
-		t.Fatal(err)
-	}
+	sup.Start(sess)
 	h.reconcile()
 	if !sup.Running("orphan") {
 		t.Fatal("a persisted session must keep its bridge")
@@ -55,9 +53,7 @@ func TestReconcileStopsTheBridgeOfAnArchivedSession(t *testing.T) {
 	if err := st.AddSession(sess); err != nil {
 		t.Fatal(err)
 	}
-	if err := sup.Start(sess); err != nil {
-		t.Fatal(err)
-	}
+	sup.Start(sess)
 	h.reconcile()
 
 	_ = st.SetArchived("shelved", true)

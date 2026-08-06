@@ -88,9 +88,21 @@ func (h *hub) goLive(sess state.Session) {
 	go func() {
 		defer close(done)
 		runSessionIdentified(sctx, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
-			func(tok string) { _ = h.st.SetResumeToken(sess.Name, tok) },
+			// Neither callback can return an error to its caller, so the only thing
+			// left to do with a failure is say it. Both are worth saying: a lost
+			// resume token means the next restart silently starts the conversation
+			// over, and a lost transcript entry means the session log quietly has a
+			// hole in it. Failing here is a full disk or a permission problem — rare,
+			// and exactly the kind of thing nobody finds without a line in the log.
+			func(tok string) {
+				if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
+					fmt.Fprintf(os.Stderr, "herrscher serve: session %q: resume token not persisted, a restart will lose the conversation: %v\n", sess.Name, err)
+				}
+			},
 			func(e state.TranscriptEntry) {
-				_ = state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e)
+				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
+					fmt.Fprintf(os.Stderr, "herrscher serve: session %q: transcript entry dropped: %v\n", sess.Name, err)
+				}
 			},
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent}, h.gate)
 	}()
@@ -175,7 +187,9 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 			coordinator: h.coordinator,
 			publish:     h.eventPublisher,
 			record: func(session string, entry state.TranscriptEntry) {
-				_ = state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry)
+				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
+					fmt.Fprintf(os.Stderr, "herrscher serve: session %q: seed transcript entry dropped: %v\n", session, err)
+				}
 			},
 		}
 		return h.reg.Dispatch(withOneShotSeedRuntime(ctx, runtime), args)
@@ -327,7 +341,7 @@ func (h *hub) Resume(name string) error {
 		sess.Archived = false
 	}
 	h.goLive(sess)
-	_ = h.sup.Start(sess)
+	h.sup.Start(sess)
 	return nil
 }
 

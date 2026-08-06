@@ -42,9 +42,7 @@ func TestRestartWaitsForOldBridgeAndStartsTargetedSession(t *testing.T) {
 		<-ctx.Done()
 	}
 
-	if err := s.Start(state.Session{Name: "worker", Vendor: "claude", Cmd: "claude"}); err != nil {
-		t.Fatal(err)
-	}
+	s.Start(state.Session{Name: "worker", Vendor: "claude", Cmd: "claude"})
 	<-oldStarted
 
 	restarted := make(chan error, 1)
@@ -106,9 +104,7 @@ func TestStopWaitsForRunLoopCompletionWithoutHoldingMutex(t *testing.T) {
 		}
 	}
 
-	if err := s.Start(state.Session{Name: "demo"}); err != nil {
-		t.Fatal(err)
-	}
+	s.Start(state.Session{Name: "demo"})
 	<-started
 
 	stopped := make(chan error, 1)
@@ -136,11 +132,14 @@ func TestStopWaitsForRunLoopCompletionWithoutHoldingMutex(t *testing.T) {
 	// A concurrent Start for the same name must wait for the stopping run, then
 	// launch a replacement. Returning idempotent success here would lose the
 	// requested start when Stop removes the old run.
-	startReturned := make(chan error, 1)
-	go func() { startReturned <- s.Start(state.Session{Name: "demo"}) }()
+	startReturned := make(chan struct{})
+	go func() {
+		s.Start(state.Session{Name: "demo"})
+		close(startReturned)
+	}()
 	select {
-	case err := <-startReturned:
-		t.Fatalf("Start returned while the previous run was still stopping: %v", err)
+	case <-startReturned:
+		t.Fatal("Start returned while the previous run was still stopping")
 	case <-time.After(50 * time.Millisecond):
 	}
 
@@ -154,10 +153,7 @@ func TestStopWaitsForRunLoopCompletionWithoutHoldingMutex(t *testing.T) {
 		t.Fatal("Stop did not return after runLoop completed")
 	}
 	select {
-	case err := <-startReturned:
-		if err != nil {
-			t.Fatal(err)
-		}
+	case <-startReturned:
 	case <-time.After(time.Second):
 		t.Fatal("Start did not return after the previous run completed")
 	}

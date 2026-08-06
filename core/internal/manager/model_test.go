@@ -306,8 +306,8 @@ func TestSessionSwitchRollbackRestoresModelID(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.SetSeeder(func(string, string) bool { return true })
-	// The new backend's Start fails; the rollback Start succeeds.
-	sup.startErrs = []error{errors.New("boom")}
+	// Stopping for the new backend fails; the rollback restart succeeds.
+	sup.stopErrs = []error{errors.New("boom")}
 
 	if _, err := h.sessionSwitchRun(context.Background(), args(
 		"name", "gamma", "vendor", "codex", "cmd", "codex", "model", "native-gpt", "handoff", "none",

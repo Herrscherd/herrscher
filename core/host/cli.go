@@ -114,6 +114,66 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
+	// session send / session interrupt reach into the live turn loop of whichever
+	// process runs them, and that is the point: forwarded over the command socket
+	// they are how a client — an attached TUI — speaks into a session the daemon
+	// owns. Run with no daemon listening they find no live session and say so,
+	// which is the honest answer: there is nothing to speak into.
+	if err := reg.Add(contracts.New("session", "send").
+		Help("send one message into a live session's turn queue (the daemon runs the turn)").
+		Param("name", "session name", true).
+		Param("text", "message text", true).
+		Param("author", "display name shown to the agent (default: you)", false).
+		Param("attachments", "JSON array of local file paths to attach", false).
+		Do(func(_ context.Context, in contracts.Input) (string, error) {
+			atts, err := parseAttachmentPaths(in.Get("attachments"))
+			if err != nil {
+				return "", err
+			}
+			author := in.Get("author")
+			if author == "" {
+				author = "you"
+			}
+			if !Submit(in.Get("name"), contracts.Inbound{
+				Author:      author,
+				AuthorID:    "local",
+				Text:        in.Get("text"),
+				Attachments: atts,
+			}) {
+				return "", fmt.Errorf("no live session named %q", in.Get("name"))
+			}
+			return "", nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
+	if err := reg.Add(contracts.New("session", "info").
+		Help("list sessions as a frontend sees them (channel, vendor, dir, archived) — JSON only").
+		Do(func(_ context.Context, _ contracts.Input) (string, error) {
+			b, err := json.Marshal(sessionInfos(st, partDir))
+			return string(b), err
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
+	if err := reg.Add(contracts.New("session", "scrollback").
+		Help("dump a session's replayable history as the frontend renders it — JSON only").
+		Param("name", "session name", true).
+		Do(func(_ context.Context, in contracts.Input) (string, error) {
+			b, err := json.Marshal(scrollbackOf(partDir, in.Get("name")))
+			return string(b), err
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
+	if err := reg.Add(contracts.New("session", "interrupt").
+		Help("cancel a session's in-flight turn").
+		Param("name", "session name", true).
+		Do(func(_ context.Context, in contracts.Input) (string, error) {
+			if !Interrupt(in.Get("name")) {
+				return "", fmt.Errorf("session %q has no turn in flight", in.Get("name"))
+			}
+			return "interrupted " + in.Get("name"), nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
 	// memory locate/forget/record — surface d'exposition mémoire consommée par
 	// exec (voir docs/superpowers/specs/2026-07-17-memory-exposure-surface).
 	// Chaque commande construit la mémoire in-process et la ferme.

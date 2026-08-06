@@ -33,39 +33,67 @@ func (m *model) renderTranscript(tb *tab, width int) string {
 // of reasoning and an error are three different things, and a reader should be
 // able to tell them apart without reading them.
 func renderEntry(e entry, width int) string {
+	body := width - lipgloss.Width(blockIndent)
 	switch e.role {
 	case roleYou:
 		return renderYou(e, width)
 	case roleAgent:
 		// A block still arriving is incomplete markdown — an unclosed fence would
-		// swallow the rest of the message — so it stays raw until endStream.
+		// swallow the rest of the message — so it stays raw until endStream. It
+		// also gets no closing rule: the block is not closed yet, and drawing the
+		// line that says it is would be a lie redrawn on every chunk.
 		if e.streaming {
-			return wrapWith(textStyle, e.text, width)
+			return titledRule(accentStyle, agentTitle, width) + "\n" +
+				indent(wrapWith(textStyle, e.text, body))
 		}
-		return renderMarkdown(e.text, width)
+		return block(accentStyle, agentTitle, renderMarkdown(e.text, body), width)
 	case roleThinking:
-		return wrapWith(thinkingStyle, glyphThinking+" "+e.text, width)
+		return indent(wrapWith(thinkingStyle, glyphThinking+" "+e.text, body))
 	case roleTool:
-		return renderTool(e.text, width)
+		return indent(renderTool(e.text, body))
 	case roleNotice:
-		return wrapWith(dimStyle, glyphNotice+" "+e.text, width)
+		return indent(wrapWith(dimStyle, glyphNotice+" "+e.text, body))
 	case roleError:
-		return wrapWith(redStyle, glyphError+" "+e.text, width)
+		return block(redStyle, glyphError+" error", wrapWith(redStyle, e.text, body), width)
 	case roleCost:
-		return dimStyle.Render(e.text)
+		return indent(dimStyle.Render(e.text))
 	case roleScrollback:
 		return wrapWith(scrollbackStyle, e.text, width)
 	default:
-		return wrapWith(dimStyle, e.text, width)
+		return indent(wrapWith(dimStyle, e.text, body))
 	}
 }
 
-// renderYou renders the operator's own turn: the dim "> " echo, then the chips
-// for whatever was attached to it and the inline image preview under them.
+// agentTitle names the voice a framed answer belongs to. The bolt is the
+// terminal's own mark, not a decoration: the tab strip and this rule are the two
+// places the reader is told whose words these are.
+const agentTitle = "⚡ Herrscher"
+
+// block frames body between a titled opening rule and a plain closing one, with
+// the body in the gutter. What it buys is a boundary: an answer and the tool
+// lines under it are otherwise one column of text, and a reader looking for
+// where the reply started has to find it by colour alone.
+func block(style lipgloss.Style, title, body string, width int) string {
+	return titledRule(style, title, width) + "\n" +
+		indent(body) + "\n" +
+		rule(style, width)
+}
+
+// renderYou renders the operator's own turn: the request framed between two
+// rules, then the chips for whatever was attached to it and the inline image
+// preview under them.
+//
+// It is framed rather than merely dim because it is the thing a reader scrolls
+// back to find. Everything else on screen is the machine answering; this is the
+// only line that says what was asked, and in a long transcript it is one dim row
+// among hundreds.
 func renderYou(e entry, width int) string {
-	out := wrapWith(userStyle, glyphPrompt+" "+e.text, width)
+	body := width - lipgloss.Width(blockIndent)
+	out := rule(dimStyle, width) + "\n" +
+		indent(wrapWith(userStyle, glyphCursor+" "+e.text, body)) + "\n" +
+		rule(dimStyle, width)
 	if chips := chipRow(e.attachments); chips != "" {
-		out += "\n" + chips
+		out += "\n" + indent(chips)
 	}
 	if e.preview != "" {
 		// The kitty graphics escape sits on its own line under the chip; the

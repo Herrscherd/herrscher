@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // The status bar is what the terminal knows about the session and had been
@@ -65,6 +67,18 @@ func contextRatio(used, limit int) float64 {
 	return 1
 }
 
+// palierStyle is the style a given occupancy is drawn in.
+func palierStyle(ratio float64) lipgloss.Style {
+	switch {
+	case ratio >= ctxAlarm:
+		return redStyle
+	case ratio >= ctxWarn:
+		return warnStyle
+	default:
+		return dimStyle
+	}
+}
+
 // renderContext renders the occupancy as `42k/200k`, coloured by palier. The
 // limit is resolved once: it reads the environment, and this runs every frame.
 func renderContext(used int, vendor string) string {
@@ -73,14 +87,20 @@ func renderContext(used int, vendor string) string {
 	}
 	limit := contextLimit(vendor)
 	text := fmt.Sprintf("%s/%s", formatTokens(used), formatLimit(limit))
-	switch r := contextRatio(used, limit); {
-	case r >= ctxAlarm:
-		return redStyle.Render(text)
-	case r >= ctxWarn:
-		return warnStyle.Render(text)
-	default:
-		return dimStyle.Render(text)
+	return palierStyle(contextRatio(used, limit)).Render(text)
+}
+
+// renderGauge renders the occupancy bar and its percentage. It says the same
+// thing as renderContext and that is the point: the numbers are the measurement,
+// the bar is what is read without reading. Below narrowStatus it is dropped —
+// two ways of saying one thing is the first luxury a cramped bar gives up.
+func renderGauge(used int, vendor string) string {
+	if used <= 0 {
+		return ""
 	}
+	r := contextRatio(used, contextLimit(vendor))
+	style := palierStyle(r)
+	return gauge(r, style) + style.Render(fmt.Sprintf(" %d%%", int(r*100)))
 }
 
 // formatLimit renders a context window: a round thousand loses its decimal, so
@@ -100,18 +120,24 @@ func formatLimit(n int) string {
 func (m *model) statusBar(tb *tab, width int) string {
 	info, known := m.activeInfo()
 
-	segs := []string{dimStyle.Render(tb.label)}
-	if width >= narrowStatus && known {
-		for _, f := range []string{info.Project, info.Vendor} {
-			if f != "" {
-				segs = append(segs, dimStyle.Render(f))
-			}
-		}
+	// The vendor leads, marked, because it is the one fact that changes what every
+	// other number on the bar means: a cost and a context are read against the
+	// model that produced them.
+	head := accentStyle.Render(glyphBolt + " " + tb.label)
+	if known && info.Vendor != "" && width >= narrowStatus {
+		head = accentStyle.Render(glyphBolt+" "+info.Vendor) + dimStyle.Render(" "+tb.label)
+	}
+	segs := []string{head}
+	if width >= narrowStatus && known && info.Project != "" {
+		segs = append(segs, dimStyle.Render(info.Project))
 	}
 	if ctx := renderContext(tb.ctxTokens, info.Vendor); ctx != "" {
 		segs = append(segs, ctx)
 	}
 	if width >= narrowStatus {
+		if g := renderGauge(tb.ctxTokens, info.Vendor); g != "" {
+			segs = append(segs, g)
+		}
 		if tb.costTotal > 0 {
 			segs = append(segs, dimStyle.Render(formatCost(tb.costTotal)))
 		}
@@ -119,8 +145,13 @@ func (m *model) statusBar(tb *tab, width int) string {
 			segs = append(segs, dimStyle.Render(formatDuration(time.Since(tb.openedAt))))
 		}
 	}
-	return strings.Join(segs, dimStyle.Render(" · "))
+	return strings.Join(segs, statusSep)
 }
+
+// statusSep divides the bar's segments. A pipe rather than the interpunct the
+// bar used: the segments are now measurements of different kinds sitting side by
+// side, and a rule between them reads as a table where a dot reads as a list.
+var statusSep = dimStyle.Render(" │ ")
 
 // formatDuration renders a session's age compactly: seconds under a minute,
 // minutes under an hour, hours and minutes beyond.

@@ -14,6 +14,7 @@ const (
 	glyphThinking = "✳" // a reasoning summary
 	glyphNotice   = "·" // a turn reset / abandoned marker
 	glyphError    = "✗" // a failed command or an error surfaced by the host
+	glyphBolt     = "⚡" // the terminal's own mark: it leads the status bar and the agent's rule
 )
 
 // familyGlyphs give each tool family its own mark, so scanning the gutter reads

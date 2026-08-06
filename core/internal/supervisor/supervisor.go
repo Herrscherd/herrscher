@@ -141,7 +141,13 @@ func (s *Supervisor) SetBridgeEnv(kv []string) {
 }
 
 // Start launches a supervised bridge for sess (idempotent per name).
-func (s *Supervisor) Start(sess state.Session) error {
+//
+// It cannot fail, and says so: launching is handing the run loop a goroutine,
+// and every way the bridge itself can fail happens later, inside that loop,
+// where the supervisor's job is to retry rather than to report. An error return
+// here would only be a nil every caller has to pretend to handle — which is what
+// it was, at six call sites, two of them with an unreachable error branch.
+func (s *Supervisor) Start(sess state.Session) {
 	for {
 		s.mu.Lock()
 		run, running := s.runs[sess.Name]
@@ -155,10 +161,10 @@ func (s *Supervisor) Start(sess state.Session) error {
 				defer close(run.done)
 				s.run(cctx, sess)
 			}()
-			return nil
+			return
 		case !run.stopping:
 			s.mu.Unlock()
-			return nil
+			return
 		default:
 			s.mu.Unlock()
 			<-run.done
@@ -210,7 +216,8 @@ func (s *Supervisor) Restart(sess state.Session) error {
 	if err := s.Stop(sess.Name); err != nil {
 		return err
 	}
-	return s.Start(sess)
+	s.Start(sess)
+	return nil
 }
 
 func (s *Supervisor) runLoop(ctx context.Context, sess state.Session) {

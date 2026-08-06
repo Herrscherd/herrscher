@@ -57,22 +57,39 @@ func (m *restoreVerbMem) Close() error { return nil }
 // deterministically resolves to whatever the current test set.
 var currentRestoreMem *restoreVerbMem
 
+// useRestoreMem installs a fixture for the duration of one test and takes it
+// back down afterwards. Leaving it standing would hand the next test that builds
+// a registry — most of this package — another test's memory contents, which is
+// how a passing suite can hide a test that cannot pass alone.
+func useRestoreMem(t *testing.T, m *restoreVerbMem) {
+	t.Helper()
+	currentRestoreMem = m
+	t.Cleanup(func() { currentRestoreMem = nil })
+}
+
 func init() {
 	contracts.Register(contracts.Plugin{
 		Manifest: contracts.Manifest{Kind: "fake-restore-verb", Category: contracts.CategoryMemory},
 		Memory: func(context.Context, contracts.PluginConfig) (contracts.Memory, error) {
+			// Never hand back a nil *restoreVerbMem: it would arrive as a non-nil
+			// contracts.Memory holding a nil pointer, and panic on first Recall. Most
+			// tests in this package build a registry without caring about memory at
+			// all, and they must get an empty one that works rather than a mine.
+			if currentRestoreMem == nil {
+				return &restoreVerbMem{nodes: map[string]contracts.Node{}}, nil
+			}
 			return currentRestoreMem, nil
 		},
 	})
 }
 
 func TestMemoryRestoreVerbReactivatesArchivedNode(t *testing.T) {
-	currentRestoreMem = &restoreVerbMem{nodes: map[string]contracts.Node{
+	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
 		"facts/a": {Key: "facts/a", Meta: map[string]string{
 			contracts.MetaState:    contracts.StateArchived,
 			contracts.MetaLastSeen: "2020-01-01T00:00:00Z",
 		}},
-	}}
+	}})
 	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
@@ -91,13 +108,13 @@ func TestMemoryRestoreVerbReactivatesArchivedNode(t *testing.T) {
 }
 
 func TestMemoryRestoreVerbForceDetachesMergedOriginal(t *testing.T) {
-	currentRestoreMem = &restoreVerbMem{nodes: map[string]contracts.Node{
+	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
 		"facts/a": {Key: "facts/a", Meta: map[string]string{
 			orchestrator.MetaMergedInto: "facts/u",
 			contracts.MetaState:         contracts.StateArchived,
 			contracts.MetaLastSeen:      "2020-01-01T00:00:00Z",
 		}},
-	}}
+	}})
 	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
@@ -123,13 +140,13 @@ func TestMemoryRestoreVerbForceDetachesMergedOriginal(t *testing.T) {
 // (`--force` with no following value), which the README advertises. The verb
 // declares force as a valueless Param, so a bare --force must toggle it on.
 func TestMemoryRestoreVerbBareForceDetaches(t *testing.T) {
-	currentRestoreMem = &restoreVerbMem{nodes: map[string]contracts.Node{
+	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
 		"facts/a": {Key: "facts/a", Meta: map[string]string{
 			orchestrator.MetaMergedInto: "facts/u",
 			contracts.MetaState:         contracts.StateArchived,
 			contracts.MetaLastSeen:      "2020-01-01T00:00:00Z",
 		}},
-	}}
+	}})
 	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
@@ -148,7 +165,7 @@ func TestMemoryRestoreVerbBareForceDetaches(t *testing.T) {
 }
 
 func TestMemoryUnlinkVerbDispatchesToMemory(t *testing.T) {
-	currentRestoreMem = &restoreVerbMem{nodes: map[string]contracts.Node{}}
+	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{}})
 	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +183,7 @@ func TestMemoryUnlinkVerbDispatchesToMemory(t *testing.T) {
 }
 
 func TestMemoryRestoreVerbUnknownKeyErrors(t *testing.T) {
-	currentRestoreMem = &restoreVerbMem{nodes: map[string]contracts.Node{}}
+	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{}})
 	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)

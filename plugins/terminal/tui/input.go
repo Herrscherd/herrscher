@@ -1,6 +1,99 @@
 package tui
 
-import "os"
+import (
+	"os"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+)
+
+// Shift+Enter is the gesture every chat UI teaches, and a plain terminal cannot
+// deliver it: it sends a bare CR, byte for byte what Enter sends, so the composer
+// has no way to tell "break the line" from "send it". The only fix is to ask the
+// terminal to stop conflating them — the enhanced keyboard protocol, whose
+// "disambiguate" mode reports such keys as `CSI <code>;<mods> u` instead.
+//
+// Bubble Tea v1 does not speak that protocol, so we turn it on ourselves and
+// translate the reports back into the legacy bytes its parser already knows
+// (legacyKey). A terminal that does not implement the protocol ignores the
+// request and never sends a CSI-u report, so the translation simply stays idle —
+// nothing to detect, nothing to configure, and nothing breaks where it is absent.
+const (
+	// Push mode 1 (disambiguate escape codes) onto the terminal's own stack, so
+	// popping it restores whatever was set before us rather than assuming none.
+	enhancedKeysOn  = "\x1b[>1u"
+	enhancedKeysOff = "\x1b[<u"
+)
+
+// legacyKey renders one `CSI <code>;<mods> u` report as the bytes Bubble Tea's
+// parser expects for that key. seq is the whole sequence including the leading
+// ESC '[' and the final 'u'.
+//
+// The modifier field is a bitmask biased by one (1 = none, 2 = shift, 3 = alt,
+// 5 = ctrl, …); anything we cannot render legacy bytes for is dropped rather
+// than replayed, since a CSI-u sequence reaching the parser is junk keys on
+// screen — the exact failure this file exists to prevent.
+func legacyKey(seq []byte) []byte {
+	// A field may carry alternate-key variants after ':'; the base value is enough.
+	fields := strings.Split(string(seq[2:len(seq)-1]), ";")
+	code, err := strconv.Atoi(strings.SplitN(fields[0], ":", 2)[0])
+	if err != nil || code <= 0 {
+		return nil
+	}
+	mods := 1
+	if len(fields) > 1 {
+		if m, err := strconv.Atoi(strings.SplitN(fields[1], ":", 2)[0]); err == nil && m > 0 {
+			mods = m
+		}
+	}
+	mask := mods - 1
+	const (
+		modShift = 1
+		modAlt   = 2
+		modCtrl  = 4
+	)
+
+	var b []byte
+	switch code {
+	case 13: // Enter — the whole reason we asked for this protocol
+		b = []byte{'\r'}
+	case 9:
+		b = []byte{'\t'}
+	case 27:
+		b = []byte{ctrlESC}
+	case 127:
+		b = []byte{0x7f}
+	default:
+		if code > utf8.MaxRune {
+			return nil
+		}
+		r := rune(code)
+		if mask&modCtrl != 0 && r >= 'a' && r <= 'z' {
+			b = []byte{byte(r) & 0x1f} // ctrl+letter is its control byte
+		} else {
+			if mask&modShift != 0 {
+				r = toUpper(r)
+			}
+			b = []byte(string(r))
+		}
+	}
+	// Shift on Enter is what we came for: hand it over as Alt+Enter, the chord
+	// the composer already binds to a line break, so one binding serves both.
+	if code == 13 && mask&modShift != 0 {
+		return []byte{ctrlESC, '\r'}
+	}
+	if mask&modAlt != 0 {
+		return append([]byte{ctrlESC}, b...)
+	}
+	return b
+}
+
+func toUpper(r rune) rune {
+	if r >= 'a' && r <= 'z' {
+		return r - 32
+	}
+	return r
+}
 
 // The terminal answers colour and cursor queries in-band, mixed into stdin. Two
 // such answers can surface as garbage in the input box:
@@ -112,7 +205,11 @@ func (f *filteredStdin) feed(b []byte) {
 			f.seq = append(f.seq, c)
 			switch {
 			case c >= 0x40 && c <= 0x7e: // CSI final byte
-				if c != 'R' { // keep real keys; drop cursor-position reports
+				switch {
+				case c == 'R': // a cursor-position report, not a key
+				case c == 'u': // a key report from the enhanced protocol
+					f.out = append(f.out, legacyKey(f.seq)...)
+				default:
 					f.out = append(f.out, f.seq...)
 				}
 				f.seq = f.seq[:0]

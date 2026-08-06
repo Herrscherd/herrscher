@@ -277,10 +277,18 @@ func (h *hub) Close(ctx context.Context, name string, force bool) (string, error
 // Sessions returns a snapshot of the hub's sessions. It implements
 // contracts.SessionControl.
 func (h *hub) Sessions() []contracts.SessionInfo {
-	sessions := h.st.SnapshotSessions()
+	return sessionInfos(h.st, h.partDir)
+}
+
+// sessionInfos renders the persisted sessions as the frontend-facing view. It is
+// shared with the `session info` command so an attached frontend, which reaches
+// the daemon over the command socket instead of holding this hub, sees exactly
+// what an in-process one does rather than a second rendering that can drift.
+func sessionInfos(st *state.State, partDir string) []contracts.SessionInfo {
+	sessions := st.SnapshotSessions()
 	out := make([]contracts.SessionInfo, 0, len(sessions))
 	for _, s := range sessions {
-		lastTs := state.ReadTranscriptLast(state.TranscriptPath(h.partDir, s.Name))
+		lastTs := state.ReadTranscriptLast(state.TranscriptPath(partDir, s.Name))
 		out = append(out, contracts.SessionInfo{
 			Name:        s.Name,
 			Incarnation: s.Incarnation,
@@ -314,7 +322,14 @@ const scrollbackCap = 200
 // Scrollback returns the last recorded transcript lines for a session, mapped to
 // the neutral seam type. It implements contracts.SessionControl.
 func (h *hub) Scrollback(name string) []contracts.ScrollbackLine {
-	entries := state.ReadTranscript(state.TranscriptPath(h.partDir, name), scrollbackCap)
+	return scrollbackOf(h.partDir, name)
+}
+
+// scrollbackOf is Scrollback without the hub, shared with the `session
+// scrollback` command so an attached frontend repaints from the same lines an
+// in-process one does.
+func scrollbackOf(partDir, name string) []contracts.ScrollbackLine {
+	entries := state.ReadTranscript(state.TranscriptPath(partDir, name), scrollbackCap)
 	if len(entries) == 0 {
 		return nil
 	}

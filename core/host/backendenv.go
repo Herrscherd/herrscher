@@ -79,12 +79,15 @@ func GatewayEnvPairs() []string {
 func gatewayEnvFor(vendor string, creds contracts.GatewayCreds, modelArg string) map[string]string {
 	switch vendor {
 	case "claude":
-		// Anthropic protocol. ANTHROPIC_AUTH_TOKEN takes precedence over the
-		// subscription OAuth in the claude CLI's precedence order, which
-		// guarantees the session runs on our account, not the user's.
+		// Anthropic protocol. ANTHROPIC_API_KEY est le premier slot de l'ordre
+		// de résolution des identifiants du CLI claude, ce qui garantit que la
+		// session tourne sur notre compte plutôt que sur celui de
+		// l'utilisateur. C'est un remplacement d'ANTHROPIC_AUTH_TOKEN, jamais
+		// un ajout : poser les deux ferait envoyer x-api-key et Authorization
+		// ensemble, et l'API rendrait un 401.
 		return map[string]string{
-			contracts.EnvAnthropicBaseURL:   creds.BaseURL(),
-			contracts.EnvAnthropicAuthToken: creds.Token(),
+			contracts.EnvAnthropicBaseURL: creds.BaseURL(),
+			contracts.EnvAnthropicAPIKey:  creds.Token(),
 			// Belt and braces only: an explicit --model flag beats ANTHROPIC_MODEL
 			// in the claude CLI's precedence order, and BuildBackendFor always
 			// passes the same Arg as the "model" plugin setting, which is the flag.

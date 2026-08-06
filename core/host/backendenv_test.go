@@ -23,8 +23,28 @@ func TestGatewayEnvClaudeSetsBothHalves(t *testing.T) {
 	if env["ANTHROPIC_BASE_URL"] != "https://gw.neublox.xyz" {
 		t.Errorf("ANTHROPIC_BASE_URL = %q", env["ANTHROPIC_BASE_URL"])
 	}
-	if env["ANTHROPIC_AUTH_TOKEN"] != "tok-123" {
-		t.Errorf("ANTHROPIC_AUTH_TOKEN = %q", env["ANTHROPIC_AUTH_TOKEN"])
+	if env["ANTHROPIC_API_KEY"] != "tok-123" {
+		t.Errorf("ANTHROPIC_API_KEY = %q", env["ANTHROPIC_API_KEY"])
+	}
+}
+
+// Poser ANTHROPIC_API_KEY *et* ANTHROPIC_AUTH_TOKEN fait envoyer les deux
+// en-têtes, et l'API répond 401. C'est un remplacement, jamais un ajout.
+//
+// gatewayEnvFor renvoie une map[string]string (pas des paires "K=V"), donc les
+// deux moitiés de l'assertion sont vérifiées directement sur la map : la
+// présence exige une valeur non vide (une clé posée à "" serait un
+// environnement passerelle cassé qui passerait à tort), et l'absence utilise
+// la forme à deux valeurs de l'index — une comparaison de valeur contre
+// "tok-123" serait aussi satisfaite par une map vide et ne prouverait rien.
+func TestGatewayEnvSetsAPIKeyAndNeverBothVariables(t *testing.T) {
+	env := gatewayEnvFor("claude", creds(t), "claude-opus-5")
+
+	if strings.TrimSpace(env[contracts.EnvAnthropicAPIKey]) == "" {
+		t.Error("ANTHROPIC_API_KEY doit être posé avec une valeur non vide")
+	}
+	if _, hasOld := env["ANTHROPIC_AUTH_TOKEN"]; hasOld {
+		t.Error("ANTHROPIC_AUTH_TOKEN ne doit plus être posé : les deux ensemble donnent un 401")
 	}
 }
 
@@ -305,8 +325,8 @@ func TestBuildBackendForInjectsResolvedGatewayEnv(t *testing.T) {
 	if env["ANTHROPIC_BASE_URL"] != "https://gw.neublox.xyz" {
 		t.Errorf("ANTHROPIC_BASE_URL = %q", env["ANTHROPIC_BASE_URL"])
 	}
-	if env["ANTHROPIC_AUTH_TOKEN"] != "tok-123" {
-		t.Errorf("ANTHROPIC_AUTH_TOKEN = %q", env["ANTHROPIC_AUTH_TOKEN"])
+	if env["ANTHROPIC_API_KEY"] != "tok-123" {
+		t.Errorf("ANTHROPIC_API_KEY = %q", env["ANTHROPIC_API_KEY"])
 	}
 	if env["ANTHROPIC_MODEL"] != "opus" {
 		t.Errorf("ANTHROPIC_MODEL = %q", env["ANTHROPIC_MODEL"])

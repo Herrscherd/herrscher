@@ -8,7 +8,7 @@ Docs live in [Herrscherd/herrscher-docs](https://github.com/Herrscherd/herrscher
 
 ## What it gives you
 
-- **Durable sessions** — each session is a channel + an agent + an isolated git worktree, supervised and restarted automatically; the conversation resumes from the backend's own resume token. A session can be created explicitly, or adopt an existing conversation — the Discord edge opens one the first time its owner pings the bot in a channel. → `architecture/durable-agents`, `architecture/session-lifecycle`
+- **Durable sessions** — each session is a channel + an agent + an isolated git worktree, supervised and restarted automatically; the conversation resumes from the backend's own resume token. A session can be created explicitly, or adopt an existing conversation (`--channel_id`) — the Discord edge opens one the first time its owner pings the bot in a channel. A new one lands in the daemon's home unless `--under` names another category or forum, so work opened from one server does not surface in another. → `architecture/durable-agents`, `architecture/session-lifecycle`
 - **Persistent memory** — an auto-provisioned Obsidian vault, scoped shared-per-project and private-per-agent, recalled before every turn. → `architecture/memory`
 - **Learning** — opt-in consolidation of a session's work into scoped nodes, with aging, semantic merge, cross-agent promotion, and fully reversible archiving. → `architecture/learning`
 - **Multi-agent delegation across vendors** — an agent ends a turn with a `⟢` trailer to delegate, fan out, route, merge, or hand off; workers inherit their agent's vendor, so one run can mix Claude, Codex, and Cursor. → `architecture/coordination`

@@ -17,8 +17,11 @@ type sentMsg struct{ channelID, content string }
 
 type fakeChannelAdmin struct {
 	created    []string
+	parents    []string // parent id each CreateUnder/ForumPost was asked for
 	archived   []string
 	homeType   string
+	kinds      map[string]string // per-id kind; falls back to homeType
+	kindErr    error
 	idPrefix   string // channel-id prefix for CreateUnder; "" defaults to "new-"
 	sent       []sentMsg
 	sendErr    error
@@ -26,10 +29,17 @@ type fakeChannelAdmin struct {
 }
 
 func (f *fakeChannelAdmin) Kind(ctx context.Context, id string) (string, error) {
+	if f.kindErr != nil {
+		return "", f.kindErr
+	}
+	if k, ok := f.kinds[id]; ok {
+		return k, nil
+	}
 	return f.homeType, nil
 }
 func (f *fakeChannelAdmin) CreateUnder(ctx context.Context, parentID, name string) (string, error) {
 	f.created = append(f.created, name)
+	f.parents = append(f.parents, parentID)
 	prefix := f.idPrefix
 	if prefix == "" {
 		prefix = "new-"
@@ -38,6 +48,7 @@ func (f *fakeChannelAdmin) CreateUnder(ctx context.Context, parentID, name strin
 }
 func (f *fakeChannelAdmin) ForumPost(ctx context.Context, forumID, name, content string) (string, error) {
 	f.created = append(f.created, "forum:"+name)
+	f.parents = append(f.parents, forumID)
 	return "post-" + name, nil
 }
 func (f *fakeChannelAdmin) Archive(ctx context.Context, id string) error {
@@ -587,7 +598,7 @@ func TestSessionBanner(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := sessionBanner(repo, "demo", tc.worktree, tc.branch, "claude", tc.shared)
+			got := sessionBanner(repo, "demo", tc.worktree, tc.branch, "claude", "", tc.shared)
 			for _, s := range tc.want {
 				if !strings.Contains(got, s) {
 					t.Errorf("banner missing %q\n--- got ---\n%s", s, got)
@@ -603,12 +614,100 @@ func TestSessionBanner(t *testing.T) {
 }
 
 func TestSessionBannerEmptyRepo(t *testing.T) {
-	got := sessionBanner("", "demo", "", "session/demo", "claude", true)
+	got := sessionBanner("", "demo", "", "session/demo", "claude", "", true)
 	if !strings.Contains(got, "Project: **(cwd)**") {
 		t.Errorf("empty repo should render (cwd), got:\n%s", got)
 	}
 	if strings.Contains(got, "**.**") || strings.Contains(got, "(``)") {
 		t.Errorf("empty repo must not render misleading path, got:\n%s", got)
+	}
+}
+
+// The banner used to print only the configured command, which already carries a
+// --model of its own; a session created with an explicit model then read back the
+// wrong model name. The requested model must appear.
+func TestSessionBannerNamesTheRequestedModel(t *testing.T) {
+	got := sessionBanner("/home/me/proj", "demo", "", "session/demo", "claude --model claude-opus-4-8", "claude-opus-5", true)
+	if !strings.Contains(got, "Model: `claude-opus-5`") {
+		t.Errorf("banner must name the requested model, got:\n%s", got)
+	}
+}
+
+// `--under` is how a caller says "here": create the conversation in the container
+// this work belongs to instead of the daemon's home, which is where a session
+// opened from another server used to surface.
+func TestSessionCreateUnderOverridesTheHome(t *testing.T) {
+	h, d, _, _, _, st := newTestHandler(t, "category")
+	_ = st.SetHome(state.HomeRef{ID: "home-cat", Type: "category"})
+	d.kinds = map[string]string{"other-cat": "category"}
+
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "here", "under", "other-cat", "shared", "true")); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(d.parents) != 1 || d.parents[0] != "other-cat" {
+		t.Fatalf("session must be created under the requested container, got %+v", d.parents)
+	}
+	if home := st.Home; home.ID != "home-cat" {
+		t.Fatalf("--under must not move the home, got %+v", home)
+	}
+}
+
+func TestSessionCreateUnderAForum(t *testing.T) {
+	h, d, _, _, _, st := newTestHandler(t, "category")
+	_ = st.SetHome(state.HomeRef{ID: "home-cat", Type: "category"})
+	d.kinds = map[string]string{"a-forum": "forum"}
+
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "post", "under", "a-forum", "shared", "true")); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(d.created) != 1 || d.created[0] != "forum:post" {
+		t.Fatalf("expected a forum post, got %+v", d.created)
+	}
+	if sess, ok := st.FindSession("post"); !ok || sess.Type != "forum" {
+		t.Fatalf("session must record the forum type, got %+v", sess)
+	}
+}
+
+// A plain text channel is a conversation, not a container: creating inside it is
+// not what the caller meant, and the error must point at the verb that is.
+func TestSessionCreateUnderRejectsAPlainChannel(t *testing.T) {
+	h, d, _, _, _, st := newTestHandler(t, "category")
+	_ = st.SetHome(state.HomeRef{ID: "home-cat", Type: "category"})
+	d.kinds = map[string]string{"a-chan": "text"}
+
+	_, err := h.sessionCreateRun(context.Background(), args("name", "nope", "under", "a-chan", "shared", "true"))
+	if err == nil {
+		t.Fatal("expected a plain text channel to be refused")
+	}
+	if !strings.Contains(err.Error(), "channel_id") {
+		t.Errorf("error should point at channel_id, got %q", err)
+	}
+	if _, ok := st.FindSession("nope"); ok {
+		t.Error("no session may be persisted when under is invalid")
+	}
+}
+
+// A terminal-only session has no gateway container to live under, and the
+// terminal admin answers "text" for every id — so without an explicit refusal
+// the operator would be told their category is a plain channel.
+func TestSessionCreateRefusesUnderWithTerminalOnly(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	_ = st.SetHome(state.HomeRef{ID: "home-cat", Type: "category"})
+
+	_, err := h.sessionCreateRun(context.Background(), args("name", "clash", "under", "a-cat", "terminal_only", "true", "shared", "true"))
+	if err == nil || !strings.Contains(err.Error(), "terminal_only") {
+		t.Fatalf("err = %v, want the contradiction named", err)
+	}
+}
+
+func TestSessionCreateRefusesUnderWithChannelID(t *testing.T) {
+	h, d, _, _, _, st := newTestHandler(t, "category")
+	_ = st.SetHome(state.HomeRef{ID: "home-cat", Type: "category"})
+	d.kinds = map[string]string{"a-cat": "category"}
+
+	_, err := h.sessionCreateRun(context.Background(), args("name", "both", "under", "a-cat", "channel_id", "c1", "shared", "true"))
+	if err == nil {
+		t.Fatal("expected under + channel_id to be refused")
 	}
 }
 

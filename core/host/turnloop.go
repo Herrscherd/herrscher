@@ -125,8 +125,11 @@ type sessionDriver struct {
 
 	// emitTap, when set, receives every event the driver fans out — including on
 	// the seed path where gateways is nil. It feeds the daemon's events socket so
-	// an external reader (Neublox) sees the live thinking/status/chunk/reply
-	// stream. nil = no tap (CLI/tests).
+	// an external reader (an attached terminal, Neublox) sees the live
+	// thinking/status/chunk/reply stream. A driven session sets it too: without
+	// it the socket carries nothing during an ordinary turn and every attached
+	// frontend sits on `thinking…` until the process dies. nil = no tap
+	// (CLI/tests).
 	emitTap func(contracts.Event)
 
 	// gate decides, after each completed turn, whether the session must pause on
@@ -824,10 +827,10 @@ type sessionIdentity struct {
 }
 
 func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry), gate budgetGate) {
-	runSessionIdentified(ctx, name, channel, gws, acc, participants, m, coord, persistResume, record, sessionIdentity{}, gate)
+	runSessionIdentified(ctx, name, channel, gws, acc, participants, m, coord, persistResume, record, nil, sessionIdentity{}, gate)
 }
 
-func runSessionIdentified(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry), identity sessionIdentity, gate budgetGate) {
+func runSessionIdentified(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry), emit func(contracts.Event), identity sessionIdentity, gate budgetGate) {
 	defer acc.Close() // own the acceptor: close the listener + remove the socket on shutdown
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
@@ -840,6 +843,7 @@ func runSessionIdentified(ctx context.Context, name, channel string, gws []contr
 	d.coordinator = coord
 	d.persistResume = persistResume
 	d.record = record
+	d.emitTap = emit
 	if gate != nil {
 		d.gate = gate
 	}

@@ -15,6 +15,12 @@ import (
 // errPrefix marks a backend failure surfaced to the human as reply text.
 const errPrefix = "⚠️ "
 
+// interruptNotice is what a turn the human stopped reads as. Cancelling the
+// turn context makes the backend return context.Canceled, which used to be
+// rendered with errPrefix — so pressing Esc answered "⚠️ context canceled",
+// which reads as the tool breaking rather than as the tool obeying.
+const interruptNotice = "⏹ interrupted"
+
 // turnController holds the cancel func of the turn currently running so an
 // out-of-band interrupt frame (read on the socket while the turn driver is
 // blocked in Respond) can cancel it. A nil *turnController is a no-op, so
@@ -22,6 +28,11 @@ const errPrefix = "⚠️ "
 type turnController struct {
 	mu     sync.Mutex
 	cancel context.CancelFunc
+	// stopped records that this turn's cancellation came from an interrupt and
+	// not from the parent context going away (a shutdown, a lost bridge). Only
+	// the former is something to tell the human about; the latter is the process
+	// ending and has nobody left to read it.
+	stopped bool
 }
 
 // begin derives a cancellable turn context and records its cancel; the returned
@@ -34,6 +45,7 @@ func (c *turnController) begin(parent context.Context) (context.Context, func())
 	ctx, cancel := context.WithCancel(parent)
 	c.mu.Lock()
 	c.cancel = cancel
+	c.stopped = false
 	c.mu.Unlock()
 	return ctx, func() {
 		c.mu.Lock()
@@ -52,9 +64,20 @@ func (c *turnController) interrupt() {
 	}
 	c.mu.Lock()
 	if c.cancel != nil {
+		c.stopped = true
 		c.cancel()
 	}
 	c.mu.Unlock()
+}
+
+// wasInterrupted reports whether the turn now ending was stopped by the human.
+func (c *turnController) wasInterrupted() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.stopped
 }
 
 // hubDialWindow is how long a bridge waits for its control socket to appear
@@ -216,9 +239,19 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 		// worth more to the human than an error banner — but the failure itself
 		// must not vanish: a truncated reply is indistinguishable from a complete
 		// one, so the reason is at least in the operator log.
-		if out == "" {
+		switch {
+		case ctrl.wasInterrupted():
+			// The human asked for this, so it is not a failure. The partial reply
+			// stays and is marked as cut short; with nothing produced yet, the
+			// notice is the whole reply.
+			if out == "" {
+				out = interruptNotice
+			} else {
+				out = strings.TrimSpace(out) + "\n\n" + interruptNotice
+			}
+		case out == "":
 			out = errPrefix + err.Error()
-		} else {
+		default:
 			logger.Warn("backend failed after partial output; keeping what it produced", "err", err, "chars", len(out))
 		}
 	}

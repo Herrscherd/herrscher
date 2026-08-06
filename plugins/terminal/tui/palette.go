@@ -39,6 +39,31 @@ func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 // paletteMax bounds how many matches the palette shows at once.
 const paletteMax = 6
 
+// paletteWindow is the slice of matches to draw, given the selection. The
+// palette used to truncate at paletteMax from the head, which made every verb
+// past the sixth unreachable: ↑↓ moved a selection nobody could see, and the
+// only way to a late command was to type enough of its name to filter the
+// others out — which requires already knowing it, the one thing a menu exists
+// to spare you.
+//
+// The window slides only far enough to hold the selection, so browsing from the
+// top keeps the first rows still until the cursor actually reaches the bottom
+// edge. It returns the offset too, so the caller can tell which drawn row is the
+// selected one.
+func paletteWindow(n, sel, rows int) (start, end int) {
+	if n <= rows {
+		return 0, n
+	}
+	start = sel - rows + 1
+	if start < 0 {
+		start = 0
+	}
+	if start > n-rows {
+		start = n - rows
+	}
+	return start, start + rows
+}
+
 // paletteOpen reports whether the input is a slash-command in progress.
 func (m *model) paletteOpen() bool { return strings.HasPrefix(m.input.Value(), "/") }
 
@@ -170,19 +195,24 @@ func (m *model) paletteView() string {
 	if len(fc) == 0 {
 		return dimStyle.Render("  (no match)")
 	}
+	sel := m.palIdx
+	if sel >= len(fc) {
+		sel = len(fc) - 1
+	}
+	if sel < 0 {
+		sel = 0
+	}
+	start, end := paletteWindow(len(fc), sel, paletteMax)
 	var b strings.Builder
-	for i, c := range fc {
-		if i >= paletteMax {
-			b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", len(fc)-paletteMax)))
-			break
-		}
+	for i, c := range fc[start:end] {
+		i += start
 		// The name is the thing being chosen and the args are a reminder of what
 		// it will ask for; drawing both dim made every row one grey smear, and a
 		// menu you have to read word by word is a menu you stop opening.
 		label := "/" + c.Name
 		var row string
 		switch {
-		case i == m.palIdx:
+		case i == sel:
 			row = accentStyle.Render(glyphCursor + " " + label)
 		default:
 			row = textStyle.Render("  " + label)
@@ -193,10 +223,15 @@ func (m *model) paletteView() string {
 		if c.Desc != "" {
 			row += "  " + dimStyle.Render(c.Desc)
 		}
-		if i > 0 {
+		if i > start {
 			b.WriteByte('\n')
 		}
 		b.WriteString(row)
+	}
+	// With more matches than rows, the window alone gives no sense of where in
+	// the list the cursor is or how much is left — so say it outright.
+	if len(fc) > paletteMax {
+		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  %d/%d", sel+1, len(fc))))
 	}
 	return b.String()
 }

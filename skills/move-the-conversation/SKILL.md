@@ -34,9 +34,24 @@ If a request is ambiguous about *where* (which project, which branch), ask that
 one question rather than guessing. Guessing the project wrongly puts an agent to
 work on the wrong repo.
 
+## Read the request before you reach for a tool
+
+Two different asks sound alike and take different tools:
+
+- **"open a Herrscher session on X"** → `herrscher session create`. This mints a
+  new conversation on the daemon's gateways and starts an agent in it.
+- **"open it in superset / in the other harness"** → that is a *different* tool
+  (see below), not `session create`. Running `session create` for it puts an
+  agent somewhere the operator did not ask for and leaves them chasing it.
+
+When the request names *where* — a server, a project, a channel — that place is
+part of the instruction, not decoration. Carry it into the command (`--under`,
+`--channel_id`, `--project`) instead of dropping it and letting the default win.
+
 ## Driving Herrscher from your shell
 
-The `herrscher` CLI talks to the live daemon, so it reads and changes real state:
+The `herrscher` CLI talks to the live daemon, so it reads and changes real state.
+This is the whole surface — you do not need to probe it:
 
 ```bash
 herrscher session list                  # what is running right now
@@ -46,12 +61,30 @@ herrscher session archive --name <slug> # keeps it resumable
 herrscher models list                   # what --model accepts
 ```
 
+Never create throwaway sessions to discover the syntax: each one is a real
+channel and a real agent. `herrscher <group> <verb> --help` costs nothing.
+
 If the bare name does not resolve, the daemon's own environment is narrower than
 a login shell's; fall back to `"$(go env GOPATH)"/bin/herrscher` rather than
 reporting the CLI as missing.
 
-`session create` also mints the conversation on whichever gateways the daemon is
-bound to, so it is how you open a fresh channel for a piece of work.
+### Where the new conversation lands
+
+By default `session create` mints its channel under the daemon's *home* — one
+container, configured once, usually in whatever server the operator set up first.
+So a session opened while reading a channel in another server surfaces somewhere
+else entirely, which reads as the agent wandering off. Two flags say "here"
+instead:
+
+```bash
+herrscher session create --name <slug> --under <category-or-forum-id>  # create it there
+herrscher session create --name <slug> --channel_id <channel-id>       # adopt this conversation
+```
+
+`--under` needs a container (a category or a forum); a plain channel is a
+conversation, so adopt it with `--channel_id`. Pass one or the other, never both.
+When you are already reading a channel and the operator says "open it here", that
+channel's container is the answer — not the home.
 
 `--force` on close **discards uncommitted work in the worktree**. Never pass it
 to silence an error; if a close is refused because the tree is dirty, say so and
@@ -64,9 +97,12 @@ sessions as tabs.
 
 ## Opening work in another harness
 
-Some machines run a separate workspace tool that can create a worktree and start
-an agent in it. When one is present, it is the right way to put a *different*
-agent on a *different* branch — not a way to relocate this conversation.
+Some machines run a separate workspace tool — `superset` is the one you are most
+likely to meet — that can create a worktree and start an agent in it. When one is
+present, it is the right way to put a *different* agent on a *different* branch —
+not a way to relocate this conversation. When the operator names it ("ouvre ça
+sur superset"), that tool is the instruction: `herrscher session create` is not a
+substitute for it and does not land in the same place.
 
 Before reaching for it, check it is actually there (`command -v <tool>`) and say
 plainly that it is not when it is not. A desktop app's CLI is often a shim into a

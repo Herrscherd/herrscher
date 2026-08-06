@@ -46,7 +46,7 @@ func renderEntry(e entry, width int) string {
 			return titledRule(accentStyle, agentTitle, width) + "\n" +
 				indent(wrapWith(textStyle, e.text, body))
 		}
-		return block(accentStyle, agentTitle, renderMarkdown(e.text, body), width)
+		return openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body), width)
 	case roleThinking:
 		return indent(wrapWith(thinkingStyle, glyphThinking+" "+e.text, body))
 	case roleTool:
@@ -73,28 +73,35 @@ func renderEntry(e entry, width int) string {
 const agentTitle = "⚡ Herrscher"
 
 // block frames body between a titled opening rule and a plain closing one, with
-// the body in the gutter. What it buys is a boundary: an answer and the tool
-// lines under it are otherwise one column of text, and a reader looking for
-// where the reply started has to find it by colour alone.
+// the body in the gutter. Reserved for what should stop the eye — an error is
+// rare enough that a closed frame costs nothing and reads as an interruption of
+// the conversation, which is what it is.
 func block(style lipgloss.Style, title, body string, width int) string {
 	return titledRule(style, title, width) + "\n" +
 		indent(body) + "\n" +
 		rule(style, width)
 }
 
-// renderYou renders the operator's own turn: the request framed between two
-// rules, then the chips for whatever was attached to it and the inline image
-// preview under them.
+// openBlock is block without the closing rule: a titled rule saying whose words
+// follow, then the words. The closing rule said nothing the blank line and the
+// next speaker's rule did not already say, and it cost a row on every single
+// turn — a transcript of short exchanges came out roughly half horizontal lines.
+func openBlock(style lipgloss.Style, title, body string, width int) string {
+	return titledRule(style, title, width) + "\n" + indent(body)
+}
+
+// renderYou renders the operator's own turn: the request in the gutter behind
+// the cursor glyph, then the chips for whatever was attached to it and the
+// inline image preview under them.
 //
-// It is framed rather than merely dim because it is the thing a reader scrolls
-// back to find. Everything else on screen is the machine answering; this is the
-// only line that says what was asked, and in a long transcript it is one dim row
-// among hundreds.
+// It used to be framed between two rules, on the reasoning that it is the line a
+// reader scrolls back to find. But a one-word message then cost four rows for one
+// character, and a frame drawn around every turn stops marking anything. The
+// glyph and the colour are what actually distinguish it, and they survive being
+// scrolled past.
 func renderYou(e entry, width int) string {
 	body := width - lipgloss.Width(blockIndent)
-	out := rule(dimStyle, width) + "\n" +
-		indent(wrapWith(userStyle, glyphCursor+" "+e.text, body)) + "\n" +
-		rule(dimStyle, width)
+	out := indent(wrapWith(userStyle, glyphCursor+" "+e.text, body))
 	if chips := chipRow(e.attachments); chips != "" {
 		out += "\n" + indent(chips)
 	}

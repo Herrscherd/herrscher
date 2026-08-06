@@ -68,6 +68,18 @@ func runServe(ctx context.Context, args []string) error {
 	// refusal is still just an error message.
 	unlock, err := host.LockState(*statePath)
 	if err != nil {
+		// Somebody else is serving. On a terminal that is almost never a mistake to
+		// report and walk away from: the operator wants to see the agent that is
+		// already running, and the daemon exposes exactly the two sockets a
+		// frontend needs. Attach instead of refusing. Off a terminal there is no
+		// TUI to attach, so the refusal stands.
+		if term.IsTerminal(int(os.Stdout.Fd())) {
+			aerr := runAttached(ctx, *instanceID)
+			if aerr == nil {
+				return nil
+			}
+			fmt.Fprintf(os.Stderr, "herrscher: could not attach to the running daemon: %v\n", aerr)
+		}
 		return err
 	}
 	defer unlock()

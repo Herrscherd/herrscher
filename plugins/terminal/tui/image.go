@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/base64"
+	"image"
 	"os"
 	"strconv"
 	"strings"
@@ -26,9 +27,10 @@ func previewEscapes(atts []Attachment, caps Capabilities) string {
 // drawable image. Every format the decoder knows arrives here, so JPEG, GIF and
 // WebP are previewed too rather than dropped for not being PNG.
 //
-// Bytes that claim to be PNG and will not decode are handed to a kitty terminal
-// untouched: the terminal is the final judge of its own format, and a decoder
-// disagreement is a poor reason to withhold a preview it might well have drawn.
+// Bytes that will not decode produce no preview. Passing them to the terminal
+// unread would put a payload on a transcript line that nothing in this package
+// has bounded — not its pixel count, not the escape it expands to — and the chip
+// alone is a perfectly good answer for a file we cannot read.
 func previewEscape(a Attachment, caps Capabilities) string {
 	if !strings.HasPrefix(a.Mime, "image/") {
 		return ""
@@ -39,14 +41,16 @@ func previewEscape(a Attachment, caps Capabilities) string {
 	}
 	img, err := decodeImage(data)
 	if err != nil {
-		if caps.Graphics == GraphicsKitty && a.Mime == "image/png" && len(data) <= maxPreviewBytes {
-			return kittyPreview(data, previewRows)
-		}
 		return ""
 	}
-	// The cap is on the escape now, not on the source file: what the viewport
-	// re-scans on every repaint is the escape, and a photo that shrinks to a few
-	// kilobytes used to be rejected for the size it arrived at.
+	return boundedEscape(img, caps)
+}
+
+// boundedEscape renders img for this terminal, or "" when the result is too big
+// to leave on a transcript line. The cap is on the escape and not on the source
+// file: what the viewport re-scans on every repaint is the escape, and a photo
+// that shrinks to a few kilobytes used to be rejected for the size it arrived at.
+func boundedEscape(img image.Image, caps Capabilities) string {
 	if esc := imageEscape(img, caps); len(esc) <= maxPreviewBytes {
 		return esc
 	}
@@ -101,7 +105,6 @@ func kittyPreview(png []byte, rows int) string {
 			b.WriteString(strconv.Itoa(rows))
 			b.WriteString(",m=")
 		} else {
-			// Continuation chunks carry only the m (more) key.
 			b.WriteString("m=")
 		}
 		b.WriteString(strconv.Itoa(more))

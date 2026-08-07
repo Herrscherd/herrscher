@@ -230,3 +230,30 @@ func TestFoldKeysRepaintRatherThanServingTheCachedFrame(t *testing.T) {
 		})
 	}
 }
+
+// The fold and the search marks are memoized outside tsCache (see contentWith),
+// so each needs its own proof that the memo is keyed on everything it depends
+// on. A stale overlay is worse than a slow one: the operator is looking at it.
+func TestOverlaysAreNotServedStale(t *testing.T) {
+	t.Run("the fold follows a growing transcript", func(t *testing.T) {
+		m := longModel(t)
+		m.toggleTurnFold()
+		before := m.baseContent()
+		m.tabs["a"].appendEntry(entry{role: roleYou, text: "one more question"})
+		m.syncViewport()
+		if after := m.baseContent(); after == before {
+			t.Fatal("a turn arriving must reach the folded view")
+		}
+	})
+
+	t.Run("the marks follow the query", func(t *testing.T) {
+		m := longModel(t)
+		m.openSearch()
+		m.typeSearch("needle")
+		withNeedle := m.thinkingContent()
+		m.typeSearch("widgets")
+		if withWidgets := m.thinkingContent(); withWidgets == withNeedle {
+			t.Fatal("editing the query must re-mark the transcript")
+		}
+	})
+}

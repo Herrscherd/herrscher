@@ -144,3 +144,27 @@ func TestTranscriptImageOffTheAllowlistIsNotFetched(t *testing.T) {
 		t.Fatalf("nothing must be drawn for it: %q", tb.entries[0].preview)
 	}
 }
+
+// A fetched image goes through the same size bound as a staged one. It reaches
+// the transcript from the network rather than from the operator, and the escape
+// it becomes is re-measured by the viewport on every repaint for the rest of the
+// session — so an oversized one leaves the URL as text and draws nothing.
+func TestFetchedImageTooLargeToDrawIsDropped(t *testing.T) {
+	m := newTestModel()
+	m.caps = Capabilities{Graphics: GraphicsKitty}
+	m.imageHosts = []string{"cdn.example.com"}
+	m.imageFetcher = func(context.Context, string) ([]byte, error) {
+		// Wide rather than tall: only height is downscaled, so the escape stays
+		// past maxPreviewBytes after the preview pass.
+		return encodeFixture(t, "png", noiseImage(4000, 200)), nil
+	}
+
+	tb := m.ensureTab("a")
+	tb.appendEntry(entry{role: roleAgent, text: "here: https://cdn.example.com/huge.png"})
+	if msg := runCmd(m.fetchEntryImages(tb, 0)); msg != nil {
+		t.Fatalf("an oversized fetched image must produce no message, got %T", msg)
+	}
+	if tb.entries[0].preview != "" {
+		t.Fatalf("nothing must be drawn for it: %q", tb.entries[0].preview)
+	}
+}

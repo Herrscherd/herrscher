@@ -62,15 +62,23 @@ func sgr(role int, c interface{ RGBA() (r, g, b, a uint32) }) string {
 		strconv.Itoa(int(r>>8)) + ";" + strconv.Itoa(int(g>>8)) + ";" + strconv.Itoa(int(b>>8)) + "m"
 }
 
+// maxBlockCols bounds the drawn width in cells. A bound on rows alone does not
+// bound the picture: a 2000×10 banner is already short enough to keep every row
+// and comes out four thousand cells wide, on one transcript line the viewport
+// re-measures on every repaint. No terminal is this wide, and clamping the width
+// shrinks the rows with it, so the picture keeps its shape.
+const maxBlockCols = 200
+
 // blockCols is how wide to draw img so it occupies at most rows text rows. It is
 // the half-block counterpart of the r= key the kitty escape carries: the bound
-// the transcript needs is on height, and width follows from the aspect ratio.
+// the transcript needs is on height, and width follows from the aspect ratio —
+// up to maxBlockCols, past which the height stops being the binding constraint.
 func blockCols(img image.Image, rows int) int {
 	b := img.Bounds()
 	if b.Dy() <= 0 {
 		return 1
 	}
-	return max(1, b.Dx()*rows*2/b.Dy())
+	return min(maxBlockCols, max(1, b.Dx()*rows*2/b.Dy()))
 }
 
 // imageEscape renders img with the best encoder this terminal has: the kitty

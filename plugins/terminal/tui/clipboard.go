@@ -65,5 +65,9 @@ func (wlClipboard) ReadImage(mime string) ([]byte, error) {
 func (wlClipboard) WriteText(s string) error {
 	cmd := exec.Command("wl-copy")
 	cmd.Stdin = strings.NewReader(s)
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait() // reaped off the render path; an unwaited child stays a zombie
+	return nil
 }

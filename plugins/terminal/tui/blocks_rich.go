@@ -317,7 +317,7 @@ func (m *model) toggleFold() {
 // selection UI, and that is not what a copy key is for.
 func (m *model) copyLastCode() {
 	tb := m.tabs[m.active]
-	if tb == nil {
+	if tb == nil || m.clip == nil {
 		return
 	}
 	for i := len(tb.entries) - 1; i >= 0; i-- {

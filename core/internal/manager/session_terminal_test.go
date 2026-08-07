@@ -15,7 +15,7 @@ import (
 func TestSessionCreateTerminalOnlyIgnoresWorkspaceProject(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "terminal")
 	st.SetHome(state.HomeRef{ID: "terminal", Type: "terminal"})
-	if err := st.SetWorkspace("/home/shan/dev"); err != nil {
+	if err := st.SetWorkspace("/workspaces/demo"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -35,7 +35,7 @@ func TestSessionCreateTerminalOnlyIgnoresWorkspaceProject(t *testing.T) {
 func TestSessionCreateNoProjectRootsAtWorkspace(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	if err := st.SetWorkspace("/home/shan/dev"); err != nil {
+	if err := st.SetWorkspace("/workspaces/demo"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -47,7 +47,7 @@ func TestSessionCreateNoProjectRootsAtWorkspace(t *testing.T) {
 	if !ok {
 		t.Fatal("session was not created")
 	}
-	if sess.Dir != "/home/shan/dev" {
+	if sess.Dir != "/workspaces/demo" {
 		t.Fatalf("Dir = %q, want workspace root", sess.Dir)
 	}
 }

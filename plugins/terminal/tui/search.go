@@ -21,11 +21,81 @@ func searchHits(lines []string, query string) []int {
 	q := strings.ToLower(query)
 	var out []int
 	for i, ln := range lines {
-		if strings.Contains(strings.ToLower(ln), q) {
+		// The lines are already painted, so a raw Contains would also match the
+		// escape sequences: "m" is in every SGR, and a search for it would report
+		// every line in the transcript as a hit.
+		if strings.Contains(strings.ToLower(visibleText(ln)), q) {
 			out = append(out, i)
 		}
 	}
 	return out
+}
+
+// escapeEnd returns the index just past the escape sequence starting at i, or -1
+// when nothing starts there. It has to know the shapes because the transcript
+// carries more than SGR: an OSC 8 hyperlink, a kitty APC image and a sixel DCS
+// band all live on these lines, and their payloads are bytes, not text.
+func escapeEnd(s string, i int) int {
+	if i >= len(s) || s[i] != 0x1b {
+		return -1
+	}
+	if i+1 >= len(s) {
+		return len(s)
+	}
+	switch s[i+1] {
+	case '[': // CSI: parameters until a final byte in 0x40..0x7e
+		for j := i + 2; j < len(s); j++ {
+			if s[j] >= 0x40 && s[j] <= 0x7e {
+				return j + 1
+			}
+		}
+		return len(s)
+	case ']', 'P', '_', '^', 'X': // OSC, DCS, APC, PM, SOS: until ST or BEL
+		for j := i + 2; j < len(s); j++ {
+			if s[j] == 0x07 {
+				return j + 1
+			}
+			if s[j] == 0x1b && j+1 < len(s) && s[j+1] == '\\' {
+				return j + 2
+			}
+		}
+		return len(s)
+	}
+	return i + 2 // a two-byte escape
+}
+
+// visibleText is s with its escape sequences removed: what the operator can
+// actually read on the row, which is the only thing a search over it should see.
+func visibleText(s string) string {
+	if !strings.Contains(s, "\x1b") {
+		return s
+	}
+	var b strings.Builder
+	forEachTextRun(s, func(esc bool, chunk string) {
+		if !esc {
+			b.WriteString(chunk)
+		}
+	})
+	return b.String()
+}
+
+// forEachTextRun walks s as alternating escape sequences and plain text, calling
+// fn for each run in order. Every caller here needs the same split and none of
+// them may get it slightly differently.
+func forEachTextRun(s string, fn func(esc bool, chunk string)) {
+	for i := 0; i < len(s); {
+		if end := escapeEnd(s, i); end > 0 {
+			fn(true, s[i:end])
+			i = end
+			continue
+		}
+		j := i
+		for j < len(s) && s[j] != 0x1b {
+			j++
+		}
+		fn(false, s[i:j])
+		i = j
+	}
 }
 
 // highlightMatches marks every occurrence of query in lines. Reverse video again:
@@ -43,11 +113,34 @@ func highlightMatches(lines []string, query string) []string {
 	return out
 }
 
-// markLine wraps each match in one line. It searches the lowercased copy but cuts
-// the original, so the text keeps its case and its escapes stay intact — the
-// offsets are the same in both because lowering ASCII does not change lengths.
+// markLine wraps each match in one line, looking only at the parts of it the
+// operator can read. Marking the escape sequences too is not a cosmetic slip: the
+// mark is inserted mid-sequence, which splits an SGR (or an image payload) in two
+// and spills the remainder onto the screen as text. A match that straddles a
+// style change is missed instead, which costs a highlight rather than the row.
 func markLine(line, lowerQuery string) string {
+	var b strings.Builder
+	forEachTextRun(line, func(esc bool, chunk string) {
+		if esc {
+			b.WriteString(chunk)
+			return
+		}
+		b.WriteString(markRun(chunk, lowerQuery))
+	})
+	return b.String()
+}
+
+// markRun marks the matches in one run of plain text. It searches the lowercased
+// copy but cuts the original, so the text keeps its case — the offsets are the
+// same in both because lowering ASCII does not change lengths.
+func markRun(line, lowerQuery string) string {
 	lower := strings.ToLower(line)
+	if len(lower) != len(line) {
+		// A handful of runes lower to a different byte length (İ is the usual one),
+		// and every offset below would then point into the wrong string — far enough
+		// to slice past the end. Such a run keeps its text and loses its highlight.
+		return line
+	}
 	var b strings.Builder
 	for {
 		i := strings.Index(lower, lowerQuery)

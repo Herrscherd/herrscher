@@ -257,3 +257,51 @@ func TestOverlaysAreNotServedStale(t *testing.T) {
 		}
 	})
 }
+
+// The transcript reaching the search is already painted, and its escape
+// sequences are not text the operator can see. Searching them anyway makes "m" —
+// the final byte of every SGR — match every styled line, and marking them splits
+// a sequence in two, so its remainder is printed on screen as characters.
+func TestSearchLooksOnlyAtWhatIsOnScreen(t *testing.T) {
+	// A styled word, an OSC 8 hyperlink and a kitty image payload: the three
+	// shapes this package puts on a transcript line.
+	line := "\x1b[38;2;204;204;204mhello\x1b[0m " +
+		"\x1b]8;;https://example.com/m\x1b\\link\x1b]8;;\x1b\\ " +
+		"\x1b_Ga=T,f=100,r=10,m=0;AAAAm\x1b\\"
+
+	if got := visibleText(line); got != "hello link " {
+		t.Fatalf("visibleText = %q", got)
+	}
+	if hits := searchHits([]string{line}, "m"); len(hits) != 0 {
+		t.Fatalf("a byte that only occurs inside an escape must not be a hit: %v", hits)
+	}
+	if hits := searchHits([]string{line}, "link"); len(hits) != 1 {
+		t.Fatalf("visible text must still be searchable: %v", hits)
+	}
+
+	marked := markLine(line, "m")
+	if marked != line {
+		t.Fatalf("a query matching only escape bytes must leave the line alone:\n got %q\nwant %q", marked, line)
+	}
+	// And a real match is marked, with every escape still intact around it.
+	marked = markLine(line, "ell")
+	if !strings.Contains(marked, ansiReverse+"ell"+ansiReverseOff) {
+		t.Fatalf("a visible match must be marked: %q", marked)
+	}
+	if visibleText(marked) != "hello link " {
+		t.Fatalf("marking must not disturb the text underneath: %q", visibleText(marked))
+	}
+	for _, esc := range []string{"\x1b[38;2;204;204;204m", "\x1b]8;;https://example.com/m\x1b\\", "\x1b_Ga=T,f=100,r=10,m=0;AAAAm\x1b\\"} {
+		if !strings.Contains(marked, esc) {
+			t.Fatalf("escape %q was broken by the mark: %q", esc, marked)
+		}
+	}
+}
+
+// A rune whose lower-case form is a different length would shift every offset in
+// the run past the end of the string it is cut from.
+func TestMarkLineSurvivesARuneThatChangesLengthWhenLowered(t *testing.T) {
+	if got := markLine("İstanbul", "i"); got != "İstanbul" {
+		t.Fatalf("markLine = %q", got)
+	}
+}

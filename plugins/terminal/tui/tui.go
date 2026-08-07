@@ -612,9 +612,9 @@ func (m *model) handleEnter() tea.Cmd {
 	tb := m.tabs[m.active]
 	tb.endStream() // a new user turn closes any lingering agent block
 	e := entry{role: roleYou, text: text, attachments: atts}
-	if m.caps.Graphics == GraphicsKitty {
-		e.preview = previewEscapes(atts) // inline image previews under the chips
-	}
+	// Every terminal gets a preview: half-blocks need no protocol at all, so the
+	// fallback is a coarser picture rather than no picture.
+	e.preview = previewEscapes(atts, m.caps)
 	tb.appendEntry(e)
 	// Flip to the working state immediately, before any backend event, so the
 	// operator sees the message was taken (the "thinking" line is derived from this).

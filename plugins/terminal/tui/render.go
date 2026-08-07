@@ -106,8 +106,8 @@ func renderYou(e entry, width int) string {
 		out += "\n" + indent(chips)
 	}
 	if e.preview != "" {
-		// The kitty graphics escape sits on its own line under the chip; the
-		// terminal draws the image at the cursor. Non-kitty terminals ignore it.
+		// The image sits on its own line under the chip, in whatever encoding the
+		// probe said this terminal draws — down to half-blocks, which always work.
 		out += "\n" + e.preview
 	}
 	return out

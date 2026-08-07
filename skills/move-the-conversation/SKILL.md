@@ -51,7 +51,7 @@ part of the instruction, not decoration. Carry it into the command (`--under`,
 ## Driving Herrscher from your shell
 
 The `herrscher` CLI talks to the live daemon, so it reads and changes real state.
-This is the whole surface — you do not need to probe it:
+These are the session verbs:
 
 ```bash
 herrscher session list                  # what is running right now
@@ -60,6 +60,19 @@ herrscher session close --name <slug>   # --force discards uncommitted work
 herrscher session archive --name <slug> # keeps it resumable
 herrscher models list                   # what --model accepts
 ```
+
+They are not the whole surface. The gateway plugins a daemon runs contribute
+verbs of their own, namespaced under the plugin's kind, and they exist only in
+that daemon — so which ones you have depends on how this host was composed. Ask
+it rather than guessing:
+
+```bash
+herrscher commands                      # every verb the running daemon accepts
+herrscher commands --json               # same, with each verb's params
+```
+
+Any verb it lists can be invoked directly (`herrscher <kind> <verb> …`); the CLI
+relays it to the daemon. With no daemon running, such a verb is simply unknown.
 
 Never create throwaway sessions to discover the syntax: each one is a real
 channel and a real agent. `herrscher <group> <verb> --help` costs nothing.

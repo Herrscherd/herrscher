@@ -162,14 +162,51 @@ func main() {
 		usage()
 		return
 	default:
-		fmt.Fprintf(os.Stderr, "herrscher: unknown command %q\n", cmd)
-		usage()
-		os.Exit(2)
+		// The switch above is not the whole command surface: gateway plugins
+		// contribute verbs the daemon namespaces under their kind, and those live
+		// in the daemon's registry alone. So an argv this binary does not
+		// recognise is offered to the daemon verbatim — main never learns what any
+		// of them mean, which is what keeps this file free of any platform.
+		// `herrscher commands` lists what the daemon will accept.
+		//
+		// Be honest about the reach: the daemon is handed the argv as-is, so what
+		// this opens is its whole registry and not only the contributed part of
+		// it — `herrscher set source --path /x` now lands on the live daemon
+		// where it used to be an unknown verb. No privilege is added; the socket
+		// already took arbitrary argv from anyone who could reach it.
+		out, derr, code := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
+		if code != 0 {
+			fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
+			usage()
+			os.Exit(code)
+		}
+		if derr == nil && out != "" {
+			fmt.Println(out)
+		}
+		err = derr
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
 		os.Exit(1)
 	}
+}
+
+// dispatchUnknown decides what becomes of a verb main()'s switch has no case
+// for. It lives outside main() so the decision can be exercised with a stub
+// forwarder — no daemon, no re-exec — and it takes cmd and args apart rather
+// than a ready-made argv so the arm passes exactly what every sibling case
+// passes: dropping the verb on the wire is then not expressible at the call
+// site. exit is the code the process must leave with, or 0 to let main() carry
+// on with err as usual.
+func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (stdout string, err error, exit int) {
+	out, handled, derr := fwd(ctx, append([]string{cmd}, args...))
+	if !handled {
+		// No daemon: the verb has nowhere to be known, so it is unknown.
+		return "", fmt.Errorf("unknown command %q", cmd), 2
+	}
+	// A daemon-side refusal is the caller's failure, so it must keep costing a
+	// non-zero exit for whoever is reading $?.
+	return out, derr, 0
 }
 
 // channelFlag registers -c/--channel on fs and returns the bound pointer.

@@ -64,6 +64,20 @@ func DaemonDispatch(ctx context.Context, instanceID string, argv []string) (stri
 	return out, err
 }
 
+// ForwardToDaemon hands a raw argv to the daemon serving statePath and returns
+// what it answered, without interpreting either end. Plugin-contributed verbs
+// are namespaced into the registry by live gateway instances, so they exist in
+// the daemon and nowhere else: a short-lived process that meets one can only
+// relay it.
+//
+// handled is dispatchLiveCommand's distinction, kept rather than folded into an
+// error the way DaemonDispatch folds it: false means the dial missed, so the
+// caller is free to answer as it did before there was a daemon to ask. A verb
+// that lives only inside a daemon must not claim to exist when none is running.
+func ForwardToDaemon(ctx context.Context, statePath, optID string, argv []string) (string, bool, error) {
+	return dispatchLiveCommand(ctx, CommandSocketPath(ServedInstanceID(statePath, optID)), argv)
+}
+
 // SubscribeDaemonEvents dials the daemon's events socket and streams what it
 // publishes until ctx ends or the daemon goes away. The channel is closed on
 // either, so a frontend can tell "the daemon stopped" from "I stopped".

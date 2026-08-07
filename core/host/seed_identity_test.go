@@ -113,7 +113,7 @@ func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contra
 	}
 	sess, _ := st.FindSession("solo")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: path}, st, sup, "")
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: path}, st, sup, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: statePath}, st, sup, "")
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: statePath}, st, sup, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -39,6 +39,8 @@ One daemon per state file: a second one over the same state answers every messag
 
 Plugins compile **into** the binary (the xcaddy pattern): add a blank import, rebuild. `herrscher update` bumps every compiled-in plugin, rebuilds, and reinstalls the binary — restart the service afterwards to run it.
 
+A plugin may also contribute commands of its own and the skills that teach an agent to use them. The daemon namespaces each contributed verb under the plugin's kind — the Discord gateway declares `channel read`, an operator types `discord channel read` — so the prefix is imposed by the host and two plugins can never collide; and its skills install only when that plugin is in the build, so a Discord playbook never sits in the context of a machine that has no Discord.
+
 | Category | Port | Official plugin |
 |----------|------|-----------------|
 | Gateway | `Gateway` | [herrscher-discord-gateway], in-tree `terminal` |

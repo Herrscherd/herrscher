@@ -89,7 +89,27 @@ func (m *model) diagView() string {
 	if !m.diagOpen {
 		return ""
 	}
-	return dimStyle.Render("capabilities — Esc close") + "\n" + diagnosticsView(m.caps)
+	return dimStyle.Render("capabilities — Esc close") + "\n" + diagnosticsView(m.caps) +
+		"\n" + m.remoteImageRow()
+}
+
+// remoteImageRow says whether an image the agent merely links to will be drawn.
+// That does not depend on the terminal but on the gateway's attachment
+// allowlist, and today the terminal gateway declares no hosts — so the answer is
+// no, always, and the code that fetches never runs. It belongs on this screen
+// rather than in a comment nobody reading the transcript will find: an operator
+// watching a URL stay a URL is owed the reason, and "off" is a reason where
+// silence is a bug report.
+func (m *model) remoteImageRow() string {
+	value, feature := "off", "an image the agent links to stays a link"
+	if m.imageFetcher != nil && len(m.imageHosts) > 0 {
+		value = "on"
+		feature = "images fetched from " + strings.Join(m.imageHosts, ", ")
+	}
+	name := "remote images"
+	return dimStyle.Render("  "+name+strings.Repeat(" ", max(1, factWidth-len(name)))) +
+		textStyle.Render(value) + strings.Repeat(" ", max(1, diagValueWidth-len(value))) +
+		dimStyle.Render(feature)
 }
 
 // diagHeight is the rendered row count of the open screen (0 when closed), so

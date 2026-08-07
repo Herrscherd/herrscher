@@ -298,6 +298,30 @@ type model struct {
 	// (which repaints every fastTick while a turn is busy) does not re-wrap the
 	// whole history on each frame — only a real content or width change does.
 	tsCache transcriptCache
+
+	// foldCache and markCache memoize the two passes that run over the whole
+	// transcript after tsCache has already served it: see contentWith.
+	foldCache overlayCache
+	markCache overlayCache
+}
+
+// overlayCache memoizes one whole-transcript pass by the string it consumed and
+// the argument it consumed it with. Keying on the input string is exact and cheap
+// at once: on a hit it is the very string tsCache handed back, so the comparison
+// settles on the pointer rather than walking the transcript.
+type overlayCache struct {
+	in  string
+	arg string
+	out string
+}
+
+func (c *overlayCache) get(in, arg string, apply func(string) string) string {
+	if c.out != "" && c.in == in && c.arg == arg {
+		return c.out
+	}
+	out := apply(in)
+	*c = overlayCache{in: in, arg: arg, out: out}
+	return out
 }
 
 // transcriptCache holds the last rendered transcript and the key it was rendered
@@ -965,18 +989,25 @@ func (m *model) spinFrame() string { return spinFrames[m.spin%len(spinFrames)] }
 // yet. Because it is derived from state it appears the instant Enter is pressed and
 // disappears when the first chunk lands or the turn completes — it can never double.
 func (m *model) thinkingContent() string {
-	base := m.baseContent()
-	if !m.searchOpen {
-		return base
-	}
-	// Highlighting sits on top of the content the rest of the TUI counts in, so a
-	// hit's line number means the same thing with the overlay open and closed.
-	return strings.Join(highlightMatches(strings.Split(base, "\n"), m.searchQuery), "\n")
+	return m.contentWith(m.searchQuery)
 }
 
 // baseContent is the transcript as the viewport would hold it without the search
 // overlay's marks: the entries, the derived thinking line, and the turn fold.
-func (m *model) baseContent() string {
+// Every line offset in search.go is counted in these lines, so the marks must not
+// change what they are counted over.
+func (m *model) baseContent() string { return m.contentWith("") }
+
+// contentWith is the painted transcript with the given query's matches marked.
+// The fold and the marks are two whole-transcript passes that tsCache cannot
+// cover — it keys on the entries, and neither of these changes one — so each is
+// memoized here. syncViewport runs on every streamed chunk and every spinner
+// frame, and without this the cost of a frame would grow with the length of the
+// session for as long as either mode stayed on.
+//
+// Both passes run before the thinking line is appended, so the frame-by-frame
+// churn of the spinner cannot invalidate either.
+func (m *model) contentWith(query string) string {
 	tb := m.tabs[m.active]
 	if tb == nil {
 		return ""
@@ -986,7 +1017,14 @@ func (m *model) baseContent() string {
 	}
 	content := m.cachedTranscript(tb)
 	if m.foldTurnsOn {
-		content = strings.Join(foldTurns(strings.Split(content, "\n"), turnFoldKeep), "\n")
+		content = m.foldCache.get(content, "", func(s string) string {
+			return strings.Join(foldTurns(strings.Split(s, "\n"), turnFoldKeep), "\n")
+		})
+	}
+	if m.searchOpen && strings.TrimSpace(query) != "" {
+		content = m.markCache.get(content, query, func(s string) string {
+			return strings.Join(highlightMatches(strings.Split(s, "\n"), query), "\n")
+		})
 	}
 	if tb.busy && !tb.streamed {
 		line := spinnerStyle.Render(m.spinFrame() + " thinking…")

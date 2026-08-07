@@ -103,15 +103,22 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		Param("name", "session name", true).
 		Param("task", "opening task", true).
 		ValueParam("turn_id", "optional caller-supplied turn identity", false).
+		ValueParam("timeout", "cap this turn (Go duration, e.g. 30m); default HERRSCHER_SEED_TIMEOUT then 120s", false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
 			rawTurnID, supplied := in.Lookup("turn_id")
 			turnID, err := resolveTurnID(rawTurnID, supplied)
 			if err != nil {
 				return "", err
 			}
+			timeout, err := resolveSeedTimeout(in.Get("timeout"), os.Getenv)
+			if err != nil {
+				return "", err
+			}
+			runtime := oneShotSeedRuntimeFrom(cmdCtx)
+			runtime.timeout = timeout
 			reply, err := runOneShotSeedCommand(
 				cmdCtx, st, in.Get("name"), in.Get("task"),
-				turnID, oneShotSeedRuntimeFrom(cmdCtx),
+				turnID, runtime,
 				seedCoord.coord, instID, dispatchLiveCommand,
 			)
 			if err != nil {

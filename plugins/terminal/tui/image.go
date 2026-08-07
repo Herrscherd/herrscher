@@ -35,6 +35,12 @@ func previewEscape(a Attachment, caps Capabilities) string {
 	if !strings.HasPrefix(a.Mime, "image/") {
 		return ""
 	}
+	// Asked of the filesystem before the file is read, not of the bytes after:
+	// decodeImage's own bound rejects an oversized source, but only once all of
+	// it is already in memory, and the path here is whatever was attached.
+	if st, err := os.Stat(a.Path); err != nil || st.Size() == 0 || st.Size() > maxDecodeBytes {
+		return ""
+	}
 	data, err := os.ReadFile(a.Path)
 	if err != nil || len(data) == 0 {
 		return ""

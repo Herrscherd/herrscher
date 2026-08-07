@@ -34,8 +34,9 @@ type Link struct {
 
 // linkURLPattern matches a bare http(s) URL. The trailing class excludes the
 // punctuation that ends a sentence rather than a URL — a full stop after a link
-// belongs to the prose, and swallowing it produces a target that 404s.
-var linkURLPattern = regexp.MustCompile(`https?://[^\s<>"'\x1b]*[^\s<>"'.,;:!?)\]\x1b]`)
+// belongs to the prose, and swallowing it produces a target that 404s. Both
+// classes exclude every control byte, for the reason hasControl gives.
+var linkURLPattern = regexp.MustCompile(`https?://[^\s<>"'\x00-\x1f\x7f]*[^\s<>"'.,;:!?)\]\x00-\x1f\x7f]`)
 
 // linkMarkdownPattern matches [label](target).
 var linkMarkdownPattern = regexp.MustCompile(`\[([^\]\n]+)\]\(([^)\s]+)\)`)
@@ -83,6 +84,9 @@ func lineLinks(line int, s string) []Link {
 	}
 
 	for _, m := range linkMarkdownPattern.FindAllStringSubmatchIndex(s, -1) {
+		if hasControl(s[m[4]:m[5]]) {
+			continue // see hasControl: not a link, and claiming it would hide the text
+		}
 		claim(m[0], m[1])
 		out = append(out, Link{
 			Label: s[m[2]:m[3]], Target: s[m[4]:m[5]],
@@ -111,6 +115,27 @@ func lineLinks(line int, s string) []Link {
 	}
 	sortLinksByStart(out)
 	return out
+}
+
+// hasControl reports whether s carries a C0 control byte or DEL. Only the
+// markdown target needs asking: the bare-URL and file patterns already exclude
+// them by construction, but a markdown target is "anything up to the closing
+// paren", and the agent writes that string.
+//
+// It matters because the target does not stay a string. It is written into the
+// OSC 8 payload, where an ESC or a BEL ends the sequence early and everything
+// after it is read by the terminal as its own command; it is printed in the
+// status line the operator reads before deciding to open it; and it is handed to
+// a launcher. A destination that has to smuggle a control byte to be itself is
+// not a destination, so it is not treated as a link at all — the characters stay
+// on screen as the text they were.
+func hasControl(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x20 || s[i] == 0x7f {
+			return true
+		}
+	}
+	return false
 }
 
 // sortLinksByStart puts a line's links back into reading order after the three

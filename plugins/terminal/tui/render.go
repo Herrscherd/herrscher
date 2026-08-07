@@ -23,16 +23,40 @@ func (m *model) renderTranscript(tb *tab, width int) string {
 				b.WriteByte('\n') // a fresh message gets a breathing line above it
 			}
 		}
-		b.WriteString(renderEntry(e, width))
+		if m.foldCode && e.role == roleAgent && !e.streaming {
+			// Folding rewrites the copy this loop holds, never the stored entry:
+			// unfolding then costs a render and not a reconstruction, and what
+			// comes back is exactly what the agent wrote.
+			e.text = foldCodeBlocks(e.text)
+		}
+		b.WriteString(renderEntry(e, width, m.caps))
 	}
-	return b.String()
+	// Links are found on the finished, wrapped lines rather than on the entry
+	// text: what the operator selects is what is on screen, and a URL folded
+	// across a wrap is not one link but two halves of a line.
+	lines := strings.Split(b.String(), "\n")
+	m.links = findLinks(lines)
+	m.clampLink()
+	return strings.Join(applyLinks(lines, m.links, m.caps, m.linkIdx), "\n")
+}
+
+// clampLink keeps the selection inside the current link set. A turn that arrived
+// and re-flowed the transcript must not leave the gesture aimed at a link that
+// is no longer there; -1 means nothing is selected, which is the resting state.
+func (m *model) clampLink() {
+	if m.linkIdx >= len(m.links) {
+		m.linkIdx = len(m.links) - 1
+	}
+	if m.linkIdx < -1 {
+		m.linkIdx = -1
+	}
 }
 
 // renderEntry dispatches one entry to the renderer for its role. Each role owns
 // its own shape — that is the whole point of having roles: a tool call, a piece
 // of reasoning and an error are three different things, and a reader should be
 // able to tell them apart without reading them.
-func renderEntry(e entry, width int) string {
+func renderEntry(e entry, width int, caps Capabilities) string {
 	body := width - lipgloss.Width(blockIndent)
 	switch e.role {
 	case roleYou:
@@ -46,7 +70,14 @@ func renderEntry(e entry, width int) string {
 			return titledRule(accentStyle, agentTitle, width) + "\n" +
 				indent(wrapWith(textStyle, e.text, body))
 		}
-		return openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body), width)
+		out := openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body, caps), width)
+		if e.preview != "" {
+			// An image the answer linked to, fetched and drawn under it. The URL
+			// stays in the prose above: the picture is an addition, not a
+			// replacement, and a reader still needs to be able to copy the link.
+			out += "\n" + e.preview
+		}
+		return out
 	case roleThinking:
 		return indent(wrapWith(thinkingStyle, glyphThinking+" "+e.text, body))
 	case roleTool:
@@ -106,8 +137,8 @@ func renderYou(e entry, width int) string {
 		out += "\n" + indent(chips)
 	}
 	if e.preview != "" {
-		// The kitty graphics escape sits on its own line under the chip; the
-		// terminal draws the image at the cursor. Non-kitty terminals ignore it.
+		// The image sits on its own line under the chip, in whatever encoding the
+		// probe said this terminal draws — down to half-blocks, which always work.
 		out += "\n" + e.preview
 	}
 	return out

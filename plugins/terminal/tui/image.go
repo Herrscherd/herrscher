@@ -46,21 +46,6 @@ const maxPreviewBytes = 512 << 10
 // after the first carries only the m (more) key.
 const kittyChunkBytes = 4096
 
-// kittyGraphicsPrograms names TERM_PROGRAM values whose terminals implement the
-// kitty graphics protocol besides kitty itself.
-var kittyGraphicsPrograms = map[string]bool{"ghostty": true, "WezTerm": true}
-
-// supportsKitty reports whether the terminal (described by env, an os.Getenv-like
-// lookup) renders the kitty graphics protocol, so the composer knows to emit an
-// inline preview instead of just a chip. It matches kitty (TERM=*kitty*) and the
-// other kitty-graphics terminals by TERM_PROGRAM.
-func supportsKitty(env func(string) string) bool {
-	if strings.Contains(env("TERM"), "kitty") {
-		return true
-	}
-	return kittyGraphicsPrograms[env("TERM_PROGRAM")]
-}
-
 // kittyPreview encodes a PNG image as a kitty graphics-protocol escape that
 // transmits and displays it inline, scaled to at most rows terminal rows (width
 // inferred from the image's aspect ratio). It returns "" for an empty image so a

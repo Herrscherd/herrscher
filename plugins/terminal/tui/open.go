@@ -32,11 +32,36 @@ func systemLauncher() launcher {
 		name = "xdg-open"
 	}
 	return func(target string) error {
-		if err := exec.Command(name, append(args, target)...).Start(); err != nil {
-			return fmt.Errorf("%s: %w", name, err)
+		if err := checkTarget(target); err != nil {
+			return err
 		}
-		return nil
+		return start(exec.Command(name, append(args, target)...), name)
 	}
+}
+
+// checkTarget refuses a target that would arrive at the launched program as one
+// of its own options. The launchers below pass the target as an argv element, so
+// it can never become a second command — but a leading dash still lets the agent
+// choose a flag rather than a destination, and neither xdg-open nor an editor
+// distinguishes the two. A destination does not start with a dash.
+func checkTarget(target string) error {
+	if strings.HasPrefix(target, "-") {
+		return fmt.Errorf("refusing a target that reads as an option: %s", target)
+	}
+	if hasControl(target) {
+		return fmt.Errorf("refusing a target carrying a control byte")
+	}
+	return nil
+}
+
+// start launches cmd and reaps it in the background. Without the Wait the child
+// stays a zombie for as long as the TUI runs, and the TUI runs for days.
+func start(cmd *exec.Cmd, name string) error {
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	go cmd.Wait()
+	return nil
 }
 
 // editorLauncher returns the launcher for a file reference: $EDITOR at the line,
@@ -45,6 +70,9 @@ func systemLauncher() launcher {
 // where the operator was looking.
 func editorLauncher(env func(string) string) launcher {
 	return func(target string) error {
+		if err := checkTarget(target); err != nil {
+			return err
+		}
 		editor := strings.TrimSpace(env("EDITOR"))
 		if editor == "" {
 			return fmt.Errorf("no $EDITOR set to open %s", target)
@@ -56,10 +84,7 @@ func editorLauncher(env func(string) string) launcher {
 			args = append(args, "+"+line)
 		}
 		args = append(args, file)
-		if err := exec.Command(fields[0], args...).Start(); err != nil {
-			return fmt.Errorf("%s: %w", fields[0], err)
-		}
-		return nil
+		return start(exec.Command(fields[0], args...), fields[0])
 	}
 }
 

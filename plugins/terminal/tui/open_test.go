@@ -171,3 +171,30 @@ func TestEditorTargetSplitsFileAndLine(t *testing.T) {
 		t.Fatalf("a reference with no line must keep the whole path: %q, %q", file, line)
 	}
 }
+
+// The target is an argv element, so it can never become a second command — but a
+// leading dash still lets the agent pick a flag for the program instead of a
+// destination, and neither xdg-open nor an editor tells the two apart.
+func TestLauncherRefusesATargetThatReadsAsAnOption(t *testing.T) {
+	for _, target := range []string{"-e", "--version", "-c.go:1"} {
+		if err := checkTarget(target); err == nil {
+			t.Fatalf("target %q must be refused", target)
+		}
+	}
+	if err := checkTarget("https://example.com/a"); err != nil {
+		t.Fatalf("an ordinary URL must pass: %v", err)
+	}
+	// A control byte never survives link detection, but the launcher is the last
+	// place it could reach a program's argv, so it is refused here too.
+	if err := checkTarget("https://example.com/\x1b]0;x\x07"); err == nil {
+		t.Fatal("a control byte in the target must be refused")
+	}
+	// And the refusal is reported, not swallowed: the operator pressed a key.
+	m, _, _ := linkedModel(t, "see https://example.com/a")
+	m.sys = systemLauncher()
+	m.links[0].Target = "--version"
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
+	if !strings.Contains(m.flash, "open failed") {
+		t.Fatalf("the refusal must reach the status line: %q", m.flash)
+	}
+}

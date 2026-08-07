@@ -51,23 +51,24 @@ func TestPromptOf(t *testing.T) {
 }
 
 // The window is the default, but only where one can be drawn: --print asks for
-// stdout, and so does the absence of a terminal.
+// stdout, and so does anything that makes a window impossible — no terminal to
+// draw on, or no frontend compiled in to draw it.
 func TestTaskPrintsTo(t *testing.T) {
 	cases := []struct {
-		name  string
-		task  task
-		isTTY bool
-		want  bool
+		name    string
+		task    task
+		canDraw bool
+		want    bool
 	}{
-		{"terminal, pas de --print → fenêtre", task{Text: "x"}, true, false},
-		{"terminal, --print → stdout", task{Text: "x", Print: true}, true, true},
-		{"pas de terminal → stdout malgré tout", task{Text: "x"}, false, true},
-		{"pas de terminal, --print → stdout", task{Text: "x", Print: true}, false, true},
+		{"fenêtre possible, pas de --print → fenêtre", task{Text: "x"}, true, false},
+		{"fenêtre possible, --print → stdout", task{Text: "x", Print: true}, true, true},
+		{"pas de fenêtre possible → stdout malgré tout", task{Text: "x"}, false, true},
+		{"pas de fenêtre possible, --print → stdout", task{Text: "x", Print: true}, false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := tc.task.printsTo(tc.isTTY); got != tc.want {
-				t.Fatalf("printsTo(%v) = %v, want %v", tc.isTTY, got, tc.want)
+			if got := tc.task.printsTo(tc.canDraw); got != tc.want {
+				t.Fatalf("printsTo(%v) = %v, want %v", tc.canDraw, got, tc.want)
 			}
 		})
 	}

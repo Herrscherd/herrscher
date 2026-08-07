@@ -15,13 +15,15 @@ type task struct {
 	Print bool
 }
 
-// printsTo reports whether this task runs non-interactively.
+// printsTo reports whether this task runs non-interactively, given whether a
+// window could be drawn at all.
 //
 // Two things force it, and only one of them is a preference: --print is the
-// operator saying so, and the absence of a terminal is the machine saying so.
-// A window cannot be drawn where there is no terminal, and a run that is being
-// piped wants the answer rather than a Bubbletea error about a missing TTY.
-func (t task) printsTo(isTTY bool) bool { return t.Print || !isTTY }
+// operator saying so, and a window that cannot exist is the build or the
+// terminal saying so. A run being piped wants the answer rather than a
+// Bubbletea error about a missing TTY, and a build with no frontend has nothing
+// to open at all.
+func (t task) printsTo(canDrawWindow bool) bool { return t.Print || !canDrawWindow }
 
 // promptOf decides whether an argv is a free-text task rather than a verb.
 //

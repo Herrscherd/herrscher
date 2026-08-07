@@ -135,10 +135,3 @@ func terminalName(term, program string) string {
 	}
 	return "unknown"
 }
-
-// supportsKitty reports whether the terminal renders the kitty graphics
-// protocol, so the composer knows to emit an inline preview instead of just a
-// chip. It reads the probe rather than sniffing the environment again.
-func supportsKitty(env func(string) string) bool {
-	return Probe(env).Graphics == GraphicsKitty
-}

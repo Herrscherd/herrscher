@@ -253,7 +253,10 @@ type model struct {
 	clip      clipboard    // system clipboard reader for Ctrl+V image paste
 	pending   []Attachment // files staged for the next submit, shown as chips
 	attachSeq int          // monotonic counter for naming pasted temp files
-	kitty     bool         // terminal renders the kitty graphics protocol (inline image previews)
+
+	// caps is what this terminal can do, resolved once at startup. Every feature
+	// that has a richer and a plainer rendering reads it; nothing re-probes.
+	caps Capabilities
 
 	// tsCache memoizes the active tab's wrapped transcript so the animation tick
 	// (which repaints every fastTick while a turn is busy) does not re-wrap the
@@ -380,7 +383,7 @@ func newModel(tm Backend) *model {
 	// above it gone. A box that is already tall enough never scrolls.
 	in.SetHeight(maxComposerLines)
 	in.Focus()
-	m := &model{tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), kitty: supportsKitty(os.Getenv)}
+	m := &model{tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), caps: Probe(os.Getenv)}
 	// The palette is the frontend's own verbs followed by the daemon's. The
 	// backend used to replace the list outright, which meant connecting to a
 	// daemon cost the operator /help, /clear and every other local overlay.
@@ -600,7 +603,7 @@ func (m *model) handleEnter() tea.Cmd {
 	tb := m.tabs[m.active]
 	tb.endStream() // a new user turn closes any lingering agent block
 	e := entry{role: roleYou, text: text, attachments: atts}
-	if m.kitty {
+	if m.caps.Graphics == GraphicsKitty {
 		e.preview = previewEscapes(atts) // inline image previews under the chips
 	}
 	tb.appendEntry(e)

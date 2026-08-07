@@ -211,8 +211,13 @@ because the registry sits upstream of both fronts.
 
 ## Out of scope
 
-- **`dctl`.** It no longer exists on this machine — no binary on `PATH`, no
-  repository. Nothing to update.
+- **`dctl`.** Nothing to change. Its `go.mod` (module `github.com/Herrscherd/dctl`)
+  declares no dependencies at all, so it never sees `herrscher-contracts` and a
+  contract change cannot reach it. It already exposes exactly what the new port
+  needs — `Messages.Edit(ctx, channelID, messageID, content) (*Message, error)`
+  and `Messages.Delete(ctx, channelID, messageID) error`, alongside `Read`,
+  `Send`, `Reply` and `Reactions.Add`/`Remove`. Every command in this design is a
+  passthrough over an API that already exists.
 - **Backend, memory and orchestrator contributions.** The ports are declared on
   terms that would suit them, but only gateways are wired in this pass. Widening
   is additive when a use case appears.

@@ -736,6 +736,9 @@ func (m *model) handleEnter() tea.Cmd {
 			m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
 			return nil
 		}
+		if args[0] == "session" && len(args) >= 2 && args[1] == "close" {
+			return m.closeCmd(args[2:])
+		}
 		return m.dispatchCmd(m.active, args)
 	}
 	if m.active == "" {
@@ -905,23 +908,81 @@ func (m *model) sessionName(channel string) string {
 	return ""
 }
 
-// confirmClose dispatches a close for the active tab's session, resolving the
-// real session name (the tab label can still be the channel id before the first
-// reconcile) and surfacing any error through dispatchResultMsg.
-func (m *model) confirmClose() tea.Cmd {
+// activeSessionName is the session the front tab belongs to, resolved through
+// the hub because a tab's label is still its channel id until the first
+// reconcile. Empty when no tab is open.
+func (m *model) activeSessionName() string {
 	tb := m.tabs[m.active]
 	if tb == nil {
+		return ""
+	}
+	if name := m.sessionName(tb.channel); name != "" {
+		return name
+	}
+	return tb.label
+}
+
+// confirmClose dispatches a close for the active tab's session.
+func (m *model) confirmClose() tea.Cmd {
+	name := m.activeSessionName()
+	if name == "" {
 		return nil
 	}
-	name := m.sessionName(tb.channel)
-	if name == "" {
-		name = tb.label
-	}
+	return m.closeSession(name, false)
+}
+
+// closeSession tears a session down through the typed seam, tagging the result
+// with the tab the close was issued from so any error surfaces where it was
+// asked for.
+func (m *model) closeSession(name string, force bool) tea.Cmd {
 	origin, tm := m.active, m.tm
 	return func() tea.Msg {
-		out, err := tm.Close(name, false)
+		out, err := tm.Close(name, force)
 		return dispatchResultMsg{origin: origin, out: out, err: err}
 	}
+}
+
+// closeCmd answers "/session close": the session it closes is the one you are
+// looking at, unless the line names another.
+//
+// The daemon cannot make that call — it has no notion of which tab is in front —
+// so the flagless form came back as "flag --name needs a value", and that is the
+// exact line the palette leaves in the composer the moment it completes the
+// verb. Closing the session you are in is what typing it means.
+func (m *model) closeCmd(rest []string) tea.Cmd {
+	name, force := closeTarget(rest)
+	if name == "" {
+		name = m.activeSessionName()
+	}
+	if name == "" {
+		m.flash = "no session here to close"
+		return nil
+	}
+	return m.closeSession(name, force)
+}
+
+// closeTarget reads what "/session close" was typed with: the session named on
+// the line, if one was, and whether the close is forced. A "--name" with nothing
+// after it counts as unnamed — that is what the palette completes to, and it
+// means "this one" rather than a mistake.
+func closeTarget(rest []string) (name string, force bool) {
+	for i := 0; i < len(rest); i++ {
+		tok := rest[i]
+		switch {
+		case tok == "--force":
+			force = true
+		case tok == "--name":
+			if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
+				name = rest[i+1]
+				i++
+			}
+		case strings.HasPrefix(tok, "--name="):
+			name = strings.TrimPrefix(tok, "--name=")
+		case !strings.HasPrefix(tok, "--") && name == "":
+			name = tok
+		}
+	}
+	return name, force
 }
 
 func (m *model) switchTab(delta int) {

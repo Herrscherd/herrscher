@@ -168,6 +168,12 @@ func main() {
 		// recognise is offered to the daemon verbatim — main never learns what any
 		// of them mean, which is what keeps this file free of any platform.
 		// `herrscher commands` lists what the daemon will accept.
+		//
+		// Be honest about the reach: the daemon is handed the argv as-is, so what
+		// this opens is its whole registry and not only the contributed part of
+		// it — `herrscher set source --path /x` now lands on the live daemon
+		// where it used to be an unknown verb. No privilege is added; the socket
+		// already took arbitrary argv from anyone who could reach it.
 		out, derr, code := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
 		if code != 0 {
 			fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())

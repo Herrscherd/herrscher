@@ -119,20 +119,15 @@ func runServe(ctx context.Context, args []string) error {
 	for _, f := range hub.Failures() {
 		fmt.Fprintln(os.Stderr, "herrscher: gateway unavailable: "+f)
 	}
-	var gws []host.Deps
-	// A gateway may own the process's main thread (a TUI). We detect it on the
-	// raw gateway before Degrade wraps it, and the composition root stays
-	// gateway-agnostic: it runs whichever bound gateway implements Foreground
-	// rather than importing a concrete frontend.
-	var fg contracts.Foreground
+	var raw []host.Deps
 	for _, kind := range hub.Kinds() {
 		if set, ok := hub.Get(kind); ok {
-			if f, ok := set.Gateway.(contracts.Foreground); ok && fg == nil {
-				fg = f
-			}
-			set.Gateway = contracts.Degrade(set.Gateway)
-			gws = append(gws, set)
+			raw = append(raw, set)
 		}
+	}
+	gws, fg, extra, err := bindGateways(raw)
+	if err != nil {
+		return err
 	}
 
 	opts := host.Options{
@@ -146,8 +141,9 @@ func runServe(ctx context.Context, args []string) error {
 		Workspace:     cfg.Workspace,
 		Source:        cfg.Source,
 
-		RemoteCategories: remoteCategories(),
-		ForegroundBound:  fg != nil,
+		RemoteCategories:    remoteCategories(),
+		ForegroundBound:     fg != nil,
+		ContributedCommands: extra,
 	}
 
 	// A bound foreground gateway + interactive TTY → run it on the main thread;
@@ -167,6 +163,34 @@ func runServe(ctx context.Context, args []string) error {
 		return fg.RunForeground(ctx, cancel)
 	}
 	return host.RunHub(ctx, gws, opts)
+}
+
+// bindGateways turns the freshly built gateways into what the daemon runs on.
+//
+// Everything a gateway offers beyond the plain Gateway interface must be read
+// here, off the unwrapped object, because Degrade returns a fixed method set:
+// whatever it does not forward stops existing the moment it wraps. Two such
+// capabilities exist and both are taken the same way — the foreground the
+// process may hand its main thread to, and the verbs a plugin grafts onto the
+// daemon's registry. Only then is each gateway degraded and passed on.
+//
+// The composition root stays gateway-agnostic throughout: it asks interfaces
+// what they are rather than importing any concrete frontend or plugin.
+func bindGateways(sets []host.Deps) ([]host.Deps, contracts.Foreground, []contracts.Cmd, error) {
+	extra, err := host.CollectCommands(sets)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("gateway commands: %w", err)
+	}
+	var fg contracts.Foreground
+	gws := make([]host.Deps, 0, len(sets))
+	for _, set := range sets {
+		if f, ok := set.Gateway.(contracts.Foreground); ok && fg == nil {
+			fg = f
+		}
+		set.Gateway = contracts.Degrade(set.Gateway)
+		gws = append(gws, set)
+	}
+	return gws, fg, extra, nil
 }
 
 // runSession dispatches the operator `session` commands (create/close/list/who)

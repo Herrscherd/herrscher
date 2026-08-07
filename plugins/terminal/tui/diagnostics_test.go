@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -61,5 +62,23 @@ func TestCapabilitiesCommandOpensAndClosesTheScreen(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.diagOpen {
 		t.Fatal("Esc must close the diagnostic screen")
+	}
+}
+
+// Remote transcript images are wired to the gateway's attachment allowlist, and
+// the terminal gateway declares no hosts — so the code that fetches them never
+// runs. That is a decision, not a defect, and this screen is where it is said.
+func TestCapabilityScreenSaysRemoteImagesAreOff(t *testing.T) {
+	m := newTestModel()
+	m.openDiagnostics()
+	off := m.diagView()
+	if !strings.Contains(off, "remote images") || !strings.Contains(off, "stays a link") {
+		t.Fatalf("the screen must say remote images are off and what that means:\n%s", off)
+	}
+
+	m.imageFetcher = func(context.Context, string) ([]byte, error) { return nil, nil }
+	m.imageHosts = []string{"cdn.example.com"}
+	if on := m.diagView(); !strings.Contains(on, "cdn.example.com") {
+		t.Fatalf("a wired fetcher must name the hosts it may reach:\n%s", on)
 	}
 }

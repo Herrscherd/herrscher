@@ -14,6 +14,9 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
+// seedTurnTimeout is the cap a seed turn runs under when nothing names another.
+// A coordination seed is a short question; a turn started by hand from a terminal
+// is not, which is what --timeout / HERRSCHER_SEED_TIMEOUT exist for.
 const seedTurnTimeout = 120 * time.Second
 
 // oneShotBackendFactory is a test seam for the one-shot bridge. The production
@@ -30,6 +33,11 @@ type oneShotSeedRuntime struct {
 	coordinator contracts.Coordinator
 	publish     func(session string, event contracts.Event)
 	record      func(session string, entry state.TranscriptEntry)
+	// timeout caps this turn; zero keeps seedTurnTimeout. It rides the runtime
+	// rather than a parameter because the seed path already threads exactly one
+	// per-request value through these three calls, and a second one would make
+	// every call site unreadable.
+	timeout time.Duration
 }
 
 type oneShotSeedRuntimeKey struct{}
@@ -62,9 +70,15 @@ func runOneShotSeedCommand(ctx context.Context, st *state.State, name, task, tur
 	// daemon, which owns the live Coordinator. The resolved turn identity travels
 	// with the forward so both processes stamp the same turn.
 	if runtime.coordinator == nil && forward != nil {
-		if reply, handled, err := forward(ctx, CommandSocketPath(instID), []string{
-			"session", "seed", "--name", name, "--task", task, "--turn_id", turnID,
-		}); handled {
+		argv := []string{"session", "seed", "--name", name, "--task", task, "--turn_id", turnID}
+		// Only a settled timeout travels. The daemon runs this turn, so a silent
+		// caller must leave the daemon's own default in force — sending a resolved
+		// value unconditionally would make this process's environment decide a cap
+		// for a turn it does not run.
+		if runtime.timeout > 0 {
+			argv = append(argv, "--timeout", runtime.timeout.String())
+		}
+		if reply, handled, err := forward(ctx, CommandSocketPath(instID), argv); handled {
 			return reply, err
 		}
 	}
@@ -115,7 +129,11 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 		defer orch.Close()
 	}
 
-	seedCtx, cancel := context.WithTimeout(ctx, seedTurnTimeout)
+	turnTimeout := runtime.timeout
+	if turnTimeout <= 0 {
+		turnTimeout = seedTurnTimeout
+	}
+	seedCtx, cancel := context.WithTimeout(ctx, turnTimeout)
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, 8)

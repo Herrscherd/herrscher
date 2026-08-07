@@ -2,24 +2,23 @@ package tui
 
 import (
 	"encoding/base64"
+	"errors"
 	"os"
 	"strconv"
 	"strings"
 )
 
-// previewEscapes builds the concatenated kitty graphics escapes for the PNG
+// previewEscapes builds the concatenated kitty graphics escapes for the image
 // attachments in atts, each capped at previewRows tall and stacked on their own
-// lines. Non-PNG, unreadable, or oversized files are silently skipped — a preview
-// is a nicety, never a reason to lose the chip or the turn. Callers gate this on
-// terminal support (see supportsKitty); the returned escapes are inert elsewhere.
+// lines. Unreadable, undecodable or oversized files are silently skipped — a
+// preview is a nicety, never a reason to lose the chip or the turn. Callers gate
+// this on the probe's graphics capability; the escapes are inert elsewhere.
 func previewEscapes(atts []Attachment) string {
 	var previews []string
 	for _, a := range atts {
-		// f=100 is PNG-only; other formats fall back to the chip alone.
-		if a.Mime != "image/png" {
-			continue
-		}
-		data, err := os.ReadFile(a.Path)
+		data, err := previewPayload(a)
+		// The cap is on the *encoded* payload now: what the viewport re-scans on
+		// every repaint is the escape, not the file it came from.
 		if err != nil || len(data) == 0 || len(data) > maxPreviewBytes {
 			continue
 		}
@@ -28,11 +27,40 @@ func previewEscapes(atts []Attachment) string {
 	return strings.Join(previews, "\n")
 }
 
+// previewPayload reads an image attachment and returns the PNG bytes kitty
+// transmits (f=100), downscaled to previewRows. Every format the decoder knows
+// arrives as PNG, so JPEG, GIF and WebP are previewed too rather than dropped.
+//
+// Bytes that claim to be PNG and will not decode are handed over untouched: the
+// terminal is the final judge of its own format, and a decoder disagreement is a
+// poor reason to withhold a preview the terminal might well have drawn.
+func previewPayload(a Attachment) ([]byte, error) {
+	if !strings.HasPrefix(a.Mime, "image/") {
+		return nil, errNotAnImage
+	}
+	data, err := os.ReadFile(a.Path)
+	if err != nil {
+		return nil, err
+	}
+	img, err := decodeImage(data)
+	if err != nil {
+		if a.Mime == "image/png" {
+			return data, nil
+		}
+		return nil, err
+	}
+	return encodePNG(downscale(img, previewRows))
+}
+
+var errNotAnImage = errors.New("attachment is not an image")
+
 // previewRows caps the inline image preview height so a tall image cannot push
 // the transcript off-screen (spec: bounded preview height).
 const previewRows = 10
 
-// maxPreviewBytes bounds the source size of an inline preview. The kitty escape
+// maxPreviewBytes bounds the *encoded* payload of an inline preview, after
+// downscaling — it used to bound the source file, which rejected a large photo
+// that shrinks to a few kilobytes. What it protects is the screen: the kitty escape
 // lives on its transcript line for the session, and the viewport re-scans every
 // line's width (ansi.StringWidth) on each repaint — once per streamed chunk and
 // per spinner frame while the tab is busy. A multi-MB base64 blob would make that

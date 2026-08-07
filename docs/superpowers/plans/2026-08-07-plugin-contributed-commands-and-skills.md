@@ -30,7 +30,7 @@
   never by checking out master.
 - **Multi-line commit messages** go through a file: write the message to a scratch file and use `git commit -F <file>`. Inline multi-line `-m` breaks under zsh quoting.
 - **`dctl` is not modified.** It already exposes everything needed.
-- **Contracts version to publish:** `v0.1.11`.
+- **Contracts version to publish:** `v0.2.16`.
 
 ---
 
@@ -198,7 +198,7 @@ git commit -F /tmp/msg.txt
 ```bash
 cd $CONTRACTS && git push origin HEAD
 SHA=$(git rev-parse HEAD)
-gh api repos/Herrscherd/herrscher-contracts/git/refs -f ref=refs/tags/v0.1.11 -f sha="$SHA"
+gh api repos/Herrscherd/herrscher-contracts/git/refs -f ref=refs/tags/v0.2.16 -f sha="$SHA"
 ```
 
 Expected: JSON describing the new ref. A 422 mentioning "40 characters" means `$SHA` was truncated — re-capture it with `git rev-parse HEAD` and retry.
@@ -222,10 +222,10 @@ All paths below are relative to the worktree `$HERRSCHER`.
 
 ```bash
 cd $HERRSCHER
-GOFLAGS= go get github.com/Herrscherd/herrscher-contracts@v0.1.11 && go mod tidy
+GOFLAGS= go get github.com/Herrscherd/herrscher-contracts@v0.2.16 && go mod tidy
 ```
 
-Expected: `go.mod` now names `v0.1.11`.
+Expected: `go.mod` now names `v0.2.16`.
 
 - [ ] **Step 2: Write the failing test**
 
@@ -766,7 +766,7 @@ git commit -F /tmp/msg.txt
 
 ```bash
 cd $GATEWAY
-GOFLAGS= go get github.com/Herrscherd/herrscher-contracts@v0.1.11 && go mod tidy && go build ./...
+GOFLAGS= go get github.com/Herrscherd/herrscher-contracts@v0.2.16 && go mod tidy && go build ./...
 ```
 
 - [ ] **Step 2: Write the failing test**

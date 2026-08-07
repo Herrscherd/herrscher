@@ -110,9 +110,14 @@ func PluginCmd(ctx context.Context, args []string) int {
 			cmds = addCommands(module, version)
 		}
 		steps := append([]step{fileStep(manifest, out)}, cmdSteps(dir, cmds)...)
-		if err := apply(ctx, dir, addFindings(ctx, dir, module, version), decider(*yes), steps); err != nil {
+		applied, err := apply(ctx, dir, addFindings(ctx, dir, module, version), osDecider(*yes), steps)
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
+		}
+		if !applied {
+			fmt.Println("aborted; nothing was written")
+			return 0
 		}
 		fmt.Printf("%s %s in %s\n", pastTense(sub), module, manifest)
 		return 0
@@ -130,9 +135,14 @@ func PluginCmd(ctx context.Context, args []string) int {
 		// would describe a composition that does not exist.
 		if sub == "pin" && version != "" {
 			steps := cmdSteps(dir, addCommands(module, version))
-			if err := apply(ctx, dir, addFindings(ctx, dir, module, version), decider(*yes), steps); err != nil {
+			applied, err := apply(ctx, dir, addFindings(ctx, dir, module, version), osDecider(*yes), steps)
+			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				return 1
+			}
+			if !applied {
+				fmt.Println("aborted; nothing was written and nothing was pinned")
+				return 0
 			}
 		}
 		if err := pinModule(dir, module, sub == "pin"); err != nil {
@@ -222,7 +232,6 @@ func updatePlan(mods []string, pins map[string]bool, installed map[string]string
 	return append(cmds, buildCommands()...), skipped
 }
 
-// cmdSteps turns command lines into transaction steps.
 func cmdSteps(dir string, cmds [][]string) []step {
 	steps := make([]step, 0, len(cmds))
 	for _, c := range cmds {
@@ -255,19 +264,19 @@ func fileStep(path, body string) step {
 	}
 }
 
-// decider picks how the two confirmations get answered: --yes and a run with no
-// terminal both take the safe branch without asking.
-func decider(yes bool) Decider {
+// osDecider picks how the two confirmations get answered: --yes and a run with
+// no terminal both take the safe branch without asking.
+func osDecider(yes bool) decider {
 	return newDecider(yes, isTerminal(os.Stdin), bufio.NewReader(os.Stdin))
 }
 
 // newDecider takes interactive as an argument rather than reading os.Stdin, so
 // the choice is assertable without a terminal on either side of the test.
-func newDecider(yes, interactive bool, in *bufio.Reader) Decider {
+func newDecider(yes, interactive bool, in *bufio.Reader) decider {
 	if yes || !interactive {
-		return NewAutoDecider()
+		return newAutoDecider()
 	}
-	return NewPromptDecider(in, newStyle())
+	return newPromptDecider(in, newStyle())
 }
 
 // addFindings reports what can be known against a requested version before

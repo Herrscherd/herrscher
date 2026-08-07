@@ -9,16 +9,16 @@ import (
 )
 
 // promptDecider answers the two composition prompts from the terminal. It is the
-// CLI half of the Decider seam; the TUI supplies the other, and the transaction
-// itself knows about neither.
+// interactive half of the decider seam, and the transaction itself knows nothing
+// about the terminal it is asked through.
 type promptDecider struct {
 	in *bufio.Reader
 	s  style
 }
 
-// NewPromptDecider returns the terminal Decider, used whenever there is a human
+// newPromptDecider returns the terminal decider, used whenever there is a human
 // on stdin to answer.
-func NewPromptDecider(in *bufio.Reader, s style) Decider { return promptDecider{in: in, s: s} }
+func newPromptDecider(in *bufio.Reader, s style) decider { return promptDecider{in: in, s: s} }
 
 // Warn reports what is known against the change before anything is written. The
 // confirmation is asked even when nothing was found, because "nothing known

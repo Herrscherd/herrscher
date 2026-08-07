@@ -14,6 +14,9 @@ type clipboard interface {
 	ImageType() (string, bool)
 	// ReadImage returns the raw bytes of the clipboard image in the given MIME type.
 	ReadImage(mime string) ([]byte, error)
+	// WriteText puts s on the clipboard. It is the copy half of the seam: a code
+	// block leaves the TUI the same way an image enters it.
+	WriteText(s string) error
 }
 
 // wlClipboard reads images via wl-paste (Wayland). Missing binary or non-image
@@ -54,4 +57,17 @@ func (wlClipboard) ImageType() (string, bool) {
 
 func (wlClipboard) ReadImage(mime string) ([]byte, error) {
 	return exec.Command("wl-paste", "--type", mime).Output()
+}
+
+// WriteText copies through wl-copy. It runs detached: wl-copy holds the
+// selection until something else claims it, so waiting for it to exit would hang
+// the TUI for as long as the copy is useful.
+func (wlClipboard) WriteText(s string) error {
+	cmd := exec.Command("wl-copy")
+	cmd.Stdin = strings.NewReader(s)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait() // reaped off the render path; an unwaited child stays a zombie
+	return nil
 }

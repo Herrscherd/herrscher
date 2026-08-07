@@ -233,6 +233,8 @@ type model struct {
 	switchIdx  int                     // selected row in the switch picker
 	switchRows []contracts.SessionInfo // switch picker rows (open/known sessions)
 
+	diagOpen bool // whether the /capabilities diagnostic screen is open
+
 	skillsOpen bool           // whether the /skills panel overlay is open
 	skillsIdx  int            // selected row in the /skills panel
 	skillsRows []skills.Skill // discovered skills, name-sorted
@@ -265,12 +267,73 @@ type model struct {
 	clip      clipboard    // system clipboard reader for Ctrl+V image paste
 	pending   []Attachment // files staged for the next submit, shown as chips
 	attachSeq int          // monotonic counter for naming pasted temp files
-	kitty     bool         // terminal renders the kitty graphics protocol (inline image previews)
+
+	// caps is what this terminal can do, resolved once at startup. Every feature
+	// that has a richer and a plainer rendering reads it; nothing re-probes.
+	caps Capabilities
+
+	// imageFetcher and imageHosts drive remote transcript images. Both are unset
+	// by default, which is the terminal gateway's own position: it declares no
+	// attachment hosts, so nothing is fetched until one is wired.
+	imageFetcher func(context.Context, string) ([]byte, error)
+	imageHosts   []string
+
+	// links are the references found in the last rendered transcript, and linkIdx
+	// is the one an open gesture would act on (-1 = none). Both are derived from
+	// the render, never from an event: see open.go.
+	links   []Link
+	linkIdx int
+
+	// sys and edit open a selected link. They are fields so a test can count the
+	// calls: the assertion that nothing opens on its own is only worth as much as
+	// the seam that lets it be checked.
+	sys  launcher
+	edit launcher
+
+	// The search overlay. searchReturn is where the viewport was when it opened:
+	// a search is a detour, and the way back is half the feature.
+	searchOpen   bool
+	searchQuery  string
+	searchHits   []int
+	searchIdx    int
+	searchReturn int
+
+	// foldTurnsOn collapses the history above the current exchange to one line
+	// per turn, for finding a turn rather than reading it.
+	foldTurnsOn bool
+
+	// foldCode collapses every long code block in the transcript to a summary
+	// line, for reading the conversation rather than the code in it.
+	foldCode bool
 
 	// tsCache memoizes the active tab's wrapped transcript so the animation tick
 	// (which repaints every fastTick while a turn is busy) does not re-wrap the
 	// whole history on each frame — only a real content or width change does.
 	tsCache transcriptCache
+
+	// foldCache and markCache memoize the two passes that run over the whole
+	// transcript after tsCache has already served it: see contentWith.
+	foldCache overlayCache
+	markCache overlayCache
+}
+
+// overlayCache memoizes one whole-transcript pass by the string it consumed and
+// the argument it consumed it with. Keying on the input string is exact and cheap
+// at once: on a hit it is the very string tsCache handed back, so the comparison
+// settles on the pointer rather than walking the transcript.
+type overlayCache struct {
+	in  string
+	arg string
+	out string
+}
+
+func (c *overlayCache) get(in, arg string, apply func(string) string) string {
+	if c.out != "" && c.in == in && c.arg == arg {
+		return c.out
+	}
+	out := apply(in)
+	*c = overlayCache{in: in, arg: arg, out: out}
+	return out
 }
 
 // transcriptCache holds the last rendered transcript and the key it was rendered
@@ -349,8 +412,14 @@ func (m *model) chromeHeight() int {
 	if m.skillsOpen {
 		h += m.skillsHeight()
 	}
+	if m.diagOpen {
+		h += m.diagHeight()
+	}
 	if m.pluginsOpen {
 		h += m.pluginsHeight()
+	}
+	if m.searchOpen {
+		h++ // the one-line search overlay
 	}
 	if m.choice != nil {
 		h += m.choiceHeight()
@@ -395,7 +464,8 @@ func newModel(tm Backend) *model {
 	// above it gone. A box that is already tall enough never scrolls.
 	in.SetHeight(maxComposerLines)
 	in.Focus()
-	m := &model{tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), kitty: supportsKitty(os.Getenv)}
+	m := &model{tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
+		sys: systemLauncher(), edit: editorLauncher(os.Getenv)}
 	// The palette is the frontend's own verbs followed by the daemon's. The
 	// backend used to replace the list outright, which meant connecting to a
 	// daemon cost the operator /help, /clear and every other local overlay.
@@ -482,11 +552,13 @@ func (m *model) removeTab(channel string) {
 	}
 }
 
-// route delivers a routed event to its tab, marking inactive tabs unread.
-func (m *model) route(re RoutedEvent) {
+// route delivers a routed event to its tab, marking inactive tabs unread. It
+// returns the command for any work the event started — today, fetching the
+// images a completed answer linked to.
+func (m *model) route(re RoutedEvent) tea.Cmd {
 	if re.Event.T == "closed" {
 		m.removeTab(re.Conv.ID)
-		return
+		return nil
 	}
 	tb := m.ensureTab(re.Conv.ID)
 	before := len(tb.entries)
@@ -497,6 +569,19 @@ func (m *model) route(re RoutedEvent) {
 	if tb.channel == m.active {
 		m.syncViewport()
 	}
+	// Only a finished answer is scanned for images: a streaming one is still
+	// growing, and a half-arrived URL is not a URL.
+	if re.Event.T != "reply" || len(tb.entries) == 0 {
+		return nil
+	}
+	last := len(tb.entries) - 1
+	for last >= 0 && tb.entries[last].role != roleAgent {
+		last--
+	}
+	if last < 0 {
+		return nil
+	}
+	return m.fetchEntryImages(tb, last)
 }
 
 // syncTabs reconciles tabs against the hub's session list: it creates tabs for
@@ -594,6 +679,10 @@ func (m *model) handleEnter() tea.Cmd {
 			}
 			return nil
 		}
+		if args[0] == "capabilities" {
+			m.openDiagnostics() // TUI-local: what the probe resolved, and why
+			return nil
+		}
 		if args[0] == "skills" {
 			m.openSkills() // TUI-local read-only view of available skills
 			return nil
@@ -618,9 +707,9 @@ func (m *model) handleEnter() tea.Cmd {
 	tb := m.tabs[m.active]
 	tb.endStream() // a new user turn closes any lingering agent block
 	e := entry{role: roleYou, text: text, attachments: atts}
-	if m.kitty {
-		e.preview = previewEscapes(atts) // inline image previews under the chips
-	}
+	// Every terminal gets a preview: half-blocks need no protocol at all, so the
+	// fallback is a coarser picture rather than no picture.
+	e.preview = previewEscapes(atts, m.caps)
 	tb.appendEntry(e)
 	// Flip to the working state immediately, before any backend event, so the
 	// operator sees the message was taken (the "thinking" line is derived from this).
@@ -918,6 +1007,25 @@ func (m *model) spinFrame() string { return spinFrames[m.spin%len(spinFrames)] }
 // yet. Because it is derived from state it appears the instant Enter is pressed and
 // disappears when the first chunk lands or the turn completes — it can never double.
 func (m *model) thinkingContent() string {
+	return m.contentWith(m.searchQuery)
+}
+
+// baseContent is the transcript as the viewport would hold it without the search
+// overlay's marks: the entries, the derived thinking line, and the turn fold.
+// Every line offset in search.go is counted in these lines, so the marks must not
+// change what they are counted over.
+func (m *model) baseContent() string { return m.contentWith("") }
+
+// contentWith is the painted transcript with the given query's matches marked.
+// The fold and the marks are two whole-transcript passes that tsCache cannot
+// cover — it keys on the entries, and neither of these changes one — so each is
+// memoized here. syncViewport runs on every streamed chunk and every spinner
+// frame, and without this the cost of a frame would grow with the length of the
+// session for as long as either mode stayed on.
+//
+// Both passes run before the thinking line is appended, so the frame-by-frame
+// churn of the spinner cannot invalidate either.
+func (m *model) contentWith(query string) string {
 	tb := m.tabs[m.active]
 	if tb == nil {
 		return ""
@@ -926,6 +1034,16 @@ func (m *model) thinkingContent() string {
 		return m.emptyState(m.vp.Width)
 	}
 	content := m.cachedTranscript(tb)
+	if m.foldTurnsOn {
+		content = m.foldCache.get(content, "", func(s string) string {
+			return strings.Join(foldTurns(strings.Split(s, "\n"), turnFoldKeep), "\n")
+		})
+	}
+	if m.searchOpen && strings.TrimSpace(query) != "" {
+		content = m.markCache.get(content, query, func(s string) string {
+			return strings.Join(highlightMatches(strings.Split(s, "\n"), query), "\n")
+		})
+	}
 	if tb.busy && !tb.streamed {
 		line := spinnerStyle.Render(m.spinFrame() + " thinking…")
 		if content != "" {
@@ -1003,6 +1121,11 @@ func (m *model) statusRow(left string) string {
 // footer renders the status line for the active tab: the spinner hint while a
 // turn is in flight, otherwise the session's status bar.
 func (m *model) footer() string {
+	// A selected link takes the row: it is the operator's current gesture, it is
+	// transient, and its target is the one thing they need to read before acting.
+	if s := m.linkStatus(); s != "" {
+		return s
+	}
 	tb := m.tabs[m.active]
 	if tb == nil {
 		return ""
@@ -1203,6 +1326,44 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// The search overlay is modal: it owns the keyboard while it is open, so
+		// Esc closes the search rather than interrupting the turn — while the
+		// operator is looking at the search, the search is what Esc means.
+		if m.searchOpen {
+			switch msg.Type {
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			case tea.KeyEsc, tea.KeyCtrlS:
+				m.closeSearch()
+				return m, nil
+			case tea.KeyEnter, tea.KeyCtrlN:
+				m.searchStep(1)
+				return m, nil
+			case tea.KeyCtrlP:
+				m.searchStep(-1)
+				return m, nil
+			case tea.KeyBackspace:
+				if q := m.searchQuery; q != "" {
+					m.typeSearch(q[:len(q)-1])
+				}
+				return m, nil
+			case tea.KeyRunes, tea.KeySpace:
+				m.typeSearch(m.searchQuery + msg.String())
+				return m, nil
+			}
+			return m, nil // everything else is swallowed: the query is the only input
+		}
+		// The capability screen is modal and read-only: any key closes it. It
+		// answers one question and there is nothing on it to navigate.
+		if m.diagOpen {
+			if msg.Type == tea.KeyCtrlC {
+				return m, tea.Quit
+			}
+			m.diagOpen = false
+			m.applySize()
+			m.syncViewport()
+			return m, nil
+		}
 		// The plugins screen is modal: it owns every key while it is open, because
 		// the two confirmations it asks are the only answers that matter then.
 		if m.pluginsOpen {
@@ -1333,6 +1494,28 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, tea.Batch(m.handleEnter(), m.ensureSpin())
+		case tea.KeyCtrlS:
+			m.openSearch()
+			return m, nil
+		case tea.KeyCtrlT:
+			m.toggleTurnFold()
+			return m, nil
+		case tea.KeyCtrlF:
+			m.toggleFold()
+			return m, nil
+		case tea.KeyCtrlY:
+			m.copyLastCode()
+			return m, nil
+		case tea.KeyCtrlL:
+			// Walk the transcript's links. Selecting one commits to nothing: it only
+			// puts the target in the status line, where it can be read before the
+			// gesture that follows it.
+			m.selectNextLink()
+			return m, nil
+		case tea.KeyCtrlO:
+			// The gesture. This is the only caller of a launcher in the program.
+			m.openSelectedLink()
+			return m, nil
 		case tea.KeyCtrlV:
 			// A clipboard image is staged as an attachment; anything else falls
 			// through to the composer so Ctrl+V still pastes text.
@@ -1348,6 +1531,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case tea.KeyUp:
+			if msg.Alt {
+				// Alt+↑/↓ walk the transcript by turn: the unit a reader actually
+				// scrolls in is a turn, not a line.
+				m.jumpTurn(-1)
+				return m, nil
+			}
 			// On an empty or already-recalling single-line composer, ↑ walks back
 			// through submitted prompts; otherwise it falls through to the composer.
 			if m.input.LineCount() <= 1 && (m.input.Value() == "" || m.histIdx < len(m.history)) {
@@ -1356,6 +1545,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case tea.KeyDown:
+			if msg.Alt {
+				m.jumpTurn(1)
+				return m, nil
+			}
 			if m.input.LineCount() <= 1 && m.histIdx < len(m.history) {
 				if m.recallHistory(1) {
 					return m, nil
@@ -1379,9 +1572,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// PgUp/PgDn reach m.vp.Update(msg) below — not intercepted here.
 	case eventMsg:
-		m.route(RoutedEvent(msg))
+		cmd := m.route(RoutedEvent(msg))
 		// A chunk/status event may have flipped a tab busy; start animating.
-		return m, m.ensureSpin()
+		return m, tea.Batch(cmd, m.ensureSpin())
+	case imageReadyMsg:
+		m.applyImage(msg)
+		return m, nil
 	case dispatchResultMsg:
 		m.syncTabs()
 		line, role := msg.out, roleNotice
@@ -1439,7 +1635,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · esc interrupt · ctrl+v paste image · / commands · @ files")
+	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · ctrl+f fold code · ctrl+y copy code · ctrl+s search · ctrl+t fold turns · alt+↑↓ jump turn · / commands · @ files")
 }
 
 func (m *model) View() string {
@@ -1473,8 +1669,14 @@ func (m *model) View() string {
 	if m.skillsOpen {
 		parts = append(parts, m.skillsView())
 	}
+	if m.diagOpen {
+		parts = append(parts, m.diagView())
+	}
 	if m.pluginsOpen {
 		parts = append(parts, m.pluginsView())
+	}
+	if m.searchOpen {
+		parts = append(parts, m.searchView())
 	}
 	if m.showHelp {
 		parts = append(parts, m.helpView())

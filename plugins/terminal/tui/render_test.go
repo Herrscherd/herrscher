@@ -12,7 +12,7 @@ import (
 // took four rows for one character — and a frame drawn around every turn marks
 // nothing. The glyph and the colour are what tell it apart.
 func TestUserEntryIsOneUnruledRow(t *testing.T) {
-	out := renderEntry(entry{role: roleYou, text: "hello there"}, 40)
+	out := renderEntry(entry{role: roleYou, text: "hello there"}, 40, Capabilities{})
 	if !strings.Contains(out, glyphCursor+" hello there") {
 		t.Fatalf("user entry must render its request: %q", out)
 	}
@@ -31,7 +31,7 @@ func TestUserEntryIsOneUnruledRow(t *testing.T) {
 // TestAgentEntryRendersBare checks agent prose renders full-width with no prompt
 // or tool prefix.
 func TestAgentEntryRendersBare(t *testing.T) {
-	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 40)
+	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 40, Capabilities{})
 	if !strings.Contains(out, "the answer") {
 		t.Fatalf("agent prose must render its text: %q", out)
 	}
@@ -43,7 +43,7 @@ func TestAgentEntryRendersBare(t *testing.T) {
 // TestToolEntryRendersBulletAndResult checks a tool status renders `● {call}` and
 // its continuation line as `  ⎿ {summary}`.
 func TestToolEntryRendersBulletAndResult(t *testing.T) {
-	out := renderEntry(entry{role: roleTool, text: "Bash(ls build/)\nremoved 3 files"}, 60)
+	out := renderEntry(entry{role: roleTool, text: "Bash(ls build/)\nremoved 3 files"}, 60, Capabilities{})
 	if !strings.Contains(out, glyphTool+" Bash(ls build/)") {
 		t.Fatalf("tool call must render `● Bash(ls build/)`: %q", out)
 	}
@@ -82,14 +82,14 @@ func TestToolVerbSplitsKnownTools(t *testing.T) {
 // TestTypedToolRendersItsFamilyGlyph checks a recognised tool gets its family's
 // mark and an unrecognised one falls back to the generic bullet.
 func TestTypedToolRendersItsFamilyGlyph(t *testing.T) {
-	out := renderEntry(entry{role: roleTool, text: "Read core/parse.go"}, 60)
+	out := renderEntry(entry{role: roleTool, text: "Read core/parse.go"}, 60, Capabilities{})
 	if !strings.Contains(out, familyGlyphs[familyRead]) {
 		t.Fatalf("a read must carry the read glyph: %q", out)
 	}
 	if !strings.Contains(out, "core/parse.go") {
 		t.Fatalf("a tool line must keep its target: %q", out)
 	}
-	unknown := renderEntry(entry{role: roleTool, text: "pondering deeply"}, 60)
+	unknown := renderEntry(entry{role: roleTool, text: "pondering deeply"}, 60, Capabilities{})
 	if !strings.Contains(unknown, glyphTool+" pondering deeply") {
 		t.Fatalf("an unknown tool falls back to the generic bullet: %q", unknown)
 	}
@@ -98,9 +98,9 @@ func TestTypedToolRendersItsFamilyGlyph(t *testing.T) {
 // TestRoleGlyphsAreDistinct is the point of having roles at all: reasoning, a
 // notice and an error must not render as the same line the way they used to.
 func TestRoleGlyphsAreDistinct(t *testing.T) {
-	think := renderEntry(entry{role: roleThinking, text: "weighing two options"}, 60)
-	notice := renderEntry(entry{role: roleNotice, text: "turn reset"}, 60)
-	fail := renderEntry(entry{role: roleError, text: "exit status 1"}, 60)
+	think := renderEntry(entry{role: roleThinking, text: "weighing two options"}, 60, Capabilities{})
+	notice := renderEntry(entry{role: roleNotice, text: "turn reset"}, 60, Capabilities{})
+	fail := renderEntry(entry{role: roleError, text: "exit status 1"}, 60, Capabilities{})
 	if !strings.Contains(think, glyphThinking) {
 		t.Fatalf("reasoning must carry its glyph: %q", think)
 	}
@@ -129,7 +129,7 @@ func TestStatusRoleSplitsErrorsFromTools(t *testing.T) {
 // exceeds the content width.
 func TestAgentBodyWrapsToWidth(t *testing.T) {
 	body := strings.Repeat("lorem ipsum dolor ", 20)
-	out := renderEntry(entry{role: roleAgent, text: body}, 40)
+	out := renderEntry(entry{role: roleAgent, text: body}, 40, Capabilities{})
 	lines := strings.Split(out, "\n")
 	if len(lines) < 3 {
 		t.Fatalf("long body must wrap to several lines, got %d", len(lines))
@@ -144,7 +144,7 @@ func TestAgentBodyWrapsToWidth(t *testing.T) {
 // TestWideGlyphWrapDoesNotOverflow guards the glyph-width awareness: a run of
 // double-width runes must still fold within the content width.
 func TestWideGlyphWrapDoesNotOverflow(t *testing.T) {
-	out := renderEntry(entry{role: roleYou, text: strings.Repeat("世界", 30)}, 24)
+	out := renderEntry(entry{role: roleYou, text: strings.Repeat("世界", 30)}, 24, Capabilities{})
 	for _, ln := range strings.Split(out, "\n") {
 		if w := lipgloss.Width(ln); w > 24 {
 			t.Fatalf("wide-glyph line width %d exceeds 24: %q", w, ln)

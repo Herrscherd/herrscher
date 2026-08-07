@@ -14,6 +14,7 @@ const (
 	glyphThinking = "✳" // a reasoning summary
 	glyphNotice   = "·" // a turn reset / abandoned marker
 	glyphError    = "✗" // a failed command or an error surfaced by the host
+	glyphFold     = "▶" // a folded code block, standing in for its lines
 	glyphBolt     = "⚡" // the terminal's own mark: it leads the status bar and the agent's rule
 )
 
@@ -74,6 +75,12 @@ var (
 	// scrollbackStyle marks replayed transcript lines seeded into a reopened tab,
 	// dimmed and faint so past context reads as distinct from live output.
 	scrollbackStyle = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color(colDim))
+
+	// linkStyle marks a reference in the transcript as something that can be
+	// acted on. The selection is not a style here but reverse video (see
+	// renderLink): colour is the one channel a terminal is free to take away,
+	// and the selected link is the one the operator's gesture is aimed at.
+	linkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent)).Underline(true)
 
 	// chipStyle renders an attachment as a pill token above the composer and under
 	// the message that carried it.

@@ -102,8 +102,44 @@ func TestSessionNameForIsAlwaysAValidSlug(t *testing.T) {
 
 func TestSessionNameForKeepsTheOpeningWords(t *testing.T) {
 	name := sessionNameFor("Va lire le thread Guide de l'aventurier et propose un plan")
-	if !strings.HasPrefix(name, "va-lire-le-thread-guide-") {
-		t.Fatalf("name = %q, want it to open on the first five words", name)
+	if !strings.HasPrefix(name, "va-lire-thread-guide-l-aventurier-") {
+		t.Fatalf("name = %q, want it to open on the first five content words", name)
+	}
+}
+
+// The defect this guards: the name has five words, and a prompt that opens on
+// filler spends them all on the half it shares with every other prompt. Two
+// tasks that differ only after "the" have to arrive as two readable names.
+func TestSessionNameForDistinguishesPromptsSharingAnOpening(t *testing.T) {
+	a := sessionNameFor("please read the auth module and propose a split")
+	b := sessionNameFor("please read the auth module and write tests")
+	stem := func(s string) string { return s[:strings.LastIndex(s, "-")] }
+	if stem(a) == stem(b) {
+		t.Fatalf("both prompts named %q; the name must carry what differs", stem(a))
+	}
+	if !strings.HasPrefix(a, "read-auth-module-propose-split-") {
+		t.Fatalf("a = %q, want the content words", a)
+	}
+	if !strings.HasPrefix(b, "read-auth-module-write-tests-") {
+		t.Fatalf("b = %q, want the content words", b)
+	}
+}
+
+// slugInvalid keeps [a-z0-9_-] only, so an accent left standing is not dropped
+// but replaced: "résume" would arrive as "r-sume".
+func TestSessionNameForFoldsAccents(t *testing.T) {
+	name := sessionNameFor("Résume la discussion et détaille les décisions")
+	if !strings.HasPrefix(name, "resume-discussion-detaille-decisions-") {
+		t.Fatalf("name = %q, want the accents folded rather than punched out", name)
+	}
+}
+
+// Filtering must never leave the session anonymous: a prompt that is all filler
+// is still better named after itself than after the "s-" fallback.
+func TestSessionNameForKeepsFillerWhenThatIsAllThereIs(t *testing.T) {
+	name := sessionNameFor("please can you")
+	if !strings.HasPrefix(name, "please-can-you-") {
+		t.Fatalf("name = %q, want the words back when filtering empties them", name)
 	}
 }
 

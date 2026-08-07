@@ -25,6 +25,7 @@ require (
 	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.44.0
+	golang.org/x/text v0.40.0
 	google.golang.org/grpc v1.67.0
 )
 
@@ -63,7 +64,6 @@ require (
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
 	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.7.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect

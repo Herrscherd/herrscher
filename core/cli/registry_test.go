@@ -113,6 +113,89 @@ func TestDispatchOptionalValueParamRequiresValueWhenPresent(t *testing.T) {
 	}
 }
 
+// The two-token form cannot carry a value that opens on "--", and must not: it
+// is the missing-value mistake far more often than it is the value. --name=value
+// is where a caller says it really meant one.
+func TestDispatchInlineValueCarriesAFlagLookingValue(t *testing.T) {
+	r := build(t, contracts.New("session", "seed").
+		Param("name", "", true).Param("task", "", true).
+		Do(func(_ context.Context, in contracts.Input) (string, error) {
+			return in.Get("name") + "|" + in.Get("task"), nil
+		}))
+
+	if _, err := r.Dispatch(context.Background(), []string{
+		"session", "seed", "--name", "s", "--task", "--no-tests please",
+	}); err == nil || !strings.Contains(err.Error(), "flag --task needs a value") {
+		t.Fatalf("separate-token form error = %v; want the mistake still named", err)
+	}
+
+	got, err := r.Dispatch(context.Background(), []string{
+		"session", "seed", "--name", "s", "--task=--no-tests please",
+	})
+	if err != nil || got != "s|--no-tests please" {
+		t.Fatalf("inline form = %q, %v; want the value intact", got, err)
+	}
+}
+
+func TestDispatchInlineValueEdgeCases(t *testing.T) {
+	r := build(t, contracts.New("memory", "record").
+		Param("key", "", true).Param("body", "", false).
+		Do(func(_ context.Context, in contracts.Input) (string, error) {
+			return in.Get("key") + "|" + in.Get("body"), nil
+		}))
+
+	// A value carrying its own '=' splits on the first one only.
+	got, err := r.Dispatch(context.Background(), []string{"memory", "record", "--key=a/b", "--body=x=1"})
+	if err != nil || got != "a/b|x=1" {
+		t.Fatalf("got %q, %v; want the split to stop at the first =", got, err)
+	}
+
+	// An empty inline value is a value, not a missing one.
+	got, err = r.Dispatch(context.Background(), []string{"memory", "record", "--key=a/b", "--body="})
+	if err != nil || got != "a/b|" {
+		t.Fatalf("got %q, %v; want an empty body to count as given", got, err)
+	}
+
+	// The flag is still checked against the declared params.
+	if _, err := r.Dispatch(context.Background(), []string{"memory", "record", "--nope=1"}); err == nil ||
+		!strings.Contains(err.Error(), "unknown flag --nope") {
+		t.Fatalf("unknown inline flag error = %v", err)
+	}
+}
+
+// FlagArg reaches for the inline form only when the value needs it. Every
+// released daemon parses the two-token form, and an attached CLI dials one it
+// may predate — so the shape on the wire must not change for ordinary text.
+func TestFlagArgUsesTheInlineFormOnlyWhenNeeded(t *testing.T) {
+	if got := cli.FlagArg("text", "hello"); len(got) != 2 || got[0] != "--text" || got[1] != "hello" {
+		t.Fatalf("ordinary value = %q, want the two-token form", got)
+	}
+	if got := cli.FlagArg("text", ""); len(got) != 2 || got[1] != "" {
+		t.Fatalf("empty value = %q, want the two-token form", got)
+	}
+	if got := cli.FlagArg("text", "-p not a flag"); len(got) != 2 || got[1] != "-p not a flag" {
+		t.Fatalf("single-dash value = %q; only -- confuses the parser", got)
+	}
+	if got := cli.FlagArg("task", "--no-tests"); len(got) != 1 || got[0] != "--task=--no-tests" {
+		t.Fatalf("flag-looking value = %q, want the inline form", got)
+	}
+}
+
+// The round trip is the actual guarantee: what FlagArg writes, parse reads back.
+func TestFlagArgRoundTripsThroughDispatch(t *testing.T) {
+	r := build(t, contracts.New("session", "send").
+		Param("text", "", true).
+		Do(func(_ context.Context, in contracts.Input) (string, error) { return in.Get("text"), nil }))
+
+	for _, text := range []string{"hello", "--no-tests", "--", "x=1", "-p", "  spaced  ", "--a=--b"} {
+		argv := append([]string{"session", "send"}, cli.FlagArg("text", text)...)
+		got, err := r.Dispatch(context.Background(), argv)
+		if err != nil || got != text {
+			t.Fatalf("text %q came back %q, %v", text, got, err)
+		}
+	}
+}
+
 func TestDispatchReturnsHandlerOutput(t *testing.T) {
 	r := build(t, leaf("session", "list"))
 	out, err := r.Dispatch(context.Background(), []string{"session", "list"})

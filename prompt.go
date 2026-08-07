@@ -4,6 +4,11 @@ import (
 	"crypto/rand"
 	"regexp"
 	"strings"
+	"unicode"
+
+	"golang.org/x/text/runes"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 )
 
 // task is what an argv asked for when it asked for a task rather than a verb.
@@ -66,15 +71,94 @@ func promptOf(cmd string, args []string) (task, bool) {
 // name legible in `session list` without the branch name running off the line.
 const nameStemMax = 40
 
-// nameStemWords is how much of a prompt makes it into the name. Five words is
-// enough to recognise the task in a list and short enough that the name does not
-// become a paraphrase of the prompt.
+// nameStemWords is how much of a prompt makes it into the name. Five content
+// words (see nameFiller) are enough to recognise the task in a list and short
+// enough that the name does not become a paraphrase of the prompt.
 const nameStemWords = 5
 
 // slugInvalid matches any run of characters a session name cannot carry. The
 // name becomes both a filesystem path and a git ref, which is why the allowed
 // set is this narrow.
 var slugInvalid = regexp.MustCompile(`[^a-z0-9_-]+`)
+
+// nameFiller is the closed set of words a session name gains nothing from:
+// articles, pronouns, prepositions, auxiliaries, conjunctions, and the
+// politeness an instruction opens on.
+//
+// The name has five words to spend, and these are precisely the words two
+// prompts are most likely to share. "read the auth module and propose a split"
+// and "read the auth module and write tests" spend all five on the half they
+// have in common and list as the same name twice; on content words they read as
+// what they are.
+//
+// English and French, which is the latin-alphabet assumption slugInvalid already
+// makes. A prompt in neither simply keeps all its words — the safe direction to
+// be wrong in, since it is what this did before.
+var nameFiller = map[string]bool{
+	"a": true, "ai": true, "an": true, "and": true, "are": true, "as": true,
+	"at": true, "au": true, "aux": true, "be": true, "been": true, "but": true,
+	"by": true, "can": true, "ce": true, "ces": true, "cet": true, "cette": true,
+	"could": true, "dans": true, "de": true, "des": true, "do": true,
+	"does": true, "du": true, "en": true, "est": true, "et": true, "for": true,
+	"from": true, "had": true, "has": true, "have": true, "i": true, "if": true,
+	"il": true, "ils": true, "in": true, "into": true, "is": true, "it": true,
+	"its": true, "je": true, "la": true, "le": true, "les": true, "leur": true,
+	"lui": true, "ma": true, "mais": true, "me": true, "mes": true, "moi": true,
+	"mon": true, "my": true, "ne": true, "nos": true, "notre": true,
+	"nous": true, "of": true, "on": true, "ont": true, "or": true, "ou": true,
+	"our": true, "par": true, "pas": true, "please": true, "pour": true,
+	"que": true, "qui": true, "sa": true, "se": true, "ses": true,
+	"should": true, "so": true, "son": true, "sont": true, "stp": true,
+	"sur": true, "ta": true, "te": true, "tes": true, "that": true,
+	"the": true, "their": true, "them": true, "then": true, "there": true,
+	"these": true, "this": true, "to": true, "toi": true, "ton": true,
+	"tu": true, "un": true, "une": true, "us": true, "vos": true,
+	"votre": true, "vous": true, "was": true, "we": true, "were": true,
+	"will": true, "with": true, "would": true, "y": true, "you": true,
+	"your": true,
+}
+
+// fillerTrim is the punctuation a word may be wearing while still being that
+// word, so "please," and "please" both match the filler set.
+const fillerTrim = `.,;:!?'"()[]{}«»…`
+
+// foldAccents rewrites a letter carrying a diacritic as the bare letter.
+//
+// slugInvalid keeps only [a-z0-9_-], so without this an accent is not dropped
+// but replaced: "résume la discussion" would name a session "r-sume", and a
+// French prompt would arrive in fragments. Folding first costs the accent
+// nothing, and it is also what lets nameFiller list its French words once, in
+// the form they fold to.
+//
+// The transformer is built per call because transform.Chain carries state; one
+// package-level value would be a race between two prompts named at once.
+func foldAccents(s string) string {
+	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+	out, _, err := transform.String(t, s)
+	if err != nil {
+		return s
+	}
+	return out
+}
+
+// nameWords reduces a prompt to the words worth naming a session after.
+//
+// Filtering hands the words back untouched when it would leave nothing, so a
+// prompt made entirely of filler still names its session after itself rather
+// than falling through to the anonymous "s-" stem.
+func nameWords(prompt string) []string {
+	all := strings.Fields(foldAccents(prompt))
+	kept := make([]string, 0, len(all))
+	for _, w := range all {
+		if !nameFiller[strings.Trim(strings.ToLower(w), fillerTrim)] {
+			kept = append(kept, w)
+		}
+	}
+	if len(kept) == 0 {
+		return all
+	}
+	return kept
+}
 
 // sessionNameFor derives a session name from a free-text prompt.
 //
@@ -86,7 +170,7 @@ var slugInvalid = regexp.MustCompile(`[^a-z0-9_-]+`)
 // slugifies again and stays the final word, but it is never handed something it
 // would have to repair.
 func sessionNameFor(prompt string) string {
-	words := strings.Fields(prompt)
+	words := nameWords(prompt)
 	if len(words) > nameStemWords {
 		words = words[:nameStemWords]
 	}

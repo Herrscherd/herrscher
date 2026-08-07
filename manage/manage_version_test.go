@@ -44,6 +44,46 @@ func TestManageVersionAddCommands(t *testing.T) {
 	}
 }
 
+func TestManageVersionRemoveKeepsTheArgumentWhole(t *testing.T) {
+	if mod, ver := moduleArg("add", "mod/a@v1.2.3"); mod != "mod/a" || ver != "v1.2.3" {
+		t.Fatalf("add = (%q, %q), want the version split off", mod, ver)
+	}
+	// A remove that split the version off would find no such module, report no
+	// change, and still run the build and announce a removal that never happened.
+	if mod, ver := moduleArg("remove", "mod/a@v1.2.3"); mod != "mod/a@v1.2.3" || ver != "" {
+		t.Fatalf("remove = (%q, %q), want the argument whole", mod, ver)
+	}
+}
+
+func TestManageVersionApplyForgetsTheEarlierSnapshot(t *testing.T) {
+	dir := hostDir(t, "mod/a")
+	ops := &PluginOps{dir: dir}
+
+	saved, err := saveComposition(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ops.saved = saved
+	gomod := filepath.Join(dir, "go.mod")
+	if err := os.WriteFile(gomod, []byte("module host\n\ngo 1.25.0\n\nrequire mod/a v1.2.3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ops.Apply(context.Background(), "pin", "mod/a", ""); err != nil {
+		t.Fatalf("pin: %v", err)
+	}
+	if err := ops.Restore(); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	body, err := os.ReadFile(gomod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "mod/a v1.2.3") {
+		t.Fatal("a restore after a pin rolled back a change the pin did not make")
+	}
+}
+
 func TestManageVersionPinRefusesAbsentModule(t *testing.T) {
 	dir := hostDir(t, "mod/a")
 	code := PluginCmd(context.Background(), []string{"pin", "--host", dir, "mod/absent"})

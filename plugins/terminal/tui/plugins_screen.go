@@ -364,8 +364,8 @@ func (m *model) pluginsView() string {
 			b.WriteString("\n" + dimStyle.Render("  "+row))
 		}
 	}
-	for _, f := range m.pluginsFindings {
-		if m.pluginsMode == pluginsWarn {
+	if m.pluginsMode == pluginsWarn {
+		for _, f := range m.pluginsFindings {
 			b.WriteString("\n" + textStyle.Render("  ! "+f))
 		}
 	}

@@ -80,7 +80,7 @@ func PluginCmd(ctx context.Context, args []string) int {
 			fmt.Fprintf(os.Stderr, "usage: herrscher plugin %s <module>\n", sub)
 			return 2
 		}
-		module, version := splitModuleVersion(positionals[0])
+		module, version := moduleArg(sub, positionals[0])
 		var out string
 		var changed bool
 		if sub == "add" {
@@ -156,6 +156,17 @@ func PluginCmd(ctx context.Context, args []string) int {
 		fmt.Fprintf(os.Stderr, "unknown plugin subcommand %q\n", sub)
 		return 2
 	}
+}
+
+// moduleArg reads the positional of a verb that may carry a version. Only the
+// verbs that install one accept `@version`; `remove` takes the argument whole,
+// so `remove mod/a@v1.2.3` stays a module that is not compiled in and is
+// reported as no change, instead of being read as a removal that happened.
+func moduleArg(sub, arg string) (module, version string) {
+	if sub == "remove" {
+		return arg, ""
+	}
+	return splitModuleVersion(arg)
 }
 
 func pinUsageTail(sub string) string {

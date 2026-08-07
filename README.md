@@ -37,7 +37,7 @@ One daemon per state file: a second one over the same state answers every messag
 
 ## Plugins
 
-Plugins compile **into** the binary (the xcaddy pattern): add a blank import, rebuild. `herrscher update` bumps every compiled-in plugin, rebuilds, and reinstalls the binary — restart the service afterwards to run it.
+Plugins compile **into** the binary (the xcaddy pattern): add a blank import, rebuild. `herrscher update` bumps every unpinned compiled-in plugin, rebuilds, and reinstalls the binary — restart the service afterwards to run it.
 
 Each plugin carries its own version. `herrscher plugin list` reports, per module, the version installed, whether it is pinned, and the newest published — the last needs the network, and reads `?` without one. `herrscher plugin add <module>@<version>` installs a chosen version; `herrscher plugin pin <module> [<version>]` moves it there first when a version is given, then records the module as pinned; `herrscher plugin unpin <module>` drops the record. `herrscher update` skips every pinned module and names each one it skipped, so a pin never looks like a silent no-op. The pins live in `.herrscher-pins` beside `plugins.go` — one module path per line, `#` comments ignored, no versions, since `go.mod` already holds those and a second copy could disagree.
 

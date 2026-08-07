@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"path"
-	"regexp"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -56,10 +55,6 @@ func hostAllowed(host string, allow []string) bool {
 	return false
 }
 
-// urlPattern matches a bare http(s) URL, stopping before the punctuation that
-// ends a sentence rather than a URL.
-var urlPattern = regexp.MustCompile(`https?://[^\s<>"']+[^\s<>"'.,;:!?)\]]`)
-
 // imageExts are the extensions worth trying to draw. Matching on the extension
 // rather than on a HEAD request means the decision costs nothing and no request
 // is made for a URL that was never a picture.
@@ -71,7 +66,9 @@ var imageExts = map[string]bool{
 // order they appear.
 func imageURLs(text string) []string {
 	var out []string
-	for _, raw := range urlPattern.FindAllString(text, -1) {
+	// The transcript scanner's own pattern: what may be fetched must be exactly
+	// what the reader was shown as a link, and two patterns would drift.
+	for _, raw := range linkURLPattern.FindAllString(text, -1) {
 		u, err := url.Parse(raw)
 		if err != nil {
 			continue

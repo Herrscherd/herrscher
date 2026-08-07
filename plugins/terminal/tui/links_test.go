@@ -100,3 +100,27 @@ func TestRenderLinkHighlightsTheSelection(t *testing.T) {
 		}
 	}
 }
+
+// A markdown target is whatever the agent wrote between the parens, and it does
+// not stay a string: it is written into the OSC 8 payload, where an ESC ends the
+// sequence and hands the terminal whatever follows as a command of its own. Such
+// a target is not a link, and the characters stay on screen as text.
+func TestATargetCarryingAControlByteIsNotALink(t *testing.T) {
+	for _, s := range []string{
+		"see [docs](https://a.test/\x1b]0;pwned\x07x) here",
+		"see [docs](https://a.test/\x07x) here",
+	} {
+		links := findLinks([]string{s})
+		for _, l := range links {
+			if strings.ContainsAny(l.Target, "\x1b\x07") {
+				t.Fatalf("a control byte must not reach a link target: %q", l.Target)
+			}
+		}
+	}
+
+	// And what does survive detection is never emitted raw into an OSC 8 payload.
+	out := renderLink(Link{Label: "x", Target: "https://a.test/ok"}, Capabilities{Hyperlinks: true}, false)
+	if !strings.Contains(out, "\x1b]8;;https://a.test/ok\x1b\\") {
+		t.Fatalf("an ordinary target must still hyperlink: %q", out)
+	}
+}

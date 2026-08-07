@@ -6,6 +6,25 @@ import (
 	"strings"
 )
 
+// task is what an argv asked for when it asked for a task rather than a verb.
+type task struct {
+	Text string
+	// Print is the non-interactive form: run one turn and write the reply to
+	// stdout. The default is a window, so this is set only when --print asked
+	// for it, or when there is no terminal to draw one on.
+	Print bool
+}
+
+// printsTo reports whether this task runs non-interactively, given whether a
+// window could be drawn at all.
+//
+// Two things force it, and only one of them is a preference: --print is the
+// operator saying so, and a window that cannot exist is the build or the
+// terminal saying so. A run being piped wants the answer rather than a
+// Bubbletea error about a missing TTY, and a build with no frontend has nothing
+// to open at all.
+func (t task) printsTo(canDrawWindow bool) bool { return t.Print || !canDrawWindow }
+
 // promptOf decides whether an argv is a free-text task rather than a verb.
 //
 // The rule is the one thing that keeps `herrscher sesion` an honest typo instead
@@ -15,24 +34,31 @@ import (
 // one — so whitespace is the discriminator, and -p is the escape hatch for the
 // one-word prompt the rule necessarily refuses.
 //
-// A -p with nothing after it returns ("", true): the caller asked for a prompt
+// --print carries that escape hatch too, and for the same reason: an operator who
+// spelled out which mode they want has already said the argument is a task, so
+// `herrscher --print refactor` is one rather than a mistyped verb.
+//
+// A flag with nothing after it returns ("", true): the caller asked for a prompt
 // and gave none, which is a mistake worth naming, not an argv to fall through to
 // the verb switch.
-func promptOf(cmd string, args []string) (string, bool) {
-	if cmd == "-p" || cmd == "--prompt" {
-		return strings.TrimSpace(strings.Join(args, " ")), true
+func promptOf(cmd string, args []string) (task, bool) {
+	switch cmd {
+	case "-p", "--prompt":
+		return task{Text: strings.TrimSpace(strings.Join(args, " "))}, true
+	case "--print":
+		return task{Text: strings.TrimSpace(strings.Join(args, " ")), Print: true}, true
 	}
 	if strings.HasPrefix(cmd, "-") {
-		return "", false
+		return task{}, false
 	}
 	if !strings.ContainsAny(cmd, " \t\n\r") {
-		return "", false
+		return task{}, false
 	}
 	text := strings.TrimSpace(strings.Join(append([]string{cmd}, args...), " "))
 	if text == "" {
-		return "", false
+		return task{}, false
 	}
-	return text, true
+	return task{Text: text}, true
 }
 
 // nameStemMax bounds the readable part of a session name. The guard downstream

@@ -225,6 +225,13 @@ type model struct {
 	spinning     bool          // whether the animation timer is currently running
 	composerRows int           // composer height the layout is built around, in rows
 
+	// openSession is the session the window must open on, and openText the first
+	// message to send there. Both are consumed once, by the first reconcile that
+	// finds the session — a window opened on a task must not resend it on every
+	// later one.
+	openSession string
+	openText    string
+
 	resumeOpen bool                    // whether the /resume picker overlay is open
 	resumeIdx  int                     // selected row in the /resume picker
 	resumeRows []contracts.SessionInfo // picker rows, sorted by LastTs desc
@@ -619,6 +626,41 @@ func (m *model) syncTabs() {
 			m.removeTab(ch)
 		}
 	}
+	m.focusOpen(infos)
+}
+
+// focusOpen selects the session the window was opened on and sends its opening
+// message, once the session exists.
+//
+// It runs off the session list rather than at startup because neither fact is
+// available then: the tab is created from the hub's answer, and when this process
+// is the one starting the daemon the session is not even bridged yet. Waiting for
+// it to appear is what makes the two launch paths — attach to a running daemon,
+// or start one — behave identically.
+//
+// Both fields are cleared before the send, so a session that comes and goes
+// cannot replay the task, and a failed submit is not retried behind the
+// operator's back.
+func (m *model) focusOpen(infos []contracts.SessionInfo) {
+	if m.openSession == "" {
+		return
+	}
+	channel := ""
+	for _, s := range infos {
+		if s.Name == m.openSession {
+			channel = s.ChannelID
+			break
+		}
+	}
+	if channel == "" || m.tabs[channel] == nil {
+		return // not bridged yet; a later reconcile will find it
+	}
+	text := m.openText
+	m.openSession, m.openText = "", ""
+	m.active = channel
+	if text != "" {
+		m.submitTo(channel, text, nil)
+	}
 }
 
 // handleEnter dispatches a /command or submits a prompt to the active tab. A
@@ -703,8 +745,21 @@ func (m *model) handleEnter() tea.Cmd {
 	m.pending = nil
 	m.applySize() // the chip row (if any) is gone now the draft is sent
 	m.recordHistory(text)
-	m.tm.Submit(m.active, text, atts)
-	tb := m.tabs[m.active]
+	m.submitTo(m.active, text, atts)
+	return nil
+}
+
+// submitTo hands a message to the backend and shows it as sent in that tab.
+//
+// Split out of handleEnter because a window opened on a task submits one message
+// nobody typed, and it must land in exactly the state a typed one does: the same
+// transcript entry, the same busy flag. Two spellings of "sent" would drift.
+func (m *model) submitTo(channel, text string, atts []Attachment) {
+	tb := m.tabs[channel]
+	if tb == nil {
+		return
+	}
+	m.tm.Submit(channel, text, atts)
 	tb.endStream() // a new user turn closes any lingering agent block
 	e := entry{role: roleYou, text: text, attachments: atts}
 	// Every terminal gets a preview: half-blocks need no protocol at all, so the
@@ -718,7 +773,6 @@ func (m *model) handleEnter() tea.Cmd {
 	tb.tokens = 0
 	tb.startedAt = time.Now()
 	m.syncViewport()
-	return nil
 }
 
 // pasteImage pulls an image off the system clipboard, stages it for the next
@@ -1175,11 +1229,25 @@ func formatCost(c float64) string {
 	return fmt.Sprintf("$%.2f", c)
 }
 
+// Option adjusts a window before it is drawn. Options exist so a caller can say
+// what the window opens on without the TUI growing a constructor per launch path.
+type Option func(*model)
+
+// OpenOn opens the window on a named session and sends text there as its first
+// message. An empty text opens the session and sends nothing, which is how a
+// caller says "show me this one" without starting a turn.
+func OpenOn(session, text string) Option {
+	return func(m *model) { m.openSession, m.openText = session, text }
+}
+
 // Run starts the TUI bound to the given gateway backend, blocking until the user
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
-func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
+func Run(ctx context.Context, cancel context.CancelFunc, tm Backend, opts ...Option) error {
 	m := newModel(tm)
+	for _, opt := range opts {
+		opt(m)
+	}
 	// The plugins screen needs a host module to manage; a binary running away
 	// from its source simply opens the screen and says so.
 	if seam, err := newManageSeam(); err == nil {

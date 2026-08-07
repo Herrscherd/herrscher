@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -32,6 +33,53 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 		t.Fatal(err)
 	}
 	return newHub(ctx, st, sup, nil, t.TempDir(), &r, nil)
+}
+
+// A plugin verb must not hold the mutation lock. It talks to a remote API, so a
+// rate-limited gateway would otherwise freeze every session create and close
+// behind one agent reading a channel — for as long as that API takes to answer.
+func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var r cli.Registry
+	slow := contracts.New("plug", "read").Do(func(context.Context, contracts.Input) (string, error) {
+		close(entered)
+		<-release
+		return "slow", nil
+	})
+	quick := contracts.New("session", "list").Do(func(context.Context, contracts.Input) (string, error) {
+		return "quick", nil
+	})
+	for _, c := range []contracts.Cmd{slow, quick} {
+		if err := r.Add(c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := newHub(ctx, state.NewState(t.TempDir()+"/s.json"),
+		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher"), nil, t.TempDir(), &r, nil)
+	h.contributedKinds = contributedKinds([]contracts.Cmd{slow})
+
+	go func() { _, _ = h.Dispatch(ctx, []string{"plug", "read"}) }()
+	<-entered
+
+	done := make(chan string, 1)
+	go func() {
+		out, err := h.Dispatch(ctx, []string{"session", "list"})
+		if err != nil {
+			t.Errorf("session list: %v", err)
+		}
+		done <- out
+	}()
+	select {
+	case out := <-done:
+		if out != "quick" {
+			t.Fatalf("session list = %q", out)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a built-in blocked behind an in-flight plugin verb")
+	}
+	close(release)
 }
 
 func TestSessionSeedRegisteredRequiresNameAndTask(t *testing.T) {

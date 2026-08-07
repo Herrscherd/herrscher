@@ -256,6 +256,11 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 	return nil
 }
 
+// forwardTimeout bounds one forwarded command. Generous enough that no honest
+// verb reaches it — the daemon answers these from memory or from one API call —
+// and short enough that a stuck one gives the terminal back.
+const forwardTimeout = 60 * time.Second
+
 // forwardUnknownVerb relays an argv this binary has no case for to the running
 // daemon. The agent does not speak to the daemon over the socket — it shells out
 // to this binary — while the verbs gateway plugins contribute exist only in the
@@ -265,7 +270,15 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 // It resolves the instance the same way runRegistryVerb does, so both find the
 // same daemon. A config.json that will not load is not fatal here: it only costs
 // the fallback id, and the dial then misses like any other absent daemon.
+//
+// The wait is bounded. A forwarded verb can reach a plugin that calls a remote
+// API, and the daemon's own read timeout covers only the request, never the
+// dispatch — so without a deadline here a rate-limited gateway leaves the
+// operator's terminal hanging with nothing to read and nothing to cancel. The
+// deadline is what turns that into an error a caller can act on.
 func forwardUnknownVerb(ctx context.Context, argv []string) (string, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, forwardTimeout)
+	defer cancel()
 	instance := envx.Get("INSTANCE_ID")
 	if instance == "" {
 		if cfg, err := config.Load(config.DefaultPath()); err == nil {

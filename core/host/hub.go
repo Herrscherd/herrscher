@@ -49,6 +49,13 @@ type hub struct {
 	// noBudgetGate{} default RunSession/newSessionDriver falls back to.
 	gate budgetGate
 
+	// contributedKinds are the plugin namespaces whose verbs the host grafted
+	// onto the registry. Every contributed path is prefixed with its plugin's
+	// kind, and reg.Add refuses a kind that collides with a built-in, so the
+	// first argument alone identifies one exactly. Set in RunHub, beside the
+	// registry it describes; nil for the operator CLI, which has none.
+	contributedKinds map[string]bool
+
 	dispatchMu sync.Mutex // serializes operator commands (and their reconcile)
 	mu         sync.Mutex
 	live       map[string]liveSession // session name → owned RunSession lifetime
@@ -210,11 +217,27 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 		return h.reg.Dispatch(withOneShotSeedRuntime(ctx, runtime), args)
 	}
 
+	// A plugin verb is outside dispatchMu for the same reason: it does not touch
+	// the session set, so the lock buys nothing and the reconcile that follows
+	// has nothing to reconcile. What it does do is talk to a remote API, and a
+	// gateway that is being rate-limited would otherwise hold the mutation lock
+	// for the length of its own retry — freezing every session create, every
+	// close, and every other operator command behind one agent reading a channel.
+	if h.isContributedCommand(args) {
+		return h.reg.Dispatch(ctx, args)
+	}
+
 	h.dispatchMu.Lock()
 	defer h.dispatchMu.Unlock()
 	out, err := h.reg.Dispatch(ctx, args)
 	h.reconcile()
 	return out, err
+}
+
+// isContributedCommand reports whether args address a verb a plugin contributed
+// rather than one the host declares itself.
+func (h *hub) isContributedCommand(args []string) bool {
+	return len(args) > 0 && h.contributedKinds[args[0]]
 }
 
 func isSessionSeedCommand(args []string) bool {

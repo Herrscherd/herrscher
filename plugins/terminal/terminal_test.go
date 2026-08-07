@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -340,6 +341,11 @@ func TestDispatchAllowsSessionAndAgentVerbs(t *testing.T) {
 
 // --- ensureDefaultSession ---
 
+// terminalSessionNameRe mirrors the session-name guard in
+// core/internal/manager/validate.go: whatever name the TUI mints must already
+// pass it, since it becomes a filesystem path and a git ref downstream.
+var terminalSessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+
 func TestEnsureDefaultSessionCreatesWhenNone(t *testing.T) {
 	fake := &fakeSessionControl{} // Sessions() returns nil/empty
 	if err := ensureDefaultSession(context.Background(), fake); err != nil {
@@ -349,14 +355,30 @@ func TestEnsureDefaultSessionCreatesWhenNone(t *testing.T) {
 		t.Fatalf("expected one typed Create, got: %+v", fake.created)
 	}
 	spec := fake.created[0]
-	if spec.Name != "main" {
-		t.Fatalf("default session name = %q, want main", spec.Name)
+	if !terminalSessionNameRe.MatchString(spec.Name) {
+		t.Fatalf("default session name %q is not a valid session slug", spec.Name)
+	}
+	if spec.Name == "main" {
+		t.Fatalf("the default session must not carry a fixed name")
 	}
 	if !spec.TerminalOnly {
 		t.Fatalf("default session must be terminal-only: %+v", spec)
 	}
 	if !spec.Shared {
 		t.Fatalf("default session must be shared: %+v", spec)
+	}
+}
+
+func TestEnsureDefaultSessionNamesAreDistinct(t *testing.T) {
+	a, b := &fakeSessionControl{}, &fakeSessionControl{}
+	if err := ensureDefaultSession(context.Background(), a); err != nil {
+		t.Fatalf("ensureDefaultSession: %v", err)
+	}
+	if err := ensureDefaultSession(context.Background(), b); err != nil {
+		t.Fatalf("ensureDefaultSession: %v", err)
+	}
+	if a.created[0].Name == b.created[0].Name {
+		t.Fatalf("both runs named the session %q; session create refuses a name already taken", a.created[0].Name)
 	}
 }
 

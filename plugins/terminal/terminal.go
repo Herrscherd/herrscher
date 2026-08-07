@@ -86,10 +86,9 @@ func ensureDefaultSession(ctx context.Context, c contracts.SessionControl) error
 	return err
 }
 
-// defaultSessionName mints the name of the TUI's own tab. It used to be the
-// fixed "main", which read as a place rather than a session and could not be
-// created twice; a short random slug says what it is — one session among
-// others — and stays a valid session name (filesystem path, git ref).
+// defaultSessionName mints the name of the TUI's own tab. It is random rather
+// than fixed because `session create` refuses a name already taken, and the
+// shape is a valid session name — it becomes a filesystem path and a git ref.
 func defaultSessionName() string {
 	return "s-" + strings.ToLower(rand.Text()[:4])
 }

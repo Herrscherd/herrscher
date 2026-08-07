@@ -25,7 +25,25 @@ func (m *model) renderTranscript(tb *tab, width int) string {
 		}
 		b.WriteString(renderEntry(e, width))
 	}
-	return b.String()
+	// Links are found on the finished, wrapped lines rather than on the entry
+	// text: what the operator selects is what is on screen, and a URL folded
+	// across a wrap is not one link but two halves of a line.
+	lines := strings.Split(b.String(), "\n")
+	m.links = findLinks(lines)
+	m.clampLink()
+	return strings.Join(applyLinks(lines, m.links, m.caps, m.linkIdx), "\n")
+}
+
+// clampLink keeps the selection inside the current link set. A turn that arrived
+// and re-flowed the transcript must not leave the gesture aimed at a link that
+// is no longer there; -1 means nothing is selected, which is the resting state.
+func (m *model) clampLink() {
+	if m.linkIdx >= len(m.links) {
+		m.linkIdx = len(m.links) - 1
+	}
+	if m.linkIdx < -1 {
+		m.linkIdx = -1
+	}
 }
 
 // renderEntry dispatches one entry to the renderer for its role. Each role owns

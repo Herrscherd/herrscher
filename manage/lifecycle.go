@@ -16,6 +16,7 @@ func UpdateCmd(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	hostDir := fs.String("host", "", "path to the host module")
 	noBuild := fs.Bool("no-build", false, "go get -u the plugins but skip tidy/build")
+	yes := fs.Bool("yes", false, "answer both confirmations without asking")
 	if err := fs.Parse(args); err != nil {
 		return parseExit(err)
 	}
@@ -40,30 +41,42 @@ func UpdateCmd(ctx context.Context, args []string) int {
 		return 0
 	}
 
-	for _, m := range mods {
-		if code := run(ctx, dir, "go", "get", "-u", m); code != 0 {
-			return code
-		}
+	pins, err := loadPins(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
 	}
+	installed, err := installedVersions(ctx, goToolchain{dir: dir}, mods)
+	if err != nil {
+		installed = nil
+	}
+	cmds, skipped := updatePlan(mods, pins, installed)
+	for _, line := range skipped {
+		fmt.Println(line)
+	}
+	if cmds == nil {
+		fmt.Println("every plugin is pinned; nothing to update")
+		return 0
+	}
+
 	if *noBuild {
+		for _, c := range cmds {
+			if c[1] != "get" {
+				continue
+			}
+			if code := run(ctx, dir, c[0], c[1:]...); code != 0 {
+				return code
+			}
+		}
 		fmt.Println("updated plugins (--no-build); run `go mod tidy && go build` in the host to apply")
 		return 0
 	}
-	if code := run(ctx, dir, "go", "mod", "tidy"); code != 0 {
-		return code
-	}
-	// Build every package first: it is the compile check that says the bumped
-	// plugins still fit together, and it fails before anything replaces the
-	// binary the machine is running.
-	if code := run(ctx, dir, "go", "build", "./..."); code != 0 {
-		return code
-	}
-	// Then install. `go build ./...` compiles the host and throws the result
-	// away, which is why an update used to report success and change nothing
-	// about the binary on PATH. Installing the module root is what actually
-	// replaces it.
-	if code := run(ctx, dir, "go", "install", "."); code != 0 {
-		return code
+	// The plan ends in `go build ./...` then `go install .`: the build is the
+	// compile check that says the bumped plugins still fit together, and it runs
+	// before anything replaces the binary the machine is running.
+	if err := apply(ctx, dir, nil, decider(*yes), cmdSteps(dir, cmds)); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
 	}
 	fmt.Println("updated plugins and reinstalled the host; restart the service to run it")
 	return 0

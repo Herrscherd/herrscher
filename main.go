@@ -115,6 +115,21 @@ func main() {
 	cmd := os.Args[1]
 	args := os.Args[2:]
 
+	// A free-text argv is a task, not a mistyped verb: open a session on it and
+	// print the reply. Checked here, ahead of every switch below, because the two
+	// surfaces cannot collide — no verb in the registry contains whitespace.
+	if prompt, ok := promptOf(cmd, args); ok {
+		if prompt == "" {
+			fmt.Fprintln(os.Stderr, "herrscher: -p needs a task, e.g. herrscher -p refactor")
+			os.Exit(2)
+		}
+		if err := runPrompt(ctx, prompt); err != nil {
+			fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Management verbs need no Discord client; dispatch them first. They shell out
 	// to go get/tidy/build, so give them a context cancelled on Ctrl-C / SIGTERM to
 	// stop those children cleanly. The runtime verbs keep their own lifecycle

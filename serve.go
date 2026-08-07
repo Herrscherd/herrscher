@@ -232,6 +232,25 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 	return nil
 }
 
+// forwardUnknownVerb relays an argv this binary has no case for to the running
+// daemon. The agent does not speak to the daemon over the socket — it shells out
+// to this binary — while the verbs gateway plugins contribute exist only in the
+// daemon's registry, built from live gateway instances. Forwarding is what joins
+// the two; this process stays ignorant of what it relayed.
+//
+// It resolves the instance the same way runRegistryVerb does, so both find the
+// same daemon. A config.json that will not load is not fatal here: it only costs
+// the fallback id, and the dial then misses like any other absent daemon.
+func forwardUnknownVerb(ctx context.Context, argv []string) (string, bool, error) {
+	instance := envx.Get("INSTANCE_ID")
+	if instance == "" {
+		if cfg, err := config.Load(config.DefaultPath()); err == nil {
+			instance = cfg.Instance
+		}
+	}
+	return host.ForwardToDaemon(ctx, host.DefaultStatePath(), instance, argv)
+}
+
 // buildGateway returns the first registered gateway's GatewaySet, built through
 // the multi-gateway hub. Behavior is unchanged from the pre-hub version (first
 // gateway wins); the hub additionally tolerates other gateways whose config is

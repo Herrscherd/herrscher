@@ -16,22 +16,27 @@ import (
 // protocol is the one whose payload round-trips to a decodable image.
 var kittyCaps = Capabilities{Graphics: GraphicsKitty}
 
-// pngFile writes a w×h PNG and returns its path. Real bytes rather than a
-// plausible-looking blob: the preview path decodes what it is given, so a fixture
-// that does not decode would test the skip and call it a preview.
-func pngFile(t *testing.T, dir, name string, w, h int) string {
-	t.Helper()
+// noiseImage is a w×h image of noise, from a fixed seed. Noise and not a
+// gradient: PNG compresses a smooth image to a few hundred bytes whatever its
+// dimensions, and the bounds under test are on bytes.
+func noiseImage(w, h int) image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	// Noise, not a gradient: PNG would compress a smooth image to a few hundred
-	// bytes whatever its dimensions, and the size bound under test is on bytes.
 	rnd := rand.New(rand.NewSource(1))
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			img.Set(x, y, color.RGBA{R: uint8(rnd.Intn(256)), G: uint8(rnd.Intn(256)), B: uint8(rnd.Intn(256)), A: 0xff})
 		}
 	}
+	return img
+}
+
+// pngFile writes a w×h PNG and returns its path. Real bytes rather than a
+// plausible-looking blob: the preview path decodes what it is given, so a fixture
+// that does not decode would test the skip and call it a preview.
+func pngFile(t *testing.T, dir, name string, w, h int) string {
+	t.Helper()
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
+	if err := png.Encode(&buf, noiseImage(w, h)); err != nil {
 		t.Fatal(err)
 	}
 	p := filepath.Join(dir, name)

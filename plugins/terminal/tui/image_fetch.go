@@ -118,7 +118,14 @@ func (m *model) fetchEntryImages(tb *tab, idx int) tea.Cmd {
 			if err != nil {
 				return nil
 			}
-			return imageReadyMsg{channel: channel, entry: idx, escape: imageEscape(img, caps)}
+			// Through the same bound a staged attachment gets: this escape lands on
+			// a transcript line the viewport re-measures on every repaint, and the
+			// bytes behind it came from the network rather than from the operator.
+			esc := boundedEscape(img, caps)
+			if esc == "" {
+				return nil
+			}
+			return imageReadyMsg{channel: channel, entry: idx, escape: esc}
 		})
 	}
 	return tea.Batch(cmds...)

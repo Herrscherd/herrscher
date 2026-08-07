@@ -180,6 +180,6 @@ func TestCodeBlocksAreFoundWithTheirLanguage(t *testing.T) {
 // fakeWriteClipboard records what was copied and holds no image.
 type fakeWriteClipboard struct{ wrote string }
 
-func (f *fakeWriteClipboard) ImageType() (string, bool)      { return "", false }
+func (f *fakeWriteClipboard) ImageType() (string, bool)        { return "", false }
 func (f *fakeWriteClipboard) ReadImage(string) ([]byte, error) { return nil, nil }
-func (f *fakeWriteClipboard) WriteText(s string) error       { f.wrote = s; return nil }
+func (f *fakeWriteClipboard) WriteText(s string) error         { f.wrote = s; return nil }

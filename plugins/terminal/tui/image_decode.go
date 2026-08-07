@@ -26,6 +26,13 @@ import (
 // maxPreviewBytes, which now applies after downscaling.
 const maxDecodeBytes = 8 << 20
 
+// maxDecodePixels bounds the *canvas* the decoder is allowed to allocate, which
+// maxDecodeBytes cannot: compression means the source size and the pixel count
+// are unrelated, and the smallest file that reaches this package can declare the
+// largest image. 64 megapixels is well past any screenshot and about 256 MiB of
+// RGBA — the point at which drawing a ten-row thumbnail stops being worth it.
+const maxDecodePixels = 64 << 20
+
 // cellPixels is the assumed height of a terminal cell in pixels. The terminal
 // knows the real number and will not say without a round trip on stdin (see
 // capabilities.go), so this is a working figure: being wrong makes the preview
@@ -41,6 +48,17 @@ func decodeImage(data []byte) (image.Image, error) {
 	}
 	if len(data) > maxDecodeBytes {
 		return nil, fmt.Errorf("image is %d bytes, past the %d-byte decode bound", len(data), maxDecodeBytes)
+	}
+	// The header is read first because the byte count says nothing about the
+	// canvas: every format here compresses, so a few kilobytes can declare a
+	// hundred-megapixel image and the decoder would allocate all of it before
+	// returning. The bound is on what gets allocated, not on what arrived.
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("read image header: %w", err)
+	}
+	if px := int64(cfg.Width) * int64(cfg.Height); px > maxDecodePixels {
+		return nil, fmt.Errorf("image is %dx%d, past the %d-pixel decode bound", cfg.Width, cfg.Height, maxDecodePixels)
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {

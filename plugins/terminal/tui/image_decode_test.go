@@ -2,12 +2,15 @@ package tui
 
 import (
 	"bytes"
+	"encoding/binary"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"math/rand"
+	"strings"
 	"testing"
 )
 
@@ -69,12 +72,51 @@ func TestDecodeImageRefusesCorruptBytes(t *testing.T) {
 	}
 }
 
-// maxDecodeBytes bounds the work, not the result: it is refused before decoding
-// so a hostile file cannot make the TUI allocate a gigapixel canvas.
+// maxDecodeBytes bounds the bytes that arrived, and is checked before any of
+// them are parsed.
 func TestDecodeImageRefusesAnOversizedSource(t *testing.T) {
 	if _, err := decodeImage(bytes.Repeat([]byte("x"), maxDecodeBytes+1)); err == nil {
 		t.Fatal("a source past maxDecodeBytes must be refused")
 	}
+}
+
+// The byte bound is not the pixel bound: every format here compresses, so the
+// smallest file that reaches this package can declare the largest canvas. A
+// header claiming a gigapixel image must be refused from the header, before the
+// decoder allocates for it.
+func TestDecodeImageRefusesAGigapixelHeader(t *testing.T) {
+	data := pngHeaderOnly(40000, 40000)
+	if int64(40000)*40000 <= maxDecodePixels {
+		t.Fatal("the fixture must be past maxDecodePixels")
+	}
+	if len(data) > 1024 {
+		t.Fatalf("the fixture must be tiny to make the point: %d bytes", len(data))
+	}
+	_, err := decodeImage(data)
+	if err == nil {
+		t.Fatal("a header past maxDecodePixels must be refused")
+	}
+	if !strings.Contains(err.Error(), "pixel") {
+		t.Fatalf("the refusal must name the pixel bound: %v", err)
+	}
+}
+
+// pngHeaderOnly is a PNG signature plus one IHDR chunk, which is all
+// image.DecodeConfig reads. There is deliberately no image data behind it: the
+// point is that the dimensions alone are enough to refuse.
+func pngHeaderOnly(w, h uint32) []byte {
+	var ihdr bytes.Buffer
+	ihdr.WriteString("IHDR")
+	binary.Write(&ihdr, binary.BigEndian, w)
+	binary.Write(&ihdr, binary.BigEndian, h)
+	ihdr.Write([]byte{8, 6, 0, 0, 0}) // 8-bit RGBA, no interlace
+
+	var out bytes.Buffer
+	out.Write([]byte("\x89PNG\r\n\x1a\n"))
+	binary.Write(&out, binary.BigEndian, uint32(ihdr.Len()-4)) // length excludes the type
+	out.Write(ihdr.Bytes())
+	binary.Write(&out, binary.BigEndian, crc32.ChecksumIEEE(ihdr.Bytes()))
+	return out.Bytes()
 }
 
 // The cap that used to sit on the source file rejected a photo that downscales

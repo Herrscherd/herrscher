@@ -357,17 +357,18 @@ func pluginRows(mods []string, installed map[string]string, pins map[string]bool
 	return rows
 }
 
-// listWithVersions prints one row per compiled-in module. Version lookups need
-// the network; when it is missing the columns read `?` and the listing still
-// prints, because knowing what is compiled in does not depend on being online.
-func listWithVersions(ctx context.Context, dir, src string, out io.Writer) error {
+// pluginVersions gathers the three facts about every compiled-in module. Version
+// lookups need the network; when it is missing the columns read `?` and the
+// listing still comes back, because knowing what is compiled in does not depend
+// on being online.
+func pluginVersions(ctx context.Context, dir, src string) ([]PluginVersion, error) {
 	mods, err := listPlugins(src)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	pins, err := loadPins(dir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	tc := goToolchain{dir: dir}
 	installed, err := installedVersions(ctx, tc, mods)
@@ -380,7 +381,16 @@ func listWithVersions(ctx context.Context, dir, src string, out io.Writer) error
 			available[m] = vs
 		}
 	}
-	for _, row := range pluginRows(mods, installed, pins, available) {
+	return pluginRows(mods, installed, pins, available), nil
+}
+
+// listWithVersions prints one row per compiled-in module.
+func listWithVersions(ctx context.Context, dir, src string, out io.Writer) error {
+	rows, err := pluginVersions(ctx, dir, src)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
 		pin := ""
 		if row.Pinned {
 			pin = "  pinned"

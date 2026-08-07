@@ -148,7 +148,7 @@ Seven, over ports that mostly already exist.
 | `discord message edit --id --msg --text` | `MessageEditor.Edit` | **new port** |
 
 `Delete` and `Edit` have no home in the contract today — there is no `Delete`,
-`Edit`, `Pin` or `Typing` anywhere in `herrscher-contracts@v0.1.10`. They go in
+`Edit`, `Pin` or `Typing` anywhere in `herrscher-contracts (as pinned, v0.2.15)`. They go in
 a new optional port rather than onto `Gateway`:
 
 ```go
@@ -263,8 +263,8 @@ because the registry sits upstream of both fronts.
 
 Three repositories, in dependency order:
 
-1. `herrscher-contracts` — the ports; release `v0.1.11`.
+1. `herrscher-contracts` — the ports; release `v0.2.16`.
 2. `herrscher` — the host wiring, prefixing, hard collision failure; bump to
-   `v0.1.11`.
+   `v0.2.16`.
 3. `herrscher-discord-gateway` — `MessageEditor`, the seven commands, the embedded
    skill; bump; then bump the gateway dependency in `herrscher` and release.

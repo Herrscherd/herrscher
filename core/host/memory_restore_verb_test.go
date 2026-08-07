@@ -90,7 +90,7 @@ func TestMemoryRestoreVerbReactivatesArchivedNode(t *testing.T) {
 			contracts.MetaLastSeen: "2020-01-01T00:00:00Z",
 		}},
 	}})
-	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestMemoryRestoreVerbForceDetachesMergedOriginal(t *testing.T) {
 			contracts.MetaLastSeen:      "2020-01-01T00:00:00Z",
 		}},
 	}})
-	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestMemoryRestoreVerbBareForceDetaches(t *testing.T) {
 			contracts.MetaLastSeen:      "2020-01-01T00:00:00Z",
 		}},
 	}})
-	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestMemoryRestoreVerbBareForceDetaches(t *testing.T) {
 
 func TestMemoryUnlinkVerbDispatchesToMemory(t *testing.T) {
 	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{}})
-	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestMemoryUnlinkVerbDispatchesToMemory(t *testing.T) {
 
 func TestMemoryRestoreVerbUnknownKeyErrors(t *testing.T) {
 	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{}})
-	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}

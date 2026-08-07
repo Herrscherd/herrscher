@@ -181,3 +181,52 @@ func TestToggleTurnFoldIsReversible(t *testing.T) {
 		t.Fatalf("unfolding must restore the transcript exactly")
 	}
 }
+
+// markLine cuts the original line at offsets found in a lowercased copy. If those
+// offsets drift by even one the transcript is corrupted rather than highlighted,
+// so what is asserted is that the text comes back exactly as it went in once the
+// marks are removed — and that every match got one.
+func TestHighlightKeepsTheLineIntactAroundEveryMark(t *testing.T) {
+	const line = "Error in Foo and ERROR in bar again"
+	got := markLine(line, "error")
+	if n := strings.Count(got, ansiReverse); n != 2 {
+		t.Fatalf("both matches must be marked, got %d: %q", n, got)
+	}
+	bare := strings.NewReplacer(ansiReverse, "", ansiReverseOff, "").Replace(got)
+	if bare != line {
+		t.Fatalf("the line must survive marking unchanged:\n got %q\nwant %q", bare, line)
+	}
+	// The case of the text is the text's, not the query's.
+	if !strings.Contains(got, ansiReverse+"Error"+ansiReverseOff) ||
+		!strings.Contains(got, ansiReverse+"ERROR"+ansiReverseOff) {
+		t.Fatalf("a match must keep its own case: %q", got)
+	}
+}
+
+// Folding is a whole-transcript rewrite the cache key cannot see: entry count,
+// widths and stream state are all unchanged by a keypress. A cache left valid
+// would paint the pre-fold frame and the key would look dead.
+func TestFoldKeysRepaintRatherThanServingTheCachedFrame(t *testing.T) {
+	long := "```go\n" + strings.Repeat("x := 1\n", foldThreshold+5) + "```"
+	for _, c := range []struct {
+		name string
+		key  tea.KeyType
+	}{
+		{"code fold", tea.KeyCtrlF},
+		{"link selection", tea.KeyCtrlL},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			m := newTestModel()
+			tb := m.ensureTab("a")
+			m.active = "a"
+			tb.appendEntry(entry{role: roleAgent, text: "see https://example.com/a\n\n" + long})
+			m.applySize()
+			before := m.baseContent()
+
+			m.Update(tea.KeyMsg{Type: c.key})
+			if after := m.baseContent(); after == before {
+				t.Fatalf("%s must change the painted frame, not serve the cached one", c.name)
+			}
+		})
+	}
+}

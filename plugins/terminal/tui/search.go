@@ -187,11 +187,14 @@ func (m *model) jumpTurn(delta int) {
 // plus a count. It returns new lines and never touches the ones it was given, so
 // unfolding is not a reconstruction — it is simply not calling this.
 func foldTurns(lines []string, keep int) []string {
+	if keep < 1 {
+		keep = 1 // a fold that collapses the current exchange too has nothing to read
+	}
 	bounds := turnBoundaries(lines)
 	if len(bounds) <= keep {
 		return lines
 	}
-	cut := bounds[len(bounds)-keep] // everything before this stays expanded
+	cut := bounds[len(bounds)-keep] // the last keep turns, from here down, stay expanded
 	var out []string
 	for i := 0; i < len(bounds); i++ {
 		start := bounds[i]

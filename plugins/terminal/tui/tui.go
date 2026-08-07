@@ -272,6 +272,12 @@ type model struct {
 	links   []Link
 	linkIdx int
 
+	// sys and edit open a selected link. They are fields so a test can count the
+	// calls: the assertion that nothing opens on its own is only worth as much as
+	// the seam that lets it be checked.
+	sys  launcher
+	edit launcher
+
 	// tsCache memoizes the active tab's wrapped transcript so the animation tick
 	// (which repaints every fastTick while a turn is busy) does not re-wrap the
 	// whole history on each frame — only a real content or width change does.
@@ -400,7 +406,8 @@ func newModel(tm Backend) *model {
 	// above it gone. A box that is already tall enough never scrolls.
 	in.SetHeight(maxComposerLines)
 	in.Focus()
-	m := &model{tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1}
+	m := &model{tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
+		sys: systemLauncher(), edit: editorLauncher(os.Getenv)}
 	// The palette is the frontend's own verbs followed by the daemon's. The
 	// backend used to replace the list outright, which meant connecting to a
 	// daemon cost the operator /help, /clear and every other local overlay.
@@ -1024,6 +1031,11 @@ func (m *model) statusRow(left string) string {
 // footer renders the status line for the active tab: the spinner hint while a
 // turn is in flight, otherwise the session's status bar.
 func (m *model) footer() string {
+	// A selected link takes the row: it is the operator's current gesture, it is
+	// transient, and its target is the one thing they need to read before acting.
+	if s := m.linkStatus(); s != "" {
+		return s
+	}
 	tb := m.tabs[m.active]
 	if tb == nil {
 		return ""
@@ -1347,6 +1359,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, tea.Batch(m.handleEnter(), m.ensureSpin())
+		case tea.KeyCtrlL:
+			// Walk the transcript's links. Selecting one commits to nothing: it only
+			// puts the target in the status line, where it can be read before the
+			// gesture that follows it.
+			m.selectNextLink()
+			return m, nil
+		case tea.KeyCtrlO:
+			// The gesture. This is the only caller of a launcher in the program.
+			m.openSelectedLink()
+			return m, nil
 		case tea.KeyCtrlV:
 			// A clipboard image is staged as an attachment; anything else falls
 			// through to the composer so Ctrl+V still pastes text.
@@ -1456,7 +1478,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · esc interrupt · ctrl+v paste image · / commands · @ files")
+	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · / commands · @ files")
 }
 
 func (m *model) View() string {

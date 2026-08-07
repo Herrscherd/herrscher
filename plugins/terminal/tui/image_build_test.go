@@ -8,6 +8,10 @@ import (
 	"testing"
 )
 
+// kittyCaps is the terminal these preview tests are written against: the kitty
+// protocol is the one whose payload round-trips to the exact bytes staged.
+var kittyCaps = Capabilities{Graphics: GraphicsKitty}
+
 func TestPreviewEscapesOnlyReadablePNGs(t *testing.T) {
 	dir := t.TempDir()
 	png := filepath.Join(dir, "shot.png")
@@ -26,7 +30,7 @@ func TestPreviewEscapesOnlyReadablePNGs(t *testing.T) {
 		{Name: "gone.png", Path: filepath.Join(dir, "gone.png"), Mime: "image/png"}, // missing → skipped
 	}
 
-	out := previewEscapes(atts)
+	out := previewEscapes(atts, kittyCaps)
 	if out == "" {
 		t.Fatal("a readable PNG must produce a preview escape")
 	}
@@ -40,7 +44,7 @@ func TestPreviewEscapesOnlyReadablePNGs(t *testing.T) {
 }
 
 func TestPreviewEscapesEmptyWhenNoImages(t *testing.T) {
-	if out := previewEscapes([]Attachment{{Name: "a.txt", Mime: "text/plain"}}); out != "" {
+	if out := previewEscapes([]Attachment{{Name: "a.txt", Mime: "text/plain"}}, kittyCaps); out != "" {
 		t.Fatalf("no images must yield no escape, got %q", out)
 	}
 }
@@ -56,7 +60,7 @@ func TestPreviewEscapesSkipsLargeImages(t *testing.T) {
 		t.Fatal(err)
 	}
 	atts := []Attachment{{Name: "big.png", Path: big, Mime: "image/png", Size: maxPreviewBytes + 1}}
-	if out := previewEscapes(atts); out != "" {
+	if out := previewEscapes(atts, kittyCaps); out != "" {
 		t.Fatalf("an oversized image must not be previewed inline, got %d bytes of escape", len(out))
 	}
 }

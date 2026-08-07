@@ -2,57 +2,56 @@ package tui
 
 import (
 	"encoding/base64"
-	"errors"
 	"os"
 	"strconv"
 	"strings"
 )
 
-// previewEscapes builds the concatenated kitty graphics escapes for the image
+// previewEscapes builds the concatenated inline-image escapes for the image
 // attachments in atts, each capped at previewRows tall and stacked on their own
-// lines. Unreadable, undecodable or oversized files are silently skipped — a
-// preview is a nicety, never a reason to lose the chip or the turn. Callers gate
-// this on the probe's graphics capability; the escapes are inert elsewhere.
-func previewEscapes(atts []Attachment) string {
+// lines, in whatever encoding caps says this terminal can draw. Unreadable,
+// undecodable or oversized files are silently skipped — a preview is a nicety,
+// never a reason to lose the chip or the turn.
+func previewEscapes(atts []Attachment, caps Capabilities) string {
 	var previews []string
 	for _, a := range atts {
-		data, err := previewPayload(a)
-		// The cap is on the *encoded* payload now: what the viewport re-scans on
-		// every repaint is the escape, not the file it came from.
-		if err != nil || len(data) == 0 || len(data) > maxPreviewBytes {
-			continue
+		if esc := previewEscape(a, caps); esc != "" {
+			previews = append(previews, esc)
 		}
-		previews = append(previews, kittyPreview(data, previewRows))
 	}
 	return strings.Join(previews, "\n")
 }
 
-// previewPayload reads an image attachment and returns the PNG bytes kitty
-// transmits (f=100), downscaled to previewRows. Every format the decoder knows
-// arrives as PNG, so JPEG, GIF and WebP are previewed too rather than dropped.
+// previewEscape renders one attachment, or "" for anything that is not a
+// drawable image. Every format the decoder knows arrives here, so JPEG, GIF and
+// WebP are previewed too rather than dropped for not being PNG.
 //
-// Bytes that claim to be PNG and will not decode are handed over untouched: the
-// terminal is the final judge of its own format, and a decoder disagreement is a
-// poor reason to withhold a preview the terminal might well have drawn.
-func previewPayload(a Attachment) ([]byte, error) {
+// Bytes that claim to be PNG and will not decode are handed to a kitty terminal
+// untouched: the terminal is the final judge of its own format, and a decoder
+// disagreement is a poor reason to withhold a preview it might well have drawn.
+func previewEscape(a Attachment, caps Capabilities) string {
 	if !strings.HasPrefix(a.Mime, "image/") {
-		return nil, errNotAnImage
+		return ""
 	}
 	data, err := os.ReadFile(a.Path)
-	if err != nil {
-		return nil, err
+	if err != nil || len(data) == 0 {
+		return ""
 	}
 	img, err := decodeImage(data)
 	if err != nil {
-		if a.Mime == "image/png" {
-			return data, nil
+		if caps.Graphics == GraphicsKitty && a.Mime == "image/png" && len(data) <= maxPreviewBytes {
+			return kittyPreview(data, previewRows)
 		}
-		return nil, err
+		return ""
 	}
-	return encodePNG(downscale(img, previewRows))
+	// The cap is on the escape now, not on the source file: what the viewport
+	// re-scans on every repaint is the escape, and a photo that shrinks to a few
+	// kilobytes used to be rejected for the size it arrived at.
+	if esc := imageEscape(img, caps); len(esc) <= maxPreviewBytes {
+		return esc
+	}
+	return ""
 }
-
-var errNotAnImage = errors.New("attachment is not an image")
 
 // previewRows caps the inline image preview height so a tall image cannot push
 // the transcript off-screen (spec: bounded preview height).

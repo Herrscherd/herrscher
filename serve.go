@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/host"
@@ -217,24 +219,24 @@ func runModels(ctx context.Context, args []string) error {
 	return runRegistryVerb(ctx, "models", args)
 }
 
-// runRegistryVerb builds the operator registry (the same one the daemon serves)
-// and dispatches a single top-level verb through it, printing any output. Both
-// session and agent verbs share this so the binary and the gateways drive an
-// identical command surface.
-func runRegistryVerb(ctx context.Context, verb string, args []string) error {
+// newOperatorRegistry builds the operator CLI registry — the same command
+// surface the daemon serves, over this short-lived process's own state. Split
+// out of runRegistryVerb because a prompt dispatches two verbs and must not
+// build the gateway stack twice: each build opens the configured gateways.
+func newOperatorRegistry(ctx context.Context) (*cli.Registry, error) {
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	gws, err := buildGateways(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var home *host.HomeRef
 	if cfg.Home != nil && cfg.Home.ID != "" {
 		home = &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
 	}
-	reg, err := host.NewRegistry(ctx, gws, host.Options{
+	return host.NewRegistry(ctx, gws, host.Options{
 		StatePath:  host.DefaultStatePath(),
 		DefaultCmd: or(cfg.Cmd, "claude"),
 		InstanceID: or(envx.Get("INSTANCE_ID"), cfg.Instance),
@@ -243,6 +245,14 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 		Workspace:  cfg.Workspace,
 		Source:     cfg.Source,
 	})
+}
+
+// runRegistryVerb builds the operator registry (the same one the daemon serves)
+// and dispatches a single top-level verb through it, printing any output. Both
+// session and agent verbs share this so the binary and the gateways drive an
+// identical command surface.
+func runRegistryVerb(ctx context.Context, verb string, args []string) error {
+	reg, err := newOperatorRegistry(ctx)
 	if err != nil {
 		return err
 	}
@@ -252,6 +262,56 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 	}
 	if out != "" {
 		fmt.Println(out)
+	}
+	return nil
+}
+
+// promptTimeout caps the turn a bare prompt runs. A coordination seed is a short
+// question and keeps the 120s default; a task typed by hand at a terminal is not
+// one, and the operator is sitting there to interrupt it.
+const promptTimeout = 30 * time.Minute
+
+// verbDispatcher is what runPromptWith needs of the registry, and nothing more —
+// so the sequencing can be tested without a gateway, a daemon or a backend.
+type verbDispatcher interface {
+	Dispatch(context.Context, []string) (string, error)
+}
+
+// runPrompt opens a session on a free-text task, runs one turn there, and prints
+// the reply.
+func runPrompt(ctx context.Context, prompt string) error {
+	reg, err := newOperatorRegistry(ctx)
+	if err != nil {
+		return err
+	}
+	return runPromptWith(ctx, reg, sessionNameFor(prompt), prompt, os.Stdout, os.Stderr)
+}
+
+// runPromptWith is the sequencing itself: create, then seed.
+//
+// The session name goes to stderr and the reply to stdout, so `herrscher "…" >
+// out.md` holds the answer and nothing else.
+//
+// A failed seed deliberately leaves the session standing. It owns a worktree and
+// the beginning of a transcript, and removing that is removing what the operator
+// needs to see why the turn failed; the error names the session so they can
+// resume or close it themselves.
+func runPromptWith(ctx context.Context, d verbDispatcher, name, prompt string, stdout, stderr io.Writer) error {
+	if _, err := d.Dispatch(ctx, []string{
+		"session", "create", "--name", name, "--terminal_only",
+	}); err != nil {
+		return err
+	}
+	fmt.Fprintln(stderr, "session: "+name)
+	reply, err := d.Dispatch(ctx, []string{
+		"session", "seed", "--name", name, "--task", prompt,
+		"--timeout", promptTimeout.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("session %s: %w", name, err)
+	}
+	if reply != "" {
+		fmt.Fprintln(stdout, reply)
 	}
 	return nil
 }

@@ -8,27 +8,31 @@ import (
 
 func TestPromptOf(t *testing.T) {
 	cases := []struct {
-		name   string
-		cmd    string
-		args   []string
-		want   string
-		wantOK bool
+		name      string
+		cmd       string
+		args      []string
+		want      string
+		wantPrint bool
+		wantOK    bool
 	}{
-		{"espace dans l'argument", "lis le thread X", nil, "lis le thread X", true},
-		{"argument à espace puis positionnels", "lis le thread", []string{"en", "entier"}, "lis le thread en entier", true},
-		{"tabulation compte comme espace", "lis\tle thread", nil, "lis\tle thread", true},
-		{"saut de ligne compte comme espace", "lis\nle thread", nil, "lis\nle thread", true},
-		{"-p force un mot seul", "-p", []string{"refactor"}, "refactor", true},
-		{"--prompt force un mot seul", "--prompt", []string{"refactor"}, "refactor", true},
-		{"-p joint ses arguments", "-p", []string{"lis", "le", "thread"}, "lis le thread", true},
-		{"-p nu est un prompt vide", "-p", nil, "", true},
-		{"-p blanc est un prompt vide", "-p", []string{"   "}, "", true},
-		{"verbe d'un mot", "sesion", nil, "", false},
-		{"verbe avec sous-commande", "session", []string{"list"}, "", false},
-		{"flag inconnu", "-x", nil, "", false},
-		{"flag long inconnu", "--config", []string{"x.json"}, "", false},
-		{"argument entièrement blanc", "   ", nil, "", false},
-		{"argument vide", "", nil, "", false},
+		{"espace dans l'argument", "lis le thread X", nil, "lis le thread X", false, true},
+		{"argument à espace puis positionnels", "lis le thread", []string{"en", "entier"}, "lis le thread en entier", false, true},
+		{"tabulation compte comme espace", "lis\tle thread", nil, "lis\tle thread", false, true},
+		{"saut de ligne compte comme espace", "lis\nle thread", nil, "lis\nle thread", false, true},
+		{"-p force un mot seul", "-p", []string{"refactor"}, "refactor", false, true},
+		{"--prompt force un mot seul", "--prompt", []string{"refactor"}, "refactor", false, true},
+		{"-p joint ses arguments", "-p", []string{"lis", "le", "thread"}, "lis le thread", false, true},
+		{"-p nu est un prompt vide", "-p", nil, "", false, true},
+		{"-p blanc est un prompt vide", "-p", []string{"   "}, "", false, true},
+		{"--print demande stdout", "--print", []string{"lis", "le", "thread"}, "lis le thread", true, true},
+		{"--print force un mot seul", "--print", []string{"refactor"}, "refactor", true, true},
+		{"--print nu est un prompt vide", "--print", nil, "", true, true},
+		{"verbe d'un mot", "sesion", nil, "", false, false},
+		{"verbe avec sous-commande", "session", []string{"list"}, "", false, false},
+		{"flag inconnu", "-x", nil, "", false, false},
+		{"flag long inconnu", "--config", []string{"x.json"}, "", false, false},
+		{"argument entièrement blanc", "   ", nil, "", false, false},
+		{"argument vide", "", nil, "", false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -36,8 +40,34 @@ func TestPromptOf(t *testing.T) {
 			if ok != tc.wantOK {
 				t.Fatalf("promptOf(%q, %v) ok = %v, want %v", tc.cmd, tc.args, ok, tc.wantOK)
 			}
-			if got != tc.want {
-				t.Fatalf("promptOf(%q, %v) = %q, want %q", tc.cmd, tc.args, got, tc.want)
+			if got.Text != tc.want {
+				t.Fatalf("promptOf(%q, %v) = %q, want %q", tc.cmd, tc.args, got.Text, tc.want)
+			}
+			if got.Print != tc.wantPrint {
+				t.Fatalf("promptOf(%q, %v) print = %v, want %v", tc.cmd, tc.args, got.Print, tc.wantPrint)
+			}
+		})
+	}
+}
+
+// The window is the default, but only where one can be drawn: --print asks for
+// stdout, and so does the absence of a terminal.
+func TestTaskPrintsTo(t *testing.T) {
+	cases := []struct {
+		name  string
+		task  task
+		isTTY bool
+		want  bool
+	}{
+		{"terminal, pas de --print → fenêtre", task{Text: "x"}, true, false},
+		{"terminal, --print → stdout", task{Text: "x", Print: true}, true, true},
+		{"pas de terminal → stdout malgré tout", task{Text: "x"}, false, true},
+		{"pas de terminal, --print → stdout", task{Text: "x", Print: true}, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.task.printsTo(tc.isTTY); got != tc.want {
+				t.Fatalf("printsTo(%v) = %v, want %v", tc.isTTY, got, tc.want)
 			}
 		})
 	}

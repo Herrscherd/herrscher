@@ -56,6 +56,20 @@ type Terminal struct {
 	bindOnce  sync.Once                // guards the close of ctrlReady
 
 	baseCtx context.Context // the foreground lifetime; scopes operator dispatches
+
+	// openSession / openText are what the window must open on when this process
+	// is the one starting the daemon. They also suppress the default tab: a run
+	// that already names the session it is for does not want a second, empty one.
+	openSession string
+	openText    string
+}
+
+// OpenOn tells the gateway which session its window opens on, and what to send
+// there first. The composition root calls it before the foreground starts; the
+// host reaches it through a structural interface, so no core package learns that
+// a terminal exists.
+func (t *Terminal) OpenOn(session, text string) {
+	t.openSession, t.openText = session, text
 }
 
 var (
@@ -121,8 +135,13 @@ func (t *Terminal) RunForeground(ctx context.Context, cancel context.CancelFunc)
 	t.ctrlMu.Lock()
 	t.baseCtx = ctx
 	t.ctrlMu.Unlock()
-	t.bootstrapDefaultSession(ctx)
-	return tui.Run(ctx, cancel, t)
+	// A run opened on a named session already has its tab; bootstrapping the
+	// default one would only add an empty second session to the list.
+	if t.openSession == "" {
+		t.bootstrapDefaultSession(ctx)
+		return tui.Run(ctx, cancel, t)
+	}
+	return tui.Run(ctx, cancel, t, tui.OpenOn(t.openSession, t.openText))
 }
 
 // New builds an unbound terminal gateway.

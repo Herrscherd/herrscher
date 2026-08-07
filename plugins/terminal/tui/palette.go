@@ -180,6 +180,7 @@ func localCommands() []CommandSpec {
 		{Name: "resume", Desc: "reopen an archived session"},
 		{Name: "usage", Desc: "cost, tokens and context for this session"},
 		{Name: "skills", Desc: "list available skills"},
+		{Name: "plugins", Desc: "the plugins this binary is made of"},
 		{Name: "attach", Args: "<path>", Desc: "stage a local file with the next message"},
 	}
 }

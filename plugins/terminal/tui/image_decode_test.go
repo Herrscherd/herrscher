@@ -162,3 +162,18 @@ func TestDownscaleLeavesASmallImageAlone(t *testing.T) {
 		t.Fatalf("a small image must be returned untouched")
 	}
 }
+
+// The row cap does not bound the width, and a very wide banner is already short
+// enough to keep every one of its pixels. Each encoder then pays for all of them
+// — sixel walks its palette across the full width once per band — for a picture
+// no terminal is wide enough to show.
+func TestDownscaleBoundsAWideImageToo(t *testing.T) {
+	wide := image.NewRGBA(image.Rect(0, 0, 20000, 40)) // short: the row cap does not fire
+	got := downscale(wide, previewRows).Bounds()
+	if got.Dx() > maxPreviewWidth {
+		t.Fatalf("a wide image must be bounded on width too, got %v", got)
+	}
+	if got.Dy() < 1 {
+		t.Fatalf("the aspect ratio must not collapse the image away: %v", got)
+	}
+}

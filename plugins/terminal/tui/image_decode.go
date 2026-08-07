@@ -67,24 +67,34 @@ func decodeImage(data []byte) (image.Image, error) {
 	return img, nil
 }
 
-// downscale shrinks img so it occupies at most maxRows terminal rows, preserving
-// the aspect ratio. An image already small enough is returned untouched:
-// resampling it would cost a pass and hand back a blurrier copy of the same
-// picture.
+// maxPreviewWidth bounds the scaled image's width in pixels, which the row cap
+// alone does not: a 20000×200 banner is already short enough to keep every pixel,
+// and each encoder then pays for all of them — sixel walks its palette across the
+// full width once per band. No terminal is this wide, so nothing on screen is
+// lost by refusing to be.
+const maxPreviewWidth = 2000
+
+// downscale shrinks img so it occupies at most maxRows terminal rows and stays
+// within maxPreviewWidth, preserving the aspect ratio. An image already small
+// enough on both axes is returned untouched: resampling it would cost a pass and
+// hand back a blurrier copy of the same picture.
 func downscale(img image.Image, maxRows int) image.Image {
 	if maxRows < 1 {
 		maxRows = 1
 	}
 	b := img.Bounds()
 	maxHeight := maxRows * cellPixels
-	if b.Dy() <= maxHeight {
+	if b.Dy() <= maxHeight && b.Dx() <= maxPreviewWidth {
 		return img
 	}
-	w := b.Dx() * maxHeight / b.Dy()
-	if w < 1 {
-		w = 1
+	h, w := b.Dy(), b.Dx()
+	if h > maxHeight {
+		h, w = maxHeight, max(1, b.Dx()*maxHeight/b.Dy())
 	}
-	out := image.NewRGBA(image.Rect(0, 0, w, maxHeight))
+	if w > maxPreviewWidth {
+		h, w = max(1, h*maxPreviewWidth/w), maxPreviewWidth
+	}
+	out := image.NewRGBA(image.Rect(0, 0, w, h))
 	// ApproxBiLinear over CatmullRom: at these sizes the difference is invisible
 	// and the cost is not — this runs on the Update goroutine, between keystrokes.
 	xdraw.ApproxBiLinear.Scale(out, out.Bounds(), img, b, xdraw.Src, nil)

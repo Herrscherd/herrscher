@@ -49,19 +49,52 @@ func strPtr(s string) *string { return &s }
 // fenced diff by hand on the way. A diff is the one block where colour carries
 // meaning rather than syntax: chroma would paint it as source code and lose the
 // only distinction that matters, which line was added and which was removed.
-func renderMarkdown(text string, width int) string {
+func renderMarkdown(text string, width int, caps Capabilities) string {
 	var b strings.Builder
 	for i, seg := range splitDiffs(text) {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
 		if seg.diff {
-			b.WriteString(renderDiff(seg.text, width))
+			b.WriteString(renderDiff(seg.text, width, caps))
 			continue
 		}
-		b.WriteString(renderGlamour(seg.text, width))
+		b.WriteString(renderProse(seg.text, width))
 	}
 	return b.String()
+}
+
+// renderProse renders one non-diff segment, pulling pipe tables out of it. The
+// markdown engine draws a table by wrapping its cells, which at terminal widths
+// turns a comparison into confetti; renderTable keeps the columns and gives up
+// the text that did not fit instead.
+func renderProse(text string, width int) string {
+	var b strings.Builder
+	var prose, table []string
+	flushProse := func() {
+		if len(prose) > 0 {
+			b.WriteString(renderGlamour(strings.Join(prose, "\n"), width))
+			prose = nil
+		}
+	}
+	flushTable := func() {
+		if len(table) > 0 {
+			b.WriteString(renderTable(parseTableRows(table), width) + "\n")
+			table = nil
+		}
+	}
+	for _, ln := range strings.Split(text, "\n") {
+		if isTableRow(ln) {
+			flushProse()
+			table = append(table, ln)
+			continue
+		}
+		flushTable()
+		prose = append(prose, ln)
+	}
+	flushTable()
+	flushProse()
+	return strings.Trim(b.String(), "\n")
 }
 
 // segment is a run of prose or the body of one fenced diff block.
@@ -102,27 +135,6 @@ func splitDiffs(text string) []segment {
 		return []segment{{text: text}}
 	}
 	return segs
-}
-
-// renderDiff colours a diff body by line class: additions green, removals red,
-// hunk headers dim, context plain. Lines are not wrapped — folding a diff line
-// would make the leading +/- of the fold ambiguous — they are clipped instead.
-func renderDiff(body string, width int) string {
-	lines := strings.Split(body, "\n")
-	out := make([]string, len(lines))
-	for i, ln := range lines {
-		style := textStyle
-		switch {
-		case strings.HasPrefix(ln, "@@"):
-			style = dimStyle
-		case strings.HasPrefix(ln, "+"):
-			style = greenStyle
-		case strings.HasPrefix(ln, "-"):
-			style = redStyle
-		}
-		out[i] = style.Render(truncate(ln, width))
-	}
-	return strings.Join(out, "\n")
 }
 
 // renderGlamour runs prose through the markdown engine. Anything the engine

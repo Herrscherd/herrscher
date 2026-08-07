@@ -98,6 +98,13 @@ type Options struct {
 	// names none. The caller derives it from the built gateways (the concrete
 	// platform kinds), so the manager package never names a gateway itself.
 	DefaultGateways []string
+
+	// ContributedCommands are the plugin verbs to graft onto the daemon's
+	// registry, already namespaced by CollectCommands. The caller collects them
+	// because only the composition root still holds the unwrapped gateways; by
+	// the time a set reaches here it has been decorated and no longer answers to
+	// CommandSource.
+	ContributedCommands []contracts.Cmd
 }
 
 // HomeRef is the seed home channel from config.json: a channel id and its kind
@@ -208,7 +215,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	if o.DefaultGateways == nil {
 		o.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID)
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID, o.ContributedCommands)
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}

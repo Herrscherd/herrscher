@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"reflect"
 	"testing"
 )
 
@@ -18,7 +20,8 @@ var expectedLocalVerbs = []string{
 	"-h", "--help", "help",
 }
 
-// mainSwitches returns every case value of every switch in main().
+// mainSwitches returns every case value of every switch in main(), and whether
+// main()'s default arm hands the argv to the daemon forwarder.
 func mainSwitches(t *testing.T) (cases []string, defaultForwards bool) {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -107,5 +110,69 @@ func TestForwardUnknownVerbWithoutDaemon(t *testing.T) {
 	}
 	if err != nil || out != "" {
 		t.Fatalf("forwardUnknownVerb = (%q, %v), want empty and no error", out, err)
+	}
+}
+
+// stubForward records the argv it was offered and replays a canned answer, so
+// the dispatch decision can be tested without a daemon or a re-exec.
+type stubForward struct {
+	argv    []string
+	out     string
+	handled bool
+	err     error
+}
+
+func (s *stubForward) fwd(_ context.Context, argv []string) (string, bool, error) {
+	s.argv = append([]string(nil), argv...)
+	return s.out, s.handled, s.err
+}
+
+func TestDispatchUnknownForwardsTheWholeArgv(t *testing.T) {
+	// The verb is part of what the daemon must read: it is the namespace the
+	// contributed command lives under, so relaying only the tail addresses the
+	// registry with a command nobody registered.
+	s := &stubForward{out: "two messages", handled: true}
+	args := []string{"channel", "read", "--limit", "5"}
+	out, err, exit := dispatchUnknown(context.Background(), "some-kind", args, s.fwd)
+
+	want := []string{"some-kind", "channel", "read", "--limit", "5"}
+	if !reflect.DeepEqual(s.argv, want) {
+		t.Fatalf("forwarded argv = %v, want %v", s.argv, want)
+	}
+	if out != "two messages" || err != nil || exit != 0 {
+		t.Fatalf("dispatchUnknown = (%q, %v, %d), want (\"two messages\", nil, 0)", out, err, exit)
+	}
+}
+
+func TestDispatchUnknownKeepsTheDaemonsFailure(t *testing.T) {
+	// Swallowing derr would exit 0 on a failed command: a silent success for any
+	// agent or script reading $?.
+	boom := errors.New(`plugin: channel "nope" not found`)
+	s := &stubForward{handled: true, err: boom}
+	out, err, exit := dispatchUnknown(context.Background(), "some-kind", []string{"channel", "read"}, s.fwd)
+	if !errors.Is(err, boom) {
+		t.Fatalf("error = %v, want the daemon's own %v", err, boom)
+	}
+	if out != "" {
+		t.Fatalf("output = %q, want empty when the daemon refused", out)
+	}
+	// exit 0 hands the failure back to main(), which turns any non-nil err into
+	// its usual exit 1 — the daemon does not get to pick the process's code.
+	if exit != 0 {
+		t.Fatalf("exit = %d, want 0 so main()'s own error path answers", exit)
+	}
+}
+
+func TestDispatchUnknownWithoutDaemonIsAnUnknownCommand(t *testing.T) {
+	s := &stubForward{handled: false}
+	out, err, exit := dispatchUnknown(context.Background(), "some-kind", []string{"channel"}, s.fwd)
+	if exit != 2 {
+		t.Fatalf("exit = %d, want 2: the unchanged unknown-command outcome", exit)
+	}
+	if err == nil || err.Error() != `unknown command "some-kind"` {
+		t.Fatalf("error = %v, want `unknown command \"some-kind\"`", err)
+	}
+	if out != "" {
+		t.Fatalf("output = %q, want empty", out)
 	}
 }

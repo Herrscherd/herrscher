@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"regexp"
+	"strings"
+	"testing"
+)
 
 func TestPromptOf(t *testing.T) {
 	cases := []struct {
@@ -36,5 +40,52 @@ func TestPromptOf(t *testing.T) {
 				t.Fatalf("promptOf(%q, %v) = %q, want %q", tc.cmd, tc.args, got, tc.want)
 			}
 		})
+	}
+}
+
+// sessionNameRe is a copy of the guard in core/internal/manager/validate.go:13.
+// The main package cannot import that internal package, so the invariant is
+// pinned here instead: whatever sessionNameFor produces must already pass it.
+var sessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+
+func TestSessionNameForIsAlwaysAValidSlug(t *testing.T) {
+	prompts := []string{
+		"Va lire le thread Guide de l'aventurier",
+		"REFACTOR the whole thing!!!",
+		"a",
+		"🔥🔥🔥",
+		"日本語だけ",
+		"   ",
+		"",
+		strings.Repeat("mot ", 60),
+		"--not-a-flag mais du texte",
+		"___",
+	}
+	for _, p := range prompts {
+		name := sessionNameFor(p)
+		if !sessionNameRe.MatchString(name) {
+			t.Fatalf("sessionNameFor(%q) = %q, which the session-name guard rejects", p, name)
+		}
+	}
+}
+
+func TestSessionNameForKeepsTheOpeningWords(t *testing.T) {
+	name := sessionNameFor("Va lire le thread Guide de l'aventurier et propose un plan")
+	if !strings.HasPrefix(name, "va-lire-le-thread-guide-") {
+		t.Fatalf("name = %q, want it to open on the first five words", name)
+	}
+}
+
+func TestSessionNameForFallsBackWhenNothingSurvives(t *testing.T) {
+	name := sessionNameFor("🔥🔥🔥")
+	if !strings.HasPrefix(name, "s-") {
+		t.Fatalf("name = %q, want the s- fallback when no character is usable", name)
+	}
+}
+
+func TestSessionNameForIsUniquePerCall(t *testing.T) {
+	p := "lis le thread"
+	if a, b := sessionNameFor(p), sessionNameFor(p); a == b {
+		t.Fatalf("two calls both gave %q; session create refuses a name already taken", a)
 	}
 }

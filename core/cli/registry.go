@@ -35,11 +35,11 @@ func (r *Registry) Add(c contracts.Cmd) error {
 }
 
 // Dispatch resolves args to the command whose Path is the longest prefix of
-// args, parses the remainder into an Input (--flag value pairs into Args; a
-// valueless optional boolean param becomes "true", while an optional
-// ValueRequired param still needs a following value; anything left over goes to
-// Rest), checks required params, and runs it. It returns the handler's output
-// string.
+// args, parses the remainder into an Input (--flag value pairs into Args, or
+// --flag=value where the value would itself read as a flag; a valueless optional
+// boolean param becomes "true", while an optional ValueRequired param still
+// needs a following value; anything left over goes to Rest), checks required
+// params, and runs it. It returns the handler's output string.
 func (r *Registry) Dispatch(ctx context.Context, args []string) (string, error) {
 	cmd, rest := r.match(args)
 	if cmd == nil {
@@ -128,6 +128,25 @@ func hasPrefix(args, path []string) bool {
 	return true
 }
 
+// FlagArg spells a flag and its value as the tokens a dispatch should carry.
+//
+// parse takes the token after a flag as that flag's value only when it does not
+// itself begin with "--", so a value that does needs the inline "--name=value"
+// form. Free text is where this happens: a task, a typed message, anything an
+// operator or an agent wrote rather than chose.
+//
+// The inline form is used only where it is needed, and that restraint is the
+// point. The two-token form is what every released daemon parses, and an
+// attached CLI dials a daemon it may predate; switching every argv to a shape an
+// older parser reads as one unknown flag would break every message to buy back
+// the one that was already broken.
+func FlagArg(name, value string) []string {
+	if strings.HasPrefix(value, "--") {
+		return []string{"--" + name + "=" + value}
+	}
+	return []string{"--" + name, value}
+}
+
 func isParam(c contracts.Cmd, name string) (contracts.Param, bool) {
 	for _, p := range c.Params {
 		if p.Name == name {
@@ -149,13 +168,27 @@ func parse(c contracts.Cmd, rest []string) (contracts.Input, error) {
 			in.Rest = append(in.Rest, tok)
 			continue
 		}
-		name := strings.TrimPrefix(tok, "--")
+		name, inline, isInline := strings.Cut(strings.TrimPrefix(tok, "--"), "=")
 		p, ok := isParam(c, name)
 		if !ok {
 			return in, fmt.Errorf("%s: unknown flag --%s", strings.Join(c.Path, " "), name)
 		}
+		// --name=value is the spelling for a value that would otherwise be read
+		// as a flag of its own: a task opening on "--no-tests", a message pasted
+		// from a diff. The separate-token form below cannot carry those, and it
+		// must not — see the next comment.
+		if isInline {
+			in.Args[name] = inline
+			continue
+		}
 		// A value follows unless the next token is itself a flag. Only an
 		// optional boolean param may be valueless.
+		//
+		// Refusing a "--"-leading token here is deliberate. Taking it would make
+		// `memory search --text --raw` a search for the literal "--raw" instead
+		// of the missing-value mistake it is, and a silent misreading is worse
+		// than an error naming the flag. FlagArg is how a caller that really
+		// means such a value says so.
 		if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
 			in.Args[name] = rest[i+1]
 			i++

@@ -11,6 +11,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
+	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -69,7 +70,8 @@ func runOneShotSeedCommand(ctx context.Context, st *state.State, name, task, tur
 	// daemon, which owns the live Coordinator. The resolved turn identity travels
 	// with the forward so both processes stamp the same turn.
 	if runtime.coordinator == nil && forward != nil {
-		argv := []string{"session", "seed", "--name", name, "--task", task, "--turn_id", turnID}
+		argv := append([]string{"session", "seed", "--name", name}, cli.FlagArg("task", task)...)
+		argv = append(argv, "--turn_id", turnID)
 		// Only a settled timeout travels. The daemon runs this turn, so a silent
 		// caller must leave the daemon's own default in force — sending a resolved
 		// value unconditionally would make this process's environment decide a cap

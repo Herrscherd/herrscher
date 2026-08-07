@@ -266,6 +266,12 @@ type model struct {
 	imageFetcher func(context.Context, string) ([]byte, error)
 	imageHosts   []string
 
+	// links are the references found in the last rendered transcript, and linkIdx
+	// is the one an open gesture would act on (-1 = none). Both are derived from
+	// the render, never from an event: see open.go.
+	links   []Link
+	linkIdx int
+
 	// tsCache memoizes the active tab's wrapped transcript so the animation tick
 	// (which repaints every fastTick while a turn is busy) does not re-wrap the
 	// whole history on each frame — only a real content or width change does.
@@ -394,7 +400,7 @@ func newModel(tm Backend) *model {
 	// above it gone. A box that is already tall enough never scrolls.
 	in.SetHeight(maxComposerLines)
 	in.Focus()
-	m := &model{tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), caps: Probe(os.Getenv)}
+	m := &model{tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1}
 	// The palette is the frontend's own verbs followed by the daemon's. The
 	// backend used to replace the list outright, which meant connecting to a
 	// daemon cost the operator /help, /clear and every other local overlay.

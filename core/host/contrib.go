@@ -7,7 +7,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// contributedCommands collects the verbs the loaded gateways contribute, each
+// CollectCommands collects the verbs the loaded gateways contribute, each
 // namespaced under the contributing plugin's own Kind:
 //
 //	<kindA> channel read
@@ -22,7 +22,16 @@ import (
 // A duplicate path within a single plugin is still possible, and it is refused
 // by name: a verb that quietly went missing would send the operator debugging
 // the command instead of the build.
-func contributedCommands(gws []contracts.GatewaySet) ([]contracts.Cmd, error) {
+//
+// Scope: only gateway sets are scanned. A plugin of any other category that
+// implements CommandSource contributes nothing, and does so silently — the
+// daemon owns gateways as live objects and has no equivalent handle on the
+// rest. Widening that is a deliberate change, not an oversight to fix in place.
+//
+// It must be called on gateways the composition root has not yet wrapped: a
+// decorator's method set is fixed and drops Commands, so a wrapped gateway
+// never satisfies CommandSource and every verb it offers is lost in silence.
+func CollectCommands(gws []contracts.GatewaySet) ([]contracts.Cmd, error) {
 	var out []contracts.Cmd
 	for _, g := range gws {
 		if g.Gateway == nil {

@@ -69,7 +69,7 @@ func (mute) Menu(context.Context, contracts.Conversation, contracts.MessageID, s
 // Without the prefix the second one would be rejected as a duplicate — the bug
 // this design was written to prevent.
 func TestSamePathFromTwoPluginsBothLand(t *testing.T) {
-	cmds, err := contributedCommands([]contracts.GatewaySet{
+	cmds, err := CollectCommands([]contracts.GatewaySet{
 		{Gateway: fakeContributor{kind: "alpha", paths: [][]string{{"channel", "read"}}}},
 		{Gateway: fakeContributor{kind: "beta", paths: [][]string{{"channel", "read"}}}},
 	})
@@ -89,7 +89,7 @@ func TestSamePathFromTwoPluginsBothLand(t *testing.T) {
 // and by name — a silently missing verb sends the operator debugging the wrong
 // thing.
 func TestSelfCollisionFailsByName(t *testing.T) {
-	_, err := contributedCommands([]contracts.GatewaySet{
+	_, err := CollectCommands([]contracts.GatewaySet{
 		{Gateway: fakeContributor{kind: "alpha", paths: [][]string{{"channel", "read"}, {"channel", "read"}}}},
 	})
 	if err == nil {
@@ -103,7 +103,7 @@ func TestSelfCollisionFailsByName(t *testing.T) {
 // A gateway that contributes nothing is left entirely alone: it does not
 // satisfy CommandSource, so it is never even asked. Most gateways are this one.
 func TestNonContributorIsLeftAlone(t *testing.T) {
-	cmds, err := contributedCommands([]contracts.GatewaySet{{Gateway: mute{}}})
+	cmds, err := CollectCommands([]contracts.GatewaySet{{Gateway: mute{}}})
 	if err != nil {
 		t.Fatalf("a plain gateway must be no trouble: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestNonContributorIsLeftAlone(t *testing.T) {
 // A nil Gateway in a set must not panic: GatewaySet fields are documented as
 // optional and the host degrades.
 func TestNilGatewayIsSkipped(t *testing.T) {
-	if _, err := contributedCommands([]contracts.GatewaySet{{}}); err != nil {
+	if _, err := CollectCommands([]contracts.GatewaySet{{}}); err != nil {
 		t.Fatalf("an empty set must be skipped, not fail: %v", err)
 	}
 }
@@ -123,7 +123,7 @@ func TestNilGatewayIsSkipped(t *testing.T) {
 // A contributed command must keep working after being renamed: the prefix is
 // added, nothing else is touched.
 func TestPrefixingPreservesTheHandler(t *testing.T) {
-	cmds, err := contributedCommands([]contracts.GatewaySet{
+	cmds, err := CollectCommands([]contracts.GatewaySet{
 		{Gateway: fakeContributor{kind: "alpha", paths: [][]string{{"channel", "read"}}}},
 	})
 	if err != nil || len(cmds) != 1 {
@@ -140,7 +140,7 @@ func TestPrefixingPreservesTheHandler(t *testing.T) {
 // surface both read.
 func TestContributedCommandDispatches(t *testing.T) {
 	reg := &cli.Registry{}
-	cmds, err := contributedCommands([]contracts.GatewaySet{
+	cmds, err := CollectCommands([]contracts.GatewaySet{
 		{Gateway: fakeContributor{kind: "alpha", paths: [][]string{{"channel", "read"}}}},
 	})
 	if err != nil {

@@ -30,16 +30,26 @@ cd herrscher
 go build -o herrscher .    # the only binary; plugins are compiled in
 ./herrscher init           # compose the plugin stack, seed config, choose routing
 ./herrscher                # serves, with the terminal TUI in the foreground
-./herrscher "read the thread and propose a split"   # one session, one turn, the reply on stdout
+./herrscher "read the thread and propose a split"   # a session on that task, in the TUI
+./herrscher --print "…"                             # one turn, the reply on stdout
 ```
 
 An argument that carries whitespace is a task, not a verb: it opens a session of
-its own (isolated worktree, terminal-only, named after the task's opening words),
-runs one turn there, and prints the reply on stdout with the session name on
-stderr — so `herrscher "…" > out.md` holds the answer alone. The session is
-persistent: `herrscher session list` shows it, `session seed --name` continues
-it, `session close` ends it. A single unrecognised word stays a verb, so a typo
-is still a typo; `-p` forces a one-word task.
+its own — isolated worktree, terminal-only, named after the task's opening words
+— sends the task there, and opens the TUI on that tab, so the turn runs in front
+of you and you can answer it. Whether the window attaches to the running daemon
+or starts one is the same question a bare `herrscher` asks (below); either way
+the session is persistent, and closing the window does not end it: `herrscher
+session list` shows it, `session seed --name` continues it, `session close` ends
+it.
+
+`--print` is the non-interactive form: one turn, the reply on stdout and the
+session name on stderr, so `herrscher --print "…" > out.md` holds the answer
+alone. A run with no terminal takes that form on its own, since there is nothing
+there to draw a window on.
+
+A single unrecognised word stays a verb, so a typo is still a typo; `-p` (or
+`--print`) forces a one-word task.
 
 One daemon per state file: a second one over the same state answers every message twice and bills it twice. So a bare `herrscher` on a TTY **serves when nothing else is**, and **attaches** when the service already is — the same TUI, driven over the sockets the running daemon exposes, so you see and drive the agent that is actually live. Quitting the window leaves that daemon running. Off a TTY there is nothing to attach and the second daemon is refused, naming the process that holds the state; use `--state` if you really want a separate world.
 

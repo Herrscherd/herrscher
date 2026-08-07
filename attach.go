@@ -131,14 +131,14 @@ func (a *attachedDaemon) dispatch(argv []string) (string, error) {
 // it returns; it never cancels anything on the other side, because the daemon
 // was there first and outlives this window — closing a viewer must not close the
 // agent it was viewing.
-func runAttached(ctx context.Context, instance string) error {
+func runAttached(ctx context.Context, instance string, opts ...tui.Option) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	a, err := newAttachedDaemon(ctx, instance)
 	if err != nil {
 		return err
 	}
-	return tui.Run(ctx, cancel, a)
+	return tui.Run(ctx, cancel, a, opts...)
 }
 
 // --- tui.Backend ---

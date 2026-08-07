@@ -17,6 +17,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
 // or returns a if non-empty, else b — used to layer config.json defaults under
@@ -28,7 +29,9 @@ func or(a, b string) string {
 	return b
 }
 
-func runServe(ctx context.Context, args []string) error {
+// runServe builds the daemon and runs it, optionally opening its foreground on a
+// session already created for a task (open, nil for a plain serve).
+func runServe(ctx context.Context, args []string, open *openWindow) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	// --config is read up front (before Parse) so config.json can seed the other
 	// flags' defaults; it's still registered for --help and validation.
@@ -80,7 +83,11 @@ func runServe(ctx context.Context, args []string) error {
 			// after the id it froze in this very state file, which is resolved
 			// from the owner when no --instance was passed. Ours is usually
 			// empty, and an empty id composes a socket path nobody listens on.
-			aerr := runAttached(ctx, host.ServedInstanceID(*statePath, *instanceID))
+			var opts []tui.Option
+			if open != nil {
+				opts = append(opts, tui.OpenOn(open.session, open.text))
+			}
+			aerr := runAttached(ctx, host.ServedInstanceID(*statePath, *instanceID), opts...)
 			if aerr == nil {
 				return nil
 			}
@@ -152,6 +159,15 @@ func runServe(ctx context.Context, args []string) error {
 	// quitting it cancels ctx and stops the daemon. No foreground gateway, or a
 	// background service (no TTY) → headless: the hub drives every gateway and
 	// nothing takes over the foreground.
+	// Point the foreground at the session this run is for, before it starts. A
+	// foreground that cannot be opened on one still runs; it simply opens where it
+	// always did, which is the honest outcome for a frontend that has no notion of
+	// a named window.
+	if open != nil && fg != nil {
+		if o, ok := fg.(foregroundOpener); ok {
+			o.OpenOn(open.session, open.text)
+		}
+	}
 	if fg != nil && term.IsTerminal(int(os.Stdout.Fd())) {
 		// The TUI owns the terminal; the background daemon (and libraries that
 		// write straight to os.Stderr) must not paint over its alt-screen. Route
@@ -277,14 +293,89 @@ type verbDispatcher interface {
 	Dispatch(context.Context, []string) (string, error)
 }
 
-// runPrompt opens a session on a free-text task, runs one turn there, and prints
-// the reply.
-func runPrompt(ctx context.Context, prompt string) error {
+// runPrompt opens a session on a free-text task.
+//
+// The default is a window: the session is created, the task is sent into it, and
+// the TUI opens on that tab with the turn running in front of the operator, which
+// is what a task typed at a terminal is for. --print is the other half — one
+// turn, the reply on stdout — and it is also what a run with no terminal gets,
+// since there is nothing there to draw a window on and an operator piping the
+// binary wants the answer, not a Bubbletea error.
+func runPrompt(ctx context.Context, t task) error {
+	name := sessionNameFor(t.Text)
+	if t.printsTo(term.IsTerminal(int(os.Stdout.Fd()))) {
+		reg, err := newOperatorRegistry(ctx)
+		if err != nil {
+			return err
+		}
+		return runPromptWith(ctx, reg, name, t.Text, os.Stdout, os.Stderr)
+	}
+	return runPromptWindow(ctx, name, t.Text)
+}
+
+// runPromptWindow opens the TUI on a session created for this task.
+//
+// Which of the two launch paths runs is decided by the state lock, the same
+// question `herrscher` on its own asks: a daemon already serving owns the state,
+// so the window attaches to it over its sockets and that daemon runs the turn —
+// quitting the window leaves both standing. Nothing serving means this process
+// becomes the daemon, and its own gateway carries the session in the foreground.
+//
+// Where the session is created follows from that, and the two are not
+// interchangeable. `session create` acts on whichever process runs it: run here
+// against a live daemon it would write a session that daemon does not know it
+// has, and an attached window — which lists sessions by asking the daemon —
+// would wait for a tab that never arrives. So the daemon creates its own, and
+// only the process that is about to become one creates it locally.
+//
+// The task itself is never sent here. The window sends it, once, when the
+// session reaches the hub's list; seeding it from this side would run the turn
+// behind a window that then had to work out what it had missed.
+func runPromptWindow(ctx context.Context, name, text string) error {
+	statePath := host.DefaultStatePath()
+	unlock, lerr := host.LockState(statePath)
+	if lerr != nil {
+		instance := host.ServedInstanceID(statePath, "")
+		if _, err := host.DaemonDispatch(ctx, instance, []string{
+			"session", "create", "--name", name, "--terminal_only",
+		}); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, "session: "+name)
+		return runAttached(ctx, instance, tui.OpenOn(name, text))
+	}
+	// Nothing was serving, so this process will be the daemon. Hand the lock
+	// straight back before runServe takes it again — holding it here would make
+	// this process refuse itself.
+	unlock()
 	reg, err := newOperatorRegistry(ctx)
 	if err != nil {
 		return err
 	}
-	return runPromptWith(ctx, reg, sessionNameFor(prompt), prompt, os.Stdout, os.Stderr)
+	if _, err := reg.Dispatch(ctx, []string{
+		"session", "create", "--name", name, "--terminal_only",
+	}); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "session: "+name)
+	return runServe(ctx, nil, &openWindow{session: name, text: text})
+}
+
+// openWindow is what a launch already knows about the window it is opening: the
+// session it belongs to and the first message to send there. It travels as a
+// parameter rather than a serve flag because no operator should ever type it —
+// it is one launch path telling another what it is for.
+type openWindow struct {
+	session string
+	text    string
+}
+
+// foregroundOpener is the foreground gateway's optional ability to be pointed at
+// a session before it starts. Declared here, structurally, so the composition
+// root can use it without importing the frontend that implements it — the same
+// way it reads contracts.Foreground off the unwrapped gateway.
+type foregroundOpener interface {
+	OpenOn(session, text string)
 }
 
 // runPromptWith is the sequencing itself: create, then seed.

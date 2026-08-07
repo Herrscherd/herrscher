@@ -46,7 +46,14 @@ func renderEntry(e entry, width int) string {
 			return titledRule(accentStyle, agentTitle, width) + "\n" +
 				indent(wrapWith(textStyle, e.text, body))
 		}
-		return openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body), width)
+		out := openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body), width)
+		if e.preview != "" {
+			// An image the answer linked to, fetched and drawn under it. The URL
+			// stays in the prose above: the picture is an addition, not a
+			// replacement, and a reader still needs to be able to copy the link.
+			out += "\n" + e.preview
+		}
+		return out
 	case roleThinking:
 		return indent(wrapWith(thinkingStyle, glyphThinking+" "+e.text, body))
 	case roleTool:

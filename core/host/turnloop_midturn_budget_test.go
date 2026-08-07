@@ -31,6 +31,24 @@ func (b *budgetedTurn) sawStatus(want string) bool {
 	return false
 }
 
+// awaitStatus waits for a fanned status containing want.
+//
+// The interrupt frame and the status are two independent deliveries, and the
+// driver cuts the turn before it explains why — spend stops first, on purpose.
+// Reading the interrupt off toBridge therefore proves nothing about the status
+// yet, and asserting on it in the same breath is a race the test loses under
+// load rather than a defect it catches.
+func (b *budgetedTurn) awaitStatus(want string) bool {
+	deadline := time.Now().Add(time.Second)
+	for !b.sawStatus(want) {
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return true
+}
+
 // startBudgetedTurn wires a driver whose gate reports the given token headroom,
 // feeds it one message, and returns once the input frame has reached the bridge —
 // i.e. once the turn is open and mid-turn events will be watched.
@@ -81,7 +99,7 @@ func TestRunawayTurnInterruptedOnTokenCap(t *testing.T) {
 		select {
 		case ev := <-b.toBridge:
 			if ev.T == "interrupt" {
-				if !b.sawStatus("interrompu") {
+				if !b.awaitStatus("interrompu") {
 					t.Fatal("turn was interrupted without telling the subscriber why")
 				}
 				return

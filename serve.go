@@ -398,10 +398,9 @@ func runPromptWith(ctx context.Context, d verbDispatcher, name, prompt string, s
 		return err
 	}
 	fmt.Fprintln(stderr, "session: "+name)
-	reply, err := d.Dispatch(ctx, []string{
-		"session", "seed", "--name", name, "--task", prompt,
-		"--timeout", promptTimeout.String(),
-	})
+	argv := append([]string{"session", "seed", "--name", name}, cli.FlagArg("task", prompt)...)
+	argv = append(argv, "--timeout", promptTimeout.String())
+	reply, err := d.Dispatch(ctx, argv)
 	if err != nil {
 		return fmt.Errorf("session %s: %w", name, err)
 	}

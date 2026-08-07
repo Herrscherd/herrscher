@@ -233,6 +233,8 @@ type model struct {
 	switchIdx  int                     // selected row in the switch picker
 	switchRows []contracts.SessionInfo // switch picker rows (open/known sessions)
 
+	diagOpen bool // whether the /capabilities diagnostic screen is open
+
 	skillsOpen bool           // whether the /skills panel overlay is open
 	skillsIdx  int            // selected row in the /skills panel
 	skillsRows []skills.Skill // discovered skills, name-sorted
@@ -339,6 +341,9 @@ func (m *model) chromeHeight() int {
 	}
 	if m.skillsOpen {
 		h += m.skillsHeight()
+	}
+	if m.diagOpen {
+		h += m.diagHeight()
 	}
 	if m.choice != nil {
 		h += m.choiceHeight()
@@ -580,6 +585,10 @@ func (m *model) handleEnter() tea.Cmd {
 				tb.appendEntry(entry{role: roleNotice, text: m.usageReport(tb)})
 				m.syncViewport()
 			}
+			return nil
+		}
+		if args[0] == "capabilities" {
+			m.openDiagnostics() // TUI-local: what the probe resolved, and why
 			return nil
 		}
 		if args[0] == "skills" {
@@ -1178,6 +1187,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// The capability screen is modal and read-only: any key closes it. It
+		// answers one question and there is nothing on it to navigate.
+		if m.diagOpen {
+			if msg.Type == tea.KeyCtrlC {
+				return m, tea.Quit
+			}
+			m.diagOpen = false
+			m.applySize()
+			m.syncViewport()
+			return m, nil
+		}
 		// The /skills panel is modal and read-only: arrows scroll the selection,
 		// Esc closes it; every other key is swallowed.
 		if m.skillsOpen {
@@ -1439,6 +1459,9 @@ func (m *model) View() string {
 	}
 	if m.skillsOpen {
 		parts = append(parts, m.skillsView())
+	}
+	if m.diagOpen {
+		parts = append(parts, m.diagView())
 	}
 	if m.showHelp {
 		parts = append(parts, m.helpView())

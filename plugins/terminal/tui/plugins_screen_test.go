@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -213,4 +214,23 @@ func indexOf(rows []string, want string) int {
 		}
 	}
 	return -1
+}
+
+// A composition with more plugins than the screen draws at once must still be
+// fully reachable: the arrows move the cursor over every row, so the drawn
+// window has to follow it instead of stopping at the first pluginsMax.
+func TestPluginsViewScrollsToSelection(t *testing.T) {
+	m := &model{pluginsOpen: true}
+	for i := 0; i < pluginsMax+5; i++ {
+		m.pluginsRows = append(m.pluginsRows, PluginRow{Module: fmt.Sprintf("mod/%d", i), Installed: "v1.0.0", Latest: "v1.0.0"})
+	}
+	m.pluginsIdx = len(m.pluginsRows) - 1
+
+	view := m.pluginsView()
+	if !strings.Contains(view, "mod/14") {
+		t.Fatalf("the selected row is not drawn:\n%s", view)
+	}
+	if !strings.Contains(view, "above") {
+		t.Fatalf("the rows scrolled past are not announced:\n%s", view)
+	}
 }

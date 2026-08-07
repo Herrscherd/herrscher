@@ -103,6 +103,12 @@ func PluginCmd(ctx context.Context, args []string) int {
 			}
 			fmt.Printf("%s %s in %s\n", pastTense(sub), module, manifest)
 			fmt.Println("skipped build (--no-build); run `go build` in the host to apply")
+			// Installing a named version is `go get`, which is exactly what
+			// --no-build skipped; saying so beats leaving the operator to believe
+			// the version was taken.
+			if version != "" {
+				fmt.Printf("the version was not installed: %s@%s needs `go get`\n", module, version)
+			}
 			return 0
 		}
 		cmds := removeCommands()
@@ -119,6 +125,10 @@ func PluginCmd(ctx context.Context, args []string) int {
 			fmt.Println("aborted; nothing was written")
 			return 0
 		}
+		if !changed {
+			fmt.Printf("%s was already in %s; moved to %s\n", module, manifest, version)
+			return 0
+		}
 		fmt.Printf("%s %s in %s\n", pastTense(sub), module, manifest)
 		return 0
 
@@ -130,6 +140,13 @@ func PluginCmd(ctx context.Context, args []string) int {
 		module, version := splitModuleVersion(positionals[0])
 		if len(positionals) == 2 {
 			version = positionals[1]
+		}
+		// Refuse a module that is not compiled in before the toolchain runs, not
+		// after: the same refusal at the end would have fetched, rebuilt and
+		// reinstalled the binary for a pin that was never going to be recorded.
+		if err := compiledIn(dir, module); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
 		}
 		// Move first, then record: a pin that named a version the tree never took
 		// would describe a composition that does not exist.
@@ -424,9 +441,9 @@ func loadPins(dir string) (map[string]bool, error) {
 	return readPins(string(src))
 }
 
-// pinModule records or drops a pin, refusing a module that is not compiled in:
-// a pin on something absent from plugins.go would never be consulted.
-func pinModule(dir, module string, pinned bool) error {
+// compiledIn refuses a module absent from plugins.go: a pin on something the
+// binary is not made of would never be consulted.
+func compiledIn(dir, module string) error {
 	src, err := os.ReadFile(filepath.Join(dir, "plugins.go"))
 	if err != nil {
 		return fmt.Errorf("read plugins.go: %w", err)
@@ -435,15 +452,18 @@ func pinModule(dir, module string, pinned bool) error {
 	if err != nil {
 		return err
 	}
-	found := false
 	for _, m := range mods {
 		if m == module {
-			found = true
-			break
+			return nil
 		}
 	}
-	if !found {
-		return fmt.Errorf("%s is not compiled in; `herrscher plugin add %s` first", module, module)
+	return fmt.Errorf("%s is not compiled in; `herrscher plugin add %s` first", module, module)
+}
+
+// pinModule records or drops a pin for a compiled-in module.
+func pinModule(dir, module string, pinned bool) error {
+	if err := compiledIn(dir, module); err != nil {
+		return err
 	}
 	pins, err := loadPins(dir)
 	if err != nil {

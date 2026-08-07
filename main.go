@@ -168,12 +168,11 @@ func main() {
 		// recognise is offered to the daemon verbatim — main never learns what any
 		// of them mean, which is what keeps this file free of any platform.
 		// `herrscher commands` lists what the daemon will accept.
-		out, handled, derr := forwardUnknownVerb(ctx, os.Args[1:])
-		if !handled {
-			// No daemon: the verb has nowhere to be known, so it is unknown.
-			fmt.Fprintf(os.Stderr, "herrscher: unknown command %q\n", cmd)
+		out, derr, code := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
+		if code != 0 {
+			fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
 			usage()
-			os.Exit(2)
+			os.Exit(code)
 		}
 		if derr == nil && out != "" {
 			fmt.Println(out)
@@ -184,6 +183,24 @@ func main() {
 		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
 		os.Exit(1)
 	}
+}
+
+// dispatchUnknown decides what becomes of a verb main()'s switch has no case
+// for. It lives outside main() so the decision can be exercised with a stub
+// forwarder — no daemon, no re-exec — and it takes cmd and args apart rather
+// than a ready-made argv so the arm passes exactly what every sibling case
+// passes: dropping the verb on the wire is then not expressible at the call
+// site. exit is the code the process must leave with, or 0 to let main() carry
+// on with err as usual.
+func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (stdout string, err error, exit int) {
+	out, handled, derr := fwd(ctx, append([]string{cmd}, args...))
+	if !handled {
+		// No daemon: the verb has nowhere to be known, so it is unknown.
+		return "", fmt.Errorf("unknown command %q", cmd), 2
+	}
+	// A daemon-side refusal is the caller's failure, so it must keep costing a
+	// non-zero exit for whoever is reading $?.
+	return out, derr, 0
 }
 
 // channelFlag registers -c/--channel on fs and returns the bound pointer.

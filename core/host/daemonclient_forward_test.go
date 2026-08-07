@@ -29,16 +29,26 @@ func serveOneCommand(t *testing.T, instance string, disp dispatcher) {
 	if err != nil {
 		t.Fatalf("listenCommandSocket: %v", err)
 	}
+	// The accept error is channelled back and joined, so a listener that never
+	// took the connection fails as itself instead of as handled = false. Joining
+	// is registered first so it runs after the close below, which is what frees a
+	// goroutine still parked in Accept.
+	accepted := make(chan error, 1)
+	t.Cleanup(func() {
+		if err := <-accepted; err != nil {
+			t.Errorf("accept: %v", err)
+		}
+	})
 	t.Cleanup(func() {
 		_ = ln.Close()
 		_ = os.Remove(path)
 	})
 	go func() {
 		conn, err := ln.Accept()
-		if err != nil {
-			return
+		if err == nil {
+			handleCommandConn(context.Background(), conn, disp, defaultCommandReadTimeout)
 		}
-		handleCommandConn(context.Background(), conn, disp, defaultCommandReadTimeout)
+		accepted <- err
 	}()
 }
 

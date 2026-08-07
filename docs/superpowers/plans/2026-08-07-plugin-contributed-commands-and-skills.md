@@ -13,8 +13,21 @@
 - **Spec:** `docs/superpowers/specs/2026-08-07-plugin-contributed-commands-and-skills-design.md`. Read it before Task 1.
 - **Purity is non-negotiable.** `TestCorePurity`, `TestHostPurity` and `TestCoreNamesNoConcretePlatform` must stay green. The last one greps every file under `core/` and fails if the string `discord` appears. Never write a platform name in `core/`.
 - **Three repos, in dependency order.** `herrscher-contracts` → `herrscher` → `herrscher-discord-gateway`. Never bump a downstream repo before its upstream tag exists.
-- **Every repo is public.** No machine-specific absolute paths (`/home/shan/...`) and no personal ids in committed files.
-- **Working tree for `herrscher`:** `/home/shan/.superset/worktrees/herrscher-plugin-cmds`, branch `feat/plugin-commands-skills`. Never checkout or reset a branch in `/home/shan/dev/herrscher` — it is shared with concurrent sessions.
+- **Every repo is public.** No machine-specific absolute paths (a literal `/home/<user>/...`) and no personal ids in committed files.
+- **Every repo gets a dedicated worktree.** All three are shared with concurrent
+  agent sessions, so never checkout, reset, or commit on a branch in the primary
+  clone. Export these before starting, pointing at worktrees taken off
+  `origin/master`:
+
+  ```bash
+  export HERRSCHER=<worktree of Herrscherd/herrscher on feat/plugin-commands-skills>
+  export CONTRACTS=<worktree of Herrscherd/herrscher-contracts on feat/contribute-commands-skills>
+  export GATEWAY=<worktree of Herrscherd/herrscher-discord-gateway on feat/contributed-commands>
+  export DCTL=<clone of Herrscherd/dctl — read only, never modified>
+  ```
+
+  Tags are pushed from the worktree with `gh api ... -f sha="$(git rev-parse HEAD)"`,
+  never by checking out master.
 - **Multi-line commit messages** go through a file: write the message to a scratch file and use `git commit -F <file>`. Inline multi-line `-m` breaks under zsh quoting.
 - **`dctl` is not modified.** It already exposes everything needed.
 - **Contracts version to publish:** `v0.1.11`.
@@ -48,9 +61,9 @@
 ## Task 1: The contribution ports in `herrscher-contracts`
 
 **Files:**
-- Modify: `~/dev/herrscher-contracts/registry.go`
-- Modify: `~/dev/herrscher-contracts/host.go`
-- Test: `~/dev/herrscher-contracts/contribute_test.go` (create)
+- Modify: `$CONTRACTS/registry.go`
+- Modify: `$CONTRACTS/host.go`
+- Test: `$CONTRACTS/contribute_test.go` (create)
 
 **Interfaces:**
 - Consumes: nothing.
@@ -58,7 +71,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Create `~/dev/herrscher-contracts/contribute_test.go`:
+Create `$CONTRACTS/contribute_test.go`:
 
 ```go
 package contracts_test
@@ -114,14 +127,14 @@ func TestPluginCarriesSkillsWithoutInstantiating(t *testing.T) {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd ~/dev/herrscher-contracts && go test ./... -run 'Contribut|Skills' -v
+cd $CONTRACTS && go test ./... -run 'Contribut|Skills' -v
 ```
 
 Expected: FAIL to compile — `undefined: contracts.CommandSource`, `undefined: contracts.MessageEditor`, `unknown field Skills in struct literal`.
 
 - [ ] **Step 3: Add the ports**
 
-In `~/dev/herrscher-contracts/registry.go`, add `"io/fs"` to the imports, add the field to `Plugin`, and add the interface after the factory type block:
+In `$CONTRACTS/registry.go`, add `"io/fs"` to the imports, add the field to `Plugin`, and add the interface after the factory type block:
 
 ```go
 type Plugin struct {
@@ -149,7 +162,7 @@ type CommandSource interface {
 }
 ```
 
-In `~/dev/herrscher-contracts/host.go`, after `ChannelAdmin`:
+In `$CONTRACTS/host.go`, after `ChannelAdmin`:
 
 ```go
 // MessageEditor is an optional channel capability: changing or removing a
@@ -166,7 +179,7 @@ type MessageEditor interface {
 - [ ] **Step 4: Run the whole suite**
 
 ```bash
-cd ~/dev/herrscher-contracts && go test ./... && go vet ./...
+cd $CONTRACTS && go test ./... && go vet ./...
 ```
 
 Expected: PASS, no vet output.
@@ -174,7 +187,7 @@ Expected: PASS, no vet output.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/dev/herrscher-contracts
+cd $CONTRACTS
 git add registry.go host.go contribute_test.go
 printf '%s\n' 'feat(contracts): let a plugin contribute commands and skills' '' 'CommandSource is asserted on a live instance because a contributed command'"'"'s' 'Run closes over the plugin'"'"'s own ports. Skills is a static field because a' 'gateway missing its credentials never instantiates, and a playbook is text —' 'it must install anyway.' '' 'MessageEditor is optional for the same reason Reader and Admin are: a line' 'already printed to a terminal cannot be unprinted.' > /tmp/msg.txt
 git commit -F /tmp/msg.txt
@@ -183,7 +196,7 @@ git commit -F /tmp/msg.txt
 - [ ] **Step 6: Tag and push**
 
 ```bash
-cd ~/dev/herrscher-contracts && git push origin HEAD
+cd $CONTRACTS && git push origin HEAD
 SHA=$(git rev-parse HEAD)
 gh api repos/Herrscherd/herrscher-contracts/git/refs -f ref=refs/tags/v0.1.11 -f sha="$SHA"
 ```
@@ -195,20 +208,20 @@ Expected: JSON describing the new ref. A 422 mentioning "40 characters" means `$
 ## Task 2: Namespacing contributed commands in the host
 
 **Files:**
-- Create: `/home/shan/.superset/worktrees/herrscher-plugin-cmds/core/host/contrib.go`
-- Test: `/home/shan/.superset/worktrees/herrscher-plugin-cmds/core/host/contrib_test.go` (create)
+- Create: `$HERRSCHER/core/host/contrib.go`
+- Test: `$HERRSCHER/core/host/contrib_test.go` (create)
 - Modify: `go.mod` (contracts bump)
 
 **Interfaces:**
 - Consumes: `contracts.CommandSource` from Task 1.
 - Produces: `func contributedCommands(gws []contracts.GatewaySet) ([]contracts.Cmd, error)` — returns every contributed command with its `Path` prefixed by the contributing gateway's `Manifest().Kind`, or an error naming the offending plugin.
 
-All paths below are relative to the worktree `/home/shan/.superset/worktrees/herrscher-plugin-cmds`.
+All paths below are relative to the worktree `$HERRSCHER`.
 
 - [ ] **Step 1: Bump contracts**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds
+cd $HERRSCHER
 GOFLAGS= go get github.com/Herrscherd/herrscher-contracts@v0.1.11 && go mod tidy
 ```
 
@@ -362,7 +375,7 @@ would make the test prove the opposite of what it claims.
 - [ ] **Step 3: Run test to verify it fails**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds && go test ./core/host/ -run 'Contribut|Collision|BothLand|NonContributor|NilGateway|Prefixing' -v
+cd $HERRSCHER && go test ./core/host/ -run 'Contribut|Collision|BothLand|NonContributor|NilGateway|Prefixing' -v
 ```
 
 Expected: FAIL to compile — `undefined: contributedCommands`.
@@ -425,7 +438,7 @@ func contributedCommands(gws []contracts.GatewaySet) ([]contracts.Cmd, error) {
 - [ ] **Step 5: Run the tests**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds && go test ./core/host/ -run 'Contribut|Collision|BothLand|NonContributor|NilGateway|Prefixing' -v
+cd $HERRSCHER && go test ./core/host/ -run 'Contribut|Collision|BothLand|NonContributor|NilGateway|Prefixing' -v
 ```
 
 Expected: PASS, five tests.
@@ -433,7 +446,7 @@ Expected: PASS, five tests.
 - [ ] **Step 6: Verify purity is intact**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds && go test ./... -run 'Purity|NoConcretePlatform' -v
+cd $HERRSCHER && go test ./... -run 'Purity|NoConcretePlatform' -v
 ```
 
 Expected: PASS. This new file is the single most likely place for a platform name to leak; if `TestCoreNamesNoConcretePlatform` fails, a literal `"discord"` was written into `core/`.
@@ -441,7 +454,7 @@ Expected: PASS. This new file is the single most likely place for a platform nam
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds
+cd $HERRSCHER
 git add go.mod go.sum core/host/contrib.go core/host/contrib_test.go
 printf '%s\n' 'feat(host): namespace plugin-contributed commands by plugin kind' '' 'The prefix is imposed by the host, never chosen by the plugin, which is what' 'makes a Discord and a Slack gateway declaring the same path impossible to' 'collide rather than merely unlikely to.' > /tmp/msg.txt
 git commit -F /tmp/msg.txt
@@ -464,7 +477,7 @@ git commit -F /tmp/msg.txt
 - [ ] **Step 1: Read the current signature and both call sites**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds
+cd $HERRSCHER
 sed -n '40,95p' core/host/cli.go
 sed -n '300,315p' core/host/cli.go
 sed -n '205,215p' core/host/serve.go
@@ -505,13 +518,18 @@ func TestContributedCommandDispatches(t *testing.T) {
 
 Add `"github.com/Herrscherd/herrscher/core/cli"` to the test file's imports.
 
-- [ ] **Step 3: Run test to verify it fails**
+- [ ] **Step 3: Run the test — it must pass before the wiring changes**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds && go test ./core/host/ -run TestContributedCommandDispatches -v
+cd $HERRSCHER && go test ./core/host/ -run TestContributedCommandDispatches -v
 ```
 
-Expected: PASS already — this test exercises `contributedCommands` plus the existing registry, both of which exist. That is fine and intended: it locks the contract between the two before the wiring below can break it. If it fails, `contributedCommands` is wrong, not the wiring.
+Expected: PASS. This is a characterisation test, not a red-first one: it
+exercises `contributedCommands` from Task 2 against the existing registry, and
+both already work. Running it green *before* touching `buildRegistry` is the
+point — it pins the behaviour the wiring must preserve, so a regression in
+Step 6 is attributable. If it fails here, `contributedCommands` is wrong and
+Task 2 is not finished.
 
 - [ ] **Step 4: Add the parameter to `buildRegistry`**
 
@@ -557,7 +575,7 @@ If `serve.go`'s enclosing function does not return a bare `error`, match its act
 - [ ] **Step 6: Build and run everything**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds && go build ./... && go test ./... && go vet ./...
+cd $HERRSCHER && go build ./... && go test ./... && go vet ./...
 ```
 
 Expected: PASS throughout, including `TestCoreNamesNoConcretePlatform`.
@@ -565,7 +583,7 @@ Expected: PASS throughout, including `TestCoreNamesNoConcretePlatform`.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds
+cd $HERRSCHER
 git add core/host/cli.go core/host/serve.go core/host/contrib_test.go
 printf '%s\n' 'feat(host): add gateway-contributed commands to the registry' '' 'Only under the daemon: contributed commands come from live gateway instances,' 'and instantiating one so a local `herrscher session list` can parse an argv it' 'will not use is a cost every invocation would pay for a case that never comes.' > /tmp/msg.txt
 git commit -F /tmp/msg.txt
@@ -586,7 +604,7 @@ git commit -F /tmp/msg.txt
 - [ ] **Step 1: Read the existing installer**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds
+cd $HERRSCHER
 cat skills.go
 sed -n '1,80p' core/skills/*.go
 ```
@@ -666,7 +684,7 @@ func TestPluginWithoutSkillsIsSkipped(t *testing.T) {
 - [ ] **Step 3: Run test to verify it fails**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds && go test . -run TestPluginSkills -v
+cd $HERRSCHER && go test . -run TestPluginSkills -v
 ```
 
 Expected: FAIL to compile — `undefined: installPluginSkills`.
@@ -717,7 +735,7 @@ Then, in `installShippedSkills`, after the existing loop that prints installed n
 - [ ] **Step 5: Run the tests**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds && go test . -run TestPluginSkills -v && go build ./...
+cd $HERRSCHER && go test . -run TestPluginSkills -v && go build ./...
 ```
 
 Expected: PASS, three tests.
@@ -725,7 +743,7 @@ Expected: PASS, three tests.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds
+cd $HERRSCHER
 git add skills.go skills_plugin_test.go
 printf '%s\n' 'feat(skills): install the playbooks compiled-in plugins ship' '' 'A Discord playbook on a host with no Discord gateway is noise in every agent'"'"'s' 'context, forever, for a capability that is not there. Reading them from a static' 'field means a gateway that never instantiates for want of a token still ships' 'its own.' > /tmp/msg.txt
 git commit -F /tmp/msg.txt
@@ -736,9 +754,9 @@ git commit -F /tmp/msg.txt
 ## Task 5: `MessageEditor` on the Discord gateway
 
 **Files:**
-- Modify: `~/dev/herrscher-discord-gateway/gateway.go` (the `client` interface at line 12; the `discordClient` adapter at line 134; the `Gateway` struct at line 48)
-- Test: `~/dev/herrscher-discord-gateway/gateway_test.go` (append; extend `fakeClient` at line 18)
-- Modify: `~/dev/herrscher-discord-gateway/go.mod`
+- Modify: `$GATEWAY/gateway.go` (the `client` interface at line 12; the `discordClient` adapter at line 134; the `Gateway` struct at line 48)
+- Test: `$GATEWAY/gateway_test.go` (append; extend `fakeClient` at line 18)
+- Modify: `$GATEWAY/go.mod`
 
 **Interfaces:**
 - Consumes: `contracts.MessageEditor` from Task 1.
@@ -747,7 +765,7 @@ git commit -F /tmp/msg.txt
 - [ ] **Step 1: Bump contracts**
 
 ```bash
-cd ~/dev/herrscher-discord-gateway
+cd $GATEWAY
 GOFLAGS= go get github.com/Herrscherd/herrscher-contracts@v0.1.11 && go mod tidy && go build ./...
 ```
 
@@ -801,7 +819,7 @@ func TestGatewayEditsAndDeletes(t *testing.T) {
 - [ ] **Step 3: Run test to verify it fails**
 
 ```bash
-cd ~/dev/herrscher-discord-gateway && go test . -run TestGatewayEditsAndDeletes -v
+cd $GATEWAY && go test . -run TestGatewayEditsAndDeletes -v
 ```
 
 Expected: FAIL to compile — `(*Gateway)` does not implement `contracts.MessageEditor`.
@@ -859,7 +877,7 @@ Add to the assertion block at the top of `gateway.go`:
 - [ ] **Step 5: Run the tests**
 
 ```bash
-cd ~/dev/herrscher-discord-gateway && go test ./... && go vet ./...
+cd $GATEWAY && go test ./... && go vet ./...
 ```
 
 Expected: PASS.
@@ -867,7 +885,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd ~/dev/herrscher-discord-gateway
+cd $GATEWAY
 git add gateway.go gateway_test.go go.mod go.sum
 printf '%s\n' 'feat(gateway): implement the optional MessageEditor port' '' 'dctl already exposed Messages.Edit and Messages.Delete with these exact' 'signatures, so both are passthroughs.' > /tmp/msg.txt
 git commit -F /tmp/msg.txt
@@ -878,9 +896,9 @@ git commit -F /tmp/msg.txt
 ## Task 6: The seven Discord commands
 
 **Files:**
-- Create: `~/dev/herrscher-discord-gateway/commands.go`
-- Test: `~/dev/herrscher-discord-gateway/commands_test.go` (create)
-- Modify: `~/dev/herrscher-discord-gateway/gateway.go` (widen the `client` interface with `Unreact`), `gateway_test.go` (extend `fakeClient`)
+- Create: `$GATEWAY/commands.go`
+- Test: `$GATEWAY/commands_test.go` (create)
+- Modify: `$GATEWAY/gateway.go` (widen the `client` interface with `Unreact`), `gateway_test.go` (extend `fakeClient`)
 
 **Interfaces:**
 - Consumes: `contracts.CommandSource` from Task 1; `(*Gateway).Edit`/`Delete` from Task 5.
@@ -1068,13 +1086,13 @@ Read the existing `fakeClient` before editing so the additions match its style.
 
 `dctl.Message` is confirmed as `{ID, ChannelID, Content string; Author Author;
 Timestamp string; Attachments []Attachment; Embeds []Embed}` and `dctl.Author` as
-`{ID, Username string; Bot bool}` (`~/dev/dctl/types.go:61` and `:18`). There is
+`{ID, Username string; Bot bool}` (`$DCTL/types.go:61` and `:18`). There is
 no `dctl.User`.
 
 - [ ] **Step 3: Run test to verify it fails**
 
 ```bash
-cd ~/dev/herrscher-discord-gateway && go test . -run 'TestCommands|TestChannelRead|TestWriteCommands|TestRequiredArgs' -v
+cd $GATEWAY && go test . -run 'TestCommands|TestChannelRead|TestWriteCommands|TestRequiredArgs' -v
 ```
 
 Expected: FAIL to compile — `g.Commands undefined`, `undefined: readCap`.
@@ -1241,7 +1259,7 @@ passthrough to `d.c.Reactions().Remove`, mirroring `Platform.Unreact`
 - [ ] **Step 5: Run the tests**
 
 ```bash
-cd ~/dev/herrscher-discord-gateway && go test ./... -v && go vet ./...
+cd $GATEWAY && go test ./... -v && go vet ./...
 ```
 
 Expected: PASS throughout.
@@ -1249,7 +1267,7 @@ Expected: PASS throughout.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd ~/dev/herrscher-discord-gateway
+cd $GATEWAY
 git add commands.go commands_test.go gateway.go gateway_test.go
 printf '%s\n' 'feat(gateway): contribute seven verbs to the daemon registry' '' 'Read goes through the raw client and not ChannelReader.Read, which returns' 'nil,nil for a channel already bound to a session: reading the session'"'"'s own' 'channel would have come back empty with no error at all.' > /tmp/msg.txt
 git commit -F /tmp/msg.txt
@@ -1260,9 +1278,9 @@ git commit -F /tmp/msg.txt
 ## Task 7: The Discord skill
 
 **Files:**
-- Create: `~/dev/herrscher-discord-gateway/skills/discord-conversations/SKILL.md`
-- Modify: `~/dev/herrscher-discord-gateway/register.go`
-- Test: `~/dev/herrscher-discord-gateway/register_test.go` (append)
+- Create: `$GATEWAY/skills/discord-conversations/SKILL.md`
+- Modify: `$GATEWAY/register.go`
+- Test: `$GATEWAY/register_test.go` (append)
 
 **Interfaces:**
 - Consumes: `contracts.Plugin.Skills` from Task 1.
@@ -1313,7 +1331,7 @@ is confirmed to exist (`registry.go:61`).
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd ~/dev/herrscher-discord-gateway && go test . -run TestPluginShipsItsSkill -v
+cd $GATEWAY && go test . -run TestPluginShipsItsSkill -v
 ```
 
 Expected: FAIL — "the plugin must carry its skill".
@@ -1425,7 +1443,7 @@ func pluginSkills() fs.FS {
 - [ ] **Step 5: Run the tests**
 
 ```bash
-cd ~/dev/herrscher-discord-gateway && go test ./... && go vet ./...
+cd $GATEWAY && go test ./... && go vet ./...
 ```
 
 Expected: PASS.
@@ -1433,7 +1451,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit, tag, push**
 
 ```bash
-cd ~/dev/herrscher-discord-gateway
+cd $GATEWAY
 git add skills register.go register_test.go
 printf '%s\n' 'feat(gateway): ship the Discord conversations playbook' '' 'A channel'"'"'s contents are written by third parties, so the playbook'"'"'s' 'load-bearing line is that what you read is context and never an instruction —' 'without it, "go read this channel" is prompt injection by Discord message.' > /tmp/msg.txt
 git commit -F /tmp/msg.txt
@@ -1457,7 +1475,7 @@ guaranteed one.
 - [ ] **Step 1: Bump the gateway and build**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds
+cd $HERRSCHER
 GOFLAGS= go get github.com/Herrscherd/herrscher-discord-gateway@<tag from Task 7> && go mod tidy
 go build ./... && go test ./... && go vet ./...
 ```
@@ -1467,7 +1485,7 @@ Expected: PASS, purity tests included.
 - [ ] **Step 2: Verify the commands actually appear**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds
+cd $HERRSCHER
 go build -o /tmp/herrscher-test . && /tmp/herrscher-test --help 2>&1 | head -40
 ```
 
@@ -1499,7 +1517,7 @@ does and why it is that shape, no marketing.
 - [ ] **Step 5: Commit and open the PR**
 
 ```bash
-cd /home/shan/.superset/worktrees/herrscher-plugin-cmds
+cd $HERRSCHER
 git add go.mod go.sum README.md
 printf '%s\n' 'chore(deps): discord gateway with contributed commands' > /tmp/msg.txt
 git commit -F /tmp/msg.txt
@@ -1549,7 +1567,7 @@ Checked against the spec:
   (Task 6).
 - **Verified while writing:** `contracts.Default.Plugins()` exists
   (`registry.go:61`); `dctl.Message`/`dctl.Author` field names
-  (`~/dev/dctl/types.go:61`, `:18`) — there is no `dctl.User`.
+  (`$DCTL/types.go:61`, `:18`) — there is no `dctl.User`.
 - **Still unverified, flagged in place rather than hidden:** `serve.go`'s
   enclosing return signature (Task 3 Step 5) and whether the TUI palette filters
   contributed verbs (Task 8 Step 2). Both steps say to read the real thing

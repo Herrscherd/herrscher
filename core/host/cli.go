@@ -42,7 +42,7 @@ type coordinatorSlot struct {
 // daemon (RunHub) and the operator CLI (NewRegistry) share this so a session
 // created either way is built from identical deps. d.Admin supplies the channel
 // admin port; instID namespaces shared git/gateway resources.
-func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup *supervisor.Supervisor, instID string) (*cli.Registry, hostDeps, error) {
+func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup *supervisor.Supervisor, instID string, extra []contracts.Cmd) (*cli.Registry, hostDeps, error) {
 	partDir := filepath.Dir(o.StatePath)
 	wt := worktree.NewWorktreer(ctx, instID)
 	fg := forge.New()
@@ -83,6 +83,15 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		}
 	}
 	for _, c := range ModelsCommands() {
+		if err := reg.Add(c); err != nil {
+			return nil, hostDeps{}, err
+		}
+	}
+	// Verbs contributed by the loaded gateways, already namespaced under their
+	// plugin's kind (see contributedCommands). Added after the host's own so a
+	// plugin can never shadow a built-in: reg.Add refuses the second of a pair,
+	// and the built-in is the one that must win.
+	for _, c := range extra {
 		if err := reg.Add(c); err != nil {
 			return nil, hostDeps{}, err
 		}
@@ -380,7 +389,12 @@ func NewRegistry(ctx context.Context, d Deps, o Options) (*cli.Registry, error) 
 	if o.DefaultGateways == nil {
 		o.DefaultGateways = nonTerminalKinds([]Deps{d})
 	}
-	reg, _, err := buildRegistry(ctx, d, o, st, sup, instID)
+	// No contributed commands on the one-shot CLI path: they are contributed by
+	// live gateway instances, and instantiating a gateway — opening a connection,
+	// spending a token — so that a local `herrscher session list` can parse an
+	// argv it will not use is a cost paid by every invocation for a case that
+	// does not arise. The agent always runs under the daemon.
+	reg, _, err := buildRegistry(ctx, d, o, st, sup, instID, nil)
 	if err != nil {
 		return nil, err
 	}

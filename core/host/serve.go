@@ -208,7 +208,11 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	if o.DefaultGateways == nil {
 		o.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID)
+	extra, err := contributedCommands(gws)
+	if err != nil {
+		return fmt.Errorf("gateway commands: %w", err)
+	}
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID, extra)
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}

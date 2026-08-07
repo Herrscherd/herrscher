@@ -162,9 +162,23 @@ func main() {
 		usage()
 		return
 	default:
-		fmt.Fprintf(os.Stderr, "herrscher: unknown command %q\n", cmd)
-		usage()
-		os.Exit(2)
+		// The switch above is not the whole command surface: gateway plugins
+		// contribute verbs the daemon namespaces under their kind, and those live
+		// in the daemon's registry alone. So an argv this binary does not
+		// recognise is offered to the daemon verbatim — main never learns what any
+		// of them mean, which is what keeps this file free of any platform.
+		// `herrscher commands` lists what the daemon will accept.
+		out, handled, derr := forwardUnknownVerb(ctx, os.Args[1:])
+		if !handled {
+			// No daemon: the verb has nowhere to be known, so it is unknown.
+			fmt.Fprintf(os.Stderr, "herrscher: unknown command %q\n", cmd)
+			usage()
+			os.Exit(2)
+		}
+		if derr == nil && out != "" {
+			fmt.Println(out)
+		}
+		err = derr
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())

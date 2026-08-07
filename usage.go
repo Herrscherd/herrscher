@@ -59,6 +59,9 @@ func usage() {
 			row("serve", "always-on gateway daemon (24/7)"),
 			row("bridge  --cmd '<command>'", "link a channel to one command"),
 			row("service <install|uninstall|…>", "run serve as a native boot service"),
+			// The list below is not the whole surface: a running daemon also carries
+			// the verbs its gateway plugins contribute, and only it can enumerate them.
+			row("commands", "every verb the running daemon accepts"),
 		),
 		"",
 		group("SETUP & MAINTENANCE",

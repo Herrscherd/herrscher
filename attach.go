@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/plugins/terminal"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
@@ -176,7 +177,7 @@ func (a *attachedDaemon) Submit(channel, text string, attachments []tui.Attachme
 		a.notify(channel, "no session is bound to this tab any more")
 		return
 	}
-	argv := []string{"session", "send", "--name", name, "--text", text}
+	argv := append([]string{"session", "send", "--name", name}, cli.FlagArg("text", text)...)
 	if len(attachments) > 0 {
 		paths := make([]string, 0, len(attachments))
 		for _, at := range attachments {

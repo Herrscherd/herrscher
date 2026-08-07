@@ -43,6 +43,7 @@ func usage() {
 		"  " + tagline.Render("modular Discord ⇄ Claude agent harness host"),
 		"",
 		group("DÉMARRER",
+			row("herrscher \"<texte>\"", "open a session on this task and print the reply"),
 			row("herrscher", "open the multi-session terminal TUI"),
 			row("herrscher version", "print the build version"),
 			row("herrscher init", "compose the plugin stack + secrets (wizard)"),

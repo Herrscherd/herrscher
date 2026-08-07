@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Herrscherd/herrscher/core/cli"
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/cli"
 )
 
 // fakeContributor is a gateway that contributes commands, named by its Kind.

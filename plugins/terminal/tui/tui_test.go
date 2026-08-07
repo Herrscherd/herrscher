@@ -378,6 +378,50 @@ func TestCloseActiveDispatchesClose(t *testing.T) {
 	}
 }
 
+// "/session close" with no name closes the session in front. The palette
+// completes the verb to "/session close --name ", which the daemon's parser can
+// only answer with "flag --name needs a value" — it does not know which tab you
+// are looking at, and the frontend does.
+func TestSlashSessionCloseClosesTheActiveSession(t *testing.T) {
+	for _, line := range []string{"/session close", "/session close --name", "/session close --force"} {
+		f := &fakeBackend{}
+		m := newModel(f)
+		tb := m.ensureTab("terminal/alpha-1")
+		tb.label = "alpha"
+		m.active = "terminal/alpha-1"
+		m.input.SetValue(line)
+		runCmd(m.handleEnter())
+		if len(f.closed) != 1 {
+			t.Fatalf("%q: close not issued: %+v", line, f.closed)
+		}
+		if f.closed[0].name != "alpha" {
+			t.Fatalf("%q: closed %q, want the active session", line, f.closed[0].name)
+		}
+		if want := strings.Contains(line, "--force"); f.closed[0].force != want {
+			t.Fatalf("%q: force = %v, want %v", line, f.closed[0].force, want)
+		}
+		if len(f.dispatched) != 0 {
+			t.Fatalf("%q: close must use the typed seam, not argv dispatch: %+v", line, f.dispatched)
+		}
+	}
+}
+
+// A named close still closes what it names, from whichever tab it was typed in.
+func TestSlashSessionCloseHonoursAnExplicitName(t *testing.T) {
+	for _, line := range []string{"/session close --name beta", "/session close --name=beta", "/session close beta"} {
+		f := &fakeBackend{}
+		m := newModel(f)
+		tb := m.ensureTab("terminal/alpha-1")
+		tb.label = "alpha"
+		m.active = "terminal/alpha-1"
+		m.input.SetValue(line)
+		runCmd(m.handleEnter())
+		if len(f.closed) != 1 || f.closed[0].name != "beta" {
+			t.Fatalf("%q: closed %+v, want beta", line, f.closed)
+		}
+	}
+}
+
 func TestAbandonedSetsDisconnected(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "abandoned"}})

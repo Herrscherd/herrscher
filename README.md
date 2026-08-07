@@ -51,6 +51,8 @@ there to draw a window on.
 A single unrecognised word stays a verb, so a typo is still a typo; `-p` (or
 `--print`) forces a one-word task.
 
+A bare `herrscher` comes back to where you left off: it opens on the terminal session last spoken in, reviving it if it had been archived, and creates one — named after the directory you launched in — only when there is no terminal session at all. In the window, `/session close` closes the session you are looking at (`/session close --name <other>` closes another, `--force` discards uncommitted work), which is what Ctrl+W on an empty composer asks to confirm.
+
 One daemon per state file: a second one over the same state answers every message twice and bills it twice. So a bare `herrscher` on a TTY **serves when nothing else is**, and **attaches** when the service already is — the same TUI, driven over the sockets the running daemon exposes, so you see and drive the agent that is actually live. Quitting the window leaves that daemon running. Off a TTY there is nothing to attach and the second daemon is refused, naming the process that holds the state; use `--state` if you really want a separate world.
 
 `init` ends by asking where agent turns run: the route policy, the gateway credentials `gateway-only` requires (both halves or neither — a base URL without a token would redirect the CLI while it keeps authenticating as this machine's own account), and the model a session gets when it names none. It writes them to `.env`; `herrscher models list` shows what the active policy offers.

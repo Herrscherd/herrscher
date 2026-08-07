@@ -36,26 +36,7 @@ func (o *PluginOps) List(ctx context.Context) ([]PluginVersion, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read plugins.go: %w", err)
 	}
-	mods, err := listPlugins(string(src))
-	if err != nil {
-		return nil, err
-	}
-	pins, err := loadPins(o.dir)
-	if err != nil {
-		return nil, err
-	}
-	tc := goToolchain{dir: o.dir}
-	installed, err := installedVersions(ctx, tc, mods)
-	if err != nil {
-		installed = nil
-	}
-	available := map[string][]string{}
-	for _, m := range mods {
-		if vs, _ := availableVersions(ctx, tc, m); vs != nil {
-			available[m] = vs
-		}
-	}
-	return pluginRows(mods, installed, pins, available), nil
+	return pluginVersions(ctx, o.dir, string(src))
 }
 
 // Versions lists what a module has published, newest last.
@@ -72,6 +53,13 @@ func (o *PluginOps) Findings(ctx context.Context, module, version string) []stri
 // Apply saves the composition, then runs the change. It never restores on its
 // own: the caller owns that decision and calls Restore for it.
 func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (string, error) {
+	// A pin changes no code, so there is nothing to compile, nothing to install
+	// and nothing to save: leaving o.saved alone keeps a later Restore honest
+	// about which change it would be undoing.
+	if action == "pin" || action == "unpin" {
+		return "", pinModule(o.dir, module, action == "pin")
+	}
+
 	saved, err := saveComposition(o.dir)
 	if err != nil {
 		return "", err
@@ -79,10 +67,6 @@ func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (
 	o.saved = saved
 
 	switch action {
-	case "pin", "unpin":
-		// A pin changes no code, so there is nothing to compile and nothing to
-		// install; it is recorded and that is the whole operation.
-		return "", pinModule(o.dir, module, action == "pin")
 	case "remove":
 		src, err := os.ReadFile(filepath.Join(o.dir, "plugins.go"))
 		if err != nil {

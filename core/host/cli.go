@@ -88,9 +88,11 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		}
 	}
 	// Verbs contributed by the loaded gateways, already namespaced under their
-	// plugin's kind (see contributedCommands). Added after the host's own so a
-	// plugin can never shadow a built-in: reg.Add refuses the second of a pair,
-	// and the built-in is the one that must win.
+	// plugin's kind (see CollectCommands). A plugin cannot shadow a built-in: on
+	// a duplicate path reg.Add refuses, the error travels up, and the daemon
+	// refuses to start naming the path. That is deliberate — a gateway whose
+	// verb silently vanished would send an operator debugging a missing command
+	// instead of reading a refusal.
 	for _, c := range extra {
 		if err := reg.Add(c); err != nil {
 			return nil, hostDeps{}, err

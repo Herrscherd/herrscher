@@ -201,7 +201,6 @@ func main() {
 func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (stdout string, err error, exit int) {
 	out, handled, derr := fwd(ctx, append([]string{cmd}, args...))
 	if !handled {
-		// No daemon: the verb has nowhere to be known, so it is unknown.
 		return "", fmt.Errorf("unknown command %q", cmd), 2
 	}
 	// A daemon-side refusal is the caller's failure, so it must keep costing a

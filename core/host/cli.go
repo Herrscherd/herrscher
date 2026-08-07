@@ -103,15 +103,22 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		Param("name", "session name", true).
 		Param("task", "opening task", true).
 		ValueParam("turn_id", "optional caller-supplied turn identity", false).
+		ValueParam("timeout", "cap this turn (Go duration, e.g. 30m); default HERRSCHER_SEED_TIMEOUT then 120s", false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
 			rawTurnID, supplied := in.Lookup("turn_id")
 			turnID, err := resolveTurnID(rawTurnID, supplied)
 			if err != nil {
 				return "", err
 			}
+			timeout, err := resolveSeedTimeout(in.Get("timeout"), os.Getenv)
+			if err != nil {
+				return "", err
+			}
+			runtime := oneShotSeedRuntimeFrom(cmdCtx)
+			runtime.timeout = timeout
 			reply, err := runOneShotSeedCommand(
 				cmdCtx, st, in.Get("name"), in.Get("task"),
-				turnID, oneShotSeedRuntimeFrom(cmdCtx),
+				turnID, runtime,
 				seedCoord.coord, instID, dispatchLiveCommand,
 			)
 			if err != nil {
@@ -364,7 +371,12 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 // supervisor (the operator invocation is a short-lived process) and registers
 // the session/service handler's commands. The returned registry dispatches argv
 // (see core/cli).
-func NewRegistry(ctx context.Context, d Deps, o Options) (*cli.Registry, error) {
+//
+// It takes every built gateway set rather than one, for the same reason RunHub
+// does: which admin a session channel is minted on is a question about the set —
+// the home's owner for a normal session, the terminal gateway for a
+// terminal-only one. One set can only ever answer the first.
+func NewRegistry(ctx context.Context, gws []Deps, o Options) (*cli.Registry, error) {
 	st, err := state.LoadState(o.StatePath)
 	if err != nil {
 		return nil, err
@@ -385,20 +397,27 @@ func NewRegistry(ctx context.Context, d Deps, o Options) (*cli.Registry, error) 
 	// `session switch` restarts a bridge from this process too, so it needs the
 	// same trusted hand-off of the captured gateway pair the daemon does.
 	sup.SetBridgeEnv(GatewayEnvPairs())
-	// The operator CLI builds one gateway; a session created here defaults to it
-	// (unless it is the terminal gateway). The concrete kind comes from the built
-	// gateway's manifest, so the manager package still never names a platform.
+	// A session created here defaults to the built gateways (bar the terminal
+	// one). The concrete kinds come from their manifests, so the manager package
+	// still never names a platform.
 	if o.DefaultGateways == nil {
-		o.DefaultGateways = nonTerminalKinds([]Deps{d})
+		o.DefaultGateways = nonTerminalKinds(gws)
 	}
 	// No contributed commands on the one-shot CLI path: they are contributed by
 	// live gateway instances, and instantiating a gateway — opening a connection,
 	// spending a token — so that a local `herrscher session list` can parse an
 	// argv it will not use is a cost paid by every invocation for a case that
 	// does not arise. The agent always runs under the daemon.
-	reg, _, err := buildRegistry(ctx, d, o, st, sup, instID, nil)
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID, nil)
 	if err != nil {
 		return nil, err
+	}
+	// Terminal-only sessions route through the terminal gateway's own admin, so
+	// they open as local `terminal/…` channels whatever home is configured — or
+	// none. Mirrors RunHub (serve.go:229); without it this path refuses a
+	// terminal-only create for want of a home it does not need.
+	if ta := terminalAdmin(gws); ta != nil {
+		deps.handler.SetTerminalAdmin(ta)
 	}
 	// This is the operator process, not the daemon: it holds its own copy of the
 	// state and must not decide alone what the live sessions are. Installed here

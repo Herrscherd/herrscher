@@ -8,6 +8,7 @@ package terminal
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"net/url"
 	"sort"
@@ -69,7 +70,10 @@ var (
 
 // ensureDefaultSession creates a default terminal-bound session when none is
 // live yet, so a freshly launched TUI has a ready tab that replies immediately.
-// It is a no-op when a session already bound to the terminal gateway exists.
+// It is a no-op when a session already bound to the terminal gateway exists —
+// and that check is now the only thing bounding creation, since the name no
+// longer collides with itself: without it every launch would stack one more
+// session row.
 func ensureDefaultSession(ctx context.Context, c contracts.SessionControl) error {
 	for _, s := range c.Sessions() {
 		for _, g := range s.Gateways {
@@ -78,8 +82,15 @@ func ensureDefaultSession(ctx context.Context, c contracts.SessionControl) error
 			}
 		}
 	}
-	_, err := c.Create(ctx, contracts.CreateSession{Name: "main", TerminalOnly: true, Shared: true})
+	_, err := c.Create(ctx, contracts.CreateSession{Name: defaultSessionName(), TerminalOnly: true, Shared: true})
 	return err
+}
+
+// defaultSessionName mints the name of the TUI's own tab. It is random rather
+// than fixed because `session create` refuses a name already taken, and the
+// shape is a valid session name — it becomes a filesystem path and a git ref.
+func defaultSessionName() string {
+	return "s-" + strings.ToLower(rand.Text()[:4])
 }
 
 // bootstrapDefaultSession waits for the host to bind SessionControl (RunHub binds

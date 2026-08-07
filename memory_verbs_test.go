@@ -13,7 +13,7 @@ import (
 
 func mkReg(t *testing.T) *cli.Registry {
 	t.Helper()
-	reg, err := host.NewRegistry(context.Background(), host.Deps{}, host.Options{StatePath: t.TempDir() + "/s.json"})
+	reg, err := host.NewRegistry(context.Background(), nil, host.Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}

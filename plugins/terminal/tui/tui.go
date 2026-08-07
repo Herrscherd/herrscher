@@ -278,6 +278,18 @@ type model struct {
 	sys  launcher
 	edit launcher
 
+	// The search overlay. searchReturn is where the viewport was when it opened:
+	// a search is a detour, and the way back is half the feature.
+	searchOpen   bool
+	searchQuery  string
+	searchHits   []int
+	searchIdx    int
+	searchReturn int
+
+	// foldTurnsOn collapses the history above the current exchange to one line
+	// per turn, for finding a turn rather than reading it.
+	foldTurnsOn bool
+
 	// foldCode collapses every long code block in the transcript to a summary
 	// line, for reading the conversation rather than the code in it.
 	foldCode bool
@@ -366,6 +378,9 @@ func (m *model) chromeHeight() int {
 	}
 	if m.diagOpen {
 		h += m.diagHeight()
+	}
+	if m.searchOpen {
+		h++ // the one-line search overlay
 	}
 	if m.choice != nil {
 		h += m.choiceHeight()
@@ -950,6 +965,18 @@ func (m *model) spinFrame() string { return spinFrames[m.spin%len(spinFrames)] }
 // yet. Because it is derived from state it appears the instant Enter is pressed and
 // disappears when the first chunk lands or the turn completes — it can never double.
 func (m *model) thinkingContent() string {
+	base := m.baseContent()
+	if !m.searchOpen {
+		return base
+	}
+	// Highlighting sits on top of the content the rest of the TUI counts in, so a
+	// hit's line number means the same thing with the overlay open and closed.
+	return strings.Join(highlightMatches(strings.Split(base, "\n"), m.searchQuery), "\n")
+}
+
+// baseContent is the transcript as the viewport would hold it without the search
+// overlay's marks: the entries, the derived thinking line, and the turn fold.
+func (m *model) baseContent() string {
 	tb := m.tabs[m.active]
 	if tb == nil {
 		return ""
@@ -958,6 +985,9 @@ func (m *model) thinkingContent() string {
 		return m.emptyState(m.vp.Width)
 	}
 	content := m.cachedTranscript(tb)
+	if m.foldTurnsOn {
+		content = strings.Join(foldTurns(strings.Split(content, "\n"), turnFoldKeep), "\n")
+	}
 	if tb.busy && !tb.streamed {
 		line := spinnerStyle.Render(m.spinFrame() + " thinking…")
 		if content != "" {
@@ -1230,6 +1260,33 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// The search overlay is modal: it owns the keyboard while it is open, so
+		// Esc closes the search rather than interrupting the turn — while the
+		// operator is looking at the search, the search is what Esc means.
+		if m.searchOpen {
+			switch msg.Type {
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			case tea.KeyEsc, tea.KeyCtrlS:
+				m.closeSearch()
+				return m, nil
+			case tea.KeyEnter, tea.KeyCtrlN:
+				m.searchStep(1)
+				return m, nil
+			case tea.KeyCtrlP:
+				m.searchStep(-1)
+				return m, nil
+			case tea.KeyBackspace:
+				if q := m.searchQuery; q != "" {
+					m.typeSearch(q[:len(q)-1])
+				}
+				return m, nil
+			case tea.KeyRunes, tea.KeySpace:
+				m.typeSearch(m.searchQuery + msg.String())
+				return m, nil
+			}
+			return m, nil // everything else is swallowed: the query is the only input
+		}
 		// The capability screen is modal and read-only: any key closes it. It
 		// answers one question and there is nothing on it to navigate.
 		if m.diagOpen {
@@ -1363,6 +1420,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, tea.Batch(m.handleEnter(), m.ensureSpin())
+		case tea.KeyCtrlS:
+			m.openSearch()
+			return m, nil
+		case tea.KeyCtrlT:
+			m.toggleTurnFold()
+			return m, nil
 		case tea.KeyCtrlF:
 			m.toggleFold()
 			return m, nil
@@ -1394,6 +1457,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case tea.KeyUp:
+			if msg.Alt {
+				// Alt+↑/↓ walk the transcript by turn: the unit a reader actually
+				// scrolls in is a turn, not a line.
+				m.jumpTurn(-1)
+				return m, nil
+			}
 			// On an empty or already-recalling single-line composer, ↑ walks back
 			// through submitted prompts; otherwise it falls through to the composer.
 			if m.input.LineCount() <= 1 && (m.input.Value() == "" || m.histIdx < len(m.history)) {
@@ -1402,6 +1471,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case tea.KeyDown:
+			if msg.Alt {
+				m.jumpTurn(1)
+				return m, nil
+			}
 			if m.input.LineCount() <= 1 && m.histIdx < len(m.history) {
 				if m.recallHistory(1) {
 					return m, nil
@@ -1488,7 +1561,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · ctrl+f fold code · ctrl+y copy code ·/ commands · @ files")
+	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · ctrl+f fold code · ctrl+y copy code · ctrl+s search · ctrl+t fold turns · alt+↑↓ jump turn · / commands · @ files")
 }
 
 func (m *model) View() string {
@@ -1524,6 +1597,9 @@ func (m *model) View() string {
 	}
 	if m.diagOpen {
 		parts = append(parts, m.diagView())
+	}
+	if m.searchOpen {
+		parts = append(parts, m.searchView())
 	}
 	if m.showHelp {
 		parts = append(parts, m.helpView())

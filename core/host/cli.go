@@ -373,10 +373,9 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 // (see core/cli).
 //
 // It takes every built gateway set rather than one, for the same reason RunHub
-// does: which admin a session channel is minted on is a question about the SET
-// — the home's owner for a normal session, the terminal gateway for a
-// terminal-only one. Handed a single set, this path could only ever answer the
-// first question, and terminal-only sessions were unreachable with no daemon up.
+// does: which admin a session channel is minted on is a question about the set —
+// the home's owner for a normal session, the terminal gateway for a
+// terminal-only one. One set can only ever answer the first.
 func NewRegistry(ctx context.Context, gws []Deps, o Options) (*cli.Registry, error) {
 	st, err := state.LoadState(o.StatePath)
 	if err != nil {

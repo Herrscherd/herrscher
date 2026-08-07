@@ -34,9 +34,8 @@ type oneShotSeedRuntime struct {
 	publish     func(session string, event contracts.Event)
 	record      func(session string, entry state.TranscriptEntry)
 	// timeout caps this turn; zero keeps seedTurnTimeout. It rides the runtime
-	// rather than a parameter because the seed path already threads exactly one
-	// per-request value through these three calls, and a second one would make
-	// every call site unreadable.
+	// because it is per-request like the rest of this struct, and the seed path
+	// already threads exactly one such value through its three call layers.
 	timeout time.Duration
 }
 

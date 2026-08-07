@@ -102,7 +102,7 @@ func main() {
 	// a script (piped/redirected, no TTY) just prints usage and exits.
 	if len(os.Args) < 2 {
 		if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
-			if err := runServe(ctx, nil); err != nil {
+			if err := runServe(ctx, nil, nil); err != nil {
 				fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
 				os.Exit(1)
 			}
@@ -116,14 +116,14 @@ func main() {
 	args := os.Args[2:]
 
 	// A free-text argv is a task, not a mistyped verb: open a session on it and
-	// print the reply. Checked here, ahead of every switch below, because the two
-	// surfaces cannot collide — no verb in the registry contains whitespace.
-	if prompt, ok := promptOf(cmd, args); ok {
-		if prompt == "" {
-			fmt.Fprintln(os.Stderr, "herrscher: -p needs a task, e.g. herrscher -p refactor")
+	// hand it the window. Checked here, ahead of every switch below, because the
+	// two surfaces cannot collide — no verb in the registry contains whitespace.
+	if t, ok := promptOf(cmd, args); ok {
+		if t.Text == "" {
+			fmt.Fprintf(os.Stderr, "herrscher: %s needs a task, e.g. herrscher %s refactor\n", cmd, cmd)
 			os.Exit(2)
 		}
-		if err := runPrompt(ctx, prompt); err != nil {
+		if err := runPrompt(ctx, t); err != nil {
 			fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
 			os.Exit(1)
 		}
@@ -160,7 +160,7 @@ func main() {
 	case "bridge":
 		err = runBridge(ctx, args)
 	case "serve":
-		err = runServe(ctx, args)
+		err = runServe(ctx, args, nil)
 	case "session":
 		err = runSession(ctx, args)
 	case "agent":

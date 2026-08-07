@@ -77,6 +77,23 @@ const (
 // pluginsMax bounds how many plugin rows the screen shows at once.
 const pluginsMax = 10
 
+// pluginsWindow picks the slice of rows to draw around the selection. The list
+// scrolls rather than truncating: a cursor the arrows can reach but the screen
+// does not draw is a selection the operator cannot see.
+func pluginsWindow(idx, n int) (start, end int) {
+	if n <= pluginsMax {
+		return 0, n
+	}
+	start = idx - pluginsMax/2
+	if start > n-pluginsMax {
+		start = n - pluginsMax
+	}
+	if start < 0 {
+		start = 0
+	}
+	return start, start + pluginsMax
+}
+
 // pluginsRequest is the change waiting on the operator's two answers.
 type pluginsRequest struct {
 	action  PluginAction
@@ -349,11 +366,12 @@ func (m *model) pluginsView() string {
 	if len(m.pluginsRows) == 0 && m.pluginsNotice == "" {
 		b.WriteString("\n" + dimStyle.Render("  (no plugins compiled in)"))
 	}
-	for i, r := range m.pluginsRows {
-		if i >= pluginsMax {
-			b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", len(m.pluginsRows)-pluginsMax)))
-			break
-		}
+	start, end := pluginsWindow(m.pluginsIdx, len(m.pluginsRows))
+	if start > 0 {
+		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … %d above", start)))
+	}
+	for i := start; i < end; i++ {
+		r := m.pluginsRows[i]
 		row := fmt.Sprintf("%s · %s → %s", r.Module, r.Installed, r.Latest)
 		if r.Pinned {
 			row += " · pinned"
@@ -363,6 +381,9 @@ func (m *model) pluginsView() string {
 		} else {
 			b.WriteString("\n" + dimStyle.Render("  "+row))
 		}
+	}
+	if end < len(m.pluginsRows) {
+		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … %d below", len(m.pluginsRows)-end)))
 	}
 	if m.pluginsMode == pluginsWarn {
 		for _, f := range m.pluginsFindings {

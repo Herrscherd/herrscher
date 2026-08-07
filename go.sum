@@ -16,8 +16,8 @@ github.com/Herrscherd/herrscher-obsidian-memory v0.3.0 h1:bN238kpqWxoEi5jI+sKUD5
 github.com/Herrscherd/herrscher-obsidian-memory v0.3.0/go.mod h1:tx1YWVTh22pdMDvMEtXaUnCN8OAxjPlhBlWYfemJeKU=
 github.com/Herrscherd/herrscher-orchestrator v0.1.21 h1:pipic2lfFJcYyE0yE/OS4un1vOp5/AYB69A9E0J6Bn4=
 github.com/Herrscherd/herrscher-orchestrator v0.1.21/go.mod h1:ni8AXNLavV6SvWdR1wudszFDrlwg3Lj2zgAUoPonUwQ=
-github.com/Herrscherd/herrscher-transport v0.2.1 h1:xWHly61aBaVI27TpW2EpFfOqp8LcbUyVfnpbHorII8o=
-github.com/Herrscherd/herrscher-transport v0.2.1/go.mod h1:6li0IhdB2xDLrqxoB3/u6umRSB0soQbXTHATyXn1a5A=
+github.com/Herrscherd/herrscher-transport v0.2.2 h1:gaCeqQFeZgkebqyLw1wHt4V42n8LulQV4EIRb4YSpFw=
+github.com/Herrscherd/herrscher-transport v0.2.2/go.mod h1:M9gCWWrrC+xaPGzKZPsTLlJ/hoOg7Nfr4JvXa9KLpbE=
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=

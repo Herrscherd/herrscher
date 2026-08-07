@@ -239,6 +239,18 @@ type model struct {
 	skillsIdx  int            // selected row in the /skills panel
 	skillsRows []skills.Skill // discovered skills, name-sorted
 
+	pluginsOpen     bool        // whether the /plugins screen overlay is open
+	pluginsSeam     PluginSeam  // the host's plugin management, nil in a build without it
+	pluginsMode     pluginsMode // where the screen is in its one flow
+	pluginsIdx      int         // selected plugin row
+	pluginsRows     []PluginRow // the compiled-in plugins, as the seam reports them
+	pluginsMenu     []string    // rows of the menu the flow is currently asking through
+	pluginsMenuIdx  int         // selected row in that menu
+	pluginsReq      pluginsRequest
+	pluginsFindings []string // what is known against the pending change
+	pluginsOutput   string   // the build's own output, shown when it refused
+	pluginsNotice   string   // the line the flow ends on
+
 	choice    *PendingChoice // an active allow/deny permission menu, else nil
 	choiceIdx int            // selected row in the permission menu
 
@@ -402,6 +414,9 @@ func (m *model) chromeHeight() int {
 	}
 	if m.diagOpen {
 		h += m.diagHeight()
+	}
+	if m.pluginsOpen {
+		h += m.pluginsHeight()
 	}
 	if m.searchOpen {
 		h++ // the one-line search overlay
@@ -671,6 +686,9 @@ func (m *model) handleEnter() tea.Cmd {
 		if args[0] == "skills" {
 			m.openSkills() // TUI-local read-only view of available skills
 			return nil
+		}
+		if args[0] == "plugins" {
+			return m.openPlugins() // TUI-local view of the composition this binary is
 		}
 		if args[0] == "attach" {
 			m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
@@ -1162,6 +1180,11 @@ func formatCost(c float64) string {
 // cleanly.
 func Run(ctx context.Context, cancel context.CancelFunc, tm Backend) error {
 	m := newModel(tm)
+	// The plugins screen needs a host module to manage; a binary running away
+	// from its source simply opens the screen and says so.
+	if seam, err := newManageSeam(); err == nil {
+		m.SetPluginSeam(seam)
+	}
 	// WithInput strips the terminal's in-band colour/cursor query responses before
 	// they reach the key parser (see filteredStdin). filteredStdin embeds os.Stdin,
 	// so raw mode and TTY detection still apply to the real terminal.
@@ -1219,6 +1242,11 @@ func (m *model) ensureSpin() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The plugins screen's own answers come back as messages, so nothing it does
+	// — a version listing, a build — runs inside this switch.
+	if cmd, handled := m.handlePluginsMsg(msg); handled {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -1335,6 +1363,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.applySize()
 			m.syncViewport()
 			return m, nil
+		}
+		// The plugins screen is modal: it owns every key while it is open, because
+		// the two confirmations it asks are the only answers that matter then.
+		if m.pluginsOpen {
+			if msg.Type == tea.KeyCtrlC {
+				return m, tea.Quit
+			}
+			return m, m.handlePluginsKey(msg)
 		}
 		// The /skills panel is modal and read-only: arrows scroll the selection,
 		// Esc closes it; every other key is swallowed.
@@ -1635,6 +1671,9 @@ func (m *model) View() string {
 	}
 	if m.diagOpen {
 		parts = append(parts, m.diagView())
+	}
+	if m.pluginsOpen {
+		parts = append(parts, m.pluginsView())
 	}
 	if m.searchOpen {
 		parts = append(parts, m.searchView())

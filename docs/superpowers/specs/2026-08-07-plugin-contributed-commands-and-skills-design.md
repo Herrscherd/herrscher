@@ -139,7 +139,7 @@ Seven, over ports that mostly already exist.
 
 | Command | Port | Contract change |
 |---|---|---|
-| `discord channel read --id --limit --after` | `ChannelReader.Read` | none |
+| `discord channel read --id --limit --after` | `dctl.Messages.Read` (see below) | none |
 | `discord channel post --id --text` | `Gateway.Post` | none |
 | `discord message reply --id --to --text` | `Gateway.Reply` | none |
 | `discord message react --id --msg --emoji` | `Gateway.React` | none |
@@ -170,6 +170,20 @@ It is type-asserted on `GatewaySet.Gateway`, like `CommandSource`, rather than
 given a field on `GatewaySet`: a gateway that can edit already has an instance to
 assert on, and adding a field would make every gateway's construction mention a
 capability most of them lack.
+
+`channel read` deliberately does **not** go through `ChannelReader.Read`, even
+though that is the port this design started from. `Platform.Read`
+(`adapters.go:162`) short-circuits to `nil, nil` for any channel already bound to
+a session, and notes the newest non-bot message id on that channel's sink. Both
+are correct for what it is — the poller's delivery of messages that must become
+turns, where a push-driven channel has nothing to deliver — and both are wrong
+here. Reusing it would make `discord channel read` on the session's own channel
+return empty with no error, the worst available failure, and would move the ACK
+bookkeeping as a side effect of a read the operator asked for.
+
+The command reads `dctl.Messages.Read` directly instead. It stays inside the
+plugin, so there is still no contract change, and an agent-requested read becomes
+side-effect free — which is what a read should be.
 
 Three decisions on `channel read` specifically:
 

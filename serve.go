@@ -226,7 +226,7 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 	if err != nil {
 		return err
 	}
-	deps, err := buildGateway(ctx)
+	gws, err := buildGateways(ctx)
 	if err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 	if cfg.Home != nil && cfg.Home.ID != "" {
 		home = &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
 	}
-	reg, err := host.NewRegistry(ctx, deps, host.Options{
+	reg, err := host.NewRegistry(ctx, gws, host.Options{
 		StatePath:  host.DefaultStatePath(),
 		DefaultCmd: or(cfg.Cmd, "claude"),
 		InstanceID: or(envx.Get("INSTANCE_ID"), cfg.Instance),
@@ -288,20 +288,26 @@ func forwardUnknownVerb(ctx context.Context, argv []string) (string, bool, error
 	return host.ForwardToDaemon(ctx, host.DefaultStatePath(), instance, argv)
 }
 
-// buildGateway returns the first registered gateway's GatewaySet, built through
-// the multi-gateway hub. Behavior is unchanged from the pre-hub version (first
-// gateway wins); the hub additionally tolerates other gateways whose config is
-// absent. A new gateway is still just a blank import + rebuild.
-func buildGateway(ctx context.Context) (host.Deps, error) {
+// buildGateways returns every gateway set the hub could build. BuildHub already
+// builds them all — the old buildGateway threw away everything but the first —
+// so this costs nothing extra and lets the operator registry answer the same
+// questions the daemon can (which admin owns the home, which one is the
+// terminal). Gateways whose config is absent are simply not in the result.
+func buildGateways(ctx context.Context) ([]host.Deps, error) {
 	hub, err := host.BuildHub(ctx, contracts.Default.Gateways(), os.Getenv)
 	if err != nil {
-		return host.Deps{}, err
+		return nil, err
 	}
-	set, ok := hub.First()
-	if !ok {
-		return host.Deps{}, fmt.Errorf("no gateway built")
+	var sets []host.Deps
+	for _, kind := range hub.Kinds() {
+		if set, ok := hub.Get(kind); ok {
+			sets = append(sets, set)
+		}
 	}
-	return set, nil
+	if len(sets) == 0 {
+		return nil, fmt.Errorf("no gateway built")
+	}
+	return sets, nil
 }
 
 // scanFlag returns the value of --name / -name (space- or =-separated) from a

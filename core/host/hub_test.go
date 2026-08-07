@@ -83,7 +83,7 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 }
 
 func TestSessionSeedRegisteredRequiresNameAndTask(t *testing.T) {
-	reg, err := NewRegistry(context.Background(), Deps{}, Options{StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}

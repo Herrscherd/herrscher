@@ -55,3 +55,17 @@ func CollectCommands(gws []contracts.GatewaySet) ([]contracts.Cmd, error) {
 	}
 	return out, nil
 }
+
+// contributedKinds reduces collected commands to the namespaces they occupy —
+// the set the daemon consults to tell a plugin verb from one of its own. The
+// first path element is enough: CollectCommands writes the kind there itself,
+// and a kind colliding with a built-in never survives registry construction.
+func contributedKinds(cmds []contracts.Cmd) map[string]bool {
+	kinds := map[string]bool{}
+	for _, c := range cmds {
+		if len(c.Path) > 0 {
+			kinds[c.Path[0]] = true
+		}
+	}
+	return kinds
+}

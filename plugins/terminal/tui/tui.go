@@ -260,6 +260,12 @@ type model struct {
 	// that has a richer and a plainer rendering reads it; nothing re-probes.
 	caps Capabilities
 
+	// imageFetcher and imageHosts drive remote transcript images. Both are unset
+	// by default, which is the terminal gateway's own position: it declares no
+	// attachment hosts, so nothing is fetched until one is wired.
+	imageFetcher func(context.Context, string) ([]byte, error)
+	imageHosts   []string
+
 	// tsCache memoizes the active tab's wrapped transcript so the animation tick
 	// (which repaints every fastTick while a turn is busy) does not re-wrap the
 	// whole history on each frame — only a real content or width change does.
@@ -475,11 +481,13 @@ func (m *model) removeTab(channel string) {
 	}
 }
 
-// route delivers a routed event to its tab, marking inactive tabs unread.
-func (m *model) route(re RoutedEvent) {
+// route delivers a routed event to its tab, marking inactive tabs unread. It
+// returns the command for any work the event started — today, fetching the
+// images a completed answer linked to.
+func (m *model) route(re RoutedEvent) tea.Cmd {
 	if re.Event.T == "closed" {
 		m.removeTab(re.Conv.ID)
-		return
+		return nil
 	}
 	tb := m.ensureTab(re.Conv.ID)
 	before := len(tb.entries)
@@ -490,6 +498,19 @@ func (m *model) route(re RoutedEvent) {
 	if tb.channel == m.active {
 		m.syncViewport()
 	}
+	// Only a finished answer is scanned for images: a streaming one is still
+	// growing, and a half-arrived URL is not a URL.
+	if re.Event.T != "reply" || len(tb.entries) == 0 {
+		return nil
+	}
+	last := len(tb.entries) - 1
+	for last >= 0 && tb.entries[last].role != roleAgent {
+		last--
+	}
+	if last < 0 {
+		return nil
+	}
+	return m.fetchEntryImages(tb, last)
 }
 
 // syncTabs reconciles tabs against the hub's session list: it creates tabs for
@@ -1366,9 +1387,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// PgUp/PgDn reach m.vp.Update(msg) below — not intercepted here.
 	case eventMsg:
-		m.route(RoutedEvent(msg))
+		cmd := m.route(RoutedEvent(msg))
 		// A chunk/status event may have flipped a tab busy; start animating.
-		return m, m.ensureSpin()
+		return m, tea.Batch(cmd, m.ensureSpin())
+	case imageReadyMsg:
+		m.applyImage(msg)
+		return m, nil
 	case dispatchResultMsg:
 		m.syncTabs()
 		line, role := msg.out, roleNotice

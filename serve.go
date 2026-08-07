@@ -301,9 +301,13 @@ type verbDispatcher interface {
 // turn, the reply on stdout — and it is also what a run with no terminal gets,
 // since there is nothing there to draw a window on and an operator piping the
 // binary wants the answer, not a Bubbletea error.
+//
+// A build with no terminal gateway takes the same fallback, and must: there is
+// no frontend to open, so the window path would create the session, start a
+// headless daemon, and leave the task sitting in it unsent.
 func runPrompt(ctx context.Context, t task) error {
 	name := sessionNameFor(t.Text)
-	if t.printsTo(term.IsTerminal(int(os.Stdout.Fd()))) {
+	if t.printsTo(term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway()) {
 		reg, err := newOperatorRegistry(ctx)
 		if err != nil {
 			return err

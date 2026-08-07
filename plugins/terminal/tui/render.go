@@ -23,7 +23,13 @@ func (m *model) renderTranscript(tb *tab, width int) string {
 				b.WriteByte('\n') // a fresh message gets a breathing line above it
 			}
 		}
-		b.WriteString(renderEntry(e, width))
+		if m.foldCode && e.role == roleAgent && !e.streaming {
+			// Folding rewrites the copy this loop holds, never the stored entry:
+			// unfolding then costs a render and not a reconstruction, and what
+			// comes back is exactly what the agent wrote.
+			e.text = foldCodeBlocks(e.text)
+		}
+		b.WriteString(renderEntry(e, width, m.caps))
 	}
 	// Links are found on the finished, wrapped lines rather than on the entry
 	// text: what the operator selects is what is on screen, and a URL folded
@@ -50,7 +56,7 @@ func (m *model) clampLink() {
 // its own shape — that is the whole point of having roles: a tool call, a piece
 // of reasoning and an error are three different things, and a reader should be
 // able to tell them apart without reading them.
-func renderEntry(e entry, width int) string {
+func renderEntry(e entry, width int, caps Capabilities) string {
 	body := width - lipgloss.Width(blockIndent)
 	switch e.role {
 	case roleYou:
@@ -64,7 +70,7 @@ func renderEntry(e entry, width int) string {
 			return titledRule(accentStyle, agentTitle, width) + "\n" +
 				indent(wrapWith(textStyle, e.text, body))
 		}
-		out := openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body), width)
+		out := openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body, caps), width)
 		if e.preview != "" {
 			// An image the answer linked to, fetched and drawn under it. The URL
 			// stays in the prose above: the picture is an addition, not a

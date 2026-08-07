@@ -278,6 +278,10 @@ type model struct {
 	sys  launcher
 	edit launcher
 
+	// foldCode collapses every long code block in the transcript to a summary
+	// line, for reading the conversation rather than the code in it.
+	foldCode bool
+
 	// tsCache memoizes the active tab's wrapped transcript so the animation tick
 	// (which repaints every fastTick while a turn is busy) does not re-wrap the
 	// whole history on each frame — only a real content or width change does.
@@ -1359,6 +1363,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, tea.Batch(m.handleEnter(), m.ensureSpin())
+		case tea.KeyCtrlF:
+			m.toggleFold()
+			return m, nil
+		case tea.KeyCtrlY:
+			m.copyLastCode()
+			return m, nil
 		case tea.KeyCtrlL:
 			// Walk the transcript's links. Selecting one commits to nothing: it only
 			// puts the target in the status line, where it can be read before the
@@ -1478,7 +1488,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · / commands · @ files")
+	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · ctrl+f fold code · ctrl+y copy code ·/ commands · @ files")
 }
 
 func (m *model) View() string {

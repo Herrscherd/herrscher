@@ -12,7 +12,7 @@ import (
 // is free to take away — but a closing rule on every turn said nothing the next
 // speaker's rule did not, and cost a row each time.
 func TestAgentAnswerOpensWithARuleAndIsNotClosed(t *testing.T) {
-	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 60)
+	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 60, Capabilities{})
 	lines := strings.Split(out, "\n")
 	if !strings.Contains(lines[0], agentTitle) {
 		t.Fatalf("the opening rule must name whose voice this is: %q", lines[0])
@@ -28,7 +28,7 @@ func TestAgentAnswerOpensWithARuleAndIsNotClosed(t *testing.T) {
 // A block still arriving gets no closing rule. The block is not closed, and
 // drawing the line that says it is would be a lie redrawn on every chunk.
 func TestStreamingAnswerIsLeftOpen(t *testing.T) {
-	out := renderEntry(entry{role: roleAgent, text: "half an ans", streaming: true}, 60)
+	out := renderEntry(entry{role: roleAgent, text: "half an ans", streaming: true}, 60, Capabilities{})
 	lines := strings.Split(out, "\n")
 	if !strings.Contains(lines[0], agentTitle) {
 		t.Fatalf("a streaming block still announces itself: %q", out)

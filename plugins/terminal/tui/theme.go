@@ -14,6 +14,7 @@ const (
 	glyphThinking = "✳" // a reasoning summary
 	glyphNotice   = "·" // a turn reset / abandoned marker
 	glyphError    = "✗" // a failed command or an error surfaced by the host
+	glyphFold     = "▶" // a folded code block, standing in for its lines
 	glyphBolt     = "⚡" // the terminal's own mark: it leads the status bar and the agent's rule
 )
 

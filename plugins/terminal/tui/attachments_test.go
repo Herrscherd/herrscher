@@ -26,6 +26,8 @@ func (f fakeClipboard) ImageType() (string, bool) {
 
 func (f fakeClipboard) ReadImage(string) ([]byte, error) { return f.data, f.err }
 
+func (f fakeClipboard) WriteText(string) error { return nil }
+
 // TestCtrlVStagesClipboardImage verifies a clipboard image is staged as a pending
 // attachment, shown as a chip, and reserves a chrome row.
 func TestCtrlVStagesClipboardImage(t *testing.T) {
@@ -96,7 +98,7 @@ func TestSubmitCarriesAttachments(t *testing.T) {
 	if last.role != roleYou || len(last.attachments) != 1 || last.attachments[0].Path != path {
 		t.Fatalf("you turn must echo the attachment: %+v", last)
 	}
-	if !strings.Contains(renderEntry(last, 80), filepath.Base(path)) {
+	if !strings.Contains(renderEntry(last, 80, Capabilities{}), filepath.Base(path)) {
 		t.Fatalf("rendered you turn must show the attachment chip")
 	}
 }

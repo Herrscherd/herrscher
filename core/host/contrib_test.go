@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/cli"
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
@@ -131,5 +132,30 @@ func TestPrefixingPreservesTheHandler(t *testing.T) {
 	out, err := cmds[0].Run(context.Background(), contracts.Input{})
 	if err != nil || out != "alpha" {
 		t.Fatalf("the plugin's own handler must survive prefixing: %q %v", out, err)
+	}
+}
+
+// A contributed command must be dispatchable under its namespaced path, which
+// is the whole point: the registry is what the TUI palette and any chat
+// surface both read.
+func TestContributedCommandDispatches(t *testing.T) {
+	reg := &cli.Registry{}
+	cmds, err := contributedCommands([]contracts.GatewaySet{
+		{Gateway: fakeContributor{kind: "alpha", paths: [][]string{{"channel", "read"}}}},
+	})
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	for _, c := range cmds {
+		if err := reg.Add(c); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+	}
+	out, err := reg.Dispatch(context.Background(), []string{"alpha", "channel", "read"})
+	if err != nil {
+		t.Fatalf("a contributed command must dispatch: %v", err)
+	}
+	if out != "alpha" {
+		t.Fatalf("the plugin's handler must run, got %q", out)
 	}
 }

@@ -24,10 +24,11 @@ const (
 	Keep
 )
 
-// Decider is the seam that lets one transaction serve both front ends: the CLI
-// implements it with a terminal prompt, the TUI with a select menu, and neither
-// owns any of the logic around it.
-type Decider interface {
+// decider is the seam that lets the transaction ask its two questions without
+// knowing who answers: a terminal prompt, or the fixed safe answers of an
+// unattended run. A front end that cannot block — a Bubble Tea Update loop —
+// drives PluginOps in phases instead and never supplies one.
+type decider interface {
 	Warn(ctx context.Context, findings []string) Decision
 	Failed(ctx context.Context, buildOutput string) Decision
 }
@@ -39,9 +40,9 @@ type autoDecider struct{}
 func (autoDecider) Warn(context.Context, []string) Decision { return Proceed }
 func (autoDecider) Failed(context.Context, string) Decision { return Restore }
 
-// NewAutoDecider returns the non-interactive Decider, used by --yes and by any
+// newAutoDecider returns the non-interactive decider, used by --yes and by any
 // run with no terminal to ask.
-func NewAutoDecider() Decider { return autoDecider{} }
+func newAutoDecider() decider { return autoDecider{} }
 
 // step is one toolchain invocation inside the transaction. It returns the
 // command's combined output so a failure can be reported in the compiler's own
@@ -56,14 +57,19 @@ var composed = []string{"go.mod", "go.sum", "plugins.go"}
 // warn from what is known, save, try, and ask again when the compiler refuses.
 // The steps are injected so the whole mechanism is exercisable without a
 // compiler and without a terminal.
-func apply(ctx context.Context, dir string, findings []string, d Decider, steps []step) error {
+//
+// An abort is not an error, but it is not a change either, which is why the two
+// are reported separately: a caller that treats a refusal as success announces a
+// composition it never wrote, and a `pin` would record a version the tree never
+// took.
+func apply(ctx context.Context, dir string, findings []string, d decider, steps []step) (applied bool, err error) {
 	if d.Warn(ctx, findings) == Abort {
-		return nil
+		return false, nil
 	}
 
 	saved, err := saveComposition(dir)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	for _, s := range steps {
@@ -74,12 +80,12 @@ func apply(ctx context.Context, dir string, findings []string, d Decider, steps 
 		failure := fmt.Errorf("%w\n%s", err, out)
 		if d.Failed(ctx, out) == Restore {
 			if rerr := restoreComposition(dir, saved); rerr != nil {
-				return errors.Join(failure, rerr)
+				return false, errors.Join(failure, rerr)
 			}
 		}
-		return failure
+		return false, failure
 	}
-	return nil
+	return true, nil
 }
 
 // saveComposition copies the composition files into memory. A file that does not

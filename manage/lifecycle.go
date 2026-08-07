@@ -74,9 +74,14 @@ func UpdateCmd(ctx context.Context, args []string) int {
 	// The plan ends in `go build ./...` then `go install .`: the build is the
 	// compile check that says the bumped plugins still fit together, and it runs
 	// before anything replaces the binary the machine is running.
-	if err := apply(ctx, dir, nil, decider(*yes), cmdSteps(dir, cmds)); err != nil {
+	applied, err := apply(ctx, dir, nil, osDecider(*yes), cmdSteps(dir, cmds))
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
+	}
+	if !applied {
+		fmt.Println("aborted; nothing was written")
+		return 0
 	}
 	fmt.Println("updated plugins and reinstalled the host; restart the service to run it")
 	return 0

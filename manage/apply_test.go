@@ -73,8 +73,8 @@ func TestApplyAbortRunsNothing(t *testing.T) {
 	ran := false
 	steps := []step{func(ctx context.Context) (string, error) { ran = true; return "", nil }}
 
-	if err := apply(context.Background(), dir, []string{"older than installed"}, d, steps); err != nil {
-		t.Fatalf("apply: %v", err)
+	if applied, err := apply(context.Background(), dir, []string{"older than installed"}, d, steps); err != nil || applied {
+		t.Fatalf("apply: applied=%v err=%v, want an abort reported as no change", applied, err)
 	}
 	if !d.warned {
 		t.Error("apply must ask before writing")
@@ -97,8 +97,8 @@ func TestApplySuccessKeepsWhatTheStepsWrote(t *testing.T) {
 		writeStep(dir, "go.sum", "h1:new\n"),
 	}
 
-	if err := apply(context.Background(), dir, nil, d, steps); err != nil {
-		t.Fatalf("apply: %v", err)
+	if applied, err := apply(context.Background(), dir, nil, d, steps); err != nil || !applied {
+		t.Fatalf("apply: applied=%v err=%v", applied, err)
 	}
 	if got, _ := read(t, dir, "go.mod"); !strings.Contains(got, "mod/a v1.0.0") {
 		t.Errorf("go.mod = %q, want the step's write to survive", got)
@@ -124,7 +124,7 @@ func TestApplyRestoreUndoesEverything(t *testing.T) {
 		func(ctx context.Context) (string, error) { third = true; return "", nil },
 	}
 
-	err := apply(context.Background(), dir, nil, d, steps)
+	_, err := apply(context.Background(), dir, nil, d, steps)
 	if err == nil {
 		t.Fatal("want an error carrying the failing step's output")
 	}
@@ -152,7 +152,7 @@ func TestApplyKeepLeavesTheTreeAlone(t *testing.T) {
 		func(ctx context.Context) (string, error) { return "build failed", errors.New("exit status 1") },
 	}
 
-	err := apply(context.Background(), dir, nil, d, steps)
+	_, err := apply(context.Background(), dir, nil, d, steps)
 	if err == nil {
 		t.Fatal("want an error even when the operator keeps the tree")
 	}
@@ -171,7 +171,7 @@ func TestApplyRestoreRemovesAFileThatDidNotExist(t *testing.T) {
 		func(ctx context.Context) (string, error) { return "build failed", errors.New("exit status 1") },
 	}
 
-	if err := apply(context.Background(), dir, nil, d, steps); err == nil {
+	if _, err := apply(context.Background(), dir, nil, d, steps); err == nil {
 		t.Fatal("want an error")
 	}
 	if _, ok := read(t, dir, "go.sum"); ok {
@@ -186,7 +186,7 @@ func TestApplyAutoDeciderProceedsThenRestores(t *testing.T) {
 		func(ctx context.Context) (string, error) { return "build failed", errors.New("exit status 1") },
 	}
 
-	if err := apply(context.Background(), dir, []string{"older than installed"}, NewAutoDecider(), steps); err == nil {
+	if _, err := apply(context.Background(), dir, []string{"older than installed"}, newAutoDecider(), steps); err == nil {
 		t.Fatal("want an error")
 	}
 	for name, want := range original() {

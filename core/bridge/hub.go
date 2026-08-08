@@ -154,8 +154,18 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	}()
 
 	eng := newSkillEngine(backend)
-	runHubTurnsCtl(ctx, in, conn, backend, orch, ctrl, eng, o.Roster)
+	runHubTurnsCtl(ctx, in, conn, backend, orch, ctrl, eng, affordances{roster: o.Roster, caps: o.Capabilities})
 	return ctx.Err()
+}
+
+// affordances are the standing blocks a turn's prompt carries beyond memory and
+// skills: who this session may delegate to, and what its daemon dispatches. They
+// travel as one value because they are the same kind of fact — something the
+// session has that the model cannot discover by looking — and because a turn
+// loop that takes one more parameter per affordance stops being readable.
+type affordances struct {
+	roster contracts.RosterProvider
+	caps   string
 }
 
 // runHubTurns serially drains input frames, running one backend turn per
@@ -164,12 +174,12 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 // sends the next input only after it sees this turn's reply{done}, and this
 // loop processes one frame at a time anyway.
 func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator) {
-	runHubTurnsCtl(ctx, in, sink, backend, orch, nil, nil, nil)
+	runHubTurnsCtl(ctx, in, sink, backend, orch, nil, nil, affordances{})
 }
 
 // runHubTurnsCtl is runHubTurns with an explicit turnController so an interrupt
 // frame read out-of-band can cancel the in-flight turn.
-func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine, roster contracts.RosterProvider) {
+func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine, aff affordances) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -182,7 +192,7 @@ func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contrac
 			case "pick":
 				runPick(ctx, sink, backend, ev.Value)
 			default: // "input" (and any human-origin frame)
-				runOneTurn(ctx, sink, backend, orch, ev, ctrl, eng, roster)
+				runOneTurn(ctx, sink, backend, orch, ev, ctrl, eng, aff)
 			}
 		}
 	}
@@ -191,7 +201,7 @@ func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contrac
 // runOneTurn runs a single backend turn for an input frame, streaming chunk/
 // status events and a terminal reply{done}. An empty output still emits
 // reply{done} so the hub's FIFO can advance.
-func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController, eng *skills.Engine, roster contracts.RosterProvider) {
+func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances) {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
 	if eng != nil {
@@ -202,7 +212,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if orch != nil {
 		memCtx = orch.Context(turnCtx)
 	}
-	prompt := contracts.Prompt{Content: ev.Text, Context: withDelegation(withSkills(memCtx, eng), roster), Author: ev.Who, Attachments: ev.Attachments}
+	prompt := contracts.Prompt{Content: ev.Text, Context: withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), Author: ev.Who, Attachments: ev.Attachments}
 	var cost float64
 	var outTok, inTok, cacheRd, cacheCr int
 	onEvent := func(be contracts.BackendEvent) {

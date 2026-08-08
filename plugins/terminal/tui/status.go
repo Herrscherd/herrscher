@@ -138,6 +138,9 @@ func (m *model) statusBar(tb *tab, width int) string {
 		if g := renderGauge(tb.ctxTokens, info.Vendor); g != "" {
 			segs = append(segs, g)
 		}
+		if ms := m.mouseStatus(); ms != "" {
+			segs = append(segs, ms)
+		}
 		if tb.costTotal > 0 {
 			segs = append(segs, dimStyle.Render(formatCost(tb.costTotal)))
 		}

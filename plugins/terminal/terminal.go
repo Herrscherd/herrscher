@@ -11,6 +11,9 @@ import (
 	"crypto/rand"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -82,47 +85,110 @@ var (
 	_ contracts.SessionControlReceiver = (*Terminal)(nil)
 )
 
-// ensureDefaultSession creates a default terminal-bound session when none is
-// live yet, so a freshly launched TUI has a ready tab that replies immediately.
-// It is a no-op when a session already bound to the terminal gateway exists —
-// and that check is now the only thing bounding creation, since the name no
-// longer collides with itself: without it every launch would stack one more
-// session row.
-func ensureDefaultSession(ctx context.Context, c contracts.SessionControl) error {
-	for _, s := range c.Sessions() {
-		for _, g := range s.Gateways {
-			if g == "terminal" {
-				return nil // a terminal session already exists
+// openDefaultSession answers which session a launching TUI opens on, and
+// returns its name.
+//
+// Reopening the terminal means going back to what you were doing, so an
+// existing terminal-bound session is reused — the one last spoken in, revived
+// first if it had been archived. Only a host with no terminal session at all
+// gets a new one. The old rule minted a session whenever none was *live*, which
+// is how every restart after a close left one more tab nobody had asked for.
+func openDefaultSession(ctx context.Context, c contracts.SessionControl) (string, error) {
+	sessions := c.Sessions()
+	if s, ok := lastTerminalSession(sessions); ok {
+		if s.Archived {
+			if err := c.Resume(s.Name); err != nil {
+				return "", err
 			}
 		}
+		return s.Name, nil
 	}
-	_, err := c.Create(ctx, contracts.CreateSession{Name: defaultSessionName(), TerminalOnly: true, Shared: true})
-	return err
+	name := defaultSessionName(sessions)
+	if _, err := c.Create(ctx, contracts.CreateSession{Name: name, TerminalOnly: true, Shared: true}); err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
-// defaultSessionName mints the name of the TUI's own tab. It is random rather
-// than fixed because `session create` refuses a name already taken, and the
-// shape is a valid session name — it becomes a filesystem path and a git ref.
-func defaultSessionName() string {
+// lastTerminalSession picks the terminal-bound session a launch reopens: the one
+// whose transcript was written to most recently, falling back to the last the
+// daemon lists — the newest — when nothing has ever been said in any of them.
+func lastTerminalSession(sessions []contracts.SessionInfo) (contracts.SessionInfo, bool) {
+	var best contracts.SessionInfo
+	found := false
+	for _, s := range sessions {
+		terminal := false
+		for _, g := range s.Gateways {
+			if g == "terminal" {
+				terminal = true
+				break
+			}
+		}
+		if !terminal {
+			continue
+		}
+		if !found || s.LastTs >= best.LastTs {
+			best, found = s, true
+		}
+	}
+	return best, found
+}
+
+// sessionNameRe mirrors the guard in core/internal/manager/validate.go: a name
+// becomes a filesystem path and a git ref, so a directory whose name does not
+// pass it cannot be one.
+var sessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+
+// defaultSessionName mints the name of the tab a first launch opens: the
+// directory herrscher was started in, because that is what the operator calls
+// what they are working on. A random name is the fallback for a directory whose
+// name is not a legal session slug, or one another session already answers to —
+// `session create` refuses a name already taken, and a refused create is a TUI
+// that opens on nothing.
+func defaultSessionName(taken []contracts.SessionInfo) string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return randomSessionName()
+	}
+	name := slug(filepath.Base(wd))
+	if !sessionNameRe.MatchString(name) {
+		return randomSessionName()
+	}
+	for _, s := range taken {
+		if s.Name == name {
+			return randomSessionName()
+		}
+	}
+	return name
+}
+
+func randomSessionName() string {
 	return "s-" + strings.ToLower(rand.Text()[:4])
 }
 
-// bootstrapDefaultSession waits for the host to bind SessionControl (RunHub binds
-// it from a background goroutine after the TUI may have started), then ensures a
-// default session exists. It blocks on the ctrlReady signal rather than polling,
-// so a slow bind is picked up the instant it lands. Never blocks forever: if the
-// bind doesn't arrive within ~5 s, or ctx is cancelled, it returns silently so
-// the TUI still launches. A failed bootstrap is best-effort and must not stop it.
-func (t *Terminal) bootstrapDefaultSession(ctx context.Context) {
+// bootstrapSession waits for the host to bind SessionControl (RunHub binds it
+// from a background goroutine after the TUI may have started), then resolves the
+// session the window opens on. It blocks on the ctrlReady signal rather than
+// polling, so a slow bind is picked up the instant it lands. Never blocks
+// forever: if the bind doesn't arrive within ~5 s, or ctx is cancelled, it
+// returns "" so the TUI still launches — a bootstrap is best-effort and must not
+// stop it.
+func (t *Terminal) bootstrapSession(ctx context.Context) string {
 	select {
 	case <-ctx.Done():
-		return
+		return ""
 	case <-time.After(5 * time.Second):
-		return
+		return ""
 	case <-t.ctrlReady:
-		if c := t.Control(); c != nil {
-			_ = ensureDefaultSession(ctx, c) // best-effort; error silently ignored
+		c := t.Control()
+		if c == nil {
+			return ""
 		}
+		name, err := openDefaultSession(ctx, c)
+		if err != nil {
+			return "" // best-effort; the window still opens, on whatever is there
+		}
+		return name
 	}
 }
 
@@ -135,10 +201,12 @@ func (t *Terminal) RunForeground(ctx context.Context, cancel context.CancelFunc)
 	t.ctrlMu.Lock()
 	t.baseCtx = ctx
 	t.ctrlMu.Unlock()
-	// A run opened on a named session already has its tab; bootstrapping the
-	// default one would only add an empty second session to the list.
+	// A run opened on a named session already knows its tab; bootstrapping is for
+	// the plain launch, which has to work out which session it comes back to.
 	if t.openSession == "" {
-		t.bootstrapDefaultSession(ctx)
+		t.openSession = t.bootstrapSession(ctx)
+	}
+	if t.openSession == "" {
 		return tui.Run(ctx, cancel, t)
 	}
 	return tui.Run(ctx, cancel, t, tui.OpenOn(t.openSession, t.openText))

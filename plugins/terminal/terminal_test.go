@@ -2,6 +2,8 @@ package terminal
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -59,20 +61,21 @@ func TestEmitDeliversControlEventUnderBackpressure(t *testing.T) {
 func TestBootstrapWaitsForBindThenCreates(t *testing.T) {
 	tm := New()
 	fake := &fakeSessionControl{}
-	done := make(chan struct{})
-	go func() {
-		tm.bootstrapDefaultSession(context.Background())
-		close(done)
-	}()
+	got := make(chan string, 1)
+	go func() { got <- tm.bootstrapSession(context.Background()) }()
 	// Bind after a beat: the ready signal must wake the bootstrap immediately.
 	tm.BindSessionControl(fake)
+	var name string
 	select {
-	case <-done:
+	case name = <-got:
 	case <-time.After(2 * time.Second):
 		t.Fatal("bootstrap did not return after bind")
 	}
 	if len(fake.created) != 1 {
 		t.Fatalf("bootstrap did not create a default session: %+v", fake.created)
+	}
+	if name != fake.created[0].Name {
+		t.Fatalf("bootstrap returned %q, want the session it created (%q)", name, fake.created[0].Name)
 	}
 }
 
@@ -339,27 +342,28 @@ func TestDispatchAllowsSessionAndAgentVerbs(t *testing.T) {
 	}
 }
 
-// --- ensureDefaultSession ---
+// --- openDefaultSession ---
 
 // terminalSessionNameRe mirrors the session-name guard in
 // core/internal/manager/validate.go: whatever name the TUI mints must already
 // pass it, since it becomes a filesystem path and a git ref downstream.
 var terminalSessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
-func TestEnsureDefaultSessionCreatesWhenNone(t *testing.T) {
+func TestOpenDefaultSessionCreatesWhenNone(t *testing.T) {
 	fake := &fakeSessionControl{} // Sessions() returns nil/empty
-	if err := ensureDefaultSession(context.Background(), fake); err != nil {
-		t.Fatalf("ensureDefaultSession: %v", err)
+	name, err := openDefaultSession(context.Background(), fake)
+	if err != nil {
+		t.Fatalf("openDefaultSession: %v", err)
 	}
 	if len(fake.created) != 1 {
 		t.Fatalf("expected one typed Create, got: %+v", fake.created)
 	}
 	spec := fake.created[0]
+	if name != spec.Name {
+		t.Fatalf("opened on %q but created %q", name, spec.Name)
+	}
 	if !terminalSessionNameRe.MatchString(spec.Name) {
 		t.Fatalf("default session name %q is not a valid session slug", spec.Name)
-	}
-	if spec.Name == "main" {
-		t.Fatalf("the default session must not carry a fixed name")
 	}
 	if !spec.TerminalOnly {
 		t.Fatalf("default session must be terminal-only: %+v", spec)
@@ -369,41 +373,84 @@ func TestEnsureDefaultSessionCreatesWhenNone(t *testing.T) {
 	}
 }
 
-func TestEnsureDefaultSessionNamesAreDistinct(t *testing.T) {
-	a, b := &fakeSessionControl{}, &fakeSessionControl{}
-	if err := ensureDefaultSession(context.Background(), a); err != nil {
-		t.Fatalf("ensureDefaultSession: %v", err)
+// A first launch names its tab after the directory it was started in, so the
+// operator recognises it; the random fallback is only for a name already taken,
+// since `session create` refuses those.
+func TestDefaultSessionNameIsTheWorkingDirectory(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := ensureDefaultSession(context.Background(), b); err != nil {
-		t.Fatalf("ensureDefaultSession: %v", err)
+	dir := slug(filepath.Base(wd))
+	if got := defaultSessionName(nil); got != dir {
+		t.Fatalf("defaultSessionName = %q, want the directory %q", got, dir)
 	}
-	if a.created[0].Name == b.created[0].Name {
-		t.Fatalf("both runs named the session %q; session create refuses a name already taken", a.created[0].Name)
+	taken := []contracts.SessionInfo{{Name: dir, Gateways: []string{"discord"}}}
+	other := defaultSessionName(taken)
+	if other == dir {
+		t.Fatalf("defaultSessionName reused the taken name %q", other)
+	}
+	if !terminalSessionNameRe.MatchString(other) {
+		t.Fatalf("fallback name %q is not a valid session slug", other)
 	}
 }
 
-func TestEnsureDefaultSessionSkipsWhenTerminalExists(t *testing.T) {
+// Reopening the terminal comes back to the session last spoken in rather than
+// stacking one more: that pile is what a launch-time create left behind.
+func TestOpenDefaultSessionReusesLastTerminalSession(t *testing.T) {
 	fake := &fakeSessionControl{
 		sessions: []contracts.SessionInfo{
-			{Name: "main", ChannelID: "ch1", Type: "shared", Gateways: []string{"terminal"}},
+			{Name: "old", ChannelID: "ch1", Gateways: []string{"terminal"}, LastTs: "2026-01-01T00:00:00Z"},
+			{Name: "recent", ChannelID: "ch2", Gateways: []string{"terminal"}, LastTs: "2026-06-01T00:00:00Z"},
+			{Name: "chat", ChannelID: "ch3", Gateways: []string{"discord"}, LastTs: "2026-09-01T00:00:00Z"},
 		},
 	}
-	if err := ensureDefaultSession(context.Background(), fake); err != nil {
-		t.Fatalf("ensureDefaultSession: %v", err)
+	name, err := openDefaultSession(context.Background(), fake)
+	if err != nil {
+		t.Fatalf("openDefaultSession: %v", err)
+	}
+	if name != "recent" {
+		t.Fatalf("opened on %q, want the last terminal session", name)
 	}
 	if fake.created != nil {
 		t.Fatalf("Create must not be called when a terminal session exists; got: %+v", fake.created)
 	}
+	if fake.resumed != nil {
+		t.Fatalf("a live session must not be resumed: %+v", fake.resumed)
+	}
 }
 
-func TestEnsureDefaultSessionCreatesWhenOnlyDiscord(t *testing.T) {
+// An archived session is revived rather than replaced: it holds the transcript
+// and the resume token the operator is coming back for.
+func TestOpenDefaultSessionResumesArchived(t *testing.T) {
+	fake := &fakeSessionControl{
+		sessions: []contracts.SessionInfo{
+			{Name: "shelved", ChannelID: "ch1", Gateways: []string{"terminal"}, Archived: true, Resumable: true},
+		},
+	}
+	name, err := openDefaultSession(context.Background(), fake)
+	if err != nil {
+		t.Fatalf("openDefaultSession: %v", err)
+	}
+	if name != "shelved" {
+		t.Fatalf("opened on %q, want the archived session", name)
+	}
+	if len(fake.resumed) != 1 || fake.resumed[0] != "shelved" {
+		t.Fatalf("archived session not resumed: %+v", fake.resumed)
+	}
+	if fake.created != nil {
+		t.Fatalf("Create must not be called when a session can be resumed: %+v", fake.created)
+	}
+}
+
+func TestOpenDefaultSessionCreatesWhenOnlyDiscord(t *testing.T) {
 	fake := &fakeSessionControl{
 		sessions: []contracts.SessionInfo{
 			{Name: "discord-main", ChannelID: "ch2", Type: "shared", Gateways: []string{"discord"}},
 		},
 	}
-	if err := ensureDefaultSession(context.Background(), fake); err != nil {
-		t.Fatalf("ensureDefaultSession: %v", err)
+	if _, err := openDefaultSession(context.Background(), fake); err != nil {
+		t.Fatalf("openDefaultSession: %v", err)
 	}
 	if len(fake.created) != 1 {
 		t.Fatalf("expected a typed Create when only discord session exists; got: %+v", fake.created)

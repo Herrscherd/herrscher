@@ -190,10 +190,6 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	partDir := filepath.Dir(o.StatePath) // participants/<name>.log lives beside state.json
 	sup := supervisor.NewSupervisor(ctx, self)
 	sup.SetLogger(base)
-	// The daemon scrubbed the gateway pair from its own environment (see
-	// CaptureGatewayCreds); hand it back to the bridge — the same trusted binary,
-	// and the process that actually builds backends — through its environment.
-	sup.SetBridgeEnv(GatewayEnvPairs())
 	sup.SetMetrics(h.Metrics())
 	sup.SetAgentsRoot(filepath.Join(partDir, "agents"))
 
@@ -219,6 +215,23 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}
+	// Two things a bridge child cannot obtain for itself, handed down its
+	// environment now that the registry exists — every bridge starts below this.
+	//
+	// The gateway pair, because the daemon scrubbed it from its own environment
+	// (see CaptureGatewayCreds) and the bridge is the process that actually builds
+	// backends; and the summary of what this daemon dispatches, because the child
+	// holds no registry and the gateway-contributed verbs exist only here. Without
+	// the summary an agent asked to read a chat channel reaches for a token of its
+	// own instead of the verb the daemon already carries — a capability it has and
+	// cannot see. (`session switch` restarts a bridge from the operator CLI, whose
+	// registry has no contributed verbs; that child runs without the block until
+	// the daemon respawns it, which beats advertising a list missing the gateways.)
+	bridgeEnv := GatewayEnvPairs()
+	if pair := CapabilityEnvPair(reg.Specs()); pair != "" {
+		bridgeEnv = append(bridgeEnv, pair)
+	}
+	sup.SetBridgeEnv(bridgeEnv)
 	// Only the daemon spawns delegates, so seed the default Codex agent here rather
 	// than in buildRegistry — an operator CLI command must not write agent homes as
 	// a side effect of building its registry.

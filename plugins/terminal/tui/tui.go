@@ -135,6 +135,7 @@ type tab struct {
 	startedAt    time.Time // when the current turn began, for the elapsed-time hint
 	costTotal    float64   // every turn's cost since the tab opened (lastCost is one turn's)
 	ctxTokens    int       // the last prompt actually sent: input + cache read + cache creation
+	ctxMeasured  bool      // a per-message reading arrived during the current turn (see renderInto)
 	openedAt     time.Time // when the tab opened, for the session-age segment
 }
 
@@ -274,6 +275,12 @@ type model struct {
 	clip      clipboard    // system clipboard reader for Ctrl+V image paste
 	pending   []Attachment // files staged for the next submit, shown as chips
 	attachSeq int          // monotonic counter for naming pasted temp files
+
+	// mouseFree records that the mouse has been handed back to the terminal, so
+	// its own selection works (see mouse.go). It is drawn in the status bar: the
+	// wheel stops scrolling while it is set, and a capability that silently comes
+	// and goes is one the operator ends up blaming the program for.
+	mouseFree bool
 
 	// caps is what this terminal can do, resolved once at startup. Every feature
 	// that has a richer and a plainer rendering reads it; nothing re-probes.
@@ -736,6 +743,16 @@ func (m *model) handleEnter() tea.Cmd {
 			m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
 			return nil
 		}
+		if args[0] == "session" && len(args) >= 2 && args[1] == "close" {
+			return m.closeCmd(args[2:])
+		}
+		if args[0] == "copy" {
+			m.copyCmd(args[1:]) // TUI-local: the transcript is here, not on the daemon
+			return nil
+		}
+		if args[0] == "mouse" {
+			return m.toggleMouse() // TUI-local: a terminal mode, nothing to dispatch
+		}
 		return m.dispatchCmd(m.active, args)
 	}
 	if m.active == "" {
@@ -905,23 +922,81 @@ func (m *model) sessionName(channel string) string {
 	return ""
 }
 
-// confirmClose dispatches a close for the active tab's session, resolving the
-// real session name (the tab label can still be the channel id before the first
-// reconcile) and surfacing any error through dispatchResultMsg.
-func (m *model) confirmClose() tea.Cmd {
+// activeSessionName is the session the front tab belongs to, resolved through
+// the hub because a tab's label is still its channel id until the first
+// reconcile. Empty when no tab is open.
+func (m *model) activeSessionName() string {
 	tb := m.tabs[m.active]
 	if tb == nil {
+		return ""
+	}
+	if name := m.sessionName(tb.channel); name != "" {
+		return name
+	}
+	return tb.label
+}
+
+// confirmClose dispatches a close for the active tab's session.
+func (m *model) confirmClose() tea.Cmd {
+	name := m.activeSessionName()
+	if name == "" {
 		return nil
 	}
-	name := m.sessionName(tb.channel)
-	if name == "" {
-		name = tb.label
-	}
+	return m.closeSession(name, false)
+}
+
+// closeSession tears a session down through the typed seam, tagging the result
+// with the tab the close was issued from so any error surfaces where it was
+// asked for.
+func (m *model) closeSession(name string, force bool) tea.Cmd {
 	origin, tm := m.active, m.tm
 	return func() tea.Msg {
-		out, err := tm.Close(name, false)
+		out, err := tm.Close(name, force)
 		return dispatchResultMsg{origin: origin, out: out, err: err}
 	}
+}
+
+// closeCmd answers "/session close": the session it closes is the one you are
+// looking at, unless the line names another.
+//
+// The daemon cannot make that call — it has no notion of which tab is in front —
+// so the flagless form came back as "flag --name needs a value", and that is the
+// exact line the palette leaves in the composer the moment it completes the
+// verb. Closing the session you are in is what typing it means.
+func (m *model) closeCmd(rest []string) tea.Cmd {
+	name, force := closeTarget(rest)
+	if name == "" {
+		name = m.activeSessionName()
+	}
+	if name == "" {
+		m.flash = "no session here to close"
+		return nil
+	}
+	return m.closeSession(name, force)
+}
+
+// closeTarget reads what "/session close" was typed with: the session named on
+// the line, if one was, and whether the close is forced. A "--name" with nothing
+// after it counts as unnamed — that is what the palette completes to, and it
+// means "this one" rather than a mistake.
+func closeTarget(rest []string) (name string, force bool) {
+	for i := 0; i < len(rest); i++ {
+		tok := rest[i]
+		switch {
+		case tok == "--force":
+			force = true
+		case tok == "--name":
+			if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
+				name = rest[i+1]
+				i++
+			}
+		case strings.HasPrefix(tok, "--name="):
+			name = strings.TrimPrefix(tok, "--name=")
+		case !strings.HasPrefix(tok, "--") && name == "":
+			name = tok
+		}
+	}
+	return name, force
 }
 
 func (m *model) switchTab(delta int) {
@@ -964,8 +1039,23 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	}
 	// The size of the prompt actually sent is the one measurement of context
 	// occupancy on the wire; the window it fills is not, hence contextLimit.
+	//
+	// Each message of an agentic turn reports its own whole prompt, so the latest
+	// of those *is* the live context — but the terminal reply carries the turn's
+	// billing totals, which add every one of those prompts up. Reading them as
+	// occupancy is what put "1252.2k/200k · 100%" on the bar after an eight-minute
+	// turn: six windows' worth of tokens, none of them the context.
+	//
+	// The exception is a turn whose whole answer was one message: the vendor
+	// reports its usage after that message's own events, so nothing mid-turn ever
+	// carried a reading, and a sum of one prompt is that prompt. Without this the
+	// gauge stayed blank for every short turn.
 	if used := e.TokensIn + e.CacheRead + e.CacheCreate; used > 0 {
-		tb.ctxTokens = used
+		if !e.Done {
+			tb.ctxTokens, tb.ctxMeasured = used, true
+		} else if !tb.ctxMeasured {
+			tb.ctxTokens = used
+		}
 	}
 	switch e.T {
 	case "chunk":
@@ -1011,15 +1101,18 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 		if e.Done {
 			tb.busy = false
 			tb.streamed = false
+			tb.ctxMeasured = false
 		}
 	case "reset":
 		tb.busy = false
 		tb.streamed = false
+		tb.ctxMeasured = false
 		tb.endStream()
 		tb.appendEntry(entry{role: roleNotice, text: "turn reset"})
 	case "abandoned":
 		tb.busy = false
 		tb.streamed = false
+		tb.ctxMeasured = false
 		tb.disconnected = true
 		tb.endStream()
 		tb.appendEntry(entry{role: roleNotice, text: "turn abandoned"})
@@ -1574,6 +1667,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyCtrlY:
 			m.copyLastCode()
 			return m, nil
+		case tea.KeyCtrlG:
+			// Give the mouse to the terminal, or take it back. The one gesture the
+			// window cannot provide for itself is the one every terminal already
+			// has: select the text on screen with the mouse.
+			return m, m.toggleMouse()
 		case tea.KeyCtrlL:
 			// Walk the transcript's links. Selecting one commits to nothing: it only
 			// puts the target in the status line, where it can be read before the
@@ -1635,6 +1733,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyRunes:
 			if msg.String() == "?" && m.input.Value() == "" {
 				m.toggleHelp()
+				return m, nil
+			}
+			// Alt+y copies the last answer, next to Ctrl+y's last code block: the
+			// two things a reader reaches for, told apart by which one they meant.
+			if msg.Alt && strings.EqualFold(string(msg.Runes), "y") {
+				m.copyTarget(copyReply)
 				return m, nil
 			}
 		}
@@ -1703,7 +1807,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · ctrl+f fold code · ctrl+y copy code · ctrl+s search · ctrl+t fold turns · alt+↑↓ jump turn · / commands · @ files")
+	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · ctrl+g free the mouse · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · ctrl+f fold code · ctrl+y copy code · alt+y copy answer · ctrl+s search · ctrl+t fold turns · alt+↑↓ jump turn · / commands · @ files")
 }
 
 func (m *model) View() string {

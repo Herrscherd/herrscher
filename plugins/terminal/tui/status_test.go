@@ -35,6 +35,26 @@ func TestContextOccupancyIgnoresTheTurnTotals(t *testing.T) {
 	}
 }
 
+// A turn answered in one message emits no mid-turn reading — the vendor reports
+// that message's usage after its own events — and its totals are that one
+// prompt. Refusing them there is what left the gauge blank on short turns.
+func TestContextOccupancyTakesTheTotalsOfAOneMessageTurn(t *testing.T) {
+	m := newTestModel()
+	conv := contracts.Conversation{ID: "a"}
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "chunk", Text: "hi"}})
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "reply", Done: true, Text: "hi", TokensIn: 12_000, CacheRead: 3_000}})
+	if got := m.tabs["a"].ctxTokens; got != 15_000 {
+		t.Fatalf("ctxTokens = %d, want the single message's prompt (15000)", got)
+	}
+	// And the next turn measures itself: the exception must not leak forward into
+	// a turn that does report per-message usage.
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "chunk", Text: "…", TokensIn: 20_000}})
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "reply", Done: true, Text: "done", TokensIn: 900_000}})
+	if got := m.tabs["a"].ctxTokens; got != 20_000 {
+		t.Fatalf("ctxTokens = %d, want the mid-turn reading (20000)", got)
+	}
+}
+
 // TestContextLimitFollowsTheVendorAndTheEnv checks the denominator: a per-vendor
 // constant, overridable when a model's window moves under us.
 func TestContextLimitFollowsTheVendorAndTheEnv(t *testing.T) {

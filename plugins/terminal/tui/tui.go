@@ -135,6 +135,7 @@ type tab struct {
 	startedAt    time.Time // when the current turn began, for the elapsed-time hint
 	costTotal    float64   // every turn's cost since the tab opened (lastCost is one turn's)
 	ctxTokens    int       // the last prompt actually sent: input + cache read + cache creation
+	ctxMeasured  bool      // a per-message reading arrived during the current turn (see renderInto)
 	openedAt     time.Time // when the tab opened, for the session-age segment
 }
 
@@ -1039,13 +1040,22 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	// The size of the prompt actually sent is the one measurement of context
 	// occupancy on the wire; the window it fills is not, hence contextLimit.
 	//
-	// Mid-turn only. Each message of an agentic turn reports its own whole prompt,
-	// so the latest of those *is* the live context — but the terminal reply carries
-	// the turn's billing totals, which add every one of those prompts up. Reading
-	// them as occupancy is what put "1252.2k/200k · 100%" on the bar after an
-	// eight-minute turn: six windows' worth of tokens, none of them the context.
-	if used := e.TokensIn + e.CacheRead + e.CacheCreate; used > 0 && !e.Done {
-		tb.ctxTokens = used
+	// Each message of an agentic turn reports its own whole prompt, so the latest
+	// of those *is* the live context — but the terminal reply carries the turn's
+	// billing totals, which add every one of those prompts up. Reading them as
+	// occupancy is what put "1252.2k/200k · 100%" on the bar after an eight-minute
+	// turn: six windows' worth of tokens, none of them the context.
+	//
+	// The exception is a turn whose whole answer was one message: the vendor
+	// reports its usage after that message's own events, so nothing mid-turn ever
+	// carried a reading, and a sum of one prompt is that prompt. Without this the
+	// gauge stayed blank for every short turn.
+	if used := e.TokensIn + e.CacheRead + e.CacheCreate; used > 0 {
+		if !e.Done {
+			tb.ctxTokens, tb.ctxMeasured = used, true
+		} else if !tb.ctxMeasured {
+			tb.ctxTokens = used
+		}
 	}
 	switch e.T {
 	case "chunk":
@@ -1091,15 +1101,18 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 		if e.Done {
 			tb.busy = false
 			tb.streamed = false
+			tb.ctxMeasured = false
 		}
 	case "reset":
 		tb.busy = false
 		tb.streamed = false
+		tb.ctxMeasured = false
 		tb.endStream()
 		tb.appendEntry(entry{role: roleNotice, text: "turn reset"})
 	case "abandoned":
 		tb.busy = false
 		tb.streamed = false
+		tb.ctxMeasured = false
 		tb.disconnected = true
 		tb.endStream()
 		tb.appendEntry(entry{role: roleNotice, text: "turn abandoned"})

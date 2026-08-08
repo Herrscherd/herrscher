@@ -6,13 +6,12 @@ import (
 )
 
 // Copying out of this window is not the same problem as copying out of a normal
-// terminal. The transcript lives on the alternate screen, which has no
-// scrollback of its own, and the mouse is captured so the wheel can scroll it —
-// between them, the terminal's own click-drag selection is unavailable exactly
-// where the interesting text is. Two answers, because they fail in different
-// places: copyTarget puts a whole message on the clipboard without any
-// selection at all, and freeMouse hands the mouse back so the terminal can
-// select the way it always could.
+// terminal: the transcript lives on the alternate screen, and the mouse is
+// captured so the wheel can scroll it, which is exactly what takes the
+// terminal's own click-drag selection away. Two answers, because they fail in
+// different places — copyTarget puts a whole message on the clipboard with no
+// selection at all, and toggleMouse (mouse.go) hands the mouse back so the
+// terminal can select the way it always could.
 
 // copyTarget is what /copy operates on.
 const (

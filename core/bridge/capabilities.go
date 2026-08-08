@@ -9,12 +9,13 @@ import "strings"
 // the daemon supervising it held that gateway open. The block is the smallest
 // thing that closes the gap: what runs it, how to talk to it, and where the full
 // usage lives.
-const capabilitiesIntro = "You are one session of a running Herrscher daemon: it supervises this session, " +
-	"owns its worktree, and holds open the gateways (chat platforms) this deployment is connected to. " +
+const capabilitiesIntro = "You are one session of a running Herrscher daemon: it supervises this session and holds " +
+	"open the gateways (chat platforms) this deployment is connected to. " +
 	"That daemon is reachable from your shell as `herrscher <verb>` — the same binary, already running — " +
 	"so a verb below acts on the live system, this session included, using the daemon's own credentials. " +
 	"Do not go around it with a token or an API of your own. " +
-	"`herrscher commands` prints every verb with its parameters."
+	"`herrscher commands` prints every verb with its parameters. " +
+	"A verb that ends a session or discards work is the operator's call to make, not yours."
 
 // withCapabilities appends a <capabilities> block — the intro plus the daemon's
 // verbs — to baseCtx, mirroring withSkills and withDelegation. An empty summary

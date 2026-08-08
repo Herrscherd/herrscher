@@ -20,6 +20,21 @@ func TestCapabilitySummaryGroupsByFamily(t *testing.T) {
 	}
 }
 
+// A verb that is a whole family on its own contributes its name and nothing
+// else, even where a longer verb shares that first word: " — " with nothing
+// after it, or with a stray comma in front, reads as a truncated line.
+func TestCapabilitySummaryHasNoDanglingSeparator(t *testing.T) {
+	got := CapabilitySummary([]cli.Spec{
+		{Path: []string{"update"}},
+		{Path: []string{"plugin"}},
+		{Path: []string{"plugin", "list"}},
+	})
+	want := "  plugin — list\n  update"
+	if got != want {
+		t.Fatalf("summary:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 // The block rides in every prompt, so its text must be a function of the build
 // alone: a summary that reordered itself between two daemon starts would spend
 // the prompt cache of every session for nothing.

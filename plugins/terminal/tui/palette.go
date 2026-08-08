@@ -183,6 +183,8 @@ func localCommands() []CommandSpec {
 		{Name: "capabilities", Desc: "what this terminal can render, and what it falls back to"},
 		{Name: "plugins", Desc: "the plugins this binary is made of"},
 		{Name: "attach", Args: "<path>", Desc: "stage a local file with the next message"},
+		{Name: "copy", Args: "[reply|turn|all]", Desc: "put the last answer (or the turn, or everything) on the clipboard"},
+		{Name: "mouse", Desc: "hand the mouse to the terminal so its own selection works (ctrl+g)"},
 	}
 }
 

@@ -275,6 +275,12 @@ type model struct {
 	pending   []Attachment // files staged for the next submit, shown as chips
 	attachSeq int          // monotonic counter for naming pasted temp files
 
+	// mouseFree records that the mouse has been handed back to the terminal, so
+	// its own selection works (see mouse.go). It is drawn in the status bar: the
+	// wheel stops scrolling while it is set, and a capability that silently comes
+	// and goes is one the operator ends up blaming the program for.
+	mouseFree bool
+
 	// caps is what this terminal can do, resolved once at startup. Every feature
 	// that has a richer and a plainer rendering reads it; nothing re-probes.
 	caps Capabilities
@@ -739,6 +745,13 @@ func (m *model) handleEnter() tea.Cmd {
 		if args[0] == "session" && len(args) >= 2 && args[1] == "close" {
 			return m.closeCmd(args[2:])
 		}
+		if args[0] == "copy" {
+			m.copyCmd(args[1:]) // TUI-local: the transcript is here, not on the daemon
+			return nil
+		}
+		if args[0] == "mouse" {
+			return m.toggleMouse() // TUI-local: a terminal mode, nothing to dispatch
+		}
 		return m.dispatchCmd(m.active, args)
 	}
 	if m.active == "" {
@@ -1025,7 +1038,13 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	}
 	// The size of the prompt actually sent is the one measurement of context
 	// occupancy on the wire; the window it fills is not, hence contextLimit.
-	if used := e.TokensIn + e.CacheRead + e.CacheCreate; used > 0 {
+	//
+	// Mid-turn only. Each message of an agentic turn reports its own whole prompt,
+	// so the latest of those *is* the live context — but the terminal reply carries
+	// the turn's billing totals, which add every one of those prompts up. Reading
+	// them as occupancy is what put "1252.2k/200k · 100%" on the bar after an
+	// eight-minute turn: six windows' worth of tokens, none of them the context.
+	if used := e.TokensIn + e.CacheRead + e.CacheCreate; used > 0 && !e.Done {
 		tb.ctxTokens = used
 	}
 	switch e.T {
@@ -1635,6 +1654,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyCtrlY:
 			m.copyLastCode()
 			return m, nil
+		case tea.KeyCtrlG:
+			// Give the mouse to the terminal, or take it back. The one gesture the
+			// window cannot provide for itself is the one every terminal already
+			// has: select the text on screen with the mouse.
+			return m, m.toggleMouse()
 		case tea.KeyCtrlL:
 			// Walk the transcript's links. Selecting one commits to nothing: it only
 			// puts the target in the status line, where it can be read before the
@@ -1696,6 +1720,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyRunes:
 			if msg.String() == "?" && m.input.Value() == "" {
 				m.toggleHelp()
+				return m, nil
+			}
+			// Alt+y copies the last answer, next to Ctrl+y's last code block: the
+			// two things a reader reaches for, told apart by which one they meant.
+			if msg.Alt && strings.EqualFold(string(msg.Runes), "y") {
+				m.copyTarget(copyReply)
 				return m, nil
 			}
 		}
@@ -1764,7 +1794,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · ctrl+f fold code · ctrl+y copy code · ctrl+s search · ctrl+t fold turns · alt+↑↓ jump turn · / commands · @ files")
+	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · ctrl+g free the mouse · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · ctrl+f fold code · ctrl+y copy code · alt+y copy answer · ctrl+s search · ctrl+t fold turns · alt+↑↓ jump turn · / commands · @ files")
 }
 
 func (m *model) View() string {

@@ -219,6 +219,17 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}
+	// The bridge child cannot know what its daemon dispatches — it holds no
+	// registry, and the gateway-contributed verbs exist only here — so the summary
+	// rides down beside the gateway pair. Without it an agent asked to read a
+	// chat channel reaches for a token of its own instead of the verb the
+	// daemon already carries, which is a capability it has and cannot see.
+	// (`session switch` restarts a bridge from the operator CLI, whose registry has
+	// no contributed verbs; that child runs without the block until the daemon
+	// respawns it, which beats advertising a list that is missing the gateways.)
+	if pair := CapabilityEnvPair(reg.Specs()); pair != "" {
+		sup.SetBridgeEnv(append(GatewayEnvPairs(), pair))
+	}
 	// Only the daemon spawns delegates, so seed the default Codex agent here rather
 	// than in buildRegistry — an operator CLI command must not write agent homes as
 	// a side effect of building its registry.

@@ -195,7 +195,7 @@ func TestInbound_InterruptCancelsTurn(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		runHubTurnsCtl(context.Background(), in, sink, be, nil, ctrl, nil, nil)
+		runHubTurnsCtl(context.Background(), in, sink, be, nil, ctrl, nil, affordances{})
 		close(done)
 	}()
 
@@ -243,7 +243,7 @@ func TestInterruptKeepsPartialOutput(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		runHubTurnsCtl(context.Background(), in, sink, be, nil, ctrl, nil, nil)
+		runHubTurnsCtl(context.Background(), in, sink, be, nil, ctrl, nil, affordances{})
 		close(done)
 	}()
 
@@ -271,7 +271,7 @@ func TestInterruptKeepsPartialOutput(t *testing.T) {
 // as an interruption.
 func TestBackendFailureStillReadsAsAFailure(t *testing.T) {
 	sink := &recordSink{}
-	runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, nil)
+	runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{})
 	last := sink.events[len(sink.events)-1]
 	if !strings.HasPrefix(last.Text, errPrefix) {
 		t.Fatalf("an uninterrupted failure must keep its banner; got %q", last.Text)

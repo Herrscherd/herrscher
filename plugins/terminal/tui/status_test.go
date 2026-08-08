@@ -14,10 +14,44 @@ func TestContextOccupancyDerivesFromTheThreeCounters(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{
 		Conv:  contracts.Conversation{ID: "a"},
-		Event: contracts.Event{T: "reply", Done: true, TokensIn: 30_000, CacheRead: 12_000, CacheCreate: 3_000},
+		Event: contracts.Event{T: "chunk", Text: "…", TokensIn: 30_000, CacheRead: 12_000, CacheCreate: 3_000},
 	})
 	if got := m.tabs["a"].ctxTokens; got != 45_000 {
 		t.Fatalf("ctxTokens = %d, want 45000", got)
+	}
+}
+
+// TestContextOccupancyIgnoresTheTurnTotals is the fix for a bar that read
+// 1252.2k/200k: the terminal reply carries what the turn *billed*, which sums
+// every message's prompt, and an agentic turn has a dozen of them. Only the
+// per-message readings measure the window.
+func TestContextOccupancyIgnoresTheTurnTotals(t *testing.T) {
+	m := newTestModel()
+	conv := contracts.Conversation{ID: "a"}
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "chunk", Text: "…", TokensIn: 40_000, CacheRead: 50_000}})
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "reply", Done: true, Text: "done", TokensIn: 600_000, CacheRead: 652_200}})
+	if got := m.tabs["a"].ctxTokens; got != 90_000 {
+		t.Fatalf("ctxTokens = %d, want the last mid-turn reading (90000)", got)
+	}
+}
+
+// A turn answered in one message emits no mid-turn reading — the vendor reports
+// that message's usage after its own events — and its totals are that one
+// prompt. Refusing them there is what left the gauge blank on short turns.
+func TestContextOccupancyTakesTheTotalsOfAOneMessageTurn(t *testing.T) {
+	m := newTestModel()
+	conv := contracts.Conversation{ID: "a"}
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "chunk", Text: "hi"}})
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "reply", Done: true, Text: "hi", TokensIn: 12_000, CacheRead: 3_000}})
+	if got := m.tabs["a"].ctxTokens; got != 15_000 {
+		t.Fatalf("ctxTokens = %d, want the single message's prompt (15000)", got)
+	}
+	// And the next turn measures itself: the exception must not leak forward into
+	// a turn that does report per-message usage.
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "chunk", Text: "…", TokensIn: 20_000}})
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "reply", Done: true, Text: "done", TokensIn: 900_000}})
+	if got := m.tabs["a"].ctxTokens; got != 20_000 {
+		t.Fatalf("ctxTokens = %d, want the mid-turn reading (20000)", got)
 	}
 }
 

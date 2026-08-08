@@ -71,6 +71,10 @@ func runBridge(ctx context.Context, args []string) error {
 		Channel:   *ch,
 		HubSocket: *hubSocket,
 		Roster:    host.NewRoster(rosterRoot),
+		// What the daemon dispatches, handed down at spawn: this process has no
+		// registry of its own, and the verbs a gateway contributes exist only in
+		// the daemon that instantiated it.
+		Capabilities: os.Getenv(host.EnvCapabilities),
 	})
 }
 

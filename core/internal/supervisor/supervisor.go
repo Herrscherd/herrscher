@@ -135,7 +135,8 @@ func (s *Supervisor) SetAgentsRoot(root string) {
 // SetBridgeEnv records extra KEY=VALUE entries handed to every bridge child on
 // top of the inherited environment. The composition root passes the captured
 // gateway credentials here (see host.GatewayEnvPairs), which the daemon removed
-// from its own environment so no vendor CLI can read them.
+// from its own environment so no vendor CLI can read them, and the summary of
+// the verbs it dispatches (host.CapabilityEnvPair), which only the daemon holds.
 func (s *Supervisor) SetBridgeEnv(kv []string) {
 	s.bridgeEnv = append([]string(nil), kv...)
 }

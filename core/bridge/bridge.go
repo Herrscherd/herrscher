@@ -30,6 +30,10 @@ type Options struct {
 	// Roster lists the agents this session may delegate to (optional). When nil or
 	// empty, no delegation affordance is injected.
 	Roster contracts.RosterProvider
+	// Capabilities is the verb summary of the daemon supervising this bridge,
+	// handed down at spawn (the bridge holds no registry of its own). Empty
+	// injects no <capabilities> block.
+	Capabilities string
 }
 
 // Run is the bridge entry point: a pure backend runner. It requires a hub socket
@@ -64,7 +68,9 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 
 	select {
 	case ev := <-in:
-		runOneTurn(ctx, channelSink{ctx: ctx, out: out}, resp, orch, ev, nil, newSkillEngine(resp), nil)
+		// No affordances on the seed path: it is one turn with no supervising
+		// daemon behind it, which is also why it carries no delegation roster.
+		runOneTurn(ctx, channelSink{ctx: ctx, out: out}, resp, orch, ev, nil, newSkillEngine(resp), affordances{})
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

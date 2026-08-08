@@ -1,8 +1,11 @@
 package bridge
 
 import (
+	"context"
 	"strings"
 	"testing"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func TestWithCapabilitiesNamesTheDaemonAndItsVerbs(t *testing.T) {
@@ -11,6 +14,17 @@ func TestWithCapabilitiesNamesTheDaemonAndItsVerbs(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("capabilities block missing %q in:\n%s", want, got)
 		}
+	}
+}
+
+// The summary is worth nothing where it is handed over: it has to reach the
+// prompt of every turn, beside the skills and the delegation roster.
+func TestTurnPromptCarriesTheCapabilities(t *testing.T) {
+	resp := &captureBackend{reply: "ok"}
+	runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, nil,
+		affordances{caps: "  session — close, list"})
+	if !strings.Contains(resp.contexts[0], "<capabilities>") || !strings.Contains(resp.contexts[0], "session — close, list") {
+		t.Fatalf("turn context missing the capabilities block:\n%s", resp.contexts[0])
 	}
 }
 

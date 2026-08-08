@@ -45,8 +45,13 @@ func CapabilitySummary(specs []cli.Spec) string {
 		head := s.Path[0]
 		if _, seen := families[head]; !seen {
 			order = append(order, head)
+			families[head] = nil
 		}
-		families[head] = append(families[head], strings.Join(s.Path[1:], " "))
+		// A one-word command (`commands`) has no tail to list under its own name,
+		// and a " — " with nothing after it reads as a truncation.
+		if tail := strings.Join(s.Path[1:], " "); tail != "" {
+			families[head] = append(families[head], tail)
+		}
 	}
 	sort.Strings(order)
 	var b strings.Builder
@@ -55,9 +60,7 @@ func CapabilitySummary(specs []cli.Spec) string {
 		sort.Strings(verbs)
 		b.WriteString("  ")
 		b.WriteString(head)
-		// A family of one is the whole verb (`commands`), and " — " with nothing
-		// after it reads as a truncation.
-		if len(verbs) > 1 || (len(verbs) == 1 && verbs[0] != "") {
+		if len(verbs) > 0 {
 			b.WriteString(" — ")
 			b.WriteString(strings.Join(verbs, ", "))
 		}

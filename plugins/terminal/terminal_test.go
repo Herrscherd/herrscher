@@ -373,9 +373,32 @@ func TestOpenDefaultSessionCreatesWhenNone(t *testing.T) {
 	}
 }
 
+// A launch is the start of something: it gets its own empty session even when
+// the host is full of conversations, terminal-bound ones included. Landing in
+// yesterday's transcript is the surprise this avoids.
+func TestOpenDefaultSessionAlwaysCreates(t *testing.T) {
+	fake := &fakeSessionControl{
+		sessions: []contracts.SessionInfo{
+			{Name: "old", ChannelID: "ch1", Gateways: []string{"terminal"}, LastTs: "2026-01-01T00:00:00Z"},
+			{Name: "shelved", ChannelID: "ch2", Gateways: []string{"terminal"}, Archived: true, Resumable: true},
+			{Name: "chat", ChannelID: "ch3", Gateways: []string{"discord"}, LastTs: "2026-09-01T00:00:00Z"},
+		},
+	}
+	name, err := openDefaultSession(context.Background(), fake)
+	if err != nil {
+		t.Fatalf("openDefaultSession: %v", err)
+	}
+	if len(fake.created) != 1 || fake.created[0].Name != name {
+		t.Fatalf("a launch must mint its own session; created: %+v (opened on %q)", fake.created, name)
+	}
+	if fake.resumed != nil {
+		t.Fatalf("an archived session is /resume's business, not a launch's: %+v", fake.resumed)
+	}
+}
+
 // A first launch names its tab after the directory it was started in, so the
-// operator recognises it; the random fallback is only for a name already taken,
-// since `session create` refuses those.
+// operator recognises it; a second one in the same directory numbers itself,
+// since `session create` refuses a name already taken.
 func TestDefaultSessionNameIsTheWorkingDirectory(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -386,74 +409,88 @@ func TestDefaultSessionNameIsTheWorkingDirectory(t *testing.T) {
 		t.Fatalf("defaultSessionName = %q, want the directory %q", got, dir)
 	}
 	taken := []contracts.SessionInfo{{Name: dir, Gateways: []string{"discord"}}}
-	other := defaultSessionName(taken)
-	if other == dir {
-		t.Fatalf("defaultSessionName reused the taken name %q", other)
+	if got := defaultSessionName(taken); got != dir+"-2" {
+		t.Fatalf("defaultSessionName = %q, want the numbered %q", got, dir+"-2")
 	}
-	if !terminalSessionNameRe.MatchString(other) {
-		t.Fatalf("fallback name %q is not a valid session slug", other)
+	taken = append(taken, contracts.SessionInfo{Name: dir + "-2"})
+	if got := defaultSessionName(taken); got != dir+"-3" {
+		t.Fatalf("defaultSessionName = %q, want the numbered %q", got, dir+"-3")
 	}
-}
-
-// Reopening the terminal comes back to the session last spoken in rather than
-// stacking one more: that pile is what a launch-time create left behind.
-func TestOpenDefaultSessionReusesLastTerminalSession(t *testing.T) {
-	fake := &fakeSessionControl{
-		sessions: []contracts.SessionInfo{
-			{Name: "old", ChannelID: "ch1", Gateways: []string{"terminal"}, LastTs: "2026-01-01T00:00:00Z"},
-			{Name: "recent", ChannelID: "ch2", Gateways: []string{"terminal"}, LastTs: "2026-06-01T00:00:00Z"},
-			{Name: "chat", ChannelID: "ch3", Gateways: []string{"discord"}, LastTs: "2026-09-01T00:00:00Z"},
-		},
-	}
-	name, err := openDefaultSession(context.Background(), fake)
-	if err != nil {
-		t.Fatalf("openDefaultSession: %v", err)
-	}
-	if name != "recent" {
-		t.Fatalf("opened on %q, want the last terminal session", name)
-	}
-	if fake.created != nil {
-		t.Fatalf("Create must not be called when a terminal session exists; got: %+v", fake.created)
-	}
-	if fake.resumed != nil {
-		t.Fatalf("a live session must not be resumed: %+v", fake.resumed)
+	// Every name it can mint has to survive the manager's guard, the random
+	// last resort included.
+	for _, name := range []string{defaultSessionName(taken), randomSessionName()} {
+		if !terminalSessionNameRe.MatchString(name) {
+			t.Fatalf("minted name %q is not a valid session slug", name)
+		}
 	}
 }
 
-// An archived session is revived rather than replaced: it holds the transcript
-// and the resume token the operator is coming back for.
-func TestOpenDefaultSessionResumesArchived(t *testing.T) {
+// The other half of minting a session per launch: one nobody spoke in is put
+// away on the way out, so opening a window and closing it leaves nothing behind.
+func TestArchiveIfUntouchedClosesTheMintedSession(t *testing.T) {
+	tm := New()
 	fake := &fakeSessionControl{
 		sessions: []contracts.SessionInfo{
-			{Name: "shelved", ChannelID: "ch1", Gateways: []string{"terminal"}, Archived: true, Resumable: true},
+			{Name: "mine", ChannelID: "ch1", Gateways: []string{"terminal"}},
+			{Name: "other", ChannelID: "ch2", Gateways: []string{"terminal"}},
 		},
 	}
-	name, err := openDefaultSession(context.Background(), fake)
-	if err != nil {
-		t.Fatalf("openDefaultSession: %v", err)
+	tm.BindSessionControl(fake)
+	tm.baseCtx = context.Background()
+	tm.mintedSession = "mine"
+
+	tm.archiveIfUntouched()
+	if len(fake.closed) != 1 || fake.closed[0].name != "mine" || fake.closed[0].force {
+		t.Fatalf("untouched session not archived gently: %+v", fake.closed)
 	}
-	if name != "shelved" {
-		t.Fatalf("opened on %q, want the archived session", name)
-	}
-	if len(fake.resumed) != 1 || fake.resumed[0] != "shelved" {
-		t.Fatalf("archived session not resumed: %+v", fake.resumed)
-	}
-	if fake.created != nil {
-		t.Fatalf("Create must not be called when a session can be resumed: %+v", fake.created)
+	// A second pass (quit twice, or a cancel already run) must not close again.
+	tm.archiveIfUntouched()
+	if len(fake.closed) != 1 {
+		t.Fatalf("archive ran twice: %+v", fake.closed)
 	}
 }
 
-func TestOpenDefaultSessionCreatesWhenOnlyDiscord(t *testing.T) {
-	fake := &fakeSessionControl{
-		sessions: []contracts.SessionInfo{
-			{Name: "discord-main", ChannelID: "ch2", Type: "shared", Gateways: []string{"discord"}},
-		},
+// A session that was spoken in is the operator's, whatever happened to the turn:
+// LastTs is the daemon's own reading of "something is in there".
+func TestArchiveIfUntouchedLeavesSpokenAndUnownedSessions(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		minted  string
+		session contracts.SessionInfo
+	}{
+		{"spoken in", "mine", contracts.SessionInfo{Name: "mine", LastTs: "2026-06-01T00:00:00Z"}},
+		{"already archived", "mine", contracts.SessionInfo{Name: "mine", Archived: true}},
+		{"not this window's", "", contracts.SessionInfo{Name: "mine"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tm := New()
+			fake := &fakeSessionControl{sessions: []contracts.SessionInfo{tc.session}}
+			tm.BindSessionControl(fake)
+			tm.baseCtx = context.Background()
+			tm.mintedSession = tc.minted
+
+			tm.archiveIfUntouched()
+			if fake.closed != nil {
+				t.Fatalf("closed a session it does not own: %+v", fake.closed)
+			}
+		})
 	}
-	if _, err := openDefaultSession(context.Background(), fake); err != nil {
-		t.Fatalf("openDefaultSession: %v", err)
-	}
-	if len(fake.created) != 1 {
-		t.Fatalf("expected a typed Create when only discord session exists; got: %+v", fake.created)
+}
+
+// A hub that is already going down cannot archive anything, and a session left
+// live is one the operator can still see: never a Close on a dead context.
+func TestArchiveIfUntouchedSkipsWhenTheDaemonIsGone(t *testing.T) {
+	tm := New()
+	fake := &fakeSessionControl{sessions: []contracts.SessionInfo{{Name: "mine"}}}
+	tm.BindSessionControl(fake)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	tm.baseCtx = ctx
+	tm.mintedSession = "mine"
+
+	tm.archiveIfUntouched()
+	if fake.closed != nil {
+		t.Fatalf("Close attempted on a cancelled lifetime: %+v", fake.closed)
 	}
 }
 

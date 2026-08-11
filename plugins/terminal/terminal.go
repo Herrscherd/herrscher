@@ -65,6 +65,12 @@ type Terminal struct {
 	// that already names the session it is for does not want a second, empty one.
 	openSession string
 	openText    string
+
+	// mintedSession is the session this launch created for itself, and only that
+	// one: it is what the window is allowed to tidy away on the way out. A session
+	// opened by name, or started for a task, was asked for by someone and is not
+	// this window's to archive.
+	mintedSession string
 }
 
 // OpenOn tells the gateway which session its window opens on, and what to send
@@ -85,53 +91,23 @@ var (
 	_ contracts.SessionControlReceiver = (*Terminal)(nil)
 )
 
-// openDefaultSession answers which session a launching TUI opens on, and
-// returns its name.
+// openDefaultSession opens the window on a conversation of its own and returns
+// its name.
 //
-// Reopening the terminal means going back to what you were doing, so an
-// existing terminal-bound session is reused — the one last spoken in, revived
-// first if it had been archived. Only a host with no terminal session at all
-// gets a new one. The old rule minted a session whenever none was *live*, which
-// is how every restart after a close left one more tab nobody had asked for.
+// A launch is the start of something, not the middle of it: it gets an empty
+// session, the way `claude` in a directory does. What came before is not lost —
+// it is a live tab if it is still going, and `/resume` otherwise — but it is not
+// what the window drops you into, because landing in yesterday's conversation is
+// its own kind of surprise. The accumulation this used to cause is answered on
+// the way out instead: an untouched session is archived when the window closes
+// (archiveIfUntouched), so a launch you changed your mind about leaves nothing
+// behind.
 func openDefaultSession(ctx context.Context, c contracts.SessionControl) (string, error) {
-	sessions := c.Sessions()
-	if s, ok := lastTerminalSession(sessions); ok {
-		if s.Archived {
-			if err := c.Resume(s.Name); err != nil {
-				return "", err
-			}
-		}
-		return s.Name, nil
-	}
-	name := defaultSessionName(sessions)
+	name := defaultSessionName(c.Sessions())
 	if _, err := c.Create(ctx, contracts.CreateSession{Name: name, TerminalOnly: true, Shared: true}); err != nil {
 		return "", err
 	}
 	return name, nil
-}
-
-// lastTerminalSession picks the terminal-bound session a launch reopens: the one
-// whose transcript was written to most recently, falling back to the last the
-// daemon lists — the newest — when nothing has ever been said in any of them.
-func lastTerminalSession(sessions []contracts.SessionInfo) (contracts.SessionInfo, bool) {
-	var best contracts.SessionInfo
-	found := false
-	for _, s := range sessions {
-		terminal := false
-		for _, g := range s.Gateways {
-			if g == "terminal" {
-				terminal = true
-				break
-			}
-		}
-		if !terminal {
-			continue
-		}
-		if !found || s.LastTs >= best.LastTs {
-			best, found = s, true
-		}
-	}
-	return best, found
 }
 
 // sessionNameRe mirrors the guard in core/internal/manager/validate.go: a name
@@ -139,27 +115,38 @@ func lastTerminalSession(sessions []contracts.SessionInfo) (contracts.SessionInf
 // pass it cannot be one.
 var sessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
-// defaultSessionName mints the name of the tab a first launch opens: the
-// directory herrscher was started in, because that is what the operator calls
-// what they are working on. A random name is the fallback for a directory whose
-// name is not a legal session slug, or one another session already answers to —
-// `session create` refuses a name already taken, and a refused create is a TUI
-// that opens on nothing.
+// defaultSessionName mints the name of the tab a launch opens: the directory
+// herrscher was started in, because that is what the operator calls what they
+// are working on. Launching there again while the first conversation is still
+// around numbers the new one (`herrscher-2`) rather than inventing a name that
+// says nothing about where you are — `session create` refuses a name already
+// taken, and a refused create is a window that opens on nothing.
+//
+// A random name is the last resort: a directory whose name is not a legal
+// session slug, or one that has already gone through the numbers.
 func defaultSessionName(taken []contracts.SessionInfo) string {
 	wd, err := os.Getwd()
 	if err != nil {
 		return randomSessionName()
 	}
-	name := slug(filepath.Base(wd))
-	if !sessionNameRe.MatchString(name) {
+	base := slug(filepath.Base(wd))
+	if !sessionNameRe.MatchString(base) {
 		return randomSessionName()
 	}
+	used := map[string]bool{}
 	for _, s := range taken {
-		if s.Name == name {
-			return randomSessionName()
+		used[s.Name] = true
+	}
+	for n := 1; n <= 9; n++ {
+		name := base
+		if n > 1 {
+			name = fmt.Sprintf("%s-%d", base, n)
+		}
+		if !used[name] && sessionNameRe.MatchString(name) {
+			return name
 		}
 	}
-	return name
+	return randomSessionName()
 }
 
 func randomSessionName() string {
@@ -188,7 +175,46 @@ func (t *Terminal) bootstrapSession(ctx context.Context) string {
 		if err != nil {
 			return "" // best-effort; the window still opens, on whatever is there
 		}
+		t.mintedSession = name
 		return name
+	}
+}
+
+// archiveIfUntouched puts away the session this launch minted for itself when
+// nothing was ever said in it. Opening a window and closing it again is a common
+// thing to do, and each one used to leave a session behind for good; this is the
+// other half of giving every launch a conversation of its own.
+//
+// It only ever touches the one session this window created, and only while the
+// daemon it would ask is still up: a torn-down hub cannot be asked to archive
+// anything, and a session left live is a session the operator can still see and
+// close — the failure that leaves something behind beats the one that takes
+// something away quietly.
+//
+// "Untouched" is the daemon's reading, not the window's: LastTs is empty until a
+// transcript entry exists, so a session that was spoken in — even one whose turn
+// never came back — is left where it is.
+func (t *Terminal) archiveIfUntouched() {
+	name := t.mintedSession
+	if name == "" {
+		return
+	}
+	t.mintedSession = ""
+	t.ctrlMu.Lock()
+	c, ctx := t.ctrl, t.baseCtx
+	t.ctrlMu.Unlock()
+	if c == nil || ctx == nil || ctx.Err() != nil {
+		return
+	}
+	for _, s := range c.Sessions() {
+		if s.Name != name {
+			continue
+		}
+		if s.Archived || s.LastTs != "" {
+			return
+		}
+		_, _ = c.Close(ctx, name, false)
+		return
 	}
 }
 
@@ -202,14 +228,22 @@ func (t *Terminal) RunForeground(ctx context.Context, cancel context.CancelFunc)
 	t.baseCtx = ctx
 	t.ctrlMu.Unlock()
 	// A run opened on a named session already knows its tab; bootstrapping is for
-	// the plain launch, which has to work out which session it comes back to.
+	// the plain launch, which mints a conversation of its own.
 	if t.openSession == "" {
 		t.openSession = t.bootstrapSession(ctx)
 	}
-	if t.openSession == "" {
-		return tui.Run(ctx, cancel, t)
+	// The tidy-up runs on the way out but *before* the daemon is told to stop:
+	// cancel is what tears the hub down, and a hub that is going down can no
+	// longer archive anything. Wrapping it is the only point where the window has
+	// stopped drawing and the daemon is still there to answer.
+	quit := func() {
+		t.archiveIfUntouched()
+		cancel()
 	}
-	return tui.Run(ctx, cancel, t, tui.OpenOn(t.openSession, t.openText))
+	if t.openSession == "" {
+		return tui.Run(ctx, quit, t)
+	}
+	return tui.Run(ctx, quit, t, tui.OpenOn(t.openSession, t.openText))
 }
 
 // New builds an unbound terminal gateway.

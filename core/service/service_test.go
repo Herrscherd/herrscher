@@ -111,6 +111,195 @@ func TestLinuxPlan(t *testing.T) {
 	assertCmd(t, p, "loginctl enable-linger me")
 }
 
+// A launcher gives the daemon a near-empty PATH (systemd: /usr/local/bin:/usr/bin),
+// and every agent it spawns inherits it. Tools installed under the operator's home
+// — herrscher itself, a workspace CLI — then simply do not exist to the agent, which
+// reads as the agent refusing to do what it was asked. So the daemon must run with
+// the PATH the operator has.
+func TestUnitCarriesTheOperatorsPath(t *testing.T) {
+	c := testConfig("linux")
+	c.Path = "/opt/tool/bin:/usr/bin"
+	p, err := BuildPlan(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit := p.Files[0].Content
+	line := ""
+	for _, l := range strings.Split(unit, "\n") {
+		if strings.HasPrefix(l, "Environment=PATH=") {
+			line = l
+		}
+	}
+	if line == "" {
+		t.Fatalf("unit declares no PATH:\n%s", unit)
+	}
+	for _, want := range []string{
+		"/opt/tool/bin",       // what the operator's shell sees
+		"/home/me/.local/bin", // where the binary itself lives
+	} {
+		if !strings.Contains(line, want) {
+			t.Errorf("PATH missing %q: %s", want, line)
+		}
+	}
+}
+
+// With no PATH captured, the unit must still beat the launcher's default rather
+// than fall back to it.
+func TestUnitPathFallsBackToTheUsualDirs(t *testing.T) {
+	p, err := BuildPlan(testConfig("linux"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"/home/me/.local/bin", "/usr/bin"} {
+		if !strings.Contains(p.Files[0].Content, want) {
+			t.Errorf("default PATH missing %q:\n%s", want, p.Files[0].Content)
+		}
+	}
+}
+
+// launchd is as narrow as systemd, so the agent needs the same treatment there.
+func TestPlistCarriesThePath(t *testing.T) {
+	c := testConfig("darwin")
+	c.Path = "/opt/tool/bin:/usr/bin"
+	p, err := BuildPlan(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plist := p.Files[0].Content
+	if !strings.Contains(plist, "<key>EnvironmentVariables</key>") || !strings.Contains(plist, "/opt/tool/bin") {
+		t.Errorf("plist carries no PATH:\n%s", plist)
+	}
+}
+
+// A PATH is not a secret, but it is attacker-visible surface if it can inject
+// unit directives. Newlines must never reach the unit.
+func TestUnitPathCannotInjectDirectives(t *testing.T) {
+	c := testConfig("linux")
+	c.Path = "/opt/bin\nExecStartPre=/bin/rm -rf /\n"
+	p, err := BuildPlan(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(p.Files[0].Content, "ExecStartPre") {
+		t.Fatalf("a newline in PATH injected a unit directive:\n%s", p.Files[0].Content)
+	}
+}
+
+// A login PATH carries entries that must not outlive the shell: a bundled app's
+// AppImage mount (/tmp/.mount_XXXXXX) is gone by the next launch, and is a
+// directory any local process can recreate — so a long-lived service resolving
+// commands through it would trust whoever gets there first.
+func TestUnitPathDropsVolatileAndRelativeEntries(t *testing.T) {
+	c := testConfig("linux")
+	c.Path = "/tmp/.mount_appXYZ:/keep/bin:relative/bin:/var/tmp/x:/dev/shm/y:/run/user/1000/z:."
+	p, err := BuildPlan(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := ""
+	for _, l := range strings.Split(p.Files[0].Content, "\n") {
+		if strings.HasPrefix(l, "Environment=PATH=") {
+			line = l
+		}
+	}
+	for _, bad := range []string{".mount_appXYZ", "relative/bin", "/var/tmp/x", "/dev/shm/y", "/run/user"} {
+		if strings.Contains(line, bad) {
+			t.Errorf("PATH kept a volatile entry %q: %s", bad, line)
+		}
+	}
+	if !strings.Contains(line, "/keep/bin") {
+		t.Errorf("PATH dropped a legitimate entry: %s", line)
+	}
+	// A relative entry must not survive as a bare "." either.
+	for _, e := range strings.Split(strings.TrimPrefix(line, "Environment=PATH="), ":") {
+		if !strings.HasPrefix(e, "/") {
+			t.Errorf("PATH contains a non-absolute entry %q: %s", e, line)
+		}
+	}
+}
+
+// writeUnit puts content where syncUnitPath looks, under a temp home.
+func writeUnit(t *testing.T, content string) (Config, string) {
+	t.Helper()
+	home := t.TempDir()
+	c := testConfig("linux")
+	c.Home = home
+	c.Path = "/opt/tool/bin"
+	unit := filepath.Join(home, ".config", "systemd", "user", "herrscher.service")
+	if err := os.MkdirAll(filepath.Dir(unit), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(unit, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return c, unit
+}
+
+// `service update` rebuilds the binary and restarts, but the unit on disk was
+// written by whatever version installed it. The PATH the daemon needs must reach a
+// machine that upgrades normally — without resetting the flags it was installed
+// with, which are the operator's choice, not ours.
+func TestUpdateAddsThePathToAUnitThatPredatesIt(t *testing.T) {
+	c, unit := writeUnit(t, "[Unit]\nDescription=x\n\n[Service]\nType=simple\n"+
+		"ExecStart=/home/me/.local/bin/herrscher serve --health-addr 127.0.0.1:9999\n"+
+		"Restart=always\n\n[Install]\nWantedBy=default.target\n")
+	changed, err := syncUnitPath(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("a unit with no PATH must be reported as changed")
+	}
+	b, _ := os.ReadFile(unit)
+	got := string(b)
+	if !strings.Contains(got, "Environment=PATH=") || !strings.Contains(got, "/opt/tool/bin") {
+		t.Errorf("unit carries no PATH:\n%s", got)
+	}
+	// The directive must land in [Service]; in [Install] systemd ignores it.
+	service := got[strings.Index(got, "[Service]"):strings.Index(got, "[Install]")]
+	if !strings.Contains(service, "Environment=PATH=") {
+		t.Errorf("PATH landed outside [Service]:\n%s", got)
+	}
+	// An upgrade must not reset what the operator installed with.
+	if !strings.Contains(got, "--health-addr 127.0.0.1:9999") {
+		t.Errorf("upgrade clobbered the installed flags:\n%s", got)
+	}
+}
+
+func TestUpdateReplacesAStalePathAndIsIdempotent(t *testing.T) {
+	c, unit := writeUnit(t, "[Unit]\nDescription=x\n\n[Service]\nType=simple\n"+
+		"Environment=PATH=/usr/bin\nExecStart=/x serve\n\n[Install]\nWantedBy=default.target\n")
+	changed, err := syncUnitPath(c)
+	if err != nil || !changed {
+		t.Fatalf("changed=%v err=%v, want a rewrite", changed, err)
+	}
+	b, _ := os.ReadFile(unit)
+	if strings.Count(string(b), "Environment=PATH=") != 1 {
+		t.Errorf("want exactly one PATH directive:\n%s", b)
+	}
+	if !strings.Contains(string(b), "/opt/tool/bin") {
+		t.Errorf("stale PATH not replaced:\n%s", b)
+	}
+	// Second run: nothing to do, so no needless daemon-reload or restart noise.
+	if changed, err = syncUnitPath(c); err != nil || changed {
+		t.Fatalf("changed=%v err=%v, want a no-op on the second run", changed, err)
+	}
+}
+
+// Not installed as a service is the normal case for a foreground daemon; an
+// update must not fail on it.
+func TestSyncUnitPathToleratesNoUnit(t *testing.T) {
+	c := testConfig("linux")
+	c.Home = t.TempDir()
+	if changed, err := syncUnitPath(c); err != nil || changed {
+		t.Fatalf("changed=%v err=%v, want a silent no-op", changed, err)
+	}
+	c.GOOS = "darwin"
+	if changed, err := syncUnitPath(c); err != nil || changed {
+		t.Fatalf("non-systemd: changed=%v err=%v, want a no-op", changed, err)
+	}
+}
+
 func TestMacPlan(t *testing.T) {
 	p, err := BuildPlan(testConfig("darwin"))
 	if err != nil {

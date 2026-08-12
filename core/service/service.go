@@ -432,10 +432,10 @@ func syncUnitPath(c Config) (bool, error) {
 	} else if err != nil {
 		return false, err
 	}
-	want := "Environment=PATH=" + daemonPath(c)
+	want := unitPathLine(c)
 	lines := strings.Split(string(b), "\n")
 	for i, l := range lines {
-		if !strings.HasPrefix(l, "Environment=PATH=") {
+		if !isUnitPathLine(l) {
 			continue
 		}
 		if l == want {
@@ -454,6 +454,21 @@ func syncUnitPath(c Config) (bool, error) {
 		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
 	}
 	return false, nil
+}
+
+// unitPathLine renders the unit's PATH directive. systemd splits Environment= on
+// whitespace, so a directory with a space in it — routine on macOS, legal
+// everywhere — would otherwise cut the daemon's PATH short at that entry and turn
+// the rest into assignments systemd drops with a warning nobody reads. Quoting is
+// the same as for an ExecStart argument.
+func unitPathLine(c Config) string {
+	return "Environment=" + systemdQuote("PATH="+daemonPath(c))
+}
+
+// isUnitPathLine spots the directive whatever form wrote it, so an upgrade
+// replaces a stale PATH instead of adding a second one beside it.
+func isUnitPathLine(l string) bool {
+	return strings.HasPrefix(l, "Environment=PATH=") || strings.HasPrefix(l, `Environment="PATH=`)
 }
 
 // daemonPath is the PATH to bake into the launcher: what the installing shell
@@ -527,7 +542,7 @@ func linuxPlan(c Config) Plan {
 		// systemd hands a user service /usr/local/bin:/usr/bin, and every agent
 		// the daemon spawns inherits it — so anything under the operator's home
 		// is invisible to them. Not a secret, so it belongs in the unit.
-		"Environment=PATH=" + daemonPath(c) + "\n" +
+		unitPathLine(c) + "\n" +
 		// The daemon loads the env file itself (serve --env-file), so the unit
 		// needs no EnvironmentFile and the token never appears here.
 		"ExecStart=" + joinQuoted(systemdQuote, c.BinPath, serveArgs(c)) + "\n" +

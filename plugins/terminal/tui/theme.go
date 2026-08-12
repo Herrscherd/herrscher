@@ -6,16 +6,17 @@ import "github.com/charmbracelet/lipgloss"
 // language is one edit. There is no message-block spine and no brand/tab glyph:
 // the flow is full-width prose, marked only by a dim prompt and tool bullets.
 const (
-	glyphTool     = "●" // a tool-call line of an unrecognised tool
-	glyphResult   = "⎿" // a tool-result / continuation line
-	glyphPrompt   = ">" // the user echo and composer prompt
-	glyphCursor   = "❯" // the selected row in an inline menu
-	glyphUnread   = "•" // an unread background session, shown only in the switch picker
-	glyphThinking = "✳" // a reasoning summary
-	glyphNotice   = "·" // a turn reset / abandoned marker
-	glyphError    = "✗" // a failed command or an error surfaced by the host
-	glyphFold     = "▶" // a folded code block, standing in for its lines
-	glyphBolt     = "⚡" // the terminal's own mark: it leads the status bar and the agent's rule
+	glyphTool      = "●" // a tool-call line of an unrecognised tool
+	glyphResult    = "⎿" // a tool-result / continuation line
+	glyphPrompt    = ">" // the user echo and composer prompt
+	glyphCursor    = "❯" // the selected row in an inline menu
+	glyphUnread    = "•" // an unread background session, shown only in the switch picker
+	glyphThinking  = "✳" // a reasoning summary
+	glyphNotice    = "·" // a turn reset / abandoned marker
+	glyphError     = "✗" // a failed command or an error surfaced by the host
+	glyphFold      = "▶" // a folded code block, standing in for its lines
+	glyphMoreLines = "↵" // lines of a tool call kept back by its budget (alt+e)
+	glyphBolt      = "⚡" // the terminal's own mark: it leads the status bar and the agent's rule
 )
 
 // familyGlyphs give each tool family its own mark, so scanning the gutter reads

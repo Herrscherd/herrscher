@@ -320,6 +320,10 @@ type model struct {
 	// line, for reading the conversation rather than the code in it.
 	foldCode bool
 
+	// expandTools lifts the budget on tool lines: the whole command as it was run
+	// rather than the two lines that say which one it was.
+	expandTools bool
+
 	// tsCache memoizes the active tab's wrapped transcript so the animation tick
 	// (which repaints every fastTick while a turn is busy) does not re-wrap the
 	// whole history on each frame — only a real content or width change does.
@@ -1741,6 +1745,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.copyTarget(copyReply)
 				return m, nil
 			}
+			// Alt+e spells out the tool lines. Alt rather than Ctrl because Ctrl+e is
+			// end-of-line in the composer, and the transcript's reading gestures
+			// already live on Alt (copy answer, jump turn).
+			if msg.Alt && strings.EqualFold(string(msg.Runes), "e") {
+				m.toggleToolExpand()
+				return m, nil
+			}
 		}
 		// PgUp/PgDn reach m.vp.Update(msg) below — not intercepted here.
 	case eventMsg:
@@ -1807,7 +1818,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · ctrl+g free the mouse · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · ctrl+f fold code · ctrl+y copy code · alt+y copy answer · ctrl+s search · ctrl+t fold turns · alt+↑↓ jump turn · / commands · @ files")
+	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · ctrl+g free the mouse · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · ctrl+f fold code · ctrl+y copy code · alt+y copy answer · alt+e whole commands · ctrl+s search · ctrl+t fold turns · alt+↑↓ jump turn · / commands · @ files")
 }
 
 func (m *model) View() string {

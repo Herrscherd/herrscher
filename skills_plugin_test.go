@@ -13,12 +13,12 @@ import (
 // makes an alpha-gateway skill exist only on a machine whose build has it in it.
 func TestPluginSkillsAreInstalled(t *testing.T) {
 	dst := t.TempDir()
-	made := installPluginSkills([]contracts.Plugin{{
+	out := installPluginSkills([]contracts.Plugin{{
 		Manifest: contracts.Manifest{Kind: "fake", Category: contracts.CategoryGateway},
 		Skills:   fstest.MapFS{"demo/SKILL.md": &fstest.MapFile{Data: []byte("# demo")}},
 	}}, dst)
-	if len(made) != 1 || made[0] != "demo" {
-		t.Fatalf("the plugin's skill must be installed, got %v", made)
+	if len(out.Installed) != 1 || out.Installed[0] != "demo" {
+		t.Fatalf("the plugin's skill must be installed, got %+v", out)
 	}
 	b, err := os.ReadFile(filepath.Join(dst, "demo", "SKILL.md"))
 	if err != nil {
@@ -40,7 +40,7 @@ func TestPluginSkillsNeverOverwrite(t *testing.T) {
 	if err := os.WriteFile(mine, []byte("mine"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	installPluginSkills([]contracts.Plugin{{
+	out := installPluginSkills([]contracts.Plugin{{
 		Manifest: contracts.Manifest{Kind: "fake"},
 		Skills:   fstest.MapFS{"demo/SKILL.md": &fstest.MapFile{Data: []byte("# demo")}},
 	}}, dst)
@@ -48,13 +48,17 @@ func TestPluginSkillsNeverOverwrite(t *testing.T) {
 	if string(b) != "mine" {
 		t.Fatalf("an existing skill must be left alone, got %q", b)
 	}
+	// Left alone, but not in silence: the plugin's own playbook is not in effect.
+	if len(out.Diverged) != 1 || out.Diverged[0] != "demo" {
+		t.Fatalf("diverged = %v, want demo reported", out.Diverged)
+	}
 }
 
 // A plugin contributing no skills is the common case and must be free.
 func TestPluginWithoutSkillsIsSkipped(t *testing.T) {
 	dst := t.TempDir()
-	if made := installPluginSkills([]contracts.Plugin{{Manifest: contracts.Manifest{Kind: "bare"}}}, dst); len(made) != 0 {
-		t.Fatalf("a plugin with no skills installs nothing, got %v", made)
+	if out := installPluginSkills([]contracts.Plugin{{Manifest: contracts.Manifest{Kind: "bare"}}}, dst); !out.Empty() {
+		t.Fatalf("a plugin with no skills installs nothing, got %+v", out)
 	}
 	entries, _ := os.ReadDir(dst)
 	if len(entries) != 0 {

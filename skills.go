@@ -20,7 +20,9 @@ import (
 var shippedSkills embed.FS
 
 // installShippedSkills materializes them where every backend looks for personal
-// skills, once. Best effort on purpose: a daemon that cannot write there must
+// skills, and keeps them current: a release that rewrites a playbook must reach
+// the agent, or it goes on following instructions from the day the daemon was
+// first installed. Best effort on purpose: a daemon that cannot write there must
 // still start — it loses a playbook, not its ability to answer.
 func installShippedSkills() {
 	home, err := os.UserHomeDir()
@@ -31,16 +33,28 @@ func installShippedSkills() {
 	if err != nil {
 		return
 	}
-	made, err := skills.Install(src, filepath.Join(home, ".claude", "skills"))
+	dst := filepath.Join(home, ".claude", "skills")
+	out, err := skills.Install(src, dst)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "herrscher: install shipped skills: "+err.Error())
 	}
-	for _, name := range made {
-		fmt.Fprintln(os.Stderr, "herrscher: installed skill "+name)
-	}
+	reportSkills(dst, out, "skill")
+	reportSkills(dst, installPluginSkills(contracts.Default.Plugins(), dst), "plugin skill")
+}
 
-	for _, name := range installPluginSkills(contracts.Default.Plugins(), filepath.Join(home, ".claude", "skills")) {
-		fmt.Fprintln(os.Stderr, "herrscher: installed plugin skill "+name)
+// reportSkills says what happened. A diverged playbook is the one worth words:
+// the agent is following the operator's version, so the shipped rewrite is not in
+// effect, and only they can decide which one wins.
+func reportSkills(dst string, out skills.Outcome, kind string) {
+	for _, name := range out.Installed {
+		fmt.Fprintln(os.Stderr, "herrscher: installed "+kind+" "+name)
+	}
+	for _, name := range out.Updated {
+		fmt.Fprintln(os.Stderr, "herrscher: updated "+kind+" "+name+" to the shipped version")
+	}
+	for _, name := range out.Diverged {
+		fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" differs from the one this build ships and was left as it is; "+
+			"delete "+filepath.Join(dst, name)+" to take the shipped version")
 	}
 }
 
@@ -53,18 +67,20 @@ func installShippedSkills() {
 // Best effort, like installShippedSkills: a daemon that cannot write there loses
 // a playbook, not its ability to answer. Skills are read from a static field, so
 // a gateway that never instantiates for want of a token still ships its own.
-func installPluginSkills(plugins []contracts.Plugin, dst string) []string {
-	var made []string
+func installPluginSkills(plugins []contracts.Plugin, dst string) skills.Outcome {
+	var all skills.Outcome
 	for _, p := range plugins {
 		if p.Skills == nil {
 			continue
 		}
-		names, err := skills.Install(p.Skills, dst)
+		out, err := skills.Install(p.Skills, dst)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "herrscher: install skills for plugin "+p.Manifest.Kind+": "+err.Error())
 			continue
 		}
-		made = append(made, names...)
+		all.Installed = append(all.Installed, out.Installed...)
+		all.Updated = append(all.Updated, out.Updated...)
+		all.Diverged = append(all.Diverged, out.Diverged...)
 	}
-	return made
+	return all
 }

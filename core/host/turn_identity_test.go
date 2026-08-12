@@ -83,8 +83,8 @@ func TestDriverAutoTurnIDIsStableWithinTurnAndDifferentAcrossTurns(t *testing.T)
 	defer cancel()
 	go d.pump(ctx)
 
-	d.queue <- contracts.Event{T: "input", Who: "alice", Text: "first"}
-	d.queue <- contracts.Event{T: "input", Who: "alice", Text: "second"}
+	d.queue <- queued{ev: contracts.Event{T: "input", Who: "alice", Text: "first"}}
+	d.queue <- queued{ev: contracts.Event{T: "input", Who: "alice", Text: "second"}}
 
 	firstInput := receiveTurnEvent(t, toBridge)
 	if firstInput.TurnID == "" {
@@ -121,7 +121,7 @@ func TestDriverAbandonedEventCarriesTurnIdentity(t *testing.T) {
 	defer cancel()
 	go d.pump(ctx)
 
-	d.queue <- contracts.Event{T: "input", Who: "alice", Text: "will fail", TurnID: "turn-abandoned"}
+	d.queue <- queued{ev: contracts.Event{T: "input", Who: "alice", Text: "will fail", TurnID: "turn-abandoned"}}
 	input := receiveTurnEvent(t, toBridge)
 	assertTurnIdentity(t, input, "incarnation-a", "turn-abandoned", "reviewer")
 
@@ -165,7 +165,7 @@ func TestDriversWithSameNameRemainDistinguishableByIncarnation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go d.pump(ctx)
-		d.queue <- contracts.Event{T: "input", Text: "task", TurnID: "same-turn"}
+		d.queue <- queued{ev: contracts.Event{T: "input", Text: "task", TurnID: "same-turn"}}
 		_ = receiveTurnEvent(t, toBridge)
 		fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
 		return receiveTurnEvent(t, emitted)

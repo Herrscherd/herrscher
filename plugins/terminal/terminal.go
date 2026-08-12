@@ -27,10 +27,15 @@ import (
 // ChannelID is the default conversation id used by the terminal gateway.
 const ChannelID = "terminal"
 
+// Kind is what this gateway is called wherever gateways are named — a session's
+// bindings, a manifest, the origin an attached window claims when it speaks into
+// a session it is only watching.
+const Kind = "terminal"
+
 func init() {
 	contracts.Register(contracts.Plugin{
 		Manifest: contracts.Manifest{
-			Kind:         "terminal",
+			Kind:         Kind,
 			Category:     contracts.CategoryGateway,
 			Capabilities: contracts.Capabilities{Replies: true},
 		},

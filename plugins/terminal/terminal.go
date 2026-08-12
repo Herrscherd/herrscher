@@ -325,7 +325,7 @@ func (t *Terminal) UpsertStatusMessage(_ context.Context, channelID, _, content 
 // --- contracts.Gateway ---
 
 func (t *Terminal) Manifest() contracts.Manifest {
-	return contracts.Manifest{Kind: "terminal", Category: contracts.CategoryGateway}
+	return contracts.Manifest{Kind: Kind, Category: contracts.CategoryGateway}
 }
 
 func (t *Terminal) Post(_ context.Context, conv contracts.Conversation, text string) (contracts.MessageID, error) {

@@ -21,7 +21,7 @@ Docs live in [Herrscherd/herrscher-docs](https://github.com/Herrscherd/herrscher
 - **Numbers that mean what they say** — the context gauge measures the live prompt, read from the counters that arrive mid-turn; the reply that ends a turn carries the vendor's *billing* totals for it, which is what the cost line and the budget need and what the window would have shown as an impossible `1252.2k/200k · 100%`.
 - **Model routing** — each backend declares the models it offers in its manifest, so the catalog is queryable without instantiating anything. A route policy picks which of them a build may use: `all` runs on this machine's own vendor logins, `gateway-only` runs every turn through a gateway you supply and refuses the two ways around the catalog (a free-form `--cmd`, or a session with no model at all).
 
-Also: cross-backend skills (`SKILL.md` works on every backend), including the playbooks the binary ships with and installs into `~/.claude/skills` on first run — existing files are never overwritten, so yours stay yours → `guide/skills`; and per-node memory budgets → `guide/budgets`.
+Also: cross-backend skills (`SKILL.md` works on every backend), including the playbooks the binary ships with and installs into `~/.claude/skills` — kept current, because a playbook is instructions and a stale one is the agent following last release's rules: a copy still bytewise the one we wrote is replaced when the shipped text changes, and a copy you edited is left alone and named at startup, so you learn the rewrite is not in effect instead of finding your version gone → `guide/skills`; and per-node memory budgets → `guide/budgets`.
 
 ## Install & run
 
@@ -60,7 +60,7 @@ One daemon per state file: a second one over the same state answers every messag
 
 `init` ends by asking where agent turns run: the route policy, the gateway credentials `gateway-only` requires (both halves or neither — a base URL without a token would redirect the CLI while it keeps authenticating as this machine's own account), and the model a session gets when it names none. It writes them to `.env`; `herrscher models list` shows what the active policy offers.
 
-**No Discord token is needed for the terminal path** — the in-tree terminal gateway is a first-class gateway, so you can create, drive, and resume sessions entirely from your shell. A Discord token is only required if you enable the Discord gateway. For a boot-started service, an Arch `PKGBUILD`, and the rest, see `guide/installation` and `guide/service`.
+**No Discord token is needed for the terminal path** — the in-tree terminal gateway is a first-class gateway, so you can create, drive, and resume sessions entirely from your shell. A Discord token is only required if you enable the Discord gateway. Installed as a service, the daemon keeps the `PATH` of the shell that installed it — a launcher supplies almost nothing, and an agent cannot use a tool it cannot find — minus the entries that cannot outlive that shell, since a service resolving commands through a directory anyone can recreate would trust whoever got there first. For a boot-started service, an Arch `PKGBUILD`, and the rest, see `guide/installation` and `guide/service`.
 
 ## Plugins
 

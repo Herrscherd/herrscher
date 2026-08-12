@@ -143,6 +143,8 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		Param("text", "message text", true).
 		Param("author", "display name shown to the agent (default: you)", false).
 		Param("attachments", "JSON array of local file paths to attach", false).
+		Param("origin", "gateway kind this was typed in (e.g. terminal) — the turn is rendered there "+
+			"instead of in every channel the session is bound to", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			atts, err := parseAttachmentPaths(in.Get("attachments"))
 			if err != nil {
@@ -153,10 +155,11 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 				author = "you"
 			}
 			if !Submit(in.Get("name"), contracts.Inbound{
-				Author:      author,
-				AuthorID:    "local",
-				Text:        in.Get("text"),
-				Attachments: atts,
+				Author:       author,
+				AuthorID:     "local",
+				Text:         in.Get("text"),
+				Attachments:  atts,
+				Conversation: contracts.Conversation{Gateway: in.Get("origin")},
 			}) {
 				return "", fmt.Errorf("no live session named %q", in.Get("name"))
 			}

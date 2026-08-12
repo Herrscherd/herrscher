@@ -377,9 +377,9 @@ func TestSeedEnqueuesInput(t *testing.T) {
 		t.Fatal("Seed should return true for a live session")
 	}
 	select {
-	case ev := <-d.queue:
-		if ev.T != "input" || ev.Text != "finir le module" || ev.Who != "handoff" {
-			t.Fatalf("unexpected frame: %+v", ev)
+	case q := <-d.queue:
+		if q.ev.T != "input" || q.ev.Text != "finir le module" || q.ev.Who != "handoff" {
+			t.Fatalf("unexpected frame: %+v", q.ev)
 		}
 	default:
 		t.Fatal("no frame enqueued")
@@ -1086,9 +1086,9 @@ func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
 		t.Fatal("Submit reported no live session for a registered driver")
 	}
 	select {
-	case ev := <-d.queue:
-		if ev.T != "input" || ev.Who != "leo" || ev.Text != "fix the login bug" {
-			t.Fatalf("queued %+v, want an input frame from leo", ev)
+	case q := <-d.queue:
+		if q.ev.T != "input" || q.ev.Who != "leo" || q.ev.Text != "fix the login bug" {
+			t.Fatalf("queued %+v, want an input frame from leo", q.ev)
 		}
 	default:
 		t.Fatal("Submit queued nothing")

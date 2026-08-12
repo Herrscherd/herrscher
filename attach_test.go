@@ -168,7 +168,9 @@ func TestAttachedFrontendSendsTypedLinesToTheRightSession(t *testing.T) {
 	a.Submit("terminal/alpha-1", "ship it", nil)
 	select {
 	case argv := <-d.argv:
-		want := "session send --name alpha --text ship it"
+		// --origin says the line was typed in this window, so a session whose
+		// conversation lives in a chat channel is not answered there as well.
+		want := "session send --name alpha --origin terminal --text ship it"
 		if strings.Join(argv, " ") != want {
 			t.Fatalf("argv = %q, want %q", strings.Join(argv, " "), want)
 		}

@@ -123,16 +123,7 @@ func TestUnitCarriesTheOperatorsPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unit := p.Files[0].Content
-	line := ""
-	for _, l := range strings.Split(unit, "\n") {
-		if strings.HasPrefix(l, "Environment=PATH=") {
-			line = l
-		}
-	}
-	if line == "" {
-		t.Fatalf("unit declares no PATH:\n%s", unit)
-	}
+	line := unitPathOf(t, p.Files[0].Content)
 	for _, want := range []string{
 		"/opt/tool/bin",       // what the operator's shell sees
 		"/home/me/.local/bin", // where the binary itself lives
@@ -171,6 +162,50 @@ func TestPlistCarriesThePath(t *testing.T) {
 	}
 }
 
+// systemd splits Environment= on whitespace, so a directory with a space in it
+// would cut the PATH short there and leave the rest as assignments it drops.
+func TestUnitPathSurvivesASpaceInADirectory(t *testing.T) {
+	c := testConfig("linux")
+	c.Path = "/opt/my tools/bin:/usr/bin"
+	p, err := BuildPlan(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := unitPathOf(t, p.Files[0].Content)
+	if !strings.HasPrefix(line, `Environment="PATH=`) {
+		t.Errorf("a PATH with a space must be quoted as one value: %s", line)
+	}
+	if !strings.Contains(line, "/opt/my tools/bin") {
+		t.Errorf("PATH lost the entry with a space: %s", line)
+	}
+	// And the sync path must recognise the unquoted form an earlier build wrote,
+	// so the upgrade replaces it instead of adding a second directive.
+	c2, unit := writeUnit(t, "[Unit]\n\n[Service]\nEnvironment=PATH=/usr/bin\nExecStart=/x serve\n\n[Install]\n")
+	c2.Path = c.Path
+	if changed, err := syncUnitPath(c2); err != nil || !changed {
+		t.Fatalf("changed=%v err=%v, want a rewrite", changed, err)
+	}
+	b, _ := os.ReadFile(unit)
+	if strings.Count(string(b), "PATH=") != 1 {
+		t.Errorf("want exactly one PATH directive:\n%s", b)
+	}
+	if changed, err := syncUnitPath(c2); err != nil || changed {
+		t.Fatalf("changed=%v err=%v, want a no-op on the second run", changed, err)
+	}
+}
+
+// unitPathOf returns the unit's PATH directive.
+func unitPathOf(t *testing.T, unit string) string {
+	t.Helper()
+	for _, l := range strings.Split(unit, "\n") {
+		if isUnitPathLine(l) {
+			return l
+		}
+	}
+	t.Fatalf("unit declares no PATH:\n%s", unit)
+	return ""
+}
+
 // A PATH is not a secret, but it is attacker-visible surface if it can inject
 // unit directives. Newlines must never reach the unit.
 func TestUnitPathCannotInjectDirectives(t *testing.T) {
@@ -196,12 +231,7 @@ func TestUnitPathDropsVolatileAndRelativeEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	line := ""
-	for _, l := range strings.Split(p.Files[0].Content, "\n") {
-		if strings.HasPrefix(l, "Environment=PATH=") {
-			line = l
-		}
-	}
+	line := unitPathOf(t, p.Files[0].Content)
 	for _, bad := range []string{".mount_appXYZ", "relative/bin", "/var/tmp/x", "/dev/shm/y", "/run/user"} {
 		if strings.Contains(line, bad) {
 			t.Errorf("PATH kept a volatile entry %q: %s", bad, line)

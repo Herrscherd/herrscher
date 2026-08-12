@@ -311,6 +311,16 @@ func (m *model) toggleFold() {
 	m.syncViewport()
 }
 
+// toggleToolExpand flips the tool-line budget for the whole transcript, the same
+// way toggleFold flips code: the operator is either reading the session or reading
+// one command out of it, and a transcript where some calls are spelled out and
+// others are not is harder to scan than either.
+func (m *model) toggleToolExpand() {
+	m.expandTools = !m.expandTools
+	m.tsCache.valid = false // the cache key cannot see a display-mode change
+	m.syncViewport()
+}
+
 // copyLastCode puts the last code block of the active tab's last agent answer on
 // the system clipboard. The last block is the one the answer ended on, which is
 // nearly always the one being asked for; anything more selective needs a

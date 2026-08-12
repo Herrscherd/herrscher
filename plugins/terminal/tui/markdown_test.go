@@ -20,7 +20,7 @@ func TestMarkdownRendersStructure(t *testing.T) {
 		{"code block", "```go\nfmt.Println(1)\n```", "Println"},
 	}
 	for _, c := range cases {
-		out := renderEntry(entry{role: roleAgent, text: c.in}, 60, Capabilities{})
+		out := renderEntry(entry{role: roleAgent, text: c.in}, 60, view{})
 		if !strings.Contains(out, c.want) {
 			t.Errorf("%s: rendered output must keep its content, got %q", c.name, out)
 		}
@@ -34,7 +34,7 @@ func TestMarkdownRendersStructure(t *testing.T) {
 // closed yet must not be handed to the engine, which would eat the rest.
 func TestStreamingMarkdownStaysRaw(t *testing.T) {
 	in := "here it is:\n```go\nfmt.Println("
-	out := renderEntry(entry{role: roleAgent, text: in, streaming: true}, 60, Capabilities{})
+	out := renderEntry(entry{role: roleAgent, text: in, streaming: true}, 60, view{})
 	if !strings.Contains(out, "```go") {
 		t.Fatalf("a streaming block must render raw: %q", out)
 	}
@@ -62,7 +62,7 @@ func TestMarkdownRewrapsOnWidth(t *testing.T) {
 // alike, and chroma must not get its hands on them.
 func TestDiffBlockColoursItsLineClasses(t *testing.T) {
 	in := "before:\n```diff\n@@ -1,2 +1,2 @@\n-old line\n+new line\n context\n```\nafter."
-	out := renderEntry(entry{role: roleAgent, text: in}, 60, Capabilities{})
+	out := renderEntry(entry{role: roleAgent, text: in}, 60, view{})
 	add := greenStyle.Render("+new line")
 	del := redStyle.Render("-old line")
 	if !strings.Contains(out, add) {

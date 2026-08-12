@@ -29,7 +29,7 @@ func (m *model) renderTranscript(tb *tab, width int) string {
 			// comes back is exactly what the agent wrote.
 			e.text = foldCodeBlocks(e.text)
 		}
-		b.WriteString(renderEntry(e, width, m.caps))
+		b.WriteString(renderEntry(e, width, m.displayMode()))
 	}
 	// Links are found on the finished, wrapped lines rather than on the entry
 	// text: what the operator selects is what is on screen, and a URL folded
@@ -52,11 +52,30 @@ func (m *model) clampLink() {
 	}
 }
 
+// view is the transcript's display mode: the toggles that change how an entry is
+// drawn without changing what it says. It travels as one value rather than as a
+// parameter per toggle — the renderers already took a width and a capability set,
+// and a fourth positional bool is a signature that only grows.
+type view struct {
+	caps Capabilities
+
+	// expand drops the tool-line budget: the whole command, unabbreviated, for the
+	// reader who needs the exact string rather than the shape of the session.
+	expand bool
+}
+
+// displayMode is the view the model is currently in. Not spelled view(): the
+// program already has a View() — bubbletea's — and two methods on one type
+// telling apart only by case is a reading trap, not an abbreviation.
+func (m *model) displayMode() view {
+	return view{caps: m.caps, expand: m.expandTools}
+}
+
 // renderEntry dispatches one entry to the renderer for its role. Each role owns
 // its own shape — that is the whole point of having roles: a tool call, a piece
 // of reasoning and an error are three different things, and a reader should be
 // able to tell them apart without reading them.
-func renderEntry(e entry, width int, caps Capabilities) string {
+func renderEntry(e entry, width int, v view) string {
 	body := width - lipgloss.Width(blockIndent)
 	switch e.role {
 	case roleYou:
@@ -70,7 +89,7 @@ func renderEntry(e entry, width int, caps Capabilities) string {
 			return titledRule(accentStyle, agentTitle, width) + "\n" +
 				indent(wrapWith(textStyle, e.text, body))
 		}
-		out := openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body, caps), width)
+		out := openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body, v.caps), width)
 		if e.preview != "" {
 			// An image the answer linked to, fetched and drawn under it. The URL
 			// stays in the prose above: the picture is an addition, not a
@@ -81,7 +100,7 @@ func renderEntry(e entry, width int, caps Capabilities) string {
 	case roleThinking:
 		return indent(wrapWith(thinkingStyle, glyphThinking+" "+e.text, body))
 	case roleTool:
-		return indent(renderTool(e.text, body))
+		return indent(renderTool(e.text, body, v))
 	case roleNotice:
 		return indent(wrapWith(dimStyle, glyphNotice+" "+e.text, body))
 	case roleError:
@@ -142,80 +161,6 @@ func renderYou(e entry, width int) string {
 		out += "\n" + e.preview
 	}
 	return out
-}
-
-// toolFamilies maps a backend tool name to the family it is rendered as. The
-// vocabulary is closed on purpose: the bus carries a tool line as one opaque
-// string (the hub flattens name and detail together in emitBackendEvent), so
-// the name can only be recovered by reading the first word. Guessing wider than
-// a known list would mistype ordinary prose that happens to start with a verb.
-var toolFamilies = map[string]string{
-	"read":         familyRead,
-	"glob":         familyRead,
-	"grep":         familySearch,
-	"websearch":    familySearch,
-	"webfetch":     familyWeb,
-	"edit":         familyWrite,
-	"write":        familyWrite,
-	"notebookedit": familyWrite,
-	"bash":         familyRun,
-	"task":         familyAgent,
-	"agent":        familyAgent,
-	"skill":        familyAgent,
-}
-
-// The tool families, each with its own glyph so a scan down the gutter reads as
-// what the agent has been doing rather than as one undifferentiated column.
-const (
-	familyRead   = "read"
-	familyWrite  = "write"
-	familyRun    = "run"
-	familySearch = "search"
-	familyWeb    = "web"
-	familyAgent  = "agent"
-)
-
-// toolVerb splits a tool status line into the family it belongs to and the rest
-// of the line. An unrecognised first word yields an empty family and the line
-// untouched — an unknown tool must stay readable, never disappear.
-func toolVerb(text string) (family, rest string) {
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" {
-		return "", ""
-	}
-	head, tail, _ := strings.Cut(trimmed, " ")
-	fam, ok := toolFamilies[strings.ToLower(head)]
-	if !ok {
-		return "", trimmed
-	}
-	return fam, strings.TrimSpace(tail)
-}
-
-// familyWidth pads the family column so targets line up down the gutter. It is
-// the longest family name plus a separating space.
-const familyWidth = 7
-
-// renderTool renders a tool status entry: a typed glyph and the tool's target on
-// the first line, any following lines as dim continuations. A line whose first
-// word is not a known tool keeps the generic glyph and its full text.
-//
-// The line is styled as a whole rather than by segment: a nested style ends with
-// its own reset, which would strip the colour from everything after it.
-func renderTool(text string, width int) string {
-	lines := strings.Split(text, "\n")
-	family, rest := toolVerb(lines[0])
-	head := familyGlyph(family) + " "
-	if family != "" {
-		head += family + strings.Repeat(" ", max(1, familyWidth-len(family)))
-	}
-	head += rest
-	var b strings.Builder
-	b.WriteString(wrapWith(toolStyle, head, width))
-	for _, ln := range lines[1:] {
-		b.WriteByte('\n')
-		b.WriteString(wrapWith(dimStyle, "  "+glyphResult+" "+ln, width))
-	}
-	return b.String()
 }
 
 // wrapWith word-wraps s to width under style, so a long line is folded

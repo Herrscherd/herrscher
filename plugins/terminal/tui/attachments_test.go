@@ -98,7 +98,7 @@ func TestSubmitCarriesAttachments(t *testing.T) {
 	if last.role != roleYou || len(last.attachments) != 1 || last.attachments[0].Path != path {
 		t.Fatalf("you turn must echo the attachment: %+v", last)
 	}
-	if !strings.Contains(renderEntry(last, 80, Capabilities{}), filepath.Base(path)) {
+	if !strings.Contains(renderEntry(last, 80, view{}), filepath.Base(path)) {
 		t.Fatalf("rendered you turn must show the attachment chip")
 	}
 }

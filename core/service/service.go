@@ -48,6 +48,12 @@ type Config struct {
 	ConfigPath string // path to the declarative config.json scaffold (template)
 	DefaultCmd string // pre-fills the scaffold's "cmd" (from install --cmd)
 
+	// Path is the PATH the daemon — and so every agent it spawns — runs with.
+	// Captured from the installing shell, because a launcher supplies almost
+	// nothing (systemd hands a user service /usr/local/bin:/usr/bin) and an agent
+	// cannot invoke a tool it cannot find. Empty falls back to the usual dirs.
+	Path string
+
 	// EnvVars are the secret env vars the daemon needs, declared by the compiled-in
 	// gateways (from their manifests) plus the core owner id. The planner renders
 	// the secrets template and the ready-to-start check from these, so the service
@@ -393,7 +399,131 @@ func Update(ctx context.Context, c Config, src string, pull bool) error {
 	if err := Smoke(ctx, c.BinPath); err != nil {
 		return err
 	}
+	// The unit on disk was written by whichever version installed it, so the PATH
+	// the daemon needs would otherwise only ever reach machines reinstalled from
+	// scratch. Set just that line: the rest of the unit carries the flags chosen
+	// at install time (--health-addr, --env-file), which are not ours to reset.
+	changed, err := syncUnitPath(c)
+	if err != nil {
+		return err
+	}
+	if changed {
+		if err := runCommand(ctx, Command{Argv: []string{"systemctl", "--user", "daemon-reload"}}); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, "herrscher service: unit PATH updated so agents can find tools under your home")
+	}
 	return Restart(ctx, c)
+}
+
+// syncUnitPath makes the installed systemd unit declare the PATH from c, editing
+// that one directive in place and reporting whether anything changed. A missing
+// unit is not an error: nothing to upgrade. systemd only — launchd reads the
+// plist afresh on load and the Windows task inherits the logon environment, so
+// neither froze a stale PATH the way a written unit does.
+func syncUnitPath(c Config) (bool, error) {
+	if goos(c) != "linux" {
+		return false, nil
+	}
+	path := filepath.Join(c.Home, ".config", "systemd", "user", linuxUnitName)
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	want := unitPathLine(c)
+	lines := strings.Split(string(b), "\n")
+	for i, l := range lines {
+		if !isUnitPathLine(l) {
+			continue
+		}
+		if l == want {
+			return false, nil
+		}
+		lines[i] = want
+		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+	}
+	// No PATH directive at all: this unit predates it. It belongs in [Service],
+	// where a bare append would land in [Install] instead.
+	for i, l := range lines {
+		if strings.TrimSpace(l) != "[Service]" {
+			continue
+		}
+		lines = append(lines[:i+1], append([]string{want}, lines[i+1:]...)...)
+		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+	}
+	return false, nil
+}
+
+// unitPathLine renders the unit's PATH directive. systemd splits Environment= on
+// whitespace, so a directory with a space in it — routine on macOS, legal
+// everywhere — would otherwise cut the daemon's PATH short at that entry and turn
+// the rest into assignments systemd drops with a warning nobody reads. Quoting is
+// the same as for an ExecStart argument.
+func unitPathLine(c Config) string {
+	return "Environment=" + systemdQuote("PATH="+daemonPath(c))
+}
+
+// isUnitPathLine spots the directive whatever form wrote it, so an upgrade
+// replaces a stale PATH instead of adding a second one beside it.
+func isUnitPathLine(l string) bool {
+	return strings.HasPrefix(l, "Environment=PATH=") || strings.HasPrefix(l, `Environment="PATH=`)
+}
+
+// daemonPath is the PATH to bake into the launcher: what the installing shell
+// had, plus the directory the binary itself lives in and the conventional user
+// bin dir, so `herrscher` and anything else installed under the home resolve for
+// the agents the daemon spawns. Entries are deduplicated, order preserved, and
+// anything that could break out of a single line is dropped — a unit file is
+// line-oriented, so a newline in a PATH would be a new directive.
+func daemonPath(c Config) string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(dir string) {
+		if dir == "" || seen[dir] || strings.ContainsAny(dir, "\n\r") || !volatileFree(dir) {
+			return
+		}
+		seen[dir] = true
+		out = append(out, dir)
+	}
+	if c.BinPath != "" {
+		add(filepath.Dir(c.BinPath))
+	}
+	if c.Home != "" {
+		add(filepath.Join(c.Home, ".local", "bin"))
+	}
+	// Split on ":" rather than the host's separator: this renders a unit or a
+	// plist, both of which are POSIX, whatever machine plans the install.
+	for _, dir := range strings.Split(c.Path, ":") {
+		add(dir)
+	}
+	// A launcher's own default is the floor, not the ceiling: keep the daemon
+	// working even when nothing was captured at install time.
+	for _, dir := range []string{"/usr/local/bin", "/usr/bin", "/bin"} {
+		add(dir)
+	}
+	return strings.Join(out, ":")
+}
+
+// volatileFree rejects PATH entries that must not be frozen into a launcher that
+// outlives the shell it came from. A login PATH routinely carries a bundled app's
+// mount point (an AppImage's /tmp/.mount_XXXXXX), which is gone by the next launch
+// — and worse, is a directory any local process can recreate, so a long-lived
+// service resolving commands through it would be trusting whoever gets there
+// first. Relative entries are refused for the same reason: they resolve against
+// the daemon's cwd.
+func volatileFree(dir string) bool {
+	if !strings.HasPrefix(dir, "/") {
+		return false
+	}
+	clean := filepath.Clean(dir)
+	for _, bad := range []string{"/tmp", "/var/tmp", "/dev/shm", "/run/user"} {
+		if clean == bad || strings.HasPrefix(clean, bad+"/") {
+			return false
+		}
+	}
+	return true
 }
 
 func linuxPlan(c Config) Plan {
@@ -409,6 +539,10 @@ func linuxPlan(c Config) Plan {
 		"StartLimitBurst=5\n\n" +
 		"[Service]\n" +
 		"Type=simple\n" +
+		// systemd hands a user service /usr/local/bin:/usr/bin, and every agent
+		// the daemon spawns inherits it — so anything under the operator's home
+		// is invisible to them. Not a secret, so it belongs in the unit.
+		unitPathLine(c) + "\n" +
 		// The daemon loads the env file itself (serve --env-file), so the unit
 		// needs no EnvironmentFile and the token never appears here.
 		"ExecStart=" + joinQuoted(systemdQuote, c.BinPath, serveArgs(c)) + "\n" +
@@ -454,6 +588,9 @@ func macPlan(c Config) Plan {
 		"  <key>ProgramArguments</key>\n  <array>\n" +
 		progArgs.String() +
 		"  </array>\n" +
+		"  <key>EnvironmentVariables</key>\n  <dict>\n" +
+		"    <key>PATH</key><string>" + xmlEscape(daemonPath(c)) + "</string>\n" +
+		"  </dict>\n" +
 		"  <key>RunAtLoad</key><true/>\n" +
 		"  <key>KeepAlive</key><true/>\n" +
 		"  <key>StandardOutPath</key><string>" + logPath + "</string>\n" +
@@ -610,6 +747,10 @@ func DefaultConfig() (Config, error) {
 		ConfigPath: filepath.Join(home, ".config", "herrscher", "config.json"),
 		HealthAddr: "127.0.0.1:8787",
 		EnvVars:    registryEnvVars(),
+		// Captured here, from the shell running the install, because this is the
+		// only moment a login PATH is in reach: the daemon's own launcher will
+		// never provide one.
+		Path: os.Getenv("PATH"),
 	}, nil
 }
 

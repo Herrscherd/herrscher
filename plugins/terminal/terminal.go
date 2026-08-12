@@ -27,10 +27,15 @@ import (
 // ChannelID is the default conversation id used by the terminal gateway.
 const ChannelID = "terminal"
 
+// Kind is what this gateway is called wherever gateways are named — a session's
+// bindings, a manifest, the origin an attached window claims when it speaks into
+// a session it is only watching.
+const Kind = "terminal"
+
 func init() {
 	contracts.Register(contracts.Plugin{
 		Manifest: contracts.Manifest{
-			Kind:         "terminal",
+			Kind:         Kind,
 			Category:     contracts.CategoryGateway,
 			Capabilities: contracts.Capabilities{Replies: true},
 		},
@@ -320,7 +325,7 @@ func (t *Terminal) UpsertStatusMessage(_ context.Context, channelID, _, content 
 // --- contracts.Gateway ---
 
 func (t *Terminal) Manifest() contracts.Manifest {
-	return contracts.Manifest{Kind: "terminal", Category: contracts.CategoryGateway}
+	return contracts.Manifest{Kind: Kind, Category: contracts.CategoryGateway}
 }
 
 func (t *Terminal) Post(_ context.Context, conv contracts.Conversation, text string) (contracts.MessageID, error) {

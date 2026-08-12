@@ -117,6 +117,28 @@ not a way to relocate this conversation. When the operator names it ("ouvre ça
 sur superset"), that tool is the instruction: `herrscher session create` is not a
 substitute for it and does not land in the same place.
 
+Naming the tool is asking you to run it. Answering in the channel about what the
+work would involve, however good the answer, is the one outcome they ruled out —
+they asked for it to continue *there*, and a reply here means they got nothing
+they can open.
+
+With `superset`, one command creates the workspace and starts the agent in it:
+
+```bash
+superset projects list                       # find the project id
+superset ws list                             # is there already one on this branch?
+superset ws create --local --project <id> --branch <branch> \
+  --agent claude --prompt "<the brief>"
+```
+
+`--local` targets this machine; drop it and pass `--host <machineId>` for another.
+`--prompt` is required with `--agent` and is the whole handoff (see below). Omit
+both when the operator only wants the worktree — that starts no agent and costs
+nothing. `--json` gives you the new workspace's id to report back.
+
+Check the flags with `--help` rather than trusting this list: it is another
+project's CLI and it moves without telling us.
+
 Before reaching for it, check it is actually there (`command -v <tool>`) and say
 plainly that it is not when it is not. A desktop app's CLI is often a shim into a
 mount that only exists while the app runs, so a "command not found" usually means
@@ -125,10 +147,9 @@ stop instead of hunting for the real binary, whose path will be stale by the nex
 launch. If it needs credentials you do not have, say so: an interactive login is
 the operator's to run, never yours to attempt, because you will hang on it.
 
-Prefer the form that starts no agent when you only need the worktree — it costs
-nothing. Check the existing workspaces before creating one: a second workspace on
-the same branch splits the work in two. And when a delete leaves the git branch
-behind, say so rather than letting stale branches accumulate silently.
+Check the existing workspaces before creating one: a second workspace on the same
+branch splits the work in two. And when a delete leaves the git branch behind, say
+so rather than letting stale branches accumulate silently.
 
 ### The brief is the whole point
 

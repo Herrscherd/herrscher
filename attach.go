@@ -163,6 +163,13 @@ func (a *attachedDaemon) Sessions() []contracts.SessionInfo {
 // Submit sends the typed line to the session the tab belongs to. Attachments
 // travel as local paths: the frontend and the daemon share a filesystem, and the
 // daemon pins every one of them to its staging root before reading.
+//
+// It says the line was typed here, in this window. That matters for a session
+// whose conversation lives somewhere else — one opened from a chat channel: the
+// answer belongs in the tab that asked, and this window already receives it over
+// the events socket. Without the origin the daemon has no way to know the
+// question was not asked in the channel, and posts the answer there too, which
+// reads as the agent replying in the place you just left.
 func (a *attachedDaemon) Submit(channel, text string, attachments []tui.Attachment) {
 	a.mu.Lock()
 	name, ok := a.nameOf[channel]
@@ -177,7 +184,7 @@ func (a *attachedDaemon) Submit(channel, text string, attachments []tui.Attachme
 		a.notify(channel, "no session is bound to this tab any more")
 		return
 	}
-	argv := append([]string{"session", "send", "--name", name}, cli.FlagArg("text", text)...)
+	argv := append([]string{"session", "send", "--name", name, "--origin", terminal.Kind}, cli.FlagArg("text", text)...)
 	if len(attachments) > 0 {
 		paths := make([]string, 0, len(attachments))
 		for _, at := range attachments {

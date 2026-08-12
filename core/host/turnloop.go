@@ -76,12 +76,17 @@ type sessionDriver struct {
 	// channel is the session's own channel: the driver polls it and posts to it,
 	// so each session uses its own channel rather than the gateway's global
 	// default. Empty falls back to the reader's DefaultChannel (legacy/tests).
-	channel   string
-	gateways  []contracts.GatewaySet
-	toBridge  chan<- contracts.Event
-	from      <-chan contracts.Event
-	queue     chan contracts.Event
-	renderers map[string]*gatewayRenderer
+	channel string
+	// saidElsewhere means the turn in flight was typed somewhere none of this
+	// session's gateways can see, so fanOut keeps it off them. Decided once when the
+	// frame is dequeued rather than per event, because every event of the turn
+	// answers the same question. See outsideBoundGateways.
+	saidElsewhere bool
+	gateways      []contracts.GatewaySet
+	toBridge      chan<- contracts.Event
+	from          <-chan contracts.Event
+	queue         chan queued
+	renderers     map[string]*gatewayRenderer
 
 	// hangup signals that the current connection ended so an in-flight turn is
 	// abandoned and the FIFO resumes on reconnect. It is buffered (1) and written
@@ -138,13 +143,22 @@ type sessionDriver struct {
 	gate budgetGate
 }
 
+// queued is one frame waiting its turn, carrying where it came from. The origin
+// travels beside the event rather than on it because contracts.Event is the wire
+// format the bridge and every gateway read, and none of them has any business
+// knowing which channel a turn was typed in — only fanOut does.
+type queued struct {
+	ev     contracts.Event
+	origin contracts.Conversation
+}
+
 func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event) *sessionDriver {
 	return &sessionDriver{
 		name:      name,
 		gateways:  gws,
 		toBridge:  toBridge,
 		from:      fromBridge,
-		queue:     make(chan contracts.Event, 64),
+		queue:     make(chan queued, 64),
 		renderers: map[string]*gatewayRenderer{},
 		hangup:    make(chan struct{}, 1),
 		seen:      map[string]bool{},
@@ -240,7 +254,7 @@ func (d *sessionDriver) recordEntry(role, text string, cost float64, u turnUsage
 // Pick injects a routed select-menu value into this session's turn queue. The
 // bridge answers it out-of-band (serialized with turns) and emits a reply.
 func (d *sessionDriver) Pick(value string) {
-	d.queue <- contracts.Event{T: "pick", Value: value}
+	d.queue <- queued{ev: contracts.Event{T: "pick", Value: value}}
 }
 
 // interruptSendTimeout bounds how long an out-of-band interrupt send waits for
@@ -278,7 +292,7 @@ func (d *sessionDriver) emitPaused(ctx context.Context, reason string) {
 // Seed injects an opening input turn into this session's FIFO. A handoff uses it
 // to hand B its task the same way a human message would arrive.
 func (d *sessionDriver) Seed(task string) {
-	d.queue <- contracts.Event{T: "input", Who: "handoff", Text: task, TurnID: newTurnID()}
+	d.queue <- queued{ev: contracts.Event{T: "input", Who: "handoff", Text: task, TurnID: newTurnID()}}
 }
 
 // SeedAndWait injects an opening task and blocks until that turn's reply{done},
@@ -293,7 +307,7 @@ func (d *sessionDriver) SeedAndWaitWithTurnID(ctx context.Context, task, turnID 
 	d.seenMu.Lock()
 	d.pendingReply = reply
 	d.seenMu.Unlock()
-	d.queue <- contracts.Event{T: "input", Who: "seed", Text: task, TurnID: turnID}
+	d.queue <- queued{ev: contracts.Event{T: "input", Who: "seed", Text: task, TurnID: turnID}}
 	select {
 	case r := <-reply:
 		return r, true
@@ -468,6 +482,11 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 // poller (a gateway the core pulls from) and SessionControl.Submit (a gateway
 // that pushes). It reports false only when ctx was cancelled while enqueueing,
 // which is the poller's signal to stop.
+//
+// in.Conversation says where the message was typed. A pushing client is the only
+// one that has to name it: what the poller reads it read from a channel this
+// session is bound to by construction, so leaving it empty there says the same
+// thing.
 func (d *sessionDriver) submit(ctx context.Context, in contracts.Inbound) bool {
 	d.journal(in.AuthorID)
 	atts := d.resolveAttachments(ctx, contracts.Message{
@@ -478,7 +497,10 @@ func (d *sessionDriver) submit(ctx context.Context, in contracts.Inbound) bool {
 		Attachments: in.Attachments,
 	})
 	select {
-	case d.queue <- contracts.Event{T: "input", Who: in.Author, Text: in.Text, Attachments: atts}:
+	case d.queue <- queued{
+		ev:     contracts.Event{T: "input", Who: in.Author, Text: in.Text, Attachments: atts},
+		origin: in.Conversation,
+	}:
 		return true
 	case <-ctx.Done():
 		return false
@@ -492,18 +514,19 @@ func (d *sessionDriver) pump(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case ev := <-d.queue:
-			// A pick is answered out-of-band by the bridge; only a real input
-			// opens a turn (and a progress view) on the bound gateways. Gate
-			// only that turn-opening path: an input event that finds the
-			// session over budget is refused here, before any turn opens, so
-			// a tripped cap actually stops further spend. Picks are not
-			// gated — they answer an in-flight or already-rendered turn, not
-			// open a new one, so they must not be blocked by a pause that
-			// took effect after the pick was queued.
-			// Only a real input turn is budget-watched: a pick answers a turn
-			// that is already rendered, and cutting it would leave that turn
-			// unanswered. So a pick keeps the zero guard.
+		case q := <-d.queue:
+			ev := q.ev
+			// Where the frame was said decides, for every event this turn produces,
+			// which channels render it. A frame that opens no turn of its own (a pick
+			// answers one already rendered) names nowhere and so changes nothing.
+			d.saidElsewhere = ev.T == "input" && outsideBoundGateways(q.origin, d.gateways)
+			// A pick is answered out-of-band by the bridge; only a real input opens a
+			// turn (and a progress view) on the bound gateways. Gate and watch only
+			// that turn-opening path: an input that finds the session over budget is
+			// refused here, before any turn opens, so a tripped cap actually stops
+			// further spend. A pick answers a turn already rendered, so it keeps the
+			// zero guard — blocking it, or cutting it mid-flight, would leave that
+			// turn unanswered.
 			var guard tokenGuard
 			if ev.T == "input" {
 				reason, headroom, capped := d.gate.Check(d.name)
@@ -775,6 +798,9 @@ func (d *sessionDriver) fanOut(ctx context.Context, e contracts.Event) {
 	if d.emitTap != nil {
 		d.emitTap(e)
 	}
+	if d.saidElsewhere {
+		return
+	}
 	for i, g := range d.gateways {
 		if rs, ok := g.Gateway.(contracts.RoutedEventSink); ok {
 			rs.EmitTo(contracts.Conversation{
@@ -795,6 +821,32 @@ func (d *sessionDriver) fanOut(ctx context.Context, e contracts.Event) {
 		}
 		r.handle(ctx, e)
 	}
+}
+
+// outsideBoundGateways answers whether a message was typed somewhere none of
+// these gateways can see: a client that pushes over the command socket — an
+// attached terminal, a frontend on the events socket — names the conversation it
+// typed in, and when that is none of the session's own gateways it is already
+// reading the whole stream through the event tap. Publishing there too would
+// answer in a chat channel where nobody asked anything, which is what the
+// operator sees as the agent replying in the place they just left.
+//
+// The turn is still one turn: it is recorded in the same transcript and the same
+// history whatever channel rendered it. Only where it is *said* is scoped.
+//
+// A turn nobody typed in a conversation (a seed, a handoff, a script, or the
+// poller, whose channel is bound by construction) names no origin, and the bound
+// channels are then the only place it can be rendered.
+func outsideBoundGateways(origin contracts.Conversation, gws []contracts.GatewaySet) bool {
+	if origin.Gateway == "" {
+		return false
+	}
+	for _, g := range gws {
+		if g.Gateway != nil && g.Gateway.Manifest().Kind == origin.Gateway {
+			return false
+		}
+	}
+	return true
 }
 
 // gatewayChannel returns the default channel for a gateway set, or "" when it

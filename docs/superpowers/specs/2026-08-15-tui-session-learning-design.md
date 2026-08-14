@@ -113,26 +113,26 @@ implement it simply keeps the scope it was built with.
 **b. Resolving a candidate at launch** — `core/host/scope.go`, new file.
 
 ```go
-// ResolveProject picks the project a session started in dir belongs to, from the
-// projects the vault already knows. It is pure: the caller supplies the known
-// names, so the rule can be tested without a vault and replaced wholesale in
-// chantier 2 by a registry lookup.
-func ResolveProject(dir string, known []string) string
+// ProjectFromDir names the project a session started in dir belongs to: the git
+// repository the work is in, slugified. It answers "" when dir is in no
+// repository, or when the name it yields could not be a project.
+func ProjectFromDir(dir string) string
+
+// MatchProject picks, among the projects the vault already knows, the one a
+// prompt is about — "" when the prompt is about none of them. It is pure and
+// takes the known names from the caller, so the rule is testable without a vault
+// and chantier 2 replaces it wholesale with a registry lookup.
+func MatchProject(prompt string, known []string) string
 ```
 
-The rule, in order:
+`ProjectFromDir` walks to `git rev-parse --git-common-dir` rather than to the
+worktree, so three worktrees of one repository answer with one project, and
+slugifies through the same normalisation `contracts.ProjectKey` uses so a scope
+can never split in two by case. A name that fails `projectRe` yields `""`, and
+the session is created unscoped exactly as today.
 
-1. Walk up from `dir` to the git repository the work is in — `--git-common-dir`,
-   not the worktree, so three worktrees of one repo answer with one project.
-2. Slugify that directory's base name through `contracts.ProjectKey`'s own
-   normalisation, so the candidate can never split a scope in two by case.
-3. If the slug matches a known project, take it. If not, take it anyway — a new
-   project is how a project starts — unless it fails `projectRe`, in which case
-   return `""` and let the session be created unscoped, as today.
-
-The caller (`hub.Create`, when `spec.Project == ""`) lists known projects with
-`Search(Query{Kinds: []NodeKind{KindProject}})`. Memory unreachable, or the
-search failing, degrades to "no known projects" — never to a failed launch.
+The two are deliberately separate: the location knows nothing about what the
+vault holds, and the prompt match knows nothing about the filesystem.
 
 **c. Pinning at the first turn** — the bridge.
 
@@ -140,13 +140,15 @@ The bridge already holds the two things the decision needs: memory, and the
 prompt. It resolves once, on the first input frame of a session whose project is
 not pinned:
 
-1. List known projects.
-2. Confront the first prompt with them. A prompt that names a known project
+1. List known projects with `Search(Query{Kinds: []NodeKind{KindProject}})`.
+   Memory unreachable, or the search failing, degrades to "no known projects" —
+   the launch candidate stands.
+2. Confront the first prompt with them through `MatchProject`. A prompt that names a known project
    takes it; one that names nothing recognisable leaves the launch candidate
    alone. **This match is textual in chantier 1** — a known project's name
    appearing in the prompt — and it is the one piece this design expects to get
    wrong in the field. That is the point of shipping it: chantier 2 replaces the
-   rule with a registry lookup, and the seam is `ResolveProject`.
+   rule with a registry lookup, and the seam is `MatchProject`.
 3. If the project changed: `provisionScope` for the new root, `SetScope` on the
    orchestrator, and fold the name into the turn's `reply{done}` event.
 4. `turnloop.go` persists it the way it persists `Resume` (`turnloop.go:628`),
@@ -222,9 +224,10 @@ never breaks a turn.** Every new failure mode folds into it.
 
 ## Testing
 
-- `ResolveProject`, table-driven: a worktree under a repo, a subdirectory, a
-  non-git directory, a name that fails `projectRe`, a name colliding with a known
-  project only by case.
+- `ProjectFromDir`, table-driven: a worktree under a repo, a subdirectory of a
+  repo, a non-git directory, a repository whose name fails `projectRe`.
+- `MatchProject`, table-driven: a prompt naming a known project, one naming none,
+  one naming two (the first named wins), a match differing only by case.
 - Pin-at-first-turn against a fake memory holding two known projects: a prompt
   naming the other one re-scopes, emits the project on `reply{done}`, and calls
   `SetScope`; a prompt naming nothing leaves the scope alone.
@@ -248,8 +251,8 @@ orchestrator tag at the moment it bumps `go.mod`.
 
 - The project registry as a component of the vault, and the path → project
   association it would own. That is chantier 2, and this design is shaped so it
-  replaces `ResolveProject` and the first-turn match without touching anything
-  above them.
+  replaces `ProjectFromDir` and `MatchProject` without touching anything above
+  them.
 - Relaxing the isolated-worktree rule for `Agent`. `MemoryAgent` exists precisely
   so we do not have to.
 - Per-turn re-scoping. The scope is pinned once; a session that changes subject

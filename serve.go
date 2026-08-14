@@ -99,7 +99,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 
 	// The playbooks ship inside the binary; put them on disk before any session
 	// can be told to follow one.
-	installShippedSkills()
+	installShippedSkills(ctx)
 
 	// Registry-driven wiring: the daemon instantiates every gateway from the
 	// plugin registry rather than hand-wiring Discord. Each plugin self-registered

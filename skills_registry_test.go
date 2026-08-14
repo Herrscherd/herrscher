@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -39,21 +38,19 @@ func TestTheCompiledInPluginsShipUsableSkills(t *testing.T) {
 	}
 
 	// The skills-category plugins are the point of this release: each one either
-	// installed something or said why not, and neither is a silent no-op.
+	// installed something or said why not, and neither is a silent no-op. Each is
+	// run alone into its own directory, so the answer is that plugin's own — asked
+	// of the aggregate, a plugin that quietly does nothing hides behind any other
+	// plugin that installed.
 	for _, p := range contracts.Default.Skills() {
 		kind := p.Manifest.Kind
 		if p.Skills == nil {
 			t.Errorf("plugin %q is registered under the skills category and carries none", kind)
 			continue
 		}
-		named := false
-		for _, n := range notes {
-			if strings.Contains(n, kind) {
-				named = true
-			}
-		}
-		if !named && len(out.Installed) == 0 {
-			t.Errorf("plugin %q installed nothing and was never named", kind)
+		alone, why := installPluginSkills(context.Background(), []contracts.Plugin{p}, os.Getenv, t.TempDir())
+		if alone.Empty() && len(why) == 0 {
+			t.Errorf("plugin %q installed nothing and never said why", kind)
 		}
 	}
 }

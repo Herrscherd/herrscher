@@ -65,19 +65,16 @@ func reportSkills(dst string, out skills.Outcome, kind string) {
 
 // installPluginSkills materializes the playbooks the compiled-in plugins ship,
 // into the same directory as the binary's own. A plugin's skill exists on a
-// machine only if that plugin is in the build, which is the point: a Discord
-// playbook on a host with no Discord gateway is noise in every agent's context,
-// forever, for a capability that is not there. A plugin refines that judgement at
-// runtime — its factory looks at the machine and may decline — and the second
-// return says which ones did, and why, so a missing playbook is never silent.
+// machine only if that plugin is in the build, and its factory refines that at
+// runtime by looking at the machine and declining; the second return says which
+// ones did, and why, so a missing playbook is never silent.
 //
 // Best effort, like installShippedSkills: a daemon that cannot write there loses
-// a playbook, not its ability to answer. The skills factory is called on its own
-// and never through the port factory, so a gateway that never instantiates for
-// want of a token still ships its own.
+// a playbook, not its ability to answer.
 func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string, dst string) (skills.Outcome, []string) {
 	var all skills.Outcome
 	var notes []string
+	claimed := map[string]string{}
 	for _, p := range plugins {
 		if p.Skills == nil {
 			continue
@@ -96,7 +93,12 @@ func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv
 			notes = append(notes, "herrscher: no skills from plugin "+p.Manifest.Kind+": its factory handed over no playbooks")
 			continue
 		}
-		out, err := skills.Install(tree, dst)
+		src, dups := reserve(tree, p.Manifest.Kind, claimed)
+		notes = append(notes, dups...)
+		if src == nil {
+			continue
+		}
+		out, err := skills.Install(src, dst)
 		if err != nil {
 			notes = append(notes, "herrscher: install skills for plugin "+p.Manifest.Kind+": "+err.Error())
 			continue
@@ -120,4 +122,63 @@ func pluginSkillsConfig(p contracts.Plugin, getenv func(string) string) (contrac
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+// reserve records under kind the skill directories tree carries, and hands back
+// the tree with the ones another plugin already claimed hidden — nil when that
+// leaves nothing. Two plugins shipping the same skill name otherwise take turns
+// overwriting it: each start rewrites the directory and announces an update
+// nobody asked for, and whichever plugin registered first loses its playbook in
+// silence. The host imposes its kind as a prefix on contributed commands for the
+// same reason; a skill name is read by the agent, so it cannot be prefixed, and
+// naming the clash is what is left.
+func reserve(tree fs.FS, kind string, claimed map[string]string) (fs.FS, []string) {
+	entries, err := fs.ReadDir(tree, ".")
+	if err != nil {
+		return tree, nil // not ours to report: skills.Install says it better.
+	}
+	var notes []string
+	hidden := map[string]bool{}
+	kept := 0
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if owner, taken := claimed[e.Name()]; taken {
+			hidden[e.Name()] = true
+			notes = append(notes, "herrscher: skill "+e.Name()+" from plugin "+kind+
+				" was left out: plugin "+owner+" already ships one by that name")
+			continue
+		}
+		claimed[e.Name()] = kind
+		kept++
+	}
+	switch {
+	case len(hidden) == 0:
+		return tree, nil
+	case kept == 0:
+		return nil, notes
+	}
+	return without{FS: tree, hidden: hidden}, notes
+}
+
+// without is a tree with some of its top-level directories taken out. Only the
+// root is filtered; everything below it is the wrapped tree's own business.
+type without struct {
+	fs.FS
+	hidden map[string]bool
+}
+
+func (w without) ReadDir(name string) ([]fs.DirEntry, error) {
+	entries, err := fs.ReadDir(w.FS, name)
+	if name != "." || err != nil {
+		return entries, err
+	}
+	out := make([]fs.DirEntry, 0, len(entries))
+	for _, e := range entries {
+		if !w.hidden[e.Name()] {
+			out = append(out, e)
+		}
+	}
+	return out, nil
 }

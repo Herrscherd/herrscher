@@ -26,6 +26,19 @@ func tree(name string, seen *contracts.PluginConfig) contracts.SkillsFactory {
 
 func noEnv(string) string { return "" }
 
+// treeOf is a skills factory handing over one directory per entry, each holding
+// a SKILL.md with the given body — the way two plugins claiming one name are
+// told apart.
+func treeOf(files map[string]string) contracts.SkillsFactory {
+	return func(context.Context, contracts.PluginConfig) (fs.FS, error) {
+		m := fstest.MapFS{}
+		for name, body := range files {
+			m[name+"/SKILL.md"] = &fstest.MapFile{Data: []byte(body)}
+		}
+		return m, nil
+	}
+}
+
 // A plugin's playbook lands where every backend looks for skills. This is what
 // makes an alpha-gateway skill exist only on a machine whose build has it in it.
 func TestPluginSkillsAreInstalled(t *testing.T) {
@@ -188,5 +201,54 @@ func TestASkillsFactoryReturningNothingIsReported(t *testing.T) {
 	}
 	if len(notes) != 1 || !strings.Contains(notes[0], "empty") {
 		t.Fatalf("a factory handing over no tree must be named, got %v", notes)
+	}
+}
+
+// Two plugins claiming one skill name. Whoever registered first keeps it, the
+// other is named, and a second start changes nothing. Unguarded, the two took
+// turns overwriting the directory: every start rewrote it and announced an
+// update nobody asked for, and the first plugin's playbook was gone in silence.
+func TestTwoPluginsClaimingOneSkillNameDoNotFightOverIt(t *testing.T) {
+	dst := t.TempDir()
+	plugs := []contracts.Plugin{
+		{Manifest: contracts.Manifest{Kind: "first"}, Skills: treeOf(map[string]string{"demo": "# from first"})},
+		{Manifest: contracts.Manifest{Kind: "second"}, Skills: treeOf(map[string]string{"demo": "# from second"})},
+	}
+
+	out, notes := installPluginSkills(context.Background(), plugs, noEnv, dst)
+	if len(out.Installed) != 1 || out.Installed[0] != "demo" {
+		t.Fatalf("the first claim must be installed once, got %+v", out)
+	}
+	if len(notes) != 1 || !strings.Contains(notes[0], "second") || !strings.Contains(notes[0], "first") {
+		t.Fatalf("the clash must name both plugins, got %v", notes)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dst, "demo", "SKILL.md")); string(b) != "# from first" {
+		t.Fatalf("the first claim must be the one on disk, got %q", b)
+	}
+
+	again, _ := installPluginSkills(context.Background(), plugs, noEnv, dst)
+	if !again.Empty() {
+		t.Fatalf("a second start must find nothing to do, got %+v", again)
+	}
+}
+
+// A plugin does not lose the rest of its tree over one clashing name.
+func TestOnlyTheClashingSkillIsLeftOut(t *testing.T) {
+	dst := t.TempDir()
+	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{
+		{Manifest: contracts.Manifest{Kind: "first"}, Skills: treeOf(map[string]string{"demo": "# from first"})},
+		{Manifest: contracts.Manifest{Kind: "second"}, Skills: treeOf(map[string]string{
+			"demo": "# from second", "other": "# other",
+		})},
+	}, noEnv, dst)
+
+	if len(out.Installed) != 2 {
+		t.Fatalf("the clash costs one skill, not the plugin, got %+v (%v)", out, notes)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dst, "other", "SKILL.md")); string(b) != "# other" {
+		t.Fatalf("the plugin's own skill must still land, got %q", b)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dst, "demo", "SKILL.md")); string(b) != "# from first" {
+		t.Fatalf("the clashing one must stay with its first claimant, got %q", b)
 	}
 }

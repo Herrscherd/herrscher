@@ -171,3 +171,71 @@ func TestEachWaitReportsWhatItIsWaitingOn(t *testing.T) {
 		}
 	}
 }
+
+// unconfigured is a gateway plugin that declares a required env-bound setting,
+// the way a chat gateway declares its bot token. With the var unset the host
+// cannot even reach the factory.
+func unconfigured(kind, env string) contracts.Plugin {
+	return contracts.Plugin{
+		Manifest: contracts.Manifest{
+			Kind: kind, Category: contracts.CategoryGateway,
+			Config: []contracts.Setting{{Key: "token", Env: env, Required: true}},
+		},
+		Gateway: func(context.Context, contracts.PluginConfig) (contracts.GatewaySet, error) {
+			return contracts.GatewaySet{Gateway: fakeGateway{}}, nil
+		},
+	}
+}
+
+// A gateway nobody configured is not a gateway that is slow to come up: the
+// environment is fixed for the life of the process, so retrying a missing token
+// can only ever fail again. Waiting on one held the whole binary: an operator
+// who never set a chat token watched the retry notice for the length of the
+// window before the frontend they asked for opened.
+func TestAnUnconfiguredGatewayIsNotWaitedFor(t *testing.T) {
+	fastRetries(t)
+	// An hour between attempts: reaching the first wait at all would hang.
+	gatewayRetryBase, gatewayRetryMax = time.Hour, time.Hour
+	hub, err := BuildHub(context.Background(), []contracts.Plugin{
+		gw("terminal", false), unconfigured("chat", "CHAT_BOT_TOKEN"),
+	}, func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("BuildHub: %v", err)
+	}
+	if hub.Pending() {
+		t.Fatal("a gateway whose config is absent must not be pending")
+	}
+	start := time.Now()
+	if joined := hub.AwaitPending(context.Background(), func(string) string { return "" }, time.Hour,
+		func([]string, time.Duration) { t.Error("an unconfigured gateway must not be announced as a retry") }); joined != 0 {
+		t.Fatalf("joined = %d, want none", joined)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("the daemon waited on a gateway that can never come up")
+	}
+	// It is still reported — silently dropping an edge is how a revoked token
+	// goes unnoticed — but as something to configure, not something to wait for.
+	if f := strings.Join(hub.Unconfigured(), ";"); !strings.Contains(f, "CHAT_BOT_TOKEN") {
+		t.Fatalf("unconfigured = %q, want the missing var named", f)
+	}
+	if f := strings.Join(hub.Failures(), ";"); f != "" {
+		t.Fatalf("failures = %q, want an unconfigured gateway kept out of the retry reasons", f)
+	}
+	if _, ok := hub.Get("terminal"); !ok {
+		t.Fatal("terminal must still be up")
+	}
+}
+
+// The one gateway in the stack being unconfigured is still a hard failure, and
+// the message has to name what to set.
+func TestAStackWithNothingConfiguredSaysWhatToSet(t *testing.T) {
+	_, err := BuildHub(context.Background(), []contracts.Plugin{
+		unconfigured("chat", "CHAT_BOT_TOKEN"),
+	}, func(string) string { return "" })
+	if err == nil {
+		t.Fatal("a hub with no gateway at all must fail")
+	}
+	if !strings.Contains(err.Error(), "CHAT_BOT_TOKEN") {
+		t.Fatalf("err = %v, want the missing var named", err)
+	}
+}

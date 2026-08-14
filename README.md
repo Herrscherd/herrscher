@@ -70,7 +70,7 @@ Each plugin carries its own version. `herrscher plugin list` reports, per module
 
 Every change to the composition is a transaction with two questions in it. Before writing, the CLI reports what can be known against the change — that it moves a module backwards, or that it wants a different `herrscher-contracts` than the composition resolves — and asks to proceed. It then saves `go.mod`, `go.sum` and `plugins.go`, and runs `go get → go mod tidy → go build ./... → go install .`. When the build refuses, it prints the compiler's own error and offers two outcomes: restore the three files and leave the tree exactly as it was, or keep it as it is to repair by hand. A run with `--yes`, or with no terminal to ask, takes the safe branch at both — it proceeds, and it restores. The same flow is available from the TUI's `/plugins` screen, where both questions are select menus and a successful change ends on a line saying it applies at the next restart.
 
-A plugin may also contribute commands of its own and the skills that teach an agent to use them. The daemon namespaces each contributed verb under the plugin's kind — the Discord gateway declares `channel read`, an operator types `discord channel read` — so the prefix is imposed by the host and two plugins can never collide; and its skills install only when that plugin is in the build, so a Discord playbook never sits in the context of a machine that has no Discord.
+A plugin may also contribute commands of its own and the skills that teach an agent to use them. The daemon namespaces each contributed verb under the plugin's kind — the Discord gateway declares `channel read`, an operator types `discord channel read` — so the prefix is imposed by the host and two plugins can never collide; and its skills install only when that plugin is in the build, so a Discord playbook never sits in the context of a machine that has no Discord. Skills are a category of their own too: a plugin may contribute nothing but playbooks, and it is added, listed, pinned and removed by the same commands as any other. What it hands over is decided at startup rather than at compile time — a factory that looks at the machine and finds the tool its playbook describes is not installed returns nothing, and the daemon says which plugin declined and why.
 
 | Category | Port | Official plugin |
 |----------|------|-----------------|
@@ -78,6 +78,7 @@ A plugin may also contribute commands of its own and the skills that teach an ag
 | Backend | `Backend` | [herrscher-claude-backend], [herrscher-codex-backend], [herrscher-cursor-backend] |
 | Memory | `Memory` | [herrscher-obsidian-memory] |
 | Orchestrator | `Orchestrator` | [herrscher-orchestrator] |
+| Skills | — (playbooks only) | [herrscher-superset-skills] |
 
 [herrscher-discord-gateway]: https://github.com/Herrscherd/herrscher-discord-gateway
 [herrscher-claude-backend]: https://github.com/Herrscherd/herrscher-claude-backend
@@ -85,6 +86,7 @@ A plugin may also contribute commands of its own and the skills that teach an ag
 [herrscher-cursor-backend]: https://github.com/Herrscherd/herrscher-cursor-backend
 [herrscher-obsidian-memory]: https://github.com/Herrscherd/herrscher-obsidian-memory
 [herrscher-orchestrator]: https://github.com/Herrscherd/herrscher-orchestrator
+[herrscher-superset-skills]: https://github.com/Herrscherd/herrscher-superset-skills
 
 ## Architecture
 

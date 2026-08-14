@@ -5,12 +5,13 @@ go 1.25.0
 require (
 	github.com/Herrscherd/herrscher-claude-backend v0.2.4
 	github.com/Herrscherd/herrscher-codex-backend v0.1.5
-	github.com/Herrscherd/herrscher-contracts v0.2.17
+	github.com/Herrscherd/herrscher-contracts v0.3.0
 	github.com/Herrscherd/herrscher-cursor-backend v0.1.6
-	github.com/Herrscherd/herrscher-discord-gateway v0.16.1
+	github.com/Herrscherd/herrscher-discord-gateway v0.17.0
 	github.com/Herrscherd/herrscher-llm-extractor v0.1.3
 	github.com/Herrscherd/herrscher-obsidian-memory v0.3.0
 	github.com/Herrscherd/herrscher-orchestrator v0.1.21
+	github.com/Herrscherd/herrscher-superset-skills v0.1.0
 	github.com/Herrscherd/herrscher-transport v0.2.2
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/charmbracelet/bubbles v1.0.0

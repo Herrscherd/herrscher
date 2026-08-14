@@ -31,6 +31,9 @@ var catalog = map[string]map[string]string{
 	"extractor": {
 		"llm": "github.com/Herrscherd/herrscher-llm-extractor",
 	},
+	"skills": {
+		"superset": "github.com/Herrscherd/herrscher-superset-skills",
+	},
 }
 
 // inTree lists plugins that live inside the host module itself. They are always
@@ -42,17 +45,21 @@ var inTree = []string{"github.com/Herrscherd/herrscher/plugins/terminal"}
 const hostModule = "github.com/Herrscherd/herrscher"
 
 // categories is the fixed order a stack is composed and printed in.
-var categories = []string{"gateway", "backend", "memory", "orchestrator", "extractor"}
+var categories = []string{"gateway", "backend", "memory", "orchestrator", "extractor", "skills"}
 
 // defaultStack is the batteries-included composition: a Discord gateway, the
-// Claude backend, Obsidian-backed memory, the basic multi-agent orchestrator and
-// the LLM extractor that turns that orchestrator into a Learner.
+// Claude backend, Obsidian-backed memory, the basic multi-agent orchestrator,
+// the LLM extractor that turns that orchestrator into a Learner, and the
+// Superset playbooks. The last one costs nothing to include by default: a skills
+// plugin builds no port, and its factory declines on a machine without Superset,
+// so what it adds to a build that does not need it is a line at startup.
 var defaultStack = map[string]string{
 	"gateway":      "discord",
 	"backend":      "claude",
 	"memory":       "obsidian",
 	"orchestrator": "basic",
 	"extractor":    "llm",
+	"skills":       "superset",
 }
 
 // InitCmd composes the host's plugin stack from scratch: it picks one module per
@@ -72,6 +79,7 @@ func InitCmd(ctx context.Context, args []string) int {
 	memory := fs.String("memory", defaultStack["memory"], "memory module kind (or none)")
 	orchestrator := fs.String("orchestrator", defaultStack["orchestrator"], "orchestrator module kind (or none)")
 	extractor := fs.String("extractor", defaultStack["extractor"], "extractor module kind (or none)")
+	skills := fs.String("skills", defaultStack["skills"], "skills module kind (or none)")
 	var extras multiFlag
 	fs.Var(&extras, "with", "pin an extra module path verbatim (repeatable)")
 	if err := fs.Parse(args); err != nil {
@@ -99,6 +107,7 @@ func InitCmd(ctx context.Context, args []string) int {
 		"memory":       *memory,
 		"orchestrator": *orchestrator,
 		"extractor":    *extractor,
+		"skills":       *skills,
 	}
 	var secrets map[string]string
 	if interactive {
@@ -239,7 +248,7 @@ func stackFlagsSet(fs *flag.FlagSet) bool {
 		// extractor belongs here for the same reason as the rest: it shapes the
 		// resolved stack, so passing it must pin the stack, not hand it to a
 		// wizard that would overwrite the choice.
-		case "gateway", "backend", "memory", "orchestrator", "extractor", "with":
+		case "gateway", "backend", "memory", "orchestrator", "extractor", "skills", "with":
 			set = true
 		}
 	})

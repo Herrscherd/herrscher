@@ -33,6 +33,7 @@ func TestResolveStackDefault(t *testing.T) {
 		catalog["memory"]["obsidian"],
 		catalog["orchestrator"]["basic"],
 		catalog["extractor"]["llm"],
+		catalog["skills"]["superset"],
 	}
 	if !reflect.DeepEqual(mods, want) {
 		t.Fatalf("got %v, want %v", mods, want)
@@ -129,5 +130,22 @@ func TestStackFlagsSetCoversEveryStackFlag(t *testing.T) {
 	}
 	if stackFlagsSet(fs) {
 		t.Error("stackFlagsSet true with no flags passed")
+	}
+}
+
+// A skills plugin is composed like any other category, and dropped like one. The
+// second half is what makes it a category rather than a hardcoded extra.
+func TestResolveStackSkillsIsACategory(t *testing.T) {
+	if defaultStack["skills"] == "" {
+		t.Fatal("the default composition must hydrate herrscher with playbooks")
+	}
+	mods, err := resolveStack(map[string]string{"backend": "claude", "skills": "none"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range mods {
+		if m == catalog["skills"]["superset"] {
+			t.Fatalf("skills=none must drop the module, got %v", mods)
+		}
 	}
 }

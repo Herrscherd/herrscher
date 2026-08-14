@@ -16,6 +16,8 @@ github.com/Herrscherd/herrscher-obsidian-memory v0.3.0 h1:bN238kpqWxoEi5jI+sKUD5
 github.com/Herrscherd/herrscher-obsidian-memory v0.3.0/go.mod h1:tx1YWVTh22pdMDvMEtXaUnCN8OAxjPlhBlWYfemJeKU=
 github.com/Herrscherd/herrscher-orchestrator v0.1.21 h1:pipic2lfFJcYyE0yE/OS4un1vOp5/AYB69A9E0J6Bn4=
 github.com/Herrscherd/herrscher-orchestrator v0.1.21/go.mod h1:ni8AXNLavV6SvWdR1wudszFDrlwg3Lj2zgAUoPonUwQ=
+github.com/Herrscherd/herrscher-superset-skills v0.1.0 h1:Wb01YjdxroT2iO0ycIjSj7IzkpfKFGGvl5v5li6Pyq8=
+github.com/Herrscherd/herrscher-superset-skills v0.1.0/go.mod h1:y/7WxBg/U1VdNUtFkDlG07ZE3tf9Mk7JtrfVMUBweQA=
 github.com/Herrscherd/herrscher-transport v0.2.2 h1:gaCeqQFeZgkebqyLw1wHt4V42n8LulQV4EIRb4YSpFw=
 github.com/Herrscherd/herrscher-transport v0.2.2/go.mod h1:M9gCWWrrC+xaPGzKZPsTLlJ/hoOg7Nfr4JvXa9KLpbE=
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=

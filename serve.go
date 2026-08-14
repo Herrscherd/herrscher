@@ -120,6 +120,15 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	// and the edge stayed dark until somebody noticed. Nothing is supervising
 	// sessions yet at this point, so the waiting costs a slower start and nothing
 	// else.
+	//
+	// A gateway nobody configured is not in that race and is never waited for
+	// (see GatewayHub.attempt): its var is unset for the life of the process, so
+	// the retry window would only be the operator watching a countdown to a
+	// foregone conclusion before the frontend they asked for opens. Say it once
+	// and carry on.
+	for _, f := range hub.Unconfigured() {
+		fmt.Fprintln(os.Stderr, "herrscher: gateway not configured, skipping: "+f)
+	}
 	hub.AwaitPending(ctx, os.Getenv, host.GatewayRetryWindow, func(failures []string, in time.Duration) {
 		for _, f := range failures {
 			fmt.Fprintf(os.Stderr, "herrscher: gateway not up yet: %s; retrying in %s\n", f, in)

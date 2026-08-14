@@ -50,10 +50,15 @@ Two things the code already gives us for free, and which shape the design:
    *and* an agent root — not one or the other.
 3. **The agent root defaults to `tui`,** overridden when the operator names a
    specific agent.
-4. **Learning is on by default and keeps pace** with the conversation, not
+4. **A memory root is not a location.** `Project` and `Agent` are placement
+   directives — the first steers the workspace sub-directory the bridge runs in
+   (`repoFor`), the second demands an isolated worktree. Learning needs neither,
+   so it gets its own pair, `MemoryProject` and `MemoryAgent`, which say where
+   knowledge is filed and nothing else.
+5. **Learning is on by default and keeps pace** with the conversation, not
    deferred to close.
-5. **Everything above is a setting** on the terminal plugin's manifest.
-6. **Thin vertical first.** The project registry as an internal component of the
+6. **Everything above is a setting** on the terminal plugin's manifest.
+7. **Thin vertical first.** The project registry as an internal component of the
    vault is chantier 2; it replaces the resolution rule from underneath without
    changing anything above it.
 
@@ -61,26 +66,32 @@ Two things the code already gives us for free, and which shape the design:
 
 Three modules. `herrscher-obsidian-memory` is deliberately untouched.
 
-### 1. herrscher-contracts v0.4.0 — two fields
+### 1. herrscher-contracts v0.4.0 — four fields
 
 ```go
 // CreateSession
-// MemoryAgent names the private memory root this session writes its learned
-// skills under, and nothing else. It is deliberately separate from Agent: that
-// field is a provisioning directive (materialize this durable companion into an
-// isolated worktree), and a session that only wants a place to put what it
-// learned should not have to be provisioned to get one.
-MemoryAgent string
+// MemoryProject and MemoryAgent name the shared and private memory roots this
+// session files what it learns under, and nothing else. They are deliberately
+// separate from Project and Agent, which are placement directives: Project
+// steers the workspace sub-directory the bridge runs in, and Agent demands an
+// isolated worktree be provisioned. A session that only wants somewhere to put
+// what it learned should not have to move house to get it.
+MemoryProject string
+MemoryAgent   string
+
+// ProjectPinned marks MemoryProject as a human's choice rather than the host's
+// guess. Only a guess may be revised by the session's first prompt.
+ProjectPinned bool
 
 // Event
-// Project carries the memory project this session resolved to, piggybacked on
-// the terminal reply{done} so the daemon can persist it — the same path Resume
-// already takes. Empty when the scope did not change this turn.
-Project string
+// Project carries the memory project this session settled on, piggybacked on the
+// terminal reply{done} so the daemon can persist it — the same path Resume
+// already takes. Empty when nothing was settled this turn.
+Project string `json:"project,omitempty"`
 ```
 
-Nothing else changes in contracts. `Agent` keeps its exact current meaning, and
-the worktree rule guarding it is not relaxed.
+Nothing else changes in contracts. `Project` and `Agent` keep their exact current
+meanings, and the worktree rule guarding `Agent` is not relaxed.
 
 ### 2. herrscher-orchestrator v0.2.0 — one optional method
 
@@ -101,16 +112,21 @@ implement it simply keeps the scope it was built with.
 
 **a. State and creation.**
 
-- `state.Session` gains `MemoryAgent string` and `ProjectPinned bool`.
-  `ProjectPinned` is true when a human named the project and false when the host
-  guessed it from the location; only the latter may be re-scoped.
-- `session create` gains the params `memory_agent` and `project_pinned`.
-  `hub.Create` maps `spec.MemoryAgent` through, and sets `project_pinned` when
-  the caller supplied a non-empty `spec.Project`.
-- `state.SetProjectPinned(name, project string) error`, mirroring
-  `SetResumeToken`'s locking and persistence (`state.go:286`).
+- `state.Session` gains `MemoryProject`, `MemoryAgent` and `ProjectPinned`.
+- `session create` gains the params `memory_project`, `memory_agent` and
+  `project_pinned`, each mapped straight through by `hub.create`. None of them
+  touches `repoFor`, the worktree decision, or agent provisioning.
+- The supervisor keeps sending the two bridge flags it sends today — they are
+  already memory-only (`--project` is documented as "the shared memory scope",
+  `--agent` as "the private memory scope") — and simply prefers the memory field
+  when one is set: `--project` from `MemoryProject` else `Project`, `--agent`
+  from `Agent` else `MemoryAgent`. Existing sessions are unaffected. It adds one
+  flag, `--project-pinned`, so the bridge knows whether it may revise.
+- `state.SetProjectPinned(name, project string) error` writes `MemoryProject` and
+  sets `ProjectPinned`, mirroring `SetResumeToken`'s locking and persistence
+  (`state.go:286`).
 
-**b. Resolving a candidate at launch** — `core/host/scope.go`, new file.
+**b. Resolving a candidate at launch** — `core/scope/scope.go`, new package.
 
 ```go
 // ProjectFromDir names the project a session started in dir belongs to: the git
@@ -132,9 +148,21 @@ can never split in two by case. A name that fails `projectRe` yields `""`, and
 the session is created unscoped exactly as today.
 
 The two are deliberately separate: the location knows nothing about what the
-vault holds, and the prompt match knows nothing about the filesystem.
+vault holds, and the prompt match knows nothing about the filesystem. They live
+in a leaf package depending on nothing but the standard library and contracts,
+because both the terminal plugin (which resolves at launch) and the bridge
+binary (which matches at the first turn) need them, and neither may import the
+other.
 
-**c. Pinning at the first turn** — the bridge.
+**c. Who resolves at launch** — the terminal plugin.
+
+`openDefaultSession` runs in the daemon, in the directory the operator launched
+from, and already holds the settings that govern all of this. So it resolves the
+candidate itself and sends it: the `project` setting when set (pinned), else
+`ProjectFromDir(cwd)` (pinned only under `project-pin: launch`). `session create`
+stays a dumb conduit, and no other gateway's sessions change behaviour.
+
+**d. Pinning at the first turn** — the bridge.
 
 The bridge already holds the two things the decision needs: memory, and the
 prompt. It resolves once, on the first input frame of a session whose project is
@@ -149,15 +177,19 @@ not pinned:
    appearing in the prompt — and it is the one piece this design expects to get
    wrong in the field. That is the point of shipping it: chantier 2 replaces the
    rule with a registry lookup, and the seam is `MatchProject`.
-3. If the project changed: `provisionScope` for the new root, `SetScope` on the
-   orchestrator, and fold the name into the turn's `reply{done}` event.
+3. If the project changed: ensure the new root exists, `SetScope` on the
+   orchestrator, and fold the name into the turn's `reply{done}` event. If it did
+   not, the launch candidate is folded in unchanged — so the row gets pinned
+   either way and no later turn re-opens the question.
 4. `turnloop.go` persists it the way it persists `Resume` (`turnloop.go:628`),
-   marking the session pinned. Either way the session is pinned from here on.
+   marking the session pinned.
 
 Injected through `bridge.Options` as a `ScopeResolver` so the turn driver stays
-testable without a vault.
+testable without a vault: the binary owns memory and therefore owns both the
+lookup and the provisioning; `core/bridge` owns the orchestrator and therefore
+owns the `SetScope` type assertion. Neither reaches into the other.
 
-**d. What `openDefaultSession` sends.**
+**e. What `openDefaultSession` sends.**
 
 The terminal plugin's manifest grows a `Config` bag, and `newGatewaySet` keeps
 the resolved `PluginConfig` on the `Terminal` struct instead of discarding it:
@@ -179,22 +211,25 @@ behaviour exactly.
 
 ```
 herrscher (launch)
-  └─ openDefaultSession
-       CreateSession{Name, TerminalOnly, Shared,
-                     Project: "", MemoryAgent: "tui",
-                     Extractor: "llm", ConsolidateEvery: 10}
-          └─ hub.Create → ResolveProject(cwd, knownProjects) → "herrscher"
-               └─ session create → state.Session{Project: "herrscher",
-                                                 ProjectPinned: false, …}
-                    └─ supervisor → herrscher bridge --project herrscher
-                                      --agent tui --extractor llm
-                                      --consolidate-every 10
-                         └─ buildOrchestrator → Learner{scope: {projects/herrscher,
-                                                                agents/tui}}
+  └─ openDefaultSession            cfg: learn=true, extractor=llm, every=10,
+                                        memory-agent=tui, project-pin=first-turn
+       ├─ scope.ProjectFromDir(cwd) → "herrscher"
+       └─ CreateSession{Name: "herrscher", TerminalOnly, Shared,
+                        MemoryProject: "herrscher", ProjectPinned: false,
+                        MemoryAgent: "tui",
+                        Extractor: "llm", ConsolidateEvery: 10}
+            └─ session create → state.Session{MemoryProject: "herrscher",
+                                              MemoryAgent: "tui",
+                                              ProjectPinned: false, …}
+                 └─ supervisor → herrscher bridge --project herrscher
+                                   --agent tui --extractor llm
+                                   --consolidate-every 10
+                      └─ buildOrchestrator → Learner{scope: {projects/herrscher,
+                                                             agents/tui}}
 
 first prompt ─ "je bosse sur neublox aujourd'hui"
-  └─ bridge: not pinned → known projects → "neublox" wins
-       ├─ provisionScope(projects/neublox)
+  └─ bridge: not pinned → Search(KindProject) → MatchProject → "neublox"
+       ├─ EnsureProject(projects/neublox)
        ├─ orch.SetScope({projects/neublox, agents/tui})
        └─ reply{done, project: "neublox"}
             └─ turnloop → state.SetProjectPinned("herrscher", "neublox")
@@ -211,7 +246,7 @@ never breaks a turn.** Every new failure mode folds into it.
 
 - Memory unreachable at launch → no known projects → the location candidate is
   used unchanged. A launch never fails because the vault is missing.
-- `ResolveProject` produces nothing valid → the session is created unscoped,
+- `ProjectFromDir` produces nothing valid → the session is created unscoped,
   which is exactly today's behaviour.
 - The first-turn re-scope fails to persist → memory still records under the
   resolved root for this run; the row keeps the launch candidate and is re-pinned
@@ -235,8 +270,12 @@ never breaks a turn.** Every new failure mode folds into it.
   existing `Resume` assertion.
 - `openDefaultSession` with default config sends extractor/cadence/memory-agent;
   with `learn=false` it sends the three fields it sends today and nothing more.
-- Regression: `session create --agent X --shared` still fails. Decoupling
-  `MemoryAgent` must not have relaxed the worktree rule.
+- Regression: `session create --agent X --shared` still fails, and
+  `memory_agent` on a shared session succeeds. Decoupling must not have relaxed
+  the worktree rule, and must actually have decoupled something.
+- Regression: `memory_project` does not move the session's run directory. With a
+  workspace root configured, a session created with `memory_project=x` and no
+  `project` still runs at the workspace root.
 - Regression: a session created with an explicit project is pinned at launch and
   is never re-scoped by any prompt.
 

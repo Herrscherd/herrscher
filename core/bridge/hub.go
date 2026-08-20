@@ -154,7 +154,11 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	}()
 
 	eng := newSkillEngine(backend)
-	runHubTurnsCtl(ctx, in, conn, backend, orch, ctrl, eng, affordances{roster: o.Roster, caps: o.Capabilities})
+	var pin *scopePin
+	if o.Scope != nil && !o.ProjectPinned {
+		pin = &scopePin{resolve: o.Scope, current: o.LaunchProject, agent: o.MemoryAgent, orch: orch}
+	}
+	runHubTurnsCtl(ctx, in, conn, backend, orch, ctrl, eng, affordances{roster: o.Roster, caps: o.Capabilities}, pin)
 	return ctx.Err()
 }
 
@@ -168,18 +172,55 @@ type affordances struct {
 	caps   string
 }
 
+// scopePin is a session's one-shot answer to "what is this conversation about".
+// It sits beside affordances rather than inside it because affordances are
+// prompt blocks, and this is not one: it changes where memory is written.
+type scopePin struct {
+	resolve ScopeResolver
+	current string // the project the session launched with ("" = none)
+	agent   string // the private root, preserved across a re-rooting
+	orch    contracts.Orchestrator
+	settled bool
+}
+
+// settle answers the project this session should be recorded under, and returns
+// "" once it has already answered — a session is asked once, not once per turn.
+// A resolver that names nothing leaves the scope alone but still returns the
+// launch candidate, so the daemon pins it and no later turn re-opens the
+// question. It is best-effort in the orchestrator's sense: an orchestrator that
+// cannot be re-rooted still gets the name into the event, so the row is right on
+// the next start.
+func (p *scopePin) settle(ctx context.Context, prompt string) string {
+	if p == nil || p.settled {
+		return ""
+	}
+	p.settled = true
+	chosen := p.resolve.Resolve(ctx, prompt)
+	if chosen == "" || chosen == p.current {
+		return p.current
+	}
+	if s, ok := p.orch.(interface{ SetScope(contracts.MemoryScope) }); ok {
+		scope := contracts.MemoryScope{Project: contracts.ProjectKey(chosen)}
+		if p.agent != "" {
+			scope.Agent = contracts.AgentKey(p.agent)
+		}
+		s.SetScope(scope)
+	}
+	return chosen
+}
+
 // runHubTurns serially drains input frames, running one backend turn per
 // input/pick. It is split from runHub so it can be unit-tested over an
 // in-memory channel + sink without a real socket. FIFO is inherent: the hub
 // sends the next input only after it sees this turn's reply{done}, and this
 // loop processes one frame at a time anyway.
 func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator) {
-	runHubTurnsCtl(ctx, in, sink, backend, orch, nil, nil, affordances{})
+	runHubTurnsCtl(ctx, in, sink, backend, orch, nil, nil, affordances{}, nil)
 }
 
 // runHubTurnsCtl is runHubTurns with an explicit turnController so an interrupt
 // frame read out-of-band can cancel the in-flight turn.
-func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine, aff affordances) {
+func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -192,7 +233,7 @@ func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contrac
 			case "pick":
 				runPick(ctx, sink, backend, ev.Value)
 			default: // "input" (and any human-origin frame)
-				runOneTurn(ctx, sink, backend, orch, ev, ctrl, eng, aff)
+				runOneTurn(ctx, sink, backend, orch, ev, ctrl, eng, aff, pin)
 			}
 		}
 	}
@@ -201,13 +242,17 @@ func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contrac
 // runOneTurn runs a single backend turn for an input frame, streaming chunk/
 // status events and a terminal reply{done}. An empty output still emits
 // reply{done} so the hub's FIFO can advance.
-func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances) {
+func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin) {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
 	if eng != nil {
 		eng.Refresh()
 	}
 	sink = turnEventSink{EventSink: sink, identity: ev}
+	// Settle the memory scope before the context is built, so this very turn is
+	// recalled against the project it belongs to rather than the one the
+	// directory guessed.
+	settledProject := pin.settle(turnCtx, ev.Text)
 	var memCtx string
 	if orch != nil {
 		memCtx = orch.Context(turnCtx)
@@ -273,7 +318,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if tr, ok := orch.(contracts.TurnReactor); ok {
 		out = tr.React(turnCtx, out)
 	}
-	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, TokensIn: inTok, CacheRead: cacheRd, CacheCreate: cacheCr, Resume: resumeToken(backend)})
+	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, TokensIn: inTok, CacheRead: cacheRd, CacheCreate: cacheCr, Resume: resumeToken(backend), Project: settledProject})
 	if orch != nil {
 		// Not fatal to the turn (the human already has the reply), but a failed
 		// observe means this turn never reached memory — silently forgetting is

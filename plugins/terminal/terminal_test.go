@@ -351,7 +351,7 @@ var terminalSessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$
 
 func TestOpenDefaultSessionCreatesWhenNone(t *testing.T) {
 	fake := &fakeSessionControl{} // Sessions() returns nil/empty
-	name, err := openDefaultSession(context.Background(), fake)
+	name, err := openDefaultSession(context.Background(), fake, contracts.PluginConfig{})
 	if err != nil {
 		t.Fatalf("openDefaultSession: %v", err)
 	}
@@ -384,7 +384,7 @@ func TestOpenDefaultSessionAlwaysCreates(t *testing.T) {
 			{Name: "chat", ChannelID: "ch3", Gateways: []string{"discord"}, LastTs: "2026-09-01T00:00:00Z"},
 		},
 	}
-	name, err := openDefaultSession(context.Background(), fake)
+	name, err := openDefaultSession(context.Background(), fake, contracts.PluginConfig{})
 	if err != nil {
 		t.Fatalf("openDefaultSession: %v", err)
 	}

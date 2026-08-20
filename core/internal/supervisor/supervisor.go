@@ -60,17 +60,20 @@ func (s *Supervisor) bridgeArgs(sess state.Session) []string {
 	// P1: thread the session's memory scope so the orchestrator recalls the
 	// game's shared memory and this agent's private skills each turn. The bridge
 	// flags are memory-only by definition, so a memory root wins over the
-	// placement field of the same name: Project may be steering the session into
-	// a workspace sub-directory, which says nothing about where knowledge goes.
+	// placement field of the same name, for both halves of the scope: Project may
+	// be steering the session into a workspace sub-directory and Agent may be
+	// demanding a worktree, and neither says where knowledge goes. No session
+	// created before the memory roots existed sets either, so the precedence only
+	// ever decides between two things one caller asked for at once.
 	if p := sess.MemoryProject; p != "" {
 		args = append(args, "--project", p)
 	} else if sess.Project != "" {
 		args = append(args, "--project", sess.Project)
 	}
-	if sess.Agent != "" {
+	if a := sess.MemoryAgent; a != "" {
+		args = append(args, "--agent", a)
+	} else if sess.Agent != "" {
 		args = append(args, "--agent", sess.Agent)
-	} else if sess.MemoryAgent != "" {
-		args = append(args, "--agent", sess.MemoryAgent)
 	}
 	// Whether the bridge may revise the project on this session's first prompt.
 	if sess.ProjectPinned {

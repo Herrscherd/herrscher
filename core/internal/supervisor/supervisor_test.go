@@ -412,3 +412,13 @@ func TestBridgeArgsKeepsThePlacementFieldsWhenNoMemoryRootIsSet(t *testing.T) {
 		t.Fatalf("nothing pinned this: %s", joined)
 	}
 }
+
+// The precedence is the same for both halves of the scope: a memory root beats
+// the placement field of the same name, because only one of the two is about
+// where knowledge goes.
+func TestMemoryAgentBeatsTheProvisionedAgent(t *testing.T) {
+	got := strings.Join((&Supervisor{}).bridgeArgs(state.Session{Name: "s", Agent: "bob", MemoryAgent: "tui"}), " ")
+	if !strings.Contains(got, "--agent tui") {
+		t.Fatalf("args = %q, want the memory agent", got)
+	}
+}

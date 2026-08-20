@@ -91,6 +91,11 @@ func TestMatchProject(t *testing.T) {
 		{"whole words only", "neubloxide est un autre projet", ""},
 		{"longest at the same place wins", "herrscher-docs a besoin d'une page", "herrscher-docs"},
 		{"nothing known, nothing matched", "neublox", ""},
+		// A prompt written in French ends words with runes whose lead byte, read
+		// alone, is a letter. The boundary test decodes, so these still match.
+		{"typographic punctuation is a boundary", "cf. neublox\u2026", "neublox"},
+		{"a non-breaking space is a boundary", "\u00ab\u00a0neublox\u00a0\u00bb", "neublox"},
+		{"an accent is not a boundary", "neubloxe\u0301 n'est pas neublox", "neublox"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			k := known

@@ -88,3 +88,20 @@ func TestAMemoryAgentIsOverridable(t *testing.T) {
 		t.Fatalf("MemoryAgent = %q, want scout", c.created[0].MemoryAgent)
 	}
 }
+
+// A launch must survive a setting a human typed. session create validates the
+// project name, so a value it would refuse has to be folded here or the window
+// opens on nothing.
+func TestAProjectNameWithASpaceIsFoldedNotRefused(t *testing.T) {
+	c := &fakeSessionControl{}
+	cfg := cfgOf(t, map[string]string{"TERMINAL_PROJECT": "Mon Projet"})
+	if _, err := openDefaultSession(context.Background(), c, cfg); err != nil {
+		t.Fatalf("openDefaultSession: %v", err)
+	}
+	if got := c.created[0].MemoryProject; got != "mon-projet" {
+		t.Fatalf("MemoryProject = %q, want %q", got, "mon-projet")
+	}
+	if !c.created[0].ProjectPinned {
+		t.Fatal("a project a human named must be pinned")
+	}
+}

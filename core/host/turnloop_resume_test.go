@@ -11,7 +11,7 @@ func TestAwaitTurnPersistsResumeToken(t *testing.T) {
 	from := make(chan contracts.Event, 1)
 	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from)
 	var got string
-	d.persistResume = func(tok string) { got = tok }
+	d.sink.Resume = func(tok string) { got = tok }
 
 	from <- contracts.Event{T: "reply", Text: "ok", Done: true, Resume: "sid-1"}
 	if !d.awaitTurn(context.Background(), tokenGuard{}) {
@@ -26,7 +26,7 @@ func TestAwaitTurnSkipsEmptyResumeToken(t *testing.T) {
 	from := make(chan contracts.Event, 1)
 	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from)
 	called := false
-	d.persistResume = func(string) { called = true }
+	d.sink.Resume = func(string) { called = true }
 
 	from <- contracts.Event{T: "reply", Text: "ok", Done: true} // no Resume
 	_ = d.awaitTurn(context.Background(), tokenGuard{})

@@ -10,7 +10,7 @@ import (
 func TestDriverRecordsTranscript(t *testing.T) {
 	var got []state.TranscriptEntry
 	d := newSessionDriver("s", nil, make(chan contracts.Event, 8), make(chan contracts.Event, 8))
-	d.record = func(e state.TranscriptEntry) { got = append(got, e) }
+	d.sink.Transcript = func(e state.TranscriptEntry) { got = append(got, e) }
 
 	// user side: pump records before fanning the human event for an input frame.
 	d.recordEntry("user", "hello", 0, turnUsage{})

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -268,3 +269,90 @@ func (b seedBackend) Respond(context.Context, contracts.Prompt, func(contracts.B
 	return "reply", nil
 }
 func (seedBackend) Close() error { return nil }
+
+// consolidateSpy records the context its Consolidate ran under, so a test can
+// assert the budget it was given rather than the one the turn already spent.
+type consolidateSpy struct {
+	err    error
+	called bool
+	// ctxErr is the context's state at the moment Consolidate ran, captured
+	// there because the caller cancels its budget as soon as the call returns.
+	ctxErr error
+}
+
+func (c *consolidateSpy) Context(context.Context) string                          { return "" }
+func (c *consolidateSpy) Observe(context.Context, contracts.Prompt, string) error { return nil }
+func (c *consolidateSpy) Consolidate(ctx context.Context) error {
+	c.called, c.ctxErr = true, ctx.Err()
+	return c.err
+}
+func (c *consolidateSpy) Close() error { return nil }
+
+// A turn that answered has done the work the caller asked for. Consolidation is
+// a side effect on the way out, so its failure is worth a line on stderr and
+// nothing more: dropping the reply would throw away a finished turn — and with
+// --print, print nothing at all — over a memory write.
+func TestASeedKeepsItsReplyWhenConsolidationFails(t *testing.T) {
+	old := oneShotBackendFactory
+	t.Cleanup(func() { oneShotBackendFactory = old })
+	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+		return seedBackend{reply: "réponse gardée"}, nil
+	}
+
+	sess := state.Session{Name: "solo", ChannelID: "channel"}
+	spy := &consolidateSpy{err: context.DeadlineExceeded}
+	got, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy)
+	if err != nil {
+		t.Fatalf("runOneShotSeedWith: %v", err)
+	}
+	if got != "réponse gardée" {
+		t.Fatalf("reply = %q, want %q", got, "réponse gardée")
+	}
+}
+
+// The turn's deadline is the turn's. Consolidating under it means a turn that
+// used its budget leaves none for the memory write, which is exactly what
+// --consolidate-every 1 produced: a turn that answered, then died on
+// "consolidate: context deadline exceeded".
+func TestASeedConsolidatesOnItsOwnBudget(t *testing.T) {
+	oldFactory := oneShotBackendFactory
+	t.Cleanup(func() { oneShotBackendFactory = oldFactory })
+	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+		return seedBackend{}, nil
+	}
+
+	sess := state.Session{Name: "solo", ChannelID: "channel"}
+	spy := &consolidateSpy{}
+	// A turn budget so small it is spent by the time the turn is over.
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy,
+		oneShotSeedRuntime{timeout: 50 * time.Millisecond}); err != nil {
+		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
+	}
+	if !spy.called {
+		t.Fatal("expected Consolidate to run")
+	}
+	if spy.ctxErr != nil {
+		t.Fatalf("consolidation ran on the turn's spent budget: %v", spy.ctxErr)
+	}
+}
+
+// A cadence means the orchestrator consolidates on its own, inside the turn.
+// Consolidating again on the way out repeats the whole extraction — with
+// --consolidate-every 1 that second pass ran the full 60s budget out and failed
+// every time, for work already done.
+func TestASeedWithACadenceDoesNotConsolidateTwice(t *testing.T) {
+	old := oneShotBackendFactory
+	t.Cleanup(func() { oneShotBackendFactory = old })
+	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+		return seedBackend{}, nil
+	}
+
+	sess := state.Session{Name: "solo", ChannelID: "channel", ConsolidateEvery: 1}
+	spy := &consolidateSpy{}
+	if _, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy); err != nil {
+		t.Fatalf("runOneShotSeedWith: %v", err)
+	}
+	if spy.called {
+		t.Fatal("expected no closing Consolidate when the orchestrator has a cadence")
+	}
+}

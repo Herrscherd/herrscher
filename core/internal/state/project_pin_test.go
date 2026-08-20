@@ -39,3 +39,25 @@ func TestSetProjectPinnedUnchangedIsNoop(t *testing.T) {
 		t.Fatalf("an already-settled project must be a no-op, got %v", err)
 	}
 }
+
+// TestMemoryRootsPreferTheMemoryFields pins the precedence every memory-scoping
+// path relies on: a memory root answers first, and the placement field of the
+// same name is only the fallback for the sessions that never set one.
+func TestMemoryRootsPreferTheMemoryFields(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		sess           Session
+		project, agent string
+	}{
+		{"memory roots win", Session{Project: "placed", Agent: "worker", MemoryProject: "learned", MemoryAgent: "tui"}, "learned", "tui"},
+		{"placement is the fallback", Session{Project: "placed", Agent: "worker"}, "placed", "worker"},
+		{"nothing set", Session{}, "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			project, agent := tc.sess.MemoryRoots()
+			if project != tc.project || agent != tc.agent {
+				t.Fatalf("MemoryRoots() = %q, %q; want %q, %q", project, agent, tc.project, tc.agent)
+			}
+		})
+	}
+}

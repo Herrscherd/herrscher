@@ -17,6 +17,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/scope"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
@@ -326,6 +327,16 @@ func runPrompt(ctx context.Context, t task) error {
 	return runPromptWindow(ctx, name, t.Text)
 }
 
+// createTaskSession is the argv that opens the session behind `herrscher
+// "<task>"`. It asks for the same memory roots the TUI's own default session
+// gets: a launch that names its task is no less worth learning from than one
+// that does not, and reading the rule from core/scope keeps the composition
+// root free of any dependency on the terminal plugin.
+func createTaskSession(name string) []string {
+	return append([]string{"session", "create", "--name", name, "--terminal_only"},
+		scope.LaunchFromEnv().Args()...)
+}
+
 // runPromptWindow opens the TUI on a session created for this task.
 //
 // Which of the two launch paths runs is decided by the state lock, the same
@@ -349,9 +360,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 	unlock, lerr := host.LockState(statePath)
 	if lerr != nil {
 		instance := host.ServedInstanceID(statePath, "")
-		if _, err := host.DaemonDispatch(ctx, instance, []string{
-			"session", "create", "--name", name, "--terminal_only",
-		}); err != nil {
+		if _, err := host.DaemonDispatch(ctx, instance, createTaskSession(name)); err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, "session: "+name)
@@ -365,9 +374,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := reg.Dispatch(ctx, []string{
-		"session", "create", "--name", name, "--terminal_only",
-	}); err != nil {
+	if _, err := reg.Dispatch(ctx, createTaskSession(name)); err != nil {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "session: "+name)
@@ -401,9 +408,7 @@ type foregroundOpener interface {
 // needs to see why the turn failed; the error names the session so they can
 // resume or close it themselves.
 func runPromptWith(ctx context.Context, d verbDispatcher, name, prompt string, stdout, stderr io.Writer) error {
-	if _, err := d.Dispatch(ctx, []string{
-		"session", "create", "--name", name, "--terminal_only",
-	}); err != nil {
+	if _, err := d.Dispatch(ctx, createTaskSession(name)); err != nil {
 		return err
 	}
 	fmt.Fprintln(stderr, "session: "+name)

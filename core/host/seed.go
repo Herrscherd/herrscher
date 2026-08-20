@@ -432,6 +432,12 @@ func provisionSeedScope(ctx context.Context, mem contracts.Memory, project, agen
 }
 
 func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orchestrator, contracts.Memory, error) {
+	// The seed turn scopes memory by the memory roots, not by the placement
+	// fields: a TUI session sets MemoryProject/MemoryAgent and leaves
+	// Project/Agent empty, and reading the latter here would file what the turn
+	// learns under no root at all — written to the vault but linked to nothing,
+	// so the next turn's recall never finds it.
+	memProject, memAgent := sess.MemoryRoots()
 	resolver := NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
 	mem, err := resolver.Memory(ctx, contracts.Default.Memories(), os.Getenv)
 	if err != nil {
@@ -443,7 +449,7 @@ func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orches
 	// project/agent roots, and the obsidian vault errors when those parent notes
 	// are absent. Best-effort and plugin-agnostic — a memory that cannot create
 	// nodes simply does not satisfy Provisioner and is skipped.
-	provisionSeedScope(ctx, mem, sess.Project, sess.Agent)
+	provisionSeedScope(ctx, mem, memProject, memAgent)
 	orch, err := resolver.Orchestrator(ctx, contracts.Default.Orchestrators())
 	if err != nil {
 		if mem != nil {
@@ -465,7 +471,7 @@ func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orches
 			}
 			return nil, nil, err
 		}
-		ApplyOrchestratorScope(&cfg, sess.Name, sess.Project, sess.Agent, sess.Extractor, sess.Journal, sess.ConsolidateEvery)
+		ApplyOrchestratorScope(&cfg, sess.Name, memProject, memAgent, sess.Extractor, sess.Journal, sess.ConsolidateEvery)
 		orch, err := plugin.Orchestrator(ctx, cfg, mem)
 		if err != nil {
 			if mem != nil {

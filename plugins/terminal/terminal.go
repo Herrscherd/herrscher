@@ -21,6 +21,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/scope"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
@@ -32,12 +33,49 @@ const ChannelID = "terminal"
 // a session it is only watching.
 const Kind = "terminal"
 
+// Setting keys. A launch reads them off the manifest like any plugin, so what
+// the window does can be changed without touching the window.
+const (
+	setLearn      = "learn"
+	setExtractor  = "extractor"
+	setEvery      = "consolidate-every"
+	setMemAgent   = "memory-agent"
+	setProject    = "project"
+	setProjectPin = "project-pin"
+
+	// pinAtLaunch is the project-pin value that takes the directory's answer as
+	// final. Anything else means the session's first prompt may revise it.
+	pinAtLaunch = "launch"
+)
+
+// settings declares what a launch can be told. Every one is optional and carries
+// a default, so a build with no environment behaves exactly as the table in
+// docs/superpowers/specs/2026-08-15-tui-session-learning-design.md describes:
+// the window learns, under the project it is standing in, as itself.
+func settings() []contracts.Setting {
+	return []contracts.Setting{
+		{Key: setLearn, Env: "TERMINAL_LEARN", Default: "true",
+			Help: "the session a launch opens learns: false restores a session that records nothing"},
+		{Key: setExtractor, Env: "TERMINAL_EXTRACTOR", Default: "llm",
+			Help: "registered curation extractor that distils the transcript"},
+		{Key: setEvery, Env: "TERMINAL_CONSOLIDATE_EVERY", Default: "10",
+			Help: "turns between consolidation passes (0 = manual/idle only)"},
+		{Key: setMemAgent, Env: "TERMINAL_MEMORY_AGENT", Default: "tui",
+			Help: "memory root for what the window learns as itself"},
+		{Key: setProject, Env: "TERMINAL_PROJECT", Default: "",
+			Help: "force the memory project and pin it, instead of resolving one"},
+		{Key: setProjectPin, Env: "TERMINAL_PROJECT_PIN", Default: "first-turn",
+			Help: "when the project is settled: first-turn (the prompt may revise it) | launch (the directory is final)"},
+	}
+}
+
 func init() {
 	contracts.Register(contracts.Plugin{
 		Manifest: contracts.Manifest{
 			Kind:         Kind,
 			Category:     contracts.CategoryGateway,
 			Capabilities: contracts.Capabilities{Replies: true},
+			Config:       settings(),
 		},
 		Gateway: newGatewaySet,
 	})
@@ -45,6 +83,7 @@ func init() {
 
 func newGatewaySet(ctx context.Context, cfg contracts.PluginConfig) (contracts.GatewaySet, error) {
 	tm := New()
+	tm.cfg = cfg
 	return contracts.GatewaySet{Gateway: tm, Reader: tm, Admin: tm}, nil
 }
 
@@ -53,7 +92,10 @@ func newGatewaySet(ctx context.Context, cfg contracts.PluginConfig) (contracts.G
 // through Read; outbound events (EmitTo/Emit/Post/Reply) are forwarded to the
 // TUI as RoutedEvents on Frontend.
 type Terminal struct {
-	mu      sync.Mutex
+	mu sync.Mutex
+	// cfg is the resolved manifest configuration. It is kept because a launch
+	// decides what its session should carry, and that decision is configuration.
+	cfg     contracts.PluginConfig
 	pending map[string][]contracts.Message // channel id -> queued inbound lines
 	nextID  int
 	out     chan tui.RoutedEvent
@@ -107,12 +149,64 @@ var (
 // the way out instead: an untouched session is archived when the window closes
 // (archiveIfUntouched), so a launch you changed your mind about leaves nothing
 // behind.
-func openDefaultSession(ctx context.Context, c contracts.SessionControl) (string, error) {
+//
+// It is also where a launch says what it wants to keep. A window that learns
+// nothing is the whole of the moat problem: the tool the operator uses all day
+// contributing nothing to what the next session knows. So unless told otherwise,
+// the session it opens files what it learns under the project it is standing in
+// and under its own agent root — a guess, deliberately left revisable, because
+// the directory is where you are and not always what you are doing.
+func openDefaultSession(ctx context.Context, c contracts.SessionControl, cfg contracts.PluginConfig) (string, error) {
 	name := defaultSessionName(c.Sessions())
-	if _, err := c.Create(ctx, contracts.CreateSession{Name: name, TerminalOnly: true, Shared: true}); err != nil {
+	spec := contracts.CreateSession{Name: name, TerminalOnly: true, Shared: true}
+	if boolSetting(cfg, setLearn, true) {
+		spec.MemoryAgent = cfg.Get(setMemAgent)
+		spec.Extractor = cfg.Get(setExtractor)
+		spec.ConsolidateEvery = intSetting(cfg, setEvery, 0)
+		if p := cfg.Get(setProject); p != "" {
+			// An operator who named the project is not guessing.
+			spec.MemoryProject, spec.ProjectPinned = p, true
+		} else {
+			spec.MemoryProject = scope.ProjectFromDir(cwd())
+			spec.ProjectPinned = spec.MemoryProject != "" && cfg.Get(setProjectPin) == pinAtLaunch
+		}
+	}
+	if _, err := c.Create(ctx, spec); err != nil {
 		return "", err
 	}
 	return name, nil
+}
+
+// cwd is the directory herrscher was launched in — what the operator means by
+// "here". An unreadable one is not an error worth failing a launch over; it
+// simply means the session starts with no project, exactly as it does today.
+func cwd() string {
+	d, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return d
+}
+
+// boolSetting reads a declared boolean setting, falling back to def for anything
+// strconv does not recognise — a typo in an environment variable must not decide
+// whether the window learns.
+func boolSetting(cfg contracts.PluginConfig, key string, def bool) bool {
+	v, err := strconv.ParseBool(strings.TrimSpace(cfg.Get(key)))
+	if err != nil {
+		return def
+	}
+	return v
+}
+
+// intSetting reads a declared integer setting, falling back to def for anything
+// unparseable or negative.
+func intSetting(cfg contracts.PluginConfig, key string, def int) int {
+	n, err := strconv.Atoi(strings.TrimSpace(cfg.Get(key)))
+	if err != nil || n < 0 {
+		return def
+	}
+	return n
 }
 
 // sessionNameRe mirrors the guard in core/internal/manager/validate.go: a name
@@ -176,7 +270,7 @@ func (t *Terminal) bootstrapSession(ctx context.Context) string {
 		if c == nil {
 			return ""
 		}
-		name, err := openDefaultSession(ctx, c)
+		name, err := openDefaultSession(ctx, c, t.cfg)
 		if err != nil {
 			return "" // best-effort; the window still opens, on whatever is there
 		}

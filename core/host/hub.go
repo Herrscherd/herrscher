@@ -109,21 +109,30 @@ func (h *hub) goLive(sess state.Session) {
 	go func() {
 		defer close(done)
 		runSessionIdentified(sctx, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
-			// Neither callback can return an error to its caller, so the only thing
-			// left to do with a failure is say it. Both are worth saying: a lost
-			// resume token means the next restart silently starts the conversation
-			// over, and a lost transcript entry means the session log quietly has a
-			// hole in it. Failing here is a full disk or a permission problem — rare,
-			// and exactly the kind of thing nobody finds without a line in the log.
-			func(tok string) {
-				if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
-					fmt.Fprintf(os.Stderr, "herrscher serve: session %q: resume token not persisted, a restart will lose the conversation: %v\n", sess.Name, err)
-				}
-			},
-			func(e state.TranscriptEntry) {
-				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
-					fmt.Fprintf(os.Stderr, "herrscher serve: session %q: transcript entry dropped: %v\n", sess.Name, err)
-				}
+			// None of these can return an error to its caller, so the only thing
+			// left to do with a failure is say it. All three are worth saying: a
+			// lost resume token means the next restart silently starts the
+			// conversation over, a lost project means the session re-guesses its
+			// scope on every start, and a lost transcript entry means the session
+			// log quietly has a hole in it. Failing here is a full disk or a
+			// permission problem — rare, and exactly the kind of thing nobody
+			// finds without a line in the log.
+			sessionSink{
+				Resume: func(tok string) {
+					if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
+						fmt.Fprintf(os.Stderr, "herrscher serve: session %q: resume token not persisted, a restart will lose the conversation: %v\n", sess.Name, err)
+					}
+				},
+				Project: func(p string) {
+					if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
+						fmt.Fprintf(os.Stderr, "herrscher serve: session %q: memory project not persisted, the next start will guess again: %v\n", sess.Name, err)
+					}
+				},
+				Transcript: func(e state.TranscriptEntry) {
+					if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
+						fmt.Fprintf(os.Stderr, "herrscher serve: session %q: transcript entry dropped: %v\n", sess.Name, err)
+					}
+				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent}, h.gate)
@@ -274,6 +283,8 @@ func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor s
 	setStr("backend", spec.Backend)
 	setStr("vendor", vendor)
 	setStr("agent", spec.Agent)
+	setStr("memory_project", spec.MemoryProject)
+	setStr("memory_agent", spec.MemoryAgent)
 	setStr("extractor", spec.Extractor)
 	setStr("journal", spec.Journal)
 	setStr("base", spec.Base)
@@ -286,6 +297,9 @@ func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor s
 	}
 	if spec.Shared {
 		args["shared"] = "true"
+	}
+	if spec.ProjectPinned {
+		args["project_pinned"] = "true"
 	}
 	if spec.ConsolidateEvery != 0 {
 		args["consolidate_every"] = strconv.Itoa(spec.ConsolidateEvery)

@@ -444,6 +444,15 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		return "", err
 	}
 	parent, _ := in.Lookup("parent")
+	// Memory roots: where this session files what it learns, as opposed to where
+	// it lives. Neither reaches repoFor, the worktree decision, or agent
+	// provisioning — that separation is the whole reason they are separate fields.
+	memProject, _ := in.Lookup("memory_project")
+	if memProject != "" && !projectRe.MatchString(memProject) {
+		return "", fmt.Errorf("invalid memory_project %q — use a single name (no /, spaces, or ..)", memProject)
+	}
+	memAgent, _ := in.Lookup("memory_agent")
+	projectPinned := in.Bool("project_pinned")
 	// P1 learning (opt-in): extractor names a registered curation extractor; the
 	// journal/cadence feed its Consolidate. Persisted on the session and threaded
 	// to the bridge by the supervisor, like project/agent scope.
@@ -587,21 +596,21 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		// The conversation already exists — bind to it rather than creating a
 		// channel. This is what lets a gateway start a session in the channel the
 		// operator is already talking in.
-		sess = state.Session{Name: name, ChannelID: adopted, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
+		sess = state.Session{Name: name, ChannelID: adopted, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
 	case home.Type == "category", home.Type == "terminal":
 		chID, err := admin.CreateUnder(ctx, home.ID, title)
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create channel: %w", err)
 		}
-		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
+		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
 	case home.Type == "forum":
 		chID, err := admin.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create forum post: %w", err)
 		}
-		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
+		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}

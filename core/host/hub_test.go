@@ -100,6 +100,7 @@ func TestHubCreateMapsSpecToTypedInput(t *testing.T) {
 	if _, err := h.Create(context.Background(), contracts.CreateSession{
 		Name: "main", Project: "alpha", Gateways: []string{"chat", "terminal"},
 		TerminalOnly: true, Shared: true, Agent: "bishop", ConsolidateEvery: 3, Base: "session/a",
+		MemoryProject: "neublox", MemoryAgent: "tui", ProjectPinned: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -118,6 +119,14 @@ func TestHubCreateMapsSpecToTypedInput(t *testing.T) {
 	if got.Get("consolidate_every") != "3" {
 		t.Fatalf("consolidate_every not mapped: %q", got.Get("consolidate_every"))
 	}
+	// A memory root travels as its own flag, never folded into project/agent,
+	// because the command reads those two as a location and a provisioning ask.
+	if got.Get("memory_project") != "neublox" || got.Get("memory_agent") != "tui" {
+		t.Fatalf("memory roots not mapped: %+v", got.Args)
+	}
+	if !got.Bool("project_pinned") {
+		t.Fatalf("project_pinned not mapped: %+v", got.Args)
+	}
 }
 
 // An omitted optional field must not appear in the Input, so it stays "flag
@@ -128,7 +137,7 @@ func TestHubCreateOmitsUnsetFields(t *testing.T) {
 	if _, err := h.Create(context.Background(), contracts.CreateSession{Name: "main"}); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"project", "gateways", "agent", "shared", "terminal_only", "consolidate_every", "base"} {
+	for _, k := range []string{"project", "gateways", "agent", "shared", "terminal_only", "consolidate_every", "base", "memory_project", "memory_agent", "project_pinned"} {
 		if _, ok := got.Args[k]; ok {
 			t.Fatalf("unset field %q must be absent, got %q", k, got.Args[k])
 		}

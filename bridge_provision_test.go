@@ -13,6 +13,10 @@ import (
 type recordingMem struct {
 	projects [][2]string // {key, title}
 	agents   [][2]string
+	// known is what Search answers with, and searchErr what it fails with — the
+	// vault the scope resolver reads to learn which projects already exist.
+	known     []contracts.Node
+	searchErr error
 }
 
 func (m *recordingMem) Recall(context.Context, string, int) (contracts.Subgraph, error) {
@@ -20,7 +24,7 @@ func (m *recordingMem) Recall(context.Context, string, int) (contracts.Subgraph,
 }
 func (m *recordingMem) Record(context.Context, contracts.Node) error { return nil }
 func (m *recordingMem) Search(context.Context, contracts.Query) ([]contracts.Node, error) {
-	return nil, nil
+	return m.known, m.searchErr
 }
 func (m *recordingMem) Links(context.Context, string, string, string) error { return nil }
 func (m *recordingMem) Unlink(context.Context, string, string) error        { return nil }

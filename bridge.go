@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/scope"
 )
 
 // runBridge runs a pure backend runner against the daemon hub: it dials the hub
@@ -24,6 +26,7 @@ func runBridge(ctx context.Context, args []string) error {
 	session := fs.String("session", "", "session name (scopes the orchestrator/attachment dir)")
 	project := fs.String("project", "", "project name — the shared memory scope (P1: every agent of this game recalls it)")
 	agent := fs.String("agent", "", "agent name — the private memory scope (P1: this agent's learned skills)")
+	projectPinned := fs.Bool("project-pinned", false, "the memory project was chosen by a human, not guessed from a directory: never revise it")
 	verbose := fs.Bool("v", false, "log activity to stderr")
 	hubSocket := fs.String("hub-socket", "", "unix socket of the daemon hub: when set, run as a pure backend runner (no gateway polling)")
 	agentsRoot := fs.String("agents-root", "", "directory holding agent homes for the delegation roster (empty = the daemon default beside state.json)")
@@ -67,15 +70,22 @@ func runBridge(ctx context.Context, args []string) error {
 	if rosterRoot == "" {
 		rosterRoot = host.DefaultAgentsRoot()
 	}
-	return bridge.Run(ctx, newBackend, orch, bridge.Options{
+	opts := bridge.Options{
 		Channel:   *ch,
 		HubSocket: *hubSocket,
 		Roster:    host.NewRoster(rosterRoot),
 		// What the daemon dispatches, handed down at spawn: this process has no
 		// registry of its own, and the verbs a gateway contributes exist only in
 		// the daemon that instantiated it.
-		Capabilities: os.Getenv(host.EnvCapabilities),
-	})
+		Capabilities:  os.Getenv(host.EnvCapabilities),
+		LaunchProject: *project,
+		ProjectPinned: *projectPinned,
+		MemoryAgent:   *agent,
+	}
+	if mem != nil {
+		opts.Scope = vaultScopeResolver{mem: mem, log: log}
+	}
+	return bridge.Run(ctx, newBackend, orch, opts)
 }
 
 // backendFlags holds the bridge flags that select and configure the backend.
@@ -195,6 +205,42 @@ func provisionScope(ctx context.Context, mem contracts.Memory, project, agent st
 			log.Warn("ensure agent root", "agent", agent, "err", err)
 		}
 	}
+}
+
+// vaultScopeResolver answers which known project a prompt is about, and makes
+// sure that project's root exists before saying so. It is the bridge's half of
+// chantier 1's deliberately dull matching rule: everything it knows comes out of
+// the vault, so the registry that replaces the rule replaces this and nothing
+// above it.
+type vaultScopeResolver struct {
+	mem contracts.Memory
+	log *slog.Logger
+}
+
+func (r vaultScopeResolver) Resolve(ctx context.Context, prompt string) string {
+	nodes, err := r.mem.Search(ctx, contracts.Query{Kinds: []contracts.NodeKind{contracts.KindProject}})
+	if err != nil {
+		// A vault that cannot be read is a session that keeps the project its
+		// launch guessed. Learning never breaks a turn.
+		r.log.Warn("list known projects", "err", err)
+		return ""
+	}
+	known := make([]string, 0, len(nodes))
+	for _, n := range nodes {
+		// The name is the key's last segment: projects/<name>. Title is a human
+		// label and may be anything, so it is not what a scope is keyed by.
+		known = append(known, strings.TrimPrefix(n.Key, "projects/"))
+	}
+	chosen := scope.MatchProject(prompt, known)
+	if chosen == "" {
+		return ""
+	}
+	if p, ok := r.mem.(contracts.Provisioner); ok {
+		if err := p.EnsureProject(ctx, contracts.ProjectKey(chosen), chosen); err != nil {
+			r.log.Warn("ensure project root", "project", chosen, "err", err)
+		}
+	}
+	return chosen
 }
 
 // learnConfig is the opt-in P1 write side: when extractor names a registered

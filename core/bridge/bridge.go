@@ -19,6 +19,13 @@ import (
 // channel can be created inside Run.
 type BackendFactory func(channelID string) (contracts.Backend, error)
 
+// ScopeResolver answers which memory project a prompt is about, having ensured
+// that project's root exists. "" means "none of the ones I know", which the
+// caller reads as "keep the scope you launched with".
+type ScopeResolver interface {
+	Resolve(ctx context.Context, prompt string) string
+}
+
 // Options configures one bridge run (parsed from CLI flags by the binary). In
 // pure-runner mode the bridge only needs the channel to key its backend and the
 // hub socket to dial; the progress level is decided host-side by the renderer.
@@ -34,6 +41,20 @@ type Options struct {
 	// handed down at spawn (the bridge holds no registry of its own). Empty
 	// injects no <capabilities> block.
 	Capabilities string
+	// Scope decides which memory project a session's conversation is actually
+	// about, on its first prompt. It is injected because the answer lives in the
+	// vault and the bridge package holds no memory of its own — which is also
+	// what lets the turn driver be tested without one. Nil never settles
+	// anything, and neither does a session whose project a human already chose.
+	Scope ScopeResolver
+	// LaunchProject is the memory project the session was created with, and
+	// ProjectPinned says a human chose it rather than the host guessing from a
+	// directory. Only a guess is ever revised.
+	LaunchProject string
+	ProjectPinned bool
+	// MemoryAgent is the private memory root, carried so a re-rooted scope keeps
+	// both halves of the tree instead of dropping the agent on the way.
+	MemoryAgent string
 }
 
 // Run is the bridge entry point: a pure backend runner. It requires a hub socket
@@ -70,7 +91,7 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 	case ev := <-in:
 		// No affordances on the seed path: it is one turn with no supervising
 		// daemon behind it, which is also why it carries no delegation roster.
-		runOneTurn(ctx, channelSink{ctx: ctx, out: out}, resp, orch, ev, nil, newSkillEngine(resp), affordances{})
+		runOneTurn(ctx, channelSink{ctx: ctx, out: out}, resp, orch, ev, nil, newSkillEngine(resp), affordances{}, nil)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

@@ -146,7 +146,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	// is applied after the pump is stopped and joined (see below).
 	if runtime.record != nil {
 		name := sess.Name
-		d.record = func(entry state.TranscriptEntry) { runtime.record(name, entry) }
+		d.sink.Transcript = func(entry state.TranscriptEntry) { runtime.record(name, entry) }
 	}
 	// Tap the seed turn onto the daemon's events socket (when one is serving) so
 	// the app sees live thinking/status/chunk/reply. The seed path binds no

@@ -58,12 +58,23 @@ func (s *Supervisor) bridgeArgs(sess state.Session) []string {
 	args := []string{"bridge", "-c", sess.ChannelID, "--cmd", sess.Cmd, "--session", sess.Name,
 		"--hub-socket", control.SocketPath(sess.Name)}
 	// P1: thread the session's memory scope so the orchestrator recalls the
-	// game's shared memory and this agent's private skills each turn.
-	if sess.Project != "" {
+	// game's shared memory and this agent's private skills each turn. The bridge
+	// flags are memory-only by definition, so a memory root wins over the
+	// placement field of the same name: Project may be steering the session into
+	// a workspace sub-directory, which says nothing about where knowledge goes.
+	if p := sess.MemoryProject; p != "" {
+		args = append(args, "--project", p)
+	} else if sess.Project != "" {
 		args = append(args, "--project", sess.Project)
 	}
 	if sess.Agent != "" {
 		args = append(args, "--agent", sess.Agent)
+	} else if sess.MemoryAgent != "" {
+		args = append(args, "--agent", sess.MemoryAgent)
+	}
+	// Whether the bridge may revise the project on this session's first prompt.
+	if sess.ProjectPinned {
+		args = append(args, "--project-pinned")
 	}
 	if sess.Backend != "" && sess.Backend != "stream" {
 		args = append(args, "--backend", sess.Backend)

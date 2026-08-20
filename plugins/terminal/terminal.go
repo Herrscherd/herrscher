@@ -162,9 +162,11 @@ func openDefaultSession(ctx context.Context, c contracts.SessionControl, cfg con
 	if boolSetting(cfg, setLearn, true) {
 		spec.MemoryAgent = cfg.Get(setMemAgent)
 		spec.Extractor = cfg.Get(setExtractor)
-		spec.ConsolidateEvery = intSetting(cfg, setEvery, 0)
-		if p := cfg.Get(setProject); p != "" {
-			// An operator who named the project is not guessing.
+		spec.ConsolidateEvery = intSetting(cfg, setEvery, 10)
+		if p := scope.Name(cfg.Get(setProject)); p != "" {
+			// An operator who named the project is not guessing. The name is
+			// folded first: session create refuses one with a space in it, and a
+			// refused create is a window that opens on nothing.
 			spec.MemoryProject, spec.ProjectPinned = p, true
 		} else {
 			spec.MemoryProject = scope.ProjectFromDir(cwd())

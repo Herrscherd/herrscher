@@ -77,8 +77,7 @@ type sessionSink struct {
 	Resume func(token string)
 	// Project records the memory project the bridge settled on for this session,
 	// once, on its first prompt.
-	Project func(project string)
-	// Transcript appends one entry to the session log.
+	Project    func(project string)
 	Transcript func(state.TranscriptEntry)
 }
 

@@ -388,3 +388,27 @@ func TestBridgeArgsThreadsModelID(t *testing.T) {
 		t.Fatalf("--model present for a legacy session with no model: %v", args)
 	}
 }
+
+func TestBridgeArgsPrefersTheMemoryRoots(t *testing.T) {
+	s := &Supervisor{}
+	joined := strings.Join(s.bridgeArgs(state.Session{
+		Name: "demo", MemoryProject: "neublox", MemoryAgent: "tui", ProjectPinned: true,
+	}), " ")
+	for _, want := range []string{"--project neublox", "--agent tui", "--project-pinned"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing %q in %s", want, joined)
+		}
+	}
+}
+
+// A session someone configured by hand keeps sending exactly what it sends today.
+func TestBridgeArgsKeepsThePlacementFieldsWhenNoMemoryRootIsSet(t *testing.T) {
+	s := &Supervisor{}
+	joined := strings.Join(s.bridgeArgs(state.Session{Name: "demo", Project: "game", Agent: "scout"}), " ")
+	if !strings.Contains(joined, "--project game") || !strings.Contains(joined, "--agent scout") {
+		t.Fatalf("legacy scope flags changed: %s", joined)
+	}
+	if strings.Contains(joined, "--project-pinned") {
+		t.Fatalf("nothing pinned this: %s", joined)
+	}
+}

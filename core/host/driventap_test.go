@@ -39,7 +39,7 @@ func TestDrivenSessionTapsTheEventSocket(t *testing.T) {
 		t.Fatalf("accept: %v", err)
 	}
 	got := make(chan contracts.Event, 4)
-	go runSessionIdentified(ctx, "driventap-test", "", nil, acc, "", nil, nil, nil, nil,
+	go runSessionIdentified(ctx, "driventap-test", "", nil, acc, "", nil, nil, sessionSink{},
 		eventTap(func(_ string, e contracts.Event) { got <- e }, "driventap-test"),
 		sessionIdentity{}, nil)
 

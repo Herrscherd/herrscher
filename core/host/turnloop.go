@@ -68,6 +68,20 @@ func (g *tokenGuard) trips(e contracts.Event) (uint64, bool) {
 // to all bound gateways. toBridge/fromBridge are the two directions of the
 // session's control connection (a *control.Conn in production; channels in
 // tests).
+// sessionSink collects the writes a completed turn owes the daemon: the
+// backend's resume token, the memory project the session settled on, and the
+// transcript entry. Any field may be nil, which disables that write.
+type sessionSink struct {
+	// Resume folds a completed turn's backend resume token into durable state so
+	// a restart resumes the conversation instead of starting it over.
+	Resume func(token string)
+	// Project records the memory project the bridge settled on for this session,
+	// once, on its first prompt.
+	Project func(project string)
+	// Transcript appends one entry to the session log.
+	Transcript func(state.TranscriptEntry)
+}
+
 type sessionDriver struct {
 	name         string
 	incarnation  string
@@ -120,13 +134,11 @@ type sessionDriver struct {
 	// maybeCoordinate simply no-ops.
 	coordinator contracts.Coordinator
 
-	// persistResume folds a completed turn's backend resume token into durable
-	// state (nil = disabled, e.g. tests and the operator CLI path).
-	persistResume func(token string)
-
-	// record appends one transcript entry (nil = disabled, e.g. tests and the
-	// operator CLI path). Set by RunSession; the daemon is the single writer.
-	record func(state.TranscriptEntry)
+	// sink is where a completed turn's durable side effects go. The three travel
+	// together because they are the same kind of fact — something about the turn
+	// the daemon has to write down — and because a nil field is how a caller with
+	// nowhere to write (tests, the short-lived operator CLI path) says so.
+	sink sessionSink
 
 	// emitTap, when set, receives every event the driver fans out — including on
 	// the seed path where gateways is nil. It feeds the daemon's events socket so
@@ -235,10 +247,10 @@ type turnUsage struct {
 // recordEntry appends one transcript turn-side, best-effort. Timestamp is set
 // here so both call sites stay one-liners.
 func (d *sessionDriver) recordEntry(role, text string, cost float64, u turnUsage) {
-	if d.record == nil || text == "" {
+	if d.sink.Transcript == nil || text == "" {
 		return
 	}
-	d.record(state.TranscriptEntry{
+	d.sink.Transcript(state.TranscriptEntry{
 		Ts:          time.Now().UTC().Format(time.RFC3339),
 		Role:        role,
 		Text:        text,
@@ -625,8 +637,14 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 			if e.T == "reply" && e.Done {
 				e.Coordination = d.maybeCoordinate(ctx, e.Text)
 				d.fanOut(ctx, e)
-				if d.persistResume != nil && e.Resume != "" {
-					d.persistResume(e.Resume)
+				if d.sink.Resume != nil && e.Resume != "" {
+					d.sink.Resume(e.Resume)
+				}
+				// The project a first prompt settled comes home the same way, and
+				// for the same reason: the bridge knows it and only the daemon can
+				// write it down.
+				if d.sink.Project != nil && e.Project != "" {
+					d.sink.Project(e.Project)
 				}
 				d.recordEntry("assistant", e.Text, e.Cost, turnUsage{
 					InTokens:    e.TokensIn,
@@ -878,11 +896,11 @@ type sessionIdentity struct {
 	agent       string
 }
 
-func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry), gate budgetGate) {
-	runSessionIdentified(ctx, name, channel, gws, acc, participants, m, coord, persistResume, record, nil, sessionIdentity{}, gate)
+func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, gate budgetGate) {
+	runSessionIdentified(ctx, name, channel, gws, acc, participants, m, coord, sink, nil, sessionIdentity{}, gate)
 }
 
-func runSessionIdentified(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, persistResume func(string), record func(state.TranscriptEntry), emit func(contracts.Event), identity sessionIdentity, gate budgetGate) {
+func runSessionIdentified(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, emit func(contracts.Event), identity sessionIdentity, gate budgetGate) {
 	defer acc.Close() // own the acceptor: close the listener + remove the socket on shutdown
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
@@ -893,8 +911,7 @@ func runSessionIdentified(ctx context.Context, name, channel string, gws []contr
 	d.participants = participants
 	d.metrics = m
 	d.coordinator = coord
-	d.persistResume = persistResume
-	d.record = record
+	d.sink = sink
 	d.emitTap = emit
 	if gate != nil {
 		d.gate = gate

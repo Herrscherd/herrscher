@@ -308,6 +308,23 @@ func (s *State) SetResumeToken(name, token string) error {
 	return nil
 }
 
+// MemoryRoots answers which project and agent this session files what it learns
+// under. A memory root wins over the placement field of the same name: Project
+// may be steering the session into a workspace sub-directory and Agent may be
+// demanding an isolated worktree, and neither says where knowledge goes. Every
+// path that scopes memory — the supervisor spawning a bridge, the daemon running
+// a one-shot seed — asks here, so the two cannot drift.
+func (s Session) MemoryRoots() (project, agent string) {
+	project, agent = s.MemoryProject, s.MemoryAgent
+	if project == "" {
+		project = s.Project
+	}
+	if agent == "" {
+		agent = s.Agent
+	}
+	return project, agent
+}
+
 // SetProjectPinned records the memory project a session settled on and marks it
 // chosen, so no later turn re-opens the question. Mirrors SetResumeToken's
 // locking and persistence: a missing session, or a project already pinned to the

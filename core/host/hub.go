@@ -274,6 +274,8 @@ func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor s
 	setStr("backend", spec.Backend)
 	setStr("vendor", vendor)
 	setStr("agent", spec.Agent)
+	setStr("memory_project", spec.MemoryProject)
+	setStr("memory_agent", spec.MemoryAgent)
 	setStr("extractor", spec.Extractor)
 	setStr("journal", spec.Journal)
 	setStr("base", spec.Base)
@@ -286,6 +288,9 @@ func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor s
 	}
 	if spec.Shared {
 		args["shared"] = "true"
+	}
+	if spec.ProjectPinned {
+		args["project_pinned"] = "true"
 	}
 	if spec.ConsolidateEvery != 0 {
 		args["consolidate_every"] = strconv.Itoa(spec.ConsolidateEvery)

@@ -15,6 +15,12 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
+// seedConsolidateTimeout caps the consolidation that closes a seed turn. It is
+// deliberately separate from the turn's own cap: the two are different pieces of
+// work, and sharing one deadline makes the memory write hostage to how long the
+// model took to answer.
+const seedConsolidateTimeout = 60 * time.Second
+
 // seedTurnTimeout is the cap a seed turn runs under when nothing names another.
 // A coordination seed is a short question; a turn started by hand from a terminal
 // is not, which is what --timeout / HERRSCHER_SEED_TIMEOUT exist for.
@@ -205,9 +211,29 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 		}
 		d.activeTurnID = ""
 	}
-	if orch != nil {
-		if err := orch.Consolidate(seedCtx); err != nil {
-			return "", fmt.Errorf("consolidate: %w", err)
+	// A cadence (--consolidate-every N) means the orchestrator already
+	// consolidated inside the turn. Doing it again here repeats the extraction
+	// for nothing; the closing call exists for the manual case, where nothing
+	// else ever writes what the turn learned.
+	if orch != nil && sess.ConsolidateEvery <= 0 {
+		// Consolidation gets its own budget, taken from the caller's context
+		// rather than the turn's: seedCtx is what the turn was allowed to spend,
+		// and a turn that spent it leaves nothing here. With --consolidate-every 1
+		// the orchestrator already consolidates inside the turn, so this one
+		// arrives on an exhausted deadline and fails every time.
+		consCtx, consCancel := context.WithTimeout(ctx, seedConsolidateTimeout)
+		started := time.Now()
+		err := orch.Consolidate(consCtx)
+		consCancel()
+		if err != nil {
+			// The elapsed time is what separates the two ways this fails: a budget
+			// genuinely spent on a slow extractor, or a parent context that was
+			// already dead when we got here — the latter returns in microseconds.
+			// The turn answered; that is what the caller asked for. A memory
+			// write that failed on the way out is worth saying and no more —
+			// returning the error here would drop a finished reply, and under
+			// --print would print nothing at all.
+			fmt.Fprintf(os.Stderr, "herrscher: session %q: consolidate after %s: %v\n", sess.Name, time.Since(started).Round(time.Millisecond), err)
 		}
 	}
 	return reply, nil

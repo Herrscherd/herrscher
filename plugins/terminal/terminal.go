@@ -33,41 +33,11 @@ const ChannelID = "terminal"
 // a session it is only watching.
 const Kind = "terminal"
 
-// Setting keys. A launch reads them off the manifest like any plugin, so what
-// the window does can be changed without touching the window.
-const (
-	setLearn      = "learn"
-	setExtractor  = "extractor"
-	setEvery      = "consolidate-every"
-	setMemAgent   = "memory-agent"
-	setProject    = "project"
-	setProjectPin = "project-pin"
-
-	// pinAtLaunch is the project-pin value that takes the directory's answer as
-	// final. Anything else means the session's first prompt may revise it.
-	pinAtLaunch = "launch"
-)
-
-// settings declares what a launch can be told. Every one is optional and carries
-// a default, so a build with no environment behaves exactly as the table in
-// docs/superpowers/specs/2026-08-15-tui-session-learning-design.md describes:
-// the window learns, under the project it is standing in, as itself.
-func settings() []contracts.Setting {
-	return []contracts.Setting{
-		{Key: setLearn, Env: "TERMINAL_LEARN", Default: "true",
-			Help: "the session a launch opens learns: false restores a session that records nothing"},
-		{Key: setExtractor, Env: "TERMINAL_EXTRACTOR", Default: "llm",
-			Help: "registered curation extractor that distils the transcript"},
-		{Key: setEvery, Env: "TERMINAL_CONSOLIDATE_EVERY", Default: "10",
-			Help: "turns between consolidation passes (0 = manual/idle only)"},
-		{Key: setMemAgent, Env: "TERMINAL_MEMORY_AGENT", Default: "tui",
-			Help: "memory root for what the window learns as itself"},
-		{Key: setProject, Env: "TERMINAL_PROJECT", Default: "",
-			Help: "force the memory project and pin it, instead of resolving one"},
-		{Key: setProjectPin, Env: "TERMINAL_PROJECT_PIN", Default: "first-turn",
-			Help: "when the project is settled: first-turn (the prompt may revise it) | launch (the directory is final)"},
-	}
-}
+// settings declares what a launch can be told. The table lives in core/scope
+// because the binary's `herrscher "<task>"` path creates its session before any
+// plugin exists and must reach the same answer; the plugin still owns declaring
+// it, which is why the manifest asks for it here.
+func settings() []contracts.Setting { return scope.LaunchSettings() }
 
 func init() {
 	contracts.Register(contracts.Plugin{
@@ -159,56 +129,11 @@ var (
 func openDefaultSession(ctx context.Context, c contracts.SessionControl, cfg contracts.PluginConfig) (string, error) {
 	name := defaultSessionName(c.Sessions())
 	spec := contracts.CreateSession{Name: name, TerminalOnly: true, Shared: true}
-	if boolSetting(cfg, setLearn, true) {
-		spec.MemoryAgent = cfg.Get(setMemAgent)
-		spec.Extractor = cfg.Get(setExtractor)
-		spec.ConsolidateEvery = intSetting(cfg, setEvery, 10)
-		if p := scope.Name(cfg.Get(setProject)); p != "" {
-			// An operator who named the project is not guessing. The name is
-			// folded first: session create refuses one with a space in it, and a
-			// refused create is a window that opens on nothing.
-			spec.MemoryProject, spec.ProjectPinned = p, true
-		} else {
-			spec.MemoryProject = scope.ProjectFromDir(cwd())
-			spec.ProjectPinned = spec.MemoryProject != "" && cfg.Get(setProjectPin) == pinAtLaunch
-		}
-	}
+	scope.LaunchFrom(cfg).Apply(&spec)
 	if _, err := c.Create(ctx, spec); err != nil {
 		return "", err
 	}
 	return name, nil
-}
-
-// cwd is the directory herrscher was launched in — what the operator means by
-// "here". An unreadable one is not an error worth failing a launch over; it
-// simply means the session starts with no project, exactly as it does today.
-func cwd() string {
-	d, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	return d
-}
-
-// boolSetting reads a declared boolean setting, falling back to def for anything
-// strconv does not recognise — a typo in an environment variable must not decide
-// whether the window learns.
-func boolSetting(cfg contracts.PluginConfig, key string, def bool) bool {
-	v, err := strconv.ParseBool(strings.TrimSpace(cfg.Get(key)))
-	if err != nil {
-		return def
-	}
-	return v
-}
-
-// intSetting reads a declared integer setting, falling back to def for anything
-// unparseable or negative.
-func intSetting(cfg contracts.PluginConfig, key string, def int) int {
-	n, err := strconv.Atoi(strings.TrimSpace(cfg.Get(key)))
-	if err != nil || n < 0 {
-		return def
-	}
-	return n
 }
 
 // sessionNameRe mirrors the guard in core/internal/manager/validate.go: a name

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -125,5 +126,47 @@ func TestRunPromptNamesTheSessionWhenSeedFails(t *testing.T) {
 	err := runPromptWith(context.Background(), d, "n-a3fq", "x y", &out, &errOut)
 	if err == nil || !strings.Contains(err.Error(), "n-a3fq") {
 		t.Fatalf("err = %v, want it to name the session left behind", err)
+	}
+}
+
+// TestATaskLaunchAsksToLearn is the moat for the `herrscher "<task>"` path: the
+// session it opens must carry the same memory roots the TUI's own default
+// session gets, or a one-shot turn learns nothing.
+func TestATaskLaunchAsksToLearn(t *testing.T) {
+	t.Setenv("TERMINAL_PROJECT", "Mon Projet")
+	d := &recordingDispatcher{reply: map[string]string{"session seed": "ok"}}
+	var out, errOut strings.Builder
+	if err := runPromptWith(context.Background(), d, "n-a3fq", "x y", &out, &errOut); err != nil {
+		t.Fatalf("runPromptWith: %v", err)
+	}
+	create := d.seen[0]
+	for flag, want := range map[string]string{
+		"--memory_project":    "mon-projet",
+		"--memory_agent":      "tui",
+		"--extractor":         "llm",
+		"--consolidate_every": "10",
+	} {
+		got, ok := argOf(create, flag)
+		if !ok || got != want {
+			t.Errorf("%s = %q (present=%v); want %q", flag, got, ok, want)
+		}
+	}
+	if !slices.Contains(create, "--project_pinned") {
+		t.Errorf("a named project must be pinned; got %v", create)
+	}
+}
+
+// TestATaskLaunchToldNotToLearnSaysNothing pins the other half: TERMINAL_LEARN=false
+// dispatches exactly the argv this path used before it learned anything.
+func TestATaskLaunchToldNotToLearnSaysNothing(t *testing.T) {
+	t.Setenv("TERMINAL_LEARN", "false")
+	d := &recordingDispatcher{reply: map[string]string{"session seed": "ok"}}
+	var out, errOut strings.Builder
+	if err := runPromptWith(context.Background(), d, "n-a3fq", "x y", &out, &errOut); err != nil {
+		t.Fatalf("runPromptWith: %v", err)
+	}
+	want := []string{"session", "create", "--name", "n-a3fq", "--terminal_only"}
+	if !slices.Equal(d.seen[0], want) {
+		t.Fatalf("create argv = %v; want %v", d.seen[0], want)
 	}
 }

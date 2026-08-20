@@ -36,6 +36,16 @@ type Session struct {
 	Dir      string `json:"dir,omitempty"`      // bridge working dir; empty = inherit launcher cwd (pwd fallback)
 	Project  string `json:"project,omitempty"`  // workspace sub-dir the session started from
 	Agent    string `json:"agent,omitempty"`    // durable agent this session was provisioned from ("" = none)
+	// MemoryProject and MemoryAgent are the memory roots this session files what
+	// it learns under. They are separate from Project and Agent on purpose: those
+	// two place the session — a workspace sub-directory, a provisioned worktree —
+	// while these only say where knowledge goes. Empty means the session
+	// contributes to no root, which is every session created before this existed.
+	MemoryProject string `json:"memoryProject,omitempty"`
+	MemoryAgent   string `json:"memoryAgent,omitempty"`
+	// ProjectPinned marks MemoryProject as a human's choice. A host guess is left
+	// unpinned so the session's first prompt may revise it, once.
+	ProjectPinned bool `json:"projectPinned,omitempty"`
 
 	// ResumeToken is the backend's opaque resume id, folded in from each turn's
 	// reply so a restart can resume the conversation with --resume. Empty =
@@ -294,6 +304,27 @@ func (s *State) SetResumeToken(name, token string) error {
 			s.Sessions[i].ResumeToken = token
 			return s.saveLocked()
 		}
+	}
+	return nil
+}
+
+// SetProjectPinned records the memory project a session settled on and marks it
+// chosen, so no later turn re-opens the question. Mirrors SetResumeToken's
+// locking and persistence: a missing session, or a project already pinned to the
+// same value, is a no-op rather than a rewrite of state.json.
+func (s *State) SetProjectPinned(name, project string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Sessions {
+		if s.Sessions[i].Name != name {
+			continue
+		}
+		if s.Sessions[i].MemoryProject == project && s.Sessions[i].ProjectPinned {
+			return nil
+		}
+		s.Sessions[i].MemoryProject = project
+		s.Sessions[i].ProjectPinned = true
+		return s.saveLocked()
 	}
 	return nil
 }

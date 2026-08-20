@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -95,6 +96,13 @@ func MatchProject(prompt string, known []string) string {
 	return best
 }
 
+// Name folds raw into the scope segment contracts would use, or "" when raw
+// holds nothing nameable. Callers that take a project name from a human — an
+// environment variable, a flag — run it through this so a value with a space in
+// it is folded rather than refused: a typo in a setting must not be the reason a
+// window opens on nothing.
+func Name(raw string) string { return nameOf(raw) }
+
 // nameOf folds raw into the scope segment contracts would use, or "" when raw
 // holds nothing nameable. The empty answer matters: the normaliser's own
 // fallback is the literal "scope", and a session filed under a project called
@@ -126,7 +134,7 @@ func indexWord(hay, needle string) int {
 			return -1
 		}
 		at := i + j
-		if boundary(hay, at-1) && boundary(hay, at+len(needle)) {
+		if boundaryBefore(hay, at) && boundaryAt(hay, at+len(needle)) {
 			return at
 		}
 		i = at + 1
@@ -134,13 +142,25 @@ func indexWord(hay, needle string) int {
 	return -1
 }
 
-// boundary reports whether index i in s is off the end or holds something that
-// is not part of a word. Off the end counts: the start and end of the prompt are
-// boundaries.
-func boundary(s string, i int) bool {
-	if i < 0 || i >= len(s) {
+// boundaryBefore reports whether the rune ending at byte i is a word boundary,
+// and boundaryAt whether the one starting at byte i is. Both decode a whole rune
+// rather than looking at one byte: the lead byte of "…" or of a non-breaking
+// space is 0xE2/0xC2, which as a bare rune is a letter, and a prompt written in
+// French is full of them. The start and end of the prompt count as boundaries.
+func boundaryBefore(s string, i int) bool {
+	if i <= 0 {
 		return true
 	}
-	r := rune(s[i])
-	return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	r, _ := utf8.DecodeLastRuneInString(s[:i])
+	return notWord(r)
 }
+
+func boundaryAt(s string, i int) bool {
+	if i >= len(s) {
+		return true
+	}
+	r, _ := utf8.DecodeRuneInString(s[i:])
+	return notWord(r)
+}
+
+func notWord(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }

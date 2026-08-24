@@ -196,8 +196,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		return nil, hostDeps{}, err
 	}
 	// memory locate/forget/record — surface d'exposition mémoire consommée par
-	// exec (voir docs/superpowers/specs/2026-07-17-memory-exposure-surface).
-	// Chaque commande construit la mémoire in-process et la ferme.
+	// exec. Chaque commande construit la mémoire in-process et la ferme.
 	if err := reg.Add(contracts.New("memory", "locate").
 		Help("print openable URIs (obsidian://, file://) of a memory node's note").
 		Param("key", "node key", true).

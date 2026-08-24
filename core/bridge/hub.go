@@ -3,11 +3,13 @@ package bridge
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/identity"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
@@ -158,18 +160,27 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	if o.Scope != nil && !o.ProjectPinned {
 		pin = &scopePin{resolve: o.Scope, current: o.LaunchProject, agent: o.MemoryAgent, orch: orch}
 	}
-	runHubTurnsCtl(ctx, in, conn, backend, orch, ctrl, eng, affordances{roster: o.Roster, caps: o.Capabilities}, pin)
+	// The human is resolved here, once, rather than per turn: they do not change
+	// mid-session, and a turn should not pay three git calls to be told so. The
+	// process's working directory is the session's worktree, which is the
+	// directory whose git config decides what a commit from this session signs
+	// with — so it is the one to ask.
+	cwd, _ := os.Getwd()
+	runHubTurnsCtl(ctx, in, conn, backend, orch, ctrl, eng,
+		affordances{roster: o.Roster, caps: o.Capabilities, user: identity.FromDir(cwd)}, pin)
 	return ctx.Err()
 }
 
 // affordances are the standing blocks a turn's prompt carries beyond memory and
-// skills: who this session may delegate to, and what its daemon dispatches. They
-// travel as one value because they are the same kind of fact — something the
-// session has that the model cannot discover by looking — and because a turn
-// loop that takes one more parameter per affordance stops being readable.
+// skills: who this session may delegate to, what its daemon dispatches, and who
+// the human is. They travel as one value because they are the same kind of fact
+// — something the session has that the model cannot discover by looking — and
+// because a turn loop that takes one more parameter per affordance stops being
+// readable.
 type affordances struct {
 	roster contracts.RosterProvider
 	caps   string
+	user   identity.Identity
 }
 
 // scopePin is a session's one-shot answer to "what is this conversation about".
@@ -257,7 +268,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if orch != nil {
 		memCtx = orch.Context(turnCtx)
 	}
-	prompt := contracts.Prompt{Content: ev.Text, Context: withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), Author: ev.Who, Attachments: ev.Attachments}
+	prompt := contracts.Prompt{Content: ev.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: ev.Who, Attachments: ev.Attachments}
 	var cost float64
 	var outTok, inTok, cacheRd, cacheCr int
 	onEvent := func(be contracts.BackendEvent) {

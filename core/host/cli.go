@@ -196,8 +196,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		return nil, hostDeps{}, err
 	}
 	// memory locate/forget/record — surface d'exposition mémoire consommée par
-	// exec (voir docs/superpowers/specs/2026-07-17-memory-exposure-surface).
-	// Chaque commande construit la mémoire in-process et la ferme.
+	// exec. Chaque commande construit la mémoire in-process et la ferme.
 	if err := reg.Add(contracts.New("memory", "locate").
 		Help("print openable URIs (obsidian://, file://) of a memory node's note").
 		Param("key", "node key", true).
@@ -348,6 +347,17 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 				fmt.Fprintf(&b, "%s\t[%s]\t%s\n", n.Key, n.Kind, n.Title)
 			}
 			return strings.TrimRight(b.String(), "\n"), nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
+	// Registered before `commands`, so that stays the last thing built. It takes
+	// no deps: what it prints comes from git, not from the daemon's state, which
+	// is exactly why it is worth having — an identity that came out wrong is
+	// diagnosed here in one command instead of inside a billed agent turn.
+	if err := reg.Add(contracts.New("whoami").
+		Help("print who git on this machine says you are").
+		Do(func(_ context.Context, in contracts.Input) (string, error) {
+			return WhoamiOut(in.JSON)
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}

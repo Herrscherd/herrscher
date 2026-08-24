@@ -177,11 +177,7 @@ func main() {
 		// Answered here rather than forwarded to the daemon: it reads git, not
 		// daemon state, and an operator reaches for it precisely when something
 		// looks wrong — which may well be that no daemon is running.
-		var out string
-		out, err = host.WhoamiOut(len(args) > 0 && args[0] == "--json")
-		if err == nil {
-			fmt.Println(out)
-		}
+		err = runWhoami(args)
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -249,4 +245,24 @@ func hasTerminalGateway() bool {
 		}
 	}
 	return false
+}
+
+// runWhoami prints the identity git describes for this directory. It parses its
+// own argv rather than going through core/cli, because it never reaches the
+// registry — but it rejects what the registry would reject: a flag the verb does
+// not define is a mistake worth naming, not an argument to ignore quietly.
+func runWhoami(args []string) error {
+	asJSON := false
+	for _, a := range args {
+		if a != "--json" {
+			return fmt.Errorf("whoami: unknown argument %q (only --json)", a)
+		}
+		asJSON = true
+	}
+	out, err := host.WhoamiOut(asJSON)
+	if err != nil {
+		return err
+	}
+	fmt.Println(out)
+	return nil
 }

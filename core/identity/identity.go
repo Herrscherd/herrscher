@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // gitTimeout bounds each git call FromDir makes, for the reason core/scope
@@ -66,7 +67,28 @@ func gitConfig(dir, key string) string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	return flatten(string(out))
+}
+
+// flatten reduces a git value to the single line every caller assumes it is.
+//
+// git does not promise one: `git config user.name` accepts a value spanning
+// lines, and this one is rendered verbatim into a turn's prompt inside a <user>
+// block. A name carrying its own "</user>" would close that block and let
+// whatever follows read as context the daemon wrote — and the account that can
+// set it is anyone who can edit .git/config in the worktree, which in a session
+// includes the agent working there. Control characters are dropped rather than
+// escaped: nothing legitimate in a name, an email or a GitHub handle needs one.
+func flatten(v string) string {
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
+		if r == '\t' {
+			return ' '
+		}
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, v))
 }
 
 // Empty reports whether git answered nothing at all.

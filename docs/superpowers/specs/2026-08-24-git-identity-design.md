@@ -64,6 +64,13 @@ the repository's local value where there is one and the global value otherwise,
 which is exactly the behaviour that makes this feature need no configuration:
 an operator who sets a per-repository `user.email` is honoured for free.
 
+Found while implementing, and kept: a directory that is **no repository at all**
+is not a silence either — git falls back to the global config and answers. That
+is the behaviour we want. A session started outside a checkout still has a human
+running it, and the identity would otherwise be absent exactly where there is no
+repository-local config to lean on. The silence is reserved for a machine where
+git itself has nothing configured.
+
 `String()` renders `"Nom <mail> (@github)"`, omitting the parts git did not
 answer, and `""` when it answered nothing.
 

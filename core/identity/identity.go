@@ -22,9 +22,9 @@ const gitTimeout = 2 * time.Second
 // Identity is what git knows about the human at the keyboard. Every field is
 // optional; the zero value means git had nothing to say.
 type Identity struct {
-	Name   string
-	Email  string
-	GitHub string
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	GitHub string `json:"github"`
 }
 
 // FromDir reads the identity git would use for a commit made in dir.

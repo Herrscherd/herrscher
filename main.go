@@ -173,6 +173,15 @@ func main() {
 		err = runService(ctx, args)
 	case "plugin-host":
 		err = runPluginHost(ctx, args)
+	case "whoami":
+		// Answered here rather than forwarded to the daemon: it reads git, not
+		// daemon state, and an operator reaches for it precisely when something
+		// looks wrong — which may well be that no daemon is running.
+		var out string
+		out, err = host.WhoamiOut(len(args) > 0 && args[0] == "--json")
+		if err == nil {
+			fmt.Println(out)
+		}
 	case "-h", "--help", "help":
 		usage()
 		return

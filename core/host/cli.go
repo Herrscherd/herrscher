@@ -12,6 +12,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	orchestrator "github.com/Herrscherd/herrscher-orchestrator"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/identity"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
@@ -351,6 +352,17 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
+	// Registered before `commands`, so that stays the last thing built. It takes
+	// no deps: what it prints comes from git, not from the daemon's state, which
+	// is exactly why it is worth having — an identity that came out wrong is
+	// diagnosed here in one command instead of inside a billed agent turn.
+	if err := reg.Add(contracts.New("whoami").
+		Help("print who git on this machine says you are").
+		Do(func(_ context.Context, in contracts.Input) (string, error) {
+			return WhoamiOut(in.JSON)
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
 	// Registered last, so it describes a complete registry. A frontend that draws
 	// its own command menu asks for this instead of keeping a copy of the verb
 	// list beside the daemon's — a copy drifts silently, and the drift shows up as
@@ -428,4 +440,57 @@ func NewRegistry(ctx context.Context, gws []Deps, o Options) (*cli.Registry, err
 	// asking itself.
 	forwardSessionCommands(reg, instID, dispatchLiveCommand)
 	return reg, nil
+}
+
+// WhoamiOut answers what `herrscher whoami` prints: the identity git describes
+// for the current directory, as a report or as JSON. It is exported because the
+// verb is not only a daemon verb — main dispatches it locally too, so that the
+// one command an operator runs when they suspect a wrong identity works whether
+// or not a daemon is up. Reading git needs no daemon; requiring one would put
+// the diagnostic behind the thing it is used to diagnose.
+func WhoamiOut(asJSON bool) (string, error) {
+	cwd, _ := os.Getwd()
+	id := identity.FromDir(cwd)
+	if asJSON {
+		b, err := json.Marshal(id)
+		return string(b), err
+	}
+	return whoamiReport(id), nil
+}
+
+// whoamiReport renders an identity as one line per git key, each naming the key
+// it came from. A key git did not answer is printed as unset rather than
+// dropped: the operator ran this to learn what herrscher believes, and a missing
+// line reads as a bug in the verb rather than as an absent configuration.
+//
+// The value column is sized to the widest value rather than to a constant: an
+// email longer than the guess would otherwise push its own source annotation out
+// of line, which reads as a rendering bug in the very command someone runs to
+// check whether something is broken.
+func whoamiReport(id identity.Identity) string {
+	if id.Empty() {
+		return "git has nothing to say about you here.\n" +
+			"Set it with: git config --global user.name \"Your Name\" && git config --global user.email you@example.com"
+	}
+	rows := []struct{ label, value, key string }{
+		{"name", id.Name, "user.name"},
+		{"email", id.Email, "user.email"},
+		{"github", id.GitHub, "github.user"},
+	}
+	const unset = "\u2014"
+	width := len(unset)
+	for _, r := range rows {
+		if n := len(r.value); n > width {
+			width = n
+		}
+	}
+	var b strings.Builder
+	for _, r := range rows {
+		if r.value == "" {
+			fmt.Fprintf(&b, "%-7s %-*s (git config %s, unset)\n", r.label, width, unset, r.key)
+			continue
+		}
+		fmt.Fprintf(&b, "%-7s %-*s (git config %s)\n", r.label, width, r.value, r.key)
+	}
+	return strings.TrimRight(b.String(), "\n")
 }

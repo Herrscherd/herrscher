@@ -3,6 +3,7 @@ package host
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/Herrscherd/herrscher/core/identity"
 )
@@ -48,5 +49,27 @@ func TestWhoamiReportOnSilence(t *testing.T) {
 	}
 	if !strings.Contains(got, "git config --global user.name") {
 		t.Fatalf("whoamiReport does not say how to fix the silence:\n%s", got)
+	}
+}
+
+// The column is measured in runes, not bytes: an accented name is exactly what
+// this repository's own operator has, and %-*s would pad it short and push the
+// annotation out of line.
+func TestWhoamiReportAlignsAnAccentedName(t *testing.T) {
+	got := whoamiReport(identity.Identity{Name: "Léo Sauvage", Email: "leo@example.com", GitHub: "leo"})
+	var col int
+	for i, line := range strings.Split(got, "\n") {
+		at := strings.Index(line, "(git config ")
+		if at < 0 {
+			t.Fatalf("line %d has no source annotation: %q", i, line)
+		}
+		at = utf8.RuneCountInString(line[:at])
+		if i == 0 {
+			col = at
+			continue
+		}
+		if at != col {
+			t.Fatalf("annotation starts at rune %d on line %d, %d on the first:\n%s", at, i, col, got)
+		}
 	}
 }

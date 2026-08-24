@@ -112,8 +112,8 @@ email   leo@example.com    (git config user.email)
 github  —                  (git config github.user, unset)
 ```
 
-Outside a repository, or with nothing configured, it says git had nothing to say
-and exits 0. A silence is not a failure.
+On a machine where git has nothing configured at all, it says so — and says which
+two commands fix it — and exits 0. A silence is not a failure.
 
 ## Testing
 

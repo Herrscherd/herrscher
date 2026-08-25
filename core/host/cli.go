@@ -408,6 +408,10 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	if err := addScheduleCommands(reg, st, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
+	// The places a session can run, this machine being the unnamed default.
+	if err := addHostCommands(reg, st); err != nil {
+		return nil, hostDeps{}, err
+	}
 	if err := reg.Add(contracts.New("memory", "search").
 		Help("full-text search the memory vault; --raw also searches the raw per-turn transcript tier (G7)").
 		Param("text", "query text", true).

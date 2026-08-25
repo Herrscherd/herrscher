@@ -512,6 +512,14 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if hostName == state.LocalHost {
 		hostName = ""
 	}
+	// Whether the host can carry a new session at all is asked here, before
+	// anything is created: a refusal an operator has to act on is worth more at
+	// the top of a create than halfway through one.
+	if hostName != "" && h.hs != nil {
+		if err := h.hs.Ready(hostName); err != nil {
+			return "", err
+		}
+	}
 	wt, ws, err := h.worktreesOn(hostName)
 	if err != nil {
 		return "", err
@@ -674,11 +682,14 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 	if !exists {
 		return "", fmt.Errorf("no session %q", name)
 	}
-	_ = h.sup.Stop(name)
+	// Resolved before the bridge is stopped, not after: a placement that cannot
+	// be resolved ends this close, and stopping first would leave a session
+	// listed with nothing serving it.
 	wt, ws, err := h.worktreesOn(sess.Host)
 	if err != nil {
 		return "", err
 	}
+	_ = h.sup.Stop(name)
 	repo := repoFor(ws, sess.Project)
 	if sess.Worktree != "" {
 		force := in.Bool("force")

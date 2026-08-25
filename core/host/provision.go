@@ -108,11 +108,18 @@ func provisionHost(ctx context.Context, run hostRunner, h state.Host, src string
 		return h, err
 	}
 
-	staged := filepath.Join(os.TempDir(), "herrscher-"+goos+"-"+goarch)
+	// A directory of its own, not a name in the temp root: two hosts of the same
+	// platform provisioned at once would otherwise build over each other's
+	// binary, and one of them would ship whatever the other had just written.
+	stage, err := os.MkdirTemp("", "herrscher-provision-")
+	if err != nil {
+		return h, err
+	}
+	defer func() { _ = os.RemoveAll(stage) }()
+	staged := filepath.Join(stage, "herrscher")
 	if err := service.BuildFor(ctx, src, staged, goos, goarch); err != nil {
 		return h, err
 	}
-	defer func() { _ = os.Remove(staged) }()
 
 	cp := run.Copy(ctx, staged, bin)
 	var cpErr bytes.Buffer

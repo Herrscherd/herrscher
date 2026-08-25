@@ -132,6 +132,12 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 		ValueParam("name", "host name; also takes a bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			name := hostNameOf(in)
+			if _, ok := st.FindHost(name); !ok {
+				// Before the sessions are counted, or an unnamed host would be
+				// answered with the list of everything running here: a local
+				// session carries the empty host too.
+				return "", unknownHost(st, name)
+			}
 			// It closes nothing on its own, the way `schedule rm` does not close
 			// the session it opened. Naming them is the operator's next move.
 			var carried []string
@@ -143,12 +149,8 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 			if len(carried) > 0 {
 				return "", fmt.Errorf("host %q still carries %s: close them first", name, strings.Join(carried, ", "))
 			}
-			found, err := st.RemoveHost(name)
-			if err != nil {
+			if _, err := st.RemoveHost(name); err != nil {
 				return "", err
-			}
-			if !found {
-				return "", unknownHost(st, name)
 			}
 			return "forgot " + name, nil
 		}))

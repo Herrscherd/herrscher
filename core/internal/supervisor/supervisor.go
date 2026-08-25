@@ -315,7 +315,7 @@ func (s *Supervisor) runBridgeCommand(ctx context.Context, sess state.Session) {
 
 // bridgeCommand builds the child process for sess: argv, working directory,
 // environment, and where it lands. Split out of runBridgeCommand so a test can
-// assert what the child would receive — in particular that the gateway
+// assert what the child would receive, in particular that the gateway
 // credentials ride the environment locally and stdin remotely, never argv.
 func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) (*exec.Cmd, error) {
 	if sess.Host != "" {

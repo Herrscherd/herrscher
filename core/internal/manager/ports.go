@@ -48,16 +48,22 @@ type Worktrees interface {
 	Remove(repo, name string, force bool) error
 }
 
-// Hosts resolves where a session's process runs. The manager needs three things
-// from a host: the worktree lifecycle over there, the repository root over
-// there, and a way to put an agent's files in a worktree that is not here. All
-// of them are ports, so a local session keeps calling the local Worktreer
-// directly and pays no process spawn for a path it shares with nothing.
+// Hosts resolves where a session's process runs. The manager needs four things
+// from a host: whether it can carry a new session, the worktree lifecycle over
+// there, the repository root over there, and a way to put an agent's files in a
+// worktree that is not here. All of them are ports, so a local session keeps
+// calling the local Worktreer directly and pays no process spawn for a path it
+// shares with nothing.
 //
 // Exported, unlike its neighbours, because the composition root implements it:
 // it is the only piece that needs both the host records and a runner, and
 // neither belongs in this package.
 type Hosts interface {
+	// Ready refuses a host that cannot carry a NEW session, version drift
+	// included. It is asked at create time only: an existing session must stay
+	// closable on a host this daemon would no longer start one on, and removing
+	// a worktree over there needs no agreement on versions.
+	Ready(name string) error
 	// Worktrees returns the worktree implementation for a host name. An empty
 	// name is this machine.
 	Worktrees(name string) (Worktrees, error)

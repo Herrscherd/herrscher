@@ -38,7 +38,7 @@ func TestPlacerRefusesAnUnprovisionedHost(t *testing.T) {
 
 func TestPlacerRefusesAVersionDrift(t *testing.T) {
 	p := placerWith(t, state.Host{Name: "build1", SSH: "me@build1", Workspace: "/srv/work", Bin: "/srv/bin/herrscher", Version: "abc1234"}, "def5678")
-	_, err := p.Workspace("build1")
+	err := p.Ready("build1")
 	if err == nil {
 		t.Fatal("a host running another build must refuse")
 	}
@@ -47,12 +47,33 @@ func TestPlacerRefusesAVersionDrift(t *testing.T) {
 			t.Fatalf("the refusal must name %q, got %v", want, err)
 		}
 	}
+	// And refuses nothing else: a session already running over there still has
+	// to be closable, which is a worktree removal and no argv agreement at all.
+	if _, err := p.Worktrees("build1"); err != nil {
+		t.Fatalf("a drifted host must still answer worktree work: %v", err)
+	}
+	if _, err := p.Workspace("build1"); err != nil {
+		t.Fatalf("a drifted host must still name its workspace: %v", err)
+	}
+}
+
+func TestPlacerReadyRefusesAnUnprovisionedHost(t *testing.T) {
+	p := placerWith(t, state.Host{Name: "build1", SSH: "me@build1", Workspace: "/srv/work"}, "")
+	if err := p.Ready("build1"); err == nil || !strings.Contains(err.Error(), "host provision") {
+		t.Fatalf("a host with no binary must point at `host provision`, got %v", err)
+	}
+	if err := p.Ready(""); err != nil {
+		t.Fatalf("this machine is always ready, got %v", err)
+	}
 }
 
 // A daemon with no source checkout has nothing to compare against. Refusing
 // every session then would be worse than running one that is probably current.
 func TestPlacerAcceptsWhenTheSourceVersionIsUnknown(t *testing.T) {
 	p := placerWith(t, state.Host{Name: "build1", SSH: "me@build1", Workspace: "/srv/work", Bin: "/srv/bin/herrscher", Version: "abc1234"}, "")
+	if err := p.Ready("build1"); err != nil {
+		t.Fatalf("nothing to compare against is not a drift, got %v", err)
+	}
 	ws, err := p.Workspace("build1")
 	if err != nil {
 		t.Fatal(err)

@@ -233,6 +233,13 @@ func runAgent(ctx context.Context, args []string) error {
 	return runRegistryVerb(ctx, "agent", args)
 }
 
+// runHost dispatches the operator `host` commands (add/list/check/provision/rm)
+// through the same registry the daemon serves. Provisioning cross-compiles and
+// copies a binary, so it runs here rather than inside the daemon's event loop.
+func runHost(ctx context.Context, args []string) error {
+	return runRegistryVerb(ctx, "host", args)
+}
+
 // runMemory dispatche les commandes opérateur `memory` (locate/forget/record)
 // à travers le même registre CLI que la daemon sert.
 func runMemory(ctx context.Context, args []string) error {

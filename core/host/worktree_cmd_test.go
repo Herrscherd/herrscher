@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
 func tempRepo(t *testing.T) string {
@@ -108,5 +112,39 @@ func TestWorktreeVerbRejectsAnUnknownSubcommand(t *testing.T) {
 func TestWorktreeVerbNeedsASubcommand(t *testing.T) {
 	if err := RunWorktree(context.Background(), nil); err == nil {
 		t.Fatal("want an error with no subcommand")
+	}
+}
+
+func TestWorktreeVerbMaterializesFromStdin(t *testing.T) {
+	store := agent.NewStore(t.TempDir())
+	a, err := store.Create(agent.CreateSpec{Name: "roblox", Soul: "at {{WORKTREE}}", MCP: "neublox serve"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := t.TempDir()
+	payload, err := stageAgentTar(a, dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		_, _ = io.Copy(w, payload)
+		_ = w.Close()
+	}()
+	old := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = old }()
+
+	out := captureStdout(t, func() error {
+		return RunWorktree(context.Background(), []string{"materialize", "--worktree", dst})
+	})
+	if !strings.Contains(out, `"materialized":true`) {
+		t.Fatalf("output = %q", out)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "AGENTS.md")); err != nil {
+		t.Fatalf("AGENTS.md not extracted: %v", err)
 	}
 }

@@ -127,7 +127,10 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 	if len(status) != 0 {
 		t.Fatalf("fresh materialized worktree is dirty:\n%s", status)
 	}
-	for _, path := range []string{".claude", ".codex", ".mcp.json", "AGENTS.md"} {
+	// .herrscher/ is not materialized (the bridge fills it at session start), so
+	// it is checked through a path inside it, which is what git would actually be
+	// asked about once a learned skill lands there.
+	for _, path := range []string{".claude", ".codex", ".mcp.json", "AGENTS.md", ".herrscher/skills/x/SKILL.md"} {
 		if out, err := exec.Command("git", "-C", worktree, "check-ignore", "--quiet", "--", path).CombinedOutput(); err != nil {
 			t.Fatalf("%s is not locally ignored: %v\n%s", path, err, out)
 		}

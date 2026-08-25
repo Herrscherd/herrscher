@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/Herrscherd/herrscher/core/internal/schedule"
 )
 
 // HomeRef points at the category or forum that holds session channels.
@@ -122,6 +124,12 @@ type State struct {
 	Sessions        []Session  `json:"sessions"`
 	StatusMessageID string     `json:"statusMessageID,omitempty"` // cached id of the status embed
 	InstanceID      string     `json:"instanceID,omitempty"`      // per-daemon namespace for global resources; "" = legacy
+	// Schedules holds the proactive schedules. They live here rather than in a
+	// store of their own because state.json is already rewritten on every turn
+	// (each reply folds its resume token back in): putting them here does not
+	// change the write profile, and they inherit the existing mutex and atomic
+	// write. See schedules.go for the accessors.
+	Schedules []schedule.Schedule `json:"schedules,omitempty"`
 }
 
 // NewState returns an empty state bound to path (not yet written).

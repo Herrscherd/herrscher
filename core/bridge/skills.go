@@ -10,10 +10,19 @@ import (
 )
 
 // skillRoots is the ordered skill search path: the session workspace (the bridge
-// runs with cwd = workspace), then the user-global skills, then any extra roots
-// from config. Earlier roots win de-dup, so a repo skill overrides a global one.
+// runs with cwd = workspace), then the skills this agent taught itself, then the
+// user-global skills, then any extra roots from config.
+//
+// The order is the policy, and Discover's de-duplication by name, earlier root
+// winning, is what enforces it. A repository's own skill beats one the agent
+// taught itself, so a self-authored procedure can never shadow one the project
+// committed. A learned skill beats a machine-wide playbook, because this agent's
+// experience on this project is more specific than an instruction to the machine.
 func skillRoots(cwd string, extra []string) []string {
-	roots := []string{filepath.Join(cwd, ".claude", "skills")}
+	roots := []string{
+		filepath.Join(cwd, ".claude", "skills"),
+		learnedRoot(cwd),
+	}
 	if home, err := os.UserHomeDir(); err == nil {
 		roots = append(roots, filepath.Join(home, ".claude", "skills"))
 	}

@@ -35,21 +35,40 @@ func (p hostPlacer) resolve(name string) (state.Host, *worktree.Remote, error) {
 	if h.Bin == "" {
 		return state.Host{}, nil, fmt.Errorf("host %q is not provisioned: run `host provision %s`", name, name)
 	}
-	// Version drift is the dangerous case, not a cosmetic one: the local
-	// supervisor builds the bridge argv, so a bridge older than this daemon dies
-	// on an unknown flag the instant it starts, and the backoff would restart it
-	// forever with nobody able to see why.
-	//
-	// An unknown source version is not a drift. A daemon with no source checkout
-	// has nothing to compare against, and refusing every session would be worse
-	// than running one that may well be current.
-	if p.sourceVersion != nil {
-		if want := p.sourceVersion(); want != "" && h.Version != want {
-			return state.Host{}, nil, fmt.Errorf("host %q runs herrscher %s but this daemon builds %s: run `host provision %s`", name, h.Version, want, name)
-		}
-	}
 	r := runner.SSH{Target: h.SSH, ControlPath: runner.ControlPathFor(h.SSH)}
 	return h, worktree.NewRemote(r, h.Bin, p.instanceID), nil
+}
+
+// Ready says whether a host can carry a new session.
+//
+// Version drift is the dangerous case, not a cosmetic one: the local supervisor
+// builds the bridge argv, so a bridge older than this daemon dies on an unknown
+// flag the instant it starts, and the backoff would restart it forever with
+// nobody able to see why.
+//
+// It is asked when a session is created, and nowhere else. Refusing to close a
+// session because the source moved since it started would strand it: the bridge
+// is already stopped by then, and removing a worktree over there asks nothing of
+// the remote version.
+//
+// An unknown source version is not a drift. A daemon with no source checkout has
+// nothing to compare against, and refusing every session would be worse than
+// running one that may well be current.
+func (p hostPlacer) Ready(name string) error {
+	if name == "" {
+		return nil
+	}
+	h, _, err := p.resolve(name)
+	if err != nil {
+		return err
+	}
+	if p.sourceVersion == nil {
+		return nil
+	}
+	if want := p.sourceVersion(); want != "" && h.Version != want {
+		return fmt.Errorf("host %q runs herrscher %s but this daemon builds %s: run `host provision %s`", name, h.Version, want, name)
+	}
+	return nil
 }
 
 // Worktrees returns the worktree lifecycle for a host. An empty name is this

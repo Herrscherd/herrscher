@@ -16,8 +16,16 @@ type fakeHosts struct {
 	name         string
 	wt           *fakeWT
 	workspace    string
+	notReady     error    // what Ready answers, e.g. a version drift
 	materialized []string // worktree paths passed to Materialize
 	ensured      []string // "project@host" per EnsureProject call
+}
+
+func (f *fakeHosts) Ready(name string) error {
+	if err := f.check(name); err != nil {
+		return err
+	}
+	return f.notReady
 }
 
 func (f *fakeHosts) check(name string) error {
@@ -167,6 +175,41 @@ func TestSessionCreateRefusesCloneOnAHost(t *testing.T) {
 	_, err := h.sessionCreateRun(context.Background(), args("name", "demo", "host", "build1", "clone", "owner/repo"))
 	if err == nil || !strings.Contains(err.Error(), "clone") {
 		t.Fatalf("clone onto a host must refuse, got %v", err)
+	}
+}
+
+func TestSessionCreateRefusesAHostThatIsNotReady(t *testing.T) {
+	h, hs, _, st := handlerWithHosts(t)
+	hs.notReady = errors.New("host \"build1\" runs herrscher abc but this daemon builds def")
+	_, err := h.sessionCreateRun(context.Background(), args("name", "demo", "host", "build1"))
+	if err == nil || !strings.Contains(err.Error(), "this daemon builds def") {
+		t.Fatalf("a host that cannot carry a session must refuse the create, got %v", err)
+	}
+	if len(hs.wt.created) != 0 {
+		t.Fatalf("nothing may be created before the refusal, got %v", hs.wt.created)
+	}
+	if _, ok := st.FindSession("demo"); ok {
+		t.Fatal("no session row may survive a refused create")
+	}
+}
+
+// The mirror of the test above: what stops a new session must not strand the
+// ones already running. Closing removes a worktree over there, which asks
+// nothing of the remote version.
+func TestSessionCloseWorksOnAHostThatIsNoLongerReady(t *testing.T) {
+	h, hs, _, st := handlerWithHosts(t)
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "host", "build1")); err != nil {
+		t.Fatal(err)
+	}
+	hs.notReady = errors.New("version drift")
+	if _, err := h.sessionCloseRun(context.Background(), args("name", "demo")); err != nil {
+		t.Fatalf("close must not depend on the host being ready for a new session: %v", err)
+	}
+	if len(hs.wt.removed) != 1 {
+		t.Fatalf("close must still remove the remote worktree, got %v", hs.wt.removed)
+	}
+	if _, ok := st.FindSession("demo"); ok {
+		t.Fatal("the session row must be gone")
 	}
 }
 

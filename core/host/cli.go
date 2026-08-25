@@ -550,6 +550,6 @@ func NewRegistry(ctx context.Context, gws []Deps, o Options) (*cli.Registry, err
 	// state and must not decide alone what the live sessions are. Installed here
 	// rather than in buildRegistry, which the daemon shares — the daemon would be
 	// asking itself.
-	forwardSessionCommands(reg, instID, dispatchLiveCommand)
+	forwardDaemonOwnedCommands(reg, instID, dispatchLiveCommand)
 	return reg, nil
 }

@@ -70,3 +70,34 @@ func TestEngineUnknownMarkerIgnored(t *testing.T) {
 		t.Fatalf("no skills discovered, menu must be empty, got %q", e.Menu())
 	}
 }
+
+func TestDetectReturnsTheKnownNamesItActivated(t *testing.T) {
+	repo := t.TempDir()
+	writeSkill(t, repo, "alpha", "name: alpha\ndescription: do alpha\n", "DO ALPHA\n")
+	writeSkill(t, repo, "beta", "name: beta\ndescription: do beta\n", "DO BETA\n")
+	e := NewEngine([]string{repo})
+
+	got := e.Detect("<use-skill>alpha</use-skill> puis <use-skill>ghost</use-skill> " +
+		"puis <use-skill>alpha</use-skill> et <use-skill>beta</use-skill>")
+
+	want := []string{"alpha", "beta"}
+	if len(got) != len(want) {
+		t.Fatalf("Detect = %v, want %v (an unknown name names nothing to record, a repeat is one use)", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("Detect = %v, want %v in order of first appearance", got, want)
+		}
+	}
+	// The names are a by-product; activation must still have happened.
+	if exp := e.Expansions(); !strings.Contains(exp, "DO ALPHA") || !strings.Contains(exp, "DO BETA") {
+		t.Errorf("Detect returned names but activated nothing:\n%s", exp)
+	}
+}
+
+func TestDetectReturnsNothingWhenNothingMatched(t *testing.T) {
+	e := NewEngine([]string{t.TempDir()})
+	if got := e.Detect("pas de marqueur ici"); len(got) != 0 {
+		t.Errorf("Detect = %v, want empty", got)
+	}
+}

@@ -87,15 +87,23 @@ func (e *Engine) Menu() string {
 	return b.String()
 }
 
-// Detect activates every known skill named by a marker in reply. Unknown names
-// are ignored.
-func (e *Engine) Detect(reply string) {
+// Detect activates every known skill named by a marker in reply and returns
+// those names, in order of first appearance and without repeats. Unknown names
+// are ignored and never returned: the caller records usage against what it gets
+// back, and a name the engine does not know names nothing to record.
+func (e *Engine) Detect(reply string) []string {
+	var used []string
+	seen := map[string]bool{}
 	for _, m := range useMarker.FindAllStringSubmatch(reply, -1) {
 		name := strings.TrimSpace(m[1])
-		if _, ok := e.byName[name]; ok {
-			e.active[name] = true
+		if _, ok := e.byName[name]; !ok || seen[name] {
+			continue
 		}
+		seen[name] = true
+		e.active[name] = true
+		used = append(used, name)
 	}
+	return used
 }
 
 // Strip removes activation markers from a reply so the marker (an internal

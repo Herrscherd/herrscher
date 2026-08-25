@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
@@ -20,7 +21,7 @@ import (
 // a daemon on another machine that reads its JSON.
 func RunWorktree(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("worktree: want one of create, pre-existing, remove")
+		return fmt.Errorf("worktree: want one of create, pre-existing, remove, materialize")
 	}
 	sub, rest := args[0], args[1:]
 	fs := flag.NewFlagSet("worktree "+sub, flag.ContinueOnError)
@@ -29,10 +30,11 @@ func RunWorktree(ctx context.Context, args []string) error {
 	instance := fs.String("instance", "", "daemon instance id (namespaces the layout)")
 	base := fs.String("base", "", "ref the new branch starts at (create only)")
 	force := fs.Bool("force", false, "remove even with local changes (remove only)")
+	worktreePath := fs.String("worktree", "", "worktree to extract into (materialize only)")
 	if err := fs.Parse(rest); err != nil {
 		return err
 	}
-	if *repo == "" || *name == "" {
+	if sub != "materialize" && (*repo == "" || *name == "") {
 		return fmt.Errorf("worktree %s: --repo and --name are required", sub)
 	}
 	wt := worktree.NewWorktreer(ctx, *instance)
@@ -52,8 +54,22 @@ func RunWorktree(ctx context.Context, args []string) error {
 			return err
 		}
 		return emitJSON(map[string]bool{"removed": true})
+	case "materialize":
+		// Reads a tar of an agent's provisioning files on stdin, from the daemon
+		// on the other machine. The excludes run here, after the write, because
+		// they touch the repository, and the repository is on this side.
+		if *worktreePath == "" {
+			return fmt.Errorf("worktree materialize: --worktree is required")
+		}
+		if err := extractTar(os.Stdin, *worktreePath); err != nil {
+			return err
+		}
+		if err := agent.EnsureGitExcludes(*worktreePath); err != nil {
+			return err
+		}
+		return emitJSON(map[string]bool{"materialized": true})
 	default:
-		return fmt.Errorf("worktree: unknown subcommand %q (want create, pre-existing or remove)", sub)
+		return fmt.Errorf("worktree: unknown subcommand %q (want create, pre-existing, remove or materialize)", sub)
 	}
 }
 

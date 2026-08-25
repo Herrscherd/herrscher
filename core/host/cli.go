@@ -403,6 +403,11 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
+	// The proactive schedules. schedSlot is empty for an operator CLI, which has
+	// no running loop; only `schedule run` needs one, and it says so.
+	if err := addScheduleCommands(reg, st, agents, schedSlot); err != nil {
+		return nil, hostDeps{}, err
+	}
 	if err := reg.Add(contracts.New("memory", "search").
 		Help("full-text search the memory vault; --raw also searches the raw per-turn transcript tier (G7)").
 		Param("text", "query text", true).

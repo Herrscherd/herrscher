@@ -31,10 +31,19 @@ type hostDeps struct {
 	agents    *agent.Store
 	handler   *manager.Handler
 	seedCoord *coordinatorSlot
+	schedSlot *schedulerSlot
 }
 
 type coordinatorSlot struct {
 	coord contracts.Coordinator
+}
+
+// schedulerSlot carries the live scheduling loop to the one verb that needs it,
+// `schedule run`. The registry is built before the loop exists, and only the
+// daemon has one at all, so the verb closes over this box rather than over a
+// scheduler: an operator CLI leaves it empty and the verb says so.
+type schedulerSlot struct {
+	sched scheduleRunner
 }
 
 // buildRegistry constructs the session/service command handler over a given
@@ -75,6 +84,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		return nil
 	})
 	seedCoord := &coordinatorSlot{}
+	schedSlot := &schedulerSlot{}
 
 	reg := &cli.Registry{}
 	for _, c := range hdl.Commands() {
@@ -393,6 +403,11 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
+	// The proactive schedules. schedSlot is empty for an operator CLI, which has
+	// no running loop; only `schedule run` needs one, and it says so.
+	if err := addScheduleCommands(reg, st, agents, schedSlot); err != nil {
+		return nil, hostDeps{}, err
+	}
 	if err := reg.Add(contracts.New("memory", "search").
 		Help("full-text search the memory vault; --raw also searches the raw per-turn transcript tier (G7)").
 		Param("text", "query text", true).
@@ -455,7 +470,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	return reg, hostDeps{wt: wt, agents: agents, handler: hdl, seedCoord: seedCoord}, nil
+	return reg, hostDeps{wt: wt, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
 }
 
 // NewRegistry builds the operator CLI registry: it loads its own state +

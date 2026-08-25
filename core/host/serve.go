@@ -254,6 +254,13 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	hb.coordinator = coord
 	deps.seedCoord.coord = coord
 
+	// Proactive agents. Wired here because this is the first point where hb (the
+	// session creator), st and Seed are all in hand. The loop owns its goroutine
+	// and dies with ctx; it blocks no turn, and a firing that fails only logs.
+	sched := newScheduler(st, st, hb, Seed, time.Now)
+	deps.schedSlot.sched = sched
+	go sched.Run(ctx)
+
 	// Observability seam: the handler's session list --json carries each session's
 	// live coordination projection, and the command socket lets an external reader
 	// (Neublox) dispatch that command against THIS running hub — the only way to

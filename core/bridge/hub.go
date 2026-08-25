@@ -329,11 +329,18 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 		// The names come from the engine, not from the text, so reporting before
 		// React (which rewrites the reply) is about who owns what, not about what
 		// survives the rewrite.
-		reportSkillUse(turnCtx, orch, eng.Detect(out))
+		//
+		// On the session ctx, not turnCtx, for the same reason Observe below is: an
+		// interrupt cancels the turn, and a turn the human cut short is still a turn
+		// where a skill was used. Stamping it on turnCtx would make the skill that
+		// gets interrupted the skill that ages out.
+		reportSkillUse(ctx, orch, eng.Detect(out))
 		out = eng.Strip(out)
 	}
 	if tr, ok := orch.(contracts.TurnReactor); ok {
-		out = tr.React(turnCtx, out)
+		// Same: React is where <remember> and <skill> are written down, and losing
+		// what the model asked to keep is not part of what an interrupt asked for.
+		out = tr.React(ctx, out)
 	}
 	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, TokensIn: inTok, CacheRead: cacheRd, CacheCreate: cacheCr, Resume: resumeToken(backend), Project: settledProject})
 	if orch != nil {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -125,7 +126,13 @@ func renderSkill(n contracts.Node) (name, md string, ok bool) {
 	// sanitised: the orchestrator normalises every key it writes, so anything else
 	// reaching here is a vault someone edited by hand, and guessing what they
 	// meant would be how the projection writes outside its own root.
-	if body == "" || name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+	//
+	// Whitespace is refused for the reason the description is collapsed, one line
+	// lower and with the roles reversed: a newline in the name closes the
+	// frontmatter block early, and everything after it reaches the model as
+	// instructions it believes came from the harness.
+	if body == "" || name == "" || name == "." || name == ".." ||
+		strings.ContainsAny(name, `/\`) || strings.ContainsFunc(name, unsafeInName) {
 		return "", "", false
 	}
 	var b strings.Builder
@@ -138,6 +145,11 @@ func renderSkill(n contracts.Node) (name, md string, ok bool) {
 	b.WriteByte('\n')
 	return name, b.String(), true
 }
+
+// unsafeInName reports whether r has no business in a skill's directory name:
+// any space (a newline breaks out of the frontmatter, an ordinary space makes a
+// path nobody can type) or any control character.
+func unsafeInName(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }
 
 // reportSkillUse tells the orchestrator which skills this turn activated, so the
 // staleness machine can tell a skill that serves from one nobody wants. A turn

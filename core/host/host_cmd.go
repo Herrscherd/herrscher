@@ -19,12 +19,12 @@ import (
 func addHostCommands(reg *cli.Registry, st *state.State) error {
 	if err := reg.Add(contracts.New("host", "add").
 		Help("register a machine sessions can run on, and provision herrscher there").
-		Param("name", "host name (unique; `local` is reserved)", true).
+		ValueParam("name", "host name (unique; `local` is reserved); also takes a bare argument", false).
 		Param("ssh", "ssh target, e.g. me@build1", true).
 		Param("workspace", "absolute path to the workspace root over there", true).
 		Do(func(ctx context.Context, in contracts.Input) (string, error) {
 			h := state.Host{
-				Name:      strings.TrimSpace(in.Get("name")),
+				Name:      hostNameOf(in),
 				SSH:       strings.TrimSpace(in.Get("ssh")),
 				Workspace: strings.TrimSpace(in.Get("workspace")),
 			}
@@ -80,11 +80,12 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 
 	if err := reg.Add(contracts.New("host", "check").
 		Help("say whether a host can carry a session: ssh, herrscher, workspace, git").
-		Param("name", "host name", true).
+		ValueParam("name", "host name; also takes a bare argument", false).
 		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			h, ok := st.FindHost(in.Get("name"))
+			name := hostNameOf(in)
+			h, ok := st.FindHost(name)
 			if !ok {
-				return "", unknownHost(st, in.Get("name"))
+				return "", unknownHost(st, name)
 			}
 			rep := checkHost(ctx, runnerFor(h), h, sourceVersionOf(ctx, st))
 			if in.JSON {
@@ -107,11 +108,12 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 
 	if err := reg.Add(contracts.New("host", "provision").
 		Help("rebuild and reinstall herrscher on a host from the configured source").
-		Param("name", "host name", true).
+		ValueParam("name", "host name; also takes a bare argument", false).
 		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			h, ok := st.FindHost(in.Get("name"))
+			name := hostNameOf(in)
+			h, ok := st.FindHost(name)
 			if !ok {
-				return "", unknownHost(st, in.Get("name"))
+				return "", unknownHost(st, name)
 			}
 			provisioned, err := provisionHost(ctx, runnerFor(h), h, st.SourceDir())
 			if err != nil {
@@ -127,9 +129,9 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 
 	return reg.Add(contracts.New("host", "rm").
 		Help("forget a host (refused while sessions still run on it)").
-		Param("name", "host name", true).
+		ValueParam("name", "host name; also takes a bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			name := in.Get("name")
+			name := hostNameOf(in)
 			// It closes nothing on its own, the way `schedule rm` does not close
 			// the session it opened. Naming them is the operator's next move.
 			var carried []string
@@ -152,11 +154,30 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 		}))
 }
 
+// hostNameOf takes the host name from --name or from the bare argument, so
+// `host check build1` and `host check --name build1` mean the same thing. A
+// gateway sends the flag; an operator types the name.
+func hostNameOf(in contracts.Input) string {
+	if n := strings.TrimSpace(in.Get("name")); n != "" {
+		return n
+	}
+	if len(in.Rest) > 0 {
+		return strings.TrimSpace(in.Rest[0])
+	}
+	return ""
+}
+
 // unknownHost names what does exist, because the usual cause is a typo.
 func unknownHost(st *state.State, name string) error {
 	var known []string
 	for _, h := range st.SnapshotHosts() {
 		known = append(known, h.Name)
+	}
+	if name == "" {
+		if len(known) == 0 {
+			return fmt.Errorf("name a host: none is registered yet, add one with `host add <name> --ssh <target> --workspace <path>`")
+		}
+		return fmt.Errorf("name a host (known: %s)", strings.Join(known, ", "))
 	}
 	if len(known) == 0 {
 		return fmt.Errorf("no host named %q, and none is registered: add one with `host add <name> --ssh <target> --workspace <path>`", name)

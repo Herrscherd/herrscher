@@ -165,6 +165,8 @@ func main() {
 		err = runSession(ctx, args)
 	case "agent":
 		err = runAgent(ctx, args)
+	case "host":
+		err = runHost(ctx, args)
 	case "memory":
 		err = runMemory(ctx, args)
 	case "models":

@@ -67,7 +67,11 @@ func parseCronField(field string, set []bool, min, max int) (bool, error) {
 	if field == "" {
 		return false, fmt.Errorf("empty")
 	}
-	star := field == "*"
+	// Vixie regarde le premier caractere du champ, pas le champ entier : "*/2"
+	// compte comme une etoile pour la regle des deux jours. La difference est
+	// visible sur "0 9 */2 * 1-5", qui vaut un jour sur deux ET en semaine, et
+	// non un jour sur deux OU en semaine.
+	star := strings.HasPrefix(field, "*")
 	for _, part := range strings.Split(field, ",") {
 		lo, hi, step := min, max, 1
 		body := part
@@ -94,6 +98,12 @@ func parseCronField(field string, set []bool, min, max int) (bool, error) {
 			n, err := strconv.Atoi(body)
 			if err != nil {
 				return false, fmt.Errorf("bad value in %q", part)
+			}
+			if step != 1 {
+				// "5/2" se lit "5 puis tous les 2" chez les uns et "5 seul" chez
+				// les autres. Refuser vaut mieux que choisir en silence une des
+				// deux lectures a la place de qui l'ecrit.
+				return false, fmt.Errorf("step needs a range or a star in %q", part)
 			}
 			lo, hi = n, n
 		}

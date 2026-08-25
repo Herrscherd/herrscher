@@ -14,6 +14,12 @@ import (
 // Un digest de 9h recu a 9h45 sert encore, le meme a 18h derange.
 const DefaultGrace = time.Hour
 
+// minGrace est le plancher de la grace. La boucle a le grain de la minute, donc
+// une fenetre servie normalement l'est deja avec quelques secondes de retard :
+// une grace plus courte les declarerait toutes perimees et l'horaire ne tirerait
+// jamais.
+const minGrace = time.Minute
+
 // maxCronLookahead borne la recherche de la prochaine fenetre cron. Une
 // expression que le calendrier ne satisfait jamais, "0 0 30 2 *" par exemple,
 // doit rendre une erreur au lieu de boucler.
@@ -31,8 +37,10 @@ type Schedule struct {
 	Cron    string `json:"cron,omitempty"`  // expression a cinq champs
 	Grace   string `json:"grace,omitempty"` // duree ; vide vaut DefaultGrace
 	Paused  bool   `json:"paused,omitempty"`
-	// LastRun est le dernier tir qui a effectivement atteint une session, en
-	// RFC3339. Vide veut dire jamais tire, et l'ancre est alors CreatedAt.
+	// LastRun est le point d'ou la prochaine fenetre se compte, en RFC3339 : le
+	// dernier tir qui a effectivement atteint une session, ou l'instant ou une
+	// fenetre perimee a ete abandonnee (voir Stale). Vide veut dire jamais tire,
+	// et l'ancre est alors CreatedAt.
 	LastRun   string `json:"lastRun,omitempty"`
 	CreatedAt string `json:"createdAt"`
 }
@@ -57,6 +65,12 @@ func Validate(s Schedule) error {
 		return errors.New("schedule needs a target: --session or --agent")
 	case s.Session != "" && s.Agent != "":
 		return errors.New("schedule takes one target: --session or --agent, not both")
+	}
+	if s.Project != "" && s.Agent == "" {
+		// --project decrit le workspace de la session que l'horaire ouvre. Une
+		// cible session designe une session deja ouverte, dont le workspace est
+		// deja choisi : accepter le flag la ferait croire qu'il agit.
+		return errors.New("--project only means something with --agent, which opens the session")
 	}
 	switch {
 	case s.Every == "" && s.Cron == "":
@@ -103,8 +117,8 @@ func graceOf(s Schedule) (time.Duration, error) {
 	if err != nil {
 		return 0, fmt.Errorf("--grace %q: %w", s.Grace, err)
 	}
-	if d < 0 {
-		return 0, fmt.Errorf("--grace %q: must not be negative", s.Grace)
+	if d < minGrace {
+		return 0, fmt.Errorf("--grace %q: must be at least %s", s.Grace, minGrace)
 	}
 	return d, nil
 }
@@ -156,6 +170,20 @@ func Due(s Schedule, now time.Time) bool {
 	}
 	next, err := Next(s, a)
 	return err == nil && !next.After(now)
+}
+
+// Stale dit qu'une fenetre est arrivee mais qu'elle est trop vieille pour etre
+// servie. Elle ne doit ni tirer ni rester en attente : la boucle realigne alors
+// l'horaire sur maintenant. Sans ce troisieme cas, une fenetre que CatchUp
+// refuse resterait due, et le tick suivant la tirerait quand meme, sans dire son
+// retard : le digest de 9h serait rendu a 18h en se presentant comme celui du
+// matin, ce que la grace existe precisement pour empecher.
+func Stale(s Schedule, now time.Time) bool {
+	if s.Paused || !Due(s, now) {
+		return false
+	}
+	fire, _ := CatchUp(s, now)
+	return !fire
 }
 
 // CatchUp decide du sort d'une fenetre ratee pendant que le daemon etait

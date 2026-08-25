@@ -18,6 +18,7 @@ func TestParseCronRejectsWhatIsNotAnExpression(t *testing.T) {
 		"*/0 9 * * *",   // pas nul
 		"30-10 9 * * *", // plage inversee
 		"a 9 * * *",     // pas un nombre
+		"5/2 9 * * *",   // un pas sur une valeur seule, lu differemment selon les crons
 	} {
 		if _, err := parseCron(expr); err == nil {
 			t.Errorf("parseCron(%q) accepted, want an error", expr)
@@ -52,6 +53,11 @@ func TestCronMatchesTheMinutesItDescribes(t *testing.T) {
 		{"0 9 1 * 1", "2026-08-01 09:00", true}, // le 1er, un samedi
 		{"0 9 1 * 1", "2026-08-24 09:00", true}, // un lundi qui n'est pas le 1er
 		{"0 9 1 * 1", "2026-08-25 09:00", false},
+		// "*/2" commence par une etoile, donc il compte comme une etoile pour la
+		// regle des deux jours : le ET s'applique, pas le OU.
+		{"0 9 */2 * 1-5", "2026-08-29 09:00", false}, // un samedi, jour impair
+		{"0 9 */2 * 1-5", "2026-08-25 09:00", true},  // un mardi, jour impair
+		{"0 9 */2 * 1-5", "2026-08-26 09:00", false}, // un mercredi, jour pair
 	}
 	for _, tc := range cases {
 		spec, err := parseCron(tc.expr)

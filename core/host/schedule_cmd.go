@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,7 +60,16 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 			if err := st.PutSchedule(sc); err != nil {
 				return "", err
 			}
-			return "scheduled " + sc.Name + " (" + cadenceOf(sc) + ")", nil
+			out := "scheduled " + sc.Name + " (" + cadenceOf(sc) + ")"
+			// A named session is not required to exist, because one can be opened
+			// after the schedule. But a typo would otherwise buy a schedule that
+			// silently skips every window forever, so it is said now, once, rather
+			// than left to be discovered by its silence.
+			if sc.Session != "" && !sessionKnown(st, sc.Session) {
+				out += "; note: no session named " + strconv.Quote(sc.Session) +
+					" right now, so its windows are skipped until there is one"
+			}
+			return out, nil
 		})); err != nil {
 		return err
 	}
@@ -85,9 +95,16 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 				// The next window is computed from now rather than from the anchor,
 				// because that is the question the operator is asking: not "which
 				// window follows the last run" but "when does this next wake up".
+				// A window already reached is the exception: saying now plus a
+				// period would name a time the schedule will not wait for.
 				next := "unknown"
-				if at, err := schedule.Next(sc, now); err == nil {
-					next = at.Format(time.RFC3339)
+				switch {
+				case !sc.Paused && schedule.Due(sc, now):
+					next = "due"
+				default:
+					if at, err := schedule.Next(sc, now); err == nil {
+						next = at.Format(time.RFC3339)
+					}
 				}
 				fmt.Fprintf(&b, "%s\t%s\t%s\t%s\tlast %s\tnext %s\n",
 					sc.Name, targetOf(sc), cadenceOf(sc), status, last, next)
@@ -123,7 +140,7 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 		help   string
 	}{
 		{"pause", true, "stop firing a schedule, keeping it and its history"},
-		{"resume", false, "let a paused schedule fire again"},
+		{"resume", false, "let a paused schedule fire again, counting from now"},
 	} {
 		if err := reg.Add(contracts.New("schedule", v.verb).
 			Help(v.help).
@@ -136,6 +153,15 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 				}
 				if !ok {
 					return "", fmt.Errorf("no schedule named %q", name)
+				}
+				if !v.paused {
+					// Resuming restarts the cadence from now. Without this, a
+					// schedule paused for a week would find its window long past
+					// and fire the instant it came back, which is not what
+					// anybody means by resume.
+					if err := st.StampScheduleRun(name, time.Now().UTC().Format(time.RFC3339)); err != nil {
+						return "", err
+					}
 				}
 				return v.verb + "d " + name, nil
 			})); err != nil {
@@ -162,6 +188,15 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 		return err
 	}
 	return nil
+}
+
+func sessionKnown(st *state.State, name string) bool {
+	for _, sess := range st.SnapshotSessions() {
+		if sess.Name == name && !sess.Archived {
+			return true
+		}
+	}
+	return false
 }
 
 func targetOf(sc schedule.Schedule) string {

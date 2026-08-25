@@ -75,15 +75,26 @@ func newScheduler(store scheduleStore, sessions scheduleSessions, creator schedu
 
 // Run catches up on what was missed while the daemon was down, then ticks until
 // its context is cancelled.
+//
+// The catch-up waits for the first tick rather than running straight away. The
+// sessions restored at boot register their driver from a goroutine of their own,
+// so a task handed over in the same breath as `serve` starts would find no
+// driver to take it and the missed window would be dropped for good. A minute
+// costs nothing on a turn that is late by definition.
 func (s *scheduler) Run(ctx context.Context) {
-	s.catchUp(ctx)
 	t := time.NewTicker(schedulerTick)
 	defer t.Stop()
+	caughtUp := false
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			if !caughtUp {
+				caughtUp = true
+				s.catchUp(ctx)
+				continue
+			}
 			s.tick(ctx)
 		}
 	}
@@ -109,6 +120,12 @@ func (s *scheduler) release(name string) {
 	s.mu.Unlock()
 }
 
+func (s *scheduler) busy(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.inflight[name]
+}
+
 // wait blocks until the firings in flight have returned. Only tests call it:
 // the loop itself never wants to wait on a firing.
 func (s *scheduler) wait() { s.wg.Wait() }
@@ -116,10 +133,32 @@ func (s *scheduler) wait() { s.wg.Wait() }
 func (s *scheduler) tick(ctx context.Context) {
 	now := s.now()
 	for _, sc := range s.store.SnapshotSchedules() {
-		if sc.Paused || !schedule.Due(sc, now) {
+		// A schedule with a turn in flight is left entirely alone, staleness
+		// included: its window is being served right now, and calling it
+		// perished would move the anchor out from under the firing.
+		if sc.Paused || s.busy(sc.Name) {
 			continue
 		}
-		s.dispatch(ctx, sc, "", true)
+		if schedule.Stale(sc, now) {
+			s.realign(sc, now)
+			continue
+		}
+		if !schedule.Due(sc, now) {
+			continue
+		}
+		s.dispatch(ctx, sc, "")
+	}
+}
+
+// realign forgets a window that passed longer ago than its grace and restarts
+// the cadence from now. It is said out loud rather than done quietly: a turn the
+// operator was expecting is not happening, and that is the kind of thing you
+// want to read in the log rather than deduce from a silence.
+func (s *scheduler) realign(sc schedule.Schedule, now time.Time) {
+	slog.Warn("schedule: window passed longer ago than its grace, skipped",
+		"schedule", sc.Name, "grace", sc.Grace)
+	if err := s.store.StampScheduleRun(sc.Name, now.UTC().Format(time.RFC3339)); err != nil {
+		slog.Warn("schedule: could not restart the cadence", "schedule", sc.Name, "err", err)
 	}
 }
 
@@ -130,7 +169,7 @@ func (s *scheduler) catchUp(ctx context.Context) {
 		if !fire {
 			continue
 		}
-		s.dispatch(ctx, sc, latePrefix(late), true)
+		s.dispatch(ctx, sc, latePrefix(late))
 	}
 }
 
@@ -138,19 +177,34 @@ func (s *scheduler) catchUp(ctx context.Context) {
 // letting it run on its own. It does not stamp LastRun: a try by hand must not
 // shift the schedule's cadence. A paused schedule fires too, because a pause
 // stops the cadence and not the operator's hand.
+//
+// Unlike a window, it fires inline and reports what happened. Someone is waiting
+// on the answer, and "fired" printed over a session that was never reached is
+// worse than no verb at all.
 func (s *scheduler) fireNow(ctx context.Context, name string) error {
 	for _, sc := range s.store.SnapshotSchedules() {
-		if sc.Name == name {
-			s.dispatch(ctx, sc, "", false)
-			return nil
+		if sc.Name != name {
+			continue
 		}
+		if !s.claim(sc.Name) {
+			return fmt.Errorf("schedule %q already has a turn in flight", name)
+		}
+		defer s.release(sc.Name)
+		fctx, cancel := context.WithTimeout(ctx, fireTimeout)
+		defer cancel()
+		if !s.fire(fctx, sc, "") {
+			return fmt.Errorf("schedule %q: no session took the task, see the daemon log", name)
+		}
+		return nil
 	}
 	return fmt.Errorf("no schedule named %q", name)
 }
 
-// dispatch launches a firing in the background, if the schedule's token is
-// free. In the background so one slow firing does not delay the others' tick.
-func (s *scheduler) dispatch(ctx context.Context, sc schedule.Schedule, prefix string, stamp bool) {
+// dispatch launches a window's firing in the background, if the schedule's token
+// is free. In the background so one slow firing does not delay the others' tick.
+// The stamp lands inside the goroutine, before the token is released, so the
+// next tick can never see a delivered window still due.
+func (s *scheduler) dispatch(ctx context.Context, sc schedule.Schedule, prefix string) {
 	if !s.claim(sc.Name) {
 		slog.Debug("schedule: previous turn still in flight, skipping this window", "schedule", sc.Name)
 		return
@@ -161,7 +215,7 @@ func (s *scheduler) dispatch(ctx context.Context, sc schedule.Schedule, prefix s
 		defer s.release(sc.Name)
 		fctx, cancel := context.WithTimeout(ctx, fireTimeout)
 		defer cancel()
-		if !s.fire(fctx, sc, prefix) || !stamp {
+		if !s.fire(fctx, sc, prefix) {
 			return
 		}
 		if err := s.store.StampScheduleRun(sc.Name, s.now().UTC().Format(time.RFC3339)); err != nil {

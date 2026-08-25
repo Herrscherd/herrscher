@@ -26,6 +26,7 @@ const (
 	tagsFile     = "TAGS"
 	backendFile  = "backend"
 	cmdFile      = "cmd"
+	hostFile     = "host"
 )
 
 // worktreeToken is replaced with the absolute worktree path when an agent is
@@ -63,6 +64,10 @@ type Agent struct {
 	Tags    []string // capability tokens from <home>/TAGS (nil when absent), for host routing
 	Backend string   // backend vendor from <home>/backend, empty when absent
 	Cmd     string   // default invocation from <home>/cmd, empty when absent
+	// Host is the default place this agent's sessions run, from <home>/host.
+	// Empty = this machine. A session's explicit --host still wins: this is a
+	// default, not a rule.
+	Host string
 }
 
 // Materialize provisions the agent into a session worktree by writing the files

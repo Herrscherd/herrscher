@@ -72,7 +72,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		sourceVersion: func() string { return sourceVersionOf(ctx, st) },
 	})
 	sup.SetInstanceID(instID)
-	sup.SetCommandSocket(CommandSocketPath(instID), RemoteCommandSocketPath(instID))
+	sup.SetCommandSocket(CommandSocketPath(instID))
 	sup.SetHostLookup(func(name string) (supervisor.Placement, bool) {
 		h, ok := st.FindHost(name)
 		if !ok {

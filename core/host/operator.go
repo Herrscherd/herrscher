@@ -28,7 +28,7 @@ func forwardSessionCommands(reg *cli.Registry, instID string, forward seedComman
 			return next
 		}
 		return func(ctx context.Context, in contracts.Input) (string, error) {
-			if out, handled, err := forward(ctx, CommandSocketPath(instID), argvOf(cmd, in)); handled {
+			if out, handled, err := forward(ctx, commandSocketTarget(instID), argvOf(cmd, in)); handled {
 				return out, err
 			}
 			return next(ctx, in)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -14,7 +15,7 @@ func remoteSupervisor(t *testing.T) *Supervisor {
 	t.Helper()
 	s := NewSupervisor(context.Background(), "/usr/local/bin/herrscher")
 	s.SetInstanceID("inst")
-	s.SetCommandSocket("/tmp/herrscher-command-inst.sock", "/tmp/herrscher-command-inst.sock")
+	s.SetCommandSocket("/tmp/herrscher-command-inst.sock")
 	s.SetHostLookup(func(name string) (Placement, bool) {
 		if name == "build1" {
 			return Placement{SSH: "me@build1", Bin: "/home/me/.herrscher/bin/herrscher"}, true
@@ -56,11 +57,17 @@ func TestRemoteBridgeRunsOverSSHWithTheRemoteBinary(t *testing.T) {
 	}
 	// The <capabilities> block promises the agent it can run `herrscher <verb>`.
 	// On another machine that is only true if the command socket followed.
-	if !strings.Contains(joined, "-R /tmp/herrscher-command-inst.sock:/tmp/herrscher-command-inst.sock") {
+	if !strings.Contains(joined, "-R /tmp/herrscher-command-s1.sock:/tmp/herrscher-command-inst.sock") {
 		t.Fatalf("the command socket is not forwarded: %s", joined)
 	}
 	if !strings.Contains(joined, "ExitOnForwardFailure=yes") {
 		t.Fatalf("a failed forward would not kill the launch: %s", joined)
+	}
+	// A launch owns its connection. Over a shared master the forwards would
+	// belong to the master, and the next launch asking for the same path would
+	// get silence instead of a socket.
+	if !strings.Contains(joined, "ControlPath=none") || !strings.Contains(joined, "ControlMaster=no") {
+		t.Fatalf("the launch multiplexes its connection: %s", joined)
 	}
 	// cmd.Dir belongs to the far machine and is in the script; setting it here
 	// would move the local ssh process instead.
@@ -112,6 +119,33 @@ func TestRemoteBridgeSendsItsEnvironmentOnStdin(t *testing.T) {
 	}
 	if !strings.Contains(block, "TMPDIR=/tmp\n") {
 		t.Fatalf("stdin block misses TMPDIR: %q", block)
+	}
+	// And the third: the per-session path the forward bound, which nothing over
+	// there could derive from the two above.
+	if !strings.Contains(block, control.CommandSocketVar+"=/tmp/herrscher-command-s1.sock\n") {
+		t.Fatalf("stdin block misses the command socket path: %q", block)
+	}
+}
+
+// Two sessions on one host is the ordinary case, and it is where a single
+// daemon-wide path breaks: the second launch would find it bound and die on
+// ExitOnForwardFailure, and clearing it first would cut the first agent off from
+// the daemon. Both forwards must name the same socket here and a different one
+// over there.
+func TestTwoSessionsOnOneHostGetDistinctCommandSockets(t *testing.T) {
+	s := remoteSupervisor(t)
+	for _, name := range []string{"s1", "s2"} {
+		cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: name, ChannelID: "c", Cmd: "claude", Host: "build1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		joined := strings.Join(cmd.Args, " ")
+		if !strings.Contains(joined, "-R "+control.RemoteCommandSocketPath(name)+":/tmp/herrscher-command-inst.sock") {
+			t.Fatalf("session %s does not forward its own command socket back to this daemon: %s", name, joined)
+		}
+	}
+	if control.RemoteCommandSocketPath("s1") == control.RemoteCommandSocketPath("s2") {
+		t.Fatal("two sessions share one remote command socket path")
 	}
 }
 

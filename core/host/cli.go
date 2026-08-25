@@ -315,6 +315,84 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
+	// The question an operator actually asks about a learned skill is not "which
+	// ones exist" but "why is that one not on disk". So each row carries the state
+	// and the date it was last reached for, and the archived ones are listed too:
+	// "it aged out because nobody used it" is the most common answer, and it is
+	// invisible in a listing that hides what aged out.
+	if err := reg.Add(contracts.New("skill", "list").
+		Help("list the skills agents wrote for themselves, with their state, approval and last use").
+		Param("limit", "max rows (default 50)", false).
+		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
+			mem, err := BuildFirstMemory(cmdCtx)
+			if err != nil {
+				return "", err
+			}
+			defer mem.Close()
+			limit := 50
+			if v, err := strconv.Atoi(in.Get("limit")); err == nil && v > 0 {
+				limit = v
+			}
+			hits, err := mem.Search(cmdCtx, contracts.Query{
+				Kinds:           []contracts.NodeKind{contracts.KindSkill},
+				IncludeArchived: true,
+				Limit:           limit,
+			})
+			if err != nil {
+				return "", err
+			}
+			if len(hits) == 0 {
+				return "no learned skills yet", nil
+			}
+			var b strings.Builder
+			for _, n := range hits {
+				state := n.Meta[contracts.MetaState]
+				if state == "" {
+					state = contracts.StateActive
+				}
+				sharing := "private"
+				if n.Meta[orchestrator.MetaApproved] != "" {
+					sharing = "approved"
+				}
+				lastSeen := n.Meta[contracts.MetaLastSeen]
+				if lastSeen == "" {
+					lastSeen = "never"
+				}
+				fmt.Fprintf(&b, "%s\t%s\t%s\tlast used %s\n", n.Key, state, sharing, lastSeen)
+			}
+			return strings.TrimRight(b.String(), "\n"), nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
+	// The one human gesture in the loop, placed at the one point where the blast
+	// radius changes: a skill writes and revises itself freely in its agent's
+	// private scope, and crosses to the shared project scope only here. Its body
+	// comes from the journal, which carries chat messages and web pages, so
+	// crossing turns "what this agent believes" into "what every agent executes".
+	if err := reg.Add(contracts.New("skill", "approve").
+		Help("let a learned skill be promoted from its agent's private scope to the shared project scope").
+		Param("key", "skill node key (see `skill list`)", true).
+		Param("revoke", "clear the approval instead; a promotion already made is not undone", false).
+		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
+			mem, err := BuildFirstMemory(cmdCtx)
+			if err != nil {
+				return "", err
+			}
+			defer mem.Close()
+			key := in.Get("key")
+			approve := !in.Bool("revoke")
+			if err := orchestrator.ApproveSkill(cmdCtx, mem, key, approve); err != nil {
+				return "", err
+			}
+			if !approve {
+				// Says what it does not do rather than letting the word "revoke" imply
+				// it undoes a promotion: the shared copy is a node of its own.
+				return "revoked " + key + " (a promotion already made stands; unmake it with `memory unlink` and `memory restore`)", nil
+			}
+			return "approved " + key, nil
+		})); err != nil {
+		return nil, hostDeps{}, err
+	}
 	if err := reg.Add(contracts.New("memory", "search").
 		Help("full-text search the memory vault; --raw also searches the raw per-turn transcript tier (G7)").
 		Param("text", "query text", true).

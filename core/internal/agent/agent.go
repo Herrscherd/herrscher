@@ -49,6 +49,10 @@ var materializedGitExcludes = []string{
 	"/.codex/",
 	"/.claude/",
 	"/.mcp.json",
+	// The root the learned-skill projection owns. It holds generated SKILL.md
+	// files, so without the exclude a session that learns anything would report a
+	// dirty worktree, and every close would offer to discard work nobody wrote.
+	"/.herrscher/",
 }
 
 // Agent is a durable companion: a name, backend vendor, and the home directory

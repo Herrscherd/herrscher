@@ -51,3 +51,30 @@ func TestCommandsVerbDescribesTheRegistry(t *testing.T) {
 		t.Fatalf("bare commands = %q, %v", text, err)
 	}
 }
+
+// The two verbs the self-authored-skill loop asks of an operator: seeing what an
+// agent wrote for itself, and deciding whether the project's other agents may run
+// it. What is held here is registration, because a handler that exists in the
+// source but not in the registry is a handler the daemon answers "unknown
+// command" to, and the approval it gates is the one step the loop cannot take on
+// its own.
+func TestSkillVerbsAreRegistered(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	st := state.NewState(t.TempDir() + "/s.json")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude"}, st, sup, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	have := map[string]bool{}
+	for _, s := range reg.Specs() {
+		have[strings.Join(s.Path, " ")] = true
+	}
+	for _, want := range []string{"skill list", "skill approve"} {
+		if !have[want] {
+			t.Errorf("%q is not dispatched", want)
+		}
+	}
+}

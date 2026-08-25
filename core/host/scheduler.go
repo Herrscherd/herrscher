@@ -139,15 +139,29 @@ func (s *scheduler) tick(ctx context.Context) {
 		if sc.Paused || s.busy(sc.Name) {
 			continue
 		}
+		// Due comes before Stale, which asks it again: this is the branch every
+		// schedule takes on almost every tick, and answering it costs a walk
+		// through the cadence.
+		if !schedule.Due(sc, now) {
+			continue
+		}
 		if schedule.Stale(sc, now) {
 			s.realign(sc, now)
 			continue
 		}
-		if !schedule.Due(sc, now) {
-			continue
-		}
-		s.dispatch(ctx, sc, "")
+		s.dispatch(ctx, sc, "", stampFor(sc, now))
 	}
+}
+
+// stampFor is the instant a firing must record as its LastRun: the window being
+// served, not the moment the loop noticed it or finished handing it over.
+// Falling back on now is the answer for a schedule whose window cannot be named
+// any more, which the callers have already ruled out.
+func stampFor(sc schedule.Schedule, now time.Time) time.Time {
+	if w, ok := schedule.Window(sc, now); ok {
+		return w
+	}
+	return now
 }
 
 // realign forgets a window that passed longer ago than its grace and restarts
@@ -165,11 +179,19 @@ func (s *scheduler) realign(sc schedule.Schedule, now time.Time) {
 func (s *scheduler) catchUp(ctx context.Context) {
 	now := s.now()
 	for _, sc := range s.store.SnapshotSchedules() {
+		// A cadence that no longer parses would simply never fire again. It is
+		// said here, once at boot, rather than every minute: state.json can be
+		// edited by hand, and a schedule that says nothing looks exactly like a
+		// schedule with nothing to do yet.
+		if _, err := schedule.Next(sc, now); err != nil {
+			slog.Warn("schedule: unusable cadence, it will never fire", "schedule", sc.Name, "err", err)
+			continue
+		}
 		fire, late := schedule.CatchUp(sc, now)
 		if !fire {
 			continue
 		}
-		s.dispatch(ctx, sc, latePrefix(late))
+		s.dispatch(ctx, sc, latePrefix(late), now.Add(-late))
 	}
 }
 
@@ -204,7 +226,11 @@ func (s *scheduler) fireNow(ctx context.Context, name string) error {
 // is free. In the background so one slow firing does not delay the others' tick.
 // The stamp lands inside the goroutine, before the token is released, so the
 // next tick can never see a delivered window still due.
-func (s *scheduler) dispatch(ctx context.Context, sc schedule.Schedule, prefix string) {
+//
+// at is the window served, and it is passed in rather than read from the clock
+// on the way out: a firing takes time, and stamping the moment it ended would
+// push every following window a tick further out.
+func (s *scheduler) dispatch(ctx context.Context, sc schedule.Schedule, prefix string, at time.Time) {
 	if !s.claim(sc.Name) {
 		slog.Debug("schedule: previous turn still in flight, skipping this window", "schedule", sc.Name)
 		return
@@ -218,7 +244,7 @@ func (s *scheduler) dispatch(ctx context.Context, sc schedule.Schedule, prefix s
 		if !s.fire(fctx, sc, prefix) {
 			return
 		}
-		if err := s.store.StampScheduleRun(sc.Name, s.now().UTC().Format(time.RFC3339)); err != nil {
+		if err := s.store.StampScheduleRun(sc.Name, at.UTC().Format(time.RFC3339)); err != nil {
 			slog.Warn("schedule: could not record the run", "schedule", sc.Name, "err", err)
 		}
 	}()

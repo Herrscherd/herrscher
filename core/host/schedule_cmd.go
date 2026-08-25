@@ -42,7 +42,7 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 				Grace:     strings.TrimSpace(in.Get("grace")),
 				CreatedAt: time.Now().UTC().Format(time.RFC3339),
 			}
-			if err := schedule.Validate(sc); err != nil {
+			if err := schedule.Validate(sc, time.Now()); err != nil {
 				return "", err
 			}
 			if sc.Agent != "" {
@@ -92,17 +92,22 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 				if last == "" {
 					last = "never"
 				}
-				// The next window is computed from now rather than from the anchor,
-				// because that is the question the operator is asking: not "which
-				// window follows the last run" but "when does this next wake up".
-				// A window already reached is the exception: saying now plus a
-				// period would name a time the schedule will not wait for.
+				// The next window is counted from the anchor, which is where the
+				// schedule counts it from too. Counting from now would answer a
+				// different question and get --every wrong: a 24h schedule anchored
+				// at nine opens tomorrow at nine, not twenty-four hours after the
+				// moment somebody asked.
 				next := "unknown"
 				switch {
-				case !sc.Paused && schedule.Due(sc, now):
+				case sc.Paused:
+					// A paused schedule has no next window at all: resuming
+					// restarts the cadence from that moment, so any time printed
+					// here would be one it will not wait for.
+					next = "-"
+				case schedule.Due(sc, now):
 					next = "due"
 				default:
-					if at, err := schedule.Next(sc, now); err == nil {
+					if at, err := schedule.NextWindow(sc); err == nil {
 						next = at.Format(time.RFC3339)
 					}
 				}

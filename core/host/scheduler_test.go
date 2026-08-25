@@ -13,8 +13,9 @@ import (
 )
 
 type fakeScheduleStore struct {
-	rows    []schedule.Schedule
-	stamped []string
+	rows      []schedule.Schedule
+	stamped   []string
+	stampedAt []string
 }
 
 func (f *fakeScheduleStore) SnapshotSchedules() []schedule.Schedule {
@@ -23,6 +24,7 @@ func (f *fakeScheduleStore) SnapshotSchedules() []schedule.Schedule {
 
 func (f *fakeScheduleStore) StampScheduleRun(name, at string) error {
 	f.stamped = append(f.stamped, name)
+	f.stampedAt = append(f.stampedAt, at)
 	return nil
 }
 
@@ -372,6 +374,68 @@ func TestRunWaitsForTheFirstTickBeforeCatchingUp(t *testing.T) {
 	sch.wait()
 	if len(seeded) != 0 {
 		t.Fatalf("seeded = %v, want nothing before the first tick", seeded)
+	}
+}
+
+// Le tampon retient la fenetre servie, pas l'instant ou la boucle l'a
+// decouverte. Sinon la fenetre suivante se compte depuis un point posterieur a
+// elle, donc elle tombe un tick plus loin, et le decalage s'ajoute a lui-meme :
+// un horaire aux trente minutes finit par tirer quarante-six fois par jour.
+func TestTickStampsTheWindowAndNotTheMomentItWasNoticed(t *testing.T) {
+	store := &fakeScheduleStore{rows: []schedule.Schedule{{
+		Name: "digest", Session: "live", Every: "30m", Task: "t",
+		LastRun: mustStamp(t, "2026-08-25 09:00"),
+	}}}
+	sessions := &fakeScheduleSessions{rows: []state.Session{{Name: "live"}}}
+	var seeded []string
+	// La boucle passe quarante secondes apres la fenetre de 9h30.
+	noticed := mkHostTime(t, "2026-08-25 09:30").Add(40 * time.Second)
+	sch := newTestScheduler(store, sessions, &fakeScheduleCreator{}, &seeded, noticed)
+	sch.tick(context.Background())
+	sch.wait()
+	if len(store.stampedAt) != 1 {
+		t.Fatalf("stampedAt = %v, want one stamp", store.stampedAt)
+	}
+	if want := mustStamp(t, "2026-08-25 09:30"); store.stampedAt[0] != want {
+		t.Fatalf("stampedAt = %q, want %q (the cadence drifted by the delay)", store.stampedAt[0], want)
+	}
+}
+
+// Une fenetre ratee est rattrapee sur sa propre heure, pas sur celle du
+// demarrage : sans ca un daemon relance a 9h12 recalerait sur 9h12 un horaire
+// qui doit rester cale sur 9h00.
+func TestCatchUpStampsTheMissedWindowAndNotTheBoot(t *testing.T) {
+	store := &fakeScheduleStore{rows: []schedule.Schedule{{
+		Name: "digest", Session: "live", Every: "24h", Task: "t",
+		LastRun: mustStamp(t, "2026-08-24 09:00"),
+	}}}
+	sessions := &fakeScheduleSessions{rows: []state.Session{{Name: "live"}}}
+	var seeded []string
+	sch := newTestScheduler(store, sessions, &fakeScheduleCreator{}, &seeded, mkHostTime(t, "2026-08-25 09:12"))
+	sch.catchUp(context.Background())
+	sch.wait()
+	if len(store.stampedAt) != 1 {
+		t.Fatalf("stampedAt = %v, want one stamp", store.stampedAt)
+	}
+	if want := mustStamp(t, "2026-08-25 09:00"); store.stampedAt[0] != want {
+		t.Fatalf("stampedAt = %q, want %q", store.stampedAt[0], want)
+	}
+}
+
+// state.json s'edite a la main. Une cadence qui ne se lit plus ne tirera jamais,
+// et la boucle doit passer son chemin sans rien tirer ni rien casser.
+func TestCatchUpSkipsAScheduleWhoseCadenceNoLongerReads(t *testing.T) {
+	store := &fakeScheduleStore{rows: []schedule.Schedule{{
+		Name: "broken", Session: "live", Cron: "0 9 * *", Task: "t",
+		LastRun: mustStamp(t, "2026-08-24 09:00"),
+	}}}
+	sessions := &fakeScheduleSessions{rows: []state.Session{{Name: "live"}}}
+	var seeded []string
+	sch := newTestScheduler(store, sessions, &fakeScheduleCreator{}, &seeded, mkHostTime(t, "2026-08-25 09:12"))
+	sch.catchUp(context.Background())
+	sch.wait()
+	if len(seeded) != 0 || len(store.stamped) != 0 {
+		t.Fatalf("seeded = %v, stamped = %v, want nothing on an unreadable cadence", seeded, store.stamped)
 	}
 }
 

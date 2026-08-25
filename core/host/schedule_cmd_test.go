@@ -172,6 +172,50 @@ func TestScheduleAddSaysWhenTheNamedSessionIsNotThere(t *testing.T) {
 	}
 }
 
+// La prochaine fenetre se compte depuis l'ancre, pas depuis l'instant ou la
+// question est posee : un horaire de 24h ancre a 9h ouvre demain a 9h, et non
+// vingt-quatre heures apres le moment ou on tape `schedule list`.
+func TestScheduleListCountsTheNextWindowFromTheAnchor(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	reg := testScheduleRegistry(t, st, nil)
+	anchor := time.Now().Add(-8 * time.Hour).UTC().Truncate(time.Second)
+	if err := st.PutSchedule(schedule.Schedule{
+		Name: "digest", Session: "live", Every: "24h", Task: "t",
+		CreatedAt: anchor.Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("PutSchedule: %v", err)
+	}
+	out, err := reg.Dispatch(context.Background(), []string{"schedule", "list"})
+	if err != nil {
+		t.Fatalf("schedule list: %v", err)
+	}
+	want := anchor.Add(24 * time.Hour).Local().Format(time.RFC3339)
+	if !strings.Contains(out, "next "+want) {
+		t.Fatalf("schedule list = %q, want the window at %s", out, want)
+	}
+}
+
+// Un horaire en pause n'a pas de prochaine fenetre : la reprise recale la
+// cadence sur l'instant ou elle est tapee, donc toute heure affichee ici serait
+// une heure que l'horaire n'attendra pas.
+func TestScheduleListNamesNoWindowForAPausedSchedule(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	reg := testScheduleRegistry(t, st, nil)
+	if err := st.PutSchedule(schedule.Schedule{
+		Name: "digest", Session: "live", Every: "1h", Task: "t", Paused: true,
+		CreatedAt: time.Now().Add(-8 * time.Hour).UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("PutSchedule: %v", err)
+	}
+	out, err := reg.Dispatch(context.Background(), []string{"schedule", "list"})
+	if err != nil {
+		t.Fatalf("schedule list: %v", err)
+	}
+	if !strings.Contains(out, "next -") {
+		t.Fatalf("schedule list = %q, want no window named for a paused schedule", out)
+	}
+}
+
 func TestScheduleListSaysWhenThereIsNothing(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	reg := testScheduleRegistry(t, st, nil)

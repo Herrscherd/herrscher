@@ -36,16 +36,40 @@ type supervisor interface {
 	Restart(s state.Session) error
 }
 
-// worktrees owns per-session git worktree lifecycle. Create returns the worktree
+// Worktrees owns per-session git worktree lifecycle. Create returns the worktree
 // path ("" + nil error means "fall back to shared", e.g. not a git repo). The
 // repo root is passed per call so one Worktreer serves every project.
-type worktrees interface {
+type Worktrees interface {
 	Create(repo, name, base string) (path string, err error)
 	// PreExisting says whether Create would reuse a worktree rather than make
 	// one, which is what tells a rollback whether the worktree is its to remove.
 	PreExisting(repo, name string) bool
 	Branch(name string) string
 	Remove(repo, name string, force bool) error
+}
+
+// Hosts resolves where a session's process runs. The manager needs three things
+// from a host: the worktree lifecycle over there, the repository root over
+// there, and a way to put an agent's files in a worktree that is not here. All
+// of them are ports, so a local session keeps calling the local Worktreer
+// directly and pays no process spawn for a path it shares with nothing.
+//
+// Exported, unlike its neighbours, because the composition root implements it:
+// it is the only piece that needs both the host records and a runner, and
+// neither belongs in this package.
+type Hosts interface {
+	// Worktrees returns the worktree implementation for a host name. An empty
+	// name is this machine.
+	Worktrees(name string) (Worktrees, error)
+	// Workspace returns the workspace root on a host. An empty name gives the
+	// daemon's own.
+	Workspace(name string) (string, error)
+	// Materialize provisions an agent into a worktree on a host.
+	Materialize(ctx context.Context, name string, a agent.Agent, worktreePath string) error
+	// EnsureProject makes sure repo exists on the host, cloning it from origin
+	// when it does not. An empty host name is a no-op: the daemon's own
+	// workspace is already where it is.
+	EnsureProject(ctx context.Context, name, project, repo string) error
 }
 
 // forges clones a remote repo into the workspace via gh/glab (see internal/forge),

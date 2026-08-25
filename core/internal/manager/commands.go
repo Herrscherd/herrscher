@@ -22,6 +22,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("terminal_only", "bind the session to the terminal gateway only", false).
 			Param("shared", "run in the main checkout instead of an isolated worktree", false).
 			Param("agent", "provision the session from a durable agent (its persona + MCP + zero-prompt settings)", false).
+			Param("host", "run this session on a registered host (see `host list`); empty or `local` = this machine", false).
 			Param("memory_project", "memory project this session files what it learns under (does NOT move the session: see project)", false).
 			Param("memory_agent", "memory agent root for this session's private learned skills (does NOT provision an agent: see agent)", false).
 			Param("project_pinned", "the memory project is a human's choice, not a guess: never revise it", false).
@@ -84,6 +85,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("mcp", "stdio MCP server command line, e.g. 'neublox serve --project {{WORKTREE}}'", false).
 			Param("backend", "agent backend vendor: claude | codex | cursor", false).
 			Param("cmd", "default invocation carrying the model, e.g. 'codex --model gpt-5.6'", false).
+			Param("host", "default host this agent's sessions run on (see `host list`)", false).
 			Param("tags", "space/comma-separated capability tokens (e.g. role:reviewer luau)", false).
 			Do(h.agentCreateRun),
 		contracts.New("agent", "list").

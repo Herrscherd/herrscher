@@ -65,6 +65,12 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	hdl.SetSeeder(Seed) // host.Seed: live-session injection for `session switch` handoff
 	// Where each session's process lands. `local` is implicit and needs no
 	// record; anything else must have been registered and provisioned.
+	hdl.SetHosts(hostPlacer{
+		st:            st,
+		instanceID:    instID,
+		local:         wt,
+		sourceVersion: func() string { return sourceVersionOf(ctx, st) },
+	})
 	sup.SetInstanceID(instID)
 	sup.SetCommandSocket(CommandSocketPath(instID), RemoteCommandSocketPath(instID))
 	sup.SetHostLookup(func(name string) (supervisor.Placement, bool) {

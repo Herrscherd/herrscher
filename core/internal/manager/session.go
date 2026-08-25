@@ -499,7 +499,23 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 		cohortTokenCap = uint64(n)
 	}
-	ws := h.st.WorkspaceRoot()
+	// Where this session runs. An explicit --host wins; otherwise a provisioned
+	// agent's default applies; otherwise this machine. `local` is spelled out by
+	// operators and stored as the empty host, so one session has one spelling.
+	hostName, _ := in.Lookup("host")
+	hostName = strings.TrimSpace(hostName)
+	if hostName == "" && agentName != "" {
+		if a, ok := h.agents.Get(agentName); ok {
+			hostName = a.Host
+		}
+	}
+	if hostName == state.LocalHost {
+		hostName = ""
+	}
+	wt, ws, err := h.worktreesOn(hostName)
+	if err != nil {
+		return "", err
+	}
 	// Project is the logical label the caller assigns; Neublox filters workspace
 	// snapshots by it, so it must be recorded even in cwd mode. It doubles as a
 	// workspace sub-dir (steering the repo path) ONLY when a workspace root is
@@ -508,6 +524,13 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	project, _ := in.Lookup("project")
 	if ws != "" {
 		if spec, ok := in.Lookup("clone"); ok && spec != "" {
+			// The forge client runs here, so it would clone onto this machine at a
+			// path that only means something over there. Cloning into the local
+			// workspace first keeps one obvious source of truth: the host then
+			// clones from that project's origin.
+			if hostName != "" {
+				return "", fmt.Errorf("clone is not supported on host %q: create the project locally first, then create the session with --host", hostName)
+			}
 			cctx, cancel := context.WithTimeout(ctx, cloneTimeout)
 			dir, err := h.fg.Clone(cctx, spec, ws)
 			cancel()
@@ -526,6 +549,14 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 	}
 	repo := repoFor(ws, project)
+	// A remote workspace does not have the project just because this one does.
+	// Cloning it now means the worktree call below finds a repository instead of
+	// silently falling back to shared mode on a directory nobody created.
+	if h.hs != nil {
+		if err := h.hs.EnsureProject(ctx, hostName, project, repo); err != nil {
+			return "", err
+		}
+	}
 	// Worktree isolation by default; shared:true runs in the main checkout.
 	shared := in.Bool("shared")
 	var worktree string
@@ -538,8 +569,8 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		if b, ok := in.Lookup("base"); ok {
 			base = b
 		}
-		reusedWorktree = h.wt.PreExisting(repo, name)
-		path, err := h.wt.Create(repo, name, base)
+		reusedWorktree = wt.PreExisting(repo, name)
+		path, err := wt.Create(repo, name, base)
 		if err != nil {
 			return "", fmt.Errorf("worktree: %w", err)
 		}
@@ -551,7 +582,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		if reusedWorktree {
 			return
 		}
-		if rmErr := h.wt.Remove(repo, name, true); rmErr != nil {
+		if rmErr := wt.Remove(repo, name, true); rmErr != nil {
 			fmt.Fprintf(os.Stderr, "herrscher: worktree rollback for %q failed: %v\n", name, rmErr)
 		}
 	}
@@ -574,7 +605,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		if !cmdExplicit && a.Cmd != "" {
 			cmd = a.Cmd
 		}
-		if err := a.Materialize(worktree); err != nil {
+		if err := h.materializeOn(ctx, hostName, a, worktree); err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("provision agent %q: %w", agentName, err)
 		}
@@ -596,21 +627,21 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		// The conversation already exists — bind to it rather than creating a
 		// channel. This is what lets a gateway start a session in the channel the
 		// operator is already talking in.
-		sess = state.Session{Name: name, ChannelID: adopted, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
+		sess = state.Session{Name: name, ChannelID: adopted, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
 	case home.Type == "category", home.Type == "terminal":
 		chID, err := admin.CreateUnder(ctx, home.ID, title)
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create channel: %w", err)
 		}
-		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
+		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
 	case home.Type == "forum":
 		chID, err := admin.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create forum post: %w", err)
 		}
-		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap}
+		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}
@@ -618,7 +649,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		return "", fmt.Errorf("persist: %w", err)
 	}
 	h.sup.Start(sess)
-	banner := sessionBanner(repo, name, worktree, h.wt.Branch(name), cmd, modelID, shared)
+	banner := sessionBanner(repo, name, worktree, wt.Branch(name), cmd, modelID, shared)
 	_ = admin.Send(ctx, sess.ChannelID, banner) // best-effort; reply is source of truth
 	return fmt.Sprintf("✅ Running on %s.\n\n%s", admin.ChannelRef(sess.ChannelID), banner), nil
 }
@@ -644,10 +675,14 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 		return "", fmt.Errorf("no session %q", name)
 	}
 	_ = h.sup.Stop(name)
-	repo := repoFor(h.st.WorkspaceRoot(), sess.Project)
+	wt, ws, err := h.worktreesOn(sess.Host)
+	if err != nil {
+		return "", err
+	}
+	repo := repoFor(ws, sess.Project)
 	if sess.Worktree != "" {
 		force := in.Bool("force")
-		if err := h.wt.Remove(repo, name, force); err != nil {
+		if err := wt.Remove(repo, name, force); err != nil {
 			// The session survives this failure, so its bridge has to survive it
 			// too. Stopping the bridge is the first thing close does — it has to
 			// be, the worktree cannot be removed from under a running process —

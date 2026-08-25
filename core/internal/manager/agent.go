@@ -28,12 +28,13 @@ func (h *Handler) agentCreateRun(_ context.Context, in contracts.Input) (string,
 	mcp, _ := in.Lookup("mcp")
 	backend, _ := in.Lookup("backend")
 	cmd, _ := in.Lookup("cmd")
+	host, _ := in.Lookup("host")
 	tagsRaw, _ := in.Lookup("tags")
 	var tags []string
 	for _, tok := range strings.Fields(strings.ReplaceAll(tagsRaw, ",", " ")) {
 		tags = append(tags, tok)
 	}
-	a, err := h.agents.Create(agent.CreateSpec{Name: name, Soul: soul, MCP: mcp, Backend: backend, Cmd: cmd, Tags: tags})
+	a, err := h.agents.Create(agent.CreateSpec{Name: name, Soul: soul, MCP: mcp, Backend: backend, Cmd: cmd, Host: strings.TrimSpace(host), Tags: tags})
 	if err != nil {
 		return "", err
 	}

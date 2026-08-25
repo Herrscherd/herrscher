@@ -298,6 +298,83 @@ func TestFireNowRunsAPausedSchedule(t *testing.T) {
 	}
 }
 
+// Le trou que ce test tient : le rattrapage refuse une fenetre trop vieille,
+// mais elle reste due, et sans realignement le tick suivant la tirerait quand
+// meme, sans dire son retard.
+func TestTickForgetsAWindowOlderThanItsGrace(t *testing.T) {
+	store := &fakeScheduleStore{rows: []schedule.Schedule{{
+		Name: "digest", Session: "live", Cron: "0 9 * * *", Task: "t",
+		LastRun: mustStamp(t, "2026-08-24 09:00"),
+	}}}
+	sessions := &fakeScheduleSessions{rows: []state.Session{{Name: "live"}}}
+	var seeded []string
+	sch := newTestScheduler(store, sessions, &fakeScheduleCreator{}, &seeded, mkHostTime(t, "2026-08-25 18:00"))
+	sch.tick(context.Background())
+	sch.wait()
+	if len(seeded) != 0 {
+		t.Fatalf("seeded = %v, want a nine-o'clock window not served at six in the evening", seeded)
+	}
+	if len(store.stamped) != 1 {
+		t.Fatalf("stamped = %v, want the cadence restarted from now", store.stamped)
+	}
+}
+
+func TestTickLeavesAScheduleInFlightAlone(t *testing.T) {
+	// Sa fenetre est servie a l'instant meme : la declarer perimee deplacerait
+	// l'ancre sous le tir en cours.
+	store := &fakeScheduleStore{rows: []schedule.Schedule{{
+		Name: "digest", Session: "live", Cron: "0 9 * * *", Task: "t",
+		LastRun: mustStamp(t, "2026-08-24 09:00"),
+	}}}
+	sessions := &fakeScheduleSessions{rows: []state.Session{{Name: "live"}}}
+	var seeded []string
+	sch := newTestScheduler(store, sessions, &fakeScheduleCreator{}, &seeded, mkHostTime(t, "2026-08-25 18:00"))
+	if !sch.claim("digest") {
+		t.Fatal("claim refused on a free schedule")
+	}
+	sch.tick(context.Background())
+	sch.wait()
+	if len(store.stamped) != 0 {
+		t.Fatalf("stamped = %v, want nothing touched while a turn is in flight", store.stamped)
+	}
+}
+
+func TestFireNowSaysWhenNoSessionTookTheTask(t *testing.T) {
+	// L'operateur attend la reponse : « fired » sur une session jamais atteinte
+	// vaut moins que pas de verbe du tout.
+	store := &fakeScheduleStore{rows: []schedule.Schedule{{
+		Name: "digest", Session: "gone", Every: "30m", Task: "t",
+		LastRun: mustStamp(t, "2026-08-25 09:00"),
+	}}}
+	var seeded []string
+	sch := newTestScheduler(store, &fakeScheduleSessions{}, &fakeScheduleCreator{}, &seeded, mkHostTime(t, "2026-08-25 09:05"))
+	if err := sch.fireNow(context.Background(), "digest"); err == nil {
+		t.Fatal("fireNow over an absent session reported success, want an error")
+	}
+}
+
+func TestRunWaitsForTheFirstTickBeforeCatchingUp(t *testing.T) {
+	// Les sessions restaurees au boot enregistrent leur driver depuis une
+	// goroutine a elles : un rattrapage tire dans la foulee de `serve` ne
+	// trouverait personne, et la fenetre ratee serait perdue pour de bon.
+	store := &fakeScheduleStore{rows: []schedule.Schedule{{
+		Name: "digest", Session: "live", Cron: "0 9 * * *", Task: "t",
+		LastRun: mustStamp(t, "2026-08-24 09:00"),
+	}}}
+	sessions := &fakeScheduleSessions{rows: []state.Session{{Name: "live"}}}
+	var seeded []string
+	sch := newTestScheduler(store, sessions, &fakeScheduleCreator{}, &seeded, mkHostTime(t, "2026-08-25 09:45"))
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { sch.Run(ctx); close(done) }()
+	cancel()
+	<-done
+	sch.wait()
+	if len(seeded) != 0 {
+		t.Fatalf("seeded = %v, want nothing before the first tick", seeded)
+	}
+}
+
 func TestRunStopsWithItsContext(t *testing.T) {
 	store := &fakeScheduleStore{}
 	var seeded []string

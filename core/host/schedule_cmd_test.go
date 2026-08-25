@@ -6,8 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -125,6 +127,48 @@ func TestScheduleAddThenListThenRemove(t *testing.T) {
 		if _, err := reg.Dispatch(ctx, []string{"schedule", verb, "--name", "digest"}); err == nil {
 			t.Errorf("schedule %s on an unknown name accepted, want an error", verb)
 		}
+	}
+}
+
+func TestScheduleResumeRestartsTheCadenceFromNow(t *testing.T) {
+	// Sans ca, un horaire mis en pause une semaine trouverait sa fenetre
+	// largement passee et tirerait a la seconde ou il revient.
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	reg := testScheduleRegistry(t, st, nil)
+	ctx := context.Background()
+	if _, err := reg.Dispatch(ctx, []string{"schedule", "add", "--name", "digest",
+		"--agent", "scout", "--every", "30m", "--task", "t"}); err != nil {
+		t.Fatalf("schedule add: %v", err)
+	}
+	for _, verb := range []string{"pause", "resume"} {
+		if _, err := reg.Dispatch(ctx, []string{"schedule", verb, "--name", "digest"}); err != nil {
+			t.Fatalf("schedule %s: %v", verb, err)
+		}
+	}
+	got := st.SnapshotSchedules()
+	if len(got) != 1 || got[0].LastRun == "" {
+		t.Fatalf("SnapshotSchedules = %+v, want the anchor moved to the resume", got)
+	}
+	if schedule.Due(got[0], time.Now()) {
+		t.Error("the resumed schedule is already due, want its next window half an hour out")
+	}
+}
+
+func TestScheduleAddSaysWhenTheNamedSessionIsNotThere(t *testing.T) {
+	// La session peut etre ouverte plus tard, donc c'est accepte. Mais une faute
+	// de frappe acheterait sinon un horaire qui saute chaque fenetre en silence.
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	reg := testScheduleRegistry(t, st, nil)
+	out, err := reg.Dispatch(context.Background(), []string{"schedule", "add", "--name", "digest",
+		"--session", "typo", "--every", "30m", "--task", "t"})
+	if err != nil {
+		t.Fatalf("schedule add: %v", err)
+	}
+	if !strings.Contains(out, "typo") || !strings.Contains(out, "no session named") {
+		t.Fatalf("schedule add = %q, want it to name the session it cannot see", out)
+	}
+	if got := st.SnapshotSchedules(); len(got) != 1 {
+		t.Fatalf("SnapshotSchedules = %+v, want the schedule written anyway", got)
 	}
 }
 

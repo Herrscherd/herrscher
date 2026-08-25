@@ -30,6 +30,13 @@ func TestValidateRefusesAnUnusableSchedule(t *testing.T) {
 		{"non-positive every", Schedule{Name: "n", Agent: "a", Every: "0s", Task: "t"}},
 		{"unreadable cron", Schedule{Name: "n", Agent: "a", Cron: "0 9 * *", Task: "t"}},
 		{"unreadable grace", Schedule{Name: "n", Agent: "a", Every: "30m", Task: "t", Grace: "soon"}},
+		// Sous la minute, la grace declarerait perimee chaque fenetre servie par
+		// une boucle qui a le grain de la minute.
+		{"grace under a minute", Schedule{Name: "n", Agent: "a", Every: "30m", Task: "t", Grace: "10s"}},
+		{"negative grace", Schedule{Name: "n", Agent: "a", Every: "30m", Task: "t", Grace: "-1h"}},
+		// --project decrit la session que l'horaire ouvre : sans --agent il
+		// n'ouvre rien, et l'accepter le ferait croire actif.
+		{"project without an agent", Schedule{Name: "n", Session: "s", Project: "p", Every: "30m", Task: "t"}},
 		// Une expression que le calendrier ne satisfait jamais doit etre refusee a
 		// la creation, pas boucler au premier tick.
 		{"unsatisfiable cron", Schedule{Name: "n", Agent: "a", Cron: "0 0 30 2 *", Task: "t"}},
@@ -165,6 +172,38 @@ func TestCatchUpSkipsAPausedSchedule(t *testing.T) {
 	}
 	if fire, _ := CatchUp(s, mkTime(t, "2026-08-25 09:45")); fire {
 		t.Error("a paused schedule caught up")
+	}
+}
+
+// La grace ne sert a rien si Due tire quand meme la fenetre qu'elle vient de
+// refuser : c'est le trou que Stale bouche, et c'est ce que ce test tient.
+func TestStaleMarksTheWindowsTheGraceRefuses(t *testing.T) {
+	base := Schedule{Cron: "0 9 * * *", LastRun: mkTime(t, "2026-08-24 09:00").UTC().Format(time.RFC3339)}
+	cases := []struct {
+		name  string
+		grace string
+		now   string
+		want  bool
+	}{
+		{"before the window", "", "2026-08-25 08:00", false},
+		{"inside the grace", "", "2026-08-25 09:45", false},
+		{"past the grace", "", "2026-08-25 10:01", true},
+		{"long past the grace", "", "2026-08-25 23:00", true},
+		{"a widened grace still covers it", "24h", "2026-08-25 18:00", false},
+	}
+	for _, tc := range cases {
+		s := base
+		s.Grace = tc.grace
+		if got := Stale(s, mkTime(t, tc.now)); got != tc.want {
+			t.Errorf("Stale(%s) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	// Une pause n'est pas une peremption : l'horaire reprendra ou l'operateur
+	// decide, et rien ne doit bouger son ancre entre-temps.
+	paused := base
+	paused.Paused = true
+	if Stale(paused, mkTime(t, "2026-08-25 23:00")) {
+		t.Error("a paused schedule went stale")
 	}
 }
 

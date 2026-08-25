@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -33,7 +35,16 @@ func runBridge(ctx context.Context, args []string) error {
 	extractor := fs.String("extractor", "", "name of a registered curation extractor — enables the P1 learning loop (empty = plain Curator, no learning)")
 	journal := fs.String("journal", "", "path to the call journal Consolidate reads (worktree-relative ok); only used with --extractor")
 	consolidateEvery := fs.Int("consolidate-every", 0, "run Consolidate every N turns (0 = manual only); only used with --extractor")
+	envStdin := fs.Bool("env-stdin", false, "read KEY=VALUE lines from stdin until a blank line and put them in this process's environment (how a remote bridge gets its gateway credentials)")
 	fs.Parse(args)
+
+	// Before anything else: the credentials this bridge is about to capture may
+	// be arriving on stdin rather than in the environment.
+	if *envStdin {
+		if err := applyEnvFromStdin(os.Stdin); err != nil {
+			return err
+		}
+	}
 
 	// The bridge is the process that actually builds backends, so it needs the
 	// gateway pair the supervisor handed it in its environment — and must scrub
@@ -295,6 +306,43 @@ func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, proje
 			return disabled(p.Manifest.Kind, err)
 		}
 		return orch
+	}
+	return nil
+}
+
+// applyEnvFromStdin reads KEY=VALUE lines until a blank line (or EOF) and puts
+// them in this process's environment.
+//
+// It exists for the bridge that runs on another machine. ssh carries no
+// environment, and putting these values in the ssh command line would reproduce
+// exactly what supervisor.SetBridgeEnv forbids: /proc/<pid>/cmdline is world
+// readable, on both machines. Stdin is free, because the bridge never reads it
+// otherwise, and the secret then touches neither argv nor disk on either side.
+//
+// The wire format is contracts' env setting encoding, whose decoder is used
+// here so encoder and decoder stay one tested pair. The blank line is this
+// caller's terminator, not the format's: reading past it would swallow input
+// that belongs to whoever reads stdin next.
+func applyEnvFromStdin(r io.Reader) error {
+	br := bufio.NewReader(r)
+	var block strings.Builder
+	for {
+		line, err := br.ReadString('\n')
+		trimmed := strings.TrimRight(line, "\r\n")
+		if trimmed != "" {
+			block.WriteString(trimmed)
+			block.WriteByte('\n')
+		} else if line != "" {
+			break // the blank line that ends the block
+		}
+		if err != nil {
+			break // EOF, with the last unterminated line already taken
+		}
+	}
+	for k, v := range contracts.ParseEnvSetting(block.String()) {
+		if err := os.Setenv(k, v); err != nil {
+			return fmt.Errorf("apply %s from stdin: %w", k, err)
+		}
 	}
 	return nil
 }

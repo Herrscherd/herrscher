@@ -155,17 +155,20 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 		})
 	}()
 
+	// The process's working directory is the session's worktree: the directory
+	// whose git config decides what a commit from this session signs with, and the
+	// one the skill roots hang off. Read once, not per turn.
+	cwd, _ := os.Getwd()
+	// Before the engine reads its roots, not after: a skill rendered afterwards
+	// would be missing from the first turn's menu, which is the turn that matters.
+	projectLearnedSkills(ctx, orch, cwd)
 	eng := newSkillEngine(backend)
 	var pin *scopePin
 	if o.Scope != nil && !o.ProjectPinned {
 		pin = &scopePin{resolve: o.Scope, current: o.LaunchProject, agent: o.MemoryAgent, orch: orch}
 	}
 	// The human is resolved here, once, rather than per turn: they do not change
-	// mid-session, and a turn should not pay three git calls to be told so. The
-	// process's working directory is the session's worktree, which is the
-	// directory whose git config decides what a commit from this session signs
-	// with — so it is the one to ask.
-	cwd, _ := os.Getwd()
+	// mid-session, and a turn should not pay three git calls to be told so.
 	runHubTurnsCtl(ctx, in, conn, backend, orch, ctrl, eng,
 		affordances{roster: o.Roster, caps: o.Capabilities, user: identity.FromDir(cwd)}, pin)
 	return ctx.Err()
@@ -323,11 +326,21 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	}
 	out = strings.TrimSpace(out)
 	if eng != nil {
-		eng.Detect(out)
+		// The names come from the engine, not from the text, so reporting before
+		// React (which rewrites the reply) is about who owns what, not about what
+		// survives the rewrite.
+		//
+		// On the session ctx, not turnCtx, for the same reason Observe below is: an
+		// interrupt cancels the turn, and a turn the human cut short is still a turn
+		// where a skill was used. Stamping it on turnCtx would make the skill that
+		// gets interrupted the skill that ages out.
+		reportSkillUse(ctx, orch, eng.Detect(out))
 		out = eng.Strip(out)
 	}
 	if tr, ok := orch.(contracts.TurnReactor); ok {
-		out = tr.React(turnCtx, out)
+		// Same: React is where <remember> and <skill> are written down, and losing
+		// what the model asked to keep is not part of what an interrupt asked for.
+		out = tr.React(ctx, out)
 	}
 	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, TokensIn: inTok, CacheRead: cacheRd, CacheCreate: cacheCr, Resume: resumeToken(backend), Project: settledProject})
 	if orch != nil {

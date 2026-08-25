@@ -14,6 +14,17 @@ func mkTime(t *testing.T, s string) time.Time {
 	return got
 }
 
+// mkUTC lit une date en UTC, pour les cas dont les tampons RFC3339 sont eux
+// aussi en UTC : les melanger ferait dependre le test du fuseau de la machine.
+func mkUTC(t *testing.T, s string) time.Time {
+	t.Helper()
+	got, err := time.ParseInLocation("2006-01-02 15:04", s, time.UTC)
+	if err != nil {
+		t.Fatalf("bad fixture %q: %v", s, err)
+	}
+	return got
+}
+
 func TestValidateRefusesAnUnusableSchedule(t *testing.T) {
 	ok := Schedule{Name: "n", Agent: "a", Every: "30m", Task: "t"}
 	cases := []struct {
@@ -41,11 +52,12 @@ func TestValidateRefusesAnUnusableSchedule(t *testing.T) {
 		// la creation, pas boucler au premier tick.
 		{"unsatisfiable cron", Schedule{Name: "n", Agent: "a", Cron: "0 0 30 2 *", Task: "t"}},
 	}
-	if err := Validate(ok); err != nil {
+	now := mkTime(t, "2026-08-25 09:00")
+	if err := Validate(ok, now); err != nil {
 		t.Fatalf("Validate(ok) = %v, want nil", err)
 	}
 	for _, tc := range cases {
-		if err := Validate(tc.s); err == nil {
+		if err := Validate(tc.s, now); err == nil {
 			t.Errorf("Validate(%s) accepted, want an error", tc.name)
 		}
 	}
@@ -204,6 +216,94 @@ func TestStaleMarksTheWindowsTheGraceRefuses(t *testing.T) {
 	paused.Paused = true
 	if Stale(paused, mkTime(t, "2026-08-25 23:00")) {
 		t.Error("a paused schedule went stale")
+	}
+}
+
+// La question de `schedule list` : quand cet horaire se reveille-t-il. Elle se
+// compte depuis l'ancre, sinon un --every de 24h ancre a 9h repond "dans
+// vingt-quatre heures" quel que soit le moment ou on la pose.
+func TestNextWindowCountsFromTheAnchorAndNotFromNow(t *testing.T) {
+	cases := []struct {
+		name string
+		s    Schedule
+		want string
+	}{
+		{
+			"every counts from the last run",
+			Schedule{Every: "24h", LastRun: "2026-08-25T09:00:00Z", CreatedAt: "2026-08-01T09:00:00Z"},
+			"2026-08-26 09:00",
+		},
+		{
+			"every falls back on the creation",
+			Schedule{Every: "6h", CreatedAt: "2026-08-25T09:00:00Z"},
+			"2026-08-25 15:00",
+		},
+	}
+	for _, tc := range cases {
+		got, err := NextWindow(tc.s)
+		if err != nil {
+			t.Errorf("%s: NextWindow = %v", tc.name, err)
+			continue
+		}
+		if want := mkUTC(t, tc.want); !got.Equal(want) {
+			t.Errorf("%s: NextWindow = %s, want %s", tc.name, got.UTC(), want)
+		}
+	}
+	// Le cron se lit dans l'heure locale du daemon, donc son cas se pose dans le
+	// meme fuseau que l'expression.
+	cron := Schedule{Cron: "0 9 * * *", LastRun: mkTime(t, "2026-08-25 09:00").Format(time.RFC3339)}
+	got, err := NextWindow(cron)
+	if err != nil {
+		t.Fatalf("NextWindow(cron) = %v", err)
+	}
+	if want := mkTime(t, "2026-08-26 09:00"); !got.Equal(want) {
+		t.Errorf("NextWindow(cron) = %s, want %s", got, want)
+	}
+
+	if _, err := NextWindow(Schedule{Every: "1h"}); err == nil {
+		t.Error("NextWindow on a schedule with no anchor at all accepted, want an error")
+	}
+}
+
+// Le tampon retient la fenetre servie et non l'instant de la livraison. Sans ca
+// la cadence glisse d'un tick a chaque tir : la fenetre suivante se compte
+// depuis une livraison qui arrive apres elle, donc elle tombe un tick plus loin,
+// et le retard s'ajoute a lui-meme.
+func TestWindowNamesTheOneBeingServedAndNotTheDelivery(t *testing.T) {
+	s := Schedule{Every: "30m", LastRun: "2026-08-25T09:00:00Z", CreatedAt: "2026-08-25T09:00:00Z"}
+	// La boucle decouvre la fenetre de 9h30 a 9h30m40s, et le tir lui-meme
+	// prendra encore un peu de temps.
+	got, ok := Window(s, mkUTC(t, "2026-08-25 09:30").Add(40*time.Second))
+	if !ok {
+		t.Fatal("Window found nothing on a schedule whose window has passed")
+	}
+	if want := mkUTC(t, "2026-08-25 09:30"); !got.Equal(want) {
+		t.Fatalf("Window = %s, want %s", got.UTC(), want)
+	}
+
+	// Vingt-quatre heures de tirs consecutifs, chacun decouvert en retard et
+	// livre plus tard encore : la cadence ne doit pas avoir bouge d'une seconde.
+	start := mkUTC(t, "2026-08-25 09:00")
+	cur := s
+	fires := 0
+	for tick := start; tick.Before(start.Add(24 * time.Hour)); tick = tick.Add(time.Minute) {
+		if !Due(cur, tick) {
+			continue
+		}
+		w, ok := Window(cur, tick)
+		if !ok {
+			t.Fatalf("Window found nothing at %s", tick)
+		}
+		cur.LastRun = w.UTC().Format(time.RFC3339)
+		fires++
+	}
+	// La premiere fenetre tombe une demi-heure apres l'ancre et la derniere une
+	// minute avant la fin du parcours, d'ou quarante-sept et non quarante-huit.
+	if fires != 47 {
+		t.Errorf("fired %d times in 24h, want 47", fires)
+	}
+	if want := start.Add(24 * time.Hour).Add(-30 * time.Minute).UTC().Format(time.RFC3339); cur.LastRun != want {
+		t.Errorf("LastRun after a day = %s, want %s (the cadence drifted)", cur.LastRun, want)
 	}
 }
 

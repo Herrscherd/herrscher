@@ -52,8 +52,10 @@ func SessionName(s Schedule) string { return "schedule-" + s.Name }
 
 // Validate porte toutes les gardes de la creation. Elles tombent ici, une fois,
 // plutot qu'au tir : un horaire impossible doit etre refuse a la face de qui
-// l'ecrit, pas echouer en silence chaque minute.
-func Validate(s Schedule) error {
+// l'ecrit, pas echouer en silence chaque minute. now est le point d'ou la
+// recherche de fenetre part, et il arrive en parametre comme partout ailleurs
+// dans ce paquet : la garde du cron impossible se teste alors a une date fixe.
+func Validate(s Schedule, now time.Time) error {
 	if strings.TrimSpace(s.Name) == "" {
 		return errors.New("schedule needs a name")
 	}
@@ -93,7 +95,7 @@ func Validate(s Schedule) error {
 	// decouvre. La question posee est donc "cette expression tire-t-elle dans
 	// l'annee qui vient", et un horaire quadriennal comme le 29 fevrier est
 	// refuse de ce fait. C'est voulu : personne n'ecrit un cron pour 2028.
-	_, err := Next(s, time.Now())
+	_, err := Next(s, now)
 	return err
 }
 
@@ -159,6 +161,39 @@ func Next(s Schedule, after time.Time) (time.Time, error) {
 		}
 	}
 	return time.Time{}, fmt.Errorf("cron %q: no window within %s", s.Cron, maxCronLookahead)
+}
+
+// NextWindow rend la prochaine fenetre a venir, comptee depuis l'ancre et non
+// depuis l'instant ou la question est posee. La difference se voit sur --every :
+// un horaire de 24h ancre a 9h ouvre sa prochaine fenetre demain a 9h, et non
+// dans vingt-quatre heures a compter de maintenant. C'est ce que veut savoir qui
+// lit `schedule list`.
+//
+// Un horaire deja du rend une fenetre passee, puisque c'est celle qu'il attend :
+// a l'appelant de poser Due d'abord s'il veut distinguer les deux.
+func NextWindow(s Schedule) (time.Time, error) {
+	a, ok := anchor(s)
+	if !ok {
+		return time.Time{}, errors.New("schedule has no anchor to count from")
+	}
+	return Next(s, a)
+}
+
+// Window rend la fenetre que la boucle est en train de servir : la plus recente
+// a `now` ou avant. C'est elle, et non l'instant de la livraison, que LastRun
+// doit retenir.
+//
+// La boucle a le grain de la minute et le tir lui-meme prend du temps, donc
+// compter la fenetre suivante depuis la livraison arrondirait chaque periode au
+// tick d'apres. La perte n'est pas ponctuelle, elle s'accumule : un horaire aux
+// trente minutes tire quarante-six fois par jour au lieu de quarante-huit, et
+// glisse de trois quarts d'heure en vingt-quatre heures.
+func Window(s Schedule, now time.Time) (time.Time, bool) {
+	grace, err := graceOf(s)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return lastWindow(s, now, grace)
 }
 
 // Due dit si la prochaine fenetre est arrivee. C'est la question que la boucle

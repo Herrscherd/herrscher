@@ -68,7 +68,12 @@ func (s SSH) options() []string {
 
 func (s SSH) multiplex() []string {
 	if s.ControlPath == "" {
-		return nil
+		// Not merely "no path of ours": the operator's ssh_config may set one for
+		// every host, and a launch that carries forwards must own its connection.
+		// A shared master owns the forwards it opened, so a second launch asking
+		// for the same one is answered with silence rather than a bound socket,
+		// and the process starts believing a socket followed it that did not.
+		return []string{"-o", "ControlMaster=no", "-o", "ControlPath=none"}
 	}
 	return []string{
 		"-o", "ControlMaster=auto",

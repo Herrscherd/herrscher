@@ -75,7 +75,7 @@ func DaemonDispatch(ctx context.Context, instanceID string, argv []string) (stri
 // caller is free to answer as it did before there was a daemon to ask. A verb
 // that lives only inside a daemon must not claim to exist when none is running.
 func ForwardToDaemon(ctx context.Context, statePath, optID string, argv []string) (string, bool, error) {
-	return dispatchLiveCommand(ctx, CommandSocketPath(ServedInstanceID(statePath, optID)), argv)
+	return dispatchLiveCommand(ctx, commandSocketTarget(ServedInstanceID(statePath, optID)), argv)
 }
 
 // SubscribeDaemonEvents dials the daemon's events socket and streams what it

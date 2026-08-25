@@ -30,3 +30,21 @@ const remoteSocketDir = "/tmp"
 func RemoteSocketPath(session string) string {
 	return remoteSocketDir + "/herrscher-control-" + safeSessionName(session) + ".sock"
 }
+
+// RemoteCommandSocketPath is where a remote session's `herrscher <verb>` dials
+// the daemon's operator command socket, once the launch has forwarded it there.
+//
+// It is named after the session and not after the daemon, even though every
+// session forwards the very same socket back here. Two sessions on one host
+// would otherwise ask for one path: the second launch finds it taken and dies
+// on ExitOnForwardFailure, and clearing it first cuts the first session's agent
+// off from the daemon. One path per session costs a socket file and makes both
+// failures unrepresentable.
+func RemoteCommandSocketPath(session string) string {
+	return remoteSocketDir + "/herrscher-command-" + safeSessionName(session) + ".sock"
+}
+
+// CommandSocketVar is how the far side learns that path: it cannot derive a
+// per-session name from the instance id alone, so the launch states it in the
+// environment the bridge reads on stdin and passes to everything it spawns.
+const CommandSocketVar = "HERRSCHER_COMMAND_SOCKET"

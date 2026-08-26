@@ -2,12 +2,38 @@ package host
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 )
+
+// menuGatewayFake is a fanRecorder that also plays the reader shape
+// askApproval must handle: a channel that may or may not route menus. Its
+// Manifest, like fanRecorder's, declares no SelectMenus capability, so
+// contracts.Degrade's text fallback posts through the embedded fanRecorder's
+// Post (recorded in .posted) rather than through Menu.
+type menuGatewayFake struct {
+	fanRecorder
+	channel  string
+	routeErr error
+	routed   []string // prompts passed to RouteMenu
+}
+
+func (m *menuGatewayFake) DefaultChannel() string { return m.channel }
+
+func (m *menuGatewayFake) RouteMenu(_ context.Context, _, _, prompt, _ string, _ []contracts.Choice) (contracts.MessageID, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.routed = append(m.routed, prompt)
+	if m.routeErr != nil {
+		return "", m.routeErr
+	}
+	return "mid", nil
+}
 
 func TestAskApprovalAnswersWithoutAskingAnyone(t *testing.T) {
 	pol := approval.Policy{{Decision: approval.Deny, Tool: "Bash", Pattern: "sudo*"}}
@@ -107,6 +133,76 @@ func TestTwoSessionsWaitIndependently(t *testing.T) {
 	if !seen["s1:allow"] || !seen["s2:deny"] {
 		t.Fatalf("got %v, want s1 allowed and s2 denied", seen)
 	}
+}
+
+// TestSessionDriverAskApproval covers the four shapes askApproval must
+// handle when fanning a question out to a session's gateways: a gateway that
+// routes a real menu, one whose RouteMenu fails and must fall back to text,
+// one with neither a usable router nor a Gateway to fall back to, and one
+// with no channel to post on at all.
+func TestSessionDriverAskApproval(t *testing.T) {
+	tests := []struct {
+		name       string
+		build      func() (d *sessionDriver, gw *menuGatewayFake)
+		wantRouted int
+		wantText   int
+	}{
+		{
+			name: "routes a menu when the reader can route and has a channel",
+			build: func() (*sessionDriver, *menuGatewayFake) {
+				gw := &menuGatewayFake{channel: "chan1"}
+				d := &sessionDriver{name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+				return d, gw
+			},
+			wantRouted: 1,
+			wantText:   0,
+		},
+		{
+			name: "falls back to text when RouteMenu errors",
+			build: func() (*sessionDriver, *menuGatewayFake) {
+				gw := &menuGatewayFake{channel: "chan1", routeErr: errors.New("boom")}
+				d := &sessionDriver{name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+				return d, gw
+			},
+			wantRouted: 1,
+			wantText:   1,
+		},
+		{
+			name: "falls back to text when the reader has no channel at all",
+			build: func() (*sessionDriver, *menuGatewayFake) {
+				gw := &menuGatewayFake{channel: ""}
+				d := &sessionDriver{name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+				return d, gw
+			},
+			wantRouted: 0,
+			wantText:   1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d, gw := tt.build()
+			d.askApproval(context.Background(), "allow Bash(rm)?", "id1")
+			gw.mu.Lock()
+			defer gw.mu.Unlock()
+			if len(gw.routed) != tt.wantRouted {
+				t.Fatalf("RouteMenu called %d times, want %d", len(gw.routed), tt.wantRouted)
+			}
+			if len(gw.posted) != tt.wantText {
+				t.Fatalf("text fallback posted %d times, want %d", len(gw.posted), tt.wantText)
+			}
+		})
+	}
+
+	t.Run("no panic and nothing posted with a nil Gateway and no usable router", func(t *testing.T) {
+		reader := &fanRecorder{} // implements ChannelReader but not contracts.MenuRouter
+		d := &sessionDriver{name: "s1", gateways: []contracts.GatewaySet{{Gateway: nil, Reader: reader}}}
+		d.askApproval(context.Background(), "allow Bash(rm)?", "id1")
+		reader.mu.Lock()
+		defer reader.mu.Unlock()
+		if len(reader.posted) != 0 {
+			t.Fatalf("posted %v, want nothing: no Gateway to fall back to", reader.posted)
+		}
+	})
 }
 
 func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {

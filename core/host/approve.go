@@ -23,6 +23,10 @@ const approvalPickPrefix = "herrscher-approval:"
 // terminal. A tool input can be a whole file.
 const subjectMaxLen = 200
 
+// defaultApprovalWait is the fallback wait when the caller passes none, matching
+// state.ApprovalWait's own default.
+const defaultApprovalWait = 5 * time.Minute
+
 // pendingApproval is one request waiting for a human.
 type pendingApproval struct {
 	id      string
@@ -66,6 +70,10 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 		return approval.Deny, fmt.Sprintf("herrscher: %s was denied by policy", describeRequest(req))
 	}
 
+	if wait <= 0 { // time.After(0) would fire instantly and deny every ask
+		wait = defaultApprovalWait
+	}
+
 	p := &pendingApproval{
 		id:      newApprovalID(),
 		session: session,
@@ -82,7 +90,13 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 		approvals.mu.Unlock()
 	}()
 
-	AskApprovalOn(ctx, session, approvalPrompt(req), p.id)
+	// The fan-out's own context is bounded by wait so a gateway whose RouteMenu
+	// hangs cannot stretch the effective wait past the deadline the model was
+	// promised; it is not detached into a goroutine because posting a menu for
+	// an already-dead request is worse than a bounded wait.
+	octx, cancel := context.WithTimeout(ctx, wait)
+	AskApprovalOn(octx, session, approvalPrompt(req), p.id)
+	cancel()
 
 	select {
 	case v := <-p.answer:

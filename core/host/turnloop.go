@@ -278,10 +278,7 @@ func (d *sessionDriver) Pick(value string) {
 func (d *sessionDriver) askApproval(ctx context.Context, prompt, id string) {
 	opts := approvalChoices(id)
 	for _, gs := range d.gateways {
-		ch := d.channel
-		if ch == "" && gs.Reader != nil {
-			ch = gs.Reader.DefaultChannel()
-		}
+		ch := d.renderChannel(gs)
 		if mr, ok := gs.Reader.(contracts.MenuRouter); ok && ch != "" {
 			if _, err := mr.RouteMenu(ctx, ch, "", prompt, d.name, opts); err == nil {
 				continue

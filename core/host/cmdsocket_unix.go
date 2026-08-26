@@ -40,9 +40,9 @@ func SessionCommandSocketPath(instanceID, session string) string {
 	if instanceID != "" {
 		name += "-" + instanceID
 	}
-	dir := os.TempDir()
-	p := filepath.Join(dir, name+"-s-"+control.SafeSessionName(session)+".sock")
-	if len(p) <= maxUnixSocketPath {
+	prefix := filepath.Join(os.TempDir(), name+"-s-")
+	short := control.SafeSessionName(session)
+	if p := prefix + short + ".sock"; len(p) <= maxUnixSocketPath {
 		return p
 	}
 	// sun_path caps a unix socket path, and this one has three variable parts:
@@ -56,17 +56,19 @@ func SessionCommandSocketPath(instanceID, session string) string {
 	// So fold instead of failing. The digest is of the full session name, so two
 	// names that share a prefix do not share a socket, and both the daemon and
 	// the supervisor derive it here, so they cannot disagree about where it is.
+	//
+	// What the fold cannot save is a prefix that is already over the cap on its
+	// own, which takes a TMPDIR of about a hundred characters. There the name
+	// truncates to nothing and bind still refuses, loudly: serveCommandSocket
+	// prints the path and the error, which is the right end for a limit only the
+	// operator's own environment can lift.
 	sum := sha256.Sum256([]byte(session))
-	digest := hex.EncodeToString(sum[:])[:12]
-	room := maxUnixSocketPath - len(filepath.Join(dir, name+"-s-"+"-"+digest+".sock"))
-	if room < 0 {
-		room = 0
-	}
-	short := control.SafeSessionName(session)
+	suffix := "-" + hex.EncodeToString(sum[:])[:12] + ".sock"
+	room := max(maxUnixSocketPath-len(prefix)-len(suffix), 0)
 	if len(short) > room {
 		short = short[:room]
 	}
-	return filepath.Join(dir, name+"-s-"+short+"-"+digest+".sock")
+	return prefix + short + suffix
 }
 
 // maxUnixSocketPath is what sun_path holds, minus the terminating NUL. Linux

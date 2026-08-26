@@ -36,6 +36,11 @@ func CapabilityEnvPair(specs []cli.Spec, contributed func(family string) bool) s
 // something that will be refused them, and a model reading a refusal it was
 // told to expect success from does not conclude "not allowed", it concludes
 // "broken" and works around it. The list has to be the truth for its reader.
+//
+// One block is built per daemon and every session reads the same one, so the
+// principal here names no session in particular. It does not have to: what
+// varies between sessions is scope, which decides which session a verb may name
+// and never which verbs exist, and no Subject is set for it to consult.
 func agentVerbs(specs []cli.Spec, contributed func(family string) bool) []cli.Spec {
 	out := make([]cli.Spec, 0, len(specs))
 	for _, s := range specs {
@@ -44,7 +49,7 @@ func agentVerbs(specs []cli.Spec, contributed func(family string) bool) []cli.Sp
 		}
 		isPlugin := contributed != nil && contributed(s.Path[0])
 		ok, _ := authz.Decide(authz.Request{
-			Principal:   authz.SessionPrincipal("this"),
+			Principal:   authz.SessionPrincipal("any"),
 			Path:        s.Path,
 			Contributed: isPlugin,
 		}, authz.RoleAgent)

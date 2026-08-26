@@ -144,6 +144,12 @@ func grantable(principal, role string) error {
 	if strings.HasPrefix(principal, authz.SessionPrefix) {
 		return fmt.Errorf("`%s` is a session, and a session is always `agent`: the socket it arrives on decides that, not this table", principal)
 	}
+	// Named apart from the unknown-role case because `role grant chat:1234` with
+	// the role forgotten is the common slip, and "unknown role \"\"" answers it
+	// with a puzzle instead of the missing word.
+	if role == "" {
+		return fmt.Errorf("name a role: one of %s", strings.Join(authz.GrantableRoles(), ", "))
+	}
 	if !authz.Grantable(role) {
 		return fmt.Errorf("unknown role %q: grant one of %s", role, strings.Join(authz.GrantableRoles(), ", "))
 	}

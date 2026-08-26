@@ -236,6 +236,15 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 		return h.reg.Dispatch(ctx, args)
 	}
 
+	// The approve family waits on a human, which is slower than anything else
+	// this daemon does, and it mutates no session. Holding the mutation lock
+	// across that wait would freeze every create, close and status behind one
+	// operator who walked away from their keyboard. Same reasoning as the
+	// contributed verb above, one notch more literal.
+	if len(args) > 0 && args[0] == "approve" {
+		return h.reg.Dispatch(ctx, args)
+	}
+
 	h.dispatchMu.Lock()
 	defer h.dispatchMu.Unlock()
 	out, err := h.reg.Dispatch(ctx, args)

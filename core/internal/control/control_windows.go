@@ -9,7 +9,7 @@ import (
 )
 
 func SocketPath(session string) string {
-	return `\\.\pipe\herrscher-control-` + safeSessionName(session)
+	return `\\.\pipe\herrscher-control-` + SafeSessionName(session)
 }
 
 func listenControl(path string) (net.Listener, error) {

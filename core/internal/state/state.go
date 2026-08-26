@@ -151,6 +151,24 @@ type State struct {
 	// this changes no write profile and inherits the existing mutex and atomic
 	// write. See hosts.go for the accessors.
 	Hosts []Host `json:"hosts,omitempty"`
+	// Roles is who may run what, keyed by principal ("chat:1234"). Empty means
+	// the daemon decides nothing about humans, which is what an install that
+	// configured nothing gets. Role definitions are not here: they are in
+	// core/internal/authz, so a fifth role is a code change and a review rather
+	// than a file nobody reads.
+	Roles map[string]RoleAssignment `json:"roles,omitempty"`
+}
+
+// RoleAssignment is one principal's role, plus a name a human can read.
+//
+// The label decides nothing. It is there because a platform id is not something
+// an operator knows by heart, and a table of opaque numbers is a table nobody
+// audits. It is not refreshed on its own: keeping it current would mean writing
+// this file on every inbound message, which is a disk write on the hottest path
+// the daemon has, for a display convenience.
+type RoleAssignment struct {
+	Role  string `json:"role"`
+	Label string `json:"label,omitempty"`
 }
 
 // NewState returns an empty state bound to path (not yet written).
@@ -561,6 +579,65 @@ func (s *State) SetSessionApprovals(name, mode string) error {
 		}
 	}
 	return fmt.Errorf("no session named %q", name)
+}
+
+// RoleAssignments returns a copy of the role table.
+func (s *State) RoleAssignments() map[string]RoleAssignment {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]RoleAssignment, len(s.Roles))
+	for k, v := range s.Roles {
+		out[k] = v
+	}
+	return out
+}
+
+// RoleNames is the table as the pure authorization package reads it: principal
+// to role name, with the display label dropped. It decides nothing, so it does
+// not travel to the code that decides.
+func (s *State) RoleNames() map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.Roles) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(s.Roles))
+	for k, v := range s.Roles {
+		out[k] = v.Role
+	}
+	return out
+}
+
+// SetRole assigns a role to a principal and persists. It reports whether the
+// table was empty before, because that first assignment is a cliff: from then
+// on every gateway account without a role is an observer. The caller validates
+// the role name first; this stores text it was told is valid, like
+// AddApprovalRule.
+func (s *State) SetRole(principal, role, label string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	first := len(s.Roles) == 0
+	if s.Roles == nil {
+		s.Roles = map[string]RoleAssignment{}
+	}
+	s.Roles[principal] = RoleAssignment{Role: role, Label: label}
+	return first, s.saveLocked()
+}
+
+// RemoveRole drops an assignment, reporting whether it was there.
+func (s *State) RemoveRole(principal string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.Roles[principal]; !ok {
+		return false, nil
+	}
+	delete(s.Roles, principal)
+	if len(s.Roles) == 0 {
+		// nil rather than an empty map, so `roles` leaves state.json entirely
+		// and a revoked-to-empty table reads exactly like one never written.
+		s.Roles = nil
+	}
+	return true, s.saveLocked()
 }
 
 // SetStatusMessageID caches the status embed's message id and persists.

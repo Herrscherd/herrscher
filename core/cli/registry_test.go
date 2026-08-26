@@ -304,3 +304,58 @@ func TestSpecsDescribeTheWholeRegistry(t *testing.T) {
 		t.Fatalf("spec dropped declared shape: %+v", specs[0])
 	}
 }
+
+func TestResolveReadsThePathAndTheFlagsWithoutRunning(t *testing.T) {
+	ran := false
+	var reg cli.Registry
+	if err := reg.Add(contracts.New("session", "send").
+		Param("name", "session name", true).
+		Do(func(context.Context, contracts.Input) (string, error) {
+			ran = true
+			return "", nil
+		})); err != nil {
+		t.Fatal(err)
+	}
+	path, in, ok := reg.Resolve([]string{"session", "send", "--name", "revue", "hello"})
+	if !ok {
+		t.Fatal("Resolve must find a registered command")
+	}
+	if strings.Join(path, " ") != "session send" {
+		t.Fatalf("path = %v, want [session send]", path)
+	}
+	if in.Get("name") != "revue" {
+		t.Fatalf("name = %q, want revue", in.Get("name"))
+	}
+	if len(in.Rest) != 1 || in.Rest[0] != "hello" {
+		t.Fatalf("Rest = %v, want [hello]", in.Rest)
+	}
+	if ran {
+		t.Fatal("Resolve must not run the command")
+	}
+}
+
+func TestResolveReportsAnUnknownCommand(t *testing.T) {
+	var reg cli.Registry
+	if _, _, ok := reg.Resolve([]string{"quantum", "entangle"}); ok {
+		t.Fatal("Resolve must not claim to have found an unregistered command")
+	}
+}
+
+// A missing required flag is Dispatch's error to report. Resolve still names
+// the path, because the caller asked for that verb whatever it forgot to pass,
+// and a caller deciding whether the verb is allowed must not be told nothing.
+func TestResolveNamesThePathEvenWhenTheFlagsDoNotParse(t *testing.T) {
+	var reg cli.Registry
+	if err := reg.Add(contracts.New("host", "add").
+		Param("ssh", "ssh target", true).
+		Do(func(context.Context, contracts.Input) (string, error) { return "", nil })); err != nil {
+		t.Fatal(err)
+	}
+	path, _, ok := reg.Resolve([]string{"host", "add"})
+	if !ok {
+		t.Fatal("Resolve must find the command")
+	}
+	if strings.Join(path, " ") != "host add" {
+		t.Fatalf("path = %v, want [host add]", path)
+	}
+}

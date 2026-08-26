@@ -9,7 +9,7 @@ import (
 )
 
 func SocketPath(session string) string {
-	return filepath.Join(os.TempDir(), "herrscher-control-"+safeSessionName(session)+".sock")
+	return filepath.Join(os.TempDir(), "herrscher-control-"+SafeSessionName(session)+".sock")
 }
 
 func listenControl(path string) (net.Listener, error) {

@@ -15,7 +15,7 @@ func remoteSupervisor(t *testing.T) *Supervisor {
 	t.Helper()
 	s := NewSupervisor(context.Background(), "/usr/local/bin/herrscher")
 	s.SetInstanceID("inst")
-	s.SetCommandSocket("/tmp/herrscher-command-inst.sock")
+	s.SetCommandSocket(func(session string) string { return "/tmp/herrscher-command-inst-s-" + session + ".sock" })
 	s.SetHostLookup(func(name string) (Placement, bool) {
 		if name == "build1" {
 			return Placement{SSH: "me@build1", Bin: "/home/me/.herrscher/bin/herrscher"}, true
@@ -57,7 +57,7 @@ func TestRemoteBridgeRunsOverSSHWithTheRemoteBinary(t *testing.T) {
 	}
 	// The <capabilities> block promises the agent it can run `herrscher <verb>`.
 	// On another machine that is only true if the command socket followed.
-	if !strings.Contains(joined, "-R /tmp/herrscher-command-s1.sock:/tmp/herrscher-command-inst.sock") {
+	if !strings.Contains(joined, "-R /tmp/herrscher-command-s1.sock:/tmp/herrscher-command-inst-s-s1.sock") {
 		t.Fatalf("the command socket is not forwarded: %s", joined)
 	}
 	if !strings.Contains(joined, "ExitOnForwardFailure=yes") {
@@ -136,8 +136,8 @@ func TestRemoteBridgeSendsItsEnvironmentOnStdin(t *testing.T) {
 // Two sessions on one host is the ordinary case, and it is where a single
 // daemon-wide path breaks: the second launch would find it bound and die on
 // ExitOnForwardFailure, and clearing it first would cut the first agent off from
-// the daemon. Both forwards must name the same socket here and a different one
-// over there.
+// the daemon. Each forward names its own socket at both ends, which is also
+// what keeps one machine from reaching another session's door.
 func TestTwoSessionsOnOneHostGetDistinctCommandSockets(t *testing.T) {
 	s := remoteSupervisor(t)
 	for _, name := range []string{"s1", "s2"} {
@@ -146,7 +146,8 @@ func TestTwoSessionsOnOneHostGetDistinctCommandSockets(t *testing.T) {
 			t.Fatal(err)
 		}
 		joined := strings.Join(cmd.Args, " ")
-		if !strings.Contains(joined, "-R "+control.RemoteCommandSocketPath(name)+":/tmp/herrscher-command-inst.sock") {
+		want := "-R " + control.RemoteCommandSocketPath(name) + ":/tmp/herrscher-command-inst-s-" + name + ".sock"
+		if !strings.Contains(joined, want) {
 			t.Fatalf("session %s does not forward its own command socket back to this daemon: %s", name, joined)
 		}
 	}

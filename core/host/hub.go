@@ -56,6 +56,19 @@ type hub struct {
 	// registry it describes; nil for the operator CLI, which has none.
 	contributedKinds map[string]bool
 
+	// instanceID namespaces this daemon's sockets. goLive needs it to derive
+	// the per-session command socket path, which is what tells the daemon a
+	// connection came from that session. Set in RunHub beside coordinator and
+	// eventPublisher, for the same reason: newHub predates it and its test
+	// callers do not have one to give.
+	instanceID string
+
+	// warnedRoles remembers which unknown role names have already been said, so
+	// a table nobody fixed costs one line and not one line per command. Its own
+	// map rather than a field under mu, because it is read on the dispatch path
+	// and has nothing to do with the live session set.
+	warnedRoles sync.Map
+
 	dispatchMu sync.Mutex // serializes operator commands (and their reconcile)
 	mu         sync.Mutex
 	live       map[string]liveSession // session name → owned RunSession lifetime
@@ -137,6 +150,13 @@ func (h *hub) goLive(sess state.Session) {
 			eventTap(h.eventPublisher, sess.Name),
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent}, h.gate)
 	}()
+
+	// The session's own command socket, alive exactly as long as the session
+	// is. sctx cancels it in goDead, and serveCommandSocket removes the file.
+	// asSession is what makes `herrscher <verb>` from inside this worktree
+	// arrive already named, without the message having to say a name that
+	// could be a different one.
+	go serveCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name), asSession{disp: h, session: sess.Name})
 }
 
 // goDead stops the session's supervised bridge, cancels its RunSession loop
@@ -205,6 +225,12 @@ func (h *hub) reconcile() {
 // the non-reentrant mutation lock across that turn would deadlock. Nested typed
 // mutations still acquire dispatchMu themselves and perform their own reconcile.
 func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
+	// Who is asking decides before what is asked. Every daemon-side entry point
+	// funnels here, so this is the one place the answer has to be right.
+	if err := h.authorize(ctx, args); err != nil {
+		return "", err
+	}
+
 	// A seed turn may synchronously emit a coordination trailer. Delegate then
 	// re-enters this hub through Create, which owns dispatchMu for its actual
 	// state mutation. Do not hold the same non-reentrant mutex around the outer

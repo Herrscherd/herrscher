@@ -18,6 +18,7 @@ type fakeHosts struct {
 	workspace    string
 	notReady     error    // what Ready answers, e.g. a version drift
 	materialized []string // worktree paths passed to Materialize
+	hooked       []bool   // whether each Materialize call asked for the approval hook
 	ensured      []string // "project@host" per EnsureProject call
 }
 
@@ -49,11 +50,12 @@ func (f *fakeHosts) Workspace(name string) (string, error) {
 	return f.workspace, nil
 }
 
-func (f *fakeHosts) Materialize(ctx context.Context, name string, a agent.Agent, worktreePath string) error {
+func (f *fakeHosts) Materialize(ctx context.Context, name string, a agent.Agent, worktreePath string, hook bool) error {
 	if err := f.check(name); err != nil {
 		return err
 	}
 	f.materialized = append(f.materialized, worktreePath)
+	f.hooked = append(f.hooked, hook)
 	return nil
 }
 
@@ -226,5 +228,58 @@ func TestSessionCloseRemovesTheWorktreeWhereItIs(t *testing.T) {
 	}
 	if len(localWT.removed) != 0 {
 		t.Fatalf("close must not touch the local worktree, got %v", localWT.removed)
+	}
+}
+
+func TestSessionCreateRefusesUnknownApprovalMode(t *testing.T) {
+	h, _, localWT, st := handlerWithHosts(t)
+	_, err := h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "loose"))
+	if err == nil || !strings.Contains(err.Error(), "ask, bypass or strict") {
+		t.Fatalf("got %v, want a refusal naming the three modes", err)
+	}
+	if _, ok := st.FindSession("demo"); ok {
+		t.Fatal("no session row may survive a refused create")
+	}
+	if len(localWT.created) != 0 {
+		t.Fatalf("nothing may be created before the refusal, got %v", localWT.created)
+	}
+}
+
+func TestSessionCreateStoresTheApprovalMode(t *testing.T) {
+	h, _, _, st := handlerWithHosts(t)
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "bypass")); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	sess, ok := st.FindSession("demo")
+	if !ok || sess.Approvals != "bypass" {
+		t.Fatalf("got %q ok=%v, want bypass", sess.Approvals, ok)
+	}
+}
+
+// A bypass session is the one case that must reach the far side with no hook at
+// all: its settings are then the ones herrscher wrote before approvals existed.
+func TestSessionCreateOnHostMaterializesWithoutAHookInBypass(t *testing.T) {
+	h, hs, _, _ := handlerWithHosts(t)
+	if _, err := h.Agents().Create(agent.CreateSpec{Name: "nova", Host: "build1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "agent", "nova", "approvals", "bypass")); err != nil {
+		t.Fatal(err)
+	}
+	if len(hs.hooked) != 1 || hs.hooked[0] {
+		t.Fatalf("bypass must materialize with no hook, got %v", hs.hooked)
+	}
+}
+
+func TestSessionCreateOnHostMaterializesWithAHookByDefault(t *testing.T) {
+	h, hs, _, _ := handlerWithHosts(t)
+	if _, err := h.Agents().Create(agent.CreateSpec{Name: "nova", Host: "build1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "agent", "nova")); err != nil {
+		t.Fatal(err)
+	}
+	if len(hs.hooked) != 1 || !hs.hooked[0] {
+		t.Fatalf("an unset mode must still get a hook, got %v", hs.hooked)
 	}
 }

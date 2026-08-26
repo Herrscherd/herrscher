@@ -422,3 +422,23 @@ func TestMemoryAgentBeatsTheProvisionedAgent(t *testing.T) {
 		t.Fatalf("args = %q, want the memory agent", got)
 	}
 }
+
+// A hook spawned inside a session asks the daemon about a session by name, and
+// the vendor CLI's own session id is not that name. The launch is the only
+// place that knows it, so it has to say so in the environment.
+func TestBridgeCarriesTheSessionName(t *testing.T) {
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude"})
+	if err != nil {
+		t.Fatalf("bridgeCommand: %v", err)
+	}
+	var found bool
+	for _, kv := range cmd.Env {
+		if kv == "HERRSCHER_SESSION=s1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("a bridge must know which session it is, or its hooks cannot say")
+	}
+}

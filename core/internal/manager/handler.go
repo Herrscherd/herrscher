@@ -76,11 +76,15 @@ func (h *Handler) worktreesOn(hostName string) (Worktrees, string, error) {
 }
 
 // materializeOn provisions an agent into a worktree, wherever that worktree is.
-func (h *Handler) materializeOn(ctx context.Context, hostName string, a agent.Agent, worktreePath string) error {
+func (h *Handler) materializeOn(ctx context.Context, hostName string, a agent.Agent, worktreePath string, hook bool) error {
 	if hostName == "" || h.hs == nil {
-		return a.Materialize(worktreePath)
+		bin := ""
+		if hook {
+			bin = agent.SelfBin()
+		}
+		return a.MaterializeAs(worktreePath, bin)
 	}
-	return h.hs.Materialize(ctx, hostName, a, worktreePath)
+	return h.hs.Materialize(ctx, hostName, a, worktreePath, hook)
 }
 
 // SetDefaultModel wires the operator's configured default. It is a fallback,

@@ -19,14 +19,17 @@ import (
 // The files are small and there are six of them, so one round trip carrying all
 // of them beats six copies. They are rendered locally because the agent's home
 // is local: only the path written INTO them belongs to the far machine, which is
-// why MaterializeInto takes the destination and that path separately.
-func stageAgentTar(a agent.Agent, remoteWorktree string) (io.Reader, error) {
+// why MaterializeIntoAs takes the destination and that path separately.
+//
+// remoteBin is herrscher over there, the binary the approval hook rendered into
+// the settings must invoke; empty means the session wants no hook.
+func stageAgentTar(a agent.Agent, remoteWorktree, remoteBin string) (io.Reader, error) {
 	stage, err := os.MkdirTemp("", "herrscher-agent-")
 	if err != nil {
 		return nil, fmt.Errorf("stage agent %q: %w", a.Name, err)
 	}
 	defer func() { _ = os.RemoveAll(stage) }()
-	if err := a.MaterializeInto(stage, remoteWorktree); err != nil {
+	if err := a.MaterializeIntoAs(stage, remoteWorktree, remoteBin); err != nil {
 		return nil, fmt.Errorf("stage agent %q: %w", a.Name, err)
 	}
 	var buf bytes.Buffer

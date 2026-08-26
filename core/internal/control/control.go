@@ -36,14 +36,17 @@ func RemoteSocketPath(session string) string {
 }
 
 // RemoteCommandSocketPath is where a remote session's `herrscher <verb>` dials
-// the daemon's operator command socket, once the launch has forwarded it there.
+// its own command socket, once the launch has forwarded it there.
 //
-// It is named after the session and not after the daemon, even though every
-// session forwards the very same socket back here. Two sessions on one host
-// would otherwise ask for one path: the second launch finds it taken and dies
-// on ExitOnForwardFailure, and clearing it first cuts the first session's agent
-// off from the daemon. One path per session costs a socket file and makes both
-// failures unrepresentable.
+// Its own, and not the daemon's operator socket: which socket a connection
+// arrives on is what tells the daemon who is calling, so forwarding the
+// operator's would hand every agent on every host the operator's authority.
+//
+// It is named after the session for a second reason, older than that one. Two
+// sessions on one host would otherwise ask for one path: the second launch
+// finds it taken and dies on ExitOnForwardFailure, and clearing it first cuts
+// the first session's agent off from the daemon. One path per session costs a
+// socket file and makes both failures unrepresentable.
 func RemoteCommandSocketPath(session string) string {
 	return remoteSocketDir + "/herrscher-command-" + SafeSessionName(session) + ".sock"
 }

@@ -1,0 +1,196 @@
+package host
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/approval"
+)
+
+// approvalPickPrefix marks a select-menu value as an answer to an approval
+// rather than a choice the model itself posed. The two ride the same Pick path
+// from a gateway, and only the prefix tells them apart; it is written by this
+// file and read by this file, so a gateway never learns the encoding.
+const approvalPickPrefix = "herrscher-approval:"
+
+// subjectMaxLen bounds how much model-written text is rendered into a menu or a
+// terminal. A tool input can be a whole file.
+const subjectMaxLen = 200
+
+// pendingApproval is one request waiting for a human.
+type pendingApproval struct {
+	id      string
+	session string
+	req     approval.Request
+	asked   time.Time
+	answer  chan approvalVerdict
+}
+
+type approvalVerdict struct {
+	decision approval.Decision
+	reason   string
+}
+
+// PendingApproval is one waiting request, as an operator sees it.
+type PendingApproval struct {
+	ID      string        `json:"id"`
+	Session string        `json:"session"`
+	Tool    string        `json:"tool"`
+	Subject string        `json:"subject"`
+	Age     time.Duration `json:"age"`
+}
+
+// approvals is the daemon's registry of requests awaiting a human. It is
+// package state for the same reason sessionRegistry is: the verbs that answer a
+// request, the Pick that carries a click, and the hook call that opened it all
+// reach it from different call paths, and none of them has a pointer to hand.
+var approvals = struct {
+	mu sync.Mutex
+	m  map[string]*pendingApproval
+}{m: map[string]*pendingApproval{}}
+
+// askApproval returns the verdict for one tool call, asking a human only when
+// the policy says to. It blocks for at most wait.
+func askApproval(ctx context.Context, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait time.Duration) (approval.Decision, string) {
+	raw, matched := pol.Decide(req)
+	switch approval.Apply(mode, raw, matched) {
+	case approval.Allow:
+		return approval.Allow, ""
+	case approval.Deny:
+		return approval.Deny, fmt.Sprintf("herrscher: %s was denied by policy", describeRequest(req))
+	}
+
+	p := &pendingApproval{
+		id:      newApprovalID(),
+		session: session,
+		req:     req,
+		asked:   time.Now(),
+		answer:  make(chan approvalVerdict, 1),
+	}
+	approvals.mu.Lock()
+	approvals.m[p.id] = p
+	approvals.mu.Unlock()
+	defer func() {
+		approvals.mu.Lock()
+		delete(approvals.m, p.id)
+		approvals.mu.Unlock()
+	}()
+
+	AskApprovalOn(ctx, session, approvalPrompt(req), p.id)
+
+	select {
+	case v := <-p.answer:
+		if v.decision == approval.Allow {
+			return approval.Allow, ""
+		}
+		reason := v.reason
+		if reason == "" {
+			reason = fmt.Sprintf("herrscher: %s was denied by the operator", describeRequest(req))
+		}
+		return approval.Deny, reason
+	case <-time.After(wait):
+		return approval.Deny, fmt.Sprintf("herrscher: nobody answered within %s, so %s was denied", wait, describeRequest(req))
+	case <-ctx.Done():
+		return approval.Deny, fmt.Sprintf("herrscher: the wait for approval ended, so %s was denied", describeRequest(req))
+	}
+}
+
+// answerApproval settles a waiting request, reporting whether one was waiting.
+func answerApproval(id string, d approval.Decision, reason string) bool {
+	approvals.mu.Lock()
+	p := approvals.m[id]
+	approvals.mu.Unlock()
+	if p == nil {
+		return false
+	}
+	select {
+	case p.answer <- approvalVerdict{decision: d, reason: reason}:
+	default: // already answered; the first answer stands
+	}
+	return true
+}
+
+// pendingApprovals lists what is waiting, for `approve list`.
+func pendingApprovals() []PendingApproval {
+	approvals.mu.Lock()
+	defer approvals.mu.Unlock()
+	out := make([]PendingApproval, 0, len(approvals.m))
+	for _, p := range approvals.m {
+		out = append(out, PendingApproval{
+			ID:      p.id,
+			Session: p.session,
+			Tool:    p.req.Tool,
+			Subject: clip(p.req.Subject),
+			Age:     time.Since(p.asked).Truncate(time.Second),
+		})
+	}
+	return out
+}
+
+// answerApprovalPick settles a request from a routed select-menu value, and
+// reports whether the value was one at all.
+func answerApprovalPick(value string) bool {
+	rest, ok := strings.CutPrefix(value, approvalPickPrefix)
+	if !ok {
+		return false
+	}
+	id, verdict, ok := strings.Cut(rest, ":")
+	if !ok {
+		return true // shaped like ours but unusable: swallow it rather than let it reach a backend
+	}
+	d := approval.Deny
+	if verdict == string(approval.Allow) {
+		d = approval.Allow
+	}
+	answerApproval(id, d, "")
+	return true
+}
+
+func newApprovalID() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// A collision here costs one misrouted answer, and the alternative is
+		// refusing to ask at all. Time is unique enough at this rate.
+		return fmt.Sprintf("%x", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// describeRequest names a request in one line, for the model.
+func describeRequest(req approval.Request) string {
+	if req.Subject == "" {
+		return req.Tool
+	}
+	return req.Tool + "(" + clip(req.Subject) + ")"
+}
+
+// approvalPrompt is what a human reads.
+func approvalPrompt(req approval.Request) string {
+	return "allow " + describeRequest(req) + "?"
+}
+
+// clip bounds model-written text and flattens it to one line: it is rendered
+// into a chat menu and a terminal, neither of which should be handed an
+// arbitrary number of newlines by a model.
+func clip(s string) string {
+	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r", " "), "\n", " ")
+	r := []rune(s)
+	if len(r) > subjectMaxLen {
+		return string(r[:subjectMaxLen]) + "…"
+	}
+	return string(r)
+}
+
+// approvalChoices are the two answers, encoded so a pick routes back here.
+func approvalChoices(id string) []contracts.Choice {
+	return []contracts.Choice{
+		{Label: "allow", Value: approvalPickPrefix + id + ":allow"},
+		{Label: "deny", Value: approvalPickPrefix + id + ":deny"},
+	}
+}

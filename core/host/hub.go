@@ -56,6 +56,13 @@ type hub struct {
 	// registry it describes; nil for the operator CLI, which has none.
 	contributedKinds map[string]bool
 
+	// instanceID namespaces this daemon's sockets. goLive needs it to derive
+	// the per-session command socket path, which is what tells the daemon a
+	// connection came from that session. Set in RunHub beside coordinator and
+	// eventPublisher, for the same reason: newHub predates it and its test
+	// callers do not have one to give.
+	instanceID string
+
 	dispatchMu sync.Mutex // serializes operator commands (and their reconcile)
 	mu         sync.Mutex
 	live       map[string]liveSession // session name → owned RunSession lifetime
@@ -205,6 +212,12 @@ func (h *hub) reconcile() {
 // the non-reentrant mutation lock across that turn would deadlock. Nested typed
 // mutations still acquire dispatchMu themselves and perform their own reconcile.
 func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
+	// Who is asking decides before what is asked. Every daemon-side entry point
+	// funnels here, so this is the one place the answer has to be right.
+	if err := h.authorize(ctx, args); err != nil {
+		return "", err
+	}
+
 	// A seed turn may synchronously emit a coordination trailer. Delegate then
 	// re-enters this hub through Create, which owns dispatchMu for its actual
 	// state mutation. Do not hold the same non-reentrant mutex around the outer

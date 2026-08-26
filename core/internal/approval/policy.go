@@ -36,7 +36,8 @@ func severity(d Decision) int {
 
 // Rule is one line of policy: a decision, the tool it speaks about, and a glob
 // the tool's subject must match. Tool "*" is any tool; an empty pattern is any
-// subject.
+// subject. In a pattern, * is any run of characters and ? is exactly one byte,
+// so ? does not match an accented or non-Latin character on its own (see glob).
 type Rule struct {
 	Decision Decision
 	Tool     string
@@ -164,9 +165,15 @@ func Apply(m Mode, d Decision, matched bool) Decision {
 }
 
 // glob matches pattern against s, where * stands for any run of characters,
-// path separators included. Two pointers with one backtrack mark rather than a
-// regexp: the subject is model-written text, and a pattern like "*a*a*a*" must
-// not be a way to make the daemon think for a second per tool call.
+// path separators included, and ? for exactly one byte. Byte and not character:
+// `git ?ush` matches `git push`, while `caf?` does not match `café`, whose last
+// character is two bytes. A rule meant to cover accented or non-Latin text
+// wants * there. Everything else in the pattern is literal, escaping included:
+// there is no way to ask for a literal * or ?.
+//
+// Two pointers with one backtrack mark rather than a regexp: the subject is
+// model-written text, and a pattern like "*a*a*a*" must not be a way to make
+// the daemon think for a second per tool call.
 func glob(pattern, s string) bool {
 	var si, pi, star, mark int
 	star = -1

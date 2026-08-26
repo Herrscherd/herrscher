@@ -97,9 +97,9 @@ func parseMCP(cmdline string) (name string, srv mcpServer, ok bool) {
 // worktree is disposable and isolated, so a permissive mode costs nothing there.
 //
 // It is not the last word on what a tool call may do, either: what reaches
-// outside that worktree is the approval policy's business, and materializing
-// this file into a session that asks for one adds a PreToolUse hook to it,
-// which is asked before any of these permissions apply.
+// outside that worktree is the approval policy's business. Materializing this
+// file into a session adds a PreToolUse hook to it unless that session asked
+// for `bypass`, and the hook is asked before any of these permissions apply.
 func buildSettings(serverName string) ([]byte, error) {
 	var allow []string
 	if serverName != "" {

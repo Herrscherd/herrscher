@@ -10,8 +10,10 @@ import (
 )
 
 // The daemon resolves this one itself, carrying the turn identity it already
-// settled on; forwarding it twice would hand the daemon a different turn.
-var forwardedLocally = map[string]bool{"seed": true}
+// settled on; forwarding it twice would hand the daemon a different turn. The
+// hook is the mirror image: it must run in the process the vendor spawned,
+// because the payload it answers is on THAT process's stdin.
+var forwardedLocally = map[string]bool{"seed": true, "hook": true}
 
 // daemonOnly names the verbs only a running daemon can answer, keyed on the
 // full command path so a future verb that happens to share a last word is not

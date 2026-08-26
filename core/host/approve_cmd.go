@@ -20,7 +20,7 @@ import (
 // the TAGS, backend, cmd and host files its home already carries.
 const approvalsFile = "APPROVALS"
 
-// addApproveCommands registers the approve verbs: five for an operator, one for
+// addApproveCommands registers the approve verbs: five for an operator, two for
 // a machine. Like host and schedule, they are neutral argv, so a chat gateway
 // binds them as they are.
 func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store) error {
@@ -154,6 +154,19 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 				Reason   string `json:"reason,omitempty"`
 			}{Decision: string(d), Reason: reason})
 			return string(b), err
+		})); err != nil {
+		return err
+	}
+
+	if err := reg.Add(contracts.New("approve", "hook").
+		Help("machine verb: read a PreToolUse payload on stdin and answer it").
+		Do(func(ctx context.Context, _ contracts.Input) (string, error) {
+			// Runs in the short-lived process the vendor spawned, never in the
+			// daemon: it is the caller that must reach the command socket, and
+			// the payload it answers is on that process's own stdin.
+			var out strings.Builder
+			RunApprovalHook(ctx, os.Stdin, &out, os.Stderr)
+			return strings.TrimRight(out.String(), "\n"), nil
 		})); err != nil {
 		return err
 	}

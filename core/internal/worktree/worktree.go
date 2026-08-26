@@ -53,11 +53,16 @@ func (w *Worktreer) pathIn(repo, dir, name string) string {
 
 // Branch returns the git branch backing a logical session name, namespaced by
 // instanceID when set.
-func (w *Worktreer) Branch(name string) string {
-	if w.instanceID == "" {
+func (w *Worktreer) Branch(name string) string { return branchFor(w.instanceID, name) }
+
+// branchFor is the pure name calculation. It is string work, so the remote
+// façade answers it here rather than paying a round trip to be told a name it
+// can compute.
+func branchFor(instanceID, name string) string {
+	if instanceID == "" {
 		return "session/" + name
 	}
-	return "session/" + w.instanceID + "/" + name
+	return "session/" + instanceID + "/" + name
 }
 
 // Create adds a worktree on branch session/<name> inside repo. When base is

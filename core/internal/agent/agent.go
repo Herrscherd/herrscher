@@ -26,6 +26,7 @@ const (
 	tagsFile     = "TAGS"
 	backendFile  = "backend"
 	cmdFile      = "cmd"
+	hostFile     = "host"
 )
 
 // worktreeToken is replaced with the absolute worktree path when an agent is
@@ -63,6 +64,10 @@ type Agent struct {
 	Tags    []string // capability tokens from <home>/TAGS (nil when absent), for host routing
 	Backend string   // backend vendor from <home>/backend, empty when absent
 	Cmd     string   // default invocation from <home>/cmd, empty when absent
+	// Host is the default place this agent's sessions run, from <home>/host.
+	// Empty = this machine. A session's explicit --host still wins: this is a
+	// default, not a rule.
+	Host string
 }
 
 // Materialize provisions the agent into a session worktree by writing the files
@@ -82,14 +87,26 @@ type Agent struct {
 //
 // Any worktreeToken in a source file is replaced with the worktree path.
 func (a Agent) Materialize(worktree string) error {
-	if err := ensureLocalGitExcludes(worktree); err != nil {
+	if err := EnsureGitExcludes(worktree); err != nil {
 		return err
 	}
-	claudeDir := filepath.Join(worktree, ".claude")
+	return a.MaterializeInto(worktree, worktree)
+}
+
+// MaterializeInto writes the agent's provisioning files into dst, substituting
+// worktreePath wherever the worktree token appears. Materialize is the case
+// where the two are the same directory; they differ when the files are staged
+// here to be shipped to a worktree on another machine, where the path written
+// into them must be the one over there.
+//
+// It does not touch git: the local excludes belong with the repository, which
+// in the staged case is not on this machine.
+func (a Agent) MaterializeInto(dst, worktreePath string) error {
+	claudeDir := filepath.Join(dst, ".claude")
 	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
 		return fmt.Errorf("create .claude dir: %w", err)
 	}
-	codexDir := filepath.Join(worktree, ".codex")
+	codexDir := filepath.Join(dst, ".codex")
 	if err := os.MkdirAll(codexDir, 0o755); err != nil {
 		return fmt.Errorf("create .codex dir: %w", err)
 	}
@@ -102,7 +119,7 @@ func (a Agent) Materialize(worktree string) error {
 		src, dst string
 		jsonDst  bool
 	}{
-		{filepath.Join(a.Home, mcpFile), filepath.Join(worktree, ".mcp.json"), true},
+		{filepath.Join(a.Home, mcpFile), filepath.Join(dst, ".mcp.json"), true},
 		{filepath.Join(a.Home, settingsFile), filepath.Join(claudeDir, "settings.json"), true},
 	}
 	for _, c := range copies {
@@ -110,9 +127,9 @@ func (a Agent) Materialize(worktree string) error {
 		if err != nil {
 			return fmt.Errorf("read %s: %w", filepath.Base(c.src), err)
 		}
-		repl := worktree
+		repl := worktreePath
 		if c.jsonDst {
-			repl = jsonStringInner(worktree)
+			repl = jsonStringInner(worktreePath)
 		}
 		out := strings.ReplaceAll(string(buf), worktreeToken, repl)
 		if err := os.WriteFile(c.dst, []byte(out), 0o644); err != nil {
@@ -126,7 +143,7 @@ func (a Agent) Materialize(worktree string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", soulFile, err)
 	}
-	soulOut := strings.ReplaceAll(string(soul), worktreeToken, worktree)
+	soulOut := strings.ReplaceAll(string(soul), worktreeToken, worktreePath)
 	claudeMd, agentsMd := soulOut, soulOut
 
 	userRaw, uErr := os.ReadFile(filepath.Join(a.Home, userFile))
@@ -134,7 +151,7 @@ func (a Agent) Materialize(worktree string) error {
 		return fmt.Errorf("read %s: %w", userFile, uErr)
 	}
 	if uErr == nil {
-		userOut := strings.ReplaceAll(string(userRaw), worktreeToken, worktree)
+		userOut := strings.ReplaceAll(string(userRaw), worktreeToken, worktreePath)
 		if err := os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), 0o644); err != nil {
 			return fmt.Errorf("write .claude/USER.md: %w", err)
 		}
@@ -148,7 +165,7 @@ func (a Agent) Materialize(worktree string) error {
 	if err := os.WriteFile(filepath.Join(claudeDir, "CLAUDE.md"), []byte(claudeMd), 0o644); err != nil {
 		return fmt.Errorf("write .claude/CLAUDE.md: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(worktree, "AGENTS.md"), []byte(agentsMd), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dst, "AGENTS.md"), []byte(agentsMd), 0o644); err != nil {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
 
@@ -156,7 +173,7 @@ func (a Agent) Materialize(worktree string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", mcpFile, err)
 	}
-	codexConfig, err := renderCodexMCP(mcp, worktree)
+	codexConfig, err := renderCodexMCP(mcp, worktreePath)
 	if err != nil {
 		return err
 	}
@@ -166,10 +183,12 @@ func (a Agent) Materialize(worktree string) error {
 	return nil
 }
 
-// ensureLocalGitExcludes keeps Herrscher-owned materialization out of Git's
+// EnsureGitExcludes keeps Herrscher-owned materialization out of Git's
 // clean-worktree verdict without changing the project's committed .gitignore.
 // Non-Git directories are valid shared-session targets and need no exclusion.
-func ensureLocalGitExcludes(worktree string) error {
+// Exported because on a remote host it runs where the repository is, from the
+// worktree verb, rather than beside the file writes.
+func EnsureGitExcludes(worktree string) error {
 	inside, err := exec.Command("git", "-C", worktree, "rev-parse", "--is-inside-work-tree").Output()
 	if err != nil || strings.TrimSpace(string(inside)) != "true" {
 		return nil

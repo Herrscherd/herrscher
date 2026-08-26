@@ -26,6 +26,7 @@ func operatorReg(t *testing.T, ran *[]string) *cli.Registry {
 			Param("force", "kill it", false).Do(local("close")),
 		contracts.New("session", "seed").Param("name", "session name", true).
 			Param("task", "opening task", true).Do(local("seed")),
+		contracts.New("host", "add").Param("name", "host name", true).Do(local("host add")),
 		contracts.New("memory", "record").Param("key", "node key", true).Do(local("record")),
 	} {
 		if err := reg.Add(c); err != nil {
@@ -42,7 +43,7 @@ func TestASessionVerbIsDecidedByTheRunningDaemon(t *testing.T) {
 	var ran []string
 	var sent []string
 	reg := operatorReg(t, &ran)
-	forwardSessionCommands(reg, "inst", func(_ context.Context, path string, argv []string) (string, bool, error) {
+	forwardDaemonOwnedCommands(reg, "inst", func(_ context.Context, path string, argv []string) (string, bool, error) {
 		sent = argv
 		if path == "" {
 			t.Error("the forward got no socket path")
@@ -66,12 +67,36 @@ func TestASessionVerbIsDecidedByTheRunningDaemon(t *testing.T) {
 	}
 }
 
+// Host records live in the same file as the sessions, so they have the same
+// problem: a host added here would be dropped by the daemon's next save, and the
+// session that named it would refuse for want of a machine just registered.
+func TestAHostVerbIsDecidedByTheRunningDaemon(t *testing.T) {
+	var ran []string
+	var sent []string
+	reg := operatorReg(t, &ran)
+	forwardDaemonOwnedCommands(reg, "inst", func(_ context.Context, _ string, argv []string) (string, bool, error) {
+		sent = argv
+		return "registered build1", true, nil
+	})
+
+	out, err := reg.Dispatch(context.Background(), []string{"host", "add", "--name", "build1"})
+	if err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	if out != "registered build1" || len(ran) != 0 {
+		t.Fatalf("out = %q ran = %v, want the daemon to decide", out, ran)
+	}
+	if got := strings.Join(sent, " "); got != "host add --name build1" {
+		t.Fatalf("argv = %q, want the invocation rebuilt as typed", got)
+	}
+}
+
 // No daemon is a normal state — a one-shot install, or the CLI used before
 // `service install`. The dial misses and the command runs here, as it always did.
 func TestWithNoDaemonListeningTheCommandStillRuns(t *testing.T) {
 	var ran []string
 	reg := operatorReg(t, &ran)
-	forwardSessionCommands(reg, "inst", func(context.Context, string, []string) (string, bool, error) {
+	forwardDaemonOwnedCommands(reg, "inst", func(context.Context, string, []string) (string, bool, error) {
 		return "", false, nil
 	})
 
@@ -89,7 +114,7 @@ func TestWithNoDaemonListeningTheCommandStillRuns(t *testing.T) {
 func TestADaemonFailureIsNotRetriedLocally(t *testing.T) {
 	var ran []string
 	reg := operatorReg(t, &ran)
-	forwardSessionCommands(reg, "inst", func(context.Context, string, []string) (string, bool, error) {
+	forwardDaemonOwnedCommands(reg, "inst", func(context.Context, string, []string) (string, bool, error) {
 		return "", true, errors.New("no session \"gone\"")
 	})
 
@@ -106,7 +131,7 @@ func TestADaemonFailureIsNotRetriedLocally(t *testing.T) {
 func TestSeedAndOtherNamespacesAreLeftAlone(t *testing.T) {
 	var ran []string
 	reg := operatorReg(t, &ran)
-	forwardSessionCommands(reg, "inst", func(context.Context, string, []string) (string, bool, error) {
+	forwardDaemonOwnedCommands(reg, "inst", func(context.Context, string, []string) (string, bool, error) {
 		t.Error("this command must not be forwarded here")
 		return "", true, nil
 	})
@@ -135,7 +160,7 @@ func TestTheWholeInvocationSurvivesTheTrip(t *testing.T) {
 		Do(func(context.Context, contracts.Input) (string, error) { return "", nil })); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
-	forwardSessionCommands(reg, "inst", func(_ context.Context, _ string, argv []string) (string, bool, error) {
+	forwardDaemonOwnedCommands(reg, "inst", func(_ context.Context, _ string, argv []string) (string, bool, error) {
 		sent = argv
 		return "ok", true, nil
 	})

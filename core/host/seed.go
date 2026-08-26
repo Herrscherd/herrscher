@@ -85,7 +85,7 @@ func runOneShotSeedCommand(ctx context.Context, st *state.State, name, task, tur
 		if runtime.timeout > 0 {
 			argv = append(argv, "--timeout", runtime.timeout.String())
 		}
-		if reply, handled, err := forward(ctx, CommandSocketPath(instID), argv); handled {
+		if reply, handled, err := forward(ctx, commandSocketTarget(instID), argv); handled {
 			return reply, err
 		}
 	}

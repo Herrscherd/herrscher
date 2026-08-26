@@ -57,6 +57,7 @@ type CreateSpec struct {
 	MCP     string
 	Backend string
 	Cmd     string
+	Host    string
 	Tags    []string
 }
 
@@ -157,6 +158,14 @@ func readCmd(home string) string {
 	return strings.TrimSpace(string(buf))
 }
 
+func readHost(home string) string {
+	buf, err := os.ReadFile(filepath.Join(home, hostFile))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(buf))
+}
+
 // Create writes a new agent home and seeds its source files. It errors if
 // the name is unsafe or the agent already exists.
 func (s *Store) Create(spec CreateSpec) (Agent, error) {
@@ -229,6 +238,12 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 			data []byte
 		}{cmdFile, []byte(spec.Cmd)})
 	}
+	if spec.Host != "" {
+		files = append(files, struct {
+			name string
+			data []byte
+		}{hostFile, []byte(spec.Host)})
+	}
 	if len(spec.Tags) > 0 {
 		files = append(files, struct {
 			name string
@@ -241,7 +256,7 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 		}
 	}
 	created = true
-	return Agent{Name: name, Home: home, Backend: spec.Backend, Cmd: spec.Cmd, Tags: readTags(home)}, nil
+	return Agent{Name: name, Home: home, Backend: spec.Backend, Cmd: spec.Cmd, Host: spec.Host, Tags: readTags(home)}, nil
 }
 
 // SetSoul overwrites <home>/SOUL.md for an existing agent. It never creates a
@@ -285,7 +300,7 @@ func (s *Store) Get(name string) (Agent, bool) {
 	if err != nil || !info.IsDir() {
 		return Agent{}, false
 	}
-	return Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home)}, true
+	return Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Host: readHost(home)}, true
 }
 
 // List returns every agent home under the store root, sorted by name. A missing
@@ -304,7 +319,7 @@ func (s *Store) List() ([]Agent, error) {
 			continue
 		}
 		home := filepath.Join(s.root, e.Name())
-		out = append(out, Agent{Name: e.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home)})
+		out = append(out, Agent{Name: e.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Host: readHost(home)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil

@@ -233,6 +233,15 @@ func runAgent(ctx context.Context, args []string) error {
 	return runRegistryVerb(ctx, "agent", args)
 }
 
+// runHost dispatches the operator `host` commands (add/list/check/provision/rm)
+// through the same registry the daemon serves. A live daemon answers them
+// itself: host records live in state.json, which it rewrites whole. Without one
+// they run here, which is how a machine is registered before anything is
+// serving.
+func runHost(ctx context.Context, args []string) error {
+	return runRegistryVerb(ctx, "host", args)
+}
+
 // runMemory dispatche les commandes opérateur `memory` (locate/forget/record)
 // à travers le même registre CLI que la daemon sert.
 func runMemory(ctx context.Context, args []string) error {

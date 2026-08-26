@@ -53,6 +53,23 @@ func TestGrantRefusesARoleNobodyDefines(t *testing.T) {
 	}
 }
 
+// `role grant chat:1234` with the role forgotten is the slip this verb invites,
+// since the principal alone is a complete-looking command. The answer has to be
+// the missing word and not a quoted empty string.
+func TestGrantWithNoRoleSaysWhichWordIsMissing(t *testing.T) {
+	reg, _ := roleRegistry(t)
+	_, err := reg.Dispatch(context.Background(), []string{"role", "grant", "chat:1"})
+	if err == nil {
+		t.Fatal("a grant with no role must be refused")
+	}
+	if strings.Contains(err.Error(), `""`) {
+		t.Fatalf("refusal %q quotes the absence instead of naming what to type", err)
+	}
+	if !strings.Contains(err.Error(), "role") || !strings.Contains(err.Error(), "owner") {
+		t.Fatalf("refusal %q must ask for a role and list the ones that exist", err)
+	}
+}
+
 // agent is what the entry point answers, and local is the daemon's own socket.
 // Writing either into the table would be claiming something the table cannot
 // change.

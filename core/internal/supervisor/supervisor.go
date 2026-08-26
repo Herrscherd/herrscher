@@ -332,6 +332,7 @@ func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) (*ex
 		cmd.Dir = sess.Worktree
 	}
 	cmd.Env = append(os.Environ(), s.bridgeEnv...)
+	cmd.Env = append(cmd.Env, control.SessionVar+"="+sess.Name)
 	return cmd, nil
 }
 
@@ -422,6 +423,9 @@ func (s *Supervisor) prepareRemote(ctx context.Context, sess state.Session) *exe
 // last one is not computable over there, since the path is per session; without
 // it `herrscher <verb>` would dial a path nothing listens on, and the
 // <capabilities> block would be a promise the agent cannot keep.
+//
+// The session name rides along too, the same one the local launch exports, so
+// the approval hook over there can name the session it is asking for.
 func (s *Supervisor) remoteEnvBlock(sess state.Session) string {
 	env := map[string]string{}
 	for _, kv := range s.bridgeEnv {
@@ -433,6 +437,7 @@ func (s *Supervisor) remoteEnvBlock(sess state.Session) string {
 		env["HERRSCHER_INSTANCE_ID"] = s.instanceID
 	}
 	env["TMPDIR"] = "/tmp"
+	env[control.SessionVar] = sess.Name
 	if s.cmdSocketLocal != "" {
 		env[control.CommandSocketVar] = control.RemoteCommandSocketPath(sess.Name)
 	}

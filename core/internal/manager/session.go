@@ -11,6 +11,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -512,6 +513,15 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if hostName == state.LocalHost {
 		hostName = ""
 	}
+	// Refused here rather than at the first tool call: a mode nobody can honour
+	// is an operator typo, and it costs nothing to say so before a worktree
+	// exists.
+	mode := strings.TrimSpace(in.Get("approvals"))
+	switch approval.Mode(mode) {
+	case "", approval.ModeAsk, approval.ModeBypass, approval.ModeStrict:
+	default:
+		return "", fmt.Errorf("unknown approval mode %q: ask, bypass or strict", mode)
+	}
 	// Whether the host can carry a new session at all is asked here, before
 	// anything is created: a refusal an operator has to act on is worth more at
 	// the top of a create than halfway through one.
@@ -613,7 +623,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		if !cmdExplicit && a.Cmd != "" {
 			cmd = a.Cmd
 		}
-		if err := h.materializeOn(ctx, hostName, a, worktree); err != nil {
+		if err := h.materializeOn(ctx, hostName, a, worktree, mode != string(approval.ModeBypass)); err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("provision agent %q: %w", agentName, err)
 		}
@@ -653,6 +663,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}
+	sess.Approvals = mode
 	if err := h.st.AddSession(sess); err != nil {
 		return "", fmt.Errorf("persist: %w", err)
 	}

@@ -137,7 +137,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.Materialize(ctx, "e2e", a, path); err != nil {
+	if err := p.Materialize(ctx, "e2e", a, path, true); err != nil {
 		t.Fatalf("materialize on the host: %v", err)
 	}
 	soul, err := capture(ctx, runnerFor(provisioned), "cat", path+"/.claude/CLAUDE.md")
@@ -146,6 +146,19 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	}
 	if !strings.Contains(soul, "# E2E") {
 		t.Fatalf("the agent's soul must land in the remote worktree, got %q", soul)
+	}
+	// The hook must name the binary of the machine the session runs on: the
+	// daemon's own path means nothing over there.
+	settings, err := capture(ctx, runnerFor(provisioned), "cat", path+"/.claude/settings.json")
+	if err != nil {
+		t.Fatalf("read the materialized settings: %v", err)
+	}
+	h, ok := st.FindHost("e2e")
+	if !ok {
+		t.Fatal("the host we just provisioned must be findable")
+	}
+	if !strings.Contains(settings, h.Bin+" approve hook") {
+		t.Fatalf("the hook must invoke the host's own herrscher (%s), got %q", h.Bin, settings)
 	}
 
 	if err := wt.Remove(repo, "demo", true); err != nil {

@@ -50,7 +50,7 @@ func TestStagedAgentTarCarriesTheFilesAndTheRemotePath(t *testing.T) {
 	}
 	// The staged settings name the far machine's binary, not this daemon's: the
 	// hook runs where the session runs.
-	if !strings.Contains(seen[".claude/settings.json"], "/far/bin/herrscher approve hook") {
+	if !strings.Contains(seen[".claude/settings.json"], "'/far/bin/herrscher' approve hook") {
 		t.Fatalf("the far side's binary did not reach the tar: %q", seen[".claude/settings.json"])
 	}
 	// Paths are relative: an absolute member would let a tar decide where it

@@ -157,7 +157,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	if !ok {
 		t.Fatal("the host we just provisioned must be findable")
 	}
-	if !strings.Contains(settings, h.Bin+" approve hook") {
+	if !strings.Contains(settings, "'"+h.Bin+"' approve hook") {
 		t.Fatalf("the hook must invoke the host's own herrscher (%s), got %q", h.Bin, settings)
 	}
 

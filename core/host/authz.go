@@ -103,8 +103,8 @@ var sessionArg = map[string]string{
 // session and appears in neither table fails that test instead of quietly
 // escaping the scope check.
 var notASession = map[string]bool{
-	// The session about to exist, not one the caller acts on. An agent that may
-	// delegate has to be able to name its child.
+	// The session about to exist, not one the caller acts on. No scope check
+	// could mean anything on a name nothing answers to yet.
 	"session create name": true,
 	// A durable companion agent, which is a catalog record and not a running
 	// session. Sessions are started FROM one, so the two share a vocabulary and
@@ -154,10 +154,11 @@ func (h *hub) authorize(ctx context.Context, args []string) error {
 	return errors.New(why)
 }
 
-// roleNames reads the assignment table, warning once per unknown role name it
-// meets. An unreadable or nonsensical table is not a decision: it falls back to
-// the default behaviour and says so on the daemon's stderr, because a file that
-// locks the owner out of their own daemon is worse than the hole it closes.
+// roleNames reads the assignment table, warning once about each principal whose
+// role name it does not know. An unreadable or nonsensical table is not a
+// decision: it falls back to the default behaviour and says so on the daemon's
+// stderr, because a file that locks the owner out of their own daemon is worse
+// than the hole it closes.
 func (h *hub) roleNames() map[string]string {
 	if h.st == nil {
 		// A hub with no state has no table to read. It only happens in tests
@@ -168,7 +169,13 @@ func (h *hub) roleNames() map[string]string {
 	}
 	names := h.st.RoleNames()
 	for principal, name := range names {
-		if !authz.Known(name) {
+		if authz.Known(name) {
+			continue
+		}
+		// Once per principal, not once per dispatch. This runs on every command
+		// the daemon answers, and a line repeated at the rate of the traffic is
+		// a line an operator learns to scroll past.
+		if _, said := h.warnedRoles.LoadOrStore(principal+"\x00"+name, struct{}{}); !said {
 			fmt.Fprintf(os.Stderr, "herrscher serve: %s holds role %q, which herrscher does not define; treating it as `observer`\n", principal, name)
 		}
 	}

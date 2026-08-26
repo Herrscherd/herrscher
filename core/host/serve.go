@@ -228,7 +228,8 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	// registry has no contributed verbs; that child runs without the block until
 	// the daemon respawns it, which beats advertising a list missing the gateways.)
 	bridgeEnv := GatewayEnvPairs()
-	if pair := CapabilityEnvPair(reg.Specs()); pair != "" {
+	kinds := contributedKinds(o.ContributedCommands)
+	if pair := CapabilityEnvPair(reg.Specs(), func(family string) bool { return kinds[family] }); pair != "" {
 		bridgeEnv = append(bridgeEnv, pair)
 	}
 	sup.SetBridgeEnv(bridgeEnv)
@@ -243,7 +244,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 		deps.handler.SetTerminalAdmin(ta)
 	}
 	hb := newHub(ctx, st, sup, gws, partDir, reg, h.Metrics())
-	hb.contributedKinds = contributedKinds(o.ContributedCommands)
+	hb.contributedKinds = kinds
 	hb.instanceID = instID
 	// Concrete budget-cap enforcement: built from the manager Handler (owner of
 	// aggregateUsage/cohortTotals + state.State), injected via the host's private

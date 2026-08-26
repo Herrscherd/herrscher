@@ -113,7 +113,7 @@ var definitions = map[Role]definition{
 	RoleAgent: {
 		allow: []string{
 			"commands", "whoami",
-			"session send", "session seed", "session create",
+			"session send", "session seed",
 			"session list", "session info", "session log", "session who", "session scrollback",
 			"agent list", "agent show",
 			"models list",
@@ -131,10 +131,22 @@ var definitions = map[Role]definition{
 		// `approve ask` with it, which is the one approve verb an agent has to
 		// reach. A later approve verb is still refused: it reaches no allow
 		// entry, and an allow list refuses what it does not name.
+		//
+		// session create is denied for a reason worth spelling out, because
+		// refusing an agent the right to open a session reads like refusing it
+		// the right to delegate, and it is not that. A session opened from argv
+		// carries whatever flags the argv chose: with no --agent nothing
+		// materializes the approval hook, and `--approvals bypass` says so out
+		// loud. Either one hands the agent a second session where its own policy
+		// does not apply, which would make every deny above decorative. What
+		// stays open is the trailer: `⟢ delegate:` reaches the coordinator, which
+		// takes a registered agent and that agent's own command, so the worker it
+		// opens is policed exactly like the lead that asked for it.
 		deny: []string{
 			"approve list", "approve allow", "approve deny", "approve rule", "approve mode",
 			"host *", "role *", "schedule *", "service *", "set *", "plugin *",
 			"skill approve", "memory forget",
+			"session create",
 			"session close", "session archive", "session resume", "session interrupt",
 			"session switch", "session set-budget",
 		},
@@ -193,12 +205,23 @@ func permits(role Role, verb string, contributed bool) bool {
 	return false
 }
 
+// agentHints answer the refusals where "ask your operator" is the wrong advice,
+// because the agent has another way to the same end and would otherwise stop at
+// a door that is open beside it.
+var agentHints = map[string]string{
+	"session create": "To delegate, end your turn with `⟢ delegate: <agent>` and the task: " +
+		"the worker that opens runs a registered agent, so it answers to a policy the way you do.",
+}
+
 // refusal writes the message. An agent's is read by a model as a tool result,
 // so it says what to do next instead of naming a role the model cannot obtain.
 // A human's names the smallest role that would run the verb, so an operator
 // knows what to grant and not only what was refused.
 func refusal(r Request, role Role, verb string) string {
 	if role == RoleAgent {
+		if hint, ok := agentHints[verb]; ok {
+			return fmt.Sprintf("herrscher: `%s` is not something a session may run. %s", verb, hint)
+		}
 		return fmt.Sprintf(
 			"herrscher: `%s` is not something a session may run. Ask your operator to run it for you.", verb)
 	}
@@ -270,9 +293,9 @@ func GrantableRoles() []string {
 }
 
 // Known reports whether name is a role this package defines at all, grantable
-// or not. The daemon calls it when it loads the table, so a name nobody defines
-// is warned about once at boot rather than falling back silently at every
-// dispatch.
+// or not. The daemon calls it when it reads the table, and says once what it
+// found: a name nobody defines falls back to observer, and falling back in
+// silence is how a typo becomes a permission nobody can explain.
 func Known(name string) bool {
 	_, ok := definitions[Role(name)]
 	return ok

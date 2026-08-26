@@ -63,6 +63,12 @@ type hub struct {
 	// callers do not have one to give.
 	instanceID string
 
+	// warnedRoles remembers which unknown role names have already been said, so
+	// a table nobody fixed costs one line and not one line per command. Its own
+	// map rather than a field under mu, because it is read on the dispatch path
+	// and has nothing to do with the live session set.
+	warnedRoles sync.Map
+
 	dispatchMu sync.Mutex // serializes operator commands (and their reconcile)
 	mu         sync.Mutex
 	live       map[string]liveSession // session name → owned RunSession lifetime

@@ -533,7 +533,10 @@ func (s *State) RemoveApprovalRule(rendered string) (bool, error) {
 // this file returns, instead of keeping a second copy of it that could drift.
 const DefaultApprovalWait = 5 * time.Minute
 
-// ApprovalWait is the configured wait, or five minutes.
+// ApprovalWait is the configured wait, or five minutes. No verb writes the
+// field: it is edited by hand in state.json, so anything unparseable or
+// negative is answered with the default here rather than refused at a door
+// there is none of.
 func (s *State) ApprovalWait() time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -545,22 +548,6 @@ func (s *State) ApprovalWait() time.Duration {
 		return DefaultApprovalWait
 	}
 	return d
-}
-
-// SetApprovalTimeout records how long a request waits, refusing what it cannot
-// parse rather than storing a value that would silently fall back later.
-func (s *State) SetApprovalTimeout(d string) error {
-	parsed, err := time.ParseDuration(d)
-	if err != nil {
-		return fmt.Errorf("approval timeout %q: %w", d, err)
-	}
-	if parsed <= 0 {
-		return fmt.Errorf("approval timeout %q: must be positive", d)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.ApprovalTimeout = d
-	return s.saveLocked()
 }
 
 // SetSessionApprovals changes one session's approval mode and persists.

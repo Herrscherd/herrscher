@@ -79,6 +79,10 @@ func (s *Supervisor) SetInstanceID(id string) { s.instanceID = id }
 // only true if the socket followed. A capabilities block that lies is a bug, not
 // a limitation. Where it lands over there is per session, so the launch derives
 // it rather than taking it here.
+//
+// A local bridge is given this very path, since a session's children must reach
+// the daemon that started them and not the one the default state file happens
+// to name.
 func (s *Supervisor) SetCommandSocket(local string) { s.cmdSocketLocal = local }
 
 type supervisedRun struct {
@@ -333,6 +337,17 @@ func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) (*ex
 	}
 	cmd.Env = append(os.Environ(), s.bridgeEnv...)
 	cmd.Env = append(cmd.Env, control.SessionVar+"="+sess.Name)
+	// The socket this daemon actually listens on, stated rather than left to be
+	// derived. A short-lived process that finds nothing here falls back to the
+	// default state file, which is the wrong one under `serve --state <path>`:
+	// it would resolve another instance and dial a socket this daemon never
+	// bound, where at best nobody answers and at worst another daemon does,
+	// knowing nothing about this session. The approval hook runs once per tool
+	// call and allows whenever it cannot get an answer, so guessing wrong there
+	// is a policy that enforces nothing and says so to nobody.
+	if s.cmdSocketLocal != "" {
+		cmd.Env = append(cmd.Env, control.CommandSocketVar+"="+s.cmdSocketLocal)
+	}
 	return cmd, nil
 }
 

@@ -177,6 +177,13 @@ type Agent struct {
 // mechanism). Without a USER.md, CLAUDE.md and AGENTS.md are byte-identical
 // to SOUL.md.
 //
+// The settings file is the one that is not merely copied: a PreToolUse hook
+// calling this binary's `approve hook` is injected into it, which is what puts
+// the session's tool calls in front of the approval policy. It goes there and
+// nowhere else, so it binds Claude Code and not the other vendors materialized
+// beside it. MaterializeAs takes the binary to call and materializes no hook at
+// all when given none.
+//
 // Any worktreeToken in a source file is replaced with the worktree path.
 func (a Agent) Materialize(worktree string) error {
 	return a.MaterializeAs(worktree, SelfBin())

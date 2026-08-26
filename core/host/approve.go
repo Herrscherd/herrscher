@@ -35,18 +35,21 @@ const subjectMaxLen = 200
 // `approve ask` opens one of each per iteration, and nothing about a request
 // that nobody has answered yet makes the next one cheaper.
 //
-// Four per session, because a session is one agent talking to one human: Claude
-// Code can emit a small block of tool calls in parallel, so one is too few, and
-// past a handful the human is the queue and the session is already unusable.
-// Forty in total, an order of magnitude above it, is ten such sessions all at
-// their own limit: enough that a real fleet never meets it, small enough that
-// the goroutines, the connections and the chat posts stay countable.
+// Eight per session, because what has to fit is one parallel tool block and not
+// a human's patience: Claude Code emits a block of tool calls at once and each
+// one spawns its own hook, so in strict mode, where everything a rule does not
+// name is asked about, a session reading half a dozen files in one breath must
+// not have the tail of that block refused for a reason that has nothing to do
+// with the policy. Past a block's worth the agent is looping, not working.
+// Forty in total, five such blocks: enough that a real fleet never meets it,
+// small enough that the goroutines, the connections and the chat posts stay
+// countable.
 //
 // A request over either cap is refused rather than allowed. It is a decision
 // the daemon makes on purpose, not a failure of the hook to reach it, which is
 // the case that must always allow.
 const (
-	maxPendingPerSession = 4
+	maxPendingPerSession = 8
 	maxPendingApprovals  = 40
 )
 
@@ -194,10 +197,10 @@ func registerApproval(p *pendingApproval) (release func(), refusal string) {
 // configured duration cannot overflow into a negative that warns about nothing.
 //
 // It warns and does not cap. The wait is the operator's to choose, and a wait
-// quietly shortened to fit the vendor would be its own surprise. Written on
-// every ask that really waits and would run long, rather than once at startup,
-// because the wait is read from state at each ask and can change under a
-// running daemon.
+// quietly shortened to fit the vendor would be its own surprise. It is written
+// on the asks that really wait rather than once at startup, so it reaches the
+// operator beside the request it is about, and a daemon whose policy never asks
+// anything is never told about a wait nothing uses.
 func warnWaitOutlivesTheHook(w io.Writer, wait time.Duration) {
 	if wait <= agent.HookWait/2 {
 		return

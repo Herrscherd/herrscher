@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,7 +29,13 @@ func (f dispatcherFunc) Dispatch(ctx context.Context, argv []string) (string, er
 // is the one test that proves the pieces every other test checks in isolation
 // still line up when they are wired to each other.
 func TestHookThroughTheCommandSocket(t *testing.T) {
-	st, err := state.LoadState(filepath.Join(t.TempDir(), "state.json"))
+	// The wait comes off the state file, which is the only place it is written:
+	// three seconds so a test that nobody answers cannot sit for five minutes.
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte(`{"sessions":[],"approvalTimeout":"3s"}`), 0o644); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	st, err := state.LoadState(statePath)
 	if err != nil {
 		t.Fatalf("LoadState: %v", err)
 	}
@@ -37,9 +44,6 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 	}
 	if err := st.AddApprovalRule("ask Bash(git push*)"); err != nil {
 		t.Fatalf("AddApprovalRule: %v", err)
-	}
-	if err := st.SetApprovalTimeout("3s"); err != nil {
-		t.Fatalf("SetApprovalTimeout: %v", err)
 	}
 	reg := &cli.Registry{}
 	if err := addApproveCommands(reg, st, nil); err != nil {

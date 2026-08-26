@@ -14,10 +14,8 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
-// SessionVar is re-exported for callers already holding this package. It is
-// declared in control, next to the command-socket variable, because the
-// supervisor sets it and cannot import this package: core/host imports the
-// supervisor, not the other way round.
+// SessionVar is re-exported for callers already holding this package. See
+// control.SessionVar for why it is declared over there.
 const SessionVar = control.SessionVar
 
 // hookEvent is the one Claude Code event this hook answers. It is both what we

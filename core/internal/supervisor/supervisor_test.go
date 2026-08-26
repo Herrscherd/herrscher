@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -440,5 +441,43 @@ func TestBridgeCarriesTheSessionName(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("a bridge must know which session it is, or its hooks cannot say")
+	}
+}
+
+// The other half of what a hook needs: where to ask. Without it the hook falls
+// back to the default state file, which under `serve --state <path>` names
+// another instance and another socket, and a hook that reaches nobody allows.
+// So a daemon serving its own state would run a policy that decides nothing.
+func TestBridgeCarriesTheCommandSocket(t *testing.T) {
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s.SetCommandSocket("/tmp/herrscher-command-alt.sock")
+	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude"})
+	if err != nil {
+		t.Fatalf("bridgeCommand: %v", err)
+	}
+	var got string
+	for _, kv := range cmd.Env {
+		if v, ok := strings.CutPrefix(kv, control.CommandSocketVar+"="); ok {
+			got = v
+		}
+	}
+	if got != "/tmp/herrscher-command-alt.sock" {
+		t.Fatalf("%s = %q, want the socket this daemon serves", control.CommandSocketVar, got)
+	}
+}
+
+// A supervisor that was never told its socket says nothing rather than naming a
+// default path: an empty value would look like an answer to the hook, which
+// takes what it is given over resolving anything.
+func TestBridgeOmitsAnUnknownCommandSocket(t *testing.T) {
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude"})
+	if err != nil {
+		t.Fatalf("bridgeCommand: %v", err)
+	}
+	for _, kv := range cmd.Env {
+		if kv == control.CommandSocketVar+"=" {
+			t.Fatal("an empty command socket must not be exported")
+		}
 	}
 }

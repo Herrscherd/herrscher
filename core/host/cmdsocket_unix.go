@@ -7,6 +7,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+
+	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
 // CommandSocketPath is the daemon-level operator command socket.
@@ -16,6 +18,27 @@ func CommandSocketPath(instanceID string) string {
 		name = "herrscher-command-" + instanceID + ".sock"
 	}
 	return filepath.Join(os.TempDir(), name)
+}
+
+// SessionCommandSocketPath is the command socket one session's own processes
+// dial, distinct from the operator's.
+//
+// It is what tells the daemon who is calling. Locally the agent and the daemon
+// share a uid, so no secret the agent can read distinguishes it from the
+// operator: any token it could present, it could also have replayed. Where the
+// connection arrives is the one thing an agent does not get to author, because
+// the daemon chose which listener serves which caller.
+//
+// Locally that is a guardrail, not a wall: nothing stops a determined agent
+// from looking for the operator socket in the same directory. Remotely it is a
+// real boundary, since ssh forwards this session's socket and no other, so the
+// far machine has no path to anything else.
+func SessionCommandSocketPath(instanceID, session string) string {
+	name := "herrscher-command"
+	if instanceID != "" {
+		name += "-" + instanceID
+	}
+	return filepath.Join(os.TempDir(), name+"-s-"+control.SafeSessionName(session)+".sock")
 }
 
 // EventsSocketPath is the daemon-level per-session events fan-out socket: a

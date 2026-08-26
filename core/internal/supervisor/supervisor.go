@@ -56,8 +56,12 @@ type Supervisor struct {
 	// instanceID and the command socket are what a remote bridge's children
 	// resolve `herrscher <verb>` through. They are injected because the package
 	// that knows those paths imports this one.
-	instanceID     string
-	cmdSocketLocal string
+	instanceID string
+	// sessionCmdSocket names the command socket a session's own processes dial.
+	// It is a function of the session and not one path, because which socket a
+	// connection arrives on is what tells the daemon who is calling. nil means
+	// nobody set one, and then nothing is exported and nothing is forwarded.
+	sessionCmdSocket func(session string) string
 }
 
 // Placement is what the supervisor needs to know about a host to launch there.
@@ -73,17 +77,22 @@ func (s *Supervisor) SetHostLookup(f func(name string) (Placement, bool)) { s.ho
 // its children resolve the same command socket this daemon listens on.
 func (s *Supervisor) SetInstanceID(id string) { s.instanceID = id }
 
-// SetCommandSocket records the operator command socket this daemon listens on.
-// Forwarding it is what keeps the <capabilities> block honest over there: it
-// tells the agent it can run `herrscher <verb>`, and on another machine that is
-// only true if the socket followed. A capabilities block that lies is a bug, not
-// a limitation. Where it lands over there is per session, so the launch derives
-// it rather than taking it here.
+// SetCommandSocket names, per session, the command socket that session's
+// processes dial. Forwarding it is what keeps the <capabilities> block honest
+// over there: it tells the agent it can run `herrscher <verb>`, and on another
+// machine that is only true if the socket followed. A capabilities block that
+// lies is a bug, not a limitation.
 //
-// A local bridge is given this very path, since a session's children must reach
-// the daemon that started them and not the one the default state file happens
-// to name.
-func (s *Supervisor) SetCommandSocket(local string) { s.cmdSocketLocal = local }
+// It is per session rather than one path for the daemon, because which listener
+// a connection arrives on is what tells the daemon who is calling. A session
+// pointed at the operator's socket would hold the operator's authority.
+//
+// A local bridge is given the very path this daemon bound, since a session's
+// children must reach the daemon that started them and not the one the default
+// state file happens to name.
+func (s *Supervisor) SetCommandSocket(resolve func(session string) string) {
+	s.sessionCmdSocket = resolve
+}
 
 type supervisedRun struct {
 	cancel   context.CancelFunc
@@ -337,16 +346,23 @@ func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) (*ex
 	}
 	cmd.Env = append(os.Environ(), s.bridgeEnv...)
 	cmd.Env = append(cmd.Env, control.SessionVar+"="+sess.Name)
-	// The socket this daemon actually listens on, stated rather than left to be
-	// derived. A short-lived process that finds nothing here falls back to the
-	// default state file, which is the wrong one under `serve --state <path>`:
-	// it would resolve another instance and dial a socket this daemon never
-	// bound, where at best nobody answers and at worst another daemon does,
-	// knowing nothing about this session. The approval hook runs once per tool
-	// call and allows whenever it cannot get an answer, so guessing wrong there
-	// is a policy that enforces nothing and says so to nobody.
-	if s.cmdSocketLocal != "" {
-		cmd.Env = append(cmd.Env, control.CommandSocketVar+"="+s.cmdSocketLocal)
+	// The socket this session dials, stated rather than left to be derived, for
+	// two reasons that both matter.
+	//
+	// It is per session, and that is what gives a short-lived process an
+	// identity: the daemon opened this listener for this session, so what
+	// arrives on it is that session, whatever the message claims.
+	//
+	// And it is stated at all because a process that finds nothing here falls
+	// back to the default state file, which is the wrong one under
+	// `serve --state <path>`: it would resolve another instance and dial a
+	// socket this daemon never bound, where at best nobody answers and at worst
+	// another daemon does, knowing nothing about this session. The approval hook
+	// runs once per tool call and allows whenever it cannot get an answer, so
+	// guessing wrong there is a policy that enforces nothing and says so to
+	// nobody.
+	if s.sessionCmdSocket != nil {
+		cmd.Env = append(cmd.Env, control.CommandSocketVar+"="+s.sessionCmdSocket(sess.Name))
 	}
 	return cmd, nil
 }
@@ -403,14 +419,19 @@ func (s *Supervisor) placementFor(sess state.Session) (Placement, error) {
 }
 
 // forwardsFor lists the sockets a remote bridge needs to reach back here: the
-// session's control socket, and the daemon's operator command socket.
+// session's control socket, and the session's own command socket. The command
+// socket is the session's and not the daemon's, so a machine that is not this
+// one has no path to the operator's.
 func (s *Supervisor) forwardsFor(sess state.Session) []runner.Forward {
 	fwd := []runner.Forward{{
 		Remote: control.RemoteSocketPath(sess.Name),
 		Local:  control.SocketPath(sess.Name),
 	}}
-	if s.cmdSocketLocal != "" {
-		fwd = append(fwd, runner.Forward{Remote: control.RemoteCommandSocketPath(sess.Name), Local: s.cmdSocketLocal})
+	if s.sessionCmdSocket != nil {
+		fwd = append(fwd, runner.Forward{
+			Remote: control.RemoteCommandSocketPath(sess.Name),
+			Local:  s.sessionCmdSocket(sess.Name),
+		})
 	}
 	return fwd
 }
@@ -453,7 +474,7 @@ func (s *Supervisor) remoteEnvBlock(sess state.Session) string {
 	}
 	env["TMPDIR"] = "/tmp"
 	env[control.SessionVar] = sess.Name
-	if s.cmdSocketLocal != "" {
+	if s.sessionCmdSocket != nil {
 		env[control.CommandSocketVar] = control.RemoteCommandSocketPath(sess.Name)
 	}
 	return contracts.EncodeEnvSetting(env) + "\n"

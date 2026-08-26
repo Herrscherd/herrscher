@@ -144,6 +144,13 @@ func (h *hub) goLive(sess state.Session) {
 			eventTap(h.eventPublisher, sess.Name),
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent}, h.gate)
 	}()
+
+	// The session's own command socket, alive exactly as long as the session
+	// is. sctx cancels it in goDead, and serveCommandSocket removes the file.
+	// asSession is what makes `herrscher <verb>` from inside this worktree
+	// arrive already named, without the message having to say a name that
+	// could be a different one.
+	go serveCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name), asSession{disp: h, session: sess.Name})
 }
 
 // goDead stops the session's supervised bridge, cancels its RunSession loop

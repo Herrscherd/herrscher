@@ -242,6 +242,28 @@ func runHost(ctx context.Context, args []string) error {
 	return runRegistryVerb(ctx, "host", args)
 }
 
+// runApprove dispatches the operator `approve` commands through the same
+// registry the daemon serves. A live daemon answers most of them itself: the
+// requests waiting for an answer live in its memory, and nowhere else.
+//
+// The family needs a case of its own rather than falling through to the daemon
+// like an unknown verb, because that arm bounds its forward at 60 seconds and
+// `approve ask` waits on a human for minutes by design.
+//
+// `approve hook` is answered before the registry is built. It is the one verb
+// whose caller reads a non-zero exit as a crash, and building the registry can
+// fail for reasons that have nothing to do with the tool call: a machine with
+// no gateway configured, an unparseable config.json. It would also cost a whole
+// gateway stack on every single tool call. The hook needs none of it, only the
+// command socket.
+func runApprove(ctx context.Context, args []string) error {
+	if len(args) > 0 && args[0] == "hook" {
+		host.RunApprovalHook(ctx, os.Stdin, os.Stdout, os.Stderr)
+		return nil
+	}
+	return runRegistryVerb(ctx, "approve", args)
+}
+
 // runMemory dispatche les commandes opérateur `memory` (locate/forget/record)
 // à travers le même registre CLI que la daemon sert.
 func runMemory(ctx context.Context, args []string) error {

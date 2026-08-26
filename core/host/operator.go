@@ -33,7 +33,7 @@ var daemonOnly = map[string]bool{"approve ask": true}
 
 // daemonOwned are the verb families whose rows live in state.json, which the
 // daemon holds in memory and rewrites whole on every turn.
-var daemonOwned = [][]string{{"session"}, {"host"}, {"approve"}}
+var daemonOwned = [][]string{{"session"}, {"host"}, {"approve"}, {"role"}}
 
 // forwardDaemonOwnedCommands sends those verbs to the running daemon instead of
 // running them here.

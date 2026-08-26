@@ -264,6 +264,11 @@ func runApprove(ctx context.Context, args []string) error {
 	return runRegistryVerb(ctx, "approve", args)
 }
 
+// runRole dispatche les verbes `role` (list/grant/revoke/show).
+func runRole(ctx context.Context, args []string) error {
+	return runRegistryVerb(ctx, "role", args)
+}
+
 // runMemory dispatche les commandes opérateur `memory` (locate/forget/record)
 // à travers le même registre CLI que la daemon sert.
 func runMemory(ctx context.Context, args []string) error {

@@ -29,6 +29,7 @@ func operatorReg(t *testing.T, ran *[]string) *cli.Registry {
 		contracts.New("host", "add").Param("name", "host name", true).Do(local("host add")),
 		contracts.New("approve", "ask").Param("session", "session name", true).Do(local("approve ask")),
 		contracts.New("approve", "list").Do(local("approve list")),
+		contracts.New("approve", "hook").Do(local("approve hook")),
 		contracts.New("memory", "record").Param("key", "node key", true).Do(local("record")),
 	} {
 		if err := reg.Add(c); err != nil {
@@ -168,13 +169,16 @@ func TestSeedAndOtherNamespacesAreLeftAlone(t *testing.T) {
 	for _, argv := range [][]string{
 		{"session", "seed", "--name", "main", "--task", "go"},
 		{"memory", "record", "--key", "k"},
+		// `approve hook` answers the payload on THIS process's stdin, so
+		// forwarding it would hand the daemon a question it cannot read.
+		{"approve", "hook"},
 	} {
 		if _, err := reg.Dispatch(context.Background(), argv); err != nil {
 			t.Fatalf("Dispatch %v: %v", argv, err)
 		}
 	}
-	if len(ran) != 2 {
-		t.Fatalf("ran = %v, want both run locally", ran)
+	if len(ran) != 3 {
+		t.Fatalf("ran = %v, want all three run locally", ran)
 	}
 }
 

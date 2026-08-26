@@ -95,19 +95,31 @@ func (p hostPlacer) Workspace(name string) (string, error) {
 	return h.Workspace, nil
 }
 
-func (p hostPlacer) Materialize(ctx context.Context, name string, a agent.Agent, worktreePath string) error {
+func (p hostPlacer) Materialize(ctx context.Context, name string, a agent.Agent, worktreePath string, hook bool) error {
 	if name == "" {
-		return a.Materialize(worktreePath)
+		return a.MaterializeAs(worktreePath, binIf(hook, agent.SelfBin()))
 	}
-	_, rem, err := p.resolve(name)
+	h, rem, err := p.resolve(name)
 	if err != nil {
 		return err
 	}
-	payload, err := stageAgentTar(a, worktreePath)
+	// h.Bin is herrscher over there, the same binary the bridge is launched
+	// with; a hook rendered with anything else would name a path that does not
+	// exist on that machine.
+	payload, err := stageAgentTar(a, worktreePath, binIf(hook, h.Bin))
 	if err != nil {
 		return err
 	}
 	return rem.Materialize(ctx, worktreePath, payload)
+}
+
+// binIf is the binary when the session wants a hook, and the empty string that
+// means "no hook" when it does not.
+func binIf(hook bool, bin string) string {
+	if !hook {
+		return ""
+	}
+	return bin
 }
 
 // EnsureProject clones the project on a host when it is not there yet, from the

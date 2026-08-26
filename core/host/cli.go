@@ -429,6 +429,10 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	if err := addHostCommands(reg, st); err != nil {
 		return nil, hostDeps{}, err
 	}
+	// The actions that need a human before they run.
+	if err := addApproveCommands(reg, st, agents); err != nil {
+		return nil, hostDeps{}, err
+	}
 	if err := reg.Add(contracts.New("memory", "search").
 		Help("full-text search the memory vault; --raw also searches the raw per-turn transcript tier (G7)").
 		Param("text", "query text", true).

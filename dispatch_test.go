@@ -6,8 +6,14 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/host"
 )
 
 // The verbs main() answers in-process. Contributed verbs reach the CLI by NOT
@@ -18,6 +24,11 @@ var expectedLocalVerbs = []string{
 	"init", "plugin", "update", "install",
 	"bridge", "serve", "session", "agent", "memory", "models", "service", "plugin-host",
 	"-h", "--help", "help",
+	// approve is here for a second reason on top of that one: the default arm
+	// bounds its forward at 60 seconds, and `approve ask` waits on a human for
+	// minutes. Losing this case would also send `approve hook` to the daemon,
+	// which would then answer a PreToolUse payload by reading its own stdin.
+	"approve",
 }
 
 // mainSwitches returns every case value of every switch in main(), and whether
@@ -94,6 +105,77 @@ func TestOnlyTheDefaultArmForwards(t *testing.T) {
 	})
 	if calls != 1 {
 		t.Fatalf("forwardUnknownVerb referenced %d times in main.go, want 1 (the default arm only)", calls)
+	}
+}
+
+// swapStdio points os.Stdin at payload and both os.Stdout and os.Stderr at
+// pipes for one test, and gives back what the call under test wrote to each.
+// Stderr is captured and not merely silenced: the note the hook prints when it
+// falls open is the only thing that tells an operator the guardrail is not
+// running, so it is worth asserting.
+func swapStdio(t *testing.T, payload string) func() (string, string) {
+	t.Helper()
+	pipe := func() (*os.File, *os.File) {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r, w
+	}
+	inR, inW := pipe()
+	outR, outW := pipe()
+	errR, errW := pipe()
+	go func() {
+		_, _ = io.WriteString(inW, payload)
+		_ = inW.Close()
+	}()
+	oldIn, oldOut, oldErr := os.Stdin, os.Stdout, os.Stderr
+	os.Stdin, os.Stdout, os.Stderr = inR, outW, errW
+	t.Cleanup(func() {
+		os.Stdin, os.Stdout, os.Stderr = oldIn, oldOut, oldErr
+		_ = inR.Close()
+		_ = outR.Close()
+		_ = errR.Close()
+	})
+	return func() (string, string) {
+		_ = outW.Close()
+		_ = errW.Close()
+		out, _ := io.ReadAll(outR)
+		errs, _ := io.ReadAll(errR)
+		return string(out), string(errs)
+	}
+}
+
+// TestApproveHookAnswersWithoutBuildingTheRegistry pins the invariant the whole
+// hook rests on: the vendor CLI reads a failure as the hook crashing, so a
+// reason unrelated to the tool call must never produce one. An unparseable
+// config.json is such a reason, and it is one the operator verbs do legitimately
+// fail on. The first half of this test establishes that, so the second half
+// proves the short circuit rather than a lucky environment.
+func TestApproveHookAnswersWithoutBuildingTheRegistry(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HERRSCHER_STATE_DIR", dir)
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("HERRSCHER_COMMAND_SOCKET", filepath.Join(t.TempDir(), "absent.sock"))
+	t.Setenv(host.SessionVar, "s1")
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := runApprove(context.Background(), []string{"list"}); err == nil {
+		t.Fatal("`approve list` built a registry out of an unparseable config.json")
+	}
+
+	read := swapStdio(t, `{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
+	err := runApprove(context.Background(), []string{"hook"})
+	out, errOut := read()
+	if err != nil {
+		t.Fatalf("the hook failed, which the vendor CLI reads as a crash: %v", err)
+	}
+	if !strings.Contains(out, `"permissionDecision":"allow"`) {
+		t.Fatalf("hook wrote %q, want an allow", out)
+	}
+	if !strings.Contains(errOut, "no daemon is listening") {
+		t.Fatalf("stderr was %q, want the note that says why the guardrail is not running", errOut)
 	}
 }
 

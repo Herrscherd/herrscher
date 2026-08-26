@@ -70,8 +70,10 @@ type Hosts interface {
 	// Workspace returns the workspace root on a host. An empty name gives the
 	// daemon's own.
 	Workspace(name string) (string, error)
-	// Materialize provisions an agent into a worktree on a host.
-	Materialize(ctx context.Context, name string, a agent.Agent, worktreePath string) error
+	// Materialize provisions an agent into a worktree on a host. hook says
+	// whether the session's settings must carry the approval hook, which each
+	// side renders with its own herrscher binary.
+	Materialize(ctx context.Context, name string, a agent.Agent, worktreePath string, hook bool) error
 	// EnsureProject makes sure repo exists on the host, cloning it from origin
 	// when it does not. An empty host name is a no-op: the daemon's own
 	// workspace is already where it is.

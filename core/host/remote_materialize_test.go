@@ -17,7 +17,7 @@ func TestStagedAgentTarCarriesTheFilesAndTheRemotePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := stageAgentTar(a, "/srv/work/proj/.herrscher-sessions/inst/s1")
+	r, err := stageAgentTar(a, "/srv/work/proj/.herrscher-sessions/inst/s1", "/far/bin/herrscher")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,6 +47,11 @@ func TestStagedAgentTarCarriesTheFilesAndTheRemotePath(t *testing.T) {
 	}
 	if !strings.Contains(seen["AGENTS.md"], "/srv/work/proj/.herrscher-sessions/inst/s1") {
 		t.Fatalf("the remote path did not reach the tar: %q", seen["AGENTS.md"])
+	}
+	// The staged settings name the far machine's binary, not this daemon's: the
+	// hook runs where the session runs.
+	if !strings.Contains(seen[".claude/settings.json"], "'/far/bin/herrscher' approve hook") {
+		t.Fatalf("the far side's binary did not reach the tar: %q", seen[".claude/settings.json"])
 	}
 	// Paths are relative: an absolute member would let a tar decide where it
 	// lands, and this one is extracted into a directory chosen by the receiver.

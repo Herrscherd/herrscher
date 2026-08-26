@@ -125,6 +125,12 @@ func TestRemoteBridgeSendsItsEnvironmentOnStdin(t *testing.T) {
 	if !strings.Contains(block, control.CommandSocketVar+"=/tmp/herrscher-command-s1.sock\n") {
 		t.Fatalf("stdin block misses the command socket path: %q", block)
 	}
+	// And the session name, which the approval hook over there reads to say which
+	// session is asking. Without it the hook allows every tool call and only
+	// leaves a note, so a regression here enforces nothing while looking wired.
+	if !strings.Contains(block, control.SessionVar+"=s1\n") {
+		t.Fatalf("stdin block misses the session name: %q", block)
+	}
 }
 
 // Two sessions on one host is the ordinary case, and it is where a single

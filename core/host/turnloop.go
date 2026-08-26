@@ -268,6 +268,46 @@ func (d *sessionDriver) Pick(value string) {
 	d.queue <- queued{ev: contracts.Event{T: "pick", Value: value}}
 }
 
+// askApproval posts an approval question to every gateway bound to this
+// session. A gateway that routes menus gets a real one, whose click comes back
+// through Pick; anything else gets the degrading Menu, which renders text the
+// operator answers with `approve allow <id>`.
+//
+// It does not touch the turn queue: an approval is asked BETWEEN the model's
+// tool call and its execution, while the turn is already in flight.
+func (d *sessionDriver) askApproval(ctx context.Context, prompt, id string) {
+	opts := approvalChoices(id)
+	for _, gs := range d.gateways {
+		ch := d.renderChannel(gs)
+		if mr, ok := gs.Reader.(contracts.MenuRouter); ok && ch != "" {
+			if _, err := mr.RouteMenu(ctx, ch, "", prompt, d.name, opts); err == nil {
+				continue
+			}
+			// A gateway that could not post its menu still owes the operator the
+			// question: fall through to the text form rather than go silent.
+		}
+		if gs.Gateway == nil {
+			continue
+		}
+		conv := contracts.Conversation{Gateway: gs.Gateway.Manifest().Kind, ID: ch}
+		_ = contracts.Degrade(gs.Gateway).Menu(ctx, conv, "", prompt+" (answer with `approve allow "+id+"`)", opts)
+	}
+}
+
+// askApprovalOn routes an approval question to the named session's gateways,
+// doing nothing when no live session by that name is driving (mirror of Pick).
+// A request nobody can see still waits out its timeout and is then refused,
+// which is the same answer with a slower clock.
+func askApprovalOn(ctx context.Context, session, prompt, id string) {
+	sessionRegistry.mu.Lock()
+	d := sessionRegistry.m[session]
+	sessionRegistry.mu.Unlock()
+	if d == nil {
+		return
+	}
+	d.askApproval(ctx, prompt, id)
+}
+
 // interruptSendTimeout bounds how long an out-of-band interrupt send waits for
 // the connection writer before it is dropped (no bridge connected / no turn).
 const interruptSendTimeout = 2 * time.Second
@@ -363,7 +403,15 @@ func unregisterDriver(name string, d *sessionDriver) {
 
 // Pick routes a select-menu value to the named session's driver, returning false
 // when no live session by that name is driving.
+//
+// An approval answer is taken first, and by value rather than by session: it is
+// answered by the daemon itself, must not reach the backend as a choice the
+// model never posed, and must work for a session whose driver is busy inside the
+// very turn that is waiting on it.
 func Pick(session, value string) bool {
+	if answerApprovalPick(value) {
+		return true
+	}
 	sessionRegistry.mu.Lock()
 	d := sessionRegistry.m[session]
 	sessionRegistry.mu.Unlock()

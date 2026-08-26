@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // File names inside an agent home (the durable source of truth).
@@ -43,6 +44,97 @@ func jsonStringInner(s string) string {
 		return s
 	}
 	return string(b[1 : len(b)-1])
+}
+
+// hookWaitSeconds bounds how long the vendor waits for our hook. It is longer
+// than the daemon's own wait on a human on purpose: if the vendor gave up
+// first, the model would be told the hook crashed instead of being told why its
+// tool call was refused.
+const hookWaitSeconds = 900
+
+// HookWait is hookWaitSeconds as a duration, exported for the one caller that
+// has to compare a configured wait against it: a wait longer than this outlives
+// the hook itself, and what the vendor does when the hook is gone is run the
+// tool call.
+const HookWait = hookWaitSeconds * time.Second
+
+// shellSingleQuote quotes s for a POSIX shell, which is what Claude Code runs a
+// hook command through. Without it a binary path holding a space (os.Executable
+// can return one, and a host's configured binary is whatever the operator
+// typed) would be read as a command plus an argument, and every tool call in
+// the session would fail. An embedded single quote closes the quoting, is
+// backslash-escaped outside it, then reopens it: the classic POSIX dance.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// injectApprovalHook adds the PreToolUse hook that asks the daemon before each
+// tool call.
+//
+// It is added here rather than written into the agent's home because the binary
+// it invokes belongs to the machine the session runs on, and a home does not
+// know which machine that will be. Adding rather than rewriting also means a
+// session that wants no hook is not a file we edited back: it is the settings
+// herrscher already wrote, untouched.
+func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
+	var doc map[string]any
+	if err := json.Unmarshal(settings, &doc); err != nil {
+		return nil, fmt.Errorf("settings.json: %w", err)
+	}
+	// A settings file whose whole content is the JSON literal `null` parses
+	// without error and leaves doc nil. Treat it as the empty object it means,
+	// rather than assigning into a nil map and taking the daemon down.
+	if doc == nil {
+		doc = map[string]any{}
+	}
+	// A key of the wrong type is refused rather than replaced. Both of these
+	// hold operator configuration, and a settings file whose shape we do not
+	// recognise is one we have no business rewriting: dropping the key would
+	// throw away hooks somebody wrote, and say nothing. Materialization fails,
+	// which names the file and stops the session before it starts.
+	hooks := map[string]any{}
+	if raw, ok := doc["hooks"]; ok && raw != nil {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("settings.json: hooks is %T, not an object", raw)
+		}
+		hooks = m
+	}
+	var pre []any
+	if raw, ok := hooks["PreToolUse"]; ok && raw != nil {
+		list, ok := raw.([]any)
+		if !ok {
+			return nil, fmt.Errorf("settings.json: hooks.PreToolUse is %T, not a list", raw)
+		}
+		pre = list
+	}
+	hooks["PreToolUse"] = append(pre, map[string]any{
+		"matcher": "*",
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": shellSingleQuote(herrscherBin) + " approve hook",
+			"timeout": hookWaitSeconds,
+		}},
+	})
+	doc["hooks"] = hooks
+	return json.MarshalIndent(doc, "", "  ")
+}
+
+// SelfBin is the herrscher binary running this process, which is what a hook
+// materialized for THIS machine must invoke. Empty when it cannot be named, and
+// an empty binary means no hook rather than a hook that fails on every call.
+//
+// That is a session materialized without the guardrail it asked for, so it is
+// said out loud on the daemon's stderr, where the other approval warnings land.
+// Warned and not repaired: there is nothing to fall back to, and refusing to
+// create the session would trade a weaker session for no session at all.
+func SelfBin() string {
+	bin, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "approvals: this binary cannot name itself, so sessions materialize with no approval hook: %v\n", err)
+		return ""
+	}
+	return bin
 }
 
 var materializedGitExcludes = []string{
@@ -85,23 +177,45 @@ type Agent struct {
 // mechanism). Without a USER.md, CLAUDE.md and AGENTS.md are byte-identical
 // to SOUL.md.
 //
+// The settings file is the one that is not merely copied: a PreToolUse hook
+// calling this binary's `approve hook` is injected into it, which is what puts
+// the session's tool calls in front of the approval policy. It goes there and
+// nowhere else, so it binds Claude Code and not the other vendors materialized
+// beside it. MaterializeAs takes the binary to call and materializes no hook at
+// all when given none.
+//
 // Any worktreeToken in a source file is replaced with the worktree path.
 func (a Agent) Materialize(worktree string) error {
+	return a.MaterializeAs(worktree, SelfBin())
+}
+
+// MaterializeAs is Materialize with the hook's binary, empty for no hook.
+func (a Agent) MaterializeAs(worktree, herrscherBin string) error {
 	if err := EnsureGitExcludes(worktree); err != nil {
 		return err
 	}
-	return a.MaterializeInto(worktree, worktree)
+	return a.MaterializeIntoAs(worktree, worktree, herrscherBin)
 }
 
-// MaterializeInto writes the agent's provisioning files into dst, substituting
+// MaterializeInto materializes for this machine, hook included.
+func (a Agent) MaterializeInto(dst, worktreePath string) error {
+	return a.MaterializeIntoAs(dst, worktreePath, SelfBin())
+}
+
+// MaterializeIntoAs writes the agent's provisioning files into dst, substituting
 // worktreePath wherever the worktree token appears. Materialize is the case
 // where the two are the same directory; they differ when the files are staged
 // here to be shipped to a worktree on another machine, where the path written
 // into them must be the one over there.
 //
+// herrscherBin is the herrscher binary the materialized approval hook must
+// invoke, empty for no hook at all. The binary and the worktree are separate
+// parameters because the first belongs to the machine and the second to the
+// session, and the staged case is exactly where the two machines differ.
+//
 // It does not touch git: the local excludes belong with the repository, which
 // in the staged case is not on this machine.
-func (a Agent) MaterializeInto(dst, worktreePath string) error {
+func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	claudeDir := filepath.Join(dst, ".claude")
 	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
 		return fmt.Errorf("create .claude dir: %w", err)
@@ -118,9 +232,10 @@ func (a Agent) MaterializeInto(dst, worktreePath string) error {
 	copies := []struct {
 		src, dst string
 		jsonDst  bool
+		settings bool
 	}{
-		{filepath.Join(a.Home, mcpFile), filepath.Join(dst, ".mcp.json"), true},
-		{filepath.Join(a.Home, settingsFile), filepath.Join(claudeDir, "settings.json"), true},
+		{filepath.Join(a.Home, mcpFile), filepath.Join(dst, ".mcp.json"), true, false},
+		{filepath.Join(a.Home, settingsFile), filepath.Join(claudeDir, "settings.json"), true, true},
 	}
 	for _, c := range copies {
 		buf, err := os.ReadFile(c.src)
@@ -131,8 +246,13 @@ func (a Agent) MaterializeInto(dst, worktreePath string) error {
 		if c.jsonDst {
 			repl = jsonStringInner(worktreePath)
 		}
-		out := strings.ReplaceAll(string(buf), worktreeToken, repl)
-		if err := os.WriteFile(c.dst, []byte(out), 0o644); err != nil {
+		out := []byte(strings.ReplaceAll(string(buf), worktreeToken, repl))
+		if c.settings && herrscherBin != "" {
+			if out, err = injectApprovalHook(out, herrscherBin); err != nil {
+				return err
+			}
+		}
+		if err := os.WriteFile(c.dst, out, 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", c.dst, err)
 		}
 	}

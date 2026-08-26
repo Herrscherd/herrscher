@@ -94,7 +94,12 @@ func parseMCP(cmdline string) (name string, srv mcpServer, ok bool) {
 // buildSettings renders the zero-prompt Claude settings: project MCP servers
 // auto-enabled, file edits auto-accepted (a headless backend can answer no
 // prompt), and (when present) the agent's MCP namespace allow-listed. The
-// worktree is disposable and isolated, so a permissive mode is safe.
+// worktree is disposable and isolated, so a permissive mode costs nothing there.
+//
+// It is not the last word on what a tool call may do, either: what reaches
+// outside that worktree is the approval policy's business. Materializing this
+// file into a session adds a PreToolUse hook to it unless that session asked
+// for `bypass`, and the hook is asked before any of these permissions apply.
 func buildSettings(serverName string) ([]byte, error) {
 	var allow []string
 	if serverName != "" {

@@ -167,6 +167,8 @@ func main() {
 		err = runAgent(ctx, args)
 	case "host":
 		err = runHost(ctx, args)
+	case "approve":
+		err = runApprove(ctx, args)
 	case "memory":
 		err = runMemory(ctx, args)
 	case "models":

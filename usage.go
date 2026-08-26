@@ -54,6 +54,7 @@ func usage() {
 			row("session <create|close|list|who>", "bridged channel + worktree + backend"),
 			row("agent   <create|list>", "durable companion agents (persona/MCP)"),
 			row("host    <add|list|check|provision|rm>", "machines a session can run on (`session create --host`)"),
+			row("approve <list|allow|deny|rule|mode>", "actions that need a human's go-ahead before they run"),
 			row("memory  <locate|forget|record>", "inspect/edit the memory graph"),
 			row("models  list", "list the models the compiled backends offer"),
 		),

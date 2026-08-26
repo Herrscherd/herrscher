@@ -23,6 +23,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("shared", "run in the main checkout instead of an isolated worktree", false).
 			Param("agent", "provision the session from a durable agent (its persona + MCP + zero-prompt settings)", false).
 			Param("host", "run this session on a registered host (see `host list`); empty or `local` = this machine", false).
+			Param("approvals", "approval stance: ask (default), bypass, strict (see `approve rule`)", false).
 			Param("memory_project", "memory project this session files what it learns under (does NOT move the session: see project)", false).
 			Param("memory_agent", "memory agent root for this session's private learned skills (does NOT provision an agent: see agent)", false).
 			Param("project_pinned", "the memory project is a human's choice, not a guess: never revise it", false).

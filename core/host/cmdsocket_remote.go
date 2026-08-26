@@ -17,8 +17,17 @@ import (
 // inherits it. So an agent's `herrscher <verb>` reaches the daemon that started
 // it rather than a socket that does not exist on that machine.
 func commandSocketTarget(instanceID string) string {
+	return commandSocketTargetFrom(func() string { return instanceID })
+}
+
+// commandSocketTargetFrom is commandSocketTarget with the instance named only
+// when it is needed. Naming it means reading the daemon's state file, which is
+// not free and not read-only either, and the forwarded path in a session's
+// environment answers without it. The one caller that pays that price per tool
+// call takes this form; everyone else already holds the id.
+func commandSocketTargetFrom(instanceID func() string) string {
 	if p := strings.TrimSpace(os.Getenv(control.CommandSocketVar)); p != "" {
 		return p
 	}
-	return CommandSocketPath(instanceID)
+	return CommandSocketPath(instanceID())
 }

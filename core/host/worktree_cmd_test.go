@@ -122,7 +122,7 @@ func TestWorktreeVerbMaterializesFromStdin(t *testing.T) {
 		t.Fatal(err)
 	}
 	dst := t.TempDir()
-	payload, err := stageAgentTar(a, dst)
+	payload, err := stageAgentTar(a, dst, "/far/bin/herrscher")
 	if err != nil {
 		t.Fatal(err)
 	}

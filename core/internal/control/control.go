@@ -48,3 +48,10 @@ func RemoteCommandSocketPath(session string) string {
 // per-session name from the instance id alone, so the launch states it in the
 // environment the bridge reads on stdin and passes to everything it spawns.
 const CommandSocketVar = "HERRSCHER_COMMAND_SOCKET"
+
+// SessionVar tells a process spawned inside a session which session it belongs
+// to. The approval hook needs it: a vendor CLI's own session id is the
+// vendor's, and the daemon knows nothing about it. It lives here rather than in
+// core/host because the supervisor is what sets it, and core/host imports the
+// supervisor, not the other way round.
+const SessionVar = "HERRSCHER_SESSION"

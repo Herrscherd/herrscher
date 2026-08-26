@@ -159,15 +159,7 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 // hostNameOf takes the host name from --name or from the bare argument, so
 // `host check build1` and `host check --name build1` mean the same thing. A
 // gateway sends the flag; an operator types the name.
-func hostNameOf(in contracts.Input) string {
-	if n := strings.TrimSpace(in.Get("name")); n != "" {
-		return n
-	}
-	if len(in.Rest) > 0 {
-		return strings.TrimSpace(in.Rest[0])
-	}
-	return ""
-}
+func hostNameOf(in contracts.Input) string { return firstOf(in.Get("name"), in.Rest) }
 
 // unknownHost names what does exist, because the usual cause is a typo.
 func unknownHost(st *state.State, name string) error {

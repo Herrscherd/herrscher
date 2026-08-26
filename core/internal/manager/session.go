@@ -11,6 +11,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -512,6 +513,25 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if hostName == state.LocalHost {
 		hostName = ""
 	}
+	// Refused here rather than at the first tool call: a mode nobody can honour
+	// is an operator typo, and it costs nothing to say so before a worktree
+	// exists.
+	mode := strings.TrimSpace(in.Get("approvals"))
+	switch approval.Mode(mode) {
+	case "", approval.ModeAsk, approval.ModeBypass, approval.ModeStrict:
+	default:
+		return "", fmt.Errorf("unknown approval mode %q: ask, bypass or strict", mode)
+	}
+	// The hook rides in what an agent materializes, and only a session with an
+	// agent is materialized. So a mode asked for here binds nothing, and the
+	// operator has no way of knowing that from the mode alone. Said now rather
+	// than left to be discovered on the first tool call nobody was asked about.
+	// The session is created regardless: the mode is recorded, and it starts
+	// biting the day this session runs an agent.
+	approvalsNote := ""
+	if agentName == "" && mode != "" && mode != string(approval.ModeBypass) {
+		approvalsNote = fmt.Sprintf("\n\n⚠️ `--approvals %s` enforces nothing on **%s**: it has no agent, so nothing materializes the hook that asks. Recreate it with an agent for the mode to bite.", mode, name)
+	}
 	// Whether the host can carry a new session at all is asked here, before
 	// anything is created: a refusal an operator has to act on is worth more at
 	// the top of a create than halfway through one.
@@ -613,7 +633,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		if !cmdExplicit && a.Cmd != "" {
 			cmd = a.Cmd
 		}
-		if err := h.materializeOn(ctx, hostName, a, worktree); err != nil {
+		if err := h.materializeOn(ctx, hostName, a, worktree, mode != string(approval.ModeBypass)); err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("provision agent %q: %w", agentName, err)
 		}
@@ -653,13 +673,14 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}
+	sess.Approvals = mode
 	if err := h.st.AddSession(sess); err != nil {
 		return "", fmt.Errorf("persist: %w", err)
 	}
 	h.sup.Start(sess)
 	banner := sessionBanner(repo, name, worktree, wt.Branch(name), cmd, modelID, shared)
 	_ = admin.Send(ctx, sess.ChannelID, banner) // best-effort; reply is source of truth
-	return fmt.Sprintf("✅ Running on %s.\n\n%s", admin.ChannelRef(sess.ChannelID), banner), nil
+	return fmt.Sprintf("✅ Running on %s.\n\n%s%s", admin.ChannelRef(sess.ChannelID), banner, approvalsNote), nil
 }
 
 // adminFor returns the channel admin that owns sess's channel: the terminal

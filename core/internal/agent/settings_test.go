@@ -27,7 +27,7 @@ func TestInjectApprovalHook(t *testing.T) {
 		t.Fatalf("injectApprovalHook: %v", err)
 	}
 	m := settingsMap(t, out)
-	if !strings.Contains(string(out), "/far/bin/herrscher approve hook") {
+	if !strings.Contains(string(out), "'/far/bin/herrscher' approve hook") {
 		t.Fatalf("the binary is not in the settings:\n%s", out)
 	}
 	perms, _ := m["permissions"].(map[string]any)
@@ -57,6 +57,46 @@ func TestInjectApprovalHookKeepsHooksAlreadyThere(t *testing.T) {
 func TestInjectApprovalHookRefusesBrokenSettings(t *testing.T) {
 	if _, err := injectApprovalHook([]byte("{not json"), "/bin/h"); err == nil {
 		t.Fatal("settings we cannot parse must be an error, not a silently rewritten file")
+	}
+}
+
+// `null` parses fine and yields a nil document. Assigning into it used to panic,
+// which in a daemon with no recover() meant a hand-edited home could kill the
+// process on `session create`.
+func TestInjectApprovalHookTreatsNullSettingsAsEmpty(t *testing.T) {
+	for _, in := range []string{"null", " null\n", "{}"} {
+		out, err := injectApprovalHook([]byte(in), "/bin/h")
+		if err != nil {
+			t.Fatalf("injectApprovalHook(%q): %v", in, err)
+		}
+		hooks, ok := settingsMap(t, out)["hooks"].(map[string]any)
+		if !ok {
+			t.Fatalf("injectApprovalHook(%q) wrote no hooks:\n%s", in, out)
+		}
+		if n := len(hooks["PreToolUse"].([]any)); n != 1 {
+			t.Fatalf("injectApprovalHook(%q): got %d PreToolUse entries, want 1", in, n)
+		}
+	}
+}
+
+// os.Executable can return a path with a space in it, and a host's binary is
+// whatever the operator configured. The hook command goes through a shell, so an
+// unquoted path would break every tool call in the session.
+func TestInjectApprovalHookQuotesTheBinaryPath(t *testing.T) {
+	for bin, want := range map[string]string{
+		"/opt/my tools/herrscher": `'/opt/my tools/herrscher' approve hook`,
+		"/opt/it's/herrscher":     `'/opt/it'\''s/herrscher' approve hook`,
+	} {
+		out, err := injectApprovalHook([]byte("{}"), bin)
+		if err != nil {
+			t.Fatalf("injectApprovalHook(%q): %v", bin, err)
+		}
+		hooks := settingsMap(t, out)["hooks"].(map[string]any)
+		entry := hooks["PreToolUse"].([]any)[0].(map[string]any)
+		got := entry["hooks"].([]any)[0].(map[string]any)["command"]
+		if got != want {
+			t.Fatalf("command = %q, want %q", got, want)
+		}
 	}
 }
 
@@ -90,7 +130,7 @@ func TestMaterializeIntoAsCarriesTheFarSideBinary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	if !strings.Contains(string(b), "/far/bin/herrscher approve hook") {
+	if !strings.Contains(string(b), "'/far/bin/herrscher' approve hook") {
 		t.Fatalf("the far side's binary is not in the settings:\n%s", b)
 	}
 	soul, err := os.ReadFile(filepath.Join(dst, ".claude", "CLAUDE.md"))

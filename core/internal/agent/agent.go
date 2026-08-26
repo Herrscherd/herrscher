@@ -51,6 +51,16 @@ func jsonStringInner(s string) string {
 // tool call was refused.
 const hookWaitSeconds = 900
 
+// shellSingleQuote quotes s for a POSIX shell, which is what Claude Code runs a
+// hook command through. Without it a binary path holding a space (os.Executable
+// can return one, and a host's configured binary is whatever the operator
+// typed) would be read as a command plus an argument, and every tool call in
+// the session would fail. An embedded single quote closes the quoting, is
+// backslash-escaped outside it, then reopens it: the classic POSIX dance.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 // injectApprovalHook adds the PreToolUse hook that asks the daemon before each
 // tool call.
 //
@@ -64,6 +74,12 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 	if err := json.Unmarshal(settings, &doc); err != nil {
 		return nil, fmt.Errorf("settings.json: %w", err)
 	}
+	// A settings file whose whole content is the JSON literal `null` parses
+	// without error and leaves doc nil. Treat it as the empty object it means,
+	// rather than assigning into a nil map and taking the daemon down.
+	if doc == nil {
+		doc = map[string]any{}
+	}
 	hooks, _ := doc["hooks"].(map[string]any)
 	if hooks == nil {
 		hooks = map[string]any{}
@@ -73,7 +89,7 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 		"matcher": "*",
 		"hooks": []any{map[string]any{
 			"type":    "command",
-			"command": herrscherBin + " approve hook",
+			"command": shellSingleQuote(herrscherBin) + " approve hook",
 			"timeout": hookWaitSeconds,
 		}},
 	})

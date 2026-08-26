@@ -61,7 +61,7 @@ func TestUnknownVerbIsRefusedForAllowListRoles(t *testing.T) {
 func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 	p := SessionPrincipal("revue")
 	allowed := [][]string{
-		{"session", "send"}, {"session", "seed"}, {"session", "create"},
+		{"session", "send"}, {"session", "seed"},
 		{"memory", "search"}, {"memory", "record"}, {"approve", "ask"},
 		{"models", "list"}, {"commands"}, {"whoami"},
 	}
@@ -74,12 +74,29 @@ func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 		{"approve", "rule"}, {"approve", "mode"}, {"approve", "allow"}, {"approve", "list"},
 		{"host", "rm"}, {"role", "grant"}, {"schedule", "add"}, {"service", "restart"},
 		{"set", "home"}, {"skill", "approve"}, {"memory", "forget"},
+		{"session", "create"},
 		{"session", "close"}, {"session", "archive"}, {"session", "switch"},
 	}
 	for _, path := range refused {
 		if ok, _ := Decide(req(p, path...), RoleAgent); ok {
 			t.Fatalf("agent must not run %v", path)
 		}
+	}
+}
+
+// Denying `approve mode` is decorative if `session create` is open beside it: a
+// session opened from argv with no --agent materializes no hook, and one opened
+// with `--approvals bypass` says so outright. Either is a second session where
+// the caller's own policy does not apply, reachable in one command. So the verb
+// is refused, and the refusal has to point at delegation, which produces a
+// worker that runs a registered agent and answers to a policy like its lead.
+func TestAnAgentCannotOpenASessionThatEscapesItsOwnPolicy(t *testing.T) {
+	ok, why := Decide(req(SessionPrincipal("revue"), "session", "create"), RoleAgent)
+	if ok {
+		t.Fatal("a session that can create a session can create one with no policy")
+	}
+	if !strings.Contains(why, "delegate") {
+		t.Fatalf("refusal must name the way that stays open: %s", why)
 	}
 }
 

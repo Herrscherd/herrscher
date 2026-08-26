@@ -4,6 +4,8 @@ package host
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net"
 	"os"
 	"path/filepath"
@@ -38,8 +40,39 @@ func SessionCommandSocketPath(instanceID, session string) string {
 	if instanceID != "" {
 		name += "-" + instanceID
 	}
-	return filepath.Join(os.TempDir(), name+"-s-"+control.SafeSessionName(session)+".sock")
+	dir := os.TempDir()
+	p := filepath.Join(dir, name+"-s-"+control.SafeSessionName(session)+".sock")
+	if len(p) <= maxUnixSocketPath {
+		return p
+	}
+	// sun_path caps a unix socket path, and this one has three variable parts:
+	// TMPDIR, an instance id, and a session name that a free-text prompt can
+	// slugify all the way to 64 characters. Over the cap, bind fails with
+	// "invalid argument", and the cost of that is not a missing socket: the
+	// session starts anyway, its `herrscher <verb>` finds nobody, and the CLI
+	// falls back to running the verb in the agent's own process against the
+	// state file. The boundary would disappear exactly where the name got long.
+	//
+	// So fold instead of failing. The digest is of the full session name, so two
+	// names that share a prefix do not share a socket, and both the daemon and
+	// the supervisor derive it here, so they cannot disagree about where it is.
+	sum := sha256.Sum256([]byte(session))
+	digest := hex.EncodeToString(sum[:])[:12]
+	room := maxUnixSocketPath - len(filepath.Join(dir, name+"-s-"+"-"+digest+".sock"))
+	if room < 0 {
+		room = 0
+	}
+	short := control.SafeSessionName(session)
+	if len(short) > room {
+		short = short[:room]
+	}
+	return filepath.Join(dir, name+"-s-"+short+"-"+digest+".sock")
 }
+
+// maxUnixSocketPath is what sun_path holds, minus the terminating NUL. Linux
+// gives 108 bytes and the BSDs 104, so the smaller one is the only figure that
+// is true everywhere a herrscher daemon runs.
+const maxUnixSocketPath = 103
 
 // EventsSocketPath is the daemon-level per-session events fan-out socket: a
 // sibling of the command socket (herrscher-command → herrscher-events). It is the path

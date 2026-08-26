@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/internal/authz"
 )
 
 // EnvCapabilities carries the daemon's verb summary down to the bridge child,
@@ -17,12 +18,41 @@ const EnvCapabilities = "HERRSCHER_CAPABILITIES"
 
 // CapabilityEnvPair renders the KEY=VALUE entry for a registry's summary, or ""
 // when there is nothing to say.
-func CapabilityEnvPair(specs []cli.Spec) string {
-	s := CapabilitySummary(specs)
+func CapabilityEnvPair(specs []cli.Spec, contributed func(family string) bool) string {
+	s := CapabilitySummary(agentVerbs(specs, contributed))
 	if s == "" {
 		return ""
 	}
 	return EnvCapabilities + "=" + s
+}
+
+// agentVerbs keeps the verbs a session may actually run. Every reader of this
+// block is one: it is handed to the bridge child, which is a session's own
+// process, and the daemon now refuses a session the verbs that would let it
+// widen its own policy or act on another session.
+//
+// Filtering here rather than letting the model find out is not politeness. An
+// unfiltered list is a prompt that promises `host add` and `approve rule` to
+// something that will be refused them, and a model reading a refusal it was
+// told to expect success from does not conclude "not allowed", it concludes
+// "broken" and works around it. The list has to be the truth for its reader.
+func agentVerbs(specs []cli.Spec, contributed func(family string) bool) []cli.Spec {
+	out := make([]cli.Spec, 0, len(specs))
+	for _, s := range specs {
+		if len(s.Path) == 0 {
+			continue
+		}
+		isPlugin := contributed != nil && contributed(s.Path[0])
+		ok, _ := authz.Decide(authz.Request{
+			Principal:   authz.SessionPrincipal("this"),
+			Path:        s.Path,
+			Contributed: isPlugin,
+		}, authz.RoleAgent)
+		if ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // CapabilitySummary renders what the daemon dispatches, one line per family:

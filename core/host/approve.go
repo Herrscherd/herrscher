@@ -5,11 +5,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 )
 
@@ -73,6 +76,14 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 	if wait <= 0 { // time.After(0) would fire instantly and deny every ask
 		wait = defaultApprovalWait
 	}
+	// Warned here, on a call that is really about to wait for a human, and not in
+	// the `approve ask` verb: the injected hook matches every tool call, so a
+	// warning raised before the policy has spoken would put one identical line on
+	// the daemon's stderr per tool call across the whole fleet, the vast majority
+	// of which ask nobody. os.Stderr is the daemon's own; the hook process runs
+	// this over the command socket and never writes it to its own stderr, which
+	// no operator reads.
+	warnWaitOutlivesTheHook(os.Stderr, wait)
 
 	p := &pendingApproval{
 		id:      newApprovalID(),
@@ -113,6 +124,24 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 	case <-ctx.Done():
 		return approval.Deny, fmt.Sprintf("herrscher: the wait for approval ended, so %s was denied", describeRequest(req))
 	}
+}
+
+// warnWaitOutlivesTheHook says so when the configured wait is longer than the
+// vendor will wait for the hook to answer. Past that point the CLI stops
+// waiting and runs the tool call, while the request is still listed as waiting
+// and the operator still believes a human is being asked: a silent allow, which
+// is the one outcome this feature exists to prevent.
+//
+// It warns and does not cap. The wait is the operator's to choose, and a wait
+// quietly shortened to fit the vendor would be its own surprise. Written on
+// every ask that really waits and would run long, rather than once at startup,
+// because the wait is read from state at each ask and can change under a
+// running daemon.
+func warnWaitOutlivesTheHook(w io.Writer, wait time.Duration) {
+	if wait <= agent.HookWait {
+		return
+	}
+	fmt.Fprintf(w, "approvals: a %s wait outlives the %s the CLI gives the hook: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait)
 }
 
 // answerApproval settles a waiting request, reporting whether one was waiting.

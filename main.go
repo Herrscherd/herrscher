@@ -169,6 +169,8 @@ func main() {
 		err = runHost(ctx, args)
 	case "approve":
 		err = runApprove(ctx, args)
+	case "role":
+		err = runRole(ctx, args)
 	case "memory":
 		err = runMemory(ctx, args)
 	case "models":

@@ -3,11 +3,14 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"golang.org/x/term"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -164,6 +167,17 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 			// Runs in the short-lived process the vendor spawned, never in the
 			// daemon: it is the caller that must reach the command socket, and
 			// the payload it answers is on that process's own stdin.
+			//
+			// This registry is also the daemon's own, so the verb shows up in the
+			// command palette. Selected there, the read below would take the
+			// terminal Bubbletea holds in raw mode: it would never see EOF, would
+			// steal the operator's keystrokes, and would block that command for
+			// good. Refusing on a terminal is the guard. A real hook is spawned
+			// with a pipe on stdin and never reaches it, and the binary answers
+			// `approve hook` before this registry exists anyway.
+			if term.IsTerminal(int(os.Stdin.Fd())) {
+				return "", errors.New("approve hook is a machine verb: it reads a PreToolUse payload on stdin")
+			}
 			var out strings.Builder
 			RunApprovalHook(ctx, os.Stdin, &out, os.Stderr)
 			return strings.TrimRight(out.String(), "\n"), nil

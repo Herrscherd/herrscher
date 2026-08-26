@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
@@ -46,14 +47,17 @@ type hookAsker func(ctx context.Context, argv []string) (string, bool, error)
 // in a materialized worktree, where no daemon watches anything. This is a
 // guardrail against mistakes, not a sandbox.
 //
-// target is the command socket ask dials, carried here only so the note written
-// when nothing is listening names the path that was tried.
+// target names the command socket ask dials, carried here only so the note
+// written when nothing is listening names the path that was tried. It is a
+// function and not a string because resolving that path can cost a read of the
+// daemon's state file, and this runs once per tool call: the payloads answered
+// below without asking anybody must not pay for it.
 //
 // ctx is handed to ask untouched, with no deadline of its own. `approve ask`
 // legitimately blocks for as long as the daemon's approval wait while a human
 // decides, so a timeout here would allow every call the operator was too slow
 // to answer, which is the one outcome this feature exists to prevent.
-func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer, target string, ask hookAsker) {
+func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer, target func() string, ask hookAsker) {
 	var payload hookInput
 	raw, err := io.ReadAll(io.LimitReader(in, 1<<20))
 	if err == nil {
@@ -95,7 +99,7 @@ func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer,
 	answer, handled, err := ask(ctx, argv)
 	switch {
 	case !handled:
-		fmt.Fprintf(errOut, "herrscher: no daemon is listening on %s, allowing\n", target)
+		fmt.Fprintf(errOut, "herrscher: no daemon is listening on %s, allowing\n", target())
 		writeHookDecision(out, errOut, "allow", "")
 		return
 	case err != nil:
@@ -118,19 +122,26 @@ func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer,
 
 // RunApprovalHook is RunPermissionHook wired to the daemon, which is what every
 // real hook process wants. The command socket is where a short-lived process
-// reaches it, locally or through the one ssh forwarded back; the path is
-// resolved here so the same string is both dialled and named in the note
-// written when nothing answers.
+// reaches it, locally or through the one ssh forwarded back; the same resolver
+// serves what is dialled and what the note written when nothing answers names,
+// so the two can never disagree.
 //
-// It is one function rather than a closure written twice because it has two
-// callers: the `approve hook` verb, and the binary's own case for that verb,
-// which answers before the operator registry is built. The second exists
-// because building that registry can fail for reasons that have nothing to do
-// with the tool call, and the hook must never fail.
+// The resolution is deferred and memoized. It runs once per tool call across
+// the whole fleet, and naming the instance means parsing the daemon's state
+// file, which that daemon is meanwhile writing. A session started by this
+// daemon carries the forwarded socket in its environment, so the common case
+// answers from there and never touches state at all.
+//
+// It is called from the binary's own case for `approve hook`, which answers
+// before the operator registry is built: building that registry can fail for
+// reasons that have nothing to do with the tool call, and the hook must never
+// fail.
 func RunApprovalHook(ctx context.Context, in io.Reader, out, errOut io.Writer) {
-	target := commandSocketTarget(ServedInstanceID(DefaultStatePath(), ""))
+	target := sync.OnceValue(func() string {
+		return commandSocketTargetFrom(func() string { return ServedInstanceID(DefaultStatePath(), "") })
+	})
 	RunPermissionHook(ctx, in, out, errOut, target, func(c context.Context, argv []string) (string, bool, error) {
-		return dispatchLiveCommand(c, target, argv)
+		return dispatchLiveCommand(c, target(), argv)
 	})
 }
 

@@ -14,6 +14,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 // approvalPickPrefix marks a select-menu value as an answer to an approval
@@ -26,9 +27,28 @@ const approvalPickPrefix = "herrscher-approval:"
 // terminal. A tool input can be a whole file.
 const subjectMaxLen = 200
 
-// defaultApprovalWait is the fallback wait when the caller passes none, matching
-// state.ApprovalWait's own default.
-const defaultApprovalWait = 5 * time.Minute
+// maxPendingPerSession and maxPendingApprovals bound the registry below.
+//
+// Every waiting request costs a daemon goroutine, a command-socket connection
+// held open for the whole wait, a map entry and a menu posted to a human. The
+// caller is a hook the agent's own tool calls spawn, so an agent that loops on
+// `approve ask` opens one of each per iteration, and nothing about a request
+// that nobody has answered yet makes the next one cheaper.
+//
+// Four per session, because a session is one agent talking to one human: Claude
+// Code can emit a small block of tool calls in parallel, so one is too few, and
+// past a handful the human is the queue and the session is already unusable.
+// Forty in total, an order of magnitude above it, is ten such sessions all at
+// their own limit: enough that a real fleet never meets it, small enough that
+// the goroutines, the connections and the chat posts stay countable.
+//
+// A request over either cap is refused rather than allowed. It is a decision
+// the daemon makes on purpose, not a failure of the hook to reach it, which is
+// the case that must always allow.
+const (
+	maxPendingPerSession = 4
+	maxPendingApprovals  = 40
+)
 
 // pendingApproval is one request waiting for a human.
 type pendingApproval struct {
@@ -74,8 +94,27 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 	}
 
 	if wait <= 0 { // time.After(0) would fire instantly and deny every ask
-		wait = defaultApprovalWait
+		wait = state.DefaultApprovalWait
 	}
+
+	p := &pendingApproval{
+		id:      newApprovalID(),
+		session: session,
+		req:     req,
+		asked:   time.Now(),
+		answer:  make(chan approvalVerdict, 1),
+	}
+	// Registered before anything is posted anywhere: over the cap the answer is
+	// known already, and the point of the cap is that the expensive part never
+	// runs. release drops the entry on every way out of this function, the
+	// timeout and the answer that arrives too late included, so a cap can only
+	// be reached by requests a human really has in front of him.
+	release, refusal := registerApproval(p)
+	if refusal != "" {
+		return approval.Deny, refusal
+	}
+	defer release()
+
 	// Warned here, on a call that is really about to wait for a human, and not in
 	// the `approve ask` verb: the injected hook matches every tool call, so a
 	// warning raised before the policy has spoken would put one identical line on
@@ -85,28 +124,12 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 	// no operator reads.
 	warnWaitOutlivesTheHook(os.Stderr, wait)
 
-	p := &pendingApproval{
-		id:      newApprovalID(),
-		session: session,
-		req:     req,
-		asked:   time.Now(),
-		answer:  make(chan approvalVerdict, 1),
-	}
-	approvals.mu.Lock()
-	approvals.m[p.id] = p
-	approvals.mu.Unlock()
-	defer func() {
-		approvals.mu.Lock()
-		delete(approvals.m, p.id)
-		approvals.mu.Unlock()
-	}()
-
 	// The fan-out's own context is bounded by wait so a gateway whose RouteMenu
 	// hangs cannot stretch the effective wait past the deadline the model was
 	// promised; it is not detached into a goroutine because posting a menu for
 	// an already-dead request is worse than a bounded wait.
 	octx, cancel := context.WithTimeout(ctx, wait)
-	AskApprovalOn(octx, session, approvalPrompt(req), p.id)
+	askApprovalOn(octx, session, approvalPrompt(req), p.id)
 	cancel()
 
 	select {
@@ -126,11 +149,49 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 	}
 }
 
-// warnWaitOutlivesTheHook says so when the configured wait is longer than the
-// vendor will wait for the hook to answer. Past that point the CLI stops
-// waiting and runs the tool call, while the request is still listed as waiting
-// and the operator still believes a human is being asked: a silent allow, which
-// is the one outcome this feature exists to prevent.
+// registerApproval puts p in the registry unless a cap is reached, and returns
+// the function that takes it back out. The second return is empty when the
+// request was registered, and otherwise is the refusal the model reads: it
+// names the cap that was hit and what to do about it, because the agent whose
+// tool call this is has no other way of learning why the answer came back at
+// once.
+//
+// Both counts are read under the same lock the insert takes, so two hooks
+// racing cannot both find room for the last slot.
+func registerApproval(p *pendingApproval) (release func(), refusal string) {
+	approvals.mu.Lock()
+	defer approvals.mu.Unlock()
+	if len(approvals.m) >= maxPendingApprovals {
+		return nil, fmt.Sprintf("herrscher: %s was denied: %d tool calls across the fleet are already waiting for a human, which is the limit; each one answered frees a slot", describeRequest(p.req), maxPendingApprovals)
+	}
+	mine := 0
+	for _, other := range approvals.m {
+		if other.session == p.session {
+			mine++
+		}
+	}
+	if mine >= maxPendingPerSession {
+		return nil, fmt.Sprintf("herrscher: %s was denied: session %q already has %d tool calls waiting for a human, which is the limit; wait for those to be answered, and ask about fewer things at once", describeRequest(p.req), p.session, maxPendingPerSession)
+	}
+	approvals.m[p.id] = p
+	return func() {
+		approvals.mu.Lock()
+		delete(approvals.m, p.id)
+		approvals.mu.Unlock()
+	}, ""
+}
+
+// warnWaitOutlivesTheHook says so when one ask can hold the hook longer than
+// the vendor will wait for it to answer. Past that point the CLI stops waiting
+// and runs the tool call, while the request is still listed as waiting and the
+// operator still believes a human is being asked: a silent allow, which is the
+// one outcome this feature exists to prevent.
+//
+// What is compared is the worst case and not the configured wait: the menu
+// fan-out is bounded by the wait, and the timer that follows it runs for the
+// wait again, so an ask can take twice what was configured. The comparison
+// halves the hook's timeout rather than doubling the wait, so an absurd
+// configured duration cannot overflow into a negative that warns about nothing.
 //
 // It warns and does not cap. The wait is the operator's to choose, and a wait
 // quietly shortened to fit the vendor would be its own surprise. Written on
@@ -138,10 +199,10 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 // because the wait is read from state at each ask and can change under a
 // running daemon.
 func warnWaitOutlivesTheHook(w io.Writer, wait time.Duration) {
-	if wait <= agent.HookWait {
+	if wait <= agent.HookWait/2 {
 		return
 	}
-	fmt.Fprintf(w, "approvals: a %s wait outlives the %s the CLI gives the hook: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait)
+	fmt.Fprintf(w, "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the CLI gives it: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait)
 }
 
 // answerApproval settles a waiting request, reporting whether one was waiting.

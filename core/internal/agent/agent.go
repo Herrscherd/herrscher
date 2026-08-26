@@ -87,11 +87,27 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 	if doc == nil {
 		doc = map[string]any{}
 	}
-	hooks, _ := doc["hooks"].(map[string]any)
-	if hooks == nil {
-		hooks = map[string]any{}
+	// A key of the wrong type is refused rather than replaced. Both of these
+	// hold operator configuration, and a settings file whose shape we do not
+	// recognise is one we have no business rewriting: dropping the key would
+	// throw away hooks somebody wrote, and say nothing. Materialization fails,
+	// which names the file and stops the session before it starts.
+	hooks := map[string]any{}
+	if raw, ok := doc["hooks"]; ok && raw != nil {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("settings.json: hooks is %T, not an object", raw)
+		}
+		hooks = m
 	}
-	pre, _ := hooks["PreToolUse"].([]any)
+	var pre []any
+	if raw, ok := hooks["PreToolUse"]; ok && raw != nil {
+		list, ok := raw.([]any)
+		if !ok {
+			return nil, fmt.Errorf("settings.json: hooks.PreToolUse is %T, not a list", raw)
+		}
+		pre = list
+	}
 	hooks["PreToolUse"] = append(pre, map[string]any{
 		"matcher": "*",
 		"hooks": []any{map[string]any{
@@ -107,9 +123,15 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 // SelfBin is the herrscher binary running this process, which is what a hook
 // materialized for THIS machine must invoke. Empty when it cannot be named, and
 // an empty binary means no hook rather than a hook that fails on every call.
+//
+// That is a session materialized without the guardrail it asked for, so it is
+// said out loud on the daemon's stderr, where the other approval warnings land.
+// Warned and not repaired: there is nothing to fall back to, and refusing to
+// create the session would trade a weaker session for no session at all.
 func SelfBin() string {
 	bin, err := os.Executable()
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "approvals: this binary cannot name itself, so sessions materialize with no approval hook: %v\n", err)
 		return ""
 	}
 	return bin

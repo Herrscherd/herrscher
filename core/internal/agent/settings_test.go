@@ -60,6 +60,37 @@ func TestInjectApprovalHookRefusesBrokenSettings(t *testing.T) {
 	}
 }
 
+// A `hooks` or `PreToolUse` of the wrong shape is somebody's configuration we
+// do not understand. Dropping it would throw away hooks an operator wrote, and
+// say nothing; refusing stops the session before it starts, with the file named.
+func TestInjectApprovalHookRefusesHooksOfTheWrongType(t *testing.T) {
+	for _, in := range []string{
+		`{"hooks":"none"}`,
+		`{"hooks":["PreToolUse"]}`,
+		`{"hooks":{"PreToolUse":{"matcher":"*"}}}`,
+		`{"hooks":{"PreToolUse":"mine"}}`,
+	} {
+		if _, err := injectApprovalHook([]byte(in), "/bin/h"); err == nil {
+			t.Fatalf("injectApprovalHook(%s) rewrote settings it did not understand", in)
+		}
+	}
+	// A key that is absent, or explicitly null, means nothing was configured:
+	// that is not a shape we fail to understand, and it must still take a hook.
+	for _, in := range []string{`{"hooks":null}`, `{"hooks":{"PreToolUse":null}}`} {
+		out, err := injectApprovalHook([]byte(in), "/bin/h")
+		if err != nil {
+			t.Fatalf("injectApprovalHook(%s): %v", in, err)
+		}
+		hooks, ok := settingsMap(t, out)["hooks"].(map[string]any)
+		if !ok {
+			t.Fatalf("injectApprovalHook(%s) wrote no hooks:\n%s", in, out)
+		}
+		if n := len(hooks["PreToolUse"].([]any)); n != 1 {
+			t.Fatalf("injectApprovalHook(%s): got %d PreToolUse entries, want 1", in, n)
+		}
+	}
+}
+
 // `null` parses fine and yields a nil document. Assigning into it used to panic,
 // which in a daemon with no recover() meant a hand-edited home could kill the
 // process on `session create`.

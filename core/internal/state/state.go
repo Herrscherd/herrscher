@@ -525,21 +525,24 @@ func (s *State) RemoveApprovalRule(rendered string) (bool, error) {
 	return false, nil
 }
 
-// defaultApprovalWait is how long a pending request waits for a human before it
+// DefaultApprovalWait is how long a pending request waits for a human before it
 // is refused. Long enough to walk back to a keyboard, short enough that a
 // scheduled turn firing at 3am is not still holding a session at breakfast.
-const defaultApprovalWait = 5 * time.Minute
+//
+// Exported so the broker that does the waiting falls back to the same number
+// this file returns, instead of keeping a second copy of it that could drift.
+const DefaultApprovalWait = 5 * time.Minute
 
 // ApprovalWait is the configured wait, or five minutes.
 func (s *State) ApprovalWait() time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.ApprovalTimeout == "" {
-		return defaultApprovalWait
+		return DefaultApprovalWait
 	}
 	d, err := time.ParseDuration(s.ApprovalTimeout)
 	if err != nil || d <= 0 {
-		return defaultApprovalWait
+		return DefaultApprovalWait
 	}
 	return d
 }

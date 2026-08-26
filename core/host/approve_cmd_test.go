@@ -95,6 +95,18 @@ func TestApproveEmptyJSONIsAnEmptyList(t *testing.T) {
 	}
 }
 
+// `approve hook` is answered by the binary, in the process the vendor spawned,
+// and must not be a verb this registry holds. The registry is served over the
+// command socket, and the stdin the hook reads would there be the daemon's own:
+// a daemon started with a pipe on stdin would sit in that read for good, with
+// the caller's connection held open behind it.
+func TestApproveHookIsNotAVerbTheDaemonAnswers(t *testing.T) {
+	reg, _ := approveReg(t)
+	if _, err := reg.Dispatch(context.Background(), []string{"approve", "hook"}); err == nil {
+		t.Fatal("`approve hook` must not be reachable through the registry")
+	}
+}
+
 func TestApproveListEmpty(t *testing.T) {
 	reg, _ := approveReg(t)
 	out, err := reg.Dispatch(context.Background(), []string{"approve", "list"})
@@ -123,8 +135,10 @@ func TestSessionPolicyMergesAgentFile(t *testing.T) {
 	}
 	// "nonsense" is what a hand-edited state.json looks like: the verbs parse
 	// before they store, so it can only get in that way. It must be dropped
-	// without taking the rules beside it down.
-	for _, r := range []string{"ask Bash(git push*)", "ask Write", "nonsense"} {
+	// without taking the rules beside it down, and it comes first for that
+	// reason: last, a parser that gave up at the first bad line would pass this
+	// test having read every rule that matters.
+	for _, r := range []string{"nonsense", "ask Bash(git push*)", "ask Write"} {
 		if err := st.AddApprovalRule(r); err != nil {
 			t.Fatalf("AddApprovalRule %q: %v", r, err)
 		}

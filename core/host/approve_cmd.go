@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"golang.org/x/term"
 
@@ -151,7 +153,9 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 				Subject: in.Get("subject"),
 			}
 			pol, mode := sessionPolicy(st, agents, session)
-			d, reason := askApproval(ctx, session, req, pol, mode, st.ApprovalWait())
+			wait := st.ApprovalWait()
+			warnWaitOutlivesTheHook(os.Stderr, wait)
+			d, reason := askApproval(ctx, session, req, pol, mode, wait)
 			b, err := json.Marshal(struct {
 				Decision string `json:"decision"`
 				Reason   string `json:"reason,omitempty"`
@@ -223,6 +227,23 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 			}
 			return fmt.Sprintf("%s is now %s", name, mode), nil
 		}))
+}
+
+// warnWaitOutlivesTheHook says so when the configured wait is longer than the
+// vendor will wait for the hook to answer. Past that point the CLI stops
+// waiting and runs the tool call, while the request is still listed as waiting
+// and the operator still believes a human is being asked: a silent allow, which
+// is the one outcome this feature exists to prevent.
+//
+// It warns and does not cap. The wait is the operator's to choose, and a wait
+// quietly shortened to fit the vendor would be its own surprise. Written on
+// every ask that would run long rather than once at startup, because the wait
+// is read from state at each ask and can change under a running daemon.
+func warnWaitOutlivesTheHook(w io.Writer, wait time.Duration) {
+	if wait <= agent.HookWait {
+		return
+	}
+	fmt.Fprintf(w, "approvals: a %s wait outlives the %s the CLI gives the hook: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait)
 }
 
 // firstOf takes a flag value, else the first bare argument. A gateway sends the

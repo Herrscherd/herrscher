@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 )
 
@@ -231,5 +233,24 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 	}
 	if d := <-done; d != approval.Deny {
 		t.Fatalf("got %q, want deny", d)
+	}
+}
+
+// A wait longer than the vendor's hook timeout is a silent allow: the CLI stops
+// waiting for the hook and runs the tool call, while the operator is still
+// looking at a request that says it is waiting for him.
+func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
+	var w bytes.Buffer
+	warnWaitOutlivesTheHook(&w, agent.HookWait)
+	if w.Len() != 0 {
+		t.Fatalf("a wait the vendor will sit through must say nothing, got %q", w.String())
+	}
+	warnWaitOutlivesTheHook(&w, agent.HookWait+time.Minute)
+	got := w.String()
+	if !strings.Contains(got, (agent.HookWait + time.Minute).String()) {
+		t.Fatalf("warning %q must name the wait that was asked for", got)
+	}
+	if !strings.Contains(got, agent.HookWait.String()) {
+		t.Fatalf("warning %q must name what the vendor will wait", got)
 	}
 }

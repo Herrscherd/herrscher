@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // File names inside an agent home (the durable source of truth).
@@ -50,6 +51,12 @@ func jsonStringInner(s string) string {
 // first, the model would be told the hook crashed instead of being told why its
 // tool call was refused.
 const hookWaitSeconds = 900
+
+// HookWait is hookWaitSeconds as a duration, exported for the one caller that
+// has to compare a configured wait against it: a wait longer than this outlives
+// the hook itself, and what the vendor does when the hook is gone is run the
+// tool call.
+const HookWait = hookWaitSeconds * time.Second
 
 // shellSingleQuote quotes s for a POSIX shell, which is what Claude Code runs a
 // hook command through. Without it a binary path holding a space (os.Executable

@@ -283,3 +283,38 @@ func TestSessionCreateOnHostMaterializesWithAHookByDefault(t *testing.T) {
 		t.Fatalf("an unset mode must still get a hook, got %v", hs.hooked)
 	}
 }
+
+// Nothing materializes a session that has no agent, and the hook rides in what
+// is materialized. Asking for a mode there enforces nothing, so create says so
+// instead of letting the operator find out on the first tool call he expected
+// to be asked about.
+func TestSessionCreateSaysAModeWithoutAnAgentBindsNothing(t *testing.T) {
+	h, _, _, st := handlerWithHosts(t)
+	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "ask"))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if !strings.Contains(out, "no agent") {
+		t.Fatalf("create said %q, want a warning that the mode binds nothing", out)
+	}
+	sess, ok := st.FindSession("demo")
+	if !ok || sess.Approvals != "ask" {
+		t.Fatalf("the session must exist with the mode asked for, got %q ok=%v", sess.Approvals, ok)
+	}
+}
+
+// The warning is for a mode that was asked for and cannot bite. bypass asks for
+// no hook, so there is nothing to warn about, and an unset mode is not a request
+// at all: warning on either would fire on every ordinary session create.
+func TestSessionCreateStaysQuietWhenThereIsNothingToWarnAbout(t *testing.T) {
+	h, _, _, _ := handlerWithHosts(t)
+	for _, mode := range []string{"", "bypass"} {
+		out, err := h.sessionCreateRun(context.Background(), args("name", "demo"+mode, "approvals", mode))
+		if err != nil {
+			t.Fatalf("create %q: %v", mode, err)
+		}
+		if strings.Contains(out, "no agent") {
+			t.Fatalf("mode %q must warn about nothing, got %q", mode, out)
+		}
+	}
+}

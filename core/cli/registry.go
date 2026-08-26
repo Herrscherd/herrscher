@@ -52,6 +52,28 @@ func (r *Registry) Dispatch(ctx context.Context, args []string) (string, error) 
 	return cmd.Run(ctx, in)
 }
 
+// Resolve reports the command args address and the Input parsed for it, without
+// running anything. It exists so a caller that must decide something ABOUT an
+// invocation, rather than perform it, reads the same command path and the same
+// parsed flags Dispatch would. The alternative is re-reading argv beside
+// Dispatch, which is how a check ends up disagreeing with what actually runs.
+//
+// A parse failure still yields the path and ok: what the caller asked for is
+// already known, and the error itself is Dispatch's to report a moment later.
+// The Input is empty there, so a decision that reads a flag sees no flag rather
+// than a stale one.
+func (r *Registry) Resolve(args []string) ([]string, contracts.Input, bool) {
+	cmd, rest := r.match(args)
+	if cmd == nil {
+		return nil, contracts.Input{}, false
+	}
+	in, err := parse(*cmd, rest)
+	if err != nil {
+		return cmd.Path, contracts.Input{}, true
+	}
+	return cmd.Path, in, true
+}
+
 // Run invokes the command at an exact path with a pre-built Input, skipping argv
 // parsing. It is the typed seam for programmatic callers (e.g. the hub's typed
 // SessionControl methods) so they never assemble stringly-typed flag argv that

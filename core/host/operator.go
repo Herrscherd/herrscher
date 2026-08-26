@@ -13,7 +13,7 @@ var forwardedLocally = map[string]bool{"seed": true}
 
 // daemonOwned are the verb families whose rows live in state.json, which the
 // daemon holds in memory and rewrites whole on every turn.
-var daemonOwned = [][]string{{"session"}, {"host"}}
+var daemonOwned = [][]string{{"session"}, {"host"}, {"approve"}}
 
 // forwardDaemonOwnedCommands sends those verbs to the running daemon instead of
 // running them here.

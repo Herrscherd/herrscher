@@ -63,6 +63,23 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	}
 	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
 	hdl.SetSeeder(Seed) // host.Seed: live-session injection for `session switch` handoff
+	// Where each session's process lands. `local` is implicit and needs no
+	// record; anything else must have been registered and provisioned.
+	hdl.SetHosts(hostPlacer{
+		st:            st,
+		instanceID:    instID,
+		local:         wt,
+		sourceVersion: func() string { return sourceVersionOf(ctx, st) },
+	})
+	sup.SetInstanceID(instID)
+	sup.SetCommandSocket(CommandSocketPath(instID))
+	sup.SetHostLookup(func(name string) (supervisor.Placement, bool) {
+		h, ok := st.FindHost(name)
+		if !ok {
+			return supervisor.Placement{}, false
+		}
+		return supervisor.Placement{SSH: h.SSH, Bin: h.Bin}, true
+	})
 	// Reject an unknown/policy-excluded --model, or one owned by a backend other
 	// than --vendor, at create/switch rather than on the first spawn. Uses the
 	// same lookup + policy the spawn choke point does.
@@ -408,6 +425,10 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	if err := addScheduleCommands(reg, st, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
+	// The places a session can run, this machine being the unnamed default.
+	if err := addHostCommands(reg, st); err != nil {
+		return nil, hostDeps{}, err
+	}
 	if err := reg.Add(contracts.New("memory", "search").
 		Help("full-text search the memory vault; --raw also searches the raw per-turn transcript tier (G7)").
 		Param("text", "query text", true).
@@ -529,6 +550,6 @@ func NewRegistry(ctx context.Context, gws []Deps, o Options) (*cli.Registry, err
 	// state and must not decide alone what the live sessions are. Installed here
 	// rather than in buildRegistry, which the daemon shares — the daemon would be
 	// asking itself.
-	forwardSessionCommands(reg, instID, dispatchLiveCommand)
+	forwardDaemonOwnedCommands(reg, instID, dispatchLiveCommand)
 	return reg, nil
 }

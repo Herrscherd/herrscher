@@ -165,6 +165,8 @@ func main() {
 		err = runSession(ctx, args)
 	case "agent":
 		err = runAgent(ctx, args)
+	case "host":
+		err = runHost(ctx, args)
 	case "memory":
 		err = runMemory(ctx, args)
 	case "models":
@@ -173,6 +175,11 @@ func main() {
 		err = runService(ctx, args)
 	case "plugin-host":
 		err = runPluginHost(ctx, args)
+	case "worktree":
+		// Answered here rather than forwarded to the daemon, like whoami: the
+		// caller is a daemon on ANOTHER machine driving this binary over ssh, and
+		// there is no daemon on this side to forward to.
+		err = host.RunWorktree(ctx, args)
 	case "whoami":
 		// Answered here rather than forwarded to the daemon: it reads git, not
 		// daemon state, and an operator reaches for it precisely when something

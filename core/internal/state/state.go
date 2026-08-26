@@ -38,6 +38,10 @@ type Session struct {
 	Dir      string `json:"dir,omitempty"`      // bridge working dir; empty = inherit launcher cwd (pwd fallback)
 	Project  string `json:"project,omitempty"`  // workspace sub-dir the session started from
 	Agent    string `json:"agent,omitempty"`    // durable agent this session was provisioned from ("" = none)
+	// Host names the place this session's process runs, as registered by
+	// `host add`. Empty means this machine, which is every session written
+	// before remote execution existed.
+	Host string `json:"host,omitempty"`
 	// MemoryProject and MemoryAgent are the memory roots this session files what
 	// it learns under. They are separate from Project and Agent on purpose: those
 	// two place the session — a workspace sub-directory, a provisioned worktree —
@@ -130,6 +134,11 @@ type State struct {
 	// change the write profile, and they inherit the existing mutex and atomic
 	// write. See schedules.go for the accessors.
 	Schedules []schedule.Schedule `json:"schedules,omitempty"`
+	// Hosts are the registered places a session can run. They live here for the
+	// same reason schedules do: state.json is already rewritten on every turn, so
+	// this changes no write profile and inherits the existing mutex and atomic
+	// write. See hosts.go for the accessors.
+	Hosts []Host `json:"hosts,omitempty"`
 }
 
 // NewState returns an empty state bound to path (not yet written).

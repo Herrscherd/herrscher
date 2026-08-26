@@ -2,16 +2,20 @@ package supervisor
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
+	"github.com/Herrscherd/herrscher/core/internal/runner"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -45,7 +49,37 @@ type Supervisor struct {
 	// runBridge is the process boundary. Tests replace it with a controlled
 	// runner so restart ordering can be asserted without launching a real agent.
 	runBridge func(context.Context, state.Session)
+	// hosts answers where a session's process must run. A function rather than
+	// the state itself, so this package stays testable and so `local` (the empty
+	// host) needs no record to exist. nil = everything runs here.
+	hosts func(name string) (Placement, bool)
+	// instanceID and the command socket are what a remote bridge's children
+	// resolve `herrscher <verb>` through. They are injected because the package
+	// that knows those paths imports this one.
+	instanceID     string
+	cmdSocketLocal string
 }
+
+// Placement is what the supervisor needs to know about a host to launch there.
+type Placement struct {
+	SSH string // user@machine
+	Bin string // absolute path to herrscher over there
+}
+
+// SetHostLookup installs the resolver from a session's host name to a placement.
+func (s *Supervisor) SetHostLookup(f func(name string) (Placement, bool)) { s.hosts = f }
+
+// SetInstanceID records the daemon's instance, threaded to a remote bridge so
+// its children resolve the same command socket this daemon listens on.
+func (s *Supervisor) SetInstanceID(id string) { s.instanceID = id }
+
+// SetCommandSocket records the operator command socket this daemon listens on.
+// Forwarding it is what keeps the <capabilities> block honest over there: it
+// tells the agent it can run `herrscher <verb>`, and on another machine that is
+// only true if the socket followed. A capabilities block that lies is a bug, not
+// a limitation. Where it lands over there is per session, so the launch derives
+// it rather than taking it here.
+func (s *Supervisor) SetCommandSocket(local string) { s.cmdSocketLocal = local }
 
 type supervisedRun struct {
 	cancel   context.CancelFunc
@@ -258,16 +292,35 @@ func (s *Supervisor) runLoop(ctx context.Context, sess state.Session) {
 }
 
 func (s *Supervisor) runBridgeCommand(ctx context.Context, sess state.Session) {
-	cmd := s.bridgeCommand(ctx, sess)
+	cmd, err := s.bridgeCommand(ctx, sess)
+	if err != nil {
+		// Warn and wait, rather than retry: the cause is a configuration an
+		// operator has to change, and a backoff loop would only bury the reason
+		// under restarts. The loop resumes when the session is stopped or
+		// restarted, which is exactly the moment the answer may have changed.
+		s.log.Error("cannot launch bridge", "session", sess.Name, "host", sess.Host, "err", err)
+		<-ctx.Done()
+		return
+	}
+	if prep := s.prepareRemote(ctx, sess); prep != nil {
+		// A stale socket from a crash blocks the bind on any sshd without
+		// StreamLocalBindUnlink. The error is not read: if the removal failed for
+		// a reason that matters, ExitOnForwardFailure says so next, in the
+		// message that names the actual forward.
+		_ = prep.Run()
+	}
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 	_ = cmd.Run() // returns on exit or ctx cancel
 }
 
-// bridgeCommand builds the child process for sess: argv, working directory and
-// environment. Split out of runBridgeCommand so a test can assert what the
-// child would receive — in particular that the gateway credentials ride the
-// environment and never argv.
-func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) *exec.Cmd {
+// bridgeCommand builds the child process for sess: argv, working directory,
+// environment, and where it lands. Split out of runBridgeCommand so a test can
+// assert what the child would receive, in particular that the gateway
+// credentials ride the environment locally and stdin remotely, never argv.
+func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) (*exec.Cmd, error) {
+	if sess.Host != "" {
+		return s.remoteBridgeCommand(ctx, sess)
+	}
 	cmd := exec.CommandContext(ctx, s.selfBin, s.bridgeArgs(sess)...)
 	configureBridgeCommand(cmd)
 	// Dir is the resolved run directory (worktree, or workspace/project root);
@@ -279,5 +332,109 @@ func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) *exe
 		cmd.Dir = sess.Worktree
 	}
 	cmd.Env = append(os.Environ(), s.bridgeEnv...)
-	return cmd
+	return cmd, nil
+}
+
+// remoteBridgeCommand builds the ssh invocation that runs the bridge on another
+// machine. Nothing about the bridge changes: it dials a unix socket exactly as
+// it does here, because -R put one at that path over there.
+func (s *Supervisor) remoteBridgeCommand(ctx context.Context, sess state.Session) (*exec.Cmd, error) {
+	p, err := s.placementFor(sess)
+	if err != nil {
+		return nil, err
+	}
+	args := s.bridgeArgs(sess)
+	// The hub socket is the FORWARDED path, not this machine's: the bridge over
+	// there dials what -R exposed.
+	for i := range args {
+		if args[i] == "--hub-socket" && i+1 < len(args) {
+			args[i+1] = control.RemoteSocketPath(sess.Name)
+		}
+	}
+	args = append(args, "--env-stdin")
+	// No multiplexing here, unlike every short command this daemon runs over
+	// ssh. A launch carries forwards, and a shared master owns the ones it
+	// opened: a relaunch after a crash, or a second session on the same host,
+	// would ask a master that already holds that path and be answered with
+	// silence rather than a socket. Its own connection makes the forwards live
+	// and die with the bridge, which is exactly their scope.
+	r := runner.SSH{Target: p.SSH, Forwards: s.forwardsFor(sess)}
+	dir := sess.Dir
+	if dir == "" {
+		dir = sess.Worktree
+	}
+	cmd := r.Command(ctx, dir, append([]string{p.Bin}, args...)...)
+	cmd.Stdin = strings.NewReader(s.remoteEnvBlock(sess))
+	return cmd, nil
+}
+
+// placementFor resolves sess.Host, and refuses when it cannot. There is
+// deliberately no fallback to local: running here an agent the operator
+// believed was elsewhere is exactly the class of silence routing exists to
+// prevent.
+func (s *Supervisor) placementFor(sess state.Session) (Placement, error) {
+	if s.hosts == nil {
+		return Placement{}, fmt.Errorf("session %q wants host %q but no host is registered", sess.Name, sess.Host)
+	}
+	p, ok := s.hosts(sess.Host)
+	if !ok {
+		return Placement{}, fmt.Errorf("session %q wants host %q, which no longer exists", sess.Name, sess.Host)
+	}
+	if p.SSH == "" || p.Bin == "" {
+		return Placement{}, fmt.Errorf("host %q is not provisioned: run `host provision %s`", sess.Host, sess.Host)
+	}
+	return p, nil
+}
+
+// forwardsFor lists the sockets a remote bridge needs to reach back here: the
+// session's control socket, and the daemon's operator command socket.
+func (s *Supervisor) forwardsFor(sess state.Session) []runner.Forward {
+	fwd := []runner.Forward{{
+		Remote: control.RemoteSocketPath(sess.Name),
+		Local:  control.SocketPath(sess.Name),
+	}}
+	if s.cmdSocketLocal != "" {
+		fwd = append(fwd, runner.Forward{Remote: control.RemoteCommandSocketPath(sess.Name), Local: s.cmdSocketLocal})
+	}
+	return fwd
+}
+
+// prepareRemote returns the command that clears the far end of this session's
+// forwards, or nil for a local session.
+func (s *Supervisor) prepareRemote(ctx context.Context, sess state.Session) *exec.Cmd {
+	if sess.Host == "" {
+		return nil
+	}
+	p, err := s.placementFor(sess)
+	if err != nil {
+		return nil
+	}
+	r := runner.SSH{Target: p.SSH, ControlPath: runner.ControlPathFor(p.SSH), Forwards: s.forwardsFor(sess)}
+	return r.PrepareForwards(ctx)
+}
+
+// remoteEnvBlock renders the environment a remote bridge reads from its stdin,
+// terminated by the blank line that ends it.
+//
+// Three entries are added that a local bridge inherits from the daemon's own
+// environment and a remote one cannot: the instance id, a TMPDIR matching the
+// directory the forwards were bound at, and the command socket itself. That
+// last one is not computable over there, since the path is per session; without
+// it `herrscher <verb>` would dial a path nothing listens on, and the
+// <capabilities> block would be a promise the agent cannot keep.
+func (s *Supervisor) remoteEnvBlock(sess state.Session) string {
+	env := map[string]string{}
+	for _, kv := range s.bridgeEnv {
+		if k, v, ok := strings.Cut(kv, "="); ok && k != "" {
+			env[k] = v
+		}
+	}
+	if s.instanceID != "" {
+		env["HERRSCHER_INSTANCE_ID"] = s.instanceID
+	}
+	env["TMPDIR"] = "/tmp"
+	if s.cmdSocketLocal != "" {
+		env[control.CommandSocketVar] = control.RemoteCommandSocketPath(sess.Name)
+	}
+	return contracts.EncodeEnvSetting(env) + "\n"
 }

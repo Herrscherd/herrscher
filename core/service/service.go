@@ -315,6 +315,27 @@ func Build(ctx context.Context, src, binPath string) error {
 	return nil
 }
 
+// BuildFor compiles the herrscher binary from src to binPath for another
+// platform. It is Build with GOOS/GOARCH pinned and cgo off: cross-compiling a
+// cgo binary would need a cross toolchain, and herrscher needs none. This is how
+// a host is provisioned, because the releases carry no binary assets.
+func BuildFor(ctx context.Context, src, binPath, goos, goarch string) error {
+	if err := validateSource(src); err != nil {
+		return err
+	}
+	if _, err := exec.LookPath("go"); err != nil {
+		return fmt.Errorf("go toolchain not found in PATH")
+	}
+	cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, ".")
+	cmd.Dir = src
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("go build (%s/%s): %s", goos, goarch, redact.Output(out))
+	}
+	return nil
+}
+
 // SourceVersion returns the short commit of the source checkout, or "" if it
 // can't be determined (best-effort, for user-facing messages only).
 func SourceVersion(ctx context.Context, src string) string {

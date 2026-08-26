@@ -207,3 +207,28 @@ func TestMaterializeWithoutUserProfileUnchanged(t *testing.T) {
 		t.Fatal(".claude/USER.md must not exist without a home USER.md")
 	}
 }
+
+// The destination and the path written INTO the files are the same directory
+// when materializing in place, and differ when the files are staged here to be
+// shipped to a worktree on another machine.
+func TestMaterializeIntoWritesTheOtherMachinesPath(t *testing.T) {
+	store := NewStore(t.TempDir())
+	a, err := store.Create(CreateSpec{Name: "roblox", Soul: "worktree is {{WORKTREE}}", MCP: "neublox serve --project {{WORKTREE}}"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage := t.TempDir()
+	if err := a.MaterializeInto(stage, "/srv/work/proj/.herrscher-sessions/inst/s1"); err != nil {
+		t.Fatal(err)
+	}
+	buf, err := os.ReadFile(filepath.Join(stage, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(buf), "/srv/work/proj/.herrscher-sessions/inst/s1") {
+		t.Fatalf("the remote path did not reach the file: %s", buf)
+	}
+	if strings.Contains(string(buf), stage) {
+		t.Fatalf("the staging directory leaked into the file: %s", buf)
+	}
+}

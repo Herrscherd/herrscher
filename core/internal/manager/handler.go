@@ -1,8 +1,10 @@
 package manager
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -13,7 +15,7 @@ type Handler struct {
 	d          channelAdmin
 	td         channelAdmin // terminal (TUI) admin; nil when no terminal gateway is bound
 	sup        supervisor
-	wt         worktrees
+	wt         Worktrees
 	fg         forges
 	up         updater
 	agents     agentStore
@@ -41,6 +43,44 @@ type Handler struct {
 	// defaultModel is the catalog id a session gets when it names none, chosen at
 	// `herrscher init`. Empty = no default, the pre-existing behaviour.
 	defaultModel string
+	// hs resolves where a session runs: which worktree implementation, which
+	// workspace root. nil = everything is local, which is the operator CLI and
+	// every daemon with no host registered.
+	hs Hosts
+}
+
+// SetHosts wires the placement resolver. Without it every session is local,
+// which is exactly what herrscher did before hosts existed.
+func (h *Handler) SetHosts(hs Hosts) { h.hs = hs }
+
+// worktreesOn returns the worktree implementation for a host, and the workspace
+// root over there. An empty host is this machine, answered by the injected
+// local Worktreer without a subprocess: the local case gains nothing from
+// paying a process spawn to share a code path with the remote one.
+func (h *Handler) worktreesOn(hostName string) (Worktrees, string, error) {
+	if hostName == "" || h.hs == nil {
+		if hostName != "" {
+			return nil, "", fmt.Errorf("session wants host %q but no host is registered", hostName)
+		}
+		return h.wt, h.st.WorkspaceRoot(), nil
+	}
+	wt, err := h.hs.Worktrees(hostName)
+	if err != nil {
+		return nil, "", err
+	}
+	ws, err := h.hs.Workspace(hostName)
+	if err != nil {
+		return nil, "", err
+	}
+	return wt, ws, nil
+}
+
+// materializeOn provisions an agent into a worktree, wherever that worktree is.
+func (h *Handler) materializeOn(ctx context.Context, hostName string, a agent.Agent, worktreePath string) error {
+	if hostName == "" || h.hs == nil {
+		return a.Materialize(worktreePath)
+	}
+	return h.hs.Materialize(ctx, hostName, a, worktreePath)
 }
 
 // SetDefaultModel wires the operator's configured default. It is a fallback,
@@ -135,7 +175,7 @@ type coordinationReader interface {
 // session is created without an explicit cmd. partDir is the directory under
 // which per-session participant journals live (participants/<name>.log). agents
 // owns the durable agent homes used to provision sessions.
-func NewHandler(d channelAdmin, sup supervisor, wt worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string) *Handler {
+func NewHandler(d channelAdmin, sup supervisor, wt Worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string) *Handler {
 	return &Handler{d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways}
 }
 

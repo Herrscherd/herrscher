@@ -28,7 +28,15 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 		Help("list the actions waiting for an answer").
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			pending := pendingApprovals()
-			sort.Slice(pending, func(i, j int) bool { return pending[i].Age > pending[j].Age })
+			// Age is truncated to the second, so two requests raised in the same
+			// second compare equal. Stable, with the id as a tiebreak, so the same
+			// waiting set lists in the same order every call.
+			sort.SliceStable(pending, func(i, j int) bool {
+				if pending[i].Age != pending[j].Age {
+					return pending[i].Age > pending[j].Age
+				}
+				return pending[i].ID < pending[j].ID
+			})
 			if in.JSON {
 				b, err := json.Marshal(pending)
 				return string(b), err
@@ -105,6 +113,9 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 			if raw == "" {
 				rules := st.ApprovalRules()
 				if in.JSON {
+					if rules == nil {
+						rules = []string{} // an empty rule set is `[]`, like `approve list`, never `null`
+					}
 					b, err := json.Marshal(rules)
 					return string(b), err
 				}
@@ -152,10 +163,19 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 		ValueParam("session", "session name; also takes a bare argument", false).
 		ValueParam("mode", "ask | bypass | strict; also takes a second bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			name := firstOf(in.Get("session"), in.Rest)
-			mode := in.Get("mode")
-			if mode == "" && len(in.Rest) > 1 {
-				mode = strings.TrimSpace(in.Rest[1])
+			// The name takes the first bare argument when no flag gave it, and the
+			// mode the last one still unclaimed. Counting from the end rather than
+			// from a fixed index is what makes the mixed form work: `approve mode
+			// --session s1 bypass` leaves one positional, `approve mode s1 bypass`
+			// leaves two.
+			rest := in.Rest
+			name := strings.TrimSpace(in.Get("session"))
+			if name == "" && len(rest) > 0 {
+				name, rest = strings.TrimSpace(rest[0]), rest[1:]
+			}
+			mode := strings.TrimSpace(in.Get("mode"))
+			if mode == "" && len(rest) > 0 {
+				mode = strings.TrimSpace(rest[len(rest)-1])
 			}
 			if name == "" || mode == "" {
 				return "", fmt.Errorf("usage: approve mode <session> <ask|bypass|strict>")
@@ -193,17 +213,27 @@ func firstOf(flag string, rest []string) string {
 // readAgentPolicy reads an agent's own rules. A missing file is no rules, and
 // an unreadable line is skipped with a note on stderr: one bad line must not
 // drop the rules around it, and must not silently widen anything either.
+//
+// Only an absent file means "no rules". Any other read error (a mode change, a
+// home on a filesystem that went away) drops rules that were written to tighten
+// something, so it is said on stderr before this falls open. Falling open is
+// deliberate: this is a guardrail against mistakes, not a sandbox, and an
+// unreadable file must not wedge every tool call. Silence is what it must not do.
 func readAgentPolicy(home string) approval.Policy {
 	if home == "" {
 		return nil
 	}
-	buf, err := os.ReadFile(filepath.Join(home, approvalsFile))
+	path := filepath.Join(home, approvalsFile)
+	buf, err := os.ReadFile(path)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "approvals: %s: unreadable, its rules do not apply: %v\n", path, err)
+		}
 		return nil
 	}
 	pol, errs := approval.ParsePolicy(string(buf))
 	for _, e := range errs {
-		fmt.Fprintf(os.Stderr, "approvals: %s/%s: %v\n", home, approvalsFile, e)
+		fmt.Fprintf(os.Stderr, "approvals: %s: %v\n", path, e)
 	}
 	return pol
 }
@@ -214,9 +244,15 @@ func readAgentPolicy(home string) approval.Policy {
 func sessionPolicy(st *state.State, agents *agent.Store, session string) (approval.Policy, approval.Mode) {
 	var daemon approval.Policy
 	for _, raw := range st.ApprovalRules() {
-		if r, err := approval.ParseRule(raw); err == nil {
-			daemon = append(daemon, r)
+		r, err := approval.ParseRule(raw)
+		if err != nil {
+			// The verbs parse before they store, so this is a hand-edited
+			// state.json. The rule is dropped, which allows every call it was
+			// written to stop, and that is exactly why it is said out loud.
+			fmt.Fprintf(os.Stderr, "approvals: state rule %q dropped, it no longer applies: %v\n", raw, err)
+			continue
 		}
+		daemon = append(daemon, r)
 	}
 	var mode approval.Mode
 	var home string

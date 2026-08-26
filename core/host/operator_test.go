@@ -27,6 +27,8 @@ func operatorReg(t *testing.T, ran *[]string) *cli.Registry {
 		contracts.New("session", "seed").Param("name", "session name", true).
 			Param("task", "opening task", true).Do(local("seed")),
 		contracts.New("host", "add").Param("name", "host name", true).Do(local("host add")),
+		contracts.New("approve", "ask").Param("session", "session name", true).Do(local("approve ask")),
+		contracts.New("approve", "list").Do(local("approve list")),
 		contracts.New("memory", "record").Param("key", "node key", true).Do(local("record")),
 	} {
 		if err := reg.Add(c); err != nil {
@@ -106,6 +108,33 @@ func TestWithNoDaemonListeningTheCommandStillRuns(t *testing.T) {
 	}
 	if out != "local close" || len(ran) != 1 {
 		t.Fatalf("out = %q ran = %v, want the local fallback", out, ran)
+	}
+}
+
+// `approve ask` is the exception to the local fallback. The broker that holds a
+// pending request lives in the daemon, so run here it would open a request
+// nobody can see and wait out the whole approval timeout before denying. It
+// fails at once instead, and names what is missing. Its siblings still fall back.
+func TestApproveAskWithNoDaemonFailsFastInsteadOfWaiting(t *testing.T) {
+	var ran []string
+	reg := operatorReg(t, &ran)
+	forwardDaemonOwnedCommands(reg, "inst", func(context.Context, string, []string) (string, bool, error) {
+		return "", false, nil
+	})
+
+	_, err := reg.Dispatch(context.Background(), []string{"approve", "ask", "--session", "s1"})
+	if err == nil {
+		t.Fatal("want an error naming the daemon that is not there")
+	}
+	if !strings.Contains(err.Error(), "daemon") {
+		t.Fatalf("err = %v, want the missing daemon named", err)
+	}
+	if len(ran) != 0 {
+		t.Fatalf("ran locally: %v, want no request opened in a process that exits", ran)
+	}
+
+	if out, err := reg.Dispatch(context.Background(), []string{"approve", "list"}); err != nil || out != "local approve list" {
+		t.Fatalf("out = %q err = %v, want the other approve verbs to still fall back", out, err)
 	}
 }
 

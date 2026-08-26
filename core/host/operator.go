@@ -2,6 +2,8 @@ package host
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -10,6 +12,17 @@ import (
 // The daemon resolves this one itself, carrying the turn identity it already
 // settled on; forwarding it twice would hand the daemon a different turn.
 var forwardedLocally = map[string]bool{"seed": true}
+
+// daemonOnly names the verbs only a running daemon can answer, keyed on the
+// full command path so a future verb that happens to share a last word is not
+// caught by accident.
+//
+// `approve ask` is one: the request it opens waits for a human, and the humans
+// reach it through the daemon. Run here, in a process that exits with the
+// command, there is nobody to ask, so it would register a request no one can
+// see and wait out the whole approval timeout before denying. Failing at once,
+// naming what is missing, is the honest answer.
+var daemonOnly = map[string]bool{"approve ask": true}
 
 // daemonOwned are the verb families whose rows live in state.json, which the
 // daemon holds in memory and rewrites whole on every turn.
@@ -28,6 +41,8 @@ var daemonOwned = [][]string{{"session"}, {"host"}, {"approve"}}
 //
 // With no daemon listening the dial misses, nothing is handled, and the command
 // runs locally exactly as before — a single-shot install has no daemon to ask.
+// The daemonOnly verbs are the exception: running them here would answer wrong,
+// so they say the daemon is missing instead.
 func forwardDaemonOwnedCommands(reg *cli.Registry, instID string, forward seedCommandForwarder) {
 	for _, prefix := range daemonOwned {
 		reg.Intercept(prefix, func(cmd contracts.Cmd, next cli.Runner) cli.Runner {
@@ -35,8 +50,13 @@ func forwardDaemonOwnedCommands(reg *cli.Registry, instID string, forward seedCo
 				return next
 			}
 			return func(ctx context.Context, in contracts.Input) (string, error) {
-				if out, handled, err := forward(ctx, commandSocketTarget(instID), argvOf(cmd, in)); handled {
+				target := commandSocketTarget(instID)
+				out, handled, err := forward(ctx, target, argvOf(cmd, in))
+				if handled {
 					return out, err
+				}
+				if path := strings.Join(cmd.Path, " "); daemonOnly[path] {
+					return "", fmt.Errorf("`%s` needs a running herrscher daemon, and none answered on %s", path, target)
 				}
 				return next(ctx, in)
 			}

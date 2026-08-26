@@ -237,10 +237,12 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 	}
 
 	// The approve family waits on a human, which is slower than anything else
-	// this daemon does, and it mutates no session. Holding the mutation lock
-	// across that wait would freeze every create, close and status behind one
-	// operator who walked away from their keyboard. Same reasoning as the
-	// contributed verb above, one notch more literal.
+	// this daemon does. Holding the mutation lock across that wait would freeze
+	// every create, close and status behind one operator who walked away from
+	// their keyboard. It needs neither the lock nor the reconcile that follows:
+	// the rows it does write (a session's approval mode, the global rule set) are
+	// serialized by state itself, and no liveness decision reads them. Same
+	// reasoning as the contributed verb above, one notch more literal.
 	if len(args) > 0 && args[0] == "approve" {
 		return h.reg.Dispatch(ctx, args)
 	}

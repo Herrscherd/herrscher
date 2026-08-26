@@ -115,7 +115,7 @@ type Request struct {
 type Mode string
 
 const (
-	ModeAsk    Mode = "ask"    // the policy's own verdict; also the zero value
+	ModeAsk    Mode = "ask"    // the policy's own verdict; an unset mode goes the same way through Apply, but is not equal to this
 	ModeBypass Mode = "bypass" // nothing is ever asked
 	ModeStrict Mode = "strict" // anything not explicitly allowed is asked
 )

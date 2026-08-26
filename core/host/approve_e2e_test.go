@@ -67,12 +67,19 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 		})
 	}()
 
-	// The operator, refusing.
+	// The operator, refusing. The request is found by the session it belongs to
+	// rather than by the registry holding exactly one entry: the registry is
+	// package state shared with every other test in here, and this test has no
+	// business caring what else is waiting in it.
 	var id string
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		if p := pendingApprovals(); len(p) == 1 {
-			id = p[0].ID
+		for _, p := range pendingApprovals() {
+			if p.Session == "s1" {
+				id = p.ID
+			}
+		}
+		if id != "" {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)

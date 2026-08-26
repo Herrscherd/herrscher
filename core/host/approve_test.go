@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -238,19 +240,68 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 
 // A wait longer than the vendor's hook timeout is a silent allow: the CLI stops
 // waiting for the hook and runs the tool call, while the operator is still
-// looking at a request that says it is waiting for him.
+// looking at a request that says it is waiting for him. It is said on the ask
+// that will really wait, and only there: the injected hook matches every tool
+// call, so a warning raised before the policy has spoken would repeat itself
+// once per tool call for calls nobody is ever asked about.
 func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
-	var w bytes.Buffer
-	warnWaitOutlivesTheHook(&w, agent.HookWait)
-	if w.Len() != 0 {
-		t.Fatalf("a wait the vendor will sit through must say nothing, got %q", w.String())
+	ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
+	req := approval.Request{Tool: "Bash", Subject: "git push"}
+	// A context already done ends the wait at once. What is under test is what
+	// was written before the wait began, not how the request settles.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	quiet := captureDaemonStderr(t, func() {
+		askApproval(ctx, "s-warn", req, ask, approval.ModeAsk, agent.HookWait)
+	})
+	if quiet != "" {
+		t.Fatalf("a wait the vendor will sit through must say nothing, got %q", quiet)
 	}
-	warnWaitOutlivesTheHook(&w, agent.HookWait+time.Minute)
-	got := w.String()
+
+	allowed := captureDaemonStderr(t, func() {
+		askApproval(ctx, "s-warn", req, nil, approval.ModeAsk, agent.HookWait+time.Minute)
+	})
+	if allowed != "" {
+		t.Fatalf("a call nobody is asked about must say nothing, got %q", allowed)
+	}
+
+	got := captureDaemonStderr(t, func() {
+		askApproval(ctx, "s-warn", req, ask, approval.ModeAsk, agent.HookWait+time.Minute)
+	})
 	if !strings.Contains(got, (agent.HookWait + time.Minute).String()) {
 		t.Fatalf("warning %q must name the wait that was asked for", got)
 	}
 	if !strings.Contains(got, agent.HookWait.String()) {
 		t.Fatalf("warning %q must name what the vendor will wait", got)
 	}
+}
+
+// captureDaemonStderr runs fn with the daemon's stderr on a pipe, and returns
+// what was written to it. The warning is aimed at the operator reading the
+// daemon's log, so the stream it lands on is part of what is under test.
+func captureDaemonStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	saved := os.Stderr
+	os.Stderr = w
+	read := make(chan string, 1)
+	go func() {
+		var b bytes.Buffer
+		_, _ = io.Copy(&b, r)
+		read <- b.String()
+	}()
+	fn()
+	os.Stderr = saved
+	if err := w.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	out := <-read
+	if err := r.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	return out
 }

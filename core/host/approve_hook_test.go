@@ -12,6 +12,10 @@ import (
 // the asker is a stub in every test here.
 const testSocket = "/run/herrscher/test.sock"
 
+// testTarget is that path as the hook takes it: a resolver it calls only when a
+// note has to name the socket.
+func testTarget() string { return testSocket }
+
 func hookDecision(t *testing.T, out string) (string, string) {
 	t.Helper()
 	var got struct {
@@ -39,7 +43,7 @@ func TestHookAsksTheDaemonWithTheRightArgv(t *testing.T) {
 	}
 	in := strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git push"}}`)
 	var out, errOut bytes.Buffer
-	RunPermissionHook(context.Background(), in, &out, &errOut, testSocket, ask)
+	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
 	want := []string{"approve", "ask", "--session", "s1", "--tool", "Bash", "--subject", "git push"}
 	if strings.Join(seen, " ") != strings.Join(want, " ") {
 		t.Fatalf("argv %v, want %v", seen, want)
@@ -63,9 +67,58 @@ func TestHookSpellsASubjectThatLooksLikeAFlag(t *testing.T) {
 	}
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"--force rm -rf /"}}`)
 	var out, errOut bytes.Buffer
-	RunPermissionHook(context.Background(), in, &out, &errOut, testSocket, ask)
+	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
+	// Bounded before it is indexed: a regression that stops asking at all leaves
+	// seen empty, and this test has to fail with its own message rather than
+	// panic somewhere the message is lost.
+	if len(seen) == 0 {
+		t.Fatal("the daemon was never asked")
+	}
 	if want := "--subject=--force rm -rf /"; seen[len(seen)-1] != want {
 		t.Fatalf("last argv token %q, want %q", seen[len(seen)-1], want)
+	}
+}
+
+// The branch that turns the guardrail off. Without a session there is no policy
+// to apply and nobody to ask, which is `claude` run by hand in a materialized
+// worktree: it allows, and says on stderr which variable was missing, because a
+// guardrail that is not in effect must never be silent about it.
+func TestHookAllowsWithNoSessionInTheEnvironment(t *testing.T) {
+	t.Setenv(SessionVar, "")
+	ask := func(context.Context, []string) (string, bool, error) {
+		t.Error("the daemon must not be asked about a call that belongs to no session")
+		return "", false, nil
+	}
+	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}`)
+	var out, errOut bytes.Buffer
+	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
+	if d, reason := hookDecision(t, out.String()); d != "allow" || reason != "" {
+		t.Fatalf("got %q/%q, want a bare allow", d, reason)
+	}
+	if !strings.Contains(errOut.String(), SessionVar) {
+		t.Fatalf("stderr was %q, want the variable whose absence turned the hook off", errOut.String())
+	}
+}
+
+// The socket is resolved through a function so the payloads answered without
+// asking anybody never pay for it: naming it reads the daemon's state file, and
+// this runs once per tool call across the whole fleet.
+func TestHookDoesNotResolveTheSocketItNeverDials(t *testing.T) {
+	t.Setenv(SessionVar, "s1")
+	resolved := 0
+	target := func() string {
+		resolved++
+		return testSocket
+	}
+	ask := func(context.Context, []string) (string, bool, error) {
+		t.Error("a payload for another event asks nobody")
+		return "", false, nil
+	}
+	var out, errOut bytes.Buffer
+	in := strings.NewReader(`{"hook_event_name":"PostToolUse","tool_name":"Bash"}`)
+	RunPermissionHook(context.Background(), in, &out, &errOut, target, ask)
+	if resolved != 0 {
+		t.Fatalf("the socket was resolved %d times, want none", resolved)
 	}
 }
 
@@ -74,7 +127,7 @@ func TestHookAllowsWhenNoDaemonListens(t *testing.T) {
 	ask := func(context.Context, []string) (string, bool, error) { return "", false, nil }
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
 	var out, errOut bytes.Buffer
-	RunPermissionHook(context.Background(), in, &out, &errOut, testSocket, ask)
+	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
 	if d, _ := hookDecision(t, out.String()); d != "allow" {
 		t.Fatalf("got %q, want allow: no daemon must not mean no claude", d)
 	}
@@ -91,7 +144,7 @@ func TestHookAllowsOnGarbageInput(t *testing.T) {
 		return "", false, nil
 	}
 	var out, errOut bytes.Buffer
-	RunPermissionHook(context.Background(), strings.NewReader("{not json"), &out, &errOut, testSocket, ask)
+	RunPermissionHook(context.Background(), strings.NewReader("{not json"), &out, &errOut, testTarget, ask)
 	if d, _ := hookDecision(t, out.String()); d != "allow" {
 		t.Fatalf("got %q, want allow", d)
 	}
@@ -108,7 +161,7 @@ func TestHookAllowsWhenThePayloadNamesNoTool(t *testing.T) {
 		return "", false, nil
 	}
 	var out, errOut bytes.Buffer
-	RunPermissionHook(context.Background(), strings.NewReader(`{"hook_event_name":"PreToolUse"}`), &out, &errOut, testSocket, ask)
+	RunPermissionHook(context.Background(), strings.NewReader(`{"hook_event_name":"PreToolUse"}`), &out, &errOut, testTarget, ask)
 	if d, _ := hookDecision(t, out.String()); d != "allow" {
 		t.Fatalf("got %q, want allow", d)
 	}
@@ -127,7 +180,7 @@ func TestHookAllowsOnAnotherEvent(t *testing.T) {
 	}
 	in := strings.NewReader(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}`)
 	var out, errOut bytes.Buffer
-	RunPermissionHook(context.Background(), in, &out, &errOut, testSocket, ask)
+	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
 	if d, _ := hookDecision(t, out.String()); d != "allow" {
 		t.Fatalf("got %q, want allow", d)
 	}
@@ -143,7 +196,7 @@ func TestHookAllowsWhenTheDaemonErrors(t *testing.T) {
 	}
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
 	var out, errOut bytes.Buffer
-	RunPermissionHook(context.Background(), in, &out, &errOut, testSocket, ask)
+	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
 	if d, _ := hookDecision(t, out.String()); d != "allow" {
 		t.Fatalf("got %q, want allow", d)
 	}
@@ -161,7 +214,7 @@ func TestHookImposesNoDeadlineOfItsOwn(t *testing.T) {
 	}
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
 	var out, errOut bytes.Buffer
-	RunPermissionHook(context.Background(), in, &out, &errOut, testSocket, ask)
+	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
 	if hadDeadline {
 		t.Fatal("the hook put a deadline on the ask: it would cut short the wait on a human")
 	}

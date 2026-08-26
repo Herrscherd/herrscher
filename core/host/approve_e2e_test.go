@@ -62,7 +62,7 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		RunPermissionHook(ctx, in, &out, &errOut, sock, func(c context.Context, argv []string) (string, bool, error) {
+		RunPermissionHook(ctx, in, &out, &errOut, func() string { return sock }, func(c context.Context, argv []string) (string, bool, error) {
 			return dispatchLiveCommand(c, sock, argv)
 		})
 	}()

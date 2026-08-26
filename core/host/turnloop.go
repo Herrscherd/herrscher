@@ -294,11 +294,11 @@ func (d *sessionDriver) askApproval(ctx context.Context, prompt, id string) {
 	}
 }
 
-// AskApprovalOn routes an approval question to the named session's gateways,
+// askApprovalOn routes an approval question to the named session's gateways,
 // doing nothing when no live session by that name is driving (mirror of Pick).
 // A request nobody can see still waits out its timeout and is then refused,
 // which is the same answer with a slower clock.
-func AskApprovalOn(ctx context.Context, session, prompt, id string) {
+func askApprovalOn(ctx context.Context, session, prompt, id string) {
 	sessionRegistry.mu.Lock()
 	d := sessionRegistry.m[session]
 	sessionRegistry.mu.Unlock()

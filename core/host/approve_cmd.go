@@ -3,14 +3,11 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"golang.org/x/term"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -23,7 +20,7 @@ import (
 // the TAGS, backend, cmd and host files its home already carries.
 const approvalsFile = "APPROVALS"
 
-// addApproveCommands registers the approve verbs: five for an operator, two for
+// addApproveCommands registers the approve verbs: five for an operator, one for
 // a machine. Like host and schedule, they are neutral argv, so a chat gateway
 // binds them as they are.
 func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store) error {
@@ -161,29 +158,13 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 		return err
 	}
 
-	if err := reg.Add(contracts.New("approve", "hook").
-		Help("machine verb: read a PreToolUse payload on stdin and answer it").
-		Do(func(ctx context.Context, _ contracts.Input) (string, error) {
-			// Runs in the short-lived process the vendor spawned, never in the
-			// daemon: it is the caller that must reach the command socket, and
-			// the payload it answers is on that process's own stdin.
-			//
-			// This registry is also the daemon's own, so the verb shows up in the
-			// command palette. Selected there, the read below would take the
-			// terminal Bubbletea holds in raw mode: it would never see EOF, would
-			// steal the operator's keystrokes, and would block that command for
-			// good. Refusing on a terminal is the guard. A real hook is spawned
-			// with a pipe on stdin and never reaches it, and the binary answers
-			// `approve hook` before this registry exists anyway.
-			if term.IsTerminal(int(os.Stdin.Fd())) {
-				return "", errors.New("approve hook is a machine verb: it reads a PreToolUse payload on stdin")
-			}
-			var out strings.Builder
-			RunApprovalHook(ctx, os.Stdin, &out, os.Stderr)
-			return strings.TrimRight(out.String(), "\n"), nil
-		})); err != nil {
-		return err
-	}
+	// `approve hook` is deliberately not registered here. It reads a PreToolUse
+	// payload on the calling process's own stdin, so it only means anything in
+	// the short-lived process the vendor spawned, and the binary answers it
+	// there before any registry is built. Registered, it would be one more verb
+	// reachable over the command socket, and the stdin it would read is the
+	// daemon's: a daemon started with a pipe on stdin would sit in that read for
+	// good, holding the connection with it.
 
 	return reg.Add(contracts.New("approve", "mode").
 		Help("set a session's stance: ask (default), bypass, or strict").

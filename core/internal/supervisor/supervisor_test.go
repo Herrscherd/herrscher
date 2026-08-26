@@ -448,9 +448,14 @@ func TestBridgeCarriesTheSessionName(t *testing.T) {
 // back to the default state file, which under `serve --state <path>` names
 // another instance and another socket, and a hook that reaches nobody allows.
 // So a daemon serving its own state would run a policy that decides nothing.
-func TestBridgeCarriesTheCommandSocket(t *testing.T) {
+//
+// The socket is this session's and not the daemon's, because which listener a
+// connection arrives on is what tells the daemon who is calling. Pointing a
+// session at the operator's socket would hand every agent the operator's
+// authority.
+func TestBridgeIsGivenItsOwnSessionSocket(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/bin/herrscher")
-	s.SetCommandSocket("/tmp/herrscher-command-alt.sock")
+	s.SetCommandSocket(func(session string) string { return "/tmp/herrscher-command-alt-s-" + session + ".sock" })
 	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude"})
 	if err != nil {
 		t.Fatalf("bridgeCommand: %v", err)
@@ -461,8 +466,29 @@ func TestBridgeCarriesTheCommandSocket(t *testing.T) {
 			got = v
 		}
 	}
-	if got != "/tmp/herrscher-command-alt.sock" {
-		t.Fatalf("%s = %q, want the socket this daemon serves", control.CommandSocketVar, got)
+	if got != "/tmp/herrscher-command-alt-s-s1.sock" {
+		t.Fatalf("%s = %q, want the socket this daemon serves for this session", control.CommandSocketVar, got)
+	}
+}
+
+// The remote half of the same claim: ssh carries this session's socket over,
+// and nothing else, so a machine that is not this one has no path to the
+// operator's.
+func TestRemoteForwardPointsAtTheSessionSocket(t *testing.T) {
+	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s.SetCommandSocket(func(session string) string { return "/tmp/sock-" + session })
+	var found bool
+	for _, f := range s.forwardsFor(state.Session{Name: "revue", Host: "build1"}) {
+		if f.Remote != control.RemoteCommandSocketPath("revue") {
+			continue
+		}
+		found = true
+		if f.Local != "/tmp/sock-revue" {
+			t.Fatalf("forward local = %q, want the session socket", f.Local)
+		}
+	}
+	if !found {
+		t.Fatal("no command-socket forward for the session")
 	}
 }
 
@@ -476,8 +502,13 @@ func TestBridgeOmitsAnUnknownCommandSocket(t *testing.T) {
 		t.Fatalf("bridgeCommand: %v", err)
 	}
 	for _, kv := range cmd.Env {
-		if kv == control.CommandSocketVar+"=" {
-			t.Fatal("an empty command socket must not be exported")
+		if strings.HasPrefix(kv, control.CommandSocketVar+"=") {
+			t.Fatalf("env names a socket nobody set: %q", kv)
+		}
+	}
+	for _, f := range s.forwardsFor(state.Session{Name: "s1", Host: "build1"}) {
+		if f.Remote == control.RemoteCommandSocketPath("s1") {
+			t.Fatal("forwarding a socket nobody set")
 		}
 	}
 }

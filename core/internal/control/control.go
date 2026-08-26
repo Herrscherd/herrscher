@@ -4,11 +4,15 @@ package control
 
 import "strings"
 
-// SocketPath derives the per-session control socket path. Both the supervisor
-// (which passes it to the bridge) and the daemon (which accepts on it) compute
-// the same path from the session name. Characters unsafe in a filename are
-// folded to "-".
-func safeSessionName(session string) string {
+// SafeSessionName folds a session name down to what is safe in a filename:
+// every character outside letters, digits, "-" and "_" becomes "-". Both the
+// supervisor (which passes a socket path to the bridge) and the daemon (which
+// accepts on it) derive their paths through here, so the same session name
+// always names the same socket.
+//
+// Exported because core/host derives a per-session command socket the same way,
+// and two foldings that could drift is two names for one socket.
+func SafeSessionName(session string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
@@ -28,20 +32,23 @@ const remoteSocketDir = "/tmp"
 
 // RemoteSocketPath is SocketPath for another machine.
 func RemoteSocketPath(session string) string {
-	return remoteSocketDir + "/herrscher-control-" + safeSessionName(session) + ".sock"
+	return remoteSocketDir + "/herrscher-control-" + SafeSessionName(session) + ".sock"
 }
 
 // RemoteCommandSocketPath is where a remote session's `herrscher <verb>` dials
-// the daemon's operator command socket, once the launch has forwarded it there.
+// its own command socket, once the launch has forwarded it there.
 //
-// It is named after the session and not after the daemon, even though every
-// session forwards the very same socket back here. Two sessions on one host
-// would otherwise ask for one path: the second launch finds it taken and dies
-// on ExitOnForwardFailure, and clearing it first cuts the first session's agent
-// off from the daemon. One path per session costs a socket file and makes both
-// failures unrepresentable.
+// Its own, and not the daemon's operator socket: which socket a connection
+// arrives on is what tells the daemon who is calling, so forwarding the
+// operator's would hand every agent on every host the operator's authority.
+//
+// It is named after the session for a second reason, older than that one. Two
+// sessions on one host would otherwise ask for one path: the second launch
+// finds it taken and dies on ExitOnForwardFailure, and clearing it first cuts
+// the first session's agent off from the daemon. One path per session costs a
+// socket file and makes both failures unrepresentable.
 func RemoteCommandSocketPath(session string) string {
-	return remoteSocketDir + "/herrscher-command-" + safeSessionName(session) + ".sock"
+	return remoteSocketDir + "/herrscher-command-" + SafeSessionName(session) + ".sock"
 }
 
 // CommandSocketVar is how the far side learns that path: it cannot derive a

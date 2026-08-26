@@ -169,6 +169,8 @@ func main() {
 		err = runHost(ctx, args)
 	case "approve":
 		err = runApprove(ctx, args)
+	case "role":
+		err = runRole(ctx, args)
 	case "memory":
 		err = runMemory(ctx, args)
 	case "models":
@@ -200,9 +202,11 @@ func main() {
 		//
 		// Be honest about the reach: the daemon is handed the argv as-is, so what
 		// this opens is its whole registry and not only the contributed part of
-		// it — `herrscher set source --path /x` now lands on the live daemon
-		// where it used to be an unknown verb. No privilege is added; the socket
-		// already took arbitrary argv from anyone who could reach it.
+		// it. `herrscher set source --path /x` lands on the live daemon where it
+		// used to be an unknown verb. What it does NOT open is a privilege: the
+		// daemon decides what the caller may run from the socket the connection
+		// arrived on, so forwarding an argv it does not recognise forwards
+		// exactly the authority that socket already carried.
 		out, derr, code := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
 		if code != 0 {
 			fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())

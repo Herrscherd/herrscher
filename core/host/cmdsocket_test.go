@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -167,3 +168,84 @@ func TestCommandSocketClosesSilentConnection(t *testing.T) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+// Identity comes from the listener, not the message: two sessions must never
+// share a socket, or the daemon could not tell them apart.
+func TestEachSessionGetsItsOwnCommandSocket(t *testing.T) {
+	a := SessionCommandSocketPath("inst", "revue")
+	b := SessionCommandSocketPath("inst", "release")
+	if a == b {
+		t.Fatalf("two sessions share %q", a)
+	}
+	if a == CommandSocketPath("inst") || b == CommandSocketPath("inst") {
+		t.Fatal("a session socket must not be the operator socket")
+	}
+}
+
+// A session name is free text. It reaches a filesystem path here.
+func TestASessionSocketPathFoldsUnsafeNames(t *testing.T) {
+	got := SessionCommandSocketPath("", "../../etc/passwd")
+	if strings.ContainsAny(filepath.Base(got), "/\\") {
+		t.Fatalf("path %q keeps a separator from the session name", got)
+	}
+	if strings.Contains(got, "..") {
+		t.Fatalf("path %q keeps a traversal from the session name", got)
+	}
+}
+
+// The longest name the slugifier produces, on the longest instance id the
+// validator accepts, used to make a path bind refused with "invalid argument".
+// That failure is quiet where it matters: the session still starts, and its
+// agent's `herrscher <verb>` then falls back to the state file with nobody
+// deciding anything, which is the boundary going away exactly where the name
+// got long. So the path must fold, and still bind.
+func TestALongSessionNameStillGetsASocketThatBinds(t *testing.T) {
+	long := strings.Repeat("b", 64)
+	p := SessionCommandSocketPath(strings.Repeat("a", 16), long)
+	if len(p) > maxUnixSocketPath {
+		t.Fatalf("path is %d bytes, over the %d sun_path holds: %q", len(p), maxUnixSocketPath, p)
+	}
+	ln, err := net.Listen("unix", p)
+	if err != nil {
+		t.Fatalf("listen %q: %v", p, err)
+	}
+	_ = ln.Close()
+	_ = os.Remove(p)
+	// Folding must not fold two sessions onto one socket, which would hand one
+	// session the other's identity.
+	other := SessionCommandSocketPath(strings.Repeat("a", 16), long[:63]+"c")
+	if p == other {
+		t.Fatalf("two long names share %q", p)
+	}
+	// And it must be a function of the name alone, or the daemon and the
+	// supervisor would each bind a different path.
+	if again := SessionCommandSocketPath(strings.Repeat("a", 16), long); again != p {
+		t.Fatalf("not stable: %q then %q", p, again)
+	}
+}
+
+func TestSessionSocketsOfTwoInstancesDoNotCollide(t *testing.T) {
+	if SessionCommandSocketPath("a", "revue") == SessionCommandSocketPath("b", "revue") {
+		t.Fatal("two daemons on one machine must not share a session socket")
+	}
+}
+
+// 0600 for the same reason the operator socket has it: it does not isolate the
+// daemon from its own agent, which shares its uid, but it does keep every other
+// account on the machine out.
+func TestASessionSocketIsNotWorldReachable(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "s.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go serveCommandSocket(ctx, sock, dispatcherFunc(func(context.Context, []string) (string, error) {
+		return "", nil
+	}))
+	waitForSocket(t, sock)
+	fi, err := os.Stat(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := fi.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("socket mode %04o, want 0600", perm)
+	}
+}

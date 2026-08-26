@@ -369,3 +369,125 @@ func TestIsLegacy(t *testing.T) {
 		})
 	}
 }
+
+func TestRolesRoundTripThroughTheFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	st, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := st.SetRole("chat:1234", "owner", "shan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first {
+		t.Fatal("SetRole must report the first assignment: it changes what every unnamed caller gets")
+	}
+	first, err = st.SetRole("chat:5678", "observer", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first {
+		t.Fatal("only the first assignment is the first one")
+	}
+
+	reloaded, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := reloaded.RoleAssignments()
+	if len(got) != 2 {
+		t.Fatalf("RoleAssignments = %v, want two entries", got)
+	}
+	if got["chat:1234"].Role != "owner" || got["chat:1234"].Label != "shan" {
+		t.Fatalf("chat:1234 = %+v, want owner/shan", got["chat:1234"])
+	}
+	if got["chat:5678"].Label != "" {
+		t.Fatalf("chat:5678 label = %q, want empty", got["chat:5678"].Label)
+	}
+}
+
+// The pure package decides from principal and role alone. Handing it the whole
+// record would hand it a display label it must never read.
+func TestRoleNamesDropsTheLabel(t *testing.T) {
+	st, err := LoadState(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SetRole("chat:1234", "owner", "shan"); err != nil {
+		t.Fatal(err)
+	}
+	names := st.RoleNames()
+	if names["chat:1234"] != "owner" {
+		t.Fatalf("RoleNames = %v, want chat:1234 -> owner", names)
+	}
+}
+
+// A caller that mutates what it got back must not be mutating the daemon's
+// authorization table.
+func TestRoleAccessorsHandBackCopies(t *testing.T) {
+	st, err := LoadState(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SetRole("chat:1234", "observer", ""); err != nil {
+		t.Fatal(err)
+	}
+	st.RoleAssignments()["chat:1234"] = RoleAssignment{Role: "owner"}
+	st.RoleNames()["chat:9999"] = "owner"
+	if st.RoleNames()["chat:1234"] != "observer" {
+		t.Fatal("RoleAssignments handed out the live map")
+	}
+	if _, ok := st.RoleNames()["chat:9999"]; ok {
+		t.Fatal("RoleNames handed out the live map")
+	}
+}
+
+func TestRemoveRoleReportsWhetherItWasThere(t *testing.T) {
+	st, err := LoadState(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SetRole("chat:1234", "owner", ""); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := st.RemoveRole("chat:1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !removed {
+		t.Fatal("RemoveRole must report the removal")
+	}
+	removed, err = st.RemoveRole("chat:1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed {
+		t.Fatal("RemoveRole must not claim to remove what is not there")
+	}
+	if len(st.RoleAssignments()) != 0 {
+		t.Fatal("the table must be empty again")
+	}
+}
+
+// Empty again is the state an install starts in, and it must mean the same
+// thing: the daemon decides nothing about humans.
+func TestRevokingTheLastRoleMakesTheNextGrantTheFirstAgain(t *testing.T) {
+	st, err := LoadState(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SetRole("chat:1234", "owner", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.RemoveRole("chat:1234"); err != nil {
+		t.Fatal(err)
+	}
+	first, err := st.SetRole("chat:5678", "owner", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first {
+		t.Fatal("an empty table means the next grant is the cliff again")
+	}
+}

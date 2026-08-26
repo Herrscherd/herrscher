@@ -244,6 +244,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	}
 	hb := newHub(ctx, st, sup, gws, partDir, reg, h.Metrics())
 	hb.contributedKinds = contributedKinds(o.ContributedCommands)
+	hb.instanceID = instID
 	// Concrete budget-cap enforcement: built from the manager Handler (owner of
 	// aggregateUsage/cohortTotals + state.State), injected via the host's private
 	// budgetGate seam so goLive's RunSession drivers actually pause on cap.
@@ -280,7 +281,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	go serveEventsSocket(ctx, EventsSocketPath(instID), es)
 	hb.eventPublisher = es.Publish
 
-	go serveCommandSocket(ctx, CommandSocketPath(instID), hb)
+	go serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{hb})
 
 	for _, sess := range st.SnapshotSessions() {
 		if sess.Archived {

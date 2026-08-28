@@ -100,6 +100,15 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		}
 		return nil
 	})
+	// What each backend can actually enforce, so an approval mode is either
+	// honoured or the operator is told at create time that it is not. Both sides
+	// read the same manifests: the manager to warn and to materialize the hook,
+	// the supervisor to decide whether a spawn carries an approval environment.
+	hdl.SetGateResolver(GateFor)
+	sup.SetGateResolver(func(vendor string) string {
+		grain, _ := GateFor(vendor)
+		return grain
+	})
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
 

@@ -217,7 +217,7 @@ workspace and git are there.
 
 ### Tool calls that answer to a policy, and to you
 
-An agent session's Claude Code tool calls are decided before they run. A rule
+A session's tool calls are decided before they run. A rule
 reads `allow Read`, `ask Bash(git push*)` or `deny Write(/etc/*)`, the strictest
 match wins, and an agent's own `APPROVALS` file can only tighten what the daemon
 set, never widen it.
@@ -229,15 +229,27 @@ timeout is a refusal, said to the model in words it can act on.
 A session is `ask`, `strict` (everything a rule does not name is asked about too)
 or `bypass` (no hook at all).
 
-It is wired in by materializing a `PreToolUse` hook into the session's worktree,
-so it binds the agent herrscher started and nothing else on the machine. That is
-also the whole of its reach, and both limits are worth knowing before you rely on
-it. The hook rides the agent files, so a session created without `--agent` has no
-hook and no policy, and asking for a mode there is answered with a warning saying
-exactly that. And it is written into `.claude/settings.json` alone, so a Codex or
-Cursor session in the same run is not covered.
+How it is wired in depends on the backend, and each backend says for itself what
+it can enforce. Claude Code gets a `PreToolUse` hook materialized into the
+session's worktree, with or without an agent: a session created without `--agent`
+now gets one written into `.claude/settings.local.json`, which is local to the
+worktree and never touches a tracked settings file. Codex is asked over the
+app-server, which requests an approval per command and per patch, so the same
+rules bite there. Cursor declares that it enforces nothing, because `cursor-agent`
+exposes no hook and no approval channel.
 
-Every failure of the hook allows and says why. This is a guardrail against
+That last one is the shape of every limit here: a mode that will not bite is said
+out loud at create time rather than discovered on the first tool call nobody was
+asked about. A shared session (no isolated worktree), a remote session without an
+agent (no channel to materialize a hook through), a backend that cannot enforce,
+and a daemon that cannot tell what its backends do all produce a warning naming
+the session and the reason. The session is still created, and it still records
+the mode: what is refused is the silence, not the session.
+
+The hook binds the agent herrscher started and nothing else on the machine, which
+is both its guarantee and the whole of its reach.
+
+Every failure allows and says why, on both paths. This is a guardrail against
 mistakes, not a sandbox, and a daemon that has gone away must not stop a `claude`
 run by hand.
 

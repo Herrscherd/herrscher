@@ -36,6 +36,11 @@ type Handler struct {
 	// this package cannot import host (host imports it).
 	// nil = no catalog wired, every id passes.
 	validateModel func(vendor, modelID string) error
+	// gate reports how finely a vendor can enforce approvals, and why it cannot
+	// when it cannot. The composition root reads it off the compiled backends'
+	// manifests; this package stays free of the plugin registry, exactly like
+	// validateModel. nil = nothing is known, so nothing is claimed.
+	gate func(vendor string) (grain, why string)
 	// gatewayOnly reports whether the active route policy forbids native spawns.
 	// The composition root wires host.ResolvePolicy; nil = unrestricted, which is
 	// the internal build and the pre-policy behaviour.
@@ -148,6 +153,35 @@ func (h *Handler) checkSpawnSource(cmdExplicit bool, modelID string) error {
 // not own the model fails at the command instead of much later, as an opaque
 // spawn failure — or worse, as a turn silently run on the machine's own login.
 func (h *Handler) SetModelValidator(fn func(vendor, modelID string) error) { h.validateModel = fn }
+
+// SetGateResolver wires the per-vendor approval granularity, read by the host
+// from the compiled backends' manifests. Until it is set, every vendor reports
+// that it enforces nothing, which is the only truthful answer a daemon with
+// nothing to ask can give.
+func (h *Handler) SetGateResolver(fn func(vendor string) (grain, why string)) { h.gate = fn }
+
+// gateFor answers whether a vendor gates per tool call. An unset resolver, an
+// unknown vendor and a backend that declares nothing all give the same answer,
+// and it is the one that is safe to say out loud.
+func (h *Handler) gateFor(vendor string) (gates bool, why string) {
+	if h.gate == nil {
+		return false, "this daemon was built without a way to tell what its backends enforce"
+	}
+	grain, w := h.gate(vendor)
+	// "tool" is contracts.GrainTool, spelled rather than imported: the manager
+	// does not depend on the plugin contract, and this is the only value it has
+	// to recognise.
+	return grain == "tool", w
+}
+
+// vendorLabel names a vendor in an operator-facing message. An empty vendor is
+// whichever backend the default command runs, which has no name to print.
+func vendorLabel(vendor string) string {
+	if vendor == "" {
+		return "this backend"
+	}
+	return vendor
+}
 
 // checkModel validates a supplied vendor/model pair. An empty id is the legacy
 // path (the model rides in cmd) and is always accepted; an empty vendor means

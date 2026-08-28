@@ -62,6 +62,12 @@ type Supervisor struct {
 	// connection arrives on is what tells the daemon who is calling. nil means
 	// nobody set one, and then nothing is exported and nothing is forwarded.
 	sessionCmdSocket func(session string) string
+	// gate reports a vendor's approval granularity, read by the host from the
+	// compiled backends' manifests. It is asked here rather than recorded on the
+	// session because the bridge environment is built per spawn, and a session's
+	// vendor can change between two of them. nil = nothing is exported, which is
+	// how herrscher behaved before approvals existed.
+	gate func(vendor string) string
 }
 
 // Placement is what the supervisor needs to know about a host to launch there.
@@ -72,6 +78,11 @@ type Placement struct {
 
 // SetHostLookup installs the resolver from a session's host name to a placement.
 func (s *Supervisor) SetHostLookup(f func(name string) (Placement, bool)) { s.hosts = f }
+
+// SetGateResolver wires the per-vendor approval granularity. It is the same
+// answer the manager gets when it decides whether to warn, asked again here
+// because only a backend that gates in-process has any use for the mode.
+func (s *Supervisor) SetGateResolver(f func(vendor string) string) { s.gate = f }
 
 // SetInstanceID records the daemon's instance, threaded to a remote bridge so
 // its children resolve the same command socket this daemon listens on.
@@ -364,7 +375,24 @@ func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) (*ex
 	if s.sessionCmdSocket != nil {
 		cmd.Env = append(cmd.Env, control.CommandSocketVar+"="+s.sessionCmdSocket(sess.Name))
 	}
+	cmd.Env = contracts.MergeEnv(cmd.Env, s.approvalsEnv(sess, s.selfBin))
 	return cmd, nil
+}
+
+// approvalsEnv is the session's approval policy, for the backends that enforce
+// it inside their own process rather than through a materialized hook. Claude
+// ignores it: its hook already asks. Codex reads it and turns it into an
+// app-server approval policy.
+//
+// It is empty unless the vendor declares that it gates per tool call, so a
+// backend that cannot enforce anything is never handed a variable implying it
+// can. It is also empty in bypass, where a variable saying "ignore me" would
+// only ever be misread.
+func (s *Supervisor) approvalsEnv(sess state.Session, bin string) map[string]string {
+	if s.gate == nil || s.gate(sess.Vendor) != string(contracts.GrainTool) {
+		return nil
+	}
+	return contracts.ApprovalsEnv(sess.Name, sess.Approvals, bin)
 }
 
 // remoteBridgeCommand builds the ssh invocation that runs the bridge on another
@@ -476,6 +504,15 @@ func (s *Supervisor) remoteEnvBlock(sess state.Session) string {
 	env[control.SessionVar] = sess.Name
 	if s.sessionCmdSocket != nil {
 		env[control.CommandSocketVar] = control.RemoteCommandSocketPath(sess.Name)
+	}
+	// The binary named here is the one over there: a session must be gated by
+	// the herrscher that runs it, not by a path that only exists on this
+	// machine. A host we cannot resolve carries no approvals rather than a
+	// binary that is not there.
+	if p, err := s.placementFor(sess); err == nil {
+		for k, v := range s.approvalsEnv(sess, p.Bin) {
+			env[k] = v
+		}
 	}
 	return contracts.EncodeEnvSetting(env) + "\n"
 }

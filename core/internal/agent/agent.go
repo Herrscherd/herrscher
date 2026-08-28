@@ -137,6 +137,58 @@ func SelfBin() string {
 	return bin
 }
 
+// localSettingsFile is the settings file Claude Code layers over settings.json
+// and writes itself for local permissions.
+const localSettingsFile = "settings.local.json"
+
+// MaterializeHook writes the PreToolUse approval hook into a worktree that has
+// no agent to materialize. It is what puts an agent-less session's tool calls
+// in front of the approval policy, which before this they never were.
+//
+// It targets settings.local.json rather than settings.json because this
+// worktree is cut from the project tip: .claude/settings.json there may be a
+// tracked file belonging to the repository, and rewriting it would dirty the
+// working tree and risk being committed. settings.local.json is the layer
+// Claude Code already treats as machine-local, and EnsureGitExcludes keeps it
+// out of git status.
+//
+// An empty herrscherBin means no hook at all rather than a hook that fails on
+// every tool call; SelfBin already says out loud when it cannot name itself.
+func MaterializeHook(worktree, herrscherBin string) error {
+	if herrscherBin == "" {
+		return nil
+	}
+	if err := EnsureGitExcludes(worktree); err != nil {
+		return err
+	}
+	claudeDir := filepath.Join(worktree, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		return fmt.Errorf("create .claude dir: %w", err)
+	}
+	path := filepath.Join(claudeDir, localSettingsFile)
+	// A missing file is the common case and means the empty object. Any other
+	// read error is real: papering over it with an empty document would
+	// silently discard whatever the operator had configured there.
+	cur := []byte("{}")
+	buf, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+		if len(strings.TrimSpace(string(buf))) > 0 {
+			cur = buf
+		}
+	case !os.IsNotExist(err):
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+	out, err := injectApprovalHook(cur, herrscherBin)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, out, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
 var materializedGitExcludes = []string{
 	"/AGENTS.md",
 	"/.codex/",

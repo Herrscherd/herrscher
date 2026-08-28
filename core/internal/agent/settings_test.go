@@ -189,3 +189,59 @@ func TestMaterializeIntoAsWithoutBinaryWritesNoHook(t *testing.T) {
 		t.Fatalf("a bypass session must carry no hook at all:\n%s", b)
 	}
 }
+
+func TestMaterializeHookWritesLocalSettings(t *testing.T) {
+	dir := t.TempDir()
+	if err := MaterializeHook(dir, "/usr/local/bin/herrscher"); err != nil {
+		t.Fatalf("MaterializeHook: %v", err)
+	}
+	buf, err := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json"))
+	if err != nil {
+		t.Fatalf("read settings.local.json: %v", err)
+	}
+	if !strings.Contains(string(buf), "approve hook") {
+		t.Fatalf("no hook in %s", buf)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "settings.json")); !os.IsNotExist(err) {
+		t.Fatalf("settings.json was touched, err = %v", err)
+	}
+}
+
+func TestMaterializeHookPreservesExistingLocalSettings(t *testing.T) {
+	// The operator's own settings.local.json is merged into, never replaced:
+	// dropping their keys would throw away configuration and say nothing.
+	dir := t.TempDir()
+	claude := filepath.Join(dir, ".claude")
+	if err := os.MkdirAll(claude, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(claude, "settings.local.json"), []byte(`{"model":"opus"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := MaterializeHook(dir, "/bin/herrscher"); err != nil {
+		t.Fatalf("MaterializeHook: %v", err)
+	}
+	buf, err := os.ReadFile(filepath.Join(claude, "settings.local.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := settingsMap(t, buf)
+	if doc["model"] != "opus" {
+		t.Fatalf("model key lost: %s", buf)
+	}
+	if doc["hooks"] == nil {
+		t.Fatalf("no hooks key: %s", buf)
+	}
+}
+
+func TestMaterializeHookNoBinIsNoOp(t *testing.T) {
+	// An empty binary means no hook rather than a hook that fails on every
+	// call; SelfBin already warns when it cannot name itself.
+	dir := t.TempDir()
+	if err := MaterializeHook(dir, ""); err != nil {
+		t.Fatalf("MaterializeHook: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".claude")); !os.IsNotExist(err) {
+		t.Fatalf(".claude created, err = %v", err)
+	}
+}

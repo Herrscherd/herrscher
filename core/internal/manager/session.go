@@ -11,6 +11,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -528,10 +529,9 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	// than left to be discovered on the first tool call nobody was asked about.
 	// The session is created regardless: the mode is recorded, and it starts
 	// biting the day this session runs an agent.
+	// Filled in further down, once the worktree and the vendor are resolved and
+	// the four ways a policy can fail to bite are all knowable.
 	approvalsNote := ""
-	if agentName == "" && mode != "" && mode != string(approval.ModeBypass) {
-		approvalsNote = fmt.Sprintf("\n\n⚠️ `--approvals %s` enforces nothing on **%s**: it has no agent, so nothing materializes the hook that asks. Recreate it with an agent for the mode to bite.", mode, name)
-	}
 	// Whether the host can carry a new session at all is asked here, before
 	// anything is created: a refusal an operator has to act on is worth more at
 	// the top of a create than halfway through one.
@@ -636,6 +636,37 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		if err := h.materializeOn(ctx, hostName, a, worktree, mode != string(approval.ModeBypass)); err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("provision agent %q: %w", agentName, err)
+		}
+	}
+	// Approvals, for every session rather than only the ones with an agent. A
+	// mode the daemon cannot enforce is a guardrail that lies, so each way it
+	// can fail either materializes the hook or says out loud that it did not.
+	// None of them refuses: whether an ungated session is worth having is the
+	// operator's call, not herrscher's.
+	if mode != "" && mode != string(approval.ModeBypass) {
+		gates, why := h.gateFor(vendor)
+		switch {
+		case !gates:
+			if why == "" {
+				why = "it exposes no approval channel"
+			}
+			approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: `%s` cannot enforce them (%s), so **%s** runs ungated.", vendorLabel(vendor), why, name)
+		case shared || worktree == "":
+			approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: a shared session has no isolated worktree to gate, so **%s** runs ungated.", name)
+		case hostName != "" && h.hs != nil && agentName == "":
+			// The only materialization path to another machine carries an agent.
+			// Placing a hook without one would need a new transport verb, which
+			// is a piece of work of its own.
+			approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: a remote session without an agent has no materialization channel, so **%s** runs ungated.", name)
+		case agentName == "":
+			// An agent session already had its hook written by materializeOn,
+			// into settings.json. This is the other half of the coverage.
+			if err := agent.MaterializeHook(worktree, agent.SelfBin()); err != nil {
+				// Failing open is the contract: a gate that cannot be written
+				// must never be the reason a session cannot exist.
+				fmt.Fprintf(os.Stderr, "approvals: materialize hook for %q failed: %v\n", name, err)
+				approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: the hook could not be written (%v), so **%s** runs ungated.", err, name)
+			}
 		}
 	}
 	// Logical name stays the state/worktree key; the qualified name namespaces

@@ -73,9 +73,14 @@ func shellSingleQuote(s string) string {
 //
 // It is added here rather than written into the agent's home because the binary
 // it invokes belongs to the machine the session runs on, and a home does not
-// know which machine that will be. Adding rather than rewriting also means a
-// session that wants no hook is not a file we edited back: it is the settings
-// herrscher already wrote, untouched.
+// know which machine that will be.
+//
+// Any hook herrscher wrote before is dropped first, so materializing twice over
+// the same file leaves exactly one. A reused worktree already carries the entry
+// from its first session, and a second one would ask the operator twice for
+// every single tool call. Dropping also repairs the binary path when the daemon
+// moved between the two materializations. Hooks somebody else wrote are left
+// where they are: only a command that ends in this daemon's own verb matches.
 func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 	var doc map[string]any
 	if err := json.Unmarshal(settings, &doc); err != nil {
@@ -108,7 +113,13 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 		}
 		pre = list
 	}
-	hooks["PreToolUse"] = append(pre, map[string]any{
+	kept := make([]any, 0, len(pre)+1)
+	for _, entry := range pre {
+		if !isApprovalHook(entry) {
+			kept = append(kept, entry)
+		}
+	}
+	hooks["PreToolUse"] = append(kept, map[string]any{
 		"matcher": "*",
 		"hooks": []any{map[string]any{
 			"type":    "command",
@@ -118,6 +129,31 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 	})
 	doc["hooks"] = hooks
 	return json.MarshalIndent(doc, "", "  ")
+}
+
+// isApprovalHook reports whether one PreToolUse entry is a hook this daemon
+// wrote. It matches on the verb the command ends with rather than on the whole
+// command line, since the binary path in front of it is the one thing that
+// legitimately differs between two materializations of the same worktree.
+func isApprovalHook(entry any) bool {
+	m, ok := entry.(map[string]any)
+	if !ok {
+		return false
+	}
+	list, ok := m["hooks"].([]any)
+	if !ok {
+		return false
+	}
+	for _, h := range list {
+		hm, ok := h.(map[string]any)
+		if !ok {
+			continue
+		}
+		if cmd, ok := hm["command"].(string); ok && strings.HasSuffix(cmd, " approve hook") {
+			return true
+		}
+	}
+	return false
 }
 
 // SelfBin is the herrscher binary running this process, which is what a hook

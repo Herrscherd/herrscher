@@ -245,3 +245,42 @@ func TestMaterializeHookNoBinIsNoOp(t *testing.T) {
 		t.Fatalf(".claude created, err = %v", err)
 	}
 }
+
+func TestMaterializeHookTwiceLeavesOneHook(t *testing.T) {
+	// A reused worktree already carries the hook from its first session. A
+	// second entry would ask the operator twice for every single tool call, and
+	// the stale binary path is repaired rather than kept beside the new one.
+	dir := t.TempDir()
+	if err := MaterializeHook(dir, "/old/herrscher"); err != nil {
+		t.Fatalf("first MaterializeHook: %v", err)
+	}
+	if err := MaterializeHook(dir, "/new/herrscher"); err != nil {
+		t.Fatalf("second MaterializeHook: %v", err)
+	}
+	buf, err := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(buf), "approve hook"); n != 1 {
+		t.Fatalf("%d hooks, want 1: %s", n, buf)
+	}
+	if strings.Contains(string(buf), "/old/herrscher") {
+		t.Fatalf("stale binary path kept: %s", buf)
+	}
+}
+
+func TestInjectApprovalHookKeepsForeignPreToolUseHooks(t *testing.T) {
+	// Only a command ending in this daemon's own verb is dropped: a PreToolUse
+	// hook somebody else wrote is configuration we have no business rewriting.
+	prior := []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/usr/bin/lint"}]}]}}`)
+	out, err := injectApprovalHook(prior, "/bin/herrscher")
+	if err != nil {
+		t.Fatalf("injectApprovalHook: %v", err)
+	}
+	if !strings.Contains(string(out), "/usr/bin/lint") {
+		t.Fatalf("foreign hook dropped: %s", out)
+	}
+	if n := strings.Count(string(out), "approve hook"); n != 1 {
+		t.Fatalf("%d approval hooks, want 1: %s", n, out)
+	}
+}

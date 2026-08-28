@@ -653,7 +653,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: `%s` cannot enforce them (%s), so **%s** runs ungated.", vendorLabel(vendor), why, name)
 		case shared || worktree == "":
 			approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: a shared session has no isolated worktree to gate, so **%s** runs ungated.", name)
-		case hostName != "" && h.hs != nil && agentName == "":
+		case hostName != "" && agentName == "":
 			// The only materialization path to another machine carries an agent.
 			// Placing a hook without one would need a new transport verb, which
 			// is a piece of work of its own.
@@ -901,6 +901,19 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 		return "", fmt.Errorf("no session %q", name)
 	}
 	sess, _ := h.st.FindSession(name) // re-read: Vendor/Cmd/ModelID/ResumeToken just changed
+	// A vendor change can land a gated session on a backend that enforces
+	// nothing, and the mode stays recorded while nothing applies it any more.
+	// Said out loud for the same reason as at creation: the switch is the
+	// operator's call, the silence is not.
+	switchNote := ""
+	if m := sess.Approvals; m != "" && m != string(approval.ModeBypass) {
+		if gates, why := h.gateFor(sess.Vendor); !gates {
+			if why == "" {
+				why = "it exposes no approval channel"
+			}
+			switchNote = fmt.Sprintf("\n\n⚠️ approvals: `%s` cannot enforce them (%s), so **%s** now runs ungated.", vendorLabel(sess.Vendor), why, name)
+		}
+	}
 	// Replace the targeted bridge synchronously for ALL handoff modes so the old
 	// process is gone before the new Cmd/Vendor starts. Only seeding is optional.
 	if err := h.sup.Restart(sess); err != nil {
@@ -910,7 +923,7 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 		return "", fmt.Errorf("redémarrage backend: %w (session %s restaurée sur %s)", err, name, oldVendor)
 	}
 	if handoff == "none" {
-		return fmt.Sprintf("session %s re-ciblée sur %s (sans reprise)", name, vendor), nil
+		return fmt.Sprintf("session %s re-ciblée sur %s (sans reprise)%s", name, vendor, switchNote), nil
 	}
 	seedText := buildHandoffSeed(
 		state.ReadTranscript(state.TranscriptPath(h.partDir, name), sessionLogTranscriptCap),
@@ -919,9 +932,9 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	if seedText != "" && h.seed != nil && !h.injectSeed(ctx, name, seedText) {
 		// Restart succeeded but the seed never landed: report honestly rather
 		// than claiming a handoff the new backend never received.
-		return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s non confirmée)", name, vendor, handoff), nil
+		return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s non confirmée)%s", name, vendor, handoff, switchNote), nil
 	}
-	return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s)", name, vendor, handoff), nil
+	return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s)%s", name, vendor, handoff, switchNote), nil
 }
 
 // injectSeed retries the live-session seed: the restarted bridge registers its

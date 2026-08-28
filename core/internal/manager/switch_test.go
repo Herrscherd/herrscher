@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -108,5 +109,49 @@ func TestSessionSwitchRollsBackOnStartFailure(t *testing.T) {
 	}
 	if sup.startedCmds[0] != "claude --model claude-opus-4-8" {
 		t.Fatalf("rollback restart must use the old Cmd, got %q", sup.startedCmds[0])
+	}
+}
+
+// A vendor change can land a gated session on a backend that enforces nothing.
+// The switch happens either way, and the loss of the guardrail is said out loud
+// rather than left to be found out on the first tool call nobody was asked about.
+func TestSessionSwitchWarnsWhenTheNewBackendCannotGate(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	if err := st.AddSession(state.Session{Name: "gamma", Vendor: "claude", Cmd: "claude", Approvals: "strict"}); err != nil {
+		t.Fatal(err)
+	}
+	h.SetGateResolver(func(vendor string) (string, string) {
+		if vendor == "claude" {
+			return "tool", ""
+		}
+		return "", "cursor-agent exposes no permission hook"
+	})
+	out, err := h.sessionSwitchRun(context.Background(), args(
+		"name", "gamma", "vendor", "cursor", "cmd", "cursor-agent", "handoff", "none",
+	))
+	if err != nil {
+		t.Fatalf("switch: %v", err)
+	}
+	if !strings.Contains(out, "runs ungated") || !strings.Contains(out, "no permission hook") {
+		t.Fatalf("no warning in reply: %q", out)
+	}
+}
+
+// The same switch onto a backend that does gate says nothing extra: a warning
+// nobody needs is noise, and noise is what makes a real warning unreadable.
+func TestSessionSwitchIsQuietWhenTheNewBackendGates(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	if err := st.AddSession(state.Session{Name: "delta", Vendor: "cursor", Cmd: "cursor-agent", Approvals: "strict"}); err != nil {
+		t.Fatal(err)
+	}
+	h.SetGateResolver(func(string) (string, string) { return "tool", "" })
+	out, err := h.sessionSwitchRun(context.Background(), args(
+		"name", "delta", "vendor", "claude", "cmd", "claude", "handoff", "none",
+	))
+	if err != nil {
+		t.Fatalf("switch: %v", err)
+	}
+	if strings.Contains(out, "ungated") {
+		t.Fatalf("unwanted warning: %q", out)
 	}
 }

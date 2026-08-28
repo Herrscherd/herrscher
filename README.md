@@ -244,7 +244,9 @@ asked about. A shared session (no isolated worktree), a remote session without a
 agent (no channel to materialize a hook through), a backend that cannot enforce,
 and a daemon that cannot tell what its backends do all produce a warning naming
 the session and the reason. The session is still created, and it still records
-the mode: what is refused is the silence, not the session.
+the mode: what is refused is the silence, not the session. `session switch` says
+the same thing when it moves a gated session onto a backend that cannot enforce
+its mode.
 
 The hook binds the agent herrscher started and nothing else on the machine, which
 is both its guarantee and the whole of its reach.

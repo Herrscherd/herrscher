@@ -20,3 +20,4 @@
 
 # atomic-write scratch files (state.json.tmp, transcript .tmp); never committed
 *.tmp
+.herrscher-scratch/

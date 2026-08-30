@@ -196,14 +196,79 @@ func TestSessionCreateUnknownAgentRollsBack(t *testing.T) {
 	}
 }
 
-func TestSessionCreateAgentRequiresWorktree(t *testing.T) {
+func TestSessionCreateAgentRefusesShared(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
 	if _, err := h.agents.Create(agent.CreateSpec{Name: "roblox"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "agent", "roblox", "shared", "true")); err == nil {
-		t.Fatal("expected error: agent session needs an isolated worktree")
+		t.Fatal("expected error: an agent session cannot run in the main checkout")
+	}
+}
+
+func TestSessionCreateWithAgentOutsideGitGetsAScratchDirectory(t *testing.T) {
+	h, _, _, wt, _, st := newTestHandler(t, "")
+	wt.path = ""
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if _, err := h.agents.Create(agent.CreateSpec{Name: "roblox", Soul: "PERSONA"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "agent", "roblox")); err != nil {
+		t.Fatalf("a session with no repository to cut a worktree from must still get a place: %v", err)
+	}
+
+	sess, ok := st.FindSession("demo")
+	if !ok || !sess.Scratch {
+		t.Fatalf("session should be marked scratch: %+v", sess)
+	}
+	if len(wt.scratched) != 1 {
+		t.Fatalf("expected one scratch directory: %+v", wt.scratched)
+	}
+	if sess.Worktree == "" || sess.Dir != sess.Worktree {
+		t.Fatalf("session should run in its scratch directory: %+v", sess)
+	}
+	soul, err := os.ReadFile(filepath.Join(sess.Worktree, ".claude", "CLAUDE.md"))
+	if err != nil || string(soul) != "PERSONA" {
+		t.Fatalf("persona not materialized: %q err=%v", soul, err)
+	}
+
+	if _, err := h.sessionCloseRun(context.Background(), args("name", "demo")); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if len(wt.removedScrap) != 1 || len(wt.removed) != 0 {
+		t.Fatalf("close should delete the scratch directory and ask git for nothing: scratch=%+v worktree=%+v", wt.removedScrap, wt.removed)
+	}
+	if _, err := os.Stat(sess.Worktree); !os.IsNotExist(err) {
+		t.Fatalf("scratch directory should be gone, stat err = %v", err)
+	}
+}
+
+func TestSessionCreateDoesNotRollBackAReusedScratchDirectory(t *testing.T) {
+	h, _, _, wt, _, st := newTestHandler(t, "")
+	wt.path = ""
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if _, err := h.agents.Create(agent.CreateSpec{Name: "roblox"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "agent", "roblox")); err != nil {
+		t.Fatal(err)
+	}
+	sess, _ := st.FindSession("demo")
+	root := filepath.Dir(filepath.Dir(sess.Worktree))
+	if err := os.MkdirAll(wt.ScratchPath(root, "back"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "back", "agent", "ghost")); err == nil {
+		t.Fatal("expected error for unknown agent")
+	}
+	if len(wt.removedScrap) != 0 {
+		t.Fatalf("a directory that predates this call is not the rollback's to remove: %+v", wt.removedScrap)
+	}
+	if _, err := os.Stat(wt.ScratchPath(root, "back")); err != nil {
+		t.Fatalf("the returning session's directory should still be there: %v", err)
 	}
 }
 

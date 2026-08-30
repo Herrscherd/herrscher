@@ -46,6 +46,9 @@ type Worktrees interface {
 	PreExisting(repo, name string) bool
 	Branch(name string) string
 	Remove(repo, name string, force bool) error
+	Scratch(root, name string) (path string, err error)
+	ScratchPath(root, name string) string
+	RemoveScratch(root, name string) error
 }
 
 // Hosts resolves where a session's process runs. The manager needs four things

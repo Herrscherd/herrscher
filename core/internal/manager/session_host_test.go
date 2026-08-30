@@ -75,7 +75,7 @@ func handlerWithHosts(t *testing.T) (*Handler, *fakeHosts, *fakeWT, *state.State
 	t.Helper()
 	h, _, _, localWT, _, st := newTestHandler(t, "category")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	hs := &fakeHosts{name: "build1", wt: &fakeWT{path: "/srv/work/demo-wt"}, workspace: "/srv/work"}
+	hs := &fakeHosts{name: "build1", wt: &fakeWT{path: "/srv/work/demo-wt", scratchBase: t.TempDir()}, workspace: "/srv/work"}
 	h.SetHosts(hs)
 	return h, hs, localWT, st
 }

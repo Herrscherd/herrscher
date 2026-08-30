@@ -36,9 +36,10 @@ type Session struct {
 	// sessions created before the catalog existed.
 	ModelID  string `json:"modelId,omitempty"`
 	Worktree string `json:"worktree,omitempty"` // abs path; empty for a shared session
-	Dir      string `json:"dir,omitempty"`      // bridge working dir; empty = inherit launcher cwd (pwd fallback)
-	Project  string `json:"project,omitempty"`  // workspace sub-dir the session started from
-	Agent    string `json:"agent,omitempty"`    // durable agent this session was provisioned from ("" = none)
+	Scratch  bool   `json:"scratch,omitempty"`
+	Dir      string `json:"dir,omitempty"`     // bridge working dir; empty = inherit launcher cwd (pwd fallback)
+	Project  string `json:"project,omitempty"` // workspace sub-dir the session started from
+	Agent    string `json:"agent,omitempty"`   // durable agent this session was provisioned from ("" = none)
 	// Host names the place this session's process runs, as registered by
 	// `host add`. Empty means this machine, which is every session written
 	// before remote execution existed.

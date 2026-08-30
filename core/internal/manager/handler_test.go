@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -287,6 +289,10 @@ type fakeWT struct {
 	removeErr    error  // simulate dirty worktree
 	createdBase  string // last base passed to Create
 	preExisting  bool   // the worktree was already on disk, so Create reuses it
+	scratched    []string
+	scratchErr   error
+	removedScrap []string
+	scratchBase  string
 }
 
 func (f *fakeWT) Create(repo, name, base string) (string, error) {
@@ -303,6 +309,27 @@ func (f *fakeWT) Remove(repo, name string, force bool) error {
 	}
 	f.removed = append(f.removed, name)
 	return nil
+}
+func (f *fakeWT) Scratch(root, name string) (string, error) {
+	if f.scratchErr != nil {
+		return "", f.scratchErr
+	}
+	f.scratched = append(f.scratched, name)
+	p := f.ScratchPath(root, name)
+	if err := os.MkdirAll(p, 0o700); err != nil {
+		return "", err
+	}
+	return p, nil
+}
+func (f *fakeWT) ScratchPath(root, name string) string {
+	if f.scratchBase != "" {
+		root = f.scratchBase
+	}
+	return filepath.Join(root, ".herrscher-scratch", name)
+}
+func (f *fakeWT) RemoveScratch(root, name string) error {
+	f.removedScrap = append(f.removedScrap, name)
+	return os.RemoveAll(f.ScratchPath(root, name))
 }
 
 type fakeForge struct {
@@ -343,7 +370,7 @@ func newTestHandlerWithUpdater(t *testing.T, homeType string) (*Handler, *fakeUp
 	t.Helper()
 	d := &fakeChannelAdmin{homeType: homeType}
 	sup := &fakeSup{}
-	wt := &fakeWT{path: "/wt/x"}
+	wt := &fakeWT{path: "/wt/x", scratchBase: t.TempDir()}
 	fg := &fakeForge{}
 	up := &fakeUpdater{version: "abc1234"}
 	st := state.NewState(t.TempDir() + "/s.json")

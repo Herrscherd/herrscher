@@ -77,6 +77,16 @@ func (r *Remote) Remove(repo, name string, force bool) error {
 	return r.call(argv, &out)
 }
 
+func (r *Remote) Scratch(root, name string) (string, error) {
+	return "", fmt.Errorf("on %s: a session with an agent needs a git repository there, a disposable directory cannot be provisioned remotely", r.run.Describe())
+}
+
+func (r *Remote) ScratchPath(root, name string) string {
+	return scratchPathIn(root, r.instanceID, name)
+}
+
+func (r *Remote) RemoveScratch(root, name string) error { return nil }
+
 // Materialize ships an agent's provisioning files into a remote worktree. The
 // payload is a tar stream, which the verb on the far side extracts before
 // adding the git excludes that materialization owns.

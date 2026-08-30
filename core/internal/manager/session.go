@@ -604,23 +604,36 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 		worktree = path // "" means non-git fallback
 	}
-	// rollbackWorktree removes the worktree we just made when a later step fails;
+	scratch := false
+	// rollbackWorktree removes the place we just made when a later step fails;
 	// the removal error is logged but never masks the original failure.
 	rollbackWorktree := func() {
 		if reusedWorktree {
+			return
+		}
+		if scratch {
+			if rmErr := wt.RemoveScratch(repo, name); rmErr != nil {
+				fmt.Fprintf(os.Stderr, "herrscher: scratch rollback for %q failed: %v\n", name, rmErr)
+			}
 			return
 		}
 		if rmErr := wt.Remove(repo, name, true); rmErr != nil {
 			fmt.Fprintf(os.Stderr, "herrscher: worktree rollback for %q failed: %v\n", name, rmErr)
 		}
 	}
-	// Agent provisioning: an agent companion needs a disposable, isolated worktree
-	// (session close removes it), so reject shared/non-git, then materialize the
-	// agent's persona + MCP + settings into it before anything outward (channel)
-	// is created.
 	if agentName != "" {
-		if shared || worktree == "" {
-			return "", fmt.Errorf("session create with agent %q needs an isolated git worktree (use a git repo and drop shared:true)", agentName)
+		if shared {
+			return "", fmt.Errorf("session create with agent %q cannot be shared: an agent needs a place of its own, and shared:true runs in the main checkout", agentName)
+		}
+		if worktree == "" {
+			if _, statErr := os.Stat(wt.ScratchPath(repo, name)); statErr == nil {
+				reusedWorktree = true
+			}
+			path, err := wt.Scratch(repo, name)
+			if err != nil {
+				return "", fmt.Errorf("provision agent %q: %w", agentName, err)
+			}
+			worktree, scratch = path, true
 		}
 		a, found := h.agents.Get(agentName)
 		if !found {
@@ -686,21 +699,21 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		// The conversation already exists — bind to it rather than creating a
 		// channel. This is what lets a gateway start a session in the channel the
 		// operator is already talking in.
-		sess = state.Session{Name: name, ChannelID: adopted, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
+		sess = state.Session{Name: name, ChannelID: adopted, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Scratch: scratch, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
 	case home.Type == "category", home.Type == "terminal":
 		chID, err := admin.CreateUnder(ctx, home.ID, title)
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create channel: %w", err)
 		}
-		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
+		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Scratch: scratch, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
 	case home.Type == "forum":
 		chID, err := admin.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create forum post: %w", err)
 		}
-		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
+		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Scratch: scratch, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
 	default:
 		return "", fmt.Errorf("home type %q unsupported", home.Type)
 	}
@@ -743,7 +756,13 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 	}
 	_ = h.sup.Stop(name)
 	repo := repoFor(ws, sess.Project)
-	if sess.Worktree != "" {
+	if sess.Worktree != "" && sess.Scratch {
+		if err := wt.RemoveScratch(repo, name); err != nil {
+			h.sup.Start(sess)
+			return "", err
+		}
+	}
+	if sess.Worktree != "" && !sess.Scratch {
 		force := in.Bool("force")
 		if err := wt.Remove(repo, name, force); err != nil {
 			// The session survives this failure, so its bridge has to survive it

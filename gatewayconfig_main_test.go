@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,7 +10,8 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-func TestEveryCompiledInGatewayKeyIsScrubbedFromTheEnvironment(t *testing.T) {
+func declaredGatewayKeys(t *testing.T) []string {
+	t.Helper()
 	var keys []string
 	for _, p := range contracts.Default.Gateways() {
 		for _, s := range p.Manifest.Config {
@@ -21,17 +23,46 @@ func TestEveryCompiledInGatewayKeyIsScrubbedFromTheEnvironment(t *testing.T) {
 	if len(keys) == 0 {
 		t.Skip("no compiled-in gateway declares an env-bound setting")
 	}
+	return keys
+}
+
+func envKeepsNoneOf(t *testing.T, keys []string) {
+	t.Helper()
+	for _, kv := range os.Environ() {
+		for _, k := range keys {
+			if strings.HasPrefix(kv, k+"=") {
+				t.Fatalf("%s survived and rides into every vendor CLI a session spawns", k)
+			}
+		}
+	}
+}
+
+func TestEveryCompiledInGatewayKeyIsScrubbedFromTheEnvironment(t *testing.T) {
+	keys := declaredGatewayKeys(t)
 	for _, k := range keys {
 		t.Setenv(k, "s3cret")
 	}
 
 	host.CaptureGatewayConfig(contracts.Default.Gateways())
 
-	for _, kv := range os.Environ() {
-		for _, k := range keys {
-			if strings.HasPrefix(kv, k+"=") {
-				t.Fatalf("%s survived the capture and rides into every vendor CLI a session spawns", k)
-			}
-		}
+	envKeepsNoneOf(t, keys)
+}
+
+func TestTheEnvFileServePassesLeavesNoGatewayKeyBehind(t *testing.T) {
+	keys := declaredGatewayKeys(t)
+	path := filepath.Join(t.TempDir(), "herrscher.env")
+	body := ""
+	for _, k := range keys {
+		body += k + "=s3cret\n"
 	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host.CaptureGatewayConfig(contracts.Default.Gateways())
+
+	if err := loadEnvFile(path); err != nil {
+		t.Fatal(err)
+	}
+
+	envKeepsNoneOf(t, keys)
 }

@@ -68,20 +68,36 @@ func TestAKeyNoManifestDeclaresSurvivesTheCapture(t *testing.T) {
 	}
 }
 
-func TestTheCaptureKeepsTheFirstValueAndKeepsScrubbing(t *testing.T) {
+func TestARealEnvironmentValueSurvivesAnEnvFileThatDisagrees(t *testing.T) {
 	resetGatewayConfigCapture(t)
-	t.Setenv("TEST_GATEWAY_TOKEN", "first")
+	t.Setenv("TEST_GATEWAY_TOKEN", "from-the-environment")
 	plugins := []contracts.Plugin{gatewayDeclaring("chat", "TEST_GATEWAY_TOKEN")}
 
 	CaptureGatewayConfig(plugins)
-	os.Setenv("TEST_GATEWAY_TOKEN", "second")
+	os.Setenv("TEST_GATEWAY_TOKEN", "from-the-file")
 	CaptureGatewayConfig(plugins)
 
 	if envHas("TEST_GATEWAY_TOKEN") {
 		t.Fatal("a value that reappeared was left in the environment")
 	}
-	if got := gatewayConfigGetenv(os.Getenv)("TEST_GATEWAY_TOKEN"); got != "first" {
-		t.Fatalf("a second capture overwrote the first: got %q", got)
+	if got := gatewayConfigGetenv(os.Getenv)("TEST_GATEWAY_TOKEN"); got != "from-the-environment" {
+		t.Fatalf("the file outranked the real environment, which reverses the loader's own precedence: got %q", got)
+	}
+}
+
+func TestAValueTheEnvFileBringsAfterAnEmptyCaptureIsStillTaken(t *testing.T) {
+	resetGatewayConfigCapture(t)
+	plugins := []contracts.Plugin{gatewayDeclaring("chat", "TEST_GATEWAY_TOKEN")}
+
+	CaptureGatewayConfig(plugins)
+	t.Setenv("TEST_GATEWAY_TOKEN", "from-the-file")
+	CaptureGatewayConfig(plugins)
+
+	if envHas("TEST_GATEWAY_TOKEN") {
+		t.Fatal("the value the env file brought was left in the environment")
+	}
+	if got := gatewayConfigGetenv(os.Getenv)("TEST_GATEWAY_TOKEN"); got != "from-the-file" {
+		t.Fatalf("the first, empty capture wiped what serve --env-file loaded next: got %q", got)
 	}
 }
 

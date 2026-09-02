@@ -30,7 +30,7 @@ func captureGatewayConfig(plugins []contracts.Plugin, getenv func(string) string
 			if s.Env == "" {
 				continue
 			}
-			if _, alreadyCaptured := capturedConfig.vals[s.Env]; !alreadyCaptured {
+			if capturedConfig.vals[s.Env] == "" {
 				capturedConfig.vals[s.Env] = getenv(s.Env)
 			}
 			_ = unsetenv(s.Env)
@@ -41,9 +41,9 @@ func captureGatewayConfig(plugins []contracts.Plugin, getenv func(string) string
 func gatewayConfigGetenv(fallback func(string) string) func(string) string {
 	return func(name string) string {
 		capturedConfig.mu.Lock()
-		v, captured := capturedConfig.vals[name]
+		v := capturedConfig.vals[name]
 		capturedConfig.mu.Unlock()
-		if captured {
+		if v != "" {
 			return v
 		}
 		return fallback(name)

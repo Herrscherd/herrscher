@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/host"
 )
 
 // loadEnvFile reads KEY=VALUE lines from path into the process environment so
@@ -18,6 +21,7 @@ import (
 // wins). A missing file is not an error — the service may be installed before
 // its secrets are filled in.
 func loadEnvFile(path string) error {
+	defer host.CaptureGatewayConfig(contracts.Default.Gateways())
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/envx"
 )
 
 // Setting keys of the launch scope. They are declared here rather than in the
@@ -86,7 +88,7 @@ func LaunchFrom(cfg contracts.PluginConfig) Launch {
 // resolve leaves the session unscoped rather than failing the launch: not
 // learning is a loss, not opening at all is a broken tool.
 func LaunchFromEnv() Launch {
-	cfg, err := contracts.Resolve(LaunchSettings(), os.Getenv)
+	cfg, err := contracts.Resolve(LaunchSettings(), envx.Getenv)
 	if err != nil {
 		return Launch{}
 	}

@@ -7,18 +7,9 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-)
 
-func resetGatewayConfigCapture(t *testing.T) {
-	t.Helper()
-	clear := func() {
-		capturedConfig.mu.Lock()
-		capturedConfig.vals = nil
-		capturedConfig.mu.Unlock()
-	}
-	clear()
-	t.Cleanup(clear)
-}
+	"github.com/Herrscherd/herrscher/core/envx"
+)
 
 func gatewayDeclaring(kind string, env ...string) contracts.Plugin {
 	var cfg []contracts.Setting
@@ -43,25 +34,24 @@ func envHas(key string) bool {
 }
 
 func TestADeclaredGatewayKeyLeavesNothingInTheEnvironmentABridgeInherits(t *testing.T) {
-	resetGatewayConfigCapture(t)
-	t.Setenv("TEST_GATEWAY_TOKEN", "s3cret")
+	const key = "TEST_SCRUBBED_TOKEN"
+	t.Setenv(key, "s3cret")
 
-	CaptureGatewayConfig([]contracts.Plugin{gatewayDeclaring("chat", "TEST_GATEWAY_TOKEN")})
+	CaptureGatewayConfig([]contracts.Plugin{gatewayDeclaring("chat", key)})
 
-	if envHas("TEST_GATEWAY_TOKEN") {
+	if envHas(key) {
 		t.Fatal("the key is still in os.Environ(), which is exactly what the supervisor hands every bridge child")
 	}
-	if got := gatewayConfigGetenv(os.Getenv)("TEST_GATEWAY_TOKEN"); got != "s3cret" {
+	if got := envx.Getenv(key); got != "s3cret" {
 		t.Fatalf("the capture lost the value: got %q, want %q", got, "s3cret")
 	}
 }
 
 func TestAKeyNoManifestDeclaresSurvivesTheCapture(t *testing.T) {
-	resetGatewayConfigCapture(t)
-	t.Setenv("TEST_GATEWAY_TOKEN", "s3cret")
+	t.Setenv("TEST_UNDECLARED_TOKEN", "s3cret")
 	t.Setenv("ANTHROPIC_API_KEY", "operator-key")
 
-	CaptureGatewayConfig([]contracts.Plugin{gatewayDeclaring("chat", "TEST_GATEWAY_TOKEN")})
+	CaptureGatewayConfig([]contracts.Plugin{gatewayDeclaring("chat", "TEST_UNDECLARED_TOKEN")})
 
 	if !envHas("ANTHROPIC_API_KEY") {
 		t.Fatal("the capture took a key no gateway manifest declares")
@@ -69,40 +59,39 @@ func TestAKeyNoManifestDeclaresSurvivesTheCapture(t *testing.T) {
 }
 
 func TestARealEnvironmentValueSurvivesAnEnvFileThatDisagrees(t *testing.T) {
-	resetGatewayConfigCapture(t)
-	t.Setenv("TEST_GATEWAY_TOKEN", "from-the-environment")
-	plugins := []contracts.Plugin{gatewayDeclaring("chat", "TEST_GATEWAY_TOKEN")}
+	const key = "TEST_PRECEDENCE_TOKEN"
+	t.Setenv(key, "from-the-environment")
+	plugins := []contracts.Plugin{gatewayDeclaring("chat", key)}
 
 	CaptureGatewayConfig(plugins)
-	os.Setenv("TEST_GATEWAY_TOKEN", "from-the-file")
+	os.Setenv(key, "from-the-file")
 	CaptureGatewayConfig(plugins)
 
-	if envHas("TEST_GATEWAY_TOKEN") {
+	if envHas(key) {
 		t.Fatal("a value that reappeared was left in the environment")
 	}
-	if got := gatewayConfigGetenv(os.Getenv)("TEST_GATEWAY_TOKEN"); got != "from-the-environment" {
+	if got := envx.Getenv(key); got != "from-the-environment" {
 		t.Fatalf("the file outranked the real environment, which reverses the loader's own precedence: got %q", got)
 	}
 }
 
 func TestAValueTheEnvFileBringsAfterAnEmptyCaptureIsStillTaken(t *testing.T) {
-	resetGatewayConfigCapture(t)
-	plugins := []contracts.Plugin{gatewayDeclaring("chat", "TEST_GATEWAY_TOKEN")}
+	const key = "TEST_LATE_ARRIVAL_TOKEN"
+	plugins := []contracts.Plugin{gatewayDeclaring("chat", key)}
 
 	CaptureGatewayConfig(plugins)
-	t.Setenv("TEST_GATEWAY_TOKEN", "from-the-file")
+	t.Setenv(key, "from-the-file")
 	CaptureGatewayConfig(plugins)
 
-	if envHas("TEST_GATEWAY_TOKEN") {
+	if envHas(key) {
 		t.Fatal("the value the env file brought was left in the environment")
 	}
-	if got := gatewayConfigGetenv(os.Getenv)("TEST_GATEWAY_TOKEN"); got != "from-the-file" {
+	if got := envx.Getenv(key); got != "from-the-file" {
 		t.Fatalf("the first, empty capture wiped what serve --env-file loaded next: got %q", got)
 	}
 }
 
 func TestABackendPluginsSettingsAreNotTheCapturesBusiness(t *testing.T) {
-	resetGatewayConfigCapture(t)
 	t.Setenv("TEST_BACKEND_KEY", "operator-key")
 	backend := contracts.Plugin{
 		Manifest: contracts.Manifest{
@@ -120,9 +109,9 @@ func TestABackendPluginsSettingsAreNotTheCapturesBusiness(t *testing.T) {
 }
 
 func TestBuildHubStillBuildsAGatewayWhoseKeyTheCaptureEmptied(t *testing.T) {
-	resetGatewayConfigCapture(t)
-	t.Setenv("TEST_GATEWAY_TOKEN", "s3cret")
-	plugins := []contracts.Plugin{gatewayDeclaring("chat", "TEST_GATEWAY_TOKEN")}
+	const key = "TEST_HUB_TOKEN"
+	t.Setenv(key, "s3cret")
+	plugins := []contracts.Plugin{gatewayDeclaring("chat", key)}
 
 	CaptureGatewayConfig(plugins)
 

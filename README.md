@@ -290,6 +290,15 @@ operator's socket in the same directory. The real boundary is a session on a
 host, under a restricted account, where ssh forwards that session's socket and no
 other.
 
+What the agent's shell can read is narrower than what the daemon holds. Every key
+a gateway's manifest declares (`DISCORD_BOT_TOKEN` and the rest) is read once,
+kept inside the daemon, and removed from the process environment, at startup and
+again on every `--env-file` load. So `env` in a session shows nothing of it, and
+no vendor CLI a session spawns inherits it. The gateways still build from those
+values and your `.env` is untouched: what changes is who gets to read it. Keys no
+gateway declares, your `ANTHROPIC_API_KEY` among them, stay where they are,
+because the agent needs them to run at all.
+
 → `architecture/authorization`
 
 ### An agent that knows what it is running inside

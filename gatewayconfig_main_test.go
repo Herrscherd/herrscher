@@ -106,7 +106,6 @@ func TestTheProductionSequenceStillResolvesEveryDeclaredGatewaySetting(t *testin
 }
 
 func TestTheLaunchPathStillReadsWhatTheCaptureTookFromIt(t *testing.T) {
-	declaredGatewayKeys(t)
 	t.Setenv("TERMINAL_PROJECT", "named-by-the-operator")
 
 	t.Cleanup(host.CaptureGatewayConfig(contracts.Default.Gateways()))

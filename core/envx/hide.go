@@ -26,12 +26,13 @@ func Hide(keys []string) (reveal func()) {
 		if k == "" {
 			continue
 		}
+		env := os.Getenv(k)
 		if _, seen := prior[k]; !seen {
 			stored, held := hidden.vals[k]
-			prior[k] = priorKey{held: held, stored: stored, env: os.Getenv(k)}
+			prior[k] = priorKey{held: held, stored: stored, env: env}
 		}
 		if hidden.vals[k] == "" {
-			hidden.vals[k] = os.Getenv(k)
+			hidden.vals[k] = env
 		}
 		_ = os.Unsetenv(k)
 	}

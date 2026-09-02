@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,4 +66,40 @@ func TestTheEnvFileServePassesLeavesNoGatewayKeyBehind(t *testing.T) {
 	}
 
 	envKeepsNoneOf(t, keys)
+}
+
+func TestTheProductionSequenceStillResolvesEveryDeclaredGatewaySetting(t *testing.T) {
+	keys := declaredGatewayKeys(t)
+	path := filepath.Join(t.TempDir(), "herrscher.env")
+	body := ""
+	for _, k := range keys {
+		body += k + "=s3cret\n"
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stubs []contracts.Plugin
+	for _, p := range contracts.Default.Gateways() {
+		m := p.Manifest
+		m.Kind = "stub-" + m.Kind
+		stubs = append(stubs, contracts.Plugin{
+			Manifest: m,
+			Gateway: func(context.Context, contracts.PluginConfig) (contracts.GatewaySet, error) {
+				return contracts.GatewaySet{Gateway: talker{}}, nil
+			},
+		})
+	}
+
+	host.CaptureGatewayConfig(contracts.Default.Gateways())
+	if err := loadEnvFile(path); err != nil {
+		t.Fatal(err)
+	}
+
+	hub, err := host.BuildHub(context.Background(), stubs, os.Getenv)
+	if err != nil {
+		t.Fatalf("no gateway resolved its config after the capture: %v", err)
+	}
+	if u := hub.Unconfigured(); len(u) > 0 {
+		t.Fatalf("the capture emptied a setting nothing reads back: %v", u)
+	}
 }

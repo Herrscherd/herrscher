@@ -22,6 +22,7 @@ type GatewayHub struct {
 	// attempt.
 	unconfigured []string
 	pending      []contracts.Plugin
+	getenv       func(string) string
 }
 
 // BuildHub instantiates each gateway plugin in plugins. A plugin whose config
@@ -33,14 +34,14 @@ type GatewayHub struct {
 // can report a gateway that dropped out — a stale token silently costing you a
 // whole edge is worse than a noisy line at boot.
 func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string) (*GatewayHub, error) {
-	h := &GatewayHub{sets: map[string]contracts.GatewaySet{}}
+	h := &GatewayHub{sets: map[string]contracts.GatewaySet{}, getenv: gatewayConfigGetenv(getenv)}
 	var candidates []contracts.Plugin
 	for _, p := range plugins {
 		if p.Gateway != nil {
 			candidates = append(candidates, p)
 		}
 	}
-	h.attempt(ctx, candidates, getenv)
+	h.attempt(ctx, candidates)
 	if len(h.sets) == 0 {
 		reasons := append(append([]string(nil), h.failures...), h.unconfigured...)
 		if len(reasons) == 0 {
@@ -62,11 +63,11 @@ func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(strin
 // holding the whole binary for the retry window over a gateway the operator
 // never asked for. Only failures that could plausibly resolve themselves (a
 // name that does not resolve yet, a service still booting) are waited on.
-func (h *GatewayHub) attempt(ctx context.Context, candidates []contracts.Plugin, getenv func(string) string) {
+func (h *GatewayHub) attempt(ctx context.Context, candidates []contracts.Plugin) {
 	h.failures = nil
 	h.pending = nil
 	for _, p := range candidates {
-		set, missingConfig, err := buildOne(ctx, p, getenv)
+		set, missingConfig, err := buildOne(ctx, p, h.getenv)
 		if err != nil {
 			line := fmt.Sprintf("%s: %v", p.Manifest.Kind, err)
 			if missingConfig {
@@ -114,12 +115,12 @@ func buildOne(ctx context.Context, p contracts.Plugin, getenv func(string) strin
 //
 // It is a no-op once everything is up, and safe to call again: whatever is still
 // pending stays pending, with its latest reason.
-func (h *GatewayHub) Retry(ctx context.Context, getenv func(string) string) int {
+func (h *GatewayHub) Retry(ctx context.Context) int {
 	if len(h.pending) == 0 {
 		return 0
 	}
 	before := len(h.sets)
-	h.attempt(ctx, h.pending, getenv)
+	h.attempt(ctx, h.pending)
 	return len(h.sets) - before
 }
 
@@ -147,7 +148,7 @@ var (
 //
 // note, if given, is called before each wait with the reasons still standing, so
 // the caller decides how a retry is reported.
-func (h *GatewayHub) AwaitPending(ctx context.Context, getenv func(string) string, window time.Duration, note func(failures []string, in time.Duration)) int {
+func (h *GatewayHub) AwaitPending(ctx context.Context, window time.Duration, note func(failures []string, in time.Duration)) int {
 	joined := 0
 	deadline := time.Now().Add(window)
 	for wait := gatewayRetryBase; h.Pending() && time.Now().Before(deadline); wait *= 2 {
@@ -162,7 +163,7 @@ func (h *GatewayHub) AwaitPending(ctx context.Context, getenv func(string) strin
 			return joined
 		case <-time.After(wait):
 		}
-		joined += h.Retry(ctx, getenv)
+		joined += h.Retry(ctx)
 	}
 	return joined
 }

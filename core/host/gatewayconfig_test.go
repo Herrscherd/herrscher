@@ -102,3 +102,19 @@ func TestABackendPluginsSettingsAreNotTheCapturesBusiness(t *testing.T) {
 		t.Fatal("the capture took a backend's setting, which the vendor CLI needs to run")
 	}
 }
+
+func TestBuildHubStillBuildsAGatewayWhoseKeyTheCaptureEmptied(t *testing.T) {
+	resetGatewayConfigCapture(t)
+	t.Setenv("TEST_GATEWAY_TOKEN", "s3cret")
+	plugins := []contracts.Plugin{gatewayDeclaring("chat", "TEST_GATEWAY_TOKEN")}
+
+	CaptureGatewayConfig(plugins)
+
+	hub, err := BuildHub(context.Background(), plugins, os.Getenv)
+	if err != nil {
+		t.Fatalf("BuildHub failed on an environment its own capture emptied: %v", err)
+	}
+	if _, ok := hub.Get("chat"); !ok {
+		t.Fatal("the gateway did not build")
+	}
+}

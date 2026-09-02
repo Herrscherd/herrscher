@@ -130,7 +130,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	for _, f := range hub.Unconfigured() {
 		fmt.Fprintln(os.Stderr, "herrscher: gateway not configured, skipping: "+f)
 	}
-	hub.AwaitPending(ctx, os.Getenv, host.GatewayRetryWindow, func(failures []string, in time.Duration) {
+	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, in time.Duration) {
 		for _, f := range failures {
 			fmt.Fprintf(os.Stderr, "herrscher: gateway not up yet: %s; retrying in %s\n", f, in)
 		}

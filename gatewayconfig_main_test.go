@@ -9,6 +9,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/scope"
 )
 
 func declaredGatewayKeys(t *testing.T) []string {
@@ -44,7 +45,7 @@ func TestEveryCompiledInGatewayKeyIsScrubbedFromTheEnvironment(t *testing.T) {
 		t.Setenv(k, "s3cret")
 	}
 
-	host.CaptureGatewayConfig(contracts.Default.Gateways())
+	t.Cleanup(host.CaptureGatewayConfig(contracts.Default.Gateways()))
 
 	envKeepsNoneOf(t, keys)
 }
@@ -59,7 +60,7 @@ func TestTheEnvFileServePassesLeavesNoGatewayKeyBehind(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	host.CaptureGatewayConfig(contracts.Default.Gateways())
+	t.Cleanup(host.CaptureGatewayConfig(contracts.Default.Gateways()))
 
 	if err := loadEnvFile(path); err != nil {
 		t.Fatal(err)
@@ -90,7 +91,7 @@ func TestTheProductionSequenceStillResolvesEveryDeclaredGatewaySetting(t *testin
 		})
 	}
 
-	host.CaptureGatewayConfig(contracts.Default.Gateways())
+	t.Cleanup(host.CaptureGatewayConfig(contracts.Default.Gateways()))
 	if err := loadEnvFile(path); err != nil {
 		t.Fatal(err)
 	}
@@ -101,5 +102,16 @@ func TestTheProductionSequenceStillResolvesEveryDeclaredGatewaySetting(t *testin
 	}
 	if u := hub.Unconfigured(); len(u) > 0 {
 		t.Fatalf("the capture emptied a setting nothing reads back: %v", u)
+	}
+}
+
+func TestTheLaunchPathStillReadsWhatTheCaptureTookFromIt(t *testing.T) {
+	declaredGatewayKeys(t)
+	t.Setenv("TERMINAL_PROJECT", "named-by-the-operator")
+
+	t.Cleanup(host.CaptureGatewayConfig(contracts.Default.Gateways()))
+
+	if got := scope.LaunchFromEnv().Project; got != "named-by-the-operator" {
+		t.Fatalf(`herrscher "<task>" lost the project the operator named: got %q`, got)
 	}
 }

@@ -21,7 +21,7 @@ import (
 // wins). A missing file is not an error — the service may be installed before
 // its secrets are filled in.
 func loadEnvFile(path string) error {
-	defer host.CaptureGatewayConfig(contracts.Default.Gateways())
+	defer hideGatewayKeys()
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -62,6 +62,8 @@ func loadEnvFile(path string) error {
 	}
 	return sc.Err()
 }
+
+func hideGatewayKeys() { host.CaptureGatewayConfig(contracts.Default.Gateways()) }
 
 // unquoteEnv strips a single matching pair of surrounding single or double
 // quotes, so `KEY="a b"` and `KEY='a b'` yield `a b`.

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/envx"
 )
 
 // GatewayHub holds every registered gateway plugin instantiated into a
@@ -34,7 +36,7 @@ type GatewayHub struct {
 // can report a gateway that dropped out — a stale token silently costing you a
 // whole edge is worse than a noisy line at boot.
 func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string) (*GatewayHub, error) {
-	h := &GatewayHub{sets: map[string]contracts.GatewaySet{}, getenv: gatewayConfigGetenv(getenv)}
+	h := &GatewayHub{sets: map[string]contracts.GatewaySet{}, getenv: envx.Revealed(getenv)}
 	var candidates []contracts.Plugin
 	for _, p := range plugins {
 		if p.Gateway != nil {

@@ -50,7 +50,7 @@ func TestAGatewayThatLosesTheRaceWithTheNetworkStillJoins(t *testing.T) {
 		t.Fatal("the flaky gateway must not be up before any retry")
 	}
 
-	if joined := hub.AwaitPending(context.Background(), func(string) string { return "" }, time.Second, nil); joined != 1 {
+	if joined := hub.AwaitPending(context.Background(), time.Second, nil); joined != 1 {
 		t.Fatalf("joined = %d, want the gateway to come up", joined)
 	}
 	if _, ok := hub.Get("remote"); !ok {
@@ -76,7 +76,7 @@ func TestAGatewayThatKeepsFailingStopsBeingWaitedFor(t *testing.T) {
 		t.Fatalf("BuildHub: %v", err)
 	}
 	start := time.Now()
-	if joined := hub.AwaitPending(context.Background(), func(string) string { return "" }, 20*time.Millisecond, nil); joined != 0 {
+	if joined := hub.AwaitPending(context.Background(), 20*time.Millisecond, nil); joined != 0 {
 		t.Fatalf("joined = %d, want none", joined)
 	}
 	if time.Since(start) > time.Second {
@@ -110,7 +110,7 @@ func TestWaitingStopsWhenTheDaemonIsCancelled(t *testing.T) {
 	cancel()
 	done := make(chan int, 1)
 	go func() {
-		done <- hub.AwaitPending(ctx, func(string) string { return "" }, time.Hour, nil)
+		done <- hub.AwaitPending(ctx, time.Hour, nil)
 	}()
 	select {
 	case joined := <-done:
@@ -134,7 +134,7 @@ func TestAWholeHubIsNotWaitedFor(t *testing.T) {
 		t.Fatalf("BuildHub: %v", err)
 	}
 	start := time.Now()
-	if joined := hub.AwaitPending(context.Background(), func(string) string { return "" }, time.Hour, nil); joined != 0 {
+	if joined := hub.AwaitPending(context.Background(), time.Hour, nil); joined != 0 {
 		t.Fatalf("joined = %d, want none", joined)
 	}
 	if time.Since(start) > time.Second {
@@ -154,7 +154,7 @@ func TestEachWaitReportsWhatItIsWaitingOn(t *testing.T) {
 	}
 	var seen []string
 	var waits []time.Duration
-	hub.AwaitPending(context.Background(), func(string) string { return "" }, 10*time.Millisecond,
+	hub.AwaitPending(context.Background(), 10*time.Millisecond,
 		func(failures []string, in time.Duration) {
 			seen = append(seen, failures...)
 			waits = append(waits, in)
@@ -206,7 +206,7 @@ func TestAnUnconfiguredGatewayIsNotWaitedFor(t *testing.T) {
 		t.Fatal("a gateway whose config is absent must not be pending")
 	}
 	start := time.Now()
-	if joined := hub.AwaitPending(context.Background(), func(string) string { return "" }, time.Hour,
+	if joined := hub.AwaitPending(context.Background(), time.Hour,
 		func([]string, time.Duration) { t.Error("an unconfigured gateway must not be announced as a retry") }); joined != 0 {
 		t.Fatalf("joined = %d, want none", joined)
 	}

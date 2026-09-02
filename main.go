@@ -92,6 +92,7 @@ func main() {
 	// supervised `herrscher bridge` child, which re-captures what the supervisor
 	// hands it. It must run AFTER the .env load above, which may define the pair.
 	host.CaptureGatewayCreds()
+	hideGatewayKeys()
 
 	ctx := context.Background()
 

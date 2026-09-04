@@ -19,6 +19,8 @@ import (
 // inbound lines.
 var pollInterval = 50 * time.Millisecond
 
+var maxPollBackoff = 30 * time.Second
+
 // budgetGate answers, in one call, both budget questions the turn loop asks: the
 // reason the session must pause ("" = it may run, and the gate has persisted the
 // reason when it is not), and how many tokens the turn about to start may spend
@@ -264,8 +266,19 @@ func (d *sessionDriver) recordEntry(role, text string, cost float64, u turnUsage
 
 // Pick injects a routed select-menu value into this session's turn queue. The
 // bridge answers it out-of-band (serialized with turns) and emits a reply.
-func (d *sessionDriver) Pick(value string) {
-	d.queue <- queued{ev: contracts.Event{T: "pick", Value: value}}
+func (d *sessionDriver) Pick(value string) bool {
+	return d.enqueue(queued{ev: contracts.Event{T: "pick", Value: value}})
+}
+
+var enqueueTimeout = 2 * time.Second
+
+func (d *sessionDriver) enqueue(q queued) bool {
+	select {
+	case d.queue <- q:
+		return true
+	case <-time.After(enqueueTimeout):
+		return false
+	}
 }
 
 // askApproval posts an approval question to every gateway bound to this
@@ -342,8 +355,8 @@ func (d *sessionDriver) emitPaused(ctx context.Context, reason string) {
 
 // Seed injects an opening input turn into this session's FIFO. A handoff uses it
 // to hand B its task the same way a human message would arrive.
-func (d *sessionDriver) Seed(task string) {
-	d.queue <- queued{ev: contracts.Event{T: "input", Who: "handoff", Text: task, TurnID: newTurnID()}}
+func (d *sessionDriver) Seed(task string) bool {
+	return d.enqueue(queued{ev: contracts.Event{T: "input", Who: "handoff", Text: task, TurnID: newTurnID()}})
 }
 
 // SeedAndWait injects an opening task and blocks until that turn's reply{done},
@@ -358,7 +371,14 @@ func (d *sessionDriver) SeedAndWaitWithTurnID(ctx context.Context, task, turnID 
 	d.seenMu.Lock()
 	d.pendingReply = reply
 	d.seenMu.Unlock()
-	d.queue <- queued{ev: contracts.Event{T: "input", Who: "seed", Text: task, TurnID: turnID}}
+	select {
+	case d.queue <- queued{ev: contracts.Event{T: "input", Who: "seed", Text: task, TurnID: turnID}}:
+	case <-ctx.Done():
+		d.seenMu.Lock()
+		d.pendingReply = nil
+		d.seenMu.Unlock()
+		return "", false
+	}
 	select {
 	case r := <-reply:
 		return r, true
@@ -409,7 +429,7 @@ func unregisterDriver(name string, d *sessionDriver) {
 // model never posed, and must work for a session whose driver is busy inside the
 // very turn that is waiting on it.
 func Pick(session, value string) bool {
-	if answerApprovalPick(value) {
+	if answerApprovalPick(session, value) {
 		return true
 	}
 	sessionRegistry.mu.Lock()
@@ -418,8 +438,7 @@ func Pick(session, value string) bool {
 	if d == nil {
 		return false
 	}
-	d.Pick(value)
-	return true
+	return d.Pick(value)
 }
 
 // Interrupt cancels the in-flight turn of the named session, returning false
@@ -444,8 +463,7 @@ func Seed(session, task string) bool {
 	if d == nil {
 		return false
 	}
-	d.Seed(task)
-	return true
+	return d.Seed(task)
 }
 
 // Submit injects one inbound message into the named session's turn queue,
@@ -488,8 +506,8 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 	// channel, weeks-old ones included. Only a successful read settles it — an
 	// empty channel legitimately leaves the cursor empty, there is nothing to
 	// skip past.
+	log := obs.Stderr(false).With("component", "poll", "session", d.name, "channel", ch)
 	if d.channel != "" {
-		log := obs.Stderr(false).With("component", "poll", "session", d.name, "channel", ch)
 		for delay := time.Second; ; delay = min(2*delay, 30*time.Second) {
 			msgs, err := r.Read(ctx, ch, 1, "")
 			if err == nil {
@@ -506,12 +524,17 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 			}
 		}
 	}
+	delay := pollInterval
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 		msgs, err := r.Read(ctx, ch, 100, last)
-		if err == nil {
+		if err != nil {
+			delay = min(2*delay, maxPollBackoff)
+			log.Warn("poll read failed", "err", err, "retry_in", delay)
+		} else {
+			delay = pollInterval
 			for _, m := range msgs {
 				if m.AuthorBot {
 					continue
@@ -531,7 +554,7 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(pollInterval):
+		case <-time.After(delay):
 		}
 	}
 }

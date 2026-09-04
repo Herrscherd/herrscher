@@ -62,7 +62,7 @@ func (s SSH) Describe() string { return s.Target }
 //     creation chain several round trips, and without multiplexing each one
 //     pays a full handshake again.
 func (s SSH) options() []string {
-	opts := []string{"-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes"}
+	opts := []string{"-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=10"}
 	return append(opts, s.multiplex()...)
 }
 

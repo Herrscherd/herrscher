@@ -24,14 +24,25 @@ type Commander interface {
 // JSON: the filesystem work stays where the filesystem is, and one operation
 // costs one round trip instead of ten.
 type Remote struct {
+	ctx        context.Context
 	run        Commander
 	bin        string // absolute path to herrscher on the far machine
 	instanceID string
 }
 
 // NewRemote builds a Remote driving bin through run.
-func NewRemote(run Commander, bin, instanceID string) *Remote {
-	return &Remote{run: run, bin: bin, instanceID: instanceID}
+func NewRemote(ctx context.Context, run Commander, bin, instanceID string) *Remote {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return &Remote{ctx: ctx, run: run, bin: bin, instanceID: instanceID}
+}
+
+func (r *Remote) context() context.Context {
+	if r.ctx == nil {
+		return context.Background()
+	}
+	return r.ctx
 }
 
 // Branch is pure string work, so it is answered here. Paying a round trip to be
@@ -105,7 +116,7 @@ func (r *Remote) Materialize(ctx context.Context, worktreePath string, payload i
 // remote stderr is carried into the error verbatim: it is the git message, and
 // nothing written here would be more precise.
 func (r *Remote) call(argv []string, into any) error {
-	cmd := r.run.Command(context.Background(), "", append([]string{r.bin}, argv...)...)
+	cmd := r.run.Command(r.context(), "", append([]string{r.bin}, argv...)...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	what := strings.Join(argv[:2], " ")

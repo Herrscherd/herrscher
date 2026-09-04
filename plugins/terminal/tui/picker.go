@@ -74,11 +74,9 @@ func (m *model) resumeView() string {
 		b.WriteString("\n" + dimStyle.Render("  (no sessions)"))
 		return b.String()
 	}
-	for i, s := range m.resumeRows {
-		if i >= resumeMax {
-			b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", len(m.resumeRows)-resumeMax)))
-			break
-		}
+	start, end := paletteWindow(len(m.resumeRows), m.resumeIdx, resumeMax)
+	for i := start; i < end; i++ {
+		s := m.resumeRows[i]
 		state := "live"
 		if s.Archived {
 			state = "archived"
@@ -104,6 +102,9 @@ func (m *model) resumeView() string {
 			row = dimStyle.Render("  " + row)
 		}
 		b.WriteString("\n" + row)
+	}
+	if hidden := len(m.resumeRows) - (end - start); hidden > 0 {
+		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", hidden)))
 	}
 	return b.String()
 }
@@ -170,11 +171,9 @@ func (m *model) switchView() string {
 		b.WriteString("\n" + dimStyle.Render("  (no sessions)"))
 		return b.String()
 	}
-	for i, s := range m.switchRows {
-		if i >= switchMax {
-			b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", len(m.switchRows)-switchMax)))
-			break
-		}
+	sstart, send := paletteWindow(len(m.switchRows), m.switchIdx, switchMax)
+	for i := sstart; i < send; i++ {
+		s := m.switchRows[i]
 		label := s.Name
 		if tb := m.tabs[s.ChannelID]; tb != nil && tb.unread {
 			label += " " + glyphUnread
@@ -184,6 +183,9 @@ func (m *model) switchView() string {
 		} else {
 			b.WriteString("\n" + dimStyle.Render("  "+label))
 		}
+	}
+	if hidden := len(m.switchRows) - (send - sstart); hidden > 0 {
+		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", hidden)))
 	}
 	return b.String()
 }

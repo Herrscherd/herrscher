@@ -86,9 +86,33 @@ func (m *model) worktreeDir() string {
 // mentionCursor is the composer's current byte offset, so @ detection and
 // completion operate on the same position the user is editing.
 func (m *model) mentionCursor() int {
-	// textarea exposes a rune column on the current line; the composer is
-	// single-line for mentions, so the value length up to the cursor suffices.
-	return len(m.input.Value())
+	value := m.input.Value()
+	lines := strings.Split(value, "\n")
+	row := m.input.Line()
+	if row < 0 {
+		row = 0
+	}
+	if row >= len(lines) {
+		return len(value)
+	}
+	offset := 0
+	for i := 0; i < row; i++ {
+		offset += len(lines[i]) + 1
+	}
+	runes := []rune(lines[row])
+	info := m.input.LineInfo()
+	col := info.StartColumn + info.ColumnOffset
+	if col < 0 {
+		col = 0
+	}
+	if col > len(runes) {
+		col = len(runes)
+	}
+	offset += len(string(runes[:col]))
+	if offset > len(value) {
+		return len(value)
+	}
+	return offset
 }
 
 // mentionOpen reports whether the composer word under the cursor is an @-mention

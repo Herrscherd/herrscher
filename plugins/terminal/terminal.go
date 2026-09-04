@@ -179,6 +179,8 @@ func randomSessionName() string {
 	return "s-" + strings.ToLower(rand.Text()[:4])
 }
 
+const bootstrapBudget = 5 * time.Second
+
 // bootstrapSession waits for the host to bind SessionControl (RunHub binds it
 // from a background goroutine after the TUI may have started), then resolves the
 // session the window opens on. It blocks on the ctrlReady signal rather than
@@ -190,14 +192,16 @@ func (t *Terminal) bootstrapSession(ctx context.Context) string {
 	select {
 	case <-ctx.Done():
 		return ""
-	case <-time.After(5 * time.Second):
+	case <-time.After(bootstrapBudget):
 		return ""
 	case <-t.ctrlReady:
 		c := t.Control()
 		if c == nil {
 			return ""
 		}
-		name, err := openDefaultSession(ctx, c, t.cfg)
+		cctx, cancel := context.WithTimeout(ctx, bootstrapBudget)
+		defer cancel()
+		name, err := openDefaultSession(cctx, c, t.cfg)
 		if err != nil {
 			return "" // best-effort; the window still opens, on whatever is there
 		}

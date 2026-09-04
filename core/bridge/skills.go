@@ -36,12 +36,10 @@ func newSkillEngine(backend contracts.Backend) *skills.Engine {
 	if n, ok := backend.(contracts.SkillNative); ok && n.NativeSkills() {
 		return nil
 	}
-	// A missing config is not an error (Load returns the zero Config), so an
-	// error here means the file is there but malformed — and silently ignoring it
-	// would ignore a skills.enabled:false the operator meant to be honored.
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
-		logger.Warn("config unreadable; falling back to default skill roots", "err", err)
+		logger.Warn("config unreadable; skills disabled", "err", err)
+		return nil
 	}
 	var extra []string
 	if cfg.Skills != nil {

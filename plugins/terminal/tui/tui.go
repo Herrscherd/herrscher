@@ -110,6 +110,7 @@ func statusRole(text string) string {
 // streamed answer's chunks into one wrappable block. streaming marks an agent
 // entry still being extended by chunk events.
 type entry struct {
+	id          uint64
 	role        string
 	text        string
 	streaming   bool
@@ -137,6 +138,7 @@ type tab struct {
 	ctxTokens    int       // the last prompt actually sent: input + cache read + cache creation
 	ctxMeasured  bool      // a per-message reading arrived during the current turn (see renderInto)
 	openedAt     time.Time // when the tab opened, for the session-age segment
+	nextEntryID  uint64
 }
 
 // maxTabLines bounds the number of logical entries a tab's transcript retains so
@@ -149,6 +151,8 @@ const maxTabLines = 5000
 // exceeds maxTabLines. Trimming reallocates so the backing array does not pin the
 // whole history in memory.
 func (tb *tab) appendEntry(e entry) {
+	tb.nextEntryID++
+	e.id = tb.nextEntryID
 	tb.entries = append(tb.entries, e)
 	if len(tb.entries) > maxTabLines {
 		tb.entries = append([]entry(nil), tb.entries[len(tb.entries)-maxTabLines:]...)
@@ -206,6 +210,7 @@ func spinTick(d time.Duration) tea.Cmd {
 }
 
 type model struct {
+	ctx          context.Context
 	tm           Backend
 	vp           viewport.Model
 	input        textarea.Model
@@ -463,6 +468,13 @@ func (m *model) applySize() {
 	m.vp.Height = m.height - m.chromeHeight()
 }
 
+func (m *model) runContext() context.Context {
+	if m.ctx == nil {
+		return context.Background()
+	}
+	return m.ctx
+}
+
 func newModel(tm Backend) *model {
 	in := textarea.New()
 	in.Placeholder = "type a message…"
@@ -482,7 +494,7 @@ func newModel(tm Backend) *model {
 	// above it gone. A box that is already tall enough never scrolls.
 	in.SetHeight(maxComposerLines)
 	in.Focus()
-	m := &model{tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
+	m := &model{ctx: context.Background(), tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv)}
 	// The palette is the frontend's own verbs followed by the daemon's. The
 	// backend used to replace the list outright, which meant connecting to a
@@ -1342,6 +1354,7 @@ func OpenOn(session, text string) Option {
 // cleanly.
 func Run(ctx context.Context, cancel context.CancelFunc, tm Backend, opts ...Option) error {
 	m := newModel(tm)
+	m.ctx = ctx
 	for _, opt := range opts {
 		opt(m)
 	}
@@ -1512,8 +1525,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.typeSearch(q[:len(q)-1])
 				}
 				return m, nil
-			case tea.KeyRunes, tea.KeySpace:
-				m.typeSearch(m.searchQuery + msg.String())
+			case tea.KeyRunes:
+				if msg.Alt {
+					return m, nil
+				}
+				m.typeSearch(m.searchQuery + string(msg.Runes))
+				return m, nil
+			case tea.KeySpace:
+				m.typeSearch(m.searchQuery + " ")
 				return m, nil
 			}
 			return m, nil // everything else is swallowed: the query is the only input

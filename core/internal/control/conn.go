@@ -44,9 +44,11 @@ func (c *Conn) Close() error { return c.c.Close() }
 // Acceptor listens on a control socket and yields one persistent Conn per
 // dialing bridge, keeping each connection open for the session's life.
 type Acceptor struct {
-	ln    net.Listener
-	path  string
-	conns chan *Conn
+	ln        net.Listener
+	path      string
+	conns     chan *Conn
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 // Accept binds the control socket at path (removing a stale socket first) and
@@ -57,7 +59,7 @@ func Accept(path string) (*Acceptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &Acceptor{ln: ln, path: path, conns: make(chan *Conn, 1)}
+	a := &Acceptor{ln: ln, path: path, conns: make(chan *Conn, 1), done: make(chan struct{})}
 	go a.loop()
 	return a, nil
 }
@@ -69,7 +71,18 @@ func (a *Acceptor) loop() {
 			close(a.conns)
 			return // listener closed
 		}
-		a.conns <- newConn(c)
+		select {
+		case <-a.done:
+			c.Close()
+			return
+		default:
+		}
+		select {
+		case a.conns <- newConn(c):
+		case <-a.done:
+			c.Close()
+			return
+		}
 	}
 }
 
@@ -78,9 +91,27 @@ func (a *Acceptor) Conns() <-chan *Conn { return a.conns }
 
 // Close stops listening and removes the socket file.
 func (a *Acceptor) Close() error {
+	a.closeOnce.Do(func() { close(a.done) })
 	err := a.ln.Close()
 	_ = os.Remove(a.path)
+	a.drainPending()
 	return err
+}
+
+func (a *Acceptor) drainPending() {
+	for {
+		select {
+		case c, ok := <-a.conns:
+			if !ok {
+				return
+			}
+			if c != nil {
+				_ = c.Close()
+			}
+		default:
+			return
+		}
+	}
 }
 
 // Dial connects to the hub's control socket, returning a persistent Conn. The

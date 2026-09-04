@@ -303,7 +303,7 @@ func TestSetBackendTargetRewritesVendorCmdAndClearsResume(t *testing.T) {
 	}
 	st.AddSession(Session{Name: "alpha", Vendor: "claude", Cmd: "claude --model claude-opus-4-8 --effort high", ResumeToken: "tok-abc"})
 
-	if !st.SetBackendTarget("alpha", "codex", "codex --model gpt-5-codex", "") {
+	if ok, err := st.SetBackendTarget("alpha", "codex", "codex --model gpt-5-codex", ""); err != nil || !ok {
 		t.Fatal("expected SetBackendTarget to report a match")
 	}
 
@@ -317,7 +317,7 @@ func TestSetBackendTargetRewritesVendorCmdAndClearsResume(t *testing.T) {
 	if got.ResumeToken != "" {
 		t.Fatalf("resume token must be cleared, got %q", got.ResumeToken)
 	}
-	if st.SetBackendTarget("ghost", "claude", "claude", "") {
+	if ok, _ := st.SetBackendTarget("ghost", "claude", "claude", ""); ok {
 		t.Fatal("unknown session must return false")
 	}
 }

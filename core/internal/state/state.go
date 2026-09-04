@@ -435,8 +435,9 @@ func (s *State) SetBudget(name string, costCap float64, tokenCap uint64, cohortC
 // opaque Cmd string (which carries model+effort) and clears the resume token,
 // which is backend-specific and meaningless once the vendor/model changes. The
 // caller restarts the supervised child so the new values take effect. Returns
-// false when no session matches name.
-func (s *State) SetBackendTarget(name, vendor, cmd, modelID string) bool {
+// false when no session matches name, and the persistence error when the new
+// target could not be written.
+func (s *State) SetBackendTarget(name, vendor, cmd, modelID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.Sessions {
@@ -445,11 +446,10 @@ func (s *State) SetBackendTarget(name, vendor, cmd, modelID string) bool {
 			s.Sessions[i].Cmd = cmd
 			s.Sessions[i].ModelID = modelID
 			s.Sessions[i].ResumeToken = ""
-			s.saveLocked()
-			return true
+			return true, s.saveLocked()
 		}
 	}
-	return false
+	return false, nil
 }
 
 // SetArchived sets a session's archived flag and persists only on change. An

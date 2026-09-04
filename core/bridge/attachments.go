@@ -364,7 +364,7 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 	}
 	// Include the per-message index so two same-named images on one message don't
 	// clobber each other (msgID alone collides within a message).
-	dest := filepath.Join(dir, fmt.Sprintf("%s-%d-%s", msgID, idx, sanitize(a.Filename)))
+	dest := filepath.Join(dir, fmt.Sprintf("%s-%d-%s", sanitize(msgID), idx, sanitize(a.Filename)))
 	// 0600 rather than os.Create's 0666&umask: this is one operator's material
 	// sitting in a directory every user on the machine can walk into.
 	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)

@@ -242,7 +242,7 @@ func pendingApprovals() []PendingApproval {
 
 // answerApprovalPick settles a request from a routed select-menu value, and
 // reports whether the value was one at all.
-func answerApprovalPick(value string) bool {
+func answerApprovalPick(session, value string) bool {
 	rest, ok := strings.CutPrefix(value, approvalPickPrefix)
 	if !ok {
 		return false
@@ -251,12 +251,25 @@ func answerApprovalPick(value string) bool {
 	if !ok {
 		return true // shaped like ours but unusable: swallow it rather than let it reach a backend
 	}
+	if owner, known := approvalSession(id); known && owner != session {
+		return true
+	}
 	d := approval.Deny
 	if verdict == string(approval.Allow) {
 		d = approval.Allow
 	}
 	answerApproval(id, d, "")
 	return true
+}
+
+func approvalSession(id string) (string, bool) {
+	approvals.mu.Lock()
+	defer approvals.mu.Unlock()
+	p := approvals.m[id]
+	if p == nil {
+		return "", false
+	}
+	return p.session, true
 }
 
 func newApprovalID() string {

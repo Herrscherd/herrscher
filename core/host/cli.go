@@ -66,6 +66,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	// Where each session's process lands. `local` is implicit and needs no
 	// record; anything else must have been registered and provisioned.
 	hdl.SetHosts(hostPlacer{
+		ctx:           ctx,
 		st:            st,
 		instanceID:    instID,
 		local:         wt,

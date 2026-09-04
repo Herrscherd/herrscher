@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -120,5 +121,22 @@ func TestGoDeadDoesNotHoldTheHubLockWhileWaiting(t *testing.T) {
 	h.mu.Unlock()
 	if still {
 		t.Fatal("wedged session name never released")
+	}
+}
+
+func TestApprovalIDsAreRandomAndWellFormed(t *testing.T) {
+	seen := make(map[string]bool, 4096)
+	for range 4096 {
+		id := newApprovalID()
+		if len(id) != 8 {
+			t.Fatalf("newApprovalID() = %q, want 8 hex characters", id)
+		}
+		if _, err := hex.DecodeString(id); err != nil {
+			t.Fatalf("newApprovalID() = %q, not hex: %v", id, err)
+		}
+		if seen[id] {
+			t.Fatalf("newApprovalID() repeated %q within 4096 draws", id)
+		}
+		seen[id] = true
 	}
 }

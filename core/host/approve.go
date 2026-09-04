@@ -274,11 +274,7 @@ func approvalSession(id string) (string, bool) {
 
 func newApprovalID() string {
 	var b [4]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		// A collision here costs one misrouted answer, and the alternative is
-		// refusing to ask at all. Time is unique enough at this rate.
-		return fmt.Sprintf("%x", time.Now().UnixNano())
-	}
+	rand.Read(b[:])
 	return hex.EncodeToString(b[:])
 }
 

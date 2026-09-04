@@ -132,9 +132,9 @@ func (m *model) openPlugins() tea.Cmd {
 		m.pluginsNotice = "plugin management is not available in this build"
 		return nil
 	}
-	seam := m.pluginsSeam
+	seam, ctx := m.pluginsSeam, m.runContext()
 	return func() tea.Msg {
-		rows, err := seam.List(context.Background())
+		rows, err := seam.List(ctx)
 		if err != nil {
 			return pluginsErrMsg{err: err}
 		}
@@ -233,9 +233,9 @@ func (m *model) choosePlugins() tea.Cmd {
 		m.pluginsMode = pluginsList
 	case pluginsFailed:
 		if m.selectedMenu() == pluginFailRestore {
-			seam := m.pluginsSeam
+			seam, ctx := m.pluginsSeam, m.runContext()
 			return func() tea.Msg {
-				if err := seam.Restore(context.Background()); err != nil {
+				if err := seam.Restore(ctx); err != nil {
 					return pluginsErrMsg{err: err}
 				}
 				return pluginsRestoredMsg{}
@@ -279,9 +279,9 @@ func (m *model) chooseAction() tea.Cmd {
 	case pluginActionRemove:
 		return m.request(pluginsRequest{action: PluginRemove, module: module})
 	case pluginActionVersion:
-		seam := m.pluginsSeam
+		seam, ctx := m.pluginsSeam, m.runContext()
 		return func() tea.Msg {
-			vs, err := seam.Versions(context.Background(), module)
+			vs, err := seam.Versions(ctx, module)
 			if err != nil {
 				return pluginsErrMsg{err: err}
 			}
@@ -296,16 +296,16 @@ func (m *model) chooseAction() tea.Cmd {
 // against it" is not the same as "it will work".
 func (m *model) request(req pluginsRequest) tea.Cmd {
 	m.pluginsReq = req
-	seam := m.pluginsSeam
+	seam, ctx := m.pluginsSeam, m.runContext()
 	return func() tea.Msg {
-		return pluginsFindingsMsg{findings: seam.Findings(context.Background(), req.module, req.version)}
+		return pluginsFindingsMsg{findings: seam.Findings(ctx, req.module, req.version)}
 	}
 }
 
 func (m *model) runRequest() tea.Cmd {
-	seam, req := m.pluginsSeam, m.pluginsReq
+	seam, req, ctx := m.pluginsSeam, m.pluginsReq, m.runContext()
 	return func() tea.Msg {
-		out, err := seam.Apply(context.Background(), req.action, req.module, req.version)
+		out, err := seam.Apply(ctx, req.action, req.module, req.version)
 		return pluginsAppliedMsg{output: out, err: err}
 	}
 }

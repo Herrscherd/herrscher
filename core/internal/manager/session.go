@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -719,6 +720,10 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	}
 	sess.Approvals = mode
 	if err := h.st.AddSession(sess); err != nil {
+		rollbackWorktree()
+		if note := h.tidyChannel(ctx, sess); note != "" {
+			fmt.Fprintf(os.Stderr, "herrscher: channel rollback for %q:%s\n", name, note)
+		}
 		return "", fmt.Errorf("persist: %w", err)
 	}
 	h.sup.Start(sess)
@@ -916,8 +921,12 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	// Capture the prior backend so we can roll back if the restart fails: rolling
 	// back to the old vendor makes the old resume token valid again.
 	oldVendor, oldCmd, oldModelID, oldToken := prior.Vendor, prior.Cmd, prior.ModelID, prior.ResumeToken
-	if !h.st.SetBackendTarget(name, vendor, cmd, modelID) {
+	targeted, persistErr := h.st.SetBackendTarget(name, vendor, cmd, modelID)
+	if !targeted {
 		return "", fmt.Errorf("no session %q", name)
+	}
+	if persistErr != nil {
+		return "", fmt.Errorf("persist: %w", persistErr)
 	}
 	sess, _ := h.st.FindSession(name) // re-read: Vendor/Cmd/ModelID/ResumeToken just changed
 	// A vendor change can land a gated session on a backend that enforces
@@ -980,10 +989,10 @@ func (h *Handler) injectSeed(ctx context.Context, name, task string) bool {
 // the thread is live again. A non-nil return means the rollback restart also failed
 // and the session is down.
 func (h *Handler) rollbackSwitch(name, oldVendor, oldCmd, oldModelID, oldToken string) error {
-	h.st.SetBackendTarget(name, oldVendor, oldCmd, oldModelID) // also clears the token
-	_ = h.st.SetResumeToken(name, oldToken)                    // restore it
+	_, persistErr := h.st.SetBackendTarget(name, oldVendor, oldCmd, oldModelID)
+	persistErr = errors.Join(persistErr, h.st.SetResumeToken(name, oldToken))
 	sess, _ := h.st.FindSession(name)
-	return h.sup.Restart(sess)
+	return errors.Join(persistErr, h.sup.Restart(sess))
 }
 
 func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string, error) {

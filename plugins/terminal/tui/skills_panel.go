@@ -64,11 +64,9 @@ func (m *model) skillsView() string {
 		b.WriteString("\n" + dimStyle.Render("  (no skills found in ~/.claude/skills)"))
 		return b.String()
 	}
-	for i, s := range m.skillsRows {
-		if i >= skillsMax {
-			b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", len(m.skillsRows)-skillsMax)))
-			break
-		}
+	start, end := paletteWindow(len(m.skillsRows), m.skillsIdx, skillsMax)
+	for i := start; i < end; i++ {
+		s := m.skillsRows[i]
 		row := s.Name
 		if s.Description != "" {
 			row += " — " + s.Description
@@ -78,6 +76,9 @@ func (m *model) skillsView() string {
 		} else {
 			b.WriteString("\n" + dimStyle.Render("  "+row))
 		}
+	}
+	if hidden := len(m.skillsRows) - (end - start); hidden > 0 {
+		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", hidden)))
 	}
 	return b.String()
 }

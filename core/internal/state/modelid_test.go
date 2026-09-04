@@ -60,7 +60,9 @@ func TestSetBackendTargetWritesModelID(t *testing.T) {
 		t.Fatalf("LoadState: %v", err)
 	}
 	s.Sessions = []Session{{Name: "s", Vendor: "claude", Cmd: "claude", ResumeToken: "old"}}
-	s.SetBackendTarget("s", "codex", "codex --model gpt-5.5", "gpt-5.5")
+	if _, err := s.SetBackendTarget("s", "codex", "codex --model gpt-5.5", "gpt-5.5"); err != nil {
+		t.Fatalf("SetBackendTarget: %v", err)
+	}
 	got := s.Sessions[0]
 	if got.ModelID != "gpt-5.5" {
 		t.Errorf("ModelID = %q, want gpt-5.5", got.ModelID)

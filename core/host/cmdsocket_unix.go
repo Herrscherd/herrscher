@@ -88,6 +88,39 @@ func EventsSocketPath(instanceID string) string {
 }
 
 func listenCommandSocket(path string) (net.Listener, error) {
+	return listenRestricted(path)
+}
+
+func dialCommandSocket(ctx context.Context, path string) (net.Conn, error) {
+	var d net.Dialer
+	return d.DialContext(ctx, "unix", path)
+}
+
+func listenRestricted(path string) (net.Listener, error) {
+	staging, err := os.MkdirTemp(filepath.Dir(path), ".hs-sock-")
+	if err != nil {
+		return listenAndRestrict(path)
+	}
+	defer os.RemoveAll(staging)
+	tmp := filepath.Join(staging, "s")
+	if len(tmp) > maxUnixSocketPath {
+		return listenAndRestrict(path)
+	}
+	l, err := listenAndRestrict(tmp)
+	if err != nil {
+		return nil, err
+	}
+	if ul, ok := l.(*net.UnixListener); ok {
+		ul.SetUnlinkOnClose(false)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = l.Close()
+		return nil, err
+	}
+	return l, nil
+}
+
+func listenAndRestrict(path string) (net.Listener, error) {
 	l, err := net.Listen("unix", path)
 	if err != nil {
 		return nil, err
@@ -98,9 +131,4 @@ func listenCommandSocket(path string) (net.Listener, error) {
 		return nil, err
 	}
 	return l, nil
-}
-
-func dialCommandSocket(ctx context.Context, path string) (net.Conn, error) {
-	var d net.Dialer
-	return d.DialContext(ctx, "unix", path)
 }

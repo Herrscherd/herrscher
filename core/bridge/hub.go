@@ -2,7 +2,9 @@ package bridge
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -136,9 +138,10 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	// gone or session closed) → the bridge exits and the supervisor decides.
 	ctrl := &turnController{}
 	in := make(chan contracts.Event)
+	scanErr := make(chan error, 1)
 	go func() {
 		defer close(in)
-		_ = conn.Scan(func(e contracts.Event) error {
+		scanErr <- conn.Scan(func(e contracts.Event) error {
 			// An interrupt is handled out-of-band: the turn driver is blocked in
 			// Respond and cannot dequeue it, so cancel the active turn directly
 			// instead of forwarding it onto the FIFO input channel.
@@ -171,7 +174,18 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	// mid-session, and a turn should not pay three git calls to be told so.
 	runHubTurnsCtl(ctx, in, conn, backend, orch, ctrl, eng,
 		affordances{roster: o.Roster, caps: o.Capabilities, user: identity.FromDir(cwd)}, pin)
-	return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return reportControlScan(<-scanErr)
+}
+
+func reportControlScan(err error) error {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) {
+		return nil
+	}
+	logger.Warn("hub control socket read failed", "err", err)
+	return fmt.Errorf("hub control socket: %w", err)
 }
 
 // affordances are the standing blocks a turn's prompt carries beyond memory and

@@ -294,7 +294,7 @@ func Pull(ctx context.Context, src string) error {
 		return err
 	}
 	if out, err := runCapture(ctx, src, "git", "pull", "--ff-only"); err != nil {
-		return fmt.Errorf("git pull: %s", redact.Output(out))
+		return fmt.Errorf("git pull: %w: %s", err, redact.Output(out))
 	}
 	return nil
 }
@@ -310,7 +310,7 @@ func Build(ctx context.Context, src, binPath string) error {
 		return fmt.Errorf("go toolchain not found in PATH")
 	}
 	if out, err := runCapture(ctx, src, "go", "build", "-o", binPath, "."); err != nil {
-		return fmt.Errorf("go build: %s", redact.Output(out))
+		return fmt.Errorf("go build: %w: %s", err, redact.Output(out))
 	}
 	return nil
 }
@@ -331,7 +331,7 @@ func BuildFor(ctx context.Context, src, binPath, goos, goarch string) error {
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("go build (%s/%s): %s", goos, goarch, redact.Output(out))
+		return fmt.Errorf("go build (%s/%s): %w: %s", goos, goarch, err, redact.Output(out))
 	}
 	return nil
 }
@@ -355,7 +355,7 @@ func Smoke(ctx context.Context, binPath string) error {
 		return errors.New("no binary path to smoke-test")
 	}
 	if out, err := runCapture(ctx, "", binPath, "--help"); err != nil {
-		return fmt.Errorf("new binary failed smoke test (%s --help): %s", binPath, redact.Output(out))
+		return fmt.Errorf("new binary failed smoke test (%s --help): %w: %s", binPath, err, redact.Output(out))
 	}
 	return nil
 }
@@ -614,8 +614,8 @@ func macPlan(c Config) Plan {
 		"  </dict>\n" +
 		"  <key>RunAtLoad</key><true/>\n" +
 		"  <key>KeepAlive</key><true/>\n" +
-		"  <key>StandardOutPath</key><string>" + logPath + "</string>\n" +
-		"  <key>StandardErrorPath</key><string>" + logPath + "</string>\n" +
+		"  <key>StandardOutPath</key><string>" + xmlEscape(logPath) + "</string>\n" +
+		"  <key>StandardErrorPath</key><string>" + xmlEscape(logPath) + "</string>\n" +
 		"</dict>\n</plist>\n"
 	cmds := []Command{
 		{Argv: []string{"launchctl", "unload", "-w", plist}, IgnoreErr: true},

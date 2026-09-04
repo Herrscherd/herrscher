@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"net/url"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -35,7 +36,23 @@ func systemLauncher() launcher {
 		if err := checkTarget(target); err != nil {
 			return err
 		}
+		if err := checkURLTarget(target); err != nil {
+			return err
+		}
 		return start(exec.Command(name, append(args, target)...), name)
+	}
+}
+
+func checkURLTarget(target string) error {
+	u, err := url.Parse(target)
+	if err != nil {
+		return fmt.Errorf("refusing an unparsable target: %w", err)
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https", "mailto":
+		return nil
+	default:
+		return fmt.Errorf("refusing a %q target: %s", u.Scheme, target)
 	}
 }
 

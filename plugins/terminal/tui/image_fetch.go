@@ -86,6 +86,7 @@ func imageURLs(text string) []string {
 type imageReadyMsg struct {
 	channel string
 	entry   int
+	entryID uint64
 	escape  string
 }
 
@@ -101,13 +102,15 @@ func (m *model) fetchEntryImages(tb *tab, idx int) tea.Cmd {
 		return nil
 	}
 	var cmds []tea.Cmd
+	ctx := m.runContext()
 	channel, caps, get, allow := tb.channel, m.caps, m.imageFetcher, m.imageHosts
+	entryID := tb.entries[idx].id
 	for _, raw := range imageURLs(tb.entries[idx].text) {
 		if !hostAllowed(strings.ToLower(urlHost(raw)), allow) {
 			continue // refused before a command is even scheduled
 		}
 		cmds = append(cmds, func() tea.Msg {
-			data, err := fetchImage(context.Background(), get, allow, raw)
+			data, err := fetchImage(ctx, get, allow, raw)
 			if err != nil {
 				return nil
 			}
@@ -122,7 +125,7 @@ func (m *model) fetchEntryImages(tb *tab, idx int) tea.Cmd {
 			if esc == "" {
 				return nil
 			}
-			return imageReadyMsg{channel: channel, entry: idx, escape: esc}
+			return imageReadyMsg{channel: channel, entry: idx, entryID: entryID, escape: esc}
 		})
 	}
 	return tea.Batch(cmds...)
@@ -142,6 +145,9 @@ func urlHost(raw string) string {
 func (m *model) applyImage(msg imageReadyMsg) {
 	tb := m.tabs[msg.channel]
 	if tb == nil || msg.entry < 0 || msg.entry >= len(tb.entries) || msg.escape == "" {
+		return
+	}
+	if tb.entries[msg.entry].id != msg.entryID {
 		return
 	}
 	e := &tb.entries[msg.entry]

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -17,6 +18,8 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
+
+var sessionTeardownGrace = 5 * time.Second
 
 // hub owns the live session set of a running daemon and implements
 // contracts.SessionControl so a gateway can change it at runtime. The startup
@@ -175,12 +178,16 @@ func (h *hub) goDead(name string) {
 	}
 	h.mu.Lock()
 	live, ok := h.live[name]
+	delete(h.live, name)
+	h.mu.Unlock()
 	if ok {
 		live.cancel()
-		<-live.done
-		delete(h.live, name)
+		select {
+		case <-live.done:
+		case <-time.After(sessionTeardownGrace):
+			fmt.Fprintf(os.Stderr, "herrscher serve: session %q: teardown still running after %s, releasing the name anyway\n", name, sessionTeardownGrace)
+		}
 	}
-	h.mu.Unlock()
 	if f, ok := h.coordinator.(forgetter); ok {
 		f.forget(name)
 	}

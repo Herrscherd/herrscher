@@ -1265,7 +1265,7 @@ func (m *model) spinnerHint(tb *tab) string {
 	if tb.lastCost > 0 {
 		segs = append(segs, formatCost(tb.lastCost))
 	}
-	return m.spinFrame() + " …(" + strings.Join(segs, " · ") + ")"
+	return m.spinFrame() + " " + workingVerb + " …(" + strings.Join(segs, " · ") + ")"
 }
 
 // formatTokens renders an output-token count compactly: sub-thousand counts as

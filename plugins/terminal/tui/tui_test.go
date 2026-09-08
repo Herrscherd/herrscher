@@ -82,7 +82,7 @@ func TestRenderEventOmitsZeroCost(t *testing.T) {
 func TestRenderEventMarksAbandonedPerTab(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "abandoned"}})
-	if !strings.Contains(tabText(m.tabs["a"]), "abandoned") {
+	if !strings.Contains(tabText(m.tabs["a"]), "abandonne") {
 		t.Fatal("abandoned not surfaced")
 	}
 }
@@ -476,7 +476,7 @@ func TestShortcutsPanelListsClaudeKeys(t *testing.T) {
 	// Shift+Enter first — it is the gesture people arrive with — but the
 	// backslash stays named beside it, since it is the one that needs nothing
 	// from the terminal.
-	for _, want := range []string{"esc interrupt", `⇧⏎ or \⏎ newline`, "/ commands", "@ files"} {
+	for _, want := range []string{"échap interrompre", `⇧⏎ ou \⏎ nouvelle ligne`, "/ commandes", "@ fichiers"} {
 		if !strings.Contains(panel, want) {
 			t.Fatalf("shortcuts panel missing %q: %q", want, panel)
 		}
@@ -514,7 +514,7 @@ func TestSpinnerHintShowsTokensAndCost(t *testing.T) {
 		startedAt: time.Now().Add(-5 * time.Second),
 	}
 	hint := m.spinnerHint(tb)
-	for _, want := range []string{"esc to interrupt", "5s", "↑ 3.4k", "$0.02"} {
+	for _, want := range []string{"échap pour interrompre", "5s", "↑ 3.4k", "$0.02"} {
 		if !strings.Contains(hint, want) {
 			t.Fatalf("spinner hint missing %q: %q", want, hint)
 		}

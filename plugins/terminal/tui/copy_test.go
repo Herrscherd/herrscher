@@ -159,7 +159,7 @@ func TestToggleMouseHandsTheMouseOverAndTakesItBack(t *testing.T) {
 	if msg := runCmd(cmd); msg == nil {
 		t.Fatal("releasing the mouse must emit the terminal mode change")
 	}
-	if !strings.Contains(m.statusBar(m.tabs[m.active], 120), "mouse") {
+	if !strings.Contains(m.statusBar(m.tabs[m.active], 120), "souris") {
 		t.Fatalf("a released mouse must be named on the status bar: %q", m.statusBar(m.tabs[m.active], 120))
 	}
 
@@ -170,7 +170,7 @@ func TestToggleMouseHandsTheMouseOverAndTakesItBack(t *testing.T) {
 	if msg := runCmd(cmd); msg == nil {
 		t.Fatal("taking the mouse back must emit the terminal mode change")
 	}
-	if strings.Contains(m.statusBar(m.tabs[m.active], 120), "mouse") {
+	if strings.Contains(m.statusBar(m.tabs[m.active], 120), "souris") {
 		t.Fatal("the default capture needs no announcement")
 	}
 }

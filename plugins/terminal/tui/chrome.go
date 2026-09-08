@@ -14,9 +14,9 @@ import (
 // state a fresh tab shows instead of a blank screen. None of it carries content —
 // it says where you are, which the terminal previously left you to guess.
 
-// activeInfo is the hub's record for the active tab, if the hub still knows it.
 const infoTTL = 500 * time.Millisecond
 
+// activeInfo is the hub's record for the active tab, if the hub still knows it.
 func (m *model) activeInfo() (contracts.SessionInfo, bool) {
 	if m.tm == nil {
 		return contracts.SessionInfo{}, false
@@ -123,7 +123,7 @@ func (m *model) otherSessions() []string {
 // shortcutRow is the two things a reader needs before typing: how to reach the
 // commands, and how to get out of a turn.
 func shortcutRow() string {
-	return dimStyle.Render("  /  commandes   @  fichiers   Tab  changer de session   esc  interrompre")
+	return dimStyle.Render("  /  commandes   @  fichiers   Tab  changer de session   échap  interrompre")
 }
 
 // joinNonEmpty joins the parts that have something to say with a separating dot.
@@ -140,6 +140,13 @@ func joinNonEmpty(parts ...string) string {
 // truncate clips s to width columns. Callers pass already-styled text, so the
 // clip must be aware of escape sequences and of wide glyphs alike — cutting mid
 // escape would leak the sequence onto the screen as text.
+func plural(n int) string {
+	if n > 1 {
+		return "s"
+	}
+	return ""
+}
+
 func truncate(s string, width int) string {
 	if width < 1 || lipgloss.Width(s) <= width {
 		return s

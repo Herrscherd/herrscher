@@ -1408,7 +1408,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.applySize()
 		}
-		m.input.SetWidth(m.innerWidth())
+		m.input.SetWidth(m.composerTextWidth())
 		m.resizeComposer() // re-wrap the draft to the new width so it never clips
 		m.syncViewport()
 	case tea.KeyMsg:

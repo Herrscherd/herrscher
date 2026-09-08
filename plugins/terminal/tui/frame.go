@@ -56,7 +56,7 @@ func (m *model) buildFrame() frame {
 	}
 	f.below = appendLines(f.below, m.separatorRow())
 	f.below = appendLines(f.below, m.statusFooter())
-	f.below = appendLines(f.below, m.inputRow())
+	f.below = append(f.below, m.composerZone()...)
 	return f
 }
 

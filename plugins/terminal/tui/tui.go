@@ -138,6 +138,32 @@ type tab struct {
 	ctxMeasured  bool      // a per-message reading arrived during the current turn (see renderInto)
 	openedAt     time.Time // when the tab opened, for the session-age segment
 	nextEntryID  uint64
+	todos        []contracts.TodoItem
+	agents       []liveAgent
+}
+
+type liveAgent struct {
+	contracts.Subagent
+	since time.Time
+}
+
+func (tb *tab) dropAgent(id string) {
+	for i, a := range tb.agents {
+		if a.ID == id {
+			tb.agents = append(tb.agents[:i], tb.agents[i+1:]...)
+			return
+		}
+	}
+}
+
+func (tb *tab) clearPanels() {
+	tb.agents = nil
+	for _, t := range tb.todos {
+		if t.State != "done" {
+			return
+		}
+	}
+	tb.todos = nil
 }
 
 // maxTabLines bounds the number of logical entries a tab's transcript retains so
@@ -1083,7 +1109,21 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 			tb.busy = false
 			tb.streamed = false
 			tb.ctxMeasured = false
+			tb.clearPanels()
 		}
+	case "todos":
+		tb.busy = true
+		tb.todos = e.Todos
+	case "subagent":
+		tb.busy = true
+		if e.Subagent == nil {
+			break
+		}
+		if e.Subagent.State == "done" {
+			tb.dropAgent(e.Subagent.ID)
+			break
+		}
+		tb.agents = append(tb.agents, liveAgent{Subagent: *e.Subagent, since: time.Now()})
 	case "reset":
 		tb.busy = false
 		tb.streamed = false

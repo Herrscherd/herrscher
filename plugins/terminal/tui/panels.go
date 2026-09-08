@@ -46,7 +46,11 @@ func todoRow(it contracts.TodoItem, width int) string {
 	case "active":
 		mark, style = "◆", accentStyle
 	}
-	return style.Render(truncate("  "+mark+" "+it.Text, width))
+	return style.Render(truncate("  "+mark+" "+oneLine(it.Text), width))
+}
+
+func oneLine(s string) string {
+	return strings.Join(strings.FieldsFunc(s, func(r rune) bool { return r == '\n' || r == '\r' || r == '\t' }), " ")
 }
 
 func subagentPanel(agents []liveAgent, now time.Time, width int) []string {
@@ -55,9 +59,9 @@ func subagentPanel(agents []liveAgent, now time.Time, width int) []string {
 	}
 	out := make([]string, 0, len(agents))
 	for _, a := range agents {
-		cols := []string{a.Name}
+		cols := []string{oneLine(a.Name)}
 		if a.Kind != "" {
-			cols = append(cols, a.Kind)
+			cols = append(cols, oneLine(a.Kind))
 		}
 		cols = append(cols, fmt.Sprintf("%ds", int(now.Sub(a.since).Seconds())))
 		line := "  " + familyGlyph(familyAgent) + " " + strings.Join(cols, "  ")

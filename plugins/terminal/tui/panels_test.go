@@ -99,3 +99,27 @@ func TestTheFrameCarriesThePanels(t *testing.T) {
 		t.Fatalf("frame missing the panels:\n%s", out)
 	}
 }
+
+func TestPanelRowsStayOnOneLine(t *testing.T) {
+	got := strip(todoPanel([]contracts.TodoItem{{Text: "premiere\nseconde", State: "active"}}, 74))
+	if len(got) != 2 {
+		t.Fatalf("un todo multiligne doit rester une ligne: %q", got)
+	}
+	if got[1] != "  ◆ premiere seconde" {
+		t.Fatalf("ligne = %q", got[1])
+	}
+	agents := []liveAgent{{Subagent: contracts.Subagent{ID: "t1", Name: "a\nb"}, since: time.Now()}}
+	if lines := strip(subagentPanel(agents, time.Now(), 74)); len(lines) != 1 {
+		t.Fatalf("un agent multiligne doit rester une ligne: %q", lines)
+	}
+}
+
+func TestTheWorkingHintSaysTheVerbOnce(t *testing.T) {
+	m := sizedTestModel(t, 74)
+	tb := m.ensureTab("c1")
+	tb.busy = true
+	tb.startedAt = time.Now()
+	if hint := ansi.Strip(m.spinnerHint(tb)); strings.Contains(hint, "… …") || strings.Contains(hint, workingVerb+" …") {
+		t.Fatalf("hint = %q", hint)
+	}
+}

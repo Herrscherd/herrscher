@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // A diff's colour is its meaning: which line was added and which was removed.
@@ -183,3 +185,26 @@ type fakeWriteClipboard struct{ wrote string }
 func (f *fakeWriteClipboard) ImageType() (string, bool)        { return "", false }
 func (f *fakeWriteClipboard) ReadImage(string) ([]byte, error) { return nil, nil }
 func (f *fakeWriteClipboard) WriteText(s string) error         { f.wrote = s; return nil }
+
+func TestDiffKeepsFourHunkLinesAndFolds(t *testing.T) {
+	src := strings.Join([]string{
+		"@@ -12,7 +12,9 @@ func Register(",
+		"+  a", "-  b", "+  c", "+  d", "+  e", "+  f",
+	}, "\n")
+	out := renderDiff(src, 74, Capabilities{})
+	lines := strings.Split(out, "\n")
+	if len(lines) != diffHunkBudget+2 {
+		t.Fatalf("got %d lines, want %d: %q", len(lines), diffHunkBudget+2, lines)
+	}
+	last := ansi.Strip(lines[len(lines)-1])
+	if !strings.Contains(last, glyphFold) || !strings.Contains(last, "2 lignes de plus") {
+		t.Fatalf("fold line = %q", last)
+	}
+}
+
+func TestDiffUnderBudgetHasNoFold(t *testing.T) {
+	out := renderDiff("@@ -1,2 +1,2 @@\n+  a\n-  b", 74, Capabilities{})
+	if strings.Contains(ansi.Strip(out), glyphFold) {
+		t.Fatalf("short diff folded: %q", out)
+	}
+}

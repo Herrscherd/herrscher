@@ -52,6 +52,8 @@ func isDiffHeader(line string) bool {
 // green is approximated to whichever of eight colours is nearest, which for a
 // diff can be no distinction at all — and the one thing a diff must never lose
 // is which line was added.
+const diffHunkBudget = 4
+
 const (
 	ansiGreen = "\x1b[32m"
 	ansiRed   = "\x1b[31m"
@@ -62,16 +64,22 @@ const (
 // which inverts the meaning of the line it came from.
 func renderDiff(body string, width int, caps Capabilities) string {
 	lines := strings.Split(body, "\n")
-	out := make([]string, len(lines))
-	// An agent quoting a change usually writes the hunk without the preamble, so
-	// content is the default: the header block only exists while the lines still
-	// look like one.
+	out := make([]string, 0, len(lines)+1)
 	inHunk := len(lines) > 0 && !isDiffHeader(lines[0])
+	spent := 0
 	for i, ln := range lines {
 		if !inHunk && !isDiffHeader(ln) {
 			inHunk = true
 		}
-		out[i] = paintDiff(truncate(ln, width), diffClass(ln, inHunk), caps)
+		class := diffClass(ln, inHunk)
+		if class != diffMeta {
+			if spent == diffHunkBudget {
+				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-i), dimStyle))
+				break
+			}
+			spent++
+		}
+		out = append(out, paintDiff(truncate(ln, width), class, caps))
 	}
 	return strings.Join(out, "\n")
 }

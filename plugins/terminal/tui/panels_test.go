@@ -108,6 +108,9 @@ func TestPanelRowsStayOnOneLine(t *testing.T) {
 	if got[1] != "  ◆ premiere seconde" {
 		t.Fatalf("ligne = %q", got[1])
 	}
+	if got := strip(todoPanel([]contracts.TodoItem{{Text: "\x1b[2Jefface", State: "pending"}}, 74)); got[1] != "  · efface" {
+		t.Fatalf("une sequence de controle doit etre retiree: %q", got)
+	}
 	agents := []liveAgent{{Subagent: contracts.Subagent{ID: "t1", Name: "a\nb"}, since: time.Now()}}
 	if lines := strip(subagentPanel(agents, time.Now(), 74)); len(lines) != 1 {
 		t.Fatalf("un agent multiligne doit rester une ligne: %q", lines)

@@ -98,7 +98,7 @@ func renderEntry(e entry, width int, v view) string {
 		}
 		return out
 	case roleThinking:
-		return indent(wrapWith(thinkingStyle, glyphThinking+" "+e.text, body))
+		return indent(wrapWith(thinkingStyle, thinkingLine(e.text), body))
 	case roleTool:
 		return indent(renderTool(e.text, body, v))
 	case roleNotice:

@@ -99,7 +99,7 @@ func renderTool(text string, width int, v view) string {
 	b.WriteString(toolPart(gutter, rest, toolStyle, width, v))
 	for _, ln := range lines[1:] {
 		b.WriteByte('\n')
-		b.WriteString(toolPart("  "+glyphResult+" ", ln, dimStyle, width, v))
+		b.WriteString(toolPart(resultGutter, ln, dimStyle, width, v))
 	}
 	return b.String()
 }
@@ -230,4 +230,14 @@ func abbreviatePath(token string) string {
 		return token
 	}
 	return opening + "…/" + strings.Join(segs[len(segs)-pathKeep:], "/") + closing
+}
+
+const resultGutter = "  " + glyphResult + " "
+
+func resultLine(text string, style lipgloss.Style) string {
+	return style.Render(resultGutter + text)
+}
+
+func thinkingLine(text string) string {
+	return glyphThinking + " " + text
 }

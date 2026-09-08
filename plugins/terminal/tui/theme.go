@@ -87,3 +87,5 @@ var (
 	// the message that carried it.
 	chipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colText)).Background(lipgloss.Color(colSelBg)).Padding(0, 1)
 )
+
+const workingVerb = "Herrschering…"

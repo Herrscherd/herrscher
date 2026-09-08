@@ -348,11 +348,12 @@ func (m *model) copyLastCode() {
 		}
 		body := blocks[len(blocks)-1].body
 		if err := m.clip.WriteText(body); err != nil {
-			m.flash = "copy failed: " + err.Error()
+			m.flash = "copie impossible : " + err.Error()
 			return
 		}
-		m.flash = fmt.Sprintf("copied %d lines", len(strings.Split(body, "\n")))
+		n := len(strings.Split(body, "\n"))
+		m.flash = fmt.Sprintf("%d ligne%s copiée%s", n, plural(n), plural(n))
 		return
 	}
-	m.flash = "no code block in the last answer"
+	m.flash = "aucun bloc de code dans la dernière réponse"
 }

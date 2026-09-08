@@ -32,7 +32,7 @@ func TestCopyTakesTheLastAnswerByDefault(t *testing.T) {
 	if clip.wrote != "second answer" {
 		t.Fatalf("/copy must take the last answer alone, got %q", clip.wrote)
 	}
-	if !strings.Contains(m.flash, "copied") {
+	if !strings.Contains(m.flash, "copié") {
 		t.Fatalf("the copy must be acknowledged: %q", m.flash)
 	}
 }
@@ -114,7 +114,7 @@ func TestCopyOnAnEmptyTabSaysSo(t *testing.T) {
 	if clip.wrote != "" {
 		t.Fatalf("nothing to copy must write nothing, got %q", clip.wrote)
 	}
-	if m.flash == "" || strings.Contains(m.flash, "copied") {
+	if m.flash == "" || strings.Contains(m.flash, "copié") {
 		t.Fatalf("an empty copy must say why: %q", m.flash)
 	}
 }

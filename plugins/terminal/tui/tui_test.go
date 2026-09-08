@@ -82,7 +82,7 @@ func TestRenderEventOmitsZeroCost(t *testing.T) {
 func TestRenderEventMarksAbandonedPerTab(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "abandoned"}})
-	if !strings.Contains(tabText(m.tabs["a"]), "abandonne") {
+	if !strings.Contains(tabText(m.tabs["a"]), "abandonné") {
 		t.Fatal("abandoned not surfaced")
 	}
 }

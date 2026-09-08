@@ -147,7 +147,7 @@ func TestCopyPutsTheRawBlockOnTheClipboard(t *testing.T) {
 	if clip.wrote != "fmt.Println(1)" {
 		t.Fatalf("the clipboard must get the raw block, got %q", clip.wrote)
 	}
-	if !strings.Contains(m.flash, "copied") {
+	if !strings.Contains(m.flash, "copiée") {
 		t.Fatalf("the copy must be acknowledged: %q", m.flash)
 	}
 }
@@ -161,7 +161,7 @@ func TestCopyWithNoCodeBlockSaysSo(t *testing.T) {
 	tb.appendEntry(entry{role: roleAgent, text: "no code here"})
 
 	m.copyLastCode()
-	if m.flash == "" || strings.Contains(m.flash, "copied") {
+	if m.flash == "" || strings.Contains(m.flash, "copiée") {
 		t.Fatalf("an empty copy must say why: %q", m.flash)
 	}
 }

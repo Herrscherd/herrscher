@@ -62,7 +62,7 @@ const (
 // renderDiff colours a diff body by line class. Lines are clipped rather than
 // wrapped: a folded continuation carries no leading +/- and reads as context,
 // which inverts the meaning of the line it came from.
-func renderDiff(body string, width int, caps Capabilities) string {
+func renderDiff(body string, width int, v view) string {
 	lines := strings.Split(body, "\n")
 	out := make([]string, 0, len(lines)+1)
 	inHunk := len(lines) > 0 && !isDiffHeader(lines[0])
@@ -73,13 +73,13 @@ func renderDiff(body string, width int, caps Capabilities) string {
 		}
 		class := diffClass(ln, inHunk)
 		if class != diffMeta {
-			if spent == diffHunkBudget {
+			if !v.expand && spent == diffHunkBudget {
 				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-i), dimStyle))
 				break
 			}
 			spent++
 		}
-		out = append(out, paintDiff(truncate(ln, width), class, caps))
+		out = append(out, paintDiff(truncate(ln, width), class, v.caps))
 	}
 	return strings.Join(out, "\n")
 }

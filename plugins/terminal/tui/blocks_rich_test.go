@@ -43,7 +43,7 @@ func TestDiffHeadersAreNotAdditions(t *testing.T) {
 // nearest, which for a diff can be nothing at all. The basic ANSI pair is the one
 // every terminal has agreed on since the seventies.
 func TestDiffUsesBasicColourOnA16ColourTerminal(t *testing.T) {
-	out := renderDiff("@@ -1 +1 @@\n+added\n-gone", 40, Capabilities{Colour: Colour16})
+	out := renderDiff("@@ -1 +1 @@\n+added\n-gone", 40, view{caps: Capabilities{Colour: Colour16}})
 	if !strings.Contains(out, "\x1b[32m") || !strings.Contains(out, "\x1b[31m") {
 		t.Fatalf("a 16-colour terminal must get the basic green/red pair: %q", out)
 	}
@@ -52,7 +52,7 @@ func TestDiffUsesBasicColourOnA16ColourTerminal(t *testing.T) {
 // An agent quoting a change writes the hunk and not the preamble, and that is
 // the common case: those lines are content, not headers.
 func TestDiffWithoutAPreambleIsAllContent(t *testing.T) {
-	out := renderDiff("+added\n-gone", 40, Capabilities{Colour: Colour16})
+	out := renderDiff("+added\n-gone", 40, view{caps: Capabilities{Colour: Colour16}})
 	if !strings.Contains(out, ansiGreen) || !strings.Contains(out, ansiRed) {
 		t.Fatalf("a bare hunk must still be coloured: %q", out)
 	}
@@ -61,7 +61,7 @@ func TestDiffWithoutAPreambleIsAllContent(t *testing.T) {
 // A diff line is clipped, never folded: a wrapped continuation has no leading
 // +/- and reads as context.
 func TestDiffLinesAreClippedToWidth(t *testing.T) {
-	out := renderDiff("@@ -1 +1 @@\n+"+strings.Repeat("x", 80), 20, Capabilities{Colour: ColourTrue})
+	out := renderDiff("@@ -1 +1 @@\n+"+strings.Repeat("x", 80), 20, view{caps: Capabilities{Colour: ColourTrue}})
 	for _, ln := range strings.Split(out, "\n") {
 		if lipgloss.Width(ln) > 20 {
 			t.Fatalf("a diff line must be clipped to the width: %q", ln)
@@ -191,7 +191,7 @@ func TestDiffKeepsFourHunkLinesAndFolds(t *testing.T) {
 		"@@ -12,7 +12,9 @@ func Register(",
 		"+  a", "-  b", "+  c", "+  d", "+  e", "+  f",
 	}, "\n")
-	out := renderDiff(src, 74, Capabilities{})
+	out := renderDiff(src, 74, view{caps: Capabilities{}})
 	lines := strings.Split(out, "\n")
 	if len(lines) != diffHunkBudget+2 {
 		t.Fatalf("got %d lines, want %d: %q", len(lines), diffHunkBudget+2, lines)
@@ -203,8 +203,22 @@ func TestDiffKeepsFourHunkLinesAndFolds(t *testing.T) {
 }
 
 func TestDiffUnderBudgetHasNoFold(t *testing.T) {
-	out := renderDiff("@@ -1,2 +1,2 @@\n+  a\n-  b", 74, Capabilities{})
+	out := renderDiff("@@ -1,2 +1,2 @@\n+  a\n-  b", 74, view{caps: Capabilities{}})
 	if strings.Contains(ansi.Strip(out), glyphFold) {
 		t.Fatalf("short diff folded: %q", out)
+	}
+}
+
+func TestDiffExpandsWithAltE(t *testing.T) {
+	src := strings.Join([]string{
+		"@@ -12,7 +12,9 @@ func Register(",
+		"+  a", "-  b", "+  c", "+  d", "+  e", "+  f",
+	}, "\n")
+	out := renderDiff(src, 74, view{expand: true})
+	if strings.Contains(ansi.Strip(out), glyphFold) {
+		t.Fatalf("alt+e must lift the diff budget: %q", out)
+	}
+	if got := len(strings.Split(out, "\n")); got != 7 {
+		t.Fatalf("expanded diff drew %d lines, want 7", got)
 	}
 }

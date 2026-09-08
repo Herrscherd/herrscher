@@ -89,7 +89,7 @@ func renderEntry(e entry, width int, v view) string {
 			return titledRule(accentStyle, agentTitle, width) + "\n" +
 				indent(wrapWith(textStyle, e.text, body))
 		}
-		out := openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body, v.caps), width)
+		out := openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body, v), width)
 		if e.preview != "" {
 			// An image the answer linked to, fetched and drawn under it. The URL
 			// stays in the prose above: the picture is an addition, not a

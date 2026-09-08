@@ -94,7 +94,7 @@ func TestEmptyStateListsTheOtherSessions(t *testing.T) {
 	m.ensureTab("b")
 	m.active = "a"
 	out := m.emptyState(80)
-	if !strings.Contains(out, "other sessions") || !strings.Contains(out, "b") {
+	if !strings.Contains(out, "autres sessions") || !strings.Contains(out, "b") {
 		t.Fatalf("the other session must be listed: %q", out)
 	}
 	if strings.Count(out, "\n  ❯") > 0 {
@@ -106,7 +106,7 @@ func TestEmptyStateListsTheOtherSessions(t *testing.T) {
 func TestEmptyStateOmitsTheListWhenAlone(t *testing.T) {
 	m := newTestModel()
 	m.ensureTab("a")
-	if out := m.emptyState(80); strings.Contains(out, "other sessions") {
+	if out := m.emptyState(80); strings.Contains(out, "autres sessions") {
 		t.Fatalf("a lone session must not be told about its peers: %q", out)
 	}
 }

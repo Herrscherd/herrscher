@@ -109,13 +109,13 @@ func (m *model) otherSessions() []string {
 	if len(rows) == 0 {
 		return nil
 	}
-	return append([]string{"", dimStyle.Render("  other sessions")}, rows...)
+	return append([]string{"", dimStyle.Render("  autres sessions")}, rows...)
 }
 
 // shortcutRow is the two things a reader needs before typing: how to reach the
 // commands, and how to get out of a turn.
 func shortcutRow() string {
-	return dimStyle.Render("  /  commands   @  files   Tab  switch session   esc  interrupt")
+	return dimStyle.Render("  /  commandes   @  fichiers   Tab  changer de session   esc  interrompre")
 }
 
 // joinNonEmpty joins the parts that have something to say with a separating dot.

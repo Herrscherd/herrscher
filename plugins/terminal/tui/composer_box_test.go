@@ -67,12 +67,27 @@ func TestComposerZoneDropsBoxWhenNarrow(t *testing.T) {
 
 func TestComposerTextWidthReservesTheBorder(t *testing.T) {
 	m := sizedTestModel(t, 74)
-	m.caps.Boxes = true
 	if got := m.composerTextWidth(); got != 70 {
 		t.Fatalf("text width = %d, want 70", got)
 	}
+	narrow := sizedTestModel(t, composerBoxMinWidth-1)
+	if got := narrow.composerTextWidth(); got != composerBoxMinWidth-1 {
+		t.Fatalf("narrow text width = %d, want %d", got, composerBoxMinWidth-1)
+	}
+}
+
+func TestComposerZoneBoxesInAsciiWhenTheTerminalCannotDrawRunes(t *testing.T) {
+	m := sizedTestModel(t, 74)
 	m.caps.Boxes = false
-	if got := m.composerTextWidth(); got != 74 {
-		t.Fatalf("plain text width = %d, want 74", got)
+	m.applySize()
+	zone := m.composerZone()
+	if len(zone) != 3 {
+		t.Fatalf("ascii zone has %d lines, want 3", len(zone))
+	}
+	if !strings.Contains(zone[0], "+") || !strings.Contains(zone[0], "-") {
+		t.Fatalf("ascii box missing its top edge: %q", zone[0])
+	}
+	if strings.Contains(zone[0], "╭") {
+		t.Fatalf("ascii box must not use rounded runes: %q", zone[0])
 	}
 }

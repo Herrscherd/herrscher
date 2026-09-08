@@ -24,8 +24,8 @@ func composerLines(t *testing.T, m *model) []string {
 	out := make([]string, len(rows))
 	for i, r := range rows {
 		r = ansi.Strip(r)
-		r = strings.TrimPrefix(r, "│")
-		r = strings.TrimSuffix(strings.TrimRight(r, " "), "│")
+		r = strings.TrimLeft(r, "│|")
+		r = strings.TrimRight(strings.TrimRight(r, " "), "│|")
 		out[i] = strings.TrimSpace(r)
 	}
 	return out

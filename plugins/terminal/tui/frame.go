@@ -1,6 +1,9 @@
 package tui
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 type frame struct {
 	above []string
@@ -21,6 +24,10 @@ func (f frame) render(viewport string) string {
 
 func (m *model) buildFrame() frame {
 	f := frame{above: []string{m.railRow()}}
+	if tb := m.tabs[m.active]; tb != nil {
+		f.below = append(f.below, todoPanel(tb.todos, m.innerWidth())...)
+		f.below = append(f.below, subagentPanel(tb.agents, time.Now(), m.innerWidth())...)
+	}
 	if m.choice != nil {
 		f.below = appendLines(f.below, m.choiceView())
 	}

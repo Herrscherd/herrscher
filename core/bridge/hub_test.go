@@ -65,6 +65,21 @@ func TestEmitBackendEventThinking(t *testing.T) {
 	}
 }
 
+func TestEmitBackendEventPanels(t *testing.T) {
+	todos := []contracts.TodoItem{{Text: "lire", State: "done"}}
+	agent := contracts.Subagent{ID: "a1", Name: "chercher", Kind: "Explore", State: "active"}
+
+	sink := &recordSink{}
+	emitBackendEvent(sink, contracts.BackendEvent{Kind: "todos", Todos: todos}, 0, 0, 0, 0)
+	emitBackendEvent(sink, contracts.BackendEvent{Kind: "subagent", Subagent: &agent}, 0, 0, 0, 0)
+	emitBackendEvent(sink, contracts.BackendEvent{Kind: "subagent"}, 0, 0, 0, 0)
+
+	want := []contracts.Event{{T: "todos", Todos: todos}, {T: "subagent", Subagent: &agent}}
+	if !reflect.DeepEqual(sink.events, want) {
+		t.Fatalf("emitted %+v, want %+v", sink.events, want)
+	}
+}
+
 // tokenBackend emits a live usage event, a text chunk, then a terminal result
 // carrying the final token count.
 type tokenBackend struct{ reply string }

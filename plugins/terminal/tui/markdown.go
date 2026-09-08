@@ -49,14 +49,14 @@ func strPtr(s string) *string { return &s }
 // fenced diff by hand on the way. A diff is the one block where colour carries
 // meaning rather than syntax: chroma would paint it as source code and lose the
 // only distinction that matters, which line was added and which was removed.
-func renderMarkdown(text string, width int, caps Capabilities) string {
+func renderMarkdown(text string, width int, v view) string {
 	var b strings.Builder
 	for i, seg := range splitDiffs(text) {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
 		if seg.diff {
-			b.WriteString(renderDiff(seg.text, width, caps))
+			b.WriteString(renderDiff(seg.text, width, v))
 			continue
 		}
 		b.WriteString(renderProse(seg.text, width))

@@ -63,6 +63,7 @@ type Capabilities struct {
 	Hyperlinks bool
 	Mouse      bool
 	Colour     Colour
+	Boxes      bool
 	Terminal   string
 }
 
@@ -93,6 +94,7 @@ func Probe(env func(string) string) Capabilities {
 	// A terminal that names itself is one bubbletea can put into mouse-reporting
 	// mode; "dumb" and an unset TERM are the two cases that mean the other end is
 	// not an interactive terminal at all.
+	caps.Boxes = probeBoxes(env)
 	caps.Mouse = term != "" && term != "dumb"
 	return caps
 }
@@ -134,4 +136,17 @@ func terminalName(term, program string) string {
 		return term
 	}
 	return "unknown"
+}
+
+func probeBoxes(env func(string) string) bool {
+	if env("HERRSCHER_TUI_PLAIN") != "" {
+		return false
+	}
+	for _, key := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		if v := env(key); v != "" {
+			upper := strings.ToUpper(v)
+			return strings.Contains(upper, "UTF-8") || strings.Contains(upper, "UTF8")
+		}
+	}
+	return false
 }

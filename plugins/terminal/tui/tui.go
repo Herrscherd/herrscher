@@ -22,7 +22,6 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/skills"
@@ -139,6 +138,32 @@ type tab struct {
 	ctxMeasured  bool      // a per-message reading arrived during the current turn (see renderInto)
 	openedAt     time.Time // when the tab opened, for the session-age segment
 	nextEntryID  uint64
+	todos        []contracts.TodoItem
+	agents       []liveAgent
+}
+
+type liveAgent struct {
+	contracts.Subagent
+	since time.Time
+}
+
+func (tb *tab) dropAgent(id string) {
+	for i, a := range tb.agents {
+		if a.ID == id {
+			tb.agents = append(tb.agents[:i], tb.agents[i+1:]...)
+			return
+		}
+	}
+}
+
+func (tb *tab) clearPanels() {
+	tb.agents = nil
+	for _, t := range tb.todos {
+		if t.State != "done" {
+			return
+		}
+	}
+	tb.todos = nil
 }
 
 // maxTabLines bounds the number of logical entries a tab's transcript retains so
@@ -230,6 +255,11 @@ type model struct {
 	palWasOpen   bool          // palette open-state after the previous key, to skip idle re-fits
 	spinning     bool          // whether the animation timer is currently running
 	composerRows int           // composer height the layout is built around, in rows
+
+	infoCache   contracts.SessionInfo
+	infoKnown   bool
+	infoChannel string
+	infoAt      time.Time
 
 	// openSession is the session the window must open on, and openText the first
 	// message to send there. Both are consumed once, by the first reconcile that
@@ -413,41 +443,7 @@ func (m *model) resizeComposer() {
 // itself takes (4), plus the composer's current height, and any staged-chip row,
 // shortcuts line, palette, or picker when each is shown.
 func (m *model) chromeHeight() int {
-	h := 4 + m.composerHeight()
-	if len(m.pending) > 0 {
-		h++ // the staged-attachments chip row
-	}
-	if m.showHelp {
-		h++ // the one-line shortcuts panel
-	}
-	if m.paletteOpen() {
-		h += m.paletteHeight()
-	}
-	if m.mentionOpen() {
-		h += m.mentionHeight()
-	}
-	if m.resumeOpen {
-		h += m.resumeHeight()
-	}
-	if m.switchOpen {
-		h += m.switchHeight()
-	}
-	if m.skillsOpen {
-		h += m.skillsHeight()
-	}
-	if m.diagOpen {
-		h += m.diagHeight()
-	}
-	if m.pluginsOpen {
-		h += m.pluginsHeight()
-	}
-	if m.searchOpen {
-		h++ // the one-line search overlay
-	}
-	if m.choice != nil {
-		h += m.choiceHeight()
-	}
-	return h
+	return m.buildFrame().height()
 }
 
 // innerWidth is the usable content width: the full window (no border, no card),
@@ -821,7 +817,7 @@ func (m *model) pasteImage() bool {
 	}
 	data, err := m.clip.ReadImage(mime)
 	if err != nil {
-		m.flash = "paste failed: " + err.Error()
+		m.flash = "collage impossible : " + err.Error()
 		return true // an image was on the clipboard; do not fall through to text
 	}
 	att, err := saveClipboardImage(data, mime, m.attachSeq)
@@ -985,7 +981,7 @@ func (m *model) closeCmd(rest []string) tea.Cmd {
 		name = m.activeSessionName()
 	}
 	if name == "" {
-		m.flash = "no session here to close"
+		m.flash = "aucune session à fermer ici"
 		return nil
 	}
 	return m.closeSession(name, force)
@@ -1118,20 +1114,34 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 			tb.busy = false
 			tb.streamed = false
 			tb.ctxMeasured = false
+			tb.clearPanels()
 		}
+	case "todos":
+		tb.busy = true
+		tb.todos = e.Todos
+	case "subagent":
+		tb.busy = true
+		if e.Subagent == nil {
+			break
+		}
+		if e.Subagent.State == "done" {
+			tb.dropAgent(e.Subagent.ID)
+			break
+		}
+		tb.agents = append(tb.agents, liveAgent{Subagent: *e.Subagent, since: time.Now()})
 	case "reset":
 		tb.busy = false
 		tb.streamed = false
 		tb.ctxMeasured = false
 		tb.endStream()
-		tb.appendEntry(entry{role: roleNotice, text: "turn reset"})
+		tb.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
 	case "abandoned":
 		tb.busy = false
 		tb.streamed = false
 		tb.ctxMeasured = false
 		tb.disconnected = true
 		tb.endStream()
-		tb.appendEntry(entry{role: roleNotice, text: "turn abandoned"})
+		tb.appendEntry(entry{role: roleNotice, text: "tour abandonné"})
 	}
 }
 
@@ -1261,28 +1271,11 @@ func (m *model) inputRow() string {
 // navigation keys while an inline menu is open.
 func (m *model) hintText() string {
 	if m.paletteOpen() {
-		return dimStyle.Render("↑↓ navigate · Tab complete · Esc close")
+		return dimStyle.Render("↑↓ naviguer · Tab compléter · Échap fermer")
 	}
-	return dimStyle.Render("/ cmds · @ files · ? shortcuts · ⇧⏎ newline · esc interrupt")
+	return dimStyle.Render("? raccourcis")
 }
 
-// statusRow is the footer status on the left and the key hint on the right,
-// separated to fill the width. left is already styled (footer or flash).
-//
-// The result is clipped to one row: the status bar grows with the session (name,
-// project, cost, context, age) and a row that wrapped would push every line below
-// it down, which chromeHeight has no way to account for.
-func (m *model) statusRow(left string) string {
-	hint := m.hintText()
-	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(hint)
-	if gap < 1 {
-		return truncate(left, m.innerWidth())
-	}
-	return left + strings.Repeat(" ", gap) + hint
-}
-
-// footer renders the status line for the active tab: the spinner hint while a
-// turn is in flight, otherwise the session's status bar.
 func (m *model) footer() string {
 	// A selected link takes the row: it is the operator's current gesture, it is
 	// transient, and its target is the one thing they need to read before acting.
@@ -1297,17 +1290,17 @@ func (m *model) footer() string {
 		return spinnerStyle.Render(m.spinnerHint(tb))
 	}
 	if tb.disconnected {
-		return dimStyle.Render("· disconnected")
+		return dimStyle.Render("· déconnecté")
 	}
 	return m.statusBar(tb, m.innerWidth())
 }
 
 // spinnerHint renders the active turn's progress line in the Claude shape:
-// `✳ …(esc to interrupt · {n}s · ↑ {tokens} · ${cost})`. The token and cost
+// `✳ {verbe} (échap pour interrompre · {n}s · ↑ {tokens} · ${cost})`. The token and cost
 // segments appear only once a count/cost has arrived, so an early turn shows just
 // the interrupt affordance and elapsed time.
 func (m *model) spinnerHint(tb *tab) string {
-	segs := []string{"esc to interrupt"}
+	segs := []string{"échap pour interrompre"}
 	if !tb.startedAt.IsZero() {
 		segs = append(segs, fmt.Sprintf("%ds", int(time.Since(tb.startedAt).Seconds())))
 	}
@@ -1317,7 +1310,7 @@ func (m *model) spinnerHint(tb *tab) string {
 	if tb.lastCost > 0 {
 		segs = append(segs, formatCost(tb.lastCost))
 	}
-	return m.spinFrame() + " …(" + strings.Join(segs, " · ") + ")"
+	return m.spinFrame() + " " + workingVerb + " (" + strings.Join(segs, " · ") + ")"
 }
 
 // formatTokens renders an output-token count compactly: sub-thousand counts as
@@ -1434,7 +1427,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.applySize()
 		}
-		m.input.SetWidth(m.innerWidth())
+		m.input.SetWidth(m.composerTextWidth())
 		m.resizeComposer() // re-wrap the draft to the new width so it never clips
 		m.syncViewport()
 	case tea.KeyMsg:
@@ -1837,55 +1830,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · ctrl+g free the mouse · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · ctrl+f fold code · ctrl+y copy code · alt+y copy answer · alt+e whole commands · ctrl+s search · ctrl+t fold turns · alt+↑↓ jump turn · / commands · @ files")
+	return dimStyle.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
 }
 
 func (m *model) View() string {
 	if !m.ready {
-		return "starting…"
+		return "démarrage…"
 	}
-	footer := m.footer()
-	if m.flash != "" {
-		footer = dimStyle.Render("· " + m.flash)
-	}
-	footer = m.statusRow(footer)
-	// banner → transcript → inline menu → rule → status/spinner → input. The
-	// banner says which session you are in, the rule keeps a long answer from
-	// running into what you are typing.
-	parts := []string{m.bannerRow(), m.vp.View()}
-	if m.choice != nil {
-		parts = append(parts, m.choiceView())
-	}
-	if m.paletteOpen() {
-		parts = append(parts, m.paletteView())
-	}
-	if m.mentionOpen() {
-		parts = append(parts, m.mentionView())
-	}
-	if m.resumeOpen {
-		parts = append(parts, m.resumeView())
-	}
-	if m.switchOpen {
-		parts = append(parts, m.switchView())
-	}
-	if m.skillsOpen {
-		parts = append(parts, m.skillsView())
-	}
-	if m.diagOpen {
-		parts = append(parts, m.diagView())
-	}
-	if m.pluginsOpen {
-		parts = append(parts, m.pluginsView())
-	}
-	if m.searchOpen {
-		parts = append(parts, m.searchView())
-	}
-	if m.showHelp {
-		parts = append(parts, m.helpView())
-	}
-	if chips := chipRow(m.pending); chips != "" {
-		parts = append(parts, chips+"  "+dimStyle.Render("⌃U remove"))
-	}
-	parts = append(parts, m.separatorRow(), footer, m.inputRow())
-	return strings.Join(parts, "\n")
+	return m.buildFrame().render(m.vp.View())
 }

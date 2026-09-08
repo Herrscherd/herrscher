@@ -167,14 +167,14 @@ func (m *model) selectedLink() (Link, bool) {
 func (m *model) openSelectedLink() {
 	l, ok := m.selectedLink()
 	if !ok {
-		m.flash = "no link selected — ctrl+l picks one"
+		m.flash = "aucun lien sélectionné · ctrl+l en choisit un"
 		return
 	}
 	if err := openLink(l, m.sys, m.edit); err != nil {
-		m.flash = "open failed: " + err.Error()
+		m.flash = "ouverture impossible : " + err.Error()
 		return
 	}
-	m.flash = "opening " + l.Target
+	m.flash = "ouverture de " + l.Target
 }
 
 // linkStatus is the status line while a link is selected: the resolved target,

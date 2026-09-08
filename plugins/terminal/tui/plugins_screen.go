@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // PluginRow is one compiled-in plugin as the screen shows it: what is built in,
@@ -48,17 +47,17 @@ type PluginSeam interface {
 // handler switches on, and a menu whose rows and branches can drift apart is a
 // menu that eventually runs the wrong thing.
 const (
-	pluginActionBump    = "bump to the latest version"
-	pluginActionPin     = "pin at the installed version"
-	pluginActionUnpin   = "unpin"
+	pluginActionBump    = "passer à la dernière version"
+	pluginActionPin     = "épingler la version installée"
+	pluginActionUnpin   = "désépingler"
 	pluginActionVersion = "version…"
-	pluginActionRemove  = "remove from the composition"
+	pluginActionRemove  = "retirer de la composition"
 
-	pluginWarnProceed = "proceed"
-	pluginWarnAbort   = "cancel, change nothing"
+	pluginWarnProceed = "continuer"
+	pluginWarnAbort   = "annuler, ne rien changer"
 
-	pluginFailRestore = "restore the tree as it was"
-	pluginFailKeep    = "keep it, I will repair by hand"
+	pluginFailRestore = "remettre l'arbre comme il était"
+	pluginFailKeep    = "le garder, je répare à la main"
 )
 
 // pluginsMode is where the screen is in the one flow it has: pick a plugin, pick
@@ -129,7 +128,7 @@ func (m *model) openPlugins() tea.Cmd {
 	m.pluginsRows = nil
 	m.pluginsNotice = ""
 	if m.pluginsSeam == nil {
-		m.pluginsNotice = "plugin management is not available in this build"
+		m.pluginsNotice = "la gestion des plugins n'est pas disponible dans ce binaire"
 		return nil
 	}
 	seam, ctx := m.pluginsSeam, m.runContext()
@@ -167,10 +166,10 @@ func (m *model) handlePluginsMsg(msg tea.Msg) (tea.Cmd, bool) {
 			m.pluginsMode = pluginsFailed
 			break
 		}
-		m.pluginsNotice = "the change is on disk; it applies at the next restart"
+		m.pluginsNotice = "le changement est sur le disque ; il s'applique au prochain démarrage"
 		m.pluginsMode = pluginsDone
 	case pluginsRestoredMsg:
-		m.pluginsNotice = "the tree is back as it was; nothing was installed"
+		m.pluginsNotice = "l'arbre est revenu comme il était ; rien n'a été installé"
 		m.pluginsMode = pluginsDone
 	case pluginsErrMsg:
 		m.pluginsNotice = msg.err.Error()
@@ -241,7 +240,7 @@ func (m *model) choosePlugins() tea.Cmd {
 				return pluginsRestoredMsg{}
 			}
 		}
-		m.pluginsNotice = "the tree is left as it is; repair it and run the build again"
+		m.pluginsNotice = "l'arbre est laissé tel quel ; répare-le et relance la construction"
 		m.pluginsMode = pluginsDone
 	case pluginsDone:
 		return m.openPlugins()
@@ -359,22 +358,22 @@ func (m *model) clampPluginsMenu() {
 // header, the plugin rows, and whichever menu the flow is asking through.
 func (m *model) pluginsView() string {
 	var b strings.Builder
-	b.WriteString(dimStyle.Render("plugins — ↑↓ select · Enter choose · Esc back"))
+	b.WriteString(dimStyle.Render("plugins · ↑↓ naviguer · ⏎ choisir · échap retour"))
 	if m.pluginsNotice != "" {
 		b.WriteString("\n" + dimStyle.Render("  "+m.pluginsNotice))
 	}
 	if len(m.pluginsRows) == 0 && m.pluginsNotice == "" {
-		b.WriteString("\n" + dimStyle.Render("  (no plugins compiled in)"))
+		b.WriteString("\n" + dimStyle.Render("  (aucun plugin compilé dans ce binaire)"))
 	}
 	start, end := pluginsWindow(m.pluginsIdx, len(m.pluginsRows))
 	if start > 0 {
-		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … %d above", start)))
+		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … %d au-dessus", start)))
 	}
 	for i := start; i < end; i++ {
 		r := m.pluginsRows[i]
 		row := fmt.Sprintf("%s · %s → %s", r.Module, r.Installed, r.Latest)
 		if r.Pinned {
-			row += " · pinned"
+			row += " · épinglé"
 		}
 		if i == m.pluginsIdx && m.pluginsMode == pluginsList {
 			b.WriteString("\n" + accentStyle.Render(glyphCursor+" "+row))
@@ -383,7 +382,7 @@ func (m *model) pluginsView() string {
 		}
 	}
 	if end < len(m.pluginsRows) {
-		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … %d below", len(m.pluginsRows)-end)))
+		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … %d en dessous", len(m.pluginsRows)-end)))
 	}
 	if m.pluginsMode == pluginsWarn {
 		for _, f := range m.pluginsFindings {
@@ -407,13 +406,4 @@ func (m *model) pluginsView() string {
 		}
 	}
 	return b.String()
-}
-
-// pluginsHeight is the rendered row count of the open screen (0 when closed), so
-// chromeHeight can reserve space for it.
-func (m *model) pluginsHeight() int {
-	if !m.pluginsOpen {
-		return 0
-	}
-	return lipgloss.Height(m.pluginsView())
 }

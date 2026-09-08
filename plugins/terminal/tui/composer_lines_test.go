@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 
@@ -11,12 +12,21 @@ import (
 func composerLines(t *testing.T, m *model) []string {
 	t.Helper()
 	all := strings.Split(m.View(), "\n")
-	if len(all) < m.composerHeight() {
-		t.Fatalf("view has %d rows, composer claims %d", len(all), m.composerHeight())
+	zone := len(m.composerZone())
+	if len(all) < zone {
+		t.Fatalf("view has %d rows, composer zone claims %d", len(all), zone)
 	}
-	out := all[len(all)-m.composerHeight():]
-	for i, r := range out {
-		out[i] = strings.TrimRight(r, " ")
+	status := len(m.statusZone())
+	rows := all[len(all)-zone-status : len(all)-status]
+	if m.composerBoxed() {
+		rows = rows[1 : len(rows)-1]
+	}
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		r = ansi.Strip(r)
+		r = strings.TrimLeft(r, "│|")
+		r = strings.TrimRight(strings.TrimRight(r, " "), "│|")
+		out[i] = strings.TrimSpace(r)
 	}
 	return out
 }

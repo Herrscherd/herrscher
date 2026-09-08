@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 // CommandSpec is one operator command advertised in the palette. Name is the
@@ -188,16 +186,13 @@ func localCommands() []CommandSpec {
 	}
 }
 
-// paletteView renders the filtered command list as an inline Claude menu: rows
-// directly under the input, the selected row prefixed ❯ in the warm accent,
-// descriptions dim, no border box. Empty when closed.
 func (m *model) paletteView() string {
 	if !m.paletteOpen() {
 		return ""
 	}
 	fc := m.filtered()
 	if len(fc) == 0 {
-		return dimStyle.Render("  (no match)")
+		return dimStyle.Render("  (aucune correspondance)")
 	}
 	sel := m.palIdx
 	if sel >= len(fc) {
@@ -207,44 +202,17 @@ func (m *model) paletteView() string {
 		sel = 0
 	}
 	start, end := paletteWindow(len(fc), sel, paletteMax)
-	var b strings.Builder
-	for i, c := range fc[start:end] {
-		i += start
-		// The name is the thing being chosen and the args are a reminder of what
-		// it will ask for; drawing both dim made every row one grey smear, and a
-		// menu you have to read word by word is a menu you stop opening.
+	rows := make([]overlayRow, 0, end-start)
+	for _, c := range fc[start:end] {
 		label := "/" + c.Name
-		var row string
-		switch {
-		case i == sel:
-			row = accentStyle.Render(glyphCursor + " " + label)
-		default:
-			row = textStyle.Render("  " + label)
-		}
 		if c.Args != "" {
-			row += dimStyle.Render(" " + c.Args)
+			label += " " + c.Args
 		}
-		if c.Desc != "" {
-			row += "  " + dimStyle.Render(c.Desc)
-		}
-		if i > start {
-			b.WriteByte('\n')
-		}
-		b.WriteString(row)
+		rows = append(rows, overlayRow{label: label, detail: c.Desc})
 	}
-	// With more matches than rows, the window alone gives no sense of where in
-	// the list the cursor is or how much is left — so say it outright.
+	footer := ""
 	if len(fc) > paletteMax {
-		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  %d/%d", sel+1, len(fc))))
+		footer = fmt.Sprintf("%d/%d", sel+1, len(fc))
 	}
-	return b.String()
-}
-
-// paletteHeight is the rendered row count of the open palette (0 when closed), so
-// chromeHeight can reserve space for it.
-func (m *model) paletteHeight() int {
-	if !m.paletteOpen() {
-		return 0
-	}
-	return lipgloss.Height(m.paletteView())
+	return floatingList(rows, sel-start, footer, m.overlayWidth())
 }

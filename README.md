@@ -368,6 +368,23 @@ same neutral port. The UI is the one that ships in the binary.
 
 → `plugins/gateway`, `plugins/terminal`
 
+### The shape of the window
+
+A thin rail across the top names the terminal, its open sessions and the vendor
+answering in the active one. Under it the transcript runs the full width. The
+composer sits in a rounded box at the foot, and the status line is glued right
+under that box, so the two things you act on are one object rather than two rows
+separated by a rule.
+
+Every list the window opens (the `/` palette, `@` completion, `/resume`,
+`/session switch`, `/skills`) shares one grammar: unbordered rows floating just
+above the box, the selected one on a filled background, a footer that says what
+the keys do and how much of the list is out of sight. The box is drawn with
+rounded runes where the locale says UTF-8, plain ASCII otherwise, and it collapses
+below 60 columns.
+
+The window speaks French.
+
 ### Sessions as tabs
 
 Several sessions render as live tabs. Each answer opens with a titled rule, so a
@@ -387,6 +404,19 @@ with the arrows.
 An attached window follows the live turn, because every driven session taps the
 daemon's event socket. Esc stops a turn as an interruption rather than an error,
 keeping whatever the agent had already written.
+
+### What the agent is doing right now
+
+A todo list and a running sub-agent are state, not transcript: written into the
+flow they would scroll away from the answer they describe, and rewritten on every
+update they would say the same thing a dozen times. So the backend lifts them out
+of the stream (`TodoWrite` and `Task` never reach the transcript) and they render
+as two panels under it: the list windowed around the task in hand with its
+`done/total` count, and one line per live sub-agent with its kind and its age. A
+sub-agent leaves the panel when it hands back, and the end of a turn clears both,
+keeping an unfinished list.
+
+→ `plugins/terminal/tui/panels.go`
 
 Picking up a chat session's tab and typing there answers you *there*. A turn says
 where it was said, so it is rendered in the window that asked and not posted a
@@ -438,8 +468,11 @@ identify it, and what is left over is counted rather than dropped: `+3 ↵`.
 `alt+e` lifts the budget and spells every command out as it was run.
 
 Diffs are coloured by hunk, and by the basic ANSI pair on a 16-colour terminal,
-where a hex green would be approximated away. Tables truncate their widest column
-instead of wrapping into confetti.
+where a hex green would be approximated away. A hunk is worth four lines before it
+folds to `▶ n lignes de plus (alt+e)`, since a fifty-line diff quoted mid-answer
+buries the sentence that follows it; `alt+e`, the same key that spells a command
+out, unfolds it. Tables truncate their widest column instead of wrapping into
+confetti.
 
 → `reference/keybindings`
 

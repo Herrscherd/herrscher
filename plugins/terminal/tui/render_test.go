@@ -44,12 +44,12 @@ func TestAgentEntryRendersBare(t *testing.T) {
 // notice and an error must not render as the same line the way they used to.
 func TestRoleGlyphsAreDistinct(t *testing.T) {
 	think := renderEntry(entry{role: roleThinking, text: "weighing two options"}, 60, view{})
-	notice := renderEntry(entry{role: roleNotice, text: "turn reset"}, 60, view{})
+	notice := renderEntry(entry{role: roleNotice, text: "tour reinitialise"}, 60, view{})
 	fail := renderEntry(entry{role: roleError, text: "exit status 1"}, 60, view{})
 	if !strings.Contains(think, glyphThinking) {
 		t.Fatalf("reasoning must carry its glyph: %q", think)
 	}
-	if !strings.Contains(notice, glyphNotice+" turn reset") {
+	if !strings.Contains(notice, glyphNotice+" tour reinitialise") {
 		t.Fatalf("a notice must carry its glyph: %q", notice)
 	}
 	// The error's glyph titles its rule rather than sitting beside the text: the

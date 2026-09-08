@@ -44,8 +44,8 @@ func TestStreamingMarkdownStaysRaw(t *testing.T) {
 // at two widths must fold differently, not reuse the first width's wrap.
 func TestMarkdownRewrapsOnWidth(t *testing.T) {
 	body := strings.Repeat("lorem ipsum dolor sit amet ", 10)
-	narrow := renderMarkdown(body, 30, Capabilities{})
-	wide := renderMarkdown(body, 90, Capabilities{})
+	narrow := renderMarkdown(body, 30, view{caps: Capabilities{}})
+	wide := renderMarkdown(body, 90, view{caps: Capabilities{}})
 	if strings.Count(narrow, "\n") <= strings.Count(wide, "\n") {
 		t.Fatalf("narrow must wrap to more lines: narrow=%d wide=%d",
 			strings.Count(narrow, "\n"), strings.Count(wide, "\n"))
@@ -102,7 +102,7 @@ func TestUnclosedDiffFenceTakesTheRest(t *testing.T) {
 // TestDiffLineIsClippedNotWrapped keeps a folded diff line from losing the +/-
 // that says what it is.
 func TestDiffLineIsClippedNotWrapped(t *testing.T) {
-	out := renderDiff("+"+strings.Repeat("x", 80), 20, Capabilities{})
+	out := renderDiff("+"+strings.Repeat("x", 80), 20, view{caps: Capabilities{}})
 	if strings.Contains(out, "\n") {
 		t.Fatalf("a diff line must be clipped, not folded: %q", out)
 	}

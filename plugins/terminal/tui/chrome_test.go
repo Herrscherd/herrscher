@@ -15,7 +15,7 @@ func TestBannerCarriesTheActiveTab(t *testing.T) {
 	m.ensureTab("alpha")
 	m.ensureTab("beta")
 	m.active = "beta"
-	out := m.bannerRow()
+	out := m.railRow()
 	if !strings.Contains(out, "HERRSCHER") {
 		t.Fatalf("banner must carry the brand: %q", out)
 	}
@@ -36,7 +36,7 @@ func TestBannerDropsTheBrandBeforeTheTabs(t *testing.T) {
 	m := newTestModel()
 	m.width = 20
 	m.ensureTab("alpha")
-	out := m.bannerRow()
+	out := m.railRow()
 	if strings.Contains(out, "HERRSCHER") {
 		t.Fatalf("a narrow banner must drop the brand: %q", out)
 	}
@@ -70,7 +70,7 @@ func TestEmptyTabShowsAnEmptyState(t *testing.T) {
 	if strings.TrimSpace(out) == "" {
 		t.Fatal("an empty tab must not render an empty screen")
 	}
-	if !strings.Contains(out, "commands") {
+	if !strings.Contains(out, "commandes") {
 		t.Fatalf("the empty state must name a gesture: %q", out)
 	}
 }
@@ -91,17 +91,16 @@ func TestChromeHeightCountsTheBannerAndRule(t *testing.T) {
 	}
 }
 
-// TestStatusRowIsClippedToOneLine is the layout invariant chromeHeight depends
-// on: the status bar grows with the session, and a row that wrapped would push
-// every line under it down by one with nothing accounting for it.
-func TestStatusRowIsClippedToOneLine(t *testing.T) {
+func TestStatusZoneIsClippedToOneLine(t *testing.T) {
 	m := newTestModel()
 	m.width = 30
-	row := m.statusRow(dimStyle.Render(strings.Repeat("very-long-session-name ", 10)))
-	if strings.Contains(row, "\n") {
-		t.Fatalf("the status row must stay one line: %q", row)
+	m.active = "c1"
+	m.tabs = map[string]*tab{"c1": {label: strings.Repeat("very-long-session-name ", 10)}}
+	zone := m.statusZone()
+	if len(zone) != 1 {
+		t.Fatalf("the status zone must stay one line: %q", zone)
 	}
-	if w := lipgloss.Width(row); w > 30 {
+	if w := lipgloss.Width(zone[0]); w > 30 {
 		t.Fatalf("status row width %d exceeds 30", w)
 	}
 }
@@ -115,11 +114,29 @@ func TestNarrowBannerKeepsTheActiveTab(t *testing.T) {
 		m.ensureTab(ch)
 	}
 	m.active = "gamma-session"
-	out := m.bannerRow()
+	out := m.railRow()
 	if !strings.Contains(out, "gamma") {
 		t.Fatalf("a banner too narrow for the strip must keep the active tab: %q", out)
 	}
 	if w := lipgloss.Width(out); w > 18 {
 		t.Fatalf("banner width %d exceeds 18: %q", w, out)
+	}
+}
+
+func TestEmptyStateListsFactsThenSessionsThenShortcuts(t *testing.T) {
+	m := sizedTestModel(t, 74)
+	m.active = "c1"
+	m.order = []string{"c1", "c2"}
+	m.tabs = map[string]*tab{"c1": {label: "docs-site"}, "c2": {label: "neublox"}}
+	out := m.emptyState(74)
+	iSessions := strings.Index(out, "autres sessions")
+	iShort := strings.Index(out, "commandes")
+	if iSessions < 0 || iShort < 0 || iSessions > iShort {
+		t.Fatalf("empty state order wrong:\n%s", out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if lipgloss.Width(line) > 74 {
+			t.Fatalf("line too wide: %q", line)
+		}
 	}
 }

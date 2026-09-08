@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // A diff's colour is its meaning: which line was added and which was removed.
@@ -41,7 +43,7 @@ func TestDiffHeadersAreNotAdditions(t *testing.T) {
 // nearest, which for a diff can be nothing at all. The basic ANSI pair is the one
 // every terminal has agreed on since the seventies.
 func TestDiffUsesBasicColourOnA16ColourTerminal(t *testing.T) {
-	out := renderDiff("@@ -1 +1 @@\n+added\n-gone", 40, Capabilities{Colour: Colour16})
+	out := renderDiff("@@ -1 +1 @@\n+added\n-gone", 40, view{caps: Capabilities{Colour: Colour16}})
 	if !strings.Contains(out, "\x1b[32m") || !strings.Contains(out, "\x1b[31m") {
 		t.Fatalf("a 16-colour terminal must get the basic green/red pair: %q", out)
 	}
@@ -50,7 +52,7 @@ func TestDiffUsesBasicColourOnA16ColourTerminal(t *testing.T) {
 // An agent quoting a change writes the hunk and not the preamble, and that is
 // the common case: those lines are content, not headers.
 func TestDiffWithoutAPreambleIsAllContent(t *testing.T) {
-	out := renderDiff("+added\n-gone", 40, Capabilities{Colour: Colour16})
+	out := renderDiff("+added\n-gone", 40, view{caps: Capabilities{Colour: Colour16}})
 	if !strings.Contains(out, ansiGreen) || !strings.Contains(out, ansiRed) {
 		t.Fatalf("a bare hunk must still be coloured: %q", out)
 	}
@@ -59,7 +61,7 @@ func TestDiffWithoutAPreambleIsAllContent(t *testing.T) {
 // A diff line is clipped, never folded: a wrapped continuation has no leading
 // +/- and reads as context.
 func TestDiffLinesAreClippedToWidth(t *testing.T) {
-	out := renderDiff("@@ -1 +1 @@\n+"+strings.Repeat("x", 80), 20, Capabilities{Colour: ColourTrue})
+	out := renderDiff("@@ -1 +1 @@\n+"+strings.Repeat("x", 80), 20, view{caps: Capabilities{Colour: ColourTrue}})
 	for _, ln := range strings.Split(out, "\n") {
 		if lipgloss.Width(ln) > 20 {
 			t.Fatalf("a diff line must be clipped to the width: %q", ln)
@@ -145,7 +147,7 @@ func TestCopyPutsTheRawBlockOnTheClipboard(t *testing.T) {
 	if clip.wrote != "fmt.Println(1)" {
 		t.Fatalf("the clipboard must get the raw block, got %q", clip.wrote)
 	}
-	if !strings.Contains(m.flash, "copied") {
+	if !strings.Contains(m.flash, "copiée") {
 		t.Fatalf("the copy must be acknowledged: %q", m.flash)
 	}
 }
@@ -159,7 +161,7 @@ func TestCopyWithNoCodeBlockSaysSo(t *testing.T) {
 	tb.appendEntry(entry{role: roleAgent, text: "no code here"})
 
 	m.copyLastCode()
-	if m.flash == "" || strings.Contains(m.flash, "copied") {
+	if m.flash == "" || strings.Contains(m.flash, "copiée") {
 		t.Fatalf("an empty copy must say why: %q", m.flash)
 	}
 }
@@ -183,3 +185,40 @@ type fakeWriteClipboard struct{ wrote string }
 func (f *fakeWriteClipboard) ImageType() (string, bool)        { return "", false }
 func (f *fakeWriteClipboard) ReadImage(string) ([]byte, error) { return nil, nil }
 func (f *fakeWriteClipboard) WriteText(s string) error         { f.wrote = s; return nil }
+
+func TestDiffKeepsFourHunkLinesAndFolds(t *testing.T) {
+	src := strings.Join([]string{
+		"@@ -12,7 +12,9 @@ func Register(",
+		"+  a", "-  b", "+  c", "+  d", "+  e", "+  f",
+	}, "\n")
+	out := renderDiff(src, 74, view{caps: Capabilities{}})
+	lines := strings.Split(out, "\n")
+	if len(lines) != diffHunkBudget+2 {
+		t.Fatalf("got %d lines, want %d: %q", len(lines), diffHunkBudget+2, lines)
+	}
+	last := ansi.Strip(lines[len(lines)-1])
+	if !strings.Contains(last, glyphFold) || !strings.Contains(last, "2 lignes de plus") {
+		t.Fatalf("fold line = %q", last)
+	}
+}
+
+func TestDiffUnderBudgetHasNoFold(t *testing.T) {
+	out := renderDiff("@@ -1,2 +1,2 @@\n+  a\n-  b", 74, view{caps: Capabilities{}})
+	if strings.Contains(ansi.Strip(out), glyphFold) {
+		t.Fatalf("short diff folded: %q", out)
+	}
+}
+
+func TestDiffExpandsWithAltE(t *testing.T) {
+	src := strings.Join([]string{
+		"@@ -12,7 +12,9 @@ func Register(",
+		"+  a", "-  b", "+  c", "+  d", "+  e", "+  f",
+	}, "\n")
+	out := renderDiff(src, 74, view{expand: true})
+	if strings.Contains(ansi.Strip(out), glyphFold) {
+		t.Fatalf("alt+e must lift the diff budget: %q", out)
+	}
+	if got := len(strings.Split(out, "\n")); got != 7 {
+		t.Fatalf("expanded diff drew %d lines, want 7", got)
+	}
+}

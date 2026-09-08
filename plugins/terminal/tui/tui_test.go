@@ -82,7 +82,7 @@ func TestRenderEventOmitsZeroCost(t *testing.T) {
 func TestRenderEventMarksAbandonedPerTab(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "abandoned"}})
-	if !strings.Contains(tabText(m.tabs["a"]), "abandoned") {
+	if !strings.Contains(tabText(m.tabs["a"]), "abandonné") {
 		t.Fatal("abandoned not surfaced")
 	}
 }
@@ -328,8 +328,6 @@ func TestResizeSyncsViewport(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	// second size message exercises the resize (else) branch
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	// The flow uses the whole width and reserves 5 chrome rows: the banner, the
-	// separator, the status/spinner row, the composer (1), and the hint line.
 	if m.vp.Width != 100 || m.vp.Height != 25 {
 		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 25)", m.vp.Width, m.vp.Height)
 	}
@@ -478,7 +476,7 @@ func TestShortcutsPanelListsClaudeKeys(t *testing.T) {
 	// Shift+Enter first — it is the gesture people arrive with — but the
 	// backslash stays named beside it, since it is the one that needs nothing
 	// from the terminal.
-	for _, want := range []string{"esc interrupt", `⇧⏎ or \⏎ newline`, "/ commands", "@ files"} {
+	for _, want := range []string{"échap interrompre", `⇧⏎ ou \⏎ nouvelle ligne`, "/ commandes", "@ fichiers"} {
 		if !strings.Contains(panel, want) {
 			t.Fatalf("shortcuts panel missing %q: %q", want, panel)
 		}
@@ -516,7 +514,7 @@ func TestSpinnerHintShowsTokensAndCost(t *testing.T) {
 		startedAt: time.Now().Add(-5 * time.Second),
 	}
 	hint := m.spinnerHint(tb)
-	for _, want := range []string{"esc to interrupt", "5s", "↑ 3.4k", "$0.02"} {
+	for _, want := range []string{"échap pour interrompre", "5s", "↑ 3.4k", "$0.02"} {
 		if !strings.Contains(hint, want) {
 			t.Fatalf("spinner hint missing %q: %q", want, hint)
 		}

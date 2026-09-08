@@ -36,7 +36,7 @@ func (m *model) copyCmd(rest []string) {
 		break
 	}
 	if !validCopyTarget(target) {
-		m.flash = "copy what? " + strings.Join(copyTargets, ", ")
+		m.flash = "copier quoi ? " + strings.Join(copyTargets, ", ")
 		return
 	}
 	m.copyTarget(target)
@@ -59,14 +59,15 @@ func (m *model) copyTarget(target string) {
 	}
 	text := copyText(tb.entries, target)
 	if strings.TrimSpace(text) == "" {
-		m.flash = "nothing to copy here"
+		m.flash = "rien à copier ici"
 		return
 	}
 	if err := m.clip.WriteText(text); err != nil {
-		m.flash = "copy failed: " + err.Error()
+		m.flash = "copie impossible : " + err.Error()
 		return
 	}
-	m.flash = fmt.Sprintf("copied the %s — %d lines", target, len(strings.Split(text, "\n")))
+	n := len(strings.Split(text, "\n"))
+	m.flash = fmt.Sprintf("%s copié, %d ligne%s", target, n, plural(n))
 }
 
 // copyText renders the requested slice of a transcript as plain text.

@@ -4,8 +4,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 // mentionMax bounds how many path matches the @ completion shows at once.
@@ -171,33 +169,14 @@ func (m *model) completeActiveMention() {
 	m.mentionIdx = 0
 }
 
-// mentionView renders the @ completion list, reusing the inline menu style: the
-// selected path prefixed ❯ in the warm accent, the rest dim, no border.
 func (m *model) mentionView() string {
-	rows := m.mentionRows()
-	if len(rows) == 0 {
+	paths := m.mentionRows()
+	if len(paths) == 0 {
 		return ""
 	}
-	var b strings.Builder
-	for i, p := range rows {
-		var row string
-		if i == m.mentionIdx {
-			row = accentStyle.Render(glyphCursor + " @" + p)
-		} else {
-			row = dimStyle.Render("  @" + p)
-		}
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		b.WriteString(row)
+	rows := make([]overlayRow, 0, len(paths))
+	for _, p := range paths {
+		rows = append(rows, overlayRow{label: "@" + p})
 	}
-	return b.String()
-}
-
-// mentionHeight is the rendered row count of the open @ list (0 when closed).
-func (m *model) mentionHeight() int {
-	if !m.mentionOpen() {
-		return 0
-	}
-	return lipgloss.Height(m.mentionView())
+	return floatingList(rows, m.mentionIdx, "Tab compléter · Échap fermer", m.overlayWidth())
 }

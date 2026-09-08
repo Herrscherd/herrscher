@@ -57,21 +57,29 @@ const (
 	ansiRed   = "\x1b[31m"
 )
 
+const diffHunkBudget = 4
+
 // renderDiff colours a diff body by line class. Lines are clipped rather than
 // wrapped: a folded continuation carries no leading +/- and reads as context,
 // which inverts the meaning of the line it came from.
-func renderDiff(body string, width int, caps Capabilities) string {
+func renderDiff(body string, width int, v view) string {
 	lines := strings.Split(body, "\n")
-	out := make([]string, len(lines))
-	// An agent quoting a change usually writes the hunk without the preamble, so
-	// content is the default: the header block only exists while the lines still
-	// look like one.
+	out := make([]string, 0, len(lines)+1)
 	inHunk := len(lines) > 0 && !isDiffHeader(lines[0])
+	spent := 0
 	for i, ln := range lines {
 		if !inHunk && !isDiffHeader(ln) {
 			inHunk = true
 		}
-		out[i] = paintDiff(truncate(ln, width), diffClass(ln, inHunk), caps)
+		class := diffClass(ln, inHunk)
+		if class != diffMeta {
+			if !v.expand && spent == diffHunkBudget {
+				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-i), dimStyle))
+				break
+			}
+			spent++
+		}
+		out = append(out, paintDiff(truncate(ln, width), class, v.caps))
 	}
 	return strings.Join(out, "\n")
 }
@@ -340,11 +348,12 @@ func (m *model) copyLastCode() {
 		}
 		body := blocks[len(blocks)-1].body
 		if err := m.clip.WriteText(body); err != nil {
-			m.flash = "copy failed: " + err.Error()
+			m.flash = "copie impossible : " + err.Error()
 			return
 		}
-		m.flash = fmt.Sprintf("copied %d lines", len(strings.Split(body, "\n")))
+		n := len(strings.Split(body, "\n"))
+		m.flash = fmt.Sprintf("%d ligne%s copiée%s", n, plural(n), plural(n))
 		return
 	}
-	m.flash = "no code block in the last answer"
+	m.flash = "aucun bloc de code dans la dernière réponse"
 }

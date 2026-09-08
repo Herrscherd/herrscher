@@ -426,8 +426,9 @@ func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Ba
 }
 
 // emitBackendEvent maps a backend progress event onto the bus vocabulary:
-// thinking → thinking, text → chunk, tool → status (dropped when empty), reset
-// → reset; usage and result carry no transcript and are dropped. The live
+// thinking → thinking, text → chunk, tool → status (dropped when empty), todos
+// → todos, subagent → subagent, reset → reset; usage and result carry no
+// transcript and are dropped. The live
 // cumulative output-token count (tokens) rides on every rendered event so a
 // gateway can show a growing counter mid-turn. Mirrors the relocated
 // runner.emitBackend.
@@ -440,6 +441,12 @@ func emitBackendEvent(sink contracts.EventSink, be contracts.BackendEvent, token
 	case "tool":
 		if text := strings.TrimSpace(be.Tool + " " + be.Detail); text != "" {
 			sink.Emit(contracts.Event{T: "status", Text: text, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+		}
+	case "todos":
+		sink.Emit(contracts.Event{T: "todos", Todos: be.Todos})
+	case "subagent":
+		if be.Subagent != nil {
+			sink.Emit(contracts.Event{T: "subagent", Subagent: be.Subagent})
 		}
 	case "reset":
 		sink.Emit(contracts.Event{T: "reset"})

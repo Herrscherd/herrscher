@@ -5,9 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/skills"
@@ -54,40 +51,19 @@ func (m *model) clampSkills() {
 
 func (m *model) moveSkills(d int) { m.skillsIdx += d; m.clampSkills() }
 
-// skillsView renders the panel as an inline Claude menu (no border box): a dim
-// header, then one row per skill with its name and description, the selected row
-// prefixed ❯ in the warm accent.
 func (m *model) skillsView() string {
-	var b strings.Builder
-	b.WriteString(dimStyle.Render("skills — ↑↓ select · Esc close"))
 	if len(m.skillsRows) == 0 {
-		b.WriteString("\n" + dimStyle.Render("  (no skills found in ~/.claude/skills)"))
-		return b.String()
+		return dimStyle.Render("  (aucune skill dans ~/.claude/skills)")
 	}
 	start, end := paletteWindow(len(m.skillsRows), m.skillsIdx, skillsMax)
+	rows := make([]overlayRow, 0, end-start)
 	for i := start; i < end; i++ {
 		s := m.skillsRows[i]
-		row := s.Name
-		if s.Description != "" {
-			row += " — " + s.Description
-		}
-		if i == m.skillsIdx {
-			b.WriteString("\n" + accentStyle.Render(glyphCursor+" "+row))
-		} else {
-			b.WriteString("\n" + dimStyle.Render("  "+row))
-		}
+		rows = append(rows, overlayRow{label: s.Name, detail: s.Description})
 	}
+	footer := "↑↓ parcourir · Échap fermer"
 	if hidden := len(m.skillsRows) - (end - start); hidden > 0 {
-		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", hidden)))
+		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}
-	return b.String()
-}
-
-// skillsHeight is the rendered row count of the open panel (0 when closed), so
-// chromeHeight can reserve space for it.
-func (m *model) skillsHeight() int {
-	if !m.skillsOpen {
-		return 0
-	}
-	return lipgloss.Height(m.skillsView())
+	return floatingList(rows, m.skillsIdx-start, footer, m.overlayWidth())
 }

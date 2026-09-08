@@ -15,10 +15,10 @@ import tea "github.com/charmbracelet/bubbletea"
 func (m *model) toggleMouse() tea.Cmd {
 	m.mouseFree = !m.mouseFree
 	if m.mouseFree {
-		m.flash = "mouse released — drag to select as usual · pgup/pgdn scroll · ctrl+g takes it back"
+		m.flash = "souris libérée · glisser pour sélectionner comme d'habitude · pgup/pgdn défiler · ctrl+g la reprend"
 		return tea.DisableMouse
 	}
-	m.flash = "mouse captured — the wheel scrolls the transcript again"
+	m.flash = "souris reprise · la molette fait de nouveau défiler la conversation"
 	return tea.EnableMouseCellMotion
 }
 
@@ -28,5 +28,5 @@ func (m *model) mouseStatus() string {
 	if !m.mouseFree {
 		return ""
 	}
-	return dimStyle.Render("mouse → terminal")
+	return dimStyle.Render("souris → terminal")
 }

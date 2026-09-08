@@ -16,7 +16,8 @@ func composerLines(t *testing.T, m *model) []string {
 	if len(all) < zone {
 		t.Fatalf("view has %d rows, composer zone claims %d", len(all), zone)
 	}
-	rows := all[len(all)-zone:]
+	status := len(m.statusZone())
+	rows := all[len(all)-zone-status : len(all)-status]
 	if m.composerBoxed() {
 		rows = rows[1 : len(rows)-1]
 	}

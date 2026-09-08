@@ -15,7 +15,7 @@ func TestBannerCarriesTheActiveTab(t *testing.T) {
 	m.ensureTab("alpha")
 	m.ensureTab("beta")
 	m.active = "beta"
-	out := m.bannerRow()
+	out := m.railRow()
 	if !strings.Contains(out, "HERRSCHER") {
 		t.Fatalf("banner must carry the brand: %q", out)
 	}
@@ -36,7 +36,7 @@ func TestBannerDropsTheBrandBeforeTheTabs(t *testing.T) {
 	m := newTestModel()
 	m.width = 20
 	m.ensureTab("alpha")
-	out := m.bannerRow()
+	out := m.railRow()
 	if strings.Contains(out, "HERRSCHER") {
 		t.Fatalf("a narrow banner must drop the brand: %q", out)
 	}
@@ -115,7 +115,7 @@ func TestNarrowBannerKeepsTheActiveTab(t *testing.T) {
 		m.ensureTab(ch)
 	}
 	m.active = "gamma-session"
-	out := m.bannerRow()
+	out := m.railRow()
 	if !strings.Contains(out, "gamma") {
 		t.Fatalf("a banner too narrow for the strip must keep the active tab: %q", out)
 	}

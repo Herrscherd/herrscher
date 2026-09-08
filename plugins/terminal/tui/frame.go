@@ -20,7 +20,7 @@ func (f frame) render(viewport string) string {
 }
 
 func (m *model) buildFrame() frame {
-	f := frame{above: []string{m.bannerRow()}}
+	f := frame{above: []string{m.railRow()}}
 	if m.choice != nil {
 		f.below = appendLines(f.below, m.choiceView())
 	}

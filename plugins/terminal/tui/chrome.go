@@ -14,63 +14,6 @@ import (
 // state a fresh tab shows instead of a blank screen. None of it carries content —
 // it says where you are, which the terminal previously left you to guess.
 
-// brand is the banner's fixed left mark.
-const brand = "──◂ HERRSCHER ▸──"
-
-// bannerRow renders the brand and the tab strip on one line, clipped to width.
-// Tabs live here rather than in a picker because they are the terminal's one real
-// advantage: several sessions at once, each with its own transcript.
-func (m *model) bannerRow() string {
-	left := accentStyle.Render(brand)
-	strip := m.tabStrip()
-	if strip == "" {
-		return truncate(left, m.innerWidth())
-	}
-	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(strip)
-	if gap >= 2 {
-		return left + strings.Repeat(" ", gap) + strip
-	}
-	// No room for both: the tabs win — which session you are typing into matters
-	// more than the name of the program you already launched. And if even the
-	// strip does not fit, clipping it would cut from the right and could drop the
-	// active tab entirely, so fall back to the active tab alone.
-	if lipgloss.Width(strip) <= m.innerWidth() {
-		return strip
-	}
-	return truncate(m.activeMark(), m.innerWidth())
-}
-
-// activeMark is the active tab's mark alone — the last thing the banner gives up.
-func (m *model) activeMark() string {
-	tb := m.tabs[m.active]
-	if tb == nil {
-		return ""
-	}
-	return accentStyle.Render(glyphCursor + " " + tb.label)
-}
-
-// tabStrip renders one mark per open session: the active one accented and led by
-// a chevron, the others dim, an unread one carrying its pip.
-func (m *model) tabStrip() string {
-	var out []string
-	for _, ch := range m.order {
-		tb := m.tabs[ch]
-		if tb == nil {
-			continue
-		}
-		label := tb.label
-		if tb.unread {
-			label = glyphUnread + label
-		}
-		if ch == m.active {
-			out = append(out, accentStyle.Render(glyphCursor+" "+label))
-			continue
-		}
-		out = append(out, dimStyle.Render(label))
-	}
-	return strings.Join(out, "  ")
-}
-
 // separatorRow rules off the transcript from the composer, so a long answer does
 // not run visually into what you are typing.
 func (m *model) separatorRow() string {

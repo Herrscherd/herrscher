@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 // CommandSpec is one operator command advertised in the palette. Name is the
@@ -217,13 +215,4 @@ func (m *model) paletteView() string {
 		footer = fmt.Sprintf("%d/%d", sel+1, len(fc))
 	}
 	return floatingList(rows, sel-start, footer, m.overlayWidth())
-}
-
-// paletteHeight is the rendered row count of the open palette (0 when closed), so
-// chromeHeight can reserve space for it.
-func (m *model) paletteHeight() int {
-	if !m.paletteOpen() {
-		return 0
-	}
-	return lipgloss.Height(m.paletteView())
 }

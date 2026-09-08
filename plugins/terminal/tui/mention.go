@@ -4,8 +4,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 // mentionMax bounds how many path matches the @ completion shows at once.
@@ -181,12 +179,4 @@ func (m *model) mentionView() string {
 		rows = append(rows, overlayRow{label: "@" + p})
 	}
 	return floatingList(rows, m.mentionIdx, "Tab compléter · Échap fermer", m.overlayWidth())
-}
-
-// mentionHeight is the rendered row count of the open @ list (0 when closed).
-func (m *model) mentionHeight() int {
-	if !m.mentionOpen() {
-		return 0
-	}
-	return lipgloss.Height(m.mentionView())
 }

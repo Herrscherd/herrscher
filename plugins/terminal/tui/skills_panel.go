@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
@@ -68,13 +66,4 @@ func (m *model) skillsView() string {
 		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}
 	return floatingList(rows, m.skillsIdx-start, footer, m.overlayWidth())
-}
-
-// skillsHeight is the rendered row count of the open panel (0 when closed), so
-// chromeHeight can reserve space for it.
-func (m *model) skillsHeight() int {
-	if !m.skillsOpen {
-		return 0
-	}
-	return lipgloss.Height(m.skillsView())
 }

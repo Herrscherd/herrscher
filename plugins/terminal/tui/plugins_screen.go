@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // PluginRow is one compiled-in plugin as the screen shows it: what is built in,
@@ -407,13 +406,4 @@ func (m *model) pluginsView() string {
 		}
 	}
 	return b.String()
-}
-
-// pluginsHeight is the rendered row count of the open screen (0 when closed), so
-// chromeHeight can reserve space for it.
-func (m *model) pluginsHeight() int {
-	if !m.pluginsOpen {
-		return 0
-	}
-	return lipgloss.Height(m.pluginsView())
 }

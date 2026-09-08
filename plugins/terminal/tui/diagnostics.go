@@ -2,8 +2,6 @@ package tui
 
 import (
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 // Degradation elsewhere in this package is deliberately silent: a feature reads
@@ -110,13 +108,4 @@ func (m *model) remoteImageRow() string {
 	return dimStyle.Render("  "+name+strings.Repeat(" ", max(1, factWidth-len(name)))) +
 		textStyle.Render(value) + strings.Repeat(" ", max(1, diagValueWidth-len(value))) +
 		dimStyle.Render(feature)
-}
-
-// diagHeight is the rendered row count of the open screen (0 when closed), so
-// chromeHeight can reserve space for it.
-func (m *model) diagHeight() int {
-	if !m.diagOpen {
-		return 0
-	}
-	return lipgloss.Height(m.diagView())
 }

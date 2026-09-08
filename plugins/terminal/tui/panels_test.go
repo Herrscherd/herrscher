@@ -126,3 +126,55 @@ func TestTheWorkingHintSaysTheVerbOnce(t *testing.T) {
 		t.Fatalf("hint = %q", hint)
 	}
 }
+
+func TestSubagentPanelCapsWhatItDraws(t *testing.T) {
+	now := time.Now()
+	agents := make([]liveAgent, 7)
+	for i := range agents {
+		agents[i] = liveAgent{Subagent: contracts.Subagent{ID: "t", Name: "chercher"}, since: now}
+	}
+	got := strip(subagentPanel(agents, now, 74))
+	if len(got) != subagentPanelMax+1 {
+		t.Fatalf("panel drew %d lines: %q", len(got), got)
+	}
+	if got[len(got)-1] != "  · +4" {
+		t.Fatalf("le panneau doit dire ce qu'il cache: %q", got)
+	}
+}
+
+func TestSubagentPanelFallsBackToACountWhenNarrow(t *testing.T) {
+	now := time.Now()
+	agents := []liveAgent{
+		{Subagent: contracts.Subagent{ID: "t1", Name: "un"}, since: now},
+		{Subagent: contracts.Subagent{ID: "t2", Name: "deux"}, since: now},
+	}
+	if got := strip(subagentPanel(agents, now, 40)); len(got) != 1 || got[0] != "  ◆ 2 sous-agents" {
+		t.Fatalf("narrow panel = %q", got)
+	}
+	if got := strip(subagentPanel(agents[:1], now, 40)); got[0] != "  ◆ 1 sous-agent" {
+		t.Fatalf("un seul agent ne prend pas le pluriel: %q", got)
+	}
+}
+
+func TestElapsedCountsInMinutesPastSixty(t *testing.T) {
+	for _, tc := range []struct {
+		d    time.Duration
+		want string
+	}{
+		{3 * time.Second, "3s"},
+		{59 * time.Second, "59s"},
+		{72 * time.Second, "1m12s"},
+		{620 * time.Second, "10m20s"},
+	} {
+		if got := elapsed(tc.d); got != tc.want {
+			t.Fatalf("elapsed(%s) = %q, want %q", tc.d, got, tc.want)
+		}
+	}
+}
+
+func TestPanelRowsDropBareControlRunes(t *testing.T) {
+	got := strip(todoPanel([]contracts.TodoItem{{Text: "sonne\x07\x08 la\vcloche", State: "pending"}}, 74))
+	if got[1] != "  · sonne la cloche" {
+		t.Fatalf("ligne = %q", got[1])
+	}
+}

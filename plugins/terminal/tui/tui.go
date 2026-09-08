@@ -413,41 +413,7 @@ func (m *model) resizeComposer() {
 // itself takes (4), plus the composer's current height, and any staged-chip row,
 // shortcuts line, palette, or picker when each is shown.
 func (m *model) chromeHeight() int {
-	h := 4 + m.composerHeight()
-	if len(m.pending) > 0 {
-		h++ // the staged-attachments chip row
-	}
-	if m.showHelp {
-		h++ // the one-line shortcuts panel
-	}
-	if m.paletteOpen() {
-		h += m.paletteHeight()
-	}
-	if m.mentionOpen() {
-		h += m.mentionHeight()
-	}
-	if m.resumeOpen {
-		h += m.resumeHeight()
-	}
-	if m.switchOpen {
-		h += m.switchHeight()
-	}
-	if m.skillsOpen {
-		h += m.skillsHeight()
-	}
-	if m.diagOpen {
-		h += m.diagHeight()
-	}
-	if m.pluginsOpen {
-		h += m.pluginsHeight()
-	}
-	if m.searchOpen {
-		h++ // the one-line search overlay
-	}
-	if m.choice != nil {
-		h += m.choiceHeight()
-	}
-	return h
+	return m.buildFrame().height()
 }
 
 // innerWidth is the usable content width: the full window (no border, no card),
@@ -1283,6 +1249,14 @@ func (m *model) statusRow(left string) string {
 
 // footer renders the status line for the active tab: the spinner hint while a
 // turn is in flight, otherwise the session's status bar.
+func (m *model) statusFooter() string {
+	footer := m.footer()
+	if m.flash != "" {
+		footer = dimStyle.Render("· " + m.flash)
+	}
+	return m.statusRow(footer)
+}
+
 func (m *model) footer() string {
 	// A selected link takes the row: it is the operator's current gesture, it is
 	// transient, and its target is the one thing they need to read before acting.
@@ -1844,48 +1818,5 @@ func (m *model) View() string {
 	if !m.ready {
 		return "starting…"
 	}
-	footer := m.footer()
-	if m.flash != "" {
-		footer = dimStyle.Render("· " + m.flash)
-	}
-	footer = m.statusRow(footer)
-	// banner → transcript → inline menu → rule → status/spinner → input. The
-	// banner says which session you are in, the rule keeps a long answer from
-	// running into what you are typing.
-	parts := []string{m.bannerRow(), m.vp.View()}
-	if m.choice != nil {
-		parts = append(parts, m.choiceView())
-	}
-	if m.paletteOpen() {
-		parts = append(parts, m.paletteView())
-	}
-	if m.mentionOpen() {
-		parts = append(parts, m.mentionView())
-	}
-	if m.resumeOpen {
-		parts = append(parts, m.resumeView())
-	}
-	if m.switchOpen {
-		parts = append(parts, m.switchView())
-	}
-	if m.skillsOpen {
-		parts = append(parts, m.skillsView())
-	}
-	if m.diagOpen {
-		parts = append(parts, m.diagView())
-	}
-	if m.pluginsOpen {
-		parts = append(parts, m.pluginsView())
-	}
-	if m.searchOpen {
-		parts = append(parts, m.searchView())
-	}
-	if m.showHelp {
-		parts = append(parts, m.helpView())
-	}
-	if chips := chipRow(m.pending); chips != "" {
-		parts = append(parts, chips+"  "+dimStyle.Render("⌃U remove"))
-	}
-	parts = append(parts, m.separatorRow(), footer, m.inputRow())
-	return strings.Join(parts, "\n")
+	return m.buildFrame().render(m.vp.View())
 }

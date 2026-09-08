@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -99,15 +98,6 @@ func (m *model) resumeView() string {
 	return floatingList(rows, m.resumeIdx-start, footer, m.overlayWidth())
 }
 
-// resumeHeight is the rendered row count of the open picker (0 when closed), so
-// chromeHeight can reserve space for it.
-func (m *model) resumeHeight() int {
-	if !m.resumeOpen {
-		return 0
-	}
-	return lipgloss.Height(m.resumeView())
-}
-
 // switchMax bounds how many rows the /session switch picker shows at once.
 const switchMax = 8
 
@@ -170,14 +160,6 @@ func (m *model) switchView() string {
 		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}
 	return floatingList(rows, m.switchIdx-start, footer, m.overlayWidth())
-}
-
-// switchHeight is the rendered row count of the open switcher (0 when closed).
-func (m *model) switchHeight() int {
-	if !m.switchOpen {
-		return 0
-	}
-	return lipgloss.Height(m.switchView())
 }
 
 // ChoiceOption is one selectable answer in a permission menu: Label is shown to
@@ -263,13 +245,4 @@ func (m *model) choiceView() string {
 		}
 	}
 	return b.String()
-}
-
-// choiceHeight is the rendered row count of the open permission menu (0 when
-// closed), so chromeHeight can reserve space for it.
-func (m *model) choiceHeight() int {
-	if m.choice == nil {
-		return 0
-	}
-	return lipgloss.Height(m.choiceView())
 }

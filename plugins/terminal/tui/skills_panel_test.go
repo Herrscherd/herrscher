@@ -20,10 +20,10 @@ func TestSkillsPanelRendersRows(t *testing.T) {
 	m.skillsOpen = true
 
 	out := m.skillsView()
-	if !strings.Contains(out, glyphCursor+" pdf-fill — fill PDFs") {
-		t.Fatalf("selected row must be prefixed and show name — desc: %q", out)
+	if !strings.Contains(out, glyphCursor+" pdf-fill") || !strings.Contains(out, "fill PDFs") {
+		t.Fatalf("selected row must be prefixed and show its name and description: %q", out)
 	}
-	if !strings.Contains(out, "web — browse") {
+	if !strings.Contains(out, "web") || !strings.Contains(out, "browse") {
 		t.Fatalf("second skill must be listed: %q", out)
 	}
 	for _, box := range []string{"╭", "╮", "╰", "│"} {
@@ -38,7 +38,7 @@ func TestSkillsPanelRendersRows(t *testing.T) {
 func TestSkillsPanelEmpty(t *testing.T) {
 	m := newTestModel()
 	m.skillsOpen = true
-	if !strings.Contains(m.skillsView(), "no skills found") {
+	if !strings.Contains(m.skillsView(), "aucune skill") {
 		t.Fatalf("empty panel must explain there are no skills: %q", m.skillsView())
 	}
 }

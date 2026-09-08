@@ -9,22 +9,30 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The chrome is the frame around the transcript: a banner naming the terminal and
-// its open sessions, a rule separating the flow from the composer, and the empty
+// The chrome is the frame around the transcript: the rail naming the terminal and
+// its open sessions, the composer box, the status line under it, and the empty
 // state a fresh tab shows instead of a blank screen. None of it carries content —
 // it says where you are, which the terminal previously left you to guess.
 
 // activeInfo is the hub's record for the active tab, if the hub still knows it.
+const infoTTL = 500 * time.Millisecond
+
 func (m *model) activeInfo() (contracts.SessionInfo, bool) {
 	if m.tm == nil {
 		return contracts.SessionInfo{}, false
 	}
+	if m.infoChannel == m.active && time.Since(m.infoAt) < infoTTL {
+		return m.infoCache, m.infoKnown
+	}
+	m.infoCache, m.infoKnown = contracts.SessionInfo{}, false
 	for _, s := range m.tm.Sessions() {
 		if s.ChannelID == m.active {
-			return s, true
+			m.infoCache, m.infoKnown = s, true
+			break
 		}
 	}
-	return contracts.SessionInfo{}, false
+	m.infoChannel, m.infoAt = m.active, time.Now()
+	return m.infoCache, m.infoKnown
 }
 
 // emptyState is what a tab with no transcript shows. It replaces a black screen

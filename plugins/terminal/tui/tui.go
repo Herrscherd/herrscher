@@ -256,6 +256,11 @@ type model struct {
 	spinning     bool          // whether the animation timer is currently running
 	composerRows int           // composer height the layout is built around, in rows
 
+	infoCache   contracts.SessionInfo
+	infoKnown   bool
+	infoChannel string
+	infoAt      time.Time
+
 	// openSession is the session the window must open on, and openText the first
 	// message to send there. Both are consumed once, by the first reconcile that
 	// finds the session — a window opened on a task must not resend it on every

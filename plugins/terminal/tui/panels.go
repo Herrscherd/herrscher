@@ -6,6 +6,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const todoPanelMax = 6
@@ -50,7 +51,7 @@ func todoRow(it contracts.TodoItem, width int) string {
 }
 
 func oneLine(s string) string {
-	return strings.Join(strings.FieldsFunc(s, func(r rune) bool { return r == '\n' || r == '\r' || r == '\t' }), " ")
+	return strings.Join(strings.FieldsFunc(ansi.Strip(s), func(r rune) bool { return r == '\n' || r == '\r' || r == '\t' }), " ")
 }
 
 func subagentPanel(agents []liveAgent, now time.Time, width int) []string {

@@ -328,8 +328,8 @@ func TestResizeSyncsViewport(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	// second size message exercises the resize (else) branch
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	if m.vp.Width != 100 || m.vp.Height != 24 {
-		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 24)", m.vp.Width, m.vp.Height)
+	if m.vp.Width != 100 || m.vp.Height != 25 {
+		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 25)", m.vp.Width, m.vp.Height)
 	}
 }
 

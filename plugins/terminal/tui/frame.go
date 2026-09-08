@@ -54,9 +54,8 @@ func (m *model) buildFrame() frame {
 	if chips := chipRow(m.pending); chips != "" {
 		f.below = appendLines(f.below, chips+"  "+dimStyle.Render("⌃U remove"))
 	}
-	f.below = appendLines(f.below, m.separatorRow())
-	f.below = appendLines(f.below, m.statusFooter())
 	f.below = append(f.below, m.composerZone()...)
+	f.below = append(f.below, m.statusZone()...)
 	return f
 }
 

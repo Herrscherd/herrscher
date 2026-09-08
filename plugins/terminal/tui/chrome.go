@@ -14,12 +14,6 @@ import (
 // state a fresh tab shows instead of a blank screen. None of it carries content —
 // it says where you are, which the terminal previously left you to guess.
 
-// separatorRow rules off the transcript from the composer, so a long answer does
-// not run visually into what you are typing.
-func (m *model) separatorRow() string {
-	return dimStyle.Render(strings.Repeat("─", m.innerWidth()))
-}
-
 // activeInfo is the hub's record for the active tab, if the hub still knows it.
 func (m *model) activeInfo() (contracts.SessionInfo, bool) {
 	if m.tm == nil {

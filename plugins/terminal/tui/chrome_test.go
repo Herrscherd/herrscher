@@ -91,17 +91,16 @@ func TestChromeHeightCountsTheBannerAndRule(t *testing.T) {
 	}
 }
 
-// TestStatusRowIsClippedToOneLine is the layout invariant chromeHeight depends
-// on: the status bar grows with the session, and a row that wrapped would push
-// every line under it down by one with nothing accounting for it.
-func TestStatusRowIsClippedToOneLine(t *testing.T) {
+func TestStatusZoneIsClippedToOneLine(t *testing.T) {
 	m := newTestModel()
 	m.width = 30
-	row := m.statusRow(dimStyle.Render(strings.Repeat("very-long-session-name ", 10)))
-	if strings.Contains(row, "\n") {
-		t.Fatalf("the status row must stay one line: %q", row)
+	m.active = "c1"
+	m.tabs = map[string]*tab{"c1": {label: strings.Repeat("very-long-session-name ", 10)}}
+	zone := m.statusZone()
+	if len(zone) != 1 {
+		t.Fatalf("the status zone must stay one line: %q", zone)
 	}
-	if w := lipgloss.Width(row); w > 30 {
+	if w := lipgloss.Width(zone[0]); w > 30 {
 		t.Fatalf("status row width %d exceeds 30", w)
 	}
 }

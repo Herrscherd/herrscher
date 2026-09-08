@@ -22,7 +22,6 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/skills"
@@ -1229,32 +1228,7 @@ func (m *model) hintText() string {
 	if m.paletteOpen() {
 		return dimStyle.Render("↑↓ navigate · Tab complete · Esc close")
 	}
-	return dimStyle.Render("/ cmds · @ files · ? shortcuts · ⇧⏎ newline · esc interrupt")
-}
-
-// statusRow is the footer status on the left and the key hint on the right,
-// separated to fill the width. left is already styled (footer or flash).
-//
-// The result is clipped to one row: the status bar grows with the session (name,
-// project, cost, context, age) and a row that wrapped would push every line below
-// it down, which chromeHeight has no way to account for.
-func (m *model) statusRow(left string) string {
-	hint := m.hintText()
-	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(hint)
-	if gap < 1 {
-		return truncate(left, m.innerWidth())
-	}
-	return left + strings.Repeat(" ", gap) + hint
-}
-
-// footer renders the status line for the active tab: the spinner hint while a
-// turn is in flight, otherwise the session's status bar.
-func (m *model) statusFooter() string {
-	footer := m.footer()
-	if m.flash != "" {
-		footer = dimStyle.Render("· " + m.flash)
-	}
-	return m.statusRow(footer)
+	return dimStyle.Render("? shortcuts")
 }
 
 func (m *model) footer() string {

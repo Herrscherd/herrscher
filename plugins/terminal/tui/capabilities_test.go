@@ -100,3 +100,25 @@ func TestCapabilityNamesAreReadable(t *testing.T) {
 		t.Errorf("Colour16.String() = %q", got)
 	}
 }
+
+func TestProbeBoxes(t *testing.T) {
+	cases := []struct {
+		name string
+		env  map[string]string
+		want bool
+	}{
+		{"utf8 locale", map[string]string{"TERM": "xterm-256color", "LANG": "fr_FR.UTF-8"}, true},
+		{"lc_all wins", map[string]string{"TERM": "xterm-256color", "LC_ALL": "C.UTF-8"}, true},
+		{"latin1 locale", map[string]string{"TERM": "xterm-256color", "LANG": "fr_FR.ISO-8859-1"}, false},
+		{"no locale", map[string]string{"TERM": "xterm-256color"}, false},
+		{"forced plain", map[string]string{"TERM": "xterm-256color", "LANG": "fr_FR.UTF-8", "HERRSCHER_TUI_PLAIN": "1"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			caps := Probe(func(k string) string { return tc.env[k] })
+			if caps.Boxes != tc.want {
+				t.Fatalf("Boxes = %v, want %v", caps.Boxes, tc.want)
+			}
+		})
+	}
+}

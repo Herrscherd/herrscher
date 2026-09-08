@@ -52,12 +52,12 @@ func isDiffHeader(line string) bool {
 // green is approximated to whichever of eight colours is nearest, which for a
 // diff can be no distinction at all — and the one thing a diff must never lose
 // is which line was added.
-const diffHunkBudget = 4
-
 const (
 	ansiGreen = "\x1b[32m"
 	ansiRed   = "\x1b[31m"
 )
+
+const diffHunkBudget = 4
 
 // renderDiff colours a diff body by line class. Lines are clipped rather than
 // wrapped: a folded continuation carries no leading +/- and reads as context,

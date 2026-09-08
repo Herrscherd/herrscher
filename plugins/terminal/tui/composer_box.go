@@ -16,7 +16,7 @@ func boxRunes(supported bool) (topLeft, topRight, bottomLeft, bottomRight, horiz
 }
 
 func (m *model) composerBoxed() bool {
-	return m.caps.Boxes && m.innerWidth() >= composerBoxMinWidth
+	return m.innerWidth() >= composerBoxMinWidth
 }
 
 func (m *model) composerTextWidth() int {
@@ -35,7 +35,7 @@ func (m *model) composerZone() []string {
 		}
 		return out
 	}
-	tl, tr, bl, br, h, v := boxRunes(true)
+	tl, tr, bl, br, h, v := boxRunes(m.caps.Boxes)
 	width := m.innerWidth()
 	edge := strings.Repeat(h, width-2)
 	side := dimStyle.Render(v)

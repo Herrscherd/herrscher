@@ -226,12 +226,12 @@ func (m *model) transcriptLines() []string {
 // keys. One row, because it sits between the transcript and the composer and
 // every row it takes is a row of conversation.
 func (m *model) searchView() string {
-	pos := "no match"
+	pos := "aucune correspondance"
 	if len(m.searchHits) > 0 {
 		pos = fmt.Sprintf("%d/%d", m.searchIdx+1, len(m.searchHits))
 	}
-	return dimStyle.Render("search: ") + textStyle.Render(m.searchQuery+"▏") +
-		dimStyle.Render("  "+pos+"  ctrl+n/ctrl+p · esc")
+	return dimStyle.Render("recherche : ") + textStyle.Render(m.searchQuery+"▏") +
+		dimStyle.Render("  "+pos+"  ctrl+n/ctrl+p · échap")
 }
 
 // turnBoundaries returns the line indexes where a turn begins: the operator's own

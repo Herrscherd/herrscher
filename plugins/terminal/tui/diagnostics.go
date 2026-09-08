@@ -23,29 +23,29 @@ type diagRow struct {
 // nothing keeps its row and names its fallback: hiding it would say the feature
 // does not exist, when what is true is that this terminal renders it plainer.
 func diagRows(caps Capabilities) []diagRow {
-	graphics := diagRow{name: "graphics", value: caps.Graphics.String()}
+	graphics := diagRow{name: "graphismes", value: caps.Graphics.String()}
 	switch caps.Graphics {
 	case GraphicsKitty:
-		graphics.feature = "inline images, full resolution"
+		graphics.feature = "images en ligne, pleine résolution"
 	case GraphicsSixel:
-		graphics.feature = "inline images, sixel resolution"
+		graphics.feature = "images en ligne, résolution sixel"
 	default:
-		graphics.feature = "inline images as unicode half-blocks"
+		graphics.feature = "images en ligne en demi-blocs unicode"
 	}
 
-	links := diagRow{name: "hyperlinks", value: yesNo(caps.Hyperlinks), feature: "links open from the terminal (OSC 8)"}
+	links := diagRow{name: "hyperliens", value: yesNo(caps.Hyperlinks), feature: "les liens s'ouvrent depuis le terminal (OSC 8)"}
 	if !caps.Hyperlinks {
-		links.feature = "links are styled text, opened with the open key"
+		links.feature = "les liens sont du texte stylé, ouverts à la touche"
 	}
 
-	mouse := diagRow{name: "mouse", value: yesNo(caps.Mouse), feature: "wheel scrolling and click-to-focus"}
+	mouse := diagRow{name: "souris", value: yesNo(caps.Mouse), feature: "molette et clic pour choisir un onglet"}
 	if !caps.Mouse {
-		mouse.feature = "scrolling by pgup/pgdn"
+		mouse.feature = "défilement par pgup/pgdn"
 	}
 
-	colour := diagRow{name: "colour", value: caps.Colour.String(), feature: "the palette exactly as designed"}
+	colour := diagRow{name: "couleur", value: caps.Colour.String(), feature: "la palette exactement comme dessinée"}
 	if caps.Colour != ColourTrue {
-		colour.feature = "the palette downsampled to the nearest colour"
+		colour.feature = "la palette ramenée à la couleur la plus proche"
 	}
 
 	return []diagRow{graphics, links, mouse, colour}
@@ -53,9 +53,9 @@ func diagRows(caps Capabilities) []diagRow {
 
 func yesNo(b bool) string {
 	if b {
-		return "yes"
+		return "oui"
 	}
-	return "no"
+	return "non"
 }
 
 // diagValueWidth pads the value column so the features line up. A ragged pair of
@@ -74,8 +74,8 @@ func diagnosticsView(caps Capabilities) string {
 		b.WriteString("\n" + dimStyle.Render("  "+r.name+strings.Repeat(" ", max(1, factWidth-len(r.name)))) +
 			textStyle.Render(r.value) + pad + dimStyle.Render(r.feature))
 	}
-	b.WriteString("\n" + dimStyle.Render("  kitty, ghostty and WezTerm get every rendering; anywhere else the"))
-	b.WriteString("\n" + dimStyle.Render("  picture is drawn in half-blocks and a link stays selectable text."))
+	b.WriteString("\n" + dimStyle.Render("  kitty, ghostty et WezTerm ont tous les rendus ; ailleurs l'image"))
+	b.WriteString("\n" + dimStyle.Render("  est dessinée en demi-blocs et un lien reste du texte sélectionnable."))
 	return b.String()
 }
 
@@ -87,7 +87,7 @@ func (m *model) diagView() string {
 	if !m.diagOpen {
 		return ""
 	}
-	return dimStyle.Render("capabilities — Esc close") + "\n" + diagnosticsView(m.caps) +
+	return dimStyle.Render("capacités · échap fermer") + "\n" + diagnosticsView(m.caps) +
 		"\n" + m.remoteImageRow()
 }
 

@@ -817,7 +817,7 @@ func (m *model) pasteImage() bool {
 	}
 	data, err := m.clip.ReadImage(mime)
 	if err != nil {
-		m.flash = "paste failed: " + err.Error()
+		m.flash = "collage impossible : " + err.Error()
 		return true // an image was on the clipboard; do not fall through to text
 	}
 	att, err := saveClipboardImage(data, mime, m.attachSeq)
@@ -981,7 +981,7 @@ func (m *model) closeCmd(rest []string) tea.Cmd {
 		name = m.activeSessionName()
 	}
 	if name == "" {
-		m.flash = "no session here to close"
+		m.flash = "aucune session à fermer ici"
 		return nil
 	}
 	return m.closeSession(name, force)
@@ -1134,14 +1134,14 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 		tb.streamed = false
 		tb.ctxMeasured = false
 		tb.endStream()
-		tb.appendEntry(entry{role: roleNotice, text: "tour reinitialise"})
+		tb.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
 	case "abandoned":
 		tb.busy = false
 		tb.streamed = false
 		tb.ctxMeasured = false
 		tb.disconnected = true
 		tb.endStream()
-		tb.appendEntry(entry{role: roleNotice, text: "tour abandonne"})
+		tb.appendEntry(entry{role: roleNotice, text: "tour abandonné"})
 	}
 }
 
@@ -1290,7 +1290,7 @@ func (m *model) footer() string {
 		return spinnerStyle.Render(m.spinnerHint(tb))
 	}
 	if tb.disconnected {
-		return dimStyle.Render("· disconnected")
+		return dimStyle.Render("· déconnecté")
 	}
 	return m.statusBar(tb, m.innerWidth())
 }
@@ -1830,7 +1830,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup defiler · shift+glisser selectionner · ctrl+g liberer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la reponse · alt+e deplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
+	return dimStyle.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
 }
 
 func (m *model) View() string {

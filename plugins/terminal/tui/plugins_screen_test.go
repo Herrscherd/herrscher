@@ -64,7 +64,7 @@ func TestPluginsScreenListsWhatTheSeamReports(t *testing.T) {
 	if !strings.Contains(out, "mod/a") || !strings.Contains(out, "v1.1.0") {
 		t.Fatalf("screen must list each module with its versions: %q", out)
 	}
-	if !strings.Contains(out, "pinned") {
+	if !strings.Contains(out, "épinglé") {
 		t.Fatalf("a pinned module must carry its marker: %q", out)
 	}
 	for _, box := range []string{"╭", "╮", "╰", "│"} {
@@ -162,7 +162,7 @@ func TestPluginsScreenSuccessEndsOnTheRestartLine(t *testing.T) {
 	m.Update(runCmd(cmd))
 
 	out := m.pluginsView()
-	if !strings.Contains(out, "next restart") {
+	if !strings.Contains(out, "prochain démarrage") {
 		t.Fatalf("a successful apply must say the change waits for a restart: %q", out)
 	}
 	if len(f.applied) != 1 || !strings.HasPrefix(f.applied[0], string(PluginBump)) {
@@ -230,7 +230,7 @@ func TestPluginsViewScrollsToSelection(t *testing.T) {
 	if !strings.Contains(view, "mod/14") {
 		t.Fatalf("the selected row is not drawn:\n%s", view)
 	}
-	if !strings.Contains(view, "above") {
+	if !strings.Contains(view, "au-dessus") {
 		t.Fatalf("the rows scrolled past are not announced:\n%s", view)
 	}
 }

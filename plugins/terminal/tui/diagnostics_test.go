@@ -23,11 +23,11 @@ func TestDiagnosticsNamesEachResolvedValueAndItsFeature(t *testing.T) {
 	for _, want := range []string{
 		"kitty",      // the terminal it was resolved for, and the graphics value
 		"truecolor",  // the colour value
-		"graphics",   // the capability names
-		"hyperlinks", //
-		"mouse",      //
-		"colour",     //
-		"inline images",
+		"graphismes", // the capability names
+		"hyperliens", //
+		"souris",     //
+		"couleur",    //
+		"images en ligne",
 		"OSC 8",
 	} {
 		if !strings.Contains(out, want) {
@@ -41,7 +41,7 @@ func TestDiagnosticsNamesEachResolvedValueAndItsFeature(t *testing.T) {
 // the feature does not exist rather than that this terminal renders it plainer.
 func TestDiagnosticsNamesTheFallbackRatherThanHidingTheRow(t *testing.T) {
 	out := diagnosticsView(Capabilities{Terminal: "xterm"})
-	for _, want := range []string{"graphics", "none", "half-block", "hyperlinks", "styled text"} {
+	for _, want := range []string{"graphismes", "none", "demi-blocs", "hyperliens", "texte stylé"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("a plain terminal must still be told what it gets, missing %q:\n%s", want, out)
 		}
@@ -56,7 +56,7 @@ func TestCapabilitiesCommandOpensAndClosesTheScreen(t *testing.T) {
 	if !m.diagOpen {
 		t.Fatal("/capabilities must open the diagnostic screen")
 	}
-	if !strings.Contains(m.diagView(), "graphics") {
+	if !strings.Contains(m.diagView(), "graphismes") {
 		t.Fatalf("the open screen must render its rows: %q", m.diagView())
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyEsc})

@@ -49,3 +49,10 @@ func padTo(s string, width int) string {
 	}
 	return s
 }
+
+func (m *model) overlayWidth() int {
+	if m.width < 1 {
+		return 0
+	}
+	return m.width
+}

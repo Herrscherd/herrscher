@@ -63,25 +63,19 @@ func (m *model) chooseResume() tea.Cmd {
 	}
 }
 
-// resumeView renders the picker as an inline Claude menu (no border box): a dim
-// header, then one row per session with its name, project, last-active timestamp,
-// vendor, live/archived state, and a ⟲ when the backend can resume it. The
-// selected row is prefixed ❯ in the warm accent.
 func (m *model) resumeView() string {
-	var b strings.Builder
-	b.WriteString(dimStyle.Render("resume — ↑↓ select · Enter open · Esc cancel"))
 	if len(m.resumeRows) == 0 {
-		b.WriteString("\n" + dimStyle.Render("  (no sessions)"))
-		return b.String()
+		return dimStyle.Render("  (aucune session)")
 	}
 	start, end := paletteWindow(len(m.resumeRows), m.resumeIdx, resumeMax)
+	rows := make([]overlayRow, 0, end-start)
 	for i := start; i < end; i++ {
 		s := m.resumeRows[i]
 		state := "live"
 		if s.Archived {
-			state = "archived"
+			state = "archivée"
 		}
-		cols := []string{s.Name}
+		cols := []string{}
 		if s.Project != "" {
 			cols = append(cols, s.Project)
 		}
@@ -92,21 +86,17 @@ func (m *model) resumeView() string {
 			cols = append(cols, s.Vendor)
 		}
 		cols = append(cols, state)
+		mark := "  "
 		if s.Resumable {
-			cols = append(cols, "⟲")
+			mark = "⟲ "
 		}
-		row := strings.Join(cols, " · ")
-		if i == m.resumeIdx {
-			row = accentStyle.Render(glyphCursor + " " + row)
-		} else {
-			row = dimStyle.Render("  " + row)
-		}
-		b.WriteString("\n" + row)
+		rows = append(rows, overlayRow{mark: mark, label: s.Name, detail: strings.Join(cols, " · ")})
 	}
+	footer := "↑↓ choisir · Entrée ouvrir · Échap annuler"
 	if hidden := len(m.resumeRows) - (end - start); hidden > 0 {
-		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", hidden)))
+		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}
-	return b.String()
+	return floatingList(rows, m.resumeIdx-start, footer, m.overlayWidth())
 }
 
 // resumeHeight is the rendered row count of the open picker (0 when closed), so
@@ -161,33 +151,25 @@ func (m *model) chooseSwitch() {
 	m.syncViewport()
 }
 
-// switchView renders the session switcher as an inline Claude menu (no border):
-// a dim header then one row per session, the selected row prefixed ❯ in the warm
-// accent and a • unread marker for background sessions with new output.
 func (m *model) switchView() string {
-	var b strings.Builder
-	b.WriteString(dimStyle.Render("switch — ↑↓ select · Enter focus · Esc cancel"))
 	if len(m.switchRows) == 0 {
-		b.WriteString("\n" + dimStyle.Render("  (no sessions)"))
-		return b.String()
+		return dimStyle.Render("  (aucune session)")
 	}
-	sstart, send := paletteWindow(len(m.switchRows), m.switchIdx, switchMax)
-	for i := sstart; i < send; i++ {
+	start, end := paletteWindow(len(m.switchRows), m.switchIdx, switchMax)
+	rows := make([]overlayRow, 0, end-start)
+	for i := start; i < end; i++ {
 		s := m.switchRows[i]
-		label := s.Name
+		mark := "  "
 		if tb := m.tabs[s.ChannelID]; tb != nil && tb.unread {
-			label += " " + glyphUnread
+			mark = glyphUnread + " "
 		}
-		if i == m.switchIdx {
-			b.WriteString("\n" + accentStyle.Render(glyphCursor+" "+label))
-		} else {
-			b.WriteString("\n" + dimStyle.Render("  "+label))
-		}
+		rows = append(rows, overlayRow{mark: mark, label: s.Name, detail: s.Project})
 	}
-	if hidden := len(m.switchRows) - (send - sstart); hidden > 0 {
-		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … +%d more", hidden)))
+	footer := "↑↓ choisir · Entrée basculer · Échap annuler"
+	if hidden := len(m.switchRows) - (end - start); hidden > 0 {
+		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}
-	return b.String()
+	return floatingList(rows, m.switchIdx-start, footer, m.overlayWidth())
 }
 
 // switchHeight is the rendered row count of the open switcher (0 when closed).

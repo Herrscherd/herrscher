@@ -59,7 +59,7 @@ func (m *model) buildFrame() frame {
 		f.below = appendLines(f.below, m.helpView())
 	}
 	if chips := chipRow(m.pending); chips != "" {
-		f.below = appendLines(f.below, chips+"  "+dimStyle.Render("⌃U remove"))
+		f.below = appendLines(f.below, chips+"  "+dimStyle.Render("⌃U retirer"))
 	}
 	f.below = append(f.below, m.composerZone()...)
 	f.below = append(f.below, m.statusZone()...)

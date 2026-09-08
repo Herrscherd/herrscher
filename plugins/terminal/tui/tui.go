@@ -1134,14 +1134,14 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 		tb.streamed = false
 		tb.ctxMeasured = false
 		tb.endStream()
-		tb.appendEntry(entry{role: roleNotice, text: "turn reset"})
+		tb.appendEntry(entry{role: roleNotice, text: "tour reinitialise"})
 	case "abandoned":
 		tb.busy = false
 		tb.streamed = false
 		tb.ctxMeasured = false
 		tb.disconnected = true
 		tb.endStream()
-		tb.appendEntry(entry{role: roleNotice, text: "turn abandoned"})
+		tb.appendEntry(entry{role: roleNotice, text: "tour abandonne"})
 	}
 }
 
@@ -1271,9 +1271,9 @@ func (m *model) inputRow() string {
 // navigation keys while an inline menu is open.
 func (m *model) hintText() string {
 	if m.paletteOpen() {
-		return dimStyle.Render("↑↓ navigate · Tab complete · Esc close")
+		return dimStyle.Render("↑↓ naviguer · Tab compléter · Échap fermer")
 	}
-	return dimStyle.Render("? shortcuts")
+	return dimStyle.Render("? raccourcis")
 }
 
 func (m *model) footer() string {
@@ -1296,11 +1296,11 @@ func (m *model) footer() string {
 }
 
 // spinnerHint renders the active turn's progress line in the Claude shape:
-// `✳ …(esc to interrupt · {n}s · ↑ {tokens} · ${cost})`. The token and cost
+// `✳ {verbe} (échap pour interrompre · {n}s · ↑ {tokens} · ${cost})`. The token and cost
 // segments appear only once a count/cost has arrived, so an early turn shows just
 // the interrupt affordance and elapsed time.
 func (m *model) spinnerHint(tb *tab) string {
-	segs := []string{"esc to interrupt"}
+	segs := []string{"échap pour interrompre"}
 	if !tb.startedAt.IsZero() {
 		segs = append(segs, fmt.Sprintf("%ds", int(time.Since(tb.startedAt).Seconds())))
 	}
@@ -1830,12 +1830,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ send · ⇧⏎ or \\⏎ newline · ↑↓ history · wheel/pgup scroll · shift+drag select · ctrl+g free the mouse · esc interrupt · ctrl+v paste image · ctrl+l next link · ctrl+o open it · ctrl+f fold code · ctrl+y copy code · alt+y copy answer · alt+e whole commands · ctrl+s search · ctrl+t fold turns · alt+↑↓ jump turn · / commands · @ files")
+	return dimStyle.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup defiler · shift+glisser selectionner · ctrl+g liberer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la reponse · alt+e deplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
 }
 
 func (m *model) View() string {
 	if !m.ready {
-		return "starting…"
+		return "démarrage…"
 	}
 	return m.buildFrame().render(m.vp.View())
 }

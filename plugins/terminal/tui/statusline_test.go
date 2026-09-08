@@ -18,7 +18,7 @@ func TestStatusZoneIsOneLineWithHintOnTheRight(t *testing.T) {
 	if lipgloss.Width(zone[0]) > 74 {
 		t.Fatalf("status is %d columns, want <= 74", lipgloss.Width(zone[0]))
 	}
-	if !strings.Contains(zone[0], "shortcuts") {
+	if !strings.Contains(zone[0], "raccourcis") {
 		t.Fatalf("status %q missing the help hint", zone[0])
 	}
 }

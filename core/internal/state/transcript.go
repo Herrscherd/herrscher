@@ -174,14 +174,18 @@ const transcriptTailBytes = 64 * 1024
 // timestamp is never lost. Kept separate from ReadTranscript, whose callers need
 // the entries themselves.
 func ReadTranscriptSummary(path string) TranscriptSummary {
-	entries := transcriptTail(path)
+	lines := transcriptTailLines(path)
 	var sum TranscriptSummary
-	for i := len(entries) - 1; i >= 0; i-- {
+	for i := len(lines) - 1; i >= 0; i-- {
+		var e TranscriptEntry
+		if json.Unmarshal(lines[i], &e) != nil {
+			continue
+		}
 		if sum.LastTs == "" {
-			sum.LastTs = entries[i].Ts
+			sum.LastTs = e.Ts
 		}
 		if sum.ContextTokens == 0 {
-			sum.ContextTokens = contextTokens(entries[i])
+			sum.ContextTokens = contextTokens(e)
 		}
 		if sum.LastTs != "" && sum.ContextTokens != 0 {
 			return sum
@@ -210,10 +214,11 @@ func contextTokens(e TranscriptEntry) int {
 	return e.TokensIn + e.CacheRead + e.CacheCreate
 }
 
-// transcriptTail parses the entries that fit in the file's last
-// transcriptTailBytes, oldest first. A partial first line (the window cut an
-// entry in half) simply fails to parse and is dropped.
-func transcriptTail(path string) []TranscriptEntry {
+// transcriptTailLines is the non-empty lines of the file's last
+// transcriptTailBytes, oldest first and left unparsed: a summary reads from the
+// newest and usually stops on the first one, so parsing the window whole would
+// be work thrown away on every poll.
+func transcriptTailLines(path string) [][]byte {
 	if path == "" {
 		return nil
 	}
@@ -234,15 +239,10 @@ func transcriptTail(path string) []TranscriptEntry {
 	if _, err := f.ReadAt(buf, start); err != nil && err != io.EOF {
 		return nil
 	}
-	var out []TranscriptEntry
+	var out [][]byte
 	for _, line := range bytes.Split(buf, []byte{'\n'}) {
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
-		}
-		var e TranscriptEntry
-		if json.Unmarshal(line, &e) == nil {
-			out = append(out, e)
+		if line = bytes.TrimSpace(line); len(line) > 0 {
+			out = append(out, line)
 		}
 	}
 	return out

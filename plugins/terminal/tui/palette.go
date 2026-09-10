@@ -35,11 +35,10 @@ func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 }
 
 // paletteWindow is the slice of matches to draw, given the selection. The
-// palette used to truncate from the head, which made every verb
-// past the last drawn row unreachable: ↑↓ moved a selection nobody could see, and the
-// only way to a late command was to type enough of its name to filter the
-// others out — which requires already knowing it, the one thing a menu exists
-// to spare you.
+// palette used to truncate from the head, which made every verb past the last
+// drawn row unreachable: ↑↓ moved a selection nobody could see, and the only way
+// to a late command was to type enough of its name to filter the others out,
+// which requires already knowing it, the one thing a menu exists to spare you.
 //
 // The window slides only far enough to hold the selection, so browsing from the
 // top keeps the first rows still until the cursor actually reaches the bottom

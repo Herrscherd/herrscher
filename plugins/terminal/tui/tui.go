@@ -1008,7 +1008,7 @@ func (m *model) renameCmd(rest []string) tea.Cmd {
 }
 
 // renameTarget reads the new name off the line. The words are kept as typed and
-// joined back with spaces — the daemon slugifies — so "/rename ma grande refonte"
+// joined back with spaces (the daemon slugifies) so "/rename ma grande refonte"
 // means what it looks like rather than only its first word.
 func renameTarget(rest []string) string {
 	var words []string

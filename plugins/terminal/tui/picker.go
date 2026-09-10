@@ -88,7 +88,7 @@ func (m *model) resumeView() string {
 		}
 		rows = append(rows, overlayRow{mark: mark, label: s.Name, detail: strings.Join(cols, " · ")})
 	}
-	footer := "↑↓ choisir · Entrée ouvrir · Échap annuler"
+	footer := "↑↓ choisir · ⇞⇟ page · Entrée ouvrir · Échap annuler"
 	if hidden := len(m.resumeRows) - (end - start); hidden > 0 {
 		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}
@@ -149,7 +149,7 @@ func (m *model) switchView() string {
 		}
 		rows = append(rows, overlayRow{mark: mark, label: s.Name, detail: s.Project})
 	}
-	footer := "↑↓ choisir · Entrée basculer · Échap annuler"
+	footer := "↑↓ choisir · ⇞⇟ page · Entrée basculer · Échap annuler"
 	if hidden := len(m.switchRows) - (end - start); hidden > 0 {
 		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}

@@ -30,6 +30,40 @@ func TestLegacyKeyTranslatesTheEnhancedReports(t *testing.T) {
 	}
 }
 
+func TestLegacyFuncNormalisesTheFunctionalReports(t *testing.T) {
+	tests := []struct {
+		name string
+		seq  string
+		want string
+	}{
+		{"an unmodified arrow spelled in full loses its empty modifier", "\x1b[1;1A", "\x1b[A"},
+		{"a bare arrow is untouched", "\x1b[A", "\x1b[A"},
+		{"an event type is dropped with the modifier", "\x1b[1;1:1B", "\x1b[B"},
+		{"a real modifier survives", "\x1b[1;2A", "\x1b[1;2A"},
+		{"home and end lose theirs too", "\x1b[1;1H", "\x1b[H"},
+		{"a tilde key keeps its number", "\x1b[5;1~", "\x1b[5~"},
+		{"a tilde key keeps its modifier", "\x1b[5;3~", "\x1b[5;3~"},
+		{"a key release is dropped rather than replayed", "\x1b[1;1:3A", ""},
+		{"a mouse report is left alone", "\x1b[<35;80;24M", "\x1b[<35;80;24M"},
+		{"bracketed paste is left alone", "\x1b[200~", "\x1b[200~"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := string(legacyFunc([]byte(tt.seq))); got != tt.want {
+				t.Fatalf("legacyFunc(%q) = %q, want %q", tt.seq, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilteredStdinNormalisesArrowsInStream(t *testing.T) {
+	f := &filteredStdin{}
+	f.feed([]byte("\x1b[1;1Aok\x1b[1;1B"))
+	if got := string(f.out); got != "\x1b[Aok\x1b[B" {
+		t.Fatalf("feed produced %q", got)
+	}
+}
+
 func TestFilteredStdinTranslatesEnhancedKeysInStream(t *testing.T) {
 	f := &filteredStdin{}
 	f.feed([]byte("hi\x1b[13;2uthere\x1b[A"))

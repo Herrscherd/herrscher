@@ -113,3 +113,46 @@ func TestWheelScrollsTheTranscript(t *testing.T) {
 		t.Fatalf("wheel-up left the transcript at %d (was %d) — the alt screen has no scrollback to fall back on", got, before)
 	}
 }
+
+func TestLegacyFuncClearsTheLockModifiers(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"num lock on an arrow", "\x1b[1;129A", "\x1b[A"},
+		{"num lock on the other arrows", "\x1b[1;129D", "\x1b[D"},
+		{"caps lock on an arrow", "\x1b[1;65B", "\x1b[B"},
+		{"both locks at once", "\x1b[1;193C", "\x1b[C"},
+		{"num lock on page down", "\x1b[6;129~", "\x1b[6~"},
+		{"shift survives num lock", "\x1b[1;130A", "\x1b[1;2A"},
+		{"ctrl survives num lock", "\x1b[1;133A", "\x1b[1;5A"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := string(legacyFunc([]byte(c.in))); got != c.want {
+				t.Fatalf("legacyFunc(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestLegacyKeyClearsTheLockModifiers(t *testing.T) {
+	if got := string(legacyKey([]byte("\x1b[97;129u"))); got != "a" {
+		t.Fatalf("num lock on a letter = %q, want %q", got, "a")
+	}
+	if got := string(legacyKey([]byte("\x1b[13;130u"))); got != "\x1b\r" {
+		t.Fatalf("shift+enter under num lock = %q, want alt+enter", got)
+	}
+	if got := string(legacyKey([]byte("\x1b[13;258u"))); got != "\x1b\r" {
+		t.Fatalf("shift+enter with num lock on = %q, want alt+enter", got)
+	}
+}
+
+func TestFilteredStdinClearsTheLockModifiersInStream(t *testing.T) {
+	f := &filteredStdin{}
+	f.feed([]byte("\x1b[1;129A\x1b[1;129B"))
+	if got := string(f.out); got != "\x1b[A\x1b[B" {
+		t.Fatalf("stream = %q, want %q", got, "\x1b[A\x1b[B")
+	}
+}

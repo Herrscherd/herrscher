@@ -170,8 +170,8 @@ func TestReadTranscriptSummaryFindsTheNewestUsage(t *testing.T) {
 		t.Fatalf("missing file must summarise as zero, got %+v", got)
 	}
 	for _, e := range []TranscriptEntry{
-		{Ts: "t1", Role: "assistant", TokensIn: 10, CacheRead: 100, CacheCreate: 5, TokensOut: 900},
-		{Ts: "t2", Role: "assistant", TokensIn: 20, CacheRead: 4000, CacheCreate: 60},
+		{Ts: "t1", Role: "assistant", TokensIn: 10, CacheRead: 100, CacheCreate: 5, TokensOut: 900, CtxTokens: 115},
+		{Ts: "t2", Role: "assistant", TokensIn: 20, CacheRead: 4000, CacheCreate: 60, CtxTokens: 4080},
 		{Ts: "t3", Role: "user", Text: "no usage on a user turn"},
 	} {
 		if err := AppendTranscript(p, e); err != nil {
@@ -184,5 +184,17 @@ func TestReadTranscriptSummaryFindsTheNewestUsage(t *testing.T) {
 	}
 	if got.ContextTokens != 4080 {
 		t.Fatalf("want the newest turn carrying usage (4080), got %d", got.ContextTokens)
+	}
+}
+
+func TestReadTranscriptSummaryIgnoresTheBillingTotals(t *testing.T) {
+	dir := t.TempDir()
+	p := TranscriptPath(dir, "sess")
+	e := TranscriptEntry{Ts: "t1", Role: "assistant", TokensIn: 11, CacheRead: 334662, CacheCreate: 5831}
+	if err := AppendTranscript(p, e); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	if got := ReadTranscriptSummary(p); got.ContextTokens != 0 {
+		t.Fatalf("a turn with no reading must report none, got %d", got.ContextTokens)
 	}
 }

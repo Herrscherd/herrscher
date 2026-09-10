@@ -26,6 +26,7 @@ type TranscriptEntry struct {
 	CacheRead   int `json:"cache_read,omitempty"`
 	CacheCreate int `json:"cache_create,omitempty"`
 	DurMs       int `json:"dur_ms,omitempty"`
+	CtxTokens   int `json:"ctx_tokens,omitempty"`
 }
 
 // TranscriptPath returns the transcript path for session name under dir
@@ -207,11 +208,11 @@ func ReadTranscriptLast(path string) string {
 	return ReadTranscriptSummary(path).LastTs
 }
 
-// contextTokens is what one recorded turn occupied of the model's window: its
-// input plus what it read from and wrote to the prompt cache. The output is not
-// part of the prompt the next turn carries, so it is not counted.
+// contextTokens is what one recorded turn occupied of the model's window: the
+// reading taken while it ran. Not TokensIn plus the cache counts, which are the
+// turn's billing totals and add up every message an agentic turn sent.
 func contextTokens(e TranscriptEntry) int {
-	return e.TokensIn + e.CacheRead + e.CacheCreate
+	return e.CtxTokens
 }
 
 // transcriptTailLines is the non-empty lines of the file's last

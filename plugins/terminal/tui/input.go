@@ -32,6 +32,15 @@ const (
 	keyRelease = "3"
 )
 
+const (
+	modCapsLock = 64
+	modNumLock  = 128
+)
+
+func withoutLocks(mods int) int {
+	return (mods-1)&^(modCapsLock|modNumLock) + 1
+}
+
 // enableEnhancedKeys asks for the protocol again once the program is running.
 // The stack the push lands on is per-screen: a push made on the main screen is
 // not in effect on the alternate screen, and this TUI spends its whole life on
@@ -70,7 +79,7 @@ func legacyKey(seq []byte) []byte {
 			return nil
 		}
 		if m, err := strconv.Atoi(parts[0]); err == nil && m > 0 {
-			mods = m
+			mods = withoutLocks(m)
 		}
 	}
 	mask := mods - 1
@@ -137,8 +146,14 @@ func legacyFunc(seq []byte) []byte {
 		if len(parts) == 2 && parts[1] == keyRelease {
 			return nil
 		}
-		if parts[0] != "" && parts[0] != "1" {
-			mods = parts[0]
+		if parts[0] != "" {
+			m, err := strconv.Atoi(parts[0])
+			if err != nil || m <= 0 {
+				return seq
+			}
+			if m = withoutLocks(m); m > 1 {
+				mods = strconv.Itoa(m)
+			}
 		}
 	}
 	if final == '~' {
@@ -218,7 +233,9 @@ func (f *filteredStdin) Read(p []byte) (int, error) {
 	if len(f.out) == 0 {
 		n, err := f.File.Read(f.raw[:])
 		if n > 0 {
+			before := len(f.out)
 			f.feed(f.raw[:n])
+			keylog("raw %q -> %q", f.raw[:n], f.out[before:])
 		}
 		if err != nil && len(f.out) == 0 {
 			return 0, err // nothing buffered to hand back first: surface the error

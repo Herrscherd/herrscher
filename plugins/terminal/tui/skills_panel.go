@@ -10,9 +10,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
-// skillsMax bounds how many rows the /skills panel shows at once.
-const skillsMax = 10
-
 // skillPanelRoots is the read-only search path the /skills panel lists from: the
 // user-global ~/.claude/skills, then any extra roots declared in config. The
 // panel is session-agnostic (the TUI is one gateway over many sessions), so it
@@ -55,13 +52,13 @@ func (m *model) skillsView() string {
 	if len(m.skillsRows) == 0 {
 		return dimStyle.Render("  (aucune skill dans ~/.claude/skills)")
 	}
-	start, end := paletteWindow(len(m.skillsRows), m.skillsIdx, skillsMax)
+	start, end := paletteWindow(len(m.skillsRows), m.skillsIdx, m.overlayRows())
 	rows := make([]overlayRow, 0, end-start)
 	for i := start; i < end; i++ {
 		s := m.skillsRows[i]
 		rows = append(rows, overlayRow{label: s.Name, detail: s.Description})
 	}
-	footer := "↑↓ parcourir · Échap fermer"
+	footer := "↑↓ parcourir · ⇞⇟ page · Échap fermer"
 	if hidden := len(m.skillsRows) - (end - start); hidden > 0 {
 		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}

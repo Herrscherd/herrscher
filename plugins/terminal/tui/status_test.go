@@ -151,3 +151,73 @@ func TestFormatDuration(t *testing.T) {
 		}
 	}
 }
+
+// La barre disait le vendeur et rien d'autre : deux sessions claude, l'une sur
+// Opus a effort eleve et l'autre sur Haiku a effort bas, se lisaient a
+// l'identique. Le modele et l'effort sont ce qui les distingue.
+func TestStatusBarNamesTheModelAndTheEffort(t *testing.T) {
+	be := &countingBackend{}
+	be.sessions = []contracts.SessionInfo{{
+		Name: "a", ChannelID: "c1", Vendor: "claude", Model: "claude-opus-5", Effort: "high",
+	}}
+	m := newModel(be)
+	tb := m.ensureTab("c1")
+	m.active = "c1"
+
+	bar := m.statusBar(tb, 120)
+	if !strings.Contains(bar, "opus-5") {
+		t.Errorf("la barre doit nommer le modele: %q", bar)
+	}
+	if !strings.Contains(bar, "high") {
+		t.Errorf("la barre doit nommer l'effort: %q", bar)
+	}
+	if strings.Contains(bar, "claude-opus-5") {
+		t.Errorf("le vendeur mene deja la barre, le prefixe est redondant: %q", bar)
+	}
+}
+
+// L'occupation ne venait que des tours vus passer : un onglet rouvert sur une
+// session a moitie pleine n'affichait aucune fenetre. La fiche du hub porte la
+// derniere mesure enregistree.
+func TestStatusBarFallsBackOnTheHubReading(t *testing.T) {
+	be := &countingBackend{}
+	be.sessions = []contracts.SessionInfo{{
+		Name: "a", ChannelID: "c1", Vendor: "claude", ContextTokens: 96_000,
+	}}
+	m := newModel(be)
+	tb := m.ensureTab("c1")
+	m.active = "c1"
+
+	if !strings.Contains(m.statusBar(tb, 120), "96.0k") {
+		t.Fatalf("un onglet sans tour vu doit lire la mesure du hub: %q", m.statusBar(tb, 120))
+	}
+	tb.ctxTokens = 120_000
+	if !strings.Contains(m.statusBar(tb, 120), "120.0k") {
+		t.Fatalf("un tour vu passer doit primer sur la fiche: %q", m.statusBar(tb, 120))
+	}
+}
+
+// Ce que l'operateur veut savoir n'est pas la part remplie mais la part qui
+// reste avant que le backend ne compacte la conversation.
+func TestGaugeCountsDownToTheCompaction(t *testing.T) {
+	if got := contextLeft(0, 200_000); got != 1 {
+		t.Errorf("une fenetre vide laisse tout le budget: %v", got)
+	}
+	if got := contextLeft(184_000, 200_000); got != 0 {
+		t.Errorf("le seuil de compaction laisse zero: %v", got)
+	}
+	if got := contextLeft(200_000, 200_000); got != 0 {
+		t.Errorf("au-dela du seuil le reste ne devient pas negatif: %v", got)
+	}
+	if got := contextLeft(92_000, 200_000); got < 0.49 || got > 0.51 {
+		t.Errorf("la moitie du budget doit se lire 50 %%: %v", got)
+	}
+	wide := renderGauge(92_000, "claude", 120)
+	narrow := renderGauge(92_000, "claude", 70)
+	if !strings.Contains(wide, "reste 50 %") || !strings.Contains(wide, "avant compaction") {
+		t.Errorf("une barre large doit epeler ce que le compte decompte: %q", wide)
+	}
+	if !strings.Contains(narrow, "reste 50 %") || strings.Contains(narrow, "avant compaction") {
+		t.Errorf("une barre etroite garde le chiffre et lache la glose: %q", narrow)
+	}
+}

@@ -14,6 +14,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
+	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -370,7 +371,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
-		return "", fmt.Errorf("invalid name %q — use letters, digits, - or _ (max 64, no /, spaces or ..)", raw)
+		return "", fmt.Errorf("invalid name %q: use letters, digits, - or _ (max 64, no /, spaces or ..)", raw)
 	}
 	if _, exists := h.st.FindSession(name); exists {
 		return "", fmt.Errorf("session %q already exists", name)
@@ -843,6 +844,68 @@ func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
 	}
 	if err := h.adminFor(sess).Archive(ctx, sess.ChannelID); err != nil {
 		return fmt.Sprintf("\n⚠️ le salon est resté ouvert : %v", err)
+	}
+	return ""
+}
+
+// sessionRenameRun moves a session to another name under the same id. The
+// persisted row, the transcript and the participants journal all follow, and the
+// bridge is stopped under the old name and started under the new one so nothing
+// keeps appending to the files that just moved. The channel is left where it is:
+// it is the conversation the session lives in, not the session.
+func (h *Handler) sessionRenameRun(_ context.Context, in contracts.Input) (string, error) {
+	name, ok := in.Lookup("name")
+	if !ok {
+		return "", fmt.Errorf("missing name")
+	}
+	raw, ok := in.Lookup("to")
+	if !ok {
+		return "", fmt.Errorf("missing to")
+	}
+	to := slugify(raw)
+	if to == "" || !sessionNameRe.MatchString(to) {
+		return "", fmt.Errorf("invalid name %q: use letters, digits, - or _ (max 64, no /, spaces or ..)", raw)
+	}
+	sess, exists := h.st.FindSession(name)
+	if !exists {
+		return "", fmt.Errorf("no session %q", name)
+	}
+	if to == name {
+		return fmt.Sprintf("session **%s** porte déjà ce nom", name), nil
+	}
+	if _, taken := h.st.FindSession(to); taken {
+		return "", fmt.Errorf("session %q already exists", to)
+	}
+	_ = h.sup.Stop(name)
+	if err := h.st.RenameSession(name, to); err != nil {
+		h.sup.Start(sess)
+		return "", fmt.Errorf("persist: %w", err)
+	}
+	note := ""
+	if err := state.MoveSessionFile(state.TranscriptPath(h.partDir, name), state.TranscriptPath(h.partDir, to)); err != nil {
+		note += fmt.Sprintf("\n⚠️ le transcript est resté sous `%s` : %v", name, err)
+	}
+	if err := state.MoveSessionFile(state.ParticipantsPath(h.partDir, name), state.ParticipantsPath(h.partDir, to)); err != nil {
+		note += fmt.Sprintf("\n⚠️ le journal des participants est resté sous `%s` : %v", name, err)
+	}
+	if sc := scheduleOwning(h.st.SnapshotSchedules(), name); sc != "" {
+		note += fmt.Sprintf("\n⚠️ l'horaire `%s` possède cette session par son nom : sa prochaine fenêtre en rouvrira une sous `%s`.", sc, name)
+	}
+	sess.Name = to
+	h.sup.Start(sess)
+	return fmt.Sprintf("✎ Session **%s** renommée en **%s**.%s", name, to, note), nil
+}
+
+// scheduleOwning names the agent schedule that owns a session, if one does. Such
+// a session's name is derived from the schedule's rather than stored, so a
+// rename cannot carry it: the next tick opens a fresh session under the old
+// name. The operator is told rather than refused, since renaming it is still
+// what they asked for.
+func scheduleOwning(schedules []schedule.Schedule, session string) string {
+	for _, sc := range schedules {
+		if sc.Agent != "" && schedule.SessionName(sc) == session {
+			return sc.Name
+		}
 	}
 	return ""
 }

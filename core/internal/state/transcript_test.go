@@ -162,3 +162,27 @@ func TestTranscriptReadMissingAndRemove(t *testing.T) {
 		t.Fatalf("remove missing should be nil, got %v", err)
 	}
 }
+
+func TestReadTranscriptSummaryFindsTheNewestUsage(t *testing.T) {
+	dir := t.TempDir()
+	p := TranscriptPath(dir, "sess")
+	if got := ReadTranscriptSummary(p); got.ContextTokens != 0 || got.LastTs != "" {
+		t.Fatalf("missing file must summarise as zero, got %+v", got)
+	}
+	for _, e := range []TranscriptEntry{
+		{Ts: "t1", Role: "assistant", TokensIn: 10, CacheRead: 100, CacheCreate: 5, TokensOut: 900},
+		{Ts: "t2", Role: "assistant", TokensIn: 20, CacheRead: 4000, CacheCreate: 60},
+		{Ts: "t3", Role: "user", Text: "no usage on a user turn"},
+	} {
+		if err := AppendTranscript(p, e); err != nil {
+			t.Fatalf("append: %v", err)
+		}
+	}
+	got := ReadTranscriptSummary(p)
+	if got.LastTs != "t3" {
+		t.Fatalf("want last ts t3, got %q", got.LastTs)
+	}
+	if got.ContextTokens != 4080 {
+		t.Fatalf("want the newest turn carrying usage (4080), got %d", got.ContextTokens)
+	}
+}

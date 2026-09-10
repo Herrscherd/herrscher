@@ -63,7 +63,7 @@ const factWidth = 10
 
 // fact renders one labelled line of the arrival record.
 func fact(label, value string) string {
-	return dimStyle.Render("  "+label+strings.Repeat(" ", max(1, factWidth-len(label)))) +
+	return dimStyle.Render("  "+label+strings.Repeat(" ", max(1, factWidth-lipgloss.Width(label)))) +
 		textStyle.Render(value)
 }
 
@@ -80,6 +80,9 @@ func (m *model) sessionFacts() []string {
 	}
 	if where := joinNonEmpty(s.Project, s.Vendor); where != "" {
 		out = append(out, fact("repo", where))
+	}
+	if label := modelLabel(s); label != "" {
+		out = append(out, fact("modèle", label))
 	}
 	if tb := m.tabs[m.active]; tb != nil && !tb.openedAt.IsZero() {
 		out = append(out, fact("open", formatDuration(time.Since(tb.openedAt))))

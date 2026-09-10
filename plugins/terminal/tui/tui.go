@@ -758,6 +758,9 @@ func (m *model) handleEnter() tea.Cmd {
 		if args[0] == "session" && len(args) >= 2 && args[1] == "close" {
 			return m.closeCmd(args[2:])
 		}
+		if args[0] == "rename" {
+			return m.renameCmd(args[1:])
+		}
 		if args[0] == "copy" {
 			m.copyCmd(args[1:]) // TUI-local: the transcript is here, not on the daemon
 			return nil
@@ -985,6 +988,45 @@ func (m *model) closeCmd(rest []string) tea.Cmd {
 		return nil
 	}
 	return m.closeSession(name, force)
+}
+
+// renameCmd renames the active tab's session. The daemon verb needs both names;
+// an operator typing in a session's own window has already named it by being
+// there, so only the new one is asked for.
+func (m *model) renameCmd(rest []string) tea.Cmd {
+	to := renameTarget(rest)
+	if to == "" {
+		m.flash = "/rename <nom> : donne le nouveau nom de la session"
+		return nil
+	}
+	name := m.activeSessionName()
+	if name == "" {
+		m.flash = "aucune session à renommer ici"
+		return nil
+	}
+	return m.dispatchCmd(m.active, []string{"session", "rename", "--name", name, "--to", to})
+}
+
+// renameTarget reads the new name off the line. The words are kept as typed and
+// joined back with spaces — the daemon slugifies — so "/rename ma grande refonte"
+// means what it looks like rather than only its first word.
+func renameTarget(rest []string) string {
+	var words []string
+	for i := 0; i < len(rest); i++ {
+		tok := rest[i]
+		switch {
+		case tok == "--to":
+			if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
+				words = append(words, rest[i+1])
+				i++
+			}
+		case strings.HasPrefix(tok, "--to="):
+			words = append(words, strings.TrimPrefix(tok, "--to="))
+		case !strings.HasPrefix(tok, "--"):
+			words = append(words, tok)
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 // closeTarget reads what "/session close" was typed with: the session named on

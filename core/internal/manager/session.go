@@ -847,6 +847,51 @@ func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
 	return ""
 }
 
+// sessionRenameRun moves a session to another name under the same id. The
+// persisted row, the transcript and the participants journal all follow, and the
+// bridge is stopped under the old name and started under the new one so nothing
+// keeps appending to the files that just moved. The channel is left where it is:
+// it is the conversation the session lives in, not the session.
+func (h *Handler) sessionRenameRun(_ context.Context, in contracts.Input) (string, error) {
+	name, ok := in.Lookup("name")
+	if !ok {
+		return "", fmt.Errorf("missing name")
+	}
+	raw, ok := in.Lookup("to")
+	if !ok {
+		return "", fmt.Errorf("missing to")
+	}
+	to := slugify(raw)
+	if to == "" || !sessionNameRe.MatchString(to) {
+		return "", fmt.Errorf("invalid name %q — use letters, digits, - or _ (max 64, no /, spaces or ..)", raw)
+	}
+	sess, exists := h.st.FindSession(name)
+	if !exists {
+		return "", fmt.Errorf("no session %q", name)
+	}
+	if to == name {
+		return fmt.Sprintf("session **%s** porte déjà ce nom", name), nil
+	}
+	if _, taken := h.st.FindSession(to); taken {
+		return "", fmt.Errorf("session %q already exists", to)
+	}
+	_ = h.sup.Stop(name)
+	if err := h.st.RenameSession(name, to); err != nil {
+		h.sup.Start(sess)
+		return "", fmt.Errorf("persist: %w", err)
+	}
+	note := ""
+	if err := state.MoveSessionFile(state.TranscriptPath(h.partDir, name), state.TranscriptPath(h.partDir, to)); err != nil {
+		note += fmt.Sprintf("\n⚠️ le transcript est resté sous `%s` : %v", name, err)
+	}
+	if err := state.MoveSessionFile(state.ParticipantsPath(h.partDir, name), state.ParticipantsPath(h.partDir, to)); err != nil {
+		note += fmt.Sprintf("\n⚠️ le journal des participants est resté sous `%s` : %v", name, err)
+	}
+	sess.Name = to
+	h.sup.Start(sess)
+	return fmt.Sprintf("✎ Session **%s** renommée en **%s**.%s", name, to, note), nil
+}
+
 // sessionResumeRun revives an archived session: it clears the archived flag and
 // restarts the supervised child. The session control socket is re-established by
 // the reconcile that follows every hub.Dispatch (reconcile brings non-archived

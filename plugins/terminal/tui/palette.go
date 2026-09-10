@@ -173,6 +173,7 @@ func localCommands() []CommandSpec {
 		{Name: "clear", Desc: "clear this tab's transcript"},
 		{Name: "session switch", Desc: "switch between live sessions"},
 		{Name: "resume", Desc: "reopen an archived session"},
+		{Name: "rename", Args: "<nom>", Desc: "rename this session"},
 		{Name: "usage", Desc: "cost, tokens and context for this session"},
 		{Name: "skills", Desc: "list available skills"},
 		{Name: "capabilities", Desc: "what this terminal can render, and what it falls back to"},

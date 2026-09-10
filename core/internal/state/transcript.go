@@ -157,55 +157,111 @@ func ReadTranscript(path string, limit int) []TranscriptEntry {
 	return out
 }
 
-// ReadTranscriptLast returns the timestamp of the last recorded entry, reading
-// only the file's tail so a hot caller (the session list, polled ~1/s) never
-// scans a long transcript. Empty only when the file is missing/empty. When the
-// newest entry is larger than the tail window it falls back to a bounded full
-// read (rare), so a timestamp is never lost. Kept separate from ReadTranscript,
-// whose callers need the entries themselves.
+// TranscriptSummary is what a session list needs from a transcript without
+// reading it: when it last moved, and how full the model's window was on the
+// last turn that reported usage.
+type TranscriptSummary struct {
+	LastTs        string
+	ContextTokens int
+}
+
+// transcriptTailBytes is how much of a transcript's end is read to summarise it,
+// so a hot caller (the session list, polled ~1/s) never scans a long file.
+const transcriptTailBytes = 64 * 1024
+
+// ReadTranscriptSummary reads only the file's tail. When the newest entry is
+// larger than the tail window it falls back to a bounded full read (rare), so a
+// timestamp is never lost. Kept separate from ReadTranscript, whose callers need
+// the entries themselves.
+func ReadTranscriptSummary(path string) TranscriptSummary {
+	lines := transcriptTailLines(path)
+	var sum TranscriptSummary
+	for i := len(lines) - 1; i >= 0; i-- {
+		var e TranscriptEntry
+		if json.Unmarshal(lines[i], &e) != nil {
+			continue
+		}
+		if sum.LastTs == "" {
+			sum.LastTs = e.Ts
+		}
+		if sum.ContextTokens == 0 {
+			sum.ContextTokens = contextTokens(e)
+		}
+		if sum.LastTs != "" && sum.ContextTokens != 0 {
+			return sum
+		}
+	}
+	if sum.LastTs != "" {
+		return sum
+	}
+	if all := ReadTranscript(path, 1); len(all) > 0 {
+		sum.LastTs = all[len(all)-1].Ts
+		sum.ContextTokens = contextTokens(all[len(all)-1])
+	}
+	return sum
+}
+
+// ReadTranscriptLast returns the timestamp of the last recorded entry. Empty
+// only when the file is missing or empty.
 func ReadTranscriptLast(path string) string {
+	return ReadTranscriptSummary(path).LastTs
+}
+
+// contextTokens is what one recorded turn occupied of the model's window: its
+// input plus what it read from and wrote to the prompt cache. The output is not
+// part of the prompt the next turn carries, so it is not counted.
+func contextTokens(e TranscriptEntry) int {
+	return e.TokensIn + e.CacheRead + e.CacheCreate
+}
+
+// transcriptTailLines is the non-empty lines of the file's last
+// transcriptTailBytes, oldest first and left unparsed: a summary reads from the
+// newest and usually stops on the first one, so parsing the window whole would
+// be work thrown away on every poll.
+func transcriptTailLines(path string) [][]byte {
 	if path == "" {
-		return ""
+		return nil
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return ""
+		return nil
 	}
 	defer f.Close()
 	fi, err := f.Stat()
 	if err != nil || fi.Size() == 0 {
-		return ""
+		return nil
 	}
-	const tail = 64 * 1024
-	start := fi.Size() - tail
+	start := fi.Size() - transcriptTailBytes
 	if start < 0 {
 		start = 0
 	}
 	buf := make([]byte, fi.Size()-start)
 	if _, err := f.ReadAt(buf, start); err != nil && err != io.EOF {
-		return ""
+		return nil
 	}
-	// Scan from the end: the last newline-delimited entry that parses is the
-	// newest. A partial first line (the window cut mid-entry) is only reached
-	// when a single entry exceeds the window, and is left unparsed.
-	lines := bytes.Split(buf, []byte{'\n'})
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := bytes.TrimSpace(lines[i])
-		if len(line) == 0 {
-			continue
+	var out [][]byte
+	for _, line := range bytes.Split(buf, []byte{'\n'}) {
+		if line = bytes.TrimSpace(line); len(line) > 0 {
+			out = append(out, line)
 		}
-		var e TranscriptEntry
-		if json.Unmarshal(line, &e) == nil {
-			return e.Ts
-		}
-		break
 	}
-	// The newest entry was larger than the tail window (or the window cut it mid-
-	// line): fall back to a bounded full read rather than lose the timestamp.
-	if all := ReadTranscript(path, 1); len(all) > 0 {
-		return all[len(all)-1].Ts
+	return out
+}
+
+// MoveSessionFile moves a per-session file to the path its session's new name
+// gives it. A missing source is not an error: a session renamed before it ever
+// spoke has neither transcript nor journal to carry over.
+func MoveSessionFile(oldPath, newPath string) error {
+	if oldPath == "" || newPath == "" || oldPath == newPath {
+		return nil
 	}
-	return ""
+	if _, err := os.Stat(oldPath); os.IsNotExist(err) {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(oldPath, newPath)
 }
 
 // RemoveTranscript deletes the transcript at path. A missing file is not an

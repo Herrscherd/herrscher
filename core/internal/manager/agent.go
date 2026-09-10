@@ -22,7 +22,7 @@ func (h *Handler) agentCreateRun(_ context.Context, in contracts.Input) (string,
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
-		return "", fmt.Errorf("invalid name %q — use letters, digits, - or _ (max 64)", raw)
+		return "", fmt.Errorf("invalid name %q: use letters, digits, - or _ (max 64)", raw)
 	}
 	soul, _ := in.Lookup("soul")
 	mcp, _ := in.Lookup("mcp")

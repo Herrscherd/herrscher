@@ -89,6 +89,7 @@ var sessionArg = map[string]string{
 	"session log":        "name",
 	"session close":      "name",
 	"session archive":    "name",
+	"session rename":     "name",
 	"session resume":     "name",
 	"session switch":     "name",
 	"session set-budget": "name",

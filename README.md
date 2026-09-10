@@ -393,13 +393,24 @@ since a frame drawn around every turn marks none of them.
 
 Events are typed by role (reasoning, tool family, notice, error). The agent's
 markdown and diffs are rendered, a resumed session's history is replayed as the
-turns it was, and the status bar carries the session's cumulative cost and a
-gauge of how full its context window is. `/usage` spells that out.
+turns it was, and the status bar names what the session runs on (vendor, model,
+reasoning effort), what it has cost, and how much room is left before the backend
+compacts the conversation. `/usage` spells that out.
+
+A session's name is chosen when you know the least about what it will become, so
+`/rename <nom>` changes it: the row keeps its identity and its id, the transcript
+and the participants journal follow, any schedule that targets the session by
+name follows too, and the bridge restarts under the new name. A session an agent
+schedule owns carries a name derived from the schedule's rather than a stored
+one, so renaming it says so: the next window opens a fresh session under the old
+name.
 
 The `/` palette is derived from the daemon's own registry, via `commands --json`
 filtered to the verbs a tab may run, so the menu cannot fall behind what the
-daemon dispatches. It scrolls rather than truncating, so every verb is reachable
-with the arrows.
+daemon dispatches. It scrolls rather than truncating, and its height follows the
+window's, so a tall terminal shows a menu rather than a slit. Arrows walk it,
+`⇞`/`⇟` page through it and `début`/`fin` jump to its ends, in the palette and in
+every other floating list.
 
 An attached window follows the live turn, because every driven session taps the
 daemon's event socket. Esc stops a turn as an interruption rather than an error,
@@ -497,7 +508,12 @@ works as always. The status bar says `mouse → terminal` while it is released,
 The context gauge measures the live prompt, read from the counters that arrive
 mid-turn. The reply that ends a turn carries the vendor's *billing* totals for
 it, which is what the cost line and the budget need, and what the window would
-otherwise have shown as an impossible `1252.2k/200k · 100%`.
+otherwise have shown as an impossible `1252.2k/200k · 100%`. A window opened on a
+session that was already running starts from the last measurement the host
+recorded, rather than from nothing until the next turn.
+
+The percentage beside the gauge counts down rather than up: it is what remains
+before a compaction, which is the question one actually asks of a context gauge.
 
 ## Plugins
 

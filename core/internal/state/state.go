@@ -337,6 +337,41 @@ func (s *State) RemoveSession(name string) error {
 	return s.saveLocked()
 }
 
+// RenameSession moves a session to a new name, keeping its ID and Incarnation:
+// it is the same persisted object under another label, not a new session. It
+// errors when the old name is unknown or the new one is taken, so a rename can
+// never silently merge two sessions into one.
+//
+// Schedules that name the session as their target follow it. They are the only
+// other place in state.json that holds a session name, and a schedule left
+// pointing at a name nobody carries skips its window in silence on every tick.
+func (s *State) RenameSession(oldName, newName string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	found := -1
+	for i, ss := range s.Sessions {
+		if ss.Name == newName && newName != oldName {
+			return fmt.Errorf("session %q already exists", newName)
+		}
+		if ss.Name == oldName {
+			found = i
+		}
+	}
+	if found < 0 {
+		return fmt.Errorf("no session %q", oldName)
+	}
+	if oldName == newName {
+		return nil
+	}
+	s.Sessions[found].Name = newName
+	for i, sc := range s.Schedules {
+		if sc.Session == oldName {
+			s.Schedules[i].Session = newName
+		}
+	}
+	return s.saveLocked()
+}
+
 // SetResumeToken records the backend resume token for the named session,
 // persisting only when it changes. Turns report the same id, so this avoids
 // rewriting state.json every turn. A missing session or an unchanged token is a

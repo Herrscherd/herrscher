@@ -46,6 +46,11 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Help("archive a session: stop the bridge, keep it resumable (row + transcript + resume token kept)").
 			Param("name", "session name", true).
 			Do(h.sessionArchiveRun),
+		contracts.New("session", "rename").
+			Help("rename a session: the row, its transcript and its journal follow, the bridge restarts under the new name").
+			Param("name", "session name", true).
+			Param("to", "new session name (slugified)", true).
+			Do(h.sessionRenameRun),
 		contracts.New("session", "list").
 			Help("list active sessions").
 			Do(h.sessionListRun),

@@ -27,7 +27,7 @@ func TestPaletteInlineRenderSelectedRow(t *testing.T) {
 }
 
 // TestPaletteWindowFollowsTheSelection is the regression for a palette that
-// truncated at paletteMax from the head: every command past the sixth was
+// truncated from the head: every command past the last drawn row was
 // unreachable with ↑↓, so a daemon advertising thirty verbs showed six.
 func TestPaletteWindowFollowsTheSelection(t *testing.T) {
 	for _, tc := range []struct{ n, sel, wantStart, wantEnd int }{
@@ -37,7 +37,7 @@ func TestPaletteWindowFollowsTheSelection(t *testing.T) {
 		{n: 30, sel: 6, wantStart: 1, wantEnd: 7},    // one past it: slide by one
 		{n: 30, sel: 29, wantStart: 24, wantEnd: 30}, // bottom: clamped, never past the end
 	} {
-		start, end := paletteWindow(tc.n, tc.sel, paletteMax)
+		start, end := paletteWindow(tc.n, tc.sel, 6)
 		if start != tc.wantStart || end != tc.wantEnd {
 			t.Fatalf("n=%d sel=%d: got [%d,%d), want [%d,%d)", tc.n, tc.sel, start, end, tc.wantStart, tc.wantEnd)
 		}
@@ -67,8 +67,8 @@ func TestPaletteViewShowsALateSelection(t *testing.T) {
 	if !strings.Contains(out, "28/30") {
 		t.Fatalf("a windowed palette must say where the cursor is: %q", out)
 	}
-	if h := lipgloss.Height(out); h != paletteMax+1 {
-		t.Fatalf("palette height %d, want %d rows plus the counter", h, paletteMax+1)
+	if h := lipgloss.Height(out); h != m.overlayRows()+1 {
+		t.Fatalf("palette height %d, want %d rows plus the counter", h, m.overlayRows()+1)
 	}
 }
 

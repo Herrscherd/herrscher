@@ -27,6 +27,11 @@ const (
 	enhancedKeysOff = "\x1b[<u"
 )
 
+const (
+	funcFinals = "ABCDEFHPQRS"
+	keyRelease = "3"
+)
+
 // enableEnhancedKeys asks for the protocol again once the program is running.
 // The stack the push lands on is per-screen: a push made on the main screen is
 // not in effect on the alternate screen, and this TUI spends its whole life on
@@ -60,7 +65,11 @@ func legacyKey(seq []byte) []byte {
 	}
 	mods := 1
 	if len(fields) > 1 {
-		if m, err := strconv.Atoi(strings.SplitN(fields[1], ":", 2)[0]); err == nil && m > 0 {
+		parts := strings.SplitN(fields[1], ":", 2)
+		if len(parts) == 2 && parts[1] == keyRelease {
+			return nil
+		}
+		if m, err := strconv.Atoi(parts[0]); err == nil && m > 0 {
 			mods = m
 		}
 	}
@@ -104,6 +113,47 @@ func legacyKey(seq []byte) []byte {
 		return append([]byte{ctrlESC}, b...)
 	}
 	return b
+}
+
+func legacyFunc(seq []byte) []byte {
+	final := seq[len(seq)-1]
+	if final != '~' && !strings.ContainsRune(funcFinals, rune(final)) {
+		return seq
+	}
+	body := string(seq[2 : len(seq)-1])
+	if !strings.ContainsAny(body, ";:") {
+		return seq
+	}
+	fields := strings.Split(body, ";")
+	number := strings.SplitN(fields[0], ":", 2)[0]
+	if number != "" {
+		if _, err := strconv.Atoi(number); err != nil {
+			return seq
+		}
+	}
+	mods := ""
+	if len(fields) > 1 {
+		parts := strings.SplitN(fields[1], ":", 2)
+		if len(parts) == 2 && parts[1] == keyRelease {
+			return nil
+		}
+		if parts[0] != "" && parts[0] != "1" {
+			mods = parts[0]
+		}
+	}
+	if final == '~' {
+		if number == "" {
+			return seq
+		}
+		if mods == "" {
+			return []byte("\x1b[" + number + "~")
+		}
+		return []byte("\x1b[" + number + ";" + mods + "~")
+	}
+	if mods == "" {
+		return []byte{ctrlESC, '[', final}
+	}
+	return []byte("\x1b[1;" + mods + string(final))
 }
 
 func toUpper(r rune) rune {
@@ -228,7 +278,7 @@ func (f *filteredStdin) feed(b []byte) {
 				case c == 'u': // a key report from the enhanced protocol
 					f.out = append(f.out, legacyKey(f.seq)...)
 				default:
-					f.out = append(f.out, f.seq...)
+					f.out = append(f.out, legacyFunc(f.seq)...)
 				}
 				f.seq = f.seq[:0]
 				f.state = filterGround

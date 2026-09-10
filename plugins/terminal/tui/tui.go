@@ -1271,7 +1271,7 @@ func (m *model) inputRow() string {
 // navigation keys while an inline menu is open.
 func (m *model) hintText() string {
 	if m.paletteOpen() {
-		return dimStyle.Render("↑↓ naviguer · Tab compléter · Échap fermer")
+		return dimStyle.Render("↑↓ naviguer · ⇞⇟ page · Tab compléter · Échap fermer")
 	}
 	return dimStyle.Render("? raccourcis")
 }
@@ -1474,13 +1474,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The /session switch picker is modal: arrows move the selection, Enter
 		// focuses the chosen session, Esc closes it; every other key is swallowed.
 		if m.switchOpen {
+			if m.overlayNav(msg, m.moveSwitch) {
+				return m, nil
+			}
 			switch msg.Type {
-			case tea.KeyUp:
-				m.moveSwitch(-1)
-				return m, nil
-			case tea.KeyDown:
-				m.moveSwitch(1)
-				return m, nil
 			case tea.KeyEsc:
 				m.switchOpen = false
 				m.applySize()
@@ -1552,13 +1549,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The /skills panel is modal and read-only: arrows scroll the selection,
 		// Esc closes it; every other key is swallowed.
 		if m.skillsOpen {
+			if m.overlayNav(msg, m.moveSkills) {
+				return m, nil
+			}
 			switch msg.Type {
-			case tea.KeyUp:
-				m.moveSkills(-1)
-				return m, nil
-			case tea.KeyDown:
-				m.moveSkills(1)
-				return m, nil
 			case tea.KeyEsc, tea.KeyEnter:
 				m.skillsOpen = false
 				m.applySize()
@@ -1572,13 +1566,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The /resume picker is modal: arrows move the selection, Enter revives or
 		// focuses the chosen session, Esc closes it; every other key is swallowed.
 		if m.resumeOpen {
+			if m.overlayNav(msg, m.moveResume) {
+				return m, nil
+			}
 			switch msg.Type {
-			case tea.KeyUp:
-				m.moveResume(-1)
-				return m, nil
-			case tea.KeyDown:
-				m.moveResume(1)
-				return m, nil
 			case tea.KeyEsc:
 				m.resumeOpen = false
 				m.applySize()
@@ -1598,13 +1589,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// While the command palette is open, arrow/Tab/Esc/Enter drive it instead
 		// of the normal bindings; other keys fall through to edit the query.
 		if m.paletteOpen() {
+			if m.overlayNav(msg, m.movePal) {
+				return m, nil
+			}
 			switch msg.Type {
-			case tea.KeyUp:
-				m.movePal(-1)
-				return m, nil
-			case tea.KeyDown:
-				m.movePal(1)
-				return m, nil
 			case tea.KeyTab:
 				m.completePal()
 				m.applySize()

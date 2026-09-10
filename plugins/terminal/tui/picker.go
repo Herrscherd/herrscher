@@ -10,9 +10,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// resumeMax bounds how many rows the /resume picker shows at once.
-const resumeMax = 8
-
 // openResume populates the /resume picker with the hub's sessions, most-recently
 // active first (by transcript LastTs), and opens the overlay. Sessions with no
 // transcript sort last (empty LastTs).
@@ -66,7 +63,7 @@ func (m *model) resumeView() string {
 	if len(m.resumeRows) == 0 {
 		return dimStyle.Render("  (aucune session)")
 	}
-	start, end := paletteWindow(len(m.resumeRows), m.resumeIdx, resumeMax)
+	start, end := paletteWindow(len(m.resumeRows), m.resumeIdx, m.overlayRows())
 	rows := make([]overlayRow, 0, end-start)
 	for i := start; i < end; i++ {
 		s := m.resumeRows[i]
@@ -97,9 +94,6 @@ func (m *model) resumeView() string {
 	}
 	return floatingList(rows, m.resumeIdx-start, footer, m.overlayWidth())
 }
-
-// switchMax bounds how many rows the /session switch picker shows at once.
-const switchMax = 8
 
 // openSwitch populates the invisible session switcher with the hub's live
 // sessions (most-recently active first) and opens the overlay. Unlike /resume it
@@ -145,7 +139,7 @@ func (m *model) switchView() string {
 	if len(m.switchRows) == 0 {
 		return dimStyle.Render("  (aucune session)")
 	}
-	start, end := paletteWindow(len(m.switchRows), m.switchIdx, switchMax)
+	start, end := paletteWindow(len(m.switchRows), m.switchIdx, m.overlayRows())
 	rows := make([]overlayRow, 0, end-start)
 	for i := start; i < end; i++ {
 		s := m.switchRows[i]

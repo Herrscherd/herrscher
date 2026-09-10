@@ -53,7 +53,7 @@ func TestFloatingListWithoutRowsIsEmpty(t *testing.T) {
 }
 
 // TestOverlayRowsFollowTheWindow: a list bounded at six rows on a forty-row
-// terminal is the bug the operator hit — thirty-five verbs, six of them visible.
+// terminal is the bug the operator hit: thirty-five verbs, six of them visible.
 func TestOverlayRowsFollowTheWindow(t *testing.T) {
 	for _, tc := range []struct{ height, want int }{
 		{height: 0, want: overlayRowsMin},

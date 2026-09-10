@@ -370,7 +370,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
-		return "", fmt.Errorf("invalid name %q — use letters, digits, - or _ (max 64, no /, spaces or ..)", raw)
+		return "", fmt.Errorf("invalid name %q: use letters, digits, - or _ (max 64, no /, spaces or ..)", raw)
 	}
 	if _, exists := h.st.FindSession(name); exists {
 		return "", fmt.Errorf("session %q already exists", name)
@@ -863,7 +863,7 @@ func (h *Handler) sessionRenameRun(_ context.Context, in contracts.Input) (strin
 	}
 	to := slugify(raw)
 	if to == "" || !sessionNameRe.MatchString(to) {
-		return "", fmt.Errorf("invalid name %q — use letters, digits, - or _ (max 64, no /, spaces or ..)", raw)
+		return "", fmt.Errorf("invalid name %q: use letters, digits, - or _ (max 64, no /, spaces or ..)", raw)
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {

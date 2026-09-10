@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -90,17 +91,61 @@ func renderContext(used int, vendor string) string {
 	return palierStyle(contextRatio(used, limit)).Render(text)
 }
 
-// renderGauge renders the occupancy bar and its percentage. It says the same
-// thing as renderContext and that is the point: the numbers are the measurement,
-// the bar is what is read without reading. Below narrowStatus it is dropped —
-// two ways of saying one thing is the first luxury a cramped bar gives up.
-func renderGauge(used int, vendor string) string {
+// compactAt is the share of the window a backend fills before it compacts the
+// conversation to keep going. It is the denominator of the figure the bar
+// actually reports: not how full the window is, but how much of the session's
+// remaining run it buys before a compaction rewrites it.
+const compactAt = 0.92
+
+// contextLeft is the share of the pre-compaction budget still free, in [0,1].
+func contextLeft(used, limit int) float64 {
+	left := (compactAt - contextRatio(used, limit)) / compactAt
+	if left < 0 {
+		return 0
+	}
+	return left
+}
+
+// verboseStatus is the width from which the bar spells out what its percentage
+// counts down to. Below it the word "reste" carries the meaning alone.
+const verboseStatus = 100
+
+func renderGauge(used int, vendor string, width int) string {
 	if used <= 0 {
 		return ""
 	}
-	r := contextRatio(used, contextLimit(vendor))
+	limit := contextLimit(vendor)
+	r := contextRatio(used, limit)
 	style := palierStyle(r)
-	return gauge(r, style) + style.Render(fmt.Sprintf(" %d%%", int(r*100)))
+	label := fmt.Sprintf(" reste %d %%", int(contextLeft(used, limit)*100))
+	if width >= verboseStatus {
+		label += " avant compaction"
+	}
+	return gauge(r, style) + style.Render(label)
+}
+
+// modelLabel names what the session runs on, vendor prefix dropped: the vendor
+// already leads the bar, and "claude · claude-opus-5" says it twice.
+func modelLabel(info contracts.SessionInfo) string {
+	model := info.Model
+	if info.Vendor != "" {
+		model = strings.TrimPrefix(model, strings.ToLower(info.Vendor)+"-")
+	}
+	return joinNonEmpty(model, info.Effort)
+}
+
+// contextTokens is the occupancy to draw: what this tab has watched pass, and
+// failing that what the hub read from the session's last recorded turn. Without
+// the fallback an attached tab showed no window at all until it had sat through
+// a turn of its own, on a session that was already half full.
+func (m *model) contextTokens(tb *tab) int {
+	if tb.ctxTokens > 0 {
+		return tb.ctxTokens
+	}
+	if info, ok := m.activeInfo(); ok {
+		return info.ContextTokens
+	}
+	return 0
 }
 
 // formatLimit renders a context window: a round thousand loses its decimal, so
@@ -112,9 +157,10 @@ func formatLimit(n int) string {
 	return formatTokens(n)
 }
 
-// statusBar is the idle footer for a tab: who this session is, how full its
-// context is, what it has cost and how long it has been open. Under narrowStatus
-// columns it keeps the session and the context and drops the rest.
+// statusBar is the idle footer for a tab: who this session is, what it runs on,
+// how much room it has left before a compaction, what it has cost and how long
+// it has been open. Under narrowStatus columns it keeps the session and the
+// context and drops the rest.
 // It reads the hub's record for the *active* session, so it is the active tab's
 // bar; the footer is its only caller.
 func (m *model) statusBar(tb *tab, width int) string {
@@ -128,15 +174,21 @@ func (m *model) statusBar(tb *tab, width int) string {
 		head = accentStyle.Render(glyphBolt+" "+info.Vendor) + dimStyle.Render(" "+tb.label)
 	}
 	segs := []string{head}
-	if width >= narrowStatus && known && info.Project != "" {
-		segs = append(segs, dimStyle.Render(info.Project))
+	if width >= narrowStatus && known {
+		if label := modelLabel(info); label != "" {
+			segs = append(segs, textStyle.Render(label))
+		}
 	}
-	if ctx := renderContext(tb.ctxTokens, info.Vendor); ctx != "" {
+	used := m.contextTokens(tb)
+	if ctx := renderContext(used, info.Vendor); ctx != "" {
 		segs = append(segs, ctx)
 	}
 	if width >= narrowStatus {
-		if g := renderGauge(tb.ctxTokens, info.Vendor); g != "" {
+		if g := renderGauge(used, info.Vendor, width); g != "" {
 			segs = append(segs, g)
+		}
+		if known && info.Project != "" {
+			segs = append(segs, dimStyle.Render(info.Project))
 		}
 		if ms := m.mouseStatus(); ms != "" {
 			segs = append(segs, ms)
@@ -168,14 +220,21 @@ func (m *model) usageReport(tb *tab) string {
 	limit := contextLimit(vendor)
 	lines := []string{"usage — " + tb.label}
 	if vendor != "" {
-		lines = append(lines, "  model    "+vendor)
+		lines = append(lines, "  vendor   "+vendor)
+	}
+	if known && info.Model != "" {
+		lines = append(lines, "  model    "+info.Model)
+	}
+	if known && info.Effort != "" {
+		lines = append(lines, "  effort   "+info.Effort)
 	}
 	if known && info.Project != "" {
 		lines = append(lines, "  project  "+info.Project)
 	}
-	if tb.ctxTokens > 0 {
-		r := contextRatio(tb.ctxTokens, limit)
-		lines = append(lines, fmt.Sprintf("  context  %s / %s  (%d%%)", formatTokens(tb.ctxTokens), formatLimit(limit), int(r*100)))
+	if used := m.contextTokens(tb); used > 0 {
+		r := contextRatio(used, limit)
+		lines = append(lines, fmt.Sprintf("  context  %s / %s  (%d%%)", formatTokens(used), formatLimit(limit), int(r*100)))
+		lines = append(lines, fmt.Sprintf("  reste    %d %% avant compaction", int(contextLeft(used, limit)*100)))
 	} else {
 		lines = append(lines, "  context  no measurement yet")
 	}

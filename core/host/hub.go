@@ -384,22 +384,57 @@ func sessionInfos(st *state.State, partDir string) []contracts.SessionInfo {
 	sessions := st.SnapshotSessions()
 	out := make([]contracts.SessionInfo, 0, len(sessions))
 	for _, s := range sessions {
-		lastTs := state.ReadTranscriptLast(state.TranscriptPath(partDir, s.Name))
+		sum := state.ReadTranscriptSummary(state.TranscriptPath(partDir, s.Name))
 		out = append(out, contracts.SessionInfo{
-			Name:        s.Name,
-			Incarnation: s.Incarnation,
-			ChannelID:   s.ChannelID,
-			Type:        s.Type,
-			Gateways:    s.BoundGateways(),
-			Vendor:      s.Vendor,
-			Project:     s.Project,
-			Archived:    s.Archived,
-			Resumable:   s.ResumeToken != "",
-			LastTs:      lastTs,
-			Dir:         sessionDir(s),
+			Name:          s.Name,
+			Incarnation:   s.Incarnation,
+			ChannelID:     s.ChannelID,
+			Type:          s.Type,
+			Gateways:      s.BoundGateways(),
+			Vendor:        s.Vendor,
+			Model:         sessionModel(s),
+			Effort:        sessionEffort(s),
+			Project:       s.Project,
+			Archived:      s.Archived,
+			Resumable:     s.ResumeToken != "",
+			LastTs:        sum.LastTs,
+			ContextTokens: sum.ContextTokens,
+			Dir:           sessionDir(s),
 		})
 	}
 	return out
+}
+
+// sessionModel names the model a session actually runs on. The catalog id is the
+// truth when the session was created with one; otherwise the invocation carries
+// the choice, and a session created before the catalog has only that.
+func sessionModel(s state.Session) string {
+	if s.ModelID != "" {
+		return s.ModelID
+	}
+	return invocationFlag(s.Cmd, "--model")
+}
+
+// sessionEffort is the reasoning effort the invocation asks for. Backends that
+// take no such flag yield empty, which a frontend renders as nothing rather than
+// as a default it invented.
+func sessionEffort(s state.Session) string {
+	return invocationFlag(s.Cmd, "--effort")
+}
+
+// invocationFlag reads one flag's value out of a bridged command line, in either
+// spelling ("--flag value" and "--flag=value").
+func invocationFlag(cmd, flag string) string {
+	fields := strings.Fields(cmd)
+	for i, f := range fields {
+		if f == flag && i+1 < len(fields) {
+			return fields[i+1]
+		}
+		if v, ok := strings.CutPrefix(f, flag+"="); ok {
+			return v
+		}
+	}
+	return ""
 }
 
 // sessionDir resolves a session's run directory the way the supervisor does:

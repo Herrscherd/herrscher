@@ -67,8 +67,8 @@ func TestGaugeShowsAnySpend(t *testing.T) {
 // The gauge takes the palier's colour, so an alarming context is alarming at a
 // glance rather than only on inspection.
 func TestGaugeTakesThePalierColour(t *testing.T) {
-	alarm := renderGauge(199_000, "claude")
-	calm := renderGauge(1_000, "claude")
+	alarm := renderGauge(199_000, "claude", 120)
+	calm := renderGauge(1_000, "claude", 120)
 	if alarm == "" || calm == "" {
 		t.Fatal("a spent context must render a gauge")
 	}

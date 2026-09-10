@@ -1473,6 +1473,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeComposer() // re-wrap the draft to the new width so it never clips
 		m.syncViewport()
 	case tea.KeyMsg:
+		keylog("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
 		m.flash = "" // any keypress clears a transient status
 		// Two-step close confirm: if waiting for confirmation, next key decides.
 		if m.pendingClose {

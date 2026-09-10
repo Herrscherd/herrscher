@@ -341,6 +341,10 @@ func (s *State) RemoveSession(name string) error {
 // it is the same persisted object under another label, not a new session. It
 // errors when the old name is unknown or the new one is taken, so a rename can
 // never silently merge two sessions into one.
+//
+// Schedules that name the session as their target follow it. They are the only
+// other place in state.json that holds a session name, and a schedule left
+// pointing at a name nobody carries skips its window in silence on every tick.
 func (s *State) RenameSession(oldName, newName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -360,6 +364,11 @@ func (s *State) RenameSession(oldName, newName string) error {
 		return nil
 	}
 	s.Sessions[found].Name = newName
+	for i, sc := range s.Schedules {
+		if sc.Session == oldName {
+			s.Schedules[i].Session = newName
+		}
+	}
 	return s.saveLocked()
 }
 

@@ -205,7 +205,7 @@ func (m *model) statusBar(tb *tab, width int) string {
 
 // usageReport is what /usage answers: the status bar's numbers, spelled out. The
 // bar has to fit on one row and so says everything by abbreviation; a session
-// worth asking about is one where the operator wants the counts named — which
+// worth asking about is one where the operator wants the counts named: which
 // window, how full, what it has cost, how long it has run.
 //
 // It writes into the transcript rather than an overlay because it is a reading
@@ -218,7 +218,7 @@ func (m *model) usageReport(tb *tab) string {
 		vendor = info.Vendor
 	}
 	limit := contextLimit(vendor)
-	lines := []string{"usage — " + tb.label}
+	lines := []string{"usage · " + tb.label}
 	if vendor != "" {
 		lines = append(lines, "  vendor   "+vendor)
 	}

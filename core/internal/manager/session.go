@@ -14,6 +14,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
+	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -887,9 +888,26 @@ func (h *Handler) sessionRenameRun(_ context.Context, in contracts.Input) (strin
 	if err := state.MoveSessionFile(state.ParticipantsPath(h.partDir, name), state.ParticipantsPath(h.partDir, to)); err != nil {
 		note += fmt.Sprintf("\n⚠️ le journal des participants est resté sous `%s` : %v", name, err)
 	}
+	if sc := scheduleOwning(h.st.SnapshotSchedules(), name); sc != "" {
+		note += fmt.Sprintf("\n⚠️ l'horaire `%s` possède cette session par son nom : sa prochaine fenêtre en rouvrira une sous `%s`.", sc, name)
+	}
 	sess.Name = to
 	h.sup.Start(sess)
 	return fmt.Sprintf("✎ Session **%s** renommée en **%s**.%s", name, to, note), nil
+}
+
+// scheduleOwning names the agent schedule that owns a session, if one does. Such
+// a session's name is derived from the schedule's rather than stored, so a
+// rename cannot carry it: the next tick opens a fresh session under the old
+// name. The operator is told rather than refused, since renaming it is still
+// what they asked for.
+func scheduleOwning(schedules []schedule.Schedule, session string) string {
+	for _, sc := range schedules {
+		if sc.Agent != "" && schedule.SessionName(sc) == session {
+			return sc.Name
+		}
+	}
+	return ""
 }
 
 // sessionResumeRun revives an archived session: it clears the archived flag and

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -82,5 +83,66 @@ func TestSessionRenameRefusesTheImpossible(t *testing.T) {
 	}
 	if _, ok := st.FindSession("un"); !ok {
 		t.Fatalf("un renommage refuse ne doit rien casser")
+	}
+}
+
+// Un horaire qui vise la session par son nom doit suivre le renommage. Sans
+// cela sa fenetre est sautee en silence a chaque tick : le planificateur cherche
+// un nom que plus personne ne porte.
+func TestSessionRenameCarriesTheSchedulesThatTargetIt(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "avant")); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutSchedule(schedule.Schedule{Name: "veille", Session: "avant", Task: "regarde", Every: "1h", CreatedAt: "2026-01-01T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutSchedule(schedule.Schedule{Name: "autre", Session: "voisine", Task: "rien", Every: "1h", CreatedAt: "2026-01-01T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.sessionRenameRun(context.Background(), args("name", "avant", "to", "apres")); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+
+	for _, sc := range st.SnapshotSchedules() {
+		switch sc.Name {
+		case "veille":
+			if sc.Session != "apres" {
+				t.Fatalf("l'horaire vise encore %q", sc.Session)
+			}
+		case "autre":
+			if sc.Session != "voisine" {
+				t.Fatalf("un horaire etranger a ete reecrit: %q", sc.Session)
+			}
+		}
+	}
+}
+
+// Une session possedee par un horaire a cible agent porte un nom derive de
+// l'horaire, que le renommage ne peut pas suivre. L'operateur doit etre averti
+// plutot que refuse : le prochain tick rouvrira une session sous l'ancien nom.
+func TestSessionRenameWarnsWhenAScheduleOwnsTheName(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "schedule-veille")); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutSchedule(schedule.Schedule{Name: "veille", Agent: "scout", Task: "regarde", Every: "1h", CreatedAt: "2026-01-01T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := h.sessionRenameRun(context.Background(), args("name", "schedule-veille", "to", "veille-manuelle"))
+	if err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if !strings.Contains(out, "veille") || !strings.Contains(out, "⚠️") {
+		t.Fatalf("le renommage doit avertir que l'horaire possede le nom: %q", out)
+	}
+	if _, ok := st.FindSession("veille-manuelle"); !ok {
+		t.Fatal("le renommage doit quand meme avoir lieu")
 	}
 }

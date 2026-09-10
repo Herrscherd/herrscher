@@ -398,8 +398,12 @@ reasoning effort), what it has cost, and how much room is left before the backen
 compacts the conversation. `/usage` spells that out.
 
 A session's name is chosen when you know the least about what it will become, so
-`/rename <nom>` changes it: the row keeps its identity, the transcript and the
-participants journal follow, and the bridge restarts under the new name.
+`/rename <nom>` changes it: the row keeps its identity and its id, the transcript
+and the participants journal follow, any schedule that targets the session by
+name follows too, and the bridge restarts under the new name. A session an agent
+schedule owns carries a name derived from the schedule's rather than a stored
+one, so renaming it says so: the next window opens a fresh session under the old
+name.
 
 The `/` palette is derived from the daemon's own registry, via `commands --json`
 filtered to the verbs a tab may run, so the menu cannot fall behind what the

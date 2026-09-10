@@ -248,6 +248,22 @@ func transcriptTail(path string) []TranscriptEntry {
 	return out
 }
 
+// MoveSessionFile moves a per-session file to the path its session's new name
+// gives it. A missing source is not an error: a session renamed before it ever
+// spoke has neither transcript nor journal to carry over.
+func MoveSessionFile(oldPath, newPath string) error {
+	if oldPath == "" || newPath == "" || oldPath == newPath {
+		return nil
+	}
+	if _, err := os.Stat(oldPath); os.IsNotExist(err) {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(oldPath, newPath)
+}
+
 // RemoveTranscript deletes the transcript at path. A missing file is not an
 // error (called on real session removal to avoid leaking transcripts/*.jsonl).
 func RemoveTranscript(path string) error {

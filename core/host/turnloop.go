@@ -243,6 +243,7 @@ func (d *sessionDriver) resolveAttachments(ctx context.Context, m contracts.Mess
 // entry. Zero value = a user turn (or a backend that reports no usage).
 type turnUsage struct {
 	InTokens, OutTokens, CacheRead, CacheCreate, DurMs int
+	CtxTokens                                          int
 }
 
 // recordEntry appends one transcript turn-side, best-effort. Timestamp is set
@@ -261,6 +262,7 @@ func (d *sessionDriver) recordEntry(role, text string, cost float64, u turnUsage
 		CacheRead:   u.CacheRead,
 		CacheCreate: u.CacheCreate,
 		DurMs:       u.DurMs,
+		CtxTokens:   u.CtxTokens,
 	})
 }
 
@@ -691,6 +693,7 @@ func (d *sessionDriver) abandon(ctx context.Context, ev contracts.Event) {
 func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 	d.metrics.TurnStarted()
 	turnStart := time.Now()
+	live := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -722,6 +725,7 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 					CacheRead:   e.CacheRead,
 					CacheCreate: e.CacheCreate,
 					DurMs:       int(time.Since(turnStart).Milliseconds()),
+					CtxTokens:   contextReading(live, e),
 				})
 				d.seenMu.Lock()
 				if d.pendingReply != nil {
@@ -737,6 +741,9 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 				return true
 			}
 			d.fanOut(ctx, e)
+			if n := promptSize(e); n > 0 {
+				live = n
+			}
 			if spent, over := guard.trips(e); over {
 				d.Interrupt()
 				d.fanOut(ctx, contracts.Event{T: "status", Text: "tour interrompu — plafond de tokens atteint (" +
@@ -744,6 +751,17 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 			}
 		}
 	}
+}
+
+func promptSize(e contracts.Event) int {
+	return e.TokensIn + e.CacheRead + e.CacheCreate
+}
+
+func contextReading(live int, done contracts.Event) int {
+	if live > 0 {
+		return live
+	}
+	return promptSize(done)
 }
 
 // turnTokens reads what an event says the running turn has spent so far. The

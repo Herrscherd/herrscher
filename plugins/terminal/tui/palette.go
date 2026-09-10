@@ -34,12 +34,9 @@ func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 	return out
 }
 
-// paletteMax bounds how many matches the palette shows at once.
-const paletteMax = 6
-
 // paletteWindow is the slice of matches to draw, given the selection. The
-// palette used to truncate at paletteMax from the head, which made every verb
-// past the sixth unreachable: ↑↓ moved a selection nobody could see, and the
+// palette used to truncate from the head, which made every verb
+// past the last drawn row unreachable: ↑↓ moved a selection nobody could see, and the
 // only way to a late command was to type enough of its name to filter the
 // others out — which requires already knowing it, the one thing a menu exists
 // to spare you.
@@ -201,7 +198,8 @@ func (m *model) paletteView() string {
 	if sel < 0 {
 		sel = 0
 	}
-	start, end := paletteWindow(len(fc), sel, paletteMax)
+	visible := m.overlayRows()
+	start, end := paletteWindow(len(fc), sel, visible)
 	rows := make([]overlayRow, 0, end-start)
 	for _, c := range fc[start:end] {
 		label := "/" + c.Name
@@ -211,7 +209,7 @@ func (m *model) paletteView() string {
 		rows = append(rows, overlayRow{label: label, detail: c.Desc})
 	}
 	footer := ""
-	if len(fc) > paletteMax {
+	if len(fc) > visible {
 		footer = fmt.Sprintf("%d/%d", sel+1, len(fc))
 	}
 	return floatingList(rows, sel-start, footer, m.overlayWidth())

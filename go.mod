@@ -3,10 +3,10 @@ module github.com/Herrscherd/herrscher
 go 1.25.0
 
 require (
-	github.com/Herrscherd/herrscher-claude-backend v0.2.7
+	github.com/Herrscherd/herrscher-claude-backend v0.2.8
 	github.com/Herrscherd/herrscher-codex-backend v0.1.7
 	github.com/Herrscherd/herrscher-contracts v0.9.0
-	github.com/Herrscherd/herrscher-cursor-backend v0.1.8
+	github.com/Herrscherd/herrscher-cursor-backend v0.1.9
 	github.com/Herrscherd/herrscher-discord-gateway v0.19.1
 	github.com/Herrscherd/herrscher-llm-extractor v0.1.4
 	github.com/Herrscherd/herrscher-obsidian-memory v0.3.1

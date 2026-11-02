@@ -29,11 +29,11 @@ func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 	return out
 }
 
-func paletteWindow(n, sel, rows int) (start, end int) {
+func paletteWindow(n, sel, rows int) (int, int) {
 	if n <= rows {
 		return 0, n
 	}
-	start = sel - rows + 1
+	start := sel - rows + 1
 	if start < 0 {
 		start = 0
 	}
@@ -140,7 +140,7 @@ func localCommands() []CommandSpec {
 		{Name: "clear", Desc: "clear this tab's transcript"},
 		{Name: "session switch", Desc: "switch between live sessions"},
 		{Name: "resume", Desc: "reopen an archived session"},
-		{Name: "rename", Args: "<nom>", Desc: "rename this session"},
+		{Name: verbRename, Args: "<nom>", Desc: "rename this session"},
 		{Name: "usage", Desc: "cost, tokens and context for this session"},
 		{Name: "skills", Desc: "list available skills"},
 		{Name: "capabilities", Desc: "what this terminal can render, and what it falls back to"},

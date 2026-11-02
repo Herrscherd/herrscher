@@ -56,7 +56,7 @@ func blockCols(img image.Image, rows int) int {
 }
 
 func imageEscape(img image.Image, caps Capabilities) string {
-	scaled := downscale(img, previewRows)
+	scaled := downscale(img)
 	switch caps.Graphics {
 	case GraphicsKitty:
 		data, err := encodePNG(scaled)

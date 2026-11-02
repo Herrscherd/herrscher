@@ -8,14 +8,14 @@ import (
 
 const mentionMax = 6
 
-func mentionWord(input string, cursor int) (start int, prefix string, ok bool) {
+func mentionWord(input string, cursor int) (int, string, bool) {
 	if cursor < 0 {
 		cursor = 0
 	}
 	if cursor > len(input) {
 		cursor = len(input)
 	}
-	start = strings.LastIndexAny(input[:cursor], " \t\n") + 1
+	start := strings.LastIndexAny(input[:cursor], " \t\n") + 1
 	word := input[start:cursor]
 	if !strings.HasPrefix(word, "@") {
 		return 0, "", false

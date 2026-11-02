@@ -48,12 +48,9 @@ func decodeImage(data []byte) (image.Image, error) {
 
 const maxPreviewWidth = 2000
 
-func downscale(img image.Image, maxRows int) image.Image {
-	if maxRows < 1 {
-		maxRows = 1
-	}
+func downscale(img image.Image) image.Image {
 	b := img.Bounds()
-	maxHeight := maxRows * cellPixels
+	maxHeight := previewRows * cellPixels
 	if b.Dy() <= maxHeight && b.Dx() <= maxPreviewWidth {
 		return img
 	}

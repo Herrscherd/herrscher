@@ -93,7 +93,7 @@ func editorLauncher(env func(string) string) launcher {
 	}
 }
 
-func splitFileRef(target string) (file, line string) {
+func splitFileRef(target string) (string, string) {
 	i := strings.LastIndex(target, ":")
 	if i < 0 {
 		return target, ""

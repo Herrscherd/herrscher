@@ -76,6 +76,12 @@ const (
 
 const hostErrPrefix = "⚠️ "
 
+const (
+	sessionVerb = "session"
+	verbRename  = "rename"
+	stateDone   = "done"
+)
+
 func hostError(text string) (string, bool) {
 	trimmed := strings.TrimSpace(text)
 	if rest, ok := strings.CutPrefix(trimmed, hostErrPrefix); ok {
@@ -138,7 +144,7 @@ func (tb *tab) dropAgent(id string) {
 func (tb *tab) clearPanels() {
 	tb.agents = nil
 	for _, t := range tb.todos {
-		if t.State != "done" {
+		if t.State != stateDone {
 			return
 		}
 	}
@@ -566,7 +572,7 @@ func (m *model) handleEnter() tea.Cmd {
 			m.toggleHelp()
 			return nil
 		}
-		if args[0] == "session" && len(args) >= 2 && args[1] == "switch" {
+		if args[0] == sessionVerb && len(args) >= 2 && args[1] == "switch" {
 			m.openSwitch()
 			return nil
 		}
@@ -592,10 +598,10 @@ func (m *model) handleEnter() tea.Cmd {
 			m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
 			return nil
 		}
-		if args[0] == "session" && len(args) >= 2 && args[1] == "close" {
+		if args[0] == sessionVerb && len(args) >= 2 && args[1] == "close" {
 			return m.closeCmd(args[2:])
 		}
-		if args[0] == "rename" {
+		if args[0] == verbRename {
 			return m.renameCmd(args[1:])
 		}
 		if args[0] == "copy" {
@@ -793,7 +799,7 @@ func (m *model) renameCmd(rest []string) tea.Cmd {
 		m.flash = "aucune session à renommer ici"
 		return nil
 	}
-	return m.dispatchCmd(m.active, []string{"session", "rename", "--name", name, "--to", to})
+	return m.dispatchCmd(m.active, []string{sessionVerb, verbRename, "--name", name, "--to", to})
 }
 
 func renameTarget(rest []string) string {
@@ -815,7 +821,9 @@ func renameTarget(rest []string) string {
 	return strings.Join(words, " ")
 }
 
-func closeTarget(rest []string) (name string, force bool) {
+func closeTarget(rest []string) (string, bool) {
+	var name string
+	var force bool
 	for i := 0; i < len(rest); i++ {
 		tok := rest[i]
 		switch {
@@ -919,7 +927,7 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 		if e.Subagent == nil {
 			break
 		}
-		if e.Subagent.State == "done" {
+		if e.Subagent.State == stateDone {
 			tb.dropAgent(e.Subagent.ID)
 			break
 		}
@@ -1148,8 +1156,8 @@ func (m *model) ensureSpin() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if cmd, handled := m.handlePluginsMsg(msg); handled {
-		return m, cmd
+	if handled := m.handlePluginsMsg(msg); handled {
+		return m, nil
 	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:

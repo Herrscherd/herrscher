@@ -12,7 +12,7 @@ require (
 	github.com/Herrscherd/herrscher-obsidian-memory v0.3.1
 	github.com/Herrscherd/herrscher-orchestrator v0.2.3
 	github.com/Herrscherd/herrscher-superset-skills v0.1.0
-	github.com/Herrscherd/herrscher-transport v0.2.3
+	github.com/Herrscherd/herrscher-transport v0.3.0
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
@@ -24,10 +24,10 @@ require (
 	github.com/nats-io/nats.go v1.37.0
 	github.com/rivo/uniseg v0.4.7
 	golang.org/x/image v0.44.0
-	golang.org/x/sys v0.46.0
-	golang.org/x/term v0.44.0
-	golang.org/x/text v0.40.0
-	google.golang.org/grpc v1.67.0
+	golang.org/x/sys v0.48.0
+	golang.org/x/term v0.46.0
+	golang.org/x/text v0.42.0
+	google.golang.org/grpc v1.83.1
 )
 
 require (
@@ -63,9 +63,9 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
-	golang.org/x/crypto v0.36.0 // indirect
-	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/time v0.7.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
-	google.golang.org/protobuf v1.34.2 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )

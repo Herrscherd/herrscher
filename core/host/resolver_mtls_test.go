@@ -53,7 +53,7 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 		t.Fatalf("listen: %v", err)
 	}
 	gs := grpc.NewServer(grpc.Creds(serverCreds))
-	transport.RegisterMemorySkeleton(gs, recordingMem{})
+	serveSkeleton(t, gs, func(r *transport.PluginRouter) error { return transport.RegisterMemorySkeleton(r, recordingMem{}) })
 	go func() { _ = gs.Serve(lis) }()
 	t.Cleanup(gs.Stop)
 

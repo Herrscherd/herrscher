@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -14,7 +15,7 @@ import (
 
 func loadEnvFile(path string) error {
 	defer hideGatewayKeys()
-	f, err := os.Open(path)
+	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil

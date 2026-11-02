@@ -49,7 +49,7 @@ func (g *SessionBudgetGate) usageFor(s state.Session) (float64, uint64) {
 	if u == nil {
 		return 0, 0
 	}
-	return u.Cost, uint64(u.TokensIn + u.TokensOut)
+	return u.Cost, nonNegativeCount(u.TokensIn + u.TokensOut)
 }
 
 // Check answers both budget questions from one transcript fold: the reason the
@@ -127,4 +127,11 @@ func cohortMembers(target state.Session, all []state.Session) []state.Session {
 	}
 	walk(root.Name)
 	return members
+}
+
+func nonNegativeCount(n int) uint64 {
+	if n < 0 {
+		return 0
+	}
+	return uint64(n)
 }

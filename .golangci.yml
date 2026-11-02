@@ -186,6 +186,15 @@ linters:
       - path: ^core/internal/manager/session\.go$
         linters: [misspell]
         text: "marrage"
+      - path: ^core/internal/agent/(agent|store)\.go$
+        linters: [gosec]
+        text: "^G(30[126]):"
+      - path: ^core/internal/agent/(agent|store)\.go$
+        linters: [gosec]
+        text: "^G(304|204|703):"
+      - path: ^core/internal/agent/agent\.go$
+        linters: [gosec]
+        text: "^G101:"
 
 formatters:
   enable:

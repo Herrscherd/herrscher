@@ -41,9 +41,9 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 	out[host.EnvRoutePolicy] = string(policy)
 
 	if policy == contracts.PolicyGatewayOnly {
-		creds, err := askGatewayCreds(s, in, cur.haveCred)
-		if err != nil {
-			return nil, err
+		creds, credsErr := askGatewayCreds(s, in, cur.haveCred)
+		if credsErr != nil {
+			return nil, credsErr
 		}
 		for k, v := range creds {
 			out[k] = v
@@ -149,10 +149,10 @@ func chooseDefaultModel(s style, in *bufio.Reader, entries []host.CatalogEntry, 
 	fmt.Fprintf(os.Stderr, "    %s %s\n", s.wrap(s.dim, strconv.Itoa(len(entries)+1)), "none")
 
 	ans := promptLine(in, "  "+s.wrap(s.dim, "›")+" ")
-	switch {
-	case ans == "":
+	switch ans {
+	case "":
 		return cur, nil
-	case ans == "none":
+	case "none":
 		return "", nil
 	}
 	if n, err := strconv.Atoi(ans); err == nil {

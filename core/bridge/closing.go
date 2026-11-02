@@ -1,12 +1,9 @@
 package bridge
 
-import (
-	"io"
-	"log/slog"
-)
+import "io"
 
-func closeQuietly(c io.Closer) {
+func closeAndWarn(c io.Closer) {
 	if err := c.Close(); err != nil {
-		slog.Warn("close", "err", err)
+		logger.Warn("close failed", "err", err)
 	}
 }

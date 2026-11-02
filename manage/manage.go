@@ -65,7 +65,7 @@ func PluginCmd(ctx context.Context, args []string) int {
 
 	switch sub {
 	case "list":
-		if err := listWithVersions(ctx, dir, string(src), os.Stdout); err != nil {
+		if err = listWithVersions(ctx, dir, string(src), os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}

@@ -93,13 +93,13 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	if err != nil {
 		return fmt.Errorf("backend: %w", err)
 	}
-	defer closeQuietly(backend)
+	defer closeAndWarn(backend)
 
 	conn, err := dialHub(ctx, o.HubSocket)
 	if err != nil {
 		return err
 	}
-	defer closeQuietly(conn)
+	defer closeAndWarn(conn)
 
 	ctrl := &turnController{}
 	in := make(chan contracts.Event)

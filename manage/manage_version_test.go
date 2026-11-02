@@ -61,14 +61,14 @@ func TestManageVersionApplyForgetsTheEarlierSnapshot(t *testing.T) {
 	}
 	ops.saved = saved
 	gomod := filepath.Join(dir, "go.mod")
-	if err := os.WriteFile(gomod, []byte("module host\n\ngo 1.25.0\n\nrequire mod/a v1.2.3\n"), 0o644); err != nil {
+	if err = os.WriteFile(gomod, []byte("module host\n\ngo 1.25.0\n\nrequire mod/a v1.2.3\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := ops.Apply(context.Background(), "pin", "mod/a", ""); err != nil {
+	if _, err = ops.Apply(context.Background(), "pin", "mod/a", ""); err != nil {
 		t.Fatalf("pin: %v", err)
 	}
-	if err := ops.Restore(); err != nil {
+	if err = ops.Restore(); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
 	body, err := os.ReadFile(gomod)
@@ -103,7 +103,7 @@ func TestManageVersionPinAndUnpin(t *testing.T) {
 	if err != nil || !pins["mod/a"] || pins["mod/b"] {
 		t.Fatalf("pins = %v, err = %v", pins, err)
 	}
-	if err := pinModule(dir, "mod/a", false); err != nil {
+	if err = pinModule(dir, "mod/a", false); err != nil {
 		t.Fatalf("unpin: %v", err)
 	}
 	pins, err = loadPins(dir)

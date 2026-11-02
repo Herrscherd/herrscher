@@ -233,7 +233,7 @@ func TestFetchOneRemovesPartialFileOnCopyError(t *testing.T) {
 		writeOrLog(w, []byte("xx"))
 		if hj, ok := w.(http.Hijacker); ok {
 			if conn, _, err := hj.Hijack(); err == nil {
-				closeQuietly(conn)
+				closeAndWarn(conn)
 			}
 		}
 	}))
@@ -362,7 +362,7 @@ func TestResolveAttachmentsNothingToResolveNoDir(t *testing.T) {
 	dir := attachmentDir(sess)
 	defer removeAllOrFail(t, dir)
 	m := contracts.Message{ID: "1", Attachments: []contracts.Attachment{{Filename: "a.zip"}}}
-	if paths := ResolveAttachments(context.Background(), http.DefaultClient, m, sess, nil); paths != nil && len(paths) != 0 {
+	if paths := ResolveAttachments(context.Background(), http.DefaultClient, m, sess, nil); len(paths) != 0 {
 		t.Fatalf("want no paths, got %v", paths)
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
@@ -413,12 +413,12 @@ func TestPinnedDialAllowsIPLiteral(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer closeQuietly(ln)
+	defer closeAndWarn(ln)
 	c, err := pinnedDial(&net.Dialer{Timeout: 2 * time.Second})(context.Background(), "tcp", ln.Addr().String())
 	if err != nil {
 		t.Fatalf("ip literal must be dialled as given: %v", err)
 	}
-	closeQuietly(c)
+	closeAndWarn(c)
 }
 
 func TestRoutable(t *testing.T) {

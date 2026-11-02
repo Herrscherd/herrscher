@@ -91,10 +91,10 @@ func chooseKind(s style, in *bufio.Reader, cat string) (string, error) {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", s.wrap(s.dim, strconv.Itoa(len(kinds)+1)), "none")
 
 	ans := promptLine(in, "  "+s.wrap(s.dim, "›")+" ")
-	switch {
-	case ans == "":
+	switch ans {
+	case "":
 		return def, nil
-	case ans == "none":
+	case "none":
 		return "none", nil
 	}
 	if n, err := strconv.Atoi(ans); err == nil {

@@ -10,7 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-type talker struct{ ran chan struct{} }
+type talker struct{}
 
 func (talker) Manifest() contracts.Manifest {
 	return contracts.Manifest{Kind: "fake", Category: contracts.CategoryGateway}

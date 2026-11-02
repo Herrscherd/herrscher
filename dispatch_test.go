@@ -195,7 +195,7 @@ func (s *stubForward) fwd(_ context.Context, argv []string) (string, bool, error
 func TestDispatchUnknownForwardsTheWholeArgv(t *testing.T) {
 	s := &stubForward{out: "two messages", handled: true}
 	args := []string{"channel", "read", "--limit", "5"}
-	out, err, exit := dispatchUnknown(context.Background(), "some-kind", args, s.fwd)
+	out, exit, err := dispatchUnknown(context.Background(), "some-kind", args, s.fwd)
 
 	want := []string{"some-kind", "channel", "read", "--limit", "5"}
 	if !reflect.DeepEqual(s.argv, want) {
@@ -209,7 +209,7 @@ func TestDispatchUnknownForwardsTheWholeArgv(t *testing.T) {
 func TestDispatchUnknownKeepsTheDaemonsFailure(t *testing.T) {
 	boom := errors.New(`plugin: channel "nope" not found`)
 	s := &stubForward{handled: true, err: boom}
-	out, err, exit := dispatchUnknown(context.Background(), "some-kind", []string{"channel", "read"}, s.fwd)
+	out, exit, err := dispatchUnknown(context.Background(), "some-kind", []string{"channel", "read"}, s.fwd)
 	if !errors.Is(err, boom) {
 		t.Fatalf("error = %v, want the daemon's own %v", err, boom)
 	}
@@ -223,7 +223,7 @@ func TestDispatchUnknownKeepsTheDaemonsFailure(t *testing.T) {
 
 func TestDispatchUnknownWithoutDaemonIsAnUnknownCommand(t *testing.T) {
 	s := &stubForward{handled: false}
-	out, err, exit := dispatchUnknown(context.Background(), "some-kind", []string{"channel"}, s.fwd)
+	out, exit, err := dispatchUnknown(context.Background(), "some-kind", []string{"channel"}, s.fwd)
 	if exit != 2 {
 		t.Fatalf("exit = %d, want 2: the unchanged unknown-command outcome", exit)
 	}

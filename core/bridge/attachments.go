@@ -295,7 +295,7 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 	if err != nil {
 		return "", fmt.Errorf("download %s: %w", a.Filename, err)
 	}
-	defer closeQuietly(resp.Body)
+	defer closeAndWarn(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download %s: status %d", a.Filename, resp.StatusCode)
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -17,7 +18,7 @@ import (
 )
 
 func runBridge(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("bridge", flag.ExitOnError)
+	fs := flag.NewFlagSet("bridge", flag.ContinueOnError)
 	ch := channelFlag(fs)
 	backendFlags := declareBackendFlags(fs)
 	session := fs.String("session", "", "session name (scopes the orchestrator/attachment dir)")
@@ -32,6 +33,9 @@ func runBridge(ctx context.Context, args []string) error {
 	consolidateEvery := fs.Int("consolidate-every", 0, "run Consolidate every N turns (0 = manual only); only used with --extractor")
 	envStdin := fs.Bool("env-stdin", false, "read KEY=VALUE lines from stdin until a blank line and put them in this process's environment (how a remote bridge gets its gateway credentials)")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 

@@ -35,8 +35,8 @@ func startFakeDaemon(t *testing.T, reply func(argv []string) (string, error)) *f
 	t.Cleanup(func() { closeQuietly(cmdLn) })
 	go func() {
 		for {
-			c, err := cmdLn.Accept()
-			if err != nil {
+			c, acceptErr := cmdLn.Accept()
+			if acceptErr != nil {
 				return
 			}
 			go d.handleCommand(c)

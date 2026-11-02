@@ -199,3 +199,57 @@ func TestOnlyTheOutputFlagOfAValidGeneratorNamesItsOutput(t *testing.T) {
 		t.Fatalf("generatorOutputs() = %v, want %v", outputs, want)
 	}
 }
+
+const manifest = "package main\n\nimport (\n\t// herrscher:plugins\n\t_ \"example.org/a\"\n\t// herrscher:end\n)\n"
+
+func moduleRootWith(t *testing.T, name, text string) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.org/m\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return root, path
+}
+
+func TestTheManifestMarkersAreAllowedInThePluginsFileOfTheModuleRoot(t *testing.T) {
+	t.Parallel()
+	_, path := moduleRootWith(t, "plugins.go", manifest)
+	if lines := strayLines(t, path, manifest, false); len(lines) != 0 {
+		t.Fatalf("stray comments on lines %v, want none", lines)
+	}
+}
+
+func TestTheManifestMarkersAreStrayOutsideThePluginsFileOfTheModuleRoot(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"other.go", "sub/plugins.go"} {
+		_, path := moduleRootWith(t, name, manifest)
+		if lines, want := strayLines(t, path, manifest, false), []int{4, 6}; !slices.Equal(lines, want) {
+			t.Fatalf("%s: stray comments on lines %v, want %v", name, lines, want)
+		}
+	}
+}
+
+func TestAnyOtherCommentInThePluginsFileStaysStray(t *testing.T) {
+	t.Parallel()
+	text := "package main\n\nimport (\n\t// herrscher:plugins\n\n\t// narrates the list\n\t_ \"example.org/a\"\n\t// herrscher:end\n)\n"
+	_, path := moduleRootWith(t, "plugins.go", text)
+	if lines, want := strayLines(t, path, text, false), []int{6}; !slices.Equal(lines, want) {
+		t.Fatalf("stray comments on lines %v, want %v", lines, want)
+	}
+}
+
+func TestAMarkerWithTextAroundItIsStrayInThePluginsFile(t *testing.T) {
+	t.Parallel()
+	text := "package main\n\nimport (\n\t// herrscher:plugins now\n\t_ \"example.org/a\"\n)\n"
+	_, path := moduleRootWith(t, "plugins.go", text)
+	if lines, want := strayLines(t, path, text, false), []int{4}; !slices.Equal(lines, want) {
+		t.Fatalf("stray comments on lines %v, want %v", lines, want)
+	}
+}

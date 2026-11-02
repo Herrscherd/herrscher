@@ -22,8 +22,10 @@ func Discover(roots []string) []Skill {
 	return out
 }
 
-func discover(roots []string, prev map[string]Skill) (out []Skill, reread []string) {
+func discover(roots []string, prev map[string]Skill) ([]Skill, []string) {
 	seen := map[string]bool{}
+	var out []Skill
+	var reread []string
 	for _, root := range roots {
 		entries, err := os.ReadDir(root)
 		if err != nil {
@@ -64,7 +66,8 @@ func discover(roots []string, prev map[string]Skill) (out []Skill, reread []stri
 	return out, reread
 }
 
-func parseFrontmatter(md []byte) (name, description string, ok bool) {
+func parseFrontmatter(md []byte) (string, string, bool) {
+	var name, description string
 	sc := bufio.NewScanner(bytes.NewReader(md))
 	if !sc.Scan() || strings.TrimSpace(sc.Text()) != frontmatterFence {
 		return "", "", false

@@ -17,7 +17,7 @@ type priorKey struct {
 	stored, env string
 }
 
-func Hide(keys []string) (reveal func()) {
+func Hide(keys []string) func() {
 	hidden.mu.Lock()
 	defer hidden.mu.Unlock()
 	if hidden.vals == nil {

@@ -16,7 +16,7 @@ func TestCreateReusesTheSessionsOwnWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first create: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(first, "wip.txt"), []byte("half a thought"), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(first, "wip.txt"), []byte("half a thought"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -40,7 +40,7 @@ func TestCreateRecoversFromAStaleRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first create: %v", err)
 	}
-	if err := os.RemoveAll(path); err != nil {
+	if err = os.RemoveAll(path); err != nil {
 		t.Fatal(err)
 	}
 

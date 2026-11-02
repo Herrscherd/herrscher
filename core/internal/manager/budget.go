@@ -41,15 +41,26 @@ type SessionBudgetGate struct {
 // BudgetGate returns a gate bound to this handler's session store + transcript
 // dir. The returned *SessionBudgetGate satisfies host's (private) budgetGate
 // interface structurally via Check.
+type sessionUsage struct {
+	cost   float64
+	tokens uint64
+}
+
+type budgetCheck struct {
+	reason   string
+	headroom uint64
+	capped   bool
+}
+
 func (h *Handler) BudgetGate() *SessionBudgetGate { return &SessionBudgetGate{h: h} }
 
-func (g *SessionBudgetGate) usageFor(s state.Session) (float64, uint64) {
+func (g *SessionBudgetGate) usageFor(s state.Session) sessionUsage {
 	entries := state.ReadTranscript(state.TranscriptPath(g.h.partDir, s.Name), 0)
-	u, _ := aggregateUsage(entries)
+	u := aggregateUsage(entries).usage
 	if u == nil {
-		return 0, 0
+		return sessionUsage{}
 	}
-	return u.Cost, nonNegativeCount(u.TokensIn + u.TokensOut)
+	return sessionUsage{cost: u.Cost, tokens: nonNegativeCount(u.TokensIn + u.TokensOut)}
 }
 
 // Check answers both budget questions from one transcript fold: the reason the
@@ -63,14 +74,16 @@ func (g *SessionBudgetGate) usageFor(s state.Session) (float64, uint64) {
 // has already blown past. Cost has no equivalent: a backend reports cost only in
 // its terminal result event, so there is no mid-turn number to compare a cost
 // cap against.
-func (g *SessionBudgetGate) Check(session string) (string, uint64, bool) {
+func (g *SessionBudgetGate) Check(session string) budgetCheck {
 	h := g.h
 	sess, ok := h.st.FindSession(session)
 	if !ok {
-		return "", 0, false
+		return budgetCheck{}
 	}
-	sc, stk := g.usageFor(sess)
-	cc, ctk := cohortTotals(sess, h.st.SnapshotSessions(), g.usageFor)
+	own := g.usageFor(sess)
+	sc, stk := own.cost, own.tokens
+	cohort := cohortTotals(sess, h.st.SnapshotSessions(), g.usageFor)
+	cc, ctk := cohort.cost, cohort.tokens
 	reason := budgetReason(sc, stk, sess.CostCap, sess.TokenCap, cc, ctk, sess.CohortCostCap, sess.CohortTokenCap)
 	if reason != "" {
 		h.warnIfFailed(h.st.SetPausedReason(session, reason), "pause "+session)
@@ -86,7 +99,7 @@ func (g *SessionBudgetGate) Check(session string) (string, uint64, bool) {
 	if !capped {
 		headroom = 0
 	}
-	return reason, headroom, capped
+	return budgetCheck{reason: reason, headroom: headroom, capped: capped}
 }
 
 func cohortMembers(target state.Session, all []state.Session) []state.Session {

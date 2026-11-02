@@ -124,12 +124,17 @@ func (h *Handler) SetModelValidator(fn func(vendor, modelID string) error) { h.v
 // nothing to ask can give.
 func (h *Handler) SetGateResolver(fn func(vendor string) (grain, why string)) { h.gate = fn }
 
-func (h *Handler) gateFor(vendor string) (bool, string) {
+type approvalGate struct {
+	enforced bool
+	why      string
+}
+
+func (h *Handler) gateFor(vendor string) approvalGate {
 	if h.gate == nil {
-		return false, "this daemon was built without a way to tell what its backends enforce"
+		return approvalGate{why: "this daemon was built without a way to tell what its backends enforce"}
 	}
-	grain, w := h.gate(vendor)
-	return grain == "tool", w
+	grain, why := h.gate(vendor)
+	return approvalGate{enforced: grain == "tool", why: why}
 }
 
 func vendorLabel(vendor string) string {

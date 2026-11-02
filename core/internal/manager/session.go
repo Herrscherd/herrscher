@@ -54,8 +54,8 @@ type usageJSON struct {
 }
 
 func cohortTotals(target state.Session, all []state.Session,
-	usageFor func(state.Session) (float64, uint64),
-) (float64, uint64) {
+	usageFor func(state.Session) sessionUsage,
+) sessionUsage {
 	byName := make(map[string]state.Session, len(all))
 	children := make(map[string][]string, len(all))
 	for i := range all {
@@ -88,20 +88,25 @@ func cohortTotals(target state.Session, all []state.Session,
 		if !ok {
 			return
 		}
-		c, tk := usageFor(s)
-		totalCost += c
-		totalTokens += tk
+		u := usageFor(s)
+		totalCost += u.cost
+		totalTokens += u.tokens
 		for _, ch := range children[name] {
 			walk(ch)
 		}
 	}
 	walk(root.Name)
-	return totalCost, totalTokens
+	return sessionUsage{cost: totalCost, tokens: totalTokens}
 }
 
-func aggregateUsage(entries []state.TranscriptEntry) (*usageJSON, string) {
+type transcriptUsage struct {
+	usage *usageJSON
+	task  string
+}
+
+func aggregateUsage(entries []state.TranscriptEntry) transcriptUsage {
 	if len(entries) == 0 {
-		return nil, ""
+		return transcriptUsage{}
 	}
 	u := &usageJSON{StartedAt: entries[0].Ts}
 	var task string
@@ -118,15 +123,15 @@ func aggregateUsage(entries []state.TranscriptEntry) (*usageJSON, string) {
 			task = e.Text
 		}
 	}
-	return u, task
+	return transcriptUsage{usage: u, task: task}
 }
 
 func (h *Handler) attachUsage(row *sessionJSON) {
 	entries := state.ReadTranscript(state.TranscriptPath(h.partDir, row.Name), 0)
-	if u, task := aggregateUsage(entries); u != nil {
-		row.Usage = u
-		if task != "" {
-			row.Task = task
+	if agg := aggregateUsage(entries); agg.usage != nil {
+		row.Usage = agg.usage
+		if agg.task != "" {
+			row.Task = agg.task
 		}
 	}
 }
@@ -201,13 +206,13 @@ func (h *Handler) sessionSetBudgetRun(ctx context.Context, in contracts.Input) (
 		}
 		patch.cohortTokenCap = uptr(uint64(n))
 	}
-	usageFor := func(s state.Session) (float64, uint64) {
+	usageFor := func(s state.Session) sessionUsage {
 		entries := state.ReadTranscript(state.TranscriptPath(h.partDir, s.Name), 0)
-		u, _ := aggregateUsage(entries)
+		u := aggregateUsage(entries).usage
 		if u == nil {
-			return 0, 0
+			return sessionUsage{}
 		}
-		return u.Cost, nonNegativeCount(u.TokensIn + u.TokensOut)
+		return sessionUsage{cost: u.Cost, tokens: nonNegativeCount(u.TokensIn + u.TokensOut)}
 	}
 	targets := []state.Session{sess}
 	scope, _ := in.Lookup("scope")
@@ -216,9 +221,10 @@ func (h *Handler) sessionSetBudgetRun(ctx context.Context, in contracts.Input) (
 	}
 	for i := range targets {
 		t := targets[i]
-		c, tk := usageFor(t)
-		cc, ctk := cohortTotals(t, h.st.SnapshotSessions(), usageFor)
-		updated := applyBudget(t, patch, c, tk)
+		usage := usageFor(t)
+		cohort := cohortTotals(t, h.st.SnapshotSessions(), usageFor)
+		cc, ctk := cohort.cost, cohort.tokens
+		updated := applyBudget(t, patch, usage.cost, usage.tokens)
 		if updated.PausedReason == "cohort_cost" && (updated.CohortCostCap == 0 || cc < updated.CohortCostCap) {
 			updated.PausedReason = ""
 		}
@@ -521,9 +527,10 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 	}
 	if mode != "" && mode != string(approval.ModeBypass) {
-		gates, why := h.gateFor(vendor)
+		gate := h.gateFor(vendor)
 		switch {
-		case !gates:
+		case !gate.enforced:
+			why := gate.why
 			if why == "" {
 				why = "it exposes no approval channel"
 			}
@@ -759,7 +766,8 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	sess, _ := h.st.FindSession(name)
 	switchNote := ""
 	if m := sess.Approvals; m != "" && m != string(approval.ModeBypass) {
-		if gates, why := h.gateFor(sess.Vendor); !gates {
+		if gate := h.gateFor(sess.Vendor); !gate.enforced {
+			why := gate.why
 			if why == "" {
 				why = "it exposes no approval channel"
 			}

@@ -87,8 +87,8 @@ func provisionHost(ctx context.Context, run hostRunner, h state.Host, src string
 	}
 	binDir := home + "/.herrscher/bin"
 	bin := binDir + "/herrscher"
-	if _, err := capture(ctx, run, "mkdir", "-p", binDir); err != nil {
-		return h, err
+	if _, captureErr := capture(ctx, run, "mkdir", "-p", binDir); captureErr != nil {
+		return h, captureErr
 	}
 
 	stage, err := os.MkdirTemp("", "herrscher-provision-")

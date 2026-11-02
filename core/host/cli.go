@@ -322,7 +322,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			}
 			defer closeRead(mem)
 			limit := 50
-			if v, err := strconv.Atoi(in.Get("limit")); err == nil && v > 0 {
+			if v, limitErr := strconv.Atoi(in.Get("limit")); limitErr == nil && v > 0 {
 				limit = v
 			}
 			hits, err := mem.Search(cmdCtx, contracts.Query{
@@ -402,7 +402,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			}
 			defer closeRead(mem)
 			limit := 10
-			if v, err := strconv.Atoi(in.Get("limit")); err == nil && v > 0 {
+			if v, limitErr := strconv.Atoi(in.Get("limit")); limitErr == nil && v > 0 {
 				limit = v
 			}
 			hits, err := mem.Search(cmdCtx, contracts.Query{

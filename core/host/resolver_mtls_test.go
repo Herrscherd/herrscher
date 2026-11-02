@@ -89,8 +89,8 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := mem.Record(ctx, contracts.Node{Key: "k"}); err != nil {
-		t.Fatalf("Record over mTLS: %v", err)
+	if recordErr := mem.Record(ctx, contracts.Node{Key: "k"}); recordErr != nil {
+		t.Fatalf("Record over mTLS: %v", recordErr)
 	}
 
 	plain := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, srv.ClientURL())

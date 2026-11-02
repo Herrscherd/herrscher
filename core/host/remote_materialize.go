@@ -53,8 +53,8 @@ func tarDir(root string, w io.Writer) error {
 			Size:     info.Size(),
 			Typeflag: tar.TypeReg,
 		}
-		if err := tw.WriteHeader(hdr); err != nil {
-			return err
+		if writeErr := tw.WriteHeader(hdr); writeErr != nil {
+			return writeErr
 		}
 		f, err := os.Open(path)
 		if err != nil {
@@ -91,8 +91,8 @@ func extractTar(r io.Reader, dst string) error {
 		if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
 			return &unsafeTarMemberError{Member: hdr.Name, Root: root}
 		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
+		if mkdirErr := os.MkdirAll(filepath.Dir(target), 0o755); mkdirErr != nil {
+			return mkdirErr
 		}
 		f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, fs.FileMode(hdr.Mode).Perm())
 		if err != nil {

@@ -45,8 +45,8 @@ func sendCommand(t *testing.T, path string, req cmdRequest) cmdResponse {
 	defer closeRead(c)
 	b, marshalErr := json.Marshal(req)
 	logCleanup(marshalErr)
-	if _, err := c.Write(append(b, '\n')); err != nil {
-		t.Fatalf("write: %v", err)
+	if _, writeErr := c.Write(append(b, '\n')); writeErr != nil {
+		t.Fatalf("write: %v", writeErr)
 	}
 	line, err := bufio.NewReader(c).ReadBytes('\n')
 	if err != nil && len(line) == 0 {

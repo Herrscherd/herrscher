@@ -765,7 +765,7 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	}
 	if err := h.sup.Restart(sess); err != nil {
 		if rbErr := h.rollbackSwitch(name, oldVendor, oldCmd, oldModelID, oldToken); rbErr != nil {
-			return "", fmt.Errorf("redémarrage backend: %w; rollback échoué, session %s hors service: %v", err, name, rbErr)
+			return "", fmt.Errorf("redémarrage backend: %w; rollback échoué, session %s hors service: %w", err, name, rbErr)
 		}
 		return "", fmt.Errorf("redémarrage backend: %w (session %s restaurée sur %s)", err, name, oldVendor)
 	}

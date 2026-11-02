@@ -1,11 +1,15 @@
 package approval
 
+const (
+	keyFilePath = "file_path"
+)
+
 var subjectKeys = map[string][]string{
 	"Bash":         {"command"},
-	"Edit":         {"file_path"},
-	"Write":        {"file_path"},
-	"Read":         {"file_path"},
-	"NotebookEdit": {"notebook_path", "file_path"},
+	"Edit":         {keyFilePath},
+	"Write":        {keyFilePath},
+	"Read":         {keyFilePath},
+	"NotebookEdit": {"notebook_path", keyFilePath},
 	"WebFetch":     {"url"},
 	"WebSearch":    {"query"},
 }

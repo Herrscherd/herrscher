@@ -17,6 +17,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
 
+const (
+	subRepo  = "repo"
+	subClone = "clone"
+)
+
 var (
 	errNoForgeCLI = errors.New("no gh or glab installed")
 	errRepoSpec   = errors.New("invalid repo spec")
@@ -110,7 +115,7 @@ func (c *Client) listGitHub(ctx context.Context) ([]Repo, error) {
 }
 
 func (c *Client) ghRepoList(ctx context.Context, owner ...string) ([]Repo, error) {
-	args := []string{"repo", "list"}
+	args := []string{subRepo, "list"}
 	args = append(args, owner...)
 	args = append(args, "--json", "nameWithOwner,sshUrl,description", "--limit", "100")
 	raw, err := c.r.run(ctx, "", nil, "gh", args...)
@@ -147,7 +152,7 @@ func (c *Client) ghOrgs(ctx context.Context) []string {
 }
 
 func (c *Client) listGitLab(ctx context.Context) ([]Repo, error) {
-	raw, err := c.r.run(ctx, "", nil, "glab", "repo", "list", "--output", "json")
+	raw, err := c.r.run(ctx, "", nil, "glab", subRepo, "list", "--output", "json")
 	if err != nil {
 		return nil, fmt.Errorf("glab repo list: %s: %w", redact.Output(raw), err)
 	}
@@ -184,12 +189,12 @@ func (c *Client) Clone(ctx context.Context, spec, workspace string) (string, err
 	var env []string
 	switch {
 	case isURL:
-		name, args = "git", []string{"clone", "--", spec, dir}
+		name, args = "git", []string{subClone, "--", spec, dir}
 		env = gitCloneAuthEnv()
 	case gh:
-		name, args = "gh", []string{"repo", "clone", spec, "--", dir}
+		name, args = "gh", []string{subRepo, subClone, spec, "--", dir}
 	case gl:
-		name, args = "glab", []string{"repo", "clone", "--", spec, dir}
+		name, args = "glab", []string{subRepo, subClone, "--", spec, dir}
 	default:
 		return "", fmt.Errorf("%w to clone %q; pass a full git URL instead", errNoForgeCLI, spec)
 	}

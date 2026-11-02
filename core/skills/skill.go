@@ -40,14 +40,14 @@ func (s Skill) Body() (string, error) {
 
 func stripFrontmatter(md []byte) string {
 	sc := bufio.NewScanner(bytes.NewReader(md))
-	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {
+	if !sc.Scan() || strings.TrimSpace(sc.Text()) != frontmatterFence {
 		return string(md)
 	}
 	var body strings.Builder
 	inBody := false
 	for sc.Scan() {
 		if !inBody {
-			if strings.TrimSpace(sc.Text()) == "---" {
+			if strings.TrimSpace(sc.Text()) == frontmatterFence {
 				inBody = true
 			}
 			continue

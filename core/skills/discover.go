@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+const (
+	frontmatterFence = "---"
+)
+
 // Discover scans each root for immediate <root>/<name>/SKILL.md entries, parses
 // their frontmatter, and returns the valid skills. De-duplication is by Name
 // with earlier roots winning, so a repo skill overrides a global one of the same
@@ -62,12 +66,12 @@ func discover(roots []string, prev map[string]Skill) (out []Skill, reread []stri
 
 func parseFrontmatter(md []byte) (name, description string, ok bool) {
 	sc := bufio.NewScanner(bytes.NewReader(md))
-	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {
+	if !sc.Scan() || strings.TrimSpace(sc.Text()) != frontmatterFence {
 		return "", "", false
 	}
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
-		if line == "---" {
+		if line == frontmatterFence {
 			return name, description, true
 		}
 		key, val, found := strings.Cut(line, ":")

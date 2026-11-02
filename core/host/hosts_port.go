@@ -16,7 +16,6 @@ import (
 )
 
 type hostPlacer struct {
-	ctx           context.Context
 	st            *state.State
 	instanceID    string
 	local         *worktree.Worktreer
@@ -32,7 +31,7 @@ func (p hostPlacer) resolve(name string) (state.Host, *worktree.Remote, error) {
 		return state.Host{}, nil, fmt.Errorf("host %q is not provisioned: run `host provision %s`", name, name)
 	}
 	r := runner.SSH{Target: h.SSH, ControlPath: runner.ControlPathFor(h.SSH)}
-	return h, worktree.NewRemote(p.ctx, r, h.Bin, p.instanceID), nil
+	return h, worktree.NewRemote(r, h.Bin, p.instanceID), nil
 }
 
 func (p hostPlacer) Ready(name string) error {

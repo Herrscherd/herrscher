@@ -33,12 +33,12 @@ type supervisor interface {
 // path ("" + nil error means "fall back to shared", e.g. not a git repo). The
 // repo root is passed per call so one Worktreer serves every project.
 type Worktrees interface {
-	Create(repo, name, base string) (path string, err error)
+	Create(ctx context.Context, repo, name, base string) (path string, err error)
 	// PreExisting says whether Create would reuse a worktree rather than make
 	// one, which is what tells a rollback whether the worktree is its to remove.
-	PreExisting(repo, name string) bool
+	PreExisting(ctx context.Context, repo, name string) bool
 	Branch(name string) string
-	Remove(repo, name string, force bool) error
+	Remove(ctx context.Context, repo, name string, force bool) error
 	Scratch(root, name string) (path string, err error)
 	ScratchPath(root, name string) string
 	RemoveScratch(root, name string) error

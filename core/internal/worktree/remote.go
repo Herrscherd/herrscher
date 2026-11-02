@@ -36,32 +36,21 @@ type Commander interface {
 // JSON: the filesystem work stays where the filesystem is, and one operation
 // costs one round trip instead of ten.
 type Remote struct {
-	ctx        context.Context
 	run        Commander
 	bin        string
 	instanceID string
 }
 
 // NewRemote builds a Remote driving bin through run.
-func NewRemote(ctx context.Context, run Commander, bin, instanceID string) *Remote {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return &Remote{ctx: ctx, run: run, bin: bin, instanceID: instanceID}
-}
-
-func (r *Remote) context() context.Context {
-	if r.ctx == nil {
-		return context.Background()
-	}
-	return r.ctx
+func NewRemote(run Commander, bin, instanceID string) *Remote {
+	return &Remote{run: run, bin: bin, instanceID: instanceID}
 }
 
 // Branch is pure string work, so it is answered here. Paying a round trip to be
 // told a name this process can compute would be a round trip for nothing.
 func (r *Remote) Branch(name string) string { return branchFor(r.instanceID, name) }
 
-func (r *Remote) Create(repo, name, base string) (string, error) {
+func (r *Remote) Create(ctx context.Context, repo, name, base string) (string, error) {
 	argv := []string{subWorktree, "create", flagRepo, repo, flagName, name, flagInstance, r.instanceID}
 	if base != "" {
 		argv = append(argv, "--base", base)
@@ -69,7 +58,7 @@ func (r *Remote) Create(repo, name, base string) (string, error) {
 	var out struct {
 		Path string `json:"path"`
 	}
-	if err := r.call(argv, &out); err != nil {
+	if err := r.call(ctx, argv, &out); err != nil {
 		return "", err
 	}
 	return out.Path, nil
@@ -79,17 +68,17 @@ func (r *Remote) Create(repo, name, base string) (string, error) {
 // return, so a host that cannot answer is reported as "yes, one is there": that
 // is the direction where a failed rollback leaves a directory behind, rather
 // than the one where it deletes work it never created.
-func (r *Remote) PreExisting(repo, name string) bool {
+func (r *Remote) PreExisting(ctx context.Context, repo, name string) bool {
 	var out struct {
 		PreExisting bool `json:"preExisting"`
 	}
-	if err := r.call([]string{subWorktree, "pre-existing", flagRepo, repo, flagName, name, flagInstance, r.instanceID}, &out); err != nil {
+	if err := r.call(ctx, []string{subWorktree, "pre-existing", flagRepo, repo, flagName, name, flagInstance, r.instanceID}, &out); err != nil {
 		return true
 	}
 	return out.PreExisting
 }
 
-func (r *Remote) Remove(repo, name string, force bool) error {
+func (r *Remote) Remove(ctx context.Context, repo, name string, force bool) error {
 	argv := []string{subWorktree, "remove", flagRepo, repo, flagName, name, flagInstance, r.instanceID}
 	if force {
 		argv = append(argv, "--force")
@@ -97,7 +86,7 @@ func (r *Remote) Remove(repo, name string, force bool) error {
 	var out struct {
 		Removed bool `json:"removed"`
 	}
-	return r.call(argv, &out)
+	return r.call(ctx, argv, &out)
 }
 
 func (r *Remote) Scratch(root, name string) (string, error) {
@@ -124,8 +113,8 @@ func (r *Remote) Materialize(ctx context.Context, worktreePath string, payload i
 	return nil
 }
 
-func (r *Remote) call(argv []string, into any) error {
-	cmd := r.run.Command(r.context(), "", append([]string{r.bin}, argv...)...)
+func (r *Remote) call(ctx context.Context, argv []string, into any) error {
+	cmd := r.run.Command(ctx, "", append([]string{r.bin}, argv...)...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	what := strings.Join(argv[:2], " ")

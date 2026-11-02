@@ -37,18 +37,18 @@ func RunWorktree(ctx context.Context, args []string) error {
 	if sub != "materialize" && (*repo == "" || *name == "") {
 		return fmt.Errorf("worktree %s: --repo and --name are required", sub)
 	}
-	wt := worktree.NewWorktreer(ctx, *instance)
+	wt := worktree.NewWorktreer(*instance)
 	switch sub {
 	case "create":
-		path, err := wt.Create(*repo, *name, *base)
+		path, err := wt.Create(ctx, *repo, *name, *base)
 		if err != nil {
 			return err
 		}
 		return emitJSON(map[string]string{"path": path})
 	case "pre-existing":
-		return emitJSON(map[string]bool{"preExisting": wt.PreExisting(*repo, *name)})
+		return emitJSON(map[string]bool{"preExisting": wt.PreExisting(ctx, *repo, *name)})
 	case "remove":
-		if err := wt.Remove(*repo, *name, *force); err != nil {
+		if err := wt.Remove(ctx, *repo, *name, *force); err != nil {
 			return err
 		}
 		return emitJSON(map[string]bool{"removed": true})

@@ -34,18 +34,17 @@ var (
 // with an empty instanceID (legacy) under <repo>/.herrscher-sessions/<name> on
 // branch session/<name>, so multiple daemons sharing a repo never collide.
 type Worktreer struct {
-	ctx        context.Context
 	instanceID string
 }
 
 // NewWorktreer builds a repo-stateless Worktreer, namespaced by instanceID
 // ("" means legacy, non-namespaced layout).
-func NewWorktreer(ctx context.Context, instanceID string) *Worktreer {
-	return &Worktreer{ctx: ctx, instanceID: instanceID}
+func NewWorktreer(instanceID string) *Worktreer {
+	return &Worktreer{instanceID: instanceID}
 }
 
-func (w *Worktreer) isGitRepo(repo string) bool {
-	return exec.CommandContext(w.ctx, "git", "-C", repo, "rev-parse", "--git-dir").Run() == nil
+func (w *Worktreer) isGitRepo(ctx context.Context, repo string) bool {
+	return exec.CommandContext(ctx, "git", "-C", repo, "rev-parse", "--git-dir").Run() == nil
 }
 
 // Path returns the on-disk worktree directory for a logical session name inside
@@ -77,8 +76,11 @@ func branchFor(instanceID, name string) string {
 // worktree continues that tip without a merge; empty base keeps the default
 // (branch from HEAD). Returns ("", nil) when repo is not a git repo (caller
 // falls back to a shared session).
-func (w *Worktreer) Create(repo, name, base string) (string, error) {
-	if !w.isGitRepo(repo) {
+func (w *Worktreer) Create(ctx context.Context, repo, name, base string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if !w.isGitRepo(ctx, repo) {
 		return "", nil
 	}
 	if base != "" && strings.HasPrefix(base, "-") {
@@ -86,20 +88,20 @@ func (w *Worktreer) Create(repo, name, base string) (string, error) {
 	}
 	p := w.Path(repo, name)
 	branch := w.Branch(name)
-	switch reusable, err := w.reusable(repo, p, branch); {
+	switch reusable, err := w.reusable(ctx, repo, p, branch); {
 	case err != nil:
 		return "", err
 	case reusable:
 		return p, nil
 	}
 	args := []string{"-C", repo, subWorktree, "add", p, branch}
-	if exists, err := w.BranchExistsAt(repo, branch); err != nil || !exists {
+	if exists, err := w.BranchExistsAt(ctx, repo, branch); err != nil || !exists {
 		args = []string{"-C", repo, subWorktree, "add", p, "-b", branch}
 		if base != "" {
 			args = append(args, base)
 		}
 	}
-	out, err := exec.CommandContext(w.ctx, "git", args...).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "git", args...).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("worktree add: %s: %w", redact.Output(out), err)
 	}
@@ -111,20 +113,20 @@ func (w *Worktreer) Create(repo, name, base string) (string, error) {
 // state it cannot verify counts as pre-existing: the cost of being wrong that
 // way is a worktree left behind, and the cost of being wrong the other way is
 // deleting a session's uncommitted work.
-func (w *Worktreer) PreExisting(repo, name string) bool {
+func (w *Worktreer) PreExisting(ctx context.Context, repo, name string) bool {
 	p := w.Path(repo, name)
 	if _, err := os.Lstat(p); err != nil {
 		return !os.IsNotExist(err)
 	}
-	registered, err := w.registeredWorktree(repo, p)
+	registered, err := w.registeredWorktree(ctx, repo, p)
 	if err != nil {
 		return true
 	}
 	return registered
 }
 
-func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
-	registered, err := w.registeredWorktree(repo, path)
+func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bool, error) {
+	registered, err := w.registeredWorktree(ctx, repo, path)
 	if err != nil {
 		return false, err
 	}
@@ -143,7 +145,7 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 	}
 
 	if missing {
-		out, pruneErr := exec.CommandContext(w.ctx, "git", "-C", repo, subWorktree, "prune").CombinedOutput()
+		out, pruneErr := exec.CommandContext(ctx, "git", "-C", repo, subWorktree, "prune").CombinedOutput()
 		if pruneErr != nil {
 			return false, fmt.Errorf("worktree prune: %s: %w", redact.Output(out), pruneErr)
 		}
@@ -153,7 +155,7 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 		return false, fmt.Errorf("inspect %q: %w", path, statErr)
 	}
 
-	at, err := w.branchAt(path)
+	at, err := w.branchAt(ctx, path)
 	if err != nil {
 		return false, err
 	}
@@ -164,8 +166,8 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 	return true, nil
 }
 
-func (w *Worktreer) branchAt(path string) (string, error) {
-	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "symbolic-ref", "--short", "HEAD").Output()
+func (w *Worktreer) branchAt(ctx context.Context, path string) (string, error) {
+	out, err := exec.CommandContext(ctx, "git", "-C", path, "symbolic-ref", "--short", "HEAD").Output()
 	if err != nil {
 		return "", fmt.Errorf("cannot read the branch checked out at %q (detached HEAD?): %w", path, err)
 	}
@@ -175,8 +177,8 @@ func (w *Worktreer) branchAt(path string) (string, error) {
 // IsCleanAt reports whether the worktree at path has no uncommitted changes. An
 // error means the state can't be verified (missing dir, not a git repo), the
 // caller must treat that as "not safe", never as clean.
-func (w *Worktreer) IsCleanAt(path string) (bool, error) {
-	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "status", "--porcelain").Output()
+func (w *Worktreer) IsCleanAt(ctx context.Context, path string) (bool, error) {
+	out, err := exec.CommandContext(ctx, "git", "-C", path, "status", "--porcelain").Output()
 	if err != nil {
 		return false, fmt.Errorf("cannot verify clean state of %q: %w", path, err)
 	}
@@ -189,8 +191,8 @@ func (w *Worktreer) IsCleanAt(path string) (bool, error) {
 // the normal "free to use" case, not an error. Any other failure (e.g. path
 // isn't a git repo at all, exit 128) is reported as an error so callers never
 // mistake "couldn't verify" for "free".
-func (w *Worktreer) BranchExistsAt(path, branch string) (bool, error) {
-	err := exec.CommandContext(w.ctx, "git", "-C", path, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run()
+func (w *Worktreer) BranchExistsAt(ctx context.Context, path, branch string) (bool, error) {
+	err := exec.CommandContext(ctx, "git", "-C", path, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run()
 	if err == nil {
 		return true, nil
 	}
@@ -217,14 +219,14 @@ const (
 // failure is returned as an error (with a best-effort abort first, so a
 // half-started merge never lingers); when err != nil the MergeOutcome is
 // undefined and callers must branch on err first.
-func (w *Worktreer) MergeInto(leadPath, branch string) (MergeOutcome, []string, error) {
-	pre, err := w.headAt(leadPath)
+func (w *Worktreer) MergeInto(ctx context.Context, leadPath, branch string) (MergeOutcome, []string, error) {
+	pre, err := w.headAt(ctx, leadPath)
 	if err != nil {
 		return MergeConflict, nil, fmt.Errorf("merge: cannot read HEAD of %q: %w", leadPath, err)
 	}
-	out, mergeErr := exec.CommandContext(w.ctx, "git", "-C", leadPath, "merge", "--no-edit", branch).CombinedOutput()
+	out, mergeErr := exec.CommandContext(ctx, "git", "-C", leadPath, "merge", "--no-edit", branch).CombinedOutput()
 	if mergeErr == nil {
-		post, err := w.headAt(leadPath)
+		post, err := w.headAt(ctx, leadPath)
 		if err != nil {
 			return MergeApplied, nil, fmt.Errorf("merge: cannot read HEAD of %q after merge: %w", leadPath, err)
 		}
@@ -233,24 +235,24 @@ func (w *Worktreer) MergeInto(leadPath, branch string) (MergeOutcome, []string, 
 		}
 		return MergeApplied, nil, nil
 	}
-	conflicts := w.conflictFiles(leadPath)
-	logFailure("merge --abort", exec.CommandContext(w.ctx, "git", "-C", leadPath, "merge", "--abort").Run())
+	conflicts := w.conflictFiles(ctx, leadPath)
+	logFailure("merge --abort", exec.CommandContext(ctx, "git", "-C", leadPath, "merge", "--abort").Run())
 	if len(conflicts) > 0 {
 		return MergeConflict, conflicts, nil
 	}
 	return MergeConflict, nil, fmt.Errorf("merge %s into %q: %s: %w", branch, leadPath, redact.Output(out), mergeErr)
 }
 
-func (w *Worktreer) headAt(path string) (string, error) {
-	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "rev-parse", "HEAD").Output()
+func (w *Worktreer) headAt(ctx context.Context, path string) (string, error) {
+	out, err := exec.CommandContext(ctx, "git", "-C", path, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (w *Worktreer) conflictFiles(path string) []string {
-	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "diff", "--name-only", "--diff-filter=U").Output()
+func (w *Worktreer) conflictFiles(ctx context.Context, path string) []string {
+	out, err := exec.CommandContext(ctx, "git", "-C", path, "diff", "--name-only", "--diff-filter=U").Output()
 	if err != nil {
 		return nil
 	}
@@ -263,10 +265,10 @@ func (w *Worktreer) conflictFiles(path string) []string {
 
 // Remove removes the worktree. If it has uncommitted changes and !force, it
 // refuses with the status. The branch session/<name> is always left intact.
-func (w *Worktreer) Remove(repo, name string, force bool) error {
+func (w *Worktreer) Remove(ctx context.Context, repo, name string, force bool) error {
 	p := w.Path(repo, name)
 	if !force {
-		clean, err := w.IsCleanAt(p)
+		clean, err := w.IsCleanAt(ctx, p)
 		if err != nil {
 			return fmt.Errorf("worktree %q: %w; close with force:true to remove anyway", name, err)
 		}
@@ -278,11 +280,11 @@ func (w *Worktreer) Remove(repo, name string, force bool) error {
 	if force {
 		args = append(args, "--force")
 	}
-	out, err := exec.CommandContext(w.ctx, "git", args...).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "git", args...).CombinedOutput()
 	if err != nil {
 		removeErr := fmt.Errorf("worktree remove: %s: %w", redact.Output(out), err)
 		if force {
-			recovered, recoverErr := w.recoverEmptyOrphan(repo, name)
+			recovered, recoverErr := w.recoverEmptyOrphan(ctx, repo, name)
 			if recoverErr != nil {
 				return fmt.Errorf("%w; empty-orphan recovery: %w", removeErr, recoverErr)
 			}
@@ -295,12 +297,12 @@ func (w *Worktreer) Remove(repo, name string, force bool) error {
 	return nil
 }
 
-func (w *Worktreer) recoverEmptyOrphan(repo, name string) (bool, error) {
+func (w *Worktreer) recoverEmptyOrphan(ctx context.Context, repo, name string) (bool, error) {
 	path, ok := w.validSessionChild(repo, name)
 	if !ok {
 		return false, nil
 	}
-	registered, err := w.registeredWorktree(repo, path)
+	registered, err := w.registeredWorktree(ctx, repo, path)
 	if err != nil {
 		return false, err
 	}
@@ -373,9 +375,9 @@ func validPathComponent(value string) bool {
 		filepath.Base(value) == value
 }
 
-func (w *Worktreer) registeredWorktree(repo, target string) (bool, error) {
+func (w *Worktreer) registeredWorktree(ctx context.Context, repo, target string) (bool, error) {
 	out, err := exec.CommandContext(
-		w.ctx,
+		ctx,
 		"git", "-C", repo, subWorktree, "list", "--porcelain", "-z",
 	).CombinedOutput()
 	if err != nil {

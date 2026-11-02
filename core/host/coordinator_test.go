@@ -57,18 +57,18 @@ type fakeWTC struct {
 	mergedBranch string
 }
 
-func (f *fakeWTC) IsCleanAt(path string) (bool, error) {
+func (f *fakeWTC) IsCleanAt(_ context.Context, path string) (bool, error) {
 	if f.cleanBy != nil {
 		return f.cleanBy[path], f.err
 	}
 	return f.clean, f.err
 }
 func (f *fakeWTC) Branch(name string) string { return "session/" + name }
-func (f *fakeWTC) BranchExistsAt(_, branch string) (bool, error) {
+func (f *fakeWTC) BranchExistsAt(_ context.Context, _, branch string) (bool, error) {
 	return f.branches[branch], nil
 }
 
-func (f *fakeWTC) MergeInto(_, branch string) (worktree.MergeOutcome, []string, error) {
+func (f *fakeWTC) MergeInto(_ context.Context, _, branch string) (worktree.MergeOutcome, []string, error) {
 	f.mergedBranch = branch
 	return f.merge, f.mergeConf, f.mergeErr
 }

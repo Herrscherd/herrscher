@@ -1,5 +1,5 @@
-github.com/Herrscherd/dctl v1.8.1 h1:SxDj0fAVS+WgUS40Kugm6e6F/iY/vojBViUB1com9I0=
-github.com/Herrscherd/dctl v1.8.1/go.mod h1:43yI1s+IzYjP0MPwkkN3rTKrBgXxqA2t7W6bkIjdiPA=
+github.com/Herrscherd/dctl v1.9.0 h1:06e9pMxflJCMcgEnxQpf7vlPwO65Qq+OlghxpbQTpIE=
+github.com/Herrscherd/dctl v1.9.0/go.mod h1:7hNu0guJ9n7fA+7oXok/Vcfso+Twc62NuKrdPCX0mXk=
 github.com/Herrscherd/herrscher-claude-backend v0.3.0 h1:UtjwLqMbkVQJ8hmemk+qoYLI8WcOaFN8t+DTjCZ9EyY=
 github.com/Herrscherd/herrscher-claude-backend v0.3.0/go.mod h1:herJLN6OUgBMUiNyy5F5eooAE2oPXrcyi7M+ZsIgzdg=
 github.com/Herrscherd/herrscher-codex-backend v0.1.7 h1:rKlcbPEmym0aNgwmEps11dNbhbxbeSGow6aN6oMYgH8=

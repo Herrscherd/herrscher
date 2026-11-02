@@ -31,7 +31,7 @@ require (
 )
 
 require (
-	github.com/Herrscherd/dctl v1.8.1 // indirect
+	github.com/Herrscherd/dctl v1.9.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.20.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect

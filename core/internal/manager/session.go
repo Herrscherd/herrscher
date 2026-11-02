@@ -305,117 +305,288 @@ func sessionBanner(repo, name, worktree, branch, cmd, modelID string, shared boo
 	return b
 }
 
+type budgetCaps struct {
+	cost, cohortCost     float64
+	tokens, cohortTokens uint64
+}
+
+type runtimeChoice struct {
+	cmd      string
+	explicit bool
+	backend  string
+	agent    string
+	vendor   string
+	model    string
+}
+
+type sessionOptions struct {
+	parent, memProject, memAgent string
+	projectPinned                bool
+	extractor, journal           string
+	consolidateEvery             int
+	gateways                     []string
+	caps                         budgetCaps
+}
+
+type createRequest struct {
+	name, base string
+	home       state.HomeRef
+	admin      channelAdmin
+	adopted    string
+	runtime    runtimeChoice
+	options    sessionOptions
+	hostName   string
+	mode       string
+	shared     bool
+}
+
+type workspace struct {
+	path    string
+	reused  bool
+	scratch bool
+}
+
+type channelSlot struct {
+	id    string
+	owned bool
+	typ   string
+}
+
 func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (string, error) {
+	req, err := h.parseCreateRequest(ctx, in)
+	if err != nil {
+		return "", err
+	}
+	if err := h.checkHostReady(req.hostName); err != nil {
+		return "", err
+	}
+	wt, wtRoot, err := h.worktreesOn(req.hostName)
+	if err != nil {
+		return "", err
+	}
+	project, err := h.resolveProject(ctx, in, req.hostName, wtRoot)
+	if err != nil {
+		return "", err
+	}
+	repo := repoFor(wtRoot, project)
+	if h.hs != nil {
+		if err := h.hs.EnsureProject(ctx, req.hostName, project, repo); err != nil {
+			return "", err
+		}
+	}
+	space, err := ensureWorkspace(wt, repo, req)
+	if err != nil {
+		return "", err
+	}
+	if req.runtime.agent != "" {
+		if err := h.provisionAgent(ctx, &req, wt, repo, &space); err != nil {
+			return "", err
+		}
+	}
+	approvalsNote := h.approvalsNote(req, space)
+	name := req.name
+	runDir := space.path
+	if runDir == "" {
+		runDir = repo
+	}
+	sess := newSessionRecord(req, space, project, runDir)
+	slot, err := openChannel(ctx, req, h.st.QualifiedName(name))
+	if err != nil {
+		if _, unsupported := errors.AsType[*UnsupportedHomeTypeError](err); unsupported {
+			return "", err
+		}
+		h.rollbackWorkspace(wt, repo, name, space)
+		return "", err
+	}
+	sess.ChannelID, sess.Owned, sess.Type = slot.id, slot.owned, slot.typ
+	sess.Approvals = req.mode
+	if err := h.st.AddSession(sess); err != nil {
+		h.rollbackWorkspace(wt, repo, name, space)
+		if note := h.tidyChannel(ctx, sess); note != "" {
+			h.log.Warn("channel rollback", "session", name, "note", note)
+		}
+		return "", fmt.Errorf("persist: %w", err)
+	}
+	h.sup.Start(sess)
+	banner := sessionBanner(repo, name, space.path, wt.Branch(name), req.runtime.cmd, req.runtime.model, req.shared)
+	h.warnIfFailed(req.admin.Send(ctx, sess.ChannelID, banner), "send banner for "+name)
+	return fmt.Sprintf("✅ Running on %s.\n\n%s%s", req.admin.ChannelRef(sess.ChannelID), banner, approvalsNote), nil
+}
+
+func (h *Handler) parseCreateRequest(ctx context.Context, in contracts.Input) (createRequest, error) {
 	raw, ok := in.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return createRequest{}, ErrMissingName
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
-		return "", &InvalidValueError{Field: nameParam, Value: raw, Hint: "use letters, digits, - or _ (max 64, no /, spaces or ..)"}
+		return createRequest{}, &InvalidValueError{Field: nameParam, Value: raw, Hint: "use letters, digits, - or _ (max 64, no /, spaces or ..)"}
 	}
 	if _, exists := h.st.FindSession(name); exists {
-		return "", &SessionExistsError{Name: name}
+		return createRequest{}, &SessionExistsError{Name: name}
 	}
 	if n := len(h.st.SnapshotSessions()); n >= maxSessions {
-		return "", fmt.Errorf("%w (%d): close a session before creating another", ErrSessionLimit, maxSessions)
+		return createRequest{}, fmt.Errorf("%w (%d): close a session before creating another", ErrSessionLimit, maxSessions)
 	}
 	terminalOnly := in.Bool("terminal_only")
-	home := h.st.Home
-	admin := h.d
+	adopted, _ := in.Lookup("channel_id")
+	home, admin, err := h.chooseHome(ctx, in, adopted, terminalOnly)
+	if err != nil {
+		return createRequest{}, err
+	}
+	runtime, err := h.chooseRuntime(in)
+	if err != nil {
+		return createRequest{}, err
+	}
+	options, err := h.parseSessionOptions(in, terminalOnly)
+	if err != nil {
+		return createRequest{}, err
+	}
+	mode := strings.TrimSpace(in.Get("approvals"))
+	if err := validateApprovalsMode(mode); err != nil {
+		return createRequest{}, err
+	}
+	base, _ := in.Lookup("base")
+	return createRequest{
+		name:     name,
+		base:     base,
+		home:     home,
+		admin:    admin,
+		adopted:  adopted,
+		runtime:  runtime,
+		options:  options,
+		hostName: h.resolveHost(in, runtime.agent),
+		mode:     mode,
+		shared:   in.Bool("shared"),
+	}, nil
+}
+
+func (h *Handler) chooseHome(ctx context.Context, in contracts.Input, adopted string, terminalOnly bool) (state.HomeRef, channelAdmin, error) {
+	home, admin := h.st.Home, h.d
 	if terminalOnly && h.td != nil {
 		home = state.HomeRef{ID: terminalPlace, Type: terminalPlace}
 		admin = h.td
 	}
-	adopted, _ := in.Lookup("channel_id")
-	if under, ok := in.Lookup("under"); ok && under != "" {
-		if adopted != "" {
-			return "", ErrConflictingChannel
+	under, ok := in.Lookup("under")
+	if !ok || under == "" {
+		if home.ID == "" && adopted == "" {
+			return state.HomeRef{}, nil, ErrNoHome
 		}
-		if terminalOnly {
-			return "", ErrConflictingPlacement
-		}
-		kind, err := admin.Kind(ctx, under)
-		if err != nil {
-			return "", fmt.Errorf("inspect channel: %w", err)
-		}
-		if kind != categoryKind && kind != forumKind {
-			return "", &ChannelKindError{Channel: under, Kind: kind, Need: "under must be a category or forum (to run in an existing conversation, pass channel_id)"}
-		}
-		home = state.HomeRef{ID: under, Type: kind}
+		return home, admin, nil
 	}
-	if home.ID == "" && adopted == "" {
-		return "", ErrNoHome
+	if adopted != "" {
+		return state.HomeRef{}, nil, ErrConflictingChannel
 	}
-	cmd := h.defaultCmd
-	cmdExplicit := false
+	if terminalOnly {
+		return state.HomeRef{}, nil, ErrConflictingPlacement
+	}
+	kind, err := admin.Kind(ctx, under)
+	if err != nil {
+		return state.HomeRef{}, nil, fmt.Errorf("inspect channel: %w", err)
+	}
+	if kind != categoryKind && kind != forumKind {
+		return state.HomeRef{}, nil, &ChannelKindError{Channel: under, Kind: kind, Need: "under must be a category or forum (to run in an existing conversation, pass channel_id)"}
+	}
+	return state.HomeRef{ID: under, Type: kind}, admin, nil
+}
+
+func (h *Handler) chooseRuntime(in contracts.Input) (runtimeChoice, error) {
+	var r runtimeChoice
+	r.cmd = h.defaultCmd
 	if c, ok := in.Lookup("cmd"); ok && c != "" {
-		cmd = c
-		cmdExplicit = true
+		r.cmd = c
+		r.explicit = true
 	}
-	backend, _ := in.Lookup("backend")
-	if backend == "" {
-		backend = "stream"
+	r.backend, _ = in.Lookup("backend")
+	if r.backend == "" {
+		r.backend = "stream"
 	}
-	agentName, _ := in.Lookup("agent")
-	vendor, _ := in.Lookup("vendor")
-	modelID, _ := in.Lookup("model")
-	modelID = h.resolveModel(modelID, vendor, cmdExplicit)
-	if err := h.checkModel(vendor, modelID); err != nil {
-		return "", err
+	r.agent, _ = in.Lookup("agent")
+	r.vendor, _ = in.Lookup("vendor")
+	model, _ := in.Lookup("model")
+	r.model = h.resolveModel(model, r.vendor, r.explicit)
+	if err := h.checkModel(r.vendor, r.model); err != nil {
+		return runtimeChoice{}, err
 	}
-	if err := h.checkSpawnSource(cmdExplicit, modelID); err != nil {
-		return "", err
+	if err := h.checkSpawnSource(r.explicit, r.model); err != nil {
+		return runtimeChoice{}, err
 	}
-	parent, _ := in.Lookup("parent")
-	memProject, _ := in.Lookup("memory_project")
-	if memProject != "" && !projectRe.MatchString(memProject) {
-		return "", &InvalidValueError{Field: "memory_project", Value: memProject, Hint: "use a single name (no /, spaces, or ..)"}
+	return r, nil
+}
+
+func (h *Handler) parseSessionOptions(in contracts.Input, terminalOnly bool) (sessionOptions, error) {
+	var o sessionOptions
+	o.parent, _ = in.Lookup("parent")
+	o.memProject, _ = in.Lookup("memory_project")
+	if o.memProject != "" && !projectRe.MatchString(o.memProject) {
+		return sessionOptions{}, &InvalidValueError{Field: "memory_project", Value: o.memProject, Hint: "use a single name (no /, spaces, or ..)"}
 	}
-	memAgent, _ := in.Lookup("memory_agent")
-	projectPinned := in.Bool("project_pinned")
-	extractor, _ := in.Lookup("extractor")
-	journal, _ := in.Lookup("journal")
-	consolidateEvery := 0
-	if v, ok := in.Lookup("consolidate_every"); ok && v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 {
-			return "", &InvalidValueError{Field: "consolidate_every", Value: v, Hint: nonNegativeHint}
-		}
-		consolidateEvery = n
+	o.memAgent, _ = in.Lookup("memory_agent")
+	o.projectPinned = in.Bool("project_pinned")
+	o.extractor, _ = in.Lookup("extractor")
+	o.journal, _ = in.Lookup("journal")
+	every, err := optionalNonNegative(in, "consolidate_every")
+	if err != nil {
+		return sessionOptions{}, err
 	}
+	o.consolidateEvery = every
 	gwList, _ := in.Lookup("gateways")
-	gateways := ParseGateways(gwList, terminalOnly, h.defaultGateways)
-	var costCap, cohortCostCap float64
-	var tokenCap, cohortTokenCap uint64
-	if v, ok := in.Lookup("cost_cap"); ok && v != "" {
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			return "", &InvalidValueError{Field: "cost_cap", Value: v}
-		}
-		costCap = f
+	o.gateways = ParseGateways(gwList, terminalOnly, h.defaultGateways)
+	caps, err := parseBudgetCaps(in)
+	if err != nil {
+		return sessionOptions{}, err
 	}
-	if v, ok := in.Lookup("token_cap"); ok && v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 {
-			return "", &InvalidValueError{Field: "token_cap", Value: v, Hint: nonNegativeHint}
-		}
-		tokenCap = uint64(n)
+	o.caps = caps
+	return o, nil
+}
+
+func parseBudgetCaps(in contracts.Input) (budgetCaps, error) {
+	var caps budgetCaps
+	var err error
+	if caps.cost, err = optionalFloat(in, "cost_cap"); err != nil {
+		return budgetCaps{}, err
 	}
-	if v, ok := in.Lookup("cohort_cost_cap"); ok && v != "" {
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			return "", &InvalidValueError{Field: "cohort_cost_cap", Value: v}
-		}
-		cohortCostCap = f
+	tokens, err := optionalNonNegative(in, "token_cap")
+	if err != nil {
+		return budgetCaps{}, err
 	}
-	if v, ok := in.Lookup("cohort_token_cap"); ok && v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 {
-			return "", &InvalidValueError{Field: "cohort_token_cap", Value: v, Hint: nonNegativeHint}
-		}
-		cohortTokenCap = uint64(n)
+	caps.tokens = uint64(tokens)
+	if caps.cohortCost, err = optionalFloat(in, "cohort_cost_cap"); err != nil {
+		return budgetCaps{}, err
 	}
+	cohortTokens, err := optionalNonNegative(in, "cohort_token_cap")
+	if err != nil {
+		return budgetCaps{}, err
+	}
+	caps.cohortTokens = uint64(cohortTokens)
+	return caps, nil
+}
+
+func optionalFloat(in contracts.Input, key string) (float64, error) {
+	v, ok := in.Lookup(key)
+	if !ok || v == "" {
+		return 0, nil
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 0, &InvalidValueError{Field: key, Value: v}
+	}
+	return f, nil
+}
+
+func optionalNonNegative(in contracts.Input, key string) (int, error) {
+	v, ok := in.Lookup(key)
+	if !ok || v == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0, &InvalidValueError{Field: key, Value: v, Hint: nonNegativeHint}
+	}
+	return n, nil
+}
+
+func (h *Handler) resolveHost(in contracts.Input, agentName string) string {
 	hostName, _ := in.Lookup("host")
 	hostName = strings.TrimSpace(hostName)
 	if hostName == "" && agentName != "" {
@@ -424,166 +595,168 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 	}
 	if hostName == state.LocalHost {
-		hostName = ""
+		return ""
 	}
-	mode := strings.TrimSpace(in.Get("approvals"))
+	return hostName
+}
+
+func validateApprovalsMode(mode string) error {
 	switch approval.Mode(mode) {
 	case "", approval.ModeAsk, approval.ModeBypass, approval.ModeStrict:
-	default:
-		return "", &UnknownApprovalModeError{Mode: mode}
+		return nil
 	}
-	approvalsNote := ""
-	if hostName != "" && h.hs != nil {
-		if err := h.hs.Ready(hostName); err != nil {
-			return "", err
-		}
+	return &UnknownApprovalModeError{Mode: mode}
+}
+
+func (h *Handler) checkHostReady(hostName string) error {
+	if hostName == "" || h.hs == nil {
+		return nil
 	}
-	wt, ws, err := h.worktreesOn(hostName)
-	if err != nil {
-		return "", err
-	}
+	return h.hs.Ready(hostName)
+}
+
+func (h *Handler) resolveProject(ctx context.Context, in contracts.Input, hostName, wtRoot string) (string, error) {
 	project, _ := in.Lookup("project")
-	if ws != "" {
-		if spec, ok := in.Lookup("clone"); ok && spec != "" {
-			if hostName != "" {
-				return "", fmt.Errorf("%w %q: create the project locally first, then create the session with --host", ErrCloneUnsupported, hostName)
-			}
-			cctx, cancel := context.WithTimeout(ctx, cloneTimeout)
-			dir, err := h.fg.Clone(cctx, spec, ws)
-			cancel()
-			if err != nil {
-				return "", fmt.Errorf("clone: %w", err)
-			}
-			project = filepath.Base(dir)
-		}
-		if project != "" && !projectRe.MatchString(project) {
-			return "", &InvalidValueError{Field: "project", Value: project, Hint: "use a single name (no /, spaces, or ..)"}
-		}
+	if wtRoot == "" {
+		return project, nil
 	}
-	repo := repoFor(ws, project)
-	if h.hs != nil {
-		if err := h.hs.EnsureProject(ctx, hostName, project, repo); err != nil {
-			return "", err
+	if spec, ok := in.Lookup("clone"); ok && spec != "" {
+		if hostName != "" {
+			return "", fmt.Errorf("%w %q: create the project locally first, then create the session with --host", ErrCloneUnsupported, hostName)
 		}
-	}
-	shared := in.Bool("shared")
-	var worktree string
-	reusedWorktree := false
-	if !shared {
-		base := ""
-		if b, ok := in.Lookup("base"); ok {
-			base = b
-		}
-		reusedWorktree = wt.PreExisting(repo, name)
-		path, err := wt.Create(repo, name, base)
+		cctx, cancel := context.WithTimeout(ctx, cloneTimeout)
+		dir, err := h.fg.Clone(cctx, spec, wtRoot)
+		cancel()
 		if err != nil {
-			return "", fmt.Errorf("worktree: %w", err)
+			return "", fmt.Errorf("clone: %w", err)
 		}
-		worktree = path
+		project = filepath.Base(dir)
 	}
-	scratch := false
-	rollbackWorktree := func() {
-		if reusedWorktree {
-			return
-		}
-		if scratch {
-			if rmErr := wt.RemoveScratch(repo, name); rmErr != nil {
-				h.log.Warn("scratch rollback failed", "session", name, "err", rmErr)
-			}
-			return
-		}
-		if rmErr := wt.Remove(repo, name, true); rmErr != nil {
-			h.log.Warn("worktree rollback failed", "session", name, "err", rmErr)
-		}
+	if project != "" && !projectRe.MatchString(project) {
+		return "", &InvalidValueError{Field: "project", Value: project, Hint: "use a single name (no /, spaces, or ..)"}
 	}
-	if agentName != "" {
-		if shared {
-			return "", &SharedAgentError{Agent: agentName}
-		}
-		if worktree == "" {
-			if _, statErr := os.Stat(wt.ScratchPath(repo, name)); statErr == nil {
-				reusedWorktree = true
-			}
-			path, err := wt.Scratch(repo, name)
-			if err != nil {
-				return "", fmt.Errorf("provision agent %q: %w", agentName, err)
-			}
-			worktree, scratch = path, true
-		}
-		a, found := h.agents.Get(agentName)
-		if !found {
-			rollbackWorktree()
-			return "", &UnknownAgentError{Name: agentName}
-		}
-		if vendor == "" {
-			vendor = a.Backend
-		}
-		if !cmdExplicit && a.Cmd != "" {
-			cmd = a.Cmd
-		}
-		if err := h.materializeOn(ctx, hostName, a, worktree, mode != string(approval.ModeBypass)); err != nil {
-			rollbackWorktree()
-			return "", fmt.Errorf("provision agent %q: %w", agentName, err)
-		}
+	return project, nil
+}
+
+func ensureWorkspace(wt Worktrees, repo string, req createRequest) (workspace, error) {
+	if req.shared {
+		return workspace{}, nil
 	}
-	if mode != "" && mode != string(approval.ModeBypass) {
-		gate := h.gateFor(vendor)
-		switch {
-		case !gate.enforced:
-			why := gate.why
-			if why == "" {
-				why = "it exposes no approval channel"
-			}
-			approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: %#q cannot enforce them (%s), so **%s** runs ungated.", vendorLabel(vendor), why, name)
-		case shared || worktree == "":
-			approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: a shared session has no isolated worktree to gate, so **%s** runs ungated.", name)
-		case hostName != "" && agentName == "":
-			approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: a remote session without an agent has no materialization channel, so **%s** runs ungated.", name)
-		case agentName == "":
-			if err := agent.MaterializeHook(worktree, agent.SelfBin()); err != nil {
-				h.log.Warn("materialize hook failed", "session", name, "err", err)
-				approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: the hook could not be written (%v), so **%s** runs ungated.", err, name)
-			}
+	reused := wt.PreExisting(repo, req.name)
+	path, err := wt.Create(repo, req.name, req.base)
+	if err != nil {
+		return workspace{}, fmt.Errorf("worktree: %w", err)
+	}
+	return workspace{path: path, reused: reused}, nil
+}
+
+func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, wt Worktrees, repo string, space *workspace) error {
+	agentName := req.runtime.agent
+	if req.shared {
+		return &SharedAgentError{Agent: agentName}
+	}
+	if space.path == "" {
+		if _, statErr := os.Stat(wt.ScratchPath(repo, req.name)); statErr == nil {
+			space.reused = true
 		}
+		path, err := wt.Scratch(repo, req.name)
+		if err != nil {
+			return fmt.Errorf("provision agent %q: %w", agentName, err)
+		}
+		space.path, space.scratch = path, true
 	}
-	title := h.st.QualifiedName(name)
-	runDir := worktree
-	if runDir == "" {
-		runDir = repo
+	a, found := h.agents.Get(agentName)
+	if !found {
+		h.rollbackWorkspace(wt, repo, req.name, *space)
+		return &UnknownAgentError{Name: agentName}
 	}
-	var sess state.Session
+	if req.runtime.vendor == "" {
+		req.runtime.vendor = a.Backend
+	}
+	if !req.runtime.explicit && a.Cmd != "" {
+		req.runtime.cmd = a.Cmd
+	}
+	if err := h.materializeOn(ctx, req.hostName, a, space.path, req.mode != string(approval.ModeBypass)); err != nil {
+		h.rollbackWorkspace(wt, repo, req.name, *space)
+		return fmt.Errorf("provision agent %q: %w", agentName, err)
+	}
+	return nil
+}
+
+func (h *Handler) rollbackWorkspace(wt Worktrees, repo, name string, space workspace) {
+	if space.reused {
+		return
+	}
+	if space.scratch {
+		if rmErr := wt.RemoveScratch(repo, name); rmErr != nil {
+			h.log.Warn("scratch rollback failed", "session", name, "err", rmErr)
+		}
+		return
+	}
+	if rmErr := wt.Remove(repo, name, true); rmErr != nil {
+		h.log.Warn("worktree rollback failed", "session", name, "err", rmErr)
+	}
+}
+
+func (h *Handler) approvalsNote(req createRequest, space workspace) string {
+	mode := req.mode
+	if mode == "" || mode == string(approval.ModeBypass) {
+		return ""
+	}
+	vendor, name, agentName := req.runtime.vendor, req.name, req.runtime.agent
+	gate := h.gateFor(vendor)
 	switch {
-	case adopted != "":
-		sess = state.Session{Name: name, ChannelID: adopted, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Scratch: scratch, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
-	case home.Type == categoryKind, home.Type == terminalPlace:
-		chID, err := admin.CreateUnder(ctx, home.ID, title)
-		if err != nil {
-			rollbackWorktree()
-			return "", fmt.Errorf("create channel: %w", err)
+	case !gate.enforced:
+		why := gate.why
+		if why == "" {
+			why = "it exposes no approval channel"
 		}
-		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Scratch: scratch, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
-	case home.Type == forumKind:
-		chID, err := admin.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
-		if err != nil {
-			rollbackWorktree()
-			return "", fmt.Errorf("create forum post: %w", err)
+		return fmt.Sprintf("\n\n⚠️ approvals: %#q cannot enforce them (%s), so **%s** runs ungated.", vendorLabel(vendor), why, name)
+	case req.shared || space.path == "":
+		return fmt.Sprintf("\n\n⚠️ approvals: a shared session has no isolated worktree to gate, so **%s** runs ungated.", name)
+	case req.hostName != "" && agentName == "":
+		return fmt.Sprintf("\n\n⚠️ approvals: a remote session without an agent has no materialization channel, so **%s** runs ungated.", name)
+	case agentName == "":
+		if err := agent.MaterializeHook(space.path, agent.SelfBin()); err != nil {
+			h.log.Warn("materialize hook failed", "session", name, "err", err)
+			return fmt.Sprintf("\n\n⚠️ approvals: the hook could not be written (%v), so **%s** runs ungated.", err, name)
 		}
-		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: forumKind, Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Scratch: scratch, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
+	}
+	return ""
+}
+
+func newSessionRecord(req createRequest, space workspace, project, runDir string) state.Session {
+	r, o := req.runtime, req.options
+	return state.Session{
+		Name: req.name, Cmd: r.cmd, Backend: r.backend, Vendor: r.vendor, ModelID: r.model,
+		Worktree: space.path, Scratch: space.scratch, Dir: runDir, Project: project, Agent: r.agent,
+		MemoryProject: o.memProject, MemoryAgent: o.memAgent, ProjectPinned: o.projectPinned,
+		Parent: o.parent, Gateways: o.gateways, Extractor: o.extractor, Journal: o.journal,
+		ConsolidateEvery: o.consolidateEvery, CostCap: o.caps.cost, TokenCap: o.caps.tokens,
+		CohortCostCap: o.caps.cohortCost, CohortTokenCap: o.caps.cohortTokens, Host: req.hostName,
+	}
+}
+
+func openChannel(ctx context.Context, req createRequest, title string) (channelSlot, error) {
+	if req.adopted != "" {
+		return channelSlot{id: req.adopted, typ: "text"}, nil
+	}
+	switch req.home.Type {
+	case categoryKind, terminalPlace:
+		chID, err := req.admin.CreateUnder(ctx, req.home.ID, title)
+		if err != nil {
+			return channelSlot{}, fmt.Errorf("create channel: %w", err)
+		}
+		return channelSlot{id: chID, owned: true, typ: "text"}, nil
+	case forumKind:
+		chID, err := req.admin.ForumPost(ctx, req.home.ID, title, "Session **"+title+"** started.")
+		if err != nil {
+			return channelSlot{}, fmt.Errorf("create forum post: %w", err)
+		}
+		return channelSlot{id: chID, owned: true, typ: forumKind}, nil
 	default:
-		return "", &UnsupportedHomeTypeError{Type: home.Type}
+		return channelSlot{}, &UnsupportedHomeTypeError{Type: req.home.Type}
 	}
-	sess.Approvals = mode
-	if err := h.st.AddSession(sess); err != nil {
-		rollbackWorktree()
-		if note := h.tidyChannel(ctx, sess); note != "" {
-			h.log.Warn("channel rollback", "session", name, "note", note)
-		}
-		return "", fmt.Errorf("persist: %w", err)
-	}
-	h.sup.Start(sess)
-	banner := sessionBanner(repo, name, worktree, wt.Branch(name), cmd, modelID, shared)
-	h.warnIfFailed(admin.Send(ctx, sess.ChannelID, banner), "send banner for "+name)
-	return fmt.Sprintf("✅ Running on %s.\n\n%s%s", admin.ChannelRef(sess.ChannelID), banner, approvalsNote), nil
 }
 
 func (h *Handler) adminFor(sess state.Session) channelAdmin {

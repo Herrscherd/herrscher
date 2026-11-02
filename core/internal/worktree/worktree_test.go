@@ -21,21 +21,21 @@ func TestPathAndBranch(t *testing.T) {
 			name:       "namespaced",
 			instanceID: "alice",
 			session:    "foo",
-			wantPath:   filepath.Join("/repo", ".herrscher-sessions", "alice", "foo"),
+			wantPath:   filepath.Join("repo", ".herrscher-sessions", "alice", "foo"),
 			wantBranch: "session/alice/foo",
 		},
 		{
 			name:       "legacy-empty-id",
 			instanceID: "",
 			session:    "foo",
-			wantPath:   filepath.Join("/repo", ".herrscher-sessions", "foo"),
+			wantPath:   filepath.Join("repo", ".herrscher-sessions", "foo"),
 			wantBranch: "session/foo",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := NewWorktreer(tt.instanceID)
-			if got := w.Path("/repo", tt.session); got != tt.wantPath {
+			if got := w.Path("repo", tt.session); got != tt.wantPath {
 				t.Fatalf("Path = %q, want %q", got, tt.wantPath)
 			}
 			if got := w.Branch(tt.session); got != tt.wantBranch {

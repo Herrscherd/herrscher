@@ -702,8 +702,9 @@ func DefaultConfig() (Config, error) {
 func registryEnvVars() []EnvVar {
 	var out []EnvVar
 	seen := map[string]bool{}
-	for _, p := range contracts.Default.Gateways() {
-		for _, s := range p.Manifest.Config {
+	gateways := contracts.Default.Gateways()
+	for i := range gateways {
+		for _, s := range gateways[i].Manifest.Config {
 			if s.Env == "" || seen[s.Env] {
 				continue
 			}
@@ -711,9 +712,10 @@ func registryEnvVars() []EnvVar {
 			out = append(out, EnvVar{Key: s.Env, Help: s.Help, Required: s.Required})
 		}
 	}
-	for _, v := range coreEnvVars() {
-		if !seen[v.Key] {
-			out = append(out, v)
+	core := coreEnvVars()
+	for i := range core {
+		if !seen[core[i].Key] {
+			out = append(out, core[i])
 		}
 	}
 	return out

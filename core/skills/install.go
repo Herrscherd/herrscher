@@ -69,8 +69,8 @@ func installPlaybook(src fs.FS, dir, name string, man manifest, out *Outcome) er
 	dest := filepath.Join(dir, name)
 	_, err = os.Stat(dest)
 	if errors.Is(err, fs.ErrNotExist) {
-		if err = write(src, name, dest, false); err != nil {
-			return err
+		if writeErr := write(src, name, dest, false); writeErr != nil {
+			return writeErr
 		}
 		man[name] = shipped
 		out.Installed = append(out.Installed, name)

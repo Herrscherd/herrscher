@@ -783,7 +783,7 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 }
 
 func (h *Handler) injectSeed(ctx context.Context, name, task string) bool {
-	for attempt := 0; attempt < 20; attempt++ {
+	for range 20 {
 		if h.seed(name, task) {
 			return true
 		}

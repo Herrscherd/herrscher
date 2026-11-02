@@ -49,7 +49,10 @@ func TestWorktreeDirFallsBackToCwd(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
 	m := newModel(f)
 	m.ensureTab("a")
-	wd, _ := os.Getwd()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got := m.worktreeDir(); got != wd {
 		t.Fatalf("worktreeDir = %q, want cwd %q", got, wd)
 	}

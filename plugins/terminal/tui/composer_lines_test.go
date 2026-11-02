@@ -35,7 +35,7 @@ func typeInto(t *testing.T, m *model, msgs ...tea.Msg) *model {
 	t.Helper()
 	for _, msg := range msgs {
 		next, _ := m.Update(msg)
-		m = next.(*model)
+		m = asModel(t, next)
 		_ = m.View()
 	}
 	return m

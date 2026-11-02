@@ -92,15 +92,15 @@ func TestDecodeImageRefusesAGigapixelHeader(t *testing.T) {
 func pngHeaderOnly(w, h uint32) []byte {
 	var ihdr bytes.Buffer
 	ihdr.WriteString("IHDR")
-	binary.Write(&ihdr, binary.BigEndian, w)
-	binary.Write(&ihdr, binary.BigEndian, h)
+	ihdr.Write(binary.BigEndian.AppendUint32(nil, w))
+	ihdr.Write(binary.BigEndian.AppendUint32(nil, h))
 	ihdr.Write([]byte{8, 6, 0, 0, 0})
 
 	var out bytes.Buffer
 	out.Write([]byte("\x89PNG\r\n\x1a\n"))
-	binary.Write(&out, binary.BigEndian, uint32(ihdr.Len()-4))
+	out.Write(binary.BigEndian.AppendUint32(nil, uint32(ihdr.Len()-4)))
 	out.Write(ihdr.Bytes())
-	binary.Write(&out, binary.BigEndian, crc32.ChecksumIEEE(ihdr.Bytes()))
+	out.Write(binary.BigEndian.AppendUint32(nil, crc32.ChecksumIEEE(ihdr.Bytes())))
 	return out.Bytes()
 }
 

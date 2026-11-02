@@ -63,7 +63,13 @@ func TestGaugeTakesThePalierColour(t *testing.T) {
 	if alarm == calm {
 		t.Fatal("a full window and an empty one must not render alike")
 	}
-	fg := func(r float64) string { return string(palierStyle(r).GetForeground().(lipgloss.Color)) }
+	fg := func(r float64) string {
+		color, ok := palierStyle(r).GetForeground().(lipgloss.Color)
+		if !ok {
+			t.Fatalf("palier %v foreground is not a lipgloss.Color", r)
+		}
+		return string(color)
+	}
 	if fg(0.99) != colRed {
 		t.Fatalf("a window past the alarm palier must take the Herrscher red: %s", fg(0.99))
 	}

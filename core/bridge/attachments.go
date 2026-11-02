@@ -314,7 +314,7 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 		return "", fmt.Errorf("download %s: %w %d", a.Filename, errUnexpectedStatus, resp.StatusCode)
 	}
 	dest := filepath.Join(dir, fmt.Sprintf("%s-%d-%s", sanitize(msgID), idx, sanitize(a.Filename)))
-	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(filepath.Clean(dest), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("create %s: %w", dest, err)
 	}

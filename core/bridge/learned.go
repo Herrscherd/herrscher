@@ -39,7 +39,7 @@ func projectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd 
 		return
 	}
 	root := learnedRoot(cwd)
-	if err := os.MkdirAll(root, 0o755); err != nil {
+	if err := os.MkdirAll(root, 0o750); err != nil {
 		logger.Warn("cannot create the learned-skill root", "root", root, "err", err)
 		return
 	}
@@ -50,11 +50,11 @@ func projectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd 
 			continue
 		}
 		dir := filepath.Join(root, name)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			logger.Warn("cannot create a learned-skill directory", "dir", dir, "err", err)
 			continue
 		}
-		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(md), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(md), 0o600); err != nil {
 			logger.Warn("cannot write a learned skill", "dir", dir, "err", err)
 			continue
 		}

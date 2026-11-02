@@ -39,9 +39,9 @@ func severity(d Decision) int {
 		return severityDeny
 	case Ask:
 		return severityAsk
-	default:
-		return severityAllow
+	case Allow:
 	}
+	return severityAllow
 }
 
 // Rule is one line of policy: a decision, the tool it speaks about, and a glob
@@ -170,6 +170,7 @@ func Apply(m Mode, d Decision, matched bool) Decision {
 		if d == Allow && !matched {
 			return Ask
 		}
+	case ModeAsk:
 	}
 	return d
 }

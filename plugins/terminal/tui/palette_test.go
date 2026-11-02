@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/charmbracelet/lipgloss"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func TestPaletteInlineRenderSelectedRow(t *testing.T) {

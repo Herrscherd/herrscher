@@ -29,29 +29,31 @@ func scanEnvFile(r io.Reader) error {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if rest, ok := strings.CutPrefix(line, "export"); ok && rest != "" && (rest[0] == ' ' || rest[0] == '\t') {
-			line = strings.TrimSpace(rest)
-		}
-		key, val, ok := strings.Cut(line, "=")
+		key, val, ok := parseEnvLine(sc.Text())
 		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		if key == "" {
 			continue
 		}
 		if _, set := os.LookupEnv(key); set {
 			continue
 		}
-		if err := os.Setenv(key, unquoteEnv(strings.TrimSpace(val))); err != nil {
+		if err := os.Setenv(key, unquoteEnv(val)); err != nil {
 			return fmt.Errorf("set %s: %w", key, err)
 		}
 	}
 	return sc.Err()
+}
+
+func parseEnvLine(raw string) (key, val string, ok bool) {
+	line := strings.TrimSpace(raw)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return "", "", false
+	}
+	if rest, isExport := strings.CutPrefix(line, "export"); isExport && rest != "" && (rest[0] == ' ' || rest[0] == '\t') {
+		line = strings.TrimSpace(rest)
+	}
+	key, val, ok = strings.Cut(line, "=")
+	key = strings.TrimSpace(key)
+	return key, strings.TrimSpace(val), ok && key != ""
 }
 
 func hideGatewayKeys() { host.CaptureGatewayConfig(contracts.Default.Gateways()) }

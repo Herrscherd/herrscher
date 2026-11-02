@@ -202,6 +202,44 @@ func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contrac
 	}
 }
 
+type turnUsage struct {
+	cost                            float64
+	outTok, inTok, cacheRd, cacheCr int
+}
+
+func (u *turnUsage) absorb(be contracts.BackendEvent) {
+	switch be.Kind {
+	case "usage":
+		u.outTok += be.OutTokens
+		u.setInputSide(be)
+	case "result":
+		u.outTok = be.OutTokens
+		u.setInputSide(be)
+		u.cost = be.Cost
+	}
+}
+
+func (u *turnUsage) setInputSide(be contracts.BackendEvent) {
+	u.inTok = be.InTokens
+	u.cacheRd = be.CacheRead
+	u.cacheCr = be.CacheCreate
+}
+
+func settleFailedReply(ctrl *turnController, out string, err error) string {
+	switch {
+	case ctrl.wasInterrupted():
+		if out == "" {
+			return interruptNotice
+		}
+		return strings.TrimSpace(out) + "\n\n" + interruptNotice
+	case out == "":
+		return errPrefix + err.Error()
+	default:
+		logger.Warn("backend failed after partial output; keeping what it produced", "err", err, "chars", len(out))
+		return out
+	}
+}
+
 func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin) {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
@@ -215,38 +253,14 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 		memCtx = orch.Context(turnCtx)
 	}
 	prompt := contracts.Prompt{Content: ev.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: ev.Who, Attachments: ev.Attachments}
-	var cost float64
-	var outTok, inTok, cacheRd, cacheCr int
+	var usage turnUsage
 	onEvent := func(be contracts.BackendEvent) {
-		switch be.Kind {
-		case "usage":
-			outTok += be.OutTokens
-			inTok = be.InTokens
-			cacheRd = be.CacheRead
-			cacheCr = be.CacheCreate
-		case "result":
-			outTok = be.OutTokens
-			inTok = be.InTokens
-			cacheRd = be.CacheRead
-			cacheCr = be.CacheCreate
-			cost = be.Cost
-		}
-		emitBackendEvent(sink, be, outTok, inTok, cacheRd, cacheCr)
+		usage.absorb(be)
+		emitBackendEvent(sink, be, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
 	}
 	out, err := backend.Respond(turnCtx, prompt, onEvent)
 	if err != nil {
-		switch {
-		case ctrl.wasInterrupted():
-			if out == "" {
-				out = interruptNotice
-			} else {
-				out = strings.TrimSpace(out) + "\n\n" + interruptNotice
-			}
-		case out == "":
-			out = errPrefix + err.Error()
-		default:
-			logger.Warn("backend failed after partial output; keeping what it produced", "err", err, "chars", len(out))
-		}
+		out = settleFailedReply(ctrl, out, err)
 	}
 	out = strings.TrimSpace(out)
 	if eng != nil {
@@ -256,7 +270,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if tr, ok := orch.(contracts.TurnReactor); ok {
 		out = tr.React(ctx, out)
 	}
-	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, TokensIn: inTok, CacheRead: cacheRd, CacheCreate: cacheCr, Resume: resumeToken(backend), Project: settledProject})
+	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
 	if orch != nil {
 		if err := orch.Observe(ctx, prompt, out); err != nil {
 			logger.Warn("memory observe failed; this turn was not recorded to memory", "err", err)

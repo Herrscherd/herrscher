@@ -25,6 +25,75 @@ var (
 	errNoBackendPlugin      = errors.New("no backend plugin registered")
 )
 
+type hostedPlugin struct {
+	manifest  contracts.Manifest
+	register  func(*grpc.Server)
+	closeReal func() error
+}
+
+func hostPlugin(ctx context.Context, category contracts.Category) (hostedPlugin, error) {
+	switch category {
+	case contracts.CategoryMemory:
+		real, m, err := firstMemory(ctx)
+		if err != nil {
+			return hostedPlugin{}, err
+		}
+		return hostedPlugin{
+			manifest:  m,
+			register:  func(s *grpc.Server) { transport.RegisterMemorySkeleton(s, real) },
+			closeReal: func() error { return real.Close() },
+		}, nil
+	case contracts.CategoryOrchestrator:
+		real, m, err := firstOrchestrator(ctx)
+		if err != nil {
+			return hostedPlugin{}, err
+		}
+		return hostedPlugin{
+			manifest:  m,
+			register:  func(s *grpc.Server) { transport.RegisterOrchestratorSkeleton(s, real) },
+			closeReal: func() error { return real.Close() },
+		}, nil
+	case contracts.CategoryBackend:
+		real, m, err := firstBackend(ctx)
+		if err != nil {
+			return hostedPlugin{}, err
+		}
+		return hostedPlugin{
+			manifest:  m,
+			register:  func(s *grpc.Server) { transport.RegisterBackendSkeleton(s, real) },
+			closeReal: func() error { return real.Close() },
+		}, nil
+	default:
+		return hostedPlugin{}, fmt.Errorf("plugin-host: category %q passed the support gate but %w", category, errNoSkeleton)
+	}
+}
+
+func newPluginServer(tlsCfg transport.TLSConfig) (*grpc.Server, error) {
+	if !tlsCfg.Enabled() {
+		return grpc.NewServer(), nil
+	}
+	creds, err := tlsCfg.ServerCredentials()
+	if err != nil {
+		return nil, fmt.Errorf("plugin-host: %w", err)
+	}
+	return grpc.NewServer(grpc.Creds(creds)), nil
+}
+
+func announceEvery(ctx context.Context, nc *nats.Conn, ann transport.Announcement) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+	for {
+		if err := transport.Announce(nc, ann); err != nil {
+			slog.Warn("announce plugin", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
 func runPluginHost(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("plugin-host", flag.ContinueOnError)
 	category := fs.String("category", "", "plugin category to host (e.g. memory, orchestrator)")
@@ -42,41 +111,12 @@ func runPluginHost(ctx context.Context, args []string) error {
 		return fmt.Errorf("plugin-host: %w", err)
 	}
 
-	var (
-		manifest  contracts.Manifest
-		register  func(*grpc.Server)
-		closeReal func() error
-	)
-	switch contracts.Category(*category) {
-	case contracts.CategoryMemory:
-		real, m, err := firstMemory(ctx)
-		if err != nil {
-			return err
-		}
-		manifest, register, closeReal = m,
-			func(s *grpc.Server) { transport.RegisterMemorySkeleton(s, real) },
-			func() error { return real.Close() }
-	case contracts.CategoryOrchestrator:
-		real, m, err := firstOrchestrator(ctx)
-		if err != nil {
-			return err
-		}
-		manifest, register, closeReal = m,
-			func(s *grpc.Server) { transport.RegisterOrchestratorSkeleton(s, real) },
-			func() error { return real.Close() }
-	case contracts.CategoryBackend:
-		real, m, err := firstBackend(ctx)
-		if err != nil {
-			return err
-		}
-		manifest, register, closeReal = m,
-			func(s *grpc.Server) { transport.RegisterBackendSkeleton(s, real) },
-			func() error { return real.Close() }
-	default:
-		return fmt.Errorf("plugin-host: category %q passed the support gate but %w", *category, errNoSkeleton)
+	hosted, err := hostPlugin(ctx, contracts.Category(*category))
+	if err != nil {
+		return err
 	}
 	defer func() {
-		if err := closeReal(); err != nil {
+		if err := hosted.closeReal(); err != nil {
 			slog.Error("close hosted plugin", "err", err)
 		}
 	}()
@@ -88,40 +128,20 @@ func runPluginHost(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	var s *grpc.Server
-	if tlsCfg.Enabled() {
-		creds, tlsErr := tlsCfg.ServerCredentials()
-		if tlsErr != nil {
-			return fmt.Errorf("plugin-host: %w", tlsErr)
-		}
-		s = grpc.NewServer(grpc.Creds(creds))
-	} else {
-		s = grpc.NewServer()
+	s, err := newPluginServer(tlsCfg)
+	if err != nil {
+		return err
 	}
-	register(s)
+	hosted.register(s)
 
 	nc, err := nats.Connect(*natsURL)
 	if err != nil {
 		return err
 	}
 	defer nc.Close()
-	ann := transport.Announcement{Manifest: manifest, GrpcAddr: lis.Addr().String(), InstanceID: *instanceID}
+	ann := transport.Announcement{Manifest: hosted.manifest, GrpcAddr: lis.Addr().String(), InstanceID: *instanceID}
 
-	go func() {
-		t := time.NewTicker(2 * time.Second)
-		defer t.Stop()
-		for {
-			if err := transport.Announce(nc, ann); err != nil {
-				slog.Warn("announce plugin", "err", err)
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-			}
-		}
-	}()
-
+	go announceEvery(ctx, nc, ann)
 	go func() { <-ctx.Done(); s.GracefulStop() }()
 	return s.Serve(lis)
 }

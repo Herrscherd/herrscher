@@ -63,47 +63,15 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 		home = &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
 	}
 
-	unlock, err := host.LockState(*statePath)
-	if err != nil {
-		if term.IsTerminal(int(os.Stdout.Fd())) {
-			var opts []tui.Option
-			if open != nil {
-				opts = append(opts, tui.OpenOn(open.session, open.text))
-			}
-			aerr := runAttached(ctx, host.ServedInstanceID(*statePath, *instanceID), opts...)
-			if aerr == nil {
-				return nil
-			}
-			fmt.Fprintf(os.Stderr, "herrscher: could not attach to the running daemon: %v\n", aerr)
-		}
+	unlock, attached, err := lockOrAttach(ctx, *statePath, *instanceID, open)
+	if attached || err != nil {
 		return err
 	}
 	defer unlock()
 
 	installShippedSkills(ctx)
 
-	hub, err := host.BuildHub(ctx, contracts.Default.Gateways(), os.Getenv)
-	if err != nil {
-		return err
-	}
-	for _, f := range hub.Unconfigured() {
-		fmt.Fprintln(os.Stderr, "herrscher: gateway not configured, skipping: "+f)
-	}
-	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, in time.Duration) {
-		for _, f := range failures {
-			fmt.Fprintf(os.Stderr, "herrscher: gateway not up yet: %s; retrying in %s\n", f, in)
-		}
-	})
-	for _, f := range hub.Failures() {
-		fmt.Fprintln(os.Stderr, "herrscher: gateway unavailable: "+f)
-	}
-	var raw []host.Deps
-	for _, kind := range hub.Kinds() {
-		if set, ok := hub.Get(kind); ok {
-			raw = append(raw, set)
-		}
-	}
-	gws, fg, extra, err := bindGateways(raw)
+	gws, fg, extra, err := startGateways(ctx)
 	if err != nil {
 		return err
 	}
@@ -124,29 +92,82 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 		ContributedCommands: extra,
 	}
 
-	if open != nil && fg != nil {
-		if o, ok := fg.(foregroundOpener); ok {
-			o.OpenOn(open.session, open.text)
+	openOnForeground(open, fg)
+	return runHubForeground(ctx, *statePath, gws, fg, opts)
+}
+
+func openOnForeground(open *openWindow, fg contracts.Foreground) {
+	if open == nil || fg == nil {
+		return
+	}
+	if o, ok := fg.(foregroundOpener); ok {
+		o.OpenOn(open.session, open.text)
+	}
+}
+
+func lockOrAttach(ctx context.Context, statePath, instanceID string, open *openWindow) (func(), bool, error) {
+	unlock, err := host.LockState(statePath)
+	if err == nil {
+		return unlock, false, nil
+	}
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		var opts []tui.Option
+		if open != nil {
+			opts = append(opts, tui.OpenOn(open.session, open.text))
+		}
+		aerr := runAttached(ctx, host.ServedInstanceID(statePath, instanceID), opts...)
+		if aerr == nil {
+			return nil, true, nil
+		}
+		fmt.Fprintf(os.Stderr, "herrscher: could not attach to the running daemon: %v\n", aerr)
+	}
+	return nil, false, err
+}
+
+func startGateways(ctx context.Context) ([]host.Deps, contracts.Foreground, []contracts.Cmd, error) {
+	hub, err := host.BuildHub(ctx, contracts.Default.Gateways(), os.Getenv)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	for _, f := range hub.Unconfigured() {
+		fmt.Fprintln(os.Stderr, "herrscher: gateway not configured, skipping: "+f)
+	}
+	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, in time.Duration) {
+		for _, f := range failures {
+			fmt.Fprintf(os.Stderr, "herrscher: gateway not up yet: %s; retrying in %s\n", f, in)
+		}
+	})
+	for _, f := range hub.Failures() {
+		fmt.Fprintln(os.Stderr, "herrscher: gateway unavailable: "+f)
+	}
+	var raw []host.Deps
+	for _, kind := range hub.Kinds() {
+		if set, ok := hub.Get(kind); ok {
+			raw = append(raw, set)
 		}
 	}
-	if fg != nil && term.IsTerminal(int(os.Stdout.Fd())) {
-		if restore, rerr := redirectStderr(filepath.Join(filepath.Dir(*statePath), "serve.log")); rerr == nil {
-			defer func() {
-				if err := restore(); err != nil {
-					slog.Error("restore stderr", "err", err)
-				}
-			}()
-		}
-		hubCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		go func() {
-			if err := host.RunHub(hubCtx, gws, opts); err != nil && !errors.Is(err, context.Canceled) {
-				slog.Error("hub stopped", "err", err)
+	return bindGateways(raw)
+}
+
+func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, fg contracts.Foreground, opts host.Options) error {
+	if fg == nil || !term.IsTerminal(int(os.Stdout.Fd())) {
+		return host.RunHub(ctx, gws, opts)
+	}
+	if restore, rerr := redirectStderr(filepath.Join(filepath.Dir(statePath), "serve.log")); rerr == nil {
+		defer func() {
+			if err := restore(); err != nil {
+				slog.Error("restore stderr", "err", err)
 			}
 		}()
-		return fg.RunForeground(hubCtx, cancel)
 	}
-	return host.RunHub(ctx, gws, opts)
+	hubCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		if err := host.RunHub(hubCtx, gws, opts); err != nil && !errors.Is(err, context.Canceled) {
+			slog.Error("hub stopped", "err", err)
+		}
+	}()
+	return fg.RunForeground(hubCtx, cancel)
 }
 
 func bindGateways(sets []host.Deps) ([]host.Deps, contracts.Foreground, []contracts.Cmd, error) {

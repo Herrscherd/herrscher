@@ -36,19 +36,7 @@ var (
 
 func main() {
 	if os.Getenv("HERRSCHER_GIT_ASKPASS") == "1" {
-		prompt := ""
-		if len(os.Args) > 1 {
-			prompt = os.Args[1]
-		}
-		out := errwriter.New(os.Stdout)
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "username") {
-			out.Println("x-access-token")
-		} else if t := os.Getenv("GITHUB_TOKEN"); t != "" {
-			out.Println(t)
-		} else {
-			out.Println(os.Getenv("GH_TOKEN"))
-		}
-		exitOnWriteError(out)
+		printGitAskpass(os.Args)
 		return
 	}
 
@@ -59,40 +47,15 @@ func main() {
 		return
 	}
 
-	envPath, explicit := os.Getenv("HERRSCHER_ENV_FILE"), true
-	if envPath == "" {
-		envPath, explicit = ".env", false
-	}
-	if abs, err := filepath.Abs(envPath); err == nil {
-		envPath = abs
-	}
-	if err := os.Setenv("HERRSCHER_ENV_FILE", envPath); err != nil {
-		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
-		os.Exit(1)
-	}
-	if err := loadEnvFile(envPath); err != nil {
-		if explicit {
-			fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
-			os.Exit(1)
-		}
-		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error()+" (continuing)")
-	}
-
+	loadHostEnv()
 	host.CaptureGatewayCreds()
 	hideGatewayKeys()
 
 	ctx := context.Background()
 
 	if len(os.Args) < 2 {
-		if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
-			if err := runServe(ctx, nil, nil); err != nil {
-				fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
-				os.Exit(1)
-			}
-			return
-		}
-		usage()
-		os.Exit(2)
+		runWithoutCommand(ctx)
+		return
 	}
 
 	cmd := os.Args[1]
@@ -104,77 +67,150 @@ func main() {
 			os.Exit(2)
 		}
 		if err := runPrompt(ctx, t); err != nil {
-			fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
-			os.Exit(1)
+			exitWithError(err)
 		}
 		return
 	}
 
-	switch cmd {
-	case "init", "plugin", "update", "install":
-		mctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-		var code int
-		switch cmd {
-		case "init":
-			code = manage.InitCmd(mctx, args)
-		case "plugin":
-			code = manage.PluginCmd(mctx, args)
-		case "update":
-			code = manage.UpdateCmd(mctx, args)
-		case "install":
-			code = manage.InstallCmd(mctx, args)
-		}
-		stop()
+	if code, ok := runManageCmd(cmd, args); ok {
 		os.Exit(code)
 	}
 
-	var err error
 	switch cmd {
-	case "bridge":
-		err = runBridge(ctx, args)
-	case "serve":
-		err = runServe(ctx, args, nil)
-	case "session":
-		err = runSession(ctx, args)
-	case "agent":
-		err = runAgent(ctx, args)
-	case "host":
-		err = runHost(ctx, args)
-	case "approve":
-		err = runApprove(ctx, args)
-	case "role":
-		err = runRole(ctx, args)
-	case "memory":
-		err = runMemory(ctx, args)
-	case "models":
-		err = runModels(ctx, args)
-	case "service":
-		err = runService(ctx, args)
-	case "plugin-host":
-		err = runPluginHost(ctx, args)
-	case "worktree":
-		err = host.RunWorktree(ctx, args)
-	case "whoami":
-		err = runWhoami(args)
 	case "-h", "--help", "help":
 		usage()
 		return
+	}
+
+	if err := runCommand(ctx, cmd, args); err != nil {
+		exitWithError(err)
+	}
+}
+
+func printGitAskpass(args []string) {
+	prompt := ""
+	if len(args) > 1 {
+		prompt = args[1]
+	}
+	out := errwriter.New(os.Stdout)
+	printGitCredential(prompt, out)
+	exitOnWriteError(out)
+}
+
+func printGitCredential(prompt string, out *errwriter.Writer) {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "username") {
+		out.Println("x-access-token")
+		return
+	}
+	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
+		out.Println(t)
+		return
+	}
+	out.Println(os.Getenv("GH_TOKEN"))
+}
+
+func loadHostEnv() {
+	envPath, explicit := os.Getenv("HERRSCHER_ENV_FILE"), true
+	if envPath == "" {
+		envPath, explicit = ".env", false
+	}
+	if abs, err := filepath.Abs(envPath); err == nil {
+		envPath = abs
+	}
+	if err := os.Setenv("HERRSCHER_ENV_FILE", envPath); err != nil {
+		exitWithError(err)
+	}
+	if err := loadEnvFile(envPath); err != nil {
+		if explicit {
+			exitWithError(err)
+		}
+		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error()+" (continuing)")
+	}
+}
+
+func runWithoutCommand(ctx context.Context) {
+	if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
+		if err := runServe(ctx, nil, nil); err != nil {
+			exitWithError(err)
+		}
+		return
+	}
+	usage()
+	os.Exit(2)
+}
+
+func runManageCmd(cmd string, args []string) (int, bool) {
+	switch cmd {
+	case "init", "plugin", "update", "install":
 	default:
-		out, code, derr := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
-		if code != 0 {
-			fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
-			usage()
-			os.Exit(code)
-		}
-		err = derr
-		if err == nil && out != "" {
-			_, err = fmt.Fprintln(os.Stdout, out)
-		}
+		return 0, false
 	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
-		os.Exit(1)
+	mctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	switch cmd {
+	case "init":
+		return manage.InitCmd(mctx, args), true
+	case "plugin":
+		return manage.PluginCmd(mctx, args), true
+	case "update":
+		return manage.UpdateCmd(mctx, args), true
+	default:
+		return manage.InstallCmd(mctx, args), true
 	}
+}
+
+func runCommand(ctx context.Context, cmd string, args []string) error {
+	switch cmd {
+	case "bridge":
+		return runBridge(ctx, args)
+	case "serve":
+		return runServe(ctx, args, nil)
+	case "session":
+		return runSession(ctx, args)
+	case "agent":
+		return runAgent(ctx, args)
+	case "host":
+		return runHost(ctx, args)
+	case "approve":
+		return runApprove(ctx, args)
+	case "role":
+		return runRole(ctx, args)
+	case "memory":
+		return runMemory(ctx, args)
+	case "models":
+		return runModels(ctx, args)
+	case "service":
+		return runService(ctx, args)
+	case "plugin-host":
+		return runPluginHost(ctx, args)
+	case "worktree":
+		return host.RunWorktree(ctx, args)
+	case "whoami":
+		return runWhoami(args)
+	}
+	return runForwarded(ctx, cmd, args)
+}
+
+func runForwarded(ctx context.Context, cmd string, args []string) error {
+	out, code, derr := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
+	if code != 0 {
+		fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
+		usage()
+		os.Exit(code)
+	}
+	if derr != nil {
+		return derr
+	}
+	if out == "" {
+		return nil
+	}
+	_, err := fmt.Fprintln(os.Stdout, out)
+	return err
+}
+
+func exitWithError(err error) {
+	fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
+	os.Exit(1)
 }
 
 func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (string, int, error) {

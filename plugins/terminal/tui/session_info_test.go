@@ -26,7 +26,7 @@ func TestActiveInfoIsReadOncePerFrame(t *testing.T) {
 	m.active = "c1"
 
 	be.calls = 0
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if s, ok := m.activeInfo(); !ok || s.Vendor != "claude" {
 			t.Fatalf("activeInfo = %+v %v", s, ok)
 		}

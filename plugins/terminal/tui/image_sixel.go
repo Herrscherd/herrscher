@@ -18,8 +18,8 @@ func sixelEscape(img image.Image) string {
 
 	idx := make([]int, w*h)
 	present := map[int]bool{}
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			r, g, bl, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
 			i := sixelLevel(r)*sixelCubeSide*sixelCubeSide + sixelLevel(g)*sixelCubeSide + sixelLevel(bl)
 			idx[y*w+x] = i
@@ -74,9 +74,9 @@ func sixelEscape(img image.Image) string {
 func sixelBand(idx []int, w, h, band, colour int) string {
 	var row strings.Builder
 	any := false
-	for x := 0; x < w; x++ {
+	for x := range w {
 		var bits byte
-		for r := 0; r < 6; r++ {
+		for r := range 6 {
 			y := band + r
 			if y < h && idx[y*w+x] == colour {
 				bits |= 1 << r

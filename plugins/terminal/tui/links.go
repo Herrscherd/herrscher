@@ -98,7 +98,7 @@ func lineLinks(line int, s string) []Link {
 }
 
 func hasControl(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] < 0x20 || s[i] == 0x7f {
 			return true
 		}

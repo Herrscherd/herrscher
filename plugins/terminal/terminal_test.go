@@ -40,7 +40,7 @@ func TestMenuRendersChoices(t *testing.T) {
 
 func TestEmitDeliversControlEventUnderBackpressure(t *testing.T) {
 	tm := New()
-	for i := 0; i < cap(tm.out); i++ {
+	for range cap(tm.out) {
 		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: "chunk", Text: "x"}})
 	}
 	go func() { <-tm.Frontend() }()

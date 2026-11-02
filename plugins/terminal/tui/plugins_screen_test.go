@@ -213,7 +213,7 @@ func indexOf(rows []string, want string) int {
 
 func TestPluginsViewScrollsToSelection(t *testing.T) {
 	m := &model{pluginsOpen: true}
-	for i := 0; i < pluginsMax+5; i++ {
+	for i := range pluginsMax + 5 {
 		m.pluginsRows = append(m.pluginsRows, PluginRow{Module: fmt.Sprintf("mod/%d", i), Installed: "v1.0.0", Latest: "v1.0.0"})
 	}
 	m.pluginsIdx = len(m.pluginsRows) - 1

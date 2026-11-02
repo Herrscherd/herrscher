@@ -16,8 +16,8 @@ import (
 
 func testImage(w, h int) image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			img.Set(x, y, color.RGBA{R: uint8(x % 256), G: uint8(y % 256), B: 0x40, A: 0xff})
 		}
 	}
@@ -107,8 +107,8 @@ func pngHeaderOnly(w, h uint32) []byte {
 func TestDownscaleBringsALargeImageUnderThePreviewCap(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	big := image.NewRGBA(image.Rect(0, 0, 900, 700))
-	for y := 0; y < 700; y++ {
-		for x := 0; x < 900; x++ {
+	for y := range 700 {
+		for x := range 900 {
 			big.Set(x, y, color.RGBA{R: uint8(rng.Intn(256)), G: uint8(rng.Intn(256)), B: uint8(rng.Intn(256)), A: 0xff})
 		}
 	}

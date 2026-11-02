@@ -72,7 +72,7 @@ func TestOverlayRowsFollowTheWindow(t *testing.T) {
 func TestPaletteWalksTheWholeListFromTheKeyboard(t *testing.T) {
 	m := sizedTestModel(t, 100)
 	m.cmds = nil
-	for i := 0; i < 35; i++ {
+	for i := range 35 {
 		m.cmds = append(m.cmds, CommandSpec{Name: fmt.Sprintf("verb%02d", i)})
 	}
 	m.input.SetValue("/")
@@ -105,7 +105,7 @@ func TestPaletteWalksTheWholeListFromTheKeyboard(t *testing.T) {
 func TestSkillsPanelWalksFromTheKeyboard(t *testing.T) {
 	m := sizedTestModel(t, 100)
 	m.skillsOpen = true
-	for i := 0; i < 14; i++ {
+	for i := range 14 {
 		m.skillsRows = append(m.skillsRows, skills.Skill{Name: fmt.Sprintf("skill%02d", i)})
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyDown})

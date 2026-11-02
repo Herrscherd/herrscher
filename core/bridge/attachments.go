@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 // supportedExts are the filename extensions accepted when an attachment carries

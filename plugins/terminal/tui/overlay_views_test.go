@@ -8,9 +8,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/charmbracelet/x/ansi"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/skills"
-	"github.com/charmbracelet/x/ansi"
 )
 
 func assertFloatingList(t *testing.T, name, out string, width int) {

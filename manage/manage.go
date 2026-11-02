@@ -480,7 +480,7 @@ func pinModule(dir, module string, pinned bool) error {
 	return os.WriteFile(filepath.Join(dir, pinFile), []byte(writePins(pins)), 0o644)
 }
 
-func run(ctx context.Context, dir string, name string, args ...string) int {
+func run(ctx context.Context, dir, name string, args ...string) int {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr

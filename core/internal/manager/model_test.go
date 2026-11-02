@@ -13,7 +13,7 @@ import (
 // knownModels wires a validator accepting exactly the given ids, mirroring what
 // the composition root builds from host.LookupModel + the route policy.
 func knownModels(h *Handler, ids ...string) {
-	h.SetModelValidator(func(_ string, modelID string) error {
+	h.SetModelValidator(func(_, modelID string) error {
 		for _, id := range ids {
 			if id == modelID {
 				return nil

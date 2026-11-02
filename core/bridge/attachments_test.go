@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 // hostsFor returns an allowlist accepting srv's host, so the injected SSRF guard
@@ -460,8 +460,10 @@ func TestPinnedDialAllowsIPLiteral(t *testing.T) {
 }
 
 func TestRoutable(t *testing.T) {
-	no := []string{"127.0.0.1", "::1", "10.0.0.1", "192.168.1.1", "172.16.0.1",
-		"169.254.169.254", "0.0.0.0", "fe80::1", "ff02::1", "100.64.0.1"}
+	no := []string{
+		"127.0.0.1", "::1", "10.0.0.1", "192.168.1.1", "172.16.0.1",
+		"169.254.169.254", "0.0.0.0", "fe80::1", "ff02::1", "100.64.0.1",
+	}
 	for _, s := range no {
 		if routable(net.ParseIP(s)) {
 			t.Errorf("routable(%s) = true, want false", s)

@@ -52,6 +52,7 @@ func (f *fanRecorder) DefaultChannel() string { return "c" }
 func (f *fanRecorder) EnsureChannel(context.Context, string, string) (contracts.Channel, error) {
 	return contracts.Channel{ID: "c"}, nil
 }
+
 func (f *fanRecorder) Read(_ context.Context, channelID string, _ int, _ string) ([]contracts.Message, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -68,21 +69,26 @@ func (f *fanRecorder) UpsertStatusMessage(_ context.Context, _, _, content strin
 	f.statuses = append(f.statuses, content)
 	return "", nil
 }
+
 func (f *fanRecorder) Manifest() contracts.Manifest {
 	return contracts.Manifest{Kind: "rec", AttachmentHosts: f.hosts}
 }
+
 func (f *fanRecorder) Post(_ context.Context, _ contracts.Conversation, text string) (contracts.MessageID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.posted = append(f.posted, text)
 	return "", nil
 }
+
 func (f *fanRecorder) Reply(_ context.Context, _ contracts.Conversation, _ contracts.MessageID, text string) (contracts.MessageID, error) {
 	return f.Post(nil, contracts.Conversation{}, text)
 }
+
 func (f *fanRecorder) React(context.Context, contracts.Conversation, contracts.MessageID, string) error {
 	return nil
 }
+
 func (f *fanRecorder) Menu(context.Context, contracts.Conversation, contracts.MessageID, string, []contracts.Choice) error {
 	return nil
 }
@@ -669,12 +675,15 @@ func (r *routedRec) Manifest() contracts.Manifest { return contracts.Manifest{Ki
 func (r *routedRec) Post(context.Context, contracts.Conversation, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (r *routedRec) Reply(context.Context, contracts.Conversation, contracts.MessageID, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (r *routedRec) React(context.Context, contracts.Conversation, contracts.MessageID, string) error {
 	return nil
 }
+
 func (r *routedRec) Menu(context.Context, contracts.Conversation, contracts.MessageID, string, []contracts.Choice) error {
 	return nil
 }
@@ -700,22 +709,27 @@ func (r *recordingCoord) Handoff(_ context.Context, req contracts.HandoffRequest
 	r.reqs = append(r.reqs, req)
 	return req.ToAgent + "-s", nil
 }
+
 func (r *recordingCoord) Delegate(_ context.Context, req contracts.DelegateRequest) (string, error) {
 	r.delegates = append(r.delegates, req)
 	return req.ToAgent + "-w", nil
 }
+
 func (r *recordingCoord) Report(_ context.Context, req contracts.ReportRequest) (string, error) {
 	r.reports = append(r.reports, req)
 	return "lead", nil
 }
+
 func (r *recordingCoord) Merge(_ context.Context, req contracts.MergeRequest) (string, error) {
 	r.merges = append(r.merges, req)
 	return "lead", nil
 }
+
 func (r *recordingCoord) Seal(_ context.Context, req contracts.SealRequest) (string, error) {
 	r.seals = append(r.seals, req)
 	return req.FromSession, nil
 }
+
 func (r *recordingCoord) FanOut(_ context.Context, req contracts.FanOutRequest) ([]string, error) {
 	r.fanouts = append(r.fanouts, req)
 	spawned := make([]string, len(req.Tasks))
@@ -724,6 +738,7 @@ func (r *recordingCoord) FanOut(_ context.Context, req contracts.FanOutRequest) 
 	}
 	return spawned, nil
 }
+
 func (r *recordingCoord) Route(_ context.Context, req contracts.RouteRequest) (string, string, error) {
 	r.routes = append(r.routes, req)
 	return "netter", req.FromSession + "-netter", nil
@@ -738,8 +753,10 @@ func TestDriverInvokesCoordinatorOnHandoffTrailer(t *testing.T) {
 	rc := &recordingCoord{}
 	d.coordinator = rc
 
-	from <- contracts.Event{T: "reply", Done: true,
-		Text: "fait.\n⟢ handoff: scripter — finir le module"}
+	from <- contracts.Event{
+		T: "reply", Done: true,
+		Text: "fait.\n⟢ handoff: scripter — finir le module",
+	}
 	if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
 		t.Fatal("awaitTurn should complete on reply{done}")
 	}
@@ -799,21 +816,27 @@ type erroringCoord struct{ err error }
 func (e *erroringCoord) Handoff(context.Context, contracts.HandoffRequest) (string, error) {
 	return "", e.err
 }
+
 func (e *erroringCoord) Delegate(context.Context, contracts.DelegateRequest) (string, error) {
 	return "", e.err
 }
+
 func (e *erroringCoord) Report(context.Context, contracts.ReportRequest) (string, error) {
 	return "", e.err
 }
+
 func (e *erroringCoord) Merge(context.Context, contracts.MergeRequest) (string, error) {
 	return "", e.err
 }
+
 func (e *erroringCoord) Seal(context.Context, contracts.SealRequest) (string, error) {
 	return "", e.err
 }
+
 func (e *erroringCoord) FanOut(context.Context, contracts.FanOutRequest) ([]string, error) {
 	return nil, e.err
 }
+
 func (e *erroringCoord) Route(context.Context, contracts.RouteRequest) (string, string, error) {
 	return "", "", e.err
 }
@@ -839,8 +862,10 @@ func TestTerminalReplyCarriesAcceptedDelegationBeforeSeedRelease(t *testing.T) {
 	}
 	d.pendingReply = replyCh
 
-	from <- contracts.Event{T: "reply", Done: true,
-		Text: "Je délègue.\n⟢ delegate: roblox-scripter — modifier les nametags"}
+	from <- contracts.Event{
+		T: "reply", Done: true,
+		Text: "Je délègue.\n⟢ delegate: roblox-scripter — modifier les nametags",
+	}
 	if !d.awaitTurn(context.Background(), tokenGuard{}) {
 		t.Fatal("turn abandoned")
 	}
@@ -1005,8 +1030,10 @@ func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
 		make(chan contracts.Event, 1), from)
 	d.coordinator = &erroringCoord{err: errors.New("boom")}
 
-	from <- contracts.Event{T: "reply", Done: true,
-		Text: "fait.\n⟢ handoff: scripter — finir le module"}
+	from <- contracts.Event{
+		T: "reply", Done: true,
+		Text: "fait.\n⟢ handoff: scripter — finir le module",
+	}
 	if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
 		t.Fatal("awaitTurn should complete on reply{done}")
 	}
@@ -1050,8 +1077,10 @@ func TestDriverInvokesCoordinatorOnFanOutTrailer(t *testing.T) {
 	rc := &recordingCoord{}
 	d.coordinator = rc
 
-	from <- contracts.Event{T: "reply", Done: true,
-		Text: "je lance.\n⟢ fanout: scripter — a ;; b"}
+	from <- contracts.Event{
+		T: "reply", Done: true,
+		Text: "je lance.\n⟢ fanout: scripter — a ;; b",
+	}
 	if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
 		t.Fatal("awaitTurn should complete on reply{done}")
 	}

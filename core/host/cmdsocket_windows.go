@@ -6,8 +6,9 @@ import (
 	"context"
 	"net"
 
-	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Microsoft/go-winio"
+
+	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
 // CommandSocketPath is the daemon-level operator command pipe.

@@ -6,11 +6,12 @@ import (
 	"testing"
 	"time"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
-	transport "github.com/Herrscherd/herrscher-transport"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/grpc"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	transport "github.com/Herrscherd/herrscher-transport"
 )
 
 func TestResolverRemoteMemoryDials(t *testing.T) {
@@ -58,8 +59,10 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 
 	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, srv.ClientURL())
 	mem, err := r.Memory(context.Background(),
-		[]contracts.Plugin{{Manifest: contracts.Manifest{Category: contracts.CategoryMemory},
-			Memory: func(context.Context, contracts.PluginConfig) (contracts.Memory, error) { return nil, nil }}},
+		[]contracts.Plugin{{
+			Manifest: contracts.Manifest{Category: contracts.CategoryMemory},
+			Memory:   func(context.Context, contracts.PluginConfig) (contracts.Memory, error) { return nil, nil },
+		}},
 		func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("remote resolve: %v", err)
@@ -119,10 +122,12 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 
 	r := NewResolver(map[contracts.Category]bool{contracts.CategoryOrchestrator: true}, srv.ClientURL())
 	orch, err := r.Orchestrator(context.Background(),
-		[]contracts.Plugin{{Manifest: contracts.Manifest{Category: contracts.CategoryOrchestrator},
+		[]contracts.Plugin{{
+			Manifest: contracts.Manifest{Category: contracts.CategoryOrchestrator},
 			Orchestrator: func(context.Context, contracts.PluginConfig, contracts.Memory) (contracts.Orchestrator, error) {
 				return nil, nil
-			}}})
+			},
+		}})
 	if err != nil {
 		t.Fatalf("remote resolve: %v", err)
 	}
@@ -188,8 +193,10 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 
 	r := NewResolver(map[contracts.Category]bool{contracts.CategoryBackend: true}, srv.ClientURL())
 	be, err := r.Backend(context.Background(),
-		[]contracts.Plugin{{Manifest: contracts.Manifest{Category: contracts.CategoryBackend},
-			Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return nil, nil }}})
+		[]contracts.Plugin{{
+			Manifest: contracts.Manifest{Category: contracts.CategoryBackend},
+			Backend:  func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return nil, nil },
+		}})
 	if err != nil {
 		t.Fatalf("remote resolve: %v", err)
 	}

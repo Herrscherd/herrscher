@@ -8,11 +8,12 @@ import (
 	"os"
 	"time"
 
+	"github.com/nats-io/nats.go"
+	"google.golang.org/grpc"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	transport "github.com/Herrscherd/herrscher-transport"
 	"github.com/Herrscherd/herrscher/core/host"
-	"github.com/nats-io/nats.go"
-	"google.golang.org/grpc"
 )
 
 func runPluginHost(ctx context.Context, args []string) error {

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 // recordingMem is a fake Memory that also implements contracts.Provisioner,
@@ -33,6 +33,7 @@ func (m *recordingMem) EnsureProject(_ context.Context, key, title string) error
 	m.projects = append(m.projects, [2]string{key, title})
 	return nil
 }
+
 func (m *recordingMem) EnsureAgent(_ context.Context, key, title string) error {
 	m.agents = append(m.agents, [2]string{key, title})
 	return nil

@@ -113,8 +113,10 @@ type supervisedRun struct {
 
 // bridgeArgs builds the child `herrscher bridge` argv for sess.
 func (s *Supervisor) bridgeArgs(sess state.Session) []string {
-	args := []string{"bridge", "-c", sess.ChannelID, "--cmd", sess.Cmd, "--session", sess.Name,
-		"--hub-socket", control.SocketPath(sess.Name)}
+	args := []string{
+		"bridge", "-c", sess.ChannelID, "--cmd", sess.Cmd, "--session", sess.Name,
+		"--hub-socket", control.SocketPath(sess.Name),
+	}
 	// P1: thread the session's memory scope so the orchestrator recalls the
 	// game's shared memory and this agent's private skills each turn. The bridge
 	// flags are memory-only by definition, so a memory root wins over the

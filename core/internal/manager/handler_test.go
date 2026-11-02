@@ -39,6 +39,7 @@ func (f *fakeChannelAdmin) Kind(ctx context.Context, id string) (string, error) 
 	}
 	return f.homeType, nil
 }
+
 func (f *fakeChannelAdmin) CreateUnder(ctx context.Context, parentID, name string) (string, error) {
 	f.created = append(f.created, name)
 	f.parents = append(f.parents, parentID)
@@ -48,11 +49,13 @@ func (f *fakeChannelAdmin) CreateUnder(ctx context.Context, parentID, name strin
 	}
 	return prefix + name, nil
 }
+
 func (f *fakeChannelAdmin) ForumPost(ctx context.Context, forumID, name, content string) (string, error) {
 	f.created = append(f.created, "forum:"+name)
 	f.parents = append(f.parents, forumID)
 	return "post-" + name, nil
 }
+
 func (f *fakeChannelAdmin) Archive(ctx context.Context, id string) error {
 	if f.archiveErr != nil {
 		return f.archiveErr
@@ -60,6 +63,7 @@ func (f *fakeChannelAdmin) Archive(ctx context.Context, id string) error {
 	f.archived = append(f.archived, id)
 	return nil
 }
+
 func (f *fakeChannelAdmin) Send(ctx context.Context, channelID, content string) error {
 	if f.sendErr != nil {
 		return f.sendErr
@@ -272,6 +276,7 @@ func (f *fakeSup) Stop(name string) error {
 	}
 	return nil
 }
+
 func (f *fakeSup) Restart(s state.Session) error {
 	f.restarted = append(f.restarted, s)
 	if err := f.Stop(s.Name); err != nil {
@@ -310,6 +315,7 @@ func (f *fakeWT) Remove(repo, name string, force bool) error {
 	f.removed = append(f.removed, name)
 	return nil
 }
+
 func (f *fakeWT) Scratch(root, name string) (string, error) {
 	if f.scratchErr != nil {
 		return "", f.scratchErr
@@ -321,12 +327,14 @@ func (f *fakeWT) Scratch(root, name string) (string, error) {
 	}
 	return p, nil
 }
+
 func (f *fakeWT) ScratchPath(root, name string) string {
 	if f.scratchBase != "" {
 		root = f.scratchBase
 	}
 	return filepath.Join(root, ".herrscher-scratch", name)
 }
+
 func (f *fakeWT) RemoveScratch(root, name string) error {
 	f.removedScrap = append(f.removedScrap, name)
 	return os.RemoveAll(f.ScratchPath(root, name))

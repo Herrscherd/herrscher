@@ -5,10 +5,11 @@ import (
 	"os"
 	"strings"
 
+	"google.golang.org/grpc/credentials"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	transport "github.com/Herrscherd/herrscher-transport"
 	"github.com/Herrscherd/herrscher/core/host"
-	"google.golang.org/grpc/credentials"
 )
 
 // remoteCategories reads HERRSCHER_REMOTE (comma-separated category names) into

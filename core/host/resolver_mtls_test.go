@@ -15,11 +15,12 @@ import (
 	"testing"
 	"time"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
-	transport "github.com/Herrscherd/herrscher-transport"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/grpc"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	transport "github.com/Herrscherd/herrscher-transport"
 )
 
 // TestResolverRemoteMemoryOverMTLS is the C4 end-to-end: with a generated CA/cert

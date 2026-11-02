@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/charmbracelet/lipgloss"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 // The status bar is what the terminal knows about the session and had been

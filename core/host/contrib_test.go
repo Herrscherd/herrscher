@@ -32,12 +32,15 @@ func (f fakeContributor) Commands() []contracts.Cmd {
 func (f fakeContributor) Post(context.Context, contracts.Conversation, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (f fakeContributor) Reply(context.Context, contracts.Conversation, contracts.MessageID, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (f fakeContributor) React(context.Context, contracts.Conversation, contracts.MessageID, string) error {
 	return nil
 }
+
 func (f fakeContributor) Menu(context.Context, contracts.Conversation, contracts.MessageID, string, []contracts.Choice) error {
 	return nil
 }
@@ -51,15 +54,19 @@ type mute struct{}
 func (mute) Manifest() contracts.Manifest {
 	return contracts.Manifest{Kind: "mute", Category: contracts.CategoryGateway}
 }
+
 func (mute) Post(context.Context, contracts.Conversation, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (mute) Reply(context.Context, contracts.Conversation, contracts.MessageID, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (mute) React(context.Context, contracts.Conversation, contracts.MessageID, string) error {
 	return nil
 }
+
 func (mute) Menu(context.Context, contracts.Conversation, contracts.MessageID, string, []contracts.Choice) error {
 	return nil
 }

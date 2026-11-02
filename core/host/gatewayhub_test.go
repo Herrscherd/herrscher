@@ -16,12 +16,15 @@ func (fakeGateway) Manifest() contracts.Manifest { return contracts.Manifest{} }
 func (fakeGateway) Post(context.Context, contracts.Conversation, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (fakeGateway) Reply(context.Context, contracts.Conversation, contracts.MessageID, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (fakeGateway) React(context.Context, contracts.Conversation, contracts.MessageID, string) error {
 	return nil
 }
+
 func (fakeGateway) Menu(context.Context, contracts.Conversation, contracts.MessageID, string, []contracts.Choice) error {
 	return nil
 }

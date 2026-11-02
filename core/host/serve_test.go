@@ -19,15 +19,19 @@ type kindGateway struct{ kind string }
 func (g kindGateway) Manifest() contracts.Manifest {
 	return contracts.Manifest{Kind: g.kind, Category: contracts.CategoryGateway}
 }
+
 func (kindGateway) Post(context.Context, contracts.Conversation, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (kindGateway) Reply(context.Context, contracts.Conversation, contracts.MessageID, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (kindGateway) React(context.Context, contracts.Conversation, contracts.MessageID, string) error {
 	return nil
 }
+
 func (kindGateway) Menu(context.Context, contracts.Conversation, contracts.MessageID, string, []contracts.Choice) error {
 	return nil
 }

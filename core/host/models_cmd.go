@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 // modelJSON is the public view of a model. Arg is deliberately absent: it's a

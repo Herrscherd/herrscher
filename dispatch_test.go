@@ -27,44 +27,62 @@ func expectedLocalVerbs() []string {
 
 func mainSwitches(t *testing.T) ([]string, bool) {
 	t.Helper()
+	f := mainFile(t)
 	var cases []string
-	var defaultForwards bool
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "main.go", nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var fn *ast.FuncDecl
-	for _, d := range f.Decls {
-		if d, ok := d.(*ast.FuncDecl); ok && d.Name.Name == "main" && d.Recv == nil {
-			fn = d
-		}
-	}
-	if fn == nil {
-		t.Fatal("no main() in main.go")
-	}
-	ast.Inspect(fn, func(n ast.Node) bool {
-		cl, ok := n.(*ast.CaseClause)
-		if !ok {
-			return true
-		}
-		if cl.List == nil {
-			ast.Inspect(cl, func(n ast.Node) bool {
-				if id, ok := n.(*ast.Ident); ok && id.Name == "forwardUnknownVerb" {
-					defaultForwards = true
-				}
-				return true
-			})
-			return true
-		}
-		for _, e := range cl.List {
-			if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-				cases = append(cases, lit.Value[1:len(lit.Value)-1])
-			}
+	ast.Inspect(f, func(n ast.Node) bool {
+		if cl, ok := n.(*ast.CaseClause); ok {
+			cases = append(cases, stringLabels(cl.List)...)
 		}
 		return true
 	})
-	return cases, defaultForwards
+	return cases, defaultArmForwards(t, f)
+}
+
+func mainFile(t *testing.T) *ast.File {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), "main.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+func funcNamed(t *testing.T, f *ast.File, name string) *ast.FuncDecl {
+	t.Helper()
+	for _, d := range f.Decls {
+		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == name && fn.Recv == nil {
+			return fn
+		}
+	}
+	t.Fatalf("no %s() in main.go", name)
+	return nil
+}
+
+func defaultArmForwards(t *testing.T, f *ast.File) bool {
+	t.Helper()
+	return mentionsIdent(funcNamed(t, f, "runCommand"), "runForwarded") &&
+		mentionsIdent(funcNamed(t, f, "runForwarded"), "forwardUnknownVerb")
+}
+
+func mentionsIdent(n ast.Node, name string) bool {
+	found := false
+	ast.Inspect(n, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && id.Name == name {
+			found = true
+		}
+		return true
+	})
+	return found
+}
+
+func stringLabels(exprs []ast.Expr) []string {
+	var labels []string
+	for _, e := range exprs {
+		if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			labels = append(labels, lit.Value[1:len(lit.Value)-1])
+		}
+	}
+	return labels
 }
 
 func TestKnownVerbsKeepTheirLocalPath(t *testing.T) {

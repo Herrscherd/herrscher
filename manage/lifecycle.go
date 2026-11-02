@@ -31,47 +31,23 @@ func updateHost(ctx context.Context, out, errOut *errwriter.Writer, args []strin
 		errOut.Println(err)
 		return 1
 	}
-	src, err := os.ReadFile(filepath.Join(dir, "plugins.go"))
-	if err != nil {
-		errOut.Printf("read plugins.go: %v\n", err)
-		return 1
-	}
-	mods, err := listPlugins(string(src))
-	if err != nil {
-		errOut.Println(err)
-		return 1
+	mods, code := readPluginModules(errOut, dir)
+	if code != 0 {
+		return code
 	}
 	if len(mods) == 0 {
 		out.Println("no plugins to update")
 		return 0
 	}
 
-	pins, err := loadPins(dir)
-	if err != nil {
-		errOut.Println(err)
-		return 1
-	}
-	installed, err := installedVersions(ctx, goToolchain{dir: dir}, mods)
-	if err != nil {
-		installed = nil
-	}
-	cmds, skipped := updatePlan(mods, pins, installed)
-	for _, line := range skipped {
-		out.Println(line)
-	}
-	if cmds == nil {
-		out.Println("every plugin is pinned; nothing to update")
-		return 0
+	cmds, code := planPluginUpdates(ctx, out, errOut, dir, mods)
+	if code != 0 || cmds == nil {
+		return code
 	}
 
 	if *noBuild {
-		for _, c := range cmds {
-			if c[1] != "get" {
-				continue
-			}
-			if code := run(ctx, errOut, dir, c[0], c[1:]...); code != 0 {
-				return code
-			}
+		if code := fetchPluginUpdates(ctx, errOut, dir, cmds); code != 0 {
+			return code
 		}
 		out.Println("updated plugins (--no-build); run `go mod tidy && go build` in the host to apply")
 		return 0
@@ -86,6 +62,52 @@ func updateHost(ctx context.Context, out, errOut *errwriter.Writer, args []strin
 		return 0
 	}
 	out.Println("updated plugins and reinstalled the host; restart the service to run it")
+	return 0
+}
+
+func readPluginModules(errOut *errwriter.Writer, dir string) ([]string, int) {
+	src, err := os.ReadFile(filepath.Join(dir, "plugins.go"))
+	if err != nil {
+		errOut.Printf("read plugins.go: %v\n", err)
+		return nil, 1
+	}
+	mods, err := listPlugins(string(src))
+	if err != nil {
+		errOut.Println(err)
+		return nil, 1
+	}
+	return mods, 0
+}
+
+func planPluginUpdates(ctx context.Context, out, errOut *errwriter.Writer, dir string, mods []string) ([][]string, int) {
+	pins, err := loadPins(dir)
+	if err != nil {
+		errOut.Println(err)
+		return nil, 1
+	}
+	installed, err := installedVersions(ctx, goToolchain{dir: dir}, mods)
+	if err != nil {
+		installed = nil
+	}
+	cmds, skipped := updatePlan(mods, pins, installed)
+	for _, line := range skipped {
+		out.Println(line)
+	}
+	if cmds == nil {
+		out.Println("every plugin is pinned; nothing to update")
+	}
+	return cmds, 0
+}
+
+func fetchPluginUpdates(ctx context.Context, errOut *errwriter.Writer, dir string, cmds [][]string) int {
+	for _, c := range cmds {
+		if c[1] != "get" {
+			continue
+		}
+		if code := run(ctx, errOut, dir, c[0], c[1:]...); code != 0 {
+			return code
+		}
+	}
 	return 0
 }
 

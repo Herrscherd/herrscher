@@ -117,19 +117,12 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 	}
 	client = pinnedClient(client, hosts)
 	dir := attachmentDir(session)
-	mkdirDone := false
+	staged := false
 	var slots [maxAttachmentsPerMessage]string
 	var fetches sync.WaitGroup
 	n := 0
 	for i, a := range m.Attachments {
-		if !supported(a) {
-			logger.Warn("attachment skipped: not a type the model can be handed",
-				"file", a.Filename, "type", a.ContentType)
-			continue
-		}
-		if a.Size > 0 && a.Size > maxAttachmentBytes {
-			logger.Warn("attachment skipped: bigger than the cap",
-				"file", a.Filename, "bytes", a.Size, "cap", maxAttachmentBytes)
+		if !attachmentAdmissible(a) {
 			continue
 		}
 		if n == maxAttachmentsPerMessage {
@@ -140,36 +133,68 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 		slot := n
 		n++
 		if strings.HasPrefix(a.URL, "file://") {
-			p, err := localAttachmentPath(a)
-			if err != nil {
-				logger.Warn("attachment skipped", "file", a.Filename, "err", err)
-				continue
-			}
-			slots[slot] = p
+			slots[slot] = localSlot(a)
 			continue
 		}
-		if !mkdirDone {
-			if err := os.MkdirAll(dir, 0o700); err != nil {
-				logger.Warn("no attachment can be staged for this turn", "dir", dir, "err", err)
+		if !staged {
+			if !stagingReady(dir) {
 				continue
 			}
-			mkdirDone = true
+			staged = true
 		}
 		fetches.Add(1)
 		go func(slot, i int, a contracts.Attachment) {
 			defer fetches.Done()
-			p, err := fetchOne(ctx, client, a, m.ID, i, dir, hosts)
-			if err != nil {
-				logger.Warn("attachment skipped", "file", a.Filename, "err", err)
-				return
-			}
-			slots[slot] = p
+			slots[slot] = fetchSlot(ctx, client, a, m.ID, i, dir, hosts)
 		}(slot, i, a)
 	}
 	fetches.Wait()
+	return nonEmpty(slots[:n])
+}
 
-	out := make([]string, 0, n)
-	for _, p := range slots[:n] {
+func attachmentAdmissible(a contracts.Attachment) bool {
+	if !supported(a) {
+		logger.Warn("attachment skipped: not a type the model can be handed",
+			"file", a.Filename, "type", a.ContentType)
+		return false
+	}
+	if a.Size > 0 && a.Size > maxAttachmentBytes {
+		logger.Warn("attachment skipped: bigger than the cap",
+			"file", a.Filename, "bytes", a.Size, "cap", maxAttachmentBytes)
+		return false
+	}
+	return true
+}
+
+func localSlot(a contracts.Attachment) string {
+	p, err := localAttachmentPath(a)
+	if err != nil {
+		logger.Warn("attachment skipped", "file", a.Filename, "err", err)
+		return ""
+	}
+	return p
+}
+
+func stagingReady(dir string) bool {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		logger.Warn("no attachment can be staged for this turn", "dir", dir, "err", err)
+		return false
+	}
+	return true
+}
+
+func fetchSlot(ctx context.Context, client *http.Client, a contracts.Attachment, msgID string, i int, dir string, hosts map[string]bool) string {
+	p, err := fetchOne(ctx, client, a, msgID, i, dir, hosts)
+	if err != nil {
+		logger.Warn("attachment skipped", "file", a.Filename, "err", err)
+		return ""
+	}
+	return p
+}
+
+func nonEmpty(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
 		if p != "" {
 			out = append(out, p)
 		}

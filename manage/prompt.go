@@ -29,12 +29,8 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 
 	if compose {
 		s.header("init", "compose your plugin stack: enter accepts the default")
-		for _, cat := range categories() {
-			kind, err := chooseKind(s, in, cat)
-			if err != nil {
-				return nil, nil, err
-			}
-			choices[cat] = kind
+		if err := chooseEveryCategory(s, in, choices); err != nil {
+			return nil, nil, err
 		}
 	} else {
 		s.header("init", "configure the installed host: enter to skip a field")
@@ -42,19 +38,8 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 
 	secrets := map[string]string{}
 	if choices["gateway"] == "discord" {
-		fmt.Fprintf(os.Stderr, "  %s  %s\n", s.wrap(s.bold+s.cyan, "discord · secrets"), s.wrap(s.dim, "(token entry is hidden)"))
-		tok, err := readSecret(in, secretLabel(s, "DISCORD_BOT_TOKEN"))
-		if err != nil {
+		if err := promptDiscordSecrets(s, in, secrets); err != nil {
 			return nil, nil, err
-		}
-		if tok != "" {
-			secrets["DISCORD_BOT_TOKEN"] = tok
-		}
-		if v := promptLine(in, secretLabel(s, "DISCORD_USER_ID")); v != "" {
-			secrets["DISCORD_USER_ID"] = v
-		}
-		if v := promptLine(in, secretLabel(s, "HERRSCHER_OWNER_ID")); v != "" {
-			secrets["HERRSCHER_OWNER_ID"] = v
 		}
 	}
 
@@ -66,6 +51,35 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 		secrets[k] = v
 	}
 	return choices, secrets, nil
+}
+
+func chooseEveryCategory(s style, in *bufio.Reader, choices map[string]string) error {
+	for _, cat := range categories() {
+		kind, err := chooseKind(s, in, cat)
+		if err != nil {
+			return err
+		}
+		choices[cat] = kind
+	}
+	return nil
+}
+
+func promptDiscordSecrets(s style, in *bufio.Reader, secrets map[string]string) error {
+	fmt.Fprintf(os.Stderr, "  %s  %s\n", s.wrap(s.bold+s.cyan, "discord · secrets"), s.wrap(s.dim, "(token entry is hidden)"))
+	tok, err := readSecret(in, secretLabel(s, "DISCORD_BOT_TOKEN"))
+	if err != nil {
+		return err
+	}
+	if tok != "" {
+		secrets["DISCORD_BOT_TOKEN"] = tok
+	}
+	if v := promptLine(in, secretLabel(s, "DISCORD_USER_ID")); v != "" {
+		secrets["DISCORD_USER_ID"] = v
+	}
+	if v := promptLine(in, secretLabel(s, "HERRSCHER_OWNER_ID")); v != "" {
+		secrets["HERRSCHER_OWNER_ID"] = v
+	}
+	return nil
 }
 
 func secretLabel(s style, key string) string {

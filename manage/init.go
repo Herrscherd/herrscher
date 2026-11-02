@@ -112,26 +112,15 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 	}
 	var secrets map[string]string
 	if interactive {
-		wc, ws, err := runWizard(compose, liveCatalog, currentRoute())
-		if err != nil {
-			errOut.Println(err)
+		var ok bool
+		choices, secrets, ok = runInitWizard(errOut, compose, choices)
+		if !ok {
 			return 1
-		}
-		secrets = ws
-		if compose {
-			choices = wc
 		}
 	}
 
 	if !compose {
-		path := envTarget()
-		n, err := writeSecretsTo(path, secrets)
-		if err != nil {
-			errOut.Printf("write secrets: %v\n", err)
-			return 1
-		}
-		summaryConfig(path, n)
-		return 0
+		return writeSecretsOnly(errOut, secrets)
 	}
 
 	modules, err := resolveStack(choices, extras)
@@ -141,42 +130,81 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 	}
 
 	manifest := filepath.Join(dir, "plugins.go")
-	src, err := os.ReadFile(manifest)
-	if err != nil {
-		errOut.Printf("read %s: %v\n", manifest, err)
-		return 1
-	}
-	rendered, err := setPlugins(string(src), modules)
-	if err != nil {
-		errOut.Println(err)
-		return 1
-	}
-	if err := os.WriteFile(manifest, []byte(rendered), 0o644); err != nil {
-		errOut.Printf("write %s: %v\n", manifest, err)
-		return 1
+	src, code := rewritePlugins(errOut, manifest, modules)
+	if code != 0 {
+		return code
 	}
 	summaryStack(modules)
 	seedEnv(out, errOut, dir)
-	if n, err := writeSecretsTo(filepath.Join(dir, ".env"), secrets); err != nil {
-		errOut.Printf("write secrets: %v\n", err)
-	} else if n > 0 {
-		out.Printf("wrote %d setting(s) to .env\n", n)
-	}
+	writeProjectSecrets(out, errOut, dir, secrets)
 
 	if *noBuild {
 		out.Println("wrote plugins.go (--no-build); run `go mod tidy && go build` in the host to apply")
 		return 0
 	}
+	return buildOrRestore(ctx, errOut, dir, manifest, src, modules)
+}
 
-	if code := buildStack(ctx, errOut, dir, modules); code != 0 {
-		if werr := os.WriteFile(manifest, src, 0o644); werr != nil {
-			errOut.Printf("restore %s: %v\n", manifest, werr)
-		} else {
-			errOut.Printf("build failed; restored %s\n", manifest)
-		}
-		return code
+func runInitWizard(errOut *errwriter.Writer, compose bool, choices map[string]string) (map[string]string, map[string]string, bool) {
+	wc, ws, err := runWizard(compose, liveCatalog, currentRoute())
+	if err != nil {
+		errOut.Println(err)
+		return choices, nil, false
 	}
+	if compose {
+		choices = wc
+	}
+	return choices, ws, true
+}
+
+func writeSecretsOnly(errOut *errwriter.Writer, secrets map[string]string) int {
+	path := envTarget()
+	n, err := writeSecretsTo(path, secrets)
+	if err != nil {
+		errOut.Printf("write secrets: %v\n", err)
+		return 1
+	}
+	summaryConfig(path, n)
 	return 0
+}
+
+func rewritePlugins(errOut *errwriter.Writer, manifest string, modules []string) ([]byte, int) {
+	src, err := os.ReadFile(manifest)
+	if err != nil {
+		errOut.Printf("read %s: %v\n", manifest, err)
+		return nil, 1
+	}
+	rendered, err := setPlugins(string(src), modules)
+	if err != nil {
+		errOut.Println(err)
+		return nil, 1
+	}
+	if err := os.WriteFile(manifest, []byte(rendered), 0o644); err != nil {
+		errOut.Printf("write %s: %v\n", manifest, err)
+		return nil, 1
+	}
+	return src, 0
+}
+
+func writeProjectSecrets(out, errOut *errwriter.Writer, dir string, secrets map[string]string) {
+	if n, err := writeSecretsTo(filepath.Join(dir, ".env"), secrets); err != nil {
+		errOut.Printf("write secrets: %v\n", err)
+	} else if n > 0 {
+		out.Printf("wrote %d setting(s) to .env\n", n)
+	}
+}
+
+func buildOrRestore(ctx context.Context, errOut *errwriter.Writer, dir, manifest string, src []byte, modules []string) int {
+	code := buildStack(ctx, errOut, dir, modules)
+	if code == 0 {
+		return 0
+	}
+	if werr := os.WriteFile(manifest, src, 0o644); werr != nil {
+		errOut.Printf("restore %s: %v\n", manifest, werr)
+	} else {
+		errOut.Printf("build failed; restored %s\n", manifest)
+	}
+	return code
 }
 
 func buildStack(ctx context.Context, errOut *errwriter.Writer, dir string, modules []string) int {

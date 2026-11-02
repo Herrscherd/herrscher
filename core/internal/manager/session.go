@@ -527,7 +527,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			if why == "" {
 				why = "it exposes no approval channel"
 			}
-			approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: `%s` cannot enforce them (%s), so **%s** runs ungated.", vendorLabel(vendor), why, name)
+			approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: %#q cannot enforce them (%s), so **%s** runs ungated.", vendorLabel(vendor), why, name)
 		case shared || worktree == "":
 			approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: a shared session has no isolated worktree to gate, so **%s** runs ungated.", name)
 		case hostName != "" && agentName == "":
@@ -682,13 +682,13 @@ func (h *Handler) sessionRenameRun(_ context.Context, in contracts.Input) (strin
 	}
 	note := ""
 	if err := state.MoveSessionFile(state.TranscriptPath(h.partDir, name), state.TranscriptPath(h.partDir, to)); err != nil {
-		note += fmt.Sprintf("\n⚠️ le transcript est resté sous `%s` : %v", name, err)
+		note += fmt.Sprintf("\n⚠️ le transcript est resté sous %#q : %v", name, err)
 	}
 	if err := state.MoveSessionFile(state.ParticipantsPath(h.partDir, name), state.ParticipantsPath(h.partDir, to)); err != nil {
-		note += fmt.Sprintf("\n⚠️ le journal des participants est resté sous `%s` : %v", name, err)
+		note += fmt.Sprintf("\n⚠️ le journal des participants est resté sous %#q : %v", name, err)
 	}
 	if sc := scheduleOwning(h.st.SnapshotSchedules(), name); sc != "" {
-		note += fmt.Sprintf("\n⚠️ l'horaire `%s` possède cette session par son nom : sa prochaine fenêtre en rouvrira une sous `%s`.", sc, name)
+		note += fmt.Sprintf("\n⚠️ l'horaire %#q possède cette session par son nom : sa prochaine fenêtre en rouvrira une sous %#q.", sc, name)
 	}
 	sess.Name = to
 	h.sup.Start(sess)
@@ -763,7 +763,7 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 			if why == "" {
 				why = "it exposes no approval channel"
 			}
-			switchNote = fmt.Sprintf("\n\n⚠️ approvals: `%s` cannot enforce them (%s), so **%s** now runs ungated.", vendorLabel(sess.Vendor), why, name)
+			switchNote = fmt.Sprintf("\n\n⚠️ approvals: %#q cannot enforce them (%s), so **%s** now runs ungated.", vendorLabel(sess.Vendor), why, name)
 		}
 	}
 	if err := h.sup.Restart(sess); err != nil {

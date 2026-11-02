@@ -23,10 +23,10 @@ func serveHealth(ctx context.Context, addr string, h *health.Health) {
 		if !snap.Online {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
-		_ = json.NewEncoder(w).Encode(snap)
+		logCleanup(json.NewEncoder(w).Encode(snap))
 	})
 	srv := &http.Server{Addr: addr, Handler: mux}
-	go func() { <-ctx.Done(); _ = srv.Close() }()
+	go func() { <-ctx.Done(); closeRead(srv) }()
 	if err := srv.ListenAndServe(); err != nil && ctx.Err() == nil {
 		fmt.Fprintf(os.Stderr, "health server: %v\n", err)
 	}
@@ -70,7 +70,7 @@ func statusLoop(ctx context.Context, cr contracts.ChannelReader, channelID strin
 		content := statusContent(instanceID, snap)
 		id, err := cr.UpsertStatusMessage(ctx, channelID, st.StatusMessageID, content)
 		if err == nil && id != st.StatusMessageID {
-			_ = st.SetStatusMessageID(id)
+			logCleanup(st.SetStatusMessageID(id))
 		}
 	}
 	render()

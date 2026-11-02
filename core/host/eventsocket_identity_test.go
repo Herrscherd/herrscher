@@ -74,7 +74,7 @@ func TestEventSocketPrioritizesCoordinationWhenTelemetryQueueFull(t *testing.T) 
 	es.subs[sub] = struct{}{}
 	t.Cleanup(func() {
 		es.closeAll()
-		_ = client.Close()
+		logCleanup(client.Close())
 	})
 
 	for range subscriberBuffer {
@@ -90,7 +90,7 @@ func TestEventSocketPrioritizesCoordinationWhenTelemetryQueueFull(t *testing.T) 
 	})
 
 	go es.serve(sub)
-	_ = client.SetReadDeadline(time.Now().Add(time.Second))
+	logCleanup(client.SetReadDeadline(time.Now().Add(time.Second)))
 	line, err := bufio.NewReader(client).ReadBytes('\n')
 	if err != nil {
 		t.Fatalf("read prioritized event: %v", err)
@@ -112,13 +112,13 @@ func TestEventSocketPreservesFIFOAndTurnIdentity(t *testing.T) {
 	es.add(server)
 	t.Cleanup(func() {
 		es.closeAll()
-		_ = client.Close()
+		logCleanup(client.Close())
 	})
 
 	es.Publish("solo", contracts.Event{T: "status", Text: "one", TurnID: "turn-1"})
 	es.Publish("solo", contracts.Event{T: "reply", Text: "two", Done: true, TurnID: "turn-2"})
 
-	_ = client.SetReadDeadline(time.Now().Add(time.Second))
+	logCleanup(client.SetReadDeadline(time.Now().Add(time.Second)))
 	reader := bufio.NewReader(client)
 	var got []struct {
 		T      string `json:"t"`

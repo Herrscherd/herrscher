@@ -95,7 +95,7 @@ func provisionHost(ctx context.Context, run hostRunner, h state.Host, src string
 	if err != nil {
 		return h, err
 	}
-	defer func() { _ = os.RemoveAll(stage) }()
+	defer func() { logCleanup(os.RemoveAll(stage)) }()
 	staged := filepath.Join(stage, "herrscher")
 	if err := service.BuildFor(ctx, src, staged, goos, goarch); err != nil {
 		return h, err

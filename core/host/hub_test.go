@@ -54,7 +54,7 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher"), nil, t.TempDir(), &r, nil)
 	h.contributedKinds = contributedKinds([]contracts.Cmd{slow})
 
-	go func() { _, _ = h.Dispatch(ctx, []string{"plug", "read"}) }()
+	go func() { _, dispatchErr := h.Dispatch(ctx, []string{"plug", "read"}); logCleanup(dispatchErr) }()
 	<-entered
 
 	done := make(chan string, 1)

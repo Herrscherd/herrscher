@@ -17,7 +17,8 @@ import (
 // or not a daemon is up. Reading git needs no daemon; requiring one would put
 // the diagnostic behind the thing it is used to diagnose.
 func WhoamiOut(asJSON bool) (string, error) {
-	cwd, _ := os.Getwd()
+	cwd, cwdErr := os.Getwd()
+	logCleanup(cwdErr)
 	id := identity.FromDir(cwd)
 	if asJSON {
 		b, err := json.Marshal(id)

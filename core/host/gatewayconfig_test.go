@@ -64,7 +64,7 @@ func TestARealEnvironmentValueSurvivesAnEnvFileThatDisagrees(t *testing.T) {
 	plugins := []contracts.Plugin{gatewayDeclaring("chat", key)}
 
 	CaptureGatewayConfig(plugins)
-	os.Setenv(key, "from-the-file")
+	logCleanup(os.Setenv(key, "from-the-file"))
 	CaptureGatewayConfig(plugins)
 
 	if envHas(key) {

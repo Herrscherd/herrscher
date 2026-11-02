@@ -73,6 +73,6 @@ func emitJSON(v any) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stdout, string(b))
+	logWriteFailure(fmt.Fprintln(os.Stdout, string(b)))
 	return nil
 }

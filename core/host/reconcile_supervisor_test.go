@@ -49,7 +49,7 @@ func TestReconcileStopsTheBridgeOfAnArchivedSession(t *testing.T) {
 	sup.Start(sess)
 	h.reconcile()
 
-	_ = st.SetArchived("shelved", true)
+	logCleanup(st.SetArchived("shelved", true))
 	h.reconcile()
 	if sup.Running("shelved") {
 		t.Fatal("an archived session must not leave a supervised bridge behind")

@@ -42,7 +42,8 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	partDir := filepath.Dir(o.StatePath)
 	wt := worktree.NewWorktreer(ctx, instID)
 	fg := forge.New()
-	upCfg, _ := service.DefaultConfig()
+	upCfg, cfgErr := service.DefaultConfig()
+	logCleanup(cfgErr)
 	up := serviceUpdater{cfg: upCfg, st: st}
 	agents := agent.NewStore(filepath.Join(partDir, "agents"))
 	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
@@ -202,7 +203,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			if err != nil {
 				return "", err
 			}
-			defer mem.Close()
+			defer closeRead(mem)
 			loc, ok := mem.(contracts.Locator)
 			if !ok {
 				return "", fmt.Errorf("memory backend does not support locate")
@@ -230,7 +231,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			if err != nil {
 				return "", err
 			}
-			defer mem.Close()
+			defer closeRead(mem)
 			del, ok := mem.(contracts.Deleter)
 			if !ok {
 				return "", fmt.Errorf("memory backend does not support forget")
@@ -253,7 +254,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			if err != nil {
 				return "", err
 			}
-			defer mem.Close()
+			defer closeRead(mem)
 			kind := contracts.NodeKind(in.Get("kind"))
 			switch kind {
 			case contracts.KindOrganization, contracts.KindProject, contracts.KindRepo,
@@ -285,7 +286,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			if err != nil {
 				return "", err
 			}
-			defer mem.Close()
+			defer closeRead(mem)
 			force := in.Bool("force")
 			if _, err := orchestrator.Restore(cmdCtx, mem, in.Get("key"), orchestrator.Force(force)); err != nil {
 				return "", err
@@ -303,7 +304,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			if err != nil {
 				return "", err
 			}
-			defer mem.Close()
+			defer closeRead(mem)
 			if err := mem.Unlink(cmdCtx, in.Get("from"), in.Get("to")); err != nil {
 				return "", err
 			}
@@ -319,7 +320,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			if err != nil {
 				return "", err
 			}
-			defer mem.Close()
+			defer closeRead(mem)
 			limit := 50
 			if v, err := strconv.Atoi(in.Get("limit")); err == nil && v > 0 {
 				limit = v
@@ -364,7 +365,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			if err != nil {
 				return "", err
 			}
-			defer mem.Close()
+			defer closeRead(mem)
 			key := in.Get("key")
 			approve := !in.Bool("revoke")
 			if err := orchestrator.ApproveSkill(cmdCtx, mem, key, approve); err != nil {
@@ -399,7 +400,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			if err != nil {
 				return "", err
 			}
-			defer mem.Close()
+			defer closeRead(mem)
 			limit := 10
 			if v, err := strconv.Atoi(in.Get("limit")); err == nil && v > 0 {
 				limit = v
@@ -471,7 +472,8 @@ func NewRegistry(ctx context.Context, gws []Deps, o Options) (*cli.Registry, err
 		return nil, err
 	}
 
-	self, _ := os.Executable()
+	self, execErr := os.Executable()
+	logCleanup(execErr)
 	sup := supervisor.NewSupervisor(ctx, self)
 	sup.SetBridgeEnv(GatewayEnvPairs())
 	if o.DefaultGateways == nil {

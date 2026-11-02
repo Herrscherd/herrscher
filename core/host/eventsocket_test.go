@@ -48,13 +48,13 @@ func TestEventSocketPublishReachesSubscriber(t *testing.T) {
 	go serveEventsSocket(ctx, path, es)
 
 	conn := dialWithRetry(t, path)
-	defer conn.Close()
+	defer closeRead(conn)
 
 	waitForSubscriber(t, es)
 
 	es.Publish("sess-1", contracts.Event{T: "chunk", Text: "hello"})
 
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	logCleanup(conn.SetReadDeadline(time.Now().Add(2 * time.Second)))
 	line, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
 		t.Fatalf("read: %v", err)

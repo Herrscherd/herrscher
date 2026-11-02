@@ -56,22 +56,22 @@ func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer,
 	}
 	switch {
 	case err != nil:
-		fmt.Fprintf(errOut, "herrscher: could not read the hook payload, allowing: %v\n", err)
+		logWriteFailure(fmt.Fprintf(errOut, "herrscher: could not read the hook payload, allowing: %v\n", err))
 		writeHookDecision(out, errOut, "allow", "")
 		return
 	case payload.HookEventName != "" && payload.HookEventName != hookEvent:
-		fmt.Fprintf(errOut, "herrscher: this hook answers %s, not %q, allowing\n", hookEvent, payload.HookEventName)
+		logWriteFailure(fmt.Fprintf(errOut, "herrscher: this hook answers %s, not %q, allowing\n", hookEvent, payload.HookEventName))
 		writeHookDecision(out, errOut, "allow", "")
 		return
 	case payload.ToolName == "":
-		fmt.Fprintln(errOut, "herrscher: the hook payload names no tool, allowing")
+		logWriteFailure(fmt.Fprintln(errOut, "herrscher: the hook payload names no tool, allowing"))
 		writeHookDecision(out, errOut, "allow", "")
 		return
 	}
 
 	session := strings.TrimSpace(os.Getenv(SessionVar))
 	if session == "" {
-		fmt.Fprintf(errOut, "herrscher: no %s in the environment, allowing\n", SessionVar)
+		logWriteFailure(fmt.Fprintf(errOut, "herrscher: no %s in the environment, allowing\n", SessionVar))
 		writeHookDecision(out, errOut, "allow", "")
 		return
 	}
@@ -82,11 +82,11 @@ func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer,
 	answer, handled, err := ask(ctx, argv)
 	switch {
 	case !handled:
-		fmt.Fprintf(errOut, "herrscher: no daemon is listening on %s, allowing\n", target())
+		logWriteFailure(fmt.Fprintf(errOut, "herrscher: no daemon is listening on %s, allowing\n", target()))
 		writeHookDecision(out, errOut, "allow", "")
 		return
 	case err != nil:
-		fmt.Fprintf(errOut, "herrscher: the daemon could not answer, allowing: %v\n", err)
+		logWriteFailure(fmt.Fprintf(errOut, "herrscher: the daemon could not answer, allowing: %v\n", err))
 		writeHookDecision(out, errOut, "allow", "")
 		return
 	}
@@ -96,7 +96,7 @@ func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer,
 		Reason   string `json:"reason"`
 	}
 	if err := json.Unmarshal([]byte(answer), &verdict); err != nil || verdict.Decision == "" {
-		fmt.Fprintf(errOut, "herrscher: could not read the daemon's answer %q, allowing\n", answer)
+		logWriteFailure(fmt.Fprintf(errOut, "herrscher: could not read the daemon's answer %q, allowing\n", answer))
 		writeHookDecision(out, errOut, "allow", "")
 		return
 	}
@@ -138,8 +138,8 @@ func writeHookDecision(out, errOut io.Writer, decision, reason string) {
 		HookSpecificOutput specific `json:"hookSpecificOutput"`
 	}{specific{HookEventName: hookEvent, PermissionDecision: decision, PermissionDecisionReason: reason}})
 	if err != nil {
-		fmt.Fprintf(errOut, "herrscher: could not write the %s decision, allowing: %v\n", decision, err)
+		logWriteFailure(fmt.Fprintf(errOut, "herrscher: could not write the %s decision, allowing: %v\n", decision, err))
 		return
 	}
-	fmt.Fprintf(out, "%s\n", b)
+	logWriteFailure(fmt.Fprintf(out, "%s\n", b))
 }

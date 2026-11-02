@@ -80,7 +80,7 @@ func TestSeedTerminalHomeWhenForeground(t *testing.T) {
 		t.Fatalf("home not seeded: %+v", st.Home)
 	}
 	st2 := state.NewState(filepath.Join(t.TempDir(), "s2.json"))
-	_ = st2.SetHome(state.HomeRef{ID: "disc", Type: "category"})
+	logCleanup(st2.SetHome(state.HomeRef{ID: "disc", Type: "category"}))
 	seedTerminalHome(st2, true)
 	if st2.Home.Type != "category" {
 		t.Fatalf("existing home overwritten: %+v", st2.Home)

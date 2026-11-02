@@ -42,9 +42,10 @@ func captureStdout(t *testing.T, f func() error) string {
 	os.Stdout = w
 	ferr := f()
 	os.Stdout = old
-	_ = w.Close()
+	logCleanup(w.Close())
 	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r)
+	_, readErr := buf.ReadFrom(r)
+	logCleanup(readErr)
 	if ferr != nil {
 		t.Fatalf("run: %v (printed %q)", ferr, buf.String())
 	}
@@ -130,8 +131,9 @@ func TestWorktreeVerbMaterializesFromStdin(t *testing.T) {
 		t.Fatal(err)
 	}
 	go func() {
-		_, _ = io.Copy(w, payload)
-		_ = w.Close()
+		_, copyErr := io.Copy(w, payload)
+	logCleanup(copyErr)
+		logCleanup(w.Close())
 	}()
 	old := os.Stdin
 	os.Stdin = r

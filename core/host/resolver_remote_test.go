@@ -31,7 +31,7 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 	}
 	gs := grpc.NewServer()
 	transport.RegisterMemorySkeleton(gs, recordingMem{})
-	go func() { _ = gs.Serve(lis) }()
+	go func() { logCleanup(gs.Serve(lis)) }()
 	t.Cleanup(gs.Stop)
 
 	nc, err := nats.Connect(srv.ClientURL())
@@ -47,7 +47,7 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 	stop := make(chan struct{})
 	go func() {
 		for {
-			_ = transport.Announce(nc, ann)
+			logCleanup(transport.Announce(nc, ann))
 			select {
 			case <-stop:
 				return
@@ -94,7 +94,7 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 	}
 	gs := grpc.NewServer()
 	transport.RegisterOrchestratorSkeleton(gs, recordingOrch{})
-	go func() { _ = gs.Serve(lis) }()
+	go func() { logCleanup(gs.Serve(lis)) }()
 	t.Cleanup(gs.Stop)
 
 	nc, err := nats.Connect(srv.ClientURL())
@@ -110,7 +110,7 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 	stop := make(chan struct{})
 	go func() {
 		for {
-			_ = transport.Announce(nc, ann)
+			logCleanup(transport.Announce(nc, ann))
 			select {
 			case <-stop:
 				return
@@ -163,7 +163,7 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 	}
 	gs := grpc.NewServer()
 	transport.RegisterBackendSkeleton(gs, streamingBackend{})
-	go func() { _ = gs.Serve(lis) }()
+	go func() { logCleanup(gs.Serve(lis)) }()
 	t.Cleanup(gs.Stop)
 
 	nc, err := nats.Connect(srv.ClientURL())
@@ -179,7 +179,7 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 	stop := make(chan struct{})
 	go func() {
 		for {
-			_ = transport.Announce(nc, ann)
+			logCleanup(transport.Announce(nc, ann))
 			select {
 			case <-stop:
 				return

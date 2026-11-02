@@ -134,7 +134,8 @@ func (d *sessionDriver) journal(authorID string) {
 	d.seen[authorID] = true
 	d.seenMu.Unlock()
 	if first {
-		_, _ = state.AppendParticipant(d.participants, authorID)
+		_, appendErr := state.AppendParticipant(d.participants, authorID)
+		logCleanup(appendErr)
 	}
 }
 
@@ -196,7 +197,7 @@ func (d *sessionDriver) askApproval(ctx context.Context, prompt, id string) {
 			continue
 		}
 		conv := contracts.Conversation{Gateway: gs.Gateway.Manifest().Kind, ID: ch}
-		_ = contracts.Degrade(gs.Gateway).Menu(ctx, conv, "", prompt+" (answer with `approve allow "+id+"`)", opts)
+		logCleanup(contracts.Degrade(gs.Gateway).Menu(ctx, conv, "", prompt+" (answer with `approve allow "+id+"`)", opts))
 	}
 }
 
@@ -749,7 +750,7 @@ func RunSession(ctx context.Context, name, channel string, gws []contracts.Gatew
 }
 
 func runSessionIdentified(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, emit func(contracts.Event), identity sessionIdentity, gate budgetGate) {
-	defer acc.Close()
+	defer closeRead(acc)
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
 	d := newSessionDriver(name, gws, toBridge, fromBridge)
@@ -784,7 +785,7 @@ func runSessionIdentified(ctx context.Context, name, channel string, gws []contr
 func serveConn(ctx context.Context, conn *control.Conn, toBridge <-chan contracts.Event, fromBridge chan<- contracts.Event, hangup chan<- struct{}) {
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	defer conn.Close()
+	defer closeRead(conn)
 	defer func() {
 		select {
 		case hangup <- struct{}{}:
@@ -793,14 +794,14 @@ func serveConn(ctx context.Context, conn *control.Conn, toBridge <-chan contract
 	}()
 
 	go func() {
-		_ = conn.Scan(func(e contracts.Event) error {
+		logCleanup(conn.Scan(func(e contracts.Event) error {
 			select {
 			case fromBridge <- e:
 				return nil
 			case <-cctx.Done():
 				return cctx.Err()
 			}
-		})
+		}))
 		cancel()
 	}()
 

@@ -41,12 +41,12 @@ func LockState(statePath string) (func(), error) {
 	}
 	locked, err := tryLock(f)
 	if err != nil {
-		f.Close()
+		closeRead(f)
 		return nil, fmt.Errorf("state lock: %w", err)
 	}
 	if !locked {
 		holder := readHolder(f)
-		f.Close()
+		closeRead(f)
 		return nil, fmt.Errorf(
 			"another herrscher is already serving %s%s\n"+
 				"Only one daemon may serve a state file: a second one answers every message a second time.\n"+
@@ -56,9 +56,9 @@ func LockState(statePath string) (func(), error) {
 			statePath, holder)
 	}
 	if err := f.Truncate(0); err == nil {
-		f.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0)
+		logWriteFailure(f.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0))
 	}
-	return func() { f.Close() }, nil
+	return func() { closeRead(f) }, nil
 }
 
 func readHolder(f *os.File) string {
@@ -71,7 +71,8 @@ func readHolder(f *os.File) string {
 
 func readPID(f *os.File) int {
 	b := make([]byte, 32)
-	n, _ := f.ReadAt(b, 0)
+	n, readErr := f.ReadAt(b, 0)
+	logCleanup(readErr)
 	pid, err := strconv.Atoi(strings.TrimSpace(string(b[:n])))
 	if err != nil || pid <= 0 {
 		return 0

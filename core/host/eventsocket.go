@@ -59,14 +59,14 @@ func (s *eventSocket) add(c net.Conn) {
 func (s *eventSocket) serve(sub *subscriber) {
 	defer func() {
 		s.remove(sub)
-		_ = sub.conn.Close()
+		logCleanup(sub.conn.Close())
 	}()
 	for {
 		line, ok := sub.next()
 		if !ok {
 			return
 		}
-		_ = sub.conn.SetWriteDeadline(time.Now().Add(publishWriteTimeout))
+		logCleanup(sub.conn.SetWriteDeadline(time.Now().Add(publishWriteTimeout)))
 		if _, err := sub.conn.Write(line); err != nil {
 			return
 		}
@@ -158,7 +158,7 @@ func (s *eventSocket) closeAll() {
 }
 
 func serveEventsSocket(ctx context.Context, path string, s *eventSocket) {
-	_ = os.Remove(path)
+	logCleanup(os.Remove(path))
 	ln, err := listenCommandSocket(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "events socket: listen %s: %v\n", path, err)
@@ -166,8 +166,8 @@ func serveEventsSocket(ctx context.Context, path string, s *eventSocket) {
 	}
 	go func() {
 		<-ctx.Done()
-		_ = ln.Close()
-		_ = os.Remove(path)
+		logCleanup(ln.Close())
+		logCleanup(os.Remove(path))
 		s.closeAll()
 	}()
 	for {

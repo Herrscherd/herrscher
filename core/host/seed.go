@@ -35,7 +35,10 @@ func withOneShotSeedRuntime(ctx context.Context, runtime oneShotSeedRuntime) con
 }
 
 func oneShotSeedRuntimeFrom(ctx context.Context) oneShotSeedRuntime {
-	runtime, _ := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
+	runtime, ok := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
+	if !ok {
+		return oneShotSeedRuntime{}
+	}
 	return runtime
 }
 
@@ -76,7 +79,7 @@ func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, tas
 		return "", err
 	}
 	if mem != nil {
-		defer mem.Close()
+		defer closeRead(mem)
 	}
 	return runOneShotSeedWithIDRuntime(ctx, sess, task, turnID, orch, runtime)
 }
@@ -91,7 +94,7 @@ func runOneShotSeedWithID(ctx context.Context, sess state.Session, task, turnID 
 
 func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator, runtime oneShotSeedRuntime) (string, error) {
 	if orch != nil {
-		defer orch.Close()
+		defer closeRead(orch)
 	}
 
 	turnTimeout := runtime.timeout
@@ -341,10 +344,10 @@ func provisionSeedScope(ctx context.Context, mem contracts.Memory, project, agen
 		return
 	}
 	if project != "" {
-		_ = p.EnsureProject(ctx, contracts.ProjectKey(project), project)
+		logCleanup(p.EnsureProject(ctx, contracts.ProjectKey(project), project))
 	}
 	if agent != "" {
-		_ = p.EnsureAgent(ctx, contracts.AgentKey(agent), agent)
+		logCleanup(p.EnsureAgent(ctx, contracts.AgentKey(agent), agent))
 	}
 }
 
@@ -359,7 +362,7 @@ func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orches
 	orch, err := resolver.Orchestrator(ctx, contracts.Default.Orchestrators())
 	if err != nil {
 		if mem != nil {
-			_ = mem.Close()
+			logCleanup(mem.Close())
 		}
 		return nil, nil, err
 	}
@@ -373,7 +376,7 @@ func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orches
 		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
 			if mem != nil {
-				_ = mem.Close()
+				logCleanup(mem.Close())
 			}
 			return nil, nil, err
 		}
@@ -381,7 +384,7 @@ func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orches
 		orch, err := plugin.Orchestrator(ctx, cfg, mem)
 		if err != nil {
 			if mem != nil {
-				_ = mem.Close()
+				logCleanup(mem.Close())
 			}
 			return nil, nil, err
 		}

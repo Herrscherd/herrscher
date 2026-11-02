@@ -32,8 +32,8 @@ func serveOneCommand(t *testing.T, instance string, disp dispatcher) {
 		}
 	})
 	t.Cleanup(func() {
-		_ = ln.Close()
-		_ = os.Remove(path)
+		logCleanup(ln.Close())
+		logCleanup(os.Remove(path))
 	})
 	go func() {
 		conn, err := ln.Accept()

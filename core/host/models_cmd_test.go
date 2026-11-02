@@ -49,7 +49,8 @@ func TestModelsListJSONNeverLeaksArg(t *testing.T) {
 	entries := []CatalogEntry{{Vendor: "claude", ModelSpec: contracts.ModelSpec{
 		ID: "x", Label: "X", Arg: "SECRET-ARG-VALUE", Route: contracts.RouteNative,
 	}}}
-	out, _ := modelsListJSON(entries)
+	out, listErr := modelsListJSON(entries)
+	logCleanup(listErr)
 	if strings.Contains(out, "SECRET-ARG-VALUE") {
 		t.Fatalf("Arg leaked into the JSON payload: %s", out)
 	}

@@ -129,7 +129,7 @@ func warnWaitOutlivesTheHook(w io.Writer, wait time.Duration) {
 	if wait <= agent.HookWait/2 {
 		return
 	}
-	fmt.Fprintf(w, "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the CLI gives it: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait)
+	logWriteFailure(fmt.Fprintf(w, "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the CLI gives it: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait))
 }
 
 func answerApproval(id string, d approval.Decision, reason string) bool {

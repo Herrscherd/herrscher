@@ -43,7 +43,8 @@ func TestApproveRuleAddsListsRemoves(t *testing.T) {
 	if _, err := reg.Dispatch(ctx, []string{"approve", "rule", "--rm", "ask Bash(git push*)"}); err != nil {
 		t.Fatalf("rm: %v", err)
 	}
-	out, _ = reg.Dispatch(ctx, []string{"approve", "rule"})
+	out, dispatchErr := reg.Dispatch(ctx, []string{"approve", "rule"})
+	logCleanup(dispatchErr)
 	if strings.Contains(out, "git push") {
 		t.Fatalf("list %q must no longer show the rule", out)
 	}

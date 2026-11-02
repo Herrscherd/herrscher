@@ -87,7 +87,10 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 
 	p := hostPlacer{st: st, instanceID: "e2e", sourceVersion: func() string { return service.SourceVersion(ctx, src) }}
 	repo := provisioned.Workspace + "/app"
-	t.Cleanup(func() { _, _ = capture(context.Background(), runnerFor(provisioned), "rm", "-rf", repo) })
+	t.Cleanup(func() {
+		_, rmErr := capture(context.Background(), runnerFor(provisioned), "rm", "-rf", repo)
+		logCleanup(rmErr)
+	})
 	if err := p.EnsureProject(ctx, "e2e", "app", repo); err != nil {
 		t.Fatalf("clone onto the host: %v", err)
 	}
@@ -109,7 +112,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	if path == "" {
 		t.Fatal("a cloned repo must yield a worktree, not the shared fallback")
 	}
-	defer func() { _ = wt.Remove(repo, "demo", true) }()
+	defer func() { logCleanup(wt.Remove(repo, "demo", true)) }()
 	if !wt.PreExisting(repo, "demo") {
 		t.Fatal("the worktree just created must read as pre-existing")
 	}
@@ -168,7 +171,7 @@ func TestE2ERemoteCommandSocketForward(t *testing.T) {
 
 	run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
 	if prep := run.PrepareForwards(ctx); prep != nil {
-		_ = prep.Run()
+		logCleanup(prep.Run())
 	}
 	remoteState, err := capture(ctx, runnerFor(provisioned), "mktemp", "-d")
 	if err != nil {
@@ -212,13 +215,13 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 		remote := control.RemoteCommandSocketPath(name)
 		run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
 		if prep := run.PrepareForwards(ctx); prep != nil {
-			_ = prep.Run()
+			logCleanup(prep.Run())
 		}
 		held := run.Command(ctx, "", "sleep", "60")
 		if err := held.Start(); err != nil {
 			t.Fatalf("hold the forward for %s open: %v", name, err)
 		}
-		defer func() { _ = held.Process.Kill() }()
+		defer func() { logCleanup(held.Process.Kill()) }()
 	}
 	plain := runner.SSH{Target: target}
 	for _, name := range sessions {
@@ -257,7 +260,7 @@ func remoteWorkspace(ctx context.Context, t *testing.T, target string) string {
 		t.Fatalf("make a remote workspace: %v", err)
 	}
 	ws := strings.TrimSpace(out)
-	t.Cleanup(func() { _, _ = capture(context.Background(), run, "rm", "-rf", ws) })
+	t.Cleanup(func() { _, rmErr := capture(context.Background(), run, "rm", "-rf", ws); logCleanup(rmErr) })
 	return ws
 }
 

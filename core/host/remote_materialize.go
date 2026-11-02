@@ -18,7 +18,7 @@ func stageAgentTar(a agent.Agent, remoteWorktree, remoteBin string) (io.Reader, 
 	if err != nil {
 		return nil, fmt.Errorf("stage agent %q: %w", a.Name, err)
 	}
-	defer func() { _ = os.RemoveAll(stage) }()
+	defer func() { logCleanup(os.RemoveAll(stage)) }()
 	if err := a.MaterializeIntoAs(stage, remoteWorktree, remoteBin); err != nil {
 		return nil, fmt.Errorf("stage agent %q: %w", a.Name, err)
 	}
@@ -59,7 +59,7 @@ func tarDir(root string, w io.Writer) error {
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer closeRead(f)
 		_, err = io.Copy(tw, f)
 		return err
 	})
@@ -98,7 +98,7 @@ func extractTar(r io.Reader, dst string) error {
 			return err
 		}
 		if _, err := io.Copy(f, tr); err != nil {
-			_ = f.Close()
+			logCleanup(f.Close())
 			return err
 		}
 		if err := f.Close(); err != nil {

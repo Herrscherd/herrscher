@@ -120,7 +120,8 @@ func TestRemoteResolveRecordsMetricsOnHealth(t *testing.T) {
 		return nil, context.DeadlineExceeded
 	}
 
-	_, _ = r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	_, memErr := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	logCleanup(memErr)
 
 	m := h.Snapshot(time.Unix(1, 0), 30*time.Second).Metrics
 	if m.RemoteAttempts != int64(r.retryAttempts) {

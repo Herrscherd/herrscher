@@ -48,10 +48,10 @@ func AppendTranscript(path string, e TranscriptEntry) error {
 	if path == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	f, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, privateFileMode)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func compactTranscript(path string) {
 		start = i
 	}
 	tmp := path + ".tmp"
-	f, err := os.OpenFile(filepath.Clean(tmp), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(filepath.Clean(tmp), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, privateFileMode)
 	if err != nil {
 		return
 	}
@@ -247,7 +247,7 @@ func MoveSessionFile(oldPath, newPath string) error {
 	if _, err := os.Stat(oldPath); os.IsNotExist(err) {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(newPath), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(newPath), privateDirMode); err != nil {
 		return err
 	}
 	return os.Rename(oldPath, newPath)

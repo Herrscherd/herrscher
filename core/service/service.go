@@ -108,6 +108,12 @@ func serveArgs(c Config) []string {
 	return append(args, c.ExtraArgs...)
 }
 
+const (
+	privateFileMode = 0o600
+	privateDirMode  = 0o750
+	unitFileMode    = 0o644
+)
+
 var (
 	errUnsupportedOS     = errors.New("unsupported OS")
 	errNoSourceDir       = errors.New("no source dir set")
@@ -134,7 +140,7 @@ func renderEnvTemplate(vars []EnvVar) string {
 }
 
 func envFileWrite(c Config) FileWrite {
-	return FileWrite{Path: c.EnvFile, Content: renderEnvTemplate(c.EnvVars), Mode: 0o600, Template: true}
+	return FileWrite{Path: c.EnvFile, Content: renderEnvTemplate(c.EnvVars), Mode: privateFileMode, Template: true}
 }
 
 // BuildPlan returns the install plan for c's target OS. Every platform also
@@ -158,7 +164,7 @@ func BuildPlan(c Config) (Plan, error) {
 }
 
 func configFileWrite(c Config) FileWrite {
-	return FileWrite{Path: c.ConfigPath, Content: config.Template(c.DefaultCmd, c.HealthAddr), Mode: 0o644, Template: true}
+	return FileWrite{Path: c.ConfigPath, Content: config.Template(c.DefaultCmd, c.HealthAddr), Mode: unitFileMode, Template: true}
 }
 
 // BuildUninstall returns the uninstall plan for c's target OS.
@@ -433,14 +439,14 @@ func syncUnitPath(c Config) (bool, error) {
 			return false, nil
 		}
 		lines[i] = want
-		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600)
+		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), unitFileMode)
 	}
 	for i, l := range lines {
 		if strings.TrimSpace(l) != "[Service]" {
 			continue
 		}
 		lines = append(lines[:i+1], append([]string{want}, lines[i+1:]...)...)
-		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600)
+		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), unitFileMode)
 	}
 	return false, nil
 }
@@ -519,7 +525,7 @@ func linuxPlan(c Config) Plan {
 		cmds = append(cmds, Command{Argv: []string{"loginctl", "enable-linger", c.User}, IgnoreErr: true})
 	}
 	return Plan{
-		Files:    []FileWrite{{Path: unit, Content: content, Mode: 0o644}, envFileWrite(c)},
+		Files:    []FileWrite{{Path: unit, Content: content, Mode: unitFileMode}, envFileWrite(c)},
 		Commands: cmds,
 		Notes:    []string{startNote(c, "systemctl --user start "+linuxUnitName)},
 	}
@@ -554,7 +560,7 @@ func macPlan(c Config) Plan {
 		cmds = append(cmds, Command{Argv: []string{"launchctl", "load", "-w", plist}})
 	}
 	return Plan{
-		Files:    []FileWrite{{Path: plist, Content: content, Mode: 0o644}, envFileWrite(c)},
+		Files:    []FileWrite{{Path: plist, Content: content, Mode: unitFileMode}, envFileWrite(c)},
 		Commands: cmds,
 		Notes:    []string{startNote(c, "launchctl load -w "+plist)},
 	}
@@ -565,7 +571,7 @@ func windowsPlan(c Config) Plan {
 	content := "@echo off\r\n" +
 		joinQuoted(cmdQuote, c.BinPath, serveArgs(c)) + "\r\n"
 	return Plan{
-		Files: []FileWrite{{Path: launcher, Content: content, Mode: 0o644}, envFileWrite(c)},
+		Files: []FileWrite{{Path: launcher, Content: content, Mode: unitFileMode}, envFileWrite(c)},
 		Commands: []Command{
 			{Argv: []string{"schtasks", "/create", "/tn", winTaskName, "/tr", launcher, "/sc", "onlogon", "/rl", "limited", "/f"}},
 		},
@@ -756,7 +762,7 @@ func writeFile(f FileWrite) error {
 			return fmt.Errorf("stat %s: %w", f.Path, err)
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(f.Path), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(f.Path), privateDirMode); err != nil {
 		return fmt.Errorf("mkdir %s: %w", filepath.Dir(f.Path), err)
 	}
 	if err := os.WriteFile(f.Path, []byte(f.Content), f.Mode); err != nil {

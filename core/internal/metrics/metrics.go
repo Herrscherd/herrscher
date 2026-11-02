@@ -117,16 +117,22 @@ func (r *Registry) Snapshot() Snapshot {
 		BridgeRestarts: r.bridgeRestarts.Load(),
 		RemoteAttempts: r.remoteAttempts.Load(),
 		RemoteFailures: r.remoteFailures.Load(),
-		RemoteLatency:  Latency{Count: count, P50MS: percentile(samples, 50), P95MS: percentile(samples, 95)},
+		RemoteLatency:  Latency{Count: count, P50MS: percentile(samples, percentileP50), P95MS: percentile(samples, percentileP95)},
 	}
 }
+
+const (
+	percentileP50   = 50
+	percentileP95   = 95
+	percentileScale = 100
+)
 
 func percentile(samples []int64, p int) int64 {
 	if len(samples) == 0 {
 		return 0
 	}
 	slices.Sort(samples)
-	rank := (p*len(samples) + 99) / 100
+	rank := (p*len(samples) + percentileScale - 1) / percentileScale
 	rank = max(rank, 1)
 	rank = min(rank, len(samples))
 	return samples[rank-1]

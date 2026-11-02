@@ -9,6 +9,8 @@ import (
 	"regexp"
 )
 
+const maxOwnerSuffix = 8
+
 var (
 	idRe         = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,15}$`)
 	errInvalidID = errors.New("invalid instance id")
@@ -27,8 +29,8 @@ func Slugify(owner string) string {
 	if owner == "" {
 		return ""
 	}
-	if len(owner) > 8 {
-		owner = owner[len(owner)-8:]
+	if len(owner) > maxOwnerSuffix {
+		owner = owner[len(owner)-maxOwnerSuffix:]
 	}
 	return "u" + owner
 }

@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const cronFieldCount = 5
+
 var errCronSyntax = errors.New("invalid cron expression")
 
 type cronSpec struct {
@@ -28,8 +30,8 @@ type cronSpec struct {
 func parseCron(expr string) (cronSpec, error) {
 	var spec cronSpec
 	fields := strings.Fields(expr)
-	if len(fields) != 5 {
-		return spec, fmt.Errorf("%w %q: want 5 fields, got %d", errCronSyntax, expr, len(fields))
+	if len(fields) != cronFieldCount {
+		return spec, fmt.Errorf("%w %q: want %d fields, got %d", errCronSyntax, expr, cronFieldCount, len(fields))
 	}
 	targets := []struct {
 		set      []bool
@@ -73,9 +75,9 @@ func parseCronField(field string, set []bool, min, max int) (bool, error) {
 		switch {
 		case body == "*":
 		case strings.ContainsRune(body, '-'):
-			ends := strings.SplitN(body, "-", 2)
-			a, errA := strconv.Atoi(ends[0])
-			b, errB := strconv.Atoi(ends[1])
+			from, to, _ := strings.Cut(body, "-")
+			a, errA := strconv.Atoi(from)
+			b, errB := strconv.Atoi(to)
 			if errA != nil || errB != nil || a > b {
 				return false, fmt.Errorf("%w: bad range in %q", errCronSyntax, part)
 			}

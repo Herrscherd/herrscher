@@ -28,9 +28,14 @@ func WriteEvent(w io.Writer, e contracts.Event) error {
 // as the legacy bare pick value and surfaced as Event{T:"pick", Value:line} for
 // back-compat. It returns the first fn error, a malformed-line error, or a read
 // error other than io.EOF.
+const (
+	scanInitialBuffer = 64 * 1024
+	scanMaxLine       = 1024 * 1024
+)
+
 func ScanEvents(r io.Reader, fn func(contracts.Event) error) error {
 	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	sc.Buffer(make([]byte, 0, scanInitialBuffer), scanMaxLine)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {

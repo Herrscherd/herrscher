@@ -134,7 +134,7 @@ func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, e
 		if !have {
 			return nil, fmt.Errorf("%w: set %s and %s", errNoGatewayCreds, host.EnvGatewayURL, host.EnvGatewayToken)
 		}
-		return nil, nil
+		return map[string]string{}, nil
 	case url == "" || token == "":
 		return nil, fmt.Errorf("%w: %s and %s go together; one without the other would run turns on this machine's own account", errIncompleteCreds, host.EnvGatewayURL, host.EnvGatewayToken)
 	}

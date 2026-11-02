@@ -18,7 +18,8 @@ import (
 var errNotAvailableFromTerminal = errors.New("not available from the terminal")
 
 type attachedDaemon struct {
-	ctx      context.Context
+	done     <-chan struct{}
+	send     func(argv []string) (string, error)
 	instance string
 	events   chan tui.RoutedEvent
 
@@ -37,11 +38,16 @@ func newAttachedDaemon(ctx context.Context, instance string) (*attachedDaemon, e
 		return nil, err
 	}
 	a := &attachedDaemon{
-		ctx:       ctx,
+		done:      ctx.Done(),
 		instance:  instance,
 		events:    make(chan tui.RoutedEvent, 256),
 		channelOf: map[string]string{},
 		nameOf:    map[string]string{},
+	}
+	a.send = func(argv []string) (string, error) {
+		call, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		return host.DaemonDispatch(call, instance, argv)
 	}
 	a.refresh()
 	go a.pump(stream)
@@ -54,7 +60,7 @@ func (a *attachedDaemon) pump(stream <-chan host.DaemonEvent) {
 		conv := contracts.Conversation{Gateway: "terminal", ID: a.channelFor(e.Session)}
 		select {
 		case a.events <- tui.RoutedEvent{Conv: conv, Event: e.Event}:
-		case <-a.ctx.Done():
+		case <-a.done:
 			return
 		}
 	}
@@ -97,9 +103,7 @@ func (a *attachedDaemon) refresh() {
 }
 
 func (a *attachedDaemon) dispatch(argv []string) (string, error) {
-	ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
-	defer cancel()
-	return host.DaemonDispatch(ctx, a.instance, argv)
+	return a.send(argv)
 }
 
 func runAttached(ctx context.Context, instance string, opts ...tui.Option) error {

@@ -84,7 +84,7 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 
 	select {
 	case ev := <-in:
-		runOneTurn(ctx, channelSink{ctx: ctx, out: out}, resp, orch, ev, nil, newSkillEngine(resp), affordances{}, nil)
+		runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, ev, nil, newSkillEngine(resp), affordances{}, nil)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -92,13 +92,13 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 }
 
 type channelSink struct {
-	ctx context.Context
-	out chan<- contracts.Event
+	done <-chan struct{}
+	out  chan<- contracts.Event
 }
 
 func (s channelSink) Emit(e contracts.Event) {
 	select {
 	case s.out <- e:
-	case <-s.ctx.Done():
+	case <-s.done:
 	}
 }

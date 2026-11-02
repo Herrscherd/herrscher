@@ -169,7 +169,7 @@ func TestASkillsFactoryReturningNothingIsReported(t *testing.T) {
 	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{Kind: "empty", Category: contracts.CategorySkills},
 		Skills: func(context.Context, contracts.PluginConfig) (fs.FS, error) {
-			return nil, nil
+			return nil, errors.New("nothing")
 		},
 	}}, noEnv, dst)
 	if !out.Empty() {

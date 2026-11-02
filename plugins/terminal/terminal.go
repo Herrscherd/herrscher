@@ -405,22 +405,24 @@ func withTerminalDefault(args []string) []string {
 	return append(out, "--terminal_only")
 }
 
-var terminalVerbs = map[string]bool{
-	sessionVerb: true,
-	"agent":     true,
-	"memory":    true,
-	"models":    true,
+func terminalVerbs() map[string]bool {
+	return map[string]bool{
+		sessionVerb: true,
+		"agent":     true,
+		"memory":    true,
+		"models":    true,
+	}
 }
 
 // OperatorVerb reports whether a command's leading verb is reachable from a
 // terminal frontend. It is exported because the attached frontend talks to the
 // same daemon over a socket and must draw the same palette; two copies of this
 // judgement would be two chances to disagree about what a tab may run.
-func OperatorVerb(verb string) bool { return terminalVerbs[verb] }
+func OperatorVerb(verb string) bool { return terminalVerbs()[verb] }
 
 func allowedVerbs() string {
-	out := make([]string, 0, len(terminalVerbs))
-	for v := range terminalVerbs {
+	out := make([]string, 0, len(terminalVerbs()))
+	for v := range terminalVerbs() {
 		out = append(out, v)
 	}
 	sort.Strings(out)
@@ -448,7 +450,7 @@ func (t *Terminal) Commands() []tui.CommandSpec {
 	if err != nil {
 		return nil
 	}
-	specs, err := tui.ParseCommandSpecs([]byte(out), func(verb string) bool { return terminalVerbs[verb] })
+	specs, err := tui.ParseCommandSpecs([]byte(out), func(verb string) bool { return terminalVerbs()[verb] })
 	if err != nil {
 		return nil
 	}
@@ -458,9 +460,9 @@ func (t *Terminal) Commands() []tui.CommandSpec {
 // Dispatch forwards an operator argv to the bound SessionControl, prepending
 // --terminal_only when creating a session without an explicit gateway selector
 // so TUI-created sessions bind to this terminal and appear as tabs. The first
-// token is gated against terminalVerbs before it ever reaches the registry.
+// token is gated against terminalVerbs() before it ever reaches the registry.
 func (t *Terminal) Dispatch(args []string) (string, error) {
-	if len(args) == 0 || !terminalVerbs[args[0]] {
+	if len(args) == 0 || !terminalVerbs()[args[0]] {
 		verb := ""
 		if len(args) > 0 {
 			verb = args[0]

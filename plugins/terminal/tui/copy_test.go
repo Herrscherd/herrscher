@@ -87,7 +87,7 @@ func TestCopyRefusesAnUnknownTarget(t *testing.T) {
 	if clip.wrote != "" {
 		t.Fatalf("an unknown target must write nothing, got %q", clip.wrote)
 	}
-	for _, target := range copyTargets {
+	for _, target := range copyTargets() {
 		if !strings.Contains(m.flash, target) {
 			t.Fatalf("the refusal must name %q: %q", target, m.flash)
 		}

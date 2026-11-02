@@ -48,8 +48,10 @@ func hostAllowed(host string, allow []string) bool {
 	return false
 }
 
-var imageExts = map[string]bool{
-	".png": true, ".jpg": true, ".jpeg": true, extGIF: true, ".webp": true,
+func imageExts() map[string]bool {
+	return map[string]bool{
+		".png": true, ".jpg": true, ".jpeg": true, extGIF: true, ".webp": true,
+	}
 }
 
 func imageURLs(text string) []string {
@@ -59,7 +61,7 @@ func imageURLs(text string) []string {
 		if err != nil {
 			continue
 		}
-		if imageExts[strings.ToLower(path.Ext(u.Path))] {
+		if imageExts()[strings.ToLower(path.Ext(u.Path))] {
 			out = append(out, raw)
 		}
 	}

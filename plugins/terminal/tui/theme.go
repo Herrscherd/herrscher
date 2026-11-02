@@ -16,23 +16,27 @@ const (
 	glyphBolt      = "⚡"
 )
 
-var familyGlyphs = map[string]string{
-	familyRead:   "◇",
-	familyWrite:  "◈",
-	familyRun:    "▸",
-	familySearch: "⌕",
-	familyWeb:    "⌖",
-	familyAgent:  "◆",
+func familyGlyphs() map[string]string {
+	return map[string]string{
+		familyRead:   "◇",
+		familyWrite:  "◈",
+		familyRun:    "▸",
+		familySearch: "⌕",
+		familyWeb:    "⌖",
+		familyAgent:  "◆",
+	}
 }
 
 func familyGlyph(family string) string {
-	if g, ok := familyGlyphs[family]; ok {
+	if g, ok := familyGlyphs()[family]; ok {
 		return g
 	}
 	return glyphTool
 }
 
-var spinFrames = []string{"✳", "✵", "✶", "✷", "✸", "✹"}
+func spinFrames() []string {
+	return []string{"✳", "✵", "✶", "✷", "✸", "✹"}
+}
 
 const (
 	colText   = "#c6d0e0"

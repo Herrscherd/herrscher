@@ -15,7 +15,9 @@ type wlClipboard struct{}
 
 func newClipboard() clipboard { return wlClipboard{} }
 
-var preferredImageTypes = []string{mimePNG, mimeJPEG, mimeWebP, mimeGIF}
+func preferredImageTypes() []string {
+	return []string{mimePNG, mimeJPEG, mimeWebP, mimeGIF}
+}
 
 func (wlClipboard) ImageType() (string, bool) {
 	out, err := exec.Command("wl-paste", "--list-types").Output()
@@ -26,7 +28,7 @@ func (wlClipboard) ImageType() (string, bool) {
 	for _, t := range strings.Fields(string(out)) {
 		available[strings.ToLower(strings.TrimSpace(t))] = true
 	}
-	for _, t := range preferredImageTypes {
+	for _, t := range preferredImageTypes() {
 		if available[t] {
 			return t, true
 		}

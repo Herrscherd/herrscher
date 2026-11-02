@@ -977,7 +977,7 @@ func (m *model) anyBusy() bool {
 	return false
 }
 
-func (m *model) spinFrame() string { return spinFrames[m.spin%len(spinFrames)] }
+func (m *model) spinFrame() string { return spinFrames()[m.spin%len(spinFrames())] }
 
 func (m *model) thinkingContent() string {
 	return m.contentWith(m.searchQuery)

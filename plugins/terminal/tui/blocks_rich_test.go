@@ -89,7 +89,7 @@ func TestFoldedCodeBlockCollapsesAndRestoresExactly(t *testing.T) {
 	text := "before\n```go\n" + code + "```\nafter"
 
 	folded := foldCodeBlocks(text)
-	if strings.Contains(folded, "line\nline") {
+	if strings.Contains(folded, strings.Repeat("line\n", 2)) {
 		t.Fatalf("a folded block must not still contain its body: %q", folded)
 	}
 	if !strings.Contains(folded, "go") || !strings.Contains(folded, "lines") {

@@ -253,20 +253,22 @@ func (r *Registry) Specs() []Spec {
 func (r *Registry) Help() string {
 	lines := make([]string, 0, len(r.cmds))
 	for _, c := range r.cmds {
-		line := "  " + strings.Join(c.Path, " ")
+		var line strings.Builder
+		line.WriteString("  " + strings.Join(c.Path, " "))
 		for _, p := range c.Params {
-			if p.Required {
-				line += " --" + p.Name + " <" + p.Name + ">"
-			} else if p.ValueRequired {
-				line += " [--" + p.Name + " <" + p.Name + ">]"
-			} else {
-				line += " [--" + p.Name + "]"
+			switch {
+			case p.Required:
+				line.WriteString(" --" + p.Name + " <" + p.Name + ">")
+			case p.ValueRequired:
+				line.WriteString(" [--" + p.Name + " <" + p.Name + ">]")
+			default:
+				line.WriteString(" [--" + p.Name + "]")
 			}
 		}
 		if c.Help != "" {
-			line += ": " + c.Help
+			line.WriteString(": " + c.Help)
 		}
-		lines = append(lines, line)
+		lines = append(lines, line.String())
 	}
 	sort.Strings(lines)
 	return strings.Join(lines, "\n")

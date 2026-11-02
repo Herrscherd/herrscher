@@ -9,6 +9,7 @@ import (
 
 type countingBackend struct {
 	fakeBackend
+
 	calls int
 }
 

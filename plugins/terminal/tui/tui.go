@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -121,6 +122,7 @@ type tab struct {
 
 type liveAgent struct {
 	contracts.Subagent
+
 	since time.Time
 }
 
@@ -1068,7 +1070,7 @@ func (m *model) spinnerHint(tb *tab) string {
 
 func formatTokens(n int) string {
 	if n < 1000 {
-		return fmt.Sprintf("%d", n)
+		return strconv.Itoa(n)
 	}
 	return fmt.Sprintf("%.1fk", float64(n)/1000)
 }

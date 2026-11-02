@@ -186,7 +186,8 @@ func (t *Terminal) archiveIfUntouched() {
 		if s.Archived || s.LastTs != "" {
 			return
 		}
-		_, _ = c.Close(ctx, name, false)
+		_, err := c.Close(ctx, name, false)
+		bestEffort(err)
 		return
 	}
 }
@@ -539,3 +540,5 @@ func slug(s string) string {
 	}
 	return out
 }
+
+func bestEffort(_ error) {}

@@ -13,6 +13,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -1102,8 +1103,10 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend, opts ...Opt
 	if seam, err := newManageSeam(); err == nil {
 		m.SetPluginSeam(seam)
 	}
-	os.Stdout.WriteString(enhancedKeysOn)
-	defer os.Stdout.WriteString(enhancedKeysOff)
+	if err := writeStdout(enhancedKeysOn); err != nil {
+		cancel()
+		return fmt.Errorf("enable enhanced keys: %w", err)
+	}
 	p := tea.NewProgram(m,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
@@ -1122,9 +1125,12 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend, opts ...Opt
 			}
 		}
 	}()
-	_, err := p.Run()
+	_, runErr := p.Run()
 	cancel()
-	return err
+	if err := writeStdout(enhancedKeysOff); err != nil {
+		return errors.Join(runErr, fmt.Errorf("disable enhanced keys: %w", err))
+	}
+	return runErr
 }
 
 func (m *model) Init() tea.Cmd {
@@ -1434,6 +1440,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmd, m.ensureSpin())
 	case imageReadyMsg:
 		m.applyImage(msg)
+		return m, nil
+	case enhancedKeysFailedMsg:
+		m.flash = "touches étendues indisponibles : " + msg.err.Error()
 		return m, nil
 	case dispatchResultMsg:
 		m.syncTabs()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"time"
@@ -36,7 +37,7 @@ func runPluginHost(ctx context.Context, args []string) error {
 	var (
 		manifest  contracts.Manifest
 		register  func(*grpc.Server)
-		closeReal func()
+		closeReal func() error
 	)
 	switch contracts.Category(*category) {
 	case contracts.CategoryMemory:
@@ -46,7 +47,7 @@ func runPluginHost(ctx context.Context, args []string) error {
 		}
 		manifest, register, closeReal = m,
 			func(s *grpc.Server) { transport.RegisterMemorySkeleton(s, real) },
-			func() { _ = real.Close() }
+			func() error { return real.Close() }
 	case contracts.CategoryOrchestrator:
 		real, m, err := firstOrchestrator(ctx)
 		if err != nil {
@@ -54,7 +55,7 @@ func runPluginHost(ctx context.Context, args []string) error {
 		}
 		manifest, register, closeReal = m,
 			func(s *grpc.Server) { transport.RegisterOrchestratorSkeleton(s, real) },
-			func() { _ = real.Close() }
+			func() error { return real.Close() }
 	case contracts.CategoryBackend:
 		real, m, err := firstBackend(ctx)
 		if err != nil {
@@ -62,11 +63,15 @@ func runPluginHost(ctx context.Context, args []string) error {
 		}
 		manifest, register, closeReal = m,
 			func(s *grpc.Server) { transport.RegisterBackendSkeleton(s, real) },
-			func() { _ = real.Close() }
+			func() error { return real.Close() }
 	default:
 		return fmt.Errorf("plugin-host: category %q passed the support gate but has no skeleton", *category)
 	}
-	defer closeReal()
+	defer func() {
+		if err := closeReal(); err != nil {
+			slog.Error("close hosted plugin", "err", err)
+		}
+	}()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -98,7 +103,9 @@ func runPluginHost(ctx context.Context, args []string) error {
 		t := time.NewTicker(2 * time.Second)
 		defer t.Stop()
 		for {
-			_ = transport.Announce(nc, ann)
+			if err := transport.Announce(nc, ann); err != nil {
+				slog.Warn("announce plugin", "err", err)
+			}
 			select {
 			case <-ctx.Done():
 				return

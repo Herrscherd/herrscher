@@ -5,6 +5,7 @@ package manage
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"syscall"
@@ -16,15 +17,26 @@ func readSecret(in *bufio.Reader, msg string) (string, error) {
 	fd := os.Stdin.Fd()
 
 	var old syscall.Termios
-	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, syscall.TCGETS, uintptr(unsafe.Pointer(&old))); errno != 0 {
+	if err := ioctlTermios(fd, syscall.TCGETS, &old); err != nil {
 		return promptLine(in, ""), nil
 	}
 	raw := old
 	raw.Lflag &^= syscall.ECHO
-	syscall.Syscall(syscall.SYS_IOCTL, fd, syscall.TCSETS, uintptr(unsafe.Pointer(&raw)))
+	if err := ioctlTermios(fd, syscall.TCSETS, &raw); err != nil {
+		return "", err
+	}
 
 	line, err := in.ReadString('\n')
-	syscall.Syscall(syscall.SYS_IOCTL, fd, syscall.TCSETS, uintptr(unsafe.Pointer(&old)))
+	if restoreErr := ioctlTermios(fd, syscall.TCSETS, &old); restoreErr != nil {
+		slog.Warn("restore terminal echo", "err", restoreErr)
+	}
 	fmt.Fprintln(os.Stderr)
 	return strings.TrimSpace(line), err
+}
+
+func ioctlTermios(fd uintptr, request uintptr, t *syscall.Termios) error {
+	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, request, uintptr(unsafe.Pointer(t))); errno != 0 {
+		return errno
+	}
+	return nil
 }

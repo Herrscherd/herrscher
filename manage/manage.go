@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -353,7 +354,12 @@ func pluginVersions(ctx context.Context, dir, src string) ([]PluginVersion, erro
 	}
 	available := map[string][]string{}
 	for _, m := range mods {
-		if vs, _ := availableVersions(ctx, tc, m); vs != nil {
+		vs, err := availableVersions(ctx, tc, m)
+		if err != nil {
+			slog.Warn("latest version unknown", "module", m, "err", err)
+			continue
+		}
+		if vs != nil {
 			available[m] = vs
 		}
 	}
@@ -370,7 +376,9 @@ func listWithVersions(ctx context.Context, dir, src string, out io.Writer) error
 		if row.Pinned {
 			pin = "  pinned"
 		}
-		fmt.Fprintf(out, "%s  %s  %s%s\n", row.Module, row.Installed, row.Latest, pin)
+		if _, err := fmt.Fprintf(out, "%s  %s  %s%s\n", row.Module, row.Installed, row.Latest, pin); err != nil {
+			return err
+		}
 	}
 	return nil
 }

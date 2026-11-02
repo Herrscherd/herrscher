@@ -31,7 +31,9 @@ func failBackend(string) (contracts.Backend, error) {
 func TestRunStartsOptionalCapability(t *testing.T) {
 	orch := &startOrch{}
 	opts := Options{Channel: "c", HubSocket: "/nonexistent-hub.sock"}
-	_ = Run(context.Background(), failBackend, orch, opts)
+	if err := Run(context.Background(), failBackend, orch, opts); err != nil {
+		t.Logf("run: %v", err)
+	}
 	if !orch.started.Load() {
 		t.Fatal("Run did not invoke the orchestrator's optional Start capability")
 	}

@@ -69,7 +69,10 @@ func runService(ctx context.Context, args []string) error {
 }
 
 func runServiceUpdate(ctx context.Context, cfg service.Config, args []string) error {
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
 	fs := flag.NewFlagSet("service update", flag.ContinueOnError)
 	source := fs.String("source", cwd, "path to the herrscher source checkout to build from")
 	noPull := fs.Bool("no-pull", false, "skip `git pull --ff-only` before building")

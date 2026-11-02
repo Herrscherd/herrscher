@@ -55,7 +55,10 @@ func main() {
 	if abs, err := filepath.Abs(envPath); err == nil {
 		envPath = abs
 	}
-	os.Setenv("HERRSCHER_ENV_FILE", envPath)
+	if err := os.Setenv("HERRSCHER_ENV_FILE", envPath); err != nil {
+		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
+		os.Exit(1)
+	}
 	if err := loadEnvFile(envPath); err != nil {
 		if explicit {
 			fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())

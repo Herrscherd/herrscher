@@ -31,7 +31,9 @@ func runBridge(ctx context.Context, args []string) error {
 	journal := fs.String("journal", "", "path to the call journal Consolidate reads (worktree-relative ok); only used with --extractor")
 	consolidateEvery := fs.Int("consolidate-every", 0, "run Consolidate every N turns (0 = manual only); only used with --extractor")
 	envStdin := fs.Bool("env-stdin", false, "read KEY=VALUE lines from stdin until a blank line and put them in this process's environment (how a remote bridge gets its gateway credentials)")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 
 	if *envStdin {
 		if err := applyEnvFromStdin(os.Stdin); err != nil {
@@ -53,13 +55,13 @@ func runBridge(ctx context.Context, args []string) error {
 
 	mem := buildMemory(ctx, log)
 	if mem != nil {
-		defer mem.Close()
+		defer closeLogged(log, "memory", mem)
 		provisionScope(ctx, mem, *project, *agent, log)
 	}
 	orch := buildOrchestrator(ctx, mem, *session, *project, *agent,
 		learnConfig{extractor: *extractor, journal: *journal, consolidateEvery: *consolidateEvery}, log)
 	if orch != nil {
-		defer orch.Close()
+		defer closeLogged(log, "orchestrator", orch)
 	}
 	rosterRoot := *agentsRoot
 	if rosterRoot == "" {
@@ -244,4 +246,10 @@ func applyEnvFromStdin(r io.Reader) error {
 		}
 	}
 	return nil
+}
+
+func closeLogged(log *slog.Logger, what string, c io.Closer) {
+	if err := c.Close(); err != nil {
+		log.Warn("close failed", "what", what, "err", err)
+	}
 }

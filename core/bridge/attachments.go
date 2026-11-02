@@ -214,7 +214,9 @@ func pinnedClient(client *http.Client, hosts allowedHosts) *http.Client {
 	tr, ok := pinned.Transport.(*http.Transport)
 	if ok || pinned.Transport == nil {
 		if tr == nil {
-			tr, _ = http.DefaultTransport.(*http.Transport)
+			if dt, ok := http.DefaultTransport.(*http.Transport); ok {
+				tr = dt
+			}
 		}
 		if tr != nil {
 			pinned.Transport = pinnedTransport(tr)
@@ -227,12 +229,17 @@ var pinnedTransports sync.Map
 
 func pinnedTransport(src *http.Transport) *http.Transport {
 	if v, ok := pinnedTransports.Load(src); ok {
-		return v.(*http.Transport)
+		if tr, ok := v.(*http.Transport); ok {
+			return tr
+		}
 	}
 	tr := src.Clone()
 	tr.DialContext = pinnedDial(&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second})
-	v, _ := pinnedTransports.LoadOrStore(src, tr)
-	return v.(*http.Transport)
+	stored, _ := pinnedTransports.LoadOrStore(src, tr)
+	if cached, ok := stored.(*http.Transport); ok {
+		return cached
+	}
+	return tr
 }
 
 func pinnedDial(d *net.Dialer) func(context.Context, string, string) (net.Conn, error) {
@@ -288,7 +295,7 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 	if err != nil {
 		return "", fmt.Errorf("download %s: %w", a.Filename, err)
 	}
-	defer resp.Body.Close()
+	defer closeQuietly(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download %s: status %d", a.Filename, resp.StatusCode)
 	}

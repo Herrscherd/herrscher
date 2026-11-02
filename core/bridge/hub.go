@@ -93,13 +93,13 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	if err != nil {
 		return fmt.Errorf("backend: %w", err)
 	}
-	defer backend.Close()
+	defer closeQuietly(backend)
 
 	conn, err := dialHub(ctx, o.HubSocket)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer closeQuietly(conn)
 
 	ctrl := &turnController{}
 	in := make(chan contracts.Event)
@@ -120,7 +120,10 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 		})
 	}()
 
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("working directory: %w", err)
+	}
 	projectLearnedSkills(ctx, orch, cwd)
 	eng := newSkillEngine(backend)
 	var pin *scopePin

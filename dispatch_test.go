@@ -111,22 +111,30 @@ func swapStdio(t *testing.T, payload string) func() (string, string) {
 	outR, outW := pipe()
 	errR, errW := pipe()
 	go func() {
-		_, _ = io.WriteString(inW, payload)
-		_ = inW.Close()
+		if _, err := io.WriteString(inW, payload); err != nil {
+			t.Errorf("write payload: %v", err)
+		}
+		closeQuietly(inW)
 	}()
 	oldIn, oldOut, oldErr := os.Stdin, os.Stdout, os.Stderr
 	os.Stdin, os.Stdout, os.Stderr = inR, outW, errW
 	t.Cleanup(func() {
 		os.Stdin, os.Stdout, os.Stderr = oldIn, oldOut, oldErr
-		_ = inR.Close()
-		_ = outR.Close()
-		_ = errR.Close()
+		closeQuietly(inR)
+		closeQuietly(outR)
+		closeQuietly(errR)
 	})
 	return func() (string, string) {
-		_ = outW.Close()
-		_ = errW.Close()
-		out, _ := io.ReadAll(outR)
-		errs, _ := io.ReadAll(errR)
+		closeQuietly(outW)
+		closeQuietly(errW)
+		out, err := io.ReadAll(outR)
+		if err != nil {
+			t.Errorf("read stdout: %v", err)
+		}
+		errs, err := io.ReadAll(errR)
+		if err != nil {
+			t.Errorf("read stderr: %v", err)
+		}
 		return string(out), string(errs)
 	}
 }

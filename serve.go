@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,7 +44,9 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	statusChannel := fs.String("status-channel", cfg.StatusChannel, "if set, maintain a self-updating status embed there")
 	instanceID := fs.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID then config.json")
 	envFile := fs.String("env-file", "", "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	if *envFile != "" {
 		if err := loadEnvFile(*envFile); err != nil {
 			return err
@@ -122,11 +126,19 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	}
 	if fg != nil && term.IsTerminal(int(os.Stdout.Fd())) {
 		if restore, rerr := redirectStderr(filepath.Join(filepath.Dir(*statePath), "serve.log")); rerr == nil {
-			defer restore()
+			defer func() {
+				if err := restore(); err != nil {
+					slog.Error("restore stderr", "err", err)
+				}
+			}()
 		}
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		go func() { _ = host.RunHub(ctx, gws, opts) }()
+		go func() {
+			if err := host.RunHub(ctx, gws, opts); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("hub stopped", "err", err)
+			}
+		}()
 		return fg.RunForeground(ctx, cancel)
 	}
 	return host.RunHub(ctx, gws, opts)
@@ -279,7 +291,9 @@ func runPromptWith(ctx context.Context, d verbDispatcher, name, prompt string, s
 	if _, err := d.Dispatch(ctx, createTaskSession(name)); err != nil {
 		return err
 	}
-	fmt.Fprintln(stderr, "session: "+name)
+	if _, err := fmt.Fprintln(stderr, "session: "+name); err != nil {
+		return err
+	}
 	argv := append([]string{"session", "seed", "--name", name}, cli.FlagArg("task", prompt)...)
 	argv = append(argv, "--timeout", promptTimeout.String())
 	reply, err := d.Dispatch(ctx, argv)
@@ -287,7 +301,9 @@ func runPromptWith(ctx context.Context, d verbDispatcher, name, prompt string, s
 		return fmt.Errorf("session %s: %w", name, err)
 	}
 	if reply != "" {
-		fmt.Fprintln(stdout, reply)
+		if _, err := fmt.Fprintln(stdout, reply); err != nil {
+			return err
+		}
 	}
 	return nil
 }

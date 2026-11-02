@@ -26,12 +26,12 @@ func hostsFor(t *testing.T, srv *httptest.Server) allowedHosts {
 
 func TestResolveAttachmentsFetchesSupportedTypes(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("DATA" + r.URL.Path))
+		writeOrLog(w, []byte("DATA"+r.URL.Path))
 	}))
 	defer srv.Close()
 
 	sess := "fetch-supported-types"
-	defer os.RemoveAll(attachmentDir(sess))
+	defer removeAllOrFail(t, attachmentDir(sess))
 	m := contracts.Message{
 		ID: "42",
 		Attachments: []contracts.Attachment{
@@ -59,12 +59,12 @@ func TestResolveAttachmentsFetchesSupportedTypes(t *testing.T) {
 
 func TestResolveAttachmentsOrderAndCollision(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(r.URL.Path))
+		writeOrLog(w, []byte(r.URL.Path))
 	}))
 	defer srv.Close()
 
 	sess := "order-and-collision"
-	defer os.RemoveAll(attachmentDir(sess))
+	defer removeAllOrFail(t, attachmentDir(sess))
 	m := contracts.Message{
 		ID: "7",
 		Attachments: []contracts.Attachment{
@@ -79,7 +79,7 @@ func TestResolveAttachmentsOrderAndCollision(t *testing.T) {
 	if paths[0] == paths[1] {
 		t.Fatalf("dest collision: %v", paths)
 	}
-	if b, _ := os.ReadFile(paths[0]); string(b) != "/1" {
+	if b := mustReadFile(t, paths[0]); string(b) != "/1" {
 		t.Errorf("first path content = %q, want /1", b)
 	}
 }
@@ -89,12 +89,12 @@ func TestResolveAttachmentsOrderSurvivesASlowFirstFetch(t *testing.T) {
 		if r.URL.Path == "/1" {
 			time.Sleep(80 * time.Millisecond)
 		}
-		_, _ = w.Write([]byte(r.URL.Path))
+		writeOrLog(w, []byte(r.URL.Path))
 	}))
 	defer srv.Close()
 
 	sess := "slow-first"
-	defer os.RemoveAll(attachmentDir(sess))
+	defer removeAllOrFail(t, attachmentDir(sess))
 	m := contracts.Message{
 		ID: "9",
 		Attachments: []contracts.Attachment{
@@ -108,7 +108,7 @@ func TestResolveAttachmentsOrderSurvivesASlowFirstFetch(t *testing.T) {
 		t.Fatalf("got %d paths, want 3: %v", len(paths), paths)
 	}
 	for i, want := range []string{"/1", "/2", "/3"} {
-		if b, _ := os.ReadFile(paths[i]); string(b) != want {
+		if b := mustReadFile(t, paths[i]); string(b) != want {
 			t.Errorf("paths[%d] content = %q, want %q", i, b, want)
 		}
 	}
@@ -118,12 +118,12 @@ func TestResolveAttachmentsFetchesConcurrently(t *testing.T) {
 	const delay = 60 * time.Millisecond
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(delay)
-		_, _ = w.Write([]byte(r.URL.Path))
+		writeOrLog(w, []byte(r.URL.Path))
 	}))
 	defer srv.Close()
 
 	sess := "concurrent"
-	defer os.RemoveAll(attachmentDir(sess))
+	defer removeAllOrFail(t, attachmentDir(sess))
 	m := contracts.Message{ID: "10"}
 	for i := 0; i < maxAttachmentsPerMessage; i++ {
 		m.Attachments = append(m.Attachments, contracts.Attachment{
@@ -151,12 +151,12 @@ func TestResolveAttachmentsHTTPError(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		_, _ = w.Write([]byte("ok"))
+		writeOrLog(w, []byte("ok"))
 	}))
 	defer srv.Close()
 
 	sess := "http-error"
-	defer os.RemoveAll(attachmentDir(sess))
+	defer removeAllOrFail(t, attachmentDir(sess))
 	m := contracts.Message{
 		ID: "9",
 		Attachments: []contracts.Attachment{
@@ -190,7 +190,7 @@ func TestResolveAttachmentsRejectsRedirectOffAllowlist(t *testing.T) {
 	defer cdn.Close()
 
 	sess := "redirect-off-allowlist"
-	defer os.RemoveAll(attachmentDir(sess))
+	defer removeAllOrFail(t, attachmentDir(sess))
 	m := contracts.Message{
 		ID:          "1",
 		Attachments: []contracts.Attachment{{Filename: "x.png", URL: cdn.URL + "/x.png"}},
@@ -230,10 +230,11 @@ func TestFetchOneRemovesPartialFileOnCopyError(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", "999999")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("xx"))
+		writeOrLog(w, []byte("xx"))
 		if hj, ok := w.(http.Hijacker); ok {
-			conn, _, _ := hj.Hijack()
-			_ = conn.Close()
+			if conn, _, err := hj.Hijack(); err == nil {
+				closeQuietly(conn)
+			}
 		}
 	}))
 	defer srv.Close()
@@ -243,7 +244,7 @@ func TestFetchOneRemovesPartialFileOnCopyError(t *testing.T) {
 	if _, err := fetchOne(context.Background(), srv.Client(), a, "1", 0, dir, hostsFor(t, srv)); err == nil {
 		t.Fatal("want copy error")
 	}
-	entries, _ := os.ReadDir(dir)
+	entries := mustReadDir(t, dir)
 	if len(entries) != 0 {
 		t.Fatalf("partial file not cleaned up: %v", entries)
 	}
@@ -251,12 +252,12 @@ func TestFetchOneRemovesPartialFileOnCopyError(t *testing.T) {
 
 func TestResolveAttachmentsContextCancelled(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("data"))
+		writeOrLog(w, []byte("data"))
 	}))
 	defer srv.Close()
 
 	sess := "ctx-cancelled"
-	defer os.RemoveAll(attachmentDir(sess))
+	defer removeAllOrFail(t, attachmentDir(sess))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	m := contracts.Message{
@@ -276,7 +277,7 @@ func TestFetchOneSkipsOversizedBody(t *testing.T) {
 			buf[i] = 'A'
 		}
 		for written := 0; written < big; written += len(buf) {
-			_, _ = w.Write(buf)
+			writeOrLog(w, buf)
 		}
 	}))
 	defer srv.Close()
@@ -287,7 +288,7 @@ func TestFetchOneSkipsOversizedBody(t *testing.T) {
 	if err == nil {
 		t.Fatalf("want error for oversized body, got path %q", p)
 	}
-	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+	if entries := mustReadDir(t, dir); len(entries) != 0 {
 		t.Errorf("oversized fetch left %d file(s) behind, want none", len(entries))
 	}
 }
@@ -296,12 +297,12 @@ func TestResolveAttachmentsSkipsDeclaredOversized(t *testing.T) {
 	called := false
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		_, _ = w.Write([]byte("x"))
+		writeOrLog(w, []byte("x"))
 	}))
 	defer srv.Close()
 
 	sess := "declared-oversized"
-	defer os.RemoveAll(attachmentDir(sess))
+	defer removeAllOrFail(t, attachmentDir(sess))
 	m := contracts.Message{ID: "1", Attachments: []contracts.Attachment{
 		{Filename: "big.png", URL: srv.URL + "/big.png", Size: maxAttachmentBytes + 1},
 	}}
@@ -339,12 +340,12 @@ func TestSupportedPrefersContentType(t *testing.T) {
 
 func TestResolveAttachmentsCapsCount(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("x"))
+		writeOrLog(w, []byte("x"))
 	}))
 	defer srv.Close()
 
 	sess := "caps-count"
-	defer os.RemoveAll(attachmentDir(sess))
+	defer removeAllOrFail(t, attachmentDir(sess))
 	var atts []contracts.Attachment
 	for i := 0; i < maxAttachmentsPerMessage+3; i++ {
 		atts = append(atts, contracts.Attachment{Filename: "x.png", URL: srv.URL + "/x.png"})
@@ -359,7 +360,7 @@ func TestResolveAttachmentsCapsCount(t *testing.T) {
 func TestResolveAttachmentsNothingToResolveNoDir(t *testing.T) {
 	sess := "nothing-to-resolve-no-dir"
 	dir := attachmentDir(sess)
-	defer os.RemoveAll(dir)
+	defer removeAllOrFail(t, dir)
 	m := contracts.Message{ID: "1", Attachments: []contracts.Attachment{{Filename: "a.zip"}}}
 	if paths := ResolveAttachments(context.Background(), http.DefaultClient, m, sess, nil); paths != nil && len(paths) != 0 {
 		t.Fatalf("want no paths, got %v", paths)
@@ -371,12 +372,12 @@ func TestResolveAttachmentsNothingToResolveNoDir(t *testing.T) {
 
 func TestResolveAttachmentsTightModes(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("PNGDATA"))
+		writeOrLog(w, []byte("PNGDATA"))
 	}))
 	defer srv.Close()
 
 	sess := "tight-modes"
-	defer os.RemoveAll(attachmentDir(sess))
+	defer removeAllOrFail(t, attachmentDir(sess))
 	m := contracts.Message{ID: "1", Attachments: []contracts.Attachment{
 		{Filename: "x.png", URL: srv.URL + "/x.png"},
 	}}
@@ -412,12 +413,12 @@ func TestPinnedDialAllowsIPLiteral(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer closeQuietly(ln)
 	c, err := pinnedDial(&net.Dialer{Timeout: 2 * time.Second})(context.Background(), "tcp", ln.Addr().String())
 	if err != nil {
 		t.Fatalf("ip literal must be dialled as given: %v", err)
 	}
-	_ = c.Close()
+	closeQuietly(c)
 }
 
 func TestRoutable(t *testing.T) {

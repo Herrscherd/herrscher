@@ -106,7 +106,11 @@ func TestManageVersionPinAndUnpin(t *testing.T) {
 	if err := pinModule(dir, "mod/a", false); err != nil {
 		t.Fatalf("unpin: %v", err)
 	}
-	if pins, _ := loadPins(dir); pins["mod/a"] {
+	pins, err = loadPins(dir)
+	if err != nil {
+		t.Fatalf("load pins: %v", err)
+	}
+	if pins["mod/a"] {
 		t.Fatalf("pins = %v, want mod/a dropped", pins)
 	}
 }

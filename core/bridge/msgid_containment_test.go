@@ -13,7 +13,7 @@ import (
 
 func TestResolveAttachmentsContainsTraversalMessageIDs(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("PNG"))
+		writeOrLog(w, []byte("PNG"))
 	}))
 	defer srv.Close()
 	hosts := map[string]bool(hostsFor(t, srv))

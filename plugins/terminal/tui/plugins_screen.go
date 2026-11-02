@@ -183,7 +183,7 @@ func (m *model) backPlugins() {
 		m.pluginsOpen = false
 	case pluginsVersions:
 		m.openPluginActions()
-	default:
+	case pluginsActions, pluginsWarn, pluginsFailed, pluginsDone:
 		m.pluginsMode = pluginsList
 	}
 	m.applySize()

@@ -17,7 +17,7 @@ func diagRows(caps Capabilities) []diagRow {
 		graphics.feature = "images en ligne, pleine résolution"
 	case GraphicsSixel:
 		graphics.feature = "images en ligne, résolution sixel"
-	default:
+	case GraphicsNone:
 		graphics.feature = "images en ligne en demi-blocs unicode"
 	}
 

@@ -66,6 +66,7 @@ func imageEscape(img image.Image, caps Capabilities) string {
 		return kittyPreview(data, previewRows)
 	case GraphicsSixel:
 		return sixelEscape(scaled)
+	case GraphicsNone:
 	}
 	return blockRender(scaled, blockCols(scaled, previewRows))
 }

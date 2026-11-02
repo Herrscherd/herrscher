@@ -20,6 +20,7 @@ func (g Graphics) String() string {
 		return programKitty
 	case GraphicsSixel:
 		return "sixel"
+	case GraphicsNone:
 	}
 	return "none"
 }
@@ -40,6 +41,7 @@ func (c Colour) String() string {
 		return "truecolor"
 	case Colour256:
 		return "256"
+	case Colour16:
 	}
 	return "16"
 }

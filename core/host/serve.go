@@ -112,7 +112,8 @@ func DefaultStatePath() string {
 	if d := envx.Get("STATE_DIR"); d != "" {
 		return filepath.Join(d, "state.json")
 	}
-	home, _ := os.UserHomeDir()
+	home, homeErr := os.UserHomeDir()
+	logCleanup(homeErr)
 	return filepath.Join(home, ".config", "herrscher", "state.json")
 }
 
@@ -164,7 +165,8 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	st.ApplyDefaults(home, o.Workspace, o.Source)
 	seedTerminalHome(st, o.ForegroundBound)
 
-	self, _ := os.Executable()
+	self, execErr := os.Executable()
+	logCleanup(execErr)
 	startRemotePluginHosts(ctx, self, o.RemoteCategories, base)
 	partDir := filepath.Dir(o.StatePath)
 	sup := supervisor.NewSupervisor(ctx, self)
@@ -258,7 +260,7 @@ func seedTerminalHome(st *state.State, hasForeground bool) {
 	if !hasForeground || st.Home.ID != "" {
 		return
 	}
-	_ = st.SetHome(state.HomeRef{ID: "terminal", Type: "terminal"})
+	logCleanup(st.SetHome(state.HomeRef{ID: "terminal", Type: "terminal"}))
 }
 
 func startRemotePluginHosts(ctx context.Context, self string, remote map[contracts.Category]bool, log *slog.Logger) {
@@ -283,7 +285,7 @@ func startRemotePluginHost(ctx context.Context, self string, cat contracts.Categ
 			cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 			cmd.Env = os.Environ()
 			start := time.Now()
-			_ = cmd.Run()
+			logCleanup(cmd.Run())
 			if ctx.Err() != nil {
 				return
 			}

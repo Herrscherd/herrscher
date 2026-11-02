@@ -81,7 +81,7 @@ func listenRestricted(path string) (net.Listener, error) {
 	if err != nil {
 		return listenAndRestrict(path)
 	}
-	defer os.RemoveAll(staging)
+	defer func() { logCleanup(os.RemoveAll(staging)) }()
 	tmp := filepath.Join(staging, "s")
 	if len(tmp) > maxUnixSocketPath {
 		return listenAndRestrict(path)
@@ -94,7 +94,7 @@ func listenRestricted(path string) (net.Listener, error) {
 		ul.SetUnlinkOnClose(false)
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		_ = l.Close()
+		logCleanup(l.Close())
 		return nil, err
 	}
 	return l, nil
@@ -106,8 +106,8 @@ func listenAndRestrict(path string) (net.Listener, error) {
 		return nil, err
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
-		_ = l.Close()
-		_ = os.Remove(path)
+		logCleanup(l.Close())
+		logCleanup(os.Remove(path))
 		return nil, err
 	}
 	return l, nil

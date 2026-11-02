@@ -223,7 +223,7 @@ func TestDriverResolvesAttachmentsOntoInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Cleanup(func() { logCleanup(os.RemoveAll(dir)) })
 	img := filepath.Join(dir, "paste.png")
 	if err := os.WriteFile(img, []byte("PNG"), 0o600); err != nil {
 		t.Fatal(err)
@@ -317,7 +317,7 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer acc.Close()
+	defer closeRead(acc)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go RunSession(ctx, "pickreg", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
@@ -489,7 +489,7 @@ func TestRunSessionReconnectsAndResumes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
-	defer acc.Close()
+	defer closeRead(acc)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -497,11 +497,11 @@ func TestRunSessionReconnectsAndResumes(t *testing.T) {
 
 	c1 := dialCtl(t, sock)
 	gotInput(t, c1, "q1")
-	c1.Close()
+	closeRead(c1)
 
 	a.feed("q2")
 	c2 := dialCtl(t, sock)
-	defer c2.Close()
+	defer closeRead(c2)
 	gotInput(t, c2, "q2")
 }
 
@@ -513,7 +513,7 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
-	defer acc.Close()
+	defer closeRead(acc)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -529,11 +529,11 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 		defer a.mu.Unlock()
 		return len(a.posted) == 1
 	}, "first turn completed (reply posted)")
-	c1.Close()
+	closeRead(c1)
 
 	a.feed("q2")
 	c2 := dialCtl(t, sock)
-	defer c2.Close()
+	defer closeRead(c2)
 	gotInput(t, c2, "q2")
 }
 
@@ -552,13 +552,13 @@ func gotInput(t *testing.T, c *control.Conn, want string) {
 	t.Helper()
 	got := make(chan string, 1)
 	go func() {
-		_ = c.Scan(func(e contracts.Event) error {
+		logCleanup(c.Scan(func(e contracts.Event) error {
 			if e.T == "input" {
 				got <- e.Text
 				return errStopScan
 			}
 			return nil
-		})
+		}))
 	}()
 	select {
 	case g := <-got:

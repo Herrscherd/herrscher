@@ -25,7 +25,8 @@ func (r *gatewayRenderer) handle(ctx context.Context, e contracts.Event) {
 		return
 	}
 	for _, part := range chunk(e.Text, gatewayMaxLen) {
-		_, _ = r.gw.Post(ctx, r.conv, part)
+		_, postErr := r.gw.Post(ctx, r.conv, part)
+		logCleanup(postErr)
 	}
 }
 

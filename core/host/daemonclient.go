@@ -88,11 +88,11 @@ func subscribeAt(ctx context.Context, path string) (<-chan DaemonEvent, error) {
 	out := make(chan DaemonEvent, 256)
 	go func() {
 		<-ctx.Done()
-		_ = conn.Close()
+		logCleanup(conn.Close())
 	}()
 	go func() {
 		defer close(out)
-		defer conn.Close()
+		defer closeRead(conn)
 		sc := bufio.NewScanner(conn)
 		sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 		for sc.Scan() {
@@ -137,7 +137,7 @@ func ServingPID(statePath string) (int, bool) {
 	if err != nil {
 		return 0, false
 	}
-	defer f.Close()
+	defer closeRead(f)
 	locked, err := tryLock(f)
 	if err != nil || locked {
 		return 0, false

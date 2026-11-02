@@ -93,7 +93,7 @@ func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("replacement control listener is not reachable: %v", err)
 	}
-	_ = conn.Close()
+	logCleanup(conn.Close())
 }
 
 func waitForRegisteredIncarnation(t *testing.T, name, incarnation string) {

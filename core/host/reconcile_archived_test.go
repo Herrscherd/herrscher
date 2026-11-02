@@ -54,7 +54,7 @@ func TestReconcileReapsInPlaceArchived(t *testing.T) {
 		t.Fatalf("session should be live before archiving")
 	}
 
-	_ = st.SetArchived("s", true)
+	logCleanup(st.SetArchived("s", true))
 	h.reconcile()
 	h.mu.Lock()
 	_, stillUp := h.live["s"]

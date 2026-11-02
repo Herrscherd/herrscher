@@ -33,7 +33,7 @@ func TestSelectBackendVendorPrecedence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.env == "" {
-				_ = os.Unsetenv("HERRSCHER_BACKEND")
+				logCleanup(os.Unsetenv("HERRSCHER_BACKEND"))
 			} else {
 				t.Setenv("HERRSCHER_BACKEND", tt.env)
 			}
@@ -101,7 +101,7 @@ func TestNewSeedBackendResolvesRelativeWorktreeOnce(t *testing.T) {
 	if err := os.Chdir(worker); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chdir(original) })
+	t.Cleanup(func() { logCleanup(os.Chdir(original)) })
 
 	var gotDir string
 	contracts.Default.Register(contracts.Plugin{

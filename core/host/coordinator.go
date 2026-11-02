@@ -170,7 +170,8 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 		return "", fmt.Errorf("coordination: create %q: %w", bName, err)
 	}
 	if !c.seedWithRetry(ctx, bName, task) {
-		_, _ = c.closer.Close(context.WithoutCancel(ctx), bName, true)
+		_, rollbackErr := c.closer.Close(context.WithoutCancel(ctx), bName, true)
+		logCleanup(rollbackErr)
 		return "", fmt.Errorf("coordination: session %q created but seeding timed out; rolled back", bName)
 	}
 	return bName, nil

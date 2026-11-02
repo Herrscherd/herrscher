@@ -37,7 +37,7 @@ func TestListenCommandSocketNeverPublishesARelaxedSocket(t *testing.T) {
 			if err != nil {
 				t.Fatalf("listenCommandSocket: %v", err)
 			}
-			defer func() { _ = l.Close(); _ = os.Remove(path) }()
+			defer func() { closeRead(l); logCleanup(os.Remove(path)) }()
 			select {
 			case perm := <-watched:
 				t.Fatalf("socket was visible with mode %o", perm)

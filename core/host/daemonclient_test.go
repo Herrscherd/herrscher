@@ -18,23 +18,25 @@ func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer closeRead(ln)
 	go func() {
 		c, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		defer c.Close()
+		defer closeRead(c)
 		for _, e := range []DaemonEvent{
 			{Session: "alpha", Event: contracts.Event{T: "reply", Text: "hello"}},
 			{Session: "beta", Event: contracts.Event{T: "status", Text: "working"}},
 		} {
-			b, _ := json.Marshal(e)
-			c.Write(append(b, '\n'))
+			b, marshalErr := json.Marshal(e)
+			logCleanup(marshalErr)
+			logWriteFailure(c.Write(append(b, '\n')))
 		}
-		c.Write([]byte("{not json\n"))
-		b, _ := json.Marshal(DaemonEvent{Session: "alpha", Event: contracts.Event{T: "reply", Text: "still here", Done: true}})
-		c.Write(append(b, '\n'))
+		logWriteFailure(c.Write([]byte("{not json\n")))
+		b, marshalErr := json.Marshal(DaemonEvent{Session: "alpha", Event: contracts.Event{T: "reply", Text: "still here", Done: true}})
+		logCleanup(marshalErr)
+		logWriteFailure(c.Write(append(b, '\n')))
 		<-time.After(200 * time.Millisecond)
 	}()
 
@@ -78,7 +80,7 @@ func TestSubscribeDaemonEventsClosesWhenTheDaemonGoesAway(t *testing.T) {
 		if err != nil {
 			return
 		}
-		c.Close()
+		closeRead(c)
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

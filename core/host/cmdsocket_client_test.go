@@ -26,8 +26,8 @@ func TestDispatchLiveCommandRoundTrips(t *testing.T) {
 		t.Fatalf("listenCommandSocket: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = ln.Close()
-		_ = os.Remove(path)
+		logCleanup(ln.Close())
+		logCleanup(os.Remove(path))
 	})
 
 	disp := &clientDispatcher{out: "worker created"}

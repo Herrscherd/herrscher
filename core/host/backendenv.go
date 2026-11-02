@@ -45,8 +45,8 @@ func captureGatewayCreds(getenv func(string) string, unsetenv func(string) error
 		capturedGateway.url, capturedGateway.token = getenv(EnvGatewayURL), getenv(EnvGatewayToken)
 		capturedGateway.captured = true
 	}
-	_ = unsetenv(EnvGatewayURL)
-	_ = unsetenv(EnvGatewayToken)
+	logCleanup(unsetenv(EnvGatewayURL))
+	logCleanup(unsetenv(EnvGatewayToken))
 }
 
 // GatewayEnvPairs returns the captured pair as KEY=VALUE entries, for the

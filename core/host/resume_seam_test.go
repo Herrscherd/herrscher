@@ -21,8 +21,8 @@ func TestHubScrollbackAndResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := state.TranscriptPath(partDir, "seam")
-	_ = state.AppendTranscript(p, state.TranscriptEntry{Ts: "t1", Role: "user", Text: "hi"})
-	_ = state.AppendTranscript(p, state.TranscriptEntry{Ts: "t2", Role: "assistant", Text: "yo"})
+	logCleanup(state.AppendTranscript(p, state.TranscriptEntry{Ts: "t1", Role: "user", Text: "hi"}))
+	logCleanup(state.AppendTranscript(p, state.TranscriptEntry{Ts: "t2", Role: "assistant", Text: "yo"}))
 
 	lines := h.Scrollback("seam")
 	if len(lines) != 2 || lines[0].Role != "user" || lines[1].Text != "yo" {

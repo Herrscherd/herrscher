@@ -51,7 +51,7 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	}
 	gs := grpc.NewServer(grpc.Creds(serverCreds))
 	transport.RegisterMemorySkeleton(gs, recordingMem{})
-	go func() { _ = gs.Serve(lis) }()
+	go func() { logCleanup(gs.Serve(lis)) }()
 	t.Cleanup(gs.Stop)
 
 	nc, err := nats.Connect(srv.ClientURL())
@@ -67,7 +67,7 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	stop := make(chan struct{})
 	go func() {
 		for {
-			_ = transport.Announce(nc, ann)
+			logCleanup(transport.Announce(nc, ann))
 			select {
 			case <-stop:
 				return
@@ -164,7 +164,7 @@ func writePEM(t *testing.T, path, typ string, der []byte) {
 	if err != nil {
 		t.Fatalf("create %s: %v", path, err)
 	}
-	defer f.Close()
+	defer closeRead(f)
 	if err := pem.Encode(f, &pem.Block{Type: typ, Bytes: der}); err != nil {
 		t.Fatalf("encode %s: %v", path, err)
 	}

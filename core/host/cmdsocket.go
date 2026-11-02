@@ -32,9 +32,9 @@ func dispatchLiveCommand(ctx context.Context, path string, argv []string) (strin
 	if err != nil {
 		return "", false, nil
 	}
-	defer conn.Close()
+	defer closeRead(conn)
 	if deadline, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(deadline)
+		logCleanup(conn.SetDeadline(deadline))
 	}
 	b, err := json.Marshal(cmdRequest{Argv: argv})
 	if err != nil {
@@ -65,13 +65,13 @@ func serveCommandSocket(ctx context.Context, path string, disp dispatcher) {
 }
 
 func serveCommandSocketWithTimeout(ctx context.Context, path string, disp dispatcher, readTimeout time.Duration) {
-	_ = os.Remove(path)
+	logCleanup(os.Remove(path))
 	ln, err := listenCommandSocket(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "command socket: listen %s: %v\n", path, err)
 		return
 	}
-	go func() { <-ctx.Done(); _ = ln.Close(); _ = os.Remove(path) }()
+	go func() { <-ctx.Done(); closeRead(ln); logCleanup(os.Remove(path)) }()
 	for {
 		c, err := ln.Accept()
 		if err != nil {
@@ -82,8 +82,8 @@ func serveCommandSocketWithTimeout(ctx context.Context, path string, disp dispat
 }
 
 func handleCommandConn(ctx context.Context, c net.Conn, disp dispatcher, readTimeout time.Duration) {
-	defer c.Close()
-	_ = c.SetReadDeadline(time.Now().Add(readTimeout))
+	defer closeRead(c)
+	logCleanup(c.SetReadDeadline(time.Now().Add(readTimeout)))
 	line, err := bufio.NewReader(c).ReadBytes('\n')
 	var resp cmdResponse
 	var req cmdRequest
@@ -102,6 +102,7 @@ func handleCommandConn(ctx context.Context, c net.Conn, disp dispatcher, readTim
 			resp.Ok = &out
 		}
 	}
-	b, _ := json.Marshal(resp)
-	_, _ = c.Write(append(b, '\n'))
+	b, marshalErr := json.Marshal(resp)
+	logCleanup(marshalErr)
+	logWriteFailure(c.Write(append(b, '\n')))
 }

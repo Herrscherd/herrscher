@@ -132,7 +132,7 @@ func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contra
 func dispatchCommandPipe(t *testing.T, ctx context.Context, disp dispatcher, argv []string) cmdResponse {
 	t.Helper()
 	server, client := net.Pipe()
-	defer client.Close()
+	defer closeRead(client)
 	done := make(chan struct{})
 	go func() {
 		handleCommandConn(ctx, server, disp, time.Second)
@@ -146,7 +146,7 @@ func dispatchCommandPipe(t *testing.T, ctx context.Context, disp dispatcher, arg
 	if _, err := client.Write(append(request, '\n')); err != nil {
 		t.Fatal(err)
 	}
-	_ = client.SetReadDeadline(time.Now().Add(time.Second))
+	logCleanup(client.SetReadDeadline(time.Now().Add(time.Second)))
 	line, err := bufio.NewReader(client).ReadBytes('\n')
 	if err != nil {
 		t.Fatalf("read command response: %v", err)

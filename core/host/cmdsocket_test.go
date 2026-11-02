@@ -42,8 +42,9 @@ func sendCommand(t *testing.T, path string, req cmdRequest) cmdResponse {
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	defer c.Close()
-	b, _ := json.Marshal(req)
+	defer closeRead(c)
+	b, marshalErr := json.Marshal(req)
+	logCleanup(marshalErr)
 	if _, err := c.Write(append(b, '\n')); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -107,11 +108,12 @@ func TestCommandSocketRejectsMalformed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	defer c.Close()
+	defer closeRead(c)
 	if _, err := c.Write([]byte("not json\n")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	line, _ := bufio.NewReader(c).ReadBytes('\n')
+	line, readErr := bufio.NewReader(c).ReadBytes('\n')
+	logCleanup(readErr)
 	var resp cmdResponse
 	if err := json.Unmarshal(line, &resp); err != nil {
 		t.Fatalf("unmarshal %q: %v", line, err)
@@ -151,8 +153,8 @@ func TestCommandSocketClosesSilentConnection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	defer c.Close()
-	_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+	defer closeRead(c)
+	logCleanup(c.SetReadDeadline(time.Now().Add(2 * time.Second)))
 	buf := make([]byte, 1)
 	if _, err := c.Read(buf); err == nil {
 		t.Fatal("expected the server to close the silent connection, got data")
@@ -194,8 +196,8 @@ func TestALongSessionNameStillGetsASocketThatBinds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen %q: %v", p, err)
 	}
-	_ = ln.Close()
-	_ = os.Remove(p)
+	logCleanup(ln.Close())
+	logCleanup(os.Remove(p))
 	other := SessionCommandSocketPath(strings.Repeat("a", 16), long[:63]+"c")
 	if p == other {
 		t.Fatalf("two long names share %q", p)

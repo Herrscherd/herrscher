@@ -108,7 +108,7 @@ func (h *hub) goLive(sess state.Session) {
 
 func (h *hub) goDead(name string) {
 	if h.sup != nil {
-		_ = h.sup.Stop(name)
+		logCleanup(h.sup.Stop(name))
 	}
 	h.mu.Lock()
 	live, ok := h.live[name]

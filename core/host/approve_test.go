@@ -393,7 +393,8 @@ func captureDaemonStderr(t *testing.T, fn func()) string {
 	read := make(chan string, 1)
 	go func() {
 		var b bytes.Buffer
-		_, _ = io.Copy(&b, r)
+		_, copyErr := io.Copy(&b, r)
+		logCleanup(copyErr)
 		read <- b.String()
 	}()
 	fn()

@@ -33,14 +33,14 @@ func renderCodexMCP(raw []byte, worktree string) ([]byte, error) {
 	var out strings.Builder
 	for i, name := range names {
 		if strings.TrimSpace(name) == "" {
-			return nil, fmt.Errorf("empty MCP server name in mcp.json")
+			return nil, ErrEmptyMCPServerName
 		}
 		server := config.MCPServers[name]
 		if server.Type != "" && server.Type != "stdio" {
-			return nil, fmt.Errorf("unsupported MCP transport %q for server %q", server.Type, name)
+			return nil, fmt.Errorf("%w %q for server %q", ErrUnsupportedMCPTransport, server.Type, name)
 		}
 		if strings.TrimSpace(server.Command) == "" {
-			return nil, fmt.Errorf("missing command for MCP server %q", name)
+			return nil, fmt.Errorf("%w %q", ErrMissingMCPCommand, name)
 		}
 		if i > 0 {
 			out.WriteByte('\n')

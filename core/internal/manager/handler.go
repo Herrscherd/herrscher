@@ -39,7 +39,7 @@ func (h *Handler) SetHosts(hs Hosts) { h.hs = hs }
 func (h *Handler) worktreesOn(hostName string) (Worktrees, string, error) {
 	if hostName == "" || h.hs == nil {
 		if hostName != "" {
-			return nil, "", fmt.Errorf("session wants host %q but no host is registered", hostName)
+			return nil, "", fmt.Errorf("%w %q but no host is registered", ErrHostNotRegistered, hostName)
 		}
 		return h.wt, h.st.WorkspaceRoot(), nil
 	}
@@ -100,10 +100,10 @@ func (h *Handler) checkSpawnSource(cmdExplicit bool, modelID string) error {
 		return nil
 	}
 	if cmdExplicit {
-		return fmt.Errorf("an explicit cmd is refused under the gateway-only route policy: it bypasses the model catalog; select a model instead")
+		return ErrExplicitCmdRefused
 	}
 	if modelID == "" {
-		return fmt.Errorf("a model is required under the gateway-only route policy: without one the session would spawn on this machine's own vendor login")
+		return ErrModelRequired
 	}
 	return nil
 }

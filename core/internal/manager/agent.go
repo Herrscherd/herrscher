@@ -17,11 +17,11 @@ import (
 func (h *Handler) agentCreateRun(_ context.Context, in contracts.Input) (string, error) {
 	raw, ok := in.Lookup("name")
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
-		return "", fmt.Errorf("invalid name %q: use letters, digits, - or _ (max 64)", raw)
+		return "", fmt.Errorf("%w %q: use letters, digits, - or _ (max 64)", ErrInvalidName, raw)
 	}
 	soul, _ := in.Lookup("soul")
 	mcp, _ := in.Lookup("mcp")
@@ -79,11 +79,11 @@ func (h *Handler) agentListRun(_ context.Context, in contracts.Input) (string, e
 func (h *Handler) agentShowRun(_ context.Context, in contracts.Input) (string, error) {
 	name, ok := in.Lookup("name")
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	a, ok := h.agents.Get(slugify(name))
 	if !ok {
-		return "", fmt.Errorf("no agent %q", name)
+		return "", fmt.Errorf("%w %q", ErrNoAgent, name)
 	}
 	soul, err := os.ReadFile(filepath.Join(a.Home, "SOUL.md"))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -111,11 +111,11 @@ func (h *Handler) agentShowRun(_ context.Context, in contracts.Input) (string, e
 func (h *Handler) agentSetSoulRun(_ context.Context, in contracts.Input) (string, error) {
 	name, ok := in.Lookup("name")
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	soul, ok := in.Lookup("soul")
 	if !ok {
-		return "", fmt.Errorf("missing soul")
+		return "", ErrMissingSoul
 	}
 	if err := h.agents.SetSoul(slugify(name), soul); err != nil {
 		return "", err

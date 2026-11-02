@@ -9,25 +9,25 @@ import (
 
 func (h *Handler) serviceRestartRun(ctx context.Context, _ contracts.Input) (string, error) {
 	if h.up == nil {
-		return "", fmt.Errorf("service control unavailable")
+		return "", ErrServiceControlUnavailable
 	}
 	if err := h.up.Restart(ctx); err != nil {
-		return "", fmt.Errorf("restart: %v", err)
+		return "", fmt.Errorf("%w: %w", ErrRestart, err)
 	}
 	return "🔄 Restarting the daemon…", nil
 }
 
 func (h *Handler) serviceUpdateRun(ctx context.Context, in contracts.Input) (string, error) {
 	if h.up == nil {
-		return "", fmt.Errorf("service control unavailable")
+		return "", ErrServiceControlUnavailable
 	}
 	pull := !in.Bool("no_pull")
 	version, err := h.up.Build(ctx, pull)
 	if err != nil {
-		return "", fmt.Errorf("update: %v", err)
+		return "", fmt.Errorf("%w: %w", ErrUpdate, err)
 	}
 	if err := h.up.Restart(ctx); err != nil {
-		return "", fmt.Errorf("rebuilt %s but restart failed: %v", version, err)
+		return "", fmt.Errorf("%w %s but restart failed: %w", ErrRebuilt, version, err)
 	}
 	v := version
 	if v == "" {

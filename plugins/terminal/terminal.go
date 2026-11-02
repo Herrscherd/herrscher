@@ -98,7 +98,7 @@ var (
 func openDefaultSession(ctx context.Context, c contracts.SessionControl, cfg contracts.PluginConfig) (string, error) {
 	name := defaultSessionName(c.Sessions())
 	spec := contracts.CreateSession{Name: name, TerminalOnly: true, Shared: true}
-	scope.LaunchFrom(cfg).Apply(&spec)
+	scope.LaunchFrom(ctx, cfg).Apply(&spec)
 	if _, err := c.Create(ctx, spec); err != nil {
 		return "", err
 	}

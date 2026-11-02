@@ -1,6 +1,7 @@
 package scope
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"strings"
@@ -74,7 +75,7 @@ type Launch struct {
 }
 
 // LaunchFrom reads the decision out of a resolved plugin configuration.
-func LaunchFrom(cfg contracts.PluginConfig) Launch {
+func LaunchFrom(ctx context.Context, cfg contracts.PluginConfig) Launch {
 	if !boolSetting(cfg, SetLearn, true) {
 		return Launch{}
 	}
@@ -87,7 +88,7 @@ func LaunchFrom(cfg contracts.PluginConfig) Launch {
 		l.Project, l.Pinned = p, true
 		return l
 	}
-	l.Project = ProjectFromDir(cwd())
+	l.Project = ProjectFromDir(ctx, cwd())
 	l.Pinned = l.Project != "" && cfg.Get(SetProjectPin) == PinAtLaunch
 	return l
 }
@@ -96,12 +97,12 @@ func LaunchFrom(cfg contracts.PluginConfig) Launch {
 // that run before any plugin is instantiated. A configuration that will not
 // resolve leaves the session unscoped rather than failing the launch: not
 // learning is a loss, not opening at all is a broken tool.
-func LaunchFromEnv() Launch {
+func LaunchFromEnv(ctx context.Context) Launch {
 	cfg, err := contracts.Resolve(LaunchSettings(), envx.Getenv)
 	if err != nil {
 		return Launch{}
 	}
-	return LaunchFrom(cfg)
+	return LaunchFrom(ctx, cfg)
 }
 
 // Apply fills in the memory roots on a session spec, and nothing else: none of

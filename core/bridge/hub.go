@@ -131,7 +131,7 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 		pin = &scopePin{resolve: o.Scope, current: o.LaunchProject, agent: o.MemoryAgent, orch: orch}
 	}
 	runHubTurnsCtl(ctx, in, conn, backend, orch, ctrl, eng,
-		affordances{roster: o.Roster, caps: o.Capabilities, user: identity.FromDir(cwd)}, pin)
+		affordances{roster: o.Roster, caps: o.Capabilities, user: identity.FromDir(ctx, cwd)}, pin)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -179,8 +179,8 @@ func (p *scopePin) settle(ctx context.Context, prompt string) string {
 	return chosen
 }
 
-func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator) {
-	runHubTurnsCtl(ctx, in, sink, backend, orch, nil, nil, affordances{}, nil)
+func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend) {
+	runHubTurnsCtl(ctx, in, sink, backend, nil, nil, nil, affordances{}, nil)
 }
 
 func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin) {

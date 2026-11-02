@@ -21,7 +21,7 @@ func TestRunHubReplyCarriesResumeToken(t *testing.T) {
 	in <- contracts.Event{T: "input", Text: "go"}
 	close(in)
 
-	runHubTurns(context.Background(), in, sink, resumableBackend{fakeBackend: fakeBackend{reply: "ok"}, token: "sid-1"}, nil)
+	runHubTurns(context.Background(), in, sink, resumableBackend{fakeBackend: fakeBackend{reply: "ok"}, token: "sid-1"})
 
 	last := sink.events[len(sink.events)-1]
 	if last.T != "reply" || !last.Done || last.Resume != "sid-1" {
@@ -35,7 +35,7 @@ func TestRunHubReplyResumeEmptyWhenNotResumeAware(t *testing.T) {
 	in <- contracts.Event{T: "input", Text: "go"}
 	close(in)
 
-	runHubTurns(context.Background(), in, sink, fakeBackend{reply: "ok"}, nil)
+	runHubTurns(context.Background(), in, sink, fakeBackend{reply: "ok"})
 
 	last := sink.events[len(sink.events)-1]
 	if last.Resume != "" {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -80,7 +81,7 @@ func InitCmd(ctx context.Context, args []string) int {
 	}
 
 	if *list {
-		printCatalog()
+		writeCatalog(os.Stdout)
 		return 0
 	}
 
@@ -146,11 +147,11 @@ func InitCmd(ctx context.Context, args []string) int {
 	if n, err := writeSecretsTo(filepath.Join(dir, ".env"), secrets); err != nil {
 		fmt.Fprintf(os.Stderr, "write secrets: %v\n", err)
 	} else if n > 0 {
-		fmt.Printf("wrote %d setting(s) to .env\n", n)
+		fmt.Fprintf(os.Stdout, "wrote %d setting(s) to .env\n", n)
 	}
 
 	if *noBuild {
-		fmt.Println("wrote plugins.go (--no-build); run `go mod tidy && go build` in the host to apply")
+		fmt.Fprintln(os.Stdout, "wrote plugins.go (--no-build); run `go mod tidy && go build` in the host to apply")
 		return 0
 	}
 
@@ -284,10 +285,10 @@ func seedEnv(dir string) {
 		fmt.Fprintf(os.Stderr, "seed %s: %v\n", dst, err)
 		return
 	}
-	fmt.Printf("seeded %s from .env.example: fill in your secrets\n", dst)
+	fmt.Fprintf(os.Stdout, "seeded %s from .env.example: fill in your secrets\n", dst)
 }
 
-func printCatalog() {
+func writeCatalog(out io.Writer) {
 	for _, cat := range categories {
 		kinds := make([]string, 0, len(catalog[cat]))
 		for k := range catalog[cat] {
@@ -299,7 +300,7 @@ func printCatalog() {
 			if defaultStack[cat] == k {
 				def = " (default)"
 			}
-			fmt.Printf("%-13s %-10s %s%s\n", cat, k, catalog[cat][k], def)
+			fmt.Fprintf(out, "%-13s %-10s %s%s\n", cat, k, catalog[cat][k], def)
 		}
 	}
 }

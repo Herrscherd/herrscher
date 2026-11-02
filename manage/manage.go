@@ -94,7 +94,7 @@ func PluginCmd(ctx context.Context, args []string) int {
 			return 1
 		}
 		if !changed && version == "" {
-			fmt.Printf("no change: %s already %s\n", module, pastTense(sub))
+			fmt.Fprintf(os.Stdout, "no change: %s already %s\n", module, pastTense(sub))
 			return 0
 		}
 		if *noBuild {
@@ -102,10 +102,10 @@ func PluginCmd(ctx context.Context, args []string) int {
 				fmt.Fprintf(os.Stderr, "write %s: %v\n", manifest, err)
 				return 1
 			}
-			fmt.Printf("%s %s in %s\n", pastTense(sub), module, manifest)
-			fmt.Println("skipped build (--no-build); run `go build` in the host to apply")
+			fmt.Fprintf(os.Stdout, "%s %s in %s\n", pastTense(sub), module, manifest)
+			fmt.Fprintln(os.Stdout, "skipped build (--no-build); run `go build` in the host to apply")
 			if version != "" {
-				fmt.Printf("the version was not installed: %s@%s needs `go get`\n", module, version)
+				fmt.Fprintf(os.Stdout, "the version was not installed: %s@%s needs `go get`\n", module, version)
 			}
 			return 0
 		}
@@ -120,14 +120,14 @@ func PluginCmd(ctx context.Context, args []string) int {
 			return 1
 		}
 		if !applied {
-			fmt.Println("aborted; nothing was written")
+			fmt.Fprintln(os.Stdout, "aborted; nothing was written")
 			return 0
 		}
 		if !changed {
-			fmt.Printf("%s was already in %s; moved to %s\n", module, manifest, version)
+			fmt.Fprintf(os.Stdout, "%s was already in %s; moved to %s\n", module, manifest, version)
 			return 0
 		}
-		fmt.Printf("%s %s in %s\n", pastTense(sub), module, manifest)
+		fmt.Fprintf(os.Stdout, "%s %s in %s\n", pastTense(sub), module, manifest)
 		return 0
 
 	case "pin", "unpin":
@@ -151,7 +151,7 @@ func PluginCmd(ctx context.Context, args []string) int {
 				return 1
 			}
 			if !applied {
-				fmt.Println("aborted; nothing was written and nothing was pinned")
+				fmt.Fprintln(os.Stdout, "aborted; nothing was written and nothing was pinned")
 				return 0
 			}
 		}
@@ -159,7 +159,7 @@ func PluginCmd(ctx context.Context, args []string) int {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
-		fmt.Printf("%sned %s\n", sub, module)
+		fmt.Fprintf(os.Stdout, "%sned %s\n", sub, module)
 		return 0
 
 	default:

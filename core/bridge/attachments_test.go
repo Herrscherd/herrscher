@@ -125,7 +125,7 @@ func TestResolveAttachmentsFetchesConcurrently(t *testing.T) {
 	sess := "concurrent"
 	defer removeAllOrFail(t, attachmentDir(sess))
 	m := contracts.Message{ID: "10"}
-	for i := 0; i < maxAttachmentsPerMessage; i++ {
+	for i := range maxAttachmentsPerMessage {
 		m.Attachments = append(m.Attachments, contracts.Attachment{
 			Filename: fmt.Sprintf("f%d.png", i),
 			URL:      fmt.Sprintf("%s/%d", srv.URL, i),
@@ -347,7 +347,7 @@ func TestResolveAttachmentsCapsCount(t *testing.T) {
 	sess := "caps-count"
 	defer removeAllOrFail(t, attachmentDir(sess))
 	var atts []contracts.Attachment
-	for i := 0; i < maxAttachmentsPerMessage+3; i++ {
+	for range maxAttachmentsPerMessage + 3 {
 		atts = append(atts, contracts.Attachment{Filename: "x.png", URL: srv.URL + "/x.png"})
 	}
 	m := contracts.Message{ID: "1", Attachments: atts}
@@ -409,7 +409,7 @@ func TestPinnedDialRefusesNonRoutableAddress(t *testing.T) {
 }
 
 func TestPinnedDialAllowsIPLiteral(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}

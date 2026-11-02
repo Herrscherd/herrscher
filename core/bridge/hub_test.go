@@ -111,7 +111,7 @@ func TestRunOneTurn_StampsTokens(t *testing.T) {
 type agenticBackend struct{ reply string }
 
 func (b agenticBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		onEvent(contracts.BackendEvent{Kind: "usage", InTokens: 100, OutTokens: 20})
 		onEvent(contracts.BackendEvent{Kind: "text", Detail: "step"})
 	}

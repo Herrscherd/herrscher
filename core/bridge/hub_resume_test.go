@@ -9,6 +9,7 @@ import (
 
 type resumableBackend struct {
 	fakeBackend
+
 	token string
 }
 

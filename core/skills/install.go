@@ -157,7 +157,7 @@ func hashDir(dest string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer root.Close()
+	defer func() { logFailure("close hashed directory", root.Close()) }()
 	out := map[string]string{}
 	err = fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {

@@ -303,7 +303,7 @@ func TestSetBackendTargetRewritesVendorCmdAndClearsResume(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	st.AddSession(Session{Name: "alpha", Vendor: "claude", Cmd: "claude --model claude-opus-4-8 --effort high", ResumeToken: "tok-abc"})
+	must(t, st.AddSession(Session{Name: "alpha", Vendor: "claude", Cmd: "claude --model claude-opus-4-8 --effort high", ResumeToken: "tok-abc"}))
 
 	if ok, err := st.SetBackendTarget("alpha", "codex", "codex --model gpt-5-codex", ""); err != nil || !ok {
 		t.Fatal("expected SetBackendTarget to report a match")
@@ -332,7 +332,7 @@ func TestSetBudgetWritesAllFieldsAndPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	st.AddSession(Session{Name: "alpha", CostCap: 5, PausedReason: "cost"})
+	must(t, st.AddSession(Session{Name: "alpha", CostCap: 5, PausedReason: "cost"}))
 
 	if err := st.SetBudget("alpha", 20, 1000, 30, 2000, ""); err != nil {
 		t.Fatalf("SetBudget: %v", err)

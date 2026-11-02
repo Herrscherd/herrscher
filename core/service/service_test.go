@@ -18,7 +18,8 @@ func TestWriteFileNeverOverwritesTemplate(t *testing.T) {
 	if err := writeFile(FileWrite{Path: path, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := os.ReadFile(path)
+	got, err := os.ReadFile(path)
+	must(t, err)
 	if !strings.Contains(string(got), "real-secret") {
 		t.Fatalf("template clobbered existing secrets: %q", got)
 	}
@@ -162,7 +163,8 @@ func TestUnitPathSurvivesASpaceInADirectory(t *testing.T) {
 	if changed, err := syncUnitPath(c2); err != nil || !changed {
 		t.Fatalf("changed=%v err=%v, want a rewrite", changed, err)
 	}
-	b, _ := os.ReadFile(unit)
+	b, err := os.ReadFile(unit)
+	must(t, err)
 	if strings.Count(string(b), "PATH=") != 1 {
 		t.Errorf("want exactly one PATH directive:\n%s", b)
 	}
@@ -244,7 +246,8 @@ func TestUpdateAddsThePathToAUnitThatPredatesIt(t *testing.T) {
 	if !changed {
 		t.Fatal("a unit with no PATH must be reported as changed")
 	}
-	b, _ := os.ReadFile(unit)
+	b, err := os.ReadFile(unit)
+	must(t, err)
 	got := string(b)
 	if !strings.Contains(got, "Environment=PATH=") || !strings.Contains(got, "/opt/tool/bin") {
 		t.Errorf("unit carries no PATH:\n%s", got)
@@ -265,7 +268,8 @@ func TestUpdateReplacesAStalePathAndIsIdempotent(t *testing.T) {
 	if err != nil || !changed {
 		t.Fatalf("changed=%v err=%v, want a rewrite", changed, err)
 	}
-	b, _ := os.ReadFile(unit)
+	b, err := os.ReadFile(unit)
+	must(t, err)
 	if strings.Count(string(b), "Environment=PATH=") != 1 {
 		t.Errorf("want exactly one PATH directive:\n%s", b)
 	}
@@ -546,7 +550,8 @@ func TestSkipStartOmitsImmediateStart(t *testing.T) {
 			t.Errorf("SkipStart mac plan must not load (start) the agent: %v", c.Argv)
 		}
 	}
-	mp2, _ := BuildPlan(testConfig("darwin"))
+	mp2, err := BuildPlan(testConfig("darwin"))
+	must(t, err)
 	assertCmd(t, mp2, "launchctl load -w")
 }
 
@@ -591,7 +596,8 @@ func TestInstallSkipsStartWhenNoToken(t *testing.T) {
 		t.Fatal("precondition: env file should not be ready")
 	}
 	c.SkipStart = true
-	p, _ := BuildPlan(c)
+	p, err := BuildPlan(c)
+	must(t, err)
 	for _, cmd := range p.Commands {
 		if strings.Contains(strings.Join(cmd.Argv, " "), "--now") {
 			t.Errorf("fresh install must not start the service now: %v", cmd.Argv)

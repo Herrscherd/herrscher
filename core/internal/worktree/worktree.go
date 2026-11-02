@@ -222,7 +222,7 @@ func (w *Worktreer) MergeInto(leadPath, branch string) (MergeOutcome, []string, 
 		return MergeApplied, nil, nil
 	}
 	conflicts := w.conflictFiles(leadPath)
-	_ = exec.CommandContext(w.ctx, "git", "-C", leadPath, "merge", "--abort").Run()
+	logFailure("merge --abort", exec.CommandContext(w.ctx, "git", "-C", leadPath, "merge", "--abort").Run())
 	if len(conflicts) > 0 {
 		return MergeConflict, conflicts, nil
 	}

@@ -103,7 +103,7 @@ func write(src fs.FS, name, dest string, replace bool) error {
 		}
 	}
 	if err := copyTree(src, name, dest); err != nil {
-		_ = os.RemoveAll(dest)
+		logFailure("remove partial install", os.RemoveAll(dest))
 		return err
 	}
 	return nil
@@ -205,5 +205,5 @@ func writeManifest(dir string, m manifest) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return
 	}
-	_ = os.WriteFile(filepath.Join(dir, manifestName), append(b, '\n'), 0o644)
+	logFailure("write manifest", os.WriteFile(filepath.Join(dir, manifestName), append(b, '\n'), 0o644))
 }

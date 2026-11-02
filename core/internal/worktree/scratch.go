@@ -44,6 +44,6 @@ func (w *Worktreer) RemoveScratch(root, name string) error {
 	if err := os.RemoveAll(p); err != nil {
 		return fmt.Errorf("remove scratch %q: %w", p, err)
 	}
-	_ = os.Remove(filepath.Dir(p))
+	removeLogged(filepath.Dir(p))
 	return nil
 }

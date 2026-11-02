@@ -11,7 +11,7 @@ import (
 )
 
 func redirectStderr(path string) (func() error, error) {
-	f, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	f, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, modeSecret)
 	if err != nil {
 		return nil, err
 	}

@@ -54,7 +54,7 @@ func main() {
 
 	ctx := context.Background()
 
-	if len(os.Args) < 2 {
+	if len(os.Args) < minArgsWithCommand {
 		runWithoutCommand(ctx)
 		return
 	}
@@ -65,7 +65,7 @@ func main() {
 	if t, ok := promptOf(cmd, args); ok {
 		if t.Text == "" {
 			fmt.Fprintf(os.Stderr, "herrscher: %s needs a task, e.g. herrscher %s refactor\n", cmd, cmd)
-			os.Exit(2)
+			os.Exit(exitUsage)
 		}
 		if err := runPrompt(ctx, t); err != nil {
 			exitWithError(err)
@@ -137,7 +137,7 @@ func runWithoutCommand(ctx context.Context) {
 		return
 	}
 	usage()
-	os.Exit(2)
+	os.Exit(exitUsage)
 }
 
 func runManageCmd(cmd string, args []string) (int, bool) {
@@ -217,7 +217,7 @@ func exitWithError(err error) {
 func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (string, int, error) {
 	out, handled, derr := fwd(ctx, append([]string{cmd}, args...))
 	if !handled {
-		return "", 2, fmt.Errorf("%w %q", errUnknownCommand, cmd)
+		return "", exitUsage, fmt.Errorf("%w %q", errUnknownCommand, cmd)
 	}
 	return out, 0, derr
 }

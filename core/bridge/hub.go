@@ -282,7 +282,7 @@ func withSkills(memCtx string, eng *skills.Engine) string {
 	if eng == nil {
 		return memCtx
 	}
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, partsCap)
 	if memCtx != "" {
 		parts = append(parts, memCtx)
 	}

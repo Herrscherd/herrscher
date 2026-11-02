@@ -78,7 +78,7 @@ func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (
 		if err != nil {
 			return "", err
 		}
-		if err := os.WriteFile(filepath.Join(o.dir, "plugins.go"), []byte(out), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(o.dir, "plugins.go"), []byte(out), modeFile); err != nil {
 			return "", err
 		}
 		return o.run(ctx, buildCommands())

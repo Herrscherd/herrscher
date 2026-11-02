@@ -12,8 +12,8 @@ github.com/Herrscherd/herrscher-discord-gateway v0.19.1 h1:ueCwqc0j8w5uANBl7MG2p
 github.com/Herrscherd/herrscher-discord-gateway v0.19.1/go.mod h1:6lnKbITtIYcgyos+6RJg4cxTsaguEG000+OY5tZ6uoM=
 github.com/Herrscherd/herrscher-llm-extractor v0.1.4 h1:stga5g7Bk4D3Kj2vHjwbi2rDt/qwli0S+TnJsEjX0AQ=
 github.com/Herrscherd/herrscher-llm-extractor v0.1.4/go.mod h1:VzNtzQJtf9KKGpsXjsCf2CQ0TElVjy2DzpinSmYSHG8=
-github.com/Herrscherd/herrscher-obsidian-memory v0.3.1 h1:HFxnWAIW9yTjbsOjiQF+mMKslsc8lpJFDaL2rwPYfvg=
-github.com/Herrscherd/herrscher-obsidian-memory v0.3.1/go.mod h1:tx1YWVTh22pdMDvMEtXaUnCN8OAxjPlhBlWYfemJeKU=
+github.com/Herrscherd/herrscher-obsidian-memory v0.4.0 h1:KG3QTKZ/nRKK1+Y5SzuR1H44lg4PQPtM+oRprwDh8ZE=
+github.com/Herrscherd/herrscher-obsidian-memory v0.4.0/go.mod h1:3IQvX/yZMqhGk1aFymktpAqewP2LrnnnCFQ+TH1BOxU=
 github.com/Herrscherd/herrscher-orchestrator v0.2.3 h1:V9AUsQ7zaZIlexFVTtwYV/wXvHUlA6Q38w7/A5ojOFk=
 github.com/Herrscherd/herrscher-orchestrator v0.2.3/go.mod h1:IedTAZ9YnvcFRLpPmSYkOwytZ0kbVoLdIIWuHw2J8pQ=
 github.com/Herrscherd/herrscher-superset-skills v0.1.0 h1:Wb01YjdxroT2iO0ycIjSj7IzkpfKFGGvl5v5li6Pyq8=

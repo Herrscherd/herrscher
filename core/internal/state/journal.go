@@ -13,7 +13,7 @@ import (
 //
 // Append uses O_APPEND so concurrent appenders (the bridge child) never race
 // with the daemon's reads; the daemon only reads this file, never writes it.
-func AppendParticipant(path, userID string) (added bool, err error) {
+func AppendParticipant(path, userID string) (bool, error) {
 	if path == "" || userID == "" {
 		return false, nil
 	}
@@ -22,7 +22,7 @@ func AppendParticipant(path, userID string) (added bool, err error) {
 			return false, nil
 		}
 	}
-	if err = os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
 		return false, err
 	}
 	f, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, privateFileMode)

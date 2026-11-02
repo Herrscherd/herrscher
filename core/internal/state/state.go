@@ -401,8 +401,8 @@ func (s *State) SetResumeToken(name, token string) error {
 // demanding an isolated worktree, and neither says where knowledge goes. Every
 // path that scopes memory (the supervisor spawning a bridge, the daemon running
 // a one-shot seed) asks here, so the two cannot drift.
-func (s Session) MemoryRoots() (project, agent string) {
-	project, agent = s.MemoryProject, s.MemoryAgent
+func (s Session) MemoryRoots() (string, string) {
+	project, agent := s.MemoryProject, s.MemoryAgent
 	if project == "" {
 		project = s.Project
 	}

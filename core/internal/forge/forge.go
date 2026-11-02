@@ -64,7 +64,7 @@ type Client struct {
 func New() *Client { return &Client{r: execRunner{}} }
 
 // Available reports which forge CLIs are installed.
-func (c *Client) Available() (github, gitlab bool) {
+func (c *Client) Available() (bool, bool) {
 	return c.r.look("gh") == nil, c.r.look("glab") == nil
 }
 
@@ -239,7 +239,7 @@ func AskpassReply(prompt string) string {
 	return EnvToken()
 }
 
-func parseSpec(spec string) (base string, isURL bool, err error) {
+func parseSpec(spec string) (string, bool, error) {
 	if spec == "" {
 		return "", false, fmt.Errorf("%w: empty", errRepoSpec)
 	}

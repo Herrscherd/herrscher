@@ -266,7 +266,7 @@ func remoteWorkspace(ctx context.Context, t *testing.T, target string) string {
 
 func mustGit(t *testing.T, dir string, argv ...string) {
 	t.Helper()
-	cmd := exec.Command("git", argv...)
+	cmd := exec.CommandContext(t.Context(), "git", argv...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(argv, " "), err, out)

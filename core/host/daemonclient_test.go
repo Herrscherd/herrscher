@@ -14,7 +14,7 @@ import (
 func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "events.sock")
-	ln, err := net.Listen("unix", path)
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
 
 func TestSubscribeDaemonEventsClosesWhenTheDaemonGoesAway(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.sock")
-	ln, err := net.Listen("unix", path)
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
 	if err != nil {
 		t.Fatal(err)
 	}

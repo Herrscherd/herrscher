@@ -32,7 +32,7 @@ func TestListenCommandSocketNeverPublishesARelaxedSocket(t *testing.T) {
 					}
 				}
 			}()
-			l, err := listenCommandSocket(path)
+			l, err := listenCommandSocket(t.Context(), path)
 			close(stop)
 			if err != nil {
 				t.Fatalf("listenCommandSocket: %v", err)

@@ -160,7 +160,7 @@ func (s *eventSocket) closeAll() {
 
 func serveEventsSocket(ctx context.Context, path string, s *eventSocket) {
 	logCleanup(os.Remove(path))
-	ln, err := listenCommandSocket(path)
+	ln, err := listenCommandSocket(ctx, path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "events socket: listen %s: %v\n", path, err)
 		return

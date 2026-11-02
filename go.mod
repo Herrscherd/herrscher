@@ -3,7 +3,7 @@ module github.com/Herrscherd/herrscher
 go 1.27.3
 
 require (
-	github.com/Herrscherd/herrscher-claude-backend v0.2.8
+	github.com/Herrscherd/herrscher-claude-backend v0.3.0
 	github.com/Herrscherd/herrscher-codex-backend v0.1.7
 	github.com/Herrscherd/herrscher-contracts v0.9.0
 	github.com/Herrscherd/herrscher-cursor-backend v0.1.9

@@ -168,7 +168,7 @@ func MaterializeHook(worktree, herrscherBin string) error {
 	buf, err := os.ReadFile(path)
 	switch {
 	case err == nil:
-		if len(strings.TrimSpace(string(buf))) > 0 {
+		if strings.TrimSpace(string(buf)) != "" {
 			cur = buf
 		}
 	case !os.IsNotExist(err):

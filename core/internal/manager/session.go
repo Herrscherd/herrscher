@@ -58,7 +58,8 @@ func cohortTotals(target state.Session, all []state.Session,
 ) (float64, uint64) {
 	byName := make(map[string]state.Session, len(all))
 	children := make(map[string][]string, len(all))
-	for _, s := range all {
+	for i := range all {
+		s := all[i]
 		byName[s.Name] = s
 		if s.Parent != "" && s.Parent != s.Name {
 			children[s.Parent] = append(children[s.Parent], s.Name)
@@ -213,7 +214,8 @@ func (h *Handler) sessionSetBudgetRun(ctx context.Context, in contracts.Input) (
 	if scope == "cohort" {
 		targets = cohortMembers(sess, h.st.SnapshotSessions())
 	}
-	for _, t := range targets {
+	for i := range targets {
+		t := targets[i]
 		c, tk := usageFor(t)
 		cc, ctk := cohortTotals(t, h.st.SnapshotSessions(), usageFor)
 		updated := applyBudget(t, patch, c, tk)
@@ -694,7 +696,8 @@ func (h *Handler) sessionRenameRun(_ context.Context, in contracts.Input) (strin
 }
 
 func scheduleOwning(schedules []schedule.Schedule, session string) string {
-	for _, sc := range schedules {
+	for i := range schedules {
+		sc := schedules[i]
 		if sc.Agent != "" && schedule.SessionName(sc) == session {
 			return sc.Name
 		}

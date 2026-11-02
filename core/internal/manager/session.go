@@ -206,7 +206,7 @@ func (h *Handler) sessionSetBudgetRun(ctx context.Context, in contracts.Input) (
 		if u == nil {
 			return 0, 0
 		}
-		return u.Cost, uint64(u.TokensIn + u.TokensOut)
+		return u.Cost, nonNegativeCount(u.TokensIn + u.TokensOut)
 	}
 	targets := []state.Session{sess}
 	scope, _ := in.Lookup("scope")

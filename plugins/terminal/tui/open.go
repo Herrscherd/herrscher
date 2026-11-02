@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/url"
@@ -18,7 +19,7 @@ var (
 	errNoSystemLauncher = errors.New("no system launcher configured")
 )
 
-type launcher func(target string) error
+type launcher func(ctx context.Context, target string) error
 
 func systemLauncher() launcher {
 	var name string
@@ -31,14 +32,14 @@ func systemLauncher() launcher {
 	default:
 		name = "xdg-open"
 	}
-	return func(target string) error {
+	return func(ctx context.Context, target string) error {
 		if err := checkTarget(target); err != nil {
 			return err
 		}
 		if err := checkURLTarget(target); err != nil {
 			return err
 		}
-		return start(exec.Command(name, append(args, target)...), name)
+		return start(exec.CommandContext(ctx, name, append(args, target)...), name)
 	}
 }
 
@@ -74,7 +75,7 @@ func start(cmd *exec.Cmd, name string) error {
 }
 
 func editorLauncher(env func(string) string) launcher {
-	return func(target string) error {
+	return func(ctx context.Context, target string) error {
 		if err := checkTarget(target); err != nil {
 			return err
 		}
@@ -89,7 +90,7 @@ func editorLauncher(env func(string) string) launcher {
 			args = append(args, "+"+line)
 		}
 		args = append(args, file)
-		return start(exec.Command(fields[0], args...), fields[0])
+		return start(exec.CommandContext(ctx, fields[0], args...), fields[0])
 	}
 }
 
@@ -105,17 +106,17 @@ func splitFileRef(target string) (string, string) {
 	return target[:i], rest
 }
 
-func openLink(l Link, sys, edit launcher) error {
+func openLink(ctx context.Context, l Link, sys, edit launcher) error {
 	if l.Kind == LinkFile {
 		if edit == nil {
 			return errNoEditorLauncher
 		}
-		return edit(l.Target)
+		return edit(ctx, l.Target)
 	}
 	if sys == nil {
 		return errNoSystemLauncher
 	}
-	return sys(l.Target)
+	return sys(ctx, l.Target)
 }
 
 func (m *model) selectNextLink() {
@@ -144,7 +145,7 @@ func (m *model) openSelectedLink() {
 		m.flash = "aucun lien sélectionné · ctrl+l en choisit un"
 		return
 	}
-	if err := openLink(l, m.sys, m.edit); err != nil {
+	if err := openLink(m.runContext(), l, m.sys, m.edit); err != nil {
 		m.flash = "ouverture impossible : " + err.Error()
 		return
 	}

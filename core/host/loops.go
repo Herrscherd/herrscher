@@ -47,7 +47,7 @@ func pingLoop(ctx context.Context, pr contracts.Prober, h *health.Health) {
 	}
 }
 
-func statusContent(instanceID string, snap health.HealthSnapshot) string {
+func statusContent(instanceID string, snap health.Snapshot) string {
 	dot, word := "🟢", "online"
 	if !snap.Online {
 		dot, word = "🔴", "offline"

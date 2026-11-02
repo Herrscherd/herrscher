@@ -22,9 +22,12 @@ var (
 type Decision string
 
 const (
+	// Allow lets the action run without asking.
 	Allow Decision = "allow"
-	Ask   Decision = "ask"
-	Deny  Decision = "deny"
+	// Ask defers the decision to the approval prompt.
+	Ask Decision = "ask"
+	// Deny refuses the action.
+	Deny Decision = "deny"
 )
 
 const (
@@ -126,8 +129,11 @@ type Request struct {
 type Mode string
 
 const (
-	ModeAsk    Mode = "ask"
+	// ModeAsk routes actions through the approval prompt.
+	ModeAsk Mode = "ask"
+	// ModeBypass skips the approval prompt.
 	ModeBypass Mode = "bypass"
+	// ModeStrict refuses anything the policy does not explicitly allow.
 	ModeStrict Mode = "strict"
 )
 

@@ -23,7 +23,7 @@ func (f *fakeRunner) look(name string) error {
 	return f.lookErr[name]
 }
 
-func (f *fakeRunner) run(ctx context.Context, dir string, env []string, name string, args ...string) ([]byte, error) {
+func (f *fakeRunner) run(_ context.Context, _ string, env []string, name string, args ...string) ([]byte, error) {
 	argv := append([]string{name}, args...)
 	f.calls = append(f.calls, argv)
 	f.envs = append(f.envs, env)
@@ -140,7 +140,7 @@ func TestListGitHubIncludesOrgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	got := map[string]bool{}
+	got := make(map[string]bool)
 	for _, rp := range repos {
 		got[rp.FullName] = true
 	}
@@ -160,7 +160,7 @@ func TestListGitHubOrgFailureNonFatal(t *testing.T) {
 		out: map[string][]byte{
 			"gh": []byte(`[{"nameWithOwner":"me/app","sshUrl":"u"}]`),
 		},
-		err: map[string]error{},
+		err: make(map[string]error),
 	}
 	c := &Client{r: r}
 	repos, err := c.List(context.Background())

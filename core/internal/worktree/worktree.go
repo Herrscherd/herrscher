@@ -1,3 +1,4 @@
+// Package worktree manages the git worktrees that give each session its own working copy.
 package worktree
 
 import (
@@ -207,8 +208,11 @@ func (w *Worktreer) BranchExistsAt(ctx context.Context, path, branch string) (bo
 type MergeOutcome int
 
 const (
+	// MergeApplied reports that the merge was applied.
 	MergeApplied MergeOutcome = iota
+	// MergeUpToDate reports that the branch already contained the merged content.
 	MergeUpToDate
+	// MergeConflict reports that the merge stopped on conflicting files.
 	MergeConflict
 )
 

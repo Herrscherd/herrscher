@@ -15,7 +15,7 @@ func bridgeEnvMap(t *testing.T, s *Supervisor, sess state.Session) map[string]st
 	if err != nil {
 		t.Fatal(err)
 	}
-	env := map[string]string{}
+	env := make(map[string]string)
 	for _, kv := range cmd.Env {
 		if k, v, ok := strings.Cut(kv, "="); ok {
 			env[k] = v
@@ -93,7 +93,7 @@ func TestBridgeCommandWithNoResolverCarriesNoApprovals(t *testing.T) {
 func TestRemoteEnvBlockNamesTheBinaryOverThere(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/opt/herrscher")
 	s.SetGateResolver(func(string) string { return "tool" })
-	s.SetHostLookup(func(name string) (Placement, bool) {
+	s.SetHostLookup(func(_ string) (Placement, bool) {
 		return Placement{SSH: "me@build1", Bin: "/remote/bin/herrscher"}, true
 	})
 

@@ -475,7 +475,7 @@ func isUnitPathLine(l string) bool {
 
 func daemonPath(c Config) string {
 	var out []string
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	add := func(dir string) {
 		if dir == "" || seen[dir] || strings.ContainsAny(dir, "\n\r") || !volatileFree(dir) {
 			return
@@ -611,7 +611,7 @@ func startNote(c Config, startCmd string) string {
 }
 
 func envFileHasRequired(path string, vars []EnvVar) bool {
-	required := map[string]bool{}
+	required := make(map[string]bool)
 	for _, v := range vars {
 		if v.Required {
 			required[v.Key] = true
@@ -624,7 +624,7 @@ func envFileHasRequired(path string, vars []EnvVar) bool {
 	if err != nil {
 		return false
 	}
-	set := map[string]bool{}
+	set := make(map[string]bool)
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -701,7 +701,7 @@ func DefaultConfig() (Config, error) {
 
 func registryEnvVars() []EnvVar {
 	var out []EnvVar
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	gateways := contracts.Default.Gateways()
 	for i := range gateways {
 		for _, s := range gateways[i].Manifest.Config {

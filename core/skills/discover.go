@@ -23,7 +23,7 @@ func Discover(roots []string) []Skill {
 }
 
 func discover(roots []string, prev map[string]Skill) ([]Skill, []string) {
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	var out []Skill
 	var reread []string
 	for _, root := range roots {

@@ -52,7 +52,7 @@ func ReadParticipants(path string) []string {
 	}
 	defer closeLogged(f)
 	var out []string
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		id := strings.TrimSpace(sc.Text())

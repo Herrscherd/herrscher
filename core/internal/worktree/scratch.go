@@ -13,6 +13,7 @@ const scratchDirMode = 0o700
 
 var errScratchRefused = errors.New("refusing a scratch directory")
 
+// ScratchPath returns the scratch directory path for name under root.
 func (w *Worktreer) ScratchPath(root, name string) string {
 	return scratchPathIn(root, w.instanceID, name)
 }
@@ -24,6 +25,7 @@ func scratchPathIn(root, instanceID, name string) string {
 	return filepath.Join(root, scratchDir, instanceID, name)
 }
 
+// Scratch creates the scratch directory for name under root.
 func (w *Worktreer) Scratch(root, name string) (string, error) {
 	if root == "" {
 		return "", fmt.Errorf("%w: no root to place session %q under", errScratchRefused, name)
@@ -38,6 +40,7 @@ func (w *Worktreer) Scratch(root, name string) (string, error) {
 	return p, nil
 }
 
+// RemoveScratch deletes the scratch directory for name under root.
 func (w *Worktreer) RemoveScratch(root, name string) error {
 	if root == "" || !validPathComponent(name) {
 		return fmt.Errorf("%w: to remove session %q under root %q", errScratchRefused, name, root)

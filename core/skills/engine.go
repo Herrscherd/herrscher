@@ -22,14 +22,14 @@ type Engine struct {
 // NewEngine discovers skills under roots and returns an engine over them. An
 // engine with no skills is a valid no-op (empty Menu/Expansions).
 func NewEngine(roots []string) *Engine {
-	e := &Engine{roots: roots, active: map[string]bool{}, bodies: map[string]string{}}
+	e := &Engine{roots: roots, active: make(map[string]bool), bodies: make(map[string]string)}
 	e.load()
 	return e
 }
 
 func (e *Engine) load() {
 	found, reread := discover(e.roots, e.byPath)
-	e.byName = map[string]Skill{}
+	e.byName = make(map[string]Skill)
 	e.byPath = make(map[string]Skill, len(found))
 	e.order = e.order[:0]
 	for _, s := range found {
@@ -82,7 +82,7 @@ func (e *Engine) Menu() string {
 // back, and a name the engine does not know names nothing to record.
 func (e *Engine) Detect(reply string) []string {
 	var used []string
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	for _, m := range useMarker.FindAllStringSubmatch(reply, -1) {
 		name := strings.TrimSpace(m[1])
 		if _, ok := e.byName[name]; !ok || seen[name] {

@@ -137,7 +137,7 @@ func NewSupervisor(ctx context.Context, selfBin string) *Supervisor {
 	s := &Supervisor{
 		ctx:     ctx,
 		selfBin: selfBin,
-		runs:    map[string]*supervisedRun{},
+		runs:    make(map[string]*supervisedRun),
 		log:     obs.NewLogger(os.Stderr, slog.LevelInfo),
 		sleep:   time.After,
 		now:     time.Now,
@@ -384,7 +384,7 @@ func (s *Supervisor) prepareRemote(ctx context.Context, sess state.Session) *exe
 }
 
 func (s *Supervisor) remoteEnvBlock(sess state.Session) string {
-	env := map[string]string{}
+	env := make(map[string]string)
 	for _, kv := range s.bridgeEnv {
 		if k, v, ok := strings.Cut(kv, "="); ok && k != "" {
 			env[k] = v

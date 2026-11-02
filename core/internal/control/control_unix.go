@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 )
 
+// SocketPath returns the Unix socket path used to control the given session.
 func SocketPath(session string) string {
 	return filepath.Join(os.TempDir(), "herrscher-control-"+SafeSessionName(session)+".sock")
 }

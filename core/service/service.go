@@ -256,7 +256,7 @@ func validateSource(src string) error {
 	if src == "" {
 		return errNoSourceDir
 	}
-	data, err := os.ReadFile(filepath.Join(src, "go.mod"))
+	data, err := os.ReadFile(filepath.Clean(filepath.Join(src, "go.mod")))
 	if err != nil {
 		return fmt.Errorf("%w (no go.mod): %s: %w", errNotSourceCheckout, src, err)
 	}
@@ -416,7 +416,7 @@ func syncUnitPath(c Config) (bool, error) {
 	if goos(c) != "linux" {
 		return false, nil
 	}
-	path := filepath.Join(c.Home, ".config", "systemd", "user", linuxUnitName)
+	path := filepath.Clean(filepath.Join(c.Home, ".config", "systemd", "user", linuxUnitName))
 	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
@@ -433,14 +433,14 @@ func syncUnitPath(c Config) (bool, error) {
 			return false, nil
 		}
 		lines[i] = want
-		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600)
 	}
 	for i, l := range lines {
 		if strings.TrimSpace(l) != "[Service]" {
 			continue
 		}
 		lines = append(lines[:i+1], append([]string{want}, lines[i+1:]...)...)
-		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600)
 	}
 	return false, nil
 }
@@ -600,7 +600,7 @@ func envFileHasRequired(path string, vars []EnvVar) bool {
 	if len(required) == 0 {
 		return true
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return false
 	}
@@ -756,7 +756,7 @@ func writeFile(f FileWrite) error {
 			return fmt.Errorf("stat %s: %w", f.Path, err)
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(f.Path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(f.Path), 0o750); err != nil {
 		return fmt.Errorf("mkdir %s: %w", filepath.Dir(f.Path), err)
 	}
 	if err := os.WriteFile(f.Path, []byte(f.Content), f.Mode); err != nil {

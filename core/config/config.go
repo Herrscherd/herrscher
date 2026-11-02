@@ -78,7 +78,7 @@ func DefaultPath() string {
 // before parsing so the file can be commented.
 func Load(path string) (Config, error) {
 	var c Config
-	buf, err := os.ReadFile(path)
+	buf, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, fs.ErrNotExist) {
 		return c, nil
 	}

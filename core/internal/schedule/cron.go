@@ -56,30 +56,30 @@ func parseCron(expr string) (cronSpec, error) {
 	return spec, nil
 }
 
-func parseCronField(field string, set []bool, min, max int) (bool, error) {
+func parseCronField(field string, set []bool, low, high int) (bool, error) {
 	if field == "" {
 		return false, fmt.Errorf("%w: empty field", errCronSyntax)
 	}
 	star := strings.HasPrefix(field, "*")
 	for _, part := range strings.Split(field, ",") {
-		if err := setCronPart(part, set, min, max); err != nil {
+		if err := setCronPart(part, set, low, high); err != nil {
 			return false, err
 		}
 	}
 	return star, nil
 }
 
-func setCronPart(part string, set []bool, min, max int) error {
+func setCronPart(part string, set []bool, low, high int) error {
 	body, step, err := splitCronStep(part)
 	if err != nil {
 		return err
 	}
-	lo, hi, err := cronBounds(body, part, step, min, max)
+	lo, hi, err := cronBounds(body, part, step, low, high)
 	if err != nil {
 		return err
 	}
-	if lo < min || hi > max {
-		return fmt.Errorf("%w: %q out of range %d-%d", errCronSyntax, part, min, max)
+	if lo < low || hi > high {
+		return fmt.Errorf("%w: %q out of range %d-%d", errCronSyntax, part, low, high)
 	}
 	for v := lo; v <= hi; v += step {
 		set[v] = true
@@ -99,10 +99,10 @@ func splitCronStep(part string) (string, int, error) {
 	return part[:slash], n, nil
 }
 
-func cronBounds(body, part string, step, min, max int) (int, int, error) {
+func cronBounds(body, part string, step, low, high int) (int, int, error) {
 	switch {
 	case body == "*":
-		return min, max, nil
+		return low, high, nil
 	case strings.ContainsRune(body, '-'):
 		from, to, _ := strings.Cut(body, "-")
 		a, errA := strconv.Atoi(from)

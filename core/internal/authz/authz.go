@@ -141,7 +141,7 @@ func Decide(r Request, role Role) (bool, string) {
 	}
 	if r.Principal.Session != "" && r.Subject.Session != "" && !r.Subject.InSubtree {
 		return false, fmt.Sprintf(
-			"herrscher: `%s` names session %q, and you are session %q. A session reaches itself and the sessions it delegated, nothing else.",
+			"herrscher: %#q names session %q, and you are session %q. A session reaches itself and the sessions it delegated, nothing else.",
 			verb, r.Subject.Session, r.Principal.Session)
 	}
 	return true, ""
@@ -172,8 +172,7 @@ func permits(role Role, verb string, contributed bool) bool {
 }
 
 func agentHint(verb string) (string, bool) {
-	switch verb {
-	case "session create":
+	if verb == "session create" {
 		return "To delegate, end your turn with `⟢ delegate: <agent>` and the task: " +
 			"the worker that opens runs a registered agent, so it answers to a policy the way you do.", true
 	}
@@ -183,18 +182,18 @@ func agentHint(verb string) (string, bool) {
 func refusal(r Request, role Role, verb string) string {
 	if role == RoleAgent {
 		if hint, ok := agentHint(verb); ok {
-			return fmt.Sprintf("herrscher: `%s` is not something a session may run. %s", verb, hint)
+			return fmt.Sprintf("herrscher: %#q is not something a session may run. %s", verb, hint)
 		}
 		return fmt.Sprintf(
-			"herrscher: `%s` is not something a session may run. Ask your operator to run it for you.", verb)
+			"herrscher: %#q is not something a session may run. Ask your operator to run it for you.", verb)
 	}
 	for _, candidate := range []Role{RoleObserver, RoleOperator, RoleOwner} {
 		if permits(candidate, verb, r.Contributed) {
-			return fmt.Sprintf("herrscher: `%s` needs the `%s` role, and %s has `%s`",
+			return fmt.Sprintf("herrscher: %#q needs the %#q role, and %s has %#q",
 				verb, candidate, r.Principal.ID, role)
 		}
 	}
-	return fmt.Sprintf("herrscher: `%s` is not something any role may run", verb)
+	return fmt.Sprintf("herrscher: %#q is not something any role may run", verb)
 }
 
 func match(pattern, verb string) bool {

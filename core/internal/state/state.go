@@ -298,9 +298,9 @@ func (s *State) saveLocked() error {
 func (s *State) FindSession(name string) (Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, ss := range s.Sessions {
-		if ss.Name == name {
-			return ss, true
+	for i := range s.Sessions {
+		if s.Sessions[i].Name == name {
+			return s.Sessions[i], true
 		}
 	}
 	return Session{}, false
@@ -310,15 +310,15 @@ func (s *State) FindSession(name string) (Session, bool) {
 func (s *State) AddSession(sess Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, ss := range s.Sessions {
-		if ss.Name == sess.Name {
+	for i := range s.Sessions {
+		if s.Sessions[i].Name == sess.Name {
 			return fmt.Errorf("%w: %q", errSessionExists, sess.Name)
 		}
 	}
 	if sess.ID == "" {
 		seen := map[string]bool{}
-		for _, e := range s.Sessions {
-			seen[e.ID] = true
+		for i := range s.Sessions {
+			seen[s.Sessions[i].ID] = true
 		}
 		sess.ID = newSessionID(sess.Name, seen)
 	}
@@ -332,9 +332,9 @@ func (s *State) RemoveSession(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := s.Sessions[:0]
-	for _, ss := range s.Sessions {
-		if ss.Name != name {
-			out = append(out, ss)
+	for i := range s.Sessions {
+		if s.Sessions[i].Name != name {
+			out = append(out, s.Sessions[i])
 		}
 	}
 	s.Sessions = out
@@ -353,11 +353,11 @@ func (s *State) RenameSession(oldName, newName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	found := -1
-	for i, ss := range s.Sessions {
-		if ss.Name == newName && newName != oldName {
+	for i := range s.Sessions {
+		if s.Sessions[i].Name == newName && newName != oldName {
 			return fmt.Errorf("%w: %q", errSessionExists, newName)
 		}
-		if ss.Name == oldName {
+		if s.Sessions[i].Name == oldName {
 			found = i
 		}
 	}
@@ -368,8 +368,8 @@ func (s *State) RenameSession(oldName, newName string) error {
 		return nil
 	}
 	s.Sessions[found].Name = newName
-	for i, sc := range s.Schedules {
-		if sc.Session == oldName {
+	for i := range s.Schedules {
+		if s.Schedules[i].Session == oldName {
 			s.Schedules[i].Session = newName
 		}
 	}
@@ -458,14 +458,15 @@ func (s *State) SetBudget(name string, costCap float64, tokenCap uint64, cohortC
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			s.Sessions[i].CostCap = costCap
-			s.Sessions[i].TokenCap = tokenCap
-			s.Sessions[i].CohortCostCap = cohortCostCap
-			s.Sessions[i].CohortTokenCap = cohortTokenCap
-			s.Sessions[i].PausedReason = pausedReason
-			return s.saveLocked()
+		if s.Sessions[i].Name != name {
+			continue
 		}
+		s.Sessions[i].CostCap = costCap
+		s.Sessions[i].TokenCap = tokenCap
+		s.Sessions[i].CohortCostCap = cohortCostCap
+		s.Sessions[i].CohortTokenCap = cohortTokenCap
+		s.Sessions[i].PausedReason = pausedReason
+		return s.saveLocked()
 	}
 	return nil
 }
@@ -480,13 +481,14 @@ func (s *State) SetBackendTarget(name, vendor, cmd, modelID string) (bool, error
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			s.Sessions[i].Vendor = vendor
-			s.Sessions[i].Cmd = cmd
-			s.Sessions[i].ModelID = modelID
-			s.Sessions[i].ResumeToken = ""
-			return true, s.saveLocked()
+		if s.Sessions[i].Name != name {
+			continue
 		}
+		s.Sessions[i].Vendor = vendor
+		s.Sessions[i].Cmd = cmd
+		s.Sessions[i].ModelID = modelID
+		s.Sessions[i].ResumeToken = ""
+		return true, s.saveLocked()
 	}
 	return false, nil
 }

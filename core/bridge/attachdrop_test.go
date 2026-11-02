@@ -69,7 +69,7 @@ func TestEveryDroppedAttachmentIsLogged(t *testing.T) {
 func TestPassingTheCapIsLogged(t *testing.T) {
 	buf := captureLog(t)
 	m := contracts.Message{ID: "1"}
-	for i := 0; i < maxAttachmentsPerMessage+1; i++ {
+	for range maxAttachmentsPerMessage + 1 {
 		m.Attachments = append(m.Attachments, contracts.Attachment{
 			Filename: "shot.png", URL: "https://evil.test/shot.png", ContentType: "image/png",
 		})

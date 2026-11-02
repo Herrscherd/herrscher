@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -96,7 +96,7 @@ func TestRunPromptSplitsReplyFromTheSessionName(t *testing.T) {
 }
 
 func TestRunPromptDoesNotSeedWhenCreateFails(t *testing.T) {
-	d := &recordingDispatcher{fail: map[string]error{"session create": fmt.Errorf("worktree: boom")}}
+	d := &recordingDispatcher{fail: map[string]error{"session create": errors.New("worktree: boom")}}
 	var out, errOut strings.Builder
 	err := runPromptWith(context.Background(), d, "n-a3fq", "x y", &out, &errOut)
 	if err == nil || !strings.Contains(err.Error(), "boom") {
@@ -108,7 +108,7 @@ func TestRunPromptDoesNotSeedWhenCreateFails(t *testing.T) {
 }
 
 func TestRunPromptNamesTheSessionWhenSeedFails(t *testing.T) {
-	d := &recordingDispatcher{fail: map[string]error{"session seed": fmt.Errorf("seed timeout")}}
+	d := &recordingDispatcher{fail: map[string]error{"session seed": errors.New("seed timeout")}}
 	var out, errOut strings.Builder
 	err := runPromptWith(context.Background(), d, "n-a3fq", "x y", &out, &errOut)
 	if err == nil || !strings.Contains(err.Error(), "n-a3fq") {

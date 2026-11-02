@@ -129,6 +129,7 @@ func reserve(tree fs.FS, kind string, claimed map[string]string) (fs.FS, []strin
 
 type without struct {
 	fs.FS
+
 	hidden map[string]bool
 }
 

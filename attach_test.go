@@ -28,7 +28,7 @@ func startFakeDaemon(t *testing.T, reply func(argv []string) (string, error)) *f
 	t.Setenv("TMPDIR", t.TempDir())
 	d := &fakeDaemon{instance: "test", argv: make(chan []string, 16), reply: reply}
 
-	cmdLn, err := net.Listen("unix", host.CommandSocketPath(d.instance))
+	cmdLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.CommandSocketPath(d.instance))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func startFakeDaemon(t *testing.T, reply func(argv []string) (string, error)) *f
 		}
 	}()
 
-	evLn, err := net.Listen("unix", host.EventsSocketPath(d.instance))
+	evLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.EventsSocketPath(d.instance))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -84,7 +84,7 @@ func runPluginHost(ctx context.Context, args []string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	lis, err := net.Listen("tcp", bindAddr())
+	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", bindAddr())
 	if err != nil {
 		return err
 	}

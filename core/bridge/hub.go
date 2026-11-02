@@ -283,6 +283,7 @@ func withSkills(memCtx string, eng *skills.Engine) string {
 
 type turnEventSink struct {
 	contracts.EventSink
+
 	identity contracts.Event
 }
 

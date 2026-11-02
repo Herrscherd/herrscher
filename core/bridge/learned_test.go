@@ -14,6 +14,7 @@ import (
 
 type learnedOrch struct {
 	plainOrch
+
 	nodes []contracts.Node
 	err   error
 	used  [][]string

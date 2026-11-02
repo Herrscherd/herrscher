@@ -528,10 +528,11 @@ func TestSkipStartOmitsImmediateStart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ljoined string
+	var ljoinedBuilder strings.Builder
 	for _, c := range lp.Commands {
-		ljoined += strings.Join(c.Argv, " ") + "\n"
+		ljoinedBuilder.WriteString(strings.Join(c.Argv, " ") + "\n")
 	}
+	ljoined := ljoinedBuilder.String()
 	if strings.Contains(ljoined, "enable --now") {
 		t.Errorf("SkipStart linux plan must not start now:\n%s", ljoined)
 	}
@@ -695,10 +696,11 @@ func TestBuildUninstallRemovesArtifacts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("uninstall %s: %v", os, err)
 		}
-		var joined string
+		var joinedBuilder strings.Builder
 		for _, cmd := range p.Commands {
-			joined += strings.Join(cmd.Argv, " ") + "\n"
+			joinedBuilder.WriteString(strings.Join(cmd.Argv, " ") + "\n")
 		}
+		joined := joinedBuilder.String()
 		if !strings.Contains(joined, marker) {
 			t.Errorf("%s uninstall never references %q:\n%s", os, marker, joined)
 		}

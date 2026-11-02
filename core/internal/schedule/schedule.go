@@ -173,7 +173,7 @@ func NextWindow(s Schedule) (time.Time, error) {
 // La boucle a le grain de la minute et le tir lui-meme prend du temps, donc
 // compter la fenetre suivante depuis la livraison arrondirait chaque periode au
 // tick d'apres. La perte n'est pas ponctuelle, elle s'accumule : un horaire aux
-// trente minutes tire quarante-six fois par jour au lieu de quarante-huit, et
+// trente minutes tire 46 fois par jour au lieu de 48, et
 // glisse de trois quarts d'heure en vingt-quatre heures.
 func Window(s Schedule, now time.Time) (time.Time, bool) {
 	grace, err := graceOf(s)
@@ -245,7 +245,7 @@ func lastWindow(s Schedule, now time.Time, grace time.Duration) (time.Time, bool
 		if elapsed < d {
 			return time.Time{}, false
 		}
-		return a.Add((elapsed / d) * d), true
+		return a.Add(elapsed.Truncate(d)), true
 	}
 	spec, err := parseCron(s.Cron)
 	if err != nil {

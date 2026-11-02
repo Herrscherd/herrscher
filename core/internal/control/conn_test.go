@@ -47,11 +47,11 @@ func TestConnRoundTrip(t *testing.T) {
 	}
 }
 
-var errStop = stopErr{}
+var errStop = stopError{}
 
-type stopErr struct{}
+type stopError struct{}
 
-func (stopErr) Error() string { return "stop" }
+func (stopError) Error() string { return "stop" }
 
 func TestConnConcurrentWrites(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "cw.sock")
@@ -85,7 +85,7 @@ func TestConnConcurrentWrites(t *testing.T) {
 		}))
 	}()
 	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
+	for range n {
 		wg.Add(1)
 		go func() { defer wg.Done(); logErr(t, cli.Write(contracts.Event{T: "chunk", Text: "x"})) }()
 	}

@@ -48,11 +48,9 @@ func ProjectFromDir(dir string) string {
 		common = filepath.Join(dir, common)
 	}
 	common = filepath.Clean(common)
-	root := common
+	root := strings.TrimSuffix(common, ".git")
 	if filepath.Base(common) == ".git" {
 		root = filepath.Dir(common)
-	} else {
-		root = strings.TrimSuffix(common, ".git")
 	}
 	return nameOf(filepath.Base(filepath.Clean(root)))
 }

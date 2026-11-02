@@ -3,6 +3,7 @@
 package control_test
 
 import (
+	"errors"
 	"io"
 	"path/filepath"
 	"testing"
@@ -30,7 +31,7 @@ func TestCloseReleasesPendingConns(t *testing.T) {
 				t.Fatalf("Accept: %v", err)
 			}
 			var clients []*control.Conn
-			for i := 0; i < tc.dials; i++ {
+			for i := range tc.dials {
 				c, err := control.Dial(sock)
 				if err != nil {
 					t.Fatalf("Dial %d: %v", i, err)
@@ -47,7 +48,7 @@ func TestCloseReleasesPendingConns(t *testing.T) {
 			}()
 			select {
 			case err := <-done:
-				if err != nil && err != io.EOF {
+				if err != nil && !errors.Is(err, io.EOF) {
 					t.Fatalf("scan after close: %v", err)
 				}
 			case <-time.After(2 * time.Second):

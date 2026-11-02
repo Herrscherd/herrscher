@@ -16,7 +16,7 @@ func TestEnableEnhancedKeysRequestsTheProtocol(t *testing.T) {
 	os.Stdout = w
 	msg := enableEnhancedKeys()
 	os.Stdout = saved
-	if err := w.Close(); err != nil {
+	if err = w.Close(); err != nil {
 		t.Fatal(err)
 	}
 

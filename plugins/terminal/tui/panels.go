@@ -94,13 +94,15 @@ func subagentPanel(agents []liveAgent, now time.Time, width int, st uiStyles) []
 	return out
 }
 
+const secondsPerMinute = 60
+
 func elapsed(d time.Duration) string {
 	secs := int(d.Seconds())
 	if secs < 0 {
 		secs = 0
 	}
-	if secs < 60 {
+	if secs < secondsPerMinute {
 		return fmt.Sprintf("%ds", secs)
 	}
-	return fmt.Sprintf("%dm%02ds", secs/60, secs%60)
+	return fmt.Sprintf("%dm%02ds", secs/secondsPerMinute, secs%secondsPerMinute)
 }

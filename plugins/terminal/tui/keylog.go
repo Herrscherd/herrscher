@@ -22,7 +22,7 @@ func (k *keyLog) write(format string, args ...any) {
 		if path == "" {
 			return
 		}
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, privateFileMode)
 		if err != nil {
 			return
 		}

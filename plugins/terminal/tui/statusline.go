@@ -6,6 +6,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const minStatusGap = 2
+
 func (m *model) statusZone() []string {
 	left := m.footer()
 	if m.flash != "" {
@@ -17,7 +19,7 @@ func (m *model) statusZone() []string {
 	}
 	right := m.hintText() + "  "
 	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 2 {
+	if gap < minStatusGap {
 		return []string{truncate(left, m.innerWidth())}
 	}
 	return []string{left + strings.Repeat(" ", gap) + right}

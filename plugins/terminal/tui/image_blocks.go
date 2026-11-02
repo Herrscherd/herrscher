@@ -8,6 +8,13 @@ import (
 	xdraw "golang.org/x/image/draw"
 )
 
+const (
+	pixelRowsPerLine = 2
+	sgrForeground    = 38
+	sgrBackground    = 48
+	byteShift        = 8
+)
+
 const blockUpperHalf = "▀"
 
 const ansiReset = "\x1b[0m"
@@ -20,8 +27,8 @@ func blockRender(img image.Image, cols int) string {
 	if b.Dx() <= 0 || b.Dy() <= 0 {
 		return ""
 	}
-	rows := max(1, (b.Dy()*cols/b.Dx()+1)/2)
-	scaled := image.NewRGBA(image.Rect(0, 0, cols, rows*2))
+	rows := max(1, (b.Dy()*cols/b.Dx()+1)/pixelRowsPerLine)
+	scaled := image.NewRGBA(image.Rect(0, 0, cols, rows*pixelRowsPerLine))
 	xdraw.ApproxBiLinear.Scale(scaled, scaled.Bounds(), img, b, xdraw.Src, nil)
 
 	var s strings.Builder
@@ -30,8 +37,8 @@ func blockRender(img image.Image, cols int) string {
 			s.WriteByte('\n')
 		}
 		for x := range cols {
-			s.WriteString(sgr(38, scaled.RGBAAt(x, row*2)))
-			s.WriteString(sgr(48, scaled.RGBAAt(x, row*2+1)))
+			s.WriteString(sgr(sgrForeground, scaled.RGBAAt(x, row*pixelRowsPerLine)))
+			s.WriteString(sgr(sgrBackground, scaled.RGBAAt(x, row*pixelRowsPerLine+1)))
 			s.WriteString(blockUpperHalf)
 		}
 		s.WriteString(ansiReset)
@@ -42,7 +49,7 @@ func blockRender(img image.Image, cols int) string {
 func sgr(role int, c interface{ RGBA() (r, g, b, a uint32) }) string {
 	r, g, b, _ := c.RGBA()
 	return "\x1b[" + strconv.Itoa(role) + ";2;" +
-		strconv.Itoa(int(r>>8)) + ";" + strconv.Itoa(int(g>>8)) + ";" + strconv.Itoa(int(b>>8)) + "m"
+		strconv.Itoa(int(r>>byteShift)) + ";" + strconv.Itoa(int(g>>byteShift)) + ";" + strconv.Itoa(int(b>>byteShift)) + "m"
 }
 
 const maxBlockCols = 200

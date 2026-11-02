@@ -70,11 +70,13 @@ const (
 
 const pluginsMax = 10
 
+const centreDivisor = 2
+
 func pluginsWindow(idx, n int) (int, int) {
 	if n <= pluginsMax {
 		return 0, n
 	}
-	start := idx - pluginsMax/2
+	start := idx - pluginsMax/centreDivisor
 	if start > n-pluginsMax {
 		start = n - pluginsMax
 	}

@@ -11,6 +11,13 @@ import (
 )
 
 const (
+	bytesPerMiB                 = 1 << 20
+	bytesPerKiB                 = 1 << 10
+	privateDirMode  os.FileMode = 0o700
+	privateFileMode os.FileMode = 0o600
+)
+
+const (
 	mimePNG  = "image/png"
 	mimeJPEG = "image/jpeg"
 	mimeWebP = "image/webp"
@@ -49,7 +56,7 @@ func saveClipboardImage(data []byte, mime string, seq int) (Attachment, error) {
 		return Attachment{}, errEmptyClipboard
 	}
 	if int64(len(data)) > maxAttachmentBytes {
-		return Attachment{}, fmt.Errorf("pasted image %w %d MiB", errSizeLimit, maxAttachmentBytes>>20)
+		return Attachment{}, fmt.Errorf("pasted image %w %d MiB", errSizeLimit, maxAttachmentBytes/bytesPerMiB)
 	}
 	name := fmt.Sprintf("paste-%d%s", seq, mimeExt(mime))
 	path, err := stage(name, data)
@@ -61,11 +68,11 @@ func saveClipboardImage(data []byte, mime string, seq int) (Attachment, error) {
 
 func stage(name string, data []byte) (string, error) {
 	dir := attachmentDir()
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, privateDirMode); err != nil {
 		return "", err
 	}
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := os.WriteFile(path, data, privateFileMode); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -89,7 +96,7 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 		return Attachment{}, fmt.Errorf("attach %s: %w", path, errNotRegularFile)
 	}
 	if info.Size() > maxAttachmentBytes {
-		return Attachment{}, fmt.Errorf("attach %s: %w %d MiB", path, errSizeLimit, maxAttachmentBytes>>20)
+		return Attachment{}, fmt.Errorf("attach %s: %w %d MiB", path, errSizeLimit, maxAttachmentBytes/bytesPerMiB)
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -158,10 +165,10 @@ func chipRow(atts []Attachment, st uiStyles) string {
 
 func humanSize(n int64) string {
 	switch {
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1fMB", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.0fKB", float64(n)/(1<<10))
+	case n >= bytesPerMiB:
+		return fmt.Sprintf("%.1fMB", float64(n)/bytesPerMiB)
+	case n >= bytesPerKiB:
+		return fmt.Sprintf("%.0fKB", float64(n)/bytesPerKiB)
 	default:
 		return fmt.Sprintf("%dB", n)
 	}

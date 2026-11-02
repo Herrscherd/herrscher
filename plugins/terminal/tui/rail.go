@@ -8,6 +8,11 @@ import (
 
 const brand = "──◂ HERRSCHER ▸──"
 
+const (
+	railMinGap    = 4
+	railSeparator = "  "
+)
+
 func (m *model) railRow() string {
 	left := m.st.accent.Render(brand)
 	strip := m.tabStrip()
@@ -16,8 +21,8 @@ func (m *model) railRow() string {
 		return truncate(joinRow(m.innerWidth(), left, right), m.innerWidth())
 	}
 	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(strip) - lipgloss.Width(right)
-	if gap >= 4 {
-		return left + strings.Repeat(" ", gap-2) + strip + "  " + right
+	if gap >= railMinGap {
+		return left + strings.Repeat(" ", gap-len(railSeparator)) + strip + railSeparator + right
 	}
 	if lipgloss.Width(strip) <= m.innerWidth() {
 		return strip

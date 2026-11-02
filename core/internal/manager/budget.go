@@ -73,7 +73,7 @@ func (g *SessionBudgetGate) Check(session string) (reason string, headroom uint6
 	cc, ctk := cohortTotals(sess, h.st.SnapshotSessions(), g.usageFor)
 	reason = budgetReason(sc, stk, sess.CostCap, sess.TokenCap, cc, ctk, sess.CohortCostCap, sess.CohortTokenCap)
 	if reason != "" {
-		_ = h.st.SetPausedReason(session, reason)
+		warnIfFailed(h.st.SetPausedReason(session, reason), "pause "+session)
 	}
 	headroom = ^uint64(0)
 	if sess.TokenCap > 0 {

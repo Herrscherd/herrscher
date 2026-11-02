@@ -573,7 +573,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	}
 	h.sup.Start(sess)
 	banner := sessionBanner(repo, name, worktree, wt.Branch(name), cmd, modelID, shared)
-	_ = admin.Send(ctx, sess.ChannelID, banner)
+	warnIfFailed(admin.Send(ctx, sess.ChannelID, banner), "send banner for "+name)
 	return fmt.Sprintf("✅ Running on %s.\n\n%s%s", admin.ChannelRef(sess.ChannelID), banner, approvalsNote), nil
 }
 
@@ -597,7 +597,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 	if err != nil {
 		return "", err
 	}
-	_ = h.sup.Stop(name)
+	warnIfFailed(h.sup.Stop(name), "stop "+name)
 	repo := repoFor(ws, sess.Project)
 	if sess.Worktree != "" && sess.Scratch {
 		if err := wt.RemoveScratch(repo, name); err != nil {
@@ -618,8 +618,8 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 		h.sup.Start(sess)
 		return "", fmt.Errorf("persist: %w", err)
 	}
-	_ = state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name))
-	_ = state.RemoveTranscript(state.TranscriptPath(h.partDir, name))
+	warnIfFailed(state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name)), "remove participants of "+name)
+	warnIfFailed(state.RemoveTranscript(state.TranscriptPath(h.partDir, name)), "remove transcript of "+name)
 	return fmt.Sprintf("🗄️ Session **%s** closed.%s", name, note), nil
 }
 
@@ -632,7 +632,7 @@ func (h *Handler) sessionArchiveRun(ctx context.Context, in contracts.Input) (st
 	if !exists {
 		return "", fmt.Errorf("no session %q", name)
 	}
-	_ = h.sup.Stop(name)
+	warnIfFailed(h.sup.Stop(name), "stop "+name)
 	note := h.tidyChannel(ctx, sess)
 	if err := h.st.SetArchived(name, true); err != nil {
 		return "", fmt.Errorf("persist: %w", err)
@@ -673,7 +673,7 @@ func (h *Handler) sessionRenameRun(_ context.Context, in contracts.Input) (strin
 	if _, taken := h.st.FindSession(to); taken {
 		return "", fmt.Errorf("session %q already exists", to)
 	}
-	_ = h.sup.Stop(name)
+	warnIfFailed(h.sup.Stop(name), "stop "+name)
 	if err := h.st.RenameSession(name, to); err != nil {
 		h.sup.Start(sess)
 		return "", fmt.Errorf("persist: %w", err)
@@ -896,4 +896,10 @@ func (h *Handler) sessionLogRun(_ context.Context, in contracts.Input) (string, 
 		out += fmt.Sprintf("**%s** %s\n", e.Role, e.Text)
 	}
 	return out, nil
+}
+
+func warnIfFailed(err error, action string) {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "herrscher: %s failed: %v\n", action, err)
+	}
 }

@@ -169,7 +169,9 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 	created := false
 	defer func() {
 		if !created {
-			_ = os.RemoveAll(home)
+			if err := os.RemoveAll(home); err != nil {
+				fmt.Fprintf(os.Stderr, "herrscher: remove agent home %q failed: %v\n", home, err)
+			}
 		}
 	}()
 

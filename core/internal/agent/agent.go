@@ -10,6 +10,7 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -374,8 +375,7 @@ func EnsureGitExcludes(worktree string) error {
 		return fmt.Errorf("open local git exclude: %w", err)
 	}
 	if _, err := f.WriteString(addition.String()); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("write local git exclude: %w", err)
+		return errors.Join(fmt.Errorf("write local git exclude: %w", err), f.Close())
 	}
 	if err := f.Close(); err != nil {
 		return fmt.Errorf("close local git exclude: %w", err)

@@ -3,7 +3,9 @@ package manager
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,7 +85,10 @@ func (h *Handler) agentShowRun(_ context.Context, in contracts.Input) (string, e
 	if !ok {
 		return "", fmt.Errorf("no agent %q", name)
 	}
-	soul, _ := os.ReadFile(filepath.Join(a.Home, "SOUL.md"))
+	soul, err := os.ReadFile(filepath.Join(a.Home, "SOUL.md"))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", fmt.Errorf("read soul: %w", err)
+	}
 	if in.JSON {
 		tags := a.Tags
 		if tags == nil {

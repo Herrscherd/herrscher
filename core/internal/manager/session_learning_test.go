@@ -9,7 +9,9 @@ import (
 
 func TestSessionCreatePersistsLearningConfig(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo",
@@ -31,7 +33,9 @@ func TestSessionCreatePersistsLearningConfig(t *testing.T) {
 
 func TestSessionCreatePersistsVendor(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "vendor", "cursor")); err != nil {
 		t.Fatal(err)
@@ -44,7 +48,9 @@ func TestSessionCreatePersistsVendor(t *testing.T) {
 
 func TestSessionCreateRejectsBadConsolidateEvery(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "consolidate_every", "-1",

@@ -38,7 +38,10 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mcp, _ := os.ReadFile(filepath.Join(wt, ".mcp.json"))
+	mcp, err := os.ReadFile(filepath.Join(wt, ".mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if strings.Contains(string(mcp), "{{WORKTREE}}") {
 		t.Fatalf("token not substituted:\n%s", mcp)
 	}
@@ -52,12 +55,18 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 		t.Fatalf("neublox server missing:\n%s", mcp)
 	}
 
-	settings, _ := os.ReadFile(filepath.Join(wt, ".claude", "settings.json"))
+	settings, err := os.ReadFile(filepath.Join(wt, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(settings), "enableAllProjectMcpServers") {
 		t.Fatalf("settings missing:\n%s", settings)
 	}
 
-	claude, _ := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
+	claude, err := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if string(claude) != "PERSONA" {
 		t.Fatalf("CLAUDE.md = %q", claude)
 	}
@@ -145,10 +154,18 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 
 func TestMaterializeWithUserProfile(t *testing.T) {
 	home := t.TempDir()
-	os.WriteFile(filepath.Join(home, "SOUL.md"), []byte("# Soul"), 0o644)
-	os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o644)
-	os.WriteFile(filepath.Join(home, "settings.json"), []byte(`{}`), 0o644)
-	os.WriteFile(filepath.Join(home, "USER.md"), []byte("user works at {{WORKTREE}}"), 0o644)
+	if err := os.WriteFile(filepath.Join(home, "SOUL.md"), []byte("# Soul"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "settings.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "USER.md"), []byte("user works at {{WORKTREE}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	wt := t.TempDir()
 	a := Agent{Name: "alice", Home: home}
@@ -163,14 +180,20 @@ func TestMaterializeWithUserProfile(t *testing.T) {
 	if string(user) != "user works at "+wt {
 		t.Fatalf("worktree token not substituted: %q", user)
 	}
-	claude, _ := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
+	claude, err := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(claude), "# Soul") || !strings.Contains(string(claude), "@USER.md") {
 		t.Fatalf("CLAUDE.md missing soul or import: %q", claude)
 	}
 	if strings.Contains(string(claude), "@.claude/USER.md") {
 		t.Fatalf("CLAUDE.md uses wrong import path @.claude/USER.md: %q", claude)
 	}
-	agents, _ := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
+	agents, err := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(agents), "# User") || !strings.Contains(string(agents), "user works at "+wt) {
 		t.Fatalf("AGENTS.md missing inlined user: %q", agents)
 	}
@@ -178,17 +201,29 @@ func TestMaterializeWithUserProfile(t *testing.T) {
 
 func TestMaterializeWithoutUserProfileUnchanged(t *testing.T) {
 	home := t.TempDir()
-	os.WriteFile(filepath.Join(home, "SOUL.md"), []byte("# Soul"), 0o644)
-	os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o644)
-	os.WriteFile(filepath.Join(home, "settings.json"), []byte(`{}`), 0o644)
+	if err := os.WriteFile(filepath.Join(home, "SOUL.md"), []byte("# Soul"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "settings.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	wt := t.TempDir()
 	a := Agent{Name: "alice", Home: home}
 	if err := a.Materialize(wt); err != nil {
 		t.Fatal(err)
 	}
-	claude, _ := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
-	agents, _ := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
+	claude, err := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	agents, err := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if string(claude) != "# Soul" || string(agents) != "# Soul" {
 		t.Fatalf("no-profile output must equal soul verbatim: claude=%q agents=%q", claude, agents)
 	}

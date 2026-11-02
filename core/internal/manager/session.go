@@ -279,22 +279,22 @@ func sessionBanner(repo, name, worktree, branch, cmd, modelID string, shared boo
 	if repo == "" {
 		b += "• Project: **(cwd)**\n"
 	} else {
-		b += fmt.Sprintf("• Project: **%s** (`%s`)\n", filepath.Base(repo), repo)
+		b += fmt.Sprintf("• Project: **%s** (%#q)\n", filepath.Base(repo), repo)
 	}
 	switch {
 	case worktree != "":
 		b += "• Mode: isolated worktree\n"
-		b += fmt.Sprintf("• Worktree: `%s`\n", worktree)
-		b += fmt.Sprintf("• Branch: `%s`\n", branch)
+		b += fmt.Sprintf("• Worktree: %#q\n", worktree)
+		b += fmt.Sprintf("• Branch: %#q\n", branch)
 	case shared:
 		b += "• Mode: shared (main checkout)\n"
 		b += "• Branch: none (runs on current branch)\n"
 	default:
 		b += "• Mode: shared (not a git repo)\n"
 	}
-	b += fmt.Sprintf("• Command: `%s`", cmd)
+	b += fmt.Sprintf("• Command: %#q", cmd)
 	if modelID != "" {
-		b += fmt.Sprintf("\n• Model: `%s`", modelID)
+		b += fmt.Sprintf("\n• Model: %#q", modelID)
 	}
 	return b
 }
@@ -812,7 +812,8 @@ func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string,
 	sessions := h.st.SnapshotSessions()
 	if in.JSON {
 		rows := make([]sessionJSON, 0, len(sessions))
-		for _, s := range sessions {
+		for i := range sessions {
+			s := sessions[i]
 			row := sessionJSONRow(s)
 			h.attachUsage(&row)
 			h.stampBudget(&row, s)
@@ -834,7 +835,8 @@ func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string,
 	}
 	var out strings.Builder
 	out.WriteString("Active sessions:\n")
-	for _, s := range sessions {
+	for i := range sessions {
+		s := sessions[i]
 		out.WriteString(fmt.Sprintf("• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID)))
 	}
 	return out.String(), nil

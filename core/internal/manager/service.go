@@ -33,5 +33,5 @@ func (h *Handler) serviceUpdateRun(ctx context.Context, in contracts.Input) (str
 	if v == "" {
 		v = "(unknown)"
 	}
-	return fmt.Sprintf("✅ Rebuilt `%s`, restarting the daemon…", v), nil
+	return fmt.Sprintf("✅ Rebuilt %#q, restarting the daemon…", v), nil
 }

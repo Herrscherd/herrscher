@@ -29,8 +29,11 @@ func AppendParticipant(path, userID string) (added bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
 	if _, err := f.WriteString(userID + "\n"); err != nil {
+		closeLogged(f)
+		return false, err
+	}
+	if err := f.Close(); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -47,7 +50,7 @@ func ReadParticipants(path string) []string {
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
+	defer closeLogged(f)
 	var out []string
 	seen := map[string]bool{}
 	sc := bufio.NewScanner(f)

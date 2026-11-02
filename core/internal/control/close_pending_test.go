@@ -54,7 +54,7 @@ func TestCloseReleasesPendingConns(t *testing.T) {
 				t.Fatal("a conn left in the acceptor after Close was never closed")
 			}
 			for _, c := range clients {
-				_ = c.Close()
+				closeLogged(t, c)
 			}
 		})
 	}

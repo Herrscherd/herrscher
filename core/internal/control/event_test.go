@@ -42,7 +42,9 @@ func TestWriteThenScanRoundTrip(t *testing.T) {
 
 func TestWriteEventOneLinePerEvent(t *testing.T) {
 	var buf bytes.Buffer
-	_ = WriteEvent(&buf, contracts.Event{T: "chunk", Text: "a\nb"})
+	if err := WriteEvent(&buf, contracts.Event{T: "chunk", Text: "a\nb"}); err != nil {
+		t.Fatal(err)
+	}
 	if n := strings.Count(buf.String(), "\n"); n != 1 {
 		t.Fatalf("encoded form has %d newlines, want exactly 1 (text newline must be escaped)", n)
 	}

@@ -10,16 +10,23 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
+const serviceUsage = "usage: herrscher service <install|uninstall|status|restart|update> [--health-addr ADDR] [--env-file PATH] [--cmd 'claude …'] [--source DIR] [--no-pull]"
+
+var (
+	errServiceUsage       = errors.New(serviceUsage)
+	errUnknownSubcommand  = errors.New("unknown subcommand")
+	errUnexpectedArgument = errors.New("unexpected argument")
+)
+
 func runService(ctx context.Context, args []string) error {
-	const usage = "usage: herrscher service <install|uninstall|status|restart|update> [--health-addr ADDR] [--env-file PATH] [--cmd 'claude …'] [--source DIR] [--no-pull]"
 	if len(args) == 0 {
-		return errors.New(usage)
+		return errServiceUsage
 	}
 	sub := args[0]
 	switch sub {
 	case "install", "uninstall", "status", "restart", "update":
 	default:
-		return fmt.Errorf("herrscher service: unknown subcommand %q (want install|uninstall|status|restart|update)", sub)
+		return fmt.Errorf("herrscher service: %w %q (want install|uninstall|status|restart|update)", errUnknownSubcommand, sub)
 	}
 
 	cfg, err := service.DefaultConfig()
@@ -46,7 +53,7 @@ func runService(ctx context.Context, args []string) error {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return fmt.Errorf("herrscher service %s: unexpected argument %q\n%s", sub, fs.Arg(0), usage)
+		return fmt.Errorf("herrscher service %s: %w %q\n%s", sub, errUnexpectedArgument, fs.Arg(0), serviceUsage)
 	}
 	cfg.HealthAddr = *healthAddr
 	cfg.EnvFile = *envFile
@@ -64,7 +71,7 @@ func runService(ctx context.Context, args []string) error {
 	case "status":
 		return service.Status(ctx, cfg)
 	default:
-		return fmt.Errorf("herrscher service: unknown subcommand %q (want install|uninstall|status)", sub)
+		return fmt.Errorf("herrscher service: %w %q (want install|uninstall|status)", errUnknownSubcommand, sub)
 	}
 }
 
@@ -80,7 +87,7 @@ func runServiceUpdate(ctx context.Context, cfg service.Config, args []string) er
 		return err
 	}
 	if fs.NArg() > 0 {
-		return fmt.Errorf("herrscher service update: unexpected argument %q", fs.Arg(0))
+		return fmt.Errorf("herrscher service update: %w %q", errUnexpectedArgument, fs.Arg(0))
 	}
 	if installed, ok := service.InstalledBinPath(cfg); ok && installed != cfg.BinPath {
 		fmt.Fprintf(os.Stderr, "herrscher service: rebuilding the installed binary %s (you ran %s)\n", installed, cfg.BinPath)

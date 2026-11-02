@@ -18,6 +18,20 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
+var (
+	errNotFileURL        = errors.New("not a file url")
+	errHostedFileURL     = errors.New("file url must be host-less")
+	errEmptyFilePath     = errors.New("empty file path")
+	errNotRegularFile    = errors.New("not a regular file")
+	errTooLarge          = errors.New("exceeds the size cap")
+	errNotStaged         = errors.New("not staged")
+	errTooManyRedirects  = errors.New("too many redirects")
+	errNoRoutableAddress = errors.New("no routable address")
+	errNotRoutable       = errors.New("not routable")
+	errUnexpectedStatus  = errors.New("unexpected status")
+	errNotAllowedCDN     = errors.New("not an allowed CDN https url")
+)
+
 var supportedExts = map[string]bool{
 	".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
 	".webp": true, ".bmp": true,
@@ -162,13 +176,13 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 func localAttachmentPath(a contracts.Attachment) (string, error) {
 	u, err := url.Parse(a.URL)
 	if err != nil || u.Scheme != "file" {
-		return "", fmt.Errorf("attachment %q: not a file url", a.URL)
+		return "", fmt.Errorf("attachment %q: %w", a.URL, errNotFileURL)
 	}
 	if u.Host != "" && u.Host != "localhost" {
-		return "", fmt.Errorf("attachment %q: file url must be host-less", a.URL)
+		return "", fmt.Errorf("attachment %q: %w", a.URL, errHostedFileURL)
 	}
 	if u.Path == "" {
-		return "", fmt.Errorf("attachment %q: empty file path", a.URL)
+		return "", fmt.Errorf("attachment %q: %w", a.URL, errEmptyFilePath)
 	}
 	path, err := stagedPath(u.Path)
 	if err != nil {
@@ -179,10 +193,10 @@ func localAttachmentPath(a contracts.Attachment) (string, error) {
 		return "", fmt.Errorf("attachment %q: %w", a.URL, err)
 	}
 	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("attachment %q: not a regular file", a.URL)
+		return "", fmt.Errorf("attachment %q: %w", a.URL, errNotRegularFile)
 	}
 	if info.Size() > maxAttachmentBytes {
-		return "", fmt.Errorf("attachment %q: exceeds %d bytes", a.URL, maxAttachmentBytes)
+		return "", fmt.Errorf("attachment %q: %w of %d bytes", a.URL, errTooLarge, maxAttachmentBytes)
 	}
 	return path, nil
 }
@@ -198,7 +212,7 @@ func stagedPath(p string) (string, error) {
 	}
 	rel, err := filepath.Rel(root, real)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%s is not staged under %s", p, root)
+		return "", fmt.Errorf("%s is %w under %s", p, errNotStaged, root)
 	}
 	return real, nil
 }
@@ -207,7 +221,7 @@ func pinnedClient(client *http.Client, hosts allowedHosts) *http.Client {
 	pinned := *client
 	pinned.CheckRedirect = func(r *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
-			return fmt.Errorf("too many redirects")
+			return errTooManyRedirects
 		}
 		return validateCDNURL(r.URL.String(), hosts)
 	}
@@ -255,10 +269,10 @@ func pinnedDial(d *net.Dialer) func(context.Context, string, string) (net.Conn, 
 		if err != nil {
 			return nil, err
 		}
-		last := fmt.Errorf("attachment host %q has no routable address", host)
+		last := fmt.Errorf("attachment host %q: %w", host, errNoRoutableAddress)
 		for _, ip := range ips {
 			if !routable(ip.IP) {
-				last = fmt.Errorf("attachment host %q resolves to %s, which is not routable", host, ip.IP)
+				last = fmt.Errorf("attachment host %q resolves to %s: %w", host, ip.IP, errNotRoutable)
 				continue
 			}
 			c, err := d.DialContext(ctx, network, net.JoinHostPort(ip.IP.String(), port))
@@ -297,7 +311,7 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 	}
 	defer closeAndWarn(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download %s: status %d", a.Filename, resp.StatusCode)
+		return "", fmt.Errorf("download %s: %w %d", a.Filename, errUnexpectedStatus, resp.StatusCode)
 	}
 	dest := filepath.Join(dir, fmt.Sprintf("%s-%d-%s", sanitize(msgID), idx, sanitize(a.Filename)))
 	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
@@ -313,7 +327,7 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 		return discardPartial(dest, fmt.Errorf("write %s: %w", dest, closeErr))
 	}
 	if n > maxAttachmentBytes {
-		return discardPartial(dest, fmt.Errorf("download %s: exceeds %d bytes", a.Filename, maxAttachmentBytes))
+		return discardPartial(dest, fmt.Errorf("download %s: %w of %d bytes", a.Filename, errTooLarge, maxAttachmentBytes))
 	}
 	return dest, nil
 }
@@ -331,7 +345,7 @@ func validateCDNURL(raw string, hosts allowedHosts) error {
 		return fmt.Errorf("attachment url %q: %w", unsigned(raw), err)
 	}
 	if u.Scheme != "https" || !hosts[strings.ToLower(u.Hostname())] {
-		return fmt.Errorf("attachment url %q: not an allowed CDN https url", unsigned(raw))
+		return fmt.Errorf("attachment url %q: %w", unsigned(raw), errNotAllowedCDN)
 	}
 	return nil
 }

@@ -1,8 +1,15 @@
 package manage
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+)
+
+var (
+	errMarkerNotFound  = errors.New("marker not found")
+	errDuplicateMarker = errors.New("duplicate marker")
+	errMarkerOrder     = errors.New("end marker precedes begin marker")
 )
 
 const (
@@ -53,7 +60,7 @@ func addPlugin(src, module string) (string, bool, error) {
 			return strings.Join(out, "\n"), true, nil
 		}
 	}
-	return src, false, fmt.Errorf("end marker %q not found", endMarker)
+	return src, false, fmt.Errorf("end marker %q: %w", endMarker, errMarkerNotFound)
 }
 
 func removePlugin(src, module string) (string, bool, error) {
@@ -103,21 +110,21 @@ func region(src string) (lines []string, begin, end int, err error) {
 		switch strings.TrimSpace(line) {
 		case beginMarker:
 			if begin >= 0 {
-				return nil, begin, end, fmt.Errorf("duplicate %q marker", beginMarker)
+				return nil, begin, end, fmt.Errorf("%q: %w", beginMarker, errDuplicateMarker)
 			}
 			begin = i
 		case endMarker:
 			if end >= 0 {
-				return nil, begin, end, fmt.Errorf("duplicate %q marker", endMarker)
+				return nil, begin, end, fmt.Errorf("%q: %w", endMarker, errDuplicateMarker)
 			}
 			end = i
 		}
 	}
 	if begin < 0 || end < 0 {
-		return nil, begin, end, fmt.Errorf("managed region markers not found")
+		return nil, begin, end, fmt.Errorf("managed region: %w", errMarkerNotFound)
 	}
 	if end < begin {
-		return nil, begin, end, fmt.Errorf("end marker precedes begin marker")
+		return nil, begin, end, errMarkerOrder
 	}
 	return all[begin+1 : end], begin, end, nil
 }

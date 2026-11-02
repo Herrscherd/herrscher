@@ -18,6 +18,11 @@ import (
 	"strings"
 )
 
+var (
+	errNoHostModule  = errors.New("no host module found (looked for plugins.go)")
+	errNotCompiledIn = errors.New("not compiled in")
+)
+
 func parseExit(err error) int {
 	if errors.Is(err, flag.ErrHelp) {
 		return 0
@@ -194,7 +199,7 @@ func resolveHost(explicit string) (string, error) {
 			return c, nil
 		}
 	}
-	return "", fmt.Errorf("no host module found (looked for plugins.go); pass --host DIR")
+	return "", fmt.Errorf("%w; pass --host DIR", errNoHostModule)
 }
 
 func buildCommands() [][]string {
@@ -408,7 +413,7 @@ func compiledIn(dir, module string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("%s is not compiled in; `herrscher plugin add %s` first", module, module)
+	return fmt.Errorf("%s is %w; `herrscher plugin add %s` first", module, errNotCompiledIn, module)
 }
 
 func pinModule(dir, module string, pinned bool) error {

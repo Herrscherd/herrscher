@@ -2,12 +2,20 @@ package manage
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/host"
+)
+
+var (
+	errUnknownPolicy   = errors.New("unknown route policy")
+	errNoGatewayCreds  = errors.New("gateway-only with no gateway credentials: every session would fail to start")
+	errIncompleteCreds = errors.New("incomplete gateway credentials")
+	errUnknownModel    = errors.New("unknown model")
 )
 
 type catalogFn func(contracts.RoutePolicy) ([]host.CatalogEntry, error)
@@ -96,7 +104,7 @@ func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contrac
 	}
 	if n, err := strconv.Atoi(ans); err == nil {
 		if n < 1 || n > len(policyChoices) {
-			return "", fmt.Errorf("route policy: choice out of range: %d", n)
+			return "", fmt.Errorf("route policy: %w: %d", errChoiceOutOfRange, n)
 		}
 		return policyChoices[n-1].policy, nil
 	}
@@ -105,7 +113,7 @@ func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contrac
 			return c.policy, nil
 		}
 	}
-	return "", fmt.Errorf("unknown route policy %q", ans)
+	return "", fmt.Errorf("%w %q", errUnknownPolicy, ans)
 }
 
 func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, error) {
@@ -124,11 +132,11 @@ func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, e
 	switch {
 	case url == "" && token == "":
 		if !have {
-			return nil, fmt.Errorf("gateway-only with no gateway credentials: every session would fail to start; set %s and %s", host.EnvGatewayURL, host.EnvGatewayToken)
+			return nil, fmt.Errorf("%w: set %s and %s", errNoGatewayCreds, host.EnvGatewayURL, host.EnvGatewayToken)
 		}
 		return nil, nil
 	case url == "" || token == "":
-		return nil, fmt.Errorf("incomplete gateway credentials: %s and %s go together; one without the other would run turns on this machine's own account", host.EnvGatewayURL, host.EnvGatewayToken)
+		return nil, fmt.Errorf("%w: %s and %s go together; one without the other would run turns on this machine's own account", errIncompleteCreds, host.EnvGatewayURL, host.EnvGatewayToken)
 	}
 	return map[string]string{host.EnvGatewayURL: url, host.EnvGatewayToken: token}, nil
 }
@@ -162,12 +170,12 @@ func chooseDefaultModel(s style, in *bufio.Reader, entries []host.CatalogEntry, 
 		case n == len(entries)+1:
 			return "", nil
 		}
-		return "", fmt.Errorf("default model: choice out of range: %d", n)
+		return "", fmt.Errorf("default model: %w: %d", errChoiceOutOfRange, n)
 	}
 	for _, e := range entries {
 		if e.ID == ans {
 			return ans, nil
 		}
 	}
-	return "", fmt.Errorf("unknown model %q (not offered under this policy)", ans)
+	return "", fmt.Errorf("%w %q (not offered under this policy)", errUnknownModel, ans)
 }

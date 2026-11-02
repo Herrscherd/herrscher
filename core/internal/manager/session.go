@@ -185,9 +185,9 @@ func (h *Handler) sessionSetBudgetRun(ctx context.Context, in contracts.Input) (
 	if scope, _ := in.Lookup("scope"); scope == "cohort" {
 		targets = cohortMembers(sess, h.st.SnapshotSessions())
 	}
-	for _, target := range targets {
-		if err := h.applyBudgetTo(target, patch); err != nil {
-			return "", err
+	for i := range targets {
+		if applyErr := h.applyBudgetTo(targets[i], patch); applyErr != nil {
+			return "", applyErr
 		}
 	}
 	return fmt.Sprintf("✅ budget updated for %d session(s)", len(targets)), nil
@@ -392,8 +392,8 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if err != nil {
 		return "", err
 	}
-	if err = h.checkHostReady(req.hostName); err != nil {
-		return "", err
+	if readyErr := h.checkHostReady(req.hostName); readyErr != nil {
+		return "", readyErr
 	}
 	place, err := h.placeSession(ctx, in, &req)
 	if err != nil {
@@ -439,8 +439,8 @@ func (h *Handler) placeSession(ctx context.Context, in contracts.Input, req *cre
 	}
 	repo := repoFor(wtRoot, project)
 	if h.hs != nil {
-		if err = h.hs.EnsureProject(ctx, req.hostName, project, repo); err != nil {
-			return placement{}, err
+		if projectErr := h.hs.EnsureProject(ctx, req.hostName, project, repo); projectErr != nil {
+			return placement{}, projectErr
 		}
 	}
 	space, err := ensureWorkspace(wt, repo, *req)
@@ -448,8 +448,8 @@ func (h *Handler) placeSession(ctx context.Context, in contracts.Input, req *cre
 		return placement{}, err
 	}
 	if req.runtime.agent != "" {
-		if err = h.provisionAgent(ctx, req, wt, repo, &space); err != nil {
-			return placement{}, err
+		if provisionErr := h.provisionAgent(ctx, req, wt, repo, &space); provisionErr != nil {
+			return placement{}, provisionErr
 		}
 	}
 	return placement{wt: wt, repo: repo, project: project, space: space}, nil

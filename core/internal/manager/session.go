@@ -902,6 +902,6 @@ func (h *Handler) sessionLogRun(_ context.Context, in contracts.Input) (string, 
 
 func (h *Handler) warnIfFailed(err error, action string) {
 	if err != nil {
-		h.log.Warn(action+" failed", "err", err)
+		h.log.Warn("best effort step failed", "action", action, "err", err)
 	}
 }

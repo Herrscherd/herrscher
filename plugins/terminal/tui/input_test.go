@@ -67,7 +67,14 @@ func TestReadReturnsZeroOnFullyDroppedChunk(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
 	}
-	t.Cleanup(func() { r.Close(); w.Close() })
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Error(err)
+		}
+		if err := w.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	f := &filteredStdin{File: r}
 
 	if _, err := w.Write([]byte("\x1b]11;rgb:1a1a/1a1a/1a1a\x1b\\")); err != nil {

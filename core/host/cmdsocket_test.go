@@ -27,7 +27,7 @@ func (f *fakeDispatcher) Dispatch(_ context.Context, argv []string) (string, err
 
 func waitForSocket(t *testing.T, path string) {
 	t.Helper()
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if _, err := os.Stat(path); err == nil {
 			return
 		}

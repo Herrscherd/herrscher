@@ -243,7 +243,7 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 
 func waitForRemoteSocket(ctx context.Context, t *testing.T, run hostRunner, path string) {
 	t.Helper()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if _, err := capture(ctx, run, "test", "-S", path); err == nil {
 			return
 		}

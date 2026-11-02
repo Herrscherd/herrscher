@@ -61,14 +61,6 @@ func runOneShotSeedCommand(ctx context.Context, st *state.State, name, task, tur
 	return runOneShotSeedIDWithRuntime(ctx, st, name, task, turnID, runtime)
 }
 
-func runOneShotSeed(ctx context.Context, st *state.State, name, task string) (string, error) {
-	return runOneShotSeedID(ctx, st, name, task, newTurnID())
-}
-
-func runOneShotSeedID(ctx context.Context, st *state.State, name, task, turnID string) (string, error) {
-	return runOneShotSeedIDWithRuntime(ctx, st, name, task, turnID, oneShotSeedRuntime{})
-}
-
 func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, task, turnID string, runtime oneShotSeedRuntime) (string, error) {
 	sess, ok := st.FindSession(name)
 	if !ok {

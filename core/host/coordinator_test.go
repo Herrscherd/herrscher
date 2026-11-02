@@ -523,7 +523,7 @@ func TestReportDoubleReportIdempotent(t *testing.T) {
 			{Name: "w2", Worktree: "/wt/w2", Parent: "lead"},
 		}, &seeded)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w1", Summary: "ok"}); err != nil {
 			t.Fatalf("report w1 #%d: %v", i, err)
 		}
@@ -585,7 +585,7 @@ func TestCoordinationViewConcurrentWithReport(t *testing.T) {
 	var seeded []string
 	workers := []state.Session{{Name: "lead", Worktree: "/wt/lead"}}
 	names := make([]string, 0, 32)
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		n := fmt.Sprintf("w%d", i)
 		names = append(names, n)
 		workers = append(workers, state.Session{Name: n, Worktree: "/wt/" + n, Parent: "lead"})
@@ -605,7 +605,7 @@ func TestCoordinationViewConcurrentWithReport(t *testing.T) {
 			}
 		}
 	}()
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		c.CoordinationView("lead")
 	}
 	<-done

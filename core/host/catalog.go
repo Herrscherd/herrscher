@@ -1,7 +1,6 @@
 package host
 
 import (
-	"fmt"
 	"sort"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -33,7 +32,7 @@ func Catalog(plugins []contracts.Plugin, policy contracts.RoutePolicy) ([]Catalo
 		}
 		for _, m := range p.Manifest.Models {
 			if prev, clash := owner[m.ID]; clash {
-				return nil, fmt.Errorf("model ID %q is declared by both %q and %q", m.ID, prev, kind)
+				return nil, &DuplicateModelError{ID: m.ID, First: prev, Second: kind}
 			}
 			owner[m.ID] = kind
 		}
@@ -68,7 +67,7 @@ func LookupModel(plugins []contracts.Plugin, policy contracts.RoutePolicy, model
 	if name == "" {
 		name = "all"
 	}
-	return CatalogEntry{}, fmt.Errorf("unknown model %q (not offered under route policy %q)", modelID, name)
+	return CatalogEntry{}, &UnknownModelError{Model: modelID, Policy: name}
 }
 
 // EnvRoutePolicy selects which models are offered; EnvDefaultModel names the one

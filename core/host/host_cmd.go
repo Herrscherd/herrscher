@@ -26,19 +26,19 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 				Workspace: strings.TrimSpace(in.Get("workspace")),
 			}
 			if h.Name == "" {
-				return "", fmt.Errorf("a host needs a name")
+				return "", ErrHostNameMissing
 			}
 			if h.Name == state.LocalHost {
-				return "", fmt.Errorf("`local` is this machine and always exists: it cannot be registered")
+				return "", ErrLocalHostReserved
 			}
 			if h.SSH == "" {
-				return "", fmt.Errorf("host %q needs an ssh target, e.g. --ssh me@%s", h.Name, h.Name)
+				return "", &HostNeedsSSHError{Name: h.Name}
 			}
 			if !strings.HasPrefix(h.Workspace, "/") {
-				return "", fmt.Errorf("host %q needs an absolute workspace path, got %q", h.Name, h.Workspace)
+				return "", &HostWorkspaceError{Name: h.Name, Workspace: h.Workspace}
 			}
 			if _, exists := st.FindHost(h.Name); exists {
-				return "", fmt.Errorf("a host named %q already exists (remove it first, or run `host provision %s`)", h.Name, h.Name)
+				return "", &HostExistsError{Name: h.Name}
 			}
 			provisioned, err := provisionHost(ctx, runnerFor(h), h, st.SourceDir())
 			if err != nil {

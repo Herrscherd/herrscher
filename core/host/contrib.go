@@ -1,7 +1,6 @@
 package host
 
 import (
-	"fmt"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -46,7 +45,7 @@ func CollectCommands(gws []contracts.GatewaySet) ([]contracts.Cmd, error) {
 		for _, c := range src.Commands() {
 			path := strings.Join(c.Path, " ")
 			if seen[path] {
-				return nil, fmt.Errorf("plugin %q contributes %q twice", kind, path)
+				return nil, &ContributionClashError{Kind: kind, Path: path}
 			}
 			seen[path] = true
 			c.Path = append([]string{kind}, c.Path...)

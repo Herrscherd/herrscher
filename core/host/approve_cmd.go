@@ -51,10 +51,10 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			id := firstOf(in.Get("id"), in.Rest)
 			if id == "" {
-				return "", fmt.Errorf("name a request (see `approve list`)")
+				return "", ErrRequestNameMissing
 			}
 			if !answerApproval(id, approval.Allow, "") {
-				return "", fmt.Errorf("no request %q is waiting: it may have been answered, or timed out", id)
+				return "", &RequestNotWaitingError{ID: id}
 			}
 			return "allowed " + id, nil
 		})); err != nil {
@@ -68,14 +68,14 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			id := firstOf(in.Get("id"), in.Rest)
 			if id == "" {
-				return "", fmt.Errorf("name a request (see `approve list`)")
+				return "", ErrRequestNameMissing
 			}
 			reason := strings.TrimSpace(in.Get("reason"))
 			if reason != "" {
 				reason = "herrscher: the operator refused: " + reason
 			}
 			if !answerApproval(id, approval.Deny, reason) {
-				return "", fmt.Errorf("no request %q is waiting: it may have been answered, or timed out", id)
+				return "", &RequestNotWaitingError{ID: id}
 			}
 			return "denied " + id, nil
 		})); err != nil {
@@ -97,7 +97,7 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 					return "", err
 				}
 				if !removed {
-					return "", fmt.Errorf("no such rule: %s", parsed.String())
+					return "", &NoSuchRuleError{Rule: parsed.String()}
 				}
 				return "removed " + parsed.String(), nil
 			}
@@ -165,12 +165,12 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 				mode = strings.TrimSpace(rest[len(rest)-1])
 			}
 			if name == "" || mode == "" {
-				return "", fmt.Errorf("usage: approve mode <session> <ask|bypass|strict>")
+				return "", ErrApproveModeUsage
 			}
 			switch approval.Mode(mode) {
 			case approval.ModeAsk, approval.ModeBypass, approval.ModeStrict:
 			default:
-				return "", fmt.Errorf("unknown mode %q: ask, bypass or strict", mode)
+				return "", &UnknownModeError{Mode: mode}
 			}
 			if err := st.SetSessionApprovals(name, mode); err != nil {
 				return "", err

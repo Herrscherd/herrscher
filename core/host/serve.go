@@ -30,7 +30,7 @@ const buildTimeout = 5 * time.Minute
 func (u serviceUpdater) Build(ctx context.Context, pull bool) (string, error) {
 	src := u.st.SourceDir()
 	if src == "" {
-		return "", fmt.Errorf("no source set; run /set source <path> first")
+		return "", ErrSourceNotSet
 	}
 	ctx, cancel := context.WithTimeout(ctx, buildTimeout)
 	defer cancel()

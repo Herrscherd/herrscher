@@ -29,7 +29,7 @@ func (p hostPlacer) resolve(name string) (state.Host, *worktree.Remote, error) {
 		return state.Host{}, nil, unknownHost(p.st, name)
 	}
 	if h.Bin == "" {
-		return state.Host{}, nil, fmt.Errorf("host %q is not provisioned: run `host provision %s`", name, name)
+		return state.Host{}, nil, &HostNotProvisionedError{Name: name}
 	}
 	r := runner.SSH{Target: h.SSH, ControlPath: runner.ControlPathFor(h.SSH)}
 	return h, worktree.NewRemote(p.ctx, r, h.Bin, p.instanceID), nil

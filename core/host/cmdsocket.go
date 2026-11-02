@@ -52,10 +52,10 @@ func dispatchLiveCommand(ctx context.Context, path string, argv []string) (strin
 		return "", true, fmt.Errorf("command socket: decode response: %w", err)
 	}
 	if resp.Err != nil {
-		return "", true, fmt.Errorf("%s", *resp.Err)
+		return "", true, &CommandSocketError{Message: *resp.Err}
 	}
 	if resp.Ok == nil {
-		return "", true, fmt.Errorf("command socket: empty response")
+		return "", true, ErrCommandSocketEmpty
 	}
 	return *resp.Ok, true, nil
 }

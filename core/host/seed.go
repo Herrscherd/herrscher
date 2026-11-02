@@ -72,7 +72,7 @@ func runOneShotSeedID(ctx context.Context, st *state.State, name, task, turnID s
 func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, task, turnID string, runtime oneShotSeedRuntime) (string, error) {
 	sess, ok := st.FindSession(name)
 	if !ok {
-		return "", fmt.Errorf("no session %q", name)
+		return "", &NotFoundError{Kind: "session", Name: name}
 	}
 	orch, mem, err := seedOrchestrator(ctx, sess)
 	if err != nil {
@@ -141,7 +141,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 			}
 		default:
 		}
-		return "", fmt.Errorf("seed timeout")
+		return "", ErrSeedTimeout
 	}
 	if err := <-bridgeErr; err != nil {
 		return "", err
@@ -333,9 +333,9 @@ func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin
 		}
 	}
 	if desired != "" {
-		return contracts.Plugin{}, fmt.Errorf("unknown backend %q", desired)
+		return contracts.Plugin{}, &UnknownBackendError{Backend: desired}
 	}
-	return contracts.Plugin{}, fmt.Errorf("no backend plugin registered")
+	return contracts.Plugin{}, ErrNoBackendPlugin
 }
 
 func provisionSeedScope(ctx context.Context, mem contracts.Memory, project, agent string) {

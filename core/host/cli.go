@@ -161,7 +161,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 				Attachments:  atts,
 				Conversation: contracts.Conversation{Gateway: in.Get("origin")},
 			}) {
-				return "", fmt.Errorf("no live session named %q", in.Get("name"))
+				return "", &NotFoundError{Kind: "live session", Name: in.Get("name")}
 			}
 			return "", nil
 		})); err != nil {
@@ -189,7 +189,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		Param("name", "session name", true).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			if !Interrupt(in.Get("name")) {
-				return "", fmt.Errorf("session %q has no turn in flight", in.Get("name"))
+				return "", &NoTurnInFlightError{Session: in.Get("name")}
 			}
 			return "interrupted " + in.Get("name"), nil
 		})); err != nil {
@@ -206,7 +206,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			defer closeRead(mem)
 			loc, ok := mem.(contracts.Locator)
 			if !ok {
-				return "", fmt.Errorf("memory backend does not support locate")
+				return "", ErrMemoryLocateUnsupported
 			}
 			l, err := loc.Locate(cmdCtx, in.Get("key"))
 			if err != nil {
@@ -234,7 +234,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			defer closeRead(mem)
 			del, ok := mem.(contracts.Deleter)
 			if !ok {
-				return "", fmt.Errorf("memory backend does not support forget")
+				return "", ErrMemoryForgetUnsupported
 			}
 			if err := del.Delete(cmdCtx, in.Get("key")); err != nil {
 				return "", err
@@ -262,7 +262,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 				contracts.KindSession, contracts.KindDecision, contracts.KindUser,
 				contracts.KindAgent, contracts.KindDomain:
 			default:
-				return "", fmt.Errorf("memory record: unknown kind %q", in.Get("kind"))
+				return "", &UnknownMemoryKindError{Kind: in.Get("kind")}
 			}
 			n := contracts.Node{
 				Key:   in.Get("key"),

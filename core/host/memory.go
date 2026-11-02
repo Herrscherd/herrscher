@@ -27,7 +27,7 @@ func BuildFirstMemoryWithManifest(ctx context.Context) (contracts.Memory, contra
 		}
 		return m, p.Manifest, nil
 	}
-	return nil, contracts.Manifest{}, fmt.Errorf("memory: no memory plugin registered")
+	return nil, contracts.Manifest{}, ErrNoMemoryPlugin
 }
 
 // BuildFirstMemory builds the first registered memory plugin without its

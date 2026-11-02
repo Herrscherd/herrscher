@@ -336,7 +336,7 @@ func scrollbackOf(partDir, name string) []contracts.ScrollbackLine {
 func (h *hub) Resume(name string) error {
 	sess, ok := h.st.FindSession(name)
 	if !ok {
-		return fmt.Errorf("no session %q", name)
+		return &NotFoundError{Kind: "session", Name: name}
 	}
 	if sess.Archived {
 		if err := h.st.SetArchived(name, false); err != nil {

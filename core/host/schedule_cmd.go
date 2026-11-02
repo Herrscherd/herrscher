@@ -41,12 +41,12 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 			}
 			if sc.Agent != "" {
 				if _, ok := agents.Get(sc.Agent); !ok {
-					return "", fmt.Errorf("unknown agent %q", sc.Agent)
+					return "", &UnknownAgentError{Agent: sc.Agent}
 				}
 			}
 			for _, existing := range st.SnapshotSchedules() {
 				if existing.Name == sc.Name {
-					return "", fmt.Errorf("a schedule named %q already exists", sc.Name)
+					return "", &ScheduleExistsError{Name: sc.Name}
 				}
 			}
 			if err := st.PutSchedule(sc); err != nil {
@@ -109,7 +109,7 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 				return "", err
 			}
 			if !ok {
-				return "", fmt.Errorf("no schedule named %q", name)
+				return "", &NotFoundError{Kind: "schedule", Name: name}
 			}
 			return "removed " + name + " (its session, if any, is still there; close it with `session close`)", nil
 		})); err != nil {
@@ -134,7 +134,7 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 					return "", err
 				}
 				if !ok {
-					return "", fmt.Errorf("no schedule named %q", name)
+					return "", &NotFoundError{Kind: "schedule", Name: name}
 				}
 				if !v.paused {
 					if err := st.StampScheduleRun(name, time.Now().UTC().Format(time.RFC3339)); err != nil {

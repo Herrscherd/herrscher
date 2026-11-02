@@ -191,6 +191,9 @@ linters:
       - path: ^plugins/terminal/tui/
         linters: [exhaustive]
         text: "missing cases in expression switch: tea\\.Key"
+      - path: ^(plugins/terminal/tui/|core/cli/registry\.go$)
+        linters: [gocritic]
+        text: "consider giving a name to these results"
 
 formatters:
   enable:

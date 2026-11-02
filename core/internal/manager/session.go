@@ -829,11 +829,12 @@ func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string,
 	if len(sessions) == 0 {
 		return "No active sessions.", nil
 	}
-	out := "Active sessions:\n"
+	var out strings.Builder
+	out.WriteString("Active sessions:\n")
 	for _, s := range sessions {
-		out += fmt.Sprintf("• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
+		out.WriteString(fmt.Sprintf("• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID)))
 	}
-	return out, nil
+	return out.String(), nil
 }
 
 func (h *Handler) sessionWhoRun(_ context.Context, in contracts.Input) (string, error) {
@@ -855,11 +856,12 @@ func (h *Handler) sessionWhoRun(_ context.Context, in contracts.Input) (string, 
 	if len(ids) == 0 {
 		return "Personne n'a encore écrit dans cette session.", nil
 	}
-	out := fmt.Sprintf("Participants observed in **%s**:\n", name)
+	var out strings.Builder
+	out.WriteString(fmt.Sprintf("Participants observed in **%s**:\n", name))
 	for _, id := range ids {
-		out += fmt.Sprintf("• <@%s>\n", id)
+		out.WriteString(fmt.Sprintf("• <@%s>\n", id))
 	}
-	return out, nil
+	return out.String(), nil
 }
 
 const sessionLogTranscriptCap = 200
@@ -893,11 +895,11 @@ func (h *Handler) sessionLogRun(_ context.Context, in contracts.Input) (string, 
 	if len(entries) == 0 {
 		return "No transcript yet.", nil
 	}
-	out := ""
+	var out strings.Builder
 	for _, e := range entries {
-		out += fmt.Sprintf("**%s** %s\n", e.Role, e.Text)
+		out.WriteString(fmt.Sprintf("**%s** %s\n", e.Role, e.Text))
 	}
-	return out, nil
+	return out.String(), nil
 }
 
 func (h *Handler) warnIfFailed(err error, action string) {

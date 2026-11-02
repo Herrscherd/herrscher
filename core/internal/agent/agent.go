@@ -179,12 +179,14 @@ func MaterializeHook(worktree, herrscherBin string) error {
 	return nil
 }
 
-var materializedGitExcludes = []string{
+func materializedGitExcludes() []string {
+	return []string{
 	"/AGENTS.md",
 	"/.codex/",
 	"/.claude/",
 	"/.mcp.json",
 	"/.herrscher/",
+}
 }
 
 // Agent is a durable companion: a name, backend vendor, and the home directory
@@ -357,7 +359,7 @@ func EnsureGitExcludes(worktree string) error {
 	}
 	existing := "\n" + strings.ReplaceAll(string(current), "\r\n", "\n") + "\n"
 	var addition strings.Builder
-	for _, pattern := range materializedGitExcludes {
+	for _, pattern := range materializedGitExcludes() {
 		if !strings.Contains(existing, "\n"+pattern+"\n") {
 			addition.WriteString(pattern)
 			addition.WriteByte('\n')

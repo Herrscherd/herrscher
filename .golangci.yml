@@ -188,6 +188,9 @@ linters:
       - path: ^plugins/terminal/tui/
         linters: [misspell]
         text: "`(commandes|marrage)` is a misspelling"
+      - path: ^plugins/terminal/tui/
+        linters: [exhaustive]
+        text: "missing cases in expression switch: tea\\.Key"
 
 formatters:
   enable:

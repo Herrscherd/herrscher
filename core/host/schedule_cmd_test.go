@@ -71,7 +71,7 @@ func TestScheduleAddStampsCreatedAtSoTheFirstWindowIsCounted(t *testing.T) {
 		"schedule", "add", "--name", "digest",
 		"--agent", "scout", "--every", "30m", "--task", "t",
 	}); err != nil {
-		t.Fatalf("schedule add: %v", err)
+		t.Fatalf("schedule add: %v", dispatchErr)
 	}
 	got := st.SnapshotSchedules()
 	if len(got) != 1 || got[0].CreatedAt == "" {
@@ -90,7 +90,7 @@ func TestScheduleAddThenListThenRemove(t *testing.T) {
 		"schedule", "add", "--name", "digest",
 		"--agent", "scout", "--cron", "0 9 * * 1-5", "--task", "read the PRs",
 	}); err != nil {
-		t.Fatalf("schedule add: %v", err)
+		t.Fatalf("schedule add: %v", dispatchErr)
 	}
 	if _, err := reg.Dispatch(ctx, []string{
 		"schedule", "add", "--name", "digest",
@@ -140,7 +140,7 @@ func TestScheduleResumeRestartsTheCadenceFromNow(t *testing.T) {
 		"schedule", "add", "--name", "digest",
 		"--agent", "scout", "--every", "30m", "--task", "t",
 	}); err != nil {
-		t.Fatalf("schedule add: %v", err)
+		t.Fatalf("schedule add: %v", dispatchErr)
 	}
 	for _, verb := range []string{"pause", "resume"} {
 		if _, err := reg.Dispatch(ctx, []string{"schedule", verb, "--name", "digest"}); err != nil {
@@ -164,7 +164,7 @@ func TestScheduleAddSaysWhenTheNamedSessionIsNotThere(t *testing.T) {
 		"--session", "typo", "--every", "30m", "--task", "t",
 	})
 	if err != nil {
-		t.Fatalf("schedule add: %v", err)
+		t.Fatalf("schedule add: %v", dispatchErr)
 	}
 	if !strings.Contains(out, "typo") || !strings.Contains(out, "no session named") {
 		t.Fatalf("schedule add = %q, want it to name the session it cannot see", out)
@@ -247,7 +247,7 @@ func TestScheduleVerbsAreInTheRealRegistry(t *testing.T) {
 		"schedule", "add", "--name", "digest",
 		"--session", "live", "--every", "30m", "--task", "read the PRs",
 	}); dispatchErr != nil {
-		t.Fatalf("schedule add: %v", err)
+		t.Fatalf("schedule add: %v", dispatchErr)
 	}
 	out, err := reg.Dispatch(ctx, []string{"schedule", "list"})
 	if err != nil {

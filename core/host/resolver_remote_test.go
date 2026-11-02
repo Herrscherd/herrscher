@@ -193,7 +193,9 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 	be, _, err := r.Backend(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryBackend},
-			Backend:  func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return &streamingBackend{}, nil },
+			Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
+				return &streamingBackend{}, nil
+			},
 		}})
 	if err != nil {
 		t.Fatalf("remote resolve: %v", err)

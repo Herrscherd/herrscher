@@ -34,5 +34,5 @@ func (h *Handler) setSourceRun(_ context.Context, in contracts.Input) (string, e
 	if err := h.st.SetSource(path); err != nil {
 		return "", fmt.Errorf("persist: %w", err)
 	}
-	return fmt.Sprintf("📦 Source checkout set to `%s`.", path), nil
+	return fmt.Sprintf("📦 Source checkout set to %#q.", path), nil
 }

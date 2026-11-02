@@ -134,12 +134,7 @@ func formatLimit(n int) string {
 
 func (m *model) statusBar(tb *tab, width int) string {
 	info, known := m.activeInfo()
-
-	head := m.st.accent.Render(glyphBolt + " " + tb.label)
-	if known && info.Vendor != "" && width >= narrowStatus {
-		head = m.st.accent.Render(glyphBolt+" "+info.Vendor) + m.st.dim.Render(" "+tb.label)
-	}
-	segs := []string{head}
+	segs := []string{m.statusHead(tb, info, known, width)}
 	if width >= narrowStatus && known {
 		if label := modelLabel(info); label != "" {
 			segs = append(segs, m.st.text.Render(label))
@@ -150,23 +145,36 @@ func (m *model) statusBar(tb *tab, width int) string {
 		segs = append(segs, ctx)
 	}
 	if width >= narrowStatus {
-		if g := renderGauge(used, info.Vendor, width, m.st); g != "" {
-			segs = append(segs, g)
-		}
-		if known && info.Project != "" {
-			segs = append(segs, m.st.dim.Render(info.Project))
-		}
-		if ms := m.mouseStatus(); ms != "" {
-			segs = append(segs, ms)
-		}
-		if tb.costTotal > 0 {
-			segs = append(segs, m.st.dim.Render(formatCost(tb.costTotal)))
-		}
-		if !tb.openedAt.IsZero() {
-			segs = append(segs, m.st.dim.Render(formatDuration(time.Since(tb.openedAt))))
-		}
+		segs = append(segs, m.statusDetails(tb, info, known, used, width)...)
 	}
 	return strings.Join(segs, m.st.sep)
+}
+
+func (m *model) statusHead(tb *tab, info contracts.SessionInfo, known bool, width int) string {
+	if known && info.Vendor != "" && width >= narrowStatus {
+		return m.st.accent.Render(glyphBolt+" "+info.Vendor) + m.st.dim.Render(" "+tb.label)
+	}
+	return m.st.accent.Render(glyphBolt + " " + tb.label)
+}
+
+func (m *model) statusDetails(tb *tab, info contracts.SessionInfo, known bool, used, width int) []string {
+	var segs []string
+	if g := renderGauge(used, info.Vendor, width, m.st); g != "" {
+		segs = append(segs, g)
+	}
+	if known && info.Project != "" {
+		segs = append(segs, m.st.dim.Render(info.Project))
+	}
+	if ms := m.mouseStatus(); ms != "" {
+		segs = append(segs, ms)
+	}
+	if tb.costTotal > 0 {
+		segs = append(segs, m.st.dim.Render(formatCost(tb.costTotal)))
+	}
+	if !tb.openedAt.IsZero() {
+		segs = append(segs, m.st.dim.Render(formatDuration(time.Since(tb.openedAt))))
+	}
+	return segs
 }
 
 func (m *model) usageReport(tb *tab) string {

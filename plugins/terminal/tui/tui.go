@@ -563,62 +563,7 @@ func (m *model) handleEnter() tea.Cmd {
 	m.input.Reset()
 	m.resizeComposer()
 	if strings.HasPrefix(text, "/") {
-		args := strings.Fields(strings.TrimPrefix(text, "/"))
-		if len(args) == 0 {
-			return nil
-		}
-		if args[0] == "resume" {
-			m.openResume()
-			return nil
-		}
-		if args[0] == "clear" {
-			m.clearActive()
-			return nil
-		}
-		if args[0] == "help" {
-			m.toggleHelp()
-			return nil
-		}
-		if args[0] == sessionVerb && len(args) >= 2 && args[1] == "switch" {
-			m.openSwitch()
-			return nil
-		}
-		if args[0] == "usage" {
-			if tb := m.tabs[m.active]; tb != nil {
-				tb.appendEntry(entry{role: roleNotice, text: m.usageReport(tb)})
-				m.syncViewport()
-			}
-			return nil
-		}
-		if args[0] == "capabilities" {
-			m.openDiagnostics()
-			return nil
-		}
-		if args[0] == "skills" {
-			m.openSkills()
-			return nil
-		}
-		if args[0] == "plugins" {
-			return m.openPlugins()
-		}
-		if args[0] == "attach" {
-			m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
-			return nil
-		}
-		if args[0] == sessionVerb && len(args) >= 2 && args[1] == "close" {
-			return m.closeCmd(args[2:])
-		}
-		if args[0] == verbRename {
-			return m.renameCmd(args[1:])
-		}
-		if args[0] == "copy" {
-			m.copyCmd(args[1:])
-			return nil
-		}
-		if args[0] == "mouse" {
-			return m.toggleMouse()
-		}
-		return m.dispatchCmd(m.active, args)
+		return m.runSlash(text)
 	}
 	if m.active == "" {
 		return nil
@@ -629,6 +574,66 @@ func (m *model) handleEnter() tea.Cmd {
 	m.recordHistory(text)
 	m.submitTo(m.active, text, atts)
 	return nil
+}
+
+func (m *model) runSlash(text string) tea.Cmd {
+	args := strings.Fields(strings.TrimPrefix(text, "/"))
+	if len(args) == 0 {
+		return nil
+	}
+	if cmd, handled := m.runLocalSlash(text, args); handled {
+		return cmd
+	}
+	return m.dispatchCmd(m.active, args)
+}
+
+func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
+	switch args[0] {
+	case "resume":
+		m.openResume()
+	case "clear":
+		m.clearActive()
+	case "help":
+		m.toggleHelp()
+	case sessionVerb:
+		return m.sessionSlash(args)
+	case "usage":
+		if tb := m.tabs[m.active]; tb != nil {
+			tb.appendEntry(entry{role: roleNotice, text: m.usageReport(tb)})
+			m.syncViewport()
+		}
+	case "capabilities":
+		m.openDiagnostics()
+	case "skills":
+		m.openSkills()
+	case "plugins":
+		return m.openPlugins(), true
+	case "attach":
+		m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
+	case verbRename:
+		return m.renameCmd(args[1:]), true
+	case "copy":
+		m.copyCmd(args[1:])
+	case "mouse":
+		return m.toggleMouse(), true
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+func (m *model) sessionSlash(args []string) (tea.Cmd, bool) {
+	if len(args) < 2 {
+		return nil, false
+	}
+	switch args[1] {
+	case "switch":
+		m.openSwitch()
+		return nil, true
+	case "close":
+		return m.closeCmd(args[2:]), true
+	}
+	return nil, false
 }
 
 func (m *model) submitTo(channel, text string, atts []Attachment) {
@@ -884,13 +889,7 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 	if e.Tokens > 0 {
 		tb.tokens = e.Tokens
 	}
-	if used := e.TokensIn + e.CacheRead + e.CacheCreate; used > 0 {
-		if !e.Done {
-			tb.ctxTokens, tb.ctxMeasured = used, true
-		} else if !tb.ctxMeasured {
-			tb.ctxTokens = used
-		}
-	}
+	tb.measureContext(e)
 	switch e.T {
 	case "chunk":
 		tb.busy = true
@@ -898,49 +897,20 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 		tb.appendChunk(e.Text)
 	case "thinking":
 		tb.busy = true
-		if strings.TrimSpace(e.Text) == "" {
-			break
-		}
-		tb.endStream()
-		tb.appendEntry(entry{role: roleThinking, text: e.Text})
+		tb.appendThinking(e.Text)
 	case "status":
 		tb.busy = true
 		tb.endStream()
 		text, _ := hostError(e.Text)
 		tb.appendEntry(entry{role: statusRole(e.Text), text: text})
 	case "reply":
-		if e.Text != "" && !tb.streamed {
-			if text, isErr := hostError(e.Text); isErr {
-				tb.appendEntry(entry{role: roleError, text: text})
-			} else {
-				tb.appendEntry(entry{role: roleAgent, text: e.Text})
-			}
-		}
-		tb.endStream()
-		if e.Cost > 0 {
-			tb.lastCost = e.Cost
-			tb.costTotal += e.Cost
-			tb.appendEntry(entry{role: roleCost, text: formatCost(e.Cost)})
-		}
-		if e.Done {
-			tb.busy = false
-			tb.streamed = false
-			tb.ctxMeasured = false
-			tb.clearPanels()
-		}
+		tb.appendReply(e)
 	case "todos":
 		tb.busy = true
 		tb.todos = e.Todos
 	case "subagent":
 		tb.busy = true
-		if e.Subagent == nil {
-			break
-		}
-		if e.Subagent.State == stateDone {
-			tb.dropAgent(e.Subagent.ID)
-			break
-		}
-		tb.agents = append(tb.agents, liveAgent{Subagent: *e.Subagent, since: time.Now()})
+		tb.applySubagent(e.Subagent)
 	case "reset":
 		tb.busy = false
 		tb.streamed = false
@@ -955,6 +925,59 @@ func (m *model) renderInto(tb *tab, e contracts.Event) {
 		tb.endStream()
 		tb.appendEntry(entry{role: roleNotice, text: "tour abandonné"})
 	}
+}
+
+func (tb *tab) measureContext(e contracts.Event) {
+	used := e.TokensIn + e.CacheRead + e.CacheCreate
+	if used <= 0 {
+		return
+	}
+	if !e.Done {
+		tb.ctxTokens, tb.ctxMeasured = used, true
+	} else if !tb.ctxMeasured {
+		tb.ctxTokens = used
+	}
+}
+
+func (tb *tab) appendThinking(text string) {
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	tb.endStream()
+	tb.appendEntry(entry{role: roleThinking, text: text})
+}
+
+func (tb *tab) appendReply(e contracts.Event) {
+	if e.Text != "" && !tb.streamed {
+		if text, isErr := hostError(e.Text); isErr {
+			tb.appendEntry(entry{role: roleError, text: text})
+		} else {
+			tb.appendEntry(entry{role: roleAgent, text: e.Text})
+		}
+	}
+	tb.endStream()
+	if e.Cost > 0 {
+		tb.lastCost = e.Cost
+		tb.costTotal += e.Cost
+		tb.appendEntry(entry{role: roleCost, text: formatCost(e.Cost)})
+	}
+	if e.Done {
+		tb.busy = false
+		tb.streamed = false
+		tb.ctxMeasured = false
+		tb.clearPanels()
+	}
+}
+
+func (tb *tab) applySubagent(sub *contracts.Subagent) {
+	if sub == nil {
+		return
+	}
+	if sub.State == stateDone {
+		tb.dropAgent(sub.ID)
+		return
+	}
+	tb.agents = append(tb.agents, liveAgent{Subagent: *sub, since: time.Now()})
 }
 
 func (m *model) syncViewport() {
@@ -1171,335 +1194,91 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if handled := m.handlePluginsMsg(msg); handled {
 		return m, nil
 	}
+	if key, ok := msg.(tea.KeyMsg); ok {
+		if cmd, handled := m.handleKey(key); handled {
+			return m, cmd
+		}
+	} else if cmd, handled := m.handleMsg(msg); handled {
+		return m, cmd
+	}
+	return m, m.updateComponents(msg)
+}
+
+func (m *model) relayout() {
+	m.applySize()
+	m.syncViewport()
+}
+
+func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
-		if !m.ready {
-			m.vp = viewport.New(msg.Width, msg.Height-m.chromeHeight())
-			m.ready = true
-		} else {
-			m.applySize()
-		}
-		m.input.SetWidth(m.composerTextWidth())
-		m.resizeComposer()
-		m.syncViewport()
-	case tea.KeyMsg:
-		m.keys.write("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
-		m.flash = ""
-		if m.pendingClose {
-			if msg.String() == "y" {
-				cmd := m.confirmClose()
-				m.pendingClose = false
-				return m, cmd
-			}
-			if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc {
-				m.pendingClose = false
-				return m, tea.Quit
-			}
-			m.pendingClose = false
-			return m, nil
-		}
-		if m.choice != nil {
-			switch msg.Type {
-			case tea.KeyUp:
-				m.moveChoice(-1)
-				return m, nil
-			case tea.KeyDown:
-				m.moveChoice(1)
-				return m, nil
-			case tea.KeyEsc:
-				m.choiceIdx = len(m.choice.Options) - 1
-				m.chooseChoice()
-				return m, nil
-			case tea.KeyEnter:
-				m.chooseChoice()
-				return m, nil
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		if m.switchOpen {
-			if m.overlayNav(msg, m.moveSwitch) {
-				return m, nil
-			}
-			switch msg.Type {
-			case tea.KeyEsc:
-				m.switchOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyEnter:
-				m.chooseSwitch()
-				m.switchOpen = false
-				m.applySize()
-				m.syncViewport()
-				cmd := m.ensureSpin()
-				return m, cmd
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		if m.searchOpen {
-			switch msg.Type {
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			case tea.KeyEsc, tea.KeyCtrlS:
-				m.closeSearch()
-				return m, nil
-			case tea.KeyEnter, tea.KeyCtrlN:
-				m.searchStep(1)
-				return m, nil
-			case tea.KeyCtrlP:
-				m.searchStep(-1)
-				return m, nil
-			case tea.KeyBackspace:
-				if q := m.searchQuery; q != "" {
-					m.typeSearch(q[:len(q)-1])
-				}
-				return m, nil
-			case tea.KeyRunes:
-				if msg.Alt {
-					return m, nil
-				}
-				m.typeSearch(m.searchQuery + string(msg.Runes))
-				return m, nil
-			case tea.KeySpace:
-				m.typeSearch(m.searchQuery + " ")
-				return m, nil
-			}
-			return m, nil
-		}
-		if m.diagOpen {
-			if msg.Type == tea.KeyCtrlC {
-				return m, tea.Quit
-			}
-			m.diagOpen = false
-			m.applySize()
-			m.syncViewport()
-			return m, nil
-		}
-		if m.pluginsOpen {
-			if msg.Type == tea.KeyCtrlC {
-				return m, tea.Quit
-			}
-			cmd := m.handlePluginsKey(msg)
-			return m, cmd
-		}
-		if m.skillsOpen {
-			if m.overlayNav(msg, m.moveSkills) {
-				return m, nil
-			}
-			switch msg.Type {
-			case tea.KeyEsc, tea.KeyEnter:
-				m.skillsOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		if m.resumeOpen {
-			if m.overlayNav(msg, m.moveResume) {
-				return m, nil
-			}
-			switch msg.Type {
-			case tea.KeyEsc:
-				m.resumeOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyEnter:
-				cmd := m.chooseResume()
-				m.resumeOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, tea.Batch(cmd, m.ensureSpin())
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		if m.paletteOpen() {
-			if m.overlayNav(msg, m.movePal) {
-				return m, nil
-			}
-			switch msg.Type {
-			case tea.KeyTab:
-				m.completePal()
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyEsc:
-				m.input.SetValue("")
-				m.palIdx = 0
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyEnter:
-				cmd := m.handleEnter()
-				m.palIdx = 0
-				m.applySize()
-				m.syncViewport()
-				return m, tea.Batch(cmd, m.ensureSpin())
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-		}
-		if m.mentionOpen() {
-			switch msg.Type {
-			case tea.KeyUp:
-				m.moveMention(-1)
-				return m, nil
-			case tea.KeyDown:
-				m.moveMention(1)
-				return m, nil
-			case tea.KeyTab:
-				m.completeActiveMention()
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			}
-		}
-		switch msg.Type {
-		case tea.KeyEsc:
-			if tb := m.tabs[m.active]; tb != nil && tb.busy {
-				if name := m.sessionName(m.active); name != "" {
-					m.tm.Interrupt(name)
-				}
-				return m, nil
-			}
-			return m, tea.Quit
-		case tea.KeyCtrlC:
-			return m, tea.Quit
-		case tea.KeyTab:
-			m.switchTab(1)
-			return m, nil
-		case tea.KeyShiftTab:
-			m.switchTab(-1)
-			return m, nil
-		case tea.KeyEnter:
-			if msg.Alt {
-				break
-			}
-			if m.continueLine() {
-				return m, nil
-			}
-			return m, tea.Batch(m.handleEnter(), m.ensureSpin())
-		case tea.KeyCtrlS:
-			m.openSearch()
-			return m, nil
-		case tea.KeyCtrlT:
-			m.toggleTurnFold()
-			return m, nil
-		case tea.KeyCtrlF:
-			m.toggleFold()
-			return m, nil
-		case tea.KeyCtrlY:
-			m.copyLastCode()
-			return m, nil
-		case tea.KeyCtrlG:
-			cmd := m.toggleMouse()
-			return m, cmd
-		case tea.KeyCtrlL:
-			m.selectNextLink()
-			return m, nil
-		case tea.KeyCtrlO:
-			m.openSelectedLink()
-			return m, nil
-		case tea.KeyCtrlV:
-			if m.pasteImage() {
-				return m, nil
-			}
-		case tea.KeyCtrlU:
-			if m.removeLastPending() {
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			}
-		case tea.KeyUp:
-			if msg.Alt {
-				m.jumpTurn(-1)
-				return m, nil
-			}
-			if m.input.LineCount() <= 1 && (m.input.Value() == "" || m.histIdx < len(m.history)) {
-				if m.recallHistory(-1) {
-					return m, nil
-				}
-			}
-		case tea.KeyDown:
-			if msg.Alt {
-				m.jumpTurn(1)
-				return m, nil
-			}
-			if m.input.LineCount() <= 1 && m.histIdx < len(m.history) {
-				if m.recallHistory(1) {
-					return m, nil
-				}
-			}
-		case tea.KeyCtrlW:
-			if m.input.Value() != "" {
-				break
-			}
-			m.pendingClose = true
-			return m, nil
-		case tea.KeyRunes:
-			if msg.String() == "?" && m.input.Value() == "" {
-				m.toggleHelp()
-				return m, nil
-			}
-			if msg.Alt && strings.EqualFold(string(msg.Runes), "y") {
-				m.copyTarget(copyReply)
-				return m, nil
-			}
-			if msg.Alt && strings.EqualFold(string(msg.Runes), "e") {
-				m.toggleToolExpand()
-				return m, nil
-			}
-		}
+		m.handleWindowSize(msg)
 	case eventMsg:
 		cmd := m.route(RoutedEvent(msg))
-		return m, tea.Batch(cmd, m.ensureSpin())
+		return tea.Batch(cmd, m.ensureSpin()), true
 	case imageReadyMsg:
 		m.applyImage(msg)
-		return m, nil
+		return nil, true
 	case enhancedKeysFailedMsg:
 		m.flash = "touches étendues indisponibles : " + msg.err.Error()
-		return m, nil
+		return nil, true
 	case dispatchResultMsg:
-		m.syncTabs()
-		line, role := msg.out, roleNotice
-		if msg.err != nil {
-			line, role = msg.err.Error(), roleError
-		}
-		if line != "" {
-			tb := m.tabs[msg.origin]
-			if tb == nil {
-				tb = m.tabs[m.active]
-			}
-			if tb != nil {
-				tb.appendEntry(entry{role: role, text: line})
-				m.syncViewport()
-			} else {
-				m.flash = line
-			}
-		}
-		return m, nil
+		m.handleDispatchResult(msg)
+		return nil, true
 	case tickMsg:
 		m.syncTabs()
-		return m, tickCmd()
+		return tickCmd(), true
 	case spinMsg:
-		if !m.anyBusy() {
-			m.spinning = false
-			return m, nil
-		}
-		m.spin++
-		m.syncViewport()
-		return m, spinTick(fastTick)
+		return m.handleSpin(), true
 	}
+	return nil, false
+}
+
+func (m *model) handleWindowSize(msg tea.WindowSizeMsg) {
+	m.width, m.height = msg.Width, msg.Height
+	if !m.ready {
+		m.vp = viewport.New(msg.Width, msg.Height-m.chromeHeight())
+		m.ready = true
+	} else {
+		m.applySize()
+	}
+	m.input.SetWidth(m.composerTextWidth())
+	m.resizeComposer()
+	m.syncViewport()
+}
+
+func (m *model) handleDispatchResult(msg dispatchResultMsg) {
+	m.syncTabs()
+	line, role := msg.out, roleNotice
+	if msg.err != nil {
+		line, role = msg.err.Error(), roleError
+	}
+	if line == "" {
+		return
+	}
+	tb := m.tabs[msg.origin]
+	if tb == nil {
+		tb = m.tabs[m.active]
+	}
+	if tb == nil {
+		m.flash = line
+		return
+	}
+	tb.appendEntry(entry{role: role, text: line})
+	m.syncViewport()
+}
+
+func (m *model) handleSpin() tea.Cmd {
+	if !m.anyBusy() {
+		m.spinning = false
+		return nil
+	}
+	m.spin++
+	m.syncViewport()
+	return spinTick(fastTick)
+}
+
+func (m *model) updateComponents(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
 	var c tea.Cmd
 	m.input, c = m.input.Update(msg)
@@ -1508,16 +1287,306 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, c)
 	if _, ok := msg.(tea.KeyMsg); ok {
 		m.resizeComposer()
-	}
-	if _, ok := msg.(tea.KeyMsg); ok {
 		if m.paletteOpen() || m.palWasOpen {
 			m.clampPal()
-			m.applySize()
-			m.syncViewport()
+			m.relayout()
 		}
 		m.palWasOpen = m.paletteOpen()
 	}
-	return m, tea.Batch(cmds...)
+	return tea.Batch(cmds...)
+}
+
+func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	m.keys.write("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
+	m.flash = ""
+	switch {
+	case m.pendingClose:
+		return m.handlePendingClose(msg), true
+	case m.choice != nil:
+		return m.handleChoiceKey(msg), true
+	case m.switchOpen:
+		return m.handleSwitchKey(msg), true
+	case m.searchOpen:
+		return m.handleSearchKey(msg), true
+	case m.diagOpen:
+		return m.handleDiagKey(msg), true
+	case m.pluginsOpen:
+		return m.handlePluginsOverlayKey(msg), true
+	case m.skillsOpen:
+		return m.handleSkillsKey(msg), true
+	case m.resumeOpen:
+		return m.handleResumeKey(msg), true
+	}
+	if cmd, handled := m.handlePaletteKey(msg); handled {
+		return cmd, true
+	}
+	if cmd, handled := m.handleMentionKey(msg); handled {
+		return cmd, true
+	}
+	return m.handleMainKey(msg)
+}
+
+func (m *model) handlePendingClose(msg tea.KeyMsg) tea.Cmd {
+	if msg.String() == "y" {
+		cmd := m.confirmClose()
+		m.pendingClose = false
+		return cmd
+	}
+	m.pendingClose = false
+	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc {
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handleChoiceKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.Type {
+	case tea.KeyUp:
+		m.moveChoice(-1)
+	case tea.KeyDown:
+		m.moveChoice(1)
+	case tea.KeyEsc:
+		m.choiceIdx = len(m.choice.Options) - 1
+		m.chooseChoice()
+	case tea.KeyEnter:
+		m.chooseChoice()
+	case tea.KeyCtrlC:
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handleSwitchKey(msg tea.KeyMsg) tea.Cmd {
+	if m.overlayNav(msg, m.moveSwitch) {
+		return nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.switchOpen = false
+		m.relayout()
+	case tea.KeyEnter:
+		m.chooseSwitch()
+		m.switchOpen = false
+		m.relayout()
+		return m.ensureSpin()
+	case tea.KeyCtrlC:
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return tea.Quit
+	case tea.KeyEsc, tea.KeyCtrlS:
+		m.closeSearch()
+	case tea.KeyEnter, tea.KeyCtrlN:
+		m.searchStep(1)
+	case tea.KeyCtrlP:
+		m.searchStep(-1)
+	case tea.KeyBackspace:
+		if q := m.searchQuery; q != "" {
+			m.typeSearch(q[:len(q)-1])
+		}
+	case tea.KeyRunes:
+		if !msg.Alt {
+			m.typeSearch(m.searchQuery + string(msg.Runes))
+		}
+	case tea.KeySpace:
+		m.typeSearch(m.searchQuery + " ")
+	}
+	return nil
+}
+
+func (m *model) handleDiagKey(msg tea.KeyMsg) tea.Cmd {
+	if msg.Type == tea.KeyCtrlC {
+		return tea.Quit
+	}
+	m.diagOpen = false
+	m.relayout()
+	return nil
+}
+
+func (m *model) handlePluginsOverlayKey(msg tea.KeyMsg) tea.Cmd {
+	if msg.Type == tea.KeyCtrlC {
+		return tea.Quit
+	}
+	return m.handlePluginsKey(msg)
+}
+
+func (m *model) handleSkillsKey(msg tea.KeyMsg) tea.Cmd {
+	if m.overlayNav(msg, m.moveSkills) {
+		return nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyEnter:
+		m.skillsOpen = false
+		m.relayout()
+	case tea.KeyCtrlC:
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handleResumeKey(msg tea.KeyMsg) tea.Cmd {
+	if m.overlayNav(msg, m.moveResume) {
+		return nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.resumeOpen = false
+		m.relayout()
+	case tea.KeyEnter:
+		cmd := m.chooseResume()
+		m.resumeOpen = false
+		m.relayout()
+		return tea.Batch(cmd, m.ensureSpin())
+	case tea.KeyCtrlC:
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handlePaletteKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if !m.paletteOpen() {
+		return nil, false
+	}
+	if m.overlayNav(msg, m.movePal) {
+		return nil, true
+	}
+	switch msg.Type {
+	case tea.KeyTab:
+		m.completePal()
+		m.relayout()
+	case tea.KeyEsc:
+		m.input.SetValue("")
+		m.palIdx = 0
+		m.relayout()
+	case tea.KeyEnter:
+		cmd := m.handleEnter()
+		m.palIdx = 0
+		m.relayout()
+		return tea.Batch(cmd, m.ensureSpin()), true
+	case tea.KeyCtrlC:
+		return tea.Quit, true
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+func (m *model) handleMentionKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if !m.mentionOpen() {
+		return nil, false
+	}
+	switch msg.Type {
+	case tea.KeyUp:
+		m.moveMention(-1)
+	case tea.KeyDown:
+		m.moveMention(1)
+	case tea.KeyTab:
+		m.completeActiveMention()
+		m.relayout()
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		if tb := m.tabs[m.active]; tb != nil && tb.busy {
+			if name := m.sessionName(m.active); name != "" {
+				m.tm.Interrupt(name)
+			}
+			return nil, true
+		}
+		return tea.Quit, true
+	case tea.KeyCtrlC:
+		return tea.Quit, true
+	case tea.KeyTab:
+		m.switchTab(1)
+	case tea.KeyShiftTab:
+		m.switchTab(-1)
+	case tea.KeyEnter:
+		if msg.Alt {
+			return nil, false
+		}
+		if m.continueLine() {
+			return nil, true
+		}
+		return tea.Batch(m.handleEnter(), m.ensureSpin()), true
+	case tea.KeyCtrlS:
+		m.openSearch()
+	case tea.KeyCtrlT:
+		m.toggleTurnFold()
+	case tea.KeyCtrlF:
+		m.toggleFold()
+	case tea.KeyCtrlY:
+		m.copyLastCode()
+	case tea.KeyCtrlG:
+		return m.toggleMouse(), true
+	case tea.KeyCtrlL:
+		m.selectNextLink()
+	case tea.KeyCtrlO:
+		m.openSelectedLink()
+	case tea.KeyCtrlV:
+		return nil, m.pasteImage()
+	case tea.KeyCtrlU:
+		if !m.removeLastPending() {
+			return nil, false
+		}
+		m.relayout()
+	case tea.KeyUp:
+		return m.handleHistoryKey(msg, -1)
+	case tea.KeyDown:
+		return m.handleHistoryKey(msg, 1)
+	case tea.KeyCtrlW:
+		if m.input.Value() != "" {
+			return nil, false
+		}
+		m.pendingClose = true
+	case tea.KeyRunes:
+		return m.handleRunesKey(msg)
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+func (m *model) handleHistoryKey(msg tea.KeyMsg, dir int) (tea.Cmd, bool) {
+	if msg.Alt {
+		m.jumpTurn(dir)
+		return nil, true
+	}
+	if dir < 0 {
+		if m.input.LineCount() <= 1 && (m.input.Value() == "" || m.histIdx < len(m.history)) && m.recallHistory(-1) {
+			return nil, true
+		}
+		return nil, false
+	}
+	if m.input.LineCount() <= 1 && m.histIdx < len(m.history) && m.recallHistory(1) {
+		return nil, true
+	}
+	return nil, false
+}
+
+func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if msg.String() == "?" && m.input.Value() == "" {
+		m.toggleHelp()
+		return nil, true
+	}
+	if msg.Alt && strings.EqualFold(string(msg.Runes), "y") {
+		m.copyTarget(copyReply)
+		return nil, true
+	}
+	if msg.Alt && strings.EqualFold(string(msg.Runes), "e") {
+		m.toggleToolExpand()
+		return nil, true
+	}
+	return nil, false
 }
 
 func (m *model) helpView() string {

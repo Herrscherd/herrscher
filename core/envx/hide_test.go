@@ -44,3 +44,18 @@ func TestAKeyNobodyHidStaysWhereItWas(t *testing.T) {
 		t.Fatalf("a key outside the list was taken: got %q", got)
 	}
 }
+
+func TestAnInvalidKeyDoesNotStopTheOthers(t *testing.T) {
+	const key = "ENVX_TEST_MIXED"
+	t.Setenv(key, "kept")
+
+	reveal := Hide([]string{"", "ENVX_TEST=BAD", key})
+
+	if _, set := os.LookupEnv(key); set {
+		t.Fatal("a valid key next to an invalid one stayed in the environment")
+	}
+	reveal()
+	if got := os.Getenv(key); got != "kept" {
+		t.Fatalf("the reveal did not restore the valid key: got %q", got)
+	}
+}

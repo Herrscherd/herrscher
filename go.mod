@@ -9,7 +9,7 @@ require (
 	github.com/Herrscherd/herrscher-cursor-backend v0.1.9
 	github.com/Herrscherd/herrscher-discord-gateway v0.19.1
 	github.com/Herrscherd/herrscher-llm-extractor v0.1.4
-	github.com/Herrscherd/herrscher-obsidian-memory v0.3.1
+	github.com/Herrscherd/herrscher-obsidian-memory v0.4.0
 	github.com/Herrscherd/herrscher-orchestrator v0.2.3
 	github.com/Herrscherd/herrscher-superset-skills v0.1.0
 	github.com/Herrscherd/herrscher-transport v0.3.0

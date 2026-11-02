@@ -58,7 +58,10 @@ func installedVersions(ctx context.Context, tc toolchain, modules []string) (map
 	versions := map[string]string{}
 	dec := json.NewDecoder(strings.NewReader(out))
 	for dec.More() {
-		var mod struct{ Path, Version string }
+		var mod struct {
+			Path    string `json:"Path"`
+			Version string `json:"Version"`
+		}
 		if err := dec.Decode(&mod); err != nil {
 			return nil, fmt.Errorf("parse go list -m -json: %w", err)
 		}
@@ -86,7 +89,9 @@ func contractsRequirement(ctx context.Context, tc toolchain, module, version str
 	if err != nil {
 		return "", err
 	}
-	var mod struct{ GoMod string }
+	var mod struct {
+		GoMod string `json:"GoMod"`
+	}
 	if err = json.Unmarshal([]byte(strings.TrimSpace(out)), &mod); err != nil {
 		return "", fmt.Errorf("parse go list -m -json %s@%s: %w", module, version, err)
 	}

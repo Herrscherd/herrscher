@@ -105,7 +105,7 @@ func (p hostPlacer) EnsureProject(ctx context.Context, name, project, repo strin
 		return err
 	}
 	run := runnerFor(h)
-	if _, err := capture(ctx, run, "test", "-d", repo+"/.git"); err == nil {
+	if _, captureErr := capture(ctx, run, "test", "-d", repo+"/.git"); captureErr == nil {
 		return nil
 	}
 	origin, err := originOf(ctx, filepath.Join(p.st.WorkspaceRoot(), project))

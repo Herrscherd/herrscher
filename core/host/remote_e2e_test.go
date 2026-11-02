@@ -62,8 +62,8 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	if provisioned.Bin == "" || provisioned.Version != service.SourceVersion(ctx, src) {
 		t.Fatalf("provisioning must record the binary and the version it put there, got %+v", provisioned)
 	}
-	if err := st.PutHost(provisioned); err != nil {
-		t.Fatal(err)
+	if putErr := st.PutHost(provisioned); putErr != nil {
+		t.Fatal(putErr)
 	}
 
 	rep := checkHost(ctx, runnerFor(provisioned), provisioned, service.SourceVersion(ctx, src))
@@ -77,8 +77,8 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	mustGit(t, "", "init", "-q", project)
 	mustGit(t, project, "config", "user.email", "e2e@test")
 	mustGit(t, project, "config", "user.name", "e2e")
-	if err := os.WriteFile(filepath.Join(project, "README.md"), []byte("e2e\n"), 0o644); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(filepath.Join(project, "README.md"), []byte("e2e\n"), 0o644); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	mustGit(t, project, "add", "-A")
 	mustGit(t, project, "commit", "-qm", "init")
@@ -91,11 +91,11 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 		_, rmErr := capture(context.Background(), runnerFor(provisioned), "rm", "-rf", repo)
 		logCleanup(rmErr)
 	})
-	if err := p.EnsureProject(ctx, "e2e", "app", repo); err != nil {
-		t.Fatalf("clone onto the host: %v", err)
+	if ensureErr := p.EnsureProject(ctx, "e2e", "app", repo); ensureErr != nil {
+		t.Fatalf("clone onto the host: %v", ensureErr)
 	}
-	if err := p.EnsureProject(ctx, "e2e", "app", repo); err != nil {
-		t.Fatalf("re-ensure: %v", err)
+	if ensureErr := p.EnsureProject(ctx, "e2e", "app", repo); ensureErr != nil {
+		t.Fatalf("re-ensure: %v", ensureErr)
 	}
 
 	wt, err := p.Worktrees("e2e")
@@ -121,8 +121,8 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.Materialize(ctx, "e2e", a, path, true); err != nil {
-		t.Fatalf("materialize on the host: %v", err)
+	if materializeErr := p.Materialize(ctx, "e2e", a, path, true); materializeErr != nil {
+		t.Fatalf("materialize on the host: %v", materializeErr)
 	}
 	soul, err := capture(ctx, runnerFor(provisioned), "cat", path+"/.claude/CLAUDE.md")
 	if err != nil {

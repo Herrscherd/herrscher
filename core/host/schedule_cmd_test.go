@@ -243,10 +243,10 @@ func TestScheduleVerbsAreInTheRealRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := reg.Dispatch(ctx, []string{
+	if _, dispatchErr := reg.Dispatch(ctx, []string{
 		"schedule", "add", "--name", "digest",
 		"--session", "live", "--every", "30m", "--task", "read the PRs",
-	}); err != nil {
+	}); dispatchErr != nil {
 		t.Fatalf("schedule add: %v", err)
 	}
 	out, err := reg.Dispatch(ctx, []string{"schedule", "list"})

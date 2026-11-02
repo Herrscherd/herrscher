@@ -20,8 +20,8 @@ func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
 	}
 	defer closeRead(ln)
 	go func() {
-		c, err := ln.Accept()
-		if err != nil {
+		c, acceptErr := ln.Accept()
+		if acceptErr != nil {
 			return
 		}
 		defer closeRead(c)
@@ -76,8 +76,8 @@ func TestSubscribeDaemonEventsClosesWhenTheDaemonGoesAway(t *testing.T) {
 		t.Fatal(err)
 	}
 	go func() {
-		c, err := ln.Accept()
-		if err != nil {
+		c, acceptErr := ln.Accept()
+		if acceptErr != nil {
 			return
 		}
 		closeRead(c)

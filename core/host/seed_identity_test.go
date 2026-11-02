@@ -144,8 +144,8 @@ func dispatchCommandPipe(t *testing.T, ctx context.Context, disp dispatcher, arg
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.Write(append(request, '\n')); err != nil {
-		t.Fatal(err)
+	if _, writeErr := client.Write(append(request, '\n')); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	logCleanup(client.SetReadDeadline(time.Now().Add(time.Second)))
 	line, err := bufio.NewReader(client).ReadBytes('\n')

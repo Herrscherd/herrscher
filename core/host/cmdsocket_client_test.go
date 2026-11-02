@@ -33,8 +33,8 @@ func TestDispatchLiveCommandRoundTrips(t *testing.T) {
 	disp := &clientDispatcher{out: "worker created"}
 	accepted := make(chan error, 1)
 	go func() {
-		conn, err := ln.Accept()
-		if err == nil {
+		conn, acceptErr := ln.Accept()
+		if acceptErr == nil {
 			handleCommandConn(context.Background(), conn, disp, defaultCommandReadTimeout)
 		}
 		accepted <- err

@@ -17,12 +17,12 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadState: %v", err)
 	}
-	if err := st.AddSession(state.Session{Name: "s1"}); err != nil {
-		t.Fatalf("AddSession: %v", err)
+	if addErr := st.AddSession(state.Session{Name: "s1"}); addErr != nil {
+		t.Fatalf("AddSession: %v", addErr)
 	}
 	reg := &cli.Registry{}
-	if err := addApproveCommands(reg, st, nil); err != nil {
-		t.Fatalf("addApproveCommands: %v", err)
+	if approveErr := addApproveCommands(reg, st, nil); approveErr != nil {
+		t.Fatalf("addApproveCommands: %v", approveErr)
 	}
 	h := &hub{st: st, reg: reg, live: map[string]liveSession{}}
 

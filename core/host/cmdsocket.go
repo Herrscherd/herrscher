@@ -40,8 +40,8 @@ func dispatchLiveCommand(ctx context.Context, path string, argv []string) (strin
 	if err != nil {
 		return "", true, err
 	}
-	if _, err := conn.Write(append(b, '\n')); err != nil {
-		return "", true, err
+	if _, writeErr := conn.Write(append(b, '\n')); writeErr != nil {
+		return "", true, writeErr
 	}
 	line, err := bufio.NewReader(conn).ReadBytes('\n')
 	if err != nil && len(line) == 0 {

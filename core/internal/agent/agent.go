@@ -9,7 +9,6 @@
 package agent
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -346,12 +345,12 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 // Exported because on a remote host it runs where the repository is, from the
 // worktree verb, rather than beside the file writes.
 func EnsureGitExcludes(worktree string) error {
-	inside, err := exec.CommandContext(context.Background(), "git", "-C", worktree, "rev-parse", "--is-inside-work-tree").Output()
+	inside, err := exec.Command("git", "-C", worktree, "rev-parse", "--is-inside-work-tree").Output()
 	isWorkTree := err == nil && strings.TrimSpace(string(inside)) == "true"
 	if !isWorkTree {
 		return nil
 	}
-	out, err := exec.CommandContext(context.Background(), "git", "-C", worktree, "rev-parse", "--git-path", "info/exclude").Output()
+	out, err := exec.Command("git", "-C", worktree, "rev-parse", "--git-path", "info/exclude").Output()
 	if err != nil {
 		return fmt.Errorf("resolve local git exclude: %w", err)
 	}

@@ -318,11 +318,12 @@ func (a Agent) writeInstructions(dst, claudeDir, worktreePath string) error {
 	soulOut := strings.ReplaceAll(string(soul), worktreeToken, worktreePath)
 	claudeMd, agentsMd := soulOut, soulOut
 
-	userOut, hasUser, err := a.userInstructions(worktreePath)
-	if err != nil {
-		return err
+	userRaw, err := os.ReadFile(filepath.Join(a.Home, userFile))
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read %s: %w", userFile, err)
 	}
-	if hasUser {
+	if err == nil {
+		userOut := strings.ReplaceAll(string(userRaw), worktreeToken, worktreePath)
 		if err := os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), fileMode); err != nil {
 			return fmt.Errorf("write .claude/USER.md: %w", err)
 		}
@@ -337,17 +338,6 @@ func (a Agent) writeInstructions(dst, claudeDir, worktreePath string) error {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
 	return nil
-}
-
-func (a Agent) userInstructions(worktreePath string) (string, bool, error) {
-	raw, err := os.ReadFile(filepath.Join(a.Home, userFile))
-	if os.IsNotExist(err) {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, fmt.Errorf("read %s: %w", userFile, err)
-	}
-	return strings.ReplaceAll(string(raw), worktreeToken, worktreePath), true, nil
 }
 
 func (a Agent) writeCodexConfig(codexDir, worktreePath string) error {

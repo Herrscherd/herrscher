@@ -34,7 +34,7 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 		t.Fatal(err)
 	}
 	wt := t.TempDir()
-	if err := a.Materialize(wt); err != nil {
+	if err = a.Materialize(wt); err != nil {
 		t.Fatal(err)
 	}
 
@@ -120,7 +120,7 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.Materialize(worktree); err != nil {
+	if err = a.Materialize(worktree); err != nil {
 		t.Fatal(err)
 	}
 
@@ -132,15 +132,15 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 		t.Fatalf("fresh materialized worktree is dirty:\n%s", status)
 	}
 	for _, path := range []string{".claude", ".codex", ".mcp.json", "AGENTS.md", ".herrscher/skills/x/SKILL.md"} {
-		if out, err := exec.CommandContext(t.Context(), "git", "-C", worktree, "check-ignore", "--quiet", "--", path).CombinedOutput(); err != nil {
-			t.Fatalf("%s is not locally ignored: %v\n%s", path, err, out)
+		if out, ignoreErr := exec.CommandContext(t.Context(), "git", "-C", worktree, "check-ignore", "--quiet", "--", path).CombinedOutput(); ignoreErr != nil {
+			t.Fatalf("%s is not locally ignored: %v\n%s", path, ignoreErr, out)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(worktree, ".gitignore")); !os.IsNotExist(err) {
+	if _, err = os.Stat(filepath.Join(worktree, ".gitignore")); !os.IsNotExist(err) {
 		t.Fatalf("materialization must not create or modify project .gitignore: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(worktree, "user.txt"), []byte("user work"), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(worktree, "user.txt"), []byte("user work"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	status, err = exec.CommandContext(t.Context(), "git", "-C", worktree, "status", "--porcelain").CombinedOutput()
@@ -239,7 +239,7 @@ func TestMaterializeIntoWritesTheOtherMachinesPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	stage := t.TempDir()
-	if err := a.MaterializeInto(stage, "/srv/work/proj/.herrscher-sessions/inst/s1"); err != nil {
+	if err = a.MaterializeInto(stage, "/srv/work/proj/.herrscher-sessions/inst/s1"); err != nil {
 		t.Fatal(err)
 	}
 	buf, err := os.ReadFile(filepath.Join(stage, "AGENTS.md"))

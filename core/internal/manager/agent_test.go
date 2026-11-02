@@ -78,7 +78,7 @@ func TestAgentCreateAndList(t *testing.T) {
 		t.Fatalf("empty list: out=%q err=%v", out, err)
 	}
 
-	if _, err := h.agentCreateRun(context.Background(), args("name", "Roblox Dev", "soul", "PERSONA", "mcp", "neublox serve --project {{WORKTREE}}", "backend", "codex", "cmd", "codex --model gpt-5.6")); err != nil {
+	if _, err = h.agentCreateRun(context.Background(), args("name", "Roblox Dev", "soul", "PERSONA", "mcp", "neublox serve --project {{WORKTREE}}", "backend", "codex", "cmd", "codex --model gpt-5.6")); err != nil {
 		t.Fatal(err)
 	}
 	if a, ok := h.agents.Get("roblox-dev"); !ok || a.Backend != "codex" || a.Cmd != "codex --model gpt-5.6" {

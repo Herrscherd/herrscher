@@ -284,7 +284,7 @@ func (w *Worktreer) Remove(repo, name string, force bool) error {
 		if force {
 			recovered, recoverErr := w.recoverEmptyOrphan(repo, name)
 			if recoverErr != nil {
-				return fmt.Errorf("%v; empty-orphan recovery: %w", removeErr, recoverErr)
+				return fmt.Errorf("%w; empty-orphan recovery: %w", removeErr, recoverErr)
 			}
 			if recovered {
 				return nil

@@ -21,24 +21,24 @@ var (
 
 func catalog() map[string]map[string]string {
 	return map[string]map[string]string{
-		"gateway": {
-			"discord": "github.com/Herrscherd/herrscher-discord-gateway",
+		catGateway: {
+			kindDiscord: "github.com/Herrscherd/herrscher-discord-gateway",
 		},
-		"backend": {
+		catBackend: {
 			"claude": "github.com/Herrscherd/herrscher-claude-backend",
 			"codex":  "github.com/Herrscherd/herrscher-codex-backend",
 			"cursor": "github.com/Herrscherd/herrscher-cursor-backend",
 		},
-		"memory": {
+		catMemory: {
 			"obsidian": "github.com/Herrscherd/herrscher-obsidian-memory",
 		},
-		"orchestrator": {
+		catOrchestrator: {
 			"basic": "github.com/Herrscherd/herrscher-orchestrator",
 		},
-		"extractor": {
+		catExtractor: {
 			"llm": "github.com/Herrscherd/herrscher-llm-extractor",
 		},
-		"skills": {
+		catSkills: {
 			"superset": "github.com/Herrscherd/herrscher-superset-skills",
 		},
 	}
@@ -51,17 +51,17 @@ func inTree() []string {
 const hostModule = "github.com/Herrscherd/herrscher"
 
 func categories() []string {
-	return []string{"gateway", "backend", "memory", "orchestrator", "extractor", "skills"}
+	return []string{catGateway, catBackend, catMemory, catOrchestrator, catExtractor, catSkills}
 }
 
 func defaultStack() map[string]string {
 	return map[string]string{
-		"gateway":      "discord",
-		"backend":      "claude",
-		"memory":       "obsidian",
-		"orchestrator": "basic",
-		"extractor":    "llm",
-		"skills":       "superset",
+		catGateway:      kindDiscord,
+		catBackend:      "claude",
+		catMemory:       "obsidian",
+		catOrchestrator: "basic",
+		catExtractor:    "llm",
+		catSkills:       "superset",
 	}
 }
 
@@ -82,12 +82,12 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 	noBuild := fs.Bool("no-build", false, "write plugins.go but skip go get/build")
 	list := fs.Bool("list", false, "list the module catalog() and exit")
 	yes := fs.Bool("yes", false, "skip the interactive wizard; use flags/defaults")
-	gateway := fs.String("gateway", defaultStack()["gateway"], "gateway module kind (or none)")
-	backend := fs.String("backend", defaultStack()["backend"], "backend module kind (or none)")
-	memory := fs.String("memory", defaultStack()["memory"], "memory module kind (or none)")
-	orchestrator := fs.String("orchestrator", defaultStack()["orchestrator"], "orchestrator module kind (or none)")
-	extractor := fs.String("extractor", defaultStack()["extractor"], "extractor module kind (or none)")
-	skills := fs.String("skills", defaultStack()["skills"], "skills module kind (or none)")
+	gateway := fs.String(catGateway, defaultStack()[catGateway], "gateway module kind (or none)")
+	backend := fs.String(catBackend, defaultStack()[catBackend], "backend module kind (or none)")
+	memory := fs.String(catMemory, defaultStack()[catMemory], "memory module kind (or none)")
+	orchestrator := fs.String(catOrchestrator, defaultStack()[catOrchestrator], "orchestrator module kind (or none)")
+	extractor := fs.String(catExtractor, defaultStack()[catExtractor], "extractor module kind (or none)")
+	skills := fs.String(catSkills, defaultStack()[catSkills], "skills module kind (or none)")
 	var extras multiFlag
 	fs.Var(&extras, "with", "pin an extra module path verbatim (repeatable)")
 	if err := fs.Parse(args); err != nil {
@@ -104,12 +104,12 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 	interactive := !*yes && !stackFlagsSet(fs) && isTerminal(os.Stdin) && isTerminal(os.Stderr)
 
 	choices := map[string]string{
-		"gateway":      *gateway,
-		"backend":      *backend,
-		"memory":       *memory,
-		"orchestrator": *orchestrator,
-		"extractor":    *extractor,
-		"skills":       *skills,
+		catGateway:      *gateway,
+		catBackend:      *backend,
+		catMemory:       *memory,
+		catOrchestrator: *orchestrator,
+		catExtractor:    *extractor,
+		catSkills:       *skills,
 	}
 	var secrets map[string]string
 	if interactive {
@@ -213,7 +213,7 @@ func buildStack(ctx context.Context, errOut *errwriter.Writer, dir string, modul
 		if m == hostModule || strings.HasPrefix(m, hostModule+"/") {
 			continue
 		}
-		if code := run(ctx, errOut, dir, "go", "get", "--", m); code != 0 {
+		if code := run(ctx, errOut, dir, "go", verbGet, "--", m); code != 0 {
 			return code
 		}
 	}
@@ -237,7 +237,7 @@ func resolveStack(choices map[string]string, extras []string) ([]string, error) 
 	}
 	for _, cat := range categories() {
 		kind := choices[cat]
-		if kind == "" || kind == "none" {
+		if kind == "" || kind == kindNone {
 			continue
 		}
 		module, ok := catalog()[cat][kind]
@@ -262,7 +262,7 @@ func stackFlagsSet(fs *flag.FlagSet) bool {
 	set := false
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
-		case "gateway", "backend", "memory", "orchestrator", "extractor", "skills", "with":
+		case catGateway, catBackend, catMemory, catOrchestrator, catExtractor, catSkills, "with":
 			set = true
 		}
 	})

@@ -166,7 +166,7 @@ func chooseDefaultModel(s style, in *bufio.Reader, entries []host.CatalogEntry, 
 	switch ans {
 	case "":
 		return cur, nil
-	case "none":
+	case kindNone:
 		return "", nil
 	}
 	if n, err := strconv.Atoi(ans); err == nil {

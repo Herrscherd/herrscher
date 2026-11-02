@@ -86,9 +86,9 @@ func pluginHost(ctx context.Context, out, errOut *errwriter.Writer, args []strin
 	switch sub {
 	case "list":
 		return pluginList(ctx, env)
-	case "add", "remove":
+	case verbAdd, verbRemove:
 		return pluginAddRemove(ctx, env, sub, positionals)
-	case "pin", "unpin":
+	case verbPin, verbUnpin:
 		return pluginPin(ctx, env, sub, positionals)
 	default:
 		errOut.Printf("unknown plugin subcommand %q\n", sub)
@@ -132,7 +132,7 @@ func pluginAddRemove(ctx context.Context, env pluginEnv, sub string, positionals
 		return 0
 	}
 	cmds := removeCommands()
-	if sub == "add" {
+	if sub == verbAdd {
 		cmds = addCommands(module, version)
 	}
 	steps := append([]step{fileStep(env.manifest, rendered)}, cmdSteps(env.errOut, env.dir, cmds)...)
@@ -154,14 +154,14 @@ func pluginAddRemove(ctx context.Context, env pluginEnv, sub string, positionals
 }
 
 func renderPluginEdit(sub, src, module string) (string, bool, error) {
-	if sub == "add" {
+	if sub == verbAdd {
 		return addPlugin(src, module)
 	}
 	return removePlugin(src, module)
 }
 
 func pluginPin(ctx context.Context, env pluginEnv, sub string, positionals []string) int {
-	if len(positionals) < 1 || len(positionals) > 2 || (sub == "unpin" && len(positionals) != 1) {
+	if len(positionals) < 1 || len(positionals) > 2 || (sub == verbUnpin && len(positionals) != 1) {
 		env.errOut.Printf("usage: herrscher plugin %s <module>%s\n", sub, pinUsageTail(sub))
 		return 2
 	}
@@ -173,7 +173,7 @@ func pluginPin(ctx context.Context, env pluginEnv, sub string, positionals []str
 		env.errOut.Println(err)
 		return 1
 	}
-	if sub == "pin" && version != "" {
+	if sub == verbPin && version != "" {
 		steps := cmdSteps(env.errOut, env.dir, addCommands(module, version))
 		applied, err := apply(ctx, env.dir, addFindings(ctx, env.dir, module, version), osDecider(env.yes), steps)
 		if err != nil {
@@ -185,7 +185,7 @@ func pluginPin(ctx context.Context, env pluginEnv, sub string, positionals []str
 			return 0
 		}
 	}
-	if err := pinModule(env.dir, module, sub == "pin"); err != nil {
+	if err := pinModule(env.dir, module, sub == verbPin); err != nil {
 		env.errOut.Println(err)
 		return 1
 	}
@@ -194,21 +194,21 @@ func pluginPin(ctx context.Context, env pluginEnv, sub string, positionals []str
 }
 
 func moduleArg(sub, arg string) (string, string) {
-	if sub == "remove" {
+	if sub == verbRemove {
 		return arg, ""
 	}
 	return splitModuleVersion(arg)
 }
 
 func pinUsageTail(sub string) string {
-	if sub == "pin" {
+	if sub == verbPin {
 		return " [version]"
 	}
 	return ""
 }
 
 func pastTense(sub string) string {
-	if sub == "add" {
+	if sub == verbAdd {
 		return "added"
 	}
 	return "removed"
@@ -240,7 +240,7 @@ func addCommands(module, version string) [][]string {
 	if version != "" {
 		arg = module + "@" + version
 	}
-	return append([][]string{{"go", "get", "--", arg}}, buildCommands()...)
+	return append([][]string{{"go", verbGet, "--", arg}}, buildCommands()...)
 }
 
 func removeCommands() [][]string { return buildCommands() }
@@ -257,7 +257,7 @@ func updatePlan(mods []string, pins map[string]bool, installed map[string]string
 			skipped = append(skipped, fmt.Sprintf("skipped %s (pinned %s)", m, v))
 			continue
 		}
-		cmds = append(cmds, []string{"go", "get", "-u", m})
+		cmds = append(cmds, []string{"go", verbGet, "-u", m})
 	}
 	if cmds == nil {
 		return nil, skipped

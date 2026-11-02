@@ -102,7 +102,7 @@ func planPluginUpdates(ctx context.Context, out, errOut *errwriter.Writer, dir s
 
 func fetchPluginUpdates(ctx context.Context, errOut *errwriter.Writer, dir string, cmds [][]string) int {
 	for _, c := range cmds {
-		if c[1] != "get" {
+		if c[1] != verbGet {
 			continue
 		}
 		if code := run(ctx, errOut, dir, c[0], c[1:]...); code != 0 {

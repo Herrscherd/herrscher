@@ -230,7 +230,7 @@ func channelFlag(fs *flag.FlagSet) *string {
 
 func hasTerminalGateway() bool {
 	for _, p := range contracts.Default.Gateways() {
-		if p.Manifest.Kind == "terminal" {
+		if p.Manifest.Kind == kindTerminal {
 			return true
 		}
 	}
@@ -240,7 +240,7 @@ func hasTerminalGateway() bool {
 func runWhoami(ctx context.Context, args []string) error {
 	asJSON := false
 	for _, a := range args {
-		if a != "--json" {
+		if a != argJSON {
 			return fmt.Errorf("whoami: %w %q (only --json)", errUnknownArgument, a)
 		}
 		asJSON = true

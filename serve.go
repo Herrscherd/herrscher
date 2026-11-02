@@ -188,7 +188,7 @@ func bindGateways(sets []host.Deps) ([]host.Deps, contracts.Foreground, []contra
 }
 
 func runSession(ctx context.Context, args []string) error {
-	return runRegistryVerb(ctx, "session", args)
+	return runRegistryVerb(ctx, verbSession, args)
 }
 
 func runAgent(ctx context.Context, args []string) error {
@@ -278,7 +278,7 @@ func runPrompt(ctx context.Context, t task) error {
 }
 
 func createTaskSession(ctx context.Context, name string) []string {
-	return append([]string{"session", "create", "--name", name, "--terminal_only"},
+	return append([]string{verbSession, "create", argName, name, "--terminal_only"},
 		scope.LaunchFromEnv(ctx).Args()...)
 }
 
@@ -321,7 +321,7 @@ func runPromptWith(ctx context.Context, d verbDispatcher, name, prompt string, s
 	if _, err := fmt.Fprintln(stderr, "session: "+name); err != nil {
 		return err
 	}
-	argv := append([]string{"session", "seed", "--name", name}, cli.FlagArg("task", prompt)...)
+	argv := append([]string{verbSession, "seed", argName, name}, cli.FlagArg("task", prompt)...)
 	argv = append(argv, "--timeout", promptTimeout.String())
 	reply, err := d.Dispatch(ctx, argv)
 	if err != nil {

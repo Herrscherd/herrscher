@@ -58,8 +58,8 @@ func (o *PluginOps) Findings(ctx context.Context, module, version string) []stri
 func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (string, error) {
 	o.saved = nil
 
-	if action == "pin" || action == "unpin" {
-		return "", pinModule(o.dir, module, action == "pin")
+	if action == verbPin || action == verbUnpin {
+		return "", pinModule(o.dir, module, action == verbPin)
 	}
 
 	saved, err := saveComposition(o.dir)
@@ -69,7 +69,7 @@ func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (
 	o.saved = saved
 
 	switch action {
-	case "remove":
+	case verbRemove:
 		src, err := os.ReadFile(filepath.Join(o.dir, "plugins.go"))
 		if err != nil {
 			return "", fmt.Errorf("read plugins.go: %w", err)
@@ -83,7 +83,7 @@ func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (
 		}
 		return o.run(ctx, buildCommands())
 	case "bump":
-		return o.run(ctx, append([][]string{{"go", "get", "-u", module}}, buildCommands()...))
+		return o.run(ctx, append([][]string{{"go", verbGet, "-u", module}}, buildCommands()...))
 	case "version":
 		return o.run(ctx, addCommands(module, version))
 	}

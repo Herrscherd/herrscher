@@ -4,8 +4,9 @@
 // file:line:column. Allowed are the package doc, the docs of exported
 // package level identifiers, the known //go: directives in their exact form
 // outside function bodies, the Output comment that closes a runnable example
-// in a test file, and every comment of a generated file that a
-// //go:generate directive of its directory names as its output.
+// in a test file, every comment of a generated file that a
+// //go:generate directive of its directory names as its output, and the two
+// marker lines of the plugin manifest plugins.go at a module root.
 //
 // Usage:
 //
@@ -49,6 +50,12 @@ const (
 )
 
 const toolDirective = "tool"
+
+const (
+	manifestFile        = "plugins.go"
+	manifestOpenMarker  = "// herrscher:plugins"
+	manifestCloseMarker = "// herrscher:end"
+)
 
 var errNoDirectory = errors.New("give at least one directory to check")
 
@@ -188,11 +195,26 @@ func strayComments(path string, file *ast.File, namedByAGenerator bool) []token.
 			}
 		case allowed[group]:
 			strays = append(strays, strayDirectiveLines(directory, group)...)
+		case isManifestMarkerGroup(path, group):
 		case !isDirective(directory, group):
 			strays = append(strays, group.Pos())
 		}
 	}
 	return strays
+}
+
+func isManifestMarkerGroup(path string, group *ast.CommentGroup) bool {
+	if filepath.Base(path) != manifestFile || !isModuleRoot(filepath.Dir(path)) {
+		return false
+	}
+	return !slices.ContainsFunc(group.List, func(line *ast.Comment) bool {
+		return line.Text != manifestOpenMarker && line.Text != manifestCloseMarker
+	})
+}
+
+func isModuleRoot(directory string) bool {
+	info, err := os.Stat(filepath.Join(directory, "go.mod"))
+	return err == nil && info.Mode().IsRegular()
 }
 
 func strayDirectiveLines(directory string, group *ast.CommentGroup) []token.Pos {

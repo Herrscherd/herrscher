@@ -66,11 +66,12 @@ func (h *Handler) agentListRun(_ context.Context, in contracts.Input) (string, e
 	if len(agents) == 0 {
 		return "No agents. Create one with `agent create <name>`.", nil
 	}
-	out := "Agents:\n"
+	var out strings.Builder
+	out.WriteString("Agents:\n")
 	for _, a := range agents {
-		out += fmt.Sprintf("• **%s** (%#q)\n", a.Name, a.Home)
+		fmt.Fprintf(&out, "• **%s** (%#q)\n", a.Name, a.Home)
 	}
-	return out, nil
+	return out.String(), nil
 }
 
 func (h *Handler) agentShowRun(_ context.Context, in contracts.Input) (string, error) {

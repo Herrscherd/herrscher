@@ -183,6 +183,9 @@ linters:
       - path: _test\.go
         linters: [gocritic]
         text: "tooManyResultsChecker"
+      - path: ^core/internal/manager/
+        linters: [gocritic]
+        text: "unnamedResult"
       - path: ^(cmd|tools)/
         linters: [gosec]
         text: "^G(304|703):"

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -158,9 +159,9 @@ func TestCodeBlocksAreFoundWithTheirLanguage(t *testing.T) {
 
 type fakeWriteClipboard struct{ wrote string }
 
-func (f *fakeWriteClipboard) ImageType() (string, bool)        { return "", false }
-func (f *fakeWriteClipboard) ReadImage(string) ([]byte, error) { return nil, nil }
-func (f *fakeWriteClipboard) WriteText(s string) error         { f.wrote = s; return nil }
+func (f *fakeWriteClipboard) ImageType(context.Context) (string, bool)          { return "", false }
+func (f *fakeWriteClipboard) ReadImage(context.Context, string) ([]byte, error) { return nil, nil }
+func (f *fakeWriteClipboard) WriteText(_ context.Context, s string) error       { f.wrote = s; return nil }
 
 func TestDiffKeepsFourHunkLinesAndFolds(t *testing.T) {
 	src := strings.Join([]string{

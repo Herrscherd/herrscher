@@ -185,6 +185,12 @@ linters:
         text: "^G(304|703):"
       - path: ^plugins/terminal/register\.go$
         linters: [gochecknoinits]
+      - path: ^plugins/terminal/tui/(clipboard|open)\.go$
+        linters: [gosec]
+        text: "^G204:"
+      - path: ^plugins/terminal/tui/keylog\.go$
+        linters: [gosec]
+        text: "^G703:"
       - path: ^plugins/terminal/tui/
         linters: [misspell]
         text: "`(commandes|marrage)` is a misspelling"

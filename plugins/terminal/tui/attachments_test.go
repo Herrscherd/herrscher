@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,16 +16,16 @@ type fakeClipboard struct {
 	err  error
 }
 
-func (f fakeClipboard) ImageType() (string, bool) {
+func (f fakeClipboard) ImageType(context.Context) (string, bool) {
 	if f.mime == "" {
 		return "", false
 	}
 	return f.mime, true
 }
 
-func (f fakeClipboard) ReadImage(string) ([]byte, error) { return f.data, f.err }
+func (f fakeClipboard) ReadImage(context.Context, string) ([]byte, error) { return f.data, f.err }
 
-func (f fakeClipboard) WriteText(string) error { return nil }
+func (f fakeClipboard) WriteText(context.Context, string) error { return nil }
 
 func TestCtrlVStagesClipboardImage(t *testing.T) {
 	m := readyModel(&fakeBackend{})
@@ -130,5 +131,12 @@ func removeIfPresent(t *testing.T, path string) {
 	t.Helper()
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		t.Error(err)
+	}
+}
+
+func TestStageRefusesANameThatEscapesTheAttachmentDirectory(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	if _, err := stage("../escape.txt", []byte("x")); err == nil {
+		t.Fatal("stage accepted a name that leaves the attachment directory")
 	}
 }

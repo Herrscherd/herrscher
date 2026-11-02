@@ -85,15 +85,23 @@ func renderCodexMCP(raw []byte, worktree string) ([]byte, error) {
 }
 
 func tomlKey(key string) string {
-	if key != "" {
-		for _, r := range key {
-			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-') {
-				return tomlString(key)
-			}
-		}
-		return key
+	if key == "" || !allBareKeyRunes(key) {
+		return tomlString(key)
 	}
-	return tomlString(key)
+	return key
+}
+
+func allBareKeyRunes(key string) bool {
+	for _, r := range key {
+		if !isBareKeyRune(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func isBareKeyRune(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-'
 }
 
 func tomlString(value string) string {

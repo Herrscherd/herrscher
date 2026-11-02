@@ -34,7 +34,7 @@ func (h *Handler) agentCreateRun(_ context.Context, in contracts.Input) (string,
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("🤖 Agent **%s** created at `%s`.", a.Name, a.Home), nil
+	return fmt.Sprintf("🤖 Agent **%s** created at %#q.", a.Name, a.Home), nil
 }
 
 func (h *Handler) agentListRun(_ context.Context, in contracts.Input) (string, error) {
@@ -68,7 +68,7 @@ func (h *Handler) agentListRun(_ context.Context, in contracts.Input) (string, e
 	}
 	out := "Agents:\n"
 	for _, a := range agents {
-		out += fmt.Sprintf("• **%s** (`%s`)\n", a.Name, a.Home)
+		out += fmt.Sprintf("• **%s** (%#q)\n", a.Name, a.Home)
 	}
 	return out, nil
 }
@@ -102,7 +102,7 @@ func (h *Handler) agentShowRun(_ context.Context, in contracts.Input) (string, e
 		}
 		return string(buf), nil
 	}
-	return fmt.Sprintf("**%s** (`%s`)\n\n%s", a.Name, a.Home, string(soul)), nil
+	return fmt.Sprintf("**%s** (%#q)\n\n%s", a.Name, a.Home, string(soul)), nil
 }
 
 func (h *Handler) agentSetSoulRun(_ context.Context, in contracts.Input) (string, error) {

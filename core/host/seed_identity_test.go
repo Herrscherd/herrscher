@@ -82,7 +82,7 @@ func (identitySeedBackend) Close() error { return nil }
 type delegateSeedBackend struct{}
 
 func (delegateSeedBackend) Respond(_ context.Context, _ contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
-	return "Je délègue.\n⟢ delegate: roblox-scripter — Inspecte PlayerNameTags en lecture seule.", nil
+	return "Je délègue.\n⟢ delegate: roblox-scripter \u2014 Inspecte PlayerNameTags en lecture seule.", nil
 }
 func (delegateSeedBackend) Close() error { return nil }
 
@@ -241,7 +241,7 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reply != "Je délègue.\n⟢ delegate: roblox-scripter — Inspecte PlayerNameTags en lecture seule." {
+	if reply != "Je délègue.\n⟢ delegate: roblox-scripter \u2014 Inspecte PlayerNameTags en lecture seule." {
 		t.Fatalf("seed reply = %q", reply)
 	}
 	if len(coord.delegates) != 1 {

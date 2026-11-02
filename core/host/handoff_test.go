@@ -9,12 +9,12 @@ func TestParseHandoff(t *testing.T) {
 		agent, task string
 		ok          bool
 	}{
-		{"valid", "Voilà.\n⟢ handoff: scripter — finir le module", "scripter", "finir le module", true},
-		{"trailing spaces", "x\n  ⟢ handoff:  scripter  —  tâche  ", "scripter", "tâche", true},
-		{"not last line ignored", "⟢ handoff: a — b\nplus de texte après", "", "", false},
+		{"valid", "Voilà.\n⟢ handoff: scripter \u2014 finir le module", "scripter", "finir le module", true},
+		{"trailing spaces", "x\n  ⟢ handoff:  scripter  \u2014  tâche  ", "scripter", "tâche", true},
+		{"not last line ignored", "⟢ handoff: a \u2014 b\nplus de texte après", "", "", false},
 		{"no marker", "juste une réponse normale", "", "", false},
-		{"empty agent", "⟢ handoff:  — tâche", "", "", false},
-		{"empty task", "⟢ handoff: scripter — ", "", "", false},
+		{"empty agent", "⟢ handoff:  \u2014 tâche", "", "", false},
+		{"empty task", "⟢ handoff: scripter \u2014 ", "", "", false},
 		{"missing separator", "⟢ handoff: scripter finir", "", "", false},
 	}
 	for _, c := range cases {
@@ -29,20 +29,20 @@ func TestParseHandoff(t *testing.T) {
 }
 
 func TestParseDelegate(t *testing.T) {
-	agent, task, ok := parseDelegate("blabla\n⟢ delegate: scripter — écris le module de vol")
+	agent, task, ok := parseDelegate("blabla\n⟢ delegate: scripter \u2014 écris le module de vol")
 	if !ok || agent != "scripter" || task != "écris le module de vol" {
 		t.Fatalf("delegate valide mal parsé: %q %q %v", agent, task, ok)
 	}
 	if _, _, ok := parseDelegate("⟢ delegate: scripter"); ok {
 		t.Fatalf("delegate sans em-dash devrait échouer")
 	}
-	if _, _, ok := parseDelegate("⟢ delegate:  — tâche"); ok {
+	if _, _, ok := parseDelegate("⟢ delegate:  \u2014 tâche"); ok {
 		t.Fatalf("delegate sans agent devrait échouer")
 	}
 	if _, _, ok := parseDelegate("pas de trailer ici"); ok {
 		t.Fatalf("absence de trailer devrait échouer")
 	}
-	if _, _, ok := parseDelegate("⟢ handoff: scripter — x"); ok {
+	if _, _, ok := parseDelegate("⟢ handoff: scripter \u2014 x"); ok {
 		t.Fatalf("handoff ne doit pas matcher delegate")
 	}
 }
@@ -52,7 +52,7 @@ func TestParseDone(t *testing.T) {
 	if !ok || summary != "module de vol commité, 12 tests verts" {
 		t.Fatalf("done valide mal parsé: %q %v", summary, ok)
 	}
-	if s, ok := parseDone("⟢ done: fait — et testé"); !ok || s != "fait — et testé" {
+	if s, ok := parseDone("⟢ done: fait \u2014 et testé"); !ok || s != "fait \u2014 et testé" {
 		t.Fatalf("done avec tiret dans le corps: %q %v", s, ok)
 	}
 	if _, ok := parseDone("⟢ done:   "); ok {
@@ -119,13 +119,13 @@ func TestParseFanOut(t *testing.T) {
 		wantTasks []string
 		wantOK    bool
 	}{
-		{"txt\n⟢ fanout: alpha — t1 ;; t2 ;; t3", "alpha", []string{"t1", "t2", "t3"}, true},
-		{"txt\n⟢ fanout: alpha — seule tâche", "alpha", []string{"seule tâche"}, true},
-		{"txt\n⟢ fanout: alpha —  t1  ;;  t2 ", "alpha", []string{"t1", "t2"}, true},
-		{"txt\n⟢ fanout: alpha — t1 ;; ;; t2", "alpha", []string{"t1", "t2"}, true},
-		{"txt\n⟢ fanout:  — t1", "", nil, false},
-		{"txt\n⟢ fanout: alpha —", "", nil, false},
-		{"txt\n⟢ fanout: alpha — ;; ;;", "", nil, false},
+		{"txt\n⟢ fanout: alpha \u2014 t1 ;; t2 ;; t3", "alpha", []string{"t1", "t2", "t3"}, true},
+		{"txt\n⟢ fanout: alpha \u2014 seule tâche", "alpha", []string{"seule tâche"}, true},
+		{"txt\n⟢ fanout: alpha \u2014  t1  ;;  t2 ", "alpha", []string{"t1", "t2"}, true},
+		{"txt\n⟢ fanout: alpha \u2014 t1 ;; ;; t2", "alpha", []string{"t1", "t2"}, true},
+		{"txt\n⟢ fanout:  \u2014 t1", "", nil, false},
+		{"txt\n⟢ fanout: alpha \u2014", "", nil, false},
+		{"txt\n⟢ fanout: alpha \u2014 ;; ;;", "", nil, false},
 		{"txt\n⟢ fanout: sans separateur", "", nil, false},
 		{"aucun trailer", "", nil, false},
 	}

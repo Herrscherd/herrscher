@@ -352,65 +352,83 @@ type channelSlot struct {
 	typ   string
 }
 
+type placement struct {
+	wt      Worktrees
+	repo    string
+	project string
+	space   workspace
+}
+
 func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (string, error) {
 	req, err := h.parseCreateRequest(ctx, in)
 	if err != nil {
 		return "", err
 	}
-	if err := h.checkHostReady(req.hostName); err != nil {
+	if err = h.checkHostReady(req.hostName); err != nil {
 		return "", err
 	}
-	wt, wtRoot, err := h.worktreesOn(req.hostName)
+	place, err := h.placeSession(ctx, in, &req)
 	if err != nil {
 		return "", err
 	}
-	project, err := h.resolveProject(ctx, in, req.hostName, wtRoot)
-	if err != nil {
-		return "", err
-	}
-	repo := repoFor(wtRoot, project)
-	if h.hs != nil {
-		if err := h.hs.EnsureProject(ctx, req.hostName, project, repo); err != nil {
-			return "", err
-		}
-	}
-	space, err := ensureWorkspace(wt, repo, req)
-	if err != nil {
-		return "", err
-	}
-	if req.runtime.agent != "" {
-		if err := h.provisionAgent(ctx, &req, wt, repo, &space); err != nil {
-			return "", err
-		}
-	}
-	approvalsNote := h.approvalsNote(req, space)
-	name := req.name
-	runDir := space.path
+	approvalsNote := h.approvalsNote(req, place.space)
+	runDir := place.space.path
 	if runDir == "" {
-		runDir = repo
+		runDir = place.repo
 	}
-	sess := newSessionRecord(req, space, project, runDir)
-	slot, err := openChannel(ctx, req, h.st.QualifiedName(name))
+	sess := newSessionRecord(req, place.space, place.project, runDir)
+	slot, err := openChannel(ctx, req, h.st.QualifiedName(req.name))
 	if err != nil {
 		if _, unsupported := errors.AsType[*UnsupportedHomeTypeError](err); unsupported {
 			return "", err
 		}
-		h.rollbackWorkspace(wt, repo, name, space)
+		h.rollbackPlacement(place, req.name)
 		return "", err
 	}
 	sess.ChannelID, sess.Owned, sess.Type = slot.id, slot.owned, slot.typ
 	sess.Approvals = req.mode
 	if err := h.st.AddSession(sess); err != nil {
-		h.rollbackWorkspace(wt, repo, name, space)
+		h.rollbackPlacement(place, req.name)
 		if note := h.tidyChannel(ctx, sess); note != "" {
-			h.log.Warn("channel rollback", "session", name, "note", note)
+			h.log.Warn("channel rollback", "session", req.name, "note", note)
 		}
 		return "", fmt.Errorf("persist: %w", err)
 	}
 	h.sup.Start(sess)
-	banner := sessionBanner(repo, name, space.path, wt.Branch(name), req.runtime.cmd, req.runtime.model, req.shared)
-	h.warnIfFailed(req.admin.Send(ctx, sess.ChannelID, banner), "send banner for "+name)
+	banner := sessionBanner(place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared)
+	h.warnIfFailed(req.admin.Send(ctx, sess.ChannelID, banner), "send banner for "+req.name)
 	return fmt.Sprintf("✅ Running on %s.\n\n%s%s", req.admin.ChannelRef(sess.ChannelID), banner, approvalsNote), nil
+}
+
+func (h *Handler) placeSession(ctx context.Context, in contracts.Input, req *createRequest) (placement, error) {
+	wt, wtRoot, err := h.worktreesOn(req.hostName)
+	if err != nil {
+		return placement{}, err
+	}
+	project, err := h.resolveProject(ctx, in, req.hostName, wtRoot)
+	if err != nil {
+		return placement{}, err
+	}
+	repo := repoFor(wtRoot, project)
+	if h.hs != nil {
+		if err = h.hs.EnsureProject(ctx, req.hostName, project, repo); err != nil {
+			return placement{}, err
+		}
+	}
+	space, err := ensureWorkspace(wt, repo, *req)
+	if err != nil {
+		return placement{}, err
+	}
+	if req.runtime.agent != "" {
+		if err = h.provisionAgent(ctx, req, wt, repo, &space); err != nil {
+			return placement{}, err
+		}
+	}
+	return placement{wt: wt, repo: repo, project: project, space: space}, nil
+}
+
+func (h *Handler) rollbackPlacement(place placement, name string) {
+	h.rollbackWorkspace(place.wt, place.repo, name, place.space)
 }
 
 func (h *Handler) parseCreateRequest(ctx context.Context, in contracts.Input) (createRequest, error) {
@@ -550,7 +568,7 @@ func parseBudgetCaps(in contracts.Input) (budgetCaps, error) {
 	if err != nil {
 		return budgetCaps{}, err
 	}
-	caps.tokens = uint64(tokens)
+	caps.tokens = nonNegativeCount(tokens)
 	if caps.cohortCost, err = optionalFloat(in, "cohort_cost_cap"); err != nil {
 		return budgetCaps{}, err
 	}
@@ -558,7 +576,7 @@ func parseBudgetCaps(in contracts.Input) (budgetCaps, error) {
 	if err != nil {
 		return budgetCaps{}, err
 	}
-	caps.cohortTokens = uint64(cohortTokens)
+	caps.cohortTokens = nonNegativeCount(cohortTokens)
 	return caps, nil
 }
 

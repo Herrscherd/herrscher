@@ -62,10 +62,10 @@ func renderTool(text string, width int, v view) string {
 		gutter += family + strings.Repeat(" ", max(1, familyWidth-len(family)))
 	}
 	var b strings.Builder
-	b.WriteString(toolPart(gutter, rest, toolStyle, width, v))
+	b.WriteString(toolPart(gutter, rest, v.st.tool, width, v))
 	for _, ln := range lines[1:] {
 		b.WriteByte('\n')
-		b.WriteString(toolPart(resultGutter, ln, dimStyle, width, v))
+		b.WriteString(toolPart(resultGutter, ln, v.st.dim, width, v))
 	}
 	return b.String()
 }

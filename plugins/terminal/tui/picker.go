@@ -53,7 +53,7 @@ func (m *model) chooseResume() tea.Cmd {
 
 func (m *model) resumeView() string {
 	if len(m.resumeRows) == 0 {
-		return dimStyle.Render("  (aucune session)")
+		return m.st.dim.Render("  (aucune session)")
 	}
 	start, end := paletteWindow(len(m.resumeRows), m.resumeIdx, m.overlayRows())
 	rows := make([]overlayRow, 0, end-start)
@@ -84,7 +84,7 @@ func (m *model) resumeView() string {
 	if hidden := len(m.resumeRows) - (end - start); hidden > 0 {
 		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}
-	return floatingList(rows, m.resumeIdx-start, footer, m.overlayWidth())
+	return floatingList(rows, m.resumeIdx-start, footer, m.overlayWidth(), m.st)
 }
 
 func (m *model) openSwitch() {
@@ -122,7 +122,7 @@ func (m *model) chooseSwitch() {
 
 func (m *model) switchView() string {
 	if len(m.switchRows) == 0 {
-		return dimStyle.Render("  (aucune session)")
+		return m.st.dim.Render("  (aucune session)")
 	}
 	start, end := paletteWindow(len(m.switchRows), m.switchIdx, m.overlayRows())
 	rows := make([]overlayRow, 0, end-start)
@@ -138,7 +138,7 @@ func (m *model) switchView() string {
 	if hidden := len(m.switchRows) - (end - start); hidden > 0 {
 		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}
-	return floatingList(rows, m.switchIdx-start, footer, m.overlayWidth())
+	return floatingList(rows, m.switchIdx-start, footer, m.overlayWidth(), m.st)
 }
 
 // ChoiceOption is one selectable answer in a permission menu: Label is shown to
@@ -201,16 +201,16 @@ func (m *model) choiceView() string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(accentStyle.Render(glyphTool + " " + m.choice.Question))
+	b.WriteString(m.st.accent.Render(glyphTool + " " + m.choice.Question))
 	for i, o := range m.choice.Options {
 		label := fmt.Sprintf("%d. %s", i+1, o.Label)
 		if i == len(m.choice.Options)-1 {
 			label += "  (esc)"
 		}
 		if i == m.choiceIdx {
-			b.WriteString("\n" + accentStyle.Render(glyphCursor+" "+label))
+			b.WriteString("\n" + m.st.accent.Render(glyphCursor+" "+label))
 		} else {
-			b.WriteString("\n" + dimStyle.Render("  "+label))
+			b.WriteString("\n" + m.st.dim.Render("  "+label))
 		}
 	}
 	return b.String()

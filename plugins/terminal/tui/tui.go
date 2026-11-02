@@ -200,6 +200,9 @@ func spinTick(d time.Duration) tea.Cmd {
 
 type model struct {
 	ctx          context.Context
+	st           uiStyles
+	md           *markdownRenderer
+	keys         *keyLog
 	tm           Backend
 	vp           viewport.Model
 	input        textarea.Model
@@ -385,6 +388,7 @@ func newModel(tm Backend) *model {
 	m := &model{
 		ctx: context.Background(), tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
+		st: newStyles(), md: &markdownRenderer{},
 	}
 	m.cmds = localCommands()
 	if tm != nil {
@@ -996,7 +1000,7 @@ func (m *model) contentWith(query string) string {
 	content := m.cachedTranscript(tb)
 	if m.foldTurnsOn {
 		content = m.foldCache.get(content, "", func(s string) string {
-			return strings.Join(foldTurns(strings.Split(s, "\n"), turnFoldKeep), "\n")
+			return strings.Join(foldTurns(strings.Split(s, "\n"), turnFoldKeep, m.st), "\n")
 		})
 	}
 	if m.searchOpen && strings.TrimSpace(query) != "" {
@@ -1005,7 +1009,7 @@ func (m *model) contentWith(query string) string {
 		})
 	}
 	if tb.busy && !tb.streamed {
-		line := spinnerStyle.Render(m.spinFrame() + " thinking…")
+		line := m.st.spinner.Render(m.spinFrame() + " thinking…")
 		if content != "" {
 			content += "\n" + line
 		} else {
@@ -1045,9 +1049,9 @@ func (m *model) inputRow() string {
 
 func (m *model) hintText() string {
 	if m.paletteOpen() {
-		return dimStyle.Render("↑↓ naviguer · ⇞⇟ page · Tab compléter · Échap fermer")
+		return m.st.dim.Render("↑↓ naviguer · ⇞⇟ page · Tab compléter · Échap fermer")
 	}
-	return dimStyle.Render("? raccourcis")
+	return m.st.dim.Render("? raccourcis")
 }
 
 func (m *model) footer() string {
@@ -1059,10 +1063,10 @@ func (m *model) footer() string {
 		return ""
 	}
 	if tb.busy {
-		return spinnerStyle.Render(m.spinnerHint(tb))
+		return m.st.spinner.Render(m.spinnerHint(tb))
 	}
 	if tb.disconnected {
-		return dimStyle.Render("· déconnecté")
+		return m.st.dim.Render("· déconnecté")
 	}
 	return m.statusBar(tb, m.innerWidth())
 }
@@ -1112,6 +1116,7 @@ func OpenOn(session, text string) Option {
 func Run(ctx context.Context, cancel context.CancelFunc, tm Backend, opts ...Option) error {
 	m := newModel(tm)
 	m.ctx = ctx
+	m.keys = &keyLog{}
 	for _, opt := range opts {
 		opt(m)
 	}
@@ -1125,7 +1130,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend, opts ...Opt
 	p := tea.NewProgram(m,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
-		tea.WithInput(newFilteredStdin()),
+		tea.WithInput(newFilteredStdin(m.keys)),
 	)
 	go func() {
 		for {
@@ -1177,7 +1182,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeComposer()
 		m.syncViewport()
 	case tea.KeyMsg:
-		keylog("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
+		m.keys.write("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
 		m.flash = ""
 		if m.pendingClose {
 			if msg.String() == "y" {
@@ -1514,7 +1519,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
+	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
 }
 
 func (m *model) View() string {

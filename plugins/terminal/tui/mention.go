@@ -155,5 +155,5 @@ func (m *model) mentionView() string {
 	for _, p := range paths {
 		rows = append(rows, overlayRow{label: "@" + p})
 	}
-	return floatingList(rows, m.mentionIdx, "Tab compléter · Échap fermer", m.overlayWidth())
+	return floatingList(rows, m.mentionIdx, "Tab compléter · Échap fermer", m.overlayWidth(), m.st)
 }

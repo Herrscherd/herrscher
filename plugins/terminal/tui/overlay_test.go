@@ -16,7 +16,7 @@ func TestFloatingListMarksTheCursorRow(t *testing.T) {
 		{label: "/resume", detail: "reprendre une session"},
 		{label: "/review", detail: "relire le diff"},
 	}
-	out := floatingList(rows, 0, "↑↓ naviguer", 74)
+	out := floatingList(rows, 0, "↑↓ naviguer", 74, newStyles())
 	lines := strings.Split(out, "\n")
 	if len(lines) != 3 {
 		t.Fatalf("got %d lines, want 3", len(lines))
@@ -31,7 +31,7 @@ func TestFloatingListMarksTheCursorRow(t *testing.T) {
 
 func TestFloatingListRowsAreFullWidth(t *testing.T) {
 	rows := []overlayRow{{label: "/resume", detail: "reprendre"}}
-	for _, line := range strings.Split(floatingList(rows, 0, "", 74), "\n") {
+	for _, line := range strings.Split(floatingList(rows, 0, "", 74, newStyles()), "\n") {
 		if lipgloss.Width(line) != 74 {
 			t.Fatalf("line %q is %d columns, want 74", line, lipgloss.Width(line))
 		}
@@ -40,7 +40,7 @@ func TestFloatingListRowsAreFullWidth(t *testing.T) {
 
 func TestFloatingListTruncatesLongDetail(t *testing.T) {
 	rows := []overlayRow{{label: "/resume", detail: strings.Repeat("x", 200)}}
-	for _, line := range strings.Split(floatingList(rows, 0, "", 40), "\n") {
+	for _, line := range strings.Split(floatingList(rows, 0, "", 40, newStyles()), "\n") {
 		if lipgloss.Width(line) > 40 {
 			t.Fatalf("line is %d columns, want <= 40", lipgloss.Width(line))
 		}
@@ -48,7 +48,7 @@ func TestFloatingListTruncatesLongDetail(t *testing.T) {
 }
 
 func TestFloatingListWithoutRowsIsEmpty(t *testing.T) {
-	if got := floatingList(nil, 0, "footer", 74); got != "" {
+	if got := floatingList(nil, 0, "footer", 74, newStyles()); got != "" {
 		t.Fatalf("empty list rendered %q", got)
 	}
 }

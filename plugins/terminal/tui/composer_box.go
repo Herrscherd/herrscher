@@ -43,8 +43,8 @@ func (m *model) composerZone() []string {
 	tl, tr, bl, br, h, v := g.tl, g.tr, g.bl, g.br, g.h, g.v
 	width := m.innerWidth()
 	edge := strings.Repeat(h, width-2)
-	side := dimStyle.Render(v)
-	zone := []string{dimStyle.Render(tl + edge + tr)}
+	side := m.st.dim.Render(v)
+	zone := []string{m.st.dim.Render(tl + edge + tr)}
 	for _, line := range body {
 		line = truncate(line, width-4)
 		pad := width - 4 - lipgloss.Width(line)
@@ -53,6 +53,6 @@ func (m *model) composerZone() []string {
 		}
 		zone = append(zone, side+" "+line+strings.Repeat(" ", pad)+" "+side)
 	}
-	zone = append(zone, dimStyle.Render(bl+edge+br))
+	zone = append(zone, m.st.dim.Render(bl+edge+br))
 	return zone
 }

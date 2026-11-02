@@ -8,13 +8,16 @@ import (
 
 const keylogEnv = "HERRSCHER_KEYLOG"
 
-var (
-	keylogOnce sync.Once
-	keylogFile *os.File
-)
+type keyLog struct {
+	once sync.Once
+	file *os.File
+}
 
-func keylog(format string, args ...any) {
-	keylogOnce.Do(func() {
+func (k *keyLog) write(format string, args ...any) {
+	if k == nil {
+		return
+	}
+	k.once.Do(func() {
 		path := os.Getenv(keylogEnv)
 		if path == "" {
 			return
@@ -23,11 +26,11 @@ func keylog(format string, args ...any) {
 		if err != nil {
 			return
 		}
-		keylogFile = f
+		k.file = f
 	})
-	if keylogFile == nil {
+	if k.file == nil {
 		return
 	}
-	_, err := fmt.Fprintf(keylogFile, format+"\n", args...)
+	_, err := fmt.Fprintf(k.file, format+"\n", args...)
 	bestEffort(err)
 }

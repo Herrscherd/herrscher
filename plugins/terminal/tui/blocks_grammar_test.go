@@ -9,7 +9,7 @@ import (
 )
 
 func TestResultLineIndentsUnderTheToolGlyph(t *testing.T) {
-	got := ansi.Strip(resultLine("214 lignes", dimStyle))
+	got := ansi.Strip(resultLine("214 lignes", newStyles().dim))
 	if !strings.HasPrefix(got, "  "+glyphResult+" ") {
 		t.Fatalf("result line = %q", got)
 	}

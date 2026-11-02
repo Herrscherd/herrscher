@@ -9,7 +9,7 @@ import (
 func (m *model) statusZone() []string {
 	left := m.footer()
 	if m.flash != "" {
-		left = dimStyle.Render("· " + m.flash)
+		left = m.st.dim.Render("· " + m.flash)
 	}
 	left = "  " + left
 	if m.innerWidth() < narrowStatus {

@@ -326,16 +326,16 @@ func (m *model) clampPluginsMenu() {
 
 func (m *model) pluginsView() string {
 	var b strings.Builder
-	b.WriteString(dimStyle.Render("plugins · ↑↓ naviguer · ⏎ choisir · échap retour"))
+	b.WriteString(m.st.dim.Render("plugins · ↑↓ naviguer · ⏎ choisir · échap retour"))
 	if m.pluginsNotice != "" {
-		b.WriteString("\n" + dimStyle.Render("  "+m.pluginsNotice))
+		b.WriteString("\n" + m.st.dim.Render("  "+m.pluginsNotice))
 	}
 	if len(m.pluginsRows) == 0 && m.pluginsNotice == "" {
-		b.WriteString("\n" + dimStyle.Render("  (aucun plugin compilé dans ce binaire)"))
+		b.WriteString("\n" + m.st.dim.Render("  (aucun plugin compilé dans ce binaire)"))
 	}
 	start, end := pluginsWindow(m.pluginsIdx, len(m.pluginsRows))
 	if start > 0 {
-		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … %d au-dessus", start)))
+		b.WriteString("\n" + m.st.dim.Render(fmt.Sprintf("  … %d au-dessus", start)))
 	}
 	for i := start; i < end; i++ {
 		r := m.pluginsRows[i]
@@ -344,30 +344,30 @@ func (m *model) pluginsView() string {
 			row += " · épinglé"
 		}
 		if i == m.pluginsIdx && m.pluginsMode == pluginsList {
-			b.WriteString("\n" + accentStyle.Render(glyphCursor+" "+row))
+			b.WriteString("\n" + m.st.accent.Render(glyphCursor+" "+row))
 		} else {
-			b.WriteString("\n" + dimStyle.Render("  "+row))
+			b.WriteString("\n" + m.st.dim.Render("  "+row))
 		}
 	}
 	if end < len(m.pluginsRows) {
-		b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("  … %d en dessous", len(m.pluginsRows)-end)))
+		b.WriteString("\n" + m.st.dim.Render(fmt.Sprintf("  … %d en dessous", len(m.pluginsRows)-end)))
 	}
 	if m.pluginsMode == pluginsWarn {
 		for _, f := range m.pluginsFindings {
-			b.WriteString("\n" + textStyle.Render("  ! "+f))
+			b.WriteString("\n" + m.st.text.Render("  ! "+f))
 		}
 	}
 	if m.pluginsMode == pluginsFailed && m.pluginsOutput != "" {
 		for _, line := range strings.Split(strings.TrimRight(m.pluginsOutput, "\n"), "\n") {
-			b.WriteString("\n" + dimStyle.Render("  "+line))
+			b.WriteString("\n" + m.st.dim.Render("  "+line))
 		}
 	}
 	if m.pluginsMode != pluginsList && m.pluginsMode != pluginsDone {
 		for i, opt := range m.pluginsMenu {
 			if i == m.pluginsMenuIdx {
-				b.WriteString("\n" + accentStyle.Render(glyphCursor+" "+opt))
+				b.WriteString("\n" + m.st.accent.Render(glyphCursor+" "+opt))
 			} else {
-				b.WriteString("\n" + dimStyle.Render("  "+opt))
+				b.WriteString("\n" + m.st.dim.Render("  "+opt))
 			}
 		}
 	}

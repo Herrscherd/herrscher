@@ -157,7 +157,7 @@ func (m *model) paletteView() string {
 	}
 	fc := m.filtered()
 	if len(fc) == 0 {
-		return dimStyle.Render("  (aucune correspondance)")
+		return m.st.dim.Render("  (aucune correspondance)")
 	}
 	sel := m.palIdx
 	if sel >= len(fc) {
@@ -180,5 +180,5 @@ func (m *model) paletteView() string {
 	if len(fc) > visible {
 		footer = fmt.Sprintf("%d/%d", sel+1, len(fc))
 	}
-	return floatingList(rows, sel-start, footer, m.overlayWidth())
+	return floatingList(rows, sel-start, footer, m.overlayWidth(), m.st)
 }

@@ -27,7 +27,7 @@ func (m *model) renderTranscript(tb *tab, width int) string {
 	lines := strings.Split(b.String(), "\n")
 	m.links = findLinks(lines)
 	m.clampLink()
-	return strings.Join(applyLinks(lines, m.links, m.caps, m.linkIdx), "\n")
+	return strings.Join(applyLinks(lines, m.links, m.caps, m.linkIdx, m.st), "\n")
 }
 
 func (m *model) clampLink() {
@@ -41,43 +41,45 @@ func (m *model) clampLink() {
 
 type view struct {
 	caps Capabilities
+	st   uiStyles
+	md   *markdownRenderer
 
 	expand bool
 }
 
 func (m *model) displayMode() view {
-	return view{caps: m.caps, expand: m.expandTools}
+	return view{caps: m.caps, st: m.st, md: m.md, expand: m.expandTools}
 }
 
 func renderEntry(e entry, width int, v view) string {
 	body := width - lipgloss.Width(blockIndent)
 	switch e.role {
 	case roleYou:
-		return renderYou(e, width)
+		return renderYou(e, width, v.st)
 	case roleAgent:
 		if e.streaming {
-			return titledRule(accentStyle, agentTitle, width) + "\n" +
-				indent(wrapWith(textStyle, e.text, body))
+			return titledRule(v.st.accent, agentTitle, width) + "\n" +
+				indent(wrapWith(v.st.text, e.text, body))
 		}
-		out := openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body, v), width)
+		out := openBlock(v.st.accent, agentTitle, renderMarkdown(e.text, body, v), width)
 		if e.preview != "" {
 			out += "\n" + e.preview
 		}
 		return out
 	case roleThinking:
-		return indent(wrapWith(thinkingStyle, thinkingLine(e.text), body))
+		return indent(wrapWith(v.st.thinking, thinkingLine(e.text), body))
 	case roleTool:
 		return indent(renderTool(e.text, body, v))
 	case roleNotice:
-		return indent(wrapWith(dimStyle, glyphNotice+" "+e.text, body))
+		return indent(wrapWith(v.st.dim, glyphNotice+" "+e.text, body))
 	case roleError:
-		return block(redStyle, glyphError+" error", wrapWith(redStyle, e.text, body), width)
+		return block(v.st.red, glyphError+" error", wrapWith(v.st.red, e.text, body), width)
 	case roleCost:
-		return indent(dimStyle.Render(e.text))
+		return indent(v.st.dim.Render(e.text))
 	case roleScrollback:
-		return titledRule(scrollbackStyle, e.text, width)
+		return titledRule(v.st.scrollback, e.text, width)
 	default:
-		return indent(wrapWith(dimStyle, e.text, body))
+		return indent(wrapWith(v.st.dim, e.text, body))
 	}
 }
 
@@ -93,10 +95,10 @@ func openBlock(style lipgloss.Style, title, body string, width int) string {
 	return titledRule(style, title, width) + "\n" + indent(body)
 }
 
-func renderYou(e entry, width int) string {
+func renderYou(e entry, width int, st uiStyles) string {
 	body := width - lipgloss.Width(blockIndent)
-	out := indent(wrapWith(userStyle, glyphCursor+" "+e.text, body))
-	if chips := chipRow(e.attachments); chips != "" {
+	out := indent(wrapWith(st.user, glyphCursor+" "+e.text, body))
+	if chips := chipRow(e.attachments, st); chips != "" {
 		out += "\n" + indent(chips)
 	}
 	if e.preview != "" {

@@ -25,8 +25,8 @@ func (f frame) render(viewport string) string {
 func (m *model) buildFrame() frame {
 	f := frame{above: []string{m.railRow()}}
 	if tb := m.tabs[m.active]; tb != nil {
-		f.below = append(f.below, todoPanel(tb.todos, m.innerWidth())...)
-		f.below = append(f.below, subagentPanel(tb.agents, time.Now(), m.innerWidth())...)
+		f.below = append(f.below, todoPanel(tb.todos, m.innerWidth(), m.st)...)
+		f.below = append(f.below, subagentPanel(tb.agents, time.Now(), m.innerWidth(), m.st)...)
 	}
 	if m.choice != nil {
 		f.below = appendLines(f.below, m.choiceView())
@@ -58,8 +58,8 @@ func (m *model) buildFrame() frame {
 	if m.showHelp {
 		f.below = appendLines(f.below, m.helpView())
 	}
-	if chips := chipRow(m.pending); chips != "" {
-		f.below = appendLines(f.below, chips+"  "+dimStyle.Render("⌃U retirer"))
+	if chips := chipRow(m.pending, m.st); chips != "" {
+		f.below = appendLines(f.below, chips+"  "+m.st.dim.Render("⌃U retirer"))
 	}
 	f.below = append(f.below, m.composerZone()...)
 	f.below = append(f.below, m.statusZone()...)

@@ -9,7 +9,7 @@ import (
 const brand = "──◂ HERRSCHER ▸──"
 
 func (m *model) railRow() string {
-	left := accentStyle.Render(brand)
+	left := m.st.accent.Render(brand)
 	strip := m.tabStrip()
 	right := m.vendorMark()
 	if strip == "" {
@@ -30,7 +30,7 @@ func (m *model) activeMark() string {
 	if tb == nil {
 		return ""
 	}
-	return accentStyle.Render(glyphCursor + " " + tb.label)
+	return m.st.accent.Render(glyphCursor + " " + tb.label)
 }
 
 func (m *model) tabStrip() string {
@@ -45,10 +45,10 @@ func (m *model) tabStrip() string {
 			label = glyphUnread + label
 		}
 		if ch == m.active {
-			out = append(out, accentStyle.Render(glyphCursor+" "+label))
+			out = append(out, m.st.accent.Render(glyphCursor+" "+label))
 			continue
 		}
-		out = append(out, dimStyle.Render(label))
+		out = append(out, m.st.dim.Render(label))
 	}
 	return strings.Join(out, "  ")
 }
@@ -58,7 +58,7 @@ func (m *model) vendorMark() string {
 	if !ok || s.Vendor == "" {
 		return ""
 	}
-	return dimStyle.Render(glyphBolt + " " + s.Vendor)
+	return m.st.dim.Render(glyphBolt + " " + s.Vendor)
 }
 
 func joinRow(width int, left, right string) string {

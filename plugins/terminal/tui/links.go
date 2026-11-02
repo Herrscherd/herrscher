@@ -119,8 +119,8 @@ const (
 	ansiReverseOff = "\x1b[27m"
 )
 
-func renderLink(l Link, caps Capabilities, selected bool) string {
-	label := linkStyle.Render(l.Label)
+func renderLink(l Link, caps Capabilities, selected bool, st uiStyles) string {
+	label := st.link.Render(l.Label)
 	if selected {
 		label = ansiReverse + label + ansiReverseOff
 	}
@@ -130,14 +130,14 @@ func renderLink(l Link, caps Capabilities, selected bool) string {
 	return "\x1b]8;;" + l.Target + "\x1b\\" + label + "\x1b]8;;\x1b\\"
 }
 
-func applyLinks(lines []string, links []Link, caps Capabilities, sel int) []string {
+func applyLinks(lines []string, links []Link, caps Capabilities, sel int, st uiStyles) []string {
 	for i := len(links) - 1; i >= 0; i-- {
 		l := links[i]
 		if l.Line < 0 || l.Line >= len(lines) || l.End > len(lines[l.Line]) {
 			continue
 		}
 		ln := lines[l.Line]
-		lines[l.Line] = ln[:l.Start] + renderLink(l, caps, i == sel) + ln[l.End:]
+		lines[l.Line] = ln[:l.Start] + renderLink(l, caps, i == sel, st) + ln[l.End:]
 	}
 	return lines
 }

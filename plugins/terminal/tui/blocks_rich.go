@@ -57,17 +57,17 @@ func renderDiff(body string, width int, v view) string {
 		class := diffClass(ln, inHunk)
 		if class != diffMeta {
 			if !v.expand && spent == diffHunkBudget {
-				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-i), dimStyle))
+				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-i), v.st.dim))
 				break
 			}
 			spent++
 		}
-		out = append(out, paintDiff(truncate(ln, width), class, v.caps))
+		out = append(out, paintDiff(truncate(ln, width), class, v.caps, v.st))
 	}
 	return strings.Join(out, "\n")
 }
 
-func paintDiff(line, class string, caps Capabilities) string {
+func paintDiff(line, class string, caps Capabilities, st uiStyles) string {
 	if caps.Colour == Colour16 {
 		switch class {
 		case diffAdd:
@@ -79,18 +79,18 @@ func paintDiff(line, class string, caps Capabilities) string {
 	}
 	switch class {
 	case diffAdd:
-		return greenStyle.Render(line)
+		return st.green.Render(line)
 	case diffDel:
-		return redStyle.Render(line)
+		return st.red.Render(line)
 	case diffMeta:
-		return dimStyle.Render(line)
+		return st.dim.Render(line)
 	}
-	return textStyle.Render(line)
+	return st.text.Render(line)
 }
 
 const tableGap = "  "
 
-func renderTable(rows [][]string, width int) string {
+func renderTable(rows [][]string, width int, st uiStyles) string {
 	if len(rows) == 0 {
 		return ""
 	}
@@ -112,9 +112,9 @@ func renderTable(rows [][]string, width int) string {
 			b.WriteByte('\n')
 		}
 		if i == 1 {
-			b.WriteString(dimStyle.Render(strings.Repeat("─", min(width, tableWidth(w)))) + "\n")
+			b.WriteString(st.dim.Render(strings.Repeat("─", min(width, tableWidth(w)))) + "\n")
 		}
-		b.WriteString(tableRow(r, w, i == 0))
+		b.WriteString(tableRow(r, w, i == 0, st))
 	}
 	return b.String()
 }
@@ -142,7 +142,7 @@ func shrinkColumns(w []int, budget int) {
 	}
 }
 
-func tableRow(r []string, w []int, header bool) string {
+func tableRow(r []string, w []int, header bool, st uiStyles) string {
 	cells := make([]string, len(w))
 	for i := range w {
 		cell := ""
@@ -155,7 +155,7 @@ func tableRow(r []string, w []int, header bool) string {
 			cell += strings.Repeat(" ", pad)
 		}
 		if header {
-			cell = accentStyle.Render(cell)
+			cell = st.accent.Render(cell)
 		}
 		cells[i] = cell
 	}

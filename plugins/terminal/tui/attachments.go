@@ -145,13 +145,13 @@ func mimeByExt(path string) string {
 	return ""
 }
 
-func chipRow(atts []Attachment) string {
+func chipRow(atts []Attachment, st uiStyles) string {
 	if len(atts) == 0 {
 		return ""
 	}
 	chips := make([]string, len(atts))
 	for i, a := range atts {
-		chips[i] = chipStyle.Render(fmt.Sprintf("📎 %s · %s", a.Name, humanSize(a.Size)))
+		chips[i] = st.chip.Render(fmt.Sprintf("📎 %s · %s", a.Name, humanSize(a.Size)))
 	}
 	return strings.Join(chips, " ")
 }

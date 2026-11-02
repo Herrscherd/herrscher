@@ -47,8 +47,8 @@ func (m *restoreVerbMem) Close() error { return nil }
 var currentRestoreMem *restoreVerbMem
 
 func useRestoreMem(t *testing.T, m *restoreVerbMem) {
-	registerRestoreVerbPlugin()
 	t.Helper()
+	registerRestoreVerbPlugin()
 	currentRestoreMem = m
 	t.Cleanup(func() { currentRestoreMem = nil })
 }

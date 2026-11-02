@@ -828,11 +828,15 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *cont
 		if spawned, err := d.coordinator.FanOut(ctx, contracts.FanOutRequest{
 			FromSession: d.name, ToAgent: toAgent, Tasks: tasks,
 		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: "status",
-				Text: "fanout partiel: " + strconv.Itoa(len(spawned)) + " lancés puis " + err.Error()})
+			d.fanOut(ctx, contracts.Event{
+				T:    "status",
+				Text: "fanout partiel: " + strconv.Itoa(len(spawned)) + " lancés puis " + err.Error(),
+			})
 		} else {
-			d.fanOut(ctx, contracts.Event{T: "status",
-				Text: "cohorte lancée : " + strconv.Itoa(len(spawned)) + " workers (" + strings.Join(spawned, ", ") + ")"})
+			d.fanOut(ctx, contracts.Event{
+				T:    "status",
+				Text: "cohorte lancée : " + strconv.Itoa(len(spawned)) + " workers (" + strings.Join(spawned, ", ") + ")",
+			})
 		}
 		return nil
 	}

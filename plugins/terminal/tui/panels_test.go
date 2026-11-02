@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/charmbracelet/x/ansi"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func strip(lines []string) []string {

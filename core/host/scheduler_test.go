@@ -67,7 +67,8 @@ func mustStamp(t *testing.T, s string) string {
 
 // newTestScheduler builds a scheduler over fakes, on a frozen clock.
 func newTestScheduler(store *fakeScheduleStore, sessions *fakeScheduleSessions,
-	creator *fakeScheduleCreator, seeded *[]string, now time.Time) *scheduler {
+	creator *fakeScheduleCreator, seeded *[]string, now time.Time,
+) *scheduler {
 	return newScheduler(store, sessions, creator, func(sess, task string) bool {
 		*seeded = append(*seeded, sess+"|"+task)
 		return true

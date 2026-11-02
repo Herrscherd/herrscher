@@ -32,10 +32,12 @@ func (m *restoreVerbMem) Recall(_ context.Context, key string, _ int) (contracts
 	}
 	return contracts.Subgraph{Root: n}, nil
 }
+
 func (m *restoreVerbMem) Record(_ context.Context, n contracts.Node) error {
 	m.nodes[n.Key] = n
 	return nil
 }
+
 func (m *restoreVerbMem) Search(_ context.Context, q contracts.Query) ([]contracts.Node, error) {
 	m.lastQuery = q
 	var hits []contracts.Node

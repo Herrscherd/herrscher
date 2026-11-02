@@ -128,10 +128,12 @@ type seedSpyOrchestrator struct {
 
 func (s *seedSpyOrchestrator) Context(context.Context) string                          { return "" }
 func (s *seedSpyOrchestrator) Observe(context.Context, contracts.Prompt, string) error { return nil }
+
 func (s *seedSpyOrchestrator) Consolidate(context.Context) error {
 	s.consolidated = true
 	return nil
 }
+
 func (s *seedSpyOrchestrator) Close() error {
 	s.closed = true
 	return nil

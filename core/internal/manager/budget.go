@@ -8,7 +8,8 @@ import "github.com/Herrscherd/herrscher/core/internal/state"
 func budgetReason(sessionCost float64, sessionTokens uint64,
 	costCap float64, tokenCap uint64,
 	cohortCost float64, cohortTokens uint64,
-	cohortCostCap float64, cohortTokenCap uint64) string {
+	cohortCostCap float64, cohortTokenCap uint64,
+) string {
 	if costCap > 0 && sessionCost >= costCap {
 		return "cost"
 	}

@@ -262,21 +262,27 @@ type stubForgetCoord struct{ forgotten []string }
 func (s *stubForgetCoord) Handoff(context.Context, contracts.HandoffRequest) (string, error) {
 	return "", nil
 }
+
 func (s *stubForgetCoord) Delegate(context.Context, contracts.DelegateRequest) (string, error) {
 	return "", nil
 }
+
 func (s *stubForgetCoord) Report(context.Context, contracts.ReportRequest) (string, error) {
 	return "", nil
 }
+
 func (s *stubForgetCoord) Merge(context.Context, contracts.MergeRequest) (string, error) {
 	return "", nil
 }
+
 func (s *stubForgetCoord) Seal(context.Context, contracts.SealRequest) (string, error) {
 	return "", nil
 }
+
 func (s *stubForgetCoord) FanOut(context.Context, contracts.FanOutRequest) ([]string, error) {
 	return nil, nil
 }
+
 func (s *stubForgetCoord) Route(context.Context, contracts.RouteRequest) (string, string, error) {
 	return "", "", nil
 }

@@ -166,7 +166,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	pumpDone := make(chan struct{})
 	go func() { defer close(pumpDone); d.pump(pumpCtx) }()
 
-	var bridgeErr = make(chan error, 1)
+	bridgeErr := make(chan error, 1)
 	go func() {
 		err := bridge.RunOneShot(seedCtx, func(channel string) (contracts.Backend, error) {
 			return oneShotBackendFactory(seedCtx, sess)

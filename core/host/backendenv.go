@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 // The pair the app hands the daemon, from the Neublox account token. These are

@@ -17,18 +17,23 @@ type talker struct{ ran chan struct{} }
 func (talker) Manifest() contracts.Manifest {
 	return contracts.Manifest{Kind: "fake", Category: contracts.CategoryGateway}
 }
+
 func (talker) Post(context.Context, contracts.Conversation, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (talker) Reply(context.Context, contracts.Conversation, contracts.MessageID, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (talker) React(context.Context, contracts.Conversation, contracts.MessageID, string) error {
 	return nil
 }
+
 func (talker) Menu(context.Context, contracts.Conversation, contracts.MessageID, string, []contracts.Choice) error {
 	return nil
 }
+
 func (talker) Commands() []contracts.Cmd {
 	return []contracts.Cmd{contracts.New("channel", "read").Help("fake").Do(
 		func(context.Context, contracts.Input) (string, error) { return "ok", nil },

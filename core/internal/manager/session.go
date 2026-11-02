@@ -90,7 +90,8 @@ type usageJSON struct {
 // usageFor returns (cost, tokens) for a single session. Cycles are cut with a
 // visited set. A solo session (no parent, no children) folds to just itself.
 func cohortTotals(target state.Session, all []state.Session,
-	usageFor func(state.Session) (float64, uint64)) (float64, uint64) {
+	usageFor func(state.Session) (float64, uint64),
+) (float64, uint64) {
 	byName := make(map[string]state.Session, len(all))
 	children := make(map[string][]string, len(all))
 	for _, s := range all {

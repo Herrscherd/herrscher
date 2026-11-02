@@ -6,8 +6,9 @@ import (
 	"time"
 	"unicode"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/charmbracelet/x/ansi"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 const (

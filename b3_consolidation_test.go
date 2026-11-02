@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	orchestrator "github.com/Herrscherd/herrscher-orchestrator"
 	"github.com/Herrscherd/herrscher/core/host"
 )

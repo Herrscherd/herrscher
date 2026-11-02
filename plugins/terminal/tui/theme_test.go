@@ -21,9 +21,14 @@ func TestThemeGlyphsAndFramesPresent(t *testing.T) {
 		name   string
 		render func(...string) string
 	}{
-		{"dim", dimStyle.Render}, {"user", userStyle.Render}, {"text", textStyle.Render},
-		{"green", greenStyle.Render}, {"red", redStyle.Render}, {"spinner", spinnerStyle.Render},
-		{"tool", toolStyle.Render}, {"thinking", thinkingStyle.Render},
+		{"dim", dimStyle.Render},
+		{"user", userStyle.Render},
+		{"text", textStyle.Render},
+		{"green", greenStyle.Render},
+		{"red", redStyle.Render},
+		{"spinner", spinnerStyle.Render},
+		{"tool", toolStyle.Render},
+		{"thinking", thinkingStyle.Render},
 	} {
 		if s.render("x") == "" {
 			t.Fatalf("%s style must render", s.name)

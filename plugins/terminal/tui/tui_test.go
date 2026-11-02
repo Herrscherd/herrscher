@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	tea "github.com/charmbracelet/bubbletea"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func newTestModel() *model { return newModel(nil) }
@@ -120,21 +121,26 @@ func (f *fakeBackend) Dispatch(args []string) (string, error) {
 	f.dispatched = append(f.dispatched, args)
 	return "ok", nil
 }
+
 func (f *fakeBackend) Close(name string, force bool) (string, error) {
 	f.closed = append(f.closed, closedSession{name: name, force: force})
 	return "ok", nil
 }
+
 func (f *fakeBackend) Scrollback(name string) []contracts.ScrollbackLine {
 	return f.scrollback[name]
 }
+
 func (f *fakeBackend) Resume(name string) (string, error) {
 	f.resumed = append(f.resumed, name)
 	return "resumed " + name, nil
 }
+
 func (f *fakeBackend) Interrupt(name string) bool {
 	f.interrupted = append(f.interrupted, name)
 	return true
 }
+
 func (f *fakeBackend) Commands() []CommandSpec {
 	return []CommandSpec{
 		{Name: "session create", Args: "--name <name>", Desc: "start a session"},

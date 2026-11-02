@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Herrscherd/herrscher/core/skills"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
 func TestFloatingListMarksTheCursorRow(t *testing.T) {

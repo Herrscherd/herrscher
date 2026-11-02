@@ -62,7 +62,8 @@ type scheduler struct {
 }
 
 func newScheduler(store scheduleStore, sessions scheduleSessions, creator scheduleCreator,
-	seed func(string, string) bool, now func() time.Time) *scheduler {
+	seed func(string, string) bool, now func() time.Time,
+) *scheduler {
 	return &scheduler{
 		store:    store,
 		sessions: sessions,

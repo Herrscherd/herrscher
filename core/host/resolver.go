@@ -7,12 +7,13 @@ import (
 	"os"
 	"time"
 
+	"github.com/nats-io/nats.go"
+	"google.golang.org/grpc/credentials"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	transport "github.com/Herrscherd/herrscher-transport"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
-	"github.com/nats-io/nats.go"
-	"google.golang.org/grpc/credentials"
 )
 
 // Remote-resolve retry/timeout defaults. They bound a remote dial so a slow or

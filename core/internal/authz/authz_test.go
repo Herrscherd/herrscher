@@ -61,9 +61,14 @@ func TestUnknownVerbIsRefusedForAllowListRoles(t *testing.T) {
 func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 	p := SessionPrincipal("revue")
 	allowed := [][]string{
-		{"session", "send"}, {"session", "seed"},
-		{"memory", "search"}, {"memory", "record"}, {"approve", "ask"},
-		{"models", "list"}, {"commands"}, {"whoami"},
+		{"session", "send"},
+		{"session", "seed"},
+		{"memory", "search"},
+		{"memory", "record"},
+		{"approve", "ask"},
+		{"models", "list"},
+		{"commands"},
+		{"whoami"},
 	}
 	for _, path := range allowed {
 		if ok, why := Decide(req(p, path...), RoleAgent); !ok {
@@ -71,11 +76,21 @@ func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 		}
 	}
 	refused := [][]string{
-		{"approve", "rule"}, {"approve", "mode"}, {"approve", "allow"}, {"approve", "list"},
-		{"host", "rm"}, {"role", "grant"}, {"schedule", "add"}, {"service", "restart"},
-		{"set", "home"}, {"skill", "approve"}, {"memory", "forget"},
+		{"approve", "rule"},
+		{"approve", "mode"},
+		{"approve", "allow"},
+		{"approve", "list"},
+		{"host", "rm"},
+		{"role", "grant"},
+		{"schedule", "add"},
+		{"service", "restart"},
+		{"set", "home"},
+		{"skill", "approve"},
+		{"memory", "forget"},
 		{"session", "create"},
-		{"session", "close"}, {"session", "archive"}, {"session", "switch"},
+		{"session", "close"},
+		{"session", "archive"},
+		{"session", "switch"},
 	}
 	for _, path := range refused {
 		if ok, _ := Decide(req(p, path...), RoleAgent); ok {

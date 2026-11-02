@@ -69,6 +69,7 @@ func (f *fakeWTC) Branch(name string) string { return "session/" + name }
 func (f *fakeWTC) BranchExistsAt(_, branch string) (bool, error) {
 	return f.branches[branch], nil
 }
+
 func (f *fakeWTC) MergeInto(_, branch string) (worktree.MergeOutcome, []string, error) {
 	f.mergedBranch = branch
 	return f.merge, f.mergeConf, f.mergeErr
@@ -351,7 +352,8 @@ func TestDelegateUnknownAgent(t *testing.T) {
 	c := newTestCoordinator(cr, nil, true,
 		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
 	if _, err := c.Delegate(context.Background(), contracts.DelegateRequest{
-		FromSession: "lead", ToAgent: "inconnu", Task: "x"}); err == nil {
+		FromSession: "lead", ToAgent: "inconnu", Task: "x",
+	}); err == nil {
 		t.Fatalf("agent inconnu devrait échouer")
 	}
 	if cr.spec.Name != "" {
@@ -365,7 +367,8 @@ func TestDelegateDirtyLeadRefused(t *testing.T) {
 	c := newTestCoordinator(cr, []string{"scripter"}, false,
 		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
 	if _, err := c.Delegate(context.Background(), contracts.DelegateRequest{
-		FromSession: "lead", ToAgent: "scripter", Task: "x"}); err == nil {
+		FromSession: "lead", ToAgent: "scripter", Task: "x",
+	}); err == nil {
 		t.Fatalf("lead sale devrait être refusé")
 	}
 	if cr.spec.Name != "" {
@@ -378,7 +381,8 @@ func TestDelegateUnknownLead(t *testing.T) {
 	var seeded []string
 	c := newTestCoordinator(cr, []string{"scripter"}, true, nil, &seeded)
 	if _, err := c.Delegate(context.Background(), contracts.DelegateRequest{
-		FromSession: "ghost", ToAgent: "scripter", Task: "x"}); err == nil {
+		FromSession: "ghost", ToAgent: "scripter", Task: "x",
+	}); err == nil {
 		t.Fatalf("lead inconnu devrait échouer")
 	}
 }
@@ -416,7 +420,8 @@ func TestReportWorkerWithoutParentErrors(t *testing.T) {
 	c := newTestCoordinator(&fakeCreator{}, nil, true,
 		[]state.Session{{Name: "orphan", Worktree: "/wt/orphan"}}, &seeded)
 	if _, err := c.Report(context.Background(), contracts.ReportRequest{
-		FromSession: "orphan", Summary: "x"}); err == nil {
+		FromSession: "orphan", Summary: "x",
+	}); err == nil {
 		t.Fatalf("worker sans parent devrait échouer")
 	}
 	if len(seeded) != 0 {
@@ -428,7 +433,8 @@ func TestReportUnknownWorkerErrors(t *testing.T) {
 	var seeded []string
 	c := newTestCoordinator(&fakeCreator{}, nil, true, nil, &seeded)
 	if _, err := c.Report(context.Background(), contracts.ReportRequest{
-		FromSession: "ghost", Summary: "x"}); err == nil {
+		FromSession: "ghost", Summary: "x",
+	}); err == nil {
 		t.Fatalf("worker inconnu devrait échouer")
 	}
 }
@@ -438,7 +444,8 @@ func TestReportParentGoneErrors(t *testing.T) {
 	c := newTestCoordinator(&fakeCreator{}, nil, true,
 		[]state.Session{{Name: "worker", Worktree: "/wt/worker", Parent: "lead"}}, &seeded)
 	if _, err := c.Report(context.Background(), contracts.ReportRequest{
-		FromSession: "worker", Summary: "x"}); err == nil {
+		FromSession: "worker", Summary: "x",
+	}); err == nil {
 		t.Fatalf("parent disparu devrait échouer")
 	}
 	if len(seeded) != 0 {
@@ -454,7 +461,8 @@ func TestReportDirtyWorkerRefused(t *testing.T) {
 			{Name: "worker", Worktree: "/wt/worker", Parent: "lead"},
 		}, &seeded)
 	if _, err := c.Report(context.Background(), contracts.ReportRequest{
-		FromSession: "worker", Summary: "x"}); err == nil {
+		FromSession: "worker", Summary: "x",
+	}); err == nil {
 		t.Fatalf("worker non commité devrait être refusé")
 	}
 	if len(seeded) != 0 {
@@ -1067,7 +1075,8 @@ func TestFanOutUnknownAgent(t *testing.T) {
 	c := newTestCoordinator(cr, nil, true,
 		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
 	if _, err := c.FanOut(context.Background(), contracts.FanOutRequest{
-		FromSession: "lead", ToAgent: "ghost", Tasks: []string{"a"}}); err == nil {
+		FromSession: "lead", ToAgent: "ghost", Tasks: []string{"a"},
+	}); err == nil {
 		t.Fatal("agent inconnu devrait échouer")
 	}
 	if cr.spec.Name != "" {
@@ -1083,7 +1092,8 @@ func TestFanOutLeadNotFound(t *testing.T) {
 	var seeded []string
 	c := newTestCoordinator(cr, []string{"scripter"}, true, nil, &seeded)
 	if _, err := c.FanOut(context.Background(), contracts.FanOutRequest{
-		FromSession: "ghost", ToAgent: "scripter", Tasks: []string{"a"}}); err == nil {
+		FromSession: "ghost", ToAgent: "scripter", Tasks: []string{"a"},
+	}); err == nil {
 		t.Fatal("lead inconnu devrait échouer")
 	}
 }
@@ -1094,7 +1104,8 @@ func TestFanOutNoTasks(t *testing.T) {
 	c := newTestCoordinator(cr, []string{"scripter"}, true,
 		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
 	if _, err := c.FanOut(context.Background(), contracts.FanOutRequest{
-		FromSession: "lead", ToAgent: "scripter", Tasks: nil}); err == nil {
+		FromSession: "lead", ToAgent: "scripter", Tasks: nil,
+	}); err == nil {
 		t.Fatal("fanout sans tâche devrait échouer")
 	}
 }
@@ -1105,7 +1116,8 @@ func TestFanOutDirtyLeadSpawnsNone(t *testing.T) {
 	c := newTestCoordinator(cr, []string{"scripter"}, false, // lead sale
 		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
 	spawned, err := c.FanOut(context.Background(), contracts.FanOutRequest{
-		FromSession: "lead", ToAgent: "scripter", Tasks: []string{"a", "b"}})
+		FromSession: "lead", ToAgent: "scripter", Tasks: []string{"a", "b"},
+	})
 	if err == nil {
 		t.Fatal("lead sale devrait faire échouer le premier spawn")
 	}
@@ -1126,7 +1138,8 @@ func TestFanOutPartialSealsToSpawned(t *testing.T) {
 		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}}, &fakeCloser{}, seed)
 
 	spawned, err := c.FanOut(context.Background(), contracts.FanOutRequest{
-		FromSession: "lead", ToAgent: "scripter", Tasks: []string{"a", "b", "c"}})
+		FromSession: "lead", ToAgent: "scripter", Tasks: []string{"a", "b", "c"},
+	})
 	if err == nil {
 		t.Fatal("un échec de Create mid-lot doit remonter une erreur")
 	}
@@ -1148,7 +1161,8 @@ func TestFanOutIncludesPreexistingCohort(t *testing.T) {
 		}, &seeded)
 
 	if _, err := c.FanOut(context.Background(), contracts.FanOutRequest{
-		FromSession: "lead", ToAgent: "scripter", Tasks: []string{"a", "b"}}); err != nil {
+		FromSession: "lead", ToAgent: "scripter", Tasks: []string{"a", "b"},
+	}); err != nil {
 		t.Fatalf("fanout: %v", err)
 	}
 	if c.expected["lead"] != 3 { // 1 préexistant + 2 spawnés

@@ -4,9 +4,10 @@ import (
 	"strings"
 	"time"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 // The chrome is the frame around the transcript: the rail naming the terminal and

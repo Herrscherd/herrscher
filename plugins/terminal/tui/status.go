@@ -12,11 +12,19 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
+const (
+	contextWindowStandard = 200_000
+	contextWindowLarge    = 400_000
+	percentScale          = 100
+	thousand              = 1000
+	minutesPerHour        = 60
+)
+
 func contextLimits() map[string]int {
 	return map[string]int{
-		"claude": 200_000,
-		"codex":  400_000,
-		"cursor": 200_000,
+		"claude": contextWindowStandard,
+		"codex":  contextWindowLarge,
+		"cursor": contextWindowStandard,
 	}
 }
 
@@ -92,7 +100,7 @@ func renderGauge(used int, vendor string, width int, st uiStyles) string {
 	limit := contextLimit(vendor)
 	r := contextRatio(used, limit)
 	style := palierStyle(r, st)
-	label := fmt.Sprintf(" reste %d %%", int(contextLeft(used, limit)*100))
+	label := fmt.Sprintf(" reste %d %%", int(contextLeft(used, limit)*percentScale))
 	if width >= verboseStatus {
 		label += " avant compaction"
 	}
@@ -119,7 +127,7 @@ func (m *model) contextTokens(tb *tab) int {
 
 func formatLimit(n int) string {
 	if n >= 1000 && n%1000 == 0 {
-		return fmt.Sprintf("%dk", n/1000)
+		return fmt.Sprintf("%dk", n/thousand)
 	}
 	return formatTokens(n)
 }
@@ -184,8 +192,8 @@ func (m *model) usageReport(tb *tab) string {
 	if used := m.contextTokens(tb); used > 0 {
 		r := contextRatio(used, limit)
 		lines = append(lines,
-			fmt.Sprintf("  context  %s / %s  (%d%%)", formatTokens(used), formatLimit(limit), int(r*100)),
-			fmt.Sprintf("  reste    %d %% avant compaction", int(contextLeft(used, limit)*100)),
+			fmt.Sprintf("  context  %s / %s  (%d%%)", formatTokens(used), formatLimit(limit), int(r*percentScale)),
+			fmt.Sprintf("  reste    %d %% avant compaction", int(contextLeft(used, limit)*percentScale)),
 		)
 	} else {
 		lines = append(lines, "  context  no measurement yet")
@@ -206,6 +214,6 @@ func formatDuration(d time.Duration) string {
 	case d < time.Hour:
 		return fmt.Sprintf("%dm", int(d.Minutes()))
 	default:
-		return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
+		return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%minutesPerHour)
 	}
 }

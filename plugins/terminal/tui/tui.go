@@ -1085,15 +1085,17 @@ func (m *model) spinnerHint(tb *tab) string {
 	return m.spinFrame() + " " + workingVerb + " (" + strings.Join(segs, " · ") + ")"
 }
 
+const minDisplayedCost = 0.01
+
 func formatTokens(n int) string {
-	if n < 1000 {
+	if n < thousand {
 		return strconv.Itoa(n)
 	}
-	return fmt.Sprintf("%.1fk", float64(n)/1000)
+	return fmt.Sprintf("%.1fk", float64(n)/thousand)
 }
 
 func formatCost(c float64) string {
-	if c < 0.01 {
+	if c < minDisplayedCost {
 		return fmt.Sprintf("$%.4f", c)
 	}
 	return fmt.Sprintf("$%.2f", c)

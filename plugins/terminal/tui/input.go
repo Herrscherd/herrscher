@@ -46,13 +46,13 @@ func writeStdout(sequence string) error {
 
 func legacyKey(seq []byte) []byte {
 	fields := strings.Split(string(seq[2:len(seq)-1]), ";")
-	code, err := strconv.Atoi(strings.SplitN(fields[0], ":", 2)[0])
+	code, err := strconv.Atoi(strings.SplitN(fields[0], ":", maxColonFields)[0])
 	if err != nil || code <= 0 {
 		return nil
 	}
 	mods := 1
 	if len(fields) > 1 {
-		parts := strings.SplitN(fields[1], ":", 2)
+		parts := strings.SplitN(fields[1], ":", maxColonFields)
 		if len(parts) == 2 && parts[1] == keyRelease {
 			return nil
 		}
@@ -69,13 +69,13 @@ func legacyKey(seq []byte) []byte {
 
 	var b []byte
 	switch code {
-	case 13:
+	case ctrlCR:
 		b = []byte{'\r'}
-	case 9:
+	case ctrlHT:
 		b = []byte{'\t'}
-	case 27:
+	case ctrlESC:
 		b = []byte{ctrlESC}
-	case 127:
+	case ctrlDEL:
 		b = []byte{0x7f}
 	default:
 		if code > utf8.MaxRune {
@@ -110,7 +110,7 @@ func legacyFunc(seq []byte) []byte {
 		return seq
 	}
 	fields := strings.Split(body, ";")
-	number := strings.SplitN(fields[0], ":", 2)[0]
+	number := strings.SplitN(fields[0], ":", maxColonFields)[0]
 	if number != "" {
 		if _, err := strconv.Atoi(number); err != nil {
 			return seq
@@ -118,7 +118,7 @@ func legacyFunc(seq []byte) []byte {
 	}
 	mods := ""
 	if len(fields) > 1 {
-		parts := strings.SplitN(fields[1], ":", 2)
+		parts := strings.SplitN(fields[1], ":", maxColonFields)
 		if len(parts) == 2 && parts[1] == keyRelease {
 			return nil
 		}
@@ -149,7 +149,7 @@ func legacyFunc(seq []byte) []byte {
 
 func toUpper(r rune) rune {
 	if r >= 'a' && r <= 'z' {
-		return r - 32
+		return r - asciiCaseGap
 	}
 	return r
 }
@@ -174,9 +174,14 @@ const (
 )
 
 const (
-	ctrlESC   = 0x1b
-	ctrlBEL   = 0x07
-	csiSeqCap = 64
+	ctrlESC        = 0x1b
+	ctrlBEL        = 0x07
+	ctrlHT         = 0x09
+	ctrlCR         = 0x0d
+	ctrlDEL        = 0x7f
+	maxColonFields = 2
+	asciiCaseGap   = 'a' - 'A'
+	csiSeqCap      = 64
 )
 
 func newFilteredStdin(keys *keyLog) *filteredStdin { return &filteredStdin{File: os.Stdin, keys: keys} }

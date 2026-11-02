@@ -5,6 +5,12 @@ import (
 	"strings"
 )
 
+const (
+	oscIntroLen     = 2
+	stTerminatorLen = 2
+	foldedHeadWidth = 60
+)
+
 func searchHits(lines []string, query string) []int {
 	if strings.TrimSpace(query) == "" {
 		return nil
@@ -28,24 +34,24 @@ func escapeEnd(s string, i int) int {
 	}
 	switch s[i+1] {
 	case '[':
-		for j := i + 2; j < len(s); j++ {
+		for j := i + oscIntroLen; j < len(s); j++ {
 			if s[j] >= 0x40 && s[j] <= 0x7e {
 				return j + 1
 			}
 		}
 		return len(s)
 	case ']', 'P', '_', '^', 'X':
-		for j := i + 2; j < len(s); j++ {
-			if s[j] == 0x07 {
+		for j := i + oscIntroLen; j < len(s); j++ {
+			if s[j] == ctrlBEL {
 				return j + 1
 			}
 			if s[j] == 0x1b && j+1 < len(s) && s[j+1] == '\\' {
-				return j + 2
+				return j + stTerminatorLen
 			}
 		}
 		return len(s)
 	}
-	return i + 2
+	return i + oscIntroLen
 }
 
 func visibleText(s string) string {
@@ -243,7 +249,7 @@ func foldTurns(lines []string, keep int, st uiStyles) []string {
 }
 
 func foldedTurnLine(head string, lines int, st uiStyles) string {
-	return truncate(head, 60) + st.dim.Render(fmt.Sprintf(" %s %d lines", glyphFold, lines))
+	return truncate(head, foldedHeadWidth) + st.dim.Render(fmt.Sprintf(" %s %d lines", glyphFold, lines))
 }
 
 const turnFoldKeep = 2

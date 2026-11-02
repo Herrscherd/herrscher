@@ -26,6 +26,11 @@ import (
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
+const (
+	routeEventBufferSize = 256
+	frontendCloseWait    = 2 * time.Second
+)
+
 // ChannelID is the default conversation id used by the terminal gateway.
 var (
 	errNoSessionControl         = errors.New("no session control")
@@ -214,7 +219,7 @@ func (t *Terminal) RunForeground(ctx context.Context, cancel context.CancelFunc)
 func New() *Terminal {
 	return &Terminal{
 		pending:   map[string][]contracts.Message{},
-		out:       make(chan tui.RoutedEvent, 256),
+		out:       make(chan tui.RoutedEvent, routeEventBufferSize),
 		ctrlReady: make(chan struct{}),
 	}
 }
@@ -324,7 +329,7 @@ func (t *Terminal) emit(re tui.RoutedEvent) {
 	if re.Event.T == "closed" || (re.Event.T == eventReply && re.Event.Done) {
 		select {
 		case t.out <- re:
-		case <-time.After(2 * time.Second):
+		case <-time.After(frontendCloseWait):
 		}
 	}
 }

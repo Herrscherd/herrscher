@@ -6,6 +6,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const (
+	composerChrome     = 4
+	composerBorderCols = 2
+)
+
 const composerBoxMinWidth = 60
 
 type boxGlyphs struct {
@@ -27,7 +32,7 @@ func (m *model) composerTextWidth() int {
 	if !m.composerBoxed() {
 		return m.innerWidth()
 	}
-	return m.innerWidth() - 4
+	return m.innerWidth() - composerChrome
 }
 
 func (m *model) composerZone() []string {
@@ -42,12 +47,12 @@ func (m *model) composerZone() []string {
 	g := boxRunes(m.caps.Boxes)
 	tl, tr, bl, br, h, v := g.tl, g.tr, g.bl, g.br, g.h, g.v
 	width := m.innerWidth()
-	edge := strings.Repeat(h, width-2)
+	edge := strings.Repeat(h, width-composerBorderCols)
 	side := m.st.dim.Render(v)
 	zone := []string{m.st.dim.Render(tl + edge + tr)}
 	for _, line := range body {
-		line = truncate(line, width-4)
-		pad := width - 4 - lipgloss.Width(line)
+		line = truncate(line, width-composerChrome)
+		pad := width - composerChrome - lipgloss.Width(line)
 		if pad < 0 {
 			pad = 0
 		}

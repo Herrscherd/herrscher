@@ -85,7 +85,7 @@ func sixelBand(idx []int, w, h, band, colour int) string {
 		if bits != 0 {
 			inked = true
 		}
-		row.WriteByte(0x3f + bits)
+		row.WriteByte(sixelBase + bits)
 	}
 	if !inked {
 		return ""
@@ -93,8 +93,13 @@ func sixelBand(idx []int, w, h, band, colour int) string {
 	return row.String()
 }
 
+const (
+	sixelBase     = 0x3f
+	channelLevels = 256
+)
+
 func sixelLevel(v uint32) int {
-	l := int(v>>8) * sixelCubeSide / 256
+	l := int(v>>byteShift) * sixelCubeSide / channelLevels
 	if l >= sixelCubeSide {
 		l = sixelCubeSide - 1
 	}

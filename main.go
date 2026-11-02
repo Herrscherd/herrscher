@@ -40,17 +40,17 @@ func main() {
 			prompt = os.Args[1]
 		}
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "username") {
-			fmt.Println("x-access-token")
+			fmt.Fprintln(os.Stdout, "x-access-token")
 		} else if t := os.Getenv("GITHUB_TOKEN"); t != "" {
-			fmt.Println(t)
+			fmt.Fprintln(os.Stdout, t)
 		} else {
-			fmt.Println(os.Getenv("GH_TOKEN"))
+			fmt.Fprintln(os.Stdout, os.Getenv("GH_TOKEN"))
 		}
 		return
 	}
 
 	if len(os.Args) == 2 && (os.Args[1] == "version" || os.Args[1] == "--version") {
-		fmt.Println(herrscherVersion())
+		fmt.Fprintln(os.Stdout, herrscherVersion())
 		return
 	}
 
@@ -162,7 +162,7 @@ func main() {
 			os.Exit(code)
 		}
 		if derr == nil && out != "" {
-			fmt.Println(out)
+			fmt.Fprintln(os.Stdout, out)
 		}
 		err = derr
 	}
@@ -207,6 +207,6 @@ func runWhoami(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(out)
+	fmt.Fprintln(os.Stdout, out)
 	return nil
 }

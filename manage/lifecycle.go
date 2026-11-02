@@ -37,7 +37,7 @@ func UpdateCmd(ctx context.Context, args []string) int {
 		return 1
 	}
 	if len(mods) == 0 {
-		fmt.Println("no plugins to update")
+		fmt.Fprintln(os.Stdout, "no plugins to update")
 		return 0
 	}
 
@@ -52,10 +52,10 @@ func UpdateCmd(ctx context.Context, args []string) int {
 	}
 	cmds, skipped := updatePlan(mods, pins, installed)
 	for _, line := range skipped {
-		fmt.Println(line)
+		fmt.Fprintln(os.Stdout, line)
 	}
 	if cmds == nil {
-		fmt.Println("every plugin is pinned; nothing to update")
+		fmt.Fprintln(os.Stdout, "every plugin is pinned; nothing to update")
 		return 0
 	}
 
@@ -68,7 +68,7 @@ func UpdateCmd(ctx context.Context, args []string) int {
 				return code
 			}
 		}
-		fmt.Println("updated plugins (--no-build); run `go mod tidy && go build` in the host to apply")
+		fmt.Fprintln(os.Stdout, "updated plugins (--no-build); run `go mod tidy && go build` in the host to apply")
 		return 0
 	}
 	applied, err := apply(ctx, dir, nil, osDecider(*yes), cmdSteps(dir, cmds))
@@ -77,10 +77,10 @@ func UpdateCmd(ctx context.Context, args []string) int {
 		return 1
 	}
 	if !applied {
-		fmt.Println("aborted; nothing was written")
+		fmt.Fprintln(os.Stdout, "aborted; nothing was written")
 		return 0
 	}
-	fmt.Println("updated plugins and reinstalled the host; restart the service to run it")
+	fmt.Fprintln(os.Stdout, "updated plugins and reinstalled the host; restart the service to run it")
 	return 0
 }
 

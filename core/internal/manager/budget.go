@@ -63,7 +63,7 @@ func (g *SessionBudgetGate) usageFor(s state.Session) (float64, uint64) {
 // has already blown past. Cost has no equivalent: a backend reports cost only in
 // its terminal result event, so there is no mid-turn number to compare a cost
 // cap against.
-func (g *SessionBudgetGate) Check(session string) (reason string, headroom uint64, capped bool) {
+func (g *SessionBudgetGate) Check(session string) (string, uint64, bool) {
 	h := g.h
 	sess, ok := h.st.FindSession(session)
 	if !ok {
@@ -71,11 +71,12 @@ func (g *SessionBudgetGate) Check(session string) (reason string, headroom uint6
 	}
 	sc, stk := g.usageFor(sess)
 	cc, ctk := cohortTotals(sess, h.st.SnapshotSessions(), g.usageFor)
-	reason = budgetReason(sc, stk, sess.CostCap, sess.TokenCap, cc, ctk, sess.CohortCostCap, sess.CohortTokenCap)
+	reason := budgetReason(sc, stk, sess.CostCap, sess.TokenCap, cc, ctk, sess.CohortCostCap, sess.CohortTokenCap)
 	if reason != "" {
 		h.warnIfFailed(h.st.SetPausedReason(session, reason), "pause "+session)
 	}
-	headroom = ^uint64(0)
+	headroom := ^uint64(0)
+	capped := false
 	if sess.TokenCap > 0 {
 		headroom, capped = min(headroom, remaining(sess.TokenCap, stk)), true
 	}

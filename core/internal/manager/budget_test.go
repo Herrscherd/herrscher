@@ -1,6 +1,8 @@
 package manager
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -123,5 +125,22 @@ func TestSessionBudgetGate_UncappedNeverTrips(t *testing.T) {
 	sess, ok := st.FindSession("free")
 	if !ok || sess.PausedReason != "" {
 		t.Fatalf("PausedReason must stay empty: ok=%v sess=%+v", ok, sess)
+	}
+}
+
+func TestNonNegativeCountClampsNegativeTotals(t *testing.T) {
+	if got := nonNegativeCount(-3); got != 0 {
+		t.Fatalf("nonNegativeCount(-3) = %d, want 0", got)
+	}
+	if got := nonNegativeCount(7); got != 7 {
+		t.Fatalf("nonNegativeCount(7) = %d, want 7", got)
+	}
+}
+
+func TestSessionSetBudgetReportsAnUnknownSession(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "category")
+	_, err := h.sessionSetBudgetRun(context.Background(), args("name", "ghost", "cost_cap", "5"))
+	if _, ok := errors.AsType[*SessionNotFoundError](err); !ok {
+		t.Fatalf("err = %v, want a *SessionNotFoundError", err)
 	}
 }

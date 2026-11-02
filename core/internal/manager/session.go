@@ -466,8 +466,8 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		if b, ok := in.Lookup("base"); ok {
 			base = b
 		}
-		reusedWorktree = wt.PreExisting(repo, name)
-		path, err := wt.Create(repo, name, base)
+		reusedWorktree = wt.PreExisting(ctx, repo, name)
+		path, err := wt.Create(ctx, repo, name, base)
 		if err != nil {
 			return "", fmt.Errorf("worktree: %w", err)
 		}
@@ -484,7 +484,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			}
 			return
 		}
-		if rmErr := wt.Remove(repo, name, true); rmErr != nil {
+		if rmErr := wt.Remove(context.WithoutCancel(ctx), repo, name, true); rmErr != nil {
 			fmt.Fprintf(os.Stderr, "herrscher: worktree rollback for %q failed: %v\n", name, rmErr)
 		}
 	}
@@ -607,7 +607,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 	}
 	if sess.Worktree != "" && !sess.Scratch {
 		force := in.Bool("force")
-		if err := wt.Remove(repo, name, force); err != nil {
+		if err := wt.Remove(ctx, repo, name, force); err != nil {
 			h.sup.Start(sess)
 			return "", fmt.Errorf("%w; commit, or close with force:true to discard (branch session/%s is kept)", err, name)
 		}

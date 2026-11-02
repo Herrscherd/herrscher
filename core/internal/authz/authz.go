@@ -128,8 +128,6 @@ func definitionOf(role Role) (definition, bool) {
 	return definition{}, false
 }
 
-var grantOrder = []Role{RoleObserver, RoleOperator, RoleOwner}
-
 // Decide answers whether the request may run, and why not when it may not.
 // RoleNone always allows. Subject is consulted for a session principal alone,
 // since a human operating from a gateway is not confined to a subtree.
@@ -173,20 +171,24 @@ func permits(role Role, verb string, contributed bool) bool {
 	return false
 }
 
-var agentHints = map[string]string{
-	"session create": "To delegate, end your turn with `⟢ delegate: <agent>` and the task: " +
-		"the worker that opens runs a registered agent, so it answers to a policy the way you do.",
+func agentHint(verb string) (string, bool) {
+	switch verb {
+	case "session create":
+		return "To delegate, end your turn with `⟢ delegate: <agent>` and the task: " +
+			"the worker that opens runs a registered agent, so it answers to a policy the way you do.", true
+	}
+	return "", false
 }
 
 func refusal(r Request, role Role, verb string) string {
 	if role == RoleAgent {
-		if hint, ok := agentHints[verb]; ok {
+		if hint, ok := agentHint(verb); ok {
 			return fmt.Sprintf("herrscher: `%s` is not something a session may run. %s", verb, hint)
 		}
 		return fmt.Sprintf(
 			"herrscher: `%s` is not something a session may run. Ask your operator to run it for you.", verb)
 	}
-	for _, candidate := range grantOrder {
+	for _, candidate := range []Role{RoleObserver, RoleOperator, RoleOwner} {
 		if permits(candidate, verb, r.Contributed) {
 			return fmt.Sprintf("herrscher: `%s` needs the `%s` role, and %s has `%s`",
 				verb, candidate, r.Principal.ID, role)

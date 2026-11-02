@@ -189,6 +189,12 @@ linters:
       - path: ^core/service/service\.go$
         linters: [gosec]
         text: "^G703:"
+      - path: ^core/envx/hide\.go$
+        linters: [gochecknoglobals]
+        text: "^hidden is a global variable"
+      - path: ^core/internal/redact/redact\.go$
+        linters: [gochecknoglobals]
+        text: "^rules is a global variable"
 
 formatters:
   enable:

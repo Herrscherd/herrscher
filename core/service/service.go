@@ -134,8 +134,10 @@ var (
 	errNoBinaryPath      = errors.New("no binary path to smoke-test")
 )
 
-var coreEnvVars = []EnvVar{
-	{Key: "HERRSCHER_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
+func coreEnvVars() []EnvVar {
+	return []EnvVar{
+		{Key: "HERRSCHER_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
+	}
 }
 
 func renderEnvTemplate(vars []EnvVar) string {
@@ -709,7 +711,7 @@ func registryEnvVars() []EnvVar {
 			out = append(out, EnvVar{Key: s.Env, Help: s.Help, Required: s.Required})
 		}
 	}
-	for _, v := range coreEnvVars {
+	for _, v := range coreEnvVars() {
 		if !seen[v.Key] {
 			out = append(out, v)
 		}

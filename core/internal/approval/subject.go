@@ -4,19 +4,25 @@ const (
 	keyFilePath = "file_path"
 )
 
-var subjectKeys = map[string][]string{
-	"Bash":         {"command"},
-	"Edit":         {keyFilePath},
-	"Write":        {keyFilePath},
-	"Read":         {keyFilePath},
-	"NotebookEdit": {"notebook_path", keyFilePath},
-	"WebFetch":     {"url"},
-	"WebSearch":    {"query"},
+func subjectKeys(tool string) []string {
+	switch tool {
+	case "Bash":
+		return []string{"command"}
+	case "Edit", "Write", "Read":
+		return []string{keyFilePath}
+	case "NotebookEdit":
+		return []string{"notebook_path", keyFilePath}
+	case "WebFetch":
+		return []string{"url"}
+	case "WebSearch":
+		return []string{"query"}
+	}
+	return nil
 }
 
 // SubjectOf pulls the part of a tool call that rules match against.
 func SubjectOf(tool string, input map[string]any) string {
-	for _, k := range subjectKeys[tool] {
+	for _, k := range subjectKeys(tool) {
 		if s, ok := input[k].(string); ok && s != "" {
 			return s
 		}

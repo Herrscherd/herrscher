@@ -20,6 +20,7 @@ import (
 
 type menuGatewayFake struct {
 	fanRecorder
+
 	channel  string
 	routeErr error
 	routed   []string

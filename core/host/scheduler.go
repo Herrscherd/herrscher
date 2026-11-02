@@ -9,7 +9,6 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
-	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 const (
@@ -22,10 +21,6 @@ type scheduleStore interface {
 	StampScheduleRun(name, at string) error
 }
 
-type scheduleSessions interface {
-	SnapshotSessions() []state.Session
-}
-
 type scheduleCreator interface {
 	Create(context.Context, contracts.CreateSession) (string, error)
 }
@@ -36,7 +31,7 @@ type scheduleRunner interface {
 
 type scheduler struct {
 	store    scheduleStore
-	sessions scheduleSessions
+	sessions sessionLister
 	creator  scheduleCreator
 	seed     func(session, task string) bool
 	now      func() time.Time
@@ -46,7 +41,7 @@ type scheduler struct {
 	wg       sync.WaitGroup
 }
 
-func newScheduler(store scheduleStore, sessions scheduleSessions, creator scheduleCreator,
+func newScheduler(store scheduleStore, sessions sessionLister, creator scheduleCreator,
 	seed func(string, string) bool, now func() time.Time,
 ) *scheduler {
 	return &scheduler{

@@ -10,8 +10,9 @@ import (
 // vendor is never shown to the user: it lets the host know which plugin to
 // instantiate once the model is chosen.
 type CatalogEntry struct {
-	Vendor string
 	contracts.ModelSpec
+
+	Vendor string
 }
 
 // Catalog aggregates the Models of every registered backend and applies the

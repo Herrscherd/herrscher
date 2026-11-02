@@ -83,7 +83,7 @@ func TestCommandSocketReportsDispatchError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cmd.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	disp := &fakeDispatcher{err: errString("boom")}
+	disp := &fakeDispatcher{err: stringError("boom")}
 	go serveCommandSocket(ctx, path, disp)
 	waitForSocket(t, path)
 
@@ -161,9 +161,9 @@ func TestCommandSocketClosesSilentConnection(t *testing.T) {
 	}
 }
 
-type errString string
+type stringError string
 
-func (e errString) Error() string { return string(e) }
+func (e stringError) Error() string { return string(e) }
 
 func TestEachSessionGetsItsOwnCommandSocket(t *testing.T) {
 	a := SessionCommandSocketPath("inst", "revue")

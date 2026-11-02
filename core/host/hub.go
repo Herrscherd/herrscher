@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -365,6 +366,7 @@ func (h *hub) Repos(ctx context.Context) ([]contracts.RepoRef, error) {
 	out := workspaceRepos(h.st.WorkspaceRoot())
 	repos, err := forge.New().List(ctx)
 	if err != nil {
+		slog.Warn("repos unavailable", "err", err)
 		return out, nil
 	}
 	for _, r := range repos {

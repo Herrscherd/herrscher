@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -70,7 +70,7 @@ func TestForwardToDaemonReturnsTheDaemonsAnswer(t *testing.T) {
 	if out != disp.out {
 		t.Fatalf("output = %q, want %q", out, disp.out)
 	}
-	if !reflect.DeepEqual(disp.argv, argv) {
+	if !slices.Equal(disp.argv, argv) {
 		t.Fatalf("argv = %v, want %v unaltered", disp.argv, argv)
 	}
 }

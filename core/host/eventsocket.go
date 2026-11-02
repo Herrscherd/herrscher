@@ -13,8 +13,9 @@ import (
 )
 
 type wireEvent struct {
-	Session string `json:"session"`
 	contracts.Event
+
+	Session string `json:"session"`
 }
 
 func marshalSessionEvent(session string, e contracts.Event) ([]byte, error) {

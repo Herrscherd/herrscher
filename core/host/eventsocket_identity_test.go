@@ -23,8 +23,9 @@ func TestMarshalSessionEventPreservesCompleteEventIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got struct {
-		Session string `json:"session"`
 		contracts.Event
+
+		Session string `json:"session"`
 	}
 	if err := json.Unmarshal(line, &got); err != nil {
 		t.Fatal(err)

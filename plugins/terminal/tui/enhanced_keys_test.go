@@ -67,7 +67,6 @@ func TestFilteredStdinNormalisesArrowsInStream(t *testing.T) {
 func TestFilteredStdinTranslatesEnhancedKeysInStream(t *testing.T) {
 	f := &filteredStdin{}
 	f.feed([]byte("hi\x1b[13;2uthere\x1b[A"))
-	// The arrow survives untouched; only the CSI-u report is rewritten.
 	if got := string(f.out); got != "hi\x1b\rthere\x1b[A" {
 		t.Fatalf("feed produced %q", got)
 	}
@@ -86,7 +85,6 @@ func TestCtrlWDeletesAWordBeforeItClosesATab(t *testing.T) {
 	if v := got.input.Value(); v != "hello " {
 		t.Fatalf("input = %q, want the last word deleted", v)
 	}
-	// With nothing left to delete, the tab is what Ctrl+W is about.
 	got.input.SetValue("")
 	mm, _ = tea.Model(got).Update(tea.KeyMsg{Type: tea.KeyCtrlW})
 	if !mm.(*model).pendingClose {

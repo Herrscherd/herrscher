@@ -12,8 +12,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// kindGateway is a minimal Gateway whose Manifest reports a fixed kind, so the
-// admin-routing tests can tell gateways apart.
 type kindGateway struct{ kind string }
 
 func (g kindGateway) Manifest() contracts.Manifest {
@@ -36,8 +34,6 @@ func (kindGateway) Menu(context.Context, contracts.Conversation, contracts.Messa
 	return nil
 }
 
-// labeledAdmin is a no-op ChannelAdmin tagged with an id so a test can assert
-// which gateway's admin was selected.
 type labeledAdmin struct{ id string }
 
 func (labeledAdmin) Kind(context.Context, string) (string, error)                { return "", nil }
@@ -52,7 +48,6 @@ func (labeledAdmin) ChannelRef(id string) string                { return id }
 func TestAdminForHomeMatchesGatewayKind(t *testing.T) {
 	chat := Deps{Gateway: kindGateway{"chat"}, Admin: labeledAdmin{"chat"}}
 	terminal := Deps{Gateway: kindGateway{"terminal"}, Admin: labeledAdmin{"terminal"}}
-	// Registration order puts chat first, so firstAdmin would mis-route.
 	gws := []Deps{chat, terminal}
 
 	for _, tc := range []struct {
@@ -71,7 +66,6 @@ func TestAdminForHomeMatchesGatewayKind(t *testing.T) {
 }
 
 func TestAdminForHomeFallsBackToFirst(t *testing.T) {
-	// No gateway matches a terminal home → fall back to the only admin present.
 	gws := []Deps{{Gateway: kindGateway{"chat"}, Admin: labeledAdmin{"chat"}}}
 	got, ok := adminForHome(gws, state.HomeRef{ID: "h", Type: "terminal"}).(labeledAdmin)
 	if !ok || got.id != "chat" {
@@ -81,11 +75,10 @@ func TestAdminForHomeFallsBackToFirst(t *testing.T) {
 
 func TestSeedTerminalHomeWhenForeground(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
-	seedTerminalHome(st, true /* hasForeground */)
+	seedTerminalHome(st, true)
 	if st.Home.Type != "terminal" || st.Home.ID == "" {
 		t.Fatalf("home not seeded: %+v", st.Home)
 	}
-	// Does not overwrite an existing home.
 	st2 := state.NewState(filepath.Join(t.TempDir(), "s2.json"))
 	_ = st2.SetHome(state.HomeRef{ID: "disc", Type: "category"})
 	seedTerminalHome(st2, true)
@@ -102,7 +95,7 @@ func TestResolveInstanceID(t *testing.T) {
 		optID       string
 		ownerID     string
 		wantID      string
-		wantFrozen  string // expected persisted State.InstanceID after the call
+		wantFrozen  string
 		wantErr     bool
 	}{
 		{
@@ -134,14 +127,14 @@ func TestResolveInstanceID(t *testing.T) {
 			stateID:    "alice",
 			optID:      "bob",
 			wantErr:    true,
-			wantFrozen: "alice", // unchanged
+			wantFrozen: "alice",
 		},
 		{
 			name:        "legacy-sessions-block-new-id",
 			hasSessions: true,
 			optID:       "alice",
 			wantID:      "",
-			wantFrozen:  "", // not frozen, sessions preserved as legacy
+			wantFrozen:  "",
 		},
 		{
 			name:    "invalid-explicit-errors",

@@ -28,7 +28,7 @@ func TestAwaitTurnSkipsEmptyResumeToken(t *testing.T) {
 	called := false
 	d.sink.Resume = func(string) { called = true }
 
-	from <- contracts.Event{T: "reply", Text: "ok", Done: true} // no Resume
+	from <- contracts.Event{T: "reply", Text: "ok", Done: true}
 	_ = d.awaitTurn(context.Background(), tokenGuard{})
 	if called {
 		t.Fatal("persistResume must not fire for an empty token")

@@ -16,21 +16,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// approvalsFile is the file an agent tightens the daemon's rules with, beside
-// the TAGS, backend, cmd and host files its home already carries.
 const approvalsFile = "APPROVALS"
 
-// addApproveCommands registers the approve verbs: five for an operator, one for
-// a machine. Like host and schedule, they are neutral argv, so a chat gateway
-// binds them as they are.
 func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store) error {
 	if err := reg.Add(contracts.New("approve", "list").
 		Help("list the actions waiting for an answer").
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			pending := pendingApprovals()
-			// Age is truncated to the second, so two requests raised in the same
-			// second compare equal. Stable, with the id as a tiebreak, so the same
-			// waiting set lists in the same order every call.
 			sort.SliceStable(pending, func(i, j int) bool {
 				if pending[i].Age != pending[j].Age {
 					return pending[i].Age > pending[j].Age
@@ -114,7 +106,7 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 				rules := st.ApprovalRules()
 				if in.JSON {
 					if rules == nil {
-						rules = []string{} // an empty rule set is `[]`, like `approve list`, never `null`
+						rules = []string{}
 					}
 					b, err := json.Marshal(rules)
 					return string(b), err
@@ -158,24 +150,11 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 		return err
 	}
 
-	// `approve hook` is deliberately not registered here. It reads a PreToolUse
-	// payload on the calling process's own stdin, so it only means anything in
-	// the short-lived process the vendor spawned, and the binary answers it
-	// there before any registry is built. Registered, it would be one more verb
-	// reachable over the command socket, and the stdin it would read is the
-	// daemon's: a daemon started with a pipe on stdin would sit in that read for
-	// good, holding the connection with it.
-
 	return reg.Add(contracts.New("approve", "mode").
 		Help("set a session's stance: ask (default), bypass, or strict").
 		ValueParam("session", "session name; also takes a bare argument", false).
 		ValueParam("mode", "ask | bypass | strict; also takes a second bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			// The name takes the first bare argument when no flag gave it, and the
-			// mode the last one still unclaimed. Counting from the end rather than
-			// from a fixed index is what makes the mixed form work: `approve mode
-			// --session s1 bypass` leaves one positional, `approve mode s1 bypass`
-			// leaves two.
 			rest := in.Rest
 			name := strings.TrimSpace(in.Get("session"))
 			if name == "" && len(rest) > 0 {
@@ -196,9 +175,6 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 			if err := st.SetSessionApprovals(name, mode); err != nil {
 				return "", err
 			}
-			// Said plainly rather than left to be discovered: a session created in
-			// bypass carries no hook at all, so there is nothing for a later mode to
-			// switch on.
 			if mode != string(approval.ModeBypass) {
 				return fmt.Sprintf("%s is now %s (a session created with --approvals bypass has no hook: recreate it for this to bite)", name, mode), nil
 			}
@@ -206,8 +182,6 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 		}))
 }
 
-// firstOf takes a flag value, else the first bare argument. A gateway sends the
-// flag; an operator types the name.
 func firstOf(flag string, rest []string) string {
 	if v := strings.TrimSpace(flag); v != "" {
 		return v
@@ -218,15 +192,6 @@ func firstOf(flag string, rest []string) string {
 	return ""
 }
 
-// readAgentPolicy reads an agent's own rules. A missing file is no rules, and
-// an unreadable line is skipped with a note on stderr: one bad line must not
-// drop the rules around it, and must not silently widen anything either.
-//
-// Only an absent file means "no rules". Any other read error (a mode change, a
-// home on a filesystem that went away) drops rules that were written to tighten
-// something, so it is said on stderr before this falls open. Falling open is
-// deliberate: this is a guardrail against mistakes, not a sandbox, and an
-// unreadable file must not wedge every tool call. Silence is what it must not do.
 func readAgentPolicy(home string) approval.Policy {
 	if home == "" {
 		return nil
@@ -246,17 +211,11 @@ func readAgentPolicy(home string) approval.Policy {
 	return pol
 }
 
-// sessionPolicy is what applies to one session right now: the daemon's rules,
-// tightened by the agent's own, plus the session's mode. Both are read at the
-// moment of asking, so a rule added while a session runs binds that session.
 func sessionPolicy(st *state.State, agents *agent.Store, session string) (approval.Policy, approval.Mode) {
 	var daemon approval.Policy
 	for _, raw := range st.ApprovalRules() {
 		r, err := approval.ParseRule(raw)
 		if err != nil {
-			// The verbs parse before they store, so this is a hand-edited
-			// state.json. The rule is dropped, which allows every call it was
-			// written to stop, and that is exactly why it is said out loud.
 			fmt.Fprintf(os.Stderr, "approvals: state rule %q dropped, it no longer applies: %v\n", raw, err)
 			continue
 		}

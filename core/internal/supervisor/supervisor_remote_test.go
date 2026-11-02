@@ -47,36 +47,26 @@ func TestRemoteBridgeRunsOverSSHWithTheRemoteBinary(t *testing.T) {
 	if !strings.Contains(script, "'--env-stdin'") {
 		t.Fatalf("a remote bridge must be told to read its environment from stdin: %s", script)
 	}
-	// The hub socket the bridge dials is the one the forward exposes, not this
-	// machine's path.
 	if !strings.Contains(script, "'--hub-socket' '/tmp/herrscher-control-s1.sock'") {
 		t.Fatalf("hub socket is not the remote path: %s", script)
 	}
 	if !strings.Contains(joined, "-R /tmp/herrscher-control-s1.sock:") {
 		t.Fatalf("the control socket is not forwarded: %s", joined)
 	}
-	// The <capabilities> block promises the agent it can run `herrscher <verb>`.
-	// On another machine that is only true if the command socket followed.
 	if !strings.Contains(joined, "-R /tmp/herrscher-command-s1.sock:/tmp/herrscher-command-inst-s-s1.sock") {
 		t.Fatalf("the command socket is not forwarded: %s", joined)
 	}
 	if !strings.Contains(joined, "ExitOnForwardFailure=yes") {
 		t.Fatalf("a failed forward would not kill the launch: %s", joined)
 	}
-	// A launch owns its connection. Over a shared master the forwards would
-	// belong to the master, and the next launch asking for the same path would
-	// get silence instead of a socket.
 	if !strings.Contains(joined, "ControlPath=none") || !strings.Contains(joined, "ControlMaster=no") {
 		t.Fatalf("the launch multiplexes its connection: %s", joined)
 	}
-	// cmd.Dir belongs to the far machine and is in the script; setting it here
-	// would move the local ssh process instead.
 	if cmd.Dir != "" {
 		t.Fatalf("Dir = %q, want empty", cmd.Dir)
 	}
 }
 
-// The rule that made the local test exist holds over ssh, on both machines.
 func TestRemoteBridgeArgvNeverCarriesTheGatewayToken(t *testing.T) {
 	s := remoteSupervisor(t)
 	s.SetBridgeEnv([]string{gatewayURLVar + "=https://gw", gatewayTokenVar + "=" + secretToken})
@@ -113,31 +103,20 @@ func TestRemoteBridgeSendsItsEnvironmentOnStdin(t *testing.T) {
 	if !strings.HasSuffix(block, "\n\n") {
 		t.Fatalf("the block is not terminated by a blank line: %q", block)
 	}
-	// The remote children resolve the command socket from these two.
 	if !strings.Contains(block, "HERRSCHER_INSTANCE_ID=inst\n") {
 		t.Fatalf("stdin block misses the instance id: %q", block)
 	}
 	if !strings.Contains(block, "TMPDIR=/tmp\n") {
 		t.Fatalf("stdin block misses TMPDIR: %q", block)
 	}
-	// And the third: the per-session path the forward bound, which nothing over
-	// there could derive from the two above.
 	if !strings.Contains(block, control.CommandSocketVar+"=/tmp/herrscher-command-s1.sock\n") {
 		t.Fatalf("stdin block misses the command socket path: %q", block)
 	}
-	// And the session name, which the approval hook over there reads to say which
-	// session is asking. Without it the hook allows every tool call and only
-	// leaves a note, so a regression here enforces nothing while looking wired.
 	if !strings.Contains(block, control.SessionVar+"=s1\n") {
 		t.Fatalf("stdin block misses the session name: %q", block)
 	}
 }
 
-// Two sessions on one host is the ordinary case, and it is where a single
-// daemon-wide path breaks: the second launch would find it bound and die on
-// ExitOnForwardFailure, and clearing it first would cut the first agent off from
-// the daemon. Each forward names its own socket at both ends, which is also
-// what keeps one machine from reaching another session's door.
 func TestTwoSessionsOnOneHostGetDistinctCommandSockets(t *testing.T) {
 	s := remoteSupervisor(t)
 	for _, name := range []string{"s1", "s2"} {
@@ -156,8 +135,6 @@ func TestTwoSessionsOnOneHostGetDistinctCommandSockets(t *testing.T) {
 	}
 }
 
-// No fallback to local. Running here an agent the operator believed was
-// elsewhere is exactly the silence routing exists to prevent.
 func TestAnUnknownHostRefusesRatherThanRunHere(t *testing.T) {
 	s := remoteSupervisor(t)
 	_, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude", Host: "ghost"})
@@ -169,7 +146,6 @@ func TestAnUnknownHostRefusesRatherThanRunHere(t *testing.T) {
 	}
 }
 
-// Non-regression: a session with no host is still a local subprocess.
 func TestALocalSessionIsUnchanged(t *testing.T) {
 	s := remoteSupervisor(t)
 	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude", Dir: "/here"})

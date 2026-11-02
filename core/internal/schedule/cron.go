@@ -12,26 +12,16 @@ import (
 	"time"
 )
 
-// cronSpec est une expression cron a 5 champs deja parsee, sous forme
-// d'ensembles d'appartenance. Un tableau de bool par champ plutot qu'une liste
-// d'intervalles : le test d'appartenance est le seul usage, et il devient une
-// indexation.
 type cronSpec struct {
-	minute [60]bool
-	hour   [24]bool
-	dom    [32]bool // 1..31, l'indice 0 n'est jamais lu
-	month  [13]bool // 1..12, l'indice 0 n'est jamais lu
-	dow    [7]bool  // 0..6, dimanche = 0
-	// domStar et dowStar retiennent lequel des deux champs de jour valait "*".
-	// La regle Vixie en depend : deux champs restreints se lisent en OU, un seul
-	// restreint se lit en ET avec le reste.
+	minute  [60]bool
+	hour    [24]bool
+	dom     [32]bool
+	month   [13]bool
+	dow     [7]bool
 	domStar bool
 	dowStar bool
 }
 
-// parseCron lit une expression a 5 champs : minute heure jour-du-mois mois
-// jour-de-semaine. Chaque champ accepte "*", "N", "N-M", "*/S" et "N-M/S",
-// separes par des virgules.
 func parseCron(expr string) (cronSpec, error) {
 	var spec cronSpec
 	fields := strings.Fields(expr)
@@ -61,16 +51,10 @@ func parseCron(expr string) (cronSpec, error) {
 	return spec, nil
 }
 
-// parseCronField remplit set pour un champ, et rapporte si le champ valait "*"
-// nu (ce que la regle Vixie a besoin de savoir pour les deux champs de jour).
 func parseCronField(field string, set []bool, min, max int) (bool, error) {
 	if field == "" {
 		return false, fmt.Errorf("empty")
 	}
-	// Vixie regarde le premier caractere du champ, pas le champ entier : "*/2"
-	// compte comme une etoile pour la regle des deux jours. La difference est
-	// visible sur "0 9 */2 * 1-5", qui vaut un jour sur deux ET en semaine, et
-	// non un jour sur deux OU en semaine.
 	star := strings.HasPrefix(field, "*")
 	for _, part := range strings.Split(field, ",") {
 		lo, hi, step := min, max, 1
@@ -85,7 +69,6 @@ func parseCronField(field string, set []bool, min, max int) (bool, error) {
 		}
 		switch {
 		case body == "*":
-			// lo et hi gardent les bornes du champ
 		case strings.ContainsRune(body, '-'):
 			ends := strings.SplitN(body, "-", 2)
 			a, errA := strconv.Atoi(ends[0])
@@ -100,9 +83,6 @@ func parseCronField(field string, set []bool, min, max int) (bool, error) {
 				return false, fmt.Errorf("bad value in %q", part)
 			}
 			if step != 1 {
-				// "5/2" se lit "5 puis tous les 2" chez les uns et "5 seul" chez
-				// les autres. Refuser vaut mieux que choisir en silence une des
-				// deux lectures a la place de qui l'ecrit.
 				return false, fmt.Errorf("step needs a range or a star in %q", part)
 			}
 			lo, hi = n, n
@@ -117,17 +97,11 @@ func parseCronField(field string, set []bool, min, max int) (bool, error) {
 	return star, nil
 }
 
-// matches dit si t tombe dans une minute que l'expression decrit. La seconde et
-// en dessous sont ignorees : cron a la minute pour grain.
 func (c cronSpec) matches(t time.Time) bool {
 	if !c.minute[t.Minute()] || !c.hour[t.Hour()] || !c.month[int(t.Month())] {
 		return false
 	}
 	dom, dow := c.dom[t.Day()], c.dow[int(t.Weekday())]
-	// La regle Vixie, et elle surprend qui ne la connait pas : quand les deux
-	// champs de jour sont restreints, un jour qui satisfait l'un OU l'autre
-	// compte. "0 9 1 * 1" veut dire le 1er du mois et tous les lundis, pas les
-	// lundis qui tombent un 1er.
 	if !c.domStar && !c.dowStar {
 		return dom || dow
 	}

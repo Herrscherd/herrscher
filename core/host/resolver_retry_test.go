@@ -14,8 +14,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 )
 
-// remotePlugin is a memory plugin whose factory is non-nil (so Memory enters the
-// remote branch) but is never called on the remote path.
 func remotePlugin() []contracts.Plugin {
 	return []contracts.Plugin{{
 		Manifest: contracts.Manifest{Category: contracts.CategoryMemory},
@@ -23,7 +21,6 @@ func remotePlugin() []contracts.Plugin {
 	}}
 }
 
-// fastClock wires the resolver's clock seams so retries incur no real waits.
 func fastClock(r *Resolver, now func() time.Time) {
 	r.now = now
 	r.sleep = func(time.Duration) <-chan time.Time {
@@ -92,7 +89,7 @@ func TestRemoteResolveExhaustsAttemptsAndWarns(t *testing.T) {
 
 func TestRemoteResolveStopsAtBudget(t *testing.T) {
 	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, "")
-	r.retryAttempts = 100 // high, so the budget — not the attempt cap — must stop it
+	r.retryAttempts = 100
 	r.retryBudget = 10 * time.Second
 	tick := time.Unix(0, 0)
 	fastClock(r, func() time.Time { tick = tick.Add(6 * time.Second); return tick })
@@ -113,9 +110,6 @@ func TestRemoteResolveStopsAtBudget(t *testing.T) {
 	}
 }
 
-// TestRemoteResolveRecordsMetricsOnHealth wires the resolver into the same
-// registry the health surface reports, so a failed remote resolve is visible on
-// the health snapshot (attempts, one failure, and a latency sample).
 func TestRemoteResolveRecordsMetricsOnHealth(t *testing.T) {
 	h := health.NewHealth(time.Unix(0, 0))
 	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, "")
@@ -140,10 +134,8 @@ func TestRemoteResolveRecordsMetricsOnHealth(t *testing.T) {
 	}
 }
 
-// TestLocalResolveSkipsRetrySeam asserts the in-process path never touches the
-// remote dial/retry seam — no retry/timeout overhead when nothing is remote.
 func TestLocalResolveSkipsRetrySeam(t *testing.T) {
-	r := NewResolver(nil, "") // nothing remote
+	r := NewResolver(nil, "")
 	var calls int
 	r.dialMemory = func(context.Context, contracts.Plugin) (contracts.Memory, error) {
 		calls++
@@ -162,8 +154,6 @@ func TestLocalResolveSkipsRetrySeam(t *testing.T) {
 	}
 }
 
-// orchestratorPlugin is an orchestrator plugin whose factory is non-nil (so the
-// remote branch is entered) but is never called on the remote path.
 func orchestratorPlugin() []contracts.Plugin {
 	return []contracts.Plugin{{
 		Manifest: contracts.Manifest{Category: contracts.CategoryOrchestrator},
@@ -173,9 +163,6 @@ func orchestratorPlugin() []contracts.Plugin {
 	}}
 }
 
-// TestRemoteResolveOrchestratorRetriesThenSucceeds proves the orchestrator reuses
-// the same Stage A retry harness as memory: a transient dial failure is retried
-// within budget and the recovered proxy is returned.
 func TestRemoteResolveOrchestratorRetriesThenSucceeds(t *testing.T) {
 	r := NewResolver(map[contracts.Category]bool{contracts.CategoryOrchestrator: true}, "")
 	frozen := time.Unix(0, 0)
@@ -203,8 +190,6 @@ func TestRemoteResolveOrchestratorRetriesThenSucceeds(t *testing.T) {
 	}
 }
 
-// TestRemoteResolveOrchestratorFailsCleanlyWithMetrics asserts a give-up returns
-// a typed error (not a panic) and moves the same metrics counters memory does.
 func TestRemoteResolveOrchestratorFailsCleanlyWithMetrics(t *testing.T) {
 	h := health.NewHealth(time.Unix(0, 0))
 	r := NewResolver(map[contracts.Category]bool{contracts.CategoryOrchestrator: true}, "")
@@ -232,11 +217,8 @@ func TestRemoteResolveOrchestratorFailsCleanlyWithMetrics(t *testing.T) {
 	}
 }
 
-// TestLocalOrchestratorResolveSkipsDial is the C2 "zero dials when local" check:
-// without orchestrator in HERRSCHER_REMOTE, Orchestrator returns (nil, nil) and
-// never touches the dial seam, leaving buildOrchestrator to build in-process.
 func TestLocalOrchestratorResolveSkipsDial(t *testing.T) {
-	r := NewResolver(nil, "") // nothing remote
+	r := NewResolver(nil, "")
 	var calls int
 	r.dialOrchestrator = func(context.Context, contracts.Plugin) (contracts.Orchestrator, error) {
 		calls++
@@ -254,11 +236,8 @@ func TestLocalOrchestratorResolveSkipsDial(t *testing.T) {
 	}
 }
 
-// TestLocalBackendResolveSkipsDial is the C3 "zero dials when local" check:
-// without backend in HERRSCHER_REMOTE, Backend returns (nil, nil) and never
-// dials, leaving the bridge to build the in-process backend.
 func TestLocalBackendResolveSkipsDial(t *testing.T) {
-	r := NewResolver(nil, "") // nothing remote
+	r := NewResolver(nil, "")
 	var calls int
 	r.dialBackend = func(context.Context, contracts.Plugin) (contracts.Backend, error) {
 		calls++

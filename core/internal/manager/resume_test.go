@@ -7,7 +7,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// resume flips Archived back to false and restarts the supervised child.
 func TestSessionResumeRunUnarchivesAndStarts(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -18,7 +17,6 @@ func TestSessionResumeRunUnarchivesAndStarts(t *testing.T) {
 	if _, err := h.sessionArchiveRun(context.Background(), args("name", "keep")); err != nil {
 		t.Fatalf("archive: %v", err)
 	}
-	// archive stopped the child; clear the record so we can prove resume starts it.
 	sup.started = nil
 
 	if _, err := h.sessionResumeRun(context.Background(), args("name", "keep")); err != nil {
@@ -36,7 +34,6 @@ func TestSessionResumeRunUnarchivesAndStarts(t *testing.T) {
 	}
 }
 
-// resuming an unknown session is a loud error (mirrors archive).
 func TestSessionResumeRunUnknownSessionErrors(t *testing.T) {
 	h, _, _, _, _, _ := newTestHandler(t, "category")
 	if _, err := h.sessionResumeRun(context.Background(), args("name", "ghost")); err == nil {

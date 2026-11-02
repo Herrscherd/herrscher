@@ -7,9 +7,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// TestPermissionMenuRendersClaudeShape checks the permission menu renders the
-// framing header plus numbered options, the first prefixed ❯, the last tagged
-// (esc), with no border box.
 func TestPermissionMenuRendersClaudeShape(t *testing.T) {
 	m := newTestModel()
 	m.openChoice(&PendingChoice{
@@ -40,8 +37,6 @@ func TestPermissionMenuRendersClaudeShape(t *testing.T) {
 	}
 }
 
-// TestPermissionMenuEnterPicksValue checks that Enter on a selection submits that
-// option's value back to the active session as a pick and dismisses the menu.
 func TestPermissionMenuEnterPicksValue(t *testing.T) {
 	f := &fakeBackend{}
 	m := newModel(f)
@@ -65,8 +60,6 @@ func TestPermissionMenuEnterPicksValue(t *testing.T) {
 	}
 }
 
-// TestPermissionMenuEscDenies checks Esc selects the final (deny) option and
-// submits it.
 func TestPermissionMenuEscDenies(t *testing.T) {
 	f := &fakeBackend{}
 	m := newModel(f)

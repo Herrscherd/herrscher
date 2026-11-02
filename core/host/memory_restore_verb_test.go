@@ -10,18 +10,9 @@ import (
 	orchestrator "github.com/Herrscherd/herrscher-orchestrator"
 )
 
-// restoreVerbMem is a minimal fake contracts.Memory for exercising `memory
-// restore` end to end through the real registry dispatch path (no obsidian
-// vault involved). Recall errors on an absent key, matching the real contract
-// orchestrator.Restore relies on.
 type restoreVerbMem struct {
-	nodes map[string]contracts.Node
-	// lastQuery captures the most recent contracts.Query passed to Search, so
-	// tests can assert on how the `memory search` verb built it (e.g.
-	// IncludeRaw for --raw).
-	lastQuery contracts.Query
-	// lastUnlink captures the most recent (from, to) passed to Unlink, so the
-	// `memory unlink` verb test can assert dispatch.
+	nodes      map[string]contracts.Node
+	lastQuery  contracts.Query
 	lastUnlink [2]string
 }
 
@@ -53,16 +44,8 @@ func (m *restoreVerbMem) Unlink(_ context.Context, from, to string) error {
 }
 func (m *restoreVerbMem) Close() error { return nil }
 
-// currentRestoreMem is swapped by each test before building a registry.
-// Registered exactly once below (init) as the package's only fake memory
-// plugin, so BuildFirstMemory's "first registered memory plugin" contract
-// deterministically resolves to whatever the current test set.
 var currentRestoreMem *restoreVerbMem
 
-// useRestoreMem installs a fixture for the duration of one test and takes it
-// back down afterwards. Leaving it standing would hand the next test that builds
-// a registry — most of this package — another test's memory contents, which is
-// how a passing suite can hide a test that cannot pass alone.
 func useRestoreMem(t *testing.T, m *restoreVerbMem) {
 	t.Helper()
 	currentRestoreMem = m
@@ -73,10 +56,6 @@ func init() {
 	contracts.Register(contracts.Plugin{
 		Manifest: contracts.Manifest{Kind: "fake-restore-verb", Category: contracts.CategoryMemory},
 		Memory: func(context.Context, contracts.PluginConfig) (contracts.Memory, error) {
-			// Never hand back a nil *restoreVerbMem: it would arrive as a non-nil
-			// contracts.Memory holding a nil pointer, and panic on first Recall. Most
-			// tests in this package build a registry without caring about memory at
-			// all, and they must get an empty one that works rather than a mine.
 			if currentRestoreMem == nil {
 				return &restoreVerbMem{nodes: map[string]contracts.Node{}}, nil
 			}
@@ -138,9 +117,6 @@ func TestMemoryRestoreVerbForceDetachesMergedOriginal(t *testing.T) {
 	}
 }
 
-// TestMemoryRestoreVerbBareForceDetaches covers the documented bare-flag idiom
-// (`--force` with no following value), which the README advertises. The verb
-// declares force as a valueless Param, so a bare --force must toggle it on.
 func TestMemoryRestoreVerbBareForceDetaches(t *testing.T) {
 	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
 		"facts/a": {Key: "facts/a", Meta: map[string]string{

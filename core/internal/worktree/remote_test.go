@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// fakeCommander answers with a canned stdout instead of running anything, so
-// the façade can be tested without ssh, without git and without a second
-// machine. `sh -c` is used because the value under test is the argv the façade
-// asks for, and the fake still has to produce a runnable command.
 type fakeCommander struct {
 	stdout string
 	fail   bool
@@ -45,9 +41,6 @@ func TestRemoteCreateAsksForTheVerbAndReadsThePath(t *testing.T) {
 	if argv != want {
 		t.Fatalf("argv = %q, want %q", argv, want)
 	}
-	// The verb takes the repo as a flag, so the command needs no working
-	// directory of its own: asking to cd into a repo that may not exist yet
-	// would fail before the verb could say so.
 	if f.dirs[0] != "" {
 		t.Fatalf("dir = %q, want empty", f.dirs[0])
 	}
@@ -84,9 +77,6 @@ func TestRemotePreExisting(t *testing.T) {
 	}
 }
 
-// An unreachable host must not be read as "no worktree there". PreExisting has
-// no error return, and false is the answer that makes a rollback delete a
-// worktree it did not create, so the safe direction is true.
 func TestRemotePreExistingIsCautiousWhenItCannotAsk(t *testing.T) {
 	f := &fakeCommander{fail: true}
 	if !NewRemote(context.Background(), f, "hs", "inst").PreExisting("/srv/work/proj", "s1") {

@@ -8,10 +8,6 @@ import (
 	"testing"
 )
 
-// A session that comes back finds its own worktree still there — after a crash,
-// a kill, or a daemon restart that never got to close it. Refusing to start on
-// the grounds that its own directory is in the way was the bug: the session was
-// left unable to run at all until someone deleted the directory by hand.
 func TestCreateReusesTheSessionsOwnWorktree(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "inst")
@@ -31,16 +27,11 @@ func TestCreateReusesTheSessionsOwnWorktree(t *testing.T) {
 	if second != first {
 		t.Fatalf("it must come back to the same worktree: %q then %q", first, second)
 	}
-	// Reuse means reuse: uncommitted work in the tree is the session's, and
-	// silently starting from a clean one would be the same loss as refusing.
 	if _, err := os.Stat(filepath.Join(second, "wip.txt")); err != nil {
 		t.Fatalf("the work already in the tree must survive the reuse: %v", err)
 	}
 }
 
-// A registration git still holds for a directory that is gone would make the add
-// fail on git's own record alone. That state is stale, not a conflict: prune it
-// and give the session a fresh tree.
 func TestCreateRecoversFromAStaleRegistration(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "inst")
@@ -65,9 +56,6 @@ func TestCreateRecoversFromAStaleRegistration(t *testing.T) {
 	}
 }
 
-// A directory git knows nothing about is somebody else's. Removing it to make
-// room is how a session would destroy work nobody asked it to touch, so the
-// state is reported instead.
 func TestCreateRefusesAForeignDirectory(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "inst")
@@ -90,8 +78,6 @@ func TestCreateRefusesAForeignDirectory(t *testing.T) {
 	}
 }
 
-// A worktree at the session's path but on another branch is not the session's
-// tree. Taking it over would move somebody else's checkout under them.
 func TestCreateRefusesAWorktreeOnAnotherBranch(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "inst")
@@ -108,9 +94,6 @@ func TestCreateRefusesAWorktreeOnAnotherBranch(t *testing.T) {
 	}
 }
 
-// The caller rolls back on a later failure, and must only ever remove what it
-// created. A worktree that was already there predates the call, and the work
-// inside it with it.
 func TestPreExistingDistinguishesReuseFromCreation(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "inst")

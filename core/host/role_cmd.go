@@ -13,17 +13,9 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// firstGrantWarning is what an operator reads the one time it matters. Until
-// the table holds something, the daemon decides nothing about humans and every
-// gateway's own rules stand alone. The first grant ends that for everyone at
-// once, and an operator who learns it from the silence of a colleague's refused
-// command learns it too late.
 const firstGrantWarning = "⚠️ this is the first role: from now on every gateway account without one is `observer`. " +
 	"Name the others with `role grant` before they find out."
 
-// addRoleCommands registers the role verbs. They are neutral argv, like host
-// and approve, so a chat gateway binds them as they are. Only an owner runs
-// them, which core/internal/authz decides and this file does not repeat.
 func addRoleCommands(reg *cli.Registry, st *state.State) error {
 	if err := reg.Add(contracts.New("role", "list").
 		Help("who holds which role, and what each role runs").
@@ -62,11 +54,6 @@ func addRoleCommands(reg *cli.Registry, st *state.State) error {
 		ValueParam("role", "one of: "+strings.Join(authz.GrantableRoles(), ", ")+"; also takes a second bare argument", false).
 		ValueParam("label", "a readable name for `role list`; it decides nothing", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			// Same shape as `approve mode`: the principal takes the first bare
-			// argument when no flag gave it, and the role the last one still
-			// unclaimed. Counting from the end is what makes the mixed form
-			// work, and matching that verb is what makes `role grant chat:1234
-			// owner` read the way the rest of the CLI does.
 			rest := in.Rest
 			principal := strings.TrimSpace(in.Get("principal"))
 			if principal == "" && len(rest) > 0 {
@@ -107,8 +94,6 @@ func addRoleCommands(reg *cli.Registry, st *state.State) error {
 			if !removed {
 				return "", fmt.Errorf("%s holds no role", principal)
 			}
-			// Worth saying, because it is not obvious: revoking the last role
-			// puts the daemon back to deciding nothing about humans.
 			if len(st.RoleAssignments()) == 0 {
 				return principal + " holds no role, and neither does anyone else: herrscher is back to deciding nothing about humans", nil
 			}
@@ -130,10 +115,6 @@ func addRoleCommands(reg *cli.Registry, st *state.State) error {
 		}))
 }
 
-// grantable refuses what the table cannot change. The two structural
-// principals are answered by the entry point a connection arrives on, and the
-// agent role is what a session holds by being a session: writing either here
-// would record a claim nothing reads.
 func grantable(principal, role string) error {
 	if principal == "" {
 		return fmt.Errorf("name a principal: a refusal spells it, e.g. chat:1234")
@@ -144,9 +125,6 @@ func grantable(principal, role string) error {
 	if strings.HasPrefix(principal, authz.SessionPrefix) {
 		return fmt.Errorf("`%s` is a session, and a session is always `agent`: the socket it arrives on decides that, not this table", principal)
 	}
-	// Named apart from the unknown-role case because `role grant chat:1234` with
-	// the role forgotten is the common slip, and "unknown role \"\"" answers it
-	// with a puzzle instead of the missing word.
 	if role == "" {
 		return fmt.Errorf("name a role: one of %s", strings.Join(authz.GrantableRoles(), ", "))
 	}

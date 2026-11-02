@@ -6,12 +6,8 @@ import (
 	"strings"
 )
 
-// mentionMax bounds how many path matches the @ completion shows at once.
 const mentionMax = 6
 
-// mentionWord returns the @-word ending at the cursor and its start index, with
-// ok=false when the cursor is not inside an @-mention. The word runs from the
-// last whitespace before the cursor up to the cursor.
 func mentionWord(input string, cursor int) (start int, prefix string, ok bool) {
 	if cursor < 0 {
 		cursor = 0
@@ -27,10 +23,6 @@ func mentionWord(input string, cursor int) (start int, prefix string, ok bool) {
 	return start, word[1:], true
 }
 
-// mentionMatches lists entries in dir whose name has the given prefix, directories
-// suffixed with "/", sorted. It returns nil on any read error, so @ completion
-// degrades to free text (the backend still resolves the mention) rather than
-// failing when the session's worktree is unavailable.
 func mentionMatches(dir, prefix string) []string {
 	ents, err := os.ReadDir(dir)
 	if err != nil {
@@ -51,8 +43,6 @@ func mentionMatches(dir, prefix string) []string {
 	return out
 }
 
-// completeMention replaces the @-word under the cursor with @match, returning the
-// new input and cursor position. A no-op when the cursor is not in a mention.
 func completeMention(input string, cursor int, match string) (string, int) {
 	start, _, ok := mentionWord(input, cursor)
 	if !ok {
@@ -63,10 +53,6 @@ func completeMention(input string, cursor int, match string) (string, int) {
 	return out, start + len(newWord)
 }
 
-// worktreeDir resolves the active session's run directory for @ completion: the
-// session's own worktree/run dir (from SessionInfo.Dir), falling back to the
-// gateway process's working directory when the session inherits the launcher cwd
-// (e.g. a shared terminal session) or is not yet known.
 func (m *model) worktreeDir() string {
 	if name := m.sessionName(m.active); name != "" {
 		for _, s := range m.tm.Sessions() {
@@ -81,8 +67,6 @@ func (m *model) worktreeDir() string {
 	return "."
 }
 
-// mentionCursor is the composer's current byte offset, so @ detection and
-// completion operate on the same position the user is editing.
 func (m *model) mentionCursor() int {
 	value := m.input.Value()
 	lines := strings.Split(value, "\n")
@@ -113,16 +97,10 @@ func (m *model) mentionCursor() int {
 	return offset
 }
 
-// mentionOpen reports whether the composer word under the cursor is an @-mention
-// with at least one path match — the inline completion list is shown only then.
 func (m *model) mentionOpen() bool {
 	return len(m.mentionRows()) > 0
 }
 
-// mentionRows are the current @ completion matches (nil when not in a mention).
-// It is called several times per render, so the underlying directory listing is
-// memoized on the model keyed by dir+prefix — the ReadDir runs at most once per
-// distinct (dir, prefix) rather than once per call.
 func (m *model) mentionRows() []string {
 	_, prefix, ok := mentionWord(m.input.Value(), m.mentionCursor())
 	if !ok {
@@ -140,7 +118,6 @@ func (m *model) mentionRows() []string {
 	return m.mentionCacheRows
 }
 
-// clampMention keeps the selection index within the current match set.
 func (m *model) clampMention() {
 	n := len(m.mentionRows())
 	if m.mentionIdx >= n {
@@ -153,8 +130,6 @@ func (m *model) clampMention() {
 
 func (m *model) moveMention(d int) { m.mentionIdx += d; m.clampMention() }
 
-// completeActiveMention replaces the @-word with the selected match as plain
-// text (the backend resolves @ mentions itself; the TUI reads no file contents).
 func (m *model) completeActiveMention() {
 	rows := m.mentionRows()
 	if len(rows) == 0 {

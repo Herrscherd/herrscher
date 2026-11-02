@@ -15,9 +15,6 @@ import (
 	"unicode"
 )
 
-// gitTimeout bounds each git call FromDir makes, for the reason core/scope
-// bounds its own: a session must not hang because a repository's objects live
-// on a stalled network mount.
 const gitTimeout = 2 * time.Second
 
 // Identity is what git knows about the human at the keyboard. Every field is
@@ -57,9 +54,6 @@ func FromDir(dir string) Identity {
 	}
 }
 
-// gitConfig answers one config key, or "" for every way that can fail to
-// produce one: no git on PATH, dir in no repository, key unset (git exits 1),
-// or a call that outran gitTimeout.
 func gitConfig(dir, key string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
@@ -70,15 +64,6 @@ func gitConfig(dir, key string) string {
 	return flatten(string(out))
 }
 
-// flatten reduces a git value to the single line every caller assumes it is.
-//
-// git does not promise one: `git config user.name` accepts a value spanning
-// lines, and this one is rendered verbatim into a turn's prompt inside a <user>
-// block. A name carrying its own "</user>" would close that block and let
-// whatever follows read as context the daemon wrote — and the account that can
-// set it is anyone who can edit .git/config in the worktree, which in a session
-// includes the agent working there. Control characters are dropped rather than
-// escaped: nothing legitimate in a name, an email or a GitHub handle needs one.
 func flatten(v string) string {
 	return strings.TrimSpace(strings.Map(func(r rune) rune {
 		if r == '\t' {

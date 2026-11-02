@@ -9,12 +9,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// TestPaletteInlineRenderSelectedRow checks the palette renders inline (no border
-// box) with the selected row prefixed ❯ in the warm accent.
 func TestPaletteInlineRenderSelectedRow(t *testing.T) {
-	m := newTestModel() // nil backend → seeded with localCommands
+	m := newTestModel()
 	m.input.SetValue("/")
-	m.palIdx = 1 // /clear: the row after the leading /help
+	m.palIdx = 1
 	out := m.paletteView()
 	if !strings.Contains(out, glyphCursor+" /clear") {
 		t.Fatalf("selected row must be prefixed %q in accent: %q", glyphCursor, out)
@@ -26,16 +24,13 @@ func TestPaletteInlineRenderSelectedRow(t *testing.T) {
 	}
 }
 
-// TestPaletteWindowFollowsTheSelection is the regression for a palette that
-// truncated from the head: every command past the last drawn row was
-// unreachable with ↑↓, so a daemon advertising thirty verbs showed six.
 func TestPaletteWindowFollowsTheSelection(t *testing.T) {
 	for _, tc := range []struct{ n, sel, wantStart, wantEnd int }{
-		{n: 4, sel: 2, wantStart: 0, wantEnd: 4},     // fits: no window at all
-		{n: 30, sel: 0, wantStart: 0, wantEnd: 6},    // top: the first rows stay put
-		{n: 30, sel: 5, wantStart: 0, wantEnd: 6},    // still on the last visible row
-		{n: 30, sel: 6, wantStart: 1, wantEnd: 7},    // one past it: slide by one
-		{n: 30, sel: 29, wantStart: 24, wantEnd: 30}, // bottom: clamped, never past the end
+		{n: 4, sel: 2, wantStart: 0, wantEnd: 4},
+		{n: 30, sel: 0, wantStart: 0, wantEnd: 6},
+		{n: 30, sel: 5, wantStart: 0, wantEnd: 6},
+		{n: 30, sel: 6, wantStart: 1, wantEnd: 7},
+		{n: 30, sel: 29, wantStart: 24, wantEnd: 30},
 	} {
 		start, end := paletteWindow(tc.n, tc.sel, 6)
 		if start != tc.wantStart || end != tc.wantEnd {
@@ -47,8 +42,6 @@ func TestPaletteWindowFollowsTheSelection(t *testing.T) {
 	}
 }
 
-// TestPaletteViewShowsALateSelection: the window has to reach the view, not just
-// the helper — the selected row must be drawn however far down the list it is.
 func TestPaletteViewShowsALateSelection(t *testing.T) {
 	m := newTestModel()
 	m.cmds = nil
@@ -72,9 +65,6 @@ func TestPaletteViewShowsALateSelection(t *testing.T) {
 	}
 }
 
-// TestLocalCommandsAreAllHandledLocally: every verb in localCommands claims to
-// need no daemon, so each must be intercepted by handleEnter. One that is only
-// advertised would reach dispatchCmd and come back "unknown command".
 func TestLocalCommandsAreAllHandledLocally(t *testing.T) {
 	src, err := os.ReadFile("tui.go")
 	if err != nil {
@@ -88,9 +78,6 @@ func TestLocalCommandsAreAllHandledLocally(t *testing.T) {
 	}
 }
 
-// TestMergeCommandsKeepsTheLocalOnes: a backend advertising commands used to
-// replace the palette outright, so connecting to a daemon cost the operator
-// /help, /clear and every other overlay.
 func TestMergeCommandsKeepsTheLocalOnes(t *testing.T) {
 	got := mergeCommands(localCommands(), []CommandSpec{
 		{Name: "session create"},
@@ -113,8 +100,6 @@ func TestMergeCommandsKeepsTheLocalOnes(t *testing.T) {
 	}
 }
 
-// TestParseCommandSpecsFiltersAndFlags checks the daemon's answer becomes rows
-// the CLI parser would actually accept: required params only, in --flag form.
 func TestParseCommandSpecsFiltersAndFlags(t *testing.T) {
 	raw := []byte(`[
 		{"path":["session","create"],"help":"start","params":[{"Name":"name","Required":true},{"Name":"repo","Required":false}]},
@@ -146,8 +131,6 @@ func TestFilterCommands(t *testing.T) {
 		{"session", []string{"session create", "session list"}},
 		{"create", []string{"session create", "agent create"}},
 		{"nope", nil},
-		// Once the query advances into a command's arguments, that command must
-		// keep matching so the palette does not misreport a valid command as "no match".
 		{"session create --name foo", []string{"session create"}},
 	}
 	for _, tc := range cases {

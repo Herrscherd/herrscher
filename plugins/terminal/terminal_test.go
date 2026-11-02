@@ -13,9 +13,6 @@ import (
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
-// The gateway the factory builds must expose the Foreground capability, since
-// serve discovers the bound gateway to run on the main thread through that
-// interface (not a concrete import). Guards against silently dropping it.
 func TestGatewaySetExposesForeground(t *testing.T) {
 	set, err := newGatewaySet(context.Background(), contracts.PluginConfig{})
 	if err != nil {
@@ -43,12 +40,9 @@ func TestMenuRendersChoices(t *testing.T) {
 
 func TestEmitDeliversControlEventUnderBackpressure(t *testing.T) {
 	tm := New()
-	// Fill the outbound buffer with droppable chunk events.
 	for i := 0; i < cap(tm.out); i++ {
 		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: "chunk", Text: "x"}})
 	}
-	// A finished reply must still be delivered (not dropped); drain one slot in
-	// parallel so the brief wait succeeds.
 	go func() { <-tm.Frontend() }()
 	done := make(chan struct{})
 	go func() {
@@ -63,7 +57,6 @@ func TestBootstrapWaitsForBindThenCreates(t *testing.T) {
 	fake := &fakeSessionControl{}
 	got := make(chan string, 1)
 	go func() { got <- tm.bootstrapSession(context.Background()) }()
-	// Bind after a beat: the ready signal must wake the bootstrap immediately.
 	tm.BindSessionControl(fake)
 	var name string
 	select {
@@ -176,23 +169,19 @@ func TestGatewaySetExposesAdmin(t *testing.T) {
 	}
 }
 
-// fakeSessionControl is a minimal contracts.SessionControl for Dispatch and
-// ensureDefaultSession tests.
 type closeCall struct {
 	name  string
 	force bool
 }
 
 type fakeSessionControl struct {
-	lastArgs    []string
-	sessions    []contracts.SessionInfo
-	created     []contracts.CreateSession
-	closed      []closeCall
-	scrollback  []contracts.ScrollbackLine
-	resumed     []string
-	interrupted []string
-	// commandsJSON is what a `commands --json` dispatch answers, so a test can
-	// stand in for the daemon registry the palette is now derived from.
+	lastArgs     []string
+	sessions     []contracts.SessionInfo
+	created      []contracts.CreateSession
+	closed       []closeCall
+	scrollback   []contracts.ScrollbackLine
+	resumed      []string
+	interrupted  []string
 	commandsJSON string
 }
 
@@ -230,8 +219,6 @@ func (f *fakeSessionControl) Interrupt(name string) bool {
 	return true
 }
 
-// The terminal drives sessions by dispatch, not by pushing inbound messages, so
-// the push half of the seam is inert here — present only to satisfy the port.
 func (f *fakeSessionControl) Submit(string, contracts.Inbound) bool { return true }
 func (f *fakeSessionControl) Pick(string, string) bool              { return true }
 func (f *fakeSessionControl) Repos(context.Context) ([]contracts.RepoRef, error) {
@@ -253,7 +240,6 @@ func TestTerminalForwardsScrollbackAndResume(t *testing.T) {
 		t.Fatalf("resume not forwarded: %+v", fake.resumed)
 	}
 
-	// unbound terminal: Scrollback nil, Resume errors (no panic).
 	if lines := New().Scrollback("s"); lines != nil {
 		t.Fatalf("unbound scrollback should be nil, got %+v", lines)
 	}
@@ -304,9 +290,6 @@ func TestDispatchPassesThroughNonCreate(t *testing.T) {
 }
 
 func TestDispatchRejectsNonSessionVerbs(t *testing.T) {
-	// The TUI forwards any /-verb to Dispatch; gate the seam so daemon-management
-	// verbs (which could restart the host the TUI runs in, or rewrite its config)
-	// are never reachable from the terminal. Only session-scoped verbs pass.
 	for _, argv := range [][]string{
 		{"service", "restart"},
 		{"service", "update"},
@@ -342,15 +325,10 @@ func TestDispatchAllowsSessionAndAgentVerbs(t *testing.T) {
 	}
 }
 
-// --- openDefaultSession ---
-
-// terminalSessionNameRe mirrors the session-name guard in
-// core/internal/manager/validate.go: whatever name the TUI mints must already
-// pass it, since it becomes a filesystem path and a git ref downstream.
 var terminalSessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
 func TestOpenDefaultSessionCreatesWhenNone(t *testing.T) {
-	fake := &fakeSessionControl{} // Sessions() returns nil/empty
+	fake := &fakeSessionControl{}
 	name, err := openDefaultSession(context.Background(), fake, contracts.PluginConfig{})
 	if err != nil {
 		t.Fatalf("openDefaultSession: %v", err)
@@ -373,9 +351,6 @@ func TestOpenDefaultSessionCreatesWhenNone(t *testing.T) {
 	}
 }
 
-// A launch is the start of something: it gets its own empty session even when
-// the host is full of conversations, terminal-bound ones included. Landing in
-// yesterday's transcript is the surprise this avoids.
 func TestOpenDefaultSessionAlwaysCreates(t *testing.T) {
 	fake := &fakeSessionControl{
 		sessions: []contracts.SessionInfo{
@@ -396,9 +371,6 @@ func TestOpenDefaultSessionAlwaysCreates(t *testing.T) {
 	}
 }
 
-// A first launch names its tab after the directory it was started in, so the
-// operator recognises it; a second one in the same directory numbers itself,
-// since `session create` refuses a name already taken.
 func TestDefaultSessionNameIsTheWorkingDirectory(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -416,8 +388,6 @@ func TestDefaultSessionNameIsTheWorkingDirectory(t *testing.T) {
 	if got := defaultSessionName(taken); got != dir+"-3" {
 		t.Fatalf("defaultSessionName = %q, want the numbered %q", got, dir+"-3")
 	}
-	// Every name it can mint has to survive the manager's guard, the random
-	// last resort included.
 	for _, name := range []string{defaultSessionName(taken), randomSessionName()} {
 		if !terminalSessionNameRe.MatchString(name) {
 			t.Fatalf("minted name %q is not a valid session slug", name)
@@ -425,8 +395,6 @@ func TestDefaultSessionNameIsTheWorkingDirectory(t *testing.T) {
 	}
 }
 
-// The other half of minting a session per launch: one nobody spoke in is put
-// away on the way out, so opening a window and closing it leaves nothing behind.
 func TestArchiveIfUntouchedClosesTheMintedSession(t *testing.T) {
 	tm := New()
 	fake := &fakeSessionControl{
@@ -443,15 +411,12 @@ func TestArchiveIfUntouchedClosesTheMintedSession(t *testing.T) {
 	if len(fake.closed) != 1 || fake.closed[0].name != "mine" || fake.closed[0].force {
 		t.Fatalf("untouched session not archived gently: %+v", fake.closed)
 	}
-	// A second pass (quit twice, or a cancel already run) must not close again.
 	tm.archiveIfUntouched()
 	if len(fake.closed) != 1 {
 		t.Fatalf("archive ran twice: %+v", fake.closed)
 	}
 }
 
-// A session that was spoken in is the operator's, whatever happened to the turn:
-// LastTs is the daemon's own reading of "something is in there".
 func TestArchiveIfUntouchedLeavesSpokenAndUnownedSessions(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -477,8 +442,6 @@ func TestArchiveIfUntouchedLeavesSpokenAndUnownedSessions(t *testing.T) {
 	}
 }
 
-// A hub that is already going down cannot archive anything, and a session left
-// live is one the operator can still see: never a Close on a dead context.
 func TestArchiveIfUntouchedSkipsWhenTheDaemonIsGone(t *testing.T) {
 	tm := New()
 	fake := &fakeSessionControl{sessions: []contracts.SessionInfo{{Name: "mine"}}}
@@ -494,10 +457,6 @@ func TestArchiveIfUntouchedSkipsWhenTheDaemonIsGone(t *testing.T) {
 	}
 }
 
-// TestCommandsAdvertiseOnlyAllowedVerbs guards the palette↔Dispatch contract:
-// whatever the daemon answers, the palette may only carry verbs Dispatch would
-// accept — otherwise the menu offers rows that error the moment they are picked.
-// The registry is faked here because the point is the filtering, not the list.
 func TestCommandsAdvertiseOnlyAllowedVerbs(t *testing.T) {
 	tm := New()
 	fake := &fakeSessionControl{commandsJSON: `[
@@ -516,8 +475,6 @@ func TestCommandsAdvertiseOnlyAllowedVerbs(t *testing.T) {
 		if !terminalVerbs[parts[0]] {
 			t.Fatalf("command %q leads with a verb outside terminalVerbs", c.Name)
 		}
-		// The CLI parser only accepts "--flag value" pairs and silently drops
-		// positional tokens, so an advertised arg that is not a flag is a trap.
 		if c.Args != "" && !strings.Contains(c.Args, "--") {
 			t.Fatalf("command %q advertises positional args %q; the parser only accepts --flag form", c.Name, c.Args)
 		}
@@ -531,9 +488,6 @@ func TestCommandsAdvertiseOnlyAllowedVerbs(t *testing.T) {
 	}
 }
 
-// TestCommandsWithoutABoundControlAreEmpty: a frontend that cannot reach the
-// registry must show no daemon rows rather than a list typed here, which would
-// be the drift this indirection exists to remove.
 func TestCommandsWithoutABoundControlAreEmpty(t *testing.T) {
 	if cmds := New().Commands(); len(cmds) != 0 {
 		t.Fatalf("unbound Commands = %+v, want none", cmds)

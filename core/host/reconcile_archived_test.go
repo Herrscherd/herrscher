@@ -9,8 +9,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
-// reconcile brings live sessions up but must leave archived ones untouched —
-// else every old session respawns a backend at startup.
 func TestReconcileSkipsArchived(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -38,9 +36,6 @@ func TestReconcileSkipsArchived(t *testing.T) {
 	}
 }
 
-// Archiving a session in a running daemon (session archive → reconcile) must reap
-// the live driver: otherwise its RunSession goroutine and control socket leak
-// until the daemon restarts, and the pump can wedge on the stopped bridge.
 func TestReconcileReapsInPlaceArchived(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

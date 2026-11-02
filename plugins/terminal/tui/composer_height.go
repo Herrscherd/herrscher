@@ -8,18 +8,8 @@ import (
 	"github.com/rivo/uniseg"
 )
 
-// displayRows reports how many visual rows the textarea composer needs to render
-// value at content width, mirroring bubbles/textarea's own soft-wrap. The widget
-// grows only with explicit newlines (LineCount counts logical lines), so a long
-// unbroken line would otherwise stay one row tall and scroll horizontally — the
-// jitter the operator sees while typing. Feeding this count into SetHeight lets
-// the composer grow with the wrapped draft instead.
-//
-// width is the textarea content width (m.input.Width(), already net of prompt and
-// line numbers); value is its full text (m.input.Value()).
 func displayRows(value string, width int) int {
 	if width <= 0 {
-		// No usable width yet: fall back to logical lines so we never under-report.
 		return max(1, strings.Count(value, "\n")+1)
 	}
 	rows := 0
@@ -29,10 +19,6 @@ func displayRows(value string, width int) int {
 	return max(1, rows)
 }
 
-// composerWrap is a verbatim port of bubbles/textarea's unexported wrap, kept in
-// lockstep with the pinned widget version so displayRows matches what the widget
-// actually renders row-for-row (including its trailing-space extra row at an exact
-// width fill). It word-wraps runes into display lines of at most width columns.
 func composerWrap(runes []rune, width int) [][]rune {
 	var (
 		lines  = [][]rune{{}}

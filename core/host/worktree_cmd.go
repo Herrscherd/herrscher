@@ -44,8 +44,6 @@ func RunWorktree(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		// An empty path is not an error: it is the non-git fallback, and the
-		// caller falls back to a shared session exactly as a local one does.
 		return emitJSON(map[string]string{"path": path})
 	case "pre-existing":
 		return emitJSON(map[string]bool{"preExisting": wt.PreExisting(*repo, *name)})
@@ -55,9 +53,6 @@ func RunWorktree(ctx context.Context, args []string) error {
 		}
 		return emitJSON(map[string]bool{"removed": true})
 	case "materialize":
-		// Reads a tar of an agent's provisioning files on stdin, from the daemon
-		// on the other machine. The excludes run here, after the write, because
-		// they touch the repository, and the repository is on this side.
 		if *worktreePath == "" {
 			return fmt.Errorf("worktree materialize: --worktree is required")
 		}
@@ -73,8 +68,6 @@ func RunWorktree(ctx context.Context, args []string) error {
 	}
 }
 
-// emitJSON prints one JSON object on stdout, the whole of this verb's output.
-// The caller is a program, so there is nothing else on the stream.
 func emitJSON(v any) error {
 	b, err := json.Marshal(v)
 	if err != nil {

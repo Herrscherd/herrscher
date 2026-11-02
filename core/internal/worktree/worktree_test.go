@@ -49,9 +49,6 @@ func TestPathAlwaysCurrentName(t *testing.T) {
 	w := NewWorktreer(context.Background(), "")
 	want := filepath.Join(repo, ".herrscher-sessions", "feat1")
 
-	// Path is now pure: it no longer stats disk to fall back to a legacy sessions
-	// dir, so it always returns the current-name location. A stray dir on disk
-	// (whatever its name) can no longer change the answer.
 	if err := os.MkdirAll(filepath.Join(repo, ".stray-sessions", "feat1"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +57,6 @@ func TestPathAlwaysCurrentName(t *testing.T) {
 	}
 }
 
-// initRepo makes a real git repo with one commit, so worktree add works.
 func initRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -75,8 +71,6 @@ func initRepo(t *testing.T) string {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
 	}
-	// Ignore the worktree scratch dir, mirroring the real repo's .gitignore, so
-	// git status on the main worktree isn't dirtied by nested worktree dirs.
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("/.herrscher-sessions/\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -92,8 +86,6 @@ func initRepo(t *testing.T) string {
 	return dir
 }
 
-// gitAt runs a git command in dir, failing the test on error. Identity is
-// inherited from the repo config that initRepo already set.
 func gitAt(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
@@ -102,7 +94,6 @@ func gitAt(t *testing.T, dir string, args ...string) {
 	}
 }
 
-// commitFile writes name=content in dir and commits it.
 func commitFile(t *testing.T, dir, name, content, msg string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
@@ -115,17 +106,14 @@ func commitFile(t *testing.T, dir, name, content, msg string) {
 func TestMergeIntoCleanMerge(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "")
-	// Base file on the lead's main worktree.
 	commitFile(t, repo, "f.txt", "base\n", "base file")
 
-	// A worker branch (created off the base) that adds a new, non-conflicting file.
 	if _, err := w.Create(repo, "worker", ""); err != nil {
 		t.Fatal(err)
 	}
 	wp := w.Path(repo, "worker")
 	commitFile(t, wp, "g.txt", "worker\n", "worker work")
 
-	// Merge the worker branch into the repo's main worktree (the lead here).
 	outcome, conflicts, err := w.MergeInto(repo, w.Branch("worker"))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -136,7 +124,6 @@ func TestMergeIntoCleanMerge(t *testing.T) {
 	if len(conflicts) != 0 {
 		t.Fatalf("conflicts = %v, want none", conflicts)
 	}
-	// Lead worktree must be clean and now contain the worker's file.
 	if clean, _ := w.IsCleanAt(repo); !clean {
 		t.Fatal("lead worktree not clean after merge")
 	}
@@ -148,17 +135,14 @@ func TestMergeIntoCleanMerge(t *testing.T) {
 func TestMergeIntoConflictAborts(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "")
-	// Base file both sides will edit on the same line.
 	commitFile(t, repo, "f.txt", "base\n", "base file")
 
-	// Worker (branched off base) edits f.txt.
 	if _, err := w.Create(repo, "worker", ""); err != nil {
 		t.Fatal(err)
 	}
 	wp := w.Path(repo, "worker")
 	commitFile(t, wp, "f.txt", "worker-change\n", "worker edit")
 
-	// Lead diverges on the same line, committed (so the lead worktree is clean).
 	commitFile(t, repo, "f.txt", "lead-change\n", "lead edit")
 
 	outcome, conflicts, err := w.MergeInto(repo, w.Branch("worker"))
@@ -171,7 +155,6 @@ func TestMergeIntoConflictAborts(t *testing.T) {
 	if len(conflicts) == 0 || conflicts[0] != "f.txt" {
 		t.Fatalf("conflicts = %v, want [f.txt]", conflicts)
 	}
-	// Abort must have restored a clean worktree.
 	if clean, _ := w.IsCleanAt(repo); !clean {
 		t.Fatal("lead worktree not clean after conflict abort")
 	}
@@ -392,7 +375,6 @@ func TestRegisteredWorktreeRecognizesLinkedRepoAlias(t *testing.T) {
 func TestCreateWithBaseBranchesOffIt(t *testing.T) {
 	w := NewWorktreer(context.Background(), "")
 	repo := initRepo(t)
-	// Base worktree "alpha" gets a commit so its tip carries work.
 	pa, err := w.Create(repo, "alpha", "")
 	if err != nil {
 		t.Fatalf("create alpha: %v", err)
@@ -405,7 +387,6 @@ func TestCreateWithBaseBranchesOffIt(t *testing.T) {
 			t.Fatalf("git %v: %v (%s)", args, err, out)
 		}
 	}
-	// beta branches off session/alpha and must inherit f.txt.
 	pb, err := w.Create(repo, "beta", "session/alpha")
 	if err != nil {
 		t.Fatalf("create beta on base: %v", err)
@@ -478,10 +459,6 @@ func TestIsCleanAt(t *testing.T) {
 	}
 }
 
-// Closing a session keeps its branch, because that is where the committed work
-// is. Creating the session again used to die on "a branch named … already
-// exists" — and a session named after a channel is precisely the one that comes
-// back to the same name.
 func TestASessionThatComesBackReturnsToItsBranch(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "inst")
@@ -506,13 +483,11 @@ func TestASessionThatComesBackReturnsToItsBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create again: %v", err)
 	}
-	// Back on the same branch, with the commit still there.
 	if _, err := os.Stat(filepath.Join(p2, "work.txt")); err != nil {
 		t.Fatalf("the work did not come back: %v", err)
 	}
 }
 
-// A name never used before still gets a fresh branch off the base it was given.
 func TestANewSessionStillBranchesFromItsBase(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "inst")
@@ -539,12 +514,6 @@ func TestANewSessionStillBranchesFromItsBase(t *testing.T) {
 	}
 }
 
-// A branch already checked out somewhere else cannot be handed to a session's
-// worktree. That is a real conflict — two trees on one branch — and it must be
-// reported rather than papered over.
-//
-// Note what is *not* a conflict: the same session asking twice. Its worktree is
-// its own, and reusing it is the point of TestCreateReusesTheSessionsOwnWorktree.
 func TestABranchAlreadyCheckedOutIsStillAnError(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer(context.Background(), "inst")

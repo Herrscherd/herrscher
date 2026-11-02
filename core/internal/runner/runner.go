@@ -21,8 +21,8 @@ type Runner interface {
 // It is how a remote process reaches the daemon without a new transport: the
 // control connection is already a net.Conn carrying JSON lines.
 type Forward struct {
-	Remote string // path on the far machine
-	Local  string // path here
+	Remote string
+	Local  string
 }
 
 // Local runs commands on this machine, which is what herrscher has always done.
@@ -45,22 +45,13 @@ func (Local) Copy(ctx context.Context, src, dst string) *exec.Cmd {
 // SSH runs commands on Target. It carries no state of its own: one value can be
 // built per launch, from a host record.
 type SSH struct {
-	Target      string // user@machine
-	ControlPath string // multiplexing socket; empty disables multiplexing
+	Target      string
+	ControlPath string
 	Forwards    []Forward
 }
 
 func (s SSH) Describe() string { return s.Target }
 
-// options are the ssh flags every command gets, and why:
-//
-//   - BatchMode: a daemon must never be blocked on an interactive prompt.
-//   - ExitOnForwardFailure: without it a failed -R is only a warning and ssh
-//     runs the command anyway, so the process would start unable to reach the
-//     hub and the supervisor's backoff would restart it forever.
-//   - ControlMaster/ControlPath/ControlPersist: provisioning and worktree
-//     creation chain several round trips, and without multiplexing each one
-//     pays a full handshake again.
 func (s SSH) options() []string {
 	opts := []string{"-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=10"}
 	return append(opts, s.multiplex()...)
@@ -68,11 +59,6 @@ func (s SSH) options() []string {
 
 func (s SSH) multiplex() []string {
 	if s.ControlPath == "" {
-		// Not merely "no path of ours": the operator's ssh_config may set one for
-		// every host, and a launch that carries forwards must own its connection.
-		// A shared master owns the forwards it opened, so a second launch asking
-		// for the same one is answered with silence rather than a bound socket,
-		// and the process starts believing a socket followed it that did not.
 		return []string{"-o", "ControlMaster=no", "-o", "ControlPath=none"}
 	}
 	return []string{
@@ -87,8 +73,6 @@ func (s SSH) Command(ctx context.Context, dir string, argv ...string) *exec.Cmd 
 	for _, f := range s.Forwards {
 		args = append(args, "-R", f.Remote+":"+f.Local)
 	}
-	// cmd.Dir stays unset on purpose: the working directory belongs to the far
-	// machine and is already in the script. Setting it would move the local ssh.
 	return exec.CommandContext(ctx, "ssh", append(args, s.Target, script(dir, argv))...)
 }
 
@@ -117,8 +101,6 @@ func (s SSH) Copy(ctx context.Context, src, dst string) *exec.Cmd {
 	return exec.CommandContext(ctx, "scp", append(args, src, s.Target+":"+dst)...)
 }
 
-// script renders one remote shell command: change directory, then replace the
-// shell with the command so signals and the exit status pass straight through.
 func script(dir string, argv []string) string {
 	if dir == "" {
 		return "exec " + quoteArgv(argv)

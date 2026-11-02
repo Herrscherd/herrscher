@@ -213,7 +213,7 @@ func TestSetUserRejectsOverBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.SetUserBudget(50)
-	err := s.SetUser("alice", strings.Repeat("é", 100)) // 100 runes / 200 bytes
+	err := s.SetUser("alice", strings.Repeat("é", 100))
 	var be *contracts.BudgetError
 	if !errors.As(err, &be) {
 		t.Fatalf("want *contracts.BudgetError, got %T (%v)", err, err)

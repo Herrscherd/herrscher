@@ -7,8 +7,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// conversation seeds a tab with an exchange plus the lines this window adds
-// around it, so every test here also asserts what copying leaves out.
 func conversation(m *model) *tab {
 	tb := m.ensureTab("a")
 	m.active = "a"
@@ -37,8 +35,6 @@ func TestCopyTakesTheLastAnswerByDefault(t *testing.T) {
 	}
 }
 
-// A turn is a question and its answer: pasting the answer without what was
-// asked is the half that needs the other half to mean anything.
 func TestCopyTurnCarriesTheQuestionWithTheAnswer(t *testing.T) {
 	m := newTestModel()
 	clip := &fakeWriteClipboard{}
@@ -68,8 +64,6 @@ func TestCopyAllTakesTheWholeTranscript(t *testing.T) {
 	}
 }
 
-// The window's own commentary is for the screen. A paste of it into an issue is
-// noise the reader steps over.
 func TestCopyLeavesOutWhatTheWindowSaid(t *testing.T) {
 	m := newTestModel()
 	clip := &fakeWriteClipboard{}
@@ -84,8 +78,6 @@ func TestCopyLeavesOutWhatTheWindowSaid(t *testing.T) {
 	}
 }
 
-// A typo copies the wrong thing, and that is discovered at the paste — too far
-// from here to connect it back. So refuse by name instead.
 func TestCopyRefusesAnUnknownTarget(t *testing.T) {
 	m := newTestModel()
 	clip := &fakeWriteClipboard{}
@@ -119,8 +111,6 @@ func TestCopyOnAnEmptyTabSaysSo(t *testing.T) {
 	}
 }
 
-// alt+y is the shortcut for the common case, and has to reach the same place
-// /copy does.
 func TestAltYCopiesTheLastAnswer(t *testing.T) {
 	m := newTestModel()
 	clip := &fakeWriteClipboard{}
@@ -133,7 +123,6 @@ func TestAltYCopiesTheLastAnswer(t *testing.T) {
 	}
 }
 
-// A plain "y" is a character being typed, not a shortcut.
 func TestPlainYIsTypedNotCopied(t *testing.T) {
 	m := newTestModel()
 	clip := &fakeWriteClipboard{}
@@ -146,8 +135,6 @@ func TestPlainYIsTypedNotCopied(t *testing.T) {
 	}
 }
 
-// The state and the escape sequence are set together, so they cannot disagree
-// about who holds the mouse.
 func TestToggleMouseHandsTheMouseOverAndTakesItBack(t *testing.T) {
 	m := newTestModel()
 	conversation(m)

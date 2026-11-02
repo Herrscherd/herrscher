@@ -46,8 +46,6 @@ func TestModelsListJSONShape(t *testing.T) {
 }
 
 func TestModelsListJSONNeverLeaksArg(t *testing.T) {
-	// Arg is a vendor-CLI invocation detail. Exposing it would invite the app to
-	// copy it, recreating the duplication this effort removes.
 	entries := []CatalogEntry{{Vendor: "claude", ModelSpec: contracts.ModelSpec{
 		ID: "x", Label: "X", Arg: "SECRET-ARG-VALUE", Route: contracts.RouteNative,
 	}}}
@@ -58,8 +56,6 @@ func TestModelsListJSONNeverLeaksArg(t *testing.T) {
 }
 
 func TestModelsListJSONEmptyIsAnArrayNotNull(t *testing.T) {
-	// A public build with no account has an empty catalog. `null` would crash the
-	// consumer; `[]` renders as an empty state.
 	out, err := modelsListJSON(nil)
 	if err != nil {
 		t.Fatalf("modelsListJSON(nil): %v", err)

@@ -53,9 +53,6 @@ func TestDiscoverMissingRootIsSkipped(t *testing.T) {
 	}
 }
 
-// TestPRJobSkillIsDiscoverable pins the repo's own playbook: a gateway names
-// "pr-job" as the default playbook in a new session's opening turn, so the skill
-// must exist here and be discoverable under the repo skills root.
 func TestPRJobSkillIsDiscoverable(t *testing.T) {
 	got := Discover([]string{"../../skills"})
 	for _, s := range got {

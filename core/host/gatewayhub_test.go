@@ -9,7 +9,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// fakeGateway is a minimal Gateway used only to make a GatewaySet non-zero.
 type fakeGateway struct{}
 
 func (fakeGateway) Manifest() contracts.Manifest { return contracts.Manifest{} }
@@ -64,9 +63,6 @@ func TestBuildHubToleratesFailure(t *testing.T) {
 	}
 }
 
-// A tolerated failure must still be reportable: the daemon logs Failures() so a
-// gateway that dropped out (revoked token, missing config) is visible instead of
-// silently absent.
 func TestBuildHubReportsToleratedFailures(t *testing.T) {
 	hub, err := BuildHub(context.Background(), []contracts.Plugin{gw("chat", true), gw("terminal", false)}, func(string) string { return "" })
 	if err != nil {

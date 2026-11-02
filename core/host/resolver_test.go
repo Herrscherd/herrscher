@@ -11,7 +11,7 @@ type stubMem struct{ contracts.Memory }
 
 func TestResolverLocalReturnsFactoryObject(t *testing.T) {
 	want := &stubMem{}
-	r := NewResolver(nil, "") // nil remote set => everything local
+	r := NewResolver(nil, "")
 	got, err := r.Memory(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Kind: "obsidian", Category: contracts.CategoryMemory},

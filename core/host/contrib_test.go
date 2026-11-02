@@ -9,7 +9,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 )
 
-// fakeContributor is a gateway that contributes commands, named by its Kind.
 type fakeContributor struct {
 	kind  string
 	paths [][]string
@@ -45,10 +44,6 @@ func (f fakeContributor) Menu(context.Context, contracts.Conversation, contracts
 	return nil
 }
 
-// mute is a gateway contributing nothing: the common case, which must stay free.
-// It deliberately has no Commands method — embedding fakeContributor would give
-// it one, and the test would then prove the assertion happens rather than that
-// a non-contributor is skipped.
 type mute struct{}
 
 func (mute) Manifest() contracts.Manifest {
@@ -71,10 +66,6 @@ func (mute) Menu(context.Context, contracts.Conversation, contracts.MessageID, s
 	return nil
 }
 
-// This is the property the whole namespacing decision exists for: two plugins
-// may declare the identical path, and both must land, told apart by their Kind.
-// Without the prefix the second one would be rejected as a duplicate — the bug
-// this design was written to prevent.
 func TestSamePathFromTwoPluginsBothLand(t *testing.T) {
 	cmds, err := CollectCommands([]contracts.GatewaySet{
 		{Gateway: fakeContributor{kind: "alpha", paths: [][]string{{"channel", "read"}}}},
@@ -92,9 +83,6 @@ func TestSamePathFromTwoPluginsBothLand(t *testing.T) {
 	}
 }
 
-// A plugin colliding with itself is a build mistake, and it must fail loudly
-// and by name — a silently missing verb sends the operator debugging the wrong
-// thing.
 func TestSelfCollisionFailsByName(t *testing.T) {
 	_, err := CollectCommands([]contracts.GatewaySet{
 		{Gateway: fakeContributor{kind: "alpha", paths: [][]string{{"channel", "read"}, {"channel", "read"}}}},
@@ -107,8 +95,6 @@ func TestSelfCollisionFailsByName(t *testing.T) {
 	}
 }
 
-// A gateway that contributes nothing is left entirely alone: it does not
-// satisfy CommandSource, so it is never even asked. Most gateways are this one.
 func TestNonContributorIsLeftAlone(t *testing.T) {
 	cmds, err := CollectCommands([]contracts.GatewaySet{{Gateway: mute{}}})
 	if err != nil {
@@ -119,16 +105,12 @@ func TestNonContributorIsLeftAlone(t *testing.T) {
 	}
 }
 
-// A nil Gateway in a set must not panic: GatewaySet fields are documented as
-// optional and the host degrades.
 func TestNilGatewayIsSkipped(t *testing.T) {
 	if _, err := CollectCommands([]contracts.GatewaySet{{}}); err != nil {
 		t.Fatalf("an empty set must be skipped, not fail: %v", err)
 	}
 }
 
-// A contributed command must keep working after being renamed: the prefix is
-// added, nothing else is touched.
 func TestPrefixingPreservesTheHandler(t *testing.T) {
 	cmds, err := CollectCommands([]contracts.GatewaySet{
 		{Gateway: fakeContributor{kind: "alpha", paths: [][]string{{"channel", "read"}}}},
@@ -142,9 +124,6 @@ func TestPrefixingPreservesTheHandler(t *testing.T) {
 	}
 }
 
-// A contributed command must be dispatchable under its namespaced path, which
-// is the whole point: the registry is what the TUI palette and any chat
-// surface both read.
 func TestContributedCommandDispatches(t *testing.T) {
 	reg := &cli.Registry{}
 	cmds, err := CollectCommands([]contracts.GatewaySet{

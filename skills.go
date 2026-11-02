@@ -12,19 +12,9 @@ import (
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
-// shippedSkills are the playbooks that travel with the binary. Shipping them in
-// the repo was not enough: the backend loads skills from the workspace and from
-// ~/.claude/skills, neither of which is this source tree, so an agent told to
-// follow "pr-job" reported the skill did not exist and improvised.
-//
 //go:embed skills
 var shippedSkills embed.FS
 
-// installShippedSkills materializes them where every backend looks for personal
-// skills, and keeps them current: a release that rewrites a playbook must reach
-// the agent, or it goes on following instructions from the day the daemon was
-// first installed. Best effort on purpose: a daemon that cannot write there must
-// still start — it loses a playbook, not its ability to answer.
 func installShippedSkills(ctx context.Context) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -47,9 +37,6 @@ func installShippedSkills(ctx context.Context) {
 	reportSkills(dst, plug, "plugin skill")
 }
 
-// reportSkills says what happened. A diverged playbook is the one worth words:
-// the agent is following the operator's version, so the shipped rewrite is not in
-// effect, and only they can decide which one wins.
 func reportSkills(dst string, out skills.Outcome, kind string) {
 	for _, name := range out.Installed {
 		fmt.Fprintln(os.Stderr, "herrscher: installed "+kind+" "+name)
@@ -63,14 +50,6 @@ func reportSkills(dst string, out skills.Outcome, kind string) {
 	}
 }
 
-// installPluginSkills materializes the playbooks the compiled-in plugins ship,
-// into the same directory as the binary's own. A plugin's skill exists on a
-// machine only if that plugin is in the build, and its factory refines that at
-// runtime by looking at the machine and declining; the second return says which
-// ones did, and why, so a missing playbook is never silent.
-//
-// Best effort, like installShippedSkills: a daemon that cannot write there loses
-// a playbook, not its ability to answer.
 func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string, dst string) (skills.Outcome, []string) {
 	var all skills.Outcome
 	var notes []string
@@ -110,12 +89,6 @@ func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv
 	return all, notes
 }
 
-// pluginSkillsConfig resolves what the skills factory is given. A plugin whose
-// whole contribution is playbooks owns its configuration, so a required setting
-// it declares is enforced and an unconfigured one is skipped and named. For any
-// other category the required settings belong to the port, not to the playbook:
-// enforcing them here would mean a gateway lost its skill the day its token
-// expired, so what resolved is handed over and the rest is the hub's problem.
 func pluginSkillsConfig(p contracts.Plugin, getenv func(string) string) (contracts.PluginConfig, error) {
 	cfg, err := contracts.Resolve(p.Manifest.Config, getenv)
 	if err != nil && p.Manifest.Category == contracts.CategorySkills {
@@ -124,18 +97,10 @@ func pluginSkillsConfig(p contracts.Plugin, getenv func(string) string) (contrac
 	return cfg, nil
 }
 
-// reserve records under kind the skill directories tree carries, and hands back
-// the tree with the ones another plugin already claimed hidden — nil when that
-// leaves nothing. Two plugins shipping the same skill name otherwise take turns
-// overwriting it: each start rewrites the directory and announces an update
-// nobody asked for, and whichever plugin registered first loses its playbook in
-// silence. The host imposes its kind as a prefix on contributed commands for the
-// same reason; a skill name is read by the agent, so it cannot be prefixed, and
-// naming the clash is what is left.
 func reserve(tree fs.FS, kind string, claimed map[string]string) (fs.FS, []string) {
 	entries, err := fs.ReadDir(tree, ".")
 	if err != nil {
-		return tree, nil // not ours to report: skills.Install says it better.
+		return tree, nil
 	}
 	var notes []string
 	hidden := map[string]bool{}
@@ -162,8 +127,6 @@ func reserve(tree fs.FS, kind string, claimed map[string]string) (fs.FS, []strin
 	return without{FS: tree, hidden: hidden}, notes
 }
 
-// without is a tree with some of its top-level directories taken out. Only the
-// root is filtered; everything below it is the wrapped tree's own business.
 type without struct {
 	fs.FS
 	hidden map[string]bool

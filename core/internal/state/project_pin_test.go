@@ -14,7 +14,6 @@ func TestSetProjectPinnedPersistsAndPins(t *testing.T) {
 	if err := s.SetProjectPinned("main", "neublox"); err != nil {
 		t.Fatal(err)
 	}
-	// Re-read from disk: the point is that the next start sees the settled project.
 	reloaded, err := LoadState(path)
 	if err != nil {
 		t.Fatal(err)
@@ -40,9 +39,6 @@ func TestSetProjectPinnedUnchangedIsNoop(t *testing.T) {
 	}
 }
 
-// TestMemoryRootsPreferTheMemoryFields pins the precedence every memory-scoping
-// path relies on: a memory root answers first, and the placement field of the
-// same name is only the fallback for the sessions that never set one.
 func TestMemoryRootsPreferTheMemoryFields(t *testing.T) {
 	for _, tc := range []struct {
 		name           string

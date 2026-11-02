@@ -22,10 +22,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
-// hostDeps surfaces pieces buildRegistry constructs internally that a caller may
-// need beyond the registry itself — the worktree manager and agent store the
-// boot-time Coordinator (Task 7/8) is built from. Kept minimal so the operator
-// CLI (NewRegistry), which has no Coordinator to wire, can ignore it.
 type hostDeps struct {
 	wt        *worktree.Worktreer
 	agents    *agent.Store
@@ -38,19 +34,10 @@ type coordinatorSlot struct {
 	coord contracts.Coordinator
 }
 
-// schedulerSlot carries the live scheduling loop to the one verb that needs it,
-// `schedule run`. The registry is built before the loop exists, and only the
-// daemon has one at all, so the verb closes over this box rather than over a
-// scheduler: an operator CLI leaves it empty and the verb says so.
 type schedulerSlot struct {
 	sched scheduleRunner
 }
 
-// buildRegistry constructs the session/service command handler over a given
-// state + supervisor and registers its commands into a fresh CLI registry. The
-// daemon (RunHub) and the operator CLI (NewRegistry) share this so a session
-// created either way is built from identical deps. d.Admin supplies the channel
-// admin port; instID namespaces shared git/gateway resources.
 func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup *supervisor.Supervisor, instID string, extra []contracts.Cmd) (*cli.Registry, hostDeps, error) {
 	partDir := filepath.Dir(o.StatePath)
 	wt := worktree.NewWorktreer(ctx, instID)
@@ -62,9 +49,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		agents.SetUserBudget(n)
 	}
 	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
-	hdl.SetSeeder(Seed) // host.Seed: live-session injection for `session switch` handoff
-	// Where each session's process lands. `local` is implicit and needs no
-	// record; anything else must have been registered and provisioned.
+	hdl.SetSeeder(Seed)
 	hdl.SetHosts(hostPlacer{
 		ctx:           ctx,
 		st:            st,
@@ -81,15 +66,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		}
 		return supervisor.Placement{SSH: h.SSH, Bin: h.Bin}, true
 	})
-	// Reject an unknown/policy-excluded --model, or one owned by a backend other
-	// than --vendor, at create/switch rather than on the first spawn. Uses the
-	// same lookup + policy the spawn choke point does.
-	// The route policy itself, so the manager can refuse the two ways of escaping
-	// the catalog (a free-form cmd, or no model at all) without importing host.
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly })
-	// The model a session gets when it names none, as chosen at `herrscher init`.
-	// Read once here rather than per-create: the daemon's environment is fixed for
-	// its lifetime, and a mid-flight change would silently repoint live sessions.
 	hdl.SetDefaultModel(os.Getenv(EnvDefaultModel))
 	hdl.SetModelValidator(func(vendor, modelID string) error {
 		entry, err := LookupModel(contracts.Default.Backends(), ResolvePolicy(os.Getenv), modelID)
@@ -101,10 +78,6 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		}
 		return nil
 	})
-	// What each backend can actually enforce, so an approval mode is either
-	// honoured or the operator is told at create time that it is not. Both sides
-	// read the same manifests: the manager to warn and to materialize the hook,
-	// the supervisor to decide whether a spawn carries an approval environment.
 	hdl.SetGateResolver(GateFor)
 	sup.SetGateResolver(func(vendor string) string {
 		grain, _ := GateFor(vendor)
@@ -124,12 +97,6 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			return nil, hostDeps{}, err
 		}
 	}
-	// Verbs contributed by the loaded gateways, already namespaced under their
-	// plugin's kind (see CollectCommands). A plugin cannot shadow a built-in: on
-	// a duplicate path reg.Add refuses, the error travels up, and the daemon
-	// refuses to start naming the path. That is deliberate — a gateway whose
-	// verb silently vanished would send an operator debugging a missing command
-	// instead of reading a refusal.
 	for _, c := range extra {
 		if err := reg.Add(c); err != nil {
 			return nil, hostDeps{}, err
@@ -169,11 +136,6 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	// session send / session interrupt reach into the live turn loop of whichever
-	// process runs them, and that is the point: forwarded over the command socket
-	// they are how a client — an attached TUI — speaks into a session the daemon
-	// owns. Run with no daemon listening they find no live session and say so,
-	// which is the honest answer: there is nothing to speak into.
 	if err := reg.Add(contracts.New("session", "send").
 		Help("send one message into a live session's turn queue (the daemon runs the turn)").
 		Param("name", "session name", true).
@@ -232,8 +194,6 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	// memory locate/forget/record — surface d'exposition mémoire consommée par
-	// exec. Chaque commande construit la mémoire in-process et la ferme.
 	if err := reg.Add(contracts.New("memory", "locate").
 		Help("print openable URIs (obsidian://, file://) of a memory node's note").
 		Param("key", "node key", true).
@@ -300,7 +260,6 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 				contracts.KindServer, contracts.KindArchitecture, contracts.KindProduction,
 				contracts.KindSession, contracts.KindDecision, contracts.KindUser,
 				contracts.KindAgent, contracts.KindDomain:
-				// ok
 			default:
 				return "", fmt.Errorf("memory record: unknown kind %q", in.Get("kind"))
 			}
@@ -352,11 +311,6 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	// The question an operator actually asks about a learned skill is not "which
-	// ones exist" but "why is that one not on disk". So each row carries the state
-	// and the date it was last reached for, and the archived ones are listed too:
-	// "it aged out because nobody used it" is the most common answer, and it is
-	// invisible in a listing that hides what aged out.
 	if err := reg.Add(contracts.New("skill", "list").
 		Help("list the skills agents wrote for themselves, with their state, approval and last use").
 		Param("limit", "max rows (default 50)", false).
@@ -401,11 +355,6 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	// The one human gesture in the loop, placed at the one point where the blast
-	// radius changes: a skill writes and revises itself freely in its agent's
-	// private scope, and crosses to the shared project scope only here. Its body
-	// comes from the journal, which carries chat messages and web pages, so
-	// crossing turns "what this agent believes" into "what every agent executes".
 	if err := reg.Add(contracts.New("skill", "approve").
 		Help("let a learned skill be promoted from its agent's private scope to the shared project scope").
 		Param("key", "skill node key (see `skill list`)", true).
@@ -422,28 +371,21 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 				return "", err
 			}
 			if !approve {
-				// Says what it does not do rather than letting the word "revoke" imply
-				// it undoes a promotion: the shared copy is a node of its own.
 				return "revoked " + key + " (a promotion already made stands; unmake it with `memory unlink` and `memory restore`)", nil
 			}
 			return "approved " + key, nil
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	// The proactive schedules. schedSlot is empty for an operator CLI, which has
-	// no running loop; only `schedule run` needs one, and it says so.
 	if err := addScheduleCommands(reg, st, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
-	// The places a session can run, this machine being the unnamed default.
 	if err := addHostCommands(reg, st); err != nil {
 		return nil, hostDeps{}, err
 	}
-	// The actions that need a human before they run.
 	if err := addApproveCommands(reg, st, agents); err != nil {
 		return nil, hostDeps{}, err
 	}
-	// Who may run what.
 	if err := addRoleCommands(reg, st); err != nil {
 		return nil, hostDeps{}, err
 	}
@@ -482,10 +424,6 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	// Registered before `commands`, so that stays the last thing built. It takes
-	// no deps: what it prints comes from git, not from the daemon's state, which
-	// is exactly why it is worth having — an identity that came out wrong is
-	// diagnosed here in one command instead of inside a billed agent turn.
 	if err := reg.Add(contracts.New("whoami").
 		Help("print who git on this machine says you are").
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
@@ -493,10 +431,6 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	// Registered last, so it describes a complete registry. A frontend that draws
-	// its own command menu asks for this instead of keeping a copy of the verb
-	// list beside the daemon's — a copy drifts silently, and the drift shows up as
-	// a palette that offers a fraction of what the daemon would accept.
 	if err := reg.Add(contracts.New("commands").
 		Help("list every command this daemon dispatches, with its params").
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
@@ -539,35 +473,17 @@ func NewRegistry(ctx context.Context, gws []Deps, o Options) (*cli.Registry, err
 
 	self, _ := os.Executable()
 	sup := supervisor.NewSupervisor(ctx, self)
-	// `session switch` restarts a bridge from this process too, so it needs the
-	// same trusted hand-off of the captured gateway pair the daemon does.
 	sup.SetBridgeEnv(GatewayEnvPairs())
-	// A session created here defaults to the built gateways (bar the terminal
-	// one). The concrete kinds come from their manifests, so the manager package
-	// still never names a platform.
 	if o.DefaultGateways == nil {
 		o.DefaultGateways = nonTerminalKinds(gws)
 	}
-	// No contributed commands on the one-shot CLI path: they are contributed by
-	// live gateway instances, and instantiating a gateway — opening a connection,
-	// spending a token — so that a local `herrscher session list` can parse an
-	// argv it will not use is a cost paid by every invocation for a case that
-	// does not arise. The agent always runs under the daemon.
 	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID, nil)
 	if err != nil {
 		return nil, err
 	}
-	// Terminal-only sessions route through the terminal gateway's own admin, so
-	// they open as local `terminal/…` channels whatever home is configured — or
-	// none. Mirrors RunHub (serve.go:229); without it this path refuses a
-	// terminal-only create for want of a home it does not need.
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
-	// This is the operator process, not the daemon: it holds its own copy of the
-	// state and must not decide alone what the live sessions are. Installed here
-	// rather than in buildRegistry, which the daemon shares — the daemon would be
-	// asking itself.
 	forwardDaemonOwnedCommands(reg, instID, dispatchLiveCommand)
 	return reg, nil
 }

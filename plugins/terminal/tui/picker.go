@@ -10,9 +10,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// openResume populates the /resume picker with the hub's sessions, most-recently
-// active first (by transcript LastTs), and opens the overlay. Sessions with no
-// transcript sort last (empty LastTs).
 func (m *model) openResume() {
 	rows := append([]contracts.SessionInfo(nil), m.tm.Sessions()...)
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].LastTs > rows[j].LastTs })
@@ -21,7 +18,6 @@ func (m *model) openResume() {
 	m.resumeOpen = true
 }
 
-// clampResume keeps the selection index within the current row set.
 func (m *model) clampResume() {
 	n := len(m.resumeRows)
 	if m.resumeIdx >= n {
@@ -34,23 +30,19 @@ func (m *model) clampResume() {
 
 func (m *model) moveResume(d int) { m.resumeIdx += d; m.clampResume() }
 
-// chooseResume acts on the selected picker row: it opens (or focuses) the
-// session's tab now — seeding scrollback from the recorded transcript — and, when
-// the session is archived, returns a command that revives it in the daemon off
-// the Update loop. Its result surfaces as a dispatchResultMsg in the tab.
 func (m *model) chooseResume() tea.Cmd {
 	if m.resumeIdx < 0 || m.resumeIdx >= len(m.resumeRows) {
 		return nil
 	}
 	s := m.resumeRows[m.resumeIdx]
-	m.ensureTab(s.ChannelID) // creates+seeds when new; returns existing when live
+	m.ensureTab(s.ChannelID)
 	m.active = s.ChannelID
 	if tb := m.tabs[s.ChannelID]; tb != nil {
 		tb.unread = false
 	}
 	m.syncViewport()
 	if !s.Archived {
-		return nil // live session: opened or focused, nothing to revive
+		return nil
 	}
 	name, ch, tm := s.Name, s.ChannelID, m.tm
 	return func() tea.Msg {
@@ -95,10 +87,6 @@ func (m *model) resumeView() string {
 	return floatingList(rows, m.resumeIdx-start, footer, m.overlayWidth())
 }
 
-// openSwitch populates the invisible session switcher with the hub's live
-// sessions (most-recently active first) and opens the overlay. Unlike /resume it
-// lists only sessions already known to the TUI as tabs or advertised live, so a
-// switch never revives an archived session — it only re-focuses an existing one.
 func (m *model) openSwitch() {
 	rows := append([]contracts.SessionInfo(nil), m.tm.Sessions()...)
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].LastTs > rows[j].LastTs })
@@ -107,7 +95,6 @@ func (m *model) openSwitch() {
 	m.switchOpen = true
 }
 
-// clampSwitch keeps the selection index within the current row set.
 func (m *model) clampSwitch() {
 	n := len(m.switchRows)
 	if m.switchIdx >= n {
@@ -120,8 +107,6 @@ func (m *model) clampSwitch() {
 
 func (m *model) moveSwitch(d int) { m.switchIdx += d; m.clampSwitch() }
 
-// chooseSwitch focuses the selected session's tab, swapping the active transcript
-// without any visible tab strip — the "invisible" multi-session switch.
 func (m *model) chooseSwitch() {
 	if m.switchIdx < 0 || m.switchIdx >= len(m.switchRows) {
 		return
@@ -172,8 +157,6 @@ type PendingChoice struct {
 	Channel  string
 }
 
-// openChoice presents a permission menu, resetting the selection to the first
-// (safe) option and resizing the viewport to make room for the inline menu.
 func (m *model) openChoice(pc *PendingChoice) {
 	m.choice = pc
 	m.choiceIdx = 0
@@ -181,7 +164,6 @@ func (m *model) openChoice(pc *PendingChoice) {
 	m.syncViewport()
 }
 
-// clampChoice keeps the selection index within the option set.
 func (m *model) clampChoice() {
 	if m.choice == nil {
 		return
@@ -197,10 +179,6 @@ func (m *model) clampChoice() {
 
 func (m *model) moveChoice(d int) { m.choiceIdx += d; m.clampChoice() }
 
-// chooseChoice submits the selected option's value back to the session as a pick
-// and dismisses the menu. With no pick-frame seam in the TUI backend, the value
-// rides the normal Submit path (see design §4.4) — the hub interprets it as the
-// answer to its outstanding Menu prompt.
 func (m *model) chooseChoice() {
 	if m.choice == nil {
 		return
@@ -218,9 +196,6 @@ func (m *model) chooseChoice() {
 	m.syncViewport()
 }
 
-// choiceView renders the permission menu in the Claude shape: a framing header
-// naming the action, then numbered options with the selected one prefixed ❯ in
-// the warm accent, the rest dim, and the final (deny) row tagged (esc).
 func (m *model) choiceView() string {
 	if m.choice == nil {
 		return ""

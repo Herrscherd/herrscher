@@ -10,8 +10,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// modelJSON is the public view of a model. Arg is deliberately absent: it's a
-// vendor-CLI invocation detail that no consumer needs.
 type modelJSON struct {
 	ID         string   `json:"id"`
 	Label      string   `json:"label"`
@@ -21,9 +19,6 @@ type modelJSON struct {
 	Vendor     string   `json:"vendor"`
 }
 
-// modelsListJSON renders the catalog for the app. The list is always an
-// array, never null: a public build with no account has an empty catalog,
-// and null would crash the consumer where [] renders as an empty state.
 func modelsListJSON(entries []CatalogEntry) (string, error) {
 	models := make([]modelJSON, 0, len(entries))
 	for _, e := range entries {
@@ -45,7 +40,6 @@ func modelsListJSON(entries []CatalogEntry) (string, error) {
 	return string(b), nil
 }
 
-// modelsListText renders the catalog for a human at the terminal.
 func modelsListText(entries []CatalogEntry) string {
 	if len(entries) == 0 {
 		return "no models offered under the current route policy"

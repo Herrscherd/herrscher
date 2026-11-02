@@ -9,10 +9,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// Renommer une session doit deplacer tout ce qui porte son nom : la ligne
-// persistee garde son identite, le transcript et le journal la suivent, et le
-// pont repart sous le nouveau nom pour ne pas continuer d'ecrire dans les
-// fichiers qui viennent de bouger.
 func TestSessionRenameCarriesTheTranscriptAndTheJournal(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -86,9 +82,6 @@ func TestSessionRenameRefusesTheImpossible(t *testing.T) {
 	}
 }
 
-// Un horaire qui vise la session par son nom doit suivre le renommage. Sans
-// cela sa fenetre est sautee en silence a chaque tick : le planificateur cherche
-// un nom que plus personne ne porte.
 func TestSessionRenameCarriesTheSchedulesThatTargetIt(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -121,9 +114,6 @@ func TestSessionRenameCarriesTheSchedulesThatTargetIt(t *testing.T) {
 	}
 }
 
-// Une session possedee par un horaire a cible agent porte un nom derive de
-// l'horaire, que le renommage ne peut pas suivre. L'operateur doit etre averti
-// plutot que refuse : le prochain tick rouvrira une session sous l'ancien nom.
 func TestSessionRenameWarnsWhenAScheduleOwnsTheName(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})

@@ -39,9 +39,6 @@ func TestApprovalRulesRoundTrip(t *testing.T) {
 	}
 }
 
-// No verb writes the wait: it is a field an operator edits in state.json, so
-// what the file said is what every ask uses, and a value nothing can make sense
-// of falls back to the default rather than taking the daemon down with it.
 func TestApprovalWaitDefaultsAndParses(t *testing.T) {
 	if got := newTestState(t).ApprovalWait(); got != 5*time.Minute {
 		t.Fatalf("got %v, want the 5m default", got)

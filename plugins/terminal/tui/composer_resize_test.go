@@ -7,13 +7,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// TestComposerRemeasuresOnResize proves a terminal resize re-wraps the draft to
-// the new width so a long line never stays clipped at the old height.
 func TestComposerRemeasuresOnResize(t *testing.T) {
-	m := readyModel(&fakeBackend{}) // width 100
+	m := readyModel(&fakeBackend{})
 	m.ensureTab("a")
 	m.active = "a"
-	// A single line that fits on one row at width 100 but wraps at width 40.
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(strings.Repeat("a", 60))})
 	if m.composerHeight() != 1 {
 		t.Fatalf("60 chars at width 100 should be 1 row, got %d", m.composerHeight())

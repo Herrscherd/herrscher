@@ -12,9 +12,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
-// agentCreateRun creates a durable companion agent: a home directory seeded with
-// SOUL.md (persona), mcp.json (an optional stdio MCP server) and settings.json
-// (zero-prompt). The agent is later materialized into a session worktree.
 func (h *Handler) agentCreateRun(_ context.Context, in contracts.Input) (string, error) {
 	raw, ok := in.Lookup("name")
 	if !ok {
@@ -41,9 +38,6 @@ func (h *Handler) agentCreateRun(_ context.Context, in contracts.Input) (string,
 	return fmt.Sprintf("🤖 Agent **%s** created at `%s`.", a.Name, a.Home), nil
 }
 
-// agentListRun lists the durable companion agents. With --json it emits a
-// structured array (name, home, tags, backend) that Neublox reads as its role
-// catalog; otherwise a human Markdown list.
 func (h *Handler) agentListRun(_ context.Context, in contracts.Input) (string, error) {
 	agents, err := h.agents.List()
 	if err != nil {
@@ -80,8 +74,6 @@ func (h *Handler) agentListRun(_ context.Context, in contracts.Input) (string, e
 	return out, nil
 }
 
-// agentShowRun returns one agent's catalog record. With --json it emits
-// {name, tags, backend, soul}; the soul is read from <home>/SOUL.md.
 func (h *Handler) agentShowRun(_ context.Context, in contracts.Input) (string, error) {
 	name, ok := in.Lookup("name")
 	if !ok {
@@ -111,8 +103,6 @@ func (h *Handler) agentShowRun(_ context.Context, in contracts.Input) (string, e
 	return fmt.Sprintf("**%s** (`%s`)\n\n%s", a.Name, a.Home, string(soul)), nil
 }
 
-// agentSetSoulRun rewrites an agent's SOUL.md. The edit applies to the next
-// session materialized from that agent (homes are the source of truth).
 func (h *Handler) agentSetSoulRun(_ context.Context, in contracts.Input) (string, error) {
 	name, ok := in.Lookup("name")
 	if !ok {

@@ -15,8 +15,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// hostsFor returns an allowlist accepting srv's host, so the injected SSRF guard
-// passes against the local TLS server without the core naming any real CDN.
 func hostsFor(t *testing.T, srv *httptest.Server) allowedHosts {
 	t.Helper()
 	u, err := url.Parse(srv.URL)
@@ -26,9 +24,6 @@ func hostsFor(t *testing.T, srv *httptest.Server) allowedHosts {
 	return allowedHosts{u.Hostname(): true}
 }
 
-// TestResolveAttachmentsFetchesSupportedTypes verifies images and documents are
-// both downloaded — the model can look at one and read the other — while a file
-// type it can do nothing with is skipped instead of staged.
 func TestResolveAttachmentsFetchesSupportedTypes(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("DATA" + r.URL.Path))
@@ -84,16 +79,11 @@ func TestResolveAttachmentsOrderAndCollision(t *testing.T) {
 	if paths[0] == paths[1] {
 		t.Fatalf("dest collision: %v", paths)
 	}
-	// Order must follow message order (load-bearing for withAttachments numbering).
 	if b, _ := os.ReadFile(paths[0]); string(b) != "/1" {
 		t.Errorf("first path content = %q, want /1", b)
 	}
 }
 
-// TestResolveAttachmentsOrderAndCollision fetches two attachments that finish in
-// whatever order they finish. This one makes the first arrive last: downloads run
-// concurrently, so completion order says nothing about message order — and message
-// order is what withAttachments numbers the files by.
 func TestResolveAttachmentsOrderSurvivesASlowFirstFetch(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/1" {
@@ -124,9 +114,6 @@ func TestResolveAttachmentsOrderSurvivesASlowFirstFetch(t *testing.T) {
 	}
 }
 
-// The point of fetching concurrently: a turn waits for the slowest attachment,
-// not for the sum of them. Eight downloads that each sleep 60ms would take
-// almost half a second in sequence.
 func TestResolveAttachmentsFetchesConcurrently(t *testing.T) {
 	const delay = 60 * time.Millisecond
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -152,8 +139,6 @@ func TestResolveAttachmentsFetchesConcurrently(t *testing.T) {
 	if len(paths) != maxAttachmentsPerMessage {
 		t.Fatalf("got %d paths, want %d", len(paths), maxAttachmentsPerMessage)
 	}
-	// Half the sequential total is a wide margin: eight in parallel should land in
-	// roughly one delay, and this still fails if they run one after another.
 	if limit := delay * maxAttachmentsPerMessage / 2; elapsed > limit {
 		t.Fatalf("%d attachments took %v, more than %v — they are not overlapping",
 			maxAttachmentsPerMessage, elapsed, limit)
@@ -179,7 +164,6 @@ func TestResolveAttachmentsHTTPError(t *testing.T) {
 			{Filename: "good.png", URL: srv.URL + "/good"},
 		},
 	}
-	// A failed fetch is dropped, not fatal: the good image still comes through.
 	paths := ResolveAttachments(context.Background(), srv.Client(), m, sess, hostsFor(t, srv))
 	if len(paths) != 1 {
 		t.Fatalf("want 1 surviving path, got %v", paths)
@@ -199,13 +183,8 @@ func TestResolveAttachmentsRejectsOffAllowlist(t *testing.T) {
 	}
 }
 
-// TestResolveAttachmentsRejectsRedirectOffAllowlist pins the redirect defence:
-// an allowlisted CDN that 302s to an off-allowlist (e.g. internal) host must not
-// be followed, or the SSRF allowlist would be a paper wall.
 func TestResolveAttachmentsRejectsRedirectOffAllowlist(t *testing.T) {
 	cdn := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 302 to a link-local metadata address — an off-allowlist host the guard
-		// must refuse to follow (and never actually contact).
 		http.Redirect(w, r, "https://169.254.169.254/latest", http.StatusFound)
 	}))
 	defer cdn.Close()
@@ -216,8 +195,6 @@ func TestResolveAttachmentsRejectsRedirectOffAllowlist(t *testing.T) {
 		ID:          "1",
 		Attachments: []contracts.Attachment{{Filename: "x.png", URL: cdn.URL + "/x.png"}},
 	}
-	// Only the CDN host is on the allowlist; the redirect target is not, so the
-	// hop must be refused before the internal host is ever contacted.
 	if paths := ResolveAttachments(context.Background(), cdn.Client(), m, sess, hostsFor(t, cdn)); len(paths) != 0 {
 		t.Fatalf("redirect to off-allowlist host must be rejected, got paths=%v", paths)
 	}
@@ -228,7 +205,6 @@ func TestValidateCDNURL(t *testing.T) {
 	ok := []string{
 		"https://cdn.example.com/attachments/1/2/a.png",
 		"https://media.example.com/attachments/1/2/a.png",
-		// A host name is case-insensitive, and the allowlist is a map lookup.
 		"https://CDN.Example.COM/attachments/1/2/a.png",
 	}
 	for _, u := range ok {
@@ -237,9 +213,9 @@ func TestValidateCDNURL(t *testing.T) {
 		}
 	}
 	bad := []string{
-		"http://cdn.example.com/a.png",           // not https
-		"https://evil.com/a.png",                 // wrong host
-		"https://cdn.example.com.evil.com/a.png", // suffix trick
+		"http://cdn.example.com/a.png",
+		"https://evil.com/a.png",
+		"https://cdn.example.com.evil.com/a.png",
 		"file:///etc/passwd",
 		"://bad",
 	}
@@ -251,8 +227,6 @@ func TestValidateCDNURL(t *testing.T) {
 }
 
 func TestFetchOneRemovesPartialFileOnCopyError(t *testing.T) {
-	// Server sends a couple of bytes then hijacks and slams the connection, so
-	// io.Copy fails mid-stream after the file has been created.
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", "999999")
 		w.WriteHeader(http.StatusOK)
@@ -284,7 +258,7 @@ func TestResolveAttachmentsContextCancelled(t *testing.T) {
 	sess := "ctx-cancelled"
 	defer os.RemoveAll(attachmentDir(sess))
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // already cancelled before the fetch
+	cancel()
 	m := contracts.Message{
 		ID:          "1",
 		Attachments: []contracts.Attachment{{Filename: "x.png", URL: srv.URL + "/x.png"}},
@@ -295,8 +269,6 @@ func TestResolveAttachmentsContextCancelled(t *testing.T) {
 }
 
 func TestFetchOneSkipsOversizedBody(t *testing.T) {
-	// Server lies: declared Size is fine but the body streams past the cap. The
-	// fetch must fail and leave no truncated file behind, not deliver a corrupt one.
 	big := maxAttachmentBytes + 100
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		buf := make([]byte, 64<<10)
@@ -321,7 +293,6 @@ func TestFetchOneSkipsOversizedBody(t *testing.T) {
 }
 
 func TestResolveAttachmentsSkipsDeclaredOversized(t *testing.T) {
-	// An attachment whose declared Size exceeds the cap is never fetched.
 	called := false
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -354,7 +325,6 @@ func TestSupportedPrefersContentType(t *testing.T) {
 		{contracts.Attachment{Filename: "x.pdf"}, true},
 		{contracts.Attachment{Filename: "notes", ContentType: "text/plain; charset=utf-8"}, true},
 		{contracts.Attachment{Filename: "x.md", ContentType: "TEXT/MARKDOWN"}, true},
-		// A declared type the model can do nothing with wins over a friendly name.
 		{contracts.Attachment{Filename: "x.pdf", ContentType: "application/zip"}, false},
 		{contracts.Attachment{Filename: "x.zip"}, false},
 		{contracts.Attachment{Filename: "x.exe"}, false},
@@ -399,9 +369,6 @@ func TestResolveAttachmentsNothingToResolveNoDir(t *testing.T) {
 	}
 }
 
-// TestResolveAttachmentsTightModes pins the permissions on the staging tree: it
-// lives in a world-writable temp dir, so a downloaded image must not be readable
-// (or its name even listable) by another user on the box.
 func TestResolveAttachmentsTightModes(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("PNGDATA"))
@@ -433,9 +400,6 @@ func TestResolveAttachmentsTightModes(t *testing.T) {
 	}
 }
 
-// TestPinnedDialRefusesNonRoutableAddress closes DNS rebinding: an allowlisted
-// name that resolves to a loopback or private address is refused at dial time,
-// after the allowlist check has already passed.
 func TestPinnedDialRefusesNonRoutableAddress(t *testing.T) {
 	dial := pinnedDial(&net.Dialer{Timeout: 2 * time.Second})
 	if _, err := dial(context.Background(), "tcp", "localhost:80"); err == nil {
@@ -443,9 +407,6 @@ func TestPinnedDialRefusesNonRoutableAddress(t *testing.T) {
 	}
 }
 
-// TestPinnedDialAllowsIPLiteral confirms the guard exempts an address the
-// allowlist already pinned exactly: there is no name to rebind, and this is what
-// keeps the httptest servers above reachable.
 func TestPinnedDialAllowsIPLiteral(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

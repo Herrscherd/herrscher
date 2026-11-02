@@ -25,7 +25,6 @@ func TestPickAgentNoMatchRefuses(t *testing.T) {
 }
 
 func TestPickAgentTieBreaksByName(t *testing.T) {
-	// Both score 1 on "lua"; roster is sorted by name, so the smallest wins.
 	roster := []agent.Agent{
 		{Name: "alpha", Tags: []string{"lua"}},
 		{Name: "beta", Tags: []string{"lua"}},
@@ -53,7 +52,6 @@ func TestPickAgentCaseAndPunctuationInsensitive(t *testing.T) {
 }
 
 func TestPickAgentMatchesAccentedTag(t *testing.T) {
-	// French-first codebase: an accented tag must match its accented task word.
 	roster := []agent.Agent{{Name: "netter", Tags: []string{"réseau"}}}
 	if got, ok := pickAgent(roster, "écris le module réseau"); !ok || got != "netter" {
 		t.Fatalf("pickAgent = %q,%v want netter,true", got, ok)

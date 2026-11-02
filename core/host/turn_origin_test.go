@@ -12,9 +12,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
-// tapping runs a driver's pump with an event tap recording everything the session
-// emits, which is what every frontend on the events socket sees. It returns the
-// tap's reader so a test can assert on the stream a pushing client gets.
 func tapping(t *testing.T, d *sessionDriver) func() []contracts.Event {
 	t.Helper()
 	var mu sync.Mutex
@@ -34,7 +31,6 @@ func tapping(t *testing.T, d *sessionDriver) func() []contracts.Event {
 	}
 }
 
-// sawReply reports whether the tapped stream carries the turn's final reply.
 func sawReply(events []contracts.Event, text string) bool {
 	for _, e := range events {
 		if e.T == "reply" && e.Done && e.Text == text {
@@ -44,14 +40,8 @@ func sawReply(events []contracts.Event, text string) bool {
 	return false
 }
 
-// A turn said somewhere the session is not bound to — an attached terminal
-// pushing over the command socket — must not be re-published in the session's
-// own channel. The client that typed it is already watching the event stream;
-// posting there too drops an answer into a chat channel where nobody asked
-// anything, which is what the operator sees as the agent replying in the wrong
-// place.
 func TestTurnSaidOutsideTheBoundChannelsIsNotPostedThere(t *testing.T) {
-	a := &fanRecorder{} // kind "rec": the session's only channel
+	a := &fanRecorder{}
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
 	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
@@ -83,8 +73,6 @@ func TestTurnSaidOutsideTheBoundChannelsIsNotPostedThere(t *testing.T) {
 	}
 }
 
-// Said in one of the session's own channels, the turn belongs there: this is the
-// ordinary path and it must keep publishing.
 func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 	a := &fanRecorder{}
 	toBridge := make(chan contracts.Event, 4)
@@ -107,9 +95,6 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 	}, "a turn said in the bound channel is answered there")
 }
 
-// `session send` is how a client speaks into a session the daemon owns, so it is
-// where the origin has to survive: an attached window passes its own gateway kind
-// and the turn is rendered there rather than in the session's channel.
 func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -136,8 +121,6 @@ func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
 		t.Fatal("session send queued nothing")
 	}
 
-	// Without it — a script at a shell — nothing is claimed, and the session's own
-	// channels stay the only place the turn can be said.
 	if _, err := reg.Dispatch(ctx, []string{"session", "send", "--name", "s1", "--text", "vas-y"}); err != nil {
 		t.Fatalf("session send: %v", err)
 	}
@@ -151,9 +134,6 @@ func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
 	}
 }
 
-// A turn nobody typed in a conversation — a seed, a handoff, a script over the
-// command socket — names no origin, and the session's channels are then the only
-// place it can be said.
 func TestTurnWithNoOriginIsPostedToTheBoundChannels(t *testing.T) {
 	a := &fanRecorder{}
 	toBridge := make(chan contracts.Event, 4)

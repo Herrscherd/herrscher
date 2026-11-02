@@ -12,7 +12,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// defaultUserBudget bounds USER.md in runes; SetUserBudget overrides it.
 const defaultUserBudget = 1500
 
 // Store owns the directory holding every agent home: <root>/<name>/.
@@ -61,15 +60,12 @@ type CreateSpec struct {
 	Tags    []string
 }
 
-// defaultSoul is the persona seeded when CreateSpec.Soul is empty. It is a
-// neutral companion persona; profiles pass their own via CreateSpec.Soul.
 const defaultSoul = `# Companion
 
 You are a durable companion agent. You keep working on this project across
 sessions, remember what matters, and act carefully inside your worktree.
 `
 
-// mcpServer / mcpConfig model a Claude Code .mcp.json stdio server entry.
 type mcpServer struct {
 	Type    string   `json:"type"`
 	Command string   `json:"command"`
@@ -80,9 +76,6 @@ type mcpConfig struct {
 	MCPServers map[string]mcpServer `json:"mcpServers"`
 }
 
-// parseMCP splits a command line ("neublox serve --project {{WORKTREE}}") into a
-// stdio server entry. The first token is both the server name and the command.
-// Whitespace-split only (no quoting) — sufficient for tokenless CLI args.
 func parseMCP(cmdline string) (name string, srv mcpServer, ok bool) {
 	fields := strings.Fields(cmdline)
 	if len(fields) == 0 {
@@ -91,15 +84,6 @@ func parseMCP(cmdline string) (name string, srv mcpServer, ok bool) {
 	return fields[0], mcpServer{Type: "stdio", Command: fields[0], Args: fields[1:]}, true
 }
 
-// buildSettings renders the zero-prompt Claude settings: project MCP servers
-// auto-enabled, file edits auto-accepted (a headless backend can answer no
-// prompt), and (when present) the agent's MCP namespace allow-listed. The
-// worktree is disposable and isolated, so a permissive mode costs nothing there.
-//
-// It is not the last word on what a tool call may do, either: what reaches
-// outside that worktree is the approval policy's business. Materializing this
-// file into a session adds a PreToolUse hook to it unless that session asked
-// for `bypass`, and the hook is asked before any of these permissions apply.
 func buildSettings(serverName string) ([]byte, error) {
 	var allow []string
 	if serverName != "" {
@@ -120,16 +104,10 @@ func buildSettings(serverName string) ([]byte, error) {
 	}, "", "  ")
 }
 
-// validateName rejects agent names that are empty, ".", or could traverse out of
-// the store root (contain a path separator or "..").
 func validateName(name string) bool {
 	return name != "" && name != "." && !strings.ContainsAny(name, `/\`) && !strings.Contains(name, "..")
 }
 
-// readTags reads <home>/TAGS into a lowercased, de-duplicated token slice — the
-// agent's capability declaration for host-side routing. Tokens are separated by
-// whitespace or commas. A missing or unreadable file yields nil: an agent without
-// tags is valid (it is simply never auto-selected by routing).
 func readTags(home string) []string {
 	buf, err := os.ReadFile(filepath.Join(home, tagsFile))
 	if err != nil {
@@ -182,8 +160,6 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 	if err := os.MkdirAll(s.root, 0o755); err != nil {
 		return Agent{}, fmt.Errorf("create agents root: %w", err)
 	}
-	// os.Mkdir is the atomic claim: it fails with EEXIST if the home already
-	// exists, avoiding a Stat/MkdirAll TOCTOU between concurrent creates.
 	if err := os.Mkdir(home, 0o755); err != nil {
 		if os.IsExist(err) {
 			return Agent{}, fmt.Errorf("agent %q already exists", name)

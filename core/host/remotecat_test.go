@@ -18,7 +18,6 @@ func TestSupportedRemoteCategoriesAreMemoryOrchestratorBackend(t *testing.T) {
 			t.Fatalf("%q must be a supported remote category (C1/C2/C3)", c)
 		}
 	}
-	// The gateway is not remote-capable (it owns the platform I/O loop).
 	if SupportedRemoteCategory(contracts.CategoryGateway) {
 		t.Fatal("gateway must not be remote-supported")
 	}
@@ -31,11 +30,8 @@ func TestStartRemotePluginHostsSkipsUnsupportedWithWarning(t *testing.T) {
 	var buf bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&buf, nil))
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // cancelled: no real plugin-host process should be spawned
+	cancel()
 
-	// An unsupported remote category must be skipped with a logged warning
-	// (Stage A logger), not hosted out-of-process. The gateway owns the platform
-	// I/O loop and is never remote-capable, so it is the durable negative case.
 	startRemotePluginHosts(ctx, "/bin/herrscher",
 		map[contracts.Category]bool{contracts.CategoryGateway: true}, log)
 

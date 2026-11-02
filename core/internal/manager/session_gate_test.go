@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// gateHandler is handlerWithHosts with a worktree that exists on disk, because
-// these tests are about a file the handler writes into it.
 func gateHandler(t *testing.T, grain, why string) (*Handler, string) {
 	t.Helper()
 	h, _, localWT, _ := handlerWithHosts(t)
@@ -37,9 +35,6 @@ func TestSessionCreateGatesASessionWithoutAnAgent(t *testing.T) {
 	}
 }
 
-// A worktree is cut from the project tip, where .claude/settings.json may be a
-// tracked file the repository owns. Rewriting it would dirty the working tree
-// and risk being committed under the operator's name.
 func TestSessionCreateLeavesATrackedSettingsFileAlone(t *testing.T) {
 	h, dir := gateHandler(t, "tool", "")
 	claude := filepath.Join(dir, ".claude")
@@ -90,8 +85,6 @@ func TestSessionCreateWarnsOnASharedSession(t *testing.T) {
 	}
 }
 
-// The only materialization path to another machine carries an agent. A remote
-// session without one cannot be gated, and saying so is the whole point.
 func TestSessionCreateWarnsOnARemoteSessionWithoutAnAgent(t *testing.T) {
 	h, _ := gateHandler(t, "tool", "")
 	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "host", "build1", "approvals", "strict"))
@@ -103,9 +96,6 @@ func TestSessionCreateWarnsOnARemoteSessionWithoutAnAgent(t *testing.T) {
 	}
 }
 
-// bypass is the operator's explicit choice to run ungated. Warning about it
-// would fire on a decision they already made, and materializing anything would
-// contradict it.
 func TestSessionCreateStaysQuietAndUngatedOnBypass(t *testing.T) {
 	h, dir := gateHandler(t, "tool", "")
 	for _, mode := range []string{"", "bypass"} {
@@ -122,8 +112,6 @@ func TestSessionCreateStaysQuietAndUngatedOnBypass(t *testing.T) {
 	}
 }
 
-// An unwired resolver is a daemon that cannot tell what its backends enforce.
-// The truthful answer is that nothing is enforced, said out loud.
 func TestSessionCreateWithNoResolverWarnsRatherThanAssumes(t *testing.T) {
 	h, _, _, _ := handlerWithHosts(t)
 	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "ask"))

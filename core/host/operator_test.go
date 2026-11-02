@@ -10,8 +10,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 )
 
-// operatorReg is a registry shaped like the operator CLI's: a couple of session
-// verbs whose handlers record that they ran here rather than in the daemon.
 func operatorReg(t *testing.T, ran *[]string) *cli.Registry {
 	t.Helper()
 	reg := &cli.Registry{}
@@ -38,9 +36,6 @@ func operatorReg(t *testing.T, ran *[]string) *cli.Registry {
 	return reg
 }
 
-// The bug this fixes: `session close` from the CLI mutated that process's copy
-// of the state, so the running daemon kept the session — still offering it for
-// completion, and writing it back on its next save.
 func TestASessionVerbIsDecidedByTheRunningDaemon(t *testing.T) {
 	var ran []string
 	var sent []string
@@ -63,15 +58,11 @@ func TestASessionVerbIsDecidedByTheRunningDaemon(t *testing.T) {
 	if len(ran) != 0 {
 		t.Fatalf("ran locally: %v, want the daemon to decide", ran)
 	}
-	// A valueless boolean goes back valueless, or "true" lands as a positional.
 	if got := strings.Join(sent, " "); got != "session close --name main --force" {
 		t.Fatalf("argv = %q, want the invocation rebuilt as typed", got)
 	}
 }
 
-// Host records live in the same file as the sessions, so they have the same
-// problem: a host added here would be dropped by the daemon's next save, and the
-// session that named it would refuse for want of a machine just registered.
 func TestAHostVerbIsDecidedByTheRunningDaemon(t *testing.T) {
 	var ran []string
 	var sent []string
@@ -93,8 +84,6 @@ func TestAHostVerbIsDecidedByTheRunningDaemon(t *testing.T) {
 	}
 }
 
-// No daemon is a normal state — a one-shot install, or the CLI used before
-// `service install`. The dial misses and the command runs here, as it always did.
 func TestWithNoDaemonListeningTheCommandStillRuns(t *testing.T) {
 	var ran []string
 	reg := operatorReg(t, &ran)
@@ -111,10 +100,6 @@ func TestWithNoDaemonListeningTheCommandStillRuns(t *testing.T) {
 	}
 }
 
-// `approve ask` is the exception to the local fallback. The broker that holds a
-// pending request lives in the daemon, so run here it would open a request
-// nobody can see and wait out the whole approval timeout before denying. It
-// fails at once instead, and names what is missing. Its siblings still fall back.
 func TestApproveAskWithNoDaemonFailsFastInsteadOfWaiting(t *testing.T) {
 	var ran []string
 	reg := operatorReg(t, &ran)
@@ -138,8 +123,6 @@ func TestApproveAskWithNoDaemonFailsFastInsteadOfWaiting(t *testing.T) {
 	}
 }
 
-// Once the daemon has answered, its answer is the answer: a failure there must
-// not be retried locally against a state the daemon owns.
 func TestADaemonFailureIsNotRetriedLocally(t *testing.T) {
 	var ran []string
 	reg := operatorReg(t, &ran)
@@ -155,8 +138,6 @@ func TestADaemonFailureIsNotRetriedLocally(t *testing.T) {
 	}
 }
 
-// seed carries a turn identity this process already resolved and forwards itself;
-// and nothing outside `session` is the daemon's business.
 func TestSeedAndOtherNamespacesAreLeftAlone(t *testing.T) {
 	var ran []string
 	reg := operatorReg(t, &ran)
@@ -178,8 +159,6 @@ func TestSeedAndOtherNamespacesAreLeftAlone(t *testing.T) {
 	}
 }
 
-// The rest of the invocation has to survive the trip: an unparsed remainder and
-// the global --json flag are part of what the operator asked for.
 func TestTheWholeInvocationSurvivesTheTrip(t *testing.T) {
 	var sent []string
 	reg := &cli.Registry{}

@@ -7,8 +7,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// gateRegistry installs a two-backend registry: one that gates per tool call,
-// one that declares it cannot and says why.
 func gateRegistry(t *testing.T) {
 	t.Helper()
 	saved := contracts.Default
@@ -46,9 +44,6 @@ func TestGateForReadsTheManifest(t *testing.T) {
 	}
 }
 
-// A vendor nothing here knows about must read as ungated with a reason, not as
-// gated by default: claiming enforcement that does not exist is the one answer
-// that gets an operator hurt.
 func TestGateForUnknownVendorSaysSoRatherThanAssuming(t *testing.T) {
 	gateRegistry(t)
 

@@ -11,16 +11,16 @@ import (
 // Reset — so a process that ran healthily restarts fast while a tight crash loop
 // backs off. The zero value is unusable; set at least Base and Factor.
 type Backoff struct {
-	Base   time.Duration // first delay (n=0)
-	Max    time.Duration // upper cap before jitter; 0 ⇒ uncapped
-	Factor float64       // geometric growth per consecutive failure
-	Jitter float64       // jitter fraction in [0,1]: delay ∈ [target·(1-Jitter), target]
-	Reset  time.Duration // a run ≥ Reset returns the next delay to Base; 0 ⇒ never
+	Base   time.Duration
+	Max    time.Duration
+	Factor float64
+	Jitter float64
+	Reset  time.Duration
 
 	// Rand draws the jitter sample in [0,1); nil falls back to math/rand.
 	Rand func() float64
 
-	n int // consecutive failures since the last reset
+	n int
 }
 
 // RestartBackoff is the shared restart-loop policy: 1s base, ×2 growth capped at

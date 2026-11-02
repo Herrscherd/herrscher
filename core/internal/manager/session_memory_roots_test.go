@@ -7,8 +7,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// A memory root lands on the row and changes nothing about where the session
-// lives — that separation is the entire reason these fields are not Project.
 func TestSessionCreatePersistsMemoryRoots(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -35,10 +33,6 @@ func TestSessionCreatePersistsMemoryRoots(t *testing.T) {
 	}
 }
 
-// The regression that made these separate fields necessary. Routing the memory
-// scope through Project would have sent this session to /workspaces/demo/neublox
-// on any machine with a workspace root configured. Compare with
-// TestSessionCreateNoProjectRootsAtWorkspace, which fixes the expected Dir.
 func TestMemoryProjectDoesNotMoveTheSession(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -73,8 +67,6 @@ func TestSessionCreatePinsWhenAsked(t *testing.T) {
 	}
 }
 
-// A memory agent is not a provisioning directive, so it must not drag in the
-// isolated-worktree rule that guards the real one.
 func TestMemoryAgentDoesNotNeedAWorktree(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -86,7 +78,6 @@ func TestMemoryAgentDoesNotNeedAWorktree(t *testing.T) {
 	}
 }
 
-// …and it must not have relaxed it either.
 func TestAgentStillNeedsAWorktree(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})

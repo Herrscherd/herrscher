@@ -12,8 +12,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 )
 
-// captureLog swaps the package logger for one writing into a buffer, so a test
-// can read what an operator would have seen.
 func captureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
@@ -23,10 +21,6 @@ func captureLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// A dropped attachment used to vanish without a word, which is how an allowlist
-// that was never populated went unnoticed: every screenshot was thrown away, no
-// turn ever failed, and nothing said so. Each reason for dropping one now names
-// the file it dropped.
 func TestEveryDroppedAttachmentIsLogged(t *testing.T) {
 	cases := []struct {
 		name string
@@ -72,9 +66,6 @@ func TestEveryDroppedAttachmentIsLogged(t *testing.T) {
 	}
 }
 
-// Going past the per-message cap is the one drop that is not about a single
-// file, and it is the one an operator is most likely to misread as the model
-// ignoring an image — so it says the cap out loud.
 func TestPassingTheCapIsLogged(t *testing.T) {
 	buf := captureLog(t)
 	m := contracts.Message{ID: "1"}
@@ -89,9 +80,6 @@ func TestPassingTheCapIsLogged(t *testing.T) {
 	}
 }
 
-// A CDN link commonly carries a signature that hands the file to whoever holds
-// it. That url now travels into a log line, so the signature has to come off
-// first — a log outlives the link it quotes.
 func TestTheAttachmentErrorDropsTheURLSignature(t *testing.T) {
 	err := validateCDNURL("https://evil.test/shot.png?ex=67&is=67&hm=deadbeefsignature", allowedHosts{})
 	if err == nil {

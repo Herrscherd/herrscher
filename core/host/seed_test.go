@@ -217,14 +217,6 @@ func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 	}
 }
 
-// TestNewSeedBackendPropagatesSessionModelID pins the connective line in
-// newSeedBackend that copies sess.ModelID into BackendRequest.ModelID. A
-// session naming a gateway-route model must reach BuildBackendFor's
-// credential-resolution path and, with no gateway credentials in the
-// environment, fail closed with the gateway error — proving the ID actually
-// arrived, not just that some error occurred. If that line were reverted to
-// ModelID: "", the request would take the legacy path instead and this model
-// lookup would never happen.
 func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
 	saved := contracts.Default
 	t.Cleanup(func() { contracts.Default = saved })
@@ -254,8 +246,6 @@ func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
 		t.Fatalf("error does not indicate the gateway credential path was reached: %v", err)
 	}
 
-	// Sanity: without a ModelID the same session takes the legacy path and
-	// succeeds, since the registered plugin needs no route resolution.
 	legacy := state.Session{Vendor: "codex"}
 	if _, err := newSeedBackend(context.Background(), legacy); err != nil {
 		t.Fatalf("legacy path (no ModelID) failed: %v", err)
@@ -272,13 +262,9 @@ func (b seedBackend) Respond(context.Context, contracts.Prompt, func(contracts.B
 }
 func (seedBackend) Close() error { return nil }
 
-// consolidateSpy records the context its Consolidate ran under, so a test can
-// assert the budget it was given rather than the one the turn already spent.
 type consolidateSpy struct {
 	err    error
 	called bool
-	// ctxErr is the context's state at the moment Consolidate ran, captured
-	// there because the caller cancels its budget as soon as the call returns.
 	ctxErr error
 }
 
@@ -290,10 +276,6 @@ func (c *consolidateSpy) Consolidate(ctx context.Context) error {
 }
 func (c *consolidateSpy) Close() error { return nil }
 
-// A turn that answered has done the work the caller asked for. Consolidation is
-// a side effect on the way out, so its failure is worth a line on stderr and
-// nothing more: dropping the reply would throw away a finished turn — and with
-// --print, print nothing at all — over a memory write.
 func TestASeedKeepsItsReplyWhenConsolidationFails(t *testing.T) {
 	old := oneShotBackendFactory
 	t.Cleanup(func() { oneShotBackendFactory = old })
@@ -312,10 +294,6 @@ func TestASeedKeepsItsReplyWhenConsolidationFails(t *testing.T) {
 	}
 }
 
-// The turn's deadline is the turn's. Consolidating under it means a turn that
-// used its budget leaves none for the memory write, which is exactly what
-// --consolidate-every 1 produced: a turn that answered, then died on
-// "consolidate: context deadline exceeded".
 func TestASeedConsolidatesOnItsOwnBudget(t *testing.T) {
 	oldFactory := oneShotBackendFactory
 	t.Cleanup(func() { oneShotBackendFactory = oldFactory })
@@ -325,7 +303,6 @@ func TestASeedConsolidatesOnItsOwnBudget(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &consolidateSpy{}
-	// A turn budget so small it is spent by the time the turn is over.
 	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy,
 		oneShotSeedRuntime{timeout: 50 * time.Millisecond}); err != nil {
 		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
@@ -338,10 +315,6 @@ func TestASeedConsolidatesOnItsOwnBudget(t *testing.T) {
 	}
 }
 
-// A cadence means the orchestrator consolidates on its own, inside the turn.
-// Consolidating again on the way out repeats the whole extraction — with
-// --consolidate-every 1 that second pass ran the full 60s budget out and failed
-// every time, for work already done.
 func TestASeedWithACadenceDoesNotConsolidateTwice(t *testing.T) {
 	old := oneShotBackendFactory
 	t.Cleanup(func() { oneShotBackendFactory = old })

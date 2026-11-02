@@ -9,8 +9,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
-// TestSkillsPanelRendersRows checks the panel renders a dim header and one row
-// per skill (name — description), the selected row prefixed ❯, with no border.
 func TestSkillsPanelRendersRows(t *testing.T) {
 	m := newTestModel()
 	m.skillsRows = []skills.Skill{
@@ -33,8 +31,6 @@ func TestSkillsPanelRendersRows(t *testing.T) {
 	}
 }
 
-// TestSkillsPanelEmpty checks the panel shows a friendly empty line when no
-// skills are discovered.
 func TestSkillsPanelEmpty(t *testing.T) {
 	m := newTestModel()
 	m.skillsOpen = true
@@ -43,7 +39,6 @@ func TestSkillsPanelEmpty(t *testing.T) {
 	}
 }
 
-// TestSkillsPanelEscCloses checks Esc dismisses the modal panel.
 func TestSkillsPanelEscCloses(t *testing.T) {
 	m := newTestModel()
 	m.skillsRows = []skills.Skill{{Name: "one", Description: "first"}}
@@ -54,7 +49,6 @@ func TestSkillsPanelEscCloses(t *testing.T) {
 	}
 }
 
-// TestSkillsPanelNavClamps checks the selection never leaves the row set.
 func TestSkillsPanelNavClamps(t *testing.T) {
 	m := newTestModel()
 	m.skillsRows = []skills.Skill{{Name: "one"}, {Name: "two"}}

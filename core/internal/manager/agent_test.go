@@ -289,10 +289,6 @@ func TestSessionCreateNoAgentUnchanged(t *testing.T) {
 	}
 }
 
-// A session that comes back reuses the worktree it left behind. If creating it
-// then fails, the rollback must leave that worktree alone: it holds work from
-// before this call, and removing it (forced, so even uncommitted) would destroy
-// exactly what reuse exists to preserve.
 func TestSessionCreateDoesNotRollBackAReusedWorktree(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	wt.path = t.TempDir()

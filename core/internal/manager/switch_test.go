@@ -9,15 +9,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// switch always re-targets the persisted backend; a non-"none" handoff also
-// stops+restarts the supervised child and injects a context seed built from the
-// prior transcript.
 func TestSessionSwitchRetargetsAndRestartsWithSeed(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
 	if err := st.AddSession(state.Session{Name: "alpha", Vendor: "claude", Cmd: "claude --model claude-opus-4-8", ResumeToken: "old"}); err != nil {
 		t.Fatal(err)
 	}
-	// A prior transcript so the summary handoff has something to hand off.
 	_ = state.AppendTranscript(state.TranscriptPath(h.PartDir(), "alpha"), state.TranscriptEntry{Role: "user", Text: "bonjour"})
 	_ = state.AppendTranscript(state.TranscriptPath(h.PartDir(), "alpha"), state.TranscriptEntry{Role: "assistant", Text: "salut"})
 
@@ -42,8 +38,6 @@ func TestSessionSwitchRetargetsAndRestartsWithSeed(t *testing.T) {
 	}
 }
 
-// handoff=none re-targets state AND restarts the backend so the new Cmd takes
-// effect, but injects NO seed (the child adopts the new model with a fresh thread).
 func TestSessionSwitchNoneRestartsWithoutSeed(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
 	if err := st.AddSession(state.Session{Name: "beta", Vendor: "claude", Cmd: "claude"}); err != nil {
@@ -76,15 +70,12 @@ func TestSessionSwitchNoneRestartsWithoutSeed(t *testing.T) {
 	}
 }
 
-// When the restart Start fails, the switch rolls back: state returns to the old
-// vendor/cmd, the old resume token is restored, and the old backend is restarted.
 func TestSessionSwitchRollsBackOnStartFailure(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
 	if err := st.AddSession(state.Session{Name: "gamma", Vendor: "claude", Cmd: "claude --model claude-opus-4-8", ResumeToken: "tok-old"}); err != nil {
 		t.Fatal(err)
 	}
 	h.SetSeeder(func(name, task string) bool { return true })
-	// The first restart (to the new backend) fails; the rollback restart succeeds.
 	sup.stopErrs = []error{errors.New("boom")}
 
 	_, err := h.sessionSwitchRun(context.Background(), args(
@@ -101,9 +92,6 @@ func TestSessionSwitchRollsBackOnStartFailure(t *testing.T) {
 	if got.ResumeToken != "tok-old" {
 		t.Fatalf("resume token not restored: %q", got.ResumeToken)
 	}
-	// One Start call: the failed restart never got past Stop, so the only bridge
-	// launched is the rollback's — and it must carry the old Cmd, or the session
-	// is left running the backend the switch was rolled back from.
 	if len(sup.started) != 1 {
 		t.Fatalf("expected 1 Start call (the rollback only), got %v", sup.started)
 	}
@@ -112,9 +100,6 @@ func TestSessionSwitchRollsBackOnStartFailure(t *testing.T) {
 	}
 }
 
-// A vendor change can land a gated session on a backend that enforces nothing.
-// The switch happens either way, and the loss of the guardrail is said out loud
-// rather than left to be found out on the first tool call nobody was asked about.
 func TestSessionSwitchWarnsWhenTheNewBackendCannotGate(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	if err := st.AddSession(state.Session{Name: "gamma", Vendor: "claude", Cmd: "claude", Approvals: "strict"}); err != nil {
@@ -137,8 +122,6 @@ func TestSessionSwitchWarnsWhenTheNewBackendCannotGate(t *testing.T) {
 	}
 }
 
-// The same switch onto a backend that does gate says nothing extra: a warning
-// nobody needs is noise, and noise is what makes a real warning unreadable.
 func TestSessionSwitchIsQuietWhenTheNewBackendGates(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	if err := st.AddSession(state.Session{Name: "delta", Vendor: "cursor", Cmd: "cursor-agent", Approvals: "strict"}); err != nil {

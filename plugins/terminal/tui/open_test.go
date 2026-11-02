@@ -6,9 +6,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// A window opened on a task must land on that session even when it is not the
-// first one the hub reports, and send the task there — that pairing is the whole
-// of `herrscher "<task>"`.
 func TestOpenOnFocusesSessionAndSendsTask(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{
 		{Name: "main", ChannelID: "c1"},
@@ -33,15 +30,13 @@ func TestOpenOnFocusesSessionAndSendsTask(t *testing.T) {
 	}
 }
 
-// The task is sent once. syncTabs runs on every repaint, so a field left set
-// would resend the opening message for as long as the window is open.
 func TestOpenOnSendsOnlyOnce(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "s", ChannelID: "c1"}}}
 	m := newModel(be)
 	OpenOn("s", "go")(m)
 
 	m.syncTabs()
-	m.tabSig = "" // force a full reconcile, as a changed session list would
+	m.tabSig = ""
 	m.syncTabs()
 
 	if len(be.submitted) != 1 {
@@ -49,9 +44,6 @@ func TestOpenOnSendsOnlyOnce(t *testing.T) {
 	}
 }
 
-// The session is usually not bridged yet when this process is the one starting
-// the daemon. The window must wait for it rather than give up on the first
-// reconcile — and must not fall back to sending the task into another session.
 func TestOpenOnWaitsForTheSession(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "main", ChannelID: "c1"}}}
 	m := newModel(be)
@@ -70,8 +62,6 @@ func TestOpenOnWaitsForTheSession(t *testing.T) {
 	}
 }
 
-// OpenOn with no text is "show me this one": it selects the session without
-// starting a turn.
 func TestOpenOnWithoutTextSendsNothing(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{
 		{Name: "main", ChannelID: "c1"},

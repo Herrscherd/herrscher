@@ -23,7 +23,6 @@ func TestSetPausedReasonPersists(t *testing.T) {
 		t.Fatalf("want cost, got %q", got.PausedReason)
 	}
 
-	// Clearing resumes the session.
 	if err := s.SetPausedReason("game", ""); err != nil {
 		t.Fatal(err)
 	}

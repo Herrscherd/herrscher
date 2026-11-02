@@ -14,9 +14,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
-// hubWith builds a hub over a registry holding one recording command at path, so
-// a test can assert how the hub's typed methods map a spec into a typed Input
-// without standing up the whole session machinery.
 func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -35,9 +32,6 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	return newHub(ctx, st, sup, nil, t.TempDir(), &r, nil)
 }
 
-// A plugin verb must not hold the mutation lock. It talks to a remote API, so a
-// rate-limited gateway would otherwise freeze every session create and close
-// behind one agent reading a channel — for as long as that API takes to answer.
 func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -92,8 +86,6 @@ func TestSessionSeedRegisteredRequiresNameAndTask(t *testing.T) {
 	}
 }
 
-// Create maps the typed CreateSession into the flags the session-create command
-// declares, so a renamed field is a compile error, not a silent argv typo.
 func TestHubCreateMapsSpecToTypedInput(t *testing.T) {
 	var got contracts.Input
 	h := hubWith(t, []string{"session", "create"}, &got)
@@ -119,8 +111,6 @@ func TestHubCreateMapsSpecToTypedInput(t *testing.T) {
 	if got.Get("consolidate_every") != "3" {
 		t.Fatalf("consolidate_every not mapped: %q", got.Get("consolidate_every"))
 	}
-	// A memory root travels as its own flag, never folded into project/agent,
-	// because the command reads those two as a location and a provisioning ask.
 	if got.Get("memory_project") != "neublox" || got.Get("memory_agent") != "tui" {
 		t.Fatalf("memory roots not mapped: %+v", got.Args)
 	}
@@ -129,8 +119,6 @@ func TestHubCreateMapsSpecToTypedInput(t *testing.T) {
 	}
 }
 
-// An omitted optional field must not appear in the Input, so it stays "flag
-// unset" rather than an empty-string value the command might misread.
 func TestHubCreateOmitsUnsetFields(t *testing.T) {
 	var got contracts.Input
 	h := hubWith(t, []string{"session", "create"}, &got)
@@ -166,8 +154,6 @@ func TestHubCloseOmitsForceWhenFalse(t *testing.T) {
 	}
 }
 
-// Dispatch routes a neutral argv through the real command registry the daemon
-// builds, proving the seam a gateway uses is wired to the manager commands.
 func TestHubDispatchSetSource(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -193,11 +179,10 @@ func newTestHub(t *testing.T) *hub {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher") // never Start()ed in these tests
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
 	return newHub(ctx, st, sup, nil, t.TempDir(), &cli.Registry{}, nil)
 }
 
-// Sessions mirrors persisted state as neutral SessionInfo for gateways.
 func TestHubSessionsSnapshot(t *testing.T) {
 	h := newTestHub(t)
 	if got := h.Sessions(); len(got) != 0 {
@@ -219,8 +204,6 @@ func TestHubSessionsSnapshot(t *testing.T) {
 	}
 }
 
-// reconcile brings persisted sessions live and tears down ones that vanished
-// from state, so a gateway-driven create/close takes effect immediately.
 func TestHubReconcileGoLiveGoDead(t *testing.T) {
 	h := newTestHub(t)
 	if err := h.st.AddSession(state.Session{Name: "live1", ChannelID: "c1", Type: "text"}); err != nil {
@@ -234,7 +217,6 @@ func TestHubReconcileGoLiveGoDead(t *testing.T) {
 		t.Fatal("reconcile did not bring the persisted session live")
 	}
 
-	// Idempotent: a second reconcile must not double-register.
 	h.reconcile()
 	h.mu.Lock()
 	n := len(h.live)
@@ -255,8 +237,6 @@ func TestHubReconcileGoLiveGoDead(t *testing.T) {
 	}
 }
 
-// stubForgetCoord implémente contracts.Coordinator (uniquement ce dont goDead a
-// besoin via type-assert) ET forget, pour prouver le câblage.
 type stubForgetCoord struct{ forgotten []string }
 
 func (s *stubForgetCoord) Handoff(context.Context, contracts.HandoffRequest) (string, error) {
@@ -301,8 +281,6 @@ func TestGoDeadCallsForget(t *testing.T) {
 }
 
 func TestHubStillSatisfiesSessionControl(t *testing.T) {
-	// The compile-time assertion at the bottom of hub.go is the real guard; this
-	// test exists so a reviewer sees the intent named.
 	var _ contracts.SessionControl = (*hub)(nil)
 }
 

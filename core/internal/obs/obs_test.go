@@ -33,8 +33,6 @@ func TestParseLevel(t *testing.T) {
 	}
 }
 
-// TestLoggerLevelGates asserts the constructed logger emits at/above its level
-// and drops records below it — the verbosity contract HERRSCHER_LOG controls.
 func TestLoggerLevelGates(t *testing.T) {
 	var buf bytes.Buffer
 	log := NewLogger(&buf, slog.LevelWarn)
@@ -50,8 +48,6 @@ func TestLoggerLevelGates(t *testing.T) {
 	}
 }
 
-// TestLoggerEmitsStructuredFields asserts records are key=value structured, not
-// interpolated strings: level and the session field are stable, parseable tokens.
 func TestLoggerEmitsStructuredFields(t *testing.T) {
 	var buf bytes.Buffer
 	log := NewLogger(&buf, slog.LevelDebug)

@@ -7,10 +7,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// TestSeedScrollbackReplaysRealRoles: a resumed session used to open on one flat
-// faint role, so the whole history read as an illegible grey wall. Replayed turns
-// must carry the roles they had, and the only thing marked as past is the
-// boundary line under them.
 func TestSeedScrollbackReplaysRealRoles(t *testing.T) {
 	fb := &fakeBackend{
 		fe:       make(chan RoutedEvent, 1),
@@ -41,8 +37,6 @@ func TestSeedScrollbackReplaysRealRoles(t *testing.T) {
 	}
 }
 
-// TestSeedScrollbackAddsNoBoundaryWithoutHistory: a fresh session must not open
-// on a rule announcing a past that does not exist.
 func TestSeedScrollbackAddsNoBoundaryWithoutHistory(t *testing.T) {
 	fb := &fakeBackend{
 		fe:       make(chan RoutedEvent, 1),
@@ -53,8 +47,6 @@ func TestSeedScrollbackAddsNoBoundaryWithoutHistory(t *testing.T) {
 	}
 }
 
-// TestUsageReportNamesTheNumbers: /usage exists because the status bar has to
-// abbreviate; the report must spell out the counts the bar compresses.
 func TestUsageReportNamesTheNumbers(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("a")

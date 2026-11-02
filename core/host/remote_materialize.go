@@ -13,16 +13,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
-// stageAgentTar renders an agent's provisioning files here, for a worktree over
-// there, and returns them as one tar stream.
-//
-// The files are small and there are six of them, so one round trip carrying all
-// of them beats six copies. They are rendered locally because the agent's home
-// is local: only the path written INTO them belongs to the far machine, which is
-// why MaterializeIntoAs takes the destination and that path separately.
-//
-// remoteBin is herrscher over there, the binary the approval hook rendered into
-// the settings must invoke; empty means the session wants no hook.
 func stageAgentTar(a agent.Agent, remoteWorktree, remoteBin string) (io.Reader, error) {
 	stage, err := os.MkdirTemp("", "herrscher-agent-")
 	if err != nil {
@@ -39,7 +29,6 @@ func stageAgentTar(a agent.Agent, remoteWorktree, remoteBin string) (io.Reader, 
 	return &buf, nil
 }
 
-// tarDir writes root's regular files into w, named relative to root.
 func tarDir(root string, w io.Writer) error {
 	tw := tar.NewWriter(w)
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -80,9 +69,6 @@ func tarDir(root string, w io.Writer) error {
 	return tw.Close()
 }
 
-// extractTar writes a tar stream into dst. Every member is checked against dst
-// before a byte is written: a tar names its own destinations, and this one
-// arrives over a pipe.
 func extractTar(r io.Reader, dst string) error {
 	root, err := filepath.Abs(dst)
 	if err != nil {
@@ -98,8 +84,6 @@ func extractTar(r io.Reader, dst string) error {
 			return err
 		}
 		if hdr.Typeflag != tar.TypeReg {
-			// Only regular files are ever packed, so anything else is not from
-			// stageAgentTar and has no business being written.
 			continue
 		}
 		target := filepath.Join(root, filepath.FromSlash(hdr.Name))

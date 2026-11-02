@@ -84,9 +84,6 @@ func LaunchFrom(cfg contracts.PluginConfig) Launch {
 		Every:     intSetting(cfg, SetEvery, defaultEvery),
 	}
 	if p := Name(cfg.Get(SetProject)); p != "" {
-		// An operator who named the project is not guessing. The name is folded
-		// first: session create refuses one with a space in it, and a refused
-		// create is a window that opens on nothing.
 		l.Project, l.Pinned = p, true
 		return l
 	}
@@ -141,9 +138,6 @@ func (l Launch) Args() []string {
 	return a
 }
 
-// cwd is the directory herrscher was launched in — what the operator means by
-// "here". An unreadable one is not an error worth failing a launch over; it
-// simply means the session starts with no project.
 func cwd() string {
 	d, err := os.Getwd()
 	if err != nil {
@@ -152,9 +146,6 @@ func cwd() string {
 	return d
 }
 
-// boolSetting reads a declared boolean setting, falling back to def for anything
-// strconv does not recognise — a typo in an environment variable must not decide
-// whether the window learns.
 func boolSetting(cfg contracts.PluginConfig, key string, def bool) bool {
 	v, err := strconv.ParseBool(strings.TrimSpace(cfg.Get(key)))
 	if err != nil {
@@ -163,8 +154,6 @@ func boolSetting(cfg contracts.PluginConfig, key string, def bool) bool {
 	return v
 }
 
-// intSetting reads a declared integer setting, falling back to def for anything
-// unparseable or negative.
 func intSetting(cfg contracts.PluginConfig, key string, def int) int {
 	n, err := strconv.Atoi(strings.TrimSpace(cfg.Get(key)))
 	if err != nil || n < 0 {

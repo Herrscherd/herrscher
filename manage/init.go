@@ -10,9 +10,6 @@ import (
 	"strings"
 )
 
-// The module catalog: one entry per category, mapping a short kind to its
-// published module path. `herrscher init` composes a stack by picking one kind
-// per category (or "none" to skip a category). New modules are added here.
 var catalog = map[string]map[string]string{
 	"gateway": {
 		"discord": "github.com/Herrscherd/herrscher-discord-gateway",
@@ -36,23 +33,12 @@ var catalog = map[string]map[string]string{
 	},
 }
 
-// inTree lists plugins that live inside the host module itself. They are always
-// blank-imported — dropping them would silently remove a compiled-in gateway —
-// and they are never `go get`-ed, since they are not external modules.
 var inTree = []string{"github.com/Herrscherd/herrscher/plugins/terminal"}
 
-// hostModule is this module's own path; inTree entries carry it as a prefix.
 const hostModule = "github.com/Herrscherd/herrscher"
 
-// categories is the fixed order a stack is composed and printed in.
 var categories = []string{"gateway", "backend", "memory", "orchestrator", "extractor", "skills"}
 
-// defaultStack is the batteries-included composition: a Discord gateway, the
-// Claude backend, Obsidian-backed memory, the basic multi-agent orchestrator,
-// the LLM extractor that turns that orchestrator into a Learner, and the
-// Superset playbooks. The last one costs nothing to include by default: a skills
-// plugin builds no port, and its factory declines on a machine without Superset,
-// so what it adds to a build that does not need it is a line at startup.
 var defaultStack = map[string]string{
 	"gateway":      "discord",
 	"backend":      "claude",
@@ -91,12 +77,6 @@ func InitCmd(ctx context.Context, args []string) int {
 		return 0
 	}
 
-	// Resolve the host source BEFORE prompting, so we never ask for input we then
-	// throw away. Two modes:
-	//   compose  — a source checkout is present: pick the stack, rewrite
-	//              plugins.go, seed secrets, rebuild.
-	//   config   — an installed binary (no source): the plugin set is already
-	//              compiled in, so we only collect secrets into the env file.
 	dir, hostErr := resolveHost(*hostDir)
 	compose := hostErr == nil
 	interactive := !*yes && !stackFlagsSet(fs) && isTerminal(os.Stdin) && isTerminal(os.Stderr)
@@ -122,9 +102,6 @@ func InitCmd(ctx context.Context, args []string) int {
 		}
 	}
 
-	// Config-only mode: the binary already carries its plugins, so there is
-	// nothing to recompose or rebuild — just persist the settings and point the
-	// operator at `serve`.
 	if !compose {
 		path := envTarget()
 		n, err := writeSecretsTo(path, secrets)
@@ -170,8 +147,6 @@ func InitCmd(ctx context.Context, args []string) int {
 		return 0
 	}
 
-	// If go get/tidy/build fails (e.g. an unresolvable module), restore the
-	// original plugins.go so a botched init doesn't leave the host uncompilable.
 	if code := buildStack(ctx, dir, modules); code != 0 {
 		if werr := os.WriteFile(manifest, src, 0o644); werr != nil {
 			fmt.Fprintf(os.Stderr, "restore %s: %v\n", manifest, werr)
@@ -183,10 +158,8 @@ func InitCmd(ctx context.Context, args []string) int {
 	return 0
 }
 
-// buildStack go-gets each module then tidies and rebuilds the host.
 func buildStack(ctx context.Context, dir string, modules []string) int {
 	for _, m := range modules {
-		// In-tree plugins live in this module; `go get` would reject them.
 		if m == hostModule || strings.HasPrefix(m, hostModule+"/") {
 			continue
 		}
@@ -200,8 +173,6 @@ func buildStack(ctx context.Context, dir string, modules []string) int {
 	return run(ctx, dir, "go", "build", "./...")
 }
 
-// resolveStack turns per-category kind choices plus verbatim extras into an
-// ordered, de-duplicated module list. A kind of "none" drops its category.
 func resolveStack(choices map[string]string, extras []string) ([]string, error) {
 	var modules []string
 	seen := map[string]bool{}
@@ -226,7 +197,6 @@ func resolveStack(choices map[string]string, extras []string) ([]string, error) 
 		add(module)
 	}
 	for _, m := range extras {
-		// Reject paths that would be read as flags by `go get` (e.g. -insecure).
 		if m == "" || m[0] == '-' {
 			return nil, fmt.Errorf("invalid module path %q", m)
 		}
@@ -238,16 +208,10 @@ func resolveStack(choices map[string]string, extras []string) ([]string, error) 
 	return modules, nil
 }
 
-// stackFlagsSet reports whether the user explicitly passed any stack-shaping
-// flag. When they did, init honours those flags and skips the wizard so
-// scripted invocations stay deterministic.
 func stackFlagsSet(fs *flag.FlagSet) bool {
 	set := false
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
-		// extractor belongs here for the same reason as the rest: it shapes the
-		// resolved stack, so passing it must pin the stack, not hand it to a
-		// wizard that would overwrite the choice.
 		case "gateway", "backend", "memory", "orchestrator", "extractor", "skills", "with":
 			set = true
 		}
@@ -255,8 +219,6 @@ func stackFlagsSet(fs *flag.FlagSet) bool {
 	return set
 }
 
-// envTarget is where config-only mode persists secrets: $HERRSCHER_ENV_FILE if
-// the operator pinned one, else a .env in the current directory.
 func envTarget() string {
 	if p := os.Getenv("HERRSCHER_ENV_FILE"); p != "" {
 		return p
@@ -264,10 +226,6 @@ func envTarget() string {
 	return ".env"
 }
 
-// writeSecretsTo upserts KEY=VALUE pairs into the env file at path (created 0600
-// if absent, parent dirs made as needed), preserving every other line and
-// overwriting only the keys we set. Values are never printed. Returns the number
-// of keys written.
 func writeSecretsTo(path string, secrets map[string]string) (int, error) {
 	if len(secrets) == 0 {
 		return 0, nil
@@ -306,9 +264,6 @@ func writeSecretsTo(path string, secrets map[string]string) (int, error) {
 	return len(secrets), os.WriteFile(path, []byte(out), 0o600)
 }
 
-// seedEnv copies .env.example to .env when no .env exists yet, so a fresh host
-// has a config skeleton to fill in. A missing example or an existing .env is a
-// no-op (never clobber real secrets).
 func seedEnv(dir string) {
 	dst := filepath.Join(dir, ".env")
 	if _, err := os.Stat(dst); err == nil {
@@ -342,7 +297,6 @@ func printCatalog() {
 	}
 }
 
-// multiFlag collects a repeatable string flag into a slice.
 type multiFlag []string
 
 func (m *multiFlag) String() string { return fmt.Sprint([]string(*m)) }

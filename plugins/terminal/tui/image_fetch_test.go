@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// counter is a fetcher that records how often it ran, so a refused host can be
-// asserted on the thing that matters: that nothing left the machine.
 type counter struct {
 	calls int
 	data  []byte
@@ -34,15 +32,11 @@ func TestFetchImageAllowsAListedHost(t *testing.T) {
 	if c.calls != 1 {
 		t.Fatalf("fetcher ran %d times, want exactly 1", c.calls)
 	}
-	// Host names are case-insensitive on both sides of the comparison.
 	if _, err := fetchImage(context.Background(), c.get, testHosts, "https://media.example.org/b.png"); err != nil {
 		t.Fatalf("host matching must be case-insensitive: %v", err)
 	}
 }
 
-// The allowlist is the existing answer to "who may this process talk to", and a
-// refusal has to be legible: the operator needs the host name to decide whether
-// to add it. And the fetcher must never have run.
 func TestFetchImageRefusesAnUnlistedHostAndNamesIt(t *testing.T) {
 	c := &counter{}
 	_, err := fetchImage(context.Background(), c.get, testHosts, "https://evil.example.net/a.png")
@@ -67,8 +61,6 @@ func TestFetchImageRefusesAnUnparseableURL(t *testing.T) {
 	}
 }
 
-// A fetch that fails loses nothing: the caller keeps the URL as a link, so the
-// error only has to reach it intact.
 func TestFetchImageErrorPropagates(t *testing.T) {
 	boom := errors.New("connection refused")
 	c := &counter{err: boom}
@@ -78,8 +70,6 @@ func TestFetchImageErrorPropagates(t *testing.T) {
 	}
 }
 
-// An empty allowlist is the terminal's own default — its attachments are file://
-// and it declares no hosts — and must mean nothing is fetched at all.
 func TestFetchImageRefusesEverythingWithoutAnAllowlist(t *testing.T) {
 	c := &counter{}
 	if _, err := fetchImage(context.Background(), c.get, nil, "https://cdn.example.com/a.png"); err == nil {
@@ -103,9 +93,6 @@ func TestImageURLsFindsOnlyImages(t *testing.T) {
 	}
 }
 
-// The wiring: a finished agent turn carrying an allowed image URL fetches it and
-// the decoded picture lands under that entry. Nothing here opens a socket — the
-// fetcher is the model's own injected seam.
 func TestTranscriptImageIsFetchedAndRendered(t *testing.T) {
 	m := newTestModel()
 	m.caps = Capabilities{Graphics: GraphicsKitty}
@@ -126,8 +113,6 @@ func TestTranscriptImageIsFetchedAndRendered(t *testing.T) {
 	}
 }
 
-// A URL off the allowlist is left exactly as it was: the transcript keeps the
-// link, and no command is issued to go and get it.
 func TestTranscriptImageOffTheAllowlistIsNotFetched(t *testing.T) {
 	m := newTestModel()
 	m.imageHosts = []string{"cdn.example.com"}
@@ -145,17 +130,11 @@ func TestTranscriptImageOffTheAllowlistIsNotFetched(t *testing.T) {
 	}
 }
 
-// A fetched image goes through the same size bound as a staged one. It reaches
-// the transcript from the network rather than from the operator, and the escape
-// it becomes is re-measured by the viewport on every repaint for the rest of the
-// session — so an oversized one leaves the URL as text and draws nothing.
 func TestFetchedImageTooLargeToDrawIsDropped(t *testing.T) {
 	m := newTestModel()
 	m.caps = Capabilities{Graphics: GraphicsKitty}
 	m.imageHosts = []string{"cdn.example.com"}
 	m.imageFetcher = func(context.Context, string) ([]byte, error) {
-		// Wide rather than tall: only height is downscaled, so the escape stays
-		// past maxPreviewBytes after the preview pass.
 		return encodeFixture(t, "png", noiseImage(4000, 200)), nil
 	}
 

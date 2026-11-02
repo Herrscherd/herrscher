@@ -7,8 +7,6 @@ import (
 	"strings"
 )
 
-// ANSI styling for the init wizard. Colour is enabled only on a real terminal
-// and disabled by $NO_COLOR or TERM=dumb, so piped/scripted output stays clean.
 type style struct{ reset, bold, dim, cyan, green, red string }
 
 func newStyle() style {
@@ -32,7 +30,6 @@ func (s style) wrap(code, v string) string {
 	return code + v + s.reset
 }
 
-// header prints a titled rule, e.g. "  herrscher · init".
 func (s style) header(title, sub string) {
 	fmt.Fprintf(os.Stderr, "\n  %s\n", s.wrap(s.bold+s.cyan, "herrscher · "+title))
 	if sub != "" {
@@ -40,7 +37,6 @@ func (s style) header(title, sub string) {
 	}
 }
 
-// summaryStack prints the resolved module list (compose mode) before the build.
 func summaryStack(modules []string) {
 	s := newStyle()
 	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "stack"))
@@ -50,8 +46,6 @@ func summaryStack(modules []string) {
 	fmt.Fprintln(os.Stderr)
 }
 
-// summaryConfig closes config-only mode: report where secrets landed and how to
-// start the already-compiled binary.
 func summaryConfig(path string, n int) {
 	s := newStyle()
 	fmt.Fprintln(os.Stderr)
@@ -64,8 +58,6 @@ func summaryConfig(path string, n int) {
 	fmt.Fprintf(os.Stderr, "  start it with:  %s\n\n", s.wrap(s.bold, "herrscherd serve"))
 }
 
-// shortModule trims the org prefix and the herrscher- prefix from a module path
-// for display, e.g. github.com/Herrscherd/herrscher-discord-gateway → discord-gateway.
 func shortModule(m string) string {
 	base := filepath.Base(m)
 	return strings.TrimPrefix(base, "herrscher-")

@@ -5,18 +5,13 @@ import (
 	"strings"
 )
 
-// The host's plugins.go carries blank imports between these markers. The CLI
-// edits only that managed region, never the rest of the file.
 const (
 	beginMarker = "// herrscher:plugins"
 	endMarker   = "// herrscher:end"
 )
 
-// importLine renders the blank import for a module inside the managed region.
 func importLine(module string) string { return fmt.Sprintf("\t_ %q", module) }
 
-// parseModule extracts the module path from a blank import line, reporting
-// whether the line is a blank import at all.
 func parseModule(line string) (string, bool) {
 	s := strings.TrimSpace(line)
 	if !strings.HasPrefix(s, "_ ") {
@@ -25,7 +20,6 @@ func parseModule(line string) (string, bool) {
 	return strings.Trim(strings.TrimSpace(s[2:]), `"`), true
 }
 
-// listPlugins returns the module paths declared in the managed region, in order.
 func listPlugins(src string) ([]string, error) {
 	region, _, _, err := region(src)
 	if err != nil {
@@ -40,8 +34,6 @@ func listPlugins(src string) ([]string, error) {
 	return mods, nil
 }
 
-// addPlugin inserts a blank import for module before the end marker. It reports
-// whether the source changed (false if the module was already present).
 func addPlugin(src, module string) (string, bool, error) {
 	mods, err := listPlugins(src)
 	if err != nil {
@@ -64,8 +56,6 @@ func addPlugin(src, module string) (string, bool, error) {
 	return src, false, fmt.Errorf("end marker %q not found", endMarker)
 }
 
-// removePlugin drops the blank import for module from the managed region. It
-// reports whether the source changed (false if the module was absent).
 func removePlugin(src, module string) (string, bool, error) {
 	if _, _, _, err := region(src); err != nil {
 		return src, false, err
@@ -92,9 +82,6 @@ func removePlugin(src, module string) (string, bool, error) {
 	return strings.Join(out, "\n"), changed, nil
 }
 
-// setPlugins replaces the whole managed region with blank imports for exactly
-// the given modules, in order. It is the bulk counterpart to add/removePlugin,
-// used by `herrscher init` to stamp a chosen stack from scratch.
 func setPlugins(src string, modules []string) (string, error) {
 	lines := strings.Split(src, "\n")
 	_, begin, end, err := region(src)
@@ -109,7 +96,6 @@ func setPlugins(src string, modules []string) (string, error) {
 	return strings.Join(out, "\n"), nil
 }
 
-// region returns the lines strictly between the markers, plus their indices.
 func region(src string) (lines []string, begin, end int, err error) {
 	all := strings.Split(src, "\n")
 	begin, end = -1, -1

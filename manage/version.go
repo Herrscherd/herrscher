@@ -9,9 +9,6 @@ import (
 	"strings"
 )
 
-// contractsModule is the one dependency every plugin shares, so a mismatch on it
-// is the usual reason a chosen version refuses to compile. It is named here to
-// warn before writing rather than after failing.
 const contractsModule = "github.com/Herrscherd/herrscher-contracts"
 
 // PluginVersion is one row of `herrscher plugin list`: what is compiled in, what
@@ -23,15 +20,10 @@ type PluginVersion struct {
 	Pinned    bool
 }
 
-// toolchain is the seam every version read goes through. Reads are `go list`
-// invocations, and routing them through an interface is what keeps the tests off
-// the toolchain and off the network.
 type toolchain interface {
 	List(ctx context.Context, args ...string) (string, error)
 }
 
-// goToolchain is the production toolchain: `go list` run inside the host module,
-// so the build list it reports is the composition's own.
 type goToolchain struct{ dir string }
 
 func (g goToolchain) List(ctx context.Context, args ...string) (string, error) {
@@ -44,8 +36,6 @@ func (g goToolchain) List(ctx context.Context, args ...string) (string, error) {
 	return string(out), nil
 }
 
-// splitModuleVersion splits a `<module>@<version>` argument. The last `@` wins
-// so a module path that contains none is returned whole.
 func splitModuleVersion(arg string) (module, version string) {
 	if i := strings.LastIndex(arg, "@"); i >= 0 {
 		return arg[:i], arg[i+1:]
@@ -53,10 +43,6 @@ func splitModuleVersion(arg string) (module, version string) {
 	return arg, ""
 }
 
-// installedVersions reports the version each module resolves to in the current
-// build list. Modules absent from the list — a plugin living inside the host
-// module has no version of its own — are simply missing from the map, and the
-// caller renders them as unknown.
 func installedVersions(ctx context.Context, tc toolchain, modules []string) (map[string]string, error) {
 	out, err := tc.List(ctx, "-m", "-json", "all")
 	if err != nil {
@@ -80,9 +66,6 @@ func installedVersions(ctx context.Context, tc toolchain, modules []string) (map
 	return versions, nil
 }
 
-// availableVersions lists the published versions of a module, oldest first. It
-// needs the network, and a run without one is not a failure of the operation the
-// operator asked for: the listing degrades to nil and the caller prints `?`.
 func availableVersions(ctx context.Context, tc toolchain, module string) ([]string, error) {
 	out, err := tc.List(ctx, "-m", "-versions", module)
 	if err != nil {
@@ -95,10 +78,6 @@ func availableVersions(ctx context.Context, tc toolchain, module string) ([]stri
 	return fields[1:], nil
 }
 
-// contractsRequirement reports the herrscher-contracts version that
-// module@version declares, or "" when it declares none. It feeds the pre-write
-// warning: a plugin built against a different contracts minor is the failure
-// worth naming before go.mod is touched, not after the compiler says so.
 func contractsRequirement(ctx context.Context, tc toolchain, module, version string) (string, error) {
 	out, err := tc.List(ctx, "-m", "-json", module+"@"+version)
 	if err != nil {
@@ -118,9 +97,6 @@ func contractsRequirement(ctx context.Context, tc toolchain, module, version str
 	return requiredVersion(string(src), contractsModule), nil
 }
 
-// requiredVersion scans go.mod text for the version required of module. It reads
-// the text directly instead of calling the toolchain again because the file is
-// already on disk and the requirement is one line of it.
 func requiredVersion(gomod, module string) string {
 	for _, line := range strings.Split(gomod, "\n") {
 		fields := strings.Fields(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "require ")))

@@ -52,7 +52,6 @@ func TestParseDone(t *testing.T) {
 	if !ok || summary != "module de vol commité, 12 tests verts" {
 		t.Fatalf("done valide mal parsé: %q %v", summary, ok)
 	}
-	// pas d'em-dash requis : tout le corps est le résumé (même avec un tiret dedans)
 	if s, ok := parseDone("⟢ done: fait — et testé"); !ok || s != "fait — et testé" {
 		t.Fatalf("done avec tiret dans le corps: %q %v", s, ok)
 	}
@@ -124,10 +123,10 @@ func TestParseFanOut(t *testing.T) {
 		{"txt\n⟢ fanout: alpha — seule tâche", "alpha", []string{"seule tâche"}, true},
 		{"txt\n⟢ fanout: alpha —  t1  ;;  t2 ", "alpha", []string{"t1", "t2"}, true},
 		{"txt\n⟢ fanout: alpha — t1 ;; ;; t2", "alpha", []string{"t1", "t2"}, true},
-		{"txt\n⟢ fanout:  — t1", "", nil, false},           // agent vide
-		{"txt\n⟢ fanout: alpha —", "", nil, false},         // aucune tâche
-		{"txt\n⟢ fanout: alpha — ;; ;;", "", nil, false},   // tâches toutes vides
-		{"txt\n⟢ fanout: sans separateur", "", nil, false}, // pas d'em-dash
+		{"txt\n⟢ fanout:  — t1", "", nil, false},
+		{"txt\n⟢ fanout: alpha —", "", nil, false},
+		{"txt\n⟢ fanout: alpha — ;; ;;", "", nil, false},
+		{"txt\n⟢ fanout: sans separateur", "", nil, false},
 		{"aucun trailer", "", nil, false},
 	}
 	for _, tc := range cases {

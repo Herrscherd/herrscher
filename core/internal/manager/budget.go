@@ -2,9 +2,6 @@ package manager
 
 import "github.com/Herrscherd/herrscher/core/internal/state"
 
-// budgetReason returns the reason a session must pause AFTER the current turn,
-// or "" if it may continue. Session caps are checked before cohort caps so a
-// session-level trip names its own unit. A zero cap means uncapped.
 func budgetReason(sessionCost float64, sessionTokens uint64,
 	costCap float64, tokenCap uint64,
 	cohortCost float64, cohortTokens uint64,
@@ -25,8 +22,6 @@ func budgetReason(sessionCost float64, sessionTokens uint64,
 	return ""
 }
 
-// remaining is the distance left to a cap, floored at zero — a cap already
-// blown leaves no headroom rather than wrapping to a huge unsigned number.
 func remaining(limit, spent uint64) uint64 {
 	if spent >= limit {
 		return 0
@@ -48,9 +43,6 @@ type SessionBudgetGate struct {
 // interface structurally via Check.
 func (h *Handler) BudgetGate() *SessionBudgetGate { return &SessionBudgetGate{h: h} }
 
-// usageFor folds one session's transcript into (cost, tokens). Every budget
-// question derives from it rather than from a running counter, because the
-// transcript is the single source of truth for what a session has spent.
 func (g *SessionBudgetGate) usageFor(s state.Session) (float64, uint64) {
 	entries := state.ReadTranscript(state.TranscriptPath(g.h.partDir, s.Name), 0)
 	u, _ := aggregateUsage(entries)
@@ -96,11 +88,6 @@ func (g *SessionBudgetGate) Check(session string) (reason string, headroom uint6
 	return reason, headroom, capped
 }
 
-// cohortMembers returns every session in the parent forest that target belongs
-// to: the root ancestor and everything transitively reachable from it via
-// Parent. Same traversal as cohortTotals, but collects the Session values
-// instead of folding usage. Cycles are cut with a visited set, mirroring
-// cohortTotals' guard.
 func cohortMembers(target state.Session, all []state.Session) []state.Session {
 	byName := make(map[string]state.Session, len(all))
 	children := make(map[string][]string, len(all))
@@ -110,7 +97,6 @@ func cohortMembers(target state.Session, all []state.Session) []state.Session {
 			children[s.Parent] = append(children[s.Parent], s.Name)
 		}
 	}
-	// Climb to the root ancestor.
 	root := target
 	seen := map[string]bool{root.Name: true}
 	for root.Parent != "" && root.Parent != root.Name {
@@ -121,7 +107,6 @@ func cohortMembers(target state.Session, all []state.Session) []state.Session {
 		seen[p.Name] = true
 		root = p
 	}
-	// Walk the whole subtree from root, collecting members.
 	var members []state.Session
 	visited := map[string]bool{}
 	var walk func(name string)

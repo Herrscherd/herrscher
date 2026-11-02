@@ -11,13 +11,10 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// recordSink captures the events runHub emits.
 type recordSink struct{ events []contracts.Event }
 
 func (s *recordSink) Emit(e contracts.Event) { s.events = append(s.events, e) }
 
-// fakeBackend emits one text event (and optionally a terminal result carrying
-// cost) then returns a fixed reply.
 type fakeBackend struct {
 	reply string
 	cost  float64
@@ -34,9 +31,6 @@ func (b fakeBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func
 }
 func (fakeBackend) Close() error { return nil }
 
-// TestRunHubReplyCarriesCost proves the terminal result's cost is captured and
-// attached to the reply{done} (the result event itself carries no transcript and
-// is dropped), so the hub can render cost in the progress summary.
 func TestRunHubReplyCarriesCost(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)
@@ -80,8 +74,6 @@ func TestEmitBackendEventPanels(t *testing.T) {
 	}
 }
 
-// tokenBackend emits a live usage event, a text chunk, then a terminal result
-// carrying the final token count.
 type tokenBackend struct{ reply string }
 
 func (b tokenBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
@@ -92,8 +84,6 @@ func (b tokenBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent fun
 }
 func (tokenBackend) Close() error { return nil }
 
-// TestRunOneTurn_StampsTokens proves the live token count rides on chunk events
-// and the final count lands on the terminal reply.
 func TestRunOneTurn_StampsTokens(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)
@@ -117,9 +107,6 @@ func TestRunOneTurn_StampsTokens(t *testing.T) {
 	}
 }
 
-// agenticBackend is a turn made of several assistant messages, the way a turn
-// with tool calls actually streams: each message reports its OWN usage, never
-// the turn so far.
 type agenticBackend struct{ reply string }
 
 func (b agenticBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
@@ -132,11 +119,6 @@ func (b agenticBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent f
 }
 func (agenticBackend) Close() error { return nil }
 
-// TestRunOneTurn_AccumulatesUsageAcrossMessages proves the live output count
-// grows over a multi-message turn instead of tracking the last message's size.
-// Without the sum, a turn that streams thirty 20-token messages would forever
-// report 20, and the host's mid-turn budget guard — which compares that number
-// to the turn's headroom — would never see the runaway it exists to cut.
 func TestRunOneTurn_AccumulatesUsageAcrossMessages(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)
@@ -160,8 +142,6 @@ func TestRunOneTurn_AccumulatesUsageAcrossMessages(t *testing.T) {
 	}
 }
 
-// cacheBackend emits a terminal result carrying the full token breakdown
-// (input/output + prompt-cache read/creation).
 type cacheBackend struct{ reply string }
 
 func (b cacheBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
@@ -172,8 +152,6 @@ func (b cacheBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent fun
 }
 func (cacheBackend) Close() error { return nil }
 
-// TestRunOneTurn_StampsTokenBreakdown proves the reply carries the full token
-// breakdown (input/cache), not just output.
 func TestRunOneTurn_StampsTokenBreakdown(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)
@@ -188,9 +166,6 @@ func TestRunOneTurn_StampsTokenBreakdown(t *testing.T) {
 	}
 }
 
-// blockingBackend blocks in Respond until its turn ctx is cancelled, then
-// returns the ctx error — standing in for a claude turn that only stops on
-// interrupt.
 type blockingBackend struct{ started chan struct{} }
 
 func (b blockingBackend) Respond(ctx context.Context, _ contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
@@ -200,8 +175,6 @@ func (b blockingBackend) Respond(ctx context.Context, _ contracts.Prompt, _ func
 }
 func (blockingBackend) Close() error { return nil }
 
-// TestInbound_InterruptCancelsTurn proves an interrupt (via the controller)
-// cancels an in-flight turn so it terminates with a reply instead of hanging.
 func TestInbound_InterruptCancelsTurn(t *testing.T) {
 	ctrl := &turnController{}
 	sink := &recordSink{}
@@ -215,7 +188,7 @@ func TestInbound_InterruptCancelsTurn(t *testing.T) {
 	}()
 
 	in <- contracts.Event{T: "input", Text: "go"}
-	<-be.started // turn is now blocked in Respond
+	<-be.started
 	ctrl.interrupt()
 
 	close(in)
@@ -228,15 +201,11 @@ func TestInbound_InterruptCancelsTurn(t *testing.T) {
 	if last.T != "reply" || !last.Done {
 		t.Fatalf("interrupted turn must still emit reply{done}; got %+v", last)
 	}
-	// Esc used to answer "⚠️ context canceled", which reads as the tool breaking
-	// rather than obeying.
 	if last.Text != interruptNotice {
 		t.Fatalf("an interrupted turn must read as interrupted; got %q", last.Text)
 	}
 }
 
-// partialBackend produces some output, then blocks until its turn ctx is
-// cancelled and reports both.
 type partialBackend struct{ started chan struct{} }
 
 func (b partialBackend) Respond(ctx context.Context, _ contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
@@ -246,10 +215,6 @@ func (b partialBackend) Respond(ctx context.Context, _ contracts.Prompt, _ func(
 }
 func (partialBackend) Close() error { return nil }
 
-// TestInterruptKeepsPartialOutput: stopping a turn must not throw away what the
-// backend already produced — the work is worth more than the fact it was cut —
-// but the reply must say it was cut, or a truncated answer reads as a complete
-// one.
 func TestInterruptKeepsPartialOutput(t *testing.T) {
 	ctrl := &turnController{}
 	sink := &recordSink{}
@@ -281,9 +246,6 @@ func TestInterruptKeepsPartialOutput(t *testing.T) {
 	}
 }
 
-// TestBackendFailureStillReadsAsAFailure guards the other side of the switch: a
-// turn nobody interrupted must keep its error banner rather than being excused
-// as an interruption.
 func TestBackendFailureStillReadsAsAFailure(t *testing.T) {
 	sink := &recordSink{}
 	runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil)
@@ -359,11 +321,6 @@ func TestRunHubEmptyReplyStillTerminates(t *testing.T) {
 	}
 }
 
-// hangingBackend simulates a remote backend whose stream is lost mid-turn: the
-// first Respond emits an event then errors (the streaming proxy surfaces a
-// hangup that way); the second succeeds. It proves a stream loss ends the turn
-// cleanly via the existing reply{done} path and the next queued input is still
-// processed — the C3 abandonment guarantee, with no new abandonment path.
 type hangingBackend struct{ calls int }
 
 func (b *hangingBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
@@ -406,7 +363,7 @@ func TestRunHubBackendStreamLossAbandonsTurnThenContinues(t *testing.T) {
 func TestRunHubContextCancelStops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	in := make(chan contracts.Event) // never fed
+	in := make(chan contracts.Event)
 	done := make(chan struct{})
 	go func() { runHubTurns(ctx, in, &recordSink{}, fakeBackend{}, nil); close(done) }()
 	select {

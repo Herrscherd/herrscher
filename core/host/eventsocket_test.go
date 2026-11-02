@@ -14,8 +14,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// TestMarshalSessionEvent pins the wire contract Neublox's HerrscherEventSource
-// parses: session-tagged, one JSON line, the seven fields it reads.
 func TestMarshalSessionEvent(t *testing.T) {
 	line, err := marshalSessionEvent("sess-1", contracts.Event{
 		T: "thinking", Who: "seed", Text: "je réfléchis", Value: "", Done: false, Cost: 0,
@@ -42,8 +40,6 @@ func TestMarshalSessionEvent(t *testing.T) {
 	}
 }
 
-// TestEventSocketPublishReachesSubscriber drives the real unix socket end to end:
-// a subscriber connects, Publish streams a JSON line, the subscriber reads it.
 func TestEventSocketPublishReachesSubscriber(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -54,8 +50,6 @@ func TestEventSocketPublishReachesSubscriber(t *testing.T) {
 	conn := dialWithRetry(t, path)
 	defer conn.Close()
 
-	// Give serveEventsSocket a beat to register the accepted connection before
-	// publishing (Accept races the dial's return).
 	waitForSubscriber(t, es)
 
 	es.Publish("sess-1", contracts.Event{T: "chunk", Text: "hello"})
@@ -78,15 +72,11 @@ func TestEventSocketPublishReachesSubscriber(t *testing.T) {
 	}
 }
 
-// TestPublishNilSocketNoop guards the seed/CLI path: a nil *eventSocket must not
-// panic on Publish.
 func TestPublishNilSocketNoop(t *testing.T) {
 	var es *eventSocket
-	es.Publish("s", contracts.Event{T: "chunk"}) // must not panic
+	es.Publish("s", contracts.Event{T: "chunk"})
 }
 
-// TestFanOutFiresEmitTap proves the driver tap sees every fanned event even with
-// nil gateways (the seed path shape).
 func TestFanOutFiresEmitTap(t *testing.T) {
 	var got []contracts.Event
 	d := newSessionDriver("s", nil, nil, nil)

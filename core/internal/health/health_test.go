@@ -21,7 +21,7 @@ func TestHealthSnapshotOnline(t *testing.T) {
 func TestHealthGoesOfflineWhenHeartbeatStale(t *testing.T) {
 	h := NewHealth(time.Unix(1000, 0))
 	h.HeartbeatAck(time.Unix(1005, 0))
-	snap := h.Snapshot(time.Unix(2000, 0), 30*time.Second) // 995s since last ack
+	snap := h.Snapshot(time.Unix(2000, 0), 30*time.Second)
 	if snap.Online {
 		t.Fatal("expected offline (heartbeat stale)")
 	}

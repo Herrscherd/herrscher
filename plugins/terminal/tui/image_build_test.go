@@ -12,13 +12,8 @@ import (
 	"testing"
 )
 
-// kittyCaps is the terminal these preview tests are written against: the kitty
-// protocol is the one whose payload round-trips to a decodable image.
 var kittyCaps = Capabilities{Graphics: GraphicsKitty}
 
-// noiseImage is a w×h image of noise, from a fixed seed. Noise and not a
-// gradient: PNG compresses a smooth image to a few hundred bytes whatever its
-// dimensions, and the bounds under test are on bytes.
 func noiseImage(w, h int) image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	rnd := rand.New(rand.NewSource(1))
@@ -30,9 +25,6 @@ func noiseImage(w, h int) image.Image {
 	return img
 }
 
-// pngFile writes a w×h PNG and returns its path. Real bytes rather than a
-// plausible-looking blob: the preview path decodes what it is given, so a fixture
-// that does not decode would test the skip and call it a preview.
 func pngFile(t *testing.T, dir, name string, w, h int) string {
 	t.Helper()
 	var buf bytes.Buffer
@@ -60,17 +52,15 @@ func TestPreviewEscapesOnlyReadableImages(t *testing.T) {
 
 	atts := []Attachment{
 		{Name: "shot.png", Path: shot, Mime: "image/png"},
-		{Name: "notes.txt", Path: txt, Mime: "text/plain"},                          // not an image → skipped
-		{Name: "gone.png", Path: filepath.Join(dir, "gone.png"), Mime: "image/png"}, // missing → skipped
-		{Name: "broken.png", Path: broken, Mime: "image/png"},                       // undecodable → skipped
+		{Name: "notes.txt", Path: txt, Mime: "text/plain"},
+		{Name: "gone.png", Path: filepath.Join(dir, "gone.png"), Mime: "image/png"},
+		{Name: "broken.png", Path: broken, Mime: "image/png"},
 	}
 
 	out := previewEscapes(atts, kittyCaps)
 	if strings.Count(out, "\x1b_G") == 0 {
 		t.Fatal("a readable PNG must produce a kitty graphics escape")
 	}
-	// Exactly one image contributed, and what it carries is a decodable PNG: the
-	// bytes the terminal is handed are bytes this package has read.
 	if _, err := decodeImage(apcPayload(t, out)); err != nil {
 		t.Fatalf("the transmitted payload must be a decodable image: %v", err)
 	}
@@ -85,11 +75,6 @@ func TestPreviewEscapesEmptyWhenNoImages(t *testing.T) {
 	}
 }
 
-// TestPreviewEscapesSkipsLargeImages guards the inline-preview budget: an image
-// whose *escape* outgrows maxPreviewBytes must fall back to the chip alone, so
-// its base64 blob is never re-scanned by the viewport's per-repaint width
-// computation. The bound is on the escape, so the fixture is an image that stays
-// large after downscaling — wide rather than tall, since only height is capped.
 func TestPreviewEscapesSkipsLargeImages(t *testing.T) {
 	dir := t.TempDir()
 	big := pngFile(t, dir, "big.png", 4000, 200)

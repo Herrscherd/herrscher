@@ -12,8 +12,6 @@ import (
 
 func newTestModel() *model { return newModel(nil) }
 
-// runCmd executes a tea.Cmd (and any single follow-up message) so tests can
-// drive commands that now run off the Update loop. Nil is a no-op.
 func runCmd(cmd tea.Cmd) tea.Msg {
 	if cmd == nil {
 		return nil
@@ -36,7 +34,7 @@ func TestRoutedEventLandsInOwnTab(t *testing.T) {
 
 func TestUnreadSetOnInactiveTab(t *testing.T) {
 	m := newTestModel()
-	m.ensureTab("a") // first tab becomes active
+	m.ensureTab("a")
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: "chunk", Text: "x"}})
 	if !m.tabs["b"].unread {
 		t.Fatal("event on inactive tab b must mark it unread")
@@ -52,7 +50,7 @@ func TestSwitchTabClearsUnread(t *testing.T) {
 	m.ensureTab("b")
 	m.tabs["b"].unread = true
 	m.active = "a"
-	m.switchTab(1) // move to next tab -> b
+	m.switchTab(1)
 	if m.active != "b" {
 		t.Fatalf("active = %q, want b", m.active)
 	}
@@ -88,7 +86,6 @@ func TestRenderEventMarksAbandonedPerTab(t *testing.T) {
 	}
 }
 
-// fakeBackend satisfies the Backend interface for unit tests.
 type closedSession struct {
 	name  string
 	force bool
@@ -105,7 +102,6 @@ type fakeBackend struct {
 	interrupted []string
 }
 
-// submittedTurn records a Submit call so tests can assert attachments were wired.
 type submittedTurn struct {
 	channel string
 	text    string
@@ -165,8 +161,6 @@ func TestBareSlashDoesNotDispatch(t *testing.T) {
 	m := newModel(f)
 	m.ensureTab("a")
 	m.active = "a"
-	// A lone "/" is the palette prefix; pressing Enter on it must not dispatch an
-	// empty argv (which the hub rejects with `error: command ""` on startup).
 	m.input.SetValue("/")
 	runCmd(m.handleEnter())
 	if len(f.dispatched) != 0 {
@@ -193,8 +187,6 @@ func TestReopenedTabSeedsDimmedScrollback(t *testing.T) {
 		},
 	}
 	m := newModel(f)
-	// Opening the tab (a live event on a not-yet-seen channel) must seed the
-	// recorded history first, then append the live line after it.
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: "chunk", Text: "live"}})
 	joined := tabText(m.tabs["c"])
 	if !strings.Contains(joined, "old-q") || !strings.Contains(joined, "old-a") {
@@ -249,12 +241,10 @@ func TestResumePickerRevivesArchivedAndFocusesLive(t *testing.T) {
 	if !m.resumeOpen {
 		t.Fatal("picker should be open")
 	}
-	// newest LastTs first → the archived row sorts to the top.
 	if len(m.resumeRows) != 2 || m.resumeRows[0].Name != "arch" {
 		t.Fatalf("rows not sorted by LastTs desc: %+v", m.resumeRows)
 	}
 
-	// Enter on the archived row revives it and opens+focuses its (seeded) tab.
 	cmd := m.chooseResume()
 	if m.active != "ca" {
 		t.Fatalf("archived choice must focus its tab; active=%q", m.active)
@@ -270,7 +260,6 @@ func TestResumePickerRevivesArchivedAndFocusesLive(t *testing.T) {
 		t.Fatalf("archived choice must call Resume: %+v", f.resumed)
 	}
 
-	// A live session with an existing tab: Enter focuses it, no second Resume.
 	m.openResume()
 	for i, r := range m.resumeRows {
 		if r.Name == "live" {
@@ -332,7 +321,6 @@ func TestResizeSyncsViewport(t *testing.T) {
 	m.ensureTab("a")
 	m.tabs["a"].entries = []entry{{role: roleAgent, text: "line1"}, {role: roleAgent, text: "line2"}, {role: roleAgent, text: "line3"}}
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	// second size message exercises the resize (else) branch
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	if m.vp.Width != 100 || m.vp.Height != 25 {
 		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 25)", m.vp.Width, m.vp.Height)
@@ -370,7 +358,7 @@ func TestCloseActiveDispatchesClose(t *testing.T) {
 	tb := m.ensureTab("terminal/alpha-1")
 	tb.label = "alpha"
 	m.active = "terminal/alpha-1"
-	runCmd(m.confirmClose()) // simulate confirmed close
+	runCmd(m.confirmClose())
 	if len(f.closed) != 1 {
 		t.Fatalf("close not issued: %+v", f.closed)
 	}
@@ -382,10 +370,6 @@ func TestCloseActiveDispatchesClose(t *testing.T) {
 	}
 }
 
-// "/session close" with no name closes the session in front. The palette
-// completes the verb to "/session close --name ", which the daemon's parser can
-// only answer with "flag --name needs a value" — it does not know which tab you
-// are looking at, and the frontend does.
 func TestSlashSessionCloseClosesTheActiveSession(t *testing.T) {
 	for _, line := range []string{"/session close", "/session close --name", "/session close --force"} {
 		f := &fakeBackend{}
@@ -410,7 +394,6 @@ func TestSlashSessionCloseClosesTheActiveSession(t *testing.T) {
 	}
 }
 
-// A named close still closes what it names, from whichever tab it was typed in.
 func TestSlashSessionCloseHonoursAnExplicitName(t *testing.T) {
 	for _, line := range []string{"/session close --name beta", "/session close --name=beta", "/session close beta"} {
 		f := &fakeBackend{}
@@ -443,13 +426,11 @@ func TestQuestionMarkTogglesHelpWhenEmpty(t *testing.T) {
 	if m.showHelp {
 		t.Fatal("help must start off")
 	}
-	// Send ? with empty input
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")}
 	m.Update(msg)
 	if !m.showHelp {
 		t.Fatal("? with empty input must toggle help on")
 	}
-	// Send ? again to toggle off
 	m.Update(msg)
 	if m.showHelp {
 		t.Fatal("? with empty input must toggle help off")
@@ -462,26 +443,19 @@ func TestQuestionMarkTypedWhenInputNonEmpty(t *testing.T) {
 	if m.showHelp {
 		t.Fatal("help must start off")
 	}
-	// Send ? with non-empty input
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")}
 	m.Update(msg)
 	if m.showHelp {
 		t.Fatal("? with non-empty input must not toggle help")
 	}
-	// Verify ? was typed into input (should have "foo?")
 	if !strings.Contains(m.input.Value(), "?") {
 		t.Fatalf("? must be typed into input: got %q", m.input.Value())
 	}
 }
 
-// TestShortcutsPanelListsClaudeKeys checks the shortcuts panel names the Claude
-// key affordances a returning user reaches for.
 func TestShortcutsPanelListsClaudeKeys(t *testing.T) {
 	m := newTestModel()
 	panel := m.helpView()
-	// Shift+Enter first — it is the gesture people arrive with — but the
-	// backslash stays named beside it, since it is the one that needs nothing
-	// from the terminal.
 	for _, want := range []string{"échap interrompre", `⇧⏎ ou \⏎ nouvelle ligne`, "/ commandes", "@ fichiers"} {
 		if !strings.Contains(panel, want) {
 			t.Fatalf("shortcuts panel missing %q: %q", want, panel)
@@ -489,8 +463,6 @@ func TestShortcutsPanelListsClaudeKeys(t *testing.T) {
 	}
 }
 
-// TestHistoryRecallsLastPrompt checks ↑ on an empty composer recalls the most
-// recently submitted prompt.
 func TestHistoryRecallsLastPrompt(t *testing.T) {
 	f := &fakeBackend{}
 	m := newModel(f)
@@ -508,8 +480,6 @@ func TestHistoryRecallsLastPrompt(t *testing.T) {
 	}
 }
 
-// TestSpinnerHintShowsTokensAndCost checks the active-turn spinner renders the
-// interrupt affordance, elapsed time, token count, and cost.
 func TestSpinnerHintShowsTokensAndCost(t *testing.T) {
 	m := newTestModel()
 	tb := &tab{
@@ -536,8 +506,6 @@ func TestFormatTokens(t *testing.T) {
 	}
 }
 
-// TestSessionSwitchOpensAndFocuses checks /session switch opens the picker and
-// Enter swaps the active transcript to the chosen session.
 func TestSessionSwitchOpensAndFocuses(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{
 		{Name: "one", ChannelID: "one"},
@@ -552,7 +520,7 @@ func TestSessionSwitchOpensAndFocuses(t *testing.T) {
 	if !m.switchOpen {
 		t.Fatal("/session switch must open the switcher")
 	}
-	m.switchIdx = 1 // select "two"
+	m.switchIdx = 1
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if m.switchOpen {
 		t.Fatal("switcher must close after a selection")
@@ -562,8 +530,6 @@ func TestSessionSwitchOpensAndFocuses(t *testing.T) {
 	}
 }
 
-// TestEscInterruptsActiveTurn checks esc emits an interrupt for the active
-// session while a turn is in flight (instead of quitting).
 func TestEscInterruptsActiveTurn(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
 	m := newModel(f)
@@ -583,13 +549,11 @@ func TestPendingCloseCtrlCQuits(t *testing.T) {
 	if !m.pendingClose {
 		t.Fatal("pendingClose must be true")
 	}
-	// Send Ctrl+C while pendingClose is true
 	msg := tea.KeyMsg{Type: tea.KeyCtrlC}
 	_, cmd := m.Update(msg)
 	if m.pendingClose {
 		t.Fatal("Ctrl+C during pendingClose must clear pendingClose")
 	}
-	// tea.Quit() is a function that returns a Cmd; we verify cmd is not nil (it's the quit command)
 	if cmd == nil {
 		t.Fatal("Ctrl+C during pendingClose must return a quit command")
 	}
@@ -598,13 +562,11 @@ func TestPendingCloseCtrlCQuits(t *testing.T) {
 func TestPendingCloseEscQuits(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.pendingClose = true
-	// Send Esc while pendingClose is true
 	msg := tea.KeyMsg{Type: tea.KeyEsc}
 	_, cmd := m.Update(msg)
 	if m.pendingClose {
 		t.Fatal("Esc during pendingClose must clear pendingClose")
 	}
-	// tea.Quit() is a function that returns a Cmd; we verify cmd is not nil
 	if cmd == nil {
 		t.Fatal("Esc during pendingClose must return a quit command")
 	}
@@ -613,7 +575,6 @@ func TestPendingCloseEscQuits(t *testing.T) {
 func TestPendingCloseOtherKeyCancels(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.pendingClose = true
-	// Send 'n' (any non-y key) while pendingClose is true
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
 	_, cmd := m.Update(msg)
 	if m.pendingClose {
@@ -624,8 +585,6 @@ func TestPendingCloseOtherKeyCancels(t *testing.T) {
 	}
 }
 
-// tabText joins a tab's logical entry bodies, for substring assertions that used
-// to run over the old pre-rendered lines.
 func tabText(tb *tab) string {
 	parts := make([]string, len(tb.entries))
 	for i, e := range tb.entries {
@@ -634,7 +593,6 @@ func tabText(tb *tab) string {
 	return strings.Join(parts, "\n")
 }
 
-// tabLineCount counts how many entries contain needle in their body text.
 func tabLineCount(tb *tab, needle string) int {
 	n := 0
 	for _, e := range tb.entries {
@@ -666,7 +624,6 @@ func TestSubmitMarksBusyImmediately(t *testing.T) {
 func TestStreamedReplyNotDuplicated(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.ensureTab("a")
-	// A streamed turn: chunk carries the text, the final reply repeats it.
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "chunk", Text: "the answer"}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "the answer", Done: true}})
 	if got := tabLineCount(m.tabs["a"], "the answer"); got != 1 {
@@ -680,7 +637,6 @@ func TestStreamedReplyNotDuplicated(t *testing.T) {
 func TestNonStreamedReplyRendersOnce(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.ensureTab("a")
-	// No chunk first: the reply is the only carrier of the text.
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "direct answer", Done: true}})
 	if got := tabLineCount(m.tabs["a"], "direct answer"); got != 1 {
 		t.Fatalf("non-streamed reply must render exactly once: got %d\n%+v", got, m.tabs["a"].entries)
@@ -692,7 +648,6 @@ func TestThinkingLineDerivedWhileBusyNoStream(t *testing.T) {
 	tb := m.ensureTab("a")
 	tb.busy = true
 	tb.streamed = false
-	// The thinking indicator is derived at render time, never stored in lines.
 	if tabLineCount(tb, "thinking") != 0 {
 		t.Fatal("thinking indicator must not be appended to tab.lines")
 	}
@@ -725,14 +680,10 @@ func TestPaletteOpensAndCompletes(t *testing.T) {
 	if m.paletteOpen() {
 		t.Fatal("palette must be closed with empty input")
 	}
-	// Typing "/" opens the palette.
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
 	if !m.paletteOpen() {
 		t.Fatal("typing / must open the palette")
 	}
-	// Tab completes the selected command and pre-seeds its first flag, so the
-	// operator lands on the value to type. Narrow to a command that has one:
-	// the palette now leads with the local overlays, which take no flags.
 	m.input.SetValue("/session create")
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if m.input.Value() != "/session create --name " {
@@ -747,17 +698,14 @@ func TestSpinnerStartsOnBusyStopsWhenIdle(t *testing.T) {
 	if m.spinning {
 		t.Fatal("spinner must be idle at rest — no timer scheduled when nothing animates")
 	}
-	// Submitting a message goes busy and must start the animation timer.
 	m.input.SetValue("hi")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if !m.spinning || cmd == nil {
 		t.Fatal("submit must flip busy and start the spinner")
 	}
-	// ensureSpin is idempotent: a concurrent busy event must not stack a timer.
 	if m.ensureSpin() != nil {
 		t.Fatal("ensureSpin must not schedule a second ticker while one runs")
 	}
-	// The turn completes; the next spin tick must stop the timer rather than reschedule.
 	m.tabs["a"].busy = false
 	_, cmd = m.Update(spinMsg{})
 	if m.spinning || cmd != nil {
@@ -777,9 +725,6 @@ func TestPaletteEscClosesWithoutQuitting(t *testing.T) {
 	}
 }
 
-// TestThinkingEventReachesTheTranscript is a regression test: the bus has always
-// emitted thinking events and renderInto had no case for them, so the agent's
-// reasoning was dropped on the floor rather than shown.
 func TestThinkingEventReachesTheTranscript(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("a")
@@ -792,8 +737,6 @@ func TestThinkingEventReachesTheTranscript(t *testing.T) {
 	}
 }
 
-// TestHostErrorRendersAsAnError checks a status line the host has flagged is not
-// filed alongside ordinary tool calls.
 func TestHostErrorRendersAsAnError(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("a")
@@ -807,10 +750,6 @@ func TestHostErrorRendersAsAnError(t *testing.T) {
 	}
 }
 
-// TestHostFailureOnReplyRendersAsAnError is where host failures actually arrive:
-// core/bridge marks the *reply* when a backend fails with no output, not a status
-// event. Rendered as prose it would go through the markdown engine and read as an
-// ordinary answer.
 func TestHostFailureOnReplyRendersAsAnError(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{
@@ -826,8 +765,6 @@ func TestHostFailureOnReplyRendersAsAnError(t *testing.T) {
 	}
 }
 
-// TestEmptyThinkingIsDropped keeps a reasoning event with no text from opening a
-// blank entry: the hub drops empty tool lines but not empty thinking ones.
 func TestEmptyThinkingIsDropped(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "thinking", Text: "  "}})

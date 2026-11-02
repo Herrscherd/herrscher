@@ -9,10 +9,6 @@ import (
 	"testing"
 )
 
-// TestJSONStringInnerEscapes pins the Windows-path guarantee: a worktree path
-// with backslashes or a quote must be escaped so it stays valid inside a JSON
-// string value. On POSIX the path is unchanged (no escaping needed), which is
-// why materialize's JSON output was accidentally valid before this fix.
 func TestJSONStringInnerEscapes(t *testing.T) {
 	cases := map[string]string{
 		`/home/me/wt`:    `/home/me/wt`,
@@ -24,7 +20,6 @@ func TestJSONStringInnerEscapes(t *testing.T) {
 		if got := jsonStringInner(in); got != want {
 			t.Errorf("jsonStringInner(%q) = %q, want %q", in, got, want)
 		}
-		// The escaped inner must round-trip as a JSON string back to the input.
 		var out string
 		if err := json.Unmarshal([]byte(`"`+jsonStringInner(in)+`"`), &out); err != nil || out != in {
 			t.Errorf("round-trip %q: got %q err=%v", in, out, err)
@@ -127,9 +122,6 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 	if len(status) != 0 {
 		t.Fatalf("fresh materialized worktree is dirty:\n%s", status)
 	}
-	// .herrscher/ is not materialized (the bridge fills it at session start), so
-	// it is checked through a path inside it, which is what git would actually be
-	// asked about once a learned skill lands there.
 	for _, path := range []string{".claude", ".codex", ".mcp.json", "AGENTS.md", ".herrscher/skills/x/SKILL.md"} {
 		if out, err := exec.Command("git", "-C", worktree, "check-ignore", "--quiet", "--", path).CombinedOutput(); err != nil {
 			t.Fatalf("%s is not locally ignored: %v\n%s", path, err, out)
@@ -172,9 +164,6 @@ func TestMaterializeWithUserProfile(t *testing.T) {
 		t.Fatalf("worktree token not substituted: %q", user)
 	}
 	claude, _ := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
-	// The import must be @USER.md (sibling), not @.claude/USER.md: Claude Code
-	// resolves relative imports against CLAUDE.md's own .claude/ directory, so a
-	// .claude/ prefix would point at the nonexistent .claude/.claude/USER.md.
 	if !strings.Contains(string(claude), "# Soul") || !strings.Contains(string(claude), "@USER.md") {
 		t.Fatalf("CLAUDE.md missing soul or import: %q", claude)
 	}
@@ -208,9 +197,6 @@ func TestMaterializeWithoutUserProfileUnchanged(t *testing.T) {
 	}
 }
 
-// The destination and the path written INTO the files are the same directory
-// when materializing in place, and differ when the files are staged here to be
-// shipped to a worktree on another machine.
 func TestMaterializeIntoWritesTheOtherMachinesPath(t *testing.T) {
 	store := NewStore(t.TempDir())
 	a, err := store.Create(CreateSpec{Name: "roblox", Soul: "worktree is {{WORKTREE}}", MCP: "neublox serve --project {{WORKTREE}}"})

@@ -345,7 +345,6 @@ func TestSetBudgetWritesAllFieldsAndPersists(t *testing.T) {
 		t.Fatalf("paused reason = %q, want cleared", got.PausedReason)
 	}
 
-	// Unknown session is a no-op, not an error.
 	if err := st.SetBudget("ghost", 1, 1, 1, 1, "cost"); err != nil {
 		t.Fatalf("SetBudget on unknown session should be a no-op, got err: %v", err)
 	}
@@ -407,8 +406,6 @@ func TestRolesRoundTripThroughTheFile(t *testing.T) {
 	}
 }
 
-// The pure package decides from principal and role alone. Handing it the whole
-// record would hand it a display label it must never read.
 func TestRoleNamesDropsTheLabel(t *testing.T) {
 	st, err := LoadState(filepath.Join(t.TempDir(), "state.json"))
 	if err != nil {
@@ -423,8 +420,6 @@ func TestRoleNamesDropsTheLabel(t *testing.T) {
 	}
 }
 
-// A caller that mutates what it got back must not be mutating the daemon's
-// authorization table.
 func TestRoleAccessorsHandBackCopies(t *testing.T) {
 	st, err := LoadState(filepath.Join(t.TempDir(), "state.json"))
 	if err != nil {
@@ -470,8 +465,6 @@ func TestRemoveRoleReportsWhetherItWasThere(t *testing.T) {
 	}
 }
 
-// Empty again is the state an install starts in, and it must mean the same
-// thing: the daemon decides nothing about humans.
 func TestRevokingTheLastRoleMakesTheNextGrantTheFirstAgain(t *testing.T) {
 	st, err := LoadState(filepath.Join(t.TempDir(), "state.json"))
 	if err != nil {

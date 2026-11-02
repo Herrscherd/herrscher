@@ -18,21 +18,14 @@ import (
 // control.SessionVar for why it is declared over there.
 const SessionVar = control.SessionVar
 
-// hookEvent is the one Claude Code event this hook answers. It is both what we
-// refuse to answer for anything else and what we echo back in the decision.
 const hookEvent = "PreToolUse"
 
-// hookInput is the part of Claude Code's PreToolUse payload we read. The rest
-// of the payload is ignored on purpose: a field we do not use is a field whose
-// renaming cannot break us.
 type hookInput struct {
 	HookEventName string         `json:"hook_event_name"`
 	ToolName      string         `json:"tool_name"`
 	ToolInput     map[string]any `json:"tool_input"`
 }
 
-// hookAsker runs one argv against the daemon. handled is false when nothing was
-// listening, which is a different answer from an error.
 type hookAsker func(ctx context.Context, argv []string) (string, bool, error)
 
 // RunPermissionHook is the whole hook process: read the vendor's payload, ask
@@ -67,9 +60,6 @@ func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer,
 		writeHookDecision(out, errOut, "allow", "")
 		return
 	case payload.HookEventName != "" && payload.HookEventName != hookEvent:
-		// Only PreToolUse asks a question this hook can answer. Anything else is
-		// a mis-edited settings file, and answering it as if it were a tool call
-		// would put the wrong event name in the reply.
 		fmt.Fprintf(errOut, "herrscher: this hook answers %s, not %q, allowing\n", hookEvent, payload.HookEventName)
 		writeHookDecision(out, errOut, "allow", "")
 		return
@@ -86,11 +76,6 @@ func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer,
 		return
 	}
 
-	// cli.FlagArg rather than a hand-written pair: the subject is free text taken
-	// from the tool call (a command, a url, a query), so it can begin with "--",
-	// which the daemon's parser refuses as a value in the two-token form. The
-	// tool name and the session go through it for the same reason, both being
-	// strings this process was handed rather than ones it chose.
 	argv := append([]string{"approve", "ask"}, cli.FlagArg("session", session)...)
 	argv = append(argv, cli.FlagArg("tool", payload.ToolName)...)
 	argv = append(argv, cli.FlagArg("subject", approval.SubjectOf(payload.ToolName, payload.ToolInput))...)
@@ -143,8 +128,6 @@ func RunApprovalHook(ctx context.Context, in io.Reader, out, errOut io.Writer) {
 	})
 }
 
-// writeHookDecision renders the one shape Claude Code reads back from a
-// PreToolUse hook.
 func writeHookDecision(out, errOut io.Writer, decision, reason string) {
 	type specific struct {
 		HookEventName            string `json:"hookEventName"`
@@ -155,9 +138,6 @@ func writeHookDecision(out, errOut io.Writer, decision, reason string) {
 		HookSpecificOutput specific `json:"hookSpecificOutput"`
 	}{specific{HookEventName: hookEvent, PermissionDecision: decision, PermissionDecisionReason: reason}})
 	if err != nil {
-		// Three strings cannot fail to marshal, so this arm is unreachable today.
-		// It is written anyway because staying silent on both streams is the one
-		// outcome this hook must never have.
 		fmt.Fprintf(errOut, "herrscher: could not write the %s decision, allowing: %v\n", decision, err)
 		return
 	}

@@ -7,10 +7,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// TestSessionCreatePersistsLearningConfig is the host-side end of the P1 write
-// path: `session create` with extractor/journal/consolidate_every must land on
-// the persisted Session, so the supervisor can thread them to the bridge and the
-// orchestrator builds a Learner instead of the plain Curator.
 func TestSessionCreatePersistsLearningConfig(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -46,7 +42,6 @@ func TestSessionCreatePersistsVendor(t *testing.T) {
 	}
 }
 
-// TestSessionCreateRejectsBadConsolidateEvery guards the only parsed integer.
 func TestSessionCreateRejectsBadConsolidateEvery(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})

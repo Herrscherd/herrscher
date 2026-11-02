@@ -18,16 +18,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
-// The remote path is the one piece the unit tests can only approximate: they
-// drive fakes, so they prove the argv is right and never that the far side
-// agrees. This test drives a real ssh target end to end, which is why it is
-// opt-in rather than skipped-by-default noise:
-//
-//	HERRSCHER_E2E_SSH=me@build1 go test ./core/host/ -run TestE2ERemote -v
-//
-// Any reachable machine works, including this one over a local sshd. The
-// account needs git, a writable home, and nothing else: the binary under test
-// is cross-compiled and shipped by the test itself.
 func e2eTarget(t *testing.T) string {
 	t.Helper()
 	target := os.Getenv("HERRSCHER_E2E_SSH")
@@ -37,24 +27,19 @@ func e2eTarget(t *testing.T) string {
 	return target
 }
 
-// sourceRoot walks up from this package to the module root, which is what
-// provisioning builds from.
 func sourceRoot(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := filepath.Dir(filepath.Dir(wd)) // core/host -> core -> module root
+	root := filepath.Dir(filepath.Dir(wd))
 	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
 		t.Fatalf("cannot find the module root from %s: %v", wd, err)
 	}
 	return root
 }
 
-// TestE2ERemoteProvisionAndWorktree walks the whole remote chain: provision a
-// host, clone a project onto it, create a worktree there, materialize an agent
-// into it, then remove it.
 func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	target := e2eTarget(t)
 	ctx := context.Background()
@@ -86,7 +71,6 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 		t.Fatalf("a freshly provisioned host must check clean, got %+v", rep)
 	}
 
-	// A project with an origin here is what the host clones from.
 	origin := filepath.Join(t.TempDir(), "origin.git")
 	mustGit(t, "", "init", "-q", "--bare", origin)
 	project := filepath.Join(local, "app")
@@ -107,7 +91,6 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	if err := p.EnsureProject(ctx, "e2e", "app", repo); err != nil {
 		t.Fatalf("clone onto the host: %v", err)
 	}
-	// A second call must be a no-op rather than a second clone.
 	if err := p.EnsureProject(ctx, "e2e", "app", repo); err != nil {
 		t.Fatalf("re-ensure: %v", err)
 	}
@@ -131,8 +114,6 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 		t.Fatal("the worktree just created must read as pre-existing")
 	}
 
-	// Agent materialization: the files are rendered here with the remote path
-	// substituted, shipped as one tar stream, and unpacked over there.
 	a, err := agent.NewStore(t.TempDir()).Create(agent.CreateSpec{Name: "e2e", Soul: "# E2E\n"})
 	if err != nil {
 		t.Fatal(err)
@@ -147,8 +128,6 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	if !strings.Contains(soul, "# E2E") {
 		t.Fatalf("the agent's soul must land in the remote worktree, got %q", soul)
 	}
-	// The hook must name the binary of the machine the session runs on: the
-	// daemon's own path means nothing over there.
 	settings, err := capture(ctx, runnerFor(provisioned), "cat", path+"/.claude/settings.json")
 	if err != nil {
 		t.Fatalf("read the materialized settings: %v", err)
@@ -169,10 +148,6 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	}
 }
 
-// TestE2ERemoteCommandSocketForward is the other half of a remote session: the
-// agent over there runs `herrscher <verb>` and it must reach THIS daemon. That
-// is what the second -R forward buys, and it is the one claim the unit tests
-// can only assert the argv of.
 func TestE2ERemoteCommandSocketForward(t *testing.T) {
 	target := e2eTarget(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -185,24 +160,16 @@ func TestE2ERemoteCommandSocketForward(t *testing.T) {
 		t.Fatalf("provision: %v", err)
 	}
 
-	// A daemon here, reduced to the one thing the far side asks of it. Its socket
-	// is this machine's, at this machine's path; the forward is what makes it
-	// answer under the session's remote name.
 	const instID = "e2efwd"
 	local := filepath.Join(os.TempDir(), "herrscher-e2e-daemon.sock")
 	remote := control.RemoteCommandSocketPath("e2e-session")
 	go serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
 	waitForSocket(t, local)
 
-	// No ControlPath, exactly as the launch builds it: forwards must belong to
-	// this connection and not to a master that outlives it.
 	run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
 	if prep := run.PrepareForwards(ctx); prep != nil {
 		_ = prep.Run()
 	}
-	// The env block is the launch's, minus what only a bridge needs: the socket
-	// path the forward bound, and a state dir that keeps a herrscher already
-	// installed over there from claiming the verb.
 	remoteState, err := capture(ctx, runnerFor(provisioned), "mktemp", "-d")
 	if err != nil {
 		t.Fatal(err)
@@ -221,11 +188,6 @@ func TestE2ERemoteCommandSocketForward(t *testing.T) {
 	}
 }
 
-// TestE2ETwoSessionsReachTheDaemonAtOnce is the case unit tests cannot see: two
-// sessions on one host, both forwarding the same daemon socket, at the same
-// time. It is the whole reason the remote path is named after the session and
-// the launch owns its connection, and both agents must reach the daemon while
-// the other is still running.
 func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	target := e2eTarget(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -245,7 +207,6 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	go serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
 	waitForSocket(t, local)
 
-	// Two launches, held open the way a bridge holds its ssh open.
 	sessions := []string{"e2e-one", "e2e-two"}
 	for _, name := range sessions {
 		remote := control.RemoteCommandSocketPath(name)
@@ -277,9 +238,6 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	}
 }
 
-// waitForRemoteSocket waits for a forwarded socket to appear over there. The
-// bind happens as the connection comes up, so it is ready shortly after Start
-// returns and not at it.
 func waitForRemoteSocket(ctx context.Context, t *testing.T, run hostRunner, path string) {
 	t.Helper()
 	for i := 0; i < 100; i++ {
@@ -291,7 +249,6 @@ func waitForRemoteSocket(ctx context.Context, t *testing.T, run hostRunner, path
 	t.Fatalf("the forward never bound %s", path)
 }
 
-// remoteWorkspace makes a scratch workspace over there and returns its path.
 func remoteWorkspace(ctx context.Context, t *testing.T, target string) string {
 	t.Helper()
 	run := runner.SSH{Target: target, ControlPath: runner.ControlPathFor(target)}

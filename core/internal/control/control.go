@@ -23,11 +23,6 @@ func SafeSessionName(session string) string {
 	}, session)
 }
 
-// remoteSocketDir is where a socket lands on a machine that is not this one.
-// It is fixed rather than taken from os.TempDir(), which reads THIS machine's
-// environment and would name a directory the far side may not have. /tmp is
-// also the shortest path every POSIX host has, and sun_path caps a socket path
-// at 108 bytes.
 const remoteSocketDir = "/tmp"
 
 // RemoteSocketPath is SocketPath for another machine.

@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// useMarker matches an activation marker the model emits to request a skill,
-// tolerant of surrounding whitespace and case: <use-skill> NAME </use-skill>.
 var useMarker = regexp.MustCompile(`(?i)<\s*use-skill\s*>\s*([^<]+?)\s*<\s*/\s*use-skill\s*>`)
 
 // Engine runs progressive disclosure for one session: it holds the discovered
@@ -17,10 +15,6 @@ type Engine struct {
 	byName map[string]Skill
 	order  []string
 	active map[string]bool
-	// byPath is the last scan keyed by SKILL.md path, so a rescan can tell an
-	// unchanged file from an edited one; bodies caches the stripped body of every
-	// skill whose body has been expanded at least once. Both are dropped for a
-	// file that changed or disappeared, and only for those.
 	byPath map[string]Skill
 	bodies map[string]string
 }
@@ -33,8 +27,6 @@ func NewEngine(roots []string) *Engine {
 	return e
 }
 
-// load (re-)discovers the skills under the engine's roots, replacing the menu.
-// The active set is preserved except for skills that have disappeared.
 func (e *Engine) load() {
 	found, reread := discover(e.roots, e.byPath)
 	e.byName = map[string]Skill{}
@@ -45,9 +37,6 @@ func (e *Engine) load() {
 		e.byPath[s.bodyPath] = s
 		e.order = append(e.order, s.Name)
 	}
-	// A body cached from a file that has since been edited would be handed to the
-	// model as the skill's current instructions, which is worse than not caching
-	// at all; one whose skill has vanished would just never be evicted.
 	for _, p := range reread {
 		delete(e.bodies, p)
 	}

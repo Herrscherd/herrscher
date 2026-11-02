@@ -14,11 +14,6 @@ type CommandSpec struct {
 	Desc string
 }
 
-// filterCommands returns the palette matches for a query (case-insensitive),
-// preserving order. An empty query returns every command. A command matches
-// when its name contains the query (browsing) or the query has advanced into
-// that command's arguments (so a fully-typed command keeps highlighting its
-// own row instead of collapsing to "no match").
 func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 	query = strings.TrimSpace(strings.ToLower(query))
 	if query == "" {
@@ -34,16 +29,6 @@ func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 	return out
 }
 
-// paletteWindow is the slice of matches to draw, given the selection. The
-// palette used to truncate from the head, which made every verb past the last
-// drawn row unreachable: ↑↓ moved a selection nobody could see, and the only way
-// to a late command was to type enough of its name to filter the others out,
-// which requires already knowing it, the one thing a menu exists to spare you.
-//
-// The window slides only far enough to hold the selection, so browsing from the
-// top keeps the first rows still until the cursor actually reaches the bottom
-// edge. It returns the offset too, so the caller can tell which drawn row is the
-// selected one.
 func paletteWindow(n, sel, rows int) (start, end int) {
 	if n <= rows {
 		return 0, n
@@ -58,10 +43,8 @@ func paletteWindow(n, sel, rows int) (start, end int) {
 	return start, start + rows
 }
 
-// paletteOpen reports whether the input is a slash-command in progress.
 func (m *model) paletteOpen() bool { return strings.HasPrefix(m.input.Value(), "/") }
 
-// filtered returns the palette matches for the current input (nil when closed).
 func (m *model) filtered() []CommandSpec {
 	if !m.paletteOpen() {
 		return nil
@@ -69,7 +52,6 @@ func (m *model) filtered() []CommandSpec {
 	return filterCommands(m.cmds, strings.TrimPrefix(m.input.Value(), "/"))
 }
 
-// clampPal keeps the selection index within the current match set.
 func (m *model) clampPal() {
 	n := len(m.filtered())
 	if m.palIdx >= n {
@@ -82,9 +64,6 @@ func (m *model) clampPal() {
 
 func (m *model) movePal(d int) { m.palIdx += d; m.clampPal() }
 
-// completePal fills the input with the selected command, pre-seeding its first
-// flag (e.g. "/session create --name ") so a discovering operator lands on the
-// value to type rather than having to know the flag name.
 func (m *model) completePal() {
 	fc := m.filtered()
 	if len(fc) == 0 {
@@ -140,10 +119,6 @@ func ParseCommandSpecs(raw []byte, allow func(verb string) bool) ([]CommandSpec,
 	return out, nil
 }
 
-// mergeCommands puts the frontend's own verbs in front of the daemon's and drops
-// any duplicate the daemon also declares. The local ones used to be replaced
-// outright the moment a backend advertised a single command, which is how a
-// palette lost /help and /clear by connecting to a daemon.
 func mergeCommands(local, remote []CommandSpec) []CommandSpec {
 	seen := make(map[string]bool, len(local))
 	out := make([]CommandSpec, 0, len(local)+len(remote))
@@ -159,13 +134,6 @@ func mergeCommands(local, remote []CommandSpec) []CommandSpec {
 	return out
 }
 
-// localCommands are the verbs the TUI answers itself, without the daemon: they
-// open an overlay or edit the view, and there is nothing on the other side of
-// the socket to run them. They lead the palette because they are the ones with
-// no other way in — every daemon verb can also be typed at a shell.
-//
-// This list must stay in step with the branches handleEnter intercepts;
-// palette_test.go asserts that each one is actually handled locally.
 func localCommands() []CommandSpec {
 	return []CommandSpec{
 		{Name: "help", Desc: "show the shortcuts"},

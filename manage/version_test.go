@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// fakeToolchain answers each `go list` invocation from a script keyed by the
-// joined arguments, so no test reaches the toolchain or the network.
 type fakeToolchain struct {
 	out  map[string]string
 	err  map[string]error
@@ -26,8 +24,6 @@ func (f *fakeToolchain) List(ctx context.Context, args ...string) (string, error
 	return f.out[key], nil
 }
 
-// listJSON is the shape `go list -m -json all` streams: concatenated objects,
-// no enclosing array.
 const listJSON = `{
 	"Path": "github.com/Herrscherd/herrscher-orchestrator",
 	"Version": "v0.1.21",
@@ -132,5 +128,4 @@ func TestVersionContractsRequirement(t *testing.T) {
 	}
 }
 
-// quote renders a path as a JSON string literal for the fixtures above.
 func quote(s string) string { return `"` + strings.ReplaceAll(s, `\`, `\\`) + `"` }

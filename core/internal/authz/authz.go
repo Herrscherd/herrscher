@@ -53,8 +53,8 @@ const SessionPrefix = "session:"
 // a uid, so any secret the agent can read it can also replay. Where the
 // connection arrives is the one thing an agent does not get to author.
 type Principal struct {
-	ID      string // "local", "session:revue", "chat:1234"
-	Session string // non-empty for a session principal alone
+	ID      string
+	Session string
 }
 
 // SessionPrincipal is the principal a session's own command socket carries.
@@ -73,21 +73,16 @@ type Subject struct {
 // Request is one invocation awaiting a verdict.
 type Request struct {
 	Principal   Principal
-	Path        []string // the verb, e.g. []string{"approve", "rule"}
-	Contributed bool     // the verb was contributed by a plugin
+	Path        []string
+	Contributed bool
 	Subject     Subject
 }
 
-// definition is what one role may run. allowAll and allow are two shapes of the
-// same field on purpose: owner and operator are deny lists, because a role
-// meant to run the daemon should not have to be told about each new verb;
-// observer and agent are allow lists, because a verb a later version adds must
-// not arrive already permitted to a caller that is meant to be bounded.
 type definition struct {
 	allowAll bool
-	allow    []string // verb patterns: an exact verb, or a family as "session *"
-	deny     []string // wins over any allow
-	plugins  bool     // verbs a plugin contributed are allowed
+	allow    []string
+	deny     []string
+	plugins  bool
 }
 
 var definitions = map[Role]definition{
@@ -103,13 +98,6 @@ var definitions = map[Role]definition{
 		"schedule list",
 		"memory search", "memory locate",
 	}},
-	// What an agent may run is what the <capabilities> block already promises
-	// it: speaking on its gateways, its memory, delegating, and asking for an
-	// approval. Plugin verbs are allowed, which is the one hole in the allow
-	// list and is deliberate: without it the capabilities block would promise a
-	// publication the agent does not have until every gateway ships a release,
-	// and compiling a plugin into the binary is already a trust decision of the
-	// same order as choosing the binary.
 	RoleAgent: {
 		allow: []string{
 			"commands", "whoami",
@@ -120,28 +108,6 @@ var definitions = map[Role]definition{
 			"memory search", "memory locate", "memory record", "memory unlink", "memory restore",
 			"approve ask",
 		},
-		// Named even where the allow list already refuses them, so the intent
-		// reads in the table instead of only in its silence. memory forget
-		// destroys with no recourse, where record and unlink are reversible.
-		// skill approve is the human door a private skill goes through to
-		// become a shared one.
-		//
-		// The approve family is spelled out rather than written "approve *",
-		// because deny wins over allow and the family pattern would take
-		// `approve ask` with it, which is the one approve verb an agent has to
-		// reach. A later approve verb is still refused: it reaches no allow
-		// entry, and an allow list refuses what it does not name.
-		//
-		// session create is denied for a reason worth spelling out, because
-		// refusing an agent the right to open a session reads like refusing it
-		// the right to delegate, and it is not that. A session opened from argv
-		// carries whatever flags the argv chose: with no --agent nothing
-		// materializes the approval hook, and `--approvals bypass` says so out
-		// loud. Either one hands the agent a second session where its own policy
-		// does not apply, which would make every deny above decorative. What
-		// stays open is the trailer: `⟢ delegate:` reaches the coordinator, which
-		// takes a registered agent and that agent's own command, so the worker it
-		// opens is policed exactly like the lead that asked for it.
 		deny: []string{
 			"approve list", "approve allow", "approve deny", "approve rule", "approve mode",
 			"host *", "role *", "schedule *", "service *", "set *", "plugin *",
@@ -154,10 +120,6 @@ var definitions = map[Role]definition{
 	},
 }
 
-// grantOrder is the order a refusal searches for the role that would run a
-// verb, least powerful first, so the message names the smallest grant that
-// works. RoleAgent is absent: it is structural, and naming it would tell an
-// operator to grant something no verb can grant.
 var grantOrder = []Role{RoleObserver, RoleOperator, RoleOwner}
 
 // Decide answers whether the request may run, and why not when it may not.
@@ -179,8 +141,6 @@ func Decide(r Request, role Role) (bool, string) {
 	return true, ""
 }
 
-// permits reports whether role runs verb. The deny list wins, then allowAll,
-// then the plugin exception, then the allow list.
 func permits(role Role, verb string, contributed bool) bool {
 	def, ok := definitions[role]
 	if !ok {
@@ -205,18 +165,11 @@ func permits(role Role, verb string, contributed bool) bool {
 	return false
 }
 
-// agentHints answer the refusals where "ask your operator" is the wrong advice,
-// because the agent has another way to the same end and would otherwise stop at
-// a door that is open beside it.
 var agentHints = map[string]string{
 	"session create": "To delegate, end your turn with `⟢ delegate: <agent>` and the task: " +
 		"the worker that opens runs a registered agent, so it answers to a policy the way you do.",
 }
 
-// refusal writes the message. An agent's is read by a model as a tool result,
-// so it says what to do next instead of naming a role the model cannot obtain.
-// A human's names the smallest role that would run the verb, so an operator
-// knows what to grant and not only what was refused.
 func refusal(r Request, role Role, verb string) string {
 	if role == RoleAgent {
 		if hint, ok := agentHints[verb]; ok {
@@ -234,10 +187,6 @@ func refusal(r Request, role Role, verb string) string {
 	return fmt.Sprintf("herrscher: `%s` is not something any role may run", verb)
 }
 
-// match reports whether pattern names verb. A pattern is an exact verb
-// ("approve ask") or a family ("session *"), which names the family verb and
-// everything under it. Deliberately not a glob: a pattern nobody can write
-// creatively is a pattern nobody has to read creatively.
 func match(pattern, verb string) bool {
 	if pattern == verb {
 		return true

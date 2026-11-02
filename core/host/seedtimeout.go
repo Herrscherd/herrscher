@@ -9,14 +9,6 @@ import (
 // seed that does not name its own.
 const EnvSeedTimeout = "HERRSCHER_SEED_TIMEOUT"
 
-// resolveSeedTimeout settles how long a seed turn may run: the command's own
-// --timeout first, then the environment, then zero — which means "say nothing"
-// and leaves seedTurnTimeout in force.
-//
-// Zero and negative durations are refused rather than clamped. A cap of 0s reads
-// as "no limit" to whoever typed it and would in fact cancel the turn before the
-// backend answers, which is the opposite; an operator deserves to hear that at
-// the point they typed it, not as a turn that dies instantly.
 func resolveSeedTimeout(raw string, getenv func(string) string) (time.Duration, error) {
 	source, value := "--timeout", raw
 	if value == "" {

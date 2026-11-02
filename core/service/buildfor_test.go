@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// writeGoModule seeds the smallest module validateSource accepts. Cross-
-// compiling is what is under test, not herrscher itself.
 func writeGoModule(t *testing.T, dir string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module github.com/Herrscherd/herrscher\n\ngo 1.21\n"), 0o644); err != nil {

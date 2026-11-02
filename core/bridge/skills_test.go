@@ -26,8 +26,6 @@ func (plainBackend) Respond(context.Context, contracts.Prompt, func(contracts.Ba
 }
 func (plainBackend) Close() error { return nil }
 
-// captureBackend records the Context of each prompt it answers and returns a
-// fixed reply, so a test can assert what the hub injected.
 type captureBackend struct {
 	reply    string
 	contexts []string

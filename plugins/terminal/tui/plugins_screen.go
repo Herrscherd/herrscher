@@ -43,9 +43,6 @@ type PluginSeam interface {
 	Restore(ctx context.Context) error
 }
 
-// The menu labels are constants because they are also the values the key
-// handler switches on, and a menu whose rows and branches can drift apart is a
-// menu that eventually runs the wrong thing.
 const (
 	pluginActionBump    = "passer à la dernière version"
 	pluginActionPin     = "épingler la version installée"
@@ -60,8 +57,6 @@ const (
 	pluginFailKeep    = "le garder, je répare à la main"
 )
 
-// pluginsMode is where the screen is in the one flow it has: pick a plugin, pick
-// an action, confirm, and answer for the build.
 type pluginsMode int
 
 const (
@@ -73,12 +68,8 @@ const (
 	pluginsDone
 )
 
-// pluginsMax bounds how many plugin rows the screen shows at once.
 const pluginsMax = 10
 
-// pluginsWindow picks the slice of rows to draw around the selection. The list
-// scrolls rather than truncating: a cursor the arrows can reach but the screen
-// does not draw is a selection the operator cannot see.
 func pluginsWindow(idx, n int) (start, end int) {
 	if n <= pluginsMax {
 		return 0, n
@@ -93,15 +84,12 @@ func pluginsWindow(idx, n int) (start, end int) {
 	return start, start + pluginsMax
 }
 
-// pluginsRequest is the change waiting on the operator's two answers.
 type pluginsRequest struct {
 	action  PluginAction
 	module  string
 	version string
 }
 
-// Messages carrying the seam's answers back into the Update loop, so nothing the
-// screen does — a version listing, a build — blocks the event loop.
 type (
 	pluginsListedMsg   struct{ rows []PluginRow }
 	pluginsVersionsMsg struct{ versions []string }
@@ -114,13 +102,8 @@ type (
 	pluginsErrMsg      struct{ err error }
 )
 
-// SetPluginSeam gives the screen its way into the host's plugin management. It
-// is set from outside so a build without one still runs the TUI.
 func (m *model) SetPluginSeam(s PluginSeam) { m.pluginsSeam = s }
 
-// openPlugins opens the screen and asks the seam for the listing off the Update
-// loop: resolving published versions needs the network, and the composition is
-// not worth freezing the terminal over.
 func (m *model) openPlugins() tea.Cmd {
 	m.pluginsOpen = true
 	m.pluginsMode = pluginsList
@@ -141,8 +124,6 @@ func (m *model) openPlugins() tea.Cmd {
 	}
 }
 
-// handlePluginsMsg folds a seam answer into the screen. It returns false for a
-// message the screen has no business with, so Update can carry on.
 func (m *model) handlePluginsMsg(msg tea.Msg) (tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case pluginsListedMsg:
@@ -150,7 +131,7 @@ func (m *model) handlePluginsMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.clampPlugins()
 	case pluginsVersionsMsg:
 		m.pluginsMenu = msg.versions
-		m.pluginsMenuIdx = len(msg.versions) - 1 // the newest is the usual answer
+		m.pluginsMenuIdx = len(msg.versions) - 1
 		m.clampPluginsMenu()
 		m.pluginsMode = pluginsVersions
 	case pluginsFindingsMsg:
@@ -182,8 +163,6 @@ func (m *model) handlePluginsMsg(msg tea.Msg) (tea.Cmd, bool) {
 	return nil, true
 }
 
-// handlePluginsKey drives the screen. It is modal: every key belongs to it while
-// it is open.
 func (m *model) handlePluginsKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.Type {
 	case tea.KeyUp:
@@ -198,8 +177,6 @@ func (m *model) handlePluginsKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-// backPlugins steps out of the current mode, closing the screen from the top.
-// A mid-flow Esc drops the pending change: nothing has been written yet.
 func (m *model) backPlugins() {
 	switch m.pluginsMode {
 	case pluginsList:
@@ -213,7 +190,6 @@ func (m *model) backPlugins() {
 	m.syncViewport()
 }
 
-// choosePlugins acts on the selected row of whatever is on screen.
 func (m *model) choosePlugins() tea.Cmd {
 	switch m.pluginsMode {
 	case pluginsList:
@@ -248,8 +224,6 @@ func (m *model) choosePlugins() tea.Cmd {
 	return nil
 }
 
-// openPluginActions builds the action menu for the selected plugin. Pin and
-// unpin are one row, not two: only one of them is ever the answer.
 func (m *model) openPluginActions() {
 	row := m.selectedRow()
 	if row.Module == "" {
@@ -290,9 +264,6 @@ func (m *model) chooseAction() tea.Cmd {
 	return nil
 }
 
-// request records the pending change and asks the seam what is known against it.
-// The confirmation is asked even when nothing is found, because "nothing known
-// against it" is not the same as "it will work".
 func (m *model) request(req pluginsRequest) tea.Cmd {
 	m.pluginsReq = req
 	seam, ctx := m.pluginsSeam, m.runContext()
@@ -325,7 +296,6 @@ func (m *model) selectedMenu() string {
 	return m.pluginsMenu[m.pluginsMenuIdx]
 }
 
-// movePlugins moves the selection of whichever list is on screen.
 func (m *model) movePlugins(d int) {
 	if m.pluginsMode == pluginsList {
 		m.pluginsIdx += d
@@ -354,8 +324,6 @@ func (m *model) clampPluginsMenu() {
 	}
 }
 
-// pluginsView renders the screen as an inline Claude menu (no border box): a dim
-// header, the plugin rows, and whichever menu the flow is asking through.
 func (m *model) pluginsView() string {
 	var b strings.Builder
 	b.WriteString(dimStyle.Render("plugins · ↑↓ naviguer · ⏎ choisir · échap retour"))
@@ -389,8 +357,6 @@ func (m *model) pluginsView() string {
 			b.WriteString("\n" + textStyle.Render("  ! "+f))
 		}
 	}
-	// The build's own output, not a paraphrase of it: it is the only thing that
-	// says why the composition was refused.
 	if m.pluginsMode == pluginsFailed && m.pluginsOutput != "" {
 		for _, line := range strings.Split(strings.TrimRight(m.pluginsOutput, "\n"), "\n") {
 			b.WriteString("\n" + dimStyle.Render("  "+line))

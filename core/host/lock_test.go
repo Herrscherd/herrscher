@@ -18,9 +18,6 @@ func TestLockStateRefusesASecondDaemon(t *testing.T) {
 	}
 	defer release()
 
-	// flock belongs to the open file description, not the process, so a second
-	// claim contends with the first even from here — which is what makes the
-	// guard testable without spawning a daemon.
 	if _, err := LockState(state); err == nil {
 		t.Fatal("second LockState succeeded; two daemons would serve the same state")
 	} else if !strings.Contains(err.Error(), state) {
@@ -40,8 +37,6 @@ func TestLockStateNamesTheHoldingProcess(t *testing.T) {
 	if err == nil {
 		t.Fatal("second LockState succeeded")
 	}
-	// The pid is the one thing that lets an operator find and stop the daemon
-	// that is already serving.
 	if want := "pid " + strconv.Itoa(os.Getpid()); !strings.Contains(err.Error(), want) {
 		t.Errorf("error = %q, want it to contain %q", err, want)
 	}
@@ -55,7 +50,6 @@ func TestReleasedLockCanBeRetaken(t *testing.T) {
 	}
 	release()
 
-	// A daemon that stopped cleanly must not leave its successor locked out.
 	release2, err := LockState(state)
 	if err != nil {
 		t.Fatalf("LockState after release: %v", err)
@@ -64,8 +58,6 @@ func TestReleasedLockCanBeRetaken(t *testing.T) {
 }
 
 func TestLockStateCreatesTheStateDirectory(t *testing.T) {
-	// The very first run has no ~/.config/herrscher yet, and the lock is taken
-	// before anything else would have created it.
 	state := filepath.Join(t.TempDir(), "fresh", "state.json")
 	release, err := LockState(state)
 	if err != nil {
@@ -78,8 +70,6 @@ func TestLockStateCreatesTheStateDirectory(t *testing.T) {
 }
 
 func TestStateLockSitsBesideTheStateFile(t *testing.T) {
-	// Never the state file itself: truncating it to write a pid would destroy
-	// every session the daemon is supposed to resume.
 	got := StateLockPath(filepath.Join("/var/lib/herrscher", "state.json"))
 	want := filepath.Join("/var/lib/herrscher", ".state.json.lock")
 	if got != want {

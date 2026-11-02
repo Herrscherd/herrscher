@@ -13,10 +13,10 @@ import (
 // call-journal: this is the human-visible conversation, replayed as scrollback.
 type TranscriptEntry struct {
 	Ts   string  `json:"ts"`
-	Role string  `json:"role"` // "user" | "assistant"
+	Role string  `json:"role"`
 	Text string  `json:"text"`
 	Cost float64 `json:"cost,omitempty"`
-	Kind string  `json:"kind,omitempty"` // reserved (tool calls)
+	Kind string  `json:"kind,omitempty"`
 	// Per-turn usage, present on assistant entries. TokensOut is the turn's
 	// output tokens; TokensIn the input; CacheRead/CacheCreate the prompt-cache
 	// read/creation tokens; DurMs the turn's wall-clock duration in ms. All
@@ -36,11 +36,6 @@ func TranscriptPath(dir, name string) string {
 }
 
 const (
-	// transcriptMaxBytes triggers compaction once a transcript grows past it, so a
-	// long-lived session cannot let its .jsonl grow without bound. transcriptKeepBytes
-	// is the budget of newest entries retained on compaction — half the trigger, so
-	// ~2 MB of fresh appends must accumulate before the next compaction, never a
-	// rewrite on every append.
 	transcriptMaxBytes  = 4 << 20
 	transcriptKeepBytes = transcriptMaxBytes / 2
 )
@@ -77,16 +72,12 @@ func AppendTranscript(path string, e TranscriptEntry) error {
 	return nil
 }
 
-// compactTranscript rewrites path to its newest entries within transcriptKeepBytes,
-// via a temp file + atomic rename so a concurrent reader sees the whole old file or
-// the whole new one, never a partial write. The single newest entry is always kept,
-// even if it alone exceeds the budget. Best-effort: any error leaves the original.
 func compactTranscript(path string) {
 	all := ReadTranscript(path, 0)
 	if len(all) == 0 {
 		return
 	}
-	start := len(all) - 1 // always retain the newest entry
+	start := len(all) - 1
 	total := 0
 	for i := len(all) - 1; i >= 0; i-- {
 		b, err := json.Marshal(all[i])
@@ -149,7 +140,7 @@ func ReadTranscript(path string, limit int) []TranscriptEntry {
 			}
 		}
 		if readErr != nil {
-			break // io.EOF (last line) or a read error: stop
+			break
 		}
 	}
 	if limit > 0 && len(out) > limit {
@@ -166,8 +157,6 @@ type TranscriptSummary struct {
 	ContextTokens int
 }
 
-// transcriptTailBytes is how much of a transcript's end is read to summarise it,
-// so a hot caller (the session list, polled ~1/s) never scans a long file.
 const transcriptTailBytes = 64 * 1024
 
 // ReadTranscriptSummary reads only the file's tail. When the newest entry is
@@ -208,17 +197,10 @@ func ReadTranscriptLast(path string) string {
 	return ReadTranscriptSummary(path).LastTs
 }
 
-// contextTokens is what one recorded turn occupied of the model's window: the
-// reading taken while it ran. Not TokensIn plus the cache counts, which are the
-// turn's billing totals and add up every message an agentic turn sent.
 func contextTokens(e TranscriptEntry) int {
 	return e.CtxTokens
 }
 
-// transcriptTailLines is the non-empty lines of the file's last
-// transcriptTailBytes, oldest first and left unparsed: a summary reads from the
-// newest and usually stops on the first one, so parsing the window whole would
-// be work thrown away on every poll.
 func transcriptTailLines(path string) [][]byte {
 	if path == "" {
 		return nil

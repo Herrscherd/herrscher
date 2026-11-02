@@ -2,18 +2,6 @@ package tui
 
 import "strings"
 
-// Every feature that draws something the terminal may not be able to draw — an
-// image, a hyperlink, a truecolor swatch — needs the same answer to the same
-// question. Asked once, here, and read from the model thereafter: two detections
-// of the same capability drift, and the one that drifts is always the one the
-// operator is looking at.
-//
-// Probing is by environment alone. A terminal can be interrogated over the wire
-// (DA1, XTGETTCAP), but that means writing a query and waiting for a reply on a
-// stdin bubbletea has not started reading yet, and a terminal that never answers
-// costs the startup a timeout. The environment is what every terminal already
-// agrees to say about itself.
-
 // Graphics is the inline-image protocol a terminal speaks, in descending order
 // of fidelity. The zero value is the honest default: no protocol at all.
 type Graphics int
@@ -67,14 +55,8 @@ type Capabilities struct {
 	Terminal   string
 }
 
-// kittyGraphicsPrograms names TERM_PROGRAM values whose terminals implement the
-// kitty graphics protocol besides kitty itself.
 var kittyGraphicsPrograms = map[string]bool{"ghostty": true, "WezTerm": true}
 
-// hyperlinkPrograms names the TERM_PROGRAM values known to honour OSC 8. The
-// list is short on purpose: a terminal that ignores OSC 8 prints nothing (the
-// sequence is swallowed), but one that half-implements it prints the escape as
-// text, and a transcript full of escape litter is worse than plain styled text.
 var hyperlinkPrograms = map[string]bool{
 	"ghostty": true, "WezTerm": true, "iTerm.app": true, "kitty": true,
 }
@@ -91,9 +73,6 @@ func Probe(env func(string) string) Capabilities {
 		Colour:     probeColour(env("COLORTERM"), term),
 		Terminal:   terminalName(term, program),
 	}
-	// A terminal that names itself is one bubbletea can put into mouse-reporting
-	// mode; "dumb" and an unset TERM are the two cases that mean the other end is
-	// not an interactive terminal at all.
 	caps.Boxes = probeBoxes(env)
 	caps.Mouse = term != "" && term != "dumb"
 	return caps
@@ -120,11 +99,6 @@ func probeColour(colorterm, term string) Colour {
 	return Colour16
 }
 
-// terminalName is what to call this terminal on the diagnostic screen.
-// TERM_PROGRAM is the name of the application and TERM the name of the
-// termcap entry, so the former is preferred when both are present — except for
-// kitty, which sets no TERM_PROGRAM and is better known by its own name than by
-// "xterm-kitty".
 func terminalName(term, program string) string {
 	if strings.Contains(term, "kitty") {
 		return "kitty"

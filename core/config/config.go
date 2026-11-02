@@ -24,7 +24,7 @@ import (
 // without this low-level package importing state.
 type HomeRef struct {
 	ID   string `json:"id"`
-	Type string `json:"type"` // "category" | "forum"
+	Type string `json:"type"`
 }
 
 // Config is the parsed config.json. Every field is optional; an absent field
@@ -32,20 +32,20 @@ type HomeRef struct {
 // default for knobs, live state.json for the declarative runtime fields).
 type Config struct {
 	// Daemon knobs (precedence: explicit flag > env > this > built-in default).
-	Cmd           string `json:"cmd"`           // base bridged command for new sessions
-	HealthAddr    string `json:"healthAddr"`    // serve --health-addr ("" disables)
-	StatusChannel string `json:"statusChannel"` // self-updating status embed channel
-	Instance      string `json:"instance"`      // per-daemon instance slug
-	Owner         string `json:"owner"`         // owner id; per-daemon instance-id fallback
+	Cmd           string `json:"cmd"`
+	HealthAddr    string `json:"healthAddr"`
+	StatusChannel string `json:"statusChannel"`
+	Instance      string `json:"instance"`
+	Owner         string `json:"owner"`
 	// Stale threshold for `session clean`: sessions inactive longer than this
 	// many days are reported as stale. 0 disables stale detection. Unset (zero)
 	// means the built-in default (14) is applied by the caller.
 	SessionMaxIdleDays int `json:"sessionMaxIdleDays,omitempty"`
 
 	// Declarative runtime defaults (precedence: live state.json > this > empty).
-	Home      *HomeRef `json:"home"`      // session home category/forum
-	Workspace string   `json:"workspace"` // workspace root holding projects
-	Source    string   `json:"source"`    // herrscher source checkout for /service update
+	Home      *HomeRef `json:"home"`
+	Workspace string   `json:"workspace"`
+	Source    string   `json:"source"`
 
 	Skills *SkillsConfig `json:"skills,omitempty"`
 }
@@ -87,10 +87,6 @@ func Load(path string) (Config, error) {
 	return c, nil
 }
 
-// stripComments removes full-line // comments (a line whose first non-space
-// characters are //). Only full-line comments are honored — trailing inline
-// comments are left intact so a value containing // (e.g. a URL) is never
-// corrupted. encoding/json then ignores the resulting blank lines.
 func stripComments(b []byte) []byte {
 	var out bytes.Buffer
 	for _, line := range bytes.Split(b, []byte("\n")) {

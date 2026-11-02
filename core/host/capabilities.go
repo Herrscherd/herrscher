@@ -26,21 +26,6 @@ func CapabilityEnvPair(specs []cli.Spec, contributed func(family string) bool) s
 	return EnvCapabilities + "=" + s
 }
 
-// agentVerbs keeps the verbs a session may actually run. Every reader of this
-// block is one: it is handed to the bridge child, which is a session's own
-// process, and the daemon now refuses a session the verbs that would let it
-// widen its own policy or act on another session.
-//
-// Filtering here rather than letting the model find out is not politeness. An
-// unfiltered list is a prompt that promises `host add` and `approve rule` to
-// something that will be refused them, and a model reading a refusal it was
-// told to expect success from does not conclude "not allowed", it concludes
-// "broken" and works around it. The list has to be the truth for its reader.
-//
-// One block is built per daemon and every session reads the same one, so the
-// principal here names no session in particular. It does not have to: what
-// varies between sessions is scope, which decides which session a verb may name
-// and never which verbs exist, and no Subject is set for it to consult.
 func agentVerbs(specs []cli.Spec, contributed func(family string) bool) []cli.Spec {
 	out := make([]cli.Spec, 0, len(specs))
 	for _, s := range specs {
@@ -82,8 +67,6 @@ func CapabilitySummary(specs []cli.Spec) string {
 			order = append(order, head)
 			families[head] = nil
 		}
-		// A one-word command (`commands`) has no tail to list under its own name,
-		// and a " — " with nothing after it reads as a truncation.
 		if tail := strings.Join(s.Path[1:], " "); tail != "" {
 			families[head] = append(families[head], tail)
 		}

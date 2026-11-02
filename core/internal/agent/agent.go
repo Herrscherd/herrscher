@@ -18,7 +18,6 @@ import (
 	"time"
 )
 
-// File names inside an agent home (the durable source of truth).
 const (
 	soulFile     = "SOUL.md"
 	userFile     = "USER.md"
@@ -30,14 +29,8 @@ const (
 	hostFile     = "host"
 )
 
-// worktreeToken is replaced with the absolute worktree path when an agent is
-// materialized, so an agent's mcp.json can point a server at the session's
-// working directory without knowing it in advance.
 const worktreeToken = "{{WORKTREE}}"
 
-// jsonStringInner returns s escaped for embedding inside a JSON string literal,
-// without the surrounding quotes — so a worktree path with backslashes (Windows)
-// or a quote can be spliced into a JSON template's string value and stay valid.
 func jsonStringInner(s string) string {
 	b, err := json.Marshal(s)
 	if err != nil {
@@ -46,10 +39,6 @@ func jsonStringInner(s string) string {
 	return string(b[1 : len(b)-1])
 }
 
-// hookWaitSeconds bounds how long the vendor waits for our hook. It is longer
-// than the daemon's own wait on a human on purpose: if the vendor gave up
-// first, the model would be told the hook crashed instead of being told why its
-// tool call was refused.
 const hookWaitSeconds = 900
 
 // HookWait is hookWaitSeconds as a duration, exported for the one caller that
@@ -58,45 +47,18 @@ const hookWaitSeconds = 900
 // tool call.
 const HookWait = hookWaitSeconds * time.Second
 
-// shellSingleQuote quotes s for a POSIX shell, which is what Claude Code runs a
-// hook command through. Without it a binary path holding a space (os.Executable
-// can return one, and a host's configured binary is whatever the operator
-// typed) would be read as a command plus an argument, and every tool call in
-// the session would fail. An embedded single quote closes the quoting, is
-// backslash-escaped outside it, then reopens it: the classic POSIX dance.
 func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// injectApprovalHook adds the PreToolUse hook that asks the daemon before each
-// tool call.
-//
-// It is added here rather than written into the agent's home because the binary
-// it invokes belongs to the machine the session runs on, and a home does not
-// know which machine that will be.
-//
-// Any hook herrscher wrote before is dropped first, so materializing twice over
-// the same file leaves exactly one. A reused worktree already carries the entry
-// from its first session, and a second one would ask the operator twice for
-// every single tool call. Dropping also repairs the binary path when the daemon
-// moved between the two materializations. Hooks somebody else wrote are left
-// where they are: only a command that ends in this daemon's own verb matches.
 func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 	var doc map[string]any
 	if err := json.Unmarshal(settings, &doc); err != nil {
 		return nil, fmt.Errorf("settings.json: %w", err)
 	}
-	// A settings file whose whole content is the JSON literal `null` parses
-	// without error and leaves doc nil. Treat it as the empty object it means,
-	// rather than assigning into a nil map and taking the daemon down.
 	if doc == nil {
 		doc = map[string]any{}
 	}
-	// A key of the wrong type is refused rather than replaced. Both of these
-	// hold operator configuration, and a settings file whose shape we do not
-	// recognise is one we have no business rewriting: dropping the key would
-	// throw away hooks somebody wrote, and say nothing. Materialization fails,
-	// which names the file and stops the session before it starts.
 	hooks := map[string]any{}
 	if raw, ok := doc["hooks"]; ok && raw != nil {
 		m, ok := raw.(map[string]any)
@@ -131,10 +93,6 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 	return json.MarshalIndent(doc, "", "  ")
 }
 
-// isApprovalHook reports whether one PreToolUse entry is a hook this daemon
-// wrote. It matches on the verb the command ends with rather than on the whole
-// command line, since the binary path in front of it is the one thing that
-// legitimately differs between two materializations of the same worktree.
 func isApprovalHook(entry any) bool {
 	m, ok := entry.(map[string]any)
 	if !ok {
@@ -173,8 +131,6 @@ func SelfBin() string {
 	return bin
 }
 
-// localSettingsFile is the settings file Claude Code layers over settings.json
-// and writes itself for local permissions.
 const localSettingsFile = "settings.local.json"
 
 // MaterializeHook writes the PreToolUse approval hook into a worktree that has
@@ -202,9 +158,6 @@ func MaterializeHook(worktree, herrscherBin string) error {
 		return fmt.Errorf("create .claude dir: %w", err)
 	}
 	path := filepath.Join(claudeDir, localSettingsFile)
-	// A missing file is the common case and means the empty object. Any other
-	// read error is real: papering over it with an empty document would
-	// silently discard whatever the operator had configured there.
 	cur := []byte("{}")
 	buf, err := os.ReadFile(path)
 	switch {
@@ -230,9 +183,6 @@ var materializedGitExcludes = []string{
 	"/.codex/",
 	"/.claude/",
 	"/.mcp.json",
-	// The root the learned-skill projection owns. It holds generated SKILL.md
-	// files, so without the exclude a session that learns anything would report a
-	// dirty worktree, and every close would offer to discard work nobody wrote.
 	"/.herrscher/",
 }
 
@@ -240,10 +190,10 @@ var materializedGitExcludes = []string{
 // that stores its persona and provisioning files.
 type Agent struct {
 	Name    string
-	Home    string   // absolute path to the agent's home directory
-	Tags    []string // capability tokens from <home>/TAGS (nil when absent), for host routing
-	Backend string   // backend vendor from <home>/backend, empty when absent
-	Cmd     string   // default invocation from <home>/cmd, empty when absent
+	Home    string
+	Tags    []string
+	Backend string
+	Cmd     string
 	// Host is the default place this agent's sessions run, from <home>/host.
 	// Empty = this machine. A session's explicit --host still wins: this is a
 	// default, not a rule.
@@ -312,11 +262,6 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	if err := os.MkdirAll(codexDir, 0o755); err != nil {
 		return fmt.Errorf("create .codex dir: %w", err)
 	}
-	// jsonDst marks a destination whose worktree token lives inside a JSON
-	// string: the path must be JSON-escaped, or a Windows worktree (backslashes)
-	// or one with a quote would produce invalid JSON. The Codex TOML path is
-	// escaped separately by renderCodexMCP. CLAUDE.md/AGENTS.md (markdown, raw
-	// path) are composed below so USER.md can augment them.
 	copies := []struct {
 		src, dst string
 		jsonDst  bool
@@ -345,8 +290,6 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 		}
 	}
 
-	// Persona (SOUL.md) → CLAUDE.md + AGENTS.md, optionally augmented with the
-	// user profile (USER.md). Absent USER.md leaves both byte-identical to soul.
 	soul, err := os.ReadFile(filepath.Join(a.Home, soulFile))
 	if err != nil {
 		return fmt.Errorf("read %s: %w", soulFile, err)
@@ -363,9 +306,6 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 		if err := os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), 0o644); err != nil {
 			return fmt.Errorf("write .claude/USER.md: %w", err)
 		}
-		// @USER.md, not @.claude/USER.md: Claude Code resolves relative imports
-		// against the importing file's own directory, and CLAUDE.md already lives
-		// in .claude/, so the profile is its sibling.
 		claudeMd = soulOut + "\n\n@USER.md\n"
 		agentsMd = soulOut + "\n\n# User\n\n" + userOut
 	}

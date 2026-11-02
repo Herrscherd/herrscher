@@ -12,18 +12,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-// B3 proves the P1 write loop end to end from the host: an enabled session
-// (a registered extractor + a journal + a cadence, all threaded by
-// buildOrchestrator) must consolidate the journal's tagged lines into exactly
-// one shared fact under projects/<project> and one private skill under
-// agents/<agent>, idempotently. The orchestrator owns the trigger/scope/dedup
-// (herrscher-orchestrator); these tests verify B2's activation actually reaches
-// those guarantees, rather than trusting the upstream unit tests alone.
-
-// b3Extractor is a deterministic, dependency-free extractor that reads the
-// journal it is handed and turns "fact:"/"skill:" lines into candidates. Reading
-// the journal (not emitting fixed nodes) is deliberate: it proves the journal
-// path is honored all the way from buildOrchestrator's config to the Learner.
 type b3Extractor struct{}
 
 func (b3Extractor) Extract(_ context.Context, journal, _ string) ([]orchestrator.Candidate, error) {
@@ -48,13 +36,8 @@ func (b3Extractor) Extract(_ context.Context, journal, _ string) ([]orchestrator
 	return cands, nil
 }
 
-// linkCall captures one Memory.Links edge so a test can tell a shared write
-// (linked under the project root) from a private one (under the agent root).
 type linkCall struct{ from, to, rel string }
 
-// recMemory is a fake Memory port that records every Record/Links call. Recall
-// returns an empty rooted subgraph so the orchestrator's transcript read and
-// scoped recall are clean no-ops.
 type recMemory struct {
 	records []contracts.Node
 	links   []linkCall
@@ -92,9 +75,6 @@ func (m *recMemory) Unlink(_ context.Context, from, to string) error {
 
 func (m *recMemory) Close() error { return nil }
 
-// linksFrom returns the edges hung under root — i.e. the scoped consolidation
-// writes (RecordShared/RecordPrivate link the new node under a scope root). The
-// session-transcript Observe writes a node but no link, so it never shows here.
 func linksFrom(m *recMemory, root string) []linkCall {
 	var out []linkCall
 	for _, l := range m.links {
@@ -125,7 +105,6 @@ func TestB3ConsolidationWritesScopedFactAndSkill(t *testing.T) {
 		t.Fatalf("want *orchestrator.Learner, got %T", orch)
 	}
 
-	// Two turns crosses the cadence (every 2), firing Consolidate once.
 	p := contracts.Prompt{Author: "u", Content: "hi"}
 	for i := 0; i < 2; i++ {
 		if err := orch.Observe(context.Background(), p, "ok"); err != nil {
@@ -151,8 +130,6 @@ func TestB3ConsolidationIsIdempotent(t *testing.T) {
 	orch := buildOrchestrator(context.Background(), mem, "s1", "alpha", "bishop",
 		learnConfig{extractor: "b3-fake", journal: journal, consolidateEvery: 1}, host.Logger(false))
 
-	// Five turns at cadence 1 runs Consolidate five times over the same journal;
-	// the Learner's per-session dedup must keep each scoped write at exactly one.
 	p := contracts.Prompt{Author: "u", Content: "hi"}
 	for i := 0; i < 5; i++ {
 		if err := orch.Observe(context.Background(), p, "ok"); err != nil {
@@ -183,8 +160,6 @@ func TestB3NoExtractorPerformsNoConsolidationWrites(t *testing.T) {
 		}
 	}
 
-	// The default Curator keeps only the rolling transcript (Record, no Links);
-	// it must perform zero scoped consolidation writes.
 	if len(mem.links) != 0 {
 		t.Fatalf("default session must not consolidate, got links %+v", mem.links)
 	}

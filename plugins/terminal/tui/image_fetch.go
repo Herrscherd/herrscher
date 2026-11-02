@@ -10,17 +10,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// An image posted as a link is the common case in a conversation, and the TUI
-// used to render it as the characters of its URL. Fetching one means this process
-// opens a connection somewhere the agent chose, which is exactly the question the
-// host's attachment allowlist already answers — so this feature does not get an
-// answer of its own. Off the list, the URL stays a URL.
-
-// fetchImage retrieves rawURL's bytes through get, but only when its host is on
-// allow. The fetcher is a parameter rather than an http.Client so the decision
-// can be tested without a socket, and so the transport stays the caller's choice.
-//
-// A refusal names the host: the operator has to be able to see which one to add.
 func fetchImage(ctx context.Context, get func(context.Context, string) ([]byte, error), allow []string, rawURL string) ([]byte, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -43,9 +32,6 @@ func fetchImage(ctx context.Context, get func(context.Context, string) ([]byte, 
 	return data, nil
 }
 
-// hostAllowed matches a host against the allowlist, case-insensitively on both
-// sides. An empty allowlist allows nothing — which is what a gateway declaring
-// no attachment hosts (the terminal's own default) must get.
 func hostAllowed(host string, allow []string) bool {
 	for _, h := range allow {
 		if strings.EqualFold(strings.TrimSpace(h), host) {
@@ -55,19 +41,12 @@ func hostAllowed(host string, allow []string) bool {
 	return false
 }
 
-// imageExts are the extensions worth trying to draw. Matching on the extension
-// rather than on a HEAD request means the decision costs nothing and no request
-// is made for a URL that was never a picture.
 var imageExts = map[string]bool{
 	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
 }
 
-// imageURLs returns the http(s) URLs in text that name an image file, in the
-// order they appear.
 func imageURLs(text string) []string {
 	var out []string
-	// The transcript scanner's own pattern: what may be fetched must be exactly
-	// what the reader was shown as a link, and two patterns would drift.
 	for _, raw := range linkURLPattern.FindAllString(text, -1) {
 		u, err := url.Parse(raw)
 		if err != nil {
@@ -80,9 +59,6 @@ func imageURLs(text string) []string {
 	return out
 }
 
-// imageReadyMsg carries a fetched, encoded image back into Update, tagged with
-// the entry that referenced it. A turn that has since been cleared simply drops
-// it — an image arriving late is never a reason to resurrect a transcript.
 type imageReadyMsg struct {
 	channel string
 	entry   int
@@ -90,13 +66,6 @@ type imageReadyMsg struct {
 	escape  string
 }
 
-// fetchEntryImages returns the commands that fetch the images a finished entry
-// links to. It yields nothing when no fetcher is wired or the allowlist is empty,
-// which is the terminal gateway's own default — the feature stays dark until a
-// gateway declares the hosts it serves attachments from.
-//
-// Every failure is silent by design: an unreachable image leaves its URL as text,
-// which is exactly what the reader had before.
 func (m *model) fetchEntryImages(tb *tab, idx int) tea.Cmd {
 	if m.imageFetcher == nil || len(m.imageHosts) == 0 || idx < 0 || idx >= len(tb.entries) {
 		return nil
@@ -107,7 +76,7 @@ func (m *model) fetchEntryImages(tb *tab, idx int) tea.Cmd {
 	entryID := tb.entries[idx].id
 	for _, raw := range imageURLs(tb.entries[idx].text) {
 		if !hostAllowed(strings.ToLower(urlHost(raw)), allow) {
-			continue // refused before a command is even scheduled
+			continue
 		}
 		cmds = append(cmds, func() tea.Msg {
 			data, err := fetchImage(ctx, get, allow, raw)
@@ -118,9 +87,6 @@ func (m *model) fetchEntryImages(tb *tab, idx int) tea.Cmd {
 			if err != nil {
 				return nil
 			}
-			// Through the same bound a staged attachment gets: this escape lands on
-			// a transcript line the viewport re-measures on every repaint, and the
-			// bytes behind it came from the network rather than from the operator.
 			esc := boundedEscape(img, caps)
 			if esc == "" {
 				return nil
@@ -131,7 +97,6 @@ func (m *model) fetchEntryImages(tb *tab, idx int) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// urlHost is the host of a URL that has already been matched as one, or "".
 func urlHost(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -140,8 +105,6 @@ func urlHost(raw string) string {
 	return u.Hostname()
 }
 
-// applyImage attaches a fetched image under the entry that referenced it,
-// ignoring a message for a tab or an entry that no longer exists.
 func (m *model) applyImage(msg imageReadyMsg) {
 	tb := m.tabs[msg.channel]
 	if tb == nil || msg.entry < 0 || msg.entry >= len(tb.entries) || msg.escape == "" {
@@ -155,6 +118,6 @@ func (m *model) applyImage(msg imageReadyMsg) {
 		e.preview += "\n"
 	}
 	e.preview += msg.escape
-	m.tsCache.valid = false // the cache key cannot see a preview change
+	m.tsCache.valid = false
 	m.syncViewport()
 }

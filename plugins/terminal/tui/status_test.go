@@ -8,8 +8,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// TestContextOccupancyDerivesFromTheThreeCounters locks the derivation: the wire
-// carries no "context used" field, only the three counters that make it up.
 func TestContextOccupancyDerivesFromTheThreeCounters(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{
@@ -21,10 +19,6 @@ func TestContextOccupancyDerivesFromTheThreeCounters(t *testing.T) {
 	}
 }
 
-// TestContextOccupancyIgnoresTheTurnTotals is the fix for a bar that read
-// 1252.2k/200k: the terminal reply carries what the turn *billed*, which sums
-// every message's prompt, and an agentic turn has a dozen of them. Only the
-// per-message readings measure the window.
 func TestContextOccupancyIgnoresTheTurnTotals(t *testing.T) {
 	m := newTestModel()
 	conv := contracts.Conversation{ID: "a"}
@@ -35,9 +29,6 @@ func TestContextOccupancyIgnoresTheTurnTotals(t *testing.T) {
 	}
 }
 
-// A turn answered in one message emits no mid-turn reading — the vendor reports
-// that message's usage after its own events — and its totals are that one
-// prompt. Refusing them there is what left the gauge blank on short turns.
 func TestContextOccupancyTakesTheTotalsOfAOneMessageTurn(t *testing.T) {
 	m := newTestModel()
 	conv := contracts.Conversation{ID: "a"}
@@ -46,8 +37,6 @@ func TestContextOccupancyTakesTheTotalsOfAOneMessageTurn(t *testing.T) {
 	if got := m.tabs["a"].ctxTokens; got != 15_000 {
 		t.Fatalf("ctxTokens = %d, want the single message's prompt (15000)", got)
 	}
-	// And the next turn measures itself: the exception must not leak forward into
-	// a turn that does report per-message usage.
 	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "chunk", Text: "…", TokensIn: 20_000}})
 	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "reply", Done: true, Text: "done", TokensIn: 900_000}})
 	if got := m.tabs["a"].ctxTokens; got != 20_000 {
@@ -55,8 +44,6 @@ func TestContextOccupancyTakesTheTotalsOfAOneMessageTurn(t *testing.T) {
 	}
 }
 
-// TestContextLimitFollowsTheVendorAndTheEnv checks the denominator: a per-vendor
-// constant, overridable when a model's window moves under us.
 func TestContextLimitFollowsTheVendorAndTheEnv(t *testing.T) {
 	if got := contextLimit("claude"); got != 200_000 {
 		t.Errorf("claude limit = %d", got)
@@ -73,13 +60,10 @@ func TestContextLimitFollowsTheVendorAndTheEnv(t *testing.T) {
 	}
 }
 
-// TestContextPaliersColourDifferently is the whole point of the gauge: a window
-// that is fine, one worth planning around and one about to compact must not read
-// as the same line.
 func TestContextPaliersColourDifferently(t *testing.T) {
-	calm := renderContext(40_000, "claude")   // 20%
-	warn := renderContext(170_000, "claude")  // 85%
-	alarm := renderContext(195_000, "claude") // 97.5%
+	calm := renderContext(40_000, "claude")
+	warn := renderContext(170_000, "claude")
+	alarm := renderContext(195_000, "claude")
 	if calm == warn || warn == alarm || calm == alarm {
 		t.Fatalf("the three paliers must differ: %q %q %q", calm, warn, alarm)
 	}
@@ -94,8 +78,6 @@ func TestContextPaliersColourDifferently(t *testing.T) {
 	}
 }
 
-// TestCostAccumulatesAcrossTurns is the bug this replaces: lastCost was
-// overwritten every turn, so a six-hour session showed the price of its last one.
 func TestCostAccumulatesAcrossTurns(t *testing.T) {
 	m := newTestModel()
 	for _, c := range []float64{0.01, 0.02, 0.03} {
@@ -112,8 +94,6 @@ func TestCostAccumulatesAcrossTurns(t *testing.T) {
 	}
 }
 
-// TestStatusBarReducesWhenNarrow keeps the two necessary segments and drops the
-// merely useful ones rather than overflowing the row.
 func TestStatusBarReducesWhenNarrow(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("alpha")
@@ -152,9 +132,6 @@ func TestFormatDuration(t *testing.T) {
 	}
 }
 
-// La barre disait le vendeur et rien d'autre : deux sessions claude, l'une sur
-// Opus a effort eleve et l'autre sur Haiku a effort bas, se lisaient a
-// l'identique. Le modele et l'effort sont ce qui les distingue.
 func TestStatusBarNamesTheModelAndTheEffort(t *testing.T) {
 	be := &countingBackend{}
 	be.sessions = []contracts.SessionInfo{{
@@ -176,9 +153,6 @@ func TestStatusBarNamesTheModelAndTheEffort(t *testing.T) {
 	}
 }
 
-// L'occupation ne venait que des tours vus passer : un onglet rouvert sur une
-// session a moitie pleine n'affichait aucune fenetre. La fiche du hub porte la
-// derniere mesure enregistree.
 func TestStatusBarFallsBackOnTheHubReading(t *testing.T) {
 	be := &countingBackend{}
 	be.sessions = []contracts.SessionInfo{{
@@ -197,8 +171,6 @@ func TestStatusBarFallsBackOnTheHubReading(t *testing.T) {
 	}
 }
 
-// Ce que l'operateur veut savoir n'est pas la part remplie mais la part qui
-// reste avant que le backend ne compacte la conversation.
 func TestGaugeCountsDownToTheCompaction(t *testing.T) {
 	if got := contextLeft(0, 200_000); got != 1 {
 		t.Errorf("une fenetre vide laisse tout le budget: %v", got)

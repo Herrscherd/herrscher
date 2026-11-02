@@ -19,6 +19,5 @@ func listenControl(path string) (net.Listener, error) {
 }
 
 func dialControl(path string) (net.Conn, error) {
-	// nil timeout = attente par défaut si la pipe est momentanément occupée.
 	return winio.DialPipe(path, nil)
 }

@@ -41,8 +41,6 @@ func Catalog(plugins []contracts.Plugin, policy contracts.RoutePolicy) ([]Catalo
 			out = append(out, CatalogEntry{Vendor: kind, ModelSpec: m})
 		}
 	}
-	// Stable order: the app renders this list as-is, and an order that shifts
-	// between restarts would move entries out from under the cursor.
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Vendor != out[j].Vendor {
 			return out[i].Vendor < out[j].Vendor
@@ -66,8 +64,6 @@ func LookupModel(plugins []contracts.Plugin, policy contracts.RoutePolicy, model
 			return e, nil
 		}
 	}
-	// PolicyAll is the zero value (""), which would render as an empty quoted
-	// string in an error the user now sees at `session create` time.
 	name := string(policy)
 	if name == "" {
 		name = "all"

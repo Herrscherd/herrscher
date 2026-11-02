@@ -16,18 +16,16 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// fanRecorder is a gateway+reader+sink that records what the hub fans to it and
-// can feed inbound lines.
 type fanRecorder struct {
 	mu          sync.Mutex
 	inbound     []contracts.Message
 	emitted     []contracts.Event
 	posted      []string
 	upserts     int
-	statuses    []string // content of each UpsertStatusMessage (the live progress view)
-	sink        bool     // implements EventSink when true
-	readChannel string   // last channel id passed to Read
-	hosts       []string // what the manifest declares as AttachmentHosts
+	statuses    []string
+	sink        bool
+	readChannel string
+	hosts       []string
 }
 
 func (f *fanRecorder) feed(text string) {
@@ -93,8 +91,6 @@ func (f *fanRecorder) Menu(context.Context, contracts.Conversation, contracts.Me
 	return nil
 }
 
-// sinkRecorder wraps fanRecorder and implements EventSink so the hub fans the
-// full event stream to it via Emit (instead of only posting the final reply).
 type sinkRecorder struct{ fanRecorder }
 
 func (s *sinkRecorder) Emit(e contracts.Event) {
@@ -108,8 +104,6 @@ func TestDriverFanOutToAllBoundGateways(t *testing.T) {
 	b := &fanRecorder{}
 	a.feed("hello")
 
-	// A pair of in-memory event streams stands in for the Conn: toBridge carries
-	// inputs, fromBridge carries the bridge's replies.
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
 	d := newSessionDriver("s1",
@@ -120,7 +114,6 @@ func TestDriverFanOutToAllBoundGateways(t *testing.T) {
 	defer cancel()
 	go d.run(ctx)
 
-	// The driver should poll a.Read, see "hello", and write an input frame.
 	select {
 	case in := <-toBridge:
 		if in.T != "input" || in.Text != "hello" {
@@ -129,7 +122,6 @@ func TestDriverFanOutToAllBoundGateways(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("driver did not pump input to bridge")
 	}
-	// Simulate the bridge replying; the driver fans it to BOTH gateways.
 	fromBridge <- contracts.Event{T: "reply", Text: "world", Done: true}
 
 	waitFor(t, func() bool {
@@ -141,10 +133,6 @@ func TestDriverFanOutToAllBoundGateways(t *testing.T) {
 	}, "reply fanned to both gateways")
 }
 
-// TestDriverPollsSessionChannel proves a session with its own channel bound is
-// polled on THAT channel, not the gateway's global DefaultChannel ("c"). This
-// guards the regression where the daemon read the empty global channel for every
-// session, so the bot never saw messages in a session's own channel.
 func TestDriverPollsSessionChannel(t *testing.T) {
 	a := &fanRecorder{}
 	toBridge := make(chan contracts.Event, 4)
@@ -163,8 +151,6 @@ func TestDriverPollsSessionChannel(t *testing.T) {
 	}, "driver polls the session's own channel, not the gateway default")
 }
 
-// failingReader fails the first n reads, then behaves like its fanRecorder. It
-// stands in for a platform that rate-limits a restarting daemon.
 type failingReader struct {
 	fanRecorder
 	left int
@@ -181,22 +167,14 @@ func (f *failingReader) Read(ctx context.Context, channelID string, limit int, a
 	return f.fanRecorder.Read(ctx, channelID, limit, after)
 }
 
-// TestDriverDoesNotReplayHistoryWhenCursorInitFails proves a failed first read
-// is retried instead of being taken for an empty channel. The cursor is what
-// keeps a restart from re-answering what is already in the channel: accepting
-// the failure would leave it empty, and the next read would hand the whole
-// history to the bridge as fresh turns — the bug where the bot woke up and
-// replied to two-week-old messages.
 func TestDriverDoesNotReplayHistoryWhenCursorInitFails(t *testing.T) {
 	a := &failingReader{left: 1}
-	a.feed("marrant tu fonctionne encore?") // already answered weeks ago
+	a.feed("marrant tu fonctionne encore?")
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
 	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
 	d.channel = "sess-chan"
 
-	// Retries back off from one second, so the whole history is still unread
-	// when the poll loop would otherwise have submitted it.
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	go d.run(ctx)
@@ -208,10 +186,6 @@ func TestDriverDoesNotReplayHistoryWhenCursorInitFails(t *testing.T) {
 	}
 }
 
-// TestDriverNonEventSinkPostsOnlyFinalReply proves that a gateway that does NOT
-// implement EventSink receives only the final reply through Post: mid-turn
-// status/chunk events render nothing on the host side (rendering is now the
-// gateway's job behind EventSink).
 func TestDriverNonEventSinkPostsOnlyFinalReply(t *testing.T) {
 	a := &fanRecorder{}
 	a.feed("hello")
@@ -241,12 +215,7 @@ func TestDriverNonEventSinkPostsOnlyFinalReply(t *testing.T) {
 	}
 }
 
-// TestDriverResolvesAttachmentsOntoInput proves the poll loop resolves a
-// message's file:// image attachment to a local path and carries it on the input
-// Event handed to the bridge, so the multimodal pipeline is wired end-to-end.
 func TestDriverResolvesAttachmentsOntoInput(t *testing.T) {
-	// The image has to live under the bridge's staging root: that is the only tree
-	// a file:// attachment may come from, the same way a real gateway stages one.
 	if err := os.MkdirAll(bridge.StagingRoot(), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -283,13 +252,9 @@ func TestDriverResolvesAttachmentsOntoInput(t *testing.T) {
 	}
 }
 
-// TestDriverEmitsAbandonedOnHangup proves that when an in-flight turn is
-// abandoned (the bridge connection drops), the host fans an abstract "abandoned"
-// signal to EventSink gateways so they can finalize their live acknowledgement.
-// The host emits no emoji/reaction itself — presentation is the gateway's job.
 func TestDriverEmitsAbandonedOnHangup(t *testing.T) {
-	a := &fanRecorder{}    // input source (non-sink)
-	rec := &sinkRecorder{} // EventSink gateway: receives the full stream
+	a := &fanRecorder{}
+	rec := &sinkRecorder{}
 	a.feed("hello")
 
 	toBridge := make(chan contracts.Event, 4)
@@ -301,11 +266,9 @@ func TestDriverEmitsAbandonedOnHangup(t *testing.T) {
 	defer cancel()
 	go d.run(ctx)
 
-	// The turn opens (human) and the input is handed to the bridge.
 	if got := <-toBridge; got.T != "input" || got.Text != "hello" {
 		t.Fatalf("driver wrote %+v, want input/hello", got)
 	}
-	// The bridge connection drops mid-turn: the driver abandons the turn.
 	d.hangup <- struct{}{}
 
 	waitFor(t, func() bool {
@@ -315,7 +278,6 @@ func TestDriverEmitsAbandonedOnHangup(t *testing.T) {
 		return n >= 2 && rec.emitted[0].T == "human" && rec.emitted[n-1].T == "abandoned"
 	}, "abandoned signal fanned to the EventSink gateway")
 
-	// A non-EventSink gateway posts nothing for an abandoned turn (no final reply).
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if len(a.posted) != 0 {
@@ -323,9 +285,6 @@ func TestDriverEmitsAbandonedOnHangup(t *testing.T) {
 	}
 }
 
-// TestDriverPickForwardsWithoutOpeningTurn proves Pick enqueues a pick frame
-// that pump forwards verbatim to the bridge, and that a pick (unlike an input)
-// does NOT open a turn/progress view on the bound gateways.
 func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 	a := &fanRecorder{}
 	toBridge := make(chan contracts.Event, 4)
@@ -344,7 +303,6 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Pick was not forwarded to the bridge")
 	}
-	// The bridge answers the pick out-of-band with a reply.
 	fromBridge <- contracts.Event{T: "reply", Text: "picked", Done: true}
 	waitFor(t, func() bool {
 		a.mu.Lock()
@@ -353,8 +311,6 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 	}, "pick reply posted without opening a progress view")
 }
 
-// TestPickRegistryRoutesToLiveSession proves the package-level Pick routes to a
-// registered session and reports false for an unknown one.
 func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	a := &fanRecorder{}
 	acc, err := control.Accept(tmpSock(t))
@@ -372,8 +328,6 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	}
 }
 
-// TestSeedEnqueuesInput proves Seed enqueues an input frame with handoff metadata
-// into the named session's FIFO, and returns false for an unknown session.
 func TestSeedEnqueuesInput(t *testing.T) {
 	d := newSessionDriver("beta", nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1))
 	registerDriver("beta", d)
@@ -430,9 +384,6 @@ func TestSeedAndWaitAbandonOnCancel(t *testing.T) {
 	}
 }
 
-// TestDriverJournalsParticipants proves the daemon driver records message
-// authors in the participants journal (the bridge no longer does), so
-// /session who keeps a source in pure-runner mode.
 func TestDriverJournalsParticipants(t *testing.T) {
 	a := &fanRecorder{}
 	a.feedFrom("hi", "u1")
@@ -462,7 +413,6 @@ func TestDriverFIFOSerializesTurns(t *testing.T) {
 	defer cancel()
 	go d.run(ctx)
 
-	// First input pumped; second must NOT appear until we reply{done} to the first.
 	if got := <-toBridge; got.Text != "first" {
 		t.Fatalf("first frame = %+v", got)
 	}
@@ -477,12 +427,9 @@ func TestDriverFIFOSerializesTurns(t *testing.T) {
 	}
 }
 
-// TestDriverResetMidTurnDoesNotEndTurn proves a backend "reset" event mid-turn
-// is fanned out (not swallowed) and does NOT complete the turn: the next queued
-// input must not pump until the real reply{done} arrives.
 func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
-	a := &fanRecorder{}    // input source (non-sink: only final reply posted)
-	rec := &sinkRecorder{} // EventSink gateway: receives the full stream
+	a := &fanRecorder{}
+	rec := &sinkRecorder{}
 	a.feed("first")
 	a.feed("second")
 
@@ -495,17 +442,13 @@ func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
 	defer cancel()
 	go d.run(ctx)
 
-	// First input pumped.
 	if got := <-toBridge; got.Text != "first" {
 		t.Fatalf("first frame = %+v", got)
 	}
 
-	// Mid-turn backend reset followed by a chunk, then the real reply{done}.
 	fromBridge <- contracts.Event{T: "reset"}
 	fromBridge <- contracts.Event{T: "chunk", Text: "x"}
 
-	// The reset+chunk must be fanned to the EventSink gateway before the reply,
-	// and the second input must NOT have pumped yet (turn still alive).
 	waitFor(t, func() bool {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
@@ -520,7 +463,6 @@ func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
 	case <-time.After(150 * time.Millisecond):
 	}
 
-	// Now complete the turn.
 	fromBridge <- contracts.Event{T: "reply", Text: "r1", Done: true}
 	if got := <-toBridge; got.Text != "second" {
 		t.Fatalf("second frame = %+v, want second after reply{done}", got)
@@ -553,23 +495,16 @@ func TestRunSessionReconnectsAndResumes(t *testing.T) {
 	defer cancel()
 	go RunSession(ctx, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
 
-	// First bridge connects, gets the input, then dies before replying.
 	c1 := dialCtl(t, sock)
 	gotInput(t, c1, "q1")
 	c1.Close()
 
-	// A new bridge connects (supervisor restart). The driver should resume and
-	// the next queued input flows. Feed a second line and expect it.
 	a.feed("q2")
 	c2 := dialCtl(t, sock)
 	defer c2.Close()
 	gotInput(t, c2, "q2")
 }
 
-// TestRunSessionReconnectsAfterCompletedTurn covers the case the reconnect test
-// above does not: the bridge dies while the driver is IDLE (the previous turn
-// already finished), then a new input arrives. The driver must accept the
-// reconnecting bridge and deliver the new input.
 func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 	a := &fanRecorder{}
 	a.feed("q1")
@@ -584,8 +519,6 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 	defer cancel()
 	go RunSession(ctx, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
 
-	// First bridge: gets q1, completes the turn with reply{done}, then dies while
-	// the driver is idle.
 	c1 := dialCtl(t, sock)
 	gotInput(t, c1, "q1")
 	if err := c1.Write(contracts.Event{T: "reply", Text: "r1", Done: true}); err != nil {
@@ -598,7 +531,6 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 	}, "first turn completed (reply posted)")
 	c1.Close()
 
-	// New bridge connects (supervisor restart); a new input must flow.
 	a.feed("q2")
 	c2 := dialCtl(t, sock)
 	defer c2.Close()
@@ -616,7 +548,6 @@ func dialCtl(t *testing.T, sock string) *control.Conn {
 	return c
 }
 
-// gotInput scans c for the first "input" frame and asserts its Text within 1s.
 func gotInput(t *testing.T, c *control.Conn, want string) {
 	t.Helper()
 	got := make(chan string, 1)
@@ -645,8 +576,6 @@ type stopScanErr struct{}
 
 func (stopScanErr) Error() string { return "stop" }
 
-// A gateway implementing RoutedEventSink must receive EmitTo with the session's
-// conversation (gateway kind + bound channel), in preference to Emit.
 func TestFanOutPrefersRoutedEventSink(t *testing.T) {
 	rec := &routedRec{}
 	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: rec}}, nil, nil)
@@ -665,7 +594,6 @@ func TestFanOutPrefersRoutedEventSink(t *testing.T) {
 	}
 }
 
-// routedRec is a minimal Gateway + RoutedEventSink + EventSink recorder.
 type routedRec struct {
 	convs      []contracts.Conversation
 	plainCalls int
@@ -692,9 +620,6 @@ func (r *routedRec) EmitTo(c contracts.Conversation, _ contracts.Event) {
 	r.convs = append(r.convs, c)
 }
 
-// recordingCoord is a fake contracts.Coordinator that records every request it
-// receives (handoff, delegate, report), so a test can assert whether (and with
-// what) the driver invoked it.
 type recordingCoord struct {
 	reqs      []contracts.HandoffRequest
 	delegates []contracts.DelegateRequest
@@ -744,9 +669,6 @@ func (r *recordingCoord) Route(_ context.Context, req contracts.RouteRequest) (s
 	return "netter", req.FromSession + "-netter", nil
 }
 
-// TestDriverInvokesCoordinatorOnHandoffTrailer proves a completed turn whose
-// reply carries a well-formed handoff trailer invokes the Coordinator with a
-// request built from the driver's own name and the parsed agent/task.
 func TestDriverInvokesCoordinatorOnHandoffTrailer(t *testing.T) {
 	from := make(chan contracts.Event, 2)
 	d := newSessionDriver("alpha", nil, make(chan contracts.Event, 1), from)
@@ -769,8 +691,6 @@ func TestDriverInvokesCoordinatorOnHandoffTrailer(t *testing.T) {
 	}
 }
 
-// TestDriverNoHandoffWithoutTrailer proves a normal reply (no handoff trailer)
-// never invokes the Coordinator.
 func TestDriverNoHandoffWithoutTrailer(t *testing.T) {
 	from := make(chan contracts.Event, 1)
 	d := newSessionDriver("alpha", nil, make(chan contracts.Event, 1), from)
@@ -783,9 +703,6 @@ func TestDriverNoHandoffWithoutTrailer(t *testing.T) {
 	}
 }
 
-// TestMaybeCoordinateDispatchesByTrailer proves the single post-turn hook routes
-// each trailer to the right coordinator method (done → delegate → handoff), and
-// a reply with no trailer invokes nothing.
 func TestMaybeCoordinateDispatchesByTrailer(t *testing.T) {
 	cases := []struct {
 		reply               string
@@ -809,8 +726,6 @@ func TestMaybeCoordinateDispatchesByTrailer(t *testing.T) {
 	}
 }
 
-// erroringCoord is a fake contracts.Coordinator whose Handoff always refuses,
-// so tests can observe how the driver surfaces a coordinator error.
 type erroringCoord struct{ err error }
 
 func (e *erroringCoord) Handoff(context.Context, contracts.HandoffRequest) (string, error) {
@@ -1019,11 +934,8 @@ func TestCoordinationRefusalStatusUsesStablePublicLabel(t *testing.T) {
 	}
 }
 
-// TestDriverSurfacesCoordinatorErrorAsStatus proves that when the Coordinator
-// refuses a handoff, the driver fans a "status" event carrying "handoff
-// refusé: <err>" to bound gateways instead of failing silently.
 func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
-	rec := &sinkRecorder{} // EventSink gateway: receives the full fanned-out stream
+	rec := &sinkRecorder{}
 	from := make(chan contracts.Event, 2)
 	d := newSessionDriver("alpha",
 		[]contracts.GatewaySet{{Gateway: rec}},
@@ -1068,9 +980,6 @@ func TestDriverInvokesCoordinatorOnSealTrailer(t *testing.T) {
 	}
 }
 
-// TestDriverInvokesCoordinatorOnFanOutTrailer proves a completed turn whose reply
-// carries a well-formed fanout trailer invokes FanOut with the driver's own name,
-// the parsed agent, and the parsed task list, and fans a "cohorte lancée" status.
 func TestDriverInvokesCoordinatorOnFanOutTrailer(t *testing.T) {
 	from := make(chan contracts.Event, 2)
 	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from)

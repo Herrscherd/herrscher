@@ -69,7 +69,7 @@ func (a *Acceptor) loop() {
 		c, err := a.ln.Accept()
 		if err != nil {
 			close(a.conns)
-			return // listener closed
+			return
 		}
 		select {
 		case <-a.done:

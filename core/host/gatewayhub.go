@@ -16,12 +16,9 @@ import (
 // daemon resolves a session's bound gateways through it instead of hand-wiring a
 // single gateway. Kinds() preserves registration order.
 type GatewayHub struct {
-	sets     map[string]contracts.GatewaySet
-	order    []string
-	failures []string
-	// unconfigured holds the gateways that never got the config they declare.
-	// They are kept apart from failures because they are not waited for: see
-	// attempt.
+	sets         map[string]contracts.GatewaySet
+	order        []string
+	failures     []string
 	unconfigured []string
 	pending      []contracts.Plugin
 	getenv       func(string) string
@@ -54,17 +51,6 @@ func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(strin
 	return h, nil
 }
 
-// attempt builds each candidate, recording the ones that came up and keeping the
-// ones that did not, with the reason, for Retry to try again.
-//
-// Not every skip is worth trying again. A gateway whose declared config is
-// simply absent — nobody set the token its manifest requires — cannot come up
-// later: the environment is fixed for the life of the process, so every retry
-// re-reads the same empty var and fails identically. Such a plugin is recorded as
-// unconfigured and left out of pending, which is what keeps AwaitPending from
-// holding the whole binary for the retry window over a gateway the operator
-// never asked for. Only failures that could plausibly resolve themselves (a
-// name that does not resolve yet, a service still booting) are waited on.
 func (h *GatewayHub) attempt(ctx context.Context, candidates []contracts.Plugin) {
 	h.failures = nil
 	h.pending = nil
@@ -80,7 +66,6 @@ func (h *GatewayHub) attempt(ctx context.Context, candidates []contracts.Plugin)
 			h.pending = append(h.pending, p)
 			continue
 		}
-		// Duplicate Manifest.Kind: keep first-seen order, last factory wins the set.
 		if _, dup := h.sets[p.Manifest.Kind]; !dup {
 			h.order = append(h.order, p.Manifest.Kind)
 		}
@@ -88,10 +73,6 @@ func (h *GatewayHub) attempt(ctx context.Context, candidates []contracts.Plugin)
 	}
 }
 
-// buildOne resolves a plugin's declared config and runs its factory. The second
-// result says the failure was the config resolution itself — a required setting
-// with nothing behind it — which the caller treats as permanent rather than
-// retryable.
 func buildOne(ctx context.Context, p contracts.Plugin, getenv func(string) string) (contracts.GatewaySet, bool, error) {
 	cfg, err := contracts.Resolve(p.Manifest.Config, getenv)
 	if err != nil {
@@ -135,8 +116,6 @@ func (h *GatewayHub) Pending() bool { return len(h.pending) > 0 }
 // wrong still gets on with serving the gateways that do work.
 const GatewayRetryWindow = 2 * time.Minute
 
-// The wait between attempts doubles from base to max. Both are variables so a
-// test can run the loop without spending the wall-clock time it describes.
 var (
 	gatewayRetryBase = 2 * time.Second
 	gatewayRetryMax  = 20 * time.Second

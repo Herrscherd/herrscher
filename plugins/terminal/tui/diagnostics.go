@@ -4,24 +4,12 @@ import (
 	"strings"
 )
 
-// Degradation elsewhere in this package is deliberately silent: a feature reads
-// the probe, picks its best available rendering and says nothing. That is right
-// at the point of use and useless when something is missing — from the outside,
-// "the image does not show up" looks exactly like a bug. This screen is the one
-// place the probe is spoken aloud.
-
-// diagRow is one capability as the operator reads it: what it is called, what it
-// resolved to, and what that buys. The third column is the point — a value with
-// no consequence attached is a number to look up somewhere else.
 type diagRow struct {
 	name    string
 	value   string
 	feature string
 }
 
-// diagRows renders caps as the rows of the screen. A capability that resolved to
-// nothing keeps its row and names its fallback: hiding it would say the feature
-// does not exist, when what is true is that this terminal renders it plainer.
 func diagRows(caps Capabilities) []diagRow {
 	graphics := diagRow{name: "graphismes", value: caps.Graphics.String()}
 	switch caps.Graphics {
@@ -58,14 +46,8 @@ func yesNo(b bool) string {
 	return "non"
 }
 
-// diagValueWidth pads the value column so the features line up. A ragged pair of
-// columns reads as prose; an aligned one reads as a record, which is what it is.
 const diagValueWidth = 12
 
-// diagnosticsView renders the capability screen for caps: the terminal it was
-// resolved for, one row per capability, and a closing line saying which
-// terminals get everything — so an operator on a plain one knows the plainer
-// rendering is the answer and not a failure.
 func diagnosticsView(caps Capabilities) string {
 	var b strings.Builder
 	b.WriteString(dimStyle.Render("terminal") + "  " + textStyle.Render(caps.Terminal))
@@ -79,10 +61,8 @@ func diagnosticsView(caps Capabilities) string {
 	return b.String()
 }
 
-// openDiagnostics opens the read-only capability screen.
 func (m *model) openDiagnostics() { m.diagOpen = true }
 
-// diagView renders the open screen with its own header, or "" when closed.
 func (m *model) diagView() string {
 	if !m.diagOpen {
 		return ""
@@ -91,13 +71,6 @@ func (m *model) diagView() string {
 		"\n" + m.remoteImageRow()
 }
 
-// remoteImageRow says whether an image the agent merely links to will be drawn.
-// That does not depend on the terminal but on the gateway's attachment
-// allowlist, and today the terminal gateway declares no hosts — so the answer is
-// no, always, and the code that fetches never runs. It belongs on this screen
-// rather than in a comment nobody reading the transcript will find: an operator
-// watching a URL stay a URL is owed the reason, and "off" is a reason where
-// silence is a bug report.
 func (m *model) remoteImageRow() string {
 	value, feature := "off", "an image the agent links to stays a link"
 	if m.imageFetcher != nil && len(m.imageHosts) > 0 {

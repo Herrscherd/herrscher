@@ -55,17 +55,12 @@ func LockState(statePath string) (func(), error) {
 				"Stop the other one, or pass --state to serve a separate world.",
 			statePath, holder)
 	}
-	// Best effort: the pid only improves the message the *next* daemon prints, and
-	// failing to record it is not a reason to refuse to start.
 	if err := f.Truncate(0); err == nil {
 		f.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0)
 	}
 	return func() { f.Close() }, nil
 }
 
-// readHolder renders the pid recorded in the lock as a parenthetical, or "" when
-// there is nothing readable there — an unhelpful "(pid 0)" would be worse than
-// saying nothing.
 func readHolder(f *os.File) string {
 	pid := readPID(f)
 	if pid <= 0 {
@@ -74,8 +69,6 @@ func readHolder(f *os.File) string {
 	return fmt.Sprintf(" (pid %d)", pid)
 }
 
-// readPID returns the pid recorded in an open lock file, or 0 when there is
-// nothing readable there.
 func readPID(f *os.File) int {
 	b := make([]byte, 32)
 	n, _ := f.ReadAt(b, 0)

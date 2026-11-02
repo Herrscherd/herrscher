@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// composerLines returns the rows View draws for the composer itself.
 func composerLines(t *testing.T, m *model) []string {
 	t.Helper()
 	all := strings.Split(m.View(), "\n")
@@ -37,9 +36,6 @@ func typeInto(t *testing.T, m *model, msgs ...tea.Msg) *model {
 	for _, msg := range msgs {
 		next, _ := m.Update(msg)
 		m = next.(*model)
-		// The real loop renders after every message, and rendering is what left
-		// the widget's inner viewport scrolled. A test that only pumps Update
-		// never reproduces the defect.
 		_ = m.View()
 	}
 	return m
@@ -47,11 +43,6 @@ func typeInto(t *testing.T, m *model, msgs ...tea.Msg) *model {
 
 func runeKey(r rune) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
 
-// TestComposerKeepsEveryLineOnANewline is the regression for a second line that
-// ate the first: the textarea scrolls its own inner viewport when an edit pushes
-// the cursor below the box, and growing the box afterwards does not undo that
-// scroll. The composer showed the new line on top and a blank row beneath it,
-// with the line above it gone.
 func TestComposerKeepsEveryLineOnANewline(t *testing.T) {
 	m := typeInto(t, newModel(nil), tea.WindowSizeMsg{Width: 100, Height: 20},
 		runeKey('A'), tea.KeyMsg{Type: tea.KeyEnter, Alt: true}, runeKey('B'))
@@ -71,9 +62,6 @@ func TestComposerKeepsEveryLineOnANewline(t *testing.T) {
 	}
 }
 
-// TestComposerKeepsEveryLineWhenTheDraftWraps is the same defect reached by
-// typing rather than by a chord: the character that spills past the width moves
-// the cursor onto a row the box does not have yet.
 func TestComposerKeepsEveryLineWhenTheDraftWraps(t *testing.T) {
 	m := typeInto(t, newModel(nil), tea.WindowSizeMsg{Width: 20, Height: 20})
 	for _, r := range "aaaaaaaaaa bbbbbbbbbb cc" {
@@ -88,9 +76,6 @@ func TestComposerKeepsEveryLineWhenTheDraftWraps(t *testing.T) {
 	}
 }
 
-// TestComposerStopsGrowingAtItsCap: past maxComposerLines the widget scrolls,
-// which is the behaviour openComposerBox must not suppress — the cap exists so a
-// long draft never eats the transcript.
 func TestComposerStopsGrowingAtItsCap(t *testing.T) {
 	m := typeInto(t, newModel(nil), tea.WindowSizeMsg{Width: 100, Height: 40})
 	for i := 0; i < maxComposerLines+4; i++ {

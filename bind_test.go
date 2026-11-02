@@ -10,8 +10,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-// talker is a gateway that both contributes a verb and owns the main thread —
-// the two capabilities bindGateways has to read before wrapping.
 type talker struct{ ran chan struct{} }
 
 func (talker) Manifest() contracts.Manifest {
@@ -41,12 +39,6 @@ func (talker) Commands() []contracts.Cmd {
 }
 func (t talker) RunForeground(context.Context, context.CancelFunc) error { return nil }
 
-// The daemon only ever sees degraded gateways, so that is the shape the
-// collection has to survive. Degrade's method set is fixed and carries no
-// Commands, which is why bindGateways reads the verbs first; collecting them
-// from what it returns yields nothing at all, and the whole plugin-command
-// feature is dead in production while every unit test on raw fakes still
-// passes. This test is the one that notices.
 func TestContributedCommandsSurviveDegrading(t *testing.T) {
 	sets := []host.Deps{{Gateway: talker{}}}
 
@@ -58,7 +50,6 @@ func TestContributedCommandsSurviveDegrading(t *testing.T) {
 		t.Fatal("a gateway owning the main thread must be detected before wrapping")
 	}
 
-	// The premise: what the daemon runs on genuinely cannot be asked for verbs.
 	if _, ok := gws[0].Gateway.(contracts.CommandSource); ok {
 		t.Fatal("the wrapped gateway is expected to have lost Commands; this test proves nothing otherwise")
 	}

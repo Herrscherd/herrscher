@@ -2,10 +2,6 @@ package tui
 
 import "testing"
 
-// The probe is the one place the TUI decides what the terminal can do, so it is
-// tested the way it is used: one row per terminal an operator actually runs,
-// with every capability asserted at once. A row that only checked graphics would
-// let a regression in colour or hyperlinks through unseen.
 func TestProbe(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -84,8 +80,6 @@ func TestProbe(t *testing.T) {
 	}
 }
 
-// The capability names reach the operator through the diagnostic screen, so they
-// have to be words rather than the integers the enums are underneath.
 func TestCapabilityNamesAreReadable(t *testing.T) {
 	if got := GraphicsKitty.String(); got != "kitty" {
 		t.Errorf("GraphicsKitty.String() = %q", got)

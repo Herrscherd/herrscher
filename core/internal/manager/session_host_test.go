@@ -10,16 +10,14 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// fakeHosts stands in for the composition root's placer: it knows one host and
-// refuses every other name, which is what an unregistered host looks like.
 type fakeHosts struct {
 	name         string
 	wt           *fakeWT
 	workspace    string
-	notReady     error    // what Ready answers, e.g. a version drift
-	materialized []string // worktree paths passed to Materialize
-	hooked       []bool   // whether each Materialize call asked for the approval hook
-	ensured      []string // "project@host" per EnsureProject call
+	notReady     error
+	materialized []string
+	hooked       []bool
+	ensured      []string
 }
 
 func (f *fakeHosts) Ready(name string) error {
@@ -70,7 +68,6 @@ func (f *fakeHosts) EnsureProject(ctx context.Context, name, project, repo strin
 	return nil
 }
 
-// handlerWithHosts wires a handler that knows one remote host named build1.
 func handlerWithHosts(t *testing.T) (*Handler, *fakeHosts, *fakeWT, *state.State) {
 	t.Helper()
 	h, _, _, localWT, _, st := newTestHandler(t, "category")
@@ -136,7 +133,7 @@ func TestSessionCreateTakesTheAgentDefaultHost(t *testing.T) {
 
 func TestSessionCreateExplicitHostBeatsTheAgentDefault(t *testing.T) {
 	h, _, localWT, st := handlerWithHosts(t)
-	localWT.path = t.TempDir() // a local agent really writes its files
+	localWT.path = t.TempDir()
 	if _, err := h.Agents().Create(agent.CreateSpec{Name: "nova", Host: "build1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -195,9 +192,6 @@ func TestSessionCreateRefusesAHostThatIsNotReady(t *testing.T) {
 	}
 }
 
-// The mirror of the test above: what stops a new session must not strand the
-// ones already running. Closing removes a worktree over there, which asks
-// nothing of the remote version.
 func TestSessionCloseWorksOnAHostThatIsNoLongerReady(t *testing.T) {
 	h, hs, _, st := handlerWithHosts(t)
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "host", "build1")); err != nil {
@@ -256,8 +250,6 @@ func TestSessionCreateStoresTheApprovalMode(t *testing.T) {
 	}
 }
 
-// A bypass session is the one case that must reach the far side with no hook at
-// all: its settings are then the ones herrscher wrote before approvals existed.
 func TestSessionCreateOnHostMaterializesWithoutAHookInBypass(t *testing.T) {
 	h, hs, _, _ := handlerWithHosts(t)
 	if _, err := h.Agents().Create(agent.CreateSpec{Name: "nova", Host: "build1"}); err != nil {
@@ -284,9 +276,6 @@ func TestSessionCreateOnHostMaterializesWithAHookByDefault(t *testing.T) {
 	}
 }
 
-// A warned session is still a session. The mode is recorded whatever the
-// warning says, so `approve mode` has something to change once the operator
-// recreates the session on a backend that can enforce it.
 func TestSessionCreateKeepsTheModeItWarnedAbout(t *testing.T) {
 	h, _, _, st := handlerWithHosts(t)
 	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "ask"))

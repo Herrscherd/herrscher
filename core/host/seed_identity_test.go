@@ -86,9 +86,6 @@ func (delegateSeedBackend) Respond(_ context.Context, _ contracts.Prompt, _ func
 }
 func (delegateSeedBackend) Close() error { return nil }
 
-// reentrantSeedCoordinator models the daemon coordinator's lock shape:
-// Delegate eventually calls hub.Create, which must be able to acquire
-// dispatchMu while the outer session-seed command is still awaiting its reply.
 type reentrantSeedCoordinator struct {
 	*recordingCoord
 	hub *hub

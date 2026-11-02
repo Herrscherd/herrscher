@@ -172,7 +172,7 @@ func main() {
 	}
 }
 
-func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (stdout string, exit int, err error) {
+func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (string, int, error) {
 	out, handled, derr := fwd(ctx, append([]string{cmd}, args...))
 	if !handled {
 		return "", 2, fmt.Errorf("%w %q", errUnknownCommand, cmd)

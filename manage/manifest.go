@@ -103,9 +103,9 @@ func setPlugins(src string, modules []string) (string, error) {
 	return strings.Join(out, "\n"), nil
 }
 
-func region(src string) (lines []string, begin, end int, err error) {
+func region(src string) ([]string, int, int, error) {
 	all := strings.Split(src, "\n")
-	begin, end = -1, -1
+	begin, end := -1, -1
 	for i, line := range all {
 		switch strings.TrimSpace(line) {
 		case beginMarker:

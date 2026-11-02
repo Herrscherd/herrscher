@@ -79,11 +79,11 @@ func pruneProjection(cwd string, kept map[string]bool) {
 	}
 }
 
-func renderSkill(n contracts.Node) (name, md string, ok bool) {
+func renderSkill(n contracts.Node) (string, string, bool) {
 	if n.Kind != contracts.KindSkill {
 		return "", "", false
 	}
-	name = n.Key[strings.LastIndex(n.Key, "/")+1:]
+	name := n.Key[strings.LastIndex(n.Key, "/")+1:]
 	body := strings.TrimSpace(n.Body)
 	if body == "" || name == "" || name == "." || name == ".." ||
 		strings.ContainsAny(name, `/\`) || strings.ContainsFunc(name, unsafeInName) {

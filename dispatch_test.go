@@ -25,8 +25,10 @@ func expectedLocalVerbs() []string {
 	}
 }
 
-func mainSwitches(t *testing.T) (cases []string, defaultForwards bool) {
+func mainSwitches(t *testing.T) ([]string, bool) {
 	t.Helper()
+	var cases []string
+	var defaultForwards bool
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "main.go", nil, 0)
 	if err != nil {

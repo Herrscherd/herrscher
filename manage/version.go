@@ -39,7 +39,7 @@ func (g goToolchain) List(ctx context.Context, args ...string) (string, error) {
 	return string(out), nil
 }
 
-func splitModuleVersion(arg string) (module, version string) {
+func splitModuleVersion(arg string) (string, string) {
 	if i := strings.LastIndex(arg, "@"); i >= 0 {
 		return arg[:i], arg[i+1:]
 	}

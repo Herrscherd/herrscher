@@ -85,14 +85,14 @@ func addRoleCommands(reg *cli.Registry, st *state.State) error {
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			principal := strings.TrimSpace(firstOf(in.Get("principal"), in.Rest))
 			if principal == "" {
-				return "", ErrPrincipalMissing
+				return "", errPrincipalMissing
 			}
 			removed, err := st.RemoveRole(principal)
 			if err != nil {
 				return "", err
 			}
 			if !removed {
-				return "", &NoRoleError{Principal: principal}
+				return "", &noRoleError{Principal: principal}
 			}
 			if len(st.RoleAssignments()) == 0 {
 				return principal + " holds no role, and neither does anyone else: herrscher is back to deciding nothing about humans", nil
@@ -108,7 +108,7 @@ func addRoleCommands(reg *cli.Registry, st *state.State) error {
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			principal := strings.TrimSpace(firstOf(in.Get("principal"), in.Rest))
 			if principal == "" {
-				return "", ErrPrincipalMissing
+				return "", errPrincipalMissing
 			}
 			role := authz.RoleOf(authz.Principal{ID: principal}, st.RoleNames())
 			return fmt.Sprintf("%s holds `%s`\n%s", principal, role, authz.Describe(role)), nil
@@ -117,19 +117,19 @@ func addRoleCommands(reg *cli.Registry, st *state.State) error {
 
 func grantable(principal, role string) error {
 	if principal == "" {
-		return fmt.Errorf("name a principal: a refusal spells it, e.g. chat:1234")
+		return errPrincipalExample
 	}
 	if principal == authz.LocalPrincipal {
-		return fmt.Errorf("`%s` is the daemon's own socket, and opening it already needs the daemon's uid: it is always `owner`", authz.LocalPrincipal)
+		return errLocalPrincipalRole
 	}
 	if strings.HasPrefix(principal, authz.SessionPrefix) {
-		return fmt.Errorf("`%s` is a session, and a session is always `agent`: the socket it arrives on decides that, not this table", principal)
+		return &sessionRoleError{Principal: principal}
 	}
 	if role == "" {
-		return fmt.Errorf("name a role: one of %s", strings.Join(authz.GrantableRoles(), ", "))
+		return &roleRequiredError{Grantable: authz.GrantableRoles()}
 	}
 	if !authz.Grantable(role) {
-		return fmt.Errorf("unknown role %q: grant one of %s", role, strings.Join(authz.GrantableRoles(), ", "))
+		return &unknownRoleError{Role: role, Grantable: authz.GrantableRoles()}
 	}
 	return nil
 }

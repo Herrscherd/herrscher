@@ -44,9 +44,9 @@ func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(strin
 	if len(h.sets) == 0 {
 		reasons := append(append([]string(nil), h.failures...), h.unconfigured...)
 		if len(reasons) == 0 {
-			return nil, ErrNoGatewayPlugin
+			return nil, errNoGatewayPlugin
 		}
-		return nil, &NoGatewayError{Reasons: strings.Join(reasons, "; ")}
+		return nil, &noGatewayError{Reasons: strings.Join(reasons, "; ")}
 	}
 	return h, nil
 }
@@ -83,7 +83,7 @@ func buildOne(ctx context.Context, p contracts.Plugin, getenv func(string) strin
 		return contracts.GatewaySet{}, false, err
 	}
 	if set.Gateway == nil {
-		return contracts.GatewaySet{}, false, ErrGatewayFactoryEmpty
+		return contracts.GatewaySet{}, false, errGatewayFactoryEmpty
 	}
 	return set, false, nil
 }

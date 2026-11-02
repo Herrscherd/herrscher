@@ -30,7 +30,7 @@ const buildTimeout = 5 * time.Minute
 func (u serviceUpdater) Build(ctx context.Context, pull bool) (string, error) {
 	src := u.st.SourceDir()
 	if src == "" {
-		return "", ErrSourceNotSet
+		return "", errSourceNotSet
 	}
 	ctx, cancel := context.WithTimeout(ctx, buildTimeout)
 	defer cancel()
@@ -124,8 +124,7 @@ func resolveInstanceID(st *state.State, optID, ownerID string, log *slog.Logger)
 	}
 	if st.InstanceID != "" {
 		if resolved != "" && resolved != st.InstanceID {
-			return "", fmt.Errorf("instanceID mismatch: state has %q but %q was requested; "+
-				"changing it would orphan existing sessions", st.InstanceID, resolved)
+			return "", &instanceIDMismatchError{Have: st.InstanceID, Want: resolved}
 		}
 		return st.InstanceID, nil
 	}

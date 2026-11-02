@@ -47,13 +47,7 @@ func LockState(statePath string) (func(), error) {
 	if !locked {
 		holder := readHolder(f)
 		closeRead(f)
-		return nil, fmt.Errorf(
-			"another herrscher is already serving %s%s\n"+
-				"Only one daemon may serve a state file: a second one answers every message a second time.\n"+
-				"On a terminal, a bare `herrscher` attaches to that daemon instead of refusing; you are seeing this\n"+
-				"because there is no terminal to attach, or because attaching failed (the reason is printed above).\n"+
-				"Stop the other one, or pass --state to serve a separate world.",
-			statePath, holder)
+		return nil, &lockHeldError{StatePath: statePath, Holder: holder}
 	}
 	if err := f.Truncate(0); err == nil {
 		logWriteFailure(f.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0))

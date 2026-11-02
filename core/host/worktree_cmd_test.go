@@ -132,7 +132,7 @@ func TestWorktreeVerbMaterializesFromStdin(t *testing.T) {
 	}
 	go func() {
 		_, copyErr := io.Copy(w, payload)
-	logCleanup(copyErr)
+		logCleanup(copyErr)
 		logCleanup(w.Close())
 	}()
 	old := os.Stdin

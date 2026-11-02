@@ -155,13 +155,13 @@ func (s *scheduler) fireNow(ctx context.Context, name string) error {
 			continue
 		}
 		if !s.claim(sc.Name) {
-			return &ScheduleBusyError{Name: name}
+			return &scheduleBusyError{Name: name}
 		}
 		defer s.release(sc.Name)
 		fctx, cancel := context.WithTimeout(ctx, fireTimeout)
 		defer cancel()
 		if !s.fire(fctx, sc, "") {
-			return fmt.Errorf("schedule %q: no session took the task, see the daemon log", name)
+			return &taskNotTakenError{Schedule: name}
 		}
 		return nil
 	}

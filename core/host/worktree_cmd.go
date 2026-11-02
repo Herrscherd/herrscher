@@ -21,7 +21,7 @@ import (
 // a daemon on another machine that reads its JSON.
 func RunWorktree(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return ErrWorktreeSubcommand
+		return errWorktreeSubcommand
 	}
 	sub, rest := args[0], args[1:]
 	fs := flag.NewFlagSet("worktree "+sub, flag.ContinueOnError)
@@ -35,7 +35,7 @@ func RunWorktree(ctx context.Context, args []string) error {
 		return err
 	}
 	if sub != "materialize" && (*repo == "" || *name == "") {
-		return &WorktreeFlagsError{Sub: sub}
+		return &worktreeFlagsError{Sub: sub}
 	}
 	wt := worktree.NewWorktreer(ctx, *instance)
 	switch sub {
@@ -54,7 +54,7 @@ func RunWorktree(ctx context.Context, args []string) error {
 		return emitJSON(map[string]bool{"removed": true})
 	case "materialize":
 		if *worktreePath == "" {
-			return ErrWorktreeMaterializeRequired
+			return errWorktreeMaterializeRequired
 		}
 		if err := extractTar(os.Stdin, *worktreePath); err != nil {
 			return err
@@ -64,7 +64,7 @@ func RunWorktree(ctx context.Context, args []string) error {
 		}
 		return emitJSON(map[string]bool{"materialized": true})
 	default:
-		return &UnknownWorktreeSubcommandError{Sub: sub}
+		return &unknownWorktreeSubcommandError{Sub: sub}
 	}
 }
 

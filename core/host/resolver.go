@@ -297,7 +297,7 @@ func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, p contracts.Plugin
 					return transport.DialBackend(ctx, be, r.creds)
 				}
 			}
-			return nil, fmt.Errorf("resolver: no remote backend announced for kind %q", p.Manifest.Kind)
+			return nil, &noRemoteBackendError{Kind: p.Manifest.Kind}
 		}
 		select {
 		case <-seen:

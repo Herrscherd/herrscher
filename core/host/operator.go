@@ -2,7 +2,6 @@ package host
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -28,7 +27,7 @@ func forwardDaemonOwnedCommands(reg *cli.Registry, instID string, forward seedCo
 					return out, err
 				}
 				if path := strings.Join(cmd.Path, " "); daemonOnly[path] {
-					return "", fmt.Errorf("`%s` needs a running herrscher daemon, and none answered on %s", path, target)
+					return "", &daemonRequiredError{Command: path, Target: target}
 				}
 				return next(ctx, in)
 			}

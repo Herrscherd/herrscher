@@ -75,7 +75,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			return err
 		}
 		if vendor != "" && vendor != entry.Vendor {
-			return fmt.Errorf("model %q belongs to backend %q, but backend %q was requested; pick a model offered by %q or switch the vendor", modelID, entry.Vendor, vendor, vendor)
+			return &modelBackendMismatchError{Model: modelID, Owner: entry.Vendor, Requested: vendor}
 		}
 		return nil
 	})
@@ -189,7 +189,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		Param("name", "session name", true).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			if !Interrupt(in.Get("name")) {
-				return "", &NoTurnInFlightError{Session: in.Get("name")}
+				return "", &noTurnInFlightError{Session: in.Get("name")}
 			}
 			return "interrupted " + in.Get("name"), nil
 		})); err != nil {
@@ -206,7 +206,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			defer closeRead(mem)
 			loc, ok := mem.(contracts.Locator)
 			if !ok {
-				return "", ErrMemoryLocateUnsupported
+				return "", errMemoryLocateUnsupported
 			}
 			l, err := loc.Locate(cmdCtx, in.Get("key"))
 			if err != nil {
@@ -234,7 +234,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			defer closeRead(mem)
 			del, ok := mem.(contracts.Deleter)
 			if !ok {
-				return "", ErrMemoryForgetUnsupported
+				return "", errMemoryForgetUnsupported
 			}
 			if err := del.Delete(cmdCtx, in.Get("key")); err != nil {
 				return "", err
@@ -262,7 +262,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 				contracts.KindSession, contracts.KindDecision, contracts.KindUser,
 				contracts.KindAgent, contracts.KindDomain:
 			default:
-				return "", &UnknownMemoryKindError{Kind: in.Get("kind")}
+				return "", &UnknownError{Kind: "memory kind", Name: in.Get("kind")}
 			}
 			n := contracts.Node{
 				Key:   in.Get("key"),

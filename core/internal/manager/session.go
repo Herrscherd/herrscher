@@ -177,65 +177,93 @@ func (h *Handler) sessionSetBudgetRun(ctx context.Context, in contracts.Input) (
 	if !ok {
 		return "", &SessionNotFoundError{Name: name}
 	}
-	patch := budgetPatch{}
-	if v, ok := in.Lookup("cost_cap"); ok && v != "" {
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			return "", &InvalidValueError{Field: "cost_cap", Value: v}
-		}
-		patch.costCap = fptr(f)
-	}
-	if v, ok := in.Lookup("token_cap"); ok && v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 {
-			return "", &InvalidValueError{Field: "token_cap", Value: v}
-		}
-		patch.tokenCap = uptr(uint64(n))
-	}
-	if v, ok := in.Lookup("cohort_cost_cap"); ok && v != "" {
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			return "", &InvalidValueError{Field: "cohort_cost_cap", Value: v}
-		}
-		patch.cohortCostCap = fptr(f)
-	}
-	if v, ok := in.Lookup("cohort_token_cap"); ok && v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 {
-			return "", &InvalidValueError{Field: "cohort_token_cap", Value: v}
-		}
-		patch.cohortTokenCap = uptr(uint64(n))
-	}
-	usageFor := func(s state.Session) sessionUsage {
-		entries := state.ReadTranscript(state.TranscriptPath(h.partDir, s.Name), 0)
-		u := aggregateUsage(entries).usage
-		if u == nil {
-			return sessionUsage{}
-		}
-		return sessionUsage{cost: u.Cost, tokens: nonNegativeCount(u.TokensIn + u.TokensOut)}
+	patch, err := parseBudgetPatch(in)
+	if err != nil {
+		return "", err
 	}
 	targets := []state.Session{sess}
-	scope, _ := in.Lookup("scope")
-	if scope == "cohort" {
+	if scope, _ := in.Lookup("scope"); scope == "cohort" {
 		targets = cohortMembers(sess, h.st.SnapshotSessions())
 	}
-	for i := range targets {
-		t := targets[i]
-		usage := usageFor(t)
-		cohort := cohortTotals(t, h.st.SnapshotSessions(), usageFor)
-		cc, ctk := cohort.cost, cohort.tokens
-		updated := applyBudget(t, patch, usage.cost, usage.tokens)
-		if updated.PausedReason == "cohort_cost" && (updated.CohortCostCap == 0 || cc < updated.CohortCostCap) {
-			updated.PausedReason = ""
-		}
-		if updated.PausedReason == "cohort_tokens" && (updated.CohortTokenCap == 0 || ctk < updated.CohortTokenCap) {
-			updated.PausedReason = ""
-		}
-		if err := h.st.SetBudget(updated.Name, updated.CostCap, updated.TokenCap, updated.CohortCostCap, updated.CohortTokenCap, updated.PausedReason); err != nil {
-			return "", fmt.Errorf("persist budget for %q: %w", updated.Name, err)
+	for _, target := range targets {
+		if err := h.applyBudgetTo(target, patch); err != nil {
+			return "", err
 		}
 	}
 	return fmt.Sprintf("✅ budget updated for %d session(s)", len(targets)), nil
+}
+
+func parseBudgetPatch(in contracts.Input) (budgetPatch, error) {
+	var patch budgetPatch
+	if err := setFloatCap(in, "cost_cap", &patch.costCap); err != nil {
+		return budgetPatch{}, err
+	}
+	if err := setCountCap(in, "token_cap", &patch.tokenCap); err != nil {
+		return budgetPatch{}, err
+	}
+	if err := setFloatCap(in, "cohort_cost_cap", &patch.cohortCostCap); err != nil {
+		return budgetPatch{}, err
+	}
+	if err := setCountCap(in, "cohort_token_cap", &patch.cohortTokenCap); err != nil {
+		return budgetPatch{}, err
+	}
+	return patch, nil
+}
+
+func setFloatCap(in contracts.Input, key string, dst **float64) error {
+	v, ok := in.Lookup(key)
+	if !ok || v == "" {
+		return nil
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return &InvalidValueError{Field: key, Value: v}
+	}
+	*dst = fptr(f)
+	return nil
+}
+
+func setCountCap(in contracts.Input, key string, dst **uint64) error {
+	v, ok := in.Lookup(key)
+	if !ok || v == "" {
+		return nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return &InvalidValueError{Field: key, Value: v}
+	}
+	*dst = uptr(nonNegativeCount(n))
+	return nil
+}
+
+func (h *Handler) applyBudgetTo(target state.Session, patch budgetPatch) error {
+	usageFor := h.usageOf
+	usage := usageFor(target)
+	cohort := cohortTotals(target, h.st.SnapshotSessions(), usageFor)
+	updated := applyBudget(target, patch, usage.cost, usage.tokens)
+	releaseCohortPause(&updated, cohort)
+	if err := h.st.SetBudget(updated.Name, updated.CostCap, updated.TokenCap, updated.CohortCostCap, updated.CohortTokenCap, updated.PausedReason); err != nil {
+		return fmt.Errorf("persist budget for %q: %w", updated.Name, err)
+	}
+	return nil
+}
+
+func (h *Handler) usageOf(s state.Session) sessionUsage {
+	entries := state.ReadTranscript(state.TranscriptPath(h.partDir, s.Name), 0)
+	u := aggregateUsage(entries).usage
+	if u == nil {
+		return sessionUsage{}
+	}
+	return sessionUsage{cost: u.Cost, tokens: nonNegativeCount(u.TokensIn + u.TokensOut)}
+}
+
+func releaseCohortPause(updated *state.Session, cohort sessionUsage) {
+	if updated.PausedReason == "cohort_cost" && (updated.CohortCostCap == 0 || cohort.cost < updated.CohortCostCap) {
+		updated.PausedReason = ""
+	}
+	if updated.PausedReason == "cohort_tokens" && (updated.CohortTokenCap == 0 || cohort.tokens < updated.CohortTokenCap) {
+		updated.PausedReason = ""
+	}
 }
 
 func (h *Handler) stampBudget(row *sessionJSON, s state.Session) {
@@ -946,7 +974,6 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	if err := h.checkSpawnSource(cmdSupplied, modelID); err != nil {
 		return "", err
 	}
-	oldVendor, oldCmd, oldModelID, oldToken := prior.Vendor, prior.Cmd, prior.ModelID, prior.ResumeToken
 	targeted, persistErr := h.st.SetBackendTarget(name, vendor, cmd, modelID)
 	if !targeted {
 		return "", &SessionNotFoundError{Name: name}
@@ -955,33 +982,48 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 		return "", fmt.Errorf("persist: %w", persistErr)
 	}
 	sess, _ := h.st.FindSession(name)
-	switchNote := ""
-	if m := sess.Approvals; m != "" && m != string(approval.ModeBypass) {
-		if gate := h.gateFor(sess.Vendor); !gate.enforced {
-			why := gate.why
-			if why == "" {
-				why = "it exposes no approval channel"
-			}
-			switchNote = fmt.Sprintf("\n\n⚠️ approvals: %#q cannot enforce them (%s), so **%s** now runs ungated.", vendorLabel(sess.Vendor), why, name)
-		}
-	}
+	switchNote := h.switchApprovalsNote(sess)
 	if err := h.sup.Restart(sess); err != nil {
-		if rbErr := h.rollbackSwitch(name, oldVendor, oldCmd, oldModelID, oldToken); rbErr != nil {
-			return "", fmt.Errorf("redémarrage backend: %w; rollback échoué, session %s hors service: %w", err, name, rbErr)
-		}
-		return "", fmt.Errorf("redémarrage backend: %w (session %s restaurée sur %s)", err, name, oldVendor)
+		return "", h.revertSwitch(name, prior, err)
 	}
+	return h.switchReply(ctx, name, vendor, handoff, switchNote), nil
+}
+
+func (h *Handler) switchApprovalsNote(sess state.Session) string {
+	mode := sess.Approvals
+	if mode == "" || mode == string(approval.ModeBypass) {
+		return ""
+	}
+	gate := h.gateFor(sess.Vendor)
+	if gate.enforced {
+		return ""
+	}
+	why := gate.why
+	if why == "" {
+		why = "it exposes no approval channel"
+	}
+	return fmt.Sprintf("\n\n⚠️ approvals: %#q cannot enforce them (%s), so **%s** now runs ungated.", vendorLabel(sess.Vendor), why, sess.Name)
+}
+
+func (h *Handler) revertSwitch(name string, prior state.Session, restartErr error) error {
+	if rbErr := h.rollbackSwitch(name, prior.Vendor, prior.Cmd, prior.ModelID, prior.ResumeToken); rbErr != nil {
+		return fmt.Errorf("redémarrage backend: %w; rollback échoué, session %s hors service: %w", restartErr, name, rbErr)
+	}
+	return fmt.Errorf("redémarrage backend: %w (session %s restaurée sur %s)", restartErr, name, prior.Vendor)
+}
+
+func (h *Handler) switchReply(ctx context.Context, name, vendor, handoff, switchNote string) string {
 	if handoff == "none" {
-		return fmt.Sprintf("session %s re-ciblée sur %s (sans reprise)%s", name, vendor, switchNote), nil
+		return fmt.Sprintf("session %s re-ciblée sur %s (sans reprise)%s", name, vendor, switchNote)
 	}
 	seedText := buildHandoffSeed(
 		state.ReadTranscript(state.TranscriptPath(h.partDir, name), sessionLogTranscriptCap),
 		handoff,
 	)
 	if seedText != "" && h.seed != nil && !h.injectSeed(ctx, name, seedText) {
-		return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s non confirmée)%s", name, vendor, handoff, switchNote), nil
+		return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s non confirmée)%s", name, vendor, handoff, switchNote)
 	}
-	return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s)%s", name, vendor, handoff, switchNote), nil
+	return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s)%s", name, vendor, handoff, switchNote)
 }
 
 const seedRetryDelay = 150 * time.Millisecond

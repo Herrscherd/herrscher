@@ -29,7 +29,7 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 		t.Fatalf("listen: %v", err)
 	}
 	gs := grpc.NewServer()
-	transport.RegisterMemorySkeleton(gs, recordingMem{})
+	serveSkeleton(t, gs, func(r *transport.PluginRouter) error { return transport.RegisterMemorySkeleton(r, recordingMem{}) })
 	go func() { _ = gs.Serve(lis) }()
 	t.Cleanup(gs.Stop)
 
@@ -90,7 +90,9 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 		t.Fatalf("listen: %v", err)
 	}
 	gs := grpc.NewServer()
-	transport.RegisterOrchestratorSkeleton(gs, recordingOrch{})
+	serveSkeleton(t, gs, func(r *transport.PluginRouter) error {
+		return transport.RegisterOrchestratorSkeleton(r, recordingOrch{})
+	})
 	go func() { _ = gs.Serve(lis) }()
 	t.Cleanup(gs.Stop)
 
@@ -232,4 +234,15 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func serveSkeleton(t *testing.T, server *grpc.Server, registerSkeleton func(*transport.PluginRouter) error) {
+	t.Helper()
+	router, err := transport.NewPluginRouter(server)
+	if err != nil {
+		t.Fatalf("new plugin router: %v", err)
+	}
+	if err := registerSkeleton(router); err != nil {
+		t.Fatalf("register skeleton: %v", err)
+	}
 }

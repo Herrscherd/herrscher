@@ -677,7 +677,7 @@ func TestDriverInvokesCoordinatorOnHandoffTrailer(t *testing.T) {
 
 	from <- contracts.Event{
 		T: "reply", Done: true,
-		Text: "fait.\n⟢ handoff: scripter — finir le module",
+		Text: "fait.\n⟢ handoff: scripter \u2014 finir le module",
 	}
 	if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
 		t.Fatal("awaitTurn should complete on reply{done}")
@@ -708,8 +708,8 @@ func TestMaybeCoordinateDispatchesByTrailer(t *testing.T) {
 		reply               string
 		wantH, wantD, wantR int
 	}{
-		{"texte\n⟢ handoff: scripter — tâche", 1, 0, 0},
-		{"texte\n⟢ delegate: scripter — tâche", 0, 1, 0},
+		{"texte\n⟢ handoff: scripter \u2014 tâche", 1, 0, 0},
+		{"texte\n⟢ delegate: scripter \u2014 tâche", 0, 1, 0},
 		{"texte\n⟢ done: fini, 12 tests verts", 0, 0, 1},
 		{"aucun trailer ici", 0, 0, 0},
 	}
@@ -779,7 +779,7 @@ func TestTerminalReplyCarriesAcceptedDelegationBeforeSeedRelease(t *testing.T) {
 
 	from <- contracts.Event{
 		T: "reply", Done: true,
-		Text: "Je délègue.\n⟢ delegate: roblox-scripter — modifier les nametags",
+		Text: "Je délègue.\n⟢ delegate: roblox-scripter \u2014 modifier les nametags",
 	}
 	if !d.awaitTurn(context.Background(), tokenGuard{}) {
 		t.Fatal("turn abandoned")
@@ -815,7 +815,7 @@ func TestTerminalReplyCarriesCoordinationOutcomesBeforeSeedRelease(t *testing.T)
 			name:        "delegation refusal",
 			session:     "lead",
 			coordinator: &erroringCoord{err: errors.New("boom")},
-			reply:       "Je délègue.\n⟢ delegate: roblox-scripter — modifier les nametags",
+			reply:       "Je délègue.\n⟢ delegate: roblox-scripter \u2014 modifier les nametags",
 			want: contracts.CoordinationEvent{
 				Kind: "delegate_failed", SourceSession: "lead",
 				Agent: "roblox-scripter", Summary: "boom",
@@ -901,7 +901,7 @@ func TestCoordinationRefusalStatusUsesStablePublicLabel(t *testing.T) {
 	}{
 		{
 			name:       "delegation",
-			reply:      "Je délègue.\n⟢ delegate: scripter — corriger",
+			reply:      "Je délègue.\n⟢ delegate: scripter \u2014 corriger",
 			wantStatus: "delegate refusé",
 			wantKind:   "delegate_failed",
 		},
@@ -944,7 +944,7 @@ func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
 
 	from <- contracts.Event{
 		T: "reply", Done: true,
-		Text: "fait.\n⟢ handoff: scripter — finir le module",
+		Text: "fait.\n⟢ handoff: scripter \u2014 finir le module",
 	}
 	if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
 		t.Fatal("awaitTurn should complete on reply{done}")
@@ -988,7 +988,7 @@ func TestDriverInvokesCoordinatorOnFanOutTrailer(t *testing.T) {
 
 	from <- contracts.Event{
 		T: "reply", Done: true,
-		Text: "je lance.\n⟢ fanout: scripter — a ;; b",
+		Text: "je lance.\n⟢ fanout: scripter \u2014 a ;; b",
 	}
 	if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
 		t.Fatal("awaitTurn should complete on reply{done}")

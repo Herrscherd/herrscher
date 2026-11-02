@@ -6,13 +6,14 @@ import (
 )
 
 const (
-	handoffMarker  = "⟢ handoff:"
-	delegateMarker = "⟢ delegate:"
-	doneMarker     = "⟢ done:"
-	sealMarker     = "⟢ seal:"
-	mergeMarker    = "⟢ merge:"
-	fanoutMarker   = "⟢ fanout:"
-	routeMarker    = "⟢ route:"
+	handoffMarker    = "⟢ handoff:"
+	delegateMarker   = "⟢ delegate:"
+	doneMarker       = "⟢ done:"
+	sealMarker       = "⟢ seal:"
+	mergeMarker      = "⟢ merge:"
+	fanoutMarker     = "⟢ fanout:"
+	routeMarker      = "⟢ route:"
+	trailerSeparator = "\u2014"
 )
 
 func parseTrailer(reply, marker string) (body string, ok bool) {
@@ -25,7 +26,7 @@ func parseTrailer(reply, marker string) (body string, ok bool) {
 }
 
 func splitAgentTask(body string) (agent, task string, ok bool) {
-	parts := strings.SplitN(body, "—", 2)
+	parts := strings.SplitN(body, trailerSeparator, 2)
 	if len(parts) != 2 {
 		return "", "", false
 	}
@@ -82,7 +83,7 @@ func parseSeal(reply string) (n int, ok bool) {
 }
 
 func splitAgentTasks(body string) (agent string, tasks []string, ok bool) {
-	parts := strings.SplitN(body, "—", 2)
+	parts := strings.SplitN(body, trailerSeparator, 2)
 	if len(parts) != 2 {
 		return "", nil, false
 	}

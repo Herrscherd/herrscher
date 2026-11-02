@@ -11,7 +11,7 @@ const delegationIntro = "You can hand a full mission to another agent. It runs a
 	"isolated worktree on its own backend and reports back to you when it is done " +
 	"(async: you keep talking to the human meanwhile). To trigger it, end your reply " +
 	"with ONE trailer line:\n" +
-	"  ⟢ delegate: <agent> — <mission>   spawn a named worker and get its result back\n" +
+	"  ⟢ delegate: <agent> \u2014 <mission>   spawn a named worker and get its result back\n" +
 	"  ⟢ route: <mission>                let the host pick the best-matching agent\n" +
 	"When a worker's result later lands in your turn, synthesize it for the human. " +
 	"This requires your session to be an isolated, committed worktree."

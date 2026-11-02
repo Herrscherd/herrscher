@@ -102,7 +102,7 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 	}
 }
 
-func registerApproval(p *pendingApproval) (release func(), refusal string) {
+func registerApproval(p *pendingApproval) (func(), string) {
 	approvals.mu.Lock()
 	defer approvals.mu.Unlock()
 	if len(approvals.m) >= maxPendingApprovals {

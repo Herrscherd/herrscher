@@ -6,7 +6,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/envx"
 )
 
-func CaptureGatewayConfig(plugins []contracts.Plugin) (reveal func()) {
+func CaptureGatewayConfig(plugins []contracts.Plugin) func() {
 	return envx.Hide(gatewayConfigKeys(plugins))
 }
 

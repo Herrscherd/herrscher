@@ -2,8 +2,9 @@ package bridge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -54,7 +55,7 @@ func TestEmitBackendEventThinking(t *testing.T) {
 	sink := &recordSink{}
 	emitBackendEvent(sink, contracts.BackendEvent{Kind: "thinking", Detail: "je réfléchis"}, 0, 0, 0, 0)
 	want := []contracts.Event{{T: "thinking", Text: "je réfléchis"}}
-	if !reflect.DeepEqual(sink.events, want) {
+	if !slices.EqualFunc(sink.events, want, sameEvent) {
 		t.Fatalf("emitted %+v, want %+v", sink.events, want)
 	}
 }
@@ -69,7 +70,7 @@ func TestEmitBackendEventPanels(t *testing.T) {
 	emitBackendEvent(sink, contracts.BackendEvent{Kind: "subagent"}, 0, 0, 0, 0)
 
 	want := []contracts.Event{{T: "todos", Todos: todos}, {T: "subagent", Subagent: &agent}}
-	if !reflect.DeepEqual(sink.events, want) {
+	if !slices.EqualFunc(sink.events, want, sameEvent) {
 		t.Fatalf("emitted %+v, want %+v", sink.events, want)
 	}
 }
@@ -133,7 +134,7 @@ func TestRunOneTurn_AccumulatesUsageAcrossMessages(t *testing.T) {
 			chunks = append(chunks, e.Tokens)
 		}
 	}
-	if want := []int{20, 40, 60}; !reflect.DeepEqual(chunks, want) {
+	if want := []int{20, 40, 60}; !slices.Equal(chunks, want) {
 		t.Fatalf("live output tokens = %v, want %v (a running sum)", chunks, want)
 	}
 	last := sink.events[len(sink.events)-1]
@@ -279,7 +280,7 @@ func TestRunHubOneTurn(t *testing.T) {
 		t.Fatalf("emitted %+v, want %+v", sink.events, want)
 	}
 	for i := range want {
-		if !reflect.DeepEqual(sink.events[i], want[i]) {
+		if !sameEvent(sink.events[i], want[i]) {
 			t.Errorf("event %d = %+v, want %+v", i, sink.events[i], want[i])
 		}
 	}
@@ -316,7 +317,7 @@ func TestRunHubEmptyReplyStillTerminates(t *testing.T) {
 
 	runHubTurns(context.Background(), in, sink, fakeBackend{reply: ""}, nil)
 
-	if len(sink.events) == 0 || !reflect.DeepEqual(sink.events[len(sink.events)-1], contracts.Event{T: "reply", Done: true}) {
+	if len(sink.events) == 0 || !sameEvent(sink.events[len(sink.events)-1], contracts.Event{T: "reply", Done: true}) {
 		t.Fatalf("empty reply must still emit a terminal reply{done}; got %+v", sink.events)
 	}
 }
@@ -371,4 +372,10 @@ func TestRunHubContextCancelStops(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("runHubTurns did not return on cancelled context")
 	}
+}
+
+func sameEvent(a, b contracts.Event) bool {
+	ja, errA := json.Marshal(a)
+	jb, errB := json.Marshal(b)
+	return errA == nil && errB == nil && string(ja) == string(jb)
 }

@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -20,7 +20,7 @@ func TestRenameNamesTheActiveSession(t *testing.T) {
 	runCmd(m.handleEnter())
 
 	want := []string{"session", "rename", "--name", "avant", "--to", "ma grande refonte"}
-	if len(be.dispatched) != 1 || !reflect.DeepEqual(be.dispatched[0], want) {
+	if len(be.dispatched) != 1 || !slices.Equal(be.dispatched[0], want) {
 		t.Fatalf("commande envoyee = %v, attendu %v", be.dispatched, want)
 	}
 }

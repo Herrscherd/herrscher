@@ -64,16 +64,16 @@ func gitConfig(dir, key string) string {
 	return flatten(string(out))
 }
 
-func flatten(v string) string {
-	return strings.TrimSpace(strings.Map(func(r rune) rune {
-		if r == '\t' {
+func flatten(raw string) string {
+	return strings.TrimSpace(strings.Map(func(char rune) rune {
+		if char == '\t' {
 			return ' '
 		}
-		if unicode.IsControl(r) {
+		if unicode.IsControl(char) {
 			return -1
 		}
-		return r
-	}, v))
+		return char
+	}, raw))
 }
 
 // Empty reports whether git answered nothing at all.

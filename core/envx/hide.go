@@ -25,42 +25,42 @@ func Hide(keys []string) func() {
 		hidden.vals = make(map[string]string)
 	}
 	prior := make(map[string]priorKey)
-	for _, k := range keys {
-		if isEnvKey(k) {
-			hideKey(k, prior)
+	for _, key := range keys {
+		if isEnvKey(key) {
+			hideKey(key, prior)
 		}
 	}
 	return func() { restoreHidden(prior) }
 }
 
-func hideKey(k string, prior map[string]priorKey) {
-	env := os.Getenv(k)
-	if err := os.Unsetenv(k); err != nil {
+func hideKey(key string, prior map[string]priorKey) {
+	env := os.Getenv(key)
+	if err := os.Unsetenv(key); err != nil {
 		return
 	}
-	if _, seen := prior[k]; !seen {
-		stored, held := hidden.vals[k]
-		prior[k] = priorKey{held: held, stored: stored, env: env}
+	if _, seen := prior[key]; !seen {
+		stored, held := hidden.vals[key]
+		prior[key] = priorKey{held: held, stored: stored, env: env}
 	}
-	if hidden.vals[k] == "" {
-		hidden.vals[k] = env
+	if hidden.vals[key] == "" {
+		hidden.vals[key] = env
 	}
 }
 
 func restoreHidden(prior map[string]priorKey) {
 	hidden.mu.Lock()
 	defer hidden.mu.Unlock()
-	for k, p := range prior {
-		if p.held {
-			hidden.vals[k] = p.stored
+	for key, saved := range prior {
+		if saved.held {
+			hidden.vals[key] = saved.stored
 		} else {
-			delete(hidden.vals, k)
+			delete(hidden.vals, key)
 		}
-		if p.env == "" {
+		if saved.env == "" {
 			continue
 		}
-		if err := os.Setenv(k, p.env); err != nil {
-			slog.Error("restore hidden environment variable", "key", k, "err", err)
+		if err := os.Setenv(key, saved.env); err != nil {
+			slog.Error("restore hidden environment variable", "key", key, "err", err)
 		}
 	}
 }
@@ -79,10 +79,10 @@ func Getenv(name string) string { return revealed(name, os.Getenv) }
 
 func revealed(name string, fallback func(string) string) string {
 	hidden.mu.Lock()
-	v := hidden.vals[name]
+	val := hidden.vals[name]
 	hidden.mu.Unlock()
-	if v != "" {
-		return v
+	if val != "" {
+		return val
 	}
 	return fallback(name)
 }

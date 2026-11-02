@@ -26,10 +26,10 @@ type Conn struct {
 func newConn(c net.Conn) *Conn { return &Conn{c: c} }
 
 // Write sends one Event as a JSON line.
-func (c *Conn) Write(e contracts.Event) error {
+func (c *Conn) Write(event contracts.Event) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return WriteEvent(c.c, e)
+	return WriteEvent(c.c, event)
 }
 
 // Emit satisfies contracts.EventSink so the bridge can hand a Conn directly to
@@ -68,32 +68,32 @@ func Accept(path string) (*Acceptor, error) {
 	if err := removeStaleSocket(path); err != nil {
 		return nil, err
 	}
-	ln, err := listenControl(path)
+	listener, err := listenControl(path)
 	if err != nil {
 		return nil, err
 	}
-	a := &Acceptor{ln: ln, path: path, conns: make(chan *Conn, 1), done: make(chan struct{})}
-	go a.loop()
-	return a, nil
+	acceptor := &Acceptor{ln: listener, path: path, conns: make(chan *Conn, 1), done: make(chan struct{})}
+	go acceptor.loop()
+	return acceptor, nil
 }
 
 func (a *Acceptor) loop() {
 	for {
-		c, err := a.ln.Accept()
+		conn, err := a.ln.Accept()
 		if err != nil {
 			close(a.conns)
 			return
 		}
 		select {
 		case <-a.done:
-			closeConn(c)
+			closeConn(conn)
 			return
 		default:
 		}
 		select {
-		case a.conns <- newConn(c):
+		case a.conns <- newConn(conn):
 		case <-a.done:
-			closeConn(c)
+			closeConn(conn)
 			return
 		}
 	}
@@ -113,12 +113,12 @@ func (a *Acceptor) Close() error {
 func (a *Acceptor) drainPending() {
 	for {
 		select {
-		case c, ok := <-a.conns:
+		case conn, ok := <-a.conns:
 			if !ok {
 				return
 			}
-			if c != nil {
-				closeConn(c)
+			if conn != nil {
+				closeConn(conn)
 			}
 		default:
 			return
@@ -129,11 +129,11 @@ func (a *Acceptor) drainPending() {
 // Dial connects to the hub's control socket, returning a persistent Conn. The
 // bridge calls this at startup and again on each reconnect.
 func Dial(path string) (*Conn, error) {
-	c, err := dialControl(path)
+	conn, err := dialControl(path)
 	if err != nil {
 		return nil, err
 	}
-	return newConn(c), nil
+	return newConn(conn), nil
 }
 
 func removeStaleSocket(path string) error {

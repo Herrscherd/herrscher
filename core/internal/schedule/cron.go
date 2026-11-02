@@ -44,13 +44,13 @@ func parseCron(expr string) (cronSpec, error) {
 		{spec.month[:], 1, 12, nil},
 		{spec.dow[:], 0, 6, &spec.dowStar},
 	}
-	for i, f := range targets {
-		star, err := parseCronField(fields[i], f.set, f.min, f.max)
+	for idx, field := range targets {
+		star, err := parseCronField(fields[idx], field.set, field.min, field.max)
 		if err != nil {
-			return cronSpec{}, fmt.Errorf("cron %q field %d: %w", expr, i+1, err)
+			return cronSpec{}, fmt.Errorf("cron %q field %d: %w", expr, idx+1, err)
 		}
-		if f.star != nil {
-			*f.star = star
+		if field.star != nil {
+			*field.star = star
 		}
 	}
 	return spec, nil
@@ -74,14 +74,14 @@ func setCronPart(part string, set []bool, low, high int) error {
 	if err != nil {
 		return err
 	}
-	lo, hi, err := cronBounds(body, part, step, low, high)
+	lowest, highest, err := cronBounds(body, part, step, low, high)
 	if err != nil {
 		return err
 	}
-	if lo < low || hi > high {
+	if lowest < low || highest > high {
 		return fmt.Errorf("%w: %q out of range %d-%d", errCronSyntax, part, low, high)
 	}
-	for v := lo; v <= hi; v += step {
+	for v := lowest; v <= highest; v += step {
 		set[v] = true
 	}
 	return nil
@@ -92,11 +92,11 @@ func splitCronStep(part string) (string, int, error) {
 	if slash < 0 {
 		return part, 1, nil
 	}
-	n, err := strconv.Atoi(part[slash+1:])
-	if err != nil || n < 1 {
+	stepVal, err := strconv.Atoi(part[slash+1:])
+	if err != nil || stepVal < 1 {
 		return "", 0, fmt.Errorf("%w: bad step in %q", errCronSyntax, part)
 	}
-	return part[:slash], n, nil
+	return part[:slash], stepVal, nil
 }
 
 func cronBounds(body, part string, step, low, high int) (int, int, error) {
@@ -104,29 +104,29 @@ func cronBounds(body, part string, step, low, high int) (int, int, error) {
 	case body == "*":
 		return low, high, nil
 	case strings.ContainsRune(body, '-'):
-		from, to, _ := strings.Cut(body, "-")
-		a, errA := strconv.Atoi(from)
-		b, errB := strconv.Atoi(to)
-		if errA != nil || errB != nil || a > b {
+		lowerPart, upperPart, _ := strings.Cut(body, "-")
+		fromVal, errA := strconv.Atoi(lowerPart)
+		toVal, errB := strconv.Atoi(upperPart)
+		if errA != nil || errB != nil || fromVal > toVal {
 			return 0, 0, fmt.Errorf("%w: bad range in %q", errCronSyntax, part)
 		}
-		return a, b, nil
+		return fromVal, toVal, nil
 	}
-	n, err := strconv.Atoi(body)
+	value, err := strconv.Atoi(body)
 	if err != nil {
 		return 0, 0, fmt.Errorf("%w: bad value in %q", errCronSyntax, part)
 	}
 	if step != 1 {
 		return 0, 0, fmt.Errorf("%w: step needs a range or a star in %q", errCronSyntax, part)
 	}
-	return n, n, nil
+	return value, value, nil
 }
 
-func (c cronSpec) matches(t time.Time) bool {
-	if !c.minute[t.Minute()] || !c.hour[t.Hour()] || !c.month[int(t.Month())] {
+func (c cronSpec) matches(instant time.Time) bool {
+	if !c.minute[instant.Minute()] || !c.hour[instant.Hour()] || !c.month[int(instant.Month())] {
 		return false
 	}
-	dom, dow := c.dom[t.Day()], c.dow[int(t.Weekday())]
+	dom, dow := c.dom[instant.Day()], c.dow[int(instant.Weekday())]
 	if !c.domStar && !c.dowStar {
 		return dom || dow
 	}

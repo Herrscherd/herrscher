@@ -339,7 +339,8 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 // worktree verb, rather than beside the file writes.
 func EnsureGitExcludes(worktree string) error {
 	inside, err := exec.Command("git", "-C", worktree, "rev-parse", "--is-inside-work-tree").Output()
-	if err != nil || strings.TrimSpace(string(inside)) != "true" {
+	isWorkTree := err == nil && strings.TrimSpace(string(inside)) == "true"
+	if !isWorkTree {
 		return nil
 	}
 	out, err := exec.Command("git", "-C", worktree, "rev-parse", "--git-path", "info/exclude").Output()

@@ -29,7 +29,7 @@ func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 	return out
 }
 
-func paletteWindow(n, sel, rows int) (int, int) {
+func paletteWindow(n, sel, rows int) (from, to int) {
 	if n <= rows {
 		return 0, n
 	}

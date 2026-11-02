@@ -8,7 +8,7 @@ import (
 
 const mentionMax = 6
 
-func mentionWord(input string, cursor int) (int, string, bool) {
+func mentionWord(input string, cursor int) (begin int, text string, ok bool) {
 	if cursor < 0 {
 		cursor = 0
 	}
@@ -43,7 +43,7 @@ func mentionMatches(dir, prefix string) []string {
 	return out
 }
 
-func completeMention(input string, cursor int, match string) (string, int) {
+func completeMention(input string, cursor int, match string) (text string, pos int) {
 	start, _, ok := mentionWord(input, cursor)
 	if !ok {
 		return input, cursor
@@ -55,7 +55,9 @@ func completeMention(input string, cursor int, match string) (string, int) {
 
 func (m *model) worktreeDir() string {
 	if name := m.sessionName(m.active); name != "" {
-		for _, s := range m.tm.Sessions() {
+		sessions := m.tm.Sessions()
+		for i := range sessions {
+			s := &sessions[i]
 			if s.Name == name && s.Dir != "" {
 				return s.Dir
 			}

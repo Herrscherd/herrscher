@@ -38,7 +38,7 @@ func TestKittyPreviewRoundTripsChunkedPayload(t *testing.T) {
 	if !strings.HasSuffix(out, "\x1b\\") {
 		t.Fatalf("preview must end with the APC terminator ESC-backslash")
 	}
-	first := out[:strings.Index(out, ";")]
+	first, _, _ := strings.Cut(out, ";")
 	for _, want := range []string{"a=T", "f=100", "r=3"} {
 		if !strings.Contains(first, want) {
 			t.Errorf("first APC block %q missing control key %q", first, want)

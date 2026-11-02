@@ -486,7 +486,8 @@ func (m *model) syncTabs() {
 		return
 	}
 	var sb strings.Builder
-	for _, s := range infos {
+	for i := range infos {
+		s := &infos[i]
 		sb.WriteString(s.ChannelID)
 		sb.WriteByte('\x1f')
 		sb.WriteString(s.Name)
@@ -498,7 +499,8 @@ func (m *model) syncTabs() {
 	}
 	m.tabSig = sig
 	live := map[string]bool{}
-	for _, s := range infos {
+	for i := range infos {
+		s := &infos[i]
 		live[s.ChannelID] = true
 		if s.Archived {
 			continue
@@ -521,7 +523,8 @@ func (m *model) focusOpen(infos []contracts.SessionInfo) {
 		return
 	}
 	channel := ""
-	for _, s := range infos {
+	for i := range infos {
+		s := &infos[i]
 		if s.Name == m.openSession {
 			channel = s.ChannelID
 			break
@@ -741,7 +744,9 @@ func (m *model) toggleHelp() {
 }
 
 func (m *model) sessionName(channel string) string {
-	for _, s := range m.tm.Sessions() {
+	sessions := m.tm.Sessions()
+	for i := range sessions {
+		s := &sessions[i]
 		if s.ChannelID == channel && s.Name != "" {
 			return s.Name
 		}
@@ -1222,7 +1227,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.switchOpen = false
 				m.applySize()
 				m.syncViewport()
-				return m, m.ensureSpin()
+				cmd := m.ensureSpin()
+				return m, cmd
 			case tea.KeyCtrlC:
 				return m, tea.Quit
 			}
@@ -1271,7 +1277,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Type == tea.KeyCtrlC {
 				return m, tea.Quit
 			}
-			return m, m.handlePluginsKey(msg)
+			cmd := m.handlePluginsKey(msg)
+			return m, cmd
 		}
 		if m.skillsOpen {
 			if m.overlayNav(msg, m.moveSkills) {
@@ -1388,7 +1395,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.copyLastCode()
 			return m, nil
 		case tea.KeyCtrlG:
-			return m, m.toggleMouse()
+			cmd := m.toggleMouse()
+			return m, cmd
 		case tea.KeyCtrlL:
 			m.selectNextLink()
 			return m, nil

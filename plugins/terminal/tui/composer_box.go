@@ -8,11 +8,15 @@ import (
 
 const composerBoxMinWidth = 60
 
-func boxRunes(supported bool) (string, string, string, string, string, string) {
+type boxGlyphs struct {
+	tl, tr, bl, br, h, v string
+}
+
+func boxRunes(supported bool) boxGlyphs {
 	if !supported {
-		return "+", "+", "+", "+", "-", "|"
+		return boxGlyphs{"+", "+", "+", "+", "-", "|"}
 	}
-	return "╭", "╮", "╰", "╯", "─", "│"
+	return boxGlyphs{"╭", "╮", "╰", "╯", "─", "│"}
 }
 
 func (m *model) composerBoxed() bool {
@@ -35,7 +39,8 @@ func (m *model) composerZone() []string {
 		}
 		return out
 	}
-	tl, tr, bl, br, h, v := boxRunes(m.caps.Boxes)
+	g := boxRunes(m.caps.Boxes)
+	tl, tr, bl, br, h, v := g.tl, g.tr, g.bl, g.br, g.h, g.v
 	width := m.innerWidth()
 	edge := strings.Repeat(h, width-2)
 	side := dimStyle.Render(v)

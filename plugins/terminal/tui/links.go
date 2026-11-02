@@ -28,7 +28,7 @@ type Link struct {
 	Kind   LinkKind
 }
 
-var linkURLPattern = regexp.MustCompile(`https?://[^\s<>"'\x00-\x1f\x7f]*[^\s<>"'.,;:!?)\]\x00-\x1f\x7f]`)
+var linkURLPattern = regexp.MustCompile(`https?://[^ <>"'\x00-\x1f\x7f]*[^ <>"'.,;:!?)\]\x00-\x1f\x7f]`)
 
 var linkMarkdownPattern = regexp.MustCompile(`\[([^\]\n]+)\]\(([^)\s]+)\)`)
 

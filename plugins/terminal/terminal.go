@@ -118,8 +118,8 @@ func defaultSessionName(taken []contracts.SessionInfo) string {
 		return randomSessionName()
 	}
 	used := map[string]bool{}
-	for _, s := range taken {
-		used[s.Name] = true
+	for i := range taken {
+		used[taken[i].Name] = true
 	}
 	for n := 1; n <= 9; n++ {
 		name := base
@@ -173,7 +173,9 @@ func (t *Terminal) archiveIfUntouched() {
 	if c == nil || ctx == nil || ctx.Err() != nil {
 		return
 	}
-	for _, s := range c.Sessions() {
+	sessions := c.Sessions()
+	for i := range sessions {
+		s := &sessions[i]
 		if s.Name != name {
 			continue
 		}

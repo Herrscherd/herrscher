@@ -131,8 +131,7 @@ func (r *Registry) Intercept(prefix []string, wrap func(cmd contracts.Cmd, next 
 	}
 }
 
-func (r *Registry) match(args []string) (*contracts.Cmd, []string) {
-	var best *contracts.Cmd
+func (r *Registry) match(args []string) (best *contracts.Cmd, rest []string) {
 	bestLen := 0
 	for i := range r.cmds {
 		c := &r.cmds[i]
@@ -208,12 +207,13 @@ func parse(c contracts.Cmd, rest []string) (contracts.Input, error) {
 			in.Args[name] = inline
 			continue
 		}
-		if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
+		switch {
+		case i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--"):
 			in.Args[name] = rest[i+1]
 			i++
-		} else if p.Required || p.ValueRequired {
+		case p.Required || p.ValueRequired:
 			return in, fmt.Errorf("%s: flag --%s %w", strings.Join(c.Path, " "), name, errFlagNeedsValue)
-		} else {
+		default:
 			in.Args[name] = "true"
 		}
 	}

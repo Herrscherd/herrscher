@@ -160,5 +160,5 @@ func (m *model) linkStatus() string {
 	if l.Kind == LinkFile {
 		verb = "↵ edit"
 	}
-	return dimStyle.Render(verb + " " + l.Target)
+	return m.st.dim.Render(verb + " " + l.Target)
 }

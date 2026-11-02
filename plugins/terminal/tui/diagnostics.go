@@ -48,16 +48,16 @@ func yesNo(b bool) string {
 
 const diagValueWidth = 12
 
-func diagnosticsView(caps Capabilities) string {
+func diagnosticsView(caps Capabilities, st uiStyles) string {
 	var b strings.Builder
-	b.WriteString(dimStyle.Render("terminal") + "  " + textStyle.Render(caps.Terminal))
+	b.WriteString(st.dim.Render("terminal") + "  " + st.text.Render(caps.Terminal))
 	for _, r := range diagRows(caps) {
 		pad := strings.Repeat(" ", max(1, diagValueWidth-len(r.value)))
-		b.WriteString("\n" + dimStyle.Render("  "+r.name+strings.Repeat(" ", max(1, factWidth-len(r.name)))) +
-			textStyle.Render(r.value) + pad + dimStyle.Render(r.feature))
+		b.WriteString("\n" + st.dim.Render("  "+r.name+strings.Repeat(" ", max(1, factWidth-len(r.name)))) +
+			st.text.Render(r.value) + pad + st.dim.Render(r.feature))
 	}
-	b.WriteString("\n" + dimStyle.Render("  kitty, ghostty et WezTerm ont tous les rendus ; ailleurs l'image"))
-	b.WriteString("\n" + dimStyle.Render("  est dessinée en demi-blocs et un lien reste du texte sélectionnable."))
+	b.WriteString("\n" + st.dim.Render("  kitty, ghostty et WezTerm ont tous les rendus ; ailleurs l'image"))
+	b.WriteString("\n" + st.dim.Render("  est dessinée en demi-blocs et un lien reste du texte sélectionnable."))
 	return b.String()
 }
 
@@ -67,7 +67,7 @@ func (m *model) diagView() string {
 	if !m.diagOpen {
 		return ""
 	}
-	return dimStyle.Render("capacités · échap fermer") + "\n" + diagnosticsView(m.caps) +
+	return m.st.dim.Render("capacités · échap fermer") + "\n" + diagnosticsView(m.caps, m.st) +
 		"\n" + m.remoteImageRow()
 }
 
@@ -78,7 +78,7 @@ func (m *model) remoteImageRow() string {
 		feature = "images fetched from " + strings.Join(m.imageHosts, ", ")
 	}
 	name := "remote images"
-	return dimStyle.Render("  "+name+strings.Repeat(" ", max(1, factWidth-len(name)))) +
-		textStyle.Render(value) + strings.Repeat(" ", max(1, diagValueWidth-len(value))) +
-		dimStyle.Render(feature)
+	return m.st.dim.Render("  "+name+strings.Repeat(" ", max(1, factWidth-len(name)))) +
+		m.st.text.Render(value) + strings.Repeat(" ", max(1, diagValueWidth-len(value))) +
+		m.st.dim.Render(feature)
 }

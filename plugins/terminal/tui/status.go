@@ -53,24 +53,24 @@ func contextRatio(used, limit int) float64 {
 	return 1
 }
 
-func palierStyle(ratio float64) lipgloss.Style {
+func palierStyle(ratio float64, st uiStyles) lipgloss.Style {
 	switch {
 	case ratio >= ctxAlarm:
-		return redStyle
+		return st.red
 	case ratio >= ctxWarn:
-		return warnStyle
+		return st.warn
 	default:
-		return dimStyle
+		return st.dim
 	}
 }
 
-func renderContext(used int, vendor string) string {
+func renderContext(used int, vendor string, st uiStyles) string {
 	if used <= 0 {
 		return ""
 	}
 	limit := contextLimit(vendor)
 	text := fmt.Sprintf("%s/%s", formatTokens(used), formatLimit(limit))
-	return palierStyle(contextRatio(used, limit)).Render(text)
+	return palierStyle(contextRatio(used, limit), st).Render(text)
 }
 
 const compactAt = 0.92
@@ -85,18 +85,18 @@ func contextLeft(used, limit int) float64 {
 
 const verboseStatus = 100
 
-func renderGauge(used int, vendor string, width int) string {
+func renderGauge(used int, vendor string, width int, st uiStyles) string {
 	if used <= 0 {
 		return ""
 	}
 	limit := contextLimit(vendor)
 	r := contextRatio(used, limit)
-	style := palierStyle(r)
+	style := palierStyle(r, st)
 	label := fmt.Sprintf(" reste %d %%", int(contextLeft(used, limit)*100))
 	if width >= verboseStatus {
 		label += " avant compaction"
 	}
-	return gauge(r, style) + style.Render(label)
+	return gauge(r, style, st.dim) + style.Render(label)
 }
 
 func modelLabel(info contracts.SessionInfo) string {
@@ -127,38 +127,38 @@ func formatLimit(n int) string {
 func (m *model) statusBar(tb *tab, width int) string {
 	info, known := m.activeInfo()
 
-	head := accentStyle.Render(glyphBolt + " " + tb.label)
+	head := m.st.accent.Render(glyphBolt + " " + tb.label)
 	if known && info.Vendor != "" && width >= narrowStatus {
-		head = accentStyle.Render(glyphBolt+" "+info.Vendor) + dimStyle.Render(" "+tb.label)
+		head = m.st.accent.Render(glyphBolt+" "+info.Vendor) + m.st.dim.Render(" "+tb.label)
 	}
 	segs := []string{head}
 	if width >= narrowStatus && known {
 		if label := modelLabel(info); label != "" {
-			segs = append(segs, textStyle.Render(label))
+			segs = append(segs, m.st.text.Render(label))
 		}
 	}
 	used := m.contextTokens(tb)
-	if ctx := renderContext(used, info.Vendor); ctx != "" {
+	if ctx := renderContext(used, info.Vendor, m.st); ctx != "" {
 		segs = append(segs, ctx)
 	}
 	if width >= narrowStatus {
-		if g := renderGauge(used, info.Vendor, width); g != "" {
+		if g := renderGauge(used, info.Vendor, width, m.st); g != "" {
 			segs = append(segs, g)
 		}
 		if known && info.Project != "" {
-			segs = append(segs, dimStyle.Render(info.Project))
+			segs = append(segs, m.st.dim.Render(info.Project))
 		}
 		if ms := m.mouseStatus(); ms != "" {
 			segs = append(segs, ms)
 		}
 		if tb.costTotal > 0 {
-			segs = append(segs, dimStyle.Render(formatCost(tb.costTotal)))
+			segs = append(segs, m.st.dim.Render(formatCost(tb.costTotal)))
 		}
 		if !tb.openedAt.IsZero() {
-			segs = append(segs, dimStyle.Render(formatDuration(time.Since(tb.openedAt))))
+			segs = append(segs, m.st.dim.Render(formatDuration(time.Since(tb.openedAt))))
 		}
 	}
-	return strings.Join(segs, statusSep)
+	return strings.Join(segs, m.st.sep)
 }
 
 func (m *model) usageReport(tb *tab) string {
@@ -198,8 +198,6 @@ func (m *model) usageReport(tb *tab) string {
 	}
 	return strings.Join(lines, "\n")
 }
-
-var statusSep = dimStyle.Render(" │ ")
 
 func formatDuration(d time.Duration) string {
 	switch {

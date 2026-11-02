@@ -8,10 +8,25 @@ import (
 	"github.com/charmbracelet/glamour/styles"
 )
 
-var (
-	mdRenderer *glamour.TermRenderer
-	mdWidth    int
-)
+type markdownRenderer struct {
+	r     *glamour.TermRenderer
+	width int
+}
+
+func (md *markdownRenderer) termRenderer(width int) (*glamour.TermRenderer, error) {
+	if md.r == nil || md.width != width {
+		r, err := glamour.NewTermRenderer(
+			glamour.WithStyles(mdStyle()),
+			glamour.WithWordWrap(width),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		md.r, md.width = r, width
+	}
+	return md.r, nil
+}
 
 func mdStyle() ansi.StyleConfig {
 	s := styles.DarkStyleConfig
@@ -39,23 +54,23 @@ func renderMarkdown(text string, width int, v view) string {
 			b.WriteString(renderDiff(seg.text, width, v))
 			continue
 		}
-		b.WriteString(renderProse(seg.text, width))
+		b.WriteString(renderProse(seg.text, width, v))
 	}
 	return b.String()
 }
 
-func renderProse(text string, width int) string {
+func renderProse(text string, width int, v view) string {
 	var b strings.Builder
 	var prose, table []string
 	flushProse := func() {
 		if len(prose) > 0 {
-			b.WriteString(renderGlamour(strings.Join(prose, "\n"), width))
+			b.WriteString(renderGlamour(strings.Join(prose, "\n"), width, v))
 			prose = nil
 		}
 	}
 	flushTable := func() {
 		if len(table) > 0 {
-			b.WriteString(renderTable(parseTableRows(table), width) + "\n")
+			b.WriteString(renderTable(parseTableRows(table), width, v.st) + "\n")
 			table = nil
 		}
 	}
@@ -109,24 +124,21 @@ func splitDiffs(text string) []segment {
 	return segs
 }
 
-func renderGlamour(text string, width int) string {
+func renderGlamour(text string, width int, v view) string {
 	if width < 1 {
 		width = 1
 	}
-	if mdRenderer == nil || mdWidth != width {
-		r, err := glamour.NewTermRenderer(
-			glamour.WithStyles(mdStyle()),
-			glamour.WithWordWrap(width),
-			glamour.WithEmoji(),
-		)
-		if err != nil {
-			return wrapWith(textStyle, text, width)
-		}
-		mdRenderer, mdWidth = r, width
+	md := v.md
+	if md == nil {
+		md = &markdownRenderer{}
 	}
-	out, err := mdRenderer.Render(text)
+	r, err := md.termRenderer(width)
 	if err != nil {
-		return wrapWith(textStyle, text, width)
+		return wrapWith(v.st.text, text, width)
+	}
+	out, err := r.Render(text)
+	if err != nil {
+		return wrapWith(v.st.text, text, width)
 	}
 	lines := strings.Split(out, "\n")
 	for i, ln := range lines {

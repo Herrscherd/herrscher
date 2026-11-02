@@ -14,21 +14,21 @@ func TestThemeGlyphsAndFramesPresent(t *testing.T) {
 	if len(spinFrames()) == 0 {
 		t.Fatal("spinFrames() must be non-empty")
 	}
-	if accentStyle.Render("x") == "" {
-		t.Fatal("accentStyle must render")
+	if newStyles().accent.Render("x") == "" {
+		t.Fatal("newStyles().accent must render")
 	}
 	for _, s := range []struct {
 		name   string
 		render func(...string) string
 	}{
-		{"dim", dimStyle.Render},
-		{"user", userStyle.Render},
-		{"text", textStyle.Render},
-		{"green", greenStyle.Render},
-		{"red", redStyle.Render},
-		{"spinner", spinnerStyle.Render},
-		{"tool", toolStyle.Render},
-		{"thinking", thinkingStyle.Render},
+		{"dim", newStyles().dim.Render},
+		{"user", newStyles().user.Render},
+		{"text", newStyles().text.Render},
+		{"green", newStyles().green.Render},
+		{"red", newStyles().red.Render},
+		{"spinner", newStyles().spinner.Render},
+		{"tool", newStyles().tool.Render},
+		{"thinking", newStyles().thinking.Render},
 	} {
 		if s.render("x") == "" {
 			t.Fatalf("%s style must render", s.name)

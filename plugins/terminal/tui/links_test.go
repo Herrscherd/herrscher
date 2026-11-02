@@ -65,7 +65,7 @@ func TestMarkdownLabelAndTargetStayDistinct(t *testing.T) {
 func TestRenderLinkUsesOSC8WhereAvailable(t *testing.T) {
 	l := Link{Label: "the docs", Target: "https://example.com/x", Kind: LinkURL}
 
-	with := renderLink(l, Capabilities{Hyperlinks: true}, false)
+	with := renderLink(l, Capabilities{Hyperlinks: true}, false, newStyles())
 	if !strings.Contains(with, "\x1b]8;;https://example.com/x") {
 		t.Errorf("an OSC 8 terminal must get the hyperlink: %q", with)
 	}
@@ -73,7 +73,7 @@ func TestRenderLinkUsesOSC8WhereAvailable(t *testing.T) {
 		t.Errorf("the hyperlink must be closed, or the rest of the line joins it: %q", with)
 	}
 
-	without := renderLink(l, Capabilities{}, false)
+	without := renderLink(l, Capabilities{}, false, newStyles())
 	if strings.Contains(without, "\x1b]8;;") {
 		t.Errorf("a terminal without OSC 8 must not be sent the escape: %q", without)
 	}
@@ -85,7 +85,7 @@ func TestRenderLinkUsesOSC8WhereAvailable(t *testing.T) {
 func TestRenderLinkHighlightsTheSelection(t *testing.T) {
 	l := Link{Label: "x", Target: "https://example.com/x", Kind: LinkURL}
 	for _, caps := range []Capabilities{{Hyperlinks: true}, {}} {
-		if renderLink(l, caps, true) == renderLink(l, caps, false) {
+		if renderLink(l, caps, true, newStyles()) == renderLink(l, caps, false, newStyles()) {
 			t.Fatalf("the selected link must render differently (caps %+v)", caps)
 		}
 	}
@@ -104,7 +104,7 @@ func TestATargetCarryingAControlByteIsNotALink(t *testing.T) {
 		}
 	}
 
-	out := renderLink(Link{Label: "x", Target: "https://a.test/ok"}, Capabilities{Hyperlinks: true}, false)
+	out := renderLink(Link{Label: "x", Target: "https://a.test/ok"}, Capabilities{Hyperlinks: true}, false, newStyles())
 	if !strings.Contains(out, "\x1b]8;;https://a.test/ok\x1b\\") {
 		t.Fatalf("an ordinary target must still hyperlink: %q", out)
 	}

@@ -157,6 +157,7 @@ func toUpper(r rune) rune {
 type filteredStdin struct {
 	*os.File
 
+	keys  *keyLog
 	state filterState
 	seq   []byte
 	out   []byte
@@ -178,7 +179,7 @@ const (
 	csiSeqCap = 64
 )
 
-func newFilteredStdin() *filteredStdin { return &filteredStdin{File: os.Stdin} }
+func newFilteredStdin(keys *keyLog) *filteredStdin { return &filteredStdin{File: os.Stdin, keys: keys} }
 
 func (f *filteredStdin) Read(p []byte) (int, error) {
 	if len(f.out) == 0 {
@@ -186,7 +187,7 @@ func (f *filteredStdin) Read(p []byte) (int, error) {
 		if n > 0 {
 			before := len(f.out)
 			f.feed(f.raw[:n])
-			keylog("raw %q -> %q", f.raw[:n], f.out[before:])
+			f.keys.write("raw %q -> %q", f.raw[:n], f.out[before:])
 		}
 		if err != nil && len(f.out) == 0 {
 			return 0, err

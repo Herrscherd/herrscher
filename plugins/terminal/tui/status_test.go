@@ -61,19 +61,19 @@ func TestContextLimitFollowsTheVendorAndTheEnv(t *testing.T) {
 }
 
 func TestContextPaliersColourDifferently(t *testing.T) {
-	calm := renderContext(40_000, "claude")
-	warn := renderContext(170_000, "claude")
-	alarm := renderContext(195_000, "claude")
+	calm := renderContext(40_000, "claude", newStyles())
+	warn := renderContext(170_000, "claude", newStyles())
+	alarm := renderContext(195_000, "claude", newStyles())
 	if calm == warn || warn == alarm || calm == alarm {
 		t.Fatalf("the three paliers must differ: %q %q %q", calm, warn, alarm)
 	}
-	if warn != warnStyle.Render("170.0k/200k") {
+	if warn != newStyles().warn.Render("170.0k/200k") {
 		t.Fatalf("the warn palier must take the warn style: %q", warn)
 	}
-	if alarm != redStyle.Render("195.0k/200k") {
+	if alarm != newStyles().red.Render("195.0k/200k") {
 		t.Fatalf("the alarm palier must take the Herrscher red: %q", alarm)
 	}
-	if renderContext(0, "claude") != "" {
+	if renderContext(0, "claude", newStyles()) != "" {
 		t.Fatal("an unmeasured context must render nothing")
 	}
 }
@@ -184,8 +184,8 @@ func TestGaugeCountsDownToTheCompaction(t *testing.T) {
 	if got := contextLeft(92_000, 200_000); got < 0.49 || got > 0.51 {
 		t.Errorf("la moitie du budget doit se lire 50 %%: %v", got)
 	}
-	wide := renderGauge(92_000, "claude", 120)
-	narrow := renderGauge(92_000, "claude", 70)
+	wide := renderGauge(92_000, "claude", 120, newStyles())
+	narrow := renderGauge(92_000, "claude", 70, newStyles())
 	if !strings.Contains(wide, "reste 50 %") || !strings.Contains(wide, "avant compaction") {
 		t.Errorf("une barre large doit epeler ce que le compte decompte: %q", wide)
 	}

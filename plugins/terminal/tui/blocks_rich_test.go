@@ -62,7 +62,7 @@ func TestTableFitsItsWidthByTruncatingTheWidestCell(t *testing.T) {
 		{"name", "description"},
 		{"ok", strings.Repeat("very long ", 20)},
 	}
-	out := renderTable(rows, 40)
+	out := renderTable(rows, 40, newStyles())
 	for _, ln := range strings.Split(out, "\n") {
 		if lipgloss.Width(ln) > 40 {
 			t.Fatalf("row wider than the table: %d cols in %q", lipgloss.Width(ln), ln)
@@ -78,7 +78,7 @@ func TestTableFitsItsWidthByTruncatingTheWidestCell(t *testing.T) {
 
 func TestTableShrinksTheWidestColumnFirst(t *testing.T) {
 	rows := [][]string{{"a", strings.Repeat("w", 60)}, {"b", "short"}}
-	out := renderTable(rows, 30)
+	out := renderTable(rows, 30, newStyles())
 	if !strings.Contains(out, "a") || !strings.Contains(out, "b") {
 		t.Fatalf("the narrow column must be left intact: %q", out)
 	}

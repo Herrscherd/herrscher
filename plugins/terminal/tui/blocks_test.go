@@ -33,7 +33,7 @@ func TestStreamingAnswerIsLeftOpen(t *testing.T) {
 }
 
 func TestNarrowTitledRuleDropsItsTitle(t *testing.T) {
-	out := titledRule(accentStyle, agentTitle, 4)
+	out := titledRule(newStyles().accent, agentTitle, 4)
 	if strings.Contains(out, "Herrscher") {
 		t.Fatalf("a title that does not fit must be dropped, not clipped: %q", out)
 	}
@@ -43,20 +43,20 @@ func TestNarrowTitledRuleDropsItsTitle(t *testing.T) {
 }
 
 func TestGaugeShowsAnySpend(t *testing.T) {
-	if got := gauge(0.001, dimStyle); !strings.Contains(got, gaugeFull) {
+	if got := gauge(0.001, newStyles().dim, newStyles().dim); !strings.Contains(got, gaugeFull) {
 		t.Fatalf("a small spend must still fill a cell: %q", got)
 	}
-	if got := gauge(0, dimStyle); strings.Contains(got, gaugeFull) {
+	if got := gauge(0, newStyles().dim, newStyles().dim); strings.Contains(got, gaugeFull) {
 		t.Fatalf("nothing spent must read as empty: %q", got)
 	}
-	if got := gauge(1, dimStyle); strings.Contains(got, gaugeEmpty) {
+	if got := gauge(1, newStyles().dim, newStyles().dim); strings.Contains(got, gaugeEmpty) {
 		t.Fatalf("a full window must leave no empty cell: %q", got)
 	}
 }
 
 func TestGaugeTakesThePalierColour(t *testing.T) {
-	alarm := renderGauge(199_000, "claude", 120)
-	calm := renderGauge(1_000, "claude", 120)
+	alarm := renderGauge(199_000, "claude", 120, newStyles())
+	calm := renderGauge(1_000, "claude", 120, newStyles())
 	if alarm == "" || calm == "" {
 		t.Fatal("a spent context must render a gauge")
 	}
@@ -64,7 +64,7 @@ func TestGaugeTakesThePalierColour(t *testing.T) {
 		t.Fatal("a full window and an empty one must not render alike")
 	}
 	fg := func(r float64) string {
-		color, ok := palierStyle(r).GetForeground().(lipgloss.Color)
+		color, ok := palierStyle(r, newStyles()).GetForeground().(lipgloss.Color)
 		if !ok {
 			t.Fatalf("palier %v foreground is not a lipgloss.Color", r)
 		}

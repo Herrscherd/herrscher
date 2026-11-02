@@ -179,8 +179,8 @@ func (m *model) searchView() string {
 	if len(m.searchHits) > 0 {
 		pos = fmt.Sprintf("%d/%d", m.searchIdx+1, len(m.searchHits))
 	}
-	return dimStyle.Render("recherche : ") + textStyle.Render(m.searchQuery+"▏") +
-		dimStyle.Render("  "+pos+"  ctrl+n/ctrl+p · échap")
+	return m.st.dim.Render("recherche : ") + m.st.text.Render(m.searchQuery+"▏") +
+		m.st.dim.Render("  "+pos+"  ctrl+n/ctrl+p · échap")
 }
 
 func turnBoundaries(lines []string) []int {
@@ -218,7 +218,7 @@ func (m *model) jumpTurn(delta int) {
 	m.vp.SetYOffset(bounds[0])
 }
 
-func foldTurns(lines []string, keep int) []string {
+func foldTurns(lines []string, keep int, st uiStyles) []string {
 	if keep < 1 {
 		keep = 1
 	}
@@ -237,13 +237,13 @@ func foldTurns(lines []string, keep int) []string {
 			out = append(out, lines[:start]...)
 		}
 		end := bounds[i+1]
-		out = append(out, foldedTurnLine(lines[start], end-start))
+		out = append(out, foldedTurnLine(lines[start], end-start, st))
 	}
 	return out
 }
 
-func foldedTurnLine(head string, lines int) string {
-	return truncate(head, 60) + dimStyle.Render(fmt.Sprintf(" %s %d lines", glyphFold, lines))
+func foldedTurnLine(head string, lines int, st uiStyles) string {
+	return truncate(head, 60) + st.dim.Render(fmt.Sprintf(" %s %d lines", glyphFold, lines))
 }
 
 const turnFoldKeep = 2

@@ -15,9 +15,7 @@ type overlayRow struct {
 
 const overlayLabelWidth = 16
 
-var overlaySelStyle = lipgloss.NewStyle().Background(lipgloss.Color(colSelBg)).Foreground(lipgloss.Color(colAccent))
-
-func floatingList(rows []overlayRow, cursor int, footer string, width int) string {
+func floatingList(rows []overlayRow, cursor int, footer string, width int, st uiStyles) string {
 	if len(rows) == 0 {
 		return ""
 	}
@@ -33,10 +31,10 @@ func floatingList(rows []overlayRow, cursor int, footer string, width int) strin
 		}
 		body := padTo(truncate("  "+head+r.mark+label+r.detail, width), width)
 		if i == cursor {
-			out = append(out, overlaySelStyle.Render(body))
+			out = append(out, st.overlaySel.Render(body))
 			continue
 		}
-		out = append(out, dimStyle.Render(body))
+		out = append(out, st.dim.Render(body))
 	}
 	if footer != "" {
 		out = append(out, padTo(truncate("  "+footer, width), width))

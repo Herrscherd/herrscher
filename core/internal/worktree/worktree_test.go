@@ -66,7 +66,7 @@ func initRepo(t *testing.T) string {
 		{"config", "user.name", "t"},
 		{"commit", "--allow-empty", "-m", "init"},
 	} {
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
@@ -78,7 +78,7 @@ func initRepo(t *testing.T) string {
 		{"add", ".gitignore"},
 		{"commit", "-m", "ignore worktree scratch dir"},
 	} {
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
@@ -88,7 +88,7 @@ func initRepo(t *testing.T) string {
 
 func gitAt(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %s", args, out)
 	}
@@ -391,7 +391,7 @@ func TestCreateWithBaseBranchesOffIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"add", "."}, {"commit", "-qm", "work"}} {
-		if out, runErr := exec.Command("git", append([]string{"-C", pa}, args...)...).CombinedOutput(); runErr != nil {
+		if out, runErr := exec.CommandContext(t.Context(), "git", append([]string{"-C", pa}, args...)...).CombinedOutput(); runErr != nil {
 			t.Fatalf("git %v: %v (%s)", args, runErr, out)
 		}
 	}
@@ -479,7 +479,7 @@ func TestASessionThatComesBackReturnsToItsBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"add", "."}, {"commit", "-m", "the work"}} {
-		if out, runErr := exec.Command("git", append([]string{"-C", p}, args...)...).CombinedOutput(); runErr != nil {
+		if out, runErr := exec.CommandContext(t.Context(), "git", append([]string{"-C", p}, args...)...).CombinedOutput(); runErr != nil {
 			t.Fatalf("git %v: %v\n%s", args, runErr, out)
 		}
 	}
@@ -508,7 +508,7 @@ func TestANewSessionStillBranchesFromItsBase(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"add", "."}, {"commit", "-m", "a"}} {
-		if out, runErr := exec.Command("git", append([]string{"-C", first}, args...)...).CombinedOutput(); runErr != nil {
+		if out, runErr := exec.CommandContext(t.Context(), "git", append([]string{"-C", first}, args...)...).CombinedOutput(); runErr != nil {
 			t.Fatalf("git %v: %v\n%s", args, runErr, out)
 		}
 	}

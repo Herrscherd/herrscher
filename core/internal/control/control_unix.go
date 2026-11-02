@@ -3,6 +3,7 @@
 package control
 
 import (
+	"context"
 	"net"
 	"os"
 	"path/filepath"
@@ -13,9 +14,9 @@ func SocketPath(session string) string {
 }
 
 func listenControl(path string) (net.Listener, error) {
-	return net.Listen("unix", path)
+	return new(net.ListenConfig).Listen(context.Background(), "unix", path)
 }
 
 func dialControl(path string) (net.Conn, error) {
-	return net.Dial("unix", path)
+	return new(net.Dialer).DialContext(context.Background(), "unix", path)
 }

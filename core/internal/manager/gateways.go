@@ -41,7 +41,7 @@ func ParseGateways(list string, terminalOnly bool, defaults []string) []string {
 
 func gatewayDefault(terminalOnly bool, defaults []string) []string {
 	if terminalOnly {
-		return []string{"terminal"}
+		return []string{terminalPlace}
 	}
 	return append([]string(nil), defaults...)
 }

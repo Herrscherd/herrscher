@@ -163,7 +163,7 @@ func applyBudget(s state.Session, p budgetPatch, curCost float64, curTokens uint
 }
 
 func (h *Handler) sessionSetBudgetRun(ctx context.Context, in contracts.Input) (string, error) {
-	name, ok := in.Lookup("name")
+	name, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
 	}
@@ -298,13 +298,13 @@ func sessionBanner(repo, name, worktree, branch, cmd, modelID string, shared boo
 }
 
 func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (string, error) {
-	raw, ok := in.Lookup("name")
+	raw, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
-		return "", &InvalidValueError{Field: "name", Value: raw, Hint: "use letters, digits, - or _ (max 64, no /, spaces or ..)"}
+		return "", &InvalidValueError{Field: nameParam, Value: raw, Hint: "use letters, digits, - or _ (max 64, no /, spaces or ..)"}
 	}
 	if _, exists := h.st.FindSession(name); exists {
 		return "", &SessionExistsError{Name: name}
@@ -316,7 +316,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	home := h.st.Home
 	admin := h.d
 	if terminalOnly && h.td != nil {
-		home = state.HomeRef{ID: "terminal", Type: "terminal"}
+		home = state.HomeRef{ID: terminalPlace, Type: terminalPlace}
 		admin = h.td
 	}
 	adopted, _ := in.Lookup("channel_id")
@@ -331,7 +331,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		if err != nil {
 			return "", fmt.Errorf("inspect channel: %w", err)
 		}
-		if kind != "category" && kind != "forum" {
+		if kind != categoryKind && kind != forumKind {
 			return "", &ChannelKindError{Channel: under, Kind: kind, Need: "under must be a category or forum (to run in an existing conversation, pass channel_id)"}
 		}
 		home = state.HomeRef{ID: under, Type: kind}
@@ -372,7 +372,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if v, ok := in.Lookup("consolidate_every"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", &InvalidValueError{Field: "consolidate_every", Value: v, Hint: "use a non-negative integer"}
+			return "", &InvalidValueError{Field: "consolidate_every", Value: v, Hint: nonNegativeHint}
 		}
 		consolidateEvery = n
 	}
@@ -390,7 +390,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if v, ok := in.Lookup("token_cap"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", &InvalidValueError{Field: "token_cap", Value: v, Hint: "use a non-negative integer"}
+			return "", &InvalidValueError{Field: "token_cap", Value: v, Hint: nonNegativeHint}
 		}
 		tokenCap = uint64(n)
 	}
@@ -404,7 +404,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if v, ok := in.Lookup("cohort_token_cap"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", &InvalidValueError{Field: "cohort_token_cap", Value: v, Hint: "use a non-negative integer"}
+			return "", &InvalidValueError{Field: "cohort_token_cap", Value: v, Hint: nonNegativeHint}
 		}
 		cohortTokenCap = uint64(n)
 	}
@@ -546,20 +546,20 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	switch {
 	case adopted != "":
 		sess = state.Session{Name: name, ChannelID: adopted, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Scratch: scratch, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
-	case home.Type == "category", home.Type == "terminal":
+	case home.Type == categoryKind, home.Type == terminalPlace:
 		chID, err := admin.CreateUnder(ctx, home.ID, title)
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create channel: %w", err)
 		}
 		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "text", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Scratch: scratch, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
-	case home.Type == "forum":
+	case home.Type == forumKind:
 		chID, err := admin.ForumPost(ctx, home.ID, title, "Session **"+title+"** started.")
 		if err != nil {
 			rollbackWorktree()
 			return "", fmt.Errorf("create forum post: %w", err)
 		}
-		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Scratch: scratch, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
+		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: forumKind, Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Scratch: scratch, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
 	default:
 		return "", &UnsupportedHomeTypeError{Type: home.Type}
 	}
@@ -585,7 +585,7 @@ func (h *Handler) adminFor(sess state.Session) channelAdmin {
 }
 
 func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (string, error) {
-	name, ok := in.Lookup("name")
+	name, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
 	}
@@ -624,7 +624,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 }
 
 func (h *Handler) sessionArchiveRun(ctx context.Context, in contracts.Input) (string, error) {
-	name, ok := in.Lookup("name")
+	name, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
 	}
@@ -651,7 +651,7 @@ func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
 }
 
 func (h *Handler) sessionRenameRun(_ context.Context, in contracts.Input) (string, error) {
-	name, ok := in.Lookup("name")
+	name, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
 	}
@@ -661,7 +661,7 @@ func (h *Handler) sessionRenameRun(_ context.Context, in contracts.Input) (strin
 	}
 	to := slugify(raw)
 	if to == "" || !sessionNameRe.MatchString(to) {
-		return "", &InvalidValueError{Field: "name", Value: raw, Hint: "use letters, digits, - or _ (max 64, no /, spaces or ..)"}
+		return "", &InvalidValueError{Field: nameParam, Value: raw, Hint: "use letters, digits, - or _ (max 64, no /, spaces or ..)"}
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
@@ -703,7 +703,7 @@ func scheduleOwning(schedules []schedule.Schedule, session string) string {
 }
 
 func (h *Handler) sessionResumeRun(_ context.Context, in contracts.Input) (string, error) {
-	name, ok := in.Lookup("name")
+	name, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
 	}
@@ -720,7 +720,7 @@ func (h *Handler) sessionResumeRun(_ context.Context, in contracts.Input) (strin
 }
 
 func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (string, error) {
-	name, ok := in.Lookup("name")
+	name, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
 	}
@@ -838,7 +838,7 @@ func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string,
 }
 
 func (h *Handler) sessionWhoRun(_ context.Context, in contracts.Input) (string, error) {
-	name, ok := in.Lookup("name")
+	name, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
 	}
@@ -866,8 +866,16 @@ func (h *Handler) sessionWhoRun(_ context.Context, in contracts.Input) (string, 
 
 const sessionLogTranscriptCap = 200
 
+const (
+	nameParam       = "name"
+	terminalPlace   = "terminal"
+	categoryKind    = "category"
+	forumKind       = "forum"
+	nonNegativeHint = "use a non-negative integer"
+)
+
 func (h *Handler) sessionLogRun(_ context.Context, in contracts.Input) (string, error) {
-	raw, ok := in.Lookup("name")
+	raw, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
 	}

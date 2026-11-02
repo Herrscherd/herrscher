@@ -10,11 +10,13 @@ var sessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
 var slugInvalidRe = regexp.MustCompile(`[^a-z0-9_-]+`)
 
+const maxSlugLen = 64
+
 func slugify(name string) string {
 	s := slugInvalidRe.ReplaceAllString(strings.ToLower(strings.TrimSpace(name)), "-")
 	s = strings.Trim(s, "-_")
-	if len(s) > 64 {
-		s = strings.Trim(s[:64], "-_")
+	if len(s) > maxSlugLen {
+		s = strings.Trim(s[:maxSlugLen], "-_")
 	}
 	return s
 }

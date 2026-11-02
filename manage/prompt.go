@@ -37,7 +37,7 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 	}
 
 	secrets := map[string]string{}
-	if choices["gateway"] == "discord" {
+	if choices[catGateway] == kindDiscord {
 		if err := promptDiscordSecrets(s, in, secrets); err != nil {
 			return nil, nil, err
 		}
@@ -110,15 +110,15 @@ func chooseKind(s style, in *bufio.Reader, cat string) (string, error) {
 	switch ans {
 	case "":
 		return def, nil
-	case "none":
-		return "none", nil
+	case kindNone:
+		return kindNone, nil
 	}
 	if n, err := strconv.Atoi(ans); err == nil {
 		switch {
 		case n >= 1 && n <= len(kinds):
 			return kinds[n-1], nil
 		case n == len(kinds)+1:
-			return "none", nil
+			return kindNone, nil
 		}
 		return "", fmt.Errorf("%s: %w: %d", cat, errChoiceOutOfRange, n)
 	}

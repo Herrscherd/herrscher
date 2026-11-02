@@ -57,7 +57,7 @@ func newAttachedDaemon(ctx context.Context, instance string) (*attachedDaemon, e
 func (a *attachedDaemon) pump(stream <-chan host.DaemonEvent) {
 	defer close(a.events)
 	for e := range stream {
-		conv := contracts.Conversation{Gateway: "terminal", ID: a.channelFor(e.Session)}
+		conv := contracts.Conversation{Gateway: kindTerminal, ID: a.channelFor(e.Session)}
 		select {
 		case a.events <- tui.RoutedEvent{Conv: conv, Event: e.Event}:
 		case <-a.done:
@@ -83,7 +83,7 @@ func (a *attachedDaemon) channelFor(session string) string {
 }
 
 func (a *attachedDaemon) refresh() {
-	out, err := a.dispatch([]string{"session", "info", "--json"})
+	out, err := a.dispatch([]string{verbSession, "info", argJSON})
 	if err != nil {
 		return
 	}
@@ -146,7 +146,7 @@ func (a *attachedDaemon) Submit(channel, text string, attachments []tui.Attachme
 		a.notify(channel, "no session is bound to this tab any more")
 		return
 	}
-	argv := append([]string{"session", "send", "--name", name, "--origin", terminal.Kind}, cli.FlagArg("text", text)...)
+	argv := append([]string{verbSession, "send", argName, name, "--origin", terminal.Kind}, cli.FlagArg("text", text)...)
 	if len(attachments) > 0 {
 		paths := make([]string, 0, len(attachments))
 		for _, at := range attachments {
@@ -165,8 +165,8 @@ func (a *attachedDaemon) Submit(channel, text string, attachments []tui.Attachme
 func (a *attachedDaemon) notify(channel, text string) {
 	select {
 	case a.events <- tui.RoutedEvent{
-		Conv:  contracts.Conversation{Gateway: "terminal", ID: channel},
-		Event: contracts.Event{T: "status", Text: "herrscher: " + text},
+		Conv:  contracts.Conversation{Gateway: kindTerminal, ID: channel},
+		Event: contracts.Event{T: cmdStatus, Text: "herrscher: " + text},
 	}:
 	default:
 	}
@@ -184,11 +184,11 @@ func (a *attachedDaemon) Dispatch(args []string) (string, error) {
 }
 
 func attachedVerbs() map[string]bool {
-	return map[string]bool{"session": true, "agent": true}
+	return map[string]bool{verbSession: true, "agent": true}
 }
 
 func withTerminalOnly(args []string) []string {
-	if len(args) < 2 || args[0] != "session" || args[1] != "create" {
+	if len(args) < 2 || args[0] != verbSession || args[1] != "create" {
 		return args
 	}
 	for _, a := range args {
@@ -200,7 +200,7 @@ func withTerminalOnly(args []string) []string {
 }
 
 func (a *attachedDaemon) Close(name string, force bool) (string, error) {
-	argv := []string{"session", "close", "--name", name}
+	argv := []string{verbSession, "close", argName, name}
 	if force {
 		argv = append(argv, "--force")
 	}
@@ -208,16 +208,16 @@ func (a *attachedDaemon) Close(name string, force bool) (string, error) {
 }
 
 func (a *attachedDaemon) Resume(name string) (string, error) {
-	return a.dispatch([]string{"session", "resume", "--name", name})
+	return a.dispatch([]string{verbSession, "resume", argName, name})
 }
 
 func (a *attachedDaemon) Interrupt(name string) bool {
-	_, err := a.dispatch([]string{"session", "interrupt", "--name", name})
+	_, err := a.dispatch([]string{verbSession, "interrupt", argName, name})
 	return err == nil
 }
 
 func (a *attachedDaemon) Scrollback(name string) []contracts.ScrollbackLine {
-	out, err := a.dispatch([]string{"session", "scrollback", "--name", name})
+	out, err := a.dispatch([]string{verbSession, "scrollback", argName, name})
 	if err != nil {
 		return nil
 	}
@@ -229,7 +229,7 @@ func (a *attachedDaemon) Scrollback(name string) []contracts.ScrollbackLine {
 }
 
 func (a *attachedDaemon) Commands() []tui.CommandSpec {
-	out, err := a.dispatch([]string{"commands", "--json"})
+	out, err := a.dispatch([]string{"commands", argJSON})
 	if err != nil {
 		return nil
 	}

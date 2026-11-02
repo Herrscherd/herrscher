@@ -24,7 +24,7 @@ func runService(ctx context.Context, args []string) error {
 	}
 	sub := args[0]
 	switch sub {
-	case "install", "uninstall", "status", "restart", "update":
+	case cmdInstall, "uninstall", cmdStatus, "restart", cmdUpdate:
 	default:
 		return fmt.Errorf("herrscher service: %w %q (want install|uninstall|status|restart|update)", errUnknownSubcommand, sub)
 	}
@@ -41,7 +41,7 @@ func runService(ctx context.Context, args []string) error {
 		}
 		fmt.Fprintln(os.Stderr, "herrscher service: restarted")
 		return nil
-	case "update":
+	case cmdUpdate:
 		return runServiceUpdate(ctx, cfg, args[1:])
 	}
 
@@ -59,7 +59,7 @@ func runService(ctx context.Context, args []string) error {
 	cfg.EnvFile = *envFile
 
 	switch sub {
-	case "install":
+	case cmdInstall:
 		cfg.DefaultCmd = *defaultCmd
 		return service.Install(ctx, cfg)
 	case "uninstall":
@@ -68,7 +68,7 @@ func runService(ctx context.Context, args []string) error {
 		}
 		fmt.Fprintln(os.Stderr, "herrscher service: removed")
 		return nil
-	case "status":
+	case cmdStatus:
 		return service.Status(ctx, cfg)
 	default:
 		return fmt.Errorf("herrscher service: %w %q (want install|uninstall|status)", errUnknownSubcommand, sub)

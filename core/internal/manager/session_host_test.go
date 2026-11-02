@@ -48,7 +48,7 @@ func (f *fakeHosts) Workspace(name string) (string, error) {
 	return f.workspace, nil
 }
 
-func (f *fakeHosts) Materialize(ctx context.Context, name string, a agent.Agent, worktreePath string, hook bool) error {
+func (f *fakeHosts) Materialize(_ context.Context, name string, _ agent.Agent, worktreePath string, hook bool) error {
 	if err := f.check(name); err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func (f *fakeHosts) Materialize(ctx context.Context, name string, a agent.Agent,
 	return nil
 }
 
-func (f *fakeHosts) EnsureProject(ctx context.Context, name, project, repo string) error {
+func (f *fakeHosts) EnsureProject(_ context.Context, name, project, _ string) error {
 	if name == "" || project == "" {
 		return nil
 	}
@@ -118,7 +118,7 @@ func TestSessionCreateLocalHostIsThisMachine(t *testing.T) {
 
 func TestSessionCreateTakesTheAgentDefaultHost(t *testing.T) {
 	h, hs, _, st := handlerWithHosts(t)
-	if _, err := h.Agents().Create(agent.CreateSpec{Name: "nova", Host: "build1"}); err != nil {
+	if _, err := h.agents.Create(agent.CreateSpec{Name: "nova", Host: "build1"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "agent", "nova")); err != nil {
@@ -136,7 +136,7 @@ func TestSessionCreateTakesTheAgentDefaultHost(t *testing.T) {
 func TestSessionCreateExplicitHostBeatsTheAgentDefault(t *testing.T) {
 	h, _, localWT, st := handlerWithHosts(t)
 	localWT.path = t.TempDir()
-	if _, err := h.Agents().Create(agent.CreateSpec{Name: "nova", Host: "build1"}); err != nil {
+	if _, err := h.agents.Create(agent.CreateSpec{Name: "nova", Host: "build1"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "agent", "nova", "host", state.LocalHost)); err != nil {
@@ -254,7 +254,7 @@ func TestSessionCreateStoresTheApprovalMode(t *testing.T) {
 
 func TestSessionCreateOnHostMaterializesWithoutAHookInBypass(t *testing.T) {
 	h, hs, _, _ := handlerWithHosts(t)
-	if _, err := h.Agents().Create(agent.CreateSpec{Name: "nova", Host: "build1"}); err != nil {
+	if _, err := h.agents.Create(agent.CreateSpec{Name: "nova", Host: "build1"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "agent", "nova", "approvals", "bypass")); err != nil {
@@ -267,7 +267,7 @@ func TestSessionCreateOnHostMaterializesWithoutAHookInBypass(t *testing.T) {
 
 func TestSessionCreateOnHostMaterializesWithAHookByDefault(t *testing.T) {
 	h, hs, _, _ := handlerWithHosts(t)
-	if _, err := h.Agents().Create(agent.CreateSpec{Name: "nova", Host: "build1"}); err != nil {
+	if _, err := h.agents.Create(agent.CreateSpec{Name: "nova", Host: "build1"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "agent", "nova")); err != nil {

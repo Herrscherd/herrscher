@@ -51,7 +51,7 @@ func TestSessionBudgetGate_CheckTrips(t *testing.T) {
 	}
 
 	gate := h.BudgetGate()
-	reason := gate.Check("game").reason
+	reason := gate.Check("game").Reason
 	if reason != "cost" {
 		t.Fatalf("reason = %q, want %q", reason, "cost")
 	}
@@ -83,14 +83,14 @@ func TestSessionBudgetGate_CheckHeadroom(t *testing.T) {
 	gate := h.BudgetGate()
 
 	child := gate.Check("child")
-	if !child.capped || child.headroom != 400 {
-		t.Fatalf("Check(child) headroom = (%d, %v), want (400, true)", child.headroom, child.capped)
+	if !child.Capped || child.Headroom != 400 {
+		t.Fatalf("Check(child) headroom = (%d, %v), want (400, true)", child.Headroom, child.Capped)
 	}
-	if free := gate.Check("free"); free.capped || free.headroom != 0 {
-		t.Fatalf("Check(free) headroom = (%d, %v), want (0, false)", free.headroom, free.capped)
+	if free := gate.Check("free"); free.Capped || free.Headroom != 0 {
+		t.Fatalf("Check(free) headroom = (%d, %v), want (0, false)", free.Headroom, free.Capped)
 	}
-	if ghost := gate.Check("ghost"); ghost.capped || ghost.headroom != 0 {
-		t.Fatalf("Check of an unknown session = (%d, %v), want (0, false)", ghost.headroom, ghost.capped)
+	if ghost := gate.Check("ghost"); ghost.Capped || ghost.Headroom != 0 {
+		t.Fatalf("Check of an unknown session = (%d, %v), want (0, false)", ghost.Headroom, ghost.Capped)
 	}
 }
 
@@ -103,8 +103,8 @@ func TestSessionBudgetGate_HeadroomFloorsAtZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	spent := h.BudgetGate().Check("spent")
-	if !spent.capped || spent.headroom != 0 {
-		t.Fatalf("headroom over cap = (%d, %v), want (0, true)", spent.headroom, spent.capped)
+	if !spent.Capped || spent.Headroom != 0 {
+		t.Fatalf("headroom over cap = (%d, %v), want (0, true)", spent.Headroom, spent.Capped)
 	}
 }
 
@@ -118,7 +118,7 @@ func TestSessionBudgetGate_UncappedNeverTrips(t *testing.T) {
 	}
 
 	gate := h.BudgetGate()
-	reason := gate.Check("free").reason
+	reason := gate.Check("free").Reason
 	if reason != "" {
 		t.Fatalf("reason = %q, want empty", reason)
 	}

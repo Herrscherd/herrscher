@@ -63,9 +63,9 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 		return nil, fmt.Errorf("settings.json: %w", err)
 	}
 	if doc == nil {
-		doc = map[string]any{}
+		doc = make(map[string]any)
 	}
-	hooks := map[string]any{}
+	hooks := make(map[string]any)
 	if raw, ok := doc["hooks"]; ok && raw != nil {
 		m, ok := raw.(map[string]any)
 		if !ok {
@@ -131,7 +131,7 @@ func isApprovalHook(entry any) bool {
 func SelfBin() string {
 	bin, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "approvals: this binary cannot name itself, so sessions materialize with no approval hook: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "approvals: this binary cannot name itself, so sessions materialize with no approval hook: %v\n", err)
 		return ""
 	}
 	return bin

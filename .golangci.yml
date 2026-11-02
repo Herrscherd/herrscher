@@ -201,6 +201,9 @@ linters:
       - path: ^core/internal/agent/agent\.go$
         linters: [noctx]
         text: "exec.Command"
+      - path: ^core/internal/(agent|manager)/
+        linters: [revive]
+        text: "Unhandled error in call to function strings.Builder.Write"
 
 formatters:
   enable:

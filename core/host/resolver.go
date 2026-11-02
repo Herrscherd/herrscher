@@ -122,7 +122,6 @@ func (r *Resolver) Orchestrator(ctx context.Context, plugins []contracts.Plugin)
 		if p.Orchestrator == nil {
 			continue
 		}
-		p := p
 		return resolveRemoteWithRetry(r, ctx, contracts.CategoryOrchestrator,
 			func(c context.Context) (contracts.Orchestrator, error) { return r.dialOrchestrator(c, p) })
 	}
@@ -195,7 +194,6 @@ func resolveRemoteWithRetry[T any](r *Resolver, ctx context.Context, cat contrac
 		r.log.Debug("remote resolve attempt failed", "category", cat, "attempt", attempt, "err", err)
 		select {
 		case <-ctx.Done():
-			lastErr = ctx.Err()
 		case <-r.sleep(bo.Next(0)):
 		}
 	}

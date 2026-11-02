@@ -94,14 +94,7 @@ func TestNewSeedBackendResolvesRelativeWorktreeOnce(t *testing.T) {
 	if err := os.MkdirAll(worker, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	original, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(worker); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { logCleanup(os.Chdir(original)) })
+	t.Chdir(worker)
 
 	var gotDir string
 	contracts.Default.Register(contracts.Plugin{

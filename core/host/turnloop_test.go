@@ -23,7 +23,6 @@ type fanRecorder struct {
 	posted      []string
 	upserts     int
 	statuses    []string
-	sink        bool
 	readChannel string
 	hosts       []string
 }
@@ -216,21 +215,23 @@ func TestDriverNonEventSinkPostsOnlyFinalReply(t *testing.T) {
 }
 
 func TestDriverResolvesAttachmentsOntoInput(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
 	if err := os.MkdirAll(bridge.StagingRoot(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(bridge.StagingRoot(), "turnloop-")
-	if err != nil {
+	dir := filepath.Join(bridge.StagingRoot(), "turnloop")
+	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { logCleanup(os.RemoveAll(dir)) })
 	img := filepath.Join(dir, "paste.png")
 	if err := os.WriteFile(img, []byte("PNG"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if img, err = filepath.EvalSymlinks(img); err != nil {
+	resolved, err := filepath.EvalSymlinks(img)
+	if err != nil {
 		t.Fatal(err)
 	}
+	img = resolved
 	a := &fanRecorder{}
 	a.feedMsg(contracts.Message{
 		ID: "m", ChannelID: "c", Content: "look", AuthorName: "you",

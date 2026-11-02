@@ -236,7 +236,7 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	sealed, isSealed := c.expected[from.Parent]
 	c.mu.Unlock()
 
-	total := 0
+	var total int
 	if isSealed {
 		total = sealed
 	} else {
@@ -392,7 +392,7 @@ func (c *coordinator) forget(name string) {
 }
 
 func (c *coordinator) seedWithRetry(ctx context.Context, session, task string) bool {
-	for i := 0; i < seedAttempts; i++ {
+	for range seedAttempts {
 		if c.seed(session, task) {
 			return true
 		}

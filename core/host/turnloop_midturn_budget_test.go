@@ -107,7 +107,7 @@ func TestBudgetedTurnUnderHeadroomRunsOn(t *testing.T) {
 func TestRunawayTurnInterruptedOnce(t *testing.T) {
 	b := startBudgetedTurn(t, 100)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		b.fromBridge <- contracts.Event{T: "chunk", Text: "more", Tokens: 200, TokensIn: 100}
 	}
 

@@ -45,7 +45,7 @@ func TestPaletteWindowFollowsTheSelection(t *testing.T) {
 func TestPaletteViewShowsALateSelection(t *testing.T) {
 	m := newTestModel()
 	m.cmds = nil
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		m.cmds = append(m.cmds, CommandSpec{Name: fmt.Sprintf("verb%02d", i)})
 	}
 	m.input.SetValue("/")

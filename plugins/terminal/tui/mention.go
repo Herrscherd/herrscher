@@ -78,7 +78,7 @@ func (m *model) mentionCursor() int {
 		return len(value)
 	}
 	offset := 0
-	for i := 0; i < row; i++ {
+	for i := range row {
 		offset += len(lines[i]) + 1
 	}
 	runes := []rune(lines[row])

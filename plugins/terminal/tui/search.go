@@ -228,7 +228,7 @@ func foldTurns(lines []string, keep int) []string {
 	}
 	cut := bounds[len(bounds)-keep]
 	var out []string
-	for i := 0; i < len(bounds); i++ {
+	for i := range bounds {
 		start := bounds[i]
 		if start >= cut {
 			return append(out, lines[start:]...)

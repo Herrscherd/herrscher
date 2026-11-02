@@ -12,7 +12,7 @@ func longModel(t *testing.T) *model {
 	m := readyModel(&fakeBackend{})
 	tb := m.ensureTab("a")
 	m.active = "a"
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		tb.appendEntry(entry{role: roleYou, text: "question " + string(rune('a'+i))})
 		tb.appendEntry(entry{role: roleAgent, text: "answer about widgets"})
 	}

@@ -25,11 +25,11 @@ func blockRender(img image.Image, cols int) string {
 	xdraw.ApproxBiLinear.Scale(scaled, scaled.Bounds(), img, b, xdraw.Src, nil)
 
 	var s strings.Builder
-	for row := 0; row < rows; row++ {
+	for row := range rows {
 		if row > 0 {
 			s.WriteByte('\n')
 		}
-		for x := 0; x < cols; x++ {
+		for x := range cols {
 			s.WriteString(sgr(38, scaled.RGBAAt(x, row*2)))
 			s.WriteString(sgr(48, scaled.RGBAAt(x, row*2+1)))
 			s.WriteString(blockUpperHalf)

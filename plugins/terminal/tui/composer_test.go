@@ -61,7 +61,7 @@ func TestComposerGrowthShrinksViewport(t *testing.T) {
 
 func TestComposerCapsHeight(t *testing.T) {
 	m := readyModel(&fakeBackend{})
-	for i := 0; i < maxComposerLines+5; i++ {
+	for range maxComposerLines + 5 {
 		m.Update(tea.KeyMsg{Type: tea.KeyEnter, Alt: true})
 	}
 	if m.composerHeight() != maxComposerLines {

@@ -95,7 +95,7 @@ func TestCtrlWDeletesAWordBeforeItClosesATab(t *testing.T) {
 func TestWheelScrollsTheTranscript(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("c")
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		tb.appendEntry(entry{role: roleNotice, text: "line"})
 	}
 	var mm tea.Model = m

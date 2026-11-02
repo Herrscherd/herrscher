@@ -175,63 +175,9 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 		}
 	}()
 
-	soul := spec.Soul
-	if soul == "" {
-		soul = defaultSoul
-	}
-
-	serverName := ""
-	servers := map[string]mcpServer{}
-	if srvName, srv, ok := parseMCP(spec.MCP); ok {
-		serverName = srvName
-		servers[srvName] = srv
-	}
-	mcpBuf, err := json.MarshalIndent(mcpConfig{MCPServers: servers}, "", "  ")
+	files, err := seedFiles(spec)
 	if err != nil {
-		return Agent{}, fmt.Errorf("render mcp.json: %w", err)
-	}
-	settingsBuf, err := buildSettings(serverName)
-	if err != nil {
-		return Agent{}, fmt.Errorf("render settings.json: %w", err)
-	}
-
-	files := []struct {
-		name string
-		data []byte
-	}{
-		{soulFile, []byte(soul)},
-		{mcpFile, mcpBuf},
-		{settingsFile, settingsBuf},
-	}
-	if spec.User != "" {
-		files = append(files, struct {
-			name string
-			data []byte
-		}{userFile, []byte(spec.User)})
-	}
-	if spec.Backend != "" {
-		files = append(files, struct {
-			name string
-			data []byte
-		}{backendFile, []byte(spec.Backend)})
-	}
-	if spec.Cmd != "" {
-		files = append(files, struct {
-			name string
-			data []byte
-		}{cmdFile, []byte(spec.Cmd)})
-	}
-	if spec.Host != "" {
-		files = append(files, struct {
-			name string
-			data []byte
-		}{hostFile, []byte(spec.Host)})
-	}
-	if len(spec.Tags) > 0 {
-		files = append(files, struct {
-			name string
-			data []byte
-		}{tagsFile, []byte(strings.Join(spec.Tags, " ") + "\n")})
+		return Agent{}, err
 	}
 	for _, f := range files {
 		if err := os.WriteFile(filepath.Join(home, f.name), f.data, fileMode); err != nil {
@@ -240,6 +186,50 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 	}
 	created = true
 	return Agent{Name: name, Home: home, Backend: spec.Backend, Cmd: spec.Cmd, Host: spec.Host, Tags: readTags(home)}, nil
+}
+
+type seedFile struct {
+	name string
+	data []byte
+}
+
+func seedFiles(spec CreateSpec) ([]seedFile, error) {
+	soul := spec.Soul
+	if soul == "" {
+		soul = defaultSoul
+	}
+	serverName := ""
+	servers := map[string]mcpServer{}
+	if srvName, srv, ok := parseMCP(spec.MCP); ok {
+		serverName = srvName
+		servers[srvName] = srv
+	}
+	mcpBuf, err := json.MarshalIndent(mcpConfig{MCPServers: servers}, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("render mcp.json: %w", err)
+	}
+	settingsBuf, err := buildSettings(serverName)
+	if err != nil {
+		return nil, fmt.Errorf("render settings.json: %w", err)
+	}
+	tags := ""
+	if len(spec.Tags) > 0 {
+		tags = strings.Join(spec.Tags, " ") + "\n"
+	}
+	files := []seedFile{{soulFile, []byte(soul)}, {mcpFile, mcpBuf}, {settingsFile, settingsBuf}}
+	files = append(files, optionalSeed(userFile, spec.User)...)
+	files = append(files, optionalSeed(backendFile, spec.Backend)...)
+	files = append(files, optionalSeed(cmdFile, spec.Cmd)...)
+	files = append(files, optionalSeed(hostFile, spec.Host)...)
+	files = append(files, optionalSeed(tagsFile, tags)...)
+	return files, nil
+}
+
+func optionalSeed(name, value string) []seedFile {
+	if value == "" {
+		return nil
+	}
+	return []seedFile{{name, []byte(value)}}
 }
 
 // SetSoul overwrites <home>/SOUL.md for an existing agent. It never creates a

@@ -270,6 +270,16 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	if err := os.MkdirAll(codexDir, dirMode); err != nil {
 		return fmt.Errorf("create .codex dir: %w", err)
 	}
+	if err := a.copyTemplates(dst, claudeDir, worktreePath, herrscherBin); err != nil {
+		return err
+	}
+	if err := a.writeInstructions(dst, claudeDir, worktreePath); err != nil {
+		return err
+	}
+	return a.writeCodexConfig(codexDir, worktreePath)
+}
+
+func (a Agent) copyTemplates(dst, claudeDir, worktreePath, herrscherBin string) error {
 	copies := []struct {
 		src, dst string
 		jsonDst  bool
@@ -297,7 +307,10 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 			return fmt.Errorf("write %s: %w", c.dst, err)
 		}
 	}
+	return nil
+}
 
+func (a Agent) writeInstructions(dst, claudeDir, worktreePath string) error {
 	soul, err := os.ReadFile(filepath.Join(a.Home, soulFile))
 	if err != nil {
 		return fmt.Errorf("read %s: %w", soulFile, err)
@@ -305,26 +318,39 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	soulOut := strings.ReplaceAll(string(soul), worktreeToken, worktreePath)
 	claudeMd, agentsMd := soulOut, soulOut
 
-	userRaw, uErr := os.ReadFile(filepath.Join(a.Home, userFile))
-	if uErr != nil && !os.IsNotExist(uErr) {
-		return fmt.Errorf("read %s: %w", userFile, uErr)
+	userOut, hasUser, err := a.userInstructions(worktreePath)
+	if err != nil {
+		return err
 	}
-	if uErr == nil {
-		userOut := strings.ReplaceAll(string(userRaw), worktreeToken, worktreePath)
-		if err = os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), fileMode); err != nil {
+	if hasUser {
+		if err := os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), fileMode); err != nil {
 			return fmt.Errorf("write .claude/USER.md: %w", err)
 		}
 		claudeMd = soulOut + "\n\n@USER.md\n"
 		agentsMd = soulOut + "\n\n# User\n\n" + userOut
 	}
 
-	if err = os.WriteFile(filepath.Join(claudeDir, "CLAUDE.md"), []byte(claudeMd), fileMode); err != nil {
+	if err := os.WriteFile(filepath.Join(claudeDir, "CLAUDE.md"), []byte(claudeMd), fileMode); err != nil {
 		return fmt.Errorf("write .claude/CLAUDE.md: %w", err)
 	}
-	if err = os.WriteFile(filepath.Join(dst, "AGENTS.md"), []byte(agentsMd), fileMode); err != nil {
+	if err := os.WriteFile(filepath.Join(dst, "AGENTS.md"), []byte(agentsMd), fileMode); err != nil {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
+	return nil
+}
 
+func (a Agent) userInstructions(worktreePath string) (string, bool, error) {
+	raw, err := os.ReadFile(filepath.Join(a.Home, userFile))
+	if os.IsNotExist(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("read %s: %w", userFile, err)
+	}
+	return strings.ReplaceAll(string(raw), worktreeToken, worktreePath), true, nil
+}
+
+func (a Agent) writeCodexConfig(codexDir, worktreePath string) error {
 	mcp, err := os.ReadFile(filepath.Join(a.Home, mcpFile))
 	if err != nil {
 		return fmt.Errorf("read %s: %w", mcpFile, err)

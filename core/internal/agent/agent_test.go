@@ -37,7 +37,14 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 	if err = a.Materialize(wt); err != nil {
 		t.Fatal(err)
 	}
+	assertMCPSubstituted(t, wt)
+	assertSettingsWritten(t, wt)
+	assertInstructionsWritten(t, wt)
+	assertCodexConfigWritten(t, wt)
+}
 
+func assertMCPSubstituted(t *testing.T, wt string) {
+	t.Helper()
 	mcp, err := os.ReadFile(filepath.Join(wt, ".mcp.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +61,10 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 	if !strings.Contains(string(mcp), `"neublox"`) {
 		t.Fatalf("neublox server missing:\n%s", mcp)
 	}
+}
 
+func assertSettingsWritten(t *testing.T, wt string) {
+	t.Helper()
 	settings, err := os.ReadFile(filepath.Join(wt, ".claude", "settings.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +72,10 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 	if !strings.Contains(string(settings), "enableAllProjectMcpServers") {
 		t.Fatalf("settings missing:\n%s", settings)
 	}
+}
 
+func assertInstructionsWritten(t *testing.T, wt string) {
+	t.Helper()
 	claude, err := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +83,6 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 	if string(claude) != "PERSONA" {
 		t.Fatalf("CLAUDE.md = %q", claude)
 	}
-
 	agents, err := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
@@ -78,7 +90,10 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 	if string(agents) != "PERSONA" {
 		t.Fatalf("AGENTS.md = %q", agents)
 	}
+}
 
+func assertCodexConfigWritten(t *testing.T, wt string) {
+	t.Helper()
 	codex, err := os.ReadFile(filepath.Join(wt, ".codex", "config.toml"))
 	if err != nil {
 		t.Fatalf("read .codex/config.toml: %v", err)

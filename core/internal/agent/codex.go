@@ -24,64 +24,68 @@ func renderCodexMCP(raw []byte, worktree string) ([]byte, error) {
 		return nil, fmt.Errorf("parse mcp.json: %w", err)
 	}
 
-	names := make([]string, 0, len(config.MCPServers))
-	for name := range config.MCPServers {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
 	var out strings.Builder
-	for i, name := range names {
-		if strings.TrimSpace(name) == "" {
-			return nil, ErrEmptyMCPServerName
-		}
+	for i, name := range sortedKeys(config.MCPServers) {
 		server := config.MCPServers[name]
-		if server.Type != "" && server.Type != "stdio" {
-			return nil, fmt.Errorf("%w %q for server %q", ErrUnsupportedMCPTransport, server.Type, name)
-		}
-		if strings.TrimSpace(server.Command) == "" {
-			return nil, fmt.Errorf("%w %q", ErrMissingMCPCommand, name)
+		if err := checkCodexMCPServer(name, server); err != nil {
+			return nil, err
 		}
 		if i > 0 {
 			out.WriteByte('\n')
 		}
-
-		out.WriteString("[mcp_servers.")
-		out.WriteString(tomlKey(name))
-		out.WriteString("]\ncommand = ")
-		out.WriteString(tomlString(strings.ReplaceAll(server.Command, worktreeToken, worktree)))
-		out.WriteByte('\n')
-		if len(server.Args) > 0 {
-			out.WriteString("args = [")
-			for i, arg := range server.Args {
-				if i > 0 {
-					out.WriteString(", ")
-				}
-				out.WriteString(tomlString(strings.ReplaceAll(arg, worktreeToken, worktree)))
-			}
-			out.WriteString("]\n")
-		}
-		if len(server.Env) == 0 {
-			continue
-		}
-
-		out.WriteByte('\n')
-		out.WriteString("[mcp_servers.")
-		out.WriteString(tomlKey(name))
-		out.WriteString(".env]\n")
-		envKeys := make([]string, 0, len(server.Env))
-		for key := range server.Env {
-			envKeys = append(envKeys, key)
-		}
-		sort.Strings(envKeys)
-		for _, key := range envKeys {
-			out.WriteString(tomlKey(key))
-			out.WriteString(" = ")
-			out.WriteString(tomlString(strings.ReplaceAll(server.Env[key], worktreeToken, worktree)))
-			out.WriteByte('\n')
-		}
+		writeCodexMCPServer(&out, name, server, worktree)
 	}
 	return []byte(out.String()), nil
+}
+
+func checkCodexMCPServer(name string, server codexMCPServer) error {
+	if strings.TrimSpace(name) == "" {
+		return ErrEmptyMCPServerName
+	}
+	if server.Type != "" && server.Type != "stdio" {
+		return fmt.Errorf("%w %q for server %q", ErrUnsupportedMCPTransport, server.Type, name)
+	}
+	if strings.TrimSpace(server.Command) == "" {
+		return fmt.Errorf("%w %q", ErrMissingMCPCommand, name)
+	}
+	return nil
+}
+
+func writeCodexMCPServer(out *strings.Builder, name string, server codexMCPServer, worktree string) {
+	table := "[mcp_servers." + tomlKey(name) + "]\n"
+	out.WriteString(table)
+	out.WriteString("command = " + substituteWorktree(server.Command, worktree) + "\n")
+	if len(server.Args) > 0 {
+		out.WriteString("args = [")
+		for i, arg := range server.Args {
+			if i > 0 {
+				out.WriteString(", ")
+			}
+			out.WriteString(substituteWorktree(arg, worktree))
+		}
+		out.WriteString("]\n")
+	}
+	if len(server.Env) == 0 {
+		return
+	}
+	out.WriteByte('\n')
+	out.WriteString("[mcp_servers." + tomlKey(name) + ".env]\n")
+	for _, key := range sortedKeys(server.Env) {
+		out.WriteString(tomlKey(key) + " = " + substituteWorktree(server.Env[key], worktree) + "\n")
+	}
+}
+
+func substituteWorktree(value, worktree string) string {
+	return tomlString(strings.ReplaceAll(value, worktreeToken, worktree))
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func tomlKey(key string) string {

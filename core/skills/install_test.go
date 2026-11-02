@@ -181,3 +181,24 @@ func TestManifestIsNotASkillAndSurvivesCorruption(t *testing.T) {
 		t.Fatalf("a corrupt manifest must not fail the install: %v", err)
 	}
 }
+
+func TestInstallWritesPrivateFilesAndDirectories(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Install(shippedFS(), dir); err != nil {
+		t.Fatal(err)
+	}
+	assertSkillMode(t, filepath.Join(dir, "pr-job", "SKILL.md"), 0o600)
+	assertSkillMode(t, filepath.Join(dir, "pr-job", "ref"), 0o750)
+	assertSkillMode(t, filepath.Join(dir, "pr-job", "ref", "notes.md"), 0o600)
+}
+
+func assertSkillMode(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Fatalf("%s mode = %o, want %o", path, got, want)
+	}
+}

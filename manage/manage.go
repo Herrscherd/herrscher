@@ -168,7 +168,7 @@ func PluginCmd(ctx context.Context, args []string) int {
 	}
 }
 
-func moduleArg(sub, arg string) (module, version string) {
+func moduleArg(sub, arg string) (string, string) {
 	if sub == "remove" {
 		return arg, ""
 	}
@@ -220,7 +220,9 @@ func addCommands(module, version string) [][]string {
 
 func removeCommands() [][]string { return buildCommands() }
 
-func updatePlan(mods []string, pins map[string]bool, installed map[string]string) (cmds [][]string, skipped []string) {
+func updatePlan(mods []string, pins map[string]bool, installed map[string]string) ([][]string, []string) {
+	var cmds [][]string
+	var skipped []string
 	for _, m := range mods {
 		if pins[m] {
 			v := installed[m]

@@ -42,7 +42,7 @@ func composed() []string {
 	return []string{"go.mod", "go.sum", "plugins.go"}
 }
 
-func apply(ctx context.Context, dir string, findings []string, d decider, steps []step) (applied bool, err error) {
+func apply(ctx context.Context, dir string, findings []string, d decider, steps []step) (bool, error) {
 	if d.Warn(ctx, findings) == Abort {
 		return false, nil
 	}

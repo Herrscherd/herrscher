@@ -47,26 +47,26 @@ func (h *Handler) worktreesOn(hostName string) (Worktrees, string, error) {
 		}
 		return h.wt, h.st.WorkspaceRoot(), nil
 	}
-	wt, err := h.hs.Worktrees(hostName)
+	worktrees, err := h.hs.Worktrees(hostName)
 	if err != nil {
 		return nil, "", err
 	}
-	ws, err := h.hs.Workspace(hostName)
+	workspaceRoot, err := h.hs.Workspace(hostName)
 	if err != nil {
 		return nil, "", err
 	}
-	return wt, ws, nil
+	return worktrees, workspaceRoot, nil
 }
 
-func (h *Handler) materializeOn(ctx context.Context, hostName string, a agent.Agent, worktreePath string, hook bool) error {
+func (h *Handler) materializeOn(ctx context.Context, hostName string, profile agent.Agent, worktreePath string, hook bool) error {
 	if hostName == "" || h.hs == nil {
 		bin := ""
 		if hook {
 			bin = agent.SelfBin()
 		}
-		return a.MaterializeAs(worktreePath, bin)
+		return profile.MaterializeAs(worktreePath, bin)
 	}
-	return h.hs.Materialize(ctx, hostName, a, worktreePath, hook)
+	return h.hs.Materialize(ctx, hostName, profile, worktreePath, hook)
 }
 
 // SetDefaultModel wires the operator's configured default. It is a fallback,

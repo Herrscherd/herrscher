@@ -8,26 +8,26 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func (h *Handler) setHomeRun(ctx context.Context, in contracts.Input) (string, error) {
-	id, ok := in.Lookup("channel")
-	if !ok || id == "" {
+func (h *Handler) setHomeRun(ctx context.Context, input contracts.Input) (string, error) {
+	channelID, ok := input.Lookup("channel")
+	if !ok || channelID == "" {
 		return "", ErrMissingChannel
 	}
-	kind, err := h.d.Kind(ctx, id)
+	kind, err := h.d.Kind(ctx, channelID)
 	if err != nil {
 		return "", fmt.Errorf("inspect channel: %w", err)
 	}
 	if kind != categoryKind && kind != forumKind {
-		return "", &ChannelKindError{Channel: id, Kind: kind, Need: "home must be a category or forum"}
+		return "", &ChannelKindError{Channel: channelID, Kind: kind, Need: "home must be a category or forum"}
 	}
-	if err := h.st.SetHome(state.HomeRef{ID: id, Type: kind}); err != nil {
+	if err := h.st.SetHome(state.HomeRef{ID: channelID, Type: kind}); err != nil {
 		return "", fmt.Errorf("persist: %w", err)
 	}
-	return fmt.Sprintf("🏠 Home set to <#%s> (%s).", id, kind), nil
+	return fmt.Sprintf("🏠 Home set to <#%s> (%s).", channelID, kind), nil
 }
 
-func (h *Handler) setSourceRun(_ context.Context, in contracts.Input) (string, error) {
-	path, ok := in.Lookup("path")
+func (h *Handler) setSourceRun(_ context.Context, input contracts.Input) (string, error) {
+	path, ok := input.Lookup("path")
 	if !ok || path == "" {
 		return "", ErrMissingPath
 	}

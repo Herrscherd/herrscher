@@ -37,12 +37,12 @@ const (
 	fileMode = 0o644
 )
 
-func jsonStringInner(s string) string {
-	b, err := json.Marshal(s)
+func jsonStringInner(value string) string {
+	data, err := json.Marshal(value)
 	if err != nil {
-		return s
+		return value
 	}
-	return string(b[1 : len(b)-1])
+	return string(data[1 : len(data)-1])
 }
 
 const hookWaitSeconds = 900
@@ -67,11 +67,11 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 	}
 	hooks := make(map[string]any)
 	if raw, ok := doc["hooks"]; ok && raw != nil {
-		m, ok := raw.(map[string]any)
+		object, ok := raw.(map[string]any)
 		if !ok {
 			return nil, &SettingsShapeError{Path: "hooks", Want: "an object", Got: raw}
 		}
-		hooks = m
+		hooks = object
 	}
 	var pre []any
 	if raw, ok := hooks["PreToolUse"]; ok && raw != nil {
@@ -100,20 +100,20 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 }
 
 func isApprovalHook(entry any) bool {
-	m, ok := entry.(map[string]any)
+	section, ok := entry.(map[string]any)
 	if !ok {
 		return false
 	}
-	list, ok := m["hooks"].([]any)
+	list, ok := section["hooks"].([]any)
 	if !ok {
 		return false
 	}
 	for _, h := range list {
-		hm, ok := h.(map[string]any)
+		hookMap, ok := h.(map[string]any)
 		if !ok {
 			continue
 		}
-		if cmd, ok := hm["command"].(string); ok && strings.HasSuffix(cmd, " approve hook") {
+		if cmd, ok := hookMap["command"].(string); ok && strings.HasSuffix(cmd, " approve hook") {
 			return true
 		}
 	}
@@ -288,23 +288,23 @@ func (a Agent) copyTemplates(dst, claudeDir, worktreePath, herrscherBin string) 
 		{filepath.Join(a.Home, mcpFile), filepath.Join(dst, ".mcp.json"), true, false},
 		{filepath.Join(a.Home, settingsFile), filepath.Join(claudeDir, "settings.json"), true, true},
 	}
-	for _, c := range copies {
-		buf, err := os.ReadFile(c.src)
+	for _, template := range copies {
+		buf, err := os.ReadFile(template.src)
 		if err != nil {
-			return fmt.Errorf("read %s: %w", filepath.Base(c.src), err)
+			return fmt.Errorf("read %s: %w", filepath.Base(template.src), err)
 		}
 		repl := worktreePath
-		if c.jsonDst {
+		if template.jsonDst {
 			repl = jsonStringInner(worktreePath)
 		}
 		out := []byte(strings.ReplaceAll(string(buf), worktreeToken, repl))
-		if c.settings && herrscherBin != "" {
+		if template.settings && herrscherBin != "" {
 			if out, err = injectApprovalHook(out, herrscherBin); err != nil {
 				return err
 			}
 		}
-		if err := os.WriteFile(c.dst, out, fileMode); err != nil {
-			return fmt.Errorf("write %s: %w", c.dst, err)
+		if err := os.WriteFile(template.dst, out, fileMode); err != nil {
+			return fmt.Errorf("write %s: %w", template.dst, err)
 		}
 	}
 	return nil
@@ -394,14 +394,14 @@ func EnsureGitExcludes(worktree string) error {
 		addition.Reset()
 		addition.WriteString(additionText)
 	}
-	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
+	excludeFile, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
 	if err != nil {
 		return fmt.Errorf("open local git exclude: %w", err)
 	}
-	if _, err := f.WriteString(addition.String()); err != nil {
-		return errors.Join(fmt.Errorf("write local git exclude: %w", err), f.Close())
+	if _, err := excludeFile.WriteString(addition.String()); err != nil {
+		return errors.Join(fmt.Errorf("write local git exclude: %w", err), excludeFile.Close())
 	}
-	if err := f.Close(); err != nil {
+	if err := excludeFile.Close(); err != nil {
 		return fmt.Errorf("close local git exclude: %w", err)
 	}
 	return nil

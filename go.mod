@@ -1,6 +1,8 @@
 module github.com/Herrscherd/herrscher
 
-go 1.27.3
+go 1.27.0
+
+toolchain go1.27.3
 
 require (
 	github.com/Herrscherd/herrscher-claude-backend v0.2.8

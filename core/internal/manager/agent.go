@@ -21,7 +21,7 @@ func (h *Handler) agentCreateRun(_ context.Context, in contracts.Input) (string,
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
-		return "", fmt.Errorf("%w %q: use letters, digits, - or _ (max 64)", ErrInvalidName, raw)
+		return "", &InvalidValueError{Field: "name", Value: raw, Hint: "use letters, digits, - or _ (max 64)"}
 	}
 	soul, _ := in.Lookup("soul")
 	mcp, _ := in.Lookup("mcp")
@@ -83,7 +83,7 @@ func (h *Handler) agentShowRun(_ context.Context, in contracts.Input) (string, e
 	}
 	a, ok := h.agents.Get(slugify(name))
 	if !ok {
-		return "", fmt.Errorf("%w %q", ErrNoAgent, name)
+		return "", &agent.NotFoundError{Name: name}
 	}
 	soul, err := os.ReadFile(filepath.Join(a.Home, "SOUL.md"))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {

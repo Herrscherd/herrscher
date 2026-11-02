@@ -1,14 +1,46 @@
 package agent
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
-	ErrAgentExists             = errors.New("agent")
 	ErrEmptyMCPServerName      = errors.New("empty MCP server name in mcp.json")
-	ErrHooksNotObject          = errors.New("settings.json: hooks is")
-	ErrInvalidAgentName        = errors.New("invalid agent name")
 	ErrMissingMCPCommand       = errors.New("missing command for MCP server")
-	ErrNoAgent                 = errors.New("no agent")
-	ErrPreToolUseNotList       = errors.New("settings.json: hooks.PreToolUse is")
 	ErrUnsupportedMCPTransport = errors.New("unsupported MCP transport")
 )
+
+type ExistsError struct {
+	Name string
+}
+
+func (e *ExistsError) Error() string {
+	return fmt.Sprintf("agent %q already exists", e.Name)
+}
+
+type InvalidNameError struct {
+	Name string
+}
+
+func (e *InvalidNameError) Error() string {
+	return fmt.Sprintf("invalid agent name %q", e.Name)
+}
+
+type NotFoundError struct {
+	Name string
+}
+
+func (e *NotFoundError) Error() string {
+	return fmt.Sprintf("no agent %q", e.Name)
+}
+
+type SettingsShapeError struct {
+	Path string
+	Want string
+	Got  any
+}
+
+func (e *SettingsShapeError) Error() string {
+	return fmt.Sprintf("settings.json: %s is %T, not %s", e.Path, e.Got, e.Want)
+}

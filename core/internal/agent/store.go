@@ -154,7 +154,7 @@ func readHost(home string) string {
 func (s *Store) Create(spec CreateSpec) (Agent, error) {
 	name := spec.Name
 	if !validateName(name) {
-		return Agent{}, fmt.Errorf("%w %q", ErrInvalidAgentName, name)
+		return Agent{}, &InvalidNameError{Name: name}
 	}
 	home := filepath.Join(s.root, name)
 	if err := os.MkdirAll(s.root, 0o755); err != nil {
@@ -162,7 +162,7 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 	}
 	if err := os.Mkdir(home, 0o755); err != nil {
 		if os.IsExist(err) {
-			return Agent{}, fmt.Errorf("%w %q already exists", ErrAgentExists, name)
+			return Agent{}, &ExistsError{Name: name}
 		}
 		return Agent{}, fmt.Errorf("create agent home: %w", err)
 	}
@@ -247,11 +247,11 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 // source of truth; an edited soul applies to the next session materialized.
 func (s *Store) SetSoul(name, soul string) error {
 	if !validateName(name) {
-		return fmt.Errorf("%w %q", ErrInvalidAgentName, name)
+		return &InvalidNameError{Name: name}
 	}
 	home := filepath.Join(s.root, name)
 	if info, err := os.Stat(home); err != nil || !info.IsDir() {
-		return fmt.Errorf("%w %q", ErrNoAgent, name)
+		return &NotFoundError{Name: name}
 	}
 	return os.WriteFile(filepath.Join(home, soulFile), []byte(soul), 0o644)
 }
@@ -261,11 +261,11 @@ func (s *Store) SetSoul(name, soul string) error {
 // It never creates a home. An absent agent is an error.
 func (s *Store) SetUser(name, text string) error {
 	if !validateName(name) {
-		return fmt.Errorf("%w %q", ErrInvalidAgentName, name)
+		return &InvalidNameError{Name: name}
 	}
 	home := filepath.Join(s.root, name)
 	if info, err := os.Stat(home); err != nil || !info.IsDir() {
-		return fmt.Errorf("%w %q", ErrNoAgent, name)
+		return &NotFoundError{Name: name}
 	}
 	if err := contracts.EnforceBudget("user:"+name, text, s.userBudget); err != nil {
 		return err

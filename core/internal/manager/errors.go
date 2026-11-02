@@ -1,42 +1,94 @@
 package manager
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
-	ErrChannelKind               = errors.New("channel")
 	ErrCloneUnsupported          = errors.New("clone is not supported on host")
 	ErrConflictingChannel        = errors.New("pass either channel_id or under, not both: one adopts a conversation that exists, the other creates one")
 	ErrConflictingPlacement      = errors.New("terminal_only and under contradict each other: one keeps the session in the terminal, the other puts it in a gateway container")
 	ErrExplicitCmdRefused        = errors.New("an explicit cmd is refused under the gateway-only route policy: it bypasses the model catalog; select a model instead")
-	ErrHostNotRegistered         = errors.New("session wants host")
-	ErrInspectChannel            = errors.New("inspect channel")
-	ErrInvalidCohortCostCap      = errors.New("invalid cohort_cost_cap")
-	ErrInvalidCohortTokenCap     = errors.New("invalid cohort_token_cap")
-	ErrInvalidConsolidateEvery   = errors.New("invalid consolidate_every")
-	ErrInvalidCostCap            = errors.New("invalid cost_cap")
-	ErrInvalidMemoryProject      = errors.New("invalid memory_project")
-	ErrInvalidName               = errors.New("invalid name")
-	ErrInvalidProject            = errors.New("invalid project")
-	ErrInvalidTokenCap           = errors.New("invalid token_cap")
 	ErrMissingChannel            = errors.New("missing channel")
 	ErrMissingName               = errors.New("missing name")
 	ErrMissingPath               = errors.New("missing path")
 	ErrMissingSoul               = errors.New("missing soul")
 	ErrMissingTo                 = errors.New("missing to")
 	ErrModelRequired             = errors.New("a model is required under the gateway-only route policy: without one the session would spawn on this machine's own vendor login")
-	ErrNoAgent                   = errors.New("no agent")
 	ErrNoHome                    = errors.New("no home set; run `set home` first")
-	ErrNoSession                 = errors.New("no session")
-	ErrPersist                   = errors.New("persist")
-	ErrRebuilt                   = errors.New("rebuilt")
-	ErrRestart                   = errors.New("restart")
+	ErrNoHostRegistered          = errors.New("no host is registered")
 	ErrServiceControlUnavailable = errors.New("service control unavailable")
-	ErrSessionExists             = errors.New("session")
 	ErrSessionLimit              = errors.New("session limit reached")
-	ErrSessionNotFound           = errors.New("session")
-	ErrSharedAgentSession        = errors.New("session create with agent")
-	ErrUnknownAgent              = errors.New("unknown agent")
-	ErrUnknownApprovalMode       = errors.New("unknown approval mode")
-	ErrUnsupportedHomeType       = errors.New("home type")
-	ErrUpdate                    = errors.New("update")
 )
+
+type ChannelKindError struct {
+	Channel string
+	Kind    string
+	Need    string
+}
+
+func (e *ChannelKindError) Error() string {
+	return fmt.Sprintf("channel %s is %q: %s", e.Channel, e.Kind, e.Need)
+}
+
+type InvalidValueError struct {
+	Field string
+	Value string
+	Hint  string
+}
+
+func (e *InvalidValueError) Error() string {
+	if e.Hint == "" {
+		return fmt.Sprintf("invalid %s %q", e.Field, e.Value)
+	}
+	return fmt.Sprintf("invalid %s %q: %s", e.Field, e.Value, e.Hint)
+}
+
+type SessionNotFoundError struct {
+	Name string
+}
+
+func (e *SessionNotFoundError) Error() string {
+	return fmt.Sprintf("session %q not found", e.Name)
+}
+
+type SessionExistsError struct {
+	Name string
+}
+
+func (e *SessionExistsError) Error() string {
+	return fmt.Sprintf("session %q already exists", e.Name)
+}
+
+type SharedAgentError struct {
+	Agent string
+}
+
+func (e *SharedAgentError) Error() string {
+	return fmt.Sprintf("session create with agent %q cannot be shared: an agent needs a place of its own, and shared:true runs in the main checkout", e.Agent)
+}
+
+type UnknownAgentError struct {
+	Name string
+}
+
+func (e *UnknownAgentError) Error() string {
+	return fmt.Sprintf("unknown agent %q: create it with `agent create %s`", e.Name, e.Name)
+}
+
+type UnknownApprovalModeError struct {
+	Mode string
+}
+
+func (e *UnknownApprovalModeError) Error() string {
+	return fmt.Sprintf("unknown approval mode %q: ask, bypass or strict", e.Mode)
+}
+
+type UnsupportedHomeTypeError struct {
+	Type string
+}
+
+func (e *UnsupportedHomeTypeError) Error() string {
+	return fmt.Sprintf("home type %q unsupported", e.Type)
+}

@@ -3,8 +3,11 @@ package manager
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 
 	"github.com/Herrscherd/herrscher/core/internal/agent"
+	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -12,6 +15,7 @@ import (
 // Commands (commands.go) turns its methods into declared contracts.Cmd values
 // the CLI dispatches.
 type Handler struct {
+	log             *slog.Logger
 	d               channelAdmin
 	td              channelAdmin
 	sup             supervisor
@@ -39,7 +43,7 @@ func (h *Handler) SetHosts(hs Hosts) { h.hs = hs }
 func (h *Handler) worktreesOn(hostName string) (Worktrees, string, error) {
 	if hostName == "" || h.hs == nil {
 		if hostName != "" {
-			return nil, "", fmt.Errorf("%w %q but no host is registered", ErrHostNotRegistered, hostName)
+			return nil, "", fmt.Errorf("session wants host %q but %w", hostName, ErrNoHostRegistered)
 		}
 		return h.wt, h.st.WorkspaceRoot(), nil
 	}
@@ -162,7 +166,7 @@ type coordinationReader interface {
 // which per-session participant journals live (participants/<name>.log). agents
 // owns the durable agent homes used to provision sessions.
 func NewHandler(d channelAdmin, sup supervisor, wt Worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string) *Handler {
-	return &Handler{d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways}
+	return &Handler{log: obs.NewLogger(os.Stderr, slog.LevelInfo), d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways}
 }
 
 // SetTerminalAdmin wires the terminal (TUI) channel admin used to route

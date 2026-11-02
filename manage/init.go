@@ -5,7 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
+	"github.com/Herrscherd/herrscher/internal/errwriter"
 	"os"
 	"path/filepath"
 	"sort"
@@ -71,6 +71,11 @@ func defaultStack() map[string]string {
 // Pass --gateway/--backend/--memory/--orchestrator to swap a category, the kind
 // "none" to drop one, or --with MODULE to pin an extra module verbatim.
 func InitCmd(ctx context.Context, args []string) int {
+	out, errOut := errwriter.New(os.Stdout), errwriter.New(os.Stderr)
+	return errwriter.Finish(initHost(ctx, out, errOut, args), out, errOut)
+}
+
+func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	hostDir := fs.String("host", "", "path to the host module")
 	noBuild := fs.Bool("no-build", false, "write plugins.go but skip go get/build")
@@ -89,7 +94,7 @@ func InitCmd(ctx context.Context, args []string) int {
 	}
 
 	if *list {
-		writeCatalog(os.Stdout)
+		writeCatalog(out)
 		return 0
 	}
 
@@ -109,7 +114,7 @@ func InitCmd(ctx context.Context, args []string) int {
 	if interactive {
 		wc, ws, err := runWizard(compose, liveCatalog, currentRoute())
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			errOut.Println(err)
 			return 1
 		}
 		secrets = ws
@@ -122,7 +127,7 @@ func InitCmd(ctx context.Context, args []string) int {
 		path := envTarget()
 		n, err := writeSecretsTo(path, secrets)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "write secrets: %v\n", err)
+			errOut.Printf("write secrets: %v\n", err)
 			return 1
 		}
 		summaryConfig(path, n)
@@ -131,62 +136,62 @@ func InitCmd(ctx context.Context, args []string) int {
 
 	modules, err := resolveStack(choices, extras)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		errOut.Println(err)
 		return 2
 	}
 
 	manifest := filepath.Join(dir, "plugins.go")
 	src, err := os.ReadFile(manifest)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "read %s: %v\n", manifest, err)
+		errOut.Printf("read %s: %v\n", manifest, err)
 		return 1
 	}
-	out, err := setPlugins(string(src), modules)
+	rendered, err := setPlugins(string(src), modules)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		errOut.Println(err)
 		return 1
 	}
-	if err := os.WriteFile(manifest, []byte(out), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "write %s: %v\n", manifest, err)
+	if err := os.WriteFile(manifest, []byte(rendered), 0o644); err != nil {
+		errOut.Printf("write %s: %v\n", manifest, err)
 		return 1
 	}
 	summaryStack(modules)
-	seedEnv(dir)
+	seedEnv(out, errOut, dir)
 	if n, err := writeSecretsTo(filepath.Join(dir, ".env"), secrets); err != nil {
-		fmt.Fprintf(os.Stderr, "write secrets: %v\n", err)
+		errOut.Printf("write secrets: %v\n", err)
 	} else if n > 0 {
-		fmt.Fprintf(os.Stdout, "wrote %d setting(s) to .env\n", n)
+		out.Printf("wrote %d setting(s) to .env\n", n)
 	}
 
 	if *noBuild {
-		fmt.Fprintln(os.Stdout, "wrote plugins.go (--no-build); run `go mod tidy && go build` in the host to apply")
+		out.Println("wrote plugins.go (--no-build); run `go mod tidy && go build` in the host to apply")
 		return 0
 	}
 
-	if code := buildStack(ctx, dir, modules); code != 0 {
+	if code := buildStack(ctx, errOut, dir, modules); code != 0 {
 		if werr := os.WriteFile(manifest, src, 0o644); werr != nil {
-			fmt.Fprintf(os.Stderr, "restore %s: %v\n", manifest, werr)
+			errOut.Printf("restore %s: %v\n", manifest, werr)
 		} else {
-			fmt.Fprintf(os.Stderr, "build failed; restored %s\n", manifest)
+			errOut.Printf("build failed; restored %s\n", manifest)
 		}
 		return code
 	}
 	return 0
 }
 
-func buildStack(ctx context.Context, dir string, modules []string) int {
+func buildStack(ctx context.Context, errOut *errwriter.Writer, dir string, modules []string) int {
 	for _, m := range modules {
 		if m == hostModule || strings.HasPrefix(m, hostModule+"/") {
 			continue
 		}
-		if code := run(ctx, dir, "go", "get", "--", m); code != 0 {
+		if code := run(ctx, errOut, dir, "go", "get", "--", m); code != 0 {
 			return code
 		}
 	}
-	if code := run(ctx, dir, "go", "mod", "tidy"); code != 0 {
+	if code := run(ctx, errOut, dir, "go", "mod", "tidy"); code != 0 {
 		return code
 	}
-	return run(ctx, dir, "go", "build", "./...")
+	return run(ctx, errOut, dir, "go", "build", "./...")
 }
 
 func resolveStack(choices map[string]string, extras []string) ([]string, error) {
@@ -280,7 +285,7 @@ func writeSecretsTo(path string, secrets map[string]string) (int, error) {
 	return len(secrets), os.WriteFile(path, []byte(out), 0o600)
 }
 
-func seedEnv(dir string) {
+func seedEnv(out, errOut *errwriter.Writer, dir string) {
 	dst := filepath.Join(dir, ".env")
 	if _, err := os.Stat(dst); err == nil {
 		return
@@ -290,13 +295,13 @@ func seedEnv(dir string) {
 		return
 	}
 	if err := os.WriteFile(dst, src, 0o600); err != nil {
-		fmt.Fprintf(os.Stderr, "seed %s: %v\n", dst, err)
+		errOut.Printf("seed %s: %v\n", dst, err)
 		return
 	}
-	fmt.Fprintf(os.Stdout, "seeded %s from .env.example: fill in your secrets\n", dst)
+	out.Printf("seeded %s from .env.example: fill in your secrets\n", dst)
 }
 
-func writeCatalog(out io.Writer) {
+func writeCatalog(out *errwriter.Writer) {
 	for _, cat := range categories() {
 		kinds := make([]string, 0, len(catalog()[cat]))
 		for k := range catalog()[cat] {
@@ -308,7 +313,7 @@ func writeCatalog(out io.Writer) {
 			if defaultStack()[cat] == k {
 				def = " (default)"
 			}
-			fmt.Fprintf(out, "%-13s %-10s %s%s\n", cat, k, catalog()[cat][k], def)
+			out.Printf("%-13s %-10s %s%s\n", cat, k, catalog()[cat][k], def)
 		}
 	}
 }

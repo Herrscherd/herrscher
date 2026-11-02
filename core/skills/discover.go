@@ -35,35 +35,39 @@ func discover(roots []string, prev map[string]Skill) ([]Skill, []string) {
 			if !e.IsDir() {
 				continue
 			}
-			dir := filepath.Join(root, e.Name())
-			path := filepath.Join(dir, "SKILL.md")
-			info, err := os.Stat(path)
-			if err != nil {
+			s, fresh, ok := loadSkill(filepath.Join(root, e.Name()), prev)
+			if !ok || seen[s.Name] {
 				continue
 			}
-			now := fileStamp{mod: info.ModTime(), size: info.Size()}
-			if s, ok := prev[path]; ok && s.stamp == now {
-				if seen[s.Name] {
-					continue
-				}
-				seen[s.Name] = true
-				out = append(out, s)
-				continue
+			seen[s.Name] = true
+			if fresh {
+				reread = append(reread, s.bodyPath)
 			}
-			md, err := os.ReadFile(filepath.Clean(path))
-			if err != nil {
-				continue
-			}
-			name, desc, ok := parseFrontmatter(md)
-			if !ok || name == "" || seen[name] {
-				continue
-			}
-			seen[name] = true
-			reread = append(reread, path)
-			out = append(out, Skill{Name: name, Description: desc, Dir: dir, bodyPath: path, stamp: now})
+			out = append(out, s)
 		}
 	}
 	return out, reread
+}
+
+func loadSkill(dir string, prev map[string]Skill) (Skill, bool, bool) {
+	path := filepath.Join(dir, "SKILL.md")
+	info, err := os.Stat(path)
+	if err != nil {
+		return Skill{}, false, false
+	}
+	now := fileStamp{mod: info.ModTime(), size: info.Size()}
+	if s, ok := prev[path]; ok && s.stamp == now {
+		return s, false, true
+	}
+	md, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return Skill{}, false, false
+	}
+	name, desc, ok := parseFrontmatter(md)
+	if !ok || name == "" {
+		return Skill{}, false, false
+	}
+	return Skill{Name: name, Description: desc, Dir: dir, bodyPath: path, stamp: now}, true, true
 }
 
 func parseFrontmatter(md []byte) (string, string, bool) {

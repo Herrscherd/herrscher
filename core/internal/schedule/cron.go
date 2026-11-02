@@ -62,44 +62,64 @@ func parseCronField(field string, set []bool, min, max int) (bool, error) {
 	}
 	star := strings.HasPrefix(field, "*")
 	for _, part := range strings.Split(field, ",") {
-		lo, hi, step := min, max, 1
-		body := part
-		if slash := strings.IndexByte(part, '/'); slash >= 0 {
-			body = part[:slash]
-			n, err := strconv.Atoi(part[slash+1:])
-			if err != nil || n < 1 {
-				return false, fmt.Errorf("%w: bad step in %q", errCronSyntax, part)
-			}
-			step = n
-		}
-		switch {
-		case body == "*":
-		case strings.ContainsRune(body, '-'):
-			from, to, _ := strings.Cut(body, "-")
-			a, errA := strconv.Atoi(from)
-			b, errB := strconv.Atoi(to)
-			if errA != nil || errB != nil || a > b {
-				return false, fmt.Errorf("%w: bad range in %q", errCronSyntax, part)
-			}
-			lo, hi = a, b
-		default:
-			n, err := strconv.Atoi(body)
-			if err != nil {
-				return false, fmt.Errorf("%w: bad value in %q", errCronSyntax, part)
-			}
-			if step != 1 {
-				return false, fmt.Errorf("%w: step needs a range or a star in %q", errCronSyntax, part)
-			}
-			lo, hi = n, n
-		}
-		if lo < min || hi > max {
-			return false, fmt.Errorf("%w: %q out of range %d-%d", errCronSyntax, part, min, max)
-		}
-		for v := lo; v <= hi; v += step {
-			set[v] = true
+		if err := setCronPart(part, set, min, max); err != nil {
+			return false, err
 		}
 	}
 	return star, nil
+}
+
+func setCronPart(part string, set []bool, min, max int) error {
+	body, step, err := splitCronStep(part)
+	if err != nil {
+		return err
+	}
+	lo, hi, err := cronBounds(body, part, step, min, max)
+	if err != nil {
+		return err
+	}
+	if lo < min || hi > max {
+		return fmt.Errorf("%w: %q out of range %d-%d", errCronSyntax, part, min, max)
+	}
+	for v := lo; v <= hi; v += step {
+		set[v] = true
+	}
+	return nil
+}
+
+func splitCronStep(part string) (string, int, error) {
+	slash := strings.IndexByte(part, '/')
+	if slash < 0 {
+		return part, 1, nil
+	}
+	n, err := strconv.Atoi(part[slash+1:])
+	if err != nil || n < 1 {
+		return "", 0, fmt.Errorf("%w: bad step in %q", errCronSyntax, part)
+	}
+	return part[:slash], n, nil
+}
+
+func cronBounds(body, part string, step, min, max int) (int, int, error) {
+	switch {
+	case body == "*":
+		return min, max, nil
+	case strings.ContainsRune(body, '-'):
+		from, to, _ := strings.Cut(body, "-")
+		a, errA := strconv.Atoi(from)
+		b, errB := strconv.Atoi(to)
+		if errA != nil || errB != nil || a > b {
+			return 0, 0, fmt.Errorf("%w: bad range in %q", errCronSyntax, part)
+		}
+		return a, b, nil
+	}
+	n, err := strconv.Atoi(body)
+	if err != nil {
+		return 0, 0, fmt.Errorf("%w: bad value in %q", errCronSyntax, part)
+	}
+	if step != 1 {
+		return 0, 0, fmt.Errorf("%w: step needs a range or a star in %q", errCronSyntax, part)
+	}
+	return n, n, nil
 }
 
 func (c cronSpec) matches(t time.Time) bool {

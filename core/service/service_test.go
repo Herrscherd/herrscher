@@ -426,24 +426,32 @@ func TestConfigScaffoldInPlan(t *testing.T) {
 		if err != nil {
 			t.Fatalf("plan %s: %v", goos, err)
 		}
-		var cfg *FileWrite
-		for i := range p.Files {
-			if p.Files[i].Path == c.ConfigPath {
-				cfg = &p.Files[i]
-			}
+		assertConfigScaffold(t, goos, configFile(p, c.ConfigPath), cmd)
+	}
+}
+
+func configFile(p Plan, path string) *FileWrite {
+	for i := range p.Files {
+		if p.Files[i].Path == path {
+			return &p.Files[i]
 		}
-		if cfg == nil {
-			t.Fatalf("%s: no config.json in plan", goos)
-		}
-		if !cfg.Template {
-			t.Errorf("%s: config.json must be Template (never clobber edits)", goos)
-		}
-		if !strings.Contains(cfg.Content, cmd) {
-			t.Errorf("%s: config.json missing pre-filled cmd:\n%s", goos, cfg.Content)
-		}
-		if strings.Contains(cfg.Content, "GW_TOKEN=") {
-			t.Errorf("%s: config.json must not assign secrets", goos)
-		}
+	}
+	return nil
+}
+
+func assertConfigScaffold(t *testing.T, goos string, cfg *FileWrite, cmd string) {
+	t.Helper()
+	if cfg == nil {
+		t.Fatalf("%s: no config.json in plan", goos)
+	}
+	if !cfg.Template {
+		t.Errorf("%s: config.json must be Template (never clobber edits)", goos)
+	}
+	if !strings.Contains(cfg.Content, cmd) {
+		t.Errorf("%s: config.json missing pre-filled cmd:\n%s", goos, cfg.Content)
+	}
+	if strings.Contains(cfg.Content, "GW_TOKEN=") {
+		t.Errorf("%s: config.json must not assign secrets", goos)
 	}
 }
 

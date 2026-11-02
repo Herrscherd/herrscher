@@ -20,6 +20,7 @@ type PluginRow struct {
 // PluginAction is one change the screen can ask for.
 type PluginAction string
 
+// The plugin changes the screen offers.
 const (
 	PluginBump       PluginAction = "bump"
 	PluginSetVersion PluginAction = "version"

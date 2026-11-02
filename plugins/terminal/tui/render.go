@@ -12,17 +12,17 @@ func (m *model) renderTranscript(tb *tab, width int) string {
 	}
 	var b strings.Builder
 	for i := range tb.entries {
-		e := tb.entries[i]
+		item := tb.entries[i]
 		if i > 0 {
 			b.WriteByte('\n')
-			if e.role == roleYou || e.role == roleAgent {
+			if item.role == roleYou || item.role == roleAgent {
 				b.WriteByte('\n')
 			}
 		}
-		if m.foldCode && e.role == roleAgent && !e.streaming {
-			e.text = foldCodeBlocks(e.text)
+		if m.foldCode && item.role == roleAgent && !item.streaming {
+			item.text = foldCodeBlocks(item.text)
 		}
-		b.WriteString(renderEntry(e, width, m.displayMode()))
+		b.WriteString(renderEntry(item, width, m.displayMode()))
 	}
 	lines := strings.Split(b.String(), "\n")
 	m.links = findLinks(lines)

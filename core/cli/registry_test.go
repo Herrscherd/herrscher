@@ -200,7 +200,7 @@ func TestDispatchGlobalJSONFlag(t *testing.T) {
 	if err := r.Add(contracts.Cmd{
 		Path:   []string{"session", "list"},
 		Params: nil,
-		Run: func(ctx context.Context, in contracts.Input) (string, error) {
+		Run: func(_ context.Context, in contracts.Input) (string, error) {
 			gotJSON = in.JSON
 			return "ok", nil
 		},
@@ -262,7 +262,7 @@ func TestRunChecksRequiredParams(t *testing.T) {
 		contracts.New("session", "create").Param("name", "", true).
 			Do(func(context.Context, contracts.Input) (string, error) { return "", nil }),
 	)
-	if _, err := r.Run(context.Background(), []string{"session", "create"}, contracts.Input{Args: map[string]string{}}); err == nil {
+	if _, err := r.Run(context.Background(), []string{"session", "create"}, contracts.Input{Args: make(map[string]string)}); err == nil {
 		t.Fatal("Run must reject missing required param")
 	}
 }

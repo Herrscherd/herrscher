@@ -337,15 +337,15 @@ func (m *model) composerHeight() int {
 }
 
 func (m *model) resizeComposer() {
-	h := displayRows(m.input.Value(), m.input.Width())
-	if h < 1 {
-		h = 1
+	height := displayRows(m.input.Value(), m.input.Width())
+	if height < 1 {
+		height = 1
 	}
-	if h > maxComposerLines {
-		h = maxComposerLines
+	if height > maxComposerLines {
+		height = maxComposerLines
 	}
-	if h != m.composerRows {
-		m.composerRows = h
+	if height != m.composerRows {
+		m.composerRows = height
 		m.applySize()
 		m.syncViewport()
 	}
@@ -489,29 +489,29 @@ func (m *model) syncTabs() {
 	if infos == nil {
 		return
 	}
-	var sb strings.Builder
+	var builder strings.Builder
 	for i := range infos {
 		s := &infos[i]
-		sb.WriteString(s.ChannelID)
-		sb.WriteByte('\x1f')
-		sb.WriteString(s.Name)
-		sb.WriteByte('\n')
+		builder.WriteString(s.ChannelID)
+		builder.WriteByte('\x1f')
+		builder.WriteString(s.Name)
+		builder.WriteByte('\n')
 	}
-	sig := sb.String()
+	sig := builder.String()
 	if sig == m.tabSig {
 		return
 	}
 	m.tabSig = sig
 	live := map[string]bool{}
 	for i := range infos {
-		s := &infos[i]
-		live[s.ChannelID] = true
-		if s.Archived {
+		session := &infos[i]
+		live[session.ChannelID] = true
+		if session.Archived {
 			continue
 		}
-		tb := m.ensureTab(s.ChannelID)
-		if s.Name != "" {
-			tb.label = s.Name
+		tab := m.ensureTab(session.ChannelID)
+		if session.Name != "" {
+			tab.label = session.Name
 		}
 	}
 	for _, ch := range append([]string(nil), m.order...) {
@@ -639,19 +639,19 @@ func (m *model) sessionSlash(args []string) (tea.Cmd, bool) {
 }
 
 func (m *model) submitTo(channel, text string, atts []Attachment) {
-	tb := m.tabs[channel]
-	if tb == nil {
+	tab := m.tabs[channel]
+	if tab == nil {
 		return
 	}
 	m.tm.Submit(channel, text, atts)
-	tb.endStream()
-	e := entry{role: roleYou, text: text, attachments: atts}
-	e.preview = previewEscapes(atts, m.caps)
-	tb.appendEntry(e)
-	tb.busy = true
-	tb.streamed = false
-	tb.tokens = 0
-	tb.startedAt = time.Now()
+	tab.endStream()
+	item := entry{role: roleYou, text: text, attachments: atts}
+	item.preview = previewEscapes(atts, m.caps)
+	tab.appendEntry(item)
+	tab.busy = true
+	tab.streamed = false
+	tab.tokens = 0
+	tab.startedAt = time.Now()
 	m.syncViewport()
 }
 
@@ -701,9 +701,9 @@ func (m *model) removeLastPending() bool {
 }
 
 func (m *model) dispatchCmd(origin string, args []string) tea.Cmd {
-	tm := m.tm
+	backend := m.tm
 	return func() tea.Msg {
-		out, err := tm.Dispatch(args)
+		out, err := backend.Dispatch(args)
 		return dispatchResultMsg{origin: origin, out: out, err: err}
 	}
 }
@@ -738,12 +738,12 @@ func (m *model) recallHistory(d int) bool {
 }
 
 func (m *model) clearActive() {
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return
 	}
-	tb.entries = nil
-	tb.streamed = false
+	tab.entries = nil
+	tab.streamed = false
 	m.tsCache.valid = false
 	m.syncViewport()
 }
@@ -766,14 +766,14 @@ func (m *model) sessionName(channel string) string {
 }
 
 func (m *model) activeSessionName() string {
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return ""
 	}
-	if name := m.sessionName(tb.channel); name != "" {
+	if name := m.sessionName(tab.channel); name != "" {
 		return name
 	}
-	return tb.label
+	return tab.label
 }
 
 func (m *model) confirmClose() tea.Cmd {
@@ -805,8 +805,8 @@ func (m *model) closeCmd(rest []string) tea.Cmd {
 }
 
 func (m *model) renameCmd(rest []string) tea.Cmd {
-	to := renameTarget(rest)
-	if to == "" {
+	target := renameTarget(rest)
+	if target == "" {
 		m.flash = "/rename <nom> : donne le nouveau nom de la session"
 		return nil
 	}
@@ -815,7 +815,7 @@ func (m *model) renameCmd(rest []string) tea.Cmd {
 		m.flash = "aucune session à renommer ici"
 		return nil
 	}
-	return m.dispatchCmd(m.active, []string{sessionVerb, verbRename, "--name", name, "--to", to})
+	return m.dispatchCmd(m.active, []string{sessionVerb, verbRename, "--name", name, "--to", target})
 }
 
 func renameTarget(rest []string) string {
@@ -1141,34 +1141,34 @@ func OpenOn(session, text string) Option {
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
 func Run(ctx context.Context, cancel context.CancelFunc, tm Backend, opts ...Option) error {
-	m := newModel(tm)
-	m.ctx = ctx
-	m.keys = &keyLog{}
+	model := newModel(tm)
+	model.ctx = ctx
+	model.keys = &keyLog{}
 	for _, opt := range opts {
-		opt(m)
+		opt(model)
 	}
 	if seam, err := newManageSeam(); err == nil {
-		m.SetPluginSeam(seam)
+		model.SetPluginSeam(seam)
 	}
 	if err := writeStdout(enhancedKeysOn); err != nil {
 		cancel()
 		return fmt.Errorf("enable enhanced keys: %w", err)
 	}
-	p := tea.NewProgram(m,
+	p := tea.NewProgram(model,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
-		tea.WithInput(newFilteredStdin(m.keys)),
+		tea.WithInput(newFilteredStdin(model.keys)),
 	)
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case e, ok := <-tm.Frontend():
+			case entry, ok := <-tm.Frontend():
 				if !ok {
 					return
 				}
-				p.Send(eventMsg(e))
+				p.Send(eventMsg(entry))
 			}
 		}
 	}()

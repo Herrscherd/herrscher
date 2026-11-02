@@ -37,11 +37,11 @@ func (m *model) emptyState(width int) string {
 	lines = append(lines, m.otherSessions()...)
 	lines = append(lines, "", shortcutRow(m.st))
 	out := make([]string, 0, len(lines))
-	for _, ln := range lines {
-		if ln == "" && len(out) > 0 && out[len(out)-1] == "" {
+	for _, line := range lines {
+		if line == "" && len(out) > 0 && out[len(out)-1] == "" {
 			continue
 		}
-		out = append(out, truncate(ln, width))
+		out = append(out, truncate(line, width))
 	}
 	return strings.Join(out, "\n")
 }
@@ -54,18 +54,18 @@ func fact(label, value string, st uiStyles) string {
 }
 
 func (m *model) sessionFacts() []string {
-	s, ok := m.activeInfo()
+	info, ok := m.activeInfo()
 	if !ok {
 		return nil
 	}
 	var out []string
-	if s.Name != "" {
-		out = append(out, fact("session", s.Name, m.st))
+	if info.Name != "" {
+		out = append(out, fact("session", info.Name, m.st))
 	}
-	if where := joinNonEmpty(s.Project, s.Vendor); where != "" {
+	if where := joinNonEmpty(info.Project, info.Vendor); where != "" {
 		out = append(out, fact("repo", where, m.st))
 	}
-	if label := modelLabel(s); label != "" {
+	if label := modelLabel(info); label != "" {
 		out = append(out, fact("modèle", label, m.st))
 	}
 	if tb := m.tabs[m.active]; tb != nil && !tb.openedAt.IsZero() {

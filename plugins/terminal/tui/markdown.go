@@ -60,17 +60,17 @@ func renderMarkdown(text string, width int, v view) string {
 }
 
 func renderProse(text string, width int, v view) string {
-	var b strings.Builder
+	var block strings.Builder
 	var prose, table []string
 	flushProse := func() {
 		if len(prose) > 0 {
-			b.WriteString(renderGlamour(strings.Join(prose, "\n"), width, v))
+			block.WriteString(renderGlamour(strings.Join(prose, "\n"), width, v))
 			prose = nil
 		}
 	}
 	flushTable := func() {
 		if len(table) > 0 {
-			b.WriteString(renderTable(parseTableRows(table), width, v.st) + "\n")
+			block.WriteString(renderTable(parseTableRows(table), width, v.st) + "\n")
 			table = nil
 		}
 	}
@@ -85,7 +85,7 @@ func renderProse(text string, width int, v view) string {
 	}
 	flushTable()
 	flushProse()
-	return strings.Trim(b.String(), "\n")
+	return strings.Trim(block.String(), "\n")
 }
 
 type segment struct {
@@ -128,11 +128,11 @@ func renderGlamour(text string, width int, v view) string {
 	if width < 1 {
 		width = 1
 	}
-	md := v.md
-	if md == nil {
-		md = &markdownRenderer{}
+	markdown := v.md
+	if markdown == nil {
+		markdown = &markdownRenderer{}
 	}
-	r, err := md.termRenderer(width)
+	r, err := markdown.termRenderer(width)
 	if err != nil {
 		return wrapWith(v.st.text, text, width)
 	}

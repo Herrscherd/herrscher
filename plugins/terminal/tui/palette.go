@@ -29,7 +29,7 @@ func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 	return out
 }
 
-func paletteWindow(n, sel, rows int) (int, int) {
+func paletteWindow(n, sel, rows int) (from, to int) {
 	if n <= rows {
 		return 0, n
 	}
@@ -102,13 +102,13 @@ func ParseCommandSpecs(raw []byte, allow func(verb string) bool) ([]CommandSpec,
 		return nil, err
 	}
 	out := make([]CommandSpec, 0, len(specs))
-	for _, s := range specs {
-		if len(s.Path) == 0 || (allow != nil && !allow(s.Path[0])) {
+	for _, text := range specs {
+		if len(text.Path) == 0 || (allow != nil && !allow(text.Path[0])) {
 			continue
 		}
-		c := CommandSpec{Name: strings.Join(s.Path, " "), Desc: s.Help}
+		c := CommandSpec{Name: strings.Join(text.Path, " "), Desc: text.Help}
 		var args []string
-		for _, p := range s.Params {
+		for _, p := range text.Params {
 			if p.Required {
 				args = append(args, "--"+p.Name+" <"+p.Name+">")
 			}

@@ -9,6 +9,7 @@ import (
 // different things: a URL by the system handler, a file by the editor.
 type LinkKind int
 
+// The kinds of target a link can point at.
 const (
 	LinkURL LinkKind = iota
 	LinkFile
@@ -37,7 +38,7 @@ var linkFilePattern = regexp.MustCompile(`[\w.~/-]*[\w~-]\.[A-Za-z]\w*:\d+`)
 func findLinks(lines []string) []Link {
 	var out []Link
 	inFence := false
-	for i, ln := range lines {
+	for index, ln := range lines {
 		if fence := strings.TrimSpace(ln); strings.HasPrefix(fence, codeFence) || strings.HasPrefix(fence, "~~~") {
 			inFence = !inFence
 			continue
@@ -45,7 +46,7 @@ func findLinks(lines []string) []Link {
 		if inFence {
 			continue
 		}
-		out = append(out, lineLinks(i, ln)...)
+		out = append(out, lineLinks(index, ln)...)
 	}
 	return out
 }
@@ -73,14 +74,14 @@ func lineLinks(line int, s string) []Link {
 			Line: line, Start: m[0], End: m[1], Kind: LinkURL,
 		})
 	}
-	for _, m := range linkURLPattern.FindAllStringIndex(s, -1) {
-		if overlaps(m[0], m[1]) {
+	for _, match := range linkURLPattern.FindAllStringIndex(s, -1) {
+		if overlaps(match[0], match[1]) {
 			continue
 		}
-		claim(m[0], m[1])
+		claim(match[0], match[1])
 		out = append(out, Link{
-			Label: s[m[0]:m[1]], Target: s[m[0]:m[1]],
-			Line: line, Start: m[0], End: m[1], Kind: LinkURL,
+			Label: s[match[0]:match[1]], Target: s[match[0]:match[1]],
+			Line: line, Start: match[0], End: match[1], Kind: LinkURL,
 		})
 	}
 	for _, m := range linkFilePattern.FindAllStringIndex(s, -1) {

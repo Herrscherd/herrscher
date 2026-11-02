@@ -31,22 +31,22 @@ func (m *model) railRow() string {
 }
 
 func (m *model) activeMark() string {
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return ""
 	}
-	return m.st.accent.Render(glyphCursor + " " + tb.label)
+	return m.st.accent.Render(glyphCursor + " " + tab.label)
 }
 
 func (m *model) tabStrip() string {
 	var out []string
 	for _, ch := range m.order {
-		tb := m.tabs[ch]
-		if tb == nil {
+		tab := m.tabs[ch]
+		if tab == nil {
 			continue
 		}
-		label := tb.label
-		if tb.unread {
+		label := tab.label
+		if tab.unread {
 			label = glyphUnread + label
 		}
 		if ch == m.active {
@@ -59,11 +59,11 @@ func (m *model) tabStrip() string {
 }
 
 func (m *model) vendorMark() string {
-	s, ok := m.activeInfo()
-	if !ok || s.Vendor == "" {
+	info, ok := m.activeInfo()
+	if !ok || info.Vendor == "" {
 		return ""
 	}
-	return m.st.dim.Render(glyphBolt + " " + s.Vendor)
+	return m.st.dim.Render(glyphBolt + " " + info.Vendor)
 }
 
 func joinRow(width int, left, right string) string {

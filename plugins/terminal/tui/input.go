@@ -104,14 +104,14 @@ func legacyKeyBytes(code, mask int) ([]byte, bool) {
 	if code < 0 || code > utf8.MaxRune {
 		return nil, false
 	}
-	r := rune(code)
-	if mask&modCtrl != 0 && r >= 'a' && r <= 'z' {
-		return []byte{byte(r) & 0x1f}, true
+	char := rune(code)
+	if mask&modCtrl != 0 && char >= 'a' && char <= 'z' {
+		return []byte{byte(char) & 0x1f}, true
 	}
 	if mask&modShift != 0 {
-		r = toUpper(r)
+		char = toUpper(char)
 	}
-	return []byte(string(r)), true
+	return []byte(string(char)), true
 }
 
 func legacyFunc(seq []byte) []byte {
@@ -228,9 +228,9 @@ func (f *filteredStdin) Read(p []byte) (int, error) {
 			return 0, err
 		}
 	}
-	n := copy(p, f.out)
-	f.out = f.out[n:]
-	return n, nil
+	count := copy(p, f.out)
+	f.out = f.out[count:]
+	return count, nil
 }
 
 func (f *filteredStdin) feed(b []byte) {

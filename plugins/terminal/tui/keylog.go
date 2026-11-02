@@ -23,11 +23,11 @@ func (k *keyLog) write(format string, args ...any) {
 		if path == "" {
 			return
 		}
-		f, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, privateFileMode)
+		file, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, privateFileMode)
 		if err != nil {
 			return
 		}
-		k.file = f
+		k.file = file
 	})
 	if k.file == nil {
 		return

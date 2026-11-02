@@ -79,12 +79,12 @@ func subagentPanel(agents []liveAgent, now time.Time, width int, st uiStyles) []
 		shown = shown[:subagentPanelMax]
 	}
 	out := make([]string, 0, len(shown)+1)
-	for _, a := range shown {
-		cols := []string{oneLine(a.Name)}
-		if a.Kind != "" {
-			cols = append(cols, oneLine(a.Kind))
+	for _, area := range shown {
+		cols := []string{oneLine(area.Name)}
+		if area.Kind != "" {
+			cols = append(cols, oneLine(area.Kind))
 		}
-		cols = append(cols, elapsed(now.Sub(a.since)))
+		cols = append(cols, elapsed(now.Sub(area.since)))
 		line := "  " + mark + " " + strings.Join(cols, "  ")
 		out = append(out, st.accent.Render(truncate(line, width)))
 	}

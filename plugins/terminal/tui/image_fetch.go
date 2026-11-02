@@ -122,11 +122,11 @@ func (m *model) applyImage(msg imageReadyMsg) {
 	if tb.entries[msg.entry].id != msg.entryID {
 		return
 	}
-	e := &tb.entries[msg.entry]
-	if e.preview != "" {
-		e.preview += "\n"
+	failure := &tb.entries[msg.entry]
+	if failure.preview != "" {
+		failure.preview += "\n"
 	}
-	e.preview += msg.escape
+	failure.preview += msg.escape
 	m.tsCache.valid = false
 	m.syncViewport()
 }

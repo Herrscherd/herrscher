@@ -38,6 +38,7 @@ var (
 	errSessionControlUnbound    = errors.New("session control not bound")
 )
 
+// ChannelID is the channel the terminal gateway serves when none is named.
 const ChannelID = "terminal"
 
 // Kind is what this gateway is called wherever gateways are named. A session's
@@ -53,10 +54,10 @@ const (
 
 func settings() []contracts.Setting { return scope.LaunchSettings() }
 
-func newGatewaySet(ctx context.Context, cfg contracts.PluginConfig) (contracts.GatewaySet, error) {
-	tm := New()
-	tm.cfg = cfg
-	return contracts.GatewaySet{Gateway: tm, Reader: tm, Admin: tm}, nil
+func newGatewaySet(_ context.Context, cfg contracts.PluginConfig) (contracts.GatewaySet, error) {
+	term := New()
+	term.cfg = cfg
+	return contracts.GatewaySet{Gateway: term, Reader: term, Admin: term}, nil
 }
 
 // Terminal is the in-process terminal gateway. Typed lines arrive via Submit
@@ -101,11 +102,11 @@ var (
 	_ contracts.SessionControlReceiver = (*Terminal)(nil)
 )
 
-func openDefaultSession(ctx context.Context, c contracts.SessionControl, cfg contracts.PluginConfig) (string, error) {
-	name := defaultSessionName(c.Sessions())
+func openDefaultSession(ctx context.Context, control contracts.SessionControl, cfg contracts.PluginConfig) (string, error) {
+	name := defaultSessionName(control.Sessions())
 	spec := contracts.CreateSession{Name: name, TerminalOnly: true, Shared: true}
 	scope.LaunchFrom(ctx, cfg).Apply(&spec)
-	if _, err := c.Create(ctx, spec); err != nil {
+	if _, err := control.Create(ctx, spec); err != nil {
 		return "", err
 	}
 	return name, nil
@@ -114,11 +115,11 @@ func openDefaultSession(ctx context.Context, c contracts.SessionControl, cfg con
 var sessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
 func defaultSessionName(taken []contracts.SessionInfo) string {
-	wd, err := os.Getwd()
+	workdir, err := os.Getwd()
 	if err != nil {
 		return randomSessionName()
 	}
-	base := slug(filepath.Base(wd))
+	base := slug(filepath.Base(workdir))
 	if !sessionNameRe.MatchString(base) {
 		return randomSessionName()
 	}
@@ -126,10 +127,10 @@ func defaultSessionName(taken []contracts.SessionInfo) string {
 	for i := range taken {
 		used[taken[i].Name] = true
 	}
-	for n := 1; n <= 9; n++ {
+	for count := 1; count <= 9; count++ {
 		name := base
-		if n > 1 {
-			name = fmt.Sprintf("%s-%d", base, n)
+		if count > 1 {
+			name = fmt.Sprintf("%s-%d", base, count)
 		}
 		if !used[name] && sessionNameRe.MatchString(name) {
 			return name
@@ -180,11 +181,11 @@ func (t *Terminal) archiveIfUntouched() {
 	}
 	sessions := c.Sessions()
 	for i := range sessions {
-		s := &sessions[i]
-		if s.Name != name {
+		session := &sessions[i]
+		if session.Name != name {
 			continue
 		}
-		if s.Archived || s.LastTs != "" {
+		if session.Archived || session.LastTs != "" {
 			return
 		}
 		_, err := c.Close(ctx, name, false)
@@ -238,13 +239,13 @@ func (t *Terminal) Submit(channel, text string, attachments []tui.Attachment) {
 		AuthorID:   "local",
 		AuthorName: "you",
 	}
-	for _, a := range attachments {
-		fileURL := (&url.URL{Scheme: "file", Path: a.Path}).String()
+	for _, attachment := range attachments {
+		fileURL := (&url.URL{Scheme: "file", Path: attachment.Path}).String()
 		msg.Attachments = append(msg.Attachments, contracts.Attachment{
-			Filename:    a.Name,
+			Filename:    attachment.Name,
 			URL:         fileURL,
-			ContentType: a.Mime,
-			Size:        int(a.Size),
+			ContentType: attachment.Mime,
+			Size:        int(attachment.Size),
 		})
 	}
 	t.pending[channel] = append(t.pending[channel], msg)
@@ -253,9 +254,13 @@ func (t *Terminal) Submit(channel, text string, attachments []tui.Attachment) {
 // Frontend yields routed outbound events for the TUI to render.
 func (t *Terminal) Frontend() <-chan tui.RoutedEvent { return t.out }
 
-func (t *Terminal) Enabled() bool          { return true }
+// Enabled reports that the terminal gateway is available whenever it is bound.
+func (t *Terminal) Enabled() bool { return true }
+
+// DefaultChannel returns the channel that messages without one are routed to.
 func (t *Terminal) DefaultChannel() string { return ChannelID }
 
+// EnsureChannel returns the single terminal channel, which always exists.
 func (t *Terminal) EnsureChannel(context.Context, string, string) (contracts.Channel, error) {
 	return contracts.Channel{ID: ChannelID, Name: ChannelID}, nil
 }
@@ -274,36 +279,43 @@ func (t *Terminal) Read(_ context.Context, channelID string, _ int, _ string) ([
 	return out, nil
 }
 
+// Unreact is a no-op: the terminal shows no reactions.
 func (t *Terminal) Unreact(context.Context, string, string, string) error { return nil }
 
+// UpsertStatusMessage shows content as a status line in the channel tab and returns no message id.
 func (t *Terminal) UpsertStatusMessage(_ context.Context, channelID, _, content string) (string, error) {
 	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: channelID}, contracts.Event{T: eventStatus, Text: content})
 	return "", nil
 }
 
+// Manifest describes the terminal as a gateway plugin.
 func (t *Terminal) Manifest() contracts.Manifest {
 	return contracts.Manifest{Kind: Kind, Category: contracts.CategoryGateway}
 }
 
+// Post emits text as a finished reply in the conversation and returns no message id.
 func (t *Terminal) Post(_ context.Context, conv contracts.Conversation, text string) (contracts.MessageID, error) {
 	t.EmitTo(conv, contracts.Event{T: eventReply, Text: text, Done: true})
 	return "", nil
 }
 
+// Reply emits text as a finished reply in the conversation and returns no message id.
 func (t *Terminal) Reply(_ context.Context, conv contracts.Conversation, _ contracts.MessageID, text string) (contracts.MessageID, error) {
 	t.EmitTo(conv, contracts.Event{T: eventReply, Text: text, Done: true})
 	return "", nil
 }
 
+// React is a no-op: the terminal does not render reactions.
 func (t *Terminal) React(context.Context, contracts.Conversation, contracts.MessageID, string) error {
 	return nil
 }
 
+// Menu prints the prompt and its numbered choices as a status line in the conversation.
 func (t *Terminal) Menu(_ context.Context, conv contracts.Conversation, _ contracts.MessageID, prompt string, opts []contracts.Choice) error {
 	var text strings.Builder
-	text.WriteString(prompt)
+	_, _ = text.WriteString(prompt)
 	for _, o := range opts {
-		text.WriteString("\n  • " + o.Value + ": " + o.Label)
+		_, _ = text.WriteString("\n  • " + o.Value + ": " + o.Label)
 	}
 	t.EmitTo(conv, contracts.Event{T: eventStatus, Text: text.String()})
 	return nil
@@ -320,15 +332,15 @@ func (t *Terminal) Emit(e contracts.Event) {
 	t.emit(tui.RoutedEvent{Conv: contracts.Conversation{Gateway: Kind, ID: ChannelID}, Event: e})
 }
 
-func (t *Terminal) emit(re tui.RoutedEvent) {
+func (t *Terminal) emit(routed tui.RoutedEvent) {
 	select {
-	case t.out <- re:
+	case t.out <- routed:
 		return
 	default:
 	}
-	if re.Event.T == "closed" || (re.Event.T == eventReply && re.Event.Done) {
+	if routed.Event.T == "closed" || (routed.Event.T == eventReply && routed.Event.Done) {
 		select {
-		case t.out <- re:
+		case t.out <- routed:
 		case <-time.After(frontendCloseWait):
 		}
 	}
@@ -380,9 +392,9 @@ func (t *Terminal) Interrupt(name string) bool {
 
 // BindSessionControl stores the hub controller so the TUI can drive the session
 // lifecycle (create/close/list) and enumerate sessions for tab labels.
-func (t *Terminal) BindSessionControl(c contracts.SessionControl) {
+func (t *Terminal) BindSessionControl(control contracts.SessionControl) {
 	t.ctrlMu.Lock()
-	t.ctrl = c
+	t.ctrl = control
 	t.ctrlMu.Unlock()
 	t.bindOnce.Do(func() { close(t.ctrlReady) })
 }
@@ -398,10 +410,10 @@ func withTerminalDefault(args []string) []string {
 	if len(args) < 2 || args[0] != sessionVerb || args[1] != "create" {
 		return args
 	}
-	for _, a := range args {
-		if a == "--gateways" || strings.HasPrefix(a, "--gateways=") ||
-			a == "--terminal_only" || strings.HasPrefix(a, "--terminal_only=") ||
-			strings.HasPrefix(a, "terminal_only:") {
+	for _, arg := range args {
+		if arg == "--gateways" || strings.HasPrefix(arg, "--gateways=") ||
+			arg == "--terminal_only" || strings.HasPrefix(arg, "--terminal_only=") ||
+			strings.HasPrefix(arg, "terminal_only:") {
 			return args
 		}
 	}
@@ -443,15 +455,15 @@ func allowedVerbs() string {
 // rather than a stale one: the local verbs still stand on their own.
 func (t *Terminal) Commands() []tui.CommandSpec {
 	t.ctrlMu.Lock()
-	c, ctx := t.ctrl, t.baseCtx
+	call, ctx := t.ctrl, t.baseCtx
 	t.ctrlMu.Unlock()
-	if c == nil {
+	if call == nil {
 		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	out, err := c.Dispatch(ctx, []string{"commands", "--json"})
+	out, err := call.Dispatch(ctx, []string{"commands", "--json"})
 	if err != nil {
 		return nil
 	}
@@ -475,15 +487,15 @@ func (t *Terminal) Dispatch(args []string) (string, error) {
 		return "", fmt.Errorf("command %q %w (allowed: %s)", verb, errNotAvailableFromTerminal, allowedVerbs())
 	}
 	t.ctrlMu.Lock()
-	c, ctx := t.ctrl, t.baseCtx
+	call, ctx := t.ctrl, t.baseCtx
 	t.ctrlMu.Unlock()
-	if c == nil {
+	if call == nil {
 		return "", errSessionControlUnbound
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return c.Dispatch(ctx, withTerminalDefault(args))
+	return call.Dispatch(ctx, withTerminalDefault(args))
 }
 
 // Close tears a session down through the typed SessionControl seam, so the TUI's
@@ -501,8 +513,10 @@ func (t *Terminal) Close(name string, force bool) (string, error) {
 	return c.Close(ctx, name, force)
 }
 
+// Kind reports every attachment as text, since the terminal has no richer kinds.
 func (t *Terminal) Kind(_ context.Context, _ string) (string, error) { return "text", nil }
 
+// CreateUnder names a new terminal conversation under parent, unique per process.
 func (t *Terminal) CreateUnder(_ context.Context, _, name string) (string, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -510,15 +524,18 @@ func (t *Terminal) CreateUnder(_ context.Context, _, name string) (string, error
 	return "terminal/" + slug(name) + "-" + strconv.Itoa(t.nextID), nil
 }
 
+// ForumPost opens a terminal conversation named name under parentID.
 func (t *Terminal) ForumPost(ctx context.Context, parentID, name, _ string) (string, error) {
 	return t.CreateUnder(ctx, parentID, name)
 }
 
+// Archive reports the conversation id as closed to its tab.
 func (t *Terminal) Archive(_ context.Context, id string) error {
 	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: id}, contracts.Event{T: "closed"})
 	return nil
 }
 
+// Send shows content as a status line in the conversation channelID.
 func (t *Terminal) Send(_ context.Context, channelID, content string) error {
 	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: channelID}, contracts.Event{T: eventStatus, Text: content})
 	return nil
@@ -528,17 +545,17 @@ func (t *Terminal) Send(_ context.Context, channelID, content string) error {
 // markup, so the operator just sees the id.
 func (t *Terminal) ChannelRef(id string) string { return id }
 
-func slug(s string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(s) {
+func slug(text string) string {
+	var builder strings.Builder
+	for _, char := range strings.ToLower(text) {
 		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
-			b.WriteRune(r)
+		case char >= 'a' && char <= 'z', char >= '0' && char <= '9', char == '-', char == '_':
+			builder.WriteRune(char)
 		default:
-			b.WriteRune('-')
+			builder.WriteRune('-')
 		}
 	}
-	out := strings.Trim(b.String(), "-")
+	out := strings.Trim(builder.String(), "-")
 	if out == "" {
 		return sessionVerb
 	}

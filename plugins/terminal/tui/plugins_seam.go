@@ -17,12 +17,12 @@ func newManageSeam() (PluginSeam, error) {
 }
 
 func (s manageSeam) List(ctx context.Context) ([]PluginRow, error) {
-	vs, err := s.ops.List(ctx)
+	values, err := s.ops.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	rows := make([]PluginRow, 0, len(vs))
-	for _, v := range vs {
+	rows := make([]PluginRow, 0, len(values))
+	for _, v := range values {
 		rows = append(rows, PluginRow{Module: v.Module, Installed: v.Installed, Latest: v.Latest, Pinned: v.Pinned})
 	}
 	return rows, nil

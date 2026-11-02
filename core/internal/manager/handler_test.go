@@ -750,16 +750,18 @@ func TestSessionCreateRefusesUnderWithChannelID(t *testing.T) {
 	}
 }
 
+type createBannerCase struct {
+	name      string
+	homeType  string
+	homeRef   state.HomeRef
+	wtPath    string
+	shared    bool
+	wantReply []string
+	wantSend  []string
+}
+
 func TestSessionCreateBanner(t *testing.T) {
-	cases := []struct {
-		name      string
-		homeType  string
-		homeRef   state.HomeRef
-		wtPath    string
-		shared    bool
-		wantReply []string
-		wantSend  []string
-	}{
+	cases := []createBannerCase{
 		{
 			name:     "category isolated",
 			homeType: "",
@@ -814,40 +816,45 @@ func TestSessionCreateBanner(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h, d, _, wt, _, st := newTestHandler(t, tc.homeType)
-			wt.path = tc.wtPath
-			if err := st.SetHome(tc.homeRef); err != nil {
-				t.Fatal(err)
-			}
-			in := args("name", "demo")
-			if tc.shared {
-				in.Args["shared"] = "true"
-			}
-			reply, err := h.sessionCreateRun(context.Background(), in)
-			if err != nil {
-				t.Fatalf("create failed: %v", err)
-			}
-			for _, s := range tc.wantReply {
-				if !strings.Contains(reply, s) {
-					t.Errorf("reply missing %q\n--- got ---\n%s", s, reply)
-				}
-			}
-			if len(d.sent) != 1 {
-				t.Fatalf("expected exactly one in-channel Send, got %d: %+v", len(d.sent), d.sent)
-			}
-			sess, _ := st.FindSession("demo")
-			if d.sent[0].channelID != sess.ChannelID {
-				t.Errorf("Send went to %q, want session channel %q", d.sent[0].channelID, sess.ChannelID)
-			}
-			for _, s := range tc.wantSend {
-				if !strings.Contains(d.sent[0].content, s) {
-					t.Errorf("in-channel banner missing %q\n--- got ---\n%s", s, d.sent[0].content)
-				}
-			}
-			if strings.Contains(d.sent[0].content, "Running on") {
-				t.Errorf("in-channel banner must not carry the 'Running on' prefix:\n%s", d.sent[0].content)
-			}
+			assertCreateBanner(t, tc)
 		})
+	}
+}
+
+func assertCreateBanner(t *testing.T, tc createBannerCase) {
+	t.Helper()
+	h, d, _, wt, _, st := newTestHandler(t, tc.homeType)
+	wt.path = tc.wtPath
+	if err := st.SetHome(tc.homeRef); err != nil {
+		t.Fatal(err)
+	}
+	in := args("name", "demo")
+	if tc.shared {
+		in.Args["shared"] = "true"
+	}
+	reply, err := h.sessionCreateRun(context.Background(), in)
+	if err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+	for _, s := range tc.wantReply {
+		if !strings.Contains(reply, s) {
+			t.Errorf("reply missing %q\n--- got ---\n%s", s, reply)
+		}
+	}
+	if len(d.sent) != 1 {
+		t.Fatalf("expected exactly one in-channel Send, got %d: %+v", len(d.sent), d.sent)
+	}
+	sess, _ := st.FindSession("demo")
+	if d.sent[0].channelID != sess.ChannelID {
+		t.Errorf("Send went to %q, want session channel %q", d.sent[0].channelID, sess.ChannelID)
+	}
+	for _, s := range tc.wantSend {
+		if !strings.Contains(d.sent[0].content, s) {
+			t.Errorf("in-channel banner missing %q\n--- got ---\n%s", s, d.sent[0].content)
+		}
+	}
+	if strings.Contains(d.sent[0].content, "Running on") {
+		t.Errorf("in-channel banner must not carry the 'Running on' prefix:\n%s", d.sent[0].content)
 	}
 }
 

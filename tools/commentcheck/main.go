@@ -182,6 +182,7 @@ func strayComments(path string, file *ast.File, namedByAGenerator bool) []token.
 	}
 	allowed := allowedDocs(file)
 	if strings.HasSuffix(path, "_test.go") {
+		allowed = exampleDocs(file)
 		allowExampleOutputs(file, allowed)
 	}
 	bodies := functionBodies(file)
@@ -570,4 +571,14 @@ func lastCommentIn(file *ast.File, body *ast.BlockStmt) *ast.CommentGroup {
 func isExampleOutput(group *ast.CommentGroup) bool {
 	first := strings.TrimSpace(strings.TrimPrefix(group.List[0].Text, "//"))
 	return strings.HasPrefix(first, "Output:") || strings.HasPrefix(first, "Unordered output:")
+}
+
+func exampleDocs(file *ast.File) map[*ast.CommentGroup]bool {
+	allowed := make(map[*ast.CommentGroup]bool)
+	for _, declared := range file.Decls {
+		if example, isFunc := declared.(*ast.FuncDecl); isFunc && isRunnableExample(example) && example.Doc != nil {
+			allowed[example.Doc] = true
+		}
+	}
+	return allowed
 }

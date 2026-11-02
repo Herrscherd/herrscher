@@ -57,7 +57,9 @@ func TestInstallNeverOverwritesAnEditedSkill(t *testing.T) {
 	if len(out.Installed) != 0 || len(out.Updated) != 0 {
 		t.Fatalf("wrote %v/%v on the second run, want nothing", out.Installed, out.Updated)
 	}
-	if b, _ := os.ReadFile(edited); string(b) != "my own procedure" {
+	b, err := os.ReadFile(edited)
+	must(t, err)
+	if string(b) != "my own procedure" {
 		t.Fatalf("edited skill = %q, want the operator's version kept", b)
 	}
 	if len(out.Diverged) != 1 || out.Diverged[0] != "pr-job" {
@@ -80,7 +82,8 @@ func TestInstallUpdatesAnUntouchedSkill(t *testing.T) {
 	if len(out.Diverged) != 0 {
 		t.Fatalf("diverged = %v, want nothing: the copy was ours", out.Diverged)
 	}
-	b, _ := os.ReadFile(filepath.Join(dir, "pr-job", "SKILL.md"))
+	b, err := os.ReadFile(filepath.Join(dir, "pr-job", "SKILL.md"))
+	must(t, err)
 	if string(b) != "---\nname: pr-job\n---\nrewritten" {
 		t.Fatalf("skill = %q, want the newly shipped text", b)
 	}
@@ -121,7 +124,9 @@ func TestUnmanagedSkillIsReportedNotOverwritten(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(old); string(b) != "an older release" {
+	b, err := os.ReadFile(old)
+	must(t, err)
+	if string(b) != "an older release" {
 		t.Fatalf("unmanaged skill = %q, want it kept", b)
 	}
 	if len(out.Diverged) != 1 || out.Diverged[0] != "pr-job" {

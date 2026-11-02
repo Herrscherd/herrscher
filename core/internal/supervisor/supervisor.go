@@ -278,10 +278,14 @@ func (s *Supervisor) runBridgeCommand(ctx context.Context, sess state.Session) {
 		return
 	}
 	if prep := s.prepareRemote(ctx, sess); prep != nil {
-		_ = prep.Run()
+		if err := prep.Run(); err != nil {
+			slog.Warn("remote prepare failed", "err", err)
+		}
 	}
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
-	_ = cmd.Run()
+	if err := cmd.Run(); err != nil {
+		slog.Warn("supervised command exited with error", "err", err)
+	}
 }
 
 func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) (*exec.Cmd, error) {

@@ -124,7 +124,11 @@ func TestMergeIntoCleanMerge(t *testing.T) {
 	if len(conflicts) != 0 {
 		t.Fatalf("conflicts = %v, want none", conflicts)
 	}
-	if clean, _ := w.IsCleanAt(repo); !clean {
+	clean, err := w.IsCleanAt(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !clean {
 		t.Fatal("lead worktree not clean after merge")
 	}
 	if _, err := os.Stat(filepath.Join(repo, "g.txt")); err != nil {
@@ -155,7 +159,11 @@ func TestMergeIntoConflictAborts(t *testing.T) {
 	if len(conflicts) == 0 || conflicts[0] != "f.txt" {
 		t.Fatalf("conflicts = %v, want [f.txt]", conflicts)
 	}
-	if clean, _ := w.IsCleanAt(repo); !clean {
+	clean, err := w.IsCleanAt(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !clean {
 		t.Fatal("lead worktree not clean after conflict abort")
 	}
 }

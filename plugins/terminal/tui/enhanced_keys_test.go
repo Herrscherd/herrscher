@@ -163,3 +163,11 @@ func asModel(t *testing.T, m tea.Model) *model {
 	}
 	return got
 }
+
+func TestLegacyKeyBytesRejectsOutOfRangeCodes(t *testing.T) {
+	for _, code := range []int{-1, -65, 0x110000} {
+		if b, ok := legacyKeyBytes(code, 0); ok || b != nil {
+			t.Errorf("legacyKeyBytes(%d) = %q, %v; want nil, false", code, b, ok)
+		}
+	}
+}

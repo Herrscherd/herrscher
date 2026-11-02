@@ -71,11 +71,15 @@ func stage(name string, data []byte) (string, error) {
 	if err := os.MkdirAll(dir, privateDirMode); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, data, privateFileMode); err != nil {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
 		return "", err
 	}
-	return path, nil
+	defer func() { bestEffort(root.Close()) }()
+	if err := root.WriteFile(name, data, privateFileMode); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, name), nil
 }
 
 func attachLocalFile(path string, seq int) (Attachment, error) {
@@ -102,7 +106,7 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 	if err != nil {
 		abs = path
 	}
-	data, err := os.ReadFile(abs)
+	data, err := os.ReadFile(filepath.Clean(abs))
 	if err != nil {
 		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
 	}

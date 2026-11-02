@@ -50,7 +50,7 @@ func (m *model) copyTarget(target string) {
 		m.flash = "rien à copier ici"
 		return
 	}
-	if err := m.clip.WriteText(text); err != nil {
+	if err := m.clip.WriteText(m.runContext(), text); err != nil {
 		m.flash = "copie impossible : " + err.Error()
 		return
 	}

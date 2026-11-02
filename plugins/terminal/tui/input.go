@@ -99,7 +99,7 @@ func legacyKeyBytes(code, mask int) ([]byte, bool) {
 	case ctrlDEL:
 		return []byte{ctrlDEL}, true
 	}
-	if code > utf8.MaxRune {
+	if code < 0 || code > utf8.MaxRune {
 		return nil, false
 	}
 	r := rune(code)

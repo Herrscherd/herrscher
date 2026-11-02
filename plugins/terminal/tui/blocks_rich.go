@@ -281,7 +281,7 @@ func (m *model) copyLastCode() {
 			break
 		}
 		body := blocks[len(blocks)-1].body
-		if err := m.clip.WriteText(body); err != nil {
+		if err := m.clip.WriteText(m.runContext(), body); err != nil {
 			m.flash = "copie impossible : " + err.Error()
 			return
 		}

@@ -657,11 +657,11 @@ func (m *model) pasteImage() bool {
 	if m.clip == nil {
 		return false
 	}
-	mime, ok := m.clip.ImageType()
+	mime, ok := m.clip.ImageType(m.runContext())
 	if !ok {
 		return false
 	}
-	data, err := m.clip.ReadImage(mime)
+	data, err := m.clip.ReadImage(m.runContext(), mime)
 	if err != nil {
 		m.flash = "collage impossible : " + err.Error()
 		return true

@@ -22,18 +22,18 @@ func TestSetPlugins(t *testing.T) {
 }
 
 func TestResolveStackDefault(t *testing.T) {
-	mods, err := resolveStack(defaultStack, nil)
+	mods, err := resolveStack(defaultStack(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []string{
-		inTree[0],
-		catalog["gateway"]["discord"],
-		catalog["backend"]["claude"],
-		catalog["memory"]["obsidian"],
-		catalog["orchestrator"]["basic"],
-		catalog["extractor"]["llm"],
-		catalog["skills"]["superset"],
+		inTree()[0],
+		catalog()["gateway"]["discord"],
+		catalog()["backend"]["claude"],
+		catalog()["memory"]["obsidian"],
+		catalog()["orchestrator"]["basic"],
+		catalog()["extractor"]["llm"],
+		catalog()["skills"]["superset"],
 	}
 	if !slices.Equal(mods, want) {
 		t.Fatalf("got %v, want %v", mods, want)
@@ -46,7 +46,7 @@ func TestResolveStackNoneDropsCategory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{inTree[0], catalog["gateway"]["discord"]}
+	want := []string{inTree()[0], catalog()["gateway"]["discord"]}
 	if !slices.Equal(mods, want) {
 		t.Fatalf("got %v, want %v", mods, want)
 	}
@@ -54,11 +54,11 @@ func TestResolveStackNoneDropsCategory(t *testing.T) {
 
 func TestResolveStackExtrasDeduped(t *testing.T) {
 	choices := map[string]string{"gateway": "discord"}
-	mods, err := resolveStack(choices, []string{"example.com/x", catalog["gateway"]["discord"]})
+	mods, err := resolveStack(choices, []string{"example.com/x", catalog()["gateway"]["discord"]})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{inTree[0], catalog["gateway"]["discord"], "example.com/x"}
+	want := []string{inTree()[0], catalog()["gateway"]["discord"], "example.com/x"}
 	if !slices.Equal(mods, want) {
 		t.Fatalf("got %v, want %v", mods, want)
 	}
@@ -82,8 +82,8 @@ func TestResolveStackAllNoneKeepsInTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(mods, inTree) {
-		t.Fatalf("got %v, want %v", mods, inTree)
+	if !slices.Equal(mods, inTree()) {
+		t.Fatalf("got %v, want %v", mods, inTree())
 	}
 }
 
@@ -93,7 +93,7 @@ func TestResolveStackAlwaysKeepsTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, m := range mods {
-		if m == inTree[0] {
+		if m == inTree()[0] {
 			return
 		}
 	}
@@ -127,7 +127,7 @@ func TestStackFlagsSetCoversEveryStackFlag(t *testing.T) {
 }
 
 func TestResolveStackSkillsIsACategory(t *testing.T) {
-	if defaultStack["skills"] == "" {
+	if defaultStack()["skills"] == "" {
 		t.Fatal("the default composition must hydrate herrscher with playbooks")
 	}
 	mods, err := resolveStack(map[string]string{"backend": "claude", "skills": "none"}, nil)
@@ -135,7 +135,7 @@ func TestResolveStackSkillsIsACategory(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, m := range mods {
-		if m == catalog["skills"]["superset"] {
+		if m == catalog()["skills"]["superset"] {
 			t.Fatalf("skills=none must drop the module, got %v", mods)
 		}
 	}

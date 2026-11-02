@@ -65,7 +65,7 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 
 	entries, err := cat(policy)
 	if err != nil {
-		return nil, fmt.Errorf("model catalog: %w", err)
+		return nil, fmt.Errorf("model catalog(): %w", err)
 	}
 	model, err := chooseDefaultModel(s, in, entries, cur.model)
 	if err != nil {
@@ -78,18 +78,24 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 	return out, nil
 }
 
-var policyChoices = []struct {
+func policyChoices() []struct {
 	policy contracts.RoutePolicy
 	label  string
 	help   string
-}{
-	{contracts.PolicyAll, "all", "native and gateway models (internal build)"},
-	{contracts.PolicyGatewayOnly, "gateway-only", "the product gateway only (public build)"},
+} {
+	return []struct {
+		policy contracts.RoutePolicy
+		label  string
+		help   string
+	}{
+		{contracts.PolicyAll, "all", "native and gateway models (internal build)"},
+		{contracts.PolicyGatewayOnly, "gateway-only", "the product gateway only (public build)"},
+	}
 }
 
 func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contracts.RoutePolicy, error) {
 	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "route policy"))
-	for i, c := range policyChoices {
+	for i, c := range policyChoices() {
 		name, tag := fmt.Sprintf("%-14s", c.label), fmt.Sprintf("%-8s", "")
 		if c.policy == cur {
 			name = s.wrap(s.green, name)
@@ -103,12 +109,12 @@ func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contrac
 		return cur, nil
 	}
 	if n, err := strconv.Atoi(ans); err == nil {
-		if n < 1 || n > len(policyChoices) {
+		if n < 1 || n > len(policyChoices()) {
 			return "", fmt.Errorf("route policy: %w: %d", errChoiceOutOfRange, n)
 		}
-		return policyChoices[n-1].policy, nil
+		return policyChoices()[n-1].policy, nil
 	}
-	for _, c := range policyChoices {
+	for _, c := range policyChoices() {
 		if ans == c.label {
 			return c.policy, nil
 		}

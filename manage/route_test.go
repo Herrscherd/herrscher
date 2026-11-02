@@ -127,7 +127,7 @@ func TestRouteStepKeepsTheCatalogOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got[host.EnvDefaultModel] != "a-codex" {
-		t.Fatalf("entry 2 = %q, want the catalog's second entry", got[host.EnvDefaultModel])
+		t.Fatalf("entry 2 = %q, want the catalog()'s second entry", got[host.EnvDefaultModel])
 	}
 }
 

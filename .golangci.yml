@@ -198,6 +198,12 @@ linters:
       - path: ^manage/version.go$
         linters: [nilerr]
         text: "returns nil"
+      - path: ^core/bridge/log.go$
+        linters: [gochecknoglobals]
+        text: "^logger is a global"
+      - path: ^core/bridge/attachments.go$
+        linters: [gochecknoglobals]
+        text: "^pinnedTransports is a global"
 
 formatters:
   enable:

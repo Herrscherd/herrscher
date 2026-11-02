@@ -76,7 +76,7 @@ type mcpConfig struct {
 	MCPServers map[string]mcpServer `json:"mcpServers"`
 }
 
-func parseMCP(cmdline string) (name string, srv mcpServer, ok bool) {
+func parseMCP(cmdline string) (string, mcpServer, bool) {
 	fields := strings.Fields(cmdline)
 	if len(fields) == 0 {
 		return "", mcpServer{}, false

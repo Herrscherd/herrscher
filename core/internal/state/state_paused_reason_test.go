@@ -23,7 +23,7 @@ func TestSetPausedReasonPersists(t *testing.T) {
 		t.Fatalf("want cost, got %q", got.PausedReason)
 	}
 
-	if err := s.SetPausedReason("game", ""); err != nil {
+	if err = s.SetPausedReason("game", ""); err != nil {
 		t.Fatal(err)
 	}
 	reloaded2, err := LoadState(path)

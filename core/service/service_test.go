@@ -160,8 +160,8 @@ func TestUnitPathSurvivesASpaceInADirectory(t *testing.T) {
 	}
 	c2, unit := writeUnit(t, "[Unit]\n\n[Service]\nEnvironment=PATH=/usr/bin\nExecStart=/x serve\n\n[Install]\n")
 	c2.Path = c.Path
-	if changed, err := syncUnitPath(c2); err != nil || !changed {
-		t.Fatalf("changed=%v err=%v, want a rewrite", changed, err)
+	if changed, syncErr := syncUnitPath(c2); syncErr != nil || !changed {
+		t.Fatalf("changed=%v err=%v, want a rewrite", changed, syncErr)
 	}
 	b, err := os.ReadFile(unit)
 	must(t, err)

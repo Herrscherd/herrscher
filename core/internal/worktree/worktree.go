@@ -139,8 +139,9 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 	}
 
 	if missing {
-		if out, err := exec.CommandContext(w.ctx, "git", "-C", repo, "worktree", "prune").CombinedOutput(); err != nil {
-			return false, fmt.Errorf("worktree prune: %s: %w", redact.Output(out), err)
+		out, pruneErr := exec.CommandContext(w.ctx, "git", "-C", repo, "worktree", "prune").CombinedOutput()
+		if pruneErr != nil {
+			return false, fmt.Errorf("worktree prune: %s: %w", redact.Output(out), pruneErr)
 		}
 		return false, nil
 	}

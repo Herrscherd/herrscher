@@ -53,7 +53,7 @@ func TestLoadStateBackfillsAndPersistsSessionIncarnation(t *testing.T) {
 	var persisted struct {
 		Sessions []Session `json:"sessions"`
 	}
-	if err := json.Unmarshal(persistedBytes, &persisted); err != nil {
+	if err = json.Unmarshal(persistedBytes, &persisted); err != nil {
 		t.Fatal(err)
 	}
 	if len(persisted.Sessions) != 1 || persisted.Sessions[0].Incarnation != firstSession.Incarnation {
@@ -305,7 +305,7 @@ func TestSetBackendTargetRewritesVendorCmdAndClearsResume(t *testing.T) {
 	}
 	must(t, st.AddSession(Session{Name: "alpha", Vendor: "claude", Cmd: "claude --model claude-opus-4-8 --effort high", ResumeToken: "tok-abc"}))
 
-	if ok, err := st.SetBackendTarget("alpha", "codex", "codex --model gpt-5-codex", ""); err != nil || !ok {
+	if ok, setErr := st.SetBackendTarget("alpha", "codex", "codex --model gpt-5-codex", ""); setErr != nil || !ok {
 		t.Fatal("expected SetBackendTarget to report a match")
 	}
 
@@ -447,7 +447,7 @@ func TestRemoveRoleReportsWhetherItWasThere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.SetRole("chat:1234", "owner", ""); err != nil {
+	if _, err = st.SetRole("chat:1234", "owner", ""); err != nil {
 		t.Fatal(err)
 	}
 	removed, err := st.RemoveRole("chat:1234")
@@ -474,10 +474,10 @@ func TestRevokingTheLastRoleMakesTheNextGrantTheFirstAgain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.SetRole("chat:1234", "owner", ""); err != nil {
+	if _, err = st.SetRole("chat:1234", "owner", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.RemoveRole("chat:1234"); err != nil {
+	if _, err = st.RemoveRole("chat:1234"); err != nil {
 		t.Fatal(err)
 	}
 	first, err := st.SetRole("chat:5678", "owner", "")

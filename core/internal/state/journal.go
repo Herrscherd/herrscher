@@ -22,7 +22,7 @@ func AppendParticipant(path, userID string) (added bool, err error) {
 			return false, nil
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+	if err = os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return false, err
 	}
 	f, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)

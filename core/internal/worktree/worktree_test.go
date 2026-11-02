@@ -387,12 +387,12 @@ func TestCreateWithBaseBranchesOffIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create alpha: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(pa, "f.txt"), []byte("x"), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(pa, "f.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"add", "."}, {"commit", "-qm", "work"}} {
-		if out, err := exec.Command("git", append([]string{"-C", pa}, args...)...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v (%s)", args, err, out)
+		if out, runErr := exec.Command("git", append([]string{"-C", pa}, args...)...).CombinedOutput(); runErr != nil {
+			t.Fatalf("git %v: %v (%s)", args, runErr, out)
 		}
 	}
 	pb, err := w.Create(repo, "beta", "session/alpha")
@@ -455,7 +455,7 @@ func TestIsCleanAt(t *testing.T) {
 	if err != nil || !clean {
 		t.Fatalf("fresh worktree should be clean: clean=%v err=%v", clean, err)
 	}
-	if err := os.WriteFile(filepath.Join(p, "dirty.txt"), []byte("x"), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(p, "dirty.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	clean, err = w.IsCleanAt(p)
@@ -475,15 +475,15 @@ func TestASessionThatComesBackReturnsToItsBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(p, "work.txt"), []byte("done"), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(p, "work.txt"), []byte("done"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"add", "."}, {"commit", "-m", "the work"}} {
-		if out, err := exec.Command("git", append([]string{"-C", p}, args...)...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
+		if out, runErr := exec.Command("git", append([]string{"-C", p}, args...)...).CombinedOutput(); runErr != nil {
+			t.Fatalf("git %v: %v\n%s", args, runErr, out)
 		}
 	}
-	if err := w.Remove(repo, "ch-1", false); err != nil {
+	if err = w.Remove(repo, "ch-1", false); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 
@@ -504,12 +504,12 @@ func TestANewSessionStillBranchesFromItsBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(first, "a.txt"), []byte("a"), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(first, "a.txt"), []byte("a"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"add", "."}, {"commit", "-m", "a"}} {
-		if out, err := exec.Command("git", append([]string{"-C", first}, args...)...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
+		if out, runErr := exec.Command("git", append([]string{"-C", first}, args...)...).CombinedOutput(); runErr != nil {
+			t.Fatalf("git %v: %v\n%s", args, runErr, out)
 		}
 	}
 

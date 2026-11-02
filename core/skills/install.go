@@ -54,9 +54,9 @@ func Install(src fs.FS, dir string) (Outcome, error) {
 			return out, err
 		}
 		dest := filepath.Join(dir, name)
-		switch _, err := os.Stat(dest); {
+		switch _, err = os.Stat(dest); {
 		case errors.Is(err, fs.ErrNotExist):
-			if err := write(src, name, dest, false); err != nil {
+			if err = write(src, name, dest, false); err != nil {
 				return out, err
 			}
 			man[name] = shipped

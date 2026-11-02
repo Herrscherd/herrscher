@@ -490,8 +490,8 @@ func TestCommandsAdvertiseOnlyAllowedVerbs(t *testing.T) {
 	}
 	for _, c := range cmds {
 		parts := strings.Fields(c.Name)
-		if !terminalVerbs[parts[0]] {
-			t.Fatalf("command %q leads with a verb outside terminalVerbs", c.Name)
+		if !terminalVerbs()[parts[0]] {
+			t.Fatalf("command %q leads with a verb outside terminalVerbs()", c.Name)
 		}
 		if c.Args != "" && !strings.Contains(c.Args, "--") {
 			t.Fatalf("command %q advertises positional args %q; the parser only accepts --flag form", c.Name, c.Args)

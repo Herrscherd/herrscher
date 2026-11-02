@@ -7,19 +7,21 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var toolFamilies = map[string]string{
-	"read":         familyRead,
-	"glob":         familyRead,
-	"grep":         familySearch,
-	"websearch":    familySearch,
-	"webfetch":     familyWeb,
-	"edit":         familyWrite,
-	"write":        familyWrite,
-	"notebookedit": familyWrite,
-	"bash":         familyRun,
-	"task":         familyAgent,
-	"agent":        familyAgent,
-	"skill":        familyAgent,
+func toolFamilies() map[string]string {
+	return map[string]string{
+		"read":         familyRead,
+		"glob":         familyRead,
+		"grep":         familySearch,
+		"websearch":    familySearch,
+		"webfetch":     familyWeb,
+		"edit":         familyWrite,
+		"write":        familyWrite,
+		"notebookedit": familyWrite,
+		"bash":         familyRun,
+		"task":         familyAgent,
+		"agent":        familyAgent,
+		"skill":        familyAgent,
+	}
 }
 
 const (
@@ -37,7 +39,7 @@ func toolVerb(text string) (family, rest string) {
 		return "", ""
 	}
 	head, tail, _ := strings.Cut(trimmed, " ")
-	fam, ok := toolFamilies[strings.ToLower(head)]
+	fam, ok := toolFamilies()[strings.ToLower(head)]
 	if !ok {
 		return "", trimmed
 	}

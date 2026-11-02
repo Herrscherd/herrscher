@@ -11,8 +11,8 @@ func TestThemeGlyphsAndFramesPresent(t *testing.T) {
 			t.Fatalf("glyph %q is empty", name)
 		}
 	}
-	if len(spinFrames) == 0 {
-		t.Fatal("spinFrames must be non-empty")
+	if len(spinFrames()) == 0 {
+		t.Fatal("spinFrames() must be non-empty")
 	}
 	if accentStyle.Render("x") == "" {
 		t.Fatal("accentStyle must render")

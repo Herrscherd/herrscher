@@ -59,10 +59,14 @@ type Capabilities struct {
 	Terminal   string
 }
 
-var kittyGraphicsPrograms = map[string]bool{"ghostty": true, "WezTerm": true}
+func kittyGraphicsPrograms() map[string]bool {
+	return map[string]bool{"ghostty": true, "WezTerm": true}
+}
 
-var hyperlinkPrograms = map[string]bool{
-	"ghostty": true, "WezTerm": true, "iTerm.app": true, programKitty: true,
+func hyperlinkPrograms() map[string]bool {
+	return map[string]bool{
+		"ghostty": true, "WezTerm": true, "iTerm.app": true, programKitty: true,
+	}
 }
 
 // Probe resolves what the terminal described by env (an os.Getenv-like lookup)
@@ -73,7 +77,7 @@ func Probe(env func(string) string) Capabilities {
 	term, program := env("TERM"), env("TERM_PROGRAM")
 	caps := Capabilities{
 		Graphics:   probeGraphics(env, term, program),
-		Hyperlinks: hyperlinkPrograms[program] || strings.Contains(term, programKitty),
+		Hyperlinks: hyperlinkPrograms()[program] || strings.Contains(term, programKitty),
 		Colour:     probeColour(env("COLORTERM"), term),
 		Terminal:   terminalName(term, program),
 	}
@@ -83,7 +87,7 @@ func Probe(env func(string) string) Capabilities {
 }
 
 func probeGraphics(env func(string) string, term, program string) Graphics {
-	if env("KITTY_WINDOW_ID") != "" || strings.Contains(term, programKitty) || kittyGraphicsPrograms[program] {
+	if env("KITTY_WINDOW_ID") != "" || strings.Contains(term, programKitty) || kittyGraphicsPrograms()[program] {
 		return GraphicsKitty
 	}
 	if strings.Contains(term, "sixel") || program == "mlterm" {

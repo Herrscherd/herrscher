@@ -11,7 +11,9 @@ const (
 	copyAll   = "all"
 )
 
-var copyTargets = []string{copyReply, copyTurn, copyAll}
+func copyTargets() []string {
+	return []string{copyReply, copyTurn, copyAll}
+}
 
 func (m *model) copyCmd(rest []string) {
 	target := copyReply
@@ -23,14 +25,14 @@ func (m *model) copyCmd(rest []string) {
 		break
 	}
 	if !validCopyTarget(target) {
-		m.flash = "copier quoi ? " + strings.Join(copyTargets, ", ")
+		m.flash = "copier quoi ? " + strings.Join(copyTargets(), ", ")
 		return
 	}
 	m.copyTarget(target)
 }
 
 func validCopyTarget(s string) bool {
-	for _, t := range copyTargets {
+	for _, t := range copyTargets() {
 		if t == s {
 			return true
 		}

@@ -12,10 +12,12 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-var contextLimits = map[string]int{
-	"claude": 200_000,
-	"codex":  400_000,
-	"cursor": 200_000,
+func contextLimits() map[string]int {
+	return map[string]int{
+		"claude": 200_000,
+		"codex":  400_000,
+		"cursor": 200_000,
+	}
 }
 
 const defaultContextLimit = 200_000
@@ -28,7 +30,7 @@ func contextLimit(vendor string) int {
 			return n
 		}
 	}
-	if n, ok := contextLimits[strings.ToLower(vendor)]; ok {
+	if n, ok := contextLimits()[strings.ToLower(vendor)]; ok {
 		return n
 	}
 	return defaultContextLimit

@@ -50,7 +50,7 @@ func ServedInstanceID(statePath, optID string) string {
 func DaemonDispatch(ctx context.Context, instanceID string, argv []string) (string, error) {
 	out, handled, err := dispatchLiveCommand(ctx, CommandSocketPath(instanceID), argv)
 	if !handled {
-		return "", &DaemonNotRunningError{Socket: CommandSocketPath(instanceID)}
+		return "", &daemonNotRunningError{Socket: CommandSocketPath(instanceID)}
 	}
 	return out, err
 }

@@ -141,7 +141,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 			}
 		default:
 		}
-		return "", ErrSeedTimeout
+		return "", errSeedTimeout
 	}
 	if err := <-bridgeErr; err != nil {
 		return "", err
@@ -229,7 +229,7 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 	var spawnEnv map[string]string
 	var modelArg string
 	if req.ModelID == "" && ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly {
-		return nil, fmt.Errorf("the gateway-only route policy forbids a spawn with no model: it would run on this machine's own vendor login")
+		return nil, errGatewayOnlyNoModel
 	}
 	if req.ModelID != "" {
 		entry, err := LookupModel(plugins, ResolvePolicy(os.Getenv), req.ModelID)
@@ -239,7 +239,7 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 		if desired == "" {
 			desired = entry.Vendor
 		} else if desired != entry.Vendor {
-			return nil, fmt.Errorf("model %q belongs to backend %q, but backend %q was requested; pick a model offered by %q or switch the vendor", req.ModelID, entry.Vendor, desired, desired)
+			return nil, &modelBackendMismatchError{Model: req.ModelID, Owner: entry.Vendor, Requested: desired}
 		}
 		if spawnEnv, err = spawnEnvFor(entry, os.Getenv); err != nil {
 			return nil, err
@@ -251,7 +251,7 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 		return nil, err
 	} else if backend != nil {
 		if len(spawnEnv) > 0 {
-			return nil, fmt.Errorf("model %q needs a gateway spawn environment, which the remote backend resolver cannot carry; unset HERRSCHER_REMOTE=backend or pick a native model", req.ModelID)
+			return nil, &gatewayEnvUnsupportedError{Model: req.ModelID}
 		}
 		return backend, nil
 	}
@@ -333,9 +333,9 @@ func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin
 		}
 	}
 	if desired != "" {
-		return contracts.Plugin{}, &UnknownBackendError{Backend: desired}
+		return contracts.Plugin{}, &UnknownError{Kind: "backend", Name: desired}
 	}
-	return contracts.Plugin{}, ErrNoBackendPlugin
+	return contracts.Plugin{}, errNoBackendPlugin
 }
 
 func provisionSeedScope(ctx context.Context, mem contracts.Memory, project, agent string) {

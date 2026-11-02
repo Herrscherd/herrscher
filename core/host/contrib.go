@@ -45,7 +45,7 @@ func CollectCommands(gws []contracts.GatewaySet) ([]contracts.Cmd, error) {
 		for _, c := range src.Commands() {
 			path := strings.Join(c.Path, " ")
 			if seen[path] {
-				return nil, &ContributionClashError{Kind: kind, Path: path}
+				return nil, &contributionClashError{Kind: kind, Path: path}
 			}
 			seen[path] = true
 			c.Path = append([]string{kind}, c.Path...)

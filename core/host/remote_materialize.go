@@ -88,7 +88,7 @@ func extractTar(r io.Reader, dst string) error {
 		}
 		target := filepath.Join(root, filepath.FromSlash(hdr.Name))
 		if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
-			return fmt.Errorf("refusing tar member %q: it lands outside %s", hdr.Name, root)
+			return &unsafeTarMemberError{Member: hdr.Name, Root: root}
 		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err

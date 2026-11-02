@@ -26,19 +26,19 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 				Workspace: strings.TrimSpace(in.Get("workspace")),
 			}
 			if h.Name == "" {
-				return "", ErrHostNameMissing
+				return "", errHostNameMissing
 			}
 			if h.Name == state.LocalHost {
-				return "", ErrLocalHostReserved
+				return "", errLocalHostReserved
 			}
 			if h.SSH == "" {
-				return "", &HostNeedsSSHError{Name: h.Name}
+				return "", &hostNeedsSSHError{Name: h.Name}
 			}
 			if !strings.HasPrefix(h.Workspace, "/") {
-				return "", &HostWorkspaceError{Name: h.Name, Workspace: h.Workspace}
+				return "", &hostWorkspaceError{Name: h.Name, Workspace: h.Workspace}
 			}
 			if _, exists := st.FindHost(h.Name); exists {
-				return "", &HostExistsError{Name: h.Name}
+				return "", &hostExistsError{Name: h.Name}
 			}
 			provisioned, err := provisionHost(ctx, runnerFor(h), h, st.SourceDir())
 			if err != nil {
@@ -136,7 +136,7 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 				}
 			}
 			if len(carried) > 0 {
-				return "", fmt.Errorf("host %q still carries %s: close them first", name, strings.Join(carried, ", "))
+				return "", &hostCarriesError{Name: name, Sessions: strings.Join(carried, ", ")}
 			}
 			if _, err := st.RemoveHost(name); err != nil {
 				return "", err
@@ -154,14 +154,14 @@ func unknownHost(st *state.State, name string) error {
 	}
 	if name == "" {
 		if len(known) == 0 {
-			return fmt.Errorf("name a host: none is registered yet, add one with `host add <name> --ssh <target> --workspace <path>`")
+			return errHostNoneRegistered
 		}
-		return fmt.Errorf("name a host (known: %s)", strings.Join(known, ", "))
+		return &hostNameRequiredError{Known: strings.Join(known, ", ")}
 	}
 	if len(known) == 0 {
-		return fmt.Errorf("no host named %q, and none is registered: add one with `host add <name> --ssh <target> --workspace <path>`", name)
+		return &hostNotFoundError{Name: name}
 	}
-	return fmt.Errorf("no host named %q (known: %s)", name, strings.Join(known, ", "))
+	return &hostNotFoundError{Name: name, Known: strings.Join(known, ", ")}
 }
 
 func sourceVersionOf(ctx context.Context, st *state.State) string {

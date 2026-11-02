@@ -2,7 +2,6 @@ package host
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -103,7 +102,7 @@ func (h *hub) authorize(ctx context.Context, args []string) error {
 	if allowed {
 		return nil
 	}
-	return errors.New(why)
+	return &accessDeniedError{Reason: why}
 }
 
 func (h *hub) roleNames() map[string]string {

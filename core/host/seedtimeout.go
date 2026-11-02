@@ -18,10 +18,10 @@ func resolveSeedTimeout(raw string, getenv func(string) string) (time.Duration, 
 	}
 	d, err := time.ParseDuration(value)
 	if err != nil {
-		return 0, &InvalidDurationError{Source: source, Value: value}
+		return 0, &invalidDurationError{Source: source, Value: value}
 	}
 	if d <= 0 {
-		return 0, &NonPositiveDurationError{Source: source, Duration: d}
+		return 0, &nonPositiveDurationError{Source: source, Duration: d}
 	}
 	return d, nil
 }

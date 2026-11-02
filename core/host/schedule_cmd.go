@@ -41,12 +41,12 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 			}
 			if sc.Agent != "" {
 				if _, ok := agents.Get(sc.Agent); !ok {
-					return "", &UnknownAgentError{Agent: sc.Agent}
+					return "", &UnknownError{Kind: "agent", Name: sc.Agent}
 				}
 			}
 			for _, existing := range st.SnapshotSchedules() {
 				if existing.Name == sc.Name {
-					return "", &ScheduleExistsError{Name: sc.Name}
+					return "", &scheduleExistsError{Name: sc.Name}
 				}
 			}
 			if err := st.PutSchedule(sc); err != nil {
@@ -153,7 +153,7 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
 			name := strings.TrimSpace(in.Get("name"))
 			if slot == nil || slot.sched == nil {
-				return "", fmt.Errorf("no running daemon to fire %q: `schedule run` needs `herrscher serve`", name)
+				return "", &noDaemonToFireError{Name: name}
 			}
 			if err := slot.sched.fireNow(cmdCtx, name); err != nil {
 				return "", err

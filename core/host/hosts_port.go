@@ -29,7 +29,7 @@ func (p hostPlacer) resolve(name string) (state.Host, *worktree.Remote, error) {
 		return state.Host{}, nil, unknownHost(p.st, name)
 	}
 	if h.Bin == "" {
-		return state.Host{}, nil, &HostNotProvisionedError{Name: name}
+		return state.Host{}, nil, &hostNotProvisionedError{Name: name}
 	}
 	r := runner.SSH{Target: h.SSH, ControlPath: runner.ControlPathFor(h.SSH)}
 	return h, worktree.NewRemote(p.ctx, r, h.Bin, p.instanceID), nil
@@ -47,7 +47,7 @@ func (p hostPlacer) Ready(name string) error {
 		return nil
 	}
 	if want := p.sourceVersion(); want != "" && h.Version != want {
-		return fmt.Errorf("host %q runs herrscher %s but this daemon builds %s: run `host provision %s`", name, h.Version, want, name)
+		return &hostVersionMismatchError{Name: name, Have: h.Version, Want: want}
 	}
 	return nil
 }
@@ -127,11 +127,11 @@ func originOf(ctx context.Context, dir string) (string, error) {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("read origin of %s: %s", dir, msg)
+		return "", &originReadError{Dir: dir, Msg: msg}
 	}
 	url := strings.TrimSpace(stdout.String())
 	if url == "" {
-		return "", fmt.Errorf("%s has no origin remote", dir)
+		return "", &noOriginError{Dir: dir}
 	}
 	return url, nil
 }

@@ -33,7 +33,7 @@ func TestSetProjectPinnedUnknownSessionIsNoop(t *testing.T) {
 
 func TestSetProjectPinnedUnchangedIsNoop(t *testing.T) {
 	s := NewState(filepath.Join(t.TempDir(), "state.json"))
-	_ = s.AddSession(Session{Name: "main", MemoryProject: "neublox", ProjectPinned: true})
+	must(t, s.AddSession(Session{Name: "main", MemoryProject: "neublox", ProjectPinned: true}))
 	if err := s.SetProjectPinned("main", "neublox"); err != nil {
 		t.Fatalf("an already-settled project must be a no-op, got %v", err)
 	}

@@ -45,7 +45,7 @@ func TestSetPausedReasonUnknownSessionIsNoop(t *testing.T) {
 
 func TestSetPausedReasonUnchangedIsNoop(t *testing.T) {
 	s := NewState(filepath.Join(t.TempDir(), "state.json"))
-	_ = s.AddSession(Session{Name: "game", PausedReason: "cost"})
+	must(t, s.AddSession(Session{Name: "game", PausedReason: "cost"}))
 	if err := s.SetPausedReason("game", "cost"); err != nil {
 		t.Fatalf("unchanged reason must be a no-op, got %v", err)
 	}

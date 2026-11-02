@@ -57,15 +57,17 @@ func AppendTranscript(path string, e TranscriptEntry) error {
 	}
 	b, err := json.Marshal(e)
 	if err != nil {
-		f.Close()
+		closeLogged(f)
 		return err
 	}
 	if _, err := f.Write(append(b, '\n')); err != nil {
-		f.Close()
+		closeLogged(f)
 		return err
 	}
 	fi, statErr := f.Stat()
-	f.Close()
+	if err := f.Close(); err != nil {
+		return err
+	}
 	if statErr == nil && fi.Size() > transcriptMaxBytes {
 		compactTranscript(path)
 	}
@@ -102,18 +104,22 @@ func compactTranscript(path string) {
 		if err != nil {
 			continue
 		}
-		_, _ = w.Write(append(b, '\n'))
+		if _, err := w.Write(append(b, '\n')); err != nil {
+			closeLogged(f)
+			removeLogged(tmp)
+			return
+		}
 	}
 	if err := w.Flush(); err != nil {
-		f.Close()
-		_ = os.Remove(tmp)
+		closeLogged(f)
+		removeLogged(tmp)
 		return
 	}
 	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
+		removeLogged(tmp)
 		return
 	}
-	_ = os.Rename(tmp, path)
+	logFailure("rename", os.Rename(tmp, path))
 }
 
 // ReadTranscript returns entries in file order; when limit > 0, only the last
@@ -128,7 +134,7 @@ func ReadTranscript(path string, limit int) []TranscriptEntry {
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
+	defer closeLogged(f)
 	var out []TranscriptEntry
 	r := bufio.NewReader(f)
 	for {
@@ -209,7 +215,7 @@ func transcriptTailLines(path string) [][]byte {
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
+	defer closeLogged(f)
 	fi, err := f.Stat()
 	if err != nil || fi.Size() == 0 {
 		return nil

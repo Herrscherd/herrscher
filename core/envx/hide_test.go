@@ -25,7 +25,7 @@ func TestARevealPutsBackWhatAnEarlierHideAlreadyHeld(t *testing.T) {
 	outer := Hide([]string{key})
 	t.Cleanup(outer)
 
-	os.Setenv(key, "second")
+	t.Setenv(key, "second")
 	inner := Hide([]string{key})
 	inner()
 

@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/Herrscherd/herrscher/core/envx"
 )
@@ -65,7 +66,10 @@ func DefaultPath() string {
 	if d := envx.Get("STATE_DIR"); d != "" {
 		return filepath.Join(d, "config.json")
 	}
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".config", "herrscher", "config.json")
+	}
 	return filepath.Join(home, ".config", "herrscher", "config.json")
 }
 
@@ -104,8 +108,8 @@ func stripComments(b []byte) []byte {
 // falls back to the built-in "claude" default. healthAddr pre-fills the
 // "healthAddr" value (the install --health-addr default).
 func Template(cmd, healthAddr string) string {
-	cmdJSON, _ := json.Marshal(cmd)
-	healthJSON, _ := json.Marshal(healthAddr)
+	cmdJSON := quoteJSON(cmd)
+	healthJSON := quoteJSON(healthAddr)
 	return `// herrscher config: declarative defaults the daemon reads at startup.
 // Secrets (gateway tokens/channel ids, owner token) are NOT here;
 // keep them in the 0600 env file (herrscher.env). The daemon never rewrites this
@@ -117,10 +121,10 @@ func Template(cmd, healthAddr string) string {
   // Base bridged command for new sessions (sets model/effort/etc.).
   // A per-session "cmd:" option still overrides this. Example:
   //   "claude --model claude-opus-4-8 --effort low"   (Opus 4.8, low, 200k ctx)
-  "cmd": ` + string(cmdJSON) + `,
+  "cmd": ` + cmdJSON + `,
 
   // Health endpoint address; "" disables it.
-  "healthAddr": ` + string(healthJSON) + `,
+  "healthAddr": ` + healthJSON + `,
 
   // Self-updating status embed channel id; "" disables it.
   "statusChannel": "",
@@ -149,4 +153,12 @@ func Template(cmd, healthAddr string) string {
   "source": ""
 }
 `
+}
+
+func quoteJSON(value string) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return strconv.Quote(value)
+	}
+	return string(encoded)
 }

@@ -1,6 +1,11 @@
 package control
 
 import (
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"log/slog"
 	"net"
 	"os"
 	"sync"
@@ -28,9 +33,14 @@ func (c *Conn) Write(e contracts.Event) error {
 }
 
 // Emit satisfies contracts.EventSink so the bridge can hand a Conn directly to
-// its turn loop as the event sink. A write error is dropped: emission is
-// best-effort and the hub's read side detects a dead conn independently.
-func (c *Conn) Emit(e contracts.Event) { _ = c.Write(e) }
+// its turn loop as the event sink. A write error is logged at debug level only:
+// emission is best-effort and the hub's read side detects a dead conn
+// independently.
+func (c *Conn) Emit(e contracts.Event) {
+	if err := c.Write(e); err != nil {
+		slog.Debug("control emit dropped", "err", err)
+	}
+}
 
 // Scan reads events until the peer closes the connection or fn returns an error,
 // calling fn for each. A clean peer close (io.EOF) yields nil; fn's error (or a
@@ -54,7 +64,9 @@ type Acceptor struct {
 // Accept binds the control socket at path (removing a stale socket first) and
 // starts accepting bridge connections. Each appears on Conns().
 func Accept(path string) (*Acceptor, error) {
-	_ = os.Remove(path)
+	if err := removeStaleSocket(path); err != nil {
+		return nil, err
+	}
 	ln, err := listenControl(path)
 	if err != nil {
 		return nil, err
@@ -73,14 +85,14 @@ func (a *Acceptor) loop() {
 		}
 		select {
 		case <-a.done:
-			c.Close()
+			closeConn(c)
 			return
 		default:
 		}
 		select {
 		case a.conns <- newConn(c):
 		case <-a.done:
-			c.Close()
+			closeConn(c)
 			return
 		}
 	}
@@ -93,9 +105,8 @@ func (a *Acceptor) Conns() <-chan *Conn { return a.conns }
 func (a *Acceptor) Close() error {
 	a.closeOnce.Do(func() { close(a.done) })
 	err := a.ln.Close()
-	_ = os.Remove(a.path)
 	a.drainPending()
-	return err
+	return errors.Join(err, removeStaleSocket(a.path))
 }
 
 func (a *Acceptor) drainPending() {
@@ -106,7 +117,7 @@ func (a *Acceptor) drainPending() {
 				return
 			}
 			if c != nil {
-				_ = c.Close()
+				closeConn(c)
 			}
 		default:
 			return
@@ -122,4 +133,17 @@ func Dial(path string) (*Conn, error) {
 		return nil, err
 	}
 	return newConn(c), nil
+}
+
+func removeStaleSocket(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("remove control socket %s: %w", path, err)
+	}
+	return nil
+}
+
+func closeConn(closer io.Closer) {
+	if err := closer.Close(); err != nil {
+		slog.Debug("control conn close", "err", err)
+	}
 }

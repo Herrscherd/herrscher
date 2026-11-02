@@ -239,7 +239,7 @@ func TestWorkspaceRootFallsBack(t *testing.T) {
 	if got := s.WorkspaceRoot(); got != "/legacy/repo" {
 		t.Fatalf("should fall back to Repo, got %q", got)
 	}
-	_ = s.SetWorkspace("/ws")
+	must(t, s.SetWorkspace("/ws"))
 	if got := s.WorkspaceRoot(); got != "/ws" {
 		t.Fatalf("Workspace should win, got %q", got)
 	}
@@ -251,7 +251,8 @@ func TestSessionProjectRoundTrips(t *testing.T) {
 	if err := s.AddSession(Session{Name: "x", ChannelID: "c", Project: "myproj"}); err != nil {
 		t.Fatalf("AddSession: %v", err)
 	}
-	reloaded, _ := LoadState(p)
+	reloaded, err := LoadState(p)
+	must(t, err)
 	got, ok := reloaded.FindSession("x")
 	if !ok || got.Project != "myproj" {
 		t.Fatalf("project not persisted: %+v", got)
@@ -267,7 +268,8 @@ func TestSessionLearningConfigRoundTrips(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("AddSession: %v", err)
 	}
-	reloaded, _ := LoadState(p)
+	reloaded, err := LoadState(p)
+	must(t, err)
 	got, ok := reloaded.FindSession("x")
 	if !ok || got.Extractor != "roblox" || got.Journal != ".neublox/calls.log" || got.ConsolidateEvery != 5 {
 		t.Fatalf("learning config not persisted: %+v", got)
@@ -317,7 +319,9 @@ func TestSetBackendTargetRewritesVendorCmdAndClearsResume(t *testing.T) {
 	if got.ResumeToken != "" {
 		t.Fatalf("resume token must be cleared, got %q", got.ResumeToken)
 	}
-	if ok, _ := st.SetBackendTarget("ghost", "claude", "claude", ""); ok {
+	ok, err = st.SetBackendTarget("ghost", "claude", "claude", "")
+	must(t, err)
+	if ok {
 		t.Fatal("unknown session must return false")
 	}
 }

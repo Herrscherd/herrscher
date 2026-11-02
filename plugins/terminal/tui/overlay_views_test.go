@@ -14,8 +14,9 @@ import (
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
-func assertFloatingList(t *testing.T, name, out string, width int) {
+func assertFloatingList(t *testing.T, name, out string) {
 	t.Helper()
+	const width = 74
 	if out == "" {
 		t.Fatalf("%s drew nothing", name)
 	}
@@ -33,28 +34,28 @@ func assertFloatingList(t *testing.T, name, out string, width int) {
 func TestPaletteUsesTheFloatingList(t *testing.T) {
 	m := sizedTestModel(t, 74)
 	m.input.SetValue("/")
-	assertFloatingList(t, "palette", m.paletteView(), 74)
+	assertFloatingList(t, "palette", m.paletteView())
 }
 
 func TestResumeUsesTheFloatingList(t *testing.T) {
 	m := sizedTestModel(t, 74)
 	m.resumeRows = []contracts.SessionInfo{{Name: "un"}, {Name: "deux"}}
 	m.resumeOpen = true
-	assertFloatingList(t, "resume", m.resumeView(), 74)
+	assertFloatingList(t, "resume", m.resumeView())
 }
 
 func TestSwitchUsesTheFloatingList(t *testing.T) {
 	m := sizedTestModel(t, 74)
 	m.switchRows = []contracts.SessionInfo{{Name: "un", ChannelID: "c1"}, {Name: "deux", ChannelID: "c2"}}
 	m.switchOpen = true
-	assertFloatingList(t, "switch", m.switchView(), 74)
+	assertFloatingList(t, "switch", m.switchView())
 }
 
 func TestSkillsUsesTheFloatingList(t *testing.T) {
 	m := sizedTestModel(t, 74)
 	m.skillsRows = []skills.Skill{{Name: "pdf-fill", Description: "remplir des PDF"}}
 	m.skillsOpen = true
-	assertFloatingList(t, "skills", m.skillsView(), 74)
+	assertFloatingList(t, "skills", m.skillsView())
 }
 
 func TestMentionUsesTheFloatingList(t *testing.T) {
@@ -66,5 +67,5 @@ func TestMentionUsesTheFloatingList(t *testing.T) {
 	m.ensureTab("a")
 	m = typeInto(t, m, tea.WindowSizeMsg{Width: 74, Height: 24})
 	m.input.SetValue("@no")
-	assertFloatingList(t, "mention", m.mentionView(), 74)
+	assertFloatingList(t, "mention", m.mentionView())
 }

@@ -10,6 +10,17 @@ import (
 	"github.com/Herrscherd/herrscher/core/bridge"
 )
 
+const (
+	mimePNG  = "image/png"
+	mimeJPEG = "image/jpeg"
+	mimeWebP = "image/webp"
+	mimeGIF  = "image/gif"
+	extPNG   = ".png"
+	extJPG   = ".jpg"
+	extWebP  = ".webp"
+	extGIF   = ".gif"
+)
+
 // Attachment is a file staged to send with the next message (and echoed under the
 // user's transcript entry once sent). Path is a local filesystem path; the
 // terminal gateway hands it to the host as a file:// URL.
@@ -98,14 +109,14 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 
 func mimeExt(mime string) string {
 	switch mime {
-	case "image/png":
-		return ".png"
-	case "image/jpeg":
-		return ".jpg"
-	case "image/webp":
-		return ".webp"
-	case "image/gif":
-		return ".gif"
+	case mimePNG:
+		return extPNG
+	case mimeJPEG:
+		return extJPG
+	case mimeWebP:
+		return extWebP
+	case mimeGIF:
+		return extGIF
 	}
 	return ".bin"
 }

@@ -40,6 +40,12 @@ const ChannelID = "terminal"
 // a session it is only watching.
 const Kind = "terminal"
 
+const (
+	eventStatus = "status"
+	eventReply  = "reply"
+	sessionVerb = "session"
+)
+
 func settings() []contracts.Setting { return scope.LaunchSettings() }
 
 func newGatewaySet(ctx context.Context, cfg contracts.PluginConfig) (contracts.GatewaySet, error) {
@@ -264,7 +270,7 @@ func (t *Terminal) Read(_ context.Context, channelID string, _ int, _ string) ([
 func (t *Terminal) Unreact(context.Context, string, string, string) error { return nil }
 
 func (t *Terminal) UpsertStatusMessage(_ context.Context, channelID, _, content string) (string, error) {
-	t.EmitTo(contracts.Conversation{Gateway: "terminal", ID: channelID}, contracts.Event{T: "status", Text: content})
+	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: channelID}, contracts.Event{T: eventStatus, Text: content})
 	return "", nil
 }
 
@@ -273,12 +279,12 @@ func (t *Terminal) Manifest() contracts.Manifest {
 }
 
 func (t *Terminal) Post(_ context.Context, conv contracts.Conversation, text string) (contracts.MessageID, error) {
-	t.EmitTo(conv, contracts.Event{T: "reply", Text: text, Done: true})
+	t.EmitTo(conv, contracts.Event{T: eventReply, Text: text, Done: true})
 	return "", nil
 }
 
 func (t *Terminal) Reply(_ context.Context, conv contracts.Conversation, _ contracts.MessageID, text string) (contracts.MessageID, error) {
-	t.EmitTo(conv, contracts.Event{T: "reply", Text: text, Done: true})
+	t.EmitTo(conv, contracts.Event{T: eventReply, Text: text, Done: true})
 	return "", nil
 }
 
@@ -292,7 +298,7 @@ func (t *Terminal) Menu(_ context.Context, conv contracts.Conversation, _ contra
 	for _, o := range opts {
 		text.WriteString("\n  • " + o.Value + ": " + o.Label)
 	}
-	t.EmitTo(conv, contracts.Event{T: "status", Text: text.String()})
+	t.EmitTo(conv, contracts.Event{T: eventStatus, Text: text.String()})
 	return nil
 }
 
@@ -304,7 +310,7 @@ func (t *Terminal) EmitTo(conv contracts.Conversation, e contracts.Event) {
 // Emit (legacy EventSink) routes to the default single channel. The hub calls
 // this when it sees only EventSink; RoutedEventSink takes priority.
 func (t *Terminal) Emit(e contracts.Event) {
-	t.emit(tui.RoutedEvent{Conv: contracts.Conversation{Gateway: "terminal", ID: ChannelID}, Event: e})
+	t.emit(tui.RoutedEvent{Conv: contracts.Conversation{Gateway: Kind, ID: ChannelID}, Event: e})
 }
 
 func (t *Terminal) emit(re tui.RoutedEvent) {
@@ -313,7 +319,7 @@ func (t *Terminal) emit(re tui.RoutedEvent) {
 		return
 	default:
 	}
-	if re.Event.T == "closed" || (re.Event.T == "reply" && re.Event.Done) {
+	if re.Event.T == "closed" || (re.Event.T == eventReply && re.Event.Done) {
 		select {
 		case t.out <- re:
 		case <-time.After(2 * time.Second):
@@ -382,7 +388,7 @@ func (t *Terminal) Control() contracts.SessionControl {
 }
 
 func withTerminalDefault(args []string) []string {
-	if len(args) < 2 || args[0] != "session" || args[1] != "create" {
+	if len(args) < 2 || args[0] != sessionVerb || args[1] != "create" {
 		return args
 	}
 	for _, a := range args {
@@ -398,10 +404,10 @@ func withTerminalDefault(args []string) []string {
 }
 
 var terminalVerbs = map[string]bool{
-	"session": true,
-	"agent":   true,
-	"memory":  true,
-	"models":  true,
+	sessionVerb: true,
+	"agent":     true,
+	"memory":    true,
+	"models":    true,
 }
 
 // OperatorVerb reports whether a command's leading verb is reachable from a
@@ -500,12 +506,12 @@ func (t *Terminal) ForumPost(ctx context.Context, parentID, name, _ string) (str
 }
 
 func (t *Terminal) Archive(_ context.Context, id string) error {
-	t.EmitTo(contracts.Conversation{Gateway: "terminal", ID: id}, contracts.Event{T: "closed"})
+	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: id}, contracts.Event{T: "closed"})
 	return nil
 }
 
 func (t *Terminal) Send(_ context.Context, channelID, content string) error {
-	t.EmitTo(contracts.Conversation{Gateway: "terminal", ID: channelID}, contracts.Event{T: "status", Text: content})
+	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: channelID}, contracts.Event{T: eventStatus, Text: content})
 	return nil
 }
 
@@ -525,7 +531,7 @@ func slug(s string) string {
 	}
 	out := strings.Trim(b.String(), "-")
 	if out == "" {
-		return "session"
+		return sessionVerb
 	}
 	return out
 }

@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const codeFence = "```"
+
 const (
 	diffAdd     = "add"
 	diffDel     = "del"
@@ -196,9 +198,9 @@ func codeBlocks(text string) []codeBlock {
 	for _, ln := range strings.Split(text, "\n") {
 		fence := strings.TrimSpace(ln)
 		switch {
-		case cur == nil && strings.HasPrefix(fence, "```"):
-			cur = &codeBlock{lang: strings.TrimPrefix(fence, "```")}
-		case cur != nil && fence == "```":
+		case cur == nil && strings.HasPrefix(fence, codeFence):
+			cur = &codeBlock{lang: strings.TrimPrefix(fence, codeFence)}
+		case cur != nil && fence == codeFence:
 			cur.body = strings.Join(buf, "\n")
 			out, cur, buf = append(out, *cur), nil, nil
 		case cur != nil:
@@ -222,17 +224,17 @@ func foldCodeBlocks(text string) string {
 	for _, ln := range strings.Split(text, "\n") {
 		fence := strings.TrimSpace(ln)
 		switch {
-		case !inFence && strings.HasPrefix(fence, "```"):
-			inFence, lang, buf = true, strings.TrimPrefix(fence, "```"), nil
-		case inFence && fence == "```":
+		case !inFence && strings.HasPrefix(fence, codeFence):
+			inFence, lang, buf = true, strings.TrimPrefix(fence, codeFence), nil
+		case inFence && fence == codeFence:
 			inFence = false
 			if len(buf) > foldThreshold {
 				out = append(out, foldSummary(lang, len(buf)))
 				continue
 			}
-			out = append(out, "```"+lang)
+			out = append(out, codeFence+lang)
 			out = append(out, buf...)
-			out = append(out, "```")
+			out = append(out, codeFence)
 		case inFence:
 			buf = append(buf, ln)
 		default:
@@ -240,7 +242,7 @@ func foldCodeBlocks(text string) string {
 		}
 	}
 	if inFence {
-		out = append(out, "```"+lang)
+		out = append(out, codeFence+lang)
 		out = append(out, buf...)
 	}
 	return strings.Join(out, "\n")

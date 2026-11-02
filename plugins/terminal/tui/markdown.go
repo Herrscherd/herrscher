@@ -95,7 +95,7 @@ func splitDiffs(text string) []segment {
 		case !inDiff && (fence == "```diff" || fence == "~~~diff"):
 			flush(false)
 			inDiff = true
-		case inDiff && (fence == "```" || fence == "~~~"):
+		case inDiff && (fence == codeFence || fence == "~~~"):
 			flush(true)
 			inDiff = false
 		default:

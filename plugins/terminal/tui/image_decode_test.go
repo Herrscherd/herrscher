@@ -120,7 +120,7 @@ func TestDownscaleBringsALargeImageUnderThePreviewCap(t *testing.T) {
 		t.Fatalf("fixture is not large enough to exercise the cap (%d bytes)", len(source))
 	}
 
-	small := downscale(big, previewRows)
+	small := downscale(big)
 	if small.Bounds().Dy() >= big.Bounds().Dy() {
 		t.Fatalf("downscale left the image at %v", small.Bounds())
 	}
@@ -135,14 +135,14 @@ func TestDownscaleBringsALargeImageUnderThePreviewCap(t *testing.T) {
 
 func TestDownscaleLeavesASmallImageAlone(t *testing.T) {
 	src := testImage(8, 8)
-	if got := downscale(src, previewRows); got != src {
+	if got := downscale(src); got != src {
 		t.Fatalf("a small image must be returned untouched")
 	}
 }
 
 func TestDownscaleBoundsAWideImageToo(t *testing.T) {
 	wide := image.NewRGBA(image.Rect(0, 0, 20000, 40))
-	got := downscale(wide, previewRows).Bounds()
+	got := downscale(wide).Bounds()
 	if got.Dx() > maxPreviewWidth {
 		t.Fatalf("a wide image must be bounded on width too, got %v", got)
 	}

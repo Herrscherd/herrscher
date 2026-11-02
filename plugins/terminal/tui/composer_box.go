@@ -8,7 +8,7 @@ import (
 
 const composerBoxMinWidth = 60
 
-func boxRunes(supported bool) (topLeft, topRight, bottomLeft, bottomRight, horizontal, vertical string) {
+func boxRunes(supported bool) (string, string, string, string, string, string) {
 	if !supported {
 		return "+", "+", "+", "+", "-", "|"
 	}

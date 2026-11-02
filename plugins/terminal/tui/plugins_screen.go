@@ -70,11 +70,11 @@ const (
 
 const pluginsMax = 10
 
-func pluginsWindow(idx, n int) (start, end int) {
+func pluginsWindow(idx, n int) (int, int) {
 	if n <= pluginsMax {
 		return 0, n
 	}
-	start = idx - pluginsMax/2
+	start := idx - pluginsMax/2
 	if start > n-pluginsMax {
 		start = n - pluginsMax
 	}
@@ -124,7 +124,7 @@ func (m *model) openPlugins() tea.Cmd {
 	}
 }
 
-func (m *model) handlePluginsMsg(msg tea.Msg) (tea.Cmd, bool) {
+func (m *model) handlePluginsMsg(msg tea.Msg) bool {
 	switch msg := msg.(type) {
 	case pluginsListedMsg:
 		m.pluginsRows = msg.rows
@@ -156,11 +156,11 @@ func (m *model) handlePluginsMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.pluginsNotice = msg.err.Error()
 		m.pluginsMode = pluginsDone
 	default:
-		return nil, false
+		return false
 	}
 	m.applySize()
 	m.syncViewport()
-	return nil, true
+	return true
 }
 
 func (m *model) handlePluginsKey(msg tea.KeyMsg) tea.Cmd {

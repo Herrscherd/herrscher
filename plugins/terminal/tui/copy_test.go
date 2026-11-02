@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func conversation(m *model) *tab {
+func conversation(m *model) {
 	tb := m.ensureTab("a")
 	m.active = "a"
 	tb.appendEntry(entry{role: roleYou, text: "first question"})
@@ -17,7 +17,6 @@ func conversation(m *model) *tab {
 	tb.appendEntry(entry{role: roleThinking, text: "hmm"})
 	tb.appendEntry(entry{role: roleAgent, text: "second answer"})
 	tb.appendEntry(entry{role: roleCost, text: "$0.01"})
-	return tb
 }
 
 func TestCopyTakesTheLastAnswerByDefault(t *testing.T) {

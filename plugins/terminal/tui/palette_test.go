@@ -2,10 +2,10 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -65,15 +65,18 @@ func TestPaletteViewShowsALateSelection(t *testing.T) {
 	}
 }
 
-func TestLocalCommandsAreAllHandledLocally(t *testing.T) {
-	src, err := os.ReadFile("tui.go")
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestLocalCommandsAreNeverDispatched(t *testing.T) {
 	for _, c := range localCommands() {
-		verb := strings.Fields(c.Name)[0]
-		if !strings.Contains(string(src), `args[0] == "`+verb+`"`) {
-			t.Errorf("/%s is advertised as local but handleEnter never intercepts %q", c.Name, verb)
+		be := &fakeBackend{}
+		be.sessions = []contracts.SessionInfo{{Name: "avant", ChannelID: "c1"}}
+		m := newModel(be)
+		m.ensureTab("c1")
+		m.active = "c1"
+		m.syncTabs()
+		m.input.SetValue("/" + c.Name)
+		runCmd(m.handleEnter())
+		if len(be.dispatched) != 0 {
+			t.Errorf("/%s is advertised as local but was dispatched: %v", c.Name, be.dispatched)
 		}
 	}
 }

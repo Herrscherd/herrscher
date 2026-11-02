@@ -23,7 +23,7 @@ func todoPanel(items []contracts.TodoItem, width int) []string {
 	done, active := 0, 0
 	for i, it := range items {
 		switch it.State {
-		case "done":
+		case stateDone:
 			done++
 		case "active":
 			active = i
@@ -47,7 +47,7 @@ func todoPanel(items []contracts.TodoItem, width int) []string {
 func todoRow(it contracts.TodoItem, width int) string {
 	mark, style := "·", dimStyle
 	switch it.State {
-	case "done":
+	case stateDone:
 		mark, style = "✓", greenStyle
 	case "active":
 		mark, style = "◆", accentStyle

@@ -49,7 +49,7 @@ func hostAllowed(host string, allow []string) bool {
 }
 
 var imageExts = map[string]bool{
-	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
+	".png": true, ".jpg": true, ".jpeg": true, extGIF: true, ".webp": true,
 }
 
 func imageURLs(text string) []string {

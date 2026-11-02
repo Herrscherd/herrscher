@@ -38,7 +38,7 @@ func findLinks(lines []string) []Link {
 	var out []Link
 	inFence := false
 	for i, ln := range lines {
-		if fence := strings.TrimSpace(ln); strings.HasPrefix(fence, "```") || strings.HasPrefix(fence, "~~~") {
+		if fence := strings.TrimSpace(ln); strings.HasPrefix(fence, codeFence) || strings.HasPrefix(fence, "~~~") {
 			inFence = !inFence
 			continue
 		}

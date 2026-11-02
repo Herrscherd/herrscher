@@ -34,24 +34,32 @@ func escapeEnd(s string, i int) int {
 	}
 	switch s[i+1] {
 	case '[':
-		for j := i + oscIntroLen; j < len(s); j++ {
-			if s[j] >= 0x40 && s[j] <= 0x7e {
-				return j + 1
-			}
-		}
-		return len(s)
+		return csiEnd(s, i)
 	case ']', 'P', '_', '^', 'X':
-		for j := i + oscIntroLen; j < len(s); j++ {
-			if s[j] == ctrlBEL {
-				return j + 1
-			}
-			if s[j] == 0x1b && j+1 < len(s) && s[j+1] == '\\' {
-				return j + stTerminatorLen
-			}
-		}
-		return len(s)
+		return stringEnd(s, i)
 	}
 	return i + oscIntroLen
+}
+
+func csiEnd(s string, i int) int {
+	for j := i + oscIntroLen; j < len(s); j++ {
+		if s[j] >= 0x40 && s[j] <= 0x7e {
+			return j + 1
+		}
+	}
+	return len(s)
+}
+
+func stringEnd(s string, i int) int {
+	for j := i + oscIntroLen; j < len(s); j++ {
+		if s[j] == ctrlBEL {
+			return j + 1
+		}
+		if s[j] == 0x1b && j+1 < len(s) && s[j+1] == '\\' {
+			return j + stTerminatorLen
+		}
+	}
+	return len(s)
 }
 
 func visibleText(s string) string {

@@ -44,60 +44,72 @@ func writeStdout(sequence string) error {
 	return err
 }
 
+const (
+	modShift = 1
+	modAlt   = 2
+	modCtrl  = 4
+)
+
 func legacyKey(seq []byte) []byte {
 	fields := strings.Split(string(seq[2:len(seq)-1]), ";")
 	code, err := strconv.Atoi(strings.SplitN(fields[0], ":", maxColonFields)[0])
 	if err != nil || code <= 0 {
 		return nil
 	}
-	mods := 1
-	if len(fields) > 1 {
-		parts := strings.SplitN(fields[1], ":", maxColonFields)
-		if len(parts) == 2 && parts[1] == keyRelease {
-			return nil
-		}
-		if m, err := strconv.Atoi(parts[0]); err == nil && m > 0 {
-			mods = withoutLocks(m)
-		}
+	mods, released := legacyKeyMods(fields)
+	if released {
+		return nil
 	}
 	mask := mods - 1
-	const (
-		modShift = 1
-		modAlt   = 2
-		modCtrl  = 4
-	)
-
-	var b []byte
-	switch code {
-	case ctrlCR:
-		b = []byte{'\r'}
-	case ctrlHT:
-		b = []byte{'\t'}
-	case ctrlESC:
-		b = []byte{ctrlESC}
-	case ctrlDEL:
-		b = []byte{0x7f}
-	default:
-		if code > utf8.MaxRune {
-			return nil
-		}
-		r := rune(code)
-		if mask&modCtrl != 0 && r >= 'a' && r <= 'z' {
-			b = []byte{byte(r) & 0x1f}
-		} else {
-			if mask&modShift != 0 {
-				r = toUpper(r)
-			}
-			b = []byte(string(r))
-		}
+	b, ok := legacyKeyBytes(code, mask)
+	if !ok {
+		return nil
 	}
-	if code == 13 && mask&modShift != 0 {
+	if code == ctrlCR && mask&modShift != 0 {
 		return []byte{ctrlESC, '\r'}
 	}
 	if mask&modAlt != 0 {
 		return append([]byte{ctrlESC}, b...)
 	}
 	return b
+}
+
+func legacyKeyMods(fields []string) (int, bool) {
+	if len(fields) < 2 {
+		return 1, false
+	}
+	parts := strings.SplitN(fields[1], ":", maxColonFields)
+	if len(parts) == 2 && parts[1] == keyRelease {
+		return 0, true
+	}
+	if m, err := strconv.Atoi(parts[0]); err == nil && m > 0 {
+		return withoutLocks(m), false
+	}
+	return 1, false
+}
+
+func legacyKeyBytes(code, mask int) ([]byte, bool) {
+	switch code {
+	case ctrlCR:
+		return []byte{'\r'}, true
+	case ctrlHT:
+		return []byte{'\t'}, true
+	case ctrlESC:
+		return []byte{ctrlESC}, true
+	case ctrlDEL:
+		return []byte{ctrlDEL}, true
+	}
+	if code > utf8.MaxRune {
+		return nil, false
+	}
+	r := rune(code)
+	if mask&modCtrl != 0 && r >= 'a' && r <= 'z' {
+		return []byte{byte(r) & 0x1f}, true
+	}
+	if mask&modShift != 0 {
+		r = toUpper(r)
+	}
+	return []byte(string(r)), true
 }
 
 func legacyFunc(seq []byte) []byte {
@@ -116,22 +128,38 @@ func legacyFunc(seq []byte) []byte {
 			return seq
 		}
 	}
-	mods := ""
-	if len(fields) > 1 {
-		parts := strings.SplitN(fields[1], ":", maxColonFields)
-		if len(parts) == 2 && parts[1] == keyRelease {
-			return nil
-		}
-		if parts[0] != "" {
-			m, err := strconv.Atoi(parts[0])
-			if err != nil || m <= 0 {
-				return seq
-			}
-			if m = withoutLocks(m); m > 1 {
-				mods = strconv.Itoa(m)
-			}
-		}
+	mods, released, ok := legacyFuncMods(fields)
+	if released {
+		return nil
 	}
+	if !ok {
+		return seq
+	}
+	return legacyFuncSequence(seq, final, number, mods)
+}
+
+func legacyFuncMods(fields []string) (string, bool, bool) {
+	if len(fields) < 2 {
+		return "", false, true
+	}
+	parts := strings.SplitN(fields[1], ":", maxColonFields)
+	if len(parts) == 2 && parts[1] == keyRelease {
+		return "", true, true
+	}
+	if parts[0] == "" {
+		return "", false, true
+	}
+	m, err := strconv.Atoi(parts[0])
+	if err != nil || m <= 0 {
+		return "", false, false
+	}
+	if m = withoutLocks(m); m > 1 {
+		return strconv.Itoa(m), false, true
+	}
+	return "", false, true
+}
+
+func legacyFuncSequence(seq []byte, final byte, number, mods string) []byte {
 	if final == '~' {
 		if number == "" {
 			return seq
@@ -205,55 +233,68 @@ func (f *filteredStdin) Read(p []byte) (int, error) {
 
 func (f *filteredStdin) feed(b []byte) {
 	for i := 0; i < len(b); i++ {
-		c := b[i]
 		switch f.state {
 		case filterGround:
-			if c != ctrlESC {
-				f.out = append(f.out, c)
-				continue
-			}
-			if i+1 >= len(b) {
-				f.out = append(f.out, c)
-				continue
-			}
-			switch b[i+1] {
-			case ']':
-				f.state = filterOSC
-				i++
-			case '[':
-				f.state = filterCSI
-				f.seq = append(f.seq[:0], ctrlESC, '[')
-				i++
-			default:
-				f.out = append(f.out, c)
-			}
+			i = f.feedGround(b, i)
 		case filterOSC:
-			switch c {
-			case ctrlBEL:
-				f.state = filterGround
-			case ctrlESC:
-				f.state = filterOSCEsc
-			}
+			f.feedOSC(b[i])
 		case filterOSCEsc:
 			f.state = filterGround
 		case filterCSI:
-			f.seq = append(f.seq, c)
-			switch {
-			case c >= 0x40 && c <= 0x7e:
-				switch c {
-				case 'R':
-				case 'u':
-					f.out = append(f.out, legacyKey(f.seq)...)
-				default:
-					f.out = append(f.out, legacyFunc(f.seq)...)
-				}
-				f.seq = f.seq[:0]
-				f.state = filterGround
-			case len(f.seq) > csiSeqCap:
-				f.out = append(f.out, f.seq...)
-				f.seq = f.seq[:0]
-				f.state = filterGround
-			}
+			f.feedCSI(b[i])
 		}
 	}
+}
+
+func (f *filteredStdin) feedGround(b []byte, i int) int {
+	c := b[i]
+	if c != ctrlESC || i+1 >= len(b) {
+		f.out = append(f.out, c)
+		return i
+	}
+	switch b[i+1] {
+	case ']':
+		f.state = filterOSC
+		return i + 1
+	case '[':
+		f.state = filterCSI
+		f.seq = append(f.seq[:0], ctrlESC, '[')
+		return i + 1
+	default:
+		f.out = append(f.out, c)
+		return i
+	}
+}
+
+func (f *filteredStdin) feedOSC(c byte) {
+	switch c {
+	case ctrlBEL:
+		f.state = filterGround
+	case ctrlESC:
+		f.state = filterOSCEsc
+	}
+}
+
+func (f *filteredStdin) feedCSI(c byte) {
+	f.seq = append(f.seq, c)
+	switch {
+	case c >= 0x40 && c <= 0x7e:
+		f.finishCSI(c)
+	case len(f.seq) > csiSeqCap:
+		f.out = append(f.out, f.seq...)
+		f.seq = f.seq[:0]
+		f.state = filterGround
+	}
+}
+
+func (f *filteredStdin) finishCSI(final byte) {
+	switch final {
+	case 'R':
+	case 'u':
+		f.out = append(f.out, legacyKey(f.seq)...)
+	default:
+		f.out = append(f.out, legacyFunc(f.seq)...)
+	}
+	f.seq = f.seq[:0]
+	f.state = filterGround
 }

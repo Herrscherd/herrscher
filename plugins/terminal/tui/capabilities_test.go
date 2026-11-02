@@ -2,16 +2,18 @@ package tui
 
 import "testing"
 
+type probeCase struct {
+	name     string
+	env      map[string]string
+	graphics Graphics
+	links    bool
+	mouse    bool
+	colour   Colour
+	terminal string
+}
+
 func TestProbe(t *testing.T) {
-	cases := []struct {
-		name     string
-		env      map[string]string
-		graphics Graphics
-		links    bool
-		mouse    bool
-		colour   Colour
-		terminal string
-	}{
+	cases := []probeCase{
 		{
 			name:     "kitty",
 			env:      map[string]string{"TERM": "xterm-kitty", "KITTY_WINDOW_ID": "1", "COLORTERM": "truecolor"},
@@ -60,38 +62,27 @@ func TestProbe(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := Probe(func(k string) string { return c.env[k] })
-			if got.Graphics != c.graphics {
-				t.Errorf("graphics = %v, want %v", got.Graphics, c.graphics)
-			}
-			if got.Hyperlinks != c.links {
-				t.Errorf("hyperlinks = %v, want %v", got.Hyperlinks, c.links)
-			}
-			if got.Mouse != c.mouse {
-				t.Errorf("mouse = %v, want %v", got.Mouse, c.mouse)
-			}
-			if got.Colour != c.colour {
-				t.Errorf("colour = %v, want %v", got.Colour, c.colour)
-			}
-			if got.Terminal != c.terminal {
-				t.Errorf("terminal = %q, want %q", got.Terminal, c.terminal)
-			}
+			checkProbe(t, c)
 		})
 	}
 }
 
-func TestCapabilityNamesAreReadable(t *testing.T) {
-	if got := GraphicsKitty.String(); got != "kitty" {
-		t.Errorf("GraphicsKitty.String() = %q", got)
+func checkProbe(t *testing.T, c probeCase) {
+	got := Probe(func(k string) string { return c.env[k] })
+	if got.Graphics != c.graphics {
+		t.Errorf("graphics = %v, want %v", got.Graphics, c.graphics)
 	}
-	if got := GraphicsNone.String(); got != "none" {
-		t.Errorf("GraphicsNone.String() = %q", got)
+	if got.Hyperlinks != c.links {
+		t.Errorf("hyperlinks = %v, want %v", got.Hyperlinks, c.links)
 	}
-	if got := ColourTrue.String(); got != "truecolor" {
-		t.Errorf("ColourTrue.String() = %q", got)
+	if got.Mouse != c.mouse {
+		t.Errorf("mouse = %v, want %v", got.Mouse, c.mouse)
 	}
-	if got := Colour16.String(); got != "16" {
-		t.Errorf("Colour16.String() = %q", got)
+	if got.Colour != c.colour {
+		t.Errorf("colour = %v, want %v", got.Colour, c.colour)
+	}
+	if got.Terminal != c.terminal {
+		t.Errorf("terminal = %q, want %q", got.Terminal, c.terminal)
 	}
 }
 

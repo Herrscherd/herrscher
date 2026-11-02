@@ -191,41 +191,54 @@ func parse(c contracts.Cmd, rest []string) (contracts.Input, error) {
 	in := contracts.Input{Args: map[string]string{}}
 	for i := 0; i < len(rest); i++ {
 		tok := rest[i]
-		if tok == "--json" {
-			in.JSON = true
-			continue
-		}
-		if !strings.HasPrefix(tok, "--") {
-			in.Rest = append(in.Rest, tok)
-			continue
-		}
-		name, inline, isInline := strings.Cut(strings.TrimPrefix(tok, "--"), "=")
-		p, ok := isParam(c, name)
-		if !ok {
-			return in, fmt.Errorf("%s: %w --%s", strings.Join(c.Path, " "), errUnknownFlag, name)
-		}
-		if isInline {
-			in.Args[name] = inline
-			continue
-		}
 		switch {
-		case i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--"):
-			in.Args[name] = rest[i+1]
-			i++
-		case p.Required || p.ValueRequired:
-			return in, fmt.Errorf("%s: flag --%s %w", strings.Join(c.Path, " "), name, errFlagNeedsValue)
+		case tok == "--json":
+			in.JSON = true
+		case !strings.HasPrefix(tok, "--"):
+			in.Rest = append(in.Rest, tok)
 		default:
-			in.Args[name] = "true"
-		}
-	}
-	for _, p := range c.Params {
-		if p.Required {
-			if _, ok := in.Args[p.Name]; !ok {
-				return in, fmt.Errorf("%s: %w --%s", strings.Join(c.Path, " "), errMissingRequired, p.Name)
+			consumed, err := parseFlag(c, rest, i, in)
+			if err != nil {
+				return in, err
 			}
+			i += consumed
 		}
 	}
-	return in, nil
+	return in, checkRequired(c, in)
+}
+
+func parseFlag(c contracts.Cmd, rest []string, i int, in contracts.Input) (int, error) {
+	name, inline, isInline := strings.Cut(strings.TrimPrefix(rest[i], "--"), "=")
+	p, ok := isParam(c, name)
+	if !ok {
+		return 0, fmt.Errorf("%s: %w --%s", strings.Join(c.Path, " "), errUnknownFlag, name)
+	}
+	if isInline {
+		in.Args[name] = inline
+		return 0, nil
+	}
+	switch {
+	case i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--"):
+		in.Args[name] = rest[i+1]
+		return 1, nil
+	case p.Required || p.ValueRequired:
+		return 0, fmt.Errorf("%s: flag --%s %w", strings.Join(c.Path, " "), name, errFlagNeedsValue)
+	default:
+		in.Args[name] = "true"
+		return 0, nil
+	}
+}
+
+func checkRequired(c contracts.Cmd, in contracts.Input) error {
+	for _, p := range c.Params {
+		if !p.Required {
+			continue
+		}
+		if _, ok := in.Args[p.Name]; !ok {
+			return fmt.Errorf("%s: %w --%s", strings.Join(c.Path, " "), errMissingRequired, p.Name)
+		}
+	}
+	return nil
 }
 
 // Spec is one command's declared shape, without its Run. Help() renders the same

@@ -15,7 +15,16 @@ func sixelEscape(img image.Image) string {
 	if w <= 0 || h <= 0 {
 		return ""
 	}
+	idx, colours := quantiseSixel(img, w, h)
+	var s strings.Builder
+	writeSixelHeader(&s, w, h, colours)
+	writeSixelBands(&s, idx, w, h, colours)
+	s.WriteString("\x1b\\")
+	return s.String()
+}
 
+func quantiseSixel(img image.Image, w, h int) ([]int, []int) {
+	b := img.Bounds()
 	idx := make([]int, w*h)
 	present := map[int]bool{}
 	for y := range h {
@@ -31,8 +40,10 @@ func sixelEscape(img image.Image) string {
 		colours = append(colours, i)
 	}
 	sort.Ints(colours)
+	return idx, colours
+}
 
-	var s strings.Builder
+func writeSixelHeader(s *strings.Builder, w, h int, colours []int) {
 	s.WriteString("\x1bPq")
 	s.WriteString(`"1;1;`)
 	s.WriteString(strconv.Itoa(w))
@@ -47,7 +58,9 @@ func sixelEscape(img image.Image) string {
 		bl := i % sixelCubeSide
 		s.WriteString(sixelPercent(r) + ";" + sixelPercent(g) + ";" + sixelPercent(bl))
 	}
+}
 
+func writeSixelBands(s *strings.Builder, idx []int, w, h int, colours []int) {
 	for band := 0; band < h; band += 6 {
 		first := true
 		for _, colour := range colours {
@@ -67,8 +80,6 @@ func sixelEscape(img image.Image) string {
 			s.WriteByte('-')
 		}
 	}
-	s.WriteString("\x1b\\")
-	return s.String()
 }
 
 func sixelBand(idx []int, w, h, band, colour int) string {

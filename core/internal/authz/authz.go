@@ -85,39 +85,47 @@ type definition struct {
 	plugins  bool
 }
 
-var definitions = map[Role]definition{
-	RoleOwner:    {allowAll: true, plugins: true},
-	RoleOperator: {allowAll: true, deny: []string{"role *"}, plugins: true},
-	RoleObserver: {allow: []string{
-		"commands", "whoami",
-		"session list", "session info", "session log", "session who", "session scrollback",
-		"agent list", "agent show",
-		"models list",
-		"approve list",
-		"host list",
-		"schedule list",
-		"memory search", "memory locate",
-	}},
-	RoleAgent: {
-		allow: []string{
+func definitionOf(role Role) (definition, bool) {
+	switch role {
+	case RoleOwner:
+		return definition{allowAll: true, plugins: true}, true
+	case RoleOperator:
+		return definition{allowAll: true, deny: []string{"role *"}, plugins: true}, true
+	case RoleObserver:
+		return definition{allow: []string{
 			"commands", "whoami",
-			"session send", "session seed",
 			"session list", "session info", "session log", "session who", "session scrollback",
 			"agent list", "agent show",
 			"models list",
-			"memory search", "memory locate", "memory record", "memory unlink", "memory restore",
-			"approve ask",
-		},
-		deny: []string{
-			"approve list", "approve allow", "approve deny", "approve rule", "approve mode",
-			"host *", "role *", "schedule *", "service *", "set *", "plugin *",
-			"skill approve", "memory forget",
-			"session create",
-			"session close", "session archive", "session resume", "session interrupt",
-			"session switch", "session set-budget",
-		},
-		plugins: true,
-	},
+			"approve list",
+			"host list",
+			"schedule list",
+			"memory search", "memory locate",
+		}}, true
+	case RoleAgent:
+		return definition{
+			allow: []string{
+				"commands", "whoami",
+				"session send", "session seed",
+				"session list", "session info", "session log", "session who", "session scrollback",
+				"agent list", "agent show",
+				"models list",
+				"memory search", "memory locate", "memory record", "memory unlink", "memory restore",
+				"approve ask",
+			},
+			deny: []string{
+				"approve list", "approve allow", "approve deny", "approve rule", "approve mode",
+				"host *", "role *", "schedule *", "service *", "set *", "plugin *",
+				"skill approve", "memory forget",
+				"session create",
+				"session close", "session archive", "session resume", "session interrupt",
+				"session switch", "session set-budget",
+			},
+			plugins: true,
+		}, true
+	case RoleNone:
+	}
+	return definition{}, false
 }
 
 var grantOrder = []Role{RoleObserver, RoleOperator, RoleOwner}
@@ -142,7 +150,7 @@ func Decide(r Request, role Role) (bool, string) {
 }
 
 func permits(role Role, verb string, contributed bool) bool {
-	def, ok := definitions[role]
+	def, ok := definitionOf(role)
 	if !ok {
 		return false
 	}
@@ -230,6 +238,7 @@ func Grantable(name string) bool {
 	switch Role(name) {
 	case RoleOwner, RoleOperator, RoleObserver:
 		return true
+	case RoleNone, RoleAgent:
 	}
 	return false
 }
@@ -246,13 +255,13 @@ func GrantableRoles() []string {
 // found: a name nobody defines falls back to observer, and falling back in
 // silence is how a typo becomes a permission nobody can explain.
 func Known(name string) bool {
-	_, ok := definitions[Role(name)]
+	_, ok := definitionOf(Role(name))
 	return ok
 }
 
 // Describe renders what a role runs, for `role show` and `role list`.
 func Describe(role Role) string {
-	def, ok := definitions[role]
+	def, ok := definitionOf(role)
 	if !ok {
 		return "no role: herrscher decides nothing, and the gateway's own rules stand alone"
 	}

@@ -67,8 +67,8 @@ func EventsSocketPath(instanceID string) string {
 	return filepath.Join(os.TempDir(), name)
 }
 
-func listenCommandSocket(path string) (net.Listener, error) {
-	return listenRestricted(path)
+func listenCommandSocket(ctx context.Context, path string) (net.Listener, error) {
+	return listenRestricted(ctx, path)
 }
 
 func dialCommandSocket(ctx context.Context, path string) (net.Conn, error) {
@@ -76,17 +76,17 @@ func dialCommandSocket(ctx context.Context, path string) (net.Conn, error) {
 	return d.DialContext(ctx, "unix", path)
 }
 
-func listenRestricted(path string) (net.Listener, error) {
+func listenRestricted(ctx context.Context, path string) (net.Listener, error) {
 	staging, err := os.MkdirTemp(filepath.Dir(path), ".hs-sock-")
 	if err != nil {
-		return listenAndRestrict(path)
+		return listenAndRestrict(ctx, path)
 	}
 	defer func() { logCleanup(os.RemoveAll(staging)) }()
 	tmp := filepath.Join(staging, "s")
 	if len(tmp) > maxUnixSocketPath {
-		return listenAndRestrict(path)
+		return listenAndRestrict(ctx, path)
 	}
-	l, err := listenAndRestrict(tmp)
+	l, err := listenAndRestrict(ctx, tmp)
 	if err != nil {
 		return nil, err
 	}
@@ -100,8 +100,8 @@ func listenRestricted(path string) (net.Listener, error) {
 	return l, nil
 }
 
-func listenAndRestrict(path string) (net.Listener, error) {
-	l, err := net.Listen("unix", path)
+func listenAndRestrict(ctx context.Context, path string) (net.Listener, error) {
+	l, err := (&net.ListenConfig{}).Listen(ctx, "unix", path)
 	if err != nil {
 		return nil, err
 	}

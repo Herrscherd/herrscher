@@ -23,7 +23,7 @@ func tempRepo(t *testing.T) string {
 		{"git", "config", "user.name", "t"},
 		{"git", "commit", "-q", "--allow-empty", "-m", "root"},
 	} {
-		cmd := exec.Command(argv[0], argv[1:]...)
+		cmd := exec.CommandContext(t.Context(), argv[0], argv[1:]...)
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%v: %v: %s", argv, err, out)

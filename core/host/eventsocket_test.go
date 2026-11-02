@@ -92,7 +92,7 @@ func dialWithRetry(t *testing.T, path string) net.Conn {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		c, err := net.Dial("unix", path)
+		c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 		if err == nil {
 			return c
 		}

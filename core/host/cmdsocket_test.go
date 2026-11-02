@@ -38,7 +38,7 @@ func waitForSocket(t *testing.T, path string) {
 
 func sendCommand(t *testing.T, path string, req cmdRequest) cmdResponse {
 	t.Helper()
-	c, err := net.Dial("unix", path)
+	c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestCommandSocketRejectsMalformed(t *testing.T) {
 	go serveCommandSocket(ctx, path, disp)
 	waitForSocket(t, path)
 
-	c, err := net.Dial("unix", path)
+	c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestCommandSocketClosesSilentConnection(t *testing.T) {
 	go serveCommandSocketWithTimeout(ctx, path, &fakeDispatcher{out: "unused"}, 50*time.Millisecond)
 	waitForSocket(t, path)
 
-	c, err := net.Dial("unix", path)
+	c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestALongSessionNameStillGetsASocketThatBinds(t *testing.T) {
 	if len(p) > maxUnixSocketPath {
 		t.Fatalf("path is %d bytes, over the %d sun_path holds: %q", len(p), maxUnixSocketPath, p)
 	}
-	ln, err := net.Listen("unix", p)
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", p)
 	if err != nil {
 		t.Fatalf("listen %q: %v", p, err)
 	}

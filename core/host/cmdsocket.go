@@ -66,7 +66,7 @@ func serveCommandSocket(ctx context.Context, path string, disp dispatcher) {
 
 func serveCommandSocketWithTimeout(ctx context.Context, path string, disp dispatcher, readTimeout time.Duration) {
 	logCleanup(os.Remove(path))
-	ln, err := listenCommandSocket(path)
+	ln, err := listenCommandSocket(ctx, path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "command socket: listen %s: %v\n", path, err)
 		return

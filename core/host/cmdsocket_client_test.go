@@ -21,7 +21,7 @@ func (d *clientDispatcher) Dispatch(_ context.Context, argv []string) (string, e
 
 func TestDispatchLiveCommandRoundTrips(t *testing.T) {
 	path := CommandSocketPath(fmt.Sprintf("client-test-%d-%d", os.Getpid(), time.Now().UnixNano()))
-	ln, err := listenCommandSocket(path)
+	ln, err := listenCommandSocket(t.Context(), path)
 	if err != nil {
 		t.Fatalf("listenCommandSocket: %v", err)
 	}

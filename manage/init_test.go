@@ -2,7 +2,7 @@ package manage
 
 import (
 	"flag"
-	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -16,7 +16,7 @@ func TestSetPlugins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(got, mods) {
+	if !slices.Equal(got, mods) {
 		t.Fatalf("got %v, want %v", got, mods)
 	}
 }
@@ -35,7 +35,7 @@ func TestResolveStackDefault(t *testing.T) {
 		catalog["extractor"]["llm"],
 		catalog["skills"]["superset"],
 	}
-	if !reflect.DeepEqual(mods, want) {
+	if !slices.Equal(mods, want) {
 		t.Fatalf("got %v, want %v", mods, want)
 	}
 }
@@ -47,7 +47,7 @@ func TestResolveStackNoneDropsCategory(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{inTree[0], catalog["gateway"]["discord"]}
-	if !reflect.DeepEqual(mods, want) {
+	if !slices.Equal(mods, want) {
 		t.Fatalf("got %v, want %v", mods, want)
 	}
 }
@@ -59,7 +59,7 @@ func TestResolveStackExtrasDeduped(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{inTree[0], catalog["gateway"]["discord"], "example.com/x"}
-	if !reflect.DeepEqual(mods, want) {
+	if !slices.Equal(mods, want) {
 		t.Fatalf("got %v, want %v", mods, want)
 	}
 }
@@ -82,7 +82,7 @@ func TestResolveStackAllNoneKeepsInTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(mods, inTree) {
+	if !slices.Equal(mods, inTree) {
 		t.Fatalf("got %v, want %v", mods, inTree)
 	}
 }

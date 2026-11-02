@@ -2,7 +2,7 @@ package control
 
 import (
 	"bytes"
-	"reflect"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -34,7 +34,7 @@ func TestWriteThenScanRoundTrip(t *testing.T) {
 		t.Fatalf("got %d events, want %d (%v)", len(got), len(want), got)
 	}
 	for i := range want {
-		if !reflect.DeepEqual(got[i], want[i]) {
+		if !sameEvent(got[i], want[i]) {
 			t.Errorf("event %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}
@@ -80,4 +80,10 @@ func TestScanSkipsBlankLines(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("decoded %d events, want 1 (blank lines skipped)", count)
 	}
+}
+
+func sameEvent(a, b contracts.Event) bool {
+	ja, errA := json.Marshal(a)
+	jb, errB := json.Marshal(b)
+	return errA == nil && errB == nil && string(ja) == string(jb)
 }

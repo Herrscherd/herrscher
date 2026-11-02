@@ -9,7 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -198,7 +198,7 @@ func TestDispatchUnknownForwardsTheWholeArgv(t *testing.T) {
 	out, exit, err := dispatchUnknown(context.Background(), "some-kind", args, s.fwd)
 
 	want := []string{"some-kind", "channel", "read", "--limit", "5"}
-	if !reflect.DeepEqual(s.argv, want) {
+	if !slices.Equal(s.argv, want) {
 		t.Fatalf("forwarded argv = %v, want %v", s.argv, want)
 	}
 	if out != "two messages" || err != nil || exit != 0 {

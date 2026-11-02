@@ -232,7 +232,8 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 		return err
 	}
 	if out != "" {
-		fmt.Fprintln(os.Stdout, out)
+		_, err := fmt.Fprintln(os.Stdout, out)
+		return err
 	}
 	return nil
 }

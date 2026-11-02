@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/Herrscherd/herrscher/internal/errwriter"
 	"io"
 	"log/slog"
 	"os"
@@ -33,12 +34,17 @@ func parseExit(err error) int {
 // PluginCmd lists, adds, removes, pins or unpins a compiled-in plugin in the
 // managed plugins.go, rebuilding the binary on a change.
 func PluginCmd(ctx context.Context, args []string) int {
+	out, errOut := errwriter.New(os.Stdout), errwriter.New(os.Stderr)
+	return errwriter.Finish(pluginHost(ctx, out, errOut, args), out, errOut)
+}
+
+func pluginHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
 	fs := flag.NewFlagSet("plugin", flag.ContinueOnError)
 	hostDir := fs.String("host", "", "path to the host module")
 	noBuild := fs.Bool("no-build", false, "edit plugins.go but skip go get/build")
 	yes := fs.Bool("yes", false, "answer both confirmations without asking")
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: herrscher plugin <list|add|remove|pin|unpin> [module[@version]]")
+		errOut.Println("usage: herrscher plugin <list|add|remove|pin|unpin> [module[@version]]")
 		return 2
 	}
 	sub := args[0]
@@ -58,54 +64,54 @@ func PluginCmd(ctx context.Context, args []string) int {
 
 	dir, err := resolveHost(*hostDir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		errOut.Println(err)
 		return 1
 	}
 	manifest := filepath.Join(dir, "plugins.go")
 	src, err := os.ReadFile(manifest)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "read %s: %v\n", manifest, err)
+		errOut.Printf("read %s: %v\n", manifest, err)
 		return 1
 	}
 
 	switch sub {
 	case "list":
-		if err = listWithVersions(ctx, dir, string(src), os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+		if err = listWithVersions(ctx, dir, string(src), out); err != nil {
+			errOut.Println(err)
 			return 1
 		}
 		return 0
 
 	case "add", "remove":
 		if len(positionals) != 1 {
-			fmt.Fprintf(os.Stderr, "usage: herrscher plugin %s <module>\n", sub)
+			errOut.Printf("usage: herrscher plugin %s <module>\n", sub)
 			return 2
 		}
 		module, version := moduleArg(sub, positionals[0])
-		var out string
+		var rendered string
 		var changed bool
 		if sub == "add" {
-			out, changed, err = addPlugin(string(src), module)
+			rendered, changed, err = addPlugin(string(src), module)
 		} else {
-			out, changed, err = removePlugin(string(src), module)
+			rendered, changed, err = removePlugin(string(src), module)
 		}
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			errOut.Println(err)
 			return 1
 		}
 		if !changed && version == "" {
-			fmt.Fprintf(os.Stdout, "no change: %s already %s\n", module, pastTense(sub))
+			out.Printf("no change: %s already %s\n", module, pastTense(sub))
 			return 0
 		}
 		if *noBuild {
-			if err := os.WriteFile(manifest, []byte(out), 0o644); err != nil {
-				fmt.Fprintf(os.Stderr, "write %s: %v\n", manifest, err)
+			if err := os.WriteFile(manifest, []byte(rendered), 0o644); err != nil {
+				errOut.Printf("write %s: %v\n", manifest, err)
 				return 1
 			}
-			fmt.Fprintf(os.Stdout, "%s %s in %s\n", pastTense(sub), module, manifest)
-			fmt.Fprintln(os.Stdout, "skipped build (--no-build); run `go build` in the host to apply")
+			out.Printf("%s %s in %s\n", pastTense(sub), module, manifest)
+			out.Println("skipped build (--no-build); run `go build` in the host to apply")
 			if version != "" {
-				fmt.Fprintf(os.Stdout, "the version was not installed: %s@%s needs `go get`\n", module, version)
+				out.Printf("the version was not installed: %s@%s needs `go get`\n", module, version)
 			}
 			return 0
 		}
@@ -113,26 +119,26 @@ func PluginCmd(ctx context.Context, args []string) int {
 		if sub == "add" {
 			cmds = addCommands(module, version)
 		}
-		steps := append([]step{fileStep(manifest, out)}, cmdSteps(dir, cmds)...)
+		steps := append([]step{fileStep(manifest, rendered)}, cmdSteps(errOut, dir, cmds)...)
 		applied, err := apply(ctx, dir, addFindings(ctx, dir, module, version), osDecider(*yes), steps)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			errOut.Println(err)
 			return 1
 		}
 		if !applied {
-			fmt.Fprintln(os.Stdout, "aborted; nothing was written")
+			out.Println("aborted; nothing was written")
 			return 0
 		}
 		if !changed {
-			fmt.Fprintf(os.Stdout, "%s was already in %s; moved to %s\n", module, manifest, version)
+			out.Printf("%s was already in %s; moved to %s\n", module, manifest, version)
 			return 0
 		}
-		fmt.Fprintf(os.Stdout, "%s %s in %s\n", pastTense(sub), module, manifest)
+		out.Printf("%s %s in %s\n", pastTense(sub), module, manifest)
 		return 0
 
 	case "pin", "unpin":
 		if len(positionals) < 1 || len(positionals) > 2 || (sub == "unpin" && len(positionals) != 1) {
-			fmt.Fprintf(os.Stderr, "usage: herrscher plugin %s <module>%s\n", sub, pinUsageTail(sub))
+			errOut.Printf("usage: herrscher plugin %s <module>%s\n", sub, pinUsageTail(sub))
 			return 2
 		}
 		module, version := splitModuleVersion(positionals[0])
@@ -140,30 +146,30 @@ func PluginCmd(ctx context.Context, args []string) int {
 			version = positionals[1]
 		}
 		if err := compiledIn(dir, module); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			errOut.Println(err)
 			return 1
 		}
 		if sub == "pin" && version != "" {
-			steps := cmdSteps(dir, addCommands(module, version))
+			steps := cmdSteps(errOut, dir, addCommands(module, version))
 			applied, err := apply(ctx, dir, addFindings(ctx, dir, module, version), osDecider(*yes), steps)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
+				errOut.Println(err)
 				return 1
 			}
 			if !applied {
-				fmt.Fprintln(os.Stdout, "aborted; nothing was written and nothing was pinned")
+				out.Println("aborted; nothing was written and nothing was pinned")
 				return 0
 			}
 		}
 		if err := pinModule(dir, module, sub == "pin"); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			errOut.Println(err)
 			return 1
 		}
-		fmt.Fprintf(os.Stdout, "%sned %s\n", sub, module)
+		out.Printf("%sned %s\n", sub, module)
 		return 0
 
 	default:
-		fmt.Fprintf(os.Stderr, "unknown plugin subcommand %q\n", sub)
+		errOut.Printf("unknown plugin subcommand %q\n", sub)
 		return 2
 	}
 }
@@ -240,22 +246,22 @@ func updatePlan(mods []string, pins map[string]bool, installed map[string]string
 	return append(cmds, buildCommands()...), skipped
 }
 
-func cmdSteps(dir string, cmds [][]string) []step {
+func cmdSteps(errOut *errwriter.Writer, dir string, cmds [][]string) []step {
 	steps := make([]step, 0, len(cmds))
 	for _, c := range cmds {
-		steps = append(steps, cmdStep(dir, c[0], c[1:]...))
+		steps = append(steps, cmdStep(errOut, dir, c[0], c[1:]...))
 	}
 	return steps
 }
 
-func cmdStep(dir, name string, args ...string) step {
+func cmdStep(errOut *errwriter.Writer, dir, name string, args ...string) step {
 	return func(ctx context.Context) (string, error) {
 		var captured strings.Builder
 		cmd := exec.CommandContext(ctx, name, args...)
 		cmd.Dir = dir
 		cmd.Stdout = io.MultiWriter(os.Stdout, &captured)
 		cmd.Stderr = io.MultiWriter(os.Stderr, &captured)
-		fmt.Fprintf(os.Stderr, "+ %s %s\n", name, strings.Join(args, " "))
+		errOut.Printf("+ %s %s\n", name, strings.Join(args, " "))
 		err := cmd.Run()
 		return captured.String(), err
 	}
@@ -437,7 +443,7 @@ func pinModule(dir, module string, pinned bool) error {
 	return os.WriteFile(filepath.Join(dir, pinFile), []byte(writePins(pins)), 0o644)
 }
 
-func run(ctx context.Context, dir, name string, args ...string) int {
+func run(ctx context.Context, errOut *errwriter.Writer, dir, name string, args ...string) int {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
@@ -448,9 +454,9 @@ func run(ctx context.Context, dir, name string, args ...string) int {
 		line.WriteByte(' ')
 		line.WriteString(a)
 	}
-	fmt.Fprintln(os.Stderr, line.String())
+	errOut.Println(line.String())
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "%s failed: %v\n", name, err)
+		errOut.Printf("%s failed: %v\n", name, err)
 		return 1
 	}
 	return 0

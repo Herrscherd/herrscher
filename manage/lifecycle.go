@@ -3,7 +3,7 @@ package manage
 import (
 	"context"
 	"flag"
-	"fmt"
+	"github.com/Herrscherd/herrscher/internal/errwriter"
 	"os"
 	"path/filepath"
 )
@@ -13,6 +13,11 @@ import (
 // (which pulls the host's own source): here we refresh the blank-imported plugin
 // modules listed in plugins.go and re-tidy/rebuild the composition.
 func UpdateCmd(ctx context.Context, args []string) int {
+	out, errOut := errwriter.New(os.Stdout), errwriter.New(os.Stderr)
+	return errwriter.Finish(updateHost(ctx, out, errOut, args), out, errOut)
+}
+
+func updateHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	hostDir := fs.String("host", "", "path to the host module")
 	noBuild := fs.Bool("no-build", false, "go get -u the plugins but skip tidy/build")
@@ -23,27 +28,27 @@ func UpdateCmd(ctx context.Context, args []string) int {
 
 	dir, err := resolveHost(*hostDir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		errOut.Println(err)
 		return 1
 	}
 	src, err := os.ReadFile(filepath.Join(dir, "plugins.go"))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "read plugins.go: %v\n", err)
+		errOut.Printf("read plugins.go: %v\n", err)
 		return 1
 	}
 	mods, err := listPlugins(string(src))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		errOut.Println(err)
 		return 1
 	}
 	if len(mods) == 0 {
-		fmt.Fprintln(os.Stdout, "no plugins to update")
+		out.Println("no plugins to update")
 		return 0
 	}
 
 	pins, err := loadPins(dir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		errOut.Println(err)
 		return 1
 	}
 	installed, err := installedVersions(ctx, goToolchain{dir: dir}, mods)
@@ -52,10 +57,10 @@ func UpdateCmd(ctx context.Context, args []string) int {
 	}
 	cmds, skipped := updatePlan(mods, pins, installed)
 	for _, line := range skipped {
-		fmt.Fprintln(os.Stdout, line)
+		out.Println(line)
 	}
 	if cmds == nil {
-		fmt.Fprintln(os.Stdout, "every plugin is pinned; nothing to update")
+		out.Println("every plugin is pinned; nothing to update")
 		return 0
 	}
 
@@ -64,23 +69,23 @@ func UpdateCmd(ctx context.Context, args []string) int {
 			if c[1] != "get" {
 				continue
 			}
-			if code := run(ctx, dir, c[0], c[1:]...); code != 0 {
+			if code := run(ctx, errOut, dir, c[0], c[1:]...); code != 0 {
 				return code
 			}
 		}
-		fmt.Fprintln(os.Stdout, "updated plugins (--no-build); run `go mod tidy && go build` in the host to apply")
+		out.Println("updated plugins (--no-build); run `go mod tidy && go build` in the host to apply")
 		return 0
 	}
-	applied, err := apply(ctx, dir, nil, osDecider(*yes), cmdSteps(dir, cmds))
+	applied, err := apply(ctx, dir, nil, osDecider(*yes), cmdSteps(errOut, dir, cmds))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		errOut.Println(err)
 		return 1
 	}
 	if !applied {
-		fmt.Fprintln(os.Stdout, "aborted; nothing was written")
+		out.Println("aborted; nothing was written")
 		return 0
 	}
-	fmt.Fprintln(os.Stdout, "updated plugins and reinstalled the host; restart the service to run it")
+	out.Println("updated plugins and reinstalled the host; restart the service to run it")
 	return 0
 }
 
@@ -90,6 +95,11 @@ func UpdateCmd(ctx context.Context, args []string) int {
 // core/service, exposed by the host. Anything after `--` is forwarded verbatim
 // to the host's service install (e.g. --health-addr, --env-file, --cmd).
 func InstallCmd(ctx context.Context, args []string) int {
+	out, errOut := errwriter.New(os.Stdout), errwriter.New(os.Stderr)
+	return errwriter.Finish(installHost(ctx, out, errOut, args), out, errOut)
+}
+
+func installHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	hostDir := fs.String("host", "", "path to the host module")
 	if err := fs.Parse(args); err != nil {
@@ -99,19 +109,19 @@ func InstallCmd(ctx context.Context, args []string) int {
 
 	dir, err := resolveHost(*hostDir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		errOut.Println(err)
 		return 1
 	}
 
-	if code := run(ctx, dir, "go", "build", "-o", "herrscher", "."); code != 0 {
+	if code := run(ctx, errOut, dir, "go", "build", "-o", "herrscher", "."); code != 0 {
 		return code
 	}
 
 	abs, err := filepath.Abs(filepath.Join(dir, "herrscher"))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		errOut.Println(err)
 		return 1
 	}
 	delegate := append([]string{"service", "install"}, passthrough...)
-	return run(ctx, dir, abs, delegate...)
+	return run(ctx, errOut, dir, abs, delegate...)
 }

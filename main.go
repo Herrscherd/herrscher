@@ -16,6 +16,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/Herrscherd/herrscher/internal/errwriter"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -39,18 +40,22 @@ func main() {
 		if len(os.Args) > 1 {
 			prompt = os.Args[1]
 		}
+		out := errwriter.New(os.Stdout)
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "username") {
-			fmt.Fprintln(os.Stdout, "x-access-token")
+			out.Println("x-access-token")
 		} else if t := os.Getenv("GITHUB_TOKEN"); t != "" {
-			fmt.Fprintln(os.Stdout, t)
+			out.Println(t)
 		} else {
-			fmt.Fprintln(os.Stdout, os.Getenv("GH_TOKEN"))
+			out.Println(os.Getenv("GH_TOKEN"))
 		}
+		exitOnWriteError(out)
 		return
 	}
 
 	if len(os.Args) == 2 && (os.Args[1] == "version" || os.Args[1] == "--version") {
-		fmt.Fprintln(os.Stdout, herrscherVersion())
+		out := errwriter.New(os.Stdout)
+		out.Println(herrscherVersion())
+		exitOnWriteError(out)
 		return
 	}
 
@@ -161,10 +166,10 @@ func main() {
 			usage()
 			os.Exit(code)
 		}
-		if derr == nil && out != "" {
-			fmt.Fprintln(os.Stdout, out)
-		}
 		err = derr
+		if err == nil && out != "" {
+			_, err = fmt.Fprintln(os.Stdout, out)
+		}
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
@@ -207,6 +212,12 @@ func runWhoami(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stdout, out)
-	return nil
+	_, err = fmt.Fprintln(os.Stdout, out)
+	return err
+}
+
+func exitOnWriteError(w *errwriter.Writer) {
+	if w.Err() != nil {
+		os.Exit(1)
+	}
 }

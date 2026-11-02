@@ -29,7 +29,7 @@ func parseExit(err error) int {
 	if errors.Is(err, flag.ErrHelp) {
 		return 0
 	}
-	return 2
+	return exitUsage
 }
 
 // PluginCmd lists, adds, removes, pins or unpins a compiled-in plugin in the
@@ -53,7 +53,7 @@ func pluginHost(ctx context.Context, out, errOut *errwriter.Writer, args []strin
 	yes := fs.Bool("yes", false, "answer both confirmations without asking")
 	if len(args) == 0 {
 		errOut.Println("usage: herrscher plugin <list|add|remove|pin|unpin> [module[@version]]")
-		return 2
+		return exitUsage
 	}
 	sub := args[0]
 	var positionals []string
@@ -92,7 +92,7 @@ func pluginHost(ctx context.Context, out, errOut *errwriter.Writer, args []strin
 		return pluginPin(ctx, env, sub, positionals)
 	default:
 		errOut.Printf("unknown plugin subcommand %q\n", sub)
-		return 2
+		return exitUsage
 	}
 }
 
@@ -107,7 +107,7 @@ func pluginList(ctx context.Context, env pluginEnv) int {
 func pluginAddRemove(ctx context.Context, env pluginEnv, sub string, positionals []string) int {
 	if len(positionals) != 1 {
 		env.errOut.Printf("usage: herrscher plugin %s <module>\n", sub)
-		return 2
+		return exitUsage
 	}
 	module, version := moduleArg(sub, positionals[0])
 	rendered, changed, err := renderPluginEdit(sub, env.src, module)
@@ -120,7 +120,7 @@ func pluginAddRemove(ctx context.Context, env pluginEnv, sub string, positionals
 		return 0
 	}
 	if env.noBuild {
-		if writeErr := os.WriteFile(env.manifest, []byte(rendered), 0o644); writeErr != nil {
+		if writeErr := os.WriteFile(env.manifest, []byte(rendered), modeFile); writeErr != nil {
 			env.errOut.Printf("write %s: %v\n", env.manifest, writeErr)
 			return 1
 		}
@@ -163,10 +163,10 @@ func renderPluginEdit(sub, src, module string) (string, bool, error) {
 func pluginPin(ctx context.Context, env pluginEnv, sub string, positionals []string) int {
 	if len(positionals) < 1 || len(positionals) > 2 || (sub == verbUnpin && len(positionals) != 1) {
 		env.errOut.Printf("usage: herrscher plugin %s <module>%s\n", sub, pinUsageTail(sub))
-		return 2
+		return exitUsage
 	}
 	module, version := splitModuleVersion(positionals[0])
-	if len(positionals) == 2 {
+	if len(positionals) == positionalsWithVersion {
 		version = positionals[1]
 	}
 	if err := compiledIn(env.dir, module); err != nil {
@@ -288,7 +288,7 @@ func cmdStep(errOut *errwriter.Writer, dir, name string, args ...string) step {
 
 func fileStep(path, body string) step {
 	return func(context.Context) (string, error) {
-		return "", os.WriteFile(path, []byte(body), 0o644)
+		return "", os.WriteFile(path, []byte(body), modeFile)
 	}
 }
 
@@ -340,7 +340,7 @@ func versionFields(v string) []int {
 			if r < '0' || r > '9' {
 				break
 			}
-			n = n*10 + int(r-'0')
+			n = n*decimalBase + int(r-'0')
 		}
 		out = append(out, n)
 	}
@@ -348,8 +348,8 @@ func versionFields(v string) []int {
 }
 
 func minorOf(v string) string {
-	parts := strings.SplitN(strings.TrimPrefix(v, "v"), ".", 3)
-	if len(parts) < 2 {
+	parts := strings.SplitN(strings.TrimPrefix(v, "v"), ".", semverParts)
+	if len(parts) < minVersionParts {
 		return v
 	}
 	return parts[0] + "." + parts[1]
@@ -459,7 +459,7 @@ func pinModule(dir, module string, pinned bool) error {
 	} else {
 		delete(pins, module)
 	}
-	return os.WriteFile(filepath.Join(dir, pinFile), []byte(writePins(pins)), 0o644)
+	return os.WriteFile(filepath.Join(dir, pinFile), []byte(writePins(pins)), modeFile)
 }
 
 func run(ctx context.Context, errOut *errwriter.Writer, dir, name string, args ...string) int {

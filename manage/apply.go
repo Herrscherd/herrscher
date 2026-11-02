@@ -98,7 +98,7 @@ func restoreComposition(dir string, saved map[string][]byte) error {
 				err = nil
 			}
 		} else {
-			err = os.WriteFile(path, body, 0o644)
+			err = os.WriteFile(path, body, modeFile)
 		}
 		if err != nil {
 			return fmt.Errorf("restore %s: %w", name, err)

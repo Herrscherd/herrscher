@@ -27,7 +27,7 @@ func loadEnvFile(path string) error {
 
 func scanEnvFile(r io.Reader) error {
 	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	sc.Buffer(make([]byte, 0, envLineInitial), envLineLimit)
 	for sc.Scan() {
 		key, val, ok := parseEnvLine(sc.Text())
 		if !ok {
@@ -59,7 +59,7 @@ func parseEnvLine(raw string) (string, string, bool) {
 func hideGatewayKeys() { host.CaptureGatewayConfig(contracts.Default.Gateways()) }
 
 func unquoteEnv(s string) string {
-	if len(s) >= 2 {
+	if len(s) >= quotedMinLen {
 		if c := s[0]; (c == '"' || c == '\'') && s[len(s)-1] == c {
 			return s[1 : len(s)-1]
 		}

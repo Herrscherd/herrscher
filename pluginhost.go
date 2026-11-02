@@ -80,7 +80,7 @@ func newPluginServer(tlsCfg transport.TLSConfig) (*grpc.Server, error) {
 }
 
 func announceEvery(ctx context.Context, nc *nats.Conn, ann transport.Announcement) {
-	t := time.NewTicker(2 * time.Second)
+	t := time.NewTicker(announceInterval)
 	defer t.Stop()
 	for {
 		if err := transport.Announce(nc, ann); err != nil {

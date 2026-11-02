@@ -78,7 +78,7 @@ func availableVersions(ctx context.Context, tc toolchain, module string) ([]stri
 		return nil, nil
 	}
 	fields := strings.Fields(out)
-	if len(fields) < 2 {
+	if len(fields) < minVersionParts {
 		return nil, errNoVersions
 	}
 	return fields[1:], nil

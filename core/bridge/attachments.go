@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -176,7 +175,7 @@ func localSlot(a contracts.Attachment) string {
 }
 
 func stagingReady(dir string) bool {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, dirPrivate); err != nil {
 		logger.Warn("no attachment can be staged for this turn", "dir", dir, "err", err)
 		return false
 	}
@@ -249,7 +248,7 @@ func stagedPath(p string) (string, error) {
 func pinnedClient(client *http.Client, hosts allowedHosts) *http.Client {
 	pinned := *client
 	pinned.CheckRedirect = func(r *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
+		if len(via) >= maxRedirects {
 			return errTooManyRedirects
 		}
 		return validateCDNURL(r.URL.String(), hosts)
@@ -277,7 +276,7 @@ func pinnedTransport(src *http.Transport) *http.Transport {
 		}
 	}
 	tr := src.Clone()
-	tr.DialContext = pinnedDial(&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second})
+	tr.DialContext = pinnedDial(&net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive})
 	stored, _ := pinnedTransports.LoadOrStore(src, tr)
 	if cached, ok := stored.(*http.Transport); ok {
 		return cached
@@ -343,7 +342,7 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 		return "", fmt.Errorf("download %s: %w %d", a.Filename, errUnexpectedStatus, resp.StatusCode)
 	}
 	dest := filepath.Join(dir, fmt.Sprintf("%s-%d-%s", sanitize(msgID), idx, sanitize(a.Filename)))
-	f, err := os.OpenFile(filepath.Clean(dest), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(filepath.Clean(dest), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileSecret)
 	if err != nil {
 		return "", fmt.Errorf("create %s: %w", dest, err)
 	}

@@ -127,7 +127,7 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 	modules, err := resolveStack(choices, extras)
 	if err != nil {
 		errOut.Println(err)
-		return 2
+		return exitUsage
 	}
 
 	manifest := filepath.Join(dir, "plugins.go")
@@ -180,7 +180,7 @@ func rewritePlugins(errOut *errwriter.Writer, manifest string, modules []string)
 		errOut.Println(err)
 		return nil, 1
 	}
-	if err := os.WriteFile(manifest, []byte(rendered), 0o644); err != nil {
+	if err := os.WriteFile(manifest, []byte(rendered), modeFile); err != nil {
 		errOut.Printf("write %s: %v\n", manifest, err)
 		return nil, 1
 	}
@@ -200,7 +200,7 @@ func buildOrRestore(ctx context.Context, errOut *errwriter.Writer, dir, manifest
 	if code == 0 {
 		return 0
 	}
-	if werr := os.WriteFile(manifest, src, 0o644); werr != nil {
+	if werr := os.WriteFile(manifest, src, modeFile); werr != nil {
 		errOut.Printf("restore %s: %v\n", manifest, werr)
 	} else {
 		errOut.Printf("build failed; restored %s\n", manifest)
@@ -281,7 +281,7 @@ func writeSecretsTo(path string, secrets map[string]string) (int, error) {
 		return 0, nil
 	}
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
+		if err := os.MkdirAll(dir, modeDirPrivate); err != nil {
 			return 0, err
 		}
 	}
@@ -311,7 +311,7 @@ func writeSecretsTo(path string, secrets map[string]string) (int, error) {
 		lines = append(lines, k+"="+secrets[k])
 	}
 	out := strings.Join(lines, "\n") + "\n"
-	return len(secrets), os.WriteFile(path, []byte(out), 0o600)
+	return len(secrets), os.WriteFile(path, []byte(out), modeSecret)
 }
 
 func seedEnv(out, errOut *errwriter.Writer, dir string) {
@@ -323,7 +323,7 @@ func seedEnv(out, errOut *errwriter.Writer, dir string) {
 	if err != nil {
 		return
 	}
-	if err := os.WriteFile(dst, src, 0o600); err != nil {
+	if err := os.WriteFile(dst, src, modeSecret); err != nil {
 		errOut.Printf("seed %s: %v\n", dst, err)
 		return
 	}

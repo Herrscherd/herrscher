@@ -22,7 +22,7 @@ func TestSessionJSONRow_ArchivedBeatsPaused(t *testing.T) {
 
 func TestAttachUsage_StampsCapsAndReason(t *testing.T) {
 	h := &Handler{}
-	row := &sessionJSON{Id: "game", Usage: &usageJSON{Cost: 1.5, Turns: 2}}
+	row := &sessionJSON{ID: "game", Usage: &usageJSON{Cost: 1.5, Turns: 2}}
 	sess := state.Session{Name: "game", CostCap: 5, TokenCap: 100000, PausedReason: "cost"}
 	h.stampBudget(row, sess)
 	if row.Usage.CostCap != 5 || row.Usage.TokenCap != 100000 {
@@ -56,7 +56,7 @@ func TestCohortTotals_SumsParentForest(t *testing.T) {
 
 func TestCohortTotals_SoloSessionIsItself(t *testing.T) {
 	all := []state.Session{{Name: "solo"}}
-	solo := cohortTotals(all[0], all, func(s state.Session) sessionUsage {
+	solo := cohortTotals(all[0], all, func(_ state.Session) sessionUsage {
 		return sessionUsage{cost: 4, tokens: 40}
 	})
 	cost, tokens := solo.cost, solo.tokens

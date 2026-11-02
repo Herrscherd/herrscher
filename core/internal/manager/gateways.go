@@ -21,7 +21,7 @@ func ParseGateways(list string, terminalOnly bool, defaults []string) []string {
 		return gatewayDefault(terminalOnly, defaults)
 	}
 	out := make([]string, 0, maxGateways)
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	for _, p := range strings.Split(list, ",") {
 		p = strings.ToLower(strings.TrimSpace(p))
 		if p == "" || seen[p] || !gatewayKindRe.MatchString(p) {

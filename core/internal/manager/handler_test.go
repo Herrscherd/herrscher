@@ -30,7 +30,7 @@ type fakeChannelAdmin struct {
 	archiveErr error
 }
 
-func (f *fakeChannelAdmin) Kind(ctx context.Context, id string) (string, error) {
+func (f *fakeChannelAdmin) Kind(_ context.Context, id string) (string, error) {
 	if f.kindErr != nil {
 		return "", f.kindErr
 	}
@@ -40,7 +40,7 @@ func (f *fakeChannelAdmin) Kind(ctx context.Context, id string) (string, error) 
 	return f.homeType, nil
 }
 
-func (f *fakeChannelAdmin) CreateUnder(ctx context.Context, parentID, name string) (string, error) {
+func (f *fakeChannelAdmin) CreateUnder(_ context.Context, parentID, name string) (string, error) {
 	f.created = append(f.created, name)
 	f.parents = append(f.parents, parentID)
 	prefix := f.idPrefix
@@ -50,13 +50,13 @@ func (f *fakeChannelAdmin) CreateUnder(ctx context.Context, parentID, name strin
 	return prefix + name, nil
 }
 
-func (f *fakeChannelAdmin) ForumPost(ctx context.Context, forumID, name, content string) (string, error) {
+func (f *fakeChannelAdmin) ForumPost(_ context.Context, forumID, name, _ string) (string, error) {
 	f.created = append(f.created, "forum:"+name)
 	f.parents = append(f.parents, forumID)
 	return "post-" + name, nil
 }
 
-func (f *fakeChannelAdmin) Archive(ctx context.Context, id string) error {
+func (f *fakeChannelAdmin) Archive(_ context.Context, id string) error {
 	if f.archiveErr != nil {
 		return f.archiveErr
 	}
@@ -64,7 +64,7 @@ func (f *fakeChannelAdmin) Archive(ctx context.Context, id string) error {
 	return nil
 }
 
-func (f *fakeChannelAdmin) Send(ctx context.Context, channelID, content string) error {
+func (f *fakeChannelAdmin) Send(_ context.Context, channelID, content string) error {
 	if f.sendErr != nil {
 		return f.sendErr
 	}
@@ -74,7 +74,7 @@ func (f *fakeChannelAdmin) Send(ctx context.Context, channelID, content string) 
 
 func (f *fakeChannelAdmin) ChannelRef(id string) string { return "REF(" + id + ")" }
 
-func TestChannelAdminInterfaceHasSend(t *testing.T) {
+func TestChannelAdminInterfaceHasSend(_ *testing.T) {
 	var _ channelAdmin = (*fakeChannelAdmin)(nil)
 }
 
@@ -185,7 +185,7 @@ func TestSessionListEmitsCoordination(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &rows); err != nil {
 		t.Fatalf("not JSON: %v (%q)", err, out)
 	}
-	byName := map[string]map[string]any{}
+	byName := make(map[string]map[string]any)
 	for _, r := range rows {
 		name, ok := r["name"].(string)
 		if !ok {
@@ -300,9 +300,9 @@ func (f *fakeWT) Create(repo, name, base string) (string, error) {
 	f.createdBase = base
 	return f.path, nil
 }
-func (f *fakeWT) PreExisting(repo, name string) bool { return f.preExisting }
-func (f *fakeWT) Branch(name string) string          { return "session/" + name }
-func (f *fakeWT) Remove(repo, name string, force bool) error {
+func (f *fakeWT) PreExisting(_, _ string) bool { return f.preExisting }
+func (f *fakeWT) Branch(name string) string    { return "session/" + name }
+func (f *fakeWT) Remove(_, name string, force bool) error {
 	if f.removeErr != nil && !force {
 		return f.removeErr
 	}
@@ -340,7 +340,7 @@ type fakeForge struct {
 	cloned   []string
 }
 
-func (f *fakeForge) Clone(ctx context.Context, spec, workspace string) (string, error) {
+func (f *fakeForge) Clone(_ context.Context, spec, _ string) (string, error) {
 	f.cloned = append(f.cloned, spec)
 	if f.cloneErr != nil {
 		return "", f.cloneErr
@@ -356,11 +356,11 @@ type fakeUpdater struct {
 	restarts   int
 }
 
-func (f *fakeUpdater) Build(ctx context.Context, pull bool) (string, error) {
+func (f *fakeUpdater) Build(_ context.Context, pull bool) (string, error) {
 	f.builds = append(f.builds, pull)
 	return f.version, f.buildErr
 }
-func (f *fakeUpdater) Restart(ctx context.Context) error { f.restarts++; return f.restartErr }
+func (f *fakeUpdater) Restart(_ context.Context) error { f.restarts++; return f.restartErr }
 
 func newTestHandler(t *testing.T, homeType string) (*Handler, *fakeChannelAdmin, *fakeSup, *fakeWT, *fakeForge, *state.State) {
 	t.Helper()
@@ -381,7 +381,7 @@ func newTestHandlerWithUpdater(t *testing.T, homeType string) (*Handler, *fakeUp
 }
 
 func args(kv ...string) contracts.Input {
-	m := map[string]string{}
+	m := make(map[string]string)
 	for i := 0; i+1 < len(kv); i += 2 {
 		m[kv[i]] = kv[i+1]
 	}

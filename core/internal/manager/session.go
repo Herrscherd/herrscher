@@ -23,7 +23,7 @@ const cloneTimeout = 10 * time.Minute
 const maxSessions = 64
 
 type sessionJSON struct {
-	Id           string            `json:"id"`
+	ID           string            `json:"id"`
 	Incarnation  string            `json:"incarnation"`
 	Name         string            `json:"name"`
 	Agent        string            `json:"agent"`
@@ -77,7 +77,7 @@ func cohortTotals(target state.Session, all []state.Session,
 	}
 	var totalCost float64
 	var totalTokens uint64
-	visited := map[string]bool{}
+	visited := make(map[string]bool)
 	var walk func(name string)
 	walk = func(name string) {
 		if visited[name] {
@@ -168,7 +168,7 @@ func applyBudget(s state.Session, p budgetPatch, curCost float64, curTokens uint
 	return s
 }
 
-func (h *Handler) sessionSetBudgetRun(ctx context.Context, in contracts.Input) (string, error) {
+func (h *Handler) sessionSetBudgetRun(_ context.Context, in contracts.Input) (string, error) {
 	name, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
@@ -302,7 +302,7 @@ func sessionJSONRow(s state.Session) sessionJSON {
 		status = "archived"
 	}
 	return sessionJSON{
-		Id: s.Name, Incarnation: s.Incarnation, Name: s.Name, Agent: s.Agent, Project: s.Project, Status: status,
+		ID: s.Name, Incarnation: s.Incarnation, Name: s.Name, Agent: s.Agent, Project: s.Project, Status: status,
 		Worktree: s.Worktree, Gateways: gateways, Parent: s.Parent,
 		Resumable: s.ResumeToken != "",
 	}
@@ -1078,7 +1078,7 @@ func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string,
 	out.WriteString("Active sessions:\n")
 	for i := range sessions {
 		s := sessions[i]
-		out.WriteString(fmt.Sprintf("• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID)))
+		_, _ = fmt.Fprintf(&out, "• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
 	}
 	return out.String(), nil
 }
@@ -1103,9 +1103,9 @@ func (h *Handler) sessionWhoRun(_ context.Context, in contracts.Input) (string, 
 		return "Personne n'a encore écrit dans cette session.", nil
 	}
 	var out strings.Builder
-	out.WriteString(fmt.Sprintf("Participants observed in **%s**:\n", name))
+	_, _ = fmt.Fprintf(&out, "Participants observed in **%s**:\n", name)
 	for _, id := range ids {
-		out.WriteString(fmt.Sprintf("• <@%s>\n", id))
+		_, _ = fmt.Fprintf(&out, "• <@%s>\n", id)
 	}
 	return out.String(), nil
 }
@@ -1151,7 +1151,7 @@ func (h *Handler) sessionLogRun(_ context.Context, in contracts.Input) (string, 
 	}
 	var out strings.Builder
 	for _, e := range entries {
-		out.WriteString(fmt.Sprintf("**%s** %s\n", e.Role, e.Text))
+		_, _ = fmt.Fprintf(&out, "**%s** %s\n", e.Role, e.Text)
 	}
 	return out.String(), nil
 }

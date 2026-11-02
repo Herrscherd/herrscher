@@ -190,6 +190,3 @@ func (h *Handler) SetCoordinationReader(r coordinationReader) { h.coord = r }
 // SetSeeder wires the live-session seed injector (host.Seed). The daemon calls
 // this; the operator CLI leaves it nil (switch --handoff none still works).
 func (h *Handler) SetSeeder(fn func(name, task string) bool) { h.seed = fn }
-
-// Agents returns the durable agent store (used by tests/wiring).
-func (h *Handler) Agents() agentStore { return h.agents }

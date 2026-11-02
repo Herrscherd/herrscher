@@ -113,7 +113,7 @@ func readTags(home string) []string {
 	if err != nil {
 		return nil
 	}
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	var out []string
 	for _, tok := range strings.Fields(strings.ReplaceAll(string(buf), ",", " ")) {
 		t := strings.ToLower(tok)
@@ -170,7 +170,7 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 	defer func() {
 		if !created {
 			if err := os.RemoveAll(home); err != nil {
-				fmt.Fprintf(os.Stderr, "herrscher: remove agent home %q failed: %v\n", home, err)
+				_, _ = fmt.Fprintf(os.Stderr, "herrscher: remove agent home %q failed: %v\n", home, err)
 			}
 		}
 	}()
@@ -199,7 +199,7 @@ func seedFiles(spec CreateSpec) ([]seedFile, error) {
 		soul = defaultSoul
 	}
 	serverName := ""
-	servers := map[string]mcpServer{}
+	servers := make(map[string]mcpServer)
 	if srvName, srv, ok := parseMCP(spec.MCP); ok {
 		serverName = srvName
 		servers[srvName] = srv

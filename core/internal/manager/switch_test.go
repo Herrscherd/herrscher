@@ -48,7 +48,7 @@ func TestSessionSwitchNoneRestartsWithoutSeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	var seeded []string
-	h.SetSeeder(func(name, task string) bool { seeded = append(seeded, name); return true })
+	h.SetSeeder(func(name, _ string) bool { seeded = append(seeded, name); return true })
 
 	if _, err := h.sessionSwitchRun(context.Background(), args(
 		"name", "beta", "vendor", "codex", "cmd", "codex --model gpt-5-codex", "handoff", "none",
@@ -79,7 +79,7 @@ func TestSessionSwitchRollsBackOnStartFailure(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "gamma", Vendor: "claude", Cmd: "claude --model claude-opus-4-8", ResumeToken: "tok-old"}); err != nil {
 		t.Fatal(err)
 	}
-	h.SetSeeder(func(name, task string) bool { return true })
+	h.SetSeeder(func(_, _ string) bool { return true })
 	sup.stopErrs = []error{errors.New("boom")}
 
 	_, err := h.sessionSwitchRun(context.Background(), args(

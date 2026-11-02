@@ -1,3 +1,5 @@
+// Package manager runs the lifecycle of the sessions a chat channel hosts: creation,
+// switching, budgets, renames and the commands that inspect them.
 package manager
 
 import (

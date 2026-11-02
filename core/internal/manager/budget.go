@@ -46,12 +46,14 @@ type sessionUsage struct {
 	tokens uint64
 }
 
-type budgetCheck struct {
-	reason   string
-	headroom uint64
-	capped   bool
+// BudgetCheck is the verdict on a live session: why it is capped, and the headroom left before its cap.
+type BudgetCheck struct {
+	Reason   string
+	Headroom uint64
+	Capped   bool
 }
 
+// BudgetGate returns the gate the host consults to check live sessions against their caps.
 func (h *Handler) BudgetGate() *SessionBudgetGate { return &SessionBudgetGate{h: h} }
 
 func (g *SessionBudgetGate) usageFor(s state.Session) sessionUsage {
@@ -74,11 +76,11 @@ func (g *SessionBudgetGate) usageFor(s state.Session) sessionUsage {
 // has already blown past. Cost has no equivalent: a backend reports cost only in
 // its terminal result event, so there is no mid-turn number to compare a cost
 // cap against.
-func (g *SessionBudgetGate) Check(session string) budgetCheck {
+func (g *SessionBudgetGate) Check(session string) BudgetCheck {
 	h := g.h
 	sess, ok := h.st.FindSession(session)
 	if !ok {
-		return budgetCheck{}
+		return BudgetCheck{}
 	}
 	own := g.usageFor(sess)
 	sc, stk := own.cost, own.tokens
@@ -99,7 +101,7 @@ func (g *SessionBudgetGate) Check(session string) budgetCheck {
 	if !capped {
 		headroom = 0
 	}
-	return budgetCheck{reason: reason, headroom: headroom, capped: capped}
+	return BudgetCheck{Reason: reason, Headroom: headroom, Capped: capped}
 }
 
 func cohortMembers(target state.Session, all []state.Session) []state.Session {
@@ -123,7 +125,7 @@ func cohortMembers(target state.Session, all []state.Session) []state.Session {
 		root = p
 	}
 	var members []state.Session
-	visited := map[string]bool{}
+	visited := make(map[string]bool)
 	var walk func(name string)
 	walk = func(name string) {
 		if visited[name] {

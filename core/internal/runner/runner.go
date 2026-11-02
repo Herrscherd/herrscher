@@ -28,12 +28,14 @@ type Forward struct {
 // Local runs commands on this machine, which is what herrscher has always done.
 type Local struct{}
 
+// Command builds the command that runs argv in dir, bound to ctx.
 func (Local) Command(ctx context.Context, dir string, argv ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
 	return cmd
 }
 
+// Describe names the local runner for logs and status.
 func (Local) Describe() string { return "local" }
 
 // Copy puts src at dst. Local has no host to reach, so this is a plain copy; it
@@ -50,6 +52,7 @@ type SSH struct {
 	Forwards    []Forward
 }
 
+// Describe names the SSH runner for logs and status.
 func (s SSH) Describe() string { return s.Target }
 
 func (s SSH) options() []string {
@@ -68,6 +71,7 @@ func (s SSH) multiplex() []string {
 	}
 }
 
+// Command builds the SSH command that runs argv in dir, bound to ctx.
 func (s SSH) Command(ctx context.Context, dir string, argv ...string) *exec.Cmd {
 	args := s.options()
 	for _, f := range s.Forwards {

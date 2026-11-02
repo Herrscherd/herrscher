@@ -29,38 +29,45 @@ type Registry struct {
 	latNext  int
 }
 
+// NewRegistry returns an empty Registry.
 func NewRegistry() *Registry { return &Registry{} }
 
+// TurnStarted records that a turn began.
 func (r *Registry) TurnStarted() {
 	if r != nil {
 		r.turnsStarted.Add(1)
 	}
 }
 
+// TurnCompleted records that a turn finished.
 func (r *Registry) TurnCompleted() {
 	if r != nil {
 		r.turnsCompleted.Add(1)
 	}
 }
 
+// TurnAbandoned records that a turn was abandoned.
 func (r *Registry) TurnAbandoned() {
 	if r != nil {
 		r.turnsAbandoned.Add(1)
 	}
 }
 
+// BridgeRestart records a bridge restart.
 func (r *Registry) BridgeRestart() {
 	if r != nil {
 		r.bridgeRestarts.Add(1)
 	}
 }
 
+// RemoteAttempt records an attempt to reach a remote host.
 func (r *Registry) RemoteAttempt() {
 	if r != nil {
 		r.remoteAttempts.Add(1)
 	}
 }
 
+// RemoteFailure records a failed remote call.
 func (r *Registry) RemoteFailure() {
 	if r != nil {
 		r.remoteFailures.Add(1)
@@ -102,6 +109,7 @@ type Snapshot struct {
 	RemoteLatency  Latency `json:"remote_latency"`
 }
 
+// Snapshot returns a point-in-time copy of the metrics.
 func (r *Registry) Snapshot() Snapshot {
 	if r == nil {
 		return Snapshot{}

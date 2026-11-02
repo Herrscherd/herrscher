@@ -17,13 +17,14 @@ type priorKey struct {
 	stored, env string
 }
 
+// Hide unsets the given environment variables and returns a function that restores them.
 func Hide(keys []string) func() {
 	hidden.mu.Lock()
 	defer hidden.mu.Unlock()
 	if hidden.vals == nil {
-		hidden.vals = map[string]string{}
+		hidden.vals = make(map[string]string)
 	}
-	prior := map[string]priorKey{}
+	prior := make(map[string]priorKey)
 	for _, k := range keys {
 		if isEnvKey(k) {
 			hideKey(k, prior)
@@ -68,10 +69,12 @@ func isEnvKey(k string) bool {
 	return k != "" && !strings.ContainsAny(k, "=\x00")
 }
 
+// Revealed returns a lookup that prefers hidden values and falls back to fallback.
 func Revealed(fallback func(string) string) func(string) string {
 	return func(name string) string { return revealed(name, fallback) }
 }
 
+// Getenv returns the value of name, preferring a hidden value over the process environment.
 func Getenv(name string) string { return revealed(name, os.Getenv) }
 
 func revealed(name string, fallback func(string) string) string {

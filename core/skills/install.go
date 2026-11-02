@@ -134,7 +134,7 @@ func copyTree(src fs.FS, root, dest string) error {
 }
 
 func hashFS(src fs.FS, root string) (map[string]string, error) {
-	out := map[string]string{}
+	out := make(map[string]string)
 	err := fs.WalkDir(src, root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -158,7 +158,7 @@ func hashDir(dest string) (map[string]string, error) {
 		return nil, err
 	}
 	defer func() { logFailure("close hashed directory", root.Close()) }()
-	out := map[string]string{}
+	out := make(map[string]string)
 	err = fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -196,11 +196,11 @@ func same(a, b map[string]string) bool {
 func readManifest(dir string) manifest {
 	b, err := os.ReadFile(filepath.Clean(filepath.Join(dir, manifestName)))
 	if err != nil {
-		return manifest{}
+		return make(manifest)
 	}
 	var m manifest
 	if err := json.Unmarshal(b, &m); err != nil || m == nil {
-		return manifest{}
+		return make(manifest)
 	}
 	return m
 }

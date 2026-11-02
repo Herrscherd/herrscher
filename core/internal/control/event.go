@@ -33,6 +33,7 @@ const (
 	scanMaxLine       = 1024 * 1024
 )
 
+// ScanEvents decodes events from r and passes each one to fn until r ends or fn fails.
 func ScanEvents(r io.Reader, fn func(contracts.Event) error) error {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, scanInitialBuffer), scanMaxLine)

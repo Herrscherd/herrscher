@@ -49,6 +49,7 @@ func (c *Conn) Scan(fn func(contracts.Event) error) error {
 	return ScanEvents(c.c, fn)
 }
 
+// Close closes the underlying connection.
 func (c *Conn) Close() error { return c.c.Close() }
 
 // Acceptor listens on a control socket and yields one persistent Conn per

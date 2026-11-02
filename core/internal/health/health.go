@@ -1,3 +1,4 @@
+// Package health tracks the host liveness and renders its health snapshot.
 package health
 
 import (
@@ -20,8 +21,8 @@ type Health struct {
 	metrics       *metrics.Registry
 }
 
-// HealthSnapshot is an immutable view rendered for /health and the status embed.
-type HealthSnapshot struct {
+// Snapshot is an immutable view rendered for /health and the status embed.
+type Snapshot struct {
 	Online        bool             `json:"online"`
 	UptimeS       int64            `json:"uptime_s"`
 	PingMS        int64            `json:"ping_ms"`
@@ -63,11 +64,11 @@ func (h *Health) SetSessions(n int) {
 
 // Snapshot renders health as of now; Online is true iff the last heartbeat ACK
 // is within window.
-func (h *Health) Snapshot(now time.Time, window time.Duration) HealthSnapshot {
+func (h *Health) Snapshot(now time.Time, window time.Duration) Snapshot {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	online := !h.lastHeartbeat.IsZero() && now.Sub(h.lastHeartbeat) <= window
-	return HealthSnapshot{
+	return Snapshot{
 		Online:        online,
 		UptimeS:       int64(now.Sub(h.startedAt).Seconds()),
 		PingMS:        h.pingLatencyMS,

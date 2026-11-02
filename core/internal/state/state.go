@@ -1,3 +1,4 @@
+// Package state persists the herrscher daemon state: sessions, roles, schedules and transcripts.
 package state
 
 import (
@@ -218,7 +219,7 @@ func LoadState(path string) (*State, error) {
 	if err := json.Unmarshal(buf, s); err != nil {
 		return nil, err
 	}
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	for i := range s.Sessions {
 		if s.Sessions[i].ID != "" {
 			seen[s.Sessions[i].ID] = true
@@ -257,7 +258,7 @@ func newSessionIncarnation(existing map[string]bool) string {
 }
 
 func (s *State) ensureSessionIncarnationsLocked() bool {
-	incarnations := map[string]bool{}
+	incarnations := make(map[string]bool)
 	dirty := false
 	for i := range s.Sessions {
 		incarnation := s.Sessions[i].Incarnation
@@ -316,7 +317,7 @@ func (s *State) AddSession(sess Session) error {
 		}
 	}
 	if sess.ID == "" {
-		seen := map[string]bool{}
+		seen := make(map[string]bool)
 		for i := range s.Sessions {
 			seen[s.Sessions[i].ID] = true
 		}
@@ -660,7 +661,7 @@ func (s *State) SetRole(principal, role, label string) (bool, error) {
 	defer s.mu.Unlock()
 	first := len(s.Roles) == 0
 	if s.Roles == nil {
-		s.Roles = map[string]RoleAssignment{}
+		s.Roles = make(map[string]RoleAssignment)
 	}
 	s.Roles[principal] = RoleAssignment{Role: role, Label: label}
 	return first, s.saveLocked()

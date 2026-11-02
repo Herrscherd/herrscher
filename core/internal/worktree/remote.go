@@ -50,6 +50,7 @@ func NewRemote(run Commander, bin, instanceID string) *Remote {
 // told a name this process can compute would be a round trip for nothing.
 func (r *Remote) Branch(name string) string { return branchFor(r.instanceID, name) }
 
+// Create creates a worktree for repo on the remote host and returns its path.
 func (r *Remote) Create(ctx context.Context, repo, name, base string) (string, error) {
 	argv := []string{subWorktree, "create", flagRepo, repo, flagName, name, flagInstance, r.instanceID}
 	if base != "" {
@@ -78,6 +79,7 @@ func (r *Remote) PreExisting(ctx context.Context, repo, name string) bool {
 	return out.PreExisting
 }
 
+// Remove deletes the named worktree of repo on the remote host.
 func (r *Remote) Remove(ctx context.Context, repo, name string, force bool) error {
 	argv := []string{subWorktree, "remove", flagRepo, repo, flagName, name, flagInstance, r.instanceID}
 	if force {
@@ -89,15 +91,18 @@ func (r *Remote) Remove(ctx context.Context, repo, name string, force bool) erro
 	return r.call(ctx, argv, &out)
 }
 
-func (r *Remote) Scratch(root, name string) (string, error) {
+// Scratch creates the scratch directory for name under root on the remote host.
+func (r *Remote) Scratch(_, _ string) (string, error) {
 	return "", fmt.Errorf("on %s: a session with an agent needs a git repository there: %w", r.run.Describe(), errRemoteScratch)
 }
 
+// ScratchPath returns the scratch directory path for name under root.
 func (r *Remote) ScratchPath(root, name string) string {
 	return scratchPathIn(root, r.instanceID, name)
 }
 
-func (r *Remote) RemoveScratch(root, name string) error { return nil }
+// RemoveScratch deletes the scratch directory for name under root.
+func (r *Remote) RemoveScratch(_, _ string) error { return nil }
 
 // Materialize ships an agent's provisioning files into a remote worktree. The
 // payload is a tar stream, which the verb on the far side extracts before

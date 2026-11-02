@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -17,6 +18,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/runner"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+)
+
+var (
+	errUnknownHost        = errors.New("host is not registered")
+	errHostNotProvisioned = errors.New("not provisioned")
 )
 
 // Supervisor manages one child `herrscher bridge` process per session.
@@ -339,14 +345,14 @@ func (s *Supervisor) remoteBridgeCommand(ctx context.Context, sess state.Session
 
 func (s *Supervisor) placementFor(sess state.Session) (Placement, error) {
 	if s.hosts == nil {
-		return Placement{}, fmt.Errorf("session %q wants host %q but no host is registered", sess.Name, sess.Host)
+		return Placement{}, fmt.Errorf("session %q wants host %q: %w", sess.Name, sess.Host, errUnknownHost)
 	}
 	p, ok := s.hosts(sess.Host)
 	if !ok {
-		return Placement{}, fmt.Errorf("session %q wants host %q, which no longer exists", sess.Name, sess.Host)
+		return Placement{}, fmt.Errorf("session %q wants host %q: %w", sess.Name, sess.Host, errUnknownHost)
 	}
 	if p.SSH == "" || p.Bin == "" {
-		return Placement{}, fmt.Errorf("host %q is not provisioned: run `host provision %s`", sess.Host, sess.Host)
+		return Placement{}, fmt.Errorf("host %q is %w: run `host provision %s`", sess.Host, errHostNotProvisioned, sess.Host)
 	}
 	return p, nil
 }

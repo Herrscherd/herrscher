@@ -3,6 +3,7 @@ package state
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,11 @@ import (
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
+)
+
+var (
+	errSessionExists = errors.New("session already exists")
+	errNoSession     = errors.New("no such session")
 )
 
 // HomeRef points at the category or forum that holds session channels.
@@ -301,7 +307,7 @@ func (s *State) AddSession(sess Session) error {
 	defer s.mu.Unlock()
 	for _, ss := range s.Sessions {
 		if ss.Name == sess.Name {
-			return fmt.Errorf("session %q already exists", sess.Name)
+			return fmt.Errorf("%w: %q", errSessionExists, sess.Name)
 		}
 	}
 	if sess.ID == "" {
@@ -344,14 +350,14 @@ func (s *State) RenameSession(oldName, newName string) error {
 	found := -1
 	for i, ss := range s.Sessions {
 		if ss.Name == newName && newName != oldName {
-			return fmt.Errorf("session %q already exists", newName)
+			return fmt.Errorf("%w: %q", errSessionExists, newName)
 		}
 		if ss.Name == oldName {
 			found = i
 		}
 	}
 	if found < 0 {
-		return fmt.Errorf("no session %q", oldName)
+		return fmt.Errorf("%w: %q", errNoSession, oldName)
 	}
 	if oldName == newName {
 		return nil
@@ -607,7 +613,7 @@ func (s *State) SetSessionApprovals(name, mode string) error {
 			return s.saveLocked()
 		}
 	}
-	return fmt.Errorf("no session named %q", name)
+	return fmt.Errorf("%w: %q", errNoSession, name)
 }
 
 // RoleAssignments returns a copy of the role table.

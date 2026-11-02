@@ -108,6 +108,14 @@ func serveArgs(c Config) []string {
 	return append(args, c.ExtraArgs...)
 }
 
+var (
+	errUnsupportedOS     = errors.New("unsupported OS")
+	errNoSourceDir       = errors.New("no source dir set")
+	errNotSourceCheckout = errors.New("not a herrscher source checkout")
+	errNoGoToolchain     = errors.New("go toolchain not found in PATH")
+	errNoBinaryPath      = errors.New("no binary path to smoke-test")
+)
+
 var coreEnvVars = []EnvVar{
 	{Key: "HERRSCHER_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
 }
@@ -141,7 +149,7 @@ func BuildPlan(c Config) (Plan, error) {
 	case "windows":
 		p = windowsPlan(c)
 	default:
-		return Plan{}, fmt.Errorf("unsupported OS %q", goos(c))
+		return Plan{}, fmt.Errorf("%w %q", errUnsupportedOS, goos(c))
 	}
 	if c.ConfigPath != "" {
 		p.Files = append(p.Files, configFileWrite(c))
@@ -174,7 +182,7 @@ func BuildUninstall(c Config) (Plan, error) {
 			{Argv: []string{"schtasks", "/delete", "/tn", winTaskName, "/f"}},
 		}}, nil
 	default:
-		return Plan{}, fmt.Errorf("unsupported OS %q", goos(c))
+		return Plan{}, fmt.Errorf("%w %q", errUnsupportedOS, goos(c))
 	}
 }
 
@@ -188,7 +196,7 @@ func StatusCommand(c Config) (Command, error) {
 	case "windows":
 		return Command{Argv: []string{"schtasks", "/query", "/tn", winTaskName, "/v"}, IgnoreErr: true}, nil
 	default:
-		return Command{}, fmt.Errorf("unsupported OS %q", goos(c))
+		return Command{}, fmt.Errorf("%w %q", errUnsupportedOS, goos(c))
 	}
 }
 
@@ -207,7 +215,7 @@ func RestartCommands(c Config) ([]Command, error) {
 			{Argv: []string{"schtasks", "/run", "/tn", winTaskName}},
 		}, nil
 	default:
-		return nil, fmt.Errorf("unsupported OS %q", goos(c))
+		return nil, fmt.Errorf("%w %q", errUnsupportedOS, goos(c))
 	}
 }
 
@@ -246,18 +254,18 @@ func RestartDetached(ctx context.Context, c Config) error {
 
 func validateSource(src string) error {
 	if src == "" {
-		return errors.New("no source dir set")
+		return errNoSourceDir
 	}
 	data, err := os.ReadFile(filepath.Join(src, "go.mod"))
 	if err != nil {
-		return fmt.Errorf("not a herrscher source checkout (no go.mod): %s", src)
+		return fmt.Errorf("%w (no go.mod): %s: %w", errNotSourceCheckout, src, err)
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		if strings.TrimSpace(line) == "module github.com/Herrscherd/herrscher" {
 			return nil
 		}
 	}
-	return fmt.Errorf("not a herrscher source checkout (wrong module): %s", src)
+	return fmt.Errorf("%w (wrong module): %s", errNotSourceCheckout, src)
 }
 
 // Pull fast-forwards the source checkout. --ff-only fails loudly rather than
@@ -280,7 +288,7 @@ func Build(ctx context.Context, src, binPath string) error {
 		return err
 	}
 	if _, err := exec.LookPath("go"); err != nil {
-		return fmt.Errorf("go toolchain not found in PATH")
+		return errNoGoToolchain
 	}
 	if out, err := runCapture(ctx, src, "go", "build", "-o", binPath, "."); err != nil {
 		return fmt.Errorf("go build: %w: %s", err, redact.Output(out))
@@ -297,7 +305,7 @@ func BuildFor(ctx context.Context, src, binPath, goos, goarch string) error {
 		return err
 	}
 	if _, err := exec.LookPath("go"); err != nil {
-		return fmt.Errorf("go toolchain not found in PATH")
+		return errNoGoToolchain
 	}
 	cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, ".")
 	cmd.Dir = src
@@ -325,7 +333,7 @@ func SourceVersion(ctx context.Context, src string) string {
 // daemon keeps running its old in-memory image; only the on-disk file changed.
 func Smoke(ctx context.Context, binPath string) error {
 	if binPath == "" {
-		return errors.New("no binary path to smoke-test")
+		return errNoBinaryPath
 	}
 	if out, err := runCapture(ctx, "", binPath, "--help"); err != nil {
 		return fmt.Errorf("new binary failed smoke test (%s --help): %w: %s", binPath, err, redact.Output(out))

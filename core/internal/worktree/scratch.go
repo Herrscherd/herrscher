@@ -1,12 +1,15 @@
 package worktree
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 )
 
 const scratchDir = ".herrscher-scratch"
+
+var errScratchRefused = errors.New("refusing a scratch directory")
 
 func (w *Worktreer) ScratchPath(root, name string) string {
 	return scratchPathIn(root, w.instanceID, name)
@@ -21,10 +24,10 @@ func scratchPathIn(root, instanceID, name string) string {
 
 func (w *Worktreer) Scratch(root, name string) (string, error) {
 	if root == "" {
-		return "", fmt.Errorf("scratch: no root to place session %q under", name)
+		return "", fmt.Errorf("%w: no root to place session %q under", errScratchRefused, name)
 	}
 	if !validPathComponent(name) {
-		return "", fmt.Errorf("scratch: refusing session name %q as a path component", name)
+		return "", fmt.Errorf("%w: session name %q is not a path component", errScratchRefused, name)
 	}
 	p := w.ScratchPath(root, name)
 	if err := os.MkdirAll(p, 0o700); err != nil {
@@ -35,7 +38,7 @@ func (w *Worktreer) Scratch(root, name string) (string, error) {
 
 func (w *Worktreer) RemoveScratch(root, name string) error {
 	if root == "" || !validPathComponent(name) {
-		return fmt.Errorf("scratch: refusing to remove session %q under root %q", name, root)
+		return fmt.Errorf("%w: to remove session %q under root %q", errScratchRefused, name, root)
 	}
 	p := w.ScratchPath(root, name)
 	if _, err := os.Lstat(p); os.IsNotExist(err) {

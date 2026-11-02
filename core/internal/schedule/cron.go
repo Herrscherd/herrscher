@@ -6,11 +6,14 @@
 package schedule
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 )
+
+var errCronSyntax = errors.New("invalid cron expression")
 
 type cronSpec struct {
 	minute  [60]bool
@@ -26,7 +29,7 @@ func parseCron(expr string) (cronSpec, error) {
 	var spec cronSpec
 	fields := strings.Fields(expr)
 	if len(fields) != 5 {
-		return spec, fmt.Errorf("cron %q: want 5 fields, got %d", expr, len(fields))
+		return spec, fmt.Errorf("%w %q: want 5 fields, got %d", errCronSyntax, expr, len(fields))
 	}
 	targets := []struct {
 		set      []bool
@@ -53,7 +56,7 @@ func parseCron(expr string) (cronSpec, error) {
 
 func parseCronField(field string, set []bool, min, max int) (bool, error) {
 	if field == "" {
-		return false, fmt.Errorf("empty")
+		return false, fmt.Errorf("%w: empty field", errCronSyntax)
 	}
 	star := strings.HasPrefix(field, "*")
 	for _, part := range strings.Split(field, ",") {
@@ -63,7 +66,7 @@ func parseCronField(field string, set []bool, min, max int) (bool, error) {
 			body = part[:slash]
 			n, err := strconv.Atoi(part[slash+1:])
 			if err != nil || n < 1 {
-				return false, fmt.Errorf("bad step in %q", part)
+				return false, fmt.Errorf("%w: bad step in %q", errCronSyntax, part)
 			}
 			step = n
 		}
@@ -74,21 +77,21 @@ func parseCronField(field string, set []bool, min, max int) (bool, error) {
 			a, errA := strconv.Atoi(ends[0])
 			b, errB := strconv.Atoi(ends[1])
 			if errA != nil || errB != nil || a > b {
-				return false, fmt.Errorf("bad range in %q", part)
+				return false, fmt.Errorf("%w: bad range in %q", errCronSyntax, part)
 			}
 			lo, hi = a, b
 		default:
 			n, err := strconv.Atoi(body)
 			if err != nil {
-				return false, fmt.Errorf("bad value in %q", part)
+				return false, fmt.Errorf("%w: bad value in %q", errCronSyntax, part)
 			}
 			if step != 1 {
-				return false, fmt.Errorf("step needs a range or a star in %q", part)
+				return false, fmt.Errorf("%w: step needs a range or a star in %q", errCronSyntax, part)
 			}
 			lo, hi = n, n
 		}
 		if lo < min || hi > max {
-			return false, fmt.Errorf("%q out of range %d-%d", part, min, max)
+			return false, fmt.Errorf("%w: %q out of range %d-%d", errCronSyntax, part, min, max)
 		}
 		for v := lo; v <= hi; v += step {
 			set[v] = true

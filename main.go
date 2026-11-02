@@ -16,11 +16,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/Herrscherd/herrscher/internal/errwriter"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/internal/errwriter"
 
 	"golang.org/x/term"
 
@@ -36,7 +37,7 @@ var (
 
 func main() {
 	if os.Getenv("HERRSCHER_GIT_ASKPASS") == "1" {
-		printGitAskpass(os.Args)
+		answerGitAskpass(os.Args)
 		return
 	}
 
@@ -87,17 +88,17 @@ func main() {
 	}
 }
 
-func printGitAskpass(args []string) {
+func answerGitAskpass(args []string) {
 	prompt := ""
 	if len(args) > 1 {
 		prompt = args[1]
 	}
 	out := errwriter.New(os.Stdout)
-	printGitCredential(prompt, out)
+	writeGitCredential(prompt, out)
 	exitOnWriteError(out)
 }
 
-func printGitCredential(prompt string, out *errwriter.Writer) {
+func writeGitCredential(prompt string, out *errwriter.Writer) {
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "username") {
 		out.Println("x-access-token")
 		return
@@ -186,7 +187,7 @@ func runCommand(ctx context.Context, cmd string, args []string) error {
 	case "worktree":
 		return host.RunWorktree(ctx, args)
 	case "whoami":
-		return runWhoami(args)
+		return runWhoami(ctx, args)
 	}
 	return runForwarded(ctx, cmd, args)
 }
@@ -236,7 +237,7 @@ func hasTerminalGateway() bool {
 	return false
 }
 
-func runWhoami(args []string) error {
+func runWhoami(ctx context.Context, args []string) error {
 	asJSON := false
 	for _, a := range args {
 		if a != "--json" {
@@ -244,7 +245,7 @@ func runWhoami(args []string) error {
 		}
 		asJSON = true
 	}
-	out, err := host.WhoamiOut(context.Background(), asJSON)
+	out, err := host.WhoamiOut(ctx, asJSON)
 	if err != nil {
 		return err
 	}

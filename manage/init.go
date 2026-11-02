@@ -5,11 +5,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/Herrscherd/herrscher/internal/errwriter"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/internal/errwriter"
 )
 
 var (

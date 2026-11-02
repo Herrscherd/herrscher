@@ -8,7 +8,7 @@ import (
 
 const mentionMax = 6
 
-func mentionWord(input string, cursor int) (begin int, text string, ok bool) {
+func mentionWord(input string, cursor int) (int, string, bool) {
 	if cursor < 0 {
 		cursor = 0
 	}
@@ -43,7 +43,7 @@ func mentionMatches(dir, prefix string) []string {
 	return out
 }
 
-func completeMention(input string, cursor int, match string) (text string, pos int) {
+func completeMention(input string, cursor int, match string) (string, int) {
 	start, _, ok := mentionWord(input, cursor)
 	if !ok {
 		return input, cursor

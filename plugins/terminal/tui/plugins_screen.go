@@ -70,7 +70,7 @@ const (
 
 const pluginsMax = 10
 
-func pluginsWindow(idx, n int) (from, to int) {
+func pluginsWindow(idx, n int) (int, int) {
 	if n <= pluginsMax {
 		return 0, n
 	}

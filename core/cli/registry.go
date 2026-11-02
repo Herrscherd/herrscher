@@ -131,7 +131,8 @@ func (r *Registry) Intercept(prefix []string, wrap func(cmd contracts.Cmd, next 
 	}
 }
 
-func (r *Registry) match(args []string) (best *contracts.Cmd, rest []string) {
+func (r *Registry) match(args []string) (*contracts.Cmd, []string) {
+	var best *contracts.Cmd
 	bestLen := 0
 	for i := range r.cmds {
 		c := &r.cmds[i]

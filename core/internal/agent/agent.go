@@ -9,6 +9,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +32,11 @@ const (
 )
 
 const worktreeToken = "{{WORKTREE}}"
+
+const (
+	dirMode  = 0o755
+	fileMode = 0o644
+)
 
 func jsonStringInner(s string) string {
 	b, err := json.Marshal(s)
@@ -155,7 +161,7 @@ func MaterializeHook(worktree, herrscherBin string) error {
 		return err
 	}
 	claudeDir := filepath.Join(worktree, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+	if err := os.MkdirAll(claudeDir, dirMode); err != nil {
 		return fmt.Errorf("create .claude dir: %w", err)
 	}
 	path := filepath.Join(claudeDir, localSettingsFile)
@@ -173,7 +179,7 @@ func MaterializeHook(worktree, herrscherBin string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, out, 0o644); err != nil {
+	if err := os.WriteFile(path, out, fileMode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
@@ -181,12 +187,12 @@ func MaterializeHook(worktree, herrscherBin string) error {
 
 func materializedGitExcludes() []string {
 	return []string{
-	"/AGENTS.md",
-	"/.codex/",
-	"/.claude/",
-	"/.mcp.json",
-	"/.herrscher/",
-}
+		"/AGENTS.md",
+		"/.codex/",
+		"/.claude/",
+		"/.mcp.json",
+		"/.herrscher/",
+	}
 }
 
 // Agent is a durable companion: a name, backend vendor, and the home directory
@@ -258,11 +264,11 @@ func (a Agent) MaterializeInto(dst, worktreePath string) error {
 // in the staged case is not on this machine.
 func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	claudeDir := filepath.Join(dst, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+	if err := os.MkdirAll(claudeDir, dirMode); err != nil {
 		return fmt.Errorf("create .claude dir: %w", err)
 	}
 	codexDir := filepath.Join(dst, ".codex")
-	if err := os.MkdirAll(codexDir, 0o755); err != nil {
+	if err := os.MkdirAll(codexDir, dirMode); err != nil {
 		return fmt.Errorf("create .codex dir: %w", err)
 	}
 	copies := []struct {
@@ -288,7 +294,7 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 				return err
 			}
 		}
-		if err := os.WriteFile(c.dst, out, 0o644); err != nil {
+		if err := os.WriteFile(c.dst, out, fileMode); err != nil {
 			return fmt.Errorf("write %s: %w", c.dst, err)
 		}
 	}
@@ -306,17 +312,17 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	}
 	if uErr == nil {
 		userOut := strings.ReplaceAll(string(userRaw), worktreeToken, worktreePath)
-		if err := os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), 0o644); err != nil {
+		if err = os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), fileMode); err != nil {
 			return fmt.Errorf("write .claude/USER.md: %w", err)
 		}
 		claudeMd = soulOut + "\n\n@USER.md\n"
 		agentsMd = soulOut + "\n\n# User\n\n" + userOut
 	}
 
-	if err := os.WriteFile(filepath.Join(claudeDir, "CLAUDE.md"), []byte(claudeMd), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(claudeDir, "CLAUDE.md"), []byte(claudeMd), fileMode); err != nil {
 		return fmt.Errorf("write .claude/CLAUDE.md: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dst, "AGENTS.md"), []byte(agentsMd), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(dst, "AGENTS.md"), []byte(agentsMd), fileMode); err != nil {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
 
@@ -328,7 +334,7 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), codexConfig, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), codexConfig, fileMode); err != nil {
 		return fmt.Errorf("write config.toml: %w", err)
 	}
 	return nil
@@ -340,12 +346,12 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 // Exported because on a remote host it runs where the repository is, from the
 // worktree verb, rather than beside the file writes.
 func EnsureGitExcludes(worktree string) error {
-	inside, err := exec.Command("git", "-C", worktree, "rev-parse", "--is-inside-work-tree").Output()
+	inside, err := exec.CommandContext(context.Background(), "git", "-C", worktree, "rev-parse", "--is-inside-work-tree").Output()
 	isWorkTree := err == nil && strings.TrimSpace(string(inside)) == "true"
 	if !isWorkTree {
 		return nil
 	}
-	out, err := exec.Command("git", "-C", worktree, "rev-parse", "--git-path", "info/exclude").Output()
+	out, err := exec.CommandContext(context.Background(), "git", "-C", worktree, "rev-parse", "--git-path", "info/exclude").Output()
 	if err != nil {
 		return fmt.Errorf("resolve local git exclude: %w", err)
 	}
@@ -373,7 +379,7 @@ func EnsureGitExcludes(worktree string) error {
 		addition.Reset()
 		addition.WriteString(additionText)
 	}
-	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
 	if err != nil {
 		return fmt.Errorf("open local git exclude: %w", err)
 	}

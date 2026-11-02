@@ -157,10 +157,10 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 		return Agent{}, &InvalidNameError{Name: name}
 	}
 	home := filepath.Join(s.root, name)
-	if err := os.MkdirAll(s.root, 0o755); err != nil {
+	if err := os.MkdirAll(s.root, dirMode); err != nil {
 		return Agent{}, fmt.Errorf("create agents root: %w", err)
 	}
-	if err := os.Mkdir(home, 0o755); err != nil {
+	if err := os.Mkdir(home, dirMode); err != nil {
 		if os.IsExist(err) {
 			return Agent{}, &ExistsError{Name: name}
 		}
@@ -234,7 +234,7 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 		}{tagsFile, []byte(strings.Join(spec.Tags, " ") + "\n")})
 	}
 	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(home, f.name), f.data, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(home, f.name), f.data, fileMode); err != nil {
 			return Agent{}, fmt.Errorf("write %s: %w", f.name, err)
 		}
 	}
@@ -253,7 +253,7 @@ func (s *Store) SetSoul(name, soul string) error {
 	if info, err := os.Stat(home); err != nil || !info.IsDir() {
 		return &NotFoundError{Name: name}
 	}
-	return os.WriteFile(filepath.Join(home, soulFile), []byte(soul), 0o644)
+	return os.WriteFile(filepath.Join(home, soulFile), []byte(soul), fileMode)
 }
 
 // SetUser overwrites <home>/USER.md for an existing agent, rejecting content
@@ -270,7 +270,7 @@ func (s *Store) SetUser(name, text string) error {
 	if err := contracts.EnforceBudget("user:"+name, text, s.userBudget); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(home, userFile), []byte(text), 0o644)
+	return os.WriteFile(filepath.Join(home, userFile), []byte(text), fileMode)
 }
 
 // Get returns the agent named name, or false if no such home directory exists.

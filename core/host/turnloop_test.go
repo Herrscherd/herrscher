@@ -78,8 +78,8 @@ func (f *fanRecorder) Post(_ context.Context, _ contracts.Conversation, text str
 	return "", nil
 }
 
-func (f *fanRecorder) Reply(_ context.Context, _ contracts.Conversation, _ contracts.MessageID, text string) (contracts.MessageID, error) {
-	return f.Post(nil, contracts.Conversation{}, text)
+func (f *fanRecorder) Reply(ctx context.Context, _ contracts.Conversation, _ contracts.MessageID, text string) (contracts.MessageID, error) {
+	return f.Post(ctx, contracts.Conversation{}, text)
 }
 
 func (f *fanRecorder) React(context.Context, contracts.Conversation, contracts.MessageID, string) error {
@@ -152,6 +152,7 @@ func TestDriverPollsSessionChannel(t *testing.T) {
 
 type failingReader struct {
 	fanRecorder
+
 	left int
 }
 
@@ -571,11 +572,11 @@ func gotInput(t *testing.T, c *control.Conn, want string) {
 	}
 }
 
-var errStopScan = stopScanErr{}
+var errStopScan = stopScanError{}
 
-type stopScanErr struct{}
+type stopScanError struct{}
 
-func (stopScanErr) Error() string { return "stop" }
+func (stopScanError) Error() string { return "stop" }
 
 func TestFanOutPrefersRoutedEventSink(t *testing.T) {
 	rec := &routedRec{}

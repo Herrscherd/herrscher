@@ -18,8 +18,9 @@ import (
 // DaemonEvent is one line off the events socket: a turn event tagged with the
 // session it belongs to, since one socket carries every session's stream.
 type DaemonEvent struct {
-	Session string `json:"session"`
 	contracts.Event
+
+	Session string `json:"session"`
 }
 
 // ServedInstanceID reports the instance id the daemon serving statePath actually

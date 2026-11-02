@@ -88,6 +88,7 @@ func (delegateSeedBackend) Close() error { return nil }
 
 type reentrantSeedCoordinator struct {
 	*recordingCoord
+
 	hub *hub
 }
 

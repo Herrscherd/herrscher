@@ -2,6 +2,7 @@ package host
 
 import (
 	"archive/tar"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ func TestStagedAgentTarCarriesTheFilesAndTheRemotePath(t *testing.T) {
 	tr := tar.NewReader(r)
 	for {
 		h, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

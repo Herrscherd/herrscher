@@ -183,6 +183,12 @@ linters:
       - path: ^(cmd|tools)/
         linters: [gosec]
         text: "^G(304|703):"
+      - path: ^core/host/(coordinator|coordinator_test|turnloop)\.go$
+        linters: [misspell]
+        text: "^`(conflit|existant|partiel)` is a misspelling"
+      - path: ^core/host/(audit_fixes|hub_seed)_test\.go$
+        linters: [staticcheck]
+        text: "^SA2001: empty critical section"
 
 formatters:
   enable:

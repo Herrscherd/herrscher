@@ -144,7 +144,7 @@ type daemonNotRunningError struct {
 }
 
 func (e *daemonNotRunningError) Error() string {
-	return fmt.Sprintf("no herrscher daemon is listening on %s", e.Socket)
+	return "no herrscher daemon is listening on " + e.Socket
 }
 
 type daemonRequiredError struct {
@@ -268,7 +268,7 @@ type noOriginError struct {
 }
 
 func (e *noOriginError) Error() string {
-	return fmt.Sprintf("%s has no origin remote", e.Dir)
+	return e.Dir + " has no origin remote"
 }
 
 type lockHeldError struct {
@@ -510,7 +510,7 @@ type remoteHomeUnresolvedError struct {
 }
 
 func (e *remoteHomeUnresolvedError) Error() string {
-	return fmt.Sprintf("%s: cannot resolve the remote home directory", e.Host)
+	return e.Host + ": cannot resolve the remote home directory"
 }
 
 type unsafeTarMemberError struct {

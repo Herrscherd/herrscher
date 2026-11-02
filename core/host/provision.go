@@ -141,8 +141,8 @@ func checkHost(ctx context.Context, run hostRunner, h state.Host, wantVersion st
 		return rep
 	}
 	rep.Reachable = true
-	switch {
-	case h.Bin == "":
+	switch h.Bin {
+	case "":
 		rep.Notes = append(rep.Notes, "no herrscher provisioned: run `host provision "+h.Name+"`")
 	default:
 		if _, err := capture(ctx, run, h.Bin, "--help"); err != nil {

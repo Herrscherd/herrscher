@@ -47,12 +47,18 @@ func (m *restoreVerbMem) Close() error { return nil }
 var currentRestoreMem *restoreVerbMem
 
 func useRestoreMem(t *testing.T, m *restoreVerbMem) {
+	registerRestoreVerbPlugin()
 	t.Helper()
 	currentRestoreMem = m
 	t.Cleanup(func() { currentRestoreMem = nil })
 }
 
-func init() {
+func registerRestoreVerbPlugin() {
+	for _, p := range contracts.Default.Plugins() {
+		if p.Manifest.Kind == "fake-restore-verb" {
+			return
+		}
+	}
 	contracts.Register(contracts.Plugin{
 		Manifest: contracts.Manifest{Kind: "fake-restore-verb", Category: contracts.CategoryMemory},
 		Memory: func(context.Context, contracts.PluginConfig) (contracts.Memory, error) {

@@ -1184,7 +1184,7 @@ func TestSessionCreateRejectedAtLimit(t *testing.T) {
 	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < maxSessions; i++ {
+	for i := range maxSessions {
 		if err := st.AddSession(state.Session{Name: fmt.Sprintf("s%d", i), ChannelID: fmt.Sprintf("c%d", i), Type: "text"}); err != nil {
 			t.Fatal(err)
 		}

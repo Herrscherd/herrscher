@@ -41,11 +41,12 @@ func capture(ctx context.Context, run hostRunner, argv ...string) (string, error
 	return stdout.String(), nil
 }
 
-func platformFromUname(out string) (goos, goarch string, err error) {
+func platformFromUname(out string) (string, string, error) {
 	f := strings.Fields(strings.TrimSpace(out))
 	if len(f) != 2 {
 		return "", "", &platformUnreadableError{Output: strings.TrimSpace(out)}
 	}
+	var goos, goarch string
 	switch strings.ToLower(f[0]) {
 	case "linux":
 		goos = "linux"

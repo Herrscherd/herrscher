@@ -16,7 +16,7 @@ const (
 	trailerSeparator = "\u2014"
 )
 
-func parseTrailer(reply, marker string) (body string, ok bool) {
+func parseTrailer(reply, marker string) (string, bool) {
 	lines := strings.Split(strings.TrimRight(reply, "\n \t"), "\n")
 	last := strings.TrimSpace(lines[len(lines)-1])
 	if !strings.HasPrefix(last, marker) {
@@ -25,20 +25,20 @@ func parseTrailer(reply, marker string) (body string, ok bool) {
 	return strings.TrimSpace(strings.TrimPrefix(last, marker)), true
 }
 
-func splitAgentTask(body string) (agent, task string, ok bool) {
+func splitAgentTask(body string) (string, string, bool) {
 	parts := strings.SplitN(body, trailerSeparator, 2)
 	if len(parts) != 2 {
 		return "", "", false
 	}
-	agent = strings.TrimSpace(parts[0])
-	task = strings.TrimSpace(parts[1])
+	agent := strings.TrimSpace(parts[0])
+	task := strings.TrimSpace(parts[1])
 	if agent == "" || task == "" {
 		return "", "", false
 	}
 	return agent, task, true
 }
 
-func parseHandoff(reply string) (agent, task string, ok bool) {
+func parseHandoff(reply string) (string, string, bool) {
 	body, ok := parseTrailer(reply, handoffMarker)
 	if !ok {
 		return "", "", false
@@ -46,7 +46,7 @@ func parseHandoff(reply string) (agent, task string, ok bool) {
 	return splitAgentTask(body)
 }
 
-func parseDelegate(reply string) (agent, task string, ok bool) {
+func parseDelegate(reply string) (string, string, bool) {
 	body, ok := parseTrailer(reply, delegateMarker)
 	if !ok {
 		return "", "", false
@@ -54,23 +54,23 @@ func parseDelegate(reply string) (agent, task string, ok bool) {
 	return splitAgentTask(body)
 }
 
-func parseSingleToken(reply, marker string) (body string, ok bool) {
-	body, ok = parseTrailer(reply, marker)
+func parseSingleToken(reply, marker string) (string, bool) {
+	body, ok := parseTrailer(reply, marker)
 	if !ok || body == "" {
 		return "", false
 	}
 	return body, true
 }
 
-func parseDone(reply string) (summary string, ok bool) {
+func parseDone(reply string) (string, bool) {
 	return parseSingleToken(reply, doneMarker)
 }
 
-func parseMerge(reply string) (worker string, ok bool) {
+func parseMerge(reply string) (string, bool) {
 	return parseSingleToken(reply, mergeMarker)
 }
 
-func parseSeal(reply string) (n int, ok bool) {
+func parseSeal(reply string) (int, bool) {
 	body, ok := parseTrailer(reply, sealMarker)
 	if !ok || body == "" {
 		return 0, false
@@ -82,15 +82,16 @@ func parseSeal(reply string) (n int, ok bool) {
 	return v, true
 }
 
-func splitAgentTasks(body string) (agent string, tasks []string, ok bool) {
+func splitAgentTasks(body string) (string, []string, bool) {
 	parts := strings.SplitN(body, trailerSeparator, 2)
 	if len(parts) != 2 {
 		return "", nil, false
 	}
-	agent = strings.TrimSpace(parts[0])
+	agent := strings.TrimSpace(parts[0])
 	if agent == "" {
 		return "", nil, false
 	}
+	var tasks []string
 	for _, raw := range strings.Split(parts[1], ";;") {
 		if t := strings.TrimSpace(raw); t != "" {
 			tasks = append(tasks, t)
@@ -102,7 +103,7 @@ func splitAgentTasks(body string) (agent string, tasks []string, ok bool) {
 	return agent, tasks, true
 }
 
-func parseFanOut(reply string) (agent string, tasks []string, ok bool) {
+func parseFanOut(reply string) (string, []string, bool) {
 	body, ok := parseTrailer(reply, fanoutMarker)
 	if !ok {
 		return "", nil, false
@@ -110,6 +111,6 @@ func parseFanOut(reply string) (agent string, tasks []string, ok bool) {
 	return splitAgentTasks(body)
 }
 
-func parseRoute(reply string) (task string, ok bool) {
+func parseRoute(reply string) (string, bool) {
 	return parseSingleToken(reply, routeMarker)
 }

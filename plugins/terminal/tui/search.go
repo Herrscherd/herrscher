@@ -15,10 +15,10 @@ func searchHits(lines []string, query string) []int {
 	if strings.TrimSpace(query) == "" {
 		return nil
 	}
-	q := strings.ToLower(query)
+	needle := strings.ToLower(query)
 	var out []int
 	for i, ln := range lines {
-		if strings.Contains(strings.ToLower(visibleText(ln)), q) {
+		if strings.Contains(strings.ToLower(visibleText(ln)), needle) {
 			out = append(out, i)
 		}
 	}
@@ -66,13 +66,13 @@ func visibleText(s string) string {
 	if !strings.Contains(s, "\x1b") {
 		return s
 	}
-	var b strings.Builder
+	var block strings.Builder
 	forEachTextRun(s, func(esc bool, chunk string) {
 		if !esc {
-			b.WriteString(chunk)
+			block.WriteString(chunk)
 		}
 	})
-	return b.String()
+	return block.String()
 }
 
 func forEachTextRun(s string, fn func(esc bool, chunk string)) {
@@ -95,10 +95,10 @@ func highlightMatches(lines []string, query string) []string {
 	if strings.TrimSpace(query) == "" {
 		return lines
 	}
-	q := strings.ToLower(query)
+	needle := strings.ToLower(query)
 	out := make([]string, len(lines))
 	for i, ln := range lines {
-		out[i] = markLine(ln, q)
+		out[i] = markLine(ln, needle)
 	}
 	return out
 }

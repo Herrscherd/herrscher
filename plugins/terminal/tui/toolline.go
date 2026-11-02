@@ -63,9 +63,9 @@ func renderTool(text string, width int, v view) string {
 	}
 	var b strings.Builder
 	b.WriteString(toolPart(gutter, rest, v.st.tool, width, v))
-	for _, ln := range lines[1:] {
+	for _, line := range lines[1:] {
 		b.WriteByte('\n')
-		b.WriteString(toolPart(resultGutter, ln, v.st.dim, width, v))
+		b.WriteString(toolPart(resultGutter, line, v.st.dim, width, v))
 	}
 	return b.String()
 }

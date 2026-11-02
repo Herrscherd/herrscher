@@ -33,9 +33,9 @@ func (wlClipboard) ImageType(ctx context.Context) (string, bool) {
 	for _, t := range strings.Fields(string(out)) {
 		available[strings.ToLower(strings.TrimSpace(t))] = true
 	}
-	for _, t := range preferredImageTypes() {
-		if available[t] {
-			return t, true
+	for _, target := range preferredImageTypes() {
+		if available[target] {
+			return target, true
 		}
 	}
 	for t := range available {

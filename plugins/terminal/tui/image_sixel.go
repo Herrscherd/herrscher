@@ -11,28 +11,28 @@ const sixelCubeSide = 6
 
 func sixelEscape(img image.Image) string {
 	b := img.Bounds()
-	w, h := b.Dx(), b.Dy()
-	if w <= 0 || h <= 0 {
+	width, h := b.Dx(), b.Dy()
+	if width <= 0 || h <= 0 {
 		return ""
 	}
-	idx, colours := quantiseSixel(img, w, h)
+	idx, colours := quantiseSixel(img, width, h)
 	var s strings.Builder
-	writeSixelHeader(&s, w, h, colours)
-	writeSixelBands(&s, idx, w, h, colours)
+	writeSixelHeader(&s, width, h, colours)
+	writeSixelBands(&s, idx, width, h, colours)
 	s.WriteString("\x1b\\")
 	return s.String()
 }
 
-func quantiseSixel(img image.Image, w, h int) ([]int, []int) {
-	b := img.Bounds()
+func quantiseSixel(img image.Image, w, h int) (indices, palette []int) {
+	bounds := img.Bounds()
 	idx := make([]int, w*h)
 	present := map[int]bool{}
 	for y := range h {
 		for x := range w {
-			r, g, bl, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
-			i := sixelLevel(r)*sixelCubeSide*sixelCubeSide + sixelLevel(g)*sixelCubeSide + sixelLevel(bl)
-			idx[y*w+x] = i
-			present[i] = true
+			r, g, bl, _ := img.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()
+			index := sixelLevel(r)*sixelCubeSide*sixelCubeSide + sixelLevel(g)*sixelCubeSide + sixelLevel(bl)
+			idx[y*w+x] = index
+			present[index] = true
 		}
 	}
 	colours := make([]int, 0, len(present))
@@ -54,9 +54,9 @@ func writeSixelHeader(s *strings.Builder, w, h int, colours []int) {
 		s.WriteString(strconv.Itoa(i))
 		s.WriteString(";2;")
 		r := i / (sixelCubeSide * sixelCubeSide)
-		g := (i / sixelCubeSide) % sixelCubeSide
+		glyph := (i / sixelCubeSide) % sixelCubeSide
 		bl := i % sixelCubeSide
-		s.WriteString(sixelPercent(r) + ";" + sixelPercent(g) + ";" + sixelPercent(bl))
+		s.WriteString(sixelPercent(r) + ";" + sixelPercent(glyph) + ";" + sixelPercent(bl))
 	}
 }
 
@@ -87,10 +87,10 @@ func sixelBand(idx []int, w, h, band, colour int) string {
 	inked := false
 	for x := range w {
 		var bits byte
-		for r := range 6 {
-			y := band + r
+		for row := range 6 {
+			y := band + row
 			if y < h && idx[y*w+x] == colour {
-				bits |= 1 << r
+				bits |= 1 << row
 			}
 		}
 		if bits != 0 {

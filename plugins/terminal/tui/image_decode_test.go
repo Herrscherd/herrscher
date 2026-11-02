@@ -97,7 +97,7 @@ func pngHeaderOnly(w, h uint32) []byte {
 	ihdr.Write([]byte{8, 6, 0, 0, 0})
 
 	var out bytes.Buffer
-	out.Write([]byte("\x89PNG\r\n\x1a\n"))
+	out.WriteString("\x89PNG\r\n\x1a\n")
 	out.Write(binary.BigEndian.AppendUint32(nil, uint32(ihdr.Len()-4)))
 	out.Write(ihdr.Bytes())
 	out.Write(binary.BigEndian.AppendUint32(nil, crc32.ChecksumIEEE(ihdr.Bytes())))

@@ -54,14 +54,14 @@ func downscale(img image.Image) image.Image {
 	if b.Dy() <= maxHeight && b.Dx() <= maxPreviewWidth {
 		return img
 	}
-	h, w := b.Dy(), b.Dx()
-	if h > maxHeight {
-		h, w = maxHeight, max(1, b.Dx()*maxHeight/b.Dy())
+	height, w := b.Dy(), b.Dx()
+	if height > maxHeight {
+		height, w = maxHeight, max(1, b.Dx()*maxHeight/b.Dy())
 	}
 	if w > maxPreviewWidth {
-		h, w = max(1, h*maxPreviewWidth/w), maxPreviewWidth
+		height, w = max(1, height*maxPreviewWidth/w), maxPreviewWidth
 	}
-	out := image.NewRGBA(image.Rect(0, 0, w, h))
+	out := image.NewRGBA(image.Rect(0, 0, w, height))
 	xdraw.ApproxBiLinear.Scale(out, out.Bounds(), img, b, xdraw.Src, nil)
 	return out
 }

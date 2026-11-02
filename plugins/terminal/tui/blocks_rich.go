@@ -98,23 +98,23 @@ func renderTable(rows [][]string, width int, st uiStyles) string {
 	for _, r := range rows {
 		cols = max(cols, len(r))
 	}
-	w := make([]int, cols)
+	widths := make([]int, cols)
 	for _, r := range rows {
 		for i, c := range r {
-			w[i] = max(w[i], lipgloss.Width(c))
+			widths[i] = max(widths[i], lipgloss.Width(c))
 		}
 	}
-	shrinkColumns(w, width-len(tableGap)*(cols-1))
+	shrinkColumns(widths, width-len(tableGap)*(cols-1))
 
 	var b strings.Builder
-	for i, r := range rows {
-		if i > 0 {
+	for row, r := range rows {
+		if row > 0 {
 			b.WriteByte('\n')
 		}
-		if i == 1 {
-			b.WriteString(st.dim.Render(strings.Repeat("─", min(width, tableWidth(w)))) + "\n")
+		if row == 1 {
+			b.WriteString(st.dim.Render(strings.Repeat("─", min(width, tableWidth(widths)))) + "\n")
 		}
-		b.WriteString(tableRow(r, w, i == 0, st))
+		b.WriteString(tableRow(r, widths, row == 0, st))
 	}
 	return b.String()
 }
@@ -144,20 +144,20 @@ func shrinkColumns(w []int, budget int) {
 
 func tableRow(r []string, w []int, header bool, st uiStyles) string {
 	cells := make([]string, len(w))
-	for i := range w {
+	for index := range w {
 		cell := ""
-		if i < len(r) {
-			cell = r[i]
+		if index < len(r) {
+			cell = r[index]
 		}
-		cell = truncate(cell, w[i])
-		pad := w[i] - lipgloss.Width(cell)
-		if pad > 0 && i < len(w)-1 {
+		cell = truncate(cell, w[index])
+		pad := w[index] - lipgloss.Width(cell)
+		if pad > 0 && index < len(w)-1 {
 			cell += strings.Repeat(" ", pad)
 		}
 		if header {
 			cell = st.accent.Render(cell)
 		}
-		cells[i] = cell
+		cells[index] = cell
 	}
 	return strings.Join(cells, tableGap)
 }
@@ -221,8 +221,8 @@ func foldCodeBlocks(text string) string {
 	var buf []string
 	lang := ""
 	inFence := false
-	for _, ln := range strings.Split(text, "\n") {
-		fence := strings.TrimSpace(ln)
+	for _, line := range strings.Split(text, "\n") {
+		fence := strings.TrimSpace(line)
 		switch {
 		case !inFence && strings.HasPrefix(fence, codeFence):
 			inFence, lang, buf = true, strings.TrimPrefix(fence, codeFence), nil
@@ -236,9 +236,9 @@ func foldCodeBlocks(text string) string {
 			out = append(out, buf...)
 			out = append(out, codeFence)
 		case inFence:
-			buf = append(buf, ln)
+			buf = append(buf, line)
 		default:
-			out = append(out, ln)
+			out = append(out, line)
 		}
 	}
 	if inFence {

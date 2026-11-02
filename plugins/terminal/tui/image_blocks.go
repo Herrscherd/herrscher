@@ -23,13 +23,13 @@ func blockRender(img image.Image, cols int) string {
 	if cols < 1 {
 		cols = 1
 	}
-	b := img.Bounds()
-	if b.Dx() <= 0 || b.Dy() <= 0 {
+	bounds := img.Bounds()
+	if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
 		return ""
 	}
-	rows := max(1, (b.Dy()*cols/b.Dx()+1)/pixelRowsPerLine)
+	rows := max(1, (bounds.Dy()*cols/bounds.Dx()+1)/pixelRowsPerLine)
 	scaled := image.NewRGBA(image.Rect(0, 0, cols, rows*pixelRowsPerLine))
-	xdraw.ApproxBiLinear.Scale(scaled, scaled.Bounds(), img, b, xdraw.Src, nil)
+	xdraw.ApproxBiLinear.Scale(scaled, scaled.Bounds(), img, bounds, xdraw.Src, nil)
 
 	var s strings.Builder
 	for row := range rows {
@@ -47,19 +47,19 @@ func blockRender(img image.Image, cols int) string {
 }
 
 func sgr(role int, c interface{ RGBA() (r, g, b, a uint32) }) string {
-	r, g, b, _ := c.RGBA()
+	glyph, g, b, _ := c.RGBA()
 	return "\x1b[" + strconv.Itoa(role) + ";2;" +
-		strconv.Itoa(int(r>>byteShift)) + ";" + strconv.Itoa(int(g>>byteShift)) + ";" + strconv.Itoa(int(b>>byteShift)) + "m"
+		strconv.Itoa(int(glyph>>byteShift)) + ";" + strconv.Itoa(int(g>>byteShift)) + ";" + strconv.Itoa(int(b>>byteShift)) + "m"
 }
 
 const maxBlockCols = 200
 
 func blockCols(img image.Image, rows int) int {
-	b := img.Bounds()
-	if b.Dy() <= 0 {
+	bounds := img.Bounds()
+	if bounds.Dy() <= 0 {
 		return 1
 	}
-	return min(maxBlockCols, max(1, b.Dx()*rows*2/b.Dy()))
+	return min(maxBlockCols, max(1, bounds.Dx()*rows*2/bounds.Dy()))
 }
 
 func imageEscape(img image.Image, caps Capabilities) string {

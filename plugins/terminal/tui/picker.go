@@ -19,9 +19,9 @@ func (m *model) openResume() {
 }
 
 func (m *model) clampResume() {
-	n := len(m.resumeRows)
-	if m.resumeIdx >= n {
-		m.resumeIdx = n - 1
+	count := len(m.resumeRows)
+	if m.resumeIdx >= count {
+		m.resumeIdx = count - 1
 	}
 	if m.resumeIdx < 0 {
 		m.resumeIdx = 0
@@ -34,19 +34,19 @@ func (m *model) chooseResume() tea.Cmd {
 	if m.resumeIdx < 0 || m.resumeIdx >= len(m.resumeRows) {
 		return nil
 	}
-	s := m.resumeRows[m.resumeIdx]
-	m.ensureTab(s.ChannelID)
-	m.active = s.ChannelID
-	if tb := m.tabs[s.ChannelID]; tb != nil {
+	session := m.resumeRows[m.resumeIdx]
+	m.ensureTab(session.ChannelID)
+	m.active = session.ChannelID
+	if tb := m.tabs[session.ChannelID]; tb != nil {
 		tb.unread = false
 	}
 	m.syncViewport()
-	if !s.Archived {
+	if !session.Archived {
 		return nil
 	}
-	name, ch, tm := s.Name, s.ChannelID, m.tm
+	channel, ch, tm := session.Name, session.ChannelID, m.tm
 	return func() tea.Msg {
-		out, err := tm.Resume(name)
+		out, err := tm.Resume(channel)
 		return dispatchResultMsg{origin: ch, out: out, err: err}
 	}
 }
@@ -202,12 +202,12 @@ func (m *model) choiceView() string {
 	}
 	var b strings.Builder
 	b.WriteString(m.st.accent.Render(glyphTool + " " + m.choice.Question))
-	for i, o := range m.choice.Options {
-		label := fmt.Sprintf("%d. %s", i+1, o.Label)
-		if i == len(m.choice.Options)-1 {
+	for index, o := range m.choice.Options {
+		label := fmt.Sprintf("%d. %s", index+1, o.Label)
+		if index == len(m.choice.Options)-1 {
 			label += "  (esc)"
 		}
-		if i == m.choiceIdx {
+		if index == m.choiceIdx {
 			b.WriteString("\n" + m.st.accent.Render(glyphCursor+" "+label))
 		} else {
 			b.WriteString("\n" + m.st.dim.Render("  "+label))

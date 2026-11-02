@@ -28,21 +28,21 @@ type composerWrapper struct {
 }
 
 func composerWrap(runes []rune, width int) [][]rune {
-	w := &composerWrapper{lines: [][]rune{{}}, word: []rune{}, width: width}
+	wrapper := &composerWrapper{lines: [][]rune{{}}, word: []rune{}, width: width}
 	for _, r := range runes {
 		if unicode.IsSpace(r) {
-			w.spaces++
+			wrapper.spaces++
 		} else {
-			w.word = append(w.word, r)
+			wrapper.word = append(wrapper.word, r)
 		}
-		if w.spaces > 0 {
-			w.placeWord()
+		if wrapper.spaces > 0 {
+			wrapper.placeWord()
 		} else {
-			w.breakLongWord()
+			wrapper.breakLongWord()
 		}
 	}
-	w.placeTrailing()
-	return w.lines
+	wrapper.placeTrailing()
+	return wrapper.lines
 }
 
 func (w *composerWrapper) placeWord() {

@@ -32,7 +32,7 @@ func (f *fakePluginSeam) Versions(context.Context, string) ([]string, error) {
 
 func (f *fakePluginSeam) Findings(context.Context, string, string) []string { return f.findings }
 
-func (f *fakePluginSeam) Apply(ctx context.Context, action PluginAction, module, version string) (string, error) {
+func (f *fakePluginSeam) Apply(_ context.Context, action PluginAction, module, version string) (string, error) {
 	f.applied = append(f.applied, string(action)+" "+module+"@"+version)
 	return f.output, f.applyErr
 }

@@ -146,7 +146,7 @@ linters:
         - name: confusing-results
         - name: modifies-value-receiver
         - name: unhandled-error
-          arguments: ["fmt.Println"]
+          arguments: ["fmt.Println", "(*strings.Builder).WriteString", "(*strings.Builder).WriteByte", "(*strings.Builder).WriteRune", "(*bytes.Buffer).WriteString", "(*bytes.Buffer).WriteByte", "(*bytes.Buffer).Write"]
         - name: use-any
         - name: datarace
         - name: identical-branches
@@ -185,6 +185,9 @@ linters:
         text: "^G(304|703):"
       - path: ^plugins/terminal/register\.go$
         linters: [gochecknoinits]
+      - path: ^plugins/terminal/tui/image_decode\.go$
+        linters: [revive]
+        text: "blank-imports"
       - path: ^plugins/terminal/tui/(clipboard|open)\.go$
         linters: [gosec]
         text: "^G204:"
@@ -200,6 +203,15 @@ linters:
       - path: ^(plugins/terminal/tui/|core/cli/registry\.go$)
         linters: [gocritic]
         text: "consider giving a name to these results"
+      - path: ^plugins/terminal/tui/image_sixel\.go$
+        linters: [nonamedreturns]
+        text: 'named return "(indices|palette)"'
+      - path: ^plugins/terminal/tui/palette\.go$
+        linters: [nonamedreturns]
+        text: 'named return "(from|to)"'
+      - path: ^plugins/terminal/tui/open\.go$
+        linters: [nonamedreturns]
+        text: 'named return "(file|line)"'
 
 formatters:
   enable:

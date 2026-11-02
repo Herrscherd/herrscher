@@ -38,6 +38,8 @@ var (
 	errNotRegularFile = errors.New("not a regular file")
 )
 
+// Attachment is a file staged for the next turn: its name, where it sits on disk,
+// its MIME type and its size in bytes.
 type Attachment struct {
 	Name string
 	Path string

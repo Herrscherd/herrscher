@@ -98,13 +98,13 @@ func renderGauge(used int, vendor string, width int, st uiStyles) string {
 		return ""
 	}
 	limit := contextLimit(vendor)
-	r := contextRatio(used, limit)
-	style := palierStyle(r, st)
+	row := contextRatio(used, limit)
+	style := palierStyle(row, st)
 	label := fmt.Sprintf(" reste %d %%", int(contextLeft(used, limit)*percentScale))
 	if width >= verboseStatus {
 		label += " avant compaction"
 	}
-	return gauge(r, style, st.dim) + style.Render(label)
+	return gauge(row, style, st.dim) + style.Render(label)
 }
 
 func modelLabel(info contracts.SessionInfo) string {

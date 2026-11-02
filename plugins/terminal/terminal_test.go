@@ -38,7 +38,7 @@ func TestMenuRendersChoices(t *testing.T) {
 	}
 }
 
-func TestEmitDeliversControlEventUnderBackpressure(t *testing.T) {
+func TestEmitDeliversControlEventUnderBackpressure(_ *testing.T) {
 	tm := New()
 	for range cap(tm.out) {
 		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: "chunk", Text: "x"}})
@@ -122,7 +122,7 @@ func TestEmitUsesDefaultChannel(t *testing.T) {
 	}
 }
 
-func TestTerminalImplementsRoutedEventSink(t *testing.T) {
+func TestTerminalImplementsRoutedEventSink(_ *testing.T) {
 	var _ contracts.RoutedEventSink = New()
 }
 
@@ -142,7 +142,7 @@ func TestPostEmitsReplyEvent(t *testing.T) {
 	}
 }
 
-func TestTerminalImplementsChannelAdmin(t *testing.T) {
+func TestTerminalImplementsChannelAdmin(_ *testing.T) {
 	var _ contracts.ChannelAdmin = New()
 }
 
@@ -223,7 +223,7 @@ func (f *fakeSessionControl) Close(_ context.Context, name string, force bool) (
 
 func (f *fakeSessionControl) Sessions() []contracts.SessionInfo { return f.sessions }
 
-func (f *fakeSessionControl) Scrollback(name string) []contracts.ScrollbackLine {
+func (f *fakeSessionControl) Scrollback(_ string) []contracts.ScrollbackLine {
 	return f.scrollback
 }
 

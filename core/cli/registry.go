@@ -24,6 +24,7 @@ var (
 	errFlagNeedsValue   = errors.New("needs a value")
 )
 
+// Registry holds the commands a process can run, keyed by their verb path.
 type Registry struct {
 	cmds []contracts.Cmd
 }
@@ -31,16 +32,16 @@ type Registry struct {
 func key(path []string) string { return strings.Join(path, " ") }
 
 // Add registers a command. It rejects an empty path or a duplicate path.
-func (r *Registry) Add(c contracts.Cmd) error {
-	if len(c.Path) == 0 {
+func (r *Registry) Add(cmd contracts.Cmd) error {
+	if len(cmd.Path) == 0 {
 		return errEmptyPath
 	}
 	for _, e := range r.cmds {
-		if key(e.Path) == key(c.Path) {
-			return fmt.Errorf("%w %q", errDuplicateCommand, key(c.Path))
+		if key(e.Path) == key(cmd.Path) {
+			return fmt.Errorf("%w %q", errDuplicateCommand, key(cmd.Path))
 		}
 	}
-	r.cmds = append(r.cmds, c)
+	r.cmds = append(r.cmds, cmd)
 	return nil
 }
 
@@ -55,11 +56,11 @@ func (r *Registry) Dispatch(ctx context.Context, args []string) (string, error) 
 	if cmd == nil {
 		return "", fmt.Errorf("%w %q", errUnknownCommand, strings.Join(args, " "))
 	}
-	in, err := parse(*cmd, rest)
+	input, err := parse(*cmd, rest)
 	if err != nil {
 		return "", err
 	}
-	return cmd.Run(ctx, in)
+	return cmd.Run(ctx, input)
 }
 
 // Resolve reports the command args address and the Input parsed for it, without
@@ -77,11 +78,11 @@ func (r *Registry) Resolve(args []string) ([]string, contracts.Input, bool) {
 	if cmd == nil {
 		return nil, contracts.Input{}, false
 	}
-	in, err := parse(*cmd, rest)
+	input, err := parse(*cmd, rest)
 	if err != nil {
 		return cmd.Path, contracts.Input{}, true
 	}
-	return cmd.Path, in, true
+	return cmd.Path, input, true
 }
 
 // Run invokes the command at an exact path with a pre-built Input, skipping argv
@@ -89,28 +90,28 @@ func (r *Registry) Resolve(args []string) ([]string, contracts.Input, bool) {
 // SessionControl methods) so they never assemble stringly-typed flag argv that
 // could silently drift from the declared params. Required params are still
 // checked, so a typed caller gets the same validation as the CLI.
-func (r *Registry) Run(ctx context.Context, path []string, in contracts.Input) (string, error) {
+func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input) (string, error) {
 	var cmd *contracts.Cmd
-	for i := range r.cmds {
-		if key(r.cmds[i].Path) == key(path) {
-			cmd = &r.cmds[i]
+	for index := range r.cmds {
+		if key(r.cmds[index].Path) == key(path) {
+			cmd = &r.cmds[index]
 			break
 		}
 	}
 	if cmd == nil {
 		return "", fmt.Errorf("%w %q", errUnknownCommand, key(path))
 	}
-	if in.Args == nil {
-		in.Args = map[string]string{}
+	if input.Args == nil {
+		input.Args = make(map[string]string)
 	}
-	for _, p := range cmd.Params {
-		if p.Required {
-			if _, ok := in.Args[p.Name]; !ok {
-				return "", fmt.Errorf("%s: %w --%s", key(cmd.Path), errMissingRequired, p.Name)
+	for _, param := range cmd.Params {
+		if param.Required {
+			if _, ok := input.Args[param.Name]; !ok {
+				return "", fmt.Errorf("%s: %w --%s", key(cmd.Path), errMissingRequired, param.Name)
 			}
 		}
 	}
-	return cmd.Run(ctx, in)
+	return cmd.Run(ctx, input)
 }
 
 // Runner is a command's handler, named so a caller can wrap one.
@@ -123,11 +124,11 @@ type Runner func(context.Context, contracts.Input) (string, error)
 // interceptors once the registry is complete.
 func (r *Registry) Intercept(prefix []string, wrap func(cmd contracts.Cmd, next Runner) Runner) {
 	for i := range r.cmds {
-		c := &r.cmds[i]
-		if len(c.Path) < len(prefix) || !hasPrefix(c.Path, prefix) {
+		cmd := &r.cmds[i]
+		if len(cmd.Path) < len(prefix) || !hasPrefix(cmd.Path, prefix) {
 			continue
 		}
-		c.Run = wrap(*c, c.Run)
+		cmd.Run = wrap(*cmd, cmd.Run)
 	}
 }
 
@@ -135,13 +136,13 @@ func (r *Registry) match(args []string) (*contracts.Cmd, []string) {
 	var best *contracts.Cmd
 	bestLen := 0
 	for i := range r.cmds {
-		c := &r.cmds[i]
-		if len(c.Path) > len(args) || len(c.Path) <= bestLen {
+		cmd := &r.cmds[i]
+		if len(cmd.Path) > len(args) || len(cmd.Path) <= bestLen {
 			continue
 		}
-		if hasPrefix(args, c.Path) {
-			best = c
-			bestLen = len(c.Path)
+		if hasPrefix(args, cmd.Path) {
+			best = cmd
+			bestLen = len(cmd.Path)
 		}
 	}
 	if best == nil {
@@ -179,63 +180,63 @@ func FlagArg(name, value string) []string {
 }
 
 func isParam(c contracts.Cmd, name string) (contracts.Param, bool) {
-	for _, p := range c.Params {
-		if p.Name == name {
-			return p, true
+	for _, param := range c.Params {
+		if param.Name == name {
+			return param, true
 		}
 	}
 	return contracts.Param{}, false
 }
 
-func parse(c contracts.Cmd, rest []string) (contracts.Input, error) {
-	in := contracts.Input{Args: map[string]string{}}
-	for i := 0; i < len(rest); i++ {
-		tok := rest[i]
+func parse(cmd contracts.Cmd, rest []string) (contracts.Input, error) {
+	input := contracts.Input{Args: make(map[string]string)}
+	for index := 0; index < len(rest); index++ {
+		tok := rest[index]
 		switch {
 		case tok == "--json":
-			in.JSON = true
+			input.JSON = true
 		case !strings.HasPrefix(tok, "--"):
-			in.Rest = append(in.Rest, tok)
+			input.Rest = append(input.Rest, tok)
 		default:
-			consumed, err := parseFlag(c, rest, i, in)
+			consumed, err := parseFlag(cmd, rest, index, input)
 			if err != nil {
-				return in, err
+				return input, err
 			}
-			i += consumed
+			index += consumed
 		}
 	}
-	return in, checkRequired(c, in)
+	return input, checkRequired(cmd, input)
 }
 
-func parseFlag(c contracts.Cmd, rest []string, i int, in contracts.Input) (int, error) {
-	name, inline, isInline := strings.Cut(strings.TrimPrefix(rest[i], "--"), "=")
-	p, ok := isParam(c, name)
+func parseFlag(c contracts.Cmd, rest []string, index int, input contracts.Input) (int, error) {
+	name, inline, isInline := strings.Cut(strings.TrimPrefix(rest[index], "--"), "=")
+	param, ok := isParam(c, name)
 	if !ok {
 		return 0, fmt.Errorf("%s: %w --%s", strings.Join(c.Path, " "), errUnknownFlag, name)
 	}
 	if isInline {
-		in.Args[name] = inline
+		input.Args[name] = inline
 		return 0, nil
 	}
 	switch {
-	case i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--"):
-		in.Args[name] = rest[i+1]
+	case index+1 < len(rest) && !strings.HasPrefix(rest[index+1], "--"):
+		input.Args[name] = rest[index+1]
 		return 1, nil
-	case p.Required || p.ValueRequired:
+	case param.Required || param.ValueRequired:
 		return 0, fmt.Errorf("%s: flag --%s %w", strings.Join(c.Path, " "), name, errFlagNeedsValue)
 	default:
-		in.Args[name] = "true"
+		input.Args[name] = "true"
 		return 0, nil
 	}
 }
 
-func checkRequired(c contracts.Cmd, in contracts.Input) error {
-	for _, p := range c.Params {
-		if !p.Required {
+func checkRequired(cmd contracts.Cmd, input contracts.Input) error {
+	for _, param := range cmd.Params {
+		if !param.Required {
 			continue
 		}
-		if _, ok := in.Args[p.Name]; !ok {
-			return fmt.Errorf("%s: %w --%s", strings.Join(c.Path, " "), errMissingRequired, p.Name)
+		if _, ok := input.Args[param.Name]; !ok {
+			return fmt.Errorf("%s: %w --%s", strings.Join(cmd.Path, " "), errMissingRequired, param.Name)
 		}
 	}
 	return nil
@@ -266,10 +267,10 @@ func (r *Registry) Specs() []Spec {
 // Help renders one usage line per command, sorted by path, for the root help.
 func (r *Registry) Help() string {
 	lines := make([]string, 0, len(r.cmds))
-	for _, c := range r.cmds {
+	for _, cmd := range r.cmds {
 		var line strings.Builder
-		line.WriteString("  " + strings.Join(c.Path, " "))
-		for _, p := range c.Params {
+		line.WriteString("  " + strings.Join(cmd.Path, " "))
+		for _, p := range cmd.Params {
 			switch {
 			case p.Required:
 				line.WriteString(" --" + p.Name + " <" + p.Name + ">")
@@ -279,8 +280,8 @@ func (r *Registry) Help() string {
 				line.WriteString(" [--" + p.Name + "]")
 			}
 		}
-		if c.Help != "" {
-			line.WriteString(": " + c.Help)
+		if cmd.Help != "" {
+			line.WriteString(": " + cmd.Help)
 		}
 		lines = append(lines, line.String())
 	}

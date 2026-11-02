@@ -94,7 +94,7 @@ func editorLauncher(env func(string) string) launcher {
 	}
 }
 
-func splitFileRef(target string) (string, string) {
+func splitFileRef(target string) (file, line string) {
 	i := strings.LastIndex(target, ":")
 	if i < 0 {
 		return target, ""
@@ -140,26 +140,26 @@ func (m *model) selectedLink() (Link, bool) {
 }
 
 func (m *model) openSelectedLink() {
-	l, ok := m.selectedLink()
+	launch, ok := m.selectedLink()
 	if !ok {
 		m.flash = "aucun lien sélectionné · ctrl+l en choisit un"
 		return
 	}
-	if err := openLink(m.runContext(), l, m.sys, m.edit); err != nil {
+	if err := openLink(m.runContext(), launch, m.sys, m.edit); err != nil {
 		m.flash = "ouverture impossible : " + err.Error()
 		return
 	}
-	m.flash = "ouverture de " + l.Target
+	m.flash = "ouverture de " + launch.Target
 }
 
 func (m *model) linkStatus() string {
-	l, ok := m.selectedLink()
+	launch, ok := m.selectedLink()
 	if !ok {
 		return ""
 	}
 	verb := "↵ open"
-	if l.Kind == LinkFile {
+	if launch.Kind == LinkFile {
 		verb = "↵ edit"
 	}
-	return m.st.dim.Render(verb + " " + l.Target)
+	return m.st.dim.Render(verb + " " + launch.Target)
 }

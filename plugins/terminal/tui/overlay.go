@@ -20,9 +20,9 @@ func floatingList(rows []overlayRow, cursor int, footer string, width int, st ui
 		return ""
 	}
 	out := make([]string, 0, len(rows)+1)
-	for i, r := range rows {
+	for row, r := range rows {
 		head := "  "
-		if i == cursor {
+		if row == cursor {
 			head = glyphCursor + " "
 		}
 		label := r.label
@@ -30,7 +30,7 @@ func floatingList(rows []overlayRow, cursor int, footer string, width int, st ui
 			label += strings.Repeat(" ", pad)
 		}
 		body := padTo(truncate("  "+head+r.mark+label+r.detail, width), width)
-		if i == cursor {
+		if row == cursor {
 			out = append(out, st.overlaySel.Render(body))
 			continue
 		}

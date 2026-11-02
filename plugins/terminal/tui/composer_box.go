@@ -45,11 +45,11 @@ func (m *model) composerZone() []string {
 		return out
 	}
 	g := boxRunes(m.caps.Boxes)
-	tl, tr, bl, br, h, v := g.tl, g.tr, g.bl, g.br, g.h, g.v
+	track, tr, bl, br, h, v := g.tl, g.tr, g.bl, g.br, g.h, g.v
 	width := m.innerWidth()
 	edge := strings.Repeat(h, width-composerBorderCols)
 	side := m.st.dim.Render(v)
-	zone := []string{m.st.dim.Render(tl + edge + tr)}
+	zone := []string{m.st.dim.Render(track + edge + tr)}
 	for _, line := range body {
 		line = truncate(line, width-composerChrome)
 		pad := width - composerChrome - lipgloss.Width(line)

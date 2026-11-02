@@ -8,6 +8,7 @@ const programKitty = "kitty"
 // of fidelity. The zero value is the honest default: no protocol at all.
 type Graphics int
 
+// The graphics protocols a terminal can speak, from most to least capable.
 const (
 	GraphicsNone Graphics = iota
 	GraphicsSixel
@@ -29,6 +30,7 @@ func (g Graphics) String() string {
 // colours: what a terminal is assumed to have when it says nothing.
 type Colour int
 
+// The colour depths a terminal can render, from least to most.
 const (
 	Colour16 Colour = iota
 	Colour256

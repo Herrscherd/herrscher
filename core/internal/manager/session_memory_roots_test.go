@@ -9,7 +9,9 @@ import (
 
 func TestSessionCreatePersistsMemoryRoots(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "shared", "true",
@@ -35,7 +37,9 @@ func TestSessionCreatePersistsMemoryRoots(t *testing.T) {
 
 func TestMemoryProjectDoesNotMoveTheSession(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.SetWorkspace("/workspaces/demo"); err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +57,9 @@ func TestMemoryProjectDoesNotMoveTheSession(t *testing.T) {
 
 func TestSessionCreatePinsWhenAsked(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "shared", "true",
@@ -69,7 +75,9 @@ func TestSessionCreatePinsWhenAsked(t *testing.T) {
 
 func TestMemoryAgentDoesNotNeedAWorktree(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "shared", "true", "memory_agent", "tui",
@@ -80,7 +88,9 @@ func TestMemoryAgentDoesNotNeedAWorktree(t *testing.T) {
 
 func TestAgentStillNeedsAWorktree(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "shared", "true", "agent", "x",
@@ -91,7 +101,9 @@ func TestAgentStillNeedsAWorktree(t *testing.T) {
 
 func TestInvalidMemoryProjectIsRefused(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "shared", "true", "memory_project", "a/b",

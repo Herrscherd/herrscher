@@ -14,7 +14,9 @@ func TestSessionCreateRefusesExplicitCmdUnderGatewayOnly(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
 	gatewayOnly(h)
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "model", "gw-claude-opus-5", "cmd", "claude --model opus-expensive"))
@@ -36,7 +38,9 @@ func TestSessionCreateRequiresAModelUnderGatewayOnly(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
 	gatewayOnly(h)
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := h.sessionCreateRun(context.Background(), args("name", "demo"))
 	if err == nil {
@@ -57,7 +61,9 @@ func TestSessionCreateWithModelAndNoCmdIsAcceptedUnderGatewayOnly(t *testing.T) 
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
 	gatewayOnly(h)
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "model", "gw-claude-opus-5")); err != nil {
 		t.Fatalf("the supported gateway-only shape was refused: %v", err)
@@ -74,7 +80,9 @@ func TestSessionCreateWithModelAndNoCmdIsAcceptedUnderGatewayOnly(t *testing.T) 
 func TestExplicitCmdAndNoModelStayAcceptedWithoutTheGatewayPolicy(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "a", "cmd", "claude --model whatever")); err != nil {
 		t.Fatalf("explicit cmd refused on the internal build: %v", err)

@@ -11,7 +11,9 @@ func TestSessionCreateTakesTheConfiguredDefaultModel(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
 	h.SetDefaultModel("gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatal(err)
@@ -29,7 +31,9 @@ func TestAnExplicitModelBeatsTheDefault(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude", "gw-claude-sonnet-5": "claude"})
 	h.SetDefaultModel("gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "model", "gw-claude-sonnet-5")); err != nil {
 		t.Fatal(err)
@@ -43,7 +47,9 @@ func TestAnExplicitCmdDoesNotTakeTheDefaultModel(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
 	h.SetDefaultModel("gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "cmd", "claude --model whatever")); err != nil {
 		t.Fatal(err)
@@ -57,7 +63,9 @@ func TestTheDefaultIsSkippedWhenAnotherVendorIsRequested(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
 	h.SetDefaultModel("gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "vendor", "codex")); err != nil {
 		t.Fatalf("a codex session was rejected because of a claude default: %v", err)
@@ -72,7 +80,9 @@ func TestTheDefaultSatisfiesTheGatewayOnlyModelRequirement(t *testing.T) {
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
 	gatewayOnly(h)
 	h.SetDefaultModel("gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatalf("a modelless create was refused despite a configured default: %v", err)
@@ -85,7 +95,9 @@ func TestTheDefaultSatisfiesTheGatewayOnlyModelRequirement(t *testing.T) {
 func TestNoDefaultLeavesTheModelEmpty(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatal(err)

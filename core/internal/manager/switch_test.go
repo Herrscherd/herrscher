@@ -14,8 +14,12 @@ func TestSessionSwitchRetargetsAndRestartsWithSeed(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "alpha", Vendor: "claude", Cmd: "claude --model claude-opus-4-8", ResumeToken: "old"}); err != nil {
 		t.Fatal(err)
 	}
-	_ = state.AppendTranscript(state.TranscriptPath(h.PartDir(), "alpha"), state.TranscriptEntry{Role: "user", Text: "bonjour"})
-	_ = state.AppendTranscript(state.TranscriptPath(h.PartDir(), "alpha"), state.TranscriptEntry{Role: "assistant", Text: "salut"})
+	if err := state.AppendTranscript(state.TranscriptPath(h.PartDir(), "alpha"), state.TranscriptEntry{Role: "user", Text: "bonjour"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.AppendTranscript(state.TranscriptPath(h.PartDir(), "alpha"), state.TranscriptEntry{Role: "assistant", Text: "salut"}); err != nil {
+		t.Fatal(err)
+	}
 
 	var seeded []string
 	h.SetSeeder(func(name, task string) bool { seeded = append(seeded, name+"|"+task); return true })

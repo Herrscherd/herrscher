@@ -11,7 +11,9 @@ import (
 
 func TestSessionRenameCarriesTheTranscriptAndTheJournal(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "avant")); err != nil {
 		t.Fatal(err)
@@ -59,7 +61,9 @@ func TestSessionRenameCarriesTheTranscriptAndTheJournal(t *testing.T) {
 
 func TestSessionRenameRefusesTheImpossible(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	for _, n := range []string{"un", "deux"} {
 		if _, err := h.sessionCreateRun(context.Background(), args("name", n)); err != nil {
 			t.Fatal(err)
@@ -84,7 +88,9 @@ func TestSessionRenameRefusesTheImpossible(t *testing.T) {
 
 func TestSessionRenameCarriesTheSchedulesThatTargetIt(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "avant")); err != nil {
 		t.Fatal(err)
@@ -116,7 +122,9 @@ func TestSessionRenameCarriesTheSchedulesThatTargetIt(t *testing.T) {
 
 func TestSessionRenameWarnsWhenAScheduleOwnsTheName(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "schedule-veille")); err != nil {
 		t.Fatal(err)

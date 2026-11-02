@@ -9,7 +9,9 @@ import (
 
 func TestSessionResumeRunUnarchivesAndStarts(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "keep")); err != nil {
 		t.Fatal(err)

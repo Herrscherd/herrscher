@@ -109,7 +109,9 @@ func TestSessionCreateWithAgentMaterializes(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	worktreeDir := t.TempDir()
 	wt.path = worktreeDir
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := h.agents.Create(agent.CreateSpec{Name: "roblox", Soul: "PERSONA", MCP: "neublox serve --project {{WORKTREE}}", Backend: "codex"}); err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +156,9 @@ func TestSessionCreateWithAgentMaterializes(t *testing.T) {
 func TestSessionCreateInheritsAgentCmd(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "default-cmd")
 	wt.path = t.TempDir()
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := h.agents.Create(agent.CreateSpec{Name: "bob", Soul: "P", Backend: "codex", Cmd: "codex --model gpt-5.6"}); err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
@@ -180,7 +184,9 @@ func TestSessionCreateUnknownAgentRollsBack(t *testing.T) {
 	h, d, _, wt, _, st := newTestHandler(t, "")
 	worktreeDir := t.TempDir()
 	wt.path = worktreeDir
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "agent", "ghost")); err == nil {
 		t.Fatal("expected error for unknown agent")
@@ -198,7 +204,9 @@ func TestSessionCreateUnknownAgentRollsBack(t *testing.T) {
 
 func TestSessionCreateAgentRefusesShared(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := h.agents.Create(agent.CreateSpec{Name: "roblox"}); err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +218,9 @@ func TestSessionCreateAgentRefusesShared(t *testing.T) {
 func TestSessionCreateWithAgentOutsideGitGetsAScratchDirectory(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	wt.path = ""
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := h.agents.Create(agent.CreateSpec{Name: "roblox", Soul: "PERSONA"}); err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +258,9 @@ func TestSessionCreateWithAgentOutsideGitGetsAScratchDirectory(t *testing.T) {
 func TestSessionCreateDoesNotRollBackAReusedScratchDirectory(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	wt.path = ""
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := h.agents.Create(agent.CreateSpec{Name: "roblox"}); err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +288,9 @@ func TestSessionCreateNoAgentUnchanged(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	worktreeDir := t.TempDir()
 	wt.path = worktreeDir
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +307,9 @@ func TestSessionCreateDoesNotRollBackAReusedWorktree(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	wt.path = t.TempDir()
 	wt.preExisting = true
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "agent", "ghost")); err == nil {
 		t.Fatal("expected error for unknown agent")

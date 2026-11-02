@@ -9,7 +9,9 @@ import (
 
 func TestSessionCreateTerminalOnlyIgnoresWorkspaceProject(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "terminal")
-	st.SetHome(state.HomeRef{ID: "terminal", Type: "terminal"})
+	if err := st.SetHome(state.HomeRef{ID: "terminal", Type: "terminal"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.SetWorkspace("/workspaces/demo"); err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +28,9 @@ func TestSessionCreateTerminalOnlyIgnoresWorkspaceProject(t *testing.T) {
 
 func TestSessionCreateNoProjectRootsAtWorkspace(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.SetWorkspace("/workspaces/demo"); err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +50,9 @@ func TestSessionCreateNoProjectRootsAtWorkspace(t *testing.T) {
 
 func TestSessionCreateNoWorkspaceInheritsPwd(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(),
 		args("name", "demo", "shared", "true")); err != nil {
@@ -63,7 +69,9 @@ func TestSessionCreateNoWorkspaceInheritsPwd(t *testing.T) {
 
 func TestSessionCreateTerminalOnlyRoutesToTerminalAdmin(t *testing.T) {
 	h, chat, _, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	term := &fakeChannelAdmin{homeType: "terminal", idPrefix: "terminal/"}
 	h.SetTerminalAdmin(term)
 

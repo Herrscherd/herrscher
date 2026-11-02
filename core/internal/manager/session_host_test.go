@@ -71,7 +71,9 @@ func (f *fakeHosts) EnsureProject(ctx context.Context, name, project, repo strin
 func handlerWithHosts(t *testing.T) (*Handler, *fakeHosts, *fakeWT, *state.State) {
 	t.Helper()
 	h, _, _, localWT, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	hs := &fakeHosts{name: "build1", wt: &fakeWT{path: "/srv/work/demo-wt", scratchBase: t.TempDir()}, workspace: "/srv/work"}
 	h.SetHosts(hs)
 	return h, hs, localWT, st

@@ -10,8 +10,12 @@ import (
 
 func TestARefusedCloseLeavesTheSessionAnswering(t *testing.T) {
 	h, _, sup, wt, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	st.AddSession(state.Session{Name: "dirty", ChannelID: "42", Type: "text", Worktree: "/wt/x"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddSession(state.Session{Name: "dirty", ChannelID: "42", Type: "text", Worktree: "/wt/x"}); err != nil {
+		t.Fatal(err)
+	}
 	wt.removeErr = errors.New("uncommitted changes")
 
 	if _, err := h.sessionCloseRun(context.Background(), args("name", "dirty")); err == nil {
@@ -27,8 +31,12 @@ func TestARefusedCloseLeavesTheSessionAnswering(t *testing.T) {
 
 func TestAForcedCloseStillRemovesEverything(t *testing.T) {
 	h, _, sup, wt, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
-	st.AddSession(state.Session{Name: "dirty", ChannelID: "42", Type: "text", Worktree: "/wt/x"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddSession(state.Session{Name: "dirty", ChannelID: "42", Type: "text", Worktree: "/wt/x"}); err != nil {
+		t.Fatal(err)
+	}
 	wt.removeErr = errors.New("uncommitted changes")
 
 	if _, err := h.sessionCloseRun(context.Background(), args("name", "dirty", "force", "true")); err != nil {

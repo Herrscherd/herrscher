@@ -169,34 +169,34 @@ func (h *Handler) sessionSetBudgetRun(ctx context.Context, in contracts.Input) (
 	}
 	sess, ok := h.st.FindSession(name)
 	if !ok {
-		return "", fmt.Errorf("%w %q not found", ErrSessionNotFound, name)
+		return "", &SessionNotFoundError{Name: name}
 	}
 	patch := budgetPatch{}
 	if v, ok := in.Lookup("cost_cap"); ok && v != "" {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil {
-			return "", fmt.Errorf("%w %q", ErrInvalidCostCap, v)
+			return "", &InvalidValueError{Field: "cost_cap", Value: v}
 		}
 		patch.costCap = fptr(f)
 	}
 	if v, ok := in.Lookup("token_cap"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("%w %q", ErrInvalidTokenCap, v)
+			return "", &InvalidValueError{Field: "token_cap", Value: v}
 		}
 		patch.tokenCap = uptr(uint64(n))
 	}
 	if v, ok := in.Lookup("cohort_cost_cap"); ok && v != "" {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil {
-			return "", fmt.Errorf("%w %q", ErrInvalidCohortCostCap, v)
+			return "", &InvalidValueError{Field: "cohort_cost_cap", Value: v}
 		}
 		patch.cohortCostCap = fptr(f)
 	}
 	if v, ok := in.Lookup("cohort_token_cap"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("%w %q", ErrInvalidCohortTokenCap, v)
+			return "", &InvalidValueError{Field: "cohort_token_cap", Value: v}
 		}
 		patch.cohortTokenCap = uptr(uint64(n))
 	}
@@ -304,10 +304,10 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
-		return "", fmt.Errorf("%w %q: use letters, digits, - or _ (max 64, no /, spaces or ..)", ErrInvalidName, raw)
+		return "", &InvalidValueError{Field: "name", Value: raw, Hint: "use letters, digits, - or _ (max 64, no /, spaces or ..)"}
 	}
 	if _, exists := h.st.FindSession(name); exists {
-		return "", fmt.Errorf("%w %q already exists", ErrSessionExists, name)
+		return "", &SessionExistsError{Name: name}
 	}
 	if n := len(h.st.SnapshotSessions()); n >= maxSessions {
 		return "", fmt.Errorf("%w (%d): close a session before creating another", ErrSessionLimit, maxSessions)
@@ -329,10 +329,10 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 		kind, err := admin.Kind(ctx, under)
 		if err != nil {
-			return "", fmt.Errorf("%w: %w", ErrInspectChannel, err)
+			return "", fmt.Errorf("inspect channel: %w", err)
 		}
 		if kind != "category" && kind != "forum" {
-			return "", fmt.Errorf("%w %s is %q: under must be a category or forum (to run in an existing conversation, pass channel_id)", ErrChannelKind, under, kind)
+			return "", &ChannelKindError{Channel: under, Kind: kind, Need: "under must be a category or forum (to run in an existing conversation, pass channel_id)"}
 		}
 		home = state.HomeRef{ID: under, Type: kind}
 	}
@@ -362,7 +362,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	parent, _ := in.Lookup("parent")
 	memProject, _ := in.Lookup("memory_project")
 	if memProject != "" && !projectRe.MatchString(memProject) {
-		return "", fmt.Errorf("%w %q: use a single name (no /, spaces, or ..)", ErrInvalidMemoryProject, memProject)
+		return "", &InvalidValueError{Field: "memory_project", Value: memProject, Hint: "use a single name (no /, spaces, or ..)"}
 	}
 	memAgent, _ := in.Lookup("memory_agent")
 	projectPinned := in.Bool("project_pinned")
@@ -372,7 +372,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if v, ok := in.Lookup("consolidate_every"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("%w %q: use a non-negative integer", ErrInvalidConsolidateEvery, v)
+			return "", &InvalidValueError{Field: "consolidate_every", Value: v, Hint: "use a non-negative integer"}
 		}
 		consolidateEvery = n
 	}
@@ -383,28 +383,28 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if v, ok := in.Lookup("cost_cap"); ok && v != "" {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil {
-			return "", fmt.Errorf("%w %q", ErrInvalidCostCap, v)
+			return "", &InvalidValueError{Field: "cost_cap", Value: v}
 		}
 		costCap = f
 	}
 	if v, ok := in.Lookup("token_cap"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("%w %q: use a non-negative integer", ErrInvalidTokenCap, v)
+			return "", &InvalidValueError{Field: "token_cap", Value: v, Hint: "use a non-negative integer"}
 		}
 		tokenCap = uint64(n)
 	}
 	if v, ok := in.Lookup("cohort_cost_cap"); ok && v != "" {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil {
-			return "", fmt.Errorf("%w %q", ErrInvalidCohortCostCap, v)
+			return "", &InvalidValueError{Field: "cohort_cost_cap", Value: v}
 		}
 		cohortCostCap = f
 	}
 	if v, ok := in.Lookup("cohort_token_cap"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("%w %q: use a non-negative integer", ErrInvalidCohortTokenCap, v)
+			return "", &InvalidValueError{Field: "cohort_token_cap", Value: v, Hint: "use a non-negative integer"}
 		}
 		cohortTokenCap = uint64(n)
 	}
@@ -422,7 +422,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	switch approval.Mode(mode) {
 	case "", approval.ModeAsk, approval.ModeBypass, approval.ModeStrict:
 	default:
-		return "", fmt.Errorf("%w %q: ask, bypass or strict", ErrUnknownApprovalMode, mode)
+		return "", &UnknownApprovalModeError{Mode: mode}
 	}
 	approvalsNote := ""
 	if hostName != "" && h.hs != nil {
@@ -449,7 +449,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			project = filepath.Base(dir)
 		}
 		if project != "" && !projectRe.MatchString(project) {
-			return "", fmt.Errorf("%w %q: use a single name (no /, spaces, or ..)", ErrInvalidProject, project)
+			return "", &InvalidValueError{Field: "project", Value: project, Hint: "use a single name (no /, spaces, or ..)"}
 		}
 	}
 	repo := repoFor(ws, project)
@@ -480,17 +480,17 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 		if scratch {
 			if rmErr := wt.RemoveScratch(repo, name); rmErr != nil {
-				fmt.Fprintf(os.Stderr, "herrscher: scratch rollback for %q failed: %v\n", name, rmErr)
+				h.log.Warn("scratch rollback failed", "session", name, "err", rmErr)
 			}
 			return
 		}
 		if rmErr := wt.Remove(repo, name, true); rmErr != nil {
-			fmt.Fprintf(os.Stderr, "herrscher: worktree rollback for %q failed: %v\n", name, rmErr)
+			h.log.Warn("worktree rollback failed", "session", name, "err", rmErr)
 		}
 	}
 	if agentName != "" {
 		if shared {
-			return "", fmt.Errorf("%w %q cannot be shared: an agent needs a place of its own, and shared:true runs in the main checkout", ErrSharedAgentSession, agentName)
+			return "", &SharedAgentError{Agent: agentName}
 		}
 		if worktree == "" {
 			if _, statErr := os.Stat(wt.ScratchPath(repo, name)); statErr == nil {
@@ -505,7 +505,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		a, found := h.agents.Get(agentName)
 		if !found {
 			rollbackWorktree()
-			return "", fmt.Errorf("%w %q: create it with `agent create %s`", ErrUnknownAgent, agentName, agentName)
+			return "", &UnknownAgentError{Name: agentName}
 		}
 		if vendor == "" {
 			vendor = a.Backend
@@ -532,7 +532,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: a remote session without an agent has no materialization channel, so **%s** runs ungated.", name)
 		case agentName == "":
 			if err := agent.MaterializeHook(worktree, agent.SelfBin()); err != nil {
-				fmt.Fprintf(os.Stderr, "approvals: materialize hook for %q failed: %v\n", name, err)
+				h.log.Warn("materialize hook failed", "session", name, "err", err)
 				approvalsNote = fmt.Sprintf("\n\n⚠️ approvals: the hook could not be written (%v), so **%s** runs ungated.", err, name)
 			}
 		}
@@ -561,19 +561,19 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Scratch: scratch, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
 	default:
-		return "", fmt.Errorf("%w %q unsupported", ErrUnsupportedHomeType, home.Type)
+		return "", &UnsupportedHomeTypeError{Type: home.Type}
 	}
 	sess.Approvals = mode
 	if err := h.st.AddSession(sess); err != nil {
 		rollbackWorktree()
 		if note := h.tidyChannel(ctx, sess); note != "" {
-			fmt.Fprintf(os.Stderr, "herrscher: channel rollback for %q:%s\n", name, note)
+			h.log.Warn("channel rollback", "session", name, "note", note)
 		}
 		return "", fmt.Errorf("persist: %w", err)
 	}
 	h.sup.Start(sess)
 	banner := sessionBanner(repo, name, worktree, wt.Branch(name), cmd, modelID, shared)
-	warnIfFailed(admin.Send(ctx, sess.ChannelID, banner), "send banner for "+name)
+	h.warnIfFailed(admin.Send(ctx, sess.ChannelID, banner), "send banner for "+name)
 	return fmt.Sprintf("✅ Running on %s.\n\n%s%s", admin.ChannelRef(sess.ChannelID), banner, approvalsNote), nil
 }
 
@@ -591,13 +591,13 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", fmt.Errorf("%w %q", ErrNoSession, name)
+		return "", &SessionNotFoundError{Name: name}
 	}
 	wt, ws, err := h.worktreesOn(sess.Host)
 	if err != nil {
 		return "", err
 	}
-	warnIfFailed(h.sup.Stop(name), "stop "+name)
+	h.warnIfFailed(h.sup.Stop(name), "stop "+name)
 	repo := repoFor(ws, sess.Project)
 	if sess.Worktree != "" && sess.Scratch {
 		if err := wt.RemoveScratch(repo, name); err != nil {
@@ -618,8 +618,8 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 		h.sup.Start(sess)
 		return "", fmt.Errorf("persist: %w", err)
 	}
-	warnIfFailed(state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name)), "remove participants of "+name)
-	warnIfFailed(state.RemoveTranscript(state.TranscriptPath(h.partDir, name)), "remove transcript of "+name)
+	h.warnIfFailed(state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name)), "remove participants of "+name)
+	h.warnIfFailed(state.RemoveTranscript(state.TranscriptPath(h.partDir, name)), "remove transcript of "+name)
 	return fmt.Sprintf("🗄️ Session **%s** closed.%s", name, note), nil
 }
 
@@ -630,9 +630,9 @@ func (h *Handler) sessionArchiveRun(ctx context.Context, in contracts.Input) (st
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", fmt.Errorf("%w %q", ErrNoSession, name)
+		return "", &SessionNotFoundError{Name: name}
 	}
-	warnIfFailed(h.sup.Stop(name), "stop "+name)
+	h.warnIfFailed(h.sup.Stop(name), "stop "+name)
 	note := h.tidyChannel(ctx, sess)
 	if err := h.st.SetArchived(name, true); err != nil {
 		return "", fmt.Errorf("persist: %w", err)
@@ -661,19 +661,19 @@ func (h *Handler) sessionRenameRun(_ context.Context, in contracts.Input) (strin
 	}
 	to := slugify(raw)
 	if to == "" || !sessionNameRe.MatchString(to) {
-		return "", fmt.Errorf("%w %q: use letters, digits, - or _ (max 64, no /, spaces or ..)", ErrInvalidName, raw)
+		return "", &InvalidValueError{Field: "name", Value: raw, Hint: "use letters, digits, - or _ (max 64, no /, spaces or ..)"}
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", fmt.Errorf("%w %q", ErrNoSession, name)
+		return "", &SessionNotFoundError{Name: name}
 	}
 	if to == name {
 		return fmt.Sprintf("session **%s** porte déjà ce nom", name), nil
 	}
 	if _, taken := h.st.FindSession(to); taken {
-		return "", fmt.Errorf("%w %q already exists", ErrSessionExists, to)
+		return "", &SessionExistsError{Name: to}
 	}
-	warnIfFailed(h.sup.Stop(name), "stop "+name)
+	h.warnIfFailed(h.sup.Stop(name), "stop "+name)
 	if err := h.st.RenameSession(name, to); err != nil {
 		h.sup.Start(sess)
 		return "", fmt.Errorf("persist: %w", err)
@@ -709,7 +709,7 @@ func (h *Handler) sessionResumeRun(_ context.Context, in contracts.Input) (strin
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", fmt.Errorf("%w %q", ErrNoSession, name)
+		return "", &SessionNotFoundError{Name: name}
 	}
 	if err := h.st.SetArchived(name, false); err != nil {
 		return "", fmt.Errorf("persist: %w", err)
@@ -733,7 +733,7 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	}
 	prior, exists := h.st.FindSession(name)
 	if !exists {
-		return "", fmt.Errorf("%w %q", ErrNoSession, name)
+		return "", &SessionNotFoundError{Name: name}
 	}
 	modelID := prior.ModelID
 	if v, supplied := in.Lookup("model"); supplied {
@@ -748,7 +748,7 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	oldVendor, oldCmd, oldModelID, oldToken := prior.Vendor, prior.Cmd, prior.ModelID, prior.ResumeToken
 	targeted, persistErr := h.st.SetBackendTarget(name, vendor, cmd, modelID)
 	if !targeted {
-		return "", fmt.Errorf("%w %q", ErrNoSession, name)
+		return "", &SessionNotFoundError{Name: name}
 	}
 	if persistErr != nil {
 		return "", fmt.Errorf("persist: %w", persistErr)
@@ -841,7 +841,7 @@ func (h *Handler) sessionWhoRun(_ context.Context, in contracts.Input) (string, 
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", fmt.Errorf("%w %q", ErrNoSession, name)
+		return "", &SessionNotFoundError{Name: name}
 	}
 	if in.JSON {
 		row := sessionJSONRow(sess)
@@ -898,8 +898,8 @@ func (h *Handler) sessionLogRun(_ context.Context, in contracts.Input) (string, 
 	return out, nil
 }
 
-func warnIfFailed(err error, action string) {
+func (h *Handler) warnIfFailed(err error, action string) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "herrscher: %s failed: %v\n", action, err)
+		h.log.Warn(action+" failed", "err", err)
 	}
 }

@@ -64,7 +64,7 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 	if raw, ok := doc["hooks"]; ok && raw != nil {
 		m, ok := raw.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("%w %T, not an object", ErrHooksNotObject, raw)
+			return nil, &SettingsShapeError{Path: "hooks", Want: "an object", Got: raw}
 		}
 		hooks = m
 	}
@@ -72,7 +72,7 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 	if raw, ok := hooks["PreToolUse"]; ok && raw != nil {
 		list, ok := raw.([]any)
 		if !ok {
-			return nil, fmt.Errorf("%w %T, not a list", ErrPreToolUseNotList, raw)
+			return nil, &SettingsShapeError{Path: "hooks.PreToolUse", Want: "a list", Got: raw}
 		}
 		pre = list
 	}

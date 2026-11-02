@@ -85,14 +85,14 @@ func addRoleCommands(reg *cli.Registry, st *state.State) error {
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			principal := strings.TrimSpace(firstOf(in.Get("principal"), in.Rest))
 			if principal == "" {
-				return "", fmt.Errorf("name a principal (see `role list`)")
+				return "", ErrPrincipalMissing
 			}
 			removed, err := st.RemoveRole(principal)
 			if err != nil {
 				return "", err
 			}
 			if !removed {
-				return "", fmt.Errorf("%s holds no role", principal)
+				return "", &NoRoleError{Principal: principal}
 			}
 			if len(st.RoleAssignments()) == 0 {
 				return principal + " holds no role, and neither does anyone else: herrscher is back to deciding nothing about humans", nil
@@ -108,7 +108,7 @@ func addRoleCommands(reg *cli.Registry, st *state.State) error {
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			principal := strings.TrimSpace(firstOf(in.Get("principal"), in.Rest))
 			if principal == "" {
-				return "", fmt.Errorf("name a principal (see `role list`)")
+				return "", ErrPrincipalMissing
 			}
 			role := authz.RoleOf(authz.Principal{ID: principal}, st.RoleNames())
 			return fmt.Sprintf("%s holds `%s`\n%s", principal, role, authz.Describe(role)), nil

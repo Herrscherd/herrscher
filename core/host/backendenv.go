@@ -104,7 +104,7 @@ func spawnEnvFor(e CatalogEntry, getenv func(string) string) (map[string]string,
 	}
 	env := gatewayEnvFor(e.Vendor, creds, e.Arg)
 	if len(env) == 0 {
-		return nil, fmt.Errorf("model %q is routed through the gateway but backend %q cannot be redirected", e.ID, e.Vendor)
+		return nil, &ModelNotRedirectableError{Model: e.ID, Backend: e.Vendor}
 	}
 	return env, nil
 }

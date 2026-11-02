@@ -155,7 +155,7 @@ func (s *scheduler) fireNow(ctx context.Context, name string) error {
 			continue
 		}
 		if !s.claim(sc.Name) {
-			return fmt.Errorf("schedule %q already has a turn in flight", name)
+			return &ScheduleBusyError{Name: name}
 		}
 		defer s.release(sc.Name)
 		fctx, cancel := context.WithTimeout(ctx, fireTimeout)
@@ -165,7 +165,7 @@ func (s *scheduler) fireNow(ctx context.Context, name string) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("no schedule named %q", name)
+	return &NotFoundError{Kind: "schedule", Name: name}
 }
 
 func (s *scheduler) dispatch(ctx context.Context, sc schedule.Schedule, prefix string, at time.Time) {

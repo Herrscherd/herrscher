@@ -44,7 +44,7 @@ func discover(roots []string, prev map[string]Skill) (out []Skill, reread []stri
 				out = append(out, s)
 				continue
 			}
-			md, err := os.ReadFile(path)
+			md, err := os.ReadFile(filepath.Clean(path))
 			if err != nil {
 				continue
 			}

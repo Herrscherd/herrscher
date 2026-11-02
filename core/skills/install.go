@@ -116,13 +116,13 @@ func copyTree(src fs.FS, root, dest string) error {
 		}
 		target := filepath.Join(dest, filepath.FromSlash(strings.TrimPrefix(p, root)))
 		if d.IsDir() {
-			return os.MkdirAll(target, 0o755)
+			return os.MkdirAll(target, 0o750)
 		}
 		b, err := fs.ReadFile(src, p)
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(target, b, 0o644)
+		return os.WriteFile(target, b, 0o600)
 	})
 }
 
@@ -146,20 +146,21 @@ func hashFS(src fs.FS, root string) (map[string]string, error) {
 }
 
 func hashDir(dest string) (map[string]string, error) {
+	root, err := os.OpenRoot(dest)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
 	out := map[string]string{}
-	err := filepath.WalkDir(dest, func(p string, d os.DirEntry, err error) error {
+	err = fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		b, err := os.ReadFile(p)
+		b, err := fs.ReadFile(root.FS(), p)
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(dest, p)
-		if err != nil {
-			return err
-		}
-		out[filepath.ToSlash(rel)] = sum(b)
+		out[p] = sum(b)
 		return nil
 	})
 	if err != nil {
@@ -186,7 +187,7 @@ func same(a, b map[string]string) bool {
 }
 
 func readManifest(dir string) manifest {
-	b, err := os.ReadFile(filepath.Join(dir, manifestName))
+	b, err := os.ReadFile(filepath.Clean(filepath.Join(dir, manifestName)))
 	if err != nil {
 		return manifest{}
 	}
@@ -202,8 +203,8 @@ func writeManifest(dir string, m manifest) {
 	if err != nil {
 		return
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return
 	}
-	logFailure("write manifest", os.WriteFile(filepath.Join(dir, manifestName), append(b, '\n'), 0o644))
+	logFailure("write manifest", os.WriteFile(filepath.Join(dir, manifestName), append(b, '\n'), 0o600))
 }

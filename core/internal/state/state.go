@@ -203,7 +203,7 @@ func (s *State) ApplyDefaults(home *HomeRef, workspace, source string) {
 // LoadState reads state from path; a missing file yields an empty state.
 func LoadState(path string) (*State, error) {
 	s := NewState(path)
-	buf, err := os.ReadFile(path)
+	buf, err := os.ReadFile(filepath.Clean(path))
 	if os.IsNotExist(err) {
 		return s, nil
 	}
@@ -275,7 +275,7 @@ func (s *State) Save() error {
 
 func (s *State) saveLocked() error {
 	s.ensureSessionIncarnationsLocked()
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
 		return err
 	}
 	buf, err := json.MarshalIndent(s, "", "  ")

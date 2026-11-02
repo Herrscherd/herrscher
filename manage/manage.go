@@ -10,13 +10,14 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/Herrscherd/herrscher/internal/errwriter"
 	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/internal/errwriter"
 )
 
 var (
@@ -119,8 +120,8 @@ func pluginAddRemove(ctx context.Context, env pluginEnv, sub string, positionals
 		return 0
 	}
 	if env.noBuild {
-		if err := os.WriteFile(env.manifest, []byte(rendered), 0o644); err != nil {
-			env.errOut.Printf("write %s: %v\n", env.manifest, err)
+		if writeErr := os.WriteFile(env.manifest, []byte(rendered), 0o644); writeErr != nil {
+			env.errOut.Printf("write %s: %v\n", env.manifest, writeErr)
 			return 1
 		}
 		env.out.Printf("%s %s in %s\n", pastTense(sub), module, env.manifest)

@@ -43,7 +43,7 @@ func scanEnvFile(r io.Reader) error {
 	return sc.Err()
 }
 
-func parseEnvLine(raw string) (key, val string, ok bool) {
+func parseEnvLine(raw string) (string, string, bool) {
 	line := strings.TrimSpace(raw)
 	if line == "" || strings.HasPrefix(line, "#") {
 		return "", "", false
@@ -51,9 +51,9 @@ func parseEnvLine(raw string) (key, val string, ok bool) {
 	if rest, isExport := strings.CutPrefix(line, "export"); isExport && rest != "" && (rest[0] == ' ' || rest[0] == '\t') {
 		line = strings.TrimSpace(rest)
 	}
-	key, val, ok = strings.Cut(line, "=")
+	key, val, found := strings.Cut(line, "=")
 	key = strings.TrimSpace(key)
-	return key, strings.TrimSpace(val), ok && key != ""
+	return key, strings.TrimSpace(val), found && key != ""
 }
 
 func hideGatewayKeys() { host.CaptureGatewayConfig(contracts.Default.Gateways()) }

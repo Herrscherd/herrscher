@@ -3,9 +3,10 @@ package manage
 import (
 	"context"
 	"flag"
-	"github.com/Herrscherd/herrscher/internal/errwriter"
 	"os"
 	"path/filepath"
+
+	"github.com/Herrscherd/herrscher/internal/errwriter"
 )
 
 // updateCmd bumps every compiled-in plugin to its latest version, then rebuilds

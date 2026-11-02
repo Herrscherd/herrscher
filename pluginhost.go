@@ -116,8 +116,8 @@ func runPluginHost(ctx context.Context, args []string) error {
 		return err
 	}
 	defer func() {
-		if err := hosted.closeReal(); err != nil {
-			slog.Error("close hosted plugin", "err", err)
+		if closeErr := hosted.closeReal(); closeErr != nil {
+			slog.Error("close hosted plugin", "err", closeErr)
 		}
 	}()
 

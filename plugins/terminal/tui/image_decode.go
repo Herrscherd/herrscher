@@ -14,6 +14,11 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
+var (
+	errEmptyImage    = errors.New("image is empty")
+	errImageTooLarge = errors.New("image past the decode bound")
+)
+
 const maxDecodeBytes = 8 << 20
 
 const maxDecodePixels = 64 << 20
@@ -22,17 +27,17 @@ const cellPixels = 20
 
 func decodeImage(data []byte) (image.Image, error) {
 	if len(data) == 0 {
-		return nil, errors.New("image is empty")
+		return nil, errEmptyImage
 	}
 	if len(data) > maxDecodeBytes {
-		return nil, fmt.Errorf("image is %d bytes, past the %d-byte decode bound", len(data), maxDecodeBytes)
+		return nil, fmt.Errorf("%w: %d bytes, bound is %d", errImageTooLarge, len(data), maxDecodeBytes)
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("read image header: %w", err)
 	}
 	if px := int64(cfg.Width) * int64(cfg.Height); px > maxDecodePixels {
-		return nil, fmt.Errorf("image is %dx%d, past the %d-pixel decode bound", cfg.Width, cfg.Height, maxDecodePixels)
+		return nil, fmt.Errorf("%w: %dx%d, bound is %d pixels", errImageTooLarge, cfg.Width, cfg.Height, maxDecodePixels)
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {

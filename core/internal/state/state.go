@@ -13,6 +13,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 )
 
+const (
+	privateDirMode  = 0o750
+	privateFileMode = 0o600
+)
+
 var (
 	errSessionExists = errors.New("session already exists")
 	errNoSession     = errors.New("no such session")
@@ -275,7 +280,7 @@ func (s *State) Save() error {
 
 func (s *State) saveLocked() error {
 	s.ensureSessionIncarnationsLocked()
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), privateDirMode); err != nil {
 		return err
 	}
 	buf, err := json.MarshalIndent(s, "", "  ")
@@ -283,7 +288,7 @@ func (s *State) saveLocked() error {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, buf, 0o600); err != nil {
+	if err := os.WriteFile(tmp, buf, privateFileMode); err != nil {
 		return err
 	}
 	return os.Rename(tmp, s.path)

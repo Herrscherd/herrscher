@@ -9,6 +9,8 @@ import (
 
 const scratchDir = ".herrscher-scratch"
 
+const scratchDirMode = 0o700
+
 var errScratchRefused = errors.New("refusing a scratch directory")
 
 func (w *Worktreer) ScratchPath(root, name string) string {
@@ -30,7 +32,7 @@ func (w *Worktreer) Scratch(root, name string) (string, error) {
 		return "", fmt.Errorf("%w: session name %q is not a path component", errScratchRefused, name)
 	}
 	p := w.ScratchPath(root, name)
-	if err := os.MkdirAll(p, 0o700); err != nil {
+	if err := os.MkdirAll(p, scratchDirMode); err != nil {
 		return "", fmt.Errorf("scratch %q: %w", p, err)
 	}
 	return p, nil

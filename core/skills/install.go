@@ -13,6 +13,11 @@ import (
 
 const manifestName = ".herrscher-shipped.json"
 
+const (
+	privateDirMode  = 0o750
+	privateFileMode = 0o600
+)
+
 type manifest map[string]map[string]string
 
 // Outcome names what Install did, so the caller can say it out loud. Diverged is
@@ -116,13 +121,13 @@ func copyTree(src fs.FS, root, dest string) error {
 		}
 		target := filepath.Join(dest, filepath.FromSlash(strings.TrimPrefix(p, root)))
 		if d.IsDir() {
-			return os.MkdirAll(target, 0o750)
+			return os.MkdirAll(target, privateDirMode)
 		}
 		b, err := fs.ReadFile(src, p)
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(target, b, 0o600)
+		return os.WriteFile(target, b, privateFileMode)
 	})
 }
 
@@ -203,8 +208,8 @@ func writeManifest(dir string, m manifest) {
 	if err != nil {
 		return
 	}
-	if err := os.MkdirAll(dir, 0o750); err != nil {
+	if err := os.MkdirAll(dir, privateDirMode); err != nil {
 		return
 	}
-	logFailure("write manifest", os.WriteFile(filepath.Join(dir, manifestName), append(b, '\n'), 0o600))
+	logFailure("write manifest", os.WriteFile(filepath.Join(dir, manifestName), append(b, '\n'), privateFileMode))
 }

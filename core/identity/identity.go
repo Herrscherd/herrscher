@@ -83,7 +83,7 @@ func (i Identity) Empty() bool { return i.Name == "" && i.Email == "" && i.GitHu
 // answer: "Nom <mail> (@github)". An empty Identity renders as "", so a caller
 // can test the rendering rather than the struct when that is what it appends.
 func (i Identity) String() string {
-	parts := make([]string, 0, 3)
+	var parts []string
 	if i.Name != "" {
 		parts = append(parts, i.Name)
 	}

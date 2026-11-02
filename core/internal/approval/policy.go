@@ -27,14 +27,20 @@ const (
 	Deny  Decision = "deny"
 )
 
+const (
+	severityAllow = iota
+	severityAsk
+	severityDeny
+)
+
 func severity(d Decision) int {
 	switch d {
 	case Deny:
-		return 2
+		return severityDeny
 	case Ask:
-		return 1
+		return severityAsk
 	default:
-		return 0
+		return severityAllow
 	}
 }
 

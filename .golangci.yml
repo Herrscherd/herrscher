@@ -183,9 +183,6 @@ linters:
       - path: ^(cmd|tools)/
         linters: [gosec]
         text: "^G(304|703):"
-      - path: ^core/envx/hide\.go$
-        linters: [errcheck]
-        text: "Error return value of `os\\.(Setenv|Unsetenv)`"
 
 formatters:
   enable:

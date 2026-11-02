@@ -1,7 +1,9 @@
 package envx
 
 import (
+	"log/slog"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -23,10 +25,13 @@ func Hide(keys []string) (reveal func()) {
 	}
 	prior := map[string]priorKey{}
 	for _, k := range keys {
-		if k == "" {
+		if !isEnvKey(k) {
 			continue
 		}
 		env := os.Getenv(k)
+		if err := os.Unsetenv(k); err != nil {
+			continue
+		}
 		if _, seen := prior[k]; !seen {
 			stored, held := hidden.vals[k]
 			prior[k] = priorKey{held: held, stored: stored, env: env}
@@ -34,7 +39,6 @@ func Hide(keys []string) (reveal func()) {
 		if hidden.vals[k] == "" {
 			hidden.vals[k] = env
 		}
-		_ = os.Unsetenv(k)
 	}
 	return func() {
 		hidden.mu.Lock()
@@ -46,12 +50,17 @@ func Hide(keys []string) (reveal func()) {
 				delete(hidden.vals, k)
 			}
 			if p.env == "" {
-				_ = os.Unsetenv(k)
 				continue
 			}
-			_ = os.Setenv(k, p.env)
+			if err := os.Setenv(k, p.env); err != nil {
+				slog.Error("restore hidden environment variable", "key", k, "err", err)
+			}
 		}
 	}
+}
+
+func isEnvKey(k string) bool {
+	return k != "" && !strings.ContainsAny(k, "=\x00")
 }
 
 func Revealed(fallback func(string) string) func(string) string {

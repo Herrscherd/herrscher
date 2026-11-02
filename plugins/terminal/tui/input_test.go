@@ -68,16 +68,16 @@ func TestReadReturnsZeroOnFullyDroppedChunk(t *testing.T) {
 		t.Fatalf("pipe: %v", err)
 	}
 	t.Cleanup(func() {
-		if err := r.Close(); err != nil {
+		if err = r.Close(); err != nil {
 			t.Error(err)
 		}
-		if err := w.Close(); err != nil {
+		if err = w.Close(); err != nil {
 			t.Error(err)
 		}
 	})
 	f := &filteredStdin{File: r}
 
-	if _, err := w.Write([]byte("\x1b]11;rgb:1a1a/1a1a/1a1a\x1b\\")); err != nil {
+	if _, err = w.Write([]byte("\x1b]11;rgb:1a1a/1a1a/1a1a\x1b\\")); err != nil {
 		t.Fatalf("write osc: %v", err)
 	}
 	buf := make([]byte, 64)
@@ -86,7 +86,7 @@ func TestReadReturnsZeroOnFullyDroppedChunk(t *testing.T) {
 		t.Fatalf("dropped chunk: got n=%d err=%v, want 0,nil", n, err)
 	}
 
-	if _, err := w.Write([]byte("k")); err != nil {
+	if _, err = w.Write([]byte("k")); err != nil {
 		t.Fatalf("write key: %v", err)
 	}
 	n, err = f.Read(buf)

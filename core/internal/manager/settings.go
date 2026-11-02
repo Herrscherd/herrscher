@@ -11,17 +11,17 @@ import (
 func (h *Handler) setHomeRun(ctx context.Context, in contracts.Input) (string, error) {
 	id, ok := in.Lookup("channel")
 	if !ok || id == "" {
-		return "", fmt.Errorf("missing channel")
+		return "", ErrMissingChannel
 	}
 	kind, err := h.d.Kind(ctx, id)
 	if err != nil {
-		return "", fmt.Errorf("inspect channel: %v", err)
+		return "", fmt.Errorf("%w: %w", ErrInspectChannel, err)
 	}
 	if kind != "category" && kind != "forum" {
-		return "", fmt.Errorf("channel %s is %q: home must be a category or forum", id, kind)
+		return "", fmt.Errorf("%w %s is %q: home must be a category or forum", ErrChannelKind, id, kind)
 	}
 	if err := h.st.SetHome(state.HomeRef{ID: id, Type: kind}); err != nil {
-		return "", fmt.Errorf("persist: %v", err)
+		return "", fmt.Errorf("%w: %w", ErrPersist, err)
 	}
 	return fmt.Sprintf("🏠 Home set to <#%s> (%s).", id, kind), nil
 }
@@ -29,10 +29,10 @@ func (h *Handler) setHomeRun(ctx context.Context, in contracts.Input) (string, e
 func (h *Handler) setSourceRun(_ context.Context, in contracts.Input) (string, error) {
 	path, ok := in.Lookup("path")
 	if !ok || path == "" {
-		return "", fmt.Errorf("missing path")
+		return "", ErrMissingPath
 	}
 	if err := h.st.SetSource(path); err != nil {
-		return "", fmt.Errorf("persist: %v", err)
+		return "", fmt.Errorf("%w: %w", ErrPersist, err)
 	}
 	return fmt.Sprintf("📦 Source checkout set to `%s`.", path), nil
 }

@@ -165,38 +165,38 @@ func applyBudget(s state.Session, p budgetPatch, curCost float64, curTokens uint
 func (h *Handler) sessionSetBudgetRun(ctx context.Context, in contracts.Input) (string, error) {
 	name, ok := in.Lookup("name")
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	sess, ok := h.st.FindSession(name)
 	if !ok {
-		return "", fmt.Errorf("session %q not found", name)
+		return "", fmt.Errorf("%w %q not found", ErrSessionNotFound, name)
 	}
 	patch := budgetPatch{}
 	if v, ok := in.Lookup("cost_cap"); ok && v != "" {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil {
-			return "", fmt.Errorf("invalid cost_cap %q", v)
+			return "", fmt.Errorf("%w %q", ErrInvalidCostCap, v)
 		}
 		patch.costCap = fptr(f)
 	}
 	if v, ok := in.Lookup("token_cap"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("invalid token_cap %q", v)
+			return "", fmt.Errorf("%w %q", ErrInvalidTokenCap, v)
 		}
 		patch.tokenCap = uptr(uint64(n))
 	}
 	if v, ok := in.Lookup("cohort_cost_cap"); ok && v != "" {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil {
-			return "", fmt.Errorf("invalid cohort_cost_cap %q", v)
+			return "", fmt.Errorf("%w %q", ErrInvalidCohortCostCap, v)
 		}
 		patch.cohortCostCap = fptr(f)
 	}
 	if v, ok := in.Lookup("cohort_token_cap"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("invalid cohort_token_cap %q", v)
+			return "", fmt.Errorf("%w %q", ErrInvalidCohortTokenCap, v)
 		}
 		patch.cohortTokenCap = uptr(uint64(n))
 	}
@@ -300,17 +300,17 @@ func sessionBanner(repo, name, worktree, branch, cmd, modelID string, shared boo
 func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (string, error) {
 	raw, ok := in.Lookup("name")
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
-		return "", fmt.Errorf("invalid name %q: use letters, digits, - or _ (max 64, no /, spaces or ..)", raw)
+		return "", fmt.Errorf("%w %q: use letters, digits, - or _ (max 64, no /, spaces or ..)", ErrInvalidName, raw)
 	}
 	if _, exists := h.st.FindSession(name); exists {
-		return "", fmt.Errorf("session %q already exists", name)
+		return "", fmt.Errorf("%w %q already exists", ErrSessionExists, name)
 	}
 	if n := len(h.st.SnapshotSessions()); n >= maxSessions {
-		return "", fmt.Errorf("session limit reached (%d): close a session before creating another", maxSessions)
+		return "", fmt.Errorf("%w (%d): close a session before creating another", ErrSessionLimit, maxSessions)
 	}
 	terminalOnly := in.Bool("terminal_only")
 	home := h.st.Home
@@ -322,22 +322,22 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	adopted, _ := in.Lookup("channel_id")
 	if under, ok := in.Lookup("under"); ok && under != "" {
 		if adopted != "" {
-			return "", fmt.Errorf("pass either channel_id or under, not both: one adopts a conversation that exists, the other creates one")
+			return "", ErrConflictingChannel
 		}
 		if terminalOnly {
-			return "", fmt.Errorf("terminal_only and under contradict each other: one keeps the session in the terminal, the other puts it in a gateway container")
+			return "", ErrConflictingPlacement
 		}
 		kind, err := admin.Kind(ctx, under)
 		if err != nil {
-			return "", fmt.Errorf("inspect channel: %v", err)
+			return "", fmt.Errorf("%w: %w", ErrInspectChannel, err)
 		}
 		if kind != "category" && kind != "forum" {
-			return "", fmt.Errorf("channel %s is %q: under must be a category or forum (to run in an existing conversation, pass channel_id)", under, kind)
+			return "", fmt.Errorf("%w %s is %q: under must be a category or forum (to run in an existing conversation, pass channel_id)", ErrChannelKind, under, kind)
 		}
 		home = state.HomeRef{ID: under, Type: kind}
 	}
 	if home.ID == "" && adopted == "" {
-		return "", fmt.Errorf("no home set; run `set home` first")
+		return "", ErrNoHome
 	}
 	cmd := h.defaultCmd
 	cmdExplicit := false
@@ -362,7 +362,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	parent, _ := in.Lookup("parent")
 	memProject, _ := in.Lookup("memory_project")
 	if memProject != "" && !projectRe.MatchString(memProject) {
-		return "", fmt.Errorf("invalid memory_project %q: use a single name (no /, spaces, or ..)", memProject)
+		return "", fmt.Errorf("%w %q: use a single name (no /, spaces, or ..)", ErrInvalidMemoryProject, memProject)
 	}
 	memAgent, _ := in.Lookup("memory_agent")
 	projectPinned := in.Bool("project_pinned")
@@ -372,7 +372,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if v, ok := in.Lookup("consolidate_every"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("invalid consolidate_every %q: use a non-negative integer", v)
+			return "", fmt.Errorf("%w %q: use a non-negative integer", ErrInvalidConsolidateEvery, v)
 		}
 		consolidateEvery = n
 	}
@@ -383,28 +383,28 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if v, ok := in.Lookup("cost_cap"); ok && v != "" {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil {
-			return "", fmt.Errorf("invalid cost_cap %q", v)
+			return "", fmt.Errorf("%w %q", ErrInvalidCostCap, v)
 		}
 		costCap = f
 	}
 	if v, ok := in.Lookup("token_cap"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("invalid token_cap %q: use a non-negative integer", v)
+			return "", fmt.Errorf("%w %q: use a non-negative integer", ErrInvalidTokenCap, v)
 		}
 		tokenCap = uint64(n)
 	}
 	if v, ok := in.Lookup("cohort_cost_cap"); ok && v != "" {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil {
-			return "", fmt.Errorf("invalid cohort_cost_cap %q", v)
+			return "", fmt.Errorf("%w %q", ErrInvalidCohortCostCap, v)
 		}
 		cohortCostCap = f
 	}
 	if v, ok := in.Lookup("cohort_token_cap"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("invalid cohort_token_cap %q: use a non-negative integer", v)
+			return "", fmt.Errorf("%w %q: use a non-negative integer", ErrInvalidCohortTokenCap, v)
 		}
 		cohortTokenCap = uint64(n)
 	}
@@ -422,7 +422,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	switch approval.Mode(mode) {
 	case "", approval.ModeAsk, approval.ModeBypass, approval.ModeStrict:
 	default:
-		return "", fmt.Errorf("unknown approval mode %q: ask, bypass or strict", mode)
+		return "", fmt.Errorf("%w %q: ask, bypass or strict", ErrUnknownApprovalMode, mode)
 	}
 	approvalsNote := ""
 	if hostName != "" && h.hs != nil {
@@ -438,7 +438,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if ws != "" {
 		if spec, ok := in.Lookup("clone"); ok && spec != "" {
 			if hostName != "" {
-				return "", fmt.Errorf("clone is not supported on host %q: create the project locally first, then create the session with --host", hostName)
+				return "", fmt.Errorf("%w %q: create the project locally first, then create the session with --host", ErrCloneUnsupported, hostName)
 			}
 			cctx, cancel := context.WithTimeout(ctx, cloneTimeout)
 			dir, err := h.fg.Clone(cctx, spec, ws)
@@ -449,7 +449,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			project = filepath.Base(dir)
 		}
 		if project != "" && !projectRe.MatchString(project) {
-			return "", fmt.Errorf("invalid project %q: use a single name (no /, spaces, or ..)", project)
+			return "", fmt.Errorf("%w %q: use a single name (no /, spaces, or ..)", ErrInvalidProject, project)
 		}
 	}
 	repo := repoFor(ws, project)
@@ -490,7 +490,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	}
 	if agentName != "" {
 		if shared {
-			return "", fmt.Errorf("session create with agent %q cannot be shared: an agent needs a place of its own, and shared:true runs in the main checkout", agentName)
+			return "", fmt.Errorf("%w %q cannot be shared: an agent needs a place of its own, and shared:true runs in the main checkout", ErrSharedAgentSession, agentName)
 		}
 		if worktree == "" {
 			if _, statErr := os.Stat(wt.ScratchPath(repo, name)); statErr == nil {
@@ -505,7 +505,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		a, found := h.agents.Get(agentName)
 		if !found {
 			rollbackWorktree()
-			return "", fmt.Errorf("unknown agent %q: create it with `agent create %s`", agentName, agentName)
+			return "", fmt.Errorf("%w %q: create it with `agent create %s`", ErrUnknownAgent, agentName, agentName)
 		}
 		if vendor == "" {
 			vendor = a.Backend
@@ -561,7 +561,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		}
 		sess = state.Session{Owned: true, Name: name, ChannelID: chID, Type: "forum", Cmd: cmd, Backend: backend, Vendor: vendor, ModelID: modelID, Worktree: worktree, Scratch: scratch, Dir: runDir, Project: project, Agent: agentName, MemoryProject: memProject, MemoryAgent: memAgent, ProjectPinned: projectPinned, Parent: parent, Gateways: gateways, Extractor: extractor, Journal: journal, ConsolidateEvery: consolidateEvery, CostCap: costCap, TokenCap: tokenCap, CohortCostCap: cohortCostCap, CohortTokenCap: cohortTokenCap, Host: hostName}
 	default:
-		return "", fmt.Errorf("home type %q unsupported", home.Type)
+		return "", fmt.Errorf("%w %q unsupported", ErrUnsupportedHomeType, home.Type)
 	}
 	sess.Approvals = mode
 	if err := h.st.AddSession(sess); err != nil {
@@ -587,11 +587,11 @@ func (h *Handler) adminFor(sess state.Session) channelAdmin {
 func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (string, error) {
 	name, ok := in.Lookup("name")
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", fmt.Errorf("no session %q", name)
+		return "", fmt.Errorf("%w %q", ErrNoSession, name)
 	}
 	wt, ws, err := h.worktreesOn(sess.Host)
 	if err != nil {
@@ -626,11 +626,11 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 func (h *Handler) sessionArchiveRun(ctx context.Context, in contracts.Input) (string, error) {
 	name, ok := in.Lookup("name")
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", fmt.Errorf("no session %q", name)
+		return "", fmt.Errorf("%w %q", ErrNoSession, name)
 	}
 	warnIfFailed(h.sup.Stop(name), "stop "+name)
 	note := h.tidyChannel(ctx, sess)
@@ -653,25 +653,25 @@ func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
 func (h *Handler) sessionRenameRun(_ context.Context, in contracts.Input) (string, error) {
 	name, ok := in.Lookup("name")
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	raw, ok := in.Lookup("to")
 	if !ok {
-		return "", fmt.Errorf("missing to")
+		return "", ErrMissingTo
 	}
 	to := slugify(raw)
 	if to == "" || !sessionNameRe.MatchString(to) {
-		return "", fmt.Errorf("invalid name %q: use letters, digits, - or _ (max 64, no /, spaces or ..)", raw)
+		return "", fmt.Errorf("%w %q: use letters, digits, - or _ (max 64, no /, spaces or ..)", ErrInvalidName, raw)
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", fmt.Errorf("no session %q", name)
+		return "", fmt.Errorf("%w %q", ErrNoSession, name)
 	}
 	if to == name {
 		return fmt.Sprintf("session **%s** porte déjà ce nom", name), nil
 	}
 	if _, taken := h.st.FindSession(to); taken {
-		return "", fmt.Errorf("session %q already exists", to)
+		return "", fmt.Errorf("%w %q already exists", ErrSessionExists, to)
 	}
 	warnIfFailed(h.sup.Stop(name), "stop "+name)
 	if err := h.st.RenameSession(name, to); err != nil {
@@ -705,11 +705,11 @@ func scheduleOwning(schedules []schedule.Schedule, session string) string {
 func (h *Handler) sessionResumeRun(_ context.Context, in contracts.Input) (string, error) {
 	name, ok := in.Lookup("name")
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", fmt.Errorf("no session %q", name)
+		return "", fmt.Errorf("%w %q", ErrNoSession, name)
 	}
 	if err := h.st.SetArchived(name, false); err != nil {
 		return "", fmt.Errorf("persist: %w", err)
@@ -722,7 +722,7 @@ func (h *Handler) sessionResumeRun(_ context.Context, in contracts.Input) (strin
 func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (string, error) {
 	name, ok := in.Lookup("name")
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	vendor := in.Get("vendor")
 	cmd, cmdSupplied := in.Lookup("cmd")
@@ -733,7 +733,7 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	}
 	prior, exists := h.st.FindSession(name)
 	if !exists {
-		return "", fmt.Errorf("no session %q", name)
+		return "", fmt.Errorf("%w %q", ErrNoSession, name)
 	}
 	modelID := prior.ModelID
 	if v, supplied := in.Lookup("model"); supplied {
@@ -748,7 +748,7 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	oldVendor, oldCmd, oldModelID, oldToken := prior.Vendor, prior.Cmd, prior.ModelID, prior.ResumeToken
 	targeted, persistErr := h.st.SetBackendTarget(name, vendor, cmd, modelID)
 	if !targeted {
-		return "", fmt.Errorf("no session %q", name)
+		return "", fmt.Errorf("%w %q", ErrNoSession, name)
 	}
 	if persistErr != nil {
 		return "", fmt.Errorf("persist: %w", persistErr)
@@ -837,11 +837,11 @@ func (h *Handler) sessionListRun(_ context.Context, in contracts.Input) (string,
 func (h *Handler) sessionWhoRun(_ context.Context, in contracts.Input) (string, error) {
 	name, ok := in.Lookup("name")
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", fmt.Errorf("no session %q", name)
+		return "", fmt.Errorf("%w %q", ErrNoSession, name)
 	}
 	if in.JSON {
 		row := sessionJSONRow(sess)
@@ -865,7 +865,7 @@ const sessionLogTranscriptCap = 200
 func (h *Handler) sessionLogRun(_ context.Context, in contracts.Input) (string, error) {
 	raw, ok := in.Lookup("name")
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {

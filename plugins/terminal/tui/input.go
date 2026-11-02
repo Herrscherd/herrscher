@@ -234,9 +234,9 @@ func (f *filteredStdin) feed(b []byte) {
 			f.seq = append(f.seq, c)
 			switch {
 			case c >= 0x40 && c <= 0x7e:
-				switch {
-				case c == 'R':
-				case c == 'u':
+				switch c {
+				case 'R':
+				case 'u':
 					f.out = append(f.out, legacyKey(f.seq)...)
 				default:
 					f.out = append(f.out, legacyFunc(f.seq)...)

@@ -42,18 +42,6 @@ const Kind = "terminal"
 
 func settings() []contracts.Setting { return scope.LaunchSettings() }
 
-func init() {
-	contracts.Register(contracts.Plugin{
-		Manifest: contracts.Manifest{
-			Kind:         Kind,
-			Category:     contracts.CategoryGateway,
-			Capabilities: contracts.Capabilities{Replies: true},
-			Config:       settings(),
-		},
-		Gateway: newGatewaySet,
-	})
-}
-
 func newGatewaySet(ctx context.Context, cfg contracts.PluginConfig) (contracts.GatewaySet, error) {
 	tm := New()
 	tm.cfg = cfg
@@ -299,11 +287,12 @@ func (t *Terminal) React(context.Context, contracts.Conversation, contracts.Mess
 }
 
 func (t *Terminal) Menu(_ context.Context, conv contracts.Conversation, _ contracts.MessageID, prompt string, opts []contracts.Choice) error {
-	text := prompt
+	var text strings.Builder
+	text.WriteString(prompt)
 	for _, o := range opts {
-		text += "\n  • " + o.Value + ": " + o.Label
+		text.WriteString("\n  • " + o.Value + ": " + o.Label)
 	}
-	t.EmitTo(conv, contracts.Event{T: "status", Text: text})
+	t.EmitTo(conv, contracts.Event{T: "status", Text: text.String()})
 	return nil
 }
 

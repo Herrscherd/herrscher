@@ -11,7 +11,6 @@ const keylogEnv = "HERRSCHER_KEYLOG"
 var (
 	keylogOnce sync.Once
 	keylogFile *os.File
-	keylogMu   sync.Mutex
 )
 
 func keylog(format string, args ...any) {

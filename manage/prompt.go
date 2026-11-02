@@ -2,7 +2,10 @@ package manage
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"sort"
 	"strconv"
@@ -113,6 +116,9 @@ func promptLine(in *bufio.Reader, msg string) string {
 	if msg != "" {
 		fmt.Fprint(os.Stderr, msg)
 	}
-	line, _ := in.ReadString('\n')
+	line, err := in.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		slog.Warn("read prompt", "err", err)
+	}
 	return strings.TrimSpace(line)
 }

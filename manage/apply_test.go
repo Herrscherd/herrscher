@@ -113,7 +113,9 @@ func TestApplyRestoreUndoesEverything(t *testing.T) {
 	steps := []step{
 		writeStep(dir, "go.mod", "module m\n\nrequire mod/a v1.0.0\n"),
 		func(ctx context.Context) (string, error) {
-			os.WriteFile(filepath.Join(dir, "plugins.go"), []byte("package main // broken\n"), 0o644)
+			if err := os.WriteFile(filepath.Join(dir, "plugins.go"), []byte("package main // broken\n"), 0o644); err != nil {
+				return "", err
+			}
 			return "plugins.go:1: undefined: Register", errors.New("exit status 1")
 		},
 		func(ctx context.Context) (string, error) { third = true; return "", nil },

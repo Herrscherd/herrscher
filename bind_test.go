@@ -53,7 +53,11 @@ func TestContributedCommandsSurviveDegrading(t *testing.T) {
 	if _, ok := gws[0].Gateway.(contracts.CommandSource); ok {
 		t.Fatal("the wrapped gateway is expected to have lost Commands; this test proves nothing otherwise")
 	}
-	if again, _ := host.CollectCommands(gws); len(again) != 0 {
+	again, err := host.CollectCommands(gws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again) != 0 {
 		t.Fatal("collecting after wrapping is expected to yield nothing")
 	}
 

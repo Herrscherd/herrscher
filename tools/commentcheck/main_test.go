@@ -128,14 +128,31 @@ func strayLines(t *testing.T, path, text string, namedByAGenerator bool) []int {
 	return lines
 }
 
-func TestOnlyDocsOfExportedIdentifiersKnownDirectivesAndClosingOutputsPass(t *testing.T) {
+func TestATestFileKeepsOnlyExampleDocsDirectivesAndClosingOutputs(t *testing.T) {
 	t.Parallel()
-	if lines, want := strayLines(t, "sample_test.go", source, false), []int{8, 12, 14, 17, 19, 26, 28, 32, 36, 42, 46, 50, 54, 62}; !slices.Equal(lines, want) {
+	if lines, want := strayLines(t, "sample_test.go", source, false), []int{1, 4, 6, 8, 12, 14, 17, 19, 26, 28, 31, 36, 42, 46, 50, 54, 57, 59, 62}; !slices.Equal(lines, want) {
 		t.Fatalf("stray comments on lines %v, want %v", lines, want)
 	}
 }
 
-func TestAnOutputCommentOutsideATestFileIsStray(t *testing.T) {
+func TestTheDocOfARunnableExampleIsAllowed(t *testing.T) {
+	t.Parallel()
+	const example = `package sample_test
+
+// ExampleParse shows a fleet parsed from text.
+func ExampleParse() {
+	// Output: ok
+}
+
+// TestParse narrates a test.
+func TestParse(t *testing.T) {}
+`
+	if lines, want := strayLines(t, "sample_test.go", example, false), []int{8}; !slices.Equal(lines, want) {
+		t.Fatalf("stray comments on lines %v, want %v", lines, want)
+	}
+}
+
+func TestOnlyDocsOfExportedIdentifiersAndKnownDirectivesPassOutsideTests(t *testing.T) {
 	t.Parallel()
 	if lines, want := strayLines(t, "sample.go", source, false), []int{8, 12, 14, 17, 19, 26, 28, 32, 36, 38, 42, 46, 50, 54, 62}; !slices.Equal(lines, want) {
 		t.Fatalf("stray comments on lines %v, want %v", lines, want)

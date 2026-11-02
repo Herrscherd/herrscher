@@ -2,12 +2,15 @@ package manage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
+
+var errUnknownAction = errors.New("unknown plugin action")
 
 // PluginOps is the programmatic half of the plugin verbs, for a front end that
 // asks the two confirmations itself. The CLI answers them inline and so runs
@@ -84,7 +87,7 @@ func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (
 	case "version":
 		return o.run(ctx, addCommands(module, version))
 	}
-	return "", fmt.Errorf("unknown plugin action %q", action)
+	return "", fmt.Errorf("%w %q", errUnknownAction, action)
 }
 
 // Restore puts the composition back as it was before the last Apply.

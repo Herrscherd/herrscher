@@ -13,6 +13,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -25,6 +26,11 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/manage"
+)
+
+var (
+	errUnknownCommand  = errors.New("unknown command")
+	errUnknownArgument = errors.New("unknown argument")
 )
 
 func main() {
@@ -169,7 +175,7 @@ func main() {
 func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (stdout string, exit int, err error) {
 	out, handled, derr := fwd(ctx, append([]string{cmd}, args...))
 	if !handled {
-		return "", 2, fmt.Errorf("unknown command %q", cmd)
+		return "", 2, fmt.Errorf("%w %q", errUnknownCommand, cmd)
 	}
 	return out, 0, derr
 }
@@ -193,7 +199,7 @@ func runWhoami(args []string) error {
 	asJSON := false
 	for _, a := range args {
 		if a != "--json" {
-			return fmt.Errorf("whoami: unknown argument %q (only --json)", a)
+			return fmt.Errorf("whoami: %w %q (only --json)", errUnknownArgument, a)
 		}
 		asJSON = true
 	}

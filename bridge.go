@@ -17,6 +17,8 @@ import (
 	"github.com/Herrscherd/herrscher/core/scope"
 )
 
+var errModelNotRoutable = errors.New("cannot be routed through the remote backend resolver")
+
 func runBridge(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("bridge", flag.ContinueOnError)
 	ch := channelFlag(fs)
@@ -123,7 +125,7 @@ func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequ
 	}
 	if be != nil {
 		if req.ModelID != "" {
-			return nil, fmt.Errorf("model %q cannot be routed through the remote backend resolver (HERRSCHER_REMOTE=backend): the proxy cannot carry the model's spawn environment", req.ModelID)
+			return nil, fmt.Errorf("model %q %w (HERRSCHER_REMOTE=backend): the proxy cannot carry the model's spawn environment", req.ModelID, errModelNotRoutable)
 		}
 		return be, nil
 	}

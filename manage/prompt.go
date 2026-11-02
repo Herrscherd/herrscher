@@ -12,6 +12,8 @@ import (
 	"strings"
 )
 
+var errChoiceOutOfRange = errors.New("choice out of range")
+
 func isTerminal(f *os.File) bool {
 	st, err := f.Stat()
 	return err == nil && st.Mode()&os.ModeCharDevice != 0
@@ -104,12 +106,12 @@ func chooseKind(s style, in *bufio.Reader, cat string) (string, error) {
 		case n == len(kinds)+1:
 			return "none", nil
 		}
-		return "", fmt.Errorf("%s: choice out of range: %d", cat, n)
+		return "", fmt.Errorf("%s: %w: %d", cat, errChoiceOutOfRange, n)
 	}
 	if _, ok := catalog[cat][ans]; ok {
 		return ans, nil
 	}
-	return "", fmt.Errorf("unknown %s kind %q", cat, ans)
+	return "", fmt.Errorf("%s: %w %q", cat, errUnknownKind, ans)
 }
 
 func promptLine(in *bufio.Reader, msg string) string {

@@ -1,10 +1,13 @@
 package manage
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 )
+
+var errNotModulePath = errors.New("not a module path")
 
 const pinFile = ".herrscher-pins"
 
@@ -16,7 +19,7 @@ func readPins(src string) (map[string]bool, error) {
 			continue
 		}
 		if strings.ContainsAny(mod, " \t") {
-			return nil, fmt.Errorf("%s line %d: not a module path: %q", pinFile, i+1, mod)
+			return nil, fmt.Errorf("%s line %d: %w: %q", pinFile, i+1, errNotModulePath, mod)
 		}
 		pins[mod] = true
 	}

@@ -2,12 +2,19 @@ package manage
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+)
+
+var (
+	errUnknownKind       = errors.New("unknown kind")
+	errInvalidModulePath = errors.New("invalid module path")
+	errEmptyStack        = errors.New("empty stack: every category was set to none")
 )
 
 var catalog = map[string]map[string]string{
@@ -192,18 +199,18 @@ func resolveStack(choices map[string]string, extras []string) ([]string, error) 
 		}
 		module, ok := catalog[cat][kind]
 		if !ok {
-			return nil, fmt.Errorf("unknown %s kind %q (try `herrscher init --list`)", cat, kind)
+			return nil, fmt.Errorf("%s: %w %q (try `herrscher init --list`)", cat, errUnknownKind, kind)
 		}
 		add(module)
 	}
 	for _, m := range extras {
 		if m == "" || m[0] == '-' {
-			return nil, fmt.Errorf("invalid module path %q", m)
+			return nil, fmt.Errorf("%w %q", errInvalidModulePath, m)
 		}
 		add(m)
 	}
 	if len(modules) == 0 {
-		return nil, fmt.Errorf("empty stack: every category was set to none")
+		return nil, errEmptyStack
 	}
 	return modules, nil
 }

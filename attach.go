@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -13,6 +14,8 @@ import (
 	"github.com/Herrscherd/herrscher/plugins/terminal"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
+
+var errNotAvailableFromTerminal = errors.New("not available from the terminal")
 
 type attachedDaemon struct {
 	ctx      context.Context
@@ -171,7 +174,7 @@ func (a *attachedDaemon) Dispatch(args []string) (string, error) {
 		if len(args) > 0 {
 			verb = args[0]
 		}
-		return "", fmt.Errorf("command %q is not available from the terminal (allowed: session, agent)", verb)
+		return "", fmt.Errorf("command %q is %w (allowed: session, agent)", verb, errNotAvailableFromTerminal)
 	}
 	return a.dispatch(withTerminalOnly(args))
 }

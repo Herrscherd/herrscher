@@ -23,6 +23,8 @@ import (
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
+var errNoGateway = errors.New("no gateway built")
+
 func or(a, b string) string {
 	if a != "" {
 		return a
@@ -337,7 +339,7 @@ func buildGateways(ctx context.Context) ([]host.Deps, error) {
 		}
 	}
 	if len(sets) == 0 {
-		return nil, fmt.Errorf("no gateway built")
+		return nil, errNoGateway
 	}
 	return sets, nil
 }

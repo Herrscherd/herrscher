@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -17,6 +18,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
+var (
+	errUnsupportedCategory  = errors.New("unsupported category")
+	errNoSkeleton           = errors.New("has no skeleton")
+	errNoOrchestratorPlugin = errors.New("no orchestrator plugin registered")
+	errNoBackendPlugin      = errors.New("no backend plugin registered")
+)
+
 func runPluginHost(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("plugin-host", flag.ContinueOnError)
 	category := fs.String("category", "", "plugin category to host (e.g. memory, orchestrator)")
@@ -26,7 +34,7 @@ func runPluginHost(ctx context.Context, args []string) error {
 		return err
 	}
 	if !host.SupportedRemoteCategory(contracts.Category(*category)) {
-		return fmt.Errorf("plugin-host: unsupported category %q", *category)
+		return fmt.Errorf("plugin-host: %w %q", errUnsupportedCategory, *category)
 	}
 
 	tlsCfg := tlsConfigFromEnv()
@@ -65,7 +73,7 @@ func runPluginHost(ctx context.Context, args []string) error {
 			func(s *grpc.Server) { transport.RegisterBackendSkeleton(s, real) },
 			func() error { return real.Close() }
 	default:
-		return fmt.Errorf("plugin-host: category %q passed the support gate but has no skeleton", *category)
+		return fmt.Errorf("plugin-host: category %q passed the support gate but %w", *category, errNoSkeleton)
 	}
 	defer func() {
 		if err := closeReal(); err != nil {
@@ -137,7 +145,7 @@ func firstOrchestrator(ctx context.Context) (contracts.Orchestrator, contracts.M
 		}
 		return o, p.Manifest, nil
 	}
-	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: no orchestrator plugin registered")
+	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: %w", errNoOrchestratorPlugin)
 }
 
 func firstBackend(ctx context.Context) (contracts.Backend, contracts.Manifest, error) {
@@ -155,5 +163,5 @@ func firstBackend(ctx context.Context) (contracts.Backend, contracts.Manifest, e
 		}
 		return b, p.Manifest, nil
 	}
-	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: no backend plugin registered")
+	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: %w", errNoBackendPlugin)
 }

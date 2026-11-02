@@ -31,7 +31,7 @@ func (g goToolchain) List(ctx context.Context, args ...string) (string, error) {
 	cmd.Dir = g.dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("go list %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("go list %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return string(out), nil
 }

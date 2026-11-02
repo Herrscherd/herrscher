@@ -12,6 +12,8 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
+var errNoHubSocket = errors.New("bridge requires --hub-socket (pure-runner mode)")
+
 // BackendFactory builds the model-edge backend for a resolved channel. It is
 // injected so core stays free of any model-specific code: the binary supplies a
 // factory closing over its chosen backend (e.g. claude.NewBackend). The channel
@@ -61,7 +63,7 @@ type Options struct {
 // (the daemon hub owns all gateway I/O) and drives the backend over it.
 func Run(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, o Options) error {
 	if o.HubSocket == "" {
-		return errors.New("bridge requires --hub-socket (pure-runner mode)")
+		return errNoHubSocket
 	}
 	if starter, ok := orch.(interface{ Start(context.Context) }); ok {
 		starter.Start(ctx)

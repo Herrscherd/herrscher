@@ -9,6 +9,7 @@ package terminal
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -26,6 +27,12 @@ import (
 )
 
 // ChannelID is the default conversation id used by the terminal gateway.
+var (
+	errNoSessionControl         = errors.New("no session control")
+	errNotAvailableFromTerminal = errors.New("is not available from the terminal")
+	errSessionControlUnbound    = errors.New("session control not bound")
+)
+
 const ChannelID = "terminal"
 
 // Kind is what this gateway is called wherever gateways are named. A session's
@@ -350,7 +357,7 @@ func (t *Terminal) Scrollback(name string) []contracts.ScrollbackLine {
 func (t *Terminal) Resume(name string) (string, error) {
 	c := t.Control()
 	if c == nil {
-		return "", fmt.Errorf("no session control")
+		return "", errNoSessionControl
 	}
 	if err := c.Resume(name); err != nil {
 		return "", err
@@ -460,13 +467,13 @@ func (t *Terminal) Dispatch(args []string) (string, error) {
 		if len(args) > 0 {
 			verb = args[0]
 		}
-		return "", fmt.Errorf("command %q is not available from the terminal (allowed: %s)", verb, allowedVerbs())
+		return "", fmt.Errorf("command %q %w (allowed: %s)", verb, errNotAvailableFromTerminal, allowedVerbs())
 	}
 	t.ctrlMu.Lock()
 	c, ctx := t.ctrl, t.baseCtx
 	t.ctrlMu.Unlock()
 	if c == nil {
-		return "", fmt.Errorf("session control not bound")
+		return "", errSessionControlUnbound
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -481,7 +488,7 @@ func (t *Terminal) Close(name string, force bool) (string, error) {
 	c, ctx := t.ctrl, t.baseCtx
 	t.ctrlMu.Unlock()
 	if c == nil {
-		return "", fmt.Errorf("session control not bound")
+		return "", errSessionControlUnbound
 	}
 	if ctx == nil {
 		ctx = context.Background()

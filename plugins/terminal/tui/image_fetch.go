@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"path"
@@ -10,20 +11,26 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+var (
+	errNotFetchable   = errors.New("is not fetchable")
+	errNoHost         = errors.New("names no host")
+	errNotAllowlisted = errors.New("is not on the attachment allowlist")
+)
+
 func fetchImage(ctx context.Context, get func(context.Context, string) ([]byte, error), allow []string, rawURL string) ([]byte, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse image url: %w", err)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fmt.Errorf("image url scheme %q is not fetchable", u.Scheme)
+		return nil, fmt.Errorf("image url scheme %q %w", u.Scheme, errNotFetchable)
 	}
 	host := strings.ToLower(u.Hostname())
 	if host == "" {
-		return nil, fmt.Errorf("image url %q names no host", rawURL)
+		return nil, fmt.Errorf("image url %q %w", rawURL, errNoHost)
 	}
 	if !hostAllowed(host, allow) {
-		return nil, fmt.Errorf("image host %s is not on the attachment allowlist", host)
+		return nil, fmt.Errorf("image host %s %w", host, errNotAllowlisted)
 	}
 	data, err := get(ctx, rawURL)
 	if err != nil {

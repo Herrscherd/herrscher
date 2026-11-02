@@ -6,6 +6,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -14,6 +15,15 @@ import (
 )
 
 // Registry collects commands and dispatches argv to them.
+var (
+	errEmptyPath        = errors.New("cli: command with empty path")
+	errDuplicateCommand = errors.New("cli: duplicate command")
+	errUnknownCommand   = errors.New("unknown command")
+	errMissingRequired  = errors.New("missing required")
+	errUnknownFlag      = errors.New("unknown flag")
+	errFlagNeedsValue   = errors.New("needs a value")
+)
+
 type Registry struct {
 	cmds []contracts.Cmd
 }
@@ -23,11 +33,11 @@ func key(path []string) string { return strings.Join(path, " ") }
 // Add registers a command. It rejects an empty path or a duplicate path.
 func (r *Registry) Add(c contracts.Cmd) error {
 	if len(c.Path) == 0 {
-		return fmt.Errorf("cli: command with empty path")
+		return errEmptyPath
 	}
 	for _, e := range r.cmds {
 		if key(e.Path) == key(c.Path) {
-			return fmt.Errorf("cli: duplicate command %q", key(c.Path))
+			return fmt.Errorf("%w %q", errDuplicateCommand, key(c.Path))
 		}
 	}
 	r.cmds = append(r.cmds, c)
@@ -43,7 +53,7 @@ func (r *Registry) Add(c contracts.Cmd) error {
 func (r *Registry) Dispatch(ctx context.Context, args []string) (string, error) {
 	cmd, rest := r.match(args)
 	if cmd == nil {
-		return "", fmt.Errorf("unknown command %q", strings.Join(args, " "))
+		return "", fmt.Errorf("%w %q", errUnknownCommand, strings.Join(args, " "))
 	}
 	in, err := parse(*cmd, rest)
 	if err != nil {
@@ -88,7 +98,7 @@ func (r *Registry) Run(ctx context.Context, path []string, in contracts.Input) (
 		}
 	}
 	if cmd == nil {
-		return "", fmt.Errorf("unknown command %q", key(path))
+		return "", fmt.Errorf("%w %q", errUnknownCommand, key(path))
 	}
 	if in.Args == nil {
 		in.Args = map[string]string{}
@@ -96,7 +106,7 @@ func (r *Registry) Run(ctx context.Context, path []string, in contracts.Input) (
 	for _, p := range cmd.Params {
 		if p.Required {
 			if _, ok := in.Args[p.Name]; !ok {
-				return "", fmt.Errorf("%s: missing required --%s", key(cmd.Path), p.Name)
+				return "", fmt.Errorf("%s: %w --%s", key(cmd.Path), errMissingRequired, p.Name)
 			}
 		}
 	}
@@ -192,7 +202,7 @@ func parse(c contracts.Cmd, rest []string) (contracts.Input, error) {
 		name, inline, isInline := strings.Cut(strings.TrimPrefix(tok, "--"), "=")
 		p, ok := isParam(c, name)
 		if !ok {
-			return in, fmt.Errorf("%s: unknown flag --%s", strings.Join(c.Path, " "), name)
+			return in, fmt.Errorf("%s: %w --%s", strings.Join(c.Path, " "), errUnknownFlag, name)
 		}
 		if isInline {
 			in.Args[name] = inline
@@ -202,7 +212,7 @@ func parse(c contracts.Cmd, rest []string) (contracts.Input, error) {
 			in.Args[name] = rest[i+1]
 			i++
 		} else if p.Required || p.ValueRequired {
-			return in, fmt.Errorf("%s: flag --%s needs a value", strings.Join(c.Path, " "), name)
+			return in, fmt.Errorf("%s: flag --%s %w", strings.Join(c.Path, " "), name, errFlagNeedsValue)
 		} else {
 			in.Args[name] = "true"
 		}
@@ -210,7 +220,7 @@ func parse(c contracts.Cmd, rest []string) (contracts.Input, error) {
 	for _, p := range c.Params {
 		if p.Required {
 			if _, ok := in.Args[p.Name]; !ok {
-				return in, fmt.Errorf("%s: missing required --%s", strings.Join(c.Path, " "), p.Name)
+				return in, fmt.Errorf("%s: %w --%s", strings.Join(c.Path, " "), errMissingRequired, p.Name)
 			}
 		}
 	}

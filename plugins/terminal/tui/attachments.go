@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,13 @@ import (
 // Attachment is a file staged to send with the next message (and echoed under the
 // user's transcript entry once sent). Path is a local filesystem path; the
 // terminal gateway hands it to the host as a file:// URL.
+var (
+	errEmptyClipboard = errors.New("clipboard image is empty")
+	errSizeLimit      = errors.New("exceeds")
+	errUsage          = errors.New("usage: /attach <path>")
+	errNotRegularFile = errors.New("not a regular file")
+)
+
 type Attachment struct {
 	Name string
 	Path string
@@ -27,10 +35,10 @@ func attachmentDir() string {
 
 func saveClipboardImage(data []byte, mime string, seq int) (Attachment, error) {
 	if len(data) == 0 {
-		return Attachment{}, fmt.Errorf("clipboard image is empty")
+		return Attachment{}, errEmptyClipboard
 	}
 	if int64(len(data)) > maxAttachmentBytes {
-		return Attachment{}, fmt.Errorf("pasted image exceeds %d MiB", maxAttachmentBytes>>20)
+		return Attachment{}, fmt.Errorf("pasted image %w %d MiB", errSizeLimit, maxAttachmentBytes>>20)
 	}
 	name := fmt.Sprintf("paste-%d%s", seq, mimeExt(mime))
 	path, err := stage(name, data)
@@ -55,7 +63,7 @@ func stage(name string, data []byte) (string, error) {
 func attachLocalFile(path string, seq int) (Attachment, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return Attachment{}, fmt.Errorf("usage: /attach <path>")
+		return Attachment{}, errUsage
 	}
 	if strings.HasPrefix(path, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {
@@ -67,10 +75,10 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
 	}
 	if !info.Mode().IsRegular() {
-		return Attachment{}, fmt.Errorf("attach %s: not a regular file", path)
+		return Attachment{}, fmt.Errorf("attach %s: %w", path, errNotRegularFile)
 	}
 	if info.Size() > maxAttachmentBytes {
-		return Attachment{}, fmt.Errorf("attach %s: exceeds %d MiB", path, maxAttachmentBytes>>20)
+		return Attachment{}, fmt.Errorf("attach %s: %w %d MiB", path, errSizeLimit, maxAttachmentBytes>>20)
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {

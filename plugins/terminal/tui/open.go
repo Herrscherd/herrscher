@@ -1,11 +1,21 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os/exec"
 	"runtime"
 	"strings"
+)
+
+var (
+	errRefusedTarget    = errors.New("refusing a")
+	errOptionTarget     = errors.New("refusing a target that reads as an option")
+	errControlByte      = errors.New("refusing a target carrying a control byte")
+	errNoEditor         = errors.New("no $EDITOR set to open")
+	errNoEditorLauncher = errors.New("no editor launcher configured")
+	errNoSystemLauncher = errors.New("no system launcher configured")
 )
 
 type launcher func(target string) error
@@ -41,16 +51,16 @@ func checkURLTarget(target string) error {
 	case "http", "https", "mailto":
 		return nil
 	default:
-		return fmt.Errorf("refusing a %q target: %s", u.Scheme, target)
+		return fmt.Errorf("%w %q target: %s", errRefusedTarget, u.Scheme, target)
 	}
 }
 
 func checkTarget(target string) error {
 	if strings.HasPrefix(target, "-") {
-		return fmt.Errorf("refusing a target that reads as an option: %s", target)
+		return fmt.Errorf("%w: %s", errOptionTarget, target)
 	}
 	if hasControl(target) {
-		return fmt.Errorf("refusing a target carrying a control byte")
+		return errControlByte
 	}
 	return nil
 }
@@ -70,7 +80,7 @@ func editorLauncher(env func(string) string) launcher {
 		}
 		editor := strings.TrimSpace(env("EDITOR"))
 		if editor == "" {
-			return fmt.Errorf("no $EDITOR set to open %s", target)
+			return fmt.Errorf("%w %s", errNoEditor, target)
 		}
 		file, line := splitFileRef(target)
 		fields := strings.Fields(editor)
@@ -98,12 +108,12 @@ func splitFileRef(target string) (file, line string) {
 func openLink(l Link, sys, edit launcher) error {
 	if l.Kind == LinkFile {
 		if edit == nil {
-			return fmt.Errorf("no editor launcher configured")
+			return errNoEditorLauncher
 		}
 		return edit(l.Target)
 	}
 	if sys == nil {
-		return fmt.Errorf("no system launcher configured")
+		return errNoSystemLauncher
 	}
 	return sys(l.Target)
 }

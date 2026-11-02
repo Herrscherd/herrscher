@@ -15,13 +15,13 @@ import (
 )
 
 func (h *Handler) agentCreateRun(_ context.Context, in contracts.Input) (string, error) {
-	raw, ok := in.Lookup("name")
+	raw, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
-		return "", &InvalidValueError{Field: "name", Value: raw, Hint: "use letters, digits, - or _ (max 64)"}
+		return "", &InvalidValueError{Field: nameParam, Value: raw, Hint: "use letters, digits, - or _ (max 64)"}
 	}
 	soul, _ := in.Lookup("soul")
 	mcp, _ := in.Lookup("mcp")
@@ -74,7 +74,7 @@ func (h *Handler) agentListRun(_ context.Context, in contracts.Input) (string, e
 }
 
 func (h *Handler) agentShowRun(_ context.Context, in contracts.Input) (string, error) {
-	name, ok := in.Lookup("name")
+	name, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
 	}
@@ -106,7 +106,7 @@ func (h *Handler) agentShowRun(_ context.Context, in contracts.Input) (string, e
 }
 
 func (h *Handler) agentSetSoulRun(_ context.Context, in contracts.Input) (string, error) {
-	name, ok := in.Lookup("name")
+	name, ok := in.Lookup(nameParam)
 	if !ok {
 		return "", ErrMissingName
 	}

@@ -181,8 +181,10 @@ func (m *model) usageReport(tb *tab) string {
 	}
 	if used := m.contextTokens(tb); used > 0 {
 		r := contextRatio(used, limit)
-		lines = append(lines, fmt.Sprintf("  context  %s / %s  (%d%%)", formatTokens(used), formatLimit(limit), int(r*100)))
-		lines = append(lines, fmt.Sprintf("  reste    %d %% avant compaction", int(contextLeft(used, limit)*100)))
+		lines = append(lines,
+			fmt.Sprintf("  context  %s / %s  (%d%%)", formatTokens(used), formatLimit(limit), int(r*100)),
+			fmt.Sprintf("  reste    %d %% avant compaction", int(contextLeft(used, limit)*100)),
+		)
 	} else {
 		lines = append(lines, "  context  no measurement yet")
 	}

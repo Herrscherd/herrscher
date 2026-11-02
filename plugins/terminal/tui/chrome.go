@@ -20,9 +20,10 @@ func (m *model) activeInfo() (contracts.SessionInfo, bool) {
 		return m.infoCache, m.infoKnown
 	}
 	m.infoCache, m.infoKnown = contracts.SessionInfo{}, false
-	for _, s := range m.tm.Sessions() {
-		if s.ChannelID == m.active {
-			m.infoCache, m.infoKnown = s, true
+	sessions := m.tm.Sessions()
+	for i := range sessions {
+		if sessions[i].ChannelID == m.active {
+			m.infoCache, m.infoKnown = sessions[i], true
 			break
 		}
 	}

@@ -31,7 +31,7 @@ const (
 	familyAgent  = "agent"
 )
 
-func toolVerb(text string) (string, string) {
+func toolVerb(text string) (family, rest string) {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
 		return "", ""

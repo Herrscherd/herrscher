@@ -73,7 +73,7 @@ func sixelEscape(img image.Image) string {
 
 func sixelBand(idx []int, w, h, band, colour int) string {
 	var row strings.Builder
-	any := false
+	inked := false
 	for x := range w {
 		var bits byte
 		for r := range 6 {
@@ -83,11 +83,11 @@ func sixelBand(idx []int, w, h, band, colour int) string {
 			}
 		}
 		if bits != 0 {
-			any = true
+			inked = true
 		}
 		row.WriteByte(0x3f + bits)
 	}
-	if !any {
+	if !inked {
 		return ""
 	}
 	return row.String()

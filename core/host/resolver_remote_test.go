@@ -58,10 +58,10 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 	t.Cleanup(func() { close(stop) })
 
 	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, srv.ClientURL())
-	mem, err := r.Memory(context.Background(),
+	mem, _, err := r.Memory(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryMemory},
-			Memory:   func(context.Context, contracts.PluginConfig) (contracts.Memory, error) { return nil, nil },
+			Memory:   func(context.Context, contracts.PluginConfig) (contracts.Memory, error) { return &stubMem{}, nil },
 		}},
 		func(string) string { return "" })
 	if err != nil {
@@ -121,11 +121,11 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 	t.Cleanup(func() { close(stop) })
 
 	r := NewResolver(map[contracts.Category]bool{contracts.CategoryOrchestrator: true}, srv.ClientURL())
-	orch, err := r.Orchestrator(context.Background(),
+	orch, _, err := r.Orchestrator(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryOrchestrator},
 			Orchestrator: func(context.Context, contracts.PluginConfig, contracts.Memory) (contracts.Orchestrator, error) {
-				return nil, nil
+				return &recordingOrch{}, nil
 			},
 		}})
 	if err != nil {
@@ -190,10 +190,10 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 	t.Cleanup(func() { close(stop) })
 
 	r := NewResolver(map[contracts.Category]bool{contracts.CategoryBackend: true}, srv.ClientURL())
-	be, err := r.Backend(context.Background(),
+	be, _, err := r.Backend(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryBackend},
-			Backend:  func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return nil, nil },
+			Backend:  func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return &streamingBackend{}, nil },
 		}})
 	if err != nil {
 		t.Fatalf("remote resolve: %v", err)

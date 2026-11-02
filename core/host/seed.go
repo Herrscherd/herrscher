@@ -200,7 +200,7 @@ type BackendRequest struct {
 }
 
 type remoteBackendResolver interface {
-	Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, error)
+	Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, bool, error)
 }
 
 var newBackendResolver = func() remoteBackendResolver {
@@ -239,9 +239,9 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 		modelArg = entry.Arg
 	}
 
-	if backend, err := newBackendResolver().Backend(ctx, plugins, desired); err != nil {
+	if backend, fromRemote, err := newBackendResolver().Backend(ctx, plugins, desired); err != nil {
 		return nil, err
-	} else if backend != nil {
+	} else if fromRemote {
 		if len(spawnEnv) > 0 {
 			return nil, &gatewayEnvUnsupportedError{Model: req.ModelID}
 		}
@@ -346,19 +346,19 @@ func provisionSeedScope(ctx context.Context, mem contracts.Memory, project, agen
 func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orchestrator, contracts.Memory, error) {
 	memProject, memAgent := sess.MemoryRoots()
 	resolver := NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
-	mem, err := resolver.Memory(ctx, contracts.Default.Memories(), os.Getenv)
+	mem, _, err := resolver.Memory(ctx, contracts.Default.Memories(), os.Getenv)
 	if err != nil {
 		return nil, nil, err
 	}
 	provisionSeedScope(ctx, mem, memProject, memAgent)
-	orch, err := resolver.Orchestrator(ctx, contracts.Default.Orchestrators())
+	orch, orchResolved, err := resolver.Orchestrator(ctx, contracts.Default.Orchestrators())
 	if err != nil {
 		if mem != nil {
 			logCleanup(mem.Close())
 		}
 		return nil, nil, err
 	}
-	if orch != nil {
+	if orchResolved {
 		return orch, mem, nil
 	}
 	for _, plugin := range contracts.Default.Orchestrators() {

@@ -364,9 +364,9 @@ func TestBuildBackendForAcceptsMatchingVendor(t *testing.T) {
 
 type fakeRemoteResolver struct{ called bool }
 
-func (f *fakeRemoteResolver) Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, error) {
+func (f *fakeRemoteResolver) Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, bool, error) {
 	f.called = true
-	return seedBackend{}, nil
+	return seedBackend{}, true, nil
 }
 
 func TestBuildBackendForRefusesGatewayModelWithRemoteBackend(t *testing.T) {

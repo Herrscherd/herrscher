@@ -135,7 +135,7 @@ func TestNativeSpawnEnvironmentCarriesNoGatewayVariables(t *testing.T) {
 	}
 	for _, kv := range contracts.MergeEnv(os.Environ(), spawnEnv) {
 		if strings.HasPrefix(kv, EnvGatewayURL+"=") || strings.HasPrefix(kv, EnvGatewayToken+"=") {
-			t.Fatalf("a native-route child would be spawned with %q — the product credential leaks to the vendor CLI", kv)
+			t.Fatalf("a native-route child would be spawned with %q: the product credential leaks to the vendor CLI", kv)
 		}
 	}
 }
@@ -192,7 +192,7 @@ func TestBackendRequestGatewayWithoutCredsFails(t *testing.T) {
 		ModelSpec: contracts.ModelSpec{ID: "g", Label: "G", Arg: "g", Route: contracts.RouteGateway},
 	}, func(string) string { return "" })
 	if err == nil {
-		t.Fatal("spawnEnvFor(gateway) succeeded with no credentials — it must fail closed")
+		t.Fatal("spawnEnvFor(gateway) succeeded with no credentials. It must fail closed")
 	}
 }
 
@@ -212,7 +212,7 @@ func TestBuildBackendForRefusesAModellessSpawnUnderGatewayOnly(t *testing.T) {
 	t.Setenv("HERRSCHER_ROUTE_POLICY", "gateway-only")
 	_, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "claude", Cmd: "claude"})
 	if err == nil {
-		t.Fatal("BuildBackendFor spawned with no model under gateway-only — it would run on the local login")
+		t.Fatal("BuildBackendFor spawned with no model under gateway-only. It would run on the local login")
 	}
 	if !strings.Contains(err.Error(), "gateway-only") {
 		t.Fatalf("error does not name the policy that refused it: %v", err)
@@ -312,7 +312,7 @@ func TestBuildBackendForSetsModelSettingOnNativeRoute(t *testing.T) {
 		t.Fatalf("BuildBackendFor: %v", err)
 	}
 	if got := cfg.Settings["model"]; got != "opus" {
-		t.Fatalf(`cfg.Settings["model"] = %q, want "opus" — the resolved model never reached the backend`, got)
+		t.Fatalf(`cfg.Settings["model"] = %q, want "opus": the resolved model never reached the backend`, got)
 	}
 }
 

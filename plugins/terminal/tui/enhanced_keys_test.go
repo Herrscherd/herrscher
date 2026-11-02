@@ -108,7 +108,7 @@ func TestWheelScrollsTheTranscript(t *testing.T) {
 	before := m.vp.YOffset
 	mm, _ = mm.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelUp})
 	if got := mm.(*model).vp.YOffset; got >= before {
-		t.Fatalf("wheel-up left the transcript at %d (was %d) — the alt screen has no scrollback to fall back on", got, before)
+		t.Fatalf("wheel-up left the transcript at %d (was %d): the alt screen has no scrollback to fall back on", got, before)
 	}
 }
 

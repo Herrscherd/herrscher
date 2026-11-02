@@ -26,11 +26,11 @@ type GatewayHub struct {
 
 // BuildHub instantiates each gateway plugin in plugins. A plugin whose config
 // can't resolve, or whose factory errors, is skipped (its required vars are
-// absent — e.g. a missing gateway token — which must not stop other gateways from
+// absent (e.g. a missing gateway token), which must not stop other gateways from
 // running). If NO gateway builds, the aggregated per-gateway reasons are
 // returned so a single-gateway stack still fails fast with a clear message.
 // Every skip is also recorded on the hub (Failures, Unconfigured) so the daemon
-// can report a gateway that dropped out — a stale token silently costing you a
+// can report a gateway that dropped out: a stale token silently costing you a
 // whole edge is worse than a noisy line at boot.
 func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string) (*GatewayHub, error) {
 	h := &GatewayHub{sets: map[string]contracts.GatewaySet{}, getenv: envx.Revealed(getenv)}
@@ -91,7 +91,7 @@ func buildOne(ctx context.Context, p contracts.Plugin, getenv func(string) strin
 // Retry rebuilds the gateways that did not come up and reports how many joined.
 // A factory can fail for a reason that fixes itself: at boot the daemon races
 // the network, and a name that does not resolve yet is a few seconds of waiting
-// rather than a broken install — while the process stayed up, so nothing
+// rather than a broken install, while the process stayed up, so nothing
 // restarted it and the edge it serves was simply gone. A genuinely bad
 // credential keeps failing, which is why the waiting is bounded by the caller
 // rather than endless.
@@ -124,7 +124,7 @@ var (
 // AwaitPending retries the gateways that did not build, backing off between
 // attempts, until every one is up or the window closes, and reports how many
 // joined. It belongs to the daemon at startup, where nothing is supervising
-// sessions yet and waiting costs nothing — never to a one-shot operator command,
+// sessions yet and waiting costs nothing; never to a one-shot operator command,
 // which must not hang because a name will not resolve.
 //
 // note, if given, is called before each wait with the reasons still standing, so
@@ -155,7 +155,7 @@ func (h *GatewayHub) Kinds() []string { return append([]string(nil), h.order...)
 // Failures returns one "kind: reason" line per gateway that did not build and
 // could not be waited into existence either, for the caller to log. It is empty
 // when every registered gateway came up. Gateways nobody configured are not in
-// here — see Unconfigured.
+// here (see Unconfigured).
 func (h *GatewayHub) Failures() []string { return append([]string(nil), h.failures...) }
 
 // Unconfigured returns one "kind: reason" line per gateway that was skipped

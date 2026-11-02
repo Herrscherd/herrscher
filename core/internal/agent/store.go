@@ -241,7 +241,7 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 }
 
 // SetSoul overwrites <home>/SOUL.md for an existing agent. It never creates a
-// home — an absent agent is an error (callers seed via Create). Homes are the
+// home. An absent agent is an error (callers seed via Create). Homes are the
 // source of truth; an edited soul applies to the next session materialized.
 func (s *Store) SetSoul(name, soul string) error {
 	if !validateName(name) {
@@ -256,7 +256,7 @@ func (s *Store) SetSoul(name, soul string) error {
 
 // SetUser overwrites <home>/USER.md for an existing agent, rejecting content
 // over the store's user budget (contracts.EnforceBudget) before touching disk.
-// It never creates a home — an absent agent is an error.
+// It never creates a home. An absent agent is an error.
 func (s *Store) SetUser(name, text string) error {
 	if !validateName(name) {
 		return fmt.Errorf("invalid agent name %q", name)

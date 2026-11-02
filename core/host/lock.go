@@ -23,7 +23,7 @@ func StateLockPath(statePath string) string {
 // delivered and answered twice, and both supervise the same sessions down to the
 // same control socket, where the second bridge overwrites the first. The symptom
 // is a bot that replies twice and bills twice, which reads as a routing bug and
-// is not one — so the second daemon is refused here, at the one place that can
+// is not one, so the second daemon is refused here, at the one place that can
 // still explain why.
 //
 // The lock is advisory and held by the process, not the file: it is released by

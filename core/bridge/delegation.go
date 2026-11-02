@@ -7,7 +7,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-const delegationIntro = "You can hand a full mission to another agent — it runs autonomously in its own " +
+const delegationIntro = "You can hand a full mission to another agent. It runs autonomously in its own " +
 	"isolated worktree on its own backend and reports back to you when it is done " +
 	"(async: you keep talking to the human meanwhile). To trigger it, end your reply " +
 	"with ONE trailer line:\n" +
@@ -46,7 +46,7 @@ func delegationLine(a contracts.AgentInfo) string {
 	}
 	line := fmt.Sprintf("  - %s (backend: %s)", a.Name, backend)
 	if a.Summary != "" {
-		line += " — " + a.Summary
+		line += ": " + a.Summary
 	}
 	if len(a.Tags) > 0 {
 		line += " [" + strings.Join(a.Tags, " ") + "]"

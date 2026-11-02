@@ -14,7 +14,7 @@ func TestCapabilitySummaryGroupsByFamily(t *testing.T) {
 		{Path: []string{"session", "close"}},
 		{Path: []string{"commands"}},
 	})
-	want := "  commands\n  gateway — channel read\n  session — close, list"
+	want := "  commands\n  gateway: channel read\n  session: close, list"
 	if got != want {
 		t.Fatalf("summary:\ngot:\n%s\nwant:\n%s", got, want)
 	}
@@ -26,7 +26,7 @@ func TestCapabilitySummaryHasNoDanglingSeparator(t *testing.T) {
 		{Path: []string{"plugin"}},
 		{Path: []string{"plugin", "list"}},
 	})
-	want := "  plugin — list\n  update"
+	want := "  plugin: list\n  update"
 	if got != want {
 		t.Fatalf("summary:\ngot:\n%s\nwant:\n%s", got, want)
 	}
@@ -51,7 +51,7 @@ func TestCapabilityEnvPairEmptyWithoutCommands(t *testing.T) {
 		t.Fatalf("no commands must produce no env pair, got %q", got)
 	}
 	pair := CapabilityEnvPair([]cli.Spec{{Path: []string{"session", "list"}}}, nil)
-	if !strings.HasPrefix(pair, EnvCapabilities+"=") || !strings.Contains(pair, "session — list") {
+	if !strings.HasPrefix(pair, EnvCapabilities+"=") || !strings.Contains(pair, "session: list") {
 		t.Fatalf("env pair: %q", pair)
 	}
 }

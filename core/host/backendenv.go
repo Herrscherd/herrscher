@@ -9,7 +9,7 @@ import (
 )
 
 // The pair the app hands the daemon, from the Neublox account token. These are
-// PRODUCT credentials on a SHARED paid account — they must never reach a
+// PRODUCT credentials on a SHARED paid account. They must never reach a
 // vendor CLI child, whose agent has a shell and is prompt-injectable.
 const (
 	EnvGatewayURL   = "NEUBLOX_GATEWAY_URL"
@@ -50,7 +50,7 @@ func captureGatewayCreds(getenv func(string) string, unsetenv func(string) error
 }
 
 // GatewayEnvPairs returns the captured pair as KEY=VALUE entries, for the
-// environment of a TRUSTED child only — `herrscher bridge`, which is this same
+// environment of a TRUSTED child only: `herrscher bridge`, which is this same
 // binary and captures-and-unsets at its own startup before building a backend.
 // Never for a vendor CLI, and never on argv: /proc/<pid>/cmdline is world
 // readable. Empty when nothing was captured.

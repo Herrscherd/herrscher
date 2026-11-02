@@ -1,6 +1,6 @@
 // Package config loads the daemon's declarative defaults from a user-authored
 // ~/.config/herrscher/config.json. The daemon only ever READS this file (it never
-// rewrites it), so it is safe to comment and hand-edit — unlike state.json,
+// rewrites it), so it is safe to comment and hand-edit, unlike state.json,
 // which the daemon rewrites atomically on every /set.
 //
 // Secrets never live here: gateway tokens/channel ids and any owner
@@ -106,7 +106,7 @@ func stripComments(b []byte) []byte {
 func Template(cmd, healthAddr string) string {
 	cmdJSON, _ := json.Marshal(cmd)
 	healthJSON, _ := json.Marshal(healthAddr)
-	return `// herrscher config — declarative defaults the daemon reads at startup.
+	return `// herrscher config: declarative defaults the daemon reads at startup.
 // Secrets (gateway tokens/channel ids, owner token) are NOT here;
 // keep them in the 0600 env file (herrscher.env). The daemon never rewrites this
 // file, so your comments and edits are safe.

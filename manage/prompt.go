@@ -23,7 +23,7 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 	}
 
 	if compose {
-		s.header("init", "compose your plugin stack — enter accepts the default")
+		s.header("init", "compose your plugin stack: enter accepts the default")
 		for _, cat := range categories {
 			kind, err := chooseKind(s, in, cat)
 			if err != nil {
@@ -32,7 +32,7 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 			choices[cat] = kind
 		}
 	} else {
-		s.header("init", "configure the installed host — enter to skip a field")
+		s.header("init", "configure the installed host: enter to skip a field")
 	}
 
 	secrets := map[string]string{}

@@ -286,7 +286,7 @@ func sessionBanner(repo, name, worktree, branch, cmd, modelID string, shared boo
 		b += fmt.Sprintf("• Branch: `%s`\n", branch)
 	case shared:
 		b += "• Mode: shared (main checkout)\n"
-		b += "• Branch: — (runs on current branch)\n"
+		b += "• Branch: none (runs on current branch)\n"
 	default:
 		b += "• Mode: shared (not a git repo)\n"
 	}
@@ -310,7 +310,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		return "", fmt.Errorf("session %q already exists", name)
 	}
 	if n := len(h.st.SnapshotSessions()); n >= maxSessions {
-		return "", fmt.Errorf("session limit reached (%d) — close a session before creating another", maxSessions)
+		return "", fmt.Errorf("session limit reached (%d): close a session before creating another", maxSessions)
 	}
 	terminalOnly := in.Bool("terminal_only")
 	home := h.st.Home
@@ -332,12 +332,12 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			return "", fmt.Errorf("inspect channel: %v", err)
 		}
 		if kind != "category" && kind != "forum" {
-			return "", fmt.Errorf("channel %s is %q — under must be a category or forum (to run in an existing conversation, pass channel_id)", under, kind)
+			return "", fmt.Errorf("channel %s is %q: under must be a category or forum (to run in an existing conversation, pass channel_id)", under, kind)
 		}
 		home = state.HomeRef{ID: under, Type: kind}
 	}
 	if home.ID == "" && adopted == "" {
-		return "", fmt.Errorf("no home set — run `set home` first")
+		return "", fmt.Errorf("no home set; run `set home` first")
 	}
 	cmd := h.defaultCmd
 	cmdExplicit := false
@@ -362,7 +362,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	parent, _ := in.Lookup("parent")
 	memProject, _ := in.Lookup("memory_project")
 	if memProject != "" && !projectRe.MatchString(memProject) {
-		return "", fmt.Errorf("invalid memory_project %q — use a single name (no /, spaces, or ..)", memProject)
+		return "", fmt.Errorf("invalid memory_project %q: use a single name (no /, spaces, or ..)", memProject)
 	}
 	memAgent, _ := in.Lookup("memory_agent")
 	projectPinned := in.Bool("project_pinned")
@@ -372,7 +372,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if v, ok := in.Lookup("consolidate_every"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("invalid consolidate_every %q — use a non-negative integer", v)
+			return "", fmt.Errorf("invalid consolidate_every %q: use a non-negative integer", v)
 		}
 		consolidateEvery = n
 	}
@@ -390,7 +390,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if v, ok := in.Lookup("token_cap"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("invalid token_cap %q — use a non-negative integer", v)
+			return "", fmt.Errorf("invalid token_cap %q: use a non-negative integer", v)
 		}
 		tokenCap = uint64(n)
 	}
@@ -404,7 +404,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 	if v, ok := in.Lookup("cohort_token_cap"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("invalid cohort_token_cap %q — use a non-negative integer", v)
+			return "", fmt.Errorf("invalid cohort_token_cap %q: use a non-negative integer", v)
 		}
 		cohortTokenCap = uint64(n)
 	}
@@ -449,7 +449,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 			project = filepath.Base(dir)
 		}
 		if project != "" && !projectRe.MatchString(project) {
-			return "", fmt.Errorf("invalid project %q — use a single name (no /, spaces, or ..)", project)
+			return "", fmt.Errorf("invalid project %q: use a single name (no /, spaces, or ..)", project)
 		}
 	}
 	repo := repoFor(ws, project)
@@ -505,7 +505,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, in contracts.Input) (str
 		a, found := h.agents.Get(agentName)
 		if !found {
 			rollbackWorktree()
-			return "", fmt.Errorf("unknown agent %q — create it with `agent create %s`", agentName, agentName)
+			return "", fmt.Errorf("unknown agent %q: create it with `agent create %s`", agentName, agentName)
 		}
 		if vendor == "" {
 			vendor = a.Backend
@@ -609,7 +609,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, in contracts.Input) (stri
 		force := in.Bool("force")
 		if err := wt.Remove(repo, name, force); err != nil {
 			h.sup.Start(sess)
-			return "", fmt.Errorf("%w — commit, or close with force:true to discard (branch session/%s is kept)", err, name)
+			return "", fmt.Errorf("%w; commit, or close with force:true to discard (branch session/%s is kept)", err, name)
 		}
 	}
 	note := h.tidyChannel(ctx, sess)
@@ -637,7 +637,7 @@ func (h *Handler) sessionArchiveRun(ctx context.Context, in contracts.Input) (st
 	if err := h.st.SetArchived(name, true); err != nil {
 		return "", fmt.Errorf("persist: %w", err)
 	}
-	return fmt.Sprintf("📦 Session **%s** archived — resume it from /resume.%s", name, note), nil
+	return fmt.Sprintf("📦 Session **%s** archived. Resume it from /resume.%s", name, note), nil
 }
 
 func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {

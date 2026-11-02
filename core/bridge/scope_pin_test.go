@@ -71,6 +71,6 @@ func TestPinToleratesAnOrchestratorThatCannotBeRerooted(t *testing.T) {
 func TestNoPinSettlesNothing(t *testing.T) {
 	var p *scopePin
 	if got := p.settle(context.Background(), "neublox"); got != "" {
-		t.Fatalf("settle = %q, want empty — a pinned session is never re-scoped", got)
+		t.Fatalf("settle = %q, want empty; a pinned session is never re-scoped", got)
 	}
 }

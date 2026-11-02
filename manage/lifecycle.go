@@ -86,7 +86,7 @@ func UpdateCmd(ctx context.Context, args []string) int {
 
 // installCmd builds the host binary from its current plugin composition, then
 // delegates to `herrscherd service install` for the OS-service glue (systemd /
-// launchd / Task Scheduler). The CLI never reimplements that glue — it lives in
+// launchd / Task Scheduler). The CLI never reimplements that glue; it lives in
 // core/service, exposed by the host. Anything after `--` is forwarded verbatim
 // to the host's service install (e.g. --health-addr, --env-file, --cmd).
 func InstallCmd(ctx context.Context, args []string) int {

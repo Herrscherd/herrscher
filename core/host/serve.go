@@ -30,7 +30,7 @@ const buildTimeout = 5 * time.Minute
 func (u serviceUpdater) Build(ctx context.Context, pull bool) (string, error) {
 	src := u.st.SourceDir()
 	if src == "" {
-		return "", fmt.Errorf("no source set — run /set source <path> first")
+		return "", fmt.Errorf("no source set; run /set source <path> first")
 	}
 	ctx, cancel := context.WithTimeout(ctx, buildTimeout)
 	defer cancel()
@@ -146,8 +146,8 @@ func resolveInstanceID(st *state.State, optID, ownerID string, log *slog.Logger)
 // bridge per persisted session, drives each session's turns over a control
 // Acceptor (fanning events out to every bound gateway), and serves
 // health/liveness. gws are the gateway sets the daemon owns (built from the
-// registry by the caller). Command dispatch no longer runs here —
-// session/service commands run through the operator CLI (see NewRegistry).
+// registry by the caller). Command dispatch no longer runs here.
+// Session/service commands run through the operator CLI (see NewRegistry).
 func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	base := obs.Stderr(false)
 	log := base.With("component", "serve")

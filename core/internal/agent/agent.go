@@ -205,7 +205,7 @@ type Agent struct {
 //
 //	<worktree>/.mcp.json             (from <home>/mcp.json)
 //	<worktree>/.claude/settings.json (from <home>/settings.json)
-//	<worktree>/.claude/CLAUDE.md     (from <home>/SOUL.md — the layered persona)
+//	<worktree>/.claude/CLAUDE.md     (from <home>/SOUL.md, the layered persona)
 //	<worktree>/AGENTS.md             (from <home>/SOUL.md)
 //	<worktree>/.claude/USER.md       (from <home>/USER.md, when present)
 //	<worktree>/.codex/config.toml    (converted from <home>/mcp.json)

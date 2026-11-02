@@ -254,7 +254,7 @@ func (r *Registry) Help() string {
 			}
 		}
 		if c.Help != "" {
-			line += "  — " + c.Help
+			line += ": " + c.Help
 		}
 		lines = append(lines, line)
 	}

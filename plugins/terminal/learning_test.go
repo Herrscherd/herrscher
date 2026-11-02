@@ -26,7 +26,7 @@ func TestDefaultSessionAsksToLearn(t *testing.T) {
 	}
 	spec := c.created[0]
 	if spec.Extractor != "llm" {
-		t.Fatalf("Extractor = %q, want llm — without one nothing is ever distilled", spec.Extractor)
+		t.Fatalf("Extractor = %q, want llm; without one nothing is ever distilled", spec.Extractor)
 	}
 	if spec.ConsolidateEvery != 10 {
 		t.Fatalf("ConsolidateEvery = %d, want 10", spec.ConsolidateEvery)

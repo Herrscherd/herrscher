@@ -6,7 +6,7 @@
 // any OS) from the executor (Install / Uninstall, which writes files and runs
 // the platform commands). Secrets never live in the generated unit: every
 // platform sources an env file (mode 0600) that holds the gateway secrets et al.,
-// and the planner only ever creates that file as an empty template — it never
+// and the planner only ever creates that file as an empty template. It never
 // overwrites an existing one and never echoes a token.
 package service
 
@@ -47,7 +47,7 @@ type Config struct {
 	ConfigPath string
 	DefaultCmd string
 
-	// Path is the PATH the daemon — and so every agent it spawns — runs with.
+	// Path is the PATH the daemon, and so every agent it spawns, runs with.
 	// Captured from the installing shell, because a launcher supplies almost
 	// nothing (systemd hands a user service /usr/local/bin:/usr/bin) and an agent
 	// cannot invoke a tool it cannot find. Empty falls back to the usual dirs.
@@ -114,7 +114,7 @@ var coreEnvVars = []EnvVar{
 
 func renderEnvTemplate(vars []EnvVar) string {
 	var b strings.Builder
-	b.WriteString("# herrscher daemon secrets — keep private (chmod 600), never commit.\n")
+	b.WriteString("# herrscher daemon secrets: keep private (chmod 600), never commit.\n")
 	b.WriteString("# Fill these in, then restart the service.\n")
 	for _, v := range vars {
 		if v.Help != "" {
@@ -212,7 +212,7 @@ func RestartCommands(c Config) ([]Command, error) {
 }
 
 // Restart restarts the service inline (for a separate caller process, e.g. the
-// `herrscher service restart` CLI — never the daemon restarting itself).
+// `herrscher service restart` CLI, never the daemon restarting itself).
 func Restart(ctx context.Context, c Config) error {
 	cmds, err := RestartCommands(c)
 	if err != nil {
@@ -227,7 +227,7 @@ func Restart(ctx context.Context, c Config) error {
 }
 
 // RestartDetached restarts the service out-of-band so it survives the caller
-// being killed mid-restart — required when the daemon restarts *itself* (e.g.
+// being killed mid-restart, required when the daemon restarts *itself* (e.g.
 // from /service restart). On Linux the daemon shares the unit's cgroup, which
 // systemd kills on stop, so the restart is scheduled as a transient timer unit
 // (systemd-run) that lives outside that cgroup. launchd/Task Scheduler manage
@@ -335,7 +335,7 @@ func Smoke(ctx context.Context, binPath string) error {
 
 // InstalledBinPath returns the binary path baked into the installed service
 // unit's ExecStart, so `service update` rebuilds the binary the service actually
-// runs — not whatever binary happened to invoke the CLI (running it from a build
+// runs, not whatever binary happened to invoke the CLI (running it from a build
 // dir would otherwise rebuild that throwaway binary and leave the daemon stale).
 // Returns ("", false) when it can't be determined: unit absent, or an OS whose
 // launcher this doesn't parse (only the linux systemd unit is read).
@@ -576,7 +576,7 @@ func xmlEscape(s string) string {
 
 func startNote(c Config, startCmd string) string {
 	if c.SkipStart {
-		return "installed and enabled at boot, but NOT started — fill the required secrets in " +
+		return "installed and enabled at boot, but NOT started: fill the required secrets in " +
 			c.EnvFile + ", then: " + startCmd
 	}
 	return "running. Secrets live in " + c.EnvFile + "; edit it and restart to change them."

@@ -63,7 +63,7 @@ var hyperlinkPrograms = map[string]bool{
 
 // Probe resolves what the terminal described by env (an os.Getenv-like lookup)
 // can do. It is pure in its input so the whole matrix is a table test, and it
-// runs exactly once — nothing re-probes mid-session, because a capability that
+// runs exactly once. Nothing re-probes mid-session, because a capability that
 // changed under a running frame would leave half the screen drawn for the old one.
 func Probe(env func(string) string) Capabilities {
 	term, program := env("TERM"), env("TERM_PROGRAM")

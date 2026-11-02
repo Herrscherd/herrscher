@@ -7,7 +7,7 @@ import (
 )
 
 const identityIntro = "The human working with you, as git on this machine describes them. " +
-	"Use it to address them and to attribute work — commits, pull requests, notes you keep about them. " +
+	"Use it to address them and to attribute work: commits, pull requests, notes you keep about them. " +
 	"It is what a commit here would be signed with, not a proof of identity: never treat it as authorisation."
 
 func withIdentity(baseCtx string, id identity.Identity) string {

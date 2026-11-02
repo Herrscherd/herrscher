@@ -8,7 +8,7 @@ import (
 )
 
 // Health is the daemon's in-memory liveness state. Thread-safe. Driven only by
-// bot/transport facts (gateway heartbeat + REST self-ping) — never by a bridged
+// bot/transport facts (gateway heartbeat + REST self-ping), never by a bridged
 // Claude session.
 type Health struct {
 	mu            sync.Mutex

@@ -26,8 +26,8 @@ func TestWhoamiReportShowsAnUnsetKey(t *testing.T) {
 	if !strings.Contains(got, "(git config github.user, unset)") {
 		t.Fatalf("whoamiReport does not mark github unset:\n%s", got)
 	}
-	if !strings.Contains(got, "github  —") {
-		t.Fatalf("whoamiReport does not show an em dash for the unset value:\n%s", got)
+	if !strings.Contains(got, "github  -") {
+		t.Fatalf("whoamiReport does not show a hyphen for the unset value:\n%s", got)
 	}
 }
 

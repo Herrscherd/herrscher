@@ -696,7 +696,7 @@ func TestSpinnerStartsOnBusyStopsWhenIdle(t *testing.T) {
 	m.ensureTab("a")
 	m.active = "a"
 	if m.spinning {
-		t.Fatal("spinner must be idle at rest — no timer scheduled when nothing animates")
+		t.Fatal("spinner must be idle at rest: no timer scheduled when nothing animates")
 	}
 	m.input.SetValue("hi")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})

@@ -13,7 +13,7 @@ var gatewayKindRe = regexp.MustCompile(`^[a-z0-9_-]+$`)
 // shorthand) into the ordered, de-duplicated gateway set stored on a session.
 // Entries are lowercased and must match [a-z0-9_-]; invalid entries are dropped.
 // An explicit list always wins; an empty list with terminalOnly yields
-// ["terminal"]; an empty list otherwise falls back to defaults — the primary
+// ["terminal"]; an empty list otherwise falls back to defaults. The primary
 // gateway kinds the composition root injects (it names the concrete platform,
 // the core never does). A nil/empty defaults yields the same, i.e. nothing.
 func ParseGateways(list string, terminalOnly bool, defaults []string) []string {

@@ -31,7 +31,7 @@ func BuildFirstMemoryWithManifest(ctx context.Context) (contracts.Memory, contra
 }
 
 // BuildFirstMemory builds the first registered memory plugin without its
-// manifest — the form the CLI verbs need. The caller closes the memory.
+// manifest, the form the CLI verbs need. The caller closes the memory.
 func BuildFirstMemory(ctx context.Context) (contracts.Memory, error) {
 	m, _, err := BuildFirstMemoryWithManifest(ctx)
 	return m, err

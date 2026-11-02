@@ -53,7 +53,7 @@ func (g *SessionBudgetGate) usageFor(s state.Session) (float64, uint64) {
 }
 
 // Check answers both budget questions from one transcript fold: the reason the
-// session must pause ("" = it may run), and — for the turn about to start — how
+// session must pause ("" = it may run), and, for the turn about to start, how
 // many tokens it may spend before a token cap trips, with capped false when no
 // token cap applies. On a trip it persists PausedReason so the session comes
 // back paused across reloads. Reason vocabulary: cost|tokens|cohort_cost|cohort_tokens.

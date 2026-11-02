@@ -1,7 +1,7 @@
 // Package terminal is the terminal gateway plugin: a chat gateway whose
 // "channels" are tabs in the local TUI. It self-registers like any gateway (init →
 // contracts.Register) and implements Gateway + ChannelReader + EventSink so the
-// daemon hub drives it exactly like Discord — polling Read for typed lines and
+// daemon hub drives it exactly like Discord, polling Read for typed lines and
 // fanning the live event stream to it via Emit. The TUI binds to the active
 // instance through Active().
 package terminal
@@ -28,7 +28,7 @@ import (
 // ChannelID is the default conversation id used by the terminal gateway.
 const ChannelID = "terminal"
 
-// Kind is what this gateway is called wherever gateways are named — a session's
+// Kind is what this gateway is called wherever gateways are named. A session's
 // bindings, a manifest, the origin an attached window claims when it speaks into
 // a session it is only watching.
 const Kind = "terminal"
@@ -293,7 +293,7 @@ func (t *Terminal) React(context.Context, contracts.Conversation, contracts.Mess
 func (t *Terminal) Menu(_ context.Context, conv contracts.Conversation, _ contracts.MessageID, prompt string, opts []contracts.Choice) error {
 	text := prompt
 	for _, o := range opts {
-		text += "\n  • " + o.Value + " — " + o.Label
+		text += "\n  • " + o.Value + ": " + o.Label
 	}
 	t.EmitTo(conv, contracts.Event{T: "status", Text: text})
 	return nil
@@ -325,7 +325,7 @@ func (t *Terminal) emit(re tui.RoutedEvent) {
 }
 
 // Sessions returns the hub's sessions for tab labels (nil until SessionControl
-// is bound — see BindSessionControl).
+// is bound, see BindSessionControl).
 func (t *Terminal) Sessions() []contracts.SessionInfo {
 	t.ctrlMu.Lock()
 	c := t.ctrl
@@ -409,7 +409,7 @@ var terminalVerbs = map[string]bool{
 
 // OperatorVerb reports whether a command's leading verb is reachable from a
 // terminal frontend. It is exported because the attached frontend talks to the
-// same daemon over a socket and must draw the same palette — two copies of this
+// same daemon over a socket and must draw the same palette; two copies of this
 // judgement would be two chances to disagree about what a tab may run.
 func OperatorVerb(verb string) bool { return terminalVerbs[verb] }
 
@@ -424,7 +424,7 @@ func allowedVerbs() string {
 
 // Commands is the palette advertised to the TUI: the daemon's own registry,
 // filtered to the verbs Dispatch accepts. Asking the registry rather than
-// re-typing a list here is what keeps the two in step — the hand-kept version
+// re-typing a list here is what keeps the two in step; the hand-kept version
 // offered seven of the twenty-odd commands the terminal would have run.
 //
 // A registry that cannot be reached (control not bound yet) yields no palette

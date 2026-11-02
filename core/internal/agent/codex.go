@@ -25,12 +25,12 @@ func renderCodexMCP(raw []byte, worktree string) ([]byte, error) {
 	}
 
 	var out strings.Builder
-	for i, name := range sortedKeys(config.MCPServers) {
+	for index, name := range sortedKeys(config.MCPServers) {
 		server := config.MCPServers[name]
 		if err := checkCodexMCPServer(name, server); err != nil {
 			return nil, err
 		}
-		if i > 0 {
+		if index > 0 {
 			out.WriteByte('\n')
 		}
 		writeCodexMCPServer(&out, name, server, worktree)
@@ -79,9 +79,9 @@ func substituteWorktree(value, worktree string) string {
 	return tomlString(strings.ReplaceAll(value, worktreeToken, worktree))
 }
 
-func sortedKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
+func sortedKeys[V any](entries map[string]V) []string {
+	keys := make([]string, 0, len(entries))
+	for key := range entries {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
@@ -111,8 +111,8 @@ func isBareKeyRune(r rune) bool {
 func tomlString(value string) string {
 	var out strings.Builder
 	out.WriteByte('"')
-	for _, r := range value {
-		switch r {
+	for _, character := range value {
+		switch character {
 		case '\\':
 			out.WriteString(`\\`)
 		case '"':
@@ -128,10 +128,10 @@ func tomlString(value string) string {
 		case '\r':
 			out.WriteString(`\r`)
 		default:
-			if r < 0x20 || r == 0x7f {
-				fmt.Fprintf(&out, `\u%04X`, r)
+			if character < 0x20 || character == 0x7f {
+				fmt.Fprintf(&out, `\u%04X`, character)
 			} else {
-				out.WriteRune(r)
+				out.WriteRune(character)
 			}
 		}
 	}

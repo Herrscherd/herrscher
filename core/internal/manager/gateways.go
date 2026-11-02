@@ -22,13 +22,13 @@ func ParseGateways(list string, terminalOnly bool, defaults []string) []string {
 	}
 	out := make([]string, 0, maxGateways)
 	seen := make(map[string]bool)
-	for _, p := range strings.Split(list, ",") {
-		p = strings.ToLower(strings.TrimSpace(p))
-		if p == "" || seen[p] || !gatewayKindRe.MatchString(p) {
+	for _, part := range strings.Split(list, ",") {
+		part = strings.ToLower(strings.TrimSpace(part))
+		if part == "" || seen[part] || !gatewayKindRe.MatchString(part) {
 			continue
 		}
-		seen[p] = true
-		out = append(out, p)
+		seen[part] = true
+		out = append(out, part)
 		if len(out) == maxGateways {
 			break
 		}

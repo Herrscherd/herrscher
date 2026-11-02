@@ -58,11 +58,11 @@ func (h *Handler) BudgetGate() *SessionBudgetGate { return &SessionBudgetGate{h:
 
 func (g *SessionBudgetGate) usageFor(s state.Session) sessionUsage {
 	entries := state.ReadTranscript(state.TranscriptPath(g.h.partDir, s.Name), 0)
-	u := aggregateUsage(entries).usage
-	if u == nil {
+	aggregated := aggregateUsage(entries).usage
+	if aggregated == nil {
 		return sessionUsage{}
 	}
-	return sessionUsage{cost: u.Cost, tokens: nonNegativeCount(u.TokensIn + u.TokensOut)}
+	return sessionUsage{cost: aggregated.Cost, tokens: nonNegativeCount(aggregated.TokensIn + aggregated.TokensOut)}
 }
 
 // Check answers both budget questions from one transcript fold: the reason the
@@ -77,18 +77,18 @@ func (g *SessionBudgetGate) usageFor(s state.Session) sessionUsage {
 // its terminal result event, so there is no mid-turn number to compare a cost
 // cap against.
 func (g *SessionBudgetGate) Check(session string) BudgetCheck {
-	h := g.h
-	sess, ok := h.st.FindSession(session)
+	handler := g.h
+	sess, ok := handler.st.FindSession(session)
 	if !ok {
 		return BudgetCheck{}
 	}
 	own := g.usageFor(sess)
-	sc, stk := own.cost, own.tokens
-	cohort := cohortTotals(sess, h.st.SnapshotSessions(), g.usageFor)
+	spentCost, stk := own.cost, own.tokens
+	cohort := cohortTotals(sess, handler.st.SnapshotSessions(), g.usageFor)
 	cc, ctk := cohort.cost, cohort.tokens
-	reason := budgetReason(sc, stk, sess.CostCap, sess.TokenCap, cc, ctk, sess.CohortCostCap, sess.CohortTokenCap)
+	reason := budgetReason(spentCost, stk, sess.CostCap, sess.TokenCap, cc, ctk, sess.CohortCostCap, sess.CohortTokenCap)
 	if reason != "" {
-		h.warnIfFailed(h.st.SetPausedReason(session, reason), "pause "+session)
+		handler.warnIfFailed(handler.st.SetPausedReason(session, reason), "pause "+session)
 	}
 	headroom := ^uint64(0)
 	capped := false
@@ -108,21 +108,21 @@ func cohortMembers(target state.Session, all []state.Session) []state.Session {
 	byName := make(map[string]state.Session, len(all))
 	children := make(map[string][]string, len(all))
 	for i := range all {
-		s := all[i]
-		byName[s.Name] = s
-		if s.Parent != "" && s.Parent != s.Name {
-			children[s.Parent] = append(children[s.Parent], s.Name)
+		session := all[i]
+		byName[session.Name] = session
+		if session.Parent != "" && session.Parent != session.Name {
+			children[session.Parent] = append(children[session.Parent], session.Name)
 		}
 	}
 	root := target
 	seen := map[string]bool{root.Name: true}
 	for root.Parent != "" && root.Parent != root.Name {
-		p, ok := byName[root.Parent]
-		if !ok || seen[p.Name] {
+		parent, ok := byName[root.Parent]
+		if !ok || seen[parent.Name] {
 			break
 		}
-		seen[p.Name] = true
-		root = p
+		seen[parent.Name] = true
+		root = parent
 	}
 	var members []state.Session
 	visited := make(map[string]bool)
@@ -132,11 +132,11 @@ func cohortMembers(target state.Session, all []state.Session) []state.Session {
 			return
 		}
 		visited[name] = true
-		s, ok := byName[name]
+		member, ok := byName[name]
 		if !ok {
 			return
 		}
-		members = append(members, s)
+		members = append(members, member)
 		for _, ch := range children[name] {
 			walk(ch)
 		}
@@ -145,9 +145,9 @@ func cohortMembers(target state.Session, all []state.Session) []state.Session {
 	return members
 }
 
-func nonNegativeCount(n int) uint64 {
-	if n < 0 {
+func nonNegativeCount(count int) uint64 {
+	if count < 0 {
 		return 0
 	}
-	return uint64(n)
+	return uint64(count)
 }

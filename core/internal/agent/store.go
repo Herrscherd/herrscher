@@ -32,15 +32,15 @@ func (s *Store) SetUserBudget(runes int) { s.userBudget = runes }
 // caller keeps the default budget; a valid value (including 0, which disables
 // the check) returns (n, true).
 func UserBudgetFromEnv(get func(string) string) (int, bool) {
-	v := get("AGENT_USER_BUDGET")
-	if v == "" {
+	value := get("AGENT_USER_BUDGET")
+	if value == "" {
 		return 0, false
 	}
-	n, err := strconv.Atoi(v)
+	count, err := strconv.Atoi(value)
 	if err != nil {
 		return 0, false
 	}
-	return n, true
+	return count, true
 }
 
 // Root returns the directory under which agent homes live.
@@ -116,10 +116,10 @@ func readTags(home string) []string {
 	seen := make(map[string]bool)
 	var out []string
 	for _, tok := range strings.Fields(strings.ReplaceAll(string(buf), ",", " ")) {
-		t := strings.ToLower(tok)
-		if !seen[t] {
-			seen[t] = true
-			out = append(out, t)
+		lowered := strings.ToLower(tok)
+		if !seen[lowered] {
+			seen[lowered] = true
+			out = append(out, lowered)
 		}
 	}
 	return out
@@ -179,9 +179,9 @@ func (s *Store) Create(spec CreateSpec) (Agent, error) {
 	if err != nil {
 		return Agent{}, err
 	}
-	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(home, f.name), f.data, fileMode); err != nil {
-			return Agent{}, fmt.Errorf("write %s: %w", f.name, err)
+	for _, file := range files {
+		if err := os.WriteFile(filepath.Join(home, file.name), file.data, fileMode); err != nil {
+			return Agent{}, fmt.Errorf("write %s: %w", file.name, err)
 		}
 	}
 	created = true
@@ -287,12 +287,12 @@ func (s *Store) List() ([]Agent, error) {
 		return nil, err
 	}
 	var out []Agent
-	for _, e := range entries {
-		if !e.IsDir() {
+	for _, entry := range entries {
+		if !entry.IsDir() {
 			continue
 		}
-		home := filepath.Join(s.root, e.Name())
-		out = append(out, Agent{Name: e.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Host: readHost(home)})
+		home := filepath.Join(s.root, entry.Name())
+		out = append(out, Agent{Name: entry.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Host: readHost(home)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil

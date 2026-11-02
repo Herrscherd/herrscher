@@ -17,11 +17,11 @@ func (h *Handler) serviceRestartRun(ctx context.Context, _ contracts.Input) (str
 	return "🔄 Restarting the daemon…", nil
 }
 
-func (h *Handler) serviceUpdateRun(ctx context.Context, in contracts.Input) (string, error) {
+func (h *Handler) serviceUpdateRun(ctx context.Context, input contracts.Input) (string, error) {
 	if h.up == nil {
 		return "", ErrServiceControlUnavailable
 	}
-	pull := !in.Bool("no_pull")
+	pull := !input.Bool("no_pull")
 	version, err := h.up.Build(ctx, pull)
 	if err != nil {
 		return "", fmt.Errorf("update: %w", err)
@@ -29,9 +29,9 @@ func (h *Handler) serviceUpdateRun(ctx context.Context, in contracts.Input) (str
 	if err := h.up.Restart(ctx); err != nil {
 		return "", fmt.Errorf("rebuilt %s but restart failed: %w", version, err)
 	}
-	v := version
-	if v == "" {
-		v = "(unknown)"
+	reported := version
+	if reported == "" {
+		reported = "(unknown)"
 	}
-	return fmt.Sprintf("✅ Rebuilt %#q, restarting the daemon…", v), nil
+	return fmt.Sprintf("✅ Rebuilt %#q, restarting the daemon…", reported), nil
 }

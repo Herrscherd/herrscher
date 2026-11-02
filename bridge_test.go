@@ -60,8 +60,8 @@ func TestBackendFlagsCarryModelID(t *testing.T) {
 
 type remoteStub struct{}
 
-func (remoteStub) Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, error) {
-	return stubBackend{}, nil
+func (remoteStub) Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, bool, error) {
+	return stubBackend{}, true, nil
 }
 
 type stubBackend struct{}

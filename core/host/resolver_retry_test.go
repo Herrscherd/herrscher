@@ -45,7 +45,7 @@ func TestRemoteResolveRetriesThenSucceeds(t *testing.T) {
 		return want, nil
 	}
 
-	got, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	got, _, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("expected success within the retry budget, got %v", err)
 	}
@@ -70,7 +70,7 @@ func TestRemoteResolveExhaustsAttemptsAndWarns(t *testing.T) {
 		return nil, context.DeadlineExceeded
 	}
 
-	got, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	got, _, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	if got != nil {
 		t.Fatalf("expected nil memory on give-up, got %v", got)
 	}
@@ -100,7 +100,7 @@ func TestRemoteResolveStopsAtBudget(t *testing.T) {
 		return nil, errors.New("down")
 	}
 
-	_, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	_, _, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	var rre *RemoteResolveError
 	if !errors.As(err, &rre) {
 		t.Fatalf("expected *RemoteResolveError, got %v", err)
@@ -120,7 +120,7 @@ func TestRemoteResolveRecordsMetricsOnHealth(t *testing.T) {
 		return nil, context.DeadlineExceeded
 	}
 
-	_, memErr := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	_, _, memErr := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	logCleanup(memErr)
 
 	m := h.Snapshot(time.Unix(1, 0), 30*time.Second).Metrics
@@ -140,10 +140,10 @@ func TestLocalResolveSkipsRetrySeam(t *testing.T) {
 	var calls int
 	r.dialMemory = func(context.Context, contracts.Plugin) (contracts.Memory, error) {
 		calls++
-		return nil, nil
+		return &stubMem{}, nil
 	}
 	want := &stubMem{}
-	_, err := r.Memory(context.Background(), []contracts.Plugin{{
+	_, _, err := r.Memory(context.Background(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{Category: contracts.CategoryMemory},
 		Memory:   func(context.Context, contracts.PluginConfig) (contracts.Memory, error) { return want, nil },
 	}}, func(string) string { return "" })
@@ -179,7 +179,7 @@ func TestRemoteResolveOrchestratorRetriesThenSucceeds(t *testing.T) {
 		return want, nil
 	}
 
-	got, err := r.Orchestrator(context.Background(), orchestratorPlugin())
+	got, _, err := r.Orchestrator(context.Background(), orchestratorPlugin())
 	if err != nil {
 		t.Fatalf("expected success within the retry budget, got %v", err)
 	}
@@ -201,7 +201,7 @@ func TestRemoteResolveOrchestratorFailsCleanlyWithMetrics(t *testing.T) {
 		return nil, context.DeadlineExceeded
 	}
 
-	got, err := r.Orchestrator(context.Background(), orchestratorPlugin())
+	got, _, err := r.Orchestrator(context.Background(), orchestratorPlugin())
 	if got != nil {
 		t.Fatalf("expected nil orchestrator on give-up, got %v", got)
 	}
@@ -223,9 +223,9 @@ func TestLocalOrchestratorResolveSkipsDial(t *testing.T) {
 	var calls int
 	r.dialOrchestrator = func(context.Context, contracts.Plugin) (contracts.Orchestrator, error) {
 		calls++
-		return nil, nil
+		return &recordingOrch{}, nil
 	}
-	orch, err := r.Orchestrator(context.Background(), orchestratorPlugin())
+	orch, _, err := r.Orchestrator(context.Background(), orchestratorPlugin())
 	if err != nil {
 		t.Fatalf("local resolve: %v", err)
 	}
@@ -242,11 +242,11 @@ func TestLocalBackendResolveSkipsDial(t *testing.T) {
 	var calls int
 	r.dialBackend = func(context.Context, contracts.Plugin) (contracts.Backend, error) {
 		calls++
-		return nil, nil
+		return &streamingBackend{}, nil
 	}
-	be, err := r.Backend(context.Background(), []contracts.Plugin{{
+	be, _, err := r.Backend(context.Background(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{Category: contracts.CategoryBackend},
-		Backend:  func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return nil, nil },
+		Backend:  func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return &streamingBackend{}, nil },
 	}})
 	if err != nil {
 		t.Fatalf("local resolve: %v", err)

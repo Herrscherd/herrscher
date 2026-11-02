@@ -88,55 +88,59 @@ func (r *Resolver) isRemote(c contracts.Category) bool {
 
 // Memory resolves the first registered memory plugin. Local: call the factory.
 // Remote: dial a gRPC proxy via NATS announcements, retried within a deadline.
-// Returns nil (no error) when none is registered, memory stays optional,
+// Returns (nil, false, nil) when none is registered, memory stays optional,
 // matching buildMemory's contract.
-func (r *Resolver) Memory(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string) (contracts.Memory, error) {
+func (r *Resolver) Memory(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string) (contracts.Memory, bool, error) {
 	for _, p := range plugins {
 		if p.Memory == nil {
 			continue
 		}
 		if r.isRemote(contracts.CategoryMemory) {
 			p := p
-			return resolveRemoteWithRetry(r, ctx, contracts.CategoryMemory,
-				func(c context.Context) (contracts.Memory, error) { return r.dialMemory(c, p) })
+			return resolved(resolveRemoteWithRetry(r, ctx, contracts.CategoryMemory,
+				func(c context.Context) (contracts.Memory, error) { return r.dialMemory(c, p) }))
 		}
 		cfg, err := contracts.Resolve(p.Manifest.Config, getenv)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return p.Memory(ctx, cfg)
+		return resolved(p.Memory(ctx, cfg))
 	}
-	return nil, nil
+	return nil, false, nil
+}
+
+func resolved[T any](v T, err error) (T, bool, error) {
+	return v, err == nil, err
 }
 
 // Orchestrator resolves a REMOTE orchestrator proxy when HERRSCHER_REMOTE names
 // "orchestrator", reusing the same retry/timeout/metrics harness as Memory. It
-// returns (nil, nil) when the category is not remote: the local orchestrator
+// returns (nil, false, nil) when the category is not remote: the local orchestrator
 // needs runtime state the resolver does not hold (the in-process Memory plus the
 // session/scope/learn config bag), so the caller builds the local one itself.
-func (r *Resolver) Orchestrator(ctx context.Context, plugins []contracts.Plugin) (contracts.Orchestrator, error) {
+func (r *Resolver) Orchestrator(ctx context.Context, plugins []contracts.Plugin) (contracts.Orchestrator, bool, error) {
 	if !r.isRemote(contracts.CategoryOrchestrator) {
-		return nil, nil
+		return nil, false, nil
 	}
 	for _, p := range plugins {
 		if p.Orchestrator == nil {
 			continue
 		}
-		return resolveRemoteWithRetry(r, ctx, contracts.CategoryOrchestrator,
-			func(c context.Context) (contracts.Orchestrator, error) { return r.dialOrchestrator(c, p) })
+		return resolved(resolveRemoteWithRetry(r, ctx, contracts.CategoryOrchestrator,
+			func(c context.Context) (contracts.Orchestrator, error) { return r.dialOrchestrator(c, p) }))
 	}
-	return nil, nil
+	return nil, false, nil
 }
 
 // Backend resolves a REMOTE backend proxy when HERRSCHER_REMOTE names "backend",
 // reusing the same retry/timeout/metrics harness. Like Orchestrator it returns
-// (nil, nil) when the category is not remote, leaving the caller to build the
+// (nil, false, nil) when the category is not remote, leaving the caller to build the
 // local backend (which closes over model config the resolver does not hold).
 // The remote proxy streams turn events over gRPC and surfaces a stream loss as a
 // Respond error so the turn loop abandons the in-flight turn.
-func (r *Resolver) Backend(ctx context.Context, plugins []contracts.Plugin, desired ...string) (contracts.Backend, error) {
+func (r *Resolver) Backend(ctx context.Context, plugins []contracts.Plugin, desired ...string) (contracts.Backend, bool, error) {
 	if !r.isRemote(contracts.CategoryBackend) {
-		return nil, nil
+		return nil, false, nil
 	}
 	kind := ""
 	if len(desired) > 0 {
@@ -144,10 +148,10 @@ func (r *Resolver) Backend(ctx context.Context, plugins []contracts.Plugin, desi
 	}
 	p, err := selectBackend(kind, plugins)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return resolveRemoteWithRetry(r, ctx, contracts.CategoryBackend,
-		func(c context.Context) (contracts.Backend, error) { return r.dialBackend(c, p) })
+	return resolved(resolveRemoteWithRetry(r, ctx, contracts.CategoryBackend,
+		func(c context.Context) (contracts.Backend, error) { return r.dialBackend(c, p) }))
 }
 
 // RemoteResolveError reports that a remote category could not be resolved within

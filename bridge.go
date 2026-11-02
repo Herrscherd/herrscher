@@ -107,15 +107,15 @@ func (f backendFlags) request() host.BackendRequest {
 }
 
 type backendResolver interface {
-	Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, error)
+	Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, bool, error)
 }
 
 func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
-	be, err := br.Backend(ctx, contracts.Default.Backends())
+	be, fromRemote, err := br.Backend(ctx, contracts.Default.Backends())
 	if err != nil {
 		return nil, err
 	}
-	if be != nil {
+	if fromRemote {
 		if req.ModelID != "" {
 			return nil, fmt.Errorf("model %q cannot be routed through the remote backend resolver (HERRSCHER_REMOTE=backend): the proxy cannot carry the model's spawn environment", req.ModelID)
 		}
@@ -133,7 +133,7 @@ func buildMemory(ctx context.Context, log *slog.Logger) contracts.Memory {
 	if err != nil {
 		return disabled("memory", err)
 	}
-	mem, err := r.Memory(ctx, contracts.Default.Memories(), os.Getenv)
+	mem, _, err := r.Memory(ctx, contracts.Default.Memories(), os.Getenv)
 	if err != nil {
 		return disabled("memory", err)
 	}
@@ -199,9 +199,9 @@ func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, proje
 	if err != nil {
 		return disabled("orchestrator", err)
 	}
-	if orch, err := r.Orchestrator(ctx, contracts.Default.Orchestrators()); err != nil {
+	if orch, resolved, err := r.Orchestrator(ctx, contracts.Default.Orchestrators()); err != nil {
 		return disabled("orchestrator", err)
-	} else if orch != nil {
+	} else if resolved {
 		return orch
 	}
 	for _, p := range contracts.Default.Orchestrators() {

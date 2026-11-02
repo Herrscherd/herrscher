@@ -5,8 +5,14 @@
 package approval
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+)
+
+var (
+	errMalformedRule   = errors.New("malformed rule")
+	errUnknownDecision = errors.New("unknown decision")
 )
 
 // Decision is one verdict on a tool call, on a severity ladder: a stricter
@@ -59,25 +65,25 @@ func ParseRule(s string) (Rule, error) {
 	s = strings.TrimSpace(s)
 	head, rest, ok := strings.Cut(s, " ")
 	if !ok {
-		return Rule{}, fmt.Errorf("rule %q: expected `<allow|ask|deny> <Tool>[(<pattern>)]`", s)
+		return Rule{}, fmt.Errorf("%w %q: expected `<allow|ask|deny> <Tool>[(<pattern>)]`", errMalformedRule, s)
 	}
 	d := Decision(strings.ToLower(strings.TrimSpace(head)))
 	switch d {
 	case Allow, Ask, Deny:
 	default:
-		return Rule{}, fmt.Errorf("rule %q: unknown decision %q", s, head)
+		return Rule{}, fmt.Errorf("%w %q in rule %q", errUnknownDecision, head, s)
 	}
 	rest = strings.TrimSpace(rest)
 	r := Rule{Decision: d, Tool: rest}
 	if open := strings.Index(rest, "("); open >= 0 {
 		if !strings.HasSuffix(rest, ")") {
-			return Rule{}, fmt.Errorf("rule %q: unclosed pattern", s)
+			return Rule{}, fmt.Errorf("%w %q: unclosed pattern", errMalformedRule, s)
 		}
 		r.Tool = strings.TrimSpace(rest[:open])
 		r.Pattern = rest[open+1 : len(rest)-1]
 	}
 	if r.Tool == "" {
-		return Rule{}, fmt.Errorf("rule %q: names no tool", s)
+		return Rule{}, fmt.Errorf("%w %q: names no tool", errMalformedRule, s)
 	}
 	return r, nil
 }

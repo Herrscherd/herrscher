@@ -4,10 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 	"strings"
+)
+
+var (
+	errRemoteScratch    = errors.New("a disposable directory cannot be provisioned remotely")
+	errUnreadableAnswer = errors.New("unreadable answer")
 )
 
 // Commander is the part of a runner this package needs: build the command that
@@ -89,7 +95,7 @@ func (r *Remote) Remove(repo, name string, force bool) error {
 }
 
 func (r *Remote) Scratch(root, name string) (string, error) {
-	return "", fmt.Errorf("on %s: a session with an agent needs a git repository there, a disposable directory cannot be provisioned remotely", r.run.Describe())
+	return "", fmt.Errorf("on %s: a session with an agent needs a git repository there: %w", r.run.Describe(), errRemoteScratch)
 }
 
 func (r *Remote) ScratchPath(root, name string) string {
@@ -107,7 +113,7 @@ func (r *Remote) Materialize(ctx context.Context, worktreePath string, payload i
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("materialize on %s: %s", r.run.Describe(), reason(stderr.String(), err))
+		return fmt.Errorf("materialize on %s: %w", r.run.Describe(), reason(stderr.String(), err))
 	}
 	return nil
 }
@@ -118,17 +124,17 @@ func (r *Remote) call(argv []string, into any) error {
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	what := strings.Join(argv[:2], " ")
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s on %s: %s", what, r.run.Describe(), reason(stderr.String(), err))
+		return fmt.Errorf("%s on %s: %w", what, r.run.Describe(), reason(stderr.String(), err))
 	}
 	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), into); err != nil {
-		return fmt.Errorf("%s on %s: unreadable answer %q", what, r.run.Describe(), stdout.String())
+		return fmt.Errorf("%s on %s: %w %q: %w", what, r.run.Describe(), errUnreadableAnswer, stdout.String(), err)
 	}
 	return nil
 }
 
-func reason(stderr string, err error) string {
+func reason(stderr string, err error) error {
 	if msg := strings.TrimSpace(stderr); msg != "" {
-		return msg
+		return fmt.Errorf("%s: %w", msg, err)
 	}
-	return err.Error()
+	return err
 }

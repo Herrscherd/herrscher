@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+var (
+	errInvalidSchedule = errors.New("invalid schedule")
+	errNoAnchor        = errors.New("schedule has no anchor to count from")
+	errCronNoWindow    = errors.New("cron has no window")
+)
+
 // DefaultGrace est le retard maximum qu'une fenetre ratee peut avoir et etre
 // quand meme tiree au demarrage du daemon. Un seul chiffre, court et
 // previsible, plutot qu'une regle derivee de la periode : derivee, elle ferait
@@ -50,25 +56,25 @@ func SessionName(s Schedule) string { return "schedule-" + s.Name }
 // dans ce paquet : la garde du cron impossible se teste alors a une date fixe.
 func Validate(s Schedule, now time.Time) error {
 	if strings.TrimSpace(s.Name) == "" {
-		return errors.New("schedule needs a name")
+		return fmt.Errorf("%w: needs a name", errInvalidSchedule)
 	}
 	if strings.TrimSpace(s.Task) == "" {
-		return errors.New("schedule needs a task")
+		return fmt.Errorf("%w: needs a task", errInvalidSchedule)
 	}
 	switch {
 	case s.Session == "" && s.Agent == "":
-		return errors.New("schedule needs a target: --session or --agent")
+		return fmt.Errorf("%w: needs a target: --session or --agent", errInvalidSchedule)
 	case s.Session != "" && s.Agent != "":
-		return errors.New("schedule takes one target: --session or --agent, not both")
+		return fmt.Errorf("%w: takes one target: --session or --agent, not both", errInvalidSchedule)
 	}
 	if s.Project != "" && s.Agent == "" {
-		return errors.New("--project only means something with --agent, which opens the session")
+		return fmt.Errorf("%w: --project only means something with --agent, which opens the session", errInvalidSchedule)
 	}
 	switch {
 	case s.Every == "" && s.Cron == "":
-		return errors.New("schedule needs a cadence: --every or --cron")
+		return fmt.Errorf("%w: needs a cadence: --every or --cron", errInvalidSchedule)
 	case s.Every != "" && s.Cron != "":
-		return errors.New("schedule takes one cadence: --every or --cron, not both")
+		return fmt.Errorf("%w: takes one cadence: --every or --cron, not both", errInvalidSchedule)
 	}
 	if _, err := graceOf(s); err != nil {
 		return err
@@ -90,7 +96,7 @@ func period(s Schedule) (time.Duration, error) {
 		return 0, fmt.Errorf("--every %q: %w", s.Every, err)
 	}
 	if d <= 0 {
-		return 0, fmt.Errorf("--every %q: must be positive", s.Every)
+		return 0, fmt.Errorf("%w: --every %q must be positive", errInvalidSchedule, s.Every)
 	}
 	return d, nil
 }
@@ -104,7 +110,7 @@ func graceOf(s Schedule) (time.Duration, error) {
 		return 0, fmt.Errorf("--grace %q: %w", s.Grace, err)
 	}
 	if d < minGrace {
-		return 0, fmt.Errorf("--grace %q: must be at least %s", s.Grace, minGrace)
+		return 0, fmt.Errorf("%w: --grace %q must be at least %s", errInvalidSchedule, s.Grace, minGrace)
 	}
 	return d, nil
 }
@@ -141,7 +147,7 @@ func Next(s Schedule, after time.Time) (time.Time, error) {
 			return t, nil
 		}
 	}
-	return time.Time{}, fmt.Errorf("cron %q: no window within %s", s.Cron, maxCronLookahead)
+	return time.Time{}, fmt.Errorf("%w: %q within %s", errCronNoWindow, s.Cron, maxCronLookahead)
 }
 
 // NextWindow rend la prochaine fenetre a venir, comptee depuis l'ancre et non
@@ -155,7 +161,7 @@ func Next(s Schedule, after time.Time) (time.Time, error) {
 func NextWindow(s Schedule) (time.Time, error) {
 	a, ok := anchor(s)
 	if !ok {
-		return time.Time{}, errors.New("schedule has no anchor to count from")
+		return time.Time{}, errNoAnchor
 	}
 	return Next(s, a)
 }

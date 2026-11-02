@@ -16,6 +16,13 @@ import (
 
 const sessionsDir = ".herrscher-sessions"
 
+var (
+	errFlagBase     = errors.New("refusing a base ref that looks like a flag")
+	errUncommitted  = errors.New("uncommitted changes")
+	errNotAWorktree = errors.New("already exists and is not a git worktree")
+	errOtherBranch  = errors.New("worktree is on another branch")
+)
+
 // Worktreer manages git worktrees. It is repo-stateless: the repo root is passed
 // to each method, so one Worktreer serves every project in the workspace.
 // With a non-empty instanceID, worktrees live under
@@ -71,7 +78,7 @@ func (w *Worktreer) Create(repo, name, base string) (string, error) {
 		return "", nil
 	}
 	if base != "" && strings.HasPrefix(base, "-") {
-		return "", fmt.Errorf("worktree: refusing base ref %q that looks like a flag", base)
+		return "", fmt.Errorf("%w: %q", errFlagBase, base)
 	}
 	p := w.Path(repo, name)
 	branch := w.Branch(name)
@@ -90,7 +97,7 @@ func (w *Worktreer) Create(repo, name, base string) (string, error) {
 	}
 	out, err := exec.CommandContext(w.ctx, "git", args...).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("worktree add: %s", redact.Output(out))
+		return "", fmt.Errorf("worktree add: %s: %w", redact.Output(out), err)
 	}
 	return p, nil
 }
@@ -126,14 +133,14 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 		}
 		if !missing {
 			return false, fmt.Errorf(
-				"%q already exists and is not a git worktree; move it aside to start this session", path)
+				"%q %w; move it aside to start this session", path, errNotAWorktree)
 		}
 		return false, nil
 	}
 
 	if missing {
 		if out, err := exec.CommandContext(w.ctx, "git", "-C", repo, "worktree", "prune").CombinedOutput(); err != nil {
-			return false, fmt.Errorf("worktree prune: %s", redact.Output(out))
+			return false, fmt.Errorf("worktree prune: %s: %w", redact.Output(out), err)
 		}
 		return false, nil
 	}
@@ -147,7 +154,7 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 	}
 	if at != branch {
 		return false, fmt.Errorf(
-			"worktree %q is on branch %q, not %q; the session cannot take it over", path, at, branch)
+			"%w %q: it is on branch %q, not %q; the session cannot take it over", errOtherBranch, path, at, branch)
 	}
 	return true, nil
 }
@@ -226,7 +233,7 @@ func (w *Worktreer) MergeInto(leadPath, branch string) (MergeOutcome, []string, 
 	if len(conflicts) > 0 {
 		return MergeConflict, conflicts, nil
 	}
-	return MergeConflict, nil, fmt.Errorf("merge %s into %q: %s", branch, leadPath, redact.Output(out))
+	return MergeConflict, nil, fmt.Errorf("merge %s into %q: %s: %w", branch, leadPath, redact.Output(out), mergeErr)
 }
 
 func (w *Worktreer) headAt(path string) (string, error) {
@@ -256,10 +263,10 @@ func (w *Worktreer) Remove(repo, name string, force bool) error {
 	if !force {
 		clean, err := w.IsCleanAt(p)
 		if err != nil {
-			return fmt.Errorf("worktree %q: %v; close with force:true to remove anyway", name, err)
+			return fmt.Errorf("worktree %q: %w; close with force:true to remove anyway", name, err)
 		}
 		if !clean {
-			return fmt.Errorf("worktree %q has uncommitted changes", name)
+			return fmt.Errorf("worktree %q has %w", name, errUncommitted)
 		}
 	}
 	args := []string{"-C", repo, "worktree", "remove", p}
@@ -268,7 +275,7 @@ func (w *Worktreer) Remove(repo, name string, force bool) error {
 	}
 	out, err := exec.CommandContext(w.ctx, "git", args...).CombinedOutput()
 	if err != nil {
-		removeErr := fmt.Errorf("worktree remove: %s", redact.Output(out))
+		removeErr := fmt.Errorf("worktree remove: %s: %w", redact.Output(out), err)
 		if force {
 			recovered, recoverErr := w.recoverEmptyOrphan(repo, name)
 			if recoverErr != nil {
@@ -367,7 +374,7 @@ func (w *Worktreer) registeredWorktree(repo, target string) (bool, error) {
 		"git", "-C", repo, "worktree", "list", "--porcelain", "-z",
 	).CombinedOutput()
 	if err != nil {
-		return false, fmt.Errorf("list registered worktrees: %s", redact.Output(out))
+		return false, fmt.Errorf("list registered worktrees: %s: %w", redact.Output(out), err)
 	}
 	rawTarget := target
 	target, err = canonicalPathForComparison(target)

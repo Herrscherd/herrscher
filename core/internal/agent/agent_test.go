@@ -106,12 +106,12 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 		{"config", "user.name", "t"},
 		{"commit", "--allow-empty", "-m", "init"},
 	} {
-		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+		if out, err := exec.CommandContext(t.Context(), "git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
 	}
 	worktree := filepath.Join(t.TempDir(), "session")
-	if out, err := exec.Command("git", "-C", repo, "worktree", "add", "-b", "session/test", worktree).CombinedOutput(); err != nil {
+	if out, err := exec.CommandContext(t.Context(), "git", "-C", repo, "worktree", "add", "-b", "session/test", worktree).CombinedOutput(); err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
 	}
 
@@ -124,7 +124,7 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	status, err := exec.Command("git", "-C", worktree, "status", "--porcelain").CombinedOutput()
+	status, err := exec.CommandContext(t.Context(), "git", "-C", worktree, "status", "--porcelain").CombinedOutput()
 	if err != nil {
 		t.Fatalf("git status: %v\n%s", err, status)
 	}
@@ -132,7 +132,7 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 		t.Fatalf("fresh materialized worktree is dirty:\n%s", status)
 	}
 	for _, path := range []string{".claude", ".codex", ".mcp.json", "AGENTS.md", ".herrscher/skills/x/SKILL.md"} {
-		if out, err := exec.Command("git", "-C", worktree, "check-ignore", "--quiet", "--", path).CombinedOutput(); err != nil {
+		if out, err := exec.CommandContext(t.Context(), "git", "-C", worktree, "check-ignore", "--quiet", "--", path).CombinedOutput(); err != nil {
 			t.Fatalf("%s is not locally ignored: %v\n%s", path, err, out)
 		}
 	}
@@ -143,7 +143,7 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(worktree, "user.txt"), []byte("user work"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	status, err = exec.Command("git", "-C", worktree, "status", "--porcelain").CombinedOutput()
+	status, err = exec.CommandContext(t.Context(), "git", "-C", worktree, "status", "--porcelain").CombinedOutput()
 	if err != nil {
 		t.Fatalf("git status after user file: %v\n%s", err, status)
 	}

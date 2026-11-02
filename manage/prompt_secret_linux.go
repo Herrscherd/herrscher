@@ -15,10 +15,13 @@ import (
 func readSecret(in *bufio.Reader, msg string) (string, error) {
 	fmt.Fprint(os.Stderr, msg)
 	fd := int(os.Stdin.Fd())
+	if !stdinIsTerminal(fd) {
+		return promptLine(in, ""), nil
+	}
 
 	old, err := unix.IoctlGetTermios(fd, unix.TCGETS)
 	if err != nil {
-		return promptLine(in, ""), nil
+		return "", err
 	}
 	raw := *old
 	raw.Lflag &^= unix.ECHO
@@ -32,4 +35,9 @@ func readSecret(in *bufio.Reader, msg string) (string, error) {
 	}
 	fmt.Fprintln(os.Stderr)
 	return strings.TrimSpace(line), err
+}
+
+func stdinIsTerminal(fd int) bool {
+	_, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+	return err == nil
 }

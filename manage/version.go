@@ -3,6 +3,7 @@ package manage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,8 @@ import (
 )
 
 const contractsModule = "github.com/Herrscherd/herrscher-contracts"
+
+var errNoVersions = errors.New("no published versions")
 
 // PluginVersion is one row of `herrscher plugin list`: what is compiled in, what
 // the operator asked to hold still, and what could be taken instead.
@@ -73,7 +76,7 @@ func availableVersions(ctx context.Context, tc toolchain, module string) ([]stri
 	}
 	fields := strings.Fields(out)
 	if len(fields) < 2 {
-		return nil, nil
+		return nil, errNoVersions
 	}
 	return fields[1:], nil
 }

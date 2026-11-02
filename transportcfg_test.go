@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestBindAddrDefaultsToLoopback(t *testing.T) {
 	t.Setenv("HERRSCHER_BIND", "")
@@ -37,8 +40,8 @@ func TestRemoteClientCredentialsNilWhenUnset(t *testing.T) {
 	t.Setenv("HERRSCHER_TLS_CERT", "")
 	t.Setenv("HERRSCHER_TLS_KEY", "")
 	creds, err := remoteClientCredentials()
-	if err != nil {
-		t.Fatalf("plaintext must be valid: %v", err)
+	if !errors.Is(err, errTLSUnset) {
+		t.Fatalf("plaintext must report the unset TLS sentinel, got %v", err)
 	}
 	if creds != nil {
 		t.Fatal("no TLS env => nil credentials (plaintext loopback)")

@@ -50,9 +50,6 @@ func TestPromptOf(t *testing.T) {
 	}
 }
 
-// The window is the default, but only where one can be drawn: --print asks for
-// stdout, and so does anything that makes a window impossible — no terminal to
-// draw on, or no frontend compiled in to draw it.
 func TestTaskPrintsTo(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -74,9 +71,6 @@ func TestTaskPrintsTo(t *testing.T) {
 	}
 }
 
-// sessionNameRe is a copy of the guard in core/internal/manager/validate.go:13.
-// The main package cannot import that internal package, so the invariant is
-// pinned here instead: whatever sessionNameFor produces must already pass it.
 var sessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
 func TestSessionNameForIsAlwaysAValidSlug(t *testing.T) {
@@ -107,9 +101,6 @@ func TestSessionNameForKeepsTheOpeningWords(t *testing.T) {
 	}
 }
 
-// The defect this guards: the name has five words, and a prompt that opens on
-// filler spends them all on the half it shares with every other prompt. Two
-// tasks that differ only after "the" have to arrive as two readable names.
 func TestSessionNameForDistinguishesPromptsSharingAnOpening(t *testing.T) {
 	a := sessionNameFor("please read the auth module and propose a split")
 	b := sessionNameFor("please read the auth module and write tests")
@@ -125,8 +116,6 @@ func TestSessionNameForDistinguishesPromptsSharingAnOpening(t *testing.T) {
 	}
 }
 
-// slugInvalid keeps [a-z0-9_-] only, so an accent left standing is not dropped
-// but replaced: "résume" would arrive as "r-sume".
 func TestSessionNameForFoldsAccents(t *testing.T) {
 	name := sessionNameFor("Résume la discussion et détaille les décisions")
 	if !strings.HasPrefix(name, "resume-discussion-detaille-decisions-") {
@@ -134,8 +123,6 @@ func TestSessionNameForFoldsAccents(t *testing.T) {
 	}
 }
 
-// Filtering must never leave the session anonymous: a prompt that is all filler
-// is still better named after itself than after the "s-" fallback.
 func TestSessionNameForKeepsFillerWhenThatIsAllThereIs(t *testing.T) {
 	name := sessionNameFor("please can you")
 	if !strings.HasPrefix(name, "please-can-you-") {

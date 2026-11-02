@@ -11,32 +11,21 @@ import (
 	"strings"
 )
 
-// maxOutputRunes caps surfaced output. Beyond it the tail is dropped with a
-// marker: tool errors put the useful message first, so keeping the head bounds
-// the size without losing the reason.
 const maxOutputRunes = 4096
 
 const mask = "REDACTED"
 
-// rule pairs a secret-shaped pattern with its replacement. Replacements keep any
-// leading capture group ($1) so surrounding context (scheme, "Bearer ", field
-// name) stays readable while the secret itself is masked.
 type rule struct {
 	re   *regexp.Regexp
 	repl string
 }
 
 var rules = []rule{
-	// scheme://user:pass@host → scheme://REDACTED@host (git remote URL userinfo)
 	{regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://)[^\s:/@]+:[^\s/@]+@`), `${1}` + mask + `@`},
-	// GitHub tokens: ghp_/gho_/ghs_/ghu_/ghr_ classic + github_pat_ fine-grained
 	{regexp.MustCompile(`gh[posur]_[A-Za-z0-9]{20,}`), mask},
 	{regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`), mask},
-	// GitLab personal/project access token
 	{regexp.MustCompile(`glpat-[A-Za-z0-9_\-]{16,}`), mask},
-	// Authorization: Bearer <token>
 	{regexp.MustCompile(`(?i)(bearer\s+)[A-Za-z0-9._\-~+/=]+`), `${1}` + mask},
-	// token= / access_token= / password= / pwd= fields
 	{regexp.MustCompile(`(?i)((?:access_)?token|password|passwd|pwd)=[^\s&"']+`), `${1}=` + mask},
 }
 

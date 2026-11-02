@@ -28,7 +28,6 @@ func TestConnRoundTrip(t *testing.T) {
 
 	srvConn := <-acc.Conns()
 
-	// daemon → bridge
 	if err := srvConn.Write(contracts.Event{T: "input", Who: "alice", Text: "hi"}); err != nil {
 		t.Fatalf("server Write: %v", err)
 	}
@@ -110,7 +109,7 @@ func TestAcceptorYieldsSecondConnAfterFirstCloses(t *testing.T) {
 		t.Fatalf("Dial 1: %v", err)
 	}
 	<-acc.Conns()
-	c1.Close() // simulate a bridge crash
+	c1.Close()
 
 	c2, err := control.Dial(sock)
 	if err != nil {

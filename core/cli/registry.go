@@ -121,7 +121,6 @@ func (r *Registry) Intercept(prefix []string, wrap func(cmd contracts.Cmd, next 
 	}
 }
 
-// match finds the command whose Path is the longest prefix of args.
 func (r *Registry) match(args []string) (*contracts.Cmd, []string) {
 	var best *contracts.Cmd
 	bestLen := 0
@@ -195,22 +194,10 @@ func parse(c contracts.Cmd, rest []string) (contracts.Input, error) {
 		if !ok {
 			return in, fmt.Errorf("%s: unknown flag --%s", strings.Join(c.Path, " "), name)
 		}
-		// --name=value is the spelling for a value that would otherwise be read
-		// as a flag of its own: a task opening on "--no-tests", a message pasted
-		// from a diff. The separate-token form below cannot carry those, and it
-		// must not — see the next comment.
 		if isInline {
 			in.Args[name] = inline
 			continue
 		}
-		// A value follows unless the next token is itself a flag. Only an
-		// optional boolean param may be valueless.
-		//
-		// Refusing a "--"-leading token here is deliberate. Taking it would make
-		// `memory search --text --raw` a search for the literal "--raw" instead
-		// of the missing-value mistake it is, and a silent misreading is worse
-		// than an error naming the flag. FlagArg is how a caller that really
-		// means such a value says so.
 		if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
 			in.Args[name] = rest[i+1]
 			i++

@@ -30,8 +30,6 @@ func WriteEvent(w io.Writer, e contracts.Event) error {
 // error other than io.EOF.
 func ScanEvents(r io.Reader, fn func(contracts.Event) error) error {
 	sc := bufio.NewScanner(r)
-	// 1 MiB line cap: a longer line ends the scan with bufio.ErrTooLong. This is
-	// a deliberate protocol limit.
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())

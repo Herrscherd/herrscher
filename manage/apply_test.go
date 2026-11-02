@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// scriptedDecider answers both prompts from fixed values and records that it was
-// asked, so a test can assert on the branch taken rather than on any output.
 type scriptedDecider struct {
 	warn, failed Decision
 	warned       bool
@@ -27,7 +25,6 @@ func (d *scriptedDecider) Failed(ctx context.Context, buildOutput string) Decisi
 	return d.failed
 }
 
-// composition writes the three files apply saves, returning the directory.
 func composition(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -51,8 +48,6 @@ func read(t *testing.T, dir, name string) (string, bool) {
 	return string(b), true
 }
 
-// writeStep returns a step that overwrites one file in dir, standing in for what
-// the Go toolchain would do.
 func writeStep(dir, name, body string) step {
 	return func(ctx context.Context) (string, error) {
 		return "wrote " + name, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)

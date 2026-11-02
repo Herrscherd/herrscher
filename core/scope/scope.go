@@ -18,12 +18,8 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// gitTimeout bounds the single git call ProjectFromDir makes. A launch must not
-// hang because a repository's objects live on a stalled network mount.
 const gitTimeout = 2 * time.Second
 
-// maxScopeLen mirrors the length projectRe allows in core/internal/manager, so a
-// name this package hands out can always be persisted as a project.
 const maxScopeLen = 128
 
 // ProjectFromDir names the memory project work done in dir belongs to: the git
@@ -48,13 +44,10 @@ func ProjectFromDir(dir string) string {
 	if common == "" {
 		return ""
 	}
-	// git answers relative to dir when it feels like it (".git" from a repo root).
 	if !filepath.IsAbs(common) {
 		common = filepath.Join(dir, common)
 	}
 	common = filepath.Clean(common)
-	// <root>/.git → <root>. A bare repository is named by its own directory,
-	// conventionally <root>.git, so drop the suffix rather than the segment.
 	root := common
 	if filepath.Base(common) == ".git" {
 		root = filepath.Dir(common)
@@ -103,10 +96,6 @@ func MatchProject(prompt string, known []string) string {
 // window opens on nothing.
 func Name(raw string) string { return nameOf(raw) }
 
-// nameOf folds raw into the scope segment contracts would use, or "" when raw
-// holds nothing nameable. The empty answer matters: the normaliser's own
-// fallback is the literal "scope", and a session filed under a project called
-// "scope" is worse than one filed under no project at all.
 func nameOf(raw string) string {
 	nameable := false
 	for _, r := range raw {
@@ -125,8 +114,6 @@ func nameOf(raw string) string {
 	return n
 }
 
-// indexWord finds needle in hay on word boundaries, so "neublox" is found in
-// "je bosse sur neublox" but not inside "neubloxide". It returns -1 for no match.
 func indexWord(hay, needle string) int {
 	for i := 0; i <= len(hay)-len(needle); {
 		j := strings.Index(hay[i:], needle)
@@ -142,11 +129,6 @@ func indexWord(hay, needle string) int {
 	return -1
 }
 
-// boundaryBefore reports whether the rune ending at byte i is a word boundary,
-// and boundaryAt whether the one starting at byte i is. Both decode a whole rune
-// rather than looking at one byte: the lead byte of "…" or of a non-breaking
-// space is 0xE2/0xC2, which as a bare rune is a letter, and a prompt written in
-// French is full of them. The start and end of the prompt count as boundaries.
 func boundaryBefore(s string, i int) bool {
 	if i <= 0 {
 		return true

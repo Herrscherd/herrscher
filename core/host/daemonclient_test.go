@@ -32,8 +32,6 @@ func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
 			b, _ := json.Marshal(e)
 			c.Write(append(b, '\n'))
 		}
-		// A line that is not an event must not end the stream, or one bad publish
-		// silently blinds the frontend for the rest of the session.
 		c.Write([]byte("{not json\n"))
 		b, _ := json.Marshal(DaemonEvent{Session: "alpha", Event: contracts.Event{T: "reply", Text: "still here", Done: true}})
 		c.Write(append(b, '\n'))
@@ -69,8 +67,6 @@ func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
 	}
 }
 
-// The daemon going away must close the channel: a frontend that cannot tell
-// "the daemon stopped" from "nothing is happening" waits forever on a dead pipe.
 func TestSubscribeDaemonEventsClosesWhenTheDaemonGoesAway(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.sock")
 	ln, err := net.Listen("unix", path)
@@ -137,7 +133,6 @@ func TestParseAttachmentPathsEncodesAwkwardNames(t *testing.T) {
 	if len(atts) != 2 {
 		t.Fatalf("got %d attachments, want 2", len(atts))
 	}
-	// The '#' is the one that matters: a raw "file://"+path concat truncates there.
 	if atts[0].URL != "file:///tmp/a%20b%23c%3F.png" {
 		t.Errorf("url = %q", atts[0].URL)
 	}

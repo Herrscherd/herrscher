@@ -11,9 +11,9 @@ func TestBudgetReason(t *testing.T) {
 		name           string
 		sc             float64
 		st             uint64
-		cc, ctk        float64 // caps
+		cc, ctk        float64
 		tkCap          uint64
-		coc, coctk     float64 // cohort totals + caps unused fields below
+		coc, coctk     float64
 		cohortCost     float64
 		cohortTokens   uint64
 		cohortCostCap  float64
@@ -39,9 +39,6 @@ func TestBudgetReason(t *testing.T) {
 	}
 }
 
-// TestSessionBudgetGate_CheckTrips proves the concrete gate re-derives usage
-// from the transcript fold (single source of truth) and persists PausedReason
-// when a cap trips, so a paused session comes back paused across reloads.
 func TestSessionBudgetGate_CheckTrips(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{{Name: "game", CostCap: 5}}
@@ -62,10 +59,6 @@ func TestSessionBudgetGate_CheckTrips(t *testing.T) {
 	}
 }
 
-// TestSessionBudgetGate_CheckHeadroom proves the headroom the host watches
-// mid-turn is what the cap leaves after the transcript's already-spent tokens,
-// that the tightest of the session and cohort caps wins, and that a session
-// with no token cap reports no cap at all.
 func TestSessionBudgetGate_CheckHeadroom(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{
@@ -87,8 +80,6 @@ func TestSessionBudgetGate_CheckHeadroom(t *testing.T) {
 
 	gate := h.BudgetGate()
 
-	// child spent 500 of its own 1000 cap; the cohort spent 800 of 1200. The
-	// cohort's 400 is tighter than the session's 500, so it is what the turn gets.
 	_, got, capped := gate.Check("child")
 	if !capped || got != 400 {
 		t.Fatalf("Check(child) headroom = (%d, %v), want (400, true)", got, capped)
@@ -101,9 +92,6 @@ func TestSessionBudgetGate_CheckHeadroom(t *testing.T) {
 	}
 }
 
-// TestSessionBudgetGate_HeadroomFloorsAtZero proves a session already past its
-// cap reports no headroom rather than wrapping the unsigned subtraction into an
-// enormous one.
 func TestSessionBudgetGate_HeadroomFloorsAtZero(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{{Name: "spent", TokenCap: 100}}
@@ -118,8 +106,6 @@ func TestSessionBudgetGate_HeadroomFloorsAtZero(t *testing.T) {
 	}
 }
 
-// TestSessionBudgetGate_UncappedNeverTrips proves a session with no caps
-// configured never pauses and never gets a PausedReason written.
 func TestSessionBudgetGate_UncappedNeverTrips(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{{Name: "free"}}

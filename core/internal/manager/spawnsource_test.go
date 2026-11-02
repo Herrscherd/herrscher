@@ -8,12 +8,8 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// gatewayOnly puts the handler under the public build's route policy.
 func gatewayOnly(h *Handler) { h.SetGatewayOnly(func() bool { return true }) }
 
-// A free-form cmd is argv the catalog never sees: it can name any binary and
-// any --model, so it bills our account for a model nobody selected, and it
-// skips the route policy entirely.
 func TestSessionCreateRefusesExplicitCmdUnderGatewayOnly(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
@@ -36,8 +32,6 @@ func TestSessionCreateRefusesExplicitCmdUnderGatewayOnly(t *testing.T) {
 	}
 }
 
-// The other half of the hole: no model at all skips the catalog lookup, so the
-// spawn gets no gateway environment and runs on the machine's own login.
 func TestSessionCreateRequiresAModelUnderGatewayOnly(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
@@ -59,8 +53,6 @@ func TestSessionCreateRequiresAModelUnderGatewayOnly(t *testing.T) {
 	}
 }
 
-// The supported public-build shape still works: pick a catalog model, let the
-// host derive the invocation.
 func TestSessionCreateWithModelAndNoCmdIsAcceptedUnderGatewayOnly(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
@@ -79,9 +71,6 @@ func TestSessionCreateWithModelAndNoCmdIsAcceptedUnderGatewayOnly(t *testing.T) 
 	}
 }
 
-// Non-regression for the INTERNAL build, which is what the colleagues run
-// today: with no policy set, a free-form cmd and a modelless session are both
-// legitimate — the machine's own login is the intended account there.
 func TestExplicitCmdAndNoModelStayAcceptedWithoutTheGatewayPolicy(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
@@ -95,7 +84,6 @@ func TestExplicitCmdAndNoModelStayAcceptedWithoutTheGatewayPolicy(t *testing.T) 
 	}
 }
 
-// Switching a live session is the same escape by another door.
 func TestSessionSwitchRefusesExplicitCmdUnderGatewayOnly(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
@@ -120,8 +108,6 @@ func TestSessionSwitchRefusesExplicitCmdUnderGatewayOnly(t *testing.T) {
 	}
 }
 
-// A switch that supplies no --cmd keeps the session's current one, which the
-// policy already vetted at creation: it must not be refused.
 func TestSessionSwitchWithoutCmdStaysAcceptedUnderGatewayOnly(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude", "gw-claude-sonnet-5": "claude"})

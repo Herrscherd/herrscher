@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// gitRepo makes a real repository named name under t.TempDir and returns its
-// path. Real git, because the whole point of ProjectFromDir is what git answers.
 func gitRepo(t *testing.T, name string) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), name)
@@ -48,8 +46,6 @@ func TestProjectFromDirAnswersTheSameFromASubdirectory(t *testing.T) {
 	}
 }
 
-// Three worktrees of one repository are three conversations about one thing.
-// Splitting their memory three ways would defeat the point of having any.
 func TestProjectFromDirFoldsWorktreesIntoTheirRepository(t *testing.T) {
 	repo := gitRepo(t, "herrscher")
 	wt := filepath.Join(filepath.Dir(repo), "detached-elsewhere")
@@ -71,8 +67,6 @@ func TestProjectFromDirIsSilentOutsideARepository(t *testing.T) {
 	}
 }
 
-// A directory whose name carries nothing nameable must not become the project
-// "scope" — the normaliser's own fallback. It must become no project at all.
 func TestProjectFromDirRefusesAnUnnameableDirectory(t *testing.T) {
 	if got := ProjectFromDir(gitRepo(t, "...")); got != "" {
 		t.Fatalf("ProjectFromDir(unnameable) = %q, want empty", got)
@@ -91,8 +85,6 @@ func TestMatchProject(t *testing.T) {
 		{"whole words only", "neubloxide est un autre projet", ""},
 		{"longest at the same place wins", "herrscher-docs a besoin d'une page", "herrscher-docs"},
 		{"nothing known, nothing matched", "neublox", ""},
-		// A prompt written in French ends words with runes whose lead byte, read
-		// alone, is a letter. The boundary test decodes, so these still match.
 		{"typographic punctuation is a boundary", "cf. neublox\u2026", "neublox"},
 		{"a non-breaking space is a boundary", "\u00ab\u00a0neublox\u00a0\u00bb", "neublox"},
 		{"an accent is not a boundary", "neubloxe\u0301 n'est pas neublox", "neublox"},

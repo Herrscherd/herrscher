@@ -16,23 +16,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-// The verbs main() answers in-process. Contributed verbs reach the CLI by NOT
-// being here — they fall through to the daemon — so the day one of these starts
-// forwarding instead, every existing user's `session list` quietly changes
-// meaning. This list is that boundary, asserted rather than assumed.
 var expectedLocalVerbs = []string{
 	"init", "plugin", "update", "install",
 	"bridge", "serve", "session", "agent", "memory", "models", "service", "plugin-host",
 	"-h", "--help", "help",
-	// approve is here for a second reason on top of that one: the default arm
-	// bounds its forward at 60 seconds, and `approve ask` waits on a human for
-	// minutes. Losing this case would also send `approve hook` to the daemon,
-	// which would then answer a PreToolUse payload by reading its own stdin.
 	"approve",
 }
 
-// mainSwitches returns every case value of every switch in main(), and whether
-// main()'s default arm hands the argv to the daemon forwarder.
 func mainSwitches(t *testing.T) (cases []string, defaultForwards bool) {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -108,11 +98,6 @@ func TestOnlyTheDefaultArmForwards(t *testing.T) {
 	}
 }
 
-// swapStdio points os.Stdin at payload and both os.Stdout and os.Stderr at
-// pipes for one test, and gives back what the call under test wrote to each.
-// Stderr is captured and not merely silenced: the note the hook prints when it
-// falls open is the only thing that tells an operator the guardrail is not
-// running, so it is worth asserting.
 func swapStdio(t *testing.T, payload string) func() (string, string) {
 	t.Helper()
 	pipe := func() (*os.File, *os.File) {
@@ -146,12 +131,6 @@ func swapStdio(t *testing.T, payload string) func() (string, string) {
 	}
 }
 
-// TestApproveHookAnswersWithoutBuildingTheRegistry pins the invariant the whole
-// hook rests on: the vendor CLI reads a failure as the hook crashing, so a
-// reason unrelated to the tool call must never produce one. An unparseable
-// config.json is such a reason, and it is one the operator verbs do legitimately
-// fail on. The first half of this test establishes that, so the second half
-// proves the short circuit rather than a lucky environment.
 func TestApproveHookAnswersWithoutBuildingTheRegistry(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HERRSCHER_STATE_DIR", dir)
@@ -180,8 +159,6 @@ func TestApproveHookAnswersWithoutBuildingTheRegistry(t *testing.T) {
 }
 
 func TestForwardUnknownVerbWithoutDaemon(t *testing.T) {
-	// No daemon anywhere: the socket path is rooted in this test's temp dir, and
-	// the state file it would name the instance from does not exist either.
 	t.Setenv("TMPDIR", t.TempDir())
 	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
 	t.Setenv("HERRSCHER_INSTANCE_ID", "dispatch-test")
@@ -195,8 +172,6 @@ func TestForwardUnknownVerbWithoutDaemon(t *testing.T) {
 	}
 }
 
-// stubForward records the argv it was offered and replays a canned answer, so
-// the dispatch decision can be tested without a daemon or a re-exec.
 type stubForward struct {
 	argv    []string
 	out     string
@@ -210,9 +185,6 @@ func (s *stubForward) fwd(_ context.Context, argv []string) (string, bool, error
 }
 
 func TestDispatchUnknownForwardsTheWholeArgv(t *testing.T) {
-	// The verb is part of what the daemon must read: it is the namespace the
-	// contributed command lives under, so relaying only the tail addresses the
-	// registry with a command nobody registered.
 	s := &stubForward{out: "two messages", handled: true}
 	args := []string{"channel", "read", "--limit", "5"}
 	out, err, exit := dispatchUnknown(context.Background(), "some-kind", args, s.fwd)
@@ -227,8 +199,6 @@ func TestDispatchUnknownForwardsTheWholeArgv(t *testing.T) {
 }
 
 func TestDispatchUnknownKeepsTheDaemonsFailure(t *testing.T) {
-	// Swallowing derr would exit 0 on a failed command: a silent success for any
-	// agent or script reading $?.
 	boom := errors.New(`plugin: channel "nope" not found`)
 	s := &stubForward{handled: true, err: boom}
 	out, err, exit := dispatchUnknown(context.Background(), "some-kind", []string{"channel", "read"}, s.fwd)
@@ -238,8 +208,6 @@ func TestDispatchUnknownKeepsTheDaemonsFailure(t *testing.T) {
 	if out != "" {
 		t.Fatalf("output = %q, want empty when the daemon refused", out)
 	}
-	// exit 0 hands the failure back to main(), which turns any non-nil err into
-	// its usual exit 1 — the daemon does not get to pick the process's code.
 	if exit != 0 {
 		t.Fatalf("exit = %d, want 0 so main()'s own error path answers", exit)
 	}

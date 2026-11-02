@@ -47,12 +47,10 @@ func (f fakeAgents) List() ([]agent.Agent, error) {
 }
 
 type fakeWTC struct {
-	clean    bool
-	err      error
-	branches map[string]bool
-	// cleanBy overrides `clean` per worktree path when non-nil (path → clean?).
-	cleanBy map[string]bool
-	// merge scripts MergeInto's return; mergedBranch records the branch merged.
+	clean        bool
+	err          error
+	branches     map[string]bool
+	cleanBy      map[string]bool
 	merge        worktree.MergeOutcome
 	mergeConf    []string
 	mergeErr     error
@@ -143,7 +141,7 @@ func TestHandoffUnknownAgent(t *testing.T) {
 func TestHandoffDirtySourceRefused(t *testing.T) {
 	cr := &fakeCreator{}
 	var seeded []string
-	c := newTestCoordinator(cr, []string{"scripter"}, false, // dirty
+	c := newTestCoordinator(cr, []string{"scripter"}, false,
 		[]state.Session{{Name: "alpha", Worktree: "/wt/alpha"}}, &seeded)
 	if _, err := c.Handoff(context.Background(), contracts.HandoffRequest{
 		FromSession: "alpha", ToAgent: "scripter", Task: "x",
@@ -219,12 +217,6 @@ func TestHandoffRollsBackOnSeedTimeout(t *testing.T) {
 	}
 }
 
-// TestSeedWithRetryHonoursCtxCancel pins seedWithRetry's ctx-awareness: with a
-// pre-cancelled ctx it must stop after exactly one seed attempt (the loop tries
-// c.seed once, then hits the <-ctx.Done() case on its first select). If the
-// ctx select were reverted to a plain sleep, this would instead run all
-// seedAttempts (50) tries — this test would then fail on the count assertion
-// instead of hanging for the full 50*100ms, so it stays fast either way.
 func TestSeedWithRetryHonoursCtxCancel(t *testing.T) {
 	var attempts int
 	seedFunc := func(sess, task string) bool { attempts++; return false }
@@ -455,7 +447,7 @@ func TestReportParentGoneErrors(t *testing.T) {
 
 func TestReportDirtyWorkerRefused(t *testing.T) {
 	var seeded []string
-	c := newTestCoordinator(&fakeCreator{}, nil, false, // worker sale
+	c := newTestCoordinator(&fakeCreator{}, nil, false,
 		[]state.Session{
 			{Name: "lead", Worktree: "/wt/lead"},
 			{Name: "worker", Worktree: "/wt/worker", Parent: "lead"},
@@ -589,10 +581,6 @@ func TestCoordinationViewProjectsJoinState(t *testing.T) {
 	}
 }
 
-// TestCoordinationViewConcurrentWithReport exercises the read path against a
-// concurrent Report so `go test -race` catches any unsynchronized access to the
-// coordinator's live reported/expected maps. CoordinationView must count under
-// c.mu, not after unlocking.
 func TestCoordinationViewConcurrentWithReport(t *testing.T) {
 	var seeded []string
 	workers := []state.Session{{Name: "lead", Worktree: "/wt/lead"}}
@@ -768,7 +756,7 @@ func TestMergeRefusesNonChildWorker(t *testing.T) {
 	var seeded []string
 	sessions := []state.Session{
 		{Name: "lead", Worktree: "/wt/lead"},
-		{Name: "w", Parent: "other", Worktree: "/wt/w"}, // not a child of lead
+		{Name: "w", Parent: "other", Worktree: "/wt/w"},
 	}
 	c := newTestCoordinator(&fakeCreator{}, nil, true, sessions, &seeded)
 
@@ -783,7 +771,6 @@ func TestMergeRefusesNonChildWorker(t *testing.T) {
 func TestMergeRefusesDirtyWorker(t *testing.T) {
 	var seeded []string
 	c := newTestCoordinator(&fakeCreator{}, nil, true, leadWorkerSessions(), &seeded)
-	// Lead clean, worker dirty.
 	c.wt.(*fakeWTC).cleanBy = map[string]bool{"/wt/lead": true, "/wt/w": false}
 
 	if _, err := c.Merge(context.Background(), contracts.MergeRequest{FromSession: "lead", Worker: "w"}); err == nil {
@@ -797,7 +784,6 @@ func TestMergeRefusesDirtyWorker(t *testing.T) {
 func TestMergeRefusesDirtyLead(t *testing.T) {
 	var seeded []string
 	c := newTestCoordinator(&fakeCreator{}, nil, true, leadWorkerSessions(), &seeded)
-	// Worker clean, lead dirty.
 	c.wt.(*fakeWTC).cleanBy = map[string]bool{"/wt/lead": false, "/wt/w": true}
 
 	if _, err := c.Merge(context.Background(), contracts.MergeRequest{FromSession: "lead", Worker: "w"}); err == nil {
@@ -858,11 +844,10 @@ func TestForgetRemovesWorkerKeepsCountConsistent(t *testing.T) {
 	if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w1", Summary: "ok"}); err != nil {
 		t.Fatalf("report w1: %v", err)
 	}
-	c.forget("w1") // w1 se ferme après avoir livré
+	c.forget("w1")
 	if c.reported["lead"]["w1"] {
 		t.Fatalf("forget(w1) devrait retirer w1 des livrés")
 	}
-	// w2 livre ensuite : done ne doit PAS compter le w1 périmé.
 	if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w2", Summary: "ok"}); err != nil {
 		t.Fatalf("report w2: %v", err)
 	}
@@ -1010,9 +995,6 @@ func TestForgetPurgesSeal(t *testing.T) {
 	}
 }
 
-// nthFailCreator succeeds until (and excluding) the failAt-th Create call, then
-// returns an error — so a fan-out can be observed spawning some workers then
-// failing mid-batch. failAt is 1-based; failAt=2 fails the second Create.
 type nthFailCreator struct {
 	failAt int
 	n      int
@@ -1113,7 +1095,7 @@ func TestFanOutNoTasks(t *testing.T) {
 func TestFanOutDirtyLeadSpawnsNone(t *testing.T) {
 	cr := &fakeCreator{}
 	var seeded []string
-	c := newTestCoordinator(cr, []string{"scripter"}, false, // lead sale
+	c := newTestCoordinator(cr, []string{"scripter"}, false,
 		[]state.Session{{Name: "lead", Worktree: "/wt/lead"}}, &seeded)
 	spawned, err := c.FanOut(context.Background(), contracts.FanOutRequest{
 		FromSession: "lead", ToAgent: "scripter", Tasks: []string{"a", "b"},
@@ -1130,7 +1112,7 @@ func TestFanOutDirtyLeadSpawnsNone(t *testing.T) {
 }
 
 func TestFanOutPartialSealsToSpawned(t *testing.T) {
-	cr := &nthFailCreator{failAt: 2} // le 2e Create échoue
+	cr := &nthFailCreator{failAt: 2}
 	var seeded []string
 	km := map[string]bool{"scripter": true}
 	seed := func(sess, task string) bool { seeded = append(seeded, sess+"|"+task); return true }
@@ -1157,7 +1139,7 @@ func TestFanOutIncludesPreexistingCohort(t *testing.T) {
 	c := newTestCoordinator(cr, []string{"scripter"}, true,
 		[]state.Session{
 			{Name: "lead", Worktree: "/wt/lead"},
-			{Name: "w0", Worktree: "/wt/w0", Parent: "lead"}, // 1 worker préexistant
+			{Name: "w0", Worktree: "/wt/w0", Parent: "lead"},
 		}, &seeded)
 
 	if _, err := c.FanOut(context.Background(), contracts.FanOutRequest{
@@ -1165,7 +1147,7 @@ func TestFanOutIncludesPreexistingCohort(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("fanout: %v", err)
 	}
-	if c.expected["lead"] != 3 { // 1 préexistant + 2 spawnés
+	if c.expected["lead"] != 3 {
 		t.Fatalf("cohorte devrait être scellée à 3 (1 préexistant + 2), got %d", c.expected["lead"])
 	}
 }

@@ -103,9 +103,6 @@ func TestHostRmDropsAFreeHost(t *testing.T) {
 	}
 }
 
-// An unnamed host is a typo, and a local session carries the empty host name:
-// counting sessions first would answer it with the list of everything running
-// here, as though `local` were a record about to be removed.
 func TestHostRmWithNoNameAsksForOne(t *testing.T) {
 	reg, st := hostRegistry(t)
 	if err := st.PutHost(state.Host{Name: "build1", SSH: "me@b1"}); err != nil {
@@ -123,7 +120,6 @@ func TestHostRmWithNoNameAsksForOne(t *testing.T) {
 	}
 }
 
-// A local session is not on any host, so it cannot hold one hostage.
 func TestHostRmIgnoresLocalSessions(t *testing.T) {
 	reg, st := hostRegistry(t)
 	if err := st.PutHost(state.Host{Name: "build1", SSH: "me@b1"}); err != nil {

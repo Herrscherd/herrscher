@@ -14,35 +14,18 @@ import (
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
-// A bare `herrscher` serves: it builds the daemon and runs the TUI on top of it.
-// That is the right thing when nothing else is running and the wrong thing when
-// the service is, because two daemons over one state file answer every message
-// twice — so the lock refuses the second one, and the operator is left with a
-// running agent they cannot see.
-//
-// attachedDaemon is the other half of that answer: the same TUI, driven over the
-// two sockets the daemon already exposes to other processes. Events come off the
-// events socket; everything else is an operator command over the command socket,
-// which is the daemon's own dispatch path — so an attached frontend can do
-// exactly what an in-process one can, and nothing more.
 type attachedDaemon struct {
 	ctx      context.Context
 	instance string
 	events   chan tui.RoutedEvent
 
-	mu sync.Mutex
-	// sessions is the last `session info` answer, and channelOf/nameOf index it
-	// both ways: an event names its session, the TUI names a channel, and the
-	// mapping between them lives only in that answer.
+	mu        sync.Mutex
 	sessions  []contracts.SessionInfo
 	fetched   time.Time
-	channelOf map[string]string // session name → channel id
-	nameOf    map[string]string // channel id → session name
+	channelOf map[string]string
+	nameOf    map[string]string
 }
 
-// sessionCacheTTL bounds how stale the tab list may be. The TUI asks for it on
-// every repaint, and a socket round trip per keystroke would be felt; a second
-// is short enough that a session created in another window shows up right away.
 const sessionCacheTTL = time.Second
 
 func newAttachedDaemon(ctx context.Context, instance string) (*attachedDaemon, error) {
@@ -57,17 +40,11 @@ func newAttachedDaemon(ctx context.Context, instance string) (*attachedDaemon, e
 		channelOf: map[string]string{},
 		nameOf:    map[string]string{},
 	}
-	// Prime the table before the first event arrives, so an event for a session
-	// the frontend has never asked about still finds its channel.
 	a.refresh()
 	go a.pump(stream)
 	return a, nil
 }
 
-// pump tags each daemon event with the conversation its session is bound to and
-// hands it to the TUI. The stream closing means the daemon went away; the
-// frontend's channel closes with it rather than hanging on a stream that will
-// never carry another line.
 func (a *attachedDaemon) pump(stream <-chan host.DaemonEvent) {
 	defer close(a.events)
 	for e := range stream {
@@ -80,9 +57,6 @@ func (a *attachedDaemon) pump(stream <-chan host.DaemonEvent) {
 	}
 }
 
-// channelFor maps a session name to the conversation the TUI tabs by, refreshing
-// the table once when the name is unknown — a session created seconds ago is the
-// common case, and the alternative is an event rendered into no tab at all.
 func (a *attachedDaemon) channelFor(session string) string {
 	a.mu.Lock()
 	ch, ok := a.channelOf[session]
@@ -96,16 +70,13 @@ func (a *attachedDaemon) channelFor(session string) string {
 	if ch, ok := a.channelOf[session]; ok {
 		return ch
 	}
-	// Falling back to the session name keeps the event visible in a tab of its
-	// own instead of dropping it, which is what a wrong-but-present id costs.
 	return session
 }
 
-// refresh reloads the session table from the daemon unconditionally.
 func (a *attachedDaemon) refresh() {
 	out, err := a.dispatch([]string{"session", "info", "--json"})
 	if err != nil {
-		return // the table stays as it was; the next call tries again
+		return
 	}
 	var infos []contracts.SessionInfo
 	if err := json.Unmarshal([]byte(out), &infos); err != nil {
@@ -128,10 +99,6 @@ func (a *attachedDaemon) dispatch(argv []string) (string, error) {
 	return host.DaemonDispatch(ctx, a.instance, argv)
 }
 
-// runAttached opens the TUI against a daemon this process does not own. Quitting
-// it returns; it never cancels anything on the other side, because the daemon
-// was there first and outlives this window — closing a viewer must not close the
-// agent it was viewing.
 func runAttached(ctx context.Context, instance string, opts ...tui.Option) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -141,8 +108,6 @@ func runAttached(ctx context.Context, instance string, opts ...tui.Option) error
 	}
 	return tui.Run(ctx, cancel, a, opts...)
 }
-
-// --- tui.Backend ---
 
 func (a *attachedDaemon) Frontend() <-chan tui.RoutedEvent { return a.events }
 
@@ -160,16 +125,6 @@ func (a *attachedDaemon) Sessions() []contracts.SessionInfo {
 	return a.sessions
 }
 
-// Submit sends the typed line to the session the tab belongs to. Attachments
-// travel as local paths: the frontend and the daemon share a filesystem, and the
-// daemon pins every one of them to its staging root before reading.
-//
-// It says the line was typed here, in this window. That matters for a session
-// whose conversation lives somewhere else — one opened from a chat channel: the
-// answer belongs in the tab that asked, and this window already receives it over
-// the events socket. Without the origin the daemon has no way to know the
-// question was not asked in the channel, and posts the answer there too, which
-// reads as the agent replying in the place you just left.
 func (a *attachedDaemon) Submit(channel, text string, attachments []tui.Attachment) {
 	a.mu.Lock()
 	name, ok := a.nameOf[channel]
@@ -200,9 +155,6 @@ func (a *attachedDaemon) Submit(channel, text string, attachments []tui.Attachme
 	}
 }
 
-// notify surfaces a client-side failure in the tab it happened in. The daemon
-// never saw it, so it will never come back over the events socket, and silence
-// would read as a message that was sent and ignored.
 func (a *attachedDaemon) notify(channel, text string) {
 	select {
 	case a.events <- tui.RoutedEvent{
@@ -224,15 +176,8 @@ func (a *attachedDaemon) Dispatch(args []string) (string, error) {
 	return a.dispatch(withTerminalOnly(args))
 }
 
-// attachedVerbs mirrors the terminal gateway's own allow-list: an attached
-// frontend reaches the daemon through the same door, so it must not open onto
-// more than the in-process one does. Service and config verbs would let a tab
-// restart or re-point the very daemon it is attached to.
 var attachedVerbs = map[string]bool{"session": true, "agent": true}
 
-// withTerminalOnly makes a session created from a tab bind to the terminal
-// gateway, the way the in-process TUI does, so it comes back as a tab rather
-// than as a session with no visible home.
 func withTerminalOnly(args []string) []string {
 	if len(args) < 2 || args[0] != "session" || args[1] != "create" {
 		return args
@@ -274,10 +219,6 @@ func (a *attachedDaemon) Scrollback(name string) []contracts.ScrollbackLine {
 	return lines
 }
 
-// Commands asks the daemon what it dispatches and keeps the verbs a terminal
-// may run. The in-process frontend answers the same question the same way, so
-// attaching to a daemon and being one show the same palette — which is the whole
-// promise of the attached window.
 func (a *attachedDaemon) Commands() []tui.CommandSpec {
 	out, err := a.dispatch([]string{"commands", "--json"})
 	if err != nil {

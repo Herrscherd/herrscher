@@ -9,11 +9,8 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// scriptedRunner answers each call from a queue of canned shell snippets, and
-// records the argv it was asked for. Provisioning is a sequence of round trips,
-// so the value under test is that sequence.
 type scriptedRunner struct {
-	replies []string // one `sh -c` body per Command call, in order
+	replies []string
 	seen    [][]string
 	copies  [][2]string
 }
@@ -69,8 +66,6 @@ func TestProvisionStopsOnAnUnsupportedPlatform(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "unsupported") {
 		t.Fatalf("want an unsupported-platform refusal, got %v", err)
 	}
-	// It refuses before building anything: a cross build for a platform Go does
-	// not have is a slow way to produce a worse message.
 	if len(run.copies) != 0 {
 		t.Fatalf("it copied something anyway: %v", run.copies)
 	}
@@ -78,10 +73,10 @@ func TestProvisionStopsOnAnUnsupportedPlatform(t *testing.T) {
 
 func TestCheckReportsTheFourPoints(t *testing.T) {
 	run := &scriptedRunner{replies: []string{
-		"true", // ssh reachability
-		"true", // herrscher --help
-		"true", // workspace present
-		"true", // git present
+		"true",
+		"true",
+		"true",
+		"true",
 	}}
 	rep := checkHost(context.Background(), run, state.Host{Name: "build1", SSH: "me@b1", Workspace: "/srv/work", Bin: "/hs", Version: "abc1234"}, "abc1234")
 	if !rep.Reachable || !rep.Workspace || !rep.Git || rep.Herrscher == "" {

@@ -8,19 +8,8 @@ import (
 	"strings"
 )
 
-// Following a link means this process launches a program on the operator's own
-// machine, at a destination the agent chose. So the gesture is the whole feature:
-// nothing here is ever reached by a message arriving or a turn completing, and the
-// only caller is a keypress. Everything else in this file merely decides which
-// program gets the target once that keypress has happened.
-
-// launcher hands a target to whatever opens it. It is a function rather than an
-// exec.Cmd so the decision can be tested without launching anything — a test that
-// could open a browser is a test nobody runs twice.
 type launcher func(target string) error
 
-// systemLauncher returns the desktop's own handler for a URL. Delegating is the
-// point: the operator's default browser is their choice, not this program's.
 func systemLauncher() launcher {
 	var name string
 	var args []string
@@ -56,11 +45,6 @@ func checkURLTarget(target string) error {
 	}
 }
 
-// checkTarget refuses a target that would arrive at the launched program as one
-// of its own options. The launchers below pass the target as an argv element, so
-// it can never become a second command — but a leading dash still lets the agent
-// choose a flag rather than a destination, and neither xdg-open nor an editor
-// distinguishes the two. A destination does not start with a dash.
 func checkTarget(target string) error {
 	if strings.HasPrefix(target, "-") {
 		return fmt.Errorf("refusing a target that reads as an option: %s", target)
@@ -71,8 +55,6 @@ func checkTarget(target string) error {
 	return nil
 }
 
-// start launches cmd and reaps it in the background. Without the Wait the child
-// stays a zombie for as long as the TUI runs, and the TUI runs for days.
 func start(cmd *exec.Cmd, name string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
@@ -81,10 +63,6 @@ func start(cmd *exec.Cmd, name string) error {
 	return nil
 }
 
-// editorLauncher returns the launcher for a file reference: $EDITOR at the line,
-// in the `+42 file` form every editor since vi has accepted. A file handed to the
-// desktop handler would open in whatever it thinks a .go file is, which is not
-// where the operator was looking.
 func editorLauncher(env func(string) string) launcher {
 	return func(target string) error {
 		if err := checkTarget(target); err != nil {
@@ -95,7 +73,7 @@ func editorLauncher(env func(string) string) launcher {
 			return fmt.Errorf("no $EDITOR set to open %s", target)
 		}
 		file, line := splitFileRef(target)
-		fields := strings.Fields(editor) // $EDITOR may carry flags of its own
+		fields := strings.Fields(editor)
 		args := fields[1:]
 		if line != "" {
 			args = append(args, "+"+line)
@@ -105,8 +83,6 @@ func editorLauncher(env func(string) string) launcher {
 	}
 }
 
-// splitFileRef separates a path from its trailing :line. A path with no line
-// number is returned whole: it is still a file, just without a destination row.
 func splitFileRef(target string) (file, line string) {
 	i := strings.LastIndex(target, ":")
 	if i < 0 {
@@ -119,9 +95,6 @@ func splitFileRef(target string) (file, line string) {
 	return target[:i], rest
 }
 
-// openLink routes one link to the launcher that suits it. The resolved Target is
-// what is launched — never the Label, which a markdown link is free to make say
-// anything at all.
 func openLink(l Link, sys, edit launcher) error {
 	if l.Kind == LinkFile {
 		if edit == nil {
@@ -135,9 +108,6 @@ func openLink(l Link, sys, edit launcher) error {
 	return sys(l.Target)
 }
 
-// selectNextLink advances the selection through the transcript's links and then
-// past the last one, back to nothing. Releasing the selection matters as much as
-// making one: an operator must be able to put the gesture down.
 func (m *model) selectNextLink() {
 	if len(m.links) == 0 {
 		m.linkIdx = -1
@@ -147,13 +117,10 @@ func (m *model) selectNextLink() {
 	if m.linkIdx >= len(m.links) {
 		m.linkIdx = -1
 	}
-	// The highlight is applied inside the cached transcript render, and the cache
-	// key cannot see a selection change.
 	m.tsCache.valid = false
 	m.syncViewport()
 }
 
-// selectedLink is the link an open gesture would act on, if any.
 func (m *model) selectedLink() (Link, bool) {
 	if m.linkIdx < 0 || m.linkIdx >= len(m.links) {
 		return Link{}, false
@@ -161,9 +128,6 @@ func (m *model) selectedLink() (Link, bool) {
 	return m.links[m.linkIdx], true
 }
 
-// openSelectedLink is the only path from a keypress to a launcher. A failure is
-// reported in the status line and nothing else changes: the turn is worth more
-// than the link, and a missing desktop helper is not a reason to lose it.
 func (m *model) openSelectedLink() {
 	l, ok := m.selectedLink()
 	if !ok {
@@ -177,10 +141,6 @@ func (m *model) openSelectedLink() {
 	m.flash = "ouverture de " + l.Target
 }
 
-// linkStatus is the status line while a link is selected: the resolved target,
-// never the label. A markdown label can name one destination and point at
-// another, and an operator about to make a gesture is owed the real one. This is
-// display and not a confirmation — the keypress remains the only consent.
 func (m *model) linkStatus() string {
 	l, ok := m.selectedLink()
 	if !ok {
@@ -190,7 +150,5 @@ func (m *model) linkStatus() string {
 	if l.Kind == LinkFile {
 		verb = "↵ edit"
 	}
-	// Not clipped here: statusRow already holds the row to one line, and a target
-	// cut short by this function would be the one thing the operator misreads.
 	return dimStyle.Render(verb + " " + l.Target)
 }

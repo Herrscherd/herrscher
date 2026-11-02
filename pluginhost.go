@@ -28,19 +28,11 @@ func runPluginHost(ctx context.Context, args []string) error {
 		return fmt.Errorf("plugin-host: unsupported category %q", *category)
 	}
 
-	// Fail fast and fail closed: a half-configured TLS env refuses to start
-	// rather than silently serving plaintext off-loopback. Validated before any
-	// plugin is built so a misconfiguration never reaches I/O. No TLS env set =>
-	// plaintext on the (default loopback) bind, exactly as before.
 	tlsCfg := tlsConfigFromEnv()
 	if err := tlsCfg.Validate(); err != nil {
 		return fmt.Errorf("plugin-host: %w", err)
 	}
 
-	// SupportedRemoteCategory gates *category above; here we build the real
-	// plugin for it and select its skeleton. Each remote category serves a
-	// different port over the shared Plugin service, so the build+register pair
-	// branches on *category — adding a category is one case, not a new host.
 	var (
 		manifest  contracts.Manifest
 		register  func(*grpc.Server)
@@ -74,13 +66,8 @@ func runPluginHost(ctx context.Context, args []string) error {
 	default:
 		return fmt.Errorf("plugin-host: category %q passed the support gate but has no skeleton", *category)
 	}
-	// The plugin-host owns the real plugin: it builds it once, serves it to every
-	// client, and closes it once on shutdown. Client proxies only close their own
-	// gRPC connection, never the shared object.
 	defer closeReal()
 
-	// Local cancel so the heartbeat and GracefulStop goroutines also unwind when
-	// Serve returns on its own (e.g. a listener error), not only on parent ctx.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -107,7 +94,6 @@ func runPluginHost(ctx context.Context, args []string) error {
 	defer nc.Close()
 	ann := transport.Announcement{Manifest: manifest, GrpcAddr: lis.Addr().String(), InstanceID: *instanceID}
 
-	// NATS core pub-sub has no replay: re-announce so a resolver subscribing later still finds us.
 	go func() {
 		t := time.NewTicker(2 * time.Second)
 		defer t.Stop()
@@ -125,16 +111,10 @@ func runPluginHost(ctx context.Context, args []string) error {
 	return s.Serve(lis)
 }
 
-// firstMemory builds the first registered memory plugin from its resolved env
-// config, returning it with its manifest for announcement.
 func firstMemory(ctx context.Context) (contracts.Memory, contracts.Manifest, error) {
 	return host.BuildFirstMemoryWithManifest(ctx)
 }
 
-// firstOrchestrator builds the first registered orchestrator plugin. The remote
-// orchestrator runs without the host's in-process Memory or the
-// session/scope/learn config bag (those are bridge-owned runtime state): C2
-// ships the request/response proxy, not remote scope threading.
 func firstOrchestrator(ctx context.Context) (contracts.Orchestrator, contracts.Manifest, error) {
 	for _, p := range contracts.Default.Orchestrators() {
 		if p.Orchestrator == nil {
@@ -153,9 +133,6 @@ func firstOrchestrator(ctx context.Context) (contracts.Orchestrator, contracts.M
 	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: no orchestrator plugin registered")
 }
 
-// firstBackend builds the first registered backend plugin from its resolved env
-// config. The streaming skeleton forwards its per-turn event stream to remote
-// hosts, preserving ordering and the reply{done} boundary.
 func firstBackend(ctx context.Context) (contracts.Backend, contracts.Manifest, error) {
 	for _, p := range contracts.Default.Backends() {
 		if p.Backend == nil {

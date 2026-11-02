@@ -18,16 +18,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 )
 
-// menuGatewayFake is a fanRecorder that also plays the reader shape
-// askApproval must handle: a channel that may or may not route menus. Its
-// Manifest, like fanRecorder's, declares no SelectMenus capability, so
-// contracts.Degrade's text fallback posts through the embedded fanRecorder's
-// Post (recorded in .posted) rather than through Menu.
 type menuGatewayFake struct {
 	fanRecorder
 	channel  string
 	routeErr error
-	routed   []string // prompts passed to RouteMenu
+	routed   []string
 }
 
 func (m *menuGatewayFake) DefaultChannel() string { return m.channel }
@@ -103,7 +98,6 @@ func TestAskApprovalTimesOutIntoADenial(t *testing.T) {
 	}
 }
 
-// waitingFor counts what the registry holds for one session.
 func waitingFor(session string) int {
 	n := 0
 	for _, p := range pendingApprovals() {
@@ -114,12 +108,6 @@ func waitingFor(session string) int {
 	return n
 }
 
-// fillApprovals opens one waiting request per session named and blocks until
-// they are all registered. The returned function answers every one of them and
-// waits for the asks to return, so a test leaves the registry as it found it.
-//
-// The wait is long on purpose: these requests are settled by hand, and a timer
-// that fired first would free the very slot the cap is being read through.
 func fillApprovals(t *testing.T, sessions ...string) func() {
 	t.Helper()
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
@@ -160,10 +148,6 @@ func fillApprovals(t *testing.T, sessions ...string) func() {
 	}
 }
 
-// One session cannot hold more than its share of the registry. Every waiting
-// request costs a goroutine, a command-socket connection and a menu somebody
-// has to read, and `approve ask` takes the session it is told: unbounded, an
-// agent looping on it floods a channel that is not even its own.
 func TestOneSessionCannotFillTheRegistry(t *testing.T) {
 	full := make([]string, 0, maxPendingPerSession)
 	for range maxPendingPerSession {
@@ -187,11 +171,8 @@ func TestOneSessionCannotFillTheRegistry(t *testing.T) {
 		t.Fatalf("%d waiting, want %d: a refused request must not be registered", n, maxPendingPerSession)
 	}
 
-	// A neighbour is not punished for it: the cap is per session precisely so
-	// one agent's flood cannot stop the rest of the fleet from asking.
 	fillApprovals(t, "s-cap-neighbour")()
 
-	// Settled, the registry gives the room back, and the session asks again.
 	settle()
 	if n := waitingFor("s-cap"); n != 0 {
 		t.Fatalf("%d still waiting after every request was answered", n)
@@ -199,8 +180,6 @@ func TestOneSessionCannotFillTheRegistry(t *testing.T) {
 	fillApprovals(t, "s-cap")()
 }
 
-// The same bound across the whole fleet, so a caller naming a fresh session
-// every time cannot walk around the per-session one.
 func TestTheRegistryIsBoundedAcrossSessions(t *testing.T) {
 	sessions := make([]string, 0, maxPendingApprovals)
 	for i := range maxPendingApprovals {
@@ -221,9 +200,6 @@ func TestTheRegistryIsBoundedAcrossSessions(t *testing.T) {
 	fillApprovals(t, "s-fleet-extra")()
 }
 
-// A request nobody answers has to free its slot as surely as an answered one.
-// Leaked entries would fill the cap with requests no human ever sees, and the
-// session would stop asking without anything having gone wrong.
 func TestATimedOutRequestFreesItsSlot(t *testing.T) {
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	var reason string
@@ -281,11 +257,6 @@ func TestTwoSessionsWaitIndependently(t *testing.T) {
 	}
 }
 
-// TestSessionDriverAskApproval covers the four shapes askApproval must
-// handle when fanning a question out to a session's gateways: a gateway that
-// routes a real menu, one whose RouteMenu fails and must fall back to text,
-// one with neither a usable router nor a Gateway to fall back to, and one
-// with no channel to post on at all.
 func TestSessionDriverAskApproval(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -340,7 +311,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 	}
 
 	t.Run("no panic and nothing posted with a nil Gateway and no usable router", func(t *testing.T) {
-		reader := &fanRecorder{} // implements ChannelReader but not contracts.MenuRouter
+		reader := &fanRecorder{}
 		d := &sessionDriver{name: "s1", gateways: []contracts.GatewaySet{{Gateway: nil, Reader: reader}}}
 		d.askApproval(context.Background(), "allow Bash(rm)?", "id1")
 		reader.mu.Lock()
@@ -370,8 +341,6 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 	if id == "" {
 		t.Fatal("the request was never registered")
 	}
-	// No live driver by that name: without the interception this Pick would
-	// report false, and the waiting request would sit until it timed out.
 	if !Pick("s-no-driver", approvalPickPrefix+id+":deny") {
 		t.Fatal("an approval pick must be handled even with no live driver")
 	}
@@ -380,22 +349,10 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 	}
 }
 
-// A wait that can outlive the vendor's hook timeout is a silent allow: the CLI
-// stops waiting for the hook and runs the tool call, while the operator is
-// still looking at a request that says it is waiting for him. It is said on the
-// ask that will really wait, and only there: the injected hook matches every
-// tool call, so a warning raised before the policy has spoken would repeat
-// itself once per tool call for calls nobody is ever asked about.
-//
-// What is compared is the worst case, twice the wait: the menu fan-out is
-// bounded by the wait and the timer that follows it runs for the wait again. A
-// wait of half the hook's timeout is the last one that always fits.
 func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
 	ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	req := approval.Request{Tool: "Bash", Subject: "git push"}
 	fits, outlives := agent.HookWait/2, agent.HookWait/2+time.Minute
-	// A context already done ends the wait at once. What is under test is what
-	// was written before the wait began, not how the request settles.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -424,9 +381,6 @@ func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
 	}
 }
 
-// captureDaemonStderr runs fn with the daemon's stderr on a pipe, and returns
-// what was written to it. The warning is aimed at the operator reading the
-// daemon's log, so the stream it lands on is part of what is under test.
 func captureDaemonStderr(t *testing.T, fn func()) string {
 	t.Helper()
 	r, w, err := os.Pipe()
@@ -435,8 +389,6 @@ func captureDaemonStderr(t *testing.T, fn func()) string {
 	}
 	saved := os.Stderr
 	os.Stderr = w
-	// Deferred: fn panicking would otherwise leave the package's own stderr on a
-	// pipe nobody drains, and every test after this one would write into it.
 	defer func() { os.Stderr = saved }()
 	read := make(chan string, 1)
 	go func() {

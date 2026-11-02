@@ -7,7 +7,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// placerWith returns a placer over a state holding one host record.
 func placerWith(t *testing.T, h state.Host, sourceVersion string) hostPlacer {
 	t.Helper()
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -47,8 +46,6 @@ func TestPlacerRefusesAVersionDrift(t *testing.T) {
 			t.Fatalf("the refusal must name %q, got %v", want, err)
 		}
 	}
-	// And refuses nothing else: a session already running over there still has
-	// to be closable, which is a worktree removal and no argv agreement at all.
 	if _, err := p.Worktrees("build1"); err != nil {
 		t.Fatalf("a drifted host must still answer worktree work: %v", err)
 	}
@@ -67,8 +64,6 @@ func TestPlacerReadyRefusesAnUnprovisionedHost(t *testing.T) {
 	}
 }
 
-// A daemon with no source checkout has nothing to compare against. Refusing
-// every session then would be worse than running one that is probably current.
 func TestPlacerAcceptsWhenTheSourceVersionIsUnknown(t *testing.T) {
 	p := placerWith(t, state.Host{Name: "build1", SSH: "me@build1", Workspace: "/srv/work", Bin: "/srv/bin/herrscher", Version: "abc1234"}, "")
 	if err := p.Ready("build1"); err != nil {

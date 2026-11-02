@@ -13,9 +13,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
-// addHostCommands registers the five `host` verbs. Like the schedule family,
-// they are neutral argv: a chat gateway binds them as they are, and core never
-// learns which gateway that is.
 func addHostCommands(reg *cli.Registry, st *state.State) error {
 	if err := reg.Add(contracts.New("host", "add").
 		Help("register a machine sessions can run on, and provision herrscher there").
@@ -64,9 +61,6 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 				b, err := json.Marshal(hosts)
 				return string(b), err
 			}
-			// local is listed but not stored: it is where a session runs when it
-			// names no host, so a list that omitted it would not answer the
-			// question it was asked.
 			var b strings.Builder
 			b.WriteString("- local (this machine)\n")
 			for _, h := range hosts {
@@ -133,13 +127,8 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			name := hostNameOf(in)
 			if _, ok := st.FindHost(name); !ok {
-				// Before the sessions are counted, or an unnamed host would be
-				// answered with the list of everything running here: a local
-				// session carries the empty host too.
 				return "", unknownHost(st, name)
 			}
-			// It closes nothing on its own, the way `schedule rm` does not close
-			// the session it opened. Naming them is the operator's next move.
 			var carried []string
 			for _, s := range st.SnapshotSessions() {
 				if s.Host == name {
@@ -156,12 +145,8 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 		}))
 }
 
-// hostNameOf takes the host name from --name or from the bare argument, so
-// `host check build1` and `host check --name build1` mean the same thing. A
-// gateway sends the flag; an operator types the name.
 func hostNameOf(in contracts.Input) string { return firstOf(in.Get("name"), in.Rest) }
 
-// unknownHost names what does exist, because the usual cause is a typo.
 func unknownHost(st *state.State, name string) error {
 	var known []string
 	for _, h := range st.SnapshotHosts() {
@@ -179,8 +164,6 @@ func unknownHost(st *state.State, name string) error {
 	return fmt.Errorf("no host named %q (known: %s)", name, strings.Join(known, ", "))
 }
 
-// sourceVersionOf is what this daemon would provision today, or "" when it has
-// no source checkout to compare against.
 func sourceVersionOf(ctx context.Context, st *state.State) string {
 	src := st.SourceDir()
 	if src == "" {

@@ -7,19 +7,8 @@ import (
 	"strings"
 )
 
-// Sixel predates the kitty protocol by forty years and is the fallback a good
-// many terminals do have: six pixel rows are packed into the low bits of one
-// printable byte, one colour at a time, six rows to a band.
-
-// sixelCubeSide is the side of the colour cube every pixel is quantised onto.
-// Sixel re-states the palette on every image, and a 216-entry cube costs about
-// two kilobytes of preamble — small against the pixel data, and uniform enough
-// that a photograph does not band visibly at preview size.
 const sixelCubeSide = 6
 
-// sixelEscape encodes img as a sixel DCS sequence. It returns "" for an empty
-// image so a caller can append the result unconditionally. Only a sixel terminal
-// interprets the sequence; the caller picks the encoder from the probe.
 func sixelEscape(img image.Image) string {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
@@ -41,12 +30,10 @@ func sixelEscape(img image.Image) string {
 	for i := range present {
 		colours = append(colours, i)
 	}
-	sort.Ints(colours) // a stable palette order keeps the output diffable
+	sort.Ints(colours)
 
 	var s strings.Builder
 	s.WriteString("\x1bPq")
-	// Raster attributes: 1:1 pixel aspect, then the image's own size, so the
-	// terminal reserves the right number of cells before any pixel arrives.
 	s.WriteString(`"1;1;`)
 	s.WriteString(strconv.Itoa(w))
 	s.WriteByte(';')
@@ -55,7 +42,6 @@ func sixelEscape(img image.Image) string {
 		s.WriteByte('#')
 		s.WriteString(strconv.Itoa(i))
 		s.WriteString(";2;")
-		// Sixel states RGB in percent, not in bytes.
 		r := i / (sixelCubeSide * sixelCubeSide)
 		g := (i / sixelCubeSide) % sixelCubeSide
 		bl := i % sixelCubeSide
@@ -67,10 +53,10 @@ func sixelEscape(img image.Image) string {
 		for _, colour := range colours {
 			row := sixelBand(idx, w, h, band, colour)
 			if row == "" {
-				continue // this colour does not appear in this band
+				continue
 			}
 			if !first {
-				s.WriteByte('$') // carriage return: overprint the band in the next colour
+				s.WriteByte('$')
 			}
 			first = false
 			s.WriteByte('#')
@@ -78,16 +64,13 @@ func sixelEscape(img image.Image) string {
 			s.WriteString(row)
 		}
 		if band+6 < h {
-			s.WriteByte('-') // next band
+			s.WriteByte('-')
 		}
 	}
 	s.WriteString("\x1b\\")
 	return s.String()
 }
 
-// sixelBand renders one colour's contribution to one six-row band, or "" when
-// the colour does not appear in it — skipping absent colours is what keeps the
-// payload proportional to the picture rather than to the palette.
 func sixelBand(idx []int, w, h, band, colour int) string {
 	var row strings.Builder
 	any := false
@@ -102,7 +85,7 @@ func sixelBand(idx []int, w, h, band, colour int) string {
 		if bits != 0 {
 			any = true
 		}
-		row.WriteByte(0x3f + bits) // the sixel alphabet starts at '?'
+		row.WriteByte(0x3f + bits)
 	}
 	if !any {
 		return ""
@@ -110,7 +93,6 @@ func sixelBand(idx []int, w, h, band, colour int) string {
 	return row.String()
 }
 
-// sixelLevel maps a 16-bit colour channel onto the cube's 0..5 levels.
 func sixelLevel(v uint32) int {
 	l := int(v>>8) * sixelCubeSide / 256
 	if l >= sixelCubeSide {
@@ -119,7 +101,6 @@ func sixelLevel(v uint32) int {
 	return l
 }
 
-// sixelPercent turns a cube level into the 0..100 the protocol wants.
 func sixelPercent(level int) string {
 	return strconv.Itoa(level * 100 / (sixelCubeSide - 1))
 }

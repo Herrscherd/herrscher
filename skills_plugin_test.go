@@ -13,8 +13,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// tree is a skills factory that hands over a one-skill tree and records the
-// config it was given.
 func tree(name string, seen *contracts.PluginConfig) contracts.SkillsFactory {
 	return func(_ context.Context, cfg contracts.PluginConfig) (fs.FS, error) {
 		if seen != nil {
@@ -26,9 +24,6 @@ func tree(name string, seen *contracts.PluginConfig) contracts.SkillsFactory {
 
 func noEnv(string) string { return "" }
 
-// treeOf is a skills factory handing over one directory per entry, each holding
-// a SKILL.md with the given body — the way two plugins claiming one name are
-// told apart.
 func treeOf(files map[string]string) contracts.SkillsFactory {
 	return func(context.Context, contracts.PluginConfig) (fs.FS, error) {
 		m := fstest.MapFS{}
@@ -39,8 +34,6 @@ func treeOf(files map[string]string) contracts.SkillsFactory {
 	}
 }
 
-// A plugin's playbook lands where every backend looks for skills. This is what
-// makes an alpha-gateway skill exist only on a machine whose build has it in it.
 func TestPluginSkillsAreInstalled(t *testing.T) {
 	dst := t.TempDir()
 	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{{
@@ -62,8 +55,6 @@ func TestPluginSkillsAreInstalled(t *testing.T) {
 	}
 }
 
-// Yours stay yours: a file already there is never overwritten, matching what the
-// shipped skills already promise.
 func TestPluginSkillsNeverOverwrite(t *testing.T) {
 	dst := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dst, "demo"), 0o755); err != nil {
@@ -81,13 +72,11 @@ func TestPluginSkillsNeverOverwrite(t *testing.T) {
 	if string(b) != "mine" {
 		t.Fatalf("an existing skill must be left alone, got %q", b)
 	}
-	// Left alone, but not in silence: the plugin's own playbook is not in effect.
 	if len(out.Diverged) != 1 || out.Diverged[0] != "demo" {
 		t.Fatalf("diverged = %v, want demo reported", out.Diverged)
 	}
 }
 
-// A plugin contributing no skills is the common case and must be free.
 func TestPluginWithoutSkillsIsSkipped(t *testing.T) {
 	dst := t.TempDir()
 	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{{
@@ -102,11 +91,6 @@ func TestPluginWithoutSkillsIsSkipped(t *testing.T) {
 	}
 }
 
-// The regression this whole change could introduce. A gateway declares a required
-// token; on a machine that has none it never instantiates — and its playbook must
-// still land, because the skill teaches an agent about a capability this build
-// has, not about a channel that happens to be reachable today. The factory gets
-// what could be resolved and nothing more.
 func TestAGatewayMissingItsTokenStillShipsItsPlaybook(t *testing.T) {
 	dst := t.TempDir()
 	var seen contracts.PluginConfig
@@ -132,9 +116,6 @@ func TestAGatewayMissingItsTokenStillShipsItsPlaybook(t *testing.T) {
 	}
 }
 
-// A plugin whose whole contribution is skills owns its own configuration, so an
-// unconfigured one is skipped and named — in the same words the gateway hub uses,
-// because the operator fixes it the same way.
 func TestAnUnconfiguredSkillsPluginIsSkipped(t *testing.T) {
 	dst := t.TempDir()
 	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{{
@@ -158,9 +139,6 @@ func TestAnUnconfiguredSkillsPluginIsSkipped(t *testing.T) {
 	}
 }
 
-// A factory declining is the point of the contract: no Superset on this machine,
-// no Superset playbook in every agent's context. It is reported, and it does not
-// take the other plugins' skills down with it.
 func TestASkillsFactoryThatDeclinesIsReportedAndIsolated(t *testing.T) {
 	dst := t.TempDir()
 	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{
@@ -186,8 +164,6 @@ func TestASkillsFactoryThatDeclinesIsReportedAndIsolated(t *testing.T) {
 	}
 }
 
-// A factory that returns neither a tree nor an error is a broken plugin, not a
-// panic in the daemon's startup path.
 func TestASkillsFactoryReturningNothingIsReported(t *testing.T) {
 	dst := t.TempDir()
 	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{{
@@ -204,10 +180,6 @@ func TestASkillsFactoryReturningNothingIsReported(t *testing.T) {
 	}
 }
 
-// Two plugins claiming one skill name. Whoever registered first keeps it, the
-// other is named, and a second start changes nothing. Unguarded, the two took
-// turns overwriting the directory: every start rewrote it and announced an
-// update nobody asked for, and the first plugin's playbook was gone in silence.
 func TestTwoPluginsClaimingOneSkillNameDoNotFightOverIt(t *testing.T) {
 	dst := t.TempDir()
 	plugs := []contracts.Plugin{
@@ -232,7 +204,6 @@ func TestTwoPluginsClaimingOneSkillNameDoNotFightOverIt(t *testing.T) {
 	}
 }
 
-// A plugin does not lose the rest of its tree over one clashing name.
 func TestOnlyTheClashingSkillIsLeftOut(t *testing.T) {
 	dst := t.TempDir()
 	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{

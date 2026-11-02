@@ -11,10 +11,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// stagedFile writes a file inside the staging root — the only tree the bridge
-// accepts a file:// attachment from, so a gateway has to copy a file there before
-// it can name one. It returns the path with symlinks resolved, which is what
-// ResolveAttachments hands back.
 func stagedFile(t *testing.T, name, content string) string {
 	t.Helper()
 	if err := os.MkdirAll(StagingRoot(), 0o700); err != nil {
@@ -36,8 +32,6 @@ func stagedFile(t *testing.T, name, content string) string {
 	return real
 }
 
-// TestResolveAttachmentsFilePassthrough verifies a staged file:// image is passed
-// through by path without any network fetch.
 func TestResolveAttachmentsFilePassthrough(t *testing.T) {
 	img := stagedFile(t, "paste-0.png", "PNG")
 	m := contracts.Message{
@@ -52,8 +46,6 @@ func TestResolveAttachmentsFilePassthrough(t *testing.T) {
 	}
 }
 
-// TestResolveAttachmentsSkipsMissingFile drops a file:// url whose target does not
-// exist rather than failing the turn.
 func TestResolveAttachmentsSkipsMissingFile(t *testing.T) {
 	m := contracts.Message{
 		ID: "1",
@@ -66,8 +58,6 @@ func TestResolveAttachmentsSkipsMissingFile(t *testing.T) {
 	}
 }
 
-// TestResolveAttachmentsSkipsUnsupportedFile drops a staged file:// url whose
-// type the model can do nothing with.
 func TestResolveAttachmentsSkipsUnsupportedFile(t *testing.T) {
 	zip := stagedFile(t, "bundle.zip", "PK")
 	m := contracts.Message{
@@ -79,9 +69,6 @@ func TestResolveAttachmentsSkipsUnsupportedFile(t *testing.T) {
 	}
 }
 
-// TestResolveAttachmentsPassesThroughStagedDocument confirms a document staged by
-// a gateway reaches the backend the same way an image does — the path is what the
-// backend gets, and it reads the file itself.
 func TestResolveAttachmentsPassesThroughStagedDocument(t *testing.T) {
 	doc := stagedFile(t, "spec.pdf", "%PDF-1.7")
 	m := contracts.Message{
@@ -94,10 +81,6 @@ func TestResolveAttachmentsPassesThroughStagedDocument(t *testing.T) {
 	}
 }
 
-// TestResolveAttachmentsRejectsUnstagedFile confirms a file:// url naming a real
-// image outside the staging tree is refused: a gateway has to copy a file in
-// before it can name it, so a compromised one cannot read arbitrary local files
-// into the model context.
 func TestResolveAttachmentsRejectsUnstagedFile(t *testing.T) {
 	img := filepath.Join(t.TempDir(), "secret.png")
 	if err := os.WriteFile(img, []byte("PNG"), 0o600); err != nil {
@@ -112,9 +95,6 @@ func TestResolveAttachmentsRejectsUnstagedFile(t *testing.T) {
 	}
 }
 
-// TestResolveAttachmentsRejectsSymlinkOutOfStaging confirms containment is checked
-// after symlinks resolve, so a link planted inside the staging tree cannot be used
-// to name a file outside it.
 func TestResolveAttachmentsRejectsSymlinkOutOfStaging(t *testing.T) {
 	outside := filepath.Join(t.TempDir(), "secret.png")
 	if err := os.WriteFile(outside, []byte("PNG"), 0o600); err != nil {
@@ -133,9 +113,6 @@ func TestResolveAttachmentsRejectsSymlinkOutOfStaging(t *testing.T) {
 	}
 }
 
-// TestResolveAttachmentsRejectsHostedFileURL confirms a file url with a host
-// (file://evil/etc/passwd, whose Path is /etc/passwd) is rejected rather than
-// read — only a genuine host-less local file url passes.
 func TestResolveAttachmentsRejectsHostedFileURL(t *testing.T) {
 	m := contracts.Message{
 		ID:          "1",
@@ -146,8 +123,6 @@ func TestResolveAttachmentsRejectsHostedFileURL(t *testing.T) {
 	}
 }
 
-// TestResolveAttachmentsMixed resolves a file:// image and a CDN image in order,
-// passing through the first and downloading the second.
 func TestResolveAttachmentsMixed(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("CDNPNG"))
@@ -175,9 +150,6 @@ func TestResolveAttachmentsMixed(t *testing.T) {
 	}
 }
 
-// TestResolveAttachmentsOffAllowlistCDNSkipped confirms a CDN image whose host is
-// not allow-listed is skipped (the terminal path, which supplies no hosts, thus
-// never downloads).
 func TestResolveAttachmentsOffAllowlistCDNSkipped(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("PNG"))

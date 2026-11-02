@@ -53,14 +53,8 @@ func (o *PluginOps) Findings(ctx context.Context, module, version string) []stri
 // Apply saves the composition, then runs the change. It never restores on its
 // own: the caller owns that decision and calls Restore for it.
 func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (string, error) {
-	// Drop what the previous Apply saved before anything else: a Restore may only
-	// ever undo the change that just failed. Carrying an older snapshot forward
-	// would let a pin that failed to write its file roll back a version change
-	// that had already succeeded.
 	o.saved = nil
 
-	// A pin changes no code, so there is nothing to compile, nothing to install
-	// and nothing to save.
 	if action == "pin" || action == "unpin" {
 		return "", pinModule(o.dir, module, action == "pin")
 	}
@@ -101,9 +95,6 @@ func (o *PluginOps) Restore() error {
 	return restoreComposition(o.dir, o.saved)
 }
 
-// run executes the commands in order, accumulating their output so a failure is
-// reported in the toolchain's own words. Nothing is written to the process's own
-// streams: the caller is drawing a screen on them.
 func (o *PluginOps) run(ctx context.Context, cmds [][]string) (string, error) {
 	var log strings.Builder
 	for _, c := range cmds {

@@ -33,12 +33,12 @@ func TestLoadEnvFile(t *testing.T) {
 	}
 	cases := map[string]string{
 		"HERRSCHER_TEST_TOKEN":     "abc.def-ghi",
-		"HERRSCHER_TEST_EXPORTED":  "fromfile", // leading `export ` stripped
-		"HERRSCHER_TEST_TABEXPORT": "tabbed",   // `export\t` (tab) stripped too
-		"HERRSCHER_TEST_QUOTED":    "a b c",    // surrounding quotes stripped, space preserved
-		"HERRSCHER_TEST_EQUALS":    "k=v=w",    // only the first '=' splits
-		"HERRSCHER_TEST_SPACED":    "trimmed",  // key and value trimmed
-		"HERRSCHER_TEST_COMMENTED": "",         // commented line ignored
+		"HERRSCHER_TEST_EXPORTED":  "fromfile",
+		"HERRSCHER_TEST_TABEXPORT": "tabbed",
+		"HERRSCHER_TEST_QUOTED":    "a b c",
+		"HERRSCHER_TEST_EQUALS":    "k=v=w",
+		"HERRSCHER_TEST_SPACED":    "trimmed",
+		"HERRSCHER_TEST_COMMENTED": "",
 	}
 	for k, want := range cases {
 		if got := os.Getenv(k); got != want {

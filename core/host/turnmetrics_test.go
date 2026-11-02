@@ -8,9 +8,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 )
 
-// TestTurnMetricsCountStartCompleteAbandon drives the turn seam through a
-// completed turn (reply{done}) and an abandoned one (hangup) and asserts the
-// counters move accordingly.
 func TestTurnMetricsCountStartCompleteAbandon(t *testing.T) {
 	a := &fanRecorder{}
 	toBridge := make(chan contracts.Event, 4)
@@ -19,11 +16,9 @@ func TestTurnMetricsCountStartCompleteAbandon(t *testing.T) {
 	m := metrics.NewRegistry()
 	d.metrics = m
 
-	// A turn that completes: the bridge emits reply{done}.
 	fromBridge <- contracts.Event{T: "reply", Text: "ok", Done: true}
 	d.awaitTurn(context.Background(), tokenGuard{})
 
-	// A turn that is abandoned: the bridge connection hangs up mid-turn.
 	d.hangup <- struct{}{}
 	d.awaitTurn(context.Background(), tokenGuard{})
 

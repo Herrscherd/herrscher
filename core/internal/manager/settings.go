@@ -8,9 +8,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// setHomeRun points the daemon at the category/forum that holds session
-// channels. The channel kind is resolved through the gateway so an invalid
-// target (a plain text channel) is rejected before it is persisted.
 func (h *Handler) setHomeRun(ctx context.Context, in contracts.Input) (string, error) {
 	id, ok := in.Lookup("channel")
 	if !ok || id == "" {
@@ -29,7 +26,6 @@ func (h *Handler) setHomeRun(ctx context.Context, in contracts.Input) (string, e
 	return fmt.Sprintf("🏠 Home set to <#%s> (%s).", id, kind), nil
 }
 
-// setSourceRun records the source checkout `/service update` builds from.
 func (h *Handler) setSourceRun(_ context.Context, in contracts.Input) (string, error) {
 	path, ok := in.Lookup("path")
 	if !ok || path == "" {

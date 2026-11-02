@@ -10,16 +10,12 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// budgetedTurn is one driver mid-turn: both directions of its bridge connection
-// plus the events it fanned out, guarded by mu (the driver fans from its own
-// goroutine while the test reads).
 type budgetedTurn struct {
 	toBridge, fromBridge chan contracts.Event
 	mu                   sync.Mutex
 	tapped               []contracts.Event
 }
 
-// sawStatus reports whether any fanned status event contains want.
 func (b *budgetedTurn) sawStatus(want string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -31,13 +27,6 @@ func (b *budgetedTurn) sawStatus(want string) bool {
 	return false
 }
 
-// awaitStatus waits for a fanned status containing want.
-//
-// The interrupt frame and the status are two independent deliveries, and the
-// driver cuts the turn before it explains why — spend stops first, on purpose.
-// Reading the interrupt off toBridge therefore proves nothing about the status
-// yet, and asserting on it in the same breath is a race the test loses under
-// load rather than a defect it catches.
 func (b *budgetedTurn) awaitStatus(want string) bool {
 	deadline := time.Now().Add(time.Second)
 	for !b.sawStatus(want) {
@@ -49,9 +38,6 @@ func (b *budgetedTurn) awaitStatus(want string) bool {
 	return true
 }
 
-// startBudgetedTurn wires a driver whose gate reports the given token headroom,
-// feeds it one message, and returns once the input frame has reached the bridge —
-// i.e. once the turn is open and mid-turn events will be watched.
 func startBudgetedTurn(t *testing.T, headroom uint64) *budgetedTurn {
 	t.Helper()
 	a := &fanRecorder{}
@@ -83,15 +69,9 @@ func startBudgetedTurn(t *testing.T, headroom uint64) *budgetedTurn {
 	return b
 }
 
-// TestRunawayTurnInterruptedOnTokenCap proves the guardrail cuts a turn the
-// moment its live token counter reaches the headroom the gate reported at turn
-// start: an interrupt frame goes to the bridge and the subscriber is told why.
-// Without it a single turn could spend arbitrarily far past a cap that is only
-// checked once the turn is already over.
 func TestRunawayTurnInterruptedOnTokenCap(t *testing.T) {
 	b := startBudgetedTurn(t, 100)
 
-	// 80 out + 40 in = 120, past the 100-token headroom.
 	b.fromBridge <- contracts.Event{T: "chunk", Text: "thinking hard", Tokens: 80, TokensIn: 40}
 
 	deadline := time.After(time.Second)
@@ -110,9 +90,6 @@ func TestRunawayTurnInterruptedOnTokenCap(t *testing.T) {
 	}
 }
 
-// TestBudgetedTurnUnderHeadroomRunsOn is the regression guard: a turn whose
-// token counter stays under the headroom is left alone, and the guard does not
-// fire on events that carry no usage at all.
 func TestBudgetedTurnUnderHeadroomRunsOn(t *testing.T) {
 	b := startBudgetedTurn(t, 100)
 
@@ -127,9 +104,6 @@ func TestBudgetedTurnUnderHeadroomRunsOn(t *testing.T) {
 	}
 }
 
-// TestRunawayTurnInterruptedOnce proves a turn that keeps streaming past the cap
-// is interrupted a single time: the interrupt is out-of-band and repeating it
-// every chunk would flood the bridge and the subscriber's view.
 func TestRunawayTurnInterruptedOnce(t *testing.T) {
 	b := startBudgetedTurn(t, 100)
 

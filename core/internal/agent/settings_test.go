@@ -60,9 +60,6 @@ func TestInjectApprovalHookRefusesBrokenSettings(t *testing.T) {
 	}
 }
 
-// A `hooks` or `PreToolUse` of the wrong shape is somebody's configuration we
-// do not understand. Dropping it would throw away hooks an operator wrote, and
-// say nothing; refusing stops the session before it starts, with the file named.
 func TestInjectApprovalHookRefusesHooksOfTheWrongType(t *testing.T) {
 	for _, in := range []string{
 		`{"hooks":"none"}`,
@@ -74,8 +71,6 @@ func TestInjectApprovalHookRefusesHooksOfTheWrongType(t *testing.T) {
 			t.Fatalf("injectApprovalHook(%s) rewrote settings it did not understand", in)
 		}
 	}
-	// A key that is absent, or explicitly null, means nothing was configured:
-	// that is not a shape we fail to understand, and it must still take a hook.
 	for _, in := range []string{`{"hooks":null}`, `{"hooks":{"PreToolUse":null}}`} {
 		out, err := injectApprovalHook([]byte(in), "/bin/h")
 		if err != nil {
@@ -91,9 +86,6 @@ func TestInjectApprovalHookRefusesHooksOfTheWrongType(t *testing.T) {
 	}
 }
 
-// `null` parses fine and yields a nil document. Assigning into it used to panic,
-// which in a daemon with no recover() meant a hand-edited home could kill the
-// process on `session create`.
 func TestInjectApprovalHookTreatsNullSettingsAsEmpty(t *testing.T) {
 	for _, in := range []string{"null", " null\n", "{}"} {
 		out, err := injectApprovalHook([]byte(in), "/bin/h")
@@ -110,9 +102,6 @@ func TestInjectApprovalHookTreatsNullSettingsAsEmpty(t *testing.T) {
 	}
 }
 
-// os.Executable can return a path with a space in it, and a host's binary is
-// whatever the operator configured. The hook command goes through a shell, so an
-// unquoted path would break every tool call in the session.
 func TestInjectApprovalHookQuotesTheBinaryPath(t *testing.T) {
 	for bin, want := range map[string]string{
 		"/opt/my tools/herrscher": `'/opt/my tools/herrscher' approve hook`,
@@ -131,7 +120,6 @@ func TestInjectApprovalHookQuotesTheBinaryPath(t *testing.T) {
 	}
 }
 
-// writeHomeFiles lays down the three files MaterializeIntoAs reads.
 func writeHomeFiles(t *testing.T, home string) {
 	t.Helper()
 	settings, err := buildSettings("")
@@ -208,8 +196,6 @@ func TestMaterializeHookWritesLocalSettings(t *testing.T) {
 }
 
 func TestMaterializeHookPreservesExistingLocalSettings(t *testing.T) {
-	// The operator's own settings.local.json is merged into, never replaced:
-	// dropping their keys would throw away configuration and say nothing.
 	dir := t.TempDir()
 	claude := filepath.Join(dir, ".claude")
 	if err := os.MkdirAll(claude, 0o755); err != nil {
@@ -235,8 +221,6 @@ func TestMaterializeHookPreservesExistingLocalSettings(t *testing.T) {
 }
 
 func TestMaterializeHookNoBinIsNoOp(t *testing.T) {
-	// An empty binary means no hook rather than a hook that fails on every
-	// call; SelfBin already warns when it cannot name itself.
 	dir := t.TempDir()
 	if err := MaterializeHook(dir, ""); err != nil {
 		t.Fatalf("MaterializeHook: %v", err)
@@ -247,9 +231,6 @@ func TestMaterializeHookNoBinIsNoOp(t *testing.T) {
 }
 
 func TestMaterializeHookTwiceLeavesOneHook(t *testing.T) {
-	// A reused worktree already carries the hook from its first session. A
-	// second entry would ask the operator twice for every single tool call, and
-	// the stale binary path is repaired rather than kept beside the new one.
 	dir := t.TempDir()
 	if err := MaterializeHook(dir, "/old/herrscher"); err != nil {
 		t.Fatalf("first MaterializeHook: %v", err)
@@ -270,8 +251,6 @@ func TestMaterializeHookTwiceLeavesOneHook(t *testing.T) {
 }
 
 func TestInjectApprovalHookKeepsForeignPreToolUseHooks(t *testing.T) {
-	// Only a command ending in this daemon's own verb is dropped: a PreToolUse
-	// hook somebody else wrote is configuration we have no business rewriting.
 	prior := []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/usr/bin/lint"}]}]}}`)
 	out, err := injectApprovalHook(prior, "/bin/herrscher")
 	if err != nil {

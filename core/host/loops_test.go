@@ -50,8 +50,6 @@ func TestStatusContent(t *testing.T) {
 	}
 }
 
-// TestStatusContentSurfacesMetrics asserts the periodic status embed carries the
-// runtime turn and restart counters from the metrics snapshot.
 func TestStatusContentSurfacesMetrics(t *testing.T) {
 	snap := health.HealthSnapshot{
 		Online: true,

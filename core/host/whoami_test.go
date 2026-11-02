@@ -10,9 +10,6 @@ import (
 
 func TestWhoamiReportNamesEveryKeyAndItsSource(t *testing.T) {
 	got := whoamiReport(identity.Identity{Name: "Jane Doe", Email: "jane@example.com", GitHub: "janedoe"})
-	// The value column is sized to the widest value, so the report is asserted
-	// line by line rather than as one golden block: what matters is that each key
-	// carries its value and names where it came from.
 	for _, want := range []string{
 		"name    Jane Doe         (git config user.name)",
 		"email   jane@example.com (git config user.email)",
@@ -24,12 +21,6 @@ func TestWhoamiReportNamesEveryKeyAndItsSource(t *testing.T) {
 	}
 }
 
-// An unset key is shown as unset rather than omitted: the operator ran this to
-// find out what herrscher believes, and "github is not configured" is an answer.
-//
-// Asserted without the column padding: "—" is one rune of three bytes, and a
-// test that counted the spaces %-19s emits would be asserting Go's padding
-// rules rather than the verb's behaviour.
 func TestWhoamiReportShowsAnUnsetKey(t *testing.T) {
 	got := whoamiReport(identity.Identity{Name: "Jane Doe"})
 	if !strings.Contains(got, "(git config github.user, unset)") {
@@ -40,8 +31,6 @@ func TestWhoamiReportShowsAnUnsetKey(t *testing.T) {
 	}
 }
 
-// Nothing configured is a silence, not a failure — the verb says so, and says
-// how to fix it, and the caller exits 0.
 func TestWhoamiReportOnSilence(t *testing.T) {
 	got := whoamiReport(identity.Identity{})
 	if !strings.Contains(got, "git has nothing to say about you here") {
@@ -52,9 +41,6 @@ func TestWhoamiReportOnSilence(t *testing.T) {
 	}
 }
 
-// The column is measured in runes, not bytes: an accented name is exactly what
-// this repository's own operator has, and %-*s would pad it short and push the
-// annotation out of line.
 func TestWhoamiReportAlignsAnAccentedName(t *testing.T) {
 	got := whoamiReport(identity.Identity{Name: "Léo Sauvage", Email: "leo@example.com", GitHub: "leo"})
 	var col int

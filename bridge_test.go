@@ -11,9 +11,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-// fakeExtractor is a no-op Extractor used only to register a name so the
-// orchestrator builds its learning variant; the learning *behaviour* is the
-// orchestrator's concern (tested upstream), B2 only wires the config through.
 type fakeExtractor struct{}
 
 func (fakeExtractor) Extract(ctx context.Context, journal, transcript string) ([]orchestrator.Candidate, error) {
@@ -37,12 +34,6 @@ func TestBuildOrchestratorCuratorWhenNoExtractor(t *testing.T) {
 	}
 }
 
-// TestBackendFlagsCarryModelID pins the consuming half of the model-routing
-// path: the supervisor now spawns `herrscher bridge --model <catalog id>`, and
-// that id must land in host.BackendRequest.ModelID — the only field that makes
-// BuildBackendFor resolve the route and inject gateway credentials. With it
-// dropped (or the flag renamed), a gateway session spawns bare, on the
-// machine's own vendor login.
 func TestBackendFlagsCarryModelID(t *testing.T) {
 	fs := flag.NewFlagSet("bridge", flag.ContinueOnError)
 	f := declareBackendFlags(fs)
@@ -67,8 +58,6 @@ func TestBackendFlagsCarryModelID(t *testing.T) {
 	}
 }
 
-// remoteStub is a resolver that always yields an out-of-process proxy, i.e. a
-// daemon started with HERRSCHER_REMOTE=backend.
 type remoteStub struct{}
 
 func (remoteStub) Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, error) {
@@ -82,9 +71,6 @@ func (stubBackend) Respond(context.Context, contracts.Prompt, func(contracts.Bac
 }
 func (stubBackend) Close() error { return nil }
 
-// A remote proxy cannot be handed a spawn environment, so it cannot carry a
-// gateway model's credentials. That combination must fail loudly rather than
-// spawn on the machine's own login.
 func TestNewBackendForRefusesModelWithRemoteBackend(t *testing.T) {
 	_, err := newBackendFor(context.Background(), remoteStub{}, host.BackendRequest{
 		Cmd: "claude", ModelID: "gw-claude-opus-5",
@@ -97,7 +83,6 @@ func TestNewBackendForRefusesModelWithRemoteBackend(t *testing.T) {
 	}
 }
 
-// Non-regression: no model named, the remote proxy is still used.
 func TestNewBackendForKeepsRemoteBackendWithoutModel(t *testing.T) {
 	be, err := newBackendFor(context.Background(), remoteStub{}, host.BackendRequest{Cmd: "claude"})
 	if err != nil {

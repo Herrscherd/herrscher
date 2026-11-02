@@ -63,13 +63,6 @@ func Run(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestr
 	if o.HubSocket == "" {
 		return errors.New("bridge requires --hub-socket (pure-runner mode)")
 	}
-	// G5: an orchestrator may expose an optional inactivity-curator loop via a
-	// Start(ctx) method (the Learner does; the plain Curator does not). Discover
-	// it by type assertion — the same optional-capability pattern used for
-	// Provisioner/Locator/Deleter — so contracts.Orchestrator stays unchanged.
-	// The loop is a no-op unless the idle trigger is configured, and it runs on
-	// its own goroutine bound to ctx (the bridge process's root context), so it
-	// is torn down automatically when the session subprocess exits.
 	if starter, ok := orch.(interface{ Start(context.Context) }); ok {
 		starter.Start(ctx)
 	}
@@ -89,8 +82,6 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 
 	select {
 	case ev := <-in:
-		// No affordances on the seed path: it is one turn with no supervising
-		// daemon behind it, which is also why it carries no delegation roster.
 		runOneTurn(ctx, channelSink{ctx: ctx, out: out}, resp, orch, ev, nil, newSkillEngine(resp), affordances{}, nil)
 		return nil
 	case <-ctx.Done():

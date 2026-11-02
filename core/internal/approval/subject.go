@@ -1,9 +1,5 @@
 package approval
 
-// subjectKeys names, per tool, the field of a tool call that a rule's pattern
-// matches. A tool absent from this table has an empty subject, so only an empty
-// pattern (or "*") can name it. That is deliberate: guessing a subject from an
-// unknown tool's arguments would make a rule mean something nobody wrote.
 var subjectKeys = map[string][]string{
 	"Bash":         {"command"},
 	"Edit":         {"file_path"},

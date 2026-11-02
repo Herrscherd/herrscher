@@ -10,31 +10,18 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-// catalogFn resolves the models offered under a policy. Injected so the wizard
-// can be driven in a test without a compiled-in backend.
 type catalogFn func(contracts.RoutePolicy) ([]host.CatalogEntry, error)
 
-// liveCatalog reads the models declared by the backends compiled into THIS
-// binary. In config-only mode that is exactly the set the daemon will serve. In
-// compose mode it is the set of the stack being REPLACED, which is why the
-// caller skips the model question there rather than offering a list that the
-// rebuild may invalidate.
 func liveCatalog(p contracts.RoutePolicy) ([]host.CatalogEntry, error) {
 	return host.Catalog(contracts.Default.Backends(), p)
 }
 
-// routeCurrent is what is already configured, so every question can offer the
-// operator's own value as its default. The gateway pair is a bool, never the
-// value: a configured token is acknowledged, never re-displayed.
 type routeCurrent struct {
 	policy   contracts.RoutePolicy
 	model    string
 	haveCred bool
 }
 
-// currentRoute reads what this process was started with. The gateway pair has
-// already been captured-and-unset by then (see host.CaptureGatewayCreds), so it
-// is read back from the capture rather than from the environment.
 func currentRoute() routeCurrent {
 	return routeCurrent{
 		policy:   host.ResolvePolicy(os.Getenv),
@@ -43,14 +30,6 @@ func currentRoute() routeCurrent {
 	}
 }
 
-// routeStep asks where agent turns run: the route policy, the gateway
-// credentials it requires, and the model a session gets when it names none. It
-// returns the env keys to persist. The gateway pair is absent from that map when
-// the operator kept an already-configured one, so it is never rewritten.
-//
-// askModel is false in compose mode, where the plugin stack is about to be
-// rewritten and rebuilt: the models this binary can enumerate belong to the old
-// stack, so offering them would invite a choice that the rebuild invalidates.
 func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askModel bool) (map[string]string, error) {
 	out := map[string]string{}
 
@@ -84,9 +63,6 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 	if err != nil {
 		return nil, err
 	}
-	// An empty value is written on purpose rather than skipped: it is how an
-	// operator CLEARS a default they previously set. writeSecretsTo upserts by
-	// key, so an absent key would silently keep the old one.
 	out[host.EnvDefaultModel] = model
 	if model == "" && policy == contracts.PolicyGatewayOnly {
 		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.red, "with no default model, every `session create` must pass --model, which gateway-only requires"))
@@ -94,8 +70,6 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 	return out, nil
 }
 
-// policyChoices are the two builds, in menu order: the internal one that may
-// use this machine's own vendor logins, and the public one that may not.
 var policyChoices = []struct {
 	policy contracts.RoutePolicy
 	label  string
@@ -105,13 +79,9 @@ var policyChoices = []struct {
 	{contracts.PolicyGatewayOnly, "gateway-only", "the product gateway only (public build)"},
 }
 
-// choosePolicy reads the route policy: empty keeps the current one, otherwise a
-// 1-based index or the policy name itself.
 func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contracts.RoutePolicy, error) {
 	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "route policy"))
 	for i, c := range policyChoices {
-		// Pad the plain label, then colour it: an ANSI wrap adds invisible bytes
-		// that %-14s would count, shifting every following column.
 		name, tag := fmt.Sprintf("%-14s", c.label), fmt.Sprintf("%-8s", "")
 		if c.policy == cur {
 			name = s.wrap(s.green, name)
@@ -138,11 +108,6 @@ func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contrac
 	return "", fmt.Errorf("unknown route policy %q", ans)
 }
 
-// askGatewayCreds reads the gateway URL and token. Both or neither: a base URL
-// without a token would point a vendor CLI at the gateway while it keeps
-// authenticating as the machine's own logged-in account, which is the one shape
-// the gateway-only policy exists to forbid. When a complete pair is already
-// configured, empty answers keep it.
 func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, error) {
 	note := "both are required"
 	if have {
@@ -168,8 +133,6 @@ func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, e
 	return map[string]string{host.EnvGatewayURL: url, host.EnvGatewayToken: token}, nil
 }
 
-// chooseDefaultModel offers the models the policy allows and returns the one a
-// session gets when it names none. The last entry clears the default.
 func chooseDefaultModel(s style, in *bufio.Reader, entries []host.CatalogEntry, cur string) (string, error) {
 	if len(entries) == 0 {
 		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "default model: no compiled backend offers one under this policy"))
@@ -177,8 +140,6 @@ func chooseDefaultModel(s style, in *bufio.Reader, entries []host.CatalogEntry, 
 	}
 	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "default model"))
 	for i, e := range entries {
-		// Colour the id alone: wrapping the id AND the already-dimmed label in one
-		// green span would end at the label's own reset, colouring half a row.
 		id, tag := fmt.Sprintf("%-24s", e.ID), ""
 		if e.ID == cur {
 			id, tag = s.wrap(s.green, id), s.wrap(s.dim, "  current")

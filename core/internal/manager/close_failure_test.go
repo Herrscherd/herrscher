@@ -8,12 +8,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// Closing a session stops its bridge first — it has to, the worktree cannot be
-// removed from under a running process. But when the removal then fails the
-// session survives, and nothing else in the daemon ever restarts a bridge: it
-// would stay listed, keep its control socket, and swallow every message sent to
-// it until the daemon was restarted. A refused close must leave the session
-// exactly as it found it.
 func TestARefusedCloseLeavesTheSessionAnswering(t *testing.T) {
 	h, _, sup, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -31,8 +25,6 @@ func TestARefusedCloseLeavesTheSessionAnswering(t *testing.T) {
 	}
 }
 
-// Forcing through the same dirty worktree closes for real, and does not leave a
-// bridge behind for a session that is gone.
 func TestAForcedCloseStillRemovesEverything(t *testing.T) {
 	h, _, sup, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})

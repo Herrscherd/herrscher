@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// hostDir lays out a minimal host module: the managed manifest plus the two go
-// files apply saves around a change.
 func hostDir(t *testing.T, modules ...string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -48,8 +46,6 @@ func TestManageVersionRemoveKeepsTheArgumentWhole(t *testing.T) {
 	if mod, ver := moduleArg("add", "mod/a@v1.2.3"); mod != "mod/a" || ver != "v1.2.3" {
 		t.Fatalf("add = (%q, %q), want the version split off", mod, ver)
 	}
-	// A remove that split the version off would find no such module, report no
-	// change, and still run the build and announce a removal that never happened.
 	if mod, ver := moduleArg("remove", "mod/a@v1.2.3"); mod != "mod/a@v1.2.3" || ver != "" {
 		t.Fatalf("remove = (%q, %q), want the argument whole", mod, ver)
 	}

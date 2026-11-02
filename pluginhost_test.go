@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-// TestRunPluginHostFailsClosedOnHalfTLS proves the plugin-host refuses to start
-// on a half-configured TLS env — every partial permutation — rather than
-// silently serving plaintext. Validation runs before any plugin is built, so the
-// error is the TLS one regardless of plugin state.
 func TestRunPluginHostFailsClosedOnHalfTLS(t *testing.T) {
 	cases := []struct {
 		name          string

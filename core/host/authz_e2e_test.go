@@ -12,12 +12,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther is the whole claim, with
-// nothing faked: two real listeners over one real registry, the same bytes sent
-// to each. Every other test checks a piece of this in isolation; this one
-// proves the pieces still line up once they are wired together, and that
-// identity really does come from the listener rather than from anything the
-// message could have said.
 func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 	st, err := state.LoadState(filepath.Join(t.TempDir(), "state.json"))
 	if err != nil {
@@ -60,8 +54,6 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 		t.Fatalf("refusal %q must name the verb", err)
 	}
 
-	// And the rule the operator added is the only one there: the refusal did
-	// not half-run.
 	if got := len(st.ApprovalRules()); got != 1 {
 		t.Fatalf("%d rules stored, want 1", got)
 	}

@@ -19,12 +19,12 @@ type sentMsg struct{ channelID, content string }
 
 type fakeChannelAdmin struct {
 	created    []string
-	parents    []string // parent id each CreateUnder/ForumPost was asked for
+	parents    []string
 	archived   []string
 	homeType   string
-	kinds      map[string]string // per-id kind; falls back to homeType
+	kinds      map[string]string
 	kindErr    error
-	idPrefix   string // channel-id prefix for CreateUnder; "" defaults to "new-"
+	idPrefix   string
 	sent       []sentMsg
 	sendErr    error
 	archiveErr error
@@ -72,17 +72,12 @@ func (f *fakeChannelAdmin) Send(ctx context.Context, channelID, content string) 
 	return nil
 }
 
-// ChannelRef renders a sentinel so tests can prove the manager delegates the
-// channel-reference syntax to the gateway instead of switching on home type.
 func (f *fakeChannelAdmin) ChannelRef(id string) string { return "REF(" + id + ")" }
 
 func TestChannelAdminInterfaceHasSend(t *testing.T) {
 	var _ channelAdmin = (*fakeChannelAdmin)(nil)
 }
 
-// The manager must render channel references through the gateway's own
-// ChannelRef (OCP: a new platform adds rendering without editing core), never
-// by switching on the home type string.
 func TestSessionListUsesGatewayChannelRef(t *testing.T) {
 	h, d, _, _, _, st := newTestHandler(t, "category")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -116,21 +111,14 @@ func TestSessionListJSON(t *testing.T) {
 	if len(got) != 2 || got[1]["parent"] != "alpha" {
 		t.Fatalf("unexpected: %v", got)
 	}
-	// id is emitted and equals the (slug) name, so a consumer can match by id.
 	if got[0]["id"] != "alpha" || got[1]["id"] != "beta" {
 		t.Fatalf("id must equal name: %v", got)
 	}
-	// A root session omits parent entirely (omitempty), so it decodes to null/None
-	// rather than an empty-string parent.
 	if _, present := got[0]["parent"]; present {
 		t.Fatalf("root session must omit parent, got: %v", got[0])
 	}
 }
 
-// TestSessionListAggregatesUsage proves session list --json rolls the transcript
-// up into a per-session usage aggregate (turns, tokens, cache, cost, start) and
-// surfaces the real objective (last user turn) as task, so the app renders live
-// activity instead of placeholder dashes.
 func TestSessionListAggregatesUsage(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{{Name: "alpha", Agent: "roblox"}}
@@ -255,9 +243,9 @@ func TestSessionCreateUsesGatewayChannelRef(t *testing.T) {
 
 type fakeSup struct {
 	started, stopped []string
-	startedCmds      []string // Cmd of each session passed to Start, in order
+	startedCmds      []string
 	restarted        []state.Session
-	stopErrs         []error // scripted errors, popped one per Stop call (nil-padded)
+	stopErrs         []error
 }
 
 func (f *fakeSup) Start(s state.Session) {
@@ -265,8 +253,6 @@ func (f *fakeSup) Start(s state.Session) {
 	f.startedCmds = append(f.startedCmds, s.Cmd)
 }
 
-// Stop is where a scripted failure goes, because Stop is the only half of a
-// restart that can fail: Start hands a goroutine to the run loop and returns.
 func (f *fakeSup) Stop(name string) error {
 	f.stopped = append(f.stopped, name)
 	if len(f.stopErrs) > 0 {
@@ -287,13 +273,13 @@ func (f *fakeSup) Restart(s state.Session) error {
 }
 
 type fakeWT struct {
-	createdRepos []string // repo arg captured per Create
+	createdRepos []string
 	created      []string
 	removed      []string
-	path         string // "" → simulate shared fallback
-	removeErr    error  // simulate dirty worktree
-	createdBase  string // last base passed to Create
-	preExisting  bool   // the worktree was already on disk, so Create reuses it
+	path         string
+	removeErr    error
+	createdBase  string
+	preExisting  bool
 	scratched    []string
 	scratchErr   error
 	removedScrap []string
@@ -343,7 +329,7 @@ func (f *fakeWT) RemoveScratch(root, name string) error {
 type fakeForge struct {
 	cloneDir string
 	cloneErr error
-	cloned   []string // specs passed to Clone
+	cloned   []string
 }
 
 func (f *fakeForge) Clone(ctx context.Context, spec, workspace string) (string, error) {
@@ -358,7 +344,7 @@ type fakeUpdater struct {
 	version    string
 	buildErr   error
 	restartErr error
-	builds     []bool // pull flag per Build call
+	builds     []bool
 	restarts   int
 }
 
@@ -386,7 +372,6 @@ func newTestHandlerWithUpdater(t *testing.T, homeType string) (*Handler, *fakeUp
 	return NewHandler(d, sup, wt, fg, up, agents, st, "claude", t.TempDir(), []string{"chat"}), up, d, sup, wt, fg, st
 }
 
-// args builds a command Input from name/value pairs (flags carry "true").
 func args(kv ...string) contracts.Input {
 	m := map[string]string{}
 	for i := 0; i+1 < len(kv); i += 2 {
@@ -414,7 +399,6 @@ func TestSessionCreateText(t *testing.T) {
 	if !ok || sess.Worktree != "/wt/x" {
 		t.Fatalf("session not persisted with worktree: %+v", sess)
 	}
-	// No backend option given → defaults to the persistent stream-json backend.
 	if sess.Backend != "stream" {
 		t.Fatalf("expected default backend stream, got %q", sess.Backend)
 	}
@@ -431,10 +415,6 @@ func TestSessionCreatePassesBaseToWorktree(t *testing.T) {
 	}
 }
 
-// In cwd mode (no workspace root set) the session runs in the checkout root and
-// the project is a *logical label* — not a workspace sub-dir. The daemon still
-// passes --project (Neublox filters workspace snapshots by it), so herrscher must
-// persist and emit that label without moving the worktree into a project subdir.
 func TestSessionCreateCapturesProjectLabelInCwdMode(t *testing.T) {
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -448,7 +428,6 @@ func TestSessionCreateCapturesProjectLabelInCwdMode(t *testing.T) {
 	if sess.Project != "aaa" {
 		t.Fatalf("project label not captured in cwd mode: %q", sess.Project)
 	}
-	// Worktree still resolved against the checkout root (repo arg ""), never ws/project.
 	if len(wt.createdRepos) != 1 || wt.createdRepos[0] != "" {
 		t.Fatalf("worktree repo must stay cwd (empty) in cwd mode: %+v", wt.createdRepos)
 	}
@@ -484,7 +463,6 @@ func TestSessionCreateShared(t *testing.T) {
 	}
 }
 
-// Names that slugify to nothing usable (no letters/digits) are rejected outright.
 func TestSessionCreateRejectsUnsafeName(t *testing.T) {
 	for _, name := range []string{"..", "/", "---", "   ", "🙂", ""} {
 		h, d, _, wt, _, st := newTestHandler(t, "")
@@ -501,7 +479,6 @@ func TestSessionCreateRejectsUnsafeName(t *testing.T) {
 	}
 }
 
-// Unsafe-looking but non-empty names are slugified into a safe slug.
 func TestSessionCreateSlugifiesName(t *testing.T) {
 	cases := map[string]string{
 		"../escape":   "escape",
@@ -658,9 +635,6 @@ func TestSessionBannerEmptyRepo(t *testing.T) {
 	}
 }
 
-// The banner used to print only the configured command, which already carries a
-// --model of its own; a session created with an explicit model then read back the
-// wrong model name. The requested model must appear.
 func TestSessionBannerNamesTheRequestedModel(t *testing.T) {
 	got := sessionBanner("/home/me/proj", "demo", "", "session/demo", "claude --model claude-opus-4-8", "claude-opus-5", true)
 	if !strings.Contains(got, "Model: `claude-opus-5`") {
@@ -668,9 +642,6 @@ func TestSessionBannerNamesTheRequestedModel(t *testing.T) {
 	}
 }
 
-// `--under` is how a caller says "here": create the conversation in the container
-// this work belongs to instead of the daemon's home, which is where a session
-// opened from another server used to surface.
 func TestSessionCreateUnderOverridesTheHome(t *testing.T) {
 	h, d, _, _, _, st := newTestHandler(t, "category")
 	_ = st.SetHome(state.HomeRef{ID: "home-cat", Type: "category"})
@@ -703,8 +674,6 @@ func TestSessionCreateUnderAForum(t *testing.T) {
 	}
 }
 
-// A plain text channel is a conversation, not a container: creating inside it is
-// not what the caller meant, and the error must point at the verb that is.
 func TestSessionCreateUnderRejectsAPlainChannel(t *testing.T) {
 	h, d, _, _, _, st := newTestHandler(t, "category")
 	_ = st.SetHome(state.HomeRef{ID: "home-cat", Type: "category"})
@@ -722,9 +691,6 @@ func TestSessionCreateUnderRejectsAPlainChannel(t *testing.T) {
 	}
 }
 
-// A terminal-only session has no gateway container to live under, and the
-// terminal admin answers "text" for every id — so without an explicit refusal
-// the operator would be told their category is a plain channel.
 func TestSessionCreateRefusesUnderWithTerminalOnly(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	_ = st.SetHome(state.HomeRef{ID: "home-cat", Type: "category"})
@@ -1016,8 +982,6 @@ func TestSessionCreateUsesWorkspaceProject(t *testing.T) {
 }
 
 func TestSessionCreateNoProjectRootsAtWorkspaceRoot(t *testing.T) {
-	// pwd-relative rule: no --project with a workspace root is no longer an error;
-	// the session runs rooted at the workspace root (worktree carved from /ws).
 	h, _, _, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
 	_ = st.SetWorkspace("/ws")
@@ -1044,7 +1008,6 @@ func TestSessionCreateRejectsProjectTraversal(t *testing.T) {
 }
 
 func TestSessionCreateLegacyNoWorkspace(t *testing.T) {
-	// No workspace set → legacy behaviour: repo is "" (WorkspaceRoot), still works.
 	h, d, _, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
@@ -1238,7 +1201,6 @@ func TestServiceUpdateBuildFailsNoRestart(t *testing.T) {
 
 func TestSessionCreateAdoptsAnExistingChannel(t *testing.T) {
 	h, d, sup, _, _, st := newTestHandler(t, "")
-	// No home configured at all: adopting a conversation must not need one.
 	out, err := h.sessionCreateRun(context.Background(), args("name", "ch-123", "channel_id", "123", "shared", "true"))
 	if err != nil {
 		t.Fatalf("create with channel_id failed: %v", err)
@@ -1266,10 +1228,6 @@ func TestSessionCreateWithoutChannelIDStillNeedsAHome(t *testing.T) {
 	}
 }
 
-// Putting a channel away can mean deleting it. A session started in a
-// conversation that already existed is a guest there: the channel belongs to the
-// people who were already talking in it, and closing the session must leave it
-// standing.
 func TestClosingAGuestSessionLeavesTheChannelAlone(t *testing.T) {
 	h, d, sup, wt, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -1282,7 +1240,6 @@ func TestClosingAGuestSessionLeavesTheChannelAlone(t *testing.T) {
 	if len(d.archived) != 0 {
 		t.Fatalf("archived %v, want the operator's own channel untouched", d.archived)
 	}
-	// Everything else still happened.
 	if len(sup.stopped) != 1 || len(wt.removed) != 1 {
 		t.Fatalf("stopped=%v removed=%v, want the session actually closed", sup.stopped, wt.removed)
 	}
@@ -1294,8 +1251,6 @@ func TestClosingAGuestSessionLeavesTheChannelAlone(t *testing.T) {
 	}
 }
 
-// A row written before the flag existed counts as a guest: a channel left behind
-// is a nuisance, a channel deleted is not recoverable.
 func TestASessionFromBeforeTheFlagIsTreatedAsAGuest(t *testing.T) {
 	h, d, _, _, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -1309,9 +1264,6 @@ func TestASessionFromBeforeTheFlagIsTreatedAsAGuest(t *testing.T) {
 	}
 }
 
-// The bridge is stopped and the worktree is gone by the time the channel is
-// tidied. Refusing to finish there left a session that could never be closed —
-// a missing permission was enough to strand it for good.
 func TestAChannelThatCannotBeTidiedDoesNotStrandTheSession(t *testing.T) {
 	h, d, _, _, _, st := newTestHandler(t, "")
 	d.archiveErr = errors.New("archive channel: 403: Missing Permissions")
@@ -1325,13 +1277,11 @@ func TestAChannelThatCannotBeTidiedDoesNotStrandTheSession(t *testing.T) {
 	if _, ok := st.FindSession("demo"); ok {
 		t.Fatal("the session must be closed even when the channel could not be")
 	}
-	// Silence would leave an open channel nobody knows about.
 	if !strings.Contains(out, "Missing Permissions") {
 		t.Fatalf("out = %q, want the reason said out loud", out)
 	}
 }
 
-// A session that created its own channel still gets it tidied away.
 func TestASessionTidiesTheChannelItCreated(t *testing.T) {
 	h, d, _, _, _, st := newTestHandler(t, "")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
@@ -1345,8 +1295,6 @@ func TestASessionTidiesTheChannelItCreated(t *testing.T) {
 	}
 }
 
-// `session create` in a channel that already exists marks the session a guest;
-// creating its own channel marks it owner. The flag is what close reads.
 func TestCreateMarksWhoOwnsTheChannel(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})

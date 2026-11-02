@@ -11,7 +11,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// seedTranscript writes newline-delimited entries to partDir/transcripts/<name>.jsonl.
 func seedTranscript(t *testing.T, partDir, name string, entries []state.TranscriptEntry) {
 	t.Helper()
 	path := state.TranscriptPath(partDir, name)
@@ -70,9 +69,6 @@ func TestSessionLogRun_UnknownSessionIsEmptyArray(t *testing.T) {
 	}
 }
 
-// A crafted path-traversal name must never escape the transcripts dir: it has
-// no valid session slug, so the verb returns empty history without ever reading
-// a file outside partDir/transcripts.
 func TestSessionLogRun_TraversalNameIsEmpty(t *testing.T) {
 	h := &Handler{partDir: t.TempDir()}
 	out, err := h.sessionLogRun(context.Background(), contractsInputJSON("../../../etc/passwd"))

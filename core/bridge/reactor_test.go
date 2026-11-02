@@ -8,8 +8,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// reactingOrch is a minimal Orchestrator that also implements TurnReactor,
-// stripping a sentinel marker from the reply so the hub test can assert React ran.
 type reactingOrch struct{ reacted bool }
 
 func (*reactingOrch) Context(context.Context) string { return "" }
@@ -37,7 +35,6 @@ func TestHubCallsReactWhenOrchIsReactor(t *testing.T) {
 	}
 }
 
-// plainOrch implements only Orchestrator, not TurnReactor.
 type plainOrch struct{}
 
 func (plainOrch) Context(context.Context) string                          { return "" }

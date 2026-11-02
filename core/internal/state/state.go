@@ -15,31 +15,31 @@ import (
 // HomeRef points at the category or forum that holds session channels.
 type HomeRef struct {
 	ID   string `json:"id"`
-	Type string `json:"type"` // "category" | "forum"
+	Type string `json:"type"`
 }
 
 // Session is one bridged channel/post supervised by the daemon.
 type Session struct {
-	ID string `json:"id,omitempty"` // stable logical id, decoupled from Name and ChannelID
+	ID string `json:"id,omitempty"`
 	// Incarnation is an opaque identity for this specific persisted session
 	// object. Closing and recreating the same Name generates a different value.
 	Incarnation string `json:"incarnation,omitempty"`
 	Name        string `json:"name"`
 	ChannelID   string `json:"channelID"`
-	Type        string `json:"type"` // "text" | "forum"
+	Type        string `json:"type"`
 	Cmd         string `json:"cmd"`
-	Backend     string `json:"backend,omitempty"` // bridge backend ("" or "stream" = stream-json default; "oneshot" = per-message cmd)
-	Vendor      string `json:"vendor,omitempty"`  // agent backend vendor ("claude", "codex", "cursor")
+	Backend     string `json:"backend,omitempty"`
+	Vendor      string `json:"vendor,omitempty"`
 	// ModelID is the catalog identifier of the chosen model. Unlike Cmd, which is
 	// an opaque invocation string, it lets a resume look up the model's ROUTE —
 	// so we know whether gateway credentials need to be re-injected. Empty for
 	// sessions created before the catalog existed.
 	ModelID  string `json:"modelId,omitempty"`
-	Worktree string `json:"worktree,omitempty"` // abs path; empty for a shared session
+	Worktree string `json:"worktree,omitempty"`
 	Scratch  bool   `json:"scratch,omitempty"`
-	Dir      string `json:"dir,omitempty"`     // bridge working dir; empty = inherit launcher cwd (pwd fallback)
-	Project  string `json:"project,omitempty"` // workspace sub-dir the session started from
-	Agent    string `json:"agent,omitempty"`   // durable agent this session was provisioned from ("" = none)
+	Dir      string `json:"dir,omitempty"`
+	Project  string `json:"project,omitempty"`
+	Agent    string `json:"agent,omitempty"`
 	// Host names the place this session's process runs, as registered by
 	// `host add`. Empty means this machine, which is every session written
 	// before remote execution existed.
@@ -89,7 +89,7 @@ type Session struct {
 	// binding the host resolves from the gateways actually built (see IsLegacy).
 	Gateways []string `json:"gateways,omitempty"`
 
-	Participants []string `json:"participants,omitempty"` // observed authors (cache; journal is source of truth)
+	Participants []string `json:"participants,omitempty"`
 
 	// Parent names the lead session that delegated this one (result-back P3).
 	// Empty = no parent. The coordinator reads it to find the delivery target
@@ -127,9 +127,9 @@ type State struct {
 	mu        sync.Mutex `json:"-"`
 	path      string     `json:"-"`
 	Home      HomeRef    `json:"home"`
-	Repo      string     `json:"repo,omitempty"`      // legacy single-repo root; defaults to daemon cwd
-	Workspace string     `json:"workspace,omitempty"` // abs path to the workspace root; preferred over Repo
-	Source    string     `json:"source,omitempty"`    // abs path to the herrscher source checkout (for /service update)
+	Repo      string     `json:"repo,omitempty"`
+	Workspace string     `json:"workspace,omitempty"`
+	Source    string     `json:"source,omitempty"`
 	// Approvals is the daemon-wide rule set, stored rendered ("ask Bash(git
 	// push*)") rather than structured: it is what the operator typed, it reads
 	// back out of the file, and parsing is already the check that runs before a
@@ -139,8 +139,8 @@ type State struct {
 	// Empty is five minutes.
 	ApprovalTimeout string    `json:"approvalTimeout,omitempty"`
 	Sessions        []Session `json:"sessions"`
-	StatusMessageID string    `json:"statusMessageID,omitempty"` // cached id of the status embed
-	InstanceID      string    `json:"instanceID,omitempty"`      // per-daemon namespace for global resources; "" = legacy
+	StatusMessageID string    `json:"statusMessageID,omitempty"`
+	InstanceID      string    `json:"instanceID,omitempty"`
 	// Schedules holds the proactive schedules. They live here rather than in a
 	// store of their own because state.json is already rewritten on every turn
 	// (each reply folds its resume token back in): putting them here does not
@@ -227,9 +227,6 @@ func LoadState(path string) (*State, error) {
 	return s, nil
 }
 
-// newSessionID returns a stable id for a session. Name is already unique and
-// git-safe, so it seeds a readable id; a numeric disambiguator keeps ids stable
-// if a name is later reused.
 func newSessionID(name string, existing map[string]bool) string {
 	base := "s_" + name
 	id := base
@@ -248,8 +245,6 @@ func newSessionIncarnation(existing map[string]bool) string {
 	}
 }
 
-// ensureSessionIncarnationsLocked assigns a unique incarnation to every
-// session. The caller must hold s.mu.
 func (s *State) ensureSessionIncarnationsLocked() bool {
 	incarnations := map[string]bool{}
 	dirty := false
@@ -316,8 +311,6 @@ func (s *State) AddSession(sess Session) error {
 		}
 		sess.ID = newSessionID(sess.Name, seen)
 	}
-	// AddSession always creates a new persisted object. Never let a caller
-	// accidentally reuse the identity of a removed session with the same name.
 	sess.Incarnation = ""
 	s.Sessions = append(s.Sessions, sess)
 	return s.saveLocked()
@@ -669,8 +662,6 @@ func (s *State) RemoveRole(principal string) (bool, error) {
 	}
 	delete(s.Roles, principal)
 	if len(s.Roles) == 0 {
-		// nil rather than an empty map, so `roles` leaves state.json entirely
-		// and a revoked-to-empty table reads exactly like one never written.
 		s.Roles = nil
 	}
 	return true, s.saveLocked()

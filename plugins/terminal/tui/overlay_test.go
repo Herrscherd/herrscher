@@ -53,8 +53,6 @@ func TestFloatingListWithoutRowsIsEmpty(t *testing.T) {
 	}
 }
 
-// TestOverlayRowsFollowTheWindow: a list bounded at six rows on a forty-row
-// terminal is the bug the operator hit: thirty-five verbs, six of them visible.
 func TestOverlayRowsFollowTheWindow(t *testing.T) {
 	for _, tc := range []struct{ height, want int }{
 		{height: 0, want: overlayRowsMin},
@@ -71,9 +69,6 @@ func TestOverlayRowsFollowTheWindow(t *testing.T) {
 	}
 }
 
-// TestPaletteWalksTheWholeListFromTheKeyboard drives the keys an operator
-// actually presses, not the move helpers: the reported failure was that the list
-// would not move at all.
 func TestPaletteWalksTheWholeListFromTheKeyboard(t *testing.T) {
 	m := sizedTestModel(t, 100)
 	m.cmds = nil
@@ -107,7 +102,6 @@ func TestPaletteWalksTheWholeListFromTheKeyboard(t *testing.T) {
 	}
 }
 
-// TestSkillsPanelWalksFromTheKeyboard is the same report, in the other panel.
 func TestSkillsPanelWalksFromTheKeyboard(t *testing.T) {
 	m := sizedTestModel(t, 100)
 	m.skillsOpen = true

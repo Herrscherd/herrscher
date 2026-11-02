@@ -29,7 +29,6 @@ func TestHubScrollbackAndResume(t *testing.T) {
 		t.Fatalf("scrollback wrong: %+v", lines)
 	}
 
-	// enriched Sessions()
 	infos := h.Sessions()
 	if len(infos) != 1 {
 		t.Fatalf("want 1 session, got %d", len(infos))

@@ -26,15 +26,6 @@ func WhoamiOut(asJSON bool) (string, error) {
 	return whoamiReport(id), nil
 }
 
-// whoamiReport renders an identity as one line per git key, each naming the key
-// it came from. A key git did not answer is printed as unset rather than
-// dropped: the operator ran this to learn what herrscher believes, and a missing
-// line reads as a bug in the verb rather than as an absent configuration.
-//
-// The value column is sized to the widest value rather than to a constant: an
-// email longer than the guess would otherwise push its own source annotation out
-// of line, which reads as a rendering bug in the very command someone runs to
-// check whether something is broken.
 func whoamiReport(id identity.Identity) string {
 	if id.Empty() {
 		return "git has nothing to say about you here.\n" +
@@ -58,7 +49,6 @@ func whoamiReport(id identity.Identity) string {
 		if value == "" {
 			value, note = unset, ", unset"
 		}
-		// %-*s counts runes, not bytes, so an accented name lines up on its own.
 		fmt.Fprintf(&b, "%-7s %-*s (git config %s%s)\n", r.label, width, value, r.key, note)
 	}
 	return strings.TrimRight(b.String(), "\n")

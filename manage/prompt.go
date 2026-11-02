@@ -9,19 +9,11 @@ import (
 	"strings"
 )
 
-// isTerminal reports whether f is an interactive terminal (a char device),
-// gating the init wizard: we only prompt when there's a human to answer.
 func isTerminal(f *os.File) bool {
 	st, err := f.Stat()
 	return err == nil && st.Mode()&os.ModeCharDevice != 0
 }
 
-// runWizard drives the interactive init. In compose mode it asks one module kind
-// per category; in config-only mode the plugin set is fixed (already compiled
-// in), so it skips straight to the gateway secrets. Either way it returns the
-// per-category choices and a secret map to persist. Every line is read through a
-// single bufio.Reader so the masked-secret reader (which toggles terminal echo)
-// shares the buffer and loses no input between prompts.
 func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string, map[string]string, error) {
 	s := newStyle()
 	in := bufio.NewReader(os.Stdin)
@@ -61,8 +53,6 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 		}
 	}
 
-	// Routing comes last: under gateway-only it asks for credentials, and there is
-	// no point collecting those before the operator has committed to a stack.
 	route, err := routeStep(s, in, cat, cur, !compose)
 	if err != nil {
 		return nil, nil, err
@@ -73,13 +63,10 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 	return choices, secrets, nil
 }
 
-// secretLabel renders an aligned, dimmed key followed by the prompt arrow.
 func secretLabel(s style, key string) string {
 	return fmt.Sprintf("    %-21s %s ", key, s.wrap(s.dim, "›"))
 }
 
-// chooseKind prints the catalog for one category (plus a "none" entry) and reads
-// a selection: empty = default, a 1-based index, or the kind name itself.
 func chooseKind(s style, in *bufio.Reader, cat string) (string, error) {
 	kinds := make([]string, 0, len(catalog[cat]))
 	for k := range catalog[cat] {
@@ -122,7 +109,6 @@ func chooseKind(s style, in *bufio.Reader, cat string) (string, error) {
 	return "", fmt.Errorf("unknown %s kind %q", cat, ans)
 }
 
-// promptLine writes msg to stderr and returns the next trimmed input line.
 func promptLine(in *bufio.Reader, msg string) string {
 	if msg != "" {
 		fmt.Fprint(os.Stderr, msg)

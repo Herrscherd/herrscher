@@ -9,8 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// fakeClipboard drives the Ctrl+V paste path deterministically: it returns a fixed
-// image type and bytes, so tests never touch the real system clipboard.
 type fakeClipboard struct {
 	mime string
 	data []byte
@@ -28,8 +26,6 @@ func (f fakeClipboard) ReadImage(string) ([]byte, error) { return f.data, f.err 
 
 func (f fakeClipboard) WriteText(string) error { return nil }
 
-// TestCtrlVStagesClipboardImage verifies a clipboard image is staged as a pending
-// attachment, shown as a chip, and reserves a chrome row.
 func TestCtrlVStagesClipboardImage(t *testing.T) {
 	m := readyModel(&fakeBackend{})
 	m.clip = fakeClipboard{mime: "image/png", data: []byte("\x89PNGfake")}
@@ -56,20 +52,15 @@ func TestCtrlVStagesClipboardImage(t *testing.T) {
 	}
 }
 
-// TestCtrlVNoImageFallsThrough confirms Ctrl+V with no clipboard image stages
-// nothing (so the composer's text paste can handle it instead).
 func TestCtrlVNoImageFallsThrough(t *testing.T) {
 	m := readyModel(&fakeBackend{})
-	m.clip = fakeClipboard{} // empty: no image
+	m.clip = fakeClipboard{}
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
 	if len(m.pending) != 0 {
 		t.Fatalf("Ctrl+V without an image must stage nothing, got %d", len(m.pending))
 	}
 }
 
-// TestSubmitCarriesAttachments checks the full wiring: a staged image plus text is
-// submitted to the backend with the attachment, echoed under the you turn, and the
-// pending set is cleared.
 func TestSubmitCarriesAttachments(t *testing.T) {
 	f := &fakeBackend{}
 	m := readyModel(f)
@@ -103,10 +94,6 @@ func TestSubmitCarriesAttachments(t *testing.T) {
 	}
 }
 
-// TestAttachCommandStagesFile verifies /attach <path> copies an existing local
-// file into the staging dir rather than pointing at it: the host only accepts a
-// file:// attachment from under that tree, and a copy also pins the bytes as they
-// were when attached.
 func TestAttachCommandStagesFile(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "diagram.png")
@@ -134,7 +121,6 @@ func TestAttachCommandStagesFile(t *testing.T) {
 	if b, err := os.ReadFile(got.Path); err != nil || string(b) != "img" {
 		t.Errorf("staged copy content = %q err=%v", b, err)
 	}
-	// The original must be left alone — /attach reads, it does not move.
 	if _, err := os.Stat(p); err != nil {
 		t.Errorf("original file must survive /attach: %v", err)
 	}

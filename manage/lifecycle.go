@@ -71,9 +71,6 @@ func UpdateCmd(ctx context.Context, args []string) int {
 		fmt.Println("updated plugins (--no-build); run `go mod tidy && go build` in the host to apply")
 		return 0
 	}
-	// The plan ends in `go build ./...` then `go install .`: the build is the
-	// compile check that says the bumped plugins still fit together, and it runs
-	// before anything replaces the binary the machine is running.
 	applied, err := apply(ctx, dir, nil, osDecider(*yes), cmdSteps(dir, cmds))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -110,8 +107,6 @@ func InstallCmd(ctx context.Context, args []string) int {
 		return code
 	}
 
-	// exec resolves a relative path-with-slash against the process cwd, not
-	// cmd.Dir, so hand it the absolute path to the freshly built binary.
 	abs, err := filepath.Abs(filepath.Join(dir, "herrscher"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

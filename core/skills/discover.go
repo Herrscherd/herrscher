@@ -18,12 +18,6 @@ func Discover(roots []string) []Skill {
 	return out
 }
 
-// discover is Discover with the previous scan's result, keyed by SKILL.md path.
-// A file whose stamp is unchanged is taken from prev — one Stat instead of a
-// read and a frontmatter parse — which matters because the engine rescans on
-// every single turn. The second return names the paths that were actually
-// re-read, so a caller caching anything else derived from the file knows what to
-// drop; a file missing from it either did not change or is gone.
 func discover(roots []string, prev map[string]Skill) (out []Skill, reread []string) {
 	seen := map[string]bool{}
 	for _, root := range roots {
@@ -66,9 +60,6 @@ func discover(roots []string, prev map[string]Skill) (out []Skill, reread []stri
 	return out, reread
 }
 
-// parseFrontmatter reads a leading --- fenced block of key: value lines and
-// returns the name and description. ok is false when the file does not open with
-// a --- fence.
 func parseFrontmatter(md []byte) (name, description string, ok bool) {
 	sc := bufio.NewScanner(bytes.NewReader(md))
 	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {

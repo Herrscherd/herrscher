@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-// A transcript is already full of references — URLs the agent quoted, files it
-// touched — and the terminal rendered every one of them as inert characters. This
-// file finds them; open.go acts on them, and only when asked.
-
 // LinkKind separates what a reference points at, because the two are opened by
 // different things: a URL by the system handler, a file by the editor.
 type LinkKind int
@@ -32,24 +28,12 @@ type Link struct {
 	Kind   LinkKind
 }
 
-// linkURLPattern matches a bare http(s) URL. The trailing class excludes the
-// punctuation that ends a sentence rather than a URL — a full stop after a link
-// belongs to the prose, and swallowing it produces a target that 404s. Both
-// classes exclude every control byte, for the reason hasControl gives.
 var linkURLPattern = regexp.MustCompile(`https?://[^\s<>"'\x00-\x1f\x7f]*[^\s<>"'.,;:!?)\]\x00-\x1f\x7f]`)
 
-// linkMarkdownPattern matches [label](target).
 var linkMarkdownPattern = regexp.MustCompile(`\[([^\]\n]+)\]\(([^)\s]+)\)`)
 
-// linkFilePattern matches a path/file.ext:line reference — the shape a compiler,
-// a linter and a stack trace all print, and the one an operator most wants to
-// jump to. The extension is required: without it every "word:12" in prose would
-// become a link.
 var linkFilePattern = regexp.MustCompile(`[\w.~/-]*[\w~-]\.[A-Za-z]\w*:\d+`)
 
-// findLinks returns every reference in lines, in reading order. Lines inside a
-// fenced code block are skipped: there the characters are the content, not a
-// reference to somewhere else, and linking them misreads the block.
 func findLinks(lines []string) []Link {
 	var out []Link
 	inFence := false
@@ -66,10 +50,6 @@ func findLinks(lines []string) []Link {
 	return out
 }
 
-// lineLinks finds the references in one line. Markdown links are matched first
-// and their spans claimed, so the URL inside one is not also reported bare; file
-// references are matched last and skip anything already claimed, so the ":80" of
-// a host:port inside a URL is not mistaken for a line number.
 func lineLinks(line int, s string) []Link {
 	var out []Link
 	var claimed [][2]int
@@ -85,7 +65,7 @@ func lineLinks(line int, s string) []Link {
 
 	for _, m := range linkMarkdownPattern.FindAllStringSubmatchIndex(s, -1) {
 		if hasControl(s[m[4]:m[5]]) {
-			continue // see hasControl: not a link, and claiming it would hide the text
+			continue
 		}
 		claim(m[0], m[1])
 		out = append(out, Link{
@@ -117,18 +97,6 @@ func lineLinks(line int, s string) []Link {
 	return out
 }
 
-// hasControl reports whether s carries a C0 control byte or DEL. Only the
-// markdown target needs asking: the bare-URL and file patterns already exclude
-// them by construction, but a markdown target is "anything up to the closing
-// paren", and the agent writes that string.
-//
-// It matters because the target does not stay a string. It is written into the
-// OSC 8 payload, where an ESC or a BEL ends the sequence early and everything
-// after it is read by the terminal as its own command; it is printed in the
-// status line the operator reads before deciding to open it; and it is handed to
-// a launcher. A destination that has to smuggle a control byte to be itself is
-// not a destination, so it is not treated as a link at all — the characters stay
-// on screen as the text they were.
 func hasControl(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] < 0x20 || s[i] == 0x7f {
@@ -138,8 +106,6 @@ func hasControl(s string) bool {
 	return false
 }
 
-// sortLinksByStart puts a line's links back into reading order after the three
-// passes found them out of it. Insertion sort: a line has a handful of links.
 func sortLinksByStart(ls []Link) {
 	for i := 1; i < len(ls); i++ {
 		for j := i; j > 0 && ls[j].Start < ls[j-1].Start; j-- {
@@ -148,22 +114,14 @@ func sortLinksByStart(ls []Link) {
 	}
 }
 
-// The selection mark, written as raw SGR: reverse video is the one highlight
-// every terminal has had since before it had colour.
 const (
 	ansiReverse    = "\x1b[7m"
 	ansiReverseOff = "\x1b[27m"
 )
 
-// renderLink draws one link: a real OSC 8 hyperlink where the terminal has them,
-// styled text where it does not. The plain rendering is not a failure — it stays
-// selectable and copyable, which is what the operator had before and more than
-// an escape sequence printed as litter would leave them.
 func renderLink(l Link, caps Capabilities, selected bool) string {
 	label := linkStyle.Render(l.Label)
 	if selected {
-		// Reverse video rather than another colour: this has to be visible on a
-		// 16-colour terminal and through whatever the theme is doing underneath.
 		label = ansiReverse + label + ansiReverseOff
 	}
 	if !caps.Hyperlinks {
@@ -172,9 +130,6 @@ func renderLink(l Link, caps Capabilities, selected bool) string {
 	return "\x1b]8;;" + l.Target + "\x1b\\" + label + "\x1b]8;;\x1b\\"
 }
 
-// applyLinks rewrites lines so every link is rendered as one, with sel (an index
-// into links, or -1) highlighted. It walks each line's spans from the right so
-// an earlier replacement cannot shift a later one's offsets.
 func applyLinks(lines []string, links []Link, caps Capabilities, sel int) []string {
 	for i := len(links) - 1; i >= 0; i-- {
 		l := links[i]

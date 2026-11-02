@@ -14,8 +14,6 @@ func mkTime(t *testing.T, s string) time.Time {
 	return got
 }
 
-// mkUTC lit une date en UTC, pour les cas dont les tampons RFC3339 sont eux
-// aussi en UTC : les melanger ferait dependre le test du fuseau de la machine.
 func mkUTC(t *testing.T, s string) time.Time {
 	t.Helper()
 	got, err := time.ParseInLocation("2006-01-02 15:04", s, time.UTC)
@@ -41,15 +39,9 @@ func TestValidateRefusesAnUnusableSchedule(t *testing.T) {
 		{"non-positive every", Schedule{Name: "n", Agent: "a", Every: "0s", Task: "t"}},
 		{"unreadable cron", Schedule{Name: "n", Agent: "a", Cron: "0 9 * *", Task: "t"}},
 		{"unreadable grace", Schedule{Name: "n", Agent: "a", Every: "30m", Task: "t", Grace: "soon"}},
-		// Sous la minute, la grace declarerait perimee chaque fenetre servie par
-		// une boucle qui a le grain de la minute.
 		{"grace under a minute", Schedule{Name: "n", Agent: "a", Every: "30m", Task: "t", Grace: "10s"}},
 		{"negative grace", Schedule{Name: "n", Agent: "a", Every: "30m", Task: "t", Grace: "-1h"}},
-		// --project decrit la session que l'horaire ouvre : sans --agent il
-		// n'ouvre rien, et l'accepter le ferait croire actif.
 		{"project without an agent", Schedule{Name: "n", Session: "s", Project: "p", Every: "30m", Task: "t"}},
-		// Une expression que le calendrier ne satisfait jamais doit etre refusee a
-		// la creation, pas boucler au premier tick.
 		{"unsatisfiable cron", Schedule{Name: "n", Agent: "a", Cron: "0 0 30 2 *", Task: "t"}},
 	}
 	now := mkTime(t, "2026-08-25 09:00")
@@ -73,8 +65,6 @@ func TestNextWalksForwardFromTheAnchor(t *testing.T) {
 		{"every", Schedule{Every: "30m"}, "2026-08-25 10:00"},
 		{"cron later today", Schedule{Cron: "0 11 * * *"}, "2026-08-25 11:00"},
 		{"cron tomorrow", Schedule{Cron: "0 9 * * *"}, "2026-08-26 09:00"},
-		// Strictement apres : une fenetre pile sur l'ancre est celle qui vient
-		// d'etre tiree, pas la suivante.
 		{"cron on the anchor", Schedule{Cron: "30 9 * * *"}, "2026-08-26 09:30"},
 	}
 	for _, tc := range cases {
@@ -108,9 +98,6 @@ func TestDueAtBothEdgesOfTheWindow(t *testing.T) {
 }
 
 func TestDueFallsBackToCreatedAtBeforeTheFirstRun(t *testing.T) {
-	// LastRun vide veut dire jamais tire. L'ancre est alors CreatedAt, sinon un
-	// horaire tout neuf considererait toutes les fenetres depuis l'epoch comme
-	// ratees et tirerait immediatement.
 	s := Schedule{Every: "30m", CreatedAt: mkTime(t, "2026-08-25 09:00").UTC().Format(time.RFC3339)}
 	if Due(s, mkTime(t, "2026-08-25 09:10")) {
 		t.Error("a fresh schedule fired before its first window")
@@ -121,8 +108,6 @@ func TestDueFallsBackToCreatedAtBeforeTheFirstRun(t *testing.T) {
 }
 
 func TestDueOnAScheduleWithNoAnchorAtAll(t *testing.T) {
-	// Ni LastRun ni CreatedAt : rien d'ou compter, donc rien ne part. Un horaire
-	// ecrit a la main dans state.json ne doit pas declencher une rafale.
 	if Due(Schedule{Every: "30m"}, mkTime(t, "2026-08-25 09:30")) {
 		t.Error("an anchorless schedule fired")
 	}
@@ -160,9 +145,6 @@ func TestCatchUpAtBothEdgesOfTheGrace(t *testing.T) {
 }
 
 func TestCatchUpTakesTheMostRecentMissedWindow(t *testing.T) {
-	// Le daemon a rate quatre fenetres. C'est la derniere qui compte : la plus
-	// ancienne est trop en retard pour servir, et rejouer les quatre facturerait
-	// quatre tours sur un monde qui n'existe plus.
 	s := Schedule{
 		Every:   "30m",
 		Grace:   "45m",
@@ -187,8 +169,6 @@ func TestCatchUpSkipsAPausedSchedule(t *testing.T) {
 	}
 }
 
-// La grace ne sert a rien si Due tire quand meme la fenetre qu'elle vient de
-// refuser : c'est le trou que Stale bouche, et c'est ce que ce test tient.
 func TestStaleMarksTheWindowsTheGraceRefuses(t *testing.T) {
 	base := Schedule{Cron: "0 9 * * *", LastRun: mkTime(t, "2026-08-24 09:00").UTC().Format(time.RFC3339)}
 	cases := []struct {
@@ -210,8 +190,6 @@ func TestStaleMarksTheWindowsTheGraceRefuses(t *testing.T) {
 			t.Errorf("Stale(%s) = %v, want %v", tc.name, got, tc.want)
 		}
 	}
-	// Une pause n'est pas une peremption : l'horaire reprendra ou l'operateur
-	// decide, et rien ne doit bouger son ancre entre-temps.
 	paused := base
 	paused.Paused = true
 	if Stale(paused, mkTime(t, "2026-08-25 23:00")) {
@@ -219,9 +197,6 @@ func TestStaleMarksTheWindowsTheGraceRefuses(t *testing.T) {
 	}
 }
 
-// La question de `schedule list` : quand cet horaire se reveille-t-il. Elle se
-// compte depuis l'ancre, sinon un --every de 24h ancre a 9h repond "dans
-// vingt-quatre heures" quel que soit le moment ou on la pose.
 func TestNextWindowCountsFromTheAnchorAndNotFromNow(t *testing.T) {
 	cases := []struct {
 		name string
@@ -249,8 +224,6 @@ func TestNextWindowCountsFromTheAnchorAndNotFromNow(t *testing.T) {
 			t.Errorf("%s: NextWindow = %s, want %s", tc.name, got.UTC(), want)
 		}
 	}
-	// Le cron se lit dans l'heure locale du daemon, donc son cas se pose dans le
-	// meme fuseau que l'expression.
 	cron := Schedule{Cron: "0 9 * * *", LastRun: mkTime(t, "2026-08-25 09:00").Format(time.RFC3339)}
 	got, err := NextWindow(cron)
 	if err != nil {
@@ -265,14 +238,8 @@ func TestNextWindowCountsFromTheAnchorAndNotFromNow(t *testing.T) {
 	}
 }
 
-// Le tampon retient la fenetre servie et non l'instant de la livraison. Sans ca
-// la cadence glisse d'un tick a chaque tir : la fenetre suivante se compte
-// depuis une livraison qui arrive apres elle, donc elle tombe un tick plus loin,
-// et le retard s'ajoute a lui-meme.
 func TestWindowNamesTheOneBeingServedAndNotTheDelivery(t *testing.T) {
 	s := Schedule{Every: "30m", LastRun: "2026-08-25T09:00:00Z", CreatedAt: "2026-08-25T09:00:00Z"}
-	// La boucle decouvre la fenetre de 9h30 a 9h30m40s, et le tir lui-meme
-	// prendra encore un peu de temps.
 	got, ok := Window(s, mkUTC(t, "2026-08-25 09:30").Add(40*time.Second))
 	if !ok {
 		t.Fatal("Window found nothing on a schedule whose window has passed")
@@ -281,8 +248,6 @@ func TestWindowNamesTheOneBeingServedAndNotTheDelivery(t *testing.T) {
 		t.Fatalf("Window = %s, want %s", got.UTC(), want)
 	}
 
-	// Vingt-quatre heures de tirs consecutifs, chacun decouvert en retard et
-	// livre plus tard encore : la cadence ne doit pas avoir bouge d'une seconde.
 	start := mkUTC(t, "2026-08-25 09:00")
 	cur := s
 	fires := 0
@@ -297,8 +262,6 @@ func TestWindowNamesTheOneBeingServedAndNotTheDelivery(t *testing.T) {
 		cur.LastRun = w.UTC().Format(time.RFC3339)
 		fires++
 	}
-	// La premiere fenetre tombe une demi-heure apres l'ancre et la derniere une
-	// minute avant la fin du parcours, d'ou quarante-sept et non quarante-huit.
 	if fires != 47 {
 		t.Errorf("fired %d times in 24h, want 47", fires)
 	}

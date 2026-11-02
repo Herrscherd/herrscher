@@ -13,13 +13,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// addScheduleCommands registers the six `schedule` verbs. The registry being
-// neutral argv, a chat gateway binds them as they are, and the core never
-// learns which gateway that is.
 func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup, slot *schedulerSlot) error {
-	// Every guard falls here, at creation, and not at firing: a schedule that
-	// cannot run must be refused to the face of whoever writes it, rather than
-	// fail silently every minute for weeks.
 	if err := reg.Add(contracts.New("schedule", "add").
 		Help("wake a session on a cadence, with no human in the loop").
 		Param("name", "schedule name (unique)", true).
@@ -52,8 +46,6 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 			}
 			for _, existing := range st.SnapshotSchedules() {
 				if existing.Name == sc.Name {
-					// Two schedules of one name would fight over the same owned
-					// session, and `rm` would no longer know which to aim at.
 					return "", fmt.Errorf("a schedule named %q already exists", sc.Name)
 				}
 			}
@@ -61,10 +53,6 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 				return "", err
 			}
 			out := "scheduled " + sc.Name + " (" + cadenceOf(sc) + ")"
-			// A named session is not required to exist, because one can be opened
-			// after the schedule. But a typo would otherwise buy a schedule that
-			// silently skips every window forever, so it is said now, once, rather
-			// than left to be discovered by its silence.
 			if sc.Session != "" && !sessionKnown(st, sc.Session) {
 				out += "; note: no session named " + strconv.Quote(sc.Session) +
 					" right now, so its windows are skipped until there is one"
@@ -92,17 +80,9 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 				if last == "" {
 					last = "never"
 				}
-				// The next window is counted from the anchor, which is where the
-				// schedule counts it from too. Counting from now would answer a
-				// different question and get --every wrong: a 24h schedule anchored
-				// at nine opens tomorrow at nine, not twenty-four hours after the
-				// moment somebody asked.
 				next := "unknown"
 				switch {
 				case sc.Paused:
-					// A paused schedule has no next window at all: resuming
-					// restarts the cadence from that moment, so any time printed
-					// here would be one it will not wait for.
 					next = "-"
 				case schedule.Due(sc, now):
 					next = "due"
@@ -131,9 +111,6 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 			if !ok {
 				return "", fmt.Errorf("no schedule named %q", name)
 			}
-			// Says what it does not do: removing a schedule does not destroy the
-			// session it had opened, and a worktree never goes on a gesture that
-			// did not name it.
 			return "removed " + name + " (its session, if any, is still there; close it with `session close`)", nil
 		})); err != nil {
 		return err
@@ -160,10 +137,6 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 					return "", fmt.Errorf("no schedule named %q", name)
 				}
 				if !v.paused {
-					// Resuming restarts the cadence from now. Without this, a
-					// schedule paused for a week would find its window long past
-					// and fire the instant it came back, which is not what
-					// anybody means by resume.
 					if err := st.StampScheduleRun(name, time.Now().UTC().Format(time.RFC3339)); err != nil {
 						return "", err
 					}
@@ -174,9 +147,6 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 		}
 	}
 
-	// The try by hand. It makes the whole thing checkable without waiting for a
-	// window, and that is what lets an operator read a task's reply before
-	// letting it run on its own.
 	if err := reg.Add(contracts.New("schedule", "run").
 		Help("fire a schedule right now, out of band; the cadence is not moved").
 		Param("name", "schedule name", true).

@@ -16,21 +16,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// dispatcherFunc adapts a function to the dispatcher the command socket serves.
 type dispatcherFunc func(context.Context, []string) (string, error)
 
 func (f dispatcherFunc) Dispatch(ctx context.Context, argv []string) (string, error) {
 	return f(ctx, argv)
 }
 
-// TestHookThroughTheCommandSocket is the whole chain with nothing faked but the
-// vendor: a real registry behind a real command socket, the hook dialling it as
-// the short-lived process it is, and an operator answering through the verb. It
-// is the one test that proves the pieces every other test checks in isolation
-// still line up when they are wired to each other.
 func TestHookThroughTheCommandSocket(t *testing.T) {
-	// The wait comes off the state file, which is the only place it is written:
-	// three seconds so a test that nobody answers cannot sit for five minutes.
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{"sessions":[],"approvalTimeout":"3s"}`), 0o644); err != nil {
 		t.Fatalf("write state: %v", err)
@@ -56,10 +48,6 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 	go serveCommandSocket(ctx, sock, dispatcherFunc(reg.Dispatch))
 	waitForSocket(t, sock)
 
-	// The hook, as the vendor would run it. ctx carries no deadline of its own,
-	// which is exactly what the real hook hands to dispatchLiveCommand: the
-	// connection deadline is taken from it, so a shorter one here would cut the
-	// call off before the operator had a chance to answer.
 	t.Setenv(SessionVar, "s1")
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git push origin master"}}`)
 	var out, errOut bytes.Buffer
@@ -71,10 +59,6 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 		})
 	}()
 
-	// The operator, refusing. The request is found by the session it belongs to
-	// rather than by the registry holding exactly one entry: the registry is
-	// package state shared with every other test in here, and this test has no
-	// business caring what else is waiting in it.
 	var id string
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {

@@ -26,7 +26,7 @@ type Commander interface {
 type Remote struct {
 	ctx        context.Context
 	run        Commander
-	bin        string // absolute path to herrscher on the far machine
+	bin        string
 	instanceID string
 }
 
@@ -112,9 +112,6 @@ func (r *Remote) Materialize(ctx context.Context, worktreePath string, payload i
 	return nil
 }
 
-// call runs one worktree verb over there and decodes its single JSON line. The
-// remote stderr is carried into the error verbatim: it is the git message, and
-// nothing written here would be more precise.
 func (r *Remote) call(argv []string, into any) error {
 	cmd := r.run.Command(r.context(), "", append([]string{r.bin}, argv...)...)
 	var stdout, stderr bytes.Buffer
@@ -129,8 +126,6 @@ func (r *Remote) call(argv []string, into any) error {
 	return nil
 }
 
-// reason prefers what the far side said over the local exit status, which only
-// ever says that something failed.
 func reason(stderr string, err error) string {
 	if msg := strings.TrimSpace(stderr); msg != "" {
 		return msg

@@ -32,7 +32,6 @@ func tempRepo(t *testing.T) string {
 	return dir
 }
 
-// captureStdout runs f with os.Stdout redirected and returns what it printed.
 func captureStdout(t *testing.T, f func() error) string {
 	t.Helper()
 	r, w, err := os.Pipe()

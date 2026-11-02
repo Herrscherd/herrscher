@@ -34,8 +34,6 @@ func TestApplyDefaultsDoesNotPersist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
 	s := NewState(path)
 	s.ApplyDefaults(&HomeRef{ID: "h1"}, "/ws", "/src")
-	// No file should have been written — config defaults live in-memory only so
-	// that removing a value from config.json takes effect on the next restart.
 	reloaded, err := LoadState(path)
 	if err != nil {
 		t.Fatal(err)

@@ -16,11 +16,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/scope"
 )
 
-// runBridge runs a pure backend runner against the daemon hub: it dials the hub
-// control socket (--hub-socket), takes one input frame per turn, and streams the
-// backend's events back over the same connection — it does no gateway I/O itself.
-// The backend is selected by --vendor from the plugin registry (Claude when
-// unset); --backend picks the kind (stream|oneshot) and --cmd the invocation.
 func runBridge(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("bridge", flag.ExitOnError)
 	ch := channelFlag(fs)
@@ -38,27 +33,16 @@ func runBridge(ctx context.Context, args []string) error {
 	envStdin := fs.Bool("env-stdin", false, "read KEY=VALUE lines from stdin until a blank line and put them in this process's environment (how a remote bridge gets its gateway credentials)")
 	fs.Parse(args)
 
-	// Before anything else: the credentials this bridge is about to capture may
-	// be arriving on stdin rather than in the environment.
 	if *envStdin {
 		if err := applyEnvFromStdin(os.Stdin); err != nil {
 			return err
 		}
 	}
 
-	// The bridge is the process that actually builds backends, so it needs the
-	// gateway pair the supervisor handed it in its environment — and must scrub
-	// it from that environment before spawning any vendor CLI. main() already
-	// captures for every path; this is the load-bearing call for the supervised
-	// child, kept here so the bridge cannot lose it if main's dispatch changes.
-	// Idempotent.
 	host.CaptureGatewayCreds()
 
 	log := host.Logger(*verbose).With("component", "bridge", "session", *session)
 
-	// The backend is the model edge: core never knows which model answers. When
-	// HERRSCHER_REMOTE names "backend" the resolver returns an out-of-process
-	// proxy; otherwise the shared host factory selects the requested vendor.
 	br, err := newResolver(log)
 	if err != nil {
 		return err
@@ -82,12 +66,9 @@ func runBridge(ctx context.Context, args []string) error {
 		rosterRoot = host.DefaultAgentsRoot()
 	}
 	opts := bridge.Options{
-		Channel:   *ch,
-		HubSocket: *hubSocket,
-		Roster:    host.NewRoster(rosterRoot),
-		// What the daemon dispatches, handed down at spawn: this process has no
-		// registry of its own, and the verbs a gateway contributes exist only in
-		// the daemon that instantiated it.
+		Channel:       *ch,
+		HubSocket:     *hubSocket,
+		Roster:        host.NewRoster(rosterRoot),
 		Capabilities:  os.Getenv(host.EnvCapabilities),
 		LaunchProject: *project,
 		ProjectPinned: *projectPinned,
@@ -99,10 +80,6 @@ func runBridge(ctx context.Context, args []string) error {
 	return bridge.Run(ctx, newBackend, orch, opts)
 }
 
-// backendFlags holds the bridge flags that select and configure the backend.
-// Grouped (rather than five loose pointers inside runBridge) so the mapping
-// from flag names to host.BackendRequest is testable — in particular --model,
-// without which a gateway-routed session spawns bare.
 type backendFlags struct {
 	cmd     *string
 	kind    *string
@@ -111,49 +88,28 @@ type backendFlags struct {
 	modelID *string
 }
 
-// declareBackendFlags registers the backend flags on fs.
 func declareBackendFlags(fs *flag.FlagSet) backendFlags {
 	f := backendFlags{
-		cmd:    fs.String("cmd", "", "base command (default 'claude' in stream mode; the per-message program in one-shot mode)"),
-		kind:   fs.String("backend", "", "responder backend: stream (default) | oneshot"),
-		vendor: fs.String("vendor", "", "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)"),
-		resume: fs.String("resume", "", "backend resume token to resume the conversation on start"),
-		// --model used to be accepted-and-ignored. It is reclaimed here with a
-		// real meaning: a catalog model id, resolved at the spawn choke point so
-		// a gateway-routed model gets its credentials (or fails closed). Only the
-		// supervisor spawns `herrscher bridge`, and it never passed the old flag,
-		// so nothing relied on the ignore. A raw CLI model name (e.g. "sonnet")
-		// now errors as an unknown model instead of being silently dropped —
-		// pass those through --cmd, as before.
+		cmd:     fs.String("cmd", "", "base command (default 'claude' in stream mode; the per-message program in one-shot mode)"),
+		kind:    fs.String("backend", "", "responder backend: stream (default) | oneshot"),
+		vendor:  fs.String("vendor", "", "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)"),
+		resume:  fs.String("resume", "", "backend resume token to resume the conversation on start"),
 		modelID: fs.String("model", "", "catalog model id (see `herrscher models list`); empty = legacy path, the model rides in --cmd"),
 	}
-	// Accepted but ignored; kept so existing --stream callers don't error.
-	// The kind is selected by --backend.
 	fs.Bool("stream", true, "deprecated, ignored (accepted for backward compatibility)")
 	return f
 }
 
-// request maps the parsed flags onto the host's spawn request.
 func (f backendFlags) request() host.BackendRequest {
 	return host.BackendRequest{
 		Vendor: *f.vendor, Cmd: *f.cmd, Kind: *f.kind, Resume: *f.resume, ModelID: *f.modelID,
 	}
 }
 
-// backendResolver is the remote-resolution seam newBackendFor consults
-// (*host.Resolver in production; a fake in tests).
 type backendResolver interface {
 	Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, error)
 }
 
-// newBackendFor builds the bridge's backend. An out-of-process proxy wins when
-// HERRSCHER_REMOTE names "backend" — but ONLY for a session with no catalog
-// model: the proxy is built from the announcement alone and there is no way to
-// hand it the spawn environment a routed model may require, so it would drop
-// gateway credentials silently and run on the machine's own vendor login.
-// Naming a model with a remote backend is therefore refused, loudly, rather
-// than degraded. Without a remote backend the shared host factory resolves the
-// model and injects whatever its route needs.
 func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
 	be, err := br.Backend(ctx, contracts.Default.Backends())
 	if err != nil {
@@ -168,12 +124,6 @@ func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequ
 	return host.BuildBackendFor(ctx, req)
 }
 
-// buildMemory instantiates the first registered memory plugin from the registry,
-// or returns nil when none is compiled in or its config is unset. Memory is
-// optional: a config/instantiation failure disables it (logged) rather than
-// blocking the bridge. The vault self-provisions (its plugin defaults the path
-// and creates the folder), so no env is required; OBSIDIAN_VAULT only overrides
-// where it lives.
 func buildMemory(ctx context.Context, log *slog.Logger) contracts.Memory {
 	disabled := func(kind string, err error) contracts.Memory {
 		log.Debug("memory disabled", "kind", kind, "err", err)
@@ -190,22 +140,11 @@ func buildMemory(ctx context.Context, log *slog.Logger) contracts.Memory {
 	return mem
 }
 
-// provisionScope ensures this session's memory scope roots exist before the first
-// turn, so B can record and A can recall from turn one. It is plugin-agnostic and
-// best-effort: memory implementations that can create nodes satisfy
-// contracts.Provisioner (the local obsidian vault does; a remote proxy may not
-// and is skipped). It keys the roots with the same contracts helpers the
-// orchestrator derives its scope from, so the keys cannot drift. Errors are
-// logged, never fatal — memory stays optional, matching buildMemory.
 func provisionScope(ctx context.Context, mem contracts.Memory, project, agent string, log *slog.Logger) {
 	p, ok := mem.(contracts.Provisioner)
 	if !ok {
 		return
 	}
-	// Warn, not Debug: reaching here means a memory that can create nodes is
-	// configured and a scope name was given, so a failure is unexpected and leaves
-	// the root missing — every later RecordShared/RecallScoped then fails on the
-	// absent node. Still non-fatal (memory is optional), but it must be visible.
 	if project != "" {
 		if err := p.EnsureProject(ctx, contracts.ProjectKey(project), project); err != nil {
 			log.Warn("ensure project root", "project", project, "err", err)
@@ -218,11 +157,6 @@ func provisionScope(ctx context.Context, mem contracts.Memory, project, agent st
 	}
 }
 
-// vaultScopeResolver answers which known project a prompt is about, and makes
-// sure that project's root exists before saying so. It is the bridge's half of
-// chantier 1's deliberately dull matching rule: everything it knows comes out of
-// the vault, so the registry that replaces the rule replaces this and nothing
-// above it.
 type vaultScopeResolver struct {
 	mem contracts.Memory
 	log *slog.Logger
@@ -231,15 +165,11 @@ type vaultScopeResolver struct {
 func (r vaultScopeResolver) Resolve(ctx context.Context, prompt string) string {
 	nodes, err := r.mem.Search(ctx, contracts.Query{Kinds: []contracts.NodeKind{contracts.KindProject}})
 	if err != nil {
-		// A vault that cannot be read is a session that keeps the project its
-		// launch guessed. Learning never breaks a turn.
 		r.log.Warn("list known projects", "err", err)
 		return ""
 	}
 	known := make([]string, 0, len(nodes))
 	for _, n := range nodes {
-		// The name is the key's last segment: projects/<name>. Title is a human
-		// label and may be anything, so it is not what a scope is keyed by.
 		known = append(known, strings.TrimPrefix(n.Key, "projects/"))
 	}
 	chosen := scope.MatchProject(prompt, known)
@@ -254,31 +184,17 @@ func (r vaultScopeResolver) Resolve(ctx context.Context, prompt string) string {
 	return chosen
 }
 
-// learnConfig is the opt-in P1 write side: when extractor names a registered
-// curation extractor, the orchestrator builds a Learner that runs Consolidate
-// over journal every `every` turns. A zero value keeps the plain Curator.
 type learnConfig struct {
 	extractor        string
 	journal          string
 	consolidateEvery int
 }
 
-// buildOrchestrator instantiates the first registered orchestrator plugin over
-// mem (the conversation-policy edge), or returns nil when none is compiled in.
-// The session name is threaded through the config bag (key "session") since it is
-// runtime state, not env config. A config/instantiation failure disables it
-// (logged) rather than blocking the bridge.
 func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, project, agent string, learn learnConfig, log *slog.Logger) contracts.Orchestrator {
 	disabled := func(kind string, err error) contracts.Orchestrator {
 		log.Debug("orchestrator disabled", "kind", kind, "err", err)
 		return nil
 	}
-	// Remote (opt-in via HERRSCHER_REMOTE=orchestrator): resolve a proxy to an
-	// out-of-process orchestrator, reusing the Stage A retry/timeout/metrics on
-	// the resolver. The remote orchestrator owns its config in its plugin-host, so
-	// the session/scope/learn bag below applies to the local path only. When
-	// orchestrator is not remote the resolver returns (nil, nil) and we build
-	// local as today.
 	r, err := newResolver(log)
 	if err != nil {
 		return disabled("orchestrator", err)
@@ -296,10 +212,6 @@ func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, proje
 		if err != nil {
 			return disabled(p.Manifest.Kind, err)
 		}
-		// Runtime state threaded through the config bag: the session scopes the
-		// rolling transcript; project/agent scope the shared/private memory (P1);
-		// a set extractor/journal/cadence flips the orchestrator into a learning
-		// Learner. Shared with the one-shot seed path via ApplyOrchestratorScope.
 		host.ApplyOrchestratorScope(&cfg, session, project, agent, learn.extractor, learn.journal, learn.consolidateEvery)
 		orch, err := p.Orchestrator(ctx, cfg, mem)
 		if err != nil {
@@ -310,19 +222,6 @@ func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, proje
 	return nil
 }
 
-// applyEnvFromStdin reads KEY=VALUE lines until a blank line (or EOF) and puts
-// them in this process's environment.
-//
-// It exists for the bridge that runs on another machine. ssh carries no
-// environment, and putting these values in the ssh command line would reproduce
-// exactly what supervisor.SetBridgeEnv forbids: /proc/<pid>/cmdline is world
-// readable, on both machines. Stdin is free, because the bridge never reads it
-// otherwise, and the secret then touches neither argv nor disk on either side.
-//
-// The wire format is contracts' env setting encoding, whose decoder is used
-// here so encoder and decoder stay one tested pair. The blank line is this
-// caller's terminator, not the format's: reading past it would swallow input
-// that belongs to whoever reads stdin next.
 func applyEnvFromStdin(r io.Reader) error {
 	br := bufio.NewReader(r)
 	var block strings.Builder
@@ -333,10 +232,10 @@ func applyEnvFromStdin(r io.Reader) error {
 			block.WriteString(trimmed)
 			block.WriteByte('\n')
 		} else if line != "" {
-			break // the blank line that ends the block
+			break
 		}
 		if err != nil {
-			break // EOF, with the last unterminated line already taken
+			break
 		}
 	}
 	for k, v := range contracts.ParseEnvSetting(block.String()) {

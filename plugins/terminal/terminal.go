@@ -33,10 +33,6 @@ const ChannelID = "terminal"
 // a session it is only watching.
 const Kind = "terminal"
 
-// settings declares what a launch can be told. The table lives in core/scope
-// because the binary's `herrscher "<task>"` path creates its session before any
-// plugin exists and must reach the same answer; the plugin still owns declaring
-// it, which is why the manifest asks for it here.
 func settings() []contracts.Setting { return scope.LaunchSettings() }
 
 func init() {
@@ -62,31 +58,22 @@ func newGatewaySet(ctx context.Context, cfg contracts.PluginConfig) (contracts.G
 // through Read; outbound events (EmitTo/Emit/Post/Reply) are forwarded to the
 // TUI as RoutedEvents on Frontend.
 type Terminal struct {
-	mu sync.Mutex
-	// cfg is the resolved manifest configuration. It is kept because a launch
-	// decides what its session should carry, and that decision is configuration.
+	mu      sync.Mutex
 	cfg     contracts.PluginConfig
-	pending map[string][]contracts.Message // channel id -> queued inbound lines
+	pending map[string][]contracts.Message
 	nextID  int
 	out     chan tui.RoutedEvent
 
 	ctrlMu    sync.Mutex
-	ctrl      contracts.SessionControl // set by BindSessionControl; nil-safe here
-	ctrlReady chan struct{}            // closed once ctrl is bound
-	bindOnce  sync.Once                // guards the close of ctrlReady
+	ctrl      contracts.SessionControl
+	ctrlReady chan struct{}
+	bindOnce  sync.Once
 
-	baseCtx context.Context // the foreground lifetime; scopes operator dispatches
+	baseCtx context.Context
 
-	// openSession / openText are what the window must open on when this process
-	// is the one starting the daemon. They also suppress the default tab: a run
-	// that already names the session it is for does not want a second, empty one.
 	openSession string
 	openText    string
 
-	// mintedSession is the session this launch created for itself, and only that
-	// one: it is what the window is allowed to tidy away on the way out. A session
-	// opened by name, or started for a task, was asked for by someone and is not
-	// this window's to archive.
 	mintedSession string
 }
 
@@ -108,24 +95,6 @@ var (
 	_ contracts.SessionControlReceiver = (*Terminal)(nil)
 )
 
-// openDefaultSession opens the window on a conversation of its own and returns
-// its name.
-//
-// A launch is the start of something, not the middle of it: it gets an empty
-// session, the way `claude` in a directory does. What came before is not lost —
-// it is a live tab if it is still going, and `/resume` otherwise — but it is not
-// what the window drops you into, because landing in yesterday's conversation is
-// its own kind of surprise. The accumulation this used to cause is answered on
-// the way out instead: an untouched session is archived when the window closes
-// (archiveIfUntouched), so a launch you changed your mind about leaves nothing
-// behind.
-//
-// It is also where a launch says what it wants to keep. A window that learns
-// nothing is the whole of the moat problem: the tool the operator uses all day
-// contributing nothing to what the next session knows. So unless told otherwise,
-// the session it opens files what it learns under the project it is standing in
-// and under its own agent root — a guess, deliberately left revisable, because
-// the directory is where you are and not always what you are doing.
 func openDefaultSession(ctx context.Context, c contracts.SessionControl, cfg contracts.PluginConfig) (string, error) {
 	name := defaultSessionName(c.Sessions())
 	spec := contracts.CreateSession{Name: name, TerminalOnly: true, Shared: true}
@@ -136,20 +105,8 @@ func openDefaultSession(ctx context.Context, c contracts.SessionControl, cfg con
 	return name, nil
 }
 
-// sessionNameRe mirrors the guard in core/internal/manager/validate.go: a name
-// becomes a filesystem path and a git ref, so a directory whose name does not
-// pass it cannot be one.
 var sessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
-// defaultSessionName mints the name of the tab a launch opens: the directory
-// herrscher was started in, because that is what the operator calls what they
-// are working on. Launching there again while the first conversation is still
-// around numbers the new one (`herrscher-2`) rather than inventing a name that
-// says nothing about where you are — `session create` refuses a name already
-// taken, and a refused create is a window that opens on nothing.
-//
-// A random name is the last resort: a directory whose name is not a legal
-// session slug, or one that has already gone through the numbers.
 func defaultSessionName(taken []contracts.SessionInfo) string {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -181,13 +138,6 @@ func randomSessionName() string {
 
 const bootstrapBudget = 5 * time.Second
 
-// bootstrapSession waits for the host to bind SessionControl (RunHub binds it
-// from a background goroutine after the TUI may have started), then resolves the
-// session the window opens on. It blocks on the ctrlReady signal rather than
-// polling, so a slow bind is picked up the instant it lands. Never blocks
-// forever: if the bind doesn't arrive within ~5 s, or ctx is cancelled, it
-// returns "" so the TUI still launches — a bootstrap is best-effort and must not
-// stop it.
 func (t *Terminal) bootstrapSession(ctx context.Context) string {
 	select {
 	case <-ctx.Done():
@@ -203,27 +153,13 @@ func (t *Terminal) bootstrapSession(ctx context.Context) string {
 		defer cancel()
 		name, err := openDefaultSession(cctx, c, t.cfg)
 		if err != nil {
-			return "" // best-effort; the window still opens, on whatever is there
+			return ""
 		}
 		t.mintedSession = name
 		return name
 	}
 }
 
-// archiveIfUntouched puts away the session this launch minted for itself when
-// nothing was ever said in it. Opening a window and closing it again is a common
-// thing to do, and each one used to leave a session behind for good; this is the
-// other half of giving every launch a conversation of its own.
-//
-// It only ever touches the one session this window created, and only while the
-// daemon it would ask is still up: a torn-down hub cannot be asked to archive
-// anything, and a session left live is a session the operator can still see and
-// close — the failure that leaves something behind beats the one that takes
-// something away quietly.
-//
-// "Untouched" is the daemon's reading, not the window's: LastTs is empty until a
-// transcript entry exists, so a session that was spoken in — even one whose turn
-// never came back — is left where it is.
 func (t *Terminal) archiveIfUntouched() {
 	name := t.mintedSession
 	if name == "" {
@@ -257,15 +193,9 @@ func (t *Terminal) RunForeground(ctx context.Context, cancel context.CancelFunc)
 	t.ctrlMu.Lock()
 	t.baseCtx = ctx
 	t.ctrlMu.Unlock()
-	// A run opened on a named session already knows its tab; bootstrapping is for
-	// the plain launch, which mints a conversation of its own.
 	if t.openSession == "" {
 		t.openSession = t.bootstrapSession(ctx)
 	}
-	// The tidy-up runs on the way out but *before* the daemon is told to stop:
-	// cancel is what tears the hub down, and a hub that is going down can no
-	// longer archive anything. Wrapping it is the only point where the window has
-	// stopped drawing and the daemon is still there to answer.
 	quit := func() {
 		t.archiveIfUntouched()
 		cancel()
@@ -300,9 +230,6 @@ func (t *Terminal) Submit(channel, text string, attachments []tui.Attachment) {
 		AuthorName: "you",
 	}
 	for _, a := range attachments {
-		// Build the file URL through url.URL so a path with spaces, '#', or '?'
-		// (all legal in a filename) is percent-encoded and round-trips intact —
-		// a raw "file://"+path concat would truncate at the first '#'/'?'.
 		fileURL := (&url.URL{Scheme: "file", Path: a.Path}).String()
 		msg.Attachments = append(msg.Attachments, contracts.Attachment{
 			Filename:    a.Name,
@@ -316,8 +243,6 @@ func (t *Terminal) Submit(channel, text string, attachments []tui.Attachment) {
 
 // Frontend yields routed outbound events for the TUI to render.
 func (t *Terminal) Frontend() <-chan tui.RoutedEvent { return t.out }
-
-// --- contracts.ChannelReader ---
 
 func (t *Terminal) Enabled() bool          { return true }
 func (t *Terminal) DefaultChannel() string { return ChannelID }
@@ -347,8 +272,6 @@ func (t *Terminal) UpsertStatusMessage(_ context.Context, channelID, _, content 
 	return "", nil
 }
 
-// --- contracts.Gateway ---
-
 func (t *Terminal) Manifest() contracts.Manifest {
 	return contracts.Manifest{Kind: Kind, Category: contracts.CategoryGateway}
 }
@@ -376,14 +299,10 @@ func (t *Terminal) Menu(_ context.Context, conv contracts.Conversation, _ contra
 	return nil
 }
 
-// --- contracts.RoutedEventSink ---
-
 // EmitTo routes a turn event to the conversation's tab in the TUI.
 func (t *Terminal) EmitTo(conv contracts.Conversation, e contracts.Event) {
 	t.emit(tui.RoutedEvent{Conv: conv, Event: e})
 }
-
-// --- contracts.EventSink ---
 
 // Emit (legacy EventSink) routes to the default single channel. The hub calls
 // this when it sees only EventSink; RoutedEventSink takes priority.
@@ -397,10 +316,6 @@ func (t *Terminal) emit(re tui.RoutedEvent) {
 		return
 	default:
 	}
-	// High-volume chunk/status events are dropped rather than block the hub when
-	// the TUI lags. A finished reply or a channel close carries terminal state
-	// (clears the busy marker, removes the tab) the TUI must not miss, so wait
-	// briefly for room before giving up.
 	if re.Event.T == "closed" || (re.Event.T == "reply" && re.Event.Done) {
 		select {
 		case t.out <- re:
@@ -469,10 +384,6 @@ func (t *Terminal) Control() contracts.SessionControl {
 	return t.ctrl
 }
 
-// withTerminalDefault ensures that a "session create" command without an
-// explicit gateway selector binds to the terminal, so TUI-created sessions
-// always appear as tabs. An explicit --gateways or --terminal_only flag is
-// respected and passed through unchanged.
 func withTerminalDefault(args []string) []string {
 	if len(args) < 2 || args[0] != "session" || args[1] != "create" {
 		return args
@@ -489,16 +400,6 @@ func withTerminalDefault(args []string) []string {
 	return append(out, "--terminal_only")
 }
 
-// terminalVerbs is the allow-list of command groups reachable from the TUI. The
-// terminal drives session lifecycle and its companion agents, reads and edits
-// the memory vault, and reads the model catalog. Daemon-management verbs are
-// deliberately out of reach — service restart/update would tear down the host
-// the TUI runs in, and set home/source rewrites its routing config — so a
-// future destructive verb in either group can never be typed into a tab.
-//
-// The gate is by group, not by command, which is why membership has to be
-// judged on the whole group: memory's most destructive verb is `forget`, and
-// `memory restore` undoes it; models only lists.
 var terminalVerbs = map[string]bool{
 	"session": true,
 	"agent":   true,
@@ -512,7 +413,6 @@ var terminalVerbs = map[string]bool{
 // judgement would be two chances to disagree about what a tab may run.
 func OperatorVerb(verb string) bool { return terminalVerbs[verb] }
 
-// allowedVerbs lists the allow-list for an error an operator has to act on.
 func allowedVerbs() string {
 	out := make([]string, 0, len(terminalVerbs))
 	for v := range terminalVerbs {
@@ -539,9 +439,6 @@ func (t *Terminal) Commands() []tui.CommandSpec {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	// Straight to the control seam, not through t.Dispatch: the gate below is
-	// about what an operator may type, and this is the frontend asking what the
-	// gate will let through.
 	out, err := c.Dispatch(ctx, []string{"commands", "--json"})
 	if err != nil {
 		return nil
@@ -592,8 +489,6 @@ func (t *Terminal) Close(name string, force bool) (string, error) {
 	return c.Close(ctx, name, force)
 }
 
-// --- contracts.ChannelAdmin: synthetic, terminal-local channels ---
-
 func (t *Terminal) Kind(_ context.Context, _ string) (string, error) { return "text", nil }
 
 func (t *Terminal) CreateUnder(_ context.Context, _, name string) (string, error) {
@@ -621,7 +516,6 @@ func (t *Terminal) Send(_ context.Context, channelID, content string) error {
 // markup, so the operator just sees the id.
 func (t *Terminal) ChannelRef(id string) string { return id }
 
-// slug lowercases and replaces unsafe runes so a channel id stays path-safe.
 func slug(s string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(s) {

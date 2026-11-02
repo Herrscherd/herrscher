@@ -14,7 +14,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
 
-// sessionsDir is the per-repo directory that holds session worktrees.
 const sessionsDir = ".herrscher-sessions"
 
 // Worktreer manages git worktrees. It is repo-stateless: the repo root is passed
@@ -55,9 +54,6 @@ func (w *Worktreer) pathIn(repo, dir, name string) string {
 // instanceID when set.
 func (w *Worktreer) Branch(name string) string { return branchFor(w.instanceID, name) }
 
-// branchFor is the pure name calculation. It is string work, so the remote
-// façade answers it here rather than paying a round trip to be told a name it
-// can compute.
 func branchFor(instanceID, name string) string {
 	if instanceID == "" {
 		return "session/" + name
@@ -74,28 +70,11 @@ func (w *Worktreer) Create(repo, name, base string) (string, error) {
 	if !w.isGitRepo(repo) {
 		return "", nil
 	}
-	// base is passed as a positional git arg; a leading "-" would let a
-	// caller-supplied ref be parsed as a git flag (option injection). The
-	// handoff path only ever passes safe "session/<A>" refs, but the
-	// operator-CLI base param is arbitrary, so guard here defense-in-depth.
 	if base != "" && strings.HasPrefix(base, "-") {
 		return "", fmt.Errorf("worktree: refusing base ref %q that looks like a flag", base)
 	}
 	p := w.Path(repo, name)
-	// Closing a session removes its worktree but keeps its branch — the branch is
-	// where the committed, unmerged work lives, and deleting it would throw that
-	// away. So a name that comes back finds its branch already there. Check it out
-	// instead of asking for a new one: a session named after a channel is exactly
-	// the case that comes back, and it should return to its own work rather than
-	// refuse to start. base only decides where a *new* branch begins; a branch
-	// that already exists carries its own history.
 	branch := w.Branch(name)
-	// The same reasoning applies to the directory. Closing a session removes its
-	// worktree, but a crash, a kill, or a daemon restart mid-session leaves the
-	// directory registered and on its branch — and then the session that comes
-	// back is refused by `worktree add` on the grounds that its own worktree is
-	// in the way. Reuse it: a registered worktree already on the right branch is
-	// not an obstacle to the session, it *is* the session.
 	switch reusable, err := w.reusable(repo, p, branch); {
 	case err != nil:
 		return "", err
@@ -133,13 +112,6 @@ func (w *Worktreer) PreExisting(repo, name string) bool {
 	return registered
 }
 
-// reusable reports whether the worktree at path can be handed back to a session
-// asking for branch, and repairs the states that are merely stale.
-//
-// It never deletes anything with content. A directory sitting where the worktree
-// belongs, but which git does not know, is someone else's — reporting that is
-// the whole value of the check, since removing it is how a session would eat
-// work nobody asked it to touch.
 func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 	registered, err := w.registeredWorktree(repo, path)
 	if err != nil {
@@ -159,9 +131,6 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 		return false, nil
 	}
 
-	// Registered but gone from disk: a worktree removed by hand, or a session
-	// directory lost with the filesystem under it. git holds the registration and
-	// would refuse the add on its own record alone, so drop the record.
 	if missing {
 		if out, err := exec.CommandContext(w.ctx, "git", "-C", repo, "worktree", "prune").CombinedOutput(); err != nil {
 			return false, fmt.Errorf("worktree prune: %s", redact.Output(out))
@@ -183,8 +152,6 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 	return true, nil
 }
 
-// branchAt names the branch checked out in an existing worktree. A detached HEAD
-// has no branch to compare against, which is reported rather than guessed at.
 func (w *Worktreer) branchAt(path string) (string, error) {
 	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "symbolic-ref", "--short", "HEAD").Output()
 	if err != nil {
@@ -226,9 +193,9 @@ func (w *Worktreer) BranchExistsAt(path, branch string) (bool, error) {
 type MergeOutcome int
 
 const (
-	MergeApplied  MergeOutcome = iota // a merge commit was created
-	MergeUpToDate                     // nothing to merge — branch already in lead
-	MergeConflict                     // conflict — the merge was aborted
+	MergeApplied MergeOutcome = iota
+	MergeUpToDate
+	MergeConflict
 )
 
 // MergeInto runs `git -C leadPath merge --no-edit branch`. On success it reports
@@ -254,7 +221,6 @@ func (w *Worktreer) MergeInto(leadPath, branch string) (MergeOutcome, []string, 
 		}
 		return MergeApplied, nil, nil
 	}
-	// Merge failed. If files are in conflict, abort and report them cleanly.
 	conflicts := w.conflictFiles(leadPath)
 	_ = exec.CommandContext(w.ctx, "git", "-C", leadPath, "merge", "--abort").Run()
 	if len(conflicts) > 0 {
@@ -263,7 +229,6 @@ func (w *Worktreer) MergeInto(leadPath, branch string) (MergeOutcome, []string, 
 	return MergeConflict, nil, fmt.Errorf("merge %s into %q: %s", branch, leadPath, redact.Output(out))
 }
 
-// headAt returns the commit HEAD points to in the given worktree.
 func (w *Worktreer) headAt(path string) (string, error) {
 	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "rev-parse", "HEAD").Output()
 	if err != nil {
@@ -272,7 +237,6 @@ func (w *Worktreer) headAt(path string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// conflictFiles lists paths currently in an unmerged (conflicted) state.
 func (w *Worktreer) conflictFiles(path string) []string {
 	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "diff", "--name-only", "--diff-filter=U").Output()
 	if err != nil {
@@ -292,8 +256,6 @@ func (w *Worktreer) Remove(repo, name string, force bool) error {
 	if !force {
 		clean, err := w.IsCleanAt(p)
 		if err != nil {
-			// Can't verify the tree is clean: refuse rather than risk discarding
-			// work. force: bypasses.
 			return fmt.Errorf("worktree %q: %v — close with force:true to remove anyway", name, err)
 		}
 		if !clean {
@@ -321,10 +283,6 @@ func (w *Worktreer) Remove(repo, name string, force bool) error {
 	return nil
 }
 
-// recoverEmptyOrphan handles the partial Windows failure where `git worktree
-// remove` already deleted its registration and contents, but a process-held
-// directory handle prevented the now-empty root directory from being removed.
-// It removes exactly one validated empty session directory, never recursively.
 func (w *Worktreer) recoverEmptyOrphan(repo, name string) (bool, error) {
 	path, ok := w.validSessionChild(repo, name)
 	if !ok {
@@ -346,8 +304,6 @@ func (w *Worktreer) recoverEmptyOrphan(repo, name string) (bool, error) {
 	case len(entries) != 0:
 		return false, nil
 	}
-	// Revalidate after the external git/list/read operations so a path swapped
-	// for a link in the meantime is never handed directly to os.Remove.
 	revalidated, ok := w.validSessionChild(repo, name)
 	if !ok || !samePath(revalidated, path) {
 		return false, nil
@@ -436,10 +392,6 @@ func (w *Worktreer) registeredWorktree(repo, target string) (bool, error) {
 	return false, nil
 }
 
-// canonicalPathForComparison resolves links in the part of a path that exists,
-// then restores the components that do not. Any number of trailing components
-// may be absent: the sessions directory itself does not exist before the repo's
-// first session, and a partial removal can take more than the leaf with it.
 func canonicalPathForComparison(path string) (string, error) {
 	path, err := filepath.Abs(path)
 	if err != nil {
@@ -456,8 +408,6 @@ func canonicalPathForComparison(path string) (string, error) {
 		}
 		parent := filepath.Dir(path)
 		if parent == path {
-			// The root itself does not resolve: nothing of this path exists, so
-			// there is nothing to canonicalise and the path stands for itself.
 			return filepath.Join(append([]string{path}, absent...)...), nil
 		}
 		absent = append([]string{filepath.Base(path)}, absent...)

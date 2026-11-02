@@ -21,8 +21,6 @@ const (
 	Deny  Decision = "deny"
 )
 
-// severity ranks decisions. Unknown values rank lowest so a malformed rule can
-// never out-vote a well formed one.
 func severity(d Decision) int {
 	switch d {
 	case Deny:
@@ -116,9 +114,9 @@ type Request struct {
 type Mode string
 
 const (
-	ModeAsk    Mode = "ask"    // the policy's own verdict; an unset mode goes the same way through Apply, but is not equal to this
-	ModeBypass Mode = "bypass" // nothing is ever asked
-	ModeStrict Mode = "strict" // anything not explicitly allowed is asked
+	ModeAsk    Mode = "ask"
+	ModeBypass Mode = "bypass"
+	ModeStrict Mode = "strict"
 )
 
 // Decide returns the strictest decision any rule reaches for req, and whether
@@ -164,16 +162,6 @@ func Apply(m Mode, d Decision, matched bool) Decision {
 	return d
 }
 
-// glob matches pattern against s, where * stands for any run of characters,
-// path separators included, and ? for exactly one byte. Byte and not character:
-// `git ?ush` matches `git push`, while `caf?` does not match `café`, whose last
-// character is two bytes. A rule meant to cover accented or non-Latin text
-// wants * there. Everything else in the pattern is literal, escaping included:
-// there is no way to ask for a literal * or ?.
-//
-// Two pointers with one backtrack mark rather than a regexp: the subject is
-// model-written text, and a pattern like "*a*a*a*" must not be a way to make
-// the daemon think for a second per tool call.
 func glob(pattern, s string) bool {
 	var si, pi, star, mark int
 	star = -1

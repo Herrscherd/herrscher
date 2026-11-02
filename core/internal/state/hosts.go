@@ -7,10 +7,10 @@ const LocalHost = "local"
 // Host is a named place where a session's process runs.
 type Host struct {
 	Name      string `json:"name"`
-	SSH       string `json:"ssh,omitempty"`       // user@machine; "" = local
-	Workspace string `json:"workspace,omitempty"` // abs path over there
-	Bin       string `json:"bin,omitempty"`       // abs path to herrscher over there
-	Version   string `json:"version,omitempty"`   // short commit provisioned
+	SSH       string `json:"ssh,omitempty"`
+	Workspace string `json:"workspace,omitempty"`
+	Bin       string `json:"bin,omitempty"`
+	Version   string `json:"version,omitempty"`
 	GOOS      string `json:"goos,omitempty"`
 	GOARCH    string `json:"goarch,omitempty"`
 }

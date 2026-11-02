@@ -118,7 +118,6 @@ func TestStopWaitsForRunLoopCompletionWithoutHoldingMutex(t *testing.T) {
 	default:
 	}
 
-	// Stop must not hold the supervisor mutex while waiting.
 	otherStopped := make(chan error, 1)
 	go func() { otherStopped <- s.Stop("other") }()
 	select {
@@ -130,9 +129,6 @@ func TestStopWaitsForRunLoopCompletionWithoutHoldingMutex(t *testing.T) {
 		t.Fatal("Stop held supervisor.mu while waiting for runLoop")
 	}
 
-	// A concurrent Start for the same name must wait for the stopping run, then
-	// launch a replacement. Returning idempotent success here would lose the
-	// requested start when Stop removes the old run.
 	startReturned := make(chan struct{})
 	go func() {
 		s.Start(state.Session{Name: "demo"})
@@ -247,19 +243,13 @@ func TestBridgeArgsOmitsLearningConfigWhenUnset(t *testing.T) {
 	}
 }
 
-// TestRunLoopLogsRestartAsStructuredWarn drives one crash-restart cycle and
-// asserts the restart line is a structured slog record (level=warn, session
-// field) routed through the injected logger — not a raw fmt.Fprintf string.
 func TestRunLoopLogsRestartAsStructuredWarn(t *testing.T) {
 	var buf bytes.Buffer
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// A binary that cannot start makes cmd.Run() return immediately, exercising
-	// the restart path without spawning a real bridge.
 	s := NewSupervisor(ctx, "/herrscher/does-not-exist")
 	s.SetLogger(obs.NewLogger(&buf, slog.LevelDebug))
-	// Cancel on the first backoff sleep so the loop logs exactly once then exits.
 	s.sleep = func(time.Duration) <-chan time.Time {
 		cancel()
 		ch := make(chan time.Time, 1)
@@ -278,9 +268,6 @@ func TestRunLoopLogsRestartAsStructuredWarn(t *testing.T) {
 	}
 }
 
-// captureDelays runs runLoop against a never-starting binary, recording the
-// delay handed to each restart and cancelling after wantN restarts. now controls
-// the per-attempt clock so the test fixes how long each attempt "ran".
 func captureDelays(t *testing.T, wantN int, now func() time.Time) []time.Duration {
 	t.Helper()
 	var delays []time.Duration
@@ -302,8 +289,6 @@ func captureDelays(t *testing.T, wantN int, now func() time.Time) []time.Duratio
 	return delays
 }
 
-// TestRunLoopCountsBridgeRestart asserts a crash-restart bumps the metrics
-// registry's bridge-restart counter.
 func TestRunLoopCountsBridgeRestart(t *testing.T) {
 	var delays []time.Duration
 	ctx, cancel := context.WithCancel(context.Background())
@@ -325,8 +310,6 @@ func TestRunLoopCountsBridgeRestart(t *testing.T) {
 	}
 }
 
-// TestRunLoopBacksOffGeometrically asserts a tight crash loop (each attempt
-// reports ~0 runtime via the frozen clock) produces strictly growing delays.
 func TestRunLoopBacksOffGeometrically(t *testing.T) {
 	frozen := time.Unix(0, 0)
 	delays := captureDelays(t, 4, func() time.Time { return frozen })
@@ -341,14 +324,9 @@ func TestRunLoopBacksOffGeometrically(t *testing.T) {
 	}
 }
 
-// TestRunLoopResetsBackoffAfterHealthyRun asserts that when each attempt runs
-// longer than resetAfter, the streak resets every time so the delay stays at
-// base — proving the measured runtime feeds the backoff (not a constant 0).
 func TestRunLoopResetsBackoffAfterHealthyRun(t *testing.T) {
 	pol := obs.RestartBackoff()
 	tick := time.Unix(0, 0)
-	// Each now() call advances past the reset threshold, so start→end of every
-	// attempt exceeds it.
 	delays := captureDelays(t, 3, func() time.Time {
 		tick = tick.Add(2 * pol.Reset)
 		return tick
@@ -371,12 +349,6 @@ func TestBridgeArgsNoBackendWhenStream(t *testing.T) {
 	}
 }
 
-// TestBridgeArgsThreadsModelID pins the flag that carries a session's catalog
-// model into the supervised child. Without it, `serve` → Start → bridge builds
-// its backend with ModelID:"" and the routing choke point is skipped entirely:
-// a gateway-routed session then spawns bare, i.e. on the machine's own vendor
-// login. Every other supervised path (create, switch/Restart, resume) goes
-// through here, so this flag is the whole reachability of the feature.
 func TestBridgeArgsThreadsModelID(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/bin/herrscher")
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1", ModelID: "gw-claude-opus-5"})
@@ -402,7 +374,6 @@ func TestBridgeArgsPrefersTheMemoryRoots(t *testing.T) {
 	}
 }
 
-// A session someone configured by hand keeps sending exactly what it sends today.
 func TestBridgeArgsKeepsThePlacementFieldsWhenNoMemoryRootIsSet(t *testing.T) {
 	s := &Supervisor{}
 	joined := strings.Join(s.bridgeArgs(state.Session{Name: "demo", Project: "game", Agent: "scout"}), " ")
@@ -414,9 +385,6 @@ func TestBridgeArgsKeepsThePlacementFieldsWhenNoMemoryRootIsSet(t *testing.T) {
 	}
 }
 
-// The precedence is the same for both halves of the scope: a memory root beats
-// the placement field of the same name, because only one of the two is about
-// where knowledge goes.
 func TestMemoryAgentBeatsTheProvisionedAgent(t *testing.T) {
 	got := strings.Join((&Supervisor{}).bridgeArgs(state.Session{Name: "s", Agent: "bob", MemoryAgent: "tui"}), " ")
 	if !strings.Contains(got, "--agent tui") {
@@ -424,9 +392,6 @@ func TestMemoryAgentBeatsTheProvisionedAgent(t *testing.T) {
 	}
 }
 
-// A hook spawned inside a session asks the daemon about a session by name, and
-// the vendor CLI's own session id is not that name. The launch is the only
-// place that knows it, so it has to say so in the environment.
 func TestBridgeCarriesTheSessionName(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/bin/herrscher")
 	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude"})
@@ -444,15 +409,6 @@ func TestBridgeCarriesTheSessionName(t *testing.T) {
 	}
 }
 
-// The other half of what a hook needs: where to ask. Without it the hook falls
-// back to the default state file, which under `serve --state <path>` names
-// another instance and another socket, and a hook that reaches nobody allows.
-// So a daemon serving its own state would run a policy that decides nothing.
-//
-// The socket is this session's and not the daemon's, because which listener a
-// connection arrives on is what tells the daemon who is calling. Pointing a
-// session at the operator's socket would hand every agent the operator's
-// authority.
 func TestBridgeIsGivenItsOwnSessionSocket(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/bin/herrscher")
 	s.SetCommandSocket(func(session string) string { return "/tmp/herrscher-command-alt-s-" + session + ".sock" })
@@ -471,9 +427,6 @@ func TestBridgeIsGivenItsOwnSessionSocket(t *testing.T) {
 	}
 }
 
-// The remote half of the same claim: ssh carries this session's socket over,
-// and nothing else, so a machine that is not this one has no path to the
-// operator's.
 func TestRemoteForwardPointsAtTheSessionSocket(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/bin/herrscher")
 	s.SetCommandSocket(func(session string) string { return "/tmp/sock-" + session })
@@ -492,9 +445,6 @@ func TestRemoteForwardPointsAtTheSessionSocket(t *testing.T) {
 	}
 }
 
-// A supervisor that was never told its socket says nothing rather than naming a
-// default path: an empty value would look like an answer to the hook, which
-// takes what it is given over resolving anything.
 func TestBridgeOmitsAnUnknownCommandSocket(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/bin/herrscher")
 	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude"})

@@ -22,10 +22,6 @@ type Skill struct {
 	stamp       fileStamp
 }
 
-// fileStamp identifies a version of a SKILL.md cheaply enough to check on every
-// turn. Modification time alone would miss a rewrite landing inside the clock's
-// resolution; size alone would miss an edit that kept the length. Together they
-// are what a rescan compares instead of reading the file again.
 type fileStamp struct {
 	mod  time.Time
 	size int64
@@ -42,8 +38,6 @@ func (s Skill) Body() (string, error) {
 	return stripFrontmatter(b), nil
 }
 
-// stripFrontmatter drops a leading ---…--- block and returns the remaining body
-// verbatim. Input without an opening --- fence is returned unchanged.
 func stripFrontmatter(md []byte) string {
 	sc := bufio.NewScanner(bytes.NewReader(md))
 	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {

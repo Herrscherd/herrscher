@@ -14,28 +14,21 @@ import (
 // Un digest de 9h recu a 9h45 sert encore, le meme a 18h derange.
 const DefaultGrace = time.Hour
 
-// minGrace est le plancher de la grace. La boucle a le grain de la minute, donc
-// une fenetre servie normalement l'est deja avec quelques secondes de retard :
-// une grace plus courte les declarerait toutes perimees et l'horaire ne tirerait
-// jamais.
 const minGrace = time.Minute
 
-// maxCronLookahead borne la recherche de la prochaine fenetre cron. Une
-// expression que le calendrier ne satisfait jamais, "0 0 30 2 *" par exemple,
-// doit rendre une erreur au lieu de boucler.
 const maxCronLookahead = 366 * 24 * time.Hour
 
 // Schedule est un horaire persiste. Session et Agent sont deux cibles
 // mutuellement exclusives, Every et Cron deux cadences mutuellement exclusives.
 type Schedule struct {
 	Name    string `json:"name"`
-	Session string `json:"session,omitempty"` // cible session, exclusive d'Agent
-	Agent   string `json:"agent,omitempty"`   // cible agent, exclusive de Session
-	Project string `json:"project,omitempty"` // sous-repertoire workspace, cible agent seulement
+	Session string `json:"session,omitempty"`
+	Agent   string `json:"agent,omitempty"`
+	Project string `json:"project,omitempty"`
 	Task    string `json:"task"`
-	Every   string `json:"every,omitempty"` // duree lue par time.ParseDuration
-	Cron    string `json:"cron,omitempty"`  // expression a cinq champs
-	Grace   string `json:"grace,omitempty"` // duree ; vide vaut DefaultGrace
+	Every   string `json:"every,omitempty"`
+	Cron    string `json:"cron,omitempty"`
+	Grace   string `json:"grace,omitempty"`
 	Paused  bool   `json:"paused,omitempty"`
 	// LastRun est le point d'ou la prochaine fenetre se compte, en RFC3339 : le
 	// dernier tir qui a effectivement atteint une session, ou l'instant ou une
@@ -69,9 +62,6 @@ func Validate(s Schedule, now time.Time) error {
 		return errors.New("schedule takes one target: --session or --agent, not both")
 	}
 	if s.Project != "" && s.Agent == "" {
-		// --project decrit le workspace de la session que l'horaire ouvre. Une
-		// cible session designe une session deja ouverte, dont le workspace est
-		// deja choisi : accepter le flag la ferait croire qu'il agit.
 		return errors.New("--project only means something with --agent, which opens the session")
 	}
 	switch {
@@ -90,16 +80,10 @@ func Validate(s Schedule, now time.Time) error {
 	if _, err := parseCron(s.Cron); err != nil {
 		return err
 	}
-	// Un aller-retour complet, parce que parser accepte "0 0 30 2 *", que le
-	// calendrier ne satisfait jamais : seule une recherche de fenetre le
-	// decouvre. La question posee est donc "cette expression tire-t-elle dans
-	// l'annee qui vient", et un horaire quadriennal comme le 29 fevrier est
-	// refuse de ce fait. C'est voulu : personne n'ecrit un cron pour 2028.
 	_, err := Next(s, now)
 	return err
 }
 
-// period lit la cadence d'un horaire --every.
 func period(s Schedule) (time.Duration, error) {
 	d, err := time.ParseDuration(s.Every)
 	if err != nil {
@@ -125,9 +109,6 @@ func graceOf(s Schedule) (time.Duration, error) {
 	return d, nil
 }
 
-// anchor est le point d'ou la prochaine fenetre se compte : le dernier tir
-// livre, ou a defaut la creation. Ni l'un ni l'autre veut dire qu'il n'y a rien
-// d'ou compter, et un horaire sans ancre ne tire pas.
 func anchor(s Schedule) (time.Time, bool) {
 	for _, stamp := range []string{s.LastRun, s.CreatedAt} {
 		if stamp == "" {
@@ -244,11 +225,6 @@ func CatchUp(s Schedule, now time.Time) (bool, time.Duration) {
 	return true, late
 }
 
-// lastWindow rend la fenetre la plus recente a `now` ou avant, quand il en
-// existe une strictement apres l'ancre. Les deux cadences se traitent
-// differemment pour rester bornees : --every par arithmetique, --cron par une
-// marche arriere limitee au delai de grace, puisqu'une fenetre plus vieille que
-// la grace serait de toute facon rejetee.
 func lastWindow(s Schedule, now time.Time, grace time.Duration) (time.Time, bool) {
 	a, ok := anchor(s)
 	if !ok {

@@ -8,12 +8,9 @@ import (
 	"testing"
 )
 
-// recordingDispatcher stands in for the operator registry: it records every argv
-// and answers from a scripted table, so runPromptWith can be exercised with no
-// daemon, no gateway and no backend.
 type recordingDispatcher struct {
 	seen  [][]string
-	reply map[string]string // first two argv segments -> reply
+	reply map[string]string
 	fail  map[string]error
 }
 
@@ -64,8 +61,6 @@ func TestRunPromptCreatesThenSeeds(t *testing.T) {
 	}
 }
 
-// A terminal-only session is the point: the prompt path must not mint a gateway
-// channel, and must not need a home to run.
 func TestRunPromptCreatesATerminalOnlySession(t *testing.T) {
 	d := &recordingDispatcher{reply: map[string]string{"session seed": "ok"}}
 	var out, errOut strings.Builder
@@ -86,9 +81,6 @@ func slicesContain(s []string, want string) bool {
 	return false
 }
 
-// The reply is the output; the session name is a note to the operator. Splitting
-// them across stdout/stderr is what makes `herrscher "…" > out.md` hold the
-// answer alone.
 func TestRunPromptSplitsReplyFromTheSessionName(t *testing.T) {
 	d := &recordingDispatcher{reply: map[string]string{"session seed": "voilà le plan"}}
 	var out, errOut strings.Builder
@@ -103,8 +95,6 @@ func TestRunPromptSplitsReplyFromTheSessionName(t *testing.T) {
 	}
 }
 
-// A session that could not be created has nothing to seed; seeding anyway would
-// hit a second, more confusing error about a session that does not exist.
 func TestRunPromptDoesNotSeedWhenCreateFails(t *testing.T) {
 	d := &recordingDispatcher{fail: map[string]error{"session create": fmt.Errorf("worktree: boom")}}
 	var out, errOut strings.Builder
@@ -117,9 +107,6 @@ func TestRunPromptDoesNotSeedWhenCreateFails(t *testing.T) {
 	}
 }
 
-// A seed that fails leaves the session standing: it carries a worktree and the
-// start of a transcript, and tearing it down is what the operator needs to
-// diagnose the failure. The error names it so they can.
 func TestRunPromptNamesTheSessionWhenSeedFails(t *testing.T) {
 	d := &recordingDispatcher{fail: map[string]error{"session seed": fmt.Errorf("seed timeout")}}
 	var out, errOut strings.Builder
@@ -129,9 +116,6 @@ func TestRunPromptNamesTheSessionWhenSeedFails(t *testing.T) {
 	}
 }
 
-// TestATaskLaunchAsksToLearn is the moat for the `herrscher "<task>"` path: the
-// session it opens must carry the same memory roots the TUI's own default
-// session gets, or a one-shot turn learns nothing.
 func TestATaskLaunchAsksToLearn(t *testing.T) {
 	t.Setenv("TERMINAL_PROJECT", "Mon Projet")
 	d := &recordingDispatcher{reply: map[string]string{"session seed": "ok"}}
@@ -156,8 +140,6 @@ func TestATaskLaunchAsksToLearn(t *testing.T) {
 	}
 }
 
-// TestATaskLaunchToldNotToLearnSaysNothing pins the other half: TERMINAL_LEARN=false
-// dispatches exactly the argv this path used before it learned anything.
 func TestATaskLaunchToldNotToLearnSaysNothing(t *testing.T) {
 	t.Setenv("TERMINAL_LEARN", "false")
 	d := &recordingDispatcher{reply: map[string]string{"session seed": "ok"}}

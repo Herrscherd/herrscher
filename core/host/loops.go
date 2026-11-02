@@ -15,7 +15,6 @@ import (
 
 const healthWindow = 90 * time.Second
 
-// serveHealth runs a tiny HTTP server exposing GET /health (200 online / 503 down).
 func serveHealth(ctx context.Context, addr string, h *health.Health) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +32,6 @@ func serveHealth(ctx context.Context, addr string, h *health.Health) {
 	}
 }
 
-// pingLoop records an independent reachability latency every 30s.
 func pingLoop(ctx context.Context, pr contracts.Prober, h *health.Health) {
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
@@ -49,9 +47,6 @@ func pingLoop(ctx context.Context, pr contracts.Prober, h *health.Health) {
 	}
 }
 
-// statusContent renders the status embed body. When instanceID is non-empty it
-// is prefixed as "[instanceID] " so daemons sharing a status channel are
-// distinguishable (Spec §6).
 func statusContent(instanceID string, snap health.HealthSnapshot) string {
 	dot, word := "🟢", "online"
 	if !snap.Online {
@@ -67,8 +62,6 @@ func statusContent(instanceID string, snap health.HealthSnapshot) string {
 		prefix, dot, word, uptime, snap.PingMS, snap.Sessions, m.TurnsCompleted, m.TurnsAbandoned, m.BridgeRestarts)
 }
 
-// statusLoop maintains a single self-updating status message in channelID via
-// the channel reader's UpsertStatusMessage.
 func statusLoop(ctx context.Context, cr contracts.ChannelReader, channelID string, st *state.State, h *health.Health, instanceID string) {
 	t := time.NewTicker(60 * time.Second)
 	defer t.Stop()

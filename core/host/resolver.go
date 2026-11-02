@@ -16,9 +16,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 )
 
-// Remote-resolve retry/timeout defaults. They bound a remote dial so a slow or
-// briefly-unavailable dependency is retried within a deadline instead of
-// blocking or killing the session — and apply only on the remote path.
 const (
 	defaultRetryAttempts  = 5
 	defaultRetryBudget    = 20 * time.Second
@@ -32,18 +29,13 @@ const (
 // remote set every category resolves local — today's behaviour.
 type Resolver struct {
 	remote  map[contracts.Category]bool
-	NatsURL string // "" => nats.DefaultURL; consulted only on the remote path
+	NatsURL string
 
-	// creds authenticates the remote dial. nil => plaintext loopback (the
-	// single-host default); a non-nil mTLS credential makes off-loopback safe.
 	creds credentials.TransportCredentials
 
 	log     *slog.Logger
 	metrics *metrics.Registry
 
-	// Retry/timeout knobs and clock seams for the remote path. dialMemory is the
-	// single-attempt dial (default dialRemoteMemoryOnce); tests inject a fake
-	// transport and a fast clock so retries run without real wall-clock waits.
 	retryAttempts    int
 	retryBudget      time.Duration
 	attemptTimeout   time.Duration
@@ -176,12 +168,6 @@ func (e *RemoteResolveError) Error() string {
 
 func (e *RemoteResolveError) Unwrap() error { return e.Err }
 
-// resolveRemoteWithRetry dials a remote category's proxy, retrying transient
-// failures on the Stage A2 backoff until either an attempt succeeds, the attempt
-// cap is hit, the total budget elapses, or ctx is cancelled. It is generic over
-// the port type so every remote category reuses the same retry/timeout/metrics
-// machinery via its own one-shot dial; memory and orchestrator are the callers
-// as of C2 (the streaming backend joins in C3).
 func resolveRemoteWithRetry[T any](r *Resolver, ctx context.Context, cat contracts.Category, dial func(context.Context) (T, error)) (T, error) {
 	var zero T
 	start := r.now()
@@ -226,9 +212,6 @@ func (r *Resolver) natsURL() string {
 	return nats.DefaultURL
 }
 
-// dialRemoteMemoryOnce is one remote-resolve attempt: connect to NATS, watch for
-// a memory announcement, and dial its gRPC proxy. The announcement wait and dial
-// are bounded by ctx (the caller sets the per-attempt deadline).
 func (r *Resolver) dialRemoteMemoryOnce(ctx context.Context, _ contracts.Plugin) (contracts.Memory, error) {
 	nc, err := nats.Connect(r.natsURL())
 	if err != nil {
@@ -258,9 +241,6 @@ func (r *Resolver) dialRemoteMemoryOnce(ctx context.Context, _ contracts.Plugin)
 	}
 }
 
-// dialRemoteOrchestratorOnce is one remote-resolve attempt for the orchestrator:
-// connect to NATS, watch for an orchestrator announcement, and dial its gRPC
-// proxy. Same shape as dialRemoteMemoryOnce; ctx bounds the announcement wait.
 func (r *Resolver) dialRemoteOrchestratorOnce(ctx context.Context, _ contracts.Plugin) (contracts.Orchestrator, error) {
 	nc, err := nats.Connect(r.natsURL())
 	if err != nil {
@@ -290,9 +270,6 @@ func (r *Resolver) dialRemoteOrchestratorOnce(ctx context.Context, _ contracts.P
 	}
 }
 
-// dialRemoteBackendOnce is one remote-resolve attempt for the backend: connect to
-// NATS, watch for a backend announcement, and dial its streaming gRPC proxy. Same
-// shape as the memory/orchestrator dials; ctx bounds the announcement wait.
 func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, p contracts.Plugin) (contracts.Backend, error) {
 	nc, err := nats.Connect(r.natsURL())
 	if err != nil {

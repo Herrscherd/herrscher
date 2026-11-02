@@ -7,7 +7,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// resumableBackend is a fakeBackend that also reports a resume token.
 type resumableBackend struct {
 	fakeBackend
 	token string

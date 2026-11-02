@@ -18,8 +18,6 @@ type codexMCPConfig struct {
 	MCPServers map[string]codexMCPServer `json:"mcpServers"`
 }
 
-// renderCodexMCP converts the durable Claude-format mcp.json into Codex's
-// project-local config.toml. Only stdio MCP servers are supported.
 func renderCodexMCP(raw []byte, worktree string) ([]byte, error) {
 	var config codexMCPConfig
 	if err := json.Unmarshal(raw, &config); err != nil {
@@ -38,8 +36,6 @@ func renderCodexMCP(raw []byte, worktree string) ([]byte, error) {
 			return nil, fmt.Errorf("empty MCP server name in mcp.json")
 		}
 		server := config.MCPServers[name]
-		// Claude's .mcp.json treats stdio as the default transport and commonly
-		// omits "type"; accept an empty type as stdio rather than rejecting.
 		if server.Type != "" && server.Type != "stdio" {
 			return nil, fmt.Errorf("unsupported MCP transport %q for server %q", server.Type, name)
 		}

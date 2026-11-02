@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// gitRepo makes a real repository under t.TempDir with no identity configured
-// and returns its path, with the developer's own global config walled off.
-// Real git, because the whole point of FromDir is what git answers.
 func gitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -53,21 +50,12 @@ func TestFromDirLeavesUnsetKeysEmpty(t *testing.T) {
 	}
 }
 
-// A repository with nothing configured is a silence, not a failure: the zero
-// Identity is what every caller renders as "git had nothing to say".
-// isolate walls off the developer's own git config for the tests that assert a
-// silence. Without it they would assert against whoever ran them: git answers
-// `config --get` from the global file even outside a repository, so "no local
-// identity" is not the same question as "no identity at all".
 func isolate(t *testing.T) {
 	t.Helper()
 	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
 	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
 }
 
-// A repository with nothing configured, on a machine with nothing configured,
-// is a silence rather than a failure: the zero Identity is what every caller
-// renders as "git had nothing to say".
 func TestFromDirIsSilentWhenNothingIsConfigured(t *testing.T) {
 	isolate(t)
 	if got := FromDir(gitRepo(t)); !got.Empty() {
@@ -82,9 +70,6 @@ func TestFromDirIsSilentOutsideARepositoryWithNoGlobalConfig(t *testing.T) {
 	}
 }
 
-// Outside a repository git still answers, from the global config — and that is
-// the answer we want: a session started in a directory that is no repository
-// still knows who its human is.
 func TestFromDirFallsBackToTheGlobalConfigOutsideARepository(t *testing.T) {
 	home := t.TempDir()
 	global := filepath.Join(home, "gitconfig")
@@ -101,8 +86,6 @@ func TestFromDirFallsBackToTheGlobalConfigOutsideARepository(t *testing.T) {
 	}
 }
 
-// The local value wins over the global one, because git decides precedence and
-// we only ask. This is what lets a per-repository identity work for free.
 func TestFromDirPrefersTheRepositoryConfigOverTheGlobalOne(t *testing.T) {
 	home := t.TempDir()
 	global := filepath.Join(home, "gitconfig")
@@ -143,11 +126,6 @@ func TestStringOmitsWhatGitDidNotAnswer(t *testing.T) {
 	}
 }
 
-// A git value is not necessarily one line. `git config user.name` accepts a
-// newline, and the name is rendered straight into a turn's prompt inside a
-// <user> block — so a value carrying its own closing tag would forge context
-// the daemon never wrote. Anyone who can edit .git/config in a worktree can set
-// it, which includes an agent working in that worktree.
 func TestFromDirFlattensAValueThatSpansLines(t *testing.T) {
 	isolate(t)
 	repo := gitRepo(t)

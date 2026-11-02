@@ -23,10 +23,6 @@ import (
 	transport "github.com/Herrscherd/herrscher-transport"
 )
 
-// TestResolverRemoteMemoryOverMTLS is the C4 end-to-end: with a generated CA/cert
-// pair the resolver negotiates mTLS to a remote memory category, and a client
-// without valid credentials is rejected. The same dual-usage leaf serves as both
-// the server and client identity (both signed by the test CA).
 func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	dir := genTestCerts(t)
 	tlsCfg := transport.TLSConfig{
@@ -81,8 +77,6 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	}()
 	t.Cleanup(func() { close(stop) })
 
-	// With client credentials the mTLS handshake succeeds and the proxy call
-	// reaches the remote memory.
 	clientCreds, err := tlsCfg.ClientCredentials()
 	if err != nil {
 		t.Fatalf("client creds: %v", err)
@@ -99,8 +93,6 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 		t.Fatalf("Record over mTLS: %v", err)
 	}
 
-	// A plaintext client (no credentials) is rejected by the mTLS server: the
-	// proxy dials lazily, so the rejection surfaces on the first call.
 	plain := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, srv.ClientURL())
 	memPlain, err := plain.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	if err != nil {
@@ -113,9 +105,6 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	}
 }
 
-// genTestCerts writes a self-signed CA plus one leaf (signed by the CA) usable as
-// both server and client identity (SAN 127.0.0.1, server+client ExtKeyUsage) into
-// a temp dir, returning the dir.
 func genTestCerts(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

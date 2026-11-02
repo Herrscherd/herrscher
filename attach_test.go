@@ -15,8 +15,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-// fakeDaemon stands in for a running herrscher: the two sockets a frontend
-// attaches to, and a record of every argv it was asked to run.
 type fakeDaemon struct {
 	instance       string
 	events         net.Conn
@@ -27,9 +25,6 @@ type fakeDaemon struct {
 
 func startFakeDaemon(t *testing.T, reply func(argv []string) (string, error)) *fakeDaemon {
 	t.Helper()
-	// The socket paths are derived from the instance id under TMPDIR, so a
-	// per-test TMPDIR keeps concurrent tests (and a real daemon on this machine)
-	// out of each other's way.
 	t.Setenv("TMPDIR", t.TempDir())
 	d := &fakeDaemon{instance: "test", argv: make(chan []string, 16), reply: reply}
 
@@ -97,8 +92,6 @@ func (d *fakeDaemon) handleCommand(c net.Conn) {
 	c.Write(append(b, '\n'))
 }
 
-// publish sends one event line on the events socket, waiting for the frontend to
-// have connected.
 func (d *fakeDaemon) publish(t *testing.T, session string, e contracts.Event) {
 	t.Helper()
 	if d.events == nil {
@@ -119,9 +112,6 @@ func infoJSON(sessions ...contracts.SessionInfo) string {
 	return string(b)
 }
 
-// An event names a session; a tab is keyed by a channel. Getting that mapping
-// wrong is the difference between a reply landing in its conversation and
-// landing nowhere the operator is looking.
 func TestAttachedFrontendRoutesAnEventToItsTab(t *testing.T) {
 	d := startFakeDaemon(t, func(argv []string) (string, error) {
 		if strings.Join(argv, " ") == "session info --json" {
@@ -163,13 +153,11 @@ func TestAttachedFrontendSendsTypedLinesToTheRightSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	<-d.argv // the priming session info
+	<-d.argv
 
 	a.Submit("terminal/alpha-1", "ship it", nil)
 	select {
 	case argv := <-d.argv:
-		// --origin says the line was typed in this window, so a session whose
-		// conversation lives in a chat channel is not answered there as well.
 		want := "session send --name alpha --origin terminal --text ship it"
 		if strings.Join(argv, " ") != want {
 			t.Fatalf("argv = %q, want %q", strings.Join(argv, " "), want)
@@ -179,8 +167,6 @@ func TestAttachedFrontendSendsTypedLinesToTheRightSession(t *testing.T) {
 	}
 }
 
-// The in-process TUI refuses everything but session/agent so a tab can never
-// restart or re-point its own host. Attaching must not be the way around that.
 func TestAttachedFrontendRefusesVerbsTheTerminalDoesNotOwn(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
@@ -203,7 +189,6 @@ func TestAttachedFrontendBindsANewSessionToTheTerminal(t *testing.T) {
 	if got := strings.Join(withTerminalOnly([]string{"session", "create", "--name", "x"}), " "); got != "session create --name x --terminal_only" {
 		t.Errorf("got %q", got)
 	}
-	// An explicit gateway choice is the operator's, and must survive.
 	if got := strings.Join(withTerminalOnly([]string{"session", "create", "--name", "x", "--gateways", "chat"}), " "); got != "session create --name x --gateways chat" {
 		t.Errorf("got %q", got)
 	}
@@ -212,8 +197,6 @@ func TestAttachedFrontendBindsANewSessionToTheTerminal(t *testing.T) {
 	}
 }
 
-// Attaching needs a daemon; without one it must fail rather than come up as an
-// empty window that silently swallows everything typed into it.
 func TestAttachingWithoutADaemonFails(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	if _, err := newAttachedDaemon(context.Background(), "nobody"); err == nil {
@@ -244,8 +227,6 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 	}
 }
 
-// A sanity check on the socket paths the whole design rests on: the frontend and
-// the daemon must derive the same ones from the same instance id.
 func TestSocketPathsAreInstanceScoped(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	if host.CommandSocketPath("a") == host.CommandSocketPath("b") {

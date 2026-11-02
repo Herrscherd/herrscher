@@ -24,8 +24,6 @@ func TestTLSConfigFromEnvReadsPaths(t *testing.T) {
 }
 
 func TestRemoteClientCredentialsFailsClosedOnHalfConfig(t *testing.T) {
-	// Only the key set: a half-configuration must error, never fall back to
-	// plaintext (the off-loopback safety guarantee).
 	t.Setenv("HERRSCHER_TLS_CA", "")
 	t.Setenv("HERRSCHER_TLS_CERT", "")
 	t.Setenv("HERRSCHER_TLS_KEY", "/key.pem")

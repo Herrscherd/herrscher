@@ -131,8 +131,6 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("remote resolve: %v", err)
 	}
-	// The turn-shaping call round-trips over gRPC: Context returns the remote
-	// value, and Observe surfaces no error.
 	if got := orch.Context(context.Background()); got != "remote-context" {
 		t.Fatalf("Context over remote = %q, want %q", got, "remote-context")
 	}
@@ -201,8 +199,6 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 		t.Fatalf("remote resolve: %v", err)
 	}
 
-	// The turn streams over gRPC: the bridge sees the same event sequence a local
-	// backend would, in order, then the terminal reply.
 	var kinds []string
 	reply, err := be.Respond(context.Background(), contracts.Prompt{Content: "hi"},
 		func(e contracts.BackendEvent) { kinds = append(kinds, e.Kind) })
@@ -217,8 +213,6 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 	}
 }
 
-// streamingBackend is a fake backend that emits a fixed multi-event turn ending
-// in a reply, exercising the streaming proxy's ordering + done boundary.
 type streamingBackend struct{ contracts.Backend }
 
 func (streamingBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {

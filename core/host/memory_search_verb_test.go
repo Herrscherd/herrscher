@@ -8,11 +8,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// TestMemorySearchVerbReturnsFormattedHits drives `memory search --text …`
-// through the real registry dispatch path, reusing the package's only fake
-// memory plugin (restoreVerbMem / currentRestoreMem, registered once in
-// memory_restore_verb_test.go) so BuildFirstMemory's "first registered
-// memory plugin" contract stays deterministic.
 func TestMemorySearchVerbReturnsFormattedHits(t *testing.T) {
 	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
 		"facts/a": {Key: "facts/a", Kind: contracts.KindDecision, Title: "Some Decision"},
@@ -30,9 +25,6 @@ func TestMemorySearchVerbReturnsFormattedHits(t *testing.T) {
 	}
 }
 
-// TestMemorySearchVerbRawFlag asserts --raw is forwarded as
-// contracts.Query.IncludeRaw = true, and that it defaults to false without
-// the flag.
 func TestMemorySearchVerbRawFlag(t *testing.T) {
 	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{}})
 	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})

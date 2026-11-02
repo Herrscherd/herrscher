@@ -17,8 +17,6 @@ func TestWithCapabilitiesNamesTheDaemonAndItsVerbs(t *testing.T) {
 	}
 }
 
-// The summary is worth nothing where it is handed over: it has to reach the
-// prompt of every turn, beside the skills and the delegation roster.
 func TestTurnPromptCarriesTheCapabilities(t *testing.T) {
 	resp := &captureBackend{reply: "ok"}
 	runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, nil,

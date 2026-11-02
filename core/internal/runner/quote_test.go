@@ -2,8 +2,6 @@ package runner
 
 import "testing"
 
-// Quoting is this package's security boundary: session names, branch names and
-// worktree paths all end up inside a remote shell command line.
 func TestShellQuote(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"", "''"},

@@ -10,10 +10,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
-// skillPanelRoots is the read-only search path the /skills panel lists from: the
-// user-global ~/.claude/skills, then any extra roots declared in config. The
-// panel is session-agnostic (the TUI is one gateway over many sessions), so it
-// deliberately omits per-session workspace roots.
 func skillPanelRoots() []string {
 	var roots []string
 	if home, err := os.UserHomeDir(); err == nil {
@@ -25,8 +21,6 @@ func skillPanelRoots() []string {
 	return roots
 }
 
-// openSkills discovers the available skills and opens the read-only panel,
-// sorted by name for a stable listing.
 func (m *model) openSkills() {
 	rows := skills.Discover(skillPanelRoots())
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
@@ -35,7 +29,6 @@ func (m *model) openSkills() {
 	m.skillsOpen = true
 }
 
-// clampSkills keeps the selection index within the current row set.
 func (m *model) clampSkills() {
 	n := len(m.skillsRows)
 	if m.skillsIdx >= n {

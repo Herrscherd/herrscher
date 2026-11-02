@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// reservoirCap bounds the retained latency samples; percentiles are computed over
-// the most recent reservoirCap observations.
 const reservoirCap = 256
 
 // Registry accumulates runtime counters and remote-call latencies. Safe for
@@ -26,9 +24,9 @@ type Registry struct {
 	remoteFailures atomic.Int64
 
 	mu       sync.Mutex
-	latency  []int64 // bounded ring of remote-call latency samples (ms)
-	latCount int64   // total observed (may exceed len(latency))
-	latNext  int     // next ring slot to overwrite once full
+	latency  []int64
+	latCount int64
+	latNext  int
 }
 
 func NewRegistry() *Registry { return &Registry{} }
@@ -123,13 +121,12 @@ func (r *Registry) Snapshot() Snapshot {
 	}
 }
 
-// percentile returns the nearest-rank p-th percentile (ms) of samples, 0 if empty.
 func percentile(samples []int64, p int) int64 {
 	if len(samples) == 0 {
 		return 0
 	}
 	slices.Sort(samples)
-	rank := (p*len(samples) + 99) / 100 // ceil(p/100 * n)
+	rank := (p*len(samples) + 99) / 100
 	rank = max(rank, 1)
 	rank = min(rank, len(samples))
 	return samples[rank-1]

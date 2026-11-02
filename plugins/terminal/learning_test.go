@@ -7,9 +7,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// cfgOf resolves the plugin's own declared settings against a fake environment,
-// so the test exercises the defaults the manifest actually ships rather than a
-// second copy of them.
 func cfgOf(t *testing.T, env map[string]string) contracts.PluginConfig {
 	t.Helper()
 	cfg, err := contracts.Resolve(settings(), func(k string) string { return env[k] })
@@ -89,9 +86,6 @@ func TestAMemoryAgentIsOverridable(t *testing.T) {
 	}
 }
 
-// A launch must survive a setting a human typed. session create validates the
-// project name, so a value it would refuse has to be folded here or the window
-// opens on nothing.
 func TestAProjectNameWithASpaceIsFoldedNotRefused(t *testing.T) {
 	c := &fakeSessionControl{}
 	cfg := cfgOf(t, map[string]string{"TERMINAL_PROJECT": "Mon Projet"})

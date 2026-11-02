@@ -22,8 +22,6 @@ func roleRegistry(t *testing.T) (*cli.Registry, *state.State) {
 	return reg, st
 }
 
-// The first grant changes what every unnamed account gets. Saying so is the
-// whole difference between a feature and a surprise.
 func TestTheFirstGrantWarnsThatEveryoneElseBecomesAnObserver(t *testing.T) {
 	reg, _ := roleRegistry(t)
 	out, err := reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:1", "--role", "owner"})
@@ -53,9 +51,6 @@ func TestGrantRefusesARoleNobodyDefines(t *testing.T) {
 	}
 }
 
-// `role grant chat:1234` with the role forgotten is the slip this verb invites,
-// since the principal alone is a complete-looking command. The answer has to be
-// the missing word and not a quoted empty string.
 func TestGrantWithNoRoleSaysWhichWordIsMissing(t *testing.T) {
 	reg, _ := roleRegistry(t)
 	_, err := reg.Dispatch(context.Background(), []string{"role", "grant", "chat:1"})
@@ -70,9 +65,6 @@ func TestGrantWithNoRoleSaysWhichWordIsMissing(t *testing.T) {
 	}
 }
 
-// agent is what the entry point answers, and local is the daemon's own socket.
-// Writing either into the table would be claiming something the table cannot
-// change.
 func TestGrantRefusesTheStructuralRoleAndTheStructuralPrincipals(t *testing.T) {
 	reg, _ := roleRegistry(t)
 	if _, err := reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:1", "--role", "agent"}); err == nil {
@@ -86,9 +78,6 @@ func TestGrantRefusesTheStructuralRoleAndTheStructuralPrincipals(t *testing.T) {
 	}
 }
 
-// The documented spelling is bare, like `approve mode revue bypass`. A flag
-// form that worked while the documented one did not would be a verb nobody can
-// run from the README.
 func TestGrantTakesItsArgumentsBareOrAsFlags(t *testing.T) {
 	reg, st := roleRegistry(t)
 	if _, err := reg.Dispatch(context.Background(), []string{"role", "grant", "chat:1", "owner"}); err != nil {

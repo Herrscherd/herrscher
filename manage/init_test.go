@@ -76,8 +76,6 @@ func TestResolveStackUnknownKind(t *testing.T) {
 	}
 }
 
-// An all-"none" stack is no longer empty: the in-tree terminal gateway is always
-// compiled in, so the host still has a usable front end and `init` must not fail.
 func TestResolveStackAllNoneKeepsInTree(t *testing.T) {
 	choices := map[string]string{"gateway": "none", "backend": "none", "memory": "none", "orchestrator": "none", "extractor": "none"}
 	mods, err := resolveStack(choices, nil)
@@ -89,8 +87,6 @@ func TestResolveStackAllNoneKeepsInTree(t *testing.T) {
 	}
 }
 
-// The in-tree terminal gateway must survive every recomposition — dropping it
-// would silently remove the only front end that needs no Discord token.
 func TestResolveStackAlwaysKeepsTerminal(t *testing.T) {
 	mods, err := resolveStack(map[string]string{"gateway": "discord"}, nil)
 	if err != nil {
@@ -104,9 +100,6 @@ func TestResolveStackAlwaysKeepsTerminal(t *testing.T) {
 	t.Fatalf("in-tree terminal gateway missing from %v", mods)
 }
 
-// Every flag that shapes the resolved stack must suppress the wizard —
-// otherwise the wizard's answers silently overwrite what the operator asked
-// for. --extractor was omitted from that set once; this pins the whole list.
 func TestStackFlagsSetCoversEveryStackFlag(t *testing.T) {
 	for _, name := range []string{"gateway", "backend", "memory", "orchestrator", "extractor", "with"} {
 		fs := flag.NewFlagSet("init", flag.ContinueOnError)
@@ -133,8 +126,6 @@ func TestStackFlagsSetCoversEveryStackFlag(t *testing.T) {
 	}
 }
 
-// A skills plugin is composed like any other category, and dropped like one. The
-// second half is what makes it a category rather than a hardcoded extra.
 func TestResolveStackSkillsIsACategory(t *testing.T) {
 	if defaultStack["skills"] == "" {
 		t.Fatal("the default composition must hydrate herrscher with playbooks")

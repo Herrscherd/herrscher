@@ -441,7 +441,7 @@ func (d *sessionDriver) pump(ctx context.Context) {
 				reason, headroom, capped := d.gate.Check(d.name)
 				if reason != "" {
 					d.emitPaused(ctx, reason)
-					d.fanOut(ctx, contracts.Event{T: "status", Text: "tour refusé — plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
+					d.fanOut(ctx, contracts.Event{T: "status", Text: "tour refusé, plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
 					continue
 				}
 				guard = tokenGuard{headroom: headroom, capped: capped}
@@ -544,7 +544,7 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 			}
 			if spent, over := guard.trips(e); over {
 				d.Interrupt()
-				d.fanOut(ctx, contracts.Event{T: "status", Text: "tour interrompu — plafond de tokens atteint (" +
+				d.fanOut(ctx, contracts.Event{T: "status", Text: "tour interrompu, plafond de tokens atteint (" +
 					strconv.FormatUint(spent, 10) + " tokens sur ce tour, marge " + strconv.FormatUint(guard.headroom, 10) + ")"})
 			}
 		}

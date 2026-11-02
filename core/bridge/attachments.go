@@ -72,12 +72,12 @@ func attachmentDir(session string) string {
 }
 
 // ResolveAttachments turns a message's attachments into local file paths a
-// backend can reference — images to look at, PDFs and text to read. file://
+// backend can reference: images to look at, PDFs and text to read. file://
 // attachments are validated and passed through (the gateway already staged them
-// on local disk — e.g. the terminal TUI's clipboard paste); every other (https
+// on local disk, e.g. the terminal TUI's clipboard paste); every other (https
 // CDN) attachment is downloaded through the SSRF allowlist. Unsupported,
 // oversized, missing, off-allowlist, and beyond-cap attachments are skipped so a
-// turn is never lost over a file — but every skip is logged with its reason: an
+// turn is never lost over a file, but every skip is logged with its reason: an
 // attachment that vanishes without a word is how an empty allowlist went
 // unnoticed long enough to drop every screenshot ever sent. Order is preserved;
 // at most maxAttachmentsPerMessage files are attempted (a candidate that fails to
@@ -87,7 +87,7 @@ func attachmentDir(session string) string {
 // sees Events), producing the paths carried in Event.Attachments.
 //
 // SECURITY: a file:// attachment is a local-file read into the model context, so
-// it is pinned to the staging root — a gateway must copy a file there before it
+// it is pinned to the staging root; a gateway must copy a file there before it
 // can name it, and a path outside is refused. A gateway that forwards attachment
 // URLs influenced by a remote author must still use https rather than staging
 // whatever it is handed, so the SSRF allowlist applies. What a resolved file

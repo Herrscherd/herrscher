@@ -589,7 +589,7 @@ func TestSessionBanner(t *testing.T) {
 				"🚀 Session **demo** ready.",
 				"Project: **proj** (`/home/me/proj`)",
 				"Mode: shared (main checkout)",
-				"Branch: — (runs on current branch)",
+				"Branch: none (runs on current branch)",
 				"Command: `claude`",
 			},
 			absent: []string{"Worktree:", "isolated worktree", "not a git repo"},
@@ -757,7 +757,7 @@ func TestSessionCreateBanner(t *testing.T) {
 			shared:   true,
 			wantReply: []string{
 				"Mode: shared (main checkout)",
-				"Branch: — (runs on current branch)",
+				"Branch: none (runs on current branch)",
 			},
 			wantSend: []string{"Mode: shared (main checkout)"},
 		},

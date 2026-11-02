@@ -36,7 +36,7 @@ func (o Outcome) Empty() bool {
 // precisely so it can be edited on the machine that runs the agent, and an
 // upgrade that overwrote those edits would be worse than shipping no playbook at
 // all. A copy nobody touched since we wrote it is ours, and a new release
-// replaces it — otherwise the agent's instructions freeze at first install.
+// replaces it, otherwise the agent's instructions freeze at first install.
 func Install(src fs.FS, dir string) (Outcome, error) {
 	entries, err := fs.ReadDir(src, ".")
 	if err != nil {

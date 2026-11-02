@@ -277,7 +277,7 @@ func seedEnv(dir string) {
 		fmt.Fprintf(os.Stderr, "seed %s: %v\n", dst, err)
 		return
 	}
-	fmt.Printf("seeded %s from .env.example — fill in your secrets\n", dst)
+	fmt.Printf("seeded %s from .env.example: fill in your secrets\n", dst)
 }
 
 func printCatalog() {

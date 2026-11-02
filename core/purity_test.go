@@ -53,7 +53,7 @@ func TestCoreNamesNoConcretePlatform(t *testing.T) {
 			return err
 		}
 		if strings.Contains(strings.ToLower(string(data)), forbidden) {
-			t.Errorf("%s mentions %q — the core must never name a concrete platform", path, forbidden)
+			t.Errorf("%s mentions %q: the core must never name a concrete platform", path, forbidden)
 		}
 		return nil
 	})

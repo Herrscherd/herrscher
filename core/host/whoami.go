@@ -12,7 +12,7 @@ import (
 
 // WhoamiOut answers what `herrscher whoami` prints: the identity git describes
 // for the current directory, as a report or as JSON. It is exported because the
-// verb is not only a daemon verb — main dispatches it locally too, so that the
+// verb is not only a daemon verb; main dispatches it locally too, so that the
 // one command an operator runs when they suspect a wrong identity works whether
 // or not a daemon is up. Reading git needs no daemon; requiring one would put
 // the diagnostic behind the thing it is used to diagnose.
@@ -36,7 +36,7 @@ func whoamiReport(id identity.Identity) string {
 		{"email", id.Email, "user.email"},
 		{"github", id.GitHub, "github.user"},
 	}
-	const unset = "\u2014"
+	const unset = "-"
 	width := utf8.RuneCountInString(unset)
 	for _, r := range rows {
 		if n := utf8.RuneCountInString(r.value); n > width {

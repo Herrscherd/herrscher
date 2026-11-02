@@ -173,7 +173,7 @@ func (s *Supervisor) SetBridgeEnv(kv []string) {
 // It cannot fail, and says so: launching is handing the run loop a goroutine,
 // and every way the bridge itself can fail happens later, inside that loop,
 // where the supervisor's job is to retry rather than to report. An error return
-// here would only be a nil every caller has to pretend to handle — which is what
+// here would only be a nil every caller has to pretend to handle, which is what
 // it was, at six call sites, two of them with an unreachable error branch.
 func (s *Supervisor) Start(sess state.Session) {
 	for {

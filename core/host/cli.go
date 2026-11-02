@@ -74,7 +74,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			return err
 		}
 		if vendor != "" && vendor != entry.Vendor {
-			return fmt.Errorf("model %q belongs to backend %q, but backend %q was requested — pick a model offered by %q or switch the vendor", modelID, entry.Vendor, vendor, vendor)
+			return fmt.Errorf("model %q belongs to backend %q, but backend %q was requested; pick a model offered by %q or switch the vendor", modelID, entry.Vendor, vendor, vendor)
 		}
 		return nil
 	})
@@ -142,7 +142,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		Param("text", "message text", true).
 		Param("author", "display name shown to the agent (default: you)", false).
 		Param("attachments", "JSON array of local file paths to attach", false).
-		Param("origin", "gateway kind this was typed in (e.g. terminal) — the turn is rendered there "+
+		Param("origin", "gateway kind this was typed in (e.g. terminal): the turn is rendered there "+
 			"instead of in every channel the session is bound to", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			atts, err := parseAttachmentPaths(in.Get("attachments"))
@@ -167,7 +167,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		return nil, hostDeps{}, err
 	}
 	if err := reg.Add(contracts.New("session", "info").
-		Help("list sessions as a frontend sees them (channel, vendor, dir, archived) — JSON only").
+		Help("list sessions as a frontend sees them (channel, vendor, dir, archived). JSON only").
 		Do(func(_ context.Context, _ contracts.Input) (string, error) {
 			b, err := json.Marshal(sessionInfos(st, partDir))
 			return string(b), err
@@ -175,7 +175,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		return nil, hostDeps{}, err
 	}
 	if err := reg.Add(contracts.New("session", "scrollback").
-		Help("dump a session's replayable history as the frontend renders it — JSON only").
+		Help("dump a session's replayable history as the frontend renders it. JSON only").
 		Param("name", "session name", true).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			b, err := json.Marshal(scrollbackOf(partDir, in.Get("name")))
@@ -452,7 +452,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 // (see core/cli).
 //
 // It takes every built gateway set rather than one, for the same reason RunHub
-// does: which admin a session channel is minted on is a question about the set —
+// does: which admin a session channel is minted on is a question about the set:
 // the home's owner for a normal session, the terminal gateway for a
 // terminal-only one. One set can only ever answer the first.
 func NewRegistry(ctx context.Context, gws []Deps, o Options) (*cli.Registry, error) {

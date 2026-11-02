@@ -15,7 +15,7 @@ const (
 )
 
 // Link is one reference found in the transcript. Label is what the reader sees
-// and Target is where it actually goes — a markdown label can name one
+// and Target is where it actually goes. A markdown label can name one
 // destination and point at another, and collapsing the two is precisely how a
 // transcript would come to lie. Line, Start and End locate the whole matched
 // span in the rendered lines, so it can be replaced in place.

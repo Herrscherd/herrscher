@@ -1,6 +1,6 @@
 // Package skills discovers SKILL.md skills and runs a progressive-disclosure
 // engine that injects a skill menu into a turn and expands a skill's body on
-// demand — so backends that do not load skills natively can still use them.
+// demand, so backends that do not load skills natively can still use them.
 package skills
 
 import (

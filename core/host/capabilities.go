@@ -47,8 +47,8 @@ func agentVerbs(specs []cli.Spec, contributed func(family string) bool) []cli.Sp
 
 // CapabilitySummary renders what the daemon dispatches, one line per family:
 //
-//	session — archive, close, create, info, …
-//	gateway — channel post, channel read
+//	session: archive, close, create, info, …
+//	gateway: channel post, channel read
 //
 // Families rather than a full usage block because this is injected into every
 // turn: the point is that the agent knows the verb exists and who answers it,
@@ -79,7 +79,7 @@ func CapabilitySummary(specs []cli.Spec) string {
 		b.WriteString("  ")
 		b.WriteString(head)
 		if len(verbs) > 0 {
-			b.WriteString(" — ")
+			b.WriteString(": ")
 			b.WriteString(strings.Join(verbs, ", "))
 		}
 		b.WriteByte('\n')

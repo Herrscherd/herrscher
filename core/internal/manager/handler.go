@@ -87,7 +87,7 @@ func (h *Handler) resolveModel(modelID, vendor string, cmdExplicit bool) string 
 //     any binary and any `--model`, so it bills our account for something the
 //     operator never selected, and it bypasses the policy outright.
 //   - no `model` at all skips the catalog lookup entirely, so the spawn gets no
-//     gateway environment and runs on the machine's own vendor login — silently,
+//     gateway environment and runs on the machine's own vendor login, silently,
 //     while the session reads as gateway-routed.
 //
 // Both are legitimate on the internal build, where the machine's own login IS
@@ -100,7 +100,7 @@ func (h *Handler) checkSpawnSource(cmdExplicit bool, modelID string) error {
 		return nil
 	}
 	if cmdExplicit {
-		return fmt.Errorf("an explicit cmd is refused under the gateway-only route policy: it bypasses the model catalog — select a model instead")
+		return fmt.Errorf("an explicit cmd is refused under the gateway-only route policy: it bypasses the model catalog; select a model instead")
 	}
 	if modelID == "" {
 		return fmt.Errorf("a model is required under the gateway-only route policy: without one the session would spawn on this machine's own vendor login")
@@ -111,7 +111,7 @@ func (h *Handler) checkSpawnSource(cmdExplicit bool, modelID string) error {
 // SetModelValidator wires the catalog check applied to `--vendor`/`--model` on
 // session create/switch, so a typo, a policy-excluded id, or a vendor that does
 // not own the model fails at the command instead of much later, as an opaque
-// spawn failure — or worse, as a turn silently run on the machine's own login.
+// spawn failure, or worse, as a turn silently run on the machine's own login.
 func (h *Handler) SetModelValidator(fn func(vendor, modelID string) error) { h.validateModel = fn }
 
 // SetGateResolver wires the per-vendor approval granularity, read by the host

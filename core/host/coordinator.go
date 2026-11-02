@@ -67,8 +67,8 @@ func (c *coordinator) findSession(name string) (state.Session, bool) {
 
 // CoordinationView is a read-only snapshot of a session's join state, projected
 // from the coordinator's in-memory maps for observability (Neublox reads it via
-// session list --json). It exposes only state the coordinator actually holds —
-// no invented phase: reported/expected are the join counters, complete is the
+// session list --json). It exposes only state the coordinator actually holds.
+// No invented phase: reported/expected are the join counters, complete is the
 // deterministic barrier (the same done>=N Report uses).
 type CoordinationView struct {
 	Role     string
@@ -140,7 +140,7 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 		return "", fmt.Errorf("coordination: %w", err)
 	}
 	if !clean {
-		return "", fmt.Errorf("coordination refused: session %q has uncommitted changes — commit first", from.Name)
+		return "", fmt.Errorf("coordination refused: session %q has uncommitted changes; commit first", from.Name)
 	}
 
 	base := from.Name + "-" + toAgent
@@ -213,14 +213,14 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 		return "", fmt.Errorf("report: unknown worker %q", req.FromSession)
 	}
 	if from.Parent == "" {
-		return "", fmt.Errorf("report: session %q has no parent — nothing to deliver", req.FromSession)
+		return "", fmt.Errorf("report: session %q has no parent; nothing to deliver", req.FromSession)
 	}
 	clean, err := c.wt.IsCleanAt(from.Worktree)
 	if err != nil {
 		return "", fmt.Errorf("report: %w", err)
 	}
 	if !clean {
-		return "", fmt.Errorf("report refused: session %q has uncommitted changes — commit first", req.FromSession)
+		return "", fmt.Errorf("report refused: session %q has uncommitted changes; commit first", req.FromSession)
 	}
 	if _, ok := findByName(sessions, from.Parent); !ok {
 		return "", fmt.Errorf("report: parent %q of %q not found", from.Parent, req.FromSession)
@@ -243,12 +243,12 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	}
 
 	branch := c.wt.Branch(req.FromSession)
-	msg := fmt.Sprintf("%s a terminé sur %s (%d/%d) — %s", req.FromSession, branch, done, total, req.Summary)
+	msg := fmt.Sprintf("%s a terminé sur %s (%d/%d): %s", req.FromSession, branch, done, total, req.Summary)
 	if done >= total {
 		if isSealed {
-			msg += " — cohorte complète"
+			msg += ", cohorte complète"
 		} else {
-			msg += " — tous les workers ont livré"
+			msg += ", tous les workers ont livré"
 		}
 	}
 	if !c.seedWithRetry(ctx, from.Parent, msg) {
@@ -275,14 +275,14 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 		return "", fmt.Errorf("merge: %w", err)
 	}
 	if !wClean {
-		return "", fmt.Errorf("merge refused: worker %q has uncommitted changes — commit first", req.Worker)
+		return "", fmt.Errorf("merge refused: worker %q has uncommitted changes; commit first", req.Worker)
 	}
 	lClean, err := c.wt.IsCleanAt(lead.Worktree)
 	if err != nil {
 		return "", fmt.Errorf("merge: %w", err)
 	}
 	if !lClean {
-		return "", fmt.Errorf("merge refused: lead %q has uncommitted changes — commit first", req.FromSession)
+		return "", fmt.Errorf("merge refused: lead %q has uncommitted changes; commit first", req.FromSession)
 	}
 
 	outcome, conflicts, err := c.wt.MergeInto(lead.Worktree, c.wt.Branch(req.Worker))
@@ -296,7 +296,7 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 	case worktree.MergeUpToDate:
 		msg = fmt.Sprintf("%s déjà à jour dans %s", req.Worker, req.FromSession)
 	case worktree.MergeConflict:
-		msg = fmt.Sprintf("merge de %s refusé : conflit sur %s — résous manuellement",
+		msg = fmt.Sprintf("merge de %s refusé : conflit sur %s, à résoudre manuellement",
 			req.Worker, strings.Join(conflicts, ", "))
 	}
 	if !c.seedWithRetry(ctx, req.FromSession, msg) {

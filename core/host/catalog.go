@@ -17,7 +17,7 @@ type CatalogEntry struct {
 
 // Catalog aggregates the Models of every registered backend and applies the
 // route policy. The aggregation works off the Manifests, so it never
-// instantiates a single backend — that's what lets the app populate its
+// instantiates a single backend, which is what lets the app populate its
 // selector before any session exists.
 //
 // An inconsistent catalog (empty ID, duplicate within one backend, duplicate
@@ -80,7 +80,7 @@ const (
 )
 
 // ResolvePolicy reads the route policy from the environment. Missing or
-// unrecognized, it falls back to PolicyAll — the behavior that predates this
+// unrecognized, it falls back to PolicyAll, the behavior that predates this
 // change. This setting is set by the app when it launches the daemon, not by
 // the user: hardening it into a fatal error would break a daemon started by
 // hand.

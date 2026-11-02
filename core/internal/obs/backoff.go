@@ -8,7 +8,7 @@ import (
 
 // Backoff computes restart delays that grow geometrically (base·factorⁿ, capped
 // at Max) with full jitter, and reset to base after a run that lasted at least
-// Reset — so a process that ran healthily restarts fast while a tight crash loop
+// Reset, so a process that ran healthily restarts fast while a tight crash loop
 // backs off. The zero value is unusable; set at least Base and Factor.
 type Backoff struct {
 	Base   time.Duration

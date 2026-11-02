@@ -58,7 +58,7 @@ func TestPRJobSkillIsDiscoverable(t *testing.T) {
 	for _, s := range got {
 		if s.Name == "pr-job" {
 			if s.Description == "" {
-				t.Fatal("pr-job has no description — the menu would show a blank line")
+				t.Fatal("pr-job has no description: the menu would show a blank line")
 			}
 			return
 		}

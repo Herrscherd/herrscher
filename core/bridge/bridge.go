@@ -43,7 +43,7 @@ type Options struct {
 	Capabilities string
 	// Scope decides which memory project a session's conversation is actually
 	// about, on its first prompt. It is injected because the answer lives in the
-	// vault and the bridge package holds no memory of its own — which is also
+	// vault and the bridge package holds no memory of its own, which is also
 	// what lets the turn driver be tested without one. Nil never settles
 	// anything, and neither does a session whose project a human already chose.
 	Scope ScopeResolver

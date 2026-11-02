@@ -24,7 +24,7 @@ type DaemonEvent struct {
 
 // ServedInstanceID reports the instance id the daemon serving statePath actually
 // namespaces its sockets with, so a client can find them. The daemon freezes that
-// id into the state file at boot — resolving it from the owner when no --instance
+// id into the state file at boot, resolving it from the owner when no --instance
 // was passed, and staying legacy (empty) when pre-existing sessions would be
 // orphaned. A client that only knows its own flag therefore guesses wrong every
 // time the two disagree, and dials a socket path nothing listens on.
@@ -74,7 +74,7 @@ func ForwardToDaemon(ctx context.Context, statePath, optID string, argv []string
 // either, so a frontend can tell "the daemon stopped" from "I stopped".
 //
 // The daemon drops a subscriber's lines rather than block a turn on it, so a
-// consumer that falls far enough behind loses telemetry — read promptly.
+// consumer that falls far enough behind loses telemetry. Read promptly.
 func SubscribeDaemonEvents(ctx context.Context, instanceID string) (<-chan DaemonEvent, error) {
 	return subscribeAt(ctx, EventsSocketPath(instanceID))
 }
@@ -129,8 +129,8 @@ func parseAttachmentPaths(raw string) ([]contracts.Attachment, error) {
 }
 
 // ServingPID reports the pid of the daemon currently serving statePath, and
-// false when nobody is. It answers the question the lock error raises — "which
-// process has it, and is it still alive?" — without claiming the lock: the check
+// false when nobody is. It answers the question the lock error raises, "which
+// process has it, and is it still alive?" It does so without claiming the lock. The check
 // takes the lock only long enough to find out it was free, then drops it.
 func ServingPID(statePath string) (int, bool) {
 	f, err := os.OpenFile(StateLockPath(statePath), os.O_CREATE|os.O_RDWR, 0o600)

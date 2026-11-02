@@ -26,7 +26,7 @@ const (
 
 // Resolver turns registered plugins into live port objects, choosing local
 // (in-proc factory) or remote (gRPC proxy) per category. With a nil/empty
-// remote set every category resolves local — today's behaviour.
+// remote set every category resolves local; today's behaviour.
 type Resolver struct {
 	remote  map[contracts.Category]bool
 	NatsURL string
@@ -88,7 +88,7 @@ func (r *Resolver) isRemote(c contracts.Category) bool {
 
 // Memory resolves the first registered memory plugin. Local: call the factory.
 // Remote: dial a gRPC proxy via NATS announcements, retried within a deadline.
-// Returns nil (no error) when none is registered — memory stays optional,
+// Returns nil (no error) when none is registered, memory stays optional,
 // matching buildMemory's contract.
 func (r *Resolver) Memory(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string) (contracts.Memory, error) {
 	for _, p := range plugins {

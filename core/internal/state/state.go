@@ -31,7 +31,7 @@ type Session struct {
 	Backend     string `json:"backend,omitempty"`
 	Vendor      string `json:"vendor,omitempty"`
 	// ModelID is the catalog identifier of the chosen model. Unlike Cmd, which is
-	// an opaque invocation string, it lets a resume look up the model's ROUTE —
+	// an opaque invocation string, it lets a resume look up the model's ROUTE,
 	// so we know whether gateway credentials need to be re-injected. Empty for
 	// sessions created before the catalog existed.
 	ModelID  string `json:"modelId,omitempty"`
@@ -49,7 +49,7 @@ type Session struct {
 	Approvals string `json:"approvals,omitempty"`
 	// MemoryProject and MemoryAgent are the memory roots this session files what
 	// it learns under. They are separate from Project and Agent on purpose: those
-	// two place the session — a workspace sub-directory, a provisioned worktree —
+	// two place the session: a workspace sub-directory, a provisioned worktree,
 	// while these only say where knowledge goes. Empty means the session
 	// contributes to no root, which is every session created before this existed.
 	MemoryProject string `json:"memoryProject,omitempty"`
@@ -71,7 +71,7 @@ type Session struct {
 	// Owned marks a channel this session created, and may therefore tidy away
 	// when it closes. A session started in a conversation that already existed
 	// binds to it instead, and that channel belongs to the people who were
-	// already talking in it — closing the session must leave it alone. Absent on
+	// already talking in it; closing the session must leave it alone. Absent on
 	// a row written before this field existed, which is the safe direction: the
 	// worst outcome is a channel left behind.
 	Owned bool `json:"owned,omitempty"`
@@ -388,8 +388,8 @@ func (s *State) SetResumeToken(name, token string) error {
 // under. A memory root wins over the placement field of the same name: Project
 // may be steering the session into a workspace sub-directory and Agent may be
 // demanding an isolated worktree, and neither says where knowledge goes. Every
-// path that scopes memory — the supervisor spawning a bridge, the daemon running
-// a one-shot seed — asks here, so the two cannot drift.
+// path that scopes memory (the supervisor spawning a bridge, the daemon running
+// a one-shot seed) asks here, so the two cannot drift.
 func (s Session) MemoryRoots() (project, agent string) {
 	project, agent = s.MemoryProject, s.MemoryAgent
 	if project == "" {

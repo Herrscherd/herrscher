@@ -14,7 +14,7 @@ import (
 const reservoirCap = 256
 
 // Registry accumulates runtime counters and remote-call latencies. Safe for
-// concurrent use; the zero value is unusable — use NewRegistry.
+// concurrent use; the zero value is unusable; use NewRegistry.
 type Registry struct {
 	turnsStarted   atomic.Int64
 	turnsCompleted atomic.Int64

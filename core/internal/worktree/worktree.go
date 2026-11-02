@@ -126,7 +126,7 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 		}
 		if !missing {
 			return false, fmt.Errorf(
-				"%q already exists and is not a git worktree — move it aside to start this session", path)
+				"%q already exists and is not a git worktree; move it aside to start this session", path)
 		}
 		return false, nil
 	}
@@ -147,7 +147,7 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 	}
 	if at != branch {
 		return false, fmt.Errorf(
-			"worktree %q is on branch %q, not %q — the session cannot take it over", path, at, branch)
+			"worktree %q is on branch %q, not %q; the session cannot take it over", path, at, branch)
 	}
 	return true, nil
 }
@@ -161,7 +161,7 @@ func (w *Worktreer) branchAt(path string) (string, error) {
 }
 
 // IsCleanAt reports whether the worktree at path has no uncommitted changes. An
-// error means the state can't be verified (missing dir, not a git repo) — the
+// error means the state can't be verified (missing dir, not a git repo), the
 // caller must treat that as "not safe", never as clean.
 func (w *Worktreer) IsCleanAt(path string) (bool, error) {
 	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "status", "--porcelain").Output()
@@ -173,7 +173,7 @@ func (w *Worktreer) IsCleanAt(path string) (bool, error) {
 
 // BranchExistsAt reports whether branch exists as a local ref, querying the
 // repo that contains path (an existing worktree dir inside that repo). Exit
-// code 1 from "show-ref --verify" means the ref is simply absent — that is
+// code 1 from "show-ref --verify" means the ref is simply absent. That is
 // the normal "free to use" case, not an error. Any other failure (e.g. path
 // isn't a git repo at all, exit 128) is reported as an error so callers never
 // mistake "couldn't verify" for "free".
@@ -256,7 +256,7 @@ func (w *Worktreer) Remove(repo, name string, force bool) error {
 	if !force {
 		clean, err := w.IsCleanAt(p)
 		if err != nil {
-			return fmt.Errorf("worktree %q: %v — close with force:true to remove anyway", name, err)
+			return fmt.Errorf("worktree %q: %v; close with force:true to remove anyway", name, err)
 		}
 		if !clean {
 			return fmt.Errorf("worktree %q has uncommitted changes", name)

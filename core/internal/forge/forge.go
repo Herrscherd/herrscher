@@ -243,7 +243,7 @@ func parseSpec(spec string) (base string, isURL bool, err error) {
 		return b, true, nil
 	}
 	if !specRe.MatchString(spec) {
-		return "", false, fmt.Errorf("invalid repo spec %q — use owner/name or a full git URL", spec)
+		return "", false, fmt.Errorf("invalid repo spec %q: use owner/name or a full git URL", spec)
 	}
 	for _, seg := range strings.Split(spec, "/") {
 		if seg == "" || seg == "." || seg == ".." || strings.HasPrefix(seg, "-") {

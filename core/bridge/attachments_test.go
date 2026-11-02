@@ -140,7 +140,7 @@ func TestResolveAttachmentsFetchesConcurrently(t *testing.T) {
 		t.Fatalf("got %d paths, want %d", len(paths), maxAttachmentsPerMessage)
 	}
 	if limit := delay * maxAttachmentsPerMessage / 2; elapsed > limit {
-		t.Fatalf("%d attachments took %v, more than %v — they are not overlapping",
+		t.Fatalf("%d attachments took %v, more than %v: they are not overlapping",
 			maxAttachmentsPerMessage, elapsed, limit)
 	}
 }

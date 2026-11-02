@@ -1,7 +1,7 @@
 // Package identity answers who the human at the keyboard is, by asking the one
 // thing on the machine that already knows: git's own config. It is the twin of
-// core/scope — that package names the project a directory belongs to, this one
-// names the person working in it — and it holds the same two rules. It depends
+// core/scope. That package names the project a directory belongs to, this one
+// names the person working in it, and it holds the same two rules. It depends
 // on nothing but the standard library, and a git that is absent, broken or
 // simply unconfigured produces a silence rather than an error, because not
 // knowing who someone is has never been a reason to refuse to run.
@@ -30,7 +30,7 @@ type Identity struct {
 // It asks `git config --get`, and asks it from within dir, so precedence is
 // git's answer rather than ours: a repository-local user.email wins over the
 // global one exactly as it would on a commit. That is what lets this feature
-// need no configuration of its own — an operator who has already told git who
+// need no configuration of its own; an operator who has already told git who
 // they are has already told herrscher.
 //
 // A dir that is no repository is not a silence: git falls back to the global

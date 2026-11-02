@@ -214,7 +214,7 @@ var newBackendResolver = func() remoteBackendResolver {
 
 // BuildBackendFor selects and constructs a backend. A remote resolver backend
 // wins when configured; otherwise the matching registered plugin is built
-// with the invocation, kind, working directory — and, if a ModelID is
+// with the invocation, kind, working directory, and, if a ModelID is
 // supplied, the environment variables its route requires.
 func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend, error) {
 	desired := req.Vendor
@@ -236,7 +236,7 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 		if desired == "" {
 			desired = entry.Vendor
 		} else if desired != entry.Vendor {
-			return nil, fmt.Errorf("model %q belongs to backend %q, but backend %q was requested — pick a model offered by %q or switch the vendor", req.ModelID, entry.Vendor, desired, desired)
+			return nil, fmt.Errorf("model %q belongs to backend %q, but backend %q was requested; pick a model offered by %q or switch the vendor", req.ModelID, entry.Vendor, desired, desired)
 		}
 		if spawnEnv, err = spawnEnvFor(entry, os.Getenv); err != nil {
 			return nil, err
@@ -248,7 +248,7 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 		return nil, err
 	} else if backend != nil {
 		if len(spawnEnv) > 0 {
-			return nil, fmt.Errorf("model %q needs a gateway spawn environment, which the remote backend resolver cannot carry — unset HERRSCHER_REMOTE=backend or pick a native model", req.ModelID)
+			return nil, fmt.Errorf("model %q needs a gateway spawn environment, which the remote backend resolver cannot carry; unset HERRSCHER_REMOTE=backend or pick a native model", req.ModelID)
 		}
 		return backend, nil
 	}

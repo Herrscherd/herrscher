@@ -111,7 +111,7 @@ func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contrac
 func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, error) {
 	note := "both are required"
 	if have {
-		note = "already set — enter to keep"
+		note = "already set: enter to keep"
 	}
 	fmt.Fprintf(os.Stderr, "  %s  %s\n", s.wrap(s.bold, "gateway · credentials"), s.wrap(s.dim, "("+note+"; token entry is hidden)"))
 
@@ -124,11 +124,11 @@ func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, e
 	switch {
 	case url == "" && token == "":
 		if !have {
-			return nil, fmt.Errorf("gateway-only with no gateway credentials: every session would fail to start — set %s and %s", host.EnvGatewayURL, host.EnvGatewayToken)
+			return nil, fmt.Errorf("gateway-only with no gateway credentials: every session would fail to start; set %s and %s", host.EnvGatewayURL, host.EnvGatewayToken)
 		}
 		return nil, nil
 	case url == "" || token == "":
-		return nil, fmt.Errorf("incomplete gateway credentials: %s and %s go together — one without the other would run turns on this machine's own account", host.EnvGatewayURL, host.EnvGatewayToken)
+		return nil, fmt.Errorf("incomplete gateway credentials: %s and %s go together; one without the other would run turns on this machine's own account", host.EnvGatewayURL, host.EnvGatewayToken)
 	}
 	return map[string]string{host.EnvGatewayURL: url, host.EnvGatewayToken: token}, nil
 }

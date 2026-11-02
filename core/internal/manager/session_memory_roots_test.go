@@ -29,7 +29,7 @@ func TestSessionCreatePersistsMemoryRoots(t *testing.T) {
 		t.Fatal("a project nobody pinned must stay revisable")
 	}
 	if sess.Project != "" {
-		t.Fatalf("Project = %q — a memory root must not become a workspace sub-dir", sess.Project)
+		t.Fatalf("Project = %q: a memory root must not become a workspace sub-dir", sess.Project)
 	}
 }
 
@@ -47,7 +47,7 @@ func TestMemoryProjectDoesNotMoveTheSession(t *testing.T) {
 	}
 	sess, _ := st.FindSession("demo")
 	if sess.Dir != "/workspaces/demo" {
-		t.Fatalf("Dir = %q, want the workspace root — a memory root is not a location", sess.Dir)
+		t.Fatalf("Dir = %q, want the workspace root; a memory root is not a location", sess.Dir)
 	}
 }
 

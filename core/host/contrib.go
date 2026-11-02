@@ -16,7 +16,7 @@ import (
 // The prefix is imposed by the host and never chosen by the plugin. That is what
 // makes a cross-plugin collision impossible rather than merely unlikely: two
 // plugins have two distinct Kinds, and if they did not, plugin loading would
-// have failed long before their commands did. It also keeps this file agnostic —
+// have failed long before their commands did. It also keeps this file agnostic, since
 // the Kind is a string read out of a manifest, never one written here.
 //
 // A duplicate path within a single plugin is still possible, and it is refused
@@ -24,7 +24,7 @@ import (
 // the command instead of the build.
 //
 // Scope: only gateway sets are scanned. A plugin of any other category that
-// implements CommandSource contributes nothing, and does so silently — the
+// implements CommandSource contributes nothing, and does so silently: the
 // daemon owns gateways as live objects and has no equivalent handle on the
 // rest. Widening that is a deliberate change, not an oversight to fix in place.
 //

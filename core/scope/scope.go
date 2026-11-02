@@ -25,7 +25,7 @@ const maxScopeLen = 128
 // ProjectFromDir names the memory project work done in dir belongs to: the git
 // repository dir is in, folded to a single stable scope segment. It answers ""
 // when dir is in no repository, or when the repository's name carries nothing
-// nameable — an unscoped session, which is what every session gets today, so ""
+// nameable: an unscoped session, which is what every session gets today, so ""
 // is never a failure, only a silence.
 //
 // It resolves the repository's *common* git directory rather than the worktree,
@@ -90,8 +90,8 @@ func MatchProject(prompt string, known []string) string {
 }
 
 // Name folds raw into the scope segment contracts would use, or "" when raw
-// holds nothing nameable. Callers that take a project name from a human — an
-// environment variable, a flag — run it through this so a value with a space in
+// holds nothing nameable. Callers that take a project name from a human (an
+// environment variable, a flag), run it through this so a value with a space in
 // it is folded rather than refused: a typo in a setting must not be the reason a
 // window opens on nothing.
 func Name(raw string) string { return nameOf(raw) }

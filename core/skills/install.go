@@ -53,52 +53,54 @@ func Install(src fs.FS, dir string) (Outcome, error) {
 		if !e.IsDir() {
 			continue
 		}
-		name := e.Name()
-		shipped, err := hashFS(src, name)
-		if err != nil {
+		if err := installPlaybook(src, dir, e.Name(), man, &out); err != nil {
 			return out, err
 		}
-		dest := filepath.Join(dir, name)
-		switch _, err = os.Stat(dest); {
-		case errors.Is(err, fs.ErrNotExist):
-			if err = write(src, name, dest, false); err != nil {
-				return out, err
-			}
-			man[name] = shipped
-			out.Installed = append(out.Installed, name)
-			continue
-		case err != nil:
-			return out, err
-		}
-
-		disk, err := hashDir(dest)
-		if err != nil {
-			return out, err
-		}
-		ours, known := man[name]
-		if !known {
-			if !same(disk, shipped) {
-				out.Diverged = append(out.Diverged, name)
-				continue
-			}
-			man[name] = shipped
-			continue
-		}
-		if !same(disk, ours) {
-			out.Diverged = append(out.Diverged, name)
-			continue
-		}
-		if same(ours, shipped) {
-			continue
-		}
-		if err := write(src, name, dest, true); err != nil {
-			return out, err
-		}
-		man[name] = shipped
-		out.Updated = append(out.Updated, name)
 	}
 	writeManifest(dir, man)
 	return out, nil
+}
+
+func installPlaybook(src fs.FS, dir, name string, man manifest, out *Outcome) error {
+	shipped, err := hashFS(src, name)
+	if err != nil {
+		return err
+	}
+	dest := filepath.Join(dir, name)
+	_, err = os.Stat(dest)
+	if errors.Is(err, fs.ErrNotExist) {
+		if err = write(src, name, dest, false); err != nil {
+			return err
+		}
+		man[name] = shipped
+		out.Installed = append(out.Installed, name)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	disk, err := hashDir(dest)
+	if err != nil {
+		return err
+	}
+	ours, known := man[name]
+	if !known && same(disk, shipped) {
+		man[name] = shipped
+		return nil
+	}
+	if !known || !same(disk, ours) {
+		out.Diverged = append(out.Diverged, name)
+		return nil
+	}
+	if same(ours, shipped) {
+		return nil
+	}
+	if err := write(src, name, dest, true); err != nil {
+		return err
+	}
+	man[name] = shipped
+	out.Updated = append(out.Updated, name)
+	return nil
 }
 
 func write(src fs.FS, name, dest string, replace bool) error {

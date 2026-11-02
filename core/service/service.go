@@ -28,6 +28,18 @@ import (
 )
 
 const (
+	goosLinux       = "linux"
+	goosDarwin      = "darwin"
+	goosWindows     = "windows"
+	flagUser        = "--user"
+	subDaemonReload = "daemon-reload"
+	cmdLaunchctl    = "launchctl"
+	flagTaskName    = "/tn"
+	cmdSystemctl    = "systemctl"
+	cmdSchtasks     = "schtasks"
+)
+
+const (
 	linuxUnitName = "herrscher.service"
 	macLabel      = "com.vskstudio.herrscher"
 	winTaskName   = "herrscher"
@@ -148,11 +160,11 @@ func envFileWrite(c Config) FileWrite {
 func BuildPlan(c Config) (Plan, error) {
 	var p Plan
 	switch goos(c) {
-	case "linux":
+	case goosLinux:
 		p = linuxPlan(c)
-	case "darwin":
+	case goosDarwin:
 		p = macPlan(c)
-	case "windows":
+	case goosWindows:
 		p = windowsPlan(c)
 	default:
 		return Plan{}, fmt.Errorf("%w %q", errUnsupportedOS, goos(c))
@@ -170,22 +182,22 @@ func configFileWrite(c Config) FileWrite {
 // BuildUninstall returns the uninstall plan for c's target OS.
 func BuildUninstall(c Config) (Plan, error) {
 	switch goos(c) {
-	case "linux":
+	case goosLinux:
 		unit := filepath.Join(c.Home, ".config", "systemd", "user", linuxUnitName)
 		return Plan{Commands: []Command{
-			{Argv: []string{"systemctl", "--user", "disable", "--now", linuxUnitName}, IgnoreErr: true},
+			{Argv: []string{cmdSystemctl, flagUser, "disable", "--now", linuxUnitName}, IgnoreErr: true},
 			{Argv: []string{"rm", "-f", unit}},
-			{Argv: []string{"systemctl", "--user", "daemon-reload"}, IgnoreErr: true},
+			{Argv: []string{cmdSystemctl, flagUser, subDaemonReload}, IgnoreErr: true},
 		}}, nil
-	case "darwin":
+	case goosDarwin:
 		plist := filepath.Join(c.Home, "Library", "LaunchAgents", macLabel+".plist")
 		return Plan{Commands: []Command{
-			{Argv: []string{"launchctl", "unload", "-w", plist}, IgnoreErr: true},
+			{Argv: []string{cmdLaunchctl, "unload", "-w", plist}, IgnoreErr: true},
 			{Argv: []string{"rm", "-f", plist}},
 		}}, nil
-	case "windows":
+	case goosWindows:
 		return Plan{Commands: []Command{
-			{Argv: []string{"schtasks", "/delete", "/tn", winTaskName, "/f"}},
+			{Argv: []string{cmdSchtasks, "/delete", flagTaskName, winTaskName, "/f"}},
 		}}, nil
 	default:
 		return Plan{}, fmt.Errorf("%w %q", errUnsupportedOS, goos(c))
@@ -195,12 +207,12 @@ func BuildUninstall(c Config) (Plan, error) {
 // StatusCommand returns the command that reports whether the service is active.
 func StatusCommand(c Config) (Command, error) {
 	switch goos(c) {
-	case "linux":
-		return Command{Argv: []string{"systemctl", "--user", "status", linuxUnitName}, IgnoreErr: true}, nil
-	case "darwin":
-		return Command{Argv: []string{"launchctl", "list", macLabel}, IgnoreErr: true}, nil
-	case "windows":
-		return Command{Argv: []string{"schtasks", "/query", "/tn", winTaskName, "/v"}, IgnoreErr: true}, nil
+	case goosLinux:
+		return Command{Argv: []string{cmdSystemctl, flagUser, "status", linuxUnitName}, IgnoreErr: true}, nil
+	case goosDarwin:
+		return Command{Argv: []string{cmdLaunchctl, "list", macLabel}, IgnoreErr: true}, nil
+	case goosWindows:
+		return Command{Argv: []string{cmdSchtasks, "/query", flagTaskName, winTaskName, "/v"}, IgnoreErr: true}, nil
 	default:
 		return Command{}, fmt.Errorf("%w %q", errUnsupportedOS, goos(c))
 	}
@@ -210,15 +222,15 @@ func StatusCommand(c Config) (Command, error) {
 // service. Some platforms need more than one (stop then start).
 func RestartCommands(c Config) ([]Command, error) {
 	switch goos(c) {
-	case "linux":
-		return []Command{{Argv: []string{"systemctl", "--user", "restart", linuxUnitName}}}, nil
-	case "darwin":
+	case goosLinux:
+		return []Command{{Argv: []string{cmdSystemctl, flagUser, "restart", linuxUnitName}}}, nil
+	case goosDarwin:
 		target := fmt.Sprintf("gui/%d/%s", os.Getuid(), macLabel)
-		return []Command{{Argv: []string{"launchctl", "kickstart", "-k", target}}}, nil
-	case "windows":
+		return []Command{{Argv: []string{cmdLaunchctl, "kickstart", "-k", target}}}, nil
+	case goosWindows:
 		return []Command{
-			{Argv: []string{"schtasks", "/end", "/tn", winTaskName}, IgnoreErr: true},
-			{Argv: []string{"schtasks", "/run", "/tn", winTaskName}},
+			{Argv: []string{cmdSchtasks, "/end", flagTaskName, winTaskName}, IgnoreErr: true},
+			{Argv: []string{cmdSchtasks, "/run", flagTaskName, winTaskName}},
 		}, nil
 	default:
 		return nil, fmt.Errorf("%w %q", errUnsupportedOS, goos(c))
@@ -248,11 +260,11 @@ func Restart(ctx context.Context, c Config) error {
 // the service from a separate process domain, so a normal restart already
 // survives there.
 func RestartDetached(ctx context.Context, c Config) error {
-	if goos(c) == "linux" {
+	if goos(c) == goosLinux {
 		return runCommand(ctx, Command{Argv: []string{
-			"systemd-run", "--user", "--on-active=3",
+			"systemd-run", flagUser, "--on-active=3",
 			"--timer-property=AccuracySec=100ms",
-			"systemctl", "--user", "restart", linuxUnitName,
+			cmdSystemctl, flagUser, "restart", linuxUnitName,
 		}})
 	}
 	return Restart(ctx, c)
@@ -354,7 +366,7 @@ func Smoke(ctx context.Context, binPath string) error {
 // Returns ("", false) when it can't be determined: unit absent, or an OS whose
 // launcher this doesn't parse (only the linux systemd unit is read).
 func InstalledBinPath(c Config) (string, bool) {
-	if goos(c) != "linux" {
+	if goos(c) != goosLinux {
 		return "", false
 	}
 	data, err := os.ReadFile(filepath.Join(c.Home, ".config", "systemd", "user", linuxUnitName))
@@ -410,7 +422,7 @@ func Update(ctx context.Context, c Config, src string, pull bool) error {
 		return err
 	}
 	if changed {
-		if err := runCommand(ctx, Command{Argv: []string{"systemctl", "--user", "daemon-reload"}}); err != nil {
+		if err := runCommand(ctx, Command{Argv: []string{cmdSystemctl, flagUser, subDaemonReload}}); err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, "herrscher service: unit PATH updated so agents can find tools under your home")
@@ -419,7 +431,7 @@ func Update(ctx context.Context, c Config, src string, pull bool) error {
 }
 
 func syncUnitPath(c Config) (bool, error) {
-	if goos(c) != "linux" {
+	if goos(c) != goosLinux {
 		return false, nil
 	}
 	path := filepath.Clean(filepath.Join(c.Home, ".config", "systemd", "user", linuxUnitName))
@@ -514,12 +526,12 @@ func linuxPlan(c Config) Plan {
 		"[Install]\n" +
 		"WantedBy=default.target\n"
 	cmds := []Command{
-		{Argv: []string{"systemctl", "--user", "daemon-reload"}},
+		{Argv: []string{cmdSystemctl, flagUser, subDaemonReload}},
 	}
 	if c.SkipStart {
-		cmds = append(cmds, Command{Argv: []string{"systemctl", "--user", "enable", linuxUnitName}})
+		cmds = append(cmds, Command{Argv: []string{cmdSystemctl, flagUser, "enable", linuxUnitName}})
 	} else {
-		cmds = append(cmds, Command{Argv: []string{"systemctl", "--user", "enable", "--now", linuxUnitName}})
+		cmds = append(cmds, Command{Argv: []string{cmdSystemctl, flagUser, "enable", "--now", linuxUnitName}})
 	}
 	if c.User != "" {
 		cmds = append(cmds, Command{Argv: []string{"loginctl", "enable-linger", c.User}, IgnoreErr: true})
@@ -554,10 +566,10 @@ func macPlan(c Config) Plan {
 		"  <key>StandardErrorPath</key><string>" + xmlEscape(logPath) + "</string>\n" +
 		"</dict>\n</plist>\n"
 	cmds := []Command{
-		{Argv: []string{"launchctl", "unload", "-w", plist}, IgnoreErr: true},
+		{Argv: []string{cmdLaunchctl, "unload", "-w", plist}, IgnoreErr: true},
 	}
 	if !c.SkipStart {
-		cmds = append(cmds, Command{Argv: []string{"launchctl", "load", "-w", plist}})
+		cmds = append(cmds, Command{Argv: []string{cmdLaunchctl, "load", "-w", plist}})
 	}
 	return Plan{
 		Files:    []FileWrite{{Path: plist, Content: content, Mode: unitFileMode}, envFileWrite(c)},
@@ -573,7 +585,7 @@ func windowsPlan(c Config) Plan {
 	return Plan{
 		Files: []FileWrite{{Path: launcher, Content: content, Mode: unitFileMode}, envFileWrite(c)},
 		Commands: []Command{
-			{Argv: []string{"schtasks", "/create", "/tn", winTaskName, "/tr", launcher, "/sc", "onlogon", "/rl", "limited", "/f"}},
+			{Argv: []string{cmdSchtasks, "/create", flagTaskName, winTaskName, "/tr", launcher, "/sc", "onlogon", "/rl", "limited", "/f"}},
 		},
 		Notes: []string{"Edit " + c.EnvFile + " with your token; the task runs herrscher at your next logon (or run it now: schtasks /run /tn " + winTaskName + ")."},
 	}

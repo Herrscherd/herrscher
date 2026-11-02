@@ -14,6 +14,10 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
 
+const (
+	subWorktree = "worktree"
+)
+
 const sessionsDir = ".herrscher-sessions"
 
 var (
@@ -88,9 +92,9 @@ func (w *Worktreer) Create(repo, name, base string) (string, error) {
 	case reusable:
 		return p, nil
 	}
-	args := []string{"-C", repo, "worktree", "add", p, branch}
+	args := []string{"-C", repo, subWorktree, "add", p, branch}
 	if exists, err := w.BranchExistsAt(repo, branch); err != nil || !exists {
-		args = []string{"-C", repo, "worktree", "add", p, "-b", branch}
+		args = []string{"-C", repo, subWorktree, "add", p, "-b", branch}
 		if base != "" {
 			args = append(args, base)
 		}
@@ -139,7 +143,7 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 	}
 
 	if missing {
-		out, pruneErr := exec.CommandContext(w.ctx, "git", "-C", repo, "worktree", "prune").CombinedOutput()
+		out, pruneErr := exec.CommandContext(w.ctx, "git", "-C", repo, subWorktree, "prune").CombinedOutput()
 		if pruneErr != nil {
 			return false, fmt.Errorf("worktree prune: %s: %w", redact.Output(out), pruneErr)
 		}
@@ -270,7 +274,7 @@ func (w *Worktreer) Remove(repo, name string, force bool) error {
 			return fmt.Errorf("worktree %q has %w", name, errUncommitted)
 		}
 	}
-	args := []string{"-C", repo, "worktree", "remove", p}
+	args := []string{"-C", repo, subWorktree, "remove", p}
 	if force {
 		args = append(args, "--force")
 	}
@@ -372,7 +376,7 @@ func validPathComponent(value string) bool {
 func (w *Worktreer) registeredWorktree(repo, target string) (bool, error) {
 	out, err := exec.CommandContext(
 		w.ctx,
-		"git", "-C", repo, "worktree", "list", "--porcelain", "-z",
+		"git", "-C", repo, subWorktree, "list", "--porcelain", "-z",
 	).CombinedOutput()
 	if err != nil {
 		return false, fmt.Errorf("list registered worktrees: %s: %w", redact.Output(out), err)

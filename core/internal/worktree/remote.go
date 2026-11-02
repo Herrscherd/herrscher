@@ -11,6 +11,12 @@ import (
 	"strings"
 )
 
+const (
+	flagInstance = "--instance"
+	flagName     = "--name"
+	flagRepo     = "--repo"
+)
+
 var (
 	errRemoteScratch    = errors.New("a disposable directory cannot be provisioned remotely")
 	errUnreadableAnswer = errors.New("unreadable answer")
@@ -56,7 +62,7 @@ func (r *Remote) context() context.Context {
 func (r *Remote) Branch(name string) string { return branchFor(r.instanceID, name) }
 
 func (r *Remote) Create(repo, name, base string) (string, error) {
-	argv := []string{"worktree", "create", "--repo", repo, "--name", name, "--instance", r.instanceID}
+	argv := []string{subWorktree, "create", flagRepo, repo, flagName, name, flagInstance, r.instanceID}
 	if base != "" {
 		argv = append(argv, "--base", base)
 	}
@@ -77,14 +83,14 @@ func (r *Remote) PreExisting(repo, name string) bool {
 	var out struct {
 		PreExisting bool `json:"preExisting"`
 	}
-	if err := r.call([]string{"worktree", "pre-existing", "--repo", repo, "--name", name, "--instance", r.instanceID}, &out); err != nil {
+	if err := r.call([]string{subWorktree, "pre-existing", flagRepo, repo, flagName, name, flagInstance, r.instanceID}, &out); err != nil {
 		return true
 	}
 	return out.PreExisting
 }
 
 func (r *Remote) Remove(repo, name string, force bool) error {
-	argv := []string{"worktree", "remove", "--repo", repo, "--name", name, "--instance", r.instanceID}
+	argv := []string{subWorktree, "remove", flagRepo, repo, flagName, name, flagInstance, r.instanceID}
 	if force {
 		argv = append(argv, "--force")
 	}

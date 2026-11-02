@@ -28,9 +28,20 @@ func withoutLocks(mods int) int {
 	return (mods-1)&^(modCapsLock|modNumLock) + 1
 }
 
+type enhancedKeysFailedMsg struct {
+	err error
+}
+
 func enableEnhancedKeys() tea.Msg {
-	os.Stdout.WriteString(enhancedKeysOn)
+	if err := writeStdout(enhancedKeysOn); err != nil {
+		return enhancedKeysFailedMsg{err: err}
+	}
 	return nil
+}
+
+func writeStdout(sequence string) error {
+	_, err := os.Stdout.WriteString(sequence)
+	return err
 }
 
 func legacyKey(seq []byte) []byte {

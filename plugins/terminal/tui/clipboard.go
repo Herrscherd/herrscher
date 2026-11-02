@@ -49,6 +49,6 @@ func (wlClipboard) WriteText(s string) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	go cmd.Wait()
+	go reap(cmd)
 	return nil
 }

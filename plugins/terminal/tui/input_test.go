@@ -2,7 +2,9 @@ package tui
 
 import (
 	"bytes"
+	"errors"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -100,5 +102,14 @@ func TestFilterMalformedCSIReplayed(t *testing.T) {
 	got := filter(in)
 	if !bytes.Equal(got, in) {
 		t.Fatalf("malformed CSI not replayed: got %q", got)
+	}
+}
+
+func TestEnhancedKeysFailureReachesTheOperator(t *testing.T) {
+	m := newTestModel()
+	failure := errors.New("stdout closed")
+	m.Update(enhancedKeysFailedMsg{err: failure})
+	if !strings.Contains(m.flash, failure.Error()) {
+		t.Fatalf("flash does not report the failure: %q", m.flash)
 	}
 }

@@ -69,7 +69,7 @@ func start(cmd *exec.Cmd, name string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
-	go cmd.Wait()
+	go reap(cmd)
 	return nil
 }
 

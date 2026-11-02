@@ -29,5 +29,6 @@ func keylog(format string, args ...any) {
 	if keylogFile == nil {
 		return
 	}
-	fmt.Fprintf(keylogFile, format+"\n", args...)
+	_, err := fmt.Fprintf(keylogFile, format+"\n", args...)
+	bestEffort(err)
 }

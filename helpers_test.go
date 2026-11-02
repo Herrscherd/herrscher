@@ -22,20 +22,20 @@ func mustMarshal(v any) []byte {
 	return b
 }
 
-func mustReadFile(t testing.TB, name string) []byte {
-	t.Helper()
+func mustReadFile(tb testing.TB, name string) []byte {
+	tb.Helper()
 	b, err := os.ReadFile(name)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	return b
 }
 
-func mustReadDir(t testing.TB, name string) []os.DirEntry {
-	t.Helper()
+func mustReadDir(tb testing.TB, name string) []os.DirEntry {
+	tb.Helper()
 	entries, err := os.ReadDir(name)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	return entries
 }

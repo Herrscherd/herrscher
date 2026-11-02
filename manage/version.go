@@ -84,7 +84,7 @@ func contractsRequirement(ctx context.Context, tc toolchain, module, version str
 		return "", err
 	}
 	var mod struct{ GoMod string }
-	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &mod); err != nil {
+	if err = json.Unmarshal([]byte(strings.TrimSpace(out)), &mod); err != nil {
 		return "", fmt.Errorf("parse go list -m -json %s@%s: %w", module, version, err)
 	}
 	if mod.GoMod == "" {

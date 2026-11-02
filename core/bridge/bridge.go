@@ -78,7 +78,7 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 	if err != nil {
 		return fmt.Errorf("backend: %w", err)
 	}
-	defer closeQuietly(resp)
+	defer closeAndWarn(resp)
 
 	select {
 	case ev := <-in:

@@ -149,7 +149,7 @@ func main() {
 		usage()
 		return
 	default:
-		out, derr, code := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
+		out, code, derr := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
 		if code != 0 {
 			fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
 			usage()
@@ -166,12 +166,12 @@ func main() {
 	}
 }
 
-func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (stdout string, err error, exit int) {
+func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (stdout string, exit int, err error) {
 	out, handled, derr := fwd(ctx, append([]string{cmd}, args...))
 	if !handled {
-		return "", fmt.Errorf("unknown command %q", cmd), 2
+		return "", 2, fmt.Errorf("unknown command %q", cmd)
 	}
-	return out, derr, 0
+	return out, 0, derr
 }
 
 func channelFlag(fs *flag.FlagSet) *string {

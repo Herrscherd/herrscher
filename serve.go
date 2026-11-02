@@ -31,7 +31,7 @@ func or(a, b string) string {
 }
 
 func runServe(ctx context.Context, args []string, open *openWindow) error {
-	fs := flag.NewFlagSet("serve", flag.ExitOnError)
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.String("config", config.DefaultPath(), "path to the declarative config.json (optional)")
 	cfg, err := config.Load(scanFlag(args, "config", config.DefaultPath()))
 	if err != nil {
@@ -44,11 +44,14 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	statusChannel := fs.String("status-channel", cfg.StatusChannel, "if set, maintain a self-updating status embed there")
 	instanceID := fs.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID then config.json")
 	envFile := fs.String("env-file", "", "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)")
-	if err := fs.Parse(args); err != nil {
+	if err = fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if *envFile != "" {
-		if err := loadEnvFile(*envFile); err != nil {
+		if err = loadEnvFile(*envFile); err != nil {
 			return err
 		}
 	}
@@ -132,14 +135,14 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 				}
 			}()
 		}
-		ctx, cancel := context.WithCancel(ctx)
+		hubCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		go func() {
-			if err := host.RunHub(ctx, gws, opts); err != nil && !errors.Is(err, context.Canceled) {
+			if err := host.RunHub(hubCtx, gws, opts); err != nil && !errors.Is(err, context.Canceled) {
 				slog.Error("hub stopped", "err", err)
 			}
 		}()
-		return fg.RunForeground(ctx, cancel)
+		return fg.RunForeground(hubCtx, cancel)
 	}
 	return host.RunHub(ctx, gws, opts)
 }

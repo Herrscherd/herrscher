@@ -82,9 +82,9 @@ func runPluginHost(ctx context.Context, args []string) error {
 	}
 	var s *grpc.Server
 	if tlsCfg.Enabled() {
-		creds, err := tlsCfg.ServerCredentials()
-		if err != nil {
-			return fmt.Errorf("plugin-host: %w", err)
+		creds, tlsErr := tlsCfg.ServerCredentials()
+		if tlsErr != nil {
+			return fmt.Errorf("plugin-host: %w", tlsErr)
 		}
 		s = grpc.NewServer(grpc.Creds(creds))
 	} else {

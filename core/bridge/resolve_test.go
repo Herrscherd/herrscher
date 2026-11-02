@@ -13,15 +13,11 @@ import (
 
 func stagedFile(t *testing.T, name, content string) string {
 	t.Helper()
+	t.Setenv("TMPDIR", t.TempDir())
 	if err := os.MkdirAll(StagingRoot(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(StagingRoot(), "test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { removeAllOrFail(t, dir) })
-	p := filepath.Join(dir, name)
+	p := filepath.Join(StagingRoot(), name)
 	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}

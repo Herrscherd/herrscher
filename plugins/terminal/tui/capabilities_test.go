@@ -68,6 +68,7 @@ func TestProbe(t *testing.T) {
 }
 
 func checkProbe(t *testing.T, c probeCase) {
+	t.Helper()
 	got := Probe(func(k string) string { return c.env[k] })
 	if got.Graphics != c.graphics {
 		t.Errorf("graphics = %v, want %v", got.Graphics, c.graphics)

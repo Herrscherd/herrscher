@@ -622,8 +622,10 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 	return nil, true
 }
 
+const minSessionArgs = 2
+
 func (m *model) sessionSlash(args []string) (tea.Cmd, bool) {
-	if len(args) < 2 {
+	if len(args) < minSessionArgs {
 		return nil, false
 	}
 	switch args[1] {
@@ -1194,14 +1196,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if handled := m.handlePluginsMsg(msg); handled {
 		return m, nil
 	}
-	if key, ok := msg.(tea.KeyMsg); ok {
-		if cmd, handled := m.handleKey(key); handled {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if cmd, handled := m.handleKey(keyMsg); handled {
 			return m, cmd
 		}
 	} else if cmd, handled := m.handleMsg(msg); handled {
 		return m, cmd
 	}
-	return m, m.updateComponents(msg)
+	cmd := m.updateComponents(msg)
+	return m, cmd
 }
 
 func (m *model) relayout() {
@@ -1320,8 +1323,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if cmd, handled := m.handlePaletteKey(msg); handled {
 		return cmd, true
 	}
-	if cmd, handled := m.handleMentionKey(msg); handled {
-		return cmd, true
+	if m.handleMentionKey(msg) {
+		return nil, true
 	}
 	return m.handleMainKey(msg)
 }
@@ -1476,9 +1479,9 @@ func (m *model) handlePaletteKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	return nil, true
 }
 
-func (m *model) handleMentionKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (m *model) handleMentionKey(msg tea.KeyMsg) bool {
 	if !m.mentionOpen() {
-		return nil, false
+		return false
 	}
 	switch msg.Type {
 	case tea.KeyUp:
@@ -1489,9 +1492,9 @@ func (m *model) handleMentionKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.completeActiveMention()
 		m.relayout()
 	default:
-		return nil, false
+		return false
 	}
-	return nil, true
+	return true
 }
 
 func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {

@@ -44,6 +44,8 @@ func writeStdout(sequence string) error {
 	return err
 }
 
+const minModFields = 2
+
 const (
 	modShift = 1
 	modAlt   = 2
@@ -75,7 +77,7 @@ func legacyKey(seq []byte) []byte {
 }
 
 func legacyKeyMods(fields []string) (int, bool) {
-	if len(fields) < 2 {
+	if len(fields) < minModFields {
 		return 1, false
 	}
 	parts := strings.SplitN(fields[1], ":", maxColonFields)
@@ -139,7 +141,7 @@ func legacyFunc(seq []byte) []byte {
 }
 
 func legacyFuncMods(fields []string) (string, bool, bool) {
-	if len(fields) < 2 {
+	if len(fields) < minModFields {
 		return "", false, true
 	}
 	parts := strings.SplitN(fields[1], ":", maxColonFields)

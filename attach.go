@@ -173,7 +173,7 @@ func (a *attachedDaemon) notify(channel, text string) {
 }
 
 func (a *attachedDaemon) Dispatch(args []string) (string, error) {
-	if len(args) == 0 || !attachedVerbs[args[0]] {
+	if len(args) == 0 || !attachedVerbs()[args[0]] {
 		verb := ""
 		if len(args) > 0 {
 			verb = args[0]
@@ -183,7 +183,9 @@ func (a *attachedDaemon) Dispatch(args []string) (string, error) {
 	return a.dispatch(withTerminalOnly(args))
 }
 
-var attachedVerbs = map[string]bool{"session": true, "agent": true}
+func attachedVerbs() map[string]bool {
+	return map[string]bool{"session": true, "agent": true}
+}
 
 func withTerminalOnly(args []string) []string {
 	if len(args) < 2 || args[0] != "session" || args[1] != "create" {

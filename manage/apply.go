@@ -38,7 +38,9 @@ func newAutoDecider() decider { return autoDecider{} }
 
 type step func(ctx context.Context) (output string, err error)
 
-var composed = []string{"go.mod", "go.sum", "plugins.go"}
+func composed() []string {
+	return []string{"go.mod", "go.sum", "plugins.go"}
+}
 
 func apply(ctx context.Context, dir string, findings []string, d decider, steps []step) (applied bool, err error) {
 	if d.Warn(ctx, findings) == Abort {
@@ -67,8 +69,8 @@ func apply(ctx context.Context, dir string, findings []string, d decider, steps 
 }
 
 func saveComposition(dir string) (map[string][]byte, error) {
-	saved := make(map[string][]byte, len(composed))
-	for _, name := range composed {
+	saved := make(map[string][]byte, len(composed()))
+	for _, name := range composed() {
 		body, err := os.ReadFile(filepath.Join(dir, name))
 		switch {
 		case errors.Is(err, os.ErrNotExist):
@@ -83,7 +85,7 @@ func saveComposition(dir string) (map[string][]byte, error) {
 }
 
 func restoreComposition(dir string, saved map[string][]byte) error {
-	for _, name := range composed {
+	for _, name := range composed() {
 		path := filepath.Join(dir, name)
 		body, ok := saved[name]
 		if !ok {

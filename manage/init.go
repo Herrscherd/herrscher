@@ -18,42 +18,50 @@ var (
 	errEmptyStack        = errors.New("empty stack: every category was set to none")
 )
 
-var catalog = map[string]map[string]string{
-	"gateway": {
-		"discord": "github.com/Herrscherd/herrscher-discord-gateway",
-	},
-	"backend": {
-		"claude": "github.com/Herrscherd/herrscher-claude-backend",
-		"codex":  "github.com/Herrscherd/herrscher-codex-backend",
-		"cursor": "github.com/Herrscherd/herrscher-cursor-backend",
-	},
-	"memory": {
-		"obsidian": "github.com/Herrscherd/herrscher-obsidian-memory",
-	},
-	"orchestrator": {
-		"basic": "github.com/Herrscherd/herrscher-orchestrator",
-	},
-	"extractor": {
-		"llm": "github.com/Herrscherd/herrscher-llm-extractor",
-	},
-	"skills": {
-		"superset": "github.com/Herrscherd/herrscher-superset-skills",
-	},
+func catalog() map[string]map[string]string {
+	return map[string]map[string]string{
+		"gateway": {
+			"discord": "github.com/Herrscherd/herrscher-discord-gateway",
+		},
+		"backend": {
+			"claude": "github.com/Herrscherd/herrscher-claude-backend",
+			"codex":  "github.com/Herrscherd/herrscher-codex-backend",
+			"cursor": "github.com/Herrscherd/herrscher-cursor-backend",
+		},
+		"memory": {
+			"obsidian": "github.com/Herrscherd/herrscher-obsidian-memory",
+		},
+		"orchestrator": {
+			"basic": "github.com/Herrscherd/herrscher-orchestrator",
+		},
+		"extractor": {
+			"llm": "github.com/Herrscherd/herrscher-llm-extractor",
+		},
+		"skills": {
+			"superset": "github.com/Herrscherd/herrscher-superset-skills",
+		},
+	}
 }
 
-var inTree = []string{"github.com/Herrscherd/herrscher/plugins/terminal"}
+func inTree() []string {
+	return []string{"github.com/Herrscherd/herrscher/plugins/terminal"}
+}
 
 const hostModule = "github.com/Herrscherd/herrscher"
 
-var categories = []string{"gateway", "backend", "memory", "orchestrator", "extractor", "skills"}
+func categories() []string {
+	return []string{"gateway", "backend", "memory", "orchestrator", "extractor", "skills"}
+}
 
-var defaultStack = map[string]string{
-	"gateway":      "discord",
-	"backend":      "claude",
-	"memory":       "obsidian",
-	"orchestrator": "basic",
-	"extractor":    "llm",
-	"skills":       "superset",
+func defaultStack() map[string]string {
+	return map[string]string{
+		"gateway":      "discord",
+		"backend":      "claude",
+		"memory":       "obsidian",
+		"orchestrator": "basic",
+		"extractor":    "llm",
+		"skills":       "superset",
+	}
 }
 
 // InitCmd composes the host's plugin stack from scratch: it picks one module per
@@ -66,14 +74,14 @@ func InitCmd(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	hostDir := fs.String("host", "", "path to the host module")
 	noBuild := fs.Bool("no-build", false, "write plugins.go but skip go get/build")
-	list := fs.Bool("list", false, "list the module catalog and exit")
+	list := fs.Bool("list", false, "list the module catalog() and exit")
 	yes := fs.Bool("yes", false, "skip the interactive wizard; use flags/defaults")
-	gateway := fs.String("gateway", defaultStack["gateway"], "gateway module kind (or none)")
-	backend := fs.String("backend", defaultStack["backend"], "backend module kind (or none)")
-	memory := fs.String("memory", defaultStack["memory"], "memory module kind (or none)")
-	orchestrator := fs.String("orchestrator", defaultStack["orchestrator"], "orchestrator module kind (or none)")
-	extractor := fs.String("extractor", defaultStack["extractor"], "extractor module kind (or none)")
-	skills := fs.String("skills", defaultStack["skills"], "skills module kind (or none)")
+	gateway := fs.String("gateway", defaultStack()["gateway"], "gateway module kind (or none)")
+	backend := fs.String("backend", defaultStack()["backend"], "backend module kind (or none)")
+	memory := fs.String("memory", defaultStack()["memory"], "memory module kind (or none)")
+	orchestrator := fs.String("orchestrator", defaultStack()["orchestrator"], "orchestrator module kind (or none)")
+	extractor := fs.String("extractor", defaultStack()["extractor"], "extractor module kind (or none)")
+	skills := fs.String("skills", defaultStack()["skills"], "skills module kind (or none)")
 	var extras multiFlag
 	fs.Var(&extras, "with", "pin an extra module path verbatim (repeatable)")
 	if err := fs.Parse(args); err != nil {
@@ -190,15 +198,15 @@ func resolveStack(choices map[string]string, extras []string) ([]string, error) 
 			modules = append(modules, m)
 		}
 	}
-	for _, m := range inTree {
+	for _, m := range inTree() {
 		add(m)
 	}
-	for _, cat := range categories {
+	for _, cat := range categories() {
 		kind := choices[cat]
 		if kind == "" || kind == "none" {
 			continue
 		}
-		module, ok := catalog[cat][kind]
+		module, ok := catalog()[cat][kind]
 		if !ok {
 			return nil, fmt.Errorf("%s: %w %q (try `herrscher init --list`)", cat, errUnknownKind, kind)
 		}
@@ -289,18 +297,18 @@ func seedEnv(dir string) {
 }
 
 func writeCatalog(out io.Writer) {
-	for _, cat := range categories {
-		kinds := make([]string, 0, len(catalog[cat]))
-		for k := range catalog[cat] {
+	for _, cat := range categories() {
+		kinds := make([]string, 0, len(catalog()[cat]))
+		for k := range catalog()[cat] {
 			kinds = append(kinds, k)
 		}
 		sort.Strings(kinds)
 		for _, k := range kinds {
 			def := ""
-			if defaultStack[cat] == k {
+			if defaultStack()[cat] == k {
 				def = " (default)"
 			}
-			fmt.Fprintf(out, "%-13s %-10s %s%s\n", cat, k, catalog[cat][k], def)
+			fmt.Fprintf(out, "%-13s %-10s %s%s\n", cat, k, catalog()[cat][k], def)
 		}
 	}
 }

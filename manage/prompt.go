@@ -23,13 +23,13 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 	s := newStyle()
 	in := bufio.NewReader(os.Stdin)
 	choices := map[string]string{}
-	for k, v := range defaultStack {
+	for k, v := range defaultStack() {
 		choices[k] = v
 	}
 
 	if compose {
 		s.header("init", "compose your plugin stack: enter accepts the default")
-		for _, cat := range categories {
+		for _, cat := range categories() {
 			kind, err := chooseKind(s, in, cat)
 			if err != nil {
 				return nil, nil, err
@@ -73,12 +73,12 @@ func secretLabel(s style, key string) string {
 }
 
 func chooseKind(s style, in *bufio.Reader, cat string) (string, error) {
-	kinds := make([]string, 0, len(catalog[cat]))
-	for k := range catalog[cat] {
+	kinds := make([]string, 0, len(catalog()[cat]))
+	for k := range catalog()[cat] {
 		kinds = append(kinds, k)
 	}
 	sort.Strings(kinds)
-	def := defaultStack[cat]
+	def := defaultStack()[cat]
 
 	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, cat))
 	for i, k := range kinds {
@@ -108,7 +108,7 @@ func chooseKind(s style, in *bufio.Reader, cat string) (string, error) {
 		}
 		return "", fmt.Errorf("%s: %w: %d", cat, errChoiceOutOfRange, n)
 	}
-	if _, ok := catalog[cat][ans]; ok {
+	if _, ok := catalog()[cat][ans]; ok {
 		return ans, nil
 	}
 	return "", fmt.Errorf("%s: %w %q", cat, errUnknownKind, ans)

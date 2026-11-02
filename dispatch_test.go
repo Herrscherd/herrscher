@@ -16,11 +16,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-var expectedLocalVerbs = []string{
-	"init", "plugin", "update", "install",
-	"bridge", "serve", "session", "agent", "memory", "models", "service", "plugin-host",
-	"-h", "--help", "help",
-	"approve",
+func expectedLocalVerbs() []string {
+	return []string{
+		"init", "plugin", "update", "install",
+		"bridge", "serve", "session", "agent", "memory", "models", "service", "plugin-host",
+		"-h", "--help", "help",
+		"approve",
+	}
 }
 
 func mainSwitches(t *testing.T) (cases []string, defaultForwards bool) {
@@ -69,7 +71,7 @@ func TestKnownVerbsKeepTheirLocalPath(t *testing.T) {
 	for _, c := range cases {
 		seen[c] = true
 	}
-	for _, v := range expectedLocalVerbs {
+	for _, v := range expectedLocalVerbs() {
 		if !seen[v] {
 			t.Errorf("verb %q lost its own case in main(): it would now forward to the daemon", v)
 		}

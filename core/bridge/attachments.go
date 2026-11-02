@@ -32,25 +32,29 @@ var (
 	errNotAllowedCDN     = errors.New("not an allowed CDN https url")
 )
 
-var supportedExts = map[string]bool{
-	".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
-	".webp": true, ".bmp": true,
-	".pdf": true, ".txt": true, ".md": true, ".markdown": true,
-	".csv": true, ".tsv": true, ".log": true, ".json": true,
-	".yaml": true, ".yml": true, ".toml": true, ".xml": true,
+func supportedExts() map[string]bool {
+	return map[string]bool{
+		".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
+		".webp": true, ".bmp": true,
+		".pdf": true, ".txt": true, ".md": true, ".markdown": true,
+		".csv": true, ".tsv": true, ".log": true, ".json": true,
+		".yaml": true, ".yml": true, ".toml": true, ".xml": true,
+	}
 }
 
-var supportedTypes = map[string]bool{
-	"application/pdf": true, "application/json": true,
-	"application/xml": true, "application/toml": true,
-	"application/x-yaml": true, "application/yaml": true,
+func supportedTypes() map[string]bool {
+	return map[string]bool{
+		"application/pdf": true, "application/json": true,
+		"application/xml": true, "application/toml": true,
+		"application/x-yaml": true, "application/yaml": true,
+	}
 }
 
 func supported(a contracts.Attachment) bool {
 	if a.ContentType != "" {
 		return supportedType(a.ContentType)
 	}
-	return supportedExts[strings.ToLower(filepath.Ext(a.Filename))]
+	return supportedExts()[strings.ToLower(filepath.Ext(a.Filename))]
 }
 
 func supportedType(ct string) bool {
@@ -61,7 +65,7 @@ func supportedType(ct string) bool {
 	if strings.HasPrefix(ct, "image/") || strings.HasPrefix(ct, "text/") {
 		return true
 	}
-	return supportedTypes[ct]
+	return supportedTypes()[ct]
 }
 
 const maxAttachmentBytes = 10 << 20

@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,9 +17,9 @@ import (
 // one command an operator runs when they suspect a wrong identity works whether
 // or not a daemon is up. Reading git needs no daemon; requiring one would put
 // the diagnostic behind the thing it is used to diagnose.
-func WhoamiOut(asJSON bool) (string, error) {
+func WhoamiOut(ctx context.Context, asJSON bool) (string, error) {
 	cwd, _ := os.Getwd()
-	id := identity.FromDir(cwd)
+	id := identity.FromDir(ctx, cwd)
 	if asJSON {
 		b, err := json.Marshal(id)
 		return string(b), err

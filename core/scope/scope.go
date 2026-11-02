@@ -30,11 +30,11 @@ const maxScopeLen = 128
 //
 // It resolves the repository's *common* git directory rather than the worktree,
 // so every worktree of one repository answers with one project.
-func ProjectFromDir(dir string) string {
+func ProjectFromDir(ctx context.Context, dir string) string {
 	if dir == "" {
 		return ""
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--git-common-dir").Output()
 	if err != nil {

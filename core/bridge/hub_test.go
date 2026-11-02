@@ -38,7 +38,7 @@ func TestRunHubReplyCarriesCost(t *testing.T) {
 	in <- contracts.Event{T: "input", Text: "go"}
 	close(in)
 
-	runHubTurns(context.Background(), in, sink, fakeBackend{reply: "ok", cost: 0.0042}, nil)
+	runHubTurns(context.Background(), in, sink, fakeBackend{reply: "ok", cost: 0.0042})
 
 	last := sink.events[len(sink.events)-1]
 	if last.T != "reply" || !last.Done || last.Cost != 0.0042 {
@@ -91,7 +91,7 @@ func TestRunOneTurn_StampsTokens(t *testing.T) {
 	in <- contracts.Event{T: "input", Text: "go"}
 	close(in)
 
-	runHubTurns(context.Background(), in, sink, tokenBackend{reply: "done"}, nil)
+	runHubTurns(context.Background(), in, sink, tokenBackend{reply: "done"})
 
 	var chunkTokens int
 	for _, e := range sink.events {
@@ -126,7 +126,7 @@ func TestRunOneTurn_AccumulatesUsageAcrossMessages(t *testing.T) {
 	in <- contracts.Event{T: "input", Text: "go"}
 	close(in)
 
-	runHubTurns(context.Background(), in, sink, agenticBackend{reply: "done"}, nil)
+	runHubTurns(context.Background(), in, sink, agenticBackend{reply: "done"})
 
 	var chunks []int
 	for _, e := range sink.events {
@@ -159,7 +159,7 @@ func TestRunOneTurn_StampsTokenBreakdown(t *testing.T) {
 	in <- contracts.Event{T: "input", Text: "go"}
 	close(in)
 
-	runHubTurns(context.Background(), in, sink, cacheBackend{reply: "done"}, nil)
+	runHubTurns(context.Background(), in, sink, cacheBackend{reply: "done"})
 
 	last := sink.events[len(sink.events)-1]
 	if last.T != "reply" || last.TokensIn != 30 || last.CacheRead != 12 || last.CacheCreate != 3 {
@@ -270,7 +270,7 @@ func TestRunHubOneTurn(t *testing.T) {
 	close(in)
 
 	be := fakeBackend{reply: "done · 4 files"}
-	runHubTurns(context.Background(), in, sink, be, nil)
+	runHubTurns(context.Background(), in, sink, be)
 
 	want := []contracts.Event{
 		{T: "chunk", Text: "thinking"},
@@ -297,7 +297,7 @@ func TestRunHubTurnEventsPreserveInputIdentity(t *testing.T) {
 	}
 	close(in)
 
-	runHubTurns(context.Background(), in, sink, fakeBackend{reply: "done"}, nil)
+	runHubTurns(context.Background(), in, sink, fakeBackend{reply: "done"})
 
 	if len(sink.events) != 2 {
 		t.Fatalf("events = %+v, want chunk + reply", sink.events)
@@ -315,7 +315,7 @@ func TestRunHubEmptyReplyStillTerminates(t *testing.T) {
 	in <- contracts.Event{T: "input", Text: "noop"}
 	close(in)
 
-	runHubTurns(context.Background(), in, sink, fakeBackend{reply: ""}, nil)
+	runHubTurns(context.Background(), in, sink, fakeBackend{reply: ""})
 
 	if len(sink.events) == 0 || !sameEvent(sink.events[len(sink.events)-1], contracts.Event{T: "reply", Done: true}) {
 		t.Fatalf("empty reply must still emit a terminal reply{done}; got %+v", sink.events)
@@ -342,7 +342,7 @@ func TestRunHubBackendStreamLossAbandonsTurnThenContinues(t *testing.T) {
 	close(in)
 
 	be := &hangingBackend{}
-	runHubTurns(context.Background(), in, sink, be, nil)
+	runHubTurns(context.Background(), in, sink, be)
 
 	var dones []contracts.Event
 	for _, e := range sink.events {
@@ -366,7 +366,7 @@ func TestRunHubContextCancelStops(t *testing.T) {
 	cancel()
 	in := make(chan contracts.Event)
 	done := make(chan struct{})
-	go func() { runHubTurns(ctx, in, &recordSink{}, fakeBackend{}, nil); close(done) }()
+	go func() { runHubTurns(ctx, in, &recordSink{}, fakeBackend{}); close(done) }()
 	select {
 	case <-done:
 	case <-time.After(time.Second):

@@ -203,7 +203,7 @@ func runWhoami(args []string) error {
 		}
 		asJSON = true
 	}
-	out, err := host.WhoamiOut(asJSON)
+	out, err := host.WhoamiOut(context.Background(), asJSON)
 	if err != nil {
 		return err
 	}

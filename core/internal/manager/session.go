@@ -782,6 +782,8 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, in contracts.Input) (str
 	return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s)%s", name, vendor, handoff, switchNote), nil
 }
 
+const seedRetryDelay = 150 * time.Millisecond
+
 func (h *Handler) injectSeed(ctx context.Context, name, task string) bool {
 	for range 20 {
 		if h.seed(name, task) {
@@ -790,7 +792,7 @@ func (h *Handler) injectSeed(ctx context.Context, name, task string) bool {
 		select {
 		case <-ctx.Done():
 			return false
-		case <-time.After(150 * time.Millisecond):
+		case <-time.After(seedRetryDelay):
 		}
 	}
 	return false

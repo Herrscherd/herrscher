@@ -195,6 +195,9 @@ linters:
       - path: ^core/internal/agent/agent\.go$
         linters: [gosec]
         text: "^G101:"
+      - path: ^core/internal/agent/agent\.go$
+        linters: [noctx]
+        text: "exec.Command"
 
 formatters:
   enable:

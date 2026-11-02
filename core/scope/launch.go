@@ -78,18 +78,18 @@ func LaunchFrom(cfg contracts.PluginConfig) Launch {
 	if !boolSetting(cfg, SetLearn, true) {
 		return Launch{}
 	}
-	l := Launch{
+	launch := Launch{
 		Agent:     cfg.Get(SetMemAgent),
 		Extractor: cfg.Get(SetExtractor),
 		Every:     intSetting(cfg, SetEvery, defaultEvery),
 	}
 	if p := Name(cfg.Get(SetProject)); p != "" {
-		l.Project, l.Pinned = p, true
-		return l
+		launch.Project, launch.Pinned = p, true
+		return launch
 	}
-	l.Project = ProjectFromDir(cwd())
-	l.Pinned = l.Project != "" && cfg.Get(SetProjectPin) == PinAtLaunch
-	return l
+	launch.Project = ProjectFromDir(cwd())
+	launch.Pinned = launch.Project != "" && cfg.Get(SetProjectPin) == PinAtLaunch
+	return launch
 }
 
 // LaunchFromEnv is LaunchFrom against the process environment, for the callers
@@ -118,46 +118,46 @@ func (l Launch) Apply(spec *contracts.CreateSession) {
 // as a struct. Empty when there is nothing to say, so a launch that learns
 // nothing dispatches exactly the argv it did before this existed.
 func (l Launch) Args() []string {
-	var a []string
+	var args []string
 	if l.Extractor == "" {
 		return nil
 	}
 	if l.Project != "" {
-		a = append(a, "--memory_project", l.Project)
+		args = append(args, "--memory_project", l.Project)
 	}
 	if l.Agent != "" {
-		a = append(a, "--memory_agent", l.Agent)
+		args = append(args, "--memory_agent", l.Agent)
 	}
 	if l.Pinned {
-		a = append(a, "--project_pinned")
+		args = append(args, "--project_pinned")
 	}
-	a = append(a, "--extractor", l.Extractor)
+	args = append(args, "--extractor", l.Extractor)
 	if l.Every > 0 {
-		a = append(a, "--consolidate_every", strconv.Itoa(l.Every))
+		args = append(args, "--consolidate_every", strconv.Itoa(l.Every))
 	}
-	return a
+	return args
 }
 
 func cwd() string {
-	d, err := os.Getwd()
+	dir, err := os.Getwd()
 	if err != nil {
 		return ""
 	}
-	return d
+	return dir
 }
 
 func boolSetting(cfg contracts.PluginConfig, key string, def bool) bool {
-	v, err := strconv.ParseBool(strings.TrimSpace(cfg.Get(key)))
+	enabled, err := strconv.ParseBool(strings.TrimSpace(cfg.Get(key)))
 	if err != nil {
 		return def
 	}
-	return v
+	return enabled
 }
 
 func intSetting(cfg contracts.PluginConfig, key string, def int) int {
-	n, err := strconv.Atoi(strings.TrimSpace(cfg.Get(key)))
-	if err != nil || n < 0 {
+	count, err := strconv.Atoi(strings.TrimSpace(cfg.Get(key)))
+	if err != nil || count < 0 {
 		return def
 	}
-	return n
+	return count
 }

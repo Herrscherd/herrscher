@@ -134,7 +134,7 @@ func (s *Supervisor) bridgeArgs(sess state.Session) []string {
 // NewSupervisor builds a Supervisor bound to ctx. It logs through a quiet
 // default until SetLogger installs the daemon's operator logger.
 func NewSupervisor(ctx context.Context, selfBin string) *Supervisor {
-	s := &Supervisor{
+	sup := &Supervisor{
 		ctx:     ctx,
 		selfBin: selfBin,
 		runs:    make(map[string]*supervisedRun),
@@ -142,9 +142,9 @@ func NewSupervisor(ctx context.Context, selfBin string) *Supervisor {
 		sleep:   time.After,
 		now:     time.Now,
 	}
-	s.runBridge = s.runBridgeCommand
-	s.run = s.runLoop
-	return s
+	sup.runBridge = sup.runBridgeCommand
+	sup.run = sup.runLoop
+	return sup
 }
 
 // SetLogger installs the operator logger the supervisor logs restart events
@@ -255,7 +255,7 @@ func (s *Supervisor) Restart(sess state.Session) error {
 }
 
 func (s *Supervisor) runLoop(ctx context.Context, sess state.Session) {
-	bo := obs.RestartBackoff()
+	backoff := obs.RestartBackoff()
 	for {
 		if ctx.Err() != nil {
 			return
@@ -266,7 +266,7 @@ func (s *Supervisor) runLoop(ctx context.Context, sess state.Session) {
 			return
 		}
 		s.metrics.BridgeRestart()
-		delay := bo.Next(s.now().Sub(start))
+		delay := backoff.Next(s.now().Sub(start))
 		s.log.Warn("bridge exited, restarting", "session", sess.Name, "delay", delay)
 		select {
 		case <-ctx.Done():
@@ -322,23 +322,23 @@ func (s *Supervisor) approvalsEnv(sess state.Session, bin string) map[string]str
 }
 
 func (s *Supervisor) remoteBridgeCommand(ctx context.Context, sess state.Session) (*exec.Cmd, error) {
-	p, err := s.placementFor(sess)
+	placement, err := s.placementFor(sess)
 	if err != nil {
 		return nil, err
 	}
 	args := s.bridgeArgs(sess)
-	for i := range args {
-		if args[i] == "--hub-socket" && i+1 < len(args) {
-			args[i+1] = control.RemoteSocketPath(sess.Name)
+	for idx := range args {
+		if args[idx] == "--hub-socket" && idx+1 < len(args) {
+			args[idx+1] = control.RemoteSocketPath(sess.Name)
 		}
 	}
 	args = append(args, "--env-stdin")
-	r := runner.SSH{Target: p.SSH, Forwards: s.forwardsFor(sess)}
+	ssh := runner.SSH{Target: placement.SSH, Forwards: s.forwardsFor(sess)}
 	dir := sess.Dir
 	if dir == "" {
 		dir = sess.Worktree
 	}
-	cmd := r.Command(ctx, dir, append([]string{p.Bin}, args...)...)
+	cmd := ssh.Command(ctx, dir, append([]string{placement.Bin}, args...)...)
 	cmd.Stdin = strings.NewReader(s.remoteEnvBlock(sess))
 	return cmd, nil
 }
@@ -347,14 +347,14 @@ func (s *Supervisor) placementFor(sess state.Session) (Placement, error) {
 	if s.hosts == nil {
 		return Placement{}, fmt.Errorf("session %q wants host %q: %w", sess.Name, sess.Host, errUnknownHost)
 	}
-	p, ok := s.hosts(sess.Host)
+	hostPlacement, ok := s.hosts(sess.Host)
 	if !ok {
 		return Placement{}, fmt.Errorf("session %q wants host %q: %w", sess.Name, sess.Host, errUnknownHost)
 	}
-	if p.SSH == "" || p.Bin == "" {
+	if hostPlacement.SSH == "" || hostPlacement.Bin == "" {
 		return Placement{}, fmt.Errorf("host %q is %w: run `host provision %s`", sess.Host, errHostNotProvisioned, sess.Host)
 	}
-	return p, nil
+	return hostPlacement, nil
 }
 
 func (s *Supervisor) forwardsFor(sess state.Session) []runner.Forward {
@@ -375,11 +375,11 @@ func (s *Supervisor) prepareRemote(ctx context.Context, sess state.Session) *exe
 	if sess.Host == "" {
 		return nil
 	}
-	p, err := s.placementFor(sess)
+	placement, err := s.placementFor(sess)
 	if err != nil {
 		return nil
 	}
-	r := runner.SSH{Target: p.SSH, ControlPath: runner.ControlPathFor(p.SSH), Forwards: s.forwardsFor(sess)}
+	r := runner.SSH{Target: placement.SSH, ControlPath: runner.ControlPathFor(placement.SSH), Forwards: s.forwardsFor(sess)}
 	return r.PrepareForwards(ctx)
 }
 

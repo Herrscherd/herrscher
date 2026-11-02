@@ -25,15 +25,15 @@ func AppendParticipant(path, userID string) (bool, error) {
 	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
 		return false, err
 	}
-	f, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, privateFileMode)
+	file, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, privateFileMode)
 	if err != nil {
 		return false, err
 	}
-	if _, err := f.WriteString(userID + "\n"); err != nil {
-		closeLogged(f)
+	if _, err := file.WriteString(userID + "\n"); err != nil {
+		closeLogged(file)
 		return false, err
 	}
-	if err := f.Close(); err != nil {
+	if err := file.Close(); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -46,21 +46,21 @@ func ReadParticipants(path string) []string {
 	if path == "" {
 		return nil
 	}
-	f, err := os.Open(filepath.Clean(path))
+	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil
 	}
-	defer closeLogged(f)
+	defer closeLogged(file)
 	var out []string
 	seen := make(map[string]bool)
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		id := strings.TrimSpace(sc.Text())
-		if id == "" || seen[id] {
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		recordID := strings.TrimSpace(scanner.Text())
+		if recordID == "" || seen[recordID] {
 			continue
 		}
-		seen[id] = true
-		out = append(out, id)
+		seen[recordID] = true
+		out = append(out, recordID)
 	}
 	return out
 }

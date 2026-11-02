@@ -77,23 +77,23 @@ func DefaultPath() string {
 // error (config.json is entirely optional). Full-line // comments are stripped
 // before parsing so the file can be commented.
 func Load(path string) (Config, error) {
-	var c Config
+	var cfg Config
 	buf, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, fs.ErrNotExist) {
-		return c, nil
+		return cfg, nil
 	}
 	if err != nil {
-		return c, fmt.Errorf("read %s: %w", path, err)
+		return cfg, fmt.Errorf("read %s: %w", path, err)
 	}
-	if err := json.Unmarshal(stripComments(buf), &c); err != nil {
-		return c, fmt.Errorf("parse %s: %w", path, err)
+	if err := json.Unmarshal(stripComments(buf), &cfg); err != nil {
+		return cfg, fmt.Errorf("parse %s: %w", path, err)
 	}
-	return c, nil
+	return cfg, nil
 }
 
-func stripComments(b []byte) []byte {
+func stripComments(data []byte) []byte {
 	var out bytes.Buffer
-	for _, line := range bytes.Split(b, []byte("\n")) {
+	for _, line := range bytes.Split(data, []byte("\n")) {
 		if bytes.HasPrefix(bytes.TrimSpace(line), []byte("//")) {
 			continue
 		}

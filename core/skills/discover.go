@@ -31,19 +31,19 @@ func discover(roots []string, prev map[string]Skill) ([]Skill, []string) {
 		if err != nil {
 			continue
 		}
-		for _, e := range entries {
-			if !e.IsDir() {
+		for _, entry := range entries {
+			if !entry.IsDir() {
 				continue
 			}
-			s, fresh, ok := loadSkill(filepath.Join(root, e.Name()), prev)
-			if !ok || seen[s.Name] {
+			skill, fresh, ok := loadSkill(filepath.Join(root, entry.Name()), prev)
+			if !ok || seen[skill.Name] {
 				continue
 			}
-			seen[s.Name] = true
+			seen[skill.Name] = true
 			if fresh {
-				reread = append(reread, s.bodyPath)
+				reread = append(reread, skill.bodyPath)
 			}
-			out = append(out, s)
+			out = append(out, skill)
 		}
 	}
 	return out, reread
@@ -59,25 +59,25 @@ func loadSkill(dir string, prev map[string]Skill) (Skill, bool, bool) {
 	if s, ok := prev[path]; ok && s.stamp == now {
 		return s, false, true
 	}
-	md, err := os.ReadFile(filepath.Clean(path))
+	content, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return Skill{}, false, false
 	}
-	name, desc, ok := parseFrontmatter(md)
+	name, desc, ok := parseFrontmatter(content)
 	if !ok || name == "" {
 		return Skill{}, false, false
 	}
 	return Skill{Name: name, Description: desc, Dir: dir, bodyPath: path, stamp: now}, true, true
 }
 
-func parseFrontmatter(md []byte) (string, string, bool) {
+func parseFrontmatter(content []byte) (string, string, bool) {
 	var name, description string
-	sc := bufio.NewScanner(bytes.NewReader(md))
-	if !sc.Scan() || strings.TrimSpace(sc.Text()) != frontmatterFence {
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	if !scanner.Scan() || strings.TrimSpace(scanner.Text()) != frontmatterFence {
 		return "", "", false
 	}
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
 		if line == frontmatterFence {
 			return name, description, true
 		}

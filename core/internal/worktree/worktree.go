@@ -87,17 +87,17 @@ func (w *Worktreer) Create(ctx context.Context, repo, name, base string) (string
 	if base != "" && strings.HasPrefix(base, "-") {
 		return "", fmt.Errorf("%w: %q", errFlagBase, base)
 	}
-	p := w.Path(repo, name)
+	wtPath := w.Path(repo, name)
 	branch := w.Branch(name)
-	switch reusable, err := w.reusable(ctx, repo, p, branch); {
+	switch reusable, err := w.reusable(ctx, repo, wtPath, branch); {
 	case err != nil:
 		return "", err
 	case reusable:
-		return p, nil
+		return wtPath, nil
 	}
-	args := []string{"-C", repo, subWorktree, "add", p, branch}
+	args := []string{"-C", repo, subWorktree, "add", wtPath, branch}
 	if exists, err := w.BranchExistsAt(ctx, repo, branch); err != nil || !exists {
-		args = []string{"-C", repo, subWorktree, "add", p, "-b", branch}
+		args = []string{"-C", repo, subWorktree, "add", wtPath, "-b", branch}
 		if base != "" {
 			args = append(args, base)
 		}
@@ -106,7 +106,7 @@ func (w *Worktreer) Create(ctx context.Context, repo, name, base string) (string
 	if err != nil {
 		return "", fmt.Errorf("worktree add: %s: %w", redact.Output(out), err)
 	}
-	return p, nil
+	return wtPath, nil
 }
 
 // PreExisting reports whether a worktree for this session is already on disk, so
@@ -115,11 +115,11 @@ func (w *Worktreer) Create(ctx context.Context, repo, name, base string) (string
 // way is a worktree left behind, and the cost of being wrong the other way is
 // deleting a session's uncommitted work.
 func (w *Worktreer) PreExisting(ctx context.Context, repo, name string) bool {
-	p := w.Path(repo, name)
-	if _, err := os.Lstat(p); err != nil {
+	wtPath := w.Path(repo, name)
+	if _, err := os.Lstat(wtPath); err != nil {
 		return !os.IsNotExist(err)
 	}
-	registered, err := w.registeredWorktree(ctx, repo, p)
+	registered, err := w.registeredWorktree(ctx, repo, wtPath)
 	if err != nil {
 		return true
 	}
@@ -156,13 +156,13 @@ func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bo
 		return false, fmt.Errorf("inspect %q: %w", path, statErr)
 	}
 
-	at, err := w.branchAt(ctx, path)
+	tip, err := w.branchAt(ctx, path)
 	if err != nil {
 		return false, err
 	}
-	if at != branch {
+	if tip != branch {
 		return false, fmt.Errorf(
-			"%w %q: it is on branch %q, not %q; the session cannot take it over", errOtherBranch, path, at, branch)
+			"%w %q: it is on branch %q, not %q; the session cannot take it over", errOtherBranch, path, tip, branch)
 	}
 	return true, nil
 }
@@ -270,9 +270,9 @@ func (w *Worktreer) conflictFiles(ctx context.Context, path string) []string {
 // Remove removes the worktree. If it has uncommitted changes and !force, it
 // refuses with the status. The branch session/<name> is always left intact.
 func (w *Worktreer) Remove(ctx context.Context, repo, name string, force bool) error {
-	p := w.Path(repo, name)
+	wtPath := w.Path(repo, name)
 	if !force {
-		clean, err := w.IsCleanAt(ctx, p)
+		clean, err := w.IsCleanAt(ctx, wtPath)
 		if err != nil {
 			return fmt.Errorf("worktree %q: %w; close with force:true to remove anyway", name, err)
 		}
@@ -280,7 +280,7 @@ func (w *Worktreer) Remove(ctx context.Context, repo, name string, force bool) e
 			return fmt.Errorf("worktree %q has %w", name, errUncommitted)
 		}
 	}
-	args := []string{"-C", repo, subWorktree, "remove", p}
+	args := []string{"-C", repo, subWorktree, "remove", wtPath}
 	if force {
 		args = append(args, "--force")
 	}
@@ -433,10 +433,10 @@ func canonicalPathForComparison(path string) (string, error) {
 	}
 }
 
-func samePath(a, b string) bool {
-	a, b = filepath.Clean(a), filepath.Clean(b)
+func samePath(other, right string) bool {
+	other, right = filepath.Clean(other), filepath.Clean(right)
 	if runtime.GOOS == "windows" {
-		return strings.EqualFold(a, b)
+		return strings.EqualFold(other, right)
 	}
-	return a == b
+	return other == right
 }

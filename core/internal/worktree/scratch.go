@@ -33,11 +33,11 @@ func (w *Worktreer) Scratch(root, name string) (string, error) {
 	if !validPathComponent(name) {
 		return "", fmt.Errorf("%w: session name %q is not a path component", errScratchRefused, name)
 	}
-	p := w.ScratchPath(root, name)
-	if err := os.MkdirAll(p, scratchDirMode); err != nil {
-		return "", fmt.Errorf("scratch %q: %w", p, err)
+	scratchPath := w.ScratchPath(root, name)
+	if err := os.MkdirAll(scratchPath, scratchDirMode); err != nil {
+		return "", fmt.Errorf("scratch %q: %w", scratchPath, err)
 	}
-	return p, nil
+	return scratchPath, nil
 }
 
 // RemoveScratch deletes the scratch directory for name under root.
@@ -45,13 +45,13 @@ func (w *Worktreer) RemoveScratch(root, name string) error {
 	if root == "" || !validPathComponent(name) {
 		return fmt.Errorf("%w: to remove session %q under root %q", errScratchRefused, name, root)
 	}
-	p := w.ScratchPath(root, name)
-	if _, err := os.Lstat(p); os.IsNotExist(err) {
+	scratchPath := w.ScratchPath(root, name)
+	if _, err := os.Lstat(scratchPath); os.IsNotExist(err) {
 		return nil
 	}
-	if err := os.RemoveAll(p); err != nil {
-		return fmt.Errorf("remove scratch %q: %w", p, err)
+	if err := os.RemoveAll(scratchPath); err != nil {
+		return fmt.Errorf("remove scratch %q: %w", scratchPath, err)
 	}
-	removeLogged(filepath.Dir(p))
+	removeLogged(filepath.Dir(scratchPath))
 	return nil
 }

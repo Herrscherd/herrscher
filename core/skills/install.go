@@ -49,11 +49,11 @@ func Install(src fs.FS, dir string) (Outcome, error) {
 	}
 	man := readManifest(dir)
 	var out Outcome
-	for _, e := range entries {
-		if !e.IsDir() {
+	for _, entry := range entries {
+		if !entry.IsDir() {
 			continue
 		}
-		if err := installPlaybook(src, dir, e.Name(), man, &out); err != nil {
+		if err := installPlaybook(src, dir, entry.Name(), man, &out); err != nil {
 			return out, err
 		}
 	}
@@ -117,33 +117,33 @@ func write(src fs.FS, name, dest string, replace bool) error {
 }
 
 func copyTree(src fs.FS, root, dest string) error {
-	return fs.WalkDir(src, root, func(p string, d fs.DirEntry, err error) error {
+	return fs.WalkDir(src, root, func(rel string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		target := filepath.Join(dest, filepath.FromSlash(strings.TrimPrefix(p, root)))
-		if d.IsDir() {
+		target := filepath.Join(dest, filepath.FromSlash(strings.TrimPrefix(rel, root)))
+		if entry.IsDir() {
 			return os.MkdirAll(target, privateDirMode)
 		}
-		b, err := fs.ReadFile(src, p)
+		payload, err := fs.ReadFile(src, rel)
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(target, b, privateFileMode)
+		return os.WriteFile(target, payload, privateFileMode)
 	})
 }
 
 func hashFS(src fs.FS, root string) (map[string]string, error) {
 	out := make(map[string]string)
-	err := fs.WalkDir(src, root, func(p string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(src, root, func(rel string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		b, err := fs.ReadFile(src, p)
+		payload, err := fs.ReadFile(src, rel)
 		if err != nil {
 			return err
 		}
-		out[strings.TrimPrefix(strings.TrimPrefix(p, root), "/")] = sum(b)
+		out[strings.TrimPrefix(strings.TrimPrefix(rel, root), "/")] = sum(payload)
 		return nil
 	})
 	if err != nil {
@@ -159,15 +159,15 @@ func hashDir(dest string) (map[string]string, error) {
 	}
 	defer func() { logFailure("close hashed directory", root.Close()) }()
 	out := make(map[string]string)
-	err = fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(root.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		b, err := fs.ReadFile(root.FS(), p)
+		payload, err := fs.ReadFile(root.FS(), rel)
 		if err != nil {
 			return err
 		}
-		out[p] = sum(b)
+		out[rel] = sum(payload)
 		return nil
 	})
 	if err != nil {
@@ -181,12 +181,12 @@ func sum(b []byte) string {
 	return hex.EncodeToString(h[:])
 }
 
-func same(a, b map[string]string) bool {
-	if len(a) != len(b) {
+func same(left, right map[string]string) bool {
+	if len(left) != len(right) {
 		return false
 	}
-	for k, v := range a {
-		if b[k] != v {
+	for k, v := range left {
+		if right[k] != v {
 			return false
 		}
 	}
@@ -194,24 +194,24 @@ func same(a, b map[string]string) bool {
 }
 
 func readManifest(dir string) manifest {
-	b, err := os.ReadFile(filepath.Clean(filepath.Join(dir, manifestName)))
+	payload, err := os.ReadFile(filepath.Clean(filepath.Join(dir, manifestName)))
 	if err != nil {
 		return make(manifest)
 	}
-	var m manifest
-	if err := json.Unmarshal(b, &m); err != nil || m == nil {
+	var man manifest
+	if err := json.Unmarshal(payload, &man); err != nil || man == nil {
 		return make(manifest)
 	}
-	return m
+	return man
 }
 
 func writeManifest(dir string, m manifest) {
-	b, err := json.MarshalIndent(m, "", "  ")
+	encoded, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return
 	}
 	if err := os.MkdirAll(dir, privateDirMode); err != nil {
 		return
 	}
-	logFailure("write manifest", os.WriteFile(filepath.Join(dir, manifestName), append(b, '\n'), privateFileMode))
+	logFailure("write manifest", os.WriteFile(filepath.Join(dir, manifestName), append(encoded, '\n'), privateFileMode))
 }

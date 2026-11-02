@@ -70,16 +70,16 @@ func (c *Client) Available() (bool, bool) {
 
 // List returns repos from every installed forge, labeled by Forge.
 func (c *Client) List(ctx context.Context) ([]Repo, error) {
-	gh, gl := c.Available()
+	githubOK, gitlabOK := c.Available()
 	var out []Repo
-	if gh {
+	if githubOK {
 		repos, err := c.listGitHub(ctx)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, repos...)
 	}
-	if gl {
+	if gitlabOK {
 		repos, err := c.listGitLab(ctx)
 		if err != nil {
 			return nil, err
@@ -103,12 +103,12 @@ func (c *Client) listGitHub(ctx context.Context) ([]Repo, error) {
 		if err != nil {
 			continue
 		}
-		for _, r := range repos {
-			if _, dup := seen[r.FullName]; dup {
+		for _, repo := range repos {
+			if _, dup := seen[repo.FullName]; dup {
 				continue
 			}
-			seen[r.FullName] = struct{}{}
-			out = append(out, r)
+			seen[repo.FullName] = struct{}{}
+			out = append(out, repo)
 		}
 	}
 	return out, nil
@@ -183,7 +183,7 @@ func (c *Client) Clone(ctx context.Context, spec, workspace string) (string, err
 	}
 	dir := filepath.Join(workspace, base)
 
-	gh, gl := c.Available()
+	githubOK, gitlabOK := c.Available()
 	var name string
 	var args []string
 	var env []string
@@ -191,9 +191,9 @@ func (c *Client) Clone(ctx context.Context, spec, workspace string) (string, err
 	case isURL:
 		name, args = "git", []string{subClone, "--", spec, dir}
 		env = gitCloneAuthEnv()
-	case gh:
+	case githubOK:
 		name, args = "gh", []string{subRepo, subClone, spec, "--", dir}
-	case gl:
+	case gitlabOK:
 		name, args = "glab", []string{subRepo, subClone, "--", spec, dir}
 	default:
 		return "", fmt.Errorf("%w to clone %q; pass a full git URL instead", errNoForgeCLI, spec)
@@ -247,11 +247,11 @@ func parseSpec(spec string) (string, bool, error) {
 		return "", false, fmt.Errorf("%w: control character", errRepoSpec)
 	}
 	if strings.HasPrefix(spec, "https://") || strings.HasPrefix(spec, "git@") || strings.HasPrefix(spec, "ssh://") {
-		b := path.Base(strings.TrimSuffix(spec, ".git"))
-		if b == "" || b == "." || b == "/" || strings.Contains(b, "..") || strings.HasPrefix(b, "-") {
+		base := path.Base(strings.TrimSuffix(spec, ".git"))
+		if base == "" || base == "." || base == "/" || strings.Contains(base, "..") || strings.HasPrefix(base, "-") {
 			return "", false, fmt.Errorf("%w: cannot derive project name from %q", errRepoSpec, spec)
 		}
-		return b, true, nil
+		return base, true, nil
 	}
 	if !specRe.MatchString(spec) {
 		return "", false, fmt.Errorf("%w %q: use owner/name or a full git URL", errRepoSpec, spec)

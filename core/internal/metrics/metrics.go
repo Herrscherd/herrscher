@@ -75,16 +75,16 @@ func (r *Registry) RemoteFailure() {
 }
 
 // RemoteLatency records one remote-call round-trip into the bounded reservoir.
-func (r *Registry) RemoteLatency(d time.Duration) {
+func (r *Registry) RemoteLatency(latency time.Duration) {
 	if r == nil {
 		return
 	}
-	ms := d.Milliseconds()
+	millis := latency.Milliseconds()
 	r.mu.Lock()
 	if len(r.latency) < reservoirCap {
-		r.latency = append(r.latency, ms)
+		r.latency = append(r.latency, millis)
 	} else {
-		r.latency[r.latNext] = ms
+		r.latency[r.latNext] = millis
 		r.latNext = (r.latNext + 1) % reservoirCap
 	}
 	r.latCount++
@@ -135,12 +135,12 @@ const (
 	percentileScale = 100
 )
 
-func percentile(samples []int64, p int) int64 {
+func percentile(samples []int64, pct int) int64 {
 	if len(samples) == 0 {
 		return 0
 	}
 	slices.Sort(samples)
-	rank := (p*len(samples) + percentileScale - 1) / percentileScale
+	rank := (pct*len(samples) + percentileScale - 1) / percentileScale
 	rank = max(rank, 1)
 	rank = min(rank, len(samples))
 	return samples[rank-1]

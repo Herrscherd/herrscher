@@ -22,9 +22,9 @@ type Engine struct {
 // NewEngine discovers skills under roots and returns an engine over them. An
 // engine with no skills is a valid no-op (empty Menu/Expansions).
 func NewEngine(roots []string) *Engine {
-	e := &Engine{roots: roots, active: make(map[string]bool), bodies: make(map[string]string)}
-	e.load()
-	return e
+	engine := &Engine{roots: roots, active: make(map[string]bool), bodies: make(map[string]string)}
+	engine.load()
+	return engine
 }
 
 func (e *Engine) load() {
@@ -32,17 +32,17 @@ func (e *Engine) load() {
 	e.byName = make(map[string]Skill)
 	e.byPath = make(map[string]Skill, len(found))
 	e.order = e.order[:0]
-	for _, s := range found {
-		e.byName[s.Name] = s
-		e.byPath[s.bodyPath] = s
-		e.order = append(e.order, s.Name)
+	for _, skill := range found {
+		e.byName[skill.Name] = skill
+		e.byPath[skill.bodyPath] = skill
+		e.order = append(e.order, skill.Name)
 	}
 	for _, p := range reread {
 		delete(e.bodies, p)
 	}
-	for p := range e.bodies {
-		if _, ok := e.byPath[p]; !ok {
-			delete(e.bodies, p)
+	for name := range e.bodies {
+		if _, ok := e.byPath[name]; !ok {
+			delete(e.bodies, name)
 		}
 	}
 	for name := range e.active {
@@ -62,18 +62,18 @@ func (e *Engine) Menu() string {
 	if len(e.order) == 0 {
 		return ""
 	}
-	var b strings.Builder
-	b.WriteString("<skills data-only=\"true\">\n")
-	b.WriteString("Skills available for this session. To use one, output the marker <use-skill>NAME</use-skill> in your reply; its full instructions arrive next turn.\n")
+	var buf strings.Builder
+	buf.WriteString("<skills data-only=\"true\">\n")
+	buf.WriteString("Skills available for this session. To use one, output the marker <use-skill>NAME</use-skill> in your reply; its full instructions arrive next turn.\n")
 	for _, name := range e.order {
-		b.WriteString("- ")
-		b.WriteString(name)
-		b.WriteString(": ")
-		b.WriteString(e.byName[name].Description)
-		b.WriteByte('\n')
+		buf.WriteString("- ")
+		buf.WriteString(name)
+		buf.WriteString(": ")
+		buf.WriteString(e.byName[name].Description)
+		buf.WriteByte('\n')
 	}
-	b.WriteString("</skills>")
-	return b.String()
+	buf.WriteString("</skills>")
+	return buf.String()
 }
 
 // Detect activates every known skill named by a marker in reply and returns
@@ -106,27 +106,27 @@ func (e *Engine) Strip(reply string) string {
 // and absolute directory so the model can Read bundled files. A body that fails
 // to load is skipped. Returns "" when nothing is active.
 func (e *Engine) Expansions() string {
-	var b strings.Builder
+	var buf strings.Builder
 	for _, name := range e.order {
 		if !e.active[name] {
 			continue
 		}
-		s := e.byName[name]
-		body, ok := e.bodies[s.bodyPath]
+		skill := e.byName[name]
+		body, ok := e.bodies[skill.bodyPath]
 		if !ok {
 			var err error
-			if body, err = s.Body(); err != nil {
+			if body, err = skill.Body(); err != nil {
 				continue
 			}
-			e.bodies[s.bodyPath] = body
+			e.bodies[skill.bodyPath] = body
 		}
-		b.WriteString("<skill name=\"")
-		b.WriteString(name)
-		b.WriteString("\" dir=\"")
-		b.WriteString(s.Dir)
-		b.WriteString("\">\n")
-		b.WriteString(body)
-		b.WriteString("\n</skill>\n")
+		buf.WriteString("<skill name=\"")
+		buf.WriteString(name)
+		buf.WriteString("\" dir=\"")
+		buf.WriteString(skill.Dir)
+		buf.WriteString("\">\n")
+		buf.WriteString(body)
+		buf.WriteString("\n</skill>\n")
 	}
-	return b.String()
+	return buf.String()
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"time"
 
@@ -22,6 +23,7 @@ const (
 	defaultAttemptTimeout = 5 * time.Second
 	retryBackoffBase      = 200 * time.Millisecond
 	retryBackoffMax       = 2 * time.Second
+	registryPollInterval  = 100 * time.Millisecond
 )
 
 // Resolver turns registered plugins into live port objects, choosing local
@@ -31,7 +33,8 @@ type Resolver struct {
 	remote  map[contracts.Category]bool
 	NatsURL string
 
-	creds credentials.TransportCredentials
+	creds       credentials.TransportCredentials
+	announceKey transport.AnnounceKey
 
 	log     *slog.Logger
 	metrics *metrics.Registry
@@ -70,8 +73,14 @@ func (r *Resolver) SetLogger(l *slog.Logger) {
 	r.log = l.With("component", "resolver")
 }
 
-func (r *Resolver) warnUndecodableAnnouncement(err error) {
-	r.log.Warn("ignoring an announcement that does not decode", "err", err)
+func (r *Resolver) warnRejectedAnnouncement(err error) {
+	r.log.Warn("ignoring a rejected announcement", "err", err)
+}
+
+// SetAnnounceKey installs the key that authenticates the announcements the remote
+// dial accepts. Without it every remote resolve fails: the zero key is unusable.
+func (r *Resolver) SetAnnounceKey(key transport.AnnounceKey) {
+	r.announceKey = key
 }
 
 // SetMetrics installs the registry remote-resolve attempts/failures/latency are
@@ -221,99 +230,86 @@ func (r *Resolver) natsURL() string {
 	return nats.DefaultURL
 }
 
+func (r *Resolver) addrAllowed(addr string) bool {
+	if r.creds != nil {
+		return true
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func (r *Resolver) dialRemoteMemoryOnce(ctx context.Context, _ contracts.Plugin) (contracts.Memory, error) {
-	conn, err := nats.Connect(r.natsURL())
+	reg, closeConn, err := r.watchAnnouncements()
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
-	reg := transport.NewRemoteRegistry()
-	seen := make(chan struct{}, 1)
-	if err := transport.WatchAnnouncements(conn, func(a transport.Announcement) {
-		reg.Observe(a)
-		select {
-		case seen <- struct{}{}:
-		default:
-		}
-	}, r.warnUndecodableAnnouncement); err != nil {
+	defer closeConn()
+	mems, err := awaitEntries(ctx, contracts.CategoryMemory, reg.Memories)
+	if err != nil {
 		return nil, err
 	}
-	for {
-		if mems := reg.Memories(); len(mems) > 0 {
-			return transport.DialMemory(ctx, mems[0], r.creds)
-		}
-		select {
-		case <-seen:
-		case <-ctx.Done():
-			return nil, fmt.Errorf("resolver: no remote memory announced: %w", ctx.Err())
-		}
-	}
+	return transport.DialMemory(ctx, mems[0], r.creds)
 }
 
 func (r *Resolver) dialRemoteOrchestratorOnce(ctx context.Context, _ contracts.Plugin) (contracts.Orchestrator, error) {
-	conn, err := nats.Connect(r.natsURL())
+	reg, closeConn, err := r.watchAnnouncements()
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
-	reg := transport.NewRemoteRegistry()
-	seen := make(chan struct{}, 1)
-	if err := transport.WatchAnnouncements(conn, func(a transport.Announcement) {
-		reg.Observe(a)
-		select {
-		case seen <- struct{}{}:
-		default:
-		}
-	}, r.warnUndecodableAnnouncement); err != nil {
+	defer closeConn()
+	orchs, err := awaitEntries(ctx, contracts.CategoryOrchestrator, reg.Orchestrators)
+	if err != nil {
 		return nil, err
 	}
-	for {
-		if orchs := reg.Orchestrators(); len(orchs) > 0 {
-			return transport.DialOrchestrator(ctx, orchs[0], r.creds)
-		}
-		select {
-		case <-seen:
-		case <-ctx.Done():
-			return nil, fmt.Errorf("resolver: no remote orchestrator announced: %w", ctx.Err())
-		}
-	}
+	return transport.DialOrchestrator(ctx, orchs[0], r.creds)
 }
 
 func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, plugin contracts.Plugin) (contracts.Backend, error) {
-	conn, err := nats.Connect(r.natsURL())
+	reg, closeConn, err := r.watchAnnouncements()
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
-	reg := transport.NewRemoteRegistry()
-	seen, err := r.watchBackendAnnouncements(conn, reg)
+	defer closeConn()
+	bes, err := awaitEntries(ctx, contracts.CategoryBackend, reg.Backends)
 	if err != nil {
 		return nil, err
 	}
-	for {
-		if bes := reg.Backends(); len(bes) > 0 {
-			return r.dialAnnouncedBackend(ctx, bes, plugin.Manifest.Kind)
-		}
-		select {
-		case <-seen:
-		case <-ctx.Done():
-			return nil, fmt.Errorf("resolver: no remote backend announced: %w", ctx.Err())
-		}
-	}
+	return r.dialAnnouncedBackend(ctx, bes, plugin.Manifest.Kind)
 }
 
-func (r *Resolver) watchBackendAnnouncements(conn *nats.Conn, reg *transport.RemoteRegistry) (<-chan struct{}, error) {
-	seen := make(chan struct{}, 1)
-	err := transport.WatchAnnouncements(conn, func(a transport.Announcement) {
-		reg.Observe(a)
-		select {
-		case seen <- struct{}{}:
-		default:
+func (r *Resolver) watchAnnouncements() (*transport.RemoteRegistry, func(), error) {
+	conn, err := nats.Connect(r.natsURL())
+	if err != nil {
+		return nil, nil, err
+	}
+	reg := transport.NewRemoteRegistry(transport.WithAddrAllow(r.addrAllowed))
+	if _, err := reg.Watch(conn, r.announceKey, r.warnRejectedAnnouncement); err != nil {
+		conn.Close()
+		return nil, nil, err
+	}
+	return reg, conn.Close, nil
+}
+
+func awaitEntries(ctx context.Context, category contracts.Category, entries func() []transport.RemoteEntry) ([]transport.RemoteEntry, error) {
+	ticker := time.NewTicker(registryPollInterval)
+	defer ticker.Stop()
+	for {
+		if found := entries(); len(found) > 0 {
+			return found, nil
 		}
-	}, func(err error) {
-		r.log.Debug("remote announcement undecodable", "err", err)
-	})
-	return seen, err
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("resolver: no remote %s announced: %w", category, ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }
 
 func (r *Resolver) dialAnnouncedBackend(ctx context.Context, bes []transport.RemoteEntry, kind string) (contracts.Backend, error) {

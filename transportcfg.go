@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -13,7 +14,22 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-var errTLSUnset = errors.New("no TLS configured: plaintext loopback")
+var (
+	errTLSUnset         = errors.New("no TLS configured: plaintext loopback")
+	errAnnounceKeyUnset = errors.New("HERRSCHER_ANNOUNCE_KEY is unset: the remote transport needs it to authenticate announcements")
+)
+
+func announceKeyFromEnv() (transport.AnnounceKey, error) {
+	secret := strings.TrimSpace(os.Getenv("HERRSCHER_ANNOUNCE_KEY"))
+	if secret == "" {
+		return transport.AnnounceKey{}, errAnnounceKeyUnset
+	}
+	key, err := transport.ParseAnnounceKey([]byte(secret))
+	if err != nil {
+		return transport.AnnounceKey{}, fmt.Errorf("HERRSCHER_ANNOUNCE_KEY: %w", err)
+	}
+	return key, nil
+}
 
 func remoteCategories() map[contracts.Category]bool {
 	out := make(map[contracts.Category]bool)
@@ -53,12 +69,21 @@ func remoteClientCredentials() (credentials.TransportCredentials, error) {
 }
 
 func newResolver(log *slog.Logger) (*host.Resolver, error) {
-	resolver := host.NewResolver(remoteCategories(), os.Getenv("HERRSCHER_NATS"))
+	categories := remoteCategories()
+	resolver := host.NewResolver(categories, os.Getenv("HERRSCHER_NATS"))
 	resolver.SetLogger(log)
 	creds, err := remoteClientCredentials()
 	if err != nil && !errors.Is(err, errTLSUnset) {
 		return nil, err
 	}
 	resolver.SetCredentials(creds)
+	if len(categories) == 0 {
+		return resolver, nil
+	}
+	key, err := announceKeyFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	resolver.SetAnnounceKey(key)
 	return resolver, nil
 }

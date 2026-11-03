@@ -39,6 +39,7 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 		t.Fatalf("nats connect: %v", err)
 	}
 	t.Cleanup(nc.Close)
+	key := testAnnounceKey(t)
 	ann := transport.Announcement{
 		Manifest:   contracts.Manifest{Kind: "sqlite", Category: contracts.CategoryMemory},
 		GrpcAddr:   lis.Addr().String(),
@@ -47,7 +48,7 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 	stop := make(chan struct{})
 	go func() {
 		for {
-			logCleanup(transport.Announce(nc, ann))
+			logCleanup(transport.Announce(nc, ann, key))
 			select {
 			case <-stop:
 				return
@@ -58,6 +59,7 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 	t.Cleanup(func() { close(stop) })
 
 	r := NewResolver(categorySet(contracts.CategoryMemory), srv.ClientURL())
+	r.SetAnnounceKey(key)
 	mem, _, err := r.Memory(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryMemory},
@@ -104,6 +106,7 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 		t.Fatalf("nats connect: %v", err)
 	}
 	t.Cleanup(nc.Close)
+	key := testAnnounceKey(t)
 	ann := transport.Announcement{
 		Manifest:   contracts.Manifest{Kind: "basic", Category: contracts.CategoryOrchestrator},
 		GrpcAddr:   lis.Addr().String(),
@@ -112,7 +115,7 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 	stop := make(chan struct{})
 	go func() {
 		for {
-			logCleanup(transport.Announce(nc, ann))
+			logCleanup(transport.Announce(nc, ann, key))
 			select {
 			case <-stop:
 				return
@@ -123,6 +126,7 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 	t.Cleanup(func() { close(stop) })
 
 	r := NewResolver(categorySet(contracts.CategoryOrchestrator), srv.ClientURL())
+	r.SetAnnounceKey(key)
 	orch, _, err := r.Orchestrator(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryOrchestrator},
@@ -173,6 +177,7 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 		t.Fatalf("nats connect: %v", err)
 	}
 	t.Cleanup(nc.Close)
+	key := testAnnounceKey(t)
 	ann := transport.Announcement{
 		Manifest:   contracts.Manifest{Kind: "claude", Category: contracts.CategoryBackend},
 		GrpcAddr:   lis.Addr().String(),
@@ -181,7 +186,7 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 	stop := make(chan struct{})
 	go func() {
 		for {
-			logCleanup(transport.Announce(nc, ann))
+			logCleanup(transport.Announce(nc, ann, key))
 			select {
 			case <-stop:
 				return
@@ -192,6 +197,7 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 	t.Cleanup(func() { close(stop) })
 
 	r := NewResolver(categorySet(contracts.CategoryBackend), srv.ClientURL())
+	r.SetAnnounceKey(key)
 	be, _, err := r.Backend(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryBackend},
@@ -248,4 +254,13 @@ func serveSkeleton(t *testing.T, server *grpc.Server, registerSkeleton func(*tra
 	if err := registerSkeleton(router); err != nil {
 		t.Fatalf("register skeleton: %v", err)
 	}
+}
+
+func testAnnounceKey(t *testing.T) transport.AnnounceKey {
+	t.Helper()
+	key, err := transport.ParseAnnounceKey([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("announce key: %v", err)
+	}
+	return key
 }

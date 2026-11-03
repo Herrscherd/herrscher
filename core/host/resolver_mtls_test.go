@@ -59,6 +59,7 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 		t.Fatalf("nats connect: %v", err)
 	}
 	t.Cleanup(nc.Close)
+	key := testAnnounceKey(t)
 	ann := transport.Announcement{
 		Manifest:   contracts.Manifest{Kind: "sqlite", Category: contracts.CategoryMemory},
 		GrpcAddr:   lis.Addr().String(),
@@ -67,7 +68,7 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	stop := make(chan struct{})
 	go func() {
 		for {
-			logCleanup(transport.Announce(nc, ann))
+			logCleanup(transport.Announce(nc, ann, key))
 			select {
 			case <-stop:
 				return
@@ -82,6 +83,7 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 		t.Fatalf("client creds: %v", err)
 	}
 	r := NewResolver(categorySet(contracts.CategoryMemory), srv.ClientURL())
+	r.SetAnnounceKey(key)
 	r.SetCredentials(clientCreds)
 	mem, _, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	if err != nil {
@@ -94,6 +96,7 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	}
 
 	plain := NewResolver(categorySet(contracts.CategoryMemory), srv.ClientURL())
+	plain.SetAnnounceKey(key)
 	memPlain, _, err := plain.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("resolve (lazy dial) should not fail: %v", err)

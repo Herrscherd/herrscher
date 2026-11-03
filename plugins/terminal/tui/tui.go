@@ -107,23 +107,24 @@ type entry struct {
 }
 
 type tab struct {
-	channel      string
-	label        string
-	entries      []entry
-	unread       bool
-	busy         bool
-	streamed     bool
-	lastCost     float64
-	disconnected bool
-	tokens       int
-	startedAt    time.Time
-	costTotal    float64
-	ctxTokens    int
-	ctxMeasured  bool
-	openedAt     time.Time
-	nextEntryID  uint64
-	todos        []contracts.TodoItem
-	agents       []liveAgent
+	channel            string
+	label              string
+	entries            []entry
+	unread             bool
+	busy               bool
+	interruptRequested bool
+	streamed           bool
+	lastCost           float64
+	disconnected       bool
+	tokens             int
+	startedAt          time.Time
+	costTotal          float64
+	ctxTokens          int
+	ctxMeasured        bool
+	openedAt           time.Time
+	nextEntryID        uint64
+	todos              []contracts.TodoItem
+	agents             []liveAgent
 }
 
 type liveAgent struct {
@@ -915,12 +916,14 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.applySubagent(event.Subagent)
 	case "reset":
 		target.busy = false
+		target.interruptRequested = false
 		target.streamed = false
 		target.ctxMeasured = false
 		target.endStream()
 		target.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
 	case "abandoned":
 		target.busy = false
+		target.interruptRequested = false
 		target.streamed = false
 		target.ctxMeasured = false
 		target.disconnected = true
@@ -965,6 +968,7 @@ func (tb *tab) appendReply(event contracts.Event) {
 	}
 	if event.Done {
 		tb.busy = false
+		tb.interruptRequested = false
 		tb.streamed = false
 		tb.ctxMeasured = false
 		tb.clearPanels()
@@ -1336,7 +1340,11 @@ func (m *model) handlePendingClose(msg tea.KeyMsg) tea.Cmd {
 		return cmd
 	}
 	m.pendingClose = false
-	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc {
+	if msg.Type == tea.KeyCtrlC {
+		cmd, _ := m.interruptOrQuit()
+		return cmd
+	}
+	if msg.Type == tea.KeyEsc {
 		return tea.Quit
 	}
 	return nil
@@ -1354,7 +1362,7 @@ func (m *model) handleChoiceKey(msg tea.KeyMsg) tea.Cmd {
 	case tea.KeyEnter:
 		m.chooseChoice()
 	case tea.KeyCtrlC:
-		return tea.Quit
+		return m.overlayCtrlC()
 	}
 	return nil
 }
@@ -1373,7 +1381,7 @@ func (m *model) handleSwitchKey(msg tea.KeyMsg) tea.Cmd {
 		m.relayout()
 		return m.ensureSpin()
 	case tea.KeyCtrlC:
-		return tea.Quit
+		return m.overlayCtrlC()
 	}
 	return nil
 }
@@ -1381,7 +1389,7 @@ func (m *model) handleSwitchKey(msg tea.KeyMsg) tea.Cmd {
 func (m *model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.Type {
 	case tea.KeyCtrlC:
-		return tea.Quit
+		return m.overlayCtrlC()
 	case tea.KeyEsc, tea.KeyCtrlS:
 		m.closeSearch()
 	case tea.KeyEnter, tea.KeyCtrlN:
@@ -1404,7 +1412,7 @@ func (m *model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m *model) handleDiagKey(msg tea.KeyMsg) tea.Cmd {
 	if msg.Type == tea.KeyCtrlC {
-		return tea.Quit
+		return m.overlayCtrlC()
 	}
 	m.diagOpen = false
 	m.relayout()
@@ -1413,7 +1421,7 @@ func (m *model) handleDiagKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m *model) handlePluginsOverlayKey(msg tea.KeyMsg) tea.Cmd {
 	if msg.Type == tea.KeyCtrlC {
-		return tea.Quit
+		return m.overlayCtrlC()
 	}
 	return m.handlePluginsKey(msg)
 }
@@ -1427,7 +1435,7 @@ func (m *model) handleSkillsKey(msg tea.KeyMsg) tea.Cmd {
 		m.skillsOpen = false
 		m.relayout()
 	case tea.KeyCtrlC:
-		return tea.Quit
+		return m.overlayCtrlC()
 	}
 	return nil
 }
@@ -1446,7 +1454,7 @@ func (m *model) handleResumeKey(msg tea.KeyMsg) tea.Cmd {
 		m.relayout()
 		return tea.Batch(cmd, m.ensureSpin())
 	case tea.KeyCtrlC:
-		return tea.Quit
+		return m.overlayCtrlC()
 	}
 	return nil
 }
@@ -1472,7 +1480,7 @@ func (m *model) handlePaletteKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.relayout()
 		return tea.Batch(cmd, m.ensureSpin()), true
 	case tea.KeyCtrlC:
-		return tea.Quit, true
+		return m.overlayCtrlC(), true
 	default:
 		return nil, false
 	}
@@ -1508,7 +1516,7 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		return tea.Quit, true
 	case tea.KeyCtrlC:
-		return tea.Quit, true
+		return m.interruptOrQuit()
 	case tea.KeyTab:
 		m.switchTab(1)
 	case tea.KeyShiftTab:
@@ -1557,6 +1565,28 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, false
 	}
 	return nil, true
+}
+
+func (m *model) interruptOrQuit() (tea.Cmd, bool) {
+	turn := m.tabs[m.active]
+	if turn == nil || !turn.busy || turn.interruptRequested {
+		return tea.Quit, true
+	}
+	turn.interruptRequested = true
+	if !m.interruptActive() {
+		m.flash = "rien à interrompre : Ctrl-C à nouveau pour quitter"
+	}
+	return nil, true
+}
+
+func (m *model) interruptActive() bool {
+	name := m.sessionName(m.active)
+	return name != "" && m.tm.Interrupt(name)
+}
+
+func (m *model) overlayCtrlC() tea.Cmd {
+	cmd, _ := m.interruptOrQuit()
+	return cmd
 }
 
 func (m *model) handleHistoryKey(msg tea.KeyMsg, dir int) (tea.Cmd, bool) {

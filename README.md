@@ -215,6 +215,25 @@ workspace and git are there.
 
 → `architecture/remote`
 
+### Plugins on another machine
+
+A plugin category can run in a plugin-host on another machine. Name the category
+in `HERRSCHER_REMOTE` and point `HERRSCHER_NATS` at the shared NATS server. Two
+settings guard it:
+
+- `HERRSCHER_ANNOUNCE_KEY` authenticates the announcements a plugin-host publishes.
+  Every host and plugin-host that exchanges them must hold the same secret of at
+  least 32 random bytes, and a host with a remote category refuses to start
+  without a valid one. The key signs announcements only: it neither encrypts the
+  traffic nor grants a caller any right. The hub, its plugin-hosts and its bridges
+  receive it. It is kept out of the environment the agent's vendor CLIs inherit,
+  but processes running as the same user can still read it, from the `.env` file
+  or from `/proc`, so the boundary is the user account.
+- The gRPC connections use mTLS (`HERRSCHER_TLS_CA`, `HERRSCHER_TLS_CERT`,
+  `HERRSCHER_TLS_KEY`). With mTLS configured, the host dials any address an
+  authenticated announcement advertises. Without it, the host dials loopback
+  addresses only, so plaintext traffic never leaves the machine.
+
 ### Tool calls that answer to a policy, and to you
 
 A session's tool calls are decided before they run. A rule

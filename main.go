@@ -20,6 +20,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/Herrscherd/herrscher/internal/errwriter"
 
@@ -50,13 +51,12 @@ func run() int {
 		return writeFailureCode(out)
 	}
 
-	if err := loadHostEnv(); err != nil {
+	if err := host.CaptureStartupSecrets(loadHostEnv, hideGatewayKeys); err != nil {
 		return reportError(err)
 	}
-	host.CaptureGatewayCreds()
-	hideGatewayKeys()
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	if len(os.Args) < minArgsWithCommand {
 		return reportError(runWithoutCommand(ctx))

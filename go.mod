@@ -8,13 +8,13 @@ require (
 	github.com/Herrscherd/herrscher-claude-backend v0.4.0
 	github.com/Herrscherd/herrscher-codex-backend v0.3.0
 	github.com/Herrscherd/herrscher-contracts v0.12.0
-	github.com/Herrscherd/herrscher-cursor-backend v0.3.0
-	github.com/Herrscherd/herrscher-discord-gateway v0.21.0
+	github.com/Herrscherd/herrscher-cursor-backend v0.4.0
+	github.com/Herrscherd/herrscher-discord-gateway v0.23.0
 	github.com/Herrscherd/herrscher-llm-extractor v0.3.0
 	github.com/Herrscherd/herrscher-obsidian-memory v0.5.0
 	github.com/Herrscherd/herrscher-orchestrator v0.4.0
 	github.com/Herrscherd/herrscher-superset-skills v0.3.0
-	github.com/Herrscherd/herrscher-transport v0.3.0
+	github.com/Herrscherd/herrscher-transport v0.4.0
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10

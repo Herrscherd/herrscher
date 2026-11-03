@@ -87,12 +87,10 @@ func subscribeAt(ctx context.Context, path string) (<-chan DaemonEvent, error) {
 		return nil, fmt.Errorf("events socket %s: %w", path, err)
 	}
 	out := make(chan DaemonEvent, daemonEventBuffer)
-	go func() {
-		<-ctx.Done()
-		logCleanup(conn.Close())
-	}()
+	stopClose := closeOnDone(ctx, conn)
 	go func() {
 		defer close(out)
+		defer stopClose()
 		defer closeRead(conn)
 		scanner := bufio.NewScanner(conn)
 		scanner.Buffer(make([]byte, 0, daemonLineBufferInitial), daemonLineBufferMax)

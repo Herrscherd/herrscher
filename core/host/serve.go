@@ -149,8 +149,9 @@ func resolveInstanceID(hostState *state.State, optID, ownerID string, log *slog.
 // health/liveness. gws are the gateway sets the daemon owns (built from the
 // registry by the caller). Command dispatch no longer runs here.
 // Session/service commands run through the operator CLI (see NewRegistry).
-func RunHub(ctx context.Context, gws []Deps, options Options) error {
+func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
 	base := obs.Stderr(false)
+	defer closeGateways(ctx, closers, base)
 	log := base.With("component", "serve")
 	monitor := health.NewHealth(time.Now())
 
@@ -242,7 +243,7 @@ func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, host 
 }
 
 func hubBridgeEnv(specs []cli.Spec, kinds map[string]bool) []string {
-	bridgeEnv := GatewayEnvPairs()
+	bridgeEnv := append(GatewayEnvPairs(), AnnounceKeyEnvPairs()...)
 	if pair := CapabilityEnvPair(specs, func(family string) bool { return kinds[family] }); pair != "" {
 		bridgeEnv = append(bridgeEnv, pair)
 	}
@@ -333,7 +334,7 @@ func startRemotePluginHost(ctx context.Context, self string, cat contracts.Categ
 				cmd.Args = append(cmd.Args, "--nats", url)
 			}
 			cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
-			cmd.Env = os.Environ()
+			cmd.Env = append(os.Environ(), AnnounceKeyEnvPairs()...)
 			start := time.Now()
 			logCleanup(cmd.Run())
 			if ctx.Err() != nil {

@@ -8,16 +8,22 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 )
 
-var forwardedLocally = map[string]bool{"seed": true}
+func forwardedLocally() map[string]bool {
+	return map[string]bool{"seed": true}
+}
 
-var daemonOnly = map[string]bool{"approve ask": true}
+func daemonOnly() map[string]bool {
+	return map[string]bool{"approve ask": true}
+}
 
-var daemonOwned = [][]string{{"session"}, {"host"}, {"approve"}, {"role"}}
+func daemonOwned() [][]string {
+	return [][]string{{"session"}, {"host"}, {"approve"}, {"role"}}
+}
 
 func forwardDaemonOwnedCommands(reg *cli.Registry, instID string, forward seedCommandForwarder) {
-	for _, prefix := range daemonOwned {
+	for _, prefix := range daemonOwned() {
 		reg.Intercept(prefix, func(cmd contracts.Cmd, next cli.Runner) cli.Runner {
-			if len(cmd.Path) > 1 && forwardedLocally[cmd.Path[1]] {
+			if len(cmd.Path) > 1 && forwardedLocally()[cmd.Path[1]] {
 				return next
 			}
 			return func(ctx context.Context, in contracts.Input) (string, error) {
@@ -26,7 +32,7 @@ func forwardDaemonOwnedCommands(reg *cli.Registry, instID string, forward seedCo
 				if handled {
 					return out, err
 				}
-				if path := strings.Join(cmd.Path, " "); daemonOnly[path] {
+				if path := strings.Join(cmd.Path, " "); daemonOnly()[path] {
 					return "", &daemonRequiredError{Command: path, Target: target}
 				}
 				return next(ctx, in)

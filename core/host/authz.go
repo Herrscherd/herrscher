@@ -49,38 +49,42 @@ func (a asOperator) Dispatch(ctx context.Context, args []string) (string, error)
 	return a.disp.Dispatch(withLocalPrincipal(ctx), args)
 }
 
-var sessionArg = map[string]string{
-	"session seed":       "name",
-	"session send":       "name",
-	"session scrollback": "name",
-	"session interrupt":  "name",
-	"session who":        "name",
-	"session log":        "name",
-	"session close":      "name",
-	"session archive":    "name",
-	"session rename":     "name",
-	"session resume":     "name",
-	"session switch":     "name",
-	"session set-budget": "name",
-	"approve ask":        "session",
-	"approve mode":       "session",
-	"schedule add":       "session",
+func sessionArgs() map[string]string {
+	return map[string]string{
+		"session seed":       "name",
+		"session send":       "name",
+		"session scrollback": "name",
+		"session interrupt":  "name",
+		"session who":        "name",
+		"session log":        "name",
+		"session close":      "name",
+		"session archive":    "name",
+		"session rename":     "name",
+		"session resume":     "name",
+		"session switch":     "name",
+		"session set-budget": "name",
+		"approve ask":        "session",
+		"approve mode":       "session",
+		"schedule add":       "session",
+	}
 }
 
-var notASession = map[string]bool{
-	"session create name":  true,
-	"agent create name":    true,
-	"agent show name":      true,
-	"agent set-soul name":  true,
-	"host add name":        true,
-	"host check name":      true,
-	"host provision name":  true,
-	"host rm name":         true,
-	"schedule add name":    true,
-	"schedule rm name":     true,
-	"schedule run name":    true,
-	"schedule pause name":  true,
-	"schedule resume name": true,
+func notASessionArgs() map[string]bool {
+	return map[string]bool{
+		"session create name":  true,
+		"agent create name":    true,
+		"agent show name":      true,
+		"agent set-soul name":  true,
+		"host add name":        true,
+		"host check name":      true,
+		"host provision name":  true,
+		"host rm name":         true,
+		"schedule add name":    true,
+		"schedule rm name":     true,
+		"schedule run name":    true,
+		"schedule pause name":  true,
+		"schedule resume name": true,
+	}
 }
 
 func (h *hub) authorize(ctx context.Context, args []string) error {
@@ -125,7 +129,7 @@ func (h *hub) subjectOf(p authz.Principal, path []string, in contracts.Input) au
 	if p.Session == "" {
 		return authz.Subject{}
 	}
-	arg, ok := sessionArg[strings.Join(path, " ")]
+	arg, ok := sessionArgs()[strings.Join(path, " ")]
 	if !ok {
 		return authz.Subject{}
 	}

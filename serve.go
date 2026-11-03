@@ -186,9 +186,7 @@ func superviseForeground(ctx context.Context, cancel context.CancelFunc, foregro
 }
 
 func runHub(ctx context.Context, gws []host.Deps, closers []contracts.Gateway, opts host.Options) error {
-	err := host.RunHub(ctx, gws, opts)
-	host.CloseGateways(ctx, closers, slog.Default())
-	return err
+	return host.RunHub(ctx, gws, closers, opts)
 }
 
 func bindGateways(sets []host.Deps) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {

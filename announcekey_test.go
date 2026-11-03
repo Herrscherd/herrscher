@@ -16,7 +16,7 @@ func TestAnnounceKeyFromEnvRefusesUnset(t *testing.T) {
 }
 
 func TestAnnounceKeyFromEnvRefusesShortSecret(t *testing.T) {
-	t.Setenv("HERRSCHER_ANNOUNCE_KEY", "too-short")
+	t.Setenv("HERRSCHER_ANNOUNCE_KEY", weakAnnounceKey)
 	if _, err := announceKeyFromEnv(); !errors.Is(err, transport.ErrWeakAnnounceKey) {
 		t.Fatalf("short key = %v, want transport.ErrWeakAnnounceKey", err)
 	}
@@ -51,9 +51,11 @@ func TestNewResolverNeedsNoAnnounceKeyWhenLocal(t *testing.T) {
 	}
 }
 
+const weakAnnounceKey = "too-short"
+
 func TestNewResolverRefusesAWeakAnnounceKeyWhenRemote(t *testing.T) {
 	t.Setenv("HERRSCHER_REMOTE", "memory")
-	t.Setenv("HERRSCHER_ANNOUNCE_KEY", "too-short")
+	t.Setenv("HERRSCHER_ANNOUNCE_KEY", weakAnnounceKey)
 	t.Setenv("HERRSCHER_TLS_CA", "")
 	t.Setenv("HERRSCHER_TLS_CERT", "")
 	t.Setenv("HERRSCHER_TLS_KEY", "")

@@ -226,7 +226,9 @@ settings guard it:
   least 32 random bytes, and a host with a remote category refuses to start
   without a valid one. The key signs announcements only: it neither encrypts the
   traffic nor grants a caller any right. The hub, its plugin-hosts and its bridges
-  receive it, and the vendor CLIs an agent runs never do.
+  receive it. It is kept out of the environment the agent's vendor CLIs inherit,
+  but processes running as the same user can still read it, from the `.env` file
+  or from `/proc`, so the boundary is the user account.
 - The gRPC connections use mTLS (`HERRSCHER_TLS_CA`, `HERRSCHER_TLS_CERT`,
   `HERRSCHER_TLS_KEY`). With mTLS configured, the host dials any address an
   authenticated announcement advertises. Without it, the host dials loopback

@@ -5,8 +5,7 @@ import (
 	"sync"
 )
 
-// EnvAnnounceKey names the variable that carries the announce secret.
-const EnvAnnounceKey = "HERRSCHER_ANNOUNCE_KEY"
+const envAnnounceKey = "HERRSCHER_ANNOUNCE_KEY"
 
 var capturedAnnounce = struct {
 	mu       sync.Mutex
@@ -23,10 +22,10 @@ func captureAnnounceKey(getenv func(string) string, unsetenv func(string) error)
 	capturedAnnounce.mu.Lock()
 	defer capturedAnnounce.mu.Unlock()
 	if !capturedAnnounce.captured {
-		capturedAnnounce.secret = getenv(EnvAnnounceKey)
+		capturedAnnounce.secret = getenv(envAnnounceKey)
 		capturedAnnounce.captured = true
 	}
-	logCleanup(unsetenv(EnvAnnounceKey))
+	logCleanup(unsetenv(envAnnounceKey))
 }
 
 // AnnounceKeySecret returns the captured announce secret, or the environment value when nothing was captured.
@@ -36,7 +35,7 @@ func AnnounceKeySecret() string {
 	if capturedAnnounce.captured {
 		return capturedAnnounce.secret
 	}
-	return os.Getenv(EnvAnnounceKey)
+	return os.Getenv(envAnnounceKey)
 }
 
 // AnnounceKeyEnvPairs returns the announce secret as KEY=VALUE for a trusted child only, empty when unset.
@@ -45,5 +44,5 @@ func AnnounceKeyEnvPairs() []string {
 	if secret == "" {
 		return nil
 	}
-	return []string{EnvAnnounceKey + "=" + secret}
+	return []string{envAnnounceKey + "=" + secret}
 }

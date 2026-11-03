@@ -149,8 +149,9 @@ func resolveInstanceID(hostState *state.State, optID, ownerID string, log *slog.
 // health/liveness. gws are the gateway sets the daemon owns (built from the
 // registry by the caller). Command dispatch no longer runs here.
 // Session/service commands run through the operator CLI (see NewRegistry).
-func RunHub(ctx context.Context, gws []Deps, options Options) error {
+func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
 	base := obs.Stderr(false)
+	defer closeGateways(ctx, closers, base)
 	log := base.With("component", "serve")
 	monitor := health.NewHealth(time.Now())
 

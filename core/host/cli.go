@@ -250,12 +250,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			}
 			defer closeRead(mem)
 			kind := contracts.NodeKind(in.Get("kind"))
-			switch kind {
-			case contracts.KindOrganization, contracts.KindProject, contracts.KindRepo,
-				contracts.KindServer, contracts.KindArchitecture, contracts.KindProduction,
-				contracts.KindSession, contracts.KindDecision, contracts.KindUser,
-				contracts.KindAgent, contracts.KindDomain:
-			default:
+			if !memoryKindAllowed(kind) {
 				return "", &UnknownError{Kind: "memory kind", Name: in.Get("kind")}
 			}
 			n := contracts.Node{
@@ -482,4 +477,17 @@ func NewRegistry(ctx context.Context, gws []Deps, o Options) (*cli.Registry, err
 	}
 	forwardDaemonOwnedCommands(reg, instID, dispatchLiveCommand)
 	return reg, nil
+}
+
+func memoryKindAllowed(kind contracts.NodeKind) bool {
+	switch kind {
+	case contracts.KindOrganization, contracts.KindProject, contracts.KindRepo,
+		contracts.KindServer, contracts.KindArchitecture, contracts.KindProduction,
+		contracts.KindSession, contracts.KindDecision, contracts.KindUser,
+		contracts.KindAgent, contracts.KindDomain:
+		return true
+	case contracts.KindTranscript, contracts.KindSkill:
+		return false
+	}
+	return false
 }

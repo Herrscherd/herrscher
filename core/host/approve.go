@@ -60,6 +60,7 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 		return approval.Allow, ""
 	case approval.Deny:
 		return approval.Deny, fmt.Sprintf("herrscher: %s was denied by policy", describeRequest(req))
+	case approval.Ask:
 	}
 
 	if wait <= 0 {

@@ -210,10 +210,10 @@ func TestEverySessionNamingVerbIsClassified(t *testing.T) {
 			if p.Name != "name" && p.Name != "session" {
 				continue
 			}
-			if sessionArg[verb] == p.Name {
+			if sessionArgs()[verb] == p.Name {
 				continue
 			}
-			if notASession[verb+" "+p.Name] {
+			if notASessionArgs()[verb+" "+p.Name] {
 				continue
 			}
 			t.Errorf("`%s --%s` names something. Add it to sessionArg if that is a session "+

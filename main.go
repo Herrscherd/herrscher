@@ -20,6 +20,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/Herrscherd/herrscher/internal/errwriter"
 
@@ -56,7 +57,8 @@ func run() int {
 	host.CaptureGatewayCreds()
 	hideGatewayKeys()
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	if len(os.Args) < minArgsWithCommand {
 		return reportError(runWithoutCommand(ctx))

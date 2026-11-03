@@ -35,54 +35,54 @@ type GatewayHub struct {
 // can report a gateway that dropped out: a stale token silently costing you a
 // whole edge is worse than a noisy line at boot.
 func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string) (*GatewayHub, error) {
-	h := &GatewayHub{sets: make(map[string]contracts.GatewaySet), getenv: envx.Revealed(getenv), retryBase: defaultRetryBase, retryMax: defaultRetryMax}
+	hub := &GatewayHub{sets: make(map[string]contracts.GatewaySet), getenv: envx.Revealed(getenv), retryBase: defaultRetryBase, retryMax: defaultRetryMax}
 	var candidates []contracts.Plugin
 	for idx := range plugins {
-		p := plugins[idx]
-		if p.Gateway != nil {
-			candidates = append(candidates, p)
+		plugin := plugins[idx]
+		if plugin.Gateway != nil {
+			candidates = append(candidates, plugin)
 		}
 	}
-	h.attempt(ctx, candidates)
-	if len(h.sets) == 0 {
-		reasons := append(append([]string(nil), h.failures...), h.unconfigured...)
+	hub.attempt(ctx, candidates)
+	if len(hub.sets) == 0 {
+		reasons := append(append([]string(nil), hub.failures...), hub.unconfigured...)
 		if len(reasons) == 0 {
 			return nil, errNoGatewayPlugin
 		}
 		return nil, &noGatewayError{Reasons: strings.Join(reasons, "; ")}
 	}
-	return h, nil
+	return hub, nil
 }
 
 func (h *GatewayHub) attempt(ctx context.Context, candidates []contracts.Plugin) {
 	h.failures = nil
 	h.pending = nil
 	for idx := range candidates {
-		p := candidates[idx]
-		set, missingConfig, err := buildOne(ctx, p, h.getenv)
+		plugin := candidates[idx]
+		set, missingConfig, err := buildOne(ctx, plugin, h.getenv)
 		if err != nil {
-			line := fmt.Sprintf("%s: %v", p.Manifest.Kind, err)
+			line := fmt.Sprintf("%s: %v", plugin.Manifest.Kind, err)
 			if missingConfig {
 				h.unconfigured = append(h.unconfigured, line)
 				continue
 			}
 			h.failures = append(h.failures, line)
-			h.pending = append(h.pending, p)
+			h.pending = append(h.pending, plugin)
 			continue
 		}
-		if _, dup := h.sets[p.Manifest.Kind]; !dup {
-			h.order = append(h.order, p.Manifest.Kind)
+		if _, dup := h.sets[plugin.Manifest.Kind]; !dup {
+			h.order = append(h.order, plugin.Manifest.Kind)
 		}
-		h.sets[p.Manifest.Kind] = set
+		h.sets[plugin.Manifest.Kind] = set
 	}
 }
 
-func buildOne(ctx context.Context, p contracts.Plugin, getenv func(string) string) (contracts.GatewaySet, bool, error) {
-	cfg, err := contracts.Resolve(p.Manifest.Config, getenv)
+func buildOne(ctx context.Context, plugin contracts.Plugin, getenv func(string) string) (contracts.GatewaySet, bool, error) {
+	cfg, err := contracts.Resolve(plugin.Manifest.Config, getenv)
 	if err != nil {
 		return contracts.GatewaySet{}, true, err
 	}
-	set, err := p.Gateway(ctx, cfg)
+	set, err := plugin.Gateway(ctx, cfg)
 	if err != nil {
 		return contracts.GatewaySet{}, false, err
 	}

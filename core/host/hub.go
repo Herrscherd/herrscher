@@ -157,18 +157,18 @@ func (h *hub) reconcile(ctx context.Context) {
 		liveNames = append(liveNames, n)
 	}
 	h.mu.Unlock()
-	for _, n := range liveNames {
-		s, ok := persisted[n]
+	for _, name := range liveNames {
+		s, ok := persisted[name]
 		if !ok || s.Archived {
-			h.goDead(n)
+			h.goDead(name)
 		}
 	}
 	for idx := range persisted {
-		s := persisted[idx]
-		if s.Archived {
+		saved := persisted[idx]
+		if saved.Archived {
 			continue
 		}
-		h.goLive(ctx, s)
+		h.goLive(ctx, saved)
 	}
 }
 
@@ -224,9 +224,9 @@ func (h *hub) CreateCoordinated(ctx context.Context, spec contracts.CreateSessio
 
 func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor string) (string, error) {
 	args := map[string]string{paramName: spec.Name}
-	setStr := func(k, v string) {
-		if v != "" {
-			args[k] = v
+	setStr := func(key, value string) {
+		if value != "" {
+			args[key] = value
 		}
 	}
 	setStr("channel_id", spec.ChannelID)
@@ -284,33 +284,33 @@ func sessionInfos(st *state.State, partDir string) []contracts.SessionInfo {
 	sessions := st.SnapshotSessions()
 	out := make([]contracts.SessionInfo, 0, len(sessions))
 	for idx := range sessions {
-		s := sessions[idx]
-		sum := state.ReadTranscriptSummary(state.TranscriptPath(partDir, s.Name))
+		live := sessions[idx]
+		sum := state.ReadTranscriptSummary(state.TranscriptPath(partDir, live.Name))
 		out = append(out, contracts.SessionInfo{
-			Name:          s.Name,
-			Incarnation:   s.Incarnation,
-			ChannelID:     s.ChannelID,
-			Type:          s.Type,
-			Gateways:      s.BoundGateways(),
-			Vendor:        s.Vendor,
-			Model:         sessionModel(s),
-			Effort:        sessionEffort(s),
-			Project:       s.Project,
-			Archived:      s.Archived,
-			Resumable:     s.ResumeToken != "",
+			Name:          live.Name,
+			Incarnation:   live.Incarnation,
+			ChannelID:     live.ChannelID,
+			Type:          live.Type,
+			Gateways:      live.BoundGateways(),
+			Vendor:        live.Vendor,
+			Model:         sessionModel(live),
+			Effort:        sessionEffort(live),
+			Project:       live.Project,
+			Archived:      live.Archived,
+			Resumable:     live.ResumeToken != "",
 			LastTs:        sum.LastTs,
 			ContextTokens: sum.ContextTokens,
-			Dir:           sessionDir(s),
+			Dir:           sessionDir(live),
 		})
 	}
 	return out
 }
 
-func sessionModel(s state.Session) string {
-	if s.ModelID != "" {
-		return s.ModelID
+func sessionModel(session state.Session) string {
+	if session.ModelID != "" {
+		return session.ModelID
 	}
-	return invocationFlag(s.Cmd, "--model")
+	return invocationFlag(session.Cmd, "--model")
 }
 
 func sessionEffort(s state.Session) string {
@@ -319,22 +319,22 @@ func sessionEffort(s state.Session) string {
 
 func invocationFlag(cmd, flag string) string {
 	fields := strings.Fields(cmd)
-	for i, f := range fields {
-		if f == flag && i+1 < len(fields) {
-			return fields[i+1]
+	for index, field := range fields {
+		if field == flag && index+1 < len(fields) {
+			return fields[index+1]
 		}
-		if v, ok := strings.CutPrefix(f, flag+"="); ok {
+		if v, ok := strings.CutPrefix(field, flag+"="); ok {
 			return v
 		}
 	}
 	return ""
 }
 
-func sessionDir(s state.Session) string {
-	if s.Dir != "" {
-		return s.Dir
+func sessionDir(session state.Session) string {
+	if session.Dir != "" {
+		return session.Dir
 	}
-	return s.Worktree
+	return session.Worktree
 }
 
 const scrollbackCap = 200
@@ -415,14 +415,14 @@ func workspaceRepos(workspace string) []contracts.RepoRef {
 		return nil
 	}
 	var out []contracts.RepoRef
-	for _, e := range entries {
-		if !e.IsDir() {
+	for _, entry := range entries {
+		if !entry.IsDir() {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(workspace, e.Name(), ".git")); err != nil {
+		if _, err := os.Stat(filepath.Join(workspace, entry.Name(), ".git")); err != nil {
 			continue
 		}
-		out = append(out, contracts.RepoRef{Name: e.Name(), Description: "workspace checkout", Local: true})
+		out = append(out, contracts.RepoRef{Name: entry.Name(), Description: "workspace checkout", Local: true})
 	}
 	return out
 }

@@ -32,24 +32,24 @@ import (
 // never satisfies CommandSource and every verb it offers is lost in silence.
 func CollectCommands(gws []contracts.GatewaySet) ([]contracts.Cmd, error) {
 	var out []contracts.Cmd
-	for _, g := range gws {
-		if g.Gateway == nil {
+	for _, gateway := range gws {
+		if gateway.Gateway == nil {
 			continue
 		}
-		src, ok := g.Gateway.(contracts.CommandSource)
+		src, ok := gateway.Gateway.(contracts.CommandSource)
 		if !ok {
 			continue
 		}
-		kind := g.Gateway.Manifest().Kind
+		kind := gateway.Gateway.Manifest().Kind
 		seen := make(map[string]bool)
-		for _, c := range src.Commands() {
-			path := strings.Join(c.Path, " ")
+		for _, command := range src.Commands() {
+			path := strings.Join(command.Path, " ")
 			if seen[path] {
 				return nil, &contributionClashError{Kind: kind, Path: path}
 			}
 			seen[path] = true
-			c.Path = append([]string{kind}, c.Path...)
-			out = append(out, c)
+			command.Path = append([]string{kind}, command.Path...)
+			out = append(out, command)
 		}
 	}
 	return out, nil
@@ -57,9 +57,9 @@ func CollectCommands(gws []contracts.GatewaySet) ([]contracts.Cmd, error) {
 
 func contributedKinds(cmds []contracts.Cmd) map[string]bool {
 	kinds := make(map[string]bool)
-	for _, c := range cmds {
-		if len(c.Path) > 0 {
-			kinds[c.Path[0]] = true
+	for _, command := range cmds {
+		if len(command.Path) > 0 {
+			kinds[command.Path[0]] = true
 		}
 	}
 	return kinds

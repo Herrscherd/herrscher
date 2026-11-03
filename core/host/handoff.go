@@ -75,11 +75,11 @@ func parseSeal(reply string) (int, bool) {
 	if !ok || body == "" {
 		return 0, false
 	}
-	v, err := strconv.Atoi(body)
-	if err != nil || v <= 0 {
+	value, err := strconv.Atoi(body)
+	if err != nil || value <= 0 {
 		return 0, false
 	}
-	return v, true
+	return value, true
 }
 
 func splitAgentTasks(body string) (string, []string, bool) {

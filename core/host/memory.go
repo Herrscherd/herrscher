@@ -15,19 +15,19 @@ import (
 func BuildFirstMemoryWithManifest(ctx context.Context) (contracts.Memory, contracts.Manifest, error) {
 	memories := contracts.Default.Memories()
 	for idx := range memories {
-		p := memories[idx]
-		if p.Memory == nil {
+		plugin := memories[idx]
+		if plugin.Memory == nil {
 			continue
 		}
-		cfg, err := contracts.Resolve(p.Manifest.Config, os.Getenv)
+		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
 			return nil, contracts.Manifest{}, fmt.Errorf("memory: %w", err)
 		}
-		m, err := p.Memory(ctx, cfg)
+		mem, err := plugin.Memory(ctx, cfg)
 		if err != nil {
 			return nil, contracts.Manifest{}, fmt.Errorf("memory: %w", err)
 		}
-		return m, p.Manifest, nil
+		return mem, plugin.Manifest, nil
 	}
 	return nil, contracts.Manifest{}, errNoMemoryPlugin
 }

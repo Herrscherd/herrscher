@@ -16,12 +16,12 @@ func resolveSeedTimeout(raw string, getenv func(string) string) (time.Duration, 
 	if value == "" {
 		return 0, nil
 	}
-	d, err := time.ParseDuration(value)
+	duration, err := time.ParseDuration(value)
 	if err != nil {
 		return 0, &invalidDurationError{Source: source, Value: value}
 	}
-	if d <= 0 {
-		return 0, &nonPositiveDurationError{Source: source, Duration: d}
+	if duration <= 0 {
+		return 0, &nonPositiveDurationError{Source: source, Duration: duration}
 	}
-	return d, nil
+	return duration, nil
 }

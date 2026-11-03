@@ -13,13 +13,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup, slot *schedulerSlot) error {
+func addScheduleCommands(reg *cli.Registry, hostState *state.State, agents agentLookup, slot *schedulerSlot) error {
 	return addVerbs(reg,
-		scheduleAddVerb(st, agents),
-		scheduleListVerb(st),
-		scheduleRmVerb(st),
-		schedulePauseVerb(st, "pause", true, "stop firing a schedule, keeping it and its history"),
-		schedulePauseVerb(st, "resume", false, "let a paused schedule fire again, counting from now"),
+		scheduleAddVerb(hostState, agents),
+		scheduleListVerb(hostState),
+		scheduleRmVerb(hostState),
+		schedulePauseVerb(hostState, "pause", true, "stop firing a schedule, keeping it and its history"),
+		schedulePauseVerb(hostState, "resume", false, "let a paused schedule fire again, counting from now"),
 		scheduleRunVerb(slot),
 	)
 }
@@ -40,16 +40,16 @@ func scheduleAddVerb(store *state.State, agents agentLookup) contracts.Cmd {
 		})
 }
 
-func addSchedule(store *state.State, agents agentLookup, in contracts.Input) (string, error) {
+func addSchedule(store *state.State, agents agentLookup, input contracts.Input) (string, error) {
 	sched := schedule.Schedule{
-		Name:      strings.TrimSpace(in.Get(paramName)),
-		Session:   strings.TrimSpace(in.Get(paramSession)),
-		Agent:     strings.TrimSpace(in.Get(paramAgent)),
-		Project:   strings.TrimSpace(in.Get("project")),
-		Task:      in.Get("task"),
-		Every:     strings.TrimSpace(in.Get("every")),
-		Cron:      strings.TrimSpace(in.Get("cron")),
-		Grace:     strings.TrimSpace(in.Get("grace")),
+		Name:      strings.TrimSpace(input.Get(paramName)),
+		Session:   strings.TrimSpace(input.Get(paramSession)),
+		Agent:     strings.TrimSpace(input.Get(paramAgent)),
+		Project:   strings.TrimSpace(input.Get("project")),
+		Task:      input.Get("task"),
+		Every:     strings.TrimSpace(input.Get("every")),
+		Cron:      strings.TrimSpace(input.Get("cron")),
+		Grace:     strings.TrimSpace(input.Get("grace")),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := checkNewSchedule(store, agents, sched); err != nil {
@@ -66,19 +66,19 @@ func addSchedule(store *state.State, agents agentLookup, in contracts.Input) (st
 	return out, nil
 }
 
-func checkNewSchedule(store *state.State, agents agentLookup, sc schedule.Schedule) error {
-	if err := schedule.Validate(sc, time.Now()); err != nil {
+func checkNewSchedule(store *state.State, agents agentLookup, definition schedule.Schedule) error {
+	if err := schedule.Validate(definition, time.Now()); err != nil {
 		return err
 	}
-	if sc.Agent != "" {
-		if _, ok := agents.Get(sc.Agent); !ok {
-			return &UnknownError{Kind: kindAgent, Name: sc.Agent}
+	if definition.Agent != "" {
+		if _, ok := agents.Get(definition.Agent); !ok {
+			return &UnknownError{Kind: kindAgent, Name: definition.Agent}
 		}
 	}
 	schedules := store.SnapshotSchedules()
 	for i := range schedules {
-		if schedules[i].Name == sc.Name {
-			return &scheduleExistsError{Name: sc.Name}
+		if schedules[i].Name == definition.Name {
+			return &scheduleExistsError{Name: definition.Name}
 		}
 	}
 	return nil
@@ -204,16 +204,16 @@ func sessionKnown(st *state.State, name string) bool {
 	return false
 }
 
-func targetOf(sc schedule.Schedule) string {
-	if sc.Session != "" {
-		return "session:" + sc.Session
+func targetOf(definition schedule.Schedule) string {
+	if definition.Session != "" {
+		return "session:" + definition.Session
 	}
-	return "agent:" + sc.Agent
+	return "agent:" + definition.Agent
 }
 
-func cadenceOf(sc schedule.Schedule) string {
-	if sc.Every != "" {
-		return "every " + sc.Every
+func cadenceOf(definition schedule.Schedule) string {
+	if definition.Every != "" {
+		return "every " + definition.Every
 	}
-	return "cron " + sc.Cron
+	return "cron " + definition.Cron
 }

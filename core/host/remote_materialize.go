@@ -14,34 +14,34 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
-func stageAgentTar(a agent.Agent, remoteWorktree, remoteBin string) (io.Reader, error) {
+func stageAgentTar(agent agent.Agent, remoteWorktree, remoteBin string) (io.Reader, error) {
 	stage, err := os.MkdirTemp("", "herrscher-agent-")
 	if err != nil {
-		return nil, fmt.Errorf("stage agent %q: %w", a.Name, err)
+		return nil, fmt.Errorf("stage agent %q: %w", agent.Name, err)
 	}
 	defer func() { logCleanup(os.RemoveAll(stage)) }()
-	if err := a.MaterializeIntoAs(stage, remoteWorktree, remoteBin); err != nil {
-		return nil, fmt.Errorf("stage agent %q: %w", a.Name, err)
+	if err := agent.MaterializeIntoAs(stage, remoteWorktree, remoteBin); err != nil {
+		return nil, fmt.Errorf("stage agent %q: %w", agent.Name, err)
 	}
 	var buf bytes.Buffer
 	if err := tarDir(stage, &buf); err != nil {
-		return nil, fmt.Errorf("pack agent %q: %w", a.Name, err)
+		return nil, fmt.Errorf("pack agent %q: %w", agent.Name, err)
 	}
 	return &buf, nil
 }
 
-func tarDir(root string, w io.Writer) error {
+func tarDir(root string, writer io.Writer) error {
 	stage, err := os.OpenRoot(root)
 	if err != nil {
 		return err
 	}
 	defer closeRead(stage)
-	tw := tar.NewWriter(w)
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+	tarWriter := tar.NewWriter(writer)
+	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
 			return err
 		}
-		info, err := d.Info()
+		info, err := entry.Info()
 		if err != nil {
 			return err
 		}
@@ -58,31 +58,31 @@ func tarDir(root string, w io.Writer) error {
 			Size:     info.Size(),
 			Typeflag: tar.TypeReg,
 		}
-		if writeErr := tw.WriteHeader(hdr); writeErr != nil {
+		if writeErr := tarWriter.WriteHeader(hdr); writeErr != nil {
 			return writeErr
 		}
-		f, err := stage.Open(rel)
+		file, err := stage.Open(rel)
 		if err != nil {
 			return err
 		}
-		defer closeRead(f)
-		_, err = io.Copy(tw, f)
+		defer closeRead(file)
+		_, err = io.Copy(tarWriter, file)
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	return tw.Close()
+	return tarWriter.Close()
 }
 
-func extractTar(r io.Reader, dst string) error {
+func extractTar(src io.Reader, dst string) error {
 	root, err := filepath.Abs(dst)
 	if err != nil {
 		return err
 	}
-	tr := tar.NewReader(r)
+	tarReader := tar.NewReader(src)
 	for {
-		hdr, err := tr.Next()
+		hdr, err := tarReader.Next()
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
@@ -92,7 +92,7 @@ func extractTar(r io.Reader, dst string) error {
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
-		if err := extractRegularMember(tr, hdr, root); err != nil {
+		if err := extractRegularMember(tarReader, hdr, root); err != nil {
 			return err
 		}
 	}

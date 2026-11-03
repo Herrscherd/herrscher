@@ -13,42 +13,42 @@ type gatewayRenderer struct {
 	conv contracts.Conversation
 }
 
-func newGatewayRenderer(gw contracts.Gateway, ch string) *gatewayRenderer {
+func newGatewayRenderer(gateway contracts.Gateway, channel string) *gatewayRenderer {
 	return &gatewayRenderer{
-		gw:   gw,
-		conv: contracts.Conversation{Gateway: gw.Manifest().Kind, ID: ch},
+		gw:   gateway,
+		conv: contracts.Conversation{Gateway: gateway.Manifest().Kind, ID: channel},
 	}
 }
 
-func (r *gatewayRenderer) handle(ctx context.Context, e contracts.Event) {
-	if e.T != eventReply || !e.Done || e.Text == "" {
+func (r *gatewayRenderer) handle(ctx context.Context, event contracts.Event) {
+	if event.T != eventReply || !event.Done || event.Text == "" {
 		return
 	}
-	for _, part := range chunk(e.Text, gatewayMaxLen) {
+	for _, part := range chunk(event.Text, gatewayMaxLen) {
 		_, postErr := r.gw.Post(ctx, r.conv, part)
 		logCleanup(postErr)
 	}
 }
 
-func chunk(s string, limit int) []string {
+func chunk(text string, limit int) []string {
 	var out []string
-	r := []rune(s)
-	for len(r) > limit {
+	runes := []rune(text)
+	for len(runes) > limit {
 		cut := limit
-		for i := limit - 1; i > limit/2; i-- {
-			if r[i] == '\n' {
-				cut = i
+		for index := limit - 1; index > limit/2; index-- {
+			if runes[index] == '\n' {
+				cut = index
 				break
 			}
 		}
-		out = append(out, string(r[:cut]))
-		r = r[cut:]
-		if len(r) > 0 && r[0] == '\n' {
-			r = r[1:]
+		out = append(out, string(runes[:cut]))
+		runes = runes[cut:]
+		if len(runes) > 0 && runes[0] == '\n' {
+			runes = runes[1:]
 		}
 	}
-	if len(r) > 0 {
-		out = append(out, string(r))
+	if len(runes) > 0 {
+		out = append(out, string(runes))
 	}
 	return out
 }

@@ -86,29 +86,29 @@ func listenRestricted(ctx context.Context, path string) (net.Listener, error) {
 	if len(tmp) > maxUnixSocketPath {
 		return listenAndRestrict(ctx, path)
 	}
-	l, err := listenAndRestrict(ctx, tmp)
+	listener, err := listenAndRestrict(ctx, tmp)
 	if err != nil {
 		return nil, err
 	}
-	if ul, ok := l.(*net.UnixListener); ok {
+	if ul, ok := listener.(*net.UnixListener); ok {
 		ul.SetUnlinkOnClose(false)
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		logCleanup(l.Close())
+		logCleanup(listener.Close())
 		return nil, err
 	}
-	return l, nil
+	return listener, nil
 }
 
 func listenAndRestrict(ctx context.Context, path string) (net.Listener, error) {
-	l, err := (&net.ListenConfig{}).Listen(ctx, "unix", path)
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "unix", path)
 	if err != nil {
 		return nil, err
 	}
 	if err := os.Chmod(path, ownerOnlyFileMode); err != nil {
-		logCleanup(l.Close())
+		logCleanup(listener.Close())
 		logCleanup(os.Remove(path))
 		return nil, err
 	}
-	return l, nil
+	return listener, nil
 }

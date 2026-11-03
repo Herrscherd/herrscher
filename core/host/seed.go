@@ -50,7 +50,7 @@ func oneShotSeedRuntimeFrom(ctx context.Context) oneShotSeedRuntime {
 
 type seedCommandForwarder func(context.Context, string, []string) (string, bool, error)
 
-func runOneShotSeedCommand(ctx context.Context, st *state.State, name, task, turnID string, runtime oneShotSeedRuntime, coord contracts.Coordinator, instID string, forward seedCommandForwarder) (string, error) {
+func runOneShotSeedCommand(ctx context.Context, hostState *state.State, name, task, turnID string, runtime oneShotSeedRuntime, coord contracts.Coordinator, instID string, forward seedCommandForwarder) (string, error) {
 	if runtime.coordinator == nil {
 		runtime.coordinator = coord
 	}
@@ -64,7 +64,7 @@ func runOneShotSeedCommand(ctx context.Context, st *state.State, name, task, tur
 			return reply, err
 		}
 	}
-	return runOneShotSeedIDWithRuntime(ctx, st, name, task, turnID, runtime)
+	return runOneShotSeedIDWithRuntime(ctx, hostState, name, task, turnID, runtime)
 }
 
 func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, task, turnID string, runtime oneShotSeedRuntime) (string, error) {
@@ -90,19 +90,19 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
-	d := newSessionDriver(sess.Name, nil, toBridge, fromBridge)
-	d.incarnation = sess.Incarnation
-	d.agent = sess.Agent
-	attachOneShotTaps(d, sess.Name, runtime)
+	driver := newSessionDriver(sess.Name, nil, toBridge, fromBridge)
+	driver.incarnation = sess.Incarnation
+	driver.agent = sess.Agent
+	attachOneShotTaps(driver, sess.Name, runtime)
 	pumpCtx, pumpCancel := context.WithCancel(seedCtx)
 	defer pumpCancel()
 	pumpDone := make(chan struct{})
-	go func() { defer close(pumpDone); d.pump(pumpCtx) }()
+	go func() { defer close(pumpDone); driver.pump(pumpCtx) }()
 
 	bridgeErr := make(chan error, 1)
 	go runOneShotBridge(seedCtx, cancel, sess, orch, runtime, toBridge, fromBridge, bridgeErr)
 
-	reply, ok := d.SeedAndWaitWithTurnID(seedCtx, task, turnID)
+	reply, ok := driver.SeedAndWaitWithTurnID(seedCtx, task, turnID)
 	if !ok {
 		return "", oneShotTimeoutError(bridgeErr)
 	}
@@ -112,12 +112,12 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	if runtime.coordinator != nil {
 		pumpCancel()
 		<-pumpDone
-		d.coordinator = runtime.coordinator
-		d.activeTurnID = turnID
-		if coordination := d.maybeCoordinate(seedCtx, reply); coordination != nil {
-			d.fanOut(seedCtx, contracts.Event{T: eventReply, Done: true, Text: reply, Coordination: coordination})
+		driver.coordinator = runtime.coordinator
+		driver.activeTurnID = turnID
+		if coordination := driver.maybeCoordinate(seedCtx, reply); coordination != nil {
+			driver.fanOut(seedCtx, contracts.Event{T: eventReply, Done: true, Text: reply, Coordination: coordination})
 		}
-		d.activeTurnID = ""
+		driver.activeTurnID = ""
 	}
 	consolidateOneShot(ctx, orch, sess)
 	return reply, nil
@@ -360,15 +360,15 @@ func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin
 }
 
 func provisionSeedScope(ctx context.Context, mem contracts.Memory, project, agent string) {
-	p, ok := mem.(contracts.Provisioner)
+	provisioner, ok := mem.(contracts.Provisioner)
 	if !ok {
 		return
 	}
 	if project != "" {
-		logCleanup(p.EnsureProject(ctx, contracts.ProjectKey(project), project))
+		logCleanup(provisioner.EnsureProject(ctx, contracts.ProjectKey(project), project))
 	}
 	if agent != "" {
-		logCleanup(p.EnsureAgent(ctx, contracts.AgentKey(agent), agent))
+		logCleanup(provisioner.EnsureAgent(ctx, contracts.AgentKey(agent), agent))
 	}
 }
 

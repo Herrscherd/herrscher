@@ -26,36 +26,36 @@ func forwardDaemonOwnedCommands(reg *cli.Registry, instID string, forward seedCo
 			if len(cmd.Path) > 1 && forwardedLocally()[cmd.Path[1]] {
 				return next
 			}
-			return func(ctx context.Context, in contracts.Input) (string, error) {
+			return func(ctx context.Context, input contracts.Input) (string, error) {
 				target := commandSocketTarget(instID)
-				out, handled, err := forward(ctx, target, argvOf(cmd, in))
+				out, handled, err := forward(ctx, target, argvOf(cmd, input))
 				if handled {
 					return out, err
 				}
 				if path := strings.Join(cmd.Path, " "); daemonOnly()[path] {
 					return "", &daemonRequiredError{Command: path, Target: target}
 				}
-				return next(ctx, in)
+				return next(ctx, input)
 			}
 		})
 	}
 }
 
-func argvOf(cmd contracts.Cmd, in contracts.Input) []string {
+func argvOf(cmd contracts.Cmd, input contracts.Input) []string {
 	argv := append([]string(nil), cmd.Path...)
-	for _, p := range cmd.Params {
-		v, ok := in.Args[p.Name]
+	for _, param := range cmd.Params {
+		value, ok := input.Args[param.Name]
 		if !ok {
 			continue
 		}
-		if !p.ValueRequired && v == valueTrue {
-			argv = append(argv, "--"+p.Name)
+		if !param.ValueRequired && value == valueTrue {
+			argv = append(argv, "--"+param.Name)
 			continue
 		}
-		argv = append(argv, "--"+p.Name, v)
+		argv = append(argv, "--"+param.Name, value)
 	}
-	argv = append(argv, in.Rest...)
-	if in.JSON {
+	argv = append(argv, input.Rest...)
+	if input.JSON {
 		argv = append(argv, "--json")
 	}
 	return argv

@@ -37,11 +37,11 @@ type tokenGuard struct {
 	cut      bool
 }
 
-func (g *tokenGuard) trips(e contracts.Event) (uint64, bool) {
+func (g *tokenGuard) trips(event contracts.Event) (uint64, bool) {
 	if !g.capped || g.cut {
 		return 0, false
 	}
-	spent := turnTokens(e)
+	spent := turnTokens(event)
 	if spent == 0 || spent < g.headroom {
 		return spent, false
 	}
@@ -115,19 +115,19 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 
 func attachmentHosts(gws []contracts.GatewaySet) map[string]bool {
 	var hosts map[string]bool
-	for _, g := range gws {
-		if g.Gateway == nil {
+	for _, gateway := range gws {
+		if gateway.Gateway == nil {
 			continue
 		}
-		for _, h := range g.Gateway.Manifest().AttachmentHosts {
-			h = strings.ToLower(strings.TrimSpace(h))
-			if h == "" {
+		for _, attachmentHost := range gateway.Gateway.Manifest().AttachmentHosts {
+			attachmentHost = strings.ToLower(strings.TrimSpace(attachmentHost))
+			if attachmentHost == "" {
 				continue
 			}
 			if hosts == nil {
 				hosts = make(map[string]bool)
 			}
-			hosts[h] = true
+			hosts[attachmentHost] = true
 		}
 	}
 	return hosts
@@ -148,11 +148,11 @@ func (d *sessionDriver) journal(authorID string) {
 	}
 }
 
-func (d *sessionDriver) resolveAttachments(ctx context.Context, m contracts.Message) []string {
-	if len(m.Attachments) == 0 {
+func (d *sessionDriver) resolveAttachments(ctx context.Context, message contracts.Message) []string {
+	if len(message.Attachments) == 0 {
 		return nil
 	}
-	return bridge.ResolveAttachments(ctx, nil, m, d.name, d.attachHosts)
+	return bridge.ResolveAttachments(ctx, nil, message, d.name, d.attachHosts)
 }
 
 type turnUsage struct {
@@ -160,7 +160,7 @@ type turnUsage struct {
 	CtxTokens                                          int
 }
 
-func (d *sessionDriver) recordEntry(role, text string, cost float64, u turnUsage) {
+func (d *sessionDriver) recordEntry(role, text string, cost float64, usage turnUsage) {
 	if d.sink.Transcript == nil || text == "" {
 		return
 	}
@@ -169,12 +169,12 @@ func (d *sessionDriver) recordEntry(role, text string, cost float64, u turnUsage
 		Role:        role,
 		Text:        text,
 		Cost:        cost,
-		TokensIn:    u.InTokens,
-		TokensOut:   u.OutTokens,
-		CacheRead:   u.CacheRead,
-		CacheCreate: u.CacheCreate,
-		DurMs:       u.DurMs,
-		CtxTokens:   u.CtxTokens,
+		TokensIn:    usage.InTokens,
+		TokensOut:   usage.OutTokens,
+		CacheRead:   usage.CacheRead,
+		CacheCreate: usage.CacheCreate,
+		DurMs:       usage.DurMs,
+		CtxTokens:   usage.CtxTokens,
 	})
 }
 
@@ -182,38 +182,38 @@ func (d *sessionDriver) Pick(value string) bool {
 	return d.enqueue(queued{ev: contracts.Event{T: "pick", Value: value}})
 }
 
-func (d *sessionDriver) enqueue(q queued) bool {
+func (d *sessionDriver) enqueue(item queued) bool {
 	select {
-	case d.queue <- q:
+	case d.queue <- item:
 		return true
 	case <-time.After(d.enqueueTimeout):
 		return false
 	}
 }
 
-func (d *sessionDriver) askApproval(ctx context.Context, prompt, id string) {
-	opts := approvalChoices(id)
-	for _, gs := range d.gateways {
-		ch := d.renderChannel(gs)
-		if mr, ok := gs.Reader.(contracts.MenuRouter); ok && ch != "" {
-			if _, err := mr.RouteMenu(ctx, ch, "", prompt, d.name, opts); err == nil {
+func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID string) {
+	opts := approvalChoices(approvalID)
+	for _, gateway := range d.gateways {
+		channel := d.renderChannel(gateway)
+		if mr, ok := gateway.Reader.(contracts.MenuRouter); ok && channel != "" {
+			if _, err := mr.RouteMenu(ctx, channel, "", prompt, d.name, opts); err == nil {
 				continue
 			}
 		}
-		if gs.Gateway == nil {
+		if gateway.Gateway == nil {
 			continue
 		}
-		conv := contracts.Conversation{Gateway: gs.Gateway.Manifest().Kind, ID: ch}
-		logCleanup(contracts.Degrade(gs.Gateway).Menu(ctx, conv, "", prompt+" (answer with `approve allow "+id+"`)", opts))
+		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: channel}
+		logCleanup(contracts.Degrade(gateway.Gateway).Menu(ctx, conv, "", prompt+" (answer with `approve allow "+approvalID+"`)", opts))
 	}
 }
 
-func askApprovalOn(ctx context.Context, sessions *sessionTable, session, prompt, id string) {
-	d := sessions.lookup(session)
-	if d == nil {
+func askApprovalOn(ctx context.Context, sessions *sessionTable, session, prompt, approvalID string) {
+	driver := sessions.lookup(session)
+	if driver == nil {
 		return
 	}
-	d.askApproval(ctx, prompt, id)
+	driver.askApproval(ctx, prompt, approvalID)
 }
 
 const interruptSendTimeout = 2 * time.Second
@@ -278,16 +278,16 @@ func newSessionTable() *sessionTable {
 	return &sessionTable{m: make(map[string]*sessionDriver)}
 }
 
-func (t *sessionTable) register(name string, d *sessionDriver) {
+func (t *sessionTable) register(name string, driver *sessionDriver) {
 	t.mu.Lock()
-	t.m[name] = d
+	t.m[name] = driver
 	t.mu.Unlock()
 	t.changed.signal()
 }
 
-func (t *sessionTable) unregister(name string, d *sessionDriver) {
+func (t *sessionTable) unregister(name string, driver *sessionDriver) {
 	t.mu.Lock()
-	if t.m[name] == d {
+	if t.m[name] == driver {
 		delete(t.m, name)
 	}
 	t.mu.Unlock()
@@ -301,75 +301,75 @@ func (t *sessionTable) lookup(name string) *sessionDriver {
 }
 
 func (t *sessionTable) pick(session, value string) bool {
-	d := t.lookup(session)
-	if d == nil {
+	driver := t.lookup(session)
+	if driver == nil {
 		return false
 	}
-	return d.Pick(value)
+	return driver.Pick(value)
 }
 
 // Interrupt cancels the in-flight turn of the named session, returning false
 // when no live session by that name is driving (mirror of Pick).
 func (t *sessionTable) Interrupt(session string) bool {
-	d := t.lookup(session)
-	if d == nil {
+	driver := t.lookup(session)
+	if driver == nil {
 		return false
 	}
-	d.Interrupt()
+	driver.Interrupt()
 	return true
 }
 
 // Seed routes an opening task to the named session's driver, returning false when
 // no live session by that name is driving (mirror of Pick).
 func (t *sessionTable) Seed(session, task string) bool {
-	d := t.lookup(session)
-	if d == nil {
+	driver := t.lookup(session)
+	if driver == nil {
 		return false
 	}
-	return d.Seed(task)
+	return driver.Seed(task)
 }
 
 // Submit injects one inbound message into the named session's turn queue,
 // returning false when no live session by that name is driving (mirror of Pick).
 // It is the push counterpart of the driver's own poll loop: a gateway that
 // receives messages by push calls this instead of being polled.
-func (t *sessionTable) Submit(ctx context.Context, session string, in contracts.Inbound) bool {
-	d := t.lookup(session)
-	if d == nil {
+func (t *sessionTable) Submit(ctx context.Context, session string, inbound contracts.Inbound) bool {
+	driver := t.lookup(session)
+	if driver == nil {
 		return false
 	}
-	return d.submit(ctx, in)
+	return driver.submit(ctx, inbound)
 }
 
 func (d *sessionDriver) run(ctx context.Context) {
-	for _, g := range d.gateways {
-		if g.Reader != nil {
-			go d.poll(ctx, g.Reader)
+	for _, gateway := range d.gateways {
+		if gateway.Reader != nil {
+			go d.poll(ctx, gateway.Reader)
 		}
 	}
 	d.pump(ctx)
 }
 
-func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
-	ch := d.channel
-	if ch == "" {
-		ch = r.DefaultChannel()
+func (d *sessionDriver) poll(ctx context.Context, reader contracts.ChannelReader) {
+	channel := d.channel
+	if channel == "" {
+		channel = reader.DefaultChannel()
 	}
-	log := obs.Stderr(false).With("component", "poll", keySession, d.name, "channel", ch)
+	log := obs.Stderr(false).With("component", "poll", keySession, d.name, "channel", channel)
 	var last string
 	if d.channel != "" {
-		cursor, ok := initPollCursor(ctx, r, ch, log)
+		cursor, ok := initPollCursor(ctx, reader, channel, log)
 		if !ok {
 			return
 		}
 		last = cursor
 	}
-	d.pollLoop(ctx, r, ch, last, log)
+	d.pollLoop(ctx, reader, channel, last, log)
 }
 
-func initPollCursor(ctx context.Context, r contracts.ChannelReader, channel string, log *slog.Logger) (string, bool) {
+func initPollCursor(ctx context.Context, reader contracts.ChannelReader, channel string, log *slog.Logger) (string, bool) {
 	for delay := time.Second; ; delay = min(backoffFactor*delay, maxPollBackoff) {
-		msgs, err := r.Read(ctx, channel, 1, "")
+		msgs, err := reader.Read(ctx, channel, 1, "")
 		if err == nil {
 			return lastMessageID(msgs), true
 		}
@@ -396,10 +396,10 @@ func sleepOrDone(ctx context.Context, delay time.Duration) bool {
 	}
 }
 
-func (d *sessionDriver) pollLoop(ctx context.Context, r contracts.ChannelReader, channel, last string, log *slog.Logger) {
+func (d *sessionDriver) pollLoop(ctx context.Context, reader contracts.ChannelReader, channel, last string, log *slog.Logger) {
 	delay := pollInterval
 	for ctx.Err() == nil {
-		msgs, err := r.Read(ctx, channel, pollBatchSize, last)
+		msgs, err := reader.Read(ctx, channel, pollBatchSize, last)
 		if err != nil {
 			delay = min(backoffFactor*delay, maxPollBackoff)
 			log.Warn("poll read failed", "err", err, "retry_in", delay)
@@ -435,19 +435,19 @@ func (d *sessionDriver) forwardPolled(ctx context.Context, msgs []contracts.Mess
 	return last, true
 }
 
-func (d *sessionDriver) submit(ctx context.Context, in contracts.Inbound) bool {
-	d.journal(in.AuthorID)
+func (d *sessionDriver) submit(ctx context.Context, inbound contracts.Inbound) bool {
+	d.journal(inbound.AuthorID)
 	atts := d.resolveAttachments(ctx, contracts.Message{
-		ID:          string(in.MessageID),
-		Content:     in.Text,
-		AuthorID:    in.AuthorID,
-		AuthorName:  in.Author,
-		Attachments: in.Attachments,
+		ID:          string(inbound.MessageID),
+		Content:     inbound.Text,
+		AuthorID:    inbound.AuthorID,
+		AuthorName:  inbound.Author,
+		Attachments: inbound.Attachments,
 	})
 	select {
 	case d.queue <- queued{
-		ev:     contracts.Event{T: eventInput, Who: in.Author, Text: in.Text, Attachments: atts},
-		origin: in.Conversation,
+		ev:     contracts.Event{T: eventInput, Who: inbound.Author, Text: inbound.Text, Attachments: atts},
+		origin: inbound.Conversation,
 	}:
 		return true
 	case <-ctx.Done():
@@ -498,22 +498,22 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 	return event, tokenGuard{headroom: verdict.Headroom, capped: verdict.Capped}, true
 }
 
-func (d *sessionDriver) runTurn(ctx context.Context, ev contracts.Event, guard tokenGuard) {
+func (d *sessionDriver) runTurn(ctx context.Context, event contracts.Event, guard tokenGuard) {
 	select {
 	case <-d.hangup:
 	default:
 	}
 	select {
-	case d.toBridge <- ev:
+	case d.toBridge <- event:
 	case <-d.hangup:
-		d.abandon(ctx, ev)
+		d.abandon(ctx, event)
 		return
 	case <-ctx.Done():
-		d.abandon(ctx, ev)
+		d.abandon(ctx, event)
 		return
 	}
 	if !d.awaitTurn(ctx, guard) {
-		d.abandon(ctx, ev)
+		d.abandon(ctx, event)
 	}
 }
 
@@ -536,20 +536,20 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 		case <-d.hangup:
 			d.metrics.TurnAbandoned()
 			return false
-		case e, ok := <-d.from:
+		case event, ok := <-d.from:
 			if !ok {
 				d.metrics.TurnAbandoned()
 				return false
 			}
-			if e.T == eventReply && e.Done {
-				d.completeTurn(ctx, e, turnStart, live)
+			if event.T == eventReply && event.Done {
+				d.completeTurn(ctx, event, turnStart, live)
 				return true
 			}
-			d.fanOut(ctx, e)
-			if n := promptSize(e); n > 0 {
+			d.fanOut(ctx, event)
+			if n := promptSize(event); n > 0 {
 				live = n
 			}
-			d.enforceTokenGuard(ctx, &guard, e)
+			d.enforceTokenGuard(ctx, &guard, event)
 		}
 	}
 }
@@ -608,15 +608,15 @@ func contextReading(live int, done contracts.Event) int {
 	return promptSize(done)
 }
 
-func turnTokens(e contracts.Event) uint64 {
-	n := 0
-	if e.Tokens > 0 {
-		n += e.Tokens
+func turnTokens(event contracts.Event) uint64 {
+	total := 0
+	if event.Tokens > 0 {
+		total += event.Tokens
 	}
-	if e.TokensIn > 0 {
-		n += e.TokensIn
+	if event.TokensIn > 0 {
+		total += event.TokensIn
 	}
-	return uint64(n)
+	return uint64(total)
 }
 
 func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *contracts.CoordinationEvent {
@@ -745,48 +745,48 @@ func (d *sessionDriver) handoffTask(ctx context.Context, toAgent, task string) {
 
 func sanitizeCoordinationError(err error) string {
 	const maxLen = 160
-	s := strings.Join(strings.Fields(err.Error()), " ")
-	if len(s) > maxLen {
-		s = s[:maxLen]
+	message := strings.Join(strings.Fields(err.Error()), " ")
+	if len(message) > maxLen {
+		message = message[:maxLen]
 	}
-	return s
+	return message
 }
 
-func (d *sessionDriver) fanOut(ctx context.Context, e contracts.Event) {
+func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {
 	if d.activeTurnID != "" {
-		e.SessionIncarnation = d.incarnation
-		e.TurnID = d.activeTurnID
-		e.Agent = d.agent
+		event.SessionIncarnation = d.incarnation
+		event.TurnID = d.activeTurnID
+		event.Agent = d.agent
 	} else {
-		e.SessionIncarnation = ""
-		e.TurnID = ""
-		e.Agent = ""
+		event.SessionIncarnation = ""
+		event.TurnID = ""
+		event.Agent = ""
 	}
 	if d.emitTap != nil {
-		d.emitTap(e)
+		d.emitTap(event)
 	}
 	if d.saidElsewhere {
 		return
 	}
-	for i, g := range d.gateways {
-		if rs, ok := g.Gateway.(contracts.RoutedEventSink); ok {
+	for index, gateway := range d.gateways {
+		if rs, ok := gateway.Gateway.(contracts.RoutedEventSink); ok {
 			rs.EmitTo(contracts.Conversation{
-				Gateway: g.Gateway.Manifest().Kind,
-				ID:      d.renderChannel(g),
-			}, e)
+				Gateway: gateway.Gateway.Manifest().Kind,
+				ID:      d.renderChannel(gateway),
+			}, event)
 			continue
 		}
-		if sink, ok := g.Gateway.(contracts.EventSink); ok {
-			sink.Emit(e)
+		if sink, ok := gateway.Gateway.(contracts.EventSink); ok {
+			sink.Emit(event)
 			continue
 		}
-		key := strconv.Itoa(i) + ":" + g.Gateway.Manifest().Kind
-		r := d.renderers[key]
-		if r == nil {
-			r = newGatewayRenderer(g.Gateway, d.renderChannel(g))
-			d.renderers[key] = r
+		key := strconv.Itoa(index) + ":" + gateway.Gateway.Manifest().Kind
+		renderer := d.renderers[key]
+		if renderer == nil {
+			renderer = newGatewayRenderer(gateway.Gateway, d.renderChannel(gateway))
+			d.renderers[key] = renderer
 		}
-		r.handle(ctx, e)
+		renderer.handle(ctx, event)
 	}
 }
 
@@ -802,18 +802,18 @@ func outsideBoundGateways(origin contracts.Conversation, gws []contracts.Gateway
 	return true
 }
 
-func gatewayChannel(g contracts.GatewaySet) string {
-	if g.Reader != nil {
-		return g.Reader.DefaultChannel()
+func gatewayChannel(gateway contracts.GatewaySet) string {
+	if gateway.Reader != nil {
+		return gateway.Reader.DefaultChannel()
 	}
 	return ""
 }
 
-func (d *sessionDriver) renderChannel(g contracts.GatewaySet) string {
+func (d *sessionDriver) renderChannel(gateway contracts.GatewaySet) string {
 	if d.channel != "" {
 		return d.channel
 	}
-	return gatewayChannel(g)
+	return gatewayChannel(gateway)
 }
 
 type sessionIdentity struct {
@@ -826,25 +826,25 @@ func RunSession(ctx context.Context, sessions *sessionTable, name, channel strin
 	runSessionIdentified(ctx, sessions, name, channel, gws, acc, participants, m, coord, sink, nil, sessionIdentity{}, gate)
 }
 
-func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, emit func(contracts.Event), identity sessionIdentity, gate budgetGate) {
+func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, registry *metrics.Registry, coord contracts.Coordinator, sink sessionSink, emit func(contracts.Event), identity sessionIdentity, gate budgetGate) {
 	defer closeRead(acc)
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
-	d := newSessionDriver(name, gws, toBridge, fromBridge)
-	d.incarnation = identity.incarnation
-	d.agent = identity.agent
-	d.channel = channel
-	d.participants = participants
-	d.metrics = m
-	d.coordinator = coord
-	d.sink = sink
-	d.emitTap = emit
+	driver := newSessionDriver(name, gws, toBridge, fromBridge)
+	driver.incarnation = identity.incarnation
+	driver.agent = identity.agent
+	driver.channel = channel
+	driver.participants = participants
+	driver.metrics = registry
+	driver.coordinator = coord
+	driver.sink = sink
+	driver.emitTap = emit
 	if gate != nil {
-		d.gate = gate
+		driver.gate = gate
 	}
-	sessions.register(name, d)
-	defer sessions.unregister(name, d)
-	go d.run(ctx)
+	sessions.register(name, driver)
+	defer sessions.unregister(name, driver)
+	go driver.run(ctx)
 
 	for {
 		select {
@@ -854,7 +854,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 			if !ok {
 				return
 			}
-			serveConn(ctx, conn, toBridge, fromBridge, d.hangup)
+			serveConn(ctx, conn, toBridge, fromBridge, driver.hangup)
 		}
 	}
 }
@@ -871,9 +871,9 @@ func serveConn(ctx context.Context, conn *control.Conn, toBridge <-chan contract
 	}()
 
 	go func() {
-		logCleanup(conn.Scan(func(e contracts.Event) error {
+		logCleanup(conn.Scan(func(event contracts.Event) error {
 			select {
-			case fromBridge <- e:
+			case fromBridge <- event:
 				return nil
 			case <-cctx.Done():
 				return cctx.Err()
@@ -886,11 +886,11 @@ func serveConn(ctx context.Context, conn *control.Conn, toBridge <-chan contract
 		select {
 		case <-cctx.Done():
 			return
-		case ev := <-toBridge:
+		case event := <-toBridge:
 			if cctx.Err() != nil {
 				return
 			}
-			if err := conn.Write(ev); err != nil {
+			if err := conn.Write(event); err != nil {
 				return
 			}
 		}

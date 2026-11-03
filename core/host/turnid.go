@@ -35,14 +35,14 @@ func resolveTurnID(value string, supplied bool) (string, error) {
 	if len(value) > maxTurnIDLength {
 		return "", &TurnIDError{Reason: fmt.Sprintf("must be at most %d bytes", maxTurnIDLength)}
 	}
-	for _, r := range value {
-		if (r >= 'a' && r <= 'z') ||
-			(r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') ||
-			r == '-' || r == '_' || r == '.' || r == '~' {
+	for _, char := range value {
+		if (char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			char == '-' || char == '_' || char == '.' || char == '~' {
 			continue
 		}
-		return "", &TurnIDError{Reason: fmt.Sprintf("contains unsafe character %q", r)}
+		return "", &TurnIDError{Reason: fmt.Sprintf("contains unsafe character %q", char)}
 	}
 	return value, nil
 }

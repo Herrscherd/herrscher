@@ -32,28 +32,28 @@ func seedVerb(store *state.State, instID string, seedCoord *coordinatorSlot) con
 		})
 }
 
-func runSeedVerb(ctx context.Context, in contracts.Input, store *state.State, instID string, coord contracts.Coordinator) (string, error) {
-	rawTurnID, supplied := in.Lookup("turn_id")
+func runSeedVerb(ctx context.Context, input contracts.Input, store *state.State, instID string, coord contracts.Coordinator) (string, error) {
+	rawTurnID, supplied := input.Lookup("turn_id")
 	turnID, err := resolveTurnID(rawTurnID, supplied)
 	if err != nil {
 		return "", err
 	}
-	timeout, err := resolveSeedTimeout(in.Get("timeout"), os.Getenv)
+	timeout, err := resolveSeedTimeout(input.Get("timeout"), os.Getenv)
 	if err != nil {
 		return "", err
 	}
 	runtime := oneShotSeedRuntimeFrom(ctx)
 	runtime.timeout = timeout
 	reply, err := runOneShotSeedCommand(
-		ctx, store, in.Get(paramName), in.Get("task"),
+		ctx, store, input.Get(paramName), input.Get("task"),
 		turnID, runtime,
 		coord, instID, dispatchLiveCommand,
 	)
 	if err != nil {
 		return "", err
 	}
-	if in.JSON {
-		b, err := json.Marshal(map[string]string{keySession: in.Get(paramName), "reply": reply})
+	if input.JSON {
+		b, err := json.Marshal(map[string]string{keySession: input.Get(paramName), "reply": reply})
 		return string(b), err
 	}
 	return reply, nil

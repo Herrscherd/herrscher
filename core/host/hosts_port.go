@@ -22,9 +22,9 @@ type hostPlacer struct {
 	newRemote     func(runner.SSH, string) *worktree.Remote
 }
 
-func newHostPlacer(st *state.State, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
+func newHostPlacer(hostState *state.State, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
 	return hostPlacer{
-		st:            st,
+		st:            hostState,
 		local:         local,
 		sourceVersion: sourceVersion,
 		newRemote: func(r runner.SSH, bin string) *worktree.Remote {
@@ -34,30 +34,30 @@ func newHostPlacer(st *state.State, instanceID string, local *worktree.Worktreer
 }
 
 func (p hostPlacer) resolve(name string) (state.Host, *worktree.Remote, error) {
-	h, ok := p.st.FindHost(name)
+	host, ok := p.st.FindHost(name)
 	if !ok {
 		return state.Host{}, nil, unknownHost(p.st, name)
 	}
-	if h.Bin == "" {
+	if host.Bin == "" {
 		return state.Host{}, nil, &hostNotProvisionedError{Name: name}
 	}
-	r := runner.SSH{Target: h.SSH, ControlPath: runner.ControlPathFor(h.SSH)}
-	return h, p.newRemote(r, h.Bin), nil
+	r := runner.SSH{Target: host.SSH, ControlPath: runner.ControlPathFor(host.SSH)}
+	return host, p.newRemote(r, host.Bin), nil
 }
 
 func (p hostPlacer) Ready(name string) error {
 	if name == "" {
 		return nil
 	}
-	h, _, err := p.resolve(name)
+	host, _, err := p.resolve(name)
 	if err != nil {
 		return err
 	}
 	if p.sourceVersion == nil {
 		return nil
 	}
-	if want := p.sourceVersion(); want != "" && h.Version != want {
-		return &hostVersionMismatchError{Name: name, Have: h.Version, Want: want}
+	if want := p.sourceVersion(); want != "" && host.Version != want {
+		return &hostVersionMismatchError{Name: name, Have: host.Version, Want: want}
 	}
 	return nil
 }
@@ -77,22 +77,22 @@ func (p hostPlacer) Workspace(name string) (string, error) {
 	if name == "" {
 		return p.st.WorkspaceRoot(), nil
 	}
-	h, _, err := p.resolve(name)
+	host, _, err := p.resolve(name)
 	if err != nil {
 		return "", err
 	}
-	return h.Workspace, nil
+	return host.Workspace, nil
 }
 
-func (p hostPlacer) Materialize(ctx context.Context, name string, a agent.Agent, worktreePath string, hook bool) error {
+func (p hostPlacer) Materialize(ctx context.Context, name string, assigned agent.Agent, worktreePath string, hook bool) error {
 	if name == "" {
-		return a.MaterializeAs(worktreePath, binIf(hook, agent.SelfBin()))
+		return assigned.MaterializeAs(worktreePath, binIf(hook, agent.SelfBin()))
 	}
-	h, rem, err := p.resolve(name)
+	host, rem, err := p.resolve(name)
 	if err != nil {
 		return err
 	}
-	payload, err := stageAgentTar(a, worktreePath, binIf(hook, h.Bin))
+	payload, err := stageAgentTar(assigned, worktreePath, binIf(hook, host.Bin))
 	if err != nil {
 		return err
 	}
@@ -110,11 +110,11 @@ func (p hostPlacer) EnsureProject(ctx context.Context, name, project, repo strin
 	if name == "" || project == "" {
 		return nil
 	}
-	h, _, err := p.resolve(name)
+	host, _, err := p.resolve(name)
 	if err != nil {
 		return err
 	}
-	run := runnerFor(h)
+	run := runnerFor(host)
 	if _, captureErr := capture(ctx, run, "test", "-d", repo+"/.git"); captureErr == nil {
 		return nil
 	}

@@ -86,20 +86,20 @@ func notASessionArgs() map[string]bool {
 }
 
 func (h *hub) authorize(ctx context.Context, args []string) error {
-	p := principalOf(ctx)
-	role := authz.RoleOf(p, h.roleNames())
+	principal := principalOf(ctx)
+	role := authz.RoleOf(principal, h.roleNames())
 	if role == authz.RoleNone {
 		return nil
 	}
-	path, in, ok := h.reg.Resolve(args)
+	path, input, ok := h.reg.Resolve(args)
 	if !ok {
 		return nil
 	}
 	allowed, why := authz.Decide(authz.Request{
-		Principal:   p,
+		Principal:   principal,
 		Path:        path,
 		Contributed: h.isContributedCommand(args),
-		Subject:     h.subjectOf(p, path, in),
+		Subject:     h.subjectOf(principal, path, input),
 	}, role)
 	if allowed {
 		return nil
@@ -123,22 +123,22 @@ func (h *hub) roleNames() map[string]string {
 	return names
 }
 
-func (h *hub) subjectOf(p authz.Principal, path []string, in contracts.Input) authz.Subject {
-	if p.Session == "" {
+func (h *hub) subjectOf(principal authz.Principal, path []string, input contracts.Input) authz.Subject {
+	if principal.Session == "" {
 		return authz.Subject{}
 	}
 	arg, ok := sessionArgs()[strings.Join(path, " ")]
 	if !ok {
 		return authz.Subject{}
 	}
-	name := strings.TrimSpace(in.Get(arg))
-	if name == "" && len(in.Rest) > 0 {
-		name = strings.TrimSpace(in.Rest[0])
+	name := strings.TrimSpace(input.Get(arg))
+	if name == "" && len(input.Rest) > 0 {
+		name = strings.TrimSpace(input.Rest[0])
 	}
 	if name == "" {
 		return authz.Subject{}
 	}
-	return authz.Subject{Session: name, InSubtree: h.inSubtree(p.Session, name)}
+	return authz.Subject{Session: name, InSubtree: h.inSubtree(principal.Session, name)}
 }
 
 func (h *hub) inSubtree(caller, target string) bool {

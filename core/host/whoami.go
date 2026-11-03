@@ -20,23 +20,23 @@ import (
 func WhoamiOut(ctx context.Context, asJSON bool) (string, error) {
 	cwd, cwdErr := os.Getwd()
 	logCleanup(cwdErr)
-	id := identity.FromDir(ctx, cwd)
+	who := identity.FromDir(ctx, cwd)
 	if asJSON {
-		b, err := json.Marshal(id)
+		b, err := json.Marshal(who)
 		return string(b), err
 	}
-	return whoamiReport(id), nil
+	return whoamiReport(who), nil
 }
 
-func whoamiReport(id identity.Identity) string {
-	if id.Empty() {
+func whoamiReport(who identity.Identity) string {
+	if who.Empty() {
 		return "git has nothing to say about you here.\n" +
 			"Set it with: git config --global user.name \"Your Name\" && git config --global user.email you@example.com"
 	}
 	rows := []struct{ label, value, key string }{
-		{paramName, id.Name, "user.name"},
-		{"email", id.Email, "user.email"},
-		{"github", id.GitHub, "github.user"},
+		{paramName, who.Name, "user.name"},
+		{"email", who.Email, "user.email"},
+		{"github", who.GitHub, "github.user"},
 	}
 	const unset = "-"
 	width := utf8.RuneCountInString(unset)
@@ -45,13 +45,13 @@ func whoamiReport(id identity.Identity) string {
 			width = n
 		}
 	}
-	var b strings.Builder
-	for _, r := range rows {
-		value, note := r.value, ""
+	var builder strings.Builder
+	for _, row := range rows {
+		value, note := row.value, ""
 		if value == "" {
 			value, note = unset, ", unset"
 		}
-		fmt.Fprintf(&b, "%-7s %-*s (git config %s%s)\n", r.label, width, value, r.key, note)
+		fmt.Fprintf(&builder, "%-7s %-*s (git config %s%s)\n", row.label, width, value, row.key, note)
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return strings.TrimRight(builder.String(), "\n")
 }

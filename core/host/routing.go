@@ -21,16 +21,16 @@ func pickAgent(roster []agent.Agent, task string) (string, bool) {
 	tokens := tokenizeTask(task)
 	best := ""
 	bestScore := 0
-	for _, a := range roster {
+	for _, agent := range roster {
 		score := 0
-		for _, tag := range a.Tags {
+		for _, tag := range agent.Tags {
 			if tokens[strings.ToLower(tag)] {
 				score++
 			}
 		}
 		if score > bestScore {
 			bestScore = score
-			best = a.Name
+			best = agent.Name
 		}
 	}
 	if bestScore == 0 {

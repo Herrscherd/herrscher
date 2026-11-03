@@ -85,7 +85,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	mustGit(t, project, "remote", "add", "origin", origin)
 	mustGit(t, project, "push", "-q", "origin", "HEAD:master")
 
-	p := hostPlacer{st: st, instanceID: "e2e", sourceVersion: func() string { return service.SourceVersion(ctx, src) }}
+	p := newHostPlacer(ctx, st, "e2e", nil, func() string { return service.SourceVersion(ctx, src) })
 	repo := provisioned.Workspace + "/app"
 	t.Cleanup(func() {
 		_, rmErr := capture(context.Background(), runnerFor(provisioned), "rm", "-rf", repo)
@@ -260,7 +260,7 @@ func remoteWorkspace(ctx context.Context, t *testing.T, target string) string {
 		t.Fatalf("make a remote workspace: %v", err)
 	}
 	ws := strings.TrimSpace(out)
-	t.Cleanup(func() { _, rmErr := capture(context.Background(), run, "rm", "-rf", ws); logCleanup(rmErr) })
+	t.Cleanup(func() { _, rmErr := capture(context.WithoutCancel(ctx), run, "rm", "-rf", ws); logCleanup(rmErr) })
 	return ws
 }
 

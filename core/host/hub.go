@@ -64,7 +64,7 @@ func eventTap(publish func(string, contracts.Event), session string) func(contra
 	return func(e contracts.Event) { publish(session, e) }
 }
 
-func (h *hub) goLive(sess state.Session) {
+func (h *hub) goLive(ctx context.Context, sess state.Session) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if _, ok := h.live[sess.Name]; ok {
@@ -75,7 +75,7 @@ func (h *hub) goLive(sess state.Session) {
 		fmt.Fprintf(os.Stderr, "herrscher serve: session %q: control socket: %v\n", sess.Name, err)
 		return
 	}
-	sctx, cancel := context.WithCancel(context.Background())
+	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
 	done := make(chan struct{})
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done}
@@ -139,7 +139,7 @@ func (h *hub) goDead(name string) {
 	}
 }
 
-func (h *hub) reconcile() {
+func (h *hub) reconcile(ctx context.Context) {
 	persisted := map[string]state.Session{}
 	for _, s := range h.st.SnapshotSessions() {
 		persisted[s.Name] = s
@@ -160,7 +160,7 @@ func (h *hub) reconcile() {
 		if s.Archived {
 			continue
 		}
-		h.goLive(s)
+		h.goLive(ctx, s)
 	}
 }
 
@@ -193,7 +193,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 	h.dispatchMu.Lock()
 	defer h.dispatchMu.Unlock()
 	out, err := h.reg.Dispatch(ctx, args)
-	h.reconcile()
+	h.reconcile(ctx)
 	return out, err
 }
 
@@ -251,7 +251,7 @@ func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor s
 	h.dispatchMu.Lock()
 	defer h.dispatchMu.Unlock()
 	out, err := h.reg.Run(ctx, []string{"session", "create"}, contracts.Input{Args: args})
-	h.reconcile()
+	h.reconcile(ctx)
 	return out, err
 }
 
@@ -263,7 +263,7 @@ func (h *hub) Close(ctx context.Context, name string, force bool) (string, error
 	h.dispatchMu.Lock()
 	defer h.dispatchMu.Unlock()
 	out, err := h.reg.Run(ctx, []string{"session", "close"}, contracts.Input{Args: args})
-	h.reconcile()
+	h.reconcile(ctx)
 	return out, err
 }
 
@@ -356,7 +356,7 @@ func (h *hub) Resume(name string) error {
 		}
 		sess.Archived = false
 	}
-	h.goLive(sess)
+	h.goLive(context.Background(), sess)
 	h.sup.Start(sess)
 	return nil
 }
@@ -366,7 +366,7 @@ func (h *hub) Interrupt(name string) bool {
 }
 
 func (h *hub) Submit(name string, in contracts.Inbound) bool {
-	return Submit(name, in)
+	return Submit(context.Background(), name, in)
 }
 
 func (h *hub) Pick(name, value string) bool {

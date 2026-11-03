@@ -22,7 +22,7 @@ func TestReconcileSkipsArchived(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "recon-arch", ChannelID: "c2", Type: "text", Archived: true}); err != nil {
 		t.Fatal(err)
 	}
-	h.reconcile()
+	h.reconcile(t.Context())
 
 	h.mu.Lock()
 	_, liveUp := h.live["recon-live"]
@@ -46,7 +46,7 @@ func TestReconcileReapsInPlaceArchived(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "s", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)
 	}
-	h.reconcile()
+	h.reconcile(t.Context())
 	h.mu.Lock()
 	_, up := h.live["s"]
 	h.mu.Unlock()
@@ -55,7 +55,7 @@ func TestReconcileReapsInPlaceArchived(t *testing.T) {
 	}
 
 	logCleanup(st.SetArchived("s", true))
-	h.reconcile()
+	h.reconcile(t.Context())
 	h.mu.Lock()
 	_, stillUp := h.live["s"]
 	h.mu.Unlock()

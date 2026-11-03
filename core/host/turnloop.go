@@ -331,14 +331,14 @@ func Seed(session, task string) bool {
 // returning false when no live session by that name is driving (mirror of Pick).
 // It is the push counterpart of the driver's own poll loop: a gateway that
 // receives messages by push calls this instead of being polled.
-func Submit(session string, in contracts.Inbound) bool {
+func Submit(ctx context.Context, session string, in contracts.Inbound) bool {
 	sessionRegistry.mu.Lock()
 	d := sessionRegistry.m[session]
 	sessionRegistry.mu.Unlock()
 	if d == nil {
 		return false
 	}
-	return d.submit(context.Background(), in)
+	return d.submit(ctx, in)
 }
 
 func (d *sessionDriver) run(ctx context.Context) {

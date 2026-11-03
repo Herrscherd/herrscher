@@ -21,7 +21,7 @@ func TestReconcileStopsTheBridgeOfARemovedSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	sup.Start(sess)
-	h.reconcile()
+	h.reconcile(t.Context())
 	if !sup.Running("orphan") {
 		t.Fatal("a persisted session must keep its bridge")
 	}
@@ -29,7 +29,7 @@ func TestReconcileStopsTheBridgeOfARemovedSession(t *testing.T) {
 	if err := st.RemoveSession("orphan"); err != nil {
 		t.Fatal(err)
 	}
-	h.reconcile()
+	h.reconcile(t.Context())
 	if sup.Running("orphan") {
 		t.Fatal("a removed session must not leave a supervised bridge behind")
 	}
@@ -47,10 +47,10 @@ func TestReconcileStopsTheBridgeOfAnArchivedSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	sup.Start(sess)
-	h.reconcile()
+	h.reconcile(t.Context())
 
 	logCleanup(st.SetArchived("shelved", true))
-	h.reconcile()
+	h.reconcile(t.Context())
 	if sup.Running("shelved") {
 		t.Fatal("an archived session must not leave a supervised bridge behind")
 	}

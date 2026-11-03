@@ -224,7 +224,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 			continue
 		}
 		hb.goLive(ctx, sess)
-		sup.Start(sess)
+		sup.StartWith(ctx, sess)
 	}
 	h.SetSessions(len(st.SnapshotSessions()))
 

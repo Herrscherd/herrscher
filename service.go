@@ -45,15 +45,15 @@ func runService(ctx context.Context, args []string) error {
 		return runServiceUpdate(ctx, cfg, args[1:])
 	}
 
-	fs := flag.NewFlagSet("service", flag.ContinueOnError)
-	healthAddr := fs.String("health-addr", cfg.HealthAddr, "value for serve --health-addr (empty disables the health endpoint)")
-	envFile := fs.String("env-file", cfg.EnvFile, "path to the 0600 secrets file the service sources")
-	defaultCmd := fs.String("cmd", "", "default bridged command pre-filled into config.json (e.g. 'claude --model claude-opus-4-8 --effort low')")
-	if err := fs.Parse(args[1:]); err != nil {
+	flags := flag.NewFlagSet("service", flag.ContinueOnError)
+	healthAddr := flags.String("health-addr", cfg.HealthAddr, "value for serve --health-addr (empty disables the health endpoint)")
+	envFile := flags.String("env-file", cfg.EnvFile, "path to the 0600 secrets file the service sources")
+	defaultCmd := flags.String("cmd", "", "default bridged command pre-filled into config.json (e.g. 'claude --model claude-opus-4-8 --effort low')")
+	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("herrscher service %s: %w %q\n%s", sub, errUnexpectedArgument, fs.Arg(0), serviceUsage)
+	if flags.NArg() > 0 {
+		return fmt.Errorf("herrscher service %s: %w %q\n%s", sub, errUnexpectedArgument, flags.Arg(0), serviceUsage)
 	}
 	cfg.HealthAddr = *healthAddr
 	cfg.EnvFile = *envFile
@@ -80,14 +80,14 @@ func runServiceUpdate(ctx context.Context, cfg service.Config, args []string) er
 	if err != nil {
 		return err
 	}
-	fs := flag.NewFlagSet("service update", flag.ContinueOnError)
-	source := fs.String("source", cwd, "path to the herrscher source checkout to build from")
-	noPull := fs.Bool("no-pull", false, "skip `git pull --ff-only` before building")
-	if err := fs.Parse(args); err != nil {
+	flags := flag.NewFlagSet("service update", flag.ContinueOnError)
+	source := flags.String("source", cwd, "path to the herrscher source checkout to build from")
+	noPull := flags.Bool("no-pull", false, "skip `git pull --ff-only` before building")
+	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("herrscher service update: %w %q", errUnexpectedArgument, fs.Arg(0))
+	if flags.NArg() > 0 {
+		return fmt.Errorf("herrscher service update: %w %q", errUnexpectedArgument, flags.Arg(0))
 	}
 	if installed, ok := service.InstalledBinPath(cfg); ok && installed != cfg.BinPath {
 		_, _ = fmt.Fprintf(os.Stderr, "herrscher service: rebuilding the installed binary %s (you ran %s)\n", installed, cfg.BinPath)

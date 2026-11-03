@@ -15,21 +15,21 @@ import (
 
 func loadEnvFile(path string) error {
 	defer hideGatewayKeys()
-	f, err := os.Open(filepath.Clean(path))
+	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		return fmt.Errorf("open env file: %w", err)
 	}
-	return errors.Join(scanEnvFile(f), f.Close())
+	return errors.Join(scanEnvFile(file), file.Close())
 }
 
 func scanEnvFile(r io.Reader) error {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, envLineInitial), envLineLimit)
-	for sc.Scan() {
-		key, val, ok := parseEnvLine(sc.Text())
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, envLineInitial), envLineLimit)
+	for scanner.Scan() {
+		key, val, ok := parseEnvLine(scanner.Text())
 		if !ok {
 			continue
 		}
@@ -40,7 +40,7 @@ func scanEnvFile(r io.Reader) error {
 			return fmt.Errorf("set %s: %w", key, err)
 		}
 	}
-	return sc.Err()
+	return scanner.Err()
 }
 
 func parseEnvLine(raw string) (string, string, bool) {
@@ -58,11 +58,11 @@ func parseEnvLine(raw string) (string, string, bool) {
 
 func hideGatewayKeys() { host.CaptureGatewayConfig(contracts.Default.Gateways()) }
 
-func unquoteEnv(s string) string {
-	if len(s) >= quotedMinLen {
-		if c := s[0]; (c == '"' || c == '\'') && s[len(s)-1] == c {
-			return s[1 : len(s)-1]
+func unquoteEnv(raw string) string {
+	if len(raw) >= quotedMinLen {
+		if c := raw[0]; (c == '"' || c == '\'') && raw[len(raw)-1] == c {
+			return raw[1 : len(raw)-1]
 		}
 	}
-	return s
+	return raw
 }

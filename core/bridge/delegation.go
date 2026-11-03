@@ -24,32 +24,32 @@ func withDelegation(baseCtx string, roster contracts.RosterProvider) string {
 	if len(agents) == 0 {
 		return baseCtx
 	}
-	var b strings.Builder
+	var out strings.Builder
 	if baseCtx != "" {
-		_, _ = b.WriteString(baseCtx)
-		_, _ = b.WriteString("\n\n")
+		_, _ = out.WriteString(baseCtx)
+		_, _ = out.WriteString("\n\n")
 	}
-	_, _ = b.WriteString("<delegation>\n")
-	_, _ = b.WriteString(delegationIntro)
-	_, _ = b.WriteString("\nAvailable agents:\n")
+	_, _ = out.WriteString("<delegation>\n")
+	_, _ = out.WriteString(delegationIntro)
+	_, _ = out.WriteString("\nAvailable agents:\n")
 	for _, a := range agents {
-		_, _ = b.WriteString(delegationLine(a))
+		_, _ = out.WriteString(delegationLine(a))
 	}
-	_, _ = b.WriteString("</delegation>")
-	return b.String()
+	_, _ = out.WriteString("</delegation>")
+	return out.String()
 }
 
-func delegationLine(a contracts.AgentInfo) string {
-	backend := a.Backend
+func delegationLine(agent contracts.AgentInfo) string {
+	backend := agent.Backend
 	if backend == "" {
 		backend = "host default"
 	}
-	line := fmt.Sprintf("  - %s (backend: %s)", a.Name, backend)
-	if a.Summary != "" {
-		line += ": " + a.Summary
+	line := fmt.Sprintf("  - %s (backend: %s)", agent.Name, backend)
+	if agent.Summary != "" {
+		line += ": " + agent.Summary
 	}
-	if len(a.Tags) > 0 {
-		line += " [" + strings.Join(a.Tags, " ") + "]"
+	if len(agent.Tags) > 0 {
+		line += " [" + strings.Join(agent.Tags, " ") + "]"
 	}
 	return line + "\n"
 }

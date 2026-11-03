@@ -25,28 +25,28 @@ import (
 
 var errNoGateway = errors.New("no gateway built")
 
-func or(a, b string) string {
-	if a != "" {
-		return a
+func or(first, second string) string {
+	if first != "" {
+		return first
 	}
-	return b
+	return second
 }
 
 func runServe(ctx context.Context, args []string, open *openWindow) error {
-	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	fs.String("config", config.DefaultPath(), "path to the declarative config.json (optional)")
+	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
+	flags.String("config", config.DefaultPath(), "path to the declarative config.json (optional)")
 	cfg, err := config.Load(scanFlag(args, "config", config.DefaultPath()))
 	if err != nil {
 		return err
 	}
 
-	statePath := fs.String("state", host.DefaultStatePath(), "path to the daemon state file")
-	defaultCmd := fs.String("cmd", or(cfg.Cmd, "claude"), "default bridged base command for new sessions (stream-json mode adds -p and the stream flags)")
-	healthAddr := fs.String("health-addr", cfg.HealthAddr, "if set (e.g. :8787), serve GET /health")
-	statusChannel := fs.String("status-channel", cfg.StatusChannel, "if set, maintain a self-updating status embed there")
-	instanceID := fs.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID then config.json")
-	envFile := fs.String("env-file", "", "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)")
-	if err = fs.Parse(args); err != nil {
+	statePath := flags.String("state", host.DefaultStatePath(), "path to the daemon state file")
+	defaultCmd := flags.String("cmd", or(cfg.Cmd, "claude"), "default bridged base command for new sessions (stream-json mode adds -p and the stream flags)")
+	healthAddr := flags.String("health-addr", cfg.HealthAddr, "if set (e.g. :8787), serve GET /health")
+	statusChannel := flags.String("status-channel", cfg.StatusChannel, "if set, maintain a self-updating status embed there")
+	instanceID := flags.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID then config.json")
+	envFile := flags.String("env-file", "", "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)")
+	if err = flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
@@ -71,7 +71,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 
 	installShippedSkills(ctx)
 
-	gws, fg, extra, err := startGateways(ctx)
+	gws, foreground, extra, err := startGateways(ctx)
 	if err != nil {
 		return err
 	}
@@ -88,19 +88,19 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 		Source:        cfg.Source,
 
 		RemoteCategories:    remoteCategories(),
-		ForegroundBound:     fg != nil,
+		ForegroundBound:     foreground != nil,
 		ContributedCommands: extra,
 	}
 
-	openOnForeground(open, fg)
-	return runHubForeground(ctx, *statePath, gws, fg, opts)
+	openOnForeground(open, foreground)
+	return runHubForeground(ctx, *statePath, gws, foreground, opts)
 }
 
-func openOnForeground(open *openWindow, fg contracts.Foreground) {
-	if open == nil || fg == nil {
+func openOnForeground(open *openWindow, foreground contracts.Foreground) {
+	if open == nil || foreground == nil {
 		return
 	}
-	if o, ok := fg.(foregroundOpener); ok {
+	if o, ok := foreground.(foregroundOpener); ok {
 		o.OpenOn(open.session, open.text)
 	}
 }
@@ -132,9 +132,9 @@ func startGateways(ctx context.Context) ([]host.Deps, contracts.Foreground, []co
 	for _, f := range hub.Unconfigured() {
 		_, _ = fmt.Fprintln(os.Stderr, "herrscher: gateway not configured, skipping: "+f)
 	}
-	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, in time.Duration) {
+	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, wait time.Duration) {
 		for _, f := range failures {
-			fmt.Fprintf(os.Stderr, "herrscher: gateway not up yet: %s; retrying in %s\n", f, in)
+			fmt.Fprintf(os.Stderr, "herrscher: gateway not up yet: %s; retrying in %s\n", f, wait)
 		}
 	})
 	for _, f := range hub.Failures() {
@@ -149,8 +149,8 @@ func startGateways(ctx context.Context) ([]host.Deps, contracts.Foreground, []co
 	return bindGateways(raw)
 }
 
-func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, fg contracts.Foreground, opts host.Options) error {
-	if fg == nil || !term.IsTerminal(int(os.Stdout.Fd())) {
+func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, foreground contracts.Foreground, opts host.Options) error {
+	if foreground == nil || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return host.RunHub(ctx, gws, opts)
 	}
 	if restore, rerr := redirectStderr(filepath.Join(filepath.Dir(statePath), "serve.log")); rerr == nil {
@@ -167,7 +167,7 @@ func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, fg
 			slog.Error("hub stopped", "err", err)
 		}
 	}()
-	return fg.RunForeground(hubCtx, cancel)
+	return foreground.RunForeground(hubCtx, cancel)
 }
 
 func bindGateways(sets []host.Deps) ([]host.Deps, contracts.Foreground, []contracts.Cmd, error) {
@@ -175,16 +175,16 @@ func bindGateways(sets []host.Deps) ([]host.Deps, contracts.Foreground, []contra
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("gateway commands: %w", err)
 	}
-	var fg contracts.Foreground
+	var foreground contracts.Foreground
 	gws := make([]host.Deps, 0, len(sets))
 	for _, set := range sets {
-		if f, ok := set.Gateway.(contracts.Foreground); ok && fg == nil {
-			fg = f
+		if f, ok := set.Gateway.(contracts.Foreground); ok && foreground == nil {
+			foreground = f
 		}
 		set.Gateway = contracts.Degrade(set.Gateway)
 		gws = append(gws, set)
 	}
-	return gws, fg, extra, nil
+	return gws, foreground, extra, nil
 }
 
 func runSession(ctx context.Context, args []string) error {
@@ -265,16 +265,16 @@ type verbDispatcher interface {
 	Dispatch(context.Context, []string) (string, error)
 }
 
-func runPrompt(ctx context.Context, t task) error {
-	name := sessionNameFor(t.Text)
-	if t.printsTo(term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway()) {
+func runPrompt(ctx context.Context, task task) error {
+	name := sessionNameFor(task.Text)
+	if task.printsTo(term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway()) {
 		reg, err := newOperatorRegistry(ctx)
 		if err != nil {
 			return err
 		}
-		return runPromptWith(ctx, reg, name, t.Text, os.Stdout, os.Stderr)
+		return runPromptWith(ctx, reg, name, task.Text, os.Stdout, os.Stderr)
 	}
-	return runPromptWindow(ctx, name, t.Text)
+	return runPromptWindow(ctx, name, task.Text)
 }
 
 func createTaskSession(ctx context.Context, name string) []string {
@@ -314,8 +314,8 @@ type foregroundOpener interface {
 	OpenOn(session, text string)
 }
 
-func runPromptWith(ctx context.Context, d verbDispatcher, name, prompt string, stdout, stderr io.Writer) error {
-	if _, err := d.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
+func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt string, stdout, stderr io.Writer) error {
+	if _, err := dispatcher.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(stderr, "session: "+name); err != nil {
@@ -323,7 +323,7 @@ func runPromptWith(ctx context.Context, d verbDispatcher, name, prompt string, s
 	}
 	argv := append([]string{verbSession, "seed", argName, name}, cli.FlagArg("task", prompt)...)
 	argv = append(argv, "--timeout", promptTimeout.String())
-	reply, err := d.Dispatch(ctx, argv)
+	reply, err := dispatcher.Dispatch(ctx, argv)
 	if err != nil {
 		return fmt.Errorf("session %s: %w", name, err)
 	}
@@ -367,15 +367,15 @@ func buildGateways(ctx context.Context) ([]host.Deps, error) {
 }
 
 func scanFlag(args []string, name, def string) string {
-	for i, a := range args {
-		for _, p := range []string{"--" + name, "-" + name} {
-			if a == p {
-				if i+1 < len(args) {
-					return args[i+1]
+	for idx, arg := range args {
+		for _, prefix := range []string{"--" + name, "-" + name} {
+			if arg == prefix {
+				if idx+1 < len(args) {
+					return args[idx+1]
 				}
 				return def
 			}
-			if v, ok := strings.CutPrefix(a, p+"="); ok {
+			if v, ok := strings.CutPrefix(arg, prefix+"="); ok {
 				return v
 			}
 		}

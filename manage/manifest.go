@@ -20,11 +20,11 @@ const (
 func importLine(module string) string { return fmt.Sprintf("\t_ %q", module) }
 
 func parseModule(line string) (string, bool) {
-	s := strings.TrimSpace(line)
-	if !strings.HasPrefix(s, "_ ") {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "_ ") {
 		return "", false
 	}
-	return strings.Trim(strings.TrimSpace(s[2:]), `"`), true
+	return strings.Trim(strings.TrimSpace(trimmed[2:]), `"`), true
 }
 
 func listPlugins(src string) ([]string, error) {
@@ -52,11 +52,11 @@ func addPlugin(src, module string) (string, bool, error) {
 		}
 	}
 	lines := strings.Split(src, "\n")
-	for i, line := range lines {
+	for idx, line := range lines {
 		if strings.TrimSpace(line) == endMarker {
-			out := append([]string{}, lines[:i]...)
+			out := append([]string{}, lines[:idx]...)
 			out = append(out, importLine(module))
-			out = append(out, lines[i:]...)
+			out = append(out, lines[idx:]...)
 			return strings.Join(out, "\n"), true, nil
 		}
 	}
@@ -106,18 +106,18 @@ func setPlugins(src string, modules []string) (string, error) {
 func region(src string) ([]string, int, int, error) {
 	all := strings.Split(src, "\n")
 	begin, end := -1, -1
-	for i, line := range all {
+	for idx, line := range all {
 		switch strings.TrimSpace(line) {
 		case beginMarker:
 			if begin >= 0 {
 				return nil, begin, end, fmt.Errorf("%q: %w", beginMarker, errDuplicateMarker)
 			}
-			begin = i
+			begin = idx
 		case endMarker:
 			if end >= 0 {
 				return nil, begin, end, fmt.Errorf("%q: %w", endMarker, errDuplicateMarker)
 			}
-			end = i
+			end = idx
 		}
 	}
 	if begin < 0 || end < 0 {

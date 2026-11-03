@@ -100,9 +100,9 @@ func (o *PluginOps) Restore() error {
 
 func (o *PluginOps) run(ctx context.Context, cmds [][]string) (string, error) {
 	var log strings.Builder
-	for _, c := range cmds {
-		_, _ = log.WriteString("+ " + strings.Join(c, " ") + "\n")
-		cmd := exec.CommandContext(ctx, c[0], c[1:]...)
+	for _, cmd := range cmds {
+		_, _ = log.WriteString("+ " + strings.Join(cmd, " ") + "\n")
+		cmd := exec.CommandContext(ctx, cmd[0], cmd[1:]...)
 		cmd.Dir = o.dir
 		out, err := cmd.CombinedOutput()
 		_, _ = log.Write(out)

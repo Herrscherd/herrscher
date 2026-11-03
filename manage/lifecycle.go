@@ -19,11 +19,11 @@ func UpdateCmd(ctx context.Context, args []string) int {
 }
 
 func updateHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
-	fs := flag.NewFlagSet("update", flag.ContinueOnError)
-	hostDir := fs.String("host", "", "path to the host module")
-	noBuild := fs.Bool("no-build", false, "go get -u the plugins but skip tidy/build")
-	yes := fs.Bool("yes", false, "answer both confirmations without asking")
-	if err := fs.Parse(args); err != nil {
+	flags := flag.NewFlagSet("update", flag.ContinueOnError)
+	hostDir := flags.String("host", "", "path to the host module")
+	noBuild := flags.Bool("no-build", false, "go get -u the plugins but skip tidy/build")
+	yes := flags.Bool("yes", false, "answer both confirmations without asking")
+	if err := flags.Parse(args); err != nil {
 		return parseExit(err)
 	}
 
@@ -101,11 +101,11 @@ func planPluginUpdates(ctx context.Context, out, errOut *errwriter.Writer, dir s
 }
 
 func fetchPluginUpdates(ctx context.Context, errOut *errwriter.Writer, dir string, cmds [][]string) int {
-	for _, c := range cmds {
-		if c[1] != verbGet {
+	for _, cmd := range cmds {
+		if cmd[1] != verbGet {
 			continue
 		}
-		if code := run(ctx, errOut, dir, c[0], c[1:]...); code != 0 {
+		if code := run(ctx, errOut, dir, cmd[0], cmd[1:]...); code != 0 {
 			return code
 		}
 	}
@@ -123,12 +123,12 @@ func InstallCmd(ctx context.Context, args []string) int {
 }
 
 func installHost(ctx context.Context, _, errOut *errwriter.Writer, args []string) int {
-	fs := flag.NewFlagSet("install", flag.ContinueOnError)
-	hostDir := fs.String("host", "", "path to the host module")
-	if err := fs.Parse(args); err != nil {
+	flags := flag.NewFlagSet("install", flag.ContinueOnError)
+	hostDir := flags.String("host", "", "path to the host module")
+	if err := flags.Parse(args); err != nil {
 		return parseExit(err)
 	}
-	passthrough := fs.Args()
+	passthrough := flags.Args()
 
 	dir, err := resolveHost(*hostDir)
 	if err != nil {

@@ -34,32 +34,32 @@ type hostedPlugin struct {
 func hostPlugin(ctx context.Context, category contracts.Category) (hostedPlugin, error) {
 	switch category {
 	case contracts.CategoryMemory:
-		impl, m, err := firstMemory(ctx)
+		impl, manifest, err := firstMemory(ctx)
 		if err != nil {
 			return hostedPlugin{}, err
 		}
 		return hostedPlugin{
-			manifest:  m,
+			manifest:  manifest,
 			register:  func(s *grpc.Server) { transport.RegisterMemorySkeleton(s, impl) },
 			closeReal: func() error { return impl.Close() },
 		}, nil
 	case contracts.CategoryOrchestrator:
-		impl, m, err := firstOrchestrator(ctx)
+		impl, manifest, err := firstOrchestrator(ctx)
 		if err != nil {
 			return hostedPlugin{}, err
 		}
 		return hostedPlugin{
-			manifest:  m,
+			manifest:  manifest,
 			register:  func(s *grpc.Server) { transport.RegisterOrchestratorSkeleton(s, impl) },
 			closeReal: func() error { return impl.Close() },
 		}, nil
 	case contracts.CategoryBackend:
-		impl, m, err := firstBackend(ctx)
+		impl, manifest, err := firstBackend(ctx)
 		if err != nil {
 			return hostedPlugin{}, err
 		}
 		return hostedPlugin{
-			manifest:  m,
+			manifest:  manifest,
 			register:  func(s *grpc.Server) { transport.RegisterBackendSkeleton(s, impl) },
 			closeReal: func() error { return impl.Close() },
 		}, nil
@@ -79,27 +79,27 @@ func newPluginServer(tlsCfg transport.TLSConfig) (*grpc.Server, error) {
 	return grpc.NewServer(grpc.Creds(creds)), nil
 }
 
-func announceEvery(ctx context.Context, nc *nats.Conn, ann transport.Announcement) {
-	t := time.NewTicker(announceInterval)
-	defer t.Stop()
+func announceEvery(ctx context.Context, conn *nats.Conn, ann transport.Announcement) {
+	ticker := time.NewTicker(announceInterval)
+	defer ticker.Stop()
 	for {
-		if err := transport.Announce(nc, ann); err != nil {
+		if err := transport.Announce(conn, ann); err != nil {
 			slog.Warn("announce plugin", "err", err)
 		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
+		case <-ticker.C:
 		}
 	}
 }
 
 func runPluginHost(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("plugin-host", flag.ContinueOnError)
-	category := fs.String("category", "", "plugin category to host (e.g. memory, orchestrator)")
-	natsURL := fs.String("nats", nats.DefaultURL, "NATS server URL")
-	instanceID := fs.String("instance", "", "process instance id")
-	if err := fs.Parse(args); err != nil {
+	flags := flag.NewFlagSet("plugin-host", flag.ContinueOnError)
+	category := flags.String("category", "", "plugin category to host (e.g. memory, orchestrator)")
+	natsURL := flags.String("nats", nats.DefaultURL, "NATS server URL")
+	instanceID := flags.String("instance", "", "process instance id")
+	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if !host.SupportedRemoteCategory(contracts.Category(*category)) {
@@ -128,22 +128,22 @@ func runPluginHost(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	s, err := newPluginServer(tlsCfg)
+	server, err := newPluginServer(tlsCfg)
 	if err != nil {
 		return err
 	}
-	hosted.register(s)
+	hosted.register(server)
 
-	nc, err := nats.Connect(*natsURL)
+	conn, err := nats.Connect(*natsURL)
 	if err != nil {
 		return err
 	}
-	defer nc.Close()
+	defer conn.Close()
 	ann := transport.Announcement{Manifest: hosted.manifest, GrpcAddr: lis.Addr().String(), InstanceID: *instanceID}
 
-	go announceEvery(ctx, nc, ann)
-	go func() { <-ctx.Done(); s.GracefulStop() }()
-	return s.Serve(lis)
+	go announceEvery(ctx, conn, ann)
+	go func() { <-ctx.Done(); server.GracefulStop() }()
+	return server.Serve(lis)
 }
 
 func firstMemory(ctx context.Context) (contracts.Memory, contracts.Manifest, error) {
@@ -153,19 +153,19 @@ func firstMemory(ctx context.Context) (contracts.Memory, contracts.Manifest, err
 func firstOrchestrator(ctx context.Context) (contracts.Orchestrator, contracts.Manifest, error) {
 	orchestrators := contracts.Default.Orchestrators()
 	for i := range orchestrators {
-		p := &orchestrators[i]
-		if p.Orchestrator == nil {
+		plugin := &orchestrators[i]
+		if plugin.Orchestrator == nil {
 			continue
 		}
-		cfg, err := contracts.Resolve(p.Manifest.Config, os.Getenv)
+		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
 			return nil, contracts.Manifest{}, fmt.Errorf("orchestrator plugin-host: %w", err)
 		}
-		o, err := p.Orchestrator(ctx, cfg, nil)
+		orch, err := plugin.Orchestrator(ctx, cfg, nil)
 		if err != nil {
 			return nil, contracts.Manifest{}, fmt.Errorf("orchestrator plugin-host: %w", err)
 		}
-		return o, p.Manifest, nil
+		return orch, plugin.Manifest, nil
 	}
 	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: %w", errNoOrchestratorPlugin)
 }
@@ -173,19 +173,19 @@ func firstOrchestrator(ctx context.Context) (contracts.Orchestrator, contracts.M
 func firstBackend(ctx context.Context) (contracts.Backend, contracts.Manifest, error) {
 	backends := contracts.Default.Backends()
 	for i := range backends {
-		p := &backends[i]
-		if p.Backend == nil {
+		plugin := &backends[i]
+		if plugin.Backend == nil {
 			continue
 		}
-		cfg, err := contracts.Resolve(p.Manifest.Config, os.Getenv)
+		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
 			return nil, contracts.Manifest{}, fmt.Errorf("backend plugin-host: %w", err)
 		}
-		b, err := p.Backend(ctx, cfg)
+		backend, err := plugin.Backend(ctx, cfg)
 		if err != nil {
 			return nil, contracts.Manifest{}, fmt.Errorf("backend plugin-host: %w", err)
 		}
-		return b, p.Manifest, nil
+		return backend, plugin.Manifest, nil
 	}
 	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: %w", errNoBackendPlugin)
 }

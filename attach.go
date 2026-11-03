@@ -37,29 +37,29 @@ func newAttachedDaemon(ctx context.Context, instance string) (*attachedDaemon, e
 	if err != nil {
 		return nil, err
 	}
-	a := &attachedDaemon{
+	daemon := &attachedDaemon{
 		done:      ctx.Done(),
 		instance:  instance,
 		events:    make(chan tui.RoutedEvent, attachBuffer),
 		channelOf: make(map[string]string),
 		nameOf:    make(map[string]string),
 	}
-	a.send = func(argv []string) (string, error) {
+	daemon.send = func(argv []string) (string, error) {
 		call, cancel := context.WithTimeout(ctx, attachTimeout)
 		defer cancel()
 		return host.DaemonDispatch(call, instance, argv)
 	}
-	a.refresh()
-	go a.pump(stream)
-	return a, nil
+	daemon.refresh()
+	go daemon.pump(stream)
+	return daemon, nil
 }
 
 func (a *attachedDaemon) pump(stream <-chan host.DaemonEvent) {
 	defer close(a.events)
-	for e := range stream {
-		conv := contracts.Conversation{Gateway: kindTerminal, ID: a.channelFor(e.Session)}
+	for event := range stream {
+		conv := contracts.Conversation{Gateway: kindTerminal, ID: a.channelFor(event.Session)}
 		select {
-		case a.events <- tui.RoutedEvent{Conv: conv, Event: e.Event}:
+		case a.events <- tui.RoutedEvent{Conv: conv, Event: event.Event}:
 		case <-a.done:
 			return
 		}
@@ -68,10 +68,10 @@ func (a *attachedDaemon) pump(stream <-chan host.DaemonEvent) {
 
 func (a *attachedDaemon) channelFor(session string) string {
 	a.mu.Lock()
-	ch, ok := a.channelOf[session]
+	channel, ok := a.channelOf[session]
 	a.mu.Unlock()
 	if ok {
-		return ch
+		return channel
 	}
 	a.refresh()
 	a.mu.Lock()
@@ -94,9 +94,9 @@ func (a *attachedDaemon) refresh() {
 	channelOf := make(map[string]string, len(infos))
 	nameOf := make(map[string]string, len(infos))
 	for i := range infos {
-		s := &infos[i]
-		channelOf[s.Name] = s.ChannelID
-		nameOf[s.ChannelID] = s.Name
+		info := &infos[i]
+		channelOf[info.Name] = info.ChannelID
+		nameOf[info.ChannelID] = info.Name
 	}
 	a.mu.Lock()
 	a.sessions, a.channelOf, a.nameOf, a.fetched = infos, channelOf, nameOf, time.Now()
@@ -110,11 +110,11 @@ func (a *attachedDaemon) dispatch(argv []string) (string, error) {
 func runAttached(ctx context.Context, instance string, opts ...tui.Option) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, instance)
+	daemon, err := newAttachedDaemon(ctx, instance)
 	if err != nil {
 		return err
 	}
-	return tui.Run(ctx, cancel, a, opts...)
+	return tui.Run(ctx, cancel, daemon, opts...)
 }
 
 func (a *attachedDaemon) Frontend() <-chan tui.RoutedEvent { return a.events }
@@ -153,9 +153,9 @@ func (a *attachedDaemon) Submit(channel, text string, attachments []tui.Attachme
 		for _, at := range attachments {
 			paths = append(paths, at.Path)
 		}
-		b, err := json.Marshal(paths)
+		payload, err := json.Marshal(paths)
 		if err == nil {
-			argv = append(argv, "--attachments", string(b))
+			argv = append(argv, "--attachments", string(payload))
 		}
 	}
 	if _, err := a.dispatch(argv); err != nil {

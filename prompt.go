@@ -72,11 +72,11 @@ func nameFiller() map[string]bool {
 
 const fillerTrim = `.,;:!?'"()[]{}«»…`
 
-func foldAccents(s string) string {
+func foldAccents(text string) string {
 	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
-	out, _, err := transform.String(t, s)
+	out, _, err := transform.String(t, text)
 	if err != nil {
-		return s
+		return text
 	}
 	return out
 }
@@ -84,9 +84,9 @@ func foldAccents(s string) string {
 func nameWords(prompt string) []string {
 	all := strings.Fields(foldAccents(prompt))
 	kept := make([]string, 0, len(all))
-	for _, w := range all {
-		if !nameFiller()[strings.Trim(strings.ToLower(w), fillerTrim)] {
-			kept = append(kept, w)
+	for _, word := range all {
+		if !nameFiller()[strings.Trim(strings.ToLower(word), fillerTrim)] {
+			kept = append(kept, word)
 		}
 	}
 	if len(kept) == 0 {

@@ -17,15 +17,15 @@ func withCapabilities(baseCtx, summary string) string {
 	if summary == "" {
 		return baseCtx
 	}
-	var b strings.Builder
+	var out strings.Builder
 	if baseCtx != "" {
-		_, _ = b.WriteString(baseCtx)
-		_, _ = b.WriteString("\n\n")
+		_, _ = out.WriteString(baseCtx)
+		_, _ = out.WriteString("\n\n")
 	}
-	_, _ = b.WriteString("<capabilities>\n")
-	_, _ = b.WriteString(capabilitiesIntro)
-	_, _ = b.WriteString("\nVerbs you may run:\n")
-	_, _ = b.WriteString(summary)
-	_, _ = b.WriteString("\n</capabilities>")
-	return b.String()
+	_, _ = out.WriteString("<capabilities>\n")
+	_, _ = out.WriteString(capabilitiesIntro)
+	_, _ = out.WriteString("\nVerbs you may run:\n")
+	_, _ = out.WriteString(summary)
+	_, _ = out.WriteString("\n</capabilities>")
+	return out.String()
 }

@@ -12,25 +12,25 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func readSecret(in *bufio.Reader, msg string) (string, error) {
+func readSecret(input *bufio.Reader, msg string) (string, error) {
 	_, _ = fmt.Fprint(os.Stderr, msg)
-	fd := int(os.Stdin.Fd())
-	if !stdinIsTerminal(fd) {
-		return promptLine(in, ""), nil
+	descriptor := int(os.Stdin.Fd())
+	if !stdinIsTerminal(descriptor) {
+		return promptLine(input, ""), nil
 	}
 
-	old, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+	old, err := unix.IoctlGetTermios(descriptor, unix.TCGETS)
 	if err != nil {
 		return "", err
 	}
 	raw := *old
 	raw.Lflag &^= unix.ECHO
-	if setErr := unix.IoctlSetTermios(fd, unix.TCSETS, &raw); setErr != nil {
+	if setErr := unix.IoctlSetTermios(descriptor, unix.TCSETS, &raw); setErr != nil {
 		return "", setErr
 	}
 
-	line, err := in.ReadString('\n')
-	if restoreErr := unix.IoctlSetTermios(fd, unix.TCSETS, old); restoreErr != nil {
+	line, err := input.ReadString('\n')
+	if restoreErr := unix.IoctlSetTermios(descriptor, unix.TCSETS, old); restoreErr != nil {
 		slog.Warn("restore terminal echo", "err", restoreErr)
 	}
 	_, _ = fmt.Fprintln(os.Stderr)

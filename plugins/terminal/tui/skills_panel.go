@@ -30,9 +30,9 @@ func (m *model) openSkills() {
 }
 
 func (m *model) clampSkills() {
-	n := len(m.skillsRows)
-	if m.skillsIdx >= n {
-		m.skillsIdx = n - 1
+	count := len(m.skillsRows)
+	if m.skillsIdx >= count {
+		m.skillsIdx = count - 1
 	}
 	if m.skillsIdx < 0 {
 		m.skillsIdx = 0

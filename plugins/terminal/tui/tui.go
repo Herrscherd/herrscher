@@ -132,10 +132,10 @@ type liveAgent struct {
 	since time.Time
 }
 
-func (tb *tab) dropAgent(id string) {
-	for i, a := range tb.agents {
-		if a.ID == id {
-			tb.agents = append(tb.agents[:i], tb.agents[i+1:]...)
+func (tb *tab) dropAgent(agentID string) {
+	for index, a := range tb.agents {
+		if a.ID == agentID {
+			tb.agents = append(tb.agents[:index], tb.agents[index+1:]...)
 			return
 		}
 	}
@@ -153,10 +153,10 @@ func (tb *tab) clearPanels() {
 
 const maxTabLines = 5000
 
-func (tb *tab) appendEntry(e entry) {
+func (tb *tab) appendEntry(item entry) {
 	tb.nextEntryID++
-	e.id = tb.nextEntryID
-	tb.entries = append(tb.entries, e)
+	item.id = tb.nextEntryID
+	tb.entries = append(tb.entries, item)
 	if len(tb.entries) > maxTabLines {
 		tb.entries = append([]entry(nil), tb.entries[len(tb.entries)-maxTabLines:]...)
 	}
@@ -308,12 +308,12 @@ type overlayCache struct {
 	out string
 }
 
-func (c *overlayCache) get(in, arg string, apply func(string) string) string {
-	if c.out != "" && c.in == in && c.arg == arg {
+func (c *overlayCache) get(input, arg string, apply func(string) string) string {
+	if c.out != "" && c.in == input && c.arg == arg {
 		return c.out
 	}
-	out := apply(in)
-	*c = overlayCache{in: in, arg: arg, out: out}
+	out := apply(input)
+	*c = overlayCache{in: input, arg: arg, out: out}
 	return out
 }
 
@@ -377,45 +377,45 @@ func (m *model) runContext() context.Context {
 	return m.ctx
 }
 
-func newModel(tm Backend) *model {
-	in := textarea.New()
-	in.Placeholder = "type a message…"
-	in.Prompt = ""
-	in.ShowLineNumbers = false
-	in.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "shift+enter", "ctrl+j"))
-	in.SetHeight(maxComposerLines)
-	in.Focus()
-	m := &model{
-		ctx: context.Background(), tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
+func newModel(backend Backend) *model {
+	field := textarea.New()
+	field.Placeholder = "type a message…"
+	field.Prompt = ""
+	field.ShowLineNumbers = false
+	field.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "shift+enter", "ctrl+j"))
+	field.SetHeight(maxComposerLines)
+	field.Focus()
+	match := &model{
+		ctx: context.Background(), tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
 		st: newStyles(), md: &markdownRenderer{},
 	}
-	m.cmds = localCommands()
-	if tm != nil {
-		m.cmds = mergeCommands(m.cmds, tm.Commands())
+	match.cmds = localCommands()
+	if backend != nil {
+		match.cmds = mergeCommands(match.cmds, backend.Commands())
 	}
-	return m
+	return match
 }
 
 func (m *model) ensureTab(channel string) *tab {
 	if tb, ok := m.tabs[channel]; ok {
 		return tb
 	}
-	tb := &tab{channel: channel, label: channel, openedAt: time.Now()}
-	m.tabs[channel] = tb
+	tab := &tab{channel: channel, label: channel, openedAt: time.Now()}
+	m.tabs[channel] = tab
 	m.order = append(m.order, channel)
 	if m.active == "" {
 		m.active = channel
 	}
-	m.seedScrollback(tb)
-	return tb
+	m.seedScrollback(tab)
+	return tab
 }
 
-func (m *model) seedScrollback(tb *tab) {
+func (m *model) seedScrollback(tab *tab) {
 	if m.tm == nil {
 		return
 	}
-	name := m.sessionName(tb.channel)
+	name := m.sessionName(tab.channel)
 	if name == "" {
 		return
 	}
@@ -424,9 +424,9 @@ func (m *model) seedScrollback(tb *tab) {
 		return
 	}
 	for _, ln := range lines {
-		tb.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
+		tab.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
 	}
-	tb.appendEntry(entry{role: roleScrollback, text: "earlier"})
+	tab.appendEntry(entry{role: roleScrollback, text: "earlier"})
 }
 
 func scrollbackRole(role string) string {
@@ -442,9 +442,9 @@ func (m *model) removeTab(channel string) {
 	}
 	delete(m.tabs, channel)
 	out := m.order[:0]
-	for _, ch := range m.order {
-		if ch != channel {
-			out = append(out, ch)
+	for _, channelName := range m.order {
+		if channelName != channel {
+			out = append(out, channelName)
 		}
 	}
 	m.order = out
@@ -457,31 +457,31 @@ func (m *model) removeTab(channel string) {
 	}
 }
 
-func (m *model) route(re RoutedEvent) tea.Cmd {
-	if re.Event.T == "closed" {
-		m.removeTab(re.Conv.ID)
+func (m *model) route(routed RoutedEvent) tea.Cmd {
+	if routed.Event.T == "closed" {
+		m.removeTab(routed.Conv.ID)
 		return nil
 	}
-	tb := m.ensureTab(re.Conv.ID)
-	before := len(tb.entries)
-	m.renderInto(tb, re.Event)
-	if len(tb.entries) != before && tb.channel != m.active {
-		tb.unread = true
+	tab := m.ensureTab(routed.Conv.ID)
+	before := len(tab.entries)
+	m.renderInto(tab, routed.Event)
+	if len(tab.entries) != before && tab.channel != m.active {
+		tab.unread = true
 	}
-	if tb.channel == m.active {
+	if tab.channel == m.active {
 		m.syncViewport()
 	}
-	if re.Event.T != "reply" || len(tb.entries) == 0 {
+	if routed.Event.T != "reply" || len(tab.entries) == 0 {
 		return nil
 	}
-	last := len(tb.entries) - 1
-	for last >= 0 && tb.entries[last].role != roleAgent {
+	last := len(tab.entries) - 1
+	for last >= 0 && tab.entries[last].role != roleAgent {
 		last--
 	}
 	if last < 0 {
 		return nil
 	}
-	return m.fetchEntryImages(tb, last)
+	return m.fetchEntryImages(tab, last)
 }
 
 func (m *model) syncTabs() {
@@ -491,10 +491,10 @@ func (m *model) syncTabs() {
 	}
 	var builder strings.Builder
 	for i := range infos {
-		s := &infos[i]
-		builder.WriteString(s.ChannelID)
+		info := &infos[i]
+		builder.WriteString(info.ChannelID)
 		builder.WriteByte('\x1f')
-		builder.WriteString(s.Name)
+		builder.WriteString(info.Name)
 		builder.WriteByte('\n')
 	}
 	sig := builder.String()
@@ -502,7 +502,7 @@ func (m *model) syncTabs() {
 		return
 	}
 	m.tabSig = sig
-	live := map[string]bool{}
+	live := make(map[string]bool)
 	for i := range infos {
 		session := &infos[i]
 		live[session.ChannelID] = true
@@ -514,9 +514,9 @@ func (m *model) syncTabs() {
 			tab.label = session.Name
 		}
 	}
-	for _, ch := range append([]string(nil), m.order...) {
-		if !live[ch] {
-			m.removeTab(ch)
+	for _, channel := range append([]string(nil), m.order...) {
+		if !live[channel] {
+			m.removeTab(channel)
 		}
 	}
 	m.focusOpen(infos)
@@ -528,9 +528,9 @@ func (m *model) focusOpen(infos []contracts.SessionInfo) {
 	}
 	channel := ""
 	for i := range infos {
-		s := &infos[i]
-		if s.Name == m.openSession {
-			channel = s.ChannelID
+		info := &infos[i]
+		if info.Name == m.openSession {
+			channel = info.ChannelID
 			break
 		}
 	}
@@ -718,11 +718,11 @@ func (m *model) recordHistory(text string) {
 	m.histIdx = len(m.history)
 }
 
-func (m *model) recallHistory(d int) bool {
+func (m *model) recallHistory(delta int) bool {
 	if len(m.history) == 0 {
 		return false
 	}
-	idx := m.histIdx + d
+	idx := m.histIdx + delta
 	if idx < 0 {
 		idx = 0
 	}
@@ -757,9 +757,9 @@ func (m *model) toggleHelp() {
 func (m *model) sessionName(channel string) string {
 	sessions := m.tm.Sessions()
 	for i := range sessions {
-		s := &sessions[i]
-		if s.ChannelID == channel && s.Name != "" {
-			return s.Name
+		session := &sessions[i]
+		if session.ChannelID == channel && session.Name != "" {
+			return session.Name
 		}
 	}
 	return ""
@@ -785,10 +785,10 @@ func (m *model) confirmClose() tea.Cmd {
 }
 
 func (m *model) closeSession(name string, force bool) tea.Cmd {
-	origin, tm := m.active, m.tm
+	backend, manager := m.active, m.tm
 	return func() tea.Msg {
-		out, err := tm.Close(name, force)
-		return dispatchResultMsg{origin: origin, out: out, err: err}
+		out, err := manager.Close(name, force)
+		return dispatchResultMsg{origin: backend, out: out, err: err}
 	}
 }
 
@@ -820,13 +820,13 @@ func (m *model) renameCmd(rest []string) tea.Cmd {
 
 func renameTarget(rest []string) string {
 	var words []string
-	for i := 0; i < len(rest); i++ {
-		tok := rest[i]
+	for index := 0; index < len(rest); index++ {
+		tok := rest[index]
 		switch {
 		case tok == "--to":
-			if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
-				words = append(words, rest[i+1])
-				i++
+			if index+1 < len(rest) && !strings.HasPrefix(rest[index+1], "--") {
+				words = append(words, rest[index+1])
+				index++
 			}
 		case strings.HasPrefix(tok, "--to="):
 			words = append(words, strings.TrimPrefix(tok, "--to="))
@@ -840,15 +840,15 @@ func renameTarget(rest []string) string {
 func closeTarget(rest []string) (string, bool) {
 	var name string
 	var force bool
-	for i := 0; i < len(rest); i++ {
-		tok := rest[i]
+	for index := 0; index < len(rest); index++ {
+		tok := rest[index]
 		switch {
 		case tok == "--force":
 			force = true
 		case tok == "--name":
-			if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
-				name = rest[i+1]
-				i++
+			if index+1 < len(rest) && !strings.HasPrefix(rest[index+1], "--") {
+				name = rest[index+1]
+				index++
 			}
 		case strings.HasPrefix(tok, "--name="):
 			name = strings.TrimPrefix(tok, "--name=")
@@ -864,9 +864,9 @@ func (m *model) switchTab(delta int) {
 		return
 	}
 	idx := 0
-	for i, ch := range m.order {
+	for index, ch := range m.order {
 		if ch == m.active {
-			idx = i
+			idx = index
 			break
 		}
 	}
@@ -874,67 +874,67 @@ func (m *model) switchTab(delta int) {
 	m.activate(m.order[idx])
 }
 
-func (m *model) activate(ch string) {
-	if ch == m.active || m.tabs[ch] == nil {
+func (m *model) activate(channel string) {
+	if channel == m.active || m.tabs[channel] == nil {
 		return
 	}
-	m.active = ch
-	m.tabs[ch].unread = false
+	m.active = channel
+	m.tabs[channel].unread = false
 	m.syncViewport()
 	m.vp.GotoBottom()
 }
 
-func (m *model) renderInto(tb *tab, e contracts.Event) {
-	if e.T != "abandoned" {
-		tb.disconnected = false
+func (m *model) renderInto(target *tab, event contracts.Event) {
+	if event.T != "abandoned" {
+		target.disconnected = false
 	}
-	if e.Tokens > 0 {
-		tb.tokens = e.Tokens
+	if event.Tokens > 0 {
+		target.tokens = event.Tokens
 	}
-	tb.measureContext(e)
-	switch e.T {
+	target.measureContext(event)
+	switch event.T {
 	case "chunk":
-		tb.busy = true
-		tb.streamed = true
-		tb.appendChunk(e.Text)
+		target.busy = true
+		target.streamed = true
+		target.appendChunk(event.Text)
 	case "thinking":
-		tb.busy = true
-		tb.appendThinking(e.Text)
+		target.busy = true
+		target.appendThinking(event.Text)
 	case "status":
-		tb.busy = true
-		tb.endStream()
-		text, _ := hostError(e.Text)
-		tb.appendEntry(entry{role: statusRole(e.Text), text: text})
+		target.busy = true
+		target.endStream()
+		text, _ := hostError(event.Text)
+		target.appendEntry(entry{role: statusRole(event.Text), text: text})
 	case "reply":
-		tb.appendReply(e)
+		target.appendReply(event)
 	case "todos":
-		tb.busy = true
-		tb.todos = e.Todos
+		target.busy = true
+		target.todos = event.Todos
 	case "subagent":
-		tb.busy = true
-		tb.applySubagent(e.Subagent)
+		target.busy = true
+		target.applySubagent(event.Subagent)
 	case "reset":
-		tb.busy = false
-		tb.streamed = false
-		tb.ctxMeasured = false
-		tb.endStream()
-		tb.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
+		target.busy = false
+		target.streamed = false
+		target.ctxMeasured = false
+		target.endStream()
+		target.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
 	case "abandoned":
-		tb.busy = false
-		tb.streamed = false
-		tb.ctxMeasured = false
-		tb.disconnected = true
-		tb.endStream()
-		tb.appendEntry(entry{role: roleNotice, text: "tour abandonné"})
+		target.busy = false
+		target.streamed = false
+		target.ctxMeasured = false
+		target.disconnected = true
+		target.endStream()
+		target.appendEntry(entry{role: roleNotice, text: "tour abandonné"})
 	}
 }
 
-func (tb *tab) measureContext(e contracts.Event) {
-	used := e.TokensIn + e.CacheRead + e.CacheCreate
+func (tb *tab) measureContext(event contracts.Event) {
+	used := event.TokensIn + event.CacheRead + event.CacheCreate
 	if used <= 0 {
 		return
 	}
-	if !e.Done {
+	if !event.Done {
 		tb.ctxTokens, tb.ctxMeasured = used, true
 	} else if !tb.ctxMeasured {
 		tb.ctxTokens = used
@@ -949,21 +949,21 @@ func (tb *tab) appendThinking(text string) {
 	tb.appendEntry(entry{role: roleThinking, text: text})
 }
 
-func (tb *tab) appendReply(e contracts.Event) {
-	if e.Text != "" && !tb.streamed {
-		if text, isErr := hostError(e.Text); isErr {
+func (tb *tab) appendReply(event contracts.Event) {
+	if event.Text != "" && !tb.streamed {
+		if text, isErr := hostError(event.Text); isErr {
 			tb.appendEntry(entry{role: roleError, text: text})
 		} else {
-			tb.appendEntry(entry{role: roleAgent, text: e.Text})
+			tb.appendEntry(entry{role: roleAgent, text: event.Text})
 		}
 	}
 	tb.endStream()
-	if e.Cost > 0 {
-		tb.lastCost = e.Cost
-		tb.costTotal += e.Cost
-		tb.appendEntry(entry{role: roleCost, text: formatCost(e.Cost)})
+	if event.Cost > 0 {
+		tb.lastCost = event.Cost
+		tb.costTotal += event.Cost
+		tb.appendEntry(entry{role: roleCost, text: formatCost(event.Cost)})
 	}
-	if e.Done {
+	if event.Done {
 		tb.busy = false
 		tb.streamed = false
 		tb.ctxMeasured = false
@@ -1015,14 +1015,14 @@ func (m *model) thinkingContent() string {
 func (m *model) baseContent() string { return m.contentWith("") }
 
 func (m *model) contentWith(query string) string {
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return ""
 	}
-	if len(tb.entries) == 0 && !tb.busy {
+	if len(tab.entries) == 0 && !tab.busy {
 		return m.emptyState(m.vp.Width)
 	}
-	content := m.cachedTranscript(tb)
+	content := m.cachedTranscript(tab)
 	if m.foldTurnsOn {
 		content = m.foldCache.get(content, "", func(s string) string {
 			return strings.Join(foldTurns(strings.Split(s, "\n"), turnFoldKeep, m.st), "\n")
@@ -1033,7 +1033,7 @@ func (m *model) contentWith(query string) string {
 			return strings.Join(highlightMatches(strings.Split(s, "\n"), query), "\n")
 		})
 	}
-	if tb.busy && !tb.streamed {
+	if tab.busy && !tab.streamed {
 		line := m.st.spinner.Render(m.spinFrame() + " thinking…")
 		if content != "" {
 			content += "\n" + line
@@ -1044,21 +1044,21 @@ func (m *model) contentWith(query string) string {
 	return content
 }
 
-func (m *model) cachedTranscript(tb *tab) string {
+func (m *model) cachedTranscript(tab *tab) string {
 	width := m.vp.Width
 	lastLen, lastStr := 0, false
-	if n := len(tb.entries); n > 0 {
-		lastLen = len(tb.entries[n-1].text)
-		lastStr = tb.entries[n-1].streaming
+	if count := len(tab.entries); count > 0 {
+		lastLen = len(tab.entries[count-1].text)
+		lastStr = tab.entries[count-1].streaming
 	}
-	c := &m.tsCache
-	if c.valid && c.ch == tb.channel && c.width == width &&
-		c.entries == len(tb.entries) && c.lastLen == lastLen && c.lastStr == lastStr {
-		return c.out
+	cache := &m.tsCache
+	if cache.valid && cache.ch == tab.channel && cache.width == width &&
+		cache.entries == len(tab.entries) && cache.lastLen == lastLen && cache.lastStr == lastStr {
+		return cache.out
 	}
-	out := m.renderTranscript(tb, width)
-	*c = transcriptCache{
-		ch: tb.channel, width: width, entries: len(tb.entries),
+	out := m.renderTranscript(tab, width)
+	*cache = transcriptCache{
+		ch: tab.channel, width: width, entries: len(tab.entries),
 		lastLen: lastLen, lastStr: lastStr, out: out, valid: true,
 	}
 	return out
@@ -1083,47 +1083,47 @@ func (m *model) footer() string {
 	if s := m.linkStatus(); s != "" {
 		return s
 	}
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return ""
 	}
-	if tb.busy {
-		return m.st.spinner.Render(m.spinnerHint(tb))
+	if tab.busy {
+		return m.st.spinner.Render(m.spinnerHint(tab))
 	}
-	if tb.disconnected {
+	if tab.disconnected {
 		return m.st.dim.Render("· déconnecté")
 	}
-	return m.statusBar(tb, m.innerWidth())
+	return m.statusBar(tab, m.innerWidth())
 }
 
-func (m *model) spinnerHint(tb *tab) string {
+func (m *model) spinnerHint(tab *tab) string {
 	segs := []string{"échap pour interrompre"}
-	if !tb.startedAt.IsZero() {
-		segs = append(segs, fmt.Sprintf("%ds", int(time.Since(tb.startedAt).Seconds())))
+	if !tab.startedAt.IsZero() {
+		segs = append(segs, fmt.Sprintf("%ds", int(time.Since(tab.startedAt).Seconds())))
 	}
-	if tb.tokens > 0 {
-		segs = append(segs, "↑ "+formatTokens(tb.tokens))
+	if tab.tokens > 0 {
+		segs = append(segs, "↑ "+formatTokens(tab.tokens))
 	}
-	if tb.lastCost > 0 {
-		segs = append(segs, formatCost(tb.lastCost))
+	if tab.lastCost > 0 {
+		segs = append(segs, formatCost(tab.lastCost))
 	}
 	return m.spinFrame() + " " + workingVerb + " (" + strings.Join(segs, " · ") + ")"
 }
 
 const minDisplayedCost = 0.01
 
-func formatTokens(n int) string {
-	if n < thousand {
-		return strconv.Itoa(n)
+func formatTokens(tokens int) string {
+	if tokens < thousand {
+		return strconv.Itoa(tokens)
 	}
-	return fmt.Sprintf("%.1fk", float64(n)/thousand)
+	return fmt.Sprintf("%.1fk", float64(tokens)/thousand)
 }
 
-func formatCost(c float64) string {
-	if c < minDisplayedCost {
-		return fmt.Sprintf("$%.4f", c)
+func formatCost(cost float64) string {
+	if cost < minDisplayedCost {
+		return fmt.Sprintf("$%.4f", cost)
 	}
-	return fmt.Sprintf("$%.2f", c)
+	return fmt.Sprintf("$%.2f", cost)
 }
 
 // Option adjusts a window before it is drawn. Options exist so a caller can say
@@ -1140,8 +1140,8 @@ func OpenOn(session, text string) Option {
 // Run starts the TUI bound to the given gateway backend, blocking until the user
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
-func Run(ctx context.Context, cancel context.CancelFunc, tm Backend, opts ...Option) error {
-	model := newModel(tm)
+func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) error {
+	model := newModel(backend)
 	model.ctx = ctx
 	model.keys = &keyLog{}
 	for _, opt := range opts {
@@ -1154,7 +1154,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend, opts ...Opt
 		cancel()
 		return fmt.Errorf("enable enhanced keys: %w", err)
 	}
-	p := tea.NewProgram(model,
+	program := tea.NewProgram(model,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 		tea.WithInput(newFilteredStdin(model.keys)),
@@ -1164,15 +1164,15 @@ func Run(ctx context.Context, cancel context.CancelFunc, tm Backend, opts ...Opt
 			select {
 			case <-ctx.Done():
 				return
-			case entry, ok := <-tm.Frontend():
+			case entry, ok := <-backend.Frontend():
 				if !ok {
 					return
 				}
-				p.Send(eventMsg(entry))
+				program.Send(eventMsg(entry))
 			}
 		}
 	}()
-	_, runErr := p.Run()
+	_, runErr := program.Run()
 	cancel()
 	if err := writeStdout(enhancedKeysOff); err != nil {
 		return errors.Join(runErr, fmt.Errorf("disable enhanced keys: %w", err))
@@ -1259,15 +1259,15 @@ func (m *model) handleDispatchResult(msg dispatchResultMsg) {
 	if line == "" {
 		return
 	}
-	tb := m.tabs[msg.origin]
-	if tb == nil {
-		tb = m.tabs[m.active]
+	tab := m.tabs[msg.origin]
+	if tab == nil {
+		tab = m.tabs[m.active]
 	}
-	if tb == nil {
+	if tab == nil {
 		m.flash = line
 		return
 	}
-	tb.appendEntry(entry{role: role, text: line})
+	tab.appendEntry(entry{role: role, text: line})
 	m.syncViewport()
 }
 
@@ -1283,11 +1283,11 @@ func (m *model) handleSpin() tea.Cmd {
 
 func (m *model) updateComponents(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
-	var c tea.Cmd
-	m.input, c = m.input.Update(msg)
-	cmds = append(cmds, c)
-	m.vp, c = m.vp.Update(msg)
-	cmds = append(cmds, c)
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	cmds = append(cmds, cmd)
+	m.vp, cmd = m.vp.Update(msg)
+	cmds = append(cmds, cmd)
 	if _, ok := msg.(tea.KeyMsg); ok {
 		m.resizeComposer()
 		if m.paletteOpen() || m.palWasOpen {

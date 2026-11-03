@@ -31,25 +31,25 @@ func blockRender(img image.Image, cols int) string {
 	scaled := image.NewRGBA(image.Rect(0, 0, cols, rows*pixelRowsPerLine))
 	xdraw.ApproxBiLinear.Scale(scaled, scaled.Bounds(), img, bounds, xdraw.Src, nil)
 
-	var s strings.Builder
+	var builder strings.Builder
 	for row := range rows {
 		if row > 0 {
-			s.WriteByte('\n')
+			builder.WriteByte('\n')
 		}
-		for x := range cols {
-			s.WriteString(sgr(sgrForeground, scaled.RGBAAt(x, row*pixelRowsPerLine)))
-			s.WriteString(sgr(sgrBackground, scaled.RGBAAt(x, row*pixelRowsPerLine+1)))
-			s.WriteString(blockUpperHalf)
+		for col := range cols {
+			builder.WriteString(sgr(sgrForeground, scaled.RGBAAt(col, row*pixelRowsPerLine)))
+			builder.WriteString(sgr(sgrBackground, scaled.RGBAAt(col, row*pixelRowsPerLine+1)))
+			builder.WriteString(blockUpperHalf)
 		}
-		s.WriteString(ansiReset)
+		builder.WriteString(ansiReset)
 	}
-	return s.String()
+	return builder.String()
 }
 
 func sgr(role int, c interface{ RGBA() (r, g, b, a uint32) }) string {
-	glyph, g, b, _ := c.RGBA()
+	red, green, blue, _ := c.RGBA()
 	return "\x1b[" + strconv.Itoa(role) + ";2;" +
-		strconv.Itoa(int(glyph>>byteShift)) + ";" + strconv.Itoa(int(g>>byteShift)) + ";" + strconv.Itoa(int(b>>byteShift)) + "m"
+		strconv.Itoa(int(red>>byteShift)) + ";" + strconv.Itoa(int(green>>byteShift)) + ";" + strconv.Itoa(int(blue>>byteShift)) + "m"
 }
 
 const maxBlockCols = 200

@@ -73,13 +73,13 @@ const pluginsMax = 10
 
 const centreDivisor = 2
 
-func pluginsWindow(idx, n int) (int, int) {
-	if n <= pluginsMax {
-		return 0, n
+func pluginsWindow(count, total int) (int, int) {
+	if total <= pluginsMax {
+		return 0, total
 	}
-	start := idx - pluginsMax/centreDivisor
-	if start > n-pluginsMax {
-		start = n - pluginsMax
+	start := count - pluginsMax/centreDivisor
+	if start > total-pluginsMax {
+		start = total - pluginsMax
 	}
 	if start < 0 {
 		start = 0
@@ -257,11 +257,11 @@ func (m *model) chooseAction() tea.Cmd {
 	case pluginActionVersion:
 		seam, ctx := m.pluginsSeam, m.runContext()
 		return func() tea.Msg {
-			vs, err := seam.Versions(ctx, module)
+			versions, err := seam.Versions(ctx, module)
 			if err != nil {
 				return pluginsErrMsg{err: err}
 			}
-			return pluginsVersionsMsg{versions: vs}
+			return pluginsVersionsMsg{versions: versions}
 		}
 	}
 	return nil
@@ -299,13 +299,13 @@ func (m *model) selectedMenu() string {
 	return m.pluginsMenu[m.pluginsMenuIdx]
 }
 
-func (m *model) movePlugins(d int) {
+func (m *model) movePlugins(delta int) {
 	if m.pluginsMode == pluginsList {
-		m.pluginsIdx += d
+		m.pluginsIdx += delta
 		m.clampPlugins()
 		return
 	}
-	m.pluginsMenuIdx += d
+	m.pluginsMenuIdx += delta
 	m.clampPluginsMenu()
 }
 
@@ -328,71 +328,71 @@ func (m *model) clampPluginsMenu() {
 }
 
 func (m *model) pluginsView() string {
-	var b strings.Builder
-	b.WriteString(m.st.dim.Render("plugins · ↑↓ naviguer · ⏎ choisir · échap retour"))
-	m.writePluginNotices(&b)
-	m.writePluginRows(&b)
-	m.writePluginDetail(&b)
-	m.writePluginMenu(&b)
-	return b.String()
+	var builder strings.Builder
+	builder.WriteString(m.st.dim.Render("plugins · ↑↓ naviguer · ⏎ choisir · échap retour"))
+	m.writePluginNotices(&builder)
+	m.writePluginRows(&builder)
+	m.writePluginDetail(&builder)
+	m.writePluginMenu(&builder)
+	return builder.String()
 }
 
-func (m *model) writePluginNotices(b *strings.Builder) {
+func (m *model) writePluginNotices(builder *strings.Builder) {
 	if m.pluginsNotice != "" {
-		b.WriteString("\n" + m.st.dim.Render("  "+m.pluginsNotice))
+		builder.WriteString("\n" + m.st.dim.Render("  "+m.pluginsNotice))
 	}
 	if len(m.pluginsRows) == 0 && m.pluginsNotice == "" {
-		b.WriteString("\n" + m.st.dim.Render("  (aucun plugin compilé dans ce binaire)"))
+		builder.WriteString("\n" + m.st.dim.Render("  (aucun plugin compilé dans ce binaire)"))
 	}
 }
 
-func (m *model) writePluginRows(b *strings.Builder) {
+func (m *model) writePluginRows(builder *strings.Builder) {
 	start, end := pluginsWindow(m.pluginsIdx, len(m.pluginsRows))
 	if start > 0 {
-		b.WriteString("\n" + m.st.dim.Render(fmt.Sprintf("  … %d au-dessus", start)))
+		builder.WriteString("\n" + m.st.dim.Render(fmt.Sprintf("  … %d au-dessus", start)))
 	}
 	for i := start; i < end; i++ {
-		b.WriteString("\n" + m.pluginRow(i))
+		builder.WriteString("\n" + m.pluginRow(i))
 	}
 	if end < len(m.pluginsRows) {
-		b.WriteString("\n" + m.st.dim.Render(fmt.Sprintf("  … %d en dessous", len(m.pluginsRows)-end)))
+		builder.WriteString("\n" + m.st.dim.Render(fmt.Sprintf("  … %d en dessous", len(m.pluginsRows)-end)))
 	}
 }
 
-func (m *model) pluginRow(i int) string {
-	r := m.pluginsRows[i]
-	row := fmt.Sprintf("%s · %s → %s", r.Module, r.Installed, r.Latest)
-	if r.Pinned {
+func (m *model) pluginRow(index int) string {
+	pluginRow := m.pluginsRows[index]
+	row := fmt.Sprintf("%s · %s → %s", pluginRow.Module, pluginRow.Installed, pluginRow.Latest)
+	if pluginRow.Pinned {
 		row += " · épinglé"
 	}
-	if i == m.pluginsIdx && m.pluginsMode == pluginsList {
+	if index == m.pluginsIdx && m.pluginsMode == pluginsList {
 		return m.st.accent.Render(glyphCursor + " " + row)
 	}
 	return m.st.dim.Render("  " + row)
 }
 
-func (m *model) writePluginDetail(b *strings.Builder) {
+func (m *model) writePluginDetail(builder *strings.Builder) {
 	if m.pluginsMode == pluginsWarn {
 		for _, f := range m.pluginsFindings {
-			b.WriteString("\n" + m.st.text.Render("  ! "+f))
+			builder.WriteString("\n" + m.st.text.Render("  ! "+f))
 		}
 	}
 	if m.pluginsMode == pluginsFailed && m.pluginsOutput != "" {
 		for _, line := range strings.Split(strings.TrimRight(m.pluginsOutput, "\n"), "\n") {
-			b.WriteString("\n" + m.st.dim.Render("  "+line))
+			builder.WriteString("\n" + m.st.dim.Render("  "+line))
 		}
 	}
 }
 
-func (m *model) writePluginMenu(b *strings.Builder) {
+func (m *model) writePluginMenu(builder *strings.Builder) {
 	if m.pluginsMode == pluginsList || m.pluginsMode == pluginsDone {
 		return
 	}
 	for i, opt := range m.pluginsMenu {
 		if i == m.pluginsMenuIdx {
-			b.WriteString("\n" + m.st.accent.Render(glyphCursor+" "+opt))
+			builder.WriteString("\n" + m.st.accent.Render(glyphCursor+" "+opt))
 		} else {
-			b.WriteString("\n" + m.st.dim.Render("  "+opt))
+			builder.WriteString("\n" + m.st.dim.Render("  "+opt))
 		}
 	}
 }

@@ -63,7 +63,7 @@ func legacyKey(seq []byte) []byte {
 		return nil
 	}
 	mask := mods - 1
-	b, ok := legacyKeyBytes(code, mask)
+	bytes, ok := legacyKeyBytes(code, mask)
 	if !ok {
 		return nil
 	}
@@ -71,9 +71,9 @@ func legacyKey(seq []byte) []byte {
 		return []byte{ctrlESC, '\r'}
 	}
 	if mask&modAlt != 0 {
-		return append([]byte{ctrlESC}, b...)
+		return append([]byte{ctrlESC}, bytes...)
 	}
-	return b
+	return bytes
 }
 
 func legacyKeyMods(fields []string) (int, bool) {
@@ -151,12 +151,12 @@ func legacyFuncMods(fields []string) (string, bool, bool) {
 	if parts[0] == "" {
 		return "", false, true
 	}
-	m, err := strconv.Atoi(parts[0])
-	if err != nil || m <= 0 {
+	value, err := strconv.Atoi(parts[0])
+	if err != nil || value <= 0 {
 		return "", false, false
 	}
-	if m = withoutLocks(m); m > 1 {
-		return strconv.Itoa(m), false, true
+	if value = withoutLocks(value); value > 1 {
+		return strconv.Itoa(value), false, true
 	}
 	return "", false, true
 }
@@ -177,11 +177,11 @@ func legacyFuncSequence(seq []byte, final byte, number, mods string) []byte {
 	return []byte("\x1b[1;" + mods + string(final))
 }
 
-func toUpper(r rune) rune {
-	if r >= 'a' && r <= 'z' {
-		return r - asciiCaseGap
+func toUpper(char rune) rune {
+	if char >= 'a' && char <= 'z' {
+		return char - asciiCaseGap
 	}
-	return r
+	return char
 }
 
 type filteredStdin struct {
@@ -216,55 +216,55 @@ const (
 
 func newFilteredStdin(keys *keyLog) *filteredStdin { return &filteredStdin{File: os.Stdin, keys: keys} }
 
-func (f *filteredStdin) Read(p []byte) (int, error) {
+func (f *filteredStdin) Read(buf []byte) (int, error) {
 	if len(f.out) == 0 {
-		n, err := f.File.Read(f.raw[:])
-		if n > 0 {
+		read, err := f.File.Read(f.raw[:])
+		if read > 0 {
 			before := len(f.out)
-			f.feed(f.raw[:n])
-			f.keys.write("raw %q -> %q", f.raw[:n], f.out[before:])
+			f.feed(f.raw[:read])
+			f.keys.write("raw %q -> %q", f.raw[:read], f.out[before:])
 		}
 		if err != nil && len(f.out) == 0 {
 			return 0, err
 		}
 	}
-	count := copy(p, f.out)
+	count := copy(buf, f.out)
 	f.out = f.out[count:]
 	return count, nil
 }
 
-func (f *filteredStdin) feed(b []byte) {
-	for i := 0; i < len(b); i++ {
+func (f *filteredStdin) feed(bytes []byte) {
+	for index := 0; index < len(bytes); index++ {
 		switch f.state {
 		case filterGround:
-			i = f.feedGround(b, i)
+			index = f.feedGround(bytes, index)
 		case filterOSC:
-			f.feedOSC(b[i])
+			f.feedOSC(bytes[index])
 		case filterOSCEsc:
 			f.state = filterGround
 		case filterCSI:
-			f.feedCSI(b[i])
+			f.feedCSI(bytes[index])
 		}
 	}
 }
 
-func (f *filteredStdin) feedGround(b []byte, i int) int {
-	c := b[i]
-	if c != ctrlESC || i+1 >= len(b) {
-		f.out = append(f.out, c)
-		return i
+func (f *filteredStdin) feedGround(bytes []byte, index int) int {
+	char := bytes[index]
+	if char != ctrlESC || index+1 >= len(bytes) {
+		f.out = append(f.out, char)
+		return index
 	}
-	switch b[i+1] {
+	switch bytes[index+1] {
 	case ']':
 		f.state = filterOSC
-		return i + 1
+		return index + 1
 	case '[':
 		f.state = filterCSI
 		f.seq = append(f.seq[:0], ctrlESC, '[')
-		return i + 1
+		return index + 1
 	default:
-		f.out = append(f.out, c)
-		return i
+		f.out = append(f.out, char)
+		return index
 	}
 }
 
@@ -277,11 +277,11 @@ func (f *filteredStdin) feedOSC(c byte) {
 	}
 }
 
-func (f *filteredStdin) feedCSI(c byte) {
-	f.seq = append(f.seq, c)
+func (f *filteredStdin) feedCSI(char byte) {
+	f.seq = append(f.seq, char)
 	switch {
-	case c >= 0x40 && c <= 0x7e:
-		f.finishCSI(c)
+	case char >= 0x40 && char <= 0x7e:
+		f.finishCSI(char)
 	case len(f.seq) > csiSeqCap:
 		f.out = append(f.out, f.seq...)
 		f.seq = f.seq[:0]

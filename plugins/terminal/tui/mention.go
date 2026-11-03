@@ -29,12 +29,12 @@ func mentionMatches(dir, prefix string) []string {
 		return nil
 	}
 	var out []string
-	for _, e := range ents {
-		name := e.Name()
+	for _, item := range ents {
+		name := item.Name()
 		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
-		if e.IsDir() {
+		if item.IsDir() {
 			name += "/"
 		}
 		out = append(out, name)
@@ -57,9 +57,9 @@ func (m *model) worktreeDir() string {
 	if name := m.sessionName(m.active); name != "" {
 		sessions := m.tm.Sessions()
 		for i := range sessions {
-			s := &sessions[i]
-			if s.Name == name && s.Dir != "" {
-				return s.Dir
+			session := &sessions[i]
+			if session.Name == name && session.Dir != "" {
+				return session.Dir
 			}
 		}
 	}
@@ -121,9 +121,9 @@ func (m *model) mentionRows() []string {
 }
 
 func (m *model) clampMention() {
-	n := len(m.mentionRows())
-	if m.mentionIdx >= n {
-		m.mentionIdx = n - 1
+	count := len(m.mentionRows())
+	if m.mentionIdx >= count {
+		m.mentionIdx = count - 1
 	}
 	if m.mentionIdx < 0 {
 		m.mentionIdx = 0

@@ -48,17 +48,17 @@ func yesNo(b bool) string {
 
 const diagValueWidth = 12
 
-func diagnosticsView(caps Capabilities, st uiStyles) string {
-	var b strings.Builder
-	b.WriteString(st.dim.Render("terminal") + "  " + st.text.Render(caps.Terminal))
-	for _, r := range diagRows(caps) {
-		pad := strings.Repeat(" ", max(1, diagValueWidth-len(r.value)))
-		b.WriteString("\n" + st.dim.Render("  "+r.name+strings.Repeat(" ", max(1, factWidth-len(r.name)))) +
-			st.text.Render(r.value) + pad + st.dim.Render(r.feature))
+func diagnosticsView(caps Capabilities, styles uiStyles) string {
+	var builder strings.Builder
+	builder.WriteString(styles.dim.Render("terminal") + "  " + styles.text.Render(caps.Terminal))
+	for _, row := range diagRows(caps) {
+		pad := strings.Repeat(" ", max(1, diagValueWidth-len(row.value)))
+		builder.WriteString("\n" + styles.dim.Render("  "+row.name+strings.Repeat(" ", max(1, factWidth-len(row.name)))) +
+			styles.text.Render(row.value) + pad + styles.dim.Render(row.feature))
 	}
-	b.WriteString("\n" + st.dim.Render("  kitty, ghostty et WezTerm ont tous les rendus ; ailleurs l'image"))
-	b.WriteString("\n" + st.dim.Render("  est dessinée en demi-blocs et un lien reste du texte sélectionnable."))
-	return b.String()
+	builder.WriteString("\n" + styles.dim.Render("  kitty, ghostty et WezTerm ont tous les rendus ; ailleurs l'image"))
+	builder.WriteString("\n" + styles.dim.Render("  est dessinée en demi-blocs et un lien reste du texte sélectionnable."))
+	return builder.String()
 }
 
 func (m *model) openDiagnostics() { m.diagOpen = true }

@@ -21,9 +21,9 @@ func (m *model) activeInfo() (contracts.SessionInfo, bool) {
 	}
 	m.infoCache, m.infoKnown = contracts.SessionInfo{}, false
 	sessions := m.tm.Sessions()
-	for i := range sessions {
-		if sessions[i].ChannelID == m.active {
-			m.infoCache, m.infoKnown = sessions[i], true
+	for index := range sessions {
+		if sessions[index].ChannelID == m.active {
+			m.infoCache, m.infoKnown = sessions[index], true
 			break
 		}
 	}
@@ -48,9 +48,9 @@ func (m *model) emptyState(width int) string {
 
 const factWidth = 10
 
-func fact(label, value string, st uiStyles) string {
-	return st.dim.Render("  "+label+strings.Repeat(" ", max(1, factWidth-lipgloss.Width(label)))) +
-		st.text.Render(value)
+func fact(label, value string, styles uiStyles) string {
+	return styles.dim.Render("  "+label+strings.Repeat(" ", max(1, factWidth-lipgloss.Width(label)))) +
+		styles.text.Render(value)
 }
 
 func (m *model) sessionFacts() []string {
@@ -78,22 +78,22 @@ const maxOtherSessions = 5
 
 func (m *model) otherSessions() []string {
 	var rows []string
-	for _, ch := range m.order {
+	for _, channel := range m.order {
 		if len(rows) >= maxOtherSessions {
 			break
 		}
-		if ch == m.active {
+		if channel == m.active {
 			continue
 		}
-		tb := m.tabs[ch]
-		if tb == nil {
+		tab := m.tabs[channel]
+		if tab == nil {
 			continue
 		}
 		mark := "  "
-		if tb.unread {
+		if tab.unread {
 			mark = " " + glyphUnread
 		}
-		rows = append(rows, m.st.dim.Render("  "+mark+" "+tb.label))
+		rows = append(rows, m.st.dim.Render("  "+mark+" "+tab.label))
 	}
 	if len(rows) == 0 {
 		return nil
@@ -107,9 +107,9 @@ func shortcutRow(st uiStyles) string {
 
 func joinNonEmpty(parts ...string) string {
 	var kept []string
-	for _, p := range parts {
-		if p != "" {
-			kept = append(kept, p)
+	for _, part := range parts {
+		if part != "" {
+			kept = append(kept, part)
 		}
 	}
 	return strings.Join(kept, " · ")
@@ -122,9 +122,9 @@ func plural(n int) string {
 	return ""
 }
 
-func truncate(s string, width int) string {
-	if width < 1 || lipgloss.Width(s) <= width {
-		return s
+func truncate(text string, width int) string {
+	if width < 1 || lipgloss.Width(text) <= width {
+		return text
 	}
-	return ansi.Truncate(s, width, "")
+	return ansi.Truncate(text, width, "")
 }

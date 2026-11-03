@@ -270,14 +270,14 @@ func (r *Registry) Help() string {
 	for _, cmd := range r.cmds {
 		var line strings.Builder
 		line.WriteString("  " + strings.Join(cmd.Path, " "))
-		for _, p := range cmd.Params {
+		for _, param := range cmd.Params {
 			switch {
-			case p.Required:
-				line.WriteString(" --" + p.Name + " <" + p.Name + ">")
-			case p.ValueRequired:
-				line.WriteString(" [--" + p.Name + " <" + p.Name + ">]")
+			case param.Required:
+				line.WriteString(" --" + param.Name + " <" + param.Name + ">")
+			case param.ValueRequired:
+				line.WriteString(" [--" + param.Name + " <" + param.Name + ">]")
 			default:
-				line.WriteString(" [--" + p.Name + "]")
+				line.WriteString(" [--" + param.Name + "]")
 			}
 		}
 		if cmd.Help != "" {

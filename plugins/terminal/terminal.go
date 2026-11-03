@@ -123,7 +123,7 @@ func defaultSessionName(taken []contracts.SessionInfo) string {
 	if !sessionNameRe.MatchString(base) {
 		return randomSessionName()
 	}
-	used := map[string]bool{}
+	used := make(map[string]bool)
 	for i := range taken {
 		used[taken[i].Name] = true
 	}
@@ -219,7 +219,7 @@ func (t *Terminal) RunForeground(ctx context.Context, cancel context.CancelFunc)
 // New builds an unbound terminal gateway.
 func New() *Terminal {
 	return &Terminal{
-		pending:   map[string][]contracts.Message{},
+		pending:   make(map[string][]contracts.Message),
 		out:       make(chan tui.RoutedEvent, routeEventBufferSize),
 		ctrlReady: make(chan struct{}),
 	}

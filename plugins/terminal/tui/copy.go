@@ -31,9 +31,9 @@ func (m *model) copyCmd(rest []string) {
 	m.copyTarget(target)
 }
 
-func validCopyTarget(s string) bool {
+func validCopyTarget(text string) bool {
 	for _, t := range copyTargets() {
-		if t == s {
+		if t == text {
 			return true
 		}
 	}
@@ -41,11 +41,11 @@ func validCopyTarget(s string) bool {
 }
 
 func (m *model) copyTarget(target string) {
-	tb := m.tabs[m.active]
-	if tb == nil || m.clip == nil {
+	tab := m.tabs[m.active]
+	if tab == nil || m.clip == nil {
 		return
 	}
-	text := copyText(tb.entries, target)
+	text := copyText(tab.entries, target)
 	if strings.TrimSpace(text) == "" {
 		m.flash = "rien à copier ici"
 		return
@@ -61,9 +61,9 @@ func (m *model) copyTarget(target string) {
 func copyText(entries []entry, target string) string {
 	switch target {
 	case copyReply:
-		for i := len(entries) - 1; i >= 0; i-- {
-			if entries[i].role == roleAgent {
-				return strings.TrimSpace(entries[i].text)
+		for index := len(entries) - 1; index >= 0; index-- {
+			if entries[index].role == roleAgent {
+				return strings.TrimSpace(entries[index].text)
 			}
 		}
 		return ""
@@ -75,9 +75,9 @@ func copyText(entries []entry, target string) string {
 }
 
 func lastTurnStart(entries []entry) int {
-	for i := len(entries) - 1; i >= 0; i-- {
-		if entries[i].role == roleYou {
-			return i
+	for index := len(entries) - 1; index >= 0; index-- {
+		if entries[index].role == roleYou {
+			return index
 		}
 	}
 	return 0
@@ -85,12 +85,12 @@ func lastTurnStart(entries []entry) int {
 
 func renderCopy(entries []entry) string {
 	var blocks []string
-	for _, e := range entries {
-		text := strings.TrimSpace(e.text)
+	for _, item := range entries {
+		text := strings.TrimSpace(item.text)
 		if text == "" {
 			continue
 		}
-		switch e.role {
+		switch item.role {
 		case roleYou:
 			blocks = append(blocks, "you: "+text)
 		case roleAgent:

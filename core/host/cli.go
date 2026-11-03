@@ -35,7 +35,7 @@ type schedulerSlot struct {
 
 func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup *supervisor.Supervisor, instID string, extra []contracts.Cmd, approvals *approvalTable, sessions *sessionTable) (*cli.Registry, hostDeps, error) {
 	partDir := filepath.Dir(o.StatePath)
-	wt := worktree.NewWorktreer(ctx, instID)
+	wt := worktree.NewWorktreer(instID)
 	upCfg, cfgErr := service.DefaultConfig()
 	logCleanup(cfgErr)
 	up := serviceUpdater{cfg: upCfg, st: st}
@@ -97,7 +97,7 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 
 func wireManagerHandler(ctx context.Context, hdl *manager.Handler, st *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable) {
 	hdl.SetSeeder(sessions.Seed)
-	hdl.SetHosts(newHostPlacer(ctx, st, instID, worktrees, func() string { return sourceVersionOf(ctx, st) }))
+	hdl.SetHosts(newHostPlacer(st, instID, worktrees, func() string { return sourceVersionOf(ctx, st) }))
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly })
 	hdl.SetDefaultModel(os.Getenv(EnvDefaultModel))
 	hdl.SetModelValidator(validateModelChoice)

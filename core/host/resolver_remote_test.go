@@ -30,7 +30,7 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 		t.Fatalf("listen: %v", err)
 	}
 	gs := grpc.NewServer()
-	transport.RegisterMemorySkeleton(gs, recordingMem{})
+	serveSkeleton(t, gs, func(r *transport.PluginRouter) error { return transport.RegisterMemorySkeleton(r, recordingMem{}) })
 	go func() { logCleanup(gs.Serve(lis)) }()
 	t.Cleanup(gs.Stop)
 
@@ -93,7 +93,9 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 		t.Fatalf("listen: %v", err)
 	}
 	gs := grpc.NewServer()
-	transport.RegisterOrchestratorSkeleton(gs, recordingOrch{})
+	serveSkeleton(t, gs, func(r *transport.PluginRouter) error {
+		return transport.RegisterOrchestratorSkeleton(r, recordingOrch{})
+	})
 	go func() { logCleanup(gs.Serve(lis)) }()
 	t.Cleanup(gs.Stop)
 

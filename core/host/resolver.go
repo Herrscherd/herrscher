@@ -286,7 +286,7 @@ func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, p contracts.Plugin
 	}
 	defer nc.Close()
 	reg := transport.NewRemoteRegistry()
-	seen, err := watchBackendAnnouncements(nc, reg)
+	seen, err := r.watchBackendAnnouncements(nc, reg)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +302,7 @@ func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, p contracts.Plugin
 	}
 }
 
-func watchBackendAnnouncements(conn *nats.Conn, reg *transport.RemoteRegistry) (<-chan struct{}, error) {
+func (r *Resolver) watchBackendAnnouncements(conn *nats.Conn, reg *transport.RemoteRegistry) (<-chan struct{}, error) {
 	seen := make(chan struct{}, 1)
 	err := transport.WatchAnnouncements(conn, func(a transport.Announcement) {
 		reg.Observe(a)
@@ -310,6 +310,8 @@ func watchBackendAnnouncements(conn *nats.Conn, reg *transport.RemoteRegistry) (
 		case seen <- struct{}{}:
 		default:
 		}
+	}, func(err error) {
+		r.log.Debug("remote announcement undecodable", "err", err)
 	})
 	return seen, err
 }

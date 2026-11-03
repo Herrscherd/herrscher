@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
@@ -76,10 +75,14 @@ func tarDir(root string, writer io.Writer) error {
 }
 
 func extractTar(src io.Reader, dst string) error {
-	root, err := filepath.Abs(dst)
+	if err := os.MkdirAll(dst, privateDirMode); err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(dst)
 	if err != nil {
 		return err
 	}
+	defer closeRead(root)
 	tarReader := tar.NewReader(src)
 	for {
 		hdr, err := tarReader.Next()
@@ -98,19 +101,19 @@ func extractTar(src io.Reader, dst string) error {
 	}
 }
 
-func extractRegularMember(reader *tar.Reader, hdr *tar.Header, root string) error {
-	target := filepath.Join(root, filepath.FromSlash(hdr.Name))
-	if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
-		return &unsafeTarMemberError{Member: hdr.Name, Root: root}
+func extractRegularMember(reader *tar.Reader, hdr *tar.Header, root *os.Root) error {
+	name := filepath.FromSlash(hdr.Name)
+	if !filepath.IsLocal(name) {
+		return &unsafeTarMemberError{Member: hdr.Name, Root: root.Name()}
 	}
-	if mkdirErr := os.MkdirAll(filepath.Dir(target), privateDirMode); mkdirErr != nil {
+	if mkdirErr := root.MkdirAll(filepath.Dir(name), privateDirMode); mkdirErr != nil {
 		return mkdirErr
 	}
-	return writeTarMember(reader, hdr, target)
+	return writeTarMember(reader, hdr, root, name)
 }
 
-func writeTarMember(reader *tar.Reader, hdr *tar.Header, target string) error {
-	file, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, hdr.FileInfo().Mode().Perm())
+func writeTarMember(reader *tar.Reader, hdr *tar.Header, root *os.Root, name string) error {
+	file, err := root.OpenFile(name, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, hdr.FileInfo().Mode().Perm())
 	if err != nil {
 		return err
 	}

@@ -186,7 +186,9 @@ func RunHub(ctx context.Context, gws []Deps, options Options) error {
 		deps.handler.SetTerminalAdmin(ta)
 	}
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
+	liveStopped := make(chan struct{})
 	go func() {
+		defer close(liveStopped)
 		<-ctx.Done()
 		runningHub.stopLive()
 	}()
@@ -213,6 +215,7 @@ func RunHub(ctx context.Context, gws []Deps, options Options) error {
 
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
 	<-ctx.Done()
+	<-liveStopped
 	return ctx.Err()
 }
 

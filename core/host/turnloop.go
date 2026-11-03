@@ -85,7 +85,6 @@ type sessionDriver struct {
 	sink sessionSink
 
 	emitTap func(contracts.Event)
-	joined  changeNotifier
 
 	gate budgetGate
 }
@@ -144,7 +143,6 @@ func (d *sessionDriver) journal(authorID string) {
 	if first {
 		_, appendErr := state.AppendParticipant(d.participants, authorID)
 		logCleanup(appendErr)
-		d.joined.signal()
 	}
 }
 
@@ -269,9 +267,8 @@ func (d *sessionDriver) SeedAndWaitWithTurnID(ctx context.Context, task, turnID 
 }
 
 type sessionTable struct {
-	mu      sync.Mutex
-	m       map[string]*sessionDriver
-	changed changeNotifier
+	mu sync.Mutex
+	m  map[string]*sessionDriver
 }
 
 func newSessionTable() *sessionTable {
@@ -282,7 +279,6 @@ func (t *sessionTable) register(name string, driver *sessionDriver) {
 	t.mu.Lock()
 	t.m[name] = driver
 	t.mu.Unlock()
-	t.changed.signal()
 }
 
 func (t *sessionTable) unregister(name string, driver *sessionDriver) {
@@ -291,7 +287,6 @@ func (t *sessionTable) unregister(name string, driver *sessionDriver) {
 		delete(t.m, name)
 	}
 	t.mu.Unlock()
-	t.changed.signal()
 }
 
 func (t *sessionTable) lookup(name string) *sessionDriver {

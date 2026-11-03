@@ -49,9 +49,8 @@ type PendingApproval struct {
 }
 
 type approvalTable struct {
-	mu      sync.Mutex
-	m       map[string]*pendingApproval
-	changed changeNotifier
+	mu sync.Mutex
+	m  map[string]*pendingApproval
 }
 
 func newApprovalTable() *approvalTable {
@@ -124,12 +123,10 @@ func registerApproval(approvals *approvalTable, pending *pendingApproval) (func(
 		return nil, fmt.Sprintf("herrscher: %s was denied: session %q already has %d tool calls waiting for a human, which is the limit; wait for those to be answered, and ask about fewer things at once", describeRequest(pending.req), pending.session, maxPendingPerSession)
 	}
 	approvals.m[pending.id] = pending
-	approvals.changed.signal()
 	return func() {
 		approvals.mu.Lock()
 		delete(approvals.m, pending.id)
 		approvals.mu.Unlock()
-		approvals.changed.signal()
 	}, ""
 }
 

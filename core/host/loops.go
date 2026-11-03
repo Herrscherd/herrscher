@@ -15,6 +15,14 @@ import (
 const healthWindow = 90 * time.Second
 
 func serveHealth(ctx context.Context, addr string, monitor *health.Health) {
+	srv := newHealthServer(addr, monitor)
+	go func() { <-ctx.Done(); closeRead(srv) }()
+	if err := srv.ListenAndServe(); err != nil && ctx.Err() == nil {
+		warnStderr("health server: %v\n", err)
+	}
+}
+
+func newHealthServer(addr string, monitor *health.Health) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(writer http.ResponseWriter, _ *http.Request) {
 		snap := monitor.Snapshot(time.Now(), healthWindow)
@@ -24,11 +32,7 @@ func serveHealth(ctx context.Context, addr string, monitor *health.Health) {
 		}
 		logCleanup(json.NewEncoder(writer).Encode(snap))
 	})
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: healthReadHeaderTimeout}
-	go func() { <-ctx.Done(); closeRead(srv) }()
-	if err := srv.ListenAndServe(); err != nil && ctx.Err() == nil {
-		warnStderr("health server: %v\n", err)
-	}
+	return &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: healthReadHeaderTimeout}
 }
 
 func pingLoop(ctx context.Context, prober contracts.Prober, monitor *health.Health) {

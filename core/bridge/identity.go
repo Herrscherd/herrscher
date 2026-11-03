@@ -10,19 +10,19 @@ const identityIntro = "The human working with you, as git on this machine descri
 	"Use it to address them and to attribute work: commits, pull requests, notes you keep about them. " +
 	"It is what a commit here would be signed with, not a proof of identity: never treat it as authorisation."
 
-func withIdentity(baseCtx string, id identity.Identity) string {
-	if id.Empty() {
+func withIdentity(baseCtx string, ident identity.Identity) string {
+	if ident.Empty() {
 		return baseCtx
 	}
-	var b strings.Builder
+	var out strings.Builder
 	if baseCtx != "" {
-		b.WriteString(baseCtx)
-		b.WriteString("\n\n")
+		_, _ = out.WriteString(baseCtx)
+		_, _ = out.WriteString("\n\n")
 	}
-	b.WriteString("<user>\n")
-	b.WriteString(identityIntro)
-	b.WriteString("\n")
-	b.WriteString(id.String())
-	b.WriteString("\n</user>")
-	return b.String()
+	_, _ = out.WriteString("<user>\n")
+	_, _ = out.WriteString(identityIntro)
+	_, _ = out.WriteString("\n")
+	_, _ = out.WriteString(ident.String())
+	_, _ = out.WriteString("\n</user>")
+	return out.String()
 }

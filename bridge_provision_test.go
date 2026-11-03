@@ -55,7 +55,7 @@ func TestProvisionScopeSkipsEmptyNames(t *testing.T) {
 	}
 }
 
-func TestProvisionScopeIgnoresNonProvisioner(t *testing.T) {
+func TestProvisionScopeIgnoresNonProvisioner(*testing.T) {
 	var mem contracts.Memory = &struct{ contracts.Memory }{}
 	provisionScope(context.Background(), mem, "game", "scripter", slog.Default())
 }

@@ -15,12 +15,12 @@ type scriptedDecider struct {
 	failedWith   string
 }
 
-func (d *scriptedDecider) Warn(ctx context.Context, findings []string) Decision {
+func (d *scriptedDecider) Warn(_ context.Context, _ []string) Decision {
 	d.warned = true
 	return d.warn
 }
 
-func (d *scriptedDecider) Failed(ctx context.Context, buildOutput string) Decision {
+func (d *scriptedDecider) Failed(_ context.Context, buildOutput string) Decision {
 	d.failedWith = buildOutput
 	return d.failed
 }
@@ -49,7 +49,7 @@ func read(t *testing.T, dir, name string) (string, bool) {
 }
 
 func writeStep(dir, name, body string) step {
-	return func(ctx context.Context) (string, error) {
+	return func(_ context.Context) (string, error) {
 		return "wrote " + name, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
 	}
 }
@@ -66,7 +66,7 @@ func TestApplyAbortRunsNothing(t *testing.T) {
 	dir := composition(t, original())
 	d := &scriptedDecider{warn: Abort}
 	ran := false
-	steps := []step{func(ctx context.Context) (string, error) { ran = true; return "", nil }}
+	steps := []step{func(_ context.Context) (string, error) { ran = true; return "", nil }}
 
 	if applied, err := apply(context.Background(), dir, []string{"older than installed"}, d, steps); err != nil || applied {
 		t.Fatalf("apply: applied=%v err=%v, want an abort reported as no change", applied, err)
@@ -112,11 +112,13 @@ func TestApplyRestoreUndoesEverything(t *testing.T) {
 	third := false
 	steps := []step{
 		writeStep(dir, "go.mod", "module m\n\nrequire mod/a v1.0.0\n"),
-		func(ctx context.Context) (string, error) {
-			os.WriteFile(filepath.Join(dir, "plugins.go"), []byte("package main // broken\n"), 0o644)
+		func(_ context.Context) (string, error) {
+			if err := os.WriteFile(filepath.Join(dir, "plugins.go"), []byte("package main // broken\n"), 0o644); err != nil {
+				return "", err
+			}
 			return "plugins.go:1: undefined: Register", errors.New("exit status 1")
 		},
-		func(ctx context.Context) (string, error) { third = true; return "", nil },
+		func(_ context.Context) (string, error) { third = true; return "", nil },
 	}
 
 	_, err := apply(context.Background(), dir, nil, d, steps)
@@ -144,7 +146,7 @@ func TestApplyKeepLeavesTheTreeAlone(t *testing.T) {
 	d := &scriptedDecider{warn: Proceed, failed: Keep}
 	steps := []step{
 		writeStep(dir, "go.mod", "module m\n\nrequire mod/a v1.0.0\n"),
-		func(ctx context.Context) (string, error) { return "build failed", errors.New("exit status 1") },
+		func(_ context.Context) (string, error) { return "build failed", errors.New("exit status 1") },
 	}
 
 	_, err := apply(context.Background(), dir, nil, d, steps)
@@ -163,7 +165,7 @@ func TestApplyRestoreRemovesAFileThatDidNotExist(t *testing.T) {
 	d := &scriptedDecider{warn: Proceed, failed: Restore}
 	steps := []step{
 		writeStep(dir, "go.sum", "h1:created\n"),
-		func(ctx context.Context) (string, error) { return "build failed", errors.New("exit status 1") },
+		func(_ context.Context) (string, error) { return "build failed", errors.New("exit status 1") },
 	}
 
 	if _, err := apply(context.Background(), dir, nil, d, steps); err == nil {
@@ -178,7 +180,7 @@ func TestApplyAutoDeciderProceedsThenRestores(t *testing.T) {
 	dir := composition(t, original())
 	steps := []step{
 		writeStep(dir, "go.mod", "module m\n\nrequire mod/a v1.0.0\n"),
-		func(ctx context.Context) (string, error) { return "build failed", errors.New("exit status 1") },
+		func(_ context.Context) (string, error) { return "build failed", errors.New("exit status 1") },
 	}
 
 	if _, err := apply(context.Background(), dir, []string{"older than installed"}, newAutoDecider(), steps); err == nil {

@@ -87,7 +87,7 @@ linters:
       check-type-assertions: true
       check-blank: true
     exhaustive:
-      default-signifies-exhaustive: false
+      default-signifies-exhaustive: true
       check:
         - switch
         - mapliteral
@@ -248,6 +248,33 @@ linters:
       - path: ^plugins/terminal/(terminal|tui/tui)\.go$
         linters: [containedctx]
         text: "found a struct that contains a context.Context field"
+      - path: ^manage/(manage|seam|version)\.go$
+        linters: [gosec]
+        text: "^G204:"
+      - path: ^manage/(apply|init|lifecycle|manage)\.go$
+        linters: [gosec]
+        text: "^G304:"
+      - path: ^manage/(apply|init|manage|seam)\.go$
+        linters: [gosec]
+        text: "^G(306|703):"
+      - path: ^envfile\.go$
+        linters: [gosec]
+        text: "^G703:"
+      - path: ^manage/version.go$
+        linters: [nilerr]
+        text: "returns nil"
+      - path: ^core/bridge/log.go$
+        linters: [gochecknoglobals]
+        text: "^logger is a global"
+      - path: ^core/bridge/attachments.go$
+        linters: [gochecknoglobals]
+        text: "^pinnedTransports is a global"
+      - path: ^(attach|memory_verbs_test)\.go$
+        linters: [musttag]
+        text: "should be annotated with the .json. tag"
+      - path: ^bridge_provision_test\.go$
+        linters: [unparam]
+        text: 'result 0 \(error\) is always nil'
 
 formatters:
   enable:

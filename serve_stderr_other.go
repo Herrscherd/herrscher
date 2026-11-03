@@ -2,6 +2,6 @@
 
 package main
 
-func redirectStderr(path string) (restore func(), err error) {
-	return func() {}, nil
+func redirectStderr(path string) (func() error, error) {
+	return func() error { return nil }, nil
 }

@@ -30,7 +30,10 @@ func TestAddPluginInserts(t *testing.T) {
 	if err != nil || !changed {
 		t.Fatalf("add failed: changed=%v err=%v", changed, err)
 	}
-	mods, _ := listPlugins(out)
+	mods, err := listPlugins(out)
+	if err != nil {
+		t.Fatalf("list plugins: %v", err)
+	}
 	if len(mods) != 3 || mods[2] != "github.com/acme/telegram-gateway" {
 		t.Fatalf("module not appended at end: %v", mods)
 	}
@@ -54,7 +57,10 @@ func TestRemovePlugin(t *testing.T) {
 	if err != nil || !changed {
 		t.Fatalf("remove failed: changed=%v err=%v", changed, err)
 	}
-	mods, _ := listPlugins(out)
+	mods, err := listPlugins(out)
+	if err != nil {
+		t.Fatalf("list plugins: %v", err)
+	}
 	if len(mods) != 1 || mods[0] != "github.com/Herrscherd/herrscher-claude-backend" {
 		t.Fatalf("wrong module removed: %v", mods)
 	}

@@ -13,7 +13,7 @@ import (
 
 type fakeExtractor struct{}
 
-func (fakeExtractor) Extract(ctx context.Context, journal, transcript string) ([]orchestrator.Candidate, error) {
+func (fakeExtractor) Extract(_ context.Context, _, _ string) ([]orchestrator.Candidate, error) {
 	return nil, nil
 }
 

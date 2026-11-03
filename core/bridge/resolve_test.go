@@ -13,23 +13,19 @@ import (
 
 func stagedFile(t *testing.T, name, content string) string {
 	t.Helper()
+	t.Setenv("TMPDIR", t.TempDir())
 	if err := os.MkdirAll(StagingRoot(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(StagingRoot(), "test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	p := filepath.Join(dir, name)
+	p := filepath.Join(StagingRoot(), name)
 	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	real, err := filepath.EvalSymlinks(p)
+	resolved, err := filepath.EvalSymlinks(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return real
+	return resolved
 }
 
 func TestResolveAttachmentsFilePassthrough(t *testing.T) {
@@ -124,8 +120,8 @@ func TestResolveAttachmentsRejectsHostedFileURL(t *testing.T) {
 }
 
 func TestResolveAttachmentsMixed(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("CDNPNG"))
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeOrLog(w, []byte("CDNPNG"))
 	}))
 	defer srv.Close()
 
@@ -151,8 +147,8 @@ func TestResolveAttachmentsMixed(t *testing.T) {
 }
 
 func TestResolveAttachmentsOffAllowlistCDNSkipped(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("PNG"))
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeOrLog(w, []byte("PNG"))
 	}))
 	defer srv.Close()
 	m := contracts.Message{

@@ -10,16 +10,23 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
+const serviceUsage = "usage: herrscher service <install|uninstall|status|restart|update> [--health-addr ADDR] [--env-file PATH] [--cmd 'claude …'] [--source DIR] [--no-pull]"
+
+var (
+	errServiceUsage       = errors.New(serviceUsage)
+	errUnknownSubcommand  = errors.New("unknown subcommand")
+	errUnexpectedArgument = errors.New("unexpected argument")
+)
+
 func runService(ctx context.Context, args []string) error {
-	const usage = "usage: herrscher service <install|uninstall|status|restart|update> [--health-addr ADDR] [--env-file PATH] [--cmd 'claude …'] [--source DIR] [--no-pull]"
 	if len(args) == 0 {
-		return errors.New(usage)
+		return errServiceUsage
 	}
 	sub := args[0]
 	switch sub {
-	case "install", "uninstall", "status", "restart", "update":
+	case cmdInstall, "uninstall", cmdStatus, "restart", cmdUpdate:
 	default:
-		return fmt.Errorf("herrscher service: unknown subcommand %q (want install|uninstall|status|restart|update)", sub)
+		return fmt.Errorf("herrscher service: %w %q (want install|uninstall|status|restart|update)", errUnknownSubcommand, sub)
 	}
 
 	cfg, err := service.DefaultConfig()
@@ -32,61 +39,64 @@ func runService(ctx context.Context, args []string) error {
 		if err := service.Restart(ctx, cfg); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "herrscher service: restarted")
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher service: restarted")
 		return nil
-	case "update":
+	case cmdUpdate:
 		return runServiceUpdate(ctx, cfg, args[1:])
 	}
 
-	fs := flag.NewFlagSet("service", flag.ContinueOnError)
-	healthAddr := fs.String("health-addr", cfg.HealthAddr, "value for serve --health-addr (empty disables the health endpoint)")
-	envFile := fs.String("env-file", cfg.EnvFile, "path to the 0600 secrets file the service sources")
-	defaultCmd := fs.String("cmd", "", "default bridged command pre-filled into config.json (e.g. 'claude --model claude-opus-4-8 --effort low')")
-	if err := fs.Parse(args[1:]); err != nil {
+	flags := flag.NewFlagSet("service", flag.ContinueOnError)
+	healthAddr := flags.String("health-addr", cfg.HealthAddr, "value for serve --health-addr (empty disables the health endpoint)")
+	envFile := flags.String("env-file", cfg.EnvFile, "path to the 0600 secrets file the service sources")
+	defaultCmd := flags.String("cmd", "", "default bridged command pre-filled into config.json (e.g. 'claude --model claude-opus-4-8 --effort low')")
+	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("herrscher service %s: unexpected argument %q\n%s", sub, fs.Arg(0), usage)
+	if flags.NArg() > 0 {
+		return fmt.Errorf("herrscher service %s: %w %q\n%s", sub, errUnexpectedArgument, flags.Arg(0), serviceUsage)
 	}
 	cfg.HealthAddr = *healthAddr
 	cfg.EnvFile = *envFile
 
 	switch sub {
-	case "install":
+	case cmdInstall:
 		cfg.DefaultCmd = *defaultCmd
 		return service.Install(ctx, cfg)
 	case "uninstall":
 		if err := service.Uninstall(ctx, cfg); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "herrscher service: removed")
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher service: removed")
 		return nil
-	case "status":
+	case cmdStatus:
 		return service.Status(ctx, cfg)
 	default:
-		return fmt.Errorf("herrscher service: unknown subcommand %q (want install|uninstall|status)", sub)
+		return fmt.Errorf("herrscher service: %w %q (want install|uninstall|status)", errUnknownSubcommand, sub)
 	}
 }
 
 func runServiceUpdate(ctx context.Context, cfg service.Config, args []string) error {
-	cwd, _ := os.Getwd()
-	fs := flag.NewFlagSet("service update", flag.ContinueOnError)
-	source := fs.String("source", cwd, "path to the herrscher source checkout to build from")
-	noPull := fs.Bool("no-pull", false, "skip `git pull --ff-only` before building")
-	if err := fs.Parse(args); err != nil {
+	cwd, err := os.Getwd()
+	if err != nil {
 		return err
 	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("herrscher service update: unexpected argument %q", fs.Arg(0))
+	flags := flag.NewFlagSet("service update", flag.ContinueOnError)
+	source := flags.String("source", cwd, "path to the herrscher source checkout to build from")
+	noPull := flags.Bool("no-pull", false, "skip `git pull --ff-only` before building")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		return fmt.Errorf("herrscher service update: %w %q", errUnexpectedArgument, flags.Arg(0))
 	}
 	if installed, ok := service.InstalledBinPath(cfg); ok && installed != cfg.BinPath {
-		fmt.Fprintf(os.Stderr, "herrscher service: rebuilding the installed binary %s (you ran %s)\n", installed, cfg.BinPath)
+		_, _ = fmt.Fprintf(os.Stderr, "herrscher service: rebuilding the installed binary %s (you ran %s)\n", installed, cfg.BinPath)
 		cfg.BinPath = installed
 	}
 	if err := service.Update(ctx, cfg, *source, !*noPull); err != nil {
 		return err
 	}
 	v := service.SourceVersion(ctx, *source)
-	fmt.Fprintf(os.Stderr, "herrscher service: rebuilt %s and restarted\n", v)
+	_, _ = fmt.Fprintf(os.Stderr, "herrscher service: rebuilt %s and restarted\n", v)
 	return nil
 }

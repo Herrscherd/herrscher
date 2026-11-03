@@ -44,37 +44,39 @@ const nameStemWords = 5
 
 var slugInvalid = regexp.MustCompile(`[^a-z0-9_-]+`)
 
-var nameFiller = map[string]bool{
-	"a": true, "ai": true, "an": true, "and": true, "are": true, "as": true,
-	"at": true, "au": true, "aux": true, "be": true, "been": true, "but": true,
-	"by": true, "can": true, "ce": true, "ces": true, "cet": true, "cette": true,
-	"could": true, "dans": true, "de": true, "des": true, "do": true,
-	"does": true, "du": true, "en": true, "est": true, "et": true, "for": true,
-	"from": true, "had": true, "has": true, "have": true, "i": true, "if": true,
-	"il": true, "ils": true, "in": true, "into": true, "is": true, "it": true,
-	"its": true, "je": true, "la": true, "le": true, "les": true, "leur": true,
-	"lui": true, "ma": true, "mais": true, "me": true, "mes": true, "moi": true,
-	"mon": true, "my": true, "ne": true, "nos": true, "notre": true,
-	"nous": true, "of": true, "on": true, "ont": true, "or": true, "ou": true,
-	"our": true, "par": true, "pas": true, "please": true, "pour": true,
-	"que": true, "qui": true, "sa": true, "se": true, "ses": true,
-	"should": true, "so": true, "son": true, "sont": true, "stp": true,
-	"sur": true, "ta": true, "te": true, "tes": true, "that": true,
-	"the": true, "their": true, "them": true, "then": true, "there": true,
-	"these": true, "this": true, "to": true, "toi": true, "ton": true,
-	"tu": true, "un": true, "une": true, "us": true, "vos": true,
-	"votre": true, "vous": true, "was": true, "we": true, "were": true,
-	"will": true, "with": true, "would": true, "y": true, "you": true,
-	"your": true,
+func nameFiller() map[string]bool {
+	return map[string]bool{
+		"a": true, "ai": true, "an": true, "and": true, "are": true, "as": true,
+		"at": true, "au": true, "aux": true, "be": true, "been": true, "but": true,
+		"by": true, "can": true, "ce": true, "ces": true, "cet": true, "cette": true,
+		"could": true, "dans": true, "de": true, "des": true, "do": true,
+		"does": true, "du": true, "en": true, "est": true, "et": true, "for": true,
+		"from": true, "had": true, "has": true, "have": true, "i": true, "if": true,
+		"il": true, "ils": true, "in": true, "into": true, "is": true, "it": true,
+		"its": true, "je": true, "la": true, "le": true, "les": true, "leur": true,
+		"lui": true, "ma": true, "mais": true, "me": true, "mes": true, "moi": true,
+		"mon": true, "my": true, "ne": true, "nos": true, "notre": true,
+		"nous": true, "of": true, "on": true, "ont": true, "or": true, "ou": true,
+		"our": true, "par": true, "pas": true, "please": true, "pour": true,
+		"que": true, "qui": true, "sa": true, "se": true, "ses": true,
+		"should": true, "so": true, "son": true, "sont": true, "stp": true,
+		"sur": true, "ta": true, "te": true, "tes": true, "that": true,
+		"the": true, "their": true, "them": true, "then": true, "there": true,
+		"these": true, "this": true, "to": true, "toi": true, "ton": true,
+		"tu": true, "un": true, "une": true, "us": true, "vos": true,
+		"votre": true, "vous": true, "was": true, "we": true, "were": true,
+		"will": true, "with": true, "would": true, "y": true, "you": true,
+		"your": true,
+	}
 }
 
 const fillerTrim = `.,;:!?'"()[]{}«»…`
 
-func foldAccents(s string) string {
+func foldAccents(text string) string {
 	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
-	out, _, err := transform.String(t, s)
+	out, _, err := transform.String(t, text)
 	if err != nil {
-		return s
+		return text
 	}
 	return out
 }
@@ -82,9 +84,9 @@ func foldAccents(s string) string {
 func nameWords(prompt string) []string {
 	all := strings.Fields(foldAccents(prompt))
 	kept := make([]string, 0, len(all))
-	for _, w := range all {
-		if !nameFiller[strings.Trim(strings.ToLower(w), fillerTrim)] {
-			kept = append(kept, w)
+	for _, word := range all {
+		if !nameFiller()[strings.Trim(strings.ToLower(word), fillerTrim)] {
+			kept = append(kept, word)
 		}
 	}
 	if len(kept) == 0 {

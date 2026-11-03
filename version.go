@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"runtime/debug"
 	"strings"
 )
@@ -12,7 +11,7 @@ func formatVersion(info *debug.BuildInfo) string {
 		version = info.Main.Version
 	}
 	version = strings.TrimPrefix(version, "v")
-	return fmt.Sprintf("herrscher version %s", version)
+	return "herrscher version " + version
 }
 
 func herrscherVersion() string {

@@ -69,12 +69,12 @@ func TestEveryDroppedAttachmentIsLogged(t *testing.T) {
 func TestPassingTheCapIsLogged(t *testing.T) {
 	buf := captureLog(t)
 	m := contracts.Message{ID: "1"}
-	for i := 0; i < maxAttachmentsPerMessage+1; i++ {
+	for range maxAttachmentsPerMessage + 1 {
 		m.Attachments = append(m.Attachments, contracts.Attachment{
 			Filename: "shot.png", URL: "https://evil.test/shot.png", ContentType: "image/png",
 		})
 	}
-	ResolveAttachments(context.Background(), http.DefaultClient, m, "cap", map[string]bool{})
+	ResolveAttachments(context.Background(), http.DefaultClient, m, "cap", make(map[string]bool))
 	if !strings.Contains(buf.String(), "per-message cap") {
 		t.Fatalf("log = %q, want the cap named", buf.String())
 	}

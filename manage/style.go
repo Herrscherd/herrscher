@@ -23,39 +23,39 @@ func newStyle() style {
 	}
 }
 
-func (s style) wrap(code, v string) string {
+func (s style) wrap(code, text string) string {
 	if code == "" {
-		return v
+		return text
 	}
-	return code + v + s.reset
+	return code + text + s.reset
 }
 
 func (s style) header(title, sub string) {
-	fmt.Fprintf(os.Stderr, "\n  %s\n", s.wrap(s.bold+s.cyan, "herrscher · "+title))
+	_, _ = fmt.Fprintf(os.Stderr, "\n  %s\n", s.wrap(s.bold+s.cyan, "herrscher · "+title))
 	if sub != "" {
-		fmt.Fprintf(os.Stderr, "  %s\n\n", s.wrap(s.dim, sub))
+		_, _ = fmt.Fprintf(os.Stderr, "  %s\n\n", s.wrap(s.dim, sub))
 	}
 }
 
 func summaryStack(modules []string) {
-	s := newStyle()
-	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "stack"))
+	sty := newStyle()
+	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, "stack"))
 	for _, m := range modules {
-		fmt.Fprintf(os.Stderr, "    %s %s\n", s.wrap(s.green, "+"), shortModule(m))
+		_, _ = fmt.Fprintf(os.Stderr, "    %s %s\n", sty.wrap(sty.green, "+"), shortModule(m))
 	}
-	fmt.Fprintln(os.Stderr)
+	_, _ = fmt.Fprintln(os.Stderr)
 }
 
-func summaryConfig(path string, n int) {
-	s := newStyle()
-	fmt.Fprintln(os.Stderr)
-	if n > 0 {
-		fmt.Fprintf(os.Stderr, "  %s wrote %d setting(s) to %s\n", s.wrap(s.green, "✓"), n, s.wrap(s.bold, path))
+func summaryConfig(path string, count int) {
+	sty := newStyle()
+	_, _ = fmt.Fprintln(os.Stderr)
+	if count > 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "  %s wrote %d setting(s) to %s\n", sty.wrap(sty.green, "✓"), count, sty.wrap(sty.bold, path))
 	} else {
-		fmt.Fprintf(os.Stderr, "  %s nothing entered; %s left unchanged\n", s.wrap(s.dim, "·"), path)
+		_, _ = fmt.Fprintf(os.Stderr, "  %s nothing entered; %s left unchanged\n", sty.wrap(sty.dim, "·"), path)
 	}
-	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "the installed binary already has its plugins compiled in."))
-	fmt.Fprintf(os.Stderr, "  start it with:  %s\n\n", s.wrap(s.bold, "herrscherd serve"))
+	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, "the installed binary already has its plugins compiled in."))
+	_, _ = fmt.Fprintf(os.Stderr, "  start it with:  %s\n\n", sty.wrap(sty.bold, "herrscherd serve"))
 }
 
 func shortModule(m string) string {

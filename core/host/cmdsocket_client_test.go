@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"reflect"
+	"slices"
 	"testing"
 	"time"
 )
@@ -51,7 +51,7 @@ func TestDispatchLiveCommandRoundTrips(t *testing.T) {
 	if out != disp.out {
 		t.Fatalf("output = %q, want %q", out, disp.out)
 	}
-	if !reflect.DeepEqual(disp.argv, argv) {
+	if !slices.Equal(disp.argv, argv) {
 		t.Fatalf("argv = %v, want %v", disp.argv, argv)
 	}
 	if err := <-accepted; err != nil {

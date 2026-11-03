@@ -1,22 +1,25 @@
 package manage
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 )
 
+var errNotModulePath = errors.New("not a module path")
+
 const pinFile = ".herrscher-pins"
 
 func readPins(src string) (map[string]bool, error) {
-	pins := map[string]bool{}
-	for i, line := range strings.Split(src, "\n") {
+	pins := make(map[string]bool)
+	for idx, line := range strings.Split(src, "\n") {
 		mod := strings.TrimSpace(line)
 		if mod == "" || strings.HasPrefix(mod, "#") {
 			continue
 		}
 		if strings.ContainsAny(mod, " \t") {
-			return nil, fmt.Errorf("%s line %d: not a module path: %q", pinFile, i+1, mod)
+			return nil, fmt.Errorf("%s line %d: %w: %q", pinFile, idx+1, errNotModulePath, mod)
 		}
 		pins[mod] = true
 	}
@@ -25,16 +28,16 @@ func readPins(src string) (map[string]bool, error) {
 
 func writePins(pins map[string]bool) string {
 	mods := make([]string, 0, len(pins))
-	for m, pinned := range pins {
+	for module, pinned := range pins {
 		if pinned {
-			mods = append(mods, m)
+			mods = append(mods, module)
 		}
 	}
 	sort.Strings(mods)
-	var b strings.Builder
+	var out strings.Builder
 	for _, m := range mods {
-		b.WriteString(m)
-		b.WriteByte('\n')
+		_, _ = out.WriteString(m)
+		_ = out.WriteByte('\n')
 	}
-	return b.String()
+	return out.String()
 }

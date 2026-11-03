@@ -42,8 +42,8 @@ func composed() []string {
 	return []string{"go.mod", "go.sum", "plugins.go"}
 }
 
-func apply(ctx context.Context, dir string, findings []string, d decider, steps []step) (bool, error) {
-	if d.Warn(ctx, findings) == Abort {
+func apply(ctx context.Context, dir string, findings []string, dec decider, steps []step) (bool, error) {
+	if dec.Warn(ctx, findings) == Abort {
 		return false, nil
 	}
 
@@ -58,7 +58,7 @@ func apply(ctx context.Context, dir string, findings []string, d decider, steps 
 			continue
 		}
 		failure := fmt.Errorf("%w\n%s", err, out)
-		if d.Failed(ctx, out) == Restore {
+		if dec.Failed(ctx, out) == Restore {
 			if rerr := restoreComposition(dir, saved); rerr != nil {
 				return false, errors.Join(failure, rerr)
 			}

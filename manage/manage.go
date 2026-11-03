@@ -47,10 +47,10 @@ type pluginEnv struct {
 }
 
 func pluginHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
-	fs := flag.NewFlagSet("plugin", flag.ContinueOnError)
-	hostDir := fs.String("host", "", "path to the host module")
-	noBuild := fs.Bool("no-build", false, "edit plugins.go but skip go get/build")
-	yes := fs.Bool("yes", false, "answer both confirmations without asking")
+	flags := flag.NewFlagSet("plugin", flag.ContinueOnError)
+	hostDir := flags.String("host", "", "path to the host module")
+	noBuild := flags.Bool("no-build", false, "edit plugins.go but skip go get/build")
+	yes := flags.Bool("yes", false, "answer both confirmations without asking")
 	if len(args) == 0 {
 		errOut.Println("usage: herrscher plugin <list|add|remove|pin|unpin> [module[@version]]")
 		return exitUsage
@@ -59,10 +59,10 @@ func pluginHost(ctx context.Context, out, errOut *errwriter.Writer, args []strin
 	var positionals []string
 	rem := args[1:]
 	for len(rem) > 0 {
-		if err := fs.Parse(rem); err != nil {
+		if err := flags.Parse(rem); err != nil {
 			return parseExit(err)
 		}
-		rem = fs.Args()
+		rem = flags.Args()
 		if len(rem) == 0 {
 			break
 		}
@@ -216,12 +216,12 @@ func pastTense(sub string) string {
 
 func resolveHost(explicit string) (string, error) {
 	candidates := []string{explicit, ".", "herrscher"}
-	for _, c := range candidates {
-		if c == "" {
+	for _, candidate := range candidates {
+		if candidate == "" {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(c, "plugins.go")); err == nil {
-			return c, nil
+		if _, err := os.Stat(filepath.Join(candidate, "plugins.go")); err == nil {
+			return candidate, nil
 		}
 	}
 	return "", fmt.Errorf("%w; pass --host DIR", errNoHostModule)
@@ -248,16 +248,16 @@ func removeCommands() [][]string { return buildCommands() }
 func updatePlan(mods []string, pins map[string]bool, installed map[string]string) ([][]string, []string) {
 	var cmds [][]string
 	var skipped []string
-	for _, m := range mods {
-		if pins[m] {
-			v := installed[m]
-			if v == "" {
-				v = "?"
+	for _, module := range mods {
+		if pins[module] {
+			version := installed[module]
+			if version == "" {
+				version = "?"
 			}
-			skipped = append(skipped, fmt.Sprintf("skipped %s (pinned %s)", m, v))
+			skipped = append(skipped, fmt.Sprintf("skipped %s (pinned %s)", module, version))
 			continue
 		}
-		cmds = append(cmds, []string{"go", verbGet, "-u", m})
+		cmds = append(cmds, []string{"go", verbGet, "-u", module})
 	}
 	if cmds == nil {
 		return nil, skipped
@@ -296,24 +296,24 @@ func osDecider(yes bool) decider {
 	return newDecider(yes, isTerminal(os.Stdin), bufio.NewReader(os.Stdin))
 }
 
-func newDecider(yes, interactive bool, in *bufio.Reader) decider {
+func newDecider(yes, interactive bool, input *bufio.Reader) decider {
 	if yes || !interactive {
 		return newAutoDecider()
 	}
-	return newPromptDecider(in, newStyle())
+	return newPromptDecider(input, newStyle())
 }
 
 func addFindings(ctx context.Context, dir, module, version string) []string {
 	if version == "" {
 		return nil
 	}
-	tc := goToolchain{dir: dir}
+	toolchain := goToolchain{dir: dir}
 	var findings []string
-	if installed, err := installedVersions(ctx, tc, []string{module, contractsModule}); err == nil {
+	if installed, err := installedVersions(ctx, toolchain, []string{module, contractsModule}); err == nil {
 		if cur := installed[module]; cur != "" && semverLess(version, cur) {
 			findings = append(findings, fmt.Sprintf("%s moves back from %s to %s", module, cur, version))
 		}
-		if want, err := contractsRequirement(ctx, tc, module, version); err == nil && want != "" {
+		if want, err := contractsRequirement(ctx, toolchain, module, version); err == nil && want != "" {
 			if have := installed[contractsModule]; have != "" && minorOf(want) != minorOf(have) {
 				findings = append(findings, fmt.Sprintf("%s@%s wants contracts %s; the composition resolves %s", module, version, want, have))
 			}
@@ -323,46 +323,46 @@ func addFindings(ctx context.Context, dir, module, version string) []string {
 }
 
 func semverLess(a, b string) bool {
-	an, bn := versionFields(a), versionFields(b)
-	for i := 0; i < len(an) && i < len(bn); i++ {
-		if an[i] != bn[i] {
-			return an[i] < bn[i]
+	aFields, bFields := versionFields(a), versionFields(b)
+	for idx := 0; idx < len(aFields) && idx < len(bFields); idx++ {
+		if aFields[idx] != bFields[idx] {
+			return aFields[idx] < bFields[idx]
 		}
 	}
-	return len(an) < len(bn)
+	return len(aFields) < len(bFields)
 }
 
-func versionFields(v string) []int {
+func versionFields(version string) []int {
 	var out []int
-	for _, part := range strings.Split(strings.TrimPrefix(v, "v"), ".") {
-		n := 0
-		for _, r := range part {
-			if r < '0' || r > '9' {
+	for _, part := range strings.Split(strings.TrimPrefix(version, "v"), ".") {
+		number := 0
+		for _, char := range part {
+			if char < '0' || char > '9' {
 				break
 			}
-			n = n*decimalBase + int(r-'0')
+			number = number*decimalBase + int(char-'0')
 		}
-		out = append(out, n)
+		out = append(out, number)
 	}
 	return out
 }
 
-func minorOf(v string) string {
-	parts := strings.SplitN(strings.TrimPrefix(v, "v"), ".", semverParts)
+func minorOf(version string) string {
+	parts := strings.SplitN(strings.TrimPrefix(version, "v"), ".", semverParts)
 	if len(parts) < minVersionParts {
-		return v
+		return version
 	}
 	return parts[0] + "." + parts[1]
 }
 
 func pluginRows(mods []string, installed map[string]string, pins map[string]bool, available map[string][]string) []PluginVersion {
 	rows := make([]PluginVersion, 0, len(mods))
-	for _, m := range mods {
-		row := PluginVersion{Module: m, Installed: "?", Latest: "?", Pinned: pins[m]}
-		if v := installed[m]; v != "" {
+	for _, module := range mods {
+		row := PluginVersion{Module: module, Installed: "?", Latest: "?", Pinned: pins[module]}
+		if v := installed[module]; v != "" {
 			row.Installed = v
 		}
-		if vs := available[m]; len(vs) > 0 {
+		if vs := available[module]; len(vs) > 0 {
 			row.Latest = vs[len(vs)-1]
 		}
 		rows = append(rows, row)
@@ -379,20 +379,20 @@ func pluginVersions(ctx context.Context, dir, src string) ([]PluginVersion, erro
 	if err != nil {
 		return nil, err
 	}
-	tc := goToolchain{dir: dir}
-	installed, err := installedVersions(ctx, tc, mods)
+	toolchain := goToolchain{dir: dir}
+	installed, err := installedVersions(ctx, toolchain, mods)
 	if err != nil {
 		installed = nil
 	}
 	available := make(map[string][]string)
-	for _, m := range mods {
-		vs, err := availableVersions(ctx, tc, m)
+	for _, module := range mods {
+		versions, err := availableVersions(ctx, toolchain, module)
 		if err != nil {
-			slog.Warn("latest version unknown", "module", m, "err", err)
+			slog.Warn("latest version unknown", "module", module, "err", err)
 			continue
 		}
-		if vs != nil {
-			available[m] = vs
+		if versions != nil {
+			available[module] = versions
 		}
 	}
 	return pluginRows(mods, installed, pins, available), nil
@@ -469,9 +469,9 @@ func run(ctx context.Context, errOut *errwriter.Writer, dir, name string, args .
 	var line strings.Builder
 	_, _ = line.WriteString("+ ")
 	_, _ = line.WriteString(name)
-	for _, a := range args {
+	for _, arg := range args {
 		_ = line.WriteByte(' ')
-		_, _ = line.WriteString(a)
+		_, _ = line.WriteString(arg)
 	}
 	errOut.Println(line.String())
 	if err := cmd.Run(); err != nil {

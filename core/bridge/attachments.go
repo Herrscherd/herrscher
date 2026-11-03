@@ -49,22 +49,22 @@ func supportedTypes() map[string]bool {
 	}
 }
 
-func supported(a contracts.Attachment) bool {
-	if a.ContentType != "" {
-		return supportedType(a.ContentType)
+func supported(att contracts.Attachment) bool {
+	if att.ContentType != "" {
+		return supportedType(att.ContentType)
 	}
-	return supportedExts()[strings.ToLower(filepath.Ext(a.Filename))]
+	return supportedExts()[strings.ToLower(filepath.Ext(att.Filename))]
 }
 
-func supportedType(ct string) bool {
-	ct = strings.ToLower(strings.TrimSpace(ct))
-	if i := strings.IndexByte(ct, ';'); i >= 0 {
-		ct = strings.TrimSpace(ct[:i])
+func supportedType(contentType string) bool {
+	contentType = strings.ToLower(strings.TrimSpace(contentType))
+	if i := strings.IndexByte(contentType, ';'); i >= 0 {
+		contentType = strings.TrimSpace(contentType[:i])
 	}
-	if strings.HasPrefix(ct, "image/") || strings.HasPrefix(ct, "text/") {
+	if strings.HasPrefix(contentType, "image/") || strings.HasPrefix(contentType, "text/") {
 		return true
 	}
-	return supportedTypes()[ct]
+	return supportedTypes()[contentType]
 }
 
 const maxAttachmentBytes = 10 << 20
@@ -110,7 +110,7 @@ func attachmentDir(session string) string {
 // whatever it is handed, so the SSRF allowlist applies. What a resolved file
 // *contains* is untrusted either way: the backend is handed a path, and the text
 // inside a document an author uploaded is that author's words, not instructions.
-func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Message, session string, hosts map[string]bool) []string {
+func ResolveAttachments(ctx context.Context, client *http.Client, msg contracts.Message, session string, hosts map[string]bool) []string {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -119,20 +119,20 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 	staged := false
 	var slots [maxAttachmentsPerMessage]string
 	var fetches sync.WaitGroup
-	n := 0
-	for i, a := range m.Attachments {
-		if !attachmentAdmissible(a) {
+	count := 0
+	for idx, att := range msg.Attachments {
+		if !attachmentAdmissible(att) {
 			continue
 		}
-		if n == maxAttachmentsPerMessage {
+		if count == maxAttachmentsPerMessage {
 			logger.Warn("attachments past the per-message cap were skipped",
-				"cap", maxAttachmentsPerMessage, "first_skipped", a.Filename)
+				"cap", maxAttachmentsPerMessage, "first_skipped", att.Filename)
 			break
 		}
-		slot := n
-		n++
-		if strings.HasPrefix(a.URL, "file://") {
-			slots[slot] = localSlot(a)
+		slot := count
+		count++
+		if strings.HasPrefix(att.URL, "file://") {
+			slots[slot] = localSlot(att)
 			continue
 		}
 		if !staged {
@@ -142,36 +142,36 @@ func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Me
 			staged = true
 		}
 		fetches.Add(1)
-		go func(slot, i int, a contracts.Attachment) {
+		go func(slot, index int, att contracts.Attachment) {
 			defer fetches.Done()
-			slots[slot] = fetchSlot(ctx, client, a, m.ID, i, dir, hosts)
-		}(slot, i, a)
+			slots[slot] = fetchSlot(ctx, client, att, msg.ID, index, dir, hosts)
+		}(slot, idx, att)
 	}
 	fetches.Wait()
-	return nonEmpty(slots[:n])
+	return nonEmpty(slots[:count])
 }
 
-func attachmentAdmissible(a contracts.Attachment) bool {
-	if !supported(a) {
+func attachmentAdmissible(att contracts.Attachment) bool {
+	if !supported(att) {
 		logger.Warn("attachment skipped: not a type the model can be handed",
-			"file", a.Filename, "type", a.ContentType)
+			"file", att.Filename, "type", att.ContentType)
 		return false
 	}
-	if a.Size > 0 && a.Size > maxAttachmentBytes {
+	if att.Size > 0 && att.Size > maxAttachmentBytes {
 		logger.Warn("attachment skipped: bigger than the cap",
-			"file", a.Filename, "bytes", a.Size, "cap", maxAttachmentBytes)
+			"file", att.Filename, "bytes", att.Size, "cap", maxAttachmentBytes)
 		return false
 	}
 	return true
 }
 
-func localSlot(a contracts.Attachment) string {
-	p, err := localAttachmentPath(a)
+func localSlot(att contracts.Attachment) string {
+	path, err := localAttachmentPath(att)
 	if err != nil {
-		logger.Warn("attachment skipped", "file", a.Filename, "err", err)
+		logger.Warn("attachment skipped", "file", att.Filename, "err", err)
 		return ""
 	}
-	return p
+	return path
 }
 
 func stagingReady(dir string) bool {
@@ -182,86 +182,86 @@ func stagingReady(dir string) bool {
 	return true
 }
 
-func fetchSlot(ctx context.Context, client *http.Client, a contracts.Attachment, msgID string, i int, dir string, hosts map[string]bool) string {
-	p, err := fetchOne(ctx, client, a, msgID, i, dir, hosts)
+func fetchSlot(ctx context.Context, client *http.Client, att contracts.Attachment, msgID string, i int, dir string, hosts map[string]bool) string {
+	path, err := fetchOne(ctx, client, att, msgID, i, dir, hosts)
 	if err != nil {
-		logger.Warn("attachment skipped", "file", a.Filename, "err", err)
+		logger.Warn("attachment skipped", "file", att.Filename, "err", err)
 		return ""
 	}
-	return p
+	return path
 }
 
 func nonEmpty(paths []string) []string {
 	out := make([]string, 0, len(paths))
-	for _, p := range paths {
-		if p != "" {
-			out = append(out, p)
+	for _, path := range paths {
+		if path != "" {
+			out = append(out, path)
 		}
 	}
 	return out
 }
 
-func localAttachmentPath(a contracts.Attachment) (string, error) {
-	u, err := url.Parse(a.URL)
-	if err != nil || u.Scheme != "file" {
-		return "", fmt.Errorf("attachment %q: %w", a.URL, errNotFileURL)
+func localAttachmentPath(att contracts.Attachment) (string, error) {
+	parsed, err := url.Parse(att.URL)
+	if err != nil || parsed.Scheme != "file" {
+		return "", fmt.Errorf("attachment %q: %w", att.URL, errNotFileURL)
 	}
-	if u.Host != "" && u.Host != "localhost" {
-		return "", fmt.Errorf("attachment %q: %w", a.URL, errHostedFileURL)
+	if parsed.Host != "" && parsed.Host != "localhost" {
+		return "", fmt.Errorf("attachment %q: %w", att.URL, errHostedFileURL)
 	}
-	if u.Path == "" {
-		return "", fmt.Errorf("attachment %q: %w", a.URL, errEmptyFilePath)
+	if parsed.Path == "" {
+		return "", fmt.Errorf("attachment %q: %w", att.URL, errEmptyFilePath)
 	}
-	path, err := stagedPath(u.Path)
+	path, err := stagedPath(parsed.Path)
 	if err != nil {
-		return "", fmt.Errorf("attachment %q: %w", a.URL, err)
+		return "", fmt.Errorf("attachment %q: %w", att.URL, err)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return "", fmt.Errorf("attachment %q: %w", a.URL, err)
+		return "", fmt.Errorf("attachment %q: %w", att.URL, err)
 	}
 	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("attachment %q: %w", a.URL, errNotRegularFile)
+		return "", fmt.Errorf("attachment %q: %w", att.URL, errNotRegularFile)
 	}
 	if info.Size() > maxAttachmentBytes {
-		return "", fmt.Errorf("attachment %q: %w of %d bytes", a.URL, errTooLarge, maxAttachmentBytes)
+		return "", fmt.Errorf("attachment %q: %w of %d bytes", att.URL, errTooLarge, maxAttachmentBytes)
 	}
 	return path, nil
 }
 
-func stagedPath(p string) (string, error) {
+func stagedPath(path string) (string, error) {
 	root, err := filepath.EvalSymlinks(StagingRoot())
 	if err != nil {
 		return "", fmt.Errorf("staging root: %w", err)
 	}
-	resolved, err := filepath.EvalSymlinks(p)
+	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return "", err
 	}
 	rel, err := filepath.Rel(root, resolved)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%s is %w under %s", p, errNotStaged, root)
+		return "", fmt.Errorf("%s is %w under %s", path, errNotStaged, root)
 	}
 	return resolved, nil
 }
 
 func pinnedClient(client *http.Client, hosts allowedHosts) *http.Client {
 	pinned := *client
-	pinned.CheckRedirect = func(r *http.Request, via []*http.Request) error {
+	pinned.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= maxRedirects {
 			return errTooManyRedirects
 		}
-		return validateCDNURL(r.URL.String(), hosts)
+		return validateCDNURL(req.URL.String(), hosts)
 	}
-	tr, ok := pinned.Transport.(*http.Transport)
+	transport, ok := pinned.Transport.(*http.Transport)
 	if ok || pinned.Transport == nil {
-		if tr == nil {
+		if transport == nil {
 			if dt, ok := http.DefaultTransport.(*http.Transport); ok {
-				tr = dt
+				transport = dt
 			}
 		}
-		if tr != nil {
-			pinned.Transport = pinnedTransport(tr)
+		if transport != nil {
+			pinned.Transport = pinnedTransport(transport)
 		}
 	}
 	return &pinned
@@ -275,37 +275,37 @@ func pinnedTransport(src *http.Transport) *http.Transport {
 			return tr
 		}
 	}
-	tr := src.Clone()
-	tr.DialContext = pinnedDial(&net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive})
-	stored, _ := pinnedTransports.LoadOrStore(src, tr)
+	transport := src.Clone()
+	transport.DialContext = pinnedDial(&net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive})
+	stored, _ := pinnedTransports.LoadOrStore(src, transport)
 	if cached, ok := stored.(*http.Transport); ok {
 		return cached
 	}
-	return tr
+	return transport
 }
 
-func pinnedDial(d *net.Dialer) func(context.Context, string, string) (net.Conn, error) {
+func pinnedDial(dialer *net.Dialer) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
 			return nil, err
 		}
 		if net.ParseIP(host) != nil {
-			return d.DialContext(ctx, network, addr)
+			return dialer.DialContext(ctx, network, addr)
 		}
 		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 		if err != nil {
 			return nil, err
 		}
 		last := fmt.Errorf("attachment host %q: %w", host, errNoRoutableAddress)
-		for _, ip := range ips {
-			if !routable(ip.IP) {
-				last = fmt.Errorf("attachment host %q resolves to %s: %w", host, ip.IP, errNotRoutable)
+		for _, addr := range ips {
+			if !routable(addr.IP) {
+				last = fmt.Errorf("attachment host %q resolves to %s: %w", host, addr.IP, errNotRoutable)
 				continue
 			}
-			c, err := d.DialContext(ctx, network, net.JoinHostPort(ip.IP.String(), port))
+			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(addr.IP.String(), port))
 			if err == nil {
-				return c, nil
+				return conn, nil
 			}
 			last = err
 		}
@@ -313,49 +313,49 @@ func pinnedDial(d *net.Dialer) func(context.Context, string, string) (net.Conn, 
 	}
 }
 
-func routable(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
-		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() {
+func routable(addr net.IP) bool {
+	if addr.IsLoopback() || addr.IsPrivate() || addr.IsUnspecified() ||
+		addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() ||
+		addr.IsInterfaceLocalMulticast() || addr.IsMulticast() {
 		return false
 	}
-	if v4 := ip.To4(); v4 != nil && v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127 {
+	if v4 := addr.To4(); v4 != nil && v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127 {
 		return false
 	}
 	return true
 }
 
-func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, msgID string, idx int, dir string, hosts allowedHosts) (string, error) {
-	if err := validateCDNURL(a.URL, hosts); err != nil {
+func fetchOne(ctx context.Context, client *http.Client, att contracts.Attachment, msgID string, idx int, dir string, hosts allowedHosts) (string, error) {
+	if err := validateCDNURL(att.URL, hosts); err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, att.URL, http.NoBody)
 	if err != nil {
-		return "", fmt.Errorf("attachment request %s: %w", a.Filename, err)
+		return "", fmt.Errorf("attachment request %s: %w", att.Filename, err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("download %s: %w", a.Filename, err)
+		return "", fmt.Errorf("download %s: %w", att.Filename, err)
 	}
 	defer closeAndWarn(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download %s: %w %d", a.Filename, errUnexpectedStatus, resp.StatusCode)
+		return "", fmt.Errorf("download %s: %w %d", att.Filename, errUnexpectedStatus, resp.StatusCode)
 	}
-	dest := filepath.Join(dir, fmt.Sprintf("%s-%d-%s", sanitize(msgID), idx, sanitize(a.Filename)))
-	f, err := os.OpenFile(filepath.Clean(dest), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileSecret)
+	dest := filepath.Join(dir, fmt.Sprintf("%s-%d-%s", sanitize(msgID), idx, sanitize(att.Filename)))
+	file, err := os.OpenFile(filepath.Clean(dest), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileSecret)
 	if err != nil {
 		return "", fmt.Errorf("create %s: %w", dest, err)
 	}
-	n, copyErr := io.Copy(f, io.LimitReader(resp.Body, maxAttachmentBytes+1))
-	closeErr := f.Close()
+	written, copyErr := io.Copy(file, io.LimitReader(resp.Body, maxAttachmentBytes+1))
+	closeErr := file.Close()
 	if copyErr != nil {
-		return discardPartial(dest, fmt.Errorf("download %s: %w", a.Filename, copyErr))
+		return discardPartial(dest, fmt.Errorf("download %s: %w", att.Filename, copyErr))
 	}
 	if closeErr != nil {
 		return discardPartial(dest, fmt.Errorf("write %s: %w", dest, closeErr))
 	}
-	if n > maxAttachmentBytes {
-		return discardPartial(dest, fmt.Errorf("download %s: %w of %d bytes", a.Filename, errTooLarge, maxAttachmentBytes))
+	if written > maxAttachmentBytes {
+		return discardPartial(dest, fmt.Errorf("download %s: %w of %d bytes", att.Filename, errTooLarge, maxAttachmentBytes))
 	}
 	return dest, nil
 }
@@ -368,11 +368,11 @@ func discardPartial(dest string, err error) (string, error) {
 }
 
 func validateCDNURL(raw string, hosts allowedHosts) error {
-	u, err := url.Parse(raw)
+	parsed, err := url.Parse(raw)
 	if err != nil {
 		return fmt.Errorf("attachment url %q: %w", unsigned(raw), err)
 	}
-	if u.Scheme != "https" || !hosts[strings.ToLower(u.Hostname())] {
+	if parsed.Scheme != "https" || !hosts[strings.ToLower(parsed.Hostname())] {
 		return fmt.Errorf("attachment url %q: %w", unsigned(raw), errNotAllowedCDN)
 	}
 	return nil
@@ -385,19 +385,19 @@ func unsigned(raw string) string {
 	return raw
 }
 
-func sanitize(s string) string {
-	s = filepath.Base(s)
-	var b strings.Builder
-	for _, r := range s {
+func sanitize(raw string) string {
+	raw = filepath.Base(raw)
+	var builder strings.Builder
+	for _, char := range raw {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
-			r == '.', r == '-', r == '_':
-			_, _ = b.WriteRune(r)
+		case char >= 'a' && char <= 'z', char >= 'A' && char <= 'Z', char >= '0' && char <= '9',
+			char == '.', char == '-', char == '_':
+			_, _ = builder.WriteRune(char)
 		default:
-			_, _ = b.WriteRune('_')
+			_, _ = builder.WriteRune('_')
 		}
 	}
-	out := strings.TrimLeft(b.String(), ".")
+	out := strings.TrimLeft(builder.String(), ".")
 	if out == "" {
 		return "file"
 	}

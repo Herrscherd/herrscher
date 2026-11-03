@@ -77,20 +77,20 @@ func InitCmd(ctx context.Context, args []string) int {
 }
 
 func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
-	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	hostDir := fs.String("host", "", "path to the host module")
-	noBuild := fs.Bool("no-build", false, "write plugins.go but skip go get/build")
-	list := fs.Bool("list", false, "list the module catalog() and exit")
-	yes := fs.Bool("yes", false, "skip the interactive wizard; use flags/defaults")
-	gateway := fs.String(catGateway, defaultStack()[catGateway], "gateway module kind (or none)")
-	backend := fs.String(catBackend, defaultStack()[catBackend], "backend module kind (or none)")
-	memory := fs.String(catMemory, defaultStack()[catMemory], "memory module kind (or none)")
-	orchestrator := fs.String(catOrchestrator, defaultStack()[catOrchestrator], "orchestrator module kind (or none)")
-	extractor := fs.String(catExtractor, defaultStack()[catExtractor], "extractor module kind (or none)")
-	skills := fs.String(catSkills, defaultStack()[catSkills], "skills module kind (or none)")
+	flags := flag.NewFlagSet("init", flag.ContinueOnError)
+	hostDir := flags.String("host", "", "path to the host module")
+	noBuild := flags.Bool("no-build", false, "write plugins.go but skip go get/build")
+	list := flags.Bool("list", false, "list the module catalog() and exit")
+	yes := flags.Bool("yes", false, "skip the interactive wizard; use flags/defaults")
+	gateway := flags.String(catGateway, defaultStack()[catGateway], "gateway module kind (or none)")
+	backend := flags.String(catBackend, defaultStack()[catBackend], "backend module kind (or none)")
+	memory := flags.String(catMemory, defaultStack()[catMemory], "memory module kind (or none)")
+	orchestrator := flags.String(catOrchestrator, defaultStack()[catOrchestrator], "orchestrator module kind (or none)")
+	extractor := flags.String(catExtractor, defaultStack()[catExtractor], "extractor module kind (or none)")
+	skills := flags.String(catSkills, defaultStack()[catSkills], "skills module kind (or none)")
 	var extras multiFlag
-	fs.Var(&extras, "with", "pin an extra module path verbatim (repeatable)")
-	if err := fs.Parse(args); err != nil {
+	flags.Var(&extras, "with", "pin an extra module path verbatim (repeatable)")
+	if err := flags.Parse(args); err != nil {
 		return parseExit(err)
 	}
 
@@ -101,7 +101,7 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 
 	dir, hostErr := resolveHost(*hostDir)
 	compose := hostErr == nil
-	interactive := !*yes && !stackFlagsSet(fs) && isTerminal(os.Stdin) && isTerminal(os.Stderr)
+	interactive := !*yes && !stackFlagsSet(flags) && isTerminal(os.Stdin) && isTerminal(os.Stderr)
 
 	choices := map[string]string{
 		catGateway:      *gateway,
@@ -147,25 +147,25 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 }
 
 func runInitWizard(errOut *errwriter.Writer, compose bool, choices map[string]string) (map[string]string, map[string]string, bool) {
-	wc, ws, err := runWizard(compose, liveCatalog, currentRoute())
+	wizardChoices, wizardSecrets, err := runWizard(compose, liveCatalog, currentRoute())
 	if err != nil {
 		errOut.Println(err)
 		return choices, nil, false
 	}
 	if compose {
-		choices = wc
+		choices = wizardChoices
 	}
-	return choices, ws, true
+	return choices, wizardSecrets, true
 }
 
 func writeSecretsOnly(errOut *errwriter.Writer, secrets map[string]string) int {
 	path := envTarget()
-	n, err := writeSecretsTo(path, secrets)
+	written, err := writeSecretsTo(path, secrets)
 	if err != nil {
 		errOut.Printf("write secrets: %v\n", err)
 		return 1
 	}
-	summaryConfig(path, n)
+	summaryConfig(path, written)
 	return 0
 }
 
@@ -188,10 +188,10 @@ func rewritePlugins(errOut *errwriter.Writer, manifest string, modules []string)
 }
 
 func writeProjectSecrets(out, errOut *errwriter.Writer, dir string, secrets map[string]string) {
-	if n, err := writeSecretsTo(filepath.Join(dir, ".env"), secrets); err != nil {
+	if written, err := writeSecretsTo(filepath.Join(dir, ".env"), secrets); err != nil {
 		errOut.Printf("write secrets: %v\n", err)
-	} else if n > 0 {
-		out.Printf("wrote %d setting(s) to .env\n", n)
+	} else if written > 0 {
+		out.Printf("wrote %d setting(s) to .env\n", written)
 	}
 }
 
@@ -209,11 +209,11 @@ func buildOrRestore(ctx context.Context, errOut *errwriter.Writer, dir, manifest
 }
 
 func buildStack(ctx context.Context, errOut *errwriter.Writer, dir string, modules []string) int {
-	for _, m := range modules {
-		if m == hostModule || strings.HasPrefix(m, hostModule+"/") {
+	for _, module := range modules {
+		if module == hostModule || strings.HasPrefix(module, hostModule+"/") {
 			continue
 		}
-		if code := run(ctx, errOut, dir, "go", verbGet, "--", m); code != 0 {
+		if code := run(ctx, errOut, dir, "go", verbGet, "--", module); code != 0 {
 			return code
 		}
 	}
@@ -226,10 +226,10 @@ func buildStack(ctx context.Context, errOut *errwriter.Writer, dir string, modul
 func resolveStack(choices map[string]string, extras []string) ([]string, error) {
 	var modules []string
 	seen := make(map[string]bool)
-	add := func(m string) {
-		if !seen[m] {
-			seen[m] = true
-			modules = append(modules, m)
+	add := func(module string) {
+		if !seen[module] {
+			seen[module] = true
+			modules = append(modules, module)
 		}
 	}
 	for _, m := range inTree() {
@@ -246,11 +246,11 @@ func resolveStack(choices map[string]string, extras []string) ([]string, error) 
 		}
 		add(module)
 	}
-	for _, m := range extras {
-		if m == "" || m[0] == '-' {
-			return nil, fmt.Errorf("%w %q", errInvalidModulePath, m)
+	for _, module := range extras {
+		if module == "" || module[0] == '-' {
+			return nil, fmt.Errorf("%w %q", errInvalidModulePath, module)
 		}
-		add(m)
+		add(module)
 	}
 	if len(modules) == 0 {
 		return nil, errEmptyStack
@@ -258,9 +258,9 @@ func resolveStack(choices map[string]string, extras []string) ([]string, error) 
 	return modules, nil
 }
 
-func stackFlagsSet(fs *flag.FlagSet) bool {
+func stackFlagsSet(flags *flag.FlagSet) bool {
 	set := false
-	fs.Visit(func(f *flag.Flag) {
+	flags.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case catGateway, catBackend, catMemory, catOrchestrator, catExtractor, catSkills, "with":
 			set = true
@@ -290,20 +290,20 @@ func writeSecretsTo(path string, secrets map[string]string) (int, error) {
 		lines = strings.Split(strings.TrimRight(string(b), "\n"), "\n")
 	}
 	done := make(map[string]bool)
-	for i, ln := range lines {
-		key := ln
-		if eq := strings.IndexByte(ln, '='); eq >= 0 {
-			key = strings.TrimSpace(strings.TrimPrefix(ln[:eq], "export "))
+	for idx, line := range lines {
+		key := line
+		if eq := strings.IndexByte(line, '='); eq >= 0 {
+			key = strings.TrimSpace(strings.TrimPrefix(line[:eq], "export "))
 		}
 		if v, ok := secrets[key]; ok {
-			lines[i] = key + "=" + v
+			lines[idx] = key + "=" + v
 			done[key] = true
 		}
 	}
 	keys := make([]string, 0, len(secrets))
-	for k := range secrets {
-		if !done[k] {
-			keys = append(keys, k)
+	for name := range secrets {
+		if !done[name] {
+			keys = append(keys, name)
 		}
 	}
 	sort.Strings(keys)
@@ -337,12 +337,12 @@ func writeCatalog(out *errwriter.Writer) {
 			kinds = append(kinds, k)
 		}
 		sort.Strings(kinds)
-		for _, k := range kinds {
+		for _, kind := range kinds {
 			def := ""
-			if defaultStack()[cat] == k {
+			if defaultStack()[cat] == kind {
 				def = " (default)"
 			}
-			out.Printf("%-13s %-10s %s%s\n", cat, k, catalog()[cat][k], def)
+			out.Printf("%-13s %-10s %s%s\n", cat, kind, catalog()[cat][kind], def)
 		}
 	}
 }

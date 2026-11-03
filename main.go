@@ -65,12 +65,12 @@ func run() int {
 	cmd := os.Args[1]
 	args := os.Args[2:]
 
-	if t, ok := promptOf(cmd, args); ok {
-		if t.Text == "" {
+	if task, ok := promptOf(cmd, args); ok {
+		if task.Text == "" {
 			_, _ = fmt.Fprintf(os.Stderr, "herrscher: %s needs a task, e.g. herrscher %s refactor\n", cmd, cmd)
 			return exitUsage
 		}
-		return reportError(runPrompt(ctx, t))
+		return reportError(runPrompt(ctx, task))
 	}
 
 	if code, ok := runManageCmd(cmd, args); ok {
@@ -233,10 +233,10 @@ func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(co
 	return out, 0, derr
 }
 
-func channelFlag(fs *flag.FlagSet) *string {
-	ch := fs.String("channel", "", "conversation id this bridge answers in")
-	fs.StringVar(ch, "c", "", "channel id (shorthand)")
-	return ch
+func channelFlag(flags *flag.FlagSet) *string {
+	channel := flags.String("channel", "", "conversation id this bridge answers in")
+	flags.StringVar(channel, "c", "", "channel id (shorthand)")
+	return channel
 }
 
 func hasTerminalGateway() bool {
@@ -252,9 +252,9 @@ func hasTerminalGateway() bool {
 
 func runWhoami(ctx context.Context, args []string) error {
 	asJSON := false
-	for _, a := range args {
-		if a != argJSON {
-			return fmt.Errorf("whoami: %w %q (only --json)", errUnknownArgument, a)
+	for _, arg := range args {
+		if arg != argJSON {
+			return fmt.Errorf("whoami: %w %q (only --json)", errUnknownArgument, arg)
 		}
 		asJSON = true
 	}

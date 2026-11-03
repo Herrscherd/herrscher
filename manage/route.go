@@ -38,18 +38,18 @@ func currentRoute() routeCurrent {
 	}
 }
 
-func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askModel bool) (map[string]string, error) {
+func routeStep(sty style, input *bufio.Reader, cat catalogFn, cur routeCurrent, askModel bool) (map[string]string, error) {
 	out := make(map[string]string)
 
-	_, _ = fmt.Fprintf(os.Stderr, "\n  %s  %s\n", s.wrap(s.bold+s.cyan, "routing"), s.wrap(s.dim, "where agent turns run"))
-	policy, err := choosePolicy(s, in, cur.policy)
+	_, _ = fmt.Fprintf(os.Stderr, "\n  %s  %s\n", sty.wrap(sty.bold+sty.cyan, "routing"), sty.wrap(sty.dim, "where agent turns run"))
+	policy, err := choosePolicy(sty, input, cur.policy)
 	if err != nil {
 		return nil, err
 	}
 	out[host.EnvRoutePolicy] = string(policy)
 
 	if policy == contracts.PolicyGatewayOnly {
-		creds, credsErr := askGatewayCreds(s, in, cur.haveCred)
+		creds, credsErr := askGatewayCreds(sty, input, cur.haveCred)
 		if credsErr != nil {
 			return nil, credsErr
 		}
@@ -59,7 +59,7 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 	}
 
 	if !askModel {
-		_, _ = fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "default model: run `herrscher init` again after the rebuild to pick one"))
+		_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, "default model: run `herrscher init` again after the rebuild to pick one"))
 		return out, nil
 	}
 
@@ -67,13 +67,13 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 	if err != nil {
 		return nil, fmt.Errorf("model catalog(): %w", err)
 	}
-	model, err := chooseDefaultModel(s, in, entries, cur.model)
+	model, err := chooseDefaultModel(sty, input, entries, cur.model)
 	if err != nil {
 		return nil, err
 	}
 	out[host.EnvDefaultModel] = model
 	if model == "" && policy == contracts.PolicyGatewayOnly {
-		_, _ = fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.red, "with no default model, every `session create` must pass --model, which gateway-only requires"))
+		_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.red, "with no default model, every `session create` must pass --model, which gateway-only requires"))
 	}
 	return out, nil
 }
@@ -93,44 +93,44 @@ func policyChoices() []struct {
 	}
 }
 
-func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contracts.RoutePolicy, error) {
-	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "route policy"))
-	for i, c := range policyChoices() {
-		name, tag := fmt.Sprintf("%-14s", c.label), fmt.Sprintf("%-8s", "")
-		if c.policy == cur {
-			name = s.wrap(s.green, name)
-			tag = s.wrap(s.dim, fmt.Sprintf("%-8s", "current"))
+func choosePolicy(sty style, input *bufio.Reader, cur contracts.RoutePolicy) (contracts.RoutePolicy, error) {
+	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, "route policy"))
+	for idx, choice := range policyChoices() {
+		name, tag := fmt.Sprintf("%-14s", choice.label), fmt.Sprintf("%-8s", "")
+		if choice.policy == cur {
+			name = sty.wrap(sty.green, name)
+			tag = sty.wrap(sty.dim, fmt.Sprintf("%-8s", "current"))
 		}
-		_, _ = fmt.Fprintf(os.Stderr, "    %s %s %s %s\n", s.wrap(s.dim, strconv.Itoa(i+1)), name, tag, s.wrap(s.dim, c.help))
+		_, _ = fmt.Fprintf(os.Stderr, "    %s %s %s %s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), name, tag, sty.wrap(sty.dim, choice.help))
 	}
 
-	ans := promptLine(in, "  "+s.wrap(s.dim, "›")+" ")
+	ans := promptLine(input, "  "+sty.wrap(sty.dim, "›")+" ")
 	if ans == "" {
 		return cur, nil
 	}
-	if n, err := strconv.Atoi(ans); err == nil {
-		if n < 1 || n > len(policyChoices()) {
-			return "", fmt.Errorf("route policy: %w: %d", errChoiceOutOfRange, n)
+	if choice, err := strconv.Atoi(ans); err == nil {
+		if choice < 1 || choice > len(policyChoices()) {
+			return "", fmt.Errorf("route policy: %w: %d", errChoiceOutOfRange, choice)
 		}
-		return policyChoices()[n-1].policy, nil
+		return policyChoices()[choice-1].policy, nil
 	}
-	for _, c := range policyChoices() {
-		if ans == c.label {
-			return c.policy, nil
+	for _, choice := range policyChoices() {
+		if ans == choice.label {
+			return choice.policy, nil
 		}
 	}
 	return "", fmt.Errorf("%w %q", errUnknownPolicy, ans)
 }
 
-func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, error) {
+func askGatewayCreds(sty style, input *bufio.Reader, have bool) (map[string]string, error) {
 	note := "both are required"
 	if have {
 		note = "already set: enter to keep"
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "  %s  %s\n", s.wrap(s.bold, "gateway · credentials"), s.wrap(s.dim, "("+note+"; token entry is hidden)"))
+	_, _ = fmt.Fprintf(os.Stderr, "  %s  %s\n", sty.wrap(sty.bold, "gateway · credentials"), sty.wrap(sty.dim, "("+note+"; token entry is hidden)"))
 
-	url := promptLine(in, secretLabel(s, host.EnvGatewayURL))
-	token, err := readSecret(in, secretLabel(s, host.EnvGatewayToken))
+	url := promptLine(input, secretLabel(sty, host.EnvGatewayURL))
+	token, err := readSecret(input, secretLabel(sty, host.EnvGatewayToken))
 	if err != nil {
 		return nil, err
 	}
@@ -147,36 +147,36 @@ func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, e
 	return map[string]string{host.EnvGatewayURL: url, host.EnvGatewayToken: token}, nil
 }
 
-func chooseDefaultModel(s style, in *bufio.Reader, entries []host.CatalogEntry, cur string) (string, error) {
+func chooseDefaultModel(sty style, input *bufio.Reader, entries []host.CatalogEntry, cur string) (string, error) {
 	if len(entries) == 0 {
-		_, _ = fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "default model: no compiled backend offers one under this policy"))
+		_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, "default model: no compiled backend offers one under this policy"))
 		return "", nil
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "default model"))
-	for i, e := range entries {
-		id, tag := fmt.Sprintf("%-24s", e.ID), ""
-		if e.ID == cur {
-			id, tag = s.wrap(s.green, id), s.wrap(s.dim, "  current")
+	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, "default model"))
+	for idx, entry := range entries {
+		padded, tag := fmt.Sprintf("%-24s", entry.ID), ""
+		if entry.ID == cur {
+			padded, tag = sty.wrap(sty.green, padded), sty.wrap(sty.dim, "  current")
 		}
-		_, _ = fmt.Fprintf(os.Stderr, "    %s %s %s%s\n", s.wrap(s.dim, strconv.Itoa(i+1)), id, s.wrap(s.dim, e.Label), tag)
+		_, _ = fmt.Fprintf(os.Stderr, "    %s %s %s%s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), padded, sty.wrap(sty.dim, entry.Label), tag)
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "    %s %s\n", s.wrap(s.dim, strconv.Itoa(len(entries)+1)), "none")
+	_, _ = fmt.Fprintf(os.Stderr, "    %s %s\n", sty.wrap(sty.dim, strconv.Itoa(len(entries)+1)), "none")
 
-	ans := promptLine(in, "  "+s.wrap(s.dim, "›")+" ")
+	ans := promptLine(input, "  "+sty.wrap(sty.dim, "›")+" ")
 	switch ans {
 	case "":
 		return cur, nil
 	case kindNone:
 		return "", nil
 	}
-	if n, err := strconv.Atoi(ans); err == nil {
+	if choice, err := strconv.Atoi(ans); err == nil {
 		switch {
-		case n >= 1 && n <= len(entries):
-			return entries[n-1].ID, nil
-		case n == len(entries)+1:
+		case choice >= 1 && choice <= len(entries):
+			return entries[choice-1].ID, nil
+		case choice == len(entries)+1:
 			return "", nil
 		}
-		return "", fmt.Errorf("default model: %w: %d", errChoiceOutOfRange, n)
+		return "", fmt.Errorf("default model: %w: %d", errChoiceOutOfRange, choice)
 	}
 	for _, e := range entries {
 		if e.ID == ans {

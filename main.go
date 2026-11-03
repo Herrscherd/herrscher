@@ -59,7 +59,7 @@ func run() int {
 	defer stop()
 
 	if len(os.Args) < minArgsWithCommand {
-		return reportError(runWithoutCommand(ctx))
+		return reportOutcome(ctx, runWithoutCommand(ctx))
 	}
 
 	cmd := os.Args[1]
@@ -70,7 +70,7 @@ func run() int {
 			fmt.Fprintf(os.Stderr, "herrscher: %s needs a task, e.g. herrscher %s refactor\n", cmd, cmd)
 			return exitUsage
 		}
-		return reportError(runPrompt(ctx, task))
+		return reportOutcome(ctx, runPrompt(ctx, task))
 	}
 
 	if code, ok := runManageCmd(cmd, args); ok {
@@ -83,7 +83,7 @@ func run() int {
 		return 0
 	}
 
-	return reportError(runCommand(ctx, cmd, args))
+	return reportOutcome(ctx, runCommand(ctx, cmd, args))
 }
 
 func answerGitAskpass(args []string) int {
@@ -211,6 +211,13 @@ type exitStatusError struct {
 
 func (s exitStatusError) Error() string {
 	return fmt.Sprintf("exit status %d", s.code)
+}
+
+func reportOutcome(ctx context.Context, err error) int {
+	if ctx.Err() != nil && errors.Is(err, context.Canceled) {
+		return 0
+	}
+	return reportError(err)
 }
 
 func reportError(err error) int {

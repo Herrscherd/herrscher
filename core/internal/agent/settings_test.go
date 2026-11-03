@@ -198,7 +198,7 @@ func TestMaterializeIntoAsWithoutBinaryWritesNoHook(t *testing.T) {
 
 func TestMaterializeHookWritesLocalSettings(t *testing.T) {
 	dir := t.TempDir()
-	if err := MaterializeHook(dir, "/usr/local/bin/herrscher"); err != nil {
+	if err := MaterializeHook(t.Context(), dir, "/usr/local/bin/herrscher"); err != nil {
 		t.Fatalf("MaterializeHook: %v", err)
 	}
 	buf, err := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json"))
@@ -222,7 +222,7 @@ func TestMaterializeHookPreservesExistingLocalSettings(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(claude, "settings.local.json"), []byte(`{"model":"opus"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := MaterializeHook(dir, "/bin/herrscher"); err != nil {
+	if err := MaterializeHook(t.Context(), dir, "/bin/herrscher"); err != nil {
 		t.Fatalf("MaterializeHook: %v", err)
 	}
 	buf, err := os.ReadFile(filepath.Join(claude, "settings.local.json"))
@@ -240,7 +240,7 @@ func TestMaterializeHookPreservesExistingLocalSettings(t *testing.T) {
 
 func TestMaterializeHookNoBinIsNoOp(t *testing.T) {
 	dir := t.TempDir()
-	if err := MaterializeHook(dir, ""); err != nil {
+	if err := MaterializeHook(t.Context(), dir, ""); err != nil {
 		t.Fatalf("MaterializeHook: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude")); !os.IsNotExist(err) {
@@ -250,10 +250,10 @@ func TestMaterializeHookNoBinIsNoOp(t *testing.T) {
 
 func TestMaterializeHookTwiceLeavesOneHook(t *testing.T) {
 	dir := t.TempDir()
-	if err := MaterializeHook(dir, "/old/herrscher"); err != nil {
+	if err := MaterializeHook(t.Context(), dir, "/old/herrscher"); err != nil {
 		t.Fatalf("first MaterializeHook: %v", err)
 	}
-	if err := MaterializeHook(dir, "/new/herrscher"); err != nil {
+	if err := MaterializeHook(t.Context(), dir, "/new/herrscher"); err != nil {
 		t.Fatalf("second MaterializeHook: %v", err)
 	}
 	buf, err := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json"))

@@ -34,7 +34,7 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 		t.Fatal(err)
 	}
 	wt := t.TempDir()
-	if err = a.Materialize(wt); err != nil {
+	if err = a.Materialize(t.Context(), wt); err != nil {
 		t.Fatal(err)
 	}
 	assertMCPSubstituted(t, wt)
@@ -108,7 +108,7 @@ func assertCodexConfigWritten(t *testing.T, wt string) {
 
 func TestMaterializeMissingHomeErrors(t *testing.T) {
 	a := Agent{Name: "ghost", Home: filepath.Join(t.TempDir(), "ghost")}
-	if err := a.Materialize(t.TempDir()); err == nil {
+	if err := a.Materialize(t.Context(), t.TempDir()); err == nil {
 		t.Fatal("expected error materializing an agent with no home files")
 	}
 }
@@ -135,7 +135,7 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = a.Materialize(worktree); err != nil {
+	if err = a.Materialize(t.Context(), worktree); err != nil {
 		t.Fatal(err)
 	}
 
@@ -184,7 +184,7 @@ func TestMaterializeWithUserProfile(t *testing.T) {
 
 	wt := t.TempDir()
 	a := Agent{Name: "alice", Home: home}
-	if err := a.Materialize(wt); err != nil {
+	if err := a.Materialize(t.Context(), wt); err != nil {
 		t.Fatal(err)
 	}
 
@@ -228,7 +228,7 @@ func TestMaterializeWithoutUserProfileUnchanged(t *testing.T) {
 
 	wt := t.TempDir()
 	a := Agent{Name: "alice", Home: home}
-	if err := a.Materialize(wt); err != nil {
+	if err := a.Materialize(t.Context(), wt); err != nil {
 		t.Fatal(err)
 	}
 	claude, err := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))

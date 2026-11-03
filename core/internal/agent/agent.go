@@ -9,6 +9,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -152,11 +153,11 @@ const localSettingsFile = "settings.local.json"
 //
 // An empty herrscherBin means no hook at all rather than a hook that fails on
 // every tool call; SelfBin already says out loud when it cannot name itself.
-func MaterializeHook(worktree, herrscherBin string) error {
+func MaterializeHook(ctx context.Context, worktree, herrscherBin string) error {
 	if herrscherBin == "" {
 		return nil
 	}
-	if err := EnsureGitExcludes(worktree); err != nil {
+	if err := EnsureGitExcludes(ctx, worktree); err != nil {
 		return err
 	}
 	claudeDir := filepath.Join(worktree, ".claude")
@@ -231,13 +232,13 @@ type Agent struct {
 // all when given none.
 //
 // Any worktreeToken in a source file is replaced with the worktree path.
-func (a Agent) Materialize(worktree string) error {
-	return a.MaterializeAs(worktree, SelfBin())
+func (a Agent) Materialize(ctx context.Context, worktree string) error {
+	return a.MaterializeAs(ctx, worktree, SelfBin())
 }
 
 // MaterializeAs is Materialize with the hook's binary, empty for no hook.
-func (a Agent) MaterializeAs(worktree, herrscherBin string) error {
-	if err := EnsureGitExcludes(worktree); err != nil {
+func (a Agent) MaterializeAs(ctx context.Context, worktree, herrscherBin string) error {
+	if err := EnsureGitExcludes(ctx, worktree); err != nil {
 		return err
 	}
 	return a.MaterializeIntoAs(worktree, worktree, herrscherBin)
@@ -360,13 +361,13 @@ func (a Agent) writeCodexConfig(codexDir, worktreePath string) error {
 // Non-Git directories are valid shared-session targets and need no exclusion.
 // Exported because on a remote host it runs where the repository is, from the
 // worktree verb, rather than beside the file writes.
-func EnsureGitExcludes(worktree string) error {
-	inside, err := exec.Command("git", "-C", worktree, "rev-parse", "--is-inside-work-tree").Output()
+func EnsureGitExcludes(ctx context.Context, worktree string) error {
+	inside, err := exec.CommandContext(ctx, "git", "-C", worktree, "rev-parse", "--is-inside-work-tree").Output()
 	isWorkTree := err == nil && strings.TrimSpace(string(inside)) == "true"
 	if !isWorkTree {
 		return nil
 	}
-	out, err := exec.Command("git", "-C", worktree, "rev-parse", "--git-path", "info/exclude").Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", worktree, "rev-parse", "--git-path", "info/exclude").Output()
 	if err != nil {
 		return fmt.Errorf("resolve local git exclude: %w", err)
 	}

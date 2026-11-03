@@ -72,14 +72,14 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 		wait = state.DefaultApprovalWait
 	}
 
-	p := &pendingApproval{
+	pending := &pendingApproval{
 		id:      newApprovalID(),
 		session: session,
 		req:     req,
 		asked:   time.Now(),
 		answer:  make(chan approvalVerdict, 1),
 	}
-	release, refusal := registerApproval(approvals, p)
+	release, refusal := registerApproval(approvals, pending)
 	if refusal != "" {
 		return approval.Deny, refusal
 	}
@@ -88,15 +88,15 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	warnWaitOutlivesTheHook(os.Stderr, wait)
 
 	octx, cancel := context.WithTimeout(ctx, wait)
-	askApprovalOn(octx, sessions, session, approvalPrompt(req), p.id)
+	askApprovalOn(octx, sessions, session, approvalPrompt(req), pending.id)
 	cancel()
 
 	select {
-	case v := <-p.answer:
-		if v.decision == approval.Allow {
+	case decision := <-pending.answer:
+		if decision.decision == approval.Allow {
 			return approval.Allow, ""
 		}
-		reason := v.reason
+		reason := decision.reason
 		if reason == "" {
 			reason = fmt.Sprintf("herrscher: %s was denied by the operator", describeRequest(req))
 		}
@@ -108,47 +108,47 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	}
 }
 
-func registerApproval(approvals *approvalTable, p *pendingApproval) (func(), string) {
+func registerApproval(approvals *approvalTable, pending *pendingApproval) (func(), string) {
 	approvals.mu.Lock()
 	defer approvals.mu.Unlock()
 	if len(approvals.m) >= maxPendingApprovals {
-		return nil, fmt.Sprintf("herrscher: %s was denied: %d tool calls across the fleet are already waiting for a human, which is the limit; each one answered frees a slot", describeRequest(p.req), maxPendingApprovals)
+		return nil, fmt.Sprintf("herrscher: %s was denied: %d tool calls across the fleet are already waiting for a human, which is the limit; each one answered frees a slot", describeRequest(pending.req), maxPendingApprovals)
 	}
 	mine := 0
 	for _, other := range approvals.m {
-		if other.session == p.session {
+		if other.session == pending.session {
 			mine++
 		}
 	}
 	if mine >= maxPendingPerSession {
-		return nil, fmt.Sprintf("herrscher: %s was denied: session %q already has %d tool calls waiting for a human, which is the limit; wait for those to be answered, and ask about fewer things at once", describeRequest(p.req), p.session, maxPendingPerSession)
+		return nil, fmt.Sprintf("herrscher: %s was denied: session %q already has %d tool calls waiting for a human, which is the limit; wait for those to be answered, and ask about fewer things at once", describeRequest(pending.req), pending.session, maxPendingPerSession)
 	}
-	approvals.m[p.id] = p
+	approvals.m[pending.id] = pending
 	approvals.changed.signal()
 	return func() {
 		approvals.mu.Lock()
-		delete(approvals.m, p.id)
+		delete(approvals.m, pending.id)
 		approvals.mu.Unlock()
 		approvals.changed.signal()
 	}, ""
 }
 
-func warnWaitOutlivesTheHook(w io.Writer, wait time.Duration) {
+func warnWaitOutlivesTheHook(out io.Writer, wait time.Duration) {
 	if wait <= agent.HookWait/2 {
 		return
 	}
-	logWriteFailure(fmt.Fprintf(w, "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the CLI gives it: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait))
+	logWriteFailure(fmt.Fprintf(out, "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the CLI gives it: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait))
 }
 
-func answerApproval(approvals *approvalTable, id string, d approval.Decision, reason string) bool {
+func answerApproval(approvals *approvalTable, approvalID string, decision approval.Decision, reason string) bool {
 	approvals.mu.Lock()
-	p := approvals.m[id]
+	pending := approvals.m[approvalID]
 	approvals.mu.Unlock()
-	if p == nil {
+	if pending == nil {
 		return false
 	}
 	select {
-	case p.answer <- approvalVerdict{decision: d, reason: reason}:
+	case pending.answer <- approvalVerdict{decision: decision, reason: reason}:
 	default:
 	}
 	return true
@@ -158,13 +158,13 @@ func pendingApprovals(approvals *approvalTable) []PendingApproval {
 	approvals.mu.Lock()
 	defer approvals.mu.Unlock()
 	out := make([]PendingApproval, 0, len(approvals.m))
-	for _, p := range approvals.m {
+	for _, pending := range approvals.m {
 		out = append(out, PendingApproval{
-			ID:      p.id,
-			Session: p.session,
-			Tool:    p.req.Tool,
-			Subject: clip(p.req.Subject),
-			Age:     time.Since(p.asked).Truncate(time.Second),
+			ID:      pending.id,
+			Session: pending.session,
+			Tool:    pending.req.Tool,
+			Subject: clip(pending.req.Subject),
+			Age:     time.Since(pending.asked).Truncate(time.Second),
 		})
 	}
 	return out
@@ -175,35 +175,35 @@ func answerApprovalPick(approvals *approvalTable, session, value string) bool {
 	if !ok {
 		return false
 	}
-	id, verdict, ok := strings.Cut(rest, ":")
+	approvalID, verdict, ok := strings.Cut(rest, ":")
 	if !ok {
 		return true
 	}
-	if owner, known := approvalSession(approvals, id); known && owner != session {
+	if owner, known := approvalSession(approvals, approvalID); known && owner != session {
 		return true
 	}
-	d := approval.Deny
+	decision := approval.Deny
 	if verdict == string(approval.Allow) {
-		d = approval.Allow
+		decision = approval.Allow
 	}
-	answerApproval(approvals, id, d, "")
+	answerApproval(approvals, approvalID, decision, "")
 	return true
 }
 
-func approvalSession(approvals *approvalTable, id string) (string, bool) {
+func approvalSession(approvals *approvalTable, approvalID string) (string, bool) {
 	approvals.mu.Lock()
 	defer approvals.mu.Unlock()
-	p := approvals.m[id]
-	if p == nil {
+	pending := approvals.m[approvalID]
+	if pending == nil {
 		return "", false
 	}
-	return p.session, true
+	return pending.session, true
 }
 
 func newApprovalID() string {
-	var b [4]byte
-	_, _ = rand.Read(b[:])
-	return hex.EncodeToString(b[:])
+	var randomBytes [4]byte
+	_, _ = rand.Read(randomBytes[:])
+	return hex.EncodeToString(randomBytes[:])
 }
 
 func describeRequest(req approval.Request) string {
@@ -217,18 +217,18 @@ func approvalPrompt(req approval.Request) string {
 	return "allow " + describeRequest(req) + "?"
 }
 
-func clip(s string) string {
-	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r", " "), "\n", " ")
-	r := []rune(s)
-	if len(r) > subjectMaxLen {
-		return string(r[:subjectMaxLen]) + "…"
+func clip(text string) string {
+	text = strings.ReplaceAll(strings.ReplaceAll(text, "\r", " "), "\n", " ")
+	runes := []rune(text)
+	if len(runes) > subjectMaxLen {
+		return string(runes[:subjectMaxLen]) + "…"
 	}
-	return string(r)
+	return string(runes)
 }
 
-func approvalChoices(id string) []contracts.Choice {
+func approvalChoices(approvalID string) []contracts.Choice {
 	return []contracts.Choice{
-		{Label: "allow", Value: approvalPickPrefix + id + ":allow"},
-		{Label: "deny", Value: approvalPickPrefix + id + ":deny"},
+		{Label: "allow", Value: approvalPickPrefix + approvalID + ":allow"},
+		{Label: "deny", Value: approvalPickPrefix + approvalID + ":deny"},
 	}
 }

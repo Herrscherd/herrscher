@@ -44,14 +44,14 @@ type worktreeFlags struct {
 }
 
 func parseWorktreeFlags(sub string, rest []string) (worktreeFlags, error) {
-	fs := flag.NewFlagSet("worktree "+sub, flag.ContinueOnError)
-	repo := fs.String("repo", "", "repository root")
-	name := fs.String(paramName, "", "logical session name")
-	instance := fs.String("instance", "", "daemon instance id (namespaces the layout)")
-	base := fs.String("base", "", "ref the new branch starts at (create only)")
-	force := fs.Bool("force", false, "remove even with local changes (remove only)")
-	worktreePath := fs.String("worktree", "", "worktree to extract into (materialize only)")
-	if err := fs.Parse(rest); err != nil {
+	flags := flag.NewFlagSet("worktree "+sub, flag.ContinueOnError)
+	repo := flags.String("repo", "", "repository root")
+	name := flags.String(paramName, "", "logical session name")
+	instance := flags.String("instance", "", "daemon instance id (namespaces the layout)")
+	base := flags.String("base", "", "ref the new branch starts at (create only)")
+	force := flags.Bool("force", false, "remove even with local changes (remove only)")
+	worktreePath := flags.String("worktree", "", "worktree to extract into (materialize only)")
+	if err := flags.Parse(rest); err != nil {
 		return worktreeFlags{}, err
 	}
 	return worktreeFlags{
@@ -110,10 +110,10 @@ func materializeWorktree(worktreePath string) error {
 }
 
 func emitJSON(v any) error {
-	b, err := json.Marshal(v)
+	payload, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	logWriteFailure(fmt.Fprintln(os.Stdout, string(b)))
+	logWriteFailure(fmt.Fprintln(os.Stdout, string(payload)))
 	return nil
 }

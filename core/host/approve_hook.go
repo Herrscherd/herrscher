@@ -48,9 +48,9 @@ type hookAsker func(ctx context.Context, argv []string) (string, bool, error)
 // legitimately blocks for as long as the daemon's approval wait while a human
 // decides, so a timeout here would allow every call the operator was too slow
 // to answer, which is the one outcome this feature exists to prevent.
-func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer, target func() string, ask hookAsker) {
+func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writer, target func() string, ask hookAsker) {
 	var payload hookInput
-	raw, err := io.ReadAll(io.LimitReader(in, maxHookInput))
+	raw, err := io.ReadAll(io.LimitReader(stdin, maxHookInput))
 	if err == nil {
 		err = json.Unmarshal(raw, &payload)
 	}
@@ -119,11 +119,11 @@ func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer,
 // before the operator registry is built: building that registry can fail for
 // reasons that have nothing to do with the tool call, and the hook must never
 // fail.
-func RunApprovalHook(ctx context.Context, in io.Reader, out, errOut io.Writer) {
+func RunApprovalHook(ctx context.Context, stdin io.Reader, out, errOut io.Writer) {
 	target := sync.OnceValue(func() string {
 		return commandSocketTargetFrom(func() string { return ServedInstanceID(DefaultStatePath(), "") })
 	})
-	RunPermissionHook(ctx, in, out, errOut, target, func(c context.Context, argv []string) (string, bool, error) {
+	RunPermissionHook(ctx, stdin, out, errOut, target, func(c context.Context, argv []string) (string, bool, error) {
 		return dispatchLiveCommand(c, target(), argv)
 	})
 }
@@ -134,12 +134,12 @@ func writeHookDecision(out, errOut io.Writer, decision, reason string) {
 		PermissionDecision       string `json:"permissionDecision"`
 		PermissionDecisionReason string `json:"permissionDecisionReason,omitempty"`
 	}
-	b, err := json.Marshal(struct {
+	payload, err := json.Marshal(struct {
 		HookSpecificOutput specific `json:"hookSpecificOutput"`
 	}{specific{HookEventName: hookEvent, PermissionDecision: decision, PermissionDecisionReason: reason}})
 	if err != nil {
 		logWriteFailure(fmt.Fprintf(errOut, "herrscher: could not write the %s decision, allowing: %v\n", decision, err))
 		return
 	}
-	logWriteFailure(fmt.Fprintf(out, "%s\n", b))
+	logWriteFailure(fmt.Fprintf(out, "%s\n", payload))
 }

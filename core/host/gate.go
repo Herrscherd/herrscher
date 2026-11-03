@@ -17,11 +17,11 @@ func GateFor(vendor string) (string, string) {
 	}
 	backends := contracts.Default.Backends()
 	for idx := range backends {
-		p := backends[idx]
-		if p.Manifest.Kind != vendor {
+		backend := backends[idx]
+		if backend.Manifest.Kind != vendor {
 			continue
 		}
-		c := p.Manifest.Capabilities
+		c := backend.Manifest.Capabilities
 		return string(c.Gate), c.GateWhy
 	}
 	return "", "no backend named " + vendor + " is compiled into this daemon"

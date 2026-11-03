@@ -53,9 +53,9 @@ type coordinator struct {
 	expected map[string]int
 }
 
-func newCoordinator(creator sessionCreator, agents agentLookup, wt cleanBrancher, sessions sessionLister, closer sessionCloser, seed func(string, string) bool) *coordinator {
+func newCoordinator(creator sessionCreator, agents agentLookup, worktrees cleanBrancher, sessions sessionLister, closer sessionCloser, seed func(string, string) bool) *coordinator {
 	return &coordinator{
-		creator: creator, agents: agents, wt: wt, sessions: sessions, closer: closer, seed: seed,
+		creator: creator, agents: agents, wt: worktrees, sessions: sessions, closer: closer, seed: seed,
 		reported: make(map[string]map[string]bool),
 		expected: make(map[string]int),
 	}
@@ -81,13 +81,13 @@ type CoordinationView struct {
 type coordViewAdapter struct{ c *coordinator }
 
 func (a coordViewAdapter) CoordinationView(name string) (manager.CoordView, bool) {
-	v, ok := a.c.CoordinationView(name)
+	view, ok := a.c.CoordinationView(name)
 	if !ok {
 		return manager.CoordView{}, false
 	}
 	return manager.CoordView{
-		Role: v.Role, Lead: v.Lead, Reported: v.Reported,
-		Expected: v.Expected, Complete: v.Complete,
+		Role: view.Role, Lead: view.Lead, Reported: view.Reported,
+		Expected: view.Expected, Complete: view.Complete,
 	}, true
 }
 
@@ -114,23 +114,23 @@ func (c *coordinator) CoordinationView(name string) (CoordinationView, bool) {
 
 func findByName(sessions []state.Session, name string) (state.Session, bool) {
 	for idx := range sessions {
-		s := sessions[idx]
-		if s.Name == name {
-			return s, true
+		found := sessions[idx]
+		if found.Name == name {
+			return found, true
 		}
 	}
 	return state.Session{}, false
 }
 
 func childCount(sessions []state.Session, parent string) int {
-	n := 0
+	count := 0
 	for idx := range sessions {
 		s := sessions[idx]
 		if s.Parent == parent {
-			n++
+			count++
 		}
 	}
-	return n
+	return count
 }
 
 func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, task, parent, vendor, cmd string) (string, error) {
@@ -147,7 +147,7 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 
 	base := from.Name + "-" + toAgent
 	bName := base
-	for n := 2; ; n++ {
+	for attempt := 2; ; attempt++ {
 		exists, err := c.wt.BranchExistsAt(ctx, from.Worktree, c.wt.Branch(bName))
 		if err != nil {
 			return "", fmt.Errorf("coordination: %w", err)
@@ -155,10 +155,10 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 		if !exists {
 			break
 		}
-		if n > maxSpawnNameProbes {
+		if attempt > maxSpawnNameProbes {
 			return "", fmt.Errorf("coordination: %w", &freeNameExhaustedError{Base: base, Tries: maxSpawnNameProbes})
 		}
-		bName = fmt.Sprintf("%s-%d", base, n)
+		bName = fmt.Sprintf("%s-%d", base, attempt)
 	}
 
 	if _, err := c.creator.CreateCoordinated(ctx, contracts.CreateSession{

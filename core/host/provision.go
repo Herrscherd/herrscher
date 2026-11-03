@@ -20,11 +20,11 @@ type hostRunner interface {
 	Describe() string
 }
 
-func runnerFor(h state.Host) hostRunner {
-	if h.SSH == "" {
+func runnerFor(host state.Host) hostRunner {
+	if host.SSH == "" {
 		return runner.Local{}
 	}
-	return runner.SSH{Target: h.SSH, ControlPath: runner.ControlPathFor(h.SSH)}
+	return runner.SSH{Target: host.SSH, ControlPath: runner.ControlPathFor(host.SSH)}
 }
 
 func capture(ctx context.Context, run hostRunner, argv ...string) (string, error) {
@@ -42,86 +42,86 @@ func capture(ctx context.Context, run hostRunner, argv ...string) (string, error
 }
 
 func platformFromUname(out string) (string, string, error) {
-	f := strings.Fields(strings.TrimSpace(out))
-	if len(f) != unameFieldCount {
+	fields := strings.Fields(strings.TrimSpace(out))
+	if len(fields) != unameFieldCount {
 		return "", "", &platformUnreadableError{Output: strings.TrimSpace(out)}
 	}
 	var goos, goarch string
-	switch strings.ToLower(f[0]) {
+	switch strings.ToLower(fields[0]) {
 	case "linux":
 		goos = "linux"
 	case "darwin":
 		goos = "darwin"
 	default:
-		return "", "", &unsupportedOSError{OS: f[0]}
+		return "", "", &unsupportedOSError{OS: fields[0]}
 	}
-	switch strings.ToLower(f[1]) {
+	switch strings.ToLower(fields[1]) {
 	case "x86_64", "amd64":
 		goarch = "amd64"
 	case "aarch64", "arm64":
 		goarch = "arm64"
 	default:
-		return "", "", &unsupportedArchError{Arch: f[1]}
+		return "", "", &unsupportedArchError{Arch: fields[1]}
 	}
 	return goos, goarch, nil
 }
 
-func provisionHost(ctx context.Context, run hostRunner, h state.Host, src string) (state.Host, error) {
+func provisionHost(ctx context.Context, run hostRunner, host state.Host, src string) (state.Host, error) {
 	if src == "" {
-		return h, &noSourceCheckoutError{Host: h.Name}
+		return host, &noSourceCheckoutError{Host: host.Name}
 	}
 	unameOut, err := capture(ctx, run, "uname", "-sm")
 	if err != nil {
-		return h, err
+		return host, err
 	}
 	goos, goarch, err := platformFromUname(unameOut)
 	if err != nil {
-		return h, fmt.Errorf("%s: %w", h.Name, err)
+		return host, fmt.Errorf("%s: %w", host.Name, err)
 	}
 	homeOut, err := capture(ctx, run, "pwd")
 	if err != nil {
-		return h, err
+		return host, err
 	}
 	home := strings.TrimSpace(homeOut)
 	if home == "" {
-		return h, &remoteHomeUnresolvedError{Host: h.Name}
+		return host, &remoteHomeUnresolvedError{Host: host.Name}
 	}
 	binDir := home + "/.herrscher/bin"
 	bin := binDir + "/herrscher"
 	if _, captureErr := capture(ctx, run, "mkdir", "-p", binDir); captureErr != nil {
-		return h, captureErr
+		return host, captureErr
 	}
 
 	stage, err := os.MkdirTemp("", "herrscher-provision-")
 	if err != nil {
-		return h, err
+		return host, err
 	}
 	defer func() { logCleanup(os.RemoveAll(stage)) }()
 	staged := filepath.Join(stage, "herrscher")
 	if err := service.BuildFor(ctx, src, staged, goos, goarch); err != nil {
-		return h, err
+		return host, err
 	}
 
-	cp := run.Copy(ctx, staged, bin)
+	copied := run.Copy(ctx, staged, bin)
 	var cpErr bytes.Buffer
-	cp.Stderr = &cpErr
-	if err := cp.Run(); err != nil {
+	copied.Stderr = &cpErr
+	if err := copied.Run(); err != nil {
 		msg := strings.TrimSpace(cpErr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return h, &copyError{Where: run.Describe(), Msg: msg}
+		return host, &copyError{Where: run.Describe(), Msg: msg}
 	}
 	if _, err := capture(ctx, run, "chmod", "+x", bin); err != nil {
-		return h, err
+		return host, err
 	}
 	if _, err := capture(ctx, run, bin, "--help"); err != nil {
-		return h, fmt.Errorf("the binary put on %s fails its smoke test: %w", h.Name, err)
+		return host, fmt.Errorf("the binary put on %s fails its smoke test: %w", host.Name, err)
 	}
 
-	h.Bin, h.GOOS, h.GOARCH = bin, goos, goarch
-	h.Version = service.SourceVersion(ctx, src)
-	return h, nil
+	host.Bin, host.GOOS, host.GOARCH = bin, goos, goarch
+	host.Version = service.SourceVersion(ctx, src)
+	return host, nil
 }
 
 type hostReport struct {
@@ -135,33 +135,33 @@ type hostReport struct {
 	Notes     []string `json:"notes,omitempty"`
 }
 
-func checkHost(ctx context.Context, run hostRunner, h state.Host, wantVersion string) hostReport {
-	rep := hostReport{Host: h.Name, SSH: h.SSH}
+func checkHost(ctx context.Context, run hostRunner, host state.Host, wantVersion string) hostReport {
+	rep := hostReport{Host: host.Name, SSH: host.SSH}
 	if _, err := capture(ctx, run, valueTrue); err != nil {
 		rep.Notes = append(rep.Notes, err.Error())
 		return rep
 	}
 	rep.Reachable = true
-	switch h.Bin {
+	switch host.Bin {
 	case "":
-		rep.Notes = append(rep.Notes, "no herrscher provisioned: run `host provision "+h.Name+"`")
+		rep.Notes = append(rep.Notes, "no herrscher provisioned: run `host provision "+host.Name+"`")
 	default:
-		if _, err := capture(ctx, run, h.Bin, "--help"); err != nil {
+		if _, err := capture(ctx, run, host.Bin, "--help"); err != nil {
 			rep.Notes = append(rep.Notes, "the provisioned herrscher does not answer --help: "+err.Error())
 			break
 		}
-		rep.Herrscher = h.Version
-		if wantVersion != "" && h.Version != wantVersion {
+		rep.Herrscher = host.Version
+		if wantVersion != "" && host.Version != wantVersion {
 			rep.Drift = true
-			rep.Notes = append(rep.Notes, "provisioned "+h.Version+" but the source is at "+wantVersion+": run `host provision "+h.Name+"`")
+			rep.Notes = append(rep.Notes, "provisioned "+host.Version+" but the source is at "+wantVersion+": run `host provision "+host.Name+"`")
 		}
 	}
-	if h.Workspace == "" {
+	if host.Workspace == "" {
 		rep.Notes = append(rep.Notes, "no workspace configured")
-	} else if _, err := capture(ctx, run, "test", "-d", h.Workspace); err == nil {
+	} else if _, err := capture(ctx, run, "test", "-d", host.Workspace); err == nil {
 		rep.Workspace = true
 	} else {
-		rep.Notes = append(rep.Notes, "workspace "+h.Workspace+" is not a directory over there")
+		rep.Notes = append(rep.Notes, "workspace "+host.Workspace+" is not a directory over there")
 	}
 	if _, err := capture(ctx, run, "git", "--version"); err == nil {
 		rep.Git = true

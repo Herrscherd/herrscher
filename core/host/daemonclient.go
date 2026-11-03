@@ -33,12 +33,12 @@ type DaemonEvent struct {
 // The stored id wins; optID is only the fallback for a state file that cannot be
 // read (no daemon has booted here yet, in which case nothing is listening either).
 func ServedInstanceID(statePath, optID string) string {
-	st, err := state.LoadState(statePath)
+	hostState, err := state.LoadState(statePath)
 	if err != nil {
 		return optID
 	}
-	if st.InstanceID != "" {
-		return st.InstanceID
+	if hostState.InstanceID != "" {
+		return hostState.InstanceID
 	}
 	return optID
 }
@@ -94,15 +94,15 @@ func subscribeAt(ctx context.Context, path string) (<-chan DaemonEvent, error) {
 	go func() {
 		defer close(out)
 		defer closeRead(conn)
-		sc := bufio.NewScanner(conn)
-		sc.Buffer(make([]byte, 0, daemonLineBufferInitial), daemonLineBufferMax)
-		for sc.Scan() {
-			var e DaemonEvent
-			if err := json.Unmarshal(sc.Bytes(), &e); err != nil {
+		scanner := bufio.NewScanner(conn)
+		scanner.Buffer(make([]byte, 0, daemonLineBufferInitial), daemonLineBufferMax)
+		for scanner.Scan() {
+			var event DaemonEvent
+			if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
 				continue
 			}
 			select {
-			case out <- e:
+			case out <- event:
 			case <-ctx.Done():
 				return
 			}
@@ -120,10 +120,10 @@ func parseAttachmentPaths(raw string) ([]contracts.Attachment, error) {
 		return nil, fmt.Errorf("attachments: expected a JSON array of paths: %w", err)
 	}
 	out := make([]contracts.Attachment, 0, len(paths))
-	for _, p := range paths {
+	for _, path := range paths {
 		out = append(out, contracts.Attachment{
-			Filename: filepath.Base(p),
-			URL:      (&url.URL{Scheme: "file", Path: p}).String(),
+			Filename: filepath.Base(path),
+			URL:      (&url.URL{Scheme: "file", Path: path}).String(),
 		})
 	}
 	return out, nil
@@ -134,14 +134,14 @@ func parseAttachmentPaths(raw string) ([]contracts.Attachment, error) {
 // process has it, and is it still alive?" It does so without claiming the lock. The check
 // takes the lock only long enough to find out it was free, then drops it.
 func ServingPID(statePath string) (int, bool) {
-	f, err := os.OpenFile(StateLockPath(statePath), os.O_CREATE|os.O_RDWR, ownerOnlyFileMode)
+	lockFile, err := os.OpenFile(StateLockPath(statePath), os.O_CREATE|os.O_RDWR, ownerOnlyFileMode)
 	if err != nil {
 		return 0, false
 	}
-	defer closeRead(f)
-	locked, err := tryLock(f)
+	defer closeRead(lockFile)
+	locked, err := tryLock(lockFile)
 	if err != nil || locked {
 		return 0, false
 	}
-	return readPID(f), true
+	return readPID(lockFile), true
 }

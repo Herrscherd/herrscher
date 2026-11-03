@@ -13,13 +13,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
-func addHostCommands(reg *cli.Registry, st *state.State) error {
+func addHostCommands(reg *cli.Registry, hostState *state.State) error {
 	return addVerbs(reg,
-		hostAddVerb(st),
-		hostListVerb(st),
-		hostCheckVerb(st),
-		hostProvisionVerb(st),
-		hostRmVerb(st),
+		hostAddVerb(hostState),
+		hostListVerb(hostState),
+		hostCheckVerb(hostState),
+		hostProvisionVerb(hostState),
+		hostRmVerb(hostState),
 	)
 }
 
@@ -34,26 +34,26 @@ func hostAddVerb(store *state.State) contracts.Cmd {
 		})
 }
 
-func addHost(ctx context.Context, st *state.State, input contracts.Input) (string, error) {
+func addHost(ctx context.Context, hostState *state.State, input contracts.Input) (string, error) {
 	host := state.Host{
 		Name:      hostNameOf(input),
 		SSH:       strings.TrimSpace(input.Get("ssh")),
 		Workspace: strings.TrimSpace(input.Get("workspace")),
 	}
-	if err := checkNewHost(st, host); err != nil {
+	if err := checkNewHost(hostState, host); err != nil {
 		return "", err
 	}
-	provisioned, err := provisionHost(ctx, runnerFor(host), host, st.SourceDir())
+	provisioned, err := provisionHost(ctx, runnerFor(host), host, hostState.SourceDir())
 	if err != nil {
 		return "", err
 	}
-	if err := st.PutHost(provisioned); err != nil {
+	if err := hostState.PutHost(provisioned); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("registered %s (%s, %s/%s, herrscher %s)", provisioned.Name, provisioned.SSH, provisioned.GOOS, provisioned.GOARCH, provisioned.Version), nil
 }
 
-func checkNewHost(st *state.State, host state.Host) error {
+func checkNewHost(hostState *state.State, host state.Host) error {
 	if host.Name == "" {
 		return errHostNameMissing
 	}
@@ -66,7 +66,7 @@ func checkNewHost(st *state.State, host state.Host) error {
 	if !strings.HasPrefix(host.Workspace, "/") {
 		return &hostWorkspaceError{Name: host.Name, Workspace: host.Workspace}
 	}
-	if _, exists := st.FindHost(host.Name); exists {
+	if _, exists := hostState.FindHost(host.Name); exists {
 		return &hostExistsError{Name: host.Name}
 	}
 	return nil
@@ -105,14 +105,14 @@ func hostCheckVerb(store *state.State) contracts.Cmd {
 		})
 }
 
-func checkRegisteredHost(ctx context.Context, store *state.State, in contracts.Input) (string, error) {
-	name := hostNameOf(in)
+func checkRegisteredHost(ctx context.Context, store *state.State, input contracts.Input) (string, error) {
+	name := hostNameOf(input)
 	host, ok := store.FindHost(name)
 	if !ok {
 		return "", unknownHost(store, name)
 	}
 	rep := checkHost(ctx, runnerFor(host), host, sourceVersionOf(ctx, store))
-	if in.JSON {
+	if input.JSON {
 		b, err := json.Marshal(rep)
 		return string(b), err
 	}
@@ -193,9 +193,9 @@ func sessionsOnHost(store *state.State, name string) []string {
 
 func hostNameOf(in contracts.Input) string { return firstOf(in.Get(paramName), in.Rest) }
 
-func unknownHost(st *state.State, name string) error {
+func unknownHost(hostState *state.State, name string) error {
 	var known []string
-	for _, h := range st.SnapshotHosts() {
+	for _, h := range hostState.SnapshotHosts() {
 		known = append(known, h.Name)
 	}
 	if name == "" {
@@ -225,9 +225,9 @@ func yesNo(b bool) string {
 	return "no"
 }
 
-func orAbsent(s string) string {
-	if s == "" {
+func orAbsent(text string) string {
+	if text == "" {
 		return "absent"
 	}
-	return s
+	return text
 }

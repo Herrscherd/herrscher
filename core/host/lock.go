@@ -35,24 +35,24 @@ func LockState(statePath string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
 		return nil, fmt.Errorf("state lock directory: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, ownerOnlyFileMode)
+	lockFile, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, ownerOnlyFileMode)
 	if err != nil {
 		return nil, fmt.Errorf("state lock: %w", err)
 	}
-	locked, err := tryLock(f)
+	locked, err := tryLock(lockFile)
 	if err != nil {
-		closeRead(f)
+		closeRead(lockFile)
 		return nil, fmt.Errorf("state lock: %w", err)
 	}
 	if !locked {
-		holder := readHolder(f)
-		closeRead(f)
+		holder := readHolder(lockFile)
+		closeRead(lockFile)
 		return nil, &lockHeldError{StatePath: statePath, Holder: holder}
 	}
-	if err := f.Truncate(0); err == nil {
-		logWriteFailure(f.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0))
+	if err := lockFile.Truncate(0); err == nil {
+		logWriteFailure(lockFile.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0))
 	}
-	return func() { closeRead(f) }, nil
+	return func() { closeRead(lockFile) }, nil
 }
 
 func readHolder(f *os.File) string {
@@ -63,11 +63,11 @@ func readHolder(f *os.File) string {
 	return fmt.Sprintf(" (pid %d)", pid)
 }
 
-func readPID(f *os.File) int {
-	b := make([]byte, pidReadBytes)
-	n, readErr := f.ReadAt(b, 0)
+func readPID(file *os.File) int {
+	buf := make([]byte, pidReadBytes)
+	count, readErr := file.ReadAt(buf, 0)
 	logCleanup(readErr)
-	pid, err := strconv.Atoi(strings.TrimSpace(string(b[:n])))
+	pid, err := strconv.Atoi(strings.TrimSpace(string(buf[:count])))
 	if err != nil || pid <= 0 {
 		return 0
 	}

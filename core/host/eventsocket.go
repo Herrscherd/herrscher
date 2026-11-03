@@ -17,15 +17,15 @@ type wireEvent struct {
 	Session string `json:"session"`
 }
 
-func marshalSessionEvent(session string, e contracts.Event) ([]byte, error) {
-	b, err := json.Marshal(wireEvent{
+func marshalSessionEvent(session string, event contracts.Event) ([]byte, error) {
+	payload, err := json.Marshal(wireEvent{
 		Session: session,
-		Event:   e,
+		Event:   event,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return append(b, '\n'), nil
+	return append(payload, '\n'), nil
 }
 
 const subscriberBuffer = 256
@@ -122,7 +122,7 @@ func (s *eventSocket) remove(sub *subscriber) {
 	s.mu.Unlock()
 }
 
-func (s *eventSocket) Publish(session string, e contracts.Event) {
+func (s *eventSocket) Publish(session string, event contracts.Event) {
 	if s == nil {
 		return
 	}
@@ -132,14 +132,14 @@ func (s *eventSocket) Publish(session string, e contracts.Event) {
 	if idle {
 		return
 	}
-	line, err := marshalSessionEvent(session, e)
+	line, err := marshalSessionEvent(session, event)
 	if err != nil {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for sub := range s.subs {
-		if e.Coordination != nil {
+		if event.Coordination != nil {
 			sub.enqueuePriority(line)
 			continue
 		}
@@ -159,28 +159,28 @@ func (s *eventSocket) closeAll() {
 	s.mu.Unlock()
 }
 
-func serveEventsSocket(ctx context.Context, path string, s *eventSocket) {
+func serveEventsSocket(ctx context.Context, path string, socket *eventSocket) {
 	logCleanup(os.Remove(path))
-	ln, err := listenCommandSocket(ctx, path)
+	listener, err := listenCommandSocket(ctx, path)
 	if err != nil {
 		warnStderr("events socket: listen %s: %v\n", path, err)
 		return
 	}
-	go acceptEvents(ctx, ln, path, s)
+	go acceptEvents(ctx, listener, path, socket)
 }
 
-func acceptEvents(ctx context.Context, ln net.Listener, path string, s *eventSocket) {
+func acceptEvents(ctx context.Context, listener net.Listener, path string, socket *eventSocket) {
 	go func() {
 		<-ctx.Done()
-		logCleanup(ln.Close())
+		logCleanup(listener.Close())
 		logCleanup(os.Remove(path))
-		s.closeAll()
+		socket.closeAll()
 	}()
 	for {
-		c, err := ln.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
 			return
 		}
-		s.add(c)
+		socket.add(conn)
 	}
 }

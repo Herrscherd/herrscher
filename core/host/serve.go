@@ -118,26 +118,26 @@ func DefaultStatePath() string {
 	return filepath.Join(home, ".config", "herrscher", "state.json")
 }
 
-func resolveInstanceID(st *state.State, optID, ownerID string, log *slog.Logger) (string, error) {
+func resolveInstanceID(hostState *state.State, optID, ownerID string, log *slog.Logger) (string, error) {
 	resolved, err := instanceid.Resolve(optID, ownerID)
 	if err != nil {
 		return "", err
 	}
-	if st.InstanceID != "" {
-		if resolved != "" && resolved != st.InstanceID {
-			return "", &instanceIDMismatchError{Have: st.InstanceID, Want: resolved}
+	if hostState.InstanceID != "" {
+		if resolved != "" && resolved != hostState.InstanceID {
+			return "", &instanceIDMismatchError{Have: hostState.InstanceID, Want: resolved}
 		}
-		return st.InstanceID, nil
+		return hostState.InstanceID, nil
 	}
 	if resolved == "" {
 		return "", nil
 	}
-	if len(st.SnapshotSessions()) > 0 {
+	if len(hostState.SnapshotSessions()) > 0 {
 		log.Warn("legacy sessions present; staying in non-namespaced mode",
-			"sessions", len(st.SnapshotSessions()))
+			"sessions", len(hostState.SnapshotSessions()))
 		return "", nil
 	}
-	if err := st.SetInstanceID(resolved); err != nil {
+	if err := hostState.SetInstanceID(resolved); err != nil {
 		return "", fmt.Errorf("persist instanceID: %w", err)
 	}
 	return resolved, nil
@@ -149,67 +149,67 @@ func resolveInstanceID(st *state.State, optID, ownerID string, log *slog.Logger)
 // health/liveness. gws are the gateway sets the daemon owns (built from the
 // registry by the caller). Command dispatch no longer runs here.
 // Session/service commands run through the operator CLI (see NewRegistry).
-func RunHub(ctx context.Context, gws []Deps, o Options) error {
+func RunHub(ctx context.Context, gws []Deps, options Options) error {
 	base := obs.Stderr(false)
 	log := base.With("component", "serve")
-	h := health.NewHealth(time.Now())
+	monitor := health.NewHealth(time.Now())
 
-	store, err := loadHubState(o)
+	store, err := loadHubState(options)
 	if err != nil {
 		return fmt.Errorf("load state: %w", err)
 	}
 
 	self, execErr := os.Executable()
 	logCleanup(execErr)
-	startRemotePluginHosts(ctx, self, o.RemoteCategories, base)
-	partDir := filepath.Dir(o.StatePath)
-	sup := newHubSupervisor(ctx, self, base, h, partDir)
+	startRemotePluginHosts(ctx, self, options.RemoteCategories, base)
+	partDir := filepath.Dir(options.StatePath)
+	sup := newHubSupervisor(ctx, self, base, monitor, partDir)
 
-	instID, err := resolveInstanceID(store, o.InstanceID, o.Owner, log)
+	instID, err := resolveInstanceID(store, options.InstanceID, options.Owner, log)
 	if err != nil {
 		return fmt.Errorf("resolve instance id: %w", err)
 	}
 
-	if o.DefaultGateways == nil {
-		o.DefaultGateways = nonTerminalKinds(gws)
+	if options.DefaultGateways == nil {
+		options.DefaultGateways = nonTerminalKinds(gws)
 	}
 	approvals := newApprovalTable()
 	sessions := newSessionTable()
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, o, store, sup, instID, o.ContributedCommands, approvals, sessions)
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, options, store, sup, instID, options.ContributedCommands, approvals, sessions)
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}
-	kinds := contributedKinds(o.ContributedCommands)
+	kinds := contributedKinds(options.ContributedCommands)
 	sup.SetBridgeEnv(hubBridgeEnv(reg.Specs(), kinds))
 	ensureCodexAgent(deps.agents)
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
-	hb := newHub(store, sup, gws, partDir, reg, h.Metrics(), approvals, sessions)
+	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
 	go func() {
 		<-ctx.Done()
-		hb.stopLive()
+		runningHub.stopLive()
 	}()
-	hb.contributedKinds = kinds
-	hb.instanceID = instID
-	hb.gate = deps.handler.BudgetGate()
-	coord := wireCoordination(hb, deps, store, sessions)
+	runningHub.contributedKinds = kinds
+	runningHub.instanceID = instID
+	runningHub.gate = deps.handler.BudgetGate()
+	coord := wireCoordination(runningHub, deps, store, sessions)
 
-	sched := newScheduler(store, store, hb, sessions.Seed, time.Now)
+	sched := newScheduler(store, store, runningHub, sessions.Seed, time.Now)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
 
 	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
 
-	serveHubSockets(ctx, instID, hb)
-	goLiveSessions(ctx, hb, sup, store, h)
-	bindSessionControl(gws, hb)
+	serveHubSockets(ctx, instID, runningHub)
+	goLiveSessions(ctx, runningHub, sup, store, monitor)
+	bindSessionControl(gws, runningHub)
 
 	if instID != "" {
 		log.Info("instance resolved", "instance", instID)
 	}
 	logCompiledPlugins(log)
-	startHubProbes(ctx, gws, o, store, h, instID)
+	startHubProbes(ctx, gws, options, store, monitor, instID)
 
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
 	<-ctx.Done()
@@ -254,23 +254,23 @@ func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *se
 }
 
 func serveHubSockets(ctx context.Context, instID string, hubCore *hub) {
-	es := newEventSocket()
-	serveEventsSocket(ctx, EventsSocketPath(instID), es)
-	hubCore.eventPublisher = es.Publish
+	events := newEventSocket()
+	serveEventsSocket(ctx, EventsSocketPath(instID), events)
+	hubCore.eventPublisher = events.Publish
 	serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{hubCore})
 }
 
-func goLiveSessions(ctx context.Context, hb *hub, sup *supervisor.Supervisor, st *state.State, host *health.Health) {
-	sessions := st.SnapshotSessions()
+func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Supervisor, hostState *state.State, host *health.Health) {
+	sessions := hostState.SnapshotSessions()
 	for idx := range sessions {
 		sess := sessions[idx]
 		if sess.Archived {
 			continue
 		}
-		hb.goLive(ctx, sess)
+		runningHub.goLive(ctx, sess)
 		sup.StartWith(ctx, sess)
 	}
-	host.SetSessions(len(st.SnapshotSessions()))
+	host.SetSessions(len(hostState.SnapshotSessions()))
 }
 
 func bindSessionControl(gws []Deps, hubCore *hub) {
@@ -289,41 +289,41 @@ func logCompiledPlugins(log *slog.Logger) {
 	}
 }
 
-func startHubProbes(ctx context.Context, gws []Deps, o Options, store *state.State, h *health.Health, instID string) {
-	if o.HealthAddr != "" {
-		go serveHealth(ctx, o.HealthAddr, h)
+func startHubProbes(ctx context.Context, gws []Deps, options Options, store *state.State, monitor *health.Health, instID string) {
+	if options.HealthAddr != "" {
+		go serveHealth(ctx, options.HealthAddr, monitor)
 	}
 	if pr := firstProber(gws); pr != nil {
-		go pingLoop(ctx, pr, h)
+		go pingLoop(ctx, pr, monitor)
 	}
-	if o.StatusChannel != "" {
+	if options.StatusChannel != "" {
 		if cr := firstReader(gws); cr != nil {
-			go statusLoop(ctx, cr, o.StatusChannel, store, h, instID)
+			go statusLoop(ctx, cr, options.StatusChannel, store, monitor, instID)
 		}
 	}
 }
 
-func seedTerminalHome(st *state.State, hasForeground bool) {
-	if !hasForeground || st.Home.ID != "" {
+func seedTerminalHome(hostState *state.State, hasForeground bool) {
+	if !hasForeground || hostState.Home.ID != "" {
 		return
 	}
-	logCleanup(st.SetHome(state.HomeRef{ID: homeTerminalID, Type: kindTerminal}))
+	logCleanup(hostState.SetHome(state.HomeRef{ID: homeTerminalID, Type: kindTerminal}))
 }
 
 func startRemotePluginHosts(ctx context.Context, self string, remote map[contracts.Category]bool, log *slog.Logger) {
 	base := log.With("component", "plugin-host")
-	for c := range remote {
-		if !SupportedRemoteCategory(c) {
-			base.Warn("remote category not yet supported; staying in-process", "category", c)
+	for category := range remote {
+		if !SupportedRemoteCategory(category) {
+			base.Warn("remote category not yet supported; staying in-process", "category", category)
 			continue
 		}
-		startRemotePluginHost(ctx, self, c, base.With("category", string(c)))
+		startRemotePluginHost(ctx, self, category, base.With("category", string(category)))
 	}
 }
 
 func startRemotePluginHost(ctx context.Context, self string, cat contracts.Category, log *slog.Logger) {
 	go func() {
-		bo := obs.RestartBackoff()
+		backoff := obs.RestartBackoff()
 		for ctx.Err() == nil {
 			cmd := exec.CommandContext(ctx, self, "plugin-host", "--category", string(cat), "--instance", string(cat)+"-0")
 			if url := os.Getenv("HERRSCHER_NATS"); url != "" {
@@ -336,7 +336,7 @@ func startRemotePluginHost(ctx context.Context, self string, cat contracts.Categ
 			if ctx.Err() != nil {
 				return
 			}
-			delay := bo.Next(time.Since(start))
+			delay := backoff.Next(time.Since(start))
 			log.Warn("plugin-host exited, restarting", "delay", delay)
 			select {
 			case <-ctx.Done():
@@ -348,18 +348,18 @@ func startRemotePluginHost(ctx context.Context, self string, cat contracts.Categ
 }
 
 func firstProber(gws []Deps) contracts.Prober {
-	for _, g := range gws {
-		if g.Prober != nil {
-			return g.Prober
+	for _, dep := range gws {
+		if dep.Prober != nil {
+			return dep.Prober
 		}
 	}
 	return nil
 }
 
 func firstAdmin(gws []Deps) contracts.ChannelAdmin {
-	for _, g := range gws {
-		if g.Admin != nil {
-			return g.Admin
+	for _, dep := range gws {
+		if dep.Admin != nil {
+			return dep.Admin
 		}
 	}
 	return nil
@@ -367,33 +367,33 @@ func firstAdmin(gws []Deps) contracts.ChannelAdmin {
 
 func adminForHome(gws []Deps, home state.HomeRef) contracts.ChannelAdmin {
 	wantTerminal := home.Type == kindTerminal
-	for _, g := range gws {
-		if g.Admin == nil || g.Gateway == nil {
+	for _, dep := range gws {
+		if dep.Admin == nil || dep.Gateway == nil {
 			continue
 		}
-		if (g.Gateway.Manifest().Kind == kindTerminal) == wantTerminal {
-			return g.Admin
+		if (dep.Gateway.Manifest().Kind == kindTerminal) == wantTerminal {
+			return dep.Admin
 		}
 	}
 	return firstAdmin(gws)
 }
 
 func terminalAdmin(gws []Deps) contracts.ChannelAdmin {
-	for _, g := range gws {
-		if g.Admin == nil || g.Gateway == nil {
+	for _, dep := range gws {
+		if dep.Admin == nil || dep.Gateway == nil {
 			continue
 		}
-		if g.Gateway.Manifest().Kind == kindTerminal {
-			return g.Admin
+		if dep.Gateway.Manifest().Kind == kindTerminal {
+			return dep.Admin
 		}
 	}
 	return nil
 }
 
 func firstReader(gws []Deps) contracts.ChannelReader {
-	for _, g := range gws {
-		if g.Reader != nil {
-			return g.Reader
+	for _, dep := range gws {
+		if dep.Reader != nil {
+			return dep.Reader
 		}
 	}
 	return nil
@@ -411,9 +411,9 @@ func effectiveKinds(all []Deps, sess state.Session) []string {
 
 func kindsOf(all []Deps) []string {
 	out := make([]string, 0, len(all))
-	for _, g := range all {
-		if g.Gateway != nil {
-			out = append(out, g.Gateway.Manifest().Kind)
+	for _, dep := range all {
+		if dep.Gateway != nil {
+			out = append(out, dep.Gateway.Manifest().Kind)
 		}
 	}
 	return out
@@ -421,12 +421,12 @@ func kindsOf(all []Deps) []string {
 
 func nonTerminalKinds(all []Deps) []string {
 	var out []string
-	for _, g := range all {
-		if g.Gateway == nil {
+	for _, dep := range all {
+		if dep.Gateway == nil {
 			continue
 		}
-		if g.Gateway.Manifest().Kind != kindTerminal {
-			out = append(out, g.Gateway.Manifest().Kind)
+		if dep.Gateway.Manifest().Kind != kindTerminal {
+			out = append(out, dep.Gateway.Manifest().Kind)
 		}
 	}
 	return out
@@ -438,9 +438,9 @@ func boundGateways(all []Deps, kinds []string) []Deps {
 		want[k] = true
 	}
 	var out []Deps
-	for _, g := range all {
-		if g.Gateway != nil && want[g.Gateway.Manifest().Kind] {
-			out = append(out, g)
+	for _, dep := range all {
+		if dep.Gateway != nil && want[dep.Gateway.Manifest().Kind] {
+			out = append(out, dep)
 		}
 	}
 	return out

@@ -18,14 +18,14 @@ import (
 
 const approvalsFile = "APPROVALS"
 
-func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
+func addApproveCommands(reg *cli.Registry, hostState *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
 	return addVerbs(reg,
 		approveListVerb(approvals),
 		approveAllowVerb(approvals),
 		approveDenyVerb(approvals),
-		approveRuleVerb(st),
-		approveAskVerb(st, agents, approvals, sessions),
-		approveModeVerb(st),
+		approveRuleVerb(hostState),
+		approveAskVerb(hostState, agents, approvals, sessions),
+		approveModeVerb(hostState),
 	)
 }
 
@@ -39,11 +39,11 @@ func approveListVerb(approvals *approvalTable) contracts.Cmd {
 
 func listApprovals(approvals *approvalTable, asJSON bool) (string, error) {
 	pending := pendingApprovals(approvals)
-	sort.SliceStable(pending, func(i, job int) bool {
-		if pending[i].Age != pending[job].Age {
-			return pending[i].Age > pending[job].Age
+	sort.SliceStable(pending, func(left, job int) bool {
+		if pending[left].Age != pending[job].Age {
+			return pending[left].Age > pending[job].Age
 		}
-		return pending[i].ID < pending[job].ID
+		return pending[left].ID < pending[job].ID
 	})
 	if asJSON {
 		body, err := json.Marshal(pending)
@@ -64,14 +64,14 @@ func approveAllowVerb(approvals *approvalTable) contracts.Cmd {
 		Help("let a waiting action run").
 		ValueParam("id", "request id; also takes a bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			id := firstOf(in.Get("id"), in.Rest)
-			if id == "" {
+			approvalID := firstOf(in.Get("id"), in.Rest)
+			if approvalID == "" {
 				return "", errRequestNameMissing
 			}
-			if !answerApproval(approvals, id, approval.Allow, "") {
-				return "", &requestNotWaitingError{ID: id}
+			if !answerApproval(approvals, approvalID, approval.Allow, "") {
+				return "", &requestNotWaitingError{ID: approvalID}
 			}
-			return "allowed " + id, nil
+			return "allowed " + approvalID, nil
 		})
 }
 
@@ -80,19 +80,19 @@ func approveDenyVerb(approvals *approvalTable) contracts.Cmd {
 		Help("refuse a waiting action; the reason is what the agent reads").
 		ValueParam("id", "request id; also takes a bare argument", false).
 		ValueParam("reason", "why, in the agent's own transcript", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			id := firstOf(in.Get("id"), in.Rest)
-			if id == "" {
+		Do(func(_ context.Context, input contracts.Input) (string, error) {
+			approvalID := firstOf(input.Get("id"), input.Rest)
+			if approvalID == "" {
 				return "", errRequestNameMissing
 			}
-			reason := strings.TrimSpace(in.Get("reason"))
+			reason := strings.TrimSpace(input.Get("reason"))
 			if reason != "" {
 				reason = "herrscher: the operator refused: " + reason
 			}
-			if !answerApproval(approvals, id, approval.Deny, reason) {
-				return "", &requestNotWaitingError{ID: id}
+			if !answerApproval(approvals, approvalID, approval.Deny, reason) {
+				return "", &requestNotWaitingError{ID: approvalID}
 			}
-			return "denied " + id, nil
+			return "denied " + approvalID, nil
 		})
 }
 
@@ -101,13 +101,13 @@ func approveRuleVerb(store *state.State) contracts.Cmd {
 		Help("add a rule, remove one with --rm, or list them with no argument").
 		ValueParam("rule", "e.g. `ask Bash(git push*)`; also takes a bare argument", false).
 		ValueParam("rm", "the rule to remove, written exactly as it is listed", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			if rm := strings.TrimSpace(in.Get("rm")); rm != "" {
+		Do(func(_ context.Context, input contracts.Input) (string, error) {
+			if rm := strings.TrimSpace(input.Get("rm")); rm != "" {
 				return removeApprovalRule(store, rm)
 			}
-			raw := firstOf(in.Get("rule"), in.Rest)
+			raw := firstOf(input.Get("rule"), input.Rest)
 			if raw == "" {
-				return listApprovalRules(store, in.JSON)
+				return listApprovalRules(store, input.JSON)
 			}
 			return addApprovalRule(store, raw)
 		})
@@ -160,19 +160,19 @@ func approveAskVerb(store *state.State, agents *agent.Store, approvals *approval
 		ValueParam(paramSession, "the session the call belongs to", true).
 		ValueParam("tool", "tool name, e.g. Bash", true).
 		ValueParam("subject", "the part a rule matches: the command, the path, the url", false).
-		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			session := strings.TrimSpace(in.Get(paramSession))
+		Do(func(ctx context.Context, input contracts.Input) (string, error) {
+			session := strings.TrimSpace(input.Get(paramSession))
 			req := approval.Request{
-				Tool:    strings.TrimSpace(in.Get("tool")),
-				Subject: in.Get("subject"),
+				Tool:    strings.TrimSpace(input.Get("tool")),
+				Subject: input.Get("subject"),
 			}
 			pol, mode := sessionPolicy(store, agents, session)
-			d, reason := askApproval(ctx, approvals, sessions, session, req, pol, mode, store.ApprovalWait())
-			b, err := json.Marshal(struct {
+			decision, reason := askApproval(ctx, approvals, sessions, session, req, pol, mode, store.ApprovalWait())
+			payload, err := json.Marshal(struct {
 				Decision string `json:"decision"`
 				Reason   string `json:"reason,omitempty"`
-			}{Decision: string(d), Reason: reason})
-			return string(b), err
+			}{Decision: string(decision), Reason: reason})
+			return string(payload), err
 		})
 }
 
@@ -211,13 +211,13 @@ type modeOperands struct {
 	mode    string
 }
 
-func parseModeOperands(in contracts.Input) modeOperands {
-	rest := in.Rest
-	name := strings.TrimSpace(in.Get(paramSession))
+func parseModeOperands(input contracts.Input) modeOperands {
+	rest := input.Rest
+	name := strings.TrimSpace(input.Get(paramSession))
 	if name == "" && len(rest) > 0 {
 		name, rest = strings.TrimSpace(rest[0]), rest[1:]
 	}
-	mode := strings.TrimSpace(in.Get("mode"))
+	mode := strings.TrimSpace(input.Get("mode"))
 	if mode == "" && len(rest) > 0 {
 		mode = strings.TrimSpace(rest[len(rest)-1])
 	}
@@ -253,25 +253,25 @@ func readAgentPolicy(home string) approval.Policy {
 	return pol
 }
 
-func sessionPolicy(st *state.State, agents *agent.Store, session string) (approval.Policy, approval.Mode) {
+func sessionPolicy(hostState *state.State, agents *agent.Store, session string) (approval.Policy, approval.Mode) {
 	var daemon approval.Policy
-	for _, raw := range st.ApprovalRules() {
-		r, err := approval.ParseRule(raw)
+	for _, raw := range hostState.ApprovalRules() {
+		rule, err := approval.ParseRule(raw)
 		if err != nil {
 			warnStderr("approvals: state rule %q dropped, it no longer applies: %v\n", raw, err)
 			continue
 		}
-		daemon = append(daemon, r)
+		daemon = append(daemon, rule)
 	}
 	var mode approval.Mode
 	var home string
-	sessions := st.SnapshotSessions()
+	sessions := hostState.SnapshotSessions()
 	for idx := range sessions {
-		s := sessions[idx]
-		if s.Name == session {
-			mode = approval.Mode(s.Approvals)
-			if agents != nil && s.Agent != "" {
-				if a, ok := agents.Get(s.Agent); ok {
+		entry := sessions[idx]
+		if entry.Name == session {
+			mode = approval.Mode(entry.Approvals)
+			if agents != nil && entry.Agent != "" {
+				if a, ok := agents.Get(entry.Agent); ok {
 					home = a.Home
 				}
 			}

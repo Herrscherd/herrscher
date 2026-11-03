@@ -27,26 +27,26 @@ func Catalog(plugins []contracts.Plugin, policy contracts.RoutePolicy) ([]Catalo
 	out := []CatalogEntry{}
 	owner := make(map[string]string)
 	for idx := range plugins {
-		p := plugins[idx]
-		kind := p.Manifest.Kind
-		if err := contracts.ValidateModels(kind, p.Manifest.Models); err != nil {
+		plugin := plugins[idx]
+		kind := plugin.Manifest.Kind
+		if err := contracts.ValidateModels(kind, plugin.Manifest.Models); err != nil {
 			return nil, err
 		}
-		for _, m := range p.Manifest.Models {
-			if prev, clash := owner[m.ID]; clash {
-				return nil, &duplicateModelError{ID: m.ID, First: prev, Second: kind}
+		for _, model := range plugin.Manifest.Models {
+			if prev, clash := owner[model.ID]; clash {
+				return nil, &duplicateModelError{ID: model.ID, First: prev, Second: kind}
 			}
-			owner[m.ID] = kind
+			owner[model.ID] = kind
 		}
-		for _, m := range contracts.FilterModels(p.Manifest.Models, policy) {
+		for _, m := range contracts.FilterModels(plugin.Manifest.Models, policy) {
 			out = append(out, CatalogEntry{Vendor: kind, ModelSpec: m})
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Vendor != out[j].Vendor {
-			return out[i].Vendor < out[j].Vendor
+	sort.SliceStable(out, func(left, right int) bool {
+		if out[left].Vendor != out[right].Vendor {
+			return out[left].Vendor < out[right].Vendor
 		}
-		return out[i].ID < out[j].ID
+		return out[left].ID < out[right].ID
 	})
 	return out, nil
 }
@@ -60,9 +60,9 @@ func LookupModel(plugins []contracts.Plugin, policy contracts.RoutePolicy, model
 	if err != nil {
 		return CatalogEntry{}, err
 	}
-	for _, e := range entries {
-		if e.ID == modelID {
-			return e, nil
+	for _, entry := range entries {
+		if entry.ID == modelID {
+			return entry, nil
 		}
 	}
 	name := string(policy)

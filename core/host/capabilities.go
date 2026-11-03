@@ -19,27 +19,27 @@ const EnvCapabilities = "HERRSCHER_CAPABILITIES"
 // CapabilityEnvPair renders the KEY=VALUE entry for a registry's summary, or ""
 // when there is nothing to say.
 func CapabilityEnvPair(specs []cli.Spec, contributed func(family string) bool) string {
-	s := CapabilitySummary(agentVerbs(specs, contributed))
-	if s == "" {
+	summary := CapabilitySummary(agentVerbs(specs, contributed))
+	if summary == "" {
 		return ""
 	}
-	return EnvCapabilities + "=" + s
+	return EnvCapabilities + "=" + summary
 }
 
 func agentVerbs(specs []cli.Spec, contributed func(family string) bool) []cli.Spec {
 	out := make([]cli.Spec, 0, len(specs))
-	for _, s := range specs {
-		if len(s.Path) == 0 {
+	for _, spec := range specs {
+		if len(spec.Path) == 0 {
 			continue
 		}
-		isPlugin := contributed != nil && contributed(s.Path[0])
+		isPlugin := contributed != nil && contributed(spec.Path[0])
 		ok, _ := authz.Decide(authz.Request{
 			Principal:   authz.SessionPrincipal("any"),
-			Path:        s.Path,
+			Path:        spec.Path,
 			Contributed: isPlugin,
 		}, authz.RoleAgent)
 		if ok {
-			out = append(out, s)
+			out = append(out, spec)
 		}
 	}
 	return out
@@ -58,16 +58,16 @@ func agentVerbs(specs []cli.Spec, contributed func(family string) bool) []cli.Sp
 func CapabilitySummary(specs []cli.Spec) string {
 	families := make(map[string][]string)
 	var order []string
-	for _, s := range specs {
-		if len(s.Path) == 0 {
+	for _, spec := range specs {
+		if len(spec.Path) == 0 {
 			continue
 		}
-		head := s.Path[0]
+		head := spec.Path[0]
 		if _, seen := families[head]; !seen {
 			order = append(order, head)
 			families[head] = nil
 		}
-		if tail := strings.Join(s.Path[1:], " "); tail != "" {
+		if tail := strings.Join(spec.Path[1:], " "); tail != "" {
 			families[head] = append(families[head], tail)
 		}
 	}

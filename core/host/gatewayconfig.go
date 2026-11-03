@@ -14,13 +14,13 @@ func CaptureGatewayConfig(plugins []contracts.Plugin) func() {
 func gatewayConfigKeys(plugins []contracts.Plugin) []string {
 	var keys []string
 	for idx := range plugins {
-		p := plugins[idx]
-		if p.Gateway == nil {
+		plugin := plugins[idx]
+		if plugin.Gateway == nil {
 			continue
 		}
-		for _, s := range p.Manifest.Config {
-			if s.Env != "" {
-				keys = append(keys, s.Env)
+		for _, field := range plugin.Manifest.Config {
+			if field.Env != "" {
+				keys = append(keys, field.Env)
 			}
 		}
 	}

@@ -33,19 +33,19 @@ type schedulerSlot struct {
 	sched scheduleRunner
 }
 
-func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup *supervisor.Supervisor, instID string, extra []contracts.Cmd, approvals *approvalTable, sessions *sessionTable) (*cli.Registry, hostDeps, error) {
-	partDir := filepath.Dir(o.StatePath)
-	wt := worktree.NewWorktreer(instID)
+func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *state.State, sup *supervisor.Supervisor, instID string, extra []contracts.Cmd, approvals *approvalTable, sessions *sessionTable) (*cli.Registry, hostDeps, error) {
+	partDir := filepath.Dir(options.StatePath)
+	worktrees := worktree.NewWorktreer(instID)
 	upCfg, cfgErr := service.DefaultConfig()
 	logCleanup(cfgErr)
-	up := serviceUpdater{cfg: upCfg, st: st}
+	updater := serviceUpdater{cfg: upCfg, st: hostState}
 	agents := agent.NewStore(filepath.Join(partDir, "agents"))
 	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
 		agents.SetUserBudget(n)
 	}
-	hdl := manager.NewHandler(d.Admin, sup, wt, forge.New(), up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
-	wireManagerHandler(ctx, hdl, st, instID, wt, sessions)
-	wireSupervisor(sup, st, instID)
+	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways)
+	wireManagerHandler(ctx, hdl, hostState, instID, worktrees, sessions)
+	wireSupervisor(sup, hostState, instID)
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
 
@@ -59,7 +59,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	if err := addVerbs(reg, extra...); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addSessionVerbs(reg, st, partDir, instID, sessions, seedCoord); err != nil {
+	if err := addSessionVerbs(reg, hostState, partDir, instID, sessions, seedCoord); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addMemoryVerbs(reg); err != nil {
@@ -68,22 +68,22 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	if err := addSkillVerbs(reg); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addScheduleCommands(reg, st, agents, schedSlot); err != nil {
+	if err := addScheduleCommands(reg, hostState, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addHostCommands(reg, st); err != nil {
+	if err := addHostCommands(reg, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addApproveCommands(reg, st, agents, approvals, sessions); err != nil {
+	if err := addApproveCommands(reg, hostState, agents, approvals, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addRoleCommands(reg, st); err != nil {
+	if err := addRoleCommands(reg, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addVerbs(reg, memorySearchVerb(), whoamiVerb(), commandsVerb(reg)); err != nil {
 		return nil, hostDeps{}, err
 	}
-	return reg, hostDeps{wt: wt, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
+	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
 }
 
 func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
@@ -95,9 +95,9 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 	return nil
 }
 
-func wireManagerHandler(ctx context.Context, hdl *manager.Handler, st *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable) {
+func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable) {
 	hdl.SetSeeder(sessions.Seed)
-	hdl.SetHosts(newHostPlacer(st, instID, worktrees, func() string { return sourceVersionOf(ctx, st) }))
+	hdl.SetHosts(newHostPlacer(hostState, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly })
 	hdl.SetDefaultModel(os.Getenv(EnvDefaultModel))
 	hdl.SetModelValidator(validateModelChoice)
@@ -140,18 +140,18 @@ func wireSupervisor(sup *supervisor.Supervisor, store *state.State, instID strin
 // does: which admin a session channel is minted on is a question about the set:
 // the home's owner for a normal session, the terminal gateway for a
 // terminal-only one. One set can only ever answer the first.
-func NewRegistry(ctx context.Context, gws []Deps, o Options) (*cli.Registry, error) {
-	st, err := state.LoadState(o.StatePath)
+func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registry, error) {
+	hostState, err := state.LoadState(options.StatePath)
 	if err != nil {
 		return nil, err
 	}
 	var home *state.HomeRef
-	if o.Home != nil {
-		home = &state.HomeRef{ID: o.Home.ID, Type: o.Home.Type}
+	if options.Home != nil {
+		home = &state.HomeRef{ID: options.Home.ID, Type: options.Home.Type}
 	}
-	st.ApplyDefaults(home, o.Workspace, o.Source)
+	hostState.ApplyDefaults(home, options.Workspace, options.Source)
 
-	instID, err := resolveInstanceID(st, o.InstanceID, o.Owner, obs.Stderr(false))
+	instID, err := resolveInstanceID(hostState, options.InstanceID, options.Owner, obs.Stderr(false))
 	if err != nil {
 		return nil, err
 	}
@@ -160,10 +160,10 @@ func NewRegistry(ctx context.Context, gws []Deps, o Options) (*cli.Registry, err
 	logCleanup(execErr)
 	sup := supervisor.NewSupervisor(ctx, self)
 	sup.SetBridgeEnv(GatewayEnvPairs())
-	if o.DefaultGateways == nil {
-		o.DefaultGateways = nonTerminalKinds(gws)
+	if options.DefaultGateways == nil {
+		options.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID, nil, newApprovalTable(), newSessionTable())
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(), newSessionTable())
 	if err != nil {
 		return nil, err
 	}

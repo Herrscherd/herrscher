@@ -16,12 +16,12 @@ import (
 const firstGrantWarning = "⚠️ this is the first role: from now on every gateway account without one is `observer`. " +
 	"Name the others with `role grant` before they find out."
 
-func addRoleCommands(reg *cli.Registry, st *state.State) error {
+func addRoleCommands(reg *cli.Registry, hostState *state.State) error {
 	return addVerbs(reg,
-		roleListVerb(st),
-		roleGrantVerb(st),
-		roleRevokeVerb(st),
-		roleShowVerb(st),
+		roleListVerb(hostState),
+		roleGrantVerb(hostState),
+		roleRevokeVerb(hostState),
+		roleShowVerb(hostState),
 	)
 }
 
@@ -75,13 +75,13 @@ func roleGrantVerb(store *state.State) contracts.Cmd {
 		})
 }
 
-func grantRole(store *state.State, in contracts.Input) (string, error) {
-	ops := parseGrantOperands(in)
+func grantRole(store *state.State, input contracts.Input) (string, error) {
+	ops := parseGrantOperands(input)
 	principal, role := ops.principal, ops.role
 	if err := grantable(principal, role); err != nil {
 		return "", err
 	}
-	first, err := store.SetRole(principal, role, strings.TrimSpace(in.Get("label")))
+	first, err := store.SetRole(principal, role, strings.TrimSpace(input.Get("label")))
 	if err != nil {
 		return "", err
 	}
@@ -97,13 +97,13 @@ type grantOperands struct {
 	role      string
 }
 
-func parseGrantOperands(in contracts.Input) grantOperands {
-	rest := in.Rest
-	principal := strings.TrimSpace(in.Get("principal"))
+func parseGrantOperands(input contracts.Input) grantOperands {
+	rest := input.Rest
+	principal := strings.TrimSpace(input.Get("principal"))
 	if principal == "" && len(rest) > 0 {
 		principal, rest = strings.TrimSpace(rest[0]), rest[1:]
 	}
-	role := strings.TrimSpace(in.Get("role"))
+	role := strings.TrimSpace(input.Get("role"))
 	if role == "" && len(rest) > 0 {
 		role = strings.TrimSpace(rest[len(rest)-1])
 	}
@@ -174,9 +174,9 @@ func grantable(principal, role string) error {
 	return nil
 }
 
-func sortedPrincipals(m map[string]state.RoleAssignment) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
+func sortedPrincipals(assignments map[string]state.RoleAssignment) []string {
+	out := make([]string, 0, len(assignments))
+	for k := range assignments {
 		out = append(out, k)
 	}
 	sort.Strings(out)

@@ -94,17 +94,17 @@ func loadGatewayCreds(getenv func(string) string) (contracts.GatewayCreds, error
 	return contracts.NewGatewayCreds(getenv(EnvGatewayURL), getenv(EnvGatewayToken))
 }
 
-func spawnEnvFor(e CatalogEntry, getenv func(string) string) (map[string]string, error) {
-	if e.Route != contracts.RouteGateway {
+func spawnEnvFor(entry CatalogEntry, getenv func(string) string) (map[string]string, error) {
+	if entry.Route != contracts.RouteGateway {
 		return make(map[string]string), nil
 	}
 	creds, err := loadGatewayCreds(getenv)
 	if err != nil {
-		return nil, fmt.Errorf("model %q needs the Neublox gateway: %w", e.ID, err)
+		return nil, fmt.Errorf("model %q needs the Neublox gateway: %w", entry.ID, err)
 	}
-	env := gatewayEnvFor(e.Vendor, creds, e.Arg)
+	env := gatewayEnvFor(entry.Vendor, creds, entry.Arg)
 	if len(env) == 0 {
-		return nil, &modelNotRedirectableError{Model: e.ID, Backend: e.Vendor}
+		return nil, &modelNotRedirectableError{Model: entry.ID, Backend: entry.Vendor}
 	}
 	return env, nil
 }

@@ -9,7 +9,7 @@ import (
 
 func entries(n int) []state.TranscriptEntry {
 	out := make([]state.TranscriptEntry, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		role := "user"
 		if i%2 == 1 {
 			role = "assistant"

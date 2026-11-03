@@ -1,9 +1,13 @@
+// Package manager runs the lifecycle of the sessions a chat channel hosts: creation,
+// switching, budgets, renames and the commands that inspect them.
 package manager
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,38 +16,35 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
-func (h *Handler) agentCreateRun(_ context.Context, in contracts.Input) (string, error) {
-	raw, ok := in.Lookup("name")
+func (h *Handler) agentCreateRun(_ context.Context, input contracts.Input) (string, error) {
+	raw, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
-		return "", fmt.Errorf("invalid name %q: use letters, digits, - or _ (max 64)", raw)
+		return "", &InvalidValueError{Field: nameParam, Value: raw, Hint: "use letters, digits, - or _ (max 64)"}
 	}
-	soul, _ := in.Lookup("soul")
-	mcp, _ := in.Lookup("mcp")
-	backend, _ := in.Lookup("backend")
-	cmd, _ := in.Lookup("cmd")
-	host, _ := in.Lookup("host")
-	tagsRaw, _ := in.Lookup("tags")
-	var tags []string
-	for _, tok := range strings.Fields(strings.ReplaceAll(tagsRaw, ",", " ")) {
-		tags = append(tags, tok)
-	}
-	a, err := h.agents.Create(agent.CreateSpec{Name: name, Soul: soul, MCP: mcp, Backend: backend, Cmd: cmd, Host: strings.TrimSpace(host), Tags: tags})
+	soul, _ := input.Lookup("soul")
+	mcp, _ := input.Lookup("mcp")
+	backend, _ := input.Lookup("backend")
+	cmd, _ := input.Lookup("cmd")
+	host, _ := input.Lookup("host")
+	tagsRaw, _ := input.Lookup("tags")
+	tags := strings.Fields(strings.ReplaceAll(tagsRaw, ",", " "))
+	created, err := h.agents.Create(agent.CreateSpec{Name: name, Soul: soul, MCP: mcp, Backend: backend, Cmd: cmd, Host: strings.TrimSpace(host), Tags: tags})
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("🤖 Agent **%s** created at `%s`.", a.Name, a.Home), nil
+	return fmt.Sprintf("🤖 Agent **%s** created at %#q.", created.Name, created.Home), nil
 }
 
-func (h *Handler) agentListRun(_ context.Context, in contracts.Input) (string, error) {
+func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (string, error) {
 	agents, err := h.agents.List()
 	if err != nil {
 		return "", err
 	}
-	if in.JSON {
+	if input.JSON {
 		type row struct {
 			Name    string   `json:"name"`
 			Home    string   `json:"home"`
@@ -51,12 +52,12 @@ func (h *Handler) agentListRun(_ context.Context, in contracts.Input) (string, e
 			Backend string   `json:"backend"`
 		}
 		rows := make([]row, 0, len(agents))
-		for _, a := range agents {
-			tags := a.Tags
+		for _, listed := range agents {
+			tags := listed.Tags
 			if tags == nil {
 				tags = []string{}
 			}
-			rows = append(rows, row{Name: a.Name, Home: a.Home, Tags: tags, Backend: a.Backend})
+			rows = append(rows, row{Name: listed.Name, Home: listed.Home, Tags: tags, Backend: listed.Backend})
 		}
 		buf, err := json.Marshal(rows)
 		if err != nil {
@@ -67,25 +68,29 @@ func (h *Handler) agentListRun(_ context.Context, in contracts.Input) (string, e
 	if len(agents) == 0 {
 		return "No agents. Create one with `agent create <name>`.", nil
 	}
-	out := "Agents:\n"
+	var out strings.Builder
+	out.WriteString("Agents:\n")
 	for _, a := range agents {
-		out += fmt.Sprintf("• **%s** (`%s`)\n", a.Name, a.Home)
+		fmt.Fprintf(&out, "• **%s** (%#q)\n", a.Name, a.Home)
 	}
-	return out, nil
+	return out.String(), nil
 }
 
-func (h *Handler) agentShowRun(_ context.Context, in contracts.Input) (string, error) {
-	name, ok := in.Lookup("name")
+func (h *Handler) agentShowRun(_ context.Context, input contracts.Input) (string, error) {
+	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
-	a, ok := h.agents.Get(slugify(name))
+	candidate, ok := h.agents.Get(slugify(name))
 	if !ok {
-		return "", fmt.Errorf("no agent %q", name)
+		return "", &agent.NotFoundError{Name: name}
 	}
-	soul, _ := os.ReadFile(filepath.Join(a.Home, "SOUL.md"))
-	if in.JSON {
-		tags := a.Tags
+	soul, err := os.ReadFile(filepath.Join(candidate.Home, "SOUL.md"))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", fmt.Errorf("read soul: %w", err)
+	}
+	if input.JSON {
+		tags := candidate.Tags
 		if tags == nil {
 			tags = []string{}
 		}
@@ -94,23 +99,23 @@ func (h *Handler) agentShowRun(_ context.Context, in contracts.Input) (string, e
 			Tags    []string `json:"tags"`
 			Backend string   `json:"backend"`
 			Soul    string   `json:"soul"`
-		}{a.Name, tags, a.Backend, string(soul)})
+		}{candidate.Name, tags, candidate.Backend, string(soul)})
 		if err != nil {
 			return "", err
 		}
 		return string(buf), nil
 	}
-	return fmt.Sprintf("**%s** (`%s`)\n\n%s", a.Name, a.Home, string(soul)), nil
+	return fmt.Sprintf("**%s** (%#q)\n\n%s", candidate.Name, candidate.Home, string(soul)), nil
 }
 
-func (h *Handler) agentSetSoulRun(_ context.Context, in contracts.Input) (string, error) {
-	name, ok := in.Lookup("name")
+func (h *Handler) agentSetSoulRun(_ context.Context, input contracts.Input) (string, error) {
+	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", fmt.Errorf("missing name")
+		return "", ErrMissingName
 	}
-	soul, ok := in.Lookup("soul")
+	soul, ok := input.Lookup("soul")
 	if !ok {
-		return "", fmt.Errorf("missing soul")
+		return "", ErrMissingSoul
 	}
 	if err := h.agents.SetSoul(slugify(name), soul); err != nil {
 		return "", err

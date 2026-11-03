@@ -1,6 +1,8 @@
 package manager
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -49,7 +51,7 @@ func TestSessionBudgetGate_CheckTrips(t *testing.T) {
 	}
 
 	gate := h.BudgetGate()
-	reason, _, _ := gate.Check("game")
+	reason := gate.Check("game").Reason
 	if reason != "cost" {
 		t.Fatalf("reason = %q, want %q", reason, "cost")
 	}
@@ -80,15 +82,15 @@ func TestSessionBudgetGate_CheckHeadroom(t *testing.T) {
 
 	gate := h.BudgetGate()
 
-	_, got, capped := gate.Check("child")
-	if !capped || got != 400 {
-		t.Fatalf("Check(child) headroom = (%d, %v), want (400, true)", got, capped)
+	child := gate.Check("child")
+	if !child.Capped || child.Headroom != 400 {
+		t.Fatalf("Check(child) headroom = (%d, %v), want (400, true)", child.Headroom, child.Capped)
 	}
-	if _, got, capped := gate.Check("free"); capped || got != 0 {
-		t.Fatalf("Check(free) headroom = (%d, %v), want (0, false)", got, capped)
+	if free := gate.Check("free"); free.Capped || free.Headroom != 0 {
+		t.Fatalf("Check(free) headroom = (%d, %v), want (0, false)", free.Headroom, free.Capped)
 	}
-	if _, got, capped := gate.Check("ghost"); capped || got != 0 {
-		t.Fatalf("Check of an unknown session = (%d, %v), want (0, false)", got, capped)
+	if ghost := gate.Check("ghost"); ghost.Capped || ghost.Headroom != 0 {
+		t.Fatalf("Check of an unknown session = (%d, %v), want (0, false)", ghost.Headroom, ghost.Capped)
 	}
 }
 
@@ -100,9 +102,9 @@ func TestSessionBudgetGate_HeadroomFloorsAtZero(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_, got, capped := h.BudgetGate().Check("spent")
-	if !capped || got != 0 {
-		t.Fatalf("headroom over cap = (%d, %v), want (0, true)", got, capped)
+	spent := h.BudgetGate().Check("spent")
+	if !spent.Capped || spent.Headroom != 0 {
+		t.Fatalf("headroom over cap = (%d, %v), want (0, true)", spent.Headroom, spent.Capped)
 	}
 }
 
@@ -116,12 +118,29 @@ func TestSessionBudgetGate_UncappedNeverTrips(t *testing.T) {
 	}
 
 	gate := h.BudgetGate()
-	reason, _, _ := gate.Check("free")
+	reason := gate.Check("free").Reason
 	if reason != "" {
 		t.Fatalf("reason = %q, want empty", reason)
 	}
 	sess, ok := st.FindSession("free")
 	if !ok || sess.PausedReason != "" {
 		t.Fatalf("PausedReason must stay empty: ok=%v sess=%+v", ok, sess)
+	}
+}
+
+func TestNonNegativeCountClampsNegativeTotals(t *testing.T) {
+	if got := nonNegativeCount(-3); got != 0 {
+		t.Fatalf("nonNegativeCount(-3) = %d, want 0", got)
+	}
+	if got := nonNegativeCount(7); got != 7 {
+		t.Fatalf("nonNegativeCount(7) = %d, want 7", got)
+	}
+}
+
+func TestSessionSetBudgetReportsAnUnknownSession(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "category")
+	_, err := h.sessionSetBudgetRun(context.Background(), args("name", "ghost", "cost_cap", "5"))
+	if _, ok := errors.AsType[*SessionNotFoundError](err); !ok {
+		t.Fatalf("err = %v, want a *SessionNotFoundError", err)
 	}
 }

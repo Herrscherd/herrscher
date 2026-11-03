@@ -10,6 +10,7 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -31,12 +32,17 @@ const (
 
 const worktreeToken = "{{WORKTREE}}"
 
-func jsonStringInner(s string) string {
-	b, err := json.Marshal(s)
+const (
+	dirMode  = 0o755
+	fileMode = 0o644
+)
+
+func jsonStringInner(value string) string {
+	data, err := json.Marshal(value)
 	if err != nil {
-		return s
+		return value
 	}
-	return string(b[1 : len(b)-1])
+	return string(data[1 : len(data)-1])
 }
 
 const hookWaitSeconds = 900
@@ -57,21 +63,21 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 		return nil, fmt.Errorf("settings.json: %w", err)
 	}
 	if doc == nil {
-		doc = map[string]any{}
+		doc = make(map[string]any)
 	}
-	hooks := map[string]any{}
+	hooks := make(map[string]any)
 	if raw, ok := doc["hooks"]; ok && raw != nil {
-		m, ok := raw.(map[string]any)
+		object, ok := raw.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("settings.json: hooks is %T, not an object", raw)
+			return nil, &SettingsShapeError{Path: "hooks", Want: "an object", Got: raw}
 		}
-		hooks = m
+		hooks = object
 	}
 	var pre []any
 	if raw, ok := hooks["PreToolUse"]; ok && raw != nil {
 		list, ok := raw.([]any)
 		if !ok {
-			return nil, fmt.Errorf("settings.json: hooks.PreToolUse is %T, not a list", raw)
+			return nil, &SettingsShapeError{Path: "hooks.PreToolUse", Want: "a list", Got: raw}
 		}
 		pre = list
 	}
@@ -94,20 +100,20 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 }
 
 func isApprovalHook(entry any) bool {
-	m, ok := entry.(map[string]any)
+	section, ok := entry.(map[string]any)
 	if !ok {
 		return false
 	}
-	list, ok := m["hooks"].([]any)
+	list, ok := section["hooks"].([]any)
 	if !ok {
 		return false
 	}
 	for _, h := range list {
-		hm, ok := h.(map[string]any)
+		hookMap, ok := h.(map[string]any)
 		if !ok {
 			continue
 		}
-		if cmd, ok := hm["command"].(string); ok && strings.HasSuffix(cmd, " approve hook") {
+		if cmd, ok := hookMap["command"].(string); ok && strings.HasSuffix(cmd, " approve hook") {
 			return true
 		}
 	}
@@ -125,7 +131,7 @@ func isApprovalHook(entry any) bool {
 func SelfBin() string {
 	bin, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "approvals: this binary cannot name itself, so sessions materialize with no approval hook: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "approvals: this binary cannot name itself, so sessions materialize with no approval hook: %v\n", err)
 		return ""
 	}
 	return bin
@@ -154,7 +160,7 @@ func MaterializeHook(worktree, herrscherBin string) error {
 		return err
 	}
 	claudeDir := filepath.Join(worktree, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+	if err := os.MkdirAll(claudeDir, dirMode); err != nil {
 		return fmt.Errorf("create .claude dir: %w", err)
 	}
 	path := filepath.Join(claudeDir, localSettingsFile)
@@ -162,7 +168,7 @@ func MaterializeHook(worktree, herrscherBin string) error {
 	buf, err := os.ReadFile(path)
 	switch {
 	case err == nil:
-		if len(strings.TrimSpace(string(buf))) > 0 {
+		if strings.TrimSpace(string(buf)) != "" {
 			cur = buf
 		}
 	case !os.IsNotExist(err):
@@ -172,18 +178,20 @@ func MaterializeHook(worktree, herrscherBin string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, out, 0o644); err != nil {
+	if err := os.WriteFile(path, out, fileMode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
 }
 
-var materializedGitExcludes = []string{
-	"/AGENTS.md",
-	"/.codex/",
-	"/.claude/",
-	"/.mcp.json",
-	"/.herrscher/",
+func materializedGitExcludes() []string {
+	return []string{
+		"/AGENTS.md",
+		"/.codex/",
+		"/.claude/",
+		"/.mcp.json",
+		"/.herrscher/",
+	}
 }
 
 // Agent is a durable companion: a name, backend vendor, and the home directory
@@ -255,13 +263,23 @@ func (a Agent) MaterializeInto(dst, worktreePath string) error {
 // in the staged case is not on this machine.
 func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	claudeDir := filepath.Join(dst, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+	if err := os.MkdirAll(claudeDir, dirMode); err != nil {
 		return fmt.Errorf("create .claude dir: %w", err)
 	}
 	codexDir := filepath.Join(dst, ".codex")
-	if err := os.MkdirAll(codexDir, 0o755); err != nil {
+	if err := os.MkdirAll(codexDir, dirMode); err != nil {
 		return fmt.Errorf("create .codex dir: %w", err)
 	}
+	if err := a.copyTemplates(dst, claudeDir, worktreePath, herrscherBin); err != nil {
+		return err
+	}
+	if err := a.writeInstructions(dst, claudeDir, worktreePath); err != nil {
+		return err
+	}
+	return a.writeCodexConfig(codexDir, worktreePath)
+}
+
+func (a Agent) copyTemplates(dst, claudeDir, worktreePath, herrscherBin string) error {
 	copies := []struct {
 		src, dst string
 		jsonDst  bool
@@ -270,26 +288,29 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 		{filepath.Join(a.Home, mcpFile), filepath.Join(dst, ".mcp.json"), true, false},
 		{filepath.Join(a.Home, settingsFile), filepath.Join(claudeDir, "settings.json"), true, true},
 	}
-	for _, c := range copies {
-		buf, err := os.ReadFile(c.src)
+	for _, template := range copies {
+		buf, err := os.ReadFile(template.src)
 		if err != nil {
-			return fmt.Errorf("read %s: %w", filepath.Base(c.src), err)
+			return fmt.Errorf("read %s: %w", filepath.Base(template.src), err)
 		}
 		repl := worktreePath
-		if c.jsonDst {
+		if template.jsonDst {
 			repl = jsonStringInner(worktreePath)
 		}
 		out := []byte(strings.ReplaceAll(string(buf), worktreeToken, repl))
-		if c.settings && herrscherBin != "" {
+		if template.settings && herrscherBin != "" {
 			if out, err = injectApprovalHook(out, herrscherBin); err != nil {
 				return err
 			}
 		}
-		if err := os.WriteFile(c.dst, out, 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", c.dst, err)
+		if err := os.WriteFile(template.dst, out, fileMode); err != nil {
+			return fmt.Errorf("write %s: %w", template.dst, err)
 		}
 	}
+	return nil
+}
 
+func (a Agent) writeInstructions(dst, claudeDir, worktreePath string) error {
 	soul, err := os.ReadFile(filepath.Join(a.Home, soulFile))
 	if err != nil {
 		return fmt.Errorf("read %s: %w", soulFile, err)
@@ -297,26 +318,29 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	soulOut := strings.ReplaceAll(string(soul), worktreeToken, worktreePath)
 	claudeMd, agentsMd := soulOut, soulOut
 
-	userRaw, uErr := os.ReadFile(filepath.Join(a.Home, userFile))
-	if uErr != nil && !os.IsNotExist(uErr) {
-		return fmt.Errorf("read %s: %w", userFile, uErr)
+	userRaw, err := os.ReadFile(filepath.Join(a.Home, userFile))
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read %s: %w", userFile, err)
 	}
-	if uErr == nil {
+	if err == nil {
 		userOut := strings.ReplaceAll(string(userRaw), worktreeToken, worktreePath)
-		if err := os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), fileMode); err != nil {
 			return fmt.Errorf("write .claude/USER.md: %w", err)
 		}
 		claudeMd = soulOut + "\n\n@USER.md\n"
 		agentsMd = soulOut + "\n\n# User\n\n" + userOut
 	}
 
-	if err := os.WriteFile(filepath.Join(claudeDir, "CLAUDE.md"), []byte(claudeMd), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(claudeDir, "CLAUDE.md"), []byte(claudeMd), fileMode); err != nil {
 		return fmt.Errorf("write .claude/CLAUDE.md: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dst, "AGENTS.md"), []byte(agentsMd), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dst, "AGENTS.md"), []byte(agentsMd), fileMode); err != nil {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
+	return nil
+}
 
+func (a Agent) writeCodexConfig(codexDir, worktreePath string) error {
 	mcp, err := os.ReadFile(filepath.Join(a.Home, mcpFile))
 	if err != nil {
 		return fmt.Errorf("read %s: %w", mcpFile, err)
@@ -325,7 +349,7 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), codexConfig, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), codexConfig, fileMode); err != nil {
 		return fmt.Errorf("write config.toml: %w", err)
 	}
 	return nil
@@ -338,7 +362,8 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 // worktree verb, rather than beside the file writes.
 func EnsureGitExcludes(worktree string) error {
 	inside, err := exec.Command("git", "-C", worktree, "rev-parse", "--is-inside-work-tree").Output()
-	if err != nil || strings.TrimSpace(string(inside)) != "true" {
+	isWorkTree := err == nil && strings.TrimSpace(string(inside)) == "true"
+	if !isWorkTree {
 		return nil
 	}
 	out, err := exec.Command("git", "-C", worktree, "rev-parse", "--git-path", "info/exclude").Output()
@@ -355,7 +380,7 @@ func EnsureGitExcludes(worktree string) error {
 	}
 	existing := "\n" + strings.ReplaceAll(string(current), "\r\n", "\n") + "\n"
 	var addition strings.Builder
-	for _, pattern := range materializedGitExcludes {
+	for _, pattern := range materializedGitExcludes() {
 		if !strings.Contains(existing, "\n"+pattern+"\n") {
 			addition.WriteString(pattern)
 			addition.WriteByte('\n')
@@ -369,15 +394,14 @@ func EnsureGitExcludes(worktree string) error {
 		addition.Reset()
 		addition.WriteString(additionText)
 	}
-	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	excludeFile, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
 	if err != nil {
 		return fmt.Errorf("open local git exclude: %w", err)
 	}
-	if _, err := f.WriteString(addition.String()); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("write local git exclude: %w", err)
+	if _, err := excludeFile.WriteString(addition.String()); err != nil {
+		return errors.Join(fmt.Errorf("write local git exclude: %w", err), excludeFile.Close())
 	}
-	if err := f.Close(); err != nil {
+	if err := excludeFile.Close(); err != nil {
 		return fmt.Errorf("close local git exclude: %w", err)
 	}
 	return nil

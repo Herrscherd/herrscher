@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 )
 
 type fixedGate struct {
@@ -16,7 +17,9 @@ type fixedGate struct {
 	capped   bool
 }
 
-func (g fixedGate) Check(string) (string, uint64, bool) { return g.reason, g.headroom, g.capped }
+func (g fixedGate) Check(string) manager.BudgetCheck {
+	return manager.BudgetCheck{Reason: g.reason, Headroom: g.headroom, Capped: g.capped}
+}
 
 func TestDispatchRefusedWhilePaused(t *testing.T) {
 	a := &fanRecorder{}

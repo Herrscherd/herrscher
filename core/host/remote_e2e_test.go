@@ -5,13 +5,13 @@ package host
 import (
 	"bufio"
 	"context"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/control"
@@ -20,6 +20,8 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/service"
 )
+
+const forwardConfirmTimeout = 30 * time.Second
 
 func e2eTarget(t *testing.T) string {
 	t.Helper()
@@ -277,18 +279,32 @@ func holdForward(ctx context.Context, t *testing.T, run runner.SSH, remote strin
 	if err := held.Start(); err != nil {
 		t.Fatalf("hold the forward for %s open: %v", remote, err)
 	}
-	t.Cleanup(func() { logCleanup(held.Process.Kill()) })
-	lines := bufio.NewScanner(stderr)
-	for lines.Scan() {
-		if forwardConfirmed(lines.Text(), remote) {
-			go func() {
-				_, err := io.Copy(io.Discard, stderr)
-				logCleanup(err)
-			}()
-			return
+	confirmed := make(chan struct{}, 1)
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		lines := bufio.NewScanner(stderr)
+		for lines.Scan() {
+			if forwardConfirmed(lines.Text(), remote) {
+				select {
+				case confirmed <- struct{}{}:
+				default:
+				}
+			}
 		}
+	}()
+	guard := time.AfterFunc(forwardConfirmTimeout, func() { logCleanup(held.Process.Kill()) })
+	t.Cleanup(func() {
+		guard.Stop()
+		logCleanup(held.Process.Kill())
+		<-drained
+		logCleanup(held.Wait())
+	})
+	select {
+	case <-confirmed:
+	case <-drained:
+		t.Fatalf("the far end never confirmed the forward %s", remote)
 	}
-	t.Fatalf("the far end never confirmed the forward %s", remote)
 }
 
 func forwardConfirmed(line, remote string) bool {

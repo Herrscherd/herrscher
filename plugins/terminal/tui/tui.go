@@ -1340,7 +1340,11 @@ func (m *model) handlePendingClose(msg tea.KeyMsg) tea.Cmd {
 		return cmd
 	}
 	m.pendingClose = false
-	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc {
+	if msg.Type == tea.KeyCtrlC {
+		cmd, _ := m.interruptOrQuit()
+		return cmd
+	}
+	if msg.Type == tea.KeyEsc {
 		return tea.Quit
 	}
 	return nil

@@ -839,6 +839,24 @@ func TestCtrlCNoticesWhenNothingWasInterrupted(t *testing.T) {
 	}
 }
 
+func TestCtrlCDuringAPendingCloseInterruptsTheTurn(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.active = "a"
+	m.ready = true
+	m.tabs["a"].busy = true
+	m.pendingClose = true
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if len(f.interrupted) != 1 {
+		t.Fatalf("Ctrl+C during a pending close must interrupt the running turn: %+v", f.interrupted)
+	}
+	if cmd != nil {
+		t.Fatal("Ctrl+C during a pending close on a busy turn must not quit")
+	}
+}
+
 func TestCtrlCInterruptsATurnFromTheSearchOverlay(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
 	m := newModel(f)

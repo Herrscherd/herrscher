@@ -14,10 +14,12 @@ import (
 type closingGateway struct {
 	contracts.Gateway
 
-	err         error
-	closed      bool
-	hasDeadline bool
-	canceled    bool
+	startErr      func() error
+	err           error
+	closed        bool
+	hasDeadline   bool
+	canceled      bool
+	startCanceled bool
 }
 
 func (g *closingGateway) Manifest() contracts.Manifest {
@@ -28,6 +30,7 @@ func (g *closingGateway) Close(ctx context.Context) error {
 	g.closed = true
 	_, g.hasDeadline = ctx.Deadline()
 	g.canceled = ctx.Err() != nil
+	g.startCanceled = g.startErr != nil && g.startErr() != nil
 	return g.err
 }
 
@@ -67,5 +70,27 @@ func TestRunHubClosesItsGatewaysWhenTheStateCannotLoad(t *testing.T) {
 	}
 	if !gateway.closed {
 		t.Fatal("RunHub returned without closing its gateways")
+	}
+}
+
+func TestRunHubCancelsTheStartContextBeforeClosingItsGateways(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gateway := &closingGateway{startErr: ctx.Err}
+
+	err := RunHub(ctx, nil, []contracts.Gateway{gateway}, Options{StatePath: statePath})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunHub must return the cancellation of its run context, got %v", err)
+	}
+	if !gateway.closed {
+		t.Fatal("RunHub returned without closing its gateways")
+	}
+	if !gateway.startCanceled {
+		t.Fatal("the gateway was closed while its start context was still live")
 	}
 }

@@ -308,8 +308,6 @@ func (t *sessionTable) pick(session, value string) bool {
 	return driver.Pick(value)
 }
 
-// Interrupt cancels the in-flight turn of the named session, returning false
-// when no live session by that name is driving (mirror of Pick).
 func (t *sessionTable) Interrupt(session string) bool {
 	driver := t.lookup(session)
 	if driver == nil {
@@ -319,8 +317,6 @@ func (t *sessionTable) Interrupt(session string) bool {
 	return true
 }
 
-// Seed routes an opening task to the named session's driver, returning false when
-// no live session by that name is driving (mirror of Pick).
 func (t *sessionTable) Seed(session, task string) bool {
 	driver := t.lookup(session)
 	if driver == nil {
@@ -329,10 +325,6 @@ func (t *sessionTable) Seed(session, task string) bool {
 	return driver.Seed(task)
 }
 
-// Submit injects one inbound message into the named session's turn queue,
-// returning false when no live session by that name is driving (mirror of Pick).
-// It is the push counterpart of the driver's own poll loop: a gateway that
-// receives messages by push calls this instead of being polled.
 func (t *sessionTable) Submit(ctx context.Context, session string, inbound contracts.Inbound) bool {
 	driver := t.lookup(session)
 	if driver == nil {

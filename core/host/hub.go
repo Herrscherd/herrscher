@@ -379,13 +379,6 @@ func (h *hub) Submit(name string, in contracts.Inbound) bool {
 	return h.sessions.Submit(context.Background(), name, in)
 }
 
-// Pick routes a select-menu value to the named session's driver, returning false
-// when no live session by that name is driving.
-//
-// An approval answer is taken first, and by value rather than by session: it is
-// answered by the daemon itself, must not reach the backend as a choice the
-// model never posed, and must work for a session whose driver is busy inside the
-// very turn that is waiting on it.
 func (h *hub) Pick(name, value string) bool {
 	if answerApprovalPick(h.approvals, name, value) {
 		return true

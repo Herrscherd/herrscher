@@ -35,7 +35,9 @@ func TestCloseReleasesPendingConns(t *testing.T) {
 			if err := acc.Close(); err != nil {
 				t.Fatalf("Close: %v", err)
 			}
-			assertScanEndsAfterClose(t, clients[0])
+			for _, c := range clients {
+				assertScanEndsAfterClose(t, c)
+			}
 			for _, c := range clients {
 				closeLogged(t, c)
 			}

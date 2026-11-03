@@ -201,6 +201,9 @@ linters:
       - path: ^core/host/(approve_cmd|lock|remote_materialize)\.go$
         linters: [gosec]
         text: "^G304:"
+      - path: ^core/host/backendenv\.go$
+        linters: [gochecknoglobals]
+        text: "capturedGateway"
 
 formatters:
   enable:

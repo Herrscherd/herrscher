@@ -14,8 +14,8 @@ func SocketPath(session string) string {
 	return filepath.Join(os.TempDir(), "herrscher-control-"+SafeSessionName(session)+".sock")
 }
 
-func listenControl(path string) (net.Listener, error) {
-	return new(net.ListenConfig).Listen(context.Background(), "unix", path)
+func listenControl(ctx context.Context, path string) (net.Listener, error) {
+	return new(net.ListenConfig).Listen(ctx, "unix", path)
 }
 
 func dialControl(ctx context.Context, path string) (net.Conn, error) {

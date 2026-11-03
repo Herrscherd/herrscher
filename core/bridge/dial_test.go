@@ -13,7 +13,7 @@ func TestDialWaitsForASocketThatIsNotThereYet(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "late.sock")
 	go func() {
 		time.Sleep(150 * time.Millisecond)
-		acc, err := control.Accept(path)
+		acc, err := control.Accept(t.Context(), path)
 		if err != nil {
 			return
 		}

@@ -328,7 +328,7 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	approvalTab := newApprovalTable()
 	sessionTab := newSessionTable()
 	a := &fanRecorder{}
-	acc, err := control.Accept(tmpSock(t))
+	acc, err := control.Accept(t.Context(), tmpSock(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,8 +560,12 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 	gotInput(t, c2, "q2")
 }
 
-func tmpSock(t *testing.T) string                      { t.Helper(); return filepath.Join(t.TempDir(), "h.sock") }
-func acceptCtl(sock string) (*control.Acceptor, error) { return control.Accept(sock) }
+func tmpSock(t *testing.T) string { t.Helper(); return filepath.Join(t.TempDir(), "h.sock") }
+
+func acceptCtl(sock string) (*control.Acceptor, error) {
+	return control.Accept(context.Background(), sock)
+}
+
 func dialCtl(t *testing.T, sock string) *control.Conn {
 	t.Helper()
 	c, err := control.Dial(sock)

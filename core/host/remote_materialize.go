@@ -14,18 +14,18 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
-func stageAgentTar(agent agent.Agent, remoteWorktree, remoteBin string) (io.Reader, error) {
+func stageAgentTar(sessionAgent agent.Agent, remoteWorktree, remoteBin string) (io.Reader, error) {
 	stage, err := os.MkdirTemp("", "herrscher-agent-")
 	if err != nil {
-		return nil, fmt.Errorf("stage agent %q: %w", agent.Name, err)
+		return nil, fmt.Errorf("stage agent %q: %w", sessionAgent.Name, err)
 	}
 	defer func() { logCleanup(os.RemoveAll(stage)) }()
-	if err := agent.MaterializeIntoAs(stage, remoteWorktree, remoteBin); err != nil {
-		return nil, fmt.Errorf("stage agent %q: %w", agent.Name, err)
+	if err := sessionAgent.MaterializeIntoAs(stage, remoteWorktree, remoteBin); err != nil {
+		return nil, fmt.Errorf("stage agent %q: %w", sessionAgent.Name, err)
 	}
 	var buf bytes.Buffer
 	if err := tarDir(stage, &buf); err != nil {
-		return nil, fmt.Errorf("pack agent %q: %w", agent.Name, err)
+		return nil, fmt.Errorf("pack agent %q: %w", sessionAgent.Name, err)
 	}
 	return &buf, nil
 }

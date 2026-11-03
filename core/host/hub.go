@@ -75,7 +75,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 	if _, ok := h.live[sess.Name]; ok {
 		return
 	}
-	acc, err := control.Accept(control.SocketPath(sess.Name))
+	acc, err := control.Accept(ctx, control.SocketPath(sess.Name))
 	if err != nil {
 		warnStderr("herrscher serve: session %q: control socket: %v\n", sess.Name, err)
 		return

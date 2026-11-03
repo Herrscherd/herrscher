@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// hostDir lays out a minimal host module: the managed manifest plus the two go
-// files apply saves around a change.
 func hostDir(t *testing.T, modules ...string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -48,8 +46,6 @@ func TestManageVersionRemoveKeepsTheArgumentWhole(t *testing.T) {
 	if mod, ver := moduleArg("add", "mod/a@v1.2.3"); mod != "mod/a" || ver != "v1.2.3" {
 		t.Fatalf("add = (%q, %q), want the version split off", mod, ver)
 	}
-	// A remove that split the version off would find no such module, report no
-	// change, and still run the build and announce a removal that never happened.
 	if mod, ver := moduleArg("remove", "mod/a@v1.2.3"); mod != "mod/a@v1.2.3" || ver != "" {
 		t.Fatalf("remove = (%q, %q), want the argument whole", mod, ver)
 	}
@@ -65,14 +61,14 @@ func TestManageVersionApplyForgetsTheEarlierSnapshot(t *testing.T) {
 	}
 	ops.saved = saved
 	gomod := filepath.Join(dir, "go.mod")
-	if err := os.WriteFile(gomod, []byte("module host\n\ngo 1.25.0\n\nrequire mod/a v1.2.3\n"), 0o644); err != nil {
+	if err = os.WriteFile(gomod, []byte("module host\n\ngo 1.25.0\n\nrequire mod/a v1.2.3\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := ops.Apply(context.Background(), "pin", "mod/a", ""); err != nil {
+	if _, err = ops.Apply(context.Background(), "pin", "mod/a", ""); err != nil {
 		t.Fatalf("pin: %v", err)
 	}
-	if err := ops.Restore(); err != nil {
+	if err = ops.Restore(); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
 	body, err := os.ReadFile(gomod)
@@ -107,10 +103,14 @@ func TestManageVersionPinAndUnpin(t *testing.T) {
 	if err != nil || !pins["mod/a"] || pins["mod/b"] {
 		t.Fatalf("pins = %v, err = %v", pins, err)
 	}
-	if err := pinModule(dir, "mod/a", false); err != nil {
+	if err = pinModule(dir, "mod/a", false); err != nil {
 		t.Fatalf("unpin: %v", err)
 	}
-	if pins, _ := loadPins(dir); pins["mod/a"] {
+	pins, err = loadPins(dir)
+	if err != nil {
+		t.Fatalf("load pins: %v", err)
+	}
+	if pins["mod/a"] {
 		t.Fatalf("pins = %v, want mod/a dropped", pins)
 	}
 }

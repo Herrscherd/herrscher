@@ -14,7 +14,6 @@ func TestSetProjectPinnedPersistsAndPins(t *testing.T) {
 	if err := s.SetProjectPinned("main", "neublox"); err != nil {
 		t.Fatal(err)
 	}
-	// Re-read from disk: the point is that the next start sees the settled project.
 	reloaded, err := LoadState(path)
 	if err != nil {
 		t.Fatal(err)
@@ -34,15 +33,12 @@ func TestSetProjectPinnedUnknownSessionIsNoop(t *testing.T) {
 
 func TestSetProjectPinnedUnchangedIsNoop(t *testing.T) {
 	s := NewState(filepath.Join(t.TempDir(), "state.json"))
-	_ = s.AddSession(Session{Name: "main", MemoryProject: "neublox", ProjectPinned: true})
+	must(t, s.AddSession(Session{Name: "main", MemoryProject: "neublox", ProjectPinned: true}))
 	if err := s.SetProjectPinned("main", "neublox"); err != nil {
 		t.Fatalf("an already-settled project must be a no-op, got %v", err)
 	}
 }
 
-// TestMemoryRootsPreferTheMemoryFields pins the precedence every memory-scoping
-// path relies on: a memory root answers first, and the placement field of the
-// same name is only the fallback for the sessions that never set one.
 func TestMemoryRootsPreferTheMemoryFields(t *testing.T) {
 	for _, tc := range []struct {
 		name           string

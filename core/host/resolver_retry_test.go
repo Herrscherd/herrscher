@@ -14,8 +14,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 )
 
-// remotePlugin is a memory plugin whose factory is non-nil (so Memory enters the
-// remote branch) but is never called on the remote path.
 func remotePlugin() []contracts.Plugin {
 	return []contracts.Plugin{{
 		Manifest: contracts.Manifest{Category: contracts.CategoryMemory},
@@ -23,7 +21,6 @@ func remotePlugin() []contracts.Plugin {
 	}}
 }
 
-// fastClock wires the resolver's clock seams so retries incur no real waits.
 func fastClock(r *Resolver, now func() time.Time) {
 	r.now = now
 	r.sleep = func(time.Duration) <-chan time.Time {
@@ -34,7 +31,7 @@ func fastClock(r *Resolver, now func() time.Time) {
 }
 
 func TestRemoteResolveRetriesThenSucceeds(t *testing.T) {
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, "")
+	r := NewResolver(categorySet(contracts.CategoryMemory), "")
 	frozen := time.Unix(0, 0)
 	fastClock(r, func() time.Time { return frozen })
 
@@ -48,7 +45,7 @@ func TestRemoteResolveRetriesThenSucceeds(t *testing.T) {
 		return want, nil
 	}
 
-	got, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	got, _, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("expected success within the retry budget, got %v", err)
 	}
@@ -61,7 +58,7 @@ func TestRemoteResolveRetriesThenSucceeds(t *testing.T) {
 }
 
 func TestRemoteResolveExhaustsAttemptsAndWarns(t *testing.T) {
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, "")
+	r := NewResolver(categorySet(contracts.CategoryMemory), "")
 	frozen := time.Unix(0, 0)
 	fastClock(r, func() time.Time { return frozen })
 	var buf bytes.Buffer
@@ -73,7 +70,7 @@ func TestRemoteResolveExhaustsAttemptsAndWarns(t *testing.T) {
 		return nil, context.DeadlineExceeded
 	}
 
-	got, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	got, _, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	if got != nil {
 		t.Fatalf("expected nil memory on give-up, got %v", got)
 	}
@@ -91,8 +88,8 @@ func TestRemoteResolveExhaustsAttemptsAndWarns(t *testing.T) {
 }
 
 func TestRemoteResolveStopsAtBudget(t *testing.T) {
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, "")
-	r.retryAttempts = 100 // high, so the budget — not the attempt cap — must stop it
+	r := NewResolver(categorySet(contracts.CategoryMemory), "")
+	r.retryAttempts = 100
 	r.retryBudget = 10 * time.Second
 	tick := time.Unix(0, 0)
 	fastClock(r, func() time.Time { tick = tick.Add(6 * time.Second); return tick })
@@ -103,7 +100,7 @@ func TestRemoteResolveStopsAtBudget(t *testing.T) {
 		return nil, errors.New("down")
 	}
 
-	_, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	_, _, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	var rre *RemoteResolveError
 	if !errors.As(err, &rre) {
 		t.Fatalf("expected *RemoteResolveError, got %v", err)
@@ -113,12 +110,9 @@ func TestRemoteResolveStopsAtBudget(t *testing.T) {
 	}
 }
 
-// TestRemoteResolveRecordsMetricsOnHealth wires the resolver into the same
-// registry the health surface reports, so a failed remote resolve is visible on
-// the health snapshot (attempts, one failure, and a latency sample).
 func TestRemoteResolveRecordsMetricsOnHealth(t *testing.T) {
 	h := health.NewHealth(time.Unix(0, 0))
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, "")
+	r := NewResolver(categorySet(contracts.CategoryMemory), "")
 	r.SetMetrics(h.Metrics())
 	frozen := time.Unix(0, 0)
 	fastClock(r, func() time.Time { return frozen })
@@ -126,7 +120,8 @@ func TestRemoteResolveRecordsMetricsOnHealth(t *testing.T) {
 		return nil, context.DeadlineExceeded
 	}
 
-	_, _ = r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	_, _, memErr := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	logCleanup(memErr)
 
 	m := h.Snapshot(time.Unix(1, 0), 30*time.Second).Metrics
 	if m.RemoteAttempts != int64(r.retryAttempts) {
@@ -140,17 +135,15 @@ func TestRemoteResolveRecordsMetricsOnHealth(t *testing.T) {
 	}
 }
 
-// TestLocalResolveSkipsRetrySeam asserts the in-process path never touches the
-// remote dial/retry seam — no retry/timeout overhead when nothing is remote.
 func TestLocalResolveSkipsRetrySeam(t *testing.T) {
-	r := NewResolver(nil, "") // nothing remote
+	r := NewResolver(nil, "")
 	var calls int
 	r.dialMemory = func(context.Context, contracts.Plugin) (contracts.Memory, error) {
 		calls++
-		return nil, nil
+		return &stubMem{}, nil
 	}
 	want := &stubMem{}
-	_, err := r.Memory(context.Background(), []contracts.Plugin{{
+	_, _, err := r.Memory(context.Background(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{Category: contracts.CategoryMemory},
 		Memory:   func(context.Context, contracts.PluginConfig) (contracts.Memory, error) { return want, nil },
 	}}, func(string) string { return "" })
@@ -162,8 +155,6 @@ func TestLocalResolveSkipsRetrySeam(t *testing.T) {
 	}
 }
 
-// orchestratorPlugin is an orchestrator plugin whose factory is non-nil (so the
-// remote branch is entered) but is never called on the remote path.
 func orchestratorPlugin() []contracts.Plugin {
 	return []contracts.Plugin{{
 		Manifest: contracts.Manifest{Category: contracts.CategoryOrchestrator},
@@ -173,11 +164,8 @@ func orchestratorPlugin() []contracts.Plugin {
 	}}
 }
 
-// TestRemoteResolveOrchestratorRetriesThenSucceeds proves the orchestrator reuses
-// the same Stage A retry harness as memory: a transient dial failure is retried
-// within budget and the recovered proxy is returned.
 func TestRemoteResolveOrchestratorRetriesThenSucceeds(t *testing.T) {
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryOrchestrator: true}, "")
+	r := NewResolver(categorySet(contracts.CategoryOrchestrator), "")
 	frozen := time.Unix(0, 0)
 	fastClock(r, func() time.Time { return frozen })
 
@@ -191,7 +179,7 @@ func TestRemoteResolveOrchestratorRetriesThenSucceeds(t *testing.T) {
 		return want, nil
 	}
 
-	got, err := r.Orchestrator(context.Background(), orchestratorPlugin())
+	got, _, err := r.Orchestrator(context.Background(), orchestratorPlugin())
 	if err != nil {
 		t.Fatalf("expected success within the retry budget, got %v", err)
 	}
@@ -203,11 +191,9 @@ func TestRemoteResolveOrchestratorRetriesThenSucceeds(t *testing.T) {
 	}
 }
 
-// TestRemoteResolveOrchestratorFailsCleanlyWithMetrics asserts a give-up returns
-// a typed error (not a panic) and moves the same metrics counters memory does.
 func TestRemoteResolveOrchestratorFailsCleanlyWithMetrics(t *testing.T) {
 	h := health.NewHealth(time.Unix(0, 0))
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryOrchestrator: true}, "")
+	r := NewResolver(categorySet(contracts.CategoryOrchestrator), "")
 	r.SetMetrics(h.Metrics())
 	frozen := time.Unix(0, 0)
 	fastClock(r, func() time.Time { return frozen })
@@ -215,7 +201,7 @@ func TestRemoteResolveOrchestratorFailsCleanlyWithMetrics(t *testing.T) {
 		return nil, context.DeadlineExceeded
 	}
 
-	got, err := r.Orchestrator(context.Background(), orchestratorPlugin())
+	got, _, err := r.Orchestrator(context.Background(), orchestratorPlugin())
 	if got != nil {
 		t.Fatalf("expected nil orchestrator on give-up, got %v", got)
 	}
@@ -232,17 +218,14 @@ func TestRemoteResolveOrchestratorFailsCleanlyWithMetrics(t *testing.T) {
 	}
 }
 
-// TestLocalOrchestratorResolveSkipsDial is the C2 "zero dials when local" check:
-// without orchestrator in HERRSCHER_REMOTE, Orchestrator returns (nil, nil) and
-// never touches the dial seam, leaving buildOrchestrator to build in-process.
 func TestLocalOrchestratorResolveSkipsDial(t *testing.T) {
-	r := NewResolver(nil, "") // nothing remote
+	r := NewResolver(nil, "")
 	var calls int
 	r.dialOrchestrator = func(context.Context, contracts.Plugin) (contracts.Orchestrator, error) {
 		calls++
-		return nil, nil
+		return &recordingOrch{}, nil
 	}
-	orch, err := r.Orchestrator(context.Background(), orchestratorPlugin())
+	orch, _, err := r.Orchestrator(context.Background(), orchestratorPlugin())
 	if err != nil {
 		t.Fatalf("local resolve: %v", err)
 	}
@@ -254,19 +237,18 @@ func TestLocalOrchestratorResolveSkipsDial(t *testing.T) {
 	}
 }
 
-// TestLocalBackendResolveSkipsDial is the C3 "zero dials when local" check:
-// without backend in HERRSCHER_REMOTE, Backend returns (nil, nil) and never
-// dials, leaving the bridge to build the in-process backend.
 func TestLocalBackendResolveSkipsDial(t *testing.T) {
-	r := NewResolver(nil, "") // nothing remote
+	r := NewResolver(nil, "")
 	var calls int
 	r.dialBackend = func(context.Context, contracts.Plugin) (contracts.Backend, error) {
 		calls++
-		return nil, nil
+		return &streamingBackend{}, nil
 	}
-	be, err := r.Backend(context.Background(), []contracts.Plugin{{
+	be, _, err := r.Backend(context.Background(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{Category: contracts.CategoryBackend},
-		Backend:  func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return nil, nil },
+		Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
+			return &streamingBackend{}, nil
+		},
 	}})
 	if err != nil {
 		t.Fatalf("local resolve: %v", err)

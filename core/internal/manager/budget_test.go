@@ -1,6 +1,8 @@
 package manager
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -11,9 +13,9 @@ func TestBudgetReason(t *testing.T) {
 		name           string
 		sc             float64
 		st             uint64
-		cc, ctk        float64 // caps
+		cc, ctk        float64
 		tkCap          uint64
-		coc, coctk     float64 // cohort totals + caps unused fields below
+		coc, coctk     float64
 		cohortCost     float64
 		cohortTokens   uint64
 		cohortCostCap  float64
@@ -39,9 +41,6 @@ func TestBudgetReason(t *testing.T) {
 	}
 }
 
-// TestSessionBudgetGate_CheckTrips proves the concrete gate re-derives usage
-// from the transcript fold (single source of truth) and persists PausedReason
-// when a cap trips, so a paused session comes back paused across reloads.
 func TestSessionBudgetGate_CheckTrips(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{{Name: "game", CostCap: 5}}
@@ -52,7 +51,7 @@ func TestSessionBudgetGate_CheckTrips(t *testing.T) {
 	}
 
 	gate := h.BudgetGate()
-	reason, _, _ := gate.Check("game")
+	reason := gate.Check("game").Reason
 	if reason != "cost" {
 		t.Fatalf("reason = %q, want %q", reason, "cost")
 	}
@@ -62,10 +61,6 @@ func TestSessionBudgetGate_CheckTrips(t *testing.T) {
 	}
 }
 
-// TestSessionBudgetGate_CheckHeadroom proves the headroom the host watches
-// mid-turn is what the cap leaves after the transcript's already-spent tokens,
-// that the tightest of the session and cohort caps wins, and that a session
-// with no token cap reports no cap at all.
 func TestSessionBudgetGate_CheckHeadroom(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{
@@ -87,23 +82,18 @@ func TestSessionBudgetGate_CheckHeadroom(t *testing.T) {
 
 	gate := h.BudgetGate()
 
-	// child spent 500 of its own 1000 cap; the cohort spent 800 of 1200. The
-	// cohort's 400 is tighter than the session's 500, so it is what the turn gets.
-	_, got, capped := gate.Check("child")
-	if !capped || got != 400 {
-		t.Fatalf("Check(child) headroom = (%d, %v), want (400, true)", got, capped)
+	child := gate.Check("child")
+	if !child.Capped || child.Headroom != 400 {
+		t.Fatalf("Check(child) headroom = (%d, %v), want (400, true)", child.Headroom, child.Capped)
 	}
-	if _, got, capped := gate.Check("free"); capped || got != 0 {
-		t.Fatalf("Check(free) headroom = (%d, %v), want (0, false)", got, capped)
+	if free := gate.Check("free"); free.Capped || free.Headroom != 0 {
+		t.Fatalf("Check(free) headroom = (%d, %v), want (0, false)", free.Headroom, free.Capped)
 	}
-	if _, got, capped := gate.Check("ghost"); capped || got != 0 {
-		t.Fatalf("Check of an unknown session = (%d, %v), want (0, false)", got, capped)
+	if ghost := gate.Check("ghost"); ghost.Capped || ghost.Headroom != 0 {
+		t.Fatalf("Check of an unknown session = (%d, %v), want (0, false)", ghost.Headroom, ghost.Capped)
 	}
 }
 
-// TestSessionBudgetGate_HeadroomFloorsAtZero proves a session already past its
-// cap reports no headroom rather than wrapping the unsigned subtraction into an
-// enormous one.
 func TestSessionBudgetGate_HeadroomFloorsAtZero(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{{Name: "spent", TokenCap: 100}}
@@ -112,14 +102,12 @@ func TestSessionBudgetGate_HeadroomFloorsAtZero(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_, got, capped := h.BudgetGate().Check("spent")
-	if !capped || got != 0 {
-		t.Fatalf("headroom over cap = (%d, %v), want (0, true)", got, capped)
+	spent := h.BudgetGate().Check("spent")
+	if !spent.Capped || spent.Headroom != 0 {
+		t.Fatalf("headroom over cap = (%d, %v), want (0, true)", spent.Headroom, spent.Capped)
 	}
 }
 
-// TestSessionBudgetGate_UncappedNeverTrips proves a session with no caps
-// configured never pauses and never gets a PausedReason written.
 func TestSessionBudgetGate_UncappedNeverTrips(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{{Name: "free"}}
@@ -130,12 +118,29 @@ func TestSessionBudgetGate_UncappedNeverTrips(t *testing.T) {
 	}
 
 	gate := h.BudgetGate()
-	reason, _, _ := gate.Check("free")
+	reason := gate.Check("free").Reason
 	if reason != "" {
 		t.Fatalf("reason = %q, want empty", reason)
 	}
 	sess, ok := st.FindSession("free")
 	if !ok || sess.PausedReason != "" {
 		t.Fatalf("PausedReason must stay empty: ok=%v sess=%+v", ok, sess)
+	}
+}
+
+func TestNonNegativeCountClampsNegativeTotals(t *testing.T) {
+	if got := nonNegativeCount(-3); got != 0 {
+		t.Fatalf("nonNegativeCount(-3) = %d, want 0", got)
+	}
+	if got := nonNegativeCount(7); got != 7 {
+		t.Fatalf("nonNegativeCount(7) = %d, want 7", got)
+	}
+}
+
+func TestSessionSetBudgetReportsAnUnknownSession(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "category")
+	_, err := h.sessionSetBudgetRun(context.Background(), args("name", "ghost", "cost_cap", "5"))
+	if _, ok := errors.AsType[*SessionNotFoundError](err); !ok {
+		t.Fatalf("err = %v, want a *SessionNotFoundError", err)
 	}
 }

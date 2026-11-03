@@ -9,7 +9,9 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,7 +20,6 @@ import (
 	"time"
 )
 
-// File names inside an agent home (the durable source of truth).
 const (
 	soulFile     = "SOUL.md"
 	userFile     = "USER.md"
@@ -30,26 +31,21 @@ const (
 	hostFile     = "host"
 )
 
-// worktreeToken is replaced with the absolute worktree path when an agent is
-// materialized, so an agent's mcp.json can point a server at the session's
-// working directory without knowing it in advance.
 const worktreeToken = "{{WORKTREE}}"
 
-// jsonStringInner returns s escaped for embedding inside a JSON string literal,
-// without the surrounding quotes — so a worktree path with backslashes (Windows)
-// or a quote can be spliced into a JSON template's string value and stay valid.
-func jsonStringInner(s string) string {
-	b, err := json.Marshal(s)
+const (
+	dirMode  = 0o755
+	fileMode = 0o644
+)
+
+func jsonStringInner(value string) string {
+	data, err := json.Marshal(value)
 	if err != nil {
-		return s
+		return value
 	}
-	return string(b[1 : len(b)-1])
+	return string(data[1 : len(data)-1])
 }
 
-// hookWaitSeconds bounds how long the vendor waits for our hook. It is longer
-// than the daemon's own wait on a human on purpose: if the vendor gave up
-// first, the model would be told the hook crashed instead of being told why its
-// tool call was refused.
 const hookWaitSeconds = 900
 
 // HookWait is hookWaitSeconds as a duration, exported for the one caller that
@@ -58,58 +54,31 @@ const hookWaitSeconds = 900
 // tool call.
 const HookWait = hookWaitSeconds * time.Second
 
-// shellSingleQuote quotes s for a POSIX shell, which is what Claude Code runs a
-// hook command through. Without it a binary path holding a space (os.Executable
-// can return one, and a host's configured binary is whatever the operator
-// typed) would be read as a command plus an argument, and every tool call in
-// the session would fail. An embedded single quote closes the quoting, is
-// backslash-escaped outside it, then reopens it: the classic POSIX dance.
 func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// injectApprovalHook adds the PreToolUse hook that asks the daemon before each
-// tool call.
-//
-// It is added here rather than written into the agent's home because the binary
-// it invokes belongs to the machine the session runs on, and a home does not
-// know which machine that will be.
-//
-// Any hook herrscher wrote before is dropped first, so materializing twice over
-// the same file leaves exactly one. A reused worktree already carries the entry
-// from its first session, and a second one would ask the operator twice for
-// every single tool call. Dropping also repairs the binary path when the daemon
-// moved between the two materializations. Hooks somebody else wrote are left
-// where they are: only a command that ends in this daemon's own verb matches.
 func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 	var doc map[string]any
 	if err := json.Unmarshal(settings, &doc); err != nil {
 		return nil, fmt.Errorf("settings.json: %w", err)
 	}
-	// A settings file whose whole content is the JSON literal `null` parses
-	// without error and leaves doc nil. Treat it as the empty object it means,
-	// rather than assigning into a nil map and taking the daemon down.
 	if doc == nil {
-		doc = map[string]any{}
+		doc = make(map[string]any)
 	}
-	// A key of the wrong type is refused rather than replaced. Both of these
-	// hold operator configuration, and a settings file whose shape we do not
-	// recognise is one we have no business rewriting: dropping the key would
-	// throw away hooks somebody wrote, and say nothing. Materialization fails,
-	// which names the file and stops the session before it starts.
-	hooks := map[string]any{}
+	hooks := make(map[string]any)
 	if raw, ok := doc["hooks"]; ok && raw != nil {
-		m, ok := raw.(map[string]any)
+		object, ok := raw.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("settings.json: hooks is %T, not an object", raw)
+			return nil, &SettingsShapeError{Path: "hooks", Want: "an object", Got: raw}
 		}
-		hooks = m
+		hooks = object
 	}
 	var pre []any
 	if raw, ok := hooks["PreToolUse"]; ok && raw != nil {
 		list, ok := raw.([]any)
 		if !ok {
-			return nil, fmt.Errorf("settings.json: hooks.PreToolUse is %T, not a list", raw)
+			return nil, &SettingsShapeError{Path: "hooks.PreToolUse", Want: "a list", Got: raw}
 		}
 		pre = list
 	}
@@ -131,25 +100,21 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 	return json.MarshalIndent(doc, "", "  ")
 }
 
-// isApprovalHook reports whether one PreToolUse entry is a hook this daemon
-// wrote. It matches on the verb the command ends with rather than on the whole
-// command line, since the binary path in front of it is the one thing that
-// legitimately differs between two materializations of the same worktree.
 func isApprovalHook(entry any) bool {
-	m, ok := entry.(map[string]any)
+	section, ok := entry.(map[string]any)
 	if !ok {
 		return false
 	}
-	list, ok := m["hooks"].([]any)
+	list, ok := section["hooks"].([]any)
 	if !ok {
 		return false
 	}
 	for _, h := range list {
-		hm, ok := h.(map[string]any)
+		hookMap, ok := h.(map[string]any)
 		if !ok {
 			continue
 		}
-		if cmd, ok := hm["command"].(string); ok && strings.HasSuffix(cmd, " approve hook") {
+		if cmd, ok := hookMap["command"].(string); ok && strings.HasSuffix(cmd, " approve hook") {
 			return true
 		}
 	}
@@ -173,8 +138,6 @@ func SelfBin() string {
 	return bin
 }
 
-// localSettingsFile is the settings file Claude Code layers over settings.json
-// and writes itself for local permissions.
 const localSettingsFile = "settings.local.json"
 
 // MaterializeHook writes the PreToolUse approval hook into a worktree that has
@@ -190,26 +153,23 @@ const localSettingsFile = "settings.local.json"
 //
 // An empty herrscherBin means no hook at all rather than a hook that fails on
 // every tool call; SelfBin already says out loud when it cannot name itself.
-func MaterializeHook(worktree, herrscherBin string) error {
+func MaterializeHook(ctx context.Context, worktree, herrscherBin string) error {
 	if herrscherBin == "" {
 		return nil
 	}
-	if err := EnsureGitExcludes(worktree); err != nil {
+	if err := EnsureGitExcludes(ctx, worktree); err != nil {
 		return err
 	}
 	claudeDir := filepath.Join(worktree, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+	if err := os.MkdirAll(claudeDir, dirMode); err != nil {
 		return fmt.Errorf("create .claude dir: %w", err)
 	}
 	path := filepath.Join(claudeDir, localSettingsFile)
-	// A missing file is the common case and means the empty object. Any other
-	// read error is real: papering over it with an empty document would
-	// silently discard whatever the operator had configured there.
 	cur := []byte("{}")
 	buf, err := os.ReadFile(path)
 	switch {
 	case err == nil:
-		if len(strings.TrimSpace(string(buf))) > 0 {
+		if strings.TrimSpace(string(buf)) != "" {
 			cur = buf
 		}
 	case !os.IsNotExist(err):
@@ -219,31 +179,30 @@ func MaterializeHook(worktree, herrscherBin string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, out, 0o644); err != nil {
+	if err := os.WriteFile(path, out, fileMode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
 }
 
-var materializedGitExcludes = []string{
-	"/AGENTS.md",
-	"/.codex/",
-	"/.claude/",
-	"/.mcp.json",
-	// The root the learned-skill projection owns. It holds generated SKILL.md
-	// files, so without the exclude a session that learns anything would report a
-	// dirty worktree, and every close would offer to discard work nobody wrote.
-	"/.herrscher/",
+func materializedGitExcludes() []string {
+	return []string{
+		"/AGENTS.md",
+		"/.codex/",
+		"/.claude/",
+		"/.mcp.json",
+		"/.herrscher/",
+	}
 }
 
 // Agent is a durable companion: a name, backend vendor, and the home directory
 // that stores its persona and provisioning files.
 type Agent struct {
 	Name    string
-	Home    string   // absolute path to the agent's home directory
-	Tags    []string // capability tokens from <home>/TAGS (nil when absent), for host routing
-	Backend string   // backend vendor from <home>/backend, empty when absent
-	Cmd     string   // default invocation from <home>/cmd, empty when absent
+	Home    string
+	Tags    []string
+	Backend string
+	Cmd     string
 	// Host is the default place this agent's sessions run, from <home>/host.
 	// Empty = this machine. A session's explicit --host still wins: this is a
 	// default, not a rule.
@@ -255,7 +214,7 @@ type Agent struct {
 //
 //	<worktree>/.mcp.json             (from <home>/mcp.json)
 //	<worktree>/.claude/settings.json (from <home>/settings.json)
-//	<worktree>/.claude/CLAUDE.md     (from <home>/SOUL.md — the layered persona)
+//	<worktree>/.claude/CLAUDE.md     (from <home>/SOUL.md, the layered persona)
 //	<worktree>/AGENTS.md             (from <home>/SOUL.md)
 //	<worktree>/.claude/USER.md       (from <home>/USER.md, when present)
 //	<worktree>/.codex/config.toml    (converted from <home>/mcp.json)
@@ -273,13 +232,13 @@ type Agent struct {
 // all when given none.
 //
 // Any worktreeToken in a source file is replaced with the worktree path.
-func (a Agent) Materialize(worktree string) error {
-	return a.MaterializeAs(worktree, SelfBin())
+func (a Agent) Materialize(ctx context.Context, worktree string) error {
+	return a.MaterializeAs(ctx, worktree, SelfBin())
 }
 
 // MaterializeAs is Materialize with the hook's binary, empty for no hook.
-func (a Agent) MaterializeAs(worktree, herrscherBin string) error {
-	if err := EnsureGitExcludes(worktree); err != nil {
+func (a Agent) MaterializeAs(ctx context.Context, worktree, herrscherBin string) error {
+	if err := EnsureGitExcludes(ctx, worktree); err != nil {
 		return err
 	}
 	return a.MaterializeIntoAs(worktree, worktree, herrscherBin)
@@ -305,18 +264,23 @@ func (a Agent) MaterializeInto(dst, worktreePath string) error {
 // in the staged case is not on this machine.
 func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	claudeDir := filepath.Join(dst, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+	if err := os.MkdirAll(claudeDir, dirMode); err != nil {
 		return fmt.Errorf("create .claude dir: %w", err)
 	}
 	codexDir := filepath.Join(dst, ".codex")
-	if err := os.MkdirAll(codexDir, 0o755); err != nil {
+	if err := os.MkdirAll(codexDir, dirMode); err != nil {
 		return fmt.Errorf("create .codex dir: %w", err)
 	}
-	// jsonDst marks a destination whose worktree token lives inside a JSON
-	// string: the path must be JSON-escaped, or a Windows worktree (backslashes)
-	// or one with a quote would produce invalid JSON. The Codex TOML path is
-	// escaped separately by renderCodexMCP. CLAUDE.md/AGENTS.md (markdown, raw
-	// path) are composed below so USER.md can augment them.
+	if err := a.copyTemplates(dst, claudeDir, worktreePath, herrscherBin); err != nil {
+		return err
+	}
+	if err := a.writeInstructions(dst, claudeDir, worktreePath); err != nil {
+		return err
+	}
+	return a.writeCodexConfig(codexDir, worktreePath)
+}
+
+func (a Agent) copyTemplates(dst, claudeDir, worktreePath, herrscherBin string) error {
 	copies := []struct {
 		src, dst string
 		jsonDst  bool
@@ -325,28 +289,29 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 		{filepath.Join(a.Home, mcpFile), filepath.Join(dst, ".mcp.json"), true, false},
 		{filepath.Join(a.Home, settingsFile), filepath.Join(claudeDir, "settings.json"), true, true},
 	}
-	for _, c := range copies {
-		buf, err := os.ReadFile(c.src)
+	for _, template := range copies {
+		buf, err := os.ReadFile(template.src)
 		if err != nil {
-			return fmt.Errorf("read %s: %w", filepath.Base(c.src), err)
+			return fmt.Errorf("read %s: %w", filepath.Base(template.src), err)
 		}
 		repl := worktreePath
-		if c.jsonDst {
+		if template.jsonDst {
 			repl = jsonStringInner(worktreePath)
 		}
 		out := []byte(strings.ReplaceAll(string(buf), worktreeToken, repl))
-		if c.settings && herrscherBin != "" {
+		if template.settings && herrscherBin != "" {
 			if out, err = injectApprovalHook(out, herrscherBin); err != nil {
 				return err
 			}
 		}
-		if err := os.WriteFile(c.dst, out, 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", c.dst, err)
+		if err := os.WriteFile(template.dst, out, fileMode); err != nil {
+			return fmt.Errorf("write %s: %w", template.dst, err)
 		}
 	}
+	return nil
+}
 
-	// Persona (SOUL.md) → CLAUDE.md + AGENTS.md, optionally augmented with the
-	// user profile (USER.md). Absent USER.md leaves both byte-identical to soul.
+func (a Agent) writeInstructions(dst, claudeDir, worktreePath string) error {
 	soul, err := os.ReadFile(filepath.Join(a.Home, soulFile))
 	if err != nil {
 		return fmt.Errorf("read %s: %w", soulFile, err)
@@ -354,29 +319,29 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	soulOut := strings.ReplaceAll(string(soul), worktreeToken, worktreePath)
 	claudeMd, agentsMd := soulOut, soulOut
 
-	userRaw, uErr := os.ReadFile(filepath.Join(a.Home, userFile))
-	if uErr != nil && !os.IsNotExist(uErr) {
-		return fmt.Errorf("read %s: %w", userFile, uErr)
+	userRaw, err := os.ReadFile(filepath.Join(a.Home, userFile))
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read %s: %w", userFile, err)
 	}
-	if uErr == nil {
+	if err == nil {
 		userOut := strings.ReplaceAll(string(userRaw), worktreeToken, worktreePath)
-		if err := os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(claudeDir, "USER.md"), []byte(userOut), fileMode); err != nil {
 			return fmt.Errorf("write .claude/USER.md: %w", err)
 		}
-		// @USER.md, not @.claude/USER.md: Claude Code resolves relative imports
-		// against the importing file's own directory, and CLAUDE.md already lives
-		// in .claude/, so the profile is its sibling.
 		claudeMd = soulOut + "\n\n@USER.md\n"
 		agentsMd = soulOut + "\n\n# User\n\n" + userOut
 	}
 
-	if err := os.WriteFile(filepath.Join(claudeDir, "CLAUDE.md"), []byte(claudeMd), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(claudeDir, "CLAUDE.md"), []byte(claudeMd), fileMode); err != nil {
 		return fmt.Errorf("write .claude/CLAUDE.md: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dst, "AGENTS.md"), []byte(agentsMd), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dst, "AGENTS.md"), []byte(agentsMd), fileMode); err != nil {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
+	return nil
+}
 
+func (a Agent) writeCodexConfig(codexDir, worktreePath string) error {
 	mcp, err := os.ReadFile(filepath.Join(a.Home, mcpFile))
 	if err != nil {
 		return fmt.Errorf("read %s: %w", mcpFile, err)
@@ -385,7 +350,7 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), codexConfig, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), codexConfig, fileMode); err != nil {
 		return fmt.Errorf("write config.toml: %w", err)
 	}
 	return nil
@@ -396,12 +361,13 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 // Non-Git directories are valid shared-session targets and need no exclusion.
 // Exported because on a remote host it runs where the repository is, from the
 // worktree verb, rather than beside the file writes.
-func EnsureGitExcludes(worktree string) error {
-	inside, err := exec.Command("git", "-C", worktree, "rev-parse", "--is-inside-work-tree").Output()
-	if err != nil || strings.TrimSpace(string(inside)) != "true" {
+func EnsureGitExcludes(ctx context.Context, worktree string) error {
+	inside, err := exec.CommandContext(ctx, "git", "-C", worktree, "rev-parse", "--is-inside-work-tree").Output()
+	isWorkTree := err == nil && strings.TrimSpace(string(inside)) == "true"
+	if !isWorkTree {
 		return nil
 	}
-	out, err := exec.Command("git", "-C", worktree, "rev-parse", "--git-path", "info/exclude").Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", worktree, "rev-parse", "--git-path", "info/exclude").Output()
 	if err != nil {
 		return fmt.Errorf("resolve local git exclude: %w", err)
 	}
@@ -415,7 +381,7 @@ func EnsureGitExcludes(worktree string) error {
 	}
 	existing := "\n" + strings.ReplaceAll(string(current), "\r\n", "\n") + "\n"
 	var addition strings.Builder
-	for _, pattern := range materializedGitExcludes {
+	for _, pattern := range materializedGitExcludes() {
 		if !strings.Contains(existing, "\n"+pattern+"\n") {
 			addition.WriteString(pattern)
 			addition.WriteByte('\n')
@@ -429,15 +395,14 @@ func EnsureGitExcludes(worktree string) error {
 		addition.Reset()
 		addition.WriteString(additionText)
 	}
-	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	excludeFile, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
 	if err != nil {
 		return fmt.Errorf("open local git exclude: %w", err)
 	}
-	if _, err := f.WriteString(addition.String()); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("write local git exclude: %w", err)
+	if _, err := excludeFile.WriteString(addition.String()); err != nil {
+		return errors.Join(fmt.Errorf("write local git exclude: %w", err), excludeFile.Close())
 	}
-	if err := f.Close(); err != nil {
+	if err := excludeFile.Close(); err != nil {
 		return fmt.Errorf("close local git exclude: %w", err)
 	}
 	return nil

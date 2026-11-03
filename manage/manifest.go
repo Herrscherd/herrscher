@@ -1,31 +1,32 @@
 package manage
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
 
-// The host's plugins.go carries blank imports between these markers. The CLI
-// edits only that managed region, never the rest of the file.
+var (
+	errMarkerNotFound  = errors.New("marker not found")
+	errDuplicateMarker = errors.New("duplicate marker")
+	errMarkerOrder     = errors.New("end marker precedes begin marker")
+)
+
 const (
 	beginMarker = "// herrscher:plugins"
 	endMarker   = "// herrscher:end"
 )
 
-// importLine renders the blank import for a module inside the managed region.
 func importLine(module string) string { return fmt.Sprintf("\t_ %q", module) }
 
-// parseModule extracts the module path from a blank import line, reporting
-// whether the line is a blank import at all.
 func parseModule(line string) (string, bool) {
-	s := strings.TrimSpace(line)
-	if !strings.HasPrefix(s, "_ ") {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "_ ") {
 		return "", false
 	}
-	return strings.Trim(strings.TrimSpace(s[2:]), `"`), true
+	return strings.Trim(strings.TrimSpace(trimmed[2:]), `"`), true
 }
 
-// listPlugins returns the module paths declared in the managed region, in order.
 func listPlugins(src string) ([]string, error) {
 	region, _, _, err := region(src)
 	if err != nil {
@@ -40,8 +41,6 @@ func listPlugins(src string) ([]string, error) {
 	return mods, nil
 }
 
-// addPlugin inserts a blank import for module before the end marker. It reports
-// whether the source changed (false if the module was already present).
 func addPlugin(src, module string) (string, bool, error) {
 	mods, err := listPlugins(src)
 	if err != nil {
@@ -53,19 +52,17 @@ func addPlugin(src, module string) (string, bool, error) {
 		}
 	}
 	lines := strings.Split(src, "\n")
-	for i, line := range lines {
+	for idx, line := range lines {
 		if strings.TrimSpace(line) == endMarker {
-			out := append([]string{}, lines[:i]...)
+			out := append([]string{}, lines[:idx]...)
 			out = append(out, importLine(module))
-			out = append(out, lines[i:]...)
+			out = append(out, lines[idx:]...)
 			return strings.Join(out, "\n"), true, nil
 		}
 	}
-	return src, false, fmt.Errorf("end marker %q not found", endMarker)
+	return src, false, fmt.Errorf("end marker %q: %w", endMarker, errMarkerNotFound)
 }
 
-// removePlugin drops the blank import for module from the managed region. It
-// reports whether the source changed (false if the module was absent).
 func removePlugin(src, module string) (string, bool, error) {
 	if _, _, _, err := region(src); err != nil {
 		return src, false, err
@@ -92,9 +89,6 @@ func removePlugin(src, module string) (string, bool, error) {
 	return strings.Join(out, "\n"), changed, nil
 }
 
-// setPlugins replaces the whole managed region with blank imports for exactly
-// the given modules, in order. It is the bulk counterpart to add/removePlugin,
-// used by `herrscher init` to stamp a chosen stack from scratch.
 func setPlugins(src string, modules []string) (string, error) {
 	lines := strings.Split(src, "\n")
 	_, begin, end, err := region(src)
@@ -109,29 +103,28 @@ func setPlugins(src string, modules []string) (string, error) {
 	return strings.Join(out, "\n"), nil
 }
 
-// region returns the lines strictly between the markers, plus their indices.
-func region(src string) (lines []string, begin, end int, err error) {
+func region(src string) ([]string, int, int, error) {
 	all := strings.Split(src, "\n")
-	begin, end = -1, -1
-	for i, line := range all {
+	begin, end := -1, -1
+	for idx, line := range all {
 		switch strings.TrimSpace(line) {
 		case beginMarker:
 			if begin >= 0 {
-				return nil, begin, end, fmt.Errorf("duplicate %q marker", beginMarker)
+				return nil, begin, end, fmt.Errorf("%q: %w", beginMarker, errDuplicateMarker)
 			}
-			begin = i
+			begin = idx
 		case endMarker:
 			if end >= 0 {
-				return nil, begin, end, fmt.Errorf("duplicate %q marker", endMarker)
+				return nil, begin, end, fmt.Errorf("%q: %w", endMarker, errDuplicateMarker)
 			}
-			end = i
+			end = idx
 		}
 	}
 	if begin < 0 || end < 0 {
-		return nil, begin, end, fmt.Errorf("managed region markers not found")
+		return nil, begin, end, fmt.Errorf("managed region: %w", errMarkerNotFound)
 	}
 	if end < begin {
-		return nil, begin, end, fmt.Errorf("end marker precedes begin marker")
+		return nil, begin, end, errMarkerOrder
 	}
 	return all[begin+1 : end], begin, end, nil
 }

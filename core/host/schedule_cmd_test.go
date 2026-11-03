@@ -67,8 +67,10 @@ func TestScheduleAddRefusesWhatCannotRun(t *testing.T) {
 func TestScheduleAddStampsCreatedAtSoTheFirstWindowIsCounted(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	reg := testScheduleRegistry(t, st, nil)
-	if _, err := reg.Dispatch(context.Background(), []string{"schedule", "add", "--name", "digest",
-		"--agent", "scout", "--every", "30m", "--task", "t"}); err != nil {
+	if _, err := reg.Dispatch(context.Background(), []string{
+		"schedule", "add", "--name", "digest",
+		"--agent", "scout", "--every", "30m", "--task", "t",
+	}); err != nil {
 		t.Fatalf("schedule add: %v", err)
 	}
 	got := st.SnapshotSchedules()
@@ -84,16 +86,37 @@ func TestScheduleAddThenListThenRemove(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	reg := testScheduleRegistry(t, st, nil)
 	ctx := context.Background()
-	if _, err := reg.Dispatch(ctx, []string{"schedule", "add", "--name", "digest",
-		"--agent", "scout", "--cron", "0 9 * * 1-5", "--task", "read the PRs"}); err != nil {
+	if _, err := reg.Dispatch(ctx, []string{
+		"schedule", "add", "--name", "digest",
+		"--agent", "scout", "--cron", "0 9 * * 1-5", "--task", "read the PRs",
+	}); err != nil {
 		t.Fatalf("schedule add: %v", err)
 	}
-	// Un nom deja pris est refuse : deux horaires du meme nom se disputeraient la
-	// meme session possedee.
-	if _, err := reg.Dispatch(ctx, []string{"schedule", "add", "--name", "digest",
-		"--agent", "scout", "--every", "30m", "--task", "other"}); err == nil {
+	assertDuplicateScheduleRefused(ctx, t, reg)
+	assertDigestListed(ctx, t, reg)
+	assertDigestPaused(ctx, t, reg, st, "pause", true)
+	assertDigestPaused(ctx, t, reg, st, "resume", false)
+	if _, err := reg.Dispatch(ctx, []string{"schedule", "rm", "--name", "digest"}); err != nil {
+		t.Fatalf("schedule rm: %v", err)
+	}
+	if got := st.SnapshotSchedules(); len(got) != 0 {
+		t.Fatalf("SnapshotSchedules = %+v, want nothing left", got)
+	}
+	assertUnknownScheduleRejected(ctx, t, reg)
+}
+
+func assertDuplicateScheduleRefused(ctx context.Context, t *testing.T, reg *cli.Registry) {
+	t.Helper()
+	if _, err := reg.Dispatch(ctx, []string{
+		"schedule", "add", "--name", "digest",
+		"--agent", "scout", "--every", "30m", "--task", "other",
+	}); err == nil {
 		t.Error("a duplicate name was accepted, want an error")
 	}
+}
+
+func assertDigestListed(ctx context.Context, t *testing.T, reg *cli.Registry) {
+	t.Helper()
 	out, err := reg.Dispatch(ctx, []string{"schedule", "list"})
 	if err != nil {
 		t.Fatalf("schedule list: %v", err)
@@ -103,26 +126,21 @@ func TestScheduleAddThenListThenRemove(t *testing.T) {
 			t.Errorf("schedule list = %q, want it to carry %q", out, want)
 		}
 	}
-	if _, err := reg.Dispatch(ctx, []string{"schedule", "pause", "--name", "digest"}); err != nil {
-		t.Fatalf("schedule pause: %v", err)
+}
+
+func assertDigestPaused(ctx context.Context, t *testing.T, reg *cli.Registry, st *state.State, verb string, wantPaused bool) {
+	t.Helper()
+	if _, err := reg.Dispatch(ctx, []string{"schedule", verb, "--name", "digest"}); err != nil {
+		t.Fatalf("schedule %s: %v", verb, err)
 	}
-	if got := st.SnapshotSchedules(); len(got) != 1 || !got[0].Paused {
-		t.Fatalf("SnapshotSchedules = %+v, want the row paused", got)
+	got := st.SnapshotSchedules()
+	if len(got) != 1 || got[0].Paused != wantPaused {
+		t.Fatalf("SnapshotSchedules = %+v, want paused=%v", got, wantPaused)
 	}
-	if _, err := reg.Dispatch(ctx, []string{"schedule", "resume", "--name", "digest"}); err != nil {
-		t.Fatalf("schedule resume: %v", err)
-	}
-	if got := st.SnapshotSchedules(); len(got) != 1 || got[0].Paused {
-		t.Fatalf("SnapshotSchedules = %+v, want the row live again", got)
-	}
-	if _, err := reg.Dispatch(ctx, []string{"schedule", "rm", "--name", "digest"}); err != nil {
-		t.Fatalf("schedule rm: %v", err)
-	}
-	if got := st.SnapshotSchedules(); len(got) != 0 {
-		t.Fatalf("SnapshotSchedules = %+v, want nothing left", got)
-	}
-	// Les mutateurs disent quand le nom n'existe pas, plutot que de reussir en
-	// silence sur rien.
+}
+
+func assertUnknownScheduleRejected(ctx context.Context, t *testing.T, reg *cli.Registry) {
+	t.Helper()
 	for _, verb := range []string{"rm", "pause", "resume"} {
 		if _, err := reg.Dispatch(ctx, []string{"schedule", verb, "--name", "digest"}); err == nil {
 			t.Errorf("schedule %s on an unknown name accepted, want an error", verb)
@@ -131,13 +149,13 @@ func TestScheduleAddThenListThenRemove(t *testing.T) {
 }
 
 func TestScheduleResumeRestartsTheCadenceFromNow(t *testing.T) {
-	// Sans ca, un horaire mis en pause une semaine trouverait sa fenetre
-	// largement passee et tirerait a la seconde ou il revient.
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	reg := testScheduleRegistry(t, st, nil)
 	ctx := context.Background()
-	if _, err := reg.Dispatch(ctx, []string{"schedule", "add", "--name", "digest",
-		"--agent", "scout", "--every", "30m", "--task", "t"}); err != nil {
+	if _, err := reg.Dispatch(ctx, []string{
+		"schedule", "add", "--name", "digest",
+		"--agent", "scout", "--every", "30m", "--task", "t",
+	}); err != nil {
 		t.Fatalf("schedule add: %v", err)
 	}
 	for _, verb := range []string{"pause", "resume"} {
@@ -155,12 +173,12 @@ func TestScheduleResumeRestartsTheCadenceFromNow(t *testing.T) {
 }
 
 func TestScheduleAddSaysWhenTheNamedSessionIsNotThere(t *testing.T) {
-	// La session peut etre ouverte plus tard, donc c'est accepte. Mais une faute
-	// de frappe acheterait sinon un horaire qui saute chaque fenetre en silence.
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	reg := testScheduleRegistry(t, st, nil)
-	out, err := reg.Dispatch(context.Background(), []string{"schedule", "add", "--name", "digest",
-		"--session", "typo", "--every", "30m", "--task", "t"})
+	out, err := reg.Dispatch(context.Background(), []string{
+		"schedule", "add", "--name", "digest",
+		"--session", "typo", "--every", "30m", "--task", "t",
+	})
 	if err != nil {
 		t.Fatalf("schedule add: %v", err)
 	}
@@ -172,9 +190,6 @@ func TestScheduleAddSaysWhenTheNamedSessionIsNotThere(t *testing.T) {
 	}
 }
 
-// La prochaine fenetre se compte depuis l'ancre, pas depuis l'instant ou la
-// question est posee : un horaire de 24h ancre a 9h ouvre demain a 9h, et non
-// vingt-quatre heures apres le moment ou on tape `schedule list`.
 func TestScheduleListCountsTheNextWindowFromTheAnchor(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	reg := testScheduleRegistry(t, st, nil)
@@ -195,9 +210,6 @@ func TestScheduleListCountsTheNextWindowFromTheAnchor(t *testing.T) {
 	}
 }
 
-// Un horaire en pause n'a pas de prochaine fenetre : la reprise recale la
-// cadence sur l'instant ou elle est tapee, donc toute heure affichee ici serait
-// une heure que l'horaire n'attendra pas.
 func TestScheduleListNamesNoWindowForAPausedSchedule(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	reg := testScheduleRegistry(t, st, nil)
@@ -231,30 +243,29 @@ func TestScheduleListSaysWhenThereIsNothing(t *testing.T) {
 func TestScheduleRunNeedsALiveDaemon(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	reg := testScheduleRegistry(t, st, nil)
-	// Un CLI operateur n'a pas de boucle : le verbe doit le dire plutot que de
-	// paniquer sur un slot vide.
 	_, err := reg.Dispatch(context.Background(), []string{"schedule", "run", "--name", "digest"})
 	if err == nil || !strings.Contains(err.Error(), "serve") {
 		t.Fatalf("schedule run without a daemon = %v, want an error pointing at `herrscher serve`", err)
 	}
 }
 
-// The verbs only reach an operator if buildRegistry registers them, and a
-// registration wired one place and tested another is a registration that drifts.
-// So dispatch through the real registry, once, for the whole namespace.
 func TestScheduleVerbsAreInTheRealRegistry(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dir := t.TempDir()
 	st := state.NewState(filepath.Join(dir, "s.json"))
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: filepath.Join(dir, "s.json"), DefaultCmd: "claude"}, st, sup, "", nil)
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: filepath.Join(dir, "s.json"), DefaultCmd: "claude"}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := reg.Dispatch(ctx, []string{"schedule", "add", "--name", "digest",
-		"--session", "live", "--every", "30m", "--task", "read the PRs"}); err != nil {
-		t.Fatalf("schedule add: %v", err)
+	if _, dispatchErr := reg.Dispatch(ctx, []string{
+		"schedule", "add", "--name", "digest",
+		"--session", "live", "--every", "30m", "--task", "read the PRs",
+	}); dispatchErr != nil {
+		t.Fatalf("schedule add: %v", dispatchErr)
 	}
 	out, err := reg.Dispatch(ctx, []string{"schedule", "list"})
 	if err != nil {
@@ -268,8 +279,6 @@ func TestScheduleVerbsAreInTheRealRegistry(t *testing.T) {
 			t.Fatalf("schedule %s: %v", verb, err)
 		}
 	}
-	// The operator CLI shares this registry and has no loop, so `schedule run`
-	// must be registered and refuse rather than be missing or panic.
 	if _, err := reg.Dispatch(ctx, []string{"schedule", "run", "--name", "digest"}); err == nil {
 		t.Error("schedule run without a daemon accepted, want an error")
 	}

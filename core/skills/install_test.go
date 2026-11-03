@@ -17,7 +17,6 @@ func shippedFS() fstest.MapFS {
 	}
 }
 
-// upgradedFS is shippedFS one release later: pr-job's playbook was rewritten.
 func upgradedFS() fstest.MapFS {
 	fs := shippedFS()
 	fs["pr-job/SKILL.md"] = &fstest.MapFile{Data: []byte("---\nname: pr-job\n---\nrewritten")}
@@ -37,14 +36,11 @@ func TestInstallWritesEverySkillTree(t *testing.T) {
 	if err != nil || string(b) != "nested" {
 		t.Fatalf("nested file = %q, %v", b, err)
 	}
-	// A loose file beside the skills is not a skill and must not be installed.
 	if _, err := os.Stat(filepath.Join(dir, "README.md")); err == nil {
 		t.Fatal("a non-directory entry was installed as a skill")
 	}
 }
 
-// The playbook is meant to be edited on the machine that runs it, so a restart
-// must never quietly restore the shipped text over the operator's version.
 func TestInstallNeverOverwritesAnEditedSkill(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := Install(shippedFS(), dir); err != nil {
@@ -61,7 +57,9 @@ func TestInstallNeverOverwritesAnEditedSkill(t *testing.T) {
 	if len(out.Installed) != 0 || len(out.Updated) != 0 {
 		t.Fatalf("wrote %v/%v on the second run, want nothing", out.Installed, out.Updated)
 	}
-	if b, _ := os.ReadFile(edited); string(b) != "my own procedure" {
+	b, err := os.ReadFile(edited)
+	must(t, err)
+	if string(b) != "my own procedure" {
 		t.Fatalf("edited skill = %q, want the operator's version kept", b)
 	}
 	if len(out.Diverged) != 1 || out.Diverged[0] != "pr-job" {
@@ -69,9 +67,6 @@ func TestInstallNeverOverwritesAnEditedSkill(t *testing.T) {
 	}
 }
 
-// The bug this fixes: an upgraded binary ships a rewritten playbook, but the
-// agent kept reading the version installed months earlier and behaved by it.
-// A copy nobody touched is ours, so a new release must replace it.
 func TestInstallUpdatesAnUntouchedSkill(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := Install(shippedFS(), dir); err != nil {
@@ -87,11 +82,11 @@ func TestInstallUpdatesAnUntouchedSkill(t *testing.T) {
 	if len(out.Diverged) != 0 {
 		t.Fatalf("diverged = %v, want nothing: the copy was ours", out.Diverged)
 	}
-	b, _ := os.ReadFile(filepath.Join(dir, "pr-job", "SKILL.md"))
+	b, err := os.ReadFile(filepath.Join(dir, "pr-job", "SKILL.md"))
+	must(t, err)
 	if string(b) != "---\nname: pr-job\n---\nrewritten" {
 		t.Fatalf("skill = %q, want the newly shipped text", b)
 	}
-	// Re-running with the same source must be a no-op, not a rewrite loop.
 	again, err := Install(upgradedFS(), dir)
 	if err != nil {
 		t.Fatal(err)
@@ -101,8 +96,6 @@ func TestInstallUpdatesAnUntouchedSkill(t *testing.T) {
 	}
 }
 
-// An update drops files the new release no longer ships, rather than leaving
-// orphans that read as part of the playbook.
 func TestUpdateRemovesFilesTheReleaseDropped(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := Install(shippedFS(), dir); err != nil {
@@ -118,8 +111,6 @@ func TestUpdateRemovesFilesTheReleaseDropped(t *testing.T) {
 	}
 }
 
-// A copy that predates the manifest cannot be told apart from an edit, so it is
-// kept and reported — never silently overwritten.
 func TestUnmanagedSkillIsReportedNotOverwritten(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "pr-job"), 0o755); err != nil {
@@ -133,7 +124,9 @@ func TestUnmanagedSkillIsReportedNotOverwritten(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(old); string(b) != "an older release" {
+	b, err := os.ReadFile(old)
+	must(t, err)
+	if string(b) != "an older release" {
 		t.Fatalf("unmanaged skill = %q, want it kept", b)
 	}
 	if len(out.Diverged) != 1 || out.Diverged[0] != "pr-job" {
@@ -141,8 +134,6 @@ func TestUnmanagedSkillIsReportedNotOverwritten(t *testing.T) {
 	}
 }
 
-// An unmanaged copy that is byte-identical to what we ship is ours by any useful
-// definition: adopt it silently so the NEXT release reaches the agent.
 func TestUnmanagedSkillIdenticalToShippedIsAdopted(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "pr-job", "ref"), 0o755); err != nil {
@@ -170,8 +161,6 @@ func TestUnmanagedSkillIdenticalToShippedIsAdopted(t *testing.T) {
 	}
 }
 
-// The manifest is bookkeeping, not a playbook: it must never be discoverable as
-// a skill, and a corrupt one must not stop an install.
 func TestManifestIsNotASkillAndSurvivesCorruption(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := Install(shippedFS(), dir); err != nil {
@@ -180,7 +169,6 @@ func TestManifestIsNotASkillAndSurvivesCorruption(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, manifestName)); err != nil {
 		t.Fatalf("the manifest must be written: %v", err)
 	}
-	// The manifest sits in the skills root; discovery must not count it.
 	for _, s := range Discover([]string{dir}) {
 		if strings.Contains(s.Dir, manifestName) || s.Name == manifestName {
 			t.Fatalf("the manifest was discovered as a skill: %+v", s)
@@ -191,5 +179,26 @@ func TestManifestIsNotASkillAndSurvivesCorruption(t *testing.T) {
 	}
 	if _, err := Install(upgradedFS(), dir); err != nil {
 		t.Fatalf("a corrupt manifest must not fail the install: %v", err)
+	}
+}
+
+func TestInstallWritesPrivateFilesAndDirectories(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Install(shippedFS(), dir); err != nil {
+		t.Fatal(err)
+	}
+	assertSkillMode(t, filepath.Join(dir, "pr-job", "SKILL.md"), 0o600)
+	assertSkillMode(t, filepath.Join(dir, "pr-job", "ref"), 0o750)
+	assertSkillMode(t, filepath.Join(dir, "pr-job", "ref", "notes.md"), 0o600)
+}
+
+func assertSkillMode(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Fatalf("%s mode = %o, want %o", path, got, want)
 	}
 }

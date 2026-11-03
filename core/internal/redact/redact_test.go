@@ -9,8 +9,8 @@ func TestOutputMasksSecrets(t *testing.T) {
 	cases := []struct {
 		name       string
 		in         string
-		wantAbsent string // secret substring that must not survive
-		wantKeep   string // context that must remain
+		wantAbsent string
+		wantKeep   string
 	}{
 		{"url userinfo", "fatal: unable to access https://alice:s3cr3t@github.com/x.git", "s3cr3t", "github.com"},
 		{"gh classic token", "error: bad credentials ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", "bad credentials"},

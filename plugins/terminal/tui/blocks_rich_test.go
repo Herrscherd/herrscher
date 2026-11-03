@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -9,9 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// A diff's colour is its meaning: which line was added and which was removed.
-// The file headers of a unified diff start with the same characters and mean
-// something else entirely, so classification is scoped to the hunk.
 func TestDiffClassifiesPerHunk(t *testing.T) {
 	body := strings.Join([]string{
 		"--- a/main.go",
@@ -31,17 +29,12 @@ func TestDiffClassifiesPerHunk(t *testing.T) {
 	}
 }
 
-// Outside a hunk a "+" is the header of the file it names, not an addition, and
-// painting it green says the whole file was added.
 func TestDiffHeadersAreNotAdditions(t *testing.T) {
 	if got := diffClass("+++ b/main.go", false); got == diffAdd {
 		t.Errorf("a file header must not classify as an addition: %q", got)
 	}
 }
 
-// On a 16-colour terminal the palette's hex green is approximated to whatever is
-// nearest, which for a diff can be nothing at all. The basic ANSI pair is the one
-// every terminal has agreed on since the seventies.
 func TestDiffUsesBasicColourOnA16ColourTerminal(t *testing.T) {
 	out := renderDiff("@@ -1 +1 @@\n+added\n-gone", 40, view{caps: Capabilities{Colour: Colour16}})
 	if !strings.Contains(out, "\x1b[32m") || !strings.Contains(out, "\x1b[31m") {
@@ -49,8 +42,6 @@ func TestDiffUsesBasicColourOnA16ColourTerminal(t *testing.T) {
 	}
 }
 
-// An agent quoting a change writes the hunk and not the preamble, and that is
-// the common case: those lines are content, not headers.
 func TestDiffWithoutAPreambleIsAllContent(t *testing.T) {
 	out := renderDiff("+added\n-gone", 40, view{caps: Capabilities{Colour: Colour16}})
 	if !strings.Contains(out, ansiGreen) || !strings.Contains(out, ansiRed) {
@@ -58,8 +49,6 @@ func TestDiffWithoutAPreambleIsAllContent(t *testing.T) {
 	}
 }
 
-// A diff line is clipped, never folded: a wrapped continuation has no leading
-// +/- and reads as context.
 func TestDiffLinesAreClippedToWidth(t *testing.T) {
 	out := renderDiff("@@ -1 +1 @@\n+"+strings.Repeat("x", 80), 20, view{caps: Capabilities{Colour: ColourTrue}})
 	for _, ln := range strings.Split(out, "\n") {
@@ -69,15 +58,12 @@ func TestDiffLinesAreClippedToWidth(t *testing.T) {
 	}
 }
 
-// A table that wraps stops being a table: the columns no longer line up and the
-// reader has to reassemble the rows by eye. Truncating the widest cell keeps the
-// shape, which is the only reason to draw a table at all.
 func TestTableFitsItsWidthByTruncatingTheWidestCell(t *testing.T) {
 	rows := [][]string{
 		{"name", "description"},
 		{"ok", strings.Repeat("very long ", 20)},
 	}
-	out := renderTable(rows, 40)
+	out := renderTable(rows, 40, newStyles())
 	for _, ln := range strings.Split(out, "\n") {
 		if lipgloss.Width(ln) > 40 {
 			t.Fatalf("row wider than the table: %d cols in %q", lipgloss.Width(ln), ln)
@@ -91,23 +77,20 @@ func TestTableFitsItsWidthByTruncatingTheWidestCell(t *testing.T) {
 	}
 }
 
-// The narrow columns are not the problem, so they are not what shrinks.
 func TestTableShrinksTheWidestColumnFirst(t *testing.T) {
 	rows := [][]string{{"a", strings.Repeat("w", 60)}, {"b", "short"}}
-	out := renderTable(rows, 30)
+	out := renderTable(rows, 30, newStyles())
 	if !strings.Contains(out, "a") || !strings.Contains(out, "b") {
 		t.Fatalf("the narrow column must be left intact: %q", out)
 	}
 }
 
-// A long code block buries the answer that follows it. Folded, it says what it is
-// and how much of it there is; unfolded, it is byte for byte what it was.
 func TestFoldedCodeBlockCollapsesAndRestoresExactly(t *testing.T) {
 	code := strings.Repeat("line\n", foldThreshold+5)
 	text := "before\n```go\n" + code + "```\nafter"
 
 	folded := foldCodeBlocks(text)
-	if strings.Contains(folded, "line\nline") {
+	if strings.Contains(folded, strings.Repeat("line\n", 2)) {
 		t.Fatalf("a folded block must not still contain its body: %q", folded)
 	}
 	if !strings.Contains(folded, "go") || !strings.Contains(folded, "lines") {
@@ -119,13 +102,11 @@ func TestFoldedCodeBlockCollapsesAndRestoresExactly(t *testing.T) {
 	if got := len(strings.Split(folded, "\n")); got != 3 {
 		t.Fatalf("a folded block is one line: got %d lines in %q", got, folded)
 	}
-	// Unfolding is not a re-render: the original text is what is kept.
 	if foldCodeBlocks(text) == text {
 		t.Fatalf("the fixture must actually fold")
 	}
 }
 
-// A block short enough to read is not worth hiding.
 func TestShortCodeBlocksAreNotFolded(t *testing.T) {
 	text := "```go\nfmt.Println(1)\n```"
 	if foldCodeBlocks(text) != text {
@@ -133,8 +114,6 @@ func TestShortCodeBlocksAreNotFolded(t *testing.T) {
 	}
 }
 
-// Copy hands over the block's raw text — not the rendered one. What lands on the
-// clipboard has to compile.
 func TestCopyPutsTheRawBlockOnTheClipboard(t *testing.T) {
 	m := newTestModel()
 	clip := &fakeWriteClipboard{}
@@ -152,7 +131,6 @@ func TestCopyPutsTheRawBlockOnTheClipboard(t *testing.T) {
 	}
 }
 
-// Nothing to copy is a message, not a silence and not an error.
 func TestCopyWithNoCodeBlockSaysSo(t *testing.T) {
 	m := newTestModel()
 	m.clip = &fakeWriteClipboard{}
@@ -179,12 +157,11 @@ func TestCodeBlocksAreFoundWithTheirLanguage(t *testing.T) {
 	}
 }
 
-// fakeWriteClipboard records what was copied and holds no image.
 type fakeWriteClipboard struct{ wrote string }
 
-func (f *fakeWriteClipboard) ImageType() (string, bool)        { return "", false }
-func (f *fakeWriteClipboard) ReadImage(string) ([]byte, error) { return nil, nil }
-func (f *fakeWriteClipboard) WriteText(s string) error         { f.wrote = s; return nil }
+func (f *fakeWriteClipboard) ImageType(context.Context) (string, bool)          { return "", false }
+func (f *fakeWriteClipboard) ReadImage(context.Context, string) ([]byte, error) { return nil, nil }
+func (f *fakeWriteClipboard) WriteText(_ context.Context, s string) error       { f.wrote = s; return nil }
 
 func TestDiffKeepsFourHunkLinesAndFolds(t *testing.T) {
 	src := strings.Join([]string{

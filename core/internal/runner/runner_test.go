@@ -34,8 +34,6 @@ func TestSSHBuildsACdAndExecScript(t *testing.T) {
 	if args[len(args)-2] != "me@build1" {
 		t.Fatalf("target = %q", args[len(args)-2])
 	}
-	// cmd.Dir must stay empty: the working directory is the REMOTE one, and it
-	// is already in the script. Setting it would move the local ssh process.
 	if cmd.Dir != "" {
 		t.Fatalf("Dir = %q, want empty", cmd.Dir)
 	}
@@ -48,9 +46,6 @@ func TestSSHWithoutDirJustExecs(t *testing.T) {
 	}
 }
 
-// A remote forward that fails must kill the launch. Without it ssh warns and
-// runs the command anyway, so a bridge would start unable to reach the hub and
-// the supervisor would restart it forever.
 func TestSSHAlwaysRefusesAFailedForward(t *testing.T) {
 	cmd := SSH{Target: "me@build1"}.Command(context.Background(), "", "true")
 	joined := strings.Join(cmd.Args, " ")
@@ -72,8 +67,6 @@ func TestSSHCarriesForwards(t *testing.T) {
 	}
 }
 
-// A socket left behind by a crash blocks the bind on a remote sshd that lacks
-// StreamLocalBindUnlink. Removing it ourselves depends on no remote config.
 func TestPrepareForwardsRemovesTheRemoteSockets(t *testing.T) {
 	s := SSH{Target: "me@build1", Forwards: []Forward{
 		{Remote: "/tmp/a.sock", Local: "/tmp/x"},
@@ -85,8 +78,6 @@ func TestPrepareForwardsRemovesTheRemoteSockets(t *testing.T) {
 	if script != want {
 		t.Fatalf("script = %s, want %s", script, want)
 	}
-	// The cleanup carries no forward of its own, so it cannot fail on the very
-	// socket it is there to remove.
 	if strings.Contains(strings.Join(cmd.Args, " "), "-R ") {
 		t.Fatalf("cleanup must carry no forward: %v", cmd.Args)
 	}
@@ -108,8 +99,6 @@ func TestSSHCopyUsesScp(t *testing.T) {
 	}
 }
 
-// The multiplexing socket is itself a unix socket, so it is subject to the same
-// 108-byte cap, and it must be stable for a given target.
 func TestControlPathIsShortAndStable(t *testing.T) {
 	a := ControlPathFor("me@build1")
 	if a != ControlPathFor("me@build1") {

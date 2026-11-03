@@ -1,6 +1,6 @@
 ---
 name: pr-job
-description: Use when a task arrives from chat and must end as a pull request — fix in the session worktree, review it against every axis, then open the PR.
+description: Use when a task arrives from chat and must end as a pull request: fix in the session worktree, review it against every axis, then open the PR.
 ---
 
 # Finishing a chat-triggered job as a PR
@@ -9,7 +9,7 @@ You are working in this session's own git worktree. The job ends with a pull
 request, not with a message saying the work is done.
 
 Everything you do happens inside the current turn. Nothing keeps running once
-you stop replying — there is no background job and no timer. So either finish
+you stop replying: there is no background job and no timer. So either finish
 the step and show the result, or say what blocks you and end on a question.
 "I've started looking into it, I'll get back to you" is a turn that did nothing.
 
@@ -18,7 +18,7 @@ the step and show the result, or say what blocks you and end on a question.
 Read the request and every screenshot attached to it. The screenshots are the
 report: reproduce what they show before you decide what is broken. If the request
 is ambiguous in a way that changes what you would build, end your turn with a
-question and concrete options — the gateway renders them as a menu and your next
+question and concrete options: the gateway renders them as a menu and your next
 turn receives the answer. Ask once, with real options; do not ask what you can
 determine by reading the code.
 
@@ -29,26 +29,26 @@ surrounding code's patterns, naming and comment density.
 
 ## 3. Review your own diff, on every axis
 
-Go through these in order and fix what you find. Report only what you verified —
-a finding you cannot demonstrate is a false positive, and false positives cost
+Go through these in order and fix what you find. Report only what you verified.
+A finding you cannot demonstrate is a false positive, and false positives cost
 more than silence.
 
-- **CI compliance** — run the project's own build, tests, vet and lint. Paste the
+- **CI compliance**: run the project's own build, tests, vet and lint. Paste the
   real output. Never claim green without it.
-- **Architecture** — does the change respect the project's boundaries? A layer
+- **Architecture**: does the change respect the project's boundaries? A layer
   that suddenly knows about another layer's concrete types is a defect, not a
   shortcut.
-- **Performance** — new allocations in hot paths, N+1 calls, unbounded goroutines,
+- **Performance**: new allocations in hot paths, N+1 calls, unbounded goroutines,
   work done per-item that could be done once.
-- **Code quality** — dead code, duplicated logic, names that do not say what the
+- **Code quality**: dead code, duplicated logic, names that do not say what the
   thing is, error paths that swallow the cause.
-- **Security** — untrusted input reaching the filesystem, a shell, or a network
+- **Security**: untrusted input reaching the filesystem, a shell, or a network
   call; secrets in logs; permissions on files you create.
-- **Bug review** — read the diff as an adversary. What input makes this wrong?
+- **Bug review**: read the diff as an adversary. What input makes this wrong?
   What happens on the empty, the concurrent, and the restart case?
-- **Useless comments** — delete comments that restate the code. Keep the ones
+- **Useless comments**: delete comments that restate the code. Keep the ones
   that explain *why*.
-- **Docs** — update the README and any doc the change contradicts, so the docs
+- **Docs**: update the README and any doc the change contradicts, so the docs
   describe the code as it is now.
 
 ## 4. Open the PR

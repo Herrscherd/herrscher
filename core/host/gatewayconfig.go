@@ -6,19 +6,21 @@ import (
 	"github.com/Herrscherd/herrscher/core/envx"
 )
 
-func CaptureGatewayConfig(plugins []contracts.Plugin) (reveal func()) {
+// CaptureGatewayConfig hides the gateway configuration keys of plugins from the environment and returns the function that restores them.
+func CaptureGatewayConfig(plugins []contracts.Plugin) func() {
 	return envx.Hide(gatewayConfigKeys(plugins))
 }
 
 func gatewayConfigKeys(plugins []contracts.Plugin) []string {
 	var keys []string
-	for _, p := range plugins {
-		if p.Gateway == nil {
+	for idx := range plugins {
+		plugin := plugins[idx]
+		if plugin.Gateway == nil {
 			continue
 		}
-		for _, s := range p.Manifest.Config {
-			if s.Env != "" {
-				keys = append(keys, s.Env)
+		for _, field := range plugin.Manifest.Config {
+			if field.Env != "" {
+				keys = append(keys, field.Env)
 			}
 		}
 	}

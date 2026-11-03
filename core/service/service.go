@@ -6,7 +6,7 @@
 // any OS) from the executor (Install / Uninstall, which writes files and runs
 // the platform commands). Secrets never live in the generated unit: every
 // platform sources an env file (mode 0600) that holds the gateway secrets et al.,
-// and the planner only ever creates that file as an empty template — it never
+// and the planner only ever creates that file as an empty template. It never
 // overwrites an existing one and never echoes a token.
 package service
 
@@ -27,7 +27,18 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
 
-// label / on-disk names shared by the planner and the docs.
+const (
+	goosLinux       = "linux"
+	goosDarwin      = "darwin"
+	goosWindows     = "windows"
+	flagUser        = "--user"
+	subDaemonReload = "daemon-reload"
+	cmdLaunchctl    = "launchctl"
+	flagTaskName    = "/tn"
+	cmdSystemctl    = "systemctl"
+	cmdSchtasks     = "schtasks"
+)
+
 const (
 	linuxUnitName = "herrscher.service"
 	macLabel      = "com.vskstudio.herrscher"
@@ -36,19 +47,19 @@ const (
 
 // Config describes the service to install.
 type Config struct {
-	GOOS       string   // target OS; "" => runtime.GOOS
-	BinPath    string   // absolute path to the herrscher binary
-	Home       string   // user home dir
-	User       string   // username (for loginctl enable-linger)
-	EnvFile    string   // path to the secrets env file (mode 0600)
-	HealthAddr string   // --health-addr value; "" omits the flag
-	ExtraArgs  []string // extra args appended to `herrscher serve`
-	SkipStart  bool     // configure boot-start but don't start now (e.g. token not set yet)
+	GOOS       string
+	BinPath    string
+	Home       string
+	User       string
+	EnvFile    string
+	HealthAddr string
+	ExtraArgs  []string
+	SkipStart  bool
 
-	ConfigPath string // path to the declarative config.json scaffold (template)
-	DefaultCmd string // pre-fills the scaffold's "cmd" (from install --cmd)
+	ConfigPath string
+	DefaultCmd string
 
-	// Path is the PATH the daemon — and so every agent it spawns — runs with.
+	// Path is the PATH the daemon, and so every agent it spawns, runs with.
 	// Captured from the installing shell, because a launcher supplies almost
 	// nothing (systemd hands a user service /usr/local/bin:/usr/bin) and an agent
 	// cannot invoke a tool it cannot find. Empty falls back to the usual dirs.
@@ -66,9 +77,9 @@ type Config struct {
 // gateway manifest's declared config. The planner turns each into a template
 // line; Required ones gate whether install starts the service immediately.
 type EnvVar struct {
-	Key      string // env var name (e.g. the gateway's token var)
-	Help     string // one-line comment rendered above the line
-	Required bool   // the daemon can't start until this is set
+	Key      string
+	Help     string
+	Required bool
 }
 
 // FileWrite is one file the plan writes. Template files are written only when
@@ -91,149 +102,145 @@ type Command struct {
 type Plan struct {
 	Files    []FileWrite
 	Commands []Command
-	Notes    []string // human-facing follow-ups (shown after a successful run)
+	Notes    []string
 }
 
-func goos(c Config) string {
-	if c.GOOS != "" {
-		return c.GOOS
+func goos(cfg Config) string {
+	if cfg.GOOS != "" {
+		return cfg.GOOS
 	}
 	return runtime.GOOS
 }
 
-// serveArgs builds the `serve …` argv the service runs. The daemon loads its
-// own secrets via --env-file (no shell sourcing), so the env file is passed as
-// a plain argument on every platform. Tunable knobs (health-addr, cmd, …) are
-// NOT baked here: they live in config.json so a user can edit them without
-// reinstalling. Baking them as explicit flags would shadow config.json (an
-// explicit flag outranks it), silently overriding the user's edits.
-func serveArgs(c Config) []string {
+func serveArgs(cfg Config) []string {
 	args := []string{"serve"}
-	if c.EnvFile != "" {
-		args = append(args, "--env-file", c.EnvFile)
+	if cfg.EnvFile != "" {
+		args = append(args, "--env-file", cfg.EnvFile)
 	}
-	return append(args, c.ExtraArgs...)
+	return append(args, cfg.ExtraArgs...)
 }
 
-// coreEnvVars are the secrets the host itself needs, independent of any gateway.
-// Gateway vars are appended from the plugin manifests (see DefaultConfig).
-var coreEnvVars = []EnvVar{
-	{Key: "HERRSCHER_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
+const (
+	privateFileMode = 0o600
+	privateDirMode  = 0o750
+	unitFileMode    = 0o644
+)
+
+var (
+	errUnsupportedOS     = errors.New("unsupported OS")
+	errNoSourceDir       = errors.New("no source dir set")
+	errNotSourceCheckout = errors.New("not a herrscher source checkout")
+	errNoGoToolchain     = errors.New("go toolchain not found in PATH")
+	errNoBinaryPath      = errors.New("no binary path to smoke-test")
+)
+
+func coreEnvVars() []EnvVar {
+	return []EnvVar{
+		{Key: "HERRSCHER_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
+	}
 }
 
-// renderEnvTemplate builds the secrets file body from the declared env vars. A
-// gateway's variables come from its manifest, so no concrete gateway is named
-// here. With no vars declared the file is just the header (still valid).
 func renderEnvTemplate(vars []EnvVar) string {
-	var b strings.Builder
-	b.WriteString("# herrscher daemon secrets — keep private (chmod 600), never commit.\n")
-	b.WriteString("# Fill these in, then restart the service.\n")
-	for _, v := range vars {
-		if v.Help != "" {
-			fmt.Fprintf(&b, "# %s\n", v.Help)
+	var buf strings.Builder
+	buf.WriteString("# herrscher daemon secrets: keep private (chmod 600), never commit.\n")
+	buf.WriteString("# Fill these in, then restart the service.\n")
+	for _, value := range vars {
+		if value.Help != "" {
+			fmt.Fprintf(&buf, "# %s\n", value.Help)
 		}
-		fmt.Fprintf(&b, "%s=\n", v.Key)
+		fmt.Fprintf(&buf, "%s=\n", value.Key)
 	}
-	return b.String()
+	return buf.String()
 }
 
-// envFileWrite is the (always template, never-overwrite) secrets file shared by
-// every platform. Its content is derived from c.EnvVars (gateway + core).
 func envFileWrite(c Config) FileWrite {
-	return FileWrite{Path: c.EnvFile, Content: renderEnvTemplate(c.EnvVars), Mode: 0o600, Template: true}
+	return FileWrite{Path: c.EnvFile, Content: renderEnvTemplate(c.EnvVars), Mode: privateFileMode, Template: true}
 }
 
 // BuildPlan returns the install plan for c's target OS. Every platform also
 // scaffolds the declarative config.json (template, never clobbered).
-func BuildPlan(c Config) (Plan, error) {
-	var p Plan
-	switch goos(c) {
-	case "linux":
-		p = linuxPlan(c)
-	case "darwin":
-		p = macPlan(c)
-	case "windows":
-		p = windowsPlan(c)
+func BuildPlan(cfg Config) (Plan, error) {
+	var plan Plan
+	switch goos(cfg) {
+	case goosLinux:
+		plan = linuxPlan(cfg)
+	case goosDarwin:
+		plan = macPlan(cfg)
+	case goosWindows:
+		plan = windowsPlan(cfg)
 	default:
-		return Plan{}, fmt.Errorf("unsupported OS %q", goos(c))
+		return Plan{}, fmt.Errorf("%w %q", errUnsupportedOS, goos(cfg))
 	}
-	if c.ConfigPath != "" {
-		p.Files = append(p.Files, configFileWrite(c))
+	if cfg.ConfigPath != "" {
+		plan.Files = append(plan.Files, configFileWrite(cfg))
 	}
-	return p, nil
+	return plan, nil
 }
 
-// configFileWrite is the declarative config.json scaffold: a commented template
-// written only when missing, so reinstalling never clobbers an edited file. It
-// holds no secrets (those stay in the env file).
 func configFileWrite(c Config) FileWrite {
-	return FileWrite{Path: c.ConfigPath, Content: config.Template(c.DefaultCmd, c.HealthAddr), Mode: 0o644, Template: true}
+	return FileWrite{Path: c.ConfigPath, Content: config.Template(c.DefaultCmd, c.HealthAddr), Mode: unitFileMode, Template: true}
 }
 
 // BuildUninstall returns the uninstall plan for c's target OS.
-func BuildUninstall(c Config) (Plan, error) {
-	switch goos(c) {
-	case "linux":
-		unit := filepath.Join(c.Home, ".config", "systemd", "user", linuxUnitName)
+func BuildUninstall(cfg Config) (Plan, error) {
+	switch goos(cfg) {
+	case goosLinux:
+		unit := filepath.Join(cfg.Home, ".config", "systemd", "user", linuxUnitName)
 		return Plan{Commands: []Command{
-			{Argv: []string{"systemctl", "--user", "disable", "--now", linuxUnitName}, IgnoreErr: true},
+			{Argv: []string{cmdSystemctl, flagUser, "disable", "--now", linuxUnitName}, IgnoreErr: true},
 			{Argv: []string{"rm", "-f", unit}},
-			{Argv: []string{"systemctl", "--user", "daemon-reload"}, IgnoreErr: true},
+			{Argv: []string{cmdSystemctl, flagUser, subDaemonReload}, IgnoreErr: true},
 		}}, nil
-	case "darwin":
-		plist := filepath.Join(c.Home, "Library", "LaunchAgents", macLabel+".plist")
+	case goosDarwin:
+		plist := filepath.Join(cfg.Home, "Library", "LaunchAgents", macLabel+".plist")
 		return Plan{Commands: []Command{
-			{Argv: []string{"launchctl", "unload", "-w", plist}, IgnoreErr: true},
+			{Argv: []string{cmdLaunchctl, "unload", "-w", plist}, IgnoreErr: true},
 			{Argv: []string{"rm", "-f", plist}},
 		}}, nil
-	case "windows":
+	case goosWindows:
 		return Plan{Commands: []Command{
-			{Argv: []string{"schtasks", "/delete", "/tn", winTaskName, "/f"}},
+			{Argv: []string{cmdSchtasks, "/delete", flagTaskName, winTaskName, "/f"}},
 		}}, nil
 	default:
-		return Plan{}, fmt.Errorf("unsupported OS %q", goos(c))
+		return Plan{}, fmt.Errorf("%w %q", errUnsupportedOS, goos(cfg))
 	}
 }
 
 // StatusCommand returns the command that reports whether the service is active.
-func StatusCommand(c Config) (Command, error) {
-	// IgnoreErr: these report status by exit code (e.g. systemctl exits 3 when
-	// the unit is inactive); we still want to print the output without turning
-	// "stopped" into a CLI error.
-	switch goos(c) {
-	case "linux":
-		return Command{Argv: []string{"systemctl", "--user", "status", linuxUnitName}, IgnoreErr: true}, nil
-	case "darwin":
-		return Command{Argv: []string{"launchctl", "list", macLabel}, IgnoreErr: true}, nil
-	case "windows":
-		return Command{Argv: []string{"schtasks", "/query", "/tn", winTaskName, "/v"}, IgnoreErr: true}, nil
+func StatusCommand(cfg Config) (Command, error) {
+	switch goos(cfg) {
+	case goosLinux:
+		return Command{Argv: []string{cmdSystemctl, flagUser, "status", linuxUnitName}, IgnoreErr: true}, nil
+	case goosDarwin:
+		return Command{Argv: []string{cmdLaunchctl, "list", macLabel}, IgnoreErr: true}, nil
+	case goosWindows:
+		return Command{Argv: []string{cmdSchtasks, "/query", flagTaskName, winTaskName, "/v"}, IgnoreErr: true}, nil
 	default:
-		return Command{}, fmt.Errorf("unsupported OS %q", goos(c))
+		return Command{}, fmt.Errorf("%w %q", errUnsupportedOS, goos(cfg))
 	}
 }
 
 // RestartCommands returns the platform commands that restart the running
 // service. Some platforms need more than one (stop then start).
-func RestartCommands(c Config) ([]Command, error) {
-	switch goos(c) {
-	case "linux":
-		return []Command{{Argv: []string{"systemctl", "--user", "restart", linuxUnitName}}}, nil
-	case "darwin":
-		// kickstart -k stops (if running) and starts the agent in one call.
+func RestartCommands(cfg Config) ([]Command, error) {
+	switch goos(cfg) {
+	case goosLinux:
+		return []Command{{Argv: []string{cmdSystemctl, flagUser, "restart", linuxUnitName}}}, nil
+	case goosDarwin:
 		target := fmt.Sprintf("gui/%d/%s", os.Getuid(), macLabel)
-		return []Command{{Argv: []string{"launchctl", "kickstart", "-k", target}}}, nil
-	case "windows":
+		return []Command{{Argv: []string{cmdLaunchctl, "kickstart", "-k", target}}}, nil
+	case goosWindows:
 		return []Command{
-			{Argv: []string{"schtasks", "/end", "/tn", winTaskName}, IgnoreErr: true},
-			{Argv: []string{"schtasks", "/run", "/tn", winTaskName}},
+			{Argv: []string{cmdSchtasks, "/end", flagTaskName, winTaskName}, IgnoreErr: true},
+			{Argv: []string{cmdSchtasks, "/run", flagTaskName, winTaskName}},
 		}, nil
 	default:
-		return nil, fmt.Errorf("unsupported OS %q", goos(c))
+		return nil, fmt.Errorf("%w %q", errUnsupportedOS, goos(cfg))
 	}
 }
 
 // Restart restarts the service inline (for a separate caller process, e.g. the
-// `herrscher service restart` CLI — never the daemon restarting itself).
+// `herrscher service restart` CLI, never the daemon restarting itself).
 func Restart(ctx context.Context, c Config) error {
 	cmds, err := RestartCommands(c)
 	if err != nil {
@@ -248,43 +255,37 @@ func Restart(ctx context.Context, c Config) error {
 }
 
 // RestartDetached restarts the service out-of-band so it survives the caller
-// being killed mid-restart — required when the daemon restarts *itself* (e.g.
+// being killed mid-restart, required when the daemon restarts *itself* (e.g.
 // from /service restart). On Linux the daemon shares the unit's cgroup, which
 // systemd kills on stop, so the restart is scheduled as a transient timer unit
 // (systemd-run) that lives outside that cgroup. launchd/Task Scheduler manage
 // the service from a separate process domain, so a normal restart already
 // survives there.
-func RestartDetached(ctx context.Context, c Config) error {
-	if goos(c) == "linux" {
-		// 3s, not 1s: the caller is mid-interaction and must finish editing its
-		// deferred reply (an HTTP round-trip to the gateway) before systemd kills the
-		// unit's cgroup out from under it. 1s raced the reply; 3s clears it.
+func RestartDetached(ctx context.Context, cfg Config) error {
+	if goos(cfg) == goosLinux {
 		return runCommand(ctx, Command{Argv: []string{
-			"systemd-run", "--user", "--on-active=3",
+			"systemd-run", flagUser, "--on-active=3",
 			"--timer-property=AccuracySec=100ms",
-			"systemctl", "--user", "restart", linuxUnitName,
+			cmdSystemctl, flagUser, "restart", linuxUnitName,
 		}})
 	}
-	return Restart(ctx, c)
+	return Restart(ctx, cfg)
 }
 
-// validateSource confirms src is the herrscher module root (a go.mod declaring
-// module github.com/Herrscherd/herrscher), so a build never runs `go build` in an
-// unrelated directory.
 func validateSource(src string) error {
 	if src == "" {
-		return errors.New("no source dir set")
+		return errNoSourceDir
 	}
-	data, err := os.ReadFile(filepath.Join(src, "go.mod"))
+	data, err := os.ReadFile(filepath.Clean(filepath.Join(src, "go.mod")))
 	if err != nil {
-		return fmt.Errorf("not a herrscher source checkout (no go.mod): %s", src)
+		return fmt.Errorf("%w (no go.mod): %s: %w", errNotSourceCheckout, src, err)
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		if strings.TrimSpace(line) == "module github.com/Herrscherd/herrscher" {
 			return nil
 		}
 	}
-	return fmt.Errorf("not a herrscher source checkout (wrong module): %s", src)
+	return fmt.Errorf("%w (wrong module): %s", errNotSourceCheckout, src)
 }
 
 // Pull fast-forwards the source checkout. --ff-only fails loudly rather than
@@ -307,7 +308,7 @@ func Build(ctx context.Context, src, binPath string) error {
 		return err
 	}
 	if _, err := exec.LookPath("go"); err != nil {
-		return fmt.Errorf("go toolchain not found in PATH")
+		return errNoGoToolchain
 	}
 	if out, err := runCapture(ctx, src, "go", "build", "-o", binPath, "."); err != nil {
 		return fmt.Errorf("go build: %w: %s", err, redact.Output(out))
@@ -324,7 +325,7 @@ func BuildFor(ctx context.Context, src, binPath, goos, goarch string) error {
 		return err
 	}
 	if _, err := exec.LookPath("go"); err != nil {
-		return fmt.Errorf("go toolchain not found in PATH")
+		return errNoGoToolchain
 	}
 	cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, ".")
 	cmd.Dir = src
@@ -352,7 +353,7 @@ func SourceVersion(ctx context.Context, src string) string {
 // daemon keeps running its old in-memory image; only the on-disk file changed.
 func Smoke(ctx context.Context, binPath string) error {
 	if binPath == "" {
-		return errors.New("no binary path to smoke-test")
+		return errNoBinaryPath
 	}
 	if out, err := runCapture(ctx, "", binPath, "--help"); err != nil {
 		return fmt.Errorf("new binary failed smoke test (%s --help): %w: %s", binPath, err, redact.Output(out))
@@ -362,15 +363,15 @@ func Smoke(ctx context.Context, binPath string) error {
 
 // InstalledBinPath returns the binary path baked into the installed service
 // unit's ExecStart, so `service update` rebuilds the binary the service actually
-// runs — not whatever binary happened to invoke the CLI (running it from a build
+// runs, not whatever binary happened to invoke the CLI (running it from a build
 // dir would otherwise rebuild that throwaway binary and leave the daemon stale).
 // Returns ("", false) when it can't be determined: unit absent, or an OS whose
 // launcher this doesn't parse (only the linux systemd unit is read).
-func InstalledBinPath(c Config) (string, bool) {
-	if goos(c) != "linux" {
+func InstalledBinPath(cfg Config) (string, bool) {
+	if goos(cfg) != goosLinux {
 		return "", false
 	}
-	data, err := os.ReadFile(filepath.Join(c.Home, ".config", "systemd", "user", linuxUnitName))
+	data, err := os.ReadFile(filepath.Join(cfg.Home, ".config", "systemd", "user", linuxUnitName))
 	if err != nil {
 		return "", false
 	}
@@ -386,121 +387,95 @@ func InstalledBinPath(c Config) (string, bool) {
 	return "", false
 }
 
-// firstToken returns the first whitespace-separated token of s, honoring a
-// leading double-quote (the unit builder quotes a space-bearing BinPath).
-func firstToken(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
+func firstToken(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
 		return ""
 	}
-	if s[0] == '"' {
-		if i := strings.IndexByte(s[1:], '"'); i >= 0 {
-			return s[1 : 1+i]
+	if token[0] == '"' {
+		if i := strings.IndexByte(token[1:], '"'); i >= 0 {
+			return token[1 : 1+i]
 		}
-		return s[1:]
+		return token[1:]
 	}
-	if i := strings.IndexByte(s, ' '); i >= 0 {
-		return s[:i]
+	if i := strings.IndexByte(token, ' '); i >= 0 {
+		return token[:i]
 	}
-	return s
+	return token
 }
 
 // Update pulls (optional), rebuilds, smoke-tests, and restarts the service
 // inline. Used by the `herrscher service update` CLI (a separate process from the
 // daemon).
-func Update(ctx context.Context, c Config, src string, pull bool) error {
+func Update(ctx context.Context, cfg Config, src string, pull bool) error {
 	if pull {
 		if err := Pull(ctx, src); err != nil {
 			return err
 		}
 	}
-	if err := Build(ctx, src, c.BinPath); err != nil {
+	if err := Build(ctx, src, cfg.BinPath); err != nil {
 		return err
 	}
-	if err := Smoke(ctx, c.BinPath); err != nil {
+	if err := Smoke(ctx, cfg.BinPath); err != nil {
 		return err
 	}
-	// The unit on disk was written by whichever version installed it, so the PATH
-	// the daemon needs would otherwise only ever reach machines reinstalled from
-	// scratch. Set just that line: the rest of the unit carries the flags chosen
-	// at install time (--health-addr, --env-file), which are not ours to reset.
-	changed, err := syncUnitPath(c)
+	changed, err := syncUnitPath(cfg)
 	if err != nil {
 		return err
 	}
 	if changed {
-		if err := runCommand(ctx, Command{Argv: []string{"systemctl", "--user", "daemon-reload"}}); err != nil {
+		if err := runCommand(ctx, Command{Argv: []string{cmdSystemctl, flagUser, subDaemonReload}}); err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, "herrscher service: unit PATH updated so agents can find tools under your home")
 	}
-	return Restart(ctx, c)
+	return Restart(ctx, cfg)
 }
 
-// syncUnitPath makes the installed systemd unit declare the PATH from c, editing
-// that one directive in place and reporting whether anything changed. A missing
-// unit is not an error: nothing to upgrade. systemd only — launchd reads the
-// plist afresh on load and the Windows task inherits the logon environment, so
-// neither froze a stale PATH the way a written unit does.
-func syncUnitPath(c Config) (bool, error) {
-	if goos(c) != "linux" {
+func syncUnitPath(cfg Config) (bool, error) {
+	if goos(cfg) != goosLinux {
 		return false, nil
 	}
-	path := filepath.Join(c.Home, ".config", "systemd", "user", linuxUnitName)
-	b, err := os.ReadFile(path)
+	path := filepath.Clean(filepath.Join(cfg.Home, ".config", "systemd", "user", linuxUnitName))
+	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
 	} else if err != nil {
 		return false, err
 	}
-	want := unitPathLine(c)
-	lines := strings.Split(string(b), "\n")
-	for i, l := range lines {
-		if !isUnitPathLine(l) {
+	want := unitPathLine(cfg)
+	lines := strings.Split(string(data), "\n")
+	for idx, line := range lines {
+		if !isUnitPathLine(line) {
 			continue
 		}
-		if l == want {
+		if line == want {
 			return false, nil
 		}
-		lines[i] = want
-		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+		lines[idx] = want
+		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), unitFileMode)
 	}
-	// No PATH directive at all: this unit predates it. It belongs in [Service],
-	// where a bare append would land in [Install] instead.
-	for i, l := range lines {
+	for idx, l := range lines {
 		if strings.TrimSpace(l) != "[Service]" {
 			continue
 		}
-		lines = append(lines[:i+1], append([]string{want}, lines[i+1:]...)...)
-		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+		lines = append(lines[:idx+1], append([]string{want}, lines[idx+1:]...)...)
+		return true, os.WriteFile(path, []byte(strings.Join(lines, "\n")), unitFileMode)
 	}
 	return false, nil
 }
 
-// unitPathLine renders the unit's PATH directive. systemd splits Environment= on
-// whitespace, so a directory with a space in it — routine on macOS, legal
-// everywhere — would otherwise cut the daemon's PATH short at that entry and turn
-// the rest into assignments systemd drops with a warning nobody reads. Quoting is
-// the same as for an ExecStart argument.
 func unitPathLine(c Config) string {
 	return "Environment=" + systemdQuote("PATH="+daemonPath(c))
 }
 
-// isUnitPathLine spots the directive whatever form wrote it, so an upgrade
-// replaces a stale PATH instead of adding a second one beside it.
 func isUnitPathLine(l string) bool {
 	return strings.HasPrefix(l, "Environment=PATH=") || strings.HasPrefix(l, `Environment="PATH=`)
 }
 
-// daemonPath is the PATH to bake into the launcher: what the installing shell
-// had, plus the directory the binary itself lives in and the conventional user
-// bin dir, so `herrscher` and anything else installed under the home resolve for
-// the agents the daemon spawns. Entries are deduplicated, order preserved, and
-// anything that could break out of a single line is dropped — a unit file is
-// line-oriented, so a newline in a PATH would be a new directive.
-func daemonPath(c Config) string {
+func daemonPath(cfg Config) string {
 	var out []string
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	add := func(dir string) {
 		if dir == "" || seen[dir] || strings.ContainsAny(dir, "\n\r") || !volatileFree(dir) {
 			return
@@ -508,32 +483,21 @@ func daemonPath(c Config) string {
 		seen[dir] = true
 		out = append(out, dir)
 	}
-	if c.BinPath != "" {
-		add(filepath.Dir(c.BinPath))
+	if cfg.BinPath != "" {
+		add(filepath.Dir(cfg.BinPath))
 	}
-	if c.Home != "" {
-		add(filepath.Join(c.Home, ".local", "bin"))
+	if cfg.Home != "" {
+		add(filepath.Join(cfg.Home, ".local", "bin"))
 	}
-	// Split on ":" rather than the host's separator: this renders a unit or a
-	// plist, both of which are POSIX, whatever machine plans the install.
-	for _, dir := range strings.Split(c.Path, ":") {
+	for _, dir := range strings.Split(cfg.Path, ":") {
 		add(dir)
 	}
-	// A launcher's own default is the floor, not the ceiling: keep the daemon
-	// working even when nothing was captured at install time.
 	for _, dir := range []string{"/usr/local/bin", "/usr/bin", "/bin"} {
 		add(dir)
 	}
 	return strings.Join(out, ":")
 }
 
-// volatileFree rejects PATH entries that must not be frozen into a launcher that
-// outlives the shell it came from. A login PATH routinely carries a bundled app's
-// mount point (an AppImage's /tmp/.mount_XXXXXX), which is gone by the next launch
-// — and worse, is a directory any local process can recreate, so a long-lived
-// service resolving commands through it would be trusting whoever gets there
-// first. Relative entries are refused for the same reason: they resolve against
-// the daemon's cwd.
 func volatileFree(dir string) bool {
 	if !strings.HasPrefix(dir, "/") {
 		return false
@@ -547,58 +511,44 @@ func volatileFree(dir string) bool {
 	return true
 }
 
-func linuxPlan(c Config) Plan {
-	unit := filepath.Join(c.Home, ".config", "systemd", "user", linuxUnitName)
+func linuxPlan(cfg Config) Plan {
+	unit := filepath.Join(cfg.Home, ".config", "systemd", "user", linuxUnitName)
 	content := "[Unit]\n" +
 		"Description=herrscher gateway daemon\n" +
 		"After=network-online.target\n" +
 		"Wants=network-online.target\n" +
-		// Don't retry forever if the daemon keeps failing (e.g. a bad token):
-		// give up after 5 failures in 60s rather than spin indefinitely. These
-		// live in [Unit] in modern systemd, not [Service].
 		"StartLimitIntervalSec=60\n" +
 		"StartLimitBurst=5\n\n" +
 		"[Service]\n" +
 		"Type=simple\n" +
-		// systemd hands a user service /usr/local/bin:/usr/bin, and every agent
-		// the daemon spawns inherits it — so anything under the operator's home
-		// is invisible to them. Not a secret, so it belongs in the unit.
-		unitPathLine(c) + "\n" +
-		// The daemon loads the env file itself (serve --env-file), so the unit
-		// needs no EnvironmentFile and the token never appears here.
-		"ExecStart=" + joinQuoted(systemdQuote, c.BinPath, serveArgs(c)) + "\n" +
+		unitPathLine(cfg) + "\n" +
+		"ExecStart=" + joinQuoted(systemdQuote, cfg.BinPath, serveArgs(cfg)) + "\n" +
 		"Restart=always\n" +
 		"RestartSec=3\n\n" +
 		"[Install]\n" +
 		"WantedBy=default.target\n"
 	cmds := []Command{
-		{Argv: []string{"systemctl", "--user", "daemon-reload"}},
+		{Argv: []string{cmdSystemctl, flagUser, subDaemonReload}},
 	}
-	if c.SkipStart {
-		// Enable at boot but don't start now: with no token the daemon exits
-		// immediately and Restart=always would crash-loop until it's filled in.
-		cmds = append(cmds, Command{Argv: []string{"systemctl", "--user", "enable", linuxUnitName}})
+	if cfg.SkipStart {
+		cmds = append(cmds, Command{Argv: []string{cmdSystemctl, flagUser, "enable", linuxUnitName}})
 	} else {
-		cmds = append(cmds, Command{Argv: []string{"systemctl", "--user", "enable", "--now", linuxUnitName}})
+		cmds = append(cmds, Command{Argv: []string{cmdSystemctl, flagUser, "enable", "--now", linuxUnitName}})
 	}
-	if c.User != "" {
-		// Linger lets the user service keep running after logout / at boot.
-		cmds = append(cmds, Command{Argv: []string{"loginctl", "enable-linger", c.User}, IgnoreErr: true})
+	if cfg.User != "" {
+		cmds = append(cmds, Command{Argv: []string{"loginctl", "enable-linger", cfg.User}, IgnoreErr: true})
 	}
 	return Plan{
-		Files:    []FileWrite{{Path: unit, Content: content, Mode: 0o644}, envFileWrite(c)},
+		Files:    []FileWrite{{Path: unit, Content: content, Mode: unitFileMode}, envFileWrite(cfg)},
 		Commands: cmds,
-		Notes:    []string{startNote(c, "systemctl --user start "+linuxUnitName)},
+		Notes:    []string{startNote(cfg, "systemctl --user start "+linuxUnitName)},
 	}
 }
 
-func macPlan(c Config) Plan {
-	plist := filepath.Join(c.Home, "Library", "LaunchAgents", macLabel+".plist")
-	logPath := filepath.Join(c.Home, ".local", "state", "herrscher", "herrscher.log")
-	// No shell: launchd execs herrscher directly and the daemon loads the env file
-	// itself (serve --env-file). Each argument is its own array element, so
-	// spaces never split a token — just XML-escape each one.
-	argv := append([]string{c.BinPath}, serveArgs(c)...)
+func macPlan(cfg Config) Plan {
+	plist := filepath.Join(cfg.Home, "Library", "LaunchAgents", macLabel+".plist")
+	logPath := filepath.Join(cfg.Home, ".local", "state", "herrscher", "herrscher.log")
+	argv := append([]string{cfg.BinPath}, serveArgs(cfg)...)
 	var progArgs strings.Builder
 	for _, a := range argv {
 		progArgs.WriteString("    <string>" + xmlEscape(a) + "</string>\n")
@@ -610,7 +560,7 @@ func macPlan(c Config) Plan {
 		progArgs.String() +
 		"  </array>\n" +
 		"  <key>EnvironmentVariables</key>\n  <dict>\n" +
-		"    <key>PATH</key><string>" + xmlEscape(daemonPath(c)) + "</string>\n" +
+		"    <key>PATH</key><string>" + xmlEscape(daemonPath(cfg)) + "</string>\n" +
 		"  </dict>\n" +
 		"  <key>RunAtLoad</key><true/>\n" +
 		"  <key>KeepAlive</key><true/>\n" +
@@ -618,36 +568,28 @@ func macPlan(c Config) Plan {
 		"  <key>StandardErrorPath</key><string>" + xmlEscape(logPath) + "</string>\n" +
 		"</dict>\n</plist>\n"
 	cmds := []Command{
-		{Argv: []string{"launchctl", "unload", "-w", plist}, IgnoreErr: true},
+		{Argv: []string{cmdLaunchctl, "unload", "-w", plist}, IgnoreErr: true},
 	}
-	if !c.SkipStart {
-		// Skipped when no token yet: loading would start the agent, which exits
-		// immediately and KeepAlive would respawn it. RunAtLoad still starts it
-		// at the next login once the token is in place.
-		cmds = append(cmds, Command{Argv: []string{"launchctl", "load", "-w", plist}})
+	if !cfg.SkipStart {
+		cmds = append(cmds, Command{Argv: []string{cmdLaunchctl, "load", "-w", plist}})
 	}
 	return Plan{
-		Files:    []FileWrite{{Path: plist, Content: content, Mode: 0o644}, envFileWrite(c)},
+		Files:    []FileWrite{{Path: plist, Content: content, Mode: unitFileMode}, envFileWrite(cfg)},
 		Commands: cmds,
-		Notes:    []string{startNote(c, "launchctl load -w "+plist)},
+		Notes:    []string{startNote(cfg, "launchctl load -w "+plist)},
 	}
 }
 
-func windowsPlan(c Config) Plan {
-	launcher := filepath.Join(c.Home, "AppData", "Local", "herrscher", "herrscher-serve.cmd")
-	// A tiny .cmd launcher just execs herrscher; the daemon loads the env file itself
-	// (serve --env-file), so there's no brittle `for /f` parsing and the task
-	// never carries the token. (schtasks /tr can't quote argv reliably, hence
-	// the wrapper file.)
+func windowsPlan(cfg Config) Plan {
+	launcher := filepath.Join(cfg.Home, "AppData", "Local", "herrscher", "herrscher-serve.cmd")
 	content := "@echo off\r\n" +
-		joinQuoted(cmdQuote, c.BinPath, serveArgs(c)) + "\r\n"
+		joinQuoted(cmdQuote, cfg.BinPath, serveArgs(cfg)) + "\r\n"
 	return Plan{
-		Files: []FileWrite{{Path: launcher, Content: content, Mode: 0o644}, envFileWrite(c)},
+		Files: []FileWrite{{Path: launcher, Content: content, Mode: unitFileMode}, envFileWrite(cfg)},
 		Commands: []Command{
-			{Argv: []string{"schtasks", "/create", "/tn", winTaskName, "/tr", launcher, "/sc", "onlogon", "/rl", "limited", "/f"}},
+			{Argv: []string{cmdSchtasks, "/create", flagTaskName, winTaskName, "/tr", launcher, "/sc", "onlogon", "/rl", "limited", "/f"}},
 		},
-		// A logon-scheduled task only runs at the next sign-in, never on install.
-		Notes: []string{"Edit " + c.EnvFile + " with your token; the task runs herrscher at your next logon (or run it now: schtasks /run /tn " + winTaskName + ")."},
+		Notes: []string{"Edit " + cfg.EnvFile + " with your token; the task runs herrscher at your next logon (or run it now: schtasks /run /tn " + winTaskName + ")."},
 	}
 }
 
@@ -655,41 +597,34 @@ const xmlHeader = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 `
 
-func xmlEscape(s string) string {
+func xmlEscape(value string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
-	return r.Replace(s)
+	return r.Replace(value)
 }
 
-// startNote returns the human-facing follow-up after an install: how to start
-// the service once the token is in place (when start was skipped), or where its
-// secrets live (when it's already running).
-func startNote(c Config, startCmd string) string {
-	if c.SkipStart {
-		return "installed and enabled at boot, but NOT started — fill the required secrets in " +
-			c.EnvFile + ", then: " + startCmd
+func startNote(cfg Config, startCmd string) string {
+	if cfg.SkipStart {
+		return "installed and enabled at boot, but NOT started: fill the required secrets in " +
+			cfg.EnvFile + ", then: " + startCmd
 	}
-	return "running. Secrets live in " + c.EnvFile + "; edit it and restart to change them."
+	return "running. Secrets live in " + cfg.EnvFile + "; edit it and restart to change them."
 }
 
-// envFileHasRequired reports whether the env file already carries a non-empty
-// value for every Required env var, so install can start the service immediately
-// instead of configuring a crash-loop with an empty template. With no required
-// vars declared it returns true (nothing gates startup).
 func envFileHasRequired(path string, vars []EnvVar) bool {
-	required := map[string]bool{}
-	for _, v := range vars {
-		if v.Required {
-			required[v.Key] = true
+	required := make(map[string]bool)
+	for _, value := range vars {
+		if value.Required {
+			required[value.Key] = true
 		}
 	}
 	if len(required) == 0 {
 		return true
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return false
 	}
-	set := map[string]bool{}
+	set := make(map[string]bool)
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -707,9 +642,6 @@ func envFileHasRequired(path string, vars []EnvVar) bool {
 	return true
 }
 
-// joinQuoted joins a binary path and its args for an ExecStart line, applying
-// quote to the binary and every argument so a path or value containing spaces
-// or metacharacters survives the target's parser.
 func joinQuoted(quote func(string) string, bin string, args []string) string {
 	parts := make([]string, 0, len(args)+1)
 	parts = append(parts, quote(bin))
@@ -719,30 +651,25 @@ func joinQuoted(quote func(string) string, bin string, args []string) string {
 	return strings.Join(parts, " ")
 }
 
-// systemdQuote quotes a token for a systemd ExecStart line. systemd splits on
-// whitespace unless double-quoted, and treats backslash as an escape inside the
-// quotes, so spaces/quotes/backslashes must be wrapped and escaped.
-func systemdQuote(s string) string {
-	if s == "" {
+func systemdQuote(value string) string {
+	if value == "" {
 		return `""`
 	}
-	if !strings.ContainsAny(s, " \t\n\"\\'") {
-		return s
+	if !strings.ContainsAny(value, " \t\n\"\\'") {
+		return value
 	}
 	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
-	return `"` + r.Replace(s) + `"`
+	return `"` + r.Replace(value) + `"`
 }
 
-// cmdQuote double-quotes a token for cmd.exe when it contains a space, tab or
-// quote (doubling embedded quotes), so a "Program Files" path stays one token.
-func cmdQuote(s string) string {
-	if s == "" {
+func cmdQuote(value string) string {
+	if value == "" {
 		return `""`
 	}
-	if !strings.ContainsAny(s, " \t\"") {
-		return s
+	if !strings.ContainsAny(value, " \t\"") {
+		return value
 	}
-	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }
 
 // DefaultConfig fills a Config from the current environment (binary path, home,
@@ -768,32 +695,27 @@ func DefaultConfig() (Config, error) {
 		ConfigPath: filepath.Join(home, ".config", "herrscher", "config.json"),
 		HealthAddr: "127.0.0.1:8787",
 		EnvVars:    registryEnvVars(),
-		// Captured here, from the shell running the install, because this is the
-		// only moment a login PATH is in reach: the daemon's own launcher will
-		// never provide one.
-		Path: os.Getenv("PATH"),
+		Path:       os.Getenv("PATH"),
 	}, nil
 }
 
-// registryEnvVars collects the env vars the daemon needs: every compiled-in
-// gateway's declared, env-bound settings (from its manifest) followed by the
-// core vars. The service package reads only the neutral contracts registry, so
-// it learns a gateway's variables without naming any platform.
 func registryEnvVars() []EnvVar {
 	var out []EnvVar
-	seen := map[string]bool{}
-	for _, p := range contracts.Default.Gateways() {
-		for _, s := range p.Manifest.Config {
-			if s.Env == "" || seen[s.Env] {
+	seen := make(map[string]bool)
+	gateways := contracts.Default.Gateways()
+	for i := range gateways {
+		for _, setting := range gateways[i].Manifest.Config {
+			if setting.Env == "" || seen[setting.Env] {
 				continue
 			}
-			seen[s.Env] = true
-			out = append(out, EnvVar{Key: s.Env, Help: s.Help, Required: s.Required})
+			seen[setting.Env] = true
+			out = append(out, EnvVar{Key: setting.Env, Help: setting.Help, Required: setting.Required})
 		}
 	}
-	for _, v := range coreEnvVars {
-		if !seen[v.Key] {
-			out = append(out, v)
+	core := coreEnvVars()
+	for idx := range core {
+		if !seen[core[idx].Key] {
+			out = append(out, core[idx])
 		}
 	}
 	return out
@@ -801,27 +723,24 @@ func registryEnvVars() []EnvVar {
 
 // Install runs the install plan for the current OS: it writes the unit/launcher
 // and secrets template, then enables and starts the service.
-func Install(ctx context.Context, c Config) error {
-	// Without its required secrets the daemon exits immediately; starting it now
-	// would just crash-loop until the user edits the template. Configure
-	// boot-start only.
-	if !envFileHasRequired(c.EnvFile, c.EnvVars) {
-		c.SkipStart = true
+func Install(ctx context.Context, cfg Config) error {
+	if !envFileHasRequired(cfg.EnvFile, cfg.EnvVars) {
+		cfg.SkipStart = true
 	}
-	p, err := BuildPlan(c)
+	plan, err := BuildPlan(cfg)
 	if err != nil {
 		return err
 	}
-	return runPlan(ctx, p)
+	return runPlan(ctx, plan)
 }
 
 // Uninstall stops and removes the service for the current OS.
 func Uninstall(ctx context.Context, c Config) error {
-	p, err := BuildUninstall(c)
+	plan, err := BuildUninstall(c)
 	if err != nil {
 		return err
 	}
-	return runPlan(ctx, p)
+	return runPlan(ctx, plan)
 }
 
 // Status prints the platform's service status to stdout/stderr.
@@ -833,53 +752,46 @@ func Status(ctx context.Context, c Config) error {
 	return runCommand(ctx, cmd)
 }
 
-func runPlan(ctx context.Context, p Plan) error {
-	for _, f := range p.Files {
+func runPlan(ctx context.Context, plan Plan) error {
+	for _, f := range plan.Files {
 		if err := writeFile(f); err != nil {
 			return err
 		}
 	}
-	for _, cmd := range p.Commands {
+	for _, cmd := range plan.Commands {
 		if err := runCommand(ctx, cmd); err != nil {
 			return err
 		}
 	}
-	for _, n := range p.Notes {
+	for _, n := range plan.Notes {
 		fmt.Fprintln(os.Stderr, "herrscher service: "+n)
 	}
 	return nil
 }
 
-func writeFile(f FileWrite) error {
-	if f.Template {
-		// Never overwrite an existing secrets file. Only a definite "not found"
-		// permits writing the template; any other stat error is fatal rather
-		// than risk clobbering a file we simply couldn't read.
-		switch _, err := os.Stat(f.Path); {
+func writeFile(write FileWrite) error {
+	if write.Template {
+		switch _, err := os.Stat(write.Path); {
 		case err == nil:
 			return nil
 		case !errors.Is(err, fs.ErrNotExist):
-			return fmt.Errorf("stat %s: %w", f.Path, err)
+			return fmt.Errorf("stat %s: %w", write.Path, err)
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(f.Path), 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", filepath.Dir(f.Path), err)
+	if err := os.MkdirAll(filepath.Dir(write.Path), privateDirMode); err != nil {
+		return fmt.Errorf("mkdir %s: %w", filepath.Dir(write.Path), err)
 	}
-	if err := os.WriteFile(f.Path, []byte(f.Content), f.Mode); err != nil {
-		return fmt.Errorf("write %s: %w", f.Path, err)
+	if err := os.WriteFile(write.Path, []byte(write.Content), write.Mode); err != nil {
+		return fmt.Errorf("write %s: %w", write.Path, err)
 	}
 	return nil
 }
 
-// runCapture runs name in dir and returns its combined output, so a failing
-// build/pull can surface the toolchain's own message to the caller. It forces
-// GIT_TERMINAL_PROMPT=0 so an unattended `git pull` fails fast on a missing
-// credential instead of blocking on a prompt that no one will answer.
 func runCapture(ctx context.Context, dir, name string, args ...string) ([]byte, error) {
-	c := exec.CommandContext(ctx, name, args...)
-	c.Dir = dir
-	c.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	out, err := c.CombinedOutput()
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	out, err := cmd.CombinedOutput()
 	return []byte(strings.TrimSpace(string(out))), err
 }
 
@@ -887,9 +799,9 @@ func runCommand(ctx context.Context, cmd Command) error {
 	if len(cmd.Argv) == 0 {
 		return nil
 	}
-	c := exec.CommandContext(ctx, cmd.Argv[0], cmd.Argv[1:]...)
-	c.Stdout, c.Stderr = os.Stderr, os.Stderr
-	if err := c.Run(); err != nil && !cmd.IgnoreErr {
+	execCmd := exec.CommandContext(ctx, cmd.Argv[0], cmd.Argv[1:]...)
+	execCmd.Stdout, execCmd.Stderr = os.Stderr, os.Stderr
+	if err := execCmd.Run(); err != nil && !cmd.IgnoreErr {
 		return fmt.Errorf("%s: %w", strings.Join(cmd.Argv, " "), err)
 	}
 	return nil

@@ -1,6 +1,12 @@
 package control
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"log/slog"
 	"net"
 	"os"
 	"sync"
@@ -21,16 +27,21 @@ type Conn struct {
 func newConn(c net.Conn) *Conn { return &Conn{c: c} }
 
 // Write sends one Event as a JSON line.
-func (c *Conn) Write(e contracts.Event) error {
+func (c *Conn) Write(event contracts.Event) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return WriteEvent(c.c, e)
+	return WriteEvent(c.c, event)
 }
 
 // Emit satisfies contracts.EventSink so the bridge can hand a Conn directly to
-// its turn loop as the event sink. A write error is dropped: emission is
-// best-effort and the hub's read side detects a dead conn independently.
-func (c *Conn) Emit(e contracts.Event) { _ = c.Write(e) }
+// its turn loop as the event sink. A write error is logged at debug level only:
+// emission is best-effort and the hub's read side detects a dead conn
+// independently.
+func (c *Conn) Emit(e contracts.Event) {
+	if err := c.Write(e); err != nil {
+		slog.Debug("control emit dropped", "err", err)
+	}
+}
 
 // Scan reads events until the peer closes the connection or fn returns an error,
 // calling fn for each. A clean peer close (io.EOF) yields nil; fn's error (or a
@@ -39,6 +50,7 @@ func (c *Conn) Scan(fn func(contracts.Event) error) error {
 	return ScanEvents(c.c, fn)
 }
 
+// Close closes the underlying connection.
 func (c *Conn) Close() error { return c.c.Close() }
 
 // Acceptor listens on a control socket and yields one persistent Conn per
@@ -48,39 +60,54 @@ type Acceptor struct {
 	path      string
 	conns     chan *Conn
 	done      chan struct{}
+	exited    chan struct{}
 	closeOnce sync.Once
 }
 
 // Accept binds the control socket at path (removing a stale socket first) and
 // starts accepting bridge connections. Each appears on Conns().
-func Accept(path string) (*Acceptor, error) {
-	_ = os.Remove(path)
-	ln, err := listenControl(path)
+func Accept(ctx context.Context, path string) (*Acceptor, error) {
+	if err := removeStaleSocket(path); err != nil {
+		return nil, err
+	}
+	listener, err := listenControl(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	a := &Acceptor{ln: ln, path: path, conns: make(chan *Conn, 1), done: make(chan struct{})}
-	go a.loop()
-	return a, nil
+	acceptor := &Acceptor{ln: listener, path: path, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
+	go acceptor.loop()
+	go acceptor.closeWhenDone(ctx)
+	return acceptor, nil
+}
+
+func (a *Acceptor) closeWhenDone(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+		if err := a.Close(); err != nil {
+			slog.Debug("control acceptor close", "err", err)
+		}
+	case <-a.exited:
+	}
 }
 
 func (a *Acceptor) loop() {
+	defer close(a.exited)
+	defer close(a.conns)
 	for {
-		c, err := a.ln.Accept()
+		conn, err := a.ln.Accept()
 		if err != nil {
-			close(a.conns)
-			return // listener closed
+			return
 		}
 		select {
 		case <-a.done:
-			c.Close()
+			closeConn(conn)
 			return
 		default:
 		}
 		select {
-		case a.conns <- newConn(c):
+		case a.conns <- newConn(conn):
 		case <-a.done:
-			c.Close()
+			closeConn(conn)
 			return
 		}
 	}
@@ -93,20 +120,20 @@ func (a *Acceptor) Conns() <-chan *Conn { return a.conns }
 func (a *Acceptor) Close() error {
 	a.closeOnce.Do(func() { close(a.done) })
 	err := a.ln.Close()
-	_ = os.Remove(a.path)
+	<-a.exited
 	a.drainPending()
-	return err
+	return errors.Join(err, removeStaleSocket(a.path))
 }
 
 func (a *Acceptor) drainPending() {
 	for {
 		select {
-		case c, ok := <-a.conns:
+		case conn, ok := <-a.conns:
 			if !ok {
 				return
 			}
-			if c != nil {
-				_ = c.Close()
+			if conn != nil {
+				closeConn(conn)
 			}
 		default:
 			return
@@ -117,9 +144,27 @@ func (a *Acceptor) drainPending() {
 // Dial connects to the hub's control socket, returning a persistent Conn. The
 // bridge calls this at startup and again on each reconnect.
 func Dial(path string) (*Conn, error) {
-	c, err := dialControl(path)
+	return DialContext(context.Background(), path)
+}
+
+// DialContext is Dial, abandoned when ctx is done.
+func DialContext(ctx context.Context, path string) (*Conn, error) {
+	conn, err := dialControl(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	return newConn(c), nil
+	return newConn(conn), nil
+}
+
+func removeStaleSocket(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("remove control socket %s: %w", path, err)
+	}
+	return nil
+}
+
+func closeConn(closer io.Closer) {
+	if err := closer.Close(); err != nil {
+		slog.Debug("control conn close", "err", err)
+	}
 }

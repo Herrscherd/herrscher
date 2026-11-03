@@ -113,9 +113,6 @@ func TestDispatchOptionalValueParamRequiresValueWhenPresent(t *testing.T) {
 	}
 }
 
-// The two-token form cannot carry a value that opens on "--", and must not: it
-// is the missing-value mistake far more often than it is the value. --name=value
-// is where a caller says it really meant one.
 func TestDispatchInlineValueCarriesAFlagLookingValue(t *testing.T) {
 	r := build(t, contracts.New("session", "seed").
 		Param("name", "", true).Param("task", "", true).
@@ -144,28 +141,22 @@ func TestDispatchInlineValueEdgeCases(t *testing.T) {
 			return in.Get("key") + "|" + in.Get("body"), nil
 		}))
 
-	// A value carrying its own '=' splits on the first one only.
 	got, err := r.Dispatch(context.Background(), []string{"memory", "record", "--key=a/b", "--body=x=1"})
 	if err != nil || got != "a/b|x=1" {
 		t.Fatalf("got %q, %v; want the split to stop at the first =", got, err)
 	}
 
-	// An empty inline value is a value, not a missing one.
 	got, err = r.Dispatch(context.Background(), []string{"memory", "record", "--key=a/b", "--body="})
 	if err != nil || got != "a/b|" {
 		t.Fatalf("got %q, %v; want an empty body to count as given", got, err)
 	}
 
-	// The flag is still checked against the declared params.
 	if _, err := r.Dispatch(context.Background(), []string{"memory", "record", "--nope=1"}); err == nil ||
 		!strings.Contains(err.Error(), "unknown flag --nope") {
 		t.Fatalf("unknown inline flag error = %v", err)
 	}
 }
 
-// FlagArg reaches for the inline form only when the value needs it. Every
-// released daemon parses the two-token form, and an attached CLI dials one it
-// may predate — so the shape on the wire must not change for ordinary text.
 func TestFlagArgUsesTheInlineFormOnlyWhenNeeded(t *testing.T) {
 	if got := cli.FlagArg("text", "hello"); len(got) != 2 || got[0] != "--text" || got[1] != "hello" {
 		t.Fatalf("ordinary value = %q, want the two-token form", got)
@@ -181,7 +172,6 @@ func TestFlagArgUsesTheInlineFormOnlyWhenNeeded(t *testing.T) {
 	}
 }
 
-// The round trip is the actual guarantee: what FlagArg writes, parse reads back.
 func TestFlagArgRoundTripsThroughDispatch(t *testing.T) {
 	r := build(t, contracts.New("session", "send").
 		Param("text", "", true).
@@ -207,14 +197,16 @@ func TestDispatchReturnsHandlerOutput(t *testing.T) {
 func TestDispatchGlobalJSONFlag(t *testing.T) {
 	r := &cli.Registry{}
 	var gotJSON bool
-	_ = r.Add(contracts.Cmd{
+	if err := r.Add(contracts.Cmd{
 		Path:   []string{"session", "list"},
 		Params: nil,
-		Run: func(ctx context.Context, in contracts.Input) (string, error) {
+		Run: func(_ context.Context, in contracts.Input) (string, error) {
 			gotJSON = in.JSON
 			return "ok", nil
 		},
-	})
+	}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
 	if _, err := r.Dispatch(context.Background(), []string{"session", "list", "--json"}); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -231,7 +223,6 @@ func TestHelpRendersSortedUsage(t *testing.T) {
 			Do(func(context.Context, contracts.Input) (string, error) { return "", nil }),
 	)
 	h := r.Help()
-	// sorted: "session list" sorts before "set home"
 	if want := "  session list"; !strings.Contains(h, want) {
 		t.Fatalf("help missing %q:\n%s", want, h)
 	}
@@ -271,13 +262,11 @@ func TestRunChecksRequiredParams(t *testing.T) {
 		contracts.New("session", "create").Param("name", "", true).
 			Do(func(context.Context, contracts.Input) (string, error) { return "", nil }),
 	)
-	if _, err := r.Run(context.Background(), []string{"session", "create"}, contracts.Input{Args: map[string]string{}}); err == nil {
+	if _, err := r.Run(context.Background(), []string{"session", "create"}, contracts.Input{Args: make(map[string]string)}); err == nil {
 		t.Fatal("Run must reject missing required param")
 	}
 }
 
-// TestSpecsDescribeTheWholeRegistry: the palette is derived from this, so a
-// command missing here is a command an operator cannot discover.
 func TestSpecsDescribeTheWholeRegistry(t *testing.T) {
 	var r cli.Registry
 	must := func(err error) {
@@ -296,7 +285,6 @@ func TestSpecsDescribeTheWholeRegistry(t *testing.T) {
 	if len(specs) != 2 {
 		t.Fatalf("Specs = %+v, want both commands", specs)
 	}
-	// Sorted by path, so a menu built from this is stable between boots.
 	if got := strings.Join(specs[0].Path, " "); got != "alpha one" {
 		t.Fatalf("first spec = %q, want the alphabetical one", got)
 	}
@@ -341,9 +329,6 @@ func TestResolveReportsAnUnknownCommand(t *testing.T) {
 	}
 }
 
-// A missing required flag is Dispatch's error to report. Resolve still names
-// the path, because the caller asked for that verb whatever it forgot to pass,
-// and a caller deciding whether the verb is allowed must not be told nothing.
 func TestResolveNamesThePathEvenWhenTheFlagsDoNotParse(t *testing.T) {
 	var reg cli.Registry
 	if err := reg.Add(contracts.New("host", "add").

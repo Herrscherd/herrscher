@@ -25,19 +25,14 @@ func TestSessionModelIDRoundTrips(t *testing.T) {
 }
 
 func TestSessionModelIDOmittedWhenEmpty(t *testing.T) {
-	// Sessions from before the catalog existed must not gain an empty field in
-	// state.json — the file is re-read by older binaries.
-	b, _ := json.Marshal(Session{Name: "s"})
+	b, err := json.Marshal(Session{Name: "s"})
+	must(t, err)
 	if strings.Contains(string(b), "modelId") {
 		t.Fatalf("empty ModelID was serialized: %s", b)
 	}
 }
 
 func TestSessionModelIDAbsentInLegacyStateFile(t *testing.T) {
-	// A state.json written by a build that predates ModelID has no "modelId"
-	// key at all. It must unmarshal cleanly with ModelID == "", not error and
-	// not invent a value — this is what lets an old daemon's session survive
-	// being read by a new binary.
 	const legacy = `{"name":"s","vendor":"claude","cmd":"claude","resumeToken":"tok-1"}`
 	var sess Session
 	if err := json.Unmarshal([]byte(legacy), &sess); err != nil {
@@ -52,9 +47,6 @@ func TestSessionModelIDAbsentInLegacyStateFile(t *testing.T) {
 }
 
 func TestSetBackendTargetWritesModelID(t *testing.T) {
-	// A State with an empty path persists to "./.tmp" and then fails to rename
-	// it into place, littering the package directory (the artifact was even
-	// committed once). Give it a real path under t.TempDir() so the save lands.
 	s, err := LoadState(filepath.Join(t.TempDir(), "state.json"))
 	if err != nil {
 		t.Fatalf("LoadState: %v", err)

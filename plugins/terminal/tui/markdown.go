@@ -8,104 +8,91 @@ import (
 	"github.com/charmbracelet/glamour/styles"
 )
 
-// The agent writes markdown — headings, lists, inline spans, fenced code. Until
-// now the TUI printed the source characters, so a code block read as a wall of
-// backticks. glamour turns it into structure; this file is the whole of that
-// coupling, so swapping the engine later touches one file.
+type markdownRenderer struct {
+	r     *glamour.TermRenderer
+	width int
+}
 
-// mdRenderer caches the renderer for the width it was built at. glamour fixes
-// its word-wrap at construction and recompiles its style each time, so building
-// one per frame would be visible; building one per *width* costs a resize.
-var (
-	mdRenderer *glamour.TermRenderer
-	mdWidth    int
-)
+func (md *markdownRenderer) termRenderer(width int) (*glamour.TermRenderer, error) {
+	if md.r == nil || md.width != width {
+		renderer, err := glamour.NewTermRenderer(
+			glamour.WithStyles(mdStyle()),
+			glamour.WithWordWrap(width),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		md.r, md.width = renderer, width
+	}
+	return md.r, nil
+}
 
-// mdStyle is the dark style with glamour's own framing removed — no page margin,
-// no leading and trailing blank line — and its headings pulled onto the palette.
-// Every transcript entry is already positioned by the transcript renderer, so the
-// engine must contribute structure and nothing else.
 func mdStyle() ansi.StyleConfig {
-	s := styles.DarkStyleConfig
+	style := styles.DarkStyleConfig
 	zero := uint(0)
-	s.Document.Margin = &zero
-	s.Document.BlockPrefix = ""
-	s.Document.BlockSuffix = ""
-	// Body prose keeps the terminal's own foreground. Colouring the document
-	// makes glamour wrap every word in its own escape pair, which triples the
-	// size of a transcript and defeats any substring search over it; the
-	// difference on screen is a shade of grey.
-	s.Document.Color = nil
-	s.Heading.Color = strPtr(colViolet)
-	s.H1.BackgroundColor = nil
-	s.H1.Color = strPtr(colViolet)
-	s.CodeBlock.Margin = &zero
-	return s
+	style.Document.Margin = &zero
+	style.Document.BlockPrefix = ""
+	style.Document.BlockSuffix = ""
+	style.Document.Color = nil
+	style.Heading.Color = strPtr(colViolet)
+	style.H1.BackgroundColor = nil
+	style.H1.Color = strPtr(colViolet)
+	style.CodeBlock.Margin = &zero
+	return style
 }
 
 func strPtr(s string) *string { return &s }
 
-// renderMarkdown renders agent prose as markdown wrapped to width, rendering any
-// fenced diff by hand on the way. A diff is the one block where colour carries
-// meaning rather than syntax: chroma would paint it as source code and lose the
-// only distinction that matters, which line was added and which was removed.
-func renderMarkdown(text string, width int, v view) string {
-	var b strings.Builder
+func renderMarkdown(text string, width int, view view) string {
+	var builder strings.Builder
 	for i, seg := range splitDiffs(text) {
 		if i > 0 {
-			b.WriteByte('\n')
+			builder.WriteByte('\n')
 		}
 		if seg.diff {
-			b.WriteString(renderDiff(seg.text, width, v))
+			builder.WriteString(renderDiff(seg.text, width, view))
 			continue
 		}
-		b.WriteString(renderProse(seg.text, width))
+		builder.WriteString(renderProse(seg.text, width, view))
 	}
-	return b.String()
+	return builder.String()
 }
 
-// renderProse renders one non-diff segment, pulling pipe tables out of it. The
-// markdown engine draws a table by wrapping its cells, which at terminal widths
-// turns a comparison into confetti; renderTable keeps the columns and gives up
-// the text that did not fit instead.
-func renderProse(text string, width int) string {
-	var b strings.Builder
+func renderProse(text string, width int, view view) string {
+	var block strings.Builder
 	var prose, table []string
 	flushProse := func() {
 		if len(prose) > 0 {
-			b.WriteString(renderGlamour(strings.Join(prose, "\n"), width))
+			block.WriteString(renderGlamour(strings.Join(prose, "\n"), width, view))
 			prose = nil
 		}
 	}
 	flushTable := func() {
 		if len(table) > 0 {
-			b.WriteString(renderTable(parseTableRows(table), width) + "\n")
+			block.WriteString(renderTable(parseTableRows(table), width, view.st) + "\n")
 			table = nil
 		}
 	}
-	for _, ln := range strings.Split(text, "\n") {
-		if isTableRow(ln) {
+	for _, line := range strings.Split(text, "\n") {
+		if isTableRow(line) {
 			flushProse()
-			table = append(table, ln)
+			table = append(table, line)
 			continue
 		}
 		flushTable()
-		prose = append(prose, ln)
+		prose = append(prose, line)
 	}
 	flushTable()
 	flushProse()
-	return strings.Trim(b.String(), "\n")
+	return strings.Trim(block.String(), "\n")
 }
 
-// segment is a run of prose or the body of one fenced diff block.
 type segment struct {
 	text string
 	diff bool
 }
 
-// splitDiffs cuts text into alternating prose and diff-body segments. An unclosed
-// diff fence takes the rest of the message: the agent is mid-stream or wrote a
-// broken fence, and either way those lines are a diff.
 func splitDiffs(text string) []segment {
 	lines := strings.Split(text, "\n")
 	var segs []segment
@@ -117,17 +104,17 @@ func splitDiffs(text string) []segment {
 			buf = nil
 		}
 	}
-	for _, ln := range lines {
-		fence := strings.TrimSpace(ln)
+	for _, line := range lines {
+		fence := strings.TrimSpace(line)
 		switch {
 		case !inDiff && (fence == "```diff" || fence == "~~~diff"):
 			flush(false)
 			inDiff = true
-		case inDiff && (fence == "```" || fence == "~~~"):
+		case inDiff && (fence == codeFence || fence == "~~~"):
 			flush(true)
 			inDiff = false
 		default:
-			buf = append(buf, ln)
+			buf = append(buf, line)
 		}
 	}
 	flush(inDiff)
@@ -137,36 +124,25 @@ func splitDiffs(text string) []segment {
 	return segs
 }
 
-// renderGlamour runs prose through the markdown engine. Anything the engine
-// refuses — and it refuses nothing in practice, but a nil renderer would panic —
-// falls back to the plain wrap, so prose always reaches the screen.
-func renderGlamour(text string, width int) string {
+func renderGlamour(text string, width int, view view) string {
 	if width < 1 {
 		width = 1
 	}
-	if mdRenderer == nil || mdWidth != width {
-		r, err := glamour.NewTermRenderer(
-			glamour.WithStyles(mdStyle()),
-			glamour.WithWordWrap(width),
-			glamour.WithEmoji(),
-		)
-		if err != nil {
-			return wrapWith(textStyle, text, width)
-		}
-		mdRenderer, mdWidth = r, width
+	markdown := view.md
+	if markdown == nil {
+		markdown = &markdownRenderer{}
 	}
-	out, err := mdRenderer.Render(text)
+	renderer, err := markdown.termRenderer(width)
 	if err != nil {
-		return wrapWith(textStyle, text, width)
+		return wrapWith(view.st.text, text, width)
 	}
-	// glamour pads every line out to the wrap width and frames the document with
-	// blank lines. The transcript owns its own spacing, and trailing padding
-	// breaks the terminal's native text selection: strip both.
+	out, err := renderer.Render(text)
+	if err != nil {
+		return wrapWith(view.st.text, text, width)
+	}
 	lines := strings.Split(out, "\n")
 	for i, ln := range lines {
 		lines[i] = strings.TrimRight(ln, " ")
 	}
-	// Trim after de-padding: a frame line of pure spaces only becomes an empty
-	// line once its padding is gone, and it is the empty lines we want dropped.
 	return strings.Trim(strings.Join(lines, "\n"), "\n")
 }

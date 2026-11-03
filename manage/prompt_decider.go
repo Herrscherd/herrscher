@@ -8,22 +8,14 @@ import (
 	"strings"
 )
 
-// promptDecider answers the two composition prompts from the terminal. It is the
-// interactive half of the decider seam, and the transaction itself knows nothing
-// about the terminal it is asked through.
 type promptDecider struct {
 	in *bufio.Reader
 	s  style
 }
 
-// newPromptDecider returns the terminal decider, used whenever there is a human
-// on stdin to answer.
 func newPromptDecider(in *bufio.Reader, s style) decider { return promptDecider{in: in, s: s} }
 
-// Warn reports what is known against the change before anything is written. The
-// confirmation is asked even when nothing was found, because "nothing known
-// against it" is not the same as "it will work".
-func (p promptDecider) Warn(ctx context.Context, findings []string) Decision {
+func (p promptDecider) Warn(_ context.Context, findings []string) Decision {
 	fmt.Fprintf(os.Stderr, "\n  %s\n", p.s.wrap(p.s.bold, "before writing"))
 	if len(findings) == 0 {
 		fmt.Fprintf(os.Stderr, "    %s nothing known against this change\n", p.s.wrap(p.s.dim, "·"))
@@ -37,10 +29,7 @@ func (p promptDecider) Warn(ctx context.Context, findings []string) Decision {
 	return Abort
 }
 
-// Failed shows the compiler's own error — not a paraphrase — and offers the two
-// outcomes. Neither is chosen automatically: only the operator knows whether the
-// tree is worth repairing by hand.
-func (p promptDecider) Failed(ctx context.Context, buildOutput string) Decision {
+func (p promptDecider) Failed(_ context.Context, buildOutput string) Decision {
 	fmt.Fprintf(os.Stderr, "\n  %s\n", p.s.wrap(p.s.bold+p.s.red, "the composition does not build"))
 	for _, line := range strings.Split(strings.TrimRight(buildOutput, "\n"), "\n") {
 		fmt.Fprintf(os.Stderr, "    %s\n", p.s.wrap(p.s.dim, line))
@@ -51,8 +40,6 @@ func (p promptDecider) Failed(ctx context.Context, buildOutput string) Decision 
 	return Keep
 }
 
-// yes reads one line and treats anything but an explicit no as the default,
-// matching the enter-accepts-the-default idiom of the init wizard.
 func (p promptDecider) yes(question string, def bool) bool {
 	hint := "[Y/n]"
 	if !def {

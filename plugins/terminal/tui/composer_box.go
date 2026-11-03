@@ -6,13 +6,22 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const (
+	composerChrome     = 4
+	composerBorderCols = 2
+)
+
 const composerBoxMinWidth = 60
 
-func boxRunes(supported bool) (topLeft, topRight, bottomLeft, bottomRight, horizontal, vertical string) {
+type boxGlyphs struct {
+	tl, tr, bl, br, h, v string
+}
+
+func boxRunes(supported bool) boxGlyphs {
 	if !supported {
-		return "+", "+", "+", "+", "-", "|"
+		return boxGlyphs{"+", "+", "+", "+", "-", "|"}
 	}
-	return "╭", "╮", "╰", "╯", "─", "│"
+	return boxGlyphs{"╭", "╮", "╰", "╯", "─", "│"}
 }
 
 func (m *model) composerBoxed() bool {
@@ -23,7 +32,7 @@ func (m *model) composerTextWidth() int {
 	if !m.composerBoxed() {
 		return m.innerWidth()
 	}
-	return m.innerWidth() - 4
+	return m.innerWidth() - composerChrome
 }
 
 func (m *model) composerZone() []string {
@@ -35,19 +44,20 @@ func (m *model) composerZone() []string {
 		}
 		return out
 	}
-	tl, tr, bl, br, h, v := boxRunes(m.caps.Boxes)
+	g := boxRunes(m.caps.Boxes)
+	topLeft, topRight, bottomLeft, bottomRight, horizontal, vertical := g.tl, g.tr, g.bl, g.br, g.h, g.v
 	width := m.innerWidth()
-	edge := strings.Repeat(h, width-2)
-	side := dimStyle.Render(v)
-	zone := []string{dimStyle.Render(tl + edge + tr)}
+	edge := strings.Repeat(horizontal, width-composerBorderCols)
+	side := m.st.dim.Render(vertical)
+	zone := []string{m.st.dim.Render(topLeft + edge + topRight)}
 	for _, line := range body {
-		line = truncate(line, width-4)
-		pad := width - 4 - lipgloss.Width(line)
+		line = truncate(line, width-composerChrome)
+		pad := width - composerChrome - lipgloss.Width(line)
 		if pad < 0 {
 			pad = 0
 		}
 		zone = append(zone, side+" "+line+strings.Repeat(" ", pad)+" "+side)
 	}
-	zone = append(zone, dimStyle.Render(bl+edge+br))
+	zone = append(zone, m.st.dim.Render(bottomLeft+edge+bottomRight))
 	return zone
 }

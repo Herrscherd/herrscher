@@ -11,12 +11,10 @@ import (
 	"time"
 )
 
-// reservoirCap bounds the retained latency samples; percentiles are computed over
-// the most recent reservoirCap observations.
 const reservoirCap = 256
 
 // Registry accumulates runtime counters and remote-call latencies. Safe for
-// concurrent use; the zero value is unusable — use NewRegistry.
+// concurrent use; the zero value is unusable; use NewRegistry.
 type Registry struct {
 	turnsStarted   atomic.Int64
 	turnsCompleted atomic.Int64
@@ -26,43 +24,50 @@ type Registry struct {
 	remoteFailures atomic.Int64
 
 	mu       sync.Mutex
-	latency  []int64 // bounded ring of remote-call latency samples (ms)
-	latCount int64   // total observed (may exceed len(latency))
-	latNext  int     // next ring slot to overwrite once full
+	latency  []int64
+	latCount int64
+	latNext  int
 }
 
+// NewRegistry returns an empty Registry.
 func NewRegistry() *Registry { return &Registry{} }
 
+// TurnStarted records that a turn began.
 func (r *Registry) TurnStarted() {
 	if r != nil {
 		r.turnsStarted.Add(1)
 	}
 }
 
+// TurnCompleted records that a turn finished.
 func (r *Registry) TurnCompleted() {
 	if r != nil {
 		r.turnsCompleted.Add(1)
 	}
 }
 
+// TurnAbandoned records that a turn was abandoned.
 func (r *Registry) TurnAbandoned() {
 	if r != nil {
 		r.turnsAbandoned.Add(1)
 	}
 }
 
+// BridgeRestart records a bridge restart.
 func (r *Registry) BridgeRestart() {
 	if r != nil {
 		r.bridgeRestarts.Add(1)
 	}
 }
 
+// RemoteAttempt records an attempt to reach a remote host.
 func (r *Registry) RemoteAttempt() {
 	if r != nil {
 		r.remoteAttempts.Add(1)
 	}
 }
 
+// RemoteFailure records a failed remote call.
 func (r *Registry) RemoteFailure() {
 	if r != nil {
 		r.remoteFailures.Add(1)
@@ -70,16 +75,16 @@ func (r *Registry) RemoteFailure() {
 }
 
 // RemoteLatency records one remote-call round-trip into the bounded reservoir.
-func (r *Registry) RemoteLatency(d time.Duration) {
+func (r *Registry) RemoteLatency(latency time.Duration) {
 	if r == nil {
 		return
 	}
-	ms := d.Milliseconds()
+	millis := latency.Milliseconds()
 	r.mu.Lock()
 	if len(r.latency) < reservoirCap {
-		r.latency = append(r.latency, ms)
+		r.latency = append(r.latency, millis)
 	} else {
-		r.latency[r.latNext] = ms
+		r.latency[r.latNext] = millis
 		r.latNext = (r.latNext + 1) % reservoirCap
 	}
 	r.latCount++
@@ -104,6 +109,7 @@ type Snapshot struct {
 	RemoteLatency  Latency `json:"remote_latency"`
 }
 
+// Snapshot returns a point-in-time copy of the metrics.
 func (r *Registry) Snapshot() Snapshot {
 	if r == nil {
 		return Snapshot{}
@@ -119,17 +125,22 @@ func (r *Registry) Snapshot() Snapshot {
 		BridgeRestarts: r.bridgeRestarts.Load(),
 		RemoteAttempts: r.remoteAttempts.Load(),
 		RemoteFailures: r.remoteFailures.Load(),
-		RemoteLatency:  Latency{Count: count, P50MS: percentile(samples, 50), P95MS: percentile(samples, 95)},
+		RemoteLatency:  Latency{Count: count, P50MS: percentile(samples, percentileP50), P95MS: percentile(samples, percentileP95)},
 	}
 }
 
-// percentile returns the nearest-rank p-th percentile (ms) of samples, 0 if empty.
-func percentile(samples []int64, p int) int64 {
+const (
+	percentileP50   = 50
+	percentileP95   = 95
+	percentileScale = 100
+)
+
+func percentile(samples []int64, pct int) int64 {
 	if len(samples) == 0 {
 		return 0
 	}
 	slices.Sort(samples)
-	rank := (p*len(samples) + 99) / 100 // ceil(p/100 * n)
+	rank := (pct*len(samples) + percentileScale - 1) / percentileScale
 	rank = max(rank, 1)
 	rank = min(rank, len(samples))
 	return samples[rank-1]

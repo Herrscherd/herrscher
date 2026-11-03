@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+var (
+	errInvalidSchedule = errors.New("invalid schedule")
+	errNoAnchor        = errors.New("schedule has no anchor to count from")
+	errCronNoWindow    = errors.New("cron has no window")
+)
+
 // DefaultGrace est le retard maximum qu'une fenetre ratee peut avoir et etre
 // quand meme tiree au demarrage du daemon. Un seul chiffre, court et
 // previsible, plutot qu'une regle derivee de la periode : derivee, elle ferait
@@ -14,28 +20,21 @@ import (
 // Un digest de 9h recu a 9h45 sert encore, le meme a 18h derange.
 const DefaultGrace = time.Hour
 
-// minGrace est le plancher de la grace. La boucle a le grain de la minute, donc
-// une fenetre servie normalement l'est deja avec quelques secondes de retard :
-// une grace plus courte les declarerait toutes perimees et l'horaire ne tirerait
-// jamais.
 const minGrace = time.Minute
 
-// maxCronLookahead borne la recherche de la prochaine fenetre cron. Une
-// expression que le calendrier ne satisfait jamais, "0 0 30 2 *" par exemple,
-// doit rendre une erreur au lieu de boucler.
 const maxCronLookahead = 366 * 24 * time.Hour
 
 // Schedule est un horaire persiste. Session et Agent sont deux cibles
 // mutuellement exclusives, Every et Cron deux cadences mutuellement exclusives.
 type Schedule struct {
 	Name    string `json:"name"`
-	Session string `json:"session,omitempty"` // cible session, exclusive d'Agent
-	Agent   string `json:"agent,omitempty"`   // cible agent, exclusive de Session
-	Project string `json:"project,omitempty"` // sous-repertoire workspace, cible agent seulement
+	Session string `json:"session,omitempty"`
+	Agent   string `json:"agent,omitempty"`
+	Project string `json:"project,omitempty"`
 	Task    string `json:"task"`
-	Every   string `json:"every,omitempty"` // duree lue par time.ParseDuration
-	Cron    string `json:"cron,omitempty"`  // expression a cinq champs
-	Grace   string `json:"grace,omitempty"` // duree ; vide vaut DefaultGrace
+	Every   string `json:"every,omitempty"`
+	Cron    string `json:"cron,omitempty"`
+	Grace   string `json:"grace,omitempty"`
 	Paused  bool   `json:"paused,omitempty"`
 	// LastRun est le point d'ou la prochaine fenetre se compte, en RFC3339 : le
 	// dernier tir qui a effectivement atteint une session, ou l'instant ou une
@@ -55,79 +54,67 @@ func SessionName(s Schedule) string { return "schedule-" + s.Name }
 // l'ecrit, pas echouer en silence chaque minute. now est le point d'ou la
 // recherche de fenetre part, et il arrive en parametre comme partout ailleurs
 // dans ce paquet : la garde du cron impossible se teste alors a une date fixe.
-func Validate(s Schedule, now time.Time) error {
-	if strings.TrimSpace(s.Name) == "" {
-		return errors.New("schedule needs a name")
+func Validate(sched Schedule, now time.Time) error {
+	if strings.TrimSpace(sched.Name) == "" {
+		return fmt.Errorf("%w: needs a name", errInvalidSchedule)
 	}
-	if strings.TrimSpace(s.Task) == "" {
-		return errors.New("schedule needs a task")
-	}
-	switch {
-	case s.Session == "" && s.Agent == "":
-		return errors.New("schedule needs a target: --session or --agent")
-	case s.Session != "" && s.Agent != "":
-		return errors.New("schedule takes one target: --session or --agent, not both")
-	}
-	if s.Project != "" && s.Agent == "" {
-		// --project decrit le workspace de la session que l'horaire ouvre. Une
-		// cible session designe une session deja ouverte, dont le workspace est
-		// deja choisi : accepter le flag la ferait croire qu'il agit.
-		return errors.New("--project only means something with --agent, which opens the session")
+	if strings.TrimSpace(sched.Task) == "" {
+		return fmt.Errorf("%w: needs a task", errInvalidSchedule)
 	}
 	switch {
-	case s.Every == "" && s.Cron == "":
-		return errors.New("schedule needs a cadence: --every or --cron")
-	case s.Every != "" && s.Cron != "":
-		return errors.New("schedule takes one cadence: --every or --cron, not both")
+	case sched.Session == "" && sched.Agent == "":
+		return fmt.Errorf("%w: needs a target: --session or --agent", errInvalidSchedule)
+	case sched.Session != "" && sched.Agent != "":
+		return fmt.Errorf("%w: takes one target: --session or --agent, not both", errInvalidSchedule)
 	}
-	if _, err := graceOf(s); err != nil {
+	if sched.Project != "" && sched.Agent == "" {
+		return fmt.Errorf("%w: --project only means something with --agent, which opens the session", errInvalidSchedule)
+	}
+	switch {
+	case sched.Every == "" && sched.Cron == "":
+		return fmt.Errorf("%w: needs a cadence: --every or --cron", errInvalidSchedule)
+	case sched.Every != "" && sched.Cron != "":
+		return fmt.Errorf("%w: takes one cadence: --every or --cron, not both", errInvalidSchedule)
+	}
+	if _, err := graceOf(sched); err != nil {
 		return err
 	}
-	if s.Every != "" {
-		_, err := period(s)
+	if sched.Every != "" {
+		_, err := period(sched)
 		return err
 	}
-	if _, err := parseCron(s.Cron); err != nil {
+	if _, err := parseCron(sched.Cron); err != nil {
 		return err
 	}
-	// Un aller-retour complet, parce que parser accepte "0 0 30 2 *", que le
-	// calendrier ne satisfait jamais : seule une recherche de fenetre le
-	// decouvre. La question posee est donc "cette expression tire-t-elle dans
-	// l'annee qui vient", et un horaire quadriennal comme le 29 fevrier est
-	// refuse de ce fait. C'est voulu : personne n'ecrit un cron pour 2028.
-	_, err := Next(s, now)
+	_, err := Next(sched, now)
 	return err
 }
 
-// period lit la cadence d'un horaire --every.
-func period(s Schedule) (time.Duration, error) {
-	d, err := time.ParseDuration(s.Every)
+func period(sched Schedule) (time.Duration, error) {
+	span, err := time.ParseDuration(sched.Every)
 	if err != nil {
-		return 0, fmt.Errorf("--every %q: %w", s.Every, err)
+		return 0, fmt.Errorf("--every %q: %w", sched.Every, err)
 	}
-	if d <= 0 {
-		return 0, fmt.Errorf("--every %q: must be positive", s.Every)
+	if span <= 0 {
+		return 0, fmt.Errorf("%w: --every %q must be positive", errInvalidSchedule, sched.Every)
 	}
-	return d, nil
+	return span, nil
 }
 
-func graceOf(s Schedule) (time.Duration, error) {
-	if s.Grace == "" {
+func graceOf(sched Schedule) (time.Duration, error) {
+	if sched.Grace == "" {
 		return DefaultGrace, nil
 	}
-	d, err := time.ParseDuration(s.Grace)
+	span, err := time.ParseDuration(sched.Grace)
 	if err != nil {
-		return 0, fmt.Errorf("--grace %q: %w", s.Grace, err)
+		return 0, fmt.Errorf("--grace %q: %w", sched.Grace, err)
 	}
-	if d < minGrace {
-		return 0, fmt.Errorf("--grace %q: must be at least %s", s.Grace, minGrace)
+	if span < minGrace {
+		return 0, fmt.Errorf("%w: --grace %q must be at least %s", errInvalidSchedule, sched.Grace, minGrace)
 	}
-	return d, nil
+	return span, nil
 }
 
-// anchor est le point d'ou la prochaine fenetre se compte : le dernier tir
-// livre, ou a defaut la creation. Ni l'un ni l'autre veut dire qu'il n'y a rien
-// d'ou compter, et un horaire sans ancre ne tire pas.
 func anchor(s Schedule) (time.Time, bool) {
 	for _, stamp := range []string{s.LastRun, s.CreatedAt} {
 		if stamp == "" {
@@ -141,26 +128,26 @@ func anchor(s Schedule) (time.Time, bool) {
 }
 
 // Next rend la premiere fenetre strictement apres `after`.
-func Next(s Schedule, after time.Time) (time.Time, error) {
-	if s.Every != "" {
-		d, err := period(s)
+func Next(sched Schedule, after time.Time) (time.Time, error) {
+	if sched.Every != "" {
+		span, err := period(sched)
 		if err != nil {
 			return time.Time{}, err
 		}
-		return after.Add(d), nil
+		return after.Add(span), nil
 	}
-	spec, err := parseCron(s.Cron)
+	spec, err := parseCron(sched.Cron)
 	if err != nil {
 		return time.Time{}, err
 	}
-	t := after.Truncate(time.Minute).Add(time.Minute)
+	next := after.Truncate(time.Minute).Add(time.Minute)
 	deadline := after.Add(maxCronLookahead)
-	for ; t.Before(deadline); t = t.Add(time.Minute) {
-		if spec.matches(t) {
-			return t, nil
+	for ; next.Before(deadline); next = next.Add(time.Minute) {
+		if spec.matches(next) {
+			return next, nil
 		}
 	}
-	return time.Time{}, fmt.Errorf("cron %q: no window within %s", s.Cron, maxCronLookahead)
+	return time.Time{}, fmt.Errorf("%w: %q within %s", errCronNoWindow, sched.Cron, maxCronLookahead)
 }
 
 // NextWindow rend la prochaine fenetre a venir, comptee depuis l'ancre et non
@@ -171,12 +158,12 @@ func Next(s Schedule, after time.Time) (time.Time, error) {
 //
 // Un horaire deja du rend une fenetre passee, puisque c'est celle qu'il attend :
 // a l'appelant de poser Due d'abord s'il veut distinguer les deux.
-func NextWindow(s Schedule) (time.Time, error) {
-	a, ok := anchor(s)
+func NextWindow(sched Schedule) (time.Time, error) {
+	anchorAt, ok := anchor(sched)
 	if !ok {
-		return time.Time{}, errors.New("schedule has no anchor to count from")
+		return time.Time{}, errNoAnchor
 	}
-	return Next(s, a)
+	return Next(sched, anchorAt)
 }
 
 // Window rend la fenetre que la boucle est en train de servir : la plus recente
@@ -186,24 +173,24 @@ func NextWindow(s Schedule) (time.Time, error) {
 // La boucle a le grain de la minute et le tir lui-meme prend du temps, donc
 // compter la fenetre suivante depuis la livraison arrondirait chaque periode au
 // tick d'apres. La perte n'est pas ponctuelle, elle s'accumule : un horaire aux
-// trente minutes tire quarante-six fois par jour au lieu de quarante-huit, et
+// trente minutes tire 46 fois par jour au lieu de 48, et
 // glisse de trois quarts d'heure en vingt-quatre heures.
-func Window(s Schedule, now time.Time) (time.Time, bool) {
-	grace, err := graceOf(s)
+func Window(sched Schedule, now time.Time) (time.Time, bool) {
+	grace, err := graceOf(sched)
 	if err != nil {
 		return time.Time{}, false
 	}
-	return lastWindow(s, now, grace)
+	return lastWindow(sched, now, grace)
 }
 
 // Due dit si la prochaine fenetre est arrivee. C'est la question que la boucle
 // pose a chaque tick.
-func Due(s Schedule, now time.Time) bool {
-	a, ok := anchor(s)
+func Due(sched Schedule, now time.Time) bool {
+	anchorAt, ok := anchor(sched)
 	if !ok {
 		return false
 	}
-	next, err := Next(s, a)
+	next, err := Next(sched, anchorAt)
 	return err == nil && !next.After(now)
 }
 
@@ -213,11 +200,11 @@ func Due(s Schedule, now time.Time) bool {
 // refuse resterait due, et le tick suivant la tirerait quand meme, sans dire son
 // retard : le digest de 9h serait rendu a 18h en se presentant comme celui du
 // matin, ce que la grace existe precisement pour empecher.
-func Stale(s Schedule, now time.Time) bool {
-	if s.Paused || !Due(s, now) {
+func Stale(sched Schedule, now time.Time) bool {
+	if sched.Paused || !Due(sched, now) {
 		return false
 	}
-	fire, _ := CatchUp(s, now)
+	fire, _ := CatchUp(sched, now)
 	return !fire
 }
 
@@ -225,55 +212,50 @@ func Stale(s Schedule, now time.Time) bool {
 // arrete. Il tire au plus une fois, sur la fenetre ratee la plus recente, et
 // seulement si son retard tient dans le delai de grace. Rejouer chaque fenetre
 // ratee facturerait N tours qui raisonnent tous sur un monde disparu.
-func CatchUp(s Schedule, now time.Time) (bool, time.Duration) {
-	if s.Paused {
+func CatchUp(sched Schedule, now time.Time) (bool, time.Duration) {
+	if sched.Paused {
 		return false, 0
 	}
-	grace, err := graceOf(s)
+	grace, err := graceOf(sched)
 	if err != nil {
 		return false, 0
 	}
-	w, ok := lastWindow(s, now, grace)
+	window, ok := lastWindow(sched, now, grace)
 	if !ok {
 		return false, 0
 	}
-	late := now.Sub(w)
+	late := now.Sub(window)
 	if late > grace {
 		return false, 0
 	}
 	return true, late
 }
 
-// lastWindow rend la fenetre la plus recente a `now` ou avant, quand il en
-// existe une strictement apres l'ancre. Les deux cadences se traitent
-// differemment pour rester bornees : --every par arithmetique, --cron par une
-// marche arriere limitee au delai de grace, puisqu'une fenetre plus vieille que
-// la grace serait de toute facon rejetee.
-func lastWindow(s Schedule, now time.Time, grace time.Duration) (time.Time, bool) {
-	a, ok := anchor(s)
+func lastWindow(sched Schedule, now time.Time, grace time.Duration) (time.Time, bool) {
+	anchorAt, ok := anchor(sched)
 	if !ok {
 		return time.Time{}, false
 	}
-	if s.Every != "" {
-		d, err := period(s)
+	if sched.Every != "" {
+		span, err := period(sched)
 		if err != nil {
 			return time.Time{}, false
 		}
-		elapsed := now.Sub(a)
-		if elapsed < d {
+		elapsed := now.Sub(anchorAt)
+		if elapsed < span {
 			return time.Time{}, false
 		}
-		return a.Add((elapsed / d) * d), true
+		return anchorAt.Add(elapsed.Truncate(span)), true
 	}
-	spec, err := parseCron(s.Cron)
+	spec, err := parseCron(sched.Cron)
 	if err != nil {
 		return time.Time{}, false
 	}
-	t := now.Truncate(time.Minute)
+	truncated := now.Truncate(time.Minute)
 	floor := now.Add(-grace).Truncate(time.Minute)
-	for ; !t.Before(floor); t = t.Add(-time.Minute) {
-		if spec.matches(t) && t.After(a) {
-			return t, true
+	for ; !truncated.Before(floor); truncated = truncated.Add(-time.Minute) {
+		if spec.matches(truncated) && truncated.After(anchorAt) {
+			return truncated, true
 		}
 	}
 	return time.Time{}, false

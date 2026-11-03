@@ -10,10 +10,8 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// knownModels wires a validator accepting exactly the given ids, mirroring what
-// the composition root builds from host.LookupModel + the route policy.
 func knownModels(h *Handler, ids ...string) {
-	h.SetModelValidator(func(_ string, modelID string) error {
+	h.SetModelValidator(func(_, modelID string) error {
 		for _, id := range ids {
 			if id == modelID {
 				return nil
@@ -23,9 +21,6 @@ func knownModels(h *Handler, ids ...string) {
 	})
 }
 
-// ownedModels wires a vendor-aware validator, mirroring what the composition
-// root builds from host.LookupModel: the catalog knows which backend declares
-// each model, so a vendor that does not own it is refused.
 func ownedModels(h *Handler, owner map[string]string) {
 	h.SetModelValidator(func(vendor, modelID string) error {
 		own, ok := owner[modelID]
@@ -40,14 +35,12 @@ func ownedModels(h *Handler, owner map[string]string) {
 	})
 }
 
-// TestSessionCreateRejectsVendorModelMismatch: --vendor wins when the backend
-// is selected, but the spawn environment is keyed off the model's OWNING
-// vendor. A mismatch spawns codex with ANTHROPIC_* it ignores — the turn runs
-// on the machine's own ChatGPT login while the session reads gateway-routed.
 func TestSessionCreateRejectsVendorModelMismatch(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "vendor", "codex", "model", "gw-claude-opus-5"))
@@ -65,9 +58,6 @@ func TestSessionCreateRejectsVendorModelMismatch(t *testing.T) {
 	}
 }
 
-// The reported path: `session switch --vendor codex` on a gateway session with
-// no --model. The model is RETAINED, so the pair only becomes inconsistent
-// because the vendor moved — validating the supplied model alone misses it.
 func TestSessionSwitchRejectsVendorMismatchOnRetainedModel(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
@@ -94,7 +84,6 @@ func TestSessionSwitchRejectsVendorMismatchOnRetainedModel(t *testing.T) {
 	}
 }
 
-// Non-regression: switching vendor AND model together, consistently, still works.
 func TestSessionSwitchAcceptsMatchingVendorAndModel(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude", "gpt-5.5": "codex"})
@@ -115,15 +104,12 @@ func TestSessionSwitchAcceptsMatchingVendorAndModel(t *testing.T) {
 	}
 }
 
-// TestSessionCreatePersistsModelID pins the `ModelID: modelID` field on the
-// state.Session built for category/terminal homes. Drop it and the session is
-// persisted with an empty model: the supervisor then spawns the bridge with no
-// --model, the routing choke point is skipped, and a gateway model runs on the
-// machine's own vendor login while the UI shows it selected.
 func TestSessionCreatePersistsModelID(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	knownModels(h, "gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "model", "gw-claude-opus-5")); err != nil {
 		t.Fatalf("create: %v", err)
@@ -137,15 +123,12 @@ func TestSessionCreatePersistsModelID(t *testing.T) {
 	}
 }
 
-// Third state.Session literal, added by the channel-adoption path: a session
-// bound to an existing conversation. Losing ModelID here is silent and
-// dangerous — the session spawns with no gateway environment, i.e. on the
-// machine's own vendor login, while the operator believes they picked a
-// gateway model.
 func TestSessionCreateAdoptedChannelPersistsModelID(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	knownModels(h, "gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "channel_id", "123", "model", "gw-claude-opus-5")); err != nil {
 		t.Fatalf("create with an adopted channel: %v", err)
@@ -162,12 +145,12 @@ func TestSessionCreateAdoptedChannelPersistsModelID(t *testing.T) {
 	}
 }
 
-// Same line, the forum branch: it is a separate state.Session literal, so it
-// can lose ModelID independently of the category one.
 func TestSessionCreateForumPersistsModelID(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "forum")
 	knownModels(h, "gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "forum1", Type: "forum"})
+	if err := st.SetHome(state.HomeRef{ID: "forum1", Type: "forum"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "model", "gw-claude-opus-5")); err != nil {
 		t.Fatalf("create: %v", err)
@@ -184,12 +167,12 @@ func TestSessionCreateForumPersistsModelID(t *testing.T) {
 	}
 }
 
-// An unknown (or route-policy-excluded) id must be refused at creation, naming
-// it, rather than persisted and surfaced much later as an opaque spawn failure.
 func TestSessionCreateRejectsUnknownModel(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "")
 	knownModels(h, "gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := h.sessionCreateRun(context.Background(), args("name", "demo", "model", "gw-claude-opus-4"))
 	if err == nil {
@@ -206,11 +189,12 @@ func TestSessionCreateRejectsUnknownModel(t *testing.T) {
 	}
 }
 
-// A session with no model at all is the legacy path and stays accepted.
 func TestSessionCreateWithoutModelIsAccepted(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	knownModels(h, "gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatalf("legacy create (no model) refused: %v", err)
@@ -220,9 +204,6 @@ func TestSessionCreateWithoutModelIsAccepted(t *testing.T) {
 	}
 }
 
-// An ABSENT --model keeps the session's current model. Re-targeting only the
-// cmd of a gateway session must not silently drop it back to the legacy path,
-// which would move it off the routed spawn — away from the safe direction.
 func TestSessionSwitchWithoutModelKeepsCurrentModel(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
 	knownModels(h, "gw-claude-opus-5")
@@ -247,7 +228,6 @@ func TestSessionSwitchWithoutModelKeepsCurrentModel(t *testing.T) {
 	}
 }
 
-// An explicitly supplied empty --model clears it, back to the legacy path.
 func TestSessionSwitchEmptyModelClearsIt(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	knownModels(h, "gw-claude-opus-5")
@@ -268,8 +248,6 @@ func TestSessionSwitchEmptyModelClearsIt(t *testing.T) {
 	}
 }
 
-// Switching TO an unknown model is refused before anything is persisted or
-// restarted.
 func TestSessionSwitchRejectsUnknownModel(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
 	knownModels(h, "gw-claude-opus-5")
@@ -293,10 +271,6 @@ func TestSessionSwitchRejectsUnknownModel(t *testing.T) {
 	}
 }
 
-// TestSessionSwitchRollbackRestoresModelID pins the oldModelID argument to
-// rollbackSwitch. Neutralised to "", a failed switch leaves the session with a
-// CLEARED model instead of the prior one: it comes back up on the legacy path,
-// off the gateway, silently.
 func TestSessionSwitchRollbackRestoresModelID(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
 	knownModels(h, "gw-claude-opus-5", "native-gpt")
@@ -306,7 +280,6 @@ func TestSessionSwitchRollbackRestoresModelID(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.SetSeeder(func(string, string) bool { return true })
-	// Stopping for the new backend fails; the rollback restart succeeds.
 	sup.stopErrs = []error{errors.New("boom")}
 
 	if _, err := h.sessionSwitchRun(context.Background(), args(

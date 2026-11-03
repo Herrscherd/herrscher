@@ -20,8 +20,6 @@ func TestCommandSocketPathUnix(t *testing.T) {
 }
 
 func TestEventsSocketPathUnix(t *testing.T) {
-	// Must equal the command socket with herrscher-command → herrscher-events, since
-	// Neublox derives the events path from the command path exactly this way.
 	if got := EventsSocketPath(""); got != filepath.Join(os.TempDir(), "herrscher-events.sock") {
 		t.Fatalf("EventsSocketPath(\"\") = %q", got)
 	}

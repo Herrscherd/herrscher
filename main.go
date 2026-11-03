@@ -13,12 +13,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/internal/errwriter"
 
 	"golang.org/x/term"
 
@@ -27,46 +30,85 @@ import (
 	"github.com/Herrscherd/herrscher/manage"
 )
 
+var (
+	errUnknownCommand  = errors.New("unknown command")
+	errUnknownArgument = errors.New("unknown argument")
+)
+
 func main() {
-	// GIT_ASKPASS re-entry: when forge.Clone authenticates a private HTTPS clone,
-	// it points git's GIT_ASKPASS at this same binary and sets the marker below.
-	// git then execs us with the credential prompt as argv[1] ("Username for…" /
-	// "Password for…"). Answer and exit BEFORE any .env load or verb dispatch —
-	// the token rides only the environment (GITHUB_TOKEN/GH_TOKEN), never argv or
-	// disk. This branch is self-contained on purpose: main can't import the
-	// internal forge package.
+	os.Exit(run())
+}
+
+func run() int {
 	if os.Getenv("HERRSCHER_GIT_ASKPASS") == "1" {
-		prompt := ""
-		if len(os.Args) > 1 {
-			prompt = os.Args[1]
-		}
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "username") {
-			fmt.Println("x-access-token")
-		} else if t := os.Getenv("GITHUB_TOKEN"); t != "" {
-			fmt.Println(t)
-		} else {
-			fmt.Println(os.Getenv("GH_TOKEN"))
-		}
-		return
+		return answerGitAskpass(os.Args)
 	}
 
 	if len(os.Args) == 2 && (os.Args[1] == "version" || os.Args[1] == "--version") {
-		fmt.Println(herrscherVersion())
-		return
+		out := errwriter.New(os.Stdout)
+		out.Println(herrscherVersion())
+		return writeFailureCode(out)
 	}
 
-	// Auto-load a project-root .env so every command (and every plugin's config
-	// resolution) sees its vars without an explicit --env-file. Real environment
-	// wins over the file, and the daemon propagates os.Environ() to each bridge
-	// subprocess, so one .env floods gateway/backend/memory alike.
-	//
-	// $HERRSCHER_ENV_FILE overrides the path. We resolve to an ABSOLUTE path and
-	// re-export it so bridge subprocesses — which run with cmd.Dir set to a
-	// per-session worktree — load the *same* file, not a stray .env that happens
-	// to sit in that worktree (which would be an env-injection vector). An
-	// explicit $HERRSCHER_ENV_FILE is authoritative, so a load failure there is
-	// fatal; the implicit ./.env is best-effort (a missing or unreadable file
-	// must not break management verbs that need no secrets).
+	if err := loadHostEnv(); err != nil {
+		return reportError(err)
+	}
+	host.CaptureGatewayCreds()
+	hideGatewayKeys()
+
+	ctx := context.Background()
+
+	if len(os.Args) < minArgsWithCommand {
+		return reportError(runWithoutCommand(ctx))
+	}
+
+	cmd := os.Args[1]
+	args := os.Args[2:]
+
+	if task, ok := promptOf(cmd, args); ok {
+		if task.Text == "" {
+			fmt.Fprintf(os.Stderr, "herrscher: %s needs a task, e.g. herrscher %s refactor\n", cmd, cmd)
+			return exitUsage
+		}
+		return reportError(runPrompt(ctx, task))
+	}
+
+	if code, ok := runManageCmd(cmd, args); ok {
+		return code
+	}
+
+	switch cmd {
+	case "-h", "--help", "help":
+		usage()
+		return 0
+	}
+
+	return reportError(runCommand(ctx, cmd, args))
+}
+
+func answerGitAskpass(args []string) int {
+	prompt := ""
+	if len(args) > 1 {
+		prompt = args[1]
+	}
+	out := errwriter.New(os.Stdout)
+	writeGitCredential(prompt, out)
+	return writeFailureCode(out)
+}
+
+func writeGitCredential(prompt string, out *errwriter.Writer) {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "username") {
+		out.Println("x-access-token")
+		return
+	}
+	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
+		out.Println(t)
+		return
+	}
+	out.Println(os.Getenv("GH_TOKEN"))
+}
+
+func loadHostEnv() error {
 	envPath, explicit := os.Getenv("HERRSCHER_ENV_FILE"), true
 	if envPath == "" {
 		envPath, explicit = ".env", false
@@ -74,209 +116,159 @@ func main() {
 	if abs, err := filepath.Abs(envPath); err == nil {
 		envPath = abs
 	}
-	os.Setenv("HERRSCHER_ENV_FILE", envPath)
+	if err := os.Setenv("HERRSCHER_ENV_FILE", envPath); err != nil {
+		return err
+	}
 	if err := loadEnvFile(envPath); err != nil {
 		if explicit {
-			fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
-			os.Exit(1)
+			return err
 		}
 		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error()+" (continuing)")
 	}
+	return nil
+}
 
-	// Capture the Neublox gateway pair and REMOVE it from this process's
-	// environment, before any verb runs. It is a product credential on a shared
-	// paid account; leaving it in the environment would propagate it to every
-	// vendor CLI a session spawns (backends spawn with MergeEnv(os.Environ(),
-	// env)), handing a prompt-injectable coding agent `env | grep NEUBLOX`. This
-	// is the earliest point common to every path — daemon, operator CLI, and the
-	// supervised `herrscher bridge` child, which re-captures what the supervisor
-	// hands it. It must run AFTER the .env load above, which may define the pair.
-	host.CaptureGatewayCreds()
-	hideGatewayKeys()
-
-	ctx := context.Background()
-
-	// Bare `herrscher`: open the terminal TUI when we can — an interactive TTY
-	// plus a compiled-in terminal gateway, which runServe runs as its foreground
-	// (see serve.go). Otherwise fall back to help. We deliberately never start a
-	// background daemon from a bare, argument-less invocation, so `herrscher` in
-	// a script (piped/redirected, no TTY) just prints usage and exits.
-	if len(os.Args) < 2 {
-		if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
-			if err := runServe(ctx, nil, nil); err != nil {
-				fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
-				os.Exit(1)
-			}
-			return
-		}
-		usage()
-		os.Exit(2)
+func runWithoutCommand(ctx context.Context) error {
+	if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
+		return runServe(ctx, nil, nil)
 	}
+	usage()
+	return exitStatusError{code: exitUsage}
+}
 
-	cmd := os.Args[1]
-	args := os.Args[2:]
-
-	// A free-text argv is a task, not a mistyped verb: open a session on it and
-	// hand it the window. Checked here, ahead of every switch below, because the
-	// two surfaces cannot collide — no verb in the registry contains whitespace.
-	if t, ok := promptOf(cmd, args); ok {
-		if t.Text == "" {
-			fmt.Fprintf(os.Stderr, "herrscher: %s needs a task, e.g. herrscher %s refactor\n", cmd, cmd)
-			os.Exit(2)
-		}
-		if err := runPrompt(ctx, t); err != nil {
-			fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
-			os.Exit(1)
-		}
-		return
-	}
-
-	// Management verbs need no Discord client; dispatch them first. They shell out
-	// to go get/tidy/build, so give them a context cancelled on Ctrl-C / SIGTERM to
-	// stop those children cleanly. The runtime verbs keep their own lifecycle
-	// (below), so signal handling stays scoped to management here.
+func runManageCmd(cmd string, args []string) (int, bool) {
 	switch cmd {
 	case "init", "plugin", "update", "install":
-		mctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-		var code int
-		switch cmd {
-		case "init":
-			code = manage.InitCmd(mctx, args)
-		case "plugin":
-			code = manage.PluginCmd(mctx, args)
-		case "update":
-			code = manage.UpdateCmd(mctx, args)
-		case "install":
-			code = manage.InstallCmd(mctx, args)
-		}
-		stop()
-		os.Exit(code)
+	default:
+		return 0, false
 	}
+	mctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	switch cmd {
+	case "init":
+		return manage.InitCmd(mctx, args), true
+	case "plugin":
+		return manage.PluginCmd(mctx, args), true
+	case "update":
+		return manage.UpdateCmd(mctx, args), true
+	default:
+		return manage.InstallCmd(mctx, args), true
+	}
+}
 
-	// The host stays gateway-agnostic: it never builds a Discord (dctl) client.
-	// Every runtime verb drives the registered gateway plugin via the contracts
-	// port; raw channel poking lives in the dctl library, not in this binary.
-	var err error
+func runCommand(ctx context.Context, cmd string, args []string) error {
 	switch cmd {
 	case "bridge":
-		err = runBridge(ctx, args)
+		return runBridge(ctx, args)
 	case "serve":
-		err = runServe(ctx, args, nil)
+		return runServe(ctx, args, nil)
 	case "session":
-		err = runSession(ctx, args)
+		return runSession(ctx, args)
 	case "agent":
-		err = runAgent(ctx, args)
+		return runAgent(ctx, args)
 	case "host":
-		err = runHost(ctx, args)
+		return runHost(ctx, args)
 	case "approve":
-		err = runApprove(ctx, args)
+		return runApprove(ctx, args)
 	case "role":
-		err = runRole(ctx, args)
+		return runRole(ctx, args)
 	case "memory":
-		err = runMemory(ctx, args)
+		return runMemory(ctx, args)
 	case "models":
-		err = runModels(ctx, args)
+		return runModels(ctx, args)
 	case "service":
-		err = runService(ctx, args)
+		return runService(ctx, args)
 	case "plugin-host":
-		err = runPluginHost(ctx, args)
+		return runPluginHost(ctx, args)
 	case "worktree":
-		// Answered here rather than forwarded to the daemon, like whoami: the
-		// caller is a daemon on ANOTHER machine driving this binary over ssh, and
-		// there is no daemon on this side to forward to.
-		err = host.RunWorktree(ctx, args)
+		return host.RunWorktree(ctx, args)
 	case "whoami":
-		// Answered here rather than forwarded to the daemon: it reads git, not
-		// daemon state, and an operator reaches for it precisely when something
-		// looks wrong — which may well be that no daemon is running.
-		err = runWhoami(args)
-	case "-h", "--help", "help":
-		usage()
-		return
-	default:
-		// The switch above is not the whole command surface: gateway plugins
-		// contribute verbs the daemon namespaces under their kind, and those live
-		// in the daemon's registry alone. So an argv this binary does not
-		// recognise is offered to the daemon verbatim — main never learns what any
-		// of them mean, which is what keeps this file free of any platform.
-		// `herrscher commands` lists what the daemon will accept.
-		//
-		// Be honest about the reach: the daemon is handed the argv as-is, so what
-		// this opens is its whole registry and not only the contributed part of
-		// it. `herrscher set source --path /x` lands on the live daemon where it
-		// used to be an unknown verb. What it does NOT open is a privilege: the
-		// daemon decides what the caller may run from the socket the connection
-		// arrived on, so forwarding an argv it does not recognise forwards
-		// exactly the authority that socket already carried.
-		out, derr, code := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
-		if code != 0 {
-			fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
-			usage()
-			os.Exit(code)
-		}
-		if derr == nil && out != "" {
-			fmt.Println(out)
-		}
-		err = derr
+		return runWhoami(ctx, args)
 	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
-		os.Exit(1)
-	}
+	return runForwarded(ctx, cmd, args)
 }
 
-// dispatchUnknown decides what becomes of a verb main()'s switch has no case
-// for. It lives outside main() so the decision can be exercised with a stub
-// forwarder — no daemon, no re-exec — and it takes cmd and args apart rather
-// than a ready-made argv so the arm passes exactly what every sibling case
-// passes: dropping the verb on the wire is then not expressible at the call
-// site. exit is the code the process must leave with, or 0 to let main() carry
-// on with err as usual.
-func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (stdout string, err error, exit int) {
+func runForwarded(ctx context.Context, cmd string, args []string) error {
+	out, code, derr := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
+	if code != 0 {
+		fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
+		usage()
+		return exitStatusError{code: code}
+	}
+	if derr != nil {
+		return derr
+	}
+	if out == "" {
+		return nil
+	}
+	_, err := fmt.Fprintln(os.Stdout, out)
+	return err
+}
+
+type exitStatusError struct {
+	code int
+}
+
+func (s exitStatusError) Error() string {
+	return fmt.Sprintf("exit status %d", s.code)
+}
+
+func reportError(err error) int {
+	if err == nil {
+		return 0
+	}
+	var status exitStatusError
+	if errors.As(err, &status) {
+		return status.code
+	}
+	fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
+	return 1
+}
+
+func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (string, int, error) {
 	out, handled, derr := fwd(ctx, append([]string{cmd}, args...))
 	if !handled {
-		return "", fmt.Errorf("unknown command %q", cmd), 2
+		return "", exitUsage, fmt.Errorf("%w %q", errUnknownCommand, cmd)
 	}
-	// A daemon-side refusal is the caller's failure, so it must keep costing a
-	// non-zero exit for whoever is reading $?.
-	return out, derr, 0
+	return out, 0, derr
 }
 
-// channelFlag registers -c/--channel on fs and returns the bound pointer.
-func channelFlag(fs *flag.FlagSet) *string {
-	ch := fs.String("channel", "", "conversation id this bridge answers in")
-	fs.StringVar(ch, "c", "", "channel id (shorthand)")
-	return ch
+func channelFlag(flags *flag.FlagSet) *string {
+	channel := flags.String("channel", "", "conversation id this bridge answers in")
+	flags.StringVar(channel, "c", "", "channel id (shorthand)")
+	return channel
 }
 
-// hasTerminalGateway reports whether a terminal (TUI) gateway plugin is compiled
-// in, so a bare `herrscher` invocation knows it can open the TUI. It inspects the
-// plugin registry directly, without building the hub.
 func hasTerminalGateway() bool {
-	for _, p := range contracts.Default.Gateways() {
-		if p.Manifest.Kind == "terminal" {
+	gateways := contracts.Default.Gateways()
+	for i := range gateways {
+		p := &gateways[i]
+		if p.Manifest.Kind == kindTerminal {
 			return true
 		}
 	}
 	return false
 }
 
-// runWhoami prints the identity git describes for this directory. It parses its
-// own argv rather than going through core/cli, because it never reaches the
-// registry — but it rejects what the registry would reject: a flag the verb does
-// not define is a mistake worth naming, not an argument to ignore quietly.
-func runWhoami(args []string) error {
+func runWhoami(ctx context.Context, args []string) error {
 	asJSON := false
-	for _, a := range args {
-		if a != "--json" {
-			return fmt.Errorf("whoami: unknown argument %q (only --json)", a)
+	for _, arg := range args {
+		if arg != argJSON {
+			return fmt.Errorf("whoami: %w %q (only --json)", errUnknownArgument, arg)
 		}
 		asJSON = true
 	}
-	out, err := host.WhoamiOut(asJSON)
+	out, err := host.WhoamiOut(ctx, asJSON)
 	if err != nil {
 		return err
 	}
-	fmt.Println(out)
-	return nil
+	_, err = fmt.Fprintln(os.Stdout, out)
+	return err
+}
+
+func writeFailureCode(w *errwriter.Writer) int {
+	if w.Err() != nil {
+		return 1
+	}
+	return 0
 }

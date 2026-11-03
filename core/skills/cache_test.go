@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// A rescan runs on every turn, so it reuses what it already parsed. That is only
-// safe if an edit still lands: these tests are the ones that make the cache an
-// optimisation rather than a way to serve yesterday's instructions.
-
 func TestRefreshPicksUpAnEditedDescription(t *testing.T) {
 	root := t.TempDir()
 	writeSkill(t, root, "one", "name: one\ndescription: first\n", "ONE\n")
@@ -42,8 +38,6 @@ func TestRefreshPicksUpAnEditedBody(t *testing.T) {
 	}
 }
 
-// An edit that keeps the byte count is the case a size check alone would miss,
-// and it is the realistic one: fixing a typo in place.
 func TestRefreshPicksUpASameSizeEdit(t *testing.T) {
 	root := t.TempDir()
 	writeSkill(t, root, "one", "name: one\ndescription: aaa\n", "BODY A\n")
@@ -62,8 +56,6 @@ func TestRefreshPicksUpASameSizeEdit(t *testing.T) {
 	}
 }
 
-// A skill that disappears must not leave its body behind in the cache, or a
-// later skill reusing the path would inherit it.
 func TestRefreshForgetsARemovedSkill(t *testing.T) {
 	root := t.TempDir()
 	writeSkill(t, root, "one", "name: one\ndescription: first\n", "GONE SOON\n")
@@ -84,7 +76,6 @@ func TestRefreshForgetsARemovedSkill(t *testing.T) {
 	}
 }
 
-// The point of all of the above: an unchanged tree is not read again.
 func TestRefreshDoesNotRereadAnUnchangedSkill(t *testing.T) {
 	root := t.TempDir()
 	writeSkill(t, root, "one", "name: one\ndescription: first\n", "ONE\n")

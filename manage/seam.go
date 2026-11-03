@@ -2,12 +2,15 @@ package manage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
+
+var errUnknownAction = errors.New("unknown plugin action")
 
 // PluginOps is the programmatic half of the plugin verbs, for a front end that
 // asks the two confirmations itself. The CLI answers them inline and so runs
@@ -53,16 +56,10 @@ func (o *PluginOps) Findings(ctx context.Context, module, version string) []stri
 // Apply saves the composition, then runs the change. It never restores on its
 // own: the caller owns that decision and calls Restore for it.
 func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (string, error) {
-	// Drop what the previous Apply saved before anything else: a Restore may only
-	// ever undo the change that just failed. Carrying an older snapshot forward
-	// would let a pin that failed to write its file roll back a version change
-	// that had already succeeded.
 	o.saved = nil
 
-	// A pin changes no code, so there is nothing to compile, nothing to install
-	// and nothing to save.
-	if action == "pin" || action == "unpin" {
-		return "", pinModule(o.dir, module, action == "pin")
+	if action == verbPin || action == verbUnpin {
+		return "", pinModule(o.dir, module, action == verbPin)
 	}
 
 	saved, err := saveComposition(o.dir)
@@ -72,7 +69,7 @@ func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (
 	o.saved = saved
 
 	switch action {
-	case "remove":
+	case verbRemove:
 		src, err := os.ReadFile(filepath.Join(o.dir, "plugins.go"))
 		if err != nil {
 			return "", fmt.Errorf("read plugins.go: %w", err)
@@ -81,16 +78,16 @@ func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (
 		if err != nil {
 			return "", err
 		}
-		if err := os.WriteFile(filepath.Join(o.dir, "plugins.go"), []byte(out), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(o.dir, "plugins.go"), []byte(out), modeFile); err != nil {
 			return "", err
 		}
 		return o.run(ctx, buildCommands())
 	case "bump":
-		return o.run(ctx, append([][]string{{"go", "get", "-u", module}}, buildCommands()...))
+		return o.run(ctx, append([][]string{{"go", verbGet, "-u", module}}, buildCommands()...))
 	case "version":
 		return o.run(ctx, addCommands(module, version))
 	}
-	return "", fmt.Errorf("unknown plugin action %q", action)
+	return "", fmt.Errorf("%w %q", errUnknownAction, action)
 }
 
 // Restore puts the composition back as it was before the last Apply.
@@ -101,14 +98,11 @@ func (o *PluginOps) Restore() error {
 	return restoreComposition(o.dir, o.saved)
 }
 
-// run executes the commands in order, accumulating their output so a failure is
-// reported in the toolchain's own words. Nothing is written to the process's own
-// streams: the caller is drawing a screen on them.
 func (o *PluginOps) run(ctx context.Context, cmds [][]string) (string, error) {
 	var log strings.Builder
-	for _, c := range cmds {
-		log.WriteString("+ " + strings.Join(c, " ") + "\n")
-		cmd := exec.CommandContext(ctx, c[0], c[1:]...)
+	for _, cmd := range cmds {
+		log.WriteString("+ " + strings.Join(cmd, " ") + "\n")
+		cmd := exec.CommandContext(ctx, cmd[0], cmd[1:]...)
 		cmd.Dir = o.dir
 		out, err := cmd.CombinedOutput()
 		log.Write(out)

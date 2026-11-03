@@ -2,10 +2,6 @@ package tui
 
 import "testing"
 
-// The modified-Enter chords are the better gesture when the terminal delivers
-// them, and plenty of terminals do not: Alt+Enter gets eaten by the window
-// manager, Shift+Enter is indistinguishable from Enter without an extended
-// keyboard protocol. A trailing backslash needs nothing from the terminal.
 func TestATrailingBackslashBreaksTheLineInsteadOfSending(t *testing.T) {
 	m := newTestModel()
 	m.input.SetValue(`first line \`)
@@ -25,7 +21,6 @@ func TestAnOrdinaryDraftStillSends(t *testing.T) {
 	}
 }
 
-// An escaped backslash is a literal one the operator typed, not a continuation.
 func TestAnEscapedBackslashIsNotAContinuation(t *testing.T) {
 	m := newTestModel()
 	m.input.SetValue(`a windows path C:\\`)

@@ -12,8 +12,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
-// authzHub builds the smallest hub that can authorize: a registry with the
-// verbs a test names, and a state holding sessions and roles.
 func authzHub(t *testing.T, st *state.State, verbs ...[]string) *hub {
 	t.Helper()
 	reg := &cli.Registry{}
@@ -31,7 +29,7 @@ func authzHub(t *testing.T, st *state.State, verbs ...[]string) *hub {
 			t.Fatal(err)
 		}
 	}
-	return &hub{st: st, reg: reg, live: map[string]liveSession{}}
+	return &hub{st: st, reg: reg, live: make(map[string]liveSession)}
 }
 
 func authzState(t *testing.T, sessions []state.Session, roles map[string]string) *state.State {
@@ -40,7 +38,8 @@ func authzState(t *testing.T, sessions []state.Session, roles map[string]string)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range sessions {
+	for idx := range sessions {
+		s := sessions[idx]
 		if err := st.AddSession(s); err != nil {
 			t.Fatal(err)
 		}
@@ -75,7 +74,6 @@ func TestTheOperatorSocketMayRunAnything(t *testing.T) {
 	}
 }
 
-// The finding D1 left open, closed: the flag no longer decides who you are.
 func TestASessionMayNotSpeakForAnother(t *testing.T) {
 	st := authzState(t, []state.Session{{Name: "revue"}, {Name: "release"}}, nil)
 	h := authzHub(t, st, []string{"approve", "ask"})
@@ -111,8 +109,6 @@ func TestASessionReachesTheSessionsItDelegated(t *testing.T) {
 	}
 }
 
-// A Parent chain hand-written into state.json can be a cycle. The walk must
-// answer, not spin.
 func TestASubtreeWalkTerminatesOnACycle(t *testing.T) {
 	st := authzState(t, []state.Session{
 		{Name: "a", Parent: "b"},
@@ -146,8 +142,6 @@ func TestTheFirstGrantMakesEveryOtherAccountAnObserver(t *testing.T) {
 	}
 }
 
-// A gateway sets the principal from text its platform gave it. The two names
-// the core mints for itself must not be claimable that way.
 func TestAGatewayCannotClaimToBeTheOperatorSocketOrASession(t *testing.T) {
 	st := authzState(t, []state.Session{{Name: "revue"}}, map[string]string{"chat:1": "owner"})
 	h := authzHub(t, st, []string{"role", "grant"})
@@ -159,9 +153,6 @@ func TestAGatewayCannotClaimToBeTheOperatorSocketOrASession(t *testing.T) {
 	}
 }
 
-// authorize is where the decision is made, but Dispatch is where it has to
-// bite. A refusal that still ran the handler would be a log line, not a
-// guardrail.
 func TestDispatchRefusesBeforeReachingTheRegistry(t *testing.T) {
 	st := authzState(t, []state.Session{{Name: "revue"}}, nil)
 	ran := false
@@ -174,7 +165,7 @@ func TestDispatchRefusesBeforeReachingTheRegistry(t *testing.T) {
 		})); err != nil {
 		t.Fatal(err)
 	}
-	h := &hub{st: st, reg: reg, live: map[string]liveSession{}}
+	h := &hub{st: st, reg: reg, live: make(map[string]liveSession)}
 	if _, err := h.Dispatch(withSessionPrincipal(context.Background(), "revue"), []string{"approve", "rule"}); err == nil {
 		t.Fatal("Dispatch must refuse")
 	}
@@ -198,27 +189,22 @@ func TestAnUnknownVerbIsDispatchsErrorAndNotARefusal(t *testing.T) {
 	}
 }
 
-// operatorRegistryForTest builds the registry the daemon serves, so the
-// coverage test below walks the verbs that actually exist rather than a list
-// re-typed beside them. A hand-kept list is a list that falls behind, which is
-// the failure that test exists to prevent.
 func operatorRegistryForTest(t *testing.T) *cli.Registry {
 	t.Helper()
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	dir := t.TempDir()
 	st := state.NewState(dir + "/state.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: dir + "/state.json", DefaultCmd: "claude"}, st, sup, "", nil)
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: dir + "/state.json", DefaultCmd: "claude"}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return reg
 }
 
-// The scoping table is the thing that rots. A verb added later that names a
-// session, and that nobody classified, must fail here rather than silently
-// escape the scope check.
 func TestEverySessionNamingVerbIsClassified(t *testing.T) {
 	reg := operatorRegistryForTest(t)
 	for _, spec := range reg.Specs() {
@@ -227,10 +213,10 @@ func TestEverySessionNamingVerbIsClassified(t *testing.T) {
 			if p.Name != "name" && p.Name != "session" {
 				continue
 			}
-			if sessionArg[verb] == p.Name {
+			if sessionArgs()[verb] == p.Name {
 				continue
 			}
-			if notASession[verb+" "+p.Name] {
+			if notASessionArgs()[verb+" "+p.Name] {
 				continue
 			}
 			t.Errorf("`%s --%s` names something. Add it to sessionArg if that is a session "+

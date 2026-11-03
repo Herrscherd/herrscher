@@ -10,26 +10,27 @@ import (
 )
 
 func TestHubScrollbackAndResume(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
 	partDir := t.TempDir()
-	h := newHub(ctx, st, sup, nil, partDir, &cli.Registry{}, nil)
+	h := newHub(st, sup, nil, partDir, &cli.Registry{}, nil, approvalTab, sessionTab)
 
 	if err := st.AddSession(state.Session{Name: "seam", ChannelID: "c", Type: "text", Archived: true, ResumeToken: "tok", Vendor: "claude", Project: "alpha"}); err != nil {
 		t.Fatal(err)
 	}
 	p := state.TranscriptPath(partDir, "seam")
-	_ = state.AppendTranscript(p, state.TranscriptEntry{Ts: "t1", Role: "user", Text: "hi"})
-	_ = state.AppendTranscript(p, state.TranscriptEntry{Ts: "t2", Role: "assistant", Text: "yo"})
+	logCleanup(state.AppendTranscript(p, state.TranscriptEntry{Ts: "t1", Role: "user", Text: "hi"}))
+	logCleanup(state.AppendTranscript(p, state.TranscriptEntry{Ts: "t2", Role: "assistant", Text: "yo"}))
 
 	lines := h.Scrollback("seam")
 	if len(lines) != 2 || lines[0].Role != "user" || lines[1].Text != "yo" {
 		t.Fatalf("scrollback wrong: %+v", lines)
 	}
 
-	// enriched Sessions()
 	infos := h.Sessions()
 	if len(infos) != 1 {
 		t.Fatalf("want 1 session, got %d", len(infos))

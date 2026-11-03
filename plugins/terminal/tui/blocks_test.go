@@ -7,10 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// An answer announces itself with a titled rule and then stops ruling. Colour
-// alone used to carry the distinction, and colour is the one channel a terminal
-// is free to take away — but a closing rule on every turn said nothing the next
-// speaker's rule did not, and cost a row each time.
 func TestAgentAnswerOpensWithARuleAndIsNotClosed(t *testing.T) {
 	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 60, view{})
 	lines := strings.Split(out, "\n")
@@ -25,8 +21,6 @@ func TestAgentAnswerOpensWithARuleAndIsNotClosed(t *testing.T) {
 	}
 }
 
-// A block still arriving gets no closing rule. The block is not closed, and
-// drawing the line that says it is would be a lie redrawn on every chunk.
 func TestStreamingAnswerIsLeftOpen(t *testing.T) {
 	out := renderEntry(entry{role: roleAgent, text: "half an ans", streaming: true}, 60, view{})
 	lines := strings.Split(out, "\n")
@@ -38,10 +32,8 @@ func TestStreamingAnswerIsLeftOpen(t *testing.T) {
 	}
 }
 
-// A rule too narrow for its title degrades to a plain rule. A clipped word says
-// less than a line that is honestly just a line.
 func TestNarrowTitledRuleDropsItsTitle(t *testing.T) {
-	out := titledRule(accentStyle, agentTitle, 4)
+	out := titledRule(newStyles().accent, agentTitle, 4)
 	if strings.Contains(out, "Herrscher") {
 		t.Fatalf("a title that does not fit must be dropped, not clipped: %q", out)
 	}
@@ -50,34 +42,34 @@ func TestNarrowTitledRuleDropsItsTitle(t *testing.T) {
 	}
 }
 
-// The gauge must never read empty when something has been spent: an empty bar
-// has to mean nothing sent, not merely little.
 func TestGaugeShowsAnySpend(t *testing.T) {
-	if got := gauge(0.001, dimStyle); !strings.Contains(got, gaugeFull) {
+	if got := gauge(0.001, newStyles().dim, newStyles().dim); !strings.Contains(got, gaugeFull) {
 		t.Fatalf("a small spend must still fill a cell: %q", got)
 	}
-	if got := gauge(0, dimStyle); strings.Contains(got, gaugeFull) {
+	if got := gauge(0, newStyles().dim, newStyles().dim); strings.Contains(got, gaugeFull) {
 		t.Fatalf("nothing spent must read as empty: %q", got)
 	}
-	if got := gauge(1, dimStyle); strings.Contains(got, gaugeEmpty) {
+	if got := gauge(1, newStyles().dim, newStyles().dim); strings.Contains(got, gaugeEmpty) {
 		t.Fatalf("a full window must leave no empty cell: %q", got)
 	}
 }
 
-// The gauge takes the palier's colour, so an alarming context is alarming at a
-// glance rather than only on inspection.
 func TestGaugeTakesThePalierColour(t *testing.T) {
-	alarm := renderGauge(199_000, "claude", 120)
-	calm := renderGauge(1_000, "claude", 120)
+	alarm := renderGauge(199_000, "claude", 120, newStyles())
+	calm := renderGauge(1_000, "claude", 120, newStyles())
 	if alarm == "" || calm == "" {
 		t.Fatal("a spent context must render a gauge")
 	}
 	if alarm == calm {
 		t.Fatal("a full window and an empty one must not render alike")
 	}
-	// The colour itself is asserted on the style: lipgloss strips colour when it
-	// renders without a terminal, so the rendered string cannot carry it here.
-	fg := func(r float64) string { return string(palierStyle(r).GetForeground().(lipgloss.Color)) }
+	fg := func(r float64) string {
+		color, ok := palierStyle(r, newStyles()).GetForeground().(lipgloss.Color)
+		if !ok {
+			t.Fatalf("palier %v foreground is not a lipgloss.Color", r)
+		}
+		return string(color)
+	}
 	if fg(0.99) != colRed {
 		t.Fatalf("a window past the alarm palier must take the Herrscher red: %s", fg(0.99))
 	}
@@ -86,8 +78,6 @@ func TestGaugeTakesThePalierColour(t *testing.T) {
 	}
 }
 
-// A fresh tab says what else is running. Implying nothing is would be wrong in
-// the case the terminal exists for: several sessions at once.
 func TestEmptyStateListsTheOtherSessions(t *testing.T) {
 	m := newTestModel()
 	m.ensureTab("a")
@@ -102,7 +92,6 @@ func TestEmptyStateListsTheOtherSessions(t *testing.T) {
 	}
 }
 
-// One session alone gets no heading. An empty heading is worse than no heading.
 func TestEmptyStateOmitsTheListWhenAlone(t *testing.T) {
 	m := newTestModel()
 	m.ensureTab("a")

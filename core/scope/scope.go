@@ -18,27 +18,23 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// gitTimeout bounds the single git call ProjectFromDir makes. A launch must not
-// hang because a repository's objects live on a stalled network mount.
 const gitTimeout = 2 * time.Second
 
-// maxScopeLen mirrors the length projectRe allows in core/internal/manager, so a
-// name this package hands out can always be persisted as a project.
 const maxScopeLen = 128
 
 // ProjectFromDir names the memory project work done in dir belongs to: the git
 // repository dir is in, folded to a single stable scope segment. It answers ""
 // when dir is in no repository, or when the repository's name carries nothing
-// nameable — an unscoped session, which is what every session gets today, so ""
+// nameable: an unscoped session, which is what every session gets today, so ""
 // is never a failure, only a silence.
 //
 // It resolves the repository's *common* git directory rather than the worktree,
 // so every worktree of one repository answers with one project.
-func ProjectFromDir(dir string) string {
+func ProjectFromDir(ctx context.Context, dir string) string {
 	if dir == "" {
 		return ""
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--git-common-dir").Output()
 	if err != nil {
@@ -48,18 +44,13 @@ func ProjectFromDir(dir string) string {
 	if common == "" {
 		return ""
 	}
-	// git answers relative to dir when it feels like it (".git" from a repo root).
 	if !filepath.IsAbs(common) {
 		common = filepath.Join(dir, common)
 	}
 	common = filepath.Clean(common)
-	// <root>/.git → <root>. A bare repository is named by its own directory,
-	// conventionally <root>.git, so drop the suffix rather than the segment.
-	root := common
+	root := strings.TrimSuffix(common, ".git")
 	if filepath.Base(common) == ".git" {
 		root = filepath.Dir(common)
-	} else {
-		root = strings.TrimSuffix(common, ".git")
 	}
 	return nameOf(filepath.Base(filepath.Clean(root)))
 }
@@ -79,34 +70,30 @@ func MatchProject(prompt string, known []string) string {
 		return ""
 	}
 	lower := strings.ToLower(prompt)
-	best, at := "", -1
+	best, bestAt := "", -1
 	for _, k := range known {
-		n := nameOf(k)
-		if n == "" {
+		name := nameOf(k)
+		if name == "" {
 			continue
 		}
-		i := indexWord(lower, n)
-		if i < 0 {
+		pos := indexWord(lower, name)
+		if pos < 0 {
 			continue
 		}
-		if at < 0 || i < at || (i == at && len(n) > len(best)) {
-			best, at = n, i
+		if bestAt < 0 || pos < bestAt || (pos == bestAt && len(name) > len(best)) {
+			best, bestAt = name, pos
 		}
 	}
 	return best
 }
 
 // Name folds raw into the scope segment contracts would use, or "" when raw
-// holds nothing nameable. Callers that take a project name from a human — an
-// environment variable, a flag — run it through this so a value with a space in
+// holds nothing nameable. Callers that take a project name from a human (an
+// environment variable, a flag), run it through this so a value with a space in
 // it is folded rather than refused: a typo in a setting must not be the reason a
 // window opens on nothing.
 func Name(raw string) string { return nameOf(raw) }
 
-// nameOf folds raw into the scope segment contracts would use, or "" when raw
-// holds nothing nameable. The empty answer matters: the normaliser's own
-// fallback is the literal "scope", and a session filed under a project called
-// "scope" is worse than one filed under no project at all.
 func nameOf(raw string) string {
 	nameable := false
 	for _, r := range raw {
@@ -118,48 +105,41 @@ func nameOf(raw string) string {
 	if !nameable {
 		return ""
 	}
-	n := contracts.NormalizeScope(raw)
-	if len(n) > maxScopeLen {
+	name := contracts.NormalizeScope(raw)
+	if len(name) > maxScopeLen {
 		return ""
 	}
-	return n
+	return name
 }
 
-// indexWord finds needle in hay on word boundaries, so "neublox" is found in
-// "je bosse sur neublox" but not inside "neubloxide". It returns -1 for no match.
 func indexWord(hay, needle string) int {
-	for i := 0; i <= len(hay)-len(needle); {
-		j := strings.Index(hay[i:], needle)
-		if j < 0 {
+	for pos := 0; pos <= len(hay)-len(needle); {
+		offset := strings.Index(hay[pos:], needle)
+		if offset < 0 {
 			return -1
 		}
-		at := i + j
-		if boundaryBefore(hay, at) && boundaryAt(hay, at+len(needle)) {
-			return at
+		found := pos + offset
+		if boundaryBefore(hay, found) && boundaryAt(hay, found+len(needle)) {
+			return found
 		}
-		i = at + 1
+		pos = found + 1
 	}
 	return -1
 }
 
-// boundaryBefore reports whether the rune ending at byte i is a word boundary,
-// and boundaryAt whether the one starting at byte i is. Both decode a whole rune
-// rather than looking at one byte: the lead byte of "…" or of a non-breaking
-// space is 0xE2/0xC2, which as a bare rune is a letter, and a prompt written in
-// French is full of them. The start and end of the prompt count as boundaries.
-func boundaryBefore(s string, i int) bool {
-	if i <= 0 {
+func boundaryBefore(text string, pos int) bool {
+	if pos <= 0 {
 		return true
 	}
-	r, _ := utf8.DecodeLastRuneInString(s[:i])
+	r, _ := utf8.DecodeLastRuneInString(text[:pos])
 	return notWord(r)
 }
 
-func boundaryAt(s string, i int) bool {
-	if i >= len(s) {
+func boundaryAt(text string, pos int) bool {
+	if pos >= len(text) {
 		return true
 	}
-	r, _ := utf8.DecodeRuneInString(s[i:])
+	r, _ := utf8.DecodeRuneInString(text[pos:])
 	return notWord(r)
 }
 

@@ -2,181 +2,203 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"time"
 
+	"github.com/nats-io/nats.go"
+	"google.golang.org/grpc"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	transport "github.com/Herrscherd/herrscher-transport"
 	"github.com/Herrscherd/herrscher/core/host"
-	"github.com/nats-io/nats.go"
-	"google.golang.org/grpc"
 )
 
+var (
+	errUnsupportedCategory  = errors.New("unsupported category")
+	errNoSkeleton           = errors.New("has no skeleton")
+	errNoOrchestratorPlugin = errors.New("no orchestrator plugin registered")
+	errNoBackendPlugin      = errors.New("no backend plugin registered")
+)
+
+type hostedPlugin struct {
+	manifest  contracts.Manifest
+	register  func(*grpc.Server) error
+	closeReal func() error
+}
+
+func hostPlugin(ctx context.Context, category contracts.Category) (hostedPlugin, error) {
+	switch category {
+	case contracts.CategoryMemory:
+		impl, manifest, err := firstMemory(ctx)
+		if err != nil {
+			return hostedPlugin{}, err
+		}
+		return hostedPlugin{
+			manifest: manifest,
+			register: func(s *grpc.Server) error {
+				return registerOnRouter(s, func(r *transport.PluginRouter) error { return transport.RegisterMemorySkeleton(r, impl) })
+			},
+			closeReal: func() error { return impl.Close() },
+		}, nil
+	case contracts.CategoryOrchestrator:
+		impl, manifest, err := firstOrchestrator(ctx)
+		if err != nil {
+			return hostedPlugin{}, err
+		}
+		return hostedPlugin{
+			manifest: manifest,
+			register: func(s *grpc.Server) error {
+				return registerOnRouter(s, func(r *transport.PluginRouter) error { return transport.RegisterOrchestratorSkeleton(r, impl) })
+			},
+			closeReal: func() error { return impl.Close() },
+		}, nil
+	case contracts.CategoryBackend:
+		impl, manifest, err := firstBackend(ctx)
+		if err != nil {
+			return hostedPlugin{}, err
+		}
+		return hostedPlugin{
+			manifest:  manifest,
+			register:  func(s *grpc.Server) error { transport.RegisterBackendSkeleton(s, impl); return nil },
+			closeReal: func() error { return impl.Close() },
+		}, nil
+	case contracts.CategoryGateway, contracts.CategorySkills:
+		return hostedPlugin{}, noSkeletonError(category)
+	}
+	return hostedPlugin{}, noSkeletonError(category)
+}
+
+func noSkeletonError(category contracts.Category) error {
+	return fmt.Errorf("plugin-host: category %q passed the support gate but %w", category, errNoSkeleton)
+}
+
+func newPluginServer(tlsCfg transport.TLSConfig) (*grpc.Server, error) {
+	if !tlsCfg.Enabled() {
+		return grpc.NewServer(), nil
+	}
+	creds, err := tlsCfg.ServerCredentials()
+	if err != nil {
+		return nil, fmt.Errorf("plugin-host: %w", err)
+	}
+	return grpc.NewServer(grpc.Creds(creds)), nil
+}
+
+func announceEvery(ctx context.Context, conn *nats.Conn, ann transport.Announcement) {
+	ticker := time.NewTicker(announceInterval)
+	defer ticker.Stop()
+	for {
+		if err := transport.Announce(conn, ann); err != nil {
+			slog.Warn("announce plugin", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
 func runPluginHost(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("plugin-host", flag.ContinueOnError)
-	category := fs.String("category", "", "plugin category to host (e.g. memory, orchestrator)")
-	natsURL := fs.String("nats", nats.DefaultURL, "NATS server URL")
-	instanceID := fs.String("instance", "", "process instance id")
-	if err := fs.Parse(args); err != nil {
+	flags := flag.NewFlagSet("plugin-host", flag.ContinueOnError)
+	category := flags.String("category", "", "plugin category to host (e.g. memory, orchestrator)")
+	natsURL := flags.String("nats", nats.DefaultURL, "NATS server URL")
+	instanceID := flags.String("instance", "", "process instance id")
+	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if !host.SupportedRemoteCategory(contracts.Category(*category)) {
-		return fmt.Errorf("plugin-host: unsupported category %q", *category)
+		return fmt.Errorf("plugin-host: %w %q", errUnsupportedCategory, *category)
 	}
 
-	// Fail fast and fail closed: a half-configured TLS env refuses to start
-	// rather than silently serving plaintext off-loopback. Validated before any
-	// plugin is built so a misconfiguration never reaches I/O. No TLS env set =>
-	// plaintext on the (default loopback) bind, exactly as before.
 	tlsCfg := tlsConfigFromEnv()
 	if err := tlsCfg.Validate(); err != nil {
 		return fmt.Errorf("plugin-host: %w", err)
 	}
 
-	// SupportedRemoteCategory gates *category above; here we build the real
-	// plugin for it and select its skeleton. Each remote category serves a
-	// different port over the shared Plugin service, so the build+register pair
-	// branches on *category — adding a category is one case, not a new host.
-	var (
-		manifest  contracts.Manifest
-		register  func(*grpc.Server) error
-		closeReal func()
-	)
-	switch contracts.Category(*category) {
-	case contracts.CategoryMemory:
-		real, m, err := firstMemory(ctx)
-		if err != nil {
-			return err
-		}
-		manifest, register, closeReal = m,
-			func(s *grpc.Server) error {
-				return registerOnRouter(s, func(r *transport.PluginRouter) error { return transport.RegisterMemorySkeleton(r, real) })
-			},
-			func() { _ = real.Close() }
-	case contracts.CategoryOrchestrator:
-		real, m, err := firstOrchestrator(ctx)
-		if err != nil {
-			return err
-		}
-		manifest, register, closeReal = m,
-			func(s *grpc.Server) error {
-				return registerOnRouter(s, func(r *transport.PluginRouter) error { return transport.RegisterOrchestratorSkeleton(r, real) })
-			},
-			func() { _ = real.Close() }
-	case contracts.CategoryBackend:
-		real, m, err := firstBackend(ctx)
-		if err != nil {
-			return err
-		}
-		manifest, register, closeReal = m,
-			func(s *grpc.Server) error { transport.RegisterBackendSkeleton(s, real); return nil },
-			func() { _ = real.Close() }
-	default:
-		return fmt.Errorf("plugin-host: category %q passed the support gate but has no skeleton", *category)
-	}
-	// The plugin-host owns the real plugin: it builds it once, serves it to every
-	// client, and closes it once on shutdown. Client proxies only close their own
-	// gRPC connection, never the shared object.
-	defer closeReal()
-
-	// Local cancel so the heartbeat and GracefulStop goroutines also unwind when
-	// Serve returns on its own (e.g. a listener error), not only on parent ctx.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	lis, err := net.Listen("tcp", bindAddr())
+	hosted, err := hostPlugin(ctx, contracts.Category(*category))
 	if err != nil {
 		return err
 	}
-	var s *grpc.Server
-	if tlsCfg.Enabled() {
-		creds, err := tlsCfg.ServerCredentials()
-		if err != nil {
-			return fmt.Errorf("plugin-host: %w", err)
-		}
-		s = grpc.NewServer(grpc.Creds(creds))
-	} else {
-		s = grpc.NewServer()
-	}
-	if err := register(s); err != nil {
-		return err
-	}
-
-	nc, err := nats.Connect(*natsURL)
-	if err != nil {
-		return err
-	}
-	defer nc.Close()
-	ann := transport.Announcement{Manifest: manifest, GrpcAddr: lis.Addr().String(), InstanceID: *instanceID}
-
-	// NATS core pub-sub has no replay: re-announce so a resolver subscribing later still finds us.
-	go func() {
-		t := time.NewTicker(2 * time.Second)
-		defer t.Stop()
-		for {
-			_ = transport.Announce(nc, ann)
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-			}
+	defer func() {
+		if closeErr := hosted.closeReal(); closeErr != nil {
+			slog.Error("close hosted plugin", "err", closeErr)
 		}
 	}()
 
-	go func() { <-ctx.Done(); s.GracefulStop() }()
-	return s.Serve(lis)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", bindAddr())
+	if err != nil {
+		return err
+	}
+	server, err := newPluginServer(tlsCfg)
+	if err != nil {
+		return err
+	}
+	if regErr := hosted.register(server); regErr != nil {
+		return regErr
+	}
+
+	conn, err := nats.Connect(*natsURL)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	ann := transport.Announcement{Manifest: hosted.manifest, GrpcAddr: lis.Addr().String(), InstanceID: *instanceID}
+
+	go announceEvery(ctx, conn, ann)
+	go func() { <-ctx.Done(); server.GracefulStop() }()
+	return server.Serve(lis)
 }
 
-// firstMemory builds the first registered memory plugin from its resolved env
-// config, returning it with its manifest for announcement.
 func firstMemory(ctx context.Context) (contracts.Memory, contracts.Manifest, error) {
 	return host.BuildFirstMemoryWithManifest(ctx)
 }
 
-// firstOrchestrator builds the first registered orchestrator plugin. The remote
-// orchestrator runs without the host's in-process Memory or the
-// session/scope/learn config bag (those are bridge-owned runtime state): C2
-// ships the request/response proxy, not remote scope threading.
 func firstOrchestrator(ctx context.Context) (contracts.Orchestrator, contracts.Manifest, error) {
-	for _, p := range contracts.Default.Orchestrators() {
-		if p.Orchestrator == nil {
+	orchestrators := contracts.Default.Orchestrators()
+	for i := range orchestrators {
+		plugin := &orchestrators[i]
+		if plugin.Orchestrator == nil {
 			continue
 		}
-		cfg, err := contracts.Resolve(p.Manifest.Config, os.Getenv)
+		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
 			return nil, contracts.Manifest{}, fmt.Errorf("orchestrator plugin-host: %w", err)
 		}
-		o, err := p.Orchestrator(ctx, cfg, nil)
+		orch, err := plugin.Orchestrator(ctx, cfg, nil)
 		if err != nil {
 			return nil, contracts.Manifest{}, fmt.Errorf("orchestrator plugin-host: %w", err)
 		}
-		return o, p.Manifest, nil
+		return orch, plugin.Manifest, nil
 	}
-	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: no orchestrator plugin registered")
+	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: %w", errNoOrchestratorPlugin)
 }
 
-// firstBackend builds the first registered backend plugin from its resolved env
-// config. The streaming skeleton forwards its per-turn event stream to remote
-// hosts, preserving ordering and the reply{done} boundary.
 func firstBackend(ctx context.Context) (contracts.Backend, contracts.Manifest, error) {
-	for _, p := range contracts.Default.Backends() {
-		if p.Backend == nil {
+	backends := contracts.Default.Backends()
+	for i := range backends {
+		plugin := &backends[i]
+		if plugin.Backend == nil {
 			continue
 		}
-		cfg, err := contracts.Resolve(p.Manifest.Config, os.Getenv)
+		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
 			return nil, contracts.Manifest{}, fmt.Errorf("backend plugin-host: %w", err)
 		}
-		b, err := p.Backend(ctx, cfg)
+		backend, err := plugin.Backend(ctx, cfg)
 		if err != nil {
 			return nil, contracts.Manifest{}, fmt.Errorf("backend plugin-host: %w", err)
 		}
-		return b, p.Manifest, nil
+		return backend, plugin.Manifest, nil
 	}
-	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: no backend plugin registered")
+	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: %w", errNoBackendPlugin)
 }
 
 func registerOnRouter(server *grpc.Server, registerSkeleton func(*transport.PluginRouter) error) error {

@@ -7,14 +7,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// TestSessionCreateTerminalOnlyIgnoresWorkspaceProject guards the TUI's default
-// `main` tab: a terminal-only session is repo-agnostic, so it must create even
-// when a workspace root is configured and no --project is given. Before the fix
-// the workspace-root branch demanded a project and the TUI bootstrap failed
-// silently, leaving an empty tab bar.
 func TestSessionCreateTerminalOnlyIgnoresWorkspaceProject(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "terminal")
-	st.SetHome(state.HomeRef{ID: "terminal", Type: "terminal"})
+	if err := st.SetHome(state.HomeRef{ID: "terminal", Type: "terminal"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.SetWorkspace("/workspaces/demo"); err != nil {
 		t.Fatal(err)
 	}
@@ -29,12 +26,11 @@ func TestSessionCreateTerminalOnlyIgnoresWorkspaceProject(t *testing.T) {
 	}
 }
 
-// TestSessionCreateNoProjectRootsAtWorkspace verifies the pwd-relative rule: a
-// session created with a workspace root but no --project no longer errors — it
-// runs rooted at the workspace root, so sess.Dir is the workspace root itself.
 func TestSessionCreateNoProjectRootsAtWorkspace(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.SetWorkspace("/workspaces/demo"); err != nil {
 		t.Fatal(err)
 	}
@@ -52,12 +48,11 @@ func TestSessionCreateNoProjectRootsAtWorkspace(t *testing.T) {
 	}
 }
 
-// TestSessionCreateNoWorkspaceInheritsPwd verifies the fallback: with no
-// workspace root configured and no project, sess.Dir is empty so the supervisor
-// leaves cmd.Dir unset and the bridge inherits the launcher's cwd (pwd).
 func TestSessionCreateNoWorkspaceInheritsPwd(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(),
 		args("name", "demo", "shared", "true")); err != nil {
@@ -72,13 +67,11 @@ func TestSessionCreateNoWorkspaceInheritsPwd(t *testing.T) {
 	}
 }
 
-// TestSessionCreateTerminalOnlyRoutesToTerminalAdmin verifies Point 3: with a
-// chat home configured AND a terminal admin wired, a terminal_only session is
-// minted through the terminal admin (local `terminal/…` channel), never the
-// chat one. Close then archives it back through the terminal admin.
 func TestSessionCreateTerminalOnlyRoutesToTerminalAdmin(t *testing.T) {
 	h, chat, _, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	term := &fakeChannelAdmin{homeType: "terminal", idPrefix: "terminal/"}
 	h.SetTerminalAdmin(term)
 

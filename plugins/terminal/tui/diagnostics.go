@@ -4,24 +4,12 @@ import (
 	"strings"
 )
 
-// Degradation elsewhere in this package is deliberately silent: a feature reads
-// the probe, picks its best available rendering and says nothing. That is right
-// at the point of use and useless when something is missing — from the outside,
-// "the image does not show up" looks exactly like a bug. This screen is the one
-// place the probe is spoken aloud.
-
-// diagRow is one capability as the operator reads it: what it is called, what it
-// resolved to, and what that buys. The third column is the point — a value with
-// no consequence attached is a number to look up somewhere else.
 type diagRow struct {
 	name    string
 	value   string
 	feature string
 }
 
-// diagRows renders caps as the rows of the screen. A capability that resolved to
-// nothing keeps its row and names its fallback: hiding it would say the feature
-// does not exist, when what is true is that this terminal renders it plainer.
 func diagRows(caps Capabilities) []diagRow {
 	graphics := diagRow{name: "graphismes", value: caps.Graphics.String()}
 	switch caps.Graphics {
@@ -29,7 +17,7 @@ func diagRows(caps Capabilities) []diagRow {
 		graphics.feature = "images en ligne, pleine résolution"
 	case GraphicsSixel:
 		graphics.feature = "images en ligne, résolution sixel"
-	default:
+	case GraphicsNone:
 		graphics.feature = "images en ligne en demi-blocs unicode"
 	}
 
@@ -58,46 +46,31 @@ func yesNo(b bool) string {
 	return "non"
 }
 
-// diagValueWidth pads the value column so the features line up. A ragged pair of
-// columns reads as prose; an aligned one reads as a record, which is what it is.
 const diagValueWidth = 12
 
-// diagnosticsView renders the capability screen for caps: the terminal it was
-// resolved for, one row per capability, and a closing line saying which
-// terminals get everything — so an operator on a plain one knows the plainer
-// rendering is the answer and not a failure.
-func diagnosticsView(caps Capabilities) string {
-	var b strings.Builder
-	b.WriteString(dimStyle.Render("terminal") + "  " + textStyle.Render(caps.Terminal))
-	for _, r := range diagRows(caps) {
-		pad := strings.Repeat(" ", max(1, diagValueWidth-len(r.value)))
-		b.WriteString("\n" + dimStyle.Render("  "+r.name+strings.Repeat(" ", max(1, factWidth-len(r.name)))) +
-			textStyle.Render(r.value) + pad + dimStyle.Render(r.feature))
+func diagnosticsView(caps Capabilities, styles uiStyles) string {
+	var builder strings.Builder
+	builder.WriteString(styles.dim.Render("terminal") + "  " + styles.text.Render(caps.Terminal))
+	for _, row := range diagRows(caps) {
+		pad := strings.Repeat(" ", max(1, diagValueWidth-len(row.value)))
+		builder.WriteString("\n" + styles.dim.Render("  "+row.name+strings.Repeat(" ", max(1, factWidth-len(row.name)))) +
+			styles.text.Render(row.value) + pad + styles.dim.Render(row.feature))
 	}
-	b.WriteString("\n" + dimStyle.Render("  kitty, ghostty et WezTerm ont tous les rendus ; ailleurs l'image"))
-	b.WriteString("\n" + dimStyle.Render("  est dessinée en demi-blocs et un lien reste du texte sélectionnable."))
-	return b.String()
+	builder.WriteString("\n" + styles.dim.Render("  kitty, ghostty et WezTerm ont tous les rendus ; ailleurs l'image"))
+	builder.WriteString("\n" + styles.dim.Render("  est dessinée en demi-blocs et un lien reste du texte sélectionnable."))
+	return builder.String()
 }
 
-// openDiagnostics opens the read-only capability screen.
 func (m *model) openDiagnostics() { m.diagOpen = true }
 
-// diagView renders the open screen with its own header, or "" when closed.
 func (m *model) diagView() string {
 	if !m.diagOpen {
 		return ""
 	}
-	return dimStyle.Render("capacités · échap fermer") + "\n" + diagnosticsView(m.caps) +
+	return m.st.dim.Render("capacités · échap fermer") + "\n" + diagnosticsView(m.caps, m.st) +
 		"\n" + m.remoteImageRow()
 }
 
-// remoteImageRow says whether an image the agent merely links to will be drawn.
-// That does not depend on the terminal but on the gateway's attachment
-// allowlist, and today the terminal gateway declares no hosts — so the answer is
-// no, always, and the code that fetches never runs. It belongs on this screen
-// rather than in a comment nobody reading the transcript will find: an operator
-// watching a URL stay a URL is owed the reason, and "off" is a reason where
-// silence is a bug report.
 func (m *model) remoteImageRow() string {
 	value, feature := "off", "an image the agent links to stays a link"
 	if m.imageFetcher != nil && len(m.imageHosts) > 0 {
@@ -105,7 +78,7 @@ func (m *model) remoteImageRow() string {
 		feature = "images fetched from " + strings.Join(m.imageHosts, ", ")
 	}
 	name := "remote images"
-	return dimStyle.Render("  "+name+strings.Repeat(" ", max(1, factWidth-len(name)))) +
-		textStyle.Render(value) + strings.Repeat(" ", max(1, diagValueWidth-len(value))) +
-		dimStyle.Render(feature)
+	return m.st.dim.Render("  "+name+strings.Repeat(" ", max(1, factWidth-len(name)))) +
+		m.st.text.Render(value) + strings.Repeat(" ", max(1, diagValueWidth-len(value))) +
+		m.st.dim.Render(feature)
 }

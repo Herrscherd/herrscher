@@ -13,9 +13,6 @@ import (
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
-// The gateway the factory builds must expose the Foreground capability, since
-// serve discovers the bound gateway to run on the main thread through that
-// interface (not a concrete import). Guards against silently dropping it.
 func TestGatewaySetExposesForeground(t *testing.T) {
 	set, err := newGatewaySet(context.Background(), contracts.PluginConfig{})
 	if err != nil {
@@ -41,14 +38,11 @@ func TestMenuRendersChoices(t *testing.T) {
 	}
 }
 
-func TestEmitDeliversControlEventUnderBackpressure(t *testing.T) {
+func TestEmitDeliversControlEventUnderBackpressure(_ *testing.T) {
 	tm := New()
-	// Fill the outbound buffer with droppable chunk events.
-	for i := 0; i < cap(tm.out); i++ {
+	for range cap(tm.out) {
 		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: "chunk", Text: "x"}})
 	}
-	// A finished reply must still be delivered (not dropped); drain one slot in
-	// parallel so the brief wait succeeds.
 	go func() { <-tm.Frontend() }()
 	done := make(chan struct{})
 	go func() {
@@ -63,7 +57,6 @@ func TestBootstrapWaitsForBindThenCreates(t *testing.T) {
 	fake := &fakeSessionControl{}
 	got := make(chan string, 1)
 	go func() { got <- tm.bootstrapSession(context.Background()) }()
-	// Bind after a beat: the ready signal must wake the bootstrap immediately.
 	tm.BindSessionControl(fake)
 	var name string
 	select {
@@ -84,15 +77,25 @@ func TestReadDrainsPerChannel(t *testing.T) {
 	tm.Submit("chA", "hello", nil)
 	tm.Submit("chB", "world", nil)
 
-	a, _ := tm.Read(context.Background(), "chA", 100, "")
+	a, err := tm.Read(context.Background(), "chA", 100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(a) != 1 || a[0].Content != "hello" || a[0].ChannelID != "chA" {
 		t.Fatalf("chA Read = %+v", a)
 	}
-	b, _ := tm.Read(context.Background(), "chB", 100, "")
+	b, err := tm.Read(context.Background(), "chB", 100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(b) != 1 || b[0].Content != "world" {
 		t.Fatalf("chB Read = %+v", b)
 	}
-	if a2, _ := tm.Read(context.Background(), "chA", 100, ""); len(a2) != 0 {
+	a2, err := tm.Read(context.Background(), "chA", 100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a2) != 0 {
 		t.Fatalf("chA second Read = %+v, want empty", a2)
 	}
 }
@@ -119,7 +122,7 @@ func TestEmitUsesDefaultChannel(t *testing.T) {
 	}
 }
 
-func TestTerminalImplementsRoutedEventSink(t *testing.T) {
+func TestTerminalImplementsRoutedEventSink(_ *testing.T) {
 	var _ contracts.RoutedEventSink = New()
 }
 
@@ -139,7 +142,7 @@ func TestPostEmitsReplyEvent(t *testing.T) {
 	}
 }
 
-func TestTerminalImplementsChannelAdmin(t *testing.T) {
+func TestTerminalImplementsChannelAdmin(_ *testing.T) {
 	var _ contracts.ChannelAdmin = New()
 }
 
@@ -149,7 +152,10 @@ func TestCreateUnderMintsUniqueChannels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := tm.CreateUnder(context.Background(), "home", "Alpha")
+	b, err := tm.CreateUnder(context.Background(), "home", "Alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if a == b {
 		t.Fatalf("CreateUnder must mint unique ids, got %q twice", a)
 	}
@@ -162,7 +168,9 @@ func TestArchiveEmitsCloseToTab(t *testing.T) {
 	tm := New()
 	got := make(chan tui.RoutedEvent, 1)
 	go func() { got <- <-tm.Frontend() }()
-	_ = tm.Archive(context.Background(), "terminal/x")
+	if err := tm.Archive(context.Background(), "terminal/x"); err != nil {
+		t.Fatal(err)
+	}
 	re := <-got
 	if re.Conv.ID != "terminal/x" || re.Event.T != "closed" {
 		t.Fatalf("Archive must emit a 'closed' event to the tab: %+v", re)
@@ -170,29 +178,28 @@ func TestArchiveEmitsCloseToTab(t *testing.T) {
 }
 
 func TestGatewaySetExposesAdmin(t *testing.T) {
-	set, _ := newGatewaySet(context.Background(), contracts.PluginConfig{})
+	set, err := newGatewaySet(context.Background(), contracts.PluginConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if set.Admin == nil {
 		t.Fatal("terminal GatewaySet must expose ChannelAdmin")
 	}
 }
 
-// fakeSessionControl is a minimal contracts.SessionControl for Dispatch and
-// ensureDefaultSession tests.
 type closeCall struct {
 	name  string
 	force bool
 }
 
 type fakeSessionControl struct {
-	lastArgs    []string
-	sessions    []contracts.SessionInfo
-	created     []contracts.CreateSession
-	closed      []closeCall
-	scrollback  []contracts.ScrollbackLine
-	resumed     []string
-	interrupted []string
-	// commandsJSON is what a `commands --json` dispatch answers, so a test can
-	// stand in for the daemon registry the palette is now derived from.
+	lastArgs     []string
+	sessions     []contracts.SessionInfo
+	created      []contracts.CreateSession
+	closed       []closeCall
+	scrollback   []contracts.ScrollbackLine
+	resumed      []string
+	interrupted  []string
 	commandsJSON string
 }
 
@@ -216,7 +223,7 @@ func (f *fakeSessionControl) Close(_ context.Context, name string, force bool) (
 
 func (f *fakeSessionControl) Sessions() []contracts.SessionInfo { return f.sessions }
 
-func (f *fakeSessionControl) Scrollback(name string) []contracts.ScrollbackLine {
+func (f *fakeSessionControl) Scrollback(_ string) []contracts.ScrollbackLine {
 	return f.scrollback
 }
 
@@ -230,8 +237,6 @@ func (f *fakeSessionControl) Interrupt(name string) bool {
 	return true
 }
 
-// The terminal drives sessions by dispatch, not by pushing inbound messages, so
-// the push half of the seam is inert here — present only to satisfy the port.
 func (f *fakeSessionControl) Submit(string, contracts.Inbound) bool { return true }
 func (f *fakeSessionControl) Pick(string, string) bool              { return true }
 func (f *fakeSessionControl) Repos(context.Context) ([]contracts.RepoRef, error) {
@@ -253,7 +258,6 @@ func TestTerminalForwardsScrollbackAndResume(t *testing.T) {
 		t.Fatalf("resume not forwarded: %+v", fake.resumed)
 	}
 
-	// unbound terminal: Scrollback nil, Resume errors (no panic).
 	if lines := New().Scrollback("s"); lines != nil {
 		t.Fatalf("unbound scrollback should be nil, got %+v", lines)
 	}
@@ -304,9 +308,6 @@ func TestDispatchPassesThroughNonCreate(t *testing.T) {
 }
 
 func TestDispatchRejectsNonSessionVerbs(t *testing.T) {
-	// The TUI forwards any /-verb to Dispatch; gate the seam so daemon-management
-	// verbs (which could restart the host the TUI runs in, or rewrite its config)
-	// are never reachable from the terminal. Only session-scoped verbs pass.
 	for _, argv := range [][]string{
 		{"service", "restart"},
 		{"service", "update"},
@@ -342,15 +343,10 @@ func TestDispatchAllowsSessionAndAgentVerbs(t *testing.T) {
 	}
 }
 
-// --- openDefaultSession ---
-
-// terminalSessionNameRe mirrors the session-name guard in
-// core/internal/manager/validate.go: whatever name the TUI mints must already
-// pass it, since it becomes a filesystem path and a git ref downstream.
 var terminalSessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
 func TestOpenDefaultSessionCreatesWhenNone(t *testing.T) {
-	fake := &fakeSessionControl{} // Sessions() returns nil/empty
+	fake := &fakeSessionControl{}
 	name, err := openDefaultSession(context.Background(), fake, contracts.PluginConfig{})
 	if err != nil {
 		t.Fatalf("openDefaultSession: %v", err)
@@ -373,9 +369,6 @@ func TestOpenDefaultSessionCreatesWhenNone(t *testing.T) {
 	}
 }
 
-// A launch is the start of something: it gets its own empty session even when
-// the host is full of conversations, terminal-bound ones included. Landing in
-// yesterday's transcript is the surprise this avoids.
 func TestOpenDefaultSessionAlwaysCreates(t *testing.T) {
 	fake := &fakeSessionControl{
 		sessions: []contracts.SessionInfo{
@@ -396,9 +389,6 @@ func TestOpenDefaultSessionAlwaysCreates(t *testing.T) {
 	}
 }
 
-// A first launch names its tab after the directory it was started in, so the
-// operator recognises it; a second one in the same directory numbers itself,
-// since `session create` refuses a name already taken.
 func TestDefaultSessionNameIsTheWorkingDirectory(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -416,8 +406,6 @@ func TestDefaultSessionNameIsTheWorkingDirectory(t *testing.T) {
 	if got := defaultSessionName(taken); got != dir+"-3" {
 		t.Fatalf("defaultSessionName = %q, want the numbered %q", got, dir+"-3")
 	}
-	// Every name it can mint has to survive the manager's guard, the random
-	// last resort included.
 	for _, name := range []string{defaultSessionName(taken), randomSessionName()} {
 		if !terminalSessionNameRe.MatchString(name) {
 			t.Fatalf("minted name %q is not a valid session slug", name)
@@ -425,8 +413,6 @@ func TestDefaultSessionNameIsTheWorkingDirectory(t *testing.T) {
 	}
 }
 
-// The other half of minting a session per launch: one nobody spoke in is put
-// away on the way out, so opening a window and closing it leaves nothing behind.
 func TestArchiveIfUntouchedClosesTheMintedSession(t *testing.T) {
 	tm := New()
 	fake := &fakeSessionControl{
@@ -443,15 +429,12 @@ func TestArchiveIfUntouchedClosesTheMintedSession(t *testing.T) {
 	if len(fake.closed) != 1 || fake.closed[0].name != "mine" || fake.closed[0].force {
 		t.Fatalf("untouched session not archived gently: %+v", fake.closed)
 	}
-	// A second pass (quit twice, or a cancel already run) must not close again.
 	tm.archiveIfUntouched()
 	if len(fake.closed) != 1 {
 		t.Fatalf("archive ran twice: %+v", fake.closed)
 	}
 }
 
-// A session that was spoken in is the operator's, whatever happened to the turn:
-// LastTs is the daemon's own reading of "something is in there".
 func TestArchiveIfUntouchedLeavesSpokenAndUnownedSessions(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -477,8 +460,6 @@ func TestArchiveIfUntouchedLeavesSpokenAndUnownedSessions(t *testing.T) {
 	}
 }
 
-// A hub that is already going down cannot archive anything, and a session left
-// live is one the operator can still see: never a Close on a dead context.
 func TestArchiveIfUntouchedSkipsWhenTheDaemonIsGone(t *testing.T) {
 	tm := New()
 	fake := &fakeSessionControl{sessions: []contracts.SessionInfo{{Name: "mine"}}}
@@ -494,10 +475,6 @@ func TestArchiveIfUntouchedSkipsWhenTheDaemonIsGone(t *testing.T) {
 	}
 }
 
-// TestCommandsAdvertiseOnlyAllowedVerbs guards the palette↔Dispatch contract:
-// whatever the daemon answers, the palette may only carry verbs Dispatch would
-// accept — otherwise the menu offers rows that error the moment they are picked.
-// The registry is faked here because the point is the filtering, not the list.
 func TestCommandsAdvertiseOnlyAllowedVerbs(t *testing.T) {
 	tm := New()
 	fake := &fakeSessionControl{commandsJSON: `[
@@ -513,11 +490,9 @@ func TestCommandsAdvertiseOnlyAllowedVerbs(t *testing.T) {
 	}
 	for _, c := range cmds {
 		parts := strings.Fields(c.Name)
-		if !terminalVerbs[parts[0]] {
-			t.Fatalf("command %q leads with a verb outside terminalVerbs", c.Name)
+		if !terminalVerbs()[parts[0]] {
+			t.Fatalf("command %q leads with a verb outside terminalVerbs()", c.Name)
 		}
-		// The CLI parser only accepts "--flag value" pairs and silently drops
-		// positional tokens, so an advertised arg that is not a flag is a trap.
 		if c.Args != "" && !strings.Contains(c.Args, "--") {
 			t.Fatalf("command %q advertises positional args %q; the parser only accepts --flag form", c.Name, c.Args)
 		}
@@ -531,9 +506,6 @@ func TestCommandsAdvertiseOnlyAllowedVerbs(t *testing.T) {
 	}
 }
 
-// TestCommandsWithoutABoundControlAreEmpty: a frontend that cannot reach the
-// registry must show no daemon rows rather than a list typed here, which would
-// be the drift this indirection exists to remove.
 func TestCommandsWithoutABoundControlAreEmpty(t *testing.T) {
 	if cmds := New().Commands(); len(cmds) != 0 {
 		t.Fatalf("unbound Commands = %+v, want none", cmds)

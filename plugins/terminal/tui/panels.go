@@ -6,8 +6,9 @@ import (
 	"time"
 	"unicode"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/charmbracelet/x/ansi"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 const (
@@ -15,43 +16,43 @@ const (
 	subagentPanelMax = 3
 )
 
-func todoPanel(items []contracts.TodoItem, width int) []string {
+func todoPanel(items []contracts.TodoItem, width int, styles uiStyles) []string {
 	if len(items) == 0 {
 		return nil
 	}
 	done, active := 0, 0
-	for i, it := range items {
+	for index, it := range items {
 		switch it.State {
-		case "done":
+		case stateDone:
 			done++
 		case "active":
-			active = i
+			active = index
 		}
 	}
-	head := greenStyle.Render(truncate(fmt.Sprintf("  ✓ todos %d/%d", done, len(items)), width))
+	head := styles.green.Render(truncate(fmt.Sprintf("  ✓ todos %d/%d", done, len(items)), width))
 	if width < narrowStatus {
 		return []string{head}
 	}
 	out := []string{head}
 	start, end := paletteWindow(len(items), active, todoPanelMax)
 	for _, it := range items[start:end] {
-		out = append(out, todoRow(it, width))
+		out = append(out, todoRow(it, width, styles))
 	}
 	if hidden := len(items) - (end - start); hidden > 0 {
-		out = append(out, dimStyle.Render(truncate(fmt.Sprintf("  · +%d", hidden), width)))
+		out = append(out, styles.dim.Render(truncate(fmt.Sprintf("  · +%d", hidden), width)))
 	}
 	return out
 }
 
-func todoRow(it contracts.TodoItem, width int) string {
-	mark, style := "·", dimStyle
-	switch it.State {
-	case "done":
-		mark, style = "✓", greenStyle
+func todoRow(todo contracts.TodoItem, width int, styles uiStyles) string {
+	mark, style := "·", styles.dim
+	switch todo.State {
+	case stateDone:
+		mark, style = "✓", styles.green
 	case "active":
-		mark, style = "◆", accentStyle
+		mark, style = "◆", styles.accent
 	}
-	return style.Render(truncate("  "+mark+" "+oneLine(it.Text), width))
+	return style.Render(truncate("  "+mark+" "+oneLine(todo.Text), width))
 }
 
 func oneLine(s string) string {
@@ -61,7 +62,7 @@ func oneLine(s string) string {
 	return strings.Join(fields, " ")
 }
 
-func subagentPanel(agents []liveAgent, now time.Time, width int) []string {
+func subagentPanel(agents []liveAgent, now time.Time, width int, styles uiStyles) []string {
 	if len(agents) == 0 {
 		return nil
 	}
@@ -71,35 +72,37 @@ func subagentPanel(agents []liveAgent, now time.Time, width int) []string {
 		if len(agents) > 1 {
 			label += "s"
 		}
-		return []string{accentStyle.Render(truncate(label, width))}
+		return []string{styles.accent.Render(truncate(label, width))}
 	}
 	shown := agents
 	if len(shown) > subagentPanelMax {
 		shown = shown[:subagentPanelMax]
 	}
 	out := make([]string, 0, len(shown)+1)
-	for _, a := range shown {
-		cols := []string{oneLine(a.Name)}
-		if a.Kind != "" {
-			cols = append(cols, oneLine(a.Kind))
+	for _, area := range shown {
+		cols := []string{oneLine(area.Name)}
+		if area.Kind != "" {
+			cols = append(cols, oneLine(area.Kind))
 		}
-		cols = append(cols, elapsed(now.Sub(a.since)))
+		cols = append(cols, elapsed(now.Sub(area.since)))
 		line := "  " + mark + " " + strings.Join(cols, "  ")
-		out = append(out, accentStyle.Render(truncate(line, width)))
+		out = append(out, styles.accent.Render(truncate(line, width)))
 	}
 	if hidden := len(agents) - len(shown); hidden > 0 {
-		out = append(out, dimStyle.Render(truncate(fmt.Sprintf("  · +%d", hidden), width)))
+		out = append(out, styles.dim.Render(truncate(fmt.Sprintf("  · +%d", hidden), width)))
 	}
 	return out
 }
+
+const secondsPerMinute = 60
 
 func elapsed(d time.Duration) string {
 	secs := int(d.Seconds())
 	if secs < 0 {
 		secs = 0
 	}
-	if secs < 60 {
+	if secs < secondsPerMinute {
 		return fmt.Sprintf("%ds", secs)
 	}
-	return fmt.Sprintf("%dm%02ds", secs/60, secs%60)
+	return fmt.Sprintf("%dm%02ds", secs/secondsPerMinute, secs%secondsPerMinute)
 }

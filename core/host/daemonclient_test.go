@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"path/filepath"
 	"testing"
@@ -12,33 +13,13 @@ import (
 )
 
 func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "events.sock")
-	ln, err := net.Listen("unix", path)
+	path := filepath.Join(t.TempDir(), "events.sock")
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer c.Close()
-		for _, e := range []DaemonEvent{
-			{Session: "alpha", Event: contracts.Event{T: "reply", Text: "hello"}},
-			{Session: "beta", Event: contracts.Event{T: "status", Text: "working"}},
-		} {
-			b, _ := json.Marshal(e)
-			c.Write(append(b, '\n'))
-		}
-		// A line that is not an event must not end the stream, or one bad publish
-		// silently blinds the frontend for the rest of the session.
-		c.Write([]byte("{not json\n"))
-		b, _ := json.Marshal(DaemonEvent{Session: "alpha", Event: contracts.Event{T: "reply", Text: "still here", Done: true}})
-		c.Write(append(b, '\n'))
-		<-time.After(200 * time.Millisecond)
-	}()
+	defer closeRead(ln)
+	go serveDaemonEventLines(ln)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -46,8 +27,38 @@ func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	got := collectDaemonEvents(ctx, t, stream, 3)
+	assertTaggedDaemonEvents(t, got)
+}
+
+func serveDaemonEventLines(ln net.Listener) {
+	c, acceptErr := ln.Accept()
+	if acceptErr != nil {
+		return
+	}
+	defer closeRead(c)
+	events := []DaemonEvent{
+		{Session: "alpha", Event: contracts.Event{T: "reply", Text: "hello"}},
+		{Session: "beta", Event: contracts.Event{T: "status", Text: "working"}},
+	}
+	for i := range events {
+		writeDaemonEventLine(c, events[i])
+	}
+	logWriteFailure(c.Write([]byte("{not json\n")))
+	writeDaemonEventLine(c, DaemonEvent{Session: "alpha", Event: contracts.Event{T: "reply", Text: "still here", Done: true}})
+	<-time.After(200 * time.Millisecond)
+}
+
+func writeDaemonEventLine(w io.Writer, e DaemonEvent) {
+	b, marshalErr := json.Marshal(e)
+	logCleanup(marshalErr)
+	logWriteFailure(w.Write(append(b, '\n')))
+}
+
+func collectDaemonEvents(ctx context.Context, t *testing.T, stream <-chan DaemonEvent, n int) []DaemonEvent {
+	t.Helper()
 	var got []DaemonEvent
-	for len(got) < 3 {
+	for len(got) < n {
 		select {
 		case e, ok := <-stream:
 			if !ok {
@@ -58,6 +69,11 @@ func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
 			t.Fatalf("timed out after %d events", len(got))
 		}
 	}
+	return got
+}
+
+func assertTaggedDaemonEvents(t *testing.T, got []DaemonEvent) {
+	t.Helper()
 	if got[0].Session != "alpha" || got[0].Text != "hello" {
 		t.Errorf("first event = %+v", got[0])
 	}
@@ -69,20 +85,18 @@ func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
 	}
 }
 
-// The daemon going away must close the channel: a frontend that cannot tell
-// "the daemon stopped" from "nothing is happening" waits forever on a dead pipe.
 func TestSubscribeDaemonEventsClosesWhenTheDaemonGoesAway(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.sock")
-	ln, err := net.Listen("unix", path)
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	go func() {
-		c, err := ln.Accept()
-		if err != nil {
+		c, acceptErr := ln.Accept()
+		if acceptErr != nil {
 			return
 		}
-		c.Close()
+		closeRead(c)
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -137,7 +151,6 @@ func TestParseAttachmentPathsEncodesAwkwardNames(t *testing.T) {
 	if len(atts) != 2 {
 		t.Fatalf("got %d attachments, want 2", len(atts))
 	}
-	// The '#' is the one that matters: a raw "file://"+path concat truncates there.
 	if atts[0].URL != "file:///tmp/a%20b%23c%3F.png" {
 		t.Errorf("url = %q", atts[0].URL)
 	}

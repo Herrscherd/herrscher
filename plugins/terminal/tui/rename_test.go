@@ -1,15 +1,13 @@
 package tui
 
 import (
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// /rename nomme la session ouverte : l'operateur donne le nouveau nom, la
-// fenetre sait deja de laquelle il parle.
 func TestRenameNamesTheActiveSession(t *testing.T) {
 	be := &fakeBackend{}
 	be.sessions = []contracts.SessionInfo{{Name: "avant", ChannelID: "c1"}}
@@ -22,13 +20,11 @@ func TestRenameNamesTheActiveSession(t *testing.T) {
 	runCmd(m.handleEnter())
 
 	want := []string{"session", "rename", "--name", "avant", "--to", "ma grande refonte"}
-	if len(be.dispatched) != 1 || !reflect.DeepEqual(be.dispatched[0], want) {
+	if len(be.dispatched) != 1 || !slices.Equal(be.dispatched[0], want) {
 		t.Fatalf("commande envoyee = %v, attendu %v", be.dispatched, want)
 	}
 }
 
-// Un /rename sans nom ne doit rien envoyer : renommer une session en rien est
-// une erreur de frappe, pas une intention.
 func TestRenameWithoutANameSaysSoAndSendsNothing(t *testing.T) {
 	be := &fakeBackend{}
 	be.sessions = []contracts.SessionInfo{{Name: "avant", ChannelID: "c1"}}

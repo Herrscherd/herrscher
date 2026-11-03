@@ -17,10 +17,6 @@ import (
 
 const processTreeKillTimeout = 10 * time.Second
 
-// configureBridgeCommand replaces CommandContext's direct-process cancellation
-// with an absolute System32 taskkill invocation. /T is required on Windows:
-// bridge children inherit the session worktree as cwd and can keep it locked
-// after their direct parent is gone.
 func configureBridgeCommand(cmd *exec.Cmd) {
 	directCancel := cmd.Cancel
 	cmd.Cancel = func() error {
@@ -45,9 +41,6 @@ func configureBridgeCommand(cmd *exec.Cmd) {
 			pathErr = killErr
 		}
 
-		// taskkill is a system binary and should always be available. Fall back
-		// to CommandContext's direct kill so a damaged Windows installation
-		// cannot wedge Stop forever, while preserving both errors for diagnosis.
 		if directCancel != nil {
 			directErr := directCancel()
 			if directErr == nil || errors.Is(directErr, os.ErrProcessDone) {

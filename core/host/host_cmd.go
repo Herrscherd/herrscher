@@ -13,174 +13,203 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
-// addHostCommands registers the five `host` verbs. Like the schedule family,
-// they are neutral argv: a chat gateway binds them as they are, and core never
-// learns which gateway that is.
-func addHostCommands(reg *cli.Registry, st *state.State) error {
-	if err := reg.Add(contracts.New("host", "add").
+func addHostCommands(reg *cli.Registry, hostState *state.State) error {
+	return addVerbs(reg,
+		hostAddVerb(hostState),
+		hostListVerb(hostState),
+		hostCheckVerb(hostState),
+		hostProvisionVerb(hostState),
+		hostRmVerb(hostState),
+	)
+}
+
+func hostAddVerb(store *state.State) contracts.Cmd {
+	return contracts.New("host", "add").
 		Help("register a machine sessions can run on, and provision herrscher there").
-		ValueParam("name", "host name (unique; `local` is reserved); also takes a bare argument", false).
+		ValueParam(paramName, "host name (unique; `local` is reserved); also takes a bare argument", false).
 		Param("ssh", "ssh target, e.g. me@build1", true).
 		Param("workspace", "absolute path to the workspace root over there", true).
 		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			h := state.Host{
-				Name:      hostNameOf(in),
-				SSH:       strings.TrimSpace(in.Get("ssh")),
-				Workspace: strings.TrimSpace(in.Get("workspace")),
-			}
-			if h.Name == "" {
-				return "", fmt.Errorf("a host needs a name")
-			}
-			if h.Name == state.LocalHost {
-				return "", fmt.Errorf("`local` is this machine and always exists: it cannot be registered")
-			}
-			if h.SSH == "" {
-				return "", fmt.Errorf("host %q needs an ssh target, e.g. --ssh me@%s", h.Name, h.Name)
-			}
-			if !strings.HasPrefix(h.Workspace, "/") {
-				return "", fmt.Errorf("host %q needs an absolute workspace path, got %q", h.Name, h.Workspace)
-			}
-			if _, exists := st.FindHost(h.Name); exists {
-				return "", fmt.Errorf("a host named %q already exists (remove it first, or run `host provision %s`)", h.Name, h.Name)
-			}
-			provisioned, err := provisionHost(ctx, runnerFor(h), h, st.SourceDir())
-			if err != nil {
-				return "", err
-			}
-			if err := st.PutHost(provisioned); err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("registered %s (%s, %s/%s, herrscher %s)", provisioned.Name, provisioned.SSH, provisioned.GOOS, provisioned.GOARCH, provisioned.Version), nil
-		})); err != nil {
-		return err
-	}
-
-	if err := reg.Add(contracts.New("host", "list").
-		Help("list the places a session can run").
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			hosts := st.SnapshotHosts()
-			sort.Slice(hosts, func(i, j int) bool { return hosts[i].Name < hosts[j].Name })
-			if in.JSON {
-				b, err := json.Marshal(hosts)
-				return string(b), err
-			}
-			// local is listed but not stored: it is where a session runs when it
-			// names no host, so a list that omitted it would not answer the
-			// question it was asked.
-			var b strings.Builder
-			b.WriteString("- local (this machine)\n")
-			for _, h := range hosts {
-				fmt.Fprintf(&b, "- %s: %s, workspace %s, herrscher %s (%s/%s)\n",
-					h.Name, h.SSH, h.Workspace, orAbsent(h.Version), h.GOOS, h.GOARCH)
-			}
-			return strings.TrimRight(b.String(), "\n"), nil
-		})); err != nil {
-		return err
-	}
-
-	if err := reg.Add(contracts.New("host", "check").
-		Help("say whether a host can carry a session: ssh, herrscher, workspace, git").
-		ValueParam("name", "host name; also takes a bare argument", false).
-		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			name := hostNameOf(in)
-			h, ok := st.FindHost(name)
-			if !ok {
-				return "", unknownHost(st, name)
-			}
-			rep := checkHost(ctx, runnerFor(h), h, sourceVersionOf(ctx, st))
-			if in.JSON {
-				b, err := json.Marshal(rep)
-				return string(b), err
-			}
-			var b strings.Builder
-			fmt.Fprintf(&b, "%s (%s)\n", rep.Host, rep.SSH)
-			fmt.Fprintf(&b, "- ssh: %s\n", yesNo(rep.Reachable))
-			fmt.Fprintf(&b, "- herrscher: %s\n", orAbsent(rep.Herrscher))
-			fmt.Fprintf(&b, "- workspace: %s\n", yesNo(rep.Workspace))
-			fmt.Fprintf(&b, "- git: %s", yesNo(rep.Git))
-			for _, n := range rep.Notes {
-				fmt.Fprintf(&b, "\n  %s", n)
-			}
-			return b.String(), nil
-		})); err != nil {
-		return err
-	}
-
-	if err := reg.Add(contracts.New("host", "provision").
-		Help("rebuild and reinstall herrscher on a host from the configured source").
-		ValueParam("name", "host name; also takes a bare argument", false).
-		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			name := hostNameOf(in)
-			h, ok := st.FindHost(name)
-			if !ok {
-				return "", unknownHost(st, name)
-			}
-			provisioned, err := provisionHost(ctx, runnerFor(h), h, st.SourceDir())
-			if err != nil {
-				return "", err
-			}
-			if err := st.PutHost(provisioned); err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("provisioned %s with herrscher %s (%s/%s)", provisioned.Name, provisioned.Version, provisioned.GOOS, provisioned.GOARCH), nil
-		})); err != nil {
-		return err
-	}
-
-	return reg.Add(contracts.New("host", "rm").
-		Help("forget a host (refused while sessions still run on it)").
-		ValueParam("name", "host name; also takes a bare argument", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			name := hostNameOf(in)
-			if _, ok := st.FindHost(name); !ok {
-				// Before the sessions are counted, or an unnamed host would be
-				// answered with the list of everything running here: a local
-				// session carries the empty host too.
-				return "", unknownHost(st, name)
-			}
-			// It closes nothing on its own, the way `schedule rm` does not close
-			// the session it opened. Naming them is the operator's next move.
-			var carried []string
-			for _, s := range st.SnapshotSessions() {
-				if s.Host == name {
-					carried = append(carried, s.Name)
-				}
-			}
-			if len(carried) > 0 {
-				return "", fmt.Errorf("host %q still carries %s: close them first", name, strings.Join(carried, ", "))
-			}
-			if _, err := st.RemoveHost(name); err != nil {
-				return "", err
-			}
-			return "forgot " + name, nil
-		}))
+			return addHost(ctx, store, in)
+		})
 }
 
-// hostNameOf takes the host name from --name or from the bare argument, so
-// `host check build1` and `host check --name build1` mean the same thing. A
-// gateway sends the flag; an operator types the name.
-func hostNameOf(in contracts.Input) string { return firstOf(in.Get("name"), in.Rest) }
+func addHost(ctx context.Context, hostState *state.State, input contracts.Input) (string, error) {
+	host := state.Host{
+		Name:      hostNameOf(input),
+		SSH:       strings.TrimSpace(input.Get("ssh")),
+		Workspace: strings.TrimSpace(input.Get("workspace")),
+	}
+	if err := checkNewHost(hostState, host); err != nil {
+		return "", err
+	}
+	provisioned, err := provisionHost(ctx, runnerFor(host), host, hostState.SourceDir())
+	if err != nil {
+		return "", err
+	}
+	if err := hostState.PutHost(provisioned); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("registered %s (%s, %s/%s, herrscher %s)", provisioned.Name, provisioned.SSH, provisioned.GOOS, provisioned.GOARCH, provisioned.Version), nil
+}
 
-// unknownHost names what does exist, because the usual cause is a typo.
-func unknownHost(st *state.State, name string) error {
+func checkNewHost(hostState *state.State, host state.Host) error {
+	if host.Name == "" {
+		return errHostNameMissing
+	}
+	if host.Name == state.LocalHost {
+		return errLocalHostReserved
+	}
+	if host.SSH == "" {
+		return &hostNeedsSSHError{Name: host.Name}
+	}
+	if !strings.HasPrefix(host.Workspace, "/") {
+		return &hostWorkspaceError{Name: host.Name, Workspace: host.Workspace}
+	}
+	if _, exists := hostState.FindHost(host.Name); exists {
+		return &hostExistsError{Name: host.Name}
+	}
+	return nil
+}
+
+func hostListVerb(store *state.State) contracts.Cmd {
+	return contracts.New("host", "list").
+		Help("list the places a session can run").
+		Do(func(_ context.Context, in contracts.Input) (string, error) {
+			return listHosts(store, in.JSON)
+		})
+}
+
+func listHosts(st *state.State, asJSON bool) (string, error) {
+	hosts := st.SnapshotHosts()
+	sort.Slice(hosts, func(i, j int) bool { return hosts[i].Name < hosts[j].Name })
+	if asJSON {
+		body, err := json.Marshal(hosts)
+		return string(body), err
+	}
+	var body strings.Builder
+	_, _ = body.WriteString("- local (this machine)\n")
+	for _, host := range hosts {
+		fmt.Fprintf(&body, "- %s: %s, workspace %s, herrscher %s (%s/%s)\n",
+			host.Name, host.SSH, host.Workspace, orAbsent(host.Version), host.GOOS, host.GOARCH)
+	}
+	return strings.TrimRight(body.String(), "\n"), nil
+}
+
+func hostCheckVerb(store *state.State) contracts.Cmd {
+	return contracts.New("host", "check").
+		Help("say whether a host can carry a session: ssh, herrscher, workspace, git").
+		ValueParam(paramName, "host name; also takes a bare argument", false).
+		Do(func(ctx context.Context, in contracts.Input) (string, error) {
+			return checkRegisteredHost(ctx, store, in)
+		})
+}
+
+func checkRegisteredHost(ctx context.Context, store *state.State, input contracts.Input) (string, error) {
+	name := hostNameOf(input)
+	host, ok := store.FindHost(name)
+	if !ok {
+		return "", unknownHost(store, name)
+	}
+	rep := checkHost(ctx, runnerFor(host), host, sourceVersionOf(ctx, store))
+	if input.JSON {
+		b, err := json.Marshal(rep)
+		return string(b), err
+	}
+	return formatHostReport(rep), nil
+}
+
+func formatHostReport(rep hostReport) string {
+	var body strings.Builder
+	fmt.Fprintf(&body, "%s (%s)\n", rep.Host, rep.SSH)
+	fmt.Fprintf(&body, "- ssh: %s\n", yesNo(rep.Reachable))
+	fmt.Fprintf(&body, "- herrscher: %s\n", orAbsent(rep.Herrscher))
+	fmt.Fprintf(&body, "- workspace: %s\n", yesNo(rep.Workspace))
+	fmt.Fprintf(&body, "- git: %s", yesNo(rep.Git))
+	for _, n := range rep.Notes {
+		fmt.Fprintf(&body, "\n  %s", n)
+	}
+	return body.String()
+}
+
+func hostProvisionVerb(store *state.State) contracts.Cmd {
+	return contracts.New("host", "provision").
+		Help("rebuild and reinstall herrscher on a host from the configured source").
+		ValueParam(paramName, "host name; also takes a bare argument", false).
+		Do(func(ctx context.Context, in contracts.Input) (string, error) {
+			return provisionRegisteredHost(ctx, store, in)
+		})
+}
+
+func provisionRegisteredHost(ctx context.Context, store *state.State, in contracts.Input) (string, error) {
+	name := hostNameOf(in)
+	host, ok := store.FindHost(name)
+	if !ok {
+		return "", unknownHost(store, name)
+	}
+	provisioned, err := provisionHost(ctx, runnerFor(host), host, store.SourceDir())
+	if err != nil {
+		return "", err
+	}
+	if err := store.PutHost(provisioned); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("provisioned %s with herrscher %s (%s/%s)", provisioned.Name, provisioned.Version, provisioned.GOOS, provisioned.GOARCH), nil
+}
+
+func hostRmVerb(store *state.State) contracts.Cmd {
+	return contracts.New("host", "rm").
+		Help("forget a host (refused while sessions still run on it)").
+		ValueParam(paramName, "host name; also takes a bare argument", false).
+		Do(func(_ context.Context, in contracts.Input) (string, error) {
+			return forgetHost(store, in)
+		})
+}
+
+func forgetHost(store *state.State, in contracts.Input) (string, error) {
+	name := hostNameOf(in)
+	if _, ok := store.FindHost(name); !ok {
+		return "", unknownHost(store, name)
+	}
+	if carried := sessionsOnHost(store, name); len(carried) > 0 {
+		return "", &hostCarriesError{Name: name, Sessions: strings.Join(carried, ", ")}
+	}
+	if _, err := store.RemoveHost(name); err != nil {
+		return "", err
+	}
+	return "forgot " + name, nil
+}
+
+func sessionsOnHost(store *state.State, name string) []string {
+	var carried []string
+	sessions := store.SnapshotSessions()
+	for index := range sessions {
+		if sessions[index].Host == name {
+			carried = append(carried, sessions[index].Name)
+		}
+	}
+	return carried
+}
+
+func hostNameOf(in contracts.Input) string { return firstOf(in.Get(paramName), in.Rest) }
+
+func unknownHost(hostState *state.State, name string) error {
 	var known []string
-	for _, h := range st.SnapshotHosts() {
+	for _, h := range hostState.SnapshotHosts() {
 		known = append(known, h.Name)
 	}
 	if name == "" {
 		if len(known) == 0 {
-			return fmt.Errorf("name a host: none is registered yet, add one with `host add <name> --ssh <target> --workspace <path>`")
+			return errHostNoneRegistered
 		}
-		return fmt.Errorf("name a host (known: %s)", strings.Join(known, ", "))
+		return &hostNameRequiredError{Known: strings.Join(known, ", ")}
 	}
 	if len(known) == 0 {
-		return fmt.Errorf("no host named %q, and none is registered: add one with `host add <name> --ssh <target> --workspace <path>`", name)
+		return &hostNotFoundError{Name: name}
 	}
-	return fmt.Errorf("no host named %q (known: %s)", name, strings.Join(known, ", "))
+	return &hostNotFoundError{Name: name, Known: strings.Join(known, ", ")}
 }
 
-// sourceVersionOf is what this daemon would provision today, or "" when it has
-// no source checkout to compare against.
 func sourceVersionOf(ctx context.Context, st *state.State) string {
 	src := st.SourceDir()
 	if src == "" {
@@ -196,9 +225,9 @@ func yesNo(b bool) string {
 	return "no"
 }
 
-func orAbsent(s string) string {
-	if s == "" {
+func orAbsent(text string) string {
+	if text == "" {
 		return "absent"
 	}
-	return s
+	return text
 }

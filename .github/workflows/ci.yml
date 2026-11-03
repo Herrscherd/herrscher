@@ -4,37 +4,46 @@ on:
   push:
     branches: [master]
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  book:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.3'
+          go-version-file: go.mod
           cache: true
-
-      - name: gofmt
+      - name: Quality chain of the go-book
+        run: scripts/check.sh
+  e2e-ssh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Open an sshd to the runner
         run: |
-          unformatted=$(gofmt -l .)
-          if [ -n "$unformatted" ]; then
-            echo "These files are not gofmt-clean:"
-            echo "$unformatted"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq openssh-server
+          ssh-keygen -q -t ed25519 -N '' -f "$HOME/.ssh/id_ed25519"
+          cat "$HOME/.ssh/id_ed25519.pub" >> "$HOME/.ssh/authorized_keys"
+          chmod 600 "$HOME/.ssh/authorized_keys"
+          ssh-keyscan -t ed25519 127.0.0.1 >> "$HOME/.ssh/known_hosts"
+          sudo systemctl start ssh
+          ssh -o BatchMode=yes runner@127.0.0.1 true
+      - name: Remote end-to-end tests over ssh
+        env:
+          HERRSCHER_E2E_SSH: runner@127.0.0.1
+        run: |
+          set -o pipefail
+          GOWORK=off go test -v -count=1 -run '^TestE2E' ./core/host/ | tee e2e.log
+          if grep -q -- '--- SKIP' e2e.log; then
+            echo "an end-to-end test was skipped, the ssh target was not used" >&2
             exit 1
           fi
-
-      - name: go vet
-        run: go vet ./...
-
-      - name: build
-        run: go build ./...
-
-      - name: test (race)
-        run: go test -race ./...
-
-      - name: go mod tidy is clean
-        run: |
-          go mod tidy
-          git diff --exit-code go.mod go.sum

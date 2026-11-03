@@ -12,7 +12,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// defaultUserBudget bounds USER.md in runes; SetUserBudget overrides it.
 const defaultUserBudget = 1500
 
 // Store owns the directory holding every agent home: <root>/<name>/.
@@ -33,15 +32,15 @@ func (s *Store) SetUserBudget(runes int) { s.userBudget = runes }
 // caller keeps the default budget; a valid value (including 0, which disables
 // the check) returns (n, true).
 func UserBudgetFromEnv(get func(string) string) (int, bool) {
-	v := get("AGENT_USER_BUDGET")
-	if v == "" {
+	value := get("AGENT_USER_BUDGET")
+	if value == "" {
 		return 0, false
 	}
-	n, err := strconv.Atoi(v)
+	count, err := strconv.Atoi(value)
 	if err != nil {
 		return 0, false
 	}
-	return n, true
+	return count, true
 }
 
 // Root returns the directory under which agent homes live.
@@ -61,15 +60,12 @@ type CreateSpec struct {
 	Tags    []string
 }
 
-// defaultSoul is the persona seeded when CreateSpec.Soul is empty. It is a
-// neutral companion persona; profiles pass their own via CreateSpec.Soul.
 const defaultSoul = `# Companion
 
 You are a durable companion agent. You keep working on this project across
 sessions, remember what matters, and act carefully inside your worktree.
 `
 
-// mcpServer / mcpConfig model a Claude Code .mcp.json stdio server entry.
 type mcpServer struct {
 	Type    string   `json:"type"`
 	Command string   `json:"command"`
@@ -80,10 +76,7 @@ type mcpConfig struct {
 	MCPServers map[string]mcpServer `json:"mcpServers"`
 }
 
-// parseMCP splits a command line ("neublox serve --project {{WORKTREE}}") into a
-// stdio server entry. The first token is both the server name and the command.
-// Whitespace-split only (no quoting) — sufficient for tokenless CLI args.
-func parseMCP(cmdline string) (name string, srv mcpServer, ok bool) {
+func parseMCP(cmdline string) (string, mcpServer, bool) {
 	fields := strings.Fields(cmdline)
 	if len(fields) == 0 {
 		return "", mcpServer{}, false
@@ -91,15 +84,6 @@ func parseMCP(cmdline string) (name string, srv mcpServer, ok bool) {
 	return fields[0], mcpServer{Type: "stdio", Command: fields[0], Args: fields[1:]}, true
 }
 
-// buildSettings renders the zero-prompt Claude settings: project MCP servers
-// auto-enabled, file edits auto-accepted (a headless backend can answer no
-// prompt), and (when present) the agent's MCP namespace allow-listed. The
-// worktree is disposable and isolated, so a permissive mode costs nothing there.
-//
-// It is not the last word on what a tool call may do, either: what reaches
-// outside that worktree is the approval policy's business. Materializing this
-// file into a session adds a PreToolUse hook to it unless that session asked
-// for `bypass`, and the hook is asked before any of these permissions apply.
 func buildSettings(serverName string) ([]byte, error) {
 	var allow []string
 	if serverName != "" {
@@ -120,28 +104,22 @@ func buildSettings(serverName string) ([]byte, error) {
 	}, "", "  ")
 }
 
-// validateName rejects agent names that are empty, ".", or could traverse out of
-// the store root (contain a path separator or "..").
 func validateName(name string) bool {
 	return name != "" && name != "." && !strings.ContainsAny(name, `/\`) && !strings.Contains(name, "..")
 }
 
-// readTags reads <home>/TAGS into a lowercased, de-duplicated token slice — the
-// agent's capability declaration for host-side routing. Tokens are separated by
-// whitespace or commas. A missing or unreadable file yields nil: an agent without
-// tags is valid (it is simply never auto-selected by routing).
 func readTags(home string) []string {
 	buf, err := os.ReadFile(filepath.Join(home, tagsFile))
 	if err != nil {
 		return nil
 	}
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	var out []string
 	for _, tok := range strings.Fields(strings.ReplaceAll(string(buf), ",", " ")) {
-		t := strings.ToLower(tok)
-		if !seen[t] {
-			seen[t] = true
-			out = append(out, t)
+		lowered := strings.ToLower(tok)
+		if !seen[lowered] {
+			seen[lowered] = true
+			out = append(out, lowered)
 		}
 	}
 	return out
@@ -176,123 +154,113 @@ func readHost(home string) string {
 func (s *Store) Create(spec CreateSpec) (Agent, error) {
 	name := spec.Name
 	if !validateName(name) {
-		return Agent{}, fmt.Errorf("invalid agent name %q", name)
+		return Agent{}, &InvalidNameError{Name: name}
 	}
 	home := filepath.Join(s.root, name)
-	if err := os.MkdirAll(s.root, 0o755); err != nil {
+	if err := os.MkdirAll(s.root, dirMode); err != nil {
 		return Agent{}, fmt.Errorf("create agents root: %w", err)
 	}
-	// os.Mkdir is the atomic claim: it fails with EEXIST if the home already
-	// exists, avoiding a Stat/MkdirAll TOCTOU between concurrent creates.
-	if err := os.Mkdir(home, 0o755); err != nil {
+	if err := os.Mkdir(home, dirMode); err != nil {
 		if os.IsExist(err) {
-			return Agent{}, fmt.Errorf("agent %q already exists", name)
+			return Agent{}, &ExistsError{Name: name}
 		}
 		return Agent{}, fmt.Errorf("create agent home: %w", err)
 	}
 	created := false
 	defer func() {
 		if !created {
-			_ = os.RemoveAll(home)
+			if err := os.RemoveAll(home); err != nil {
+				fmt.Fprintf(os.Stderr, "herrscher: remove agent home %q failed: %v\n", home, err)
+			}
 		}
 	}()
 
-	soul := spec.Soul
-	if soul == "" {
-		soul = defaultSoul
-	}
-
-	serverName := ""
-	servers := map[string]mcpServer{}
-	if srvName, srv, ok := parseMCP(spec.MCP); ok {
-		serverName = srvName
-		servers[srvName] = srv
-	}
-	mcpBuf, err := json.MarshalIndent(mcpConfig{MCPServers: servers}, "", "  ")
+	files, err := seedFiles(spec)
 	if err != nil {
-		return Agent{}, fmt.Errorf("render mcp.json: %w", err)
+		return Agent{}, err
 	}
-	settingsBuf, err := buildSettings(serverName)
-	if err != nil {
-		return Agent{}, fmt.Errorf("render settings.json: %w", err)
-	}
-
-	files := []struct {
-		name string
-		data []byte
-	}{
-		{soulFile, []byte(soul)},
-		{mcpFile, mcpBuf},
-		{settingsFile, settingsBuf},
-	}
-	if spec.User != "" {
-		files = append(files, struct {
-			name string
-			data []byte
-		}{userFile, []byte(spec.User)})
-	}
-	if spec.Backend != "" {
-		files = append(files, struct {
-			name string
-			data []byte
-		}{backendFile, []byte(spec.Backend)})
-	}
-	if spec.Cmd != "" {
-		files = append(files, struct {
-			name string
-			data []byte
-		}{cmdFile, []byte(spec.Cmd)})
-	}
-	if spec.Host != "" {
-		files = append(files, struct {
-			name string
-			data []byte
-		}{hostFile, []byte(spec.Host)})
-	}
-	if len(spec.Tags) > 0 {
-		files = append(files, struct {
-			name string
-			data []byte
-		}{tagsFile, []byte(strings.Join(spec.Tags, " ") + "\n")})
-	}
-	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(home, f.name), f.data, 0o644); err != nil {
-			return Agent{}, fmt.Errorf("write %s: %w", f.name, err)
+	for _, file := range files {
+		if err := os.WriteFile(filepath.Join(home, file.name), file.data, fileMode); err != nil {
+			return Agent{}, fmt.Errorf("write %s: %w", file.name, err)
 		}
 	}
 	created = true
 	return Agent{Name: name, Home: home, Backend: spec.Backend, Cmd: spec.Cmd, Host: spec.Host, Tags: readTags(home)}, nil
 }
 
+type seedFile struct {
+	name string
+	data []byte
+}
+
+func seedFiles(spec CreateSpec) ([]seedFile, error) {
+	soul := spec.Soul
+	if soul == "" {
+		soul = defaultSoul
+	}
+	serverName := ""
+	servers := make(map[string]mcpServer)
+	if srvName, srv, ok := parseMCP(spec.MCP); ok {
+		serverName = srvName
+		servers[srvName] = srv
+	}
+	mcpBuf, err := json.MarshalIndent(mcpConfig{MCPServers: servers}, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("render mcp.json: %w", err)
+	}
+	settingsBuf, err := buildSettings(serverName)
+	if err != nil {
+		return nil, fmt.Errorf("render settings.json: %w", err)
+	}
+	tags := ""
+	if len(spec.Tags) > 0 {
+		tags = strings.Join(spec.Tags, " ") + "\n"
+	}
+	files := []seedFile{{soulFile, []byte(soul)}, {mcpFile, mcpBuf}, {settingsFile, settingsBuf}}
+	files = append(files, optionalSeed(userFile, spec.User)...)
+	files = append(files, optionalSeed(backendFile, spec.Backend)...)
+	files = append(files, optionalSeed(cmdFile, spec.Cmd)...)
+	files = append(files, optionalSeed(hostFile, spec.Host)...)
+	files = append(files, optionalSeed(tagsFile, tags)...)
+	return files, nil
+}
+
+func optionalSeed(name, value string) []seedFile {
+	if value == "" {
+		return nil
+	}
+	return []seedFile{{name, []byte(value)}}
+}
+
 // SetSoul overwrites <home>/SOUL.md for an existing agent. It never creates a
-// home — an absent agent is an error (callers seed via Create). Homes are the
+// home. An absent agent is an error (callers seed via Create). Homes are the
 // source of truth; an edited soul applies to the next session materialized.
 func (s *Store) SetSoul(name, soul string) error {
 	if !validateName(name) {
-		return fmt.Errorf("invalid agent name %q", name)
+		return &InvalidNameError{Name: name}
 	}
 	home := filepath.Join(s.root, name)
 	if info, err := os.Stat(home); err != nil || !info.IsDir() {
-		return fmt.Errorf("no agent %q", name)
+		return &NotFoundError{Name: name}
 	}
-	return os.WriteFile(filepath.Join(home, soulFile), []byte(soul), 0o644)
+	return os.WriteFile(filepath.Join(home, soulFile), []byte(soul), fileMode)
 }
 
 // SetUser overwrites <home>/USER.md for an existing agent, rejecting content
 // over the store's user budget (contracts.EnforceBudget) before touching disk.
-// It never creates a home — an absent agent is an error.
+// It never creates a home. An absent agent is an error.
 func (s *Store) SetUser(name, text string) error {
 	if !validateName(name) {
-		return fmt.Errorf("invalid agent name %q", name)
+		return &InvalidNameError{Name: name}
 	}
 	home := filepath.Join(s.root, name)
 	if info, err := os.Stat(home); err != nil || !info.IsDir() {
-		return fmt.Errorf("no agent %q", name)
+		return &NotFoundError{Name: name}
 	}
 	if err := contracts.EnforceBudget("user:"+name, text, s.userBudget); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(home, userFile), []byte(text), 0o644)
+	return os.WriteFile(filepath.Join(home, userFile), []byte(text), fileMode)
 }
 
 // Get returns the agent named name, or false if no such home directory exists.
@@ -319,12 +287,12 @@ func (s *Store) List() ([]Agent, error) {
 		return nil, err
 	}
 	var out []Agent
-	for _, e := range entries {
-		if !e.IsDir() {
+	for _, entry := range entries {
+		if !entry.IsDir() {
 			continue
 		}
-		home := filepath.Join(s.root, e.Name())
-		out = append(out, Agent{Name: e.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Host: readHost(home)})
+		home := filepath.Join(s.root, entry.Name())
+		out = append(out, Agent{Name: entry.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Host: readHost(home)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil

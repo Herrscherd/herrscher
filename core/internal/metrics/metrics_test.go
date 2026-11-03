@@ -37,7 +37,6 @@ func TestRemoteLatencyPercentiles(t *testing.T) {
 	if s.RemoteLatency.Count != 5 {
 		t.Fatalf("latency count = %d, want 5", s.RemoteLatency.Count)
 	}
-	// Nearest-rank: p50 of 5 sorted samples is the 3rd (30), p95 is the 5th (50).
 	if s.RemoteLatency.P50MS != 30 {
 		t.Fatalf("p50 = %d, want 30", s.RemoteLatency.P50MS)
 	}
@@ -53,8 +52,6 @@ func TestEmptyLatencyIsZero(t *testing.T) {
 	}
 }
 
-// TestNilRegistryIsNoOp lets call sites hold an optional registry without nil
-// guards at every increment.
 func TestNilRegistryIsNoOp(t *testing.T) {
 	var r *Registry
 	r.TurnStarted()

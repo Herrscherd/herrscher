@@ -3,8 +3,10 @@
 package control_test
 
 import (
+	"errors"
 	"io"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -25,37 +27,49 @@ func TestCloseReleasesPendingConns(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			sock := filepath.Join(t.TempDir(), "p.sock")
-			acc, err := control.Accept(sock)
+			acc, err := control.Accept(t.Context(), sock)
 			if err != nil {
 				t.Fatalf("Accept: %v", err)
 			}
-			var clients []*control.Conn
-			for i := 0; i < tc.dials; i++ {
-				c, err := control.Dial(sock)
-				if err != nil {
-					t.Fatalf("Dial %d: %v", i, err)
-				}
-				clients = append(clients, c)
-			}
-			time.Sleep(50 * time.Millisecond)
+			clients := dialClients(t, sock, tc.dials)
 			if err := acc.Close(); err != nil {
 				t.Fatalf("Close: %v", err)
 			}
-			done := make(chan error, 1)
-			go func() {
-				done <- clients[0].Scan(func(contracts.Event) error { return nil })
-			}()
-			select {
-			case err := <-done:
-				if err != nil && err != io.EOF {
-					t.Fatalf("scan after close: %v", err)
-				}
-			case <-time.After(2 * time.Second):
-				t.Fatal("a conn left in the acceptor after Close was never closed")
+			for _, c := range clients {
+				assertScanEndsAfterClose(t, c)
 			}
 			for _, c := range clients {
-				_ = c.Close()
+				closeLogged(t, c)
 			}
 		})
+	}
+}
+
+func dialClients(t *testing.T, sock string, n int) []*control.Conn {
+	t.Helper()
+	var clients []*control.Conn
+	for i := range n {
+		c, err := control.Dial(sock)
+		if err != nil {
+			t.Fatalf("Dial %d: %v", i, err)
+		}
+		clients = append(clients, c)
+	}
+	return clients
+}
+
+func assertScanEndsAfterClose(t *testing.T, c *control.Conn) {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() {
+		done <- c.Scan(func(contracts.Event) error { return nil })
+	}()
+	select {
+	case err := <-done:
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, syscall.ECONNRESET) {
+			t.Fatalf("scan after close: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a conn left in the acceptor after Close was never closed")
 	}
 }

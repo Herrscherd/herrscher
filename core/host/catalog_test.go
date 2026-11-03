@@ -3,7 +3,7 @@ package host
 import (
 	"testing"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func fakePlugins() []contracts.Plugin {
@@ -29,7 +29,10 @@ func TestCatalogAggregatesAcrossBackends(t *testing.T) {
 }
 
 func TestCatalogTagsTheServingVendor(t *testing.T) {
-	got, _ := Catalog(fakePlugins(), contracts.PolicyAll)
+	got, catalogErr := Catalog(fakePlugins(), contracts.PolicyAll)
+	if catalogErr != nil {
+		t.Fatal(catalogErr)
+	}
 	for _, e := range got {
 		if e.ID == "b-native" && e.Vendor != "beta" {
 			t.Fatalf("model b-native is tagged vendor %q, want beta", e.Vendor)
@@ -48,8 +51,6 @@ func TestCatalogGatewayOnlyDropsNative(t *testing.T) {
 }
 
 func TestCatalogRejectsDuplicateIDsAcrossBackends(t *testing.T) {
-	// Two backends declaring the same ID would make LookupModel non-deterministic.
-	// The daemon must refuse to start rather than pick one at random.
 	plugins := append(fakePlugins(), contracts.Plugin{Manifest: contracts.Manifest{
 		Kind: "gamma", Category: contracts.CategoryBackend,
 		Models: []contracts.ModelSpec{{ID: "a-native", Label: "clash", Arg: "x", Route: contracts.RouteNative}},
@@ -80,8 +81,6 @@ func TestLookupModelFindsAndTags(t *testing.T) {
 }
 
 func TestLookupModelRespectsPolicy(t *testing.T) {
-	// Under gateway-only, a native model isn't merely hidden: it's not found.
-	// A persisted session naming it can therefore not resume.
 	if _, err := LookupModel(fakePlugins(), contracts.PolicyGatewayOnly, "a-native"); err == nil {
 		t.Fatal("LookupModel resolved a native model under gateway-only")
 	}
@@ -113,8 +112,6 @@ func TestResolvePolicyReadsEnv(t *testing.T) {
 }
 
 func TestResolvePolicyIgnoresGarbage(t *testing.T) {
-	// An unknown value must fall back to the historical behavior, not block the
-	// daemon: this setting is set by the app, not the user.
 	got := ResolvePolicy(func(string) string { return "banana" })
 	if got != contracts.PolicyAll {
 		t.Fatalf("ResolvePolicy(garbage) = %q, want PolicyAll", got)

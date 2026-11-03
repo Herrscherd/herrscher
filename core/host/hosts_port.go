@@ -15,65 +15,53 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
-// hostPlacer is the composition root's answer to "where does this session run".
-// It lives here rather than in the manager because it is the only piece that
-// needs both the host records and the runner.
 type hostPlacer struct {
-	ctx        context.Context
-	st         *state.State
-	instanceID string
-	local      *worktree.Worktreer
-	// sourceVersion is what the daemon would provision today. A seam so the
-	// drift guard is testable without a git checkout.
+	st            *state.State
+	local         *worktree.Worktreer
 	sourceVersion func() string
+	newRemote     func(runner.SSH, string) *worktree.Remote
+}
+
+func newHostPlacer(hostState *state.State, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
+	return hostPlacer{
+		st:            hostState,
+		local:         local,
+		sourceVersion: sourceVersion,
+		newRemote: func(r runner.SSH, bin string) *worktree.Remote {
+			return worktree.NewRemote(r, bin, instanceID)
+		},
+	}
 }
 
 func (p hostPlacer) resolve(name string) (state.Host, *worktree.Remote, error) {
-	h, ok := p.st.FindHost(name)
+	host, ok := p.st.FindHost(name)
 	if !ok {
 		return state.Host{}, nil, unknownHost(p.st, name)
 	}
-	if h.Bin == "" {
-		return state.Host{}, nil, fmt.Errorf("host %q is not provisioned: run `host provision %s`", name, name)
+	if host.Bin == "" {
+		return state.Host{}, nil, &hostNotProvisionedError{Name: name}
 	}
-	r := runner.SSH{Target: h.SSH, ControlPath: runner.ControlPathFor(h.SSH)}
-	return h, worktree.NewRemote(p.ctx, r, h.Bin, p.instanceID), nil
+	r := runner.SSH{Target: host.SSH, ControlPath: runner.ControlPathFor(host.SSH)}
+	return host, p.newRemote(r, host.Bin), nil
 }
 
-// Ready says whether a host can carry a new session.
-//
-// Version drift is the dangerous case, not a cosmetic one: the local supervisor
-// builds the bridge argv, so a bridge older than this daemon dies on an unknown
-// flag the instant it starts, and the backoff would restart it forever with
-// nobody able to see why.
-//
-// It is asked when a session is created, and nowhere else. Refusing to close a
-// session because the source moved since it started would strand it: the bridge
-// is already stopped by then, and removing a worktree over there asks nothing of
-// the remote version.
-//
-// An unknown source version is not a drift. A daemon with no source checkout has
-// nothing to compare against, and refusing every session would be worse than
-// running one that may well be current.
 func (p hostPlacer) Ready(name string) error {
 	if name == "" {
 		return nil
 	}
-	h, _, err := p.resolve(name)
+	host, _, err := p.resolve(name)
 	if err != nil {
 		return err
 	}
 	if p.sourceVersion == nil {
 		return nil
 	}
-	if want := p.sourceVersion(); want != "" && h.Version != want {
-		return fmt.Errorf("host %q runs herrscher %s but this daemon builds %s: run `host provision %s`", name, h.Version, want, name)
+	if want := p.sourceVersion(); want != "" && host.Version != want {
+		return &hostVersionMismatchError{Name: name, Have: host.Version, Want: want}
 	}
 	return nil
 }
 
-// Worktrees returns the worktree lifecycle for a host. An empty name is this
-// machine, answered by the local Worktreer with no subprocess at all.
 func (p hostPlacer) Worktrees(name string) (manager.Worktrees, error) {
 	if name == "" {
 		return p.local, nil
@@ -89,33 +77,28 @@ func (p hostPlacer) Workspace(name string) (string, error) {
 	if name == "" {
 		return p.st.WorkspaceRoot(), nil
 	}
-	h, _, err := p.resolve(name)
+	host, _, err := p.resolve(name)
 	if err != nil {
 		return "", err
 	}
-	return h.Workspace, nil
+	return host.Workspace, nil
 }
 
-func (p hostPlacer) Materialize(ctx context.Context, name string, a agent.Agent, worktreePath string, hook bool) error {
+func (p hostPlacer) Materialize(ctx context.Context, name string, assigned agent.Agent, worktreePath string, hook bool) error {
 	if name == "" {
-		return a.MaterializeAs(worktreePath, binIf(hook, agent.SelfBin()))
+		return assigned.MaterializeAs(ctx, worktreePath, binIf(hook, agent.SelfBin()))
 	}
-	h, rem, err := p.resolve(name)
+	host, rem, err := p.resolve(name)
 	if err != nil {
 		return err
 	}
-	// h.Bin is herrscher over there, the same binary the bridge is launched
-	// with; a hook rendered with anything else would name a path that does not
-	// exist on that machine.
-	payload, err := stageAgentTar(a, worktreePath, binIf(hook, h.Bin))
+	payload, err := stageAgentTar(assigned, worktreePath, binIf(hook, host.Bin))
 	if err != nil {
 		return err
 	}
 	return rem.Materialize(ctx, worktreePath, payload)
 }
 
-// binIf is the binary when the session wants a hook, and the empty string that
-// means "no hook" when it does not.
 func binIf(hook bool, bin string) string {
 	if !hook {
 		return ""
@@ -123,19 +106,16 @@ func binIf(hook bool, bin string) string {
 	return bin
 }
 
-// EnsureProject clones the project on a host when it is not there yet, from the
-// origin of the same project here. git's own message is surfaced as it comes:
-// it is more precise than anything written on top of it would be.
 func (p hostPlacer) EnsureProject(ctx context.Context, name, project, repo string) error {
 	if name == "" || project == "" {
 		return nil
 	}
-	h, _, err := p.resolve(name)
+	host, _, err := p.resolve(name)
 	if err != nil {
 		return err
 	}
-	run := runnerFor(h)
-	if _, err := capture(ctx, run, "test", "-d", repo+"/.git"); err == nil {
+	run := runnerFor(host)
+	if _, captureErr := capture(ctx, run, "test", "-d", repo+"/.git"); captureErr == nil {
 		return nil
 	}
 	origin, err := originOf(ctx, filepath.Join(p.st.WorkspaceRoot(), project))
@@ -148,8 +128,6 @@ func (p hostPlacer) EnsureProject(ctx context.Context, name, project, repo strin
 	return nil
 }
 
-// originOf reads the origin remote of a local project, which is what a host is
-// told to clone from.
 func originOf(ctx context.Context, dir string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", dir, "remote", "get-url", "origin")
 	var stdout, stderr bytes.Buffer
@@ -159,11 +137,11 @@ func originOf(ctx context.Context, dir string) (string, error) {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("read origin of %s: %s", dir, msg)
+		return "", &originReadError{Dir: dir, Msg: msg}
 	}
 	url := strings.TrimSpace(stdout.String())
 	if url == "" {
-		return "", fmt.Errorf("%s has no origin remote", dir)
+		return "", &noOriginError{Dir: dir}
 	}
 	return url, nil
 }

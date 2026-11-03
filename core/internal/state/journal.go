@@ -13,7 +13,7 @@ import (
 //
 // Append uses O_APPEND so concurrent appenders (the bridge child) never race
 // with the daemon's reads; the daemon only reads this file, never writes it.
-func AppendParticipant(path, userID string) (added bool, err error) {
+func AppendParticipant(path, userID string) (bool, error) {
 	if path == "" || userID == "" {
 		return false, nil
 	}
@@ -22,15 +22,18 @@ func AppendParticipant(path, userID string) (added bool, err error) {
 			return false, nil
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
 		return false, err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	file, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, privateFileMode)
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
-	if _, err := f.WriteString(userID + "\n"); err != nil {
+	if _, err := file.WriteString(userID + "\n"); err != nil {
+		closeLogged(file)
+		return false, err
+	}
+	if err := file.Close(); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -43,21 +46,21 @@ func ReadParticipants(path string) []string {
 	if path == "" {
 		return nil
 	}
-	f, err := os.Open(path)
+	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
+	defer closeLogged(file)
 	var out []string
-	seen := map[string]bool{}
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		id := strings.TrimSpace(sc.Text())
-		if id == "" || seen[id] {
+	seen := make(map[string]bool)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		recordID := strings.TrimSpace(scanner.Text())
+		if recordID == "" || seen[recordID] {
 			continue
 		}
-		seen[id] = true
-		out = append(out, id)
+		seen[recordID] = true
+		out = append(out, recordID)
 	}
 	return out
 }

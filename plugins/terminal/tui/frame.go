@@ -23,47 +23,47 @@ func (f frame) render(viewport string) string {
 }
 
 func (m *model) buildFrame() frame {
-	f := frame{above: []string{m.railRow()}}
-	if tb := m.tabs[m.active]; tb != nil {
-		f.below = append(f.below, todoPanel(tb.todos, m.innerWidth())...)
-		f.below = append(f.below, subagentPanel(tb.agents, time.Now(), m.innerWidth())...)
+	stacked := frame{above: []string{m.railRow()}}
+	if tab := m.tabs[m.active]; tab != nil {
+		stacked.below = append(stacked.below, todoPanel(tab.todos, m.innerWidth(), m.st)...)
+		stacked.below = append(stacked.below, subagentPanel(tab.agents, time.Now(), m.innerWidth(), m.st)...)
 	}
 	if m.choice != nil {
-		f.below = appendLines(f.below, m.choiceView())
+		stacked.below = appendLines(stacked.below, m.choiceView())
 	}
 	if m.paletteOpen() {
-		f.below = appendLines(f.below, m.paletteView())
+		stacked.below = appendLines(stacked.below, m.paletteView())
 	}
 	if m.mentionOpen() {
-		f.below = appendLines(f.below, m.mentionView())
+		stacked.below = appendLines(stacked.below, m.mentionView())
 	}
 	if m.resumeOpen {
-		f.below = appendLines(f.below, m.resumeView())
+		stacked.below = appendLines(stacked.below, m.resumeView())
 	}
 	if m.switchOpen {
-		f.below = appendLines(f.below, m.switchView())
+		stacked.below = appendLines(stacked.below, m.switchView())
 	}
 	if m.skillsOpen {
-		f.below = appendLines(f.below, m.skillsView())
+		stacked.below = appendLines(stacked.below, m.skillsView())
 	}
 	if m.diagOpen {
-		f.below = appendLines(f.below, m.diagView())
+		stacked.below = appendLines(stacked.below, m.diagView())
 	}
 	if m.pluginsOpen {
-		f.below = appendLines(f.below, m.pluginsView())
+		stacked.below = appendLines(stacked.below, m.pluginsView())
 	}
 	if m.searchOpen {
-		f.below = appendLines(f.below, m.searchView())
+		stacked.below = appendLines(stacked.below, m.searchView())
 	}
 	if m.showHelp {
-		f.below = appendLines(f.below, m.helpView())
+		stacked.below = appendLines(stacked.below, m.helpView())
 	}
-	if chips := chipRow(m.pending); chips != "" {
-		f.below = appendLines(f.below, chips+"  "+dimStyle.Render("⌃U retirer"))
+	if chips := chipRow(m.pending, m.st); chips != "" {
+		stacked.below = appendLines(stacked.below, chips+"  "+m.st.dim.Render("⌃U retirer"))
 	}
-	f.below = append(f.below, m.composerZone()...)
-	f.below = append(f.below, m.statusZone()...)
-	return f
+	stacked.below = append(stacked.below, m.composerZone()...)
+	stacked.below = append(stacked.below, m.statusZone()...)
+	return stacked
 }
 
 func appendLines(dst []string, block string) []string {

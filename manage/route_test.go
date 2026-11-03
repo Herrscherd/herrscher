@@ -9,8 +9,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-// fakeCatalog offers two gateway models and one native one, filtered by policy
-// the way the real catalog is.
 func fakeCatalog(p contracts.RoutePolicy) ([]host.CatalogEntry, error) {
 	all := []host.CatalogEntry{
 		{Vendor: "claude", ModelSpec: contracts.ModelSpec{ID: "gw-opus", Route: contracts.RouteGateway}},
@@ -26,13 +24,11 @@ func fakeCatalog(p contracts.RoutePolicy) ([]host.CatalogEntry, error) {
 	return out, nil
 }
 
-// answers drives the wizard from a script of typed lines.
 func answers(lines ...string) *bufio.Reader {
 	return bufio.NewReader(strings.NewReader(strings.Join(lines, "\n") + "\n"))
 }
 
 func TestRouteStepDefaultsToTheInternalBuild(t *testing.T) {
-	// Two empty lines: keep the current policy, keep the current model.
 	got, err := routeStep(style{}, answers("", ""), fakeCatalog, routeCurrent{}, true)
 	if err != nil {
 		t.Fatal(err)
@@ -45,8 +41,6 @@ func TestRouteStepDefaultsToTheInternalBuild(t *testing.T) {
 	}
 }
 
-// The whole point of the step: gateway-only without credentials is a build that
-// cannot start a single session, so it must not be persistable.
 func TestRouteStepRefusesGatewayOnlyWithNoCredentials(t *testing.T) {
 	_, err := routeStep(style{}, answers("gateway-only", "", ""), fakeCatalog, routeCurrent{}, true)
 	if err == nil {
@@ -57,9 +51,6 @@ func TestRouteStepRefusesGatewayOnlyWithNoCredentials(t *testing.T) {
 	}
 }
 
-// A base URL without a token points the CLI at the gateway while it keeps
-// authenticating as this machine's own account — the exact shape gateway-only
-// exists to forbid, so a half pair is refused rather than written.
 func TestRouteStepRefusesAHalfGatewayPair(t *testing.T) {
 	for _, tc := range []struct{ name, url, token string }{
 		{"url only", "https://gw.example", ""},
@@ -88,13 +79,11 @@ func TestRouteStepWritesTheGatewayPairAndModel(t *testing.T) {
 	if got[host.EnvGatewayURL] != "https://gw.example" || got[host.EnvGatewayToken] != "secret" {
 		t.Fatalf("gateway pair not persisted: %v", got)
 	}
-	// The native model must not be offered here, so index 1 is a gateway one.
 	if got[host.EnvDefaultModel] != "gw-opus" {
 		t.Fatalf("default model = %q, want the first GATEWAY model", got[host.EnvDefaultModel])
 	}
 }
 
-// An already-configured pair is kept on an empty answer, and never re-displayed.
 func TestRouteStepKeepsAnExistingGatewayPair(t *testing.T) {
 	got, err := routeStep(style{}, answers("2", "", "", ""), fakeCatalog, routeCurrent{haveCred: true}, true)
 	if err != nil {
@@ -105,8 +94,6 @@ func TestRouteStepKeepsAnExistingGatewayPair(t *testing.T) {
 	}
 }
 
-// Compose mode is about to rebuild the binary, so the models this one can
-// enumerate belong to the stack being replaced.
 func TestRouteStepSkipsTheModelQuestionInComposeMode(t *testing.T) {
 	got, err := routeStep(style{}, answers(""), fakeCatalog, routeCurrent{}, false)
 	if err != nil {
@@ -117,8 +104,6 @@ func TestRouteStepSkipsTheModelQuestionInComposeMode(t *testing.T) {
 	}
 }
 
-// Clearing is distinct from keeping: it must write an empty value, since
-// writeSecretsTo upserts by key and an absent key keeps the old default.
 func TestRouteStepClearsTheDefaultModel(t *testing.T) {
 	got, err := routeStep(style{}, answers("1", "none"), fakeCatalog, routeCurrent{model: "local-opus"}, true)
 	if err != nil {
@@ -130,11 +115,7 @@ func TestRouteStepClearsTheDefaultModel(t *testing.T) {
 	}
 }
 
-// The wizard must render the catalog in the order it is given — the same
-// (vendor, id) order `models list` and the app selector show. Re-sorting here
-// would make "pick 2" mean two different models on two surfaces.
 func TestRouteStepKeepsTheCatalogOrder(t *testing.T) {
-	// Vendor-grouped, so a sort by id alone would reorder these.
 	grouped := func(contracts.RoutePolicy) ([]host.CatalogEntry, error) {
 		return []host.CatalogEntry{
 			{Vendor: "claude", ModelSpec: contracts.ModelSpec{ID: "z-claude"}},
@@ -146,7 +127,7 @@ func TestRouteStepKeepsTheCatalogOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got[host.EnvDefaultModel] != "a-codex" {
-		t.Fatalf("entry 2 = %q, want the catalog's second entry", got[host.EnvDefaultModel])
+		t.Fatalf("entry 2 = %q, want the catalog()'s second entry", got[host.EnvDefaultModel])
 	}
 }
 

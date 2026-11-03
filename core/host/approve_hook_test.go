@@ -8,12 +8,8 @@ import (
 	"testing"
 )
 
-// testSocket is the path the hook is told it dialled. Nothing listens on it:
-// the asker is a stub in every test here.
 const testSocket = "/run/herrscher/test.sock"
 
-// testTarget is that path as the hook takes it: a resolver it calls only when a
-// note has to name the socket.
 func testTarget() string { return testSocket }
 
 func hookDecision(t *testing.T, out string) (string, string) {
@@ -54,10 +50,6 @@ func TestHookAsksTheDaemonWithTheRightArgv(t *testing.T) {
 	}
 }
 
-// A subject the operator never chose: it comes from the tool call, so it can
-// begin with "--". The daemon's parser refuses such a value in the two-token
-// form, so the ask would error and the guardrail would fall open on a call it
-// was written to stop.
 func TestHookSpellsASubjectThatLooksLikeAFlag(t *testing.T) {
 	t.Setenv(SessionVar, "s1")
 	var seen []string
@@ -68,9 +60,6 @@ func TestHookSpellsASubjectThatLooksLikeAFlag(t *testing.T) {
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"--force rm -rf /"}}`)
 	var out, errOut bytes.Buffer
 	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
-	// Bounded before it is indexed: a regression that stops asking at all leaves
-	// seen empty, and this test has to fail with its own message rather than
-	// panic somewhere the message is lost.
 	if len(seen) == 0 {
 		t.Fatal("the daemon was never asked")
 	}
@@ -79,10 +68,6 @@ func TestHookSpellsASubjectThatLooksLikeAFlag(t *testing.T) {
 	}
 }
 
-// The branch that turns the guardrail off. Without a session there is no policy
-// to apply and nobody to ask, which is `claude` run by hand in a materialized
-// worktree: it allows, and says on stderr which variable was missing, because a
-// guardrail that is not in effect must never be silent about it.
 func TestHookAllowsWithNoSessionInTheEnvironment(t *testing.T) {
 	t.Setenv(SessionVar, "")
 	ask := func(context.Context, []string) (string, bool, error) {
@@ -100,9 +85,6 @@ func TestHookAllowsWithNoSessionInTheEnvironment(t *testing.T) {
 	}
 }
 
-// The socket is resolved through a function so the payloads answered without
-// asking anybody never pay for it: naming it reads the daemon's state file, and
-// this runs once per tool call across the whole fleet.
 func TestHookDoesNotResolveTheSocketItNeverDials(t *testing.T) {
 	t.Setenv(SessionVar, "s1")
 	resolved := 0
@@ -131,8 +113,6 @@ func TestHookAllowsWhenNoDaemonListens(t *testing.T) {
 	if d, _ := hookDecision(t, out.String()); d != "allow" {
 		t.Fatalf("got %q, want allow: no daemon must not mean no claude", d)
 	}
-	// The note names the socket: an operator whose guardrail is silently not
-	// running has one thing to check, and this is it.
 	if !strings.Contains(errOut.String(), testSocket) {
 		t.Fatalf("stderr was %q, want the socket it dialled", errOut.String())
 	}
@@ -153,8 +133,6 @@ func TestHookAllowsOnGarbageInput(t *testing.T) {
 	}
 }
 
-// A payload that parsed but names no tool is a different mistake from one that
-// did not parse, and the note must not blame the wrong one.
 func TestHookAllowsWhenThePayloadNamesNoTool(t *testing.T) {
 	ask := func(context.Context, []string) (string, bool, error) {
 		t.Fatal("the daemon must not be asked about a payload with no tool")
@@ -170,8 +148,6 @@ func TestHookAllowsWhenThePayloadNamesNoTool(t *testing.T) {
 	}
 }
 
-// Wired to another event by a mis-edited settings file, the hook allows with a
-// note rather than answering a question it was not asked.
 func TestHookAllowsOnAnotherEvent(t *testing.T) {
 	t.Setenv(SessionVar, "s1")
 	ask := func(context.Context, []string) (string, bool, error) {
@@ -202,9 +178,6 @@ func TestHookAllowsWhenTheDaemonErrors(t *testing.T) {
 	}
 }
 
-// TestHookImposesNoDeadlineOfItsOwn is the whole point of the feature, asserted:
-// `approve ask` blocks while a human decides, and a hook that gave up first
-// would allow every call an operator was too slow to answer.
 func TestHookImposesNoDeadlineOfItsOwn(t *testing.T) {
 	t.Setenv(SessionVar, "s1")
 	hadDeadline := true

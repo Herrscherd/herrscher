@@ -7,10 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// TestUserEntryIsOneUnruledRow checks a user turn costs exactly the rows its text
-// needs. It used to be framed between two rules, which meant a one-word message
-// took four rows for one character — and a frame drawn around every turn marks
-// nothing. The glyph and the colour are what tell it apart.
 func TestUserEntryIsOneUnruledRow(t *testing.T) {
 	out := renderEntry(entry{role: roleYou, text: "hello there"}, 40, view{})
 	if !strings.Contains(out, glyphCursor+" hello there") {
@@ -28,8 +24,6 @@ func TestUserEntryIsOneUnruledRow(t *testing.T) {
 	}
 }
 
-// TestAgentEntryRendersBare checks agent prose renders full-width with no prompt
-// or tool prefix.
 func TestAgentEntryRendersBare(t *testing.T) {
 	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 40, view{})
 	if !strings.Contains(out, "the answer") {
@@ -40,8 +34,6 @@ func TestAgentEntryRendersBare(t *testing.T) {
 	}
 }
 
-// TestRoleGlyphsAreDistinct is the point of having roles at all: reasoning, a
-// notice and an error must not render as the same line the way they used to.
 func TestRoleGlyphsAreDistinct(t *testing.T) {
 	think := renderEntry(entry{role: roleThinking, text: "weighing two options"}, 60, view{})
 	notice := renderEntry(entry{role: roleNotice, text: "tour reinitialise"}, 60, view{})
@@ -52,15 +44,11 @@ func TestRoleGlyphsAreDistinct(t *testing.T) {
 	if !strings.Contains(notice, glyphNotice+" tour reinitialise") {
 		t.Fatalf("a notice must carry its glyph: %q", notice)
 	}
-	// The error's glyph titles its rule rather than sitting beside the text: the
-	// whole block is the error, not just its first line.
 	if !strings.Contains(fail, glyphError) || !strings.Contains(fail, "exit status 1") {
 		t.Fatalf("an error must carry its glyph and its text: %q", fail)
 	}
 }
 
-// TestStatusRoleSplitsErrorsFromTools locks the one distinction the bus does not
-// make for us: tool calls and host errors arrive on the same event.
 func TestStatusRoleSplitsErrorsFromTools(t *testing.T) {
 	if got := statusRole("Read core/parse.go"); got != roleTool {
 		t.Fatalf("a tool line is a tool: %q", got)
@@ -70,8 +58,6 @@ func TestStatusRoleSplitsErrorsFromTools(t *testing.T) {
 	}
 }
 
-// TestAgentBodyWrapsToWidth checks a long agent body folds so no rendered line
-// exceeds the content width.
 func TestAgentBodyWrapsToWidth(t *testing.T) {
 	body := strings.Repeat("lorem ipsum dolor ", 20)
 	out := renderEntry(entry{role: roleAgent, text: body}, 40, view{})
@@ -86,8 +72,6 @@ func TestAgentBodyWrapsToWidth(t *testing.T) {
 	}
 }
 
-// TestWideGlyphWrapDoesNotOverflow guards the glyph-width awareness: a run of
-// double-width runes must still fold within the content width.
 func TestWideGlyphWrapDoesNotOverflow(t *testing.T) {
 	out := renderEntry(entry{role: roleYou, text: strings.Repeat("世界", 30)}, 24, view{})
 	for _, ln := range strings.Split(out, "\n") {
@@ -97,8 +81,6 @@ func TestWideGlyphWrapDoesNotOverflow(t *testing.T) {
 	}
 }
 
-// TestChunkCoalescingRendersOneBlock verifies streamed chunks accumulate into a
-// single agent entry so the final wrap spans the whole message.
 func TestChunkCoalescingRendersOneBlock(t *testing.T) {
 	tb := &tab{}
 	tb.appendChunk("hello ")
@@ -109,7 +91,6 @@ func TestChunkCoalescingRendersOneBlock(t *testing.T) {
 	if tb.entries[0].text != "hello world" {
 		t.Fatalf("coalesced text = %q", tb.entries[0].text)
 	}
-	// A status line between streams breaks the block; the next chunk opens a new one.
 	tb.endStream()
 	tb.appendEntry(entry{role: roleTool, text: "tool"})
 	tb.appendChunk("again")
@@ -118,8 +99,6 @@ func TestChunkCoalescingRendersOneBlock(t *testing.T) {
 	}
 }
 
-// TestRenderTranscriptResizeReflows confirms the same entries wrap differently at
-// two widths — i.e. wrapping is recomputed, not frozen.
 func TestRenderTranscriptResizeReflows(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("a")

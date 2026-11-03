@@ -8,30 +8,23 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// usage prints the top-level help. It is grouped by intent and styled with
-// lipgloss; the renderer is bound to os.Stderr so color auto-degrades to plain
-// text under NO_COLOR, TERM=dumb, or a non-TTY stderr — matching the convention
-// in manage/style.go. Help goes to stderr (unchanged), so `2>` redirection and
-// existing scripts keep working.
 func usage() {
-	r := lipgloss.NewRenderer(os.Stderr)
+	renderer := lipgloss.NewRenderer(os.Stderr)
 	var (
-		banner  = r.NewStyle().Bold(true).Foreground(lipgloss.Color("13"))
-		tagline = r.NewStyle().Faint(true)
-		section = r.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
-		verb    = r.NewStyle().Bold(true)
-		hint    = r.NewStyle().Faint(true)
+		banner  = renderer.NewStyle().Bold(true).Foreground(lipgloss.Color("13"))
+		tagline = renderer.NewStyle().Faint(true)
+		section = renderer.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
+		verb    = renderer.NewStyle().Bold(true)
+		hint    = renderer.NewStyle().Faint(true)
 	)
 
-	// row renders one "  <verb>  <hint>" line with the verb column padded so the
-	// hints align. col is the verb-column width (in visible runes).
 	const col = 34
-	row := func(v, h string) string {
-		pad := col - len([]rune(v))
+	row := func(value, help string) string {
+		pad := col - len([]rune(value))
 		if pad < 1 {
 			pad = 1
 		}
-		return "    " + verb.Render(v) + strings.Repeat(" ", pad) + hint.Render(h)
+		return "    " + verb.Render(value) + strings.Repeat(" ", pad) + hint.Render(help)
 	}
 
 	group := func(title string, rows ...string) string {
@@ -63,8 +56,6 @@ func usage() {
 			row("serve", "always-on gateway daemon (24/7)"),
 			row("bridge  --cmd '<command>'", "link a channel to one command"),
 			row("service <install|uninstall|…>", "run serve as a native boot service"),
-			// The list below is not the whole surface: a running daemon also carries
-			// the verbs its gateway plugins contribute, and only it can enumerate them.
 			row("commands", "every verb the running daemon accepts (needs `serve`)"),
 		),
 		"",
@@ -81,7 +72,7 @@ func usage() {
 		"  " + hint.Render("     HERRSCHER_ROUTE_POLICY=gateway-only (n'offre que les modèles passerelle)"),
 		"  " + hint.Render("     NEUBLOX_GATEWAY_URL + NEUBLOX_GATEWAY_TOKEN (les deux, sinon une session passerelle échoue)"),
 		"  " + hint.Render("     HERRSCHER_DEFAULT_MODEL (modèle pris quand `session create` n'en nomme aucun)"),
-		"  " + hint.Render("     `herrscher init` pose ces trois questions — pas besoin de les écrire à la main"),
+		"  " + hint.Render("     `herrscher init` pose ces trois questions, pas besoin de les écrire à la main"),
 	}
 
 	fmt.Fprintln(os.Stderr, strings.Join(blocks, "\n"))

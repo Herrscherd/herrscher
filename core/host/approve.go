@@ -17,43 +17,15 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// approvalPickPrefix marks a select-menu value as an answer to an approval
-// rather than a choice the model itself posed. The two ride the same Pick path
-// from a gateway, and only the prefix tells them apart; it is written by this
-// file and read by this file, so a gateway never learns the encoding.
 const approvalPickPrefix = "herrscher-approval:"
 
-// subjectMaxLen bounds how much model-written text is rendered into a menu or a
-// terminal. A tool input can be a whole file.
 const subjectMaxLen = 200
 
-// maxPendingPerSession and maxPendingApprovals bound the registry below.
-//
-// Every waiting request costs a daemon goroutine, a command-socket connection
-// held open for the whole wait, a map entry and a menu posted to a human. The
-// caller is a hook the agent's own tool calls spawn, so an agent that loops on
-// `approve ask` opens one of each per iteration, and nothing about a request
-// that nobody has answered yet makes the next one cheaper.
-//
-// Eight per session, because what has to fit is one parallel tool block and not
-// a human's patience: Claude Code emits a block of tool calls at once and each
-// one spawns its own hook, so in strict mode, where everything a rule does not
-// name is asked about, a session reading half a dozen files in one breath must
-// not have the tail of that block refused for a reason that has nothing to do
-// with the policy. Past a block's worth the agent is looping, not working.
-// Forty in total, five such blocks: enough that a real fleet never meets it,
-// small enough that the goroutines, the connections and the chat posts stay
-// countable.
-//
-// A request over either cap is refused rather than allowed. It is a decision
-// the daemon makes on purpose, not a failure of the hook to reach it, which is
-// the case that must always allow.
 const (
 	maxPendingPerSession = 8
 	maxPendingApprovals  = 40
 )
 
-// pendingApproval is one request waiting for a human.
 type pendingApproval struct {
 	id      string
 	session string
@@ -76,71 +48,54 @@ type PendingApproval struct {
 	Age     time.Duration `json:"age"`
 }
 
-// approvals is the daemon's registry of requests awaiting a human. It is
-// package state for the same reason sessionRegistry is: the verbs that answer a
-// request, the Pick that carries a click, and the hook call that opened it all
-// reach it from different call paths, and none of them has a pointer to hand.
-var approvals = struct {
+type approvalTable struct {
 	mu sync.Mutex
 	m  map[string]*pendingApproval
-}{m: map[string]*pendingApproval{}}
+}
 
-// askApproval returns the verdict for one tool call, asking a human only when
-// the policy says to. It blocks for at most wait.
-func askApproval(ctx context.Context, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait time.Duration) (approval.Decision, string) {
+func newApprovalTable() *approvalTable {
+	return &approvalTable{m: make(map[string]*pendingApproval)}
+}
+
+func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessionTable, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait time.Duration) (approval.Decision, string) {
 	raw, matched := pol.Decide(req)
 	switch approval.Apply(mode, raw, matched) {
 	case approval.Allow:
 		return approval.Allow, ""
 	case approval.Deny:
 		return approval.Deny, fmt.Sprintf("herrscher: %s was denied by policy", describeRequest(req))
+	case approval.Ask:
 	}
 
-	if wait <= 0 { // time.After(0) would fire instantly and deny every ask
+	if wait <= 0 {
 		wait = state.DefaultApprovalWait
 	}
 
-	p := &pendingApproval{
+	pending := &pendingApproval{
 		id:      newApprovalID(),
 		session: session,
 		req:     req,
 		asked:   time.Now(),
 		answer:  make(chan approvalVerdict, 1),
 	}
-	// Registered before anything is posted anywhere: over the cap the answer is
-	// known already, and the point of the cap is that the expensive part never
-	// runs. release drops the entry on every way out of this function, the
-	// timeout and the answer that arrives too late included, so a cap can only
-	// be reached by requests a human really has in front of him.
-	release, refusal := registerApproval(p)
+	release, refusal := registerApproval(approvals, pending)
 	if refusal != "" {
 		return approval.Deny, refusal
 	}
 	defer release()
 
-	// Warned here, on a call that is really about to wait for a human, and not in
-	// the `approve ask` verb: the injected hook matches every tool call, so a
-	// warning raised before the policy has spoken would put one identical line on
-	// the daemon's stderr per tool call across the whole fleet, the vast majority
-	// of which ask nobody. os.Stderr is the daemon's own; the hook process runs
-	// this over the command socket and never writes it to its own stderr, which
-	// no operator reads.
 	warnWaitOutlivesTheHook(os.Stderr, wait)
 
-	// The fan-out's own context is bounded by wait so a gateway whose RouteMenu
-	// hangs cannot stretch the effective wait past the deadline the model was
-	// promised; it is not detached into a goroutine because posting a menu for
-	// an already-dead request is worse than a bounded wait.
 	octx, cancel := context.WithTimeout(ctx, wait)
-	askApprovalOn(octx, session, approvalPrompt(req), p.id)
+	askApprovalOn(octx, sessions, session, approvalPrompt(req), pending.id)
 	cancel()
 
 	select {
-	case v := <-p.answer:
-		if v.decision == approval.Allow {
+	case decision := <-pending.answer:
+		if decision.decision == approval.Allow {
 			return approval.Allow, ""
 		}
-		reason := v.reason
+		reason := decision.reason
 		if reason == "" {
 			reason = fmt.Sprintf("herrscher: %s was denied by the operator", describeRequest(req))
 		}
@@ -152,133 +107,102 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 	}
 }
 
-// registerApproval puts p in the registry unless a cap is reached, and returns
-// the function that takes it back out. The second return is empty when the
-// request was registered, and otherwise is the refusal the model reads: it
-// names the cap that was hit and what to do about it, because the agent whose
-// tool call this is has no other way of learning why the answer came back at
-// once.
-//
-// Both counts are read under the same lock the insert takes, so two hooks
-// racing cannot both find room for the last slot.
-func registerApproval(p *pendingApproval) (release func(), refusal string) {
+func registerApproval(approvals *approvalTable, pending *pendingApproval) (func(), string) {
 	approvals.mu.Lock()
 	defer approvals.mu.Unlock()
 	if len(approvals.m) >= maxPendingApprovals {
-		return nil, fmt.Sprintf("herrscher: %s was denied: %d tool calls across the fleet are already waiting for a human, which is the limit; each one answered frees a slot", describeRequest(p.req), maxPendingApprovals)
+		return nil, fmt.Sprintf("herrscher: %s was denied: %d tool calls across the fleet are already waiting for a human, which is the limit; each one answered frees a slot", describeRequest(pending.req), maxPendingApprovals)
 	}
 	mine := 0
 	for _, other := range approvals.m {
-		if other.session == p.session {
+		if other.session == pending.session {
 			mine++
 		}
 	}
 	if mine >= maxPendingPerSession {
-		return nil, fmt.Sprintf("herrscher: %s was denied: session %q already has %d tool calls waiting for a human, which is the limit; wait for those to be answered, and ask about fewer things at once", describeRequest(p.req), p.session, maxPendingPerSession)
+		return nil, fmt.Sprintf("herrscher: %s was denied: session %q already has %d tool calls waiting for a human, which is the limit; wait for those to be answered, and ask about fewer things at once", describeRequest(pending.req), pending.session, maxPendingPerSession)
 	}
-	approvals.m[p.id] = p
+	approvals.m[pending.id] = pending
 	return func() {
 		approvals.mu.Lock()
-		delete(approvals.m, p.id)
+		delete(approvals.m, pending.id)
 		approvals.mu.Unlock()
 	}, ""
 }
 
-// warnWaitOutlivesTheHook says so when one ask can hold the hook longer than
-// the vendor will wait for it to answer. Past that point the CLI stops waiting
-// and runs the tool call, while the request is still listed as waiting and the
-// operator still believes a human is being asked: a silent allow, which is the
-// one outcome this feature exists to prevent.
-//
-// What is compared is the worst case and not the configured wait: the menu
-// fan-out is bounded by the wait, and the timer that follows it runs for the
-// wait again, so an ask can take twice what was configured. The comparison
-// halves the hook's timeout rather than doubling the wait, so an absurd
-// configured duration cannot overflow into a negative that warns about nothing.
-//
-// It warns and does not cap. The wait is the operator's to choose, and a wait
-// quietly shortened to fit the vendor would be its own surprise. It is written
-// on the asks that really wait rather than once at startup, so it reaches the
-// operator beside the request it is about, and a daemon whose policy never asks
-// anything is never told about a wait nothing uses.
-func warnWaitOutlivesTheHook(w io.Writer, wait time.Duration) {
+func warnWaitOutlivesTheHook(out io.Writer, wait time.Duration) {
 	if wait <= agent.HookWait/2 {
 		return
 	}
-	fmt.Fprintf(w, "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the CLI gives it: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait)
+	logWriteFailure(fmt.Fprintf(out, "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the CLI gives it: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait))
 }
 
-// answerApproval settles a waiting request, reporting whether one was waiting.
-func answerApproval(id string, d approval.Decision, reason string) bool {
+func answerApproval(approvals *approvalTable, approvalID string, decision approval.Decision, reason string) bool {
 	approvals.mu.Lock()
-	p := approvals.m[id]
+	pending := approvals.m[approvalID]
 	approvals.mu.Unlock()
-	if p == nil {
+	if pending == nil {
 		return false
 	}
 	select {
-	case p.answer <- approvalVerdict{decision: d, reason: reason}:
-	default: // already answered; the first answer stands
+	case pending.answer <- approvalVerdict{decision: decision, reason: reason}:
+	default:
 	}
 	return true
 }
 
-// pendingApprovals lists what is waiting, for `approve list`.
-func pendingApprovals() []PendingApproval {
+func pendingApprovals(approvals *approvalTable) []PendingApproval {
 	approvals.mu.Lock()
 	defer approvals.mu.Unlock()
 	out := make([]PendingApproval, 0, len(approvals.m))
-	for _, p := range approvals.m {
+	for _, pending := range approvals.m {
 		out = append(out, PendingApproval{
-			ID:      p.id,
-			Session: p.session,
-			Tool:    p.req.Tool,
-			Subject: clip(p.req.Subject),
-			Age:     time.Since(p.asked).Truncate(time.Second),
+			ID:      pending.id,
+			Session: pending.session,
+			Tool:    pending.req.Tool,
+			Subject: clip(pending.req.Subject),
+			Age:     time.Since(pending.asked).Truncate(time.Second),
 		})
 	}
 	return out
 }
 
-// answerApprovalPick settles a request from a routed select-menu value, and
-// reports whether the value was one at all.
-func answerApprovalPick(session, value string) bool {
+func answerApprovalPick(approvals *approvalTable, session, value string) bool {
 	rest, ok := strings.CutPrefix(value, approvalPickPrefix)
 	if !ok {
 		return false
 	}
-	id, verdict, ok := strings.Cut(rest, ":")
+	approvalID, verdict, ok := strings.Cut(rest, ":")
 	if !ok {
-		return true // shaped like ours but unusable: swallow it rather than let it reach a backend
-	}
-	if owner, known := approvalSession(id); known && owner != session {
 		return true
 	}
-	d := approval.Deny
-	if verdict == string(approval.Allow) {
-		d = approval.Allow
+	if owner, known := approvalSession(approvals, approvalID); known && owner != session {
+		return true
 	}
-	answerApproval(id, d, "")
+	decision := approval.Deny
+	if verdict == string(approval.Allow) {
+		decision = approval.Allow
+	}
+	answerApproval(approvals, approvalID, decision, "")
 	return true
 }
 
-func approvalSession(id string) (string, bool) {
+func approvalSession(approvals *approvalTable, approvalID string) (string, bool) {
 	approvals.mu.Lock()
 	defer approvals.mu.Unlock()
-	p := approvals.m[id]
-	if p == nil {
+	pending := approvals.m[approvalID]
+	if pending == nil {
 		return "", false
 	}
-	return p.session, true
+	return pending.session, true
 }
 
 func newApprovalID() string {
-	var b [4]byte
-	rand.Read(b[:])
-	return hex.EncodeToString(b[:])
+	var randomBytes [4]byte
+	_, _ = rand.Read(randomBytes[:])
+	return hex.EncodeToString(randomBytes[:])
 }
 
-// describeRequest names a request in one line, for the model.
 func describeRequest(req approval.Request) string {
 	if req.Subject == "" {
 		return req.Tool
@@ -286,27 +210,22 @@ func describeRequest(req approval.Request) string {
 	return req.Tool + "(" + clip(req.Subject) + ")"
 }
 
-// approvalPrompt is what a human reads.
 func approvalPrompt(req approval.Request) string {
 	return "allow " + describeRequest(req) + "?"
 }
 
-// clip bounds model-written text and flattens it to one line: it is rendered
-// into a chat menu and a terminal, neither of which should be handed an
-// arbitrary number of newlines by a model.
-func clip(s string) string {
-	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r", " "), "\n", " ")
-	r := []rune(s)
-	if len(r) > subjectMaxLen {
-		return string(r[:subjectMaxLen]) + "…"
+func clip(text string) string {
+	text = strings.ReplaceAll(strings.ReplaceAll(text, "\r", " "), "\n", " ")
+	runes := []rune(text)
+	if len(runes) > subjectMaxLen {
+		return string(runes[:subjectMaxLen]) + "…"
 	}
-	return string(r)
+	return string(runes)
 }
 
-// approvalChoices are the two answers, encoded so a pick routes back here.
-func approvalChoices(id string) []contracts.Choice {
+func approvalChoices(approvalID string) []contracts.Choice {
 	return []contracts.Choice{
-		{Label: "allow", Value: approvalPickPrefix + id + ":allow"},
-		{Label: "deny", Value: approvalPickPrefix + id + ":deny"},
+		{Label: "allow", Value: approvalPickPrefix + approvalID + ":allow"},
+		{Label: "deny", Value: approvalPickPrefix + approvalID + ":deny"},
 	}
 }

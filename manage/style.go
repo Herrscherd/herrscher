@@ -7,8 +7,6 @@ import (
 	"strings"
 )
 
-// ANSI styling for the init wizard. Colour is enabled only on a real terminal
-// and disabled by $NO_COLOR or TERM=dumb, so piped/scripted output stays clean.
 type style struct{ reset, bold, dim, cyan, green, red string }
 
 func newStyle() style {
@@ -25,14 +23,13 @@ func newStyle() style {
 	}
 }
 
-func (s style) wrap(code, v string) string {
+func (s style) wrap(code, text string) string {
 	if code == "" {
-		return v
+		return text
 	}
-	return code + v + s.reset
+	return code + text + s.reset
 }
 
-// header prints a titled rule, e.g. "  herrscher · init".
 func (s style) header(title, sub string) {
 	fmt.Fprintf(os.Stderr, "\n  %s\n", s.wrap(s.bold+s.cyan, "herrscher · "+title))
 	if sub != "" {
@@ -40,32 +37,27 @@ func (s style) header(title, sub string) {
 	}
 }
 
-// summaryStack prints the resolved module list (compose mode) before the build.
 func summaryStack(modules []string) {
-	s := newStyle()
-	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "stack"))
+	sty := newStyle()
+	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, "stack"))
 	for _, m := range modules {
-		fmt.Fprintf(os.Stderr, "    %s %s\n", s.wrap(s.green, "+"), shortModule(m))
+		fmt.Fprintf(os.Stderr, "    %s %s\n", sty.wrap(sty.green, "+"), shortModule(m))
 	}
 	fmt.Fprintln(os.Stderr)
 }
 
-// summaryConfig closes config-only mode: report where secrets landed and how to
-// start the already-compiled binary.
-func summaryConfig(path string, n int) {
-	s := newStyle()
+func summaryConfig(path string, count int) {
+	sty := newStyle()
 	fmt.Fprintln(os.Stderr)
-	if n > 0 {
-		fmt.Fprintf(os.Stderr, "  %s wrote %d setting(s) to %s\n", s.wrap(s.green, "✓"), n, s.wrap(s.bold, path))
+	if count > 0 {
+		fmt.Fprintf(os.Stderr, "  %s wrote %d setting(s) to %s\n", sty.wrap(sty.green, "✓"), count, sty.wrap(sty.bold, path))
 	} else {
-		fmt.Fprintf(os.Stderr, "  %s nothing entered; %s left unchanged\n", s.wrap(s.dim, "·"), path)
+		fmt.Fprintf(os.Stderr, "  %s nothing entered; %s left unchanged\n", sty.wrap(sty.dim, "·"), path)
 	}
-	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "the installed binary already has its plugins compiled in."))
-	fmt.Fprintf(os.Stderr, "  start it with:  %s\n\n", s.wrap(s.bold, "herrscherd serve"))
+	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, "the installed binary already has its plugins compiled in."))
+	fmt.Fprintf(os.Stderr, "  start it with:  %s\n\n", sty.wrap(sty.bold, "herrscherd serve"))
 }
 
-// shortModule trims the org prefix and the herrscher- prefix from a module path
-// for display, e.g. github.com/Herrscherd/herrscher-discord-gateway → discord-gateway.
 func shortModule(m string) string {
 	base := filepath.Base(m)
 	return strings.TrimPrefix(base, "herrscher-")

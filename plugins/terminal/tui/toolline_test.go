@@ -8,8 +8,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// plainLines strips the styling off a rendered block, so a test can assert on the
-// columns a reader actually sees rather than on the escape sequences around them.
 func plainLines(s string) []string {
 	out := strings.Split(ansi.Strip(s), "\n")
 	for i := range out {
@@ -18,8 +16,6 @@ func plainLines(s string) []string {
 	return out
 }
 
-// TestToolEntryRendersBulletAndResult checks a tool status renders `● {call}` and
-// its continuation line as `  ⎿ {summary}`.
 func TestToolEntryRendersBulletAndResult(t *testing.T) {
 	out := renderEntry(entry{role: roleTool, text: "Bash(ls build/)\nremoved 3 files"}, 60, view{})
 	if !strings.Contains(out, glyphTool+" Bash(ls build/)") {
@@ -30,8 +26,6 @@ func TestToolEntryRendersBulletAndResult(t *testing.T) {
 	}
 }
 
-// TestToolVerbSplitsKnownTools checks the closed vocabulary: a known first word
-// yields its family and the rest of the line, an unknown one keeps the line whole.
 func TestToolVerbSplitsKnownTools(t *testing.T) {
 	cases := []struct {
 		in        string
@@ -43,7 +37,6 @@ func TestToolVerbSplitsKnownTools(t *testing.T) {
 		{"WebFetch https://x.dev", familyWeb, "https://x.dev"},
 		{"Task review the diff", familyAgent, "review the diff"},
 		{"Edit core/parse.go", familyWrite, "core/parse.go"},
-		// Not a tool: the line must survive intact rather than lose its first word.
 		{"Reading the envfile", "", "Reading the envfile"},
 		{"bash", familyRun, ""},
 		{"", "", ""},
@@ -57,11 +50,9 @@ func TestToolVerbSplitsKnownTools(t *testing.T) {
 	}
 }
 
-// TestTypedToolRendersItsFamilyGlyph checks a recognised tool gets its family's
-// mark and an unrecognised one falls back to the generic bullet.
 func TestTypedToolRendersItsFamilyGlyph(t *testing.T) {
 	out := renderEntry(entry{role: roleTool, text: "Read core/parse.go"}, 60, view{})
-	if !strings.Contains(out, familyGlyphs[familyRead]) {
+	if !strings.Contains(out, familyGlyphs()[familyRead]) {
 		t.Fatalf("a read must carry the read glyph: %q", out)
 	}
 	if !strings.Contains(out, "core/parse.go") {
@@ -73,31 +64,22 @@ func TestTypedToolRendersItsFamilyGlyph(t *testing.T) {
 	}
 }
 
-// TestAbbreviatePathsShortensDeepAbsolutePaths checks the one thing the
-// abbreviation is for — a session path that costs a line and a half — and the
-// several things it must leave alone.
 func TestAbbreviatePathsShortensDeepAbsolutePaths(t *testing.T) {
 	cases := []struct{ in, want string }{
-		// The case from the transcript: eight segments down to the two that say where.
 		{
 			"cd /home/shan/dev/enderbot/.herrscher-sessions/u03787009/ch-8688/core",
 			"cd …/ch-8688/core",
 		},
-		// Trailing punctuation belongs to the command, not to the path.
 		{"cd /a/b/c/d; ls", "cd …/c/d; ls"},
 		{"(/a/b/c/d)", "(…/c/d)"},
 		{`"/a/b/c/d"`, `"…/c/d"`},
-		// Four segments is the threshold; three still reads as a place.
 		{"/a/b/c/d", "…/c/d"},
 		{"/home/shan/dev", "/home/shan/dev"},
 		{"/etc/hosts", "/etc/hosts"},
-		// A tilde is the root of its path, so ~/a/b/c/d is four segments deep.
 		{"~/a/b/c/d", "…/c/d"},
 		{"~/dev/herrscher", "~/dev/herrscher"},
-		// Never touched: a relative path is already short, and a flag is not a path.
 		{"sed -n '1,120p' src/common/utils/Components/Modal/Modal.ts", "sed -n '1,120p' src/common/utils/Components/Modal/Modal.ts"},
 		{"grep -rln modal: src/modules --include=*.ts", "grep -rln modal: src/modules --include=*.ts"},
-		// Spacing is the command's own; abbreviating must not reflow it.
 		{"cd  /a/b/c/d   ls", "cd  …/c/d   ls"},
 		{"", ""},
 	}
@@ -108,16 +90,12 @@ func TestAbbreviatePathsShortensDeepAbsolutePaths(t *testing.T) {
 	}
 }
 
-// TestToolLineHangsContinuationsUnderTheTarget is the readability fix itself: a
-// folded tool line must resume under its target, not back at the gutter where it
-// reads as a new line of prose.
 func TestToolLineHangsContinuationsUnderTheTarget(t *testing.T) {
 	out := renderTool("bash grep -n needle one two three four five six seven", 40, view{expand: true})
 	lines := plainLines(out)
 	if len(lines) < 2 {
 		t.Fatalf("the command must fold at width 40: %q", lines)
 	}
-	// Glyph, space, and the padded family column: nine cells before the target.
 	if !strings.HasPrefix(lines[1], strings.Repeat(" ", toolTargetColumn)) {
 		t.Fatalf("a continuation must hang under the target column:\n%q", lines)
 	}
@@ -126,8 +104,6 @@ func TestToolLineHangsContinuationsUnderTheTarget(t *testing.T) {
 	}
 }
 
-// TestUnknownToolLineHangsUnderItsBullet checks the family-less case: with no
-// family column there is only the bullet to hang under.
 func TestUnknownToolLineHangsUnderItsBullet(t *testing.T) {
 	out := renderTool("pondering one two three four five six seven eight nine ten", 40, view{expand: true})
 	lines := plainLines(out)
@@ -139,8 +115,6 @@ func TestUnknownToolLineHangsUnderItsBullet(t *testing.T) {
 	}
 }
 
-// TestToolLineIsCappedWithACount checks the budget: a long command shows the two
-// lines that identify it and says how many it kept back.
 func TestToolLineIsCappedWithACount(t *testing.T) {
 	long := "bash cd /a/b/c/d; echo one two three four five six seven eight nine ten eleven twelve thirteen fourteen"
 	lines := plainLines(renderTool(long, 40, view{}))
@@ -160,8 +134,6 @@ func TestToolLineIsCappedWithACount(t *testing.T) {
 	}
 }
 
-// TestShortToolLineCarriesNoMarker: the budget must be invisible on the lines that
-// fit, which is most of them.
 func TestShortToolLineCarriesNoMarker(t *testing.T) {
 	out := renderTool("Read core/parse.go", 60, view{})
 	if strings.Contains(out, glyphMoreLines) {
@@ -172,15 +144,10 @@ func TestShortToolLineCarriesNoMarker(t *testing.T) {
 	}
 }
 
-// TestExpandedToolLineKeepsTheWholeCommand: alt+e is the promise that nothing was
-// destroyed, only budgeted — so the whole path and every line come back.
 func TestExpandedToolLineKeepsTheWholeCommand(t *testing.T) {
 	const cmd = "bash cd /home/shan/dev/enderbot/.herrscher-sessions/u03787009/ch-8688/core; sed -n '1,120p' src/common/utils/Components/Modal/Modal.ts"
 	expanded := plainLines(renderTool(cmd, 40, view{expand: true}))
 	joined := strings.Join(expanded, "")
-	// A path longer than the width is folded across lines, so the comparison drops
-	// the whitespace the fold and the hanging indent introduced: the path itself has
-	// none, and lipgloss breaks a long token without adding characters to it.
 	squashed := strings.ReplaceAll(joined, " ", "")
 	if !strings.Contains(squashed, "/home/shan/dev/enderbot/.herrscher-sessions/u03787009/ch-8688/core") {
 		t.Fatalf("an expanded line keeps its path whole:\n%q", expanded)
@@ -196,8 +163,6 @@ func TestExpandedToolLineKeepsTheWholeCommand(t *testing.T) {
 	}
 }
 
-// TestNarrowToolLineStaysLegible: below the point where a hanging indent leaves
-// room to read, the indent is what gives way — never the text.
 func TestNarrowToolLineStaysLegible(t *testing.T) {
 	lines := plainLines(renderTool("bash go test ./...", 12, view{expand: true}))
 	if strings.Join(lines, "") == "" {
@@ -213,8 +178,6 @@ func TestNarrowToolLineStaysLegible(t *testing.T) {
 	}
 }
 
-// TestToolResultTakesTheSameBudget: a fifteen-line result is the same illegibility
-// as a ten-line command, so it answers to the same rule.
 func TestToolResultTakesTheSameBudget(t *testing.T) {
 	entryText := "Read core/parse.go\n" + strings.Repeat("a long summary of what came back ", 6)
 	lines := plainLines(renderTool(entryText, 40, view{}))
@@ -229,8 +192,6 @@ func TestToolResultTakesTheSameBudget(t *testing.T) {
 	}
 }
 
-// toolModel is a ready model whose active tab holds the shape this whole file is
-// about: a call whose command does not fit the window.
 func toolModel(t *testing.T) *model {
 	t.Helper()
 	m := readyModel(&fakeBackend{})
@@ -241,8 +202,6 @@ func toolModel(t *testing.T) *model {
 	return m
 }
 
-// TestToggleToolExpandIsReversible: the budget must be a view over the entry, not
-// an edit of it — so lifting it and putting it back returns the same transcript.
 func TestToggleToolExpandIsReversible(t *testing.T) {
 	m := toolModel(t)
 	before := m.thinkingContent()
@@ -263,8 +222,6 @@ func TestToggleToolExpandIsReversible(t *testing.T) {
 	}
 }
 
-// TestAltEExpandsToolLines checks the gesture reaches the toggle, and that Ctrl+e
-// is left to the composer, where it is end-of-line.
 func TestAltEExpandsToolLines(t *testing.T) {
 	m := toolModel(t)
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}, Alt: true})

@@ -2,7 +2,7 @@ package control
 
 import (
 	"bytes"
-	"reflect"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -34,7 +34,7 @@ func TestWriteThenScanRoundTrip(t *testing.T) {
 		t.Fatalf("got %d events, want %d (%v)", len(got), len(want), got)
 	}
 	for i := range want {
-		if !reflect.DeepEqual(got[i], want[i]) {
+		if !sameEvent(got[i], want[i]) {
 			t.Errorf("event %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}
@@ -42,7 +42,9 @@ func TestWriteThenScanRoundTrip(t *testing.T) {
 
 func TestWriteEventOneLinePerEvent(t *testing.T) {
 	var buf bytes.Buffer
-	_ = WriteEvent(&buf, contracts.Event{T: "chunk", Text: "a\nb"}) // text with an embedded newline
+	if err := WriteEvent(&buf, contracts.Event{T: "chunk", Text: "a\nb"}); err != nil {
+		t.Fatal(err)
+	}
 	if n := strings.Count(buf.String(), "\n"); n != 1 {
 		t.Fatalf("encoded form has %d newlines, want exactly 1 (text newline must be escaped)", n)
 	}
@@ -80,4 +82,10 @@ func TestScanSkipsBlankLines(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("decoded %d events, want 1 (blank lines skipped)", count)
 	}
+}
+
+func sameEvent(a, b contracts.Event) bool {
+	aj, errA := json.Marshal(a)
+	bj, errB := json.Marshal(b)
+	return errA == nil && errB == nil && bytes.Equal(aj, bj)
 }

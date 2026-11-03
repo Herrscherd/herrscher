@@ -13,8 +13,10 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -61,10 +63,6 @@ type Backend interface {
 	Interrupt(name string) bool
 }
 
-// roles label a transcript entry so the renderer maps it to a gutter + body
-// style. They exist to separate intents the bus flattens together: the wire has
-// one "status" event for a tool call, a turn reset and a host error alike, and
-// rendering all three the same way is what made the transcript unreadable.
 const (
 	roleYou        = "you"
 	roleAgent      = "agent"
@@ -76,16 +74,14 @@ const (
 	roleScrollback = "scrollback"
 )
 
-// hostErrPrefix marks text the host has already flagged as a failure. core/bridge
-// owns the marker (errPrefix there) and keeps it unexported, so the coupling is
-// this constant: a mismatch costs the error its colour, nothing more.
 const hostErrPrefix = "⚠️ "
 
-// hostError reports whether text is a host-flagged failure, and returns it with
-// the marker removed: the error role renders its own glyph, and two markers on
-// one line read as noise. The host attaches the marker to a reply (a backend that
-// failed with no output) — status lines are tools — but the check is cheap and
-// the same on both paths.
+const (
+	sessionVerb = "session"
+	verbRename  = "rename"
+	stateDone   = "done"
+)
+
 func hostError(text string) (string, bool) {
 	trimmed := strings.TrimSpace(text)
 	if rest, ok := strings.CutPrefix(trimmed, hostErrPrefix); ok {
@@ -94,8 +90,6 @@ func hostError(text string) (string, bool) {
 	return text, false
 }
 
-// statusRole classifies a status line: the bus carries tool calls and host
-// errors on the same event, told apart only by the host's marker.
 func statusRole(text string) string {
 	if _, isErr := hostError(text); isErr {
 		return roleError
@@ -103,25 +97,15 @@ func statusRole(text string) string {
 	return roleTool
 }
 
-// entry is one logical unit of a tab's transcript: a role plus the unwrapped,
-// unstyled body text. Storing logical text (not pre-rendered lines) is what lets
-// the renderer re-wrap to the current width on every resize and coalesce a
-// streamed answer's chunks into one wrappable block. streaming marks an agent
-// entry still being extended by chunk events.
 type entry struct {
 	id          uint64
 	role        string
 	text        string
 	streaming   bool
-	attachments []Attachment // files echoed under a user turn (chips)
-	preview     string       // precomputed kitty graphics escape for image attachments; "" when unsupported or none
+	attachments []Attachment
+	preview     string
 }
 
-// tab is one session's pane: its transcript, unread flag, busy state, last cost,
-// and a disconnected flag set when the last event was an "abandoned" turn. streamed
-// records whether any chunk arrived during the current turn, so the final reply is
-// not rendered a second time (the duplicate fix) and the "thinking" indicator hides
-// once real output begins.
 type tab struct {
 	channel      string
 	label        string
@@ -131,12 +115,12 @@ type tab struct {
 	streamed     bool
 	lastCost     float64
 	disconnected bool
-	tokens       int       // cumulative output tokens for the current turn
-	startedAt    time.Time // when the current turn began, for the elapsed-time hint
-	costTotal    float64   // every turn's cost since the tab opened (lastCost is one turn's)
-	ctxTokens    int       // the last prompt actually sent: input + cache read + cache creation
-	ctxMeasured  bool      // a per-message reading arrived during the current turn (see renderInto)
-	openedAt     time.Time // when the tab opened, for the session-age segment
+	tokens       int
+	startedAt    time.Time
+	costTotal    float64
+	ctxTokens    int
+	ctxMeasured  bool
+	openedAt     time.Time
 	nextEntryID  uint64
 	todos        []contracts.TodoItem
 	agents       []liveAgent
@@ -144,13 +128,14 @@ type tab struct {
 
 type liveAgent struct {
 	contracts.Subagent
+
 	since time.Time
 }
 
-func (tb *tab) dropAgent(id string) {
-	for i, a := range tb.agents {
-		if a.ID == id {
-			tb.agents = append(tb.agents[:i], tb.agents[i+1:]...)
+func (tb *tab) dropAgent(agentID string) {
+	for index, a := range tb.agents {
+		if a.ID == agentID {
+			tb.agents = append(tb.agents[:index], tb.agents[index+1:]...)
 			return
 		}
 	}
@@ -159,35 +144,24 @@ func (tb *tab) dropAgent(id string) {
 func (tb *tab) clearPanels() {
 	tb.agents = nil
 	for _, t := range tb.todos {
-		if t.State != "done" {
+		if t.State != stateDone {
 			return
 		}
 	}
 	tb.todos = nil
 }
 
-// maxTabLines bounds the number of logical entries a tab's transcript retains so
-// a long-lived session cannot grow memory without limit. It caps entry count, not
-// the size of any one entry: a streamed answer coalesces into a single entry (see
-// appendChunk) whose text grows for the duration of that turn.
 const maxTabLines = 5000
 
-// appendEntry adds a logical entry, dropping the oldest once the transcript
-// exceeds maxTabLines. Trimming reallocates so the backing array does not pin the
-// whole history in memory.
-func (tb *tab) appendEntry(e entry) {
+func (tb *tab) appendEntry(item entry) {
 	tb.nextEntryID++
-	e.id = tb.nextEntryID
-	tb.entries = append(tb.entries, e)
+	item.id = tb.nextEntryID
+	tb.entries = append(tb.entries, item)
 	if len(tb.entries) > maxTabLines {
 		tb.entries = append([]entry(nil), tb.entries[len(tb.entries)-maxTabLines:]...)
 	}
 }
 
-// appendChunk coalesces streamed agent prose: it extends the current live agent
-// entry, or opens a new one when the previous entry is not an in-flight stream
-// (e.g. a status line interrupted it). The final wrap is thus over the whole
-// message, not per-token fragments.
 func (tb *tab) appendChunk(text string) {
 	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent && tb.entries[n-1].streaming {
 		tb.entries[n-1].text += text
@@ -196,16 +170,12 @@ func (tb *tab) appendChunk(text string) {
 	tb.appendEntry(entry{role: roleAgent, text: text, streaming: true})
 }
 
-// endStream clears the streaming flag on the current agent entry so later chunks
-// (a new turn) open a fresh block instead of extending a finished answer.
 func (tb *tab) endStream() {
 	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent {
 		tb.entries[n-1].streaming = false
 	}
 }
 
-// dispatchResultMsg carries the outcome of a slash-command run off the Update
-// goroutine back into it, so a slow command never freezes the TUI.
 type dispatchResultMsg struct {
 	origin string
 	out    string
@@ -214,28 +184,25 @@ type dispatchResultMsg struct {
 
 type eventMsg RoutedEvent
 
-// tickMsg fires on a periodic timer so the TUI refreshes tabs from the hub.
 type tickMsg struct{}
 
-// tickCmd returns a command that fires tickMsg after ~1 second.
 func tickCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
-// spinMsg fires the animation timer that advances the "thinking" spinner. It
-// runs fast (fastTick) while a session is busy and slow otherwise, so an idle
-// TUI is not repainting several times a second.
 type spinMsg struct{}
 
 const fastTick = 200 * time.Millisecond
 
-// spinTick returns a command that fires spinMsg after d.
 func spinTick(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return spinMsg{} })
 }
 
 type model struct {
 	ctx          context.Context
+	st           uiStyles
+	md           *markdownRenderer
+	keys         *keyLog
 	tm           Backend
 	vp           viewport.Model
 	input        textarea.Model
@@ -247,153 +214,109 @@ type model struct {
 	pendingClose bool
 	width        int
 	height       int
-	flash        string        // transient status shown when there is no active tab
-	tabSig       string        // last reconciled session signature, to skip idle work
-	spin         int           // animation frame for the thinking spinner
-	cmds         []CommandSpec // palette command table, loaded from the backend
-	palIdx       int           // selected row in the open command palette
-	palWasOpen   bool          // palette open-state after the previous key, to skip idle re-fits
-	spinning     bool          // whether the animation timer is currently running
-	composerRows int           // composer height the layout is built around, in rows
+	flash        string
+	tabSig       string
+	spin         int
+	cmds         []CommandSpec
+	palIdx       int
+	palWasOpen   bool
+	spinning     bool
+	composerRows int
 
 	infoCache   contracts.SessionInfo
 	infoKnown   bool
 	infoChannel string
 	infoAt      time.Time
 
-	// openSession is the session the window must open on, and openText the first
-	// message to send there. Both are consumed once, by the first reconcile that
-	// finds the session — a window opened on a task must not resend it on every
-	// later one.
 	openSession string
 	openText    string
 
-	resumeOpen bool                    // whether the /resume picker overlay is open
-	resumeIdx  int                     // selected row in the /resume picker
-	resumeRows []contracts.SessionInfo // picker rows, sorted by LastTs desc
+	resumeOpen bool
+	resumeIdx  int
+	resumeRows []contracts.SessionInfo
 
-	switchOpen bool                    // whether the /session switch picker is open
-	switchIdx  int                     // selected row in the switch picker
-	switchRows []contracts.SessionInfo // switch picker rows (open/known sessions)
+	switchOpen bool
+	switchIdx  int
+	switchRows []contracts.SessionInfo
 
-	diagOpen bool // whether the /capabilities diagnostic screen is open
+	diagOpen bool
 
-	skillsOpen bool           // whether the /skills panel overlay is open
-	skillsIdx  int            // selected row in the /skills panel
-	skillsRows []skills.Skill // discovered skills, name-sorted
+	skillsOpen bool
+	skillsIdx  int
+	skillsRows []skills.Skill
 
-	pluginsOpen     bool        // whether the /plugins screen overlay is open
-	pluginsSeam     PluginSeam  // the host's plugin management, nil in a build without it
-	pluginsMode     pluginsMode // where the screen is in its one flow
-	pluginsIdx      int         // selected plugin row
-	pluginsRows     []PluginRow // the compiled-in plugins, as the seam reports them
-	pluginsMenu     []string    // rows of the menu the flow is currently asking through
-	pluginsMenuIdx  int         // selected row in that menu
+	pluginsOpen     bool
+	pluginsSeam     PluginSeam
+	pluginsMode     pluginsMode
+	pluginsIdx      int
+	pluginsRows     []PluginRow
+	pluginsMenu     []string
+	pluginsMenuIdx  int
 	pluginsReq      pluginsRequest
-	pluginsFindings []string // what is known against the pending change
-	pluginsOutput   string   // the build's own output, shown when it refused
-	pluginsNotice   string   // the line the flow ends on
+	pluginsFindings []string
+	pluginsOutput   string
+	pluginsNotice   string
 
-	choice    *PendingChoice // an active allow/deny permission menu, else nil
-	choiceIdx int            // selected row in the permission menu
+	choice    *PendingChoice
+	choiceIdx int
 
-	mentionIdx int // selected row in the inline @ file-mention list
-	// mentionCache memoizes the last @-mention directory listing so the several
-	// mentionRows() calls per render (open/view/height/clamp) share one ReadDir
-	// instead of hitting the filesystem repeatedly. Keyed by "dir\x00prefix".
+	mentionIdx       int
 	mentionCacheKey  string
 	mentionCacheRows []string
 
-	history []string // ring of submitted prompts, for ↑/↓ recall
-	histIdx int      // cursor into history while recalling (len(history) == not recalling)
+	history []string
+	histIdx int
 
-	clip      clipboard    // system clipboard reader for Ctrl+V image paste
-	pending   []Attachment // files staged for the next submit, shown as chips
-	attachSeq int          // monotonic counter for naming pasted temp files
+	clip      clipboard
+	pending   []Attachment
+	attachSeq int
 
-	// mouseFree records that the mouse has been handed back to the terminal, so
-	// its own selection works (see mouse.go). It is drawn in the status bar: the
-	// wheel stops scrolling while it is set, and a capability that silently comes
-	// and goes is one the operator ends up blaming the program for.
 	mouseFree bool
 
-	// caps is what this terminal can do, resolved once at startup. Every feature
-	// that has a richer and a plainer rendering reads it; nothing re-probes.
 	caps Capabilities
 
-	// imageFetcher and imageHosts drive remote transcript images. Both are unset
-	// by default, which is the terminal gateway's own position: it declares no
-	// attachment hosts, so nothing is fetched until one is wired.
 	imageFetcher func(context.Context, string) ([]byte, error)
 	imageHosts   []string
 
-	// links are the references found in the last rendered transcript, and linkIdx
-	// is the one an open gesture would act on (-1 = none). Both are derived from
-	// the render, never from an event: see open.go.
 	links   []Link
 	linkIdx int
 
-	// sys and edit open a selected link. They are fields so a test can count the
-	// calls: the assertion that nothing opens on its own is only worth as much as
-	// the seam that lets it be checked.
 	sys  launcher
 	edit launcher
 
-	// The search overlay. searchReturn is where the viewport was when it opened:
-	// a search is a detour, and the way back is half the feature.
 	searchOpen   bool
 	searchQuery  string
 	searchHits   []int
 	searchIdx    int
 	searchReturn int
 
-	// foldTurnsOn collapses the history above the current exchange to one line
-	// per turn, for finding a turn rather than reading it.
 	foldTurnsOn bool
 
-	// foldCode collapses every long code block in the transcript to a summary
-	// line, for reading the conversation rather than the code in it.
 	foldCode bool
 
-	// expandTools lifts the budget on tool lines: the whole command as it was run
-	// rather than the two lines that say which one it was.
 	expandTools bool
 
-	// tsCache memoizes the active tab's wrapped transcript so the animation tick
-	// (which repaints every fastTick while a turn is busy) does not re-wrap the
-	// whole history on each frame — only a real content or width change does.
 	tsCache transcriptCache
 
-	// foldCache and markCache memoize the two passes that run over the whole
-	// transcript after tsCache has already served it: see contentWith.
 	foldCache overlayCache
 	markCache overlayCache
 }
 
-// overlayCache memoizes one whole-transcript pass by the string it consumed and
-// the argument it consumed it with. Keying on the input string is exact and cheap
-// at once: on a hit it is the very string tsCache handed back, so the comparison
-// settles on the pointer rather than walking the transcript.
 type overlayCache struct {
 	in  string
 	arg string
 	out string
 }
 
-func (c *overlayCache) get(in, arg string, apply func(string) string) string {
-	if c.out != "" && c.in == in && c.arg == arg {
+func (c *overlayCache) get(input, arg string, apply func(string) string) string {
+	if c.out != "" && c.in == input && c.arg == arg {
 		return c.out
 	}
-	out := apply(in)
-	*c = overlayCache{in: in, arg: arg, out: out}
+	out := apply(input)
+	*c = overlayCache{in: input, arg: arg, out: out}
 	return out
 }
 
-// transcriptCache holds the last rendered transcript and the key it was rendered
-// for. The key captures everything renderTranscript's output depends on: which
-// tab, the wrap width, the entry count, and the length + streaming state of the
-// last entry (the only one appendChunk mutates in place). A matching key means
-// the wrapped output is byte-identical, so it can be reused without re-wrapping.
 type transcriptCache struct {
 	ch      string
 	width   int
@@ -404,15 +327,8 @@ type transcriptCache struct {
 	valid   bool
 }
 
-// maxComposerLines caps how tall the multi-line composer grows before it scrolls
-// internally, so a long draft never eats the whole transcript.
 const maxComposerLines = 8
 
-// composerHeight is the current height of the input composer in rows (≥1). It
-// grows with the draft up to maxComposerLines.
-//
-// It reads composerRows and not the widget: the widget is held permanently at
-// maxComposerLines and inputRow trims what it draws. See newModel.
 func (m *model) composerHeight() int {
 	if m.composerRows >= 1 {
 		return m.composerRows
@@ -420,34 +336,25 @@ func (m *model) composerHeight() int {
 	return 1
 }
 
-// resizeComposer records the height the draft needs, up to maxComposerLines, and
-// re-fits the viewport when that height changed, so the transcript never overlaps
-// a multi-line draft. The widget's own height is never touched.
 func (m *model) resizeComposer() {
-	h := displayRows(m.input.Value(), m.input.Width())
-	if h < 1 {
-		h = 1
+	height := displayRows(m.input.Value(), m.input.Width())
+	if height < 1 {
+		height = 1
 	}
-	if h > maxComposerLines {
-		h = maxComposerLines
+	if height > maxComposerLines {
+		height = maxComposerLines
 	}
-	if h != m.composerRows {
-		m.composerRows = h
+	if height != m.composerRows {
+		m.composerRows = height
 		m.applySize()
 		m.syncViewport()
 	}
 }
 
-// chromeHeight is the number of non-viewport rows View renders: the banner, the
-// separator above the composer, the status/spinner row and the row bubbletea
-// itself takes (4), plus the composer's current height, and any staged-chip row,
-// shortcuts line, palette, or picker when each is shown.
 func (m *model) chromeHeight() int {
 	return m.buildFrame().height()
 }
 
-// innerWidth is the usable content width: the full window (no border, no card),
-// floored at 1 so a tiny terminal never yields a negative width.
 func (m *model) innerWidth() int {
 	if m.width < 1 {
 		return 1
@@ -455,7 +362,6 @@ func (m *model) innerWidth() int {
 	return m.width
 }
 
-// applySize fits the viewport to the current window minus the chrome.
 func (m *model) applySize() {
 	if !m.ready {
 		return
@@ -471,66 +377,45 @@ func (m *model) runContext() context.Context {
 	return m.ctx
 }
 
-func newModel(tm Backend) *model {
-	in := textarea.New()
-	in.Placeholder = "type a message…"
-	in.Prompt = "" // the composer sits flush inside the panel; no per-line gutter
-	in.ShowLineNumbers = false
-	// Enter submits (intercepted in Update); a newline is an explicit chord. Both
-	// modified-Enter forms are bound because which one survives depends on the
-	// terminal, and neither is guaranteed — a trailing backslash (continueLine)
-	// is the fallback that needs nothing from the terminal.
-	in.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "shift+enter", "ctrl+j"))
-	// The widget is held at its full allowance for life and inputRow trims the
-	// rows it draws, because a textarea that is resized to fit its draft scrolls
-	// its own inner viewport the moment an edit puts the cursor below the last
-	// row it can currently show — and growing the box afterwards does not undo
-	// that scroll. That is what ate the first line of every two-line message:
-	// what you had just typed sat on top, with a blank row under it and the line
-	// above it gone. A box that is already tall enough never scrolls.
-	in.SetHeight(maxComposerLines)
-	in.Focus()
-	m := &model{ctx: context.Background(), tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
-		sys: systemLauncher(), edit: editorLauncher(os.Getenv)}
-	// The palette is the frontend's own verbs followed by the daemon's. The
-	// backend used to replace the list outright, which meant connecting to a
-	// daemon cost the operator /help, /clear and every other local overlay.
-	m.cmds = localCommands()
-	if tm != nil {
-		m.cmds = mergeCommands(m.cmds, tm.Commands())
+func newModel(backend Backend) *model {
+	field := textarea.New()
+	field.Placeholder = "type a message…"
+	field.Prompt = ""
+	field.ShowLineNumbers = false
+	field.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "shift+enter", "ctrl+j"))
+	field.SetHeight(maxComposerLines)
+	field.Focus()
+	match := &model{
+		ctx: context.Background(), tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
+		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
+		st: newStyles(), md: &markdownRenderer{},
 	}
-	return m
+	match.cmds = localCommands()
+	if backend != nil {
+		match.cmds = mergeCommands(match.cmds, backend.Commands())
+	}
+	return match
 }
 
-// ensureTab creates a tab for channel if missing, making the first tab active.
 func (m *model) ensureTab(channel string) *tab {
 	if tb, ok := m.tabs[channel]; ok {
 		return tb
 	}
-	tb := &tab{channel: channel, label: channel, openedAt: time.Now()}
-	m.tabs[channel] = tb
+	tab := &tab{channel: channel, label: channel, openedAt: time.Now()}
+	m.tabs[channel] = tab
 	m.order = append(m.order, channel)
 	if m.active == "" {
 		m.active = channel
 	}
-	m.seedScrollback(tb)
-	return tb
+	m.seedScrollback(tab)
+	return tab
 }
 
-// seedScrollback fills a freshly created tab with its recorded transcript. Every
-// replayed line used to collapse into one faint role, which made a resumed
-// session open on a wall of unreadable grey — the history is the conversation,
-// and it deserves the same shape the live turns get. So a replayed line is
-// rendered as what it is, and the one thing marked as past is the boundary.
-//
-// It is a no-op when the backend is absent, the session name is not yet known,
-// or no history exists — a reopened tab is thus seeded before any live event
-// arrives.
-func (m *model) seedScrollback(tb *tab) {
+func (m *model) seedScrollback(tab *tab) {
 	if m.tm == nil {
 		return
 	}
-	name := m.sessionName(tb.channel)
+	name := m.sessionName(tab.channel)
 	if name == "" {
 		return
 	}
@@ -539,16 +424,11 @@ func (m *model) seedScrollback(tb *tab) {
 		return
 	}
 	for _, ln := range lines {
-		tb.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
+		tab.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
 	}
-	// One rule under the replay, not a mark on every line: the reader needs to
-	// know where the past stops, and that is a single fact about a single place.
-	tb.appendEntry(entry{role: roleScrollback, text: "earlier"})
+	tab.appendEntry(entry{role: roleScrollback, text: "earlier"})
 }
 
-// scrollbackRole maps a recorded line's role onto the transcript's own. The wire
-// records only "user" and "assistant"; anything else is prose from the agent
-// side, which is the safer of the two to be wrong about.
 func scrollbackRole(role string) string {
 	if role == "user" {
 		return roleYou
@@ -556,16 +436,15 @@ func scrollbackRole(role string) string {
 	return roleAgent
 }
 
-// removeTab drops a tab and fixes the active selection.
 func (m *model) removeTab(channel string) {
 	if _, ok := m.tabs[channel]; !ok {
 		return
 	}
 	delete(m.tabs, channel)
 	out := m.order[:0]
-	for _, ch := range m.order {
-		if ch != channel {
-			out = append(out, ch)
+	for _, channelName := range m.order {
+		if channelName != channel {
+			out = append(out, channelName)
 		}
 	}
 	m.order = out
@@ -578,101 +457,85 @@ func (m *model) removeTab(channel string) {
 	}
 }
 
-// route delivers a routed event to its tab, marking inactive tabs unread. It
-// returns the command for any work the event started — today, fetching the
-// images a completed answer linked to.
-func (m *model) route(re RoutedEvent) tea.Cmd {
-	if re.Event.T == "closed" {
-		m.removeTab(re.Conv.ID)
+func (m *model) route(routed RoutedEvent) tea.Cmd {
+	if routed.Event.T == "closed" {
+		m.removeTab(routed.Conv.ID)
 		return nil
 	}
-	tb := m.ensureTab(re.Conv.ID)
-	before := len(tb.entries)
-	m.renderInto(tb, re.Event)
-	if len(tb.entries) != before && tb.channel != m.active {
-		tb.unread = true
+	tab := m.ensureTab(routed.Conv.ID)
+	before := len(tab.entries)
+	m.renderInto(tab, routed.Event)
+	if len(tab.entries) != before && tab.channel != m.active {
+		tab.unread = true
 	}
-	if tb.channel == m.active {
+	if tab.channel == m.active {
 		m.syncViewport()
 	}
-	// Only a finished answer is scanned for images: a streaming one is still
-	// growing, and a half-arrived URL is not a URL.
-	if re.Event.T != "reply" || len(tb.entries) == 0 {
+	if routed.Event.T != "reply" || len(tab.entries) == 0 {
 		return nil
 	}
-	last := len(tb.entries) - 1
-	for last >= 0 && tb.entries[last].role != roleAgent {
+	last := len(tab.entries) - 1
+	for last >= 0 && tab.entries[last].role != roleAgent {
 		last--
 	}
 	if last < 0 {
 		return nil
 	}
-	return m.fetchEntryImages(tb, last)
+	return m.fetchEntryImages(tab, last)
 }
 
-// syncTabs reconciles tabs against the hub's session list: it creates tabs for
-// new sessions, labels them by name, and drops tabs whose session is gone.
 func (m *model) syncTabs() {
 	infos := m.tm.Sessions()
 	if infos == nil {
 		return
 	}
-	var sb strings.Builder
-	for _, s := range infos {
-		sb.WriteString(s.ChannelID)
-		sb.WriteByte('\x1f')
-		sb.WriteString(s.Name)
-		sb.WriteByte('\n')
+	var builder strings.Builder
+	for i := range infos {
+		info := &infos[i]
+		builder.WriteString(info.ChannelID)
+		builder.WriteByte('\x1f')
+		builder.WriteString(info.Name)
+		builder.WriteByte('\n')
 	}
-	sig := sb.String()
+	sig := builder.String()
 	if sig == m.tabSig {
-		return // session set unchanged since last reconcile
+		return
 	}
 	m.tabSig = sig
-	live := map[string]bool{}
-	for _, s := range infos {
-		live[s.ChannelID] = true // keep an already-open tab even once archived
-		if s.Archived {
-			continue // archived sessions never auto-open a tab (reopen via /resume)
+	live := make(map[string]bool)
+	for i := range infos {
+		session := &infos[i]
+		live[session.ChannelID] = true
+		if session.Archived {
+			continue
 		}
-		tb := m.ensureTab(s.ChannelID)
-		if s.Name != "" {
-			tb.label = s.Name
+		tab := m.ensureTab(session.ChannelID)
+		if session.Name != "" {
+			tab.label = session.Name
 		}
 	}
-	for _, ch := range append([]string(nil), m.order...) {
-		if !live[ch] {
-			m.removeTab(ch)
+	for _, channel := range append([]string(nil), m.order...) {
+		if !live[channel] {
+			m.removeTab(channel)
 		}
 	}
 	m.focusOpen(infos)
 }
 
-// focusOpen selects the session the window was opened on and sends its opening
-// message, once the session exists.
-//
-// It runs off the session list rather than at startup because neither fact is
-// available then: the tab is created from the hub's answer, and when this process
-// is the one starting the daemon the session is not even bridged yet. Waiting for
-// it to appear is what makes the two launch paths — attach to a running daemon,
-// or start one — behave identically.
-//
-// Both fields are cleared before the send, so a session that comes and goes
-// cannot replay the task, and a failed submit is not retried behind the
-// operator's back.
 func (m *model) focusOpen(infos []contracts.SessionInfo) {
 	if m.openSession == "" {
 		return
 	}
 	channel := ""
-	for _, s := range infos {
-		if s.Name == m.openSession {
-			channel = s.ChannelID
+	for i := range infos {
+		info := &infos[i]
+		if info.Name == m.openSession {
+			channel = info.ChannelID
 			break
 		}
 	}
 	if channel == "" || m.tabs[channel] == nil {
-		return // not bridged yet; a later reconcile will find it
+		return
 	}
 	text := m.openText
 	m.openSession, m.openText = "", ""
@@ -682,19 +545,6 @@ func (m *model) focusOpen(infos []contracts.SessionInfo) {
 	}
 }
 
-// handleEnter dispatches a /command or submits a prompt to the active tab. A
-// slash command runs in a returned tea.Cmd (off the Update goroutine) so a slow
-// dispatch — e.g. a clone against an unreachable host — never freezes the TUI;
-// its result is delivered back as a dispatchResultMsg.
-// continueLine implements the backslash convention: a draft ending in a lone
-// backslash treats Enter as a line break rather than a send, replacing the
-// backslash with the newline. It reports whether it consumed the key.
-//
-// The modified-Enter chords are the better gesture when the terminal delivers
-// them, but plenty do not — Alt+Enter is eaten by the window manager, and
-// Shift+Enter is indistinguishable from Enter unless the terminal speaks an
-// extended keyboard protocol. A trailing backslash needs nothing from the
-// terminal at all, which is why every shell settled on it.
 func (m *model) continueLine() bool {
 	val := m.input.Value()
 	if !strings.HasSuffix(val, `\`) || strings.HasSuffix(val, `\\`) {
@@ -711,117 +561,112 @@ func (m *model) handleEnter() tea.Cmd {
 		return nil
 	}
 	m.input.Reset()
-	m.resizeComposer() // a submitted draft collapses the composer back to one row
+	m.resizeComposer()
 	if strings.HasPrefix(text, "/") {
-		args := strings.Fields(strings.TrimPrefix(text, "/"))
-		if len(args) == 0 {
-			return nil // a bare "/" is the palette prefix, not an empty command to run
-		}
-		if args[0] == "resume" {
-			m.openResume() // TUI-local overlay, not a backend command
-			return nil
-		}
-		if args[0] == "clear" {
-			m.clearActive() // TUI-local: wipe the active transcript
-			return nil
-		}
-		if args[0] == "help" {
-			m.toggleHelp() // TUI-local: the shortcuts panel
-			return nil
-		}
-		if args[0] == "session" && len(args) >= 2 && args[1] == "switch" {
-			m.openSwitch() // TUI-local session switcher (invisible multi-session)
-			return nil
-		}
-		if args[0] == "usage" {
-			if tb := m.tabs[m.active]; tb != nil {
-				tb.appendEntry(entry{role: roleNotice, text: m.usageReport(tb)})
-				m.syncViewport()
-			}
-			return nil
-		}
-		if args[0] == "capabilities" {
-			m.openDiagnostics() // TUI-local: what the probe resolved, and why
-			return nil
-		}
-		if args[0] == "skills" {
-			m.openSkills() // TUI-local read-only view of available skills
-			return nil
-		}
-		if args[0] == "plugins" {
-			return m.openPlugins() // TUI-local view of the composition this binary is
-		}
-		if args[0] == "attach" {
-			m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
-			return nil
-		}
-		if args[0] == "session" && len(args) >= 2 && args[1] == "close" {
-			return m.closeCmd(args[2:])
-		}
-		if args[0] == "rename" {
-			return m.renameCmd(args[1:])
-		}
-		if args[0] == "copy" {
-			m.copyCmd(args[1:]) // TUI-local: the transcript is here, not on the daemon
-			return nil
-		}
-		if args[0] == "mouse" {
-			return m.toggleMouse() // TUI-local: a terminal mode, nothing to dispatch
-		}
-		return m.dispatchCmd(m.active, args)
+		return m.runSlash(text)
 	}
 	if m.active == "" {
 		return nil
 	}
 	atts := m.pending
 	m.pending = nil
-	m.applySize() // the chip row (if any) is gone now the draft is sent
+	m.applySize()
 	m.recordHistory(text)
 	m.submitTo(m.active, text, atts)
 	return nil
 }
 
-// submitTo hands a message to the backend and shows it as sent in that tab.
-//
-// Split out of handleEnter because a window opened on a task submits one message
-// nobody typed, and it must land in exactly the state a typed one does: the same
-// transcript entry, the same busy flag. Two spellings of "sent" would drift.
+func (m *model) runSlash(text string) tea.Cmd {
+	args := strings.Fields(strings.TrimPrefix(text, "/"))
+	if len(args) == 0 {
+		return nil
+	}
+	if cmd, handled := m.runLocalSlash(text, args); handled {
+		return cmd
+	}
+	return m.dispatchCmd(m.active, args)
+}
+
+func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
+	switch args[0] {
+	case "resume":
+		m.openResume()
+	case "clear":
+		m.clearActive()
+	case "help":
+		m.toggleHelp()
+	case sessionVerb:
+		return m.sessionSlash(args)
+	case "usage":
+		if tb := m.tabs[m.active]; tb != nil {
+			tb.appendEntry(entry{role: roleNotice, text: m.usageReport(tb)})
+			m.syncViewport()
+		}
+	case "capabilities":
+		m.openDiagnostics()
+	case "skills":
+		m.openSkills()
+	case "plugins":
+		return m.openPlugins(), true
+	case "attach":
+		m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
+	case verbRename:
+		return m.renameCmd(args[1:]), true
+	case "copy":
+		m.copyCmd(args[1:])
+	case "mouse":
+		return m.toggleMouse(), true
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+const minSessionArgs = 2
+
+func (m *model) sessionSlash(args []string) (tea.Cmd, bool) {
+	if len(args) < minSessionArgs {
+		return nil, false
+	}
+	switch args[1] {
+	case "switch":
+		m.openSwitch()
+		return nil, true
+	case "close":
+		return m.closeCmd(args[2:]), true
+	}
+	return nil, false
+}
+
 func (m *model) submitTo(channel, text string, atts []Attachment) {
-	tb := m.tabs[channel]
-	if tb == nil {
+	tab := m.tabs[channel]
+	if tab == nil {
 		return
 	}
 	m.tm.Submit(channel, text, atts)
-	tb.endStream() // a new user turn closes any lingering agent block
-	e := entry{role: roleYou, text: text, attachments: atts}
-	// Every terminal gets a preview: half-blocks need no protocol at all, so the
-	// fallback is a coarser picture rather than no picture.
-	e.preview = previewEscapes(atts, m.caps)
-	tb.appendEntry(e)
-	// Flip to the working state immediately, before any backend event, so the
-	// operator sees the message was taken (the "thinking" line is derived from this).
-	tb.busy = true
-	tb.streamed = false
-	tb.tokens = 0
-	tb.startedAt = time.Now()
+	tab.endStream()
+	item := entry{role: roleYou, text: text, attachments: atts}
+	item.preview = previewEscapes(atts, m.caps)
+	tab.appendEntry(item)
+	tab.busy = true
+	tab.streamed = false
+	tab.tokens = 0
+	tab.startedAt = time.Now()
 	m.syncViewport()
 }
 
-// pasteImage pulls an image off the system clipboard, stages it for the next
-// submit, and reports whether it consumed the paste. A clipboard holding no image
-// (or no clipboard tool) returns false, so Ctrl+V falls through to a text paste.
 func (m *model) pasteImage() bool {
 	if m.clip == nil {
 		return false
 	}
-	mime, ok := m.clip.ImageType()
+	mime, ok := m.clip.ImageType(m.runContext())
 	if !ok {
 		return false
 	}
-	data, err := m.clip.ReadImage(mime)
+	data, err := m.clip.ReadImage(m.runContext(), mime)
 	if err != nil {
 		m.flash = "collage impossible : " + err.Error()
-		return true // an image was on the clipboard; do not fall through to text
+		return true
 	}
 	att, err := saveClipboardImage(data, mime, m.attachSeq)
 	if err != nil {
@@ -830,13 +675,11 @@ func (m *model) pasteImage() bool {
 	}
 	m.attachSeq++
 	m.pending = append(m.pending, att)
-	m.applySize() // the new chip row steals a viewport line
+	m.applySize()
 	m.syncViewport()
 	return true
 }
 
-// stageAttachment resolves a /attach path to a staged file, surfacing any error
-// through the transient flash rather than the transcript.
 func (m *model) stageAttachment(path string) {
 	att, err := attachLocalFile(path, m.attachSeq)
 	if err != nil {
@@ -849,9 +692,6 @@ func (m *model) stageAttachment(path string) {
 	m.syncViewport()
 }
 
-// removeLastPending drops the most recently staged attachment, returning whether
-// one was there to drop — so the Ctrl+U binding can fall through to the composer's
-// delete-to-line-start when nothing is staged.
 func (m *model) removeLastPending() bool {
 	if len(m.pending) == 0 {
 		return false
@@ -860,37 +700,29 @@ func (m *model) removeLastPending() bool {
 	return true
 }
 
-// dispatchCmd runs an operator argv against the backend off the Update goroutine,
-// tagging the result with the tab it was issued from.
 func (m *model) dispatchCmd(origin string, args []string) tea.Cmd {
-	tm := m.tm
+	backend := m.tm
 	return func() tea.Msg {
-		out, err := tm.Dispatch(args)
+		out, err := backend.Dispatch(args)
 		return dispatchResultMsg{origin: origin, out: out, err: err}
 	}
 }
 
-// recordHistory appends a submitted prompt to the input-history ring and resets
-// the recall cursor to the end, so the next ↑ starts from the newest entry.
 func (m *model) recordHistory(text string) {
 	if text == "" {
 		return
 	}
-	// Skip a duplicate of the most recent entry so repeated sends don't stack.
 	if n := len(m.history); n == 0 || m.history[n-1] != text {
 		m.history = append(m.history, text)
 	}
 	m.histIdx = len(m.history)
 }
 
-// recallHistory moves the recall cursor by d (−1 = older, +1 = newer) and loads
-// that prompt into the composer. Moving past the newest entry restores an empty
-// draft. It reports whether it consumed the key (false when there is no history).
-func (m *model) recallHistory(d int) bool {
+func (m *model) recallHistory(delta int) bool {
 	if len(m.history) == 0 {
 		return false
 	}
-	idx := m.histIdx + d
+	idx := m.histIdx + delta
 	if idx < 0 {
 		idx = 0
 	}
@@ -905,53 +737,45 @@ func (m *model) recallHistory(d int) bool {
 	return true
 }
 
-// clearActive wipes the active tab's transcript, the /clear conversation reset.
-// It leaves the session itself untouched — only the on-screen history is cleared.
 func (m *model) clearActive() {
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return
 	}
-	tb.entries = nil
-	tb.streamed = false
+	tab.entries = nil
+	tab.streamed = false
 	m.tsCache.valid = false
 	m.syncViewport()
 }
 
-// toggleHelp flips the shortcuts panel on/off, resizing the viewport so the panel
-// does not push the chrome off-screen.
 func (m *model) toggleHelp() {
 	m.showHelp = !m.showHelp
 	m.applySize()
 	m.syncViewport()
 }
 
-// sessionName resolves a channel id to its logical session name via the hub,
-// returning "" when the session is not (yet) known.
 func (m *model) sessionName(channel string) string {
-	for _, s := range m.tm.Sessions() {
-		if s.ChannelID == channel && s.Name != "" {
-			return s.Name
+	sessions := m.tm.Sessions()
+	for i := range sessions {
+		session := &sessions[i]
+		if session.ChannelID == channel && session.Name != "" {
+			return session.Name
 		}
 	}
 	return ""
 }
 
-// activeSessionName is the session the front tab belongs to, resolved through
-// the hub because a tab's label is still its channel id until the first
-// reconcile. Empty when no tab is open.
 func (m *model) activeSessionName() string {
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return ""
 	}
-	if name := m.sessionName(tb.channel); name != "" {
+	if name := m.sessionName(tab.channel); name != "" {
 		return name
 	}
-	return tb.label
+	return tab.label
 }
 
-// confirmClose dispatches a close for the active tab's session.
 func (m *model) confirmClose() tea.Cmd {
 	name := m.activeSessionName()
 	if name == "" {
@@ -960,24 +784,14 @@ func (m *model) confirmClose() tea.Cmd {
 	return m.closeSession(name, false)
 }
 
-// closeSession tears a session down through the typed seam, tagging the result
-// with the tab the close was issued from so any error surfaces where it was
-// asked for.
 func (m *model) closeSession(name string, force bool) tea.Cmd {
-	origin, tm := m.active, m.tm
+	backend, manager := m.active, m.tm
 	return func() tea.Msg {
-		out, err := tm.Close(name, force)
-		return dispatchResultMsg{origin: origin, out: out, err: err}
+		out, err := manager.Close(name, force)
+		return dispatchResultMsg{origin: backend, out: out, err: err}
 	}
 }
 
-// closeCmd answers "/session close": the session it closes is the one you are
-// looking at, unless the line names another.
-//
-// The daemon cannot make that call — it has no notion of which tab is in front —
-// so the flagless form came back as "flag --name needs a value", and that is the
-// exact line the palette leaves in the composer the moment it completes the
-// verb. Closing the session you are in is what typing it means.
 func (m *model) closeCmd(rest []string) tea.Cmd {
 	name, force := closeTarget(rest)
 	if name == "" {
@@ -990,12 +804,9 @@ func (m *model) closeCmd(rest []string) tea.Cmd {
 	return m.closeSession(name, force)
 }
 
-// renameCmd renames the active tab's session. The daemon verb needs both names;
-// an operator typing in a session's own window has already named it by being
-// there, so only the new one is asked for.
 func (m *model) renameCmd(rest []string) tea.Cmd {
-	to := renameTarget(rest)
-	if to == "" {
+	target := renameTarget(rest)
+	if target == "" {
 		m.flash = "/rename <nom> : donne le nouveau nom de la session"
 		return nil
 	}
@@ -1004,21 +815,18 @@ func (m *model) renameCmd(rest []string) tea.Cmd {
 		m.flash = "aucune session à renommer ici"
 		return nil
 	}
-	return m.dispatchCmd(m.active, []string{"session", "rename", "--name", name, "--to", to})
+	return m.dispatchCmd(m.active, []string{sessionVerb, verbRename, "--name", name, "--to", target})
 }
 
-// renameTarget reads the new name off the line. The words are kept as typed and
-// joined back with spaces (the daemon slugifies) so "/rename ma grande refonte"
-// means what it looks like rather than only its first word.
 func renameTarget(rest []string) string {
 	var words []string
-	for i := 0; i < len(rest); i++ {
-		tok := rest[i]
+	for index := 0; index < len(rest); index++ {
+		tok := rest[index]
 		switch {
 		case tok == "--to":
-			if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
-				words = append(words, rest[i+1])
-				i++
+			if index+1 < len(rest) && !strings.HasPrefix(rest[index+1], "--") {
+				words = append(words, rest[index+1])
+				index++
 			}
 		case strings.HasPrefix(tok, "--to="):
 			words = append(words, strings.TrimPrefix(tok, "--to="))
@@ -1029,20 +837,18 @@ func renameTarget(rest []string) string {
 	return strings.Join(words, " ")
 }
 
-// closeTarget reads what "/session close" was typed with: the session named on
-// the line, if one was, and whether the close is forced. A "--name" with nothing
-// after it counts as unnamed — that is what the palette completes to, and it
-// means "this one" rather than a mistake.
-func closeTarget(rest []string) (name string, force bool) {
-	for i := 0; i < len(rest); i++ {
-		tok := rest[i]
+func closeTarget(rest []string) (string, bool) {
+	var name string
+	var force bool
+	for index := 0; index < len(rest); index++ {
+		tok := rest[index]
 		switch {
 		case tok == "--force":
 			force = true
 		case tok == "--name":
-			if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
-				name = rest[i+1]
-				i++
+			if index+1 < len(rest) && !strings.HasPrefix(rest[index+1], "--") {
+				name = rest[index+1]
+				index++
 			}
 		case strings.HasPrefix(tok, "--name="):
 			name = strings.TrimPrefix(tok, "--name=")
@@ -1058,9 +864,9 @@ func (m *model) switchTab(delta int) {
 		return
 	}
 	idx := 0
-	for i, ch := range m.order {
+	for index, ch := range m.order {
 		if ch == m.active {
-			idx = i
+			idx = index
 			break
 		}
 	}
@@ -1068,123 +874,112 @@ func (m *model) switchTab(delta int) {
 	m.activate(m.order[idx])
 }
 
-// activate focuses the tab for ch: it clears its unread marker and snaps the
-// viewport to its latest output. A no-op if ch is already active or unknown, so
-// re-clicking the current tab does not fight an in-progress scroll.
-func (m *model) activate(ch string) {
-	if ch == m.active || m.tabs[ch] == nil {
+func (m *model) activate(channel string) {
+	if channel == m.active || m.tabs[channel] == nil {
 		return
 	}
-	m.active = ch
-	m.tabs[ch].unread = false
+	m.active = channel
+	m.tabs[channel].unread = false
 	m.syncViewport()
-	m.vp.GotoBottom() // a freshly switched-to tab starts at its latest output
+	m.vp.GotoBottom()
 }
 
-func (m *model) renderInto(tb *tab, e contracts.Event) {
-	// Any non-abandoned event clears the disconnected marker.
-	if e.T != "abandoned" {
-		tb.disconnected = false
+func (m *model) renderInto(target *tab, event contracts.Event) {
+	if event.T != "abandoned" {
+		target.disconnected = false
 	}
-	// Tokens ride events as a cumulative output-token count; keep the latest so the
-	// spinner hint can show turn progress.
-	if e.Tokens > 0 {
-		tb.tokens = e.Tokens
+	if event.Tokens > 0 {
+		target.tokens = event.Tokens
 	}
-	// The size of the prompt actually sent is the one measurement of context
-	// occupancy on the wire; the window it fills is not, hence contextLimit.
-	//
-	// Each message of an agentic turn reports its own whole prompt, so the latest
-	// of those *is* the live context — but the terminal reply carries the turn's
-	// billing totals, which add every one of those prompts up. Reading them as
-	// occupancy is what put "1252.2k/200k · 100%" on the bar after an eight-minute
-	// turn: six windows' worth of tokens, none of them the context.
-	//
-	// The exception is a turn whose whole answer was one message: the vendor
-	// reports its usage after that message's own events, so nothing mid-turn ever
-	// carried a reading, and a sum of one prompt is that prompt. Without this the
-	// gauge stayed blank for every short turn.
-	if used := e.TokensIn + e.CacheRead + e.CacheCreate; used > 0 {
-		if !e.Done {
-			tb.ctxTokens, tb.ctxMeasured = used, true
-		} else if !tb.ctxMeasured {
-			tb.ctxTokens = used
-		}
-	}
-	switch e.T {
+	target.measureContext(event)
+	switch event.T {
 	case "chunk":
-		tb.busy = true
-		tb.streamed = true
-		tb.appendChunk(e.Text)
+		target.busy = true
+		target.streamed = true
+		target.appendChunk(event.Text)
 	case "thinking":
-		// The bus has always emitted these (hub.emitBackendEvent); the TUI used to
-		// drop them on the floor, so the agent's reasoning never reached the screen.
-		// Unlike a tool line the hub does not drop the empty ones, so we do.
-		tb.busy = true
-		if strings.TrimSpace(e.Text) == "" {
-			break
-		}
-		tb.endStream()
-		tb.appendEntry(entry{role: roleThinking, text: e.Text})
+		target.busy = true
+		target.appendThinking(event.Text)
 	case "status":
-		tb.busy = true
-		tb.endStream() // a tool line ends the current prose block
-		text, _ := hostError(e.Text)
-		tb.appendEntry(entry{role: statusRole(e.Text), text: text})
+		target.busy = true
+		target.endStream()
+		text, _ := hostError(event.Text)
+		target.appendEntry(entry{role: statusRole(event.Text), text: text})
 	case "reply":
-		// A streamed answer is already on screen from its chunks; rendering the
-		// final reply text again is the duplicate we are killing. The streamed
-		// flag holds whether or not the reply repeats the text, so a
-		// non-streaming backend still renders reply.Text exactly once.
-		if e.Text != "" && !tb.streamed {
-			// A backend that failed with no output arrives here, not on a status
-			// event: the host marks the reply itself. Rendered as prose it would
-			// go through the markdown engine and read as an ordinary answer.
-			if text, isErr := hostError(e.Text); isErr {
-				tb.appendEntry(entry{role: roleError, text: text})
-			} else {
-				tb.appendEntry(entry{role: roleAgent, text: e.Text})
-			}
-		}
-		tb.endStream()
-		if e.Cost > 0 {
-			tb.lastCost = e.Cost
-			tb.costTotal += e.Cost
-			tb.appendEntry(entry{role: roleCost, text: formatCost(e.Cost)})
-		}
-		if e.Done {
-			tb.busy = false
-			tb.streamed = false
-			tb.ctxMeasured = false
-			tb.clearPanels()
-		}
+		target.appendReply(event)
 	case "todos":
-		tb.busy = true
-		tb.todos = e.Todos
+		target.busy = true
+		target.todos = event.Todos
 	case "subagent":
-		tb.busy = true
-		if e.Subagent == nil {
-			break
-		}
-		if e.Subagent.State == "done" {
-			tb.dropAgent(e.Subagent.ID)
-			break
-		}
-		tb.agents = append(tb.agents, liveAgent{Subagent: *e.Subagent, since: time.Now()})
+		target.busy = true
+		target.applySubagent(event.Subagent)
 	case "reset":
-		tb.busy = false
-		tb.streamed = false
-		tb.ctxMeasured = false
-		tb.endStream()
-		tb.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
+		target.busy = false
+		target.streamed = false
+		target.ctxMeasured = false
+		target.endStream()
+		target.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
 	case "abandoned":
+		target.busy = false
+		target.streamed = false
+		target.ctxMeasured = false
+		target.disconnected = true
+		target.endStream()
+		target.appendEntry(entry{role: roleNotice, text: "tour abandonné"})
+	}
+}
+
+func (tb *tab) measureContext(event contracts.Event) {
+	used := event.TokensIn + event.CacheRead + event.CacheCreate
+	if used <= 0 {
+		return
+	}
+	if !event.Done {
+		tb.ctxTokens, tb.ctxMeasured = used, true
+	} else if !tb.ctxMeasured {
+		tb.ctxTokens = used
+	}
+}
+
+func (tb *tab) appendThinking(text string) {
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	tb.endStream()
+	tb.appendEntry(entry{role: roleThinking, text: text})
+}
+
+func (tb *tab) appendReply(event contracts.Event) {
+	if event.Text != "" && !tb.streamed {
+		if text, isErr := hostError(event.Text); isErr {
+			tb.appendEntry(entry{role: roleError, text: text})
+		} else {
+			tb.appendEntry(entry{role: roleAgent, text: event.Text})
+		}
+	}
+	tb.endStream()
+	if event.Cost > 0 {
+		tb.lastCost = event.Cost
+		tb.costTotal += event.Cost
+		tb.appendEntry(entry{role: roleCost, text: formatCost(event.Cost)})
+	}
+	if event.Done {
 		tb.busy = false
 		tb.streamed = false
 		tb.ctxMeasured = false
-		tb.disconnected = true
-		tb.endStream()
-		tb.appendEntry(entry{role: roleNotice, text: "tour abandonné"})
+		tb.clearPanels()
 	}
+}
+
+func (tb *tab) applySubagent(sub *contracts.Subagent) {
+	if sub == nil {
+		return
+	}
+	if sub.State == stateDone {
+		tb.dropAgent(sub.ID)
+		return
+	}
+	tb.agents = append(tb.agents, liveAgent{Subagent: *sub, since: time.Now()})
 }
 
 func (m *model) syncViewport() {
@@ -1195,9 +990,6 @@ func (m *model) syncViewport() {
 		m.vp.SetContent("")
 		return
 	}
-	// Preserve the operator's scroll position: only snap to the bottom when the
-	// view is already there, so streaming output into the active tab does not
-	// defeat PgUp/PgDn scrollback mid-turn.
 	atBottom := m.vp.AtBottom()
 	m.vp.SetContent(m.thinkingContent())
 	if atBottom {
@@ -1205,7 +997,6 @@ func (m *model) syncViewport() {
 	}
 }
 
-// anyBusy reports whether any tab has a turn in flight, so the spinner can idle.
 func (m *model) anyBusy() bool {
 	for _, tb := range m.tabs {
 		if tb.busy {
@@ -1215,43 +1006,26 @@ func (m *model) anyBusy() bool {
 	return false
 }
 
-func (m *model) spinFrame() string { return spinFrames[m.spin%len(spinFrames)] }
+func (m *model) spinFrame() string { return spinFrames()[m.spin%len(spinFrames())] }
 
-// thinkingContent is the active tab's rendered transcript plus a derived, non-stored
-// "thinking" line, shown only when the turn is accepted but nothing has streamed back
-// yet. Because it is derived from state it appears the instant Enter is pressed and
-// disappears when the first chunk lands or the turn completes — it can never double.
 func (m *model) thinkingContent() string {
 	return m.contentWith(m.searchQuery)
 }
 
-// baseContent is the transcript as the viewport would hold it without the search
-// overlay's marks: the entries, the derived thinking line, and the turn fold.
-// Every line offset in search.go is counted in these lines, so the marks must not
-// change what they are counted over.
 func (m *model) baseContent() string { return m.contentWith("") }
 
-// contentWith is the painted transcript with the given query's matches marked.
-// The fold and the marks are two whole-transcript passes that tsCache cannot
-// cover — it keys on the entries, and neither of these changes one — so each is
-// memoized here. syncViewport runs on every streamed chunk and every spinner
-// frame, and without this the cost of a frame would grow with the length of the
-// session for as long as either mode stayed on.
-//
-// Both passes run before the thinking line is appended, so the frame-by-frame
-// churn of the spinner cannot invalidate either.
 func (m *model) contentWith(query string) string {
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return ""
 	}
-	if len(tb.entries) == 0 && !tb.busy {
+	if len(tab.entries) == 0 && !tab.busy {
 		return m.emptyState(m.vp.Width)
 	}
-	content := m.cachedTranscript(tb)
+	content := m.cachedTranscript(tab)
 	if m.foldTurnsOn {
 		content = m.foldCache.get(content, "", func(s string) string {
-			return strings.Join(foldTurns(strings.Split(s, "\n"), turnFoldKeep), "\n")
+			return strings.Join(foldTurns(strings.Split(s, "\n"), turnFoldKeep, m.st), "\n")
 		})
 	}
 	if m.searchOpen && strings.TrimSpace(query) != "" {
@@ -1259,8 +1033,8 @@ func (m *model) contentWith(query string) string {
 			return strings.Join(highlightMatches(strings.Split(s, "\n"), query), "\n")
 		})
 	}
-	if tb.busy && !tb.streamed {
-		line := spinnerStyle.Render(m.spinFrame() + " thinking…")
+	if tab.busy && !tab.streamed {
+		line := m.st.spinner.Render(m.spinFrame() + " thinking…")
 		if content != "" {
 			content += "\n" + line
 		} else {
@@ -1270,37 +1044,26 @@ func (m *model) contentWith(query string) string {
 	return content
 }
 
-// cachedTranscript returns the active tab's wrapped transcript, re-wrapping only
-// when the cache key changed since the last render. The heavy work (lipgloss
-// word-wrap over every entry) thus runs on a real content/width change, not on
-// every animation frame.
-func (m *model) cachedTranscript(tb *tab) string {
+func (m *model) cachedTranscript(tab *tab) string {
 	width := m.vp.Width
 	lastLen, lastStr := 0, false
-	if n := len(tb.entries); n > 0 {
-		lastLen = len(tb.entries[n-1].text)
-		lastStr = tb.entries[n-1].streaming
+	if count := len(tab.entries); count > 0 {
+		lastLen = len(tab.entries[count-1].text)
+		lastStr = tab.entries[count-1].streaming
 	}
-	c := &m.tsCache
-	if c.valid && c.ch == tb.channel && c.width == width &&
-		c.entries == len(tb.entries) && c.lastLen == lastLen && c.lastStr == lastStr {
-		return c.out
+	cache := &m.tsCache
+	if cache.valid && cache.ch == tab.channel && cache.width == width &&
+		cache.entries == len(tab.entries) && cache.lastLen == lastLen && cache.lastStr == lastStr {
+		return cache.out
 	}
-	out := m.renderTranscript(tb, width)
-	*c = transcriptCache{
-		ch: tb.channel, width: width, entries: len(tb.entries),
+	out := m.renderTranscript(tab, width)
+	*cache = transcriptCache{
+		ch: tab.channel, width: width, entries: len(tab.entries),
 		lastLen: lastLen, lastStr: lastStr, out: out, valid: true,
 	}
 	return out
 }
 
-// inputRow renders the multi-line composer. The key hint lives on the status row
-// above it (see statusRow), since a growing composer can no longer share its line.
-// inputRow draws the composer, cut to the rows its draft actually needs. The
-// widget always renders maxComposerLines of them (see newModel) and pads the
-// unused ones, so the trim is what makes the box appear to grow with the text.
-// Past the cap the two heights meet and nothing is cut, which is where the
-// widget's own scrolling takes over.
 func (m *model) inputRow() string {
 	lines := strings.Split(m.input.View(), "\n")
 	if h := m.composerHeight(); h < len(lines) {
@@ -1309,68 +1072,58 @@ func (m *model) inputRow() string {
 	return strings.Join(lines, "\n")
 }
 
-// hintText is the dim key cheatsheet under the composer, switching to menu
-// navigation keys while an inline menu is open.
 func (m *model) hintText() string {
 	if m.paletteOpen() {
-		return dimStyle.Render("↑↓ naviguer · ⇞⇟ page · Tab compléter · Échap fermer")
+		return m.st.dim.Render("↑↓ naviguer · ⇞⇟ page · Tab compléter · Échap fermer")
 	}
-	return dimStyle.Render("? raccourcis")
+	return m.st.dim.Render("? raccourcis")
 }
 
 func (m *model) footer() string {
-	// A selected link takes the row: it is the operator's current gesture, it is
-	// transient, and its target is the one thing they need to read before acting.
 	if s := m.linkStatus(); s != "" {
 		return s
 	}
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return ""
 	}
-	if tb.busy {
-		return spinnerStyle.Render(m.spinnerHint(tb))
+	if tab.busy {
+		return m.st.spinner.Render(m.spinnerHint(tab))
 	}
-	if tb.disconnected {
-		return dimStyle.Render("· déconnecté")
+	if tab.disconnected {
+		return m.st.dim.Render("· déconnecté")
 	}
-	return m.statusBar(tb, m.innerWidth())
+	return m.statusBar(tab, m.innerWidth())
 }
 
-// spinnerHint renders the active turn's progress line in the Claude shape:
-// `✳ {verbe} (échap pour interrompre · {n}s · ↑ {tokens} · ${cost})`. The token and cost
-// segments appear only once a count/cost has arrived, so an early turn shows just
-// the interrupt affordance and elapsed time.
-func (m *model) spinnerHint(tb *tab) string {
+func (m *model) spinnerHint(tab *tab) string {
 	segs := []string{"échap pour interrompre"}
-	if !tb.startedAt.IsZero() {
-		segs = append(segs, fmt.Sprintf("%ds", int(time.Since(tb.startedAt).Seconds())))
+	if !tab.startedAt.IsZero() {
+		segs = append(segs, fmt.Sprintf("%ds", int(time.Since(tab.startedAt).Seconds())))
 	}
-	if tb.tokens > 0 {
-		segs = append(segs, "↑ "+formatTokens(tb.tokens))
+	if tab.tokens > 0 {
+		segs = append(segs, "↑ "+formatTokens(tab.tokens))
 	}
-	if tb.lastCost > 0 {
-		segs = append(segs, formatCost(tb.lastCost))
+	if tab.lastCost > 0 {
+		segs = append(segs, formatCost(tab.lastCost))
 	}
 	return m.spinFrame() + " " + workingVerb + " (" + strings.Join(segs, " · ") + ")"
 }
 
-// formatTokens renders an output-token count compactly: sub-thousand counts as
-// their integer, thousands as "3.4k" (matching Claude's spinner).
-func formatTokens(n int) string {
-	if n < 1000 {
-		return fmt.Sprintf("%d", n)
+const minDisplayedCost = 0.01
+
+func formatTokens(tokens int) string {
+	if tokens < thousand {
+		return strconv.Itoa(tokens)
 	}
-	return fmt.Sprintf("%.1fk", float64(n)/1000)
+	return fmt.Sprintf("%.1fk", float64(tokens)/thousand)
 }
 
-// formatCost renders a turn's USD cost, matching the host progress summary:
-// sub-cent costs get four decimals, larger ones two.
-func formatCost(c float64) string {
-	if c < 0.01 {
-		return fmt.Sprintf("$%.4f", c)
+func formatCost(cost float64) string {
+	if cost < minDisplayedCost {
+		return fmt.Sprintf("$%.4f", cost)
 	}
-	return fmt.Sprintf("$%.2f", c)
+	return fmt.Sprintf("$%.2f", cost)
 }
 
 // Option adjusts a window before it is drawn. Options exist so a caller can say
@@ -1387,65 +1140,50 @@ func OpenOn(session, text string) Option {
 // Run starts the TUI bound to the given gateway backend, blocking until the user
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
-func Run(ctx context.Context, cancel context.CancelFunc, tm Backend, opts ...Option) error {
-	m := newModel(tm)
-	m.ctx = ctx
+func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) error {
+	model := newModel(backend)
+	model.ctx = ctx
+	model.keys = &keyLog{}
 	for _, opt := range opts {
-		opt(m)
+		opt(model)
 	}
-	// The plugins screen needs a host module to manage; a binary running away
-	// from its source simply opens the screen and says so.
 	if seam, err := newManageSeam(); err == nil {
-		m.SetPluginSeam(seam)
+		model.SetPluginSeam(seam)
 	}
-	// WithInput strips the terminal's in-band colour/cursor query responses before
-	// they reach the key parser (see filteredStdin). filteredStdin embeds os.Stdin,
-	// so raw mode and TTY detection still apply to the real terminal.
-	//
-	// The mouse is captured for one reason: the alt screen has no scrollback, so
-	// without wheel events there is no way at all to look back at a long turn.
-	// The cost is the terminal's own click-drag selection, which every terminal
-	// gives back under Shift — named in the help so it is not a discovery.
-	//
-	// The keyboard protocol is asked for before the program starts drawing and
-	// released after it stops, so a crash between them cannot leave the terminal
-	// reporting keys nobody translates any more. This push covers the main screen;
-	// the alternate screen this TUI lives on has its own stack and gets its own
-	// push from Init (see enableEnhancedKeys), which is the one that makes
-	// Shift+Enter actually arrive.
-	os.Stdout.WriteString(enhancedKeysOn)
-	defer os.Stdout.WriteString(enhancedKeysOff)
-	p := tea.NewProgram(m,
+	if err := writeStdout(enhancedKeysOn); err != nil {
+		cancel()
+		return fmt.Errorf("enable enhanced keys: %w", err)
+	}
+	program := tea.NewProgram(model,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
-		tea.WithInput(newFilteredStdin()),
+		tea.WithInput(newFilteredStdin(model.keys)),
 	)
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case e, ok := <-tm.Frontend():
+			case entry, ok := <-backend.Frontend():
 				if !ok {
 					return
 				}
-				p.Send(eventMsg(e))
+				program.Send(eventMsg(entry))
 			}
 		}
 	}()
-	_, err := p.Run()
+	_, runErr := program.Run()
 	cancel()
-	return err
+	if err := writeStdout(enhancedKeysOff); err != nil {
+		return errors.Join(runErr, fmt.Errorf("disable enhanced keys: %w", err))
+	}
+	return runErr
 }
 
 func (m *model) Init() tea.Cmd {
 	return tea.Batch(textarea.Blink, tickCmd(), enableEnhancedKeys)
 }
 
-// ensureSpin starts the animation timer if it is not already running. A turn
-// that just went busy calls it to begin animating; the guard means overlapping
-// events never stack duplicate tickers. The timer stops itself once idle, so an
-// idle TUI schedules no spin frames at all.
 func (m *model) ensureSpin() tea.Cmd {
 	if m.spinning {
 		return nil
@@ -1455,413 +1193,407 @@ func (m *model) ensureSpin() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// The plugins screen's own answers come back as messages, so nothing it does
-	// — a version listing, a build — runs inside this switch.
-	if cmd, handled := m.handlePluginsMsg(msg); handled {
+	if handled := m.handlePluginsMsg(msg); handled {
+		return m, nil
+	}
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if cmd, handled := m.handleKey(keyMsg); handled {
+			return m, cmd
+		}
+	} else if cmd, handled := m.handleMsg(msg); handled {
 		return m, cmd
 	}
+	cmd := m.updateComponents(msg)
+	return m, cmd
+}
+
+func (m *model) relayout() {
+	m.applySize()
+	m.syncViewport()
+}
+
+func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
-		if !m.ready {
-			m.vp = viewport.New(msg.Width, msg.Height-m.chromeHeight())
-			m.ready = true
-		} else {
-			m.applySize()
-		}
-		m.input.SetWidth(m.composerTextWidth())
-		m.resizeComposer() // re-wrap the draft to the new width so it never clips
-		m.syncViewport()
-	case tea.KeyMsg:
-		keylog("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
-		m.flash = "" // any keypress clears a transient status
-		// Two-step close confirm: if waiting for confirmation, next key decides.
-		if m.pendingClose {
-			if msg.String() == "y" {
-				cmd := m.confirmClose()
-				m.pendingClose = false
-				return m, cmd
-			}
-			// Quit keys always quit, even during pending close.
-			if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc {
-				m.pendingClose = false
-				return m, tea.Quit
-			}
-			// Any other key cancels the close.
-			m.pendingClose = false
-			return m, nil
-		}
-		// The permission menu is modal and takes precedence: arrows move the
-		// selection, Enter submits the chosen option as a pick, Esc denies (selects
-		// the last, safe option); every other key is swallowed.
-		if m.choice != nil {
-			switch msg.Type {
-			case tea.KeyUp:
-				m.moveChoice(-1)
-				return m, nil
-			case tea.KeyDown:
-				m.moveChoice(1)
-				return m, nil
-			case tea.KeyEsc:
-				m.choiceIdx = len(m.choice.Options) - 1 // esc = the final deny row
-				m.chooseChoice()
-				return m, nil
-			case tea.KeyEnter:
-				m.chooseChoice()
-				return m, nil
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		// The /session switch picker is modal: arrows move the selection, Enter
-		// focuses the chosen session, Esc closes it; every other key is swallowed.
-		if m.switchOpen {
-			if m.overlayNav(msg, m.moveSwitch) {
-				return m, nil
-			}
-			switch msg.Type {
-			case tea.KeyEsc:
-				m.switchOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyEnter:
-				m.chooseSwitch()
-				m.switchOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, m.ensureSpin()
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		// The search overlay is modal: it owns the keyboard while it is open, so
-		// Esc closes the search rather than interrupting the turn — while the
-		// operator is looking at the search, the search is what Esc means.
-		if m.searchOpen {
-			switch msg.Type {
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			case tea.KeyEsc, tea.KeyCtrlS:
-				m.closeSearch()
-				return m, nil
-			case tea.KeyEnter, tea.KeyCtrlN:
-				m.searchStep(1)
-				return m, nil
-			case tea.KeyCtrlP:
-				m.searchStep(-1)
-				return m, nil
-			case tea.KeyBackspace:
-				if q := m.searchQuery; q != "" {
-					m.typeSearch(q[:len(q)-1])
-				}
-				return m, nil
-			case tea.KeyRunes:
-				if msg.Alt {
-					return m, nil
-				}
-				m.typeSearch(m.searchQuery + string(msg.Runes))
-				return m, nil
-			case tea.KeySpace:
-				m.typeSearch(m.searchQuery + " ")
-				return m, nil
-			}
-			return m, nil // everything else is swallowed: the query is the only input
-		}
-		// The capability screen is modal and read-only: any key closes it. It
-		// answers one question and there is nothing on it to navigate.
-		if m.diagOpen {
-			if msg.Type == tea.KeyCtrlC {
-				return m, tea.Quit
-			}
-			m.diagOpen = false
-			m.applySize()
-			m.syncViewport()
-			return m, nil
-		}
-		// The plugins screen is modal: it owns every key while it is open, because
-		// the two confirmations it asks are the only answers that matter then.
-		if m.pluginsOpen {
-			if msg.Type == tea.KeyCtrlC {
-				return m, tea.Quit
-			}
-			return m, m.handlePluginsKey(msg)
-		}
-		// The /skills panel is modal and read-only: arrows scroll the selection,
-		// Esc closes it; every other key is swallowed.
-		if m.skillsOpen {
-			if m.overlayNav(msg, m.moveSkills) {
-				return m, nil
-			}
-			switch msg.Type {
-			case tea.KeyEsc, tea.KeyEnter:
-				m.skillsOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		// The /resume picker is modal: arrows move the selection, Enter revives or
-		// focuses the chosen session, Esc closes it; every other key is swallowed.
-		if m.resumeOpen {
-			if m.overlayNav(msg, m.moveResume) {
-				return m, nil
-			}
-			switch msg.Type {
-			case tea.KeyEsc:
-				m.resumeOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyEnter:
-				cmd := m.chooseResume()
-				m.resumeOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, tea.Batch(cmd, m.ensureSpin())
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		// While the command palette is open, arrow/Tab/Esc/Enter drive it instead
-		// of the normal bindings; other keys fall through to edit the query.
-		if m.paletteOpen() {
-			if m.overlayNav(msg, m.movePal) {
-				return m, nil
-			}
-			switch msg.Type {
-			case tea.KeyTab:
-				m.completePal()
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyEsc:
-				m.input.SetValue("")
-				m.palIdx = 0
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyEnter:
-				cmd := m.handleEnter()
-				m.palIdx = 0
-				m.applySize()
-				m.syncViewport()
-				return m, tea.Batch(cmd, m.ensureSpin())
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-		}
-		// The inline @ file-mention list, when the cursor word is an @-mention with
-		// matches: arrows move the selection, Tab inserts the selected path as plain
-		// text; other keys fall through to keep editing the word.
-		if m.mentionOpen() {
-			switch msg.Type {
-			case tea.KeyUp:
-				m.moveMention(-1)
-				return m, nil
-			case tea.KeyDown:
-				m.moveMention(1)
-				return m, nil
-			case tea.KeyTab:
-				m.completeActiveMention()
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			}
-		}
-		switch msg.Type {
-		case tea.KeyEsc:
-			// Esc interrupts the active turn when one is in flight; only when the
-			// session is idle does it fall through to quit (matching Claude).
-			if tb := m.tabs[m.active]; tb != nil && tb.busy {
-				if name := m.sessionName(m.active); name != "" {
-					m.tm.Interrupt(name)
-				}
-				return m, nil
-			}
-			return m, tea.Quit
-		case tea.KeyCtrlC:
-			return m, tea.Quit
-		case tea.KeyTab:
-			m.switchTab(1)
-			return m, nil
-		case tea.KeyShiftTab:
-			m.switchTab(-1)
-			return m, nil
-		case tea.KeyEnter:
-			if msg.Alt {
-				break // Alt+Enter falls through to the composer as a newline
-			}
-			if m.continueLine() {
-				return m, nil
-			}
-			return m, tea.Batch(m.handleEnter(), m.ensureSpin())
-		case tea.KeyCtrlS:
-			m.openSearch()
-			return m, nil
-		case tea.KeyCtrlT:
-			m.toggleTurnFold()
-			return m, nil
-		case tea.KeyCtrlF:
-			m.toggleFold()
-			return m, nil
-		case tea.KeyCtrlY:
-			m.copyLastCode()
-			return m, nil
-		case tea.KeyCtrlG:
-			// Give the mouse to the terminal, or take it back. The one gesture the
-			// window cannot provide for itself is the one every terminal already
-			// has: select the text on screen with the mouse.
-			return m, m.toggleMouse()
-		case tea.KeyCtrlL:
-			// Walk the transcript's links. Selecting one commits to nothing: it only
-			// puts the target in the status line, where it can be read before the
-			// gesture that follows it.
-			m.selectNextLink()
-			return m, nil
-		case tea.KeyCtrlO:
-			// The gesture. This is the only caller of a launcher in the program.
-			m.openSelectedLink()
-			return m, nil
-		case tea.KeyCtrlV:
-			// A clipboard image is staged as an attachment; anything else falls
-			// through to the composer so Ctrl+V still pastes text.
-			if m.pasteImage() {
-				return m, nil
-			}
-		case tea.KeyCtrlU:
-			// Unstage the last attachment; with none staged, fall through so the
-			// composer keeps its delete-to-line-start behaviour.
-			if m.removeLastPending() {
-				m.applySize() // the chip row may have just disappeared
-				m.syncViewport()
-				return m, nil
-			}
-		case tea.KeyUp:
-			if msg.Alt {
-				// Alt+↑/↓ walk the transcript by turn: the unit a reader actually
-				// scrolls in is a turn, not a line.
-				m.jumpTurn(-1)
-				return m, nil
-			}
-			// On an empty or already-recalling single-line composer, ↑ walks back
-			// through submitted prompts; otherwise it falls through to the composer.
-			if m.input.LineCount() <= 1 && (m.input.Value() == "" || m.histIdx < len(m.history)) {
-				if m.recallHistory(-1) {
-					return m, nil
-				}
-			}
-		case tea.KeyDown:
-			if msg.Alt {
-				m.jumpTurn(1)
-				return m, nil
-			}
-			if m.input.LineCount() <= 1 && m.histIdx < len(m.history) {
-				if m.recallHistory(1) {
-					return m, nil
-				}
-			}
-		case tea.KeyCtrlW:
-			// Ctrl+W deletes the previous word in every editor and every shell,
-			// and a composer that swallowed it to offer closing the tab made
-			// writing a sentence a trap. It only reaches the tab when there is
-			// no word behind the cursor to delete.
-			if m.input.Value() != "" {
-				break
-			}
-			m.pendingClose = true
-			return m, nil
-		case tea.KeyRunes:
-			if msg.String() == "?" && m.input.Value() == "" {
-				m.toggleHelp()
-				return m, nil
-			}
-			// Alt+y copies the last answer, next to Ctrl+y's last code block: the
-			// two things a reader reaches for, told apart by which one they meant.
-			if msg.Alt && strings.EqualFold(string(msg.Runes), "y") {
-				m.copyTarget(copyReply)
-				return m, nil
-			}
-			// Alt+e spells out the tool lines. Alt rather than Ctrl because Ctrl+e is
-			// end-of-line in the composer, and the transcript's reading gestures
-			// already live on Alt (copy answer, jump turn).
-			if msg.Alt && strings.EqualFold(string(msg.Runes), "e") {
-				m.toggleToolExpand()
-				return m, nil
-			}
-		}
-		// PgUp/PgDn reach m.vp.Update(msg) below — not intercepted here.
+		m.handleWindowSize(msg)
 	case eventMsg:
 		cmd := m.route(RoutedEvent(msg))
-		// A chunk/status event may have flipped a tab busy; start animating.
-		return m, tea.Batch(cmd, m.ensureSpin())
+		return tea.Batch(cmd, m.ensureSpin()), true
 	case imageReadyMsg:
 		m.applyImage(msg)
-		return m, nil
+		return nil, true
+	case enhancedKeysFailedMsg:
+		m.flash = "touches étendues indisponibles : " + msg.err.Error()
+		return nil, true
 	case dispatchResultMsg:
-		m.syncTabs()
-		line, role := msg.out, roleNotice
-		if msg.err != nil {
-			line, role = msg.err.Error(), roleError
-		}
-		if line != "" {
-			tb := m.tabs[msg.origin]
-			if tb == nil {
-				tb = m.tabs[m.active]
-			}
-			if tb != nil {
-				tb.appendEntry(entry{role: role, text: line})
-				m.syncViewport()
-			} else {
-				m.flash = line // no tab to render into — surface it standalone
-			}
-		}
-		return m, nil
+		m.handleDispatchResult(msg)
+		return nil, true
 	case tickMsg:
 		m.syncTabs()
-		return m, tickCmd()
+		return tickCmd(), true
 	case spinMsg:
-		if !m.anyBusy() {
-			m.spinning = false // nothing to animate; let the timer lapse
-			return m, nil
-		}
-		m.spin++
-		m.syncViewport() // repaint the animated thinking line
-		return m, spinTick(fastTick)
+		return m.handleSpin(), true
 	}
+	return nil, false
+}
+
+func (m *model) handleWindowSize(msg tea.WindowSizeMsg) {
+	m.width, m.height = msg.Width, msg.Height
+	if !m.ready {
+		m.vp = viewport.New(msg.Width, msg.Height-m.chromeHeight())
+		m.ready = true
+	} else {
+		m.applySize()
+	}
+	m.input.SetWidth(m.composerTextWidth())
+	m.resizeComposer()
+	m.syncViewport()
+}
+
+func (m *model) handleDispatchResult(msg dispatchResultMsg) {
+	m.syncTabs()
+	line, role := msg.out, roleNotice
+	if msg.err != nil {
+		line, role = msg.err.Error(), roleError
+	}
+	if line == "" {
+		return
+	}
+	tab := m.tabs[msg.origin]
+	if tab == nil {
+		tab = m.tabs[m.active]
+	}
+	if tab == nil {
+		m.flash = line
+		return
+	}
+	tab.appendEntry(entry{role: role, text: line})
+	m.syncViewport()
+}
+
+func (m *model) handleSpin() tea.Cmd {
+	if !m.anyBusy() {
+		m.spinning = false
+		return nil
+	}
+	m.spin++
+	m.syncViewport()
+	return spinTick(fastTick)
+}
+
+func (m *model) updateComponents(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
-	var c tea.Cmd
-	m.input, c = m.input.Update(msg)
-	cmds = append(cmds, c)
-	m.vp, c = m.vp.Update(msg)
-	cmds = append(cmds, c)
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	cmds = append(cmds, cmd)
+	m.vp, cmd = m.vp.Update(msg)
+	cmds = append(cmds, cmd)
 	if _, ok := msg.(tea.KeyMsg); ok {
-		m.resizeComposer() // an edit may have added/removed a composer row
-	}
-	// Editing the query can open/close the palette or change its match count,
-	// both of which change the reserved chrome height. Re-fit only while the
-	// palette is (or was just) open, so typing an ordinary message does not
-	// rebuild the viewport on every keystroke.
-	if _, ok := msg.(tea.KeyMsg); ok {
+		m.resizeComposer()
 		if m.paletteOpen() || m.palWasOpen {
 			m.clampPal()
-			m.applySize()
-			m.syncViewport()
+			m.relayout()
 		}
 		m.palWasOpen = m.paletteOpen()
 	}
-	return m, tea.Batch(cmds...)
+	return tea.Batch(cmds...)
 }
 
-// helpView returns the one-line dim shortcuts panel toggled by ? (and /help).
+func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	m.keys.write("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
+	m.flash = ""
+	switch {
+	case m.pendingClose:
+		return m.handlePendingClose(msg), true
+	case m.choice != nil:
+		return m.handleChoiceKey(msg), true
+	case m.switchOpen:
+		return m.handleSwitchKey(msg), true
+	case m.searchOpen:
+		return m.handleSearchKey(msg), true
+	case m.diagOpen:
+		return m.handleDiagKey(msg), true
+	case m.pluginsOpen:
+		return m.handlePluginsOverlayKey(msg), true
+	case m.skillsOpen:
+		return m.handleSkillsKey(msg), true
+	case m.resumeOpen:
+		return m.handleResumeKey(msg), true
+	}
+	if cmd, handled := m.handlePaletteKey(msg); handled {
+		return cmd, true
+	}
+	if m.handleMentionKey(msg) {
+		return nil, true
+	}
+	return m.handleMainKey(msg)
+}
+
+func (m *model) handlePendingClose(msg tea.KeyMsg) tea.Cmd {
+	if msg.String() == "y" {
+		cmd := m.confirmClose()
+		m.pendingClose = false
+		return cmd
+	}
+	m.pendingClose = false
+	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc {
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handleChoiceKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.Type {
+	case tea.KeyUp:
+		m.moveChoice(-1)
+	case tea.KeyDown:
+		m.moveChoice(1)
+	case tea.KeyEsc:
+		m.choiceIdx = len(m.choice.Options) - 1
+		m.chooseChoice()
+	case tea.KeyEnter:
+		m.chooseChoice()
+	case tea.KeyCtrlC:
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handleSwitchKey(msg tea.KeyMsg) tea.Cmd {
+	if m.overlayNav(msg, m.moveSwitch) {
+		return nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.switchOpen = false
+		m.relayout()
+	case tea.KeyEnter:
+		m.chooseSwitch()
+		m.switchOpen = false
+		m.relayout()
+		return m.ensureSpin()
+	case tea.KeyCtrlC:
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return tea.Quit
+	case tea.KeyEsc, tea.KeyCtrlS:
+		m.closeSearch()
+	case tea.KeyEnter, tea.KeyCtrlN:
+		m.searchStep(1)
+	case tea.KeyCtrlP:
+		m.searchStep(-1)
+	case tea.KeyBackspace:
+		if q := m.searchQuery; q != "" {
+			m.typeSearch(q[:len(q)-1])
+		}
+	case tea.KeyRunes:
+		if !msg.Alt {
+			m.typeSearch(m.searchQuery + string(msg.Runes))
+		}
+	case tea.KeySpace:
+		m.typeSearch(m.searchQuery + " ")
+	}
+	return nil
+}
+
+func (m *model) handleDiagKey(msg tea.KeyMsg) tea.Cmd {
+	if msg.Type == tea.KeyCtrlC {
+		return tea.Quit
+	}
+	m.diagOpen = false
+	m.relayout()
+	return nil
+}
+
+func (m *model) handlePluginsOverlayKey(msg tea.KeyMsg) tea.Cmd {
+	if msg.Type == tea.KeyCtrlC {
+		return tea.Quit
+	}
+	return m.handlePluginsKey(msg)
+}
+
+func (m *model) handleSkillsKey(msg tea.KeyMsg) tea.Cmd {
+	if m.overlayNav(msg, m.moveSkills) {
+		return nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyEnter:
+		m.skillsOpen = false
+		m.relayout()
+	case tea.KeyCtrlC:
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handleResumeKey(msg tea.KeyMsg) tea.Cmd {
+	if m.overlayNav(msg, m.moveResume) {
+		return nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.resumeOpen = false
+		m.relayout()
+	case tea.KeyEnter:
+		cmd := m.chooseResume()
+		m.resumeOpen = false
+		m.relayout()
+		return tea.Batch(cmd, m.ensureSpin())
+	case tea.KeyCtrlC:
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handlePaletteKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if !m.paletteOpen() {
+		return nil, false
+	}
+	if m.overlayNav(msg, m.movePal) {
+		return nil, true
+	}
+	switch msg.Type {
+	case tea.KeyTab:
+		m.completePal()
+		m.relayout()
+	case tea.KeyEsc:
+		m.input.SetValue("")
+		m.palIdx = 0
+		m.relayout()
+	case tea.KeyEnter:
+		cmd := m.handleEnter()
+		m.palIdx = 0
+		m.relayout()
+		return tea.Batch(cmd, m.ensureSpin()), true
+	case tea.KeyCtrlC:
+		return tea.Quit, true
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+func (m *model) handleMentionKey(msg tea.KeyMsg) bool {
+	if !m.mentionOpen() {
+		return false
+	}
+	switch msg.Type {
+	case tea.KeyUp:
+		m.moveMention(-1)
+	case tea.KeyDown:
+		m.moveMention(1)
+	case tea.KeyTab:
+		m.completeActiveMention()
+		m.relayout()
+	default:
+		return false
+	}
+	return true
+}
+
+func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		if tb := m.tabs[m.active]; tb != nil && tb.busy {
+			if name := m.sessionName(m.active); name != "" {
+				m.tm.Interrupt(name)
+			}
+			return nil, true
+		}
+		return tea.Quit, true
+	case tea.KeyCtrlC:
+		return tea.Quit, true
+	case tea.KeyTab:
+		m.switchTab(1)
+	case tea.KeyShiftTab:
+		m.switchTab(-1)
+	case tea.KeyEnter:
+		if msg.Alt {
+			return nil, false
+		}
+		if m.continueLine() {
+			return nil, true
+		}
+		return tea.Batch(m.handleEnter(), m.ensureSpin()), true
+	case tea.KeyCtrlS:
+		m.openSearch()
+	case tea.KeyCtrlT:
+		m.toggleTurnFold()
+	case tea.KeyCtrlF:
+		m.toggleFold()
+	case tea.KeyCtrlY:
+		m.copyLastCode()
+	case tea.KeyCtrlG:
+		return m.toggleMouse(), true
+	case tea.KeyCtrlL:
+		m.selectNextLink()
+	case tea.KeyCtrlO:
+		m.openSelectedLink()
+	case tea.KeyCtrlV:
+		return nil, m.pasteImage()
+	case tea.KeyCtrlU:
+		if !m.removeLastPending() {
+			return nil, false
+		}
+		m.relayout()
+	case tea.KeyUp:
+		return m.handleHistoryKey(msg, -1)
+	case tea.KeyDown:
+		return m.handleHistoryKey(msg, 1)
+	case tea.KeyCtrlW:
+		if m.input.Value() != "" {
+			return nil, false
+		}
+		m.pendingClose = true
+	case tea.KeyRunes:
+		return m.handleRunesKey(msg)
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+func (m *model) handleHistoryKey(msg tea.KeyMsg, dir int) (tea.Cmd, bool) {
+	if msg.Alt {
+		m.jumpTurn(dir)
+		return nil, true
+	}
+	if dir < 0 {
+		if m.input.LineCount() <= 1 && (m.input.Value() == "" || m.histIdx < len(m.history)) && m.recallHistory(-1) {
+			return nil, true
+		}
+		return nil, false
+	}
+	if m.input.LineCount() <= 1 && m.histIdx < len(m.history) && m.recallHistory(1) {
+		return nil, true
+	}
+	return nil, false
+}
+
+func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if msg.String() == "?" && m.input.Value() == "" {
+		m.toggleHelp()
+		return nil, true
+	}
+	if msg.Alt && strings.EqualFold(string(msg.Runes), "y") {
+		m.copyTarget(copyReply)
+		return nil, true
+	}
+	if msg.Alt && strings.EqualFold(string(msg.Runes), "e") {
+		m.toggleToolExpand()
+		return nil, true
+	}
+	return nil, false
+}
+
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
+	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
 }
 
 func (m *model) View() string {

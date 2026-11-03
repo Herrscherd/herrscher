@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,9 +10,33 @@ import (
 	"github.com/Herrscherd/herrscher/core/bridge"
 )
 
-// Attachment is a file staged to send with the next message (and echoed under the
-// user's transcript entry once sent). Path is a local filesystem path; the
-// terminal gateway hands it to the host as a file:// URL.
+const (
+	bytesPerMiB                 = 1 << 20
+	bytesPerKiB                 = 1 << 10
+	privateDirMode  os.FileMode = 0o700
+	privateFileMode os.FileMode = 0o600
+)
+
+const (
+	mimePNG  = "image/png"
+	mimeJPEG = "image/jpeg"
+	mimeWebP = "image/webp"
+	mimeGIF  = "image/gif"
+	extPNG   = ".png"
+	extJPG   = ".jpg"
+	extWebP  = ".webp"
+	extGIF   = ".gif"
+)
+
+var (
+	errEmptyClipboard = errors.New("clipboard image is empty")
+	errSizeLimit      = errors.New("exceeds")
+	errUsage          = errors.New("usage: /attach <path>")
+	errNotRegularFile = errors.New("not a regular file")
+)
+
+// Attachment is a file staged for the next turn: its name, where it sits on disk,
+// its MIME type and its size in bytes.
 type Attachment struct {
 	Name string
 	Path string
@@ -19,26 +44,18 @@ type Attachment struct {
 	Size int64
 }
 
-// maxAttachmentBytes bounds a staged file, mirroring the bridge download cap so a
-// pasted image the host would reject never gets queued in the first place.
-const maxAttachmentBytes = 10 << 20 // 10 MiB
+const maxAttachmentBytes = 10 << 20
 
-// attachmentDir is where staged files are written: the bridge's staging root,
-// namespaced for this gateway. The root comes from the bridge rather than a copy
-// of the path here, because the bridge refuses any file:// attachment from
-// outside it.
 func attachmentDir() string {
 	return filepath.Join(bridge.StagingRoot(), "terminal")
 }
 
-// saveClipboardImage writes clipboard image bytes to a fresh temp file and returns
-// the Attachment describing it. seq disambiguates names within a session.
 func saveClipboardImage(data []byte, mime string, seq int) (Attachment, error) {
 	if len(data) == 0 {
-		return Attachment{}, fmt.Errorf("clipboard image is empty")
+		return Attachment{}, errEmptyClipboard
 	}
 	if int64(len(data)) > maxAttachmentBytes {
-		return Attachment{}, fmt.Errorf("pasted image exceeds %d MiB", maxAttachmentBytes>>20)
+		return Attachment{}, fmt.Errorf("pasted image %w %d MiB", errSizeLimit, maxAttachmentBytes/bytesPerMiB)
 	}
 	name := fmt.Sprintf("paste-%d%s", seq, mimeExt(mime))
 	path, err := stage(name, data)
@@ -48,29 +65,26 @@ func saveClipboardImage(data []byte, mime string, seq int) (Attachment, error) {
 	return Attachment{Name: name, Path: path, Mime: mime, Size: int64(len(data))}, nil
 }
 
-// stage writes bytes into the staging dir under the given name and returns the
-// path. The host only accepts a file:// attachment from under this tree, so
-// staging is what makes a file nameable at all — and the modes are tight because
-// the tree lives in a world-writable temp dir.
 func stage(name string, data []byte) (string, error) {
 	dir := attachmentDir()
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, privateDirMode); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
 		return "", err
 	}
-	return path, nil
+	defer func() { bestEffort(root.Close()) }()
+	if err := root.WriteFile(name, data, privateFileMode); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, name), nil
 }
 
-// attachLocalFile stages an existing local file for /attach, validating it is a
-// regular file within the size cap and resolving ~ and relative paths. seq
-// disambiguates two attachments sharing a basename.
 func attachLocalFile(path string, seq int) (Attachment, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return Attachment{}, fmt.Errorf("usage: /attach <path>")
+		return Attachment{}, errUsage
 	}
 	if strings.HasPrefix(path, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {
@@ -82,20 +96,16 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
 	}
 	if !info.Mode().IsRegular() {
-		return Attachment{}, fmt.Errorf("attach %s: not a regular file", path)
+		return Attachment{}, fmt.Errorf("attach %s: %w", path, errNotRegularFile)
 	}
 	if info.Size() > maxAttachmentBytes {
-		return Attachment{}, fmt.Errorf("attach %s: exceeds %d MiB", path, maxAttachmentBytes>>20)
+		return Attachment{}, fmt.Errorf("attach %s: %w %d MiB", path, errSizeLimit, maxAttachmentBytes/bytesPerMiB)
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		abs = path
 	}
-	// Copy rather than point at the original. The host refuses a file:// path from
-	// outside the staging tree — "the gateway staged this" is something it checks,
-	// not something it takes our word for — and a copy also means the turn reads
-	// what was attached rather than whatever the file became while it queued.
-	data, err := os.ReadFile(abs)
+	data, err := os.ReadFile(filepath.Clean(abs))
 	if err != nil {
 		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
 	}
@@ -109,21 +119,18 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 
 func mimeExt(mime string) string {
 	switch mime {
-	case "image/png":
-		return ".png"
-	case "image/jpeg":
-		return ".jpg"
-	case "image/webp":
-		return ".webp"
-	case "image/gif":
-		return ".gif"
+	case mimePNG:
+		return extPNG
+	case mimeJPEG:
+		return extJPG
+	case mimeWebP:
+		return extWebP
+	case mimeGIF:
+		return extGIF
 	}
 	return ".bin"
 }
 
-// mimeByExt names what /attach staged. An extension it doesn't know yields "",
-// and the host falls back to the extension itself — so this only has to cover
-// what is worth naming, not everything that can be attached.
 func mimeByExt(path string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".png":
@@ -148,25 +155,24 @@ func mimeByExt(path string) string {
 	return ""
 }
 
-// chipRow renders staged/echoed attachments as pill tokens.
-func chipRow(atts []Attachment) string {
+func chipRow(atts []Attachment, styles uiStyles) string {
 	if len(atts) == 0 {
 		return ""
 	}
 	chips := make([]string, len(atts))
 	for i, a := range atts {
-		chips[i] = chipStyle.Render(fmt.Sprintf("📎 %s · %s", a.Name, humanSize(a.Size)))
+		chips[i] = styles.chip.Render(fmt.Sprintf("📎 %s · %s", a.Name, humanSize(a.Size)))
 	}
 	return strings.Join(chips, " ")
 }
 
-func humanSize(n int64) string {
+func humanSize(size int64) string {
 	switch {
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1fMB", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.0fKB", float64(n)/(1<<10))
+	case size >= bytesPerMiB:
+		return fmt.Sprintf("%.1fMB", float64(size)/bytesPerMiB)
+	case size >= bytesPerKiB:
+		return fmt.Sprintf("%.0fKB", float64(size)/bytesPerKiB)
 	default:
-		return fmt.Sprintf("%dB", n)
+		return fmt.Sprintf("%dB", size)
 	}
 }

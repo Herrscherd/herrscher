@@ -89,7 +89,6 @@ func TestDetectReturnsTheKnownNamesItActivated(t *testing.T) {
 			t.Fatalf("Detect = %v, want %v in order of first appearance", got, want)
 		}
 	}
-	// The names are a by-product; activation must still have happened.
 	if exp := e.Expansions(); !strings.Contains(exp, "DO ALPHA") || !strings.Contains(exp, "DO BETA") {
 		t.Errorf("Detect returned names but activated nothing:\n%s", exp)
 	}

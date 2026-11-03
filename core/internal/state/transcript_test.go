@@ -63,10 +63,8 @@ func TestReadTranscriptLast(t *testing.T) {
 		t.Fatalf("want last ts t3, got %q", got)
 	}
 
-	// A transcript larger than the tail window must still find the newest entry
-	// (the tail read starts mid-file, and the scan-from-end reaches the last line).
 	big := strings.Repeat("x", 4096)
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		if err := AppendTranscript(p, TranscriptEntry{Ts: "t3", Role: "assistant", Text: big}); err != nil {
 			t.Fatalf("append big: %v", err)
 		}
@@ -79,12 +77,10 @@ func TestReadTranscriptLast(t *testing.T) {
 	}
 }
 
-// An entry far larger than any fixed scanner-token cap must round-trip intact,
-// not be silently dropped: bufio.Reader grows the line as needed.
 func TestReadTranscriptHandlesHugeLine(t *testing.T) {
 	dir := t.TempDir()
 	p := TranscriptPath(dir, "sess")
-	huge := strings.Repeat("z", 2<<20) // 2 MB, past the old 1 MB scanner cap
+	huge := strings.Repeat("z", 2<<20)
 	for _, e := range []TranscriptEntry{
 		{Ts: "t1", Role: "user", Text: "hi"},
 		{Ts: "t2", Role: "assistant", Text: huge},
@@ -102,15 +98,12 @@ func TestReadTranscriptHandlesHugeLine(t *testing.T) {
 	}
 }
 
-// A long-lived session must not grow its transcript without bound: once it crosses
-// transcriptMaxBytes, compaction rewrites it to its newest entries. The very last
-// entry always survives; older ones are dropped.
 func TestTranscriptCompactionBoundsGrowth(t *testing.T) {
 	dir := t.TempDir()
 	p := TranscriptPath(dir, "sess")
 	body := strings.Repeat("m", 5000)
-	const n = 1000 // ~5 MB raw, crossing the 4 MB trigger
-	for i := 0; i < n; i++ {
+	const n = 1000
+	for i := range n {
 		if err := AppendTranscript(p, TranscriptEntry{Ts: fmt.Sprintf("t%04d", i), Role: "user", Text: body}); err != nil {
 			t.Fatalf("append %d: %v", i, err)
 		}
@@ -134,16 +127,12 @@ func TestTranscriptCompactionBoundsGrowth(t *testing.T) {
 	}
 }
 
-// When the newest entry is larger than the tail window, ReadTranscriptLast must
-// fall back to a full read rather than return no timestamp.
 func TestReadTranscriptLastFallsBackPastTailWindow(t *testing.T) {
 	dir := t.TempDir()
 	p := TranscriptPath(dir, "sess")
 	if err := AppendTranscript(p, TranscriptEntry{Ts: "t1", Role: "user", Text: "hi"}); err != nil {
 		t.Fatalf("append: %v", err)
 	}
-	// Final entry's own JSON exceeds the 64 KB tail window, so the tail scan finds
-	// only a partial (unparseable) line and the fallback must kick in.
 	if err := AppendTranscript(p, TranscriptEntry{Ts: "tHUGE", Role: "assistant", Text: strings.Repeat("y", 128*1024)}); err != nil {
 		t.Fatalf("append huge: %v", err)
 	}

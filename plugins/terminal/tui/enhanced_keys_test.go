@@ -67,7 +67,6 @@ func TestFilteredStdinNormalisesArrowsInStream(t *testing.T) {
 func TestFilteredStdinTranslatesEnhancedKeysInStream(t *testing.T) {
 	f := &filteredStdin{}
 	f.feed([]byte("hi\x1b[13;2uthere\x1b[A"))
-	// The arrow survives untouched; only the CSI-u report is rewritten.
 	if got := string(f.out); got != "hi\x1b\rthere\x1b[A" {
 		t.Fatalf("feed produced %q", got)
 	}
@@ -79,17 +78,16 @@ func TestCtrlWDeletesAWordBeforeItClosesATab(t *testing.T) {
 	m.input.SetValue("hello world")
 	var mm tea.Model = m
 	mm, _ = mm.Update(tea.KeyMsg{Type: tea.KeyCtrlW})
-	got := mm.(*model)
+	got := asModel(t, mm)
 	if got.pendingClose {
 		t.Fatal("Ctrl+W offered to close the tab while there was a word to delete")
 	}
 	if v := got.input.Value(); v != "hello " {
 		t.Fatalf("input = %q, want the last word deleted", v)
 	}
-	// With nothing left to delete, the tab is what Ctrl+W is about.
 	got.input.SetValue("")
 	mm, _ = tea.Model(got).Update(tea.KeyMsg{Type: tea.KeyCtrlW})
-	if !mm.(*model).pendingClose {
+	if !asModel(t, mm).pendingClose {
 		t.Fatal("Ctrl+W on an empty composer did not offer to close the tab")
 	}
 }
@@ -97,20 +95,20 @@ func TestCtrlWDeletesAWordBeforeItClosesATab(t *testing.T) {
 func TestWheelScrollsTheTranscript(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("c")
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		tb.appendEntry(entry{role: roleNotice, text: "line"})
 	}
 	var mm tea.Model = m
 	mm, _ = mm.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	m = mm.(*model)
+	m = asModel(t, mm)
 	m.syncViewport()
 	if m.vp.AtTop() {
 		t.Fatal("a 200-line transcript did not overflow an 24-row viewport")
 	}
 	before := m.vp.YOffset
 	mm, _ = mm.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelUp})
-	if got := mm.(*model).vp.YOffset; got >= before {
-		t.Fatalf("wheel-up left the transcript at %d (was %d) — the alt screen has no scrollback to fall back on", got, before)
+	if got := asModel(t, mm).vp.YOffset; got >= before {
+		t.Fatalf("wheel-up left the transcript at %d (was %d): the alt screen has no scrollback to fall back on", got, before)
 	}
 }
 
@@ -154,5 +152,22 @@ func TestFilteredStdinClearsTheLockModifiersInStream(t *testing.T) {
 	f.feed([]byte("\x1b[1;129A\x1b[1;129B"))
 	if got := string(f.out); got != "\x1b[A\x1b[B" {
 		t.Fatalf("stream = %q, want %q", got, "\x1b[A\x1b[B")
+	}
+}
+
+func asModel(t *testing.T, m tea.Model) *model {
+	t.Helper()
+	got, ok := m.(*model)
+	if !ok {
+		t.Fatalf("update returned %T, want *model", m)
+	}
+	return got
+}
+
+func TestLegacyKeyBytesRejectsOutOfRangeCodes(t *testing.T) {
+	for _, code := range []int{-1, -65, 0x110000} {
+		if b, ok := legacyKeyBytes(code, 0); ok || b != nil {
+			t.Errorf("legacyKeyBytes(%d) = %q, %v; want nil, false", code, b, ok)
+		}
 	}
 }

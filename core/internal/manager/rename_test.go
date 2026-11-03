@@ -9,31 +9,41 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// Renommer une session doit deplacer tout ce qui porte son nom : la ligne
-// persistee garde son identite, le transcript et le journal la suivent, et le
-// pont repart sous le nouveau nom pour ne pas continuer d'ecrire dans les
-// fichiers qui viennent de bouger.
 func TestSessionRenameCarriesTheTranscriptAndTheJournal(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "avant")); err != nil {
 		t.Fatal(err)
 	}
 	before, _ := st.FindSession("avant")
 	old := state.TranscriptPath(h.PartDir(), "avant")
-	if err := state.AppendTranscript(old, state.TranscriptEntry{Ts: "t", Role: "user", Text: "salut"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := state.AppendParticipant(state.ParticipantsPath(h.PartDir(), "avant"), "u1"); err != nil {
-		t.Fatal(err)
-	}
+	seedTranscriptAndJournal(t, h, old)
 	sup.started, sup.stopped = nil, nil
 
 	out, err := h.sessionRenameRun(context.Background(), args("name", "avant", "to", "Apres Le Renommage"))
 	if err != nil {
 		t.Fatalf("rename: %v", err)
 	}
+	assertRenamedKeepsIdentity(t, st, before, out)
+	assertRenameMovedState(t, h, old)
+	assertBridgeRestarted(t, sup)
+}
+
+func seedTranscriptAndJournal(t *testing.T, h *Handler, transcript string) {
+	t.Helper()
+	if err := state.AppendTranscript(transcript, state.TranscriptEntry{Ts: "t", Role: "user", Text: "salut"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := state.AppendParticipant(state.ParticipantsPath(h.PartDir(), "avant"), "u1"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertRenamedKeepsIdentity(t *testing.T, st *state.State, before state.Session, out string) {
+	t.Helper()
 	if _, still := st.FindSession("avant"); still {
 		t.Fatalf("l'ancien nom doit disparaitre: %s", out)
 	}
@@ -44,6 +54,10 @@ func TestSessionRenameCarriesTheTranscriptAndTheJournal(t *testing.T) {
 	if after.ID != before.ID || after.Incarnation != before.Incarnation {
 		t.Fatalf("un renommage garde l'identite: %q/%q puis %q/%q", before.ID, before.Incarnation, after.ID, after.Incarnation)
 	}
+}
+
+func assertRenameMovedState(t *testing.T, h *Handler, old string) {
+	t.Helper()
 	if got := state.ReadTranscript(state.TranscriptPath(h.PartDir(), "apres-le-renommage"), 0); len(got) != 1 {
 		t.Fatalf("le transcript doit suivre, %d entrees trouvees", len(got))
 	}
@@ -53,6 +67,10 @@ func TestSessionRenameCarriesTheTranscriptAndTheJournal(t *testing.T) {
 	if got := state.ReadParticipants(state.ParticipantsPath(h.PartDir(), "apres-le-renommage")); len(got) != 1 {
 		t.Fatalf("le journal des participants doit suivre: %v", got)
 	}
+}
+
+func assertBridgeRestarted(t *testing.T, sup *fakeSup) {
+	t.Helper()
 	if len(sup.stopped) == 0 || sup.stopped[0] != "avant" {
 		t.Fatalf("le pont doit etre arrete sous l'ancien nom: %v", sup.stopped)
 	}
@@ -63,7 +81,9 @@ func TestSessionRenameCarriesTheTranscriptAndTheJournal(t *testing.T) {
 
 func TestSessionRenameRefusesTheImpossible(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	for _, n := range []string{"un", "deux"} {
 		if _, err := h.sessionCreateRun(context.Background(), args("name", n)); err != nil {
 			t.Fatal(err)
@@ -86,12 +106,11 @@ func TestSessionRenameRefusesTheImpossible(t *testing.T) {
 	}
 }
 
-// Un horaire qui vise la session par son nom doit suivre le renommage. Sans
-// cela sa fenetre est sautee en silence a chaque tick : le planificateur cherche
-// un nom que plus personne ne porte.
 func TestSessionRenameCarriesTheSchedulesThatTargetIt(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "avant")); err != nil {
 		t.Fatal(err)
@@ -121,12 +140,11 @@ func TestSessionRenameCarriesTheSchedulesThatTargetIt(t *testing.T) {
 	}
 }
 
-// Une session possedee par un horaire a cible agent porte un nom derive de
-// l'horaire, que le renommage ne peut pas suivre. L'operateur doit etre averti
-// plutot que refuse : le prochain tick rouvrira une session sous l'ancien nom.
 func TestSessionRenameWarnsWhenAScheduleOwnsTheName(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "schedule-veille")); err != nil {
 		t.Fatal(err)

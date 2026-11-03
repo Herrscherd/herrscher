@@ -9,10 +9,6 @@ import (
 	"testing"
 )
 
-// TestJSONStringInnerEscapes pins the Windows-path guarantee: a worktree path
-// with backslashes or a quote must be escaped so it stays valid inside a JSON
-// string value. On POSIX the path is unchanged (no escaping needed), which is
-// why materialize's JSON output was accidentally valid before this fix.
 func TestJSONStringInnerEscapes(t *testing.T) {
 	cases := map[string]string{
 		`/home/me/wt`:    `/home/me/wt`,
@@ -24,7 +20,6 @@ func TestJSONStringInnerEscapes(t *testing.T) {
 		if got := jsonStringInner(in); got != want {
 			t.Errorf("jsonStringInner(%q) = %q, want %q", in, got, want)
 		}
-		// The escaped inner must round-trip as a JSON string back to the input.
 		var out string
 		if err := json.Unmarshal([]byte(`"`+jsonStringInner(in)+`"`), &out); err != nil || out != in {
 			t.Errorf("round-trip %q: got %q err=%v", in, out, err)
@@ -39,11 +34,21 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 		t.Fatal(err)
 	}
 	wt := t.TempDir()
-	if err := a.Materialize(wt); err != nil {
+	if err = a.Materialize(t.Context(), wt); err != nil {
 		t.Fatal(err)
 	}
+	assertMCPSubstituted(t, wt)
+	assertSettingsWritten(t, wt)
+	assertInstructionsWritten(t, wt)
+	assertCodexConfigWritten(t, wt)
+}
 
-	mcp, _ := os.ReadFile(filepath.Join(wt, ".mcp.json"))
+func assertMCPSubstituted(t *testing.T, wt string) {
+	t.Helper()
+	mcp, err := os.ReadFile(filepath.Join(wt, ".mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if strings.Contains(string(mcp), "{{WORKTREE}}") {
 		t.Fatalf("token not substituted:\n%s", mcp)
 	}
@@ -56,17 +61,28 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 	if !strings.Contains(string(mcp), `"neublox"`) {
 		t.Fatalf("neublox server missing:\n%s", mcp)
 	}
+}
 
-	settings, _ := os.ReadFile(filepath.Join(wt, ".claude", "settings.json"))
+func assertSettingsWritten(t *testing.T, wt string) {
+	t.Helper()
+	settings, err := os.ReadFile(filepath.Join(wt, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(settings), "enableAllProjectMcpServers") {
 		t.Fatalf("settings missing:\n%s", settings)
 	}
+}
 
-	claude, _ := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
+func assertInstructionsWritten(t *testing.T, wt string) {
+	t.Helper()
+	claude, err := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if string(claude) != "PERSONA" {
 		t.Fatalf("CLAUDE.md = %q", claude)
 	}
-
 	agents, err := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
@@ -74,7 +90,10 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 	if string(agents) != "PERSONA" {
 		t.Fatalf("AGENTS.md = %q", agents)
 	}
+}
 
+func assertCodexConfigWritten(t *testing.T, wt string) {
+	t.Helper()
 	codex, err := os.ReadFile(filepath.Join(wt, ".codex", "config.toml"))
 	if err != nil {
 		t.Fatalf("read .codex/config.toml: %v", err)
@@ -89,7 +108,7 @@ func TestMaterializeWritesFilesWithSubstitution(t *testing.T) {
 
 func TestMaterializeMissingHomeErrors(t *testing.T) {
 	a := Agent{Name: "ghost", Home: filepath.Join(t.TempDir(), "ghost")}
-	if err := a.Materialize(t.TempDir()); err == nil {
+	if err := a.Materialize(t.Context(), t.TempDir()); err == nil {
 		t.Fatal("expected error materializing an agent with no home files")
 	}
 }
@@ -102,12 +121,12 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 		{"config", "user.name", "t"},
 		{"commit", "--allow-empty", "-m", "init"},
 	} {
-		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+		if out, err := exec.CommandContext(t.Context(), "git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
 	}
 	worktree := filepath.Join(t.TempDir(), "session")
-	if out, err := exec.Command("git", "-C", repo, "worktree", "add", "-b", "session/test", worktree).CombinedOutput(); err != nil {
+	if out, err := exec.CommandContext(t.Context(), "git", "-C", repo, "worktree", "add", "-b", "session/test", worktree).CombinedOutput(); err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
 	}
 
@@ -116,33 +135,30 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.Materialize(worktree); err != nil {
+	if err = a.Materialize(t.Context(), worktree); err != nil {
 		t.Fatal(err)
 	}
 
-	status, err := exec.Command("git", "-C", worktree, "status", "--porcelain").CombinedOutput()
+	status, err := exec.CommandContext(t.Context(), "git", "-C", worktree, "status", "--porcelain").CombinedOutput()
 	if err != nil {
 		t.Fatalf("git status: %v\n%s", err, status)
 	}
 	if len(status) != 0 {
 		t.Fatalf("fresh materialized worktree is dirty:\n%s", status)
 	}
-	// .herrscher/ is not materialized (the bridge fills it at session start), so
-	// it is checked through a path inside it, which is what git would actually be
-	// asked about once a learned skill lands there.
 	for _, path := range []string{".claude", ".codex", ".mcp.json", "AGENTS.md", ".herrscher/skills/x/SKILL.md"} {
-		if out, err := exec.Command("git", "-C", worktree, "check-ignore", "--quiet", "--", path).CombinedOutput(); err != nil {
-			t.Fatalf("%s is not locally ignored: %v\n%s", path, err, out)
+		if out, ignoreErr := exec.CommandContext(t.Context(), "git", "-C", worktree, "check-ignore", "--quiet", "--", path).CombinedOutput(); ignoreErr != nil {
+			t.Fatalf("%s is not locally ignored: %v\n%s", path, ignoreErr, out)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(worktree, ".gitignore")); !os.IsNotExist(err) {
+	if _, err = os.Stat(filepath.Join(worktree, ".gitignore")); !os.IsNotExist(err) {
 		t.Fatalf("materialization must not create or modify project .gitignore: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(worktree, "user.txt"), []byte("user work"), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(worktree, "user.txt"), []byte("user work"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	status, err = exec.Command("git", "-C", worktree, "status", "--porcelain").CombinedOutput()
+	status, err = exec.CommandContext(t.Context(), "git", "-C", worktree, "status", "--porcelain").CombinedOutput()
 	if err != nil {
 		t.Fatalf("git status after user file: %v\n%s", err, status)
 	}
@@ -153,14 +169,22 @@ func TestMaterializeKeepsFreshSessionWorktreeClean(t *testing.T) {
 
 func TestMaterializeWithUserProfile(t *testing.T) {
 	home := t.TempDir()
-	os.WriteFile(filepath.Join(home, "SOUL.md"), []byte("# Soul"), 0o644)
-	os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o644)
-	os.WriteFile(filepath.Join(home, "settings.json"), []byte(`{}`), 0o644)
-	os.WriteFile(filepath.Join(home, "USER.md"), []byte("user works at {{WORKTREE}}"), 0o644)
+	if err := os.WriteFile(filepath.Join(home, "SOUL.md"), []byte("# Soul"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "settings.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "USER.md"), []byte("user works at {{WORKTREE}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	wt := t.TempDir()
 	a := Agent{Name: "alice", Home: home}
-	if err := a.Materialize(wt); err != nil {
+	if err := a.Materialize(t.Context(), wt); err != nil {
 		t.Fatal(err)
 	}
 
@@ -171,17 +195,20 @@ func TestMaterializeWithUserProfile(t *testing.T) {
 	if string(user) != "user works at "+wt {
 		t.Fatalf("worktree token not substituted: %q", user)
 	}
-	claude, _ := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
-	// The import must be @USER.md (sibling), not @.claude/USER.md: Claude Code
-	// resolves relative imports against CLAUDE.md's own .claude/ directory, so a
-	// .claude/ prefix would point at the nonexistent .claude/.claude/USER.md.
+	claude, err := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(claude), "# Soul") || !strings.Contains(string(claude), "@USER.md") {
 		t.Fatalf("CLAUDE.md missing soul or import: %q", claude)
 	}
 	if strings.Contains(string(claude), "@.claude/USER.md") {
 		t.Fatalf("CLAUDE.md uses wrong import path @.claude/USER.md: %q", claude)
 	}
-	agents, _ := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
+	agents, err := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(agents), "# User") || !strings.Contains(string(agents), "user works at "+wt) {
 		t.Fatalf("AGENTS.md missing inlined user: %q", agents)
 	}
@@ -189,17 +216,29 @@ func TestMaterializeWithUserProfile(t *testing.T) {
 
 func TestMaterializeWithoutUserProfileUnchanged(t *testing.T) {
 	home := t.TempDir()
-	os.WriteFile(filepath.Join(home, "SOUL.md"), []byte("# Soul"), 0o644)
-	os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o644)
-	os.WriteFile(filepath.Join(home, "settings.json"), []byte(`{}`), 0o644)
+	if err := os.WriteFile(filepath.Join(home, "SOUL.md"), []byte("# Soul"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "settings.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	wt := t.TempDir()
 	a := Agent{Name: "alice", Home: home}
-	if err := a.Materialize(wt); err != nil {
+	if err := a.Materialize(t.Context(), wt); err != nil {
 		t.Fatal(err)
 	}
-	claude, _ := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
-	agents, _ := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
+	claude, err := os.ReadFile(filepath.Join(wt, ".claude", "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	agents, err := os.ReadFile(filepath.Join(wt, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if string(claude) != "# Soul" || string(agents) != "# Soul" {
 		t.Fatalf("no-profile output must equal soul verbatim: claude=%q agents=%q", claude, agents)
 	}
@@ -208,9 +247,6 @@ func TestMaterializeWithoutUserProfileUnchanged(t *testing.T) {
 	}
 }
 
-// The destination and the path written INTO the files are the same directory
-// when materializing in place, and differ when the files are staged here to be
-// shipped to a worktree on another machine.
 func TestMaterializeIntoWritesTheOtherMachinesPath(t *testing.T) {
 	store := NewStore(t.TempDir())
 	a, err := store.Create(CreateSpec{Name: "roblox", Soul: "worktree is {{WORKTREE}}", MCP: "neublox serve --project {{WORKTREE}}"})
@@ -218,7 +254,7 @@ func TestMaterializeIntoWritesTheOtherMachinesPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	stage := t.TempDir()
-	if err := a.MaterializeInto(stage, "/srv/work/proj/.herrscher-sessions/inst/s1"); err != nil {
+	if err = a.MaterializeInto(stage, "/srv/work/proj/.herrscher-sessions/inst/s1"); err != nil {
 		t.Fatal(err)
 	}
 	buf, err := os.ReadFile(filepath.Join(stage, "AGENTS.md"))

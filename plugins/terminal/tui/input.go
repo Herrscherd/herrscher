@@ -9,20 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Shift+Enter is the gesture every chat UI teaches, and a plain terminal cannot
-// deliver it: it sends a bare CR, byte for byte what Enter sends, so the composer
-// has no way to tell "break the line" from "send it". The only fix is to ask the
-// terminal to stop conflating them — the enhanced keyboard protocol, whose
-// "disambiguate" mode reports such keys as `CSI <code>;<mods> u` instead.
-//
-// Bubble Tea v1 does not speak that protocol, so we turn it on ourselves and
-// translate the reports back into the legacy bytes its parser already knows
-// (legacyKey). A terminal that does not implement the protocol ignores the
-// request and never sends a CSI-u report, so the translation simply stays idle —
-// nothing to detect, nothing to configure, and nothing breaks where it is absent.
 const (
-	// Push mode 1 (disambiguate escape codes) onto the terminal's own stack, so
-	// popping it restores whatever was set before us rather than assuming none.
 	enhancedKeysOn  = "\x1b[>1u"
 	enhancedKeysOff = "\x1b[<u"
 )
@@ -41,87 +28,90 @@ func withoutLocks(mods int) int {
 	return (mods-1)&^(modCapsLock|modNumLock) + 1
 }
 
-// enableEnhancedKeys asks for the protocol again once the program is running.
-// The stack the push lands on is per-screen: a push made on the main screen is
-// not in effect on the alternate screen, and this TUI spends its whole life on
-// the alternate one. Asking only before tea.NewProgram — which is where the
-// alt-screen switch happens — therefore had Shift+Enter working nowhere, on
-// terminals that implement the protocol perfectly.
-//
-// It stays a plain stdout write rather than a rendered frame because it is a
-// request to the terminal, not output: it draws nothing, and Bubble Tea has no
-// seam for sending one. The pre-program push is kept as well, so the main
-// screen is left in the same state whichever screen a terminal scopes to.
+type enhancedKeysFailedMsg struct {
+	err error
+}
+
 func enableEnhancedKeys() tea.Msg {
-	os.Stdout.WriteString(enhancedKeysOn)
+	if err := writeStdout(enhancedKeysOn); err != nil {
+		return enhancedKeysFailedMsg{err: err}
+	}
 	return nil
 }
 
-// legacyKey renders one `CSI <code>;<mods> u` report as the bytes Bubble Tea's
-// parser expects for that key. seq is the whole sequence including the leading
-// ESC '[' and the final 'u'.
-//
-// The modifier field is a bitmask biased by one (1 = none, 2 = shift, 3 = alt,
-// 5 = ctrl, …); anything we cannot render legacy bytes for is dropped rather
-// than replayed, since a CSI-u sequence reaching the parser is junk keys on
-// screen — the exact failure this file exists to prevent.
+func writeStdout(sequence string) error {
+	_, err := os.Stdout.WriteString(sequence)
+	return err
+}
+
+const minModFields = 2
+
+const (
+	modShift = 1
+	modAlt   = 2
+	modCtrl  = 4
+)
+
 func legacyKey(seq []byte) []byte {
-	// A field may carry alternate-key variants after ':'; the base value is enough.
 	fields := strings.Split(string(seq[2:len(seq)-1]), ";")
-	code, err := strconv.Atoi(strings.SplitN(fields[0], ":", 2)[0])
+	code, err := strconv.Atoi(strings.SplitN(fields[0], ":", maxColonFields)[0])
 	if err != nil || code <= 0 {
 		return nil
 	}
-	mods := 1
-	if len(fields) > 1 {
-		parts := strings.SplitN(fields[1], ":", 2)
-		if len(parts) == 2 && parts[1] == keyRelease {
-			return nil
-		}
-		if m, err := strconv.Atoi(parts[0]); err == nil && m > 0 {
-			mods = withoutLocks(m)
-		}
+	mods, released := legacyKeyMods(fields)
+	if released {
+		return nil
 	}
 	mask := mods - 1
-	const (
-		modShift = 1
-		modAlt   = 2
-		modCtrl  = 4
-	)
-
-	var b []byte
-	switch code {
-	case 13: // Enter — the whole reason we asked for this protocol
-		b = []byte{'\r'}
-	case 9:
-		b = []byte{'\t'}
-	case 27:
-		b = []byte{ctrlESC}
-	case 127:
-		b = []byte{0x7f}
-	default:
-		if code > utf8.MaxRune {
-			return nil
-		}
-		r := rune(code)
-		if mask&modCtrl != 0 && r >= 'a' && r <= 'z' {
-			b = []byte{byte(r) & 0x1f} // ctrl+letter is its control byte
-		} else {
-			if mask&modShift != 0 {
-				r = toUpper(r)
-			}
-			b = []byte(string(r))
-		}
+	bytes, ok := legacyKeyBytes(code, mask)
+	if !ok {
+		return nil
 	}
-	// Shift on Enter is what we came for: hand it over as Alt+Enter, the chord
-	// the composer already binds to a line break, so one binding serves both.
-	if code == 13 && mask&modShift != 0 {
+	if code == ctrlCR && mask&modShift != 0 {
 		return []byte{ctrlESC, '\r'}
 	}
 	if mask&modAlt != 0 {
-		return append([]byte{ctrlESC}, b...)
+		return append([]byte{ctrlESC}, bytes...)
 	}
-	return b
+	return bytes
+}
+
+func legacyKeyMods(fields []string) (int, bool) {
+	if len(fields) < minModFields {
+		return 1, false
+	}
+	parts := strings.SplitN(fields[1], ":", maxColonFields)
+	if len(parts) == 2 && parts[1] == keyRelease {
+		return 0, true
+	}
+	if m, err := strconv.Atoi(parts[0]); err == nil && m > 0 {
+		return withoutLocks(m), false
+	}
+	return 1, false
+}
+
+func legacyKeyBytes(code, mask int) ([]byte, bool) {
+	switch code {
+	case ctrlCR:
+		return []byte{'\r'}, true
+	case ctrlHT:
+		return []byte{'\t'}, true
+	case ctrlESC:
+		return []byte{ctrlESC}, true
+	case ctrlDEL:
+		return []byte{ctrlDEL}, true
+	}
+	if code < 0 || code > utf8.MaxRune {
+		return nil, false
+	}
+	char := rune(code)
+	if mask&modCtrl != 0 && char >= 'a' && char <= 'z' {
+		return []byte{byte(char) & 0x1f}, true
+	}
+	if mask&modShift != 0 {
+		char = toUpper(char)
+	}
+	return []byte(string(char)), true
 }
 
 func legacyFunc(seq []byte) []byte {
@@ -134,28 +124,44 @@ func legacyFunc(seq []byte) []byte {
 		return seq
 	}
 	fields := strings.Split(body, ";")
-	number := strings.SplitN(fields[0], ":", 2)[0]
+	number := strings.SplitN(fields[0], ":", maxColonFields)[0]
 	if number != "" {
 		if _, err := strconv.Atoi(number); err != nil {
 			return seq
 		}
 	}
-	mods := ""
-	if len(fields) > 1 {
-		parts := strings.SplitN(fields[1], ":", 2)
-		if len(parts) == 2 && parts[1] == keyRelease {
-			return nil
-		}
-		if parts[0] != "" {
-			m, err := strconv.Atoi(parts[0])
-			if err != nil || m <= 0 {
-				return seq
-			}
-			if m = withoutLocks(m); m > 1 {
-				mods = strconv.Itoa(m)
-			}
-		}
+	mods, released, ok := legacyFuncMods(fields)
+	if released {
+		return nil
 	}
+	if !ok {
+		return seq
+	}
+	return legacyFuncSequence(seq, final, number, mods)
+}
+
+func legacyFuncMods(fields []string) (string, bool, bool) {
+	if len(fields) < minModFields {
+		return "", false, true
+	}
+	parts := strings.SplitN(fields[1], ":", maxColonFields)
+	if len(parts) == 2 && parts[1] == keyRelease {
+		return "", true, true
+	}
+	if parts[0] == "" {
+		return "", false, true
+	}
+	value, err := strconv.Atoi(parts[0])
+	if err != nil || value <= 0 {
+		return "", false, false
+	}
+	if value = withoutLocks(value); value > 1 {
+		return strconv.Itoa(value), false, true
+	}
+	return "", false, true
+}
+
+func legacyFuncSequence(seq []byte, final byte, number, mods string) []byte {
 	if final == '~' {
 		if number == "" {
 			return seq
@@ -171,139 +177,126 @@ func legacyFunc(seq []byte) []byte {
 	return []byte("\x1b[1;" + mods + string(final))
 }
 
-func toUpper(r rune) rune {
-	if r >= 'a' && r <= 'z' {
-		return r - 32
+func toUpper(char rune) rune {
+	if char >= 'a' && char <= 'z' {
+		return char - asciiCaseGap
 	}
-	return r
+	return char
 }
 
-// The terminal answers colour and cursor queries in-band, mixed into stdin. Two
-// such answers can surface as garbage in the input box:
-//
-//   - OSC responses: Bubble Tea probes the background colour at init (via
-//     lipgloss.HasDarkBackground → an OSC 11 query). The terminal replies with
-//     "\x1b]11;rgb:rrrr/gggg/bbbb\x1b\\" (or …\a). On terminals that answer the
-//     cursor-position probe first, termenv abandons the read, and the leftover
-//     OSC reply reaches Bubble Tea's key parser as a stray Esc plus typed text.
-//   - CSI cursor-position reports: "\x1b[<row>;<col>R", the answer to a DSR (6n)
-//     probe, which the parser would likewise turn into junk keys.
-//
-// filteredStdin drops both, upstream of Bubble Tea's parser, without disturbing
-// real keys, arrows, or mouse events. It embeds *os.File so Bubble Tea's
-// term.File check still sees the real stdin fd (Fd/Name/Write/Close are
-// promoted): raw mode and TTY detection apply to the true terminal, and only
-// Read is filtered.
 type filteredStdin struct {
-	*os.File // os.Stdin: the byte source and the promoted term.File methods
+	*os.File
 
+	keys  *keyLog
 	state filterState
-	seq   []byte     // buffered CSI bytes, replayed verbatim unless it is a report
-	out   []byte     // filtered bytes not yet handed to the caller
-	raw   [4096]byte // scratch for one underlying Read
+	seq   []byte
+	out   []byte
+	raw   [4096]byte
 }
 
 type filterState int
 
 const (
-	filterGround filterState = iota // outside any escape sequence
-	filterOSC                       // inside an OSC string, dropping to BEL or ST
-	filterOSCEsc                    // inside an OSC string, saw ESC (maybe ST)
-	filterCSI                       // inside a CSI sequence, buffering to its final byte
+	filterGround filterState = iota
+	filterOSC
+	filterOSCEsc
+	filterCSI
 )
 
 const (
-	ctrlESC = 0x1b
-	ctrlBEL = 0x07
-	// csiSeqCap bounds how many bytes a CSI sequence may buffer before it is
-	// treated as malformed and replayed as-is, so a stray ESC-[ can never make
-	// Read withhold input indefinitely.
-	csiSeqCap = 64
+	ctrlESC        = 0x1b
+	ctrlBEL        = 0x07
+	ctrlHT         = 0x09
+	ctrlCR         = 0x0d
+	ctrlDEL        = 0x7f
+	maxColonFields = 2
+	asciiCaseGap   = 'a' - 'A'
+	csiSeqCap      = 64
 )
 
-func newFilteredStdin() *filteredStdin { return &filteredStdin{File: os.Stdin} }
+func newFilteredStdin(keys *keyLog) *filteredStdin { return &filteredStdin{File: os.Stdin, keys: keys} }
 
-// Read hands back filtered bytes. It performs at most one underlying read per
-// call: if a whole chunk is dropped (e.g. the startup colour-query response) it
-// returns (0, nil), and the caller (Bubble Tea's readAnsiInputs) simply reads
-// again through its cancelable epoll wait. It must NOT loop on an empty result —
-// a second blocking f.File.Read here would sit outside that cancel point and
-// wedge shutdown until the next keypress.
-func (f *filteredStdin) Read(p []byte) (int, error) {
+func (f *filteredStdin) Read(buf []byte) (int, error) {
 	if len(f.out) == 0 {
-		n, err := f.File.Read(f.raw[:])
-		if n > 0 {
+		read, err := f.File.Read(f.raw[:])
+		if read > 0 {
 			before := len(f.out)
-			f.feed(f.raw[:n])
-			keylog("raw %q -> %q", f.raw[:n], f.out[before:])
+			f.feed(f.raw[:read])
+			f.keys.write("raw %q -> %q", f.raw[:read], f.out[before:])
 		}
 		if err != nil && len(f.out) == 0 {
-			return 0, err // nothing buffered to hand back first: surface the error
+			return 0, err
 		}
 	}
-	n := copy(p, f.out)
-	f.out = f.out[n:]
-	return n, nil
+	count := copy(buf, f.out)
+	f.out = f.out[count:]
+	return count, nil
 }
 
-// feed runs the byte-at-a-time filter state machine, appending surviving bytes
-// to f.out and dropping query responses.
-func (f *filteredStdin) feed(b []byte) {
-	for i := 0; i < len(b); i++ {
-		c := b[i]
+func (f *filteredStdin) feed(bytes []byte) {
+	for index := 0; index < len(bytes); index++ {
 		switch f.state {
 		case filterGround:
-			if c != ctrlESC {
-				f.out = append(f.out, c)
-				continue
-			}
-			// Classify the ESC by the next byte in this same chunk. Query
-			// responses arrive as one atomic tty read, so a trailing ESC (no next
-			// byte yet) is a real Esc keypress and passes through untouched — the
-			// Esc key is never swallowed or delayed.
-			if i+1 >= len(b) {
-				f.out = append(f.out, c)
-				continue
-			}
-			switch b[i+1] {
-			case ']': // OSC: a colour-query response — drop the whole string
-				f.state = filterOSC
-				i++
-			case '[': // CSI: an arrow/function key, or a cursor-position report
-				f.state = filterCSI
-				f.seq = append(f.seq[:0], ctrlESC, '[')
-				i++
-			default: // ESC + anything else: leave it for the parser
-				f.out = append(f.out, c)
-			}
+			index = f.feedGround(bytes, index)
 		case filterOSC:
-			switch c {
-			case ctrlBEL:
-				f.state = filterGround
-			case ctrlESC:
-				f.state = filterOSCEsc
-			}
+			f.feedOSC(bytes[index])
 		case filterOSCEsc:
-			// ST is ESC '\'; any byte here ends the OSC string either way.
 			f.state = filterGround
 		case filterCSI:
-			f.seq = append(f.seq, c)
-			switch {
-			case c >= 0x40 && c <= 0x7e: // CSI final byte
-				switch {
-				case c == 'R': // a cursor-position report, not a key
-				case c == 'u': // a key report from the enhanced protocol
-					f.out = append(f.out, legacyKey(f.seq)...)
-				default:
-					f.out = append(f.out, legacyFunc(f.seq)...)
-				}
-				f.seq = f.seq[:0]
-				f.state = filterGround
-			case len(f.seq) > csiSeqCap: // malformed: replay rather than withhold
-				f.out = append(f.out, f.seq...)
-				f.seq = f.seq[:0]
-				f.state = filterGround
-			}
+			f.feedCSI(bytes[index])
 		}
 	}
+}
+
+func (f *filteredStdin) feedGround(bytes []byte, index int) int {
+	char := bytes[index]
+	if char != ctrlESC || index+1 >= len(bytes) {
+		f.out = append(f.out, char)
+		return index
+	}
+	switch bytes[index+1] {
+	case ']':
+		f.state = filterOSC
+		return index + 1
+	case '[':
+		f.state = filterCSI
+		f.seq = append(f.seq[:0], ctrlESC, '[')
+		return index + 1
+	default:
+		f.out = append(f.out, char)
+		return index
+	}
+}
+
+func (f *filteredStdin) feedOSC(c byte) {
+	switch c {
+	case ctrlBEL:
+		f.state = filterGround
+	case ctrlESC:
+		f.state = filterOSCEsc
+	}
+}
+
+func (f *filteredStdin) feedCSI(char byte) {
+	f.seq = append(f.seq, char)
+	switch {
+	case char >= 0x40 && char <= 0x7e:
+		f.finishCSI(char)
+	case len(f.seq) > csiSeqCap:
+		f.out = append(f.out, f.seq...)
+		f.seq = f.seq[:0]
+		f.state = filterGround
+	}
+}
+
+func (f *filteredStdin) finishCSI(final byte) {
+	switch final {
+	case 'R':
+	case 'u':
+		f.out = append(f.out, legacyKey(f.seq)...)
+	default:
+		f.out = append(f.out, legacyFunc(f.seq)...)
+	}
+	f.seq = f.seq[:0]
+	f.state = filterGround
 }

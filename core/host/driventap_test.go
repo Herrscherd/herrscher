@@ -6,13 +6,9 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	control "github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
-// TestEventTapAddressesTheSession: the driver knows only its own events, so the
-// tap is what puts a session's name on them. A nil publisher must yield a nil
-// tap, not a closure calling nothing — the driver's own nil check is the single
-// place the absence is decided.
 func TestEventTapAddressesTheSession(t *testing.T) {
 	if eventTap(nil, "s") != nil {
 		t.Fatal("a nil publisher must give a nil tap")
@@ -26,49 +22,41 @@ func TestEventTapAddressesTheSession(t *testing.T) {
 	}
 }
 
-// TestDrivenSessionTapsTheEventSocket is the regression for an attached frontend
-// that sat on `thinking…` forever: the events socket was created, served and
-// bound, but only the one-shot seed path ever fed it, so an ordinary session's
-// turn published nothing and every attached reader went blind.
 func TestDrivenSessionTapsTheEventSocket(t *testing.T) {
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	acc, err := control.Accept(control.SocketPath("driventap-test"))
+	const name = "driventap-test"
+	sock := control.SocketPath(name)
+	acc, err := control.Accept(ctx, sock)
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
-	got := make(chan contracts.Event, 4)
-	go runSessionIdentified(ctx, "driventap-test", "", nil, acc, "", nil, nil, sessionSink{},
-		eventTap(func(_ string, e contracts.Event) { got <- e }, "driventap-test"),
+	gw := &fanRecorder{}
+	gw.feed("ping")
+	got := make(chan contracts.Event, 8)
+	go runSessionIdentified(ctx, sessionTab, name, "", []contracts.GatewaySet{{Gateway: gw, Reader: gw}}, acc, "", nil, nil, sessionSink{},
+		eventTap(func(_ string, e contracts.Event) { got <- e }, name),
 		sessionIdentity{}, nil)
 
-	d := waitForDriver(t, "driventap-test")
-	d.fanOut(ctx, contracts.Event{T: "reply", Text: "pong", Done: true})
-
-	select {
-	case e := <-got:
-		if e.Text != "pong" {
-			t.Fatalf("socket saw %+v", e)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("a driven session published nothing on the events socket")
+	c := dialCtl(t, sock)
+	defer closeRead(c)
+	gotInput(t, c, "ping")
+	if err := c.Write(contracts.Event{T: "reply", Text: "pong", Done: true}); err != nil {
+		t.Fatalf("write reply: %v", err)
 	}
-}
-
-func waitForDriver(t *testing.T, name string) *sessionDriver {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
 	for {
-		sessionRegistry.mu.Lock()
-		d := sessionRegistry.m[name]
-		sessionRegistry.mu.Unlock()
-		if d != nil {
-			return d
+		select {
+		case e := <-got:
+			if e.T != "reply" {
+				continue
+			}
+			if e.Text != "pong" {
+				t.Fatalf("socket saw %+v", e)
+			}
+			return
+		case <-time.After(2 * time.Second):
+			t.Fatal("a driven session published nothing on the events socket")
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("session %q never registered a driver", name)
-		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }

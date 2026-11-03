@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func TestModelsListJSONShape(t *testing.T) {
@@ -46,20 +46,17 @@ func TestModelsListJSONShape(t *testing.T) {
 }
 
 func TestModelsListJSONNeverLeaksArg(t *testing.T) {
-	// Arg is a vendor-CLI invocation detail. Exposing it would invite the app to
-	// copy it, recreating the duplication this effort removes.
 	entries := []CatalogEntry{{Vendor: "claude", ModelSpec: contracts.ModelSpec{
 		ID: "x", Label: "X", Arg: "SECRET-ARG-VALUE", Route: contracts.RouteNative,
 	}}}
-	out, _ := modelsListJSON(entries)
+	out, listErr := modelsListJSON(entries)
+	logCleanup(listErr)
 	if strings.Contains(out, "SECRET-ARG-VALUE") {
 		t.Fatalf("Arg leaked into the JSON payload: %s", out)
 	}
 }
 
 func TestModelsListJSONEmptyIsAnArrayNotNull(t *testing.T) {
-	// A public build with no account has an empty catalog. `null` would crash the
-	// consumer; `[]` renders as an empty state.
 	out, err := modelsListJSON(nil)
 	if err != nil {
 		t.Fatalf("modelsListJSON(nil): %v", err)

@@ -53,7 +53,6 @@ func TestRemoveHostReportsWhetherItWasThere(t *testing.T) {
 	}
 }
 
-// local is implicit: it always exists, and it is not in the file.
 func TestLocalIsNeverAStoredHost(t *testing.T) {
 	s := NewState(filepath.Join(t.TempDir(), "state.json"))
 	if _, ok := s.FindHost(LocalHost); ok {
@@ -61,8 +60,6 @@ func TestLocalIsNeverAStoredHost(t *testing.T) {
 	}
 }
 
-// A session written before hosts existed stays local, which is the safe
-// direction: no field, no remote.
 func TestSessionHostDefaultsToEmpty(t *testing.T) {
 	if (Session{Name: "s"}).Host != "" {
 		t.Fatal("a session must be local until it says otherwise")

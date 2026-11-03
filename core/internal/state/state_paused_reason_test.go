@@ -23,8 +23,7 @@ func TestSetPausedReasonPersists(t *testing.T) {
 		t.Fatalf("want cost, got %q", got.PausedReason)
 	}
 
-	// Clearing resumes the session.
-	if err := s.SetPausedReason("game", ""); err != nil {
+	if err = s.SetPausedReason("game", ""); err != nil {
 		t.Fatal(err)
 	}
 	reloaded2, err := LoadState(path)
@@ -46,7 +45,7 @@ func TestSetPausedReasonUnknownSessionIsNoop(t *testing.T) {
 
 func TestSetPausedReasonUnchangedIsNoop(t *testing.T) {
 	s := NewState(filepath.Join(t.TempDir(), "state.json"))
-	_ = s.AddSession(Session{Name: "game", PausedReason: "cost"})
+	must(t, s.AddSession(Session{Name: "game", PausedReason: "cost"}))
 	if err := s.SetPausedReason("game", "cost"); err != nil {
 		t.Fatalf("unchanged reason must be a no-op, got %v", err)
 	}

@@ -7,8 +7,6 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 )
 
-// newComposerLikeArea builds a textarea configured exactly as the live composer
-// (no prompt gutter, no line numbers) so its content width and wrap match.
 func newComposerLikeArea(width int) textarea.Model {
 	ta := textarea.New()
 	ta.Prompt = ""
@@ -17,9 +15,6 @@ func newComposerLikeArea(width int) textarea.Model {
 	return ta
 }
 
-// TestComposerWrapMatchesWidget pins composerWrap to the real widget's soft-wrap:
-// LineInfo().Height is the widget's own wrapped-row count for the cursor's logical
-// line, so for a single line it must equal len(composerWrap(...)).
 func TestComposerWrapMatchesWidget(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -49,8 +44,6 @@ func TestComposerWrapMatchesWidget(t *testing.T) {
 	}
 }
 
-// TestDisplayRowsGrowsWithWrap is the behavioural guard: a line longer than the
-// width must report more than one row, and explicit newlines add rows.
 func TestDisplayRowsGrowsWithWrap(t *testing.T) {
 	if n := displayRows("", 20); n != 1 {
 		t.Fatalf("empty displayRows = %d, want 1", n)

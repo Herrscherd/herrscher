@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -348,58 +349,84 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 	if ch == "" {
 		ch = r.DefaultChannel()
 	}
-	var last string
 	log := obs.Stderr(false).With("component", "poll", keySession, d.name, "channel", ch)
+	var last string
 	if d.channel != "" {
-		for delay := time.Second; ; delay = min(backoffFactor*delay, maxPollBackoff) {
-			msgs, err := r.Read(ctx, ch, 1, "")
-			if err == nil {
-				if len(msgs) > 0 {
-					last = msgs[len(msgs)-1].ID
-				}
-				break
-			}
-			log.Warn("cursor init failed; retrying rather than replaying history", "err", err, "retry_in", delay)
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(delay):
-			}
-		}
-	}
-	delay := pollInterval
-	for {
-		if ctx.Err() != nil {
+		cursor, ok := initPollCursor(ctx, r, ch, log)
+		if !ok {
 			return
 		}
+		last = cursor
+	}
+	d.pollLoop(ctx, r, ch, last, log)
+}
+
+func initPollCursor(ctx context.Context, r contracts.ChannelReader, ch string, log *slog.Logger) (string, bool) {
+	for delay := time.Second; ; delay = min(backoffFactor*delay, maxPollBackoff) {
+		msgs, err := r.Read(ctx, ch, 1, "")
+		if err == nil {
+			return lastMessageID(msgs), true
+		}
+		log.Warn("cursor init failed; retrying rather than replaying history", "err", err, "retry_in", delay)
+		if !sleepOrDone(ctx, delay) {
+			return "", false
+		}
+	}
+}
+
+func lastMessageID(msgs []contracts.Message) string {
+	if len(msgs) == 0 {
+		return ""
+	}
+	return msgs[len(msgs)-1].ID
+}
+
+func sleepOrDone(ctx context.Context, delay time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(delay):
+		return true
+	}
+}
+
+func (d *sessionDriver) pollLoop(ctx context.Context, r contracts.ChannelReader, ch, last string, log *slog.Logger) {
+	delay := pollInterval
+	for ctx.Err() == nil {
 		msgs, err := r.Read(ctx, ch, pollBatchSize, last)
 		if err != nil {
 			delay = min(backoffFactor*delay, maxPollBackoff)
 			log.Warn("poll read failed", "err", err, "retry_in", delay)
 		} else {
 			delay = pollInterval
-			for _, m := range msgs {
-				if m.AuthorBot {
-					continue
-				}
-				last = m.ID
-				if !d.submit(ctx, contracts.Inbound{
-					Author:      m.AuthorName,
-					AuthorID:    m.AuthorID,
-					Text:        m.Content,
-					Attachments: m.Attachments,
-					MessageID:   contracts.MessageID(m.ID),
-				}) {
-					return
-				}
+			var ok bool
+			if last, ok = d.forwardPolled(ctx, msgs, last); !ok {
+				return
 			}
 		}
-		select {
-		case <-ctx.Done():
+		if !sleepOrDone(ctx, delay) {
 			return
-		case <-time.After(delay):
 		}
 	}
+}
+
+func (d *sessionDriver) forwardPolled(ctx context.Context, msgs []contracts.Message, last string) (string, bool) {
+	for _, m := range msgs {
+		if m.AuthorBot {
+			continue
+		}
+		last = m.ID
+		if !d.submit(ctx, contracts.Inbound{
+			Author:      m.AuthorName,
+			AuthorID:    m.AuthorID,
+			Text:        m.Content,
+			Attachments: m.Attachments,
+			MessageID:   contracts.MessageID(m.ID),
+		}) {
+			return last, false
+		}
+	}
+	return last, true
 }
 
 func (d *sessionDriver) submit(ctx context.Context, in contracts.Inbound) bool {
@@ -428,35 +455,41 @@ func (d *sessionDriver) pump(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case q := <-d.queue:
-			ev := q.ev
-			d.saidElsewhere = ev.T == eventInput && outsideBoundGateways(q.origin, d.gateways)
-			var guard tokenGuard
-			if ev.T == eventInput {
-				reason, headroom, capped := d.gate.Check(d.name)
-				if reason != "" {
-					d.emitPaused(ctx, reason)
-					d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour refusé, plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
-					continue
-				}
-				guard = tokenGuard{headroom: headroom, capped: capped}
-				if ev.TurnID == "" {
-					ev.TurnID = newTurnID()
-				}
-				ev.SessionIncarnation = d.incarnation
-				ev.Agent = d.agent
-				d.activeTurnID = ev.TurnID
-				d.recordEntry("user", ev.Text, 0, turnUsage{})
-				d.fanOut(ctx, contracts.Event{T: "human", Who: ev.Who, Text: ev.Text})
-			} else {
-				ev.SessionIncarnation = ""
-				ev.TurnID = ""
-				ev.Agent = ""
-				d.activeTurnID = ""
+			ev, guard, ok := d.prepareTurn(ctx, q)
+			if !ok {
+				continue
 			}
 			d.runTurn(ctx, ev, guard)
 			d.activeTurnID = ""
 		}
 	}
+}
+
+func (d *sessionDriver) prepareTurn(ctx context.Context, q queued) (contracts.Event, tokenGuard, bool) {
+	ev := q.ev
+	d.saidElsewhere = ev.T == eventInput && outsideBoundGateways(q.origin, d.gateways)
+	if ev.T != eventInput {
+		ev.SessionIncarnation = ""
+		ev.TurnID = ""
+		ev.Agent = ""
+		d.activeTurnID = ""
+		return ev, tokenGuard{}, true
+	}
+	reason, headroom, capped := d.gate.Check(d.name)
+	if reason != "" {
+		d.emitPaused(ctx, reason)
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour refusé, plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
+		return ev, tokenGuard{}, false
+	}
+	if ev.TurnID == "" {
+		ev.TurnID = newTurnID()
+	}
+	ev.SessionIncarnation = d.incarnation
+	ev.Agent = d.agent
+	d.activeTurnID = ev.TurnID
+	d.recordEntry("user", ev.Text, 0, turnUsage{})
+	d.fanOut(ctx, contracts.Event{T: "human", Who: ev.Who, Text: ev.Text})
+	return ev, tokenGuard{headroom: headroom, capped: capped}, true
 }
 
 func (d *sessionDriver) runTurn(ctx context.Context, ev contracts.Event, guard tokenGuard) {
@@ -503,46 +536,59 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 				return false
 			}
 			if e.T == eventReply && e.Done {
-				e.Coordination = d.maybeCoordinate(ctx, e.Text)
-				d.fanOut(ctx, e)
-				if d.sink.Resume != nil && e.Resume != "" {
-					d.sink.Resume(e.Resume)
-				}
-				if d.sink.Project != nil && e.Project != "" {
-					d.sink.Project(e.Project)
-				}
-				d.recordEntry("assistant", e.Text, e.Cost, turnUsage{
-					InTokens:    e.TokensIn,
-					OutTokens:   e.Tokens,
-					CacheRead:   e.CacheRead,
-					CacheCreate: e.CacheCreate,
-					DurMs:       int(time.Since(turnStart).Milliseconds()),
-					CtxTokens:   contextReading(live, e),
-				})
-				d.seenMu.Lock()
-				if d.pendingReply != nil {
-					d.pendingReply <- e.Text
-					d.pendingReply = nil
-				}
-				d.seenMu.Unlock()
-				d.metrics.TurnCompleted()
-				if reason, _, _ := d.gate.Check(d.name); reason != "" {
-					d.emitPaused(ctx, reason)
-					return true
-				}
+				d.completeTurn(ctx, e, turnStart, live)
 				return true
 			}
 			d.fanOut(ctx, e)
 			if n := promptSize(e); n > 0 {
 				live = n
 			}
-			if spent, over := guard.trips(e); over {
-				d.Interrupt()
-				d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour interrompu, plafond de tokens atteint (" +
-					strconv.FormatUint(spent, 10) + " tokens sur ce tour, marge " + strconv.FormatUint(guard.headroom, 10) + ")"})
-			}
+			d.enforceTokenGuard(ctx, &guard, e)
 		}
 	}
+}
+
+func (d *sessionDriver) completeTurn(ctx context.Context, e contracts.Event, turnStart time.Time, live int) {
+	e.Coordination = d.maybeCoordinate(ctx, e.Text)
+	d.fanOut(ctx, e)
+	if d.sink.Resume != nil && e.Resume != "" {
+		d.sink.Resume(e.Resume)
+	}
+	if d.sink.Project != nil && e.Project != "" {
+		d.sink.Project(e.Project)
+	}
+	d.recordEntry("assistant", e.Text, e.Cost, turnUsage{
+		InTokens:    e.TokensIn,
+		OutTokens:   e.Tokens,
+		CacheRead:   e.CacheRead,
+		CacheCreate: e.CacheCreate,
+		DurMs:       int(time.Since(turnStart).Milliseconds()),
+		CtxTokens:   contextReading(live, e),
+	})
+	d.deliverPendingReply(e.Text)
+	d.metrics.TurnCompleted()
+	if reason, _, _ := d.gate.Check(d.name); reason != "" {
+		d.emitPaused(ctx, reason)
+	}
+}
+
+func (d *sessionDriver) deliverPendingReply(text string) {
+	d.seenMu.Lock()
+	defer d.seenMu.Unlock()
+	if d.pendingReply != nil {
+		d.pendingReply <- text
+		d.pendingReply = nil
+	}
+}
+
+func (d *sessionDriver) enforceTokenGuard(ctx context.Context, guard *tokenGuard, e contracts.Event) {
+	spent, over := guard.trips(e)
+	if !over {
+		return
+	}
+	d.Interrupt()
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour interrompu, plafond de tokens atteint (" +
+		strconv.FormatUint(spent, 10) + " tokens sur ce tour, marge " + strconv.FormatUint(guard.headroom, 10) + ")"})
 }
 
 func promptSize(e contracts.Event) int {
@@ -572,92 +618,123 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *cont
 		return nil
 	}
 	if summary, ok := parseDone(reply); ok {
-		if parent, err := d.coordinator.Report(ctx, contracts.ReportRequest{
-			FromSession: d.name, Summary: summary,
-		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "report refusé"})
-			return &contracts.CoordinationEvent{
-				Kind: "report_failed", SourceSession: d.name,
-				Summary: sanitizeCoordinationError(err),
-			}
-		} else {
-			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "rapport livré à " + parent})
-			return &contracts.CoordinationEvent{
-				Kind: "reported", SourceSession: d.name,
-				ParentSession: parent, Summary: summary,
-			}
-		}
+		return d.reportDone(ctx, summary)
 	}
 	if toAgent, task, ok := parseDelegate(reply); ok {
-		target, err := d.coordinator.Delegate(ctx, contracts.DelegateRequest{
-			FromSession: d.name, ToAgent: toAgent, Task: task,
-		})
-		if err != nil {
-			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "delegate refusé"})
-			return &contracts.CoordinationEvent{
-				Kind: "delegate_failed", SourceSession: d.name,
-				Agent: toAgent, Summary: sanitizeCoordinationError(err),
-			}
-		}
-		return &contracts.CoordinationEvent{
-			Kind: "delegated", SourceSession: d.name,
-			TargetSession: target, Agent: toAgent,
-		}
+		return d.delegateTask(ctx, toAgent, task)
 	}
 	if toAgent, tasks, ok := parseFanOut(reply); ok {
-		if spawned, err := d.coordinator.FanOut(ctx, contracts.FanOutRequest{
-			FromSession: d.name, ToAgent: toAgent, Tasks: tasks,
-		}); err != nil {
-			d.fanOut(ctx, contracts.Event{
-				T:    eventStatus,
-				Text: "fanout partiel: " + strconv.Itoa(len(spawned)) + " lancés puis " + err.Error(),
-			})
-		} else {
-			d.fanOut(ctx, contracts.Event{
-				T:    eventStatus,
-				Text: "cohorte lancée : " + strconv.Itoa(len(spawned)) + " workers (" + strings.Join(spawned, ", ") + ")",
-			})
-		}
+		d.launchCohort(ctx, toAgent, tasks)
 		return nil
 	}
 	if task, ok := parseRoute(reply); ok {
-		if toAgent, session, err := d.coordinator.Route(ctx, contracts.RouteRequest{
-			FromSession: d.name, Task: task,
-		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "route refusé: " + err.Error()})
-		} else {
-			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "routé vers " + toAgent + " : " + session})
-		}
+		d.routeTask(ctx, task)
 		return nil
 	}
 	if n, ok := parseSeal(reply); ok {
-		if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
-			FromSession: d.name, Expected: n,
-		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "seal refusé: " + err.Error()})
-		} else {
-			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "cohorte scellée à " + strconv.Itoa(n)})
-		}
+		d.sealCohort(ctx, n)
 		return nil
 	}
 	if worker, ok := parseMerge(reply); ok {
-		if lead, err := d.coordinator.Merge(ctx, contracts.MergeRequest{
-			FromSession: d.name, Worker: worker,
-		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "merge refusé: " + err.Error()})
-		} else {
-			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "merge traité pour " + lead})
-		}
+		d.mergeWorker(ctx, worker)
 		return nil
 	}
 	if toAgent, task, ok := parseHandoff(reply); ok {
-		if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
-			FromSession: d.name, ToAgent: toAgent, Task: task,
-		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "handoff refusé: " + err.Error()})
-		}
+		d.handoffTask(ctx, toAgent, task)
 	}
 	return nil
+}
+
+func (d *sessionDriver) reportDone(ctx context.Context, summary string) *contracts.CoordinationEvent {
+	parent, err := d.coordinator.Report(ctx, contracts.ReportRequest{
+		FromSession: d.name, Summary: summary,
+	})
+	if err != nil {
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "report refusé"})
+		return &contracts.CoordinationEvent{
+			Kind: "report_failed", SourceSession: d.name,
+			Summary: sanitizeCoordinationError(err),
+		}
+	}
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "rapport livré à " + parent})
+	return &contracts.CoordinationEvent{
+		Kind: "reported", SourceSession: d.name,
+		ParentSession: parent, Summary: summary,
+	}
+}
+
+func (d *sessionDriver) delegateTask(ctx context.Context, toAgent, task string) *contracts.CoordinationEvent {
+	target, err := d.coordinator.Delegate(ctx, contracts.DelegateRequest{
+		FromSession: d.name, ToAgent: toAgent, Task: task,
+	})
+	if err != nil {
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "delegate refusé"})
+		return &contracts.CoordinationEvent{
+			Kind: "delegate_failed", SourceSession: d.name,
+			Agent: toAgent, Summary: sanitizeCoordinationError(err),
+		}
+	}
+	return &contracts.CoordinationEvent{
+		Kind: "delegated", SourceSession: d.name,
+		TargetSession: target, Agent: toAgent,
+	}
+}
+
+func (d *sessionDriver) launchCohort(ctx context.Context, toAgent string, tasks []string) {
+	spawned, err := d.coordinator.FanOut(ctx, contracts.FanOutRequest{
+		FromSession: d.name, ToAgent: toAgent, Tasks: tasks,
+	})
+	if err != nil {
+		d.fanOut(ctx, contracts.Event{
+			T:    eventStatus,
+			Text: "fanout partiel: " + strconv.Itoa(len(spawned)) + " lancés puis " + err.Error(),
+		})
+		return
+	}
+	d.fanOut(ctx, contracts.Event{
+		T:    eventStatus,
+		Text: "cohorte lancée : " + strconv.Itoa(len(spawned)) + " workers (" + strings.Join(spawned, ", ") + ")",
+	})
+}
+
+func (d *sessionDriver) routeTask(ctx context.Context, task string) {
+	toAgent, session, err := d.coordinator.Route(ctx, contracts.RouteRequest{
+		FromSession: d.name, Task: task,
+	})
+	if err != nil {
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "route refusé: " + err.Error()})
+		return
+	}
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "routé vers " + toAgent + " : " + session})
+}
+
+func (d *sessionDriver) sealCohort(ctx context.Context, n int) {
+	if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
+		FromSession: d.name, Expected: n,
+	}); err != nil {
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "seal refusé: " + err.Error()})
+		return
+	}
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "cohorte scellée à " + strconv.Itoa(n)})
+}
+
+func (d *sessionDriver) mergeWorker(ctx context.Context, worker string) {
+	lead, err := d.coordinator.Merge(ctx, contracts.MergeRequest{
+		FromSession: d.name, Worker: worker,
+	})
+	if err != nil {
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "merge refusé: " + err.Error()})
+		return
+	}
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "merge traité pour " + lead})
+}
+
+func (d *sessionDriver) handoffTask(ctx context.Context, toAgent, task string) {
+	if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
+		FromSession: d.name, ToAgent: toAgent, Task: task,
+	}); err != nil {
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "handoff refusé: " + err.Error()})
+	}
 }
 
 func sanitizeCoordinationError(err error) string {

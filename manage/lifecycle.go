@@ -9,7 +9,7 @@ import (
 	"github.com/Herrscherd/herrscher/internal/errwriter"
 )
 
-// updateCmd bumps every compiled-in plugin to its latest version, then rebuilds
+// UpdateCmd bumps every compiled-in plugin to its latest version, then rebuilds
 // the host. This is the plugin-side counterpart to `herrscherd service update`
 // (which pulls the host's own source): here we refresh the blank-imported plugin
 // modules listed in plugins.go and re-tidy/rebuild the composition.
@@ -112,7 +112,7 @@ func fetchPluginUpdates(ctx context.Context, errOut *errwriter.Writer, dir strin
 	return 0
 }
 
-// installCmd builds the host binary from its current plugin composition, then
+// InstallCmd builds the host binary from its current plugin composition, then
 // delegates to `herrscherd service install` for the OS-service glue (systemd /
 // launchd / Task Scheduler). The CLI never reimplements that glue; it lives in
 // core/service, exposed by the host. Anything after `--` is forwarded verbatim
@@ -122,7 +122,7 @@ func InstallCmd(ctx context.Context, args []string) int {
 	return errwriter.Finish(installHost(ctx, out, errOut, args), out, errOut)
 }
 
-func installHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
+func installHost(ctx context.Context, _, errOut *errwriter.Writer, args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	hostDir := fs.String("host", "", "path to the host module")
 	if err := fs.Parse(args); err != nil {

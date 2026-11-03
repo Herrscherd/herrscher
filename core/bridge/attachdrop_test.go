@@ -74,7 +74,7 @@ func TestPassingTheCapIsLogged(t *testing.T) {
 			Filename: "shot.png", URL: "https://evil.test/shot.png", ContentType: "image/png",
 		})
 	}
-	ResolveAttachments(context.Background(), http.DefaultClient, m, "cap", map[string]bool{})
+	ResolveAttachments(context.Background(), http.DefaultClient, m, "cap", make(map[string]bool))
 	if !strings.Contains(buf.String(), "per-message cap") {
 		t.Fatalf("log = %q, want the cap named", buf.String())
 	}

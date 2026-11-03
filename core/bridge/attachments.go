@@ -392,9 +392,9 @@ func sanitize(s string) string {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
 			r == '.', r == '-', r == '_':
-			b.WriteRune(r)
+			_, _ = b.WriteRune(r)
 		default:
-			b.WriteRune('_')
+			_, _ = b.WriteRune('_')
 		}
 	}
 	out := strings.TrimLeft(b.String(), ".")

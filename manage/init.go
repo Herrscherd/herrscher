@@ -225,7 +225,7 @@ func buildStack(ctx context.Context, errOut *errwriter.Writer, dir string, modul
 
 func resolveStack(choices map[string]string, extras []string) ([]string, error) {
 	var modules []string
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	add := func(m string) {
 		if !seen[m] {
 			seen[m] = true
@@ -289,7 +289,7 @@ func writeSecretsTo(path string, secrets map[string]string) (int, error) {
 	if b, err := os.ReadFile(path); err == nil {
 		lines = strings.Split(strings.TrimRight(string(b), "\n"), "\n")
 	}
-	done := map[string]bool{}
+	done := make(map[string]bool)
 	for i, ln := range lines {
 		key := ln
 		if eq := strings.IndexByte(ln, '='); eq >= 0 {

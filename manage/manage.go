@@ -384,7 +384,7 @@ func pluginVersions(ctx context.Context, dir, src string) ([]PluginVersion, erro
 	if err != nil {
 		installed = nil
 	}
-	available := map[string][]string{}
+	available := make(map[string][]string)
 	for _, m := range mods {
 		vs, err := availableVersions(ctx, tc, m)
 		if err != nil {
@@ -418,7 +418,7 @@ func listWithVersions(ctx context.Context, dir, src string, out io.Writer) error
 func loadPins(dir string) (map[string]bool, error) {
 	src, err := os.ReadFile(filepath.Join(dir, pinFile))
 	if errors.Is(err, os.ErrNotExist) {
-		return map[string]bool{}, nil
+		return make(map[string]bool), nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", pinFile, err)
@@ -467,11 +467,11 @@ func run(ctx context.Context, errOut *errwriter.Writer, dir, name string, args .
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	var line strings.Builder
-	line.WriteString("+ ")
-	line.WriteString(name)
+	_, _ = line.WriteString("+ ")
+	_, _ = line.WriteString(name)
 	for _, a := range args {
-		line.WriteByte(' ')
-		line.WriteString(a)
+		_ = line.WriteByte(' ')
+		_, _ = line.WriteString(a)
 	}
 	errOut.Println(line.String())
 	if err := cmd.Run(); err != nil {

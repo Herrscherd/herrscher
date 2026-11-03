@@ -39,7 +39,7 @@ func runService(ctx context.Context, args []string) error {
 		if err := service.Restart(ctx, cfg); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "herrscher service: restarted")
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher service: restarted")
 		return nil
 	case cmdUpdate:
 		return runServiceUpdate(ctx, cfg, args[1:])
@@ -66,7 +66,7 @@ func runService(ctx context.Context, args []string) error {
 		if err := service.Uninstall(ctx, cfg); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "herrscher service: removed")
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher service: removed")
 		return nil
 	case cmdStatus:
 		return service.Status(ctx, cfg)
@@ -90,13 +90,13 @@ func runServiceUpdate(ctx context.Context, cfg service.Config, args []string) er
 		return fmt.Errorf("herrscher service update: %w %q", errUnexpectedArgument, fs.Arg(0))
 	}
 	if installed, ok := service.InstalledBinPath(cfg); ok && installed != cfg.BinPath {
-		fmt.Fprintf(os.Stderr, "herrscher service: rebuilding the installed binary %s (you ran %s)\n", installed, cfg.BinPath)
+		_, _ = fmt.Fprintf(os.Stderr, "herrscher service: rebuilding the installed binary %s (you ran %s)\n", installed, cfg.BinPath)
 		cfg.BinPath = installed
 	}
 	if err := service.Update(ctx, cfg, *source, !*noPull); err != nil {
 		return err
 	}
 	v := service.SourceVersion(ctx, *source)
-	fmt.Fprintf(os.Stderr, "herrscher service: rebuilt %s and restarted\n", v)
+	_, _ = fmt.Fprintf(os.Stderr, "herrscher service: rebuilt %s and restarted\n", v)
 	return nil
 }

@@ -227,7 +227,7 @@ func TestValidateCDNURL(t *testing.T) {
 }
 
 func TestFetchOneRemovesPartialFileOnCopyError(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Length", "999999")
 		w.WriteHeader(http.StatusOK)
 		writeOrLog(w, []byte("xx"))
@@ -251,7 +251,7 @@ func TestFetchOneRemovesPartialFileOnCopyError(t *testing.T) {
 }
 
 func TestResolveAttachmentsContextCancelled(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeOrLog(w, []byte("data"))
 	}))
 	defer srv.Close()
@@ -271,7 +271,7 @@ func TestResolveAttachmentsContextCancelled(t *testing.T) {
 
 func TestFetchOneSkipsOversizedBody(t *testing.T) {
 	big := maxAttachmentBytes + 100
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		buf := make([]byte, 64<<10)
 		for i := range buf {
 			buf[i] = 'A'
@@ -295,7 +295,7 @@ func TestFetchOneSkipsOversizedBody(t *testing.T) {
 
 func TestResolveAttachmentsSkipsDeclaredOversized(t *testing.T) {
 	called := false
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called = true
 		writeOrLog(w, []byte("x"))
 	}))
@@ -339,7 +339,7 @@ func TestSupportedPrefersContentType(t *testing.T) {
 }
 
 func TestResolveAttachmentsCapsCount(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeOrLog(w, []byte("x"))
 	}))
 	defer srv.Close()
@@ -371,7 +371,7 @@ func TestResolveAttachmentsNothingToResolveNoDir(t *testing.T) {
 }
 
 func TestResolveAttachmentsTightModes(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeOrLog(w, []byte("PNGDATA"))
 	}))
 	defer srv.Close()

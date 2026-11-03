@@ -16,13 +16,13 @@ func withIdentity(baseCtx string, id identity.Identity) string {
 	}
 	var b strings.Builder
 	if baseCtx != "" {
-		b.WriteString(baseCtx)
-		b.WriteString("\n\n")
+		_, _ = b.WriteString(baseCtx)
+		_, _ = b.WriteString("\n\n")
 	}
-	b.WriteString("<user>\n")
-	b.WriteString(identityIntro)
-	b.WriteString("\n")
-	b.WriteString(id.String())
-	b.WriteString("\n</user>")
+	_, _ = b.WriteString("<user>\n")
+	_, _ = b.WriteString(identityIntro)
+	_, _ = b.WriteString("\n")
+	_, _ = b.WriteString(id.String())
+	_, _ = b.WriteString("\n</user>")
 	return b.String()
 }

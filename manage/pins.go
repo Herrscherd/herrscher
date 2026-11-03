@@ -12,7 +12,7 @@ var errNotModulePath = errors.New("not a module path")
 const pinFile = ".herrscher-pins"
 
 func readPins(src string) (map[string]bool, error) {
-	pins := map[string]bool{}
+	pins := make(map[string]bool)
 	for i, line := range strings.Split(src, "\n") {
 		mod := strings.TrimSpace(line)
 		if mod == "" || strings.HasPrefix(mod, "#") {
@@ -36,8 +36,8 @@ func writePins(pins map[string]bool) string {
 	sort.Strings(mods)
 	var b strings.Builder
 	for _, m := range mods {
-		b.WriteString(m)
-		b.WriteByte('\n')
+		_, _ = b.WriteString(m)
+		_ = b.WriteByte('\n')
 	}
 	return b.String()
 }

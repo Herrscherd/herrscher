@@ -55,7 +55,7 @@ func installedVersions(ctx context.Context, tc toolchain, modules []string) (map
 	for _, m := range modules {
 		wanted[m] = true
 	}
-	versions := map[string]string{}
+	versions := make(map[string]string)
 	dec := json.NewDecoder(strings.NewReader(out))
 	for dec.More() {
 		var mod struct {

@@ -87,7 +87,7 @@ func stringLabels(exprs []ast.Expr) []string {
 
 func TestKnownVerbsKeepTheirLocalPath(t *testing.T) {
 	cases, _ := mainSwitches(t)
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	for _, c := range cases {
 		seen[c] = true
 	}

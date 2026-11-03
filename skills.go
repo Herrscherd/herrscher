@@ -27,25 +27,25 @@ func installShippedSkills(ctx context.Context) {
 	dst := filepath.Join(home, ".claude", "skills")
 	out, err := skills.Install(src, dst)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "herrscher: install shipped skills: "+err.Error())
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher: install shipped skills: "+err.Error())
 	}
 	reportSkills(dst, out, "skill")
 	plug, notes := installPluginSkills(ctx, contracts.Default.Plugins(), os.Getenv, dst)
 	for _, n := range notes {
-		fmt.Fprintln(os.Stderr, n)
+		_, _ = fmt.Fprintln(os.Stderr, n)
 	}
 	reportSkills(dst, plug, "plugin skill")
 }
 
 func reportSkills(dst string, out skills.Outcome, kind string) {
 	for _, name := range out.Installed {
-		fmt.Fprintln(os.Stderr, "herrscher: installed "+kind+" "+name)
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher: installed "+kind+" "+name)
 	}
 	for _, name := range out.Updated {
-		fmt.Fprintln(os.Stderr, "herrscher: updated "+kind+" "+name+" to the shipped version")
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher: updated "+kind+" "+name+" to the shipped version")
 	}
 	for _, name := range out.Diverged {
-		fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" differs from the one this build ships and was left as it is; "+
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" differs from the one this build ships and was left as it is; "+
 			"delete "+filepath.Join(dst, name)+" to take the shipped version")
 	}
 }
@@ -53,7 +53,7 @@ func reportSkills(dst string, out skills.Outcome, kind string) {
 func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string, dst string) (skills.Outcome, []string) {
 	var all skills.Outcome
 	var notes []string
-	claimed := map[string]string{}
+	claimed := make(map[string]string)
 	for i := range plugins {
 		p := &plugins[i]
 		if p.Skills == nil {
@@ -104,7 +104,7 @@ func reserve(tree fs.FS, kind string, claimed map[string]string) (fs.FS, []strin
 		return tree, nil
 	}
 	var notes []string
-	hidden := map[string]bool{}
+	hidden := make(map[string]bool)
 	kept := 0
 	for _, e := range entries {
 		if !e.IsDir() {

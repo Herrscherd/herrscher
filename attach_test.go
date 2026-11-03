@@ -28,26 +28,26 @@ func startFakeDaemon(t *testing.T, reply func(argv []string) (string, error)) *f
 	t.Setenv("TMPDIR", t.TempDir())
 	d := &fakeDaemon{instance: "test", argv: make(chan []string, 16), reply: reply}
 
-	cmdLn, err := net.Listen("unix", host.CommandSocketPath(d.instance))
+	cmdLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.CommandSocketPath(d.instance))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { cmdLn.Close() })
+	t.Cleanup(func() { closeQuietly(cmdLn) })
 	go func() {
 		for {
-			c, err := cmdLn.Accept()
-			if err != nil {
+			c, acceptErr := cmdLn.Accept()
+			if acceptErr != nil {
 				return
 			}
 			go d.handleCommand(c)
 		}
 	}()
 
-	evLn, err := net.Listen("unix", host.EventsSocketPath(d.instance))
+	evLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.EventsSocketPath(d.instance))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { evLn.Close() })
+	t.Cleanup(func() { closeQuietly(evLn) })
 	accepted := make(chan net.Conn, 1)
 	go func() {
 		c, err := evLn.Accept()
@@ -58,7 +58,7 @@ func startFakeDaemon(t *testing.T, reply func(argv []string) (string, error)) *f
 	}()
 	t.Cleanup(func() {
 		if d.events != nil {
-			d.events.Close()
+			closeQuietly(d.events)
 		}
 	})
 	d.acceptedEvents = accepted
@@ -66,7 +66,7 @@ func startFakeDaemon(t *testing.T, reply func(argv []string) (string, error)) *f
 }
 
 func (d *fakeDaemon) handleCommand(c net.Conn) {
-	defer c.Close()
+	defer closeQuietly(c)
 	line, err := bufio.NewReader(c).ReadBytes('\n')
 	if err != nil && len(line) == 0 {
 		return
@@ -82,14 +82,16 @@ func (d *fakeDaemon) handleCommand(c net.Conn) {
 	default:
 	}
 	out, rerr := d.reply(req.Argv)
-	resp := map[string]string{}
+	resp := make(map[string]string)
 	if rerr != nil {
 		resp["err"] = rerr.Error()
 	} else {
 		resp["ok"] = out
 	}
-	b, _ := json.Marshal(resp)
-	c.Write(append(b, '\n'))
+	b := mustMarshal(resp)
+	if _, err := c.Write(append(b, '\n')); err != nil {
+		return
+	}
 }
 
 func (d *fakeDaemon) publish(t *testing.T, session string, e contracts.Event) {
@@ -101,14 +103,14 @@ func (d *fakeDaemon) publish(t *testing.T, session string, e contracts.Event) {
 			t.Fatal("the frontend never connected to the events socket")
 		}
 	}
-	b, _ := json.Marshal(host.DaemonEvent{Session: session, Event: e})
+	b := mustMarshal(host.DaemonEvent{Session: session, Event: e})
 	if _, err := d.events.Write(append(b, '\n')); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func infoJSON(sessions ...contracts.SessionInfo) string {
-	b, _ := json.Marshal(sessions)
+	b := mustMarshal(sessions)
 	return string(b)
 }
 
@@ -210,7 +212,7 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 		case strings.Join(argv, " ") == "session info --json":
 			return infoJSON(), nil
 		case argv[1] == "scrollback":
-			b, _ := json.Marshal([]contracts.ScrollbackLine{{Role: "user", Text: "hello"}})
+			b := mustMarshal([]contracts.ScrollbackLine{{Role: "user", Text: "hello"}})
 			return string(b), nil
 		}
 		return "", nil

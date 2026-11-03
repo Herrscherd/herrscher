@@ -25,8 +25,14 @@ func TestLoadEnvFile(t *testing.T) {
 		"HERRSCHER_TEST_TOKEN", "HERRSCHER_TEST_EXPORTED", "HERRSCHER_TEST_TABEXPORT", "HERRSCHER_TEST_QUOTED",
 		"HERRSCHER_TEST_EQUALS", "HERRSCHER_TEST_SPACED", "HERRSCHER_TEST_COMMENTED",
 	} {
-		os.Unsetenv(k)
-		t.Cleanup(func() { os.Unsetenv(k) })
+		if err := os.Unsetenv(k); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := os.Unsetenv(k); err != nil {
+				t.Errorf("unset %s: %v", k, err)
+			}
+		})
 	}
 	if err := loadEnvFile(path); err != nil {
 		t.Fatal(err)

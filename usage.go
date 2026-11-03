@@ -9,22 +9,22 @@ import (
 )
 
 func usage() {
-	r := lipgloss.NewRenderer(os.Stderr)
+	renderer := lipgloss.NewRenderer(os.Stderr)
 	var (
-		banner  = r.NewStyle().Bold(true).Foreground(lipgloss.Color("13"))
-		tagline = r.NewStyle().Faint(true)
-		section = r.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
-		verb    = r.NewStyle().Bold(true)
-		hint    = r.NewStyle().Faint(true)
+		banner  = renderer.NewStyle().Bold(true).Foreground(lipgloss.Color("13"))
+		tagline = renderer.NewStyle().Faint(true)
+		section = renderer.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
+		verb    = renderer.NewStyle().Bold(true)
+		hint    = renderer.NewStyle().Faint(true)
 	)
 
 	const col = 34
-	row := func(v, h string) string {
-		pad := col - len([]rune(v))
+	row := func(value, help string) string {
+		pad := col - len([]rune(value))
 		if pad < 1 {
 			pad = 1
 		}
-		return "    " + verb.Render(v) + strings.Repeat(" ", pad) + hint.Render(h)
+		return "    " + verb.Render(value) + strings.Repeat(" ", pad) + hint.Render(help)
 	}
 
 	group := func(title string, rows ...string) string {
@@ -75,5 +75,5 @@ func usage() {
 		"  " + hint.Render("     `herrscher init` pose ces trois questions, pas besoin de les écrire à la main"),
 	}
 
-	fmt.Fprintln(os.Stderr, strings.Join(blocks, "\n"))
+	_, _ = fmt.Fprintln(os.Stderr, strings.Join(blocks, "\n"))
 }

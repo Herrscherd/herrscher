@@ -425,8 +425,8 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	}
 	if err := reg.Add(contracts.New("whoami").
 		Help("print who git on this machine says you are").
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return WhoamiOut(in.JSON)
+		Do(func(ctx context.Context, in contracts.Input) (string, error) {
+			return WhoamiOut(ctx, in.JSON)
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}

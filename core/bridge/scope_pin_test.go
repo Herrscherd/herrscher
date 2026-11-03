@@ -19,6 +19,7 @@ func (r *fixedResolver) Resolve(context.Context, string) string {
 
 type scopedOrch struct {
 	contracts.Orchestrator
+
 	got contracts.MemoryScope
 }
 

@@ -12,6 +12,8 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
+var errNoHubSocket = errors.New("bridge requires --hub-socket (pure-runner mode)")
+
 // BackendFactory builds the model-edge backend for a resolved channel. It is
 // injected so core stays free of any model-specific code: the binary supplies a
 // factory closing over its chosen backend (e.g. claude.NewBackend). The channel
@@ -59,30 +61,30 @@ type Options struct {
 
 // Run is the bridge entry point: a pure backend runner. It requires a hub socket
 // (the daemon hub owns all gateway I/O) and drives the backend over it.
-func Run(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, o Options) error {
-	if o.HubSocket == "" {
-		return errors.New("bridge requires --hub-socket (pure-runner mode)")
+func Run(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, opts Options) error {
+	if opts.HubSocket == "" {
+		return errNoHubSocket
 	}
 	if starter, ok := orch.(interface{ Start(context.Context) }); ok {
 		starter.Start(ctx)
 	}
-	return runHub(ctx, newBackend, orch, o)
+	return runHub(ctx, newBackend, orch, opts)
 }
 
 // RunOneShot runs one backend turn in-process over event channels. It is the
 // bridge seam used by the operator's short-lived session seed path: no control
 // socket or gateway is involved, but the same backend turn machinery (including
 // orchestrator context/observation) is exercised.
-func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, channel string, in <-chan contracts.Event, out chan<- contracts.Event) error {
+func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, channel string, input <-chan contracts.Event, out chan<- contracts.Event) error {
 	resp, err := newBackend(channel)
 	if err != nil {
 		return fmt.Errorf("backend: %w", err)
 	}
-	defer resp.Close()
+	defer closeAndWarn(resp)
 
 	select {
-	case ev := <-in:
-		runOneTurn(ctx, channelSink{ctx: ctx, out: out}, resp, orch, ev, nil, newSkillEngine(resp), affordances{}, nil)
+	case ev := <-input:
+		runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, ev, nil, newSkillEngine(resp), affordances{}, nil)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -90,13 +92,13 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 }
 
 type channelSink struct {
-	ctx context.Context
-	out chan<- contracts.Event
+	done <-chan struct{}
+	out  chan<- contracts.Event
 }
 
-func (s channelSink) Emit(e contracts.Event) {
+func (s channelSink) Emit(event contracts.Event) {
 	select {
-	case s.out <- e:
-	case <-s.ctx.Done():
+	case s.out <- event:
+	case <-s.done:
 	}
 }

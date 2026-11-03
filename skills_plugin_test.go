@@ -68,7 +68,7 @@ func TestPluginSkillsNeverOverwrite(t *testing.T) {
 		Manifest: contracts.Manifest{Kind: "fake"},
 		Skills:   tree("demo", nil),
 	}}, noEnv, dst)
-	b, _ := os.ReadFile(mine)
+	b := mustReadFile(t, mine)
 	if string(b) != "mine" {
 		t.Fatalf("an existing skill must be left alone, got %q", b)
 	}
@@ -85,7 +85,7 @@ func TestPluginWithoutSkillsIsSkipped(t *testing.T) {
 	if !out.Empty() || len(notes) != 0 {
 		t.Fatalf("a plugin with no skills installs nothing and says nothing, got %+v %v", out, notes)
 	}
-	entries, _ := os.ReadDir(dst)
+	entries := mustReadDir(t, dst)
 	if len(entries) != 0 {
 		t.Fatalf("nothing must be created, found %d entries", len(entries))
 	}
@@ -169,7 +169,7 @@ func TestASkillsFactoryReturningNothingIsReported(t *testing.T) {
 	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{Kind: "empty", Category: contracts.CategorySkills},
 		Skills: func(context.Context, contracts.PluginConfig) (fs.FS, error) {
-			return nil, nil
+			return nil, errors.New("nothing")
 		},
 	}}, noEnv, dst)
 	if !out.Empty() {
@@ -194,7 +194,7 @@ func TestTwoPluginsClaimingOneSkillNameDoNotFightOverIt(t *testing.T) {
 	if len(notes) != 1 || !strings.Contains(notes[0], "second") || !strings.Contains(notes[0], "first") {
 		t.Fatalf("the clash must name both plugins, got %v", notes)
 	}
-	if b, _ := os.ReadFile(filepath.Join(dst, "demo", "SKILL.md")); string(b) != "# from first" {
+	if b := mustReadFile(t, filepath.Join(dst, "demo", "SKILL.md")); string(b) != "# from first" {
 		t.Fatalf("the first claim must be the one on disk, got %q", b)
 	}
 
@@ -216,10 +216,10 @@ func TestOnlyTheClashingSkillIsLeftOut(t *testing.T) {
 	if len(out.Installed) != 2 {
 		t.Fatalf("the clash costs one skill, not the plugin, got %+v (%v)", out, notes)
 	}
-	if b, _ := os.ReadFile(filepath.Join(dst, "other", "SKILL.md")); string(b) != "# other" {
+	if b := mustReadFile(t, filepath.Join(dst, "other", "SKILL.md")); string(b) != "# other" {
 		t.Fatalf("the plugin's own skill must still land, got %q", b)
 	}
-	if b, _ := os.ReadFile(filepath.Join(dst, "demo", "SKILL.md")); string(b) != "# from first" {
+	if b := mustReadFile(t, filepath.Join(dst, "demo", "SKILL.md")); string(b) != "# from first" {
 		t.Fatalf("the clashing one must stay with its first claimant, got %q", b)
 	}
 }

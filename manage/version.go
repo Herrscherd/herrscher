@@ -3,6 +3,7 @@ package manage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,8 @@ import (
 )
 
 const contractsModule = "github.com/Herrscherd/herrscher-contracts"
+
+var errNoVersions = errors.New("no published versions")
 
 // PluginVersion is one row of `herrscher plugin list`: what is compiled in, what
 // the operator asked to hold still, and what could be taken instead.
@@ -31,12 +34,12 @@ func (g goToolchain) List(ctx context.Context, args ...string) (string, error) {
 	cmd.Dir = g.dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("go list %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("go list %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return string(out), nil
 }
 
-func splitModuleVersion(arg string) (module, version string) {
+func splitModuleVersion(arg string) (string, string) {
 	if i := strings.LastIndex(arg, "@"); i >= 0 {
 		return arg[:i], arg[i+1:]
 	}
@@ -52,10 +55,13 @@ func installedVersions(ctx context.Context, tc toolchain, modules []string) (map
 	for _, m := range modules {
 		wanted[m] = true
 	}
-	versions := map[string]string{}
+	versions := make(map[string]string)
 	dec := json.NewDecoder(strings.NewReader(out))
 	for dec.More() {
-		var mod struct{ Path, Version string }
+		var mod struct {
+			Path    string `json:"Path"`
+			Version string `json:"Version"`
+		}
 		if err := dec.Decode(&mod); err != nil {
 			return nil, fmt.Errorf("parse go list -m -json: %w", err)
 		}
@@ -72,8 +78,8 @@ func availableVersions(ctx context.Context, tc toolchain, module string) ([]stri
 		return nil, nil
 	}
 	fields := strings.Fields(out)
-	if len(fields) < 2 {
-		return nil, nil
+	if len(fields) < minVersionParts {
+		return nil, errNoVersions
 	}
 	return fields[1:], nil
 }
@@ -83,8 +89,10 @@ func contractsRequirement(ctx context.Context, tc toolchain, module, version str
 	if err != nil {
 		return "", err
 	}
-	var mod struct{ GoMod string }
-	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &mod); err != nil {
+	var mod struct {
+		GoMod string `json:"GoMod"`
+	}
+	if err = json.Unmarshal([]byte(strings.TrimSpace(out)), &mod); err != nil {
 		return "", fmt.Errorf("parse go list -m -json %s@%s: %w", module, version, err)
 	}
 	if mod.GoMod == "" {

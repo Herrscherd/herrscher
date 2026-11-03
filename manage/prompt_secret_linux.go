@@ -5,26 +5,39 @@ package manage
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
-	"syscall"
-	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
-func readSecret(in *bufio.Reader, msg string) (string, error) {
-	fmt.Fprint(os.Stderr, msg)
-	fd := os.Stdin.Fd()
-
-	var old syscall.Termios
-	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, syscall.TCGETS, uintptr(unsafe.Pointer(&old))); errno != 0 {
-		return promptLine(in, ""), nil
+func readSecret(input *bufio.Reader, msg string) (string, error) {
+	_, _ = fmt.Fprint(os.Stderr, msg)
+	descriptor := int(os.Stdin.Fd())
+	if !stdinIsTerminal(descriptor) {
+		return promptLine(input, ""), nil
 	}
-	raw := old
-	raw.Lflag &^= syscall.ECHO
-	syscall.Syscall(syscall.SYS_IOCTL, fd, syscall.TCSETS, uintptr(unsafe.Pointer(&raw)))
 
-	line, err := in.ReadString('\n')
-	syscall.Syscall(syscall.SYS_IOCTL, fd, syscall.TCSETS, uintptr(unsafe.Pointer(&old)))
-	fmt.Fprintln(os.Stderr)
+	old, err := unix.IoctlGetTermios(descriptor, unix.TCGETS)
+	if err != nil {
+		return "", err
+	}
+	raw := *old
+	raw.Lflag &^= unix.ECHO
+	if setErr := unix.IoctlSetTermios(descriptor, unix.TCSETS, &raw); setErr != nil {
+		return "", setErr
+	}
+
+	line, err := input.ReadString('\n')
+	if restoreErr := unix.IoctlSetTermios(descriptor, unix.TCSETS, old); restoreErr != nil {
+		slog.Warn("restore terminal echo", "err", restoreErr)
+	}
+	_, _ = fmt.Fprintln(os.Stderr)
 	return strings.TrimSpace(line), err
+}
+
+func stdinIsTerminal(fd int) bool {
+	_, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+	return err == nil
 }

@@ -38,10 +38,12 @@ func newAutoDecider() decider { return autoDecider{} }
 
 type step func(ctx context.Context) (output string, err error)
 
-var composed = []string{"go.mod", "go.sum", "plugins.go"}
+func composed() []string {
+	return []string{"go.mod", "go.sum", "plugins.go"}
+}
 
-func apply(ctx context.Context, dir string, findings []string, d decider, steps []step) (applied bool, err error) {
-	if d.Warn(ctx, findings) == Abort {
+func apply(ctx context.Context, dir string, findings []string, dec decider, steps []step) (bool, error) {
+	if dec.Warn(ctx, findings) == Abort {
 		return false, nil
 	}
 
@@ -56,7 +58,7 @@ func apply(ctx context.Context, dir string, findings []string, d decider, steps 
 			continue
 		}
 		failure := fmt.Errorf("%w\n%s", err, out)
-		if d.Failed(ctx, out) == Restore {
+		if dec.Failed(ctx, out) == Restore {
 			if rerr := restoreComposition(dir, saved); rerr != nil {
 				return false, errors.Join(failure, rerr)
 			}
@@ -67,8 +69,8 @@ func apply(ctx context.Context, dir string, findings []string, d decider, steps 
 }
 
 func saveComposition(dir string) (map[string][]byte, error) {
-	saved := make(map[string][]byte, len(composed))
-	for _, name := range composed {
+	saved := make(map[string][]byte, len(composed()))
+	for _, name := range composed() {
 		body, err := os.ReadFile(filepath.Join(dir, name))
 		switch {
 		case errors.Is(err, os.ErrNotExist):
@@ -83,7 +85,7 @@ func saveComposition(dir string) (map[string][]byte, error) {
 }
 
 func restoreComposition(dir string, saved map[string][]byte) error {
-	for _, name := range composed {
+	for _, name := range composed() {
 		path := filepath.Join(dir, name)
 		body, ok := saved[name]
 		if !ok {
@@ -96,7 +98,7 @@ func restoreComposition(dir string, saved map[string][]byte) error {
 				err = nil
 			}
 		} else {
-			err = os.WriteFile(path, body, 0o644)
+			err = os.WriteFile(path, body, modeFile)
 		}
 		if err != nil {
 			return fmt.Errorf("restore %s: %w", name, err)

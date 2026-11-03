@@ -43,19 +43,19 @@ type Identity struct {
 // deliberately NOT derived from the origin remote: a remote's owner is
 // frequently an organisation rather than the human, so deriving it would
 // manufacture a wrong identity wearing the shape of a right one.
-func FromDir(dir string) Identity {
+func FromDir(ctx context.Context, dir string) Identity {
 	if dir == "" {
 		return Identity{}
 	}
 	return Identity{
-		Name:   gitConfig(dir, "user.name"),
-		Email:  gitConfig(dir, "user.email"),
-		GitHub: gitConfig(dir, "github.user"),
+		Name:   gitConfig(ctx, dir, "user.name"),
+		Email:  gitConfig(ctx, dir, "user.email"),
+		GitHub: gitConfig(ctx, dir, "github.user"),
 	}
 }
 
-func gitConfig(dir, key string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+func gitConfig(ctx context.Context, dir, key string) string {
+	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "git", "-C", dir, "config", "--get", key).Output()
 	if err != nil {

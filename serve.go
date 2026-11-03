@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,31 +23,38 @@ import (
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
-func or(a, b string) string {
-	if a != "" {
-		return a
+var errNoGateway = errors.New("no gateway built")
+
+func or(first, second string) string {
+	if first != "" {
+		return first
 	}
-	return b
+	return second
 }
 
 func runServe(ctx context.Context, args []string, open *openWindow) error {
-	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	fs.String("config", config.DefaultPath(), "path to the declarative config.json (optional)")
+	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
+	flags.String("config", config.DefaultPath(), "path to the declarative config.json (optional)")
 	cfg, err := config.Load(scanFlag(args, "config", config.DefaultPath()))
 	if err != nil {
 		return err
 	}
 
-	statePath := fs.String("state", host.DefaultStatePath(), "path to the daemon state file")
-	defaultCmd := fs.String("cmd", or(cfg.Cmd, "claude"), "default bridged base command for new sessions (stream-json mode adds -p and the stream flags)")
-	healthAddr := fs.String("health-addr", cfg.HealthAddr, "if set (e.g. :8787), serve GET /health")
-	statusChannel := fs.String("status-channel", cfg.StatusChannel, "if set, maintain a self-updating status embed there")
-	instanceID := fs.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID then config.json")
-	envFile := fs.String("env-file", "", "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)")
-	fs.Parse(args)
+	statePath := flags.String("state", host.DefaultStatePath(), "path to the daemon state file")
+	defaultCmd := flags.String("cmd", or(cfg.Cmd, "claude"), "default bridged base command for new sessions (stream-json mode adds -p and the stream flags)")
+	healthAddr := flags.String("health-addr", cfg.HealthAddr, "if set (e.g. :8787), serve GET /health")
+	statusChannel := flags.String("status-channel", cfg.StatusChannel, "if set, maintain a self-updating status embed there")
+	instanceID := flags.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID then config.json")
+	envFile := flags.String("env-file", "", "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)")
+	if err = flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
 	if *envFile != "" {
-		if err := loadEnvFile(*envFile); err != nil {
-			return err
+		if loadErr := loadEnvFile(*envFile); loadErr != nil {
+			return loadErr
 		}
 	}
 	owner := or(envx.Get("OWNER_ID"), cfg.Owner)
@@ -54,47 +63,15 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 		home = &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
 	}
 
-	unlock, err := host.LockState(*statePath)
-	if err != nil {
-		if term.IsTerminal(int(os.Stdout.Fd())) {
-			var opts []tui.Option
-			if open != nil {
-				opts = append(opts, tui.OpenOn(open.session, open.text))
-			}
-			aerr := runAttached(ctx, host.ServedInstanceID(*statePath, *instanceID), opts...)
-			if aerr == nil {
-				return nil
-			}
-			fmt.Fprintf(os.Stderr, "herrscher: could not attach to the running daemon: %v\n", aerr)
-		}
+	unlock, attached, err := lockOrAttach(ctx, *statePath, *instanceID, open)
+	if attached || err != nil {
 		return err
 	}
 	defer unlock()
 
 	installShippedSkills(ctx)
 
-	hub, err := host.BuildHub(ctx, contracts.Default.Gateways(), os.Getenv)
-	if err != nil {
-		return err
-	}
-	for _, f := range hub.Unconfigured() {
-		fmt.Fprintln(os.Stderr, "herrscher: gateway not configured, skipping: "+f)
-	}
-	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, in time.Duration) {
-		for _, f := range failures {
-			fmt.Fprintf(os.Stderr, "herrscher: gateway not up yet: %s; retrying in %s\n", f, in)
-		}
-	})
-	for _, f := range hub.Failures() {
-		fmt.Fprintln(os.Stderr, "herrscher: gateway unavailable: "+f)
-	}
-	var raw []host.Deps
-	for _, kind := range hub.Kinds() {
-		if set, ok := hub.Get(kind); ok {
-			raw = append(raw, set)
-		}
-	}
-	gws, fg, extra, err := bindGateways(raw)
+	gws, foreground, extra, err := startGateways(ctx)
 	if err != nil {
 		return err
 	}
@@ -111,25 +88,86 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 		Source:        cfg.Source,
 
 		RemoteCategories:    remoteCategories(),
-		ForegroundBound:     fg != nil,
+		ForegroundBound:     foreground != nil,
 		ContributedCommands: extra,
 	}
 
-	if open != nil && fg != nil {
-		if o, ok := fg.(foregroundOpener); ok {
-			o.OpenOn(open.session, open.text)
+	openOnForeground(open, foreground)
+	return runHubForeground(ctx, *statePath, gws, foreground, opts)
+}
+
+func openOnForeground(open *openWindow, foreground contracts.Foreground) {
+	if open == nil || foreground == nil {
+		return
+	}
+	if o, ok := foreground.(foregroundOpener); ok {
+		o.OpenOn(open.session, open.text)
+	}
+}
+
+func lockOrAttach(ctx context.Context, statePath, instanceID string, open *openWindow) (func(), bool, error) {
+	unlock, err := host.LockState(statePath)
+	if err == nil {
+		return unlock, false, nil
+	}
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		var opts []tui.Option
+		if open != nil {
+			opts = append(opts, tui.OpenOn(open.session, open.text))
+		}
+		aerr := runAttached(ctx, host.ServedInstanceID(statePath, instanceID), opts...)
+		if aerr == nil {
+			return nil, true, nil
+		}
+		_, _ = fmt.Fprintf(os.Stderr, "herrscher: could not attach to the running daemon: %v\n", aerr)
+	}
+	return nil, false, err
+}
+
+func startGateways(ctx context.Context) ([]host.Deps, contracts.Foreground, []contracts.Cmd, error) {
+	hub, err := host.BuildHub(ctx, contracts.Default.Gateways(), os.Getenv)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	for _, f := range hub.Unconfigured() {
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher: gateway not configured, skipping: "+f)
+	}
+	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, wait time.Duration) {
+		for _, f := range failures {
+			fmt.Fprintf(os.Stderr, "herrscher: gateway not up yet: %s; retrying in %s\n", f, wait)
+		}
+	})
+	for _, f := range hub.Failures() {
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher: gateway unavailable: "+f)
+	}
+	var raw []host.Deps
+	for _, kind := range hub.Kinds() {
+		if set, ok := hub.Get(kind); ok {
+			raw = append(raw, set)
 		}
 	}
-	if fg != nil && term.IsTerminal(int(os.Stdout.Fd())) {
-		if restore, rerr := redirectStderr(filepath.Join(filepath.Dir(*statePath), "serve.log")); rerr == nil {
-			defer restore()
-		}
-		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		go func() { _ = host.RunHub(ctx, gws, opts) }()
-		return fg.RunForeground(ctx, cancel)
+	return bindGateways(raw)
+}
+
+func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, foreground contracts.Foreground, opts host.Options) error {
+	if foreground == nil || !term.IsTerminal(int(os.Stdout.Fd())) {
+		return host.RunHub(ctx, gws, opts)
 	}
-	return host.RunHub(ctx, gws, opts)
+	if restore, rerr := redirectStderr(filepath.Join(filepath.Dir(statePath), "serve.log")); rerr == nil {
+		defer func() {
+			if err := restore(); err != nil {
+				slog.Error("restore stderr", "err", err)
+			}
+		}()
+	}
+	hubCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		if err := host.RunHub(hubCtx, gws, opts); err != nil && !errors.Is(err, context.Canceled) {
+			slog.Error("hub stopped", "err", err)
+		}
+	}()
+	return foreground.RunForeground(hubCtx, cancel)
 }
 
 func bindGateways(sets []host.Deps) ([]host.Deps, contracts.Foreground, []contracts.Cmd, error) {
@@ -137,20 +175,20 @@ func bindGateways(sets []host.Deps) ([]host.Deps, contracts.Foreground, []contra
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("gateway commands: %w", err)
 	}
-	var fg contracts.Foreground
+	var foreground contracts.Foreground
 	gws := make([]host.Deps, 0, len(sets))
 	for _, set := range sets {
-		if f, ok := set.Gateway.(contracts.Foreground); ok && fg == nil {
-			fg = f
+		if f, ok := set.Gateway.(contracts.Foreground); ok && foreground == nil {
+			foreground = f
 		}
 		set.Gateway = contracts.Degrade(set.Gateway)
 		gws = append(gws, set)
 	}
-	return gws, fg, extra, nil
+	return gws, foreground, extra, nil
 }
 
 func runSession(ctx context.Context, args []string) error {
-	return runRegistryVerb(ctx, "session", args)
+	return runRegistryVerb(ctx, verbSession, args)
 }
 
 func runAgent(ctx context.Context, args []string) error {
@@ -215,7 +253,8 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 		return err
 	}
 	if out != "" {
-		fmt.Println(out)
+		_, err := fmt.Fprintln(os.Stdout, out)
+		return err
 	}
 	return nil
 }
@@ -226,20 +265,20 @@ type verbDispatcher interface {
 	Dispatch(context.Context, []string) (string, error)
 }
 
-func runPrompt(ctx context.Context, t task) error {
-	name := sessionNameFor(t.Text)
-	if t.printsTo(term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway()) {
+func runPrompt(ctx context.Context, task task) error {
+	name := sessionNameFor(task.Text)
+	if task.printsTo(term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway()) {
 		reg, err := newOperatorRegistry(ctx)
 		if err != nil {
 			return err
 		}
-		return runPromptWith(ctx, reg, name, t.Text, os.Stdout, os.Stderr)
+		return runPromptWith(ctx, reg, name, task.Text, os.Stdout, os.Stderr)
 	}
-	return runPromptWindow(ctx, name, t.Text)
+	return runPromptWindow(ctx, name, task.Text)
 }
 
 func createTaskSession(ctx context.Context, name string) []string {
-	return append([]string{"session", "create", "--name", name, "--terminal_only"},
+	return append([]string{verbSession, "create", argName, name, "--terminal_only"},
 		scope.LaunchFromEnv(ctx).Args()...)
 }
 
@@ -251,7 +290,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 		if _, err := host.DaemonDispatch(ctx, instance, createTaskSession(ctx, name)); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "session: "+name)
+		_, _ = fmt.Fprintln(os.Stderr, "session: "+name)
 		return runAttached(ctx, instance, tui.OpenOn(name, text))
 	}
 	unlock()
@@ -262,7 +301,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 	if _, err := reg.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, "session: "+name)
+	_, _ = fmt.Fprintln(os.Stderr, "session: "+name)
 	return runServe(ctx, nil, &openWindow{session: name, text: text})
 }
 
@@ -275,19 +314,23 @@ type foregroundOpener interface {
 	OpenOn(session, text string)
 }
 
-func runPromptWith(ctx context.Context, d verbDispatcher, name, prompt string, stdout, stderr io.Writer) error {
-	if _, err := d.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
+func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt string, stdout, stderr io.Writer) error {
+	if _, err := dispatcher.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
 		return err
 	}
-	fmt.Fprintln(stderr, "session: "+name)
-	argv := append([]string{"session", "seed", "--name", name}, cli.FlagArg("task", prompt)...)
+	if _, err := fmt.Fprintln(stderr, "session: "+name); err != nil {
+		return err
+	}
+	argv := append([]string{verbSession, "seed", argName, name}, cli.FlagArg("task", prompt)...)
 	argv = append(argv, "--timeout", promptTimeout.String())
-	reply, err := d.Dispatch(ctx, argv)
+	reply, err := dispatcher.Dispatch(ctx, argv)
 	if err != nil {
 		return fmt.Errorf("session %s: %w", name, err)
 	}
 	if reply != "" {
-		fmt.Fprintln(stdout, reply)
+		if _, err := fmt.Fprintln(stdout, reply); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -318,21 +361,21 @@ func buildGateways(ctx context.Context) ([]host.Deps, error) {
 		}
 	}
 	if len(sets) == 0 {
-		return nil, fmt.Errorf("no gateway built")
+		return nil, errNoGateway
 	}
 	return sets, nil
 }
 
 func scanFlag(args []string, name, def string) string {
-	for i, a := range args {
-		for _, p := range []string{"--" + name, "-" + name} {
-			if a == p {
-				if i+1 < len(args) {
-					return args[i+1]
+	for idx, arg := range args {
+		for _, prefix := range []string{"--" + name, "-" + name} {
+			if arg == prefix {
+				if idx+1 < len(args) {
+					return args[idx+1]
 				}
 				return def
 			}
-			if v, ok := strings.CutPrefix(a, p+"="); ok {
+			if v, ok := strings.CutPrefix(arg, prefix+"="); ok {
 				return v
 			}
 		}

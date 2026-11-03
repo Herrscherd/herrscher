@@ -17,14 +17,14 @@ func TestDialWaitsForASocketThatIsNotThereYet(t *testing.T) {
 		if err != nil {
 			return
 		}
-		t.Cleanup(func() { _ = acc.Close() })
+		t.Cleanup(func() { closeAndWarn(acc) })
 	}()
 
 	conn, err := dialHub(context.Background(), path)
 	if err != nil {
 		t.Fatalf("dial must wait for the socket: %v", err)
 	}
-	_ = conn.Close()
+	closeAndWarn(conn)
 }
 
 func TestDialGivesUpWhenTheContextIsCancelled(t *testing.T) {

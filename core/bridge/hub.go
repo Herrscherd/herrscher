@@ -88,31 +88,31 @@ func dialHub(ctx context.Context, path string) (*control.Conn, error) {
 	}
 }
 
-func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, o Options) error {
-	backend, err := newBackend(o.Channel)
+func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, opts Options) error {
+	backend, err := newBackend(opts.Channel)
 	if err != nil {
 		return fmt.Errorf("backend: %w", err)
 	}
-	defer backend.Close()
+	defer closeAndWarn(backend)
 
-	conn, err := dialHub(ctx, o.HubSocket)
+	conn, err := dialHub(ctx, opts.HubSocket)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer closeAndWarn(conn)
 
 	ctrl := &turnController{}
-	in := make(chan contracts.Event)
+	events := make(chan contracts.Event)
 	scanErr := make(chan error, 1)
 	go func() {
-		defer close(in)
-		scanErr <- conn.Scan(func(e contracts.Event) error {
-			if e.T == "interrupt" {
+		defer close(events)
+		scanErr <- conn.Scan(func(event contracts.Event) error {
+			if event.T == "interrupt" {
 				ctrl.interrupt()
 				return nil
 			}
 			select {
-			case in <- e:
+			case events <- event:
 				return nil
 			case <-ctx.Done():
 				return ctx.Err()
@@ -120,15 +120,18 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 		})
 	}()
 
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("working directory: %w", err)
+	}
 	projectLearnedSkills(ctx, orch, cwd)
 	eng := newSkillEngine(backend)
 	var pin *scopePin
-	if o.Scope != nil && !o.ProjectPinned {
-		pin = &scopePin{resolve: o.Scope, current: o.LaunchProject, agent: o.MemoryAgent, orch: orch}
+	if opts.Scope != nil && !opts.ProjectPinned {
+		pin = &scopePin{resolve: opts.Scope, current: opts.LaunchProject, agent: opts.MemoryAgent, orch: orch}
 	}
-	runHubTurnsCtl(ctx, in, conn, backend, orch, ctrl, eng,
-		affordances{roster: o.Roster, caps: o.Capabilities, user: identity.FromDir(cwd)}, pin)
+	runHubTurnsCtl(ctx, events, conn, backend, orch, ctrl, eng,
+		affordances{roster: opts.Roster, caps: opts.Capabilities, user: identity.FromDir(ctx, cwd)}, pin)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -166,84 +169,98 @@ func (p *scopePin) settle(ctx context.Context, prompt string) string {
 	if chosen == "" || chosen == p.current {
 		return p.current
 	}
-	if s, ok := p.orch.(interface{ SetScope(contracts.MemoryScope) }); ok {
+	if scoper, ok := p.orch.(interface{ SetScope(contracts.MemoryScope) }); ok {
 		scope := contracts.MemoryScope{Project: contracts.ProjectKey(chosen)}
 		if p.agent != "" {
 			scope.Agent = contracts.AgentKey(p.agent)
 		}
-		s.SetScope(scope)
+		scoper.SetScope(scope)
 	}
 	return chosen
 }
 
-func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator) {
-	runHubTurnsCtl(ctx, in, sink, backend, orch, nil, nil, affordances{}, nil)
+func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend) {
+	runHubTurnsCtl(ctx, in, sink, backend, nil, nil, nil, affordances{}, nil)
 }
 
-func runHubTurnsCtl(ctx context.Context, in <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin) {
+func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case ev, ok := <-in:
+		case event, ok := <-events:
 			if !ok {
 				return
 			}
-			switch ev.T {
+			switch event.T {
 			case "pick":
-				runPick(ctx, sink, backend, ev.Value)
+				runPick(ctx, sink, backend, event.Value)
 			default:
-				runOneTurn(ctx, sink, backend, orch, ev, ctrl, eng, aff, pin)
+				runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin)
 			}
 		}
 	}
 }
 
-func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ev contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin) {
+type turnUsage struct {
+	cost                            float64
+	outTok, inTok, cacheRd, cacheCr int
+}
+
+func (u *turnUsage) absorb(event contracts.BackendEvent) {
+	switch event.Kind {
+	case "usage":
+		u.outTok += event.OutTokens
+		u.setInputSide(event)
+	case "result":
+		u.outTok = event.OutTokens
+		u.setInputSide(event)
+		u.cost = event.Cost
+	}
+}
+
+func (u *turnUsage) setInputSide(event contracts.BackendEvent) {
+	u.inTok = event.InTokens
+	u.cacheRd = event.CacheRead
+	u.cacheCr = event.CacheCreate
+}
+
+func settleFailedReply(ctrl *turnController, out string, err error) string {
+	switch {
+	case ctrl.wasInterrupted():
+		if out == "" {
+			return interruptNotice
+		}
+		return strings.TrimSpace(out) + "\n\n" + interruptNotice
+	case out == "":
+		return errPrefix + err.Error()
+	default:
+		logger.Warn("backend failed after partial output; keeping what it produced", "err", err, "chars", len(out))
+		return out
+	}
+}
+
+func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, event contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin) {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
 	if eng != nil {
 		eng.Refresh()
 	}
-	sink = turnEventSink{EventSink: sink, identity: ev}
-	settledProject := pin.settle(turnCtx, ev.Text)
+	sink = turnEventSink{EventSink: sink, identity: event}
+	settledProject := pin.settle(turnCtx, event.Text)
 	var memCtx string
 	if orch != nil {
 		memCtx = orch.Context(turnCtx)
 	}
-	prompt := contracts.Prompt{Content: ev.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: ev.Who, Attachments: ev.Attachments}
-	var cost float64
-	var outTok, inTok, cacheRd, cacheCr int
-	onEvent := func(be contracts.BackendEvent) {
-		switch be.Kind {
-		case "usage":
-			outTok += be.OutTokens
-			inTok = be.InTokens
-			cacheRd = be.CacheRead
-			cacheCr = be.CacheCreate
-		case "result":
-			outTok = be.OutTokens
-			inTok = be.InTokens
-			cacheRd = be.CacheRead
-			cacheCr = be.CacheCreate
-			cost = be.Cost
-		}
-		emitBackendEvent(sink, be, outTok, inTok, cacheRd, cacheCr)
+	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments}
+	var usage turnUsage
+	onEvent := func(event contracts.BackendEvent) {
+		usage.absorb(event)
+		emitBackendEvent(sink, event, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
 	}
 	out, err := backend.Respond(turnCtx, prompt, onEvent)
 	if err != nil {
-		switch {
-		case ctrl.wasInterrupted():
-			if out == "" {
-				out = interruptNotice
-			} else {
-				out = strings.TrimSpace(out) + "\n\n" + interruptNotice
-			}
-		case out == "":
-			out = errPrefix + err.Error()
-		default:
-			logger.Warn("backend failed after partial output; keeping what it produced", "err", err, "chars", len(out))
-		}
+		out = settleFailedReply(ctrl, out, err)
 	}
 	out = strings.TrimSpace(out)
 	if eng != nil {
@@ -253,7 +270,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if tr, ok := orch.(contracts.TurnReactor); ok {
 		out = tr.React(ctx, out)
 	}
-	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: cost, Tokens: outTok, TokensIn: inTok, CacheRead: cacheRd, CacheCreate: cacheCr, Resume: resumeToken(backend), Project: settledProject})
+	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
 	if orch != nil {
 		if err := orch.Observe(ctx, prompt, out); err != nil {
 			logger.Warn("memory observe failed; this turn was not recorded to memory", "err", err)
@@ -265,7 +282,7 @@ func withSkills(memCtx string, eng *skills.Engine) string {
 	if eng == nil {
 		return memCtx
 	}
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, partsCap)
 	if memCtx != "" {
 		parts = append(parts, memCtx)
 	}
@@ -280,14 +297,15 @@ func withSkills(memCtx string, eng *skills.Engine) string {
 
 type turnEventSink struct {
 	contracts.EventSink
+
 	identity contracts.Event
 }
 
-func (s turnEventSink) Emit(e contracts.Event) {
-	e.SessionIncarnation = s.identity.SessionIncarnation
-	e.TurnID = s.identity.TurnID
-	e.Agent = s.identity.Agent
-	s.EventSink.Emit(e)
+func (s turnEventSink) Emit(event contracts.Event) {
+	event.SessionIncarnation = s.identity.SessionIncarnation
+	event.TurnID = s.identity.TurnID
+	event.Agent = s.identity.Agent
+	s.EventSink.Emit(event)
 }
 
 func resumeToken(backend contracts.Backend) string {
@@ -309,21 +327,21 @@ func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Ba
 	sink.Emit(contracts.Event{T: "reply", Text: strings.TrimSpace(out), Done: true})
 }
 
-func emitBackendEvent(sink contracts.EventSink, be contracts.BackendEvent, tokens, tokensIn, cacheRead, cacheCreate int) {
-	switch be.Kind {
+func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, tokens, tokensIn, cacheRead, cacheCreate int) {
+	switch event.Kind {
 	case "thinking":
-		sink.Emit(contracts.Event{T: "thinking", Text: be.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+		sink.Emit(contracts.Event{T: "thinking", Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 	case "text":
-		sink.Emit(contracts.Event{T: "chunk", Text: be.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+		sink.Emit(contracts.Event{T: "chunk", Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 	case "tool":
-		if text := strings.TrimSpace(be.Tool + " " + be.Detail); text != "" {
+		if text := strings.TrimSpace(event.Tool + " " + event.Detail); text != "" {
 			sink.Emit(contracts.Event{T: "status", Text: text, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 		}
 	case "todos":
-		sink.Emit(contracts.Event{T: "todos", Todos: be.Todos})
+		sink.Emit(contracts.Event{T: "todos", Todos: event.Todos})
 	case "subagent":
-		if be.Subagent != nil {
-			sink.Emit(contracts.Event{T: "subagent", Subagent: be.Subagent})
+		if event.Subagent != nil {
+			sink.Emit(contracts.Event{T: "subagent", Subagent: event.Subagent})
 		}
 	case "reset":
 		sink.Emit(contracts.Event{T: "reset"})

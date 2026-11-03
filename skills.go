@@ -27,25 +27,25 @@ func installShippedSkills(ctx context.Context) {
 	dst := filepath.Join(home, ".claude", "skills")
 	out, err := skills.Install(src, dst)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "herrscher: install shipped skills: "+err.Error())
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher: install shipped skills: "+err.Error())
 	}
 	reportSkills(dst, out, "skill")
 	plug, notes := installPluginSkills(ctx, contracts.Default.Plugins(), os.Getenv, dst)
 	for _, n := range notes {
-		fmt.Fprintln(os.Stderr, n)
+		_, _ = fmt.Fprintln(os.Stderr, n)
 	}
 	reportSkills(dst, plug, "plugin skill")
 }
 
 func reportSkills(dst string, out skills.Outcome, kind string) {
 	for _, name := range out.Installed {
-		fmt.Fprintln(os.Stderr, "herrscher: installed "+kind+" "+name)
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher: installed "+kind+" "+name)
 	}
 	for _, name := range out.Updated {
-		fmt.Fprintln(os.Stderr, "herrscher: updated "+kind+" "+name+" to the shipped version")
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher: updated "+kind+" "+name+" to the shipped version")
 	}
 	for _, name := range out.Diverged {
-		fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" differs from the one this build ships and was left as it is; "+
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" differs from the one this build ships and was left as it is; "+
 			"delete "+filepath.Join(dst, name)+" to take the shipped version")
 	}
 }
@@ -53,33 +53,34 @@ func reportSkills(dst string, out skills.Outcome, kind string) {
 func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string, dst string) (skills.Outcome, []string) {
 	var all skills.Outcome
 	var notes []string
-	claimed := map[string]string{}
-	for _, p := range plugins {
-		if p.Skills == nil {
+	claimed := make(map[string]string)
+	for i := range plugins {
+		plugin := &plugins[i]
+		if plugin.Skills == nil {
 			continue
 		}
-		cfg, err := pluginSkillsConfig(p, getenv)
+		cfg, err := pluginSkillsConfig(plugin, getenv)
 		if err != nil {
-			notes = append(notes, "herrscher: skills not configured, skipping: "+p.Manifest.Kind+": "+err.Error())
+			notes = append(notes, "herrscher: skills not configured, skipping: "+plugin.Manifest.Kind+": "+err.Error())
 			continue
 		}
-		tree, err := p.Skills(ctx, cfg)
+		tree, err := plugin.Skills(ctx, cfg)
 		if err != nil {
-			notes = append(notes, "herrscher: no skills from plugin "+p.Manifest.Kind+": "+err.Error())
+			notes = append(notes, "herrscher: no skills from plugin "+plugin.Manifest.Kind+": "+err.Error())
 			continue
 		}
 		if tree == nil {
-			notes = append(notes, "herrscher: no skills from plugin "+p.Manifest.Kind+": its factory handed over no playbooks")
+			notes = append(notes, "herrscher: no skills from plugin "+plugin.Manifest.Kind+": its factory handed over no playbooks")
 			continue
 		}
-		src, dups := reserve(tree, p.Manifest.Kind, claimed)
+		src, dups := reserve(tree, plugin.Manifest.Kind, claimed)
 		notes = append(notes, dups...)
 		if src == nil {
 			continue
 		}
 		out, err := skills.Install(src, dst)
 		if err != nil {
-			notes = append(notes, "herrscher: install skills for plugin "+p.Manifest.Kind+": "+err.Error())
+			notes = append(notes, "herrscher: install skills for plugin "+plugin.Manifest.Kind+": "+err.Error())
 			continue
 		}
 		all.Installed = append(all.Installed, out.Installed...)
@@ -89,9 +90,9 @@ func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv
 	return all, notes
 }
 
-func pluginSkillsConfig(p contracts.Plugin, getenv func(string) string) (contracts.PluginConfig, error) {
-	cfg, err := contracts.Resolve(p.Manifest.Config, getenv)
-	if err != nil && p.Manifest.Category == contracts.CategorySkills {
+func pluginSkillsConfig(plugin *contracts.Plugin, getenv func(string) string) (contracts.PluginConfig, error) {
+	cfg, err := contracts.Resolve(plugin.Manifest.Config, getenv)
+	if err != nil && plugin.Manifest.Category == contracts.CategorySkills {
 		return cfg, err
 	}
 	return cfg, nil
@@ -103,19 +104,19 @@ func reserve(tree fs.FS, kind string, claimed map[string]string) (fs.FS, []strin
 		return tree, nil
 	}
 	var notes []string
-	hidden := map[string]bool{}
+	hidden := make(map[string]bool)
 	kept := 0
-	for _, e := range entries {
-		if !e.IsDir() {
+	for _, entry := range entries {
+		if !entry.IsDir() {
 			continue
 		}
-		if owner, taken := claimed[e.Name()]; taken {
-			hidden[e.Name()] = true
-			notes = append(notes, "herrscher: skill "+e.Name()+" from plugin "+kind+
+		if owner, taken := claimed[entry.Name()]; taken {
+			hidden[entry.Name()] = true
+			notes = append(notes, "herrscher: skill "+entry.Name()+" from plugin "+kind+
 				" was left out: plugin "+owner+" already ships one by that name")
 			continue
 		}
-		claimed[e.Name()] = kind
+		claimed[entry.Name()] = kind
 		kept++
 	}
 	switch {
@@ -129,6 +130,7 @@ func reserve(tree fs.FS, kind string, claimed map[string]string) (fs.FS, []strin
 
 type without struct {
 	fs.FS
+
 	hidden map[string]bool
 }
 
@@ -138,9 +140,9 @@ func (w without) ReadDir(name string) ([]fs.DirEntry, error) {
 		return entries, err
 	}
 	out := make([]fs.DirEntry, 0, len(entries))
-	for _, e := range entries {
-		if !w.hidden[e.Name()] {
-			out = append(out, e)
+	for _, entry := range entries {
+		if !w.hidden[entry.Name()] {
+			out = append(out, entry)
 		}
 	}
 	return out, nil

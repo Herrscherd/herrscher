@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 	"strings"
@@ -12,12 +13,14 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
+var errTLSUnset = errors.New("no TLS configured: plaintext loopback")
+
 func remoteCategories() map[contracts.Category]bool {
-	out := map[contracts.Category]bool{}
-	for _, c := range strings.Split(os.Getenv("HERRSCHER_REMOTE"), ",") {
-		c = strings.TrimSpace(c)
-		if c != "" {
-			out[contracts.Category(c)] = true
+	out := make(map[contracts.Category]bool)
+	for _, category := range strings.Split(os.Getenv("HERRSCHER_REMOTE"), ",") {
+		category = strings.TrimSpace(category)
+		if category != "" {
+			out[contracts.Category(category)] = true
 		}
 	}
 	return out
@@ -41,7 +44,7 @@ func bindAddr() string {
 func remoteClientCredentials() (credentials.TransportCredentials, error) {
 	cfg := tlsConfigFromEnv()
 	if !cfg.Enabled() {
-		return nil, nil
+		return nil, errTLSUnset
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -50,12 +53,12 @@ func remoteClientCredentials() (credentials.TransportCredentials, error) {
 }
 
 func newResolver(log *slog.Logger) (*host.Resolver, error) {
-	r := host.NewResolver(remoteCategories(), os.Getenv("HERRSCHER_NATS"))
-	r.SetLogger(log)
+	resolver := host.NewResolver(remoteCategories(), os.Getenv("HERRSCHER_NATS"))
+	resolver.SetLogger(log)
 	creds, err := remoteClientCredentials()
-	if err != nil {
+	if err != nil && !errors.Is(err, errTLSUnset) {
 		return nil, err
 	}
-	r.SetCredentials(creds)
-	return r, nil
+	resolver.SetCredentials(creds)
+	return resolver, nil
 }

@@ -106,7 +106,7 @@ func TestB3ConsolidationWritesScopedFactAndSkill(t *testing.T) {
 	}
 
 	p := contracts.Prompt{Author: "u", Content: "hi"}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if err := orch.Observe(context.Background(), p, "ok"); err != nil {
 			t.Fatalf("Observe: %v", err)
 		}
@@ -131,7 +131,7 @@ func TestB3ConsolidationIsIdempotent(t *testing.T) {
 		learnConfig{extractor: "b3-fake", journal: journal, consolidateEvery: 1}, host.Logger(false))
 
 	p := contracts.Prompt{Author: "u", Content: "hi"}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		if err := orch.Observe(context.Background(), p, "ok"); err != nil {
 			t.Fatalf("Observe: %v", err)
 		}
@@ -154,7 +154,7 @@ func TestB3NoExtractorPerformsNoConsolidationWrites(t *testing.T) {
 	}
 
 	p := contracts.Prompt{Author: "u", Content: "hi"}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if err := orch.Observe(context.Background(), p, "ok"); err != nil {
 			t.Fatalf("Observe: %v", err)
 		}

@@ -9,67 +9,89 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-var expectedLocalVerbs = []string{
-	"init", "plugin", "update", "install",
-	"bridge", "serve", "session", "agent", "memory", "models", "service", "plugin-host",
-	"-h", "--help", "help",
-	"approve",
+func expectedLocalVerbs() []string {
+	return []string{
+		"init", "plugin", "update", "install",
+		"bridge", "serve", "session", "agent", "memory", "models", "service", "plugin-host",
+		"-h", "--help", "help",
+		"approve",
+	}
 }
 
-func mainSwitches(t *testing.T) (cases []string, defaultForwards bool) {
+func mainSwitches(t *testing.T) ([]string, bool) {
 	t.Helper()
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "main.go", nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var fn *ast.FuncDecl
-	for _, d := range f.Decls {
-		if d, ok := d.(*ast.FuncDecl); ok && d.Name.Name == "main" && d.Recv == nil {
-			fn = d
-		}
-	}
-	if fn == nil {
-		t.Fatal("no main() in main.go")
-	}
-	ast.Inspect(fn, func(n ast.Node) bool {
-		cl, ok := n.(*ast.CaseClause)
-		if !ok {
-			return true
-		}
-		if cl.List == nil {
-			ast.Inspect(cl, func(n ast.Node) bool {
-				if id, ok := n.(*ast.Ident); ok && id.Name == "forwardUnknownVerb" {
-					defaultForwards = true
-				}
-				return true
-			})
-			return true
-		}
-		for _, e := range cl.List {
-			if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-				cases = append(cases, lit.Value[1:len(lit.Value)-1])
-			}
+	f := mainFile(t)
+	var cases []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		if cl, ok := n.(*ast.CaseClause); ok {
+			cases = append(cases, stringLabels(cl.List)...)
 		}
 		return true
 	})
-	return cases, defaultForwards
+	return cases, defaultArmForwards(t, f)
+}
+
+func mainFile(t *testing.T) *ast.File {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), "main.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+func funcNamed(t *testing.T, f *ast.File, name string) *ast.FuncDecl {
+	t.Helper()
+	for _, d := range f.Decls {
+		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == name && fn.Recv == nil {
+			return fn
+		}
+	}
+	t.Fatalf("no %s() in main.go", name)
+	return nil
+}
+
+func defaultArmForwards(t *testing.T, f *ast.File) bool {
+	t.Helper()
+	return mentionsIdent(funcNamed(t, f, "runCommand"), "runForwarded") &&
+		mentionsIdent(funcNamed(t, f, "runForwarded"), "forwardUnknownVerb")
+}
+
+func mentionsIdent(n ast.Node, name string) bool {
+	found := false
+	ast.Inspect(n, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && id.Name == name {
+			found = true
+		}
+		return true
+	})
+	return found
+}
+
+func stringLabels(exprs []ast.Expr) []string {
+	var labels []string
+	for _, e := range exprs {
+		if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			labels = append(labels, lit.Value[1:len(lit.Value)-1])
+		}
+	}
+	return labels
 }
 
 func TestKnownVerbsKeepTheirLocalPath(t *testing.T) {
 	cases, _ := mainSwitches(t)
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	for _, c := range cases {
 		seen[c] = true
 	}
-	for _, v := range expectedLocalVerbs {
+	for _, v := range expectedLocalVerbs() {
 		if !seen[v] {
 			t.Errorf("verb %q lost its own case in main(): it would now forward to the daemon", v)
 		}
@@ -111,22 +133,30 @@ func swapStdio(t *testing.T, payload string) func() (string, string) {
 	outR, outW := pipe()
 	errR, errW := pipe()
 	go func() {
-		_, _ = io.WriteString(inW, payload)
-		_ = inW.Close()
+		if _, err := inW.WriteString(payload); err != nil {
+			t.Errorf("write payload: %v", err)
+		}
+		closeQuietly(inW)
 	}()
 	oldIn, oldOut, oldErr := os.Stdin, os.Stdout, os.Stderr
 	os.Stdin, os.Stdout, os.Stderr = inR, outW, errW
 	t.Cleanup(func() {
 		os.Stdin, os.Stdout, os.Stderr = oldIn, oldOut, oldErr
-		_ = inR.Close()
-		_ = outR.Close()
-		_ = errR.Close()
+		closeQuietly(inR)
+		closeQuietly(outR)
+		closeQuietly(errR)
 	})
 	return func() (string, string) {
-		_ = outW.Close()
-		_ = errW.Close()
-		out, _ := io.ReadAll(outR)
-		errs, _ := io.ReadAll(errR)
+		closeQuietly(outW)
+		closeQuietly(errW)
+		out, err := io.ReadAll(outR)
+		if err != nil {
+			t.Errorf("read stdout: %v", err)
+		}
+		errs, err := io.ReadAll(errR)
+		if err != nil {
+			t.Errorf("read stderr: %v", err)
+		}
 		return string(out), string(errs)
 	}
 }
@@ -187,10 +217,10 @@ func (s *stubForward) fwd(_ context.Context, argv []string) (string, bool, error
 func TestDispatchUnknownForwardsTheWholeArgv(t *testing.T) {
 	s := &stubForward{out: "two messages", handled: true}
 	args := []string{"channel", "read", "--limit", "5"}
-	out, err, exit := dispatchUnknown(context.Background(), "some-kind", args, s.fwd)
+	out, exit, err := dispatchUnknown(context.Background(), "some-kind", args, s.fwd)
 
 	want := []string{"some-kind", "channel", "read", "--limit", "5"}
-	if !reflect.DeepEqual(s.argv, want) {
+	if !slices.Equal(s.argv, want) {
 		t.Fatalf("forwarded argv = %v, want %v", s.argv, want)
 	}
 	if out != "two messages" || err != nil || exit != 0 {
@@ -201,7 +231,7 @@ func TestDispatchUnknownForwardsTheWholeArgv(t *testing.T) {
 func TestDispatchUnknownKeepsTheDaemonsFailure(t *testing.T) {
 	boom := errors.New(`plugin: channel "nope" not found`)
 	s := &stubForward{handled: true, err: boom}
-	out, err, exit := dispatchUnknown(context.Background(), "some-kind", []string{"channel", "read"}, s.fwd)
+	out, exit, err := dispatchUnknown(context.Background(), "some-kind", []string{"channel", "read"}, s.fwd)
 	if !errors.Is(err, boom) {
 		t.Fatalf("error = %v, want the daemon's own %v", err, boom)
 	}
@@ -215,7 +245,7 @@ func TestDispatchUnknownKeepsTheDaemonsFailure(t *testing.T) {
 
 func TestDispatchUnknownWithoutDaemonIsAnUnknownCommand(t *testing.T) {
 	s := &stubForward{handled: false}
-	out, err, exit := dispatchUnknown(context.Background(), "some-kind", []string{"channel"}, s.fwd)
+	out, exit, err := dispatchUnknown(context.Background(), "some-kind", []string{"channel"}, s.fwd)
 	if exit != 2 {
 		t.Fatalf("exit = %d, want 2: the unchanged unknown-command outcome", exit)
 	}

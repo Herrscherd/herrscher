@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -83,12 +84,64 @@ func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
 	t.Cleanup(func() { h.goDead(name) })
 
 	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "old-incarnation"})
+	awaitRegisteredIncarnation(t, sessionTab, name, "old-incarnation")
 	h.goDead(name)
 
 	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "new-incarnation"})
+	awaitRegisteredIncarnation(t, sessionTab, name, "new-incarnation")
 	conn, err := control.Dial(control.SocketPath(name))
 	if err != nil {
 		t.Fatalf("replacement control listener is not reachable: %v", err)
+	}
+	logCleanup(conn.Close())
+}
+
+func awaitRegisteredIncarnation(t *testing.T, sessionTab *sessionTable, name, incarnation string) {
+	t.Helper()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.After(5 * time.Second)
+	for {
+		if registeredIncarnation(sessionTab, name) == incarnation {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline:
+			t.Fatalf("session %s never registered incarnation %s", name, incarnation)
+		}
+	}
+}
+
+func registeredIncarnation(sessionTab *sessionTable, name string) string {
+	driver := sessionTab.lookup(name)
+	if driver == nil {
+		return ""
+	}
+	return driver.incarnation
+}
+
+func TestSessionSocketOutlivesTheContextThatCreatedIt(t *testing.T) {
+	name := "outlive-" + newTurnID()
+	h := newHub(
+		state.NewState(filepath.Join(t.TempDir(), "state.json")),
+		nil,
+		nil,
+		t.TempDir(),
+		nil,
+		nil,
+		newApprovalTable(),
+		newSessionTable(),
+	)
+	t.Cleanup(func() { h.goDead(name) })
+
+	ctx, cancel := context.WithCancel(t.Context())
+	h.goLive(ctx, state.Session{Name: name, Incarnation: "incarnation"})
+	cancel()
+	<-time.After(200 * time.Millisecond)
+	conn, err := control.Dial(control.SocketPath(name))
+	if err != nil {
+		t.Fatalf("the session socket closed with the creating context: %v", err)
 	}
 	logCleanup(conn.Close())
 }

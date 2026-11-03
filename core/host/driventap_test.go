@@ -26,35 +26,37 @@ func TestDrivenSessionTapsTheEventSocket(t *testing.T) {
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	acc, err := control.Accept(t.Context(), control.SocketPath("driventap-test"))
+	const name = "driventap-test"
+	sock := control.SocketPath(name)
+	acc, err := control.Accept(ctx, sock)
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
-	got := make(chan contracts.Event, 4)
-	go runSessionIdentified(ctx, sessionTab, "driventap-test", "", nil, acc, "", nil, nil, sessionSink{},
-		eventTap(func(_ string, e contracts.Event) { got <- e }, "driventap-test"),
+	gw := &fanRecorder{}
+	gw.feed("ping")
+	got := make(chan contracts.Event, 8)
+	go runSessionIdentified(ctx, sessionTab, name, "", []contracts.GatewaySet{{Gateway: gw, Reader: gw}}, acc, "", nil, nil, sessionSink{},
+		eventTap(func(_ string, e contracts.Event) { got <- e }, name),
 		sessionIdentity{}, nil)
 
-	d := waitForDriver(t, sessionTab, "driventap-test")
-	d.fanOut(ctx, contracts.Event{T: "reply", Text: "pong", Done: true})
-
-	select {
-	case e := <-got:
-		if e.Text != "pong" {
-			t.Fatalf("socket saw %+v", e)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("a driven session published nothing on the events socket")
+	c := dialCtl(t, sock)
+	defer closeRead(c)
+	gotInput(t, c, "ping")
+	if err := c.Write(contracts.Event{T: "reply", Text: "pong", Done: true}); err != nil {
+		t.Fatalf("write reply: %v", err)
 	}
-}
-
-func waitForDriver(t *testing.T, sessions *sessionTable, name string) *sessionDriver {
-	t.Helper()
-	var d *sessionDriver
-	waitFor(t, &sessions.changed, func() bool {
-		d = sessions.lookup(name)
-		return d != nil
-	}, "session "+name+" to register a driver")
-	return d
+	for {
+		select {
+		case e := <-got:
+			if e.T != "reply" {
+				continue
+			}
+			if e.Text != "pong" {
+				t.Fatalf("socket saw %+v", e)
+			}
+			return
+		case <-time.After(2 * time.Second):
+			t.Fatal("a driven session published nothing on the events socket")
+		}
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -14,7 +15,7 @@ type budgetedTurn struct {
 	toBridge, fromBridge chan contracts.Event
 	mu                   sync.Mutex
 	tapped               []contracts.Event
-	changed              changeNotifier
+	stop                 context.CancelFunc
 }
 
 func (b *budgetedTurn) sawStatus(want string) bool {
@@ -31,7 +32,7 @@ func (b *budgetedTurn) sawStatus(want string) bool {
 
 func (b *budgetedTurn) awaitStatus(t *testing.T, want string) {
 	t.Helper()
-	waitFor(t, &b.changed, func() bool { return b.sawStatus(want) }, "a status telling why the turn was interrupted")
+	requireSettled(t, func() bool { return b.sawStatus(want) }, "a status telling why the turn was interrupted")
 }
 
 func startBudgetedTurn(t *testing.T, headroom uint64) *budgetedTurn {
@@ -48,11 +49,10 @@ func startBudgetedTurn(t *testing.T, headroom uint64) *budgetedTurn {
 		b.mu.Lock()
 		b.tapped = append(b.tapped, e)
 		b.mu.Unlock()
-		b.changed.signal()
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
+	b.stop = cancel
 	go d.run(ctx)
 
 	select {
@@ -67,58 +67,67 @@ func startBudgetedTurn(t *testing.T, headroom uint64) *budgetedTurn {
 }
 
 func TestRunawayTurnInterruptedOnTokenCap(t *testing.T) {
-	b := startBudgetedTurn(t, 100)
+	synctest.Test(t, func(t *testing.T) {
+		b := startBudgetedTurn(t, 100)
+		defer b.stop()
 
-	b.fromBridge <- contracts.Event{T: "chunk", Text: "thinking hard", Tokens: 80, TokensIn: 40}
+		b.fromBridge <- contracts.Event{T: "chunk", Text: "thinking hard", Tokens: 80, TokensIn: 40}
 
-	deadline := time.After(time.Second)
-	for {
-		select {
-		case ev := <-b.toBridge:
-			if ev.T == "interrupt" {
-				b.awaitStatus(t, "interrompu")
-				return
+		deadline := time.After(time.Second)
+		for {
+			select {
+			case ev := <-b.toBridge:
+				if ev.T == "interrupt" {
+					b.awaitStatus(t, "interrompu")
+					return
+				}
+			case <-deadline:
+				t.Fatal("runaway turn was never interrupted")
 			}
-		case <-deadline:
-			t.Fatal("runaway turn was never interrupted")
 		}
-	}
+	})
 }
 
 func TestBudgetedTurnUnderHeadroomRunsOn(t *testing.T) {
-	b := startBudgetedTurn(t, 100)
+	synctest.Test(t, func(t *testing.T) {
+		b := startBudgetedTurn(t, 100)
+		defer b.stop()
 
-	b.fromBridge <- contracts.Event{T: "chunk", Text: "cheap", Tokens: 10, TokensIn: 5}
-	b.fromBridge <- contracts.Event{T: "status", Text: "no usage reported"}
-	b.fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true, Tokens: 10, TokensIn: 5}
+		b.fromBridge <- contracts.Event{T: "chunk", Text: "cheap", Tokens: 10, TokensIn: 5}
+		b.fromBridge <- contracts.Event{T: "status", Text: "no usage reported"}
+		b.fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true, Tokens: 10, TokensIn: 5}
 
-	select {
-	case ev := <-b.toBridge:
-		t.Fatalf("turn under headroom must not be interrupted, got %+v", ev)
-	case <-time.After(200 * time.Millisecond):
-	}
+		select {
+		case ev := <-b.toBridge:
+			t.Fatalf("turn under headroom must not be interrupted, got %+v", ev)
+		case <-time.After(200 * time.Millisecond):
+		}
+	})
 }
 
 func TestRunawayTurnInterruptedOnce(t *testing.T) {
-	b := startBudgetedTurn(t, 100)
+	synctest.Test(t, func(t *testing.T) {
+		b := startBudgetedTurn(t, 100)
+		defer b.stop()
 
-	for range 3 {
-		b.fromBridge <- contracts.Event{T: "chunk", Text: "more", Tokens: 200, TokensIn: 100}
-	}
-
-	interrupts := 0
-	deadline := time.After(500 * time.Millisecond)
-	for {
-		select {
-		case ev := <-b.toBridge:
-			if ev.T == "interrupt" {
-				interrupts++
-			}
-		case <-deadline:
-			if interrupts != 1 {
-				t.Fatalf("interrupt frames = %d, want exactly 1", interrupts)
-			}
-			return
+		for range 3 {
+			b.fromBridge <- contracts.Event{T: "chunk", Text: "more", Tokens: 200, TokensIn: 100}
 		}
-	}
+
+		interrupts := 0
+		deadline := time.After(500 * time.Millisecond)
+		for {
+			select {
+			case ev := <-b.toBridge:
+				if ev.T == "interrupt" {
+					interrupts++
+				}
+			case <-deadline:
+				if interrupts != 1 {
+					t.Fatalf("interrupt frames = %d, want exactly 1", interrupts)
+				}
+				return
+			}
+		}
+	})
 }

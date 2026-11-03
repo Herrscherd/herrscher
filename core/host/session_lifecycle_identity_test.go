@@ -83,22 +83,12 @@ func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
 	t.Cleanup(func() { h.goDead(name) })
 
 	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "old-incarnation"})
-	waitForRegisteredIncarnation(t, sessionTab, name, "old-incarnation")
 	h.goDead(name)
 
 	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "new-incarnation"})
-	waitForRegisteredIncarnation(t, sessionTab, name, "new-incarnation")
 	conn, err := control.Dial(control.SocketPath(name))
 	if err != nil {
 		t.Fatalf("replacement control listener is not reachable: %v", err)
 	}
 	logCleanup(conn.Close())
-}
-
-func waitForRegisteredIncarnation(t *testing.T, sessionTab *sessionTable, name, incarnation string) {
-	t.Helper()
-	waitFor(t, &sessionTab.changed, func() bool {
-		driver := sessionTab.lookup(name)
-		return driver != nil && driver.incarnation == incarnation
-	}, "session "+name+" to register incarnation "+incarnation)
 }

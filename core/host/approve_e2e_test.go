@@ -11,7 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -26,7 +28,8 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	approvalTab := newApprovalTable()
-	reg := newApprovalRegistry(t, approvalTab)
+	menus := &menuRecorder{menus: make(chan []contracts.Choice, 4)}
+	reg := newApprovalRegistry(t, approvalTab, menus)
 	sock := startApprovalSocket(ctx, t, reg)
 
 	t.Setenv(SessionVar, "s1")
@@ -34,7 +37,7 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 	var out, errOut bytes.Buffer
 	done := runHookAsync(ctx, in, &out, &errOut, sock)
 
-	id := awaitPendingApproval(t, approvalTab, "s1")
+	id := awaitPendingApproval(t, menus.menus)
 	if _, err := reg.Dispatch(ctx, []string{"approve", "deny", id, "--reason", "not today"}); err != nil {
 		t.Fatalf("deny: %v", err)
 	}
@@ -42,7 +45,22 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 	assertHookDeniedWithReason(t, out.Bytes(), "not today")
 }
 
-func newApprovalRegistry(t *testing.T, approvalTab *approvalTable) *cli.Registry {
+type menuRecorder struct {
+	fanRecorder
+
+	menus chan []contracts.Choice
+}
+
+func (m *menuRecorder) Manifest() contracts.Manifest {
+	return contracts.Manifest{Kind: "rec", Capabilities: contracts.Capabilities{SelectMenus: true}}
+}
+
+func (m *menuRecorder) Menu(_ context.Context, _ contracts.Conversation, _ contracts.MessageID, _ string, choices []contracts.Choice) error {
+	m.menus <- choices
+	return nil
+}
+
+func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRecorder) *cli.Registry {
 	t.Helper()
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{"sessions":[],"approvalTimeout":"3s"}`), 0o644); err != nil {
@@ -58,8 +76,10 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable) *cli.Registry
 	if err := st.AddApprovalRule("ask Bash(git push*)"); err != nil {
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
+	sessionTab := newSessionTable()
+	sessionTab.register("s1", newSessionDriver("s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil))
 	reg := &cli.Registry{}
-	if err := addApproveCommands(reg, st, nil, approvalTab, newSessionTable()); err != nil {
+	if err := addApproveCommands(reg, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}
 	return reg
@@ -83,18 +103,19 @@ func runHookAsync(ctx context.Context, in io.Reader, out, errOut io.Writer, sock
 	return done
 }
 
-func awaitPendingApproval(t *testing.T, approvalTab *approvalTable, session string) string {
+func awaitPendingApproval(t *testing.T, menus <-chan []contracts.Choice) string {
 	t.Helper()
-	var id string
-	waitFor(t, &approvalTab.changed, func() bool {
-		for _, p := range pendingApprovals(approvalTab) {
-			if p.Session == session {
-				id = p.ID
-			}
+	select {
+	case choices := <-menus:
+		id, _, ok := strings.Cut(strings.TrimPrefix(choices[0].Value, approvalPickPrefix), ":")
+		if !ok {
+			t.Fatalf("approval menu value %q carries no id", choices[0].Value)
 		}
-		return id != ""
-	}, "the hook reached the daemon")
-	return id
+		return id
+	case <-time.After(5 * time.Second):
+		t.Fatal("the hook never reached the operator's menu")
+	}
+	return ""
 }
 
 func assertHookDeniedWithReason(t *testing.T, raw []byte, reason string) {

@@ -60,6 +60,7 @@ type Acceptor struct {
 	path      string
 	conns     chan *Conn
 	done      chan struct{}
+	exited    chan struct{}
 	closeOnce sync.Once
 }
 
@@ -73,16 +74,28 @@ func Accept(ctx context.Context, path string) (*Acceptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	acceptor := &Acceptor{ln: listener, path: path, conns: make(chan *Conn, 1), done: make(chan struct{})}
+	acceptor := &Acceptor{ln: listener, path: path, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
 	go acceptor.loop()
+	go acceptor.closeWhenDone(ctx)
 	return acceptor, nil
 }
 
+func (a *Acceptor) closeWhenDone(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+		if err := a.Close(); err != nil {
+			slog.Debug("control acceptor close", "err", err)
+		}
+	case <-a.exited:
+	}
+}
+
 func (a *Acceptor) loop() {
+	defer close(a.exited)
+	defer close(a.conns)
 	for {
 		conn, err := a.ln.Accept()
 		if err != nil {
-			close(a.conns)
 			return
 		}
 		select {
@@ -107,6 +120,7 @@ func (a *Acceptor) Conns() <-chan *Conn { return a.conns }
 func (a *Acceptor) Close() error {
 	a.closeOnce.Do(func() { close(a.done) })
 	err := a.ln.Close()
+	<-a.exited
 	a.drainPending()
 	return errors.Join(err, removeStaleSocket(a.path))
 }

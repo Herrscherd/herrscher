@@ -180,7 +180,7 @@ func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, sess s
 // omitted so a plain/unconfigured run's config stays byte-for-byte unchanged.
 func ApplyOrchestratorScope(cfg *contracts.PluginConfig, session, project, agent, extractor, journal string, consolidateEvery int) {
 	if cfg.Settings == nil {
-		cfg.Settings = map[string]string{}
+		cfg.Settings = make(map[string]string)
 	}
 	cfg.Settings[keySession] = session
 	if project != "" {
@@ -262,7 +262,7 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 		return nil, err
 	}
 	if cfg.Settings == nil {
-		cfg.Settings = map[string]string{}
+		cfg.Settings = make(map[string]string)
 	}
 	applyBackendRequest(cfg.Settings, req, route)
 	return plugin.Backend(ctx, cfg)
@@ -344,7 +344,8 @@ func resolveBackendDir(dir string) string {
 }
 
 func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin, error) {
-	for _, plugin := range plugins {
+	for idx := range plugins {
+		plugin := plugins[idx]
 		if plugin.Backend == nil {
 			continue
 		}
@@ -399,7 +400,9 @@ func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orches
 }
 
 func buildLocalOrchestrator(ctx context.Context, sess state.Session, mem contracts.Memory, memProject, memAgent string) (contracts.Orchestrator, bool, error) {
-	for _, plugin := range contracts.Default.Orchestrators() {
+	orchestrators := contracts.Default.Orchestrators()
+	for idx := range orchestrators {
+		plugin := orchestrators[idx]
 		if plugin.Orchestrator == nil {
 			continue
 		}

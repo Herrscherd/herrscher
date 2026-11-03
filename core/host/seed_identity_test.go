@@ -128,7 +128,7 @@ func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contra
 	return reg, sess, &events, ctx
 }
 
-func dispatchCommandPipe(t *testing.T, ctx context.Context, disp dispatcher, argv []string) cmdResponse {
+func dispatchCommandPipe(ctx context.Context, t *testing.T, disp dispatcher, argv []string) cmdResponse {
 	t.Helper()
 	server, client := net.Pipe()
 	defer closeRead(client)
@@ -164,7 +164,8 @@ func assertSeedEventIdentity(t *testing.T, events []contracts.Event, sess state.
 		t.Fatalf("seed events = %+v, want human/status/reply", events)
 	}
 	wantTypes := []string{"human", "status", "reply"}
-	for i, event := range events {
+	for i := range events {
+		event := events[i]
 		if event.T != wantTypes[i] {
 			t.Fatalf("event %d type = %q, want %q", i, event.T, wantTypes[i])
 		}
@@ -186,7 +187,7 @@ func TestSeedTurnIDRoundTripsThroughShellAndCommandSocket(t *testing.T) {
 
 	*events = nil
 	const socketTurnID = "socket_turn-02"
-	response := dispatchCommandPipe(t, ctx, reg, []string{
+	response := dispatchCommandPipe(ctx, t, reg, []string{
 		"session", "seed", "--name", "solo", "--task", "second", "--turn_id", socketTurnID,
 	})
 	if response.Err != nil {
@@ -273,7 +274,7 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 
 func TestSeedCommandSocketReportsInvalidTurnIDClearly(t *testing.T) {
 	reg, _, _, ctx := identitySeedRegistry(t)
-	response := dispatchCommandPipe(t, ctx, reg, []string{
+	response := dispatchCommandPipe(ctx, t, reg, []string{
 		"session", "seed", "--name", "solo", "--task", "bad", "--turn_id", "not safe",
 	})
 	if response.Err == nil || !strings.Contains(*response.Err, "invalid turn_id") {
@@ -290,7 +291,7 @@ func TestSeedRequiresValueAfterTurnIDFlag(t *testing.T) {
 		t.Fatalf("shell valueless turn_id error = %v", err)
 	}
 
-	response := dispatchCommandPipe(t, ctx, reg, []string{
+	response := dispatchCommandPipe(ctx, t, reg, []string{
 		"session", "seed", "--name", "solo", "--task", "bad", "--turn_id",
 	})
 	if response.Err == nil || !strings.Contains(*response.Err, "flag --turn_id needs a value") {

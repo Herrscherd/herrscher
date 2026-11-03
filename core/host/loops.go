@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -17,7 +16,7 @@ const healthWindow = 90 * time.Second
 
 func serveHealth(ctx context.Context, addr string, h *health.Health) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		snap := h.Snapshot(time.Now(), healthWindow)
 		w.Header().Set("Content-Type", "application/json")
 		if !snap.Online {
@@ -28,7 +27,7 @@ func serveHealth(ctx context.Context, addr string, h *health.Health) {
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: healthReadHeaderTimeout}
 	go func() { <-ctx.Done(); closeRead(srv) }()
 	if err := srv.ListenAndServe(); err != nil && ctx.Err() == nil {
-		fmt.Fprintf(os.Stderr, "health server: %v\n", err)
+		warnStderr("health server: %v\n", err)
 	}
 }
 

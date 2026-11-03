@@ -6,7 +6,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	control "github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
 func TestEventTapAddressesTheSession(t *testing.T) {
@@ -51,15 +51,10 @@ func TestDrivenSessionTapsTheEventSocket(t *testing.T) {
 
 func waitForDriver(t *testing.T, sessions *sessionTable, name string) *sessionDriver {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		d := sessions.lookup(name)
-		if d != nil {
-			return d
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("session %q never registered a driver", name)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	var d *sessionDriver
+	waitFor(t, &sessions.changed, func() bool {
+		d = sessions.lookup(name)
+		return d != nil
+	}, "session "+name+" to register a driver")
+	return d
 }

@@ -15,7 +15,7 @@ type scriptedRunner struct {
 	copies  [][2]string
 }
 
-func (s *scriptedRunner) Command(ctx context.Context, dir string, argv ...string) *exec.Cmd {
+func (s *scriptedRunner) Command(ctx context.Context, _ string, argv ...string) *exec.Cmd {
 	s.seen = append(s.seen, argv)
 	body := "true"
 	if len(s.seen) <= len(s.replies) {

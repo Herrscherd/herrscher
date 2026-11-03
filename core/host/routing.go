@@ -8,7 +8,7 @@ import (
 )
 
 func tokenizeTask(task string) map[string]bool {
-	set := map[string]bool{}
+	set := make(map[string]bool)
 	for _, tok := range strings.FieldsFunc(strings.ToLower(task), func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
 	}) {

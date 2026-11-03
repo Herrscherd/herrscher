@@ -12,14 +12,16 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
-func tapping(t *testing.T, d *sessionDriver) func() []contracts.Event {
+func tapping(t *testing.T, d *sessionDriver) (func() []contracts.Event, *changeNotifier) {
 	t.Helper()
 	var mu sync.Mutex
 	var seen []contracts.Event
+	var changed changeNotifier
 	d.emitTap = func(e contracts.Event) {
 		mu.Lock()
 		seen = append(seen, e)
 		mu.Unlock()
+		changed.signal()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -28,11 +30,12 @@ func tapping(t *testing.T, d *sessionDriver) func() []contracts.Event {
 		mu.Lock()
 		defer mu.Unlock()
 		return append([]contracts.Event(nil), seen...)
-	}
+	}, &changed
 }
 
 func sawReply(events []contracts.Event, text string) bool {
-	for _, e := range events {
+	for idx := range events {
+		e := events[idx]
 		if e.T == "reply" && e.Done && e.Text == text {
 			return true
 		}
@@ -46,7 +49,7 @@ func TestTurnSaidOutsideTheBoundChannelsIsNotPostedThere(t *testing.T) {
 	fromBridge := make(chan contracts.Event, 4)
 	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
 	d.channel = "chan-1"
-	tapped := tapping(t, d)
+	tapped, tapChanged := tapping(t, d)
 
 	if !d.submit(context.Background(), contracts.Inbound{
 		Author:       "you",
@@ -65,7 +68,7 @@ func TestTurnSaidOutsideTheBoundChannelsIsNotPostedThere(t *testing.T) {
 	}
 	fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
 
-	waitFor(t, func() bool { return sawReply(tapped(), "done") }, "the pushing client sees the reply on the event stream")
+	waitFor(t, tapChanged, func() bool { return sawReply(tapped(), "done") }, "the pushing client sees the reply on the event stream")
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if len(a.posted) != 0 || a.upserts != 0 {
@@ -88,7 +91,7 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 	<-toBridge
 	fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
 
-	waitFor(t, func() bool {
+	waitFor(t, &a.changed, func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		return len(a.posted) == 1 && a.posted[0] == "done"
@@ -147,7 +150,7 @@ func TestTurnWithNoOriginIsPostedToTheBoundChannels(t *testing.T) {
 	<-toBridge
 	fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
 
-	waitFor(t, func() bool {
+	waitFor(t, &a.changed, func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		return len(a.posted) == 1 && a.posted[0] == "done"

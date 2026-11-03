@@ -33,7 +33,7 @@ func TestCommandsVerbDescribesTheRegistry(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &specs); err != nil {
 		t.Fatalf("commands --json did not answer JSON: %v (%q)", err, out)
 	}
-	have := map[string]bool{}
+	have := make(map[string]bool)
 	for _, s := range specs {
 		have[strings.Join(s.Path, " ")] = true
 	}
@@ -60,7 +60,7 @@ func TestSkillVerbsAreRegistered(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	have := map[string]bool{}
+	have := make(map[string]bool)
 	for _, s := range reg.Specs() {
 		have[strings.Join(s.Path, " ")] = true
 	}

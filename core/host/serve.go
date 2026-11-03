@@ -255,13 +255,15 @@ func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *se
 
 func serveHubSockets(ctx context.Context, instID string, hubCore *hub) {
 	es := newEventSocket()
-	go serveEventsSocket(ctx, EventsSocketPath(instID), es)
+	serveEventsSocket(ctx, EventsSocketPath(instID), es)
 	hubCore.eventPublisher = es.Publish
-	go serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{hubCore})
+	serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{hubCore})
 }
 
 func goLiveSessions(ctx context.Context, hb *hub, sup *supervisor.Supervisor, st *state.State, host *health.Health) {
-	for _, sess := range st.SnapshotSessions() {
+	sessions := st.SnapshotSessions()
+	for idx := range sessions {
+		sess := sessions[idx]
 		if sess.Archived {
 			continue
 		}
@@ -280,7 +282,9 @@ func bindSessionControl(gws []Deps, hubCore *hub) {
 }
 
 func logCompiledPlugins(log *slog.Logger) {
-	for _, p := range contracts.Default.Plugins() {
+	plugins := contracts.Default.Plugins()
+	for idx := range plugins {
+		p := plugins[idx]
 		log.Info("plugin compiled in", "kind", p.Manifest.Kind, "category", p.Manifest.Category, keyStatus, p.Manifest.Status)
 	}
 }
@@ -429,7 +433,7 @@ func nonTerminalKinds(all []Deps) []string {
 }
 
 func boundGateways(all []Deps, kinds []string) []Deps {
-	want := map[string]bool{}
+	want := make(map[string]bool)
 	for _, k := range kinds {
 		want[k] = true
 	}

@@ -3,6 +3,7 @@ package host
 import (
 	"encoding/hex"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -96,37 +97,28 @@ func TestDriverEnqueueIsBounded(t *testing.T) {
 }
 
 func TestGoDeadDoesNotHoldTheHubLockWhileWaiting(t *testing.T) {
-	stuck := make(chan struct{})
-	h := &hub{live: map[string]liveSession{}, teardownGrace: 100 * time.Millisecond}
-	h.live["wedged"] = liveSession{cancel: func() {}, done: stuck}
+	synctest.Test(t, func(t *testing.T) {
+		stuck := make(chan struct{})
+		h := &hub{live: make(map[string]liveSession), teardownGrace: 100 * time.Millisecond}
+		h.live["wedged"] = liveSession{cancel: func() {}, done: stuck}
 
-	probed := make(chan struct{})
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		h.mu.Lock()
+		returned := make(chan struct{})
+		go func() { h.goDead("wedged"); close(returned) }()
+
+		synctest.Wait()
+		if !h.mu.TryLock() {
+			t.Fatal("h.mu held while waiting for a wedged teardown")
+		}
 		h.mu.Unlock()
-		close(probed)
-	}()
 
-	returned := make(chan struct{})
-	go func() { h.goDead("wedged"); close(returned) }()
-
-	select {
-	case <-probed:
-	case <-time.After(time.Second):
-		t.Fatal("h.mu held while waiting for a wedged teardown")
-	}
-	select {
-	case <-returned:
-	case <-time.After(2 * time.Second):
-		t.Fatal("goDead never returned on a wedged teardown")
-	}
-	h.mu.Lock()
-	_, still := h.live["wedged"]
-	h.mu.Unlock()
-	if still {
-		t.Fatal("wedged session name never released")
-	}
+		<-returned
+		h.mu.Lock()
+		_, still := h.live["wedged"]
+		h.mu.Unlock()
+		if still {
+			t.Fatal("wedged session name never released")
+		}
+	})
 }
 
 func TestApprovalIDsAreRandomAndWellFormed(t *testing.T) {

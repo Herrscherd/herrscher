@@ -26,7 +26,7 @@ func TestMemorySearchVerbReturnsFormattedHits(t *testing.T) {
 }
 
 func TestMemorySearchVerbRawFlag(t *testing.T) {
-	mem := useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{}})
+	mem := useRestoreMem(t, &restoreVerbMem{nodes: make(map[string]contracts.Node)})
 	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)

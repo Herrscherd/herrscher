@@ -12,12 +12,13 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
-	control "github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 type fanRecorder struct {
 	mu          sync.Mutex
+	changed     changeNotifier
 	inbound     []contracts.Message
 	emitted     []contracts.Event
 	posted      []string
@@ -30,18 +31,21 @@ type fanRecorder struct {
 func (f *fanRecorder) feed(text string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.changed.signal()
 	f.inbound = append(f.inbound, contracts.Message{ID: "m", ChannelID: "c", Content: text, AuthorName: "you"})
 }
 
 func (f *fanRecorder) feedFrom(text, authorID string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.changed.signal()
 	f.inbound = append(f.inbound, contracts.Message{ID: "m", ChannelID: "c", Content: text, AuthorName: "you", AuthorID: authorID})
 }
 
 func (f *fanRecorder) feedMsg(m contracts.Message) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.changed.signal()
 	f.inbound = append(f.inbound, m)
 }
 func (f *fanRecorder) Enabled() bool          { return true }
@@ -53,6 +57,7 @@ func (f *fanRecorder) EnsureChannel(context.Context, string, string) (contracts.
 func (f *fanRecorder) Read(_ context.Context, channelID string, _ int, _ string) ([]contracts.Message, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.changed.signal()
 	f.readChannel = channelID
 	out := f.inbound
 	f.inbound = nil
@@ -62,6 +67,7 @@ func (f *fanRecorder) Unreact(context.Context, string, string, string) error { r
 func (f *fanRecorder) UpsertStatusMessage(_ context.Context, _, _, content string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.changed.signal()
 	f.upserts++
 	f.statuses = append(f.statuses, content)
 	return "", nil
@@ -74,6 +80,7 @@ func (f *fanRecorder) Manifest() contracts.Manifest {
 func (f *fanRecorder) Post(_ context.Context, _ contracts.Conversation, text string) (contracts.MessageID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.changed.signal()
 	f.posted = append(f.posted, text)
 	return "", nil
 }
@@ -95,6 +102,7 @@ type sinkRecorder struct{ fanRecorder }
 func (s *sinkRecorder) Emit(e contracts.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.changed.signal()
 	s.emitted = append(s.emitted, e)
 }
 
@@ -123,13 +131,16 @@ func TestDriverFanOutToAllBoundGateways(t *testing.T) {
 	}
 	fromBridge <- contracts.Event{T: "reply", Text: "world", Done: true}
 
-	waitFor(t, func() bool {
+	waitFor(t, &a.changed, func() bool {
 		a.mu.Lock()
-		b.mu.Lock()
 		defer a.mu.Unlock()
+		return len(a.posted) == 1 && a.posted[0] == "world"
+	}, "reply fanned to the first gateway")
+	waitFor(t, &b.changed, func() bool {
+		b.mu.Lock()
 		defer b.mu.Unlock()
-		return len(a.posted) == 1 && a.posted[0] == "world" && len(b.posted) == 1 && b.posted[0] == "world"
-	}, "reply fanned to both gateways")
+		return len(b.posted) == 1 && b.posted[0] == "world"
+	}, "reply fanned to the second gateway")
 }
 
 func TestDriverPollsSessionChannel(t *testing.T) {
@@ -143,7 +154,7 @@ func TestDriverPollsSessionChannel(t *testing.T) {
 	defer cancel()
 	go d.run(ctx)
 
-	waitFor(t, func() bool {
+	waitFor(t, &a.changed, func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		return a.readChannel == "sess-chan"
@@ -202,7 +213,7 @@ func TestDriverNonEventSinkPostsOnlyFinalReply(t *testing.T) {
 	fromBridge <- contracts.Event{T: "status", Text: "running"}
 	fromBridge <- contracts.Event{T: "reply", Text: "world", Done: true}
 
-	waitFor(t, func() bool {
+	waitFor(t, &a.changed, func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		return len(a.posted) == 1 && a.posted[0] == "world"
@@ -273,7 +284,7 @@ func TestDriverEmitsAbandonedOnHangup(t *testing.T) {
 	}
 	d.hangup <- struct{}{}
 
-	waitFor(t, func() bool {
+	waitFor(t, &rec.changed, func() bool {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
 		n := len(rec.emitted)
@@ -306,7 +317,7 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 		t.Fatal("Pick was not forwarded to the bridge")
 	}
 	fromBridge <- contracts.Event{T: "reply", Text: "picked", Done: true}
-	waitFor(t, func() bool {
+	waitFor(t, &a.changed, func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		return len(a.posted) == 1 && a.posted[0] == "picked" && a.upserts == 0
@@ -326,7 +337,7 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	defer cancel()
 	go RunSession(ctx, sessionTab, "pickreg", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
 
-	waitFor(t, func() bool { return (&hub{approvals: approvalTab, sessions: sessionTab}).Pick("pickreg", "1") }, "Pick routes to the live session")
+	waitFor(t, &sessionTab.changed, func() bool { return (&hub{approvals: approvalTab, sessions: sessionTab}).Pick("pickreg", "1") }, "Pick routes to the live session")
 	if (&hub{approvals: approvalTab, sessions: sessionTab}).Pick("does-not-exist", "1") {
 		t.Fatal("Pick must report false for an unknown session")
 	}
@@ -401,7 +412,7 @@ func TestDriverJournalsParticipants(t *testing.T) {
 	defer cancel()
 	go d.run(ctx)
 
-	waitFor(t, func() bool {
+	waitFor(t, &d.joined, func() bool {
 		ids := state.ReadParticipants(journal)
 		return len(ids) == 1 && ids[0] == "u1"
 	}, "author journaled for /session who")
@@ -454,7 +465,7 @@ func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
 	fromBridge <- contracts.Event{T: "reset"}
 	fromBridge <- contracts.Event{T: "chunk", Text: "x"}
 
-	waitFor(t, func() bool {
+	waitFor(t, &rec.changed, func() bool {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
 		return len(rec.emitted) == 3 &&
@@ -474,16 +485,21 @@ func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
 	}
 }
 
-func waitFor(t *testing.T, cond func() bool, what string) {
+func waitFor(t *testing.T, changed *changeNotifier, cond func() bool, what string) {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
+	timeout := time.NewTimer(time.Second)
+	defer timeout.Stop()
+	for {
+		wake := changed.watch()
 		if cond() {
 			return
 		}
-		time.Sleep(5 * time.Millisecond)
+		select {
+		case <-wake:
+		case <-timeout.C:
+			t.Fatalf("timed out waiting for: %s", what)
+		}
 	}
-	t.Fatalf("timed out waiting for: %s", what)
 }
 
 func TestRunSessionReconnectsAndResumes(t *testing.T) {
@@ -531,7 +547,7 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 	if err := c1.Write(contracts.Event{T: "reply", Text: "r1", Done: true}); err != nil {
 		t.Fatalf("write reply: %v", err)
 	}
-	waitFor(t, func() bool {
+	waitFor(t, &a.changed, func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		return len(a.posted) == 1
@@ -975,7 +991,7 @@ func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
 		t.Fatal("awaitTurn should complete on reply{done}")
 	}
 
-	waitFor(t, func() bool {
+	waitFor(t, &rec.changed, func() bool {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
 		for _, e := range rec.emitted {

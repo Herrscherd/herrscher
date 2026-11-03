@@ -97,15 +97,8 @@ func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
 
 func waitForRegisteredIncarnation(t *testing.T, sessionTab *sessionTable, name, incarnation string) {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
-	for {
+	waitFor(t, &sessionTab.changed, func() bool {
 		driver := sessionTab.lookup(name)
-		if driver != nil && driver.incarnation == incarnation {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("session %q did not register incarnation %q", name, incarnation)
-		}
-		time.Sleep(time.Millisecond)
-	}
+		return driver != nil && driver.incarnation == incarnation
+	}, "session "+name+" to register incarnation "+incarnation)
 }

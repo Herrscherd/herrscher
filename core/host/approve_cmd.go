@@ -242,13 +242,13 @@ func readAgentPolicy(home string) approval.Policy {
 	buf, err := os.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "approvals: %s: unreadable, its rules do not apply: %v\n", path, err)
+			warnStderr("approvals: %s: unreadable, its rules do not apply: %v\n", path, err)
 		}
 		return nil
 	}
 	pol, errs := approval.ParsePolicy(string(buf))
 	for _, e := range errs {
-		fmt.Fprintf(os.Stderr, "approvals: %s: %v\n", path, e)
+		warnStderr("approvals: %s: %v\n", path, e)
 	}
 	return pol
 }
@@ -258,14 +258,16 @@ func sessionPolicy(st *state.State, agents *agent.Store, session string) (approv
 	for _, raw := range st.ApprovalRules() {
 		r, err := approval.ParseRule(raw)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "approvals: state rule %q dropped, it no longer applies: %v\n", raw, err)
+			warnStderr("approvals: state rule %q dropped, it no longer applies: %v\n", raw, err)
 			continue
 		}
 		daemon = append(daemon, r)
 	}
 	var mode approval.Mode
 	var home string
-	for _, s := range st.SnapshotSessions() {
+	sessions := st.SnapshotSessions()
+	for idx := range sessions {
+		s := sessions[idx]
 		if s.Name == session {
 			mode = approval.Mode(s.Approvals)
 			if agents != nil && s.Agent != "" {

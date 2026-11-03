@@ -45,9 +45,12 @@ func TestEventSocketPublishReachesSubscriber(t *testing.T) {
 	defer cancel()
 	path := filepath.Join(t.TempDir(), "events.sock")
 	es := newEventSocket()
-	go serveEventsSocket(ctx, path, es)
+	serveEventsSocket(ctx, path, es)
 
-	conn := dialWithRetry(t, path)
+	conn, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
+	if err != nil {
+		t.Fatalf("dial %s: %v", path, err)
+	}
 	defer closeRead(conn)
 
 	waitForSubscriber(t, es)
@@ -72,7 +75,7 @@ func TestEventSocketPublishReachesSubscriber(t *testing.T) {
 	}
 }
 
-func TestPublishNilSocketNoop(t *testing.T) {
+func TestPublishNilSocketNoop(_ *testing.T) {
 	var es *eventSocket
 	es.Publish("s", contracts.Event{T: "chunk"})
 }
@@ -88,34 +91,11 @@ func TestFanOutFiresEmitTap(t *testing.T) {
 	}
 }
 
-func dialWithRetry(t *testing.T, path string) net.Conn {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
-		if err == nil {
-			return c
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("dial %s: %v", path, err)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
 func waitForSubscriber(t *testing.T, es *eventSocket) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for {
+	waitFor(t, &es.changed, func() bool {
 		es.mu.Lock()
-		n := len(es.subs)
-		es.mu.Unlock()
-		if n > 0 {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("no subscriber registered")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+		defer es.mu.Unlock()
+		return len(es.subs) > 0
+	}, "a subscriber registered")
 }

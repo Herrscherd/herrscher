@@ -186,12 +186,6 @@ linters:
       - path: ^core/host/(coordinator|coordinator_test|turnloop)\.go$
         linters: [misspell]
         text: "^`(conflit|existant|partiel)` is a misspelling"
-      - path: ^core/host/(audit_fixes|hub_seed)_test\.go$
-        linters: [staticcheck]
-        text: "^SA2001: empty critical section"
-      - path: ^core/host/cli\.go$
-        linters: [musttag]
-        text: "should be annotated with the .json. tag"
       - path: ^core/host/backendenv\.go$
         linters: [gosec]
         text: "^G101:"

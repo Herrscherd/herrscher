@@ -29,7 +29,7 @@ func TestStagedAgentTarCarriesTheFilesAndTheRemotePath(t *testing.T) {
 
 func readTarMembers(t *testing.T, r io.Reader) map[string]string {
 	t.Helper()
-	seen := map[string]string{}
+	seen := make(map[string]string)
 	tr := tar.NewReader(r)
 	for {
 		h, err := tr.Next()

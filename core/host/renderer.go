@@ -30,12 +30,12 @@ func (r *gatewayRenderer) handle(ctx context.Context, e contracts.Event) {
 	}
 }
 
-func chunk(s string, max int) []string {
+func chunk(s string, limit int) []string {
 	var out []string
 	r := []rune(s)
-	for len(r) > max {
-		cut := max
-		for i := max - 1; i > max/2; i-- {
+	for len(r) > limit {
+		cut := limit
+		for i := limit - 1; i > limit/2; i-- {
 			if r[i] == '\n' {
 				cut = i
 				break

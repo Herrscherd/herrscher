@@ -74,7 +74,7 @@ func TestSamePathFromTwoPluginsBothLand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("two distinct plugins must not collide: %v", err)
 	}
-	got := map[string]bool{}
+	got := make(map[string]bool)
 	for _, c := range cmds {
 		got[strings.Join(c.Path, " ")] = true
 	}

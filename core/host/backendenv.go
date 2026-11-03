@@ -96,7 +96,7 @@ func loadGatewayCreds(getenv func(string) string) (contracts.GatewayCreds, error
 
 func spawnEnvFor(e CatalogEntry, getenv func(string) string) (map[string]string, error) {
 	if e.Route != contracts.RouteGateway {
-		return map[string]string{}, nil
+		return make(map[string]string), nil
 	}
 	creds, err := loadGatewayCreds(getenv)
 	if err != nil {

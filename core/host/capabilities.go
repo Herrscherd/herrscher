@@ -56,7 +56,7 @@ func agentVerbs(specs []cli.Spec, contributed func(family string) bool) []cli.Sp
 // on demand. Sorted, so two daemons with the same build produce the same text
 // and the prompt cache is not invalidated by map order.
 func CapabilitySummary(specs []cli.Spec) string {
-	families := map[string][]string{}
+	families := make(map[string][]string)
 	var order []string
 	for _, s := range specs {
 		if len(s.Path) == 0 {
@@ -72,17 +72,15 @@ func CapabilitySummary(specs []cli.Spec) string {
 		}
 	}
 	sort.Strings(order)
-	var b strings.Builder
+	var lines []string
 	for _, head := range order {
 		verbs := families[head]
 		sort.Strings(verbs)
-		b.WriteString("  ")
-		b.WriteString(head)
+		line := "  " + head
 		if len(verbs) > 0 {
-			b.WriteString(": ")
-			b.WriteString(strings.Join(verbs, ", "))
+			line += ": " + strings.Join(verbs, ", ")
 		}
-		b.WriteByte('\n')
+		lines = append(lines, line)
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return strings.Join(lines, "\n")
 }

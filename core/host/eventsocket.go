@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net"
 	"os"
 	"sync"
@@ -41,12 +40,13 @@ type subscriber struct {
 }
 
 type eventSocket struct {
-	mu   sync.Mutex
-	subs map[*subscriber]struct{}
+	mu      sync.Mutex
+	subs    map[*subscriber]struct{}
+	changed changeNotifier
 }
 
 func newEventSocket() *eventSocket {
-	return &eventSocket{subs: map[*subscriber]struct{}{}}
+	return &eventSocket{subs: make(map[*subscriber]struct{})}
 }
 
 func (s *eventSocket) add(c net.Conn) {
@@ -54,6 +54,7 @@ func (s *eventSocket) add(c net.Conn) {
 	s.mu.Lock()
 	s.subs[sub] = struct{}{}
 	s.mu.Unlock()
+	s.changed.signal()
 	go s.serve(sub)
 }
 
@@ -162,9 +163,13 @@ func serveEventsSocket(ctx context.Context, path string, s *eventSocket) {
 	logCleanup(os.Remove(path))
 	ln, err := listenCommandSocket(ctx, path)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "events socket: listen %s: %v\n", path, err)
+		warnStderr("events socket: listen %s: %v\n", path, err)
 		return
 	}
+	go acceptEvents(ctx, ln, path, s)
+}
+
+func acceptEvents(ctx context.Context, ln net.Listener, path string, s *eventSocket) {
 	go func() {
 		<-ctx.Done()
 		logCleanup(ln.Close())

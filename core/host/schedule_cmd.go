@@ -194,7 +194,9 @@ func scheduleRunVerb(slot *schedulerSlot) contracts.Cmd {
 }
 
 func sessionKnown(st *state.State, name string) bool {
-	for _, sess := range st.SnapshotSessions() {
+	sessions := st.SnapshotSessions()
+	for idx := range sessions {
+		sess := sessions[idx]
 		if sess.Name == name && !sess.Archived {
 			return true
 		}

@@ -184,18 +184,7 @@ func TestApproveAllowSettlesAWaitingRequest(t *testing.T) {
 		done <- d
 	}()
 
-	var id string
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if p := pendingApprovals(approvalTab); len(p) == 1 {
-			id = p[0].ID
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	if id == "" {
-		t.Fatal("the request was never registered")
-	}
+	id := awaitPending(t, approvalTab, 1)[0].ID
 	out, err := reg.Dispatch(context.Background(), []string{"approve", "allow", id})
 	if err != nil {
 		t.Fatalf("allow: %v", err)

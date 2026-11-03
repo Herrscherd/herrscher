@@ -1,8 +1,10 @@
 package host
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
+	"os"
 )
 
 func closeRead(closer io.Closer) {
@@ -17,4 +19,8 @@ func logCleanup(err error) {
 
 func logWriteFailure(_ int, err error) {
 	logCleanup(err)
+}
+
+func warnStderr(format string, args ...any) {
+	logWriteFailure(fmt.Fprintf(os.Stderr, format, args...))
 }

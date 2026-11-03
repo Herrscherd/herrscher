@@ -46,6 +46,7 @@ type Resolver struct {
 	sleep            func(time.Duration) <-chan time.Time
 }
 
+// NewResolver builds a Resolver for the categories in remote, reaching them over NATS at natsURL.
 func NewResolver(remote map[contracts.Category]bool, natsURL string) *Resolver {
 	r := &Resolver{
 		remote:         remote,
@@ -91,13 +92,14 @@ func (r *Resolver) isRemote(c contracts.Category) bool {
 // Returns (nil, false, nil) when none is registered, memory stays optional,
 // matching buildMemory's contract.
 func (r *Resolver) Memory(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string) (contracts.Memory, bool, error) {
-	for _, p := range plugins {
+	for idx := range plugins {
+		p := plugins[idx]
 		if p.Memory == nil {
 			continue
 		}
 		if r.isRemote(contracts.CategoryMemory) {
 			p := p
-			return resolved(resolveRemoteWithRetry(r, ctx, contracts.CategoryMemory,
+			return resolved(resolveRemoteWithRetry(ctx, r, contracts.CategoryMemory,
 				func(c context.Context) (contracts.Memory, error) { return r.dialMemory(c, p) }))
 		}
 		cfg, err := contracts.Resolve(p.Manifest.Config, getenv)
@@ -122,11 +124,12 @@ func (r *Resolver) Orchestrator(ctx context.Context, plugins []contracts.Plugin)
 	if !r.isRemote(contracts.CategoryOrchestrator) {
 		return nil, false, nil
 	}
-	for _, p := range plugins {
+	for idx := range plugins {
+		p := plugins[idx]
 		if p.Orchestrator == nil {
 			continue
 		}
-		return resolved(resolveRemoteWithRetry(r, ctx, contracts.CategoryOrchestrator,
+		return resolved(resolveRemoteWithRetry(ctx, r, contracts.CategoryOrchestrator,
 			func(c context.Context) (contracts.Orchestrator, error) { return r.dialOrchestrator(c, p) }))
 	}
 	return nil, false, nil
@@ -150,7 +153,7 @@ func (r *Resolver) Backend(ctx context.Context, plugins []contracts.Plugin, desi
 	if err != nil {
 		return nil, false, err
 	}
-	return resolved(resolveRemoteWithRetry(r, ctx, contracts.CategoryBackend,
+	return resolved(resolveRemoteWithRetry(ctx, r, contracts.CategoryBackend,
 		func(c context.Context) (contracts.Backend, error) { return r.dialBackend(c, p) }))
 }
 
@@ -171,7 +174,7 @@ func (e *RemoteResolveError) Error() string {
 
 func (e *RemoteResolveError) Unwrap() error { return e.Err }
 
-func resolveRemoteWithRetry[T any](r *Resolver, ctx context.Context, cat contracts.Category, dial func(context.Context) (T, error)) (T, error) {
+func resolveRemoteWithRetry[T any](ctx context.Context, r *Resolver, cat contracts.Category, dial func(context.Context) (T, error)) (T, error) {
 	var zero T
 	start := r.now()
 	bo := &obs.Backoff{Base: retryBackoffBase, Factor: backoffFactor, Max: retryBackoffMax, Jitter: retryJitter}

@@ -65,11 +65,11 @@ type Acceptor struct {
 
 // Accept binds the control socket at path (removing a stale socket first) and
 // starts accepting bridge connections. Each appears on Conns().
-func Accept(path string) (*Acceptor, error) {
+func Accept(ctx context.Context, path string) (*Acceptor, error) {
 	if err := removeStaleSocket(path); err != nil {
 		return nil, err
 	}
-	listener, err := listenControl(path)
+	listener, err := listenControl(ctx, path)
 	if err != nil {
 		return nil, err
 	}

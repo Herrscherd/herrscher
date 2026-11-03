@@ -13,7 +13,7 @@ func SocketPath(session string) string {
 	return `\\.\pipe\herrscher-control-` + SafeSessionName(session)
 }
 
-func listenControl(path string) (net.Listener, error) {
+func listenControl(_ context.Context, path string) (net.Listener, error) {
 	return winio.ListenPipe(path, &winio.PipeConfig{
 		SecurityDescriptor: "D:P(A;;GA;;;OW)",
 	})

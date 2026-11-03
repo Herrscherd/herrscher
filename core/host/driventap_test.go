@@ -27,7 +27,7 @@ func TestDrivenSessionTapsTheEventSocket(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	acc, err := control.Accept(control.SocketPath("driventap-test"))
+	acc, err := control.Accept(t.Context(), control.SocketPath("driventap-test"))
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}

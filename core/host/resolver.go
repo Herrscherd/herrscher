@@ -69,6 +69,10 @@ func (r *Resolver) SetLogger(l *slog.Logger) {
 	r.log = l.With("component", "resolver")
 }
 
+func (r *Resolver) warnUndecodableAnnouncement(err error) {
+	r.log.Warn("ignoring an announcement that does not decode", "err", err)
+}
+
 // SetMetrics installs the registry remote-resolve attempts/failures/latency are
 // recorded into.
 func (r *Resolver) SetMetrics(m *metrics.Registry) {
@@ -226,7 +230,7 @@ func (r *Resolver) dialRemoteMemoryOnce(ctx context.Context, _ contracts.Plugin)
 		case seen <- struct{}{}:
 		default:
 		}
-	}); err != nil {
+	}, r.warnUndecodableAnnouncement); err != nil {
 		return nil, err
 	}
 	for {
@@ -255,7 +259,7 @@ func (r *Resolver) dialRemoteOrchestratorOnce(ctx context.Context, _ contracts.P
 		case seen <- struct{}{}:
 		default:
 		}
-	}); err != nil {
+	}, r.warnUndecodableAnnouncement); err != nil {
 		return nil, err
 	}
 	for {
@@ -284,7 +288,7 @@ func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, p contracts.Plugin
 		case seen <- struct{}{}:
 		default:
 		}
-	}); err != nil {
+	}, r.warnUndecodableAnnouncement); err != nil {
 		return nil, err
 	}
 	for {

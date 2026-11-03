@@ -27,7 +27,7 @@ var (
 
 type hostedPlugin struct {
 	manifest  contracts.Manifest
-	register  func(*grpc.Server)
+	register  func(*grpc.Server) error
 	closeReal func() error
 }
 
@@ -39,8 +39,10 @@ func hostPlugin(ctx context.Context, category contracts.Category) (hostedPlugin,
 			return hostedPlugin{}, err
 		}
 		return hostedPlugin{
-			manifest:  manifest,
-			register:  func(s *grpc.Server) { transport.RegisterMemorySkeleton(s, impl) },
+			manifest: manifest,
+			register: func(s *grpc.Server) error {
+				return registerOnRouter(s, func(r *transport.PluginRouter) error { return transport.RegisterMemorySkeleton(r, impl) })
+			},
 			closeReal: func() error { return impl.Close() },
 		}, nil
 	case contracts.CategoryOrchestrator:
@@ -49,8 +51,10 @@ func hostPlugin(ctx context.Context, category contracts.Category) (hostedPlugin,
 			return hostedPlugin{}, err
 		}
 		return hostedPlugin{
-			manifest:  manifest,
-			register:  func(s *grpc.Server) { transport.RegisterOrchestratorSkeleton(s, impl) },
+			manifest: manifest,
+			register: func(s *grpc.Server) error {
+				return registerOnRouter(s, func(r *transport.PluginRouter) error { return transport.RegisterOrchestratorSkeleton(r, impl) })
+			},
 			closeReal: func() error { return impl.Close() },
 		}, nil
 	case contracts.CategoryBackend:
@@ -60,7 +64,7 @@ func hostPlugin(ctx context.Context, category contracts.Category) (hostedPlugin,
 		}
 		return hostedPlugin{
 			manifest:  manifest,
-			register:  func(s *grpc.Server) { transport.RegisterBackendSkeleton(s, impl) },
+			register:  func(s *grpc.Server) error { transport.RegisterBackendSkeleton(s, impl); return nil },
 			closeReal: func() error { return impl.Close() },
 		}, nil
 	default:
@@ -132,7 +136,9 @@ func runPluginHost(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	hosted.register(server)
+	if err := hosted.register(server); err != nil {
+		return err
+	}
 
 	conn, err := nats.Connect(*natsURL)
 	if err != nil {
@@ -188,4 +194,12 @@ func firstBackend(ctx context.Context) (contracts.Backend, contracts.Manifest, e
 		return backend, plugin.Manifest, nil
 	}
 	return nil, contracts.Manifest{}, fmt.Errorf("plugin-host: %w", errNoBackendPlugin)
+}
+
+func registerOnRouter(server *grpc.Server, registerSkeleton func(*transport.PluginRouter) error) error {
+	router, err := transport.NewPluginRouter(server)
+	if err != nil {
+		return err
+	}
+	return registerSkeleton(router)
 }

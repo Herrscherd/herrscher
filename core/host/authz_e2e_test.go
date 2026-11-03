@@ -21,7 +21,9 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 		t.Fatalf("AddSession: %v", addErr)
 	}
 	reg := &cli.Registry{}
-	if approveErr := addApproveCommands(reg, st, nil); approveErr != nil {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
+	if approveErr := addApproveCommands(reg, st, nil, approvalTab, sessionTab); approveErr != nil {
 		t.Fatalf("addApproveCommands: %v", approveErr)
 	}
 	h := &hub{st: st, reg: reg, live: map[string]liveSession{}}

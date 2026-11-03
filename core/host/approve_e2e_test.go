@@ -23,6 +23,8 @@ func (f dispatcherFunc) Dispatch(ctx context.Context, argv []string) (string, er
 }
 
 func TestHookThroughTheCommandSocket(t *testing.T) {
+	sessionTab := newSessionTable()
+	approvalTab := newApprovalTable()
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{"sessions":[],"approvalTimeout":"3s"}`), 0o644); err != nil {
 		t.Fatalf("write state: %v", err)
@@ -38,7 +40,7 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
 	reg := &cli.Registry{}
-	if err := addApproveCommands(reg, st, nil); err != nil {
+	if err := addApproveCommands(reg, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}
 
@@ -62,7 +64,7 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 	var id string
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		for _, p := range pendingApprovals() {
+		for _, p := range pendingApprovals(approvalTab) {
 			if p.Session == "s1" {
 				id = p.ID
 			}

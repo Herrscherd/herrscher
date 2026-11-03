@@ -96,18 +96,20 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 }
 
 func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dir := t.TempDir()
 	st := state.NewState(filepath.Join(dir, "s.json"))
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: filepath.Join(dir, "s.json"), DefaultCmd: "claude"}, st, sup, "", nil)
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: filepath.Join(dir, "s.json"), DefaultCmd: "claude"}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
 	d := newSessionDriver("s1", nil, nil, nil)
-	registerDriver("s1", d)
-	defer unregisterDriver("s1", d)
+	sessionTab.register("s1", d)
+	defer sessionTab.unregister("s1", d)
 
 	if _, err := reg.Dispatch(ctx, []string{"session", "send", "--name", "s1", "--text", "reprends ici", "--origin", "terminal"}); err != nil {
 		t.Fatalf("session send: %v", err)

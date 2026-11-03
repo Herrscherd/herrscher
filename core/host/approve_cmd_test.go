@@ -14,21 +14,23 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func approveReg(t *testing.T) (*cli.Registry, *state.State) {
+func approveReg(t *testing.T, approvalTab *approvalTable, sessionTab *sessionTable) (*cli.Registry, *state.State) {
 	t.Helper()
 	st, err := state.LoadState(filepath.Join(t.TempDir(), "state.json"))
 	if err != nil {
 		t.Fatalf("LoadState: %v", err)
 	}
 	reg := &cli.Registry{}
-	if err := addApproveCommands(reg, st, nil); err != nil {
+	if err := addApproveCommands(reg, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}
 	return reg, st
 }
 
 func TestApproveRuleAddsListsRemoves(t *testing.T) {
-	reg, _ := approveReg(t)
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
+	reg, _ := approveReg(t, approvalTab, sessionTab)
 	ctx := context.Background()
 	if _, err := reg.Dispatch(ctx, []string{"approve", "rule", "ask Bash(git push*)"}); err != nil {
 		t.Fatalf("add: %v", err)
@@ -51,7 +53,9 @@ func TestApproveRuleAddsListsRemoves(t *testing.T) {
 }
 
 func TestApproveRuleRefusesNonsense(t *testing.T) {
-	reg, st := approveReg(t)
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
+	reg, st := approveReg(t, approvalTab, sessionTab)
 	if _, err := reg.Dispatch(context.Background(), []string{"approve", "rule", "maybe Bash(ls)"}); err == nil {
 		t.Fatal("an unparseable rule must be refused")
 	}
@@ -61,7 +65,9 @@ func TestApproveRuleRefusesNonsense(t *testing.T) {
 }
 
 func TestApproveModeRefusesUnknownMode(t *testing.T) {
-	reg, st := approveReg(t)
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
+	reg, st := approveReg(t, approvalTab, sessionTab)
 	if err := st.AddSession(state.Session{Name: "s1", ChannelID: "c1"}); err != nil {
 		t.Fatalf("AddSession: %v", err)
 	}
@@ -80,7 +86,9 @@ func TestApproveModeRefusesUnknownMode(t *testing.T) {
 }
 
 func TestApproveEmptyJSONIsAnEmptyList(t *testing.T) {
-	reg, _ := approveReg(t)
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
+	reg, _ := approveReg(t, approvalTab, sessionTab)
 	for _, argv := range [][]string{{"approve", "rule", "--json"}, {"approve", "list", "--json"}} {
 		out, err := reg.Dispatch(context.Background(), argv)
 		if err != nil {
@@ -93,14 +101,18 @@ func TestApproveEmptyJSONIsAnEmptyList(t *testing.T) {
 }
 
 func TestApproveHookIsNotAVerbTheDaemonAnswers(t *testing.T) {
-	reg, _ := approveReg(t)
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
+	reg, _ := approveReg(t, approvalTab, sessionTab)
 	if _, err := reg.Dispatch(context.Background(), []string{"approve", "hook"}); err == nil {
 		t.Fatal("`approve hook` must not be reachable through the registry")
 	}
 }
 
 func TestApproveListEmpty(t *testing.T) {
-	reg, _ := approveReg(t)
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
+	reg, _ := approveReg(t, approvalTab, sessionTab)
 	out, err := reg.Dispatch(context.Background(), []string{"approve", "list"})
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -162,18 +174,20 @@ func TestSessionPolicyOfAnUnknownSession(t *testing.T) {
 }
 
 func TestApproveAllowSettlesAWaitingRequest(t *testing.T) {
-	reg, _ := approveReg(t)
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
+	reg, _ := approveReg(t, approvalTab, sessionTab)
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "Bash", Pattern: "git push*"}}
 	done := make(chan approval.Decision, 1)
 	go func() {
-		d, _ := askApproval(context.Background(), "s1", approval.Request{Tool: "Bash", Subject: "git push"}, pol, approval.ModeAsk, 5*time.Second)
+		d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s1", approval.Request{Tool: "Bash", Subject: "git push"}, pol, approval.ModeAsk, 5*time.Second)
 		done <- d
 	}()
 
 	var id string
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if p := pendingApprovals(); len(p) == 1 {
+		if p := pendingApprovals(approvalTab); len(p) == 1 {
 			id = p[0].ID
 			break
 		}
@@ -200,7 +214,9 @@ func TestApproveAllowSettlesAWaitingRequest(t *testing.T) {
 }
 
 func TestApproveAllowUnknownIDReportsIt(t *testing.T) {
-	reg, _ := approveReg(t)
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
+	reg, _ := approveReg(t, approvalTab, sessionTab)
 	out, err := reg.Dispatch(context.Background(), []string{"approve", "allow", "nope"})
 	if err == nil {
 		t.Fatalf("out = %q, want an error: claiming success for a request nobody is waiting on reads as an allowed call", out)

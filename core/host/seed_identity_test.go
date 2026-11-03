@@ -102,6 +102,8 @@ func (c *reentrantSeedCoordinator) Delegate(_ context.Context, req contracts.Del
 }
 
 func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contracts.Event, context.Context) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	t.Helper()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "state.json")
@@ -111,7 +113,7 @@ func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contra
 	}
 	sess, _ := st.FindSession("solo")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: path}, st, sup, "", nil)
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: path}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,6 +199,8 @@ func TestSeedTurnIDRoundTripsThroughShellAndCommandSocket(t *testing.T) {
 }
 
 func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -209,11 +213,11 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: statePath}, st, sup, "", nil)
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: statePath}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, sup, nil, partDir, reg, nil)
+	h := newHub(st, sup, nil, partDir, reg, nil, approvalTab, sessionTab)
 	coord := &reentrantSeedCoordinator{recordingCoord: &recordingCoord{}, hub: h}
 	h.coordinator = coord
 

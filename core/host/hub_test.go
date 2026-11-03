@@ -15,6 +15,8 @@ import (
 )
 
 func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -29,10 +31,12 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	if err := r.Add(cmd); err != nil {
 		t.Fatal(err)
 	}
-	return newHub(st, sup, nil, t.TempDir(), &r, nil)
+	return newHub(st, sup, nil, t.TempDir(), &r, nil, approvalTab, sessionTab)
 }
 
 func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -51,7 +55,7 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 		}
 	}
 	h := newHub(state.NewState(t.TempDir()+"/s.json"),
-		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher"), nil, t.TempDir(), &r, nil)
+		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher"), nil, t.TempDir(), &r, nil, approvalTab, sessionTab)
 	h.contributedKinds = contributedKinds([]contracts.Cmd{slow})
 
 	go func() { _, dispatchErr := h.Dispatch(ctx, []string{"plug", "read"}); logCleanup(dispatchErr) }()
@@ -155,16 +159,18 @@ func TestHubCloseOmitsForceWhenFalse(t *testing.T) {
 }
 
 func TestHubDispatchSetSource(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
 	o := Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude"}
-	reg, _, err := buildRegistry(ctx, Deps{}, o, st, sup, "", nil)
+	reg, _, err := buildRegistry(ctx, Deps{}, o, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, sup, nil, t.TempDir(), reg, nil)
+	h := newHub(st, sup, nil, t.TempDir(), reg, nil, approvalTab, sessionTab)
 
 	if _, err := h.Dispatch(ctx, []string{"set", "source", "--path", "/src/x"}); err != nil {
 		t.Fatal(err)
@@ -175,12 +181,14 @@ func TestHubDispatchSetSource(t *testing.T) {
 }
 
 func newTestHub(t *testing.T) *hub {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	return newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil)
+	return newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
 }
 
 func TestHubSessionsSnapshot(t *testing.T) {

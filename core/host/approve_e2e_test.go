@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,8 +24,27 @@ func (f dispatcherFunc) Dispatch(ctx context.Context, argv []string) (string, er
 }
 
 func TestHookThroughTheCommandSocket(t *testing.T) {
-	sessionTab := newSessionTable()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	approvalTab := newApprovalTable()
+	reg := newApprovalRegistry(t, approvalTab)
+	sock := startApprovalSocket(ctx, t, reg)
+
+	t.Setenv(SessionVar, "s1")
+	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git push origin master"}}`)
+	var out, errOut bytes.Buffer
+	done := runHookAsync(ctx, in, &out, &errOut, sock)
+
+	id := awaitPendingApproval(t, approvalTab, "s1")
+	if _, err := reg.Dispatch(ctx, []string{"approve", "deny", id, "--reason", "not today"}); err != nil {
+		t.Fatalf("deny: %v", err)
+	}
+	<-done
+	assertHookDeniedWithReason(t, out.Bytes(), "not today")
+}
+
+func newApprovalRegistry(t *testing.T, approvalTab *approvalTable) *cli.Registry {
+	t.Helper()
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{"sessions":[],"approvalTimeout":"3s"}`), 0o644); err != nil {
 		t.Fatalf("write state: %v", err)
@@ -40,61 +60,65 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
 	reg := &cli.Registry{}
-	if err := addApproveCommands(reg, st, nil, approvalTab, sessionTab); err != nil {
+	if err := addApproveCommands(reg, st, nil, approvalTab, newSessionTable()); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}
+	return reg
+}
 
+func startApprovalSocket(ctx context.Context, t *testing.T, reg *cli.Registry) string {
+	t.Helper()
 	sock := filepath.Join(t.TempDir(), "cmd.sock")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	go serveCommandSocket(ctx, sock, dispatcherFunc(reg.Dispatch))
 	waitForSocket(t, sock)
+	return sock
+}
 
-	t.Setenv(SessionVar, "s1")
-	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git push origin master"}}`)
-	var out, errOut bytes.Buffer
+func runHookAsync(ctx context.Context, in io.Reader, out, errOut io.Writer, sock string) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		RunPermissionHook(ctx, in, &out, &errOut, func() string { return sock }, func(c context.Context, argv []string) (string, bool, error) {
+		RunPermissionHook(ctx, in, out, errOut, func() string { return sock }, func(c context.Context, argv []string) (string, bool, error) {
 			return dispatchLiveCommand(c, sock, argv)
 		})
 	}()
+	return done
+}
 
+func awaitPendingApproval(t *testing.T, approvalTab *approvalTable, session string) string {
+	t.Helper()
 	var id string
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		for _, p := range pendingApprovals(approvalTab) {
-			if p.Session == "s1" {
+			if p.Session == session {
 				id = p.ID
 			}
 		}
 		if id != "" {
-			break
+			return id
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if id == "" {
-		t.Fatal("the hook never reached the daemon")
-	}
-	if _, err := reg.Dispatch(ctx, []string{"approve", "deny", id, "--reason", "not today"}); err != nil {
-		t.Fatalf("deny: %v", err)
-	}
-	<-done
+	t.Fatal("the hook never reached the daemon")
+	return ""
+}
 
+func assertHookDeniedWithReason(t *testing.T, raw []byte, reason string) {
+	t.Helper()
 	var got struct {
 		HookSpecificOutput struct {
 			PermissionDecision       string `json:"permissionDecision"`
 			PermissionDecisionReason string `json:"permissionDecisionReason"`
 		} `json:"hookSpecificOutput"`
 	}
-	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
-		t.Fatalf("hook output %q: %v", out.String(), err)
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("hook output %q: %v", raw, err)
 	}
 	if got.HookSpecificOutput.PermissionDecision != "deny" {
 		t.Fatalf("got %q, want deny", got.HookSpecificOutput.PermissionDecision)
 	}
-	if !strings.Contains(got.HookSpecificOutput.PermissionDecisionReason, "not today") {
+	if !strings.Contains(got.HookSpecificOutput.PermissionDecisionReason, reason) {
 		t.Fatalf("reason %q must carry what the operator typed", got.HookSpecificOutput.PermissionDecisionReason)
 	}
 }

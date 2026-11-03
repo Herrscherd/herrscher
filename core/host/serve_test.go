@@ -88,16 +88,7 @@ func TestSeedTerminalHomeWhenForeground(t *testing.T) {
 }
 
 func TestResolveInstanceID(t *testing.T) {
-	tests := []struct {
-		name        string
-		stateID     string
-		hasSessions bool
-		optID       string
-		ownerID     string
-		wantID      string
-		wantFrozen  string
-		wantErr     bool
-	}{
+	tests := []instanceIDCase{
 		{
 			name:       "fresh-state-freezes-explicit",
 			optID:      "alice",
@@ -144,29 +135,51 @@ func TestResolveInstanceID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := state.NewState(t.TempDir() + "/s.json")
-			st.InstanceID = tt.stateID
-			if tt.hasSessions {
-				if err := st.AddSession(state.Session{Name: "old", ChannelID: "c"}); err != nil {
-					t.Fatal(err)
-				}
-			}
+			st := newInstanceIDState(t, tt.stateID, tt.hasSessions)
 			got, err := resolveInstanceID(st, tt.optID, tt.ownerID, obs.NewLogger(io.Discard, slog.LevelInfo))
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantErr {
-				if st.InstanceID != tt.wantFrozen {
-					t.Fatalf("state id mutated on error: got %q want %q", st.InstanceID, tt.wantFrozen)
-				}
-				return
-			}
-			if got != tt.wantID {
-				t.Fatalf("effective id = %q, want %q", got, tt.wantID)
-			}
-			if st.InstanceID != tt.wantFrozen {
-				t.Fatalf("frozen id = %q, want %q", st.InstanceID, tt.wantFrozen)
-			}
+			assertInstanceIDOutcome(t, tt, st, got, err)
 		})
+	}
+}
+
+type instanceIDCase struct {
+	name        string
+	stateID     string
+	hasSessions bool
+	optID       string
+	ownerID     string
+	wantID      string
+	wantFrozen  string
+	wantErr     bool
+}
+
+func newInstanceIDState(t *testing.T, stateID string, hasSessions bool) *state.State {
+	t.Helper()
+	st := state.NewState(t.TempDir() + "/s.json")
+	st.InstanceID = stateID
+	if hasSessions {
+		if err := st.AddSession(state.Session{Name: "old", ChannelID: "c"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return st
+}
+
+func assertInstanceIDOutcome(t *testing.T, tt instanceIDCase, st *state.State, got string, err error) {
+	t.Helper()
+	if (err != nil) != tt.wantErr {
+		t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+	}
+	if tt.wantErr {
+		if st.InstanceID != tt.wantFrozen {
+			t.Fatalf("state id mutated on error: got %q want %q", st.InstanceID, tt.wantFrozen)
+		}
+		return
+	}
+	if got != tt.wantID {
+		t.Fatalf("effective id = %q, want %q", got, tt.wantID)
+	}
+	if st.InstanceID != tt.wantFrozen {
+		t.Fatalf("frozen id = %q, want %q", st.InstanceID, tt.wantFrozen)
 	}
 }

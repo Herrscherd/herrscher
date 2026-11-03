@@ -92,12 +92,31 @@ func TestScheduleAddThenListThenRemove(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("schedule add: %v", err)
 	}
+	assertDuplicateScheduleRefused(ctx, t, reg)
+	assertDigestListed(ctx, t, reg)
+	assertDigestPaused(ctx, t, reg, st, "pause", true)
+	assertDigestPaused(ctx, t, reg, st, "resume", false)
+	if _, err := reg.Dispatch(ctx, []string{"schedule", "rm", "--name", "digest"}); err != nil {
+		t.Fatalf("schedule rm: %v", err)
+	}
+	if got := st.SnapshotSchedules(); len(got) != 0 {
+		t.Fatalf("SnapshotSchedules = %+v, want nothing left", got)
+	}
+	assertUnknownScheduleRejected(ctx, t, reg)
+}
+
+func assertDuplicateScheduleRefused(ctx context.Context, t *testing.T, reg *cli.Registry) {
+	t.Helper()
 	if _, err := reg.Dispatch(ctx, []string{
 		"schedule", "add", "--name", "digest",
 		"--agent", "scout", "--every", "30m", "--task", "other",
 	}); err == nil {
 		t.Error("a duplicate name was accepted, want an error")
 	}
+}
+
+func assertDigestListed(ctx context.Context, t *testing.T, reg *cli.Registry) {
+	t.Helper()
 	out, err := reg.Dispatch(ctx, []string{"schedule", "list"})
 	if err != nil {
 		t.Fatalf("schedule list: %v", err)
@@ -107,24 +126,21 @@ func TestScheduleAddThenListThenRemove(t *testing.T) {
 			t.Errorf("schedule list = %q, want it to carry %q", out, want)
 		}
 	}
-	if _, err := reg.Dispatch(ctx, []string{"schedule", "pause", "--name", "digest"}); err != nil {
-		t.Fatalf("schedule pause: %v", err)
+}
+
+func assertDigestPaused(ctx context.Context, t *testing.T, reg *cli.Registry, st *state.State, verb string, wantPaused bool) {
+	t.Helper()
+	if _, err := reg.Dispatch(ctx, []string{"schedule", verb, "--name", "digest"}); err != nil {
+		t.Fatalf("schedule %s: %v", verb, err)
 	}
-	if got := st.SnapshotSchedules(); len(got) != 1 || !got[0].Paused {
-		t.Fatalf("SnapshotSchedules = %+v, want the row paused", got)
+	got := st.SnapshotSchedules()
+	if len(got) != 1 || got[0].Paused != wantPaused {
+		t.Fatalf("SnapshotSchedules = %+v, want paused=%v", got, wantPaused)
 	}
-	if _, err := reg.Dispatch(ctx, []string{"schedule", "resume", "--name", "digest"}); err != nil {
-		t.Fatalf("schedule resume: %v", err)
-	}
-	if got := st.SnapshotSchedules(); len(got) != 1 || got[0].Paused {
-		t.Fatalf("SnapshotSchedules = %+v, want the row live again", got)
-	}
-	if _, err := reg.Dispatch(ctx, []string{"schedule", "rm", "--name", "digest"}); err != nil {
-		t.Fatalf("schedule rm: %v", err)
-	}
-	if got := st.SnapshotSchedules(); len(got) != 0 {
-		t.Fatalf("SnapshotSchedules = %+v, want nothing left", got)
-	}
+}
+
+func assertUnknownScheduleRejected(ctx context.Context, t *testing.T, reg *cli.Registry) {
+	t.Helper()
 	for _, verb := range []string{"rm", "pause", "resume"} {
 		if _, err := reg.Dispatch(ctx, []string{"schedule", verb, "--name", "digest"}); err == nil {
 			t.Errorf("schedule %s on an unknown name accepted, want an error", verb)

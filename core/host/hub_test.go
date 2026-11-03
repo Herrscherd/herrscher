@@ -15,9 +15,9 @@ import (
 )
 
 func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
+	t.Helper()
 	approvalTab := newApprovalTable()
 	sessionTab := newSessionTable()
-	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -181,9 +181,9 @@ func TestHubDispatchSetSource(t *testing.T) {
 }
 
 func newTestHub(t *testing.T) *hub {
+	t.Helper()
 	approvalTab := newApprovalTable()
 	sessionTab := newSessionTable()
-	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")

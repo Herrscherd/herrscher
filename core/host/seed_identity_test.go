@@ -102,9 +102,9 @@ func (c *reentrantSeedCoordinator) Delegate(_ context.Context, req contracts.Del
 }
 
 func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contracts.Event, context.Context) {
+	t.Helper()
 	approvalTab := newApprovalTable()
 	sessionTab := newSessionTable()
-	t.Helper()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "state.json")
 	st := state.NewState(path)

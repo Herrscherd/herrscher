@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -44,13 +45,20 @@ func (m *restoreVerbMem) Unlink(_ context.Context, from, to string) error {
 }
 func (m *restoreVerbMem) Close() error { return nil }
 
-var currentRestoreMem *restoreVerbMem
+const (
+	restoreFixtureKey = "fixture"
+	restoreFixtureEnv = "HERRSCHER_TEST_RESTORE_FIXTURE"
+)
 
-func useRestoreMem(t *testing.T, m *restoreVerbMem) {
+var restoreFixtures sync.Map
+
+func useRestoreMem(t *testing.T, m *restoreVerbMem) *restoreVerbMem {
 	t.Helper()
 	registerRestoreVerbPlugin()
-	currentRestoreMem = m
-	t.Cleanup(func() { currentRestoreMem = nil })
+	restoreFixtures.Store(t.Name(), m)
+	t.Setenv(restoreFixtureEnv, t.Name())
+	t.Cleanup(func() { restoreFixtures.Delete(t.Name()) })
+	return m
 }
 
 func registerRestoreVerbPlugin() {
@@ -60,18 +68,22 @@ func registerRestoreVerbPlugin() {
 		}
 	}
 	contracts.Register(contracts.Plugin{
-		Manifest: contracts.Manifest{Kind: "fake-restore-verb", Category: contracts.CategoryMemory},
-		Memory: func(context.Context, contracts.PluginConfig) (contracts.Memory, error) {
-			if currentRestoreMem == nil {
-				return &restoreVerbMem{nodes: map[string]contracts.Node{}}, nil
+		Manifest: contracts.Manifest{
+			Kind:     "fake-restore-verb",
+			Category: contracts.CategoryMemory,
+			Config:   []contracts.Setting{{Key: restoreFixtureKey, Env: restoreFixtureEnv}},
+		},
+		Memory: func(_ context.Context, cfg contracts.PluginConfig) (contracts.Memory, error) {
+			if m, ok := restoreFixtures.Load(cfg.Settings[restoreFixtureKey]); ok {
+				return m.(*restoreVerbMem), nil
 			}
-			return currentRestoreMem, nil
+			return &restoreVerbMem{nodes: map[string]contracts.Node{}}, nil
 		},
 	})
 }
 
 func TestMemoryRestoreVerbReactivatesArchivedNode(t *testing.T) {
-	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
+	mem := useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
 		"facts/a": {Key: "facts/a", Meta: map[string]string{
 			contracts.MetaState:    contracts.StateArchived,
 			contracts.MetaLastSeen: "2020-01-01T00:00:00Z",
@@ -88,14 +100,14 @@ func TestMemoryRestoreVerbReactivatesArchivedNode(t *testing.T) {
 	if out != "restored facts/a" {
 		t.Errorf("output = %q, want %q", out, "restored facts/a")
 	}
-	got := currentRestoreMem.nodes["facts/a"]
+	got := mem.nodes["facts/a"]
 	if got.Meta[contracts.MetaState] != contracts.StateActive {
 		t.Errorf("state = %q, want active", got.Meta[contracts.MetaState])
 	}
 }
 
 func TestMemoryRestoreVerbForceDetachesMergedOriginal(t *testing.T) {
-	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
+	mem := useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
 		"facts/a": {Key: "facts/a", Meta: map[string]string{
 			orchestrator.MetaMergedInto: "facts/u",
 			contracts.MetaState:         contracts.StateArchived,
@@ -117,14 +129,14 @@ func TestMemoryRestoreVerbForceDetachesMergedOriginal(t *testing.T) {
 	if out != "restored facts/a" {
 		t.Errorf("output = %q, want %q", out, "restored facts/a")
 	}
-	got := currentRestoreMem.nodes["facts/a"]
+	got := mem.nodes["facts/a"]
 	if got.Meta[contracts.MetaState] != contracts.StateActive || got.Meta[orchestrator.MetaMergedInto] != "" {
 		t.Fatalf("force-restore did not detach: %+v", got.Meta)
 	}
 }
 
 func TestMemoryRestoreVerbBareForceDetaches(t *testing.T) {
-	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
+	mem := useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
 		"facts/a": {Key: "facts/a", Meta: map[string]string{
 			orchestrator.MetaMergedInto: "facts/u",
 			contracts.MetaState:         contracts.StateArchived,
@@ -142,14 +154,14 @@ func TestMemoryRestoreVerbBareForceDetaches(t *testing.T) {
 	if out != "restored facts/a" {
 		t.Errorf("output = %q, want %q", out, "restored facts/a")
 	}
-	got := currentRestoreMem.nodes["facts/a"]
+	got := mem.nodes["facts/a"]
 	if got.Meta[contracts.MetaState] != contracts.StateActive || got.Meta[orchestrator.MetaMergedInto] != "" {
 		t.Fatalf("bare-force restore did not detach: %+v", got.Meta)
 	}
 }
 
 func TestMemoryUnlinkVerbDispatchesToMemory(t *testing.T) {
-	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{}})
+	mem := useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{}})
 	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
@@ -161,8 +173,8 @@ func TestMemoryUnlinkVerbDispatchesToMemory(t *testing.T) {
 	if out != "unlinked facts/a -> facts/b" {
 		t.Errorf("output = %q, want %q", out, "unlinked facts/a -> facts/b")
 	}
-	if currentRestoreMem.lastUnlink != [2]string{"facts/a", "facts/b"} {
-		t.Errorf("Unlink not dispatched, got %+v", currentRestoreMem.lastUnlink)
+	if mem.lastUnlink != [2]string{"facts/a", "facts/b"} {
+		t.Errorf("Unlink not dispatched, got %+v", mem.lastUnlink)
 	}
 }
 

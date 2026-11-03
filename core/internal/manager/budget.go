@@ -38,9 +38,6 @@ type SessionBudgetGate struct {
 	h *Handler
 }
 
-// BudgetGate returns a gate bound to this handler's session store + transcript
-// dir. The returned *SessionBudgetGate satisfies host's (private) budgetGate
-// interface structurally via Check.
 type sessionUsage struct {
 	cost   float64
 	tokens uint64
@@ -54,6 +51,7 @@ type BudgetCheck struct {
 }
 
 // BudgetGate returns the gate the host consults to check live sessions against their caps.
+// BudgetGate returns the budget gate of this handler's sessions.
 func (h *Handler) BudgetGate() *SessionBudgetGate { return &SessionBudgetGate{h: h} }
 
 func (g *SessionBudgetGate) usageFor(s state.Session) sessionUsage {

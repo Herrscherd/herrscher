@@ -14,7 +14,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// Registry collects commands and dispatches argv to them.
 var (
 	errEmptyPath        = errors.New("cli: command with empty path")
 	errDuplicateCommand = errors.New("cli: duplicate command")

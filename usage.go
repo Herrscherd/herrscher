@@ -75,5 +75,5 @@ func usage() {
 		"  " + hint.Render("     `herrscher init` pose ces trois questions, pas besoin de les écrire à la main"),
 	}
 
-	_, _ = fmt.Fprintln(os.Stderr, strings.Join(blocks, "\n"))
+	fmt.Fprintln(os.Stderr, strings.Join(blocks, "\n"))
 }

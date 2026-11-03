@@ -467,11 +467,11 @@ func run(ctx context.Context, errOut *errwriter.Writer, dir, name string, args .
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	var line strings.Builder
-	_, _ = line.WriteString("+ ")
-	_, _ = line.WriteString(name)
+	line.WriteString("+ ")
+	line.WriteString(name)
 	for _, arg := range args {
 		_ = line.WriteByte(' ')
-		_, _ = line.WriteString(arg)
+		line.WriteString(arg)
 	}
 	errOut.Println(line.String())
 	if err := cmd.Run(); err != nil {

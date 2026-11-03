@@ -41,7 +41,7 @@ func currentRoute() routeCurrent {
 func routeStep(sty style, input *bufio.Reader, cat catalogFn, cur routeCurrent, askModel bool) (map[string]string, error) {
 	out := make(map[string]string)
 
-	_, _ = fmt.Fprintf(os.Stderr, "\n  %s  %s\n", sty.wrap(sty.bold+sty.cyan, "routing"), sty.wrap(sty.dim, "where agent turns run"))
+	fmt.Fprintf(os.Stderr, "\n  %s  %s\n", sty.wrap(sty.bold+sty.cyan, "routing"), sty.wrap(sty.dim, "where agent turns run"))
 	policy, err := choosePolicy(sty, input, cur.policy)
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func routeStep(sty style, input *bufio.Reader, cat catalogFn, cur routeCurrent, 
 	}
 
 	if !askModel {
-		_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, "default model: run `herrscher init` again after the rebuild to pick one"))
+		fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, "default model: run `herrscher init` again after the rebuild to pick one"))
 		return out, nil
 	}
 
@@ -73,7 +73,7 @@ func routeStep(sty style, input *bufio.Reader, cat catalogFn, cur routeCurrent, 
 	}
 	out[host.EnvDefaultModel] = model
 	if model == "" && policy == contracts.PolicyGatewayOnly {
-		_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.red, "with no default model, every `session create` must pass --model, which gateway-only requires"))
+		fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.red, "with no default model, every `session create` must pass --model, which gateway-only requires"))
 	}
 	return out, nil
 }
@@ -94,14 +94,14 @@ func policyChoices() []struct {
 }
 
 func choosePolicy(sty style, input *bufio.Reader, cur contracts.RoutePolicy) (contracts.RoutePolicy, error) {
-	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, "route policy"))
+	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, "route policy"))
 	for idx, choice := range policyChoices() {
 		name, tag := fmt.Sprintf("%-14s", choice.label), fmt.Sprintf("%-8s", "")
 		if choice.policy == cur {
 			name = sty.wrap(sty.green, name)
 			tag = sty.wrap(sty.dim, fmt.Sprintf("%-8s", "current"))
 		}
-		_, _ = fmt.Fprintf(os.Stderr, "    %s %s %s %s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), name, tag, sty.wrap(sty.dim, choice.help))
+		fmt.Fprintf(os.Stderr, "    %s %s %s %s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), name, tag, sty.wrap(sty.dim, choice.help))
 	}
 
 	ans := promptLine(input, "  "+sty.wrap(sty.dim, "›")+" ")
@@ -127,7 +127,7 @@ func askGatewayCreds(sty style, input *bufio.Reader, have bool) (map[string]stri
 	if have {
 		note = "already set: enter to keep"
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "  %s  %s\n", sty.wrap(sty.bold, "gateway · credentials"), sty.wrap(sty.dim, "("+note+"; token entry is hidden)"))
+	fmt.Fprintf(os.Stderr, "  %s  %s\n", sty.wrap(sty.bold, "gateway · credentials"), sty.wrap(sty.dim, "("+note+"; token entry is hidden)"))
 
 	url := promptLine(input, secretLabel(sty, host.EnvGatewayURL))
 	token, err := readSecret(input, secretLabel(sty, host.EnvGatewayToken))
@@ -149,18 +149,18 @@ func askGatewayCreds(sty style, input *bufio.Reader, have bool) (map[string]stri
 
 func chooseDefaultModel(sty style, input *bufio.Reader, entries []host.CatalogEntry, cur string) (string, error) {
 	if len(entries) == 0 {
-		_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, "default model: no compiled backend offers one under this policy"))
+		fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, "default model: no compiled backend offers one under this policy"))
 		return "", nil
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, "default model"))
+	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, "default model"))
 	for idx, entry := range entries {
 		padded, tag := fmt.Sprintf("%-24s", entry.ID), ""
 		if entry.ID == cur {
 			padded, tag = sty.wrap(sty.green, padded), sty.wrap(sty.dim, "  current")
 		}
-		_, _ = fmt.Fprintf(os.Stderr, "    %s %s %s%s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), padded, sty.wrap(sty.dim, entry.Label), tag)
+		fmt.Fprintf(os.Stderr, "    %s %s %s%s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), padded, sty.wrap(sty.dim, entry.Label), tag)
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "    %s %s\n", sty.wrap(sty.dim, strconv.Itoa(len(entries)+1)), "none")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", sty.wrap(sty.dim, strconv.Itoa(len(entries)+1)), "none")
 
 	ans := promptLine(input, "  "+sty.wrap(sty.dim, "›")+" ")
 	switch ans {

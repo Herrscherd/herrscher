@@ -31,7 +31,6 @@ const (
 	frontendCloseWait    = 2 * time.Second
 )
 
-// ChannelID is the default conversation id used by the terminal gateway.
 var (
 	errNoSessionControl         = errors.New("no session control")
 	errNotAvailableFromTerminal = errors.New("is not available from the terminal")
@@ -313,9 +312,9 @@ func (t *Terminal) React(context.Context, contracts.Conversation, contracts.Mess
 // Menu prints the prompt and its numbered choices as a status line in the conversation.
 func (t *Terminal) Menu(_ context.Context, conv contracts.Conversation, _ contracts.MessageID, prompt string, opts []contracts.Choice) error {
 	var text strings.Builder
-	_, _ = text.WriteString(prompt)
+	text.WriteString(prompt)
 	for _, o := range opts {
-		_, _ = text.WriteString("\n  • " + o.Value + ": " + o.Label)
+		text.WriteString("\n  • " + o.Value + ": " + o.Label)
 	}
 	t.EmitTo(conv, contracts.Event{T: eventStatus, Text: text.String()})
 	return nil

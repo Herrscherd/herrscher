@@ -57,7 +57,7 @@ func TestTheEnvFileServePassesLeavesNoGatewayKeyBehind(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "herrscher.env")
 	var body strings.Builder
 	for _, k := range keys {
-		_, _ = body.WriteString(k + "=s3cret\n")
+		body.WriteString(k + "=s3cret\n")
 	}
 	if err := os.WriteFile(path, []byte(body.String()), 0o600); err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func TestTheProductionSequenceStillResolvesEveryDeclaredGatewaySetting(t *testin
 	path := filepath.Join(t.TempDir(), "herrscher.env")
 	var body strings.Builder
 	for _, k := range keys {
-		_, _ = body.WriteString(k + "=s3cret\n")
+		body.WriteString(k + "=s3cret\n")
 	}
 	if err := os.WriteFile(path, []byte(body.String()), 0o600); err != nil {
 		t.Fatal(err)

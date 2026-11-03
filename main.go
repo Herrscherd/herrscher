@@ -67,7 +67,7 @@ func run() int {
 
 	if task, ok := promptOf(cmd, args); ok {
 		if task.Text == "" {
-			_, _ = fmt.Fprintf(os.Stderr, "herrscher: %s needs a task, e.g. herrscher %s refactor\n", cmd, cmd)
+			fmt.Fprintf(os.Stderr, "herrscher: %s needs a task, e.g. herrscher %s refactor\n", cmd, cmd)
 			return exitUsage
 		}
 		return reportError(runPrompt(ctx, task))
@@ -123,7 +123,7 @@ func loadHostEnv() error {
 		if explicit {
 			return err
 		}
-		_, _ = fmt.Fprintln(os.Stderr, "herrscher: "+err.Error()+" (continuing)")
+		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error()+" (continuing)")
 	}
 	return nil
 }
@@ -133,7 +133,7 @@ func runWithoutCommand(ctx context.Context) error {
 		return runServe(ctx, nil, nil)
 	}
 	usage()
-	return exitStatus{code: exitUsage}
+	return exitStatusError{code: exitUsage}
 }
 
 func runManageCmd(cmd string, args []string) (int, bool) {
@@ -191,9 +191,9 @@ func runCommand(ctx context.Context, cmd string, args []string) error {
 func runForwarded(ctx context.Context, cmd string, args []string) error {
 	out, code, derr := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
 	if code != 0 {
-		_, _ = fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
+		fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
 		usage()
-		return exitStatus{code: code}
+		return exitStatusError{code: code}
 	}
 	if derr != nil {
 		return derr
@@ -205,11 +205,11 @@ func runForwarded(ctx context.Context, cmd string, args []string) error {
 	return err
 }
 
-type exitStatus struct {
+type exitStatusError struct {
 	code int
 }
 
-func (s exitStatus) Error() string {
+func (s exitStatusError) Error() string {
 	return fmt.Sprintf("exit status %d", s.code)
 }
 
@@ -217,11 +217,11 @@ func reportError(err error) int {
 	if err == nil {
 		return 0
 	}
-	var status exitStatus
+	var status exitStatusError
 	if errors.As(err, &status) {
 		return status.code
 	}
-	_, _ = fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
+	fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
 	return 1
 }
 

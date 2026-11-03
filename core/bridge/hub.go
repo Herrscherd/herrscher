@@ -73,7 +73,7 @@ const hubDialInterval = 100 * time.Millisecond
 func dialHub(ctx context.Context, path string) (*control.Conn, error) {
 	deadline := time.Now().Add(hubDialWindow)
 	for {
-		conn, err := control.Dial(path)
+		conn, err := control.DialContext(ctx, path)
 		if err == nil {
 			return conn, nil
 		}

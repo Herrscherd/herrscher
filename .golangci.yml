@@ -242,6 +242,9 @@ linters:
       - path: ^plugins/terminal/(terminal|tui/tui)\.go$
         linters: [containedctx]
         text: "found a struct that contains a context.Context field"
+      - path: ^core/internal/supervisor/supervisor\.go$
+        linters: [containedctx]
+        text: "found a struct that contains a context.Context field"
       - path: ^manage/(manage|seam|version)\.go$
         linters: [gosec]
         text: "^G204:"

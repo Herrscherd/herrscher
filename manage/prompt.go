@@ -65,7 +65,7 @@ func chooseEveryCategory(sty style, input *bufio.Reader, choices map[string]stri
 }
 
 func promptDiscordSecrets(sty style, input *bufio.Reader, secrets map[string]string) error {
-	_, _ = fmt.Fprintf(os.Stderr, "  %s  %s\n", sty.wrap(sty.bold+sty.cyan, "discord · secrets"), sty.wrap(sty.dim, "(token entry is hidden)"))
+	fmt.Fprintf(os.Stderr, "  %s  %s\n", sty.wrap(sty.bold+sty.cyan, "discord · secrets"), sty.wrap(sty.dim, "(token entry is hidden)"))
 	tok, err := readSecret(input, secretLabel(sty, "DISCORD_BOT_TOKEN"))
 	if err != nil {
 		return err
@@ -94,7 +94,7 @@ func chooseKind(sty style, input *bufio.Reader, cat string) (string, error) {
 	sort.Strings(kinds)
 	def := defaultStack()[cat]
 
-	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, cat))
+	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, cat))
 	for idx, kind := range kinds {
 		name := kind
 		tag := ""
@@ -102,9 +102,9 @@ func chooseKind(sty style, input *bufio.Reader, cat string) (string, error) {
 			name = sty.wrap(sty.green, kind)
 			tag = sty.wrap(sty.dim, "  default")
 		}
-		_, _ = fmt.Fprintf(os.Stderr, "    %s %s%s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), name, tag)
+		fmt.Fprintf(os.Stderr, "    %s %s%s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), name, tag)
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "    %s %s\n", sty.wrap(sty.dim, strconv.Itoa(len(kinds)+1)), "none")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", sty.wrap(sty.dim, strconv.Itoa(len(kinds)+1)), "none")
 
 	ans := promptLine(input, "  "+sty.wrap(sty.dim, "›")+" ")
 	switch ans {
@@ -130,7 +130,7 @@ func chooseKind(sty style, input *bufio.Reader, cat string) (string, error) {
 
 func promptLine(input *bufio.Reader, msg string) string {
 	if msg != "" {
-		_, _ = fmt.Fprint(os.Stderr, msg)
+		fmt.Fprint(os.Stderr, msg)
 	}
 	line, err := input.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {

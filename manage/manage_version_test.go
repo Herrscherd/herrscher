@@ -13,11 +13,11 @@ func hostDir(t *testing.T, modules ...string) string {
 	t.Helper()
 	dir := t.TempDir()
 	var b strings.Builder
-	_, _ = b.WriteString("package main\n\nimport (\n\t" + beginMarker + "\n")
+	b.WriteString("package main\n\nimport (\n\t" + beginMarker + "\n")
 	for _, m := range modules {
-		_, _ = b.WriteString(importLine(m) + "\n")
+		b.WriteString(importLine(m) + "\n")
 	}
-	_, _ = b.WriteString("\t" + endMarker + "\n)\n")
+	b.WriteString("\t" + endMarker + "\n)\n")
 	write := func(name, body string) {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)

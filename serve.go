@@ -119,7 +119,7 @@ func lockOrAttach(ctx context.Context, statePath, instanceID string, open *openW
 		if aerr == nil {
 			return nil, true, nil
 		}
-		_, _ = fmt.Fprintf(os.Stderr, "herrscher: could not attach to the running daemon: %v\n", aerr)
+		fmt.Fprintf(os.Stderr, "herrscher: could not attach to the running daemon: %v\n", aerr)
 	}
 	return nil, false, err
 }
@@ -130,7 +130,7 @@ func startGateways(ctx context.Context) ([]host.Deps, contracts.Foreground, []co
 		return nil, nil, nil, err
 	}
 	for _, f := range hub.Unconfigured() {
-		_, _ = fmt.Fprintln(os.Stderr, "herrscher: gateway not configured, skipping: "+f)
+		fmt.Fprintln(os.Stderr, "herrscher: gateway not configured, skipping: "+f)
 	}
 	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, wait time.Duration) {
 		for _, f := range failures {
@@ -138,7 +138,7 @@ func startGateways(ctx context.Context) ([]host.Deps, contracts.Foreground, []co
 		}
 	})
 	for _, f := range hub.Failures() {
-		_, _ = fmt.Fprintln(os.Stderr, "herrscher: gateway unavailable: "+f)
+		fmt.Fprintln(os.Stderr, "herrscher: gateway unavailable: "+f)
 	}
 	var raw []host.Deps
 	for _, kind := range hub.Kinds() {
@@ -290,7 +290,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 		if _, err := host.DaemonDispatch(ctx, instance, createTaskSession(ctx, name)); err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintln(os.Stderr, "session: "+name)
+		fmt.Fprintln(os.Stderr, "session: "+name)
 		return runAttached(ctx, instance, tui.OpenOn(name, text))
 	}
 	unlock()
@@ -301,7 +301,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 	if _, err := reg.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(os.Stderr, "session: "+name)
+	fmt.Fprintln(os.Stderr, "session: "+name)
 	return runServe(ctx, nil, &openWindow{session: name, text: text})
 }
 

@@ -16,12 +16,12 @@ type promptDecider struct {
 func newPromptDecider(in *bufio.Reader, s style) decider { return promptDecider{in: in, s: s} }
 
 func (p promptDecider) Warn(_ context.Context, findings []string) Decision {
-	_, _ = fmt.Fprintf(os.Stderr, "\n  %s\n", p.s.wrap(p.s.bold, "before writing"))
+	fmt.Fprintf(os.Stderr, "\n  %s\n", p.s.wrap(p.s.bold, "before writing"))
 	if len(findings) == 0 {
-		_, _ = fmt.Fprintf(os.Stderr, "    %s nothing known against this change\n", p.s.wrap(p.s.dim, "·"))
+		fmt.Fprintf(os.Stderr, "    %s nothing known against this change\n", p.s.wrap(p.s.dim, "·"))
 	}
 	for _, f := range findings {
-		_, _ = fmt.Fprintf(os.Stderr, "    %s %s\n", p.s.wrap(p.s.red, "!"), f)
+		fmt.Fprintf(os.Stderr, "    %s %s\n", p.s.wrap(p.s.red, "!"), f)
 	}
 	if p.yes("proceed?", true) {
 		return Proceed
@@ -30,9 +30,9 @@ func (p promptDecider) Warn(_ context.Context, findings []string) Decision {
 }
 
 func (p promptDecider) Failed(_ context.Context, buildOutput string) Decision {
-	_, _ = fmt.Fprintf(os.Stderr, "\n  %s\n", p.s.wrap(p.s.bold+p.s.red, "the composition does not build"))
+	fmt.Fprintf(os.Stderr, "\n  %s\n", p.s.wrap(p.s.bold+p.s.red, "the composition does not build"))
 	for _, line := range strings.Split(strings.TrimRight(buildOutput, "\n"), "\n") {
-		_, _ = fmt.Fprintf(os.Stderr, "    %s\n", p.s.wrap(p.s.dim, line))
+		fmt.Fprintf(os.Stderr, "    %s\n", p.s.wrap(p.s.dim, line))
 	}
 	if p.yes("restore the tree as it was?", true) {
 		return Restore

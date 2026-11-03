@@ -17,9 +17,20 @@ import (
 
 type hostPlacer struct {
 	st            *state.State
-	instanceID    string
 	local         *worktree.Worktreer
 	sourceVersion func() string
+	newRemote     func(runner.SSH, string) *worktree.Remote
+}
+
+func newHostPlacer(ctx context.Context, st *state.State, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
+	return hostPlacer{
+		st:            st,
+		local:         local,
+		sourceVersion: sourceVersion,
+		newRemote: func(r runner.SSH, bin string) *worktree.Remote {
+			return worktree.NewRemote(ctx, r, bin, instanceID)
+		},
+	}
 }
 
 func (p hostPlacer) resolve(name string) (state.Host, *worktree.Remote, error) {
@@ -28,10 +39,10 @@ func (p hostPlacer) resolve(name string) (state.Host, *worktree.Remote, error) {
 		return state.Host{}, nil, unknownHost(p.st, name)
 	}
 	if h.Bin == "" {
-		return state.Host{}, nil, fmt.Errorf("host %q is not provisioned: run `host provision %s`", name, name)
+		return state.Host{}, nil, &hostNotProvisionedError{Name: name}
 	}
 	r := runner.SSH{Target: h.SSH, ControlPath: runner.ControlPathFor(h.SSH)}
-	return h, worktree.NewRemote(r, h.Bin, p.instanceID), nil
+	return h, p.newRemote(r, h.Bin), nil
 }
 
 func (p hostPlacer) Ready(name string) error {
@@ -46,7 +57,7 @@ func (p hostPlacer) Ready(name string) error {
 		return nil
 	}
 	if want := p.sourceVersion(); want != "" && h.Version != want {
-		return fmt.Errorf("host %q runs herrscher %s but this daemon builds %s: run `host provision %s`", name, h.Version, want, name)
+		return &hostVersionMismatchError{Name: name, Have: h.Version, Want: want}
 	}
 	return nil
 }
@@ -104,7 +115,7 @@ func (p hostPlacer) EnsureProject(ctx context.Context, name, project, repo strin
 		return err
 	}
 	run := runnerFor(h)
-	if _, err := capture(ctx, run, "test", "-d", repo+"/.git"); err == nil {
+	if _, captureErr := capture(ctx, run, "test", "-d", repo+"/.git"); captureErr == nil {
 		return nil
 	}
 	origin, err := originOf(ctx, filepath.Join(p.st.WorkspaceRoot(), project))
@@ -126,11 +137,11 @@ func originOf(ctx context.Context, dir string) (string, error) {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("read origin of %s: %s", dir, msg)
+		return "", &originReadError{Dir: dir, Msg: msg}
 	}
 	url := strings.TrimSpace(stdout.String())
 	if url == "" {
-		return "", fmt.Errorf("%s has no origin remote", dir)
+		return "", &noOriginError{Dir: dir}
 	}
 	return url, nil
 }

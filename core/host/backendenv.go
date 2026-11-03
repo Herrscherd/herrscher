@@ -45,8 +45,8 @@ func captureGatewayCreds(getenv func(string) string, unsetenv func(string) error
 		capturedGateway.url, capturedGateway.token = getenv(EnvGatewayURL), getenv(EnvGatewayToken)
 		capturedGateway.captured = true
 	}
-	_ = unsetenv(EnvGatewayURL)
-	_ = unsetenv(EnvGatewayToken)
+	logCleanup(unsetenv(EnvGatewayURL))
+	logCleanup(unsetenv(EnvGatewayToken))
 }
 
 // GatewayEnvPairs returns the captured pair as KEY=VALUE entries, for the
@@ -74,7 +74,7 @@ func gatewayEnvFor(vendor string, creds contracts.GatewayCreds, modelArg string)
 			contracts.EnvAnthropicAPIKey:  creds.Token(),
 			"ANTHROPIC_MODEL":             modelArg,
 		}
-	case "codex":
+	case backendCodex:
 		return map[string]string{
 			contracts.EnvOpenAIBaseURL: creds.BaseURL(),
 			contracts.EnvNeubloxToken:  creds.Token(),
@@ -96,7 +96,7 @@ func loadGatewayCreds(getenv func(string) string) (contracts.GatewayCreds, error
 
 func spawnEnvFor(e CatalogEntry, getenv func(string) string) (map[string]string, error) {
 	if e.Route != contracts.RouteGateway {
-		return nil, nil
+		return make(map[string]string), nil
 	}
 	creds, err := loadGatewayCreds(getenv)
 	if err != nil {
@@ -104,7 +104,7 @@ func spawnEnvFor(e CatalogEntry, getenv func(string) string) (map[string]string,
 	}
 	env := gatewayEnvFor(e.Vendor, creds, e.Arg)
 	if len(env) == 0 {
-		return nil, fmt.Errorf("model %q is routed through the gateway but backend %q cannot be redirected", e.ID, e.Vendor)
+		return nil, &modelNotRedirectableError{Model: e.ID, Backend: e.Vendor}
 	}
 	return env, nil
 }

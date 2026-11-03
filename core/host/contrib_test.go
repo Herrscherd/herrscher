@@ -74,7 +74,7 @@ func TestSamePathFromTwoPluginsBothLand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("two distinct plugins must not collide: %v", err)
 	}
-	got := map[string]bool{}
+	got := make(map[string]bool)
 	for _, c := range cmds {
 		got[strings.Join(c.Path, " ")] = true
 	}
@@ -133,8 +133,8 @@ func TestContributedCommandDispatches(t *testing.T) {
 		t.Fatalf("collect: %v", err)
 	}
 	for _, c := range cmds {
-		if err := reg.Add(c); err != nil {
-			t.Fatalf("add: %v", err)
+		if addErr := reg.Add(c); addErr != nil {
+			t.Fatalf("add: %v", addErr)
 		}
 	}
 	out, err := reg.Dispatch(context.Background(), []string{"alpha", "channel", "read"})

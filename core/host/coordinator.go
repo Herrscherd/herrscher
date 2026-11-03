@@ -56,8 +56,8 @@ type coordinator struct {
 func newCoordinator(creator sessionCreator, agents agentLookup, wt cleanBrancher, sessions sessionLister, closer sessionCloser, seed func(string, string) bool) *coordinator {
 	return &coordinator{
 		creator: creator, agents: agents, wt: wt, sessions: sessions, closer: closer, seed: seed,
-		reported: map[string]map[string]bool{},
-		expected: map[string]int{},
+		reported: make(map[string]map[string]bool),
+		expected: make(map[string]int),
 	}
 }
 
@@ -99,7 +99,7 @@ func (c *coordinator) CoordinationView(name string) (CoordinationView, bool) {
 	c.mu.Unlock()
 	if hasReported || hasExpected {
 		return CoordinationView{
-			Role:     "lead",
+			Role:     roleLead,
 			Lead:     name,
 			Reported: reportedCount,
 			Expected: expected,
@@ -107,13 +107,14 @@ func (c *coordinator) CoordinationView(name string) (CoordinationView, bool) {
 		}, true
 	}
 	if sess, ok := c.findSession(name); ok && sess.Parent != "" {
-		return CoordinationView{Role: "worker", Lead: sess.Parent}, true
+		return CoordinationView{Role: roleWorker, Lead: sess.Parent}, true
 	}
 	return CoordinationView{}, false
 }
 
 func findByName(sessions []state.Session, name string) (state.Session, bool) {
-	for _, s := range sessions {
+	for idx := range sessions {
+		s := sessions[idx]
 		if s.Name == name {
 			return s, true
 		}
@@ -123,7 +124,8 @@ func findByName(sessions []state.Session, name string) (state.Session, bool) {
 
 func childCount(sessions []state.Session, parent string) int {
 	n := 0
-	for _, s := range sessions {
+	for idx := range sessions {
+		s := sessions[idx]
 		if s.Parent == parent {
 			n++
 		}
@@ -133,14 +135,14 @@ func childCount(sessions []state.Session, parent string) int {
 
 func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, task, parent, vendor, cmd string) (string, error) {
 	if from.Worktree == "" {
-		return "", fmt.Errorf("coordination: source session %q has no isolated worktree to continue", from.Name)
+		return "", fmt.Errorf("coordination: %w", &noIsolatedWorktreeError{Session: from.Name})
 	}
 	clean, err := c.wt.IsCleanAt(ctx, from.Worktree)
 	if err != nil {
 		return "", fmt.Errorf("coordination: %w", err)
 	}
 	if !clean {
-		return "", fmt.Errorf("coordination refused: session %q has uncommitted changes; commit first", from.Name)
+		return "", fmt.Errorf("coordination refused: %w", &uncommittedError{Role: roleSession, Name: from.Name})
 	}
 
 	base := from.Name + "-" + toAgent
@@ -154,7 +156,7 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 			break
 		}
 		if n > maxSpawnNameProbes {
-			return "", fmt.Errorf("coordination: no free session name for %q after %d tries", base, maxSpawnNameProbes)
+			return "", fmt.Errorf("coordination: %w", &freeNameExhaustedError{Base: base, Tries: maxSpawnNameProbes})
 		}
 		bName = fmt.Sprintf("%s-%d", base, n)
 	}
@@ -170,19 +172,20 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 		return "", fmt.Errorf("coordination: create %q: %w", bName, err)
 	}
 	if !c.seedWithRetry(ctx, bName, task) {
-		_, _ = c.closer.Close(context.WithoutCancel(ctx), bName, true)
-		return "", fmt.Errorf("coordination: session %q created but seeding timed out; rolled back", bName)
+		_, rollbackErr := c.closer.Close(context.WithoutCancel(ctx), bName, true)
+		logCleanup(rollbackErr)
+		return "", fmt.Errorf("coordination: %w", &seedTimedOutError{Session: bName})
 	}
 	return bName, nil
 }
 
 func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest) (string, error) {
 	if _, ok := c.agents.Get(req.ToAgent); !ok {
-		return "", fmt.Errorf("handoff: unknown agent %q", req.ToAgent)
+		return "", fmt.Errorf("handoff: %w", &UnknownError{Kind: kindAgent, Name: req.ToAgent})
 	}
 	from, ok := c.findSession(req.FromSession)
 	if !ok {
-		return "", fmt.Errorf("handoff: source session %q not found", req.FromSession)
+		return "", fmt.Errorf("handoff: %w", &NotFoundError{Kind: kindSession, Name: req.FromSession})
 	}
 	return c.spawn(ctx, from, req.ToAgent, req.Task, "", "", "")
 }
@@ -190,11 +193,11 @@ func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest)
 func (c *coordinator) Delegate(ctx context.Context, req contracts.DelegateRequest) (string, error) {
 	target, ok := c.agents.Get(req.ToAgent)
 	if !ok {
-		return "", fmt.Errorf("delegate: unknown agent %q", req.ToAgent)
+		return "", fmt.Errorf("delegate: %w", &UnknownError{Kind: kindAgent, Name: req.ToAgent})
 	}
 	from, ok := c.findSession(req.FromSession)
 	if !ok {
-		return "", fmt.Errorf("delegate: lead session %q not found", req.FromSession)
+		return "", fmt.Errorf("delegate: %w", &NotFoundError{Kind: kindLead, Name: req.FromSession})
 	}
 	vendor, cmd := "", ""
 	if target.Backend == "" {
@@ -210,32 +213,32 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	sessions := c.sessions.SnapshotSessions()
 	from, ok := findByName(sessions, req.FromSession)
 	if !ok {
-		return "", fmt.Errorf("report: unknown worker %q", req.FromSession)
+		return "", fmt.Errorf("report: %w", &UnknownError{Kind: kindWorker, Name: req.FromSession})
 	}
 	if from.Parent == "" {
-		return "", fmt.Errorf("report: session %q has no parent; nothing to deliver", req.FromSession)
+		return "", fmt.Errorf("report: %w", &noParentError{Session: req.FromSession})
 	}
 	clean, err := c.wt.IsCleanAt(ctx, from.Worktree)
 	if err != nil {
 		return "", fmt.Errorf("report: %w", err)
 	}
 	if !clean {
-		return "", fmt.Errorf("report refused: session %q has uncommitted changes; commit first", req.FromSession)
+		return "", fmt.Errorf("report refused: %w", &uncommittedError{Role: roleSession, Name: req.FromSession})
 	}
 	if _, ok := findByName(sessions, from.Parent); !ok {
-		return "", fmt.Errorf("report: parent %q of %q not found", from.Parent, req.FromSession)
+		return "", fmt.Errorf("report: %w", &NotFoundError{Kind: "parent", Name: from.Parent})
 	}
 
 	c.mu.Lock()
 	if c.reported[from.Parent] == nil {
-		c.reported[from.Parent] = map[string]bool{}
+		c.reported[from.Parent] = make(map[string]bool)
 	}
 	c.reported[from.Parent][req.FromSession] = true
 	done := len(c.reported[from.Parent])
 	sealed, isSealed := c.expected[from.Parent]
 	c.mu.Unlock()
 
-	total := 0
+	var total int
 	if isSealed {
 		total = sealed
 	} else {
@@ -252,7 +255,7 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 		}
 	}
 	if !c.seedWithRetry(ctx, from.Parent, msg) {
-		return "", fmt.Errorf("report: delivery to parent %q timed out", from.Parent)
+		return "", fmt.Errorf("report: %w", &deliveryTimeoutError{Role: "parent", Name: from.Parent})
 	}
 	return from.Parent, nil
 }
@@ -261,28 +264,28 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 	sessions := c.sessions.SnapshotSessions()
 	lead, ok := findByName(sessions, req.FromSession)
 	if !ok {
-		return "", fmt.Errorf("merge: lead %q not found", req.FromSession)
+		return "", fmt.Errorf("merge: %w", &NotFoundError{Kind: kindLead, Name: req.FromSession})
 	}
 	worker, ok := findByName(sessions, req.Worker)
 	if !ok {
-		return "", fmt.Errorf("merge: worker %q not found", req.Worker)
+		return "", fmt.Errorf("merge: %w", &NotFoundError{Kind: kindWorker, Name: req.Worker})
 	}
 	if worker.Parent != req.FromSession {
-		return "", fmt.Errorf("merge refused: %q is not a worker of %q", req.Worker, req.FromSession)
+		return "", fmt.Errorf("merge refused: %w", &notAWorkerError{Worker: req.Worker, Lead: req.FromSession})
 	}
 	wClean, err := c.wt.IsCleanAt(ctx, worker.Worktree)
 	if err != nil {
 		return "", fmt.Errorf("merge: %w", err)
 	}
 	if !wClean {
-		return "", fmt.Errorf("merge refused: worker %q has uncommitted changes; commit first", req.Worker)
+		return "", fmt.Errorf("merge refused: %w", &uncommittedError{Role: roleWorker, Name: req.Worker})
 	}
 	lClean, err := c.wt.IsCleanAt(ctx, lead.Worktree)
 	if err != nil {
 		return "", fmt.Errorf("merge: %w", err)
 	}
 	if !lClean {
-		return "", fmt.Errorf("merge refused: lead %q has uncommitted changes; commit first", req.FromSession)
+		return "", fmt.Errorf("merge refused: %w", &uncommittedError{Role: roleLead, Name: req.FromSession})
 	}
 
 	outcome, conflicts, err := c.wt.MergeInto(ctx, lead.Worktree, c.wt.Branch(req.Worker))
@@ -300,22 +303,22 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 			req.Worker, strings.Join(conflicts, ", "))
 	}
 	if !c.seedWithRetry(ctx, req.FromSession, msg) {
-		return "", fmt.Errorf("merge: delivery to lead %q timed out", req.FromSession)
+		return "", fmt.Errorf("merge: %w", &deliveryTimeoutError{Role: roleLead, Name: req.FromSession})
 	}
 	return req.FromSession, nil
 }
 
-func (c *coordinator) Seal(ctx context.Context, req contracts.SealRequest) (string, error) {
+func (c *coordinator) Seal(_ context.Context, req contracts.SealRequest) (string, error) {
 	sessions := c.sessions.SnapshotSessions()
 	if _, ok := findByName(sessions, req.FromSession); !ok {
-		return "", fmt.Errorf("seal: lead %q not found", req.FromSession)
+		return "", fmt.Errorf("seal: %w", &NotFoundError{Kind: kindLead, Name: req.FromSession})
 	}
 	if req.Expected <= 0 {
-		return "", fmt.Errorf("seal refused: expected must be > 0")
+		return "", errSealExpectedPositive
 	}
 	cohort := childCount(sessions, req.FromSession)
 	if req.Expected < cohort {
-		return "", fmt.Errorf("seal refused: expected %d below current cohort size %d", req.Expected, cohort)
+		return "", fmt.Errorf("seal refused: %w", &sealBelowCohortError{Expected: req.Expected, Cohort: cohort})
 	}
 	c.mu.Lock()
 	c.expected[req.FromSession] = req.Expected
@@ -325,15 +328,15 @@ func (c *coordinator) Seal(ctx context.Context, req contracts.SealRequest) (stri
 
 func (c *coordinator) FanOut(ctx context.Context, req contracts.FanOutRequest) ([]string, error) {
 	if _, ok := c.agents.Get(req.ToAgent); !ok {
-		return nil, fmt.Errorf("fanout: unknown agent %q", req.ToAgent)
+		return nil, fmt.Errorf("fanout: %w", &UnknownError{Kind: kindAgent, Name: req.ToAgent})
 	}
 	sessions := c.sessions.SnapshotSessions()
 	lead, ok := findByName(sessions, req.FromSession)
 	if !ok {
-		return nil, fmt.Errorf("fanout: lead %q not found", req.FromSession)
+		return nil, fmt.Errorf("fanout: %w", &NotFoundError{Kind: kindLead, Name: req.FromSession})
 	}
 	if len(req.Tasks) == 0 {
-		return nil, fmt.Errorf("fanout: no tasks")
+		return nil, errFanoutNoTasks
 	}
 	preexisting := childCount(sessions, req.FromSession)
 	var spawned []string
@@ -356,11 +359,11 @@ func (c *coordinator) FanOut(ctx context.Context, req contracts.FanOutRequest) (
 
 func (c *coordinator) Route(ctx context.Context, req contracts.RouteRequest) (string, string, error) {
 	if strings.TrimSpace(req.Task) == "" {
-		return "", "", fmt.Errorf("route: empty task")
+		return "", "", errRouteEmptyTask
 	}
 	from, ok := c.findSession(req.FromSession)
 	if !ok {
-		return "", "", fmt.Errorf("route: lead %q not found", req.FromSession)
+		return "", "", fmt.Errorf("route: %w", &NotFoundError{Kind: kindLead, Name: req.FromSession})
 	}
 	roster, err := c.agents.List()
 	if err != nil {
@@ -368,7 +371,7 @@ func (c *coordinator) Route(ctx context.Context, req contracts.RouteRequest) (st
 	}
 	chosen, ok := pickAgent(roster, req.Task)
 	if !ok {
-		return "", "", fmt.Errorf("route: no agent matches task")
+		return "", "", errRouteNoAgent
 	}
 	session, err := c.spawn(ctx, from, chosen, req.Task, req.FromSession, "", "")
 	if err != nil {
@@ -391,7 +394,7 @@ func (c *coordinator) forget(name string) {
 }
 
 func (c *coordinator) seedWithRetry(ctx context.Context, session, task string) bool {
-	for i := 0; i < seedAttempts; i++ {
+	for range seedAttempts {
 		if c.seed(session, task) {
 			return true
 		}

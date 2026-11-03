@@ -100,42 +100,59 @@ func TestRefusedInputAcknowledgedNotSilentlyDropped(t *testing.T) {
 		[]contracts.GatewaySet{{Gateway: a, Reader: a}},
 		toBridge, fromBridge)
 	d.gate = fixedGate{reason: "cost"}
-	var tapped []contracts.Event
-	var mu sync.Mutex
-	d.emitTap = func(e contracts.Event) {
-		mu.Lock()
-		tapped = append(tapped, e)
-		mu.Unlock()
-	}
+	tap := &refusalTap{}
+	d.emitTap = tap.record
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go d.run(ctx)
 
-	deadline := time.After(time.Second)
-	sawPaused, sawRefusalStatus := false, false
-	for {
-		mu.Lock()
-		for _, e := range tapped {
-			if e.T == "human" {
-				mu.Unlock()
-				t.Fatalf("a turn was opened for input refused by the budget gate: %+v", e)
-			}
-			if e.T == "paused" {
-				sawPaused = true
-			}
-			if e.T == "status" && strings.Contains(e.Text, "refus") {
-				sawRefusalStatus = true
-			}
+	awaitRefusalAcknowledged(t, tap)
+}
+
+type refusalTap struct {
+	mu     sync.Mutex
+	events []contracts.Event
+}
+
+func (k *refusalTap) record(e contracts.Event) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.events = append(k.events, e)
+}
+
+type refusalScan struct {
+	paused  bool
+	refused bool
+}
+
+func (k *refusalTap) scanRefusal(t *testing.T) refusalScan {
+	t.Helper()
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	var scan refusalScan
+	for i := range k.events {
+		e := k.events[i]
+		if e.T == "human" {
+			t.Fatalf("a turn was opened for input refused by the budget gate: %+v", e)
 		}
-		gotBoth := sawPaused && sawRefusalStatus
-		mu.Unlock()
-		if gotBoth {
+		scan.paused = scan.paused || e.T == "paused"
+		scan.refused = scan.refused || (e.T == "status" && strings.Contains(e.Text, "refus"))
+	}
+	return scan
+}
+
+func awaitRefusalAcknowledged(t *testing.T, tap *refusalTap) {
+	t.Helper()
+	deadline := time.After(time.Second)
+	for {
+		scan := tap.scanRefusal(t)
+		if scan.paused && scan.refused {
 			return
 		}
 		select {
 		case <-deadline:
-			t.Fatalf("did not see both paused and refusal status on emitTap: paused=%v refusalStatus=%v", sawPaused, sawRefusalStatus)
+			t.Fatalf("did not see both paused and refusal status on emitTap: paused=%v refusalStatus=%v", scan.paused, scan.refused)
 		case <-time.After(5 * time.Millisecond):
 		}
 	}

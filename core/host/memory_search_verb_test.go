@@ -26,7 +26,7 @@ func TestMemorySearchVerbReturnsFormattedHits(t *testing.T) {
 }
 
 func TestMemorySearchVerbRawFlag(t *testing.T) {
-	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{}})
+	mem := useRestoreMem(t, &restoreVerbMem{nodes: make(map[string]contracts.Node)})
 	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
@@ -35,14 +35,14 @@ func TestMemorySearchVerbRawFlag(t *testing.T) {
 	if _, err := reg.Dispatch(context.Background(), []string{"memory", "search", "--text", "x", "--raw"}); err != nil {
 		t.Fatalf("dispatch with --raw: %v", err)
 	}
-	if !currentRestoreMem.lastQuery.IncludeRaw {
+	if !mem.lastQuery.IncludeRaw {
 		t.Errorf("IncludeRaw = false, want true when --raw is set")
 	}
 
 	if _, err := reg.Dispatch(context.Background(), []string{"memory", "search", "--text", "x"}); err != nil {
 		t.Fatalf("dispatch without --raw: %v", err)
 	}
-	if currentRestoreMem.lastQuery.IncludeRaw {
+	if mem.lastQuery.IncludeRaw {
 		t.Errorf("IncludeRaw = true, want false when --raw is absent")
 	}
 }

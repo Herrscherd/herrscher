@@ -18,8 +18,9 @@ import (
 // DaemonEvent is one line off the events socket: a turn event tagged with the
 // session it belongs to, since one socket carries every session's stream.
 type DaemonEvent struct {
-	Session string `json:"session"`
 	contracts.Event
+
+	Session string `json:"session"`
 }
 
 // ServedInstanceID reports the instance id the daemon serving statePath actually
@@ -50,7 +51,7 @@ func ServedInstanceID(statePath, optID string) string {
 func DaemonDispatch(ctx context.Context, instanceID string, argv []string) (string, error) {
 	out, handled, err := dispatchLiveCommand(ctx, CommandSocketPath(instanceID), argv)
 	if !handled {
-		return "", fmt.Errorf("no herrscher daemon is listening on %s", CommandSocketPath(instanceID))
+		return "", &daemonNotRunningError{Socket: CommandSocketPath(instanceID)}
 	}
 	return out, err
 }
@@ -85,16 +86,16 @@ func subscribeAt(ctx context.Context, path string) (<-chan DaemonEvent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("events socket %s: %w", path, err)
 	}
-	out := make(chan DaemonEvent, 256)
+	out := make(chan DaemonEvent, daemonEventBuffer)
 	go func() {
 		<-ctx.Done()
-		_ = conn.Close()
+		logCleanup(conn.Close())
 	}()
 	go func() {
 		defer close(out)
-		defer conn.Close()
+		defer closeRead(conn)
 		sc := bufio.NewScanner(conn)
-		sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+		sc.Buffer(make([]byte, 0, daemonLineBufferInitial), daemonLineBufferMax)
 		for sc.Scan() {
 			var e DaemonEvent
 			if err := json.Unmarshal(sc.Bytes(), &e); err != nil {
@@ -133,11 +134,11 @@ func parseAttachmentPaths(raw string) ([]contracts.Attachment, error) {
 // process has it, and is it still alive?" It does so without claiming the lock. The check
 // takes the lock only long enough to find out it was free, then drops it.
 func ServingPID(statePath string) (int, bool) {
-	f, err := os.OpenFile(StateLockPath(statePath), os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(StateLockPath(statePath), os.O_CREATE|os.O_RDWR, ownerOnlyFileMode)
 	if err != nil {
 		return 0, false
 	}
-	defer f.Close()
+	defer closeRead(f)
 	locked, err := tryLock(f)
 	if err != nil || locked {
 		return 0, false

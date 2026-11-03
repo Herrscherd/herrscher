@@ -25,13 +25,13 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 	}
 	t.Cleanup(srv.Shutdown)
 
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	gs := grpc.NewServer()
-	serveSkeleton(t, gs, func(r *transport.PluginRouter) error { return transport.RegisterMemorySkeleton(r, recordingMem{}) })
-	go func() { _ = gs.Serve(lis) }()
+	transport.RegisterMemorySkeleton(gs, recordingMem{})
+	go func() { logCleanup(gs.Serve(lis)) }()
 	t.Cleanup(gs.Stop)
 
 	nc, err := nats.Connect(srv.ClientURL())
@@ -47,7 +47,7 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 	stop := make(chan struct{})
 	go func() {
 		for {
-			_ = transport.Announce(nc, ann)
+			logCleanup(transport.Announce(nc, ann))
 			select {
 			case <-stop:
 				return
@@ -57,11 +57,11 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 	}()
 	t.Cleanup(func() { close(stop) })
 
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, srv.ClientURL())
-	mem, err := r.Memory(context.Background(),
+	r := NewResolver(categorySet(contracts.CategoryMemory), srv.ClientURL())
+	mem, _, err := r.Memory(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryMemory},
-			Memory:   func(context.Context, contracts.PluginConfig) (contracts.Memory, error) { return nil, nil },
+			Memory:   func(context.Context, contracts.PluginConfig) (contracts.Memory, error) { return &stubMem{}, nil },
 		}},
 		func(string) string { return "" })
 	if err != nil {
@@ -88,15 +88,13 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 	}
 	t.Cleanup(srv.Shutdown)
 
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	gs := grpc.NewServer()
-	serveSkeleton(t, gs, func(r *transport.PluginRouter) error {
-		return transport.RegisterOrchestratorSkeleton(r, recordingOrch{})
-	})
-	go func() { _ = gs.Serve(lis) }()
+	transport.RegisterOrchestratorSkeleton(gs, recordingOrch{})
+	go func() { logCleanup(gs.Serve(lis)) }()
 	t.Cleanup(gs.Stop)
 
 	nc, err := nats.Connect(srv.ClientURL())
@@ -112,7 +110,7 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 	stop := make(chan struct{})
 	go func() {
 		for {
-			_ = transport.Announce(nc, ann)
+			logCleanup(transport.Announce(nc, ann))
 			select {
 			case <-stop:
 				return
@@ -122,12 +120,12 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 	}()
 	t.Cleanup(func() { close(stop) })
 
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryOrchestrator: true}, srv.ClientURL())
-	orch, err := r.Orchestrator(context.Background(),
+	r := NewResolver(categorySet(contracts.CategoryOrchestrator), srv.ClientURL())
+	orch, _, err := r.Orchestrator(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryOrchestrator},
 			Orchestrator: func(context.Context, contracts.PluginConfig, contracts.Memory) (contracts.Orchestrator, error) {
-				return nil, nil
+				return &recordingOrch{}, nil
 			},
 		}})
 	if err != nil {
@@ -159,13 +157,13 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 	}
 	t.Cleanup(srv.Shutdown)
 
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	gs := grpc.NewServer()
 	transport.RegisterBackendSkeleton(gs, streamingBackend{})
-	go func() { _ = gs.Serve(lis) }()
+	go func() { logCleanup(gs.Serve(lis)) }()
 	t.Cleanup(gs.Stop)
 
 	nc, err := nats.Connect(srv.ClientURL())
@@ -181,7 +179,7 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 	stop := make(chan struct{})
 	go func() {
 		for {
-			_ = transport.Announce(nc, ann)
+			logCleanup(transport.Announce(nc, ann))
 			select {
 			case <-stop:
 				return
@@ -191,11 +189,13 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 	}()
 	t.Cleanup(func() { close(stop) })
 
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryBackend: true}, srv.ClientURL())
-	be, err := r.Backend(context.Background(),
+	r := NewResolver(categorySet(contracts.CategoryBackend), srv.ClientURL())
+	be, _, err := r.Backend(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryBackend},
-			Backend:  func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return nil, nil },
+			Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
+				return &streamingBackend{}, nil
+			},
 		}})
 	if err != nil {
 		t.Fatalf("remote resolve: %v", err)

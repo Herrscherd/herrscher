@@ -16,6 +16,8 @@ import (
 
 func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	t.Helper()
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -29,10 +31,12 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	if err := r.Add(cmd); err != nil {
 		t.Fatal(err)
 	}
-	return newHub(ctx, st, sup, nil, t.TempDir(), &r, nil)
+	return newHub(st, sup, nil, t.TempDir(), &r, nil, approvalTab, sessionTab)
 }
 
 func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -50,11 +54,11 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	h := newHub(ctx, state.NewState(t.TempDir()+"/s.json"),
-		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher"), nil, t.TempDir(), &r, nil)
+	h := newHub(state.NewState(t.TempDir()+"/s.json"),
+		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher"), nil, t.TempDir(), &r, nil, approvalTab, sessionTab)
 	h.contributedKinds = contributedKinds([]contracts.Cmd{slow})
 
-	go func() { _, _ = h.Dispatch(ctx, []string{"plug", "read"}) }()
+	go func() { _, dispatchErr := h.Dispatch(ctx, []string{"plug", "read"}); logCleanup(dispatchErr) }()
 	<-entered
 
 	done := make(chan string, 1)
@@ -155,16 +159,18 @@ func TestHubCloseOmitsForceWhenFalse(t *testing.T) {
 }
 
 func TestHubDispatchSetSource(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
 	o := Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude"}
-	reg, _, err := buildRegistry(ctx, Deps{}, o, st, sup, "", nil)
+	reg, _, err := buildRegistry(ctx, Deps{}, o, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(ctx, st, sup, nil, t.TempDir(), reg, nil)
+	h := newHub(st, sup, nil, t.TempDir(), reg, nil, approvalTab, sessionTab)
 
 	if _, err := h.Dispatch(ctx, []string{"set", "source", "--path", "/src/x"}); err != nil {
 		t.Fatal(err)
@@ -176,11 +182,13 @@ func TestHubDispatchSetSource(t *testing.T) {
 
 func newTestHub(t *testing.T) *hub {
 	t.Helper()
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	return newHub(ctx, st, sup, nil, t.TempDir(), &cli.Registry{}, nil)
+	return newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
 }
 
 func TestHubSessionsSnapshot(t *testing.T) {
@@ -209,7 +217,7 @@ func TestHubReconcileGoLiveGoDead(t *testing.T) {
 	if err := h.st.AddSession(state.Session{Name: "live1", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)
 	}
-	h.reconcile()
+	h.reconcile(t.Context())
 	h.mu.Lock()
 	_, up := h.live["live1"]
 	h.mu.Unlock()
@@ -217,7 +225,7 @@ func TestHubReconcileGoLiveGoDead(t *testing.T) {
 		t.Fatal("reconcile did not bring the persisted session live")
 	}
 
-	h.reconcile()
+	h.reconcile(t.Context())
 	h.mu.Lock()
 	n := len(h.live)
 	h.mu.Unlock()
@@ -228,7 +236,7 @@ func TestHubReconcileGoLiveGoDead(t *testing.T) {
 	if err := h.st.RemoveSession("live1"); err != nil {
 		t.Fatal(err)
 	}
-	h.reconcile()
+	h.reconcile(t.Context())
 	h.mu.Lock()
 	_, stillUp := h.live["live1"]
 	h.mu.Unlock()
@@ -271,8 +279,9 @@ func (s *stubForgetCoord) forget(name string) { s.forgotten = append(s.forgotten
 func TestGoDeadCallsForget(t *testing.T) {
 	stub := &stubForgetCoord{}
 	h := &hub{
-		coordinator: stub,
-		live:        map[string]liveSession{},
+		coordinator:   stub,
+		live:          make(map[string]liveSession),
+		teardownGrace: defaultTeardownGrace,
 	}
 	h.goDead("worker")
 	if len(stub.forgotten) != 1 || stub.forgotten[0] != "worker" {
@@ -280,7 +289,7 @@ func TestGoDeadCallsForget(t *testing.T) {
 	}
 }
 
-func TestHubStillSatisfiesSessionControl(t *testing.T) {
+func TestHubStillSatisfiesSessionControl(_ *testing.T) {
 	var _ contracts.SessionControl = (*hub)(nil)
 }
 

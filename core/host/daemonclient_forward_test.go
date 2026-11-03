@@ -21,7 +21,7 @@ func serveOneCommand(t *testing.T, instance string, disp dispatcher) {
 	t.Helper()
 	t.Setenv("TMPDIR", t.TempDir())
 	path := CommandSocketPath(instance)
-	ln, err := listenCommandSocket(path)
+	ln, err := listenCommandSocket(t.Context(), path)
 	if err != nil {
 		t.Fatalf("listenCommandSocket: %v", err)
 	}
@@ -32,8 +32,8 @@ func serveOneCommand(t *testing.T, instance string, disp dispatcher) {
 		}
 	})
 	t.Cleanup(func() {
-		_ = ln.Close()
-		_ = os.Remove(path)
+		logCleanup(ln.Close())
+		logCleanup(os.Remove(path))
 	})
 	go func() {
 		conn, err := ln.Accept()

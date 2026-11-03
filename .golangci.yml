@@ -272,6 +272,21 @@ linters:
       - path: ^bridge_provision_test\.go$
         linters: [unparam]
         text: 'result 0 \(error\) is always nil'
+      - path: ^core/host/(coordinator|coordinator_test|turnloop)\.go$
+        linters: [misspell]
+        text: "^`(conflit|existant|partiel)` is a misspelling"
+      - path: ^core/host/backendenv\.go$
+        linters: [gosec]
+        text: "^G101:"
+      - path: ^core/host/(hosts_port|serve)\.go$
+        linters: [gosec]
+        text: "^G204:"
+      - path: ^core/host/(approve_cmd|lock|remote_materialize)\.go$
+        linters: [gosec]
+        text: "^G304:"
+      - path: ^core/host/backendenv\.go$
+        linters: [gochecknoglobals]
+        text: "capturedGateway"
 
 formatters:
   enable:

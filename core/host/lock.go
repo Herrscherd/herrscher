@@ -32,33 +32,27 @@ func StateLockPath(statePath string) string {
 // reads it to make a decision.
 func LockState(statePath string) (func(), error) {
 	path := StateLockPath(statePath)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
 		return nil, fmt.Errorf("state lock directory: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, ownerOnlyFileMode)
 	if err != nil {
 		return nil, fmt.Errorf("state lock: %w", err)
 	}
 	locked, err := tryLock(f)
 	if err != nil {
-		f.Close()
+		closeRead(f)
 		return nil, fmt.Errorf("state lock: %w", err)
 	}
 	if !locked {
 		holder := readHolder(f)
-		f.Close()
-		return nil, fmt.Errorf(
-			"another herrscher is already serving %s%s\n"+
-				"Only one daemon may serve a state file: a second one answers every message a second time.\n"+
-				"On a terminal, a bare `herrscher` attaches to that daemon instead of refusing; you are seeing this\n"+
-				"because there is no terminal to attach, or because attaching failed (the reason is printed above).\n"+
-				"Stop the other one, or pass --state to serve a separate world.",
-			statePath, holder)
+		closeRead(f)
+		return nil, &lockHeldError{StatePath: statePath, Holder: holder}
 	}
 	if err := f.Truncate(0); err == nil {
-		f.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0)
+		logWriteFailure(f.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0))
 	}
-	return func() { f.Close() }, nil
+	return func() { closeRead(f) }, nil
 }
 
 func readHolder(f *os.File) string {
@@ -70,8 +64,9 @@ func readHolder(f *os.File) string {
 }
 
 func readPID(f *os.File) int {
-	b := make([]byte, 32)
-	n, _ := f.ReadAt(b, 0)
+	b := make([]byte, pidReadBytes)
+	n, readErr := f.ReadAt(b, 0)
+	logCleanup(readErr)
 	pid, err := strconv.Atoi(strings.TrimSpace(string(b[:n])))
 	if err != nil || pid <= 0 {
 		return 0

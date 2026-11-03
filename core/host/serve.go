@@ -11,6 +11,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
@@ -30,7 +31,7 @@ const buildTimeout = 5 * time.Minute
 func (u serviceUpdater) Build(ctx context.Context, pull bool) (string, error) {
 	src := u.st.SourceDir()
 	if src == "" {
-		return "", fmt.Errorf("no source set; run /set source <path> first")
+		return "", errSourceNotSet
 	}
 	ctx, cancel := context.WithTimeout(ctx, buildTimeout)
 	defer cancel()
@@ -112,7 +113,8 @@ func DefaultStatePath() string {
 	if d := envx.Get("STATE_DIR"); d != "" {
 		return filepath.Join(d, "state.json")
 	}
-	home, _ := os.UserHomeDir()
+	home, homeErr := os.UserHomeDir()
+	logCleanup(homeErr)
 	return filepath.Join(home, ".config", "herrscher", "state.json")
 }
 
@@ -123,8 +125,7 @@ func resolveInstanceID(st *state.State, optID, ownerID string, log *slog.Logger)
 	}
 	if st.InstanceID != "" {
 		if resolved != "" && resolved != st.InstanceID {
-			return "", fmt.Errorf("instanceID mismatch: state has %q but %q was requested; "+
-				"changing it would orphan existing sessions", st.InstanceID, resolved)
+			return "", &instanceIDMismatchError{Have: st.InstanceID, Want: resolved}
 		}
 		return st.InstanceID, nil
 	}
@@ -153,26 +154,18 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	log := base.With("component", "serve")
 	h := health.NewHealth(time.Now())
 
-	st, err := state.LoadState(o.StatePath)
+	store, err := loadHubState(o)
 	if err != nil {
 		return fmt.Errorf("load state: %w", err)
 	}
-	var home *state.HomeRef
-	if o.Home != nil {
-		home = &state.HomeRef{ID: o.Home.ID, Type: o.Home.Type}
-	}
-	st.ApplyDefaults(home, o.Workspace, o.Source)
-	seedTerminalHome(st, o.ForegroundBound)
 
-	self, _ := os.Executable()
+	self, execErr := os.Executable()
+	logCleanup(execErr)
 	startRemotePluginHosts(ctx, self, o.RemoteCategories, base)
 	partDir := filepath.Dir(o.StatePath)
-	sup := supervisor.NewSupervisor(ctx, self)
-	sup.SetLogger(base)
-	sup.SetMetrics(h.Metrics())
-	sup.SetAgentsRoot(filepath.Join(partDir, "agents"))
+	sup := newHubSupervisor(ctx, self, base, h, partDir)
 
-	instID, err := resolveInstanceID(st, o.InstanceID, o.Owner, log)
+	instID, err := resolveInstanceID(store, o.InstanceID, o.Owner, log)
 	if err != nil {
 		return fmt.Errorf("resolve instance id: %w", err)
 	}
@@ -180,63 +173,123 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	if o.DefaultGateways == nil {
 		o.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID, o.ContributedCommands)
+	approvals := newApprovalTable()
+	sessions := newSessionTable()
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, o, store, sup, instID, o.ContributedCommands, approvals, sessions)
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}
-	bridgeEnv := GatewayEnvPairs()
 	kinds := contributedKinds(o.ContributedCommands)
-	if pair := CapabilityEnvPair(reg.Specs(), func(family string) bool { return kinds[family] }); pair != "" {
-		bridgeEnv = append(bridgeEnv, pair)
-	}
-	sup.SetBridgeEnv(bridgeEnv)
+	sup.SetBridgeEnv(hubBridgeEnv(reg.Specs(), kinds))
 	ensureCodexAgent(deps.agents)
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
-	hb := newHub(ctx, st, sup, gws, partDir, reg, h.Metrics())
+	hb := newHub(store, sup, gws, partDir, reg, h.Metrics(), approvals, sessions)
+	go func() {
+		<-ctx.Done()
+		hb.stopLive()
+	}()
 	hb.contributedKinds = kinds
 	hb.instanceID = instID
 	hb.gate = deps.handler.BudgetGate()
-	coord := newCoordinator(hb, deps.agents, deps.wt, st, hb, Seed)
-	hb.coordinator = coord
-	deps.seedCoord.coord = coord
+	coord := wireCoordination(hb, deps, store, sessions)
 
-	sched := newScheduler(st, st, hb, Seed, time.Now)
+	sched := newScheduler(store, store, hb, sessions.Seed, time.Now)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
 
 	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
 
-	es := newEventSocket()
-	go serveEventsSocket(ctx, EventsSocketPath(instID), es)
-	hb.eventPublisher = es.Publish
-
-	go serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{hb})
-
-	for _, sess := range st.SnapshotSessions() {
-		if sess.Archived {
-			continue
-		}
-		hb.goLive(sess)
-		sup.Start(sess)
-	}
-	h.SetSessions(len(st.SnapshotSessions()))
-
-	for _, g := range gws {
-		if rcv, ok := g.Gateway.(contracts.SessionControlReceiver); ok {
-			rcv.BindSessionControl(hb)
-		}
-	}
+	serveHubSockets(ctx, instID, hb)
+	goLiveSessions(ctx, hb, sup, store, h)
+	bindSessionControl(gws, hb)
 
 	if instID != "" {
 		log.Info("instance resolved", "instance", instID)
 	}
+	logCompiledPlugins(log)
+	startHubProbes(ctx, gws, o, store, h, instID)
 
-	for _, p := range contracts.Default.Plugins() {
-		log.Info("plugin compiled in", "kind", p.Manifest.Kind, "category", p.Manifest.Category, "status", p.Manifest.Status)
+	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func loadHubState(opts Options) (*state.State, error) {
+	store, err := state.LoadState(opts.StatePath)
+	if err != nil {
+		return nil, err
 	}
+	var home *state.HomeRef
+	if opts.Home != nil {
+		home = &state.HomeRef{ID: opts.Home.ID, Type: opts.Home.Type}
+	}
+	store.ApplyDefaults(home, opts.Workspace, opts.Source)
+	seedTerminalHome(store, opts.ForegroundBound)
+	return store, nil
+}
 
+func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, host *health.Health, partDir string) *supervisor.Supervisor {
+	sup := supervisor.NewSupervisor(ctx, self)
+	sup.SetLogger(base)
+	sup.SetMetrics(host.Metrics())
+	sup.SetAgentsRoot(filepath.Join(partDir, "agents"))
+	return sup
+}
+
+func hubBridgeEnv(specs []cli.Spec, kinds map[string]bool) []string {
+	bridgeEnv := GatewayEnvPairs()
+	if pair := CapabilityEnvPair(specs, func(family string) bool { return kinds[family] }); pair != "" {
+		bridgeEnv = append(bridgeEnv, pair)
+	}
+	return bridgeEnv
+}
+
+func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *sessionTable) *coordinator {
+	coord := newCoordinator(hubCore, deps.agents, deps.wt, st, hubCore, sessions.Seed)
+	hubCore.coordinator = coord
+	deps.seedCoord.coord = coord
+	return coord
+}
+
+func serveHubSockets(ctx context.Context, instID string, hubCore *hub) {
+	es := newEventSocket()
+	serveEventsSocket(ctx, EventsSocketPath(instID), es)
+	hubCore.eventPublisher = es.Publish
+	serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{hubCore})
+}
+
+func goLiveSessions(ctx context.Context, hb *hub, sup *supervisor.Supervisor, st *state.State, host *health.Health) {
+	sessions := st.SnapshotSessions()
+	for idx := range sessions {
+		sess := sessions[idx]
+		if sess.Archived {
+			continue
+		}
+		hb.goLive(ctx, sess)
+		sup.StartWith(ctx, sess)
+	}
+	host.SetSessions(len(st.SnapshotSessions()))
+}
+
+func bindSessionControl(gws []Deps, hubCore *hub) {
+	for _, g := range gws {
+		if rcv, ok := g.Gateway.(contracts.SessionControlReceiver); ok {
+			rcv.BindSessionControl(hubCore)
+		}
+	}
+}
+
+func logCompiledPlugins(log *slog.Logger) {
+	plugins := contracts.Default.Plugins()
+	for idx := range plugins {
+		p := plugins[idx]
+		log.Info("plugin compiled in", "kind", p.Manifest.Kind, "category", p.Manifest.Category, keyStatus, p.Manifest.Status)
+	}
+}
+
+func startHubProbes(ctx context.Context, gws []Deps, o Options, store *state.State, h *health.Health, instID string) {
 	if o.HealthAddr != "" {
 		go serveHealth(ctx, o.HealthAddr, h)
 	}
@@ -245,20 +298,16 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	}
 	if o.StatusChannel != "" {
 		if cr := firstReader(gws); cr != nil {
-			go statusLoop(ctx, cr, o.StatusChannel, st, h, instID)
+			go statusLoop(ctx, cr, o.StatusChannel, store, h, instID)
 		}
 	}
-
-	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
-	<-ctx.Done()
-	return ctx.Err()
 }
 
 func seedTerminalHome(st *state.State, hasForeground bool) {
 	if !hasForeground || st.Home.ID != "" {
 		return
 	}
-	_ = st.SetHome(state.HomeRef{ID: "terminal", Type: "terminal"})
+	logCleanup(st.SetHome(state.HomeRef{ID: homeTerminalID, Type: kindTerminal}))
 }
 
 func startRemotePluginHosts(ctx context.Context, self string, remote map[contracts.Category]bool, log *slog.Logger) {
@@ -283,7 +332,7 @@ func startRemotePluginHost(ctx context.Context, self string, cat contracts.Categ
 			cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 			cmd.Env = os.Environ()
 			start := time.Now()
-			_ = cmd.Run()
+			logCleanup(cmd.Run())
 			if ctx.Err() != nil {
 				return
 			}
@@ -317,12 +366,12 @@ func firstAdmin(gws []Deps) contracts.ChannelAdmin {
 }
 
 func adminForHome(gws []Deps, home state.HomeRef) contracts.ChannelAdmin {
-	wantTerminal := home.Type == "terminal"
+	wantTerminal := home.Type == kindTerminal
 	for _, g := range gws {
 		if g.Admin == nil || g.Gateway == nil {
 			continue
 		}
-		if (g.Gateway.Manifest().Kind == "terminal") == wantTerminal {
+		if (g.Gateway.Manifest().Kind == kindTerminal) == wantTerminal {
 			return g.Admin
 		}
 	}
@@ -334,7 +383,7 @@ func terminalAdmin(gws []Deps) contracts.ChannelAdmin {
 		if g.Admin == nil || g.Gateway == nil {
 			continue
 		}
-		if g.Gateway.Manifest().Kind == "terminal" {
+		if g.Gateway.Manifest().Kind == kindTerminal {
 			return g.Admin
 		}
 	}
@@ -376,7 +425,7 @@ func nonTerminalKinds(all []Deps) []string {
 		if g.Gateway == nil {
 			continue
 		}
-		if g.Gateway.Manifest().Kind != "terminal" {
+		if g.Gateway.Manifest().Kind != kindTerminal {
 			out = append(out, g.Gateway.Manifest().Kind)
 		}
 	}
@@ -384,7 +433,7 @@ func nonTerminalKinds(all []Deps) []string {
 }
 
 func boundGateways(all []Deps, kinds []string) []Deps {
-	want := map[string]bool{}
+	want := make(map[string]bool)
 	for _, k := range kinds {
 		want[k] = true
 	}

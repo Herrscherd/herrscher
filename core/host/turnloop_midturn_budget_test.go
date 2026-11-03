@@ -14,12 +14,14 @@ type budgetedTurn struct {
 	toBridge, fromBridge chan contracts.Event
 	mu                   sync.Mutex
 	tapped               []contracts.Event
+	changed              changeNotifier
 }
 
 func (b *budgetedTurn) sawStatus(want string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	for _, e := range b.tapped {
+	for idx := range b.tapped {
+		e := b.tapped[idx]
 		if e.T == "status" && strings.Contains(e.Text, want) {
 			return true
 		}
@@ -27,15 +29,9 @@ func (b *budgetedTurn) sawStatus(want string) bool {
 	return false
 }
 
-func (b *budgetedTurn) awaitStatus(want string) bool {
-	deadline := time.Now().Add(time.Second)
-	for !b.sawStatus(want) {
-		if time.Now().After(deadline) {
-			return false
-		}
-		time.Sleep(time.Millisecond)
-	}
-	return true
+func (b *budgetedTurn) awaitStatus(t *testing.T, want string) {
+	t.Helper()
+	waitFor(t, &b.changed, func() bool { return b.sawStatus(want) }, "a status telling why the turn was interrupted")
 }
 
 func startBudgetedTurn(t *testing.T, headroom uint64) *budgetedTurn {
@@ -52,6 +48,7 @@ func startBudgetedTurn(t *testing.T, headroom uint64) *budgetedTurn {
 		b.mu.Lock()
 		b.tapped = append(b.tapped, e)
 		b.mu.Unlock()
+		b.changed.signal()
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -79,9 +76,7 @@ func TestRunawayTurnInterruptedOnTokenCap(t *testing.T) {
 		select {
 		case ev := <-b.toBridge:
 			if ev.T == "interrupt" {
-				if !b.awaitStatus("interrompu") {
-					t.Fatal("turn was interrupted without telling the subscriber why")
-				}
+				b.awaitStatus(t, "interrompu")
 				return
 			}
 		case <-deadline:
@@ -107,7 +102,7 @@ func TestBudgetedTurnUnderHeadroomRunsOn(t *testing.T) {
 func TestRunawayTurnInterruptedOnce(t *testing.T) {
 	b := startBudgetedTurn(t, 100)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		b.fromBridge <- contracts.Event{T: "chunk", Text: "more", Tokens: 200, TokensIn: 100}
 	}
 

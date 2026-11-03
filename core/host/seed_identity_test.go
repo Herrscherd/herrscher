@@ -217,7 +217,7 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(ctx, st, sup, nil, partDir, reg, nil)
+	h := newHub(st, sup, nil, partDir, reg, nil)
 	coord := &reentrantSeedCoordinator{recordingCoord: &recordingCoord{}, hub: h}
 	h.coordinator = coord
 

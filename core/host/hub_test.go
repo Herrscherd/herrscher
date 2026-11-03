@@ -29,7 +29,7 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	if err := r.Add(cmd); err != nil {
 		t.Fatal(err)
 	}
-	return newHub(ctx, st, sup, nil, t.TempDir(), &r, nil)
+	return newHub(st, sup, nil, t.TempDir(), &r, nil)
 }
 
 func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
@@ -50,7 +50,7 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	h := newHub(ctx, state.NewState(t.TempDir()+"/s.json"),
+	h := newHub(state.NewState(t.TempDir()+"/s.json"),
 		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher"), nil, t.TempDir(), &r, nil)
 	h.contributedKinds = contributedKinds([]contracts.Cmd{slow})
 
@@ -164,7 +164,7 @@ func TestHubDispatchSetSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(ctx, st, sup, nil, t.TempDir(), reg, nil)
+	h := newHub(st, sup, nil, t.TempDir(), reg, nil)
 
 	if _, err := h.Dispatch(ctx, []string{"set", "source", "--path", "/src/x"}); err != nil {
 		t.Fatal(err)
@@ -180,7 +180,7 @@ func newTestHub(t *testing.T) *hub {
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	return newHub(ctx, st, sup, nil, t.TempDir(), &cli.Registry{}, nil)
+	return newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil)
 }
 
 func TestHubSessionsSnapshot(t *testing.T) {

@@ -51,12 +51,9 @@ func run() int {
 		return writeFailureCode(out)
 	}
 
-	if err := loadHostEnv(); err != nil {
+	if err := host.CaptureStartupSecrets(loadHostEnv, hideGatewayKeys); err != nil {
 		return reportError(err)
 	}
-	host.CaptureGatewayCreds()
-	host.CaptureAnnounceKey()
-	hideGatewayKeys()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

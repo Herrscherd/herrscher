@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -37,16 +36,14 @@ func TestSuperviseForegroundJoinsTheHubBeforeReturning(t *testing.T) {
 type closingTalker struct {
 	talker
 
-	closed bool
-	err    error
+	err error
 }
 
 func (c *closingTalker) Close(context.Context) error {
-	c.closed = true
 	return c.err
 }
 
-func TestGatewayCloseReachesTheRawGatewayThroughBinding(t *testing.T) {
+func TestBindingKeepsTheRawGatewayAsItsCloser(t *testing.T) {
 	gateway := &closingTalker{}
 
 	gws, closers, _, _, err := bindGateways([]host.Deps{{Gateway: gateway}})
@@ -56,9 +53,7 @@ func TestGatewayCloseReachesTheRawGatewayThroughBinding(t *testing.T) {
 	if _, ok := gws[0].Gateway.(contracts.GatewayCloser); ok {
 		t.Fatal("the degraded gateway is expected to hide Close; the test proves nothing otherwise")
 	}
-
-	host.CloseGateways(context.Background(), closers, slog.New(slog.DiscardHandler))
-	if !gateway.closed {
-		t.Fatal("the raw gateway must be closed through the binding")
+	if len(closers) != 1 || closers[0] != contracts.Gateway(gateway) {
+		t.Fatalf("the closers must hold the raw gateway, got %v", closers)
 	}
 }

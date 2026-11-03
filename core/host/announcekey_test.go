@@ -21,15 +21,15 @@ func resetAnnounceCapture(t *testing.T) {
 
 func TestCaptureAnnounceKeyRemovesItFromTheEnvironment(t *testing.T) {
 	resetAnnounceCapture(t)
-	env := map[string]string{EnvAnnounceKey: testAnnounceSecret}
+	env := map[string]string{envAnnounceKey: testAnnounceSecret}
 	captureAnnounceKey(
 		func(k string) string { return env[k] },
 		func(k string) error { delete(env, k); return nil },
 	)
-	if _, still := env[EnvAnnounceKey]; still {
+	if _, still := env[envAnnounceKey]; still {
 		t.Fatal("the announce key survived the capture: every vendor CLI would inherit it")
 	}
-	want := []string{EnvAnnounceKey + "=" + testAnnounceSecret}
+	want := []string{envAnnounceKey + "=" + testAnnounceSecret}
 	if got := AnnounceKeyEnvPairs(); len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("AnnounceKeyEnvPairs() = %v, want %v for trusted children", got, want)
 	}
@@ -45,9 +45,9 @@ func TestAnnounceKeyEnvPairsEmptyWhenUnset(t *testing.T) {
 
 func TestCaptureAnnounceKeyLeavesTheProcessEnvironmentClean(t *testing.T) {
 	resetAnnounceCapture(t)
-	t.Setenv(EnvAnnounceKey, testAnnounceSecret)
+	t.Setenv(envAnnounceKey, testAnnounceSecret)
 	CaptureAnnounceKey()
-	if _, set := os.LookupEnv(EnvAnnounceKey); set {
+	if _, set := os.LookupEnv(envAnnounceKey); set {
 		t.Fatal("the process environment still carries the announce key after the capture")
 	}
 }

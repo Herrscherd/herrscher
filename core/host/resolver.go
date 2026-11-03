@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -77,8 +78,27 @@ func (r *Resolver) SetLogger(l *slog.Logger) {
 	r.log = l.With("component", "resolver")
 }
 
+func rejectionClass(err error) string {
+	switch {
+	case errors.Is(err, transport.ErrUnauthenticatedAnnouncement):
+		return "unauthenticated"
+	case errors.Is(err, transport.ErrStaleAnnouncement):
+		return "stale"
+	case errors.Is(err, transport.ErrOversizedAnnouncement):
+		return "oversized"
+	case errors.Is(err, transport.ErrMalformedAnnouncement):
+		return "malformed"
+	case errors.Is(err, transport.ErrUnusableAnnouncement):
+		return "unusable"
+	case errors.Is(err, transport.ErrAddrRefused):
+		return "addr-refused"
+	default:
+		return "other"
+	}
+}
+
 func (r *Resolver) warnRejectedAnnouncement(err error) {
-	reason := err.Error()
+	reason := rejectionClass(err)
 	r.rejectMu.Lock()
 	defer r.rejectMu.Unlock()
 	if r.rejectionsSeen == nil {

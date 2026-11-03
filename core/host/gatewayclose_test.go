@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -36,7 +38,7 @@ func TestCloseGatewaysClosesEveryCloserWithALiveDeadline(t *testing.T) {
 	failing := &closingGateway{err: errors.New("stuck")}
 	plain := struct{ contracts.Gateway }{}
 
-	CloseGateways(parent, []contracts.Gateway{first, plain, failing}, slog.New(slog.DiscardHandler))
+	closeGateways(parent, []contracts.Gateway{first, plain, failing}, slog.New(slog.DiscardHandler))
 
 	for name, gateway := range map[string]*closingGateway{"first": first, "failing": failing} {
 		if !gateway.closed {
@@ -48,5 +50,22 @@ func TestCloseGatewaysClosesEveryCloserWithALiveDeadline(t *testing.T) {
 		if gateway.canceled {
 			t.Fatalf("%s gateway closed with the cancelled run context", name)
 		}
+	}
+}
+
+func TestRunHubClosesItsGatewaysWhenTheStateCannotLoad(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gateway := &closingGateway{}
+
+	err := RunHub(context.Background(), nil, []contracts.Gateway{gateway}, Options{StatePath: statePath})
+
+	if err == nil {
+		t.Fatal("RunHub accepted a corrupt state file")
+	}
+	if !gateway.closed {
+		t.Fatal("RunHub returned without closing its gateways")
 	}
 }

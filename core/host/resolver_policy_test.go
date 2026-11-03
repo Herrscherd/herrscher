@@ -2,6 +2,7 @@ package host
 
 import (
 	"bytes"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -54,5 +55,19 @@ func TestAnyRemoteAddressIsAdmittedOnceCredentialsAreSet(t *testing.T) {
 	r.SetCredentials(insecure.NewCredentials())
 	if !r.addrAllowed("10.0.0.5:4000") {
 		t.Fatal("mTLS credentials authenticate the peer, so a non-loopback address must be admitted")
+	}
+}
+
+func TestRejectionsOfOneClassShareOneLogLine(t *testing.T) {
+	var logs bytes.Buffer
+	r := NewResolver(nil, "")
+	r.SetLogger(slog.New(slog.NewTextHandler(&logs, nil)))
+	clock := r.now()
+	r.now = func() time.Time { return clock }
+
+	r.warnRejectedAnnouncement(fmt.Errorf("first %w", transport.ErrAddrRefused))
+	r.warnRejectedAnnouncement(fmt.Errorf("second %w", transport.ErrAddrRefused))
+	if got := strings.Count(logs.String(), "ignoring a rejected announcement"); got != 1 {
+		t.Fatalf("one class of rejection must log once within the interval, logged %d times", got)
 	}
 }

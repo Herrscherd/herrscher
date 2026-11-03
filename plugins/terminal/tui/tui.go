@@ -1358,7 +1358,7 @@ func (m *model) handleChoiceKey(msg tea.KeyMsg) tea.Cmd {
 	case tea.KeyEnter:
 		m.chooseChoice()
 	case tea.KeyCtrlC:
-		return tea.Quit
+		return m.overlayCtrlC()
 	}
 	return nil
 }
@@ -1377,7 +1377,7 @@ func (m *model) handleSwitchKey(msg tea.KeyMsg) tea.Cmd {
 		m.relayout()
 		return m.ensureSpin()
 	case tea.KeyCtrlC:
-		return tea.Quit
+		return m.overlayCtrlC()
 	}
 	return nil
 }
@@ -1385,7 +1385,7 @@ func (m *model) handleSwitchKey(msg tea.KeyMsg) tea.Cmd {
 func (m *model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.Type {
 	case tea.KeyCtrlC:
-		return tea.Quit
+		return m.overlayCtrlC()
 	case tea.KeyEsc, tea.KeyCtrlS:
 		m.closeSearch()
 	case tea.KeyEnter, tea.KeyCtrlN:
@@ -1408,7 +1408,7 @@ func (m *model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m *model) handleDiagKey(msg tea.KeyMsg) tea.Cmd {
 	if msg.Type == tea.KeyCtrlC {
-		return tea.Quit
+		return m.overlayCtrlC()
 	}
 	m.diagOpen = false
 	m.relayout()
@@ -1417,7 +1417,7 @@ func (m *model) handleDiagKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m *model) handlePluginsOverlayKey(msg tea.KeyMsg) tea.Cmd {
 	if msg.Type == tea.KeyCtrlC {
-		return tea.Quit
+		return m.overlayCtrlC()
 	}
 	return m.handlePluginsKey(msg)
 }
@@ -1431,7 +1431,7 @@ func (m *model) handleSkillsKey(msg tea.KeyMsg) tea.Cmd {
 		m.skillsOpen = false
 		m.relayout()
 	case tea.KeyCtrlC:
-		return tea.Quit
+		return m.overlayCtrlC()
 	}
 	return nil
 }
@@ -1450,7 +1450,7 @@ func (m *model) handleResumeKey(msg tea.KeyMsg) tea.Cmd {
 		m.relayout()
 		return tea.Batch(cmd, m.ensureSpin())
 	case tea.KeyCtrlC:
-		return tea.Quit
+		return m.overlayCtrlC()
 	}
 	return nil
 }
@@ -1476,7 +1476,7 @@ func (m *model) handlePaletteKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.relayout()
 		return tea.Batch(cmd, m.ensureSpin()), true
 	case tea.KeyCtrlC:
-		return tea.Quit, true
+		return m.overlayCtrlC(), true
 	default:
 		return nil, false
 	}
@@ -1569,10 +1569,20 @@ func (m *model) interruptOrQuit() (tea.Cmd, bool) {
 		return tea.Quit, true
 	}
 	turn.interruptRequested = true
-	if name := m.sessionName(m.active); name != "" {
-		m.tm.Interrupt(name)
+	if !m.interruptActive() {
+		m.flash = "rien à interrompre : Ctrl-C à nouveau pour quitter"
 	}
 	return nil, true
+}
+
+func (m *model) interruptActive() bool {
+	name := m.sessionName(m.active)
+	return name != "" && m.tm.Interrupt(name)
+}
+
+func (m *model) overlayCtrlC() tea.Cmd {
+	cmd, _ := m.interruptOrQuit()
+	return cmd
 }
 
 func (m *model) handleHistoryKey(msg tea.KeyMsg, dir int) (tea.Cmd, bool) {

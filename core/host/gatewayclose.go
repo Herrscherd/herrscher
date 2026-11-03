@@ -15,8 +15,7 @@ type gatewayCloseOutcome struct {
 	err  error
 }
 
-// CloseGateways closes every GatewayCloser within gatewayCloseTimeout and logs each failure.
-func CloseGateways(ctx context.Context, gateways []contracts.Gateway, log *slog.Logger) {
+func closeGateways(ctx context.Context, gateways []contracts.Gateway, log *slog.Logger) {
 	closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gatewayCloseTimeout)
 	defer cancel()
 	outcomes := make(chan gatewayCloseOutcome, len(gateways))

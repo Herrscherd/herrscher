@@ -209,7 +209,7 @@ func TestHubReconcileGoLiveGoDead(t *testing.T) {
 	if err := h.st.AddSession(state.Session{Name: "live1", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)
 	}
-	h.reconcile()
+	h.reconcile(t.Context())
 	h.mu.Lock()
 	_, up := h.live["live1"]
 	h.mu.Unlock()
@@ -217,7 +217,7 @@ func TestHubReconcileGoLiveGoDead(t *testing.T) {
 		t.Fatal("reconcile did not bring the persisted session live")
 	}
 
-	h.reconcile()
+	h.reconcile(t.Context())
 	h.mu.Lock()
 	n := len(h.live)
 	h.mu.Unlock()
@@ -228,7 +228,7 @@ func TestHubReconcileGoLiveGoDead(t *testing.T) {
 	if err := h.st.RemoveSession("live1"); err != nil {
 		t.Fatal(err)
 	}
-	h.reconcile()
+	h.reconcile(t.Context())
 	h.mu.Lock()
 	_, stillUp := h.live["live1"]
 	h.mu.Unlock()

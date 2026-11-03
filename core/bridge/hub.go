@@ -128,7 +128,7 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 		pin = &scopePin{resolve: o.Scope, current: o.LaunchProject, agent: o.MemoryAgent, orch: orch}
 	}
 	runHubTurnsCtl(ctx, in, conn, backend, orch, ctrl, eng,
-		affordances{roster: o.Roster, caps: o.Capabilities, user: identity.FromDir(cwd)}, pin)
+		affordances{roster: o.Roster, caps: o.Capabilities, user: identity.FromDir(ctx, cwd)}, pin)
 	if err := ctx.Err(); err != nil {
 		return err
 	}

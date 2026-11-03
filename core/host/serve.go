@@ -223,7 +223,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 		if sess.Archived {
 			continue
 		}
-		hb.goLive(sess)
+		hb.goLive(ctx, sess)
 		sup.Start(sess)
 	}
 	h.SetSessions(len(st.SnapshotSessions()))

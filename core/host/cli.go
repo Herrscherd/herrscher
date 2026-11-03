@@ -51,13 +51,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	}
 	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
 	hdl.SetSeeder(Seed)
-	hdl.SetHosts(hostPlacer{
-		ctx:           ctx,
-		st:            st,
-		instanceID:    instID,
-		local:         wt,
-		sourceVersion: func() string { return sourceVersionOf(ctx, st) },
-	})
+	hdl.SetHosts(newHostPlacer(ctx, st, instID, wt, func() string { return sourceVersionOf(ctx, st) }))
 	sup.SetInstanceID(instID)
 	sup.SetCommandSocket(func(session string) string { return SessionCommandSocketPath(instID, session) })
 	sup.SetHostLookup(func(name string) (supervisor.Placement, bool) {
@@ -145,7 +139,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		Param("attachments", "JSON array of local file paths to attach", false).
 		Param("origin", "gateway kind this was typed in (e.g. terminal): the turn is rendered there "+
 			"instead of in every channel the session is bound to", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
+		Do(func(ctx context.Context, in contracts.Input) (string, error) {
 			atts, err := parseAttachmentPaths(in.Get("attachments"))
 			if err != nil {
 				return "", err
@@ -154,7 +148,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			if author == "" {
 				author = "you"
 			}
-			if !Submit(in.Get("name"), contracts.Inbound{
+			if !Submit(ctx, in.Get("name"), contracts.Inbound{
 				Author:       author,
 				AuthorID:     "local",
 				Text:         in.Get("text"),
@@ -427,8 +421,8 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	}
 	if err := reg.Add(contracts.New("whoami").
 		Help("print who git on this machine says you are").
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return WhoamiOut(in.JSON)
+		Do(func(ctx context.Context, in contracts.Input) (string, error) {
+			return WhoamiOut(ctx, in.JSON)
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}

@@ -79,11 +79,11 @@ func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
 	)
 	t.Cleanup(func() { h.goDead(name) })
 
-	h.goLive(state.Session{Name: name, Incarnation: "old-incarnation"})
+	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "old-incarnation"})
 	waitForRegisteredIncarnation(t, name, "old-incarnation")
 	h.goDead(name)
 
-	h.goLive(state.Session{Name: name, Incarnation: "new-incarnation"})
+	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "new-incarnation"})
 	waitForRegisteredIncarnation(t, name, "new-incarnation")
 	conn, err := control.Dial(control.SocketPath(name))
 	if err != nil {

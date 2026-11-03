@@ -1022,7 +1022,7 @@ func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
 	registerDriver("s1", d)
 	defer unregisterDriver("s1", d)
 
-	if !Submit("s1", contracts.Inbound{Author: "leo", Text: "fix the login bug"}) {
+	if !Submit(t.Context(), "s1", contracts.Inbound{Author: "leo", Text: "fix the login bug"}) {
 		t.Fatal("Submit reported no live session for a registered driver")
 	}
 	select {
@@ -1036,7 +1036,7 @@ func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
 }
 
 func TestSubmitOnUnknownSessionReportsFalse(t *testing.T) {
-	if Submit("nobody-home", contracts.Inbound{Text: "hi"}) {
+	if Submit(t.Context(), "nobody-home", contracts.Inbound{Text: "hi"}) {
 		t.Fatal("Submit reported success for an unregistered session")
 	}
 }
@@ -1048,7 +1048,7 @@ func TestSubmitJournalsTheAuthor(t *testing.T) {
 	registerDriver("s2", d)
 	defer unregisterDriver("s2", d)
 
-	Submit("s2", contracts.Inbound{Author: "leo", AuthorID: "42", Text: "hi"})
+	Submit(t.Context(), "s2", contracts.Inbound{Author: "leo", AuthorID: "42", Text: "hi"})
 	<-d.queue
 	b, err := os.ReadFile(d.participants)
 	if err != nil || !strings.Contains(string(b), "42") {

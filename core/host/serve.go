@@ -216,6 +216,7 @@ func RunHub(ctx context.Context, gws []Deps, options Options) error {
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
 	<-ctx.Done()
 	<-liveStopped
+	closeGateways(ctx, gatewaysOf(gws), log)
 	return ctx.Err()
 }
 

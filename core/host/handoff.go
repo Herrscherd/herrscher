@@ -26,8 +26,8 @@ func parseTrailer(reply, marker string) (string, bool) {
 }
 
 func splitAgentTask(body string) (string, string, bool) {
-	parts := strings.SplitN(body, trailerSeparator, 2)
-	if len(parts) != 2 {
+	parts := strings.SplitN(body, trailerSeparator, trailerFields)
+	if len(parts) != trailerFields {
 		return "", "", false
 	}
 	agent := strings.TrimSpace(parts[0])
@@ -83,8 +83,8 @@ func parseSeal(reply string) (int, bool) {
 }
 
 func splitAgentTasks(body string) (string, []string, bool) {
-	parts := strings.SplitN(body, trailerSeparator, 2)
-	if len(parts) != 2 {
+	parts := strings.SplitN(body, trailerSeparator, trailerFields)
+	if len(parts) != trailerFields {
 		return "", nil, false
 	}
 	agent := strings.TrimSpace(parts[0])

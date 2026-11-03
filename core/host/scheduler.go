@@ -123,9 +123,9 @@ func stampFor(sc schedule.Schedule, now time.Time) time.Time {
 
 func (s *scheduler) realign(sc schedule.Schedule, now time.Time) {
 	slog.Warn("schedule: window passed longer ago than its grace, skipped",
-		"schedule", sc.Name, "grace", sc.Grace)
+		keySchedule, sc.Name, "grace", sc.Grace)
 	if err := s.store.StampScheduleRun(sc.Name, now.UTC().Format(time.RFC3339)); err != nil {
-		slog.Warn("schedule: could not restart the cadence", "schedule", sc.Name, "err", err)
+		slog.Warn("schedule: could not restart the cadence", keySchedule, sc.Name, "err", err)
 	}
 }
 
@@ -133,7 +133,7 @@ func (s *scheduler) catchUp(ctx context.Context) {
 	now := s.now()
 	for _, sc := range s.store.SnapshotSchedules() {
 		if _, err := schedule.Next(sc, now); err != nil {
-			slog.Warn("schedule: unusable cadence, it will never fire", "schedule", sc.Name, "err", err)
+			slog.Warn("schedule: unusable cadence, it will never fire", keySchedule, sc.Name, "err", err)
 			continue
 		}
 		fire, late := schedule.CatchUp(sc, now)
@@ -160,12 +160,12 @@ func (s *scheduler) fireNow(ctx context.Context, name string) error {
 		}
 		return nil
 	}
-	return &NotFoundError{Kind: "schedule", Name: name}
+	return &NotFoundError{Kind: kindSchedule, Name: name}
 }
 
 func (s *scheduler) dispatch(ctx context.Context, sc schedule.Schedule, prefix string, at time.Time) {
 	if !s.claim(sc.Name) {
-		slog.Debug("schedule: previous turn still in flight, skipping this window", "schedule", sc.Name)
+		slog.Debug("schedule: previous turn still in flight, skipping this window", keySchedule, sc.Name)
 		return
 	}
 	s.wg.Add(1)
@@ -178,7 +178,7 @@ func (s *scheduler) dispatch(ctx context.Context, sc schedule.Schedule, prefix s
 			return
 		}
 		if err := s.store.StampScheduleRun(sc.Name, at.UTC().Format(time.RFC3339)); err != nil {
-			slog.Warn("schedule: could not record the run", "schedule", sc.Name, "err", err)
+			slog.Warn("schedule: could not record the run", keySchedule, sc.Name, "err", err)
 		}
 	}()
 }
@@ -189,7 +189,7 @@ func (s *scheduler) fire(ctx context.Context, sc schedule.Schedule, prefix strin
 		return false
 	}
 	if !s.seed(name, prefix+sc.Task) {
-		slog.Warn("schedule: no live session to hand the task to", "schedule", sc.Name, "session", name)
+		slog.Warn("schedule: no live session to hand the task to", keySchedule, sc.Name, keySession, name)
 		return false
 	}
 	return true
@@ -200,7 +200,7 @@ func (s *scheduler) target(ctx context.Context, sc schedule.Schedule) (string, b
 		if s.live(sc.Session) {
 			return sc.Session, true
 		}
-		slog.Warn("schedule: the target session is not there", "schedule", sc.Name, "session", sc.Session)
+		slog.Warn("schedule: the target session is not there", keySchedule, sc.Name, keySession, sc.Session)
 		return "", false
 	}
 	want := schedule.SessionName(sc)
@@ -212,7 +212,7 @@ func (s *scheduler) target(ctx context.Context, sc schedule.Schedule) (string, b
 		Agent:   sc.Agent,
 		Project: sc.Project,
 	}); err != nil {
-		slog.Warn("schedule: could not open the session", "schedule", sc.Name, "session", want, "err", err)
+		slog.Warn("schedule: could not open the session", keySchedule, sc.Name, keySession, want, "err", err)
 		return "", false
 	}
 	return want, true

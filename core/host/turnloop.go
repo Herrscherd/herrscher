@@ -98,7 +98,7 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		gateways:  gws,
 		toBridge:  toBridge,
 		from:      fromBridge,
-		queue:     make(chan queued, 64),
+		queue:     make(chan queued, turnQueueCapacity),
 		renderers: map[string]*gatewayRenderer{},
 		hangup:    make(chan struct{}, 1),
 		seen:      map[string]bool{},
@@ -230,7 +230,7 @@ func (d *sessionDriver) emitPaused(ctx context.Context, reason string) {
 }
 
 func (d *sessionDriver) Seed(task string) bool {
-	return d.enqueue(queued{ev: contracts.Event{T: "input", Who: "handoff", Text: task, TurnID: newTurnID()}})
+	return d.enqueue(queued{ev: contracts.Event{T: eventInput, Who: "handoff", Text: task, TurnID: newTurnID()}})
 }
 
 func (d *sessionDriver) SeedAndWait(ctx context.Context, task string) (string, bool) {
@@ -243,7 +243,7 @@ func (d *sessionDriver) SeedAndWaitWithTurnID(ctx context.Context, task, turnID 
 	d.pendingReply = reply
 	d.seenMu.Unlock()
 	select {
-	case d.queue <- queued{ev: contracts.Event{T: "input", Who: "seed", Text: task, TurnID: turnID}}:
+	case d.queue <- queued{ev: contracts.Event{T: eventInput, Who: authorSeed, Text: task, TurnID: turnID}}:
 	case <-ctx.Done():
 		d.seenMu.Lock()
 		d.pendingReply = nil
@@ -359,9 +359,9 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 		ch = r.DefaultChannel()
 	}
 	var last string
-	log := obs.Stderr(false).With("component", "poll", "session", d.name, "channel", ch)
+	log := obs.Stderr(false).With("component", "poll", keySession, d.name, "channel", ch)
 	if d.channel != "" {
-		for delay := time.Second; ; delay = min(2*delay, 30*time.Second) {
+		for delay := time.Second; ; delay = min(backoffFactor*delay, maxPollBackoff) {
 			msgs, err := r.Read(ctx, ch, 1, "")
 			if err == nil {
 				if len(msgs) > 0 {
@@ -382,9 +382,9 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 		if ctx.Err() != nil {
 			return
 		}
-		msgs, err := r.Read(ctx, ch, 100, last)
+		msgs, err := r.Read(ctx, ch, pollBatchSize, last)
 		if err != nil {
-			delay = min(2*delay, maxPollBackoff)
+			delay = min(backoffFactor*delay, maxPollBackoff)
 			log.Warn("poll read failed", "err", err, "retry_in", delay)
 		} else {
 			delay = pollInterval
@@ -423,7 +423,7 @@ func (d *sessionDriver) submit(ctx context.Context, in contracts.Inbound) bool {
 	})
 	select {
 	case d.queue <- queued{
-		ev:     contracts.Event{T: "input", Who: in.Author, Text: in.Text, Attachments: atts},
+		ev:     contracts.Event{T: eventInput, Who: in.Author, Text: in.Text, Attachments: atts},
 		origin: in.Conversation,
 	}:
 		return true
@@ -439,13 +439,13 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			return
 		case q := <-d.queue:
 			ev := q.ev
-			d.saidElsewhere = ev.T == "input" && outsideBoundGateways(q.origin, d.gateways)
+			d.saidElsewhere = ev.T == eventInput && outsideBoundGateways(q.origin, d.gateways)
 			var guard tokenGuard
-			if ev.T == "input" {
+			if ev.T == eventInput {
 				reason, headroom, capped := d.gate.Check(d.name)
 				if reason != "" {
 					d.emitPaused(ctx, reason)
-					d.fanOut(ctx, contracts.Event{T: "status", Text: "tour refusé, plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
+					d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour refusé, plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
 					continue
 				}
 				guard = tokenGuard{headroom: headroom, capped: capped}
@@ -489,7 +489,7 @@ func (d *sessionDriver) runTurn(ctx context.Context, ev contracts.Event, guard t
 }
 
 func (d *sessionDriver) abandon(ctx context.Context, ev contracts.Event) {
-	if ev.T != "input" {
+	if ev.T != eventInput {
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: "abandoned"})
@@ -512,7 +512,7 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 				d.metrics.TurnAbandoned()
 				return false
 			}
-			if e.T == "reply" && e.Done {
+			if e.T == eventReply && e.Done {
 				e.Coordination = d.maybeCoordinate(ctx, e.Text)
 				d.fanOut(ctx, e)
 				if d.sink.Resume != nil && e.Resume != "" {
@@ -548,7 +548,7 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 			}
 			if spent, over := guard.trips(e); over {
 				d.Interrupt()
-				d.fanOut(ctx, contracts.Event{T: "status", Text: "tour interrompu, plafond de tokens atteint (" +
+				d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour interrompu, plafond de tokens atteint (" +
 					strconv.FormatUint(spent, 10) + " tokens sur ce tour, marge " + strconv.FormatUint(guard.headroom, 10) + ")"})
 			}
 		}
@@ -585,13 +585,13 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *cont
 		if parent, err := d.coordinator.Report(ctx, contracts.ReportRequest{
 			FromSession: d.name, Summary: summary,
 		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "report refusé"})
+			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "report refusé"})
 			return &contracts.CoordinationEvent{
 				Kind: "report_failed", SourceSession: d.name,
 				Summary: sanitizeCoordinationError(err),
 			}
 		} else {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "rapport livré à " + parent})
+			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "rapport livré à " + parent})
 			return &contracts.CoordinationEvent{
 				Kind: "reported", SourceSession: d.name,
 				ParentSession: parent, Summary: summary,
@@ -603,7 +603,7 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *cont
 			FromSession: d.name, ToAgent: toAgent, Task: task,
 		})
 		if err != nil {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "delegate refusé"})
+			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "delegate refusé"})
 			return &contracts.CoordinationEvent{
 				Kind: "delegate_failed", SourceSession: d.name,
 				Agent: toAgent, Summary: sanitizeCoordinationError(err),
@@ -619,12 +619,12 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *cont
 			FromSession: d.name, ToAgent: toAgent, Tasks: tasks,
 		}); err != nil {
 			d.fanOut(ctx, contracts.Event{
-				T:    "status",
+				T:    eventStatus,
 				Text: "fanout partiel: " + strconv.Itoa(len(spawned)) + " lancés puis " + err.Error(),
 			})
 		} else {
 			d.fanOut(ctx, contracts.Event{
-				T:    "status",
+				T:    eventStatus,
 				Text: "cohorte lancée : " + strconv.Itoa(len(spawned)) + " workers (" + strings.Join(spawned, ", ") + ")",
 			})
 		}
@@ -634,9 +634,9 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *cont
 		if toAgent, session, err := d.coordinator.Route(ctx, contracts.RouteRequest{
 			FromSession: d.name, Task: task,
 		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "route refusé: " + err.Error()})
+			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "route refusé: " + err.Error()})
 		} else {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "routé vers " + toAgent + " : " + session})
+			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "routé vers " + toAgent + " : " + session})
 		}
 		return nil
 	}
@@ -644,9 +644,9 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *cont
 		if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
 			FromSession: d.name, Expected: n,
 		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "seal refusé: " + err.Error()})
+			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "seal refusé: " + err.Error()})
 		} else {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "cohorte scellée à " + strconv.Itoa(n)})
+			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "cohorte scellée à " + strconv.Itoa(n)})
 		}
 		return nil
 	}
@@ -654,9 +654,9 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *cont
 		if lead, err := d.coordinator.Merge(ctx, contracts.MergeRequest{
 			FromSession: d.name, Worker: worker,
 		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "merge refusé: " + err.Error()})
+			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "merge refusé: " + err.Error()})
 		} else {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "merge traité pour " + lead})
+			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "merge traité pour " + lead})
 		}
 		return nil
 	}
@@ -664,7 +664,7 @@ func (d *sessionDriver) maybeCoordinate(ctx context.Context, reply string) *cont
 		if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
 			FromSession: d.name, ToAgent: toAgent, Task: task,
 		}); err != nil {
-			d.fanOut(ctx, contracts.Event{T: "status", Text: "handoff refusé: " + err.Error()})
+			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "handoff refusé: " + err.Error()})
 		}
 	}
 	return nil

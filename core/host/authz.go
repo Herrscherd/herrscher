@@ -51,21 +51,21 @@ func (a asOperator) Dispatch(ctx context.Context, args []string) (string, error)
 
 func sessionArgs() map[string]string {
 	return map[string]string{
-		"session seed":       "name",
-		"session send":       "name",
-		"session scrollback": "name",
-		"session interrupt":  "name",
-		"session who":        "name",
-		"session log":        "name",
-		"session close":      "name",
-		"session archive":    "name",
-		"session rename":     "name",
-		"session resume":     "name",
-		"session switch":     "name",
-		"session set-budget": "name",
-		"approve ask":        "session",
-		"approve mode":       "session",
-		"schedule add":       "session",
+		"session seed":       paramName,
+		"session send":       paramName,
+		"session scrollback": paramName,
+		"session interrupt":  paramName,
+		"session who":        paramName,
+		"session log":        paramName,
+		"session close":      paramName,
+		"session archive":    paramName,
+		"session rename":     paramName,
+		"session resume":     paramName,
+		"session switch":     paramName,
+		"session set-budget": paramName,
+		"approve ask":        paramSession,
+		"approve mode":       paramSession,
+		"schedule add":       paramSession,
 	}
 }
 

@@ -190,7 +190,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 		return h.reg.Dispatch(ctx, args)
 	}
 
-	if len(args) > 0 && args[0] == "approve" {
+	if len(args) > 0 && args[0] == nsApprove {
 		return h.reg.Dispatch(ctx, args)
 	}
 
@@ -206,7 +206,7 @@ func (h *hub) isContributedCommand(args []string) bool {
 }
 
 func isSessionSeedCommand(args []string) bool {
-	return len(args) >= 2 && args[0] == "session" && args[1] == "seed"
+	return len(args) >= 2 && args[0] == nsSession && args[1] == verbSeed
 }
 
 func (h *hub) Create(ctx context.Context, spec contracts.CreateSession) (string, error) {
@@ -218,7 +218,7 @@ func (h *hub) CreateCoordinated(ctx context.Context, spec contracts.CreateSessio
 }
 
 func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor string) (string, error) {
-	args := map[string]string{"name": spec.Name}
+	args := map[string]string{paramName: spec.Name}
 	setStr := func(k, v string) {
 		if v != "" {
 			args[k] = v
@@ -230,7 +230,7 @@ func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor s
 	setStr("cmd", spec.Cmd)
 	setStr("backend", spec.Backend)
 	setStr("vendor", vendor)
-	setStr("agent", spec.Agent)
+	setStr(paramAgent, spec.Agent)
 	setStr("memory_project", spec.MemoryProject)
 	setStr("memory_agent", spec.MemoryAgent)
 	setStr("extractor", spec.Extractor)
@@ -241,32 +241,32 @@ func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor s
 		args["gateways"] = strings.Join(spec.Gateways, ",")
 	}
 	if spec.TerminalOnly {
-		args["terminal_only"] = "true"
+		args["terminal_only"] = valueTrue
 	}
 	if spec.Shared {
-		args["shared"] = "true"
+		args["shared"] = valueTrue
 	}
 	if spec.ProjectPinned {
-		args["project_pinned"] = "true"
+		args["project_pinned"] = valueTrue
 	}
 	if spec.ConsolidateEvery != 0 {
 		args["consolidate_every"] = strconv.Itoa(spec.ConsolidateEvery)
 	}
 	h.dispatchMu.Lock()
 	defer h.dispatchMu.Unlock()
-	out, err := h.reg.Run(ctx, []string{"session", "create"}, contracts.Input{Args: args})
+	out, err := h.reg.Run(ctx, []string{nsSession, "create"}, contracts.Input{Args: args})
 	h.reconcile(ctx)
 	return out, err
 }
 
 func (h *hub) Close(ctx context.Context, name string, force bool) (string, error) {
-	args := map[string]string{"name": name}
+	args := map[string]string{paramName: name}
 	if force {
-		args["force"] = "true"
+		args["force"] = valueTrue
 	}
 	h.dispatchMu.Lock()
 	defer h.dispatchMu.Unlock()
-	out, err := h.reg.Run(ctx, []string{"session", "close"}, contracts.Input{Args: args})
+	out, err := h.reg.Run(ctx, []string{nsSession, "close"}, contracts.Input{Args: args})
 	h.reconcile(ctx)
 	return out, err
 }
@@ -352,7 +352,7 @@ func scrollbackOf(partDir, name string) []contracts.ScrollbackLine {
 func (h *hub) Resume(name string) error {
 	sess, ok := h.st.FindSession(name)
 	if !ok {
-		return &NotFoundError{Kind: "session", Name: name}
+		return &NotFoundError{Kind: kindSession, Name: name}
 	}
 	if sess.Archived {
 		if err := h.st.SetArchived(name, false); err != nil {

@@ -97,9 +97,9 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			return nil, hostDeps{}, err
 		}
 	}
-	if err := reg.Add(contracts.New("session", "seed").
+	if err := reg.Add(contracts.New(nsSession, verbSeed).
 		Help("run one agent turn in a session and print the reply").
-		Param("name", "session name", true).
+		Param(paramName, "session name", true).
 		Param("task", "opening task", true).
 		ValueParam("turn_id", "optional caller-supplied turn identity", false).
 		ValueParam("timeout", "cap this turn (Go duration, e.g. 30m); default HERRSCHER_SEED_TIMEOUT then 120s", false).
@@ -116,7 +116,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			runtime := oneShotSeedRuntimeFrom(cmdCtx)
 			runtime.timeout = timeout
 			reply, err := runOneShotSeedCommand(
-				cmdCtx, st, in.Get("name"), in.Get("task"),
+				cmdCtx, st, in.Get(paramName), in.Get("task"),
 				turnID, runtime,
 				seedCoord.coord, instID, dispatchLiveCommand,
 			)
@@ -124,16 +124,16 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 				return "", err
 			}
 			if in.JSON {
-				b, err := json.Marshal(map[string]string{"session": in.Get("name"), "reply": reply})
+				b, err := json.Marshal(map[string]string{keySession: in.Get(paramName), "reply": reply})
 				return string(b), err
 			}
 			return reply, nil
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := reg.Add(contracts.New("session", "send").
+	if err := reg.Add(contracts.New(nsSession, "send").
 		Help("send one message into a live session's turn queue (the daemon runs the turn)").
-		Param("name", "session name", true).
+		Param(paramName, "session name", true).
 		Param("text", "message text", true).
 		Param("author", "display name shown to the agent (default: you)", false).
 		Param("attachments", "JSON array of local file paths to attach", false).
@@ -148,20 +148,20 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			if author == "" {
 				author = "you"
 			}
-			if !Submit(ctx, in.Get("name"), contracts.Inbound{
+			if !Submit(ctx, in.Get(paramName), contracts.Inbound{
 				Author:       author,
 				AuthorID:     "local",
 				Text:         in.Get("text"),
 				Attachments:  atts,
 				Conversation: contracts.Conversation{Gateway: in.Get("origin")},
 			}) {
-				return "", &NotFoundError{Kind: "live session", Name: in.Get("name")}
+				return "", &NotFoundError{Kind: "live session", Name: in.Get(paramName)}
 			}
 			return "", nil
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := reg.Add(contracts.New("session", "info").
+	if err := reg.Add(contracts.New(nsSession, "info").
 		Help("list sessions as a frontend sees them (channel, vendor, dir, archived). JSON only").
 		Do(func(_ context.Context, _ contracts.Input) (string, error) {
 			b, err := json.Marshal(sessionInfos(st, partDir))
@@ -169,23 +169,23 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := reg.Add(contracts.New("session", "scrollback").
+	if err := reg.Add(contracts.New(nsSession, "scrollback").
 		Help("dump a session's replayable history as the frontend renders it. JSON only").
-		Param("name", "session name", true).
+		Param(paramName, "session name", true).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			b, err := json.Marshal(scrollbackOf(partDir, in.Get("name")))
+			b, err := json.Marshal(scrollbackOf(partDir, in.Get(paramName)))
 			return string(b), err
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := reg.Add(contracts.New("session", "interrupt").
+	if err := reg.Add(contracts.New(nsSession, "interrupt").
 		Help("cancel a session's in-flight turn").
-		Param("name", "session name", true).
+		Param(paramName, "session name", true).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			if !Interrupt(in.Get("name")) {
-				return "", &noTurnInFlightError{Session: in.Get("name")}
+			if !Interrupt(in.Get(paramName)) {
+				return "", &noTurnInFlightError{Session: in.Get(paramName)}
 			}
-			return "interrupted " + in.Get("name"), nil
+			return "interrupted " + in.Get(paramName), nil
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
@@ -345,7 +345,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		})); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := reg.Add(contracts.New("skill", "approve").
+	if err := reg.Add(contracts.New("skill", verbApprove).
 		Help("let a learned skill be promoted from its agent's private scope to the shared project scope").
 		Param("key", "skill node key (see `skill list`)", true).
 		Param("revoke", "clear the approval instead; a promotion already made is not undone", false).

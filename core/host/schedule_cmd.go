@@ -14,11 +14,11 @@ import (
 )
 
 func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup, slot *schedulerSlot) error {
-	if err := reg.Add(contracts.New("schedule", "add").
+	if err := reg.Add(contracts.New(nsSchedule, "add").
 		Help("wake a session on a cadence, with no human in the loop").
-		Param("name", "schedule name (unique)", true).
-		Param("session", "target an existing session by name (exclusive with --agent)", false).
-		Param("agent", "target a durable agent; its session is opened once and reused (exclusive with --session)", false).
+		Param(paramName, "schedule name (unique)", true).
+		Param(paramSession, "target an existing session by name (exclusive with --agent)", false).
+		Param(paramAgent, "target a durable agent; its session is opened once and reused (exclusive with --session)", false).
 		Param("project", "workspace sub-directory for the agent's session", false).
 		Param("every", "fixed cadence, e.g. 30m or 24h (exclusive with --cron)", false).
 		Param("cron", "five-field cron in the daemon's local time, e.g. '0 9 * * 1-5' (exclusive with --every)", false).
@@ -26,9 +26,9 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 		Param("grace", "how late a window missed while the daemon was down may still fire (default 1h)", false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
 			sc := schedule.Schedule{
-				Name:      strings.TrimSpace(in.Get("name")),
-				Session:   strings.TrimSpace(in.Get("session")),
-				Agent:     strings.TrimSpace(in.Get("agent")),
+				Name:      strings.TrimSpace(in.Get(paramName)),
+				Session:   strings.TrimSpace(in.Get(paramSession)),
+				Agent:     strings.TrimSpace(in.Get(paramAgent)),
 				Project:   strings.TrimSpace(in.Get("project")),
 				Task:      in.Get("task"),
 				Every:     strings.TrimSpace(in.Get("every")),
@@ -41,7 +41,7 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 			}
 			if sc.Agent != "" {
 				if _, ok := agents.Get(sc.Agent); !ok {
-					return "", &UnknownError{Kind: "agent", Name: sc.Agent}
+					return "", &UnknownError{Kind: kindAgent, Name: sc.Agent}
 				}
 			}
 			for _, existing := range st.SnapshotSchedules() {
@@ -62,7 +62,7 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 		return err
 	}
 
-	if err := reg.Add(contracts.New("schedule", "list").
+	if err := reg.Add(contracts.New(nsSchedule, "list").
 		Help("list the schedules, with their target, cadence, state and next window").
 		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
 			rows := st.SnapshotSchedules()
@@ -99,17 +99,17 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 		return err
 	}
 
-	if err := reg.Add(contracts.New("schedule", "rm").
+	if err := reg.Add(contracts.New(nsSchedule, "rm").
 		Help("remove a schedule; the session it opened is left alone").
-		Param("name", "schedule name", true).
+		Param(paramName, "schedule name", true).
 		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
-			name := strings.TrimSpace(in.Get("name"))
+			name := strings.TrimSpace(in.Get(paramName))
 			ok, err := st.RemoveSchedule(name)
 			if err != nil {
 				return "", err
 			}
 			if !ok {
-				return "", &NotFoundError{Kind: "schedule", Name: name}
+				return "", &NotFoundError{Kind: kindSchedule, Name: name}
 			}
 			return "removed " + name + " (its session, if any, is still there; close it with `session close`)", nil
 		})); err != nil {
@@ -124,17 +124,17 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 		{"pause", true, "stop firing a schedule, keeping it and its history"},
 		{"resume", false, "let a paused schedule fire again, counting from now"},
 	} {
-		if err := reg.Add(contracts.New("schedule", v.verb).
+		if err := reg.Add(contracts.New(nsSchedule, v.verb).
 			Help(v.help).
-			Param("name", "schedule name", true).
+			Param(paramName, "schedule name", true).
 			Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
-				name := strings.TrimSpace(in.Get("name"))
+				name := strings.TrimSpace(in.Get(paramName))
 				ok, err := st.SetSchedulePaused(name, v.paused)
 				if err != nil {
 					return "", err
 				}
 				if !ok {
-					return "", &NotFoundError{Kind: "schedule", Name: name}
+					return "", &NotFoundError{Kind: kindSchedule, Name: name}
 				}
 				if !v.paused {
 					if err := st.StampScheduleRun(name, time.Now().UTC().Format(time.RFC3339)); err != nil {
@@ -147,11 +147,11 @@ func addScheduleCommands(reg *cli.Registry, st *state.State, agents agentLookup,
 		}
 	}
 
-	if err := reg.Add(contracts.New("schedule", "run").
+	if err := reg.Add(contracts.New(nsSchedule, "run").
 		Help("fire a schedule right now, out of band; the cadence is not moved").
-		Param("name", "schedule name", true).
+		Param(paramName, "schedule name", true).
 		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
-			name := strings.TrimSpace(in.Get("name"))
+			name := strings.TrimSpace(in.Get(paramName))
 			if slot == nil || slot.sched == nil {
 				return "", &noDaemonToFireError{Name: name}
 			}

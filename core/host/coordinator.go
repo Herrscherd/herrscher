@@ -99,7 +99,7 @@ func (c *coordinator) CoordinationView(name string) (CoordinationView, bool) {
 	c.mu.Unlock()
 	if hasReported || hasExpected {
 		return CoordinationView{
-			Role:     "lead",
+			Role:     roleLead,
 			Lead:     name,
 			Reported: reportedCount,
 			Expected: expected,
@@ -107,7 +107,7 @@ func (c *coordinator) CoordinationView(name string) (CoordinationView, bool) {
 		}, true
 	}
 	if sess, ok := c.findSession(name); ok && sess.Parent != "" {
-		return CoordinationView{Role: "worker", Lead: sess.Parent}, true
+		return CoordinationView{Role: roleWorker, Lead: sess.Parent}, true
 	}
 	return CoordinationView{}, false
 }
@@ -140,7 +140,7 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 		return "", fmt.Errorf("coordination: %w", err)
 	}
 	if !clean {
-		return "", fmt.Errorf("coordination refused: %w", &uncommittedError{Role: "session", Name: from.Name})
+		return "", fmt.Errorf("coordination refused: %w", &uncommittedError{Role: roleSession, Name: from.Name})
 	}
 
 	base := from.Name + "-" + toAgent
@@ -179,11 +179,11 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 
 func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest) (string, error) {
 	if _, ok := c.agents.Get(req.ToAgent); !ok {
-		return "", fmt.Errorf("handoff: %w", &UnknownError{Kind: "agent", Name: req.ToAgent})
+		return "", fmt.Errorf("handoff: %w", &UnknownError{Kind: kindAgent, Name: req.ToAgent})
 	}
 	from, ok := c.findSession(req.FromSession)
 	if !ok {
-		return "", fmt.Errorf("handoff: %w", &NotFoundError{Kind: "session", Name: req.FromSession})
+		return "", fmt.Errorf("handoff: %w", &NotFoundError{Kind: kindSession, Name: req.FromSession})
 	}
 	return c.spawn(ctx, from, req.ToAgent, req.Task, "", "", "")
 }
@@ -191,11 +191,11 @@ func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest)
 func (c *coordinator) Delegate(ctx context.Context, req contracts.DelegateRequest) (string, error) {
 	target, ok := c.agents.Get(req.ToAgent)
 	if !ok {
-		return "", fmt.Errorf("delegate: %w", &UnknownError{Kind: "agent", Name: req.ToAgent})
+		return "", fmt.Errorf("delegate: %w", &UnknownError{Kind: kindAgent, Name: req.ToAgent})
 	}
 	from, ok := c.findSession(req.FromSession)
 	if !ok {
-		return "", fmt.Errorf("delegate: %w", &NotFoundError{Kind: "lead", Name: req.FromSession})
+		return "", fmt.Errorf("delegate: %w", &NotFoundError{Kind: kindLead, Name: req.FromSession})
 	}
 	vendor, cmd := "", ""
 	if target.Backend == "" {
@@ -211,7 +211,7 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	sessions := c.sessions.SnapshotSessions()
 	from, ok := findByName(sessions, req.FromSession)
 	if !ok {
-		return "", fmt.Errorf("report: %w", &UnknownError{Kind: "worker", Name: req.FromSession})
+		return "", fmt.Errorf("report: %w", &UnknownError{Kind: kindWorker, Name: req.FromSession})
 	}
 	if from.Parent == "" {
 		return "", fmt.Errorf("report: %w", &noParentError{Session: req.FromSession})
@@ -221,7 +221,7 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 		return "", fmt.Errorf("report: %w", err)
 	}
 	if !clean {
-		return "", fmt.Errorf("report refused: %w", &uncommittedError{Role: "session", Name: req.FromSession})
+		return "", fmt.Errorf("report refused: %w", &uncommittedError{Role: roleSession, Name: req.FromSession})
 	}
 	if _, ok := findByName(sessions, from.Parent); !ok {
 		return "", fmt.Errorf("report: %w", &NotFoundError{Kind: "parent", Name: from.Parent})
@@ -262,11 +262,11 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 	sessions := c.sessions.SnapshotSessions()
 	lead, ok := findByName(sessions, req.FromSession)
 	if !ok {
-		return "", fmt.Errorf("merge: %w", &NotFoundError{Kind: "lead", Name: req.FromSession})
+		return "", fmt.Errorf("merge: %w", &NotFoundError{Kind: kindLead, Name: req.FromSession})
 	}
 	worker, ok := findByName(sessions, req.Worker)
 	if !ok {
-		return "", fmt.Errorf("merge: %w", &NotFoundError{Kind: "worker", Name: req.Worker})
+		return "", fmt.Errorf("merge: %w", &NotFoundError{Kind: kindWorker, Name: req.Worker})
 	}
 	if worker.Parent != req.FromSession {
 		return "", fmt.Errorf("merge refused: %w", &notAWorkerError{Worker: req.Worker, Lead: req.FromSession})
@@ -276,14 +276,14 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 		return "", fmt.Errorf("merge: %w", err)
 	}
 	if !wClean {
-		return "", fmt.Errorf("merge refused: %w", &uncommittedError{Role: "worker", Name: req.Worker})
+		return "", fmt.Errorf("merge refused: %w", &uncommittedError{Role: roleWorker, Name: req.Worker})
 	}
 	lClean, err := c.wt.IsCleanAt(lead.Worktree)
 	if err != nil {
 		return "", fmt.Errorf("merge: %w", err)
 	}
 	if !lClean {
-		return "", fmt.Errorf("merge refused: %w", &uncommittedError{Role: "lead", Name: req.FromSession})
+		return "", fmt.Errorf("merge refused: %w", &uncommittedError{Role: roleLead, Name: req.FromSession})
 	}
 
 	outcome, conflicts, err := c.wt.MergeInto(lead.Worktree, c.wt.Branch(req.Worker))
@@ -301,7 +301,7 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 			req.Worker, strings.Join(conflicts, ", "))
 	}
 	if !c.seedWithRetry(ctx, req.FromSession, msg) {
-		return "", fmt.Errorf("merge: %w", &deliveryTimeoutError{Role: "lead", Name: req.FromSession})
+		return "", fmt.Errorf("merge: %w", &deliveryTimeoutError{Role: roleLead, Name: req.FromSession})
 	}
 	return req.FromSession, nil
 }
@@ -309,7 +309,7 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 func (c *coordinator) Seal(ctx context.Context, req contracts.SealRequest) (string, error) {
 	sessions := c.sessions.SnapshotSessions()
 	if _, ok := findByName(sessions, req.FromSession); !ok {
-		return "", fmt.Errorf("seal: %w", &NotFoundError{Kind: "lead", Name: req.FromSession})
+		return "", fmt.Errorf("seal: %w", &NotFoundError{Kind: kindLead, Name: req.FromSession})
 	}
 	if req.Expected <= 0 {
 		return "", errSealExpectedPositive
@@ -326,12 +326,12 @@ func (c *coordinator) Seal(ctx context.Context, req contracts.SealRequest) (stri
 
 func (c *coordinator) FanOut(ctx context.Context, req contracts.FanOutRequest) ([]string, error) {
 	if _, ok := c.agents.Get(req.ToAgent); !ok {
-		return nil, fmt.Errorf("fanout: %w", &UnknownError{Kind: "agent", Name: req.ToAgent})
+		return nil, fmt.Errorf("fanout: %w", &UnknownError{Kind: kindAgent, Name: req.ToAgent})
 	}
 	sessions := c.sessions.SnapshotSessions()
 	lead, ok := findByName(sessions, req.FromSession)
 	if !ok {
-		return nil, fmt.Errorf("fanout: %w", &NotFoundError{Kind: "lead", Name: req.FromSession})
+		return nil, fmt.Errorf("fanout: %w", &NotFoundError{Kind: kindLead, Name: req.FromSession})
 	}
 	if len(req.Tasks) == 0 {
 		return nil, errFanoutNoTasks
@@ -361,7 +361,7 @@ func (c *coordinator) Route(ctx context.Context, req contracts.RouteRequest) (st
 	}
 	from, ok := c.findSession(req.FromSession)
 	if !ok {
-		return "", "", fmt.Errorf("route: %w", &NotFoundError{Kind: "lead", Name: req.FromSession})
+		return "", "", fmt.Errorf("route: %w", &NotFoundError{Kind: kindLead, Name: req.FromSession})
 	}
 	roster, err := c.agents.List()
 	if err != nil {

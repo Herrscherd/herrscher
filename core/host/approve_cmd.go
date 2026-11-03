@@ -19,7 +19,7 @@ import (
 const approvalsFile = "APPROVALS"
 
 func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store) error {
-	if err := reg.Add(contracts.New("approve", "list").
+	if err := reg.Add(contracts.New(nsApprove, "list").
 		Help("list the actions waiting for an answer").
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			pending := pendingApprovals()
@@ -45,7 +45,7 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 		return err
 	}
 
-	if err := reg.Add(contracts.New("approve", "allow").
+	if err := reg.Add(contracts.New(nsApprove, "allow").
 		Help("let a waiting action run").
 		ValueParam("id", "request id; also takes a bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
@@ -61,7 +61,7 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 		return err
 	}
 
-	if err := reg.Add(contracts.New("approve", "deny").
+	if err := reg.Add(contracts.New(nsApprove, "deny").
 		Help("refuse a waiting action; the reason is what the agent reads").
 		ValueParam("id", "request id; also takes a bare argument", false).
 		ValueParam("reason", "why, in the agent's own transcript", false).
@@ -82,7 +82,7 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 		return err
 	}
 
-	if err := reg.Add(contracts.New("approve", "rule").
+	if err := reg.Add(contracts.New(nsApprove, "rule").
 		Help("add a rule, remove one with --rm, or list them with no argument").
 		ValueParam("rule", "e.g. `ask Bash(git push*)`; also takes a bare argument", false).
 		ValueParam("rm", "the rule to remove, written exactly as it is listed", false).
@@ -128,13 +128,13 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 		return err
 	}
 
-	if err := reg.Add(contracts.New("approve", "ask").
+	if err := reg.Add(contracts.New(nsApprove, "ask").
 		Help("machine verb: ask the daemon whether one tool call may run").
-		ValueParam("session", "the session the call belongs to", true).
+		ValueParam(paramSession, "the session the call belongs to", true).
 		ValueParam("tool", "tool name, e.g. Bash", true).
 		ValueParam("subject", "the part a rule matches: the command, the path, the url", false).
 		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			session := strings.TrimSpace(in.Get("session"))
+			session := strings.TrimSpace(in.Get(paramSession))
 			req := approval.Request{
 				Tool:    strings.TrimSpace(in.Get("tool")),
 				Subject: in.Get("subject"),
@@ -150,13 +150,13 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 		return err
 	}
 
-	return reg.Add(contracts.New("approve", "mode").
+	return reg.Add(contracts.New(nsApprove, "mode").
 		Help("set a session's stance: ask (default), bypass, or strict").
-		ValueParam("session", "session name; also takes a bare argument", false).
+		ValueParam(paramSession, "session name; also takes a bare argument", false).
 		ValueParam("mode", "ask | bypass | strict; also takes a second bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			rest := in.Rest
-			name := strings.TrimSpace(in.Get("session"))
+			name := strings.TrimSpace(in.Get(paramSession))
 			if name == "" && len(rest) > 0 {
 				name, rest = strings.TrimSpace(rest[0]), rest[1:]
 			}

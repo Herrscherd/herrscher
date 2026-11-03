@@ -105,7 +105,7 @@ func listenAndRestrict(ctx context.Context, path string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(path, 0o600); err != nil {
+	if err := os.Chmod(path, ownerOnlyFileMode); err != nil {
 		logCleanup(l.Close())
 		logCleanup(os.Remove(path))
 		return nil, err

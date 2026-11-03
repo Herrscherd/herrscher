@@ -74,7 +74,7 @@ func gatewayEnvFor(vendor string, creds contracts.GatewayCreds, modelArg string)
 			contracts.EnvAnthropicAPIKey:  creds.Token(),
 			"ANTHROPIC_MODEL":             modelArg,
 		}
-	case "codex":
+	case backendCodex:
 		return map[string]string{
 			contracts.EnvOpenAIBaseURL: creds.BaseURL(),
 			contracts.EnvNeubloxToken:  creds.Token(),

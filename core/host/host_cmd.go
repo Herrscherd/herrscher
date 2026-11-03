@@ -16,7 +16,7 @@ import (
 func addHostCommands(reg *cli.Registry, st *state.State) error {
 	if err := reg.Add(contracts.New("host", "add").
 		Help("register a machine sessions can run on, and provision herrscher there").
-		ValueParam("name", "host name (unique; `local` is reserved); also takes a bare argument", false).
+		ValueParam(paramName, "host name (unique; `local` is reserved); also takes a bare argument", false).
 		Param("ssh", "ssh target, e.g. me@build1", true).
 		Param("workspace", "absolute path to the workspace root over there", true).
 		Do(func(ctx context.Context, in contracts.Input) (string, error) {
@@ -74,7 +74,7 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 
 	if err := reg.Add(contracts.New("host", "check").
 		Help("say whether a host can carry a session: ssh, herrscher, workspace, git").
-		ValueParam("name", "host name; also takes a bare argument", false).
+		ValueParam(paramName, "host name; also takes a bare argument", false).
 		Do(func(ctx context.Context, in contracts.Input) (string, error) {
 			name := hostNameOf(in)
 			h, ok := st.FindHost(name)
@@ -102,7 +102,7 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 
 	if err := reg.Add(contracts.New("host", "provision").
 		Help("rebuild and reinstall herrscher on a host from the configured source").
-		ValueParam("name", "host name; also takes a bare argument", false).
+		ValueParam(paramName, "host name; also takes a bare argument", false).
 		Do(func(ctx context.Context, in contracts.Input) (string, error) {
 			name := hostNameOf(in)
 			h, ok := st.FindHost(name)
@@ -123,7 +123,7 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 
 	return reg.Add(contracts.New("host", "rm").
 		Help("forget a host (refused while sessions still run on it)").
-		ValueParam("name", "host name; also takes a bare argument", false).
+		ValueParam(paramName, "host name; also takes a bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			name := hostNameOf(in)
 			if _, ok := st.FindHost(name); !ok {
@@ -145,7 +145,7 @@ func addHostCommands(reg *cli.Registry, st *state.State) error {
 		}))
 }
 
-func hostNameOf(in contracts.Input) string { return firstOf(in.Get("name"), in.Rest) }
+func hostNameOf(in contracts.Input) string { return firstOf(in.Get(paramName), in.Rest) }
 
 func unknownHost(st *state.State, name string) error {
 	var known []string

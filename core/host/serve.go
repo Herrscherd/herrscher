@@ -239,7 +239,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	}
 
 	for _, p := range contracts.Default.Plugins() {
-		log.Info("plugin compiled in", "kind", p.Manifest.Kind, "category", p.Manifest.Category, "status", p.Manifest.Status)
+		log.Info("plugin compiled in", "kind", p.Manifest.Kind, "category", p.Manifest.Category, keyStatus, p.Manifest.Status)
 	}
 
 	if o.HealthAddr != "" {
@@ -263,7 +263,7 @@ func seedTerminalHome(st *state.State, hasForeground bool) {
 	if !hasForeground || st.Home.ID != "" {
 		return
 	}
-	logCleanup(st.SetHome(state.HomeRef{ID: "terminal", Type: "terminal"}))
+	logCleanup(st.SetHome(state.HomeRef{ID: homeTerminalID, Type: kindTerminal}))
 }
 
 func startRemotePluginHosts(ctx context.Context, self string, remote map[contracts.Category]bool, log *slog.Logger) {
@@ -322,12 +322,12 @@ func firstAdmin(gws []Deps) contracts.ChannelAdmin {
 }
 
 func adminForHome(gws []Deps, home state.HomeRef) contracts.ChannelAdmin {
-	wantTerminal := home.Type == "terminal"
+	wantTerminal := home.Type == kindTerminal
 	for _, g := range gws {
 		if g.Admin == nil || g.Gateway == nil {
 			continue
 		}
-		if (g.Gateway.Manifest().Kind == "terminal") == wantTerminal {
+		if (g.Gateway.Manifest().Kind == kindTerminal) == wantTerminal {
 			return g.Admin
 		}
 	}
@@ -339,7 +339,7 @@ func terminalAdmin(gws []Deps) contracts.ChannelAdmin {
 		if g.Admin == nil || g.Gateway == nil {
 			continue
 		}
-		if g.Gateway.Manifest().Kind == "terminal" {
+		if g.Gateway.Manifest().Kind == kindTerminal {
 			return g.Admin
 		}
 	}
@@ -381,7 +381,7 @@ func nonTerminalKinds(all []Deps) []string {
 		if g.Gateway == nil {
 			continue
 		}
-		if g.Gateway.Manifest().Kind != "terminal" {
+		if g.Gateway.Manifest().Kind != kindTerminal {
 			out = append(out, g.Gateway.Manifest().Kind)
 		}
 	}

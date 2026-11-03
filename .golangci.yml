@@ -266,9 +266,6 @@ linters:
       - path: ^core/bridge/attachments.go$
         linters: [gochecknoglobals]
         text: "^pinnedTransports is a global"
-      - path: ^(attach|memory_verbs_test)\.go$
-        linters: [musttag]
-        text: "should be annotated with the .json. tag"
       - path: ^bridge_provision_test\.go$
         linters: [unparam]
         text: 'result 0 \(error\) is always nil'

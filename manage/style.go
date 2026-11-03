@@ -31,31 +31,31 @@ func (s style) wrap(code, text string) string {
 }
 
 func (s style) header(title, sub string) {
-	_, _ = fmt.Fprintf(os.Stderr, "\n  %s\n", s.wrap(s.bold+s.cyan, "herrscher · "+title))
+	fmt.Fprintf(os.Stderr, "\n  %s\n", s.wrap(s.bold+s.cyan, "herrscher · "+title))
 	if sub != "" {
-		_, _ = fmt.Fprintf(os.Stderr, "  %s\n\n", s.wrap(s.dim, sub))
+		fmt.Fprintf(os.Stderr, "  %s\n\n", s.wrap(s.dim, sub))
 	}
 }
 
 func summaryStack(modules []string) {
 	sty := newStyle()
-	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, "stack"))
+	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, "stack"))
 	for _, m := range modules {
-		_, _ = fmt.Fprintf(os.Stderr, "    %s %s\n", sty.wrap(sty.green, "+"), shortModule(m))
+		fmt.Fprintf(os.Stderr, "    %s %s\n", sty.wrap(sty.green, "+"), shortModule(m))
 	}
-	_, _ = fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr)
 }
 
 func summaryConfig(path string, count int) {
 	sty := newStyle()
-	_, _ = fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr)
 	if count > 0 {
-		_, _ = fmt.Fprintf(os.Stderr, "  %s wrote %d setting(s) to %s\n", sty.wrap(sty.green, "✓"), count, sty.wrap(sty.bold, path))
+		fmt.Fprintf(os.Stderr, "  %s wrote %d setting(s) to %s\n", sty.wrap(sty.green, "✓"), count, sty.wrap(sty.bold, path))
 	} else {
-		_, _ = fmt.Fprintf(os.Stderr, "  %s nothing entered; %s left unchanged\n", sty.wrap(sty.dim, "·"), path)
+		fmt.Fprintf(os.Stderr, "  %s nothing entered; %s left unchanged\n", sty.wrap(sty.dim, "·"), path)
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, "the installed binary already has its plugins compiled in."))
-	_, _ = fmt.Fprintf(os.Stderr, "  start it with:  %s\n\n", sty.wrap(sty.bold, "herrscherd serve"))
+	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, "the installed binary already has its plugins compiled in."))
+	fmt.Fprintf(os.Stderr, "  start it with:  %s\n\n", sty.wrap(sty.bold, "herrscherd serve"))
 }
 
 func shortModule(m string) string {

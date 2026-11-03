@@ -3,6 +3,7 @@
 package control
 
 import (
+	"context"
 	"net"
 
 	"github.com/Microsoft/go-winio"
@@ -18,6 +19,6 @@ func listenControl(path string) (net.Listener, error) {
 	})
 }
 
-func dialControl(path string) (net.Conn, error) {
-	return winio.DialPipe(path, nil)
+func dialControl(ctx context.Context, path string) (net.Conn, error) {
+	return winio.DialPipeContext(ctx, path)
 }

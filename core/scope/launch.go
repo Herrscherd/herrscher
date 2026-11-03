@@ -79,18 +79,18 @@ func LaunchFrom(ctx context.Context, cfg contracts.PluginConfig) Launch {
 	if !boolSetting(cfg, SetLearn, true) {
 		return Launch{}
 	}
-	l := Launch{
+	launch := Launch{
 		Agent:     cfg.Get(SetMemAgent),
 		Extractor: cfg.Get(SetExtractor),
 		Every:     intSetting(cfg, SetEvery, defaultEvery),
 	}
 	if p := Name(cfg.Get(SetProject)); p != "" {
-		l.Project, l.Pinned = p, true
-		return l
+		launch.Project, launch.Pinned = p, true
+		return launch
 	}
-	l.Project = ProjectFromDir(ctx, cwd())
-	l.Pinned = l.Project != "" && cfg.Get(SetProjectPin) == PinAtLaunch
-	return l
+	launch.Project = ProjectFromDir(ctx, cwd())
+	launch.Pinned = launch.Project != "" && cfg.Get(SetProjectPin) == PinAtLaunch
+	return launch
 }
 
 // LaunchFromEnv is LaunchFrom against the process environment, for the callers

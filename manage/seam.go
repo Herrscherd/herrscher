@@ -101,11 +101,11 @@ func (o *PluginOps) Restore() error {
 func (o *PluginOps) run(ctx context.Context, cmds [][]string) (string, error) {
 	var log strings.Builder
 	for _, cmd := range cmds {
-		_, _ = log.WriteString("+ " + strings.Join(cmd, " ") + "\n")
+		log.WriteString("+ " + strings.Join(cmd, " ") + "\n")
 		cmd := exec.CommandContext(ctx, cmd[0], cmd[1:]...)
 		cmd.Dir = o.dir
 		out, err := cmd.CombinedOutput()
-		_, _ = log.Write(out)
+		log.Write(out)
 		if err != nil {
 			return log.String(), err
 		}

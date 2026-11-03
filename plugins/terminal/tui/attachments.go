@@ -28,9 +28,6 @@ const (
 	extGIF   = ".gif"
 )
 
-// Attachment is a file staged to send with the next message (and echoed under the
-// user's transcript entry once sent). Path is a local filesystem path; the
-// terminal gateway hands it to the host as a file:// URL.
 var (
 	errEmptyClipboard = errors.New("clipboard image is empty")
 	errSizeLimit      = errors.New("exceeds")

@@ -131,7 +131,7 @@ func isApprovalHook(entry any) bool {
 func SelfBin() string {
 	bin, err := os.Executable()
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "approvals: this binary cannot name itself, so sessions materialize with no approval hook: %v\n", err)
+		fmt.Fprintf(os.Stderr, "approvals: this binary cannot name itself, so sessions materialize with no approval hook: %v\n", err)
 		return ""
 	}
 	return bin

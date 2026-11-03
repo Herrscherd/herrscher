@@ -1,6 +1,7 @@
 package control
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -129,7 +130,12 @@ func (a *Acceptor) drainPending() {
 // Dial connects to the hub's control socket, returning a persistent Conn. The
 // bridge calls this at startup and again on each reconnect.
 func Dial(path string) (*Conn, error) {
-	conn, err := dialControl(path)
+	return DialContext(context.Background(), path)
+}
+
+// DialContext is Dial, abandoned when ctx is done.
+func DialContext(ctx context.Context, path string) (*Conn, error) {
+	conn, err := dialControl(ctx, path)
 	if err != nil {
 		return nil, err
 	}

@@ -36,7 +36,7 @@ func writePins(pins map[string]bool) string {
 	sort.Strings(mods)
 	var out strings.Builder
 	for _, m := range mods {
-		_, _ = out.WriteString(m)
+		out.WriteString(m)
 		_ = out.WriteByte('\n')
 	}
 	return out.String()

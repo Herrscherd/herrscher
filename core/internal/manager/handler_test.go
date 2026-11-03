@@ -300,9 +300,10 @@ func (f *fakeWT) Create(_ context.Context, repo, name, base string) (string, err
 	f.createdBase = base
 	return f.path, nil
 }
-func (f *fakeWT) PreExisting(_ context.Context, repo, name string) bool { return f.preExisting }
-func (f *fakeWT) Branch(name string) string                             { return "session/" + name }
-func (f *fakeWT) Remove(_ context.Context, repo, name string, force bool) error {
+
+func (f *fakeWT) PreExisting(context.Context, string, string) bool { return f.preExisting }
+func (f *fakeWT) Branch(name string) string                        { return "session/" + name }
+func (f *fakeWT) Remove(_ context.Context, _, name string, force bool) error {
 	if f.removeErr != nil && !force {
 		return f.removeErr
 	}

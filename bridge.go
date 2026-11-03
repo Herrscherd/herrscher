@@ -239,7 +239,7 @@ func applyEnvFromStdin(r io.Reader) error {
 		line, err := reader.ReadString('\n')
 		trimmed := strings.TrimRight(line, "\r\n")
 		if trimmed != "" {
-			_, _ = block.WriteString(trimmed)
+			block.WriteString(trimmed)
 			_ = block.WriteByte('\n')
 		} else if line != "" {
 			break

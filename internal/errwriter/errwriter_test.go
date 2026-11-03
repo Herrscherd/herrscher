@@ -10,7 +10,7 @@ var errSink = errors.New("sink closed")
 
 type failingSink struct{ wrote int }
 
-func (f *failingSink) Write(p []byte) (int, error) {
+func (f *failingSink) Write([]byte) (int, error) {
 	f.wrote++
 	return 0, errSink
 }

@@ -1078,7 +1078,7 @@ func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (stri
 	out.WriteString("Active sessions:\n")
 	for i := range sessions {
 		s := sessions[i]
-		_, _ = fmt.Fprintf(&out, "• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
+		fmt.Fprintf(&out, "• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
 	}
 	return out.String(), nil
 }
@@ -1103,9 +1103,9 @@ func (h *Handler) sessionWhoRun(_ context.Context, input contracts.Input) (strin
 		return "Personne n'a encore écrit dans cette session.", nil
 	}
 	var out strings.Builder
-	_, _ = fmt.Fprintf(&out, "Participants observed in **%s**:\n", name)
+	fmt.Fprintf(&out, "Participants observed in **%s**:\n", name)
 	for _, id := range ids {
-		_, _ = fmt.Fprintf(&out, "• <@%s>\n", id)
+		fmt.Fprintf(&out, "• <@%s>\n", id)
 	}
 	return out.String(), nil
 }
@@ -1151,7 +1151,7 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (strin
 	}
 	var out strings.Builder
 	for _, e := range entries {
-		_, _ = fmt.Fprintf(&out, "**%s** %s\n", e.Role, e.Text)
+		fmt.Fprintf(&out, "**%s** %s\n", e.Role, e.Text)
 	}
 	return out.String(), nil
 }

@@ -27,25 +27,25 @@ func installShippedSkills(ctx context.Context) {
 	dst := filepath.Join(home, ".claude", "skills")
 	out, err := skills.Install(src, dst)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "herrscher: install shipped skills: "+err.Error())
+		fmt.Fprintln(os.Stderr, "herrscher: install shipped skills: "+err.Error())
 	}
 	reportSkills(dst, out, "skill")
 	plug, notes := installPluginSkills(ctx, contracts.Default.Plugins(), os.Getenv, dst)
 	for _, n := range notes {
-		_, _ = fmt.Fprintln(os.Stderr, n)
+		fmt.Fprintln(os.Stderr, n)
 	}
 	reportSkills(dst, plug, "plugin skill")
 }
 
 func reportSkills(dst string, out skills.Outcome, kind string) {
 	for _, name := range out.Installed {
-		_, _ = fmt.Fprintln(os.Stderr, "herrscher: installed "+kind+" "+name)
+		fmt.Fprintln(os.Stderr, "herrscher: installed "+kind+" "+name)
 	}
 	for _, name := range out.Updated {
-		_, _ = fmt.Fprintln(os.Stderr, "herrscher: updated "+kind+" "+name+" to the shipped version")
+		fmt.Fprintln(os.Stderr, "herrscher: updated "+kind+" "+name+" to the shipped version")
 	}
 	for _, name := range out.Diverged {
-		_, _ = fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" differs from the one this build ships and was left as it is; "+
+		fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" differs from the one this build ships and was left as it is; "+
 			"delete "+filepath.Join(dst, name)+" to take the shipped version")
 	}
 }

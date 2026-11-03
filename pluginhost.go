@@ -67,9 +67,14 @@ func hostPlugin(ctx context.Context, category contracts.Category) (hostedPlugin,
 			register:  func(s *grpc.Server) error { transport.RegisterBackendSkeleton(s, impl); return nil },
 			closeReal: func() error { return impl.Close() },
 		}, nil
-	default:
-		return hostedPlugin{}, fmt.Errorf("plugin-host: category %q passed the support gate but %w", category, errNoSkeleton)
+	case contracts.CategoryGateway, contracts.CategorySkills:
+		return hostedPlugin{}, noSkeletonError(category)
 	}
+	return hostedPlugin{}, noSkeletonError(category)
+}
+
+func noSkeletonError(category contracts.Category) error {
+	return fmt.Errorf("plugin-host: category %q passed the support gate but %w", category, errNoSkeleton)
 }
 
 func newPluginServer(tlsCfg transport.TLSConfig) (*grpc.Server, error) {
@@ -136,8 +141,8 @@ func runPluginHost(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := hosted.register(server); err != nil {
-		return err
+	if regErr := hosted.register(server); regErr != nil {
+		return regErr
 	}
 
 	conn, err := nats.Connect(*natsURL)

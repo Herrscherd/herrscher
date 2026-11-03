@@ -90,12 +90,12 @@ func renderSkill(node contracts.Node) (string, string, bool) {
 		return "", "", false
 	}
 	var out strings.Builder
-	_, _ = out.WriteString("---\nname: ")
-	_, _ = out.WriteString(name)
-	_, _ = out.WriteString("\ndescription: ")
-	_, _ = out.WriteString(strings.Join(strings.Fields(node.Title), " "))
-	_, _ = out.WriteString("\n---\n")
-	_, _ = out.WriteString(body)
+	out.WriteString("---\nname: ")
+	out.WriteString(name)
+	out.WriteString("\ndescription: ")
+	out.WriteString(strings.Join(strings.Fields(node.Title), " "))
+	out.WriteString("\n---\n")
+	out.WriteString(body)
 	_ = out.WriteByte('\n')
 	return name, out.String(), true
 }

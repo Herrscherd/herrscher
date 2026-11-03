@@ -18,6 +18,6 @@ func listenControl(path string) (net.Listener, error) {
 	return new(net.ListenConfig).Listen(context.Background(), "unix", path)
 }
 
-func dialControl(path string) (net.Conn, error) {
-	return new(net.Dialer).DialContext(context.Background(), "unix", path)
+func dialControl(ctx context.Context, path string) (net.Conn, error) {
+	return new(net.Dialer).DialContext(ctx, "unix", path)
 }

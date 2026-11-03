@@ -22,18 +22,13 @@ func WriteEvent(dst io.Writer, e contracts.Event) error {
 	return err
 }
 
-// ScanEvents reads JSON-line events from r, calling fn for each. A blank line is
-// skipped; a line starting with '{' MUST parse as a JSON Event or it is a
-// protocol error (returned, not surfaced as a pick); a non-'{' line is treated
-// as the legacy bare pick value and surfaced as Event{T:"pick", Value:line} for
-// back-compat. It returns the first fn error, a malformed-line error, or a read
-// error other than io.EOF.
 const (
 	scanInitialBuffer = 64 * 1024
 	scanMaxLine       = 1024 * 1024
 )
 
 // ScanEvents decodes events from r and passes each one to fn until r ends or fn fails.
+// ScanEvents passes each event read from r to handle and rejects a malformed line.
 func ScanEvents(r io.Reader, handle func(contracts.Event) error) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, scanInitialBuffer), scanMaxLine)

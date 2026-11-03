@@ -8,17 +8,17 @@ import (
 	"testing"
 )
 
-func gateHandler(t *testing.T, grain, why string) (*Handler, string) {
+func gateHandler(t *testing.T, dir, grain, why string) *Handler {
 	t.Helper()
 	h, _, localWT, _ := handlerWithHosts(t)
-	dir := t.TempDir()
 	localWT.path = dir
 	h.SetGateResolver(func(string) (string, string) { return grain, why })
-	return h, dir
+	return h
 }
 
 func TestSessionCreateGatesASessionWithoutAnAgent(t *testing.T) {
-	h, dir := gateHandler(t, "tool", "")
+	dir := t.TempDir()
+	h := gateHandler(t, dir, "tool", "")
 	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "strict"))
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -36,7 +36,8 @@ func TestSessionCreateGatesASessionWithoutAnAgent(t *testing.T) {
 }
 
 func TestSessionCreateLeavesATrackedSettingsFileAlone(t *testing.T) {
-	h, dir := gateHandler(t, "tool", "")
+	dir := t.TempDir()
+	h := gateHandler(t, dir, "tool", "")
 	claude := filepath.Join(dir, ".claude")
 	if err := os.MkdirAll(claude, 0o755); err != nil {
 		t.Fatal(err)
@@ -58,7 +59,8 @@ func TestSessionCreateLeavesATrackedSettingsFileAlone(t *testing.T) {
 }
 
 func TestSessionCreateWarnsWhenTheVendorCannotEnforce(t *testing.T) {
-	h, dir := gateHandler(t, "", "cursor-agent exposes no permission hook")
+	dir := t.TempDir()
+	h := gateHandler(t, dir, "", "cursor-agent exposes no permission hook")
 	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "vendor", "cursor", "approvals", "strict"))
 	if err != nil {
 		t.Fatalf("create must not refuse: %v", err)
@@ -75,7 +77,7 @@ func TestSessionCreateWarnsWhenTheVendorCannotEnforce(t *testing.T) {
 }
 
 func TestSessionCreateWarnsOnASharedSession(t *testing.T) {
-	h, _ := gateHandler(t, "tool", "")
+	h := gateHandler(t, t.TempDir(), "tool", "")
 	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "strict", "shared", "true"))
 	if err != nil {
 		t.Fatalf("create must not refuse: %v", err)
@@ -86,7 +88,7 @@ func TestSessionCreateWarnsOnASharedSession(t *testing.T) {
 }
 
 func TestSessionCreateWarnsOnARemoteSessionWithoutAnAgent(t *testing.T) {
-	h, _ := gateHandler(t, "tool", "")
+	h := gateHandler(t, t.TempDir(), "tool", "")
 	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "host", "build1", "approvals", "strict"))
 	if err != nil {
 		t.Fatalf("create must not refuse: %v", err)
@@ -97,7 +99,8 @@ func TestSessionCreateWarnsOnARemoteSessionWithoutAnAgent(t *testing.T) {
 }
 
 func TestSessionCreateStaysQuietAndUngatedOnBypass(t *testing.T) {
-	h, dir := gateHandler(t, "tool", "")
+	dir := t.TempDir()
+	h := gateHandler(t, dir, "tool", "")
 	for _, mode := range []string{"", "bypass"} {
 		out, err := h.sessionCreateRun(context.Background(), args("name", "demo"+mode, "approvals", mode))
 		if err != nil {

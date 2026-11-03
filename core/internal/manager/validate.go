@@ -10,13 +10,15 @@ var sessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
 var slugInvalidRe = regexp.MustCompile(`[^a-z0-9_-]+`)
 
+const maxSlugLen = 64
+
 func slugify(name string) string {
-	s := slugInvalidRe.ReplaceAllString(strings.ToLower(strings.TrimSpace(name)), "-")
-	s = strings.Trim(s, "-_")
-	if len(s) > 64 {
-		s = strings.Trim(s[:64], "-_")
+	slug := slugInvalidRe.ReplaceAllString(strings.ToLower(strings.TrimSpace(name)), "-")
+	slug = strings.Trim(slug, "-_")
+	if len(slug) > maxSlugLen {
+		slug = strings.Trim(slug[:maxSlugLen], "-_")
 	}
-	return s
+	return slug
 }
 
 var projectRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)

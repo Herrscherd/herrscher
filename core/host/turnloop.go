@@ -10,6 +10,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	control "github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -20,12 +21,12 @@ var pollInterval = 50 * time.Millisecond
 var maxPollBackoff = 30 * time.Second
 
 type budgetGate interface {
-	Check(session string) (reason string, headroom uint64, capped bool)
+	Check(session string) manager.BudgetCheck
 }
 
 type noBudgetGate struct{}
 
-func (noBudgetGate) Check(string) (string, uint64, bool) { return "", 0, false }
+func (noBudgetGate) Check(string) manager.BudgetCheck { return manager.BudgetCheck{} }
 
 type tokenGuard struct {
 	headroom uint64
@@ -438,13 +439,13 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			d.saidElsewhere = ev.T == "input" && outsideBoundGateways(q.origin, d.gateways)
 			var guard tokenGuard
 			if ev.T == "input" {
-				reason, headroom, capped := d.gate.Check(d.name)
-				if reason != "" {
-					d.emitPaused(ctx, reason)
-					d.fanOut(ctx, contracts.Event{T: "status", Text: "tour refusé, plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
+				verdict := d.gate.Check(d.name)
+				if verdict.Reason != "" {
+					d.emitPaused(ctx, verdict.Reason)
+					d.fanOut(ctx, contracts.Event{T: "status", Text: "tour refusé, plafond budget atteint (" + verdict.Reason + ") ; augmentez le plafond puis renvoyez le message"})
 					continue
 				}
-				guard = tokenGuard{headroom: headroom, capped: capped}
+				guard = tokenGuard{headroom: verdict.Headroom, capped: verdict.Capped}
 				if ev.TurnID == "" {
 					ev.TurnID = newTurnID()
 				}
@@ -532,8 +533,8 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 				}
 				d.seenMu.Unlock()
 				d.metrics.TurnCompleted()
-				if reason, _, _ := d.gate.Check(d.name); reason != "" {
-					d.emitPaused(ctx, reason)
+				if verdict := d.gate.Check(d.name); verdict.Reason != "" {
+					d.emitPaused(ctx, verdict.Reason)
 					return true
 				}
 				return true

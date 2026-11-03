@@ -41,15 +41,28 @@ type SessionBudgetGate struct {
 // BudgetGate returns a gate bound to this handler's session store + transcript
 // dir. The returned *SessionBudgetGate satisfies host's (private) budgetGate
 // interface structurally via Check.
+type sessionUsage struct {
+	cost   float64
+	tokens uint64
+}
+
+// BudgetCheck is the verdict on a live session: why it is capped, and the headroom left before its cap.
+type BudgetCheck struct {
+	Reason   string
+	Headroom uint64
+	Capped   bool
+}
+
+// BudgetGate returns the gate the host consults to check live sessions against their caps.
 func (h *Handler) BudgetGate() *SessionBudgetGate { return &SessionBudgetGate{h: h} }
 
-func (g *SessionBudgetGate) usageFor(s state.Session) (float64, uint64) {
+func (g *SessionBudgetGate) usageFor(s state.Session) sessionUsage {
 	entries := state.ReadTranscript(state.TranscriptPath(g.h.partDir, s.Name), 0)
-	u, _ := aggregateUsage(entries)
-	if u == nil {
-		return 0, 0
+	aggregated := aggregateUsage(entries).usage
+	if aggregated == nil {
+		return sessionUsage{}
 	}
-	return u.Cost, uint64(u.TokensIn + u.TokensOut)
+	return sessionUsage{cost: aggregated.Cost, tokens: nonNegativeCount(aggregated.TokensIn + aggregated.TokensOut)}
 }
 
 // Check answers both budget questions from one transcript fold: the reason the
@@ -63,19 +76,22 @@ func (g *SessionBudgetGate) usageFor(s state.Session) (float64, uint64) {
 // has already blown past. Cost has no equivalent: a backend reports cost only in
 // its terminal result event, so there is no mid-turn number to compare a cost
 // cap against.
-func (g *SessionBudgetGate) Check(session string) (reason string, headroom uint64, capped bool) {
-	h := g.h
-	sess, ok := h.st.FindSession(session)
+func (g *SessionBudgetGate) Check(session string) BudgetCheck {
+	handler := g.h
+	sess, ok := handler.st.FindSession(session)
 	if !ok {
-		return "", 0, false
+		return BudgetCheck{}
 	}
-	sc, stk := g.usageFor(sess)
-	cc, ctk := cohortTotals(sess, h.st.SnapshotSessions(), g.usageFor)
-	reason = budgetReason(sc, stk, sess.CostCap, sess.TokenCap, cc, ctk, sess.CohortCostCap, sess.CohortTokenCap)
+	own := g.usageFor(sess)
+	spentCost, stk := own.cost, own.tokens
+	cohort := cohortTotals(sess, handler.st.SnapshotSessions(), g.usageFor)
+	cc, ctk := cohort.cost, cohort.tokens
+	reason := budgetReason(spentCost, stk, sess.CostCap, sess.TokenCap, cc, ctk, sess.CohortCostCap, sess.CohortTokenCap)
 	if reason != "" {
-		_ = h.st.SetPausedReason(session, reason)
+		handler.warnIfFailed(handler.st.SetPausedReason(session, reason), "pause "+session)
 	}
-	headroom = ^uint64(0)
+	headroom := ^uint64(0)
+	capped := false
 	if sess.TokenCap > 0 {
 		headroom, capped = min(headroom, remaining(sess.TokenCap, stk)), true
 	}
@@ -85,45 +101,53 @@ func (g *SessionBudgetGate) Check(session string) (reason string, headroom uint6
 	if !capped {
 		headroom = 0
 	}
-	return reason, headroom, capped
+	return BudgetCheck{Reason: reason, Headroom: headroom, Capped: capped}
 }
 
 func cohortMembers(target state.Session, all []state.Session) []state.Session {
 	byName := make(map[string]state.Session, len(all))
 	children := make(map[string][]string, len(all))
-	for _, s := range all {
-		byName[s.Name] = s
-		if s.Parent != "" && s.Parent != s.Name {
-			children[s.Parent] = append(children[s.Parent], s.Name)
+	for i := range all {
+		session := all[i]
+		byName[session.Name] = session
+		if session.Parent != "" && session.Parent != session.Name {
+			children[session.Parent] = append(children[session.Parent], session.Name)
 		}
 	}
 	root := target
 	seen := map[string]bool{root.Name: true}
 	for root.Parent != "" && root.Parent != root.Name {
-		p, ok := byName[root.Parent]
-		if !ok || seen[p.Name] {
+		parent, ok := byName[root.Parent]
+		if !ok || seen[parent.Name] {
 			break
 		}
-		seen[p.Name] = true
-		root = p
+		seen[parent.Name] = true
+		root = parent
 	}
 	var members []state.Session
-	visited := map[string]bool{}
+	visited := make(map[string]bool)
 	var walk func(name string)
 	walk = func(name string) {
 		if visited[name] {
 			return
 		}
 		visited[name] = true
-		s, ok := byName[name]
+		member, ok := byName[name]
 		if !ok {
 			return
 		}
-		members = append(members, s)
+		members = append(members, member)
 		for _, ch := range children[name] {
 			walk(ch)
 		}
 	}
 	walk(root.Name)
 	return members
+}
+
+func nonNegativeCount(count int) uint64 {
+	if count < 0 {
+		return 0
+	}
+	return uint64(count)
 }

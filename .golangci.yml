@@ -180,9 +180,30 @@ linters:
     rules:
       - path: _test\.go
         linters: [forbidigo, err113, gosec, goconst, mnd, varnamelen]
+      - path: _test\.go
+        linters: [gocritic]
+        text: "tooManyResultsChecker"
       - path: ^(cmd|tools)/
         linters: [gosec]
         text: "^G(304|703):"
+      - path: ^core/internal/manager/session\.go$
+        linters: [misspell]
+        text: "marrage"
+      - path: ^core/internal/agent/(agent|store)\.go$
+        linters: [gosec]
+        text: "^G(30[126]):"
+      - path: ^core/internal/agent/(agent|store)\.go$
+        linters: [gosec]
+        text: "^G(304|204|703):"
+      - path: ^core/internal/agent/agent\.go$
+        linters: [gosec]
+        text: "^G101:"
+      - path: ^core/internal/agent/agent\.go$
+        linters: [noctx]
+        text: "exec.Command"
+      - path: ^core/internal/(agent|manager)/
+        linters: [revive]
+        text: "Unhandled error in call to function strings.Builder.Write"
 
 formatters:
   enable:

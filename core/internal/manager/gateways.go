@@ -21,14 +21,14 @@ func ParseGateways(list string, terminalOnly bool, defaults []string) []string {
 		return gatewayDefault(terminalOnly, defaults)
 	}
 	out := make([]string, 0, maxGateways)
-	seen := map[string]bool{}
-	for _, p := range strings.Split(list, ",") {
-		p = strings.ToLower(strings.TrimSpace(p))
-		if p == "" || seen[p] || !gatewayKindRe.MatchString(p) {
+	seen := make(map[string]bool)
+	for _, part := range strings.Split(list, ",") {
+		part = strings.ToLower(strings.TrimSpace(part))
+		if part == "" || seen[part] || !gatewayKindRe.MatchString(part) {
 			continue
 		}
-		seen[p] = true
-		out = append(out, p)
+		seen[part] = true
+		out = append(out, part)
 		if len(out) == maxGateways {
 			break
 		}
@@ -41,7 +41,7 @@ func ParseGateways(list string, terminalOnly bool, defaults []string) []string {
 
 func gatewayDefault(terminalOnly bool, defaults []string) []string {
 	if terminalOnly {
-		return []string{"terminal"}
+		return []string{terminalPlace}
 	}
 	return append([]string(nil), defaults...)
 }

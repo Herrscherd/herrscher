@@ -3,8 +3,11 @@ package manager
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 
 	"github.com/Herrscherd/herrscher/core/internal/agent"
+	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -12,6 +15,7 @@ import (
 // Commands (commands.go) turns its methods into declared contracts.Cmd values
 // the CLI dispatches.
 type Handler struct {
+	log             *slog.Logger
 	d               channelAdmin
 	td              channelAdmin
 	sup             supervisor
@@ -39,30 +43,30 @@ func (h *Handler) SetHosts(hs Hosts) { h.hs = hs }
 func (h *Handler) worktreesOn(hostName string) (Worktrees, string, error) {
 	if hostName == "" || h.hs == nil {
 		if hostName != "" {
-			return nil, "", fmt.Errorf("session wants host %q but no host is registered", hostName)
+			return nil, "", fmt.Errorf("session wants host %q but %w", hostName, ErrNoHostRegistered)
 		}
 		return h.wt, h.st.WorkspaceRoot(), nil
 	}
-	wt, err := h.hs.Worktrees(hostName)
+	worktrees, err := h.hs.Worktrees(hostName)
 	if err != nil {
 		return nil, "", err
 	}
-	ws, err := h.hs.Workspace(hostName)
+	workspaceRoot, err := h.hs.Workspace(hostName)
 	if err != nil {
 		return nil, "", err
 	}
-	return wt, ws, nil
+	return worktrees, workspaceRoot, nil
 }
 
-func (h *Handler) materializeOn(ctx context.Context, hostName string, a agent.Agent, worktreePath string, hook bool) error {
+func (h *Handler) materializeOn(ctx context.Context, hostName string, profile agent.Agent, worktreePath string, hook bool) error {
 	if hostName == "" || h.hs == nil {
 		bin := ""
 		if hook {
 			bin = agent.SelfBin()
 		}
-		return a.MaterializeAs(worktreePath, bin)
+		return profile.MaterializeAs(worktreePath, bin)
 	}
-	return h.hs.Materialize(ctx, hostName, a, worktreePath, hook)
+	return h.hs.Materialize(ctx, hostName, profile, worktreePath, hook)
 }
 
 // SetDefaultModel wires the operator's configured default. It is a fallback,
@@ -100,10 +104,10 @@ func (h *Handler) checkSpawnSource(cmdExplicit bool, modelID string) error {
 		return nil
 	}
 	if cmdExplicit {
-		return fmt.Errorf("an explicit cmd is refused under the gateway-only route policy: it bypasses the model catalog; select a model instead")
+		return ErrExplicitCmdRefused
 	}
 	if modelID == "" {
-		return fmt.Errorf("a model is required under the gateway-only route policy: without one the session would spawn on this machine's own vendor login")
+		return ErrModelRequired
 	}
 	return nil
 }
@@ -120,12 +124,17 @@ func (h *Handler) SetModelValidator(fn func(vendor, modelID string) error) { h.v
 // nothing to ask can give.
 func (h *Handler) SetGateResolver(fn func(vendor string) (grain, why string)) { h.gate = fn }
 
-func (h *Handler) gateFor(vendor string) (gates bool, why string) {
+type approvalGate struct {
+	enforced bool
+	why      string
+}
+
+func (h *Handler) gateFor(vendor string) approvalGate {
 	if h.gate == nil {
-		return false, "this daemon was built without a way to tell what its backends enforce"
+		return approvalGate{why: "this daemon was built without a way to tell what its backends enforce"}
 	}
-	grain, w := h.gate(vendor)
-	return grain == "tool", w
+	grain, why := h.gate(vendor)
+	return approvalGate{enforced: grain == "tool", why: why}
 }
 
 func vendorLabel(vendor string) string {
@@ -162,7 +171,7 @@ type coordinationReader interface {
 // which per-session participant journals live (participants/<name>.log). agents
 // owns the durable agent homes used to provision sessions.
 func NewHandler(d channelAdmin, sup supervisor, wt Worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string) *Handler {
-	return &Handler{d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways}
+	return &Handler{log: obs.NewLogger(os.Stderr, slog.LevelInfo), d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways}
 }
 
 // SetTerminalAdmin wires the terminal (TUI) channel admin used to route
@@ -181,6 +190,3 @@ func (h *Handler) SetCoordinationReader(r coordinationReader) { h.coord = r }
 // SetSeeder wires the live-session seed injector (host.Seed). The daemon calls
 // this; the operator CLI leaves it nil (switch --handoff none still works).
 func (h *Handler) SetSeeder(fn func(name, task string) bool) { h.seed = fn }
-
-// Agents returns the durable agent store (used by tests/wiring).
-func (h *Handler) Agents() agentStore { return h.agents }

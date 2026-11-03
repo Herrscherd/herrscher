@@ -38,7 +38,9 @@ func ownedModels(h *Handler, owner map[string]string) {
 func TestSessionCreateRejectsVendorModelMismatch(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "vendor", "codex", "model", "gw-claude-opus-5"))
@@ -105,7 +107,9 @@ func TestSessionSwitchAcceptsMatchingVendorAndModel(t *testing.T) {
 func TestSessionCreatePersistsModelID(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	knownModels(h, "gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "model", "gw-claude-opus-5")); err != nil {
 		t.Fatalf("create: %v", err)
@@ -122,7 +126,9 @@ func TestSessionCreatePersistsModelID(t *testing.T) {
 func TestSessionCreateAdoptedChannelPersistsModelID(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	knownModels(h, "gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "channel_id", "123", "model", "gw-claude-opus-5")); err != nil {
 		t.Fatalf("create with an adopted channel: %v", err)
@@ -142,7 +148,9 @@ func TestSessionCreateAdoptedChannelPersistsModelID(t *testing.T) {
 func TestSessionCreateForumPersistsModelID(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "forum")
 	knownModels(h, "gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "forum1", Type: "forum"})
+	if err := st.SetHome(state.HomeRef{ID: "forum1", Type: "forum"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "model", "gw-claude-opus-5")); err != nil {
 		t.Fatalf("create: %v", err)
@@ -162,7 +170,9 @@ func TestSessionCreateForumPersistsModelID(t *testing.T) {
 func TestSessionCreateRejectsUnknownModel(t *testing.T) {
 	h, _, sup, _, _, st := newTestHandler(t, "")
 	knownModels(h, "gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := h.sessionCreateRun(context.Background(), args("name", "demo", "model", "gw-claude-opus-4"))
 	if err == nil {
@@ -182,7 +192,9 @@ func TestSessionCreateRejectsUnknownModel(t *testing.T) {
 func TestSessionCreateWithoutModelIsAccepted(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	knownModels(h, "gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatalf("legacy create (no model) refused: %v", err)

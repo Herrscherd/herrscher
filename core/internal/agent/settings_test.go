@@ -8,6 +8,24 @@ import (
 	"testing"
 )
 
+func mapOf(t *testing.T, v any) map[string]any {
+	t.Helper()
+	m, ok := v.(map[string]any)
+	if !ok {
+		t.Fatalf("got %T, want a JSON object", v)
+	}
+	return m
+}
+
+func listOf(t *testing.T, v any) []any {
+	t.Helper()
+	l, ok := v.([]any)
+	if !ok {
+		t.Fatalf("got %T, want a JSON array", v)
+	}
+	return l
+}
+
 func settingsMap(t *testing.T, b []byte) map[string]any {
 	t.Helper()
 	var m map[string]any
@@ -30,7 +48,7 @@ func TestInjectApprovalHook(t *testing.T) {
 	if !strings.Contains(string(out), "'/far/bin/herrscher' approve hook") {
 		t.Fatalf("the binary is not in the settings:\n%s", out)
 	}
-	perms, _ := m["permissions"].(map[string]any)
+	perms := mapOf(t, m["permissions"])
 	if perms["defaultMode"] != "acceptEdits" {
 		t.Fatalf("the existing settings were not left alone:\n%s", out)
 	}
@@ -48,8 +66,8 @@ func TestInjectApprovalHookKeepsHooksAlreadyThere(t *testing.T) {
 	if !strings.Contains(string(out), `"mine"`) {
 		t.Fatalf("an operator's own hook was dropped:\n%s", out)
 	}
-	hooks := settingsMap(t, out)["hooks"].(map[string]any)
-	if n := len(hooks["PreToolUse"].([]any)); n != 2 {
+	hooks := mapOf(t, settingsMap(t, out)["hooks"])
+	if n := len(listOf(t, hooks["PreToolUse"])); n != 2 {
 		t.Fatalf("got %d PreToolUse entries, want 2", n)
 	}
 }
@@ -80,7 +98,7 @@ func TestInjectApprovalHookRefusesHooksOfTheWrongType(t *testing.T) {
 		if !ok {
 			t.Fatalf("injectApprovalHook(%s) wrote no hooks:\n%s", in, out)
 		}
-		if n := len(hooks["PreToolUse"].([]any)); n != 1 {
+		if n := len(listOf(t, hooks["PreToolUse"])); n != 1 {
 			t.Fatalf("injectApprovalHook(%s): got %d PreToolUse entries, want 1", in, n)
 		}
 	}
@@ -96,7 +114,7 @@ func TestInjectApprovalHookTreatsNullSettingsAsEmpty(t *testing.T) {
 		if !ok {
 			t.Fatalf("injectApprovalHook(%q) wrote no hooks:\n%s", in, out)
 		}
-		if n := len(hooks["PreToolUse"].([]any)); n != 1 {
+		if n := len(listOf(t, hooks["PreToolUse"])); n != 1 {
 			t.Fatalf("injectApprovalHook(%q): got %d PreToolUse entries, want 1", in, n)
 		}
 	}
@@ -111,9 +129,9 @@ func TestInjectApprovalHookQuotesTheBinaryPath(t *testing.T) {
 		if err != nil {
 			t.Fatalf("injectApprovalHook(%q): %v", bin, err)
 		}
-		hooks := settingsMap(t, out)["hooks"].(map[string]any)
-		entry := hooks["PreToolUse"].([]any)[0].(map[string]any)
-		got := entry["hooks"].([]any)[0].(map[string]any)["command"]
+		hooks := mapOf(t, settingsMap(t, out)["hooks"])
+		entry := mapOf(t, listOf(t, hooks["PreToolUse"])[0])
+		got := mapOf(t, listOf(t, entry["hooks"])[0])["command"]
 		if got != want {
 			t.Fatalf("command = %q, want %q", got, want)
 		}

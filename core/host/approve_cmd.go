@@ -19,33 +19,48 @@ import (
 const approvalsFile = "APPROVALS"
 
 func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
-	if err := reg.Add(contracts.New(nsApprove, "list").
+	return addVerbs(reg,
+		approveListVerb(approvals),
+		approveAllowVerb(approvals),
+		approveDenyVerb(approvals),
+		approveRuleVerb(st),
+		approveAskVerb(st, agents, approvals, sessions),
+		approveModeVerb(st),
+	)
+}
+
+func approveListVerb(approvals *approvalTable) contracts.Cmd {
+	return contracts.New(nsApprove, "list").
 		Help("list the actions waiting for an answer").
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			pending := pendingApprovals(approvals)
-			sort.SliceStable(pending, func(i, j int) bool {
-				if pending[i].Age != pending[j].Age {
-					return pending[i].Age > pending[j].Age
-				}
-				return pending[i].ID < pending[j].ID
-			})
-			if in.JSON {
-				b, err := json.Marshal(pending)
-				return string(b), err
-			}
-			if len(pending) == 0 {
-				return "nothing is waiting", nil
-			}
-			var b strings.Builder
-			for _, p := range pending {
-				fmt.Fprintf(&b, "- %s  %s  %s(%s)  waiting %s\n", p.ID, p.Session, p.Tool, p.Subject, p.Age)
-			}
-			return strings.TrimRight(b.String(), "\n"), nil
-		})); err != nil {
-		return err
-	}
+			return listApprovals(approvals, in.JSON)
+		})
+}
 
-	if err := reg.Add(contracts.New(nsApprove, "allow").
+func listApprovals(approvals *approvalTable, asJSON bool) (string, error) {
+	pending := pendingApprovals(approvals)
+	sort.SliceStable(pending, func(i, j int) bool {
+		if pending[i].Age != pending[j].Age {
+			return pending[i].Age > pending[j].Age
+		}
+		return pending[i].ID < pending[j].ID
+	})
+	if asJSON {
+		b, err := json.Marshal(pending)
+		return string(b), err
+	}
+	if len(pending) == 0 {
+		return "nothing is waiting", nil
+	}
+	var b strings.Builder
+	for _, p := range pending {
+		fmt.Fprintf(&b, "- %s  %s  %s(%s)  waiting %s\n", p.ID, p.Session, p.Tool, p.Subject, p.Age)
+	}
+	return strings.TrimRight(b.String(), "\n"), nil
+}
+
+func approveAllowVerb(approvals *approvalTable) contracts.Cmd {
+	return contracts.New(nsApprove, "allow").
 		Help("let a waiting action run").
 		ValueParam("id", "request id; also takes a bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
@@ -57,11 +72,11 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store,
 				return "", &requestNotWaitingError{ID: id}
 			}
 			return "allowed " + id, nil
-		})); err != nil {
-		return err
-	}
+		})
+}
 
-	if err := reg.Add(contracts.New(nsApprove, "deny").
+func approveDenyVerb(approvals *approvalTable) contracts.Cmd {
+	return contracts.New(nsApprove, "deny").
 		Help("refuse a waiting action; the reason is what the agent reads").
 		ValueParam("id", "request id; also takes a bare argument", false).
 		ValueParam("reason", "why, in the agent's own transcript", false).
@@ -78,57 +93,69 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store,
 				return "", &requestNotWaitingError{ID: id}
 			}
 			return "denied " + id, nil
-		})); err != nil {
-		return err
-	}
+		})
+}
 
-	if err := reg.Add(contracts.New(nsApprove, "rule").
+func approveRuleVerb(st *state.State) contracts.Cmd {
+	return contracts.New(nsApprove, "rule").
 		Help("add a rule, remove one with --rm, or list them with no argument").
 		ValueParam("rule", "e.g. `ask Bash(git push*)`; also takes a bare argument", false).
 		ValueParam("rm", "the rule to remove, written exactly as it is listed", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			if rm := strings.TrimSpace(in.Get("rm")); rm != "" {
-				parsed, err := approval.ParseRule(rm)
-				if err != nil {
-					return "", err
-				}
-				removed, err := st.RemoveApprovalRule(parsed.String())
-				if err != nil {
-					return "", err
-				}
-				if !removed {
-					return "", &noSuchRuleError{Rule: parsed.String()}
-				}
-				return "removed " + parsed.String(), nil
+				return removeApprovalRule(st, rm)
 			}
 			raw := firstOf(in.Get("rule"), in.Rest)
 			if raw == "" {
-				rules := st.ApprovalRules()
-				if in.JSON {
-					if rules == nil {
-						rules = []string{}
-					}
-					b, err := json.Marshal(rules)
-					return string(b), err
-				}
-				if len(rules) == 0 {
-					return "no rule: everything is allowed, which is how herrscher behaved before approvals existed", nil
-				}
-				return "- " + strings.Join(rules, "\n- "), nil
+				return listApprovalRules(st, in.JSON)
 			}
-			parsed, err := approval.ParseRule(raw)
-			if err != nil {
-				return "", err
-			}
-			if err := st.AddApprovalRule(parsed.String()); err != nil {
-				return "", err
-			}
-			return "added " + parsed.String(), nil
-		})); err != nil {
-		return err
-	}
+			return addApprovalRule(st, raw)
+		})
+}
 
-	if err := reg.Add(contracts.New(nsApprove, "ask").
+func removeApprovalRule(st *state.State, raw string) (string, error) {
+	parsed, err := approval.ParseRule(raw)
+	if err != nil {
+		return "", err
+	}
+	removed, err := st.RemoveApprovalRule(parsed.String())
+	if err != nil {
+		return "", err
+	}
+	if !removed {
+		return "", &noSuchRuleError{Rule: parsed.String()}
+	}
+	return "removed " + parsed.String(), nil
+}
+
+func listApprovalRules(st *state.State, asJSON bool) (string, error) {
+	rules := st.ApprovalRules()
+	if asJSON {
+		if rules == nil {
+			rules = []string{}
+		}
+		b, err := json.Marshal(rules)
+		return string(b), err
+	}
+	if len(rules) == 0 {
+		return "no rule: everything is allowed, which is how herrscher behaved before approvals existed", nil
+	}
+	return "- " + strings.Join(rules, "\n- "), nil
+}
+
+func addApprovalRule(st *state.State, raw string) (string, error) {
+	parsed, err := approval.ParseRule(raw)
+	if err != nil {
+		return "", err
+	}
+	if err := st.AddApprovalRule(parsed.String()); err != nil {
+		return "", err
+	}
+	return "added " + parsed.String(), nil
+}
+
+func approveAskVerb(st *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+	return contracts.New(nsApprove, "ask").
 		Help("machine verb: ask the daemon whether one tool call may run").
 		ValueParam(paramSession, "the session the call belongs to", true).
 		ValueParam("tool", "tool name, e.g. Bash", true).
@@ -146,40 +173,49 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store,
 				Reason   string `json:"reason,omitempty"`
 			}{Decision: string(d), Reason: reason})
 			return string(b), err
-		})); err != nil {
-		return err
-	}
+		})
+}
 
-	return reg.Add(contracts.New(nsApprove, "mode").
+func approveModeVerb(st *state.State) contracts.Cmd {
+	return contracts.New(nsApprove, "mode").
 		Help("set a session's stance: ask (default), bypass, or strict").
 		ValueParam(paramSession, "session name; also takes a bare argument", false).
 		ValueParam("mode", "ask | bypass | strict; also takes a second bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			rest := in.Rest
-			name := strings.TrimSpace(in.Get(paramSession))
-			if name == "" && len(rest) > 0 {
-				name, rest = strings.TrimSpace(rest[0]), rest[1:]
-			}
-			mode := strings.TrimSpace(in.Get("mode"))
-			if mode == "" && len(rest) > 0 {
-				mode = strings.TrimSpace(rest[len(rest)-1])
-			}
-			if name == "" || mode == "" {
-				return "", errApproveModeUsage
-			}
-			switch approval.Mode(mode) {
-			case approval.ModeAsk, approval.ModeBypass, approval.ModeStrict:
-			default:
-				return "", &unknownModeError{Mode: mode}
-			}
-			if err := st.SetSessionApprovals(name, mode); err != nil {
-				return "", err
-			}
-			if mode != string(approval.ModeBypass) {
-				return fmt.Sprintf("%s is now %s (a session created with --approvals bypass has no hook: recreate it for this to bite)", name, mode), nil
-			}
-			return fmt.Sprintf("%s is now %s", name, mode), nil
-		}))
+			return setApprovalMode(st, in)
+		})
+}
+
+func setApprovalMode(st *state.State, in contracts.Input) (string, error) {
+	name, mode := modeOperands(in)
+	if name == "" || mode == "" {
+		return "", errApproveModeUsage
+	}
+	switch approval.Mode(mode) {
+	case approval.ModeAsk, approval.ModeBypass, approval.ModeStrict:
+	default:
+		return "", &unknownModeError{Mode: mode}
+	}
+	if err := st.SetSessionApprovals(name, mode); err != nil {
+		return "", err
+	}
+	if mode != string(approval.ModeBypass) {
+		return fmt.Sprintf("%s is now %s (a session created with --approvals bypass has no hook: recreate it for this to bite)", name, mode), nil
+	}
+	return fmt.Sprintf("%s is now %s", name, mode), nil
+}
+
+func modeOperands(in contracts.Input) (string, string) {
+	rest := in.Rest
+	name := strings.TrimSpace(in.Get(paramSession))
+	if name == "" && len(rest) > 0 {
+		name, rest = strings.TrimSpace(rest[0]), rest[1:]
+	}
+	mode := strings.TrimSpace(in.Get("mode"))
+	if mode == "" && len(rest) > 0 {
+		mode = strings.TrimSpace(rest[len(rest)-1])
+	}
+	return name, mode
 }
 
 func firstOf(flag string, rest []string) string {

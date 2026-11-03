@@ -82,7 +82,7 @@ func run() int {
 		return 0
 	}
 
-	return reportOutcome(ctx, runCommand(ctx, cmd, args))
+	return outcomeReporterFor(cmd)(ctx, runCommand(ctx, cmd, args))
 }
 
 func answerGitAskpass(args []string) int {

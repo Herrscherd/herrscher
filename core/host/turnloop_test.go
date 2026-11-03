@@ -811,13 +811,7 @@ func TestTerminalReplyCarriesAcceptedDelegationBeforeSeedRelease(t *testing.T) {
 }
 
 func TestTerminalReplyCarriesCoordinationOutcomesBeforeSeedRelease(t *testing.T) {
-	tests := []struct {
-		name        string
-		session     string
-		coordinator contracts.Coordinator
-		reply       string
-		want        contracts.CoordinationEvent
-	}{
+	tests := []terminalReplyCase{
 		{
 			name:        "delegation refusal",
 			session:     "lead",
@@ -852,42 +846,66 @@ func TestTerminalReplyCarriesCoordinationOutcomesBeforeSeedRelease(t *testing.T)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			from := make(chan contracts.Event, 1)
-			d := newSessionDriver(tc.session, nil, make(chan contracts.Event, 1), from)
-			d.coordinator = tc.coordinator
-			var terminal contracts.Event
-			replyCh := make(chan string, 1)
-			releasedBeforeTerminal := false
-			d.emitTap = func(e contracts.Event) {
-				if e.T != "reply" || !e.Done {
-					return
-				}
-				select {
-				case <-replyCh:
-					releasedBeforeTerminal = true
-				default:
-				}
-				terminal = e
-			}
-			d.pendingReply = replyCh
-
-			from <- contracts.Event{T: "reply", Done: true, Text: tc.reply}
-			if !d.awaitTurn(context.Background(), tokenGuard{}) {
-				t.Fatal("turn abandoned")
-			}
-
-			if terminal.Coordination == nil || *terminal.Coordination != tc.want {
-				t.Fatalf("coordination = %+v, want %+v", terminal.Coordination, tc.want)
-			}
-			if releasedBeforeTerminal {
-				t.Fatal("seed response was released before terminal publication")
-			}
-			select {
-			case <-replyCh:
-			default:
-				t.Fatal("seed response was not released after coordination")
-			}
+			runTerminalReplyCase(t, tc)
 		})
+	}
+}
+
+type terminalReplyCase struct {
+	name        string
+	session     string
+	coordinator contracts.Coordinator
+	reply       string
+	want        contracts.CoordinationEvent
+}
+
+type terminalCapture struct {
+	replyCh                chan string
+	terminal               contracts.Event
+	releasedBeforeTerminal bool
+}
+
+func (c *terminalCapture) observe(e contracts.Event) {
+	if e.T != "reply" || !e.Done {
+		return
+	}
+	select {
+	case <-c.replyCh:
+		c.releasedBeforeTerminal = true
+	default:
+	}
+	c.terminal = e
+}
+
+func runTerminalReplyCase(t *testing.T, tc terminalReplyCase) {
+	t.Helper()
+	from := make(chan contracts.Event, 1)
+	d := newSessionDriver(tc.session, nil, make(chan contracts.Event, 1), from)
+	d.coordinator = tc.coordinator
+	capture := &terminalCapture{replyCh: make(chan string, 1)}
+	d.emitTap = capture.observe
+	d.pendingReply = capture.replyCh
+
+	from <- contracts.Event{T: "reply", Done: true, Text: tc.reply}
+	if !d.awaitTurn(context.Background(), tokenGuard{}) {
+		t.Fatal("turn abandoned")
+	}
+
+	assertTerminalCoordination(t, capture.terminal, tc.want)
+	if capture.releasedBeforeTerminal {
+		t.Fatal("seed response was released before terminal publication")
+	}
+	select {
+	case <-capture.replyCh:
+	default:
+		t.Fatal("seed response was not released after coordination")
+	}
+}
+
+func assertTerminalCoordination(t *testing.T, terminal contracts.Event, want contracts.CoordinationEvent) {
+	t.Helper()
+	if terminal.Coordination == nil || *terminal.Coordination != want {
+		t.Fatalf("coordination = %+v, want %+v", terminal.Coordination, want)
 	}
 }
 

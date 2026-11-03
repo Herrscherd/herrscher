@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,33 +20,27 @@ func TestSelectBackendVendorPrecedence(t *testing.T) {
 		{Manifest: contracts.Manifest{Kind: "cursor"}, Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return seedBackend{}, nil }},
 	}
 	tests := []struct {
-		name    string
-		session string
-		env     string
-		want    string
-		wantErr string
+		name        string
+		session     string
+		env         string
+		want        string
+		wantUnknown bool
 	}{
 		{name: "explicit beats env", session: "cursor", env: "codex", want: "cursor"},
 		{name: "env beats fallback", env: "codex", want: "codex"},
 		{name: "fallback is first", want: "claude"},
-		{name: "unknown is an error", session: "gemini", env: "codex", wantErr: `unknown backend "gemini"`},
+		{name: "unknown is an error", session: "gemini", env: "codex", wantUnknown: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.env == "" {
-				logCleanup(os.Unsetenv("HERRSCHER_BACKEND"))
-			} else {
-				t.Setenv("HERRSCHER_BACKEND", tt.env)
-			}
+			setBackendEnv(t, tt.env)
 			desired := tt.session
 			if desired == "" {
 				desired = os.Getenv("HERRSCHER_BACKEND")
 			}
 			plugin, err := selectBackend(desired, plugins)
-			if tt.wantErr != "" {
-				if err == nil || err.Error() != tt.wantErr {
-					t.Fatalf("selectBackend error = %v, want %q", err, tt.wantErr)
-				}
+			if tt.wantUnknown {
+				assertUnknownBackend(t, err, desired)
 				return
 			}
 			if err != nil {
@@ -55,6 +50,23 @@ func TestSelectBackendVendorPrecedence(t *testing.T) {
 				t.Fatalf("selected kind = %q, want %q", plugin.Manifest.Kind, tt.want)
 			}
 		})
+	}
+}
+
+func setBackendEnv(t *testing.T, value string) {
+	t.Helper()
+	if value == "" {
+		logCleanup(os.Unsetenv("HERRSCHER_BACKEND"))
+		return
+	}
+	t.Setenv("HERRSCHER_BACKEND", value)
+}
+
+func assertUnknownBackend(t *testing.T, err error, name string) {
+	t.Helper()
+	var unknown *UnknownError
+	if !errors.As(err, &unknown) || unknown.Name != name {
+		t.Fatalf("selectBackend error = %v, want an UnknownError for %q", err, name)
 	}
 }
 

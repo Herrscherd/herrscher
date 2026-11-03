@@ -13,6 +13,7 @@ import (
 
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/runner"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/service"
@@ -54,6 +55,30 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	provisioned := provisionE2EHost(ctx, t, st, target, src)
+	initE2EProject(t, local)
+
+	p := newHostPlacer(ctx, st, "e2e", nil, func() string { return service.SourceVersion(ctx, src) })
+	repo := provisioned.Workspace + "/app"
+	t.Cleanup(func() {
+		_, rmErr := capture(context.Background(), runnerFor(provisioned), "rm", "-rf", repo)
+		logCleanup(rmErr)
+	})
+	assertProjectEnsuredTwice(ctx, t, p, repo)
+
+	wt, err := p.Worktrees("e2e")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := createE2EWorktree(t, wt, repo)
+	defer func() { logCleanup(wt.Remove(repo, "demo", true)) }()
+
+	assertE2EMaterialized(ctx, t, p, st, provisioned, path)
+	removeE2EWorktree(ctx, t, wt, provisioned, repo, path)
+}
+
+func provisionE2EHost(ctx context.Context, t *testing.T, st *state.State, target, src string) state.Host {
+	t.Helper()
 	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, target)}
 	provisioned, err := provisionHost(ctx, runnerFor(h), h, src)
 	if err != nil {
@@ -65,12 +90,15 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	if putErr := st.PutHost(provisioned); putErr != nil {
 		t.Fatal(putErr)
 	}
-
 	rep := checkHost(ctx, runnerFor(provisioned), provisioned, service.SourceVersion(ctx, src))
 	if !rep.Reachable || !rep.Workspace || !rep.Git || rep.Drift {
 		t.Fatalf("a freshly provisioned host must check clean, got %+v", rep)
 	}
+	return provisioned
+}
 
+func initE2EProject(t *testing.T, local string) {
+	t.Helper()
 	origin := filepath.Join(t.TempDir(), "origin.git")
 	mustGit(t, "", "init", "-q", "--bare", origin)
 	project := filepath.Join(local, "app")
@@ -84,24 +112,20 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	mustGit(t, project, "commit", "-qm", "init")
 	mustGit(t, project, "remote", "add", "origin", origin)
 	mustGit(t, project, "push", "-q", "origin", "HEAD:master")
+}
 
-	p := newHostPlacer(ctx, st, "e2e", nil, func() string { return service.SourceVersion(ctx, src) })
-	repo := provisioned.Workspace + "/app"
-	t.Cleanup(func() {
-		_, rmErr := capture(context.Background(), runnerFor(provisioned), "rm", "-rf", repo)
-		logCleanup(rmErr)
-	})
+func assertProjectEnsuredTwice(ctx context.Context, t *testing.T, p hostPlacer, repo string) {
+	t.Helper()
 	if ensureErr := p.EnsureProject(ctx, "e2e", "app", repo); ensureErr != nil {
 		t.Fatalf("clone onto the host: %v", ensureErr)
 	}
 	if ensureErr := p.EnsureProject(ctx, "e2e", "app", repo); ensureErr != nil {
 		t.Fatalf("re-ensure: %v", ensureErr)
 	}
+}
 
-	wt, err := p.Worktrees("e2e")
-	if err != nil {
-		t.Fatal(err)
-	}
+func createE2EWorktree(t *testing.T, wt manager.Worktrees, repo string) string {
+	t.Helper()
 	if wt.PreExisting(repo, "demo") {
 		t.Fatal("nothing has been created yet")
 	}
@@ -112,11 +136,14 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	if path == "" {
 		t.Fatal("a cloned repo must yield a worktree, not the shared fallback")
 	}
-	defer func() { logCleanup(wt.Remove(repo, "demo", true)) }()
 	if !wt.PreExisting(repo, "demo") {
 		t.Fatal("the worktree just created must read as pre-existing")
 	}
+	return path
+}
 
+func assertE2EMaterialized(ctx context.Context, t *testing.T, p hostPlacer, st *state.State, provisioned state.Host, path string) {
+	t.Helper()
 	a, err := agent.NewStore(t.TempDir()).Create(agent.CreateSpec{Name: "e2e", Soul: "# E2E\n"})
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +169,10 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	if !strings.Contains(settings, "'"+h.Bin+"' approve hook") {
 		t.Fatalf("the hook must invoke the host's own herrscher (%s), got %q", h.Bin, settings)
 	}
+}
 
+func removeE2EWorktree(ctx context.Context, t *testing.T, wt manager.Worktrees, provisioned state.Host, repo, path string) {
+	t.Helper()
 	if err := wt.Remove(repo, "demo", true); err != nil {
 		t.Fatalf("remote worktree remove: %v", err)
 	}

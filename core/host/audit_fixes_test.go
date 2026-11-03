@@ -23,32 +23,46 @@ func TestAnswerApprovalPickIsSessionScoped(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			p := &pendingApproval{
-				id:      newApprovalID(),
-				session: tc.owner,
-				req:     approval.Request{Tool: "Bash"},
-				asked:   time.Now(),
-				answer:  make(chan approvalVerdict, 1),
-			}
-			release, refusal := registerApproval(approvalTab, p)
-			if refusal != "" {
-				t.Fatalf("registerApproval refused: %s", refusal)
-			}
-			defer release()
+			p := newTestPendingApproval(tc.owner)
+			defer registerTestApproval(t, approvalTab, p)()
 			if got := answerApprovalPick(approvalTab, tc.clicker, approvalPickPrefix+p.id+":allow"); got != tc.swallowd {
 				t.Fatalf("answerApprovalPick = %v, want %v", got, tc.swallowd)
 			}
-			select {
-			case v := <-p.answer:
-				if !tc.answered {
-					t.Fatalf("request settled by a foreign session: %v", v.decision)
-				}
-			default:
-				if tc.answered {
-					t.Fatal("request not settled by its own session")
-				}
-			}
+			assertSettlement(t, p, tc.answered)
 		})
+	}
+}
+
+func newTestPendingApproval(session string) *pendingApproval {
+	return &pendingApproval{
+		id:      newApprovalID(),
+		session: session,
+		req:     approval.Request{Tool: "Bash"},
+		asked:   time.Now(),
+		answer:  make(chan approvalVerdict, 1),
+	}
+}
+
+func registerTestApproval(t *testing.T, approvalTab *approvalTable, p *pendingApproval) func() {
+	t.Helper()
+	release, refusal := registerApproval(approvalTab, p)
+	if refusal != "" {
+		t.Fatalf("registerApproval refused: %s", refusal)
+	}
+	return release
+}
+
+func assertSettlement(t *testing.T, p *pendingApproval, answered bool) {
+	t.Helper()
+	select {
+	case v := <-p.answer:
+		if !answered {
+			t.Fatalf("request settled by a foreign session: %v", v.decision)
+		}
+	default:
+		if answered {
+			t.Fatal("request not settled by its own session")
+		}
 	}
 }
 

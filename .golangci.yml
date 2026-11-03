@@ -195,9 +195,6 @@ linters:
       - path: ^core/internal/agent/agent\.go$
         linters: [gosec]
         text: "^G101:"
-      - path: ^core/internal/agent/agent\.go$
-        linters: [noctx]
-        text: "exec.Command"
       - path: ^core/(identity|scope|service|internal/(forge|runner|supervisor|worktree))/
         linters: [gosec]
         text: "^G204:"

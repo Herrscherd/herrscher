@@ -22,13 +22,13 @@ type hostPlacer struct {
 	newRemote     func(runner.SSH, string) *worktree.Remote
 }
 
-func newHostPlacer(ctx context.Context, st *state.State, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
+func newHostPlacer(st *state.State, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
 	return hostPlacer{
 		st:            st,
 		local:         local,
 		sourceVersion: sourceVersion,
 		newRemote: func(r runner.SSH, bin string) *worktree.Remote {
-			return worktree.NewRemote(ctx, r, bin, instanceID)
+			return worktree.NewRemote(r, bin, instanceID)
 		},
 	}
 }

@@ -58,7 +58,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	provisioned := provisionE2EHost(ctx, t, st, target, src)
 	initE2EProject(t, local)
 
-	p := newHostPlacer(ctx, st, "e2e", nil, func() string { return service.SourceVersion(ctx, src) })
+	p := newHostPlacer(st, "e2e", nil, func() string { return service.SourceVersion(ctx, src) })
 	repo := provisioned.Workspace + "/app"
 	t.Cleanup(func() {
 		_, rmErr := capture(context.Background(), runnerFor(provisioned), "rm", "-rf", repo)
@@ -70,8 +70,8 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := createE2EWorktree(t, wt, repo)
-	defer func() { logCleanup(wt.Remove(repo, "demo", true)) }()
+	path := createE2EWorktree(ctx, t, wt, repo)
+	defer func() { logCleanup(wt.Remove(ctx, repo, "demo", true)) }()
 
 	assertE2EMaterialized(ctx, t, p, st, provisioned, path)
 	removeE2EWorktree(ctx, t, wt, provisioned, repo, path)
@@ -124,9 +124,9 @@ func assertProjectEnsuredTwice(ctx context.Context, t *testing.T, p hostPlacer, 
 	}
 }
 
-func createE2EWorktree(t *testing.T, wt manager.Worktrees, repo string) string {
+func createE2EWorktree(ctx context.Context, t *testing.T, wt manager.Worktrees, repo string) string {
 	t.Helper()
-	if wt.PreExisting(repo, "demo") {
+	if wt.PreExisting(ctx, repo, "demo") {
 		t.Fatal("nothing has been created yet")
 	}
 	path, err := wt.Create(ctx, repo, "demo", "")
@@ -136,7 +136,7 @@ func createE2EWorktree(t *testing.T, wt manager.Worktrees, repo string) string {
 	if path == "" {
 		t.Fatal("a cloned repo must yield a worktree, not the shared fallback")
 	}
-	if !wt.PreExisting(repo, "demo") {
+	if !wt.PreExisting(ctx, repo, "demo") {
 		t.Fatal("the worktree just created must read as pre-existing")
 	}
 	return path
@@ -173,7 +173,7 @@ func assertE2EMaterialized(ctx context.Context, t *testing.T, p hostPlacer, st *
 
 func removeE2EWorktree(ctx context.Context, t *testing.T, wt manager.Worktrees, provisioned state.Host, repo, path string) {
 	t.Helper()
-	if err := wt.Remove(repo, "demo", true); err != nil {
+	if err := wt.Remove(ctx, repo, "demo", true); err != nil {
 		t.Fatalf("remote worktree remove: %v", err)
 	}
 	if _, err := capture(ctx, runnerFor(provisioned), "test", "-d", path); err == nil {

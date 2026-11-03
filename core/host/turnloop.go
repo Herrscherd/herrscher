@@ -11,6 +11,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -480,10 +481,10 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 		d.activeTurnID = ""
 		return event, tokenGuard{}, true
 	}
-	reason, headroom, capped := d.gate.Check(d.name)
-	if reason != "" {
-		d.emitPaused(ctx, reason)
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour refusé, plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
+	verdict := d.gate.Check(d.name)
+	if verdict.Reason != "" {
+		d.emitPaused(ctx, verdict.Reason)
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour refusé, plafond budget atteint (" + verdict.Reason + ") ; augmentez le plafond puis renvoyez le message"})
 		return event, tokenGuard{}, false
 	}
 	if event.TurnID == "" {
@@ -494,7 +495,7 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 	d.activeTurnID = event.TurnID
 	d.recordEntry("user", event.Text, 0, turnUsage{})
 	d.fanOut(ctx, contracts.Event{T: "human", Who: event.Who, Text: event.Text})
-	return event, tokenGuard{headroom: headroom, capped: capped}, true
+	return event, tokenGuard{headroom: verdict.Headroom, capped: verdict.Capped}, true
 }
 
 func (d *sessionDriver) runTurn(ctx context.Context, ev contracts.Event, guard tokenGuard) {
@@ -572,8 +573,8 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 	})
 	d.deliverPendingReply(event.Text)
 	d.metrics.TurnCompleted()
-	if reason, _, _ := d.gate.Check(d.name); reason != "" {
-		d.emitPaused(ctx, reason)
+	if verdict := d.gate.Check(d.name); verdict.Reason != "" {
+		d.emitPaused(ctx, verdict.Reason)
 	}
 }
 

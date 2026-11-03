@@ -66,14 +66,14 @@ func parseWorktreeFlags(sub string, rest []string) (worktreeFlags, error) {
 }
 
 func runWorktreeSub(ctx context.Context, file worktreeFlags) error {
-	worktrees := worktree.NewWorktreer(ctx, file.instance)
+	worktrees := worktree.NewWorktreer(file.instance)
 	switch file.sub {
 	case "create":
-		return createWorktree(worktrees, file)
+		return createWorktree(ctx, worktrees, file)
 	case "pre-existing":
-		return emitJSON(map[string]bool{"preExisting": worktrees.PreExisting(file.repo, file.name)})
+		return emitJSON(map[string]bool{"preExisting": worktrees.PreExisting(ctx, file.repo, file.name)})
 	case "remove":
-		return removeWorktree(worktrees, file)
+		return removeWorktree(ctx, worktrees, file)
 	case "materialize":
 		return materializeWorktree(file.worktreePath)
 	default:
@@ -81,16 +81,16 @@ func runWorktreeSub(ctx context.Context, file worktreeFlags) error {
 	}
 }
 
-func createWorktree(wt *worktree.Worktreer, f worktreeFlags) error {
-	path, err := wt.Create(f.repo, f.name, f.base)
+func createWorktree(ctx context.Context, wt *worktree.Worktreer, f worktreeFlags) error {
+	path, err := wt.Create(ctx, f.repo, f.name, f.base)
 	if err != nil {
 		return err
 	}
 	return emitJSON(map[string]string{"path": path})
 }
 
-func removeWorktree(wt *worktree.Worktreer, f worktreeFlags) error {
-	if err := wt.Remove(f.repo, f.name, f.force); err != nil {
+func removeWorktree(ctx context.Context, wt *worktree.Worktreer, f worktreeFlags) error {
+	if err := wt.Remove(ctx, f.repo, f.name, f.force); err != nil {
 		return err
 	}
 	return emitJSON(map[string]bool{"removed": true})

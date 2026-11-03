@@ -133,15 +133,13 @@ func (s *seedSpyOrchestrator) Close() error {
 }
 
 func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
-	old := oneShotBackendFactory
-	t.Cleanup(func() { oneShotBackendFactory = old })
-	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
 		return seedBackend{}, nil
 	}
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &seedSpyOrchestrator{}
-	if _, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend}); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if !spy.consolidated {
@@ -153,15 +151,13 @@ func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
 }
 
 func TestRunOneShotSeedWithCoordinatesDelegateTrailer(t *testing.T) {
-	old := oneShotBackendFactory
-	t.Cleanup(func() { oneShotBackendFactory = old })
-	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
 		return seedBackend{reply: "travail préparé\n⟢ delegate: roblox-scripter \u2014 inspection en lecture seule"}, nil
 	}
 
 	sess := state.Session{Name: "orchestrator", ChannelID: "channel"}
 	coord := &recordingCoord{}
-	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), nil, oneShotSeedRuntime{coordinator: coord}); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), nil, oneShotSeedRuntime{backend: backend, coordinator: coord}); err != nil {
 		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
 	}
 	if len(coord.delegates) != 1 {
@@ -270,15 +266,13 @@ func (c *consolidateSpy) Consolidate(ctx context.Context) error {
 func (c *consolidateSpy) Close() error { return nil }
 
 func TestASeedKeepsItsReplyWhenConsolidationFails(t *testing.T) {
-	old := oneShotBackendFactory
-	t.Cleanup(func() { oneShotBackendFactory = old })
-	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
 		return seedBackend{reply: "réponse gardée"}, nil
 	}
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &consolidateSpy{err: context.DeadlineExceeded}
-	got, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy)
+	got, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend})
 	if err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
@@ -288,16 +282,14 @@ func TestASeedKeepsItsReplyWhenConsolidationFails(t *testing.T) {
 }
 
 func TestASeedConsolidatesOnItsOwnBudget(t *testing.T) {
-	oldFactory := oneShotBackendFactory
-	t.Cleanup(func() { oneShotBackendFactory = oldFactory })
-	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
 		return seedBackend{}, nil
 	}
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &consolidateSpy{}
 	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy,
-		oneShotSeedRuntime{timeout: 50 * time.Millisecond}); err != nil {
+		oneShotSeedRuntime{backend: backend, timeout: 50 * time.Millisecond}); err != nil {
 		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
 	}
 	if !spy.called {
@@ -309,15 +301,13 @@ func TestASeedConsolidatesOnItsOwnBudget(t *testing.T) {
 }
 
 func TestASeedWithACadenceDoesNotConsolidateTwice(t *testing.T) {
-	old := oneShotBackendFactory
-	t.Cleanup(func() { oneShotBackendFactory = old })
-	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
 		return seedBackend{}, nil
 	}
 
 	sess := state.Session{Name: "solo", ChannelID: "channel", ConsolidateEvery: 1}
 	spy := &consolidateSpy{}
-	if _, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend}); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if spy.called {

@@ -271,8 +271,9 @@ func (s *stubForgetCoord) forget(name string) { s.forgotten = append(s.forgotten
 func TestGoDeadCallsForget(t *testing.T) {
 	stub := &stubForgetCoord{}
 	h := &hub{
-		coordinator: stub,
-		live:        map[string]liveSession{},
+		coordinator:   stub,
+		live:          map[string]liveSession{},
+		teardownGrace: defaultTeardownGrace,
 	}
 	h.goDead("worker")
 	if len(stub.forgotten) != 1 || stub.forgotten[0] != "worker" {

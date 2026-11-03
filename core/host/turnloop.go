@@ -15,9 +15,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-var pollInterval = 50 * time.Millisecond
-
-var maxPollBackoff = 30 * time.Second
+const (
+	pollInterval          = 50 * time.Millisecond
+	maxPollBackoff        = 30 * time.Second
+	defaultEnqueueTimeout = 2 * time.Second
+)
 
 type budgetGate interface {
 	Check(session string) (reason string, headroom uint64, capped bool)
@@ -64,7 +66,8 @@ type sessionDriver struct {
 	queue         chan queued
 	renderers     map[string]*gatewayRenderer
 
-	hangup chan struct{}
+	hangup         chan struct{}
+	enqueueTimeout time.Duration
 
 	attachHosts map[string]bool
 
@@ -100,6 +103,8 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		hangup:    make(chan struct{}, 1),
 		seen:      map[string]bool{},
 		gate:      noBudgetGate{},
+
+		enqueueTimeout: defaultEnqueueTimeout,
 
 		attachHosts: attachmentHosts(gws),
 	}
@@ -173,13 +178,11 @@ func (d *sessionDriver) Pick(value string) bool {
 	return d.enqueue(queued{ev: contracts.Event{T: "pick", Value: value}})
 }
 
-var enqueueTimeout = 2 * time.Second
-
 func (d *sessionDriver) enqueue(q queued) bool {
 	select {
 	case d.queue <- q:
 		return true
-	case <-time.After(enqueueTimeout):
+	case <-time.After(d.enqueueTimeout):
 		return false
 	}
 }

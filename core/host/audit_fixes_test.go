@@ -52,10 +52,6 @@ func TestAnswerApprovalPickIsSessionScoped(t *testing.T) {
 }
 
 func TestDriverEnqueueIsBounded(t *testing.T) {
-	prev := enqueueTimeout
-	enqueueTimeout = 50 * time.Millisecond
-	defer func() { enqueueTimeout = prev }()
-
 	cases := []struct {
 		name string
 		call func(*sessionDriver) bool
@@ -66,6 +62,7 @@ func TestDriverEnqueueIsBounded(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			d := newSessionDriver("full", nil, make(chan contracts.Event, 1), make(chan contracts.Event))
+			d.enqueueTimeout = 50 * time.Millisecond
 			for len(d.queue) < cap(d.queue) {
 				d.queue <- queued{ev: contracts.Event{T: "input"}}
 			}
@@ -84,12 +81,8 @@ func TestDriverEnqueueIsBounded(t *testing.T) {
 }
 
 func TestGoDeadDoesNotHoldTheHubLockWhileWaiting(t *testing.T) {
-	prev := sessionTeardownGrace
-	sessionTeardownGrace = 100 * time.Millisecond
-	defer func() { sessionTeardownGrace = prev }()
-
 	stuck := make(chan struct{})
-	h := &hub{live: map[string]liveSession{}}
+	h := &hub{live: map[string]liveSession{}, teardownGrace: 100 * time.Millisecond}
 	h.live["wedged"] = liveSession{cancel: func() {}, done: stuck}
 
 	probed := make(chan struct{})

@@ -116,15 +116,11 @@ func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contra
 		t.Fatal(err)
 	}
 
-	oldFactory := oneShotBackendFactory
 	var events []contracts.Event
-	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
-		return identitySeedBackend{}, nil
-	}
-	t.Cleanup(func() {
-		oneShotBackendFactory = oldFactory
-	})
 	ctx = withOneShotSeedRuntime(ctx, oneShotSeedRuntime{
+		backend: func(context.Context, state.Session) (contracts.Backend, error) {
+			return identitySeedBackend{}, nil
+		},
 		publish: func(_ string, event contracts.Event) { events = append(events, event) },
 	})
 	return reg, sess, &events, ctx
@@ -221,17 +217,13 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 	coord := &reentrantSeedCoordinator{recordingCoord: &recordingCoord{}, hub: h}
 	h.coordinator = coord
 
-	oldFactory := oneShotBackendFactory
 	var events []contracts.Event
-	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
-		return delegateSeedBackend{}, nil
-	}
 	h.eventPublisher = func(_ string, event contracts.Event) {
 		events = append(events, event)
 	}
-	t.Cleanup(func() {
-		oneShotBackendFactory = oldFactory
-	})
+	h.seedBackend = func(context.Context, state.Session) (contracts.Backend, error) {
+		return delegateSeedBackend{}, nil
+	}
 
 	reply, err := h.Dispatch(ctx, []string{
 		"session", "seed",

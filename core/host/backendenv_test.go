@@ -372,12 +372,9 @@ func (f *fakeRemoteResolver) Backend(context.Context, []contracts.Plugin, ...str
 func TestBuildBackendForRefusesGatewayModelWithRemoteBackend(t *testing.T) {
 	var cfg contracts.PluginConfig
 	gatewayPlugin(t, &cfg)
-	savedResolver := newBackendResolver
-	t.Cleanup(func() { newBackendResolver = savedResolver })
 	fake := &fakeRemoteResolver{}
-	newBackendResolver = func() remoteBackendResolver { return fake }
 
-	_, err := BuildBackendFor(context.Background(), BackendRequest{Cmd: "claude", ModelID: "gw-opus"})
+	_, err := BuildBackendFor(context.Background(), BackendRequest{Cmd: "claude", ModelID: "gw-opus", resolver: fake})
 	if err == nil {
 		t.Fatal("a gateway model resolved through the remote backend resolver must be refused, not silently stripped of its credentials")
 	}
@@ -390,11 +387,7 @@ func TestBuildBackendForRefusesGatewayModelWithRemoteBackend(t *testing.T) {
 }
 
 func TestBuildBackendForKeepsRemoteBackendWithoutModel(t *testing.T) {
-	savedResolver := newBackendResolver
-	t.Cleanup(func() { newBackendResolver = savedResolver })
-	newBackendResolver = func() remoteBackendResolver { return &fakeRemoteResolver{} }
-
-	be, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "claude", Cmd: "claude"})
+	be, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "claude", Cmd: "claude", resolver: &fakeRemoteResolver{}})
 	if err != nil {
 		t.Fatalf("BuildBackendFor: %v", err)
 	}

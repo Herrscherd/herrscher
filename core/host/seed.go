@@ -19,13 +19,19 @@ const seedConsolidateTimeout = 60 * time.Second
 
 const seedTurnTimeout = 120 * time.Second
 
-var oneShotBackendFactory = newSeedBackend
-
 type oneShotSeedRuntime struct {
 	coordinator contracts.Coordinator
 	publish     func(session string, event contracts.Event)
 	record      func(session string, entry state.TranscriptEntry)
 	timeout     time.Duration
+	backend     func(context.Context, state.Session) (contracts.Backend, error)
+}
+
+func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session) (contracts.Backend, error) {
+	if r.backend != nil {
+		return r.backend
+	}
+	return newSeedBackend
 }
 
 type oneShotSeedRuntimeKey struct{}
@@ -76,14 +82,6 @@ func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, tas
 	return runOneShotSeedWithIDRuntime(ctx, sess, task, turnID, orch, runtime)
 }
 
-func runOneShotSeedWith(ctx context.Context, sess state.Session, task string, orch contracts.Orchestrator) (string, error) {
-	return runOneShotSeedWithID(ctx, sess, task, newTurnID(), orch)
-}
-
-func runOneShotSeedWithID(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator) (string, error) {
-	return runOneShotSeedWithIDRuntime(ctx, sess, task, turnID, orch, oneShotSeedRuntime{})
-}
-
 func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator, runtime oneShotSeedRuntime) (string, error) {
 	if orch != nil {
 		defer closeRead(orch)
@@ -116,7 +114,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	bridgeErr := make(chan error, 1)
 	go func() {
 		err := bridge.RunOneShot(seedCtx, func(channel string) (contracts.Backend, error) {
-			return oneShotBackendFactory(seedCtx, sess)
+			return runtime.backendFactory()(seedCtx, sess)
 		}, orch, sess.ChannelID, toBridge, fromBridge)
 		bridgeErr <- err
 		if err != nil {
@@ -197,14 +195,19 @@ type BackendRequest struct {
 	Dir     string
 	Resume  string
 	ModelID string
+
+	resolver remoteBackendResolver
+}
+
+func (req BackendRequest) remoteResolver() remoteBackendResolver {
+	if req.resolver != nil {
+		return req.resolver
+	}
+	return NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
 }
 
 type remoteBackendResolver interface {
 	Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, bool, error)
-}
-
-var newBackendResolver = func() remoteBackendResolver {
-	return NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
 }
 
 // BuildBackendFor selects and constructs a backend. A remote resolver backend
@@ -239,7 +242,7 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 		modelArg = entry.Arg
 	}
 
-	if backend, fromRemote, err := newBackendResolver().Backend(ctx, plugins, desired); err != nil {
+	if backend, fromRemote, err := req.remoteResolver().Backend(ctx, plugins, desired); err != nil {
 		return nil, err
 	} else if fromRemote {
 		if len(spawnEnv) > 0 {

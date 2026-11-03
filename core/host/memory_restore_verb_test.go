@@ -75,7 +75,9 @@ func registerRestoreVerbPlugin() {
 		},
 		Memory: func(_ context.Context, cfg contracts.PluginConfig) (contracts.Memory, error) {
 			if m, ok := restoreFixtures.Load(cfg.Settings[restoreFixtureKey]); ok {
-				return m.(*restoreVerbMem), nil
+				if mem, isMem := m.(*restoreVerbMem); isMem {
+					return mem, nil
+				}
 			}
 			return &restoreVerbMem{nodes: map[string]contracts.Node{}}, nil
 		},

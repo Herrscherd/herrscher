@@ -37,7 +37,7 @@ func TestDispatchLiveCommandRoundTrips(t *testing.T) {
 		if acceptErr == nil {
 			handleCommandConn(context.Background(), conn, disp, defaultCommandReadTimeout)
 		}
-		accepted <- err
+		accepted <- acceptErr
 	}()
 
 	argv := []string{"session", "seed", "--name", "orchestrator", "--task", "read only"}

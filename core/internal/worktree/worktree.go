@@ -353,6 +353,9 @@ func (w *Worktreer) validSessionChild(repo, name string) (string, bool) {
 		expectedRoot = filepath.Join(expectedRoot, w.instanceID)
 	}
 	resolvedRoot, err := resolveExistingPath(root)
+	if os.IsNotExist(err) {
+		return filepath.Join(root, name), true
+	}
 	if err != nil || !samePath(resolvedRoot, expectedRoot) {
 		return "", false
 	}

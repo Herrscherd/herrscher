@@ -31,8 +31,13 @@ func stageAgentTar(a agent.Agent, remoteWorktree, remoteBin string) (io.Reader, 
 }
 
 func tarDir(root string, w io.Writer) error {
+	stage, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer closeRead(stage)
 	tw := tar.NewWriter(w)
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
@@ -56,7 +61,7 @@ func tarDir(root string, w io.Writer) error {
 		if writeErr := tw.WriteHeader(hdr); writeErr != nil {
 			return writeErr
 		}
-		f, err := os.Open(path)
+		f, err := stage.Open(rel)
 		if err != nil {
 			return err
 		}
@@ -91,14 +96,14 @@ func extractTar(r io.Reader, dst string) error {
 		if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
 			return &unsafeTarMemberError{Member: hdr.Name, Root: root}
 		}
-		if mkdirErr := os.MkdirAll(filepath.Dir(target), 0o755); mkdirErr != nil {
+		if mkdirErr := os.MkdirAll(filepath.Dir(target), privateDirMode); mkdirErr != nil {
 			return mkdirErr
 		}
-		f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, fs.FileMode(hdr.Mode).Perm())
+		f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, hdr.FileInfo().Mode().Perm())
 		if err != nil {
 			return err
 		}
-		if _, err := io.Copy(f, tr); err != nil {
+		if _, err := io.CopyN(f, tr, hdr.Size); err != nil {
 			logCleanup(f.Close())
 			return err
 		}

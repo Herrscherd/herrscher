@@ -158,24 +158,24 @@ func mimeByExt(path string) string {
 	return ""
 }
 
-func chipRow(atts []Attachment, st uiStyles) string {
+func chipRow(atts []Attachment, styles uiStyles) string {
 	if len(atts) == 0 {
 		return ""
 	}
 	chips := make([]string, len(atts))
 	for i, a := range atts {
-		chips[i] = st.chip.Render(fmt.Sprintf("📎 %s · %s", a.Name, humanSize(a.Size)))
+		chips[i] = styles.chip.Render(fmt.Sprintf("📎 %s · %s", a.Name, humanSize(a.Size)))
 	}
 	return strings.Join(chips, " ")
 }
 
-func humanSize(n int64) string {
+func humanSize(size int64) string {
 	switch {
-	case n >= bytesPerMiB:
-		return fmt.Sprintf("%.1fMB", float64(n)/bytesPerMiB)
-	case n >= bytesPerKiB:
-		return fmt.Sprintf("%.0fKB", float64(n)/bytesPerKiB)
+	case size >= bytesPerMiB:
+		return fmt.Sprintf("%.1fMB", float64(size)/bytesPerMiB)
+	case size >= bytesPerKiB:
+		return fmt.Sprintf("%.0fKB", float64(size)/bytesPerKiB)
 	default:
-		return fmt.Sprintf("%dB", n)
+		return fmt.Sprintf("%dB", size)
 	}
 }

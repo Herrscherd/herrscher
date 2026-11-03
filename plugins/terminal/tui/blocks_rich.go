@@ -50,14 +50,14 @@ func renderDiff(body string, width int, v view) string {
 	out := make([]string, 0, len(lines)+1)
 	inHunk := len(lines) > 0 && !isDiffHeader(lines[0])
 	spent := 0
-	for i, ln := range lines {
+	for line, ln := range lines {
 		if !inHunk && !isDiffHeader(ln) {
 			inHunk = true
 		}
 		class := diffClass(ln, inHunk)
 		if class != diffMeta {
 			if !v.expand && spent == diffHunkBudget {
-				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-i), v.st.dim))
+				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-line), v.st.dim))
 				break
 			}
 			spent++
@@ -67,7 +67,7 @@ func renderDiff(body string, width int, v view) string {
 	return strings.Join(out, "\n")
 }
 
-func paintDiff(line, class string, caps Capabilities, st uiStyles) string {
+func paintDiff(line, class string, caps Capabilities, styles uiStyles) string {
 	if caps.Colour == Colour16 {
 		switch class {
 		case diffAdd:
@@ -79,18 +79,18 @@ func paintDiff(line, class string, caps Capabilities, st uiStyles) string {
 	}
 	switch class {
 	case diffAdd:
-		return st.green.Render(line)
+		return styles.green.Render(line)
 	case diffDel:
-		return st.red.Render(line)
+		return styles.red.Render(line)
 	case diffMeta:
-		return st.dim.Render(line)
+		return styles.dim.Render(line)
 	}
-	return st.text.Render(line)
+	return styles.text.Render(line)
 }
 
 const tableGap = "  "
 
-func renderTable(rows [][]string, width int, st uiStyles) string {
+func renderTable(rows [][]string, width int, styles uiStyles) string {
 	if len(rows) == 0 {
 		return ""
 	}
@@ -106,39 +106,39 @@ func renderTable(rows [][]string, width int, st uiStyles) string {
 	}
 	shrinkColumns(widths, width-len(tableGap)*(cols-1))
 
-	var b strings.Builder
-	for row, r := range rows {
-		if row > 0 {
-			b.WriteByte('\n')
+	var builder strings.Builder
+	for cells, r := range rows {
+		if cells > 0 {
+			builder.WriteByte('\n')
 		}
-		if row == 1 {
-			b.WriteString(st.dim.Render(strings.Repeat("─", min(width, tableWidth(widths)))) + "\n")
+		if cells == 1 {
+			builder.WriteString(styles.dim.Render(strings.Repeat("─", min(width, tableWidth(widths)))) + "\n")
 		}
-		b.WriteString(tableRow(r, widths, row == 0, st))
+		builder.WriteString(tableRow(r, widths, cells == 0, styles))
 	}
-	return b.String()
+	return builder.String()
 }
 
-func tableWidth(w []int) int {
-	total := len(tableGap) * (len(w) - 1)
-	for _, c := range w {
+func tableWidth(widths []int) int {
+	total := len(tableGap) * (len(widths) - 1)
+	for _, c := range widths {
 		total += c
 	}
 	return total
 }
 
-func shrinkColumns(w []int, budget int) {
-	for tableWidth(w) > budget {
+func shrinkColumns(widths []int, budget int) {
+	for tableWidth(widths) > budget {
 		widest := 0
-		for i := range w {
-			if w[i] > w[widest] {
-				widest = i
+		for index := range widths {
+			if widths[index] > widths[widest] {
+				widest = index
 			}
 		}
-		if w[widest] <= 1 {
+		if widths[widest] <= 1 {
 			return
 		}
-		w[widest]--
+		widths[widest]--
 	}
 }
 
@@ -172,9 +172,9 @@ func parseTableRows(lines []string) [][]string {
 	for _, ln := range lines {
 		cells := strings.Split(strings.Trim(strings.TrimSpace(ln), "|"), "|")
 		rule := true
-		for i, c := range cells {
-			cells[i] = strings.TrimSpace(c)
-			if strings.Trim(cells[i], ":- ") != "" {
+		for cell, c := range cells {
+			cells[cell] = strings.TrimSpace(c)
+			if strings.Trim(cells[cell], ":- ") != "" {
 				rule = false
 			}
 		}
@@ -268,15 +268,15 @@ func (m *model) toggleToolExpand() {
 }
 
 func (m *model) copyLastCode() {
-	tb := m.tabs[m.active]
-	if tb == nil || m.clip == nil {
+	tab := m.tabs[m.active]
+	if tab == nil || m.clip == nil {
 		return
 	}
-	for i := len(tb.entries) - 1; i >= 0; i-- {
-		if tb.entries[i].role != roleAgent {
+	for index := len(tab.entries) - 1; index >= 0; index-- {
+		if tab.entries[index].role != roleAgent {
 			continue
 		}
-		blocks := codeBlocks(tb.entries[i].text)
+		blocks := codeBlocks(tab.entries[index].text)
 		if len(blocks) == 0 {
 			break
 		}

@@ -208,11 +208,11 @@ func parse(cmd contracts.Cmd, rest []string) (contracts.Input, error) {
 	return input, checkRequired(cmd, input)
 }
 
-func parseFlag(c contracts.Cmd, rest []string, index int, input contracts.Input) (int, error) {
+func parseFlag(cmd contracts.Cmd, rest []string, index int, input contracts.Input) (int, error) {
 	name, inline, isInline := strings.Cut(strings.TrimPrefix(rest[index], "--"), "=")
-	param, ok := isParam(c, name)
+	param, ok := isParam(cmd, name)
 	if !ok {
-		return 0, fmt.Errorf("%s: %w --%s", strings.Join(c.Path, " "), errUnknownFlag, name)
+		return 0, fmt.Errorf("%s: %w --%s", strings.Join(cmd.Path, " "), errUnknownFlag, name)
 	}
 	if isInline {
 		input.Args[name] = inline
@@ -223,7 +223,7 @@ func parseFlag(c contracts.Cmd, rest []string, index int, input contracts.Input)
 		input.Args[name] = rest[index+1]
 		return 1, nil
 	case param.Required || param.ValueRequired:
-		return 0, fmt.Errorf("%s: flag --%s %w", strings.Join(c.Path, " "), name, errFlagNeedsValue)
+		return 0, fmt.Errorf("%s: flag --%s %w", strings.Join(cmd.Path, " "), name, errFlagNeedsValue)
 	default:
 		input.Args[name] = "true"
 		return 0, nil

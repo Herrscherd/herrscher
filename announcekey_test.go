@@ -50,3 +50,14 @@ func TestNewResolverNeedsNoAnnounceKeyWhenLocal(t *testing.T) {
 		t.Fatalf("local resolver = %v, want nil", err)
 	}
 }
+
+func TestNewResolverRefusesAWeakAnnounceKeyWhenRemote(t *testing.T) {
+	t.Setenv("HERRSCHER_REMOTE", "memory")
+	t.Setenv("HERRSCHER_ANNOUNCE_KEY", "too-short")
+	t.Setenv("HERRSCHER_TLS_CA", "")
+	t.Setenv("HERRSCHER_TLS_CERT", "")
+	t.Setenv("HERRSCHER_TLS_KEY", "")
+	if _, err := newResolver(slog.New(slog.DiscardHandler)); !errors.Is(err, transport.ErrWeakAnnounceKey) {
+		t.Fatalf("remote with a weak key = %v, want transport.ErrWeakAnnounceKey", err)
+	}
+}

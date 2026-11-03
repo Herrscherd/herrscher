@@ -55,6 +55,7 @@ func run() int {
 		return reportError(err)
 	}
 	host.CaptureGatewayCreds()
+	host.CaptureAnnounceKey()
 	hideGatewayKeys()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -775,3 +775,47 @@ func TestEmptyThinkingIsDropped(t *testing.T) {
 		t.Fatal("it must still mark the turn busy")
 	}
 }
+
+func TestCtrlCInterruptsTheTurnThenQuits(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.active = "a"
+	m.ready = true
+	m.tabs["a"].busy = true
+
+	_, first := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if len(f.interrupted) != 1 || f.interrupted[0] != "a" {
+		t.Fatalf("the first Ctrl+C during a turn must interrupt it: %+v", f.interrupted)
+	}
+	if first != nil {
+		t.Fatal("the first Ctrl+C during a turn must not quit")
+	}
+
+	_, second := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if len(f.interrupted) != 1 {
+		t.Fatalf("the second Ctrl+C must not interrupt again: %+v", f.interrupted)
+	}
+	if second == nil {
+		t.Fatal("the second Ctrl+C must quit")
+	}
+	if _, ok := second().(tea.QuitMsg); !ok {
+		t.Fatal("the second Ctrl+C must return the quit command")
+	}
+}
+
+func TestCtrlCQuitsWhenNoTurnIsRunning(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.active = "a"
+	m.ready = true
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatal("Ctrl+C with no running turn must quit")
+	}
+	if len(f.interrupted) != 0 {
+		t.Fatalf("no turn is running, nothing to interrupt: %+v", f.interrupted)
+	}
+}

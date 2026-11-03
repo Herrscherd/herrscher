@@ -33,6 +33,8 @@ func dispatchLiveCommand(ctx context.Context, path string, argv []string) (strin
 		return "", false, nil
 	}
 	defer closeRead(conn)
+	stopClose := closeOnDone(ctx, conn)
+	defer stopClose()
 	if deadline, ok := ctx.Deadline(); ok {
 		logCleanup(conn.SetDeadline(deadline))
 	}
@@ -45,6 +47,9 @@ func dispatchLiveCommand(ctx context.Context, path string, argv []string) (strin
 	}
 	line, err := bufio.NewReader(conn).ReadBytes('\n')
 	if err != nil && len(line) == 0 {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", true, ctxErr
+		}
 		return "", true, err
 	}
 	var resp cmdResponse
@@ -109,4 +114,17 @@ func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, read
 	payload, marshalErr := json.Marshal(resp)
 	logCleanup(marshalErr)
 	logWriteFailure(conn.Write(append(payload, '\n')))
+}
+
+func closeOnDone(ctx context.Context, conn net.Conn) func() {
+	closed := make(chan struct{})
+	stopAfter := context.AfterFunc(ctx, func() {
+		defer close(closed)
+		logCleanup(conn.Close())
+	})
+	return func() {
+		if !stopAfter() {
+			<-closed
+		}
+	}
 }

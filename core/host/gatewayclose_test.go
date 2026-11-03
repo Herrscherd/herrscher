@@ -18,6 +18,10 @@ type closingGateway struct {
 	canceled    bool
 }
 
+func (g *closingGateway) Manifest() contracts.Manifest {
+	return contracts.Manifest{Kind: "closing"}
+}
+
 func (g *closingGateway) Close(ctx context.Context) error {
 	g.closed = true
 	_, g.hasDeadline = ctx.Deadline()
@@ -32,7 +36,7 @@ func TestCloseGatewaysClosesEveryCloserWithALiveDeadline(t *testing.T) {
 	failing := &closingGateway{err: errors.New("stuck")}
 	plain := struct{ contracts.Gateway }{}
 
-	closeGateways(parent, []contracts.Gateway{first, plain, failing}, slog.New(slog.DiscardHandler))
+	CloseGateways(parent, []contracts.Gateway{first, plain, failing}, slog.New(slog.DiscardHandler))
 
 	for name, gateway := range map[string]*closingGateway{"first": first, "failing": failing} {
 		if !gateway.closed {

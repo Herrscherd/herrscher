@@ -21,11 +21,11 @@ func stagedFile(t *testing.T, name, content string) string {
 	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	real, err := filepath.EvalSymlinks(p)
+	resolved, err := filepath.EvalSymlinks(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return real
+	return resolved
 }
 
 func TestResolveAttachmentsFilePassthrough(t *testing.T) {

@@ -212,7 +212,9 @@ func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, proje
 	} else if orch != nil {
 		return orch
 	}
-	for _, p := range contracts.Default.Orchestrators() {
+	orchestrators := contracts.Default.Orchestrators()
+	for i := range orchestrators {
+		p := &orchestrators[i]
 		if p.Orchestrator == nil {
 			continue
 		}

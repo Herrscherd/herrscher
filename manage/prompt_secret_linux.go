@@ -25,8 +25,8 @@ func readSecret(in *bufio.Reader, msg string) (string, error) {
 	}
 	raw := *old
 	raw.Lflag &^= unix.ECHO
-	if err = unix.IoctlSetTermios(fd, unix.TCSETS, &raw); err != nil {
-		return "", err
+	if setErr := unix.IoctlSetTermios(fd, unix.TCSETS, &raw); setErr != nil {
+		return "", setErr
 	}
 
 	line, err := in.ReadString('\n')

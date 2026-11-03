@@ -53,8 +53,8 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 		return err
 	}
 	if *envFile != "" {
-		if err = loadEnvFile(*envFile); err != nil {
-			return err
+		if loadErr := loadEnvFile(*envFile); loadErr != nil {
+			return loadErr
 		}
 	}
 	owner := or(envx.Get("OWNER_ID"), cfg.Owner)

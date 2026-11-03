@@ -34,34 +34,34 @@ type hostedPlugin struct {
 func hostPlugin(ctx context.Context, category contracts.Category) (hostedPlugin, error) {
 	switch category {
 	case contracts.CategoryMemory:
-		real, m, err := firstMemory(ctx)
+		impl, m, err := firstMemory(ctx)
 		if err != nil {
 			return hostedPlugin{}, err
 		}
 		return hostedPlugin{
 			manifest:  m,
-			register:  func(s *grpc.Server) { transport.RegisterMemorySkeleton(s, real) },
-			closeReal: func() error { return real.Close() },
+			register:  func(s *grpc.Server) { transport.RegisterMemorySkeleton(s, impl) },
+			closeReal: func() error { return impl.Close() },
 		}, nil
 	case contracts.CategoryOrchestrator:
-		real, m, err := firstOrchestrator(ctx)
+		impl, m, err := firstOrchestrator(ctx)
 		if err != nil {
 			return hostedPlugin{}, err
 		}
 		return hostedPlugin{
 			manifest:  m,
-			register:  func(s *grpc.Server) { transport.RegisterOrchestratorSkeleton(s, real) },
-			closeReal: func() error { return real.Close() },
+			register:  func(s *grpc.Server) { transport.RegisterOrchestratorSkeleton(s, impl) },
+			closeReal: func() error { return impl.Close() },
 		}, nil
 	case contracts.CategoryBackend:
-		real, m, err := firstBackend(ctx)
+		impl, m, err := firstBackend(ctx)
 		if err != nil {
 			return hostedPlugin{}, err
 		}
 		return hostedPlugin{
 			manifest:  m,
-			register:  func(s *grpc.Server) { transport.RegisterBackendSkeleton(s, real) },
-			closeReal: func() error { return real.Close() },
+			register:  func(s *grpc.Server) { transport.RegisterBackendSkeleton(s, impl) },
+			closeReal: func() error { return impl.Close() },
 		}, nil
 	default:
 		return hostedPlugin{}, fmt.Errorf("plugin-host: category %q passed the support gate but %w", category, errNoSkeleton)
@@ -151,7 +151,9 @@ func firstMemory(ctx context.Context) (contracts.Memory, contracts.Manifest, err
 }
 
 func firstOrchestrator(ctx context.Context) (contracts.Orchestrator, contracts.Manifest, error) {
-	for _, p := range contracts.Default.Orchestrators() {
+	orchestrators := contracts.Default.Orchestrators()
+	for i := range orchestrators {
+		p := &orchestrators[i]
 		if p.Orchestrator == nil {
 			continue
 		}
@@ -169,7 +171,9 @@ func firstOrchestrator(ctx context.Context) (contracts.Orchestrator, contracts.M
 }
 
 func firstBackend(ctx context.Context) (contracts.Backend, contracts.Manifest, error) {
-	for _, p := range contracts.Default.Backends() {
+	backends := contracts.Default.Backends()
+	for i := range backends {
+		p := &backends[i]
 		if p.Backend == nil {
 			continue
 		}

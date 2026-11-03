@@ -234,15 +234,15 @@ func stagedPath(p string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("staging root: %w", err)
 	}
-	real, err := filepath.EvalSymlinks(p)
+	resolved, err := filepath.EvalSymlinks(p)
 	if err != nil {
 		return "", err
 	}
-	rel, err := filepath.Rel(root, real)
+	rel, err := filepath.Rel(root, resolved)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("%s is %w under %s", p, errNotStaged, root)
 	}
-	return real, nil
+	return resolved, nil
 }
 
 func pinnedClient(client *http.Client, hosts allowedHosts) *http.Client {
@@ -329,7 +329,7 @@ func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, 
 	if err := validateCDNURL(a.URL, hosts); err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("attachment request %s: %w", a.Filename, err)
 	}

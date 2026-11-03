@@ -13,7 +13,7 @@ func TestGoDeadWaitsForRunSessionTeardown(t *testing.T) {
 	cancelled := make(chan struct{})
 	tornDown := make(chan struct{})
 	returned := make(chan struct{})
-	h := &hub{live: map[string]liveSession{
+	h := &hub{teardownGrace: defaultTeardownGrace, live: map[string]liveSession{
 		"same-name": {
 			cancel: func() { close(cancelled) },
 			done:   tornDown,

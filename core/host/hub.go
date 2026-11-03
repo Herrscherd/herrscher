@@ -20,7 +20,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
-var sessionTeardownGrace = 5 * time.Second
+const defaultTeardownGrace = 5 * time.Second
 
 type hub struct {
 	st      *state.State
@@ -44,6 +44,9 @@ type hub struct {
 	dispatchMu sync.Mutex
 	mu         sync.Mutex
 	live       map[string]liveSession
+
+	teardownGrace time.Duration
+	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
 }
 
 type forgetter interface{ forget(string) }
@@ -54,7 +57,7 @@ type liveSession struct {
 }
 
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry) *hub {
-	return &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: map[string]liveSession{}}
+	return &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: map[string]liveSession{}, teardownGrace: defaultTeardownGrace}
 }
 
 func eventTap(publish func(string, contracts.Event), session string) func(contracts.Event) {
@@ -130,8 +133,8 @@ func (h *hub) goDead(name string) {
 		live.cancel()
 		select {
 		case <-live.done:
-		case <-time.After(sessionTeardownGrace):
-			fmt.Fprintf(os.Stderr, "herrscher serve: session %q: teardown still running after %s, releasing the name anyway\n", name, sessionTeardownGrace)
+		case <-time.After(h.teardownGrace):
+			fmt.Fprintf(os.Stderr, "herrscher serve: session %q: teardown still running after %s, releasing the name anyway\n", name, h.teardownGrace)
 		}
 	}
 	if f, ok := h.coordinator.(forgetter); ok {
@@ -173,6 +176,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 		runtime := oneShotSeedRuntime{
 			coordinator: h.coordinator,
 			publish:     h.eventPublisher,
+			backend:     h.seedBackend,
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
 					fmt.Fprintf(os.Stderr, "herrscher serve: session %q: seed transcript entry dropped: %v\n", session, err)

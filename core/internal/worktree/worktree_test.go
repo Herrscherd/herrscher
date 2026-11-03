@@ -239,6 +239,19 @@ func TestRemoveForceRecoversEmptyUnregisteredWorktree(t *testing.T) {
 	}
 }
 
+func TestRemoveForceRecoversASessionWhoseSessionsRootIsGone(t *testing.T) {
+	repo := initRepo(t)
+	w := NewWorktreer("instance")
+	path := w.Path(repo, "vanished")
+	if _, err := os.Stat(filepath.Dir(path)); !os.IsNotExist(err) {
+		t.Fatalf("the sessions root must be absent for this case, stat err = %v", err)
+	}
+
+	if err := w.Remove(context.Background(), repo, "vanished", true); err != nil {
+		t.Fatalf("Remove should accept a session whose sessions root was deleted: %v", err)
+	}
+}
+
 func TestRemoveDoesNotRecoverEmptyOrphanWithoutForce(t *testing.T) {
 	repo := initRepo(t)
 	w := NewWorktreer("")

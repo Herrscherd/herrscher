@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -285,13 +286,12 @@ func TestResolveAttachmentsContextCancelled(t *testing.T) {
 
 func TestFetchOneSkipsOversizedBody(t *testing.T) {
 	big := maxAttachmentBytes + 100
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		buf := make([]byte, 64<<10)
-		for i := range buf {
-			buf[i] = 'A'
-		}
-		for written := 0; written < big; written += len(buf) {
-			writeOrLog(w, buf)
+	chunk := bytes.Repeat([]byte{'A'}, 64<<10)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for written := 0; written < big && r.Context().Err() == nil; written += len(chunk) {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
 		}
 	}))
 	defer srv.Close()

@@ -2,44 +2,37 @@ package bridge
 
 import (
 	"context"
+	"net"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
-
-	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
 func TestDialWaitsForASocketThatIsNotThereYet(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "late.sock")
-	waiting := make(chan struct{}, 1)
-	retry := make(chan time.Time)
-	after := func(time.Duration) <-chan time.Time {
-		waiting <- struct{}{}
-		return retry
-	}
-	type dialed struct {
-		conn *control.Conn
-		err  error
-	}
-	result := make(chan dialed, 1)
-	go func() {
-		conn, err := dialHubAfter(context.Background(), path, after)
-		result <- dialed{conn, err}
-	}()
-
-	<-waiting
-	acc, err := control.Accept(t.Context(), path)
-	if err != nil {
-		t.Fatalf("Accept: %v", err)
-	}
-	defer closeAndWarn(acc)
-	retry <- time.Now()
-
-	got := <-result
-	if got.err != nil {
-		t.Fatalf("dial must wait for the socket: %v", got.err)
-	}
-	closeAndWarn(got.conn)
+	synctest.Test(t, func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "late.sock")
+		listening := make(chan net.Listener, 1)
+		time.AfterFunc(350*time.Millisecond, func() {
+			ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
+			if err != nil {
+				t.Errorf("listen: %v", err)
+				return
+			}
+			listening <- ln
+		})
+		conn, err := dialHub(context.Background(), path)
+		if err != nil {
+			t.Fatalf("dial must wait for the socket: %v", err)
+		}
+		defer closeAndWarn(conn)
+		select {
+		case ln := <-listening:
+			defer closeAndWarn(ln)
+		default:
+			t.Fatal("dial connected before any listener was up on the path")
+		}
+	})
 }
 
 func TestDialGivesUpWhenTheContextIsCancelled(t *testing.T) {

@@ -71,10 +71,6 @@ const hubDialWindow = 10 * time.Second
 const hubDialInterval = 100 * time.Millisecond
 
 func dialHub(ctx context.Context, path string) (*control.Conn, error) {
-	return dialHubAfter(ctx, path, time.After)
-}
-
-func dialHubAfter(ctx context.Context, path string, after func(time.Duration) <-chan time.Time) (*control.Conn, error) {
 	deadline := time.Now().Add(hubDialWindow)
 	for {
 		conn, err := control.DialContext(ctx, path)
@@ -87,7 +83,7 @@ func dialHubAfter(ctx context.Context, path string, after func(time.Duration) <-
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-after(hubDialInterval):
+		case <-time.After(hubDialInterval):
 		}
 	}
 }

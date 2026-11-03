@@ -399,7 +399,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 	if err != nil {
 		return "", err
 	}
-	approvalsNote := h.approvalsNote(req, place.space)
+	approvalsNote := h.approvalsNote(ctx, req, place.space)
 	runDir := place.space.path
 	if runDir == "" {
 		runDir = place.repo
@@ -744,7 +744,7 @@ func (h *Handler) rollbackWorkspace(ctx context.Context, worktrees Worktrees, re
 	}
 }
 
-func (h *Handler) approvalsNote(req createRequest, space workspace) string {
+func (h *Handler) approvalsNote(ctx context.Context, req createRequest, space workspace) string {
 	mode := req.mode
 	if mode == "" || mode == string(approval.ModeBypass) {
 		return ""
@@ -763,7 +763,7 @@ func (h *Handler) approvalsNote(req createRequest, space workspace) string {
 	case req.hostName != "" && agentName == "":
 		return fmt.Sprintf("\n\n⚠️ approvals: a remote session without an agent has no materialization channel, so **%s** runs ungated.", name)
 	case agentName == "":
-		if err := agent.MaterializeHook(space.path, agent.SelfBin()); err != nil {
+		if err := agent.MaterializeHook(ctx, space.path, agent.SelfBin()); err != nil {
 			h.log.Warn("materialize hook failed", "session", name, "err", err)
 			return fmt.Sprintf("\n\n⚠️ approvals: the hook could not be written (%v), so **%s** runs ungated.", err, name)
 		}

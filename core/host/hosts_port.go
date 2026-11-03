@@ -86,7 +86,7 @@ func (p hostPlacer) Workspace(name string) (string, error) {
 
 func (p hostPlacer) Materialize(ctx context.Context, name string, assigned agent.Agent, worktreePath string, hook bool) error {
 	if name == "" {
-		return assigned.MaterializeAs(worktreePath, binIf(hook, agent.SelfBin()))
+		return assigned.MaterializeAs(ctx, worktreePath, binIf(hook, agent.SelfBin()))
 	}
 	host, rem, err := p.resolve(name)
 	if err != nil {

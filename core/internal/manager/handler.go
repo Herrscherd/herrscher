@@ -64,7 +64,7 @@ func (h *Handler) materializeOn(ctx context.Context, hostName string, profile ag
 		if hook {
 			bin = agent.SelfBin()
 		}
-		return profile.MaterializeAs(worktreePath, bin)
+		return profile.MaterializeAs(ctx, worktreePath, bin)
 	}
 	return h.hs.Materialize(ctx, hostName, profile, worktreePath, hook)
 }

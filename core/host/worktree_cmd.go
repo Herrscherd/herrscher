@@ -75,7 +75,7 @@ func runWorktreeSub(ctx context.Context, file worktreeFlags) error {
 	case "remove":
 		return removeWorktree(ctx, worktrees, file)
 	case "materialize":
-		return materializeWorktree(file.worktreePath)
+		return materializeWorktree(ctx, file.worktreePath)
 	default:
 		return &unknownWorktreeSubcommandError{Sub: file.sub}
 	}
@@ -96,14 +96,14 @@ func removeWorktree(ctx context.Context, wt *worktree.Worktreer, f worktreeFlags
 	return emitJSON(map[string]bool{"removed": true})
 }
 
-func materializeWorktree(worktreePath string) error {
+func materializeWorktree(ctx context.Context, worktreePath string) error {
 	if worktreePath == "" {
 		return errWorktreeMaterializeRequired
 	}
 	if err := extractTar(os.Stdin, worktreePath); err != nil {
 		return err
 	}
-	if err := agent.EnsureGitExcludes(worktreePath); err != nil {
+	if err := agent.EnsureGitExcludes(ctx, worktreePath); err != nil {
 		return err
 	}
 	return emitJSON(map[string]bool{"materialized": true})

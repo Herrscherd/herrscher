@@ -88,11 +88,11 @@ func newPluginServer(tlsCfg transport.TLSConfig) (*grpc.Server, error) {
 	return grpc.NewServer(grpc.Creds(creds)), nil
 }
 
-func announceEvery(ctx context.Context, conn *nats.Conn, ann transport.Announcement) {
+func announceEvery(ctx context.Context, conn *nats.Conn, ann transport.Announcement, key transport.AnnounceKey) {
 	ticker := time.NewTicker(announceInterval)
 	defer ticker.Stop()
 	for {
-		if err := transport.Announce(conn, ann); err != nil {
+		if err := transport.Announce(conn, ann, key); err != nil {
 			slog.Warn("announce plugin", "err", err)
 		}
 		select {
@@ -117,6 +117,12 @@ func runPluginHost(ctx context.Context, args []string) error {
 
 	tlsCfg := tlsConfigFromEnv()
 	if err := tlsCfg.Validate(); err != nil {
+		return fmt.Errorf("plugin-host: %w", err)
+	}
+
+	host.CaptureAnnounceKey()
+	announceKey, err := announceKeyFromEnv()
+	if err != nil {
 		return fmt.Errorf("plugin-host: %w", err)
 	}
 
@@ -152,7 +158,7 @@ func runPluginHost(ctx context.Context, args []string) error {
 	defer conn.Close()
 	ann := transport.Announcement{Manifest: hosted.manifest, GrpcAddr: lis.Addr().String(), InstanceID: *instanceID}
 
-	go announceEvery(ctx, conn, ann)
+	go announceEvery(ctx, conn, ann, announceKey)
 	go func() { <-ctx.Done(); server.GracefulStop() }()
 	return server.Serve(lis)
 }

@@ -92,14 +92,15 @@ type closedSession struct {
 }
 
 type fakeBackend struct {
-	dispatched  [][]string
-	closed      []closedSession
-	sessions    []contracts.SessionInfo
-	fe          chan RoutedEvent
-	scrollback  map[string][]contracts.ScrollbackLine
-	resumed     []string
-	submitted   []submittedTurn
-	interrupted []string
+	refuseInterrupt bool
+	dispatched      [][]string
+	closed          []closedSession
+	sessions        []contracts.SessionInfo
+	fe              chan RoutedEvent
+	scrollback      map[string][]contracts.ScrollbackLine
+	resumed         []string
+	submitted       []submittedTurn
+	interrupted     []string
 }
 
 type submittedTurn struct {
@@ -134,7 +135,7 @@ func (f *fakeBackend) Resume(name string) (string, error) {
 
 func (f *fakeBackend) Interrupt(name string) bool {
 	f.interrupted = append(f.interrupted, name)
-	return true
+	return !f.refuseInterrupt
 }
 
 func (f *fakeBackend) Commands() []CommandSpec {
@@ -773,5 +774,103 @@ func TestEmptyThinkingIsDropped(t *testing.T) {
 	}
 	if !m.tabs["a"].busy {
 		t.Fatal("it must still mark the turn busy")
+	}
+}
+
+func TestCtrlCInterruptsTheTurnThenQuits(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.active = "a"
+	m.ready = true
+	m.tabs["a"].busy = true
+
+	_, first := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if len(f.interrupted) != 1 || f.interrupted[0] != "a" {
+		t.Fatalf("the first Ctrl+C during a turn must interrupt it: %+v", f.interrupted)
+	}
+	if first != nil {
+		t.Fatal("the first Ctrl+C during a turn must not quit")
+	}
+
+	_, second := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if len(f.interrupted) != 1 {
+		t.Fatalf("the second Ctrl+C must not interrupt again: %+v", f.interrupted)
+	}
+	if second == nil {
+		t.Fatal("the second Ctrl+C must quit")
+	}
+	if _, ok := second().(tea.QuitMsg); !ok {
+		t.Fatal("the second Ctrl+C must return the quit command")
+	}
+}
+
+func TestCtrlCQuitsWhenNoTurnIsRunning(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.active = "a"
+	m.ready = true
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatal("Ctrl+C with no running turn must quit")
+	}
+	if len(f.interrupted) != 0 {
+		t.Fatalf("no turn is running, nothing to interrupt: %+v", f.interrupted)
+	}
+}
+
+func TestCtrlCNoticesWhenNothingWasInterrupted(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}, refuseInterrupt: true}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.active = "a"
+	m.ready = true
+	m.tabs["a"].busy = true
+
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if m.flash == "" {
+		t.Fatal("a Ctrl+C that interrupted nothing must say so")
+	}
+	_, second := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if second == nil {
+		t.Fatal("the next Ctrl+C must quit, so the user is never trapped")
+	}
+}
+
+func TestCtrlCDuringAPendingCloseInterruptsTheTurn(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.active = "a"
+	m.ready = true
+	m.tabs["a"].busy = true
+	m.pendingClose = true
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if len(f.interrupted) != 1 {
+		t.Fatalf("Ctrl+C during a pending close must interrupt the running turn: %+v", f.interrupted)
+	}
+	if cmd != nil {
+		t.Fatal("Ctrl+C during a pending close on a busy turn must not quit")
+	}
+}
+
+func TestCtrlCInterruptsATurnFromTheSearchOverlay(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
+	m := newModel(f)
+	m.ensureTab("a")
+	m.active = "a"
+	m.ready = true
+	m.tabs["a"].busy = true
+	m.openSearch()
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if len(f.interrupted) != 1 {
+		t.Fatalf("Ctrl+C in the search overlay must interrupt the running turn: %+v", f.interrupted)
+	}
+	if cmd != nil {
+		t.Fatal("Ctrl+C in the search overlay during a turn must not quit")
 	}
 }

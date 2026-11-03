@@ -48,6 +48,7 @@ func runBridge(ctx context.Context, args []string) error {
 	}
 
 	host.CaptureGatewayCreds()
+	host.CaptureAnnounceKey()
 
 	log := host.Logger(*verbose).With("component", "bridge", "session", *session)
 

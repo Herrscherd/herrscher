@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -174,32 +175,34 @@ func TestSessionPolicyOfAnUnknownSession(t *testing.T) {
 }
 
 func TestApproveAllowSettlesAWaitingRequest(t *testing.T) {
-	approvalTab := newApprovalTable()
-	sessionTab := newSessionTable()
-	reg, _ := approveReg(t, approvalTab, sessionTab)
-	pol := approval.Policy{{Decision: approval.Ask, Tool: "Bash", Pattern: "git push*"}}
-	done := make(chan approval.Decision, 1)
-	go func() {
-		d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s1", approval.Request{Tool: "Bash", Subject: "git push"}, pol, approval.ModeAsk, 5*time.Second)
-		done <- d
-	}()
+	synctest.Test(t, func(t *testing.T) {
+		approvalTab := newApprovalTable()
+		sessionTab := newSessionTable()
+		reg, _ := approveReg(t, approvalTab, sessionTab)
+		pol := approval.Policy{{Decision: approval.Ask, Tool: "Bash", Pattern: "git push*"}}
+		done := make(chan approval.Decision, 1)
+		go func() {
+			d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s1", approval.Request{Tool: "Bash", Subject: "git push"}, pol, approval.ModeAsk, 5*time.Second)
+			done <- d
+		}()
 
-	id := awaitPending(t, approvalTab, 1)[0].ID
-	out, err := reg.Dispatch(context.Background(), []string{"approve", "allow", id})
-	if err != nil {
-		t.Fatalf("allow: %v", err)
-	}
-	if !strings.Contains(out, id) {
-		t.Fatalf("out = %q, want the id it settled", out)
-	}
-	select {
-	case d := <-done:
-		if d != approval.Allow {
-			t.Fatalf("got %q, want allow: the operator said so", d)
+		id := awaitPending(t, approvalTab, 1)[0].ID
+		out, err := reg.Dispatch(context.Background(), []string{"approve", "allow", id})
+		if err != nil {
+			t.Fatalf("allow: %v", err)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("the waiter never got the answer")
-	}
+		if !strings.Contains(out, id) {
+			t.Fatalf("out = %q, want the id it settled", out)
+		}
+		select {
+		case d := <-done:
+			if d != approval.Allow {
+				t.Fatalf("got %q, want allow: the operator said so", d)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("the waiter never got the answer")
+		}
+	})
 }
 
 func TestApproveAllowUnknownIDReportsIt(t *testing.T) {

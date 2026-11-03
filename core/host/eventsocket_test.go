@@ -7,9 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"path/filepath"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -41,38 +40,31 @@ func TestMarshalSessionEvent(t *testing.T) {
 }
 
 func TestEventSocketPublishReachesSubscriber(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	path := filepath.Join(t.TempDir(), "events.sock")
-	es := newEventSocket()
-	serveEventsSocket(ctx, path, es)
+	synctest.Test(t, func(t *testing.T) {
+		es := newEventSocket()
+		defer es.closeAll()
+		server, client := net.Pipe()
+		defer closeRead(client)
+		es.add(server)
 
-	conn, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
-	if err != nil {
-		t.Fatalf("dial %s: %v", path, err)
-	}
-	defer closeRead(conn)
+		es.Publish("sess-1", contracts.Event{T: "chunk", Text: "hello"})
 
-	waitForSubscriber(t, es)
-
-	es.Publish("sess-1", contracts.Event{T: "chunk", Text: "hello"})
-
-	logCleanup(conn.SetReadDeadline(time.Now().Add(2 * time.Second)))
-	line, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	var got struct {
-		Session string `json:"session"`
-		T       string `json:"t"`
-		Text    string `json:"text"`
-	}
-	if err := json.Unmarshal([]byte(line), &got); err != nil {
-		t.Fatalf("unmarshal %q: %v", line, err)
-	}
-	if got.Session != "sess-1" || got.T != "chunk" || got.Text != "hello" {
-		t.Fatalf("received %+v", got)
-	}
+		line, err := bufio.NewReader(client).ReadString('\n')
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		var got struct {
+			Session string `json:"session"`
+			T       string `json:"t"`
+			Text    string `json:"text"`
+		}
+		if err := json.Unmarshal([]byte(line), &got); err != nil {
+			t.Fatalf("unmarshal %q: %v", line, err)
+		}
+		if got.Session != "sess-1" || got.T != "chunk" || got.Text != "hello" {
+			t.Fatalf("received %+v", got)
+		}
+	})
 }
 
 func TestPublishNilSocketNoop(_ *testing.T) {
@@ -89,13 +81,4 @@ func TestFanOutFiresEmitTap(t *testing.T) {
 	if len(got) != 2 || got[0].T != "thinking" || got[1].T != "reply" || !got[1].Done {
 		t.Fatalf("tap saw %+v", got)
 	}
-}
-
-func waitForSubscriber(t *testing.T, es *eventSocket) {
-	t.Helper()
-	waitFor(t, &es.changed, func() bool {
-		es.mu.Lock()
-		defer es.mu.Unlock()
-		return len(es.subs) > 0
-	}, "a subscriber registered")
 }

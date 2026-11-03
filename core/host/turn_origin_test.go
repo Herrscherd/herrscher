@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -12,25 +13,21 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
-func tapping(t *testing.T, d *sessionDriver) (func() []contracts.Event, *changeNotifier) {
-	t.Helper()
+func tapping(d *sessionDriver) (func() []contracts.Event, context.CancelFunc) {
 	var mu sync.Mutex
 	var seen []contracts.Event
-	var changed changeNotifier
 	d.emitTap = func(e contracts.Event) {
 		mu.Lock()
 		seen = append(seen, e)
 		mu.Unlock()
-		changed.signal()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
 	go d.pump(ctx)
 	return func() []contracts.Event {
 		mu.Lock()
 		defer mu.Unlock()
 		return append([]contracts.Event(nil), seen...)
-	}, &changed
+	}, cancel
 }
 
 func sawReply(events []contracts.Event, text string) bool {
@@ -44,58 +41,64 @@ func sawReply(events []contracts.Event, text string) bool {
 }
 
 func TestTurnSaidOutsideTheBoundChannelsIsNotPostedThere(t *testing.T) {
-	a := &fanRecorder{}
-	toBridge := make(chan contracts.Event, 4)
-	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
-	d.channel = "chan-1"
-	tapped, tapChanged := tapping(t, d)
+	synctest.Test(t, func(t *testing.T) {
+		a := &fanRecorder{}
+		toBridge := make(chan contracts.Event, 4)
+		fromBridge := make(chan contracts.Event, 4)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d.channel = "chan-1"
+		tapped, stop := tapping(d)
+		defer stop()
 
-	if !d.submit(context.Background(), contracts.Inbound{
-		Author:       "you",
-		Text:         "reprends ici",
-		Conversation: contracts.Conversation{Gateway: "terminal", ID: "chan-1"},
-	}) {
-		t.Fatal("submit reported a cancelled context")
-	}
-	select {
-	case in := <-toBridge:
-		if in.T != "input" || in.Text != "reprends ici" {
-			t.Fatalf("driver wrote %+v, want the pushed input", in)
+		if !d.submit(context.Background(), contracts.Inbound{
+			Author:       "you",
+			Text:         "reprends ici",
+			Conversation: contracts.Conversation{Gateway: "terminal", ID: "chan-1"},
+		}) {
+			t.Fatal("submit reported a cancelled context")
 		}
-	case <-time.After(time.Second):
-		t.Fatal("driver did not pump the pushed input to the bridge")
-	}
-	fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
+		select {
+		case in := <-toBridge:
+			if in.T != "input" || in.Text != "reprends ici" {
+				t.Fatalf("driver wrote %+v, want the pushed input", in)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("driver did not pump the pushed input to the bridge")
+		}
+		fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
 
-	waitFor(t, tapChanged, func() bool { return sawReply(tapped(), "done") }, "the pushing client sees the reply on the event stream")
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if len(a.posted) != 0 || a.upserts != 0 {
-		t.Fatalf("the session's channel must stay silent, got posted=%v statuses=%v", a.posted, a.statuses)
-	}
+		requireSettled(t, func() bool { return sawReply(tapped(), "done") }, "the pushing client sees the reply on the event stream")
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if len(a.posted) != 0 || a.upserts != 0 {
+			t.Fatalf("the session's channel must stay silent, got posted=%v statuses=%v", a.posted, a.statuses)
+		}
+	})
 }
 
 func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
-	a := &fanRecorder{}
-	toBridge := make(chan contracts.Event, 4)
-	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
-	tapping(t, d)
+	synctest.Test(t, func(t *testing.T) {
+		a := &fanRecorder{}
+		toBridge := make(chan contracts.Event, 4)
+		fromBridge := make(chan contracts.Event, 4)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		_, stop := tapping(d)
+		defer stop()
 
-	d.submit(context.Background(), contracts.Inbound{
-		Author:       "you",
-		Text:         "salut",
-		Conversation: contracts.Conversation{Gateway: "rec", ID: "c"},
+		d.submit(context.Background(), contracts.Inbound{
+			Author:       "you",
+			Text:         "salut",
+			Conversation: contracts.Conversation{Gateway: "rec", ID: "c"},
+		})
+		<-toBridge
+		fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
+
+		requireSettled(t, func() bool {
+			a.mu.Lock()
+			defer a.mu.Unlock()
+			return len(a.posted) == 1 && a.posted[0] == "done"
+		}, "a turn said in the bound channel is answered there")
 	})
-	<-toBridge
-	fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
-
-	waitFor(t, &a.changed, func() bool {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		return len(a.posted) == 1 && a.posted[0] == "done"
-	}, "a turn said in the bound channel is answered there")
 }
 
 func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
@@ -140,19 +143,22 @@ func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
 }
 
 func TestTurnWithNoOriginIsPostedToTheBoundChannels(t *testing.T) {
-	a := &fanRecorder{}
-	toBridge := make(chan contracts.Event, 4)
-	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
-	tapping(t, d)
+	synctest.Test(t, func(t *testing.T) {
+		a := &fanRecorder{}
+		toBridge := make(chan contracts.Event, 4)
+		fromBridge := make(chan contracts.Event, 4)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		_, stop := tapping(d)
+		defer stop()
 
-	d.submit(context.Background(), contracts.Inbound{Author: "script", Text: "vas-y"})
-	<-toBridge
-	fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
+		d.submit(context.Background(), contracts.Inbound{Author: "script", Text: "vas-y"})
+		<-toBridge
+		fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
 
-	waitFor(t, &a.changed, func() bool {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		return len(a.posted) == 1 && a.posted[0] == "done"
-	}, "a turn with no origin is answered in the session's channel")
+		requireSettled(t, func() bool {
+			a.mu.Lock()
+			defer a.mu.Unlock()
+			return len(a.posted) == 1 && a.posted[0] == "done"
+		}, "a turn with no origin is answered in the session's channel")
+	})
 }

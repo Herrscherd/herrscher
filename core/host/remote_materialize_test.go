@@ -103,3 +103,28 @@ func TestExtractTarRefusesAnEscapingMember(t *testing.T) {
 		t.Fatal("the member escaped the destination")
 	}
 }
+
+func TestExtractTarRefusesAWriteThroughASymlinkInTheDestination(t *testing.T) {
+	dst := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(dst, "link")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	var buf strings.Builder
+	tw := tar.NewWriter(&buf)
+	if err := tw.WriteHeader(&tar.Header{Name: "link/victim.txt", Mode: 0o644, Size: 3, Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("bad")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := extractTar(strings.NewReader(buf.String()), dst); err == nil {
+		t.Fatal("want a refusal for a member that resolves through a symlink")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "victim.txt")); err == nil {
+		t.Fatal("the member was written through the symlink, outside the destination")
+	}
+}

@@ -57,7 +57,7 @@ func TestResolverRemoteMemoryDials(t *testing.T) {
 	}()
 	t.Cleanup(func() { close(stop) })
 
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, srv.ClientURL())
+	r := NewResolver(categorySet(contracts.CategoryMemory), srv.ClientURL())
 	mem, _, err := r.Memory(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryMemory},
@@ -120,7 +120,7 @@ func TestResolverRemoteOrchestratorDials(t *testing.T) {
 	}()
 	t.Cleanup(func() { close(stop) })
 
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryOrchestrator: true}, srv.ClientURL())
+	r := NewResolver(categorySet(contracts.CategoryOrchestrator), srv.ClientURL())
 	orch, _, err := r.Orchestrator(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryOrchestrator},
@@ -189,7 +189,7 @@ func TestResolverRemoteBackendStreamsTurn(t *testing.T) {
 	}()
 	t.Cleanup(func() { close(stop) })
 
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryBackend: true}, srv.ClientURL())
+	r := NewResolver(categorySet(contracts.CategoryBackend), srv.ClientURL())
 	be, _, err := r.Backend(context.Background(),
 		[]contracts.Plugin{{
 			Manifest: contracts.Manifest{Category: contracts.CategoryBackend},

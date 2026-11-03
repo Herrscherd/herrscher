@@ -31,7 +31,7 @@ func fastClock(r *Resolver, now func() time.Time) {
 }
 
 func TestRemoteResolveRetriesThenSucceeds(t *testing.T) {
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, "")
+	r := NewResolver(categorySet(contracts.CategoryMemory), "")
 	frozen := time.Unix(0, 0)
 	fastClock(r, func() time.Time { return frozen })
 
@@ -58,7 +58,7 @@ func TestRemoteResolveRetriesThenSucceeds(t *testing.T) {
 }
 
 func TestRemoteResolveExhaustsAttemptsAndWarns(t *testing.T) {
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, "")
+	r := NewResolver(categorySet(contracts.CategoryMemory), "")
 	frozen := time.Unix(0, 0)
 	fastClock(r, func() time.Time { return frozen })
 	var buf bytes.Buffer
@@ -88,7 +88,7 @@ func TestRemoteResolveExhaustsAttemptsAndWarns(t *testing.T) {
 }
 
 func TestRemoteResolveStopsAtBudget(t *testing.T) {
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, "")
+	r := NewResolver(categorySet(contracts.CategoryMemory), "")
 	r.retryAttempts = 100
 	r.retryBudget = 10 * time.Second
 	tick := time.Unix(0, 0)
@@ -112,7 +112,7 @@ func TestRemoteResolveStopsAtBudget(t *testing.T) {
 
 func TestRemoteResolveRecordsMetricsOnHealth(t *testing.T) {
 	h := health.NewHealth(time.Unix(0, 0))
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, "")
+	r := NewResolver(categorySet(contracts.CategoryMemory), "")
 	r.SetMetrics(h.Metrics())
 	frozen := time.Unix(0, 0)
 	fastClock(r, func() time.Time { return frozen })
@@ -165,7 +165,7 @@ func orchestratorPlugin() []contracts.Plugin {
 }
 
 func TestRemoteResolveOrchestratorRetriesThenSucceeds(t *testing.T) {
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryOrchestrator: true}, "")
+	r := NewResolver(categorySet(contracts.CategoryOrchestrator), "")
 	frozen := time.Unix(0, 0)
 	fastClock(r, func() time.Time { return frozen })
 
@@ -193,7 +193,7 @@ func TestRemoteResolveOrchestratorRetriesThenSucceeds(t *testing.T) {
 
 func TestRemoteResolveOrchestratorFailsCleanlyWithMetrics(t *testing.T) {
 	h := health.NewHealth(time.Unix(0, 0))
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryOrchestrator: true}, "")
+	r := NewResolver(categorySet(contracts.CategoryOrchestrator), "")
 	r.SetMetrics(h.Metrics())
 	frozen := time.Unix(0, 0)
 	fastClock(r, func() time.Time { return frozen })

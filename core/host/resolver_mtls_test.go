@@ -81,7 +81,7 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("client creds: %v", err)
 	}
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, srv.ClientURL())
+	r := NewResolver(categorySet(contracts.CategoryMemory), srv.ClientURL())
 	r.SetCredentials(clientCreds)
 	mem, _, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	if err != nil {
@@ -93,7 +93,7 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 		t.Fatalf("Record over mTLS: %v", recordErr)
 	}
 
-	plain := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, srv.ClientURL())
+	plain := NewResolver(categorySet(contracts.CategoryMemory), srv.ClientURL())
 	memPlain, _, err := plain.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("resolve (lazy dial) should not fail: %v", err)

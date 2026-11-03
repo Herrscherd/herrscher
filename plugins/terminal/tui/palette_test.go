@@ -87,7 +87,7 @@ func TestMergeCommandsKeepsTheLocalOnes(t *testing.T) {
 		{Name: "session create"},
 		{Name: "help", Desc: "the daemon's own help"},
 	})
-	have := map[string]string{}
+	have := make(map[string]string)
 	for _, c := range got {
 		if _, dup := have[c.Name]; dup {
 			t.Fatalf("duplicate row %q", c.Name)

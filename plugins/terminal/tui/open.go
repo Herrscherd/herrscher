@@ -44,15 +44,15 @@ func systemLauncher() launcher {
 }
 
 func checkURLTarget(target string) error {
-	u, err := url.Parse(target)
+	parsed, err := url.Parse(target)
 	if err != nil {
 		return fmt.Errorf("refusing an unparsable target: %w", err)
 	}
-	switch strings.ToLower(u.Scheme) {
+	switch strings.ToLower(parsed.Scheme) {
 	case "http", "https", "mailto":
 		return nil
 	default:
-		return fmt.Errorf("%w %q target: %s", errRefusedTarget, u.Scheme, target)
+		return fmt.Errorf("%w %q target: %s", errRefusedTarget, parsed.Scheme, target)
 	}
 }
 
@@ -95,28 +95,28 @@ func editorLauncher(env func(string) string) launcher {
 }
 
 func splitFileRef(target string) (file, line string) {
-	i := strings.LastIndex(target, ":")
-	if i < 0 {
+	index := strings.LastIndex(target, ":")
+	if index < 0 {
 		return target, ""
 	}
-	rest := target[i+1:]
+	rest := target[index+1:]
 	if rest == "" || strings.TrimLeft(rest, "0123456789") != "" {
 		return target, ""
 	}
-	return target[:i], rest
+	return target[:index], rest
 }
 
-func openLink(ctx context.Context, l Link, sys, edit launcher) error {
-	if l.Kind == LinkFile {
+func openLink(ctx context.Context, link Link, sys, edit launcher) error {
+	if link.Kind == LinkFile {
 		if edit == nil {
 			return errNoEditorLauncher
 		}
-		return edit(ctx, l.Target)
+		return edit(ctx, link.Target)
 	}
 	if sys == nil {
 		return errNoSystemLauncher
 	}
-	return sys(ctx, l.Target)
+	return sys(ctx, link.Target)
 }
 
 func (m *model) selectNextLink() {

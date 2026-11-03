@@ -16,43 +16,43 @@ const (
 	subagentPanelMax = 3
 )
 
-func todoPanel(items []contracts.TodoItem, width int, st uiStyles) []string {
+func todoPanel(items []contracts.TodoItem, width int, styles uiStyles) []string {
 	if len(items) == 0 {
 		return nil
 	}
 	done, active := 0, 0
-	for i, it := range items {
+	for index, it := range items {
 		switch it.State {
 		case stateDone:
 			done++
 		case "active":
-			active = i
+			active = index
 		}
 	}
-	head := st.green.Render(truncate(fmt.Sprintf("  ✓ todos %d/%d", done, len(items)), width))
+	head := styles.green.Render(truncate(fmt.Sprintf("  ✓ todos %d/%d", done, len(items)), width))
 	if width < narrowStatus {
 		return []string{head}
 	}
 	out := []string{head}
 	start, end := paletteWindow(len(items), active, todoPanelMax)
 	for _, it := range items[start:end] {
-		out = append(out, todoRow(it, width, st))
+		out = append(out, todoRow(it, width, styles))
 	}
 	if hidden := len(items) - (end - start); hidden > 0 {
-		out = append(out, st.dim.Render(truncate(fmt.Sprintf("  · +%d", hidden), width)))
+		out = append(out, styles.dim.Render(truncate(fmt.Sprintf("  · +%d", hidden), width)))
 	}
 	return out
 }
 
-func todoRow(it contracts.TodoItem, width int, st uiStyles) string {
-	mark, style := "·", st.dim
-	switch it.State {
+func todoRow(todo contracts.TodoItem, width int, styles uiStyles) string {
+	mark, style := "·", styles.dim
+	switch todo.State {
 	case stateDone:
-		mark, style = "✓", st.green
+		mark, style = "✓", styles.green
 	case "active":
-		mark, style = "◆", st.accent
+		mark, style = "◆", styles.accent
 	}
-	return style.Render(truncate("  "+mark+" "+oneLine(it.Text), width))
+	return style.Render(truncate("  "+mark+" "+oneLine(todo.Text), width))
 }
 
 func oneLine(s string) string {
@@ -62,7 +62,7 @@ func oneLine(s string) string {
 	return strings.Join(fields, " ")
 }
 
-func subagentPanel(agents []liveAgent, now time.Time, width int, st uiStyles) []string {
+func subagentPanel(agents []liveAgent, now time.Time, width int, styles uiStyles) []string {
 	if len(agents) == 0 {
 		return nil
 	}
@@ -72,7 +72,7 @@ func subagentPanel(agents []liveAgent, now time.Time, width int, st uiStyles) []
 		if len(agents) > 1 {
 			label += "s"
 		}
-		return []string{st.accent.Render(truncate(label, width))}
+		return []string{styles.accent.Render(truncate(label, width))}
 	}
 	shown := agents
 	if len(shown) > subagentPanelMax {
@@ -86,10 +86,10 @@ func subagentPanel(agents []liveAgent, now time.Time, width int, st uiStyles) []
 		}
 		cols = append(cols, elapsed(now.Sub(area.since)))
 		line := "  " + mark + " " + strings.Join(cols, "  ")
-		out = append(out, st.accent.Render(truncate(line, width)))
+		out = append(out, styles.accent.Render(truncate(line, width)))
 	}
 	if hidden := len(agents) - len(shown); hidden > 0 {
-		out = append(out, st.dim.Render(truncate(fmt.Sprintf("  · +%d", hidden), width)))
+		out = append(out, styles.dim.Render(truncate(fmt.Sprintf("  · +%d", hidden), width)))
 	}
 	return out
 }

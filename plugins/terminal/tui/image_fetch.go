@@ -18,14 +18,14 @@ var (
 )
 
 func fetchImage(ctx context.Context, get func(context.Context, string) ([]byte, error), allow []string, rawURL string) ([]byte, error) {
-	u, err := url.Parse(rawURL)
+	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse image url: %w", err)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fmt.Errorf("image url scheme %q %w", u.Scheme, errNotFetchable)
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("image url scheme %q %w", parsed.Scheme, errNotFetchable)
 	}
-	host := strings.ToLower(u.Hostname())
+	host := strings.ToLower(parsed.Hostname())
 	if host == "" {
 		return nil, fmt.Errorf("image url %q %w", rawURL, errNoHost)
 	}
@@ -57,11 +57,11 @@ func imageExts() map[string]bool {
 func imageURLs(text string) []string {
 	var out []string
 	for _, raw := range linkURLPattern.FindAllString(text, -1) {
-		u, err := url.Parse(raw)
+		parsed, err := url.Parse(raw)
 		if err != nil {
 			continue
 		}
-		if imageExts()[strings.ToLower(path.Ext(u.Path))] {
+		if imageExts()[strings.ToLower(path.Ext(parsed.Path))] {
 			out = append(out, raw)
 		}
 	}
@@ -75,15 +75,15 @@ type imageReadyMsg struct {
 	escape  string
 }
 
-func (m *model) fetchEntryImages(tb *tab, idx int) tea.Cmd {
-	if m.imageFetcher == nil || len(m.imageHosts) == 0 || idx < 0 || idx >= len(tb.entries) {
+func (m *model) fetchEntryImages(tab *tab, idx int) tea.Cmd {
+	if m.imageFetcher == nil || len(m.imageHosts) == 0 || idx < 0 || idx >= len(tab.entries) {
 		return nil
 	}
 	var cmds []tea.Cmd
 	ctx := m.runContext()
-	channel, caps, get, allow := tb.channel, m.caps, m.imageFetcher, m.imageHosts
-	entryID := tb.entries[idx].id
-	for _, raw := range imageURLs(tb.entries[idx].text) {
+	channel, caps, get, allow := tab.channel, m.caps, m.imageFetcher, m.imageHosts
+	entryID := tab.entries[idx].id
+	for _, raw := range imageURLs(tab.entries[idx].text) {
 		if !hostAllowed(strings.ToLower(urlHost(raw)), allow) {
 			continue
 		}
@@ -107,22 +107,22 @@ func (m *model) fetchEntryImages(tb *tab, idx int) tea.Cmd {
 }
 
 func urlHost(raw string) string {
-	u, err := url.Parse(raw)
+	parsed, err := url.Parse(raw)
 	if err != nil {
 		return ""
 	}
-	return u.Hostname()
+	return parsed.Hostname()
 }
 
 func (m *model) applyImage(msg imageReadyMsg) {
-	tb := m.tabs[msg.channel]
-	if tb == nil || msg.entry < 0 || msg.entry >= len(tb.entries) || msg.escape == "" {
+	tab := m.tabs[msg.channel]
+	if tab == nil || msg.entry < 0 || msg.entry >= len(tab.entries) || msg.escape == "" {
 		return
 	}
-	if tb.entries[msg.entry].id != msg.entryID {
+	if tab.entries[msg.entry].id != msg.entryID {
 		return
 	}
-	failure := &tb.entries[msg.entry]
+	failure := &tab.entries[msg.entry]
 	if failure.preview != "" {
 		failure.preview += "\n"
 	}

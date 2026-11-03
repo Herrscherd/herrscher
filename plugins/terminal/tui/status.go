@@ -61,24 +61,24 @@ func contextRatio(used, limit int) float64 {
 	return 1
 }
 
-func palierStyle(ratio float64, st uiStyles) lipgloss.Style {
+func palierStyle(ratio float64, styles uiStyles) lipgloss.Style {
 	switch {
 	case ratio >= ctxAlarm:
-		return st.red
+		return styles.red
 	case ratio >= ctxWarn:
-		return st.warn
+		return styles.warn
 	default:
-		return st.dim
+		return styles.dim
 	}
 }
 
-func renderContext(used int, vendor string, st uiStyles) string {
+func renderContext(used int, vendor string, styles uiStyles) string {
 	if used <= 0 {
 		return ""
 	}
 	limit := contextLimit(vendor)
 	text := fmt.Sprintf("%s/%s", formatTokens(used), formatLimit(limit))
-	return palierStyle(contextRatio(used, limit), st).Render(text)
+	return palierStyle(contextRatio(used, limit), styles).Render(text)
 }
 
 const compactAt = 0.92
@@ -93,18 +93,18 @@ func contextLeft(used, limit int) float64 {
 
 const verboseStatus = 100
 
-func renderGauge(used int, vendor string, width int, st uiStyles) string {
+func renderGauge(used int, vendor string, width int, styles uiStyles) string {
 	if used <= 0 {
 		return ""
 	}
 	limit := contextLimit(vendor)
 	row := contextRatio(used, limit)
-	style := palierStyle(row, st)
+	style := palierStyle(row, styles)
 	label := fmt.Sprintf(" reste %d %%", int(contextLeft(used, limit)*percentScale))
 	if width >= verboseStatus {
 		label += " avant compaction"
 	}
-	return gauge(row, style, st.dim) + style.Render(label)
+	return gauge(row, style, styles.dim) + style.Render(label)
 }
 
 func modelLabel(info contracts.SessionInfo) string {
@@ -115,9 +115,9 @@ func modelLabel(info contracts.SessionInfo) string {
 	return joinNonEmpty(model, info.Effort)
 }
 
-func (m *model) contextTokens(tb *tab) int {
-	if tb.ctxTokens > 0 {
-		return tb.ctxTokens
+func (m *model) contextTokens(tab *tab) int {
+	if tab.ctxTokens > 0 {
+		return tab.ctxTokens
 	}
 	if info, ok := m.activeInfo(); ok {
 		return info.ContextTokens
@@ -125,39 +125,39 @@ func (m *model) contextTokens(tb *tab) int {
 	return 0
 }
 
-func formatLimit(n int) string {
-	if n >= 1000 && n%1000 == 0 {
-		return fmt.Sprintf("%dk", n/thousand)
+func formatLimit(limit int) string {
+	if limit >= 1000 && limit%1000 == 0 {
+		return fmt.Sprintf("%dk", limit/thousand)
 	}
-	return formatTokens(n)
+	return formatTokens(limit)
 }
 
-func (m *model) statusBar(tb *tab, width int) string {
+func (m *model) statusBar(tab *tab, width int) string {
 	info, known := m.activeInfo()
-	segs := []string{m.statusHead(tb, info, known, width)}
+	segs := []string{m.statusHead(tab, info, known, width)}
 	if width >= narrowStatus && known {
 		if label := modelLabel(info); label != "" {
 			segs = append(segs, m.st.text.Render(label))
 		}
 	}
-	used := m.contextTokens(tb)
+	used := m.contextTokens(tab)
 	if ctx := renderContext(used, info.Vendor, m.st); ctx != "" {
 		segs = append(segs, ctx)
 	}
 	if width >= narrowStatus {
-		segs = append(segs, m.statusDetails(tb, info, known, used, width)...)
+		segs = append(segs, m.statusDetails(tab, info, known, used, width)...)
 	}
 	return strings.Join(segs, m.st.sep)
 }
 
-func (m *model) statusHead(tb *tab, info contracts.SessionInfo, known bool, width int) string {
+func (m *model) statusHead(tab *tab, info contracts.SessionInfo, known bool, width int) string {
 	if known && info.Vendor != "" && width >= narrowStatus {
-		return m.st.accent.Render(glyphBolt+" "+info.Vendor) + m.st.dim.Render(" "+tb.label)
+		return m.st.accent.Render(glyphBolt+" "+info.Vendor) + m.st.dim.Render(" "+tab.label)
 	}
-	return m.st.accent.Render(glyphBolt + " " + tb.label)
+	return m.st.accent.Render(glyphBolt + " " + tab.label)
 }
 
-func (m *model) statusDetails(tb *tab, info contracts.SessionInfo, known bool, used, width int) []string {
+func (m *model) statusDetails(tab *tab, info contracts.SessionInfo, known bool, used, width int) []string {
 	var segs []string
 	if g := renderGauge(used, info.Vendor, width, m.st); g != "" {
 		segs = append(segs, g)
@@ -168,23 +168,23 @@ func (m *model) statusDetails(tb *tab, info contracts.SessionInfo, known bool, u
 	if ms := m.mouseStatus(); ms != "" {
 		segs = append(segs, ms)
 	}
-	if tb.costTotal > 0 {
-		segs = append(segs, m.st.dim.Render(formatCost(tb.costTotal)))
+	if tab.costTotal > 0 {
+		segs = append(segs, m.st.dim.Render(formatCost(tab.costTotal)))
 	}
-	if !tb.openedAt.IsZero() {
-		segs = append(segs, m.st.dim.Render(formatDuration(time.Since(tb.openedAt))))
+	if !tab.openedAt.IsZero() {
+		segs = append(segs, m.st.dim.Render(formatDuration(time.Since(tab.openedAt))))
 	}
 	return segs
 }
 
-func (m *model) usageReport(tb *tab) string {
+func (m *model) usageReport(tab *tab) string {
 	info, known := m.activeInfo()
 	vendor := ""
 	if known {
 		vendor = info.Vendor
 	}
 	limit := contextLimit(vendor)
-	lines := []string{"usage · " + tb.label}
+	lines := []string{"usage · " + tab.label}
 	if vendor != "" {
 		lines = append(lines, "  vendor   "+vendor)
 	}
@@ -197,31 +197,31 @@ func (m *model) usageReport(tb *tab) string {
 	if known && info.Project != "" {
 		lines = append(lines, "  project  "+info.Project)
 	}
-	if used := m.contextTokens(tb); used > 0 {
-		r := contextRatio(used, limit)
+	if used := m.contextTokens(tab); used > 0 {
+		ratio := contextRatio(used, limit)
 		lines = append(lines,
-			fmt.Sprintf("  context  %s / %s  (%d%%)", formatTokens(used), formatLimit(limit), int(r*percentScale)),
+			fmt.Sprintf("  context  %s / %s  (%d%%)", formatTokens(used), formatLimit(limit), int(ratio*percentScale)),
 			fmt.Sprintf("  reste    %d %% avant compaction", int(contextLeft(used, limit)*percentScale)),
 		)
 	} else {
 		lines = append(lines, "  context  no measurement yet")
 	}
-	if tb.costTotal > 0 {
-		lines = append(lines, "  cost     "+formatCost(tb.costTotal)+"  since this tab opened")
+	if tab.costTotal > 0 {
+		lines = append(lines, "  cost     "+formatCost(tab.costTotal)+"  since this tab opened")
 	}
-	if !tb.openedAt.IsZero() {
-		lines = append(lines, "  open     "+formatDuration(time.Since(tb.openedAt)))
+	if !tab.openedAt.IsZero() {
+		lines = append(lines, "  open     "+formatDuration(time.Since(tab.openedAt)))
 	}
 	return strings.Join(lines, "\n")
 }
 
-func formatDuration(d time.Duration) string {
+func formatDuration(span time.Duration) string {
 	switch {
-	case d < time.Minute:
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case span < time.Minute:
+		return fmt.Sprintf("%ds", int(span.Seconds()))
+	case span < time.Hour:
+		return fmt.Sprintf("%dm", int(span.Minutes()))
 	default:
-		return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%minutesPerHour)
+		return fmt.Sprintf("%dh%02dm", int(span.Hours()), int(span.Minutes())%minutesPerHour)
 	}
 }

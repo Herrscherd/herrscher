@@ -45,24 +45,24 @@ const (
 
 const diffHunkBudget = 4
 
-func renderDiff(body string, width int, v view) string {
+func renderDiff(body string, width int, view view) string {
 	lines := strings.Split(body, "\n")
 	out := make([]string, 0, len(lines)+1)
 	inHunk := len(lines) > 0 && !isDiffHeader(lines[0])
 	spent := 0
-	for line, ln := range lines {
-		if !inHunk && !isDiffHeader(ln) {
+	for lineIndex, diffLine := range lines {
+		if !inHunk && !isDiffHeader(diffLine) {
 			inHunk = true
 		}
-		class := diffClass(ln, inHunk)
+		class := diffClass(diffLine, inHunk)
 		if class != diffMeta {
-			if !v.expand && spent == diffHunkBudget {
-				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-line), v.st.dim))
+			if !view.expand && spent == diffHunkBudget {
+				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-lineIndex), view.st.dim))
 				break
 			}
 			spent++
 		}
-		out = append(out, paintDiff(truncate(ln, width), class, v.caps, v.st))
+		out = append(out, paintDiff(truncate(diffLine, width), class, view.caps, view.st))
 	}
 	return strings.Join(out, "\n")
 }
@@ -107,14 +107,14 @@ func renderTable(rows [][]string, width int, styles uiStyles) string {
 	shrinkColumns(widths, width-len(tableGap)*(cols-1))
 
 	var builder strings.Builder
-	for cells, r := range rows {
-		if cells > 0 {
+	for rowIndex, row := range rows {
+		if rowIndex > 0 {
 			builder.WriteByte('\n')
 		}
-		if cells == 1 {
+		if rowIndex == 1 {
 			builder.WriteString(styles.dim.Render(strings.Repeat("─", min(width, tableWidth(widths)))) + "\n")
 		}
-		builder.WriteString(tableRow(r, widths, cells == 0, styles))
+		builder.WriteString(tableRow(row, widths, rowIndex == 0, styles))
 	}
 	return builder.String()
 }
@@ -142,20 +142,20 @@ func shrinkColumns(widths []int, budget int) {
 	}
 }
 
-func tableRow(r []string, w []int, header bool, st uiStyles) string {
-	cells := make([]string, len(w))
-	for index := range w {
+func tableRow(rowCells []string, widths []int, header bool, styles uiStyles) string {
+	cells := make([]string, len(widths))
+	for index := range widths {
 		cell := ""
-		if index < len(r) {
-			cell = r[index]
+		if index < len(rowCells) {
+			cell = rowCells[index]
 		}
-		cell = truncate(cell, w[index])
-		pad := w[index] - lipgloss.Width(cell)
-		if pad > 0 && index < len(w)-1 {
+		cell = truncate(cell, widths[index])
+		pad := widths[index] - lipgloss.Width(cell)
+		if pad > 0 && index < len(widths)-1 {
 			cell += strings.Repeat(" ", pad)
 		}
 		if header {
-			cell = st.accent.Render(cell)
+			cell = styles.accent.Render(cell)
 		}
 		cells[index] = cell
 	}
@@ -172,9 +172,9 @@ func parseTableRows(lines []string) [][]string {
 	for _, ln := range lines {
 		cells := strings.Split(strings.Trim(strings.TrimSpace(ln), "|"), "|")
 		rule := true
-		for cell, c := range cells {
-			cells[cell] = strings.TrimSpace(c)
-			if strings.Trim(cells[cell], ":- ") != "" {
+		for cellIndex, c := range cells {
+			cells[cellIndex] = strings.TrimSpace(c)
+			if strings.Trim(cells[cellIndex], ":- ") != "" {
 				rule = false
 			}
 		}
@@ -195,8 +195,8 @@ func codeBlocks(text string) []codeBlock {
 	var out []codeBlock
 	var cur *codeBlock
 	var buf []string
-	for _, ln := range strings.Split(text, "\n") {
-		fence := strings.TrimSpace(ln)
+	for _, line := range strings.Split(text, "\n") {
+		fence := strings.TrimSpace(line)
 		switch {
 		case cur == nil && strings.HasPrefix(fence, codeFence):
 			cur = &codeBlock{lang: strings.TrimPrefix(fence, codeFence)}
@@ -204,7 +204,7 @@ func codeBlocks(text string) []codeBlock {
 			cur.body = strings.Join(buf, "\n")
 			out, cur, buf = append(out, *cur), nil, nil
 		case cur != nil:
-			buf = append(buf, ln)
+			buf = append(buf, line)
 		}
 	}
 	if cur != nil {

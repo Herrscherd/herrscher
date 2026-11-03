@@ -40,8 +40,8 @@ func (m *model) activeMark() string {
 
 func (m *model) tabStrip() string {
 	var out []string
-	for _, ch := range m.order {
-		tab := m.tabs[ch]
+	for _, channel := range m.order {
+		tab := m.tabs[channel]
 		if tab == nil {
 			continue
 		}
@@ -49,7 +49,7 @@ func (m *model) tabStrip() string {
 		if tab.unread {
 			label = glyphUnread + label
 		}
-		if ch == m.active {
+		if channel == m.active {
 			out = append(out, m.st.accent.Render(glyphCursor+" "+label))
 			continue
 		}

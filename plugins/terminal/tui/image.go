@@ -18,14 +18,14 @@ func previewEscapes(atts []Attachment, caps Capabilities) string {
 	return strings.Join(previews, "\n")
 }
 
-func previewEscape(a Attachment, caps Capabilities) string {
-	if !strings.HasPrefix(a.Mime, "image/") {
+func previewEscape(attachment Attachment, caps Capabilities) string {
+	if !strings.HasPrefix(attachment.Mime, "image/") {
 		return ""
 	}
-	if st, err := os.Stat(a.Path); err != nil || st.Size() == 0 || st.Size() > maxDecodeBytes {
+	if st, err := os.Stat(attachment.Path); err != nil || st.Size() == 0 || st.Size() > maxDecodeBytes {
 		return ""
 	}
-	data, err := os.ReadFile(a.Path)
+	data, err := os.ReadFile(attachment.Path)
 	if err != nil || len(data) == 0 {
 		return ""
 	}
@@ -55,9 +55,9 @@ func kittyPreview(png []byte, rows int) string {
 	}
 	b64 := base64.StdEncoding.EncodeToString(png)
 
-	var b strings.Builder
-	for i := 0; i < len(b64); i += kittyChunkBytes {
-		end := i + kittyChunkBytes
+	var builder strings.Builder
+	for index := 0; index < len(b64); index += kittyChunkBytes {
+		end := index + kittyChunkBytes
 		if end > len(b64) {
 			end = len(b64)
 		}
@@ -65,18 +65,18 @@ func kittyPreview(png []byte, rows int) string {
 		if end < len(b64) {
 			more = 1
 		}
-		b.WriteString("\x1b_G")
-		if i == 0 {
-			b.WriteString("a=T,f=100,r=")
-			b.WriteString(strconv.Itoa(rows))
-			b.WriteString(",m=")
+		builder.WriteString("\x1b_G")
+		if index == 0 {
+			builder.WriteString("a=T,f=100,r=")
+			builder.WriteString(strconv.Itoa(rows))
+			builder.WriteString(",m=")
 		} else {
-			b.WriteString("m=")
+			builder.WriteString("m=")
 		}
-		b.WriteString(strconv.Itoa(more))
-		b.WriteByte(';')
-		b.WriteString(b64[i:end])
-		b.WriteString("\x1b\\")
+		builder.WriteString(strconv.Itoa(more))
+		builder.WriteByte(';')
+		builder.WriteString(b64[index:end])
+		builder.WriteString("\x1b\\")
 	}
-	return b.String()
+	return builder.String()
 }

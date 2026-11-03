@@ -54,25 +54,25 @@ const toolLineCap = 2
 
 const minHangWidth = 8
 
-func renderTool(text string, width int, v view) string {
+func renderTool(text string, width int, view view) string {
 	lines := strings.Split(text, "\n")
 	family, rest := toolVerb(lines[0])
 	gutter := familyGlyph(family) + " "
 	if family != "" {
 		gutter += family + strings.Repeat(" ", max(1, familyWidth-len(family)))
 	}
-	var b strings.Builder
-	b.WriteString(toolPart(gutter, rest, v.st.tool, width, v))
+	var builder strings.Builder
+	builder.WriteString(toolPart(gutter, rest, view.st.tool, width, view))
 	for _, line := range lines[1:] {
-		b.WriteByte('\n')
-		b.WriteString(toolPart(resultGutter, line, v.st.dim, width, v))
+		builder.WriteByte('\n')
+		builder.WriteString(toolPart(resultGutter, line, view.st.dim, width, view))
 	}
-	return b.String()
+	return builder.String()
 }
 
-func toolPart(gutter, body string, style lipgloss.Style, width int, v view) string {
+func toolPart(gutter, body string, style lipgloss.Style, width int, view view) string {
 	lines := hangingLines(gutter, body, width)
-	if !v.expand && len(lines) > toolLineCap {
+	if !view.expand && len(lines) > toolLineCap {
 		lines = hangingLines(gutter, abbreviatePaths(body), width)
 		if len(lines) > toolLineCap {
 			hidden := len(lines) - toolLineCap
@@ -93,21 +93,21 @@ func hangingLines(gutter, body string, width int) []string {
 	}
 	wrapped := wrapPlain(body, width-offset)
 	out := make([]string, len(wrapped))
-	for i, ln := range wrapped {
-		if i == 0 {
-			out[i] = gutter + ln
+	for lineIndex, line := range wrapped {
+		if lineIndex == 0 {
+			out[lineIndex] = gutter + line
 			continue
 		}
-		out[i] = strings.Repeat(" ", offset) + ln
+		out[lineIndex] = strings.Repeat(" ", offset) + line
 	}
 	return out
 }
 
-func wrapPlain(s string, width int) []string {
+func wrapPlain(text string, width int) []string {
 	if width < 1 {
 		width = 1
 	}
-	out := strings.Split(lipgloss.NewStyle().Width(width).Render(s), "\n")
+	out := strings.Split(lipgloss.NewStyle().Width(width).Render(text), "\n")
 	for i := range out {
 		out[i] = strings.TrimRight(out[i], " ")
 	}

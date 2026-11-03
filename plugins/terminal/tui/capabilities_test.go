@@ -56,7 +56,7 @@ func TestProbe(t *testing.T) {
 		},
 		{
 			name:     "empty environment",
-			env:      map[string]string{},
+			env:      make(map[string]string),
 			graphics: GraphicsNone, links: false, mouse: false, colour: Colour16, terminal: "unknown",
 		},
 	}

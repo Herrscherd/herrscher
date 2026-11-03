@@ -29,7 +29,7 @@ func (wlClipboard) ImageType(ctx context.Context) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	available := map[string]bool{}
+	available := make(map[string]bool)
 	for _, t := range strings.Fields(string(out)) {
 		available[strings.ToLower(strings.TrimSpace(t))] = true
 	}
@@ -38,9 +38,9 @@ func (wlClipboard) ImageType(ctx context.Context) (string, bool) {
 			return target, true
 		}
 	}
-	for t := range available {
-		if strings.HasPrefix(t, "image/") {
-			return t, true
+	for target := range available {
+		if strings.HasPrefix(target, "image/") {
+			return target, true
 		}
 	}
 	return "", false
@@ -53,9 +53,9 @@ func (wlClipboard) ReadImage(ctx context.Context, mime string) ([]byte, error) {
 	return exec.CommandContext(ctx, "wl-paste", "--type", mime).Output()
 }
 
-func (wlClipboard) WriteText(ctx context.Context, s string) error {
+func (wlClipboard) WriteText(ctx context.Context, text string) error {
 	cmd := exec.CommandContext(ctx, "wl-copy")
-	cmd.Stdin = strings.NewReader(s)
+	cmd.Stdin = strings.NewReader(text)
 	if err := cmd.Start(); err != nil {
 		return err
 	}

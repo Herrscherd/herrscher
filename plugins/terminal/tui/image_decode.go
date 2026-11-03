@@ -49,20 +49,20 @@ func decodeImage(data []byte) (image.Image, error) {
 const maxPreviewWidth = 2000
 
 func downscale(img image.Image) image.Image {
-	b := img.Bounds()
+	bounds := img.Bounds()
 	maxHeight := previewRows * cellPixels
-	if b.Dy() <= maxHeight && b.Dx() <= maxPreviewWidth {
+	if bounds.Dy() <= maxHeight && bounds.Dx() <= maxPreviewWidth {
 		return img
 	}
-	height, w := b.Dy(), b.Dx()
+	height, width := bounds.Dy(), bounds.Dx()
 	if height > maxHeight {
-		height, w = maxHeight, max(1, b.Dx()*maxHeight/b.Dy())
+		height, width = maxHeight, max(1, bounds.Dx()*maxHeight/bounds.Dy())
 	}
-	if w > maxPreviewWidth {
-		height, w = max(1, height*maxPreviewWidth/w), maxPreviewWidth
+	if width > maxPreviewWidth {
+		height, width = max(1, height*maxPreviewWidth/width), maxPreviewWidth
 	}
-	out := image.NewRGBA(image.Rect(0, 0, w, height))
-	xdraw.ApproxBiLinear.Scale(out, out.Bounds(), img, b, xdraw.Src, nil)
+	out := image.NewRGBA(image.Rect(0, 0, width, height))
+	xdraw.ApproxBiLinear.Scale(out, out.Bounds(), img, bounds, xdraw.Src, nil)
 	return out
 }
 

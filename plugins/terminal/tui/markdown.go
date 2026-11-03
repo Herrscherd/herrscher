@@ -15,7 +15,7 @@ type markdownRenderer struct {
 
 func (md *markdownRenderer) termRenderer(width int) (*glamour.TermRenderer, error) {
 	if md.r == nil || md.width != width {
-		r, err := glamour.NewTermRenderer(
+		renderer, err := glamour.NewTermRenderer(
 			glamour.WithStyles(mdStyle()),
 			glamour.WithWordWrap(width),
 			glamour.WithEmoji(),
@@ -23,65 +23,65 @@ func (md *markdownRenderer) termRenderer(width int) (*glamour.TermRenderer, erro
 		if err != nil {
 			return nil, err
 		}
-		md.r, md.width = r, width
+		md.r, md.width = renderer, width
 	}
 	return md.r, nil
 }
 
 func mdStyle() ansi.StyleConfig {
-	s := styles.DarkStyleConfig
+	style := styles.DarkStyleConfig
 	zero := uint(0)
-	s.Document.Margin = &zero
-	s.Document.BlockPrefix = ""
-	s.Document.BlockSuffix = ""
-	s.Document.Color = nil
-	s.Heading.Color = strPtr(colViolet)
-	s.H1.BackgroundColor = nil
-	s.H1.Color = strPtr(colViolet)
-	s.CodeBlock.Margin = &zero
-	return s
+	style.Document.Margin = &zero
+	style.Document.BlockPrefix = ""
+	style.Document.BlockSuffix = ""
+	style.Document.Color = nil
+	style.Heading.Color = strPtr(colViolet)
+	style.H1.BackgroundColor = nil
+	style.H1.Color = strPtr(colViolet)
+	style.CodeBlock.Margin = &zero
+	return style
 }
 
 func strPtr(s string) *string { return &s }
 
-func renderMarkdown(text string, width int, v view) string {
-	var b strings.Builder
+func renderMarkdown(text string, width int, view view) string {
+	var builder strings.Builder
 	for i, seg := range splitDiffs(text) {
 		if i > 0 {
-			b.WriteByte('\n')
+			builder.WriteByte('\n')
 		}
 		if seg.diff {
-			b.WriteString(renderDiff(seg.text, width, v))
+			builder.WriteString(renderDiff(seg.text, width, view))
 			continue
 		}
-		b.WriteString(renderProse(seg.text, width, v))
+		builder.WriteString(renderProse(seg.text, width, view))
 	}
-	return b.String()
+	return builder.String()
 }
 
-func renderProse(text string, width int, v view) string {
+func renderProse(text string, width int, view view) string {
 	var block strings.Builder
 	var prose, table []string
 	flushProse := func() {
 		if len(prose) > 0 {
-			block.WriteString(renderGlamour(strings.Join(prose, "\n"), width, v))
+			block.WriteString(renderGlamour(strings.Join(prose, "\n"), width, view))
 			prose = nil
 		}
 	}
 	flushTable := func() {
 		if len(table) > 0 {
-			block.WriteString(renderTable(parseTableRows(table), width, v.st) + "\n")
+			block.WriteString(renderTable(parseTableRows(table), width, view.st) + "\n")
 			table = nil
 		}
 	}
-	for _, ln := range strings.Split(text, "\n") {
-		if isTableRow(ln) {
+	for _, line := range strings.Split(text, "\n") {
+		if isTableRow(line) {
 			flushProse()
-			table = append(table, ln)
+			table = append(table, line)
 			continue
 		}
 		flushTable()
-		prose = append(prose, ln)
+		prose = append(prose, line)
 	}
 	flushTable()
 	flushProse()
@@ -104,8 +104,8 @@ func splitDiffs(text string) []segment {
 			buf = nil
 		}
 	}
-	for _, ln := range lines {
-		fence := strings.TrimSpace(ln)
+	for _, line := range lines {
+		fence := strings.TrimSpace(line)
 		switch {
 		case !inDiff && (fence == "```diff" || fence == "~~~diff"):
 			flush(false)
@@ -114,7 +114,7 @@ func splitDiffs(text string) []segment {
 			flush(true)
 			inDiff = false
 		default:
-			buf = append(buf, ln)
+			buf = append(buf, line)
 		}
 	}
 	flush(inDiff)
@@ -124,21 +124,21 @@ func splitDiffs(text string) []segment {
 	return segs
 }
 
-func renderGlamour(text string, width int, v view) string {
+func renderGlamour(text string, width int, view view) string {
 	if width < 1 {
 		width = 1
 	}
-	markdown := v.md
+	markdown := view.md
 	if markdown == nil {
 		markdown = &markdownRenderer{}
 	}
-	r, err := markdown.termRenderer(width)
+	renderer, err := markdown.termRenderer(width)
 	if err != nil {
-		return wrapWith(v.st.text, text, width)
+		return wrapWith(view.st.text, text, width)
 	}
-	out, err := r.Render(text)
+	out, err := renderer.Render(text)
 	if err != nil {
-		return wrapWith(v.st.text, text, width)
+		return wrapWith(view.st.text, text, width)
 	}
 	lines := strings.Split(out, "\n")
 	for i, ln := range lines {

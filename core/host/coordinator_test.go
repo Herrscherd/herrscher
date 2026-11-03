@@ -89,7 +89,7 @@ func newTestCoordinator(cr *fakeCreator, known []string, clean bool, sessions []
 }
 
 func newTestCoordinatorFull(cr *fakeCreator, known []string, clean bool, sessions []state.Session, seeded *[]string, branches map[string]bool, closer *fakeCloser) *coordinator {
-	km := map[string]bool{}
+	km := make(map[string]bool)
 	for _, k := range known {
 		km[k] = true
 	}
@@ -195,7 +195,7 @@ func TestHandoffRollsBackOnSeedTimeout(t *testing.T) {
 	cr := &fakeCreator{}
 	closer := &fakeCloser{}
 	km := map[string]bool{"scripter": true}
-	seedFunc := func(sess, task string) bool { return false }
+	seedFunc := func(_, _ string) bool { return false }
 	c := newCoordinator(cr, fakeAgents{known: km}, &fakeWTC{clean: true}, fakeSessions{list: []state.Session{
 		{Name: "alpha", Project: "game", Worktree: "/wt/alpha"},
 	}}, closer, seedFunc)
@@ -219,7 +219,7 @@ func TestHandoffRollsBackOnSeedTimeout(t *testing.T) {
 
 func TestSeedWithRetryHonoursCtxCancel(t *testing.T) {
 	var attempts int
-	seedFunc := func(sess, task string) bool { attempts++; return false }
+	seedFunc := func(_, _ string) bool { attempts++; return false }
 	c := newCoordinator(&fakeCreator{}, fakeAgents{}, &fakeWTC{}, fakeSessions{}, &fakeCloser{}, seedFunc)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -523,7 +523,7 @@ func TestReportDoubleReportIdempotent(t *testing.T) {
 			{Name: "w2", Worktree: "/wt/w2", Parent: "lead"},
 		}, &seeded)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if _, err := c.Report(context.Background(), contracts.ReportRequest{FromSession: "w1", Summary: "ok"}); err != nil {
 			t.Fatalf("report w1 #%d: %v", i, err)
 		}
@@ -585,7 +585,7 @@ func TestCoordinationViewConcurrentWithReport(t *testing.T) {
 	var seeded []string
 	workers := []state.Session{{Name: "lead", Worktree: "/wt/lead"}}
 	names := make([]string, 0, 32)
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		n := fmt.Sprintf("w%d", i)
 		names = append(names, n)
 		workers = append(workers, state.Session{Name: n, Worktree: "/wt/" + n, Parent: "lead"})
@@ -605,7 +605,7 @@ func TestCoordinationViewConcurrentWithReport(t *testing.T) {
 			}
 		}
 	}()
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		c.CoordinationView("lead")
 	}
 	<-done
@@ -617,14 +617,14 @@ func TestCoordinationViewConcurrentWithReport(t *testing.T) {
 }
 
 func TestRoutePicksAndDelegates(t *testing.T) {
-	seeded := map[string]string{}
+	seeded := make(map[string]string)
 	c := newCoordinator(
 		&fakeCreator{},
 		fakeAgents{roster: []agent.Agent{
 			{Name: "netter", Tags: []string{"network"}},
 			{Name: "scripter", Tags: []string{"lua"}},
 		}},
-		&fakeWTC{clean: true, branches: map[string]bool{}},
+		&fakeWTC{clean: true, branches: make(map[string]bool)},
 		fakeSessions{list: []state.Session{
 			{Name: "lead", Worktree: "/wt/lead", Project: "p"},
 		}},
@@ -670,7 +670,7 @@ func TestRouteLeadNotFound(t *testing.T) {
 func TestRouteNoMatchRefused(t *testing.T) {
 	c := newCoordinator(&fakeCreator{},
 		fakeAgents{roster: []agent.Agent{{Name: "scripter", Tags: []string{"lua"}}}},
-		&fakeWTC{clean: true, branches: map[string]bool{}},
+		&fakeWTC{clean: true, branches: make(map[string]bool)},
 		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
 		&fakeCloser{}, func(string, string) bool { return true })
 	if _, _, err := c.Route(context.Background(), contracts.RouteRequest{FromSession: "lead", Task: "de la doc markdown"}); err == nil {
@@ -679,7 +679,7 @@ func TestRouteNoMatchRefused(t *testing.T) {
 }
 
 func TestRouteDirtyLeadSpawnsNone(t *testing.T) {
-	seeded := map[string]string{}
+	seeded := make(map[string]string)
 	c := newCoordinator(&fakeCreator{},
 		fakeAgents{roster: []agent.Agent{{Name: "netter", Tags: []string{"network"}}}},
 		&fakeWTC{clean: false},
@@ -703,7 +703,7 @@ func leadWorkerSessions() []state.Session {
 func TestMergeDeliversWorkerBranchToLead(t *testing.T) {
 	var seeded []string
 	c := newTestCoordinator(&fakeCreator{}, nil, true, leadWorkerSessions(), &seeded)
-	c.wt.(*fakeWTC).merge = worktree.MergeApplied
+	fakeWTCOf(t, c.wt).merge = worktree.MergeApplied
 
 	lead, err := c.Merge(context.Background(), contracts.MergeRequest{FromSession: "lead", Worker: "w"})
 	if err != nil {
@@ -712,7 +712,7 @@ func TestMergeDeliversWorkerBranchToLead(t *testing.T) {
 	if lead != "lead" {
 		t.Fatalf("lead = %q, want lead", lead)
 	}
-	if got := c.wt.(*fakeWTC).mergedBranch; got != "session/w" {
+	if got := fakeWTCOf(t, c.wt).mergedBranch; got != "session/w" {
 		t.Fatalf("merged branch = %q, want session/w", got)
 	}
 	if len(seeded) != 1 || !strings.Contains(seeded[0], "lead|") || !strings.Contains(seeded[0], "w") {
@@ -723,7 +723,7 @@ func TestMergeDeliversWorkerBranchToLead(t *testing.T) {
 func TestMergeConflictAbortsAndReports(t *testing.T) {
 	var seeded []string
 	c := newTestCoordinator(&fakeCreator{}, nil, true, leadWorkerSessions(), &seeded)
-	f := c.wt.(*fakeWTC)
+	f := fakeWTCOf(t, c.wt)
 	f.merge = worktree.MergeConflict
 	f.mergeConf = []string{"a.go", "b.go"}
 
@@ -742,7 +742,7 @@ func TestMergeConflictAbortsAndReports(t *testing.T) {
 func TestMergeUpToDateIsNeutral(t *testing.T) {
 	var seeded []string
 	c := newTestCoordinator(&fakeCreator{}, nil, true, leadWorkerSessions(), &seeded)
-	c.wt.(*fakeWTC).merge = worktree.MergeUpToDate
+	fakeWTCOf(t, c.wt).merge = worktree.MergeUpToDate
 
 	if _, err := c.Merge(context.Background(), contracts.MergeRequest{FromSession: "lead", Worker: "w"}); err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -763,7 +763,7 @@ func TestMergeRefusesNonChildWorker(t *testing.T) {
 	if _, err := c.Merge(context.Background(), contracts.MergeRequest{FromSession: "lead", Worker: "w"}); err == nil {
 		t.Fatal("expected refusal for non-child worker")
 	}
-	if c.wt.(*fakeWTC).mergedBranch != "" {
+	if fakeWTCOf(t, c.wt).mergedBranch != "" {
 		t.Fatal("MergeInto must not be called on a non-child worker")
 	}
 }
@@ -771,12 +771,12 @@ func TestMergeRefusesNonChildWorker(t *testing.T) {
 func TestMergeRefusesDirtyWorker(t *testing.T) {
 	var seeded []string
 	c := newTestCoordinator(&fakeCreator{}, nil, true, leadWorkerSessions(), &seeded)
-	c.wt.(*fakeWTC).cleanBy = map[string]bool{"/wt/lead": true, "/wt/w": false}
+	fakeWTCOf(t, c.wt).cleanBy = map[string]bool{"/wt/lead": true, "/wt/w": false}
 
 	if _, err := c.Merge(context.Background(), contracts.MergeRequest{FromSession: "lead", Worker: "w"}); err == nil {
 		t.Fatal("expected refusal for dirty worker")
 	}
-	if c.wt.(*fakeWTC).mergedBranch != "" {
+	if fakeWTCOf(t, c.wt).mergedBranch != "" {
 		t.Fatal("MergeInto must not be called when worker is dirty")
 	}
 }
@@ -784,12 +784,12 @@ func TestMergeRefusesDirtyWorker(t *testing.T) {
 func TestMergeRefusesDirtyLead(t *testing.T) {
 	var seeded []string
 	c := newTestCoordinator(&fakeCreator{}, nil, true, leadWorkerSessions(), &seeded)
-	c.wt.(*fakeWTC).cleanBy = map[string]bool{"/wt/lead": false, "/wt/w": true}
+	fakeWTCOf(t, c.wt).cleanBy = map[string]bool{"/wt/lead": false, "/wt/w": true}
 
 	if _, err := c.Merge(context.Background(), contracts.MergeRequest{FromSession: "lead", Worker: "w"}); err == nil {
 		t.Fatal("expected refusal for dirty lead")
 	}
-	if c.wt.(*fakeWTC).mergedBranch != "" {
+	if fakeWTCOf(t, c.wt).mergedBranch != "" {
 		t.Fatal("MergeInto must not be called when lead is dirty")
 	}
 }
@@ -1150,4 +1150,13 @@ func TestFanOutIncludesPreexistingCohort(t *testing.T) {
 	if c.expected["lead"] != 3 {
 		t.Fatalf("cohorte devrait être scellée à 3 (1 préexistant + 2), got %d", c.expected["lead"])
 	}
+}
+
+func fakeWTCOf(t *testing.T, wt any) *fakeWTC {
+	t.Helper()
+	f, ok := wt.(*fakeWTC)
+	if !ok {
+		t.Fatalf("worktree client is %T, want *fakeWTC", wt)
+	}
+	return f
 }

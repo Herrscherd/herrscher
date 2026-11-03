@@ -1,7 +1,7 @@
 package host
 
 import (
-	"strings"
+	"errors"
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -13,7 +13,7 @@ func placerWith(t *testing.T, h state.Host, sourceVersion string) hostPlacer {
 	if err := st.PutHost(h); err != nil {
 		t.Fatal(err)
 	}
-	return hostPlacer{st: st, instanceID: "inst", sourceVersion: func() string { return sourceVersion }}
+	return newHostPlacer(t.Context(), st, "inst", nil, func() string { return sourceVersion })
 }
 
 func TestPlacerLocalNeedsNoRecord(t *testing.T) {
@@ -30,21 +30,21 @@ func TestPlacerLocalNeedsNoRecord(t *testing.T) {
 func TestPlacerRefusesAnUnprovisionedHost(t *testing.T) {
 	p := placerWith(t, state.Host{Name: "build1", SSH: "me@build1", Workspace: "/srv/work"}, "")
 	_, err := p.Workspace("build1")
-	if err == nil || !strings.Contains(err.Error(), "host provision") {
-		t.Fatalf("a host with no binary must point at `host provision`, got %v", err)
+	var notProvisioned *hostNotProvisionedError
+	if !errors.As(err, &notProvisioned) || notProvisioned.Name != "build1" {
+		t.Fatalf("a host with no binary must be refused as not provisioned, got %v", err)
 	}
 }
 
 func TestPlacerRefusesAVersionDrift(t *testing.T) {
 	p := placerWith(t, state.Host{Name: "build1", SSH: "me@build1", Workspace: "/srv/work", Bin: "/srv/bin/herrscher", Version: "abc1234"}, "def5678")
 	err := p.Ready("build1")
-	if err == nil {
-		t.Fatal("a host running another build must refuse")
+	var drift *hostVersionMismatchError
+	if !errors.As(err, &drift) {
+		t.Fatalf("a host running another build must refuse as a version mismatch, got %v", err)
 	}
-	for _, want := range []string{"abc1234", "def5678", "host provision"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("the refusal must name %q, got %v", want, err)
-		}
+	if drift.Have != "abc1234" || drift.Want != "def5678" {
+		t.Fatalf("the refusal must carry both builds, got have %q want %q", drift.Have, drift.Want)
 	}
 	if _, err := p.Worktrees("build1"); err != nil {
 		t.Fatalf("a drifted host must still answer worktree work: %v", err)
@@ -56,8 +56,9 @@ func TestPlacerRefusesAVersionDrift(t *testing.T) {
 
 func TestPlacerReadyRefusesAnUnprovisionedHost(t *testing.T) {
 	p := placerWith(t, state.Host{Name: "build1", SSH: "me@build1", Workspace: "/srv/work"}, "")
-	if err := p.Ready("build1"); err == nil || !strings.Contains(err.Error(), "host provision") {
-		t.Fatalf("a host with no binary must point at `host provision`, got %v", err)
+	var notProvisioned *hostNotProvisionedError
+	if err := p.Ready("build1"); !errors.As(err, &notProvisioned) {
+		t.Fatalf("a host with no binary must be refused as not provisioned, got %v", err)
 	}
 	if err := p.Ready(""); err != nil {
 		t.Fatalf("this machine is always ready, got %v", err)
@@ -81,11 +82,15 @@ func TestPlacerAcceptsWhenTheSourceVersionIsUnknown(t *testing.T) {
 func TestPlacerRefusesAnUnknownHost(t *testing.T) {
 	p := placerWith(t, state.Host{Name: "build1", SSH: "me@build1", Workspace: "/srv/work", Bin: "/srv/bin/herrscher"}, "")
 	_, err := p.Worktrees("nowhere")
-	if err == nil || !strings.Contains(err.Error(), "nowhere") {
-		t.Fatalf("the refusal must name the host asked for, got %v", err)
+	var notFound *hostNotFoundError
+	if !errors.As(err, &notFound) {
+		t.Fatalf("an unknown host must be refused as not found, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "build1") {
-		t.Fatalf("the refusal must name what does exist, got %v", err)
+	if notFound.Name != "nowhere" {
+		t.Fatalf("the refusal must name the host asked for, got %q", notFound.Name)
+	}
+	if notFound.Known != "build1" {
+		t.Fatalf("the refusal must name what does exist, got known %q", notFound.Known)
 	}
 }
 

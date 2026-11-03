@@ -10,11 +10,13 @@ import (
 )
 
 func TestReconcileSkipsArchived(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	h := newHub(ctx, st, sup, nil, t.TempDir(), &cli.Registry{}, nil)
+	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
 
 	if err := st.AddSession(state.Session{Name: "recon-live", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)
@@ -22,7 +24,7 @@ func TestReconcileSkipsArchived(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "recon-arch", ChannelID: "c2", Type: "text", Archived: true}); err != nil {
 		t.Fatal(err)
 	}
-	h.reconcile()
+	h.reconcile(t.Context())
 
 	h.mu.Lock()
 	_, liveUp := h.live["recon-live"]
@@ -37,16 +39,18 @@ func TestReconcileSkipsArchived(t *testing.T) {
 }
 
 func TestReconcileReapsInPlaceArchived(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	h := newHub(ctx, st, sup, nil, t.TempDir(), &cli.Registry{}, nil)
+	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
 
 	if err := st.AddSession(state.Session{Name: "s", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)
 	}
-	h.reconcile()
+	h.reconcile(t.Context())
 	h.mu.Lock()
 	_, up := h.live["s"]
 	h.mu.Unlock()
@@ -54,8 +58,8 @@ func TestReconcileReapsInPlaceArchived(t *testing.T) {
 		t.Fatalf("session should be live before archiving")
 	}
 
-	_ = st.SetArchived("s", true)
-	h.reconcile()
+	logCleanup(st.SetArchived("s", true))
+	h.reconcile(t.Context())
 	h.mu.Lock()
 	_, stillUp := h.live["s"]
 	h.mu.Unlock()

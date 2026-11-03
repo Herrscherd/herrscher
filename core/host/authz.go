@@ -2,9 +2,6 @@ package host
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"os"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -50,38 +47,42 @@ func (a asOperator) Dispatch(ctx context.Context, args []string) (string, error)
 	return a.disp.Dispatch(withLocalPrincipal(ctx), args)
 }
 
-var sessionArg = map[string]string{
-	"session seed":       "name",
-	"session send":       "name",
-	"session scrollback": "name",
-	"session interrupt":  "name",
-	"session who":        "name",
-	"session log":        "name",
-	"session close":      "name",
-	"session archive":    "name",
-	"session rename":     "name",
-	"session resume":     "name",
-	"session switch":     "name",
-	"session set-budget": "name",
-	"approve ask":        "session",
-	"approve mode":       "session",
-	"schedule add":       "session",
+func sessionArgs() map[string]string {
+	return map[string]string{
+		"session seed":       paramName,
+		"session send":       paramName,
+		"session scrollback": paramName,
+		"session interrupt":  paramName,
+		"session who":        paramName,
+		"session log":        paramName,
+		"session close":      paramName,
+		"session archive":    paramName,
+		"session rename":     paramName,
+		"session resume":     paramName,
+		"session switch":     paramName,
+		"session set-budget": paramName,
+		"approve ask":        paramSession,
+		"approve mode":       paramSession,
+		"schedule add":       paramSession,
+	}
 }
 
-var notASession = map[string]bool{
-	"session create name":  true,
-	"agent create name":    true,
-	"agent show name":      true,
-	"agent set-soul name":  true,
-	"host add name":        true,
-	"host check name":      true,
-	"host provision name":  true,
-	"host rm name":         true,
-	"schedule add name":    true,
-	"schedule rm name":     true,
-	"schedule run name":    true,
-	"schedule pause name":  true,
-	"schedule resume name": true,
+func notASessionArgs() map[string]bool {
+	return map[string]bool{
+		"session create name":  true,
+		"agent create name":    true,
+		"agent show name":      true,
+		"agent set-soul name":  true,
+		"host add name":        true,
+		"host check name":      true,
+		"host provision name":  true,
+		"host rm name":         true,
+		"schedule add name":    true,
+		"schedule rm name":     true,
+		"schedule run name":    true,
+		"schedule pause name":  true,
+		"schedule resume name": true,
+	}
 }
 
 func (h *hub) authorize(ctx context.Context, args []string) error {
@@ -103,7 +104,7 @@ func (h *hub) authorize(ctx context.Context, args []string) error {
 	if allowed {
 		return nil
 	}
-	return errors.New(why)
+	return &accessDeniedError{Reason: why}
 }
 
 func (h *hub) roleNames() map[string]string {
@@ -116,7 +117,7 @@ func (h *hub) roleNames() map[string]string {
 			continue
 		}
 		if _, said := h.warnedRoles.LoadOrStore(principal+"\x00"+name, struct{}{}); !said {
-			fmt.Fprintf(os.Stderr, "herrscher serve: %s holds role %q, which herrscher does not define; treating it as `observer`\n", principal, name)
+			warnStderr("herrscher serve: %s holds role %q, which herrscher does not define; treating it as `observer`\n", principal, name)
 		}
 	}
 	return names
@@ -126,7 +127,7 @@ func (h *hub) subjectOf(p authz.Principal, path []string, in contracts.Input) au
 	if p.Session == "" {
 		return authz.Subject{}
 	}
-	arg, ok := sessionArg[strings.Join(path, " ")]
+	arg, ok := sessionArgs()[strings.Join(path, " ")]
 	if !ok {
 		return authz.Subject{}
 	}
@@ -147,8 +148,10 @@ func (h *hub) inSubtree(caller, target string) bool {
 	if h.st == nil {
 		return false
 	}
-	parents := map[string]string{}
-	for _, s := range h.st.SnapshotSessions() {
+	parents := make(map[string]string)
+	sessions := h.st.SnapshotSessions()
+	for idx := range sessions {
+		s := sessions[idx]
 		parents[s.Name] = s.Parent
 	}
 	cur := target

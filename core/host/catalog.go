@@ -1,7 +1,6 @@
 package host
 
 import (
-	"fmt"
 	"sort"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -11,8 +10,9 @@ import (
 // vendor is never shown to the user: it lets the host know which plugin to
 // instantiate once the model is chosen.
 type CatalogEntry struct {
-	Vendor string
 	contracts.ModelSpec
+
+	Vendor string
 }
 
 // Catalog aggregates the Models of every registered backend and applies the
@@ -25,15 +25,16 @@ type CatalogEntry struct {
 // start rather than silently serve a wrong selector.
 func Catalog(plugins []contracts.Plugin, policy contracts.RoutePolicy) ([]CatalogEntry, error) {
 	out := []CatalogEntry{}
-	owner := map[string]string{}
-	for _, p := range plugins {
+	owner := make(map[string]string)
+	for idx := range plugins {
+		p := plugins[idx]
 		kind := p.Manifest.Kind
 		if err := contracts.ValidateModels(kind, p.Manifest.Models); err != nil {
 			return nil, err
 		}
 		for _, m := range p.Manifest.Models {
 			if prev, clash := owner[m.ID]; clash {
-				return nil, fmt.Errorf("model ID %q is declared by both %q and %q", m.ID, prev, kind)
+				return nil, &duplicateModelError{ID: m.ID, First: prev, Second: kind}
 			}
 			owner[m.ID] = kind
 		}
@@ -68,7 +69,7 @@ func LookupModel(plugins []contracts.Plugin, policy contracts.RoutePolicy, model
 	if name == "" {
 		name = "all"
 	}
-	return CatalogEntry{}, fmt.Errorf("unknown model %q (not offered under route policy %q)", modelID, name)
+	return CatalogEntry{}, &unknownModelError{Model: modelID, Policy: name}
 }
 
 // EnvRoutePolicy selects which models are offered; EnvDefaultModel names the one

@@ -1,7 +1,6 @@
 package host
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -19,10 +18,10 @@ func resolveSeedTimeout(raw string, getenv func(string) string) (time.Duration, 
 	}
 	d, err := time.ParseDuration(value)
 	if err != nil {
-		return 0, fmt.Errorf("%s %q is not a duration (try 90s or 30m)", source, value)
+		return 0, &invalidDurationError{Source: source, Value: value}
 	}
 	if d <= 0 {
-		return 0, fmt.Errorf("%s must be positive, got %s", source, d)
+		return 0, &nonPositiveDurationError{Source: source, Duration: d}
 	}
 	return d, nil
 }

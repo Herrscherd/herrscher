@@ -3,6 +3,7 @@ package host
 import (
 	"archive/tar"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -18,7 +19,7 @@ func stageAgentTar(a agent.Agent, remoteWorktree, remoteBin string) (io.Reader, 
 	if err != nil {
 		return nil, fmt.Errorf("stage agent %q: %w", a.Name, err)
 	}
-	defer func() { _ = os.RemoveAll(stage) }()
+	defer func() { logCleanup(os.RemoveAll(stage)) }()
 	if err := a.MaterializeIntoAs(stage, remoteWorktree, remoteBin); err != nil {
 		return nil, fmt.Errorf("stage agent %q: %w", a.Name, err)
 	}
@@ -30,8 +31,13 @@ func stageAgentTar(a agent.Agent, remoteWorktree, remoteBin string) (io.Reader, 
 }
 
 func tarDir(root string, w io.Writer) error {
+	stage, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer closeRead(stage)
 	tw := tar.NewWriter(w)
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
@@ -52,14 +58,14 @@ func tarDir(root string, w io.Writer) error {
 			Size:     info.Size(),
 			Typeflag: tar.TypeReg,
 		}
-		if err := tw.WriteHeader(hdr); err != nil {
-			return err
+		if writeErr := tw.WriteHeader(hdr); writeErr != nil {
+			return writeErr
 		}
-		f, err := os.Open(path)
+		f, err := stage.Open(rel)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer closeRead(f)
 		_, err = io.Copy(tw, f)
 		return err
 	})
@@ -77,7 +83,7 @@ func extractTar(r io.Reader, dst string) error {
 	tr := tar.NewReader(r)
 	for {
 		hdr, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {
@@ -86,23 +92,31 @@ func extractTar(r io.Reader, dst string) error {
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
-		target := filepath.Join(root, filepath.FromSlash(hdr.Name))
-		if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
-			return fmt.Errorf("refusing tar member %q: it lands outside %s", hdr.Name, root)
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
-		}
-		f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, fs.FileMode(hdr.Mode).Perm())
-		if err != nil {
-			return err
-		}
-		if _, err := io.Copy(f, tr); err != nil {
-			_ = f.Close()
-			return err
-		}
-		if err := f.Close(); err != nil {
+		if err := extractRegularMember(tr, hdr, root); err != nil {
 			return err
 		}
 	}
+}
+
+func extractRegularMember(reader *tar.Reader, hdr *tar.Header, root string) error {
+	target := filepath.Join(root, filepath.FromSlash(hdr.Name))
+	if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
+		return &unsafeTarMemberError{Member: hdr.Name, Root: root}
+	}
+	if mkdirErr := os.MkdirAll(filepath.Dir(target), privateDirMode); mkdirErr != nil {
+		return mkdirErr
+	}
+	return writeTarMember(reader, hdr, target)
+}
+
+func writeTarMember(reader *tar.Reader, hdr *tar.Header, target string) error {
+	file, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, hdr.FileInfo().Mode().Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.CopyN(file, reader, hdr.Size); err != nil {
+		logCleanup(file.Close())
+		return err
+	}
+	return file.Close()
 }

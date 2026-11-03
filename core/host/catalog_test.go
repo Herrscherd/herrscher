@@ -29,7 +29,10 @@ func TestCatalogAggregatesAcrossBackends(t *testing.T) {
 }
 
 func TestCatalogTagsTheServingVendor(t *testing.T) {
-	got, _ := Catalog(fakePlugins(), contracts.PolicyAll)
+	got, catalogErr := Catalog(fakePlugins(), contracts.PolicyAll)
+	if catalogErr != nil {
+		t.Fatal(catalogErr)
+	}
 	for _, e := range got {
 		if e.ID == "b-native" && e.Vendor != "beta" {
 			t.Fatalf("model b-native is tagged vendor %q, want beta", e.Vendor)

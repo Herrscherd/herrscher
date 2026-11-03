@@ -89,7 +89,10 @@ func TestBuildHubAllFailedAggregates(t *testing.T) {
 }
 
 func TestFirstReturnsRegistrationOrder(t *testing.T) {
-	hub, _ := BuildHub(context.Background(), []contracts.Plugin{gw("chat", false), gw("terminal", false)}, func(string) string { return "" })
+	hub, hubErr := BuildHub(context.Background(), []contracts.Plugin{gw("chat", false), gw("terminal", false)}, func(string) string { return "" })
+	if hubErr != nil {
+		t.Fatal(hubErr)
+	}
 	set, ok := hub.First()
 	if !ok {
 		t.Fatal("First() should report a built set")

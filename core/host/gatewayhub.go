@@ -22,6 +22,8 @@ type GatewayHub struct {
 	unconfigured []string
 	pending      []contracts.Plugin
 	getenv       func(string) string
+	retryBase    time.Duration
+	retryMax     time.Duration
 }
 
 // BuildHub instantiates each gateway plugin in plugins. A plugin whose config
@@ -33,9 +35,10 @@ type GatewayHub struct {
 // can report a gateway that dropped out: a stale token silently costing you a
 // whole edge is worse than a noisy line at boot.
 func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string) (*GatewayHub, error) {
-	h := &GatewayHub{sets: map[string]contracts.GatewaySet{}, getenv: envx.Revealed(getenv)}
+	h := &GatewayHub{sets: make(map[string]contracts.GatewaySet), getenv: envx.Revealed(getenv), retryBase: defaultRetryBase, retryMax: defaultRetryMax}
 	var candidates []contracts.Plugin
-	for _, p := range plugins {
+	for idx := range plugins {
+		p := plugins[idx]
 		if p.Gateway != nil {
 			candidates = append(candidates, p)
 		}
@@ -44,9 +47,9 @@ func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(strin
 	if len(h.sets) == 0 {
 		reasons := append(append([]string(nil), h.failures...), h.unconfigured...)
 		if len(reasons) == 0 {
-			return nil, fmt.Errorf("no gateway plugin registered")
+			return nil, errNoGatewayPlugin
 		}
-		return nil, fmt.Errorf("no gateway available: %s", strings.Join(reasons, "; "))
+		return nil, &noGatewayError{Reasons: strings.Join(reasons, "; ")}
 	}
 	return h, nil
 }
@@ -54,7 +57,8 @@ func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(strin
 func (h *GatewayHub) attempt(ctx context.Context, candidates []contracts.Plugin) {
 	h.failures = nil
 	h.pending = nil
-	for _, p := range candidates {
+	for idx := range candidates {
+		p := candidates[idx]
 		set, missingConfig, err := buildOne(ctx, p, h.getenv)
 		if err != nil {
 			line := fmt.Sprintf("%s: %v", p.Manifest.Kind, err)
@@ -83,7 +87,7 @@ func buildOne(ctx context.Context, p contracts.Plugin, getenv func(string) strin
 		return contracts.GatewaySet{}, false, err
 	}
 	if set.Gateway == nil {
-		return contracts.GatewaySet{}, false, fmt.Errorf("factory returned no gateway")
+		return contracts.GatewaySet{}, false, errGatewayFactoryEmpty
 	}
 	return set, false, nil
 }
@@ -116,9 +120,9 @@ func (h *GatewayHub) Pending() bool { return len(h.pending) > 0 }
 // wrong still gets on with serving the gateways that do work.
 const GatewayRetryWindow = 2 * time.Minute
 
-var (
-	gatewayRetryBase = 2 * time.Second
-	gatewayRetryMax  = 20 * time.Second
+const (
+	defaultRetryBase = 2 * time.Second
+	defaultRetryMax  = 20 * time.Second
 )
 
 // AwaitPending retries the gateways that did not build, backing off between
@@ -132,9 +136,9 @@ var (
 func (h *GatewayHub) AwaitPending(ctx context.Context, window time.Duration, note func(failures []string, in time.Duration)) int {
 	joined := 0
 	deadline := time.Now().Add(window)
-	for wait := gatewayRetryBase; h.Pending() && time.Now().Before(deadline); wait *= 2 {
-		if wait > gatewayRetryMax {
-			wait = gatewayRetryMax
+	for wait := h.retryBase; h.Pending() && time.Now().Before(deadline); wait *= 2 {
+		if wait > h.retryMax {
+			wait = h.retryMax
 		}
 		if note != nil {
 			note(h.Failures(), wait)

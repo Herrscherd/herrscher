@@ -56,7 +56,7 @@ func ModelsCommands() []contracts.Cmd {
 	return []contracts.Cmd{
 		contracts.New("models", "list").
 			Help("list the models every compiled backend offers, under the active route policy; --json for the app").
-			Do(func(ctx context.Context, in contracts.Input) (string, error) {
+			Do(func(_ context.Context, in contracts.Input) (string, error) {
 				entries, err := Catalog(contracts.Default.Backends(), ResolvePolicy(os.Getenv))
 				if err != nil {
 					return "", err

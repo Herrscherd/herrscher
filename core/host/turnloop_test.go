@@ -12,18 +12,18 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
-	control "github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 type fanRecorder struct {
 	mu          sync.Mutex
+	changed     changeNotifier
 	inbound     []contracts.Message
 	emitted     []contracts.Event
 	posted      []string
 	upserts     int
 	statuses    []string
-	sink        bool
 	readChannel string
 	hosts       []string
 }
@@ -31,18 +31,21 @@ type fanRecorder struct {
 func (f *fanRecorder) feed(text string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.changed.signal()
 	f.inbound = append(f.inbound, contracts.Message{ID: "m", ChannelID: "c", Content: text, AuthorName: "you"})
 }
 
 func (f *fanRecorder) feedFrom(text, authorID string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.changed.signal()
 	f.inbound = append(f.inbound, contracts.Message{ID: "m", ChannelID: "c", Content: text, AuthorName: "you", AuthorID: authorID})
 }
 
 func (f *fanRecorder) feedMsg(m contracts.Message) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.changed.signal()
 	f.inbound = append(f.inbound, m)
 }
 func (f *fanRecorder) Enabled() bool          { return true }
@@ -54,6 +57,7 @@ func (f *fanRecorder) EnsureChannel(context.Context, string, string) (contracts.
 func (f *fanRecorder) Read(_ context.Context, channelID string, _ int, _ string) ([]contracts.Message, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.changed.signal()
 	f.readChannel = channelID
 	out := f.inbound
 	f.inbound = nil
@@ -63,6 +67,7 @@ func (f *fanRecorder) Unreact(context.Context, string, string, string) error { r
 func (f *fanRecorder) UpsertStatusMessage(_ context.Context, _, _, content string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.changed.signal()
 	f.upserts++
 	f.statuses = append(f.statuses, content)
 	return "", nil
@@ -75,12 +80,13 @@ func (f *fanRecorder) Manifest() contracts.Manifest {
 func (f *fanRecorder) Post(_ context.Context, _ contracts.Conversation, text string) (contracts.MessageID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.changed.signal()
 	f.posted = append(f.posted, text)
 	return "", nil
 }
 
-func (f *fanRecorder) Reply(_ context.Context, _ contracts.Conversation, _ contracts.MessageID, text string) (contracts.MessageID, error) {
-	return f.Post(nil, contracts.Conversation{}, text)
+func (f *fanRecorder) Reply(ctx context.Context, _ contracts.Conversation, _ contracts.MessageID, text string) (contracts.MessageID, error) {
+	return f.Post(ctx, contracts.Conversation{}, text)
 }
 
 func (f *fanRecorder) React(context.Context, contracts.Conversation, contracts.MessageID, string) error {
@@ -96,6 +102,7 @@ type sinkRecorder struct{ fanRecorder }
 func (s *sinkRecorder) Emit(e contracts.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.changed.signal()
 	s.emitted = append(s.emitted, e)
 }
 
@@ -124,13 +131,16 @@ func TestDriverFanOutToAllBoundGateways(t *testing.T) {
 	}
 	fromBridge <- contracts.Event{T: "reply", Text: "world", Done: true}
 
-	waitFor(t, func() bool {
+	waitFor(t, &a.changed, func() bool {
 		a.mu.Lock()
-		b.mu.Lock()
 		defer a.mu.Unlock()
+		return len(a.posted) == 1 && a.posted[0] == "world"
+	}, "reply fanned to the first gateway")
+	waitFor(t, &b.changed, func() bool {
+		b.mu.Lock()
 		defer b.mu.Unlock()
-		return len(a.posted) == 1 && a.posted[0] == "world" && len(b.posted) == 1 && b.posted[0] == "world"
-	}, "reply fanned to both gateways")
+		return len(b.posted) == 1 && b.posted[0] == "world"
+	}, "reply fanned to the second gateway")
 }
 
 func TestDriverPollsSessionChannel(t *testing.T) {
@@ -144,7 +154,7 @@ func TestDriverPollsSessionChannel(t *testing.T) {
 	defer cancel()
 	go d.run(ctx)
 
-	waitFor(t, func() bool {
+	waitFor(t, &a.changed, func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		return a.readChannel == "sess-chan"
@@ -153,6 +163,7 @@ func TestDriverPollsSessionChannel(t *testing.T) {
 
 type failingReader struct {
 	fanRecorder
+
 	left int
 }
 
@@ -202,7 +213,7 @@ func TestDriverNonEventSinkPostsOnlyFinalReply(t *testing.T) {
 	fromBridge <- contracts.Event{T: "status", Text: "running"}
 	fromBridge <- contracts.Event{T: "reply", Text: "world", Done: true}
 
-	waitFor(t, func() bool {
+	waitFor(t, &a.changed, func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		return len(a.posted) == 1 && a.posted[0] == "world"
@@ -216,21 +227,23 @@ func TestDriverNonEventSinkPostsOnlyFinalReply(t *testing.T) {
 }
 
 func TestDriverResolvesAttachmentsOntoInput(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
 	if err := os.MkdirAll(bridge.StagingRoot(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(bridge.StagingRoot(), "turnloop-")
-	if err != nil {
+	dir := filepath.Join(bridge.StagingRoot(), "turnloop")
+	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	img := filepath.Join(dir, "paste.png")
 	if err := os.WriteFile(img, []byte("PNG"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if img, err = filepath.EvalSymlinks(img); err != nil {
+	resolved, err := filepath.EvalSymlinks(img)
+	if err != nil {
 		t.Fatal(err)
 	}
+	img = resolved
 	a := &fanRecorder{}
 	a.feedMsg(contracts.Message{
 		ID: "m", ChannelID: "c", Content: "look", AuthorName: "you",
@@ -271,7 +284,7 @@ func TestDriverEmitsAbandonedOnHangup(t *testing.T) {
 	}
 	d.hangup <- struct{}{}
 
-	waitFor(t, func() bool {
+	waitFor(t, &rec.changed, func() bool {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
 		n := len(rec.emitted)
@@ -304,7 +317,7 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 		t.Fatal("Pick was not forwarded to the bridge")
 	}
 	fromBridge <- contracts.Event{T: "reply", Text: "picked", Done: true}
-	waitFor(t, func() bool {
+	waitFor(t, &a.changed, func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		return len(a.posted) == 1 && a.posted[0] == "picked" && a.upserts == 0
@@ -312,28 +325,31 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 }
 
 func TestPickRegistryRoutesToLiveSession(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	a := &fanRecorder{}
 	acc, err := control.Accept(tmpSock(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer acc.Close()
+	defer closeRead(acc)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, "pickreg", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
+	go RunSession(ctx, sessionTab, "pickreg", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
 
-	waitFor(t, func() bool { return Pick("pickreg", "1") }, "Pick routes to the live session")
-	if Pick("does-not-exist", "1") {
+	waitFor(t, &sessionTab.changed, func() bool { return (&hub{approvals: approvalTab, sessions: sessionTab}).Pick("pickreg", "1") }, "Pick routes to the live session")
+	if (&hub{approvals: approvalTab, sessions: sessionTab}).Pick("does-not-exist", "1") {
 		t.Fatal("Pick must report false for an unknown session")
 	}
 }
 
 func TestSeedEnqueuesInput(t *testing.T) {
+	sessionTab := newSessionTable()
 	d := newSessionDriver("beta", nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1))
-	registerDriver("beta", d)
-	defer unregisterDriver("beta", d)
+	sessionTab.register("beta", d)
+	defer sessionTab.unregister("beta", d)
 
-	if !Seed("beta", "finir le module") {
+	if !sessionTab.Seed("beta", "finir le module") {
 		t.Fatal("Seed should return true for a live session")
 	}
 	select {
@@ -344,7 +360,7 @@ func TestSeedEnqueuesInput(t *testing.T) {
 	default:
 		t.Fatal("no frame enqueued")
 	}
-	if Seed("ghost", "x") {
+	if sessionTab.Seed("ghost", "x") {
 		t.Fatal("Seed should return false for an unknown session")
 	}
 }
@@ -396,7 +412,7 @@ func TestDriverJournalsParticipants(t *testing.T) {
 	defer cancel()
 	go d.run(ctx)
 
-	waitFor(t, func() bool {
+	waitFor(t, &d.joined, func() bool {
 		ids := state.ReadParticipants(journal)
 		return len(ids) == 1 && ids[0] == "u1"
 	}, "author journaled for /session who")
@@ -449,7 +465,7 @@ func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
 	fromBridge <- contracts.Event{T: "reset"}
 	fromBridge <- contracts.Event{T: "chunk", Text: "x"}
 
-	waitFor(t, func() bool {
+	waitFor(t, &rec.changed, func() bool {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
 		return len(rec.emitted) == 3 &&
@@ -469,19 +485,25 @@ func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
 	}
 }
 
-func waitFor(t *testing.T, cond func() bool, what string) {
+func waitFor(t *testing.T, changed *changeNotifier, cond func() bool, what string) {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
+	timeout := time.NewTimer(time.Second)
+	defer timeout.Stop()
+	for {
+		wake := changed.watch()
 		if cond() {
 			return
 		}
-		time.Sleep(5 * time.Millisecond)
+		select {
+		case <-wake:
+		case <-timeout.C:
+			t.Fatalf("timed out waiting for: %s", what)
+		}
 	}
-	t.Fatalf("timed out waiting for: %s", what)
 }
 
 func TestRunSessionReconnectsAndResumes(t *testing.T) {
+	sessionTab := newSessionTable()
 	a := &fanRecorder{}
 	a.feed("q1")
 	sock := tmpSock(t)
@@ -489,23 +511,24 @@ func TestRunSessionReconnectsAndResumes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
-	defer acc.Close()
+	defer closeRead(acc)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
+	go RunSession(ctx, sessionTab, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
 
 	c1 := dialCtl(t, sock)
 	gotInput(t, c1, "q1")
-	c1.Close()
+	closeRead(c1)
 
 	a.feed("q2")
 	c2 := dialCtl(t, sock)
-	defer c2.Close()
+	defer closeRead(c2)
 	gotInput(t, c2, "q2")
 }
 
 func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
+	sessionTab := newSessionTable()
 	a := &fanRecorder{}
 	a.feed("q1")
 	sock := tmpSock(t)
@@ -513,27 +536,27 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
-	defer acc.Close()
+	defer closeRead(acc)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
+	go RunSession(ctx, sessionTab, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
 
 	c1 := dialCtl(t, sock)
 	gotInput(t, c1, "q1")
 	if err := c1.Write(contracts.Event{T: "reply", Text: "r1", Done: true}); err != nil {
 		t.Fatalf("write reply: %v", err)
 	}
-	waitFor(t, func() bool {
+	waitFor(t, &a.changed, func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		return len(a.posted) == 1
 	}, "first turn completed (reply posted)")
-	c1.Close()
+	closeRead(c1)
 
 	a.feed("q2")
 	c2 := dialCtl(t, sock)
-	defer c2.Close()
+	defer closeRead(c2)
 	gotInput(t, c2, "q2")
 }
 
@@ -552,13 +575,13 @@ func gotInput(t *testing.T, c *control.Conn, want string) {
 	t.Helper()
 	got := make(chan string, 1)
 	go func() {
-		_ = c.Scan(func(e contracts.Event) error {
+		logCleanup(c.Scan(func(e contracts.Event) error {
 			if e.T == "input" {
 				got <- e.Text
 				return errStopScan
 			}
 			return nil
-		})
+		}))
 	}()
 	select {
 	case g := <-got:
@@ -570,11 +593,11 @@ func gotInput(t *testing.T, c *control.Conn, want string) {
 	}
 }
 
-var errStopScan = stopScanErr{}
+var errStopScan = stopScanError{}
 
-type stopScanErr struct{}
+type stopScanError struct{}
 
-func (stopScanErr) Error() string { return "stop" }
+func (stopScanError) Error() string { return "stop" }
 
 func TestFanOutPrefersRoutedEventSink(t *testing.T) {
 	rec := &routedRec{}
@@ -804,13 +827,7 @@ func TestTerminalReplyCarriesAcceptedDelegationBeforeSeedRelease(t *testing.T) {
 }
 
 func TestTerminalReplyCarriesCoordinationOutcomesBeforeSeedRelease(t *testing.T) {
-	tests := []struct {
-		name        string
-		session     string
-		coordinator contracts.Coordinator
-		reply       string
-		want        contracts.CoordinationEvent
-	}{
+	tests := []terminalReplyCase{
 		{
 			name:        "delegation refusal",
 			session:     "lead",
@@ -845,42 +862,66 @@ func TestTerminalReplyCarriesCoordinationOutcomesBeforeSeedRelease(t *testing.T)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			from := make(chan contracts.Event, 1)
-			d := newSessionDriver(tc.session, nil, make(chan contracts.Event, 1), from)
-			d.coordinator = tc.coordinator
-			var terminal contracts.Event
-			replyCh := make(chan string, 1)
-			releasedBeforeTerminal := false
-			d.emitTap = func(e contracts.Event) {
-				if e.T != "reply" || !e.Done {
-					return
-				}
-				select {
-				case <-replyCh:
-					releasedBeforeTerminal = true
-				default:
-				}
-				terminal = e
-			}
-			d.pendingReply = replyCh
-
-			from <- contracts.Event{T: "reply", Done: true, Text: tc.reply}
-			if !d.awaitTurn(context.Background(), tokenGuard{}) {
-				t.Fatal("turn abandoned")
-			}
-
-			if terminal.Coordination == nil || *terminal.Coordination != tc.want {
-				t.Fatalf("coordination = %+v, want %+v", terminal.Coordination, tc.want)
-			}
-			if releasedBeforeTerminal {
-				t.Fatal("seed response was released before terminal publication")
-			}
-			select {
-			case <-replyCh:
-			default:
-				t.Fatal("seed response was not released after coordination")
-			}
+			runTerminalReplyCase(t, tc)
 		})
+	}
+}
+
+type terminalReplyCase struct {
+	name        string
+	session     string
+	coordinator contracts.Coordinator
+	reply       string
+	want        contracts.CoordinationEvent
+}
+
+type terminalCapture struct {
+	replyCh                chan string
+	terminal               contracts.Event
+	releasedBeforeTerminal bool
+}
+
+func (c *terminalCapture) observe(e contracts.Event) {
+	if e.T != "reply" || !e.Done {
+		return
+	}
+	select {
+	case <-c.replyCh:
+		c.releasedBeforeTerminal = true
+	default:
+	}
+	c.terminal = e
+}
+
+func runTerminalReplyCase(t *testing.T, tc terminalReplyCase) {
+	t.Helper()
+	from := make(chan contracts.Event, 1)
+	d := newSessionDriver(tc.session, nil, make(chan contracts.Event, 1), from)
+	d.coordinator = tc.coordinator
+	capture := &terminalCapture{replyCh: make(chan string, 1)}
+	d.emitTap = capture.observe
+	d.pendingReply = capture.replyCh
+
+	from <- contracts.Event{T: "reply", Done: true, Text: tc.reply}
+	if !d.awaitTurn(context.Background(), tokenGuard{}) {
+		t.Fatal("turn abandoned")
+	}
+
+	assertTerminalCoordination(t, capture.terminal, tc.want)
+	if capture.releasedBeforeTerminal {
+		t.Fatal("seed response was released before terminal publication")
+	}
+	select {
+	case <-capture.replyCh:
+	default:
+		t.Fatal("seed response was not released after coordination")
+	}
+}
+
+func assertTerminalCoordination(t *testing.T, terminal contracts.Event, want contracts.CoordinationEvent) {
+	t.Helper()
+	if terminal.Coordination == nil || *terminal.Coordination != want {
+		t.Fatalf("coordination = %+v, want %+v", terminal.Coordination, want)
 	}
 }
 
@@ -950,7 +991,7 @@ func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
 		t.Fatal("awaitTurn should complete on reply{done}")
 	}
 
-	waitFor(t, func() bool {
+	waitFor(t, &rec.changed, func() bool {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
 		for _, e := range rec.emitted {
@@ -1016,11 +1057,12 @@ func TestDriverInvokesCoordinatorOnRouteTrailer(t *testing.T) {
 }
 
 func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
+	sessionTab := newSessionTable()
 	d := newSessionDriver("s1", nil, nil, nil)
-	registerDriver("s1", d)
-	defer unregisterDriver("s1", d)
+	sessionTab.register("s1", d)
+	defer sessionTab.unregister("s1", d)
 
-	if !Submit("s1", contracts.Inbound{Author: "leo", Text: "fix the login bug"}) {
+	if !sessionTab.Submit(t.Context(), "s1", contracts.Inbound{Author: "leo", Text: "fix the login bug"}) {
 		t.Fatal("Submit reported no live session for a registered driver")
 	}
 	select {
@@ -1034,19 +1076,21 @@ func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
 }
 
 func TestSubmitOnUnknownSessionReportsFalse(t *testing.T) {
-	if Submit("nobody-home", contracts.Inbound{Text: "hi"}) {
+	sessionTab := newSessionTable()
+	if sessionTab.Submit(t.Context(), "nobody-home", contracts.Inbound{Text: "hi"}) {
 		t.Fatal("Submit reported success for an unregistered session")
 	}
 }
 
 func TestSubmitJournalsTheAuthor(t *testing.T) {
+	sessionTab := newSessionTable()
 	dir := t.TempDir()
 	d := newSessionDriver("s2", nil, nil, nil)
 	d.participants = filepath.Join(dir, "participants")
-	registerDriver("s2", d)
-	defer unregisterDriver("s2", d)
+	sessionTab.register("s2", d)
+	defer sessionTab.unregister("s2", d)
 
-	Submit("s2", contracts.Inbound{Author: "leo", AuthorID: "42", Text: "hi"})
+	sessionTab.Submit(t.Context(), "s2", contracts.Inbound{Author: "leo", AuthorID: "42", Text: "hi"})
 	<-d.queue
 	b, err := os.ReadFile(d.participants)
 	if err != nil || !strings.Contains(string(b), "42") {

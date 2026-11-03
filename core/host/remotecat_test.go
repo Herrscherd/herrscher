@@ -21,8 +21,8 @@ func TestSupportedRemoteCategoriesAreMemoryOrchestratorBackend(t *testing.T) {
 	if SupportedRemoteCategory(contracts.CategoryGateway) {
 		t.Fatal("gateway must not be remote-supported")
 	}
-	if n := len(supportedRemoteCategories); n != 3 {
-		t.Fatalf("expected exactly three supported remote categories (memory, orchestrator, backend), got %d: %v", n, supportedRemoteCategories)
+	if SupportedRemoteCategory(contracts.CategorySkills) {
+		t.Fatal("skills must not be remote-supported")
 	}
 }
 
@@ -33,7 +33,7 @@ func TestStartRemotePluginHostsSkipsUnsupportedWithWarning(t *testing.T) {
 	cancel()
 
 	startRemotePluginHosts(ctx, "/bin/herrscher",
-		map[contracts.Category]bool{contracts.CategoryGateway: true}, log)
+		categorySet(contracts.CategoryGateway), log)
 
 	out := buf.String()
 	if !strings.Contains(out, "not yet supported") || !strings.Contains(out, "category=gateway") {

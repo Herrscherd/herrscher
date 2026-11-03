@@ -18,7 +18,8 @@ import (
 // or not a daemon is up. Reading git needs no daemon; requiring one would put
 // the diagnostic behind the thing it is used to diagnose.
 func WhoamiOut(ctx context.Context, asJSON bool) (string, error) {
-	cwd, _ := os.Getwd()
+	cwd, cwdErr := os.Getwd()
+	logCleanup(cwdErr)
 	id := identity.FromDir(ctx, cwd)
 	if asJSON {
 		b, err := json.Marshal(id)
@@ -33,7 +34,7 @@ func whoamiReport(id identity.Identity) string {
 			"Set it with: git config --global user.name \"Your Name\" && git config --global user.email you@example.com"
 	}
 	rows := []struct{ label, value, key string }{
-		{"name", id.Name, "user.name"},
+		{paramName, id.Name, "user.name"},
 		{"email", id.Email, "user.email"},
 		{"github", id.GitHub, "github.user"},
 	}

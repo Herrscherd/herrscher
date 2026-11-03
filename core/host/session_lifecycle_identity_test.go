@@ -1,7 +1,6 @@
 package host
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -14,7 +13,7 @@ func TestGoDeadWaitsForRunSessionTeardown(t *testing.T) {
 	cancelled := make(chan struct{})
 	tornDown := make(chan struct{})
 	returned := make(chan struct{})
-	h := &hub{live: map[string]liveSession{
+	h := &hub{teardownGrace: defaultTeardownGrace, live: map[string]liveSession{
 		"same-name": {
 			cancel: func() { close(cancelled) },
 			done:   tornDown,
@@ -51,64 +50,55 @@ func TestGoDeadWaitsForRunSessionTeardown(t *testing.T) {
 }
 
 func TestOldDriverCannotUnregisterSameNameReplacement(t *testing.T) {
+	sessionTab := newSessionTable()
 	name := "registry-" + newTurnID()
 	oldDriver := newSessionDriver(name, nil, nil, nil)
 	newDriver := newSessionDriver(name, nil, nil, nil)
-	registerDriver(name, oldDriver)
-	t.Cleanup(func() { unregisterDriver(name, newDriver) })
+	sessionTab.register(name, oldDriver)
+	t.Cleanup(func() { sessionTab.unregister(name, newDriver) })
 
-	registerDriver(name, newDriver)
-	unregisterDriver(name, oldDriver)
+	sessionTab.register(name, newDriver)
+	sessionTab.unregister(name, oldDriver)
 
-	sessionRegistry.mu.Lock()
-	got := sessionRegistry.m[name]
-	sessionRegistry.mu.Unlock()
+	got := sessionTab.lookup(name)
 	if got != newDriver {
 		t.Fatalf("old teardown removed replacement driver: got %p want %p", got, newDriver)
 	}
 }
 
 func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	name := "rebind-" + newTurnID()
 	h := newHub(
-		ctx,
 		state.NewState(filepath.Join(t.TempDir(), "state.json")),
 		nil,
 		nil,
 		t.TempDir(),
 		nil,
 		nil,
+		approvalTab,
+		sessionTab,
 	)
 	t.Cleanup(func() { h.goDead(name) })
 
-	h.goLive(state.Session{Name: name, Incarnation: "old-incarnation"})
-	waitForRegisteredIncarnation(t, name, "old-incarnation")
+	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "old-incarnation"})
+	waitForRegisteredIncarnation(t, sessionTab, name, "old-incarnation")
 	h.goDead(name)
 
-	h.goLive(state.Session{Name: name, Incarnation: "new-incarnation"})
-	waitForRegisteredIncarnation(t, name, "new-incarnation")
+	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "new-incarnation"})
+	waitForRegisteredIncarnation(t, sessionTab, name, "new-incarnation")
 	conn, err := control.Dial(control.SocketPath(name))
 	if err != nil {
 		t.Fatalf("replacement control listener is not reachable: %v", err)
 	}
-	_ = conn.Close()
+	logCleanup(conn.Close())
 }
 
-func waitForRegisteredIncarnation(t *testing.T, name, incarnation string) {
+func waitForRegisteredIncarnation(t *testing.T, sessionTab *sessionTable, name, incarnation string) {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
-	for {
-		sessionRegistry.mu.Lock()
-		driver := sessionRegistry.m[name]
-		sessionRegistry.mu.Unlock()
-		if driver != nil && driver.incarnation == incarnation {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("session %q did not register incarnation %q", name, incarnation)
-		}
-		time.Sleep(time.Millisecond)
-	}
+	waitFor(t, &sessionTab.changed, func() bool {
+		driver := sessionTab.lookup(name)
+		return driver != nil && driver.incarnation == incarnation
+	}, "session "+name+" to register incarnation "+incarnation)
 }

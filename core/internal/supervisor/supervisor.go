@@ -182,12 +182,17 @@ func (s *Supervisor) SetBridgeEnv(kv []string) {
 // here would only be a nil every caller has to pretend to handle, which is what
 // it was, at six call sites, two of them with an unreachable error branch.
 func (s *Supervisor) Start(sess state.Session) {
+	s.StartWith(s.ctx, sess)
+}
+
+// StartWith is Start for a run that stops when ctx is done.
+func (s *Supervisor) StartWith(ctx context.Context, sess state.Session) {
 	for {
 		s.mu.Lock()
 		run, running := s.runs[sess.Name]
 		switch {
 		case !running:
-			cctx, cancel := context.WithCancel(s.ctx)
+			cctx, cancel := context.WithCancel(ctx)
 			run = &supervisedRun{cancel: cancel, done: make(chan struct{})}
 			s.runs[sess.Name] = run
 			s.mu.Unlock()

@@ -36,23 +36,24 @@ func capture(ctx context.Context, run hostRunner, argv ...string) (string, error
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("%s on %s: %s", argv[0], run.Describe(), msg)
+		return "", &remoteStepError{Step: argv[0], Where: run.Describe(), Msg: msg}
 	}
 	return stdout.String(), nil
 }
 
-func platformFromUname(out string) (goos, goarch string, err error) {
+func platformFromUname(out string) (string, string, error) {
 	f := strings.Fields(strings.TrimSpace(out))
-	if len(f) != 2 {
-		return "", "", fmt.Errorf("cannot read the host platform from %q", strings.TrimSpace(out))
+	if len(f) != unameFieldCount {
+		return "", "", &platformUnreadableError{Output: strings.TrimSpace(out)}
 	}
+	var goos, goarch string
 	switch strings.ToLower(f[0]) {
 	case "linux":
 		goos = "linux"
 	case "darwin":
 		goos = "darwin"
 	default:
-		return "", "", fmt.Errorf("unsupported remote OS %q (linux and darwin only)", f[0])
+		return "", "", &unsupportedOSError{OS: f[0]}
 	}
 	switch strings.ToLower(f[1]) {
 	case "x86_64", "amd64":
@@ -60,14 +61,14 @@ func platformFromUname(out string) (goos, goarch string, err error) {
 	case "aarch64", "arm64":
 		goarch = "arm64"
 	default:
-		return "", "", fmt.Errorf("unsupported remote architecture %q (x86_64 and aarch64 only)", f[1])
+		return "", "", &unsupportedArchError{Arch: f[1]}
 	}
 	return goos, goarch, nil
 }
 
 func provisionHost(ctx context.Context, run hostRunner, h state.Host, src string) (state.Host, error) {
 	if src == "" {
-		return h, fmt.Errorf("no source checkout configured, so there is no binary to build for %s: run `set source <path>` first", h.Name)
+		return h, &noSourceCheckoutError{Host: h.Name}
 	}
 	unameOut, err := capture(ctx, run, "uname", "-sm")
 	if err != nil {
@@ -83,19 +84,19 @@ func provisionHost(ctx context.Context, run hostRunner, h state.Host, src string
 	}
 	home := strings.TrimSpace(homeOut)
 	if home == "" {
-		return h, fmt.Errorf("%s: cannot resolve the remote home directory", h.Name)
+		return h, &remoteHomeUnresolvedError{Host: h.Name}
 	}
 	binDir := home + "/.herrscher/bin"
 	bin := binDir + "/herrscher"
-	if _, err := capture(ctx, run, "mkdir", "-p", binDir); err != nil {
-		return h, err
+	if _, captureErr := capture(ctx, run, "mkdir", "-p", binDir); captureErr != nil {
+		return h, captureErr
 	}
 
 	stage, err := os.MkdirTemp("", "herrscher-provision-")
 	if err != nil {
 		return h, err
 	}
-	defer func() { _ = os.RemoveAll(stage) }()
+	defer func() { logCleanup(os.RemoveAll(stage)) }()
 	staged := filepath.Join(stage, "herrscher")
 	if err := service.BuildFor(ctx, src, staged, goos, goarch); err != nil {
 		return h, err
@@ -109,7 +110,7 @@ func provisionHost(ctx context.Context, run hostRunner, h state.Host, src string
 		if msg == "" {
 			msg = err.Error()
 		}
-		return h, fmt.Errorf("copy herrscher to %s: %s", run.Describe(), msg)
+		return h, &copyError{Where: run.Describe(), Msg: msg}
 	}
 	if _, err := capture(ctx, run, "chmod", "+x", bin); err != nil {
 		return h, err
@@ -136,13 +137,13 @@ type hostReport struct {
 
 func checkHost(ctx context.Context, run hostRunner, h state.Host, wantVersion string) hostReport {
 	rep := hostReport{Host: h.Name, SSH: h.SSH}
-	if _, err := capture(ctx, run, "true"); err != nil {
+	if _, err := capture(ctx, run, valueTrue); err != nil {
 		rep.Notes = append(rep.Notes, err.Error())
 		return rep
 	}
 	rep.Reachable = true
-	switch {
-	case h.Bin == "":
+	switch h.Bin {
+	case "":
 		rep.Notes = append(rep.Notes, "no herrscher provisioned: run `host provision "+h.Name+"`")
 	default:
 		if _, err := capture(ctx, run, h.Bin, "--help"); err != nil {

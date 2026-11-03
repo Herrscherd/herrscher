@@ -21,20 +21,21 @@ func newGatewayRenderer(gw contracts.Gateway, ch string) *gatewayRenderer {
 }
 
 func (r *gatewayRenderer) handle(ctx context.Context, e contracts.Event) {
-	if e.T != "reply" || !e.Done || e.Text == "" {
+	if e.T != eventReply || !e.Done || e.Text == "" {
 		return
 	}
 	for _, part := range chunk(e.Text, gatewayMaxLen) {
-		_, _ = r.gw.Post(ctx, r.conv, part)
+		_, postErr := r.gw.Post(ctx, r.conv, part)
+		logCleanup(postErr)
 	}
 }
 
-func chunk(s string, max int) []string {
+func chunk(s string, limit int) []string {
 	var out []string
 	r := []rune(s)
-	for len(r) > max {
-		cut := max
-		for i := max - 1; i > max/2; i-- {
+	for len(r) > limit {
+		cut := limit
+		for i := limit - 1; i > limit/2; i-- {
 			if r[i] == '\n' {
 				cut = i
 				break

@@ -29,7 +29,7 @@ func authzHub(t *testing.T, st *state.State, verbs ...[]string) *hub {
 			t.Fatal(err)
 		}
 	}
-	return &hub{st: st, reg: reg, live: map[string]liveSession{}}
+	return &hub{st: st, reg: reg, live: make(map[string]liveSession)}
 }
 
 func authzState(t *testing.T, sessions []state.Session, roles map[string]string) *state.State {
@@ -38,7 +38,8 @@ func authzState(t *testing.T, sessions []state.Session, roles map[string]string)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range sessions {
+	for idx := range sessions {
+		s := sessions[idx]
 		if err := st.AddSession(s); err != nil {
 			t.Fatal(err)
 		}
@@ -164,7 +165,7 @@ func TestDispatchRefusesBeforeReachingTheRegistry(t *testing.T) {
 		})); err != nil {
 		t.Fatal(err)
 	}
-	h := &hub{st: st, reg: reg, live: map[string]liveSession{}}
+	h := &hub{st: st, reg: reg, live: make(map[string]liveSession)}
 	if _, err := h.Dispatch(withSessionPrincipal(context.Background(), "revue"), []string{"approve", "rule"}); err == nil {
 		t.Fatal("Dispatch must refuse")
 	}
@@ -190,12 +191,14 @@ func TestAnUnknownVerbIsDispatchsErrorAndNotARefusal(t *testing.T) {
 
 func operatorRegistryForTest(t *testing.T) *cli.Registry {
 	t.Helper()
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	dir := t.TempDir()
 	st := state.NewState(dir + "/state.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: dir + "/state.json", DefaultCmd: "claude"}, st, sup, "", nil)
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: dir + "/state.json", DefaultCmd: "claude"}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,10 +213,10 @@ func TestEverySessionNamingVerbIsClassified(t *testing.T) {
 			if p.Name != "name" && p.Name != "session" {
 				continue
 			}
-			if sessionArg[verb] == p.Name {
+			if sessionArgs()[verb] == p.Name {
 				continue
 			}
-			if notASession[verb+" "+p.Name] {
+			if notASessionArgs()[verb+" "+p.Name] {
 				continue
 			}
 			t.Errorf("`%s --%s` names something. Add it to sessionArg if that is a session "+

@@ -2,6 +2,7 @@ package host
 
 import (
 	"archive/tar"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -21,12 +22,19 @@ func TestStagedAgentTarCarriesTheFilesAndTheRemotePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seen := map[string]string{}
+	seen := readTarMembers(t, r)
+	assertStagedAgentFiles(t, seen)
+	assertNoUnsafeMembers(t, seen)
+}
+
+func readTarMembers(t *testing.T, r io.Reader) map[string]string {
+	t.Helper()
+	seen := make(map[string]string)
 	tr := tar.NewReader(r)
 	for {
 		h, err := tr.Next()
-		if err == io.EOF {
-			break
+		if errors.Is(err, io.EOF) {
+			return seen
 		}
 		if err != nil {
 			t.Fatal(err)
@@ -40,6 +48,10 @@ func TestStagedAgentTarCarriesTheFilesAndTheRemotePath(t *testing.T) {
 		}
 		seen[h.Name] = string(buf)
 	}
+}
+
+func assertStagedAgentFiles(t *testing.T, seen map[string]string) {
+	t.Helper()
 	for _, want := range []string{"AGENTS.md", ".claude/CLAUDE.md", ".mcp.json", ".claude/settings.json", ".codex/config.toml"} {
 		if _, ok := seen[want]; !ok {
 			t.Errorf("the tar is missing %s (has %v)", want, keysOf(seen))
@@ -51,6 +63,10 @@ func TestStagedAgentTarCarriesTheFilesAndTheRemotePath(t *testing.T) {
 	if !strings.Contains(seen[".claude/settings.json"], "'/far/bin/herrscher' approve hook") {
 		t.Fatalf("the far side's binary did not reach the tar: %q", seen[".claude/settings.json"])
 	}
+}
+
+func assertNoUnsafeMembers(t *testing.T, seen map[string]string) {
+	t.Helper()
 	for name := range seen {
 		if strings.HasPrefix(name, "/") || strings.Contains(name, "..") {
 			t.Fatalf("unsafe tar member %q", name)

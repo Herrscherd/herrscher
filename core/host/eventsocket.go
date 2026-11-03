@@ -40,21 +40,25 @@ type subscriber struct {
 }
 
 type eventSocket struct {
-	mu      sync.Mutex
-	subs    map[*subscriber]struct{}
-	changed changeNotifier
+	mu     sync.Mutex
+	subs   map[*subscriber]struct{}
+	closed bool
 }
 
 func newEventSocket() *eventSocket {
 	return &eventSocket{subs: make(map[*subscriber]struct{})}
 }
 
-func (s *eventSocket) add(c net.Conn) {
-	sub := &subscriber{conn: c, ch: make(chan []byte, subscriberBuffer)}
+func (s *eventSocket) add(conn net.Conn) {
+	sub := &subscriber{conn: conn, ch: make(chan []byte, subscriberBuffer)}
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		logCleanup(conn.Close())
+		return
+	}
 	s.subs[sub] = struct{}{}
 	s.mu.Unlock()
-	s.changed.signal()
 	go s.serve(sub)
 }
 
@@ -152,6 +156,7 @@ func (s *eventSocket) Publish(session string, event contracts.Event) {
 
 func (s *eventSocket) closeAll() {
 	s.mu.Lock()
+	s.closed = true
 	for sub := range s.subs {
 		delete(s.subs, sub)
 		close(sub.ch)

@@ -41,6 +41,7 @@ type hub struct {
 	warnedRoles sync.Map
 
 	dispatchMu sync.Mutex
+	lifecycle  sync.Mutex
 	mu         sync.Mutex
 	live       map[string]liveSession
 
@@ -70,9 +71,12 @@ func eventTap(publish func(string, contracts.Event), session string) func(contra
 }
 
 func (h *hub) goLive(ctx context.Context, sess state.Session) {
+	h.lifecycle.Lock()
+	defer h.lifecycle.Unlock()
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if _, ok := h.live[sess.Name]; ok {
+	_, running := h.live[sess.Name]
+	h.mu.Unlock()
+	if running {
 		return
 	}
 	acc, err := control.Accept(ctx, control.SocketPath(sess.Name))
@@ -83,7 +87,9 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
 	done := make(chan struct{})
+	h.mu.Lock()
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done}
+	h.mu.Unlock()
 	go func() {
 		defer close(done)
 		runSessionIdentified(sctx, h.sessions, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
@@ -127,10 +133,12 @@ func (h *hub) goDead(name string) {
 	if h.sup != nil {
 		logCleanup(h.sup.Stop(name))
 	}
+	h.lifecycle.Lock()
 	h.mu.Lock()
 	live, ok := h.live[name]
 	delete(h.live, name)
 	h.mu.Unlock()
+	h.lifecycle.Unlock()
 	if ok {
 		live.cancel()
 		select {

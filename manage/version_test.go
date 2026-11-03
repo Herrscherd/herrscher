@@ -15,7 +15,7 @@ type fakeToolchain struct {
 	seen []string
 }
 
-func (f *fakeToolchain) List(ctx context.Context, args ...string) (string, error) {
+func (f *fakeToolchain) List(_ context.Context, args ...string) (string, error) {
 	key := strings.Join(args, " ")
 	f.seen = append(f.seen, key)
 	if err, ok := f.err[key]; ok {

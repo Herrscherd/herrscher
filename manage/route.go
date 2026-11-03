@@ -39,9 +39,9 @@ func currentRoute() routeCurrent {
 }
 
 func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askModel bool) (map[string]string, error) {
-	out := map[string]string{}
+	out := make(map[string]string)
 
-	fmt.Fprintf(os.Stderr, "\n  %s  %s\n", s.wrap(s.bold+s.cyan, "routing"), s.wrap(s.dim, "where agent turns run"))
+	_, _ = fmt.Fprintf(os.Stderr, "\n  %s  %s\n", s.wrap(s.bold+s.cyan, "routing"), s.wrap(s.dim, "where agent turns run"))
 	policy, err := choosePolicy(s, in, cur.policy)
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 	}
 
 	if !askModel {
-		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "default model: run `herrscher init` again after the rebuild to pick one"))
+		_, _ = fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "default model: run `herrscher init` again after the rebuild to pick one"))
 		return out, nil
 	}
 
@@ -73,7 +73,7 @@ func routeStep(s style, in *bufio.Reader, cat catalogFn, cur routeCurrent, askMo
 	}
 	out[host.EnvDefaultModel] = model
 	if model == "" && policy == contracts.PolicyGatewayOnly {
-		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.red, "with no default model, every `session create` must pass --model, which gateway-only requires"))
+		_, _ = fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.red, "with no default model, every `session create` must pass --model, which gateway-only requires"))
 	}
 	return out, nil
 }
@@ -94,14 +94,14 @@ func policyChoices() []struct {
 }
 
 func choosePolicy(s style, in *bufio.Reader, cur contracts.RoutePolicy) (contracts.RoutePolicy, error) {
-	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "route policy"))
+	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "route policy"))
 	for i, c := range policyChoices() {
 		name, tag := fmt.Sprintf("%-14s", c.label), fmt.Sprintf("%-8s", "")
 		if c.policy == cur {
 			name = s.wrap(s.green, name)
 			tag = s.wrap(s.dim, fmt.Sprintf("%-8s", "current"))
 		}
-		fmt.Fprintf(os.Stderr, "    %s %s %s %s\n", s.wrap(s.dim, strconv.Itoa(i+1)), name, tag, s.wrap(s.dim, c.help))
+		_, _ = fmt.Fprintf(os.Stderr, "    %s %s %s %s\n", s.wrap(s.dim, strconv.Itoa(i+1)), name, tag, s.wrap(s.dim, c.help))
 	}
 
 	ans := promptLine(in, "  "+s.wrap(s.dim, "›")+" ")
@@ -127,7 +127,7 @@ func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, e
 	if have {
 		note = "already set: enter to keep"
 	}
-	fmt.Fprintf(os.Stderr, "  %s  %s\n", s.wrap(s.bold, "gateway · credentials"), s.wrap(s.dim, "("+note+"; token entry is hidden)"))
+	_, _ = fmt.Fprintf(os.Stderr, "  %s  %s\n", s.wrap(s.bold, "gateway · credentials"), s.wrap(s.dim, "("+note+"; token entry is hidden)"))
 
 	url := promptLine(in, secretLabel(s, host.EnvGatewayURL))
 	token, err := readSecret(in, secretLabel(s, host.EnvGatewayToken))
@@ -140,7 +140,7 @@ func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, e
 		if !have {
 			return nil, fmt.Errorf("%w: set %s and %s", errNoGatewayCreds, host.EnvGatewayURL, host.EnvGatewayToken)
 		}
-		return map[string]string{}, nil
+		return make(map[string]string), nil
 	case url == "" || token == "":
 		return nil, fmt.Errorf("%w: %s and %s go together; one without the other would run turns on this machine's own account", errIncompleteCreds, host.EnvGatewayURL, host.EnvGatewayToken)
 	}
@@ -149,18 +149,18 @@ func askGatewayCreds(s style, in *bufio.Reader, have bool) (map[string]string, e
 
 func chooseDefaultModel(s style, in *bufio.Reader, entries []host.CatalogEntry, cur string) (string, error) {
 	if len(entries) == 0 {
-		fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "default model: no compiled backend offers one under this policy"))
+		_, _ = fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.dim, "default model: no compiled backend offers one under this policy"))
 		return "", nil
 	}
-	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "default model"))
+	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, "default model"))
 	for i, e := range entries {
 		id, tag := fmt.Sprintf("%-24s", e.ID), ""
 		if e.ID == cur {
 			id, tag = s.wrap(s.green, id), s.wrap(s.dim, "  current")
 		}
-		fmt.Fprintf(os.Stderr, "    %s %s %s%s\n", s.wrap(s.dim, strconv.Itoa(i+1)), id, s.wrap(s.dim, e.Label), tag)
+		_, _ = fmt.Fprintf(os.Stderr, "    %s %s %s%s\n", s.wrap(s.dim, strconv.Itoa(i+1)), id, s.wrap(s.dim, e.Label), tag)
 	}
-	fmt.Fprintf(os.Stderr, "    %s %s\n", s.wrap(s.dim, strconv.Itoa(len(entries)+1)), "none")
+	_, _ = fmt.Fprintf(os.Stderr, "    %s %s\n", s.wrap(s.dim, strconv.Itoa(len(entries)+1)), "none")
 
 	ans := promptLine(in, "  "+s.wrap(s.dim, "›")+" ")
 	switch ans {

@@ -22,7 +22,7 @@ func isTerminal(f *os.File) bool {
 func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string, map[string]string, error) {
 	s := newStyle()
 	in := bufio.NewReader(os.Stdin)
-	choices := map[string]string{}
+	choices := make(map[string]string)
 	for k, v := range defaultStack() {
 		choices[k] = v
 	}
@@ -36,7 +36,7 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 		s.header("init", "configure the installed host: enter to skip a field")
 	}
 
-	secrets := map[string]string{}
+	secrets := make(map[string]string)
 	if choices[catGateway] == kindDiscord {
 		if err := promptDiscordSecrets(s, in, secrets); err != nil {
 			return nil, nil, err
@@ -65,7 +65,7 @@ func chooseEveryCategory(s style, in *bufio.Reader, choices map[string]string) e
 }
 
 func promptDiscordSecrets(s style, in *bufio.Reader, secrets map[string]string) error {
-	fmt.Fprintf(os.Stderr, "  %s  %s\n", s.wrap(s.bold+s.cyan, "discord · secrets"), s.wrap(s.dim, "(token entry is hidden)"))
+	_, _ = fmt.Fprintf(os.Stderr, "  %s  %s\n", s.wrap(s.bold+s.cyan, "discord · secrets"), s.wrap(s.dim, "(token entry is hidden)"))
 	tok, err := readSecret(in, secretLabel(s, "DISCORD_BOT_TOKEN"))
 	if err != nil {
 		return err
@@ -94,7 +94,7 @@ func chooseKind(s style, in *bufio.Reader, cat string) (string, error) {
 	sort.Strings(kinds)
 	def := defaultStack()[cat]
 
-	fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, cat))
+	_, _ = fmt.Fprintf(os.Stderr, "  %s\n", s.wrap(s.bold, cat))
 	for i, k := range kinds {
 		name := k
 		tag := ""
@@ -102,9 +102,9 @@ func chooseKind(s style, in *bufio.Reader, cat string) (string, error) {
 			name = s.wrap(s.green, k)
 			tag = s.wrap(s.dim, "  default")
 		}
-		fmt.Fprintf(os.Stderr, "    %s %s%s\n", s.wrap(s.dim, strconv.Itoa(i+1)), name, tag)
+		_, _ = fmt.Fprintf(os.Stderr, "    %s %s%s\n", s.wrap(s.dim, strconv.Itoa(i+1)), name, tag)
 	}
-	fmt.Fprintf(os.Stderr, "    %s %s\n", s.wrap(s.dim, strconv.Itoa(len(kinds)+1)), "none")
+	_, _ = fmt.Fprintf(os.Stderr, "    %s %s\n", s.wrap(s.dim, strconv.Itoa(len(kinds)+1)), "none")
 
 	ans := promptLine(in, "  "+s.wrap(s.dim, "›")+" ")
 	switch ans {
@@ -130,7 +130,7 @@ func chooseKind(s style, in *bufio.Reader, cat string) (string, error) {
 
 func promptLine(in *bufio.Reader, msg string) string {
 	if msg != "" {
-		fmt.Fprint(os.Stderr, msg)
+		_, _ = fmt.Fprint(os.Stderr, msg)
 	}
 	line, err := in.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {

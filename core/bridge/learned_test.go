@@ -218,7 +218,7 @@ func TestReportSkillUseForwardsOnlyWhatWasActivated(t *testing.T) {
 	}
 }
 
-func TestReportSkillUseIsSilentWithoutTheCapability(t *testing.T) {
+func TestReportSkillUseIsSilentWithoutTheCapability(_ *testing.T) {
 	reportSkillUse(context.Background(), plainOrch{}, []string{"alpha"})
 	reportSkillUse(context.Background(), nil, []string{"alpha"})
 }

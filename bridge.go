@@ -55,7 +55,7 @@ func runBridge(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	newBackend := func(channelID string) (contracts.Backend, error) {
+	newBackend := func(_ string) (contracts.Backend, error) {
 		return newBackendFor(ctx, br, backendFlags.request())
 	}
 
@@ -239,8 +239,8 @@ func applyEnvFromStdin(r io.Reader) error {
 		line, err := br.ReadString('\n')
 		trimmed := strings.TrimRight(line, "\r\n")
 		if trimmed != "" {
-			block.WriteString(trimmed)
-			block.WriteByte('\n')
+			_, _ = block.WriteString(trimmed)
+			_ = block.WriteByte('\n')
 		} else if line != "" {
 			break
 		}

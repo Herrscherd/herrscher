@@ -41,8 +41,8 @@ func newAttachedDaemon(ctx context.Context, instance string) (*attachedDaemon, e
 		done:      ctx.Done(),
 		instance:  instance,
 		events:    make(chan tui.RoutedEvent, attachBuffer),
-		channelOf: map[string]string{},
-		nameOf:    map[string]string{},
+		channelOf: make(map[string]string),
+		nameOf:    make(map[string]string),
 	}
 	a.send = func(argv []string) (string, error) {
 		call, cancel := context.WithTimeout(ctx, attachTimeout)

@@ -13,7 +13,7 @@ import (
 )
 
 func readSecret(in *bufio.Reader, msg string) (string, error) {
-	fmt.Fprint(os.Stderr, msg)
+	_, _ = fmt.Fprint(os.Stderr, msg)
 	fd := int(os.Stdin.Fd())
 	if !stdinIsTerminal(fd) {
 		return promptLine(in, ""), nil
@@ -33,7 +33,7 @@ func readSecret(in *bufio.Reader, msg string) (string, error) {
 	if restoreErr := unix.IoctlSetTermios(fd, unix.TCSETS, old); restoreErr != nil {
 		slog.Warn("restore terminal echo", "err", restoreErr)
 	}
-	fmt.Fprintln(os.Stderr)
+	_, _ = fmt.Fprintln(os.Stderr)
 	return strings.TrimSpace(line), err
 }
 

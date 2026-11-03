@@ -26,16 +26,16 @@ func withDelegation(baseCtx string, roster contracts.RosterProvider) string {
 	}
 	var b strings.Builder
 	if baseCtx != "" {
-		b.WriteString(baseCtx)
-		b.WriteString("\n\n")
+		_, _ = b.WriteString(baseCtx)
+		_, _ = b.WriteString("\n\n")
 	}
-	b.WriteString("<delegation>\n")
-	b.WriteString(delegationIntro)
-	b.WriteString("\nAvailable agents:\n")
+	_, _ = b.WriteString("<delegation>\n")
+	_, _ = b.WriteString(delegationIntro)
+	_, _ = b.WriteString("\nAvailable agents:\n")
 	for _, a := range agents {
-		b.WriteString(delegationLine(a))
+		_, _ = b.WriteString(delegationLine(a))
 	}
-	b.WriteString("</delegation>")
+	_, _ = b.WriteString("</delegation>")
 	return b.String()
 }
 

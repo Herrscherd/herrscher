@@ -36,27 +36,30 @@ var (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	if os.Getenv("HERRSCHER_GIT_ASKPASS") == "1" {
-		answerGitAskpass(os.Args)
-		return
+		return answerGitAskpass(os.Args)
 	}
 
 	if len(os.Args) == 2 && (os.Args[1] == "version" || os.Args[1] == "--version") {
 		out := errwriter.New(os.Stdout)
 		out.Println(herrscherVersion())
-		exitOnWriteError(out)
-		return
+		return writeFailureCode(out)
 	}
 
-	loadHostEnv()
+	if err := loadHostEnv(); err != nil {
+		return reportError(err)
+	}
 	host.CaptureGatewayCreds()
 	hideGatewayKeys()
 
 	ctx := context.Background()
 
 	if len(os.Args) < minArgsWithCommand {
-		runWithoutCommand(ctx)
-		return
+		return reportError(runWithoutCommand(ctx))
 	}
 
 	cmd := os.Args[1]
@@ -64,38 +67,33 @@ func main() {
 
 	if t, ok := promptOf(cmd, args); ok {
 		if t.Text == "" {
-			fmt.Fprintf(os.Stderr, "herrscher: %s needs a task, e.g. herrscher %s refactor\n", cmd, cmd)
-			os.Exit(exitUsage)
+			_, _ = fmt.Fprintf(os.Stderr, "herrscher: %s needs a task, e.g. herrscher %s refactor\n", cmd, cmd)
+			return exitUsage
 		}
-		if err := runPrompt(ctx, t); err != nil {
-			exitWithError(err)
-		}
-		return
+		return reportError(runPrompt(ctx, t))
 	}
 
 	if code, ok := runManageCmd(cmd, args); ok {
-		os.Exit(code)
+		return code
 	}
 
 	switch cmd {
 	case "-h", "--help", "help":
 		usage()
-		return
+		return 0
 	}
 
-	if err := runCommand(ctx, cmd, args); err != nil {
-		exitWithError(err)
-	}
+	return reportError(runCommand(ctx, cmd, args))
 }
 
-func answerGitAskpass(args []string) {
+func answerGitAskpass(args []string) int {
 	prompt := ""
 	if len(args) > 1 {
 		prompt = args[1]
 	}
 	out := errwriter.New(os.Stdout)
 	writeGitCredential(prompt, out)
-	exitOnWriteError(out)
+	return writeFailureCode(out)
 }
 
 func writeGitCredential(prompt string, out *errwriter.Writer) {
@@ -110,7 +108,7 @@ func writeGitCredential(prompt string, out *errwriter.Writer) {
 	out.Println(os.Getenv("GH_TOKEN"))
 }
 
-func loadHostEnv() {
+func loadHostEnv() error {
 	envPath, explicit := os.Getenv("HERRSCHER_ENV_FILE"), true
 	if envPath == "" {
 		envPath, explicit = ".env", false
@@ -119,25 +117,23 @@ func loadHostEnv() {
 		envPath = abs
 	}
 	if err := os.Setenv("HERRSCHER_ENV_FILE", envPath); err != nil {
-		exitWithError(err)
+		return err
 	}
 	if err := loadEnvFile(envPath); err != nil {
 		if explicit {
-			exitWithError(err)
+			return err
 		}
-		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error()+" (continuing)")
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher: "+err.Error()+" (continuing)")
 	}
+	return nil
 }
 
-func runWithoutCommand(ctx context.Context) {
+func runWithoutCommand(ctx context.Context) error {
 	if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
-		if err := runServe(ctx, nil, nil); err != nil {
-			exitWithError(err)
-		}
-		return
+		return runServe(ctx, nil, nil)
 	}
 	usage()
-	os.Exit(exitUsage)
+	return exitStatus{code: exitUsage}
 }
 
 func runManageCmd(cmd string, args []string) (int, bool) {
@@ -195,9 +191,9 @@ func runCommand(ctx context.Context, cmd string, args []string) error {
 func runForwarded(ctx context.Context, cmd string, args []string) error {
 	out, code, derr := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
 	if code != 0 {
-		fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
+		_, _ = fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
 		usage()
-		os.Exit(code)
+		return exitStatus{code: code}
 	}
 	if derr != nil {
 		return derr
@@ -209,9 +205,24 @@ func runForwarded(ctx context.Context, cmd string, args []string) error {
 	return err
 }
 
-func exitWithError(err error) {
-	fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
-	os.Exit(1)
+type exitStatus struct {
+	code int
+}
+
+func (s exitStatus) Error() string {
+	return fmt.Sprintf("exit status %d", s.code)
+}
+
+func reportError(err error) int {
+	if err == nil {
+		return 0
+	}
+	var status exitStatus
+	if errors.As(err, &status) {
+		return status.code
+	}
+	_, _ = fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
+	return 1
 }
 
 func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (string, int, error) {
@@ -255,8 +266,9 @@ func runWhoami(ctx context.Context, args []string) error {
 	return err
 }
 
-func exitOnWriteError(w *errwriter.Writer) {
+func writeFailureCode(w *errwriter.Writer) int {
 	if w.Err() != nil {
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

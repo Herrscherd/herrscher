@@ -120,7 +120,7 @@ func TestResolveAttachmentsRejectsHostedFileURL(t *testing.T) {
 }
 
 func TestResolveAttachmentsMixed(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeOrLog(w, []byte("CDNPNG"))
 	}))
 	defer srv.Close()
@@ -147,7 +147,7 @@ func TestResolveAttachmentsMixed(t *testing.T) {
 }
 
 func TestResolveAttachmentsOffAllowlistCDNSkipped(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeOrLog(w, []byte("PNG"))
 	}))
 	defer srv.Close()

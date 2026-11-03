@@ -82,7 +82,7 @@ func (d *fakeDaemon) handleCommand(c net.Conn) {
 	default:
 	}
 	out, rerr := d.reply(req.Argv)
-	resp := map[string]string{}
+	resp := make(map[string]string)
 	if rerr != nil {
 		resp["err"] = rerr.Error()
 	} else {

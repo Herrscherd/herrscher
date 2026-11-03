@@ -16,7 +16,7 @@ func TestRedirectStderrCapturesDirectWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("redirectStderr: %v", err)
 	}
-	fmt.Fprint(os.Stderr, "discord gateway: command sync: discord 401: Unauthorized\n")
+	_, _ = fmt.Fprint(os.Stderr, "discord gateway: command sync: discord 401: Unauthorized\n")
 	if err = restore(); err != nil {
 		t.Fatalf("restore stderr: %v", err)
 	}

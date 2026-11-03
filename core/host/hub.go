@@ -79,7 +79,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 	if running {
 		return
 	}
-	acc, err := control.Accept(ctx, control.SocketPath(sess.Name))
+	acc, err := control.Accept(context.WithoutCancel(ctx), control.SocketPath(sess.Name))
 	if err != nil {
 		warnStderr("herrscher serve: session %q: control socket: %v\n", sess.Name, err)
 		return
@@ -92,6 +92,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 	h.mu.Unlock()
 	go func() {
 		defer close(done)
+		defer func() { logCleanup(acc.Close()) }()
 		runSessionIdentified(sctx, h.sessions, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
 			sessionSink{
 				Resume: func(tok string) {

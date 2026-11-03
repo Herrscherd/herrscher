@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -45,43 +44,21 @@ func (m *restoreVerbMem) Unlink(_ context.Context, from, to string) error {
 }
 func (m *restoreVerbMem) Close() error { return nil }
 
-const (
-	restoreFixtureKey = "fixture"
-	restoreFixtureEnv = "HERRSCHER_TEST_RESTORE_FIXTURE"
-)
-
-var restoreFixtures sync.Map
-
 func useRestoreMem(t *testing.T, m *restoreVerbMem) *restoreVerbMem {
 	t.Helper()
-	registerRestoreVerbPlugin()
-	restoreFixtures.Store(t.Name(), m)
-	t.Setenv(restoreFixtureEnv, t.Name())
-	t.Cleanup(func() { restoreFixtures.Delete(t.Name()) })
-	return m
-}
-
-func registerRestoreVerbPlugin() {
-	for _, p := range contracts.Default.Plugins() {
-		if p.Manifest.Kind == "fake-restore-verb" {
-			return
-		}
-	}
-	contracts.Register(contracts.Plugin{
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	contracts.Default.Register(contracts.Plugin{
 		Manifest: contracts.Manifest{
 			Kind:     "fake-restore-verb",
 			Category: contracts.CategoryMemory,
-			Config:   []contracts.Setting{{Key: restoreFixtureKey, Env: restoreFixtureEnv}},
 		},
-		Memory: func(_ context.Context, cfg contracts.PluginConfig) (contracts.Memory, error) {
-			if m, ok := restoreFixtures.Load(cfg.Settings[restoreFixtureKey]); ok {
-				if mem, isMem := m.(*restoreVerbMem); isMem {
-					return mem, nil
-				}
-			}
-			return &restoreVerbMem{nodes: map[string]contracts.Node{}}, nil
+		Memory: func(context.Context, contracts.PluginConfig) (contracts.Memory, error) {
+			return m, nil
 		},
 	})
+	return m
 }
 
 func TestMemoryRestoreVerbReactivatesArchivedNode(t *testing.T) {

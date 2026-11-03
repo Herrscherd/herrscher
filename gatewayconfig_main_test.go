@@ -110,7 +110,7 @@ func TestTheLaunchPathStillReadsWhatTheCaptureTookFromIt(t *testing.T) {
 
 	t.Cleanup(host.CaptureGatewayConfig(contracts.Default.Gateways()))
 
-	if got := scope.LaunchFromEnv().Project; got != "named-by-the-operator" {
+	if got := scope.LaunchFromEnv(context.Background()).Project; got != "named-by-the-operator" {
 		t.Fatalf(`herrscher "<task>" lost the project the operator named: got %q`, got)
 	}
 }

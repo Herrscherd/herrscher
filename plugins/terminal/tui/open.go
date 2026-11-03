@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os/exec"
@@ -8,7 +10,16 @@ import (
 	"strings"
 )
 
-type launcher func(target string) error
+var (
+	errRefusedTarget    = errors.New("refusing a")
+	errOptionTarget     = errors.New("refusing a target that reads as an option")
+	errControlByte      = errors.New("refusing a target carrying a control byte")
+	errNoEditor         = errors.New("no $EDITOR set to open")
+	errNoEditorLauncher = errors.New("no editor launcher configured")
+	errNoSystemLauncher = errors.New("no system launcher configured")
+)
+
+type launcher func(ctx context.Context, target string) error
 
 func systemLauncher() launcher {
 	var name string
@@ -21,36 +32,36 @@ func systemLauncher() launcher {
 	default:
 		name = "xdg-open"
 	}
-	return func(target string) error {
+	return func(ctx context.Context, target string) error {
 		if err := checkTarget(target); err != nil {
 			return err
 		}
 		if err := checkURLTarget(target); err != nil {
 			return err
 		}
-		return start(exec.Command(name, append(args, target)...), name)
+		return start(exec.CommandContext(ctx, name, append(args, target)...), name)
 	}
 }
 
 func checkURLTarget(target string) error {
-	u, err := url.Parse(target)
+	parsed, err := url.Parse(target)
 	if err != nil {
 		return fmt.Errorf("refusing an unparsable target: %w", err)
 	}
-	switch strings.ToLower(u.Scheme) {
+	switch strings.ToLower(parsed.Scheme) {
 	case "http", "https", "mailto":
 		return nil
 	default:
-		return fmt.Errorf("refusing a %q target: %s", u.Scheme, target)
+		return fmt.Errorf("%w %q target: %s", errRefusedTarget, parsed.Scheme, target)
 	}
 }
 
 func checkTarget(target string) error {
 	if strings.HasPrefix(target, "-") {
-		return fmt.Errorf("refusing a target that reads as an option: %s", target)
+		return fmt.Errorf("%w: %s", errOptionTarget, target)
 	}
 	if hasControl(target) {
-		return fmt.Errorf("refusing a target carrying a control byte")
+		return errControlByte
 	}
 	return nil
 }
@@ -59,18 +70,18 @@ func start(cmd *exec.Cmd, name string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
-	go cmd.Wait()
+	go reap(cmd)
 	return nil
 }
 
 func editorLauncher(env func(string) string) launcher {
-	return func(target string) error {
+	return func(ctx context.Context, target string) error {
 		if err := checkTarget(target); err != nil {
 			return err
 		}
 		editor := strings.TrimSpace(env("EDITOR"))
 		if editor == "" {
-			return fmt.Errorf("no $EDITOR set to open %s", target)
+			return fmt.Errorf("%w %s", errNoEditor, target)
 		}
 		file, line := splitFileRef(target)
 		fields := strings.Fields(editor)
@@ -79,33 +90,33 @@ func editorLauncher(env func(string) string) launcher {
 			args = append(args, "+"+line)
 		}
 		args = append(args, file)
-		return start(exec.Command(fields[0], args...), fields[0])
+		return start(exec.CommandContext(ctx, fields[0], args...), fields[0])
 	}
 }
 
 func splitFileRef(target string) (file, line string) {
-	i := strings.LastIndex(target, ":")
-	if i < 0 {
+	index := strings.LastIndex(target, ":")
+	if index < 0 {
 		return target, ""
 	}
-	rest := target[i+1:]
+	rest := target[index+1:]
 	if rest == "" || strings.TrimLeft(rest, "0123456789") != "" {
 		return target, ""
 	}
-	return target[:i], rest
+	return target[:index], rest
 }
 
-func openLink(l Link, sys, edit launcher) error {
-	if l.Kind == LinkFile {
+func openLink(ctx context.Context, link Link, sys, edit launcher) error {
+	if link.Kind == LinkFile {
 		if edit == nil {
-			return fmt.Errorf("no editor launcher configured")
+			return errNoEditorLauncher
 		}
-		return edit(l.Target)
+		return edit(ctx, link.Target)
 	}
 	if sys == nil {
-		return fmt.Errorf("no system launcher configured")
+		return errNoSystemLauncher
 	}
-	return sys(l.Target)
+	return sys(ctx, link.Target)
 }
 
 func (m *model) selectNextLink() {
@@ -129,26 +140,26 @@ func (m *model) selectedLink() (Link, bool) {
 }
 
 func (m *model) openSelectedLink() {
-	l, ok := m.selectedLink()
+	launch, ok := m.selectedLink()
 	if !ok {
 		m.flash = "aucun lien sélectionné · ctrl+l en choisit un"
 		return
 	}
-	if err := openLink(l, m.sys, m.edit); err != nil {
+	if err := openLink(m.runContext(), launch, m.sys, m.edit); err != nil {
 		m.flash = "ouverture impossible : " + err.Error()
 		return
 	}
-	m.flash = "ouverture de " + l.Target
+	m.flash = "ouverture de " + launch.Target
 }
 
 func (m *model) linkStatus() string {
-	l, ok := m.selectedLink()
+	launch, ok := m.selectedLink()
 	if !ok {
 		return ""
 	}
 	verb := "↵ open"
-	if l.Kind == LinkFile {
+	if launch.Kind == LinkFile {
 		verb = "↵ edit"
 	}
-	return dimStyle.Render(verb + " " + l.Target)
+	return m.st.dim.Render(verb + " " + launch.Target)
 }

@@ -53,15 +53,15 @@ func TestMarkdownRewrapsOnWidth(t *testing.T) {
 func TestDiffBlockColoursItsLineClasses(t *testing.T) {
 	in := "before:\n```diff\n@@ -1,2 +1,2 @@\n-old line\n+new line\n context\n```\nafter."
 	out := renderEntry(entry{role: roleAgent, text: in}, 60, view{})
-	add := greenStyle.Render("+new line")
-	del := redStyle.Render("-old line")
+	add := newStyles().green.Render("+new line")
+	del := newStyles().red.Render("-old line")
 	if !strings.Contains(out, add) {
 		t.Errorf("an added line must render green: %q", out)
 	}
 	if !strings.Contains(out, del) {
 		t.Errorf("a removed line must render red: %q", out)
 	}
-	if !strings.Contains(out, dimStyle.Render("@@ -1,2 +1,2 @@")) {
+	if !strings.Contains(out, newStyles().dim.Render("@@ -1,2 +1,2 @@")) {
 		t.Errorf("a hunk header must render dim: %q", out)
 	}
 	for _, want := range []string{"before", "after"} {

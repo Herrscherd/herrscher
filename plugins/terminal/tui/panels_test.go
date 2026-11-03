@@ -25,7 +25,7 @@ func TestTodoPanelCountsAndMarks(t *testing.T) {
 		{Text: "brancher le panneau", State: "active"},
 		{Text: "relire le diff", State: "pending"},
 	}
-	got := strip(todoPanel(items, 74))
+	got := strip(todoPanel(items, 74, newStyles()))
 	want := []string{
 		"  ✓ todos 2/4",
 		"  ✓ lire capabilities.go",
@@ -49,7 +49,7 @@ func TestTodoPanelWindowsALongList(t *testing.T) {
 		items[i] = contracts.TodoItem{Text: "tache", State: "pending"}
 	}
 	items[9].State = "active"
-	got := strip(todoPanel(items, 74))
+	got := strip(todoPanel(items, 74, newStyles()))
 	if len(got) != todoPanelMax+2 {
 		t.Fatalf("windowed panel drew %d lines: %q", len(got), got)
 	}
@@ -59,7 +59,7 @@ func TestTodoPanelWindowsALongList(t *testing.T) {
 }
 
 func TestTodoPanelIsEmptyWithoutItems(t *testing.T) {
-	if got := todoPanel(nil, 74); got != nil {
+	if got := todoPanel(nil, 74, newStyles()); got != nil {
 		t.Fatalf("empty list drew %q", got)
 	}
 }
@@ -70,7 +70,7 @@ func TestSubagentPanelDrawsOneLinePerAgent(t *testing.T) {
 		{Subagent: contracts.Subagent{ID: "t1", Name: "explorer le hub", Kind: "Explore"}, since: now.Add(-18 * time.Second)},
 		{Subagent: contracts.Subagent{ID: "t2", Name: "relire"}, since: now.Add(-3 * time.Second)},
 	}
-	got := strip(subagentPanel(agents, now, 74))
+	got := strip(subagentPanel(agents, now, 74, newStyles()))
 	if len(got) != 2 {
 		t.Fatalf("panel drew %d lines: %q", len(got), got)
 	}
@@ -84,7 +84,7 @@ func TestSubagentPanelDrawsOneLinePerAgent(t *testing.T) {
 
 func TestPanelsFallBackToTheirHeaderWhenNarrow(t *testing.T) {
 	items := []contracts.TodoItem{{Text: "a", State: "active"}, {Text: "b", State: "pending"}}
-	if got := strip(todoPanel(items, 40)); len(got) != 1 || got[0] != "  ✓ todos 0/2" {
+	if got := strip(todoPanel(items, 40, newStyles())); len(got) != 1 || got[0] != "  ✓ todos 0/2" {
 		t.Fatalf("narrow panel = %q", got)
 	}
 }
@@ -102,18 +102,18 @@ func TestTheFrameCarriesThePanels(t *testing.T) {
 }
 
 func TestPanelRowsStayOnOneLine(t *testing.T) {
-	got := strip(todoPanel([]contracts.TodoItem{{Text: "premiere\nseconde", State: "active"}}, 74))
+	got := strip(todoPanel([]contracts.TodoItem{{Text: "premiere\nseconde", State: "active"}}, 74, newStyles()))
 	if len(got) != 2 {
 		t.Fatalf("un todo multiligne doit rester une ligne: %q", got)
 	}
 	if got[1] != "  ◆ premiere seconde" {
 		t.Fatalf("ligne = %q", got[1])
 	}
-	if got := strip(todoPanel([]contracts.TodoItem{{Text: "\x1b[2Jefface", State: "pending"}}, 74)); got[1] != "  · efface" {
+	if got := strip(todoPanel([]contracts.TodoItem{{Text: "\x1b[2Jefface", State: "pending"}}, 74, newStyles())); got[1] != "  · efface" {
 		t.Fatalf("une sequence de controle doit etre retiree: %q", got)
 	}
 	agents := []liveAgent{{Subagent: contracts.Subagent{ID: "t1", Name: "a\nb"}, since: time.Now()}}
-	if lines := strip(subagentPanel(agents, time.Now(), 74)); len(lines) != 1 {
+	if lines := strip(subagentPanel(agents, time.Now(), 74, newStyles())); len(lines) != 1 {
 		t.Fatalf("un agent multiligne doit rester une ligne: %q", lines)
 	}
 }
@@ -134,7 +134,7 @@ func TestSubagentPanelCapsWhatItDraws(t *testing.T) {
 	for i := range agents {
 		agents[i] = liveAgent{Subagent: contracts.Subagent{ID: "t", Name: "chercher"}, since: now}
 	}
-	got := strip(subagentPanel(agents, now, 74))
+	got := strip(subagentPanel(agents, now, 74, newStyles()))
 	if len(got) != subagentPanelMax+1 {
 		t.Fatalf("panel drew %d lines: %q", len(got), got)
 	}
@@ -149,10 +149,10 @@ func TestSubagentPanelFallsBackToACountWhenNarrow(t *testing.T) {
 		{Subagent: contracts.Subagent{ID: "t1", Name: "un"}, since: now},
 		{Subagent: contracts.Subagent{ID: "t2", Name: "deux"}, since: now},
 	}
-	if got := strip(subagentPanel(agents, now, 40)); len(got) != 1 || got[0] != "  ◆ 2 sous-agents" {
+	if got := strip(subagentPanel(agents, now, 40, newStyles())); len(got) != 1 || got[0] != "  ◆ 2 sous-agents" {
 		t.Fatalf("narrow panel = %q", got)
 	}
-	if got := strip(subagentPanel(agents[:1], now, 40)); got[0] != "  ◆ 1 sous-agent" {
+	if got := strip(subagentPanel(agents[:1], now, 40, newStyles())); got[0] != "  ◆ 1 sous-agent" {
 		t.Fatalf("un seul agent ne prend pas le pluriel: %q", got)
 	}
 }
@@ -174,7 +174,7 @@ func TestElapsedCountsInMinutesPastSixty(t *testing.T) {
 }
 
 func TestPanelRowsDropBareControlRunes(t *testing.T) {
-	got := strip(todoPanel([]contracts.TodoItem{{Text: "sonne\x07\x08 la\vcloche", State: "pending"}}, 74))
+	got := strip(todoPanel([]contracts.TodoItem{{Text: "sonne\x07\x08 la\vcloche", State: "pending"}}, 74, newStyles()))
 	if got[1] != "  · sonne la cloche" {
 		t.Fatalf("ligne = %q", got[1])
 	}

@@ -6,28 +6,28 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func (m *model) renderTranscript(tb *tab, width int) string {
+func (m *model) renderTranscript(tab *tab, width int) string {
 	if width < 1 {
 		width = 1
 	}
-	var b strings.Builder
-	for i := range tb.entries {
-		e := tb.entries[i]
-		if i > 0 {
-			b.WriteByte('\n')
-			if e.role == roleYou || e.role == roleAgent {
-				b.WriteByte('\n')
+	var builder strings.Builder
+	for index := range tab.entries {
+		item := tab.entries[index]
+		if index > 0 {
+			builder.WriteByte('\n')
+			if item.role == roleYou || item.role == roleAgent {
+				builder.WriteByte('\n')
 			}
 		}
-		if m.foldCode && e.role == roleAgent && !e.streaming {
-			e.text = foldCodeBlocks(e.text)
+		if m.foldCode && item.role == roleAgent && !item.streaming {
+			item.text = foldCodeBlocks(item.text)
 		}
-		b.WriteString(renderEntry(e, width, m.displayMode()))
+		builder.WriteString(renderEntry(item, width, m.displayMode()))
 	}
-	lines := strings.Split(b.String(), "\n")
+	lines := strings.Split(builder.String(), "\n")
 	m.links = findLinks(lines)
 	m.clampLink()
-	return strings.Join(applyLinks(lines, m.links, m.caps, m.linkIdx), "\n")
+	return strings.Join(applyLinks(lines, m.links, m.caps, m.linkIdx, m.st), "\n")
 }
 
 func (m *model) clampLink() {
@@ -41,43 +41,45 @@ func (m *model) clampLink() {
 
 type view struct {
 	caps Capabilities
+	st   uiStyles
+	md   *markdownRenderer
 
 	expand bool
 }
 
 func (m *model) displayMode() view {
-	return view{caps: m.caps, expand: m.expandTools}
+	return view{caps: m.caps, st: m.st, md: m.md, expand: m.expandTools}
 }
 
-func renderEntry(e entry, width int, v view) string {
+func renderEntry(item entry, width int, view view) string {
 	body := width - lipgloss.Width(blockIndent)
-	switch e.role {
+	switch item.role {
 	case roleYou:
-		return renderYou(e, width)
+		return renderYou(item, width, view.st)
 	case roleAgent:
-		if e.streaming {
-			return titledRule(accentStyle, agentTitle, width) + "\n" +
-				indent(wrapWith(textStyle, e.text, body))
+		if item.streaming {
+			return titledRule(view.st.accent, agentTitle, width) + "\n" +
+				indent(wrapWith(view.st.text, item.text, body))
 		}
-		out := openBlock(accentStyle, agentTitle, renderMarkdown(e.text, body, v), width)
-		if e.preview != "" {
-			out += "\n" + e.preview
+		out := openBlock(view.st.accent, agentTitle, renderMarkdown(item.text, body, view), width)
+		if item.preview != "" {
+			out += "\n" + item.preview
 		}
 		return out
 	case roleThinking:
-		return indent(wrapWith(thinkingStyle, thinkingLine(e.text), body))
+		return indent(wrapWith(view.st.thinking, thinkingLine(item.text), body))
 	case roleTool:
-		return indent(renderTool(e.text, body, v))
+		return indent(renderTool(item.text, body, view))
 	case roleNotice:
-		return indent(wrapWith(dimStyle, glyphNotice+" "+e.text, body))
+		return indent(wrapWith(view.st.dim, glyphNotice+" "+item.text, body))
 	case roleError:
-		return block(redStyle, glyphError+" error", wrapWith(redStyle, e.text, body), width)
+		return block(view.st.red, glyphError+" error", wrapWith(view.st.red, item.text, body), width)
 	case roleCost:
-		return indent(dimStyle.Render(e.text))
+		return indent(view.st.dim.Render(item.text))
 	case roleScrollback:
-		return titledRule(scrollbackStyle, e.text, width)
+		return titledRule(view.st.scrollback, item.text, width)
 	default:
-		return indent(wrapWith(dimStyle, e.text, body))
+		return indent(wrapWith(view.st.dim, item.text, body))
 	}
 }
 
@@ -93,21 +95,21 @@ func openBlock(style lipgloss.Style, title, body string, width int) string {
 	return titledRule(style, title, width) + "\n" + indent(body)
 }
 
-func renderYou(e entry, width int) string {
+func renderYou(item entry, width int, styles uiStyles) string {
 	body := width - lipgloss.Width(blockIndent)
-	out := indent(wrapWith(userStyle, glyphCursor+" "+e.text, body))
-	if chips := chipRow(e.attachments); chips != "" {
+	out := indent(wrapWith(styles.user, glyphCursor+" "+item.text, body))
+	if chips := chipRow(item.attachments, styles); chips != "" {
 		out += "\n" + indent(chips)
 	}
-	if e.preview != "" {
-		out += "\n" + e.preview
+	if item.preview != "" {
+		out += "\n" + item.preview
 	}
 	return out
 }
 
-func wrapWith(style lipgloss.Style, s string, width int) string {
+func wrapWith(style lipgloss.Style, text string, width int) string {
 	if width < 1 {
 		width = 1
 	}
-	return style.Width(width).Render(s)
+	return style.Width(width).Render(text)
 }

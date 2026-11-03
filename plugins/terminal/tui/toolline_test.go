@@ -52,7 +52,7 @@ func TestToolVerbSplitsKnownTools(t *testing.T) {
 
 func TestTypedToolRendersItsFamilyGlyph(t *testing.T) {
 	out := renderEntry(entry{role: roleTool, text: "Read core/parse.go"}, 60, view{})
-	if !strings.Contains(out, familyGlyphs[familyRead]) {
+	if !strings.Contains(out, familyGlyphs()[familyRead]) {
 		t.Fatalf("a read must carry the read glyph: %q", out)
 	}
 	if !strings.Contains(out, "core/parse.go") {

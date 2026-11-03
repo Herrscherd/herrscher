@@ -35,7 +35,7 @@ func typeInto(t *testing.T, m *model, msgs ...tea.Msg) *model {
 	t.Helper()
 	for _, msg := range msgs {
 		next, _ := m.Update(msg)
-		m = next.(*model)
+		m = asModel(t, next)
 		_ = m.View()
 	}
 	return m
@@ -78,7 +78,7 @@ func TestComposerKeepsEveryLineWhenTheDraftWraps(t *testing.T) {
 
 func TestComposerStopsGrowingAtItsCap(t *testing.T) {
 	m := typeInto(t, newModel(nil), tea.WindowSizeMsg{Width: 100, Height: 40})
-	for i := 0; i < maxComposerLines+4; i++ {
+	for range maxComposerLines + 4 {
 		m = typeInto(t, m, runeKey('x'), tea.KeyMsg{Type: tea.KeyEnter, Alt: true})
 	}
 	if h := m.composerHeight(); h != maxComposerLines {

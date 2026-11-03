@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func conversation(m *model) *tab {
+func conversation(m *model) {
 	tb := m.ensureTab("a")
 	m.active = "a"
 	tb.appendEntry(entry{role: roleYou, text: "first question"})
@@ -17,7 +17,6 @@ func conversation(m *model) *tab {
 	tb.appendEntry(entry{role: roleThinking, text: "hmm"})
 	tb.appendEntry(entry{role: roleAgent, text: "second answer"})
 	tb.appendEntry(entry{role: roleCost, text: "$0.01"})
-	return tb
 }
 
 func TestCopyTakesTheLastAnswerByDefault(t *testing.T) {
@@ -88,7 +87,7 @@ func TestCopyRefusesAnUnknownTarget(t *testing.T) {
 	if clip.wrote != "" {
 		t.Fatalf("an unknown target must write nothing, got %q", clip.wrote)
 	}
-	for _, target := range copyTargets {
+	for _, target := range copyTargets() {
 		if !strings.Contains(m.flash, target) {
 			t.Fatalf("the refusal must name %q: %q", target, m.flash)
 		}

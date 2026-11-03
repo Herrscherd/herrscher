@@ -16,23 +16,27 @@ const (
 	glyphBolt      = "⚡"
 )
 
-var familyGlyphs = map[string]string{
-	familyRead:   "◇",
-	familyWrite:  "◈",
-	familyRun:    "▸",
-	familySearch: "⌕",
-	familyWeb:    "⌖",
-	familyAgent:  "◆",
+func familyGlyphs() map[string]string {
+	return map[string]string{
+		familyRead:   "◇",
+		familyWrite:  "◈",
+		familyRun:    "▸",
+		familySearch: "⌕",
+		familyWeb:    "⌖",
+		familyAgent:  "◆",
+	}
 }
 
 func familyGlyph(family string) string {
-	if g, ok := familyGlyphs[family]; ok {
+	if g, ok := familyGlyphs()[family]; ok {
 		return g
 	}
 	return glyphTool
 }
 
-var spinFrames = []string{"✳", "✵", "✶", "✷", "✸", "✹"}
+func spinFrames() []string {
+	return []string{"✳", "✵", "✶", "✷", "✸", "✹"}
+}
 
 const (
 	colText   = "#c6d0e0"
@@ -45,24 +49,43 @@ const (
 	colSelBg  = "#16202e"
 )
 
-var (
-	textStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(colText))
-	dimStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(colDim))
-	accentStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent))
-	userStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(colDim))
-	greenStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(colGreen))
-	redStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(colRed))
-	warnStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(colWarn))
-	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent))
+type uiStyles struct {
+	text       lipgloss.Style
+	dim        lipgloss.Style
+	accent     lipgloss.Style
+	user       lipgloss.Style
+	green      lipgloss.Style
+	red        lipgloss.Style
+	warn       lipgloss.Style
+	spinner    lipgloss.Style
+	tool       lipgloss.Style
+	thinking   lipgloss.Style
+	scrollback lipgloss.Style
+	link       lipgloss.Style
+	chip       lipgloss.Style
+	overlaySel lipgloss.Style
+	sep        string
+}
 
-	toolStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent))
-	thinkingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colViolet)).Italic(true)
-
-	scrollbackStyle = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color(colDim))
-
-	linkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent)).Underline(true)
-
-	chipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colText)).Background(lipgloss.Color(colSelBg)).Padding(0, 1)
-)
+func newStyles() uiStyles {
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(colDim))
+	return uiStyles{
+		text:       lipgloss.NewStyle().Foreground(lipgloss.Color(colText)),
+		dim:        dim,
+		accent:     lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent)),
+		user:       lipgloss.NewStyle().Foreground(lipgloss.Color(colDim)),
+		green:      lipgloss.NewStyle().Foreground(lipgloss.Color(colGreen)),
+		red:        lipgloss.NewStyle().Foreground(lipgloss.Color(colRed)),
+		warn:       lipgloss.NewStyle().Foreground(lipgloss.Color(colWarn)),
+		spinner:    lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent)),
+		tool:       lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent)),
+		thinking:   lipgloss.NewStyle().Foreground(lipgloss.Color(colViolet)).Italic(true),
+		scrollback: lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color(colDim)),
+		link:       lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent)).Underline(true),
+		chip:       lipgloss.NewStyle().Foreground(lipgloss.Color(colText)).Background(lipgloss.Color(colSelBg)).Padding(0, 1),
+		overlaySel: lipgloss.NewStyle().Background(lipgloss.Color(colSelBg)).Foreground(lipgloss.Color(colAccent)),
+		sep:        dim.Render(" │ "),
+	}
+}
 
 const workingVerb = "Herrschering…"

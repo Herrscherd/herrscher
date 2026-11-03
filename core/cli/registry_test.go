@@ -197,14 +197,16 @@ func TestDispatchReturnsHandlerOutput(t *testing.T) {
 func TestDispatchGlobalJSONFlag(t *testing.T) {
 	r := &cli.Registry{}
 	var gotJSON bool
-	_ = r.Add(contracts.Cmd{
+	if err := r.Add(contracts.Cmd{
 		Path:   []string{"session", "list"},
 		Params: nil,
-		Run: func(ctx context.Context, in contracts.Input) (string, error) {
+		Run: func(_ context.Context, in contracts.Input) (string, error) {
 			gotJSON = in.JSON
 			return "ok", nil
 		},
-	})
+	}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
 	if _, err := r.Dispatch(context.Background(), []string{"session", "list", "--json"}); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -260,7 +262,7 @@ func TestRunChecksRequiredParams(t *testing.T) {
 		contracts.New("session", "create").Param("name", "", true).
 			Do(func(context.Context, contracts.Input) (string, error) { return "", nil }),
 	)
-	if _, err := r.Run(context.Background(), []string{"session", "create"}, contracts.Input{Args: map[string]string{}}); err == nil {
+	if _, err := r.Run(context.Background(), []string{"session", "create"}, contracts.Input{Args: make(map[string]string)}); err == nil {
 		t.Fatal("Run must reject missing required param")
 	}
 }

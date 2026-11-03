@@ -49,7 +49,7 @@ func TestPickerViewsDrawTheSelectedRow(t *testing.T) {
 
 func TestSkillsViewDrawsTheSelectedRow(t *testing.T) {
 	m := newModel(&fakeBackend{})
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		m.skillsRows = append(m.skillsRows, skills.Skill{Name: fmt.Sprintf("skill-%02d", i)})
 	}
 	m.skillsIdx = 20

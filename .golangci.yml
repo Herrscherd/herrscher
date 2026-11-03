@@ -146,7 +146,7 @@ linters:
         - name: confusing-results
         - name: modifies-value-receiver
         - name: unhandled-error
-          arguments: ["fmt.Println", "fmt.Fprintln", "strings.Builder.Write", "strings.Builder.WriteByte", "strings.Builder.WriteRune", "strings.Builder.WriteString", "bytes.Buffer.Write", "bytes.Buffer.WriteByte", "bytes.Buffer.WriteString"]
+          arguments: ['fmt\.Println', 'fmt\.Fprint.*', 'strings\.Builder\..*', 'bytes\.Buffer\..*']
         - name: use-any
         - name: datarace
         - name: identical-branches
@@ -216,6 +216,38 @@ linters:
       - path: ^core/internal/redact/redact\.go$
         linters: [gochecknoglobals]
         text: "^rules is a global variable"
+      - path: ^plugins/terminal/register\.go$
+        linters: [gochecknoinits]
+      - path: ^plugins/terminal/tui/image_decode\.go$
+        linters: [revive]
+        text: "blank-imports"
+      - path: ^plugins/terminal/tui/(clipboard|open)\.go$
+        linters: [gosec]
+        text: "^G204:"
+      - path: ^plugins/terminal/tui/keylog\.go$
+        linters: [gosec]
+        text: "^G703:"
+      - path: ^plugins/terminal/tui/
+        linters: [misspell]
+        text: "`(commandes|marrage)` is a misspelling"
+      - path: ^plugins/terminal/tui/
+        linters: [exhaustive]
+        text: "missing cases in expression switch: tea\\.Key"
+      - path: ^(plugins/terminal/tui/|core/cli/registry\.go$)
+        linters: [gocritic]
+        text: "consider giving a name to these results"
+      - path: ^plugins/terminal/tui/image_sixel\.go$
+        linters: [nonamedreturns]
+        text: 'named return "(indices|palette)"'
+      - path: ^plugins/terminal/tui/palette\.go$
+        linters: [nonamedreturns]
+        text: 'named return "(from|to)"'
+      - path: ^plugins/terminal/tui/open\.go$
+        linters: [nonamedreturns]
+        text: 'named return "(file|line)"'
+      - path: ^plugins/terminal/(terminal|tui/tui)\.go$
+        linters: [containedctx]
+        text: "found a struct that contains a context.Context field"
 
 formatters:
   enable:

@@ -18,11 +18,13 @@ func (c *counter) get(context.Context, string) ([]byte, error) {
 	return c.data, c.err
 }
 
-var testHosts = []string{"cdn.example.com", "Media.Example.Org"}
+func testHosts() []string {
+	return []string{"cdn.example.com", "Media.Example.Org"}
+}
 
 func TestFetchImageAllowsAListedHost(t *testing.T) {
 	c := &counter{data: []byte("bytes")}
-	got, err := fetchImage(context.Background(), c.get, testHosts, "https://cdn.example.com/a.png")
+	got, err := fetchImage(context.Background(), c.get, testHosts(), "https://cdn.example.com/a.png")
 	if err != nil {
 		t.Fatalf("an allowed host must fetch: %v", err)
 	}
@@ -32,14 +34,14 @@ func TestFetchImageAllowsAListedHost(t *testing.T) {
 	if c.calls != 1 {
 		t.Fatalf("fetcher ran %d times, want exactly 1", c.calls)
 	}
-	if _, err := fetchImage(context.Background(), c.get, testHosts, "https://media.example.org/b.png"); err != nil {
+	if _, err := fetchImage(context.Background(), c.get, testHosts(), "https://media.example.org/b.png"); err != nil {
 		t.Fatalf("host matching must be case-insensitive: %v", err)
 	}
 }
 
 func TestFetchImageRefusesAnUnlistedHostAndNamesIt(t *testing.T) {
 	c := &counter{}
-	_, err := fetchImage(context.Background(), c.get, testHosts, "https://evil.example.net/a.png")
+	_, err := fetchImage(context.Background(), c.get, testHosts(), "https://evil.example.net/a.png")
 	if err == nil {
 		t.Fatal("an unlisted host must be refused")
 	}
@@ -53,7 +55,7 @@ func TestFetchImageRefusesAnUnlistedHostAndNamesIt(t *testing.T) {
 
 func TestFetchImageRefusesAnUnparseableURL(t *testing.T) {
 	c := &counter{}
-	if _, err := fetchImage(context.Background(), c.get, testHosts, "://not a url"); err == nil {
+	if _, err := fetchImage(context.Background(), c.get, testHosts(), "://not a url"); err == nil {
 		t.Fatal("an unparseable URL must error")
 	}
 	if c.calls != 0 {
@@ -64,7 +66,7 @@ func TestFetchImageRefusesAnUnparseableURL(t *testing.T) {
 func TestFetchImageErrorPropagates(t *testing.T) {
 	boom := errors.New("connection refused")
 	c := &counter{err: boom}
-	_, err := fetchImage(context.Background(), c.get, testHosts, "https://cdn.example.com/a.png")
+	_, err := fetchImage(context.Background(), c.get, testHosts(), "https://cdn.example.com/a.png")
 	if !errors.Is(err, boom) {
 		t.Fatalf("the fetcher's error must reach the caller: %v", err)
 	}

@@ -20,7 +20,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/Herrscherd/herrscher/internal/errwriter"
 
@@ -55,11 +54,11 @@ func run() int {
 		return reportError(err)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := notifyStop(context.Background())
 	defer stop()
 
 	if len(os.Args) < minArgsWithCommand {
-		return reportError(runWithoutCommand(ctx))
+		return reportOutcome(ctx, runWithoutCommand(ctx))
 	}
 
 	cmd := os.Args[1]
@@ -70,7 +69,7 @@ func run() int {
 			fmt.Fprintf(os.Stderr, "herrscher: %s needs a task, e.g. herrscher %s refactor\n", cmd, cmd)
 			return exitUsage
 		}
-		return reportError(runPrompt(ctx, task))
+		return reportOutcome(ctx, runPrompt(ctx, task))
 	}
 
 	if code, ok := runManageCmd(cmd, args); ok {
@@ -83,7 +82,7 @@ func run() int {
 		return 0
 	}
 
-	return reportError(runCommand(ctx, cmd, args))
+	return outcomeReporterFor(cmd)(ctx, runCommand(ctx, cmd, args))
 }
 
 func answerGitAskpass(args []string) int {

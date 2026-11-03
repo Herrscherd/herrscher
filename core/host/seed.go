@@ -86,52 +86,25 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	if orch != nil {
 		defer closeRead(orch)
 	}
-
-	turnTimeout := runtime.timeout
-	if turnTimeout <= 0 {
-		turnTimeout = seedTurnTimeout
-	}
-	seedCtx, cancel := context.WithTimeout(ctx, turnTimeout)
+	seedCtx, cancel := context.WithTimeout(ctx, oneShotTurnTimeout(runtime))
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
 	d := newSessionDriver(sess.Name, nil, toBridge, fromBridge)
 	d.incarnation = sess.Incarnation
 	d.agent = sess.Agent
-	if runtime.record != nil {
-		name := sess.Name
-		d.sink.Transcript = func(entry state.TranscriptEntry) { runtime.record(name, entry) }
-	}
-	if runtime.publish != nil {
-		name := sess.Name
-		d.emitTap = func(e contracts.Event) { runtime.publish(name, e) }
-	}
+	attachOneShotTaps(d, sess.Name, runtime)
 	pumpCtx, pumpCancel := context.WithCancel(seedCtx)
 	defer pumpCancel()
 	pumpDone := make(chan struct{})
 	go func() { defer close(pumpDone); d.pump(pumpCtx) }()
 
 	bridgeErr := make(chan error, 1)
-	go func() {
-		err := bridge.RunOneShot(seedCtx, func(channel string) (contracts.Backend, error) {
-			return runtime.backendFactory()(seedCtx, sess)
-		}, orch, sess.ChannelID, toBridge, fromBridge)
-		bridgeErr <- err
-		if err != nil {
-			cancel()
-		}
-	}()
+	go runOneShotBridge(seedCtx, cancel, sess, orch, runtime, toBridge, fromBridge, bridgeErr)
 
 	reply, ok := d.SeedAndWaitWithTurnID(seedCtx, task, turnID)
 	if !ok {
-		select {
-		case err := <-bridgeErr:
-			if err != nil {
-				return "", err
-			}
-		default:
-		}
-		return "", errSeedTimeout
+		return "", oneShotTimeoutError(bridgeErr)
 	}
 	if err := <-bridgeErr; err != nil {
 		return "", err
@@ -146,16 +119,58 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 		}
 		d.activeTurnID = ""
 	}
-	if orch != nil && sess.ConsolidateEvery <= 0 {
-		consCtx, consCancel := context.WithTimeout(ctx, seedConsolidateTimeout)
-		started := time.Now()
-		err := orch.Consolidate(consCtx)
-		consCancel()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "herrscher: session %q: consolidate after %s: %v\n", sess.Name, time.Since(started).Round(time.Millisecond), err)
-		}
-	}
+	consolidateOneShot(ctx, orch, sess)
 	return reply, nil
+}
+
+func oneShotTurnTimeout(runtime oneShotSeedRuntime) time.Duration {
+	if runtime.timeout <= 0 {
+		return seedTurnTimeout
+	}
+	return runtime.timeout
+}
+
+func attachOneShotTaps(d *sessionDriver, name string, runtime oneShotSeedRuntime) {
+	if runtime.record != nil {
+		d.sink.Transcript = func(entry state.TranscriptEntry) { runtime.record(name, entry) }
+	}
+	if runtime.publish != nil {
+		d.emitTap = func(e contracts.Event) { runtime.publish(name, e) }
+	}
+}
+
+func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state.Session, orch contracts.Orchestrator, runtime oneShotSeedRuntime, toBridge, fromBridge chan contracts.Event, bridgeErr chan<- error) {
+	err := bridge.RunOneShot(ctx, func(channel string) (contracts.Backend, error) {
+		return runtime.backendFactory()(ctx, sess)
+	}, orch, sess.ChannelID, toBridge, fromBridge)
+	bridgeErr <- err
+	if err != nil {
+		cancel()
+	}
+}
+
+func oneShotTimeoutError(bridgeErr <-chan error) error {
+	select {
+	case err := <-bridgeErr:
+		if err != nil {
+			return err
+		}
+	default:
+	}
+	return errSeedTimeout
+}
+
+func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, sess state.Session) {
+	if orch == nil || sess.ConsolidateEvery > 0 {
+		return
+	}
+	consCtx, consCancel := context.WithTimeout(ctx, seedConsolidateTimeout)
+	started := time.Now()
+	err := orch.Consolidate(consCtx)
+	consCancel()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "herrscher: session %q: consolidate after %s: %v\n", sess.Name, time.Since(started).Round(time.Millisecond), err)
+	}
 }
 
 // ApplyOrchestratorScope threads a session's runtime scope into an orchestrator
@@ -220,32 +235,20 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 		desired = os.Getenv("HERRSCHER_BACKEND")
 	}
 	plugins := contracts.Default.Backends()
-
-	var spawnEnv map[string]string
-	var modelArg string
 	if req.ModelID == "" && ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly {
 		return nil, errGatewayOnlyNoModel
 	}
+	var route modelRoute
 	if req.ModelID != "" {
-		entry, err := LookupModel(plugins, ResolvePolicy(os.Getenv), req.ModelID)
-		if err != nil {
+		var err error
+		if desired, route, err = resolveModelRoute(req.ModelID, plugins, desired); err != nil {
 			return nil, err
 		}
-		if desired == "" {
-			desired = entry.Vendor
-		} else if desired != entry.Vendor {
-			return nil, &modelBackendMismatchError{Model: req.ModelID, Owner: entry.Vendor, Requested: desired}
-		}
-		if spawnEnv, err = spawnEnvFor(entry, os.Getenv); err != nil {
-			return nil, err
-		}
-		modelArg = entry.Arg
 	}
-
 	if backend, fromRemote, err := req.remoteResolver().Backend(ctx, plugins, desired); err != nil {
 		return nil, err
 	} else if fromRemote {
-		if len(spawnEnv) > 0 {
+		if len(route.env) > 0 {
 			return nil, &gatewayEnvUnsupportedError{Model: req.ModelID}
 		}
 		return backend, nil
@@ -261,25 +264,47 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 	if cfg.Settings == nil {
 		cfg.Settings = map[string]string{}
 	}
-	if req.Cmd != "" {
-		cfg.Settings["cmd"] = req.Cmd
-	}
-	if req.Kind != "" {
-		cfg.Settings["kind"] = req.Kind
-	}
-	if req.Dir != "" {
-		cfg.Settings["dir"] = req.Dir
-	}
-	if req.Resume != "" {
-		cfg.Settings["resume"] = req.Resume
-	}
-	if modelArg != "" {
-		cfg.Settings["model"] = modelArg
-	}
-	if len(spawnEnv) > 0 {
-		cfg.Settings["env"] = contracts.EncodeEnvSetting(spawnEnv)
-	}
+	applyBackendRequest(cfg.Settings, req, route)
 	return plugin.Backend(ctx, cfg)
+}
+
+type modelRoute struct {
+	env map[string]string
+	arg string
+}
+
+func resolveModelRoute(modelID string, plugins []contracts.Plugin, desired string) (string, modelRoute, error) {
+	entry, err := LookupModel(plugins, ResolvePolicy(os.Getenv), modelID)
+	if err != nil {
+		return "", modelRoute{}, err
+	}
+	if desired == "" {
+		desired = entry.Vendor
+	} else if desired != entry.Vendor {
+		return "", modelRoute{}, &modelBackendMismatchError{Model: modelID, Owner: entry.Vendor, Requested: desired}
+	}
+	env, err := spawnEnvFor(entry, os.Getenv)
+	if err != nil {
+		return "", modelRoute{}, err
+	}
+	return desired, modelRoute{env: env, arg: entry.Arg}, nil
+}
+
+func applyBackendRequest(settings map[string]string, req BackendRequest, route modelRoute) {
+	setIfPresent(settings, "cmd", req.Cmd)
+	setIfPresent(settings, "kind", req.Kind)
+	setIfPresent(settings, "dir", req.Dir)
+	setIfPresent(settings, "resume", req.Resume)
+	setIfPresent(settings, "model", route.arg)
+	if len(route.env) > 0 {
+		settings["env"] = contracts.EncodeEnvSetting(route.env)
+	}
+}
+
+func setIfPresent(settings map[string]string, key, value string) {
+	if value != "" {
+		settings[key] = value
+	}
 }
 
 func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend, error) {
@@ -356,34 +381,44 @@ func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orches
 	provisionSeedScope(ctx, mem, memProject, memAgent)
 	orch, orchResolved, err := resolver.Orchestrator(ctx, contracts.Default.Orchestrators())
 	if err != nil {
-		if mem != nil {
-			logCleanup(mem.Close())
-		}
+		closeMemory(mem)
 		return nil, nil, err
 	}
 	if orchResolved {
 		return orch, mem, nil
 	}
+	orch, found, err := buildLocalOrchestrator(ctx, sess, mem, memProject, memAgent)
+	if err != nil {
+		closeMemory(mem)
+		return nil, nil, err
+	}
+	if !found {
+		return nil, mem, nil
+	}
+	return orch, mem, nil
+}
+
+func buildLocalOrchestrator(ctx context.Context, sess state.Session, mem contracts.Memory, memProject, memAgent string) (contracts.Orchestrator, bool, error) {
 	for _, plugin := range contracts.Default.Orchestrators() {
 		if plugin.Orchestrator == nil {
 			continue
 		}
 		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
-			if mem != nil {
-				logCleanup(mem.Close())
-			}
-			return nil, nil, err
+			return nil, false, err
 		}
 		ApplyOrchestratorScope(&cfg, sess.Name, memProject, memAgent, sess.Extractor, sess.Journal, sess.ConsolidateEvery)
 		orch, err := plugin.Orchestrator(ctx, cfg, mem)
 		if err != nil {
-			if mem != nil {
-				logCleanup(mem.Close())
-			}
-			return nil, nil, err
+			return nil, false, err
 		}
-		return orch, mem, nil
+		return orch, true, nil
 	}
-	return nil, mem, nil
+	return nil, false, nil
+}
+
+func closeMemory(mem contracts.Memory) {
+	if mem != nil {
+		logCleanup(mem.Close())
+	}
 }

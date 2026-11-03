@@ -314,6 +314,8 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 }
 
 func TestPickRegistryRoutesToLiveSession(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	a := &fanRecorder{}
 	acc, err := control.Accept(tmpSock(t))
 	if err != nil {
@@ -322,20 +324,21 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	defer closeRead(acc)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, "pickreg", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
+	go RunSession(ctx, sessionTab, "pickreg", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
 
-	waitFor(t, func() bool { return Pick("pickreg", "1") }, "Pick routes to the live session")
-	if Pick("does-not-exist", "1") {
+	waitFor(t, func() bool { return (&hub{approvals: approvalTab, sessions: sessionTab}).Pick("pickreg", "1") }, "Pick routes to the live session")
+	if (&hub{approvals: approvalTab, sessions: sessionTab}).Pick("does-not-exist", "1") {
 		t.Fatal("Pick must report false for an unknown session")
 	}
 }
 
 func TestSeedEnqueuesInput(t *testing.T) {
+	sessionTab := newSessionTable()
 	d := newSessionDriver("beta", nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1))
-	registerDriver("beta", d)
-	defer unregisterDriver("beta", d)
+	sessionTab.register("beta", d)
+	defer sessionTab.unregister("beta", d)
 
-	if !Seed("beta", "finir le module") {
+	if !sessionTab.Seed("beta", "finir le module") {
 		t.Fatal("Seed should return true for a live session")
 	}
 	select {
@@ -346,7 +349,7 @@ func TestSeedEnqueuesInput(t *testing.T) {
 	default:
 		t.Fatal("no frame enqueued")
 	}
-	if Seed("ghost", "x") {
+	if sessionTab.Seed("ghost", "x") {
 		t.Fatal("Seed should return false for an unknown session")
 	}
 }
@@ -484,6 +487,7 @@ func waitFor(t *testing.T, cond func() bool, what string) {
 }
 
 func TestRunSessionReconnectsAndResumes(t *testing.T) {
+	sessionTab := newSessionTable()
 	a := &fanRecorder{}
 	a.feed("q1")
 	sock := tmpSock(t)
@@ -495,7 +499,7 @@ func TestRunSessionReconnectsAndResumes(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
+	go RunSession(ctx, sessionTab, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
 
 	c1 := dialCtl(t, sock)
 	gotInput(t, c1, "q1")
@@ -508,6 +512,7 @@ func TestRunSessionReconnectsAndResumes(t *testing.T) {
 }
 
 func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
+	sessionTab := newSessionTable()
 	a := &fanRecorder{}
 	a.feed("q1")
 	sock := tmpSock(t)
@@ -519,7 +524,7 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
+	go RunSession(ctx, sessionTab, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
 
 	c1 := dialCtl(t, sock)
 	gotInput(t, c1, "q1")
@@ -1018,11 +1023,12 @@ func TestDriverInvokesCoordinatorOnRouteTrailer(t *testing.T) {
 }
 
 func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
+	sessionTab := newSessionTable()
 	d := newSessionDriver("s1", nil, nil, nil)
-	registerDriver("s1", d)
-	defer unregisterDriver("s1", d)
+	sessionTab.register("s1", d)
+	defer sessionTab.unregister("s1", d)
 
-	if !Submit(t.Context(), "s1", contracts.Inbound{Author: "leo", Text: "fix the login bug"}) {
+	if !sessionTab.Submit(t.Context(), "s1", contracts.Inbound{Author: "leo", Text: "fix the login bug"}) {
 		t.Fatal("Submit reported no live session for a registered driver")
 	}
 	select {
@@ -1036,19 +1042,21 @@ func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
 }
 
 func TestSubmitOnUnknownSessionReportsFalse(t *testing.T) {
-	if Submit(t.Context(), "nobody-home", contracts.Inbound{Text: "hi"}) {
+	sessionTab := newSessionTable()
+	if sessionTab.Submit(t.Context(), "nobody-home", contracts.Inbound{Text: "hi"}) {
 		t.Fatal("Submit reported success for an unregistered session")
 	}
 }
 
 func TestSubmitJournalsTheAuthor(t *testing.T) {
+	sessionTab := newSessionTable()
 	dir := t.TempDir()
 	d := newSessionDriver("s2", nil, nil, nil)
 	d.participants = filepath.Join(dir, "participants")
-	registerDriver("s2", d)
-	defer unregisterDriver("s2", d)
+	sessionTab.register("s2", d)
+	defer sessionTab.unregister("s2", d)
 
-	Submit(t.Context(), "s2", contracts.Inbound{Author: "leo", AuthorID: "42", Text: "hi"})
+	sessionTab.Submit(t.Context(), "s2", contracts.Inbound{Author: "leo", AuthorID: "42", Text: "hi"})
 	<-d.queue
 	b, err := os.ReadFile(d.participants)
 	if err != nil || !strings.Contains(string(b), "42") {

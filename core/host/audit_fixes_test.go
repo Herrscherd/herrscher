@@ -10,6 +10,7 @@ import (
 )
 
 func TestAnswerApprovalPickIsSessionScoped(t *testing.T) {
+	approvalTab := newApprovalTable()
 	cases := []struct {
 		name     string
 		owner    string
@@ -29,12 +30,12 @@ func TestAnswerApprovalPickIsSessionScoped(t *testing.T) {
 				asked:   time.Now(),
 				answer:  make(chan approvalVerdict, 1),
 			}
-			release, refusal := registerApproval(p)
+			release, refusal := registerApproval(approvalTab, p)
 			if refusal != "" {
 				t.Fatalf("registerApproval refused: %s", refusal)
 			}
 			defer release()
-			if got := answerApprovalPick(tc.clicker, approvalPickPrefix+p.id+":allow"); got != tc.swallowd {
+			if got := answerApprovalPick(approvalTab, tc.clicker, approvalPickPrefix+p.id+":allow"); got != tc.swallowd {
 				t.Fatalf("answerApprovalPick = %v, want %v", got, tc.swallowd)
 			}
 			select {

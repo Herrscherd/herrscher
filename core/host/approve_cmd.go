@@ -18,11 +18,11 @@ import (
 
 const approvalsFile = "APPROVALS"
 
-func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store) error {
+func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
 	if err := reg.Add(contracts.New(nsApprove, "list").
 		Help("list the actions waiting for an answer").
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			pending := pendingApprovals()
+			pending := pendingApprovals(approvals)
 			sort.SliceStable(pending, func(i, j int) bool {
 				if pending[i].Age != pending[j].Age {
 					return pending[i].Age > pending[j].Age
@@ -53,7 +53,7 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 			if id == "" {
 				return "", errRequestNameMissing
 			}
-			if !answerApproval(id, approval.Allow, "") {
+			if !answerApproval(approvals, id, approval.Allow, "") {
 				return "", &requestNotWaitingError{ID: id}
 			}
 			return "allowed " + id, nil
@@ -74,7 +74,7 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 			if reason != "" {
 				reason = "herrscher: the operator refused: " + reason
 			}
-			if !answerApproval(id, approval.Deny, reason) {
+			if !answerApproval(approvals, id, approval.Deny, reason) {
 				return "", &requestNotWaitingError{ID: id}
 			}
 			return "denied " + id, nil
@@ -140,7 +140,7 @@ func addApproveCommands(reg *cli.Registry, st *state.State, agents *agent.Store)
 				Subject: in.Get("subject"),
 			}
 			pol, mode := sessionPolicy(st, agents, session)
-			d, reason := askApproval(ctx, session, req, pol, mode, st.ApprovalWait())
+			d, reason := askApproval(ctx, approvals, sessions, session, req, pol, mode, st.ApprovalWait())
 			b, err := json.Marshal(struct {
 				Decision string `json:"decision"`
 				Reason   string `json:"reason,omitempty"`

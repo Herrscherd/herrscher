@@ -38,7 +38,7 @@ type schedulerSlot struct {
 	sched scheduleRunner
 }
 
-func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup *supervisor.Supervisor, instID string, extra []contracts.Cmd) (*cli.Registry, hostDeps, error) {
+func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup *supervisor.Supervisor, instID string, extra []contracts.Cmd, approvals *approvalTable, sessions *sessionTable) (*cli.Registry, hostDeps, error) {
 	partDir := filepath.Dir(o.StatePath)
 	wt := worktree.NewWorktreer(ctx, instID)
 	fg := forge.New()
@@ -50,7 +50,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		agents.SetUserBudget(n)
 	}
 	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
-	hdl.SetSeeder(Seed)
+	hdl.SetSeeder(sessions.Seed)
 	hdl.SetHosts(newHostPlacer(ctx, st, instID, wt, func() string { return sourceVersionOf(ctx, st) }))
 	sup.SetInstanceID(instID)
 	sup.SetCommandSocket(func(session string) string { return SessionCommandSocketPath(instID, session) })
@@ -148,7 +148,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 			if author == "" {
 				author = "you"
 			}
-			if !Submit(ctx, in.Get(paramName), contracts.Inbound{
+			if !sessions.Submit(ctx, in.Get(paramName), contracts.Inbound{
 				Author:       author,
 				AuthorID:     "local",
 				Text:         in.Get("text"),
@@ -182,7 +182,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 		Help("cancel a session's in-flight turn").
 		Param(paramName, "session name", true).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			if !Interrupt(in.Get(paramName)) {
+			if !sessions.Interrupt(in.Get(paramName)) {
 				return "", &noTurnInFlightError{Session: in.Get(paramName)}
 			}
 			return "interrupted " + in.Get(paramName), nil
@@ -373,7 +373,7 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	if err := addHostCommands(reg, st); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addApproveCommands(reg, st, agents); err != nil {
+	if err := addApproveCommands(reg, st, agents, approvals, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addRoleCommands(reg, st); err != nil {
@@ -468,7 +468,7 @@ func NewRegistry(ctx context.Context, gws []Deps, o Options) (*cli.Registry, err
 	if o.DefaultGateways == nil {
 		o.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID, nil)
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID, nil, newApprovalTable(), newSessionTable())
 	if err != nil {
 		return nil, err
 	}

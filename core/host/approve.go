@@ -48,12 +48,16 @@ type PendingApproval struct {
 	Age     time.Duration `json:"age"`
 }
 
-var approvals = struct {
+type approvalTable struct {
 	mu sync.Mutex
 	m  map[string]*pendingApproval
-}{m: map[string]*pendingApproval{}}
+}
 
-func askApproval(ctx context.Context, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait time.Duration) (approval.Decision, string) {
+func newApprovalTable() *approvalTable {
+	return &approvalTable{m: map[string]*pendingApproval{}}
+}
+
+func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessionTable, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait time.Duration) (approval.Decision, string) {
 	raw, matched := pol.Decide(req)
 	switch approval.Apply(mode, raw, matched) {
 	case approval.Allow:
@@ -74,7 +78,7 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 		asked:   time.Now(),
 		answer:  make(chan approvalVerdict, 1),
 	}
-	release, refusal := registerApproval(p)
+	release, refusal := registerApproval(approvals, p)
 	if refusal != "" {
 		return approval.Deny, refusal
 	}
@@ -83,7 +87,7 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 	warnWaitOutlivesTheHook(os.Stderr, wait)
 
 	octx, cancel := context.WithTimeout(ctx, wait)
-	askApprovalOn(octx, session, approvalPrompt(req), p.id)
+	askApprovalOn(octx, sessions, session, approvalPrompt(req), p.id)
 	cancel()
 
 	select {
@@ -103,7 +107,7 @@ func askApproval(ctx context.Context, session string, req approval.Request, pol 
 	}
 }
 
-func registerApproval(p *pendingApproval) (func(), string) {
+func registerApproval(approvals *approvalTable, p *pendingApproval) (func(), string) {
 	approvals.mu.Lock()
 	defer approvals.mu.Unlock()
 	if len(approvals.m) >= maxPendingApprovals {
@@ -133,7 +137,7 @@ func warnWaitOutlivesTheHook(w io.Writer, wait time.Duration) {
 	logWriteFailure(fmt.Fprintf(w, "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the CLI gives it: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait))
 }
 
-func answerApproval(id string, d approval.Decision, reason string) bool {
+func answerApproval(approvals *approvalTable, id string, d approval.Decision, reason string) bool {
 	approvals.mu.Lock()
 	p := approvals.m[id]
 	approvals.mu.Unlock()
@@ -147,7 +151,7 @@ func answerApproval(id string, d approval.Decision, reason string) bool {
 	return true
 }
 
-func pendingApprovals() []PendingApproval {
+func pendingApprovals(approvals *approvalTable) []PendingApproval {
 	approvals.mu.Lock()
 	defer approvals.mu.Unlock()
 	out := make([]PendingApproval, 0, len(approvals.m))
@@ -163,7 +167,7 @@ func pendingApprovals() []PendingApproval {
 	return out
 }
 
-func answerApprovalPick(session, value string) bool {
+func answerApprovalPick(approvals *approvalTable, session, value string) bool {
 	rest, ok := strings.CutPrefix(value, approvalPickPrefix)
 	if !ok {
 		return false
@@ -172,18 +176,18 @@ func answerApprovalPick(session, value string) bool {
 	if !ok {
 		return true
 	}
-	if owner, known := approvalSession(id); known && owner != session {
+	if owner, known := approvalSession(approvals, id); known && owner != session {
 		return true
 	}
 	d := approval.Deny
 	if verdict == string(approval.Allow) {
 		d = approval.Allow
 	}
-	answerApproval(id, d, "")
+	answerApproval(approvals, id, d, "")
 	return true
 }
 
-func approvalSession(id string) (string, bool) {
+func approvalSession(approvals *approvalTable, id string) (string, bool) {
 	approvals.mu.Lock()
 	defer approvals.mu.Unlock()
 	p := approvals.m[id]

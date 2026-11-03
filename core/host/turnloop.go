@@ -204,10 +204,8 @@ func (d *sessionDriver) askApproval(ctx context.Context, prompt, id string) {
 	}
 }
 
-func askApprovalOn(ctx context.Context, session, prompt, id string) {
-	sessionRegistry.mu.Lock()
-	d := sessionRegistry.m[session]
-	sessionRegistry.mu.Unlock()
+func askApprovalOn(ctx context.Context, sessions *sessionTable, session, prompt, id string) {
+	d := sessions.lookup(session)
 	if d == nil {
 		return
 	}
@@ -266,39 +264,37 @@ func (d *sessionDriver) SeedAndWaitWithTurnID(ctx context.Context, task, turnID 
 	}
 }
 
-var sessionRegistry = struct {
+type sessionTable struct {
 	mu sync.Mutex
 	m  map[string]*sessionDriver
-}{m: map[string]*sessionDriver{}}
-
-func registerDriver(name string, d *sessionDriver) {
-	sessionRegistry.mu.Lock()
-	sessionRegistry.m[name] = d
-	sessionRegistry.mu.Unlock()
 }
 
-func unregisterDriver(name string, d *sessionDriver) {
-	sessionRegistry.mu.Lock()
-	if sessionRegistry.m[name] == d {
-		delete(sessionRegistry.m, name)
-	}
-	sessionRegistry.mu.Unlock()
+func newSessionTable() *sessionTable {
+	return &sessionTable{m: map[string]*sessionDriver{}}
 }
 
-// Pick routes a select-menu value to the named session's driver, returning false
-// when no live session by that name is driving.
-//
-// An approval answer is taken first, and by value rather than by session: it is
-// answered by the daemon itself, must not reach the backend as a choice the
-// model never posed, and must work for a session whose driver is busy inside the
-// very turn that is waiting on it.
-func Pick(session, value string) bool {
-	if answerApprovalPick(session, value) {
-		return true
+func (t *sessionTable) register(name string, d *sessionDriver) {
+	t.mu.Lock()
+	t.m[name] = d
+	t.mu.Unlock()
+}
+
+func (t *sessionTable) unregister(name string, d *sessionDriver) {
+	t.mu.Lock()
+	if t.m[name] == d {
+		delete(t.m, name)
 	}
-	sessionRegistry.mu.Lock()
-	d := sessionRegistry.m[session]
-	sessionRegistry.mu.Unlock()
+	t.mu.Unlock()
+}
+
+func (t *sessionTable) lookup(name string) *sessionDriver {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.m[name]
+}
+
+func (t *sessionTable) pick(session, value string) bool {
+	d := t.lookup(session)
 	if d == nil {
 		return false
 	}
@@ -307,10 +303,8 @@ func Pick(session, value string) bool {
 
 // Interrupt cancels the in-flight turn of the named session, returning false
 // when no live session by that name is driving (mirror of Pick).
-func Interrupt(session string) bool {
-	sessionRegistry.mu.Lock()
-	d := sessionRegistry.m[session]
-	sessionRegistry.mu.Unlock()
+func (t *sessionTable) Interrupt(session string) bool {
+	d := t.lookup(session)
 	if d == nil {
 		return false
 	}
@@ -320,10 +314,8 @@ func Interrupt(session string) bool {
 
 // Seed routes an opening task to the named session's driver, returning false when
 // no live session by that name is driving (mirror of Pick).
-func Seed(session, task string) bool {
-	sessionRegistry.mu.Lock()
-	d := sessionRegistry.m[session]
-	sessionRegistry.mu.Unlock()
+func (t *sessionTable) Seed(session, task string) bool {
+	d := t.lookup(session)
 	if d == nil {
 		return false
 	}
@@ -334,10 +326,8 @@ func Seed(session, task string) bool {
 // returning false when no live session by that name is driving (mirror of Pick).
 // It is the push counterpart of the driver's own poll loop: a gateway that
 // receives messages by push calls this instead of being polled.
-func Submit(ctx context.Context, session string, in contracts.Inbound) bool {
-	sessionRegistry.mu.Lock()
-	d := sessionRegistry.m[session]
-	sessionRegistry.mu.Unlock()
+func (t *sessionTable) Submit(ctx context.Context, session string, in contracts.Inbound) bool {
+	d := t.lookup(session)
 	if d == nil {
 		return false
 	}
@@ -748,11 +738,11 @@ type sessionIdentity struct {
 	agent       string
 }
 
-func RunSession(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, gate budgetGate) {
-	runSessionIdentified(ctx, name, channel, gws, acc, participants, m, coord, sink, nil, sessionIdentity{}, gate)
+func RunSession(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, gate budgetGate) {
+	runSessionIdentified(ctx, sessions, name, channel, gws, acc, participants, m, coord, sink, nil, sessionIdentity{}, gate)
 }
 
-func runSessionIdentified(ctx context.Context, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, emit func(contracts.Event), identity sessionIdentity, gate budgetGate) {
+func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, emit func(contracts.Event), identity sessionIdentity, gate budgetGate) {
 	defer closeRead(acc)
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
@@ -768,8 +758,8 @@ func runSessionIdentified(ctx context.Context, name, channel string, gws []contr
 	if gate != nil {
 		d.gate = gate
 	}
-	registerDriver(name, d)
-	defer unregisterDriver(name, d)
+	sessions.register(name, d)
+	defer sessions.unregister(name, d)
 	go d.run(ctx)
 
 	for {

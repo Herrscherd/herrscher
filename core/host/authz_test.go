@@ -189,13 +189,15 @@ func TestAnUnknownVerbIsDispatchsErrorAndNotARefusal(t *testing.T) {
 }
 
 func operatorRegistryForTest(t *testing.T) *cli.Registry {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	dir := t.TempDir()
 	st := state.NewState(dir + "/state.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: dir + "/state.json", DefaultCmd: "claude"}, st, sup, "", nil)
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: dir + "/state.json", DefaultCmd: "claude"}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -47,6 +47,9 @@ type hub struct {
 
 	teardownGrace time.Duration
 	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
+
+	approvals *approvalTable
+	sessions  *sessionTable
 }
 
 type forgetter interface{ forget(string) }
@@ -56,8 +59,8 @@ type liveSession struct {
 	done   <-chan struct{}
 }
 
-func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry) *hub {
-	return &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: map[string]liveSession{}, teardownGrace: defaultTeardownGrace}
+func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable) *hub {
+	return &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: map[string]liveSession{}, teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions}
 }
 
 func eventTap(publish func(string, contracts.Event), session string) func(contracts.Event) {
@@ -84,7 +87,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done}
 	go func() {
 		defer close(done)
-		runSessionIdentified(sctx, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
+		runSessionIdentified(sctx, h.sessions, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
 			sessionSink{
 				Resume: func(tok string) {
 					if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
@@ -366,15 +369,25 @@ func (h *hub) Resume(name string) error {
 }
 
 func (h *hub) Interrupt(name string) bool {
-	return Interrupt(name)
+	return h.sessions.Interrupt(name)
 }
 
 func (h *hub) Submit(name string, in contracts.Inbound) bool {
-	return Submit(context.Background(), name, in)
+	return h.sessions.Submit(context.Background(), name, in)
 }
 
+// Pick routes a select-menu value to the named session's driver, returning false
+// when no live session by that name is driving.
+//
+// An approval answer is taken first, and by value rather than by session: it is
+// answered by the daemon itself, must not reach the backend as a choice the
+// model never posed, and must work for a session whose driver is busy inside the
+// very turn that is waiting on it.
 func (h *hub) Pick(name, value string) bool {
-	return Pick(name, value)
+	if answerApprovalPick(h.approvals, name, value) {
+		return true
+	}
+	return h.sessions.pick(name, value)
 }
 
 func (h *hub) Repos(ctx context.Context) ([]contracts.RepoRef, error) {

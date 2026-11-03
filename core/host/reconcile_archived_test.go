@@ -10,11 +10,13 @@ import (
 )
 
 func TestReconcileSkipsArchived(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil)
+	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
 
 	if err := st.AddSession(state.Session{Name: "recon-live", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)
@@ -37,11 +39,13 @@ func TestReconcileSkipsArchived(t *testing.T) {
 }
 
 func TestReconcileReapsInPlaceArchived(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil)
+	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
 
 	if err := st.AddSession(state.Session{Name: "s", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)

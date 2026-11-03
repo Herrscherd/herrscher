@@ -39,32 +39,36 @@ func (m *menuGatewayFake) RouteMenu(_ context.Context, _, _, prompt, _ string, _
 }
 
 func TestAskApprovalAnswersWithoutAskingAnyone(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	pol := approval.Policy{{Decision: approval.Deny, Tool: "Bash", Pattern: "sudo*"}}
 	req := approval.Request{Tool: "Bash", Subject: "sudo rm"}
-	d, reason := askApproval(context.Background(), "s1", req, pol, approval.ModeAsk, time.Minute)
+	d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, time.Minute)
 	if d != approval.Deny {
 		t.Fatalf("got %q, want deny", d)
 	}
 	if reason == "" {
 		t.Fatal("a refusal must carry a reason the model can read")
 	}
-	if n := len(pendingApprovals()); n != 0 {
+	if n := len(pendingApprovals(approvalTab)); n != 0 {
 		t.Fatalf("%d pending: a decided request must never be registered", n)
 	}
 }
 
 func TestAskApprovalWaitsThenIsAnswered(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "Bash", Pattern: "git push*"}}
 	req := approval.Request{Tool: "Bash", Subject: "git push origin master"}
 	done := make(chan approval.Decision, 1)
 	go func() {
-		d, _ := askApproval(context.Background(), "s1", req, pol, approval.ModeAsk, 5*time.Second)
+		d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, 5*time.Second)
 		done <- d
 	}()
 	var id string
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if p := pendingApprovals(); len(p) == 1 {
+		if p := pendingApprovals(approvalTab); len(p) == 1 {
 			id = p[0].ID
 			break
 		}
@@ -73,35 +77,37 @@ func TestAskApprovalWaitsThenIsAnswered(t *testing.T) {
 	if id == "" {
 		t.Fatal("the request was never registered")
 	}
-	if !answerApproval(id, approval.Allow, "") {
+	if !answerApproval(approvalTab, id, approval.Allow, "") {
 		t.Fatal("answerApproval reported no such request")
 	}
 	if d := <-done; d != approval.Allow {
 		t.Fatalf("got %q, want allow", d)
 	}
-	if n := len(pendingApprovals()); n != 0 {
+	if n := len(pendingApprovals(approvalTab)); n != 0 {
 		t.Fatalf("%d pending: an answered request must be dropped", n)
 	}
 }
 
 func TestAskApprovalTimesOutIntoADenial(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	req := approval.Request{Tool: "Bash", Subject: "git push"}
-	d, reason := askApproval(context.Background(), "s1", req, pol, approval.ModeAsk, 30*time.Millisecond)
+	d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, 30*time.Millisecond)
 	if d != approval.Deny {
 		t.Fatalf("got %q, want deny", d)
 	}
 	if !strings.Contains(reason, "30ms") {
 		t.Fatalf("reason %q must name the wait it gave up on", reason)
 	}
-	if n := len(pendingApprovals()); n != 0 {
+	if n := len(pendingApprovals(approvalTab)); n != 0 {
 		t.Fatalf("%d pending: a timed-out request must be dropped", n)
 	}
 }
 
-func waitingFor(session string) int {
+func waitingFor(approvalTab *approvalTable, session string) int {
 	n := 0
-	for _, p := range pendingApprovals() {
+	for _, p := range pendingApprovals(approvalTab) {
 		if p.Session == session {
 			n++
 		}
@@ -109,7 +115,7 @@ func waitingFor(session string) int {
 	return n
 }
 
-func fillApprovals(t *testing.T, sessions ...string) func() {
+func fillApprovals(t *testing.T, approvalTab *approvalTable, sessionTab *sessionTable, sessions ...string) func() {
 	t.Helper()
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	mine := map[string]bool{}
@@ -121,14 +127,14 @@ func fillApprovals(t *testing.T, sessions ...string) func() {
 		wg.Add(1)
 		go func(session string) {
 			defer wg.Done()
-			askApproval(context.Background(), session, approval.Request{Tool: "Bash", Subject: session}, pol, approval.ModeAsk, time.Minute)
+			askApproval(context.Background(), approvalTab, sessionTab, session, approval.Request{Tool: "Bash", Subject: session}, pol, approval.ModeAsk, time.Minute)
 		}(s)
 	}
 	var ids []string
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		ids = ids[:0]
-		for _, p := range pendingApprovals() {
+		for _, p := range pendingApprovals(approvalTab) {
 			if mine[p.Session] {
 				ids = append(ids, p.ID)
 			}
@@ -143,22 +149,24 @@ func fillApprovals(t *testing.T, sessions ...string) func() {
 	}
 	return func() {
 		for _, id := range ids {
-			answerApproval(id, approval.Deny, "")
+			answerApproval(approvalTab, id, approval.Deny, "")
 		}
 		wg.Wait()
 	}
 }
 
 func TestOneSessionCannotFillTheRegistry(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	full := make([]string, 0, maxPendingPerSession)
 	for range maxPendingPerSession {
 		full = append(full, "s-cap")
 	}
-	settle := fillApprovals(t, full...)
+	settle := fillApprovals(t, approvalTab, sessionTab, full...)
 
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	started := time.Now()
-	d, reason := askApproval(context.Background(), "s-cap", approval.Request{Tool: "Bash", Subject: "one too many"}, pol, approval.ModeAsk, time.Minute)
+	d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s-cap", approval.Request{Tool: "Bash", Subject: "one too many"}, pol, approval.ModeAsk, time.Minute)
 	if d != approval.Deny {
 		t.Fatalf("got %q, want deny: over the cap is a decision, not a failure to reach anyone", d)
 	}
@@ -168,28 +176,30 @@ func TestOneSessionCannotFillTheRegistry(t *testing.T) {
 	if elapsed := time.Since(started); elapsed > 5*time.Second {
 		t.Fatalf("the refusal took %s: over the cap must be decided without waiting for anyone", elapsed)
 	}
-	if n := waitingFor("s-cap"); n != maxPendingPerSession {
+	if n := waitingFor(approvalTab, "s-cap"); n != maxPendingPerSession {
 		t.Fatalf("%d waiting, want %d: a refused request must not be registered", n, maxPendingPerSession)
 	}
 
-	fillApprovals(t, "s-cap-neighbour")()
+	fillApprovals(t, approvalTab, sessionTab, "s-cap-neighbour")()
 
 	settle()
-	if n := waitingFor("s-cap"); n != 0 {
+	if n := waitingFor(approvalTab, "s-cap"); n != 0 {
 		t.Fatalf("%d still waiting after every request was answered", n)
 	}
-	fillApprovals(t, "s-cap")()
+	fillApprovals(t, approvalTab, sessionTab, "s-cap")()
 }
 
 func TestTheRegistryIsBoundedAcrossSessions(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	sessions := make([]string, 0, maxPendingApprovals)
 	for i := range maxPendingApprovals {
 		sessions = append(sessions, fmt.Sprintf("s-fleet-%d", i))
 	}
-	settle := fillApprovals(t, sessions...)
+	settle := fillApprovals(t, approvalTab, sessionTab, sessions...)
 
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
-	d, reason := askApproval(context.Background(), "s-fleet-extra", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, time.Minute)
+	d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s-fleet-extra", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, time.Minute)
 	if d != approval.Deny {
 		t.Fatalf("got %q, want deny", d)
 	}
@@ -198,15 +208,17 @@ func TestTheRegistryIsBoundedAcrossSessions(t *testing.T) {
 	}
 
 	settle()
-	fillApprovals(t, "s-fleet-extra")()
+	fillApprovals(t, approvalTab, sessionTab, "s-fleet-extra")()
 }
 
 func TestATimedOutRequestFreesItsSlot(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	var reason string
 	for range maxPendingPerSession + 1 {
 		var d approval.Decision
-		d, reason = askApproval(context.Background(), "s-expiry", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, 20*time.Millisecond)
+		d, reason = askApproval(context.Background(), approvalTab, sessionTab, "s-expiry", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, 20*time.Millisecond)
 		if d != approval.Deny {
 			t.Fatalf("got %q, want deny: nobody answered", d)
 		}
@@ -214,30 +226,33 @@ func TestATimedOutRequestFreesItsSlot(t *testing.T) {
 	if !strings.Contains(reason, "nobody answered") {
 		t.Fatalf("reason %q: more asks than the cap allows still timed out one by one, so none of them may be refused for the cap", reason)
 	}
-	if n := waitingFor("s-expiry"); n != 0 {
+	if n := waitingFor(approvalTab, "s-expiry"); n != 0 {
 		t.Fatalf("%d still waiting: a timed-out request must leave the registry", n)
 	}
 }
 
 func TestAnswerApprovalUnknownID(t *testing.T) {
-	if answerApproval("nope", approval.Allow, "") {
+	approvalTab := newApprovalTable()
+	if answerApproval(approvalTab, "nope", approval.Allow, "") {
 		t.Fatal("answering an unknown id must report false")
 	}
 }
 
 func TestTwoSessionsWaitIndependently(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	got := make(chan string, 2)
 	for _, name := range []string{"s1", "s2"} {
 		go func(session string) {
-			d, _ := askApproval(context.Background(), session, approval.Request{Tool: "Bash", Subject: session}, pol, approval.ModeAsk, 5*time.Second)
+			d, _ := askApproval(context.Background(), approvalTab, sessionTab, session, approval.Request{Tool: "Bash", Subject: session}, pol, approval.ModeAsk, 5*time.Second)
 			got <- session + ":" + string(d)
 		}(name)
 	}
 	byID := map[string]string{}
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) && len(byID) < 2 {
-		for _, p := range pendingApprovals() {
+		for _, p := range pendingApprovals(approvalTab) {
 			byID[p.ID] = p.Session
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -247,9 +262,9 @@ func TestTwoSessionsWaitIndependently(t *testing.T) {
 	}
 	for id, session := range byID {
 		if session == "s1" {
-			answerApproval(id, approval.Allow, "")
+			answerApproval(approvalTab, id, approval.Allow, "")
 		} else {
-			answerApproval(id, approval.Deny, "")
+			answerApproval(approvalTab, id, approval.Deny, "")
 		}
 	}
 	seen := map[string]bool{<-got: true, <-got: true}
@@ -324,16 +339,18 @@ func TestSessionDriverAskApproval(t *testing.T) {
 }
 
 func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	done := make(chan approval.Decision, 1)
 	go func() {
-		d, _ := askApproval(context.Background(), "s-no-driver", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, 5*time.Second)
+		d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s-no-driver", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, 5*time.Second)
 		done <- d
 	}()
 	var id string
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if p := pendingApprovals(); len(p) == 1 {
+		if p := pendingApprovals(approvalTab); len(p) == 1 {
 			id = p[0].ID
 			break
 		}
@@ -342,7 +359,7 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 	if id == "" {
 		t.Fatal("the request was never registered")
 	}
-	if !Pick("s-no-driver", approvalPickPrefix+id+":deny") {
+	if !(&hub{approvals: approvalTab, sessions: sessionTab}).Pick("s-no-driver", approvalPickPrefix+id+":deny") {
 		t.Fatal("an approval pick must be handled even with no live driver")
 	}
 	if d := <-done; d != approval.Deny {
@@ -351,6 +368,8 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 }
 
 func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
+	approvalTab := newApprovalTable()
+	sessionTab := newSessionTable()
 	ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	req := approval.Request{Tool: "Bash", Subject: "git push"}
 	fits, outlives := agent.HookWait/2, agent.HookWait/2+time.Minute
@@ -358,21 +377,21 @@ func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
 	cancel()
 
 	quiet := captureDaemonStderr(t, func() {
-		askApproval(ctx, "s-warn", req, ask, approval.ModeAsk, fits)
+		askApproval(ctx, approvalTab, sessionTab, "s-warn", req, ask, approval.ModeAsk, fits)
 	})
 	if quiet != "" {
 		t.Fatalf("a wait the vendor will sit through must say nothing, got %q", quiet)
 	}
 
 	allowed := captureDaemonStderr(t, func() {
-		askApproval(ctx, "s-warn", req, nil, approval.ModeAsk, outlives)
+		askApproval(ctx, approvalTab, sessionTab, "s-warn", req, nil, approval.ModeAsk, outlives)
 	})
 	if allowed != "" {
 		t.Fatalf("a call nobody is asked about must say nothing, got %q", allowed)
 	}
 
 	got := captureDaemonStderr(t, func() {
-		askApproval(ctx, "s-warn", req, ask, approval.ModeAsk, outlives)
+		askApproval(ctx, approvalTab, sessionTab, "s-warn", req, ask, approval.ModeAsk, outlives)
 	})
 	if !strings.Contains(got, outlives.String()) {
 		t.Fatalf("warning %q must name the wait that was asked for", got)

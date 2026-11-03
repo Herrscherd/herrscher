@@ -181,7 +181,9 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	if o.DefaultGateways == nil {
 		o.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID, o.ContributedCommands)
+	approvals := newApprovalTable()
+	sessions := newSessionTable()
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID, o.ContributedCommands, approvals, sessions)
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}
@@ -195,7 +197,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
-	hb := newHub(st, sup, gws, partDir, reg, h.Metrics())
+	hb := newHub(st, sup, gws, partDir, reg, h.Metrics(), approvals, sessions)
 	go func() {
 		<-ctx.Done()
 		hb.stopLive()
@@ -203,11 +205,11 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	hb.contributedKinds = kinds
 	hb.instanceID = instID
 	hb.gate = deps.handler.BudgetGate()
-	coord := newCoordinator(hb, deps.agents, deps.wt, st, hb, Seed)
+	coord := newCoordinator(hb, deps.agents, deps.wt, st, hb, sessions.Seed)
 	hb.coordinator = coord
 	deps.seedCoord.coord = coord
 
-	sched := newScheduler(st, st, hb, Seed, time.Now)
+	sched := newScheduler(st, st, hb, sessions.Seed, time.Now)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
 

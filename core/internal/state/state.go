@@ -1,8 +1,10 @@
+// Package state persists the herrscher daemon state: sessions, roles, schedules and transcripts.
 package state
 
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,34 +14,44 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 )
 
+const (
+	privateDirMode  = 0o750
+	privateFileMode = 0o600
+)
+
+var (
+	errSessionExists = errors.New("session already exists")
+	errNoSession     = errors.New("no such session")
+)
+
 // HomeRef points at the category or forum that holds session channels.
 type HomeRef struct {
 	ID   string `json:"id"`
-	Type string `json:"type"` // "category" | "forum"
+	Type string `json:"type"`
 }
 
 // Session is one bridged channel/post supervised by the daemon.
 type Session struct {
-	ID string `json:"id,omitempty"` // stable logical id, decoupled from Name and ChannelID
+	ID string `json:"id,omitempty"`
 	// Incarnation is an opaque identity for this specific persisted session
 	// object. Closing and recreating the same Name generates a different value.
 	Incarnation string `json:"incarnation,omitempty"`
 	Name        string `json:"name"`
 	ChannelID   string `json:"channelID"`
-	Type        string `json:"type"` // "text" | "forum"
+	Type        string `json:"type"`
 	Cmd         string `json:"cmd"`
-	Backend     string `json:"backend,omitempty"` // bridge backend ("" or "stream" = stream-json default; "oneshot" = per-message cmd)
-	Vendor      string `json:"vendor,omitempty"`  // agent backend vendor ("claude", "codex", "cursor")
+	Backend     string `json:"backend,omitempty"`
+	Vendor      string `json:"vendor,omitempty"`
 	// ModelID is the catalog identifier of the chosen model. Unlike Cmd, which is
-	// an opaque invocation string, it lets a resume look up the model's ROUTE —
+	// an opaque invocation string, it lets a resume look up the model's ROUTE,
 	// so we know whether gateway credentials need to be re-injected. Empty for
 	// sessions created before the catalog existed.
 	ModelID  string `json:"modelId,omitempty"`
-	Worktree string `json:"worktree,omitempty"` // abs path; empty for a shared session
+	Worktree string `json:"worktree,omitempty"`
 	Scratch  bool   `json:"scratch,omitempty"`
-	Dir      string `json:"dir,omitempty"`     // bridge working dir; empty = inherit launcher cwd (pwd fallback)
-	Project  string `json:"project,omitempty"` // workspace sub-dir the session started from
-	Agent    string `json:"agent,omitempty"`   // durable agent this session was provisioned from ("" = none)
+	Dir      string `json:"dir,omitempty"`
+	Project  string `json:"project,omitempty"`
+	Agent    string `json:"agent,omitempty"`
 	// Host names the place this session's process runs, as registered by
 	// `host add`. Empty means this machine, which is every session written
 	// before remote execution existed.
@@ -49,7 +61,7 @@ type Session struct {
 	Approvals string `json:"approvals,omitempty"`
 	// MemoryProject and MemoryAgent are the memory roots this session files what
 	// it learns under. They are separate from Project and Agent on purpose: those
-	// two place the session — a workspace sub-directory, a provisioned worktree —
+	// two place the session: a workspace sub-directory, a provisioned worktree,
 	// while these only say where knowledge goes. Empty means the session
 	// contributes to no root, which is every session created before this existed.
 	MemoryProject string `json:"memoryProject,omitempty"`
@@ -71,7 +83,7 @@ type Session struct {
 	// Owned marks a channel this session created, and may therefore tidy away
 	// when it closes. A session started in a conversation that already existed
 	// binds to it instead, and that channel belongs to the people who were
-	// already talking in it — closing the session must leave it alone. Absent on
+	// already talking in it; closing the session must leave it alone. Absent on
 	// a row written before this field existed, which is the safe direction: the
 	// worst outcome is a channel left behind.
 	Owned bool `json:"owned,omitempty"`
@@ -89,7 +101,7 @@ type Session struct {
 	// binding the host resolves from the gateways actually built (see IsLegacy).
 	Gateways []string `json:"gateways,omitempty"`
 
-	Participants []string `json:"participants,omitempty"` // observed authors (cache; journal is source of truth)
+	Participants []string `json:"participants,omitempty"`
 
 	// Parent names the lead session that delegated this one (result-back P3).
 	// Empty = no parent. The coordinator reads it to find the delivery target
@@ -127,9 +139,9 @@ type State struct {
 	mu        sync.Mutex `json:"-"`
 	path      string     `json:"-"`
 	Home      HomeRef    `json:"home"`
-	Repo      string     `json:"repo,omitempty"`      // legacy single-repo root; defaults to daemon cwd
-	Workspace string     `json:"workspace,omitempty"` // abs path to the workspace root; preferred over Repo
-	Source    string     `json:"source,omitempty"`    // abs path to the herrscher source checkout (for /service update)
+	Repo      string     `json:"repo,omitempty"`
+	Workspace string     `json:"workspace,omitempty"`
+	Source    string     `json:"source,omitempty"`
 	// Approvals is the daemon-wide rule set, stored rendered ("ask Bash(git
 	// push*)") rather than structured: it is what the operator typed, it reads
 	// back out of the file, and parsing is already the check that runs before a
@@ -139,8 +151,8 @@ type State struct {
 	// Empty is five minutes.
 	ApprovalTimeout string    `json:"approvalTimeout,omitempty"`
 	Sessions        []Session `json:"sessions"`
-	StatusMessageID string    `json:"statusMessageID,omitempty"` // cached id of the status embed
-	InstanceID      string    `json:"instanceID,omitempty"`      // per-daemon namespace for global resources; "" = legacy
+	StatusMessageID string    `json:"statusMessageID,omitempty"`
+	InstanceID      string    `json:"instanceID,omitempty"`
 	// Schedules holds the proactive schedules. They live here rather than in a
 	// store of their own because state.json is already rewritten on every turn
 	// (each reply folds its resume token back in): putting them here does not
@@ -196,68 +208,63 @@ func (s *State) ApplyDefaults(home *HomeRef, workspace, source string) {
 
 // LoadState reads state from path; a missing file yields an empty state.
 func LoadState(path string) (*State, error) {
-	s := NewState(path)
-	buf, err := os.ReadFile(path)
+	fresh := NewState(path)
+	buf, err := os.ReadFile(filepath.Clean(path))
 	if os.IsNotExist(err) {
-		return s, nil
+		return fresh, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(buf, s); err != nil {
+	if err := json.Unmarshal(buf, fresh); err != nil {
 		return nil, err
 	}
-	seen := map[string]bool{}
-	for i := range s.Sessions {
-		if s.Sessions[i].ID != "" {
-			seen[s.Sessions[i].ID] = true
+	seen := make(map[string]bool)
+	for idx := range fresh.Sessions {
+		if fresh.Sessions[idx].ID != "" {
+			seen[fresh.Sessions[idx].ID] = true
 		}
 	}
-	for i := range s.Sessions {
-		if s.Sessions[i].ID == "" {
-			s.Sessions[i].ID = newSessionID(s.Sessions[i].Name, seen)
-			seen[s.Sessions[i].ID] = true
+	for idx := range fresh.Sessions {
+		if fresh.Sessions[idx].ID == "" {
+			fresh.Sessions[idx].ID = newSessionID(fresh.Sessions[idx].Name, seen)
+			seen[fresh.Sessions[idx].ID] = true
 		}
 	}
-	if s.ensureSessionIncarnationsLocked() {
-		if err := s.saveLocked(); err != nil {
+	if fresh.ensureSessionIncarnationsLocked() {
+		if err := fresh.saveLocked(); err != nil {
 			return nil, fmt.Errorf("persist session incarnation backfill: %w", err)
 		}
 	}
-	return s, nil
+	return fresh, nil
 }
 
-// newSessionID returns a stable id for a session. Name is already unique and
-// git-safe, so it seeds a readable id; a numeric disambiguator keeps ids stable
-// if a name is later reused.
 func newSessionID(name string, existing map[string]bool) string {
 	base := "s_" + name
-	id := base
-	for n := 1; existing[id]; n++ {
-		id = fmt.Sprintf("%s_%d", base, n)
+	baseID := base
+	for n := 1; existing[baseID]; n++ {
+		baseID = fmt.Sprintf("%s_%d", base, n)
 	}
-	return id
+	return baseID
 }
 
 func newSessionIncarnation(existing map[string]bool) string {
 	for {
-		id := "inc_" + rand.Text()
-		if !existing[id] {
-			return id
+		incarnationID := "inc_" + rand.Text()
+		if !existing[incarnationID] {
+			return incarnationID
 		}
 	}
 }
 
-// ensureSessionIncarnationsLocked assigns a unique incarnation to every
-// session. The caller must hold s.mu.
 func (s *State) ensureSessionIncarnationsLocked() bool {
-	incarnations := map[string]bool{}
+	incarnations := make(map[string]bool)
 	dirty := false
-	for i := range s.Sessions {
-		incarnation := s.Sessions[i].Incarnation
+	for idx := range s.Sessions {
+		incarnation := s.Sessions[idx].Incarnation
 		if incarnation == "" || incarnations[incarnation] {
 			incarnation = newSessionIncarnation(incarnations)
-			s.Sessions[i].Incarnation = incarnation
+			s.Sessions[idx].Incarnation = incarnation
 			dirty = true
 		}
 		incarnations[incarnation] = true
@@ -274,7 +281,7 @@ func (s *State) Save() error {
 
 func (s *State) saveLocked() error {
 	s.ensureSessionIncarnationsLocked()
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), privateDirMode); err != nil {
 		return err
 	}
 	buf, err := json.MarshalIndent(s, "", "  ")
@@ -282,7 +289,7 @@ func (s *State) saveLocked() error {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, buf, 0o600); err != nil {
+	if err := os.WriteFile(tmp, buf, privateFileMode); err != nil {
 		return err
 	}
 	return os.Rename(tmp, s.path)
@@ -292,9 +299,9 @@ func (s *State) saveLocked() error {
 func (s *State) FindSession(name string) (Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, ss := range s.Sessions {
-		if ss.Name == name {
-			return ss, true
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == name {
+			return s.Sessions[idx], true
 		}
 	}
 	return Session{}, false
@@ -304,20 +311,18 @@ func (s *State) FindSession(name string) (Session, bool) {
 func (s *State) AddSession(sess Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, ss := range s.Sessions {
-		if ss.Name == sess.Name {
-			return fmt.Errorf("session %q already exists", sess.Name)
+	for i := range s.Sessions {
+		if s.Sessions[i].Name == sess.Name {
+			return fmt.Errorf("%w: %q", errSessionExists, sess.Name)
 		}
 	}
 	if sess.ID == "" {
-		seen := map[string]bool{}
-		for _, e := range s.Sessions {
-			seen[e.ID] = true
+		seen := make(map[string]bool)
+		for i := range s.Sessions {
+			seen[s.Sessions[i].ID] = true
 		}
 		sess.ID = newSessionID(sess.Name, seen)
 	}
-	// AddSession always creates a new persisted object. Never let a caller
-	// accidentally reuse the identity of a removed session with the same name.
 	sess.Incarnation = ""
 	s.Sessions = append(s.Sessions, sess)
 	return s.saveLocked()
@@ -328,9 +333,9 @@ func (s *State) RemoveSession(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := s.Sessions[:0]
-	for _, ss := range s.Sessions {
-		if ss.Name != name {
-			out = append(out, ss)
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name != name {
+			out = append(out, s.Sessions[idx])
 		}
 	}
 	s.Sessions = out
@@ -349,24 +354,24 @@ func (s *State) RenameSession(oldName, newName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	found := -1
-	for i, ss := range s.Sessions {
-		if ss.Name == newName && newName != oldName {
-			return fmt.Errorf("session %q already exists", newName)
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == newName && newName != oldName {
+			return fmt.Errorf("%w: %q", errSessionExists, newName)
 		}
-		if ss.Name == oldName {
-			found = i
+		if s.Sessions[idx].Name == oldName {
+			found = idx
 		}
 	}
 	if found < 0 {
-		return fmt.Errorf("no session %q", oldName)
+		return fmt.Errorf("%w: %q", errNoSession, oldName)
 	}
 	if oldName == newName {
 		return nil
 	}
 	s.Sessions[found].Name = newName
-	for i, sc := range s.Schedules {
-		if sc.Session == oldName {
-			s.Schedules[i].Session = newName
+	for idx := range s.Schedules {
+		if s.Schedules[idx].Session == oldName {
+			s.Schedules[idx].Session = newName
 		}
 	}
 	return s.saveLocked()
@@ -379,12 +384,12 @@ func (s *State) RenameSession(oldName, newName string) error {
 func (s *State) SetResumeToken(name, token string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			if s.Sessions[i].ResumeToken == token {
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == name {
+			if s.Sessions[idx].ResumeToken == token {
 				return nil
 			}
-			s.Sessions[i].ResumeToken = token
+			s.Sessions[idx].ResumeToken = token
 			return s.saveLocked()
 		}
 	}
@@ -395,10 +400,10 @@ func (s *State) SetResumeToken(name, token string) error {
 // under. A memory root wins over the placement field of the same name: Project
 // may be steering the session into a workspace sub-directory and Agent may be
 // demanding an isolated worktree, and neither says where knowledge goes. Every
-// path that scopes memory — the supervisor spawning a bridge, the daemon running
-// a one-shot seed — asks here, so the two cannot drift.
-func (s Session) MemoryRoots() (project, agent string) {
-	project, agent = s.MemoryProject, s.MemoryAgent
+// path that scopes memory (the supervisor spawning a bridge, the daemon running
+// a one-shot seed) asks here, so the two cannot drift.
+func (s Session) MemoryRoots() (string, string) {
+	project, agent := s.MemoryProject, s.MemoryAgent
 	if project == "" {
 		project = s.Project
 	}
@@ -415,15 +420,15 @@ func (s Session) MemoryRoots() (project, agent string) {
 func (s *State) SetProjectPinned(name, project string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name != name {
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name != name {
 			continue
 		}
-		if s.Sessions[i].MemoryProject == project && s.Sessions[i].ProjectPinned {
+		if s.Sessions[idx].MemoryProject == project && s.Sessions[idx].ProjectPinned {
 			return nil
 		}
-		s.Sessions[i].MemoryProject = project
-		s.Sessions[i].ProjectPinned = true
+		s.Sessions[idx].MemoryProject = project
+		s.Sessions[idx].ProjectPinned = true
 		return s.saveLocked()
 	}
 	return nil
@@ -434,12 +439,12 @@ func (s *State) SetProjectPinned(name, project string) error {
 func (s *State) SetPausedReason(name, reason string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			if s.Sessions[i].PausedReason == reason {
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == name {
+			if s.Sessions[idx].PausedReason == reason {
 				return nil
 			}
-			s.Sessions[i].PausedReason = reason
+			s.Sessions[idx].PausedReason = reason
 			return s.saveLocked()
 		}
 	}
@@ -453,15 +458,16 @@ func (s *State) SetPausedReason(name, reason string) error {
 func (s *State) SetBudget(name string, costCap float64, tokenCap uint64, cohortCostCap float64, cohortTokenCap uint64, pausedReason string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			s.Sessions[i].CostCap = costCap
-			s.Sessions[i].TokenCap = tokenCap
-			s.Sessions[i].CohortCostCap = cohortCostCap
-			s.Sessions[i].CohortTokenCap = cohortTokenCap
-			s.Sessions[i].PausedReason = pausedReason
-			return s.saveLocked()
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name != name {
+			continue
 		}
+		s.Sessions[idx].CostCap = costCap
+		s.Sessions[idx].TokenCap = tokenCap
+		s.Sessions[idx].CohortCostCap = cohortCostCap
+		s.Sessions[idx].CohortTokenCap = cohortTokenCap
+		s.Sessions[idx].PausedReason = pausedReason
+		return s.saveLocked()
 	}
 	return nil
 }
@@ -475,14 +481,15 @@ func (s *State) SetBudget(name string, costCap float64, tokenCap uint64, cohortC
 func (s *State) SetBackendTarget(name, vendor, cmd, modelID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			s.Sessions[i].Vendor = vendor
-			s.Sessions[i].Cmd = cmd
-			s.Sessions[i].ModelID = modelID
-			s.Sessions[i].ResumeToken = ""
-			return true, s.saveLocked()
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name != name {
+			continue
 		}
+		s.Sessions[idx].Vendor = vendor
+		s.Sessions[idx].Cmd = cmd
+		s.Sessions[idx].ModelID = modelID
+		s.Sessions[idx].ResumeToken = ""
+		return true, s.saveLocked()
 	}
 	return false, nil
 }
@@ -492,12 +499,12 @@ func (s *State) SetBackendTarget(name, vendor, cmd, modelID string) (bool, error
 func (s *State) SetArchived(name string, archived bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			if s.Sessions[i].Archived == archived {
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == name {
+			if s.Sessions[idx].Archived == archived {
 				return nil
 			}
-			s.Sessions[i].Archived = archived
+			s.Sessions[idx].Archived = archived
 			return s.saveLocked()
 		}
 	}
@@ -505,10 +512,10 @@ func (s *State) SetArchived(name string, archived bool) error {
 }
 
 // SetHome records the home ref and persists.
-func (s *State) SetHome(h HomeRef) error {
+func (s *State) SetHome(home HomeRef) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.Home = h
+	s.Home = home
 	return s.saveLocked()
 }
 
@@ -570,9 +577,9 @@ func (s *State) AddApprovalRule(rendered string) error {
 func (s *State) RemoveApprovalRule(rendered string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i, r := range s.Approvals {
+	for idx, r := range s.Approvals {
 		if r == rendered {
-			s.Approvals = append(s.Approvals[:i], s.Approvals[i+1:]...)
+			s.Approvals = append(s.Approvals[:idx], s.Approvals[idx+1:]...)
 			return true, s.saveLocked()
 		}
 	}
@@ -597,24 +604,24 @@ func (s *State) ApprovalWait() time.Duration {
 	if s.ApprovalTimeout == "" {
 		return DefaultApprovalWait
 	}
-	d, err := time.ParseDuration(s.ApprovalTimeout)
-	if err != nil || d <= 0 {
+	timeout, err := time.ParseDuration(s.ApprovalTimeout)
+	if err != nil || timeout <= 0 {
 		return DefaultApprovalWait
 	}
-	return d
+	return timeout
 }
 
 // SetSessionApprovals changes one session's approval mode and persists.
 func (s *State) SetSessionApprovals(name, mode string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			s.Sessions[i].Approvals = mode
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == name {
+			s.Sessions[idx].Approvals = mode
 			return s.saveLocked()
 		}
 	}
-	return fmt.Errorf("no session named %q", name)
+	return fmt.Errorf("%w: %q", errNoSession, name)
 }
 
 // RoleAssignments returns a copy of the role table.
@@ -654,7 +661,7 @@ func (s *State) SetRole(principal, role, label string) (bool, error) {
 	defer s.mu.Unlock()
 	first := len(s.Roles) == 0
 	if s.Roles == nil {
-		s.Roles = map[string]RoleAssignment{}
+		s.Roles = make(map[string]RoleAssignment)
 	}
 	s.Roles[principal] = RoleAssignment{Role: role, Label: label}
 	return first, s.saveLocked()
@@ -669,18 +676,16 @@ func (s *State) RemoveRole(principal string) (bool, error) {
 	}
 	delete(s.Roles, principal)
 	if len(s.Roles) == 0 {
-		// nil rather than an empty map, so `roles` leaves state.json entirely
-		// and a revoked-to-empty table reads exactly like one never written.
 		s.Roles = nil
 	}
 	return true, s.saveLocked()
 }
 
 // SetStatusMessageID caches the status embed's message id and persists.
-func (s *State) SetStatusMessageID(id string) error {
+func (s *State) SetStatusMessageID(messageID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.StatusMessageID = id
+	s.StatusMessageID = messageID
 	return s.saveLocked()
 }
 
@@ -705,9 +710,9 @@ func (s *State) QualifiedName(name string) string {
 
 // SetInstanceID records the per-daemon instance id and persists. The id is meant
 // to be frozen after first resolution; callers enforce that invariant.
-func (s *State) SetInstanceID(id string) error {
+func (s *State) SetInstanceID(instanceID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.InstanceID = id
+	s.InstanceID = instanceID
 	return s.saveLocked()
 }

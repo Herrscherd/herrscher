@@ -8,35 +8,31 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// setHomeRun points the daemon at the category/forum that holds session
-// channels. The channel kind is resolved through the gateway so an invalid
-// target (a plain text channel) is rejected before it is persisted.
-func (h *Handler) setHomeRun(ctx context.Context, in contracts.Input) (string, error) {
-	id, ok := in.Lookup("channel")
-	if !ok || id == "" {
-		return "", fmt.Errorf("missing channel")
+func (h *Handler) setHomeRun(ctx context.Context, input contracts.Input) (string, error) {
+	channelID, ok := input.Lookup("channel")
+	if !ok || channelID == "" {
+		return "", ErrMissingChannel
 	}
-	kind, err := h.d.Kind(ctx, id)
+	kind, err := h.d.Kind(ctx, channelID)
 	if err != nil {
-		return "", fmt.Errorf("inspect channel: %v", err)
+		return "", fmt.Errorf("inspect channel: %w", err)
 	}
-	if kind != "category" && kind != "forum" {
-		return "", fmt.Errorf("channel %s is %q — home must be a category or forum", id, kind)
+	if kind != categoryKind && kind != forumKind {
+		return "", &ChannelKindError{Channel: channelID, Kind: kind, Need: "home must be a category or forum"}
 	}
-	if err := h.st.SetHome(state.HomeRef{ID: id, Type: kind}); err != nil {
-		return "", fmt.Errorf("persist: %v", err)
+	if err := h.st.SetHome(state.HomeRef{ID: channelID, Type: kind}); err != nil {
+		return "", fmt.Errorf("persist: %w", err)
 	}
-	return fmt.Sprintf("🏠 Home set to <#%s> (%s).", id, kind), nil
+	return fmt.Sprintf("🏠 Home set to <#%s> (%s).", channelID, kind), nil
 }
 
-// setSourceRun records the source checkout `/service update` builds from.
-func (h *Handler) setSourceRun(_ context.Context, in contracts.Input) (string, error) {
-	path, ok := in.Lookup("path")
+func (h *Handler) setSourceRun(_ context.Context, input contracts.Input) (string, error) {
+	path, ok := input.Lookup("path")
 	if !ok || path == "" {
-		return "", fmt.Errorf("missing path")
+		return "", ErrMissingPath
 	}
 	if err := h.st.SetSource(path); err != nil {
-		return "", fmt.Errorf("persist: %v", err)
+		return "", fmt.Errorf("persist: %w", err)
 	}
-	return fmt.Sprintf("📦 Source checkout set to `%s`.", path), nil
+	return fmt.Sprintf("📦 Source checkout set to %#q.", path), nil
 }

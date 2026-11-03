@@ -44,8 +44,6 @@ func TestObserverReadsAndNothingElse(t *testing.T) {
 	}
 }
 
-// The allow list is a list: a verb nobody named is refused, so a verb a later
-// version adds does not arrive already permitted.
 func TestUnknownVerbIsRefusedForAllowListRoles(t *testing.T) {
 	p := Principal{ID: "chat:1"}
 	for _, role := range []Role{RoleObserver, RoleAgent} {
@@ -61,9 +59,14 @@ func TestUnknownVerbIsRefusedForAllowListRoles(t *testing.T) {
 func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 	p := SessionPrincipal("revue")
 	allowed := [][]string{
-		{"session", "send"}, {"session", "seed"},
-		{"memory", "search"}, {"memory", "record"}, {"approve", "ask"},
-		{"models", "list"}, {"commands"}, {"whoami"},
+		{"session", "send"},
+		{"session", "seed"},
+		{"memory", "search"},
+		{"memory", "record"},
+		{"approve", "ask"},
+		{"models", "list"},
+		{"commands"},
+		{"whoami"},
 	}
 	for _, path := range allowed {
 		if ok, why := Decide(req(p, path...), RoleAgent); !ok {
@@ -71,11 +74,21 @@ func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 		}
 	}
 	refused := [][]string{
-		{"approve", "rule"}, {"approve", "mode"}, {"approve", "allow"}, {"approve", "list"},
-		{"host", "rm"}, {"role", "grant"}, {"schedule", "add"}, {"service", "restart"},
-		{"set", "home"}, {"skill", "approve"}, {"memory", "forget"},
+		{"approve", "rule"},
+		{"approve", "mode"},
+		{"approve", "allow"},
+		{"approve", "list"},
+		{"host", "rm"},
+		{"role", "grant"},
+		{"schedule", "add"},
+		{"service", "restart"},
+		{"set", "home"},
+		{"skill", "approve"},
+		{"memory", "forget"},
 		{"session", "create"},
-		{"session", "close"}, {"session", "archive"}, {"session", "switch"},
+		{"session", "close"},
+		{"session", "archive"},
+		{"session", "switch"},
 	}
 	for _, path := range refused {
 		if ok, _ := Decide(req(p, path...), RoleAgent); ok {
@@ -84,12 +97,6 @@ func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 	}
 }
 
-// Denying `approve mode` is decorative if `session create` is open beside it: a
-// session opened from argv with no --agent materializes no hook, and one opened
-// with `--approvals bypass` says so outright. Either is a second session where
-// the caller's own policy does not apply, reachable in one command. So the verb
-// is refused, and the refusal has to point at delegation, which produces a
-// worker that runs a registered agent and answers to a policy like its lead.
 func TestAnAgentCannotOpenASessionThatEscapesItsOwnPolicy(t *testing.T) {
 	ok, why := Decide(req(SessionPrincipal("revue"), "session", "create"), RoleAgent)
 	if ok {
@@ -100,9 +107,6 @@ func TestAnAgentCannotOpenASessionThatEscapesItsOwnPolicy(t *testing.T) {
 	}
 }
 
-// The approve family is a deny list of exact verbs and not "approve *", since
-// deny wins and the family would take `approve ask` with it. What keeps a later
-// approve verb bounded is the allow list, which refuses what it does not name.
 func TestAnApproveVerbNobodyNamedIsStillRefusedToAnAgent(t *testing.T) {
 	p := SessionPrincipal("revue")
 	if ok, why := Decide(req(p, "approve", "ask"), RoleAgent); !ok {
@@ -113,8 +117,6 @@ func TestAnApproveVerbNobodyNamedIsStillRefusedToAnAgent(t *testing.T) {
 	}
 }
 
-// An agent reads its refusal as a tool result, so it is written for a model:
-// it must not read as a crash, and it must say who to ask.
 func TestAgentRefusalTellsTheModelWhatToDo(t *testing.T) {
 	_, why := Decide(req(SessionPrincipal("revue"), "approve", "rule"), RoleAgent)
 	if why == "" {
@@ -127,8 +129,6 @@ func TestAgentRefusalTellsTheModelWhatToDo(t *testing.T) {
 	}
 }
 
-// A human's refusal names the role that would run it, so the operator knows
-// what to grant rather than only what was refused.
 func TestHumanRefusalNamesTheRoleThatWouldRunIt(t *testing.T) {
 	_, why := Decide(req(Principal{ID: "chat:5678"}, "approve", "rule"), RoleObserver)
 	for _, want := range []string{"approve rule", "operator", "observer", "chat:5678"} {
@@ -171,8 +171,6 @@ func TestScopeBindsSessionsToTheirOwnSubtree(t *testing.T) {
 	}
 }
 
-// Scope is a session's confinement. A human operating from a gateway is not
-// confined to a subtree, so a subject outside one changes nothing for them.
 func TestScopeDoesNotBindHumans(t *testing.T) {
 	r := Request{
 		Principal: Principal{ID: "chat:1"},
@@ -227,8 +225,6 @@ func TestAnUnknownRoleNameFallsBackToObserver(t *testing.T) {
 	}
 }
 
-// agent is structural. Granting it by hand in state.json would say a human is
-// a session, which is a claim the entry point already answers.
 func TestAgentIsNotGrantable(t *testing.T) {
 	if Grantable("agent") {
 		t.Fatal("agent must not be grantable")

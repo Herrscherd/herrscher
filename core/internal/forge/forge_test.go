@@ -7,16 +7,13 @@ import (
 	"testing"
 )
 
-// fakeRunner records calls and returns scripted output/errors keyed by argv[0],
-// or by the full "name arg arg…" line when outByArgs has a matching entry (used
-// to distinguish e.g. `gh repo list` from `gh api user/orgs`).
 type fakeRunner struct {
 	calls     [][]string
-	envs      [][]string        // extra env passed per call, aligned with calls
-	out       map[string][]byte // keyed by first arg (e.g. "gh", "glab", "git")
-	outByArgs map[string][]byte // keyed by the full joined argv, takes precedence
+	envs      [][]string
+	out       map[string][]byte
+	outByArgs map[string][]byte
 	err       map[string]error
-	lookErr   map[string]error // exec.LookPath result per binary
+	lookErr   map[string]error
 }
 
 func (f *fakeRunner) look(name string) error {
@@ -26,7 +23,7 @@ func (f *fakeRunner) look(name string) error {
 	return f.lookErr[name]
 }
 
-func (f *fakeRunner) run(ctx context.Context, dir string, env []string, name string, args ...string) ([]byte, error) {
+func (f *fakeRunner) run(_ context.Context, _ string, env []string, name string, args ...string) ([]byte, error) {
 	argv := append([]string{name}, args...)
 	f.calls = append(f.calls, argv)
 	f.envs = append(f.envs, env)
@@ -38,7 +35,6 @@ func (f *fakeRunner) run(ctx context.Context, dir string, env []string, name str
 	return f.out[name], f.err[name]
 }
 
-// lastEnv returns the extra env of the most recent call.
 func (f *fakeRunner) lastEnv() []string { return f.envs[len(f.envs)-1] }
 
 func hasEnv(env []string, key string) (string, bool) {
@@ -68,7 +64,6 @@ func TestCloneURLWithTokenUsesAskpass(t *testing.T) {
 	if v, ok := hasEnv(env, "GIT_TERMINAL_PROMPT"); !ok || v != "0" {
 		t.Fatalf("expected GIT_TERMINAL_PROMPT=0, env=%v", env)
 	}
-	// The token must never leak into argv (visible in `ps`).
 	if joined := strings.Join(r.calls[0], " "); strings.Contains(joined, "ghp_secrettoken") {
 		t.Fatalf("token leaked into argv: %s", joined)
 	}
@@ -83,7 +78,6 @@ func TestCloneURLWithoutTokenFailsFastNoAskpass(t *testing.T) {
 		t.Fatalf("Clone: %v", err)
 	}
 	env := r.lastEnv()
-	// No token → no askpass, but still fail-fast instead of hanging on a prompt.
 	if _, ok := hasEnv(env, "GIT_ASKPASS"); ok {
 		t.Fatalf("did not expect GIT_ASKPASS without a token, env=%v", env)
 	}
@@ -94,12 +88,11 @@ func TestCloneURLWithoutTokenFailsFastNoAskpass(t *testing.T) {
 
 func TestCloneOwnerNameNoGitEnv(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "ghp_secrettoken")
-	r := &fakeRunner{} // gh present
+	r := &fakeRunner{}
 	c := &Client{r: r}
 	if _, err := c.Clone(context.Background(), "me/app", "/ws"); err != nil {
 		t.Fatalf("Clone: %v", err)
 	}
-	// gh reads GH_TOKEN itself; we don't build a git askpass env for its path.
 	if _, ok := hasEnv(r.lastEnv(), "GIT_ASKPASS"); ok {
 		t.Fatalf("gh path must not set GIT_ASKPASS, env=%v", r.lastEnv())
 	}
@@ -116,7 +109,7 @@ func TestAvailableReportsBothAbsent(t *testing.T) {
 
 func TestListMergesGitHubOnly(t *testing.T) {
 	r := &fakeRunner{
-		lookErr: map[string]error{"glab": errors.New("nope")}, // only gh present
+		lookErr: map[string]error{"glab": errors.New("nope")},
 		out: map[string][]byte{
 			"gh": []byte(`[{"nameWithOwner":"me/app","sshUrl":"git@github.com:me/app.git","description":"d"}]`),
 		},
@@ -134,7 +127,7 @@ func TestListMergesGitHubOnly(t *testing.T) {
 func TestListGitHubIncludesOrgs(t *testing.T) {
 	const flags = "--json nameWithOwner,sshUrl,description --limit 100"
 	r := &fakeRunner{
-		lookErr: map[string]error{"glab": errors.New("nope")}, // only gh present
+		lookErr: map[string]error{"glab": errors.New("nope")},
 		outByArgs: map[string][]byte{
 			"gh repo list " + flags:                      []byte(`[{"nameWithOwner":"me/app","sshUrl":"git@github.com:me/app.git"}]`),
 			"gh api --paginate user/orgs --jq .[].login": []byte("acme\nwidgets\n"),
@@ -147,7 +140,7 @@ func TestListGitHubIncludesOrgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	got := map[string]bool{}
+	got := make(map[string]bool)
 	for _, rp := range repos {
 		got[rp.FullName] = true
 	}
@@ -156,20 +149,18 @@ func TestListGitHubIncludesOrgs(t *testing.T) {
 			t.Fatalf("expected %q in repos, got %+v", want, repos)
 		}
 	}
-	// me/app appears in both personal and acme listings but must be deduped.
 	if len(repos) != 3 {
 		t.Fatalf("expected 3 deduped repos, got %d: %+v", len(repos), repos)
 	}
 }
 
-// A failing org enumeration must not drop the user's personal repos.
 func TestListGitHubOrgFailureNonFatal(t *testing.T) {
 	r := &fakeRunner{
 		lookErr: map[string]error{"glab": errors.New("nope")},
 		out: map[string][]byte{
 			"gh": []byte(`[{"nameWithOwner":"me/app","sshUrl":"u"}]`),
 		},
-		err: map[string]error{}, // gh api user/orgs returns the repo JSON; treated as junk org, deduped away
+		err: make(map[string]error),
 	}
 	c := &Client{r: r}
 	repos, err := c.List(context.Background())
@@ -201,8 +192,6 @@ func TestCloneRejectsBadSpec(t *testing.T) {
 	if _, err := c.Clone(context.Background(), "a b; rm -rf", "/ws"); err == nil {
 		t.Fatal("expected rejection of spec with shell metacharacters")
 	}
-	// Argument injection: a leading-dash segment could be read as a CLI flag
-	// (the git-clone --upload-pack RCE class).
 	for _, bad := range []string{"-x/app", "owner/-rf", "--upload-pack=x/app", "ow\tner/app", ""} {
 		if _, err := c.Clone(context.Background(), bad, "/ws"); err == nil {
 			t.Fatalf("expected rejection of injection spec %q", bad)
@@ -211,7 +200,6 @@ func TestCloneRejectsBadSpec(t *testing.T) {
 }
 
 func TestCloneArgvSeparatesSpec(t *testing.T) {
-	// git/glab clones must place spec after a `--` separator (defense in depth).
 	r := &fakeRunner{}
 	c := &Client{r: r}
 	if _, err := c.Clone(context.Background(), "https://github.com/me/app.git", "/ws"); err != nil {
@@ -233,7 +221,7 @@ func TestCloneArgvSeparatesSpec(t *testing.T) {
 }
 
 func TestCloneOwnerNameUsesGh(t *testing.T) {
-	r := &fakeRunner{} // gh present (no lookErr)
+	r := &fakeRunner{}
 	c := &Client{r: r}
 	dir, err := c.Clone(context.Background(), "me/app", "/ws")
 	if err != nil {

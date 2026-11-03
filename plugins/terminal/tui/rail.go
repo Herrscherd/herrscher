@@ -8,16 +8,21 @@ import (
 
 const brand = "──◂ HERRSCHER ▸──"
 
+const (
+	railMinGap    = 4
+	railSeparator = "  "
+)
+
 func (m *model) railRow() string {
-	left := accentStyle.Render(brand)
+	left := m.st.accent.Render(brand)
 	strip := m.tabStrip()
 	right := m.vendorMark()
 	if strip == "" {
 		return truncate(joinRow(m.innerWidth(), left, right), m.innerWidth())
 	}
 	gap := m.innerWidth() - lipgloss.Width(left) - lipgloss.Width(strip) - lipgloss.Width(right)
-	if gap >= 4 {
-		return left + strings.Repeat(" ", gap-2) + strip + "  " + right
+	if gap >= railMinGap {
+		return left + strings.Repeat(" ", gap-len(railSeparator)) + strip + railSeparator + right
 	}
 	if lipgloss.Width(strip) <= m.innerWidth() {
 		return strip
@@ -26,39 +31,39 @@ func (m *model) railRow() string {
 }
 
 func (m *model) activeMark() string {
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return ""
 	}
-	return accentStyle.Render(glyphCursor + " " + tb.label)
+	return m.st.accent.Render(glyphCursor + " " + tab.label)
 }
 
 func (m *model) tabStrip() string {
 	var out []string
-	for _, ch := range m.order {
-		tb := m.tabs[ch]
-		if tb == nil {
+	for _, channel := range m.order {
+		tab := m.tabs[channel]
+		if tab == nil {
 			continue
 		}
-		label := tb.label
-		if tb.unread {
+		label := tab.label
+		if tab.unread {
 			label = glyphUnread + label
 		}
-		if ch == m.active {
-			out = append(out, accentStyle.Render(glyphCursor+" "+label))
+		if channel == m.active {
+			out = append(out, m.st.accent.Render(glyphCursor+" "+label))
 			continue
 		}
-		out = append(out, dimStyle.Render(label))
+		out = append(out, m.st.dim.Render(label))
 	}
 	return strings.Join(out, "  ")
 }
 
 func (m *model) vendorMark() string {
-	s, ok := m.activeInfo()
-	if !ok || s.Vendor == "" {
+	info, ok := m.activeInfo()
+	if !ok || info.Vendor == "" {
 		return ""
 	}
-	return dimStyle.Render(glyphBolt + " " + s.Vendor)
+	return m.st.dim.Render(glyphBolt + " " + info.Vendor)
 }
 
 func joinRow(width int, left, right string) string {

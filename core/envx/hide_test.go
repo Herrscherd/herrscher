@@ -25,7 +25,7 @@ func TestARevealPutsBackWhatAnEarlierHideAlreadyHeld(t *testing.T) {
 	outer := Hide([]string{key})
 	t.Cleanup(outer)
 
-	os.Setenv(key, "second")
+	t.Setenv(key, "second")
 	inner := Hide([]string{key})
 	inner()
 
@@ -42,5 +42,20 @@ func TestAKeyNobodyHidStaysWhereItWas(t *testing.T) {
 
 	if got := os.Getenv(key); got != "operator-key" {
 		t.Fatalf("a key outside the list was taken: got %q", got)
+	}
+}
+
+func TestAnInvalidKeyDoesNotStopTheOthers(t *testing.T) {
+	const key = "ENVX_TEST_MIXED"
+	t.Setenv(key, "kept")
+
+	reveal := Hide([]string{"", "ENVX_TEST=BAD", key})
+
+	if _, set := os.LookupEnv(key); set {
+		t.Fatal("a valid key next to an invalid one stayed in the environment")
+	}
+	reveal()
+	if got := os.Getenv(key); got != "kept" {
+		t.Fatalf("the reveal did not restore the valid key: got %q", got)
 	}
 }

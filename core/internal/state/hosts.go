@@ -7,10 +7,10 @@ const LocalHost = "local"
 // Host is a named place where a session's process runs.
 type Host struct {
 	Name      string `json:"name"`
-	SSH       string `json:"ssh,omitempty"`       // user@machine; "" = local
-	Workspace string `json:"workspace,omitempty"` // abs path over there
-	Bin       string `json:"bin,omitempty"`       // abs path to herrscher over there
-	Version   string `json:"version,omitempty"`   // short commit provisioned
+	SSH       string `json:"ssh,omitempty"`
+	Workspace string `json:"workspace,omitempty"`
+	Bin       string `json:"bin,omitempty"`
+	Version   string `json:"version,omitempty"`
 	GOOS      string `json:"goos,omitempty"`
 	GOARCH    string `json:"goarch,omitempty"`
 }
@@ -28,25 +28,25 @@ func (s *State) SnapshotHosts() []Host {
 func (s *State) FindHost(name string) (Host, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, h := range s.Hosts {
-		if h.Name == name {
-			return h, true
+	for _, host := range s.Hosts {
+		if host.Name == name {
+			return host, true
 		}
 	}
 	return Host{}, false
 }
 
 // PutHost adds or replaces a host, by name.
-func (s *State) PutHost(h Host) error {
+func (s *State) PutHost(host Host) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Hosts {
-		if s.Hosts[i].Name == h.Name {
-			s.Hosts[i] = h
+	for idx := range s.Hosts {
+		if s.Hosts[idx].Name == host.Name {
+			s.Hosts[idx] = host
 			return s.saveLocked()
 		}
 	}
-	s.Hosts = append(s.Hosts, h)
+	s.Hosts = append(s.Hosts, host)
 	return s.saveLocked()
 }
 
@@ -54,9 +54,9 @@ func (s *State) PutHost(h Host) error {
 func (s *State) RemoveHost(name string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Hosts {
-		if s.Hosts[i].Name == name {
-			s.Hosts = append(s.Hosts[:i], s.Hosts[i+1:]...)
+	for idx := range s.Hosts {
+		if s.Hosts[idx].Name == name {
+			s.Hosts = append(s.Hosts[:idx], s.Hosts[idx+1:]...)
 			return true, s.saveLocked()
 		}
 	}

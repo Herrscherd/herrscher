@@ -26,8 +26,6 @@ func (plainBackend) Respond(context.Context, contracts.Prompt, func(contracts.Ba
 }
 func (plainBackend) Close() error { return nil }
 
-// captureBackend records the Context of each prompt it answers and returns a
-// fixed reply, so a test can assert what the hub injected.
 type captureBackend struct {
 	reply    string
 	contexts []string
@@ -52,7 +50,7 @@ func writeBridgeSkill(t *testing.T, workspace, name, front, body string) {
 
 func TestSkillRootsOrder(t *testing.T) {
 	roots := skillRoots("/work/repo", []string{"/opt/x"})
-	if roots[0] != filepath.Join("/work/repo", ".claude", "skills") {
+	if roots[0] != filepath.Join(string(filepath.Separator), "work", "repo", ".claude", "skills") {
 		t.Fatalf("workspace root must come first, got %v", roots)
 	}
 	if roots[len(roots)-1] != "/opt/x" {

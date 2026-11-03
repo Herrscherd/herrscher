@@ -18,7 +18,6 @@ func TestSetArchivedPersistsOnChange(t *testing.T) {
 	if !got.Archived {
 		t.Fatalf("archived not set")
 	}
-	// unknown name is a no-op, not an error
 	if err := st.SetArchived("nope", true); err != nil {
 		t.Fatalf("unknown should be nil, got %v", err)
 	}

@@ -8,24 +8,19 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 )
 
-// fixedGate is a test-local fake budgetGate: it always answers the same reason
-// (non-empty = a session already over budget before the next turn is dispatched)
-// and the same headroom (capped=false by default, i.e. no token cap configured).
 type fixedGate struct {
 	reason   string
 	headroom uint64
 	capped   bool
 }
 
-func (g fixedGate) Check(string) (string, uint64, bool) { return g.reason, g.headroom, g.capped }
+func (g fixedGate) Check(string) manager.BudgetCheck {
+	return manager.BudgetCheck{Reason: g.reason, Headroom: g.headroom, Capped: g.capped}
+}
 
-// TestDispatchRefusedWhilePaused proves the dispatch point — not just the
-// post-turn check — refuses to open a new turn when the gate reports the
-// session is over budget. No input frame should reach the bridge, so
-// runTurn/awaitTurn never engage the backend; instead a paused event is
-// emitted.
 func TestDispatchRefusedWhilePaused(t *testing.T) {
 	a := &fanRecorder{}
 	a.feed("hello")
@@ -41,8 +36,6 @@ func TestDispatchRefusedWhilePaused(t *testing.T) {
 	defer cancel()
 	go d.run(ctx)
 
-	// The driver must never write an input frame (that would mean it opened
-	// a turn against an over-budget session).
 	deadline := time.After(time.Second)
 loop:
 	for {
@@ -57,11 +50,6 @@ loop:
 	}
 }
 
-// TestPausedReachesEmitTap proves the paused event reaches LIVE subscribers
-// via the same fanOut path as every other subscriber-visible frame (status,
-// reply, etc.) — not only the backend bridge. Before this fix, emitPaused
-// wrote solely to d.toBridge, which no subscriber tap observes; a subscriber
-// only learned of the pause on the app's next status poll, not live.
 func TestPausedReachesEmitTap(t *testing.T) {
 	a := &fanRecorder{}
 	a.feed("hello")
@@ -102,12 +90,6 @@ func TestPausedReachesEmitTap(t *testing.T) {
 	}
 }
 
-// TestRefusedInputAcknowledgedNotSilentlyDropped proves that when an input
-// event arrives while the gate is tripped, the dequeued input is not just
-// discarded: the subscriber tap sees BOTH the paused event and an explicit
-// refusal status frame naming the refused input, and no turn is opened for
-// it (no "human"/"input" frame reaches the tap or the bridge for that
-// message).
 func TestRefusedInputAcknowledgedNotSilentlyDropped(t *testing.T) {
 	a := &fanRecorder{}
 	a.feed("spend more")
@@ -118,50 +100,64 @@ func TestRefusedInputAcknowledgedNotSilentlyDropped(t *testing.T) {
 		[]contracts.GatewaySet{{Gateway: a, Reader: a}},
 		toBridge, fromBridge)
 	d.gate = fixedGate{reason: "cost"}
-	var tapped []contracts.Event
-	var mu sync.Mutex
-	d.emitTap = func(e contracts.Event) {
-		mu.Lock()
-		tapped = append(tapped, e)
-		mu.Unlock()
-	}
+	tap := &refusalTap{}
+	d.emitTap = tap.record
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go d.run(ctx)
 
-	deadline := time.After(time.Second)
-	sawPaused, sawRefusalStatus := false, false
-	for {
-		mu.Lock()
-		for _, e := range tapped {
-			if e.T == "human" {
-				mu.Unlock()
-				t.Fatalf("a turn was opened for input refused by the budget gate: %+v", e)
-			}
-			if e.T == "paused" {
-				sawPaused = true
-			}
-			if e.T == "status" && strings.Contains(e.Text, "refus") {
-				sawRefusalStatus = true
-			}
+	awaitRefusalAcknowledged(t, tap)
+}
+
+type refusalTap struct {
+	mu     sync.Mutex
+	events []contracts.Event
+}
+
+func (k *refusalTap) record(e contracts.Event) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.events = append(k.events, e)
+}
+
+type refusalScan struct {
+	paused  bool
+	refused bool
+}
+
+func (k *refusalTap) scanRefusal(t *testing.T) refusalScan {
+	t.Helper()
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	var scan refusalScan
+	for i := range k.events {
+		e := k.events[i]
+		if e.T == "human" {
+			t.Fatalf("a turn was opened for input refused by the budget gate: %+v", e)
 		}
-		gotBoth := sawPaused && sawRefusalStatus
-		mu.Unlock()
-		if gotBoth {
+		scan.paused = scan.paused || e.T == "paused"
+		scan.refused = scan.refused || (e.T == "status" && strings.Contains(e.Text, "refus"))
+	}
+	return scan
+}
+
+func awaitRefusalAcknowledged(t *testing.T, tap *refusalTap) {
+	t.Helper()
+	deadline := time.After(time.Second)
+	for {
+		scan := tap.scanRefusal(t)
+		if scan.paused && scan.refused {
 			return
 		}
 		select {
 		case <-deadline:
-			t.Fatalf("did not see both paused and refusal status on emitTap: paused=%v refusalStatus=%v", sawPaused, sawRefusalStatus)
+			t.Fatalf("did not see both paused and refusal status on emitTap: paused=%v refusalStatus=%v", scan.paused, scan.refused)
 		case <-time.After(5 * time.Millisecond):
 		}
 	}
 }
 
-// TestDispatchProceedsWhenNotPaused is the regression guard: with a gate that
-// never trips (matching noBudgetGate's contract), the same event still opens
-// a turn normally.
 func TestDispatchProceedsWhenNotPaused(t *testing.T) {
 	a := &fanRecorder{}
 	a.feed("hello")

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
@@ -20,23 +21,17 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
-// serviceUpdater backs /service update|restart from inside the daemon. It binds
-// the service config to the persisted source dir, builds from source, and
-// restarts the unit out-of-band so the daemon can reply before it is replaced.
 type serviceUpdater struct {
 	cfg service.Config
 	st  *state.State
 }
 
-// buildTimeout bounds the unattended pull+build behind /service update so a
-// stuck network fetch or compile can't hold the interaction open until the
-// token expires (the CLI path is attended, so it isn't bounded).
 const buildTimeout = 5 * time.Minute
 
 func (u serviceUpdater) Build(ctx context.Context, pull bool) (string, error) {
 	src := u.st.SourceDir()
 	if src == "" {
-		return "", fmt.Errorf("no source set — run /set source <path> first")
+		return "", errSourceNotSet
 	}
 	ctx, cancel := context.WithTimeout(ctx, buildTimeout)
 	defer cancel()
@@ -48,8 +43,6 @@ func (u serviceUpdater) Build(ctx context.Context, pull bool) (string, error) {
 	if err := service.Build(ctx, src, u.cfg.BinPath); err != nil {
 		return "", err
 	}
-	// Refuse to advertise a version we won't restart into: if the new binary
-	// can't even run --help, fail here so the handler never schedules a restart.
 	if err := service.Smoke(ctx, u.cfg.BinPath); err != nil {
 		return "", err
 	}
@@ -120,40 +113,31 @@ func DefaultStatePath() string {
 	if d := envx.Get("STATE_DIR"); d != "" {
 		return filepath.Join(d, "state.json")
 	}
-	home, _ := os.UserHomeDir()
+	home, homeErr := os.UserHomeDir()
+	logCleanup(homeErr)
 	return filepath.Join(home, ".config", "herrscher", "state.json")
 }
 
-// resolveInstanceID computes and freezes the daemon's instanceID, per Spec §2/§8.
-//   - An invalid explicit optID is an error.
-//   - If the state already carries an id, a different non-empty resolved id is
-//     refused (changing it would orphan existing branches/worktrees); a matching
-//     or empty resolved id keeps the stored id.
-//   - On a fresh state (no id) with a non-empty resolved id and NO sessions, the
-//     id is frozen (persisted). If sessions already exist, the daemon stays in
-//     legacy (empty) mode so pre-existing sessions are never orphaned.
-func resolveInstanceID(st *state.State, optID, ownerID string, log *slog.Logger) (string, error) {
+func resolveInstanceID(hostState *state.State, optID, ownerID string, log *slog.Logger) (string, error) {
 	resolved, err := instanceid.Resolve(optID, ownerID)
 	if err != nil {
 		return "", err
 	}
-	if st.InstanceID != "" {
-		if resolved != "" && resolved != st.InstanceID {
-			return "", fmt.Errorf("instanceID mismatch: state has %q but %q was requested; "+
-				"changing it would orphan existing sessions", st.InstanceID, resolved)
+	if hostState.InstanceID != "" {
+		if resolved != "" && resolved != hostState.InstanceID {
+			return "", &instanceIDMismatchError{Have: hostState.InstanceID, Want: resolved}
 		}
-		return st.InstanceID, nil
+		return hostState.InstanceID, nil
 	}
 	if resolved == "" {
 		return "", nil
 	}
-	if len(st.SnapshotSessions()) > 0 {
-		// Legacy sessions exist; stay non-namespaced so they keep working.
+	if len(hostState.SnapshotSessions()) > 0 {
 		log.Warn("legacy sessions present; staying in non-namespaced mode",
-			"sessions", len(st.SnapshotSessions()))
+			"sessions", len(hostState.SnapshotSessions()))
 		return "", nil
 	}
-	if err := st.SetInstanceID(resolved); err != nil {
+	if err := hostState.SetInstanceID(resolved); err != nil {
 		return "", fmt.Errorf("persist instanceID: %w", err)
 	}
 	return resolved, nil
@@ -163,205 +147,186 @@ func resolveInstanceID(st *state.State, optID, ownerID string, log *slog.Logger)
 // bridge per persisted session, drives each session's turns over a control
 // Acceptor (fanning events out to every bound gateway), and serves
 // health/liveness. gws are the gateway sets the daemon owns (built from the
-// registry by the caller). Command dispatch no longer runs here —
-// session/service commands run through the operator CLI (see NewRegistry).
-func RunHub(ctx context.Context, gws []Deps, o Options) error {
-	// base carries no component so each subsystem attaches its own; log is the
-	// serve composition root's own child.
+// registry by the caller). Command dispatch no longer runs here.
+// Session/service commands run through the operator CLI (see NewRegistry).
+func RunHub(ctx context.Context, gws []Deps, options Options) error {
 	base := obs.Stderr(false)
 	log := base.With("component", "serve")
-	h := health.NewHealth(time.Now())
+	monitor := health.NewHealth(time.Now())
 
-	st, err := state.LoadState(o.StatePath)
+	store, err := loadHubState(options)
 	if err != nil {
 		return fmt.Errorf("load state: %w", err)
 	}
-	// Seed declarative defaults from config.json in-memory only; a live update
-	// (persisted to state.json) keeps precedence.
-	var home *state.HomeRef
-	if o.Home != nil {
-		home = &state.HomeRef{ID: o.Home.ID, Type: o.Home.Type}
-	}
-	st.ApplyDefaults(home, o.Workspace, o.Source)
-	seedTerminalHome(st, o.ForegroundBound)
 
-	self, _ := os.Executable()
-	startRemotePluginHosts(ctx, self, o.RemoteCategories, base)
-	partDir := filepath.Dir(o.StatePath) // participants/<name>.log lives beside state.json
-	sup := supervisor.NewSupervisor(ctx, self)
-	sup.SetLogger(base)
-	sup.SetMetrics(h.Metrics())
-	sup.SetAgentsRoot(filepath.Join(partDir, "agents"))
+	self, execErr := os.Executable()
+	logCleanup(execErr)
+	startRemotePluginHosts(ctx, self, options.RemoteCategories, base)
+	partDir := filepath.Dir(options.StatePath)
+	sup := newHubSupervisor(ctx, self, base, monitor, partDir)
 
-	instID, err := resolveInstanceID(st, o.InstanceID, o.Owner, log)
+	instID, err := resolveInstanceID(store, options.InstanceID, options.Owner, log)
 	if err != nil {
 		return fmt.Errorf("resolve instance id: %w", err)
 	}
 
-	// The hub owns the live session set and the runtime command seam: the boot
-	// loop and any gateway-driven create/close both go through it, so a session
-	// added at runtime is wired exactly like one loaded here. The handler behind
-	// the registry creates/archives session channels through the channel admin of
-	// the gateway that owns the home, so a terminal home is never minted by a
-	// remote gateway (nor vice-versa) when both are present.
-	//
-	// The default gateway set a new session binds to is derived here from the
-	// built gateways — the concrete platform kinds live at the composition root,
-	// never inside the manager package.
-	if o.DefaultGateways == nil {
-		o.DefaultGateways = nonTerminalKinds(gws)
+	if options.DefaultGateways == nil {
+		options.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID, o.ContributedCommands)
+	approvals := newApprovalTable()
+	sessions := newSessionTable()
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, options, store, sup, instID, options.ContributedCommands, approvals, sessions)
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}
-	// Two things a bridge child cannot obtain for itself, handed down its
-	// environment now that the registry exists — every bridge starts below this.
-	//
-	// The gateway pair, because the daemon scrubbed it from its own environment
-	// (see CaptureGatewayCreds) and the bridge is the process that actually builds
-	// backends; and the summary of what this daemon dispatches, because the child
-	// holds no registry and the gateway-contributed verbs exist only here. Without
-	// the summary an agent asked to read a chat channel reaches for a token of its
-	// own instead of the verb the daemon already carries — a capability it has and
-	// cannot see. (`session switch` restarts a bridge from the operator CLI, whose
-	// registry has no contributed verbs; that child runs without the block until
-	// the daemon respawns it, which beats advertising a list missing the gateways.)
-	bridgeEnv := GatewayEnvPairs()
-	kinds := contributedKinds(o.ContributedCommands)
-	if pair := CapabilityEnvPair(reg.Specs(), func(family string) bool { return kinds[family] }); pair != "" {
-		bridgeEnv = append(bridgeEnv, pair)
-	}
-	sup.SetBridgeEnv(bridgeEnv)
-	// Only the daemon spawns delegates, so seed the default Codex agent here rather
-	// than in buildRegistry — an operator CLI command must not write agent homes as
-	// a side effect of building its registry.
+	kinds := contributedKinds(options.ContributedCommands)
+	sup.SetBridgeEnv(hubBridgeEnv(reg.Specs(), kinds))
 	ensureCodexAgent(deps.agents)
-	// Terminal-only sessions (the TUI's own tabs) route through the terminal
-	// gateway's admin, not the operator's home gateway — so they open as local
-	// `terminal/…` channels even when a remote home is configured, or none is.
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
-	hb := newHub(ctx, st, sup, gws, partDir, reg, h.Metrics())
-	hb.contributedKinds = kinds
-	hb.instanceID = instID
-	// Concrete budget-cap enforcement: built from the manager Handler (owner of
-	// aggregateUsage/cohortTotals + state.State), injected via the host's private
-	// budgetGate seam so goLive's RunSession drivers actually pause on cap.
-	hb.gate = deps.handler.BudgetGate()
-	// Wired before the boot loop's goLive calls below, so the Coordinator is
-	// non-nil for every driver started at boot (Model O handoff hook).
-	coord := newCoordinator(hb, deps.agents, deps.wt, st, hb, Seed)
-	hb.coordinator = coord
-	deps.seedCoord.coord = coord
+	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
+	liveStopped := make(chan struct{})
+	go func() {
+		defer close(liveStopped)
+		<-ctx.Done()
+		runningHub.stopLive()
+	}()
+	runningHub.contributedKinds = kinds
+	runningHub.instanceID = instID
+	runningHub.gate = deps.handler.BudgetGate()
+	coord := wireCoordination(runningHub, deps, store, sessions)
 
-	// Proactive agents. Wired here because this is the first point where hb (the
-	// session creator), st and Seed are all in hand. The loop owns its goroutine
-	// and dies with ctx; it blocks no turn, and a firing that fails only logs.
-	sched := newScheduler(st, st, hb, Seed, time.Now)
+	sched := newScheduler(store, store, runningHub, sessions.Seed, time.Now)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
 
-	// Observability seam: the handler's session list --json carries each session's
-	// live coordination projection, and the command socket lets an external reader
-	// (Neublox) dispatch that command against THIS running hub — the only way to
-	// see in-memory coordinator state across the process boundary (a fresh CLI has
-	// no live coordinator). Read-only: the accessor never mutates coordinator state.
 	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
 
-	// Live event stream: a sibling append-only socket carries every session's
-	// bus events (thinking/status/chunk/reply) as JSON lines to any external
-	// reader (an attached terminal, Neublox). Every driven session's turn driver
-	// taps it through goLive, and the seed path (Op::DispatchTask) receives it in
-	// its request-scoped daemon runtime; absent a subscriber, Publish is a cheap
-	// no-op. Bind it BEFORE serveCommandSocket and BEFORE the boot loop below, so
-	// the very first dispatched task and the first driver started already see the
-	// tap (no race, no missed live stream).
-	es := newEventSocket()
-	go serveEventsSocket(ctx, EventsSocketPath(instID), es)
-	hb.eventPublisher = es.Publish
-
-	go serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{hb})
-
-	for _, sess := range st.SnapshotSessions() {
-		if sess.Archived {
-			continue // archived sessions come back only on demand via /resume
-		}
-		hb.goLive(sess)
-		sup.Start(sess)
-	}
-	h.SetSessions(len(st.SnapshotSessions()))
-
-	// Hand the runtime session controller to any gateway that drives the session
-	// lifecycle itself (e.g. slash commands). Only the neutral SessionControl
-	// crosses the boundary, so the core never learns the gateway's platform.
-	for _, g := range gws {
-		if rcv, ok := g.Gateway.(contracts.SessionControlReceiver); ok {
-			rcv.BindSessionControl(hb)
-		}
-	}
+	serveHubSockets(ctx, instID, runningHub)
+	goLiveSessions(ctx, runningHub, sup, store, monitor)
+	bindSessionControl(gws, runningHub)
 
 	if instID != "" {
 		log.Info("instance resolved", "instance", instID)
 	}
+	logCompiledPlugins(log)
+	startHubProbes(ctx, gws, options, store, monitor, instID)
 
-	// Plugin discovery: report the plugins compiled into this binary. Each
-	// self-registers into contracts.Default from its init() (xcaddy pattern), so
-	// adding a gateway or backend is a blank import + rebuild.
-	for _, p := range contracts.Default.Plugins() {
-		log.Info("plugin compiled in", "kind", p.Manifest.Kind, "category", p.Manifest.Category, "status", p.Manifest.Status)
-	}
-
-	// Liveness uses the first gateway exposing each port: ping a Prober for
-	// reachability, and maintain the status embed via a Reader.
-	if o.HealthAddr != "" {
-		go serveHealth(ctx, o.HealthAddr, h)
-	}
-	if pr := firstProber(gws); pr != nil {
-		go pingLoop(ctx, pr, h)
-	}
-	if o.StatusChannel != "" {
-		if cr := firstReader(gws); cr != nil {
-			go statusLoop(ctx, cr, o.StatusChannel, st, h, instID)
-		}
-	}
-
-	// Naming the gateways that are actually up, rather than announcing an edge is
-	// online: this line used to say "bot online" whatever had failed to build, so
-	// the one log an operator reads after a restart confirmed a gateway that was
-	// not there.
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
 	<-ctx.Done()
+	<-liveStopped
 	return ctx.Err()
 }
 
-// seedTerminalHome sets a terminal home when a foreground (TUI) gateway is bound
-// and no home is configured, so session create works with no remote gateway. It
-// never overwrites an existing home (a remote setup keeps its category/forum).
-func seedTerminalHome(st *state.State, hasForeground bool) {
-	if !hasForeground || st.Home.ID != "" {
+func loadHubState(opts Options) (*state.State, error) {
+	store, err := state.LoadState(opts.StatePath)
+	if err != nil {
+		return nil, err
+	}
+	var home *state.HomeRef
+	if opts.Home != nil {
+		home = &state.HomeRef{ID: opts.Home.ID, Type: opts.Home.Type}
+	}
+	store.ApplyDefaults(home, opts.Workspace, opts.Source)
+	seedTerminalHome(store, opts.ForegroundBound)
+	return store, nil
+}
+
+func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, host *health.Health, partDir string) *supervisor.Supervisor {
+	sup := supervisor.NewSupervisor(ctx, self)
+	sup.SetLogger(base)
+	sup.SetMetrics(host.Metrics())
+	sup.SetAgentsRoot(filepath.Join(partDir, "agents"))
+	return sup
+}
+
+func hubBridgeEnv(specs []cli.Spec, kinds map[string]bool) []string {
+	bridgeEnv := GatewayEnvPairs()
+	if pair := CapabilityEnvPair(specs, func(family string) bool { return kinds[family] }); pair != "" {
+		bridgeEnv = append(bridgeEnv, pair)
+	}
+	return bridgeEnv
+}
+
+func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *sessionTable) *coordinator {
+	coord := newCoordinator(hubCore, deps.agents, deps.wt, st, hubCore, sessions.Seed)
+	hubCore.coordinator = coord
+	deps.seedCoord.coord = coord
+	return coord
+}
+
+func serveHubSockets(ctx context.Context, instID string, hubCore *hub) {
+	events := newEventSocket()
+	serveEventsSocket(ctx, EventsSocketPath(instID), events)
+	hubCore.eventPublisher = events.Publish
+	serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{hubCore})
+}
+
+func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Supervisor, hostState *state.State, host *health.Health) {
+	sessions := hostState.SnapshotSessions()
+	for idx := range sessions {
+		sess := sessions[idx]
+		if sess.Archived {
+			continue
+		}
+		runningHub.goLive(ctx, sess)
+		sup.StartWith(ctx, sess)
+	}
+	host.SetSessions(len(hostState.SnapshotSessions()))
+}
+
+func bindSessionControl(gws []Deps, hubCore *hub) {
+	for _, g := range gws {
+		if rcv, ok := g.Gateway.(contracts.SessionControlReceiver); ok {
+			rcv.BindSessionControl(hubCore)
+		}
+	}
+}
+
+func logCompiledPlugins(log *slog.Logger) {
+	plugins := contracts.Default.Plugins()
+	for idx := range plugins {
+		p := plugins[idx]
+		log.Info("plugin compiled in", "kind", p.Manifest.Kind, "category", p.Manifest.Category, keyStatus, p.Manifest.Status)
+	}
+}
+
+func startHubProbes(ctx context.Context, gws []Deps, options Options, store *state.State, monitor *health.Health, instID string) {
+	if options.HealthAddr != "" {
+		go serveHealth(ctx, options.HealthAddr, monitor)
+	}
+	if pr := firstProber(gws); pr != nil {
+		go pingLoop(ctx, pr, monitor)
+	}
+	if options.StatusChannel != "" {
+		if cr := firstReader(gws); cr != nil {
+			go statusLoop(ctx, cr, options.StatusChannel, store, monitor, instID)
+		}
+	}
+}
+
+func seedTerminalHome(hostState *state.State, hasForeground bool) {
+	if !hasForeground || hostState.Home.ID != "" {
 		return
 	}
-	_ = st.SetHome(state.HomeRef{ID: "terminal", Type: "terminal"})
+	logCleanup(hostState.SetHome(state.HomeRef{ID: homeTerminalID, Type: kindTerminal}))
 }
 
 func startRemotePluginHosts(ctx context.Context, self string, remote map[contracts.Category]bool, log *slog.Logger) {
 	base := log.With("component", "plugin-host")
-	for c := range remote {
-		if !SupportedRemoteCategory(c) {
-			base.Warn("remote category not yet supported; staying in-process", "category", c)
+	for category := range remote {
+		if !SupportedRemoteCategory(category) {
+			base.Warn("remote category not yet supported; staying in-process", "category", category)
 			continue
 		}
-		startRemotePluginHost(ctx, self, c, base.With("category", string(c)))
+		startRemotePluginHost(ctx, self, category, base.With("category", string(category)))
 	}
 }
 
-// startRemotePluginHost supervises one out-of-process plugin-host for cat,
-// restarting it with backoff (Stage A2) whenever it exits while ctx is live.
 func startRemotePluginHost(ctx context.Context, self string, cat contracts.Category, log *slog.Logger) {
 	go func() {
-		bo := obs.RestartBackoff()
+		backoff := obs.RestartBackoff()
 		for ctx.Err() == nil {
 			cmd := exec.CommandContext(ctx, self, "plugin-host", "--category", string(cat), "--instance", string(cat)+"-0")
 			if url := os.Getenv("HERRSCHER_NATS"); url != "" {
@@ -370,11 +335,11 @@ func startRemotePluginHost(ctx context.Context, self string, cat contracts.Categ
 			cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 			cmd.Env = os.Environ()
 			start := time.Now()
-			_ = cmd.Run()
+			logCleanup(cmd.Run())
 			if ctx.Err() != nil {
 				return
 			}
-			delay := bo.Next(time.Since(start))
+			delay := backoff.Next(time.Since(start))
 			log.Warn("plugin-host exited, restarting", "delay", delay)
 			select {
 			case <-ctx.Done():
@@ -385,75 +350,58 @@ func startRemotePluginHost(ctx context.Context, self string, cat contracts.Categ
 	}()
 }
 
-// firstProber returns the first gateway's Prober (nil if none expose one).
 func firstProber(gws []Deps) contracts.Prober {
-	for _, g := range gws {
-		if g.Prober != nil {
-			return g.Prober
+	for _, dep := range gws {
+		if dep.Prober != nil {
+			return dep.Prober
 		}
 	}
 	return nil
 }
 
-// firstAdmin returns the first gateway's ChannelAdmin (nil if none expose one),
-// used by the session commands to create/archive session channels.
 func firstAdmin(gws []Deps) contracts.ChannelAdmin {
-	for _, g := range gws {
-		if g.Admin != nil {
-			return g.Admin
+	for _, dep := range gws {
+		if dep.Admin != nil {
+			return dep.Admin
 		}
 	}
 	return nil
 }
 
-// adminForHome returns the ChannelAdmin of the gateway that owns the home, so a
-// session channel is minted on the same platform as its home. The terminal home
-// maps to the terminal gateway; a category/forum home maps to a
-// non-terminal gateway. Falls back to the first available admin when no gateway
-// matches (e.g. an unset home, or only one admin present).
 func adminForHome(gws []Deps, home state.HomeRef) contracts.ChannelAdmin {
-	wantTerminal := home.Type == "terminal"
-	for _, g := range gws {
-		if g.Admin == nil || g.Gateway == nil {
+	wantTerminal := home.Type == kindTerminal
+	for _, dep := range gws {
+		if dep.Admin == nil || dep.Gateway == nil {
 			continue
 		}
-		if (g.Gateway.Manifest().Kind == "terminal") == wantTerminal {
-			return g.Admin
+		if (dep.Gateway.Manifest().Kind == kindTerminal) == wantTerminal {
+			return dep.Admin
 		}
 	}
 	return firstAdmin(gws)
 }
 
-// terminalAdmin returns the ChannelAdmin of the compiled-in terminal (TUI)
-// gateway, or nil when none is bound. The handler uses it to route terminal-only
-// sessions to a local `terminal/…` channel regardless of the configured home.
 func terminalAdmin(gws []Deps) contracts.ChannelAdmin {
-	for _, g := range gws {
-		if g.Admin == nil || g.Gateway == nil {
+	for _, dep := range gws {
+		if dep.Admin == nil || dep.Gateway == nil {
 			continue
 		}
-		if g.Gateway.Manifest().Kind == "terminal" {
-			return g.Admin
+		if dep.Gateway.Manifest().Kind == kindTerminal {
+			return dep.Admin
 		}
 	}
 	return nil
 }
 
-// firstReader returns the first gateway's ChannelReader (nil if none expose one).
 func firstReader(gws []Deps) contracts.ChannelReader {
-	for _, g := range gws {
-		if g.Reader != nil {
-			return g.Reader
+	for _, dep := range gws {
+		if dep.Reader != nil {
+			return dep.Reader
 		}
 	}
 	return nil
 }
 
-// effectiveKinds returns the gateway kinds a session should bind to: its stored
-// set, or — for a legacy session (a channel but no stored set) — the primary
-// (non-terminal) gateways actually built. This reproduces the original
-// single-gateway routing for pre-multi-gateway state without the core naming
-// that gateway.
 func effectiveKinds(all []Deps, sess state.Session) []string {
 	if kinds := sess.BoundGateways(); len(kinds) > 0 {
 		return kinds
@@ -464,15 +412,11 @@ func effectiveKinds(all []Deps, sess state.Session) []string {
 	return nil
 }
 
-// nonTerminalKinds lists the kinds of every built gateway that is not a terminal
-// (TUI) gateway — the "primary" gateways a session binds to by default.
-// kindsOf names every gateway the daemon ended up with, terminal included — the
-// operator's one line of proof about what is serving.
 func kindsOf(all []Deps) []string {
 	out := make([]string, 0, len(all))
-	for _, g := range all {
-		if g.Gateway != nil {
-			out = append(out, g.Gateway.Manifest().Kind)
+	for _, dep := range all {
+		if dep.Gateway != nil {
+			out = append(out, dep.Gateway.Manifest().Kind)
 		}
 	}
 	return out
@@ -480,29 +424,26 @@ func kindsOf(all []Deps) []string {
 
 func nonTerminalKinds(all []Deps) []string {
 	var out []string
-	for _, g := range all {
-		if g.Gateway == nil {
+	for _, dep := range all {
+		if dep.Gateway == nil {
 			continue
 		}
-		if g.Gateway.Manifest().Kind != "terminal" {
-			out = append(out, g.Gateway.Manifest().Kind)
+		if dep.Gateway.Manifest().Kind != kindTerminal {
+			out = append(out, dep.Gateway.Manifest().Kind)
 		}
 	}
 	return out
 }
 
-// boundGateways selects, from all built gateway sets, those whose kind is in the
-// session's bound set. A bound kind that wasn't built is skipped (its config was
-// absent).
 func boundGateways(all []Deps, kinds []string) []Deps {
-	want := map[string]bool{}
+	want := make(map[string]bool)
 	for _, k := range kinds {
 		want[k] = true
 	}
 	var out []Deps
-	for _, g := range all {
-		if g.Gateway != nil && want[g.Gateway.Manifest().Kind] {
-			out = append(out, g)
+	for _, dep := range all {
+		if dep.Gateway != nil && want[dep.Gateway.Manifest().Kind] {
+			out = append(out, dep)
 		}
 	}
 	return out

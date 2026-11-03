@@ -9,19 +9,21 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// fakeGateway is a minimal Gateway used only to make a GatewaySet non-zero.
 type fakeGateway struct{}
 
 func (fakeGateway) Manifest() contracts.Manifest { return contracts.Manifest{} }
 func (fakeGateway) Post(context.Context, contracts.Conversation, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (fakeGateway) Reply(context.Context, contracts.Conversation, contracts.MessageID, string) (contracts.MessageID, error) {
 	return "", nil
 }
+
 func (fakeGateway) React(context.Context, contracts.Conversation, contracts.MessageID, string) error {
 	return nil
 }
+
 func (fakeGateway) Menu(context.Context, contracts.Conversation, contracts.MessageID, string, []contracts.Choice) error {
 	return nil
 }
@@ -61,9 +63,6 @@ func TestBuildHubToleratesFailure(t *testing.T) {
 	}
 }
 
-// A tolerated failure must still be reportable: the daemon logs Failures() so a
-// gateway that dropped out (revoked token, missing config) is visible instead of
-// silently absent.
 func TestBuildHubReportsToleratedFailures(t *testing.T) {
 	hub, err := BuildHub(context.Background(), []contracts.Plugin{gw("chat", true), gw("terminal", false)}, func(string) string { return "" })
 	if err != nil {
@@ -90,7 +89,10 @@ func TestBuildHubAllFailedAggregates(t *testing.T) {
 }
 
 func TestFirstReturnsRegistrationOrder(t *testing.T) {
-	hub, _ := BuildHub(context.Background(), []contracts.Plugin{gw("chat", false), gw("terminal", false)}, func(string) string { return "" })
+	hub, hubErr := BuildHub(context.Background(), []contracts.Plugin{gw("chat", false), gw("terminal", false)}, func(string) string { return "" })
+	if hubErr != nil {
+		t.Fatal(hubErr)
+	}
 	set, ok := hub.First()
 	if !ok {
 		t.Fatal("First() should report a built set")

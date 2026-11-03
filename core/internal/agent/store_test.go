@@ -39,7 +39,7 @@ func TestStoreSetSoul(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := s.SetSoul("reviewer", "new soul body"); err != nil {
+	if err = s.SetSoul("reviewer", "new soul body"); err != nil {
 		t.Fatalf("set-soul: %v", err)
 	}
 	buf, err := os.ReadFile(filepath.Join(a.Home, "SOUL.md"))
@@ -80,7 +80,7 @@ func TestStoreCreateSeedsFiles(t *testing.T) {
 			Args    []string `json:"args"`
 		} `json:"mcpServers"`
 	}
-	if err := json.Unmarshal(mcp, &cfg); err != nil {
+	if err = json.Unmarshal(mcp, &cfg); err != nil {
 		t.Fatalf("mcp.json invalid: %v\n%s", err, mcp)
 	}
 	srv, ok := cfg.MCPServers["neublox"]
@@ -213,7 +213,7 @@ func TestSetUserRejectsOverBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.SetUserBudget(50)
-	err := s.SetUser("alice", strings.Repeat("é", 100)) // 100 runes / 200 bytes
+	err := s.SetUser("alice", strings.Repeat("é", 100))
 	var be *contracts.BudgetError
 	if !errors.As(err, &be) {
 		t.Fatalf("want *contracts.BudgetError, got %T (%v)", err, err)

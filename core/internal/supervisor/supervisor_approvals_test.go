@@ -9,15 +9,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// bridgeEnvMap decodes the child environment into a map so a test can ask about
-// one variable without caring what else rides along.
 func bridgeEnvMap(t *testing.T, s *Supervisor, sess state.Session) map[string]string {
 	t.Helper()
 	cmd, err := s.bridgeCommand(context.Background(), sess)
 	if err != nil {
 		t.Fatal(err)
 	}
-	env := map[string]string{}
+	env := make(map[string]string)
 	for _, kv := range cmd.Env {
 		if k, v, ok := strings.Cut(kv, "="); ok {
 			env[k] = v
@@ -42,10 +40,6 @@ func TestBridgeCommandCarriesApprovalsForABackendThatGates(t *testing.T) {
 	}
 }
 
-// EnvApprovalsSession is HERRSCHER_SESSION, which the launch already exports.
-// The merge must leave exactly one entry: an exec.Cmd holding two for one name
-// has platform-dependent behaviour, so a duplicate is a bug that would only
-// show up somewhere else.
 func TestBridgeCommandExportsTheSessionNameOnce(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/opt/herrscher")
 	s.SetGateResolver(func(string) string { return "tool" })
@@ -65,8 +59,6 @@ func TestBridgeCommandExportsTheSessionNameOnce(t *testing.T) {
 	}
 }
 
-// A backend that enforces nothing must never be handed a variable implying it
-// does, and neither must a session the operator explicitly told to run ungated.
 func TestBridgeCommandOmitsApprovalsWhenNothingWouldEnforceThem(t *testing.T) {
 	cases := []struct {
 		name, grain, mode string
@@ -98,13 +90,10 @@ func TestBridgeCommandWithNoResolverCarriesNoApprovals(t *testing.T) {
 	}
 }
 
-// A remote session must be gated by the herrscher that runs it. Sending this
-// machine's path would name a binary that is not there, and every ask would
-// fail, which under the failure contract means every tool call is allowed.
 func TestRemoteEnvBlockNamesTheBinaryOverThere(t *testing.T) {
 	s := NewSupervisor(context.Background(), "/opt/herrscher")
 	s.SetGateResolver(func(string) string { return "tool" })
-	s.SetHostLookup(func(name string) (Placement, bool) {
+	s.SetHostLookup(func(_ string) (Placement, bool) {
 		return Placement{SSH: "me@build1", Bin: "/remote/bin/herrscher"}, true
 	})
 

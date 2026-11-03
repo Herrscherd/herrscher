@@ -2,12 +2,12 @@ package tui
 
 import (
 	"bytes"
+	"errors"
 	"os"
+	"strings"
 	"testing"
 )
 
-// filter runs the state machine over the given chunks (each chunk simulates one
-// underlying tty Read) and returns the surviving bytes.
 func filter(chunks ...[]byte) []byte {
 	f := &filteredStdin{}
 	for _, c := range chunks {
@@ -17,8 +17,6 @@ func filter(chunks ...[]byte) []byte {
 }
 
 func TestFilterDropsOSCColorResponse(t *testing.T) {
-	// The exact leak from the bug report: an OSC 11 background-colour reply,
-	// ST-terminated, arriving ahead of real typing.
 	in := []byte("\x1b]11;rgb:1a1a/1a1a/1a1a\x1b\\hello")
 	if got := filter(in); !bytes.Equal(got, []byte("hello")) {
 		t.Fatalf("OSC not stripped: got %q", got)
@@ -40,8 +38,6 @@ func TestFilterDropsCursorPositionReport(t *testing.T) {
 }
 
 func TestFilterKeepsRealKeys(t *testing.T) {
-	// A lone Esc keypress (trailing ESC, no following byte in the chunk) and an
-	// arrow key (CSI ending in a non-R final byte) must both survive.
 	cases := map[string][]byte{
 		"lone esc":     []byte("\x1b"),
 		"up arrow":     []byte("\x1b[A"),
@@ -56,8 +52,6 @@ func TestFilterKeepsRealKeys(t *testing.T) {
 }
 
 func TestFilterHandlesSplitOSCAcrossReads(t *testing.T) {
-	// The colour reply is split across two underlying reads; the machine must
-	// stay in the OSC state between chunks and still drop all of it.
 	got := filter([]byte("\x1b]11;rgb:1a1a/1a"), []byte("1a/1a1a\x1b\\done"))
 	if !bytes.Equal(got, []byte("done")) {
 		t.Fatalf("split OSC not stripped: got %q", got)
@@ -65,25 +59,27 @@ func TestFilterHandlesSplitOSCAcrossReads(t *testing.T) {
 }
 
 func TestFilterTrailingEscIsRealKey(t *testing.T) {
-	// An ESC that is the last byte of a chunk is a genuine Esc keypress: it must
-	// pass through immediately, not be withheld waiting for a classifier byte.
 	if got := filter([]byte("ab\x1b")); !bytes.Equal(got, []byte("ab\x1b")) {
 		t.Fatalf("trailing ESC withheld: got %q", got)
 	}
 }
 
-// A chunk that filters to nothing must make Read return (0, nil) — not loop and
-// block on a second underlying read — so shutdown stays cancelable. A later real
-// key must then read back intact.
 func TestReadReturnsZeroOnFullyDroppedChunk(t *testing.T) {
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
 	}
-	t.Cleanup(func() { r.Close(); w.Close() })
+	t.Cleanup(func() {
+		if err = r.Close(); err != nil {
+			t.Error(err)
+		}
+		if err = w.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	f := &filteredStdin{File: r}
 
-	if _, err := w.Write([]byte("\x1b]11;rgb:1a1a/1a1a/1a1a\x1b\\")); err != nil {
+	if _, err = w.WriteString("\x1b]11;rgb:1a1a/1a1a/1a1a\x1b\\"); err != nil {
 		t.Fatalf("write osc: %v", err)
 	}
 	buf := make([]byte, 64)
@@ -92,7 +88,7 @@ func TestReadReturnsZeroOnFullyDroppedChunk(t *testing.T) {
 		t.Fatalf("dropped chunk: got n=%d err=%v, want 0,nil", n, err)
 	}
 
-	if _, err := w.Write([]byte("k")); err != nil {
+	if _, err = w.WriteString("k"); err != nil {
 		t.Fatalf("write key: %v", err)
 	}
 	n, err = f.Read(buf)
@@ -102,11 +98,18 @@ func TestReadReturnsZeroOnFullyDroppedChunk(t *testing.T) {
 }
 
 func TestFilterMalformedCSIReplayed(t *testing.T) {
-	// A CSI that never reaches a final byte within the cap must be replayed, not
-	// swallowed, so input is never lost to a stray ESC-[.
 	in := append([]byte("\x1b["), bytes.Repeat([]byte("9"), csiSeqCap+5)...)
 	got := filter(in)
 	if !bytes.Equal(got, in) {
 		t.Fatalf("malformed CSI not replayed: got %q", got)
+	}
+}
+
+func TestEnhancedKeysFailureReachesTheOperator(t *testing.T) {
+	m := newTestModel()
+	failure := errors.New("stdout closed")
+	m.Update(enhancedKeysFailedMsg{err: failure})
+	if !strings.Contains(m.flash, failure.Error()) {
+		t.Fatalf("flash does not report the failure: %q", m.flash)
 	}
 }

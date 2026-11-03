@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"reflect"
+	"slices"
 	"testing"
 	"time"
 )
@@ -21,23 +21,23 @@ func (d *clientDispatcher) Dispatch(_ context.Context, argv []string) (string, e
 
 func TestDispatchLiveCommandRoundTrips(t *testing.T) {
 	path := CommandSocketPath(fmt.Sprintf("client-test-%d-%d", os.Getpid(), time.Now().UnixNano()))
-	ln, err := listenCommandSocket(path)
+	ln, err := listenCommandSocket(t.Context(), path)
 	if err != nil {
 		t.Fatalf("listenCommandSocket: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = ln.Close()
-		_ = os.Remove(path)
+		logCleanup(ln.Close())
+		logCleanup(os.Remove(path))
 	})
 
 	disp := &clientDispatcher{out: "worker created"}
 	accepted := make(chan error, 1)
 	go func() {
-		conn, err := ln.Accept()
-		if err == nil {
+		conn, acceptErr := ln.Accept()
+		if acceptErr == nil {
 			handleCommandConn(context.Background(), conn, disp, defaultCommandReadTimeout)
 		}
-		accepted <- err
+		accepted <- acceptErr
 	}()
 
 	argv := []string{"session", "seed", "--name", "orchestrator", "--task", "read only"}
@@ -51,7 +51,7 @@ func TestDispatchLiveCommandRoundTrips(t *testing.T) {
 	if out != disp.out {
 		t.Fatalf("output = %q, want %q", out, disp.out)
 	}
-	if !reflect.DeepEqual(disp.argv, argv) {
+	if !slices.Equal(disp.argv, argv) {
 		t.Fatalf("argv = %v, want %v", disp.argv, argv)
 	}
 	if err := <-accepted; err != nil {

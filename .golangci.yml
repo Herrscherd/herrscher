@@ -1,0 +1,292 @@
+version: "2"
+
+run:
+  go: "1.27"
+  tests: true
+  relative-path-mode: gomod
+
+linters:
+  default: standard
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    - depguard
+    - dupword
+    - durationcheck
+    - embeddedstructfieldcheck
+    - err113
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - exptostd
+    - fatcontext
+    - forbidigo
+    - forcetypeassert
+    - gocheckcompilerdirectives
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - godot
+    - godox
+    - gosec
+    - iface
+    - intrange
+    - makezero
+    - mirror
+    - misspell
+    - mnd
+    - musttag
+    - nakedret
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - noctx
+    - nonamedreturns
+    - nosprintfhostport
+    - perfsprint
+    - predeclared
+    - reassign
+    - recvcheck
+    - revive
+    - rowserrcheck
+    - sloglint
+    - sqlclosecheck
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - usetesting
+    - varnamelen
+    - wastedassign
+  settings:
+    depguard:
+      rules:
+        banned:
+          deny:
+            - pkg: unsafe
+              desc: "no unsafe, see go-book code.md"
+            - pkg: reflect
+              desc: "no reflection in our code, see go-book code.md"
+            - pkg: github.com/pkg/errors
+              desc: "the standard errors package and %w, see go-book errors.md"
+            - pkg: io/ioutil
+              desc: "deprecated, use io and os"
+            - pkg: log$
+              desc: "log/slog with structured fields, see go-book concurrency.md"
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    exhaustive:
+      default-signifies-exhaustive: false
+      check:
+        - switch
+        - mapliteral
+    forbidigo:
+      forbid:
+        - pattern: ^panic$
+          msg: "a panic is a bug, return an error, see go-book errors.md"
+        - pattern: ^(fmt\.Print|print|println)
+          msg: "write through the output type or log/slog, see go-book binaries.md"
+        - pattern: ^log\.
+          msg: "log/slog with structured fields"
+      analyze-types: true
+    gocognit:
+      min-complexity: 15
+    gocritic:
+      enable-all: true
+      disabled-checks:
+        - whyNoLint
+        - hugeParam
+        - unnamedResult
+    gosec:
+      excludes: []
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    nakedret:
+      max-func-lines: 0
+    revive:
+      enable-all-rules: false
+      rules:
+        - name: exported
+          arguments: [sayRepetitiveInsteadOfStutters]
+        - name: package-comments
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: unused-parameter
+        - name: var-declaration
+        - name: var-naming
+        - name: early-return
+        - name: defer
+        - name: modifies-value-receiver
+        - name: unhandled-error
+          arguments: ['fmt\.Println', 'fmt\.Fprint.*', 'strings\.Builder\..*', 'bytes\.Buffer\..*']
+        - name: use-any
+        - name: datarace
+        - name: identical-branches
+        - name: enforce-map-style
+          arguments: [make]
+        - name: enforce-slice-style
+          arguments: [any]
+        - name: redundant-import-alias
+        - name: deep-exit
+    sloglint:
+      kv-only: true
+      static-msg: true
+      no-raw-keys: false
+      key-naming-case: snake
+      args-on-sep-lines: false
+    varnamelen:
+      min-name-length: 3
+      max-distance: 1
+      check-receiver: false
+      check-return: true
+      check-type-param: true
+      ignore-names: [err, ok]
+      ignore-decls:
+        - t *testing.T
+        - b *testing.B
+        - f *testing.F
+        - tb testing.TB
+        - ctx context.Context
+        - wg sync.WaitGroup
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [forbidigo, err113, gosec, goconst, mnd, varnamelen]
+      - path: _test\.go
+        linters: [gocritic]
+        text: "tooManyResultsChecker"
+      - path: ^(cmd|tools)/
+        linters: [gosec]
+        text: "^G(304|703):"
+      - path: ^core/internal/manager/session\.go$
+        linters: [misspell]
+        text: "marrage"
+      - path: ^core/internal/agent/(agent|store)\.go$
+        linters: [gosec]
+        text: "^G(304|204|703):"
+      - path: ^core/internal/agent/agent\.go$
+        linters: [gosec]
+        text: "^G101:"
+      - path: ^core/(identity|scope|service|internal/(forge|runner|supervisor|worktree))/
+        linters: [gosec]
+        text: "^G204:"
+      - path: ^core/service/service\.go$
+        linters: [gosec]
+        text: "^G703:"
+      - path: ^core/envx/hide\.go$
+        linters: [gochecknoglobals]
+        text: "^hidden is a global variable"
+      - path: ^core/internal/redact/redact\.go$
+        linters: [gochecknoglobals]
+        text: "^rules is a global variable"
+      - path: ^plugins/terminal/register\.go$
+        linters: [gochecknoinits]
+      - path: ^plugins/terminal/tui/image_decode\.go$
+        linters: [revive]
+        text: "blank-imports"
+      - path: ^plugins/terminal/tui/(clipboard|open)\.go$
+        linters: [gosec]
+        text: "^G204:"
+      - path: ^plugins/terminal/tui/keylog\.go$
+        linters: [gosec]
+        text: "^G703:"
+      - path: ^plugins/terminal/tui/
+        linters: [misspell]
+        text: "`(commandes|marrage)` is a misspelling"
+      - path: ^plugins/terminal/tui/
+        linters: [exhaustive]
+        text: "missing cases in expression switch: tea\\.Key"
+      - path: ^plugins/terminal/tui/image_sixel\.go$
+        linters: [nonamedreturns]
+        text: 'named return "(indices|palette)"'
+      - path: ^plugins/terminal/tui/palette\.go$
+        linters: [nonamedreturns]
+        text: 'named return "(from|to)"'
+      - path: ^plugins/terminal/tui/open\.go$
+        linters: [nonamedreturns]
+        text: 'named return "(file|line)"'
+      - path: ^plugins/terminal/(terminal|tui/tui)\.go$
+        linters: [containedctx]
+        text: "found a struct that contains a context.Context field"
+      - path: ^core/internal/supervisor/supervisor\.go$
+        linters: [containedctx]
+        text: "found a struct that contains a context.Context field"
+      - path: ^manage/(manage|seam|version)\.go$
+        linters: [gosec]
+        text: "^G204:"
+      - path: ^manage/(apply|init|lifecycle|manage)\.go$
+        linters: [gosec]
+        text: "^G304:"
+      - path: ^manage/(apply|init|manage|seam)\.go$
+        linters: [gosec]
+        text: "^G(306|703):"
+      - path: ^envfile\.go$
+        linters: [gosec]
+        text: "^G703:"
+      - path: ^manage/version.go$
+        linters: [nilerr]
+        text: "returns nil"
+      - path: ^core/bridge/log.go$
+        linters: [gochecknoglobals]
+        text: "^logger is a global"
+      - path: ^core/bridge/attachments.go$
+        linters: [gochecknoglobals]
+        text: "^pinnedTransports is a global"
+      - path: ^bridge_provision_test\.go$
+        linters: [unparam]
+        text: 'result 0 \(error\) is always nil'
+      - path: ^core/host/(coordinator|coordinator_test|turnloop)\.go$
+        linters: [misspell]
+        text: "^`(conflit|existant|partiel)` is a misspelling"
+      - path: ^core/host/backendenv\.go$
+        linters: [gosec]
+        text: "^G101:"
+      - path: ^core/host/(hosts_port|serve)\.go$
+        linters: [gosec]
+        text: "^G204:"
+      - path: ^core/host/(approve_cmd|lock|remote_materialize)\.go$
+        linters: [gosec]
+        text: "^G304:"
+      - path: ^core/host/backendenv\.go$
+        linters: [gochecknoglobals]
+        text: "capturedGateway"
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      extra:
+        group-params: true
+        clothe-returns: true
+    goimports:
+      local-prefixes: [github.com/Herrscherd/herrscher]

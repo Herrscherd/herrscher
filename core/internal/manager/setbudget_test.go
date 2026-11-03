@@ -8,7 +8,6 @@ import (
 
 func TestApplyBudget_ClearsPauseWhenCapRaised(t *testing.T) {
 	s := state.Session{Name: "game", CostCap: 5, PausedReason: "cost"}
-	// Session already spent $6 (over the old $5 cap). Raise cap to $20.
 	out := applyBudget(s, budgetPatch{costCap: fptr(20)}, 6.0, 0)
 	if out.CostCap != 20 {
 		t.Fatalf("cost cap = %v, want 20", out.CostCap)

@@ -16,21 +16,21 @@ func sizedTestModel(t *testing.T, width int) *model {
 }
 
 func TestBoxRunesFallBackToAscii(t *testing.T) {
-	tl, tr, bl, br, h, v := boxRunes(false)
-	for _, got := range []string{tl, tr, bl, br} {
+	g := boxRunes(false)
+	for _, got := range []string{g.tl, g.tr, g.bl, g.br} {
 		if got != "+" {
 			t.Fatalf("corner = %q, want +", got)
 		}
 	}
-	if h != "-" || v != "|" {
-		t.Fatalf("edges = %q %q, want - |", h, v)
+	if g.h != "-" || g.v != "|" {
+		t.Fatalf("edges = %q %q, want - |", g.h, g.v)
 	}
 }
 
 func TestBoxRunesUseRoundedWhenSupported(t *testing.T) {
-	tl, _, _, br, h, v := boxRunes(true)
-	if tl != "╭" || br != "╯" || h != "─" || v != "│" {
-		t.Fatalf("rounded runes wrong: %q %q %q %q", tl, br, h, v)
+	g := boxRunes(true)
+	if g.tl != "╭" || g.br != "╯" || g.h != "─" || g.v != "│" {
+		t.Fatalf("rounded runes wrong: %q %q %q %q", g.tl, g.br, g.h, g.v)
 	}
 }
 

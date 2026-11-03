@@ -6,8 +6,9 @@ import (
 	"context"
 	"net"
 
-	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Microsoft/go-winio"
+
+	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
 // CommandSocketPath is the daemon-level operator command pipe.
@@ -38,7 +39,7 @@ func EventsSocketPath(instanceID string) string {
 	return `\\.\pipe\herrscher-events`
 }
 
-func listenCommandSocket(path string) (net.Listener, error) {
+func listenCommandSocket(_ context.Context, path string) (net.Listener, error) {
 	return winio.ListenPipe(path, &winio.PipeConfig{
 		SecurityDescriptor: "D:P(A;;GA;;;OW)",
 	})

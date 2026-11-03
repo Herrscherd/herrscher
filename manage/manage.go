@@ -11,43 +11,58 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/internal/errwriter"
 )
 
-// parseExit reports the exit code for a flag.Parse error: 0 when the user asked
-// for help (-h/--help), 2 for a genuine parse error. Callers use it so help is a
-// success, not a usage failure.
+var (
+	errNoHostModule  = errors.New("no host module found (looked for plugins.go)")
+	errNotCompiledIn = errors.New("not compiled in")
+)
+
 func parseExit(err error) int {
 	if errors.Is(err, flag.ErrHelp) {
 		return 0
 	}
-	return 2
+	return exitUsage
 }
 
 // PluginCmd lists, adds, removes, pins or unpins a compiled-in plugin in the
 // managed plugins.go, rebuilding the binary on a change.
 func PluginCmd(ctx context.Context, args []string) int {
-	fs := flag.NewFlagSet("plugin", flag.ContinueOnError)
-	hostDir := fs.String("host", "", "path to the host module")
-	noBuild := fs.Bool("no-build", false, "edit plugins.go but skip go get/build")
-	yes := fs.Bool("yes", false, "answer both confirmations without asking")
+	out, errOut := errwriter.New(os.Stdout), errwriter.New(os.Stderr)
+	return errwriter.Finish(pluginHost(ctx, out, errOut, args), out, errOut)
+}
+
+type pluginEnv struct {
+	dir, manifest string
+	src           string
+	out, errOut   *errwriter.Writer
+	yes, noBuild  bool
+}
+
+func pluginHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
+	flags := flag.NewFlagSet("plugin", flag.ContinueOnError)
+	hostDir := flags.String("host", "", "path to the host module")
+	noBuild := flags.Bool("no-build", false, "edit plugins.go but skip go get/build")
+	yes := flags.Bool("yes", false, "answer both confirmations without asking")
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: herrscher plugin <list|add|remove|pin|unpin> [module[@version]]")
-		return 2
+		errOut.Println("usage: herrscher plugin <list|add|remove|pin|unpin> [module[@version]]")
+		return exitUsage
 	}
 	sub := args[0]
-	// Allow flags and positionals in any order: flag.Parse stops at the first
-	// non-flag, so loop, collecting positionals between flag runs.
 	var positionals []string
 	rem := args[1:]
 	for len(rem) > 0 {
-		if err := fs.Parse(rem); err != nil {
+		if err := flags.Parse(rem); err != nil {
 			return parseExit(err)
 		}
-		rem = fs.Args()
+		rem = flags.Args()
 		if len(rem) == 0 {
 			break
 		}
@@ -57,167 +72,161 @@ func PluginCmd(ctx context.Context, args []string) int {
 
 	dir, err := resolveHost(*hostDir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		errOut.Println(err)
 		return 1
 	}
 	manifest := filepath.Join(dir, "plugins.go")
 	src, err := os.ReadFile(manifest)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "read %s: %v\n", manifest, err)
+		errOut.Printf("read %s: %v\n", manifest, err)
 		return 1
 	}
+	env := pluginEnv{dir: dir, manifest: manifest, src: string(src), out: out, errOut: errOut, yes: *yes, noBuild: *noBuild}
 
 	switch sub {
 	case "list":
-		if err := listWithVersions(ctx, dir, string(src), os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-		return 0
-
-	case "add", "remove":
-		if len(positionals) != 1 {
-			fmt.Fprintf(os.Stderr, "usage: herrscher plugin %s <module>\n", sub)
-			return 2
-		}
-		module, version := moduleArg(sub, positionals[0])
-		var out string
-		var changed bool
-		if sub == "add" {
-			out, changed, err = addPlugin(string(src), module)
-		} else {
-			out, changed, err = removePlugin(string(src), module)
-		}
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-		if !changed && version == "" {
-			fmt.Printf("no change: %s already %s\n", module, pastTense(sub))
-			return 0
-		}
-		if *noBuild {
-			if err := os.WriteFile(manifest, []byte(out), 0o644); err != nil {
-				fmt.Fprintf(os.Stderr, "write %s: %v\n", manifest, err)
-				return 1
-			}
-			fmt.Printf("%s %s in %s\n", pastTense(sub), module, manifest)
-			fmt.Println("skipped build (--no-build); run `go build` in the host to apply")
-			// Installing a named version is `go get`, which is exactly what
-			// --no-build skipped; saying so beats leaving the operator to believe
-			// the version was taken.
-			if version != "" {
-				fmt.Printf("the version was not installed: %s@%s needs `go get`\n", module, version)
-			}
-			return 0
-		}
-		cmds := removeCommands()
-		if sub == "add" {
-			cmds = addCommands(module, version)
-		}
-		steps := append([]step{fileStep(manifest, out)}, cmdSteps(dir, cmds)...)
-		applied, err := apply(ctx, dir, addFindings(ctx, dir, module, version), osDecider(*yes), steps)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-		if !applied {
-			fmt.Println("aborted; nothing was written")
-			return 0
-		}
-		if !changed {
-			fmt.Printf("%s was already in %s; moved to %s\n", module, manifest, version)
-			return 0
-		}
-		fmt.Printf("%s %s in %s\n", pastTense(sub), module, manifest)
-		return 0
-
-	case "pin", "unpin":
-		if len(positionals) < 1 || len(positionals) > 2 || (sub == "unpin" && len(positionals) != 1) {
-			fmt.Fprintf(os.Stderr, "usage: herrscher plugin %s <module>%s\n", sub, pinUsageTail(sub))
-			return 2
-		}
-		module, version := splitModuleVersion(positionals[0])
-		if len(positionals) == 2 {
-			version = positionals[1]
-		}
-		// Refuse a module that is not compiled in before the toolchain runs, not
-		// after: the same refusal at the end would have fetched, rebuilt and
-		// reinstalled the binary for a pin that was never going to be recorded.
-		if err := compiledIn(dir, module); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-		// Move first, then record: a pin that named a version the tree never took
-		// would describe a composition that does not exist.
-		if sub == "pin" && version != "" {
-			steps := cmdSteps(dir, addCommands(module, version))
-			applied, err := apply(ctx, dir, addFindings(ctx, dir, module, version), osDecider(*yes), steps)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				return 1
-			}
-			if !applied {
-				fmt.Println("aborted; nothing was written and nothing was pinned")
-				return 0
-			}
-		}
-		if err := pinModule(dir, module, sub == "pin"); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-		fmt.Printf("%sned %s\n", sub, module)
-		return 0
-
+		return pluginList(ctx, env)
+	case verbAdd, verbRemove:
+		return pluginAddRemove(ctx, env, sub, positionals)
+	case verbPin, verbUnpin:
+		return pluginPin(ctx, env, sub, positionals)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown plugin subcommand %q\n", sub)
-		return 2
+		errOut.Printf("unknown plugin subcommand %q\n", sub)
+		return exitUsage
 	}
 }
 
-// moduleArg reads the positional of a verb that may carry a version. Only the
-// verbs that install one accept `@version`; `remove` takes the argument whole,
-// so `remove mod/a@v1.2.3` stays a module that is not compiled in and is
-// reported as no change, instead of being read as a removal that happened.
-func moduleArg(sub, arg string) (module, version string) {
-	if sub == "remove" {
+func pluginList(ctx context.Context, env pluginEnv) int {
+	if err := listWithVersions(ctx, env.dir, env.src, env.out); err != nil {
+		env.errOut.Println(err)
+		return 1
+	}
+	return 0
+}
+
+func pluginAddRemove(ctx context.Context, env pluginEnv, sub string, positionals []string) int {
+	if len(positionals) != 1 {
+		env.errOut.Printf("usage: herrscher plugin %s <module>\n", sub)
+		return exitUsage
+	}
+	module, version := moduleArg(sub, positionals[0])
+	rendered, changed, err := renderPluginEdit(sub, env.src, module)
+	if err != nil {
+		env.errOut.Println(err)
+		return 1
+	}
+	if !changed && version == "" {
+		env.out.Printf("no change: %s already %s\n", module, pastTense(sub))
+		return 0
+	}
+	if env.noBuild {
+		if writeErr := os.WriteFile(env.manifest, []byte(rendered), modeFile); writeErr != nil {
+			env.errOut.Printf("write %s: %v\n", env.manifest, writeErr)
+			return 1
+		}
+		env.out.Printf("%s %s in %s\n", pastTense(sub), module, env.manifest)
+		env.out.Println("skipped build (--no-build); run `go build` in the host to apply")
+		if version != "" {
+			env.out.Printf("the version was not installed: %s@%s needs `go get`\n", module, version)
+		}
+		return 0
+	}
+	cmds := removeCommands()
+	if sub == verbAdd {
+		cmds = addCommands(module, version)
+	}
+	steps := append([]step{fileStep(env.manifest, rendered)}, cmdSteps(env.errOut, env.dir, cmds)...)
+	applied, err := apply(ctx, env.dir, addFindings(ctx, env.dir, module, version), osDecider(env.yes), steps)
+	if err != nil {
+		env.errOut.Println(err)
+		return 1
+	}
+	if !applied {
+		env.out.Println("aborted; nothing was written")
+		return 0
+	}
+	if !changed {
+		env.out.Printf("%s was already in %s; moved to %s\n", module, env.manifest, version)
+		return 0
+	}
+	env.out.Printf("%s %s in %s\n", pastTense(sub), module, env.manifest)
+	return 0
+}
+
+func renderPluginEdit(sub, src, module string) (string, bool, error) {
+	if sub == verbAdd {
+		return addPlugin(src, module)
+	}
+	return removePlugin(src, module)
+}
+
+func pluginPin(ctx context.Context, env pluginEnv, sub string, positionals []string) int {
+	if len(positionals) < 1 || len(positionals) > 2 || (sub == verbUnpin && len(positionals) != 1) {
+		env.errOut.Printf("usage: herrscher plugin %s <module>%s\n", sub, pinUsageTail(sub))
+		return exitUsage
+	}
+	module, version := splitModuleVersion(positionals[0])
+	if len(positionals) == positionalsWithVersion {
+		version = positionals[1]
+	}
+	if err := compiledIn(env.dir, module); err != nil {
+		env.errOut.Println(err)
+		return 1
+	}
+	if sub == verbPin && version != "" {
+		steps := cmdSteps(env.errOut, env.dir, addCommands(module, version))
+		applied, err := apply(ctx, env.dir, addFindings(ctx, env.dir, module, version), osDecider(env.yes), steps)
+		if err != nil {
+			env.errOut.Println(err)
+			return 1
+		}
+		if !applied {
+			env.out.Println("aborted; nothing was written and nothing was pinned")
+			return 0
+		}
+	}
+	if err := pinModule(env.dir, module, sub == verbPin); err != nil {
+		env.errOut.Println(err)
+		return 1
+	}
+	env.out.Printf("%sned %s\n", sub, module)
+	return 0
+}
+
+func moduleArg(sub, arg string) (string, string) {
+	if sub == verbRemove {
 		return arg, ""
 	}
 	return splitModuleVersion(arg)
 }
 
 func pinUsageTail(sub string) string {
-	if sub == "pin" {
+	if sub == verbPin {
 		return " [version]"
 	}
 	return ""
 }
 
 func pastTense(sub string) string {
-	if sub == "add" {
+	if sub == verbAdd {
 		return "added"
 	}
 	return "removed"
 }
 
-// resolveHost finds the host module directory: an explicit --host, else the
-// current directory (self-host), else a sibling ./herrscher.
 func resolveHost(explicit string) (string, error) {
 	candidates := []string{explicit, ".", "herrscher"}
-	for _, c := range candidates {
-		if c == "" {
+	for _, candidate := range candidates {
+		if candidate == "" {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(c, "plugins.go")); err == nil {
-			return c, nil
+		if _, err := os.Stat(filepath.Join(candidate, "plugins.go")); err == nil {
+			return candidate, nil
 		}
 	}
-	return "", fmt.Errorf("no host module found (looked for plugins.go); pass --host DIR")
+	return "", fmt.Errorf("%w; pass --host DIR", errNoHostModule)
 }
 
-// buildCommands is the tail every composition change ends with. The build runs
-// before the install so the deployed binary is never replaced by a composition
-// that does not compile.
 func buildCommands() [][]string {
 	return [][]string{
 		{"go", "mod", "tidy"},
@@ -226,33 +235,29 @@ func buildCommands() [][]string {
 	}
 }
 
-// addCommands installs one module, at a named version when the operator chose
-// one. `--` stops a module path that begins with `-` being read as a flag.
 func addCommands(module, version string) [][]string {
 	arg := module
 	if version != "" {
 		arg = module + "@" + version
 	}
-	return append([][]string{{"go", "get", "--", arg}}, buildCommands()...)
+	return append([][]string{{"go", verbGet, "--", arg}}, buildCommands()...)
 }
 
-// removeCommands drops a module without fetching anything: tidy is what actually
-// forgets it.
 func removeCommands() [][]string { return buildCommands() }
 
-// updatePlan splits the compiled-in modules into the ones to bump and a line per
-// module left alone, so a pin never looks like a silent no-op.
-func updatePlan(mods []string, pins map[string]bool, installed map[string]string) (cmds [][]string, skipped []string) {
-	for _, m := range mods {
-		if pins[m] {
-			v := installed[m]
-			if v == "" {
-				v = "?"
+func updatePlan(mods []string, pins map[string]bool, installed map[string]string) ([][]string, []string) {
+	var cmds [][]string
+	var skipped []string
+	for _, module := range mods {
+		if pins[module] {
+			version := installed[module]
+			if version == "" {
+				version = "?"
 			}
-			skipped = append(skipped, fmt.Sprintf("skipped %s (pinned %s)", m, v))
+			skipped = append(skipped, fmt.Sprintf("skipped %s (pinned %s)", module, version))
 			continue
 		}
-		cmds = append(cmds, []string{"go", "get", "-u", m})
+		cmds = append(cmds, []string{"go", verbGet, "-u", module})
 	}
 	if cmds == nil {
 		return nil, skipped
@@ -260,67 +265,55 @@ func updatePlan(mods []string, pins map[string]bool, installed map[string]string
 	return append(cmds, buildCommands()...), skipped
 }
 
-func cmdSteps(dir string, cmds [][]string) []step {
+func cmdSteps(errOut *errwriter.Writer, dir string, cmds [][]string) []step {
 	steps := make([]step, 0, len(cmds))
 	for _, c := range cmds {
-		steps = append(steps, cmdStep(dir, c[0], c[1:]...))
+		steps = append(steps, cmdStep(errOut, dir, c[0], c[1:]...))
 	}
 	return steps
 }
 
-// cmdStep runs one toolchain command inside the host module. It streams the
-// output as it goes and also captures it, so a failure can be reported in the
-// tool's own words rather than paraphrased.
-func cmdStep(dir, name string, args ...string) step {
+func cmdStep(errOut *errwriter.Writer, dir, name string, args ...string) step {
 	return func(ctx context.Context) (string, error) {
 		var captured strings.Builder
 		cmd := exec.CommandContext(ctx, name, args...)
 		cmd.Dir = dir
 		cmd.Stdout = io.MultiWriter(os.Stdout, &captured)
 		cmd.Stderr = io.MultiWriter(os.Stderr, &captured)
-		fmt.Fprintf(os.Stderr, "+ %s %s\n", name, strings.Join(args, " "))
+		errOut.Printf("+ %s %s\n", name, strings.Join(args, " "))
 		err := cmd.Run()
 		return captured.String(), err
 	}
 }
 
-// fileStep writes a file as part of the transaction rather than before it, so a
-// refused build restores the manifest along with go.mod and go.sum.
 func fileStep(path, body string) step {
 	return func(context.Context) (string, error) {
-		return "", os.WriteFile(path, []byte(body), 0o644)
+		return "", os.WriteFile(path, []byte(body), modeFile)
 	}
 }
 
-// osDecider picks how the two confirmations get answered: --yes and a run with
-// no terminal both take the safe branch without asking.
 func osDecider(yes bool) decider {
 	return newDecider(yes, isTerminal(os.Stdin), bufio.NewReader(os.Stdin))
 }
 
-// newDecider takes interactive as an argument rather than reading os.Stdin, so
-// the choice is assertable without a terminal on either side of the test.
-func newDecider(yes, interactive bool, in *bufio.Reader) decider {
+func newDecider(yes, interactive bool, input *bufio.Reader) decider {
 	if yes || !interactive {
 		return newAutoDecider()
 	}
-	return newPromptDecider(in, newStyle())
+	return newPromptDecider(input, newStyle())
 }
 
-// addFindings reports what can be known against a requested version before
-// anything is written: that it moves the composition backwards, or that it wants
-// a different herrscher-contracts than the one resolved today.
 func addFindings(ctx context.Context, dir, module, version string) []string {
 	if version == "" {
 		return nil
 	}
-	tc := goToolchain{dir: dir}
+	toolchain := goToolchain{dir: dir}
 	var findings []string
-	if installed, err := installedVersions(ctx, tc, []string{module, contractsModule}); err == nil {
+	if installed, err := installedVersions(ctx, toolchain, []string{module, contractsModule}); err == nil {
 		if cur := installed[module]; cur != "" && semverLess(version, cur) {
 			findings = append(findings, fmt.Sprintf("%s moves back from %s to %s", module, cur, version))
 		}
-		if want, err := contractsRequirement(ctx, tc, module, version); err == nil && want != "" {
+		if want, err := contractsRequirement(ctx, toolchain, module, version); err == nil && want != "" {
 			if have := installed[contractsModule]; have != "" && minorOf(want) != minorOf(have) {
 				findings = append(findings, fmt.Sprintf("%s@%s wants contracts %s; the composition resolves %s", module, version, want, have))
 			}
@@ -329,55 +322,47 @@ func addFindings(ctx context.Context, dir, module, version string) []string {
 	return findings
 }
 
-// semverLess compares two version strings well enough for the warning. It is a
-// heuristic on purpose: Go resolves versions, and a wrong guess here costs one
-// extra confirmation, never a wrong build.
 func semverLess(a, b string) bool {
-	an, bn := versionFields(a), versionFields(b)
-	for i := 0; i < len(an) && i < len(bn); i++ {
-		if an[i] != bn[i] {
-			return an[i] < bn[i]
+	aFields, bFields := versionFields(a), versionFields(b)
+	for idx := 0; idx < len(aFields) && idx < len(bFields); idx++ {
+		if aFields[idx] != bFields[idx] {
+			return aFields[idx] < bFields[idx]
 		}
 	}
-	return len(an) < len(bn)
+	return len(aFields) < len(bFields)
 }
 
-func versionFields(v string) []int {
+func versionFields(version string) []int {
 	var out []int
-	for _, part := range strings.Split(strings.TrimPrefix(v, "v"), ".") {
-		n := 0
-		for _, r := range part {
-			if r < '0' || r > '9' {
+	for _, part := range strings.Split(strings.TrimPrefix(version, "v"), ".") {
+		number := 0
+		for _, char := range part {
+			if char < '0' || char > '9' {
 				break
 			}
-			n = n*10 + int(r-'0')
+			number = number*decimalBase + int(char-'0')
 		}
-		out = append(out, n)
+		out = append(out, number)
 	}
 	return out
 }
 
-// minorOf keeps the major.minor of a version: contracts breaks compilation at
-// that granularity, and the patch digit is noise for the warning.
-func minorOf(v string) string {
-	parts := strings.SplitN(strings.TrimPrefix(v, "v"), ".", 3)
-	if len(parts) < 2 {
-		return v
+func minorOf(version string) string {
+	parts := strings.SplitN(strings.TrimPrefix(version, "v"), ".", semverParts)
+	if len(parts) < minVersionParts {
+		return version
 	}
 	return parts[0] + "." + parts[1]
 }
 
-// pluginRows joins the three facts about a module into one row, rendering
-// anything unknown — a plugin that lives inside the host module, a version list
-// the network could not answer — as `?` rather than as blank.
 func pluginRows(mods []string, installed map[string]string, pins map[string]bool, available map[string][]string) []PluginVersion {
 	rows := make([]PluginVersion, 0, len(mods))
-	for _, m := range mods {
-		row := PluginVersion{Module: m, Installed: "?", Latest: "?", Pinned: pins[m]}
-		if v := installed[m]; v != "" {
+	for _, module := range mods {
+		row := PluginVersion{Module: module, Installed: "?", Latest: "?", Pinned: pins[module]}
+		if v := installed[module]; v != "" {
 			row.Installed = v
 		}
-		if vs := available[m]; len(vs) > 0 {
+		if vs := available[module]; len(vs) > 0 {
 			row.Latest = vs[len(vs)-1]
 		}
 		rows = append(rows, row)
@@ -385,10 +370,6 @@ func pluginRows(mods []string, installed map[string]string, pins map[string]bool
 	return rows
 }
 
-// pluginVersions gathers the three facts about every compiled-in module. Version
-// lookups need the network; when it is missing the columns read `?` and the
-// listing still comes back, because knowing what is compiled in does not depend
-// on being online.
 func pluginVersions(ctx context.Context, dir, src string) ([]PluginVersion, error) {
 	mods, err := listPlugins(src)
 	if err != nil {
@@ -398,21 +379,25 @@ func pluginVersions(ctx context.Context, dir, src string) ([]PluginVersion, erro
 	if err != nil {
 		return nil, err
 	}
-	tc := goToolchain{dir: dir}
-	installed, err := installedVersions(ctx, tc, mods)
+	toolchain := goToolchain{dir: dir}
+	installed, err := installedVersions(ctx, toolchain, mods)
 	if err != nil {
 		installed = nil
 	}
-	available := map[string][]string{}
-	for _, m := range mods {
-		if vs, _ := availableVersions(ctx, tc, m); vs != nil {
-			available[m] = vs
+	available := make(map[string][]string)
+	for _, module := range mods {
+		versions, err := availableVersions(ctx, toolchain, module)
+		if err != nil {
+			slog.Warn("latest version unknown", "module", module, "err", err)
+			continue
+		}
+		if versions != nil {
+			available[module] = versions
 		}
 	}
 	return pluginRows(mods, installed, pins, available), nil
 }
 
-// listWithVersions prints one row per compiled-in module.
 func listWithVersions(ctx context.Context, dir, src string, out io.Writer) error {
 	rows, err := pluginVersions(ctx, dir, src)
 	if err != nil {
@@ -423,17 +408,17 @@ func listWithVersions(ctx context.Context, dir, src string, out io.Writer) error
 		if row.Pinned {
 			pin = "  pinned"
 		}
-		fmt.Fprintf(out, "%s  %s  %s%s\n", row.Module, row.Installed, row.Latest, pin)
+		if _, err := fmt.Fprintf(out, "%s  %s  %s%s\n", row.Module, row.Installed, row.Latest, pin); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-// loadPins reads the pin file beside plugins.go. A missing file means no pins;
-// an unreadable one is an error, since guessing would silently un-pin.
 func loadPins(dir string) (map[string]bool, error) {
 	src, err := os.ReadFile(filepath.Join(dir, pinFile))
 	if errors.Is(err, os.ErrNotExist) {
-		return map[string]bool{}, nil
+		return make(map[string]bool), nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", pinFile, err)
@@ -441,8 +426,6 @@ func loadPins(dir string) (map[string]bool, error) {
 	return readPins(string(src))
 }
 
-// compiledIn refuses a module absent from plugins.go: a pin on something the
-// binary is not made of would never be consulted.
 func compiledIn(dir, module string) error {
 	src, err := os.ReadFile(filepath.Join(dir, "plugins.go"))
 	if err != nil {
@@ -457,10 +440,9 @@ func compiledIn(dir, module string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("%s is not compiled in; `herrscher plugin add %s` first", module, module)
+	return fmt.Errorf("%s is %w; `herrscher plugin add %s` first", module, errNotCompiledIn, module)
 }
 
-// pinModule records or drops a pin for a compiled-in module.
 func pinModule(dir, module string, pinned bool) error {
 	if err := compiledIn(dir, module); err != nil {
 		return err
@@ -477,23 +459,23 @@ func pinModule(dir, module string, pinned bool) error {
 	} else {
 		delete(pins, module)
 	}
-	return os.WriteFile(filepath.Join(dir, pinFile), []byte(writePins(pins)), 0o644)
+	return os.WriteFile(filepath.Join(dir, pinFile), []byte(writePins(pins)), modeFile)
 }
 
-func run(ctx context.Context, dir string, name string, args ...string) int {
+func run(ctx context.Context, errOut *errwriter.Writer, dir, name string, args ...string) int {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	var line strings.Builder
 	line.WriteString("+ ")
 	line.WriteString(name)
-	for _, a := range args {
-		line.WriteByte(' ')
-		line.WriteString(a)
+	for _, arg := range args {
+		_ = line.WriteByte(' ')
+		line.WriteString(arg)
 	}
-	fmt.Fprintln(os.Stderr, line.String())
+	errOut.Println(line.String())
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "%s failed: %v\n", name, err)
+		errOut.Printf("%s failed: %v\n", name, err)
 		return 1
 	}
 	return 0

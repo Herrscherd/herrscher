@@ -2,7 +2,7 @@
 // logger (stdlib log/slog) whose level is controlled by the -v flag and the
 // HERRSCHER_LOG env, so every diagnostic line carries a level and stable fields
 // (session, category, component) instead of an interpolated string. This is
-// operator logging on stderr only — user-facing gateway rendering is untouched.
+// operator logging on stderr only; user-facing gateway rendering is untouched.
 package obs
 
 import (

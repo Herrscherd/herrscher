@@ -5,16 +5,12 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// recordingMem is a fake Memory that also implements contracts.Provisioner,
-// capturing the ensured roots.
 type recordingMem struct {
-	projects [][2]string // {key, title}
-	agents   [][2]string
-	// known is what Search answers with, and searchErr what it fails with — the
-	// vault the scope resolver reads to learn which projects already exist.
+	projects  [][2]string
+	agents    [][2]string
 	known     []contracts.Node
 	searchErr error
 }
@@ -33,6 +29,7 @@ func (m *recordingMem) EnsureProject(_ context.Context, key, title string) error
 	m.projects = append(m.projects, [2]string{key, title})
 	return nil
 }
+
 func (m *recordingMem) EnsureAgent(_ context.Context, key, title string) error {
 	m.agents = append(m.agents, [2]string{key, title})
 	return nil
@@ -58,8 +55,7 @@ func TestProvisionScopeSkipsEmptyNames(t *testing.T) {
 	}
 }
 
-func TestProvisionScopeIgnoresNonProvisioner(t *testing.T) {
-	// A Memory that is not a Provisioner must be handled without panicking.
+func TestProvisionScopeIgnoresNonProvisioner(*testing.T) {
 	var mem contracts.Memory = &struct{ contracts.Memory }{}
 	provisionScope(context.Background(), mem, "game", "scripter", slog.Default())
 }

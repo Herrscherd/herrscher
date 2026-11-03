@@ -6,8 +6,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// La fiche d'une session ne disait que le vendeur, alors que le modele et
-// l'effort vivent l'un dans le catalogue, l'autre dans l'invocation.
 func TestSessionModelAndEffortComeFromTheCatalogThenTheInvocation(t *testing.T) {
 	for _, c := range []struct {
 		name          string

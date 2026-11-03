@@ -1,23 +1,23 @@
 package host
 
 import (
-	"fmt"
 	"sort"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 // CatalogEntry is an offered model plus the backend that serves it. The
 // vendor is never shown to the user: it lets the host know which plugin to
 // instantiate once the model is chosen.
 type CatalogEntry struct {
-	Vendor string
 	contracts.ModelSpec
+
+	Vendor string
 }
 
 // Catalog aggregates the Models of every registered backend and applies the
 // route policy. The aggregation works off the Manifests, so it never
-// instantiates a single backend — that's what lets the app populate its
+// instantiates a single backend, which is what lets the app populate its
 // selector before any session exists.
 //
 // An inconsistent catalog (empty ID, duplicate within one backend, duplicate
@@ -25,29 +25,28 @@ type CatalogEntry struct {
 // start rather than silently serve a wrong selector.
 func Catalog(plugins []contracts.Plugin, policy contracts.RoutePolicy) ([]CatalogEntry, error) {
 	out := []CatalogEntry{}
-	owner := map[string]string{}
-	for _, p := range plugins {
-		kind := p.Manifest.Kind
-		if err := contracts.ValidateModels(kind, p.Manifest.Models); err != nil {
+	owner := make(map[string]string)
+	for idx := range plugins {
+		plugin := plugins[idx]
+		kind := plugin.Manifest.Kind
+		if err := contracts.ValidateModels(kind, plugin.Manifest.Models); err != nil {
 			return nil, err
 		}
-		for _, m := range p.Manifest.Models {
-			if prev, clash := owner[m.ID]; clash {
-				return nil, fmt.Errorf("model ID %q is declared by both %q and %q", m.ID, prev, kind)
+		for _, model := range plugin.Manifest.Models {
+			if prev, clash := owner[model.ID]; clash {
+				return nil, &duplicateModelError{ID: model.ID, First: prev, Second: kind}
 			}
-			owner[m.ID] = kind
+			owner[model.ID] = kind
 		}
-		for _, m := range contracts.FilterModels(p.Manifest.Models, policy) {
+		for _, m := range contracts.FilterModels(plugin.Manifest.Models, policy) {
 			out = append(out, CatalogEntry{Vendor: kind, ModelSpec: m})
 		}
 	}
-	// Stable order: the app renders this list as-is, and an order that shifts
-	// between restarts would move entries out from under the cursor.
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Vendor != out[j].Vendor {
-			return out[i].Vendor < out[j].Vendor
+	sort.SliceStable(out, func(left, right int) bool {
+		if out[left].Vendor != out[right].Vendor {
+			return out[left].Vendor < out[right].Vendor
 		}
-		return out[i].ID < out[j].ID
+		return out[left].ID < out[right].ID
 	})
 	return out, nil
 }
@@ -61,18 +60,16 @@ func LookupModel(plugins []contracts.Plugin, policy contracts.RoutePolicy, model
 	if err != nil {
 		return CatalogEntry{}, err
 	}
-	for _, e := range entries {
-		if e.ID == modelID {
-			return e, nil
+	for _, entry := range entries {
+		if entry.ID == modelID {
+			return entry, nil
 		}
 	}
-	// PolicyAll is the zero value (""), which would render as an empty quoted
-	// string in an error the user now sees at `session create` time.
 	name := string(policy)
 	if name == "" {
 		name = "all"
 	}
-	return CatalogEntry{}, fmt.Errorf("unknown model %q (not offered under route policy %q)", modelID, name)
+	return CatalogEntry{}, &unknownModelError{Model: modelID, Policy: name}
 }
 
 // EnvRoutePolicy selects which models are offered; EnvDefaultModel names the one
@@ -84,7 +81,7 @@ const (
 )
 
 // ResolvePolicy reads the route policy from the environment. Missing or
-// unrecognized, it falls back to PolicyAll — the behavior that predates this
+// unrecognized, it falls back to PolicyAll, the behavior that predates this
 // change. This setting is set by the app when it launches the daemon, not by
 // the user: hardening it into a fatal error would break a daemon started by
 // hand.

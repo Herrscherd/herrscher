@@ -2,6 +2,7 @@ package host
 
 import (
 	"archive/tar"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -21,12 +22,19 @@ func TestStagedAgentTarCarriesTheFilesAndTheRemotePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seen := map[string]string{}
+	seen := readTarMembers(t, r)
+	assertStagedAgentFiles(t, seen)
+	assertNoUnsafeMembers(t, seen)
+}
+
+func readTarMembers(t *testing.T, r io.Reader) map[string]string {
+	t.Helper()
+	seen := make(map[string]string)
 	tr := tar.NewReader(r)
 	for {
 		h, err := tr.Next()
-		if err == io.EOF {
-			break
+		if errors.Is(err, io.EOF) {
+			return seen
 		}
 		if err != nil {
 			t.Fatal(err)
@@ -40,6 +48,10 @@ func TestStagedAgentTarCarriesTheFilesAndTheRemotePath(t *testing.T) {
 		}
 		seen[h.Name] = string(buf)
 	}
+}
+
+func assertStagedAgentFiles(t *testing.T, seen map[string]string) {
+	t.Helper()
 	for _, want := range []string{"AGENTS.md", ".claude/CLAUDE.md", ".mcp.json", ".claude/settings.json", ".codex/config.toml"} {
 		if _, ok := seen[want]; !ok {
 			t.Errorf("the tar is missing %s (has %v)", want, keysOf(seen))
@@ -48,13 +60,13 @@ func TestStagedAgentTarCarriesTheFilesAndTheRemotePath(t *testing.T) {
 	if !strings.Contains(seen["AGENTS.md"], "/srv/work/proj/.herrscher-sessions/inst/s1") {
 		t.Fatalf("the remote path did not reach the tar: %q", seen["AGENTS.md"])
 	}
-	// The staged settings name the far machine's binary, not this daemon's: the
-	// hook runs where the session runs.
 	if !strings.Contains(seen[".claude/settings.json"], "'/far/bin/herrscher' approve hook") {
 		t.Fatalf("the far side's binary did not reach the tar: %q", seen[".claude/settings.json"])
 	}
-	// Paths are relative: an absolute member would let a tar decide where it
-	// lands, and this one is extracted into a directory chosen by the receiver.
+}
+
+func assertNoUnsafeMembers(t *testing.T, seen map[string]string) {
+	t.Helper()
 	for name := range seen {
 		if strings.HasPrefix(name, "/") || strings.Contains(name, "..") {
 			t.Fatalf("unsafe tar member %q", name)
@@ -89,5 +101,30 @@ func TestExtractTarRefusesAnEscapingMember(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(dir), "escaped")); err == nil {
 		t.Fatal("the member escaped the destination")
+	}
+}
+
+func TestExtractTarRefusesAWriteThroughASymlinkInTheDestination(t *testing.T) {
+	dst := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(dst, "link")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	var buf strings.Builder
+	tw := tar.NewWriter(&buf)
+	if err := tw.WriteHeader(&tar.Header{Name: "link/victim.txt", Mode: 0o644, Size: 3, Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("bad")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := extractTar(strings.NewReader(buf.String()), dst); err == nil {
+		t.Fatal("want a refusal for a member that resolves through a symlink")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "victim.txt")); err == nil {
+		t.Fatal("the member was written through the symlink, outside the destination")
 	}
 }

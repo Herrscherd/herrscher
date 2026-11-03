@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+const (
+	frontmatterFence = "---"
+)
+
 // Discover scans each root for immediate <root>/<name>/SKILL.md entries, parses
 // their frontmatter, and returns the valid skills. De-duplication is by Name
 // with earlier roots winning, so a repo skill overrides a global one of the same
@@ -18,65 +22,63 @@ func Discover(roots []string) []Skill {
 	return out
 }
 
-// discover is Discover with the previous scan's result, keyed by SKILL.md path.
-// A file whose stamp is unchanged is taken from prev — one Stat instead of a
-// read and a frontmatter parse — which matters because the engine rescans on
-// every single turn. The second return names the paths that were actually
-// re-read, so a caller caching anything else derived from the file knows what to
-// drop; a file missing from it either did not change or is gone.
-func discover(roots []string, prev map[string]Skill) (out []Skill, reread []string) {
-	seen := map[string]bool{}
+func discover(roots []string, prev map[string]Skill) ([]Skill, []string) {
+	seen := make(map[string]bool)
+	var out []Skill
+	var reread []string
 	for _, root := range roots {
 		entries, err := os.ReadDir(root)
 		if err != nil {
 			continue
 		}
-		for _, e := range entries {
-			if !e.IsDir() {
+		for _, entry := range entries {
+			if !entry.IsDir() {
 				continue
 			}
-			dir := filepath.Join(root, e.Name())
-			path := filepath.Join(dir, "SKILL.md")
-			info, err := os.Stat(path)
-			if err != nil {
+			skill, fresh, ok := loadSkill(filepath.Join(root, entry.Name()), prev)
+			if !ok || seen[skill.Name] {
 				continue
 			}
-			now := fileStamp{mod: info.ModTime(), size: info.Size()}
-			if s, ok := prev[path]; ok && s.stamp == now {
-				if seen[s.Name] {
-					continue
-				}
-				seen[s.Name] = true
-				out = append(out, s)
-				continue
+			seen[skill.Name] = true
+			if fresh {
+				reread = append(reread, skill.bodyPath)
 			}
-			md, err := os.ReadFile(path)
-			if err != nil {
-				continue
-			}
-			name, desc, ok := parseFrontmatter(md)
-			if !ok || name == "" || seen[name] {
-				continue
-			}
-			seen[name] = true
-			reread = append(reread, path)
-			out = append(out, Skill{Name: name, Description: desc, Dir: dir, bodyPath: path, stamp: now})
+			out = append(out, skill)
 		}
 	}
 	return out, reread
 }
 
-// parseFrontmatter reads a leading --- fenced block of key: value lines and
-// returns the name and description. ok is false when the file does not open with
-// a --- fence.
-func parseFrontmatter(md []byte) (name, description string, ok bool) {
-	sc := bufio.NewScanner(bytes.NewReader(md))
-	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {
+func loadSkill(dir string, prev map[string]Skill) (Skill, bool, bool) {
+	path := filepath.Join(dir, "SKILL.md")
+	info, err := os.Stat(path)
+	if err != nil {
+		return Skill{}, false, false
+	}
+	now := fileStamp{mod: info.ModTime(), size: info.Size()}
+	if s, ok := prev[path]; ok && s.stamp == now {
+		return s, false, true
+	}
+	content, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return Skill{}, false, false
+	}
+	name, desc, ok := parseFrontmatter(content)
+	if !ok || name == "" {
+		return Skill{}, false, false
+	}
+	return Skill{Name: name, Description: desc, Dir: dir, bodyPath: path, stamp: now}, true, true
+}
+
+func parseFrontmatter(content []byte) (string, string, bool) {
+	var name, description string
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	if !scanner.Scan() || strings.TrimSpace(scanner.Text()) != frontmatterFence {
 		return "", "", false
 	}
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "---" {
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == frontmatterFence {
 			return name, description, true
 		}
 		key, val, found := strings.Cut(line, ":")

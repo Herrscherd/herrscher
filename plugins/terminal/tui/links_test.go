@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// A transcript is already full of links; the terminal simply never noticed them.
-// The table is the contract: what counts as one, and what its target resolves to.
 func TestFindLinks(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -19,8 +17,6 @@ func TestFindLinks(t *testing.T) {
 			want:  []Link{{Label: "https://example.com/a", Target: "https://example.com/a", Line: 0, Start: 4, End: 25, Kind: LinkURL}},
 		},
 		{
-			// The case the status line exists for: the label names one destination
-			// and the target is another. Both are captured, and they differ.
 			name:  "a markdown link whose label is not its target",
 			lines: []string{"read [the docs](https://elsewhere.test/x)"},
 			want:  []Link{{Label: "the docs", Target: "https://elsewhere.test/x", Line: 0, Start: 5, End: 41, Kind: LinkURL}},
@@ -36,8 +32,6 @@ func TestFindLinks(t *testing.T) {
 			want:  []Link{{Label: "https://example.com/a", Target: "https://example.com/a", Line: 0, Start: 6, End: 27, Kind: LinkURL}},
 		},
 		{
-			// Inside a fence the characters are the content, not a reference to
-			// somewhere else — turning them into a link would misread the block.
 			name:  "a url inside a code block is not a link",
 			lines: []string{"```", "curl https://example.com/a", "```", "then https://example.com/b"},
 			want:  []Link{{Label: "https://example.com/b", Target: "https://example.com/b", Line: 3, Start: 5, End: 26, Kind: LinkURL}},
@@ -58,8 +52,6 @@ func TestFindLinks(t *testing.T) {
 	}
 }
 
-// A markdown link's label and target must stay distinct all the way through:
-// collapsing them is how a transcript would come to lie about where it goes.
 func TestMarkdownLabelAndTargetStayDistinct(t *testing.T) {
 	got := findLinks([]string{"[example.com](https://phish.test/)"})
 	if len(got) != 1 {
@@ -73,7 +65,7 @@ func TestMarkdownLabelAndTargetStayDistinct(t *testing.T) {
 func TestRenderLinkUsesOSC8WhereAvailable(t *testing.T) {
 	l := Link{Label: "the docs", Target: "https://example.com/x", Kind: LinkURL}
 
-	with := renderLink(l, Capabilities{Hyperlinks: true}, false)
+	with := renderLink(l, Capabilities{Hyperlinks: true}, false, newStyles())
 	if !strings.Contains(with, "\x1b]8;;https://example.com/x") {
 		t.Errorf("an OSC 8 terminal must get the hyperlink: %q", with)
 	}
@@ -81,7 +73,7 @@ func TestRenderLinkUsesOSC8WhereAvailable(t *testing.T) {
 		t.Errorf("the hyperlink must be closed, or the rest of the line joins it: %q", with)
 	}
 
-	without := renderLink(l, Capabilities{}, false)
+	without := renderLink(l, Capabilities{}, false, newStyles())
 	if strings.Contains(without, "\x1b]8;;") {
 		t.Errorf("a terminal without OSC 8 must not be sent the escape: %q", without)
 	}
@@ -90,21 +82,15 @@ func TestRenderLinkUsesOSC8WhereAvailable(t *testing.T) {
 	}
 }
 
-// The selected link has to be findable by eye, on a terminal with hyperlinks and
-// on one without: the gesture is aimed at whichever one is highlighted.
 func TestRenderLinkHighlightsTheSelection(t *testing.T) {
 	l := Link{Label: "x", Target: "https://example.com/x", Kind: LinkURL}
 	for _, caps := range []Capabilities{{Hyperlinks: true}, {}} {
-		if renderLink(l, caps, true) == renderLink(l, caps, false) {
+		if renderLink(l, caps, true, newStyles()) == renderLink(l, caps, false, newStyles()) {
 			t.Fatalf("the selected link must render differently (caps %+v)", caps)
 		}
 	}
 }
 
-// A markdown target is whatever the agent wrote between the parens, and it does
-// not stay a string: it is written into the OSC 8 payload, where an ESC ends the
-// sequence and hands the terminal whatever follows as a command of its own. Such
-// a target is not a link, and the characters stay on screen as text.
 func TestATargetCarryingAControlByteIsNotALink(t *testing.T) {
 	for _, s := range []string{
 		"see [docs](https://a.test/\x1b]0;pwned\x07x) here",
@@ -118,8 +104,7 @@ func TestATargetCarryingAControlByteIsNotALink(t *testing.T) {
 		}
 	}
 
-	// And what does survive detection is never emitted raw into an OSC 8 payload.
-	out := renderLink(Link{Label: "x", Target: "https://a.test/ok"}, Capabilities{Hyperlinks: true}, false)
+	out := renderLink(Link{Label: "x", Target: "https://a.test/ok"}, Capabilities{Hyperlinks: true}, false, newStyles())
 	if !strings.Contains(out, "\x1b]8;;https://a.test/ok\x1b\\") {
 		t.Fatalf("an ordinary target must still hyperlink: %q", out)
 	}

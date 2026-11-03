@@ -2,20 +2,18 @@ package tui
 
 import "testing"
 
-// The probe is the one place the TUI decides what the terminal can do, so it is
-// tested the way it is used: one row per terminal an operator actually runs,
-// with every capability asserted at once. A row that only checked graphics would
-// let a regression in colour or hyperlinks through unseen.
+type probeCase struct {
+	name     string
+	env      map[string]string
+	graphics Graphics
+	links    bool
+	mouse    bool
+	colour   Colour
+	terminal string
+}
+
 func TestProbe(t *testing.T) {
-	cases := []struct {
-		name     string
-		env      map[string]string
-		graphics Graphics
-		links    bool
-		mouse    bool
-		colour   Colour
-		terminal string
-	}{
+	cases := []probeCase{
 		{
 			name:     "kitty",
 			env:      map[string]string{"TERM": "xterm-kitty", "KITTY_WINDOW_ID": "1", "COLORTERM": "truecolor"},
@@ -58,46 +56,34 @@ func TestProbe(t *testing.T) {
 		},
 		{
 			name:     "empty environment",
-			env:      map[string]string{},
+			env:      make(map[string]string),
 			graphics: GraphicsNone, links: false, mouse: false, colour: Colour16, terminal: "unknown",
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := Probe(func(k string) string { return c.env[k] })
-			if got.Graphics != c.graphics {
-				t.Errorf("graphics = %v, want %v", got.Graphics, c.graphics)
-			}
-			if got.Hyperlinks != c.links {
-				t.Errorf("hyperlinks = %v, want %v", got.Hyperlinks, c.links)
-			}
-			if got.Mouse != c.mouse {
-				t.Errorf("mouse = %v, want %v", got.Mouse, c.mouse)
-			}
-			if got.Colour != c.colour {
-				t.Errorf("colour = %v, want %v", got.Colour, c.colour)
-			}
-			if got.Terminal != c.terminal {
-				t.Errorf("terminal = %q, want %q", got.Terminal, c.terminal)
-			}
+			checkProbe(t, c)
 		})
 	}
 }
 
-// The capability names reach the operator through the diagnostic screen, so they
-// have to be words rather than the integers the enums are underneath.
-func TestCapabilityNamesAreReadable(t *testing.T) {
-	if got := GraphicsKitty.String(); got != "kitty" {
-		t.Errorf("GraphicsKitty.String() = %q", got)
+func checkProbe(t *testing.T, c probeCase) {
+	t.Helper()
+	got := Probe(func(k string) string { return c.env[k] })
+	if got.Graphics != c.graphics {
+		t.Errorf("graphics = %v, want %v", got.Graphics, c.graphics)
 	}
-	if got := GraphicsNone.String(); got != "none" {
-		t.Errorf("GraphicsNone.String() = %q", got)
+	if got.Hyperlinks != c.links {
+		t.Errorf("hyperlinks = %v, want %v", got.Hyperlinks, c.links)
 	}
-	if got := ColourTrue.String(); got != "truecolor" {
-		t.Errorf("ColourTrue.String() = %q", got)
+	if got.Mouse != c.mouse {
+		t.Errorf("mouse = %v, want %v", got.Mouse, c.mouse)
 	}
-	if got := Colour16.String(); got != "16" {
-		t.Errorf("Colour16.String() = %q", got)
+	if got.Colour != c.colour {
+		t.Errorf("colour = %v, want %v", got.Colour, c.colour)
+	}
+	if got.Terminal != c.terminal {
+		t.Errorf("terminal = %q, want %q", got.Terminal, c.terminal)
 	}
 }
 

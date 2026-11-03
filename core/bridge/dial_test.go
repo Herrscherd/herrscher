@@ -2,38 +2,39 @@ package bridge
 
 import (
 	"context"
+	"net"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
-
-	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
-// The daemon starts a bridge and opens its control socket from two different
-// places, so a fresh bridge routinely reaches the socket before it exists.
-// Without a wait it dies on the spot and comes back only through the restart
-// backoff — a crash in the log, and a session that answers nothing while it
-// happens.
 func TestDialWaitsForASocketThatIsNotThereYet(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "late.sock")
-	go func() {
-		time.Sleep(150 * time.Millisecond)
-		acc, err := control.Accept(path)
+	synctest.Test(t, func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "late.sock")
+		listening := make(chan net.Listener, 1)
+		time.AfterFunc(350*time.Millisecond, func() {
+			ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
+			if err != nil {
+				t.Errorf("listen: %v", err)
+				return
+			}
+			listening <- ln
+		})
+		conn, err := dialHub(context.Background(), path)
 		if err != nil {
-			return
+			t.Fatalf("dial must wait for the socket: %v", err)
 		}
-		t.Cleanup(func() { _ = acc.Close() })
-	}()
-
-	conn, err := dialHub(context.Background(), path)
-	if err != nil {
-		t.Fatalf("dial must wait for the socket: %v", err)
-	}
-	_ = conn.Close()
+		defer closeAndWarn(conn)
+		select {
+		case ln := <-listening:
+			defer closeAndWarn(ln)
+		default:
+			t.Fatal("dial connected before any listener was up on the path")
+		}
+	})
 }
 
-// A bridge whose daemon is truly gone must still exit, so the supervisor gets to
-// decide rather than the process hanging on a socket that will never appear.
 func TestDialGivesUpWhenTheContextIsCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

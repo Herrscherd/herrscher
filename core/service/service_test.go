@@ -15,15 +15,14 @@ func TestWriteFileNeverOverwritesTemplate(t *testing.T) {
 	if err := os.WriteFile(path, []byte("GW_TOKEN=real-secret\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// Template write against an existing file must be a no-op (preserve secrets).
 	if err := writeFile(FileWrite{Path: path, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := os.ReadFile(path)
+	got, err := os.ReadFile(path)
+	must(t, err)
 	if !strings.Contains(string(got), "real-secret") {
 		t.Fatalf("template clobbered existing secrets: %q", got)
 	}
-	// A fresh path is created from the template.
 	fresh := filepath.Join(dir, "sub", "new.env")
 	if err := writeFile(FileWrite{Path: fresh, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
 		t.Fatal(err)
@@ -45,9 +44,6 @@ func testConfig(goos string) Config {
 	}
 }
 
-// testEnvVars is a neutral secrets set standing in for what the plugin registry
-// would supply: one required gateway token plus the core owner id. No concrete
-// platform is named, matching the core's gateway-agnostic contract.
 func testEnvVars() []EnvVar {
 	return []EnvVar{
 		{Key: "GW_TOKEN", Help: "gateway token", Required: true},
@@ -61,9 +57,6 @@ func TestServeArgs(t *testing.T) {
 	if strings.Join(got, " ") != want {
 		t.Fatalf("serveArgs = %q, want %q", strings.Join(got, " "), want)
 	}
-	// Tunable knobs (health-addr) are NOT baked into the unit — they live in
-	// config.json so editing them doesn't require reinstalling. Baking them would
-	// shadow config.json.
 	if strings.Join(serveArgs(Config{HealthAddr: "127.0.0.1:8787"}), " ") != "serve" {
 		t.Fatalf("health-addr must not be baked into serveArgs, got %v", serveArgs(Config{HealthAddr: "127.0.0.1:8787"}))
 	}
@@ -82,24 +75,21 @@ func TestLinuxPlan(t *testing.T) {
 		t.Fatalf("unit path = %s", unit.Path)
 	}
 	for _, want := range []string{
-		// The daemon loads the env file itself; the unit just passes --env-file.
 		"ExecStart=/home/me/.local/bin/herrscher serve --env-file /home/me/.config/herrscher/herrscher.env",
 		"Restart=always",
-		"StartLimitBurst=5", // cap restarts so a bad token can't spin forever
+		"StartLimitBurst=5",
 		"WantedBy=default.target",
 	} {
 		if !strings.Contains(unit.Content, want) {
 			t.Errorf("unit missing %q\n---\n%s", want, unit.Content)
 		}
 	}
-	// No EnvironmentFile (sourcing moved into the daemon), and no secret value.
 	if strings.Contains(unit.Content, "EnvironmentFile") {
 		t.Error("unit should not declare EnvironmentFile anymore")
 	}
 	if strings.Contains(unit.Content, "TOKEN=") {
 		t.Error("unit file embeds a secret value")
 	}
-	// Env file is a never-overwrite 0600 template with no values.
 	env := p.Files[1]
 	if !env.Template || env.Mode != 0o600 {
 		t.Fatalf("env file should be a 0600 template, got mode=%o template=%v", env.Mode, env.Template)
@@ -111,11 +101,6 @@ func TestLinuxPlan(t *testing.T) {
 	assertCmd(t, p, "loginctl enable-linger me")
 }
 
-// A launcher gives the daemon a near-empty PATH (systemd: /usr/local/bin:/usr/bin),
-// and every agent it spawns inherits it. Tools installed under the operator's home
-// — herrscher itself, a workspace CLI — then simply do not exist to the agent, which
-// reads as the agent refusing to do what it was asked. So the daemon must run with
-// the PATH the operator has.
 func TestUnitCarriesTheOperatorsPath(t *testing.T) {
 	c := testConfig("linux")
 	c.Path = "/opt/tool/bin:/usr/bin"
@@ -125,8 +110,8 @@ func TestUnitCarriesTheOperatorsPath(t *testing.T) {
 	}
 	line := unitPathOf(t, p.Files[0].Content)
 	for _, want := range []string{
-		"/opt/tool/bin",       // what the operator's shell sees
-		"/home/me/.local/bin", // where the binary itself lives
+		"/opt/tool/bin",
+		"/home/me/.local/bin",
 	} {
 		if !strings.Contains(line, want) {
 			t.Errorf("PATH missing %q: %s", want, line)
@@ -134,8 +119,6 @@ func TestUnitCarriesTheOperatorsPath(t *testing.T) {
 	}
 }
 
-// With no PATH captured, the unit must still beat the launcher's default rather
-// than fall back to it.
 func TestUnitPathFallsBackToTheUsualDirs(t *testing.T) {
 	p, err := BuildPlan(testConfig("linux"))
 	if err != nil {
@@ -148,7 +131,6 @@ func TestUnitPathFallsBackToTheUsualDirs(t *testing.T) {
 	}
 }
 
-// launchd is as narrow as systemd, so the agent needs the same treatment there.
 func TestPlistCarriesThePath(t *testing.T) {
 	c := testConfig("darwin")
 	c.Path = "/opt/tool/bin:/usr/bin"
@@ -162,8 +144,6 @@ func TestPlistCarriesThePath(t *testing.T) {
 	}
 }
 
-// systemd splits Environment= on whitespace, so a directory with a space in it
-// would cut the PATH short there and leave the rest as assignments it drops.
 func TestUnitPathSurvivesASpaceInADirectory(t *testing.T) {
 	c := testConfig("linux")
 	c.Path = "/opt/my tools/bin:/usr/bin"
@@ -178,14 +158,13 @@ func TestUnitPathSurvivesASpaceInADirectory(t *testing.T) {
 	if !strings.Contains(line, "/opt/my tools/bin") {
 		t.Errorf("PATH lost the entry with a space: %s", line)
 	}
-	// And the sync path must recognise the unquoted form an earlier build wrote,
-	// so the upgrade replaces it instead of adding a second directive.
 	c2, unit := writeUnit(t, "[Unit]\n\n[Service]\nEnvironment=PATH=/usr/bin\nExecStart=/x serve\n\n[Install]\n")
 	c2.Path = c.Path
-	if changed, err := syncUnitPath(c2); err != nil || !changed {
-		t.Fatalf("changed=%v err=%v, want a rewrite", changed, err)
+	if changed, syncErr := syncUnitPath(c2); syncErr != nil || !changed {
+		t.Fatalf("changed=%v err=%v, want a rewrite", changed, syncErr)
 	}
-	b, _ := os.ReadFile(unit)
+	b, err := os.ReadFile(unit)
+	must(t, err)
 	if strings.Count(string(b), "PATH=") != 1 {
 		t.Errorf("want exactly one PATH directive:\n%s", b)
 	}
@@ -194,7 +173,6 @@ func TestUnitPathSurvivesASpaceInADirectory(t *testing.T) {
 	}
 }
 
-// unitPathOf returns the unit's PATH directive.
 func unitPathOf(t *testing.T, unit string) string {
 	t.Helper()
 	for _, l := range strings.Split(unit, "\n") {
@@ -206,8 +184,6 @@ func unitPathOf(t *testing.T, unit string) string {
 	return ""
 }
 
-// A PATH is not a secret, but it is attacker-visible surface if it can inject
-// unit directives. Newlines must never reach the unit.
 func TestUnitPathCannotInjectDirectives(t *testing.T) {
 	c := testConfig("linux")
 	c.Path = "/opt/bin\nExecStartPre=/bin/rm -rf /\n"
@@ -220,10 +196,6 @@ func TestUnitPathCannotInjectDirectives(t *testing.T) {
 	}
 }
 
-// A login PATH carries entries that must not outlive the shell: a bundled app's
-// AppImage mount (/tmp/.mount_XXXXXX) is gone by the next launch, and is a
-// directory any local process can recreate — so a long-lived service resolving
-// commands through it would trust whoever gets there first.
 func TestUnitPathDropsVolatileAndRelativeEntries(t *testing.T) {
 	c := testConfig("linux")
 	c.Path = "/tmp/.mount_appXYZ:/keep/bin:relative/bin:/var/tmp/x:/dev/shm/y:/run/user/1000/z:."
@@ -240,7 +212,6 @@ func TestUnitPathDropsVolatileAndRelativeEntries(t *testing.T) {
 	if !strings.Contains(line, "/keep/bin") {
 		t.Errorf("PATH dropped a legitimate entry: %s", line)
 	}
-	// A relative entry must not survive as a bare "." either.
 	for _, e := range strings.Split(strings.TrimPrefix(line, "Environment=PATH="), ":") {
 		if !strings.HasPrefix(e, "/") {
 			t.Errorf("PATH contains a non-absolute entry %q: %s", e, line)
@@ -248,7 +219,6 @@ func TestUnitPathDropsVolatileAndRelativeEntries(t *testing.T) {
 	}
 }
 
-// writeUnit puts content where syncUnitPath looks, under a temp home.
 func writeUnit(t *testing.T, content string) (Config, string) {
 	t.Helper()
 	home := t.TempDir()
@@ -265,10 +235,6 @@ func writeUnit(t *testing.T, content string) (Config, string) {
 	return c, unit
 }
 
-// `service update` rebuilds the binary and restarts, but the unit on disk was
-// written by whatever version installed it. The PATH the daemon needs must reach a
-// machine that upgrades normally — without resetting the flags it was installed
-// with, which are the operator's choice, not ours.
 func TestUpdateAddsThePathToAUnitThatPredatesIt(t *testing.T) {
 	c, unit := writeUnit(t, "[Unit]\nDescription=x\n\n[Service]\nType=simple\n"+
 		"ExecStart=/home/me/.local/bin/herrscher serve --health-addr 127.0.0.1:9999\n"+
@@ -280,17 +246,16 @@ func TestUpdateAddsThePathToAUnitThatPredatesIt(t *testing.T) {
 	if !changed {
 		t.Fatal("a unit with no PATH must be reported as changed")
 	}
-	b, _ := os.ReadFile(unit)
+	b, err := os.ReadFile(unit)
+	must(t, err)
 	got := string(b)
 	if !strings.Contains(got, "Environment=PATH=") || !strings.Contains(got, "/opt/tool/bin") {
 		t.Errorf("unit carries no PATH:\n%s", got)
 	}
-	// The directive must land in [Service]; in [Install] systemd ignores it.
 	service := got[strings.Index(got, "[Service]"):strings.Index(got, "[Install]")]
 	if !strings.Contains(service, "Environment=PATH=") {
 		t.Errorf("PATH landed outside [Service]:\n%s", got)
 	}
-	// An upgrade must not reset what the operator installed with.
 	if !strings.Contains(got, "--health-addr 127.0.0.1:9999") {
 		t.Errorf("upgrade clobbered the installed flags:\n%s", got)
 	}
@@ -303,21 +268,19 @@ func TestUpdateReplacesAStalePathAndIsIdempotent(t *testing.T) {
 	if err != nil || !changed {
 		t.Fatalf("changed=%v err=%v, want a rewrite", changed, err)
 	}
-	b, _ := os.ReadFile(unit)
+	b, err := os.ReadFile(unit)
+	must(t, err)
 	if strings.Count(string(b), "Environment=PATH=") != 1 {
 		t.Errorf("want exactly one PATH directive:\n%s", b)
 	}
 	if !strings.Contains(string(b), "/opt/tool/bin") {
 		t.Errorf("stale PATH not replaced:\n%s", b)
 	}
-	// Second run: nothing to do, so no needless daemon-reload or restart noise.
 	if changed, err = syncUnitPath(c); err != nil || changed {
 		t.Fatalf("changed=%v err=%v, want a no-op on the second run", changed, err)
 	}
 }
 
-// Not installed as a service is the normal case for a foreground daemon; an
-// update must not fail on it.
 func TestSyncUnitPathToleratesNoUnit(t *testing.T) {
 	c := testConfig("linux")
 	c.Home = t.TempDir()
@@ -342,7 +305,6 @@ func TestMacPlan(t *testing.T) {
 	for _, want := range []string{
 		"<key>Label</key><string>com.vskstudio.herrscher</string>",
 		"<key>RunAtLoad</key><true/>",
-		// launchd execs herrscher directly (no shell); each arg is its own <string>.
 		"<string>/home/me/.local/bin/herrscher</string>",
 		"<string>serve</string>",
 		"<string>--env-file</string>",
@@ -352,7 +314,6 @@ func TestMacPlan(t *testing.T) {
 			t.Errorf("plist missing %q\n---\n%s", want, plist.Content)
 		}
 	}
-	// No shell wrapper anymore.
 	if strings.Contains(plist.Content, "/bin/sh") {
 		t.Errorf("plist should exec herrscher directly, not via a shell:\n%s", plist.Content)
 	}
@@ -372,7 +333,6 @@ func TestWindowsPlan(t *testing.T) {
 	if !strings.HasSuffix(launcher.Path, "herrscher-serve.cmd") {
 		t.Fatalf("launcher path = %s", launcher.Path)
 	}
-	// The launcher just execs herrscher with --env-file; no brittle for/f parsing.
 	if !strings.Contains(launcher.Content, `C:\Users\me\herrscher.exe serve --env-file C:\Users\me\.config\herrscher\herrscher.env`) {
 		t.Errorf("launcher missing herrscher invocation:\n%s", launcher.Content)
 	}
@@ -383,8 +343,6 @@ func TestWindowsPlan(t *testing.T) {
 }
 
 func TestStatusToleratesInactive(t *testing.T) {
-	// `systemctl status` exits non-zero when the unit is stopped; status must
-	// still print rather than surface that as a CLI error.
 	for _, os := range []string{"linux", "darwin", "windows"} {
 		cmd, err := StatusCommand(testConfig(os))
 		if err != nil {
@@ -403,8 +361,6 @@ func TestUnsupportedOS(t *testing.T) {
 }
 
 func TestQuoters(t *testing.T) {
-	// systemd: plain tokens pass through; spaces/quotes get double-quoted and
-	// backslashes & quotes escaped.
 	if got := systemdQuote("/usr/bin/herrscher"); got != "/usr/bin/herrscher" {
 		t.Errorf("systemdQuote plain = %q", got)
 	}
@@ -415,7 +371,6 @@ func TestQuoters(t *testing.T) {
 		t.Errorf("systemdQuote escape = %q", got)
 	}
 
-	// cmd: plain tokens pass through; spaces get double-quoted, embedded quotes doubled.
 	if got := cmdQuote(`C:\herrscher.exe`); got != `C:\herrscher.exe` {
 		t.Errorf("cmdQuote plain = %q", got)
 	}
@@ -423,14 +378,11 @@ func TestQuoters(t *testing.T) {
 		t.Errorf("cmdQuote spaces = %q", got)
 	}
 
-	// joinQuoted applies the quoter to bin and every arg.
 	if got := joinQuoted(systemdQuote, "/b/herrscher", []string{"serve", "x y"}); got != `/b/herrscher serve "x y"` {
 		t.Errorf("joinQuoted = %q", got)
 	}
 }
 
-// TestArgsWithSpacesAreQuoted: an ExtraArg containing a space must stay a single
-// token in every generated artifact (regression for unquoted arg-joining).
 func TestArgsWithSpacesAreQuoted(t *testing.T) {
 	for _, goos := range []string{"linux", "darwin", "windows"} {
 		c := testConfig(goos)
@@ -439,15 +391,12 @@ func TestArgsWithSpacesAreQuoted(t *testing.T) {
 		if err != nil {
 			t.Fatalf("plan %s: %v", goos, err)
 		}
-		// The raw, unquoted form must NOT appear adjacent (would be two tokens).
 		if strings.Contains(p.Files[0].Content, "--status-channel chan with space") {
 			t.Errorf("%s leaves a space-bearing arg unquoted:\n%s", goos, p.Files[0].Content)
 		}
 	}
 }
 
-// A baked-in default --cmd (model/effort) must land in the unit's ExecStart as a
-// single quoted token, so serve receives the whole "claude …" string as one arg.
 func TestDefaultCmdBakedIntoUnit(t *testing.T) {
 	const cmd = "claude --model claude-opus-4-8 --effort low"
 	for _, goos := range []string{"linux", "darwin", "windows"} {
@@ -461,16 +410,12 @@ func TestDefaultCmdBakedIntoUnit(t *testing.T) {
 		if !strings.Contains(content, "claude-opus-4-8") {
 			t.Errorf("%s: ExecStart missing the baked model:\n%s", goos, content)
 		}
-		// Unquoted, the value would be five separate tokens; its presence as a raw
-		// run means it was NOT quoted into one arg.
 		if strings.Contains(content, "--cmd "+cmd) {
 			t.Errorf("%s: default cmd not quoted as a single token:\n%s", goos, content)
 		}
 	}
 }
 
-// The install plan scaffolds a config.json template (never the unit's [0] slot,
-// which stays the launcher) carrying the pre-filled cmd and no secrets.
 func TestConfigScaffoldInPlan(t *testing.T) {
 	const cmd = "claude --model claude-opus-4-8 --effort low"
 	for _, goos := range []string{"linux", "darwin", "windows"} {
@@ -481,31 +426,35 @@ func TestConfigScaffoldInPlan(t *testing.T) {
 		if err != nil {
 			t.Fatalf("plan %s: %v", goos, err)
 		}
-		var cfg *FileWrite
-		for i := range p.Files {
-			if p.Files[i].Path == c.ConfigPath {
-				cfg = &p.Files[i]
-			}
-		}
-		if cfg == nil {
-			t.Fatalf("%s: no config.json in plan", goos)
-		}
-		if !cfg.Template {
-			t.Errorf("%s: config.json must be Template (never clobber edits)", goos)
-		}
-		if !strings.Contains(cfg.Content, cmd) {
-			t.Errorf("%s: config.json missing pre-filled cmd:\n%s", goos, cfg.Content)
-		}
-		// The comment may *name* the secrets (explaining they live elsewhere),
-		// but the file must never carry an actual secret assignment.
-		if strings.Contains(cfg.Content, "GW_TOKEN=") {
-			t.Errorf("%s: config.json must not assign secrets", goos)
-		}
+		assertConfigScaffold(t, goos, configFile(p, c.ConfigPath), cmd)
 	}
 }
 
-// Without a ConfigPath (e.g. older callers) the plan omits the scaffold and the
-// launcher stays the first file, as the InstalledBinPath parse assumes.
+func configFile(p Plan, path string) *FileWrite {
+	for i := range p.Files {
+		if p.Files[i].Path == path {
+			return &p.Files[i]
+		}
+	}
+	return nil
+}
+
+func assertConfigScaffold(t *testing.T, goos string, cfg *FileWrite, cmd string) {
+	t.Helper()
+	if cfg == nil {
+		t.Fatalf("%s: no config.json in plan", goos)
+	}
+	if !cfg.Template {
+		t.Errorf("%s: config.json must be Template (never clobber edits)", goos)
+	}
+	if !strings.Contains(cfg.Content, cmd) {
+		t.Errorf("%s: config.json missing pre-filled cmd:\n%s", goos, cfg.Content)
+	}
+	if strings.Contains(cfg.Content, "GW_TOKEN=") {
+		t.Errorf("%s: config.json must not assign secrets", goos)
+	}
+}
+
 func TestNoConfigScaffoldWhenUnset(t *testing.T) {
 	p, err := BuildPlan(testConfig("linux"))
 	if err != nil {
@@ -527,7 +476,6 @@ func TestInstalledBinPathReadsUnit(t *testing.T) {
 	if err := os.MkdirAll(unitDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Write a real unit via the install plan so the parse matches what we emit.
 	p, err := BuildPlan(c)
 	if err != nil {
 		t.Fatal(err)
@@ -539,7 +487,6 @@ func TestInstalledBinPathReadsUnit(t *testing.T) {
 	if !ok || got != "/opt/herrscher/herrscher" {
 		t.Fatalf("InstalledBinPath = %q, %v; want /opt/herrscher/herrscher, true", got, ok)
 	}
-	// Absent unit (fresh home) → not found, not a panic.
 	c2 := testConfig("linux")
 	c2.Home = t.TempDir()
 	if _, ok := InstalledBinPath(c2); ok {
@@ -582,21 +529,18 @@ func assertCmd(t *testing.T, p Plan, want string) {
 	t.Errorf("no command matching %q in plan", want)
 }
 
-// TestSkipStartOmitsImmediateStart: with SkipStart (no token yet), install must
-// enable boot-start but NOT start the daemon now — else it crash-loops against
-// the empty template (Restart=always / KeepAlive).
 func TestSkipStartOmitsImmediateStart(t *testing.T) {
-	// Linux: `enable` present, `enable --now` absent.
 	lc := testConfig("linux")
 	lc.SkipStart = true
 	lp, err := BuildPlan(lc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ljoined string
+	var ljoinedBuilder strings.Builder
 	for _, c := range lp.Commands {
-		ljoined += strings.Join(c.Argv, " ") + "\n"
+		ljoinedBuilder.WriteString(strings.Join(c.Argv, " ") + "\n")
 	}
+	ljoined := ljoinedBuilder.String()
 	if strings.Contains(ljoined, "enable --now") {
 		t.Errorf("SkipStart linux plan must not start now:\n%s", ljoined)
 	}
@@ -604,7 +548,6 @@ func TestSkipStartOmitsImmediateStart(t *testing.T) {
 		t.Errorf("SkipStart linux plan should still enable at boot:\n%s", ljoined)
 	}
 
-	// macOS: no `launchctl load` (RunAtLoad starts it next login).
 	mc := testConfig("darwin")
 	mc.SkipStart = true
 	mp, err := BuildPlan(mc)
@@ -616,14 +559,11 @@ func TestSkipStartOmitsImmediateStart(t *testing.T) {
 			t.Errorf("SkipStart mac plan must not load (start) the agent: %v", c.Argv)
 		}
 	}
-	// Non-skip is still the start path.
-	mp2, _ := BuildPlan(testConfig("darwin"))
+	mp2, err := BuildPlan(testConfig("darwin"))
+	must(t, err)
 	assertCmd(t, mp2, "launchctl load -w")
 }
 
-// TestEnvFileHasRequired: the start decision hinges on every required secret
-// being set to a real, non-empty value — the empty template and a comment line
-// must read as "not ready".
 func TestEnvFileHasRequired(t *testing.T) {
 	vars := testEnvVars()
 	dir := t.TempDir()
@@ -645,7 +585,6 @@ func TestEnvFileHasRequired(t *testing.T) {
 	if !envFileHasRequired(filled, vars) {
 		t.Error("a filled required var should be detected")
 	}
-	// A commented-out required var must not count.
 	commented := filepath.Join(dir, "commented.env")
 	if err := os.WriteFile(commented, []byte("#GW_TOKEN=abc\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -653,25 +592,21 @@ func TestEnvFileHasRequired(t *testing.T) {
 	if envFileHasRequired(commented, vars) {
 		t.Error("commented required line should not count")
 	}
-	// With no required vars declared, any file (even absent) is ready.
 	if !envFileHasRequired(missing, []EnvVar{{Key: "OPTIONAL"}}) {
 		t.Error("no required vars should always report ready")
 	}
 }
 
-// TestInstallSkipsStartWhenNoToken: the end-to-end decision in Install — a fresh
-// install (no env file) flips SkipStart so no immediate-start command is run.
-// We exercise it on a non-host OS plan so no real services are touched.
 func TestInstallSkipsStartWhenNoToken(t *testing.T) {
 	dir := t.TempDir()
 	c := testConfig("linux")
-	c.EnvFile = filepath.Join(dir, "herrscher.env") // does not exist yet
-	// Mirror what Install computes, then assert the plan it would run.
+	c.EnvFile = filepath.Join(dir, "herrscher.env")
 	if envFileHasRequired(c.EnvFile, c.EnvVars) {
 		t.Fatal("precondition: env file should not be ready")
 	}
 	c.SkipStart = true
-	p, _ := BuildPlan(c)
+	p, err := BuildPlan(c)
+	must(t, err)
 	for _, cmd := range p.Commands {
 		if strings.Contains(strings.Join(cmd.Argv, " "), "--now") {
 			t.Errorf("fresh install must not start the service now: %v", cmd.Argv)
@@ -679,8 +614,6 @@ func TestInstallSkipsStartWhenNoToken(t *testing.T) {
 	}
 }
 
-// TestEnvTemplateCarriesNoValues guards the core secret-hygiene invariant: the
-// template lists each var but never a value, so installing can't leak a token.
 func TestEnvTemplateCarriesNoValues(t *testing.T) {
 	vars := testEnvVars()
 	tmpl := renderEnvTemplate(vars)
@@ -699,15 +632,10 @@ func TestEnvTemplateCarriesNoValues(t *testing.T) {
 	}
 }
 
-// TestNoSecretEmbeddedInAnyArtifact scans every file an install would write, on
-// every OS, for a token-shaped value — defense in depth against a regression
-// that bakes a secret into the unit/plist/launcher instead of the env file.
 func TestNoSecretEmbeddedInAnyArtifact(t *testing.T) {
 	const sentinel = "super-secret-token-value"
 	for _, os := range []string{"linux", "darwin", "windows"} {
 		c := testConfig(os)
-		// Even if a caller smuggles a secret through ExtraArgs we don't assert on
-		// that; we assert the generated *files* never contain a raw token.
 		p, err := BuildPlan(c)
 		if err != nil {
 			t.Fatalf("plan %s: %v", os, err)
@@ -723,8 +651,6 @@ func TestNoSecretEmbeddedInAnyArtifact(t *testing.T) {
 	}
 }
 
-// TestLinuxLingerOmittedWithoutUser: with no username we can't enable-linger, so
-// the plan must not emit a malformed `loginctl enable-linger ` command.
 func TestLinuxLingerOmittedWithoutUser(t *testing.T) {
 	c := testConfig("linux")
 	c.User = ""
@@ -739,9 +665,6 @@ func TestLinuxLingerOmittedWithoutUser(t *testing.T) {
 	}
 }
 
-// TestMacRunStringIsXMLEscaped: the sh snippet contains `&&`-free text but the
-// plist is XML, so any &/</> in the run string must be entity-escaped or the
-// plist won't parse.
 func TestMacRunStringIsXMLEscaped(t *testing.T) {
 	c := testConfig("darwin")
 	c.ExtraArgs = []string{"--note", "a<b>c&d"}
@@ -758,8 +681,6 @@ func TestMacRunStringIsXMLEscaped(t *testing.T) {
 	}
 }
 
-// TestWindowsBinPathQuotedWithSpaces: a Program Files path has a space; the .cmd
-// must quote the binary or cmd.exe splits the path mid-command.
 func TestWindowsBinPathQuotedWithSpaces(t *testing.T) {
 	c := testConfig("windows")
 	c.BinPath = `C:\Program Files\herrscher\herrscher.exe`
@@ -772,8 +693,6 @@ func TestWindowsBinPathQuotedWithSpaces(t *testing.T) {
 	}
 }
 
-// TestBuildUninstallRemovesArtifacts: uninstall must both stop the service and
-// delete the file it installed (otherwise a stale unit lingers).
 func TestBuildUninstallRemovesArtifacts(t *testing.T) {
 	cases := map[string]string{
 		"linux":   "herrscher.service",
@@ -785,22 +704,20 @@ func TestBuildUninstallRemovesArtifacts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("uninstall %s: %v", os, err)
 		}
-		var joined string
+		var joinedBuilder strings.Builder
 		for _, cmd := range p.Commands {
-			joined += strings.Join(cmd.Argv, " ") + "\n"
+			joinedBuilder.WriteString(strings.Join(cmd.Argv, " ") + "\n")
 		}
+		joined := joinedBuilder.String()
 		if !strings.Contains(joined, marker) {
 			t.Errorf("%s uninstall never references %q:\n%s", os, marker, joined)
 		}
-		// A removal step (rm or schtasks /delete) must be present.
 		if !strings.Contains(joined, "rm ") && !strings.Contains(joined, "/delete") {
 			t.Errorf("%s uninstall has no removal step:\n%s", os, joined)
 		}
 	}
 }
 
-// TestDefaultConfig: the env-derived config must point the env file under the
-// home dir and default the health address.
 func TestDefaultConfig(t *testing.T) {
 	c, err := DefaultConfig()
 	if err != nil {
@@ -820,8 +737,6 @@ func TestDefaultConfig(t *testing.T) {
 	}
 }
 
-// TestRunCommandRespectsIgnoreErr: a failing IgnoreErr command is swallowed; a
-// failing strict command surfaces. Uses a cross-platform always-fail binary.
 func TestRunCommandRespectsIgnoreErr(t *testing.T) {
 	bad := "definitely-not-a-real-binary-xyz"
 	if runtime.GOOS == "windows" {
@@ -833,14 +748,11 @@ func TestRunCommandRespectsIgnoreErr(t *testing.T) {
 	if err := runCommand(context.Background(), Command{Argv: []string{bad}}); err == nil {
 		t.Error("strict command should surface a failure")
 	}
-	// An empty argv is a no-op, never an error.
 	if err := runCommand(context.Background(), Command{}); err != nil {
 		t.Errorf("empty command should be a no-op, got %v", err)
 	}
 }
 
-// TestWriteFileAppliesMode: a freshly written (non-template) file gets the mode
-// the plan requested — the env file must land at 0600.
 func TestWriteFileAppliesMode(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix file modes not meaningful on windows")
@@ -862,7 +774,7 @@ func TestWriteFileAppliesMode(t *testing.T) {
 func TestRestartCommandsPerOS(t *testing.T) {
 	for _, tc := range []struct {
 		goos string
-		want string // substring expected in the (last) restart command
+		want string
 	}{
 		{"linux", "systemctl --user restart herrscher.service"},
 		{"darwin", "launchctl kickstart -k"},
@@ -915,11 +827,9 @@ func TestSmokeRejectsBrokenBinary(t *testing.T) {
 	if err := Smoke(context.Background(), ""); err == nil {
 		t.Fatal("Smoke must reject an empty binary path")
 	}
-	// A binary that exits non-zero on --help must fail the smoke test.
 	if err := Smoke(context.Background(), "/usr/bin/false"); err == nil {
 		t.Fatal("Smoke must reject a binary that exits non-zero")
 	}
-	// A binary that exits 0 passes (true ignores --help and exits 0).
 	if err := Smoke(context.Background(), "/bin/true"); err != nil {
 		t.Skipf("smoke baseline unavailable: %v", err)
 	}

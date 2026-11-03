@@ -7,11 +7,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// A memory root lands on the row and changes nothing about where the session
-// lives — that separation is the entire reason these fields are not Project.
 func TestSessionCreatePersistsMemoryRoots(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "shared", "true",
@@ -31,17 +31,15 @@ func TestSessionCreatePersistsMemoryRoots(t *testing.T) {
 		t.Fatal("a project nobody pinned must stay revisable")
 	}
 	if sess.Project != "" {
-		t.Fatalf("Project = %q — a memory root must not become a workspace sub-dir", sess.Project)
+		t.Fatalf("Project = %q: a memory root must not become a workspace sub-dir", sess.Project)
 	}
 }
 
-// The regression that made these separate fields necessary. Routing the memory
-// scope through Project would have sent this session to /workspaces/demo/neublox
-// on any machine with a workspace root configured. Compare with
-// TestSessionCreateNoProjectRootsAtWorkspace, which fixes the expected Dir.
 func TestMemoryProjectDoesNotMoveTheSession(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.SetWorkspace("/workspaces/demo"); err != nil {
 		t.Fatal(err)
 	}
@@ -53,13 +51,15 @@ func TestMemoryProjectDoesNotMoveTheSession(t *testing.T) {
 	}
 	sess, _ := st.FindSession("demo")
 	if sess.Dir != "/workspaces/demo" {
-		t.Fatalf("Dir = %q, want the workspace root — a memory root is not a location", sess.Dir)
+		t.Fatalf("Dir = %q, want the workspace root; a memory root is not a location", sess.Dir)
 	}
 }
 
 func TestSessionCreatePinsWhenAsked(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "shared", "true",
@@ -73,11 +73,11 @@ func TestSessionCreatePinsWhenAsked(t *testing.T) {
 	}
 }
 
-// A memory agent is not a provisioning directive, so it must not drag in the
-// isolated-worktree rule that guards the real one.
 func TestMemoryAgentDoesNotNeedAWorktree(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "shared", "true", "memory_agent", "tui",
@@ -86,10 +86,11 @@ func TestMemoryAgentDoesNotNeedAWorktree(t *testing.T) {
 	}
 }
 
-// …and it must not have relaxed it either.
 func TestAgentStillNeedsAWorktree(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "shared", "true", "agent", "x",
@@ -100,7 +101,9 @@ func TestAgentStillNeedsAWorktree(t *testing.T) {
 
 func TestInvalidMemoryProjectIsRefused(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args(
 		"name", "demo", "shared", "true", "memory_project", "a/b",

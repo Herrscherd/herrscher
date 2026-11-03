@@ -15,7 +15,9 @@ import (
 func declaredGatewayKeys(t *testing.T) []string {
 	t.Helper()
 	var keys []string
-	for _, p := range contracts.Default.Gateways() {
+	gateways := contracts.Default.Gateways()
+	for i := range gateways {
+		p := &gateways[i]
 		for _, s := range p.Manifest.Config {
 			if s.Env != "" {
 				keys = append(keys, s.Env)
@@ -53,11 +55,11 @@ func TestEveryCompiledInGatewayKeyIsScrubbedFromTheEnvironment(t *testing.T) {
 func TestTheEnvFileServePassesLeavesNoGatewayKeyBehind(t *testing.T) {
 	keys := declaredGatewayKeys(t)
 	path := filepath.Join(t.TempDir(), "herrscher.env")
-	body := ""
+	var body strings.Builder
 	for _, k := range keys {
-		body += k + "=s3cret\n"
+		body.WriteString(k + "=s3cret\n")
 	}
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(body.String()), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(host.CaptureGatewayConfig(contracts.Default.Gateways()))
@@ -72,11 +74,11 @@ func TestTheEnvFileServePassesLeavesNoGatewayKeyBehind(t *testing.T) {
 func TestTheProductionSequenceStillResolvesEveryDeclaredGatewaySetting(t *testing.T) {
 	keys := declaredGatewayKeys(t)
 	path := filepath.Join(t.TempDir(), "herrscher.env")
-	body := ""
+	var body strings.Builder
 	for _, k := range keys {
-		body += k + "=s3cret\n"
+		body.WriteString(k + "=s3cret\n")
 	}
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(body.String()), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var stubs []contracts.Plugin
@@ -110,7 +112,7 @@ func TestTheLaunchPathStillReadsWhatTheCaptureTookFromIt(t *testing.T) {
 
 	t.Cleanup(host.CaptureGatewayConfig(contracts.Default.Gateways()))
 
-	if got := scope.LaunchFromEnv().Project; got != "named-by-the-operator" {
+	if got := scope.LaunchFromEnv(context.Background()).Project; got != "named-by-the-operator" {
 		t.Fatalf(`herrscher "<task>" lost the project the operator named: got %q`, got)
 	}
 }

@@ -12,11 +12,8 @@ func TestDriverRecordsTranscript(t *testing.T) {
 	d := newSessionDriver("s", nil, make(chan contracts.Event, 8), make(chan contracts.Event, 8))
 	d.sink.Transcript = func(e state.TranscriptEntry) { got = append(got, e) }
 
-	// user side: pump records before fanning the human event for an input frame.
 	d.recordEntry("user", "hello", 0, turnUsage{})
-	// assistant side: awaitTurn records on reply{done}.
 	d.recordEntry("assistant", "hi there", 0.02, turnUsage{})
-	// empty text is skipped (best-effort, no blank entries).
 	d.recordEntry("assistant", "", 0, turnUsage{})
 
 	if len(got) != 2 {

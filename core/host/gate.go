@@ -11,15 +11,17 @@ import contracts "github.com/Herrscherd/herrscher-contracts"
 // An unknown or unnamed vendor is not an error here. A session can legitimately
 // run a free-form cmd whose backend nothing on this side names, and the honest
 // answer for it is the same as for a backend that enforces nothing.
-func GateFor(vendor string) (grain, why string) {
+func GateFor(vendor string) (string, string) {
 	if vendor == "" {
 		return "", "no backend is named on this session, so nothing here can say what it enforces"
 	}
-	for _, p := range contracts.Default.Backends() {
-		if p.Manifest.Kind != vendor {
+	backends := contracts.Default.Backends()
+	for idx := range backends {
+		backend := backends[idx]
+		if backend.Manifest.Kind != vendor {
 			continue
 		}
-		c := p.Manifest.Capabilities
+		c := backend.Manifest.Capabilities
 		return string(c.Gate), c.GateWhy
 	}
 	return "", "no backend named " + vendor + " is compiled into this daemon"

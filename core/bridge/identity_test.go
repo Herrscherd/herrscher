@@ -7,8 +7,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/identity"
 )
 
-// A machine where git said nothing pays zero bytes of context: the turn is
-// byte-identical to what it was before this feature existed.
 func TestWithIdentityIsInvisibleWhenGitSaidNothing(t *testing.T) {
 	const base = "<capabilities>\nverbs\n</capabilities>"
 	if got := withIdentity(base, identity.Identity{}); got != base {
@@ -32,7 +30,6 @@ func TestWithIdentityAppendsTheBlockAfterTheBaseContext(t *testing.T) {
 	}
 }
 
-// An empty base context must not produce a leading blank line.
 func TestWithIdentityOnAnEmptyContext(t *testing.T) {
 	got := withIdentity("", identity.Identity{Name: "Jane Doe"})
 	if !strings.HasPrefix(got, "<user>") {

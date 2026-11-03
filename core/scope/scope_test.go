@@ -1,14 +1,13 @@
 package scope
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 )
 
-// gitRepo makes a real repository named name under t.TempDir and returns its
-// path. Real git, because the whole point of ProjectFromDir is what git answers.
 func gitRepo(t *testing.T, name string) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), name)
@@ -17,7 +16,7 @@ func gitRepo(t *testing.T, name string) string {
 	}
 	run := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
 		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
@@ -32,8 +31,8 @@ func gitRepo(t *testing.T, name string) string {
 
 func TestProjectFromDirNamesTheRepository(t *testing.T) {
 	repo := gitRepo(t, "Herrscher")
-	if got := ProjectFromDir(repo); got != "herrscher" {
-		t.Fatalf("ProjectFromDir(repo) = %q, want %q", got, "herrscher")
+	if got := ProjectFromDir(context.Background(), repo); got != "herrscher" {
+		t.Fatalf("ProjectFromDir(context.Background(), repo) = %q, want %q", got, "herrscher")
 	}
 }
 
@@ -43,39 +42,35 @@ func TestProjectFromDirAnswersTheSameFromASubdirectory(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := ProjectFromDir(sub); got != "herrscher" {
-		t.Fatalf("ProjectFromDir(sub) = %q, want %q", got, "herrscher")
+	if got := ProjectFromDir(context.Background(), sub); got != "herrscher" {
+		t.Fatalf("ProjectFromDir(context.Background(), sub) = %q, want %q", got, "herrscher")
 	}
 }
 
-// Three worktrees of one repository are three conversations about one thing.
-// Splitting their memory three ways would defeat the point of having any.
 func TestProjectFromDirFoldsWorktreesIntoTheirRepository(t *testing.T) {
 	repo := gitRepo(t, "herrscher")
 	wt := filepath.Join(filepath.Dir(repo), "detached-elsewhere")
-	cmd := exec.Command("git", "-C", repo, "worktree", "add", "-q", "-b", "side", wt)
+	cmd := exec.CommandContext(t.Context(), "git", "-C", repo, "worktree", "add", "-q", "-b", "side", wt)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("worktree add: %v\n%s", err, out)
 	}
-	if got := ProjectFromDir(wt); got != "herrscher" {
-		t.Fatalf("ProjectFromDir(worktree) = %q, want %q", got, "herrscher")
+	if got := ProjectFromDir(context.Background(), wt); got != "herrscher" {
+		t.Fatalf("ProjectFromDir(context.Background(), worktree) = %q, want %q", got, "herrscher")
 	}
 }
 
 func TestProjectFromDirIsSilentOutsideARepository(t *testing.T) {
-	if got := ProjectFromDir(t.TempDir()); got != "" {
-		t.Fatalf("ProjectFromDir(non-repo) = %q, want empty", got)
+	if got := ProjectFromDir(context.Background(), t.TempDir()); got != "" {
+		t.Fatalf("ProjectFromDir(context.Background(), non-repo) = %q, want empty", got)
 	}
-	if got := ProjectFromDir(""); got != "" {
-		t.Fatalf("ProjectFromDir(\"\") = %q, want empty", got)
+	if got := ProjectFromDir(context.Background(), ""); got != "" {
+		t.Fatalf("ProjectFromDir(context.Background(), \"\") = %q, want empty", got)
 	}
 }
 
-// A directory whose name carries nothing nameable must not become the project
-// "scope" — the normaliser's own fallback. It must become no project at all.
 func TestProjectFromDirRefusesAnUnnameableDirectory(t *testing.T) {
-	if got := ProjectFromDir(gitRepo(t, "...")); got != "" {
-		t.Fatalf("ProjectFromDir(unnameable) = %q, want empty", got)
+	if got := ProjectFromDir(context.Background(), gitRepo(t, "...")); got != "" {
+		t.Fatalf("ProjectFromDir(context.Background(), unnameable) = %q, want empty", got)
 	}
 }
 
@@ -91,8 +86,6 @@ func TestMatchProject(t *testing.T) {
 		{"whole words only", "neubloxide est un autre projet", ""},
 		{"longest at the same place wins", "herrscher-docs a besoin d'une page", "herrscher-docs"},
 		{"nothing known, nothing matched", "neublox", ""},
-		// A prompt written in French ends words with runes whose lead byte, read
-		// alone, is a letter. The boundary test decodes, so these still match.
 		{"typographic punctuation is a boundary", "cf. neublox\u2026", "neublox"},
 		{"a non-breaking space is a boundary", "\u00ab\u00a0neublox\u00a0\u00bb", "neublox"},
 		{"an accent is not a boundary", "neubloxe\u0301 n'est pas neublox", "neublox"},

@@ -13,66 +13,64 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// supportedExts are the filename extensions accepted when an attachment carries
-// no content-type: images to look at, documents to read. It is an allowlist, so
-// an archive or a binary is skipped rather than staged on the operator's disk.
-var supportedExts = map[string]bool{
-	".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
-	".webp": true, ".bmp": true,
-	".pdf": true, ".txt": true, ".md": true, ".markdown": true,
-	".csv": true, ".tsv": true, ".log": true, ".json": true,
-	".yaml": true, ".yml": true, ".toml": true, ".xml": true,
-}
+var (
+	errNotFileURL        = errors.New("not a file url")
+	errHostedFileURL     = errors.New("file url must be host-less")
+	errEmptyFilePath     = errors.New("empty file path")
+	errNotRegularFile    = errors.New("not a regular file")
+	errTooLarge          = errors.New("exceeds the size cap")
+	errNotStaged         = errors.New("not staged")
+	errTooManyRedirects  = errors.New("too many redirects")
+	errNoRoutableAddress = errors.New("no routable address")
+	errNotRoutable       = errors.New("not routable")
+	errUnexpectedStatus  = errors.New("unexpected status")
+	errNotAllowedCDN     = errors.New("not an allowed CDN https url")
+)
 
-// supportedTypes are the non-text, non-image media types accepted by name. Any
-// text/* or image/* type is accepted by prefix instead.
-var supportedTypes = map[string]bool{
-	"application/pdf": true, "application/json": true,
-	"application/xml": true, "application/toml": true,
-	"application/x-yaml": true, "application/yaml": true,
-}
-
-// supported reports whether the bridge will resolve an attachment. It prefers the
-// declared content-type and falls back to the filename extension, so a file with
-// an odd or missing extension is still recognized.
-func supported(a contracts.Attachment) bool {
-	if a.ContentType != "" {
-		return supportedType(a.ContentType)
+func supportedExts() map[string]bool {
+	return map[string]bool{
+		".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
+		".webp": true, ".bmp": true,
+		".pdf": true, ".txt": true, ".md": true, ".markdown": true,
+		".csv": true, ".tsv": true, ".log": true, ".json": true,
+		".yaml": true, ".yml": true, ".toml": true, ".xml": true,
 	}
-	return supportedExts[strings.ToLower(filepath.Ext(a.Filename))]
 }
 
-func supportedType(ct string) bool {
-	ct = strings.ToLower(strings.TrimSpace(ct))
-	// "text/plain; charset=utf-8" — the parameters say nothing about whether we
-	// can handle the type, and they break an exact match.
-	if i := strings.IndexByte(ct, ';'); i >= 0 {
-		ct = strings.TrimSpace(ct[:i])
+func supportedTypes() map[string]bool {
+	return map[string]bool{
+		"application/pdf": true, "application/json": true,
+		"application/xml": true, "application/toml": true,
+		"application/x-yaml": true, "application/yaml": true,
 	}
-	if strings.HasPrefix(ct, "image/") || strings.HasPrefix(ct, "text/") {
+}
+
+func supported(att contracts.Attachment) bool {
+	if att.ContentType != "" {
+		return supportedType(att.ContentType)
+	}
+	return supportedExts()[strings.ToLower(filepath.Ext(att.Filename))]
+}
+
+func supportedType(contentType string) bool {
+	contentType = strings.ToLower(strings.TrimSpace(contentType))
+	if i := strings.IndexByte(contentType, ';'); i >= 0 {
+		contentType = strings.TrimSpace(contentType[:i])
+	}
+	if strings.HasPrefix(contentType, "image/") || strings.HasPrefix(contentType, "text/") {
 		return true
 	}
-	return supportedTypes[ct]
+	return supportedTypes()[contentType]
 }
 
-// maxAttachmentBytes bounds a single downloaded attachment. Anything larger is
-// skipped: the bridge must never let an oversized upload stall or OOM a turn.
-const maxAttachmentBytes = 10 << 20 // 10 MiB
+const maxAttachmentBytes = 10 << 20
 
-// maxAttachmentsPerMessage caps how many files one message can pull down, so an
-// author can't fan a single message into an unbounded number of fetches/files.
 const maxAttachmentsPerMessage = 8
 
-// allowedHosts is the SSRF allowlist for attachment downloads: the caller (the
-// gateway that produced the message) supplies the CDN hosts its attachments may
-// point at, so the core pins host/scheme without knowing any concrete platform.
-// A gateway populates attachments[].url itself, but we still pin it so a future
-// change (or a spoofed field) can't turn this into an SSRF primitive.
 type allowedHosts map[string]bool
 
 // StagingRoot is the one tree an attachment may live in on local disk. Every
@@ -82,8 +80,6 @@ type allowedHosts map[string]bool
 // so a gateway names the same tree the core enforces instead of guessing at it.
 func StagingRoot() string { return filepath.Join(os.TempDir(), "herrscher-attachments") }
 
-// attachmentDir is where downloads land, namespaced per session so concurrent
-// bridges don't collide.
 func attachmentDir(session string) string {
 	name := session
 	if name == "" {
@@ -93,12 +89,12 @@ func attachmentDir(session string) string {
 }
 
 // ResolveAttachments turns a message's attachments into local file paths a
-// backend can reference — images to look at, PDFs and text to read. file://
+// backend can reference: images to look at, PDFs and text to read. file://
 // attachments are validated and passed through (the gateway already staged them
-// on local disk — e.g. the terminal TUI's clipboard paste); every other (https
+// on local disk, e.g. the terminal TUI's clipboard paste); every other (https
 // CDN) attachment is downloaded through the SSRF allowlist. Unsupported,
 // oversized, missing, off-allowlist, and beyond-cap attachments are skipped so a
-// turn is never lost over a file — but every skip is logged with its reason: an
+// turn is never lost over a file, but every skip is logged with its reason: an
 // attachment that vanishes without a word is how an empty allowlist went
 // unnoticed long enough to drop every screenshot ever sent. Order is preserved;
 // at most maxAttachmentsPerMessage files are attempted (a candidate that fails to
@@ -108,220 +104,208 @@ func attachmentDir(session string) string {
 // sees Events), producing the paths carried in Event.Attachments.
 //
 // SECURITY: a file:// attachment is a local-file read into the model context, so
-// it is pinned to the staging root — a gateway must copy a file there before it
+// it is pinned to the staging root; a gateway must copy a file there before it
 // can name it, and a path outside is refused. A gateway that forwards attachment
 // URLs influenced by a remote author must still use https rather than staging
 // whatever it is handed, so the SSRF allowlist applies. What a resolved file
 // *contains* is untrusted either way: the backend is handed a path, and the text
 // inside a document an author uploaded is that author's words, not instructions.
-func ResolveAttachments(ctx context.Context, client *http.Client, m contracts.Message, session string, hosts map[string]bool) []string {
+func ResolveAttachments(ctx context.Context, client *http.Client, msg contracts.Message, session string, hosts map[string]bool) []string {
 	if client == nil {
 		client = http.DefaultClient
 	}
 	client = pinnedClient(client, hosts)
 	dir := attachmentDir(session)
-	mkdirDone := false
-	// slots holds one entry per accepted candidate, in message order, so a
-	// download that finishes first does not reorder the turn's attachments. A
-	// candidate that fails to resolve leaves its slot empty and is dropped at the
-	// end rather than shifting the ones after it. It is a fixed array, not a
-	// growing slice: a concurrent fetch holds an index into it, and an append that
-	// reallocated would leave that write in a discarded backing array.
+	staged := false
 	var slots [maxAttachmentsPerMessage]string
 	var fetches sync.WaitGroup
-	n := 0
-	for i, a := range m.Attachments {
-		if !supported(a) {
-			logger.Warn("attachment skipped: not a type the model can be handed",
-				"file", a.Filename, "type", a.ContentType)
+	count := 0
+	for idx, att := range msg.Attachments {
+		if !attachmentAdmissible(att) {
 			continue
 		}
-		if a.Size > 0 && a.Size > maxAttachmentBytes {
-			logger.Warn("attachment skipped: bigger than the cap",
-				"file", a.Filename, "bytes", a.Size, "cap", maxAttachmentBytes)
-			continue
-		}
-		if n == maxAttachmentsPerMessage {
+		if count == maxAttachmentsPerMessage {
 			logger.Warn("attachments past the per-message cap were skipped",
-				"cap", maxAttachmentsPerMessage, "first_skipped", a.Filename)
+				"cap", maxAttachmentsPerMessage, "first_skipped", att.Filename)
 			break
 		}
-		slot := n
-		n++
-		if strings.HasPrefix(a.URL, "file://") {
-			p, err := localAttachmentPath(a)
-			if err != nil {
-				logger.Warn("attachment skipped", "file", a.Filename, "err", err)
-				continue
-			}
-			slots[slot] = p
+		slot := count
+		count++
+		if strings.HasPrefix(att.URL, "file://") {
+			slots[slot] = localSlot(att)
 			continue
 		}
-		if !mkdirDone {
-			// 0700: a downloaded attachment is one operator's private material, and
-			// the staging tree lives in a world-writable temp dir.
-			if err := os.MkdirAll(dir, 0o700); err != nil {
-				logger.Warn("no attachment can be staged for this turn", "dir", dir, "err", err)
+		if !staged {
+			if !stagingReady(dir) {
 				continue
 			}
-			mkdirDone = true
+			staged = true
 		}
-		// Download in parallel: the cap is eight attachments of up to ten megabytes
-		// each, and fetching them one after another made the turn wait for the sum
-		// of eight round trips before the model saw the first image. Each fetch
-		// writes only its own slot, so no lock is needed; the count is bounded by
-		// the per-message cap, so no worker pool is either.
 		fetches.Add(1)
-		go func(slot, i int, a contracts.Attachment) {
+		go func(slot, index int, att contracts.Attachment) {
 			defer fetches.Done()
-			p, err := fetchOne(ctx, client, a, m.ID, i, dir, hosts)
-			if err != nil {
-				logger.Warn("attachment skipped", "file", a.Filename, "err", err)
-				return
-			}
-			slots[slot] = p
-		}(slot, i, a)
+			slots[slot] = fetchSlot(ctx, client, att, msg.ID, index, dir, hosts)
+		}(slot, idx, att)
 	}
 	fetches.Wait()
+	return nonEmpty(slots[:count])
+}
 
-	out := make([]string, 0, n)
-	for _, p := range slots[:n] {
-		if p != "" {
-			out = append(out, p)
+func attachmentAdmissible(att contracts.Attachment) bool {
+	if !supported(att) {
+		logger.Warn("attachment skipped: not a type the model can be handed",
+			"file", att.Filename, "type", att.ContentType)
+		return false
+	}
+	if att.Size > 0 && att.Size > maxAttachmentBytes {
+		logger.Warn("attachment skipped: bigger than the cap",
+			"file", att.Filename, "bytes", att.Size, "cap", maxAttachmentBytes)
+		return false
+	}
+	return true
+}
+
+func localSlot(att contracts.Attachment) string {
+	path, err := localAttachmentPath(att)
+	if err != nil {
+		logger.Warn("attachment skipped", "file", att.Filename, "err", err)
+		return ""
+	}
+	return path
+}
+
+func stagingReady(dir string) bool {
+	if err := os.MkdirAll(dir, dirPrivate); err != nil {
+		logger.Warn("no attachment can be staged for this turn", "dir", dir, "err", err)
+		return false
+	}
+	return true
+}
+
+func fetchSlot(ctx context.Context, client *http.Client, att contracts.Attachment, msgID string, i int, dir string, hosts map[string]bool) string {
+	path, err := fetchOne(ctx, client, att, msgID, i, dir, hosts)
+	if err != nil {
+		logger.Warn("attachment skipped", "file", att.Filename, "err", err)
+		return ""
+	}
+	return path
+}
+
+func nonEmpty(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if path != "" {
+			out = append(out, path)
 		}
 	}
 	return out
 }
 
-// localAttachmentPath validates a file:// attachment already staged on local
-// disk and returns its path, rejecting non-file URLs, non-regular files, and
-// oversized ones so a crafted file:// url can't smuggle a device node or huge
-// file into a turn. The gateway owns the file's lifetime; the bridge only reads it.
-func localAttachmentPath(a contracts.Attachment) (string, error) {
-	u, err := url.Parse(a.URL)
-	if err != nil || u.Scheme != "file" {
-		return "", fmt.Errorf("attachment %q: not a file url", a.URL)
+func localAttachmentPath(att contracts.Attachment) (string, error) {
+	parsed, err := url.Parse(att.URL)
+	if err != nil || parsed.Scheme != "file" {
+		return "", fmt.Errorf("attachment %q: %w", att.URL, errNotFileURL)
 	}
-	// Pin to a local, host-less file URL so file://evil/etc/passwd (whose Path is
-	// /etc/passwd) can't slip through — a genuine local file URL has no host.
-	if u.Host != "" && u.Host != "localhost" {
-		return "", fmt.Errorf("attachment %q: file url must be host-less", a.URL)
+	if parsed.Host != "" && parsed.Host != "localhost" {
+		return "", fmt.Errorf("attachment %q: %w", att.URL, errHostedFileURL)
 	}
-	if u.Path == "" {
-		return "", fmt.Errorf("attachment %q: empty file path", a.URL)
+	if parsed.Path == "" {
+		return "", fmt.Errorf("attachment %q: %w", att.URL, errEmptyFilePath)
 	}
-	path, err := stagedPath(u.Path)
+	path, err := stagedPath(parsed.Path)
 	if err != nil {
-		return "", fmt.Errorf("attachment %q: %w", a.URL, err)
+		return "", fmt.Errorf("attachment %q: %w", att.URL, err)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return "", fmt.Errorf("attachment %q: %w", a.URL, err)
+		return "", fmt.Errorf("attachment %q: %w", att.URL, err)
 	}
 	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("attachment %q: not a regular file", a.URL)
+		return "", fmt.Errorf("attachment %q: %w", att.URL, errNotRegularFile)
 	}
 	if info.Size() > maxAttachmentBytes {
-		return "", fmt.Errorf("attachment %q: exceeds %d bytes", a.URL, maxAttachmentBytes)
+		return "", fmt.Errorf("attachment %q: %w of %d bytes", att.URL, errTooLarge, maxAttachmentBytes)
 	}
 	return path, nil
 }
 
-// stagedPath confirms a local path really sits inside the staging root and
-// returns it resolved. Symlinks are resolved on both sides before comparing:
-// /tmp is itself a symlink on macOS, and a symlink planted inside the staging
-// tree would otherwise read any file on the machine into the model's context.
-func stagedPath(p string) (string, error) {
+func stagedPath(path string) (string, error) {
 	root, err := filepath.EvalSymlinks(StagingRoot())
 	if err != nil {
 		return "", fmt.Errorf("staging root: %w", err)
 	}
-	real, err := filepath.EvalSymlinks(p)
+	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return "", err
 	}
-	rel, err := filepath.Rel(root, real)
+	rel, err := filepath.Rel(root, resolved)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%s is not staged under %s", p, root)
+		return "", fmt.Errorf("%s is %w under %s", path, errNotStaged, root)
 	}
-	return real, nil
+	return resolved, nil
 }
 
-// pinnedClient returns a copy of client — the caller's shared client is left
-// untouched — that enforces the allowlist all the way down to the socket.
-//
-// Two holes are closed. Redirects: the default client follows them blindly, so an
-// allowlisted CDN that 302s to an internal host would defeat the pin; every hop is
-// re-validated. And the name/address gap: validateCDNURL checks a *name*, while
-// the connection goes to whatever that name resolves to — which DNS can answer
-// differently the second time, or answer 127.0.0.1 the first. The dialer resolves
-// once, refuses anything not publicly routable, and connects to the exact address
-// it checked.
-//
-// A caller supplying a RoundTripper that is not an *http.Transport owns its own
-// dialing and keeps it: there is no dialer to wrap. Only the tests do that.
 func pinnedClient(client *http.Client, hosts allowedHosts) *http.Client {
 	pinned := *client
-	pinned.CheckRedirect = func(r *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return fmt.Errorf("too many redirects")
+	pinned.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= maxRedirects {
+			return errTooManyRedirects
 		}
-		return validateCDNURL(r.URL.String(), hosts)
+		return validateCDNURL(req.URL.String(), hosts)
 	}
-	tr, ok := pinned.Transport.(*http.Transport)
+	transport, ok := pinned.Transport.(*http.Transport)
 	if ok || pinned.Transport == nil {
-		if tr == nil {
-			tr, _ = http.DefaultTransport.(*http.Transport)
+		if transport == nil {
+			if dt, ok := http.DefaultTransport.(*http.Transport); ok {
+				transport = dt
+			}
 		}
-		if tr != nil {
-			pinned.Transport = pinnedTransport(tr)
+		if transport != nil {
+			pinned.Transport = pinnedTransport(transport)
 		}
 	}
 	return &pinned
 }
 
-// pinnedTransports memoizes the wrapped transport per source transport. Without
-// it every message with an attachment would get a freshly cloned transport, hence
-// a fresh connection pool: no reuse, and a set of idle sockets left to time out.
-var pinnedTransports sync.Map // *http.Transport -> *http.Transport
+var pinnedTransports sync.Map
 
 func pinnedTransport(src *http.Transport) *http.Transport {
 	if v, ok := pinnedTransports.Load(src); ok {
-		return v.(*http.Transport)
+		if tr, ok := v.(*http.Transport); ok {
+			return tr
+		}
 	}
-	tr := src.Clone()
-	tr.DialContext = pinnedDial(&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second})
-	v, _ := pinnedTransports.LoadOrStore(src, tr)
-	return v.(*http.Transport)
+	transport := src.Clone()
+	transport.DialContext = pinnedDial(&net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive})
+	stored, _ := pinnedTransports.LoadOrStore(src, transport)
+	if cached, ok := stored.(*http.Transport); ok {
+		return cached
+	}
+	return transport
 }
 
-// pinnedDial resolves the host itself and dials the literal address it approved,
-// so no second lookup can land the connection somewhere else.
-func pinnedDial(d *net.Dialer) func(context.Context, string, string) (net.Conn, error) {
+func pinnedDial(dialer *net.Dialer) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
 			return nil, err
 		}
-		// An allowlist entry that is already a literal IP was pinned exactly: there
-		// is no name left to re-resolve, so there is nothing to rebind. Whoever put
-		// an address in the allowlist meant that address.
 		if net.ParseIP(host) != nil {
-			return d.DialContext(ctx, network, addr)
+			return dialer.DialContext(ctx, network, addr)
 		}
 		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 		if err != nil {
 			return nil, err
 		}
-		last := fmt.Errorf("attachment host %q has no routable address", host)
-		for _, ip := range ips {
-			if !routable(ip.IP) {
-				last = fmt.Errorf("attachment host %q resolves to %s, which is not routable", host, ip.IP)
+		last := fmt.Errorf("attachment host %q: %w", host, errNoRoutableAddress)
+		for _, addr := range ips {
+			if !routable(addr.IP) {
+				last = fmt.Errorf("attachment host %q resolves to %s: %w", host, addr.IP, errNotRoutable)
 				continue
 			}
-			c, err := d.DialContext(ctx, network, net.JoinHostPort(ip.IP.String(), port))
+			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(addr.IP.String(), port))
 			if err == nil {
-				return c, nil
+				return conn, nil
 			}
 			last = err
 		}
@@ -329,69 +313,53 @@ func pinnedDial(d *net.Dialer) func(context.Context, string, string) (net.Conn, 
 	}
 }
 
-// routable reports whether ip is an address on the public internet — the only
-// kind a CDN legitimately lives on. Loopback, private, link-local, carrier-NAT
-// and multicast are where an SSRF wants to land, never where an attachment is.
-func routable(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
-		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() {
+func routable(addr net.IP) bool {
+	if addr.IsLoopback() || addr.IsPrivate() || addr.IsUnspecified() ||
+		addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() ||
+		addr.IsInterfaceLocalMulticast() || addr.IsMulticast() {
 		return false
 	}
-	// 100.64.0.0/10 is neither private nor public: behind carrier NAT it reaches
-	// other tenants of the same ISP, and Go does not count it as private.
-	if v4 := ip.To4(); v4 != nil && v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127 {
+	if v4 := addr.To4(); v4 != nil && v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127 {
 		return false
 	}
 	return true
 }
 
-func fetchOne(ctx context.Context, client *http.Client, a contracts.Attachment, msgID string, idx int, dir string, hosts allowedHosts) (string, error) {
-	if err := validateCDNURL(a.URL, hosts); err != nil {
+func fetchOne(ctx context.Context, client *http.Client, att contracts.Attachment, msgID string, idx int, dir string, hosts allowedHosts) (string, error) {
+	if err := validateCDNURL(att.URL, hosts); err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, att.URL, http.NoBody)
 	if err != nil {
-		return "", fmt.Errorf("attachment request %s: %w", a.Filename, err)
+		return "", fmt.Errorf("attachment request %s: %w", att.Filename, err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("download %s: %w", a.Filename, err)
+		return "", fmt.Errorf("download %s: %w", att.Filename, err)
 	}
-	defer resp.Body.Close()
+	defer closeAndWarn(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download %s: status %d", a.Filename, resp.StatusCode)
+		return "", fmt.Errorf("download %s: %w %d", att.Filename, errUnexpectedStatus, resp.StatusCode)
 	}
-	// Include the per-message index so two same-named images on one message don't
-	// clobber each other (msgID alone collides within a message).
-	dest := filepath.Join(dir, fmt.Sprintf("%s-%d-%s", sanitize(msgID), idx, sanitize(a.Filename)))
-	// 0600 rather than os.Create's 0666&umask: this is one operator's material
-	// sitting in a directory every user on the machine can walk into.
-	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	dest := filepath.Join(dir, fmt.Sprintf("%s-%d-%s", sanitize(msgID), idx, sanitize(att.Filename)))
+	file, err := os.OpenFile(filepath.Clean(dest), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileSecret)
 	if err != nil {
 		return "", fmt.Errorf("create %s: %w", dest, err)
 	}
-	// Bound the copy so a server lying about Size can't exhaust the disk. Read one
-	// byte past the cap so an oversized body is detected and skipped rather than
-	// silently truncated into a corrupt-but-valid file.
-	n, copyErr := io.Copy(f, io.LimitReader(resp.Body, maxAttachmentBytes+1))
-	closeErr := f.Close()
+	written, copyErr := io.Copy(file, io.LimitReader(resp.Body, maxAttachmentBytes+1))
+	closeErr := file.Close()
 	if copyErr != nil {
-		return discardPartial(dest, fmt.Errorf("download %s: %w", a.Filename, copyErr))
+		return discardPartial(dest, fmt.Errorf("download %s: %w", att.Filename, copyErr))
 	}
 	if closeErr != nil {
 		return discardPartial(dest, fmt.Errorf("write %s: %w", dest, closeErr))
 	}
-	if n > maxAttachmentBytes {
-		return discardPartial(dest, fmt.Errorf("download %s: exceeds %d bytes", a.Filename, maxAttachmentBytes))
+	if written > maxAttachmentBytes {
+		return discardPartial(dest, fmt.Errorf("download %s: %w of %d bytes", att.Filename, errTooLarge, maxAttachmentBytes))
 	}
 	return dest, nil
 }
 
-// discardPartial deletes a half-written download and hands back the failure that
-// caused it. The removal's own error is logged rather than swallowed: what is
-// left behind is a truncated image sitting in the session's attachment dir, and
-// the next turn would happily hand it to the backend as if it were whole.
 func discardPartial(dest string, err error) (string, error) {
 	if rmErr := os.Remove(dest); rmErr != nil && !errors.Is(rmErr, fs.ErrNotExist) {
 		logger.Warn("could not remove a partial attachment download", "path", dest, "err", rmErr)
@@ -399,24 +367,17 @@ func discardPartial(dest string, err error) (string, error) {
 	return "", err
 }
 
-// validateCDNURL pins an attachment URL to https on one of the caller-supplied
-// allowlist hosts, rejecting anything else before it is fetched.
 func validateCDNURL(raw string, hosts allowedHosts) error {
-	u, err := url.Parse(raw)
+	parsed, err := url.Parse(raw)
 	if err != nil {
 		return fmt.Errorf("attachment url %q: %w", unsigned(raw), err)
 	}
-	// A host name is case-insensitive; the allowlist is keyed lowercase.
-	if u.Scheme != "https" || !hosts[strings.ToLower(u.Hostname())] {
-		return fmt.Errorf("attachment url %q: not an allowed CDN https url", unsigned(raw))
+	if parsed.Scheme != "https" || !hosts[strings.ToLower(parsed.Hostname())] {
+		return fmt.Errorf("attachment url %q: %w", unsigned(raw), errNotAllowedCDN)
 	}
 	return nil
 }
 
-// unsigned drops a url's query before it goes into an error. A CDN commonly
-// signs its links (`…/shot.png?ex=…&is=…&hm=…`) and that signature hands the
-// file to whoever holds it — these errors are logged, and a log line is read by
-// more people and kept longer than the link was ever meant to live.
 func unsigned(raw string) string {
 	if i := strings.IndexByte(raw, '?'); i >= 0 {
 		return raw[:i]
@@ -424,21 +385,19 @@ func unsigned(raw string) string {
 	return raw
 }
 
-// sanitize keeps a path component to a safe, flat token so a crafted filename or
-// session name can't escape the attachment directory.
-func sanitize(s string) string {
-	s = filepath.Base(s)
-	var b strings.Builder
-	for _, r := range s {
+func sanitize(raw string) string {
+	raw = filepath.Base(raw)
+	var builder strings.Builder
+	for _, char := range raw {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
-			r == '.', r == '-', r == '_':
-			b.WriteRune(r)
+		case char >= 'a' && char <= 'z', char >= 'A' && char <= 'Z', char >= '0' && char <= '9',
+			char == '.', char == '-', char == '_':
+			_, _ = builder.WriteRune(char)
 		default:
-			b.WriteRune('_')
+			_, _ = builder.WriteRune('_')
 		}
 	}
-	out := strings.TrimLeft(b.String(), ".")
+	out := strings.TrimLeft(builder.String(), ".")
 	if out == "" {
 		return "file"
 	}

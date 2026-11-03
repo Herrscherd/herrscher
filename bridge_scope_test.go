@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func TestResolverPicksAKnownProjectAndEnsuresItsRoot(t *testing.T) {
@@ -36,8 +36,6 @@ func TestResolverIsSilentWhenThePromptNamesNothingKnown(t *testing.T) {
 	}
 }
 
-// A vault that cannot be read is a session that keeps its launch guess. Learning
-// never breaks a turn — least of all the first one.
 func TestResolverSurvivesAnUnreadableVault(t *testing.T) {
 	m := &recordingMem{searchErr: errors.New("vault gone")}
 	r := vaultScopeResolver{mem: m, log: slog.Default()}

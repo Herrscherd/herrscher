@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,33 +20,27 @@ func TestSelectBackendVendorPrecedence(t *testing.T) {
 		{Manifest: contracts.Manifest{Kind: "cursor"}, Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return seedBackend{}, nil }},
 	}
 	tests := []struct {
-		name    string
-		session string
-		env     string
-		want    string
-		wantErr string
+		name        string
+		session     string
+		env         string
+		want        string
+		wantUnknown bool
 	}{
 		{name: "explicit beats env", session: "cursor", env: "codex", want: "cursor"},
 		{name: "env beats fallback", env: "codex", want: "codex"},
 		{name: "fallback is first", want: "claude"},
-		{name: "unknown is an error", session: "gemini", env: "codex", wantErr: `unknown backend "gemini"`},
+		{name: "unknown is an error", session: "gemini", env: "codex", wantUnknown: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.env == "" {
-				_ = os.Unsetenv("HERRSCHER_BACKEND")
-			} else {
-				t.Setenv("HERRSCHER_BACKEND", tt.env)
-			}
+			setBackendEnv(t, tt.env)
 			desired := tt.session
 			if desired == "" {
 				desired = os.Getenv("HERRSCHER_BACKEND")
 			}
 			plugin, err := selectBackend(desired, plugins)
-			if tt.wantErr != "" {
-				if err == nil || err.Error() != tt.wantErr {
-					t.Fatalf("selectBackend error = %v, want %q", err, tt.wantErr)
-				}
+			if tt.wantUnknown {
+				assertUnknownBackend(t, err, desired)
 				return
 			}
 			if err != nil {
@@ -55,6 +50,23 @@ func TestSelectBackendVendorPrecedence(t *testing.T) {
 				t.Fatalf("selected kind = %q, want %q", plugin.Manifest.Kind, tt.want)
 			}
 		})
+	}
+}
+
+func setBackendEnv(t *testing.T, value string) {
+	t.Helper()
+	if value == "" {
+		logCleanup(os.Unsetenv("HERRSCHER_BACKEND"))
+		return
+	}
+	t.Setenv("HERRSCHER_BACKEND", value)
+}
+
+func assertUnknownBackend(t *testing.T, err error, name string) {
+	t.Helper()
+	var unknown *UnknownError
+	if !errors.As(err, &unknown) || unknown.Name != name {
+		t.Fatalf("selectBackend error = %v, want an UnknownError for %q", err, name)
 	}
 }
 
@@ -94,14 +106,7 @@ func TestNewSeedBackendResolvesRelativeWorktreeOnce(t *testing.T) {
 	if err := os.MkdirAll(worker, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	original, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(worker); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(original) })
+	t.Chdir(worker)
 
 	var gotDir string
 	contracts.Default.Register(contracts.Plugin{
@@ -128,25 +133,25 @@ type seedSpyOrchestrator struct {
 
 func (s *seedSpyOrchestrator) Context(context.Context) string                          { return "" }
 func (s *seedSpyOrchestrator) Observe(context.Context, contracts.Prompt, string) error { return nil }
+
 func (s *seedSpyOrchestrator) Consolidate(context.Context) error {
 	s.consolidated = true
 	return nil
 }
+
 func (s *seedSpyOrchestrator) Close() error {
 	s.closed = true
 	return nil
 }
 
 func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
-	old := oneShotBackendFactory
-	t.Cleanup(func() { oneShotBackendFactory = old })
-	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
 		return seedBackend{}, nil
 	}
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &seedSpyOrchestrator{}
-	if _, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend}); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if !spy.consolidated {
@@ -158,15 +163,13 @@ func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
 }
 
 func TestRunOneShotSeedWithCoordinatesDelegateTrailer(t *testing.T) {
-	old := oneShotBackendFactory
-	t.Cleanup(func() { oneShotBackendFactory = old })
-	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
-		return seedBackend{reply: "travail préparé\n⟢ delegate: roblox-scripter — inspection en lecture seule"}, nil
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
+		return seedBackend{reply: "travail préparé\n⟢ delegate: roblox-scripter \u2014 inspection en lecture seule"}, nil
 	}
 
 	sess := state.Session{Name: "orchestrator", ChannelID: "channel"}
 	coord := &recordingCoord{}
-	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), nil, oneShotSeedRuntime{coordinator: coord}); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), nil, oneShotSeedRuntime{backend: backend, coordinator: coord}); err != nil {
 		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
 	}
 	if len(coord.delegates) != 1 {
@@ -215,14 +218,6 @@ func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 	}
 }
 
-// TestNewSeedBackendPropagatesSessionModelID pins the connective line in
-// newSeedBackend that copies sess.ModelID into BackendRequest.ModelID. A
-// session naming a gateway-route model must reach BuildBackendFor's
-// credential-resolution path and, with no gateway credentials in the
-// environment, fail closed with the gateway error — proving the ID actually
-// arrived, not just that some error occurred. If that line were reverted to
-// ModelID: "", the request would take the legacy path instead and this model
-// lookup would never happen.
 func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
 	saved := contracts.Default
 	t.Cleanup(func() { contracts.Default = saved })
@@ -252,8 +247,6 @@ func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
 		t.Fatalf("error does not indicate the gateway credential path was reached: %v", err)
 	}
 
-	// Sanity: without a ModelID the same session takes the legacy path and
-	// succeeds, since the registered plugin needs no route resolution.
 	legacy := state.Session{Vendor: "codex"}
 	if _, err := newSeedBackend(context.Background(), legacy); err != nil {
 		t.Fatalf("legacy path (no ModelID) failed: %v", err)
@@ -270,13 +263,9 @@ func (b seedBackend) Respond(context.Context, contracts.Prompt, func(contracts.B
 }
 func (seedBackend) Close() error { return nil }
 
-// consolidateSpy records the context its Consolidate ran under, so a test can
-// assert the budget it was given rather than the one the turn already spent.
 type consolidateSpy struct {
 	err    error
 	called bool
-	// ctxErr is the context's state at the moment Consolidate ran, captured
-	// there because the caller cancels its budget as soon as the call returns.
 	ctxErr error
 }
 
@@ -288,20 +277,14 @@ func (c *consolidateSpy) Consolidate(ctx context.Context) error {
 }
 func (c *consolidateSpy) Close() error { return nil }
 
-// A turn that answered has done the work the caller asked for. Consolidation is
-// a side effect on the way out, so its failure is worth a line on stderr and
-// nothing more: dropping the reply would throw away a finished turn — and with
-// --print, print nothing at all — over a memory write.
 func TestASeedKeepsItsReplyWhenConsolidationFails(t *testing.T) {
-	old := oneShotBackendFactory
-	t.Cleanup(func() { oneShotBackendFactory = old })
-	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
 		return seedBackend{reply: "réponse gardée"}, nil
 	}
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &consolidateSpy{err: context.DeadlineExceeded}
-	got, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy)
+	got, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend})
 	if err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
@@ -310,22 +293,15 @@ func TestASeedKeepsItsReplyWhenConsolidationFails(t *testing.T) {
 	}
 }
 
-// The turn's deadline is the turn's. Consolidating under it means a turn that
-// used its budget leaves none for the memory write, which is exactly what
-// --consolidate-every 1 produced: a turn that answered, then died on
-// "consolidate: context deadline exceeded".
 func TestASeedConsolidatesOnItsOwnBudget(t *testing.T) {
-	oldFactory := oneShotBackendFactory
-	t.Cleanup(func() { oneShotBackendFactory = oldFactory })
-	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
 		return seedBackend{}, nil
 	}
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &consolidateSpy{}
-	// A turn budget so small it is spent by the time the turn is over.
 	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy,
-		oneShotSeedRuntime{timeout: 50 * time.Millisecond}); err != nil {
+		oneShotSeedRuntime{backend: backend, timeout: 50 * time.Millisecond}); err != nil {
 		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
 	}
 	if !spy.called {
@@ -336,20 +312,14 @@ func TestASeedConsolidatesOnItsOwnBudget(t *testing.T) {
 	}
 }
 
-// A cadence means the orchestrator consolidates on its own, inside the turn.
-// Consolidating again on the way out repeats the whole extraction — with
-// --consolidate-every 1 that second pass ran the full 60s budget out and failed
-// every time, for work already done.
 func TestASeedWithACadenceDoesNotConsolidateTwice(t *testing.T) {
-	old := oneShotBackendFactory
-	t.Cleanup(func() { oneShotBackendFactory = old })
-	oneShotBackendFactory = func(context.Context, state.Session) (contracts.Backend, error) {
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
 		return seedBackend{}, nil
 	}
 
 	sess := state.Session{Name: "solo", ChannelID: "channel", ConsolidateEvery: 1}
 	spy := &consolidateSpy{}
-	if _, err := runOneShotSeedWith(context.Background(), sess, "tâche", spy); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend}); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if spy.called {

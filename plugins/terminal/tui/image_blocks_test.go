@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// Two pixel rows share one text row: the upper half-block takes the foreground
-// and the lower half the background. A 2×2 image is therefore exactly one row.
 func TestBlockRenderPacksTwoPixelRowsPerTextRow(t *testing.T) {
 	out := blockRender(twoByTwo(), 2)
 	if n := strings.Count(out, "\n"); n != 0 {
@@ -16,7 +14,6 @@ func TestBlockRenderPacksTwoPixelRowsPerTextRow(t *testing.T) {
 	if got := strings.Count(out, blockUpperHalf); got != 2 {
 		t.Fatalf("a two-column image must render two half-block cells, got %d: %q", got, out)
 	}
-	// Red over blue in the first cell: the upper half is the foreground.
 	if !strings.Contains(out, "38;2;255;0;0") {
 		t.Errorf("the top-left pixel must reach the foreground: %q", out)
 	}
@@ -28,8 +25,6 @@ func TestBlockRenderPacksTwoPixelRowsPerTextRow(t *testing.T) {
 	}
 }
 
-// An odd pixel height leaves a last row with no lower half. It must still draw:
-// dropping it would silently crop the picture by a row.
 func TestBlockRenderKeepsAnOddLastRow(t *testing.T) {
 	out := blockRender(image.NewRGBA(image.Rect(0, 0, 2, 3)), 2)
 	if n := strings.Count(out, "\n"); n != 1 {
@@ -43,8 +38,6 @@ func TestBlockRenderEmptyIsNoOp(t *testing.T) {
 	}
 }
 
-// The encoder is chosen from the probe and nowhere else, so a terminal without a
-// graphics protocol still sees the picture — coarsely — rather than a blank.
 func TestImageEscapePicksTheEncoderFromTheProbe(t *testing.T) {
 	img := twoByTwo()
 	kitty := imageEscape(img, Capabilities{Graphics: GraphicsKitty})

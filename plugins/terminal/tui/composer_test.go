@@ -7,16 +7,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// readyModel returns a model that has received an initial size, so the viewport
-// and composer are live.
 func readyModel(f *fakeBackend) *model {
 	m := newModel(f)
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return m
 }
 
-// TestAltEnterInsertsNewlineEnterSubmits is the core composer key policy: Alt+Enter
-// adds a line (growing the composer), a plain Enter submits the whole draft.
 func TestAltEnterInsertsNewlineEnterSubmits(t *testing.T) {
 	f := &fakeBackend{}
 	m := readyModel(f)
@@ -24,7 +20,7 @@ func TestAltEnterInsertsNewlineEnterSubmits(t *testing.T) {
 	m.active = "a"
 
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("line1")})
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter, Alt: true}) // newline, not submit
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter, Alt: true})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("line2")})
 
 	if got := m.input.Value(); got != "line1\nline2" {
@@ -34,7 +30,7 @@ func TestAltEnterInsertsNewlineEnterSubmits(t *testing.T) {
 		t.Fatalf("two-line draft must grow composer to 2 rows, got %d", m.composerHeight())
 	}
 
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // plain Enter submits
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if m.input.Value() != "" {
 		t.Fatalf("Enter must submit and clear the composer: %q", m.input.Value())
 	}
@@ -47,8 +43,6 @@ func TestAltEnterInsertsNewlineEnterSubmits(t *testing.T) {
 	}
 }
 
-// TestComposerGrowthShrinksViewport verifies the growing composer reserves chrome
-// so the transcript viewport shrinks by exactly the added rows.
 func TestComposerGrowthShrinksViewport(t *testing.T) {
 	m := readyModel(&fakeBackend{})
 	m.ensureTab("a")
@@ -65,10 +59,9 @@ func TestComposerGrowthShrinksViewport(t *testing.T) {
 	}
 }
 
-// TestComposerCapsHeight confirms the composer stops growing at maxComposerLines.
 func TestComposerCapsHeight(t *testing.T) {
 	m := readyModel(&fakeBackend{})
-	for i := 0; i < maxComposerLines+5; i++ {
+	for range maxComposerLines + 5 {
 		m.Update(tea.KeyMsg{Type: tea.KeyEnter, Alt: true})
 	}
 	if m.composerHeight() != maxComposerLines {

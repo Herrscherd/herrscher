@@ -14,10 +14,6 @@ const (
 	secretToken     = "tok-supersecret"
 )
 
-// The daemon removes the gateway pair from its own environment so it cannot
-// leak into a vendor CLI. The bridge is the process that actually builds
-// backends, so it must get the pair back — through its ENVIRONMENT. Without
-// this hand-off every gateway spawn in a supervised session fails closed.
 func TestBridgeCommandCarriesTheGatewayPairInItsEnvironment(t *testing.T) {
 	s := NewSupervisor(context.Background(), "herrscher")
 	s.SetBridgeEnv([]string{gatewayURLVar + "=https://gw", gatewayTokenVar + "=" + secretToken})
@@ -40,8 +36,6 @@ func TestBridgeCommandCarriesTheGatewayPairInItsEnvironment(t *testing.T) {
 	}
 }
 
-// The token must NEVER ride argv: /proc/<pid>/cmdline is world readable, so any
-// local process could read the product's shared paid credential off the bridge.
 func TestBridgeArgvNeverCarriesTheGatewayToken(t *testing.T) {
 	s := NewSupervisor(context.Background(), "herrscher")
 	s.SetBridgeEnv([]string{gatewayURLVar + "=https://gw", gatewayTokenVar + "=" + secretToken})
@@ -59,15 +53,11 @@ func TestBridgeArgvNeverCarriesTheGatewayToken(t *testing.T) {
 			t.Fatalf("argv exposes %q: %s", secret, argv)
 		}
 	}
-	// The persisted invocation string must stay clean too — it is written to
-	// state.json and shown by `session list`.
 	if strings.Contains(sess.Cmd, secretToken) {
 		t.Fatalf("the persisted Cmd carries the token: %q", sess.Cmd)
 	}
 }
 
-// Non-regression: with no extra environment the child still inherits the
-// daemon's, exactly as before.
 func TestBridgeCommandInheritsEnvironmentWithoutExtras(t *testing.T) {
 	s := NewSupervisor(context.Background(), "herrscher")
 	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "main", ChannelID: "c1", Cmd: "claude"})

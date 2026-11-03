@@ -4,10 +4,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 	"strings"
+)
+
+const (
+	flagInstance = "--instance"
+	flagName     = "--name"
+	flagRepo     = "--repo"
+)
+
+var (
+	errRemoteScratch    = errors.New("a disposable directory cannot be provisioned remotely")
+	errUnreadableAnswer = errors.New("unreadable answer")
 )
 
 // Commander is the part of a runner this package needs: build the command that
@@ -24,40 +36,30 @@ type Commander interface {
 // JSON: the filesystem work stays where the filesystem is, and one operation
 // costs one round trip instead of ten.
 type Remote struct {
-	ctx        context.Context
 	run        Commander
-	bin        string // absolute path to herrscher on the far machine
+	bin        string
 	instanceID string
 }
 
 // NewRemote builds a Remote driving bin through run.
-func NewRemote(ctx context.Context, run Commander, bin, instanceID string) *Remote {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return &Remote{ctx: ctx, run: run, bin: bin, instanceID: instanceID}
-}
-
-func (r *Remote) context() context.Context {
-	if r.ctx == nil {
-		return context.Background()
-	}
-	return r.ctx
+func NewRemote(run Commander, bin, instanceID string) *Remote {
+	return &Remote{run: run, bin: bin, instanceID: instanceID}
 }
 
 // Branch is pure string work, so it is answered here. Paying a round trip to be
 // told a name this process can compute would be a round trip for nothing.
 func (r *Remote) Branch(name string) string { return branchFor(r.instanceID, name) }
 
-func (r *Remote) Create(repo, name, base string) (string, error) {
-	argv := []string{"worktree", "create", "--repo", repo, "--name", name, "--instance", r.instanceID}
+// Create creates a worktree for repo on the remote host and returns its path.
+func (r *Remote) Create(ctx context.Context, repo, name, base string) (string, error) {
+	argv := []string{subWorktree, "create", flagRepo, repo, flagName, name, flagInstance, r.instanceID}
 	if base != "" {
 		argv = append(argv, "--base", base)
 	}
 	var out struct {
 		Path string `json:"path"`
 	}
-	if err := r.call(argv, &out); err != nil {
+	if err := r.call(ctx, argv, &out); err != nil {
 		return "", err
 	}
 	return out.Path, nil
@@ -67,36 +69,40 @@ func (r *Remote) Create(repo, name, base string) (string, error) {
 // return, so a host that cannot answer is reported as "yes, one is there": that
 // is the direction where a failed rollback leaves a directory behind, rather
 // than the one where it deletes work it never created.
-func (r *Remote) PreExisting(repo, name string) bool {
+func (r *Remote) PreExisting(ctx context.Context, repo, name string) bool {
 	var out struct {
 		PreExisting bool `json:"preExisting"`
 	}
-	if err := r.call([]string{"worktree", "pre-existing", "--repo", repo, "--name", name, "--instance", r.instanceID}, &out); err != nil {
+	if err := r.call(ctx, []string{subWorktree, "pre-existing", flagRepo, repo, flagName, name, flagInstance, r.instanceID}, &out); err != nil {
 		return true
 	}
 	return out.PreExisting
 }
 
-func (r *Remote) Remove(repo, name string, force bool) error {
-	argv := []string{"worktree", "remove", "--repo", repo, "--name", name, "--instance", r.instanceID}
+// Remove deletes the named worktree of repo on the remote host.
+func (r *Remote) Remove(ctx context.Context, repo, name string, force bool) error {
+	argv := []string{subWorktree, "remove", flagRepo, repo, flagName, name, flagInstance, r.instanceID}
 	if force {
 		argv = append(argv, "--force")
 	}
 	var out struct {
 		Removed bool `json:"removed"`
 	}
-	return r.call(argv, &out)
+	return r.call(ctx, argv, &out)
 }
 
-func (r *Remote) Scratch(root, name string) (string, error) {
-	return "", fmt.Errorf("on %s: a session with an agent needs a git repository there, a disposable directory cannot be provisioned remotely", r.run.Describe())
+// Scratch creates the scratch directory for name under root on the remote host.
+func (r *Remote) Scratch(_, _ string) (string, error) {
+	return "", fmt.Errorf("on %s: a session with an agent needs a git repository there: %w", r.run.Describe(), errRemoteScratch)
 }
 
+// ScratchPath returns the scratch directory path for name under root.
 func (r *Remote) ScratchPath(root, name string) string {
 	return scratchPathIn(root, r.instanceID, name)
 }
 
-func (r *Remote) RemoveScratch(root, name string) error { return nil }
+// RemoveScratch deletes the scratch directory for name under root.
+func (r *Remote) RemoveScratch(_, _ string) error { return nil }
 
 // Materialize ships an agent's provisioning files into a remote worktree. The
 // payload is a tar stream, which the verb on the far side extracts before
@@ -107,33 +113,28 @@ func (r *Remote) Materialize(ctx context.Context, worktreePath string, payload i
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("materialize on %s: %s", r.run.Describe(), reason(stderr.String(), err))
+		return fmt.Errorf("materialize on %s: %w", r.run.Describe(), reason(stderr.String(), err))
 	}
 	return nil
 }
 
-// call runs one worktree verb over there and decodes its single JSON line. The
-// remote stderr is carried into the error verbatim: it is the git message, and
-// nothing written here would be more precise.
-func (r *Remote) call(argv []string, into any) error {
-	cmd := r.run.Command(r.context(), "", append([]string{r.bin}, argv...)...)
+func (r *Remote) call(ctx context.Context, argv []string, into any) error {
+	cmd := r.run.Command(ctx, "", append([]string{r.bin}, argv...)...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	what := strings.Join(argv[:2], " ")
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s on %s: %s", what, r.run.Describe(), reason(stderr.String(), err))
+		return fmt.Errorf("%s on %s: %w", what, r.run.Describe(), reason(stderr.String(), err))
 	}
 	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), into); err != nil {
-		return fmt.Errorf("%s on %s: unreadable answer %q", what, r.run.Describe(), stdout.String())
+		return fmt.Errorf("%s on %s: %w %q: %w", what, r.run.Describe(), errUnreadableAnswer, stdout.String(), err)
 	}
 	return nil
 }
 
-// reason prefers what the far side said over the local exit status, which only
-// ever says that something failed.
-func reason(stderr string, err error) string {
+func reason(stderr string, err error) error {
 	if msg := strings.TrimSpace(stderr); msg != "" {
-		return msg
+		return fmt.Errorf("%s: %w", msg, err)
 	}
-	return err.Error()
+	return err
 }

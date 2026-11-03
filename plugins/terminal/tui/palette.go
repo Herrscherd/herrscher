@@ -14,54 +14,37 @@ type CommandSpec struct {
 	Desc string
 }
 
-// filterCommands returns the palette matches for a query (case-insensitive),
-// preserving order. An empty query returns every command. A command matches
-// when its name contains the query (browsing) or the query has advanced into
-// that command's arguments (so a fully-typed command keeps highlighting its
-// own row instead of collapsing to "no match").
 func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 	query = strings.TrimSpace(strings.ToLower(query))
 	if query == "" {
 		return cmds
 	}
 	var out []CommandSpec
-	for _, c := range cmds {
-		name := strings.ToLower(c.Name)
+	for _, cmd := range cmds {
+		name := strings.ToLower(cmd.Name)
 		if strings.Contains(name, query) || strings.HasPrefix(query, name+" ") {
-			out = append(out, c)
+			out = append(out, cmd)
 		}
 	}
 	return out
 }
 
-// paletteWindow is the slice of matches to draw, given the selection. The
-// palette used to truncate from the head, which made every verb past the last
-// drawn row unreachable: ↑↓ moved a selection nobody could see, and the only way
-// to a late command was to type enough of its name to filter the others out,
-// which requires already knowing it, the one thing a menu exists to spare you.
-//
-// The window slides only far enough to hold the selection, so browsing from the
-// top keeps the first rows still until the cursor actually reaches the bottom
-// edge. It returns the offset too, so the caller can tell which drawn row is the
-// selected one.
-func paletteWindow(n, sel, rows int) (start, end int) {
-	if n <= rows {
-		return 0, n
+func paletteWindow(count, sel, rows int) (from, to int) {
+	if count <= rows {
+		return 0, count
 	}
-	start = sel - rows + 1
+	start := sel - rows + 1
 	if start < 0 {
 		start = 0
 	}
-	if start > n-rows {
-		start = n - rows
+	if start > count-rows {
+		start = count - rows
 	}
 	return start, start + rows
 }
 
-// paletteOpen reports whether the input is a slash-command in progress.
 func (m *model) paletteOpen() bool { return strings.HasPrefix(m.input.Value(), "/") }
 
-// filtered returns the palette matches for the current input (nil when closed).
 func (m *model) filtered() []CommandSpec {
 	if !m.paletteOpen() {
 		return nil
@@ -69,11 +52,10 @@ func (m *model) filtered() []CommandSpec {
 	return filterCommands(m.cmds, strings.TrimPrefix(m.input.Value(), "/"))
 }
 
-// clampPal keeps the selection index within the current match set.
 func (m *model) clampPal() {
-	n := len(m.filtered())
-	if m.palIdx >= n {
-		m.palIdx = n - 1
+	count := len(m.filtered())
+	if m.palIdx >= count {
+		m.palIdx = count - 1
 	}
 	if m.palIdx < 0 {
 		m.palIdx = 0
@@ -82,20 +64,17 @@ func (m *model) clampPal() {
 
 func (m *model) movePal(d int) { m.palIdx += d; m.clampPal() }
 
-// completePal fills the input with the selected command, pre-seeding its first
-// flag (e.g. "/session create --name ") so a discovering operator lands on the
-// value to type rather than having to know the flag name.
 func (m *model) completePal() {
-	fc := m.filtered()
-	if len(fc) == 0 {
+	filtered := m.filtered()
+	if len(filtered) == 0 {
 		return
 	}
-	if m.palIdx >= len(fc) {
-		m.palIdx = len(fc) - 1
+	if m.palIdx >= len(filtered) {
+		m.palIdx = len(filtered) - 1
 	}
-	c := fc[m.palIdx]
-	val := "/" + c.Name + " "
-	if flag := strings.Fields(c.Args); len(flag) > 0 && strings.HasPrefix(flag[0], "--") {
+	cmd := filtered[m.palIdx]
+	val := "/" + cmd.Name + " "
+	if flag := strings.Fields(cmd.Args); len(flag) > 0 && strings.HasPrefix(flag[0], "--") {
 		val += flag[0] + " "
 	}
 	m.input.SetValue(val)
@@ -123,56 +102,45 @@ func ParseCommandSpecs(raw []byte, allow func(verb string) bool) ([]CommandSpec,
 		return nil, err
 	}
 	out := make([]CommandSpec, 0, len(specs))
-	for _, s := range specs {
-		if len(s.Path) == 0 || (allow != nil && !allow(s.Path[0])) {
+	for _, text := range specs {
+		if len(text.Path) == 0 || (allow != nil && !allow(text.Path[0])) {
 			continue
 		}
-		c := CommandSpec{Name: strings.Join(s.Path, " "), Desc: s.Help}
+		spec := CommandSpec{Name: strings.Join(text.Path, " "), Desc: text.Help}
 		var args []string
-		for _, p := range s.Params {
-			if p.Required {
-				args = append(args, "--"+p.Name+" <"+p.Name+">")
+		for _, param := range text.Params {
+			if param.Required {
+				args = append(args, "--"+param.Name+" <"+param.Name+">")
 			}
 		}
-		c.Args = strings.Join(args, " ")
-		out = append(out, c)
+		spec.Args = strings.Join(args, " ")
+		out = append(out, spec)
 	}
 	return out, nil
 }
 
-// mergeCommands puts the frontend's own verbs in front of the daemon's and drops
-// any duplicate the daemon also declares. The local ones used to be replaced
-// outright the moment a backend advertised a single command, which is how a
-// palette lost /help and /clear by connecting to a daemon.
 func mergeCommands(local, remote []CommandSpec) []CommandSpec {
 	seen := make(map[string]bool, len(local))
 	out := make([]CommandSpec, 0, len(local)+len(remote))
-	for _, c := range local {
-		seen[c.Name] = true
-		out = append(out, c)
+	for _, cmd := range local {
+		seen[cmd.Name] = true
+		out = append(out, cmd)
 	}
-	for _, c := range remote {
-		if !seen[c.Name] {
-			out = append(out, c)
+	for _, cmd := range remote {
+		if !seen[cmd.Name] {
+			out = append(out, cmd)
 		}
 	}
 	return out
 }
 
-// localCommands are the verbs the TUI answers itself, without the daemon: they
-// open an overlay or edit the view, and there is nothing on the other side of
-// the socket to run them. They lead the palette because they are the ones with
-// no other way in — every daemon verb can also be typed at a shell.
-//
-// This list must stay in step with the branches handleEnter intercepts;
-// palette_test.go asserts that each one is actually handled locally.
 func localCommands() []CommandSpec {
 	return []CommandSpec{
 		{Name: "help", Desc: "show the shortcuts"},
 		{Name: "clear", Desc: "clear this tab's transcript"},
 		{Name: "session switch", Desc: "switch between live sessions"},
 		{Name: "resume", Desc: "reopen an archived session"},
-		{Name: "rename", Args: "<nom>", Desc: "rename this session"},
+		{Name: verbRename, Args: "<nom>", Desc: "rename this session"},
 		{Name: "usage", Desc: "cost, tokens and context for this session"},
 		{Name: "skills", Desc: "list available skills"},
 		{Name: "capabilities", Desc: "what this terminal can render, and what it falls back to"},
@@ -187,30 +155,30 @@ func (m *model) paletteView() string {
 	if !m.paletteOpen() {
 		return ""
 	}
-	fc := m.filtered()
-	if len(fc) == 0 {
-		return dimStyle.Render("  (aucune correspondance)")
+	filtered := m.filtered()
+	if len(filtered) == 0 {
+		return m.st.dim.Render("  (aucune correspondance)")
 	}
 	sel := m.palIdx
-	if sel >= len(fc) {
-		sel = len(fc) - 1
+	if sel >= len(filtered) {
+		sel = len(filtered) - 1
 	}
 	if sel < 0 {
 		sel = 0
 	}
 	visible := m.overlayRows()
-	start, end := paletteWindow(len(fc), sel, visible)
+	start, end := paletteWindow(len(filtered), sel, visible)
 	rows := make([]overlayRow, 0, end-start)
-	for _, c := range fc[start:end] {
-		label := "/" + c.Name
-		if c.Args != "" {
-			label += " " + c.Args
+	for _, cmd := range filtered[start:end] {
+		label := "/" + cmd.Name
+		if cmd.Args != "" {
+			label += " " + cmd.Args
 		}
-		rows = append(rows, overlayRow{label: label, detail: c.Desc})
+		rows = append(rows, overlayRow{label: label, detail: cmd.Desc})
 	}
 	footer := ""
-	if len(fc) > visible {
-		footer = fmt.Sprintf("%d/%d", sel+1, len(fc))
+	if len(filtered) > visible {
+		footer = fmt.Sprintf("%d/%d", sel+1, len(filtered))
 	}
-	return floatingList(rows, sel-start, footer, m.overlayWidth())
+	return floatingList(rows, sel-start, footer, m.overlayWidth(), m.st)
 }

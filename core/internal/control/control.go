@@ -13,21 +13,16 @@ import "strings"
 // Exported because core/host derives a per-session command socket the same way,
 // and two foldings that could drift is two names for one socket.
 func SafeSessionName(session string) string {
-	return strings.Map(func(r rune) rune {
+	return strings.Map(func(char rune) rune {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
-			return r
+		case char >= 'a' && char <= 'z', char >= 'A' && char <= 'Z', char >= '0' && char <= '9', char == '-', char == '_':
+			return char
 		default:
 			return '-'
 		}
 	}, session)
 }
 
-// remoteSocketDir is where a socket lands on a machine that is not this one.
-// It is fixed rather than taken from os.TempDir(), which reads THIS machine's
-// environment and would name a directory the far side may not have. /tmp is
-// also the shortest path every POSIX host has, and sun_path caps a socket path
-// at 108 bytes.
 const remoteSocketDir = "/tmp"
 
 // RemoteSocketPath is SocketPath for another machine.

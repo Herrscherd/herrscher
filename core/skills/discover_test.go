@@ -30,7 +30,7 @@ func TestDiscoverParsesAndDedupes(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("want 2 skills (deduped, malformed skipped), got %d: %+v", len(got), got)
 	}
-	byName := map[string]Skill{}
+	byName := make(map[string]Skill)
 	for _, s := range got {
 		byName[s.Name] = s
 	}
@@ -53,15 +53,12 @@ func TestDiscoverMissingRootIsSkipped(t *testing.T) {
 	}
 }
 
-// TestPRJobSkillIsDiscoverable pins the repo's own playbook: a gateway names
-// "pr-job" as the default playbook in a new session's opening turn, so the skill
-// must exist here and be discoverable under the repo skills root.
 func TestPRJobSkillIsDiscoverable(t *testing.T) {
 	got := Discover([]string{"../../skills"})
 	for _, s := range got {
 		if s.Name == "pr-job" {
 			if s.Description == "" {
-				t.Fatal("pr-job has no description — the menu would show a blank line")
+				t.Fatal("pr-job has no description: the menu would show a blank line")
 			}
 			return
 		}

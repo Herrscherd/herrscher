@@ -2,8 +2,6 @@ package tui
 
 import "testing"
 
-// TestRemoveLastPending pops staged attachments newest-first and reports whether
-// anything was removed, so Ctrl+U can fall through to the composer when empty.
 func TestRemoveLastPending(t *testing.T) {
 	m := newTestModel()
 	m.pending = []Attachment{{Name: "a.png"}, {Name: "b.png"}}

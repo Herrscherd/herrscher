@@ -10,9 +10,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// fakePluginSeam stands in for the host's plugin management: it answers from
-// canned data and records every call that would touch the composition, so a test
-// can assert that an abort wrote nothing.
 type fakePluginSeam struct {
 	rows      []PluginRow
 	versions  []string
@@ -35,14 +32,13 @@ func (f *fakePluginSeam) Versions(context.Context, string) ([]string, error) {
 
 func (f *fakePluginSeam) Findings(context.Context, string, string) []string { return f.findings }
 
-func (f *fakePluginSeam) Apply(ctx context.Context, action PluginAction, module, version string) (string, error) {
+func (f *fakePluginSeam) Apply(_ context.Context, action PluginAction, module, version string) (string, error) {
 	f.applied = append(f.applied, string(action)+" "+module+"@"+version)
 	return f.output, f.applyErr
 }
 
 func (f *fakePluginSeam) Restore(context.Context) error { f.restored++; return nil }
 
-// openPluginsScreen opens the screen on a seam and delivers the listing.
 func openPluginsScreen(t *testing.T, f *fakePluginSeam) *model {
 	t.Helper()
 	m := newTestModel()
@@ -78,7 +74,7 @@ func TestPluginsScreenVersionActionOpensASelectMenu(t *testing.T) {
 	f := &fakePluginSeam{rows: testRows(), versions: []string{"v1.0.0", "v1.1.0"}}
 	m := openPluginsScreen(t, f)
 
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open the actions for mod/a
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if !strings.Contains(m.pluginsView(), pluginActionVersion) {
 		t.Fatalf("actions must offer a version choice: %q", m.pluginsView())
 	}
@@ -99,10 +95,10 @@ func TestPluginsScreenWarningAbortWritesNothing(t *testing.T) {
 	f := &fakePluginSeam{rows: testRows(), findings: []string{"mod/a moves back from v1.0.0 to v0.9.0"}}
 	m := openPluginsScreen(t, f)
 
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // actions
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m.pluginsMenuIdx = indexOf(m.pluginsMenu, pluginActionBump)
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m.Update(runCmd(cmd)) // the findings arrive
+	m.Update(runCmd(cmd))
 
 	out := m.pluginsView()
 	if !strings.Contains(out, "moves back from v1.0.0") {
@@ -131,9 +127,9 @@ func TestPluginsScreenFailedBuildOffersRestoreOrKeep(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m.pluginsMenuIdx = indexOf(m.pluginsMenu, pluginActionBump)
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m.Update(runCmd(cmd)) // findings (none) → the warning menu
+	m.Update(runCmd(cmd))
 	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m.Update(runCmd(cmd)) // the apply fails
+	m.Update(runCmd(cmd))
 
 	out := m.pluginsView()
 	if !strings.Contains(out, "undefined: contracts.Register") {
@@ -194,7 +190,6 @@ func TestPluginsScreenNavClamps(t *testing.T) {
 	}
 }
 
-// TestPluginsScreenPaletteEntry checks the screen has a way in from the palette.
 func TestPluginsScreenPaletteEntry(t *testing.T) {
 	found := false
 	for _, c := range localCommands() {
@@ -216,12 +211,9 @@ func indexOf(rows []string, want string) int {
 	return -1
 }
 
-// A composition with more plugins than the screen draws at once must still be
-// fully reachable: the arrows move the cursor over every row, so the drawn
-// window has to follow it instead of stopping at the first pluginsMax.
 func TestPluginsViewScrollsToSelection(t *testing.T) {
 	m := &model{pluginsOpen: true}
-	for i := 0; i < pluginsMax+5; i++ {
+	for i := range pluginsMax + 5 {
 		m.pluginsRows = append(m.pluginsRows, PluginRow{Module: fmt.Sprintf("mod/%d", i), Installed: "v1.0.0", Latest: "v1.0.0"})
 	}
 	m.pluginsIdx = len(m.pluginsRows) - 1

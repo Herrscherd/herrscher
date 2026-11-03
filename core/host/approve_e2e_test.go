@@ -6,31 +6,62 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-// dispatcherFunc adapts a function to the dispatcher the command socket serves.
 type dispatcherFunc func(context.Context, []string) (string, error)
 
 func (f dispatcherFunc) Dispatch(ctx context.Context, argv []string) (string, error) {
 	return f(ctx, argv)
 }
 
-// TestHookThroughTheCommandSocket is the whole chain with nothing faked but the
-// vendor: a real registry behind a real command socket, the hook dialling it as
-// the short-lived process it is, and an operator answering through the verb. It
-// is the one test that proves the pieces every other test checks in isolation
-// still line up when they are wired to each other.
 func TestHookThroughTheCommandSocket(t *testing.T) {
-	// The wait comes off the state file, which is the only place it is written:
-	// three seconds so a test that nobody answers cannot sit for five minutes.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	approvalTab := newApprovalTable()
+	menus := &menuRecorder{menus: make(chan []contracts.Choice, 4)}
+	reg := newApprovalRegistry(t, approvalTab, menus)
+	sock := startApprovalSocket(ctx, t, reg)
+
+	t.Setenv(SessionVar, "s1")
+	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git push origin master"}}`)
+	var out, errOut bytes.Buffer
+	done := runHookAsync(ctx, in, &out, &errOut, sock)
+
+	id := awaitPendingApproval(t, menus.menus)
+	if _, err := reg.Dispatch(ctx, []string{"approve", "deny", id, "--reason", "not today"}); err != nil {
+		t.Fatalf("deny: %v", err)
+	}
+	<-done
+	assertHookDeniedWithReason(t, out.Bytes(), "not today")
+}
+
+type menuRecorder struct {
+	fanRecorder
+
+	menus chan []contracts.Choice
+}
+
+func (m *menuRecorder) Manifest() contracts.Manifest {
+	return contracts.Manifest{Kind: "rec", Capabilities: contracts.Capabilities{SelectMenus: true}}
+}
+
+func (m *menuRecorder) Menu(_ context.Context, _ contracts.Conversation, _ contracts.MessageID, _ string, choices []contracts.Choice) error {
+	m.menus <- choices
+	return nil
+}
+
+func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRecorder) *cli.Registry {
+	t.Helper()
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{"sessions":[],"approvalTimeout":"3s"}`), 0o644); err != nil {
 		t.Fatalf("write state: %v", err)
@@ -45,70 +76,63 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 	if err := st.AddApprovalRule("ask Bash(git push*)"); err != nil {
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
+	sessionTab := newSessionTable()
+	sessionTab.register("s1", newSessionDriver("s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil))
 	reg := &cli.Registry{}
-	if err := addApproveCommands(reg, st, nil); err != nil {
+	if err := addApproveCommands(reg, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}
+	return reg
+}
 
+func startApprovalSocket(ctx context.Context, t *testing.T, reg *cli.Registry) string {
+	t.Helper()
 	sock := filepath.Join(t.TempDir(), "cmd.sock")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go serveCommandSocket(ctx, sock, dispatcherFunc(reg.Dispatch))
-	waitForSocket(t, sock)
+	serveCommandSocket(ctx, sock, dispatcherFunc(reg.Dispatch))
+	return sock
+}
 
-	// The hook, as the vendor would run it. ctx carries no deadline of its own,
-	// which is exactly what the real hook hands to dispatchLiveCommand: the
-	// connection deadline is taken from it, so a shorter one here would cut the
-	// call off before the operator had a chance to answer.
-	t.Setenv(SessionVar, "s1")
-	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git push origin master"}}`)
-	var out, errOut bytes.Buffer
+func runHookAsync(ctx context.Context, in io.Reader, out, errOut io.Writer, sock string) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		RunPermissionHook(ctx, in, &out, &errOut, func() string { return sock }, func(c context.Context, argv []string) (string, bool, error) {
+		RunPermissionHook(ctx, in, out, errOut, func() string { return sock }, func(c context.Context, argv []string) (string, bool, error) {
 			return dispatchLiveCommand(c, sock, argv)
 		})
 	}()
+	return done
+}
 
-	// The operator, refusing. The request is found by the session it belongs to
-	// rather than by the registry holding exactly one entry: the registry is
-	// package state shared with every other test in here, and this test has no
-	// business caring what else is waiting in it.
-	var id string
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		for _, p := range pendingApprovals() {
-			if p.Session == "s1" {
-				id = p.ID
-			}
+func awaitPendingApproval(t *testing.T, menus <-chan []contracts.Choice) string {
+	t.Helper()
+	select {
+	case choices := <-menus:
+		id, _, ok := strings.Cut(strings.TrimPrefix(choices[0].Value, approvalPickPrefix), ":")
+		if !ok {
+			t.Fatalf("approval menu value %q carries no id", choices[0].Value)
 		}
-		if id != "" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
+		return id
+	case <-time.After(5 * time.Second):
+		t.Fatal("the hook never reached the operator's menu")
 	}
-	if id == "" {
-		t.Fatal("the hook never reached the daemon")
-	}
-	if _, err := reg.Dispatch(ctx, []string{"approve", "deny", id, "--reason", "not today"}); err != nil {
-		t.Fatalf("deny: %v", err)
-	}
-	<-done
+	return ""
+}
 
+func assertHookDeniedWithReason(t *testing.T, raw []byte, reason string) {
+	t.Helper()
 	var got struct {
 		HookSpecificOutput struct {
 			PermissionDecision       string `json:"permissionDecision"`
 			PermissionDecisionReason string `json:"permissionDecisionReason"`
 		} `json:"hookSpecificOutput"`
 	}
-	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
-		t.Fatalf("hook output %q: %v", out.String(), err)
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("hook output %q: %v", raw, err)
 	}
 	if got.HookSpecificOutput.PermissionDecision != "deny" {
 		t.Fatalf("got %q, want deny", got.HookSpecificOutput.PermissionDecision)
 	}
-	if !strings.Contains(got.HookSpecificOutput.PermissionDecisionReason, "not today") {
+	if !strings.Contains(got.HookSpecificOutput.PermissionDecisionReason, reason) {
 		t.Fatalf("reason %q must carry what the operator typed", got.HookSpecificOutput.PermissionDecisionReason)
 	}
 }

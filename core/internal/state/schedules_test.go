@@ -47,8 +47,6 @@ func TestScheduleMutatorsReportAnUnknownName(t *testing.T) {
 	if ok, err := s.SetSchedulePaused("nope", true); ok || err != nil {
 		t.Errorf("SetSchedulePaused(unknown) = %v, %v, want false, nil", ok, err)
 	}
-	// StampScheduleRun est le seul appele depuis la boucle de tir : il ne doit
-	// pas se plaindre d'un horaire supprime entre le tick et le tampon.
 	if err := s.StampScheduleRun("nope", "2026-08-25T09:00:00Z"); err != nil {
 		t.Errorf("StampScheduleRun(unknown) = %v, want nil", err)
 	}

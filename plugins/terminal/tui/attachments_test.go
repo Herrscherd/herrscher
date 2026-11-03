@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,27 +10,23 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// fakeClipboard drives the Ctrl+V paste path deterministically: it returns a fixed
-// image type and bytes, so tests never touch the real system clipboard.
 type fakeClipboard struct {
 	mime string
 	data []byte
 	err  error
 }
 
-func (f fakeClipboard) ImageType() (string, bool) {
+func (f fakeClipboard) ImageType(context.Context) (string, bool) {
 	if f.mime == "" {
 		return "", false
 	}
 	return f.mime, true
 }
 
-func (f fakeClipboard) ReadImage(string) ([]byte, error) { return f.data, f.err }
+func (f fakeClipboard) ReadImage(context.Context, string) ([]byte, error) { return f.data, f.err }
 
-func (f fakeClipboard) WriteText(string) error { return nil }
+func (f fakeClipboard) WriteText(context.Context, string) error { return nil }
 
-// TestCtrlVStagesClipboardImage verifies a clipboard image is staged as a pending
-// attachment, shown as a chip, and reserves a chrome row.
 func TestCtrlVStagesClipboardImage(t *testing.T) {
 	m := readyModel(&fakeBackend{})
 	m.clip = fakeClipboard{mime: "image/png", data: []byte("\x89PNGfake")}
@@ -47,7 +44,7 @@ func TestCtrlVStagesClipboardImage(t *testing.T) {
 	if _, err := os.Stat(att.Path); err != nil {
 		t.Fatalf("pasted image must be written to disk: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(att.Path) })
+	t.Cleanup(func() { removeIfPresent(t, att.Path) })
 	if m.vp.Height != base-1 {
 		t.Fatalf("chip row must steal one viewport line: base=%d now=%d", base, m.vp.Height)
 	}
@@ -56,20 +53,15 @@ func TestCtrlVStagesClipboardImage(t *testing.T) {
 	}
 }
 
-// TestCtrlVNoImageFallsThrough confirms Ctrl+V with no clipboard image stages
-// nothing (so the composer's text paste can handle it instead).
 func TestCtrlVNoImageFallsThrough(t *testing.T) {
 	m := readyModel(&fakeBackend{})
-	m.clip = fakeClipboard{} // empty: no image
+	m.clip = fakeClipboard{}
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
 	if len(m.pending) != 0 {
 		t.Fatalf("Ctrl+V without an image must stage nothing, got %d", len(m.pending))
 	}
 }
 
-// TestSubmitCarriesAttachments checks the full wiring: a staged image plus text is
-// submitted to the backend with the attachment, echoed under the you turn, and the
-// pending set is cleared.
 func TestSubmitCarriesAttachments(t *testing.T) {
 	f := &fakeBackend{}
 	m := readyModel(f)
@@ -78,7 +70,7 @@ func TestSubmitCarriesAttachments(t *testing.T) {
 	m.clip = fakeClipboard{mime: "image/png", data: []byte("bytes")}
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
 	path := m.pending[0].Path
-	t.Cleanup(func() { os.Remove(path) })
+	t.Cleanup(func() { removeIfPresent(t, path) })
 
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("look at this")})
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -103,10 +95,6 @@ func TestSubmitCarriesAttachments(t *testing.T) {
 	}
 }
 
-// TestAttachCommandStagesFile verifies /attach <path> copies an existing local
-// file into the staging dir rather than pointing at it: the host only accepts a
-// file:// attachment from under that tree, and a copy also pins the bytes as they
-// were when attached.
 func TestAttachCommandStagesFile(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "diagram.png")
@@ -124,7 +112,7 @@ func TestAttachCommandStagesFile(t *testing.T) {
 		t.Fatalf("/attach must stage the file, pending=%+v", m.pending)
 	}
 	got := m.pending[0]
-	t.Cleanup(func() { os.Remove(got.Path) })
+	t.Cleanup(func() { removeIfPresent(t, got.Path) })
 	if filepath.Dir(got.Path) != attachmentDir() {
 		t.Errorf("staged path %s is not under %s", got.Path, attachmentDir())
 	}
@@ -134,8 +122,21 @@ func TestAttachCommandStagesFile(t *testing.T) {
 	if b, err := os.ReadFile(got.Path); err != nil || string(b) != "img" {
 		t.Errorf("staged copy content = %q err=%v", b, err)
 	}
-	// The original must be left alone — /attach reads, it does not move.
 	if _, err := os.Stat(p); err != nil {
 		t.Errorf("original file must survive /attach: %v", err)
+	}
+}
+
+func removeIfPresent(t *testing.T, path string) {
+	t.Helper()
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		t.Error(err)
+	}
+}
+
+func TestStageRefusesANameThatEscapesTheAttachmentDirectory(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	if _, err := stage("../escape.txt", []byte("x")); err == nil {
+		t.Fatal("stage accepted a name that leaves the attachment directory")
 	}
 }

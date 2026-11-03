@@ -13,7 +13,7 @@ func TestResolveSeedTimeoutUnsetMeansZero(t *testing.T) {
 		t.Fatalf("resolveSeedTimeout: %v", err)
 	}
 	if got != 0 {
-		t.Fatalf("got %v, want 0 — an unset timeout must leave the historical cap alone", got)
+		t.Fatalf("got %v, want 0; an unset timeout must leave the historical cap alone", got)
 	}
 }
 

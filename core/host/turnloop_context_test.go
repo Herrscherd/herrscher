@@ -30,7 +30,8 @@ func recordedTurn(t *testing.T, events ...contracts.Event) state.TranscriptEntry
 	case <-time.After(time.Second):
 		t.Fatal("driver never opened a turn")
 	}
-	for _, e := range events {
+	for idx := range events {
+		e := events[idx]
 		fromBridge <- e
 	}
 	deadline := time.After(2 * time.Second)

@@ -65,9 +65,9 @@ func mustStamp(t *testing.T, s string) string {
 	return mkHostTime(t, s).UTC().Format(time.RFC3339)
 }
 
-// newTestScheduler builds a scheduler over fakes, on a frozen clock.
 func newTestScheduler(store *fakeScheduleStore, sessions *fakeScheduleSessions,
-	creator *fakeScheduleCreator, seeded *[]string, now time.Time) *scheduler {
+	creator *fakeScheduleCreator, seeded *[]string, now time.Time,
+) *scheduler {
 	return newScheduler(store, sessions, creator, func(sess, task string) bool {
 		*seeded = append(*seeded, sess+"|"+task)
 		return true
@@ -115,8 +115,6 @@ func TestTickDoesNotStackASecondTurnOnTheSameSchedule(t *testing.T) {
 	sessions := &fakeScheduleSessions{rows: []state.Session{{Name: "live"}}}
 	var seeded []string
 	sch := newTestScheduler(store, sessions, &fakeScheduleCreator{}, &seeded, mkHostTime(t, "2026-08-25 09:30"))
-	// Le premier tir est retenu en vol : le tick suivant doit passer son chemin
-	// plutot que d'empiler un tour derriere le premier.
 	if !sch.claim("digest") {
 		t.Fatal("claim refused on a free schedule")
 	}
@@ -125,7 +123,6 @@ func TestTickDoesNotStackASecondTurnOnTheSameSchedule(t *testing.T) {
 	if len(seeded) != 0 {
 		t.Fatalf("seeded = %v, want nothing while the previous turn is in flight", seeded)
 	}
-	// Une fois le jeton rendu, la fenetre suivante repart normalement.
 	sch.release("digest")
 	sch.tick(context.Background())
 	sch.wait()
@@ -150,7 +147,6 @@ func TestAnAbsentSessionTargetCreatesNothing(t *testing.T) {
 	if len(seeded) != 0 {
 		t.Errorf("seeded = %v, want nothing", seeded)
 	}
-	// La fenetre n'a rien livre, donc elle doit etre retentee, pas enregistree.
 	if len(store.stamped) != 0 {
 		t.Errorf("stamped = %v, want LastRun left alone", store.stamped)
 	}
@@ -282,8 +278,6 @@ func TestFireNowIgnoresTheCadenceAndLeavesLastRunAlone(t *testing.T) {
 }
 
 func TestFireNowRunsAPausedSchedule(t *testing.T) {
-	// Une pause arrete la cadence, pas la main de l'operateur : c'est ainsi qu'on
-	// verifie une tache avant de la relancer.
 	store := &fakeScheduleStore{rows: []schedule.Schedule{{
 		Name: "digest", Session: "live", Every: "30m", Task: "t", Paused: true,
 		LastRun: mustStamp(t, "2026-08-25 09:00"),
@@ -300,9 +294,6 @@ func TestFireNowRunsAPausedSchedule(t *testing.T) {
 	}
 }
 
-// Le trou que ce test tient : le rattrapage refuse une fenetre trop vieille,
-// mais elle reste due, et sans realignement le tick suivant la tirerait quand
-// meme, sans dire son retard.
 func TestTickForgetsAWindowOlderThanItsGrace(t *testing.T) {
 	store := &fakeScheduleStore{rows: []schedule.Schedule{{
 		Name: "digest", Session: "live", Cron: "0 9 * * *", Task: "t",
@@ -322,8 +313,6 @@ func TestTickForgetsAWindowOlderThanItsGrace(t *testing.T) {
 }
 
 func TestTickLeavesAScheduleInFlightAlone(t *testing.T) {
-	// Sa fenetre est servie a l'instant meme : la declarer perimee deplacerait
-	// l'ancre sous le tir en cours.
 	store := &fakeScheduleStore{rows: []schedule.Schedule{{
 		Name: "digest", Session: "live", Cron: "0 9 * * *", Task: "t",
 		LastRun: mustStamp(t, "2026-08-24 09:00"),
@@ -342,8 +331,6 @@ func TestTickLeavesAScheduleInFlightAlone(t *testing.T) {
 }
 
 func TestFireNowSaysWhenNoSessionTookTheTask(t *testing.T) {
-	// L'operateur attend la reponse : « fired » sur une session jamais atteinte
-	// vaut moins que pas de verbe du tout.
 	store := &fakeScheduleStore{rows: []schedule.Schedule{{
 		Name: "digest", Session: "gone", Every: "30m", Task: "t",
 		LastRun: mustStamp(t, "2026-08-25 09:00"),
@@ -356,9 +343,6 @@ func TestFireNowSaysWhenNoSessionTookTheTask(t *testing.T) {
 }
 
 func TestRunWaitsForTheFirstTickBeforeCatchingUp(t *testing.T) {
-	// Les sessions restaurees au boot enregistrent leur driver depuis une
-	// goroutine a elles : un rattrapage tire dans la foulee de `serve` ne
-	// trouverait personne, et la fenetre ratee serait perdue pour de bon.
 	store := &fakeScheduleStore{rows: []schedule.Schedule{{
 		Name: "digest", Session: "live", Cron: "0 9 * * *", Task: "t",
 		LastRun: mustStamp(t, "2026-08-24 09:00"),
@@ -377,10 +361,6 @@ func TestRunWaitsForTheFirstTickBeforeCatchingUp(t *testing.T) {
 	}
 }
 
-// Le tampon retient la fenetre servie, pas l'instant ou la boucle l'a
-// decouverte. Sinon la fenetre suivante se compte depuis un point posterieur a
-// elle, donc elle tombe un tick plus loin, et le decalage s'ajoute a lui-meme :
-// un horaire aux trente minutes finit par tirer quarante-six fois par jour.
 func TestTickStampsTheWindowAndNotTheMomentItWasNoticed(t *testing.T) {
 	store := &fakeScheduleStore{rows: []schedule.Schedule{{
 		Name: "digest", Session: "live", Every: "30m", Task: "t",
@@ -388,7 +368,6 @@ func TestTickStampsTheWindowAndNotTheMomentItWasNoticed(t *testing.T) {
 	}}}
 	sessions := &fakeScheduleSessions{rows: []state.Session{{Name: "live"}}}
 	var seeded []string
-	// La boucle passe quarante secondes apres la fenetre de 9h30.
 	noticed := mkHostTime(t, "2026-08-25 09:30").Add(40 * time.Second)
 	sch := newTestScheduler(store, sessions, &fakeScheduleCreator{}, &seeded, noticed)
 	sch.tick(context.Background())
@@ -401,9 +380,6 @@ func TestTickStampsTheWindowAndNotTheMomentItWasNoticed(t *testing.T) {
 	}
 }
 
-// Une fenetre ratee est rattrapee sur sa propre heure, pas sur celle du
-// demarrage : sans ca un daemon relance a 9h12 recalerait sur 9h12 un horaire
-// qui doit rester cale sur 9h00.
 func TestCatchUpStampsTheMissedWindowAndNotTheBoot(t *testing.T) {
 	store := &fakeScheduleStore{rows: []schedule.Schedule{{
 		Name: "digest", Session: "live", Every: "24h", Task: "t",
@@ -422,8 +398,6 @@ func TestCatchUpStampsTheMissedWindowAndNotTheBoot(t *testing.T) {
 	}
 }
 
-// state.json s'edite a la main. Une cadence qui ne se lit plus ne tirera jamais,
-// et la boucle doit passer son chemin sans rien tirer ni rien casser.
 func TestCatchUpSkipsAScheduleWhoseCadenceNoLongerReads(t *testing.T) {
 	store := &fakeScheduleStore{rows: []schedule.Schedule{{
 		Name: "broken", Session: "live", Cron: "0 9 * *", Task: "t",

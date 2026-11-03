@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// twoByTwo is the fixture both new encoders are read against: the top row red
-// then green, the bottom row blue then white, so a mistake in row or column
-// order shows up as a different colour rather than as a subtler shift.
 func twoByTwo() image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
 	img.Set(0, 0, color.RGBA{R: 0xff, A: 0xff})
@@ -30,12 +27,9 @@ func TestSixelEscapeShape(t *testing.T) {
 	if !strings.Contains(out, `"1;1;2;2`) {
 		t.Errorf("sixel must declare its raster size: %q", out)
 	}
-	// One colour definition per distinct colour in the fixture, each in the
-	// #index;2;r;g;b form the protocol defines for RGB.
 	if got := strings.Count(out, ";2;"); got < 4 {
 		t.Errorf("four distinct colours must each be defined, got %d definitions: %q", got, out)
 	}
-	// A two-row image fits one sixel band, so there is no band separator.
 	if strings.Contains(out, "-") {
 		t.Errorf("a two-row image needs no band separator: %q", out)
 	}

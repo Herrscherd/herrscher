@@ -53,8 +53,8 @@ const SessionPrefix = "session:"
 // a uid, so any secret the agent can read it can also replay. Where the
 // connection arrives is the one thing an agent does not get to author.
 type Principal struct {
-	ID      string // "local", "session:revue", "chat:1234"
-	Session string // non-empty for a session principal alone
+	ID      string
+	Session string
 }
 
 // SessionPrincipal is the principal a session's own command socket carries.
@@ -73,116 +73,82 @@ type Subject struct {
 // Request is one invocation awaiting a verdict.
 type Request struct {
 	Principal   Principal
-	Path        []string // the verb, e.g. []string{"approve", "rule"}
-	Contributed bool     // the verb was contributed by a plugin
+	Path        []string
+	Contributed bool
 	Subject     Subject
 }
 
-// definition is what one role may run. allowAll and allow are two shapes of the
-// same field on purpose: owner and operator are deny lists, because a role
-// meant to run the daemon should not have to be told about each new verb;
-// observer and agent are allow lists, because a verb a later version adds must
-// not arrive already permitted to a caller that is meant to be bounded.
 type definition struct {
 	allowAll bool
-	allow    []string // verb patterns: an exact verb, or a family as "session *"
-	deny     []string // wins over any allow
-	plugins  bool     // verbs a plugin contributed are allowed
+	allow    []string
+	deny     []string
+	plugins  bool
 }
 
-var definitions = map[Role]definition{
-	RoleOwner:    {allowAll: true, plugins: true},
-	RoleOperator: {allowAll: true, deny: []string{"role *"}, plugins: true},
-	RoleObserver: {allow: []string{
-		"commands", "whoami",
-		"session list", "session info", "session log", "session who", "session scrollback",
-		"agent list", "agent show",
-		"models list",
-		"approve list",
-		"host list",
-		"schedule list",
-		"memory search", "memory locate",
-	}},
-	// What an agent may run is what the <capabilities> block already promises
-	// it: speaking on its gateways, its memory, delegating, and asking for an
-	// approval. Plugin verbs are allowed, which is the one hole in the allow
-	// list and is deliberate: without it the capabilities block would promise a
-	// publication the agent does not have until every gateway ships a release,
-	// and compiling a plugin into the binary is already a trust decision of the
-	// same order as choosing the binary.
-	RoleAgent: {
-		allow: []string{
+func definitionOf(role Role) (definition, bool) {
+	switch role {
+	case RoleOwner:
+		return definition{allowAll: true, plugins: true}, true
+	case RoleOperator:
+		return definition{allowAll: true, deny: []string{"role *"}, plugins: true}, true
+	case RoleObserver:
+		return definition{allow: []string{
 			"commands", "whoami",
-			"session send", "session seed",
 			"session list", "session info", "session log", "session who", "session scrollback",
 			"agent list", "agent show",
 			"models list",
-			"memory search", "memory locate", "memory record", "memory unlink", "memory restore",
-			"approve ask",
-		},
-		// Named even where the allow list already refuses them, so the intent
-		// reads in the table instead of only in its silence. memory forget
-		// destroys with no recourse, where record and unlink are reversible.
-		// skill approve is the human door a private skill goes through to
-		// become a shared one.
-		//
-		// The approve family is spelled out rather than written "approve *",
-		// because deny wins over allow and the family pattern would take
-		// `approve ask` with it, which is the one approve verb an agent has to
-		// reach. A later approve verb is still refused: it reaches no allow
-		// entry, and an allow list refuses what it does not name.
-		//
-		// session create is denied for a reason worth spelling out, because
-		// refusing an agent the right to open a session reads like refusing it
-		// the right to delegate, and it is not that. A session opened from argv
-		// carries whatever flags the argv chose: with no --agent nothing
-		// materializes the approval hook, and `--approvals bypass` says so out
-		// loud. Either one hands the agent a second session where its own policy
-		// does not apply, which would make every deny above decorative. What
-		// stays open is the trailer: `⟢ delegate:` reaches the coordinator, which
-		// takes a registered agent and that agent's own command, so the worker it
-		// opens is policed exactly like the lead that asked for it.
-		deny: []string{
-			"approve list", "approve allow", "approve deny", "approve rule", "approve mode",
-			"host *", "role *", "schedule *", "service *", "set *", "plugin *",
-			"skill approve", "memory forget",
-			"session create",
-			"session close", "session archive", "session resume", "session interrupt",
-			"session switch", "session set-budget",
-		},
-		plugins: true,
-	},
+			"approve list",
+			"host list",
+			"schedule list",
+			"memory search", "memory locate",
+		}}, true
+	case RoleAgent:
+		return definition{
+			allow: []string{
+				"commands", "whoami",
+				"session send", "session seed",
+				"session list", "session info", "session log", "session who", "session scrollback",
+				"agent list", "agent show",
+				"models list",
+				"memory search", "memory locate", "memory record", "memory unlink", "memory restore",
+				"approve ask",
+			},
+			deny: []string{
+				"approve list", "approve allow", "approve deny", "approve rule", "approve mode",
+				"host *", "role *", "schedule *", "service *", "set *", "plugin *",
+				"skill approve", "memory forget",
+				"session create",
+				"session close", "session archive", "session resume", "session interrupt",
+				"session switch", "session set-budget",
+			},
+			plugins: true,
+		}, true
+	case RoleNone:
+	}
+	return definition{}, false
 }
-
-// grantOrder is the order a refusal searches for the role that would run a
-// verb, least powerful first, so the message names the smallest grant that
-// works. RoleAgent is absent: it is structural, and naming it would tell an
-// operator to grant something no verb can grant.
-var grantOrder = []Role{RoleObserver, RoleOperator, RoleOwner}
 
 // Decide answers whether the request may run, and why not when it may not.
 // RoleNone always allows. Subject is consulted for a session principal alone,
 // since a human operating from a gateway is not confined to a subtree.
-func Decide(r Request, role Role) (bool, string) {
+func Decide(req Request, role Role) (bool, string) {
 	if role == RoleNone {
 		return true, ""
 	}
-	verb := strings.Join(r.Path, " ")
-	if !permits(role, verb, r.Contributed) {
-		return false, refusal(r, role, verb)
+	verb := strings.Join(req.Path, " ")
+	if !permits(role, verb, req.Contributed) {
+		return false, refusal(req, role, verb)
 	}
-	if r.Principal.Session != "" && r.Subject.Session != "" && !r.Subject.InSubtree {
+	if req.Principal.Session != "" && req.Subject.Session != "" && !req.Subject.InSubtree {
 		return false, fmt.Sprintf(
-			"herrscher: `%s` names session %q, and you are session %q. A session reaches itself and the sessions it delegated, nothing else.",
-			verb, r.Subject.Session, r.Principal.Session)
+			"herrscher: %#q names session %q, and you are session %q. A session reaches itself and the sessions it delegated, nothing else.",
+			verb, req.Subject.Session, req.Principal.Session)
 	}
 	return true, ""
 }
 
-// permits reports whether role runs verb. The deny list wins, then allowAll,
-// then the plugin exception, then the allow list.
 func permits(role Role, verb string, contributed bool) bool {
-	def, ok := definitions[role]
+	def, ok := definitionOf(role)
 	if !ok {
 		return false
 	}
@@ -205,39 +171,31 @@ func permits(role Role, verb string, contributed bool) bool {
 	return false
 }
 
-// agentHints answer the refusals where "ask your operator" is the wrong advice,
-// because the agent has another way to the same end and would otherwise stop at
-// a door that is open beside it.
-var agentHints = map[string]string{
-	"session create": "To delegate, end your turn with `⟢ delegate: <agent>` and the task: " +
-		"the worker that opens runs a registered agent, so it answers to a policy the way you do.",
+func agentHint(verb string) (string, bool) {
+	if verb == "session create" {
+		return "To delegate, end your turn with `⟢ delegate: <agent>` and the task: " +
+			"the worker that opens runs a registered agent, so it answers to a policy the way you do.", true
+	}
+	return "", false
 }
 
-// refusal writes the message. An agent's is read by a model as a tool result,
-// so it says what to do next instead of naming a role the model cannot obtain.
-// A human's names the smallest role that would run the verb, so an operator
-// knows what to grant and not only what was refused.
-func refusal(r Request, role Role, verb string) string {
+func refusal(req Request, role Role, verb string) string {
 	if role == RoleAgent {
-		if hint, ok := agentHints[verb]; ok {
-			return fmt.Sprintf("herrscher: `%s` is not something a session may run. %s", verb, hint)
+		if hint, ok := agentHint(verb); ok {
+			return fmt.Sprintf("herrscher: %#q is not something a session may run. %s", verb, hint)
 		}
 		return fmt.Sprintf(
-			"herrscher: `%s` is not something a session may run. Ask your operator to run it for you.", verb)
+			"herrscher: %#q is not something a session may run. Ask your operator to run it for you.", verb)
 	}
-	for _, candidate := range grantOrder {
-		if permits(candidate, verb, r.Contributed) {
-			return fmt.Sprintf("herrscher: `%s` needs the `%s` role, and %s has `%s`",
-				verb, candidate, r.Principal.ID, role)
+	for _, candidate := range []Role{RoleObserver, RoleOperator, RoleOwner} {
+		if permits(candidate, verb, req.Contributed) {
+			return fmt.Sprintf("herrscher: %#q needs the %#q role, and %s has %#q",
+				verb, candidate, req.Principal.ID, role)
 		}
 	}
-	return fmt.Sprintf("herrscher: `%s` is not something any role may run", verb)
+	return fmt.Sprintf("herrscher: %#q is not something any role may run", verb)
 }
 
-// match reports whether pattern names verb. A pattern is an exact verb
-// ("approve ask") or a family ("session *"), which names the family verb and
-// everything under it. Deliberately not a glob: a pattern nobody can write
-// creatively is a pattern nobody has to read creatively.
 func match(pattern, verb string) bool {
 	if pattern == verb {
 		return true
@@ -258,17 +216,17 @@ func match(pattern, verb string) bool {
 // holds anything at all, or no role when it is empty. That last one is what
 // makes an upgrade a no-op for humans, and the first grant a cliff: the verb
 // that writes it says so.
-func RoleOf(p Principal, assignments map[string]string) Role {
-	if p.ID == LocalPrincipal {
+func RoleOf(principal Principal, assignments map[string]string) Role {
+	if principal.ID == LocalPrincipal {
 		return RoleOwner
 	}
-	if p.Session != "" {
+	if principal.Session != "" {
 		return RoleAgent
 	}
 	if len(assignments) == 0 {
 		return RoleNone
 	}
-	if name, ok := assignments[p.ID]; ok && Grantable(name) {
+	if name, ok := assignments[principal.ID]; ok && Grantable(name) {
 		return Role(name)
 	}
 	return RoleObserver
@@ -281,6 +239,7 @@ func Grantable(name string) bool {
 	switch Role(name) {
 	case RoleOwner, RoleOperator, RoleObserver:
 		return true
+	case RoleNone, RoleAgent:
 	}
 	return false
 }
@@ -297,27 +256,27 @@ func GrantableRoles() []string {
 // found: a name nobody defines falls back to observer, and falling back in
 // silence is how a typo becomes a permission nobody can explain.
 func Known(name string) bool {
-	_, ok := definitions[Role(name)]
+	_, ok := definitionOf(Role(name))
 	return ok
 }
 
 // Describe renders what a role runs, for `role show` and `role list`.
 func Describe(role Role) string {
-	def, ok := definitions[role]
+	def, ok := definitionOf(role)
 	if !ok {
 		return "no role: herrscher decides nothing, and the gateway's own rules stand alone"
 	}
-	var b strings.Builder
+	var buf strings.Builder
 	if def.allowAll {
-		b.WriteString("runs everything")
+		buf.WriteString("runs everything")
 	} else {
-		b.WriteString("runs " + strings.Join(def.allow, ", "))
+		buf.WriteString("runs " + strings.Join(def.allow, ", "))
 	}
 	if def.plugins && !def.allowAll {
-		b.WriteString(", and the verbs plugins contribute")
+		buf.WriteString(", and the verbs plugins contribute")
 	}
 	if len(def.deny) > 0 {
-		b.WriteString("\nnever runs " + strings.Join(def.deny, ", "))
+		buf.WriteString("\nnever runs " + strings.Join(def.deny, ", "))
 	}
-	return b.String()
+	return buf.String()
 }

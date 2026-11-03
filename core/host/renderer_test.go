@@ -40,8 +40,6 @@ func TestRendererSkipsEmptyReply(t *testing.T) {
 	}
 }
 
-// A pending choice the backend couldn't resolve natively is collapsed into the
-// reply text (numbered options); the renderer posts it as plain text.
 func TestRendererPostsChoiceAsText(t *testing.T) {
 	g := &fanRecorder{}
 	r := newGatewayRenderer(g, "c1")
@@ -53,7 +51,6 @@ func TestRendererPostsChoiceAsText(t *testing.T) {
 	}
 }
 
-// A reply longer than the per-message limit is split into multiple posts.
 func TestRendererChunksLongReply(t *testing.T) {
 	g := &fanRecorder{}
 	r := newGatewayRenderer(g, "c1")
@@ -66,10 +63,6 @@ func TestRendererChunksLongReply(t *testing.T) {
 	}
 }
 
-// chunk counts and slices in rune space and prefers a newline break, so
-// multibyte UTF-8 (accented French text) is never split into invalid bytes and
-// the limit is honoured in characters. "é" is 2 bytes: a byte-based cut at the
-// limit would land mid-rune and over-count the limit.
 func TestChunkRuneSafeAndNewlinePreferred(t *testing.T) {
 	input := strings.Repeat("é", gatewayMaxLen+10)
 	parts := chunk(input, gatewayMaxLen)
@@ -85,8 +78,6 @@ func TestChunkRuneSafeAndNewlinePreferred(t *testing.T) {
 		t.Fatalf("rejoined chunks lost runes")
 	}
 
-	// A newline past the halfway point of the window is the preferred break
-	// point, and the consumed newline is not duplicated at the boundary.
 	head := strings.Repeat("a", 1500)
 	nl := head + "\n" + strings.Repeat("b", 1000)
 	parts = chunk(nl, gatewayMaxLen)

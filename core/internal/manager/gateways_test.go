@@ -6,8 +6,6 @@ import (
 )
 
 func TestParseGateways(t *testing.T) {
-	// def is the injected primary default used to prove an empty/invalid list
-	// falls back to what the composition root supplies (never a hard-coded kind).
 	def := []string{"chat"}
 	cases := []struct {
 		name         string

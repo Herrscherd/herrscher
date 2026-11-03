@@ -15,17 +15,14 @@ import (
 	"testing"
 	"time"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
-	transport "github.com/Herrscherd/herrscher-transport"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/grpc"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	transport "github.com/Herrscherd/herrscher-transport"
 )
 
-// TestResolverRemoteMemoryOverMTLS is the C4 end-to-end: with a generated CA/cert
-// pair the resolver negotiates mTLS to a remote memory category, and a client
-// without valid credentials is rejected. The same dual-usage leaf serves as both
-// the server and client identity (both signed by the test CA).
 func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	dir := genTestCerts(t)
 	tlsCfg := transport.TLSConfig{
@@ -48,13 +45,13 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	}
 	t.Cleanup(srv.Shutdown)
 
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	gs := grpc.NewServer(grpc.Creds(serverCreds))
 	serveSkeleton(t, gs, func(r *transport.PluginRouter) error { return transport.RegisterMemorySkeleton(r, recordingMem{}) })
-	go func() { _ = gs.Serve(lis) }()
+	go func() { logCleanup(gs.Serve(lis)) }()
 	t.Cleanup(gs.Stop)
 
 	nc, err := nats.Connect(srv.ClientURL())
@@ -70,7 +67,7 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	stop := make(chan struct{})
 	go func() {
 		for {
-			_ = transport.Announce(nc, ann)
+			logCleanup(transport.Announce(nc, ann))
 			select {
 			case <-stop:
 				return
@@ -80,28 +77,24 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	}()
 	t.Cleanup(func() { close(stop) })
 
-	// With client credentials the mTLS handshake succeeds and the proxy call
-	// reaches the remote memory.
 	clientCreds, err := tlsCfg.ClientCredentials()
 	if err != nil {
 		t.Fatalf("client creds: %v", err)
 	}
-	r := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, srv.ClientURL())
+	r := NewResolver(categorySet(contracts.CategoryMemory), srv.ClientURL())
 	r.SetCredentials(clientCreds)
-	mem, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	mem, _, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("remote resolve over mTLS: %v", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := mem.Record(ctx, contracts.Node{Key: "k"}); err != nil {
-		t.Fatalf("Record over mTLS: %v", err)
+	if recordErr := mem.Record(ctx, contracts.Node{Key: "k"}); recordErr != nil {
+		t.Fatalf("Record over mTLS: %v", recordErr)
 	}
 
-	// A plaintext client (no credentials) is rejected by the mTLS server: the
-	// proxy dials lazily, so the rejection surfaces on the first call.
-	plain := NewResolver(map[contracts.Category]bool{contracts.CategoryMemory: true}, srv.ClientURL())
-	memPlain, err := plain.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
+	plain := NewResolver(categorySet(contracts.CategoryMemory), srv.ClientURL())
+	memPlain, _, err := plain.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("resolve (lazy dial) should not fail: %v", err)
 	}
@@ -112,9 +105,6 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	}
 }
 
-// genTestCerts writes a self-signed CA plus one leaf (signed by the CA) usable as
-// both server and client identity (SAN 127.0.0.1, server+client ExtKeyUsage) into
-// a temp dir, returning the dir.
 func genTestCerts(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -174,7 +164,7 @@ func writePEM(t *testing.T, path, typ string, der []byte) {
 	if err != nil {
 		t.Fatalf("create %s: %v", path, err)
 	}
-	defer f.Close()
+	defer closeRead(f)
 	if err := pem.Encode(f, &pem.Block{Type: typ, Bytes: der}); err != nil {
 		t.Fatalf("encode %s: %v", path, err)
 	}

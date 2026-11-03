@@ -1,6 +1,6 @@
 // Package config loads the daemon's declarative defaults from a user-authored
 // ~/.config/herrscher/config.json. The daemon only ever READS this file (it never
-// rewrites it), so it is safe to comment and hand-edit — unlike state.json,
+// rewrites it), so it is safe to comment and hand-edit, unlike state.json,
 // which the daemon rewrites atomically on every /set.
 //
 // Secrets never live here: gateway tokens/channel ids and any owner
@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/Herrscherd/herrscher/core/envx"
 )
@@ -24,7 +25,7 @@ import (
 // without this low-level package importing state.
 type HomeRef struct {
 	ID   string `json:"id"`
-	Type string `json:"type"` // "category" | "forum"
+	Type string `json:"type"`
 }
 
 // Config is the parsed config.json. Every field is optional; an absent field
@@ -32,20 +33,20 @@ type HomeRef struct {
 // default for knobs, live state.json for the declarative runtime fields).
 type Config struct {
 	// Daemon knobs (precedence: explicit flag > env > this > built-in default).
-	Cmd           string `json:"cmd"`           // base bridged command for new sessions
-	HealthAddr    string `json:"healthAddr"`    // serve --health-addr ("" disables)
-	StatusChannel string `json:"statusChannel"` // self-updating status embed channel
-	Instance      string `json:"instance"`      // per-daemon instance slug
-	Owner         string `json:"owner"`         // owner id; per-daemon instance-id fallback
+	Cmd           string `json:"cmd"`
+	HealthAddr    string `json:"healthAddr"`
+	StatusChannel string `json:"statusChannel"`
+	Instance      string `json:"instance"`
+	Owner         string `json:"owner"`
 	// Stale threshold for `session clean`: sessions inactive longer than this
 	// many days are reported as stale. 0 disables stale detection. Unset (zero)
 	// means the built-in default (14) is applied by the caller.
 	SessionMaxIdleDays int `json:"sessionMaxIdleDays,omitempty"`
 
 	// Declarative runtime defaults (precedence: live state.json > this > empty).
-	Home      *HomeRef `json:"home"`      // session home category/forum
-	Workspace string   `json:"workspace"` // workspace root holding projects
-	Source    string   `json:"source"`    // herrscher source checkout for /service update
+	Home      *HomeRef `json:"home"`
+	Workspace string   `json:"workspace"`
+	Source    string   `json:"source"`
 
 	Skills *SkillsConfig `json:"skills,omitempty"`
 }
@@ -65,7 +66,10 @@ func DefaultPath() string {
 	if d := envx.Get("STATE_DIR"); d != "" {
 		return filepath.Join(d, "config.json")
 	}
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".config", "herrscher", "config.json")
+	}
 	return filepath.Join(home, ".config", "herrscher", "config.json")
 }
 
@@ -73,27 +77,23 @@ func DefaultPath() string {
 // error (config.json is entirely optional). Full-line // comments are stripped
 // before parsing so the file can be commented.
 func Load(path string) (Config, error) {
-	var c Config
-	buf, err := os.ReadFile(path)
+	var cfg Config
+	buf, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, fs.ErrNotExist) {
-		return c, nil
+		return cfg, nil
 	}
 	if err != nil {
-		return c, fmt.Errorf("read %s: %w", path, err)
+		return cfg, fmt.Errorf("read %s: %w", path, err)
 	}
-	if err := json.Unmarshal(stripComments(buf), &c); err != nil {
-		return c, fmt.Errorf("parse %s: %w", path, err)
+	if err := json.Unmarshal(stripComments(buf), &cfg); err != nil {
+		return cfg, fmt.Errorf("parse %s: %w", path, err)
 	}
-	return c, nil
+	return cfg, nil
 }
 
-// stripComments removes full-line // comments (a line whose first non-space
-// characters are //). Only full-line comments are honored — trailing inline
-// comments are left intact so a value containing // (e.g. a URL) is never
-// corrupted. encoding/json then ignores the resulting blank lines.
-func stripComments(b []byte) []byte {
+func stripComments(data []byte) []byte {
 	var out bytes.Buffer
-	for _, line := range bytes.Split(b, []byte("\n")) {
+	for _, line := range bytes.Split(data, []byte("\n")) {
 		if bytes.HasPrefix(bytes.TrimSpace(line), []byte("//")) {
 			continue
 		}
@@ -108,9 +108,9 @@ func stripComments(b []byte) []byte {
 // falls back to the built-in "claude" default. healthAddr pre-fills the
 // "healthAddr" value (the install --health-addr default).
 func Template(cmd, healthAddr string) string {
-	cmdJSON, _ := json.Marshal(cmd)
-	healthJSON, _ := json.Marshal(healthAddr)
-	return `// herrscher config — declarative defaults the daemon reads at startup.
+	cmdJSON := quoteJSON(cmd)
+	healthJSON := quoteJSON(healthAddr)
+	return `// herrscher config: declarative defaults the daemon reads at startup.
 // Secrets (gateway tokens/channel ids, owner token) are NOT here;
 // keep them in the 0600 env file (herrscher.env). The daemon never rewrites this
 // file, so your comments and edits are safe.
@@ -121,10 +121,10 @@ func Template(cmd, healthAddr string) string {
   // Base bridged command for new sessions (sets model/effort/etc.).
   // A per-session "cmd:" option still overrides this. Example:
   //   "claude --model claude-opus-4-8 --effort low"   (Opus 4.8, low, 200k ctx)
-  "cmd": ` + string(cmdJSON) + `,
+  "cmd": ` + cmdJSON + `,
 
   // Health endpoint address; "" disables it.
-  "healthAddr": ` + string(healthJSON) + `,
+  "healthAddr": ` + healthJSON + `,
 
   // Self-updating status embed channel id; "" disables it.
   "statusChannel": "",
@@ -153,4 +153,12 @@ func Template(cmd, healthAddr string) string {
   "source": ""
 }
 `
+}
+
+func quoteJSON(value string) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return strconv.Quote(value)
+	}
+	return string(encoded)
 }

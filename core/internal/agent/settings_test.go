@@ -8,6 +8,24 @@ import (
 	"testing"
 )
 
+func mapOf(t *testing.T, v any) map[string]any {
+	t.Helper()
+	m, ok := v.(map[string]any)
+	if !ok {
+		t.Fatalf("got %T, want a JSON object", v)
+	}
+	return m
+}
+
+func listOf(t *testing.T, v any) []any {
+	t.Helper()
+	l, ok := v.([]any)
+	if !ok {
+		t.Fatalf("got %T, want a JSON array", v)
+	}
+	return l
+}
+
 func settingsMap(t *testing.T, b []byte) map[string]any {
 	t.Helper()
 	var m map[string]any
@@ -30,7 +48,7 @@ func TestInjectApprovalHook(t *testing.T) {
 	if !strings.Contains(string(out), "'/far/bin/herrscher' approve hook") {
 		t.Fatalf("the binary is not in the settings:\n%s", out)
 	}
-	perms, _ := m["permissions"].(map[string]any)
+	perms := mapOf(t, m["permissions"])
 	if perms["defaultMode"] != "acceptEdits" {
 		t.Fatalf("the existing settings were not left alone:\n%s", out)
 	}
@@ -48,8 +66,8 @@ func TestInjectApprovalHookKeepsHooksAlreadyThere(t *testing.T) {
 	if !strings.Contains(string(out), `"mine"`) {
 		t.Fatalf("an operator's own hook was dropped:\n%s", out)
 	}
-	hooks := settingsMap(t, out)["hooks"].(map[string]any)
-	if n := len(hooks["PreToolUse"].([]any)); n != 2 {
+	hooks := mapOf(t, settingsMap(t, out)["hooks"])
+	if n := len(listOf(t, hooks["PreToolUse"])); n != 2 {
 		t.Fatalf("got %d PreToolUse entries, want 2", n)
 	}
 }
@@ -60,9 +78,6 @@ func TestInjectApprovalHookRefusesBrokenSettings(t *testing.T) {
 	}
 }
 
-// A `hooks` or `PreToolUse` of the wrong shape is somebody's configuration we
-// do not understand. Dropping it would throw away hooks an operator wrote, and
-// say nothing; refusing stops the session before it starts, with the file named.
 func TestInjectApprovalHookRefusesHooksOfTheWrongType(t *testing.T) {
 	for _, in := range []string{
 		`{"hooks":"none"}`,
@@ -74,8 +89,6 @@ func TestInjectApprovalHookRefusesHooksOfTheWrongType(t *testing.T) {
 			t.Fatalf("injectApprovalHook(%s) rewrote settings it did not understand", in)
 		}
 	}
-	// A key that is absent, or explicitly null, means nothing was configured:
-	// that is not a shape we fail to understand, and it must still take a hook.
 	for _, in := range []string{`{"hooks":null}`, `{"hooks":{"PreToolUse":null}}`} {
 		out, err := injectApprovalHook([]byte(in), "/bin/h")
 		if err != nil {
@@ -85,15 +98,12 @@ func TestInjectApprovalHookRefusesHooksOfTheWrongType(t *testing.T) {
 		if !ok {
 			t.Fatalf("injectApprovalHook(%s) wrote no hooks:\n%s", in, out)
 		}
-		if n := len(hooks["PreToolUse"].([]any)); n != 1 {
+		if n := len(listOf(t, hooks["PreToolUse"])); n != 1 {
 			t.Fatalf("injectApprovalHook(%s): got %d PreToolUse entries, want 1", in, n)
 		}
 	}
 }
 
-// `null` parses fine and yields a nil document. Assigning into it used to panic,
-// which in a daemon with no recover() meant a hand-edited home could kill the
-// process on `session create`.
 func TestInjectApprovalHookTreatsNullSettingsAsEmpty(t *testing.T) {
 	for _, in := range []string{"null", " null\n", "{}"} {
 		out, err := injectApprovalHook([]byte(in), "/bin/h")
@@ -104,15 +114,12 @@ func TestInjectApprovalHookTreatsNullSettingsAsEmpty(t *testing.T) {
 		if !ok {
 			t.Fatalf("injectApprovalHook(%q) wrote no hooks:\n%s", in, out)
 		}
-		if n := len(hooks["PreToolUse"].([]any)); n != 1 {
+		if n := len(listOf(t, hooks["PreToolUse"])); n != 1 {
 			t.Fatalf("injectApprovalHook(%q): got %d PreToolUse entries, want 1", in, n)
 		}
 	}
 }
 
-// os.Executable can return a path with a space in it, and a host's binary is
-// whatever the operator configured. The hook command goes through a shell, so an
-// unquoted path would break every tool call in the session.
 func TestInjectApprovalHookQuotesTheBinaryPath(t *testing.T) {
 	for bin, want := range map[string]string{
 		"/opt/my tools/herrscher": `'/opt/my tools/herrscher' approve hook`,
@@ -122,16 +129,15 @@ func TestInjectApprovalHookQuotesTheBinaryPath(t *testing.T) {
 		if err != nil {
 			t.Fatalf("injectApprovalHook(%q): %v", bin, err)
 		}
-		hooks := settingsMap(t, out)["hooks"].(map[string]any)
-		entry := hooks["PreToolUse"].([]any)[0].(map[string]any)
-		got := entry["hooks"].([]any)[0].(map[string]any)["command"]
+		hooks := mapOf(t, settingsMap(t, out)["hooks"])
+		entry := mapOf(t, listOf(t, hooks["PreToolUse"])[0])
+		got := mapOf(t, listOf(t, entry["hooks"])[0])["command"]
 		if got != want {
 			t.Fatalf("command = %q, want %q", got, want)
 		}
 	}
 }
 
-// writeHomeFiles lays down the three files MaterializeIntoAs reads.
 func writeHomeFiles(t *testing.T, home string) {
 	t.Helper()
 	settings, err := buildSettings("")
@@ -192,7 +198,7 @@ func TestMaterializeIntoAsWithoutBinaryWritesNoHook(t *testing.T) {
 
 func TestMaterializeHookWritesLocalSettings(t *testing.T) {
 	dir := t.TempDir()
-	if err := MaterializeHook(dir, "/usr/local/bin/herrscher"); err != nil {
+	if err := MaterializeHook(t.Context(), dir, "/usr/local/bin/herrscher"); err != nil {
 		t.Fatalf("MaterializeHook: %v", err)
 	}
 	buf, err := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json"))
@@ -208,8 +214,6 @@ func TestMaterializeHookWritesLocalSettings(t *testing.T) {
 }
 
 func TestMaterializeHookPreservesExistingLocalSettings(t *testing.T) {
-	// The operator's own settings.local.json is merged into, never replaced:
-	// dropping their keys would throw away configuration and say nothing.
 	dir := t.TempDir()
 	claude := filepath.Join(dir, ".claude")
 	if err := os.MkdirAll(claude, 0o755); err != nil {
@@ -218,7 +222,7 @@ func TestMaterializeHookPreservesExistingLocalSettings(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(claude, "settings.local.json"), []byte(`{"model":"opus"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := MaterializeHook(dir, "/bin/herrscher"); err != nil {
+	if err := MaterializeHook(t.Context(), dir, "/bin/herrscher"); err != nil {
 		t.Fatalf("MaterializeHook: %v", err)
 	}
 	buf, err := os.ReadFile(filepath.Join(claude, "settings.local.json"))
@@ -235,10 +239,8 @@ func TestMaterializeHookPreservesExistingLocalSettings(t *testing.T) {
 }
 
 func TestMaterializeHookNoBinIsNoOp(t *testing.T) {
-	// An empty binary means no hook rather than a hook that fails on every
-	// call; SelfBin already warns when it cannot name itself.
 	dir := t.TempDir()
-	if err := MaterializeHook(dir, ""); err != nil {
+	if err := MaterializeHook(t.Context(), dir, ""); err != nil {
 		t.Fatalf("MaterializeHook: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude")); !os.IsNotExist(err) {
@@ -247,14 +249,11 @@ func TestMaterializeHookNoBinIsNoOp(t *testing.T) {
 }
 
 func TestMaterializeHookTwiceLeavesOneHook(t *testing.T) {
-	// A reused worktree already carries the hook from its first session. A
-	// second entry would ask the operator twice for every single tool call, and
-	// the stale binary path is repaired rather than kept beside the new one.
 	dir := t.TempDir()
-	if err := MaterializeHook(dir, "/old/herrscher"); err != nil {
+	if err := MaterializeHook(t.Context(), dir, "/old/herrscher"); err != nil {
 		t.Fatalf("first MaterializeHook: %v", err)
 	}
-	if err := MaterializeHook(dir, "/new/herrscher"); err != nil {
+	if err := MaterializeHook(t.Context(), dir, "/new/herrscher"); err != nil {
 		t.Fatalf("second MaterializeHook: %v", err)
 	}
 	buf, err := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json"))
@@ -270,8 +269,6 @@ func TestMaterializeHookTwiceLeavesOneHook(t *testing.T) {
 }
 
 func TestInjectApprovalHookKeepsForeignPreToolUseHooks(t *testing.T) {
-	// Only a command ending in this daemon's own verb is dropped: a PreToolUse
-	// hook somebody else wrote is configuration we have no business rewriting.
 	prior := []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/usr/bin/lint"}]}]}}`)
 	out, err := injectApprovalHook(prior, "/bin/herrscher")
 	if err != nil {

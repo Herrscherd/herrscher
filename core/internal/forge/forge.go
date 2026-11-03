@@ -5,6 +5,7 @@ package forge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,17 +17,24 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
 
+const (
+	subRepo  = "repo"
+	subClone = "clone"
+)
+
+var (
+	errNoForgeCLI = errors.New("no gh or glab installed")
+	errRepoSpec   = errors.New("invalid repo spec")
+)
+
 // Repo is one remote repository discovered via a forge CLI.
 type Repo struct {
-	FullName string // owner/name
+	FullName string
 	CloneURL string
 	Desc     string
-	Forge    string // "github" | "gitlab"
+	Forge    string
 }
 
-// runner abstracts exec.LookPath + exec.CommandContext so it can be faked.
-// `env` is appended to the inherited environment for that call; nil keeps the
-// process environment untouched.
 type runner interface {
 	look(name string) error
 	run(ctx context.Context, dir string, env []string, name string, args ...string) ([]byte, error)
@@ -41,8 +49,6 @@ func (execRunner) run(ctx context.Context, dir string, env []string, name string
 	if dir != "" {
 		cmd.Dir = dir
 	}
-	// nil env → inherit the process environment as-is (implicit cmd.Env == nil).
-	// Non-nil → inherit AND add the extra pairs (never replace: git needs PATH etc.).
 	if env != nil {
 		cmd.Env = append(os.Environ(), env...)
 	}
@@ -58,22 +64,22 @@ type Client struct {
 func New() *Client { return &Client{r: execRunner{}} }
 
 // Available reports which forge CLIs are installed.
-func (c *Client) Available() (github, gitlab bool) {
+func (c *Client) Available() (bool, bool) {
 	return c.r.look("gh") == nil, c.r.look("glab") == nil
 }
 
 // List returns repos from every installed forge, labeled by Forge.
 func (c *Client) List(ctx context.Context) ([]Repo, error) {
-	gh, gl := c.Available()
+	githubOK, gitlabOK := c.Available()
 	var out []Repo
-	if gh {
+	if githubOK {
 		repos, err := c.listGitHub(ctx)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, repos...)
 	}
-	if gl {
+	if gitlabOK {
 		repos, err := c.listGitLab(ctx)
 		if err != nil {
 			return nil, err
@@ -84,13 +90,10 @@ func (c *Client) List(ctx context.Context) ([]Repo, error) {
 }
 
 func (c *Client) listGitHub(ctx context.Context) ([]Repo, error) {
-	// Personal repos first; this query is the source of truth for auth errors.
 	out, err := c.ghRepoList(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// Then each org the user belongs to. Org discovery/listing is best-effort:
-	// a missing org scope or a single failing org must not drop personal repos.
 	seen := make(map[string]struct{}, len(out))
 	for _, r := range out {
 		seen[r.FullName] = struct{}{}
@@ -100,26 +103,24 @@ func (c *Client) listGitHub(ctx context.Context) ([]Repo, error) {
 		if err != nil {
 			continue
 		}
-		for _, r := range repos {
-			if _, dup := seen[r.FullName]; dup {
+		for _, repo := range repos {
+			if _, dup := seen[repo.FullName]; dup {
 				continue
 			}
-			seen[r.FullName] = struct{}{}
-			out = append(out, r)
+			seen[repo.FullName] = struct{}{}
+			out = append(out, repo)
 		}
 	}
 	return out, nil
 }
 
-// ghRepoList runs `gh repo list [owner]` and parses the result. With no owner it
-// lists the authenticated user's repos; with one it lists that org/user's.
 func (c *Client) ghRepoList(ctx context.Context, owner ...string) ([]Repo, error) {
-	args := []string{"repo", "list"}
+	args := []string{subRepo, "list"}
 	args = append(args, owner...)
 	args = append(args, "--json", "nameWithOwner,sshUrl,description", "--limit", "100")
 	raw, err := c.r.run(ctx, "", nil, "gh", args...)
 	if err != nil {
-		return nil, fmt.Errorf("gh repo list: %s", redact.Output(raw))
+		return nil, fmt.Errorf("gh repo list: %s: %w", redact.Output(raw), err)
 	}
 	var items []struct {
 		NameWithOwner string `json:"nameWithOwner"`
@@ -136,8 +137,6 @@ func (c *Client) ghRepoList(ctx context.Context, owner ...string) ([]Repo, error
 	return out, nil
 }
 
-// ghOrgs returns the logins of the orgs the authenticated user belongs to, or
-// nil on any failure (the caller treats orgs as best-effort).
 func (c *Client) ghOrgs(ctx context.Context) []string {
 	raw, err := c.r.run(ctx, "", nil, "gh", "api", "--paginate", "user/orgs", "--jq", ".[].login")
 	if err != nil {
@@ -153,9 +152,9 @@ func (c *Client) ghOrgs(ctx context.Context) []string {
 }
 
 func (c *Client) listGitLab(ctx context.Context) ([]Repo, error) {
-	raw, err := c.r.run(ctx, "", nil, "glab", "repo", "list", "--output", "json")
+	raw, err := c.r.run(ctx, "", nil, "glab", subRepo, "list", "--output", "json")
 	if err != nil {
-		return nil, fmt.Errorf("glab repo list: %s", redact.Output(raw))
+		return nil, fmt.Errorf("glab repo list: %s: %w", redact.Output(raw), err)
 	}
 	var items []struct {
 		PathWithNamespace string `json:"path_with_namespace"`
@@ -172,7 +171,6 @@ func (c *Client) listGitLab(ctx context.Context) ([]Repo, error) {
 	return out, nil
 }
 
-// specRe permits owner/name style specs (no shell metacharacters, no traversal).
 var specRe = regexp.MustCompile(`^[\w.\-]+/[\w.\-]+$`)
 
 // Clone clones spec into workspace and returns the project dir. It refuses
@@ -185,52 +183,36 @@ func (c *Client) Clone(ctx context.Context, spec, workspace string) (string, err
 	}
 	dir := filepath.Join(workspace, base)
 
-	gh, gl := c.Available()
+	githubOK, gitlabOK := c.Available()
 	var name string
 	var args []string
 	var env []string
 	switch {
 	case isURL:
-		// `--` stops git from treating a (validated) spec as an option.
-		name, args = "git", []string{"clone", "--", spec, dir}
-		// Raw `git` (unlike `gh`) ignores GITHUB_TOKEN/GH_TOKEN, so a private
-		// HTTPS clone would prompt — and, unattended, hang. Always disable the
-		// prompt (fail fast); when a token is present, authenticate via a
-		// GIT_ASKPASS callback into this same binary so the secret rides the
-		// environment, never argv (visible in `ps`) nor `.git/config` (on disk).
+		name, args = "git", []string{subClone, "--", spec, dir}
 		env = gitCloneAuthEnv()
-	case gh:
-		// gh parses `spec` as a positional before `--`; parseSpec already
-		// rejects a leading dash, so it can't be read as a flag.
-		name, args = "gh", []string{"repo", "clone", spec, "--", dir}
-	case gl:
-		// `--` stops glab (cobra) from treating spec as a flag.
-		name, args = "glab", []string{"repo", "clone", "--", spec, dir}
+	case githubOK:
+		name, args = "gh", []string{subRepo, subClone, spec, "--", dir}
+	case gitlabOK:
+		name, args = "glab", []string{subRepo, subClone, "--", spec, dir}
 	default:
-		return "", fmt.Errorf("no gh/glab installed to clone %q; pass a full git URL instead", spec)
+		return "", fmt.Errorf("%w to clone %q; pass a full git URL instead", errNoForgeCLI, spec)
 	}
 	if out, err := c.r.run(ctx, workspace, env, name, args...); err != nil {
 		msg := strings.TrimSpace(string(out))
-		// A pre-existing checkout is success (idempotent).
 		if strings.Contains(msg, "already exists") {
 			return dir, nil
 		}
-		return "", fmt.Errorf("%s clone: %s", name, redact.Output(out))
+		return "", fmt.Errorf("%s clone: %s: %w", name, redact.Output(out), err)
 	}
 	return dir, nil
 }
 
-// gitCloneAuthEnv returns the extra environment for a raw `git clone` of an
-// HTTPS URL: GIT_TERMINAL_PROMPT=0 always (never block on a credential prompt),
-// plus a GIT_ASKPASS callback into this binary when a token is in the
-// environment. Returns a non-nil slice so the runner inherits+extends the env.
 func gitCloneAuthEnv() []string {
 	env := []string{"GIT_TERMINAL_PROMPT=0"}
 	if EnvToken() == "" {
 		return env
 	}
-	// Point GIT_ASKPASS at ourselves; the marker makes the re-exec answer as an
-	// askpass helper (see AskpassReply) instead of dispatching a normal verb.
 	self, err := os.Executable()
 	if err != nil {
 		return env
@@ -257,31 +239,26 @@ func AskpassReply(prompt string) string {
 	return EnvToken()
 }
 
-// parseSpec validates spec and returns the project basename + whether it's a URL.
-// It rejects shell/argument-injection vectors: control characters, path
-// traversal, and any segment or derived name beginning with '-' (which a CLI
-// could otherwise read as an option flag — the git-clone --upload-pack RCE
-// class). Callers still pass specs after a `--` separator as defense in depth.
-func parseSpec(spec string) (base string, isURL bool, err error) {
+func parseSpec(spec string) (string, bool, error) {
 	if spec == "" {
-		return "", false, fmt.Errorf("empty repo spec")
+		return "", false, fmt.Errorf("%w: empty", errRepoSpec)
 	}
 	if strings.ContainsFunc(spec, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
-		return "", false, fmt.Errorf("invalid repo spec: control character")
+		return "", false, fmt.Errorf("%w: control character", errRepoSpec)
 	}
 	if strings.HasPrefix(spec, "https://") || strings.HasPrefix(spec, "git@") || strings.HasPrefix(spec, "ssh://") {
-		b := path.Base(strings.TrimSuffix(spec, ".git"))
-		if b == "" || b == "." || b == "/" || strings.Contains(b, "..") || strings.HasPrefix(b, "-") {
-			return "", false, fmt.Errorf("cannot derive project name from %q", spec)
+		base := path.Base(strings.TrimSuffix(spec, ".git"))
+		if base == "" || base == "." || base == "/" || strings.Contains(base, "..") || strings.HasPrefix(base, "-") {
+			return "", false, fmt.Errorf("%w: cannot derive project name from %q", errRepoSpec, spec)
 		}
-		return b, true, nil
+		return base, true, nil
 	}
 	if !specRe.MatchString(spec) {
-		return "", false, fmt.Errorf("invalid repo spec %q — use owner/name or a full git URL", spec)
+		return "", false, fmt.Errorf("%w %q: use owner/name or a full git URL", errRepoSpec, spec)
 	}
 	for _, seg := range strings.Split(spec, "/") {
 		if seg == "" || seg == "." || seg == ".." || strings.HasPrefix(seg, "-") {
-			return "", false, fmt.Errorf("invalid repo spec %q", spec)
+			return "", false, fmt.Errorf("%w %q", errRepoSpec, spec)
 		}
 	}
 	return path.Base(spec), false, nil

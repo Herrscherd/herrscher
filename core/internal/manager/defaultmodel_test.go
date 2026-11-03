@@ -11,7 +11,9 @@ func TestSessionCreateTakesTheConfiguredDefaultModel(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
 	h.SetDefaultModel("gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatal(err)
@@ -25,12 +27,13 @@ func TestSessionCreateTakesTheConfiguredDefaultModel(t *testing.T) {
 	}
 }
 
-// A default is a fallback, never an override.
 func TestAnExplicitModelBeatsTheDefault(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude", "gw-claude-sonnet-5": "claude"})
 	h.SetDefaultModel("gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "model", "gw-claude-sonnet-5")); err != nil {
 		t.Fatal(err)
@@ -40,14 +43,13 @@ func TestAnExplicitModelBeatsTheDefault(t *testing.T) {
 	}
 }
 
-// An explicit cmd carries its own invocation. Attaching a model to it would give
-// the spawn a gateway environment for a model the argv does not name, so the
-// session would report one model and run another.
 func TestAnExplicitCmdDoesNotTakeTheDefaultModel(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
 	h.SetDefaultModel("gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "cmd", "claude --model whatever")); err != nil {
 		t.Fatal(err)
@@ -57,14 +59,13 @@ func TestAnExplicitCmdDoesNotTakeTheDefaultModel(t *testing.T) {
 	}
 }
 
-// An explicit --vendor outranks a default that belongs to another backend:
-// otherwise a correctly written command would fail validation on a preference
-// the operator never restated.
 func TestTheDefaultIsSkippedWhenAnotherVendorIsRequested(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
 	h.SetDefaultModel("gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo", "vendor", "codex")); err != nil {
 		t.Fatalf("a codex session was rejected because of a claude default: %v", err)
@@ -74,14 +75,14 @@ func TestTheDefaultIsSkippedWhenAnotherVendorIsRequested(t *testing.T) {
 	}
 }
 
-// The default is what makes gateway-only usable: with one configured, a plain
-// `session create` is accepted even though a model is mandatory there.
 func TestTheDefaultSatisfiesTheGatewayOnlyModelRequirement(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
 	gatewayOnly(h)
 	h.SetDefaultModel("gw-claude-opus-5")
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatalf("a modelless create was refused despite a configured default: %v", err)
@@ -91,11 +92,12 @@ func TestTheDefaultSatisfiesTheGatewayOnlyModelRequirement(t *testing.T) {
 	}
 }
 
-// No default configured = the behaviour that predates this feature.
 func TestNoDefaultLeavesTheModelEmpty(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
 	ownedModels(h, map[string]string{"gw-claude-opus-5": "claude"})
-	st.SetHome(state.HomeRef{ID: "cat1", Type: "category"})
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatal(err)

@@ -7,11 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Herrscherd/herrscher-contracts"
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// modelJSON is the public view of a model. Arg is deliberately absent: it's a
-// vendor-CLI invocation detail that no consumer needs.
 type modelJSON struct {
 	ID         string   `json:"id"`
 	Label      string   `json:"label"`
@@ -21,40 +19,36 @@ type modelJSON struct {
 	Vendor     string   `json:"vendor"`
 }
 
-// modelsListJSON renders the catalog for the app. The list is always an
-// array, never null: a public build with no account has an empty catalog,
-// and null would crash the consumer where [] renders as an empty state.
 func modelsListJSON(entries []CatalogEntry) (string, error) {
 	models := make([]modelJSON, 0, len(entries))
-	for _, e := range entries {
-		efforts := e.Efforts
+	for _, entry := range entries {
+		efforts := entry.Efforts
 		if efforts == nil {
 			efforts = []string{}
 		}
 		models = append(models, modelJSON{
-			ID: e.ID, Label: e.Label, Efforts: efforts,
-			Route: string(e.Route), InputPrice: e.InputPrice, Vendor: e.Vendor,
+			ID: entry.ID, Label: entry.Label, Efforts: efforts,
+			Route: string(entry.Route), InputPrice: entry.InputPrice, Vendor: entry.Vendor,
 		})
 	}
-	b, err := json.Marshal(struct {
+	payload, err := json.Marshal(struct {
 		Models []modelJSON `json:"models"`
 	}{Models: models})
 	if err != nil {
 		return "", err
 	}
-	return string(b), nil
+	return string(payload), nil
 }
 
-// modelsListText renders the catalog for a human at the terminal.
 func modelsListText(entries []CatalogEntry) string {
 	if len(entries) == 0 {
 		return "no models offered under the current route policy"
 	}
-	var b strings.Builder
+	var builder strings.Builder
 	for _, e := range entries {
-		fmt.Fprintf(&b, "%-32s %-24s %-8s %s\n", e.ID, e.Label, e.Route, e.Vendor)
+		fmt.Fprintf(&builder, "%-32s %-24s %-8s %s\n", e.ID, e.Label, e.Route, e.Vendor)
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return strings.TrimRight(builder.String(), "\n")
 }
 
 // ModelsCommands returns the model catalog verbs.
@@ -62,12 +56,12 @@ func ModelsCommands() []contracts.Cmd {
 	return []contracts.Cmd{
 		contracts.New("models", "list").
 			Help("list the models every compiled backend offers, under the active route policy; --json for the app").
-			Do(func(ctx context.Context, in contracts.Input) (string, error) {
+			Do(func(_ context.Context, input contracts.Input) (string, error) {
 				entries, err := Catalog(contracts.Default.Backends(), ResolvePolicy(os.Getenv))
 				if err != nil {
 					return "", err
 				}
-				if in.JSON {
+				if input.JSON {
 					return modelsListJSON(entries)
 				}
 				return modelsListText(entries), nil

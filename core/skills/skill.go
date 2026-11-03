@@ -1,6 +1,6 @@
 // Package skills discovers SKILL.md skills and runs a progressive-disclosure
 // engine that injects a skill menu into a turn and expands a skill's body on
-// demand — so backends that do not load skills natively can still use them.
+// demand, so backends that do not load skills natively can still use them.
 package skills
 
 import (
@@ -22,10 +22,6 @@ type Skill struct {
 	stamp       fileStamp
 }
 
-// fileStamp identifies a version of a SKILL.md cheaply enough to check on every
-// turn. Modification time alone would miss a rewrite landing inside the clock's
-// resolution; size alone would miss an edit that kept the length. Together they
-// are what a rescan compares instead of reading the file again.
 type fileStamp struct {
 	mod  time.Time
 	size int64
@@ -35,30 +31,28 @@ type fileStamp struct {
 // stripped (the name and description already surface in the menu). When there is
 // no frontmatter fence the whole file is returned.
 func (s Skill) Body() (string, error) {
-	b, err := os.ReadFile(s.bodyPath)
+	payload, err := os.ReadFile(s.bodyPath)
 	if err != nil {
 		return "", err
 	}
-	return stripFrontmatter(b), nil
+	return stripFrontmatter(payload), nil
 }
 
-// stripFrontmatter drops a leading ---…--- block and returns the remaining body
-// verbatim. Input without an opening --- fence is returned unchanged.
-func stripFrontmatter(md []byte) string {
-	sc := bufio.NewScanner(bytes.NewReader(md))
-	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {
-		return string(md)
+func stripFrontmatter(content []byte) string {
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	if !scanner.Scan() || strings.TrimSpace(scanner.Text()) != frontmatterFence {
+		return string(content)
 	}
 	var body strings.Builder
 	inBody := false
-	for sc.Scan() {
+	for scanner.Scan() {
 		if !inBody {
-			if strings.TrimSpace(sc.Text()) == "---" {
+			if strings.TrimSpace(scanner.Text()) == frontmatterFence {
 				inBody = true
 			}
 			continue
 		}
-		body.WriteString(sc.Text())
+		body.WriteString(scanner.Text())
 		body.WriteByte('\n')
 	}
 	return body.String()

@@ -7,8 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// TestBannerCarriesTheActiveTab is the point of the banner: which session you are
-// typing into must be readable without opening a picker.
 func TestBannerCarriesTheActiveTab(t *testing.T) {
 	m := newTestModel()
 	m.width = 80
@@ -30,8 +28,6 @@ func TestBannerCarriesTheActiveTab(t *testing.T) {
 	}
 }
 
-// TestBannerDropsTheBrandBeforeTheTabs checks the narrow case resolves the right
-// way: which session you are in outranks the name of the running program.
 func TestBannerDropsTheBrandBeforeTheTabs(t *testing.T) {
 	m := newTestModel()
 	m.width = 20
@@ -45,8 +41,6 @@ func TestBannerDropsTheBrandBeforeTheTabs(t *testing.T) {
 	}
 }
 
-// TestUnreadTabCarriesItsPip keeps a background session that produced output from
-// looking like one that did not.
 func TestUnreadTabCarriesItsPip(t *testing.T) {
 	m := newTestModel()
 	m.width = 80
@@ -58,8 +52,6 @@ func TestUnreadTabCarriesItsPip(t *testing.T) {
 	}
 }
 
-// TestEmptyTabShowsAnEmptyState is the regression for the black screen: a fresh
-// tab used to render nothing at all.
 func TestEmptyTabShowsAnEmptyState(t *testing.T) {
 	m := newTestModel()
 	m.ready = true
@@ -75,8 +67,6 @@ func TestEmptyTabShowsAnEmptyState(t *testing.T) {
 	}
 }
 
-// TestChromeHeightCountsTheBannerAndRule guards the arithmetic that keeps the
-// viewport from overflowing: View renders exactly chromeHeight non-viewport rows.
 func TestChromeHeightCountsTheBannerAndRule(t *testing.T) {
 	m := newTestModel()
 	m.ready = true
@@ -84,8 +74,6 @@ func TestChromeHeightCountsTheBannerAndRule(t *testing.T) {
 	m.applySize()
 	rows := strings.Count(m.View(), "\n") + 1
 	want := m.vp.Height + m.chromeHeight()
-	// bubbletea draws one row it does not count; the invariant is that View never
-	// renders more rows than the window has.
 	if rows > want {
 		t.Fatalf("View renders %d rows, budget is %d", rows, want)
 	}
@@ -105,8 +93,6 @@ func TestStatusZoneIsClippedToOneLine(t *testing.T) {
 	}
 }
 
-// TestNarrowBannerKeepsTheActiveTab guards the reduction order: clipping the
-// strip cuts from the right, which would drop the very tab you are typing into.
 func TestNarrowBannerKeepsTheActiveTab(t *testing.T) {
 	m := newTestModel()
 	m.width = 18

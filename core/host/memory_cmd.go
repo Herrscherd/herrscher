@@ -56,7 +56,7 @@ func locateMemoryNode(ctx context.Context, mem contracts.Memory, input contracts
 		return "", err
 	}
 	if input.JSON {
-		b, err := json.Marshal(locationJSON(line))
+		b, err := json.Marshal(line)
 		return string(b), err
 	}
 	if line.Obsidian != "" {
@@ -286,11 +286,6 @@ func commandsVerb(reg *cli.Registry) contracts.Cmd {
 			}
 			return reg.Help(), nil
 		})
-}
-
-type locationJSON struct {
-	Obsidian string `json:"Obsidian"`
-	File     string `json:"File"`
 }
 
 type paramJSON struct {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -31,7 +32,6 @@ func TestCloseReleasesPendingConns(t *testing.T) {
 				t.Fatalf("Accept: %v", err)
 			}
 			clients := dialClients(t, sock, tc.dials)
-			time.Sleep(50 * time.Millisecond)
 			if err := acc.Close(); err != nil {
 				t.Fatalf("Close: %v", err)
 			}
@@ -64,7 +64,7 @@ func assertScanEndsAfterClose(t *testing.T, c *control.Conn) {
 	}()
 	select {
 	case err := <-done:
-		if err != nil && !errors.Is(err, io.EOF) {
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, syscall.ECONNRESET) {
 			t.Fatalf("scan after close: %v", err)
 		}
 	case <-time.After(2 * time.Second):

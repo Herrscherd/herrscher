@@ -85,13 +85,18 @@ func TestResolveAttachmentsOrderAndCollision(t *testing.T) {
 }
 
 func TestResolveAttachmentsOrderSurvivesASlowFirstFetch(t *testing.T) {
+	others := make(chan struct{}, 2)
+	release := make(chan struct{})
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/1" {
-			time.Sleep(80 * time.Millisecond)
+			<-release
+		} else {
+			others <- struct{}{}
 		}
 		writeOrLog(w, []byte(r.URL.Path))
 	}))
 	defer srv.Close()
+	go releaseAfterArrivals(t, others, 2, release)
 
 	sess := "slow-first"
 	defer removeAllOrFail(t, attachmentDir(sess))
@@ -115,9 +120,11 @@ func TestResolveAttachmentsOrderSurvivesASlowFirstFetch(t *testing.T) {
 }
 
 func TestResolveAttachmentsFetchesConcurrently(t *testing.T) {
-	const delay = 60 * time.Millisecond
+	arrivals := make(chan struct{}, maxAttachmentsPerMessage)
+	release := make(chan struct{})
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(delay)
+		arrivals <- struct{}{}
+		<-release
 		writeOrLog(w, []byte(r.URL.Path))
 	}))
 	defer srv.Close()
@@ -132,16 +139,23 @@ func TestResolveAttachmentsFetchesConcurrently(t *testing.T) {
 		})
 	}
 
-	start := time.Now()
+	go releaseAfterArrivals(t, arrivals, maxAttachmentsPerMessage, release)
 	paths := ResolveAttachments(context.Background(), srv.Client(), m, sess, hostsFor(t, srv))
-	elapsed := time.Since(start)
-
 	if len(paths) != maxAttachmentsPerMessage {
 		t.Fatalf("got %d paths, want %d", len(paths), maxAttachmentsPerMessage)
 	}
-	if limit := delay * maxAttachmentsPerMessage / 2; elapsed > limit {
-		t.Fatalf("%d attachments took %v, more than %v: they are not overlapping",
-			maxAttachmentsPerMessage, elapsed, limit)
+}
+
+func releaseAfterArrivals(t *testing.T, arrivals <-chan struct{}, n int, release chan struct{}) {
+	t.Helper()
+	defer close(release)
+	for range n {
+		select {
+		case <-arrivals:
+		case <-time.After(10 * time.Second):
+			t.Errorf("fewer than %d requests were in flight at once", n)
+			return
+		}
 	}
 }
 

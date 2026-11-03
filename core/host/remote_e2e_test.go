@@ -3,13 +3,15 @@
 package host
 
 import (
+	"bufio"
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/control"
@@ -245,16 +247,11 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 		if prep := run.PrepareForwards(ctx); prep != nil {
 			logCleanup(prep.Run())
 		}
-		held := run.Command(ctx, "", "sleep", "60")
-		if err := held.Start(); err != nil {
-			t.Fatalf("hold the forward for %s open: %v", name, err)
-		}
-		t.Cleanup(func() { logCleanup(held.Process.Kill()) })
+		holdForward(ctx, t, run, remote)
 	}
 	plain := runner.SSH{Target: target}
 	for _, name := range sessions {
 		remote := control.RemoteCommandSocketPath(name)
-		waitForRemoteSocket(ctx, t, plain, remote)
 		out, err := capture(ctx, plain, "env",
 			"TMPDIR=/tmp",
 			control.CommandSocketVar+"="+remote,
@@ -269,15 +266,39 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	}
 }
 
-func waitForRemoteSocket(ctx context.Context, t *testing.T, run hostRunner, path string) {
+func holdForward(ctx context.Context, t *testing.T, run runner.SSH, remote string) {
 	t.Helper()
-	for range 100 {
-		if _, err := capture(ctx, run, "test", "-S", path); err == nil {
+	held := run.Command(ctx, "", "sleep", "60")
+	held.Args = slices.Insert(held.Args, 1, "-v")
+	stderr, err := held.StderrPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := held.Start(); err != nil {
+		t.Fatalf("hold the forward for %s open: %v", remote, err)
+	}
+	t.Cleanup(func() { logCleanup(held.Process.Kill()) })
+	lines := bufio.NewScanner(stderr)
+	for lines.Scan() {
+		if forwardConfirmed(lines.Text(), remote) {
+			go func() {
+				_, err := io.Copy(io.Discard, stderr)
+				logCleanup(err)
+			}()
 			return
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatalf("the forward never bound %s", path)
+	t.Fatalf("the far end never confirmed the forward %s", remote)
+}
+
+func forwardConfirmed(line, remote string) bool {
+	const prefix = "remote forward success for: listen "
+	at := strings.Index(line, prefix+remote)
+	if at < 0 {
+		return false
+	}
+	next := line[at+len(prefix)+len(remote):]
+	return strings.HasPrefix(next, ":") || strings.HasPrefix(next, ",")
 }
 
 func remoteWorkspace(ctx context.Context, t *testing.T, target string) string {

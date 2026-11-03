@@ -11,20 +11,35 @@ import (
 
 func TestDialWaitsForASocketThatIsNotThereYet(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "late.sock")
+	waiting := make(chan struct{}, 1)
+	retry := make(chan time.Time)
+	after := func(time.Duration) <-chan time.Time {
+		waiting <- struct{}{}
+		return retry
+	}
+	type dialed struct {
+		conn *control.Conn
+		err  error
+	}
+	result := make(chan dialed, 1)
 	go func() {
-		time.Sleep(150 * time.Millisecond)
-		acc, err := control.Accept(t.Context(), path)
-		if err != nil {
-			return
-		}
-		t.Cleanup(func() { closeAndWarn(acc) })
+		conn, err := dialHubAfter(context.Background(), path, after)
+		result <- dialed{conn, err}
 	}()
 
-	conn, err := dialHub(context.Background(), path)
+	<-waiting
+	acc, err := control.Accept(t.Context(), path)
 	if err != nil {
-		t.Fatalf("dial must wait for the socket: %v", err)
+		t.Fatalf("Accept: %v", err)
 	}
-	closeAndWarn(conn)
+	defer closeAndWarn(acc)
+	retry <- time.Now()
+
+	got := <-result
+	if got.err != nil {
+		t.Fatalf("dial must wait for the socket: %v", got.err)
+	}
+	closeAndWarn(got.conn)
 }
 
 func TestDialGivesUpWhenTheContextIsCancelled(t *testing.T) {

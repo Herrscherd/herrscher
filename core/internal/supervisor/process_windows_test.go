@@ -3,9 +3,14 @@
 package supervisor
 
 import (
+	"bufio"
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,9 +21,8 @@ import (
 )
 
 const (
-	processHelperRoleEnv  = "HERRSCHER_SUPERVISOR_PROCESS_HELPER"
-	processHelperLockEnv  = "HERRSCHER_SUPERVISOR_PROCESS_LOCK"
-	processHelperReadyEnv = "HERRSCHER_SUPERVISOR_PROCESS_READY"
+	processHelperRoleEnv = "HERRSCHER_SUPERVISOR_PROCESS_HELPER"
+	processHelperLockEnv = "HERRSCHER_SUPERVISOR_PROCESS_LOCK"
 )
 
 func TestMain(m *testing.M) {
@@ -40,6 +44,7 @@ func runProcessTreeRootHelper() int {
 	cmd := exec.Command(exe)
 	cmd.Dir = os.Getenv(processHelperLockEnv)
 	cmd.Env = helperEnvironment("child")
+	cmd.Stdout = os.Stdout
 	if err := cmd.Start(); err != nil {
 		return 3
 	}
@@ -67,16 +72,13 @@ func runProcessTreeChildHelper() int {
 		return 6
 	}
 	defer windows.CloseHandle(handle)
-	if err := os.WriteFile(
-		os.Getenv(processHelperReadyEnv),
-		[]byte(strconv.Itoa(os.Getpid())),
-		0o600,
-	); err != nil {
+	if _, err := fmt.Fprintln(os.Stdout, os.Getpid()); err != nil {
 		return 7
 	}
-	for {
-		time.Sleep(time.Hour)
-	}
+	stop, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+	<-stop.Done()
+	return 0
 }
 
 func helperEnvironment(role string) []string {
@@ -90,21 +92,23 @@ func helperEnvironment(role string) []string {
 	return append(env, processHelperRoleEnv+"="+role)
 }
 
-func waitForHelperPID(t *testing.T, path string) int {
+func waitForHelperPID(t *testing.T, ready io.Reader) int {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		raw, err := os.ReadFile(path)
-		if err == nil {
-			pid, parseErr := strconv.Atoi(string(raw))
-			if parseErr != nil {
-				t.Fatalf("parse helper pid %q: %v", raw, parseErr)
-			}
-			return pid
+	line := make(chan string, 1)
+	go func() {
+		text, _ := bufio.NewReader(ready).ReadString('\n')
+		line <- text
+	}()
+	select {
+	case text := <-line:
+		pid, err := strconv.Atoi(strings.TrimSpace(text))
+		if err != nil {
+			t.Fatalf("parse helper pid %q: %v", text, err)
 		}
-		time.Sleep(10 * time.Millisecond)
+		return pid
+	case <-time.After(5 * time.Second):
+		t.Fatalf("process-tree helper did not become ready")
 	}
-	t.Fatalf("process-tree helper did not become ready")
 	return 0
 }
 
@@ -125,19 +129,25 @@ func TestConfiguredBridgeCancellationTerminatesDescendantHoldingWorktree(t *test
 	if err := os.Mkdir(lockDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	readyPath := filepath.Join(base, "ready")
 	t.Setenv(processHelperRoleEnv, "root")
 	t.Setenv(processHelperLockEnv, lockDir)
-	t.Setenv(processHelperReadyEnv, readyPath)
+
+	readyReader, readyWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readyReader.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, os.Args[0])
 	cmd.Dir = lockDir
+	cmd.Stdout = readyWriter
 	configureBridgeCommand(cmd)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	childPID := waitForHelperPID(t, readyPath)
+	readyWriter.Close()
+	childPID := waitForHelperPID(t, readyReader)
 	defer func() {
 		cancel()
 		killTestProcessTree(cmd.Process.Pid)
@@ -157,15 +167,29 @@ func TestConfiguredBridgeCancellationTerminatesDescendantHoldingWorktree(t *test
 		t.Fatal("bridge process did not exit after cancellation")
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		err := os.Remove(lockDir)
-		if err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("descendant still holds worktree after bridge cancellation: %v", err)
-		}
-		time.Sleep(10 * time.Millisecond)
+	if err := waitForProcessExit(childPID, 2*time.Second); err != nil {
+		t.Fatalf("descendant still holds worktree after bridge cancellation: %v", err)
 	}
+	if err := os.Remove(lockDir); err != nil {
+		t.Fatalf("descendant still holds worktree after bridge cancellation: %v", err)
+	}
+}
+
+func waitForProcessExit(pid int, timeout time.Duration) error {
+	handle, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
+	if errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(handle)
+	event, err := windows.WaitForSingleObject(handle, uint32(timeout/time.Millisecond))
+	if err != nil {
+		return err
+	}
+	if event != windows.WAIT_OBJECT_0 {
+		return fmt.Errorf("process %d still running after %v", pid, timeout)
+	}
+	return nil
 }

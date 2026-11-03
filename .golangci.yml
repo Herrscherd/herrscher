@@ -87,7 +87,7 @@ linters:
       check-type-assertions: true
       check-blank: true
     exhaustive:
-      default-signifies-exhaustive: true
+      default-signifies-exhaustive: false
       check:
         - switch
         - mapliteral
@@ -107,6 +107,7 @@ linters:
       disabled-checks:
         - whyNoLint
         - hugeParam
+        - unnamedResult
     gosec:
       excludes: []
     govet:
@@ -143,7 +144,6 @@ linters:
         - name: var-naming
         - name: early-return
         - name: defer
-        - name: confusing-results
         - name: modifies-value-receiver
         - name: unhandled-error
           arguments: ['fmt\.Println', 'fmt\.Fprint.*', 'strings\.Builder\..*', 'bytes\.Buffer\..*']
@@ -201,9 +201,6 @@ linters:
       - path: ^core/internal/agent/agent\.go$
         linters: [noctx]
         text: "exec.Command"
-      - path: ^core/internal/(agent|manager)/
-        linters: [revive]
-        text: "Unhandled error in call to function strings.Builder.Write"
       - path: ^core/(identity|scope|service|internal/(forge|runner|supervisor|worktree))/
         linters: [gosec]
         text: "^G204:"
@@ -233,9 +230,6 @@ linters:
       - path: ^plugins/terminal/tui/
         linters: [exhaustive]
         text: "missing cases in expression switch: tea\\.Key"
-      - path: ^(plugins/terminal/tui/|core/cli/registry\.go$)
-        linters: [gocritic]
-        text: "consider giving a name to these results"
       - path: ^plugins/terminal/tui/image_sixel\.go$
         linters: [nonamedreturns]
         text: 'named return "(indices|palette)"'

@@ -29,7 +29,7 @@ func authzHub(t *testing.T, st *state.State, verbs ...[]string) *hub {
 			t.Fatal(err)
 		}
 	}
-	return &hub{st: st, reg: reg, live: map[string]liveSession{}}
+	return &hub{st: st, reg: reg, live: make(map[string]liveSession)}
 }
 
 func authzState(t *testing.T, sessions []state.Session, roles map[string]string) *state.State {
@@ -38,7 +38,8 @@ func authzState(t *testing.T, sessions []state.Session, roles map[string]string)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range sessions {
+	for idx := range sessions {
+		s := sessions[idx]
 		if err := st.AddSession(s); err != nil {
 			t.Fatal(err)
 		}
@@ -164,7 +165,7 @@ func TestDispatchRefusesBeforeReachingTheRegistry(t *testing.T) {
 		})); err != nil {
 		t.Fatal(err)
 	}
-	h := &hub{st: st, reg: reg, live: map[string]liveSession{}}
+	h := &hub{st: st, reg: reg, live: make(map[string]liveSession)}
 	if _, err := h.Dispatch(withSessionPrincipal(context.Background(), "revue"), []string{"approve", "rule"}); err == nil {
 		t.Fatal("Dispatch must refuse")
 	}

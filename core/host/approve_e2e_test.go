@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -69,8 +68,7 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable) *cli.Registry
 func startApprovalSocket(ctx context.Context, t *testing.T, reg *cli.Registry) string {
 	t.Helper()
 	sock := filepath.Join(t.TempDir(), "cmd.sock")
-	go serveCommandSocket(ctx, sock, dispatcherFunc(reg.Dispatch))
-	waitForSocket(t, sock)
+	serveCommandSocket(ctx, sock, dispatcherFunc(reg.Dispatch))
 	return sock
 }
 
@@ -88,20 +86,15 @@ func runHookAsync(ctx context.Context, in io.Reader, out, errOut io.Writer, sock
 func awaitPendingApproval(t *testing.T, approvalTab *approvalTable, session string) string {
 	t.Helper()
 	var id string
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
+	waitFor(t, &approvalTab.changed, func() bool {
 		for _, p := range pendingApprovals(approvalTab) {
 			if p.Session == session {
 				id = p.ID
 			}
 		}
-		if id != "" {
-			return id
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("the hook never reached the daemon")
-	return ""
+		return id != ""
+	}, "the hook reached the daemon")
+	return id
 }
 
 func assertHookDeniedWithReason(t *testing.T, raw []byte, reason string) {

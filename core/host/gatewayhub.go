@@ -35,9 +35,10 @@ type GatewayHub struct {
 // can report a gateway that dropped out: a stale token silently costing you a
 // whole edge is worse than a noisy line at boot.
 func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string) (*GatewayHub, error) {
-	h := &GatewayHub{sets: map[string]contracts.GatewaySet{}, getenv: envx.Revealed(getenv), retryBase: defaultRetryBase, retryMax: defaultRetryMax}
+	h := &GatewayHub{sets: make(map[string]contracts.GatewaySet), getenv: envx.Revealed(getenv), retryBase: defaultRetryBase, retryMax: defaultRetryMax}
 	var candidates []contracts.Plugin
-	for _, p := range plugins {
+	for idx := range plugins {
+		p := plugins[idx]
 		if p.Gateway != nil {
 			candidates = append(candidates, p)
 		}
@@ -56,7 +57,8 @@ func BuildHub(ctx context.Context, plugins []contracts.Plugin, getenv func(strin
 func (h *GatewayHub) attempt(ctx context.Context, candidates []contracts.Plugin) {
 	h.failures = nil
 	h.pending = nil
-	for _, p := range candidates {
+	for idx := range candidates {
+		p := candidates[idx]
 		set, missingConfig, err := buildOne(ctx, p, h.getenv)
 		if err != nil {
 			line := fmt.Sprintf("%s: %v", p.Manifest.Kind, err)

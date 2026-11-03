@@ -196,8 +196,7 @@ func TestE2ERemoteCommandSocketForward(t *testing.T) {
 	const instID = "e2efwd"
 	local := filepath.Join(os.TempDir(), "herrscher-e2e-daemon.sock")
 	remote := control.RemoteCommandSocketPath("e2e-session")
-	go serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
-	waitForSocket(t, local)
+	serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
 
 	run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
 	if prep := run.PrepareForwards(ctx); prep != nil {
@@ -237,8 +236,7 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	}
 
 	local := filepath.Join(os.TempDir(), "herrscher-e2e-two.sock")
-	go serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
-	waitForSocket(t, local)
+	serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
 
 	sessions := []string{"e2e-one", "e2e-two"}
 	for _, name := range sessions {
@@ -251,7 +249,7 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 		if err := held.Start(); err != nil {
 			t.Fatalf("hold the forward for %s open: %v", name, err)
 		}
-		defer func() { logCleanup(held.Process.Kill()) }()
+		t.Cleanup(func() { logCleanup(held.Process.Kill()) })
 	}
 	plain := runner.SSH{Target: target}
 	for _, name := range sessions {

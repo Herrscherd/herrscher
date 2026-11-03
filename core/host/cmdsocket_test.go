@@ -25,17 +25,6 @@ func (f *fakeDispatcher) Dispatch(_ context.Context, argv []string) (string, err
 	return f.out, f.err
 }
 
-func waitForSocket(t *testing.T, path string) {
-	t.Helper()
-	for range 200 {
-		if _, err := os.Stat(path); err == nil {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("socket %s never appeared", path)
-}
-
 func sendCommand(t *testing.T, path string, req cmdRequest) cmdResponse {
 	t.Helper()
 	c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
@@ -64,8 +53,7 @@ func TestCommandSocketDispatchesOk(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	disp := &fakeDispatcher{out: `[{"name":"lead1"}]`}
-	go serveCommandSocket(ctx, path, disp)
-	waitForSocket(t, path)
+	serveCommandSocket(ctx, path, disp)
 
 	resp := sendCommand(t, path, cmdRequest{Argv: []string{"session", "list", "--json"}})
 	if resp.Ok == nil || *resp.Ok != disp.out {
@@ -84,8 +72,7 @@ func TestCommandSocketReportsDispatchError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	disp := &fakeDispatcher{err: stringError("boom")}
-	go serveCommandSocket(ctx, path, disp)
-	waitForSocket(t, path)
+	serveCommandSocket(ctx, path, disp)
 
 	resp := sendCommand(t, path, cmdRequest{Argv: []string{"session", "list"}})
 	if resp.Ok != nil {
@@ -101,8 +88,7 @@ func TestCommandSocketRejectsMalformed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	disp := &fakeDispatcher{out: "unused"}
-	go serveCommandSocket(ctx, path, disp)
-	waitForSocket(t, path)
+	serveCommandSocket(ctx, path, disp)
 
 	c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 	if err != nil {
@@ -130,8 +116,7 @@ func TestCommandSocketRestrictedToOwner(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cmd.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go serveCommandSocket(ctx, path, &fakeDispatcher{out: "unused"})
-	waitForSocket(t, path)
+	serveCommandSocket(ctx, path, &fakeDispatcher{out: "unused"})
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -146,8 +131,7 @@ func TestCommandSocketClosesSilentConnection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cmd.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go serveCommandSocketWithTimeout(ctx, path, &fakeDispatcher{out: "unused"}, 50*time.Millisecond)
-	waitForSocket(t, path)
+	serveCommandSocketWithTimeout(ctx, path, &fakeDispatcher{out: "unused"}, 50*time.Millisecond)
 
 	c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 	if err != nil {
@@ -217,10 +201,9 @@ func TestASessionSocketIsNotWorldReachable(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "s.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go serveCommandSocket(ctx, sock, dispatcherFunc(func(context.Context, []string) (string, error) {
+	serveCommandSocket(ctx, sock, dispatcherFunc(func(context.Context, []string) (string, error) {
 		return "", nil
 	}))
-	waitForSocket(t, sock)
 	fi, err := os.Stat(sock)
 	if err != nil {
 		t.Fatal(err)

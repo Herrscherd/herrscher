@@ -23,7 +23,7 @@ func hostRegistry(t *testing.T) (*cli.Registry, *state.State) {
 
 func runHostVerb(t *testing.T, reg *cli.Registry, verb string, kv map[string]string) (string, error) {
 	t.Helper()
-	in := contracts.Input{Args: map[string]string{}}
+	in := contracts.Input{Args: make(map[string]string)}
 	for k, v := range kv {
 		in.Args[k] = v
 	}

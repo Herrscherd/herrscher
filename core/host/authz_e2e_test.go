@@ -26,17 +26,15 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 	if approveErr := addApproveCommands(reg, st, nil, approvalTab, sessionTab); approveErr != nil {
 		t.Fatalf("addApproveCommands: %v", approveErr)
 	}
-	h := &hub{st: st, reg: reg, live: map[string]liveSession{}}
+	h := &hub{st: st, reg: reg, live: make(map[string]liveSession)}
 
 	dir := t.TempDir()
 	operatorSock := filepath.Join(dir, "op.sock")
 	sessionSock := filepath.Join(dir, "s1.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go serveCommandSocket(ctx, operatorSock, asOperator{h})
-	go serveCommandSocket(ctx, sessionSock, asSession{disp: h, session: "s1"})
-	waitForSocket(t, operatorSock)
-	waitForSocket(t, sessionSock)
+	serveCommandSocket(ctx, operatorSock, asOperator{h})
+	serveCommandSocket(ctx, sessionSock, asSession{disp: h, session: "s1"})
 
 	argv := []string{"approve", "rule", "allow Bash(*)"}
 

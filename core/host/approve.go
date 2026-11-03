@@ -49,12 +49,13 @@ type PendingApproval struct {
 }
 
 type approvalTable struct {
-	mu sync.Mutex
-	m  map[string]*pendingApproval
+	mu      sync.Mutex
+	m       map[string]*pendingApproval
+	changed changeNotifier
 }
 
 func newApprovalTable() *approvalTable {
-	return &approvalTable{m: map[string]*pendingApproval{}}
+	return &approvalTable{m: make(map[string]*pendingApproval)}
 }
 
 func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessionTable, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait time.Duration) (approval.Decision, string) {
@@ -123,10 +124,12 @@ func registerApproval(approvals *approvalTable, p *pendingApproval) (func(), str
 		return nil, fmt.Sprintf("herrscher: %s was denied: session %q already has %d tool calls waiting for a human, which is the limit; wait for those to be answered, and ask about fewer things at once", describeRequest(p.req), p.session, maxPendingPerSession)
 	}
 	approvals.m[p.id] = p
+	approvals.changed.signal()
 	return func() {
 		approvals.mu.Lock()
 		delete(approvals.m, p.id)
 		approvals.mu.Unlock()
+		approvals.changed.signal()
 	}, ""
 }
 
@@ -199,7 +202,7 @@ func approvalSession(approvals *approvalTable, id string) (string, bool) {
 
 func newApprovalID() string {
 	var b [4]byte
-	rand.Read(b[:])
+	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
 }
 

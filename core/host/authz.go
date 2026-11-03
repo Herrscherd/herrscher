@@ -2,8 +2,6 @@ package host
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -119,7 +117,7 @@ func (h *hub) roleNames() map[string]string {
 			continue
 		}
 		if _, said := h.warnedRoles.LoadOrStore(principal+"\x00"+name, struct{}{}); !said {
-			fmt.Fprintf(os.Stderr, "herrscher serve: %s holds role %q, which herrscher does not define; treating it as `observer`\n", principal, name)
+			warnStderr("herrscher serve: %s holds role %q, which herrscher does not define; treating it as `observer`\n", principal, name)
 		}
 	}
 	return names
@@ -150,8 +148,10 @@ func (h *hub) inSubtree(caller, target string) bool {
 	if h.st == nil {
 		return false
 	}
-	parents := map[string]string{}
-	for _, s := range h.st.SnapshotSessions() {
+	parents := make(map[string]string)
+	sessions := h.st.SnapshotSessions()
+	for idx := range sessions {
+		s := sessions[idx]
 		parents[s.Name] = s.Parent
 	}
 	cur := target

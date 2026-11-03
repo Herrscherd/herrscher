@@ -10,7 +10,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
-	control "github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -84,6 +84,7 @@ type sessionDriver struct {
 	sink sessionSink
 
 	emitTap func(contracts.Event)
+	joined  changeNotifier
 
 	gate budgetGate
 }
@@ -100,9 +101,9 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		toBridge:  toBridge,
 		from:      fromBridge,
 		queue:     make(chan queued, turnQueueCapacity),
-		renderers: map[string]*gatewayRenderer{},
+		renderers: make(map[string]*gatewayRenderer),
 		hangup:    make(chan struct{}, 1),
-		seen:      map[string]bool{},
+		seen:      make(map[string]bool),
 		gate:      noBudgetGate{},
 
 		enqueueTimeout: defaultEnqueueTimeout,
@@ -123,7 +124,7 @@ func attachmentHosts(gws []contracts.GatewaySet) map[string]bool {
 				continue
 			}
 			if hosts == nil {
-				hosts = map[string]bool{}
+				hosts = make(map[string]bool)
 			}
 			hosts[h] = true
 		}
@@ -142,6 +143,7 @@ func (d *sessionDriver) journal(authorID string) {
 	if first {
 		_, appendErr := state.AppendParticipant(d.participants, authorID)
 		logCleanup(appendErr)
+		d.joined.signal()
 	}
 }
 
@@ -266,18 +268,20 @@ func (d *sessionDriver) SeedAndWaitWithTurnID(ctx context.Context, task, turnID 
 }
 
 type sessionTable struct {
-	mu sync.Mutex
-	m  map[string]*sessionDriver
+	mu      sync.Mutex
+	m       map[string]*sessionDriver
+	changed changeNotifier
 }
 
 func newSessionTable() *sessionTable {
-	return &sessionTable{m: map[string]*sessionDriver{}}
+	return &sessionTable{m: make(map[string]*sessionDriver)}
 }
 
 func (t *sessionTable) register(name string, d *sessionDriver) {
 	t.mu.Lock()
 	t.m[name] = d
 	t.mu.Unlock()
+	t.changed.signal()
 }
 
 func (t *sessionTable) unregister(name string, d *sessionDriver) {
@@ -286,6 +290,7 @@ func (t *sessionTable) unregister(name string, d *sessionDriver) {
 		delete(t.m, name)
 	}
 	t.mu.Unlock()
+	t.changed.signal()
 }
 
 func (t *sessionTable) lookup(name string) *sessionDriver {
@@ -738,10 +743,10 @@ func (d *sessionDriver) handoffTask(ctx context.Context, toAgent, task string) {
 }
 
 func sanitizeCoordinationError(err error) string {
-	const max = 160
+	const maxLen = 160
 	s := strings.Join(strings.Fields(err.Error()), " ")
-	if len(s) > max {
-		s = s[:max]
+	if len(s) > maxLen {
+		s = s[:maxLen]
 	}
 	return s
 }
@@ -815,6 +820,7 @@ type sessionIdentity struct {
 	agent       string
 }
 
+// RunSession drives a session without a declared identity until ctx is done.
 func RunSession(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, gate budgetGate) {
 	runSessionIdentified(ctx, sessions, name, channel, gws, acc, participants, m, coord, sink, nil, sessionIdentity{}, gate)
 }

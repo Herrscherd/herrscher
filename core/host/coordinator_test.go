@@ -89,7 +89,7 @@ func newTestCoordinator(cr *fakeCreator, known []string, clean bool, sessions []
 }
 
 func newTestCoordinatorFull(cr *fakeCreator, known []string, clean bool, sessions []state.Session, seeded *[]string, branches map[string]bool, closer *fakeCloser) *coordinator {
-	km := map[string]bool{}
+	km := make(map[string]bool)
 	for _, k := range known {
 		km[k] = true
 	}
@@ -195,7 +195,7 @@ func TestHandoffRollsBackOnSeedTimeout(t *testing.T) {
 	cr := &fakeCreator{}
 	closer := &fakeCloser{}
 	km := map[string]bool{"scripter": true}
-	seedFunc := func(sess, task string) bool { return false }
+	seedFunc := func(_, _ string) bool { return false }
 	c := newCoordinator(cr, fakeAgents{known: km}, &fakeWTC{clean: true}, fakeSessions{list: []state.Session{
 		{Name: "alpha", Project: "game", Worktree: "/wt/alpha"},
 	}}, closer, seedFunc)
@@ -219,7 +219,7 @@ func TestHandoffRollsBackOnSeedTimeout(t *testing.T) {
 
 func TestSeedWithRetryHonoursCtxCancel(t *testing.T) {
 	var attempts int
-	seedFunc := func(sess, task string) bool { attempts++; return false }
+	seedFunc := func(_, _ string) bool { attempts++; return false }
 	c := newCoordinator(&fakeCreator{}, fakeAgents{}, &fakeWTC{}, fakeSessions{}, &fakeCloser{}, seedFunc)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -617,14 +617,14 @@ func TestCoordinationViewConcurrentWithReport(t *testing.T) {
 }
 
 func TestRoutePicksAndDelegates(t *testing.T) {
-	seeded := map[string]string{}
+	seeded := make(map[string]string)
 	c := newCoordinator(
 		&fakeCreator{},
 		fakeAgents{roster: []agent.Agent{
 			{Name: "netter", Tags: []string{"network"}},
 			{Name: "scripter", Tags: []string{"lua"}},
 		}},
-		&fakeWTC{clean: true, branches: map[string]bool{}},
+		&fakeWTC{clean: true, branches: make(map[string]bool)},
 		fakeSessions{list: []state.Session{
 			{Name: "lead", Worktree: "/wt/lead", Project: "p"},
 		}},
@@ -670,7 +670,7 @@ func TestRouteLeadNotFound(t *testing.T) {
 func TestRouteNoMatchRefused(t *testing.T) {
 	c := newCoordinator(&fakeCreator{},
 		fakeAgents{roster: []agent.Agent{{Name: "scripter", Tags: []string{"lua"}}}},
-		&fakeWTC{clean: true, branches: map[string]bool{}},
+		&fakeWTC{clean: true, branches: make(map[string]bool)},
 		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
 		&fakeCloser{}, func(string, string) bool { return true })
 	if _, _, err := c.Route(context.Background(), contracts.RouteRequest{FromSession: "lead", Task: "de la doc markdown"}); err == nil {
@@ -679,7 +679,7 @@ func TestRouteNoMatchRefused(t *testing.T) {
 }
 
 func TestRouteDirtyLeadSpawnsNone(t *testing.T) {
-	seeded := map[string]string{}
+	seeded := make(map[string]string)
 	c := newCoordinator(&fakeCreator{},
 		fakeAgents{roster: []agent.Agent{{Name: "netter", Tags: []string{"network"}}}},
 		&fakeWTC{clean: false},

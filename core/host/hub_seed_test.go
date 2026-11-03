@@ -15,7 +15,7 @@ func TestHubDispatchSeedAllowsCoordinatorReentry(t *testing.T) {
 	if err := reg.Add(contracts.New("session", "seed").
 		Do(func(context.Context, contracts.Input) (string, error) {
 			h.dispatchMu.Lock()
-			h.dispatchMu.Unlock()
+			defer h.dispatchMu.Unlock()
 			return "seeded", nil
 		})); err != nil {
 		t.Fatal(err)

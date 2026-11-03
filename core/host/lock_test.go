@@ -70,8 +70,8 @@ func TestLockStateCreatesTheStateDirectory(t *testing.T) {
 }
 
 func TestStateLockSitsBesideTheStateFile(t *testing.T) {
-	got := StateLockPath(filepath.Join("/var/lib/herrscher", "state.json"))
-	want := filepath.Join("/var/lib/herrscher", ".state.json.lock")
+	got := StateLockPath(filepath.Join(string(filepath.Separator), "var", "lib", "herrscher", "state.json"))
+	want := filepath.Join(string(filepath.Separator), "var", "lib", "herrscher", ".state.json.lock")
 	if got != want {
 		t.Errorf("StateLockPath = %q, want %q", got, want)
 	}

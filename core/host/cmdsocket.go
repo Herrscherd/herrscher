@@ -68,9 +68,13 @@ func serveCommandSocketWithTimeout(ctx context.Context, path string, disp dispat
 	logCleanup(os.Remove(path))
 	ln, err := listenCommandSocket(ctx, path)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "command socket: listen %s: %v\n", path, err)
+		warnStderr("command socket: listen %s: %v\n", path, err)
 		return
 	}
+	go acceptCommands(ctx, ln, path, disp, readTimeout)
+}
+
+func acceptCommands(ctx context.Context, ln net.Listener, path string, disp dispatcher, readTimeout time.Duration) {
 	go func() { <-ctx.Done(); closeRead(ln); logCleanup(os.Remove(path)) }()
 	for {
 		c, err := ln.Accept()

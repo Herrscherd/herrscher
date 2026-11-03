@@ -56,8 +56,8 @@ type coordinator struct {
 func newCoordinator(creator sessionCreator, agents agentLookup, wt cleanBrancher, sessions sessionLister, closer sessionCloser, seed func(string, string) bool) *coordinator {
 	return &coordinator{
 		creator: creator, agents: agents, wt: wt, sessions: sessions, closer: closer, seed: seed,
-		reported: map[string]map[string]bool{},
-		expected: map[string]int{},
+		reported: make(map[string]map[string]bool),
+		expected: make(map[string]int),
 	}
 }
 
@@ -113,7 +113,8 @@ func (c *coordinator) CoordinationView(name string) (CoordinationView, bool) {
 }
 
 func findByName(sessions []state.Session, name string) (state.Session, bool) {
-	for _, s := range sessions {
+	for idx := range sessions {
+		s := sessions[idx]
 		if s.Name == name {
 			return s, true
 		}
@@ -123,7 +124,8 @@ func findByName(sessions []state.Session, name string) (state.Session, bool) {
 
 func childCount(sessions []state.Session, parent string) int {
 	n := 0
-	for _, s := range sessions {
+	for idx := range sessions {
+		s := sessions[idx]
 		if s.Parent == parent {
 			n++
 		}
@@ -229,7 +231,7 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 
 	c.mu.Lock()
 	if c.reported[from.Parent] == nil {
-		c.reported[from.Parent] = map[string]bool{}
+		c.reported[from.Parent] = make(map[string]bool)
 	}
 	c.reported[from.Parent][req.FromSession] = true
 	done := len(c.reported[from.Parent])
@@ -306,7 +308,7 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 	return req.FromSession, nil
 }
 
-func (c *coordinator) Seal(ctx context.Context, req contracts.SealRequest) (string, error) {
+func (c *coordinator) Seal(_ context.Context, req contracts.SealRequest) (string, error) {
 	sessions := c.sessions.SnapshotSessions()
 	if _, ok := findByName(sessions, req.FromSession); !ok {
 		return "", fmt.Errorf("seal: %w", &NotFoundError{Kind: kindLead, Name: req.FromSession})

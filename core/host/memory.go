@@ -13,7 +13,9 @@ import (
 // the single source both the CLI verbs (via BuildFirstMemory) and the
 // plugin-host (via firstMemory) build memory through.
 func BuildFirstMemoryWithManifest(ctx context.Context) (contracts.Memory, contracts.Manifest, error) {
-	for _, p := range contracts.Default.Memories() {
+	memories := contracts.Default.Memories()
+	for idx := range memories {
+		p := memories[idx]
 		if p.Memory == nil {
 			continue
 		}

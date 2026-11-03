@@ -65,18 +65,7 @@ func TestAskApprovalWaitsThenIsAnswered(t *testing.T) {
 		d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, 5*time.Second)
 		done <- d
 	}()
-	var id string
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if p := pendingApprovals(approvalTab); len(p) == 1 {
-			id = p[0].ID
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	if id == "" {
-		t.Fatal("the request was never registered")
-	}
+	id := awaitPending(t, approvalTab, 1)[0].ID
 	if !answerApproval(approvalTab, id, approval.Allow, "") {
 		t.Fatal("answerApproval reported no such request")
 	}
@@ -118,7 +107,7 @@ func waitingFor(approvalTab *approvalTable, session string) int {
 func fillApprovals(t *testing.T, approvalTab *approvalTable, sessionTab *sessionTable, sessions ...string) func() {
 	t.Helper()
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
-	mine := map[string]bool{}
+	mine := make(map[string]bool)
 	for _, s := range sessions {
 		mine[s] = true
 	}
@@ -131,22 +120,15 @@ func fillApprovals(t *testing.T, approvalTab *approvalTable, sessionTab *session
 		}(s)
 	}
 	var ids []string
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
+	waitFor(t, &approvalTab.changed, func() bool {
 		ids = ids[:0]
 		for _, p := range pendingApprovals(approvalTab) {
 			if mine[p.Session] {
 				ids = append(ids, p.ID)
 			}
 		}
-		if len(ids) == len(sessions) {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	if len(ids) != len(sessions) {
-		t.Fatalf("%d of %d requests registered", len(ids), len(sessions))
-	}
+		return len(ids) == len(sessions)
+	}, "every session's approval registered")
 	return func() {
 		for _, id := range ids {
 			answerApproval(approvalTab, id, approval.Deny, "")
@@ -249,14 +231,13 @@ func TestTwoSessionsWaitIndependently(t *testing.T) {
 			got <- session + ":" + string(d)
 		}(name)
 	}
-	byID := map[string]string{}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && len(byID) < 2 {
+	byID := make(map[string]string)
+	waitFor(t, &approvalTab.changed, func() bool {
 		for _, p := range pendingApprovals(approvalTab) {
 			byID[p.ID] = p.Session
 		}
-		time.Sleep(5 * time.Millisecond)
-	}
+		return len(byID) >= 2
+	}, "two approvals registered")
 	if len(byID) != 2 {
 		t.Fatalf("got %d pending, want 2: one session's answer must not settle another's", len(byID))
 	}
@@ -347,18 +328,7 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 		d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s-no-driver", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, 5*time.Second)
 		done <- d
 	}()
-	var id string
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if p := pendingApprovals(approvalTab); len(p) == 1 {
-			id = p[0].ID
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	if id == "" {
-		t.Fatal("the request was never registered")
-	}
+	id := awaitPending(t, approvalTab, 1)[0].ID
 	if !(&hub{approvals: approvalTab, sessions: sessionTab}).Pick("s-no-driver", approvalPickPrefix+id+":deny") {
 		t.Fatal("an approval pick must be handled even with no live driver")
 	}
@@ -426,4 +396,14 @@ func captureDaemonStderr(t *testing.T, fn func()) string {
 		t.Fatalf("close: %v", err)
 	}
 	return out
+}
+
+func awaitPending(t *testing.T, tab *approvalTable, want int) []PendingApproval {
+	t.Helper()
+	var pending []PendingApproval
+	waitFor(t, &tab.changed, func() bool {
+		pending = pendingApprovals(tab)
+		return len(pending) == want
+	}, "the approval registered")
+	return pending
 }

@@ -280,7 +280,7 @@ func TestGoDeadCallsForget(t *testing.T) {
 	stub := &stubForgetCoord{}
 	h := &hub{
 		coordinator:   stub,
-		live:          map[string]liveSession{},
+		live:          make(map[string]liveSession),
 		teardownGrace: defaultTeardownGrace,
 	}
 	h.goDead("worker")
@@ -289,7 +289,7 @@ func TestGoDeadCallsForget(t *testing.T) {
 	}
 }
 
-func TestHubStillSatisfiesSessionControl(t *testing.T) {
+func TestHubStillSatisfiesSessionControl(_ *testing.T) {
 	var _ contracts.SessionControl = (*hub)(nil)
 }
 

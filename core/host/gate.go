@@ -15,7 +15,9 @@ func GateFor(vendor string) (string, string) {
 	if vendor == "" {
 		return "", "no backend is named on this session, so nothing here can say what it enforces"
 	}
-	for _, p := range contracts.Default.Backends() {
+	backends := contracts.Default.Backends()
+	for idx := range backends {
+		p := backends[idx]
 		if p.Manifest.Kind != vendor {
 			continue
 		}

@@ -25,8 +25,9 @@ type CatalogEntry struct {
 // start rather than silently serve a wrong selector.
 func Catalog(plugins []contracts.Plugin, policy contracts.RoutePolicy) ([]CatalogEntry, error) {
 	out := []CatalogEntry{}
-	owner := map[string]string{}
-	for _, p := range plugins {
+	owner := make(map[string]string)
+	for idx := range plugins {
+		p := plugins[idx]
 		kind := p.Manifest.Kind
 		if err := contracts.ValidateModels(kind, p.Manifest.Models); err != nil {
 			return nil, err

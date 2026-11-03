@@ -56,7 +56,7 @@ func locateMemoryNode(ctx context.Context, mem contracts.Memory, input contracts
 		return "", err
 	}
 	if input.JSON {
-		b, err := json.Marshal(line)
+		b, err := json.Marshal(locationJSON(line))
 		return string(b), err
 	}
 	if line.Obsidian != "" {
@@ -281,9 +281,39 @@ func commandsVerb(reg *cli.Registry) contracts.Cmd {
 		Help("list every command this daemon dispatches, with its params").
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			if in.JSON {
-				b, err := json.Marshal(reg.Specs())
+				b, err := json.Marshal(commandSpecsJSON(reg.Specs()))
 				return string(b), err
 			}
 			return reg.Help(), nil
 		})
+}
+
+type locationJSON struct {
+	Obsidian string `json:"Obsidian"`
+	File     string `json:"File"`
+}
+
+type paramJSON struct {
+	Name          string `json:"Name"`
+	Help          string `json:"Help"`
+	Required      bool   `json:"Required"`
+	ValueRequired bool   `json:"ValueRequired"`
+}
+
+type commandSpecJSON struct {
+	Path   []string    `json:"path"`
+	Help   string      `json:"help,omitempty"`
+	Params []paramJSON `json:"params,omitempty"`
+}
+
+func commandSpecsJSON(specs []cli.Spec) []commandSpecJSON {
+	out := make([]commandSpecJSON, 0, len(specs))
+	for _, spec := range specs {
+		params := make([]paramJSON, 0, len(spec.Params))
+		for _, p := range spec.Params {
+			params = append(params, paramJSON(p))
+		}
+		out = append(out, commandSpecJSON{Path: spec.Path, Help: spec.Help, Params: params})
+	}
+	return out
 }

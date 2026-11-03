@@ -50,7 +50,7 @@ func newScheduler(store scheduleStore, sessions sessionLister, creator scheduleC
 		creator:  creator,
 		seed:     seed,
 		now:      now,
-		inflight: map[string]bool{},
+		inflight: make(map[string]bool),
 	}
 }
 
@@ -99,7 +99,9 @@ func (s *scheduler) wait() { s.wg.Wait() }
 
 func (s *scheduler) tick(ctx context.Context) {
 	now := s.now()
-	for _, sc := range s.store.SnapshotSchedules() {
+	schedules := s.store.SnapshotSchedules()
+	for idx := range schedules {
+		sc := schedules[idx]
 		if sc.Paused || s.busy(sc.Name) {
 			continue
 		}
@@ -131,7 +133,9 @@ func (s *scheduler) realign(sc schedule.Schedule, now time.Time) {
 
 func (s *scheduler) catchUp(ctx context.Context) {
 	now := s.now()
-	for _, sc := range s.store.SnapshotSchedules() {
+	schedules := s.store.SnapshotSchedules()
+	for idx := range schedules {
+		sc := schedules[idx]
 		if _, err := schedule.Next(sc, now); err != nil {
 			slog.Warn("schedule: unusable cadence, it will never fire", keySchedule, sc.Name, "err", err)
 			continue
@@ -145,22 +149,28 @@ func (s *scheduler) catchUp(ctx context.Context) {
 }
 
 func (s *scheduler) fireNow(ctx context.Context, name string) error {
-	for _, sc := range s.store.SnapshotSchedules() {
+	schedules := s.store.SnapshotSchedules()
+	for idx := range schedules {
+		sc := schedules[idx]
 		if sc.Name != name {
 			continue
 		}
-		if !s.claim(sc.Name) {
-			return &scheduleBusyError{Name: name}
-		}
-		defer s.release(sc.Name)
-		fctx, cancel := context.WithTimeout(ctx, fireTimeout)
-		defer cancel()
-		if !s.fire(fctx, sc, "") {
-			return &taskNotTakenError{Schedule: name}
-		}
-		return nil
+		return s.fireScheduled(ctx, sc)
 	}
 	return &NotFoundError{Kind: kindSchedule, Name: name}
+}
+
+func (s *scheduler) fireScheduled(ctx context.Context, sc schedule.Schedule) error {
+	if !s.claim(sc.Name) {
+		return &scheduleBusyError{Name: sc.Name}
+	}
+	defer s.release(sc.Name)
+	fctx, cancel := context.WithTimeout(ctx, fireTimeout)
+	defer cancel()
+	if !s.fire(fctx, sc, "") {
+		return &taskNotTakenError{Schedule: sc.Name}
+	}
+	return nil
 }
 
 func (s *scheduler) dispatch(ctx context.Context, sc schedule.Schedule, prefix string, at time.Time) {
@@ -219,7 +229,9 @@ func (s *scheduler) target(ctx context.Context, sc schedule.Schedule) (string, b
 }
 
 func (s *scheduler) live(name string) bool {
-	for _, sess := range s.sessions.SnapshotSessions() {
+	sessions := s.sessions.SnapshotSessions()
+	for idx := range sessions {
+		sess := sessions[idx]
 		if sess.Name == name && !sess.Archived {
 			return true
 		}

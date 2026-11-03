@@ -36,6 +36,7 @@ var (
 	errSealExpectedPositive        = errors.New("seal refused: expected must be > 0")
 )
 
+// NotFoundError reports that no entity of Kind is registered under Name.
 type NotFoundError struct {
 	Kind string
 	Name string
@@ -45,6 +46,7 @@ func (e *NotFoundError) Error() string {
 	return fmt.Sprintf("no %s named %q", e.Kind, e.Name)
 }
 
+// UnknownError reports that Name is not a known entity of Kind.
 type UnknownError struct {
 	Kind string
 	Name string
@@ -153,7 +155,7 @@ type daemonRequiredError struct {
 }
 
 func (e *daemonRequiredError) Error() string {
-	return fmt.Sprintf("`%s` needs a running herrscher daemon, and none answered on %s", e.Command, e.Target)
+	return fmt.Sprintf("%#q needs a running herrscher daemon, and none answered on %s", e.Command, e.Target)
 }
 
 type noGatewayError struct {
@@ -299,7 +301,7 @@ type sessionRoleError struct {
 }
 
 func (e *sessionRoleError) Error() string {
-	return fmt.Sprintf("`%s` is a session, and a session is always `agent`: the socket it arrives on decides that, not this table", e.Principal)
+	return fmt.Sprintf("%#q is a session, and a session is always `agent`: the socket it arrives on decides that, not this table", e.Principal)
 }
 
 type roleRequiredError struct {

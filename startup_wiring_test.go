@@ -17,8 +17,12 @@ const (
 )
 
 func TestMain(m *testing.M) {
-	if os.Getenv(reexecMarker) == "1" {
+	switch os.Getenv(reexecMarker) {
+	case "1":
 		os.Exit(runStartupProbe())
+	case "serve":
+		os.Args = []string{"herrscher", "serve", "--env-file", os.Getenv("HERRSCHER_ENV_FILE")}
+		os.Exit(run())
 	}
 	os.Exit(m.Run())
 }

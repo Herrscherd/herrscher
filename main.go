@@ -20,7 +20,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/Herrscherd/herrscher/internal/errwriter"
 
@@ -55,7 +54,7 @@ func run() int {
 		return reportError(err)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := notifyStop(context.Background())
 	defer stop()
 
 	if len(os.Args) < minArgsWithCommand {
@@ -211,13 +210,6 @@ type exitStatusError struct {
 
 func (s exitStatusError) Error() string {
 	return fmt.Sprintf("exit status %d", s.code)
-}
-
-func reportOutcome(ctx context.Context, err error) int {
-	if ctx.Err() != nil && errors.Is(err, context.Canceled) {
-		return 0
-	}
-	return reportError(err)
 }
 
 func reportError(err error) int {

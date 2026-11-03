@@ -279,27 +279,13 @@ func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, p contracts.Plugin
 	}
 	defer nc.Close()
 	reg := transport.NewRemoteRegistry()
-	seen := make(chan struct{}, 1)
-	if err := transport.WatchAnnouncements(nc, func(a transport.Announcement) {
-		reg.Observe(a)
-		select {
-		case seen <- struct{}{}:
-		default:
-		}
-	}); err != nil {
+	seen, err := watchBackendAnnouncements(nc, reg)
+	if err != nil {
 		return nil, err
 	}
 	for {
 		if bes := reg.Backends(); len(bes) > 0 {
-			if p.Manifest.Kind == "" {
-				return transport.DialBackend(ctx, bes[0], r.creds)
-			}
-			for _, be := range bes {
-				if be.Manifest.Kind == p.Manifest.Kind {
-					return transport.DialBackend(ctx, be, r.creds)
-				}
-			}
-			return nil, &noRemoteBackendError{Kind: p.Manifest.Kind}
+			return r.dialAnnouncedBackend(ctx, bes, p.Manifest.Kind)
 		}
 		select {
 		case <-seen:
@@ -307,4 +293,28 @@ func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, p contracts.Plugin
 			return nil, fmt.Errorf("resolver: no remote backend announced: %w", ctx.Err())
 		}
 	}
+}
+
+func watchBackendAnnouncements(nc *nats.Conn, reg *transport.RemoteRegistry) (<-chan struct{}, error) {
+	seen := make(chan struct{}, 1)
+	err := transport.WatchAnnouncements(nc, func(a transport.Announcement) {
+		reg.Observe(a)
+		select {
+		case seen <- struct{}{}:
+		default:
+		}
+	})
+	return seen, err
+}
+
+func (r *Resolver) dialAnnouncedBackend(ctx context.Context, bes []transport.RemoteEntry, kind string) (contracts.Backend, error) {
+	if kind == "" {
+		return transport.DialBackend(ctx, bes[0], r.creds)
+	}
+	for _, be := range bes {
+		if be.Manifest.Kind == kind {
+			return transport.DialBackend(ctx, be, r.creds)
+		}
+	}
+	return nil, &noRemoteBackendError{Kind: kind}
 }

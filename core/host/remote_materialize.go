@@ -92,23 +92,31 @@ func extractTar(r io.Reader, dst string) error {
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
-		target := filepath.Join(root, filepath.FromSlash(hdr.Name))
-		if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
-			return &unsafeTarMemberError{Member: hdr.Name, Root: root}
-		}
-		if mkdirErr := os.MkdirAll(filepath.Dir(target), privateDirMode); mkdirErr != nil {
-			return mkdirErr
-		}
-		f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, hdr.FileInfo().Mode().Perm())
-		if err != nil {
-			return err
-		}
-		if _, err := io.CopyN(f, tr, hdr.Size); err != nil {
-			logCleanup(f.Close())
-			return err
-		}
-		if err := f.Close(); err != nil {
+		if err := extractRegularMember(tr, hdr, root); err != nil {
 			return err
 		}
 	}
+}
+
+func extractRegularMember(tr *tar.Reader, hdr *tar.Header, root string) error {
+	target := filepath.Join(root, filepath.FromSlash(hdr.Name))
+	if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
+		return &unsafeTarMemberError{Member: hdr.Name, Root: root}
+	}
+	if mkdirErr := os.MkdirAll(filepath.Dir(target), privateDirMode); mkdirErr != nil {
+		return mkdirErr
+	}
+	return writeTarMember(tr, hdr, target)
+}
+
+func writeTarMember(tr *tar.Reader, hdr *tar.Header, target string) error {
+	f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, hdr.FileInfo().Mode().Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.CopyN(f, tr, hdr.Size); err != nil {
+		logCleanup(f.Close())
+		return err
+	}
+	return f.Close()
 }

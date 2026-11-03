@@ -195,7 +195,11 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
-	hb := newHub(ctx, st, sup, gws, partDir, reg, h.Metrics())
+	hb := newHub(st, sup, gws, partDir, reg, h.Metrics())
+	go func() {
+		<-ctx.Done()
+		hb.stopLive()
+	}()
 	hb.contributedKinds = kinds
 	hb.instanceID = instID
 	hb.gate = deps.handler.BudgetGate()

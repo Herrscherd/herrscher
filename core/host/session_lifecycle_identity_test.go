@@ -1,7 +1,6 @@
 package host
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -69,11 +68,8 @@ func TestOldDriverCannotUnregisterSameNameReplacement(t *testing.T) {
 }
 
 func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	name := "rebind-" + newTurnID()
 	h := newHub(
-		ctx,
 		state.NewState(filepath.Join(t.TempDir(), "state.json")),
 		nil,
 		nil,

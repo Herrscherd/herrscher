@@ -23,7 +23,6 @@ import (
 var sessionTeardownGrace = 5 * time.Second
 
 type hub struct {
-	ctx     context.Context
 	st      *state.State
 	sup     *supervisor.Supervisor
 	gws     []Deps
@@ -54,8 +53,8 @@ type liveSession struct {
 	done   <-chan struct{}
 }
 
-func newHub(ctx context.Context, st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry) *hub {
-	return &hub{ctx: ctx, st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: map[string]liveSession{}}
+func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry) *hub {
+	return &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: map[string]liveSession{}}
 }
 
 func eventTap(publish func(string, contracts.Event), session string) func(contracts.Event) {
@@ -76,7 +75,7 @@ func (h *hub) goLive(sess state.Session) {
 		fmt.Fprintf(os.Stderr, "herrscher serve: session %q: control socket: %v\n", sess.Name, err)
 		return
 	}
-	sctx, cancel := context.WithCancel(h.ctx)
+	sctx, cancel := context.WithCancel(context.Background())
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
 	done := make(chan struct{})
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done}
@@ -105,6 +104,18 @@ func (h *hub) goLive(sess state.Session) {
 	}()
 
 	go serveCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name), asSession{disp: h, session: sess.Name})
+}
+
+func (h *hub) stopLive() {
+	h.mu.Lock()
+	lives := make([]liveSession, 0, len(h.live))
+	for _, live := range h.live {
+		lives = append(lives, live)
+	}
+	h.mu.Unlock()
+	for _, live := range lives {
+		live.cancel()
+	}
 }
 
 func (h *hub) goDead(name string) {

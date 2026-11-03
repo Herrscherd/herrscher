@@ -1,7 +1,6 @@
 package host
 
 import (
-	"context"
 	"encoding/hex"
 	"testing"
 	"time"
@@ -89,10 +88,8 @@ func TestGoDeadDoesNotHoldTheHubLockWhileWaiting(t *testing.T) {
 	sessionTeardownGrace = 100 * time.Millisecond
 	defer func() { sessionTeardownGrace = prev }()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	stuck := make(chan struct{})
-	h := &hub{ctx: ctx, live: map[string]liveSession{}}
+	h := &hub{live: map[string]liveSession{}}
 	h.live["wedged"] = liveSession{cancel: func() {}, done: stuck}
 
 	probed := make(chan struct{})

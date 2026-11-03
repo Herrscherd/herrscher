@@ -39,24 +39,24 @@ func approveListVerb(approvals *approvalTable) contracts.Cmd {
 
 func listApprovals(approvals *approvalTable, asJSON bool) (string, error) {
 	pending := pendingApprovals(approvals)
-	sort.SliceStable(pending, func(i, j int) bool {
-		if pending[i].Age != pending[j].Age {
-			return pending[i].Age > pending[j].Age
+	sort.SliceStable(pending, func(i, job int) bool {
+		if pending[i].Age != pending[job].Age {
+			return pending[i].Age > pending[job].Age
 		}
-		return pending[i].ID < pending[j].ID
+		return pending[i].ID < pending[job].ID
 	})
 	if asJSON {
-		b, err := json.Marshal(pending)
-		return string(b), err
+		body, err := json.Marshal(pending)
+		return string(body), err
 	}
 	if len(pending) == 0 {
 		return "nothing is waiting", nil
 	}
-	var b strings.Builder
+	var body strings.Builder
 	for _, p := range pending {
-		fmt.Fprintf(&b, "- %s  %s  %s(%s)  waiting %s\n", p.ID, p.Session, p.Tool, p.Subject, p.Age)
+		fmt.Fprintf(&body, "- %s  %s  %s(%s)  waiting %s\n", p.ID, p.Session, p.Tool, p.Subject, p.Age)
 	}
-	return strings.TrimRight(b.String(), "\n"), nil
+	return strings.TrimRight(body.String(), "\n"), nil
 }
 
 func approveAllowVerb(approvals *approvalTable) contracts.Cmd {
@@ -96,29 +96,29 @@ func approveDenyVerb(approvals *approvalTable) contracts.Cmd {
 		})
 }
 
-func approveRuleVerb(st *state.State) contracts.Cmd {
+func approveRuleVerb(store *state.State) contracts.Cmd {
 	return contracts.New(nsApprove, "rule").
 		Help("add a rule, remove one with --rm, or list them with no argument").
 		ValueParam("rule", "e.g. `ask Bash(git push*)`; also takes a bare argument", false).
 		ValueParam("rm", "the rule to remove, written exactly as it is listed", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			if rm := strings.TrimSpace(in.Get("rm")); rm != "" {
-				return removeApprovalRule(st, rm)
+				return removeApprovalRule(store, rm)
 			}
 			raw := firstOf(in.Get("rule"), in.Rest)
 			if raw == "" {
-				return listApprovalRules(st, in.JSON)
+				return listApprovalRules(store, in.JSON)
 			}
-			return addApprovalRule(st, raw)
+			return addApprovalRule(store, raw)
 		})
 }
 
-func removeApprovalRule(st *state.State, raw string) (string, error) {
+func removeApprovalRule(store *state.State, raw string) (string, error) {
 	parsed, err := approval.ParseRule(raw)
 	if err != nil {
 		return "", err
 	}
-	removed, err := st.RemoveApprovalRule(parsed.String())
+	removed, err := store.RemoveApprovalRule(parsed.String())
 	if err != nil {
 		return "", err
 	}
@@ -143,18 +143,18 @@ func listApprovalRules(st *state.State, asJSON bool) (string, error) {
 	return "- " + strings.Join(rules, "\n- "), nil
 }
 
-func addApprovalRule(st *state.State, raw string) (string, error) {
+func addApprovalRule(store *state.State, raw string) (string, error) {
 	parsed, err := approval.ParseRule(raw)
 	if err != nil {
 		return "", err
 	}
-	if err := st.AddApprovalRule(parsed.String()); err != nil {
+	if err := store.AddApprovalRule(parsed.String()); err != nil {
 		return "", err
 	}
 	return "added " + parsed.String(), nil
 }
 
-func approveAskVerb(st *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveAskVerb(store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "ask").
 		Help("machine verb: ask the daemon whether one tool call may run").
 		ValueParam(paramSession, "the session the call belongs to", true).
@@ -166,8 +166,8 @@ func approveAskVerb(st *state.State, agents *agent.Store, approvals *approvalTab
 				Tool:    strings.TrimSpace(in.Get("tool")),
 				Subject: in.Get("subject"),
 			}
-			pol, mode := sessionPolicy(st, agents, session)
-			d, reason := askApproval(ctx, approvals, sessions, session, req, pol, mode, st.ApprovalWait())
+			pol, mode := sessionPolicy(store, agents, session)
+			d, reason := askApproval(ctx, approvals, sessions, session, req, pol, mode, store.ApprovalWait())
 			b, err := json.Marshal(struct {
 				Decision string `json:"decision"`
 				Reason   string `json:"reason,omitempty"`
@@ -176,18 +176,19 @@ func approveAskVerb(st *state.State, agents *agent.Store, approvals *approvalTab
 		})
 }
 
-func approveModeVerb(st *state.State) contracts.Cmd {
+func approveModeVerb(store *state.State) contracts.Cmd {
 	return contracts.New(nsApprove, "mode").
 		Help("set a session's stance: ask (default), bypass, or strict").
 		ValueParam(paramSession, "session name; also takes a bare argument", false).
 		ValueParam("mode", "ask | bypass | strict; also takes a second bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return setApprovalMode(st, in)
+			return setApprovalMode(store, in)
 		})
 }
 
-func setApprovalMode(st *state.State, in contracts.Input) (string, error) {
-	name, mode := modeOperands(in)
+func setApprovalMode(store *state.State, in contracts.Input) (string, error) {
+	ops := parseModeOperands(in)
+	name, mode := ops.session, ops.mode
 	if name == "" || mode == "" {
 		return "", errApproveModeUsage
 	}
@@ -196,7 +197,7 @@ func setApprovalMode(st *state.State, in contracts.Input) (string, error) {
 	default:
 		return "", &unknownModeError{Mode: mode}
 	}
-	if err := st.SetSessionApprovals(name, mode); err != nil {
+	if err := store.SetSessionApprovals(name, mode); err != nil {
 		return "", err
 	}
 	if mode != string(approval.ModeBypass) {
@@ -205,7 +206,12 @@ func setApprovalMode(st *state.State, in contracts.Input) (string, error) {
 	return fmt.Sprintf("%s is now %s", name, mode), nil
 }
 
-func modeOperands(in contracts.Input) (string, string) {
+type modeOperands struct {
+	session string
+	mode    string
+}
+
+func parseModeOperands(in contracts.Input) modeOperands {
 	rest := in.Rest
 	name := strings.TrimSpace(in.Get(paramSession))
 	if name == "" && len(rest) > 0 {
@@ -215,7 +221,7 @@ func modeOperands(in contracts.Input) (string, string) {
 	if mode == "" && len(rest) > 0 {
 		mode = strings.TrimSpace(rest[len(rest)-1])
 	}
-	return name, mode
+	return modeOperands{session: name, mode: mode}
 }
 
 func firstOf(flag string, rest []string) string {

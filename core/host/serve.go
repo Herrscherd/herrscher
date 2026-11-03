@@ -154,7 +154,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	log := base.With("component", "serve")
 	h := health.NewHealth(time.Now())
 
-	st, err := loadHubState(o)
+	store, err := loadHubState(o)
 	if err != nil {
 		return fmt.Errorf("load state: %w", err)
 	}
@@ -165,7 +165,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	partDir := filepath.Dir(o.StatePath)
 	sup := newHubSupervisor(ctx, self, base, h, partDir)
 
-	instID, err := resolveInstanceID(st, o.InstanceID, o.Owner, log)
+	instID, err := resolveInstanceID(store, o.InstanceID, o.Owner, log)
 	if err != nil {
 		return fmt.Errorf("resolve instance id: %w", err)
 	}
@@ -175,7 +175,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	}
 	approvals := newApprovalTable()
 	sessions := newSessionTable()
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, st.Home)}, o, st, sup, instID, o.ContributedCommands, approvals, sessions)
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, o, store, sup, instID, o.ContributedCommands, approvals, sessions)
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}
@@ -185,7 +185,7 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
-	hb := newHub(st, sup, gws, partDir, reg, h.Metrics(), approvals, sessions)
+	hb := newHub(store, sup, gws, partDir, reg, h.Metrics(), approvals, sessions)
 	go func() {
 		<-ctx.Done()
 		hb.stopLive()
@@ -193,47 +193,47 @@ func RunHub(ctx context.Context, gws []Deps, o Options) error {
 	hb.contributedKinds = kinds
 	hb.instanceID = instID
 	hb.gate = deps.handler.BudgetGate()
-	coord := wireCoordination(hb, deps, st, sessions)
+	coord := wireCoordination(hb, deps, store, sessions)
 
-	sched := newScheduler(st, st, hb, sessions.Seed, time.Now)
+	sched := newScheduler(store, store, hb, sessions.Seed, time.Now)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
 
 	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
 
 	serveHubSockets(ctx, instID, hb)
-	goLiveSessions(ctx, hb, sup, st, h)
+	goLiveSessions(ctx, hb, sup, store, h)
 	bindSessionControl(gws, hb)
 
 	if instID != "" {
 		log.Info("instance resolved", "instance", instID)
 	}
 	logCompiledPlugins(log)
-	startHubProbes(ctx, gws, o, st, h, instID)
+	startHubProbes(ctx, gws, o, store, h, instID)
 
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
 	<-ctx.Done()
 	return ctx.Err()
 }
 
-func loadHubState(o Options) (*state.State, error) {
-	st, err := state.LoadState(o.StatePath)
+func loadHubState(opts Options) (*state.State, error) {
+	store, err := state.LoadState(opts.StatePath)
 	if err != nil {
 		return nil, err
 	}
 	var home *state.HomeRef
-	if o.Home != nil {
-		home = &state.HomeRef{ID: o.Home.ID, Type: o.Home.Type}
+	if opts.Home != nil {
+		home = &state.HomeRef{ID: opts.Home.ID, Type: opts.Home.Type}
 	}
-	st.ApplyDefaults(home, o.Workspace, o.Source)
-	seedTerminalHome(st, o.ForegroundBound)
-	return st, nil
+	store.ApplyDefaults(home, opts.Workspace, opts.Source)
+	seedTerminalHome(store, opts.ForegroundBound)
+	return store, nil
 }
 
-func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, h *health.Health, partDir string) *supervisor.Supervisor {
+func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, host *health.Health, partDir string) *supervisor.Supervisor {
 	sup := supervisor.NewSupervisor(ctx, self)
 	sup.SetLogger(base)
-	sup.SetMetrics(h.Metrics())
+	sup.SetMetrics(host.Metrics())
 	sup.SetAgentsRoot(filepath.Join(partDir, "agents"))
 	return sup
 }
@@ -246,21 +246,21 @@ func hubBridgeEnv(specs []cli.Spec, kinds map[string]bool) []string {
 	return bridgeEnv
 }
 
-func wireCoordination(hb *hub, deps hostDeps, st *state.State, sessions *sessionTable) *coordinator {
-	coord := newCoordinator(hb, deps.agents, deps.wt, st, hb, sessions.Seed)
-	hb.coordinator = coord
+func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *sessionTable) *coordinator {
+	coord := newCoordinator(hubCore, deps.agents, deps.wt, st, hubCore, sessions.Seed)
+	hubCore.coordinator = coord
 	deps.seedCoord.coord = coord
 	return coord
 }
 
-func serveHubSockets(ctx context.Context, instID string, hb *hub) {
+func serveHubSockets(ctx context.Context, instID string, hubCore *hub) {
 	es := newEventSocket()
 	go serveEventsSocket(ctx, EventsSocketPath(instID), es)
-	hb.eventPublisher = es.Publish
-	go serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{hb})
+	hubCore.eventPublisher = es.Publish
+	go serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{hubCore})
 }
 
-func goLiveSessions(ctx context.Context, hb *hub, sup *supervisor.Supervisor, st *state.State, h *health.Health) {
+func goLiveSessions(ctx context.Context, hb *hub, sup *supervisor.Supervisor, st *state.State, host *health.Health) {
 	for _, sess := range st.SnapshotSessions() {
 		if sess.Archived {
 			continue
@@ -268,13 +268,13 @@ func goLiveSessions(ctx context.Context, hb *hub, sup *supervisor.Supervisor, st
 		hb.goLive(ctx, sess)
 		sup.StartWith(ctx, sess)
 	}
-	h.SetSessions(len(st.SnapshotSessions()))
+	host.SetSessions(len(st.SnapshotSessions()))
 }
 
-func bindSessionControl(gws []Deps, hb *hub) {
+func bindSessionControl(gws []Deps, hubCore *hub) {
 	for _, g := range gws {
 		if rcv, ok := g.Gateway.(contracts.SessionControlReceiver); ok {
-			rcv.BindSessionControl(hb)
+			rcv.BindSessionControl(hubCore)
 		}
 	}
 }
@@ -285,7 +285,7 @@ func logCompiledPlugins(log *slog.Logger) {
 	}
 }
 
-func startHubProbes(ctx context.Context, gws []Deps, o Options, st *state.State, h *health.Health, instID string) {
+func startHubProbes(ctx context.Context, gws []Deps, o Options, store *state.State, h *health.Health, instID string) {
 	if o.HealthAddr != "" {
 		go serveHealth(ctx, o.HealthAddr, h)
 	}
@@ -294,7 +294,7 @@ func startHubProbes(ctx context.Context, gws []Deps, o Options, st *state.State,
 	}
 	if o.StatusChannel != "" {
 		if cr := firstReader(gws); cr != nil {
-			go statusLoop(ctx, cr, o.StatusChannel, st, h, instID)
+			go statusLoop(ctx, cr, o.StatusChannel, store, h, instID)
 		}
 	}
 }

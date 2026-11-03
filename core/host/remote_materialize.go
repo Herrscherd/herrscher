@@ -98,7 +98,7 @@ func extractTar(r io.Reader, dst string) error {
 	}
 }
 
-func extractRegularMember(tr *tar.Reader, hdr *tar.Header, root string) error {
+func extractRegularMember(reader *tar.Reader, hdr *tar.Header, root string) error {
 	target := filepath.Join(root, filepath.FromSlash(hdr.Name))
 	if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
 		return &unsafeTarMemberError{Member: hdr.Name, Root: root}
@@ -106,17 +106,17 @@ func extractRegularMember(tr *tar.Reader, hdr *tar.Header, root string) error {
 	if mkdirErr := os.MkdirAll(filepath.Dir(target), privateDirMode); mkdirErr != nil {
 		return mkdirErr
 	}
-	return writeTarMember(tr, hdr, target)
+	return writeTarMember(reader, hdr, target)
 }
 
-func writeTarMember(tr *tar.Reader, hdr *tar.Header, target string) error {
-	f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, hdr.FileInfo().Mode().Perm())
+func writeTarMember(reader *tar.Reader, hdr *tar.Header, target string) error {
+	file, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, hdr.FileInfo().Mode().Perm())
 	if err != nil {
 		return err
 	}
-	if _, err := io.CopyN(f, tr, hdr.Size); err != nil {
-		logCleanup(f.Close())
+	if _, err := io.CopyN(file, reader, hdr.Size); err != nil {
+		logCleanup(file.Close())
 		return err
 	}
-	return f.Close()
+	return file.Close()
 }

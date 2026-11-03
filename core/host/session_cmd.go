@@ -10,17 +10,17 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func addSessionVerbs(reg *cli.Registry, st *state.State, partDir, instID string, sessions *sessionTable, seedCoord *coordinatorSlot) error {
+func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, sessions *sessionTable, seedCoord *coordinatorSlot) error {
 	return addVerbs(reg,
-		seedVerb(st, instID, seedCoord),
+		seedVerb(store, instID, seedCoord),
 		sessionSendVerb(sessions),
-		sessionInfoVerb(st, partDir),
+		sessionInfoVerb(store, partDir),
 		sessionScrollbackVerb(partDir),
 		sessionInterruptVerb(sessions),
 	)
 }
 
-func seedVerb(st *state.State, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
+func seedVerb(store *state.State, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
 	return contracts.New(nsSession, verbSeed).
 		Help("run one agent turn in a session and print the reply").
 		Param(paramName, "session name", true).
@@ -28,11 +28,11 @@ func seedVerb(st *state.State, instID string, seedCoord *coordinatorSlot) contra
 		ValueParam("turn_id", "optional caller-supplied turn identity", false).
 		ValueParam("timeout", "cap this turn (Go duration, e.g. 30m); default HERRSCHER_SEED_TIMEOUT then 120s", false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
-			return runSeedVerb(cmdCtx, in, st, instID, seedCoord.coord)
+			return runSeedVerb(cmdCtx, in, store, instID, seedCoord.coord)
 		})
 }
 
-func runSeedVerb(ctx context.Context, in contracts.Input, st *state.State, instID string, coord contracts.Coordinator) (string, error) {
+func runSeedVerb(ctx context.Context, in contracts.Input, store *state.State, instID string, coord contracts.Coordinator) (string, error) {
 	rawTurnID, supplied := in.Lookup("turn_id")
 	turnID, err := resolveTurnID(rawTurnID, supplied)
 	if err != nil {
@@ -45,7 +45,7 @@ func runSeedVerb(ctx context.Context, in contracts.Input, st *state.State, instI
 	runtime := oneShotSeedRuntimeFrom(ctx)
 	runtime.timeout = timeout
 	reply, err := runOneShotSeedCommand(
-		ctx, st, in.Get(paramName), in.Get("task"),
+		ctx, store, in.Get(paramName), in.Get("task"),
 		turnID, runtime,
 		coord, instID, dispatchLiveCommand,
 	)
@@ -73,32 +73,32 @@ func sessionSendVerb(sessions *sessionTable) contracts.Cmd {
 		})
 }
 
-func sendToSession(ctx context.Context, sessions *sessionTable, in contracts.Input) (string, error) {
-	atts, err := parseAttachmentPaths(in.Get("attachments"))
+func sendToSession(ctx context.Context, sessions *sessionTable, input contracts.Input) (string, error) {
+	atts, err := parseAttachmentPaths(input.Get("attachments"))
 	if err != nil {
 		return "", err
 	}
-	author := in.Get("author")
+	author := input.Get("author")
 	if author == "" {
 		author = "you"
 	}
-	if !sessions.Submit(ctx, in.Get(paramName), contracts.Inbound{
+	if !sessions.Submit(ctx, input.Get(paramName), contracts.Inbound{
 		Author:       author,
 		AuthorID:     "local",
-		Text:         in.Get("text"),
+		Text:         input.Get("text"),
 		Attachments:  atts,
-		Conversation: contracts.Conversation{Gateway: in.Get("origin")},
+		Conversation: contracts.Conversation{Gateway: input.Get("origin")},
 	}) {
-		return "", &NotFoundError{Kind: "live session", Name: in.Get(paramName)}
+		return "", &NotFoundError{Kind: "live session", Name: input.Get(paramName)}
 	}
 	return "", nil
 }
 
-func sessionInfoVerb(st *state.State, partDir string) contracts.Cmd {
+func sessionInfoVerb(store *state.State, partDir string) contracts.Cmd {
 	return contracts.New(nsSession, "info").
 		Help("list sessions as a frontend sees them (channel, vendor, dir, archived). JSON only").
 		Do(func(_ context.Context, _ contracts.Input) (string, error) {
-			b, err := json.Marshal(sessionInfos(st, partDir))
+			b, err := json.Marshal(sessionInfos(store, partDir))
 			return string(b), err
 		})
 }
@@ -117,10 +117,10 @@ func sessionInterruptVerb(sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, "interrupt").
 		Help("cancel a session's in-flight turn").
 		Param(paramName, "session name", true).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			if !sessions.Interrupt(in.Get(paramName)) {
-				return "", &noTurnInFlightError{Session: in.Get(paramName)}
+		Do(func(_ context.Context, input contracts.Input) (string, error) {
+			if !sessions.Interrupt(input.Get(paramName)) {
+				return "", &noTurnInFlightError{Session: input.Get(paramName)}
 			}
-			return "interrupted " + in.Get(paramName), nil
+			return "interrupted " + input.Get(paramName), nil
 		})
 }

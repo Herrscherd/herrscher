@@ -65,19 +65,19 @@ func parseWorktreeFlags(sub string, rest []string) (worktreeFlags, error) {
 	}, nil
 }
 
-func runWorktreeSub(ctx context.Context, f worktreeFlags) error {
-	wt := worktree.NewWorktreer(ctx, f.instance)
-	switch f.sub {
+func runWorktreeSub(ctx context.Context, file worktreeFlags) error {
+	worktrees := worktree.NewWorktreer(ctx, file.instance)
+	switch file.sub {
 	case "create":
-		return createWorktree(wt, f)
+		return createWorktree(worktrees, file)
 	case "pre-existing":
-		return emitJSON(map[string]bool{"preExisting": wt.PreExisting(f.repo, f.name)})
+		return emitJSON(map[string]bool{"preExisting": worktrees.PreExisting(file.repo, file.name)})
 	case "remove":
-		return removeWorktree(wt, f)
+		return removeWorktree(worktrees, file)
 	case "materialize":
-		return materializeWorktree(f.worktreePath)
+		return materializeWorktree(file.worktreePath)
 	default:
-		return &unknownWorktreeSubcommandError{Sub: f.sub}
+		return &unknownWorktreeSubcommandError{Sub: file.sub}
 	}
 }
 

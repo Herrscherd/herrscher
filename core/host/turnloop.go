@@ -361,9 +361,9 @@ func (d *sessionDriver) poll(ctx context.Context, r contracts.ChannelReader) {
 	d.pollLoop(ctx, r, ch, last, log)
 }
 
-func initPollCursor(ctx context.Context, r contracts.ChannelReader, ch string, log *slog.Logger) (string, bool) {
+func initPollCursor(ctx context.Context, r contracts.ChannelReader, channel string, log *slog.Logger) (string, bool) {
 	for delay := time.Second; ; delay = min(backoffFactor*delay, maxPollBackoff) {
-		msgs, err := r.Read(ctx, ch, 1, "")
+		msgs, err := r.Read(ctx, channel, 1, "")
 		if err == nil {
 			return lastMessageID(msgs), true
 		}
@@ -390,10 +390,10 @@ func sleepOrDone(ctx context.Context, delay time.Duration) bool {
 	}
 }
 
-func (d *sessionDriver) pollLoop(ctx context.Context, r contracts.ChannelReader, ch, last string, log *slog.Logger) {
+func (d *sessionDriver) pollLoop(ctx context.Context, r contracts.ChannelReader, channel, last string, log *slog.Logger) {
 	delay := pollInterval
 	for ctx.Err() == nil {
-		msgs, err := r.Read(ctx, ch, pollBatchSize, last)
+		msgs, err := r.Read(ctx, channel, pollBatchSize, last)
 		if err != nil {
 			delay = min(backoffFactor*delay, maxPollBackoff)
 			log.Warn("poll read failed", "err", err, "retry_in", delay)
@@ -411,17 +411,17 @@ func (d *sessionDriver) pollLoop(ctx context.Context, r contracts.ChannelReader,
 }
 
 func (d *sessionDriver) forwardPolled(ctx context.Context, msgs []contracts.Message, last string) (string, bool) {
-	for _, m := range msgs {
-		if m.AuthorBot {
+	for _, msg := range msgs {
+		if msg.AuthorBot {
 			continue
 		}
-		last = m.ID
+		last = msg.ID
 		if !d.submit(ctx, contracts.Inbound{
-			Author:      m.AuthorName,
-			AuthorID:    m.AuthorID,
-			Text:        m.Content,
-			Attachments: m.Attachments,
-			MessageID:   contracts.MessageID(m.ID),
+			Author:      msg.AuthorName,
+			AuthorID:    msg.AuthorID,
+			Text:        msg.Content,
+			Attachments: msg.Attachments,
+			MessageID:   contracts.MessageID(msg.ID),
 		}) {
 			return last, false
 		}
@@ -455,41 +455,41 @@ func (d *sessionDriver) pump(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case q := <-d.queue:
-			ev, guard, ok := d.prepareTurn(ctx, q)
+			event, guard, ok := d.prepareTurn(ctx, q)
 			if !ok {
 				continue
 			}
-			d.runTurn(ctx, ev, guard)
+			d.runTurn(ctx, event, guard)
 			d.activeTurnID = ""
 		}
 	}
 }
 
-func (d *sessionDriver) prepareTurn(ctx context.Context, q queued) (contracts.Event, tokenGuard, bool) {
-	ev := q.ev
-	d.saidElsewhere = ev.T == eventInput && outsideBoundGateways(q.origin, d.gateways)
-	if ev.T != eventInput {
-		ev.SessionIncarnation = ""
-		ev.TurnID = ""
-		ev.Agent = ""
+func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts.Event, tokenGuard, bool) {
+	event := item.ev
+	d.saidElsewhere = event.T == eventInput && outsideBoundGateways(item.origin, d.gateways)
+	if event.T != eventInput {
+		event.SessionIncarnation = ""
+		event.TurnID = ""
+		event.Agent = ""
 		d.activeTurnID = ""
-		return ev, tokenGuard{}, true
+		return event, tokenGuard{}, true
 	}
 	reason, headroom, capped := d.gate.Check(d.name)
 	if reason != "" {
 		d.emitPaused(ctx, reason)
 		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour refusé, plafond budget atteint (" + reason + ") ; augmentez le plafond puis renvoyez le message"})
-		return ev, tokenGuard{}, false
+		return event, tokenGuard{}, false
 	}
-	if ev.TurnID == "" {
-		ev.TurnID = newTurnID()
+	if event.TurnID == "" {
+		event.TurnID = newTurnID()
 	}
-	ev.SessionIncarnation = d.incarnation
-	ev.Agent = d.agent
-	d.activeTurnID = ev.TurnID
-	d.recordEntry("user", ev.Text, 0, turnUsage{})
-	d.fanOut(ctx, contracts.Event{T: "human", Who: ev.Who, Text: ev.Text})
-	return ev, tokenGuard{headroom: headroom, capped: capped}, true
+	event.SessionIncarnation = d.incarnation
+	event.Agent = d.agent
+	d.activeTurnID = event.TurnID
+	d.recordEntry("user", event.Text, 0, turnUsage{})
+	d.fanOut(ctx, contracts.Event{T: "human", Who: event.Who, Text: event.Text})
+	return event, tokenGuard{headroom: headroom, capped: capped}, true
 }
 
 func (d *sessionDriver) runTurn(ctx context.Context, ev contracts.Event, guard tokenGuard) {
@@ -548,24 +548,24 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 	}
 }
 
-func (d *sessionDriver) completeTurn(ctx context.Context, e contracts.Event, turnStart time.Time, live int) {
-	e.Coordination = d.maybeCoordinate(ctx, e.Text)
-	d.fanOut(ctx, e)
-	if d.sink.Resume != nil && e.Resume != "" {
-		d.sink.Resume(e.Resume)
+func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event, turnStart time.Time, live int) {
+	event.Coordination = d.maybeCoordinate(ctx, event.Text)
+	d.fanOut(ctx, event)
+	if d.sink.Resume != nil && event.Resume != "" {
+		d.sink.Resume(event.Resume)
 	}
-	if d.sink.Project != nil && e.Project != "" {
-		d.sink.Project(e.Project)
+	if d.sink.Project != nil && event.Project != "" {
+		d.sink.Project(event.Project)
 	}
-	d.recordEntry("assistant", e.Text, e.Cost, turnUsage{
-		InTokens:    e.TokensIn,
-		OutTokens:   e.Tokens,
-		CacheRead:   e.CacheRead,
-		CacheCreate: e.CacheCreate,
+	d.recordEntry("assistant", event.Text, event.Cost, turnUsage{
+		InTokens:    event.TokensIn,
+		OutTokens:   event.Tokens,
+		CacheRead:   event.CacheRead,
+		CacheCreate: event.CacheCreate,
 		DurMs:       int(time.Since(turnStart).Milliseconds()),
-		CtxTokens:   contextReading(live, e),
+		CtxTokens:   contextReading(live, event),
 	})
-	d.deliverPendingReply(e.Text)
+	d.deliverPendingReply(event.Text)
 	d.metrics.TurnCompleted()
 	if reason, _, _ := d.gate.Check(d.name); reason != "" {
 		d.emitPaused(ctx, reason)
@@ -708,14 +708,14 @@ func (d *sessionDriver) routeTask(ctx context.Context, task string) {
 	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "routé vers " + toAgent + " : " + session})
 }
 
-func (d *sessionDriver) sealCohort(ctx context.Context, n int) {
+func (d *sessionDriver) sealCohort(ctx context.Context, node int) {
 	if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
-		FromSession: d.name, Expected: n,
+		FromSession: d.name, Expected: node,
 	}); err != nil {
 		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "seal refusé: " + err.Error()})
 		return
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "cohorte scellée à " + strconv.Itoa(n)})
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "cohorte scellée à " + strconv.Itoa(node)})
 }
 
 func (d *sessionDriver) mergeWorker(ctx context.Context, worker string) {

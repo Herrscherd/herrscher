@@ -18,7 +18,8 @@ func TestWriteFileNeverOverwritesTemplate(t *testing.T) {
 	if err := writeFile(FileWrite{Path: path, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := os.ReadFile(path)
+	got, err := os.ReadFile(path)
+	must(t, err)
 	if !strings.Contains(string(got), "real-secret") {
 		t.Fatalf("template clobbered existing secrets: %q", got)
 	}
@@ -159,10 +160,11 @@ func TestUnitPathSurvivesASpaceInADirectory(t *testing.T) {
 	}
 	c2, unit := writeUnit(t, "[Unit]\n\n[Service]\nEnvironment=PATH=/usr/bin\nExecStart=/x serve\n\n[Install]\n")
 	c2.Path = c.Path
-	if changed, err := syncUnitPath(c2); err != nil || !changed {
-		t.Fatalf("changed=%v err=%v, want a rewrite", changed, err)
+	if changed, syncErr := syncUnitPath(c2); syncErr != nil || !changed {
+		t.Fatalf("changed=%v err=%v, want a rewrite", changed, syncErr)
 	}
-	b, _ := os.ReadFile(unit)
+	b, err := os.ReadFile(unit)
+	must(t, err)
 	if strings.Count(string(b), "PATH=") != 1 {
 		t.Errorf("want exactly one PATH directive:\n%s", b)
 	}
@@ -244,7 +246,8 @@ func TestUpdateAddsThePathToAUnitThatPredatesIt(t *testing.T) {
 	if !changed {
 		t.Fatal("a unit with no PATH must be reported as changed")
 	}
-	b, _ := os.ReadFile(unit)
+	b, err := os.ReadFile(unit)
+	must(t, err)
 	got := string(b)
 	if !strings.Contains(got, "Environment=PATH=") || !strings.Contains(got, "/opt/tool/bin") {
 		t.Errorf("unit carries no PATH:\n%s", got)
@@ -265,7 +268,8 @@ func TestUpdateReplacesAStalePathAndIsIdempotent(t *testing.T) {
 	if err != nil || !changed {
 		t.Fatalf("changed=%v err=%v, want a rewrite", changed, err)
 	}
-	b, _ := os.ReadFile(unit)
+	b, err := os.ReadFile(unit)
+	must(t, err)
 	if strings.Count(string(b), "Environment=PATH=") != 1 {
 		t.Errorf("want exactly one PATH directive:\n%s", b)
 	}
@@ -422,24 +426,32 @@ func TestConfigScaffoldInPlan(t *testing.T) {
 		if err != nil {
 			t.Fatalf("plan %s: %v", goos, err)
 		}
-		var cfg *FileWrite
-		for i := range p.Files {
-			if p.Files[i].Path == c.ConfigPath {
-				cfg = &p.Files[i]
-			}
+		assertConfigScaffold(t, goos, configFile(p, c.ConfigPath), cmd)
+	}
+}
+
+func configFile(p Plan, path string) *FileWrite {
+	for i := range p.Files {
+		if p.Files[i].Path == path {
+			return &p.Files[i]
 		}
-		if cfg == nil {
-			t.Fatalf("%s: no config.json in plan", goos)
-		}
-		if !cfg.Template {
-			t.Errorf("%s: config.json must be Template (never clobber edits)", goos)
-		}
-		if !strings.Contains(cfg.Content, cmd) {
-			t.Errorf("%s: config.json missing pre-filled cmd:\n%s", goos, cfg.Content)
-		}
-		if strings.Contains(cfg.Content, "GW_TOKEN=") {
-			t.Errorf("%s: config.json must not assign secrets", goos)
-		}
+	}
+	return nil
+}
+
+func assertConfigScaffold(t *testing.T, goos string, cfg *FileWrite, cmd string) {
+	t.Helper()
+	if cfg == nil {
+		t.Fatalf("%s: no config.json in plan", goos)
+	}
+	if !cfg.Template {
+		t.Errorf("%s: config.json must be Template (never clobber edits)", goos)
+	}
+	if !strings.Contains(cfg.Content, cmd) {
+		t.Errorf("%s: config.json missing pre-filled cmd:\n%s", goos, cfg.Content)
+	}
+	if strings.Contains(cfg.Content, "GW_TOKEN=") {
+		t.Errorf("%s: config.json must not assign secrets", goos)
 	}
 }
 
@@ -524,10 +536,11 @@ func TestSkipStartOmitsImmediateStart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ljoined string
+	var ljoinedBuilder strings.Builder
 	for _, c := range lp.Commands {
-		ljoined += strings.Join(c.Argv, " ") + "\n"
+		ljoinedBuilder.WriteString(strings.Join(c.Argv, " ") + "\n")
 	}
+	ljoined := ljoinedBuilder.String()
 	if strings.Contains(ljoined, "enable --now") {
 		t.Errorf("SkipStart linux plan must not start now:\n%s", ljoined)
 	}
@@ -546,7 +559,8 @@ func TestSkipStartOmitsImmediateStart(t *testing.T) {
 			t.Errorf("SkipStart mac plan must not load (start) the agent: %v", c.Argv)
 		}
 	}
-	mp2, _ := BuildPlan(testConfig("darwin"))
+	mp2, err := BuildPlan(testConfig("darwin"))
+	must(t, err)
 	assertCmd(t, mp2, "launchctl load -w")
 }
 
@@ -591,7 +605,8 @@ func TestInstallSkipsStartWhenNoToken(t *testing.T) {
 		t.Fatal("precondition: env file should not be ready")
 	}
 	c.SkipStart = true
-	p, _ := BuildPlan(c)
+	p, err := BuildPlan(c)
+	must(t, err)
 	for _, cmd := range p.Commands {
 		if strings.Contains(strings.Join(cmd.Argv, " "), "--now") {
 			t.Errorf("fresh install must not start the service now: %v", cmd.Argv)
@@ -689,10 +704,11 @@ func TestBuildUninstallRemovesArtifacts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("uninstall %s: %v", os, err)
 		}
-		var joined string
+		var joinedBuilder strings.Builder
 		for _, cmd := range p.Commands {
-			joined += strings.Join(cmd.Argv, " ") + "\n"
+			joinedBuilder.WriteString(strings.Join(cmd.Argv, " ") + "\n")
 		}
+		joined := joinedBuilder.String()
 		if !strings.Contains(joined, marker) {
 			t.Errorf("%s uninstall never references %q:\n%s", os, marker, joined)
 		}

@@ -25,7 +25,8 @@ func TestSessionModelIDRoundTrips(t *testing.T) {
 }
 
 func TestSessionModelIDOmittedWhenEmpty(t *testing.T) {
-	b, _ := json.Marshal(Session{Name: "s"})
+	b, err := json.Marshal(Session{Name: "s"})
+	must(t, err)
 	if strings.Contains(string(b), "modelId") {
 		t.Fatalf("empty ModelID was serialized: %s", b)
 	}

@@ -33,7 +33,7 @@ func TestSetResumeTokenUnknownSessionIsNoop(t *testing.T) {
 
 func TestSetResumeTokenUnchangedIsNoop(t *testing.T) {
 	s := NewState(filepath.Join(t.TempDir(), "state.json"))
-	_ = s.AddSession(Session{Name: "main", ResumeToken: "sid-1"})
+	must(t, s.AddSession(Session{Name: "main", ResumeToken: "sid-1"}))
 	if err := s.SetResumeToken("main", "sid-1"); err != nil {
 		t.Fatalf("unchanged token must be a no-op, got %v", err)
 	}

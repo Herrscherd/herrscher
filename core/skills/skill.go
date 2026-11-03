@@ -31,28 +31,28 @@ type fileStamp struct {
 // stripped (the name and description already surface in the menu). When there is
 // no frontmatter fence the whole file is returned.
 func (s Skill) Body() (string, error) {
-	b, err := os.ReadFile(s.bodyPath)
+	payload, err := os.ReadFile(s.bodyPath)
 	if err != nil {
 		return "", err
 	}
-	return stripFrontmatter(b), nil
+	return stripFrontmatter(payload), nil
 }
 
-func stripFrontmatter(md []byte) string {
-	sc := bufio.NewScanner(bytes.NewReader(md))
-	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {
-		return string(md)
+func stripFrontmatter(content []byte) string {
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	if !scanner.Scan() || strings.TrimSpace(scanner.Text()) != frontmatterFence {
+		return string(content)
 	}
 	var body strings.Builder
 	inBody := false
-	for sc.Scan() {
+	for scanner.Scan() {
 		if !inBody {
-			if strings.TrimSpace(sc.Text()) == "---" {
+			if strings.TrimSpace(scanner.Text()) == frontmatterFence {
 				inBody = true
 			}
 			continue
 		}
-		body.WriteString(sc.Text())
+		body.WriteString(scanner.Text())
 		body.WriteByte('\n')
 	}
 	return body.String()

@@ -30,7 +30,7 @@ func TestDiscoverParsesAndDedupes(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("want 2 skills (deduped, malformed skipped), got %d: %+v", len(got), got)
 	}
-	byName := map[string]Skill{}
+	byName := make(map[string]Skill)
 	for _, s := range got {
 		byName[s.Name] = s
 	}

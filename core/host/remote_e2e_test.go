@@ -99,18 +99,18 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if wt.PreExisting(repo, "demo") {
+	if wt.PreExisting(ctx, repo, "demo") {
 		t.Fatal("nothing has been created yet")
 	}
-	path, err := wt.Create(repo, "demo", "")
+	path, err := wt.Create(ctx, repo, "demo", "")
 	if err != nil {
 		t.Fatalf("remote worktree create: %v", err)
 	}
 	if path == "" {
 		t.Fatal("a cloned repo must yield a worktree, not the shared fallback")
 	}
-	defer func() { _ = wt.Remove(repo, "demo", true) }()
-	if !wt.PreExisting(repo, "demo") {
+	defer func() { _ = wt.Remove(ctx, repo, "demo", true) }()
+	if !wt.PreExisting(ctx, repo, "demo") {
 		t.Fatal("the worktree just created must read as pre-existing")
 	}
 
@@ -140,7 +140,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 		t.Fatalf("the hook must invoke the host's own herrscher (%s), got %q", h.Bin, settings)
 	}
 
-	if err := wt.Remove(repo, "demo", true); err != nil {
+	if err := wt.Remove(ctx, repo, "demo", true); err != nil {
 		t.Fatalf("remote worktree remove: %v", err)
 	}
 	if _, err := capture(ctx, runnerFor(provisioned), "test", "-d", path); err == nil {

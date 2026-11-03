@@ -48,11 +48,9 @@ func ProjectFromDir(dir string) string {
 		common = filepath.Join(dir, common)
 	}
 	common = filepath.Clean(common)
-	root := common
+	root := strings.TrimSuffix(common, ".git")
 	if filepath.Base(common) == ".git" {
 		root = filepath.Dir(common)
-	} else {
-		root = strings.TrimSuffix(common, ".git")
 	}
 	return nameOf(filepath.Base(filepath.Clean(root)))
 }
@@ -72,18 +70,18 @@ func MatchProject(prompt string, known []string) string {
 		return ""
 	}
 	lower := strings.ToLower(prompt)
-	best, at := "", -1
+	best, bestAt := "", -1
 	for _, k := range known {
-		n := nameOf(k)
-		if n == "" {
+		name := nameOf(k)
+		if name == "" {
 			continue
 		}
-		i := indexWord(lower, n)
-		if i < 0 {
+		pos := indexWord(lower, name)
+		if pos < 0 {
 			continue
 		}
-		if at < 0 || i < at || (i == at && len(n) > len(best)) {
-			best, at = n, i
+		if bestAt < 0 || pos < bestAt || (pos == bestAt && len(name) > len(best)) {
+			best, bestAt = name, pos
 		}
 	}
 	return best
@@ -107,41 +105,41 @@ func nameOf(raw string) string {
 	if !nameable {
 		return ""
 	}
-	n := contracts.NormalizeScope(raw)
-	if len(n) > maxScopeLen {
+	name := contracts.NormalizeScope(raw)
+	if len(name) > maxScopeLen {
 		return ""
 	}
-	return n
+	return name
 }
 
 func indexWord(hay, needle string) int {
-	for i := 0; i <= len(hay)-len(needle); {
-		j := strings.Index(hay[i:], needle)
-		if j < 0 {
+	for pos := 0; pos <= len(hay)-len(needle); {
+		offset := strings.Index(hay[pos:], needle)
+		if offset < 0 {
 			return -1
 		}
-		at := i + j
-		if boundaryBefore(hay, at) && boundaryAt(hay, at+len(needle)) {
-			return at
+		found := pos + offset
+		if boundaryBefore(hay, found) && boundaryAt(hay, found+len(needle)) {
+			return found
 		}
-		i = at + 1
+		pos = found + 1
 	}
 	return -1
 }
 
-func boundaryBefore(s string, i int) bool {
-	if i <= 0 {
+func boundaryBefore(text string, pos int) bool {
+	if pos <= 0 {
 		return true
 	}
-	r, _ := utf8.DecodeLastRuneInString(s[:i])
+	r, _ := utf8.DecodeLastRuneInString(text[:pos])
 	return notWord(r)
 }
 
-func boundaryAt(s string, i int) bool {
-	if i >= len(s) {
+func boundaryAt(text string, pos int) bool {
+	if pos >= len(text) {
 		return true
 	}
-	r, _ := utf8.DecodeRuneInString(s[i:])
+	r, _ := utf8.DecodeRuneInString(text[pos:])
 	return notWord(r)
 }
 

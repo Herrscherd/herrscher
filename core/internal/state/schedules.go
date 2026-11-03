@@ -12,16 +12,16 @@ func (s *State) SnapshotSchedules() []schedule.Schedule {
 }
 
 // PutSchedule adds or replaces a schedule, by name.
-func (s *State) PutSchedule(sc schedule.Schedule) error {
+func (s *State) PutSchedule(sched schedule.Schedule) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Schedules {
-		if s.Schedules[i].Name == sc.Name {
-			s.Schedules[i] = sc
+	for idx := range s.Schedules {
+		if s.Schedules[idx].Name == sched.Name {
+			s.Schedules[idx] = sched
 			return s.saveLocked()
 		}
 	}
-	s.Schedules = append(s.Schedules, sc)
+	s.Schedules = append(s.Schedules, sched)
 	return s.saveLocked()
 }
 
@@ -29,9 +29,9 @@ func (s *State) PutSchedule(sc schedule.Schedule) error {
 func (s *State) RemoveSchedule(name string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Schedules {
-		if s.Schedules[i].Name == name {
-			s.Schedules = append(s.Schedules[:i], s.Schedules[i+1:]...)
+	for idx := range s.Schedules {
+		if s.Schedules[idx].Name == name {
+			s.Schedules = append(s.Schedules[:idx], s.Schedules[idx+1:]...)
 			return true, s.saveLocked()
 		}
 	}
@@ -43,9 +43,9 @@ func (s *State) RemoveSchedule(name string) (bool, error) {
 func (s *State) SetSchedulePaused(name string, paused bool) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Schedules {
-		if s.Schedules[i].Name == name {
-			s.Schedules[i].Paused = paused
+	for idx := range s.Schedules {
+		if s.Schedules[idx].Name == name {
+			s.Schedules[idx].Paused = paused
 			return true, s.saveLocked()
 		}
 	}
@@ -56,12 +56,12 @@ func (s *State) SetSchedulePaused(name string, paused bool) (bool, error) {
 // schedule may have been removed between the tick and the end of the turn, and
 // the firing loop has nothing to hold against an operator who changed their
 // mind.
-func (s *State) StampScheduleRun(name, at string) error {
+func (s *State) StampScheduleRun(name, stampedAt string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Schedules {
-		if s.Schedules[i].Name == name {
-			s.Schedules[i].LastRun = at
+	for idx := range s.Schedules {
+		if s.Schedules[idx].Name == name {
+			s.Schedules[idx].LastRun = stampedAt
 			return s.saveLocked()
 		}
 	}

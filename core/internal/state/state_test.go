@@ -53,7 +53,7 @@ func TestLoadStateBackfillsAndPersistsSessionIncarnation(t *testing.T) {
 	var persisted struct {
 		Sessions []Session `json:"sessions"`
 	}
-	if err := json.Unmarshal(persistedBytes, &persisted); err != nil {
+	if err = json.Unmarshal(persistedBytes, &persisted); err != nil {
 		t.Fatal(err)
 	}
 	if len(persisted.Sessions) != 1 || persisted.Sessions[0].Incarnation != firstSession.Incarnation {
@@ -239,7 +239,7 @@ func TestWorkspaceRootFallsBack(t *testing.T) {
 	if got := s.WorkspaceRoot(); got != "/legacy/repo" {
 		t.Fatalf("should fall back to Repo, got %q", got)
 	}
-	_ = s.SetWorkspace("/ws")
+	must(t, s.SetWorkspace("/ws"))
 	if got := s.WorkspaceRoot(); got != "/ws" {
 		t.Fatalf("Workspace should win, got %q", got)
 	}
@@ -251,7 +251,8 @@ func TestSessionProjectRoundTrips(t *testing.T) {
 	if err := s.AddSession(Session{Name: "x", ChannelID: "c", Project: "myproj"}); err != nil {
 		t.Fatalf("AddSession: %v", err)
 	}
-	reloaded, _ := LoadState(p)
+	reloaded, err := LoadState(p)
+	must(t, err)
 	got, ok := reloaded.FindSession("x")
 	if !ok || got.Project != "myproj" {
 		t.Fatalf("project not persisted: %+v", got)
@@ -267,7 +268,8 @@ func TestSessionLearningConfigRoundTrips(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("AddSession: %v", err)
 	}
-	reloaded, _ := LoadState(p)
+	reloaded, err := LoadState(p)
+	must(t, err)
 	got, ok := reloaded.FindSession("x")
 	if !ok || got.Extractor != "roblox" || got.Journal != ".neublox/calls.log" || got.ConsolidateEvery != 5 {
 		t.Fatalf("learning config not persisted: %+v", got)
@@ -301,9 +303,9 @@ func TestSetBackendTargetRewritesVendorCmdAndClearsResume(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	st.AddSession(Session{Name: "alpha", Vendor: "claude", Cmd: "claude --model claude-opus-4-8 --effort high", ResumeToken: "tok-abc"})
+	must(t, st.AddSession(Session{Name: "alpha", Vendor: "claude", Cmd: "claude --model claude-opus-4-8 --effort high", ResumeToken: "tok-abc"}))
 
-	if ok, err := st.SetBackendTarget("alpha", "codex", "codex --model gpt-5-codex", ""); err != nil || !ok {
+	if ok, setErr := st.SetBackendTarget("alpha", "codex", "codex --model gpt-5-codex", ""); setErr != nil || !ok {
 		t.Fatal("expected SetBackendTarget to report a match")
 	}
 
@@ -317,7 +319,9 @@ func TestSetBackendTargetRewritesVendorCmdAndClearsResume(t *testing.T) {
 	if got.ResumeToken != "" {
 		t.Fatalf("resume token must be cleared, got %q", got.ResumeToken)
 	}
-	if ok, _ := st.SetBackendTarget("ghost", "claude", "claude", ""); ok {
+	ok, err = st.SetBackendTarget("ghost", "claude", "claude", "")
+	must(t, err)
+	if ok {
 		t.Fatal("unknown session must return false")
 	}
 }
@@ -328,7 +332,7 @@ func TestSetBudgetWritesAllFieldsAndPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	st.AddSession(Session{Name: "alpha", CostCap: 5, PausedReason: "cost"})
+	must(t, st.AddSession(Session{Name: "alpha", CostCap: 5, PausedReason: "cost"}))
 
 	if err := st.SetBudget("alpha", 20, 1000, 30, 2000, ""); err != nil {
 		t.Fatalf("SetBudget: %v", err)
@@ -443,7 +447,7 @@ func TestRemoveRoleReportsWhetherItWasThere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.SetRole("chat:1234", "owner", ""); err != nil {
+	if _, err = st.SetRole("chat:1234", "owner", ""); err != nil {
 		t.Fatal(err)
 	}
 	removed, err := st.RemoveRole("chat:1234")
@@ -470,10 +474,10 @@ func TestRevokingTheLastRoleMakesTheNextGrantTheFirstAgain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.SetRole("chat:1234", "owner", ""); err != nil {
+	if _, err = st.SetRole("chat:1234", "owner", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.RemoveRole("chat:1234"); err != nil {
+	if _, err = st.RemoveRole("chat:1234"); err != nil {
 		t.Fatal(err)
 	}
 	first, err := st.SetRole("chat:5678", "owner", "")

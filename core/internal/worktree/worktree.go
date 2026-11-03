@@ -1,3 +1,4 @@
+// Package worktree manages the git worktrees that give each session its own working copy.
 package worktree
 
 import (
@@ -14,7 +15,18 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
 
+const (
+	subWorktree = "worktree"
+)
+
 const sessionsDir = ".herrscher-sessions"
+
+var (
+	errFlagBase     = errors.New("refusing a base ref that looks like a flag")
+	errUncommitted  = errors.New("uncommitted changes")
+	errNotAWorktree = errors.New("already exists and is not a git worktree")
+	errOtherBranch  = errors.New("worktree is on another branch")
+)
 
 // Worktreer manages git worktrees. It is repo-stateless: the repo root is passed
 // to each method, so one Worktreer serves every project in the workspace.
@@ -23,18 +35,17 @@ const sessionsDir = ".herrscher-sessions"
 // with an empty instanceID (legacy) under <repo>/.herrscher-sessions/<name> on
 // branch session/<name>, so multiple daemons sharing a repo never collide.
 type Worktreer struct {
-	ctx        context.Context
 	instanceID string
 }
 
 // NewWorktreer builds a repo-stateless Worktreer, namespaced by instanceID
 // ("" means legacy, non-namespaced layout).
-func NewWorktreer(ctx context.Context, instanceID string) *Worktreer {
-	return &Worktreer{ctx: ctx, instanceID: instanceID}
+func NewWorktreer(instanceID string) *Worktreer {
+	return &Worktreer{instanceID: instanceID}
 }
 
-func (w *Worktreer) isGitRepo(repo string) bool {
-	return exec.CommandContext(w.ctx, "git", "-C", repo, "rev-parse", "--git-dir").Run() == nil
+func (w *Worktreer) isGitRepo(ctx context.Context, repo string) bool {
+	return exec.CommandContext(ctx, "git", "-C", repo, "rev-parse", "--git-dir").Run() == nil
 }
 
 // Path returns the on-disk worktree directory for a logical session name inside
@@ -66,33 +77,36 @@ func branchFor(instanceID, name string) string {
 // worktree continues that tip without a merge; empty base keeps the default
 // (branch from HEAD). Returns ("", nil) when repo is not a git repo (caller
 // falls back to a shared session).
-func (w *Worktreer) Create(repo, name, base string) (string, error) {
-	if !w.isGitRepo(repo) {
+func (w *Worktreer) Create(ctx context.Context, repo, name, base string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if !w.isGitRepo(ctx, repo) {
 		return "", nil
 	}
 	if base != "" && strings.HasPrefix(base, "-") {
-		return "", fmt.Errorf("worktree: refusing base ref %q that looks like a flag", base)
+		return "", fmt.Errorf("%w: %q", errFlagBase, base)
 	}
-	p := w.Path(repo, name)
+	wtPath := w.Path(repo, name)
 	branch := w.Branch(name)
-	switch reusable, err := w.reusable(repo, p, branch); {
+	switch reusable, err := w.reusable(ctx, repo, wtPath, branch); {
 	case err != nil:
 		return "", err
 	case reusable:
-		return p, nil
+		return wtPath, nil
 	}
-	args := []string{"-C", repo, "worktree", "add", p, branch}
-	if exists, err := w.BranchExistsAt(repo, branch); err != nil || !exists {
-		args = []string{"-C", repo, "worktree", "add", p, "-b", branch}
+	args := []string{"-C", repo, subWorktree, "add", wtPath, branch}
+	if exists, err := w.BranchExistsAt(ctx, repo, branch); err != nil || !exists {
+		args = []string{"-C", repo, subWorktree, "add", wtPath, "-b", branch}
 		if base != "" {
 			args = append(args, base)
 		}
 	}
-	out, err := exec.CommandContext(w.ctx, "git", args...).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "git", args...).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("worktree add: %s", redact.Output(out))
+		return "", fmt.Errorf("worktree add: %s: %w", redact.Output(out), err)
 	}
-	return p, nil
+	return wtPath, nil
 }
 
 // PreExisting reports whether a worktree for this session is already on disk, so
@@ -100,20 +114,20 @@ func (w *Worktreer) Create(repo, name, base string) (string, error) {
 // state it cannot verify counts as pre-existing: the cost of being wrong that
 // way is a worktree left behind, and the cost of being wrong the other way is
 // deleting a session's uncommitted work.
-func (w *Worktreer) PreExisting(repo, name string) bool {
-	p := w.Path(repo, name)
-	if _, err := os.Lstat(p); err != nil {
+func (w *Worktreer) PreExisting(ctx context.Context, repo, name string) bool {
+	wtPath := w.Path(repo, name)
+	if _, err := os.Lstat(wtPath); err != nil {
 		return !os.IsNotExist(err)
 	}
-	registered, err := w.registeredWorktree(repo, p)
+	registered, err := w.registeredWorktree(ctx, repo, wtPath)
 	if err != nil {
 		return true
 	}
 	return registered
 }
 
-func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
-	registered, err := w.registeredWorktree(repo, path)
+func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bool, error) {
+	registered, err := w.registeredWorktree(ctx, repo, path)
 	if err != nil {
 		return false, err
 	}
@@ -126,14 +140,15 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 		}
 		if !missing {
 			return false, fmt.Errorf(
-				"%q already exists and is not a git worktree; move it aside to start this session", path)
+				"%q %w; move it aside to start this session", path, errNotAWorktree)
 		}
 		return false, nil
 	}
 
 	if missing {
-		if out, err := exec.CommandContext(w.ctx, "git", "-C", repo, "worktree", "prune").CombinedOutput(); err != nil {
-			return false, fmt.Errorf("worktree prune: %s", redact.Output(out))
+		out, pruneErr := exec.CommandContext(ctx, "git", "-C", repo, subWorktree, "prune").CombinedOutput()
+		if pruneErr != nil {
+			return false, fmt.Errorf("worktree prune: %s: %w", redact.Output(out), pruneErr)
 		}
 		return false, nil
 	}
@@ -141,19 +156,19 @@ func (w *Worktreer) reusable(repo, path, branch string) (bool, error) {
 		return false, fmt.Errorf("inspect %q: %w", path, statErr)
 	}
 
-	at, err := w.branchAt(path)
+	tip, err := w.branchAt(ctx, path)
 	if err != nil {
 		return false, err
 	}
-	if at != branch {
+	if tip != branch {
 		return false, fmt.Errorf(
-			"worktree %q is on branch %q, not %q; the session cannot take it over", path, at, branch)
+			"%w %q: it is on branch %q, not %q; the session cannot take it over", errOtherBranch, path, tip, branch)
 	}
 	return true, nil
 }
 
-func (w *Worktreer) branchAt(path string) (string, error) {
-	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "symbolic-ref", "--short", "HEAD").Output()
+func (w *Worktreer) branchAt(ctx context.Context, path string) (string, error) {
+	out, err := exec.CommandContext(ctx, "git", "-C", path, "symbolic-ref", "--short", "HEAD").Output()
 	if err != nil {
 		return "", fmt.Errorf("cannot read the branch checked out at %q (detached HEAD?): %w", path, err)
 	}
@@ -163,8 +178,8 @@ func (w *Worktreer) branchAt(path string) (string, error) {
 // IsCleanAt reports whether the worktree at path has no uncommitted changes. An
 // error means the state can't be verified (missing dir, not a git repo), the
 // caller must treat that as "not safe", never as clean.
-func (w *Worktreer) IsCleanAt(path string) (bool, error) {
-	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "status", "--porcelain").Output()
+func (w *Worktreer) IsCleanAt(ctx context.Context, path string) (bool, error) {
+	out, err := exec.CommandContext(ctx, "git", "-C", path, "status", "--porcelain").Output()
 	if err != nil {
 		return false, fmt.Errorf("cannot verify clean state of %q: %w", path, err)
 	}
@@ -177,8 +192,8 @@ func (w *Worktreer) IsCleanAt(path string) (bool, error) {
 // the normal "free to use" case, not an error. Any other failure (e.g. path
 // isn't a git repo at all, exit 128) is reported as an error so callers never
 // mistake "couldn't verify" for "free".
-func (w *Worktreer) BranchExistsAt(path, branch string) (bool, error) {
-	err := exec.CommandContext(w.ctx, "git", "-C", path, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run()
+func (w *Worktreer) BranchExistsAt(ctx context.Context, path, branch string) (bool, error) {
+	err := exec.CommandContext(ctx, "git", "-C", path, "show-ref", "--verify", "--quiet", "refs/heads/"+branch).Run()
 	if err == nil {
 		return true, nil
 	}
@@ -193,8 +208,11 @@ func (w *Worktreer) BranchExistsAt(path, branch string) (bool, error) {
 type MergeOutcome int
 
 const (
+	// MergeApplied reports that the merge was applied.
 	MergeApplied MergeOutcome = iota
+	// MergeUpToDate reports that the branch already contained the merged content.
 	MergeUpToDate
+	// MergeConflict reports that the merge stopped on conflicting files.
 	MergeConflict
 )
 
@@ -205,14 +223,14 @@ const (
 // failure is returned as an error (with a best-effort abort first, so a
 // half-started merge never lingers); when err != nil the MergeOutcome is
 // undefined and callers must branch on err first.
-func (w *Worktreer) MergeInto(leadPath, branch string) (MergeOutcome, []string, error) {
-	pre, err := w.headAt(leadPath)
+func (w *Worktreer) MergeInto(ctx context.Context, leadPath, branch string) (MergeOutcome, []string, error) {
+	pre, err := w.headAt(ctx, leadPath)
 	if err != nil {
 		return MergeConflict, nil, fmt.Errorf("merge: cannot read HEAD of %q: %w", leadPath, err)
 	}
-	out, mergeErr := exec.CommandContext(w.ctx, "git", "-C", leadPath, "merge", "--no-edit", branch).CombinedOutput()
+	out, mergeErr := exec.CommandContext(ctx, "git", "-C", leadPath, "merge", "--no-edit", branch).CombinedOutput()
 	if mergeErr == nil {
-		post, err := w.headAt(leadPath)
+		post, err := w.headAt(ctx, leadPath)
 		if err != nil {
 			return MergeApplied, nil, fmt.Errorf("merge: cannot read HEAD of %q after merge: %w", leadPath, err)
 		}
@@ -221,24 +239,24 @@ func (w *Worktreer) MergeInto(leadPath, branch string) (MergeOutcome, []string, 
 		}
 		return MergeApplied, nil, nil
 	}
-	conflicts := w.conflictFiles(leadPath)
-	_ = exec.CommandContext(w.ctx, "git", "-C", leadPath, "merge", "--abort").Run()
+	conflicts := w.conflictFiles(ctx, leadPath)
+	logFailure("merge --abort", exec.CommandContext(ctx, "git", "-C", leadPath, "merge", "--abort").Run())
 	if len(conflicts) > 0 {
 		return MergeConflict, conflicts, nil
 	}
-	return MergeConflict, nil, fmt.Errorf("merge %s into %q: %s", branch, leadPath, redact.Output(out))
+	return MergeConflict, nil, fmt.Errorf("merge %s into %q: %s: %w", branch, leadPath, redact.Output(out), mergeErr)
 }
 
-func (w *Worktreer) headAt(path string) (string, error) {
-	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "rev-parse", "HEAD").Output()
+func (w *Worktreer) headAt(ctx context.Context, path string) (string, error) {
+	out, err := exec.CommandContext(ctx, "git", "-C", path, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (w *Worktreer) conflictFiles(path string) []string {
-	out, err := exec.CommandContext(w.ctx, "git", "-C", path, "diff", "--name-only", "--diff-filter=U").Output()
+func (w *Worktreer) conflictFiles(ctx context.Context, path string) []string {
+	out, err := exec.CommandContext(ctx, "git", "-C", path, "diff", "--name-only", "--diff-filter=U").Output()
 	if err != nil {
 		return nil
 	}
@@ -251,28 +269,28 @@ func (w *Worktreer) conflictFiles(path string) []string {
 
 // Remove removes the worktree. If it has uncommitted changes and !force, it
 // refuses with the status. The branch session/<name> is always left intact.
-func (w *Worktreer) Remove(repo, name string, force bool) error {
-	p := w.Path(repo, name)
+func (w *Worktreer) Remove(ctx context.Context, repo, name string, force bool) error {
+	wtPath := w.Path(repo, name)
 	if !force {
-		clean, err := w.IsCleanAt(p)
+		clean, err := w.IsCleanAt(ctx, wtPath)
 		if err != nil {
-			return fmt.Errorf("worktree %q: %v; close with force:true to remove anyway", name, err)
+			return fmt.Errorf("worktree %q: %w; close with force:true to remove anyway", name, err)
 		}
 		if !clean {
-			return fmt.Errorf("worktree %q has uncommitted changes", name)
+			return fmt.Errorf("worktree %q has %w", name, errUncommitted)
 		}
 	}
-	args := []string{"-C", repo, "worktree", "remove", p}
+	args := []string{"-C", repo, subWorktree, "remove", wtPath}
 	if force {
 		args = append(args, "--force")
 	}
-	out, err := exec.CommandContext(w.ctx, "git", args...).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "git", args...).CombinedOutput()
 	if err != nil {
-		removeErr := fmt.Errorf("worktree remove: %s", redact.Output(out))
+		removeErr := fmt.Errorf("worktree remove: %s: %w", redact.Output(out), err)
 		if force {
-			recovered, recoverErr := w.recoverEmptyOrphan(repo, name)
+			recovered, recoverErr := w.recoverEmptyOrphan(ctx, repo, name)
 			if recoverErr != nil {
-				return fmt.Errorf("%v; empty-orphan recovery: %w", removeErr, recoverErr)
+				return fmt.Errorf("%w; empty-orphan recovery: %w", removeErr, recoverErr)
 			}
 			if recovered {
 				return nil
@@ -283,12 +301,12 @@ func (w *Worktreer) Remove(repo, name string, force bool) error {
 	return nil
 }
 
-func (w *Worktreer) recoverEmptyOrphan(repo, name string) (bool, error) {
+func (w *Worktreer) recoverEmptyOrphan(ctx context.Context, repo, name string) (bool, error) {
 	path, ok := w.validSessionChild(repo, name)
 	if !ok {
 		return false, nil
 	}
-	registered, err := w.registeredWorktree(repo, path)
+	registered, err := w.registeredWorktree(ctx, repo, path)
 	if err != nil {
 		return false, err
 	}
@@ -361,13 +379,13 @@ func validPathComponent(value string) bool {
 		filepath.Base(value) == value
 }
 
-func (w *Worktreer) registeredWorktree(repo, target string) (bool, error) {
+func (w *Worktreer) registeredWorktree(ctx context.Context, repo, target string) (bool, error) {
 	out, err := exec.CommandContext(
-		w.ctx,
-		"git", "-C", repo, "worktree", "list", "--porcelain", "-z",
+		ctx,
+		"git", "-C", repo, subWorktree, "list", "--porcelain", "-z",
 	).CombinedOutput()
 	if err != nil {
-		return false, fmt.Errorf("list registered worktrees: %s", redact.Output(out))
+		return false, fmt.Errorf("list registered worktrees: %s: %w", redact.Output(out), err)
 	}
 	rawTarget := target
 	target, err = canonicalPathForComparison(target)
@@ -415,10 +433,10 @@ func canonicalPathForComparison(path string) (string, error) {
 	}
 }
 
-func samePath(a, b string) bool {
-	a, b = filepath.Clean(a), filepath.Clean(b)
+func samePath(other, right string) bool {
+	other, right = filepath.Clean(other), filepath.Clean(right)
 	if runtime.GOOS == "windows" {
-		return strings.EqualFold(a, b)
+		return strings.EqualFold(other, right)
 	}
-	return a == b
+	return other == right
 }

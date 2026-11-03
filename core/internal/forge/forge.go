@@ -5,6 +5,7 @@ package forge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +15,16 @@ import (
 	"strings"
 
 	"github.com/Herrscherd/herrscher/core/internal/redact"
+)
+
+const (
+	subRepo  = "repo"
+	subClone = "clone"
+)
+
+var (
+	errNoForgeCLI = errors.New("no gh or glab installed")
+	errRepoSpec   = errors.New("invalid repo spec")
 )
 
 // Repo is one remote repository discovered via a forge CLI.
@@ -53,22 +64,22 @@ type Client struct {
 func New() *Client { return &Client{r: execRunner{}} }
 
 // Available reports which forge CLIs are installed.
-func (c *Client) Available() (github, gitlab bool) {
+func (c *Client) Available() (bool, bool) {
 	return c.r.look("gh") == nil, c.r.look("glab") == nil
 }
 
 // List returns repos from every installed forge, labeled by Forge.
 func (c *Client) List(ctx context.Context) ([]Repo, error) {
-	gh, gl := c.Available()
+	githubOK, gitlabOK := c.Available()
 	var out []Repo
-	if gh {
+	if githubOK {
 		repos, err := c.listGitHub(ctx)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, repos...)
 	}
-	if gl {
+	if gitlabOK {
 		repos, err := c.listGitLab(ctx)
 		if err != nil {
 			return nil, err
@@ -92,24 +103,24 @@ func (c *Client) listGitHub(ctx context.Context) ([]Repo, error) {
 		if err != nil {
 			continue
 		}
-		for _, r := range repos {
-			if _, dup := seen[r.FullName]; dup {
+		for _, repo := range repos {
+			if _, dup := seen[repo.FullName]; dup {
 				continue
 			}
-			seen[r.FullName] = struct{}{}
-			out = append(out, r)
+			seen[repo.FullName] = struct{}{}
+			out = append(out, repo)
 		}
 	}
 	return out, nil
 }
 
 func (c *Client) ghRepoList(ctx context.Context, owner ...string) ([]Repo, error) {
-	args := []string{"repo", "list"}
+	args := []string{subRepo, "list"}
 	args = append(args, owner...)
 	args = append(args, "--json", "nameWithOwner,sshUrl,description", "--limit", "100")
 	raw, err := c.r.run(ctx, "", nil, "gh", args...)
 	if err != nil {
-		return nil, fmt.Errorf("gh repo list: %s", redact.Output(raw))
+		return nil, fmt.Errorf("gh repo list: %s: %w", redact.Output(raw), err)
 	}
 	var items []struct {
 		NameWithOwner string `json:"nameWithOwner"`
@@ -141,9 +152,9 @@ func (c *Client) ghOrgs(ctx context.Context) []string {
 }
 
 func (c *Client) listGitLab(ctx context.Context) ([]Repo, error) {
-	raw, err := c.r.run(ctx, "", nil, "glab", "repo", "list", "--output", "json")
+	raw, err := c.r.run(ctx, "", nil, "glab", subRepo, "list", "--output", "json")
 	if err != nil {
-		return nil, fmt.Errorf("glab repo list: %s", redact.Output(raw))
+		return nil, fmt.Errorf("glab repo list: %s: %w", redact.Output(raw), err)
 	}
 	var items []struct {
 		PathWithNamespace string `json:"path_with_namespace"`
@@ -172,27 +183,27 @@ func (c *Client) Clone(ctx context.Context, spec, workspace string) (string, err
 	}
 	dir := filepath.Join(workspace, base)
 
-	gh, gl := c.Available()
+	githubOK, gitlabOK := c.Available()
 	var name string
 	var args []string
 	var env []string
 	switch {
 	case isURL:
-		name, args = "git", []string{"clone", "--", spec, dir}
+		name, args = "git", []string{subClone, "--", spec, dir}
 		env = gitCloneAuthEnv()
-	case gh:
-		name, args = "gh", []string{"repo", "clone", spec, "--", dir}
-	case gl:
-		name, args = "glab", []string{"repo", "clone", "--", spec, dir}
+	case githubOK:
+		name, args = "gh", []string{subRepo, subClone, spec, "--", dir}
+	case gitlabOK:
+		name, args = "glab", []string{subRepo, subClone, "--", spec, dir}
 	default:
-		return "", fmt.Errorf("no gh/glab installed to clone %q; pass a full git URL instead", spec)
+		return "", fmt.Errorf("%w to clone %q; pass a full git URL instead", errNoForgeCLI, spec)
 	}
 	if out, err := c.r.run(ctx, workspace, env, name, args...); err != nil {
 		msg := strings.TrimSpace(string(out))
 		if strings.Contains(msg, "already exists") {
 			return dir, nil
 		}
-		return "", fmt.Errorf("%s clone: %s", name, redact.Output(out))
+		return "", fmt.Errorf("%s clone: %s: %w", name, redact.Output(out), err)
 	}
 	return dir, nil
 }
@@ -228,26 +239,26 @@ func AskpassReply(prompt string) string {
 	return EnvToken()
 }
 
-func parseSpec(spec string) (base string, isURL bool, err error) {
+func parseSpec(spec string) (string, bool, error) {
 	if spec == "" {
-		return "", false, fmt.Errorf("empty repo spec")
+		return "", false, fmt.Errorf("%w: empty", errRepoSpec)
 	}
 	if strings.ContainsFunc(spec, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
-		return "", false, fmt.Errorf("invalid repo spec: control character")
+		return "", false, fmt.Errorf("%w: control character", errRepoSpec)
 	}
 	if strings.HasPrefix(spec, "https://") || strings.HasPrefix(spec, "git@") || strings.HasPrefix(spec, "ssh://") {
-		b := path.Base(strings.TrimSuffix(spec, ".git"))
-		if b == "" || b == "." || b == "/" || strings.Contains(b, "..") || strings.HasPrefix(b, "-") {
-			return "", false, fmt.Errorf("cannot derive project name from %q", spec)
+		base := path.Base(strings.TrimSuffix(spec, ".git"))
+		if base == "" || base == "." || base == "/" || strings.Contains(base, "..") || strings.HasPrefix(base, "-") {
+			return "", false, fmt.Errorf("%w: cannot derive project name from %q", errRepoSpec, spec)
 		}
-		return b, true, nil
+		return base, true, nil
 	}
 	if !specRe.MatchString(spec) {
-		return "", false, fmt.Errorf("invalid repo spec %q: use owner/name or a full git URL", spec)
+		return "", false, fmt.Errorf("%w %q: use owner/name or a full git URL", errRepoSpec, spec)
 	}
 	for _, seg := range strings.Split(spec, "/") {
 		if seg == "" || seg == "." || seg == ".." || strings.HasPrefix(seg, "-") {
-			return "", false, fmt.Errorf("invalid repo spec %q", spec)
+			return "", false, fmt.Errorf("%w %q", errRepoSpec, spec)
 		}
 	}
 	return path.Base(spec), false, nil

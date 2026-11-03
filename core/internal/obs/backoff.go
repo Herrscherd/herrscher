@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+const (
+	restartBackoffMax    = 30 * time.Second
+	restartBackoffFactor = 2
+	restartBackoffJitter = 0.2
+	restartBackoffReset  = time.Minute
+)
+
 // Backoff computes restart delays that grow geometrically (base·factorⁿ, capped
 // at Max) with full jitter, and reset to base after a run that lasted at least
 // Reset, so a process that ran healthily restarts fast while a tight crash loop
@@ -27,7 +34,7 @@ type Backoff struct {
 // 30s, ±20% jitter, resetting to base after a 60s healthy run. The supervisor
 // and the remote plugin-host loop both restart on this schedule.
 func RestartBackoff() *Backoff {
-	return &Backoff{Base: time.Second, Max: 30 * time.Second, Factor: 2, Jitter: 0.2, Reset: time.Minute}
+	return &Backoff{Base: time.Second, Max: restartBackoffMax, Factor: restartBackoffFactor, Jitter: restartBackoffJitter, Reset: restartBackoffReset}
 }
 
 // Next returns the delay before the next restart, given how long the attempt

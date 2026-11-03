@@ -4,11 +4,17 @@
 package instanceid
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 )
 
-var idRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,15}$`)
+const maxOwnerSuffix = 8
+
+var (
+	idRe         = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,15}$`)
+	errInvalidID = errors.New("invalid instance id")
+)
 
 // Validate reports whether id is a well-formed instanceID slug.
 func Validate(id string) bool {
@@ -23,8 +29,8 @@ func Slugify(owner string) string {
 	if owner == "" {
 		return ""
 	}
-	if len(owner) > 8 {
-		owner = owner[len(owner)-8:]
+	if len(owner) > maxOwnerSuffix {
+		owner = owner[len(owner)-maxOwnerSuffix:]
 	}
 	return "u" + owner
 }
@@ -37,13 +43,13 @@ func Slugify(owner string) string {
 func Resolve(explicit, owner string) (string, error) {
 	if explicit != "" {
 		if !Validate(explicit) {
-			return "", fmt.Errorf("invalid HERRSCHER_INSTANCE_ID %q: want %s", explicit, idRe.String())
+			return "", fmt.Errorf("%w: HERRSCHER_INSTANCE_ID %q, want %s", errInvalidID, explicit, idRe.String())
 		}
 		return explicit, nil
 	}
 	derived := Slugify(owner)
 	if derived != "" && !Validate(derived) {
-		return "", fmt.Errorf("invalid HERRSCHER_OWNER_ID %q: derived id %q is not a valid slug", owner, derived)
+		return "", fmt.Errorf("%w: HERRSCHER_OWNER_ID %q derives %q", errInvalidID, owner, derived)
 	}
 	return derived, nil
 }

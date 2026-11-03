@@ -10,17 +10,17 @@ import (
 
 func TestCreateReusesTheSessionsOwnWorktree(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "inst")
+	w := NewWorktreer("inst")
 
-	first, err := w.Create(repo, "ch-1", "")
+	first, err := w.Create(context.Background(), repo, "ch-1", "")
 	if err != nil {
 		t.Fatalf("first create: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(first, "wip.txt"), []byte("half a thought"), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(first, "wip.txt"), []byte("half a thought"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	second, err := w.Create(repo, "ch-1", "")
+	second, err := w.Create(context.Background(), repo, "ch-1", "")
 	if err != nil {
 		t.Fatalf("the session must be able to come back to its own worktree: %v", err)
 	}
@@ -34,17 +34,17 @@ func TestCreateReusesTheSessionsOwnWorktree(t *testing.T) {
 
 func TestCreateRecoversFromAStaleRegistration(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "inst")
+	w := NewWorktreer("inst")
 
-	path, err := w.Create(repo, "ch-1", "")
+	path, err := w.Create(context.Background(), repo, "ch-1", "")
 	if err != nil {
 		t.Fatalf("first create: %v", err)
 	}
-	if err := os.RemoveAll(path); err != nil {
+	if err = os.RemoveAll(path); err != nil {
 		t.Fatal(err)
 	}
 
-	again, err := w.Create(repo, "ch-1", "")
+	again, err := w.Create(context.Background(), repo, "ch-1", "")
 	if err != nil {
 		t.Fatalf("a registration for a directory that is gone must be pruned, not fatal: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestCreateRecoversFromAStaleRegistration(t *testing.T) {
 
 func TestCreateRefusesAForeignDirectory(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "inst")
+	w := NewWorktreer("inst")
 
 	path := w.Path(repo, "ch-1")
 	if err := os.MkdirAll(path, 0o755); err != nil {
@@ -68,7 +68,7 @@ func TestCreateRefusesAForeignDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := w.Create(repo, "ch-1", ""); err == nil {
+	if _, err := w.Create(context.Background(), repo, "ch-1", ""); err == nil {
 		t.Fatal("a foreign directory in the way must be reported, not adopted")
 	} else if !strings.Contains(err.Error(), "not a git worktree") {
 		t.Fatalf("the error must say what is actually wrong: %v", err)
@@ -80,12 +80,12 @@ func TestCreateRefusesAForeignDirectory(t *testing.T) {
 
 func TestCreateRefusesAWorktreeOnAnotherBranch(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "inst")
+	w := NewWorktreer("inst")
 
 	path := w.Path(repo, "ch-1")
 	gitAt(t, repo, "worktree", "add", path, "-b", "somebody-elses")
 
-	_, err := w.Create(repo, "ch-1", "")
+	_, err := w.Create(context.Background(), repo, "ch-1", "")
 	if err == nil {
 		t.Fatal("a worktree on another branch must not be taken over")
 	}
@@ -96,15 +96,15 @@ func TestCreateRefusesAWorktreeOnAnotherBranch(t *testing.T) {
 
 func TestPreExistingDistinguishesReuseFromCreation(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "inst")
+	w := NewWorktreer("inst")
 
-	if w.PreExisting(repo, "ch-1") {
+	if w.PreExisting(context.Background(), repo, "ch-1") {
 		t.Fatal("a session with no worktree yet must not read as pre-existing")
 	}
-	if _, err := w.Create(repo, "ch-1", ""); err != nil {
+	if _, err := w.Create(context.Background(), repo, "ch-1", ""); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if !w.PreExisting(repo, "ch-1") {
+	if !w.PreExisting(context.Background(), repo, "ch-1") {
 		t.Fatal("a worktree already on disk must read as pre-existing")
 	}
 }

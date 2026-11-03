@@ -44,29 +44,31 @@ const (
 // daemon's single writer never races a read; a missing parent is created. When
 // the file crosses transcriptMaxBytes it is compacted to its newest entries, so
 // scrollback stays cheap and the transcript is bounded.
-func AppendTranscript(path string, e TranscriptEntry) error {
+func AppendTranscript(path string, entry TranscriptEntry) error {
 	if path == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	file, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, privateFileMode)
 	if err != nil {
 		return err
 	}
-	b, err := json.Marshal(e)
+	payload, err := json.Marshal(entry)
 	if err != nil {
-		f.Close()
+		closeLogged(file)
 		return err
 	}
-	if _, err := f.Write(append(b, '\n')); err != nil {
-		f.Close()
+	if _, err := file.Write(append(payload, '\n')); err != nil {
+		closeLogged(file)
 		return err
 	}
-	fi, statErr := f.Stat()
-	f.Close()
-	if statErr == nil && fi.Size() > transcriptMaxBytes {
+	info, statErr := file.Stat()
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if statErr == nil && info.Size() > transcriptMaxBytes {
 		compactTranscript(path)
 	}
 	return nil
@@ -79,41 +81,45 @@ func compactTranscript(path string) {
 	}
 	start := len(all) - 1
 	total := 0
-	for i := len(all) - 1; i >= 0; i-- {
-		b, err := json.Marshal(all[i])
+	for idx := len(all) - 1; idx >= 0; idx-- {
+		payload, err := json.Marshal(all[idx])
 		if err != nil {
 			continue
 		}
-		sz := len(b) + 1
-		if i < len(all)-1 && total+sz > transcriptKeepBytes {
+		size := len(payload) + 1
+		if idx < len(all)-1 && total+size > transcriptKeepBytes {
 			break
 		}
-		total += sz
-		start = i
+		total += size
+		start = idx
 	}
 	tmp := path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	file, err := os.OpenFile(filepath.Clean(tmp), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, privateFileMode)
 	if err != nil {
 		return
 	}
-	w := bufio.NewWriter(f)
+	writer := bufio.NewWriter(file)
 	for _, e := range all[start:] {
-		b, err := json.Marshal(e)
+		payload, err := json.Marshal(e)
 		if err != nil {
 			continue
 		}
-		_, _ = w.Write(append(b, '\n'))
+		if _, err := writer.Write(append(payload, '\n')); err != nil {
+			closeLogged(file)
+			removeLogged(tmp)
+			return
+		}
 	}
-	if err := w.Flush(); err != nil {
-		f.Close()
-		_ = os.Remove(tmp)
+	if err := writer.Flush(); err != nil {
+		closeLogged(file)
+		removeLogged(tmp)
 		return
 	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
+	if err := file.Close(); err != nil {
+		removeLogged(tmp)
 		return
 	}
-	_ = os.Rename(tmp, path)
+	logFailure("rename", os.Rename(tmp, path))
 }
 
 // ReadTranscript returns entries in file order; when limit > 0, only the last
@@ -124,19 +130,19 @@ func ReadTranscript(path string, limit int) []TranscriptEntry {
 	if path == "" {
 		return nil
 	}
-	f, err := os.Open(path)
+	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
+	defer closeLogged(file)
 	var out []TranscriptEntry
-	r := bufio.NewReader(f)
+	reader := bufio.NewReader(file)
 	for {
-		line, readErr := r.ReadBytes('\n')
+		line, readErr := reader.ReadBytes('\n')
 		if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 {
-			var e TranscriptEntry
-			if json.Unmarshal(trimmed, &e) == nil {
-				out = append(out, e)
+			var entry TranscriptEntry
+			if json.Unmarshal(trimmed, &entry) == nil {
+				out = append(out, entry)
 			}
 		}
 		if readErr != nil {
@@ -166,16 +172,16 @@ const transcriptTailBytes = 64 * 1024
 func ReadTranscriptSummary(path string) TranscriptSummary {
 	lines := transcriptTailLines(path)
 	var sum TranscriptSummary
-	for i := len(lines) - 1; i >= 0; i-- {
-		var e TranscriptEntry
-		if json.Unmarshal(lines[i], &e) != nil {
+	for idx := len(lines) - 1; idx >= 0; idx-- {
+		var entry TranscriptEntry
+		if json.Unmarshal(lines[idx], &entry) != nil {
 			continue
 		}
 		if sum.LastTs == "" {
-			sum.LastTs = e.Ts
+			sum.LastTs = entry.Ts
 		}
 		if sum.ContextTokens == 0 {
-			sum.ContextTokens = contextTokens(e)
+			sum.ContextTokens = contextTokens(entry)
 		}
 		if sum.LastTs != "" && sum.ContextTokens != 0 {
 			return sum
@@ -205,21 +211,21 @@ func transcriptTailLines(path string) [][]byte {
 	if path == "" {
 		return nil
 	}
-	f, err := os.Open(path)
+	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
-	fi, err := f.Stat()
-	if err != nil || fi.Size() == 0 {
+	defer closeLogged(file)
+	info, err := file.Stat()
+	if err != nil || info.Size() == 0 {
 		return nil
 	}
-	start := fi.Size() - transcriptTailBytes
+	start := info.Size() - transcriptTailBytes
 	if start < 0 {
 		start = 0
 	}
-	buf := make([]byte, fi.Size()-start)
-	if _, err := f.ReadAt(buf, start); err != nil && err != io.EOF {
+	buf := make([]byte, info.Size()-start)
+	if _, err := file.ReadAt(buf, start); err != nil && err != io.EOF {
 		return nil
 	}
 	var out [][]byte
@@ -241,7 +247,7 @@ func MoveSessionFile(oldPath, newPath string) error {
 	if _, err := os.Stat(oldPath); os.IsNotExist(err) {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(newPath), privateDirMode); err != nil {
 		return err
 	}
 	return os.Rename(oldPath, newPath)

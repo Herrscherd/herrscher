@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -11,28 +10,56 @@ import (
 
 const gatewayCloseTimeout = 10 * time.Second
 
-func closeGateways(ctx context.Context, gateways []contracts.Gateway, log *slog.Logger) {
+type gatewayCloseOutcome struct {
+	kind string
+	err  error
+}
+
+// CloseGateways closes every GatewayCloser within gatewayCloseTimeout and logs each failure.
+func CloseGateways(ctx context.Context, gateways []contracts.Gateway, log *slog.Logger) {
 	closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gatewayCloseTimeout)
 	defer cancel()
-	var closing sync.WaitGroup
+	outcomes := make(chan gatewayCloseOutcome, len(gateways))
+	pending := make(map[string]int)
 	for _, gateway := range gateways {
 		closer, ok := gateway.(contracts.GatewayCloser)
 		if !ok {
 			continue
 		}
-		closing.Go(func() {
-			if err := closer.Close(closeCtx); err != nil {
-				log.Error("close gateway", "err", err)
-			}
-		})
+		kind := gateway.Manifest().Kind
+		pending[kind]++
+		go func() {
+			outcomes <- gatewayCloseOutcome{kind: kind, err: closer.Close(closeCtx)}
+		}()
 	}
-	closing.Wait()
+	for remaining := sumPending(pending); remaining > 0; remaining-- {
+		select {
+		case outcome := <-outcomes:
+			pending[outcome.kind]--
+			if outcome.err != nil {
+				log.Error("close gateway", "kind", outcome.kind, "err", outcome.err)
+			}
+		case <-closeCtx.Done():
+			log.Error("gateways still closing at the deadline; abandoning them", "kinds", stuckKinds(pending))
+			return
+		}
+	}
 }
 
-func gatewaysOf(deps []Deps) []contracts.Gateway {
-	gateways := make([]contracts.Gateway, 0, len(deps))
-	for _, dep := range deps {
-		gateways = append(gateways, dep.Gateway)
+func sumPending(pending map[string]int) int {
+	total := 0
+	for _, n := range pending {
+		total += n
 	}
-	return gateways
+	return total
+}
+
+func stuckKinds(pending map[string]int) []string {
+	var kinds []string
+	for kind, n := range pending {
+		for range n {
+			kinds = append(kinds, kind)
+		}
+	}
+	return kinds
 }

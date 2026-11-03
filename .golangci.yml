@@ -278,6 +278,9 @@ linters:
       - path: ^core/host/backendenv\.go$
         linters: [gochecknoglobals]
         text: "capturedGateway"
+      - path: ^core/host/announcekey\.go$
+        linters: [gochecknoglobals]
+        text: "capturedAnnounce"
 
 formatters:
   enable:

@@ -120,6 +120,7 @@ func runPluginHost(ctx context.Context, args []string) error {
 		return fmt.Errorf("plugin-host: %w", err)
 	}
 
+	host.CaptureAnnounceKey()
 	announceKey, err := announceKeyFromEnv()
 	if err != nil {
 		return fmt.Errorf("plugin-host: %w", err)

@@ -20,7 +20,7 @@ var (
 )
 
 func announceKeyFromEnv() (transport.AnnounceKey, error) {
-	secret := strings.TrimSpace(os.Getenv("HERRSCHER_ANNOUNCE_KEY"))
+	secret := strings.TrimSpace(host.AnnounceKeySecret())
 	if secret == "" {
 		return transport.AnnounceKey{}, errAnnounceKeyUnset
 	}

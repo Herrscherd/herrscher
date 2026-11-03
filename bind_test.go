@@ -42,7 +42,7 @@ func (t talker) RunForeground(context.Context, context.CancelFunc) error { retur
 func TestContributedCommandsSurviveDegrading(t *testing.T) {
 	sets := []host.Deps{{Gateway: talker{}}}
 
-	gws, fg, extra, err := bindGateways(sets)
+	gws, _, fg, extra, err := bindGateways(sets)
 	if err != nil {
 		t.Fatalf("bind: %v", err)
 	}

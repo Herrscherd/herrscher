@@ -107,23 +107,24 @@ type entry struct {
 }
 
 type tab struct {
-	channel      string
-	label        string
-	entries      []entry
-	unread       bool
-	busy         bool
-	streamed     bool
-	lastCost     float64
-	disconnected bool
-	tokens       int
-	startedAt    time.Time
-	costTotal    float64
-	ctxTokens    int
-	ctxMeasured  bool
-	openedAt     time.Time
-	nextEntryID  uint64
-	todos        []contracts.TodoItem
-	agents       []liveAgent
+	channel            string
+	label              string
+	entries            []entry
+	unread             bool
+	busy               bool
+	interruptRequested bool
+	streamed           bool
+	lastCost           float64
+	disconnected       bool
+	tokens             int
+	startedAt          time.Time
+	costTotal          float64
+	ctxTokens          int
+	ctxMeasured        bool
+	openedAt           time.Time
+	nextEntryID        uint64
+	todos              []contracts.TodoItem
+	agents             []liveAgent
 }
 
 type liveAgent struct {
@@ -915,12 +916,14 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.applySubagent(event.Subagent)
 	case "reset":
 		target.busy = false
+		target.interruptRequested = false
 		target.streamed = false
 		target.ctxMeasured = false
 		target.endStream()
 		target.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
 	case "abandoned":
 		target.busy = false
+		target.interruptRequested = false
 		target.streamed = false
 		target.ctxMeasured = false
 		target.disconnected = true
@@ -965,6 +968,7 @@ func (tb *tab) appendReply(event contracts.Event) {
 	}
 	if event.Done {
 		tb.busy = false
+		tb.interruptRequested = false
 		tb.streamed = false
 		tb.ctxMeasured = false
 		tb.clearPanels()
@@ -1508,7 +1512,7 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		return tea.Quit, true
 	case tea.KeyCtrlC:
-		return tea.Quit, true
+		return m.interruptOrQuit()
 	case tea.KeyTab:
 		m.switchTab(1)
 	case tea.KeyShiftTab:
@@ -1555,6 +1559,18 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleRunesKey(msg)
 	default:
 		return nil, false
+	}
+	return nil, true
+}
+
+func (m *model) interruptOrQuit() (tea.Cmd, bool) {
+	turn := m.tabs[m.active]
+	if turn == nil || !turn.busy || turn.interruptRequested {
+		return tea.Quit, true
+	}
+	turn.interruptRequested = true
+	if name := m.sessionName(m.active); name != "" {
+		m.tm.Interrupt(name)
 	}
 	return nil, true
 }

@@ -25,6 +25,8 @@ import (
 
 var errNoGateway = errors.New("no gateway built")
 
+const hubStopTimeout = 15 * time.Second
+
 func or(first, second string) string {
 	if first != "" {
 		return first
@@ -71,7 +73,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 
 	installShippedSkills(ctx)
 
-	gws, foreground, extra, err := startGateways(ctx)
+	gws, closers, foreground, extra, err := startGateways(ctx)
 	if err != nil {
 		return err
 	}
@@ -93,7 +95,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	}
 
 	openOnForeground(open, foreground)
-	return runHubForeground(ctx, *statePath, gws, foreground, opts)
+	return runHubForeground(ctx, *statePath, gws, closers, foreground, opts)
 }
 
 func openOnForeground(open *openWindow, foreground contracts.Foreground) {
@@ -124,10 +126,10 @@ func lockOrAttach(ctx context.Context, statePath, instanceID string, open *openW
 	return nil, false, err
 }
 
-func startGateways(ctx context.Context) ([]host.Deps, contracts.Foreground, []contracts.Cmd, error) {
+func startGateways(ctx context.Context) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
 	hub, err := host.BuildHub(ctx, contracts.Default.Gateways(), os.Getenv)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	for _, f := range hub.Unconfigured() {
 		fmt.Fprintln(os.Stderr, "herrscher: gateway not configured, skipping: "+f)
@@ -149,9 +151,9 @@ func startGateways(ctx context.Context) ([]host.Deps, contracts.Foreground, []co
 	return bindGateways(raw)
 }
 
-func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, foreground contracts.Foreground, opts host.Options) error {
+func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, closers []contracts.Gateway, foreground contracts.Foreground, opts host.Options) error {
 	if foreground == nil || !term.IsTerminal(int(os.Stdout.Fd())) {
-		return host.RunHub(ctx, gws, opts)
+		return runHub(ctx, gws, closers, opts)
 	}
 	if restore, rerr := redirectStderr(filepath.Join(filepath.Dir(statePath), "serve.log")); rerr == nil {
 		defer func() {
@@ -162,29 +164,50 @@ func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, fo
 	}
 	hubCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	go func() {
-		if err := host.RunHub(hubCtx, gws, opts); err != nil && !errors.Is(err, context.Canceled) {
-			slog.Error("hub stopped", "err", err)
-		}
-	}()
-	return foreground.RunForeground(hubCtx, cancel)
+	return superviseForeground(hubCtx, cancel, foreground, func(ctx context.Context) error {
+		return runHub(ctx, gws, closers, opts)
+	})
 }
 
-func bindGateways(sets []host.Deps) ([]host.Deps, contracts.Foreground, []contracts.Cmd, error) {
+func superviseForeground(ctx context.Context, cancel context.CancelFunc, foreground contracts.Foreground, hub func(context.Context) error) error {
+	hubDone := make(chan error, 1)
+	go func() { hubDone <- hub(ctx) }()
+	foregroundErr := foreground.RunForeground(ctx, cancel)
+	cancel()
+	select {
+	case err := <-hubDone:
+		if err != nil && !errors.Is(err, context.Canceled) {
+			slog.Error("hub stopped", "err", err)
+		}
+	case <-time.After(hubStopTimeout):
+		slog.Error("hub did not stop in time", "timeout", hubStopTimeout)
+	}
+	return foregroundErr
+}
+
+func runHub(ctx context.Context, gws []host.Deps, closers []contracts.Gateway, opts host.Options) error {
+	err := host.RunHub(ctx, gws, opts)
+	host.CloseGateways(ctx, closers, slog.Default())
+	return err
+}
+
+func bindGateways(sets []host.Deps) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
 	extra, err := host.CollectCommands(sets)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("gateway commands: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("gateway commands: %w", err)
 	}
 	var foreground contracts.Foreground
 	gws := make([]host.Deps, 0, len(sets))
+	closers := make([]contracts.Gateway, 0, len(sets))
 	for _, set := range sets {
 		if f, ok := set.Gateway.(contracts.Foreground); ok && foreground == nil {
 			foreground = f
 		}
+		closers = append(closers, set.Gateway)
 		set.Gateway = contracts.Degrade(set.Gateway)
 		gws = append(gws, set)
 	}
-	return gws, foreground, extra, nil
+	return gws, closers, foreground, extra, nil
 }
 
 func runSession(ctx context.Context, args []string) error {

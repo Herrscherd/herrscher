@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -23,7 +24,7 @@ const (
 	defaultAttemptTimeout = 5 * time.Second
 	retryBackoffBase      = 200 * time.Millisecond
 	retryBackoffMax       = 2 * time.Second
-	registryPollInterval  = 100 * time.Millisecond
+	rejectionLogInterval  = time.Minute
 )
 
 // Resolver turns registered plugins into live port objects, choosing local
@@ -47,6 +48,9 @@ type Resolver struct {
 	dialBackend      func(context.Context, contracts.Plugin) (contracts.Backend, error)
 	now              func() time.Time
 	sleep            func(time.Duration) <-chan time.Time
+
+	rejectMu       sync.Mutex
+	rejectionsSeen map[string]time.Time
 }
 
 // NewResolver builds a Resolver for the categories in remote, reaching them over NATS at natsURL.
@@ -74,7 +78,18 @@ func (r *Resolver) SetLogger(l *slog.Logger) {
 }
 
 func (r *Resolver) warnRejectedAnnouncement(err error) {
-	r.log.Warn("ignoring a rejected announcement", "err", err)
+	reason := err.Error()
+	r.rejectMu.Lock()
+	defer r.rejectMu.Unlock()
+	if r.rejectionsSeen == nil {
+		r.rejectionsSeen = make(map[string]time.Time)
+	}
+	now := r.now()
+	if last, seen := r.rejectionsSeen[reason]; seen && now.Sub(last) < rejectionLogInterval {
+		return
+	}
+	r.rejectionsSeen[reason] = now
+	r.log.Warn("ignoring a rejected announcement", "err", err, "repeats_within", rejectionLogInterval)
 }
 
 // SetAnnounceKey installs the key that authenticates the announcements the remote
@@ -246,12 +261,12 @@ func (r *Resolver) addrAllowed(addr string) bool {
 }
 
 func (r *Resolver) dialRemoteMemoryOnce(ctx context.Context, _ contracts.Plugin) (contracts.Memory, error) {
-	reg, closeConn, err := r.watchAnnouncements()
+	watch, closeConn, err := r.watchAnnouncements()
 	if err != nil {
 		return nil, err
 	}
 	defer closeConn()
-	mems, err := awaitEntries(ctx, contracts.CategoryMemory, reg.Memories)
+	mems, err := awaitEntries(ctx, contracts.CategoryMemory, watch)
 	if err != nil {
 		return nil, err
 	}
@@ -259,12 +274,12 @@ func (r *Resolver) dialRemoteMemoryOnce(ctx context.Context, _ contracts.Plugin)
 }
 
 func (r *Resolver) dialRemoteOrchestratorOnce(ctx context.Context, _ contracts.Plugin) (contracts.Orchestrator, error) {
-	reg, closeConn, err := r.watchAnnouncements()
+	watch, closeConn, err := r.watchAnnouncements()
 	if err != nil {
 		return nil, err
 	}
 	defer closeConn()
-	orchs, err := awaitEntries(ctx, contracts.CategoryOrchestrator, reg.Orchestrators)
+	orchs, err := awaitEntries(ctx, contracts.CategoryOrchestrator, watch)
 	if err != nil {
 		return nil, err
 	}
@@ -272,44 +287,16 @@ func (r *Resolver) dialRemoteOrchestratorOnce(ctx context.Context, _ contracts.P
 }
 
 func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, plugin contracts.Plugin) (contracts.Backend, error) {
-	reg, closeConn, err := r.watchAnnouncements()
+	watch, closeConn, err := r.watchAnnouncements()
 	if err != nil {
 		return nil, err
 	}
 	defer closeConn()
-	bes, err := awaitEntries(ctx, contracts.CategoryBackend, reg.Backends)
+	bes, err := awaitEntries(ctx, contracts.CategoryBackend, watch)
 	if err != nil {
 		return nil, err
 	}
 	return r.dialAnnouncedBackend(ctx, bes, plugin.Manifest.Kind)
-}
-
-func (r *Resolver) watchAnnouncements() (*transport.RemoteRegistry, func(), error) {
-	conn, err := nats.Connect(r.natsURL())
-	if err != nil {
-		return nil, nil, err
-	}
-	reg := transport.NewRemoteRegistry(transport.WithAddrAllow(r.addrAllowed))
-	if _, err := reg.Watch(conn, r.announceKey, r.warnRejectedAnnouncement); err != nil {
-		conn.Close()
-		return nil, nil, err
-	}
-	return reg, conn.Close, nil
-}
-
-func awaitEntries(ctx context.Context, category contracts.Category, entries func() []transport.RemoteEntry) ([]transport.RemoteEntry, error) {
-	ticker := time.NewTicker(registryPollInterval)
-	defer ticker.Stop()
-	for {
-		if found := entries(); len(found) > 0 {
-			return found, nil
-		}
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("resolver: no remote %s announced: %w", category, ctx.Err())
-		case <-ticker.C:
-		}
-	}
 }
 
 func (r *Resolver) dialAnnouncedBackend(ctx context.Context, bes []transport.RemoteEntry, kind string) (contracts.Backend, error) {

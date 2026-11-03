@@ -216,7 +216,6 @@ func RunHub(ctx context.Context, gws []Deps, options Options) error {
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
 	<-ctx.Done()
 	<-liveStopped
-	closeGateways(ctx, gatewaysOf(gws), log)
 	return ctx.Err()
 }
 
@@ -243,7 +242,7 @@ func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, host 
 }
 
 func hubBridgeEnv(specs []cli.Spec, kinds map[string]bool) []string {
-	bridgeEnv := GatewayEnvPairs()
+	bridgeEnv := append(GatewayEnvPairs(), AnnounceKeyEnvPairs()...)
 	if pair := CapabilityEnvPair(specs, func(family string) bool { return kinds[family] }); pair != "" {
 		bridgeEnv = append(bridgeEnv, pair)
 	}
@@ -334,7 +333,7 @@ func startRemotePluginHost(ctx context.Context, self string, cat contracts.Categ
 				cmd.Args = append(cmd.Args, "--nats", url)
 			}
 			cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
-			cmd.Env = os.Environ()
+			cmd.Env = append(os.Environ(), AnnounceKeyEnvPairs()...)
 			start := time.Now()
 			logCleanup(cmd.Run())
 			if ctx.Err() != nil {

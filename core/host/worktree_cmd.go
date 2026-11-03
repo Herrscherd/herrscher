@@ -23,7 +23,27 @@ func RunWorktree(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errWorktreeSubcommand
 	}
-	sub, rest := args[0], args[1:]
+	flags, err := parseWorktreeFlags(args[0], args[1:])
+	if err != nil {
+		return err
+	}
+	if flags.sub != "materialize" && (flags.repo == "" || flags.name == "") {
+		return &worktreeFlagsError{Sub: flags.sub}
+	}
+	return runWorktreeSub(ctx, flags)
+}
+
+type worktreeFlags struct {
+	sub          string
+	repo         string
+	name         string
+	instance     string
+	base         string
+	force        bool
+	worktreePath string
+}
+
+func parseWorktreeFlags(sub string, rest []string) (worktreeFlags, error) {
 	fs := flag.NewFlagSet("worktree "+sub, flag.ContinueOnError)
 	repo := fs.String("repo", "", "repository root")
 	name := fs.String(paramName, "", "logical session name")
@@ -32,40 +52,61 @@ func RunWorktree(ctx context.Context, args []string) error {
 	force := fs.Bool("force", false, "remove even with local changes (remove only)")
 	worktreePath := fs.String("worktree", "", "worktree to extract into (materialize only)")
 	if err := fs.Parse(rest); err != nil {
+		return worktreeFlags{}, err
+	}
+	return worktreeFlags{
+		sub:          sub,
+		repo:         *repo,
+		name:         *name,
+		instance:     *instance,
+		base:         *base,
+		force:        *force,
+		worktreePath: *worktreePath,
+	}, nil
+}
+
+func runWorktreeSub(ctx context.Context, f worktreeFlags) error {
+	wt := worktree.NewWorktreer(ctx, f.instance)
+	switch f.sub {
+	case "create":
+		return createWorktree(wt, f)
+	case "pre-existing":
+		return emitJSON(map[string]bool{"preExisting": wt.PreExisting(f.repo, f.name)})
+	case "remove":
+		return removeWorktree(wt, f)
+	case "materialize":
+		return materializeWorktree(f.worktreePath)
+	default:
+		return &unknownWorktreeSubcommandError{Sub: f.sub}
+	}
+}
+
+func createWorktree(wt *worktree.Worktreer, f worktreeFlags) error {
+	path, err := wt.Create(f.repo, f.name, f.base)
+	if err != nil {
 		return err
 	}
-	if sub != "materialize" && (*repo == "" || *name == "") {
-		return &worktreeFlagsError{Sub: sub}
+	return emitJSON(map[string]string{"path": path})
+}
+
+func removeWorktree(wt *worktree.Worktreer, f worktreeFlags) error {
+	if err := wt.Remove(f.repo, f.name, f.force); err != nil {
+		return err
 	}
-	wt := worktree.NewWorktreer(ctx, *instance)
-	switch sub {
-	case "create":
-		path, err := wt.Create(*repo, *name, *base)
-		if err != nil {
-			return err
-		}
-		return emitJSON(map[string]string{"path": path})
-	case "pre-existing":
-		return emitJSON(map[string]bool{"preExisting": wt.PreExisting(*repo, *name)})
-	case "remove":
-		if err := wt.Remove(*repo, *name, *force); err != nil {
-			return err
-		}
-		return emitJSON(map[string]bool{"removed": true})
-	case "materialize":
-		if *worktreePath == "" {
-			return errWorktreeMaterializeRequired
-		}
-		if err := extractTar(os.Stdin, *worktreePath); err != nil {
-			return err
-		}
-		if err := agent.EnsureGitExcludes(*worktreePath); err != nil {
-			return err
-		}
-		return emitJSON(map[string]bool{"materialized": true})
-	default:
-		return &unknownWorktreeSubcommandError{Sub: sub}
+	return emitJSON(map[string]bool{"removed": true})
+}
+
+func materializeWorktree(worktreePath string) error {
+	if worktreePath == "" {
+		return errWorktreeMaterializeRequired
 	}
+	if err := extractTar(os.Stdin, worktreePath); err != nil {
+		return err
+	}
+	if err := agent.EnsureGitExcludes(worktreePath); err != nil {
+		return err
+	}
+	return emitJSON(map[string]bool{"materialized": true})
 }
 
 func emitJSON(v any) error {

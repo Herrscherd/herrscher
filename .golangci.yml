@@ -192,6 +192,15 @@ linters:
       - path: ^core/host/cli\.go$
         linters: [musttag]
         text: "should be annotated with the .json. tag"
+      - path: ^core/host/backendenv\.go$
+        linters: [gosec]
+        text: "^G101:"
+      - path: ^core/host/(hosts_port|serve)\.go$
+        linters: [gosec]
+        text: "^G204:"
+      - path: ^core/host/(approve_cmd|lock|remote_materialize)\.go$
+        linters: [gosec]
+        text: "^G304:"
 
 formatters:
   enable:

@@ -25,7 +25,7 @@ func serveHealth(ctx context.Context, addr string, h *health.Health) {
 		}
 		logCleanup(json.NewEncoder(w).Encode(snap))
 	})
-	srv := &http.Server{Addr: addr, Handler: mux}
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: healthReadHeaderTimeout}
 	go func() { <-ctx.Done(); closeRead(srv) }()
 	if err := srv.ListenAndServe(); err != nil && ctx.Err() == nil {
 		fmt.Fprintf(os.Stderr, "health server: %v\n", err)

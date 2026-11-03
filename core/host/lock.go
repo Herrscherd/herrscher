@@ -32,10 +32,10 @@ func StateLockPath(statePath string) string {
 // reads it to make a decision.
 func LockState(statePath string) (func(), error) {
 	path := StateLockPath(statePath)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
 		return nil, fmt.Errorf("state lock directory: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, ownerOnlyFileMode)
 	if err != nil {
 		return nil, fmt.Errorf("state lock: %w", err)
 	}

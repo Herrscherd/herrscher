@@ -22,4 +22,6 @@ const (
 	turnQueueCapacity       = 64
 	pollBatchSize           = 100
 	retryJitter             = 0.2
+	privateDirMode          = os.FileMode(0o750)
+	healthReadHeaderTimeout = 5 * time.Second
 )

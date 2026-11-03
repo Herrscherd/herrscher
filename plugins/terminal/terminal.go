@@ -152,13 +152,13 @@ func (t *Terminal) bootstrapSession(ctx context.Context) string {
 	case <-time.After(bootstrapBudget):
 		return ""
 	case <-t.ctrlReady:
-		c := t.Control()
-		if c == nil {
+		control := t.Control()
+		if control == nil {
 			return ""
 		}
 		cctx, cancel := context.WithTimeout(ctx, bootstrapBudget)
 		defer cancel()
-		name, err := openDefaultSession(cctx, c, t.cfg)
+		name, err := openDefaultSession(cctx, control, t.cfg)
 		if err != nil {
 			return ""
 		}
@@ -174,12 +174,12 @@ func (t *Terminal) archiveIfUntouched() {
 	}
 	t.mintedSession = ""
 	t.ctrlMu.Lock()
-	c, ctx := t.ctrl, t.baseCtx
+	control, ctx := t.ctrl, t.baseCtx
 	t.ctrlMu.Unlock()
-	if c == nil || ctx == nil || ctx.Err() != nil {
+	if control == nil || ctx == nil || ctx.Err() != nil {
 		return
 	}
-	sessions := c.Sessions()
+	sessions := control.Sessions()
 	for i := range sessions {
 		session := &sessions[i]
 		if session.Name != name {
@@ -188,7 +188,7 @@ func (t *Terminal) archiveIfUntouched() {
 		if session.Archived || session.LastTs != "" {
 			return
 		}
-		_, err := c.Close(ctx, name, false)
+		_, err := control.Close(ctx, name, false)
 		bestEffort(err)
 		return
 	}
@@ -350,12 +350,12 @@ func (t *Terminal) emit(routed tui.RoutedEvent) {
 // is bound, see BindSessionControl).
 func (t *Terminal) Sessions() []contracts.SessionInfo {
 	t.ctrlMu.Lock()
-	c := t.ctrl
+	control := t.ctrl
 	t.ctrlMu.Unlock()
-	if c == nil {
+	if control == nil {
 		return nil
 	}
-	return c.Sessions()
+	return control.Sessions()
 }
 
 // Scrollback returns a session's recorded history lines through the bound
@@ -370,11 +370,11 @@ func (t *Terminal) Scrollback(name string) []contracts.ScrollbackLine {
 // Resume revives an archived session by name through the bound SessionControl,
 // for the /resume picker.
 func (t *Terminal) Resume(name string) (string, error) {
-	c := t.Control()
-	if c == nil {
+	control := t.Control()
+	if control == nil {
 		return "", errNoSessionControl
 	}
-	if err := c.Resume(name); err != nil {
+	if err := control.Resume(name); err != nil {
 		return "", err
 	}
 	return "resumed " + name, nil
@@ -502,15 +502,15 @@ func (t *Terminal) Dispatch(args []string) (string, error) {
 // close action never assembles "session close" flag argv.
 func (t *Terminal) Close(name string, force bool) (string, error) {
 	t.ctrlMu.Lock()
-	c, ctx := t.ctrl, t.baseCtx
+	control, ctx := t.ctrl, t.baseCtx
 	t.ctrlMu.Unlock()
-	if c == nil {
+	if control == nil {
 		return "", errSessionControlUnbound
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return c.Close(ctx, name, force)
+	return control.Close(ctx, name, force)
 }
 
 // Kind reports every attachment as text, since the terminal has no richer kinds.

@@ -146,7 +146,7 @@ linters:
         - name: confusing-results
         - name: modifies-value-receiver
         - name: unhandled-error
-          arguments: ["fmt.Println", "(*strings.Builder).WriteString", "(*strings.Builder).WriteByte", "(*strings.Builder).WriteRune", "(*bytes.Buffer).WriteString", "(*bytes.Buffer).WriteByte", "(*bytes.Buffer).Write"]
+          arguments: ['fmt\.Println', 'strings\.Builder\.WriteString', 'strings\.Builder\.WriteByte', 'strings\.Builder\.WriteRune', 'bytes\.Buffer\.WriteString', 'bytes\.Buffer\.WriteByte', 'bytes\.Buffer\.Write']
         - name: use-any
         - name: datarace
         - name: identical-branches
@@ -212,6 +212,9 @@ linters:
       - path: ^plugins/terminal/tui/open\.go$
         linters: [nonamedreturns]
         text: 'named return "(file|line)"'
+      - path: ^plugins/terminal/(terminal|tui/tui)\.go$
+        linters: [containedctx]
+        text: "found a struct that contains a context.Context field"
 
 formatters:
   enable:

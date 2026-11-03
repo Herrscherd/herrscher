@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -74,7 +75,7 @@ func TestProjectionIsStableAcrossRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(first) != string(second) {
+	if !bytes.Equal(first, second) {
 		t.Errorf("the same node rendered differently twice:\n%q\n%q", first, second)
 	}
 }
@@ -189,7 +190,7 @@ func TestSkillRootsPutsLearnedBetweenRepoAndGlobal(t *testing.T) {
 	if len(roots) != 4 {
 		t.Fatalf("%d roots, want 4: %v", len(roots), roots)
 	}
-	if roots[0] != filepath.Join("/wt", ".claude", "skills") {
+	if roots[0] != filepath.Join(string(filepath.Separator), "wt", ".claude", "skills") {
 		t.Errorf("roots[0] = %q; a repository skill must win", roots[0])
 	}
 	if roots[1] != learnedRoot("/wt") {

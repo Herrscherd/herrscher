@@ -133,7 +133,7 @@ func swapStdio(t *testing.T, payload string) func() (string, string) {
 	outR, outW := pipe()
 	errR, errW := pipe()
 	go func() {
-		if _, err := io.WriteString(inW, payload); err != nil {
+		if _, err := inW.WriteString(payload); err != nil {
 			t.Errorf("write payload: %v", err)
 		}
 		closeQuietly(inW)

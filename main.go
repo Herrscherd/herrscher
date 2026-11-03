@@ -229,7 +229,9 @@ func channelFlag(fs *flag.FlagSet) *string {
 }
 
 func hasTerminalGateway() bool {
-	for _, p := range contracts.Default.Gateways() {
+	gateways := contracts.Default.Gateways()
+	for i := range gateways {
+		p := &gateways[i]
 		if p.Manifest.Kind == kindTerminal {
 			return true
 		}

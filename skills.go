@@ -54,7 +54,8 @@ func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv
 	var all skills.Outcome
 	var notes []string
 	claimed := map[string]string{}
-	for _, p := range plugins {
+	for i := range plugins {
+		p := &plugins[i]
 		if p.Skills == nil {
 			continue
 		}
@@ -89,7 +90,7 @@ func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv
 	return all, notes
 }
 
-func pluginSkillsConfig(p contracts.Plugin, getenv func(string) string) (contracts.PluginConfig, error) {
+func pluginSkillsConfig(p *contracts.Plugin, getenv func(string) string) (contracts.PluginConfig, error) {
 	cfg, err := contracts.Resolve(p.Manifest.Config, getenv)
 	if err != nil && p.Manifest.Category == contracts.CategorySkills {
 		return cfg, err

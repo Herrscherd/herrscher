@@ -15,7 +15,9 @@ import (
 func declaredGatewayKeys(t *testing.T) []string {
 	t.Helper()
 	var keys []string
-	for _, p := range contracts.Default.Gateways() {
+	gateways := contracts.Default.Gateways()
+	for i := range gateways {
+		p := &gateways[i]
 		for _, s := range p.Manifest.Config {
 			if s.Env != "" {
 				keys = append(keys, s.Env)

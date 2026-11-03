@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -377,5 +378,5 @@ func TestRunHubContextCancelStops(t *testing.T) {
 func sameEvent(a, b contracts.Event) bool {
 	ja, errA := json.Marshal(a)
 	jb, errB := json.Marshal(b)
-	return errA == nil && errB == nil && string(ja) == string(jb)
+	return errA == nil && errB == nil && bytes.Equal(ja, jb)
 }

@@ -93,7 +93,8 @@ func (a *attachedDaemon) refresh() {
 	}
 	channelOf := make(map[string]string, len(infos))
 	nameOf := make(map[string]string, len(infos))
-	for _, s := range infos {
+	for i := range infos {
+		s := &infos[i]
 		channelOf[s.Name] = s.ChannelID
 		nameOf[s.ChannelID] = s.Name
 	}

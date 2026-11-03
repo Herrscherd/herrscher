@@ -295,9 +295,9 @@ func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, p contracts.Plugin
 	}
 }
 
-func watchBackendAnnouncements(nc *nats.Conn, reg *transport.RemoteRegistry) (<-chan struct{}, error) {
+func watchBackendAnnouncements(conn *nats.Conn, reg *transport.RemoteRegistry) (<-chan struct{}, error) {
 	seen := make(chan struct{}, 1)
-	err := transport.WatchAnnouncements(nc, func(a transport.Announcement) {
+	err := transport.WatchAnnouncements(conn, func(a transport.Announcement) {
 		reg.Observe(a)
 		select {
 		case seen <- struct{}{}:
@@ -311,9 +311,9 @@ func (r *Resolver) dialAnnouncedBackend(ctx context.Context, bes []transport.Rem
 	if kind == "" {
 		return transport.DialBackend(ctx, bes[0], r.creds)
 	}
-	for _, be := range bes {
-		if be.Manifest.Kind == kind {
-			return transport.DialBackend(ctx, be, r.creds)
+	for index := range bes {
+		if bes[index].Manifest.Kind == kind {
+			return transport.DialBackend(ctx, bes[index], r.creds)
 		}
 	}
 	return nil, &noRemoteBackendError{Kind: kind}

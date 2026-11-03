@@ -95,9 +95,9 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 	return nil
 }
 
-func wireManagerHandler(ctx context.Context, hdl *manager.Handler, st *state.State, instID string, wt *worktree.Worktreer, sessions *sessionTable) {
+func wireManagerHandler(ctx context.Context, hdl *manager.Handler, st *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable) {
 	hdl.SetSeeder(sessions.Seed)
-	hdl.SetHosts(newHostPlacer(ctx, st, instID, wt, func() string { return sourceVersionOf(ctx, st) }))
+	hdl.SetHosts(newHostPlacer(ctx, st, instID, worktrees, func() string { return sourceVersionOf(ctx, st) }))
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly })
 	hdl.SetDefaultModel(os.Getenv(EnvDefaultModel))
 	hdl.SetModelValidator(validateModelChoice)
@@ -115,15 +115,15 @@ func validateModelChoice(vendor, modelID string) error {
 	return nil
 }
 
-func wireSupervisor(sup *supervisor.Supervisor, st *state.State, instID string) {
+func wireSupervisor(sup *supervisor.Supervisor, store *state.State, instID string) {
 	sup.SetInstanceID(instID)
 	sup.SetCommandSocket(func(session string) string { return SessionCommandSocketPath(instID, session) })
 	sup.SetHostLookup(func(name string) (supervisor.Placement, bool) {
-		h, ok := st.FindHost(name)
+		host, ok := store.FindHost(name)
 		if !ok {
 			return supervisor.Placement{}, false
 		}
-		return supervisor.Placement{SSH: h.SSH, Bin: h.Bin}, true
+		return supervisor.Placement{SSH: host.SSH, Bin: host.Bin}, true
 	})
 	sup.SetGateResolver(func(vendor string) string {
 		grain, _ := GateFor(vendor)

@@ -130,17 +130,17 @@ func oneShotTurnTimeout(runtime oneShotSeedRuntime) time.Duration {
 	return runtime.timeout
 }
 
-func attachOneShotTaps(d *sessionDriver, name string, runtime oneShotSeedRuntime) {
+func attachOneShotTaps(driver *sessionDriver, name string, runtime oneShotSeedRuntime) {
 	if runtime.record != nil {
-		d.sink.Transcript = func(entry state.TranscriptEntry) { runtime.record(name, entry) }
+		driver.sink.Transcript = func(entry state.TranscriptEntry) { runtime.record(name, entry) }
 	}
 	if runtime.publish != nil {
-		d.emitTap = func(e contracts.Event) { runtime.publish(name, e) }
+		driver.emitTap = func(e contracts.Event) { runtime.publish(name, e) }
 	}
 }
 
 func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state.Session, orch contracts.Orchestrator, runtime oneShotSeedRuntime, toBridge, fromBridge chan contracts.Event, bridgeErr chan<- error) {
-	err := bridge.RunOneShot(ctx, func(channel string) (contracts.Backend, error) {
+	err := bridge.RunOneShot(ctx, func(string) (contracts.Backend, error) {
 		return runtime.backendFactory()(ctx, sess)
 	}, orch, sess.ChannelID, toBridge, fromBridge)
 	bridgeErr <- err
@@ -169,7 +169,7 @@ func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, sess s
 	err := orch.Consolidate(consCtx)
 	consCancel()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "herrscher: session %q: consolidate after %s: %v\n", sess.Name, time.Since(started).Round(time.Millisecond), err)
+		_, _ = fmt.Fprintf(os.Stderr, "herrscher: session %q: consolidate after %s: %v\n", sess.Name, time.Since(started).Round(time.Millisecond), err)
 	}
 }
 

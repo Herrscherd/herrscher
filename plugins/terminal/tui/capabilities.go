@@ -2,10 +2,13 @@ package tui
 
 import "strings"
 
+const programKitty = "kitty"
+
 // Graphics is the inline-image protocol a terminal speaks, in descending order
 // of fidelity. The zero value is the honest default: no protocol at all.
 type Graphics int
 
+// The graphics protocols a terminal can speak, from most to least capable.
 const (
 	GraphicsNone Graphics = iota
 	GraphicsSixel
@@ -15,9 +18,10 @@ const (
 func (g Graphics) String() string {
 	switch g {
 	case GraphicsKitty:
-		return "kitty"
+		return programKitty
 	case GraphicsSixel:
 		return "sixel"
+	case GraphicsNone:
 	}
 	return "none"
 }
@@ -26,6 +30,7 @@ func (g Graphics) String() string {
 // colours: what a terminal is assumed to have when it says nothing.
 type Colour int
 
+// The colour depths a terminal can render, from least to most.
 const (
 	Colour16 Colour = iota
 	Colour256
@@ -38,6 +43,7 @@ func (c Colour) String() string {
 		return "truecolor"
 	case Colour256:
 		return "256"
+	case Colour16:
 	}
 	return "16"
 }
@@ -55,10 +61,14 @@ type Capabilities struct {
 	Terminal   string
 }
 
-var kittyGraphicsPrograms = map[string]bool{"ghostty": true, "WezTerm": true}
+func kittyGraphicsPrograms() map[string]bool {
+	return map[string]bool{"ghostty": true, "WezTerm": true}
+}
 
-var hyperlinkPrograms = map[string]bool{
-	"ghostty": true, "WezTerm": true, "iTerm.app": true, "kitty": true,
+func hyperlinkPrograms() map[string]bool {
+	return map[string]bool{
+		"ghostty": true, "WezTerm": true, "iTerm.app": true, programKitty: true,
+	}
 }
 
 // Probe resolves what the terminal described by env (an os.Getenv-like lookup)
@@ -69,7 +79,7 @@ func Probe(env func(string) string) Capabilities {
 	term, program := env("TERM"), env("TERM_PROGRAM")
 	caps := Capabilities{
 		Graphics:   probeGraphics(env, term, program),
-		Hyperlinks: hyperlinkPrograms[program] || strings.Contains(term, "kitty"),
+		Hyperlinks: hyperlinkPrograms()[program] || strings.Contains(term, programKitty),
 		Colour:     probeColour(env("COLORTERM"), term),
 		Terminal:   terminalName(term, program),
 	}
@@ -79,7 +89,7 @@ func Probe(env func(string) string) Capabilities {
 }
 
 func probeGraphics(env func(string) string, term, program string) Graphics {
-	if env("KITTY_WINDOW_ID") != "" || strings.Contains(term, "kitty") || kittyGraphicsPrograms[program] {
+	if env("KITTY_WINDOW_ID") != "" || strings.Contains(term, programKitty) || kittyGraphicsPrograms()[program] {
 		return GraphicsKitty
 	}
 	if strings.Contains(term, "sixel") || program == "mlterm" {
@@ -100,8 +110,8 @@ func probeColour(colorterm, term string) Colour {
 }
 
 func terminalName(term, program string) string {
-	if strings.Contains(term, "kitty") {
-		return "kitty"
+	if strings.Contains(term, programKitty) {
+		return programKitty
 	}
 	if program != "" {
 		return program

@@ -2,11 +2,12 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func TestPaletteInlineRenderSelectedRow(t *testing.T) {
@@ -45,7 +46,7 @@ func TestPaletteWindowFollowsTheSelection(t *testing.T) {
 func TestPaletteViewShowsALateSelection(t *testing.T) {
 	m := newTestModel()
 	m.cmds = nil
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		m.cmds = append(m.cmds, CommandSpec{Name: fmt.Sprintf("verb%02d", i)})
 	}
 	m.input.SetValue("/")
@@ -65,15 +66,18 @@ func TestPaletteViewShowsALateSelection(t *testing.T) {
 	}
 }
 
-func TestLocalCommandsAreAllHandledLocally(t *testing.T) {
-	src, err := os.ReadFile("tui.go")
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestLocalCommandsAreNeverDispatched(t *testing.T) {
 	for _, c := range localCommands() {
-		verb := strings.Fields(c.Name)[0]
-		if !strings.Contains(string(src), `args[0] == "`+verb+`"`) {
-			t.Errorf("/%s is advertised as local but handleEnter never intercepts %q", c.Name, verb)
+		be := &fakeBackend{}
+		be.sessions = []contracts.SessionInfo{{Name: "avant", ChannelID: "c1"}}
+		m := newModel(be)
+		m.ensureTab("c1")
+		m.active = "c1"
+		m.syncTabs()
+		m.input.SetValue("/" + c.Name)
+		runCmd(m.handleEnter())
+		if len(be.dispatched) != 0 {
+			t.Errorf("/%s is advertised as local but was dispatched: %v", c.Name, be.dispatched)
 		}
 	}
 }
@@ -83,7 +87,7 @@ func TestMergeCommandsKeepsTheLocalOnes(t *testing.T) {
 		{Name: "session create"},
 		{Name: "help", Desc: "the daemon's own help"},
 	})
-	have := map[string]string{}
+	have := make(map[string]string)
 	for _, c := range got {
 		if _, dup := have[c.Name]; dup {
 			t.Fatalf("duplicate row %q", c.Name)

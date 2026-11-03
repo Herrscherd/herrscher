@@ -1,6 +1,7 @@
 package scope
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,8 +31,8 @@ func gitRepo(t *testing.T, name string) string {
 
 func TestProjectFromDirNamesTheRepository(t *testing.T) {
 	repo := gitRepo(t, "Herrscher")
-	if got := ProjectFromDir(repo); got != "herrscher" {
-		t.Fatalf("ProjectFromDir(repo) = %q, want %q", got, "herrscher")
+	if got := ProjectFromDir(context.Background(), repo); got != "herrscher" {
+		t.Fatalf("ProjectFromDir(context.Background(), repo) = %q, want %q", got, "herrscher")
 	}
 }
 
@@ -41,8 +42,8 @@ func TestProjectFromDirAnswersTheSameFromASubdirectory(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := ProjectFromDir(sub); got != "herrscher" {
-		t.Fatalf("ProjectFromDir(sub) = %q, want %q", got, "herrscher")
+	if got := ProjectFromDir(context.Background(), sub); got != "herrscher" {
+		t.Fatalf("ProjectFromDir(context.Background(), sub) = %q, want %q", got, "herrscher")
 	}
 }
 
@@ -53,23 +54,23 @@ func TestProjectFromDirFoldsWorktreesIntoTheirRepository(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("worktree add: %v\n%s", err, out)
 	}
-	if got := ProjectFromDir(wt); got != "herrscher" {
-		t.Fatalf("ProjectFromDir(worktree) = %q, want %q", got, "herrscher")
+	if got := ProjectFromDir(context.Background(), wt); got != "herrscher" {
+		t.Fatalf("ProjectFromDir(context.Background(), worktree) = %q, want %q", got, "herrscher")
 	}
 }
 
 func TestProjectFromDirIsSilentOutsideARepository(t *testing.T) {
-	if got := ProjectFromDir(t.TempDir()); got != "" {
-		t.Fatalf("ProjectFromDir(non-repo) = %q, want empty", got)
+	if got := ProjectFromDir(context.Background(), t.TempDir()); got != "" {
+		t.Fatalf("ProjectFromDir(context.Background(), non-repo) = %q, want empty", got)
 	}
-	if got := ProjectFromDir(""); got != "" {
-		t.Fatalf("ProjectFromDir(\"\") = %q, want empty", got)
+	if got := ProjectFromDir(context.Background(), ""); got != "" {
+		t.Fatalf("ProjectFromDir(context.Background(), \"\") = %q, want empty", got)
 	}
 }
 
 func TestProjectFromDirRefusesAnUnnameableDirectory(t *testing.T) {
-	if got := ProjectFromDir(gitRepo(t, "...")); got != "" {
-		t.Fatalf("ProjectFromDir(unnameable) = %q, want empty", got)
+	if got := ProjectFromDir(context.Background(), gitRepo(t, "...")); got != "" {
+		t.Fatalf("ProjectFromDir(context.Background(), unnameable) = %q, want empty", got)
 	}
 }
 

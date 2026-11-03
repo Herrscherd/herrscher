@@ -3,31 +3,35 @@ package tui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 )
 
 const keylogEnv = "HERRSCHER_KEYLOG"
 
-var (
-	keylogOnce sync.Once
-	keylogFile *os.File
-	keylogMu   sync.Mutex
-)
+type keyLog struct {
+	once sync.Once
+	file *os.File
+}
 
-func keylog(format string, args ...any) {
-	keylogOnce.Do(func() {
+func (k *keyLog) write(format string, args ...any) {
+	if k == nil {
+		return
+	}
+	k.once.Do(func() {
 		path := os.Getenv(keylogEnv)
 		if path == "" {
 			return
 		}
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		file, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, privateFileMode)
 		if err != nil {
 			return
 		}
-		keylogFile = f
+		k.file = file
 	})
-	if keylogFile == nil {
+	if k.file == nil {
 		return
 	}
-	fmt.Fprintf(keylogFile, format+"\n", args...)
+	_, err := fmt.Fprintf(k.file, format+"\n", args...)
+	bestEffort(err)
 }

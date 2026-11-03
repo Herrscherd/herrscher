@@ -32,7 +32,7 @@ func (f *fakePluginSeam) Versions(context.Context, string) ([]string, error) {
 
 func (f *fakePluginSeam) Findings(context.Context, string, string) []string { return f.findings }
 
-func (f *fakePluginSeam) Apply(ctx context.Context, action PluginAction, module, version string) (string, error) {
+func (f *fakePluginSeam) Apply(_ context.Context, action PluginAction, module, version string) (string, error) {
 	f.applied = append(f.applied, string(action)+" "+module+"@"+version)
 	return f.output, f.applyErr
 }
@@ -213,7 +213,7 @@ func indexOf(rows []string, want string) int {
 
 func TestPluginsViewScrollsToSelection(t *testing.T) {
 	m := &model{pluginsOpen: true}
-	for i := 0; i < pluginsMax+5; i++ {
+	for i := range pluginsMax + 5 {
 		m.pluginsRows = append(m.pluginsRows, PluginRow{Module: fmt.Sprintf("mod/%d", i), Installed: "v1.0.0", Latest: "v1.0.0"})
 	}
 	m.pluginsIdx = len(m.pluginsRows) - 1

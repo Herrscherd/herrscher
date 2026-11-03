@@ -48,7 +48,7 @@ const (
 	gaugeEmpty = "░"
 )
 
-func gauge(ratio float64, style lipgloss.Style) string {
+func gauge(ratio float64, style, empty lipgloss.Style) string {
 	if ratio < 0 {
 		ratio = 0
 	}
@@ -59,7 +59,7 @@ func gauge(ratio float64, style lipgloss.Style) string {
 	if filled == 0 && ratio > 0 {
 		filled = 1
 	}
-	return dimStyle.Render("[") +
+	return empty.Render("[") +
 		style.Render(strings.Repeat(gaugeFull, filled)) +
-		dimStyle.Render(strings.Repeat(gaugeEmpty, gaugeWidth-filled)+"]")
+		empty.Render(strings.Repeat(gaugeEmpty, gaugeWidth-filled)+"]")
 }

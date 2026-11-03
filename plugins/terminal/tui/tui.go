@@ -13,8 +13,10 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -74,6 +76,12 @@ const (
 
 const hostErrPrefix = "⚠️ "
 
+const (
+	sessionVerb = "session"
+	verbRename  = "rename"
+	stateDone   = "done"
+)
+
 func hostError(text string) (string, bool) {
 	trimmed := strings.TrimSpace(text)
 	if rest, ok := strings.CutPrefix(trimmed, hostErrPrefix); ok {
@@ -120,13 +128,14 @@ type tab struct {
 
 type liveAgent struct {
 	contracts.Subagent
+
 	since time.Time
 }
 
-func (tb *tab) dropAgent(id string) {
-	for i, a := range tb.agents {
-		if a.ID == id {
-			tb.agents = append(tb.agents[:i], tb.agents[i+1:]...)
+func (tb *tab) dropAgent(agentID string) {
+	for index, a := range tb.agents {
+		if a.ID == agentID {
+			tb.agents = append(tb.agents[:index], tb.agents[index+1:]...)
 			return
 		}
 	}
@@ -135,7 +144,7 @@ func (tb *tab) dropAgent(id string) {
 func (tb *tab) clearPanels() {
 	tb.agents = nil
 	for _, t := range tb.todos {
-		if t.State != "done" {
+		if t.State != stateDone {
 			return
 		}
 	}
@@ -144,10 +153,10 @@ func (tb *tab) clearPanels() {
 
 const maxTabLines = 5000
 
-func (tb *tab) appendEntry(e entry) {
+func (tb *tab) appendEntry(item entry) {
 	tb.nextEntryID++
-	e.id = tb.nextEntryID
-	tb.entries = append(tb.entries, e)
+	item.id = tb.nextEntryID
+	tb.entries = append(tb.entries, item)
 	if len(tb.entries) > maxTabLines {
 		tb.entries = append([]entry(nil), tb.entries[len(tb.entries)-maxTabLines:]...)
 	}
@@ -191,6 +200,9 @@ func spinTick(d time.Duration) tea.Cmd {
 
 type model struct {
 	ctx          context.Context
+	st           uiStyles
+	md           *markdownRenderer
+	keys         *keyLog
 	tm           Backend
 	vp           viewport.Model
 	input        textarea.Model
@@ -296,12 +308,12 @@ type overlayCache struct {
 	out string
 }
 
-func (c *overlayCache) get(in, arg string, apply func(string) string) string {
-	if c.out != "" && c.in == in && c.arg == arg {
+func (c *overlayCache) get(input, arg string, apply func(string) string) string {
+	if c.out != "" && c.in == input && c.arg == arg {
 		return c.out
 	}
-	out := apply(in)
-	*c = overlayCache{in: in, arg: arg, out: out}
+	out := apply(input)
+	*c = overlayCache{in: input, arg: arg, out: out}
 	return out
 }
 
@@ -325,15 +337,15 @@ func (m *model) composerHeight() int {
 }
 
 func (m *model) resizeComposer() {
-	h := displayRows(m.input.Value(), m.input.Width())
-	if h < 1 {
-		h = 1
+	height := displayRows(m.input.Value(), m.input.Width())
+	if height < 1 {
+		height = 1
 	}
-	if h > maxComposerLines {
-		h = maxComposerLines
+	if height > maxComposerLines {
+		height = maxComposerLines
 	}
-	if h != m.composerRows {
-		m.composerRows = h
+	if height != m.composerRows {
+		m.composerRows = height
 		m.applySize()
 		m.syncViewport()
 	}
@@ -365,44 +377,45 @@ func (m *model) runContext() context.Context {
 	return m.ctx
 }
 
-func newModel(tm Backend) *model {
-	in := textarea.New()
-	in.Placeholder = "type a message…"
-	in.Prompt = ""
-	in.ShowLineNumbers = false
-	in.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "shift+enter", "ctrl+j"))
-	in.SetHeight(maxComposerLines)
-	in.Focus()
-	m := &model{
-		ctx: context.Background(), tm: tm, input: in, composerRows: 1, tabs: map[string]*tab{}, clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
+func newModel(backend Backend) *model {
+	field := textarea.New()
+	field.Placeholder = "type a message…"
+	field.Prompt = ""
+	field.ShowLineNumbers = false
+	field.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "shift+enter", "ctrl+j"))
+	field.SetHeight(maxComposerLines)
+	field.Focus()
+	match := &model{
+		ctx: context.Background(), tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
+		st: newStyles(), md: &markdownRenderer{},
 	}
-	m.cmds = localCommands()
-	if tm != nil {
-		m.cmds = mergeCommands(m.cmds, tm.Commands())
+	match.cmds = localCommands()
+	if backend != nil {
+		match.cmds = mergeCommands(match.cmds, backend.Commands())
 	}
-	return m
+	return match
 }
 
 func (m *model) ensureTab(channel string) *tab {
 	if tb, ok := m.tabs[channel]; ok {
 		return tb
 	}
-	tb := &tab{channel: channel, label: channel, openedAt: time.Now()}
-	m.tabs[channel] = tb
+	tab := &tab{channel: channel, label: channel, openedAt: time.Now()}
+	m.tabs[channel] = tab
 	m.order = append(m.order, channel)
 	if m.active == "" {
 		m.active = channel
 	}
-	m.seedScrollback(tb)
-	return tb
+	m.seedScrollback(tab)
+	return tab
 }
 
-func (m *model) seedScrollback(tb *tab) {
+func (m *model) seedScrollback(tab *tab) {
 	if m.tm == nil {
 		return
 	}
-	name := m.sessionName(tb.channel)
+	name := m.sessionName(tab.channel)
 	if name == "" {
 		return
 	}
@@ -411,9 +424,9 @@ func (m *model) seedScrollback(tb *tab) {
 		return
 	}
 	for _, ln := range lines {
-		tb.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
+		tab.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
 	}
-	tb.appendEntry(entry{role: roleScrollback, text: "earlier"})
+	tab.appendEntry(entry{role: roleScrollback, text: "earlier"})
 }
 
 func scrollbackRole(role string) string {
@@ -429,9 +442,9 @@ func (m *model) removeTab(channel string) {
 	}
 	delete(m.tabs, channel)
 	out := m.order[:0]
-	for _, ch := range m.order {
-		if ch != channel {
-			out = append(out, ch)
+	for _, channelName := range m.order {
+		if channelName != channel {
+			out = append(out, channelName)
 		}
 	}
 	m.order = out
@@ -444,31 +457,31 @@ func (m *model) removeTab(channel string) {
 	}
 }
 
-func (m *model) route(re RoutedEvent) tea.Cmd {
-	if re.Event.T == "closed" {
-		m.removeTab(re.Conv.ID)
+func (m *model) route(routed RoutedEvent) tea.Cmd {
+	if routed.Event.T == "closed" {
+		m.removeTab(routed.Conv.ID)
 		return nil
 	}
-	tb := m.ensureTab(re.Conv.ID)
-	before := len(tb.entries)
-	m.renderInto(tb, re.Event)
-	if len(tb.entries) != before && tb.channel != m.active {
-		tb.unread = true
+	tab := m.ensureTab(routed.Conv.ID)
+	before := len(tab.entries)
+	m.renderInto(tab, routed.Event)
+	if len(tab.entries) != before && tab.channel != m.active {
+		tab.unread = true
 	}
-	if tb.channel == m.active {
+	if tab.channel == m.active {
 		m.syncViewport()
 	}
-	if re.Event.T != "reply" || len(tb.entries) == 0 {
+	if routed.Event.T != "reply" || len(tab.entries) == 0 {
 		return nil
 	}
-	last := len(tb.entries) - 1
-	for last >= 0 && tb.entries[last].role != roleAgent {
+	last := len(tab.entries) - 1
+	for last >= 0 && tab.entries[last].role != roleAgent {
 		last--
 	}
 	if last < 0 {
 		return nil
 	}
-	return m.fetchEntryImages(tb, last)
+	return m.fetchEntryImages(tab, last)
 }
 
 func (m *model) syncTabs() {
@@ -476,32 +489,34 @@ func (m *model) syncTabs() {
 	if infos == nil {
 		return
 	}
-	var sb strings.Builder
-	for _, s := range infos {
-		sb.WriteString(s.ChannelID)
-		sb.WriteByte('\x1f')
-		sb.WriteString(s.Name)
-		sb.WriteByte('\n')
+	var builder strings.Builder
+	for i := range infos {
+		info := &infos[i]
+		builder.WriteString(info.ChannelID)
+		builder.WriteByte('\x1f')
+		builder.WriteString(info.Name)
+		builder.WriteByte('\n')
 	}
-	sig := sb.String()
+	sig := builder.String()
 	if sig == m.tabSig {
 		return
 	}
 	m.tabSig = sig
-	live := map[string]bool{}
-	for _, s := range infos {
-		live[s.ChannelID] = true
-		if s.Archived {
+	live := make(map[string]bool)
+	for i := range infos {
+		session := &infos[i]
+		live[session.ChannelID] = true
+		if session.Archived {
 			continue
 		}
-		tb := m.ensureTab(s.ChannelID)
-		if s.Name != "" {
-			tb.label = s.Name
+		tab := m.ensureTab(session.ChannelID)
+		if session.Name != "" {
+			tab.label = session.Name
 		}
 	}
-	for _, ch := range append([]string(nil), m.order...) {
-		if !live[ch] {
-			m.removeTab(ch)
+	for _, channel := range append([]string(nil), m.order...) {
+		if !live[channel] {
+			m.removeTab(channel)
 		}
 	}
 	m.focusOpen(infos)
@@ -512,9 +527,10 @@ func (m *model) focusOpen(infos []contracts.SessionInfo) {
 		return
 	}
 	channel := ""
-	for _, s := range infos {
-		if s.Name == m.openSession {
-			channel = s.ChannelID
+	for i := range infos {
+		info := &infos[i]
+		if info.Name == m.openSession {
+			channel = info.ChannelID
 			break
 		}
 	}
@@ -547,62 +563,7 @@ func (m *model) handleEnter() tea.Cmd {
 	m.input.Reset()
 	m.resizeComposer()
 	if strings.HasPrefix(text, "/") {
-		args := strings.Fields(strings.TrimPrefix(text, "/"))
-		if len(args) == 0 {
-			return nil
-		}
-		if args[0] == "resume" {
-			m.openResume()
-			return nil
-		}
-		if args[0] == "clear" {
-			m.clearActive()
-			return nil
-		}
-		if args[0] == "help" {
-			m.toggleHelp()
-			return nil
-		}
-		if args[0] == "session" && len(args) >= 2 && args[1] == "switch" {
-			m.openSwitch()
-			return nil
-		}
-		if args[0] == "usage" {
-			if tb := m.tabs[m.active]; tb != nil {
-				tb.appendEntry(entry{role: roleNotice, text: m.usageReport(tb)})
-				m.syncViewport()
-			}
-			return nil
-		}
-		if args[0] == "capabilities" {
-			m.openDiagnostics()
-			return nil
-		}
-		if args[0] == "skills" {
-			m.openSkills()
-			return nil
-		}
-		if args[0] == "plugins" {
-			return m.openPlugins()
-		}
-		if args[0] == "attach" {
-			m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
-			return nil
-		}
-		if args[0] == "session" && len(args) >= 2 && args[1] == "close" {
-			return m.closeCmd(args[2:])
-		}
-		if args[0] == "rename" {
-			return m.renameCmd(args[1:])
-		}
-		if args[0] == "copy" {
-			m.copyCmd(args[1:])
-			return nil
-		}
-		if args[0] == "mouse" {
-			return m.toggleMouse()
-		}
-		return m.dispatchCmd(m.active, args)
+		return m.runSlash(text)
 	}
 	if m.active == "" {
 		return nil
@@ -615,20 +576,82 @@ func (m *model) handleEnter() tea.Cmd {
 	return nil
 }
 
+func (m *model) runSlash(text string) tea.Cmd {
+	args := strings.Fields(strings.TrimPrefix(text, "/"))
+	if len(args) == 0 {
+		return nil
+	}
+	if cmd, handled := m.runLocalSlash(text, args); handled {
+		return cmd
+	}
+	return m.dispatchCmd(m.active, args)
+}
+
+func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
+	switch args[0] {
+	case "resume":
+		m.openResume()
+	case "clear":
+		m.clearActive()
+	case "help":
+		m.toggleHelp()
+	case sessionVerb:
+		return m.sessionSlash(args)
+	case "usage":
+		if tb := m.tabs[m.active]; tb != nil {
+			tb.appendEntry(entry{role: roleNotice, text: m.usageReport(tb)})
+			m.syncViewport()
+		}
+	case "capabilities":
+		m.openDiagnostics()
+	case "skills":
+		m.openSkills()
+	case "plugins":
+		return m.openPlugins(), true
+	case "attach":
+		m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
+	case verbRename:
+		return m.renameCmd(args[1:]), true
+	case "copy":
+		m.copyCmd(args[1:])
+	case "mouse":
+		return m.toggleMouse(), true
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+const minSessionArgs = 2
+
+func (m *model) sessionSlash(args []string) (tea.Cmd, bool) {
+	if len(args) < minSessionArgs {
+		return nil, false
+	}
+	switch args[1] {
+	case "switch":
+		m.openSwitch()
+		return nil, true
+	case "close":
+		return m.closeCmd(args[2:]), true
+	}
+	return nil, false
+}
+
 func (m *model) submitTo(channel, text string, atts []Attachment) {
-	tb := m.tabs[channel]
-	if tb == nil {
+	tab := m.tabs[channel]
+	if tab == nil {
 		return
 	}
 	m.tm.Submit(channel, text, atts)
-	tb.endStream()
-	e := entry{role: roleYou, text: text, attachments: atts}
-	e.preview = previewEscapes(atts, m.caps)
-	tb.appendEntry(e)
-	tb.busy = true
-	tb.streamed = false
-	tb.tokens = 0
-	tb.startedAt = time.Now()
+	tab.endStream()
+	item := entry{role: roleYou, text: text, attachments: atts}
+	item.preview = previewEscapes(atts, m.caps)
+	tab.appendEntry(item)
+	tab.busy = true
+	tab.streamed = false
+	tab.tokens = 0
+	tab.startedAt = time.Now()
 	m.syncViewport()
 }
 
@@ -636,11 +659,11 @@ func (m *model) pasteImage() bool {
 	if m.clip == nil {
 		return false
 	}
-	mime, ok := m.clip.ImageType()
+	mime, ok := m.clip.ImageType(m.runContext())
 	if !ok {
 		return false
 	}
-	data, err := m.clip.ReadImage(mime)
+	data, err := m.clip.ReadImage(m.runContext(), mime)
 	if err != nil {
 		m.flash = "collage impossible : " + err.Error()
 		return true
@@ -678,9 +701,9 @@ func (m *model) removeLastPending() bool {
 }
 
 func (m *model) dispatchCmd(origin string, args []string) tea.Cmd {
-	tm := m.tm
+	backend := m.tm
 	return func() tea.Msg {
-		out, err := tm.Dispatch(args)
+		out, err := backend.Dispatch(args)
 		return dispatchResultMsg{origin: origin, out: out, err: err}
 	}
 }
@@ -695,11 +718,11 @@ func (m *model) recordHistory(text string) {
 	m.histIdx = len(m.history)
 }
 
-func (m *model) recallHistory(d int) bool {
+func (m *model) recallHistory(delta int) bool {
 	if len(m.history) == 0 {
 		return false
 	}
-	idx := m.histIdx + d
+	idx := m.histIdx + delta
 	if idx < 0 {
 		idx = 0
 	}
@@ -715,12 +738,12 @@ func (m *model) recallHistory(d int) bool {
 }
 
 func (m *model) clearActive() {
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return
 	}
-	tb.entries = nil
-	tb.streamed = false
+	tab.entries = nil
+	tab.streamed = false
 	m.tsCache.valid = false
 	m.syncViewport()
 }
@@ -732,23 +755,25 @@ func (m *model) toggleHelp() {
 }
 
 func (m *model) sessionName(channel string) string {
-	for _, s := range m.tm.Sessions() {
-		if s.ChannelID == channel && s.Name != "" {
-			return s.Name
+	sessions := m.tm.Sessions()
+	for i := range sessions {
+		session := &sessions[i]
+		if session.ChannelID == channel && session.Name != "" {
+			return session.Name
 		}
 	}
 	return ""
 }
 
 func (m *model) activeSessionName() string {
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return ""
 	}
-	if name := m.sessionName(tb.channel); name != "" {
+	if name := m.sessionName(tab.channel); name != "" {
 		return name
 	}
-	return tb.label
+	return tab.label
 }
 
 func (m *model) confirmClose() tea.Cmd {
@@ -760,10 +785,10 @@ func (m *model) confirmClose() tea.Cmd {
 }
 
 func (m *model) closeSession(name string, force bool) tea.Cmd {
-	origin, tm := m.active, m.tm
+	backend, manager := m.active, m.tm
 	return func() tea.Msg {
-		out, err := tm.Close(name, force)
-		return dispatchResultMsg{origin: origin, out: out, err: err}
+		out, err := manager.Close(name, force)
+		return dispatchResultMsg{origin: backend, out: out, err: err}
 	}
 }
 
@@ -780,8 +805,8 @@ func (m *model) closeCmd(rest []string) tea.Cmd {
 }
 
 func (m *model) renameCmd(rest []string) tea.Cmd {
-	to := renameTarget(rest)
-	if to == "" {
+	target := renameTarget(rest)
+	if target == "" {
 		m.flash = "/rename <nom> : donne le nouveau nom de la session"
 		return nil
 	}
@@ -790,18 +815,18 @@ func (m *model) renameCmd(rest []string) tea.Cmd {
 		m.flash = "aucune session à renommer ici"
 		return nil
 	}
-	return m.dispatchCmd(m.active, []string{"session", "rename", "--name", name, "--to", to})
+	return m.dispatchCmd(m.active, []string{sessionVerb, verbRename, "--name", name, "--to", target})
 }
 
 func renameTarget(rest []string) string {
 	var words []string
-	for i := 0; i < len(rest); i++ {
-		tok := rest[i]
+	for index := 0; index < len(rest); index++ {
+		tok := rest[index]
 		switch {
 		case tok == "--to":
-			if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
-				words = append(words, rest[i+1])
-				i++
+			if index+1 < len(rest) && !strings.HasPrefix(rest[index+1], "--") {
+				words = append(words, rest[index+1])
+				index++
 			}
 		case strings.HasPrefix(tok, "--to="):
 			words = append(words, strings.TrimPrefix(tok, "--to="))
@@ -812,16 +837,18 @@ func renameTarget(rest []string) string {
 	return strings.Join(words, " ")
 }
 
-func closeTarget(rest []string) (name string, force bool) {
-	for i := 0; i < len(rest); i++ {
-		tok := rest[i]
+func closeTarget(rest []string) (string, bool) {
+	var name string
+	var force bool
+	for index := 0; index < len(rest); index++ {
+		tok := rest[index]
 		switch {
 		case tok == "--force":
 			force = true
 		case tok == "--name":
-			if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "--") {
-				name = rest[i+1]
-				i++
+			if index+1 < len(rest) && !strings.HasPrefix(rest[index+1], "--") {
+				name = rest[index+1]
+				index++
 			}
 		case strings.HasPrefix(tok, "--name="):
 			name = strings.TrimPrefix(tok, "--name=")
@@ -837,9 +864,9 @@ func (m *model) switchTab(delta int) {
 		return
 	}
 	idx := 0
-	for i, ch := range m.order {
+	for index, ch := range m.order {
 		if ch == m.active {
-			idx = i
+			idx = index
 			break
 		}
 	}
@@ -847,94 +874,112 @@ func (m *model) switchTab(delta int) {
 	m.activate(m.order[idx])
 }
 
-func (m *model) activate(ch string) {
-	if ch == m.active || m.tabs[ch] == nil {
+func (m *model) activate(channel string) {
+	if channel == m.active || m.tabs[channel] == nil {
 		return
 	}
-	m.active = ch
-	m.tabs[ch].unread = false
+	m.active = channel
+	m.tabs[channel].unread = false
 	m.syncViewport()
 	m.vp.GotoBottom()
 }
 
-func (m *model) renderInto(tb *tab, e contracts.Event) {
-	if e.T != "abandoned" {
-		tb.disconnected = false
+func (m *model) renderInto(target *tab, event contracts.Event) {
+	if event.T != "abandoned" {
+		target.disconnected = false
 	}
-	if e.Tokens > 0 {
-		tb.tokens = e.Tokens
+	if event.Tokens > 0 {
+		target.tokens = event.Tokens
 	}
-	if used := e.TokensIn + e.CacheRead + e.CacheCreate; used > 0 {
-		if !e.Done {
-			tb.ctxTokens, tb.ctxMeasured = used, true
-		} else if !tb.ctxMeasured {
-			tb.ctxTokens = used
-		}
-	}
-	switch e.T {
+	target.measureContext(event)
+	switch event.T {
 	case "chunk":
-		tb.busy = true
-		tb.streamed = true
-		tb.appendChunk(e.Text)
+		target.busy = true
+		target.streamed = true
+		target.appendChunk(event.Text)
 	case "thinking":
-		tb.busy = true
-		if strings.TrimSpace(e.Text) == "" {
-			break
-		}
-		tb.endStream()
-		tb.appendEntry(entry{role: roleThinking, text: e.Text})
+		target.busy = true
+		target.appendThinking(event.Text)
 	case "status":
-		tb.busy = true
-		tb.endStream()
-		text, _ := hostError(e.Text)
-		tb.appendEntry(entry{role: statusRole(e.Text), text: text})
+		target.busy = true
+		target.endStream()
+		text, _ := hostError(event.Text)
+		target.appendEntry(entry{role: statusRole(event.Text), text: text})
 	case "reply":
-		if e.Text != "" && !tb.streamed {
-			if text, isErr := hostError(e.Text); isErr {
-				tb.appendEntry(entry{role: roleError, text: text})
-			} else {
-				tb.appendEntry(entry{role: roleAgent, text: e.Text})
-			}
-		}
-		tb.endStream()
-		if e.Cost > 0 {
-			tb.lastCost = e.Cost
-			tb.costTotal += e.Cost
-			tb.appendEntry(entry{role: roleCost, text: formatCost(e.Cost)})
-		}
-		if e.Done {
-			tb.busy = false
-			tb.streamed = false
-			tb.ctxMeasured = false
-			tb.clearPanels()
-		}
+		target.appendReply(event)
 	case "todos":
-		tb.busy = true
-		tb.todos = e.Todos
+		target.busy = true
+		target.todos = event.Todos
 	case "subagent":
-		tb.busy = true
-		if e.Subagent == nil {
-			break
-		}
-		if e.Subagent.State == "done" {
-			tb.dropAgent(e.Subagent.ID)
-			break
-		}
-		tb.agents = append(tb.agents, liveAgent{Subagent: *e.Subagent, since: time.Now()})
+		target.busy = true
+		target.applySubagent(event.Subagent)
 	case "reset":
-		tb.busy = false
-		tb.streamed = false
-		tb.ctxMeasured = false
-		tb.endStream()
-		tb.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
+		target.busy = false
+		target.streamed = false
+		target.ctxMeasured = false
+		target.endStream()
+		target.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
 	case "abandoned":
+		target.busy = false
+		target.streamed = false
+		target.ctxMeasured = false
+		target.disconnected = true
+		target.endStream()
+		target.appendEntry(entry{role: roleNotice, text: "tour abandonné"})
+	}
+}
+
+func (tb *tab) measureContext(event contracts.Event) {
+	used := event.TokensIn + event.CacheRead + event.CacheCreate
+	if used <= 0 {
+		return
+	}
+	if !event.Done {
+		tb.ctxTokens, tb.ctxMeasured = used, true
+	} else if !tb.ctxMeasured {
+		tb.ctxTokens = used
+	}
+}
+
+func (tb *tab) appendThinking(text string) {
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	tb.endStream()
+	tb.appendEntry(entry{role: roleThinking, text: text})
+}
+
+func (tb *tab) appendReply(event contracts.Event) {
+	if event.Text != "" && !tb.streamed {
+		if text, isErr := hostError(event.Text); isErr {
+			tb.appendEntry(entry{role: roleError, text: text})
+		} else {
+			tb.appendEntry(entry{role: roleAgent, text: event.Text})
+		}
+	}
+	tb.endStream()
+	if event.Cost > 0 {
+		tb.lastCost = event.Cost
+		tb.costTotal += event.Cost
+		tb.appendEntry(entry{role: roleCost, text: formatCost(event.Cost)})
+	}
+	if event.Done {
 		tb.busy = false
 		tb.streamed = false
 		tb.ctxMeasured = false
-		tb.disconnected = true
-		tb.endStream()
-		tb.appendEntry(entry{role: roleNotice, text: "tour abandonné"})
+		tb.clearPanels()
 	}
+}
+
+func (tb *tab) applySubagent(sub *contracts.Subagent) {
+	if sub == nil {
+		return
+	}
+	if sub.State == stateDone {
+		tb.dropAgent(sub.ID)
+		return
+	}
+	tb.agents = append(tb.agents, liveAgent{Subagent: *sub, since: time.Now()})
 }
 
 func (m *model) syncViewport() {
@@ -961,7 +1006,7 @@ func (m *model) anyBusy() bool {
 	return false
 }
 
-func (m *model) spinFrame() string { return spinFrames[m.spin%len(spinFrames)] }
+func (m *model) spinFrame() string { return spinFrames()[m.spin%len(spinFrames())] }
 
 func (m *model) thinkingContent() string {
 	return m.contentWith(m.searchQuery)
@@ -970,17 +1015,17 @@ func (m *model) thinkingContent() string {
 func (m *model) baseContent() string { return m.contentWith("") }
 
 func (m *model) contentWith(query string) string {
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return ""
 	}
-	if len(tb.entries) == 0 && !tb.busy {
+	if len(tab.entries) == 0 && !tab.busy {
 		return m.emptyState(m.vp.Width)
 	}
-	content := m.cachedTranscript(tb)
+	content := m.cachedTranscript(tab)
 	if m.foldTurnsOn {
 		content = m.foldCache.get(content, "", func(s string) string {
-			return strings.Join(foldTurns(strings.Split(s, "\n"), turnFoldKeep), "\n")
+			return strings.Join(foldTurns(strings.Split(s, "\n"), turnFoldKeep, m.st), "\n")
 		})
 	}
 	if m.searchOpen && strings.TrimSpace(query) != "" {
@@ -988,8 +1033,8 @@ func (m *model) contentWith(query string) string {
 			return strings.Join(highlightMatches(strings.Split(s, "\n"), query), "\n")
 		})
 	}
-	if tb.busy && !tb.streamed {
-		line := spinnerStyle.Render(m.spinFrame() + " thinking…")
+	if tab.busy && !tab.streamed {
+		line := m.st.spinner.Render(m.spinFrame() + " thinking…")
 		if content != "" {
 			content += "\n" + line
 		} else {
@@ -999,21 +1044,21 @@ func (m *model) contentWith(query string) string {
 	return content
 }
 
-func (m *model) cachedTranscript(tb *tab) string {
+func (m *model) cachedTranscript(tab *tab) string {
 	width := m.vp.Width
 	lastLen, lastStr := 0, false
-	if n := len(tb.entries); n > 0 {
-		lastLen = len(tb.entries[n-1].text)
-		lastStr = tb.entries[n-1].streaming
+	if count := len(tab.entries); count > 0 {
+		lastLen = len(tab.entries[count-1].text)
+		lastStr = tab.entries[count-1].streaming
 	}
-	c := &m.tsCache
-	if c.valid && c.ch == tb.channel && c.width == width &&
-		c.entries == len(tb.entries) && c.lastLen == lastLen && c.lastStr == lastStr {
-		return c.out
+	cache := &m.tsCache
+	if cache.valid && cache.ch == tab.channel && cache.width == width &&
+		cache.entries == len(tab.entries) && cache.lastLen == lastLen && cache.lastStr == lastStr {
+		return cache.out
 	}
-	out := m.renderTranscript(tb, width)
-	*c = transcriptCache{
-		ch: tb.channel, width: width, entries: len(tb.entries),
+	out := m.renderTranscript(tab, width)
+	*cache = transcriptCache{
+		ch: tab.channel, width: width, entries: len(tab.entries),
 		lastLen: lastLen, lastStr: lastStr, out: out, valid: true,
 	}
 	return out
@@ -1029,54 +1074,56 @@ func (m *model) inputRow() string {
 
 func (m *model) hintText() string {
 	if m.paletteOpen() {
-		return dimStyle.Render("↑↓ naviguer · ⇞⇟ page · Tab compléter · Échap fermer")
+		return m.st.dim.Render("↑↓ naviguer · ⇞⇟ page · Tab compléter · Échap fermer")
 	}
-	return dimStyle.Render("? raccourcis")
+	return m.st.dim.Render("? raccourcis")
 }
 
 func (m *model) footer() string {
 	if s := m.linkStatus(); s != "" {
 		return s
 	}
-	tb := m.tabs[m.active]
-	if tb == nil {
+	tab := m.tabs[m.active]
+	if tab == nil {
 		return ""
 	}
-	if tb.busy {
-		return spinnerStyle.Render(m.spinnerHint(tb))
+	if tab.busy {
+		return m.st.spinner.Render(m.spinnerHint(tab))
 	}
-	if tb.disconnected {
-		return dimStyle.Render("· déconnecté")
+	if tab.disconnected {
+		return m.st.dim.Render("· déconnecté")
 	}
-	return m.statusBar(tb, m.innerWidth())
+	return m.statusBar(tab, m.innerWidth())
 }
 
-func (m *model) spinnerHint(tb *tab) string {
+func (m *model) spinnerHint(tab *tab) string {
 	segs := []string{"échap pour interrompre"}
-	if !tb.startedAt.IsZero() {
-		segs = append(segs, fmt.Sprintf("%ds", int(time.Since(tb.startedAt).Seconds())))
+	if !tab.startedAt.IsZero() {
+		segs = append(segs, fmt.Sprintf("%ds", int(time.Since(tab.startedAt).Seconds())))
 	}
-	if tb.tokens > 0 {
-		segs = append(segs, "↑ "+formatTokens(tb.tokens))
+	if tab.tokens > 0 {
+		segs = append(segs, "↑ "+formatTokens(tab.tokens))
 	}
-	if tb.lastCost > 0 {
-		segs = append(segs, formatCost(tb.lastCost))
+	if tab.lastCost > 0 {
+		segs = append(segs, formatCost(tab.lastCost))
 	}
 	return m.spinFrame() + " " + workingVerb + " (" + strings.Join(segs, " · ") + ")"
 }
 
-func formatTokens(n int) string {
-	if n < 1000 {
-		return fmt.Sprintf("%d", n)
+const minDisplayedCost = 0.01
+
+func formatTokens(tokens int) string {
+	if tokens < thousand {
+		return strconv.Itoa(tokens)
 	}
-	return fmt.Sprintf("%.1fk", float64(n)/1000)
+	return fmt.Sprintf("%.1fk", float64(tokens)/thousand)
 }
 
-func formatCost(c float64) string {
-	if c < 0.01 {
-		return fmt.Sprintf("$%.4f", c)
+func formatCost(cost float64) string {
+	if cost < minDisplayedCost {
+		return fmt.Sprintf("$%.4f", cost)
 	}
-	return fmt.Sprintf("$%.2f", c)
+	return fmt.Sprintf("$%.2f", cost)
 }
 
 // Option adjusts a window before it is drawn. Options exist so a caller can say
@@ -1093,38 +1140,44 @@ func OpenOn(session, text string) Option {
 // Run starts the TUI bound to the given gateway backend, blocking until the user
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
-func Run(ctx context.Context, cancel context.CancelFunc, tm Backend, opts ...Option) error {
-	m := newModel(tm)
-	m.ctx = ctx
+func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) error {
+	model := newModel(backend)
+	model.ctx = ctx
+	model.keys = &keyLog{}
 	for _, opt := range opts {
-		opt(m)
+		opt(model)
 	}
 	if seam, err := newManageSeam(); err == nil {
-		m.SetPluginSeam(seam)
+		model.SetPluginSeam(seam)
 	}
-	os.Stdout.WriteString(enhancedKeysOn)
-	defer os.Stdout.WriteString(enhancedKeysOff)
-	p := tea.NewProgram(m,
+	if err := writeStdout(enhancedKeysOn); err != nil {
+		cancel()
+		return fmt.Errorf("enable enhanced keys: %w", err)
+	}
+	program := tea.NewProgram(model,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
-		tea.WithInput(newFilteredStdin()),
+		tea.WithInput(newFilteredStdin(model.keys)),
 	)
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case e, ok := <-tm.Frontend():
+			case entry, ok := <-backend.Frontend():
 				if !ok {
 					return
 				}
-				p.Send(eventMsg(e))
+				program.Send(eventMsg(entry))
 			}
 		}
 	}()
-	_, err := p.Run()
+	_, runErr := program.Run()
 	cancel()
-	return err
+	if err := writeStdout(enhancedKeysOff); err != nil {
+		return errors.Join(runErr, fmt.Errorf("disable enhanced keys: %w", err))
+	}
+	return runErr
 }
 
 func (m *model) Init() tea.Cmd {
@@ -1140,354 +1193,407 @@ func (m *model) ensureSpin() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if cmd, handled := m.handlePluginsMsg(msg); handled {
+	if handled := m.handlePluginsMsg(msg); handled {
+		return m, nil
+	}
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if cmd, handled := m.handleKey(keyMsg); handled {
+			return m, cmd
+		}
+	} else if cmd, handled := m.handleMsg(msg); handled {
 		return m, cmd
 	}
+	cmd := m.updateComponents(msg)
+	return m, cmd
+}
+
+func (m *model) relayout() {
+	m.applySize()
+	m.syncViewport()
+}
+
+func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
-		if !m.ready {
-			m.vp = viewport.New(msg.Width, msg.Height-m.chromeHeight())
-			m.ready = true
-		} else {
-			m.applySize()
-		}
-		m.input.SetWidth(m.composerTextWidth())
-		m.resizeComposer()
-		m.syncViewport()
-	case tea.KeyMsg:
-		keylog("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
-		m.flash = ""
-		if m.pendingClose {
-			if msg.String() == "y" {
-				cmd := m.confirmClose()
-				m.pendingClose = false
-				return m, cmd
-			}
-			if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc {
-				m.pendingClose = false
-				return m, tea.Quit
-			}
-			m.pendingClose = false
-			return m, nil
-		}
-		if m.choice != nil {
-			switch msg.Type {
-			case tea.KeyUp:
-				m.moveChoice(-1)
-				return m, nil
-			case tea.KeyDown:
-				m.moveChoice(1)
-				return m, nil
-			case tea.KeyEsc:
-				m.choiceIdx = len(m.choice.Options) - 1
-				m.chooseChoice()
-				return m, nil
-			case tea.KeyEnter:
-				m.chooseChoice()
-				return m, nil
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		if m.switchOpen {
-			if m.overlayNav(msg, m.moveSwitch) {
-				return m, nil
-			}
-			switch msg.Type {
-			case tea.KeyEsc:
-				m.switchOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyEnter:
-				m.chooseSwitch()
-				m.switchOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, m.ensureSpin()
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		if m.searchOpen {
-			switch msg.Type {
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			case tea.KeyEsc, tea.KeyCtrlS:
-				m.closeSearch()
-				return m, nil
-			case tea.KeyEnter, tea.KeyCtrlN:
-				m.searchStep(1)
-				return m, nil
-			case tea.KeyCtrlP:
-				m.searchStep(-1)
-				return m, nil
-			case tea.KeyBackspace:
-				if q := m.searchQuery; q != "" {
-					m.typeSearch(q[:len(q)-1])
-				}
-				return m, nil
-			case tea.KeyRunes:
-				if msg.Alt {
-					return m, nil
-				}
-				m.typeSearch(m.searchQuery + string(msg.Runes))
-				return m, nil
-			case tea.KeySpace:
-				m.typeSearch(m.searchQuery + " ")
-				return m, nil
-			}
-			return m, nil
-		}
-		if m.diagOpen {
-			if msg.Type == tea.KeyCtrlC {
-				return m, tea.Quit
-			}
-			m.diagOpen = false
-			m.applySize()
-			m.syncViewport()
-			return m, nil
-		}
-		if m.pluginsOpen {
-			if msg.Type == tea.KeyCtrlC {
-				return m, tea.Quit
-			}
-			return m, m.handlePluginsKey(msg)
-		}
-		if m.skillsOpen {
-			if m.overlayNav(msg, m.moveSkills) {
-				return m, nil
-			}
-			switch msg.Type {
-			case tea.KeyEsc, tea.KeyEnter:
-				m.skillsOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		if m.resumeOpen {
-			if m.overlayNav(msg, m.moveResume) {
-				return m, nil
-			}
-			switch msg.Type {
-			case tea.KeyEsc:
-				m.resumeOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyEnter:
-				cmd := m.chooseResume()
-				m.resumeOpen = false
-				m.applySize()
-				m.syncViewport()
-				return m, tea.Batch(cmd, m.ensureSpin())
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		if m.paletteOpen() {
-			if m.overlayNav(msg, m.movePal) {
-				return m, nil
-			}
-			switch msg.Type {
-			case tea.KeyTab:
-				m.completePal()
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyEsc:
-				m.input.SetValue("")
-				m.palIdx = 0
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			case tea.KeyEnter:
-				cmd := m.handleEnter()
-				m.palIdx = 0
-				m.applySize()
-				m.syncViewport()
-				return m, tea.Batch(cmd, m.ensureSpin())
-			case tea.KeyCtrlC:
-				return m, tea.Quit
-			}
-		}
-		if m.mentionOpen() {
-			switch msg.Type {
-			case tea.KeyUp:
-				m.moveMention(-1)
-				return m, nil
-			case tea.KeyDown:
-				m.moveMention(1)
-				return m, nil
-			case tea.KeyTab:
-				m.completeActiveMention()
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			}
-		}
-		switch msg.Type {
-		case tea.KeyEsc:
-			if tb := m.tabs[m.active]; tb != nil && tb.busy {
-				if name := m.sessionName(m.active); name != "" {
-					m.tm.Interrupt(name)
-				}
-				return m, nil
-			}
-			return m, tea.Quit
-		case tea.KeyCtrlC:
-			return m, tea.Quit
-		case tea.KeyTab:
-			m.switchTab(1)
-			return m, nil
-		case tea.KeyShiftTab:
-			m.switchTab(-1)
-			return m, nil
-		case tea.KeyEnter:
-			if msg.Alt {
-				break
-			}
-			if m.continueLine() {
-				return m, nil
-			}
-			return m, tea.Batch(m.handleEnter(), m.ensureSpin())
-		case tea.KeyCtrlS:
-			m.openSearch()
-			return m, nil
-		case tea.KeyCtrlT:
-			m.toggleTurnFold()
-			return m, nil
-		case tea.KeyCtrlF:
-			m.toggleFold()
-			return m, nil
-		case tea.KeyCtrlY:
-			m.copyLastCode()
-			return m, nil
-		case tea.KeyCtrlG:
-			return m, m.toggleMouse()
-		case tea.KeyCtrlL:
-			m.selectNextLink()
-			return m, nil
-		case tea.KeyCtrlO:
-			m.openSelectedLink()
-			return m, nil
-		case tea.KeyCtrlV:
-			if m.pasteImage() {
-				return m, nil
-			}
-		case tea.KeyCtrlU:
-			if m.removeLastPending() {
-				m.applySize()
-				m.syncViewport()
-				return m, nil
-			}
-		case tea.KeyUp:
-			if msg.Alt {
-				m.jumpTurn(-1)
-				return m, nil
-			}
-			if m.input.LineCount() <= 1 && (m.input.Value() == "" || m.histIdx < len(m.history)) {
-				if m.recallHistory(-1) {
-					return m, nil
-				}
-			}
-		case tea.KeyDown:
-			if msg.Alt {
-				m.jumpTurn(1)
-				return m, nil
-			}
-			if m.input.LineCount() <= 1 && m.histIdx < len(m.history) {
-				if m.recallHistory(1) {
-					return m, nil
-				}
-			}
-		case tea.KeyCtrlW:
-			if m.input.Value() != "" {
-				break
-			}
-			m.pendingClose = true
-			return m, nil
-		case tea.KeyRunes:
-			if msg.String() == "?" && m.input.Value() == "" {
-				m.toggleHelp()
-				return m, nil
-			}
-			if msg.Alt && strings.EqualFold(string(msg.Runes), "y") {
-				m.copyTarget(copyReply)
-				return m, nil
-			}
-			if msg.Alt && strings.EqualFold(string(msg.Runes), "e") {
-				m.toggleToolExpand()
-				return m, nil
-			}
-		}
+		m.handleWindowSize(msg)
 	case eventMsg:
 		cmd := m.route(RoutedEvent(msg))
-		return m, tea.Batch(cmd, m.ensureSpin())
+		return tea.Batch(cmd, m.ensureSpin()), true
 	case imageReadyMsg:
 		m.applyImage(msg)
-		return m, nil
+		return nil, true
+	case enhancedKeysFailedMsg:
+		m.flash = "touches étendues indisponibles : " + msg.err.Error()
+		return nil, true
 	case dispatchResultMsg:
-		m.syncTabs()
-		line, role := msg.out, roleNotice
-		if msg.err != nil {
-			line, role = msg.err.Error(), roleError
-		}
-		if line != "" {
-			tb := m.tabs[msg.origin]
-			if tb == nil {
-				tb = m.tabs[m.active]
-			}
-			if tb != nil {
-				tb.appendEntry(entry{role: role, text: line})
-				m.syncViewport()
-			} else {
-				m.flash = line
-			}
-		}
-		return m, nil
+		m.handleDispatchResult(msg)
+		return nil, true
 	case tickMsg:
 		m.syncTabs()
-		return m, tickCmd()
+		return tickCmd(), true
 	case spinMsg:
-		if !m.anyBusy() {
-			m.spinning = false
-			return m, nil
-		}
-		m.spin++
-		m.syncViewport()
-		return m, spinTick(fastTick)
+		return m.handleSpin(), true
 	}
+	return nil, false
+}
+
+func (m *model) handleWindowSize(msg tea.WindowSizeMsg) {
+	m.width, m.height = msg.Width, msg.Height
+	if !m.ready {
+		m.vp = viewport.New(msg.Width, msg.Height-m.chromeHeight())
+		m.ready = true
+	} else {
+		m.applySize()
+	}
+	m.input.SetWidth(m.composerTextWidth())
+	m.resizeComposer()
+	m.syncViewport()
+}
+
+func (m *model) handleDispatchResult(msg dispatchResultMsg) {
+	m.syncTabs()
+	line, role := msg.out, roleNotice
+	if msg.err != nil {
+		line, role = msg.err.Error(), roleError
+	}
+	if line == "" {
+		return
+	}
+	tab := m.tabs[msg.origin]
+	if tab == nil {
+		tab = m.tabs[m.active]
+	}
+	if tab == nil {
+		m.flash = line
+		return
+	}
+	tab.appendEntry(entry{role: role, text: line})
+	m.syncViewport()
+}
+
+func (m *model) handleSpin() tea.Cmd {
+	if !m.anyBusy() {
+		m.spinning = false
+		return nil
+	}
+	m.spin++
+	m.syncViewport()
+	return spinTick(fastTick)
+}
+
+func (m *model) updateComponents(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
-	var c tea.Cmd
-	m.input, c = m.input.Update(msg)
-	cmds = append(cmds, c)
-	m.vp, c = m.vp.Update(msg)
-	cmds = append(cmds, c)
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	cmds = append(cmds, cmd)
+	m.vp, cmd = m.vp.Update(msg)
+	cmds = append(cmds, cmd)
 	if _, ok := msg.(tea.KeyMsg); ok {
 		m.resizeComposer()
-	}
-	if _, ok := msg.(tea.KeyMsg); ok {
 		if m.paletteOpen() || m.palWasOpen {
 			m.clampPal()
-			m.applySize()
-			m.syncViewport()
+			m.relayout()
 		}
 		m.palWasOpen = m.paletteOpen()
 	}
-	return m, tea.Batch(cmds...)
+	return tea.Batch(cmds...)
+}
+
+func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	m.keys.write("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
+	m.flash = ""
+	switch {
+	case m.pendingClose:
+		return m.handlePendingClose(msg), true
+	case m.choice != nil:
+		return m.handleChoiceKey(msg), true
+	case m.switchOpen:
+		return m.handleSwitchKey(msg), true
+	case m.searchOpen:
+		return m.handleSearchKey(msg), true
+	case m.diagOpen:
+		return m.handleDiagKey(msg), true
+	case m.pluginsOpen:
+		return m.handlePluginsOverlayKey(msg), true
+	case m.skillsOpen:
+		return m.handleSkillsKey(msg), true
+	case m.resumeOpen:
+		return m.handleResumeKey(msg), true
+	}
+	if cmd, handled := m.handlePaletteKey(msg); handled {
+		return cmd, true
+	}
+	if m.handleMentionKey(msg) {
+		return nil, true
+	}
+	return m.handleMainKey(msg)
+}
+
+func (m *model) handlePendingClose(msg tea.KeyMsg) tea.Cmd {
+	if msg.String() == "y" {
+		cmd := m.confirmClose()
+		m.pendingClose = false
+		return cmd
+	}
+	m.pendingClose = false
+	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc {
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handleChoiceKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.Type {
+	case tea.KeyUp:
+		m.moveChoice(-1)
+	case tea.KeyDown:
+		m.moveChoice(1)
+	case tea.KeyEsc:
+		m.choiceIdx = len(m.choice.Options) - 1
+		m.chooseChoice()
+	case tea.KeyEnter:
+		m.chooseChoice()
+	case tea.KeyCtrlC:
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handleSwitchKey(msg tea.KeyMsg) tea.Cmd {
+	if m.overlayNav(msg, m.moveSwitch) {
+		return nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.switchOpen = false
+		m.relayout()
+	case tea.KeyEnter:
+		m.chooseSwitch()
+		m.switchOpen = false
+		m.relayout()
+		return m.ensureSpin()
+	case tea.KeyCtrlC:
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return tea.Quit
+	case tea.KeyEsc, tea.KeyCtrlS:
+		m.closeSearch()
+	case tea.KeyEnter, tea.KeyCtrlN:
+		m.searchStep(1)
+	case tea.KeyCtrlP:
+		m.searchStep(-1)
+	case tea.KeyBackspace:
+		if q := m.searchQuery; q != "" {
+			m.typeSearch(q[:len(q)-1])
+		}
+	case tea.KeyRunes:
+		if !msg.Alt {
+			m.typeSearch(m.searchQuery + string(msg.Runes))
+		}
+	case tea.KeySpace:
+		m.typeSearch(m.searchQuery + " ")
+	}
+	return nil
+}
+
+func (m *model) handleDiagKey(msg tea.KeyMsg) tea.Cmd {
+	if msg.Type == tea.KeyCtrlC {
+		return tea.Quit
+	}
+	m.diagOpen = false
+	m.relayout()
+	return nil
+}
+
+func (m *model) handlePluginsOverlayKey(msg tea.KeyMsg) tea.Cmd {
+	if msg.Type == tea.KeyCtrlC {
+		return tea.Quit
+	}
+	return m.handlePluginsKey(msg)
+}
+
+func (m *model) handleSkillsKey(msg tea.KeyMsg) tea.Cmd {
+	if m.overlayNav(msg, m.moveSkills) {
+		return nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyEnter:
+		m.skillsOpen = false
+		m.relayout()
+	case tea.KeyCtrlC:
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handleResumeKey(msg tea.KeyMsg) tea.Cmd {
+	if m.overlayNav(msg, m.moveResume) {
+		return nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.resumeOpen = false
+		m.relayout()
+	case tea.KeyEnter:
+		cmd := m.chooseResume()
+		m.resumeOpen = false
+		m.relayout()
+		return tea.Batch(cmd, m.ensureSpin())
+	case tea.KeyCtrlC:
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) handlePaletteKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if !m.paletteOpen() {
+		return nil, false
+	}
+	if m.overlayNav(msg, m.movePal) {
+		return nil, true
+	}
+	switch msg.Type {
+	case tea.KeyTab:
+		m.completePal()
+		m.relayout()
+	case tea.KeyEsc:
+		m.input.SetValue("")
+		m.palIdx = 0
+		m.relayout()
+	case tea.KeyEnter:
+		cmd := m.handleEnter()
+		m.palIdx = 0
+		m.relayout()
+		return tea.Batch(cmd, m.ensureSpin()), true
+	case tea.KeyCtrlC:
+		return tea.Quit, true
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+func (m *model) handleMentionKey(msg tea.KeyMsg) bool {
+	if !m.mentionOpen() {
+		return false
+	}
+	switch msg.Type {
+	case tea.KeyUp:
+		m.moveMention(-1)
+	case tea.KeyDown:
+		m.moveMention(1)
+	case tea.KeyTab:
+		m.completeActiveMention()
+		m.relayout()
+	default:
+		return false
+	}
+	return true
+}
+
+func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		if tb := m.tabs[m.active]; tb != nil && tb.busy {
+			if name := m.sessionName(m.active); name != "" {
+				m.tm.Interrupt(name)
+			}
+			return nil, true
+		}
+		return tea.Quit, true
+	case tea.KeyCtrlC:
+		return tea.Quit, true
+	case tea.KeyTab:
+		m.switchTab(1)
+	case tea.KeyShiftTab:
+		m.switchTab(-1)
+	case tea.KeyEnter:
+		if msg.Alt {
+			return nil, false
+		}
+		if m.continueLine() {
+			return nil, true
+		}
+		return tea.Batch(m.handleEnter(), m.ensureSpin()), true
+	case tea.KeyCtrlS:
+		m.openSearch()
+	case tea.KeyCtrlT:
+		m.toggleTurnFold()
+	case tea.KeyCtrlF:
+		m.toggleFold()
+	case tea.KeyCtrlY:
+		m.copyLastCode()
+	case tea.KeyCtrlG:
+		return m.toggleMouse(), true
+	case tea.KeyCtrlL:
+		m.selectNextLink()
+	case tea.KeyCtrlO:
+		m.openSelectedLink()
+	case tea.KeyCtrlV:
+		return nil, m.pasteImage()
+	case tea.KeyCtrlU:
+		if !m.removeLastPending() {
+			return nil, false
+		}
+		m.relayout()
+	case tea.KeyUp:
+		return m.handleHistoryKey(msg, -1)
+	case tea.KeyDown:
+		return m.handleHistoryKey(msg, 1)
+	case tea.KeyCtrlW:
+		if m.input.Value() != "" {
+			return nil, false
+		}
+		m.pendingClose = true
+	case tea.KeyRunes:
+		return m.handleRunesKey(msg)
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+func (m *model) handleHistoryKey(msg tea.KeyMsg, dir int) (tea.Cmd, bool) {
+	if msg.Alt {
+		m.jumpTurn(dir)
+		return nil, true
+	}
+	if dir < 0 {
+		if m.input.LineCount() <= 1 && (m.input.Value() == "" || m.histIdx < len(m.history)) && m.recallHistory(-1) {
+			return nil, true
+		}
+		return nil, false
+	}
+	if m.input.LineCount() <= 1 && m.histIdx < len(m.history) && m.recallHistory(1) {
+		return nil, true
+	}
+	return nil, false
+}
+
+func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if msg.String() == "?" && m.input.Value() == "" {
+		m.toggleHelp()
+		return nil, true
+	}
+	if msg.Alt && strings.EqualFold(string(msg.Runes), "y") {
+		m.copyTarget(copyReply)
+		return nil, true
+	}
+	if msg.Alt && strings.EqualFold(string(msg.Runes), "e") {
+		m.toggleToolExpand()
+		return nil, true
+	}
+	return nil, false
 }
 
 func (m *model) helpView() string {
-	return dimStyle.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
+	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
 }
 
 func (m *model) View() string {

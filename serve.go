@@ -238,9 +238,9 @@ func runPrompt(ctx context.Context, t task) error {
 	return runPromptWindow(ctx, name, t.Text)
 }
 
-func createTaskSession(name string) []string {
+func createTaskSession(ctx context.Context, name string) []string {
 	return append([]string{"session", "create", "--name", name, "--terminal_only"},
-		scope.LaunchFromEnv().Args()...)
+		scope.LaunchFromEnv(ctx).Args()...)
 }
 
 func runPromptWindow(ctx context.Context, name, text string) error {
@@ -248,7 +248,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 	unlock, lerr := host.LockState(statePath)
 	if lerr != nil {
 		instance := host.ServedInstanceID(statePath, "")
-		if _, err := host.DaemonDispatch(ctx, instance, createTaskSession(name)); err != nil {
+		if _, err := host.DaemonDispatch(ctx, instance, createTaskSession(ctx, name)); err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, "session: "+name)
@@ -259,7 +259,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := reg.Dispatch(ctx, createTaskSession(name)); err != nil {
+	if _, err := reg.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "session: "+name)
@@ -276,7 +276,7 @@ type foregroundOpener interface {
 }
 
 func runPromptWith(ctx context.Context, d verbDispatcher, name, prompt string, stdout, stderr io.Writer) error {
-	if _, err := d.Dispatch(ctx, createTaskSession(name)); err != nil {
+	if _, err := d.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
 		return err
 	}
 	fmt.Fprintln(stderr, "session: "+name)

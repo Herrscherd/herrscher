@@ -5,75 +5,89 @@ import (
 	"strings"
 )
 
+const (
+	oscIntroLen     = 2
+	stTerminatorLen = 2
+	foldedHeadWidth = 60
+)
+
 func searchHits(lines []string, query string) []int {
 	if strings.TrimSpace(query) == "" {
 		return nil
 	}
-	q := strings.ToLower(query)
+	needle := strings.ToLower(query)
 	var out []int
-	for i, ln := range lines {
-		if strings.Contains(strings.ToLower(visibleText(ln)), q) {
-			out = append(out, i)
+	for index, ln := range lines {
+		if strings.Contains(strings.ToLower(visibleText(ln)), needle) {
+			out = append(out, index)
 		}
 	}
 	return out
 }
 
-func escapeEnd(s string, i int) int {
-	if i >= len(s) || s[i] != 0x1b {
+func escapeEnd(text string, index int) int {
+	if index >= len(text) || text[index] != 0x1b {
 		return -1
 	}
-	if i+1 >= len(s) {
-		return len(s)
+	if index+1 >= len(text) {
+		return len(text)
 	}
-	switch s[i+1] {
+	switch text[index+1] {
 	case '[':
-		for j := i + 2; j < len(s); j++ {
-			if s[j] >= 0x40 && s[j] <= 0x7e {
-				return j + 1
-			}
-		}
-		return len(s)
+		return csiEnd(text, index)
 	case ']', 'P', '_', '^', 'X':
-		for j := i + 2; j < len(s); j++ {
-			if s[j] == 0x07 {
-				return j + 1
-			}
-			if s[j] == 0x1b && j+1 < len(s) && s[j+1] == '\\' {
-				return j + 2
-			}
-		}
-		return len(s)
+		return stringEnd(text, index)
 	}
-	return i + 2
+	return index + oscIntroLen
 }
 
-func visibleText(s string) string {
-	if !strings.Contains(s, "\x1b") {
-		return s
+func csiEnd(text string, i int) int {
+	for next := i + oscIntroLen; next < len(text); next++ {
+		if text[next] >= 0x40 && text[next] <= 0x7e {
+			return next + 1
+		}
 	}
-	var b strings.Builder
-	forEachTextRun(s, func(esc bool, chunk string) {
+	return len(text)
+}
+
+func stringEnd(text string, i int) int {
+	for next := i + oscIntroLen; next < len(text); next++ {
+		if text[next] == ctrlBEL {
+			return next + 1
+		}
+		if text[next] == 0x1b && next+1 < len(text) && text[next+1] == '\\' {
+			return next + stTerminatorLen
+		}
+	}
+	return len(text)
+}
+
+func visibleText(text string) string {
+	if !strings.Contains(text, "\x1b") {
+		return text
+	}
+	var block strings.Builder
+	forEachTextRun(text, func(esc bool, chunk string) {
 		if !esc {
-			b.WriteString(chunk)
+			block.WriteString(chunk)
 		}
 	})
-	return b.String()
+	return block.String()
 }
 
-func forEachTextRun(s string, fn func(esc bool, chunk string)) {
-	for i := 0; i < len(s); {
-		if end := escapeEnd(s, i); end > 0 {
-			fn(true, s[i:end])
-			i = end
+func forEachTextRun(text string, emit func(esc bool, chunk string)) {
+	for index := 0; index < len(text); {
+		if end := escapeEnd(text, index); end > 0 {
+			emit(true, text[index:end])
+			index = end
 			continue
 		}
-		j := i
-		for j < len(s) && s[j] != 0x1b {
-			j++
+		next := index
+		for next < len(text) && text[next] != 0x1b {
+			next++
 		}
-		fn(false, s[i:j])
-		i = j
+		emit(false, text[index:next])
+		index = next
 	}
 }
 
@@ -81,24 +95,24 @@ func highlightMatches(lines []string, query string) []string {
 	if strings.TrimSpace(query) == "" {
 		return lines
 	}
-	q := strings.ToLower(query)
+	needle := strings.ToLower(query)
 	out := make([]string, len(lines))
 	for i, ln := range lines {
-		out[i] = markLine(ln, q)
+		out[i] = markLine(ln, needle)
 	}
 	return out
 }
 
 func markLine(line, lowerQuery string) string {
-	var b strings.Builder
+	var builder strings.Builder
 	forEachTextRun(line, func(esc bool, chunk string) {
 		if esc {
-			b.WriteString(chunk)
+			builder.WriteString(chunk)
 			return
 		}
-		b.WriteString(markRun(chunk, lowerQuery))
+		builder.WriteString(markRun(chunk, lowerQuery))
 	})
-	return b.String()
+	return builder.String()
 }
 
 func markRun(line, lowerQuery string) string {
@@ -106,17 +120,17 @@ func markRun(line, lowerQuery string) string {
 	if len(lower) != len(line) {
 		return line
 	}
-	var b strings.Builder
+	var builder strings.Builder
 	for {
-		i := strings.Index(lower, lowerQuery)
-		if i < 0 {
-			b.WriteString(line)
-			return b.String()
+		index := strings.Index(lower, lowerQuery)
+		if index < 0 {
+			builder.WriteString(line)
+			return builder.String()
 		}
-		j := i + len(lowerQuery)
-		b.WriteString(line[:i])
-		b.WriteString(ansiReverse + line[i:j] + ansiReverseOff)
-		line, lower = line[j:], lower[j:]
+		next := index + len(lowerQuery)
+		builder.WriteString(line[:index])
+		builder.WriteString(ansiReverse + line[index:next] + ansiReverseOff)
+		line, lower = line[next:], lower[next:]
 	}
 }
 
@@ -146,9 +160,9 @@ func (m *model) closeSearch() {
 	m.vp.SetYOffset(m.searchReturn)
 }
 
-func (m *model) typeSearch(q string) {
-	m.searchQuery = q
-	m.searchHits = searchHits(m.transcriptLines(), q)
+func (m *model) typeSearch(query string) {
+	m.searchQuery = query
+	m.searchHits = searchHits(m.transcriptLines(), query)
 	m.searchIdx = 0
 	m.syncViewport()
 	m.scrollToHit()
@@ -179,15 +193,15 @@ func (m *model) searchView() string {
 	if len(m.searchHits) > 0 {
 		pos = fmt.Sprintf("%d/%d", m.searchIdx+1, len(m.searchHits))
 	}
-	return dimStyle.Render("recherche : ") + textStyle.Render(m.searchQuery+"▏") +
-		dimStyle.Render("  "+pos+"  ctrl+n/ctrl+p · échap")
+	return m.st.dim.Render("recherche : ") + m.st.text.Render(m.searchQuery+"▏") +
+		m.st.dim.Render("  "+pos+"  ctrl+n/ctrl+p · échap")
 }
 
 func turnBoundaries(lines []string) []int {
 	var out []int
-	for i, ln := range lines {
+	for index, ln := range lines {
 		if strings.Contains(ln, glyphCursor) || strings.Contains(ln, agentTitle) {
-			out = append(out, i)
+			out = append(out, index)
 		}
 	}
 	return out
@@ -200,25 +214,25 @@ func (m *model) jumpTurn(delta int) {
 	}
 	cur := m.vp.YOffset
 	if delta > 0 {
-		for _, b := range bounds {
-			if b > cur {
-				m.vp.SetYOffset(b)
+		for _, bounds := range bounds {
+			if bounds > cur {
+				m.vp.SetYOffset(bounds)
 				return
 			}
 		}
 		m.vp.SetYOffset(bounds[len(bounds)-1])
 		return
 	}
-	for i := len(bounds) - 1; i >= 0; i-- {
-		if bounds[i] < cur {
-			m.vp.SetYOffset(bounds[i])
+	for index := len(bounds) - 1; index >= 0; index-- {
+		if bounds[index] < cur {
+			m.vp.SetYOffset(bounds[index])
 			return
 		}
 	}
 	m.vp.SetYOffset(bounds[0])
 }
 
-func foldTurns(lines []string, keep int) []string {
+func foldTurns(lines []string, keep int, styles uiStyles) []string {
 	if keep < 1 {
 		keep = 1
 	}
@@ -228,22 +242,22 @@ func foldTurns(lines []string, keep int) []string {
 	}
 	cut := bounds[len(bounds)-keep]
 	var out []string
-	for i := 0; i < len(bounds); i++ {
-		start := bounds[i]
+	for index := range bounds {
+		start := bounds[index]
 		if start >= cut {
 			return append(out, lines[start:]...)
 		}
-		if i == 0 && start > 0 {
+		if index == 0 && start > 0 {
 			out = append(out, lines[:start]...)
 		}
-		end := bounds[i+1]
-		out = append(out, foldedTurnLine(lines[start], end-start))
+		end := bounds[index+1]
+		out = append(out, foldedTurnLine(lines[start], end-start, styles))
 	}
 	return out
 }
 
-func foldedTurnLine(head string, lines int) string {
-	return truncate(head, 60) + dimStyle.Render(fmt.Sprintf(" %s %d lines", glyphFold, lines))
+func foldedTurnLine(head string, lines int, st uiStyles) string {
+	return truncate(head, foldedHeadWidth) + st.dim.Render(fmt.Sprintf(" %s %d lines", glyphFold, lines))
 }
 
 const turnFoldKeep = 2

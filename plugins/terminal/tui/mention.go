@@ -8,14 +8,14 @@ import (
 
 const mentionMax = 6
 
-func mentionWord(input string, cursor int) (start int, prefix string, ok bool) {
+func mentionWord(input string, cursor int) (int, string, bool) {
 	if cursor < 0 {
 		cursor = 0
 	}
 	if cursor > len(input) {
 		cursor = len(input)
 	}
-	start = strings.LastIndexAny(input[:cursor], " \t\n") + 1
+	start := strings.LastIndexAny(input[:cursor], " \t\n") + 1
 	word := input[start:cursor]
 	if !strings.HasPrefix(word, "@") {
 		return 0, "", false
@@ -29,12 +29,12 @@ func mentionMatches(dir, prefix string) []string {
 		return nil
 	}
 	var out []string
-	for _, e := range ents {
-		name := e.Name()
+	for _, item := range ents {
+		name := item.Name()
 		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
-		if e.IsDir() {
+		if item.IsDir() {
 			name += "/"
 		}
 		out = append(out, name)
@@ -55,9 +55,11 @@ func completeMention(input string, cursor int, match string) (string, int) {
 
 func (m *model) worktreeDir() string {
 	if name := m.sessionName(m.active); name != "" {
-		for _, s := range m.tm.Sessions() {
-			if s.Name == name && s.Dir != "" {
-				return s.Dir
+		sessions := m.tm.Sessions()
+		for i := range sessions {
+			session := &sessions[i]
+			if session.Name == name && session.Dir != "" {
+				return session.Dir
 			}
 		}
 	}
@@ -78,7 +80,7 @@ func (m *model) mentionCursor() int {
 		return len(value)
 	}
 	offset := 0
-	for i := 0; i < row; i++ {
+	for i := range row {
 		offset += len(lines[i]) + 1
 	}
 	runes := []rune(lines[row])
@@ -119,9 +121,9 @@ func (m *model) mentionRows() []string {
 }
 
 func (m *model) clampMention() {
-	n := len(m.mentionRows())
-	if m.mentionIdx >= n {
-		m.mentionIdx = n - 1
+	count := len(m.mentionRows())
+	if m.mentionIdx >= count {
+		m.mentionIdx = count - 1
 	}
 	if m.mentionIdx < 0 {
 		m.mentionIdx = 0
@@ -153,5 +155,5 @@ func (m *model) mentionView() string {
 	for _, p := range paths {
 		rows = append(rows, overlayRow{label: "@" + p})
 	}
-	return floatingList(rows, m.mentionIdx, "Tab compléter · Échap fermer", m.overlayWidth())
+	return floatingList(rows, m.mentionIdx, "Tab compléter · Échap fermer", m.overlayWidth(), m.st)
 }

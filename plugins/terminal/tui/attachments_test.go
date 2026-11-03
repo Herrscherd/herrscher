@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,16 +16,16 @@ type fakeClipboard struct {
 	err  error
 }
 
-func (f fakeClipboard) ImageType() (string, bool) {
+func (f fakeClipboard) ImageType(context.Context) (string, bool) {
 	if f.mime == "" {
 		return "", false
 	}
 	return f.mime, true
 }
 
-func (f fakeClipboard) ReadImage(string) ([]byte, error) { return f.data, f.err }
+func (f fakeClipboard) ReadImage(context.Context, string) ([]byte, error) { return f.data, f.err }
 
-func (f fakeClipboard) WriteText(string) error { return nil }
+func (f fakeClipboard) WriteText(context.Context, string) error { return nil }
 
 func TestCtrlVStagesClipboardImage(t *testing.T) {
 	m := readyModel(&fakeBackend{})
@@ -43,7 +44,7 @@ func TestCtrlVStagesClipboardImage(t *testing.T) {
 	if _, err := os.Stat(att.Path); err != nil {
 		t.Fatalf("pasted image must be written to disk: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(att.Path) })
+	t.Cleanup(func() { removeIfPresent(t, att.Path) })
 	if m.vp.Height != base-1 {
 		t.Fatalf("chip row must steal one viewport line: base=%d now=%d", base, m.vp.Height)
 	}
@@ -69,7 +70,7 @@ func TestSubmitCarriesAttachments(t *testing.T) {
 	m.clip = fakeClipboard{mime: "image/png", data: []byte("bytes")}
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
 	path := m.pending[0].Path
-	t.Cleanup(func() { os.Remove(path) })
+	t.Cleanup(func() { removeIfPresent(t, path) })
 
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("look at this")})
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -111,7 +112,7 @@ func TestAttachCommandStagesFile(t *testing.T) {
 		t.Fatalf("/attach must stage the file, pending=%+v", m.pending)
 	}
 	got := m.pending[0]
-	t.Cleanup(func() { os.Remove(got.Path) })
+	t.Cleanup(func() { removeIfPresent(t, got.Path) })
 	if filepath.Dir(got.Path) != attachmentDir() {
 		t.Errorf("staged path %s is not under %s", got.Path, attachmentDir())
 	}
@@ -123,5 +124,19 @@ func TestAttachCommandStagesFile(t *testing.T) {
 	}
 	if _, err := os.Stat(p); err != nil {
 		t.Errorf("original file must survive /attach: %v", err)
+	}
+}
+
+func removeIfPresent(t *testing.T, path string) {
+	t.Helper()
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		t.Error(err)
+	}
+}
+
+func TestStageRefusesANameThatEscapesTheAttachmentDirectory(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	if _, err := stage("../escape.txt", []byte("x")); err == nil {
+		t.Fatal("stage accepted a name that leaves the attachment directory")
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const codeFence = "```"
+
 const (
 	diffAdd     = "add"
 	diffDel     = "del"
@@ -43,29 +45,29 @@ const (
 
 const diffHunkBudget = 4
 
-func renderDiff(body string, width int, v view) string {
+func renderDiff(body string, width int, view view) string {
 	lines := strings.Split(body, "\n")
 	out := make([]string, 0, len(lines)+1)
 	inHunk := len(lines) > 0 && !isDiffHeader(lines[0])
 	spent := 0
-	for i, ln := range lines {
-		if !inHunk && !isDiffHeader(ln) {
+	for lineIndex, diffLine := range lines {
+		if !inHunk && !isDiffHeader(diffLine) {
 			inHunk = true
 		}
-		class := diffClass(ln, inHunk)
+		class := diffClass(diffLine, inHunk)
 		if class != diffMeta {
-			if !v.expand && spent == diffHunkBudget {
-				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-i), dimStyle))
+			if !view.expand && spent == diffHunkBudget {
+				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-lineIndex), view.st.dim))
 				break
 			}
 			spent++
 		}
-		out = append(out, paintDiff(truncate(ln, width), class, v.caps))
+		out = append(out, paintDiff(truncate(diffLine, width), class, view.caps, view.st))
 	}
 	return strings.Join(out, "\n")
 }
 
-func paintDiff(line, class string, caps Capabilities) string {
+func paintDiff(line, class string, caps Capabilities, styles uiStyles) string {
 	if caps.Colour == Colour16 {
 		switch class {
 		case diffAdd:
@@ -77,18 +79,18 @@ func paintDiff(line, class string, caps Capabilities) string {
 	}
 	switch class {
 	case diffAdd:
-		return greenStyle.Render(line)
+		return styles.green.Render(line)
 	case diffDel:
-		return redStyle.Render(line)
+		return styles.red.Render(line)
 	case diffMeta:
-		return dimStyle.Render(line)
+		return styles.dim.Render(line)
 	}
-	return textStyle.Render(line)
+	return styles.text.Render(line)
 }
 
 const tableGap = "  "
 
-func renderTable(rows [][]string, width int) string {
+func renderTable(rows [][]string, width int, styles uiStyles) string {
 	if len(rows) == 0 {
 		return ""
 	}
@@ -96,66 +98,66 @@ func renderTable(rows [][]string, width int) string {
 	for _, r := range rows {
 		cols = max(cols, len(r))
 	}
-	w := make([]int, cols)
+	widths := make([]int, cols)
 	for _, r := range rows {
 		for i, c := range r {
-			w[i] = max(w[i], lipgloss.Width(c))
+			widths[i] = max(widths[i], lipgloss.Width(c))
 		}
 	}
-	shrinkColumns(w, width-len(tableGap)*(cols-1))
+	shrinkColumns(widths, width-len(tableGap)*(cols-1))
 
-	var b strings.Builder
-	for i, r := range rows {
-		if i > 0 {
-			b.WriteByte('\n')
+	var builder strings.Builder
+	for rowIndex, row := range rows {
+		if rowIndex > 0 {
+			builder.WriteByte('\n')
 		}
-		if i == 1 {
-			b.WriteString(dimStyle.Render(strings.Repeat("─", min(width, tableWidth(w)))) + "\n")
+		if rowIndex == 1 {
+			builder.WriteString(styles.dim.Render(strings.Repeat("─", min(width, tableWidth(widths)))) + "\n")
 		}
-		b.WriteString(tableRow(r, w, i == 0))
+		builder.WriteString(tableRow(row, widths, rowIndex == 0, styles))
 	}
-	return b.String()
+	return builder.String()
 }
 
-func tableWidth(w []int) int {
-	total := len(tableGap) * (len(w) - 1)
-	for _, c := range w {
+func tableWidth(widths []int) int {
+	total := len(tableGap) * (len(widths) - 1)
+	for _, c := range widths {
 		total += c
 	}
 	return total
 }
 
-func shrinkColumns(w []int, budget int) {
-	for tableWidth(w) > budget {
+func shrinkColumns(widths []int, budget int) {
+	for tableWidth(widths) > budget {
 		widest := 0
-		for i := range w {
-			if w[i] > w[widest] {
-				widest = i
+		for index := range widths {
+			if widths[index] > widths[widest] {
+				widest = index
 			}
 		}
-		if w[widest] <= 1 {
+		if widths[widest] <= 1 {
 			return
 		}
-		w[widest]--
+		widths[widest]--
 	}
 }
 
-func tableRow(r []string, w []int, header bool) string {
-	cells := make([]string, len(w))
-	for i := range w {
+func tableRow(rowCells []string, widths []int, header bool, styles uiStyles) string {
+	cells := make([]string, len(widths))
+	for index := range widths {
 		cell := ""
-		if i < len(r) {
-			cell = r[i]
+		if index < len(rowCells) {
+			cell = rowCells[index]
 		}
-		cell = truncate(cell, w[i])
-		pad := w[i] - lipgloss.Width(cell)
-		if pad > 0 && i < len(w)-1 {
+		cell = truncate(cell, widths[index])
+		pad := widths[index] - lipgloss.Width(cell)
+		if pad > 0 && index < len(widths)-1 {
 			cell += strings.Repeat(" ", pad)
 		}
 		if header {
-			cell = accentStyle.Render(cell)
+			cell = styles.accent.Render(cell)
 		}
-		cells[i] = cell
+		cells[index] = cell
 	}
 	return strings.Join(cells, tableGap)
 }
@@ -170,9 +172,9 @@ func parseTableRows(lines []string) [][]string {
 	for _, ln := range lines {
 		cells := strings.Split(strings.Trim(strings.TrimSpace(ln), "|"), "|")
 		rule := true
-		for i, c := range cells {
-			cells[i] = strings.TrimSpace(c)
-			if strings.Trim(cells[i], ":- ") != "" {
+		for cellIndex, c := range cells {
+			cells[cellIndex] = strings.TrimSpace(c)
+			if strings.Trim(cells[cellIndex], ":- ") != "" {
 				rule = false
 			}
 		}
@@ -193,16 +195,16 @@ func codeBlocks(text string) []codeBlock {
 	var out []codeBlock
 	var cur *codeBlock
 	var buf []string
-	for _, ln := range strings.Split(text, "\n") {
-		fence := strings.TrimSpace(ln)
+	for _, line := range strings.Split(text, "\n") {
+		fence := strings.TrimSpace(line)
 		switch {
-		case cur == nil && strings.HasPrefix(fence, "```"):
-			cur = &codeBlock{lang: strings.TrimPrefix(fence, "```")}
-		case cur != nil && fence == "```":
+		case cur == nil && strings.HasPrefix(fence, codeFence):
+			cur = &codeBlock{lang: strings.TrimPrefix(fence, codeFence)}
+		case cur != nil && fence == codeFence:
 			cur.body = strings.Join(buf, "\n")
 			out, cur, buf = append(out, *cur), nil, nil
 		case cur != nil:
-			buf = append(buf, ln)
+			buf = append(buf, line)
 		}
 	}
 	if cur != nil {
@@ -219,28 +221,28 @@ func foldCodeBlocks(text string) string {
 	var buf []string
 	lang := ""
 	inFence := false
-	for _, ln := range strings.Split(text, "\n") {
-		fence := strings.TrimSpace(ln)
+	for _, line := range strings.Split(text, "\n") {
+		fence := strings.TrimSpace(line)
 		switch {
-		case !inFence && strings.HasPrefix(fence, "```"):
-			inFence, lang, buf = true, strings.TrimPrefix(fence, "```"), nil
-		case inFence && fence == "```":
+		case !inFence && strings.HasPrefix(fence, codeFence):
+			inFence, lang, buf = true, strings.TrimPrefix(fence, codeFence), nil
+		case inFence && fence == codeFence:
 			inFence = false
 			if len(buf) > foldThreshold {
 				out = append(out, foldSummary(lang, len(buf)))
 				continue
 			}
-			out = append(out, "```"+lang)
+			out = append(out, codeFence+lang)
 			out = append(out, buf...)
-			out = append(out, "```")
+			out = append(out, codeFence)
 		case inFence:
-			buf = append(buf, ln)
+			buf = append(buf, line)
 		default:
-			out = append(out, ln)
+			out = append(out, line)
 		}
 	}
 	if inFence {
-		out = append(out, "```"+lang)
+		out = append(out, codeFence+lang)
 		out = append(out, buf...)
 	}
 	return strings.Join(out, "\n")
@@ -266,20 +268,20 @@ func (m *model) toggleToolExpand() {
 }
 
 func (m *model) copyLastCode() {
-	tb := m.tabs[m.active]
-	if tb == nil || m.clip == nil {
+	tab := m.tabs[m.active]
+	if tab == nil || m.clip == nil {
 		return
 	}
-	for i := len(tb.entries) - 1; i >= 0; i-- {
-		if tb.entries[i].role != roleAgent {
+	for index := len(tab.entries) - 1; index >= 0; index-- {
+		if tab.entries[index].role != roleAgent {
 			continue
 		}
-		blocks := codeBlocks(tb.entries[i].text)
+		blocks := codeBlocks(tab.entries[index].text)
 		if len(blocks) == 0 {
 			break
 		}
 		body := blocks[len(blocks)-1].body
-		if err := m.clip.WriteText(body); err != nil {
+		if err := m.clip.WriteText(m.runContext(), body); err != nil {
 			m.flash = "copie impossible : " + err.Error()
 			return
 		}

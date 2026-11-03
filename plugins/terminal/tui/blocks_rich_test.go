@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -62,7 +63,7 @@ func TestTableFitsItsWidthByTruncatingTheWidestCell(t *testing.T) {
 		{"name", "description"},
 		{"ok", strings.Repeat("very long ", 20)},
 	}
-	out := renderTable(rows, 40)
+	out := renderTable(rows, 40, newStyles())
 	for _, ln := range strings.Split(out, "\n") {
 		if lipgloss.Width(ln) > 40 {
 			t.Fatalf("row wider than the table: %d cols in %q", lipgloss.Width(ln), ln)
@@ -78,7 +79,7 @@ func TestTableFitsItsWidthByTruncatingTheWidestCell(t *testing.T) {
 
 func TestTableShrinksTheWidestColumnFirst(t *testing.T) {
 	rows := [][]string{{"a", strings.Repeat("w", 60)}, {"b", "short"}}
-	out := renderTable(rows, 30)
+	out := renderTable(rows, 30, newStyles())
 	if !strings.Contains(out, "a") || !strings.Contains(out, "b") {
 		t.Fatalf("the narrow column must be left intact: %q", out)
 	}
@@ -89,7 +90,7 @@ func TestFoldedCodeBlockCollapsesAndRestoresExactly(t *testing.T) {
 	text := "before\n```go\n" + code + "```\nafter"
 
 	folded := foldCodeBlocks(text)
-	if strings.Contains(folded, "line\nline") {
+	if strings.Contains(folded, strings.Repeat("line\n", 2)) {
 		t.Fatalf("a folded block must not still contain its body: %q", folded)
 	}
 	if !strings.Contains(folded, "go") || !strings.Contains(folded, "lines") {
@@ -158,9 +159,9 @@ func TestCodeBlocksAreFoundWithTheirLanguage(t *testing.T) {
 
 type fakeWriteClipboard struct{ wrote string }
 
-func (f *fakeWriteClipboard) ImageType() (string, bool)        { return "", false }
-func (f *fakeWriteClipboard) ReadImage(string) ([]byte, error) { return nil, nil }
-func (f *fakeWriteClipboard) WriteText(s string) error         { f.wrote = s; return nil }
+func (f *fakeWriteClipboard) ImageType(context.Context) (string, bool)          { return "", false }
+func (f *fakeWriteClipboard) ReadImage(context.Context, string) ([]byte, error) { return nil, nil }
+func (f *fakeWriteClipboard) WriteText(_ context.Context, s string) error       { f.wrote = s; return nil }
 
 func TestDiffKeepsFourHunkLinesAndFolds(t *testing.T) {
 	src := strings.Join([]string{

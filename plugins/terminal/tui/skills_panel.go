@@ -30,9 +30,9 @@ func (m *model) openSkills() {
 }
 
 func (m *model) clampSkills() {
-	n := len(m.skillsRows)
-	if m.skillsIdx >= n {
-		m.skillsIdx = n - 1
+	count := len(m.skillsRows)
+	if m.skillsIdx >= count {
+		m.skillsIdx = count - 1
 	}
 	if m.skillsIdx < 0 {
 		m.skillsIdx = 0
@@ -43,7 +43,7 @@ func (m *model) moveSkills(d int) { m.skillsIdx += d; m.clampSkills() }
 
 func (m *model) skillsView() string {
 	if len(m.skillsRows) == 0 {
-		return dimStyle.Render("  (aucune skill dans ~/.claude/skills)")
+		return m.st.dim.Render("  (aucune skill dans ~/.claude/skills)")
 	}
 	start, end := paletteWindow(len(m.skillsRows), m.skillsIdx, m.overlayRows())
 	rows := make([]overlayRow, 0, end-start)
@@ -55,5 +55,5 @@ func (m *model) skillsView() string {
 	if hidden := len(m.skillsRows) - (end - start); hidden > 0 {
 		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}
-	return floatingList(rows, m.skillsIdx-start, footer, m.overlayWidth())
+	return floatingList(rows, m.skillsIdx-start, footer, m.overlayWidth(), m.st)
 }

@@ -16,8 +16,8 @@ import (
 
 func testImage(w, h int) image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			img.Set(x, y, color.RGBA{R: uint8(x % 256), G: uint8(y % 256), B: 0x40, A: 0xff})
 		}
 	}
@@ -92,23 +92,23 @@ func TestDecodeImageRefusesAGigapixelHeader(t *testing.T) {
 func pngHeaderOnly(w, h uint32) []byte {
 	var ihdr bytes.Buffer
 	ihdr.WriteString("IHDR")
-	binary.Write(&ihdr, binary.BigEndian, w)
-	binary.Write(&ihdr, binary.BigEndian, h)
+	ihdr.Write(binary.BigEndian.AppendUint32(nil, w))
+	ihdr.Write(binary.BigEndian.AppendUint32(nil, h))
 	ihdr.Write([]byte{8, 6, 0, 0, 0})
 
 	var out bytes.Buffer
-	out.Write([]byte("\x89PNG\r\n\x1a\n"))
-	binary.Write(&out, binary.BigEndian, uint32(ihdr.Len()-4))
+	out.WriteString("\x89PNG\r\n\x1a\n")
+	out.Write(binary.BigEndian.AppendUint32(nil, uint32(ihdr.Len()-4)))
 	out.Write(ihdr.Bytes())
-	binary.Write(&out, binary.BigEndian, crc32.ChecksumIEEE(ihdr.Bytes()))
+	out.Write(binary.BigEndian.AppendUint32(nil, crc32.ChecksumIEEE(ihdr.Bytes())))
 	return out.Bytes()
 }
 
 func TestDownscaleBringsALargeImageUnderThePreviewCap(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	big := image.NewRGBA(image.Rect(0, 0, 900, 700))
-	for y := 0; y < 700; y++ {
-		for x := 0; x < 900; x++ {
+	for y := range 700 {
+		for x := range 900 {
 			big.Set(x, y, color.RGBA{R: uint8(rng.Intn(256)), G: uint8(rng.Intn(256)), B: uint8(rng.Intn(256)), A: 0xff})
 		}
 	}
@@ -120,7 +120,7 @@ func TestDownscaleBringsALargeImageUnderThePreviewCap(t *testing.T) {
 		t.Fatalf("fixture is not large enough to exercise the cap (%d bytes)", len(source))
 	}
 
-	small := downscale(big, previewRows)
+	small := downscale(big)
 	if small.Bounds().Dy() >= big.Bounds().Dy() {
 		t.Fatalf("downscale left the image at %v", small.Bounds())
 	}
@@ -135,14 +135,14 @@ func TestDownscaleBringsALargeImageUnderThePreviewCap(t *testing.T) {
 
 func TestDownscaleLeavesASmallImageAlone(t *testing.T) {
 	src := testImage(8, 8)
-	if got := downscale(src, previewRows); got != src {
+	if got := downscale(src); got != src {
 		t.Fatalf("a small image must be returned untouched")
 	}
 }
 
 func TestDownscaleBoundsAWideImageToo(t *testing.T) {
 	wide := image.NewRGBA(image.Rect(0, 0, 20000, 40))
-	got := downscale(wide, previewRows).Bounds()
+	got := downscale(wide).Bounds()
 	if got.Dx() > maxPreviewWidth {
 		t.Fatalf("a wide image must be bounded on width too, got %v", got)
 	}

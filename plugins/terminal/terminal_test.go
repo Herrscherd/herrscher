@@ -38,9 +38,9 @@ func TestMenuRendersChoices(t *testing.T) {
 	}
 }
 
-func TestEmitDeliversControlEventUnderBackpressure(t *testing.T) {
+func TestEmitDeliversControlEventUnderBackpressure(_ *testing.T) {
 	tm := New()
-	for i := 0; i < cap(tm.out); i++ {
+	for range cap(tm.out) {
 		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: "chunk", Text: "x"}})
 	}
 	go func() { <-tm.Frontend() }()
@@ -77,15 +77,25 @@ func TestReadDrainsPerChannel(t *testing.T) {
 	tm.Submit("chA", "hello", nil)
 	tm.Submit("chB", "world", nil)
 
-	a, _ := tm.Read(context.Background(), "chA", 100, "")
+	a, err := tm.Read(context.Background(), "chA", 100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(a) != 1 || a[0].Content != "hello" || a[0].ChannelID != "chA" {
 		t.Fatalf("chA Read = %+v", a)
 	}
-	b, _ := tm.Read(context.Background(), "chB", 100, "")
+	b, err := tm.Read(context.Background(), "chB", 100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(b) != 1 || b[0].Content != "world" {
 		t.Fatalf("chB Read = %+v", b)
 	}
-	if a2, _ := tm.Read(context.Background(), "chA", 100, ""); len(a2) != 0 {
+	a2, err := tm.Read(context.Background(), "chA", 100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a2) != 0 {
 		t.Fatalf("chA second Read = %+v, want empty", a2)
 	}
 }
@@ -112,7 +122,7 @@ func TestEmitUsesDefaultChannel(t *testing.T) {
 	}
 }
 
-func TestTerminalImplementsRoutedEventSink(t *testing.T) {
+func TestTerminalImplementsRoutedEventSink(_ *testing.T) {
 	var _ contracts.RoutedEventSink = New()
 }
 
@@ -132,7 +142,7 @@ func TestPostEmitsReplyEvent(t *testing.T) {
 	}
 }
 
-func TestTerminalImplementsChannelAdmin(t *testing.T) {
+func TestTerminalImplementsChannelAdmin(_ *testing.T) {
 	var _ contracts.ChannelAdmin = New()
 }
 
@@ -142,7 +152,10 @@ func TestCreateUnderMintsUniqueChannels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := tm.CreateUnder(context.Background(), "home", "Alpha")
+	b, err := tm.CreateUnder(context.Background(), "home", "Alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if a == b {
 		t.Fatalf("CreateUnder must mint unique ids, got %q twice", a)
 	}
@@ -155,7 +168,9 @@ func TestArchiveEmitsCloseToTab(t *testing.T) {
 	tm := New()
 	got := make(chan tui.RoutedEvent, 1)
 	go func() { got <- <-tm.Frontend() }()
-	_ = tm.Archive(context.Background(), "terminal/x")
+	if err := tm.Archive(context.Background(), "terminal/x"); err != nil {
+		t.Fatal(err)
+	}
 	re := <-got
 	if re.Conv.ID != "terminal/x" || re.Event.T != "closed" {
 		t.Fatalf("Archive must emit a 'closed' event to the tab: %+v", re)
@@ -163,7 +178,10 @@ func TestArchiveEmitsCloseToTab(t *testing.T) {
 }
 
 func TestGatewaySetExposesAdmin(t *testing.T) {
-	set, _ := newGatewaySet(context.Background(), contracts.PluginConfig{})
+	set, err := newGatewaySet(context.Background(), contracts.PluginConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if set.Admin == nil {
 		t.Fatal("terminal GatewaySet must expose ChannelAdmin")
 	}
@@ -205,7 +223,7 @@ func (f *fakeSessionControl) Close(_ context.Context, name string, force bool) (
 
 func (f *fakeSessionControl) Sessions() []contracts.SessionInfo { return f.sessions }
 
-func (f *fakeSessionControl) Scrollback(name string) []contracts.ScrollbackLine {
+func (f *fakeSessionControl) Scrollback(_ string) []contracts.ScrollbackLine {
 	return f.scrollback
 }
 
@@ -472,8 +490,8 @@ func TestCommandsAdvertiseOnlyAllowedVerbs(t *testing.T) {
 	}
 	for _, c := range cmds {
 		parts := strings.Fields(c.Name)
-		if !terminalVerbs[parts[0]] {
-			t.Fatalf("command %q leads with a verb outside terminalVerbs", c.Name)
+		if !terminalVerbs()[parts[0]] {
+			t.Fatalf("command %q leads with a verb outside terminalVerbs()", c.Name)
 		}
 		if c.Args != "" && !strings.Contains(c.Args, "--") {
 			t.Fatalf("command %q advertises positional args %q; the parser only accepts --flag form", c.Name, c.Args)

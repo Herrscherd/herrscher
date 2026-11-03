@@ -16,5 +16,5 @@ func (m *model) mouseStatus() string {
 	if !m.mouseFree {
 		return ""
 	}
-	return dimStyle.Render("souris → terminal")
+	return m.st.dim.Render("souris → terminal")
 }

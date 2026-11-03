@@ -20,25 +20,25 @@ func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 		return cmds
 	}
 	var out []CommandSpec
-	for _, c := range cmds {
-		name := strings.ToLower(c.Name)
+	for _, cmd := range cmds {
+		name := strings.ToLower(cmd.Name)
 		if strings.Contains(name, query) || strings.HasPrefix(query, name+" ") {
-			out = append(out, c)
+			out = append(out, cmd)
 		}
 	}
 	return out
 }
 
-func paletteWindow(n, sel, rows int) (start, end int) {
-	if n <= rows {
-		return 0, n
+func paletteWindow(count, sel, rows int) (from, to int) {
+	if count <= rows {
+		return 0, count
 	}
-	start = sel - rows + 1
+	start := sel - rows + 1
 	if start < 0 {
 		start = 0
 	}
-	if start > n-rows {
-		start = n - rows
+	if start > count-rows {
+		start = count - rows
 	}
 	return start, start + rows
 }
@@ -53,9 +53,9 @@ func (m *model) filtered() []CommandSpec {
 }
 
 func (m *model) clampPal() {
-	n := len(m.filtered())
-	if m.palIdx >= n {
-		m.palIdx = n - 1
+	count := len(m.filtered())
+	if m.palIdx >= count {
+		m.palIdx = count - 1
 	}
 	if m.palIdx < 0 {
 		m.palIdx = 0
@@ -65,16 +65,16 @@ func (m *model) clampPal() {
 func (m *model) movePal(d int) { m.palIdx += d; m.clampPal() }
 
 func (m *model) completePal() {
-	fc := m.filtered()
-	if len(fc) == 0 {
+	filtered := m.filtered()
+	if len(filtered) == 0 {
 		return
 	}
-	if m.palIdx >= len(fc) {
-		m.palIdx = len(fc) - 1
+	if m.palIdx >= len(filtered) {
+		m.palIdx = len(filtered) - 1
 	}
-	c := fc[m.palIdx]
-	val := "/" + c.Name + " "
-	if flag := strings.Fields(c.Args); len(flag) > 0 && strings.HasPrefix(flag[0], "--") {
+	cmd := filtered[m.palIdx]
+	val := "/" + cmd.Name + " "
+	if flag := strings.Fields(cmd.Args); len(flag) > 0 && strings.HasPrefix(flag[0], "--") {
 		val += flag[0] + " "
 	}
 	m.input.SetValue(val)
@@ -102,19 +102,19 @@ func ParseCommandSpecs(raw []byte, allow func(verb string) bool) ([]CommandSpec,
 		return nil, err
 	}
 	out := make([]CommandSpec, 0, len(specs))
-	for _, s := range specs {
-		if len(s.Path) == 0 || (allow != nil && !allow(s.Path[0])) {
+	for _, text := range specs {
+		if len(text.Path) == 0 || (allow != nil && !allow(text.Path[0])) {
 			continue
 		}
-		c := CommandSpec{Name: strings.Join(s.Path, " "), Desc: s.Help}
+		spec := CommandSpec{Name: strings.Join(text.Path, " "), Desc: text.Help}
 		var args []string
-		for _, p := range s.Params {
-			if p.Required {
-				args = append(args, "--"+p.Name+" <"+p.Name+">")
+		for _, param := range text.Params {
+			if param.Required {
+				args = append(args, "--"+param.Name+" <"+param.Name+">")
 			}
 		}
-		c.Args = strings.Join(args, " ")
-		out = append(out, c)
+		spec.Args = strings.Join(args, " ")
+		out = append(out, spec)
 	}
 	return out, nil
 }
@@ -122,13 +122,13 @@ func ParseCommandSpecs(raw []byte, allow func(verb string) bool) ([]CommandSpec,
 func mergeCommands(local, remote []CommandSpec) []CommandSpec {
 	seen := make(map[string]bool, len(local))
 	out := make([]CommandSpec, 0, len(local)+len(remote))
-	for _, c := range local {
-		seen[c.Name] = true
-		out = append(out, c)
+	for _, cmd := range local {
+		seen[cmd.Name] = true
+		out = append(out, cmd)
 	}
-	for _, c := range remote {
-		if !seen[c.Name] {
-			out = append(out, c)
+	for _, cmd := range remote {
+		if !seen[cmd.Name] {
+			out = append(out, cmd)
 		}
 	}
 	return out
@@ -140,7 +140,7 @@ func localCommands() []CommandSpec {
 		{Name: "clear", Desc: "clear this tab's transcript"},
 		{Name: "session switch", Desc: "switch between live sessions"},
 		{Name: "resume", Desc: "reopen an archived session"},
-		{Name: "rename", Args: "<nom>", Desc: "rename this session"},
+		{Name: verbRename, Args: "<nom>", Desc: "rename this session"},
 		{Name: "usage", Desc: "cost, tokens and context for this session"},
 		{Name: "skills", Desc: "list available skills"},
 		{Name: "capabilities", Desc: "what this terminal can render, and what it falls back to"},
@@ -155,30 +155,30 @@ func (m *model) paletteView() string {
 	if !m.paletteOpen() {
 		return ""
 	}
-	fc := m.filtered()
-	if len(fc) == 0 {
-		return dimStyle.Render("  (aucune correspondance)")
+	filtered := m.filtered()
+	if len(filtered) == 0 {
+		return m.st.dim.Render("  (aucune correspondance)")
 	}
 	sel := m.palIdx
-	if sel >= len(fc) {
-		sel = len(fc) - 1
+	if sel >= len(filtered) {
+		sel = len(filtered) - 1
 	}
 	if sel < 0 {
 		sel = 0
 	}
 	visible := m.overlayRows()
-	start, end := paletteWindow(len(fc), sel, visible)
+	start, end := paletteWindow(len(filtered), sel, visible)
 	rows := make([]overlayRow, 0, end-start)
-	for _, c := range fc[start:end] {
-		label := "/" + c.Name
-		if c.Args != "" {
-			label += " " + c.Args
+	for _, cmd := range filtered[start:end] {
+		label := "/" + cmd.Name
+		if cmd.Args != "" {
+			label += " " + cmd.Args
 		}
-		rows = append(rows, overlayRow{label: label, detail: c.Desc})
+		rows = append(rows, overlayRow{label: label, detail: cmd.Desc})
 	}
 	footer := ""
-	if len(fc) > visible {
-		footer = fmt.Sprintf("%d/%d", sel+1, len(fc))
+	if len(filtered) > visible {
+		footer = fmt.Sprintf("%d/%d", sel+1, len(filtered))
 	}
-	return floatingList(rows, sel-start, footer, m.overlayWidth())
+	return floatingList(rows, sel-start, footer, m.overlayWidth(), m.st)
 }

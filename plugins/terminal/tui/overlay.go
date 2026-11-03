@@ -15,28 +15,26 @@ type overlayRow struct {
 
 const overlayLabelWidth = 16
 
-var overlaySelStyle = lipgloss.NewStyle().Background(lipgloss.Color(colSelBg)).Foreground(lipgloss.Color(colAccent))
-
-func floatingList(rows []overlayRow, cursor int, footer string, width int) string {
+func floatingList(rows []overlayRow, cursor int, footer string, width int, styles uiStyles) string {
 	if len(rows) == 0 {
 		return ""
 	}
 	out := make([]string, 0, len(rows)+1)
-	for i, r := range rows {
+	for index, row := range rows {
 		head := "  "
-		if i == cursor {
+		if index == cursor {
 			head = glyphCursor + " "
 		}
-		label := r.label
+		label := row.label
 		if pad := overlayLabelWidth - lipgloss.Width(label); pad > 0 {
 			label += strings.Repeat(" ", pad)
 		}
-		body := padTo(truncate("  "+head+r.mark+label+r.detail, width), width)
-		if i == cursor {
-			out = append(out, overlaySelStyle.Render(body))
+		body := padTo(truncate("  "+head+row.mark+label+row.detail, width), width)
+		if index == cursor {
+			out = append(out, styles.overlaySel.Render(body))
 			continue
 		}
-		out = append(out, dimStyle.Render(body))
+		out = append(out, styles.dim.Render(body))
 	}
 	if footer != "" {
 		out = append(out, padTo(truncate("  "+footer, width), width))
@@ -44,11 +42,11 @@ func floatingList(rows []overlayRow, cursor int, footer string, width int) strin
 	return strings.Join(out, "\n")
 }
 
-func padTo(s string, width int) string {
-	if pad := width - lipgloss.Width(s); pad > 0 {
-		return s + strings.Repeat(" ", pad)
+func padTo(text string, width int) string {
+	if pad := width - lipgloss.Width(text); pad > 0 {
+		return text + strings.Repeat(" ", pad)
 	}
-	return s
+	return text
 }
 
 func (m *model) overlayWidth() int {

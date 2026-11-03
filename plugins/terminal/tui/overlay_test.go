@@ -16,7 +16,7 @@ func TestFloatingListMarksTheCursorRow(t *testing.T) {
 		{label: "/resume", detail: "reprendre une session"},
 		{label: "/review", detail: "relire le diff"},
 	}
-	out := floatingList(rows, 0, "↑↓ naviguer", 74)
+	out := floatingList(rows, 0, "↑↓ naviguer", 74, newStyles())
 	lines := strings.Split(out, "\n")
 	if len(lines) != 3 {
 		t.Fatalf("got %d lines, want 3", len(lines))
@@ -31,7 +31,7 @@ func TestFloatingListMarksTheCursorRow(t *testing.T) {
 
 func TestFloatingListRowsAreFullWidth(t *testing.T) {
 	rows := []overlayRow{{label: "/resume", detail: "reprendre"}}
-	for _, line := range strings.Split(floatingList(rows, 0, "", 74), "\n") {
+	for _, line := range strings.Split(floatingList(rows, 0, "", 74, newStyles()), "\n") {
 		if lipgloss.Width(line) != 74 {
 			t.Fatalf("line %q is %d columns, want 74", line, lipgloss.Width(line))
 		}
@@ -40,7 +40,7 @@ func TestFloatingListRowsAreFullWidth(t *testing.T) {
 
 func TestFloatingListTruncatesLongDetail(t *testing.T) {
 	rows := []overlayRow{{label: "/resume", detail: strings.Repeat("x", 200)}}
-	for _, line := range strings.Split(floatingList(rows, 0, "", 40), "\n") {
+	for _, line := range strings.Split(floatingList(rows, 0, "", 40, newStyles()), "\n") {
 		if lipgloss.Width(line) > 40 {
 			t.Fatalf("line is %d columns, want <= 40", lipgloss.Width(line))
 		}
@@ -48,7 +48,7 @@ func TestFloatingListTruncatesLongDetail(t *testing.T) {
 }
 
 func TestFloatingListWithoutRowsIsEmpty(t *testing.T) {
-	if got := floatingList(nil, 0, "footer", 74); got != "" {
+	if got := floatingList(nil, 0, "footer", 74, newStyles()); got != "" {
 		t.Fatalf("empty list rendered %q", got)
 	}
 }
@@ -72,7 +72,7 @@ func TestOverlayRowsFollowTheWindow(t *testing.T) {
 func TestPaletteWalksTheWholeListFromTheKeyboard(t *testing.T) {
 	m := sizedTestModel(t, 100)
 	m.cmds = nil
-	for i := 0; i < 35; i++ {
+	for i := range 35 {
 		m.cmds = append(m.cmds, CommandSpec{Name: fmt.Sprintf("verb%02d", i)})
 	}
 	m.input.SetValue("/")
@@ -105,7 +105,7 @@ func TestPaletteWalksTheWholeListFromTheKeyboard(t *testing.T) {
 func TestSkillsPanelWalksFromTheKeyboard(t *testing.T) {
 	m := sizedTestModel(t, 100)
 	m.skillsOpen = true
-	for i := 0; i < 14; i++ {
+	for i := range 14 {
 		m.skillsRows = append(m.skillsRows, skills.Skill{Name: fmt.Sprintf("skill%02d", i)})
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyDown})

@@ -10,20 +10,29 @@ import (
 const sixelCubeSide = 6
 
 func sixelEscape(img image.Image) string {
-	b := img.Bounds()
-	w, h := b.Dx(), b.Dy()
-	if w <= 0 || h <= 0 {
+	bounds := img.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	if width <= 0 || height <= 0 {
 		return ""
 	}
+	idx, colours := quantiseSixel(img, width, height)
+	var builder strings.Builder
+	writeSixelHeader(&builder, width, height, colours)
+	writeSixelBands(&builder, idx, width, height, colours)
+	builder.WriteString("\x1b\\")
+	return builder.String()
+}
 
-	idx := make([]int, w*h)
-	present := map[int]bool{}
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			r, g, bl, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
-			i := sixelLevel(r)*sixelCubeSide*sixelCubeSide + sixelLevel(g)*sixelCubeSide + sixelLevel(bl)
-			idx[y*w+x] = i
-			present[i] = true
+func quantiseSixel(img image.Image, width, height int) (indices, palette []int) {
+	bounds := img.Bounds()
+	idx := make([]int, width*height)
+	present := make(map[int]bool)
+	for row := range height {
+		for col := range width {
+			r, g, bl, _ := img.At(bounds.Min.X+col, bounds.Min.Y+row).RGBA()
+			index := sixelLevel(r)*sixelCubeSide*sixelCubeSide + sixelLevel(g)*sixelCubeSide + sixelLevel(bl)
+			idx[row*width+col] = index
+			present[index] = true
 		}
 	}
 	colours := make([]int, 0, len(present))
@@ -31,74 +40,81 @@ func sixelEscape(img image.Image) string {
 		colours = append(colours, i)
 	}
 	sort.Ints(colours)
+	return idx, colours
+}
 
-	var s strings.Builder
-	s.WriteString("\x1bPq")
-	s.WriteString(`"1;1;`)
-	s.WriteString(strconv.Itoa(w))
-	s.WriteByte(';')
-	s.WriteString(strconv.Itoa(h))
-	for _, i := range colours {
-		s.WriteByte('#')
-		s.WriteString(strconv.Itoa(i))
-		s.WriteString(";2;")
-		r := i / (sixelCubeSide * sixelCubeSide)
-		g := (i / sixelCubeSide) % sixelCubeSide
-		bl := i % sixelCubeSide
-		s.WriteString(sixelPercent(r) + ";" + sixelPercent(g) + ";" + sixelPercent(bl))
+func writeSixelHeader(builder *strings.Builder, width, height int, colours []int) {
+	builder.WriteString("\x1bPq")
+	builder.WriteString(`"1;1;`)
+	builder.WriteString(strconv.Itoa(width))
+	builder.WriteByte(';')
+	builder.WriteString(strconv.Itoa(height))
+	for _, index := range colours {
+		builder.WriteByte('#')
+		builder.WriteString(strconv.Itoa(index))
+		builder.WriteString(";2;")
+		row := index / (sixelCubeSide * sixelCubeSide)
+		glyph := (index / sixelCubeSide) % sixelCubeSide
+		bl := index % sixelCubeSide
+		builder.WriteString(sixelPercent(row) + ";" + sixelPercent(glyph) + ";" + sixelPercent(bl))
 	}
+}
 
-	for band := 0; band < h; band += 6 {
+func writeSixelBands(builder *strings.Builder, idx []int, width, height int, colours []int) {
+	for band := 0; band < height; band += 6 {
 		first := true
 		for _, colour := range colours {
-			row := sixelBand(idx, w, h, band, colour)
+			row := sixelBand(idx, width, height, band, colour)
 			if row == "" {
 				continue
 			}
 			if !first {
-				s.WriteByte('$')
+				builder.WriteByte('$')
 			}
 			first = false
-			s.WriteByte('#')
-			s.WriteString(strconv.Itoa(colour))
-			s.WriteString(row)
+			builder.WriteByte('#')
+			builder.WriteString(strconv.Itoa(colour))
+			builder.WriteString(row)
 		}
-		if band+6 < h {
-			s.WriteByte('-')
+		if band+6 < height {
+			builder.WriteByte('-')
 		}
 	}
-	s.WriteString("\x1b\\")
-	return s.String()
 }
 
-func sixelBand(idx []int, w, h, band, colour int) string {
-	var row strings.Builder
-	any := false
-	for x := 0; x < w; x++ {
+func sixelBand(idx []int, width, height, band, colour int) string {
+	var strip strings.Builder
+	inked := false
+	for col := range width {
 		var bits byte
-		for r := 0; r < 6; r++ {
-			y := band + r
-			if y < h && idx[y*w+x] == colour {
-				bits |= 1 << r
+		for row := range 6 {
+			y := band + row
+			if y < height && idx[y*width+col] == colour {
+				bits |= 1 << row
 			}
 		}
 		if bits != 0 {
-			any = true
+			inked = true
 		}
-		row.WriteByte(0x3f + bits)
+		strip.WriteByte(sixelBase + bits)
 	}
-	if !any {
+	if !inked {
 		return ""
 	}
-	return row.String()
+	return strip.String()
 }
 
+const (
+	sixelBase     = 0x3f
+	channelLevels = 256
+)
+
 func sixelLevel(v uint32) int {
-	l := int(v>>8) * sixelCubeSide / 256
-	if l >= sixelCubeSide {
-		l = sixelCubeSide - 1
+	level := int(v>>byteShift) * sixelCubeSide / channelLevels
+	if level >= sixelCubeSide {
+		level = sixelCubeSide - 1
 	}
-	return l
+	return level
 }
 
 func sixelPercent(level int) string {

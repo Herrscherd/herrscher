@@ -40,7 +40,7 @@ type schedulerSlot struct {
 
 func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup *supervisor.Supervisor, instID string, extra []contracts.Cmd) (*cli.Registry, hostDeps, error) {
 	partDir := filepath.Dir(o.StatePath)
-	wt := worktree.NewWorktreer(ctx, instID)
+	wt := worktree.NewWorktreer(instID)
 	fg := forge.New()
 	upCfg, _ := service.DefaultConfig()
 	up := serviceUpdater{cfg: upCfg, st: st}
@@ -51,7 +51,6 @@ func buildRegistry(ctx context.Context, d Deps, o Options, st *state.State, sup 
 	hdl := manager.NewHandler(d.Admin, sup, wt, fg, up, agents, st, o.DefaultCmd, partDir, o.DefaultGateways)
 	hdl.SetSeeder(Seed)
 	hdl.SetHosts(hostPlacer{
-		ctx:           ctx,
 		st:            st,
 		instanceID:    instID,
 		local:         wt,

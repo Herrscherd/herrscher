@@ -3,6 +3,7 @@
 package control_test
 
 import (
+	"errors"
 	"io"
 	"path/filepath"
 	"testing"
@@ -29,33 +30,44 @@ func TestCloseReleasesPendingConns(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Accept: %v", err)
 			}
-			var clients []*control.Conn
-			for i := 0; i < tc.dials; i++ {
-				c, err := control.Dial(sock)
-				if err != nil {
-					t.Fatalf("Dial %d: %v", i, err)
-				}
-				clients = append(clients, c)
-			}
+			clients := dialClients(t, sock, tc.dials)
 			time.Sleep(50 * time.Millisecond)
 			if err := acc.Close(); err != nil {
 				t.Fatalf("Close: %v", err)
 			}
-			done := make(chan error, 1)
-			go func() {
-				done <- clients[0].Scan(func(contracts.Event) error { return nil })
-			}()
-			select {
-			case err := <-done:
-				if err != nil && err != io.EOF {
-					t.Fatalf("scan after close: %v", err)
-				}
-			case <-time.After(2 * time.Second):
-				t.Fatal("a conn left in the acceptor after Close was never closed")
-			}
+			assertScanEndsAfterClose(t, clients[0])
 			for _, c := range clients {
-				_ = c.Close()
+				closeLogged(t, c)
 			}
 		})
+	}
+}
+
+func dialClients(t *testing.T, sock string, n int) []*control.Conn {
+	t.Helper()
+	var clients []*control.Conn
+	for i := range n {
+		c, err := control.Dial(sock)
+		if err != nil {
+			t.Fatalf("Dial %d: %v", i, err)
+		}
+		clients = append(clients, c)
+	}
+	return clients
+}
+
+func assertScanEndsAfterClose(t *testing.T, c *control.Conn) {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() {
+		done <- c.Scan(func(contracts.Event) error { return nil })
+	}()
+	select {
+	case err := <-done:
+		if err != nil && !errors.Is(err, io.EOF) {
+			t.Fatalf("scan after close: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a conn left in the acceptor after Close was never closed")
 	}
 }

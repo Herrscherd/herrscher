@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/Herrscherd/herrscher/core/envx"
 )
@@ -65,7 +66,10 @@ func DefaultPath() string {
 	if d := envx.Get("STATE_DIR"); d != "" {
 		return filepath.Join(d, "config.json")
 	}
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".config", "herrscher", "config.json")
+	}
 	return filepath.Join(home, ".config", "herrscher", "config.json")
 }
 
@@ -73,23 +77,23 @@ func DefaultPath() string {
 // error (config.json is entirely optional). Full-line // comments are stripped
 // before parsing so the file can be commented.
 func Load(path string) (Config, error) {
-	var c Config
-	buf, err := os.ReadFile(path)
+	var cfg Config
+	buf, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, fs.ErrNotExist) {
-		return c, nil
+		return cfg, nil
 	}
 	if err != nil {
-		return c, fmt.Errorf("read %s: %w", path, err)
+		return cfg, fmt.Errorf("read %s: %w", path, err)
 	}
-	if err := json.Unmarshal(stripComments(buf), &c); err != nil {
-		return c, fmt.Errorf("parse %s: %w", path, err)
+	if err := json.Unmarshal(stripComments(buf), &cfg); err != nil {
+		return cfg, fmt.Errorf("parse %s: %w", path, err)
 	}
-	return c, nil
+	return cfg, nil
 }
 
-func stripComments(b []byte) []byte {
+func stripComments(data []byte) []byte {
 	var out bytes.Buffer
-	for _, line := range bytes.Split(b, []byte("\n")) {
+	for _, line := range bytes.Split(data, []byte("\n")) {
 		if bytes.HasPrefix(bytes.TrimSpace(line), []byte("//")) {
 			continue
 		}
@@ -104,8 +108,8 @@ func stripComments(b []byte) []byte {
 // falls back to the built-in "claude" default. healthAddr pre-fills the
 // "healthAddr" value (the install --health-addr default).
 func Template(cmd, healthAddr string) string {
-	cmdJSON, _ := json.Marshal(cmd)
-	healthJSON, _ := json.Marshal(healthAddr)
+	cmdJSON := quoteJSON(cmd)
+	healthJSON := quoteJSON(healthAddr)
 	return `// herrscher config: declarative defaults the daemon reads at startup.
 // Secrets (gateway tokens/channel ids, owner token) are NOT here;
 // keep them in the 0600 env file (herrscher.env). The daemon never rewrites this
@@ -117,10 +121,10 @@ func Template(cmd, healthAddr string) string {
   // Base bridged command for new sessions (sets model/effort/etc.).
   // A per-session "cmd:" option still overrides this. Example:
   //   "claude --model claude-opus-4-8 --effort low"   (Opus 4.8, low, 200k ctx)
-  "cmd": ` + string(cmdJSON) + `,
+  "cmd": ` + cmdJSON + `,
 
   // Health endpoint address; "" disables it.
-  "healthAddr": ` + string(healthJSON) + `,
+  "healthAddr": ` + healthJSON + `,
 
   // Self-updating status embed channel id; "" disables it.
   "statusChannel": "",
@@ -149,4 +153,12 @@ func Template(cmd, healthAddr string) string {
   "source": ""
 }
 `
+}
+
+func quoteJSON(value string) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return strconv.Quote(value)
+	}
+	return string(encoded)
 }

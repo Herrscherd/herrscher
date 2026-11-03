@@ -3,6 +3,7 @@
 package control_test
 
 import (
+	"io"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -18,13 +19,13 @@ func TestConnRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
-	defer acc.Close()
+	defer closeLogged(t, acc)
 
 	cli, err := control.Dial(sock)
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
-	defer cli.Close()
+	defer closeLogged(t, cli)
 
 	srvConn := <-acc.Conns()
 
@@ -34,7 +35,7 @@ func TestConnRoundTrip(t *testing.T) {
 	var got contracts.Event
 	done := make(chan struct{})
 	go func() {
-		_ = cli.Scan(func(e contracts.Event) error { got = e; close(done); return errStop })
+		logErr(t, cli.Scan(func(e contracts.Event) error { got = e; close(done); return errStop }))
 	}()
 	select {
 	case <-done:
@@ -46,11 +47,11 @@ func TestConnRoundTrip(t *testing.T) {
 	}
 }
 
-var errStop = stopErr{}
+var errStop = stopError{}
 
-type stopErr struct{}
+type stopError struct{}
 
-func (stopErr) Error() string { return "stop" }
+func (stopError) Error() string { return "stop" }
 
 func TestConnConcurrentWrites(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "cw.sock")
@@ -58,12 +59,12 @@ func TestConnConcurrentWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
-	defer acc.Close()
+	defer closeLogged(t, acc)
 	cli, err := control.Dial(sock)
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
-	defer cli.Close()
+	defer closeLogged(t, cli)
 	srvConn := <-acc.Conns()
 
 	const n = 50
@@ -71,7 +72,7 @@ func TestConnConcurrentWrites(t *testing.T) {
 	var mu sync.Mutex
 	done := make(chan struct{})
 	go func() {
-		_ = srvConn.Scan(func(contracts.Event) error {
+		logErr(t, srvConn.Scan(func(contracts.Event) error {
 			mu.Lock()
 			got++
 			reached := got == n
@@ -81,12 +82,12 @@ func TestConnConcurrentWrites(t *testing.T) {
 				return errStop
 			}
 			return nil
-		})
+		}))
 	}()
 	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
+	for range n {
 		wg.Add(1)
-		go func() { defer wg.Done(); _ = cli.Write(contracts.Event{T: "chunk", Text: "x"}) }()
+		go func() { defer wg.Done(); logErr(t, cli.Write(contracts.Event{T: "chunk", Text: "x"})) }()
 	}
 	wg.Wait()
 	select {
@@ -102,20 +103,20 @@ func TestAcceptorYieldsSecondConnAfterFirstCloses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
-	defer acc.Close()
+	defer closeLogged(t, acc)
 
 	c1, err := control.Dial(sock)
 	if err != nil {
 		t.Fatalf("Dial 1: %v", err)
 	}
 	<-acc.Conns()
-	c1.Close()
+	closeLogged(t, c1)
 
 	c2, err := control.Dial(sock)
 	if err != nil {
 		t.Fatalf("Dial 2 (reconnect): %v", err)
 	}
-	defer c2.Close()
+	defer closeLogged(t, c2)
 	select {
 	case sc := <-acc.Conns():
 		if sc == nil {
@@ -124,4 +125,16 @@ func TestAcceptorYieldsSecondConnAfterFirstCloses(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("acceptor did not yield a second conn after reconnect")
 	}
+}
+
+func logErr(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Logf("%v", err)
+	}
+}
+
+func closeLogged(t *testing.T, closer io.Closer) {
+	t.Helper()
+	logErr(t, closer.Close())
 }

@@ -34,7 +34,9 @@ func TestApprovalRulesRoundTrip(t *testing.T) {
 	if err != nil || !removed {
 		t.Fatalf("RemoveApprovalRule: removed=%v err=%v", removed, err)
 	}
-	if removed, _ := st.RemoveApprovalRule("ask Bash(git push*)"); removed {
+	removed, err = st.RemoveApprovalRule("ask Bash(git push*)")
+	must(t, err)
+	if removed {
 		t.Fatal("removing an absent rule must report false")
 	}
 }

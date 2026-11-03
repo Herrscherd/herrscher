@@ -32,12 +32,12 @@ var rules = []rule{
 // Output masks credential-shaped substrings in b and caps the result length. It
 // trims surrounding whitespace, so callers need not TrimSpace first.
 func Output(b []byte) string {
-	s := strings.TrimSpace(string(b))
+	text := strings.TrimSpace(string(b))
 	for _, r := range rules {
-		s = r.re.ReplaceAllString(s, r.repl)
+		text = r.re.ReplaceAllString(text, r.repl)
 	}
-	if rs := []rune(s); len(rs) > maxOutputRunes {
-		s = string(rs[:maxOutputRunes]) + "… (truncated)"
+	if rs := []rune(text); len(rs) > maxOutputRunes {
+		text = string(rs[:maxOutputRunes]) + "… (truncated)"
 	}
-	return s
+	return text
 }

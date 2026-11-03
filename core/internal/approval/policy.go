@@ -5,8 +5,14 @@
 package approval
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+)
+
+var (
+	errMalformedRule   = errors.New("malformed rule")
+	errUnknownDecision = errors.New("unknown decision")
 )
 
 // Decision is one verdict on a tool call, on a severity ladder: a stricter
@@ -16,20 +22,29 @@ import (
 type Decision string
 
 const (
+	// Allow lets the action run without asking.
 	Allow Decision = "allow"
-	Ask   Decision = "ask"
-	Deny  Decision = "deny"
+	// Ask defers the decision to the approval prompt.
+	Ask Decision = "ask"
+	// Deny refuses the action.
+	Deny Decision = "deny"
+)
+
+const (
+	severityAllow = iota
+	severityAsk
+	severityDeny
 )
 
 func severity(d Decision) int {
 	switch d {
 	case Deny:
-		return 2
+		return severityDeny
 	case Ask:
-		return 1
-	default:
-		return 0
+		return severityAsk
+	case Allow:
 	}
+	return severityAllow
 }
 
 // Rule is one line of policy: a decision, the tool it speaks about, and a glob
@@ -55,52 +70,52 @@ func (r Rule) String() string {
 }
 
 // ParseRule reads one rule: "<decision> <Tool>" or "<decision> <Tool>(<glob>)".
-func ParseRule(s string) (Rule, error) {
-	s = strings.TrimSpace(s)
-	head, rest, ok := strings.Cut(s, " ")
+func ParseRule(spec string) (Rule, error) {
+	spec = strings.TrimSpace(spec)
+	head, rest, ok := strings.Cut(spec, " ")
 	if !ok {
-		return Rule{}, fmt.Errorf("rule %q: expected `<allow|ask|deny> <Tool>[(<pattern>)]`", s)
+		return Rule{}, fmt.Errorf("%w %q: expected `<allow|ask|deny> <Tool>[(<pattern>)]`", errMalformedRule, spec)
 	}
-	d := Decision(strings.ToLower(strings.TrimSpace(head)))
-	switch d {
+	decision := Decision(strings.ToLower(strings.TrimSpace(head)))
+	switch decision {
 	case Allow, Ask, Deny:
 	default:
-		return Rule{}, fmt.Errorf("rule %q: unknown decision %q", s, head)
+		return Rule{}, fmt.Errorf("%w %q in rule %q", errUnknownDecision, head, spec)
 	}
 	rest = strings.TrimSpace(rest)
-	r := Rule{Decision: d, Tool: rest}
+	rule := Rule{Decision: decision, Tool: rest}
 	if open := strings.Index(rest, "("); open >= 0 {
 		if !strings.HasSuffix(rest, ")") {
-			return Rule{}, fmt.Errorf("rule %q: unclosed pattern", s)
+			return Rule{}, fmt.Errorf("%w %q: unclosed pattern", errMalformedRule, spec)
 		}
-		r.Tool = strings.TrimSpace(rest[:open])
-		r.Pattern = rest[open+1 : len(rest)-1]
+		rule.Tool = strings.TrimSpace(rest[:open])
+		rule.Pattern = rest[open+1 : len(rest)-1]
 	}
-	if r.Tool == "" {
-		return Rule{}, fmt.Errorf("rule %q: names no tool", s)
+	if rule.Tool == "" {
+		return Rule{}, fmt.Errorf("%w %q: names no tool", errMalformedRule, spec)
 	}
-	return r, nil
+	return rule, nil
 }
 
 // ParsePolicy reads one rule per line, skipping blanks and # comments. It
 // returns every rule it could read AND every error it met: one bad line in an
 // agent's file must not silently drop the rules around it.
 func ParsePolicy(text string) (Policy, []error) {
-	var p Policy
+	var policy Policy
 	var errs []error
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		r, err := ParseRule(line)
+		rule, err := ParseRule(line)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		p = append(p, r)
+		policy = append(policy, rule)
 	}
-	return p, errs
+	return policy, errs
 }
 
 // Request is one tool call awaiting a verdict. Subject is the part a rule
@@ -114,8 +129,11 @@ type Request struct {
 type Mode string
 
 const (
-	ModeAsk    Mode = "ask"
+	// ModeAsk routes actions through the approval prompt.
+	ModeAsk Mode = "ask"
+	// ModeBypass skips the approval prompt.
 	ModeBypass Mode = "bypass"
+	// ModeStrict refuses anything the policy does not explicitly allow.
 	ModeStrict Mode = "strict"
 )
 
@@ -125,16 +143,16 @@ const (
 // install must keep on first boot.
 func (p Policy) Decide(req Request) (Decision, bool) {
 	out, matched := Allow, false
-	for _, r := range p {
-		if r.Tool != "*" && r.Tool != req.Tool {
+	for _, rule := range p {
+		if rule.Tool != "*" && rule.Tool != req.Tool {
 			continue
 		}
-		if r.Pattern != "" && !glob(r.Pattern, req.Subject) {
+		if rule.Pattern != "" && !glob(rule.Pattern, req.Subject) {
 			continue
 		}
 		matched = true
-		if severity(r.Decision) > severity(out) {
-			out = r.Decision
+		if severity(rule.Decision) > severity(out) {
+			out = rule.Decision
 		}
 	}
 	return out, matched
@@ -150,39 +168,40 @@ func Merge(daemon, agent Policy) Policy {
 }
 
 // Apply folds the session's mode into a verdict.
-func Apply(m Mode, d Decision, matched bool) Decision {
+func Apply(m Mode, decided Decision, matched bool) Decision {
 	switch m {
 	case ModeBypass:
 		return Allow
 	case ModeStrict:
-		if d == Allow && !matched {
+		if decided == Allow && !matched {
 			return Ask
 		}
+	case ModeAsk:
 	}
-	return d
+	return decided
 }
 
-func glob(pattern, s string) bool {
-	var si, pi, star, mark int
+func glob(pattern, subject string) bool {
+	var textPos, patPos, star, mark int
 	star = -1
-	for si < len(s) {
+	for textPos < len(subject) {
 		switch {
-		case pi < len(pattern) && (pattern[pi] == s[si] || pattern[pi] == '?'):
-			si++
-			pi++
-		case pi < len(pattern) && pattern[pi] == '*':
-			star, mark = pi, si
-			pi++
+		case patPos < len(pattern) && (pattern[patPos] == subject[textPos] || pattern[patPos] == '?'):
+			textPos++
+			patPos++
+		case patPos < len(pattern) && pattern[patPos] == '*':
+			star, mark = patPos, textPos
+			patPos++
 		case star >= 0:
-			pi = star + 1
+			patPos = star + 1
 			mark++
-			si = mark
+			textPos = mark
 		default:
 			return false
 		}
 	}
-	for pi < len(pattern) && pattern[pi] == '*' {
-		pi++
+	for patPos < len(pattern) && pattern[patPos] == '*' {
+		patPos++
 	}
-	return pi == len(pattern)
+	return patPos == len(pattern)
 }

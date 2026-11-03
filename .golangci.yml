@@ -146,7 +146,7 @@ linters:
         - name: confusing-results
         - name: modifies-value-receiver
         - name: unhandled-error
-          arguments: ["fmt.Println"]
+          arguments: ["fmt.Println", "fmt.Fprintln", "strings.Builder.Write", "strings.Builder.WriteByte", "strings.Builder.WriteRune", "strings.Builder.WriteString", "bytes.Buffer.Write", "bytes.Buffer.WriteByte", "bytes.Buffer.WriteString"]
         - name: use-any
         - name: datarace
         - name: identical-branches
@@ -204,6 +204,18 @@ linters:
       - path: ^core/internal/(agent|manager)/
         linters: [revive]
         text: "Unhandled error in call to function strings.Builder.Write"
+      - path: ^core/(identity|scope|service|internal/(forge|runner|supervisor|worktree))/
+        linters: [gosec]
+        text: "^G204:"
+      - path: ^core/service/service\.go$
+        linters: [gosec]
+        text: "^G703:"
+      - path: ^core/envx/hide\.go$
+        linters: [gochecknoglobals]
+        text: "^hidden is a global variable"
+      - path: ^core/internal/redact/redact\.go$
+        linters: [gochecknoglobals]
+        text: "^rules is a global variable"
 
 formatters:
   enable:

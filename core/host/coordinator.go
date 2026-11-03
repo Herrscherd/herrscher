@@ -28,10 +28,10 @@ type agentLookup interface {
 	List() ([]agent.Agent, error)
 }
 type cleanBrancher interface {
-	IsCleanAt(path string) (bool, error)
+	IsCleanAt(ctx context.Context, path string) (bool, error)
 	Branch(name string) string
-	BranchExistsAt(path, branch string) (bool, error)
-	MergeInto(leadPath, branch string) (worktree.MergeOutcome, []string, error)
+	BranchExistsAt(ctx context.Context, path, branch string) (bool, error)
+	MergeInto(ctx context.Context, leadPath, branch string) (worktree.MergeOutcome, []string, error)
 }
 type sessionLister interface {
 	SnapshotSessions() []state.Session
@@ -135,7 +135,7 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 	if from.Worktree == "" {
 		return "", fmt.Errorf("coordination: source session %q has no isolated worktree to continue", from.Name)
 	}
-	clean, err := c.wt.IsCleanAt(from.Worktree)
+	clean, err := c.wt.IsCleanAt(ctx, from.Worktree)
 	if err != nil {
 		return "", fmt.Errorf("coordination: %w", err)
 	}
@@ -146,7 +146,7 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 	base := from.Name + "-" + toAgent
 	bName := base
 	for n := 2; ; n++ {
-		exists, err := c.wt.BranchExistsAt(from.Worktree, c.wt.Branch(bName))
+		exists, err := c.wt.BranchExistsAt(ctx, from.Worktree, c.wt.Branch(bName))
 		if err != nil {
 			return "", fmt.Errorf("coordination: %w", err)
 		}
@@ -215,7 +215,7 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	if from.Parent == "" {
 		return "", fmt.Errorf("report: session %q has no parent; nothing to deliver", req.FromSession)
 	}
-	clean, err := c.wt.IsCleanAt(from.Worktree)
+	clean, err := c.wt.IsCleanAt(ctx, from.Worktree)
 	if err != nil {
 		return "", fmt.Errorf("report: %w", err)
 	}
@@ -270,14 +270,14 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 	if worker.Parent != req.FromSession {
 		return "", fmt.Errorf("merge refused: %q is not a worker of %q", req.Worker, req.FromSession)
 	}
-	wClean, err := c.wt.IsCleanAt(worker.Worktree)
+	wClean, err := c.wt.IsCleanAt(ctx, worker.Worktree)
 	if err != nil {
 		return "", fmt.Errorf("merge: %w", err)
 	}
 	if !wClean {
 		return "", fmt.Errorf("merge refused: worker %q has uncommitted changes; commit first", req.Worker)
 	}
-	lClean, err := c.wt.IsCleanAt(lead.Worktree)
+	lClean, err := c.wt.IsCleanAt(ctx, lead.Worktree)
 	if err != nil {
 		return "", fmt.Errorf("merge: %w", err)
 	}
@@ -285,7 +285,7 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 		return "", fmt.Errorf("merge refused: lead %q has uncommitted changes; commit first", req.FromSession)
 	}
 
-	outcome, conflicts, err := c.wt.MergeInto(lead.Worktree, c.wt.Branch(req.Worker))
+	outcome, conflicts, err := c.wt.MergeInto(ctx, lead.Worktree, c.wt.Branch(req.Worker))
 	if err != nil {
 		return "", fmt.Errorf("merge: %w", err)
 	}

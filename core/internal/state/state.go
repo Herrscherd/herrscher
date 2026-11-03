@@ -1,8 +1,10 @@
+// Package state persists the herrscher daemon state: sessions, roles, schedules and transcripts.
 package state
 
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +12,16 @@ import (
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
+)
+
+const (
+	privateDirMode  = 0o750
+	privateFileMode = 0o600
+)
+
+var (
+	errSessionExists = errors.New("session already exists")
+	errNoSession     = errors.New("no such session")
 )
 
 // HomeRef points at the category or forum that holds session channels.
@@ -196,63 +208,63 @@ func (s *State) ApplyDefaults(home *HomeRef, workspace, source string) {
 
 // LoadState reads state from path; a missing file yields an empty state.
 func LoadState(path string) (*State, error) {
-	s := NewState(path)
-	buf, err := os.ReadFile(path)
+	fresh := NewState(path)
+	buf, err := os.ReadFile(filepath.Clean(path))
 	if os.IsNotExist(err) {
-		return s, nil
+		return fresh, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(buf, s); err != nil {
+	if err := json.Unmarshal(buf, fresh); err != nil {
 		return nil, err
 	}
-	seen := map[string]bool{}
-	for i := range s.Sessions {
-		if s.Sessions[i].ID != "" {
-			seen[s.Sessions[i].ID] = true
+	seen := make(map[string]bool)
+	for idx := range fresh.Sessions {
+		if fresh.Sessions[idx].ID != "" {
+			seen[fresh.Sessions[idx].ID] = true
 		}
 	}
-	for i := range s.Sessions {
-		if s.Sessions[i].ID == "" {
-			s.Sessions[i].ID = newSessionID(s.Sessions[i].Name, seen)
-			seen[s.Sessions[i].ID] = true
+	for idx := range fresh.Sessions {
+		if fresh.Sessions[idx].ID == "" {
+			fresh.Sessions[idx].ID = newSessionID(fresh.Sessions[idx].Name, seen)
+			seen[fresh.Sessions[idx].ID] = true
 		}
 	}
-	if s.ensureSessionIncarnationsLocked() {
-		if err := s.saveLocked(); err != nil {
+	if fresh.ensureSessionIncarnationsLocked() {
+		if err := fresh.saveLocked(); err != nil {
 			return nil, fmt.Errorf("persist session incarnation backfill: %w", err)
 		}
 	}
-	return s, nil
+	return fresh, nil
 }
 
 func newSessionID(name string, existing map[string]bool) string {
 	base := "s_" + name
-	id := base
-	for n := 1; existing[id]; n++ {
-		id = fmt.Sprintf("%s_%d", base, n)
+	baseID := base
+	for n := 1; existing[baseID]; n++ {
+		baseID = fmt.Sprintf("%s_%d", base, n)
 	}
-	return id
+	return baseID
 }
 
 func newSessionIncarnation(existing map[string]bool) string {
 	for {
-		id := "inc_" + rand.Text()
-		if !existing[id] {
-			return id
+		incarnationID := "inc_" + rand.Text()
+		if !existing[incarnationID] {
+			return incarnationID
 		}
 	}
 }
 
 func (s *State) ensureSessionIncarnationsLocked() bool {
-	incarnations := map[string]bool{}
+	incarnations := make(map[string]bool)
 	dirty := false
-	for i := range s.Sessions {
-		incarnation := s.Sessions[i].Incarnation
+	for idx := range s.Sessions {
+		incarnation := s.Sessions[idx].Incarnation
 		if incarnation == "" || incarnations[incarnation] {
 			incarnation = newSessionIncarnation(incarnations)
-			s.Sessions[i].Incarnation = incarnation
+			s.Sessions[idx].Incarnation = incarnation
 			dirty = true
 		}
 		incarnations[incarnation] = true
@@ -269,7 +281,7 @@ func (s *State) Save() error {
 
 func (s *State) saveLocked() error {
 	s.ensureSessionIncarnationsLocked()
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), privateDirMode); err != nil {
 		return err
 	}
 	buf, err := json.MarshalIndent(s, "", "  ")
@@ -277,7 +289,7 @@ func (s *State) saveLocked() error {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, buf, 0o600); err != nil {
+	if err := os.WriteFile(tmp, buf, privateFileMode); err != nil {
 		return err
 	}
 	return os.Rename(tmp, s.path)
@@ -287,9 +299,9 @@ func (s *State) saveLocked() error {
 func (s *State) FindSession(name string) (Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, ss := range s.Sessions {
-		if ss.Name == name {
-			return ss, true
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == name {
+			return s.Sessions[idx], true
 		}
 	}
 	return Session{}, false
@@ -299,15 +311,15 @@ func (s *State) FindSession(name string) (Session, bool) {
 func (s *State) AddSession(sess Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, ss := range s.Sessions {
-		if ss.Name == sess.Name {
-			return fmt.Errorf("session %q already exists", sess.Name)
+	for i := range s.Sessions {
+		if s.Sessions[i].Name == sess.Name {
+			return fmt.Errorf("%w: %q", errSessionExists, sess.Name)
 		}
 	}
 	if sess.ID == "" {
-		seen := map[string]bool{}
-		for _, e := range s.Sessions {
-			seen[e.ID] = true
+		seen := make(map[string]bool)
+		for i := range s.Sessions {
+			seen[s.Sessions[i].ID] = true
 		}
 		sess.ID = newSessionID(sess.Name, seen)
 	}
@@ -321,9 +333,9 @@ func (s *State) RemoveSession(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := s.Sessions[:0]
-	for _, ss := range s.Sessions {
-		if ss.Name != name {
-			out = append(out, ss)
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name != name {
+			out = append(out, s.Sessions[idx])
 		}
 	}
 	s.Sessions = out
@@ -342,24 +354,24 @@ func (s *State) RenameSession(oldName, newName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	found := -1
-	for i, ss := range s.Sessions {
-		if ss.Name == newName && newName != oldName {
-			return fmt.Errorf("session %q already exists", newName)
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == newName && newName != oldName {
+			return fmt.Errorf("%w: %q", errSessionExists, newName)
 		}
-		if ss.Name == oldName {
-			found = i
+		if s.Sessions[idx].Name == oldName {
+			found = idx
 		}
 	}
 	if found < 0 {
-		return fmt.Errorf("no session %q", oldName)
+		return fmt.Errorf("%w: %q", errNoSession, oldName)
 	}
 	if oldName == newName {
 		return nil
 	}
 	s.Sessions[found].Name = newName
-	for i, sc := range s.Schedules {
-		if sc.Session == oldName {
-			s.Schedules[i].Session = newName
+	for idx := range s.Schedules {
+		if s.Schedules[idx].Session == oldName {
+			s.Schedules[idx].Session = newName
 		}
 	}
 	return s.saveLocked()
@@ -372,12 +384,12 @@ func (s *State) RenameSession(oldName, newName string) error {
 func (s *State) SetResumeToken(name, token string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			if s.Sessions[i].ResumeToken == token {
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == name {
+			if s.Sessions[idx].ResumeToken == token {
 				return nil
 			}
-			s.Sessions[i].ResumeToken = token
+			s.Sessions[idx].ResumeToken = token
 			return s.saveLocked()
 		}
 	}
@@ -390,8 +402,8 @@ func (s *State) SetResumeToken(name, token string) error {
 // demanding an isolated worktree, and neither says where knowledge goes. Every
 // path that scopes memory (the supervisor spawning a bridge, the daemon running
 // a one-shot seed) asks here, so the two cannot drift.
-func (s Session) MemoryRoots() (project, agent string) {
-	project, agent = s.MemoryProject, s.MemoryAgent
+func (s Session) MemoryRoots() (string, string) {
+	project, agent := s.MemoryProject, s.MemoryAgent
 	if project == "" {
 		project = s.Project
 	}
@@ -408,15 +420,15 @@ func (s Session) MemoryRoots() (project, agent string) {
 func (s *State) SetProjectPinned(name, project string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name != name {
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name != name {
 			continue
 		}
-		if s.Sessions[i].MemoryProject == project && s.Sessions[i].ProjectPinned {
+		if s.Sessions[idx].MemoryProject == project && s.Sessions[idx].ProjectPinned {
 			return nil
 		}
-		s.Sessions[i].MemoryProject = project
-		s.Sessions[i].ProjectPinned = true
+		s.Sessions[idx].MemoryProject = project
+		s.Sessions[idx].ProjectPinned = true
 		return s.saveLocked()
 	}
 	return nil
@@ -427,12 +439,12 @@ func (s *State) SetProjectPinned(name, project string) error {
 func (s *State) SetPausedReason(name, reason string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			if s.Sessions[i].PausedReason == reason {
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == name {
+			if s.Sessions[idx].PausedReason == reason {
 				return nil
 			}
-			s.Sessions[i].PausedReason = reason
+			s.Sessions[idx].PausedReason = reason
 			return s.saveLocked()
 		}
 	}
@@ -446,15 +458,16 @@ func (s *State) SetPausedReason(name, reason string) error {
 func (s *State) SetBudget(name string, costCap float64, tokenCap uint64, cohortCostCap float64, cohortTokenCap uint64, pausedReason string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			s.Sessions[i].CostCap = costCap
-			s.Sessions[i].TokenCap = tokenCap
-			s.Sessions[i].CohortCostCap = cohortCostCap
-			s.Sessions[i].CohortTokenCap = cohortTokenCap
-			s.Sessions[i].PausedReason = pausedReason
-			return s.saveLocked()
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name != name {
+			continue
 		}
+		s.Sessions[idx].CostCap = costCap
+		s.Sessions[idx].TokenCap = tokenCap
+		s.Sessions[idx].CohortCostCap = cohortCostCap
+		s.Sessions[idx].CohortTokenCap = cohortTokenCap
+		s.Sessions[idx].PausedReason = pausedReason
+		return s.saveLocked()
 	}
 	return nil
 }
@@ -468,14 +481,15 @@ func (s *State) SetBudget(name string, costCap float64, tokenCap uint64, cohortC
 func (s *State) SetBackendTarget(name, vendor, cmd, modelID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			s.Sessions[i].Vendor = vendor
-			s.Sessions[i].Cmd = cmd
-			s.Sessions[i].ModelID = modelID
-			s.Sessions[i].ResumeToken = ""
-			return true, s.saveLocked()
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name != name {
+			continue
 		}
+		s.Sessions[idx].Vendor = vendor
+		s.Sessions[idx].Cmd = cmd
+		s.Sessions[idx].ModelID = modelID
+		s.Sessions[idx].ResumeToken = ""
+		return true, s.saveLocked()
 	}
 	return false, nil
 }
@@ -485,12 +499,12 @@ func (s *State) SetBackendTarget(name, vendor, cmd, modelID string) (bool, error
 func (s *State) SetArchived(name string, archived bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			if s.Sessions[i].Archived == archived {
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == name {
+			if s.Sessions[idx].Archived == archived {
 				return nil
 			}
-			s.Sessions[i].Archived = archived
+			s.Sessions[idx].Archived = archived
 			return s.saveLocked()
 		}
 	}
@@ -498,10 +512,10 @@ func (s *State) SetArchived(name string, archived bool) error {
 }
 
 // SetHome records the home ref and persists.
-func (s *State) SetHome(h HomeRef) error {
+func (s *State) SetHome(home HomeRef) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.Home = h
+	s.Home = home
 	return s.saveLocked()
 }
 
@@ -563,9 +577,9 @@ func (s *State) AddApprovalRule(rendered string) error {
 func (s *State) RemoveApprovalRule(rendered string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i, r := range s.Approvals {
+	for idx, r := range s.Approvals {
 		if r == rendered {
-			s.Approvals = append(s.Approvals[:i], s.Approvals[i+1:]...)
+			s.Approvals = append(s.Approvals[:idx], s.Approvals[idx+1:]...)
 			return true, s.saveLocked()
 		}
 	}
@@ -590,24 +604,24 @@ func (s *State) ApprovalWait() time.Duration {
 	if s.ApprovalTimeout == "" {
 		return DefaultApprovalWait
 	}
-	d, err := time.ParseDuration(s.ApprovalTimeout)
-	if err != nil || d <= 0 {
+	timeout, err := time.ParseDuration(s.ApprovalTimeout)
+	if err != nil || timeout <= 0 {
 		return DefaultApprovalWait
 	}
-	return d
+	return timeout
 }
 
 // SetSessionApprovals changes one session's approval mode and persists.
 func (s *State) SetSessionApprovals(name, mode string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.Sessions {
-		if s.Sessions[i].Name == name {
-			s.Sessions[i].Approvals = mode
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == name {
+			s.Sessions[idx].Approvals = mode
 			return s.saveLocked()
 		}
 	}
-	return fmt.Errorf("no session named %q", name)
+	return fmt.Errorf("%w: %q", errNoSession, name)
 }
 
 // RoleAssignments returns a copy of the role table.
@@ -647,7 +661,7 @@ func (s *State) SetRole(principal, role, label string) (bool, error) {
 	defer s.mu.Unlock()
 	first := len(s.Roles) == 0
 	if s.Roles == nil {
-		s.Roles = map[string]RoleAssignment{}
+		s.Roles = make(map[string]RoleAssignment)
 	}
 	s.Roles[principal] = RoleAssignment{Role: role, Label: label}
 	return first, s.saveLocked()
@@ -668,10 +682,10 @@ func (s *State) RemoveRole(principal string) (bool, error) {
 }
 
 // SetStatusMessageID caches the status embed's message id and persists.
-func (s *State) SetStatusMessageID(id string) error {
+func (s *State) SetStatusMessageID(messageID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.StatusMessageID = id
+	s.StatusMessageID = messageID
 	return s.saveLocked()
 }
 
@@ -696,9 +710,9 @@ func (s *State) QualifiedName(name string) string {
 
 // SetInstanceID records the per-daemon instance id and persists. The id is meant
 // to be frozen after first resolution; callers enforce that invariant.
-func (s *State) SetInstanceID(id string) error {
+func (s *State) SetInstanceID(instanceID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.InstanceID = id
+	s.InstanceID = instanceID
 	return s.saveLocked()
 }

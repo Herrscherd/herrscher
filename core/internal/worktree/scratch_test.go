@@ -17,7 +17,7 @@ func TestScratchIsIdempotentAndRemovable(t *testing.T) {
 	if want := filepath.Join(root, ".herrscher-scratch", "inst", "demo"); p != want {
 		t.Fatalf("path = %q, want %q", p, want)
 	}
-	if err := os.WriteFile(filepath.Join(p, "SOUL.md"), []byte("x"), 0o600); err != nil {
+	if err = os.WriteFile(filepath.Join(p, "SOUL.md"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

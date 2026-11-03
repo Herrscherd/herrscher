@@ -64,7 +64,7 @@ func TestReadTranscriptLast(t *testing.T) {
 	}
 
 	big := strings.Repeat("x", 4096)
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		if err := AppendTranscript(p, TranscriptEntry{Ts: "t3", Role: "assistant", Text: big}); err != nil {
 			t.Fatalf("append big: %v", err)
 		}
@@ -103,7 +103,7 @@ func TestTranscriptCompactionBoundsGrowth(t *testing.T) {
 	p := TranscriptPath(dir, "sess")
 	body := strings.Repeat("m", 5000)
 	const n = 1000
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if err := AppendTranscript(p, TranscriptEntry{Ts: fmt.Sprintf("t%04d", i), Role: "user", Text: body}); err != nil {
 			t.Fatalf("append %d: %v", i, err)
 		}

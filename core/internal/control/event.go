@@ -12,13 +12,13 @@ import (
 
 // WriteEvent encodes e as a single JSON line (newline-terminated). encoding/json
 // escapes any newline inside a field, so one Event is always one line.
-func WriteEvent(w io.Writer, e contracts.Event) error {
-	b, err := json.Marshal(e)
+func WriteEvent(dst io.Writer, e contracts.Event) error {
+	payload, err := json.Marshal(e)
 	if err != nil {
 		return err
 	}
-	b = append(b, '\n')
-	_, err = w.Write(b)
+	payload = append(payload, '\n')
+	_, err = dst.Write(payload)
 	return err
 }
 
@@ -28,27 +28,33 @@ func WriteEvent(w io.Writer, e contracts.Event) error {
 // as the legacy bare pick value and surfaced as Event{T:"pick", Value:line} for
 // back-compat. It returns the first fn error, a malformed-line error, or a read
 // error other than io.EOF.
-func ScanEvents(r io.Reader, fn func(contracts.Event) error) error {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
+const (
+	scanInitialBuffer = 64 * 1024
+	scanMaxLine       = 1024 * 1024
+)
+
+// ScanEvents decodes events from r and passes each one to fn until r ends or fn fails.
+func ScanEvents(r io.Reader, handle func(contracts.Event) error) error {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, scanInitialBuffer), scanMaxLine)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}
 		if line[0] == '{' {
-			var e contracts.Event
-			if err := json.Unmarshal([]byte(line), &e); err != nil {
+			var event contracts.Event
+			if err := json.Unmarshal([]byte(line), &event); err != nil {
 				return fmt.Errorf("control: malformed event line: %w", err)
 			}
-			if err := fn(e); err != nil {
+			if err := handle(event); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := fn(contracts.Event{T: "pick", Value: line}); err != nil {
+		if err := handle(contracts.Event{T: "pick", Value: line}); err != nil {
 			return err
 		}
 	}
-	return sc.Err()
+	return scanner.Err()
 }

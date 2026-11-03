@@ -15,7 +15,7 @@ func gitRepo(t *testing.T, name string) string {
 	}
 	run := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
 		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
@@ -49,7 +49,7 @@ func TestProjectFromDirAnswersTheSameFromASubdirectory(t *testing.T) {
 func TestProjectFromDirFoldsWorktreesIntoTheirRepository(t *testing.T) {
 	repo := gitRepo(t, "herrscher")
 	wt := filepath.Join(filepath.Dir(repo), "detached-elsewhere")
-	cmd := exec.Command("git", "-C", repo, "worktree", "add", "-q", "-b", "side", wt)
+	cmd := exec.CommandContext(t.Context(), "git", "-C", repo, "worktree", "add", "-q", "-b", "side", wt)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("worktree add: %v\n%s", err, out)
 	}

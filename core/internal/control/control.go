@@ -13,10 +13,10 @@ import "strings"
 // Exported because core/host derives a per-session command socket the same way,
 // and two foldings that could drift is two names for one socket.
 func SafeSessionName(session string) string {
-	return strings.Map(func(r rune) rune {
+	return strings.Map(func(char rune) rune {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
-			return r
+		case char >= 'a' && char <= 'z', char >= 'A' && char <= 'Z', char >= '0' && char <= '9', char == '-', char == '_':
+			return char
 		default:
 			return '-'
 		}

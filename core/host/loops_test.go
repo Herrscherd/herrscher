@@ -38,7 +38,7 @@ func TestStatusContent(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			snap := health.HealthSnapshot{Online: tt.online, UptimeS: 5, PingMS: 12, Sessions: 2}
+			snap := health.Snapshot{Online: tt.online, UptimeS: 5, PingMS: 12, Sessions: 2}
 			got := statusContent(tt.instanceID, snap)
 			if !strings.Contains(got, tt.wantSubstr) {
 				t.Fatalf("statusContent = %q, want substring %q", got, tt.wantSubstr)
@@ -51,7 +51,7 @@ func TestStatusContent(t *testing.T) {
 }
 
 func TestStatusContentSurfacesMetrics(t *testing.T) {
-	snap := health.HealthSnapshot{
+	snap := health.Snapshot{
 		Online: true,
 		Metrics: metrics.Snapshot{
 			TurnsCompleted: 9,

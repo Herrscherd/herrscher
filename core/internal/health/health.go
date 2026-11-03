@@ -1,3 +1,4 @@
+// Package health tracks the host liveness and renders its health snapshot.
 package health
 
 import (
@@ -20,8 +21,8 @@ type Health struct {
 	metrics       *metrics.Registry
 }
 
-// HealthSnapshot is an immutable view rendered for /health and the status embed.
-type HealthSnapshot struct {
+// Snapshot is an immutable view rendered for /health and the status embed.
+type Snapshot struct {
 	Online        bool             `json:"online"`
 	UptimeS       int64            `json:"uptime_s"`
 	PingMS        int64            `json:"ping_ms"`
@@ -41,33 +42,33 @@ func NewHealth(startedAt time.Time) *Health {
 func (h *Health) Metrics() *metrics.Registry { return h.metrics }
 
 // HeartbeatAck records a gateway heartbeat ACK at t.
-func (h *Health) HeartbeatAck(t time.Time) {
+func (h *Health) HeartbeatAck(when time.Time) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.lastHeartbeat = t
+	h.lastHeartbeat = when
 }
 
 // Ping records a successful REST self-ping at t with round-trip latency.
-func (h *Health) Ping(t time.Time, latencyMS int64) {
+func (h *Health) Ping(when time.Time, latencyMS int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.lastPing, h.pingLatencyMS = t, latencyMS
+	h.lastPing, h.pingLatencyMS = when, latencyMS
 }
 
 // SetSessions records the active supervised-bridge count.
-func (h *Health) SetSessions(n int) {
+func (h *Health) SetSessions(count int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.sessions = n
+	h.sessions = count
 }
 
 // Snapshot renders health as of now; Online is true iff the last heartbeat ACK
 // is within window.
-func (h *Health) Snapshot(now time.Time, window time.Duration) HealthSnapshot {
+func (h *Health) Snapshot(now time.Time, window time.Duration) Snapshot {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	online := !h.lastHeartbeat.IsZero() && now.Sub(h.lastHeartbeat) <= window
-	return HealthSnapshot{
+	return Snapshot{
 		Online:        online,
 		UptimeS:       int64(now.Sub(h.startedAt).Seconds()),
 		PingMS:        h.pingLatencyMS,
@@ -78,9 +79,9 @@ func (h *Health) Snapshot(now time.Time, window time.Duration) HealthSnapshot {
 	}
 }
 
-func stamp(t time.Time) string {
-	if t.IsZero() {
+func stamp(when time.Time) string {
+	if when.IsZero() {
 		return ""
 	}
-	return t.UTC().Format(time.RFC3339)
+	return when.UTC().Format(time.RFC3339)
 }

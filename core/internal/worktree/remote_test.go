@@ -27,9 +27,9 @@ func (f *fakeCommander) Describe() string { return "fake" }
 
 func TestRemoteCreateAsksForTheVerbAndReadsThePath(t *testing.T) {
 	f := &fakeCommander{stdout: `{"path":"/srv/work/proj/.herrscher-sessions/inst/s1"}`}
-	r := NewRemote(context.Background(), f, "/home/me/.herrscher/bin/herrscher", "inst")
+	r := NewRemote(f, "/home/me/.herrscher/bin/herrscher", "inst")
 
-	got, err := r.Create("/srv/work/proj", "s1", "session/other")
+	got, err := r.Create(context.Background(), "/srv/work/proj", "s1", "session/other")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestRemoteCreateAsksForTheVerbAndReadsThePath(t *testing.T) {
 
 func TestRemoteCreateOmitsAnEmptyBase(t *testing.T) {
 	f := &fakeCommander{stdout: `{"path":"/p"}`}
-	if _, err := NewRemote(context.Background(), f, "hs", "inst").Create("/srv/work/proj", "s1", ""); err != nil {
+	if _, err := NewRemote(f, "hs", "inst").Create(context.Background(), "/srv/work/proj", "s1", ""); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(strings.Join(f.seen[0], " "), "--base") {
@@ -58,7 +58,7 @@ func TestRemoteCreateOmitsAnEmptyBase(t *testing.T) {
 
 func TestRemoteCreateSurfacesTheRemoteError(t *testing.T) {
 	f := &fakeCommander{fail: true}
-	_, err := NewRemote(context.Background(), f, "hs", "inst").Create("/srv/work/proj", "s1", "")
+	_, err := NewRemote(f, "hs", "inst").Create(context.Background(), "/srv/work/proj", "s1", "")
 	if err == nil {
 		t.Fatal("want an error")
 	}
@@ -72,21 +72,21 @@ func TestRemoteCreateSurfacesTheRemoteError(t *testing.T) {
 
 func TestRemotePreExisting(t *testing.T) {
 	f := &fakeCommander{stdout: `{"preExisting":true}`}
-	if !NewRemote(context.Background(), f, "hs", "inst").PreExisting("/srv/work/proj", "s1") {
+	if !NewRemote(f, "hs", "inst").PreExisting(context.Background(), "/srv/work/proj", "s1") {
 		t.Fatal("want true")
 	}
 }
 
 func TestRemotePreExistingIsCautiousWhenItCannotAsk(t *testing.T) {
 	f := &fakeCommander{fail: true}
-	if !NewRemote(context.Background(), f, "hs", "inst").PreExisting("/srv/work/proj", "s1") {
+	if !NewRemote(f, "hs", "inst").PreExisting(context.Background(), "/srv/work/proj", "s1") {
 		t.Fatal("an unanswerable question must not be read as 'nothing there'")
 	}
 }
 
 func TestRemoteRemove(t *testing.T) {
 	f := &fakeCommander{stdout: `{"removed":true}`}
-	if err := NewRemote(context.Background(), f, "hs", "inst").Remove("/srv/work/proj", "s1", true); err != nil {
+	if err := NewRemote(f, "hs", "inst").Remove(context.Background(), "/srv/work/proj", "s1", true); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(strings.Join(f.seen[0], " "), "--force") {
@@ -96,7 +96,7 @@ func TestRemoteRemove(t *testing.T) {
 
 func TestRemoteBranchDoesNotTravel(t *testing.T) {
 	f := &fakeCommander{}
-	if got := NewRemote(context.Background(), f, "hs", "inst").Branch("s1"); got != "session/inst/s1" {
+	if got := NewRemote(f, "hs", "inst").Branch("s1"); got != "session/inst/s1" {
 		t.Fatalf("Branch = %q", got)
 	}
 	if len(f.seen) != 0 {
@@ -106,7 +106,7 @@ func TestRemoteBranchDoesNotTravel(t *testing.T) {
 
 func TestRemoteMaterializeFeedsThePayloadOnStdin(t *testing.T) {
 	f := &fakeCommander{stdout: `{"materialized":true}`}
-	err := NewRemote(context.Background(), f, "hs", "inst").Materialize(context.Background(), "/srv/work/wt", strings.NewReader("tar bytes"))
+	err := NewRemote(f, "hs", "inst").Materialize(context.Background(), "/srv/work/wt", strings.NewReader("tar bytes"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,10 +11,13 @@ func TestParticipantJournalAppendAndRead(t *testing.T) {
 	if err != nil || !added {
 		t.Fatalf("first append should report new: added=%v err=%v", added, err)
 	}
-	if again, _ := AppendParticipant(path, "u1"); again {
+	again, err := AppendParticipant(path, "u1")
+	must(t, err)
+	if again {
 		t.Fatal("duplicate append should report false (idempotent)")
 	}
-	AppendParticipant(path, "u2")
+	_, err = AppendParticipant(path, "u2")
+	must(t, err)
 	got := ReadParticipants(path)
 	if len(got) != 2 || got[0] != "u1" || got[1] != "u2" {
 		t.Fatalf("expected [u1 u2] in order, got %+v", got)
@@ -29,7 +32,8 @@ func TestReadParticipantsMissingFileIsEmpty(t *testing.T) {
 
 func TestRemoveParticipantJournal(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "p", "a.log")
-	AppendParticipant(path, "u1")
+	_, err := AppendParticipant(path, "u1")
+	must(t, err)
 	if err := RemoveParticipantJournal(path); err != nil {
 		t.Fatal(err)
 	}

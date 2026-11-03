@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,21 +21,21 @@ func TestPathAndBranch(t *testing.T) {
 			name:       "namespaced",
 			instanceID: "alice",
 			session:    "foo",
-			wantPath:   filepath.Join("/repo", ".herrscher-sessions", "alice", "foo"),
+			wantPath:   filepath.Join("repo", ".herrscher-sessions", "alice", "foo"),
 			wantBranch: "session/alice/foo",
 		},
 		{
 			name:       "legacy-empty-id",
 			instanceID: "",
 			session:    "foo",
-			wantPath:   filepath.Join("/repo", ".herrscher-sessions", "foo"),
+			wantPath:   filepath.Join("repo", ".herrscher-sessions", "foo"),
 			wantBranch: "session/foo",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := NewWorktreer(context.Background(), tt.instanceID)
-			if got := w.Path("/repo", tt.session); got != tt.wantPath {
+			w := NewWorktreer(tt.instanceID)
+			if got := w.Path("repo", tt.session); got != tt.wantPath {
 				t.Fatalf("Path = %q, want %q", got, tt.wantPath)
 			}
 			if got := w.Branch(tt.session); got != tt.wantBranch {
@@ -46,7 +47,7 @@ func TestPathAndBranch(t *testing.T) {
 
 func TestPathAlwaysCurrentName(t *testing.T) {
 	repo := t.TempDir()
-	w := NewWorktreer(context.Background(), "")
+	w := NewWorktreer("")
 	want := filepath.Join(repo, ".herrscher-sessions", "feat1")
 
 	if err := os.MkdirAll(filepath.Join(repo, ".stray-sessions", "feat1"), 0o755); err != nil {
@@ -66,7 +67,7 @@ func initRepo(t *testing.T) string {
 		{"config", "user.name", "t"},
 		{"commit", "--allow-empty", "-m", "init"},
 	} {
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
@@ -78,7 +79,7 @@ func initRepo(t *testing.T) string {
 		{"add", ".gitignore"},
 		{"commit", "-m", "ignore worktree scratch dir"},
 	} {
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
@@ -88,7 +89,7 @@ func initRepo(t *testing.T) string {
 
 func gitAt(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %s", args, out)
 	}
@@ -105,16 +106,16 @@ func commitFile(t *testing.T, dir, name, content, msg string) {
 
 func TestMergeIntoCleanMerge(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "")
+	w := NewWorktreer("")
 	commitFile(t, repo, "f.txt", "base\n", "base file")
 
-	if _, err := w.Create(repo, "worker", ""); err != nil {
+	if _, err := w.Create(context.Background(), repo, "worker", ""); err != nil {
 		t.Fatal(err)
 	}
 	wp := w.Path(repo, "worker")
 	commitFile(t, wp, "g.txt", "worker\n", "worker work")
 
-	outcome, conflicts, err := w.MergeInto(repo, w.Branch("worker"))
+	outcome, conflicts, err := w.MergeInto(context.Background(), repo, w.Branch("worker"))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -124,7 +125,11 @@ func TestMergeIntoCleanMerge(t *testing.T) {
 	if len(conflicts) != 0 {
 		t.Fatalf("conflicts = %v, want none", conflicts)
 	}
-	if clean, _ := w.IsCleanAt(repo); !clean {
+	clean, err := w.IsCleanAt(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !clean {
 		t.Fatal("lead worktree not clean after merge")
 	}
 	if _, err := os.Stat(filepath.Join(repo, "g.txt")); err != nil {
@@ -134,10 +139,10 @@ func TestMergeIntoCleanMerge(t *testing.T) {
 
 func TestMergeIntoConflictAborts(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "")
+	w := NewWorktreer("")
 	commitFile(t, repo, "f.txt", "base\n", "base file")
 
-	if _, err := w.Create(repo, "worker", ""); err != nil {
+	if _, err := w.Create(context.Background(), repo, "worker", ""); err != nil {
 		t.Fatal(err)
 	}
 	wp := w.Path(repo, "worker")
@@ -145,7 +150,7 @@ func TestMergeIntoConflictAborts(t *testing.T) {
 
 	commitFile(t, repo, "f.txt", "lead-change\n", "lead edit")
 
-	outcome, conflicts, err := w.MergeInto(repo, w.Branch("worker"))
+	outcome, conflicts, err := w.MergeInto(context.Background(), repo, w.Branch("worker"))
 	if err != nil {
 		t.Fatalf("conflict must not be an error, got: %v", err)
 	}
@@ -155,15 +160,19 @@ func TestMergeIntoConflictAborts(t *testing.T) {
 	if len(conflicts) == 0 || conflicts[0] != "f.txt" {
 		t.Fatalf("conflicts = %v, want [f.txt]", conflicts)
 	}
-	if clean, _ := w.IsCleanAt(repo); !clean {
+	clean, err := w.IsCleanAt(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !clean {
 		t.Fatal("lead worktree not clean after conflict abort")
 	}
 }
 
 func TestCreateUsesPassedRepo(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "")
-	path, err := w.Create(repo, "feat1", "")
+	w := NewWorktreer("")
+	path, err := w.Create(context.Background(), repo, "feat1", "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -176,9 +185,22 @@ func TestCreateUsesPassedRepo(t *testing.T) {
 	}
 }
 
+func TestCreateReportsCancellationInsteadOfFallingBack(t *testing.T) {
+	repo := initRepo(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	path, err := NewWorktreer("").Create(ctx, repo, "feat1", "")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Create under a cancelled context = %q, %v; want context.Canceled", path, err)
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, ".herrscher-sessions", "feat1")); statErr == nil {
+		t.Fatal("a cancelled Create left a worktree directory behind")
+	}
+}
+
 func TestCreateNonGitRepoFallsBack(t *testing.T) {
-	w := NewWorktreer(context.Background(), "")
-	path, err := w.Create(t.TempDir(), "feat1", "")
+	w := NewWorktreer("")
+	path, err := w.Create(context.Background(), t.TempDir(), "feat1", "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -189,11 +211,11 @@ func TestCreateNonGitRepoFallsBack(t *testing.T) {
 
 func TestRemoveUsesPassedRepo(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "")
-	if _, err := w.Create(repo, "feat1", ""); err != nil {
+	w := NewWorktreer("")
+	if _, err := w.Create(context.Background(), repo, "feat1", ""); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if err := w.Remove(repo, "feat1", false); err != nil {
+	if err := w.Remove(context.Background(), repo, "feat1", false); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(repo, ".herrscher-sessions", "feat1")); !os.IsNotExist(err) {
@@ -203,13 +225,13 @@ func TestRemoveUsesPassedRepo(t *testing.T) {
 
 func TestRemoveForceRecoversEmptyUnregisteredWorktree(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "")
+	w := NewWorktreer("")
 	path := w.Path(repo, "orphan")
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := w.Remove(repo, "orphan", true); err != nil {
+	if err := w.Remove(context.Background(), repo, "orphan", true); err != nil {
 		t.Fatalf("Remove should recover an empty orphan: %v", err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -219,13 +241,13 @@ func TestRemoveForceRecoversEmptyUnregisteredWorktree(t *testing.T) {
 
 func TestRemoveDoesNotRecoverEmptyOrphanWithoutForce(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "")
+	w := NewWorktreer("")
 	path := w.Path(repo, "orphan")
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := w.Remove(repo, "orphan", false); err == nil {
+	if err := w.Remove(context.Background(), repo, "orphan", false); err == nil {
 		t.Fatal("non-force remove must reject an unregistered orphan")
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -235,7 +257,7 @@ func TestRemoveDoesNotRecoverEmptyOrphanWithoutForce(t *testing.T) {
 
 func TestRemoveForceDoesNotRecoverNonEmptyOrphan(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "")
+	w := NewWorktreer("")
 	path := w.Path(repo, "orphan")
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
@@ -245,7 +267,7 @@ func TestRemoveForceDoesNotRecoverNonEmptyOrphan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := w.Remove(repo, "orphan", true); err == nil {
+	if err := w.Remove(context.Background(), repo, "orphan", true); err == nil {
 		t.Fatal("force remove must reject a non-empty unregistered directory")
 	}
 	if got, err := os.ReadFile(keep); err != nil || string(got) != "preserve" {
@@ -255,14 +277,14 @@ func TestRemoveForceDoesNotRecoverNonEmptyOrphan(t *testing.T) {
 
 func TestRemoveForceDoesNotRecoverPathOutsideSessionRoot(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "")
+	w := NewWorktreer("")
 	name := filepath.Join("..", "outside")
 	path := w.Path(repo, name)
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := w.Remove(repo, name, true); err == nil {
+	if err := w.Remove(context.Background(), repo, name, true); err == nil {
 		t.Fatal("force remove must reject a path outside the session root")
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -278,12 +300,12 @@ func TestRemoveForceRejectsTraversingInstanceID(t *testing.T) {
 		t.Fatal(err)
 	}
 	instanceID := filepath.Join("..", "..", filepath.Base(outsideRoot))
-	w := NewWorktreer(context.Background(), instanceID)
+	w := NewWorktreer(instanceID)
 	if got := filepath.Clean(w.Path(repo, "orphan")); got != filepath.Clean(path) {
 		t.Fatalf("test setup: traversing path = %q, want %q", got, path)
 	}
 
-	if err := w.Remove(repo, "orphan", true); err == nil {
+	if err := w.Remove(context.Background(), repo, "orphan", true); err == nil {
 		t.Fatal("force remove must reject a traversing instance ID")
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -299,9 +321,9 @@ func TestRemoveForceRejectsLinkedSessionsRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	makeDirectoryLink(t, filepath.Join(repo, sessionsDir), externalRoot)
-	w := NewWorktreer(context.Background(), "")
+	w := NewWorktreer("")
 
-	if err := w.Remove(repo, "orphan", true); err == nil {
+	if err := w.Remove(context.Background(), repo, "orphan", true); err == nil {
 		t.Fatal("force remove must reject a linked sessions root")
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -321,9 +343,9 @@ func TestRemoveForceRejectsLinkedInstanceRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	makeDirectoryLink(t, filepath.Join(sessionsRoot, "instance"), externalRoot)
-	w := NewWorktreer(context.Background(), "instance")
+	w := NewWorktreer("instance")
 
-	if err := w.Remove(repo, "orphan", true); err == nil {
+	if err := w.Remove(context.Background(), repo, "orphan", true); err == nil {
 		t.Fatal("force remove must reject a linked instance root")
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -333,13 +355,13 @@ func TestRemoveForceRejectsLinkedInstanceRoot(t *testing.T) {
 
 func TestRecoverEmptyOrphanRejectsRegisteredWorktree(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "")
-	path, err := w.Create(repo, "registered", "")
+	w := NewWorktreer("")
+	path, err := w.Create(context.Background(), repo, "registered", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	recovered, err := w.recoverEmptyOrphan(repo, "registered")
+	recovered, err := w.recoverEmptyOrphan(context.Background(), repo, "registered")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,8 +375,8 @@ func TestRecoverEmptyOrphanRejectsRegisteredWorktree(t *testing.T) {
 
 func TestRegisteredWorktreeRecognizesLinkedRepoAlias(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "")
-	if _, err := w.Create(repo, "registered", ""); err != nil {
+	w := NewWorktreer("")
+	if _, err := w.Create(context.Background(), repo, "registered", ""); err != nil {
 		t.Fatal(err)
 	}
 	alias := filepath.Join(t.TempDir(), "repo-alias")
@@ -363,7 +385,7 @@ func TestRegisteredWorktreeRecognizesLinkedRepoAlias(t *testing.T) {
 		t.Fatalf("test setup: registered worktree through alias: %v", err)
 	}
 
-	registered, err := w.registeredWorktree(alias, w.Path(alias, "registered"))
+	registered, err := w.registeredWorktree(context.Background(), alias, w.Path(alias, "registered"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,21 +395,21 @@ func TestRegisteredWorktreeRecognizesLinkedRepoAlias(t *testing.T) {
 }
 
 func TestCreateWithBaseBranchesOffIt(t *testing.T) {
-	w := NewWorktreer(context.Background(), "")
+	w := NewWorktreer("")
 	repo := initRepo(t)
-	pa, err := w.Create(repo, "alpha", "")
+	pa, err := w.Create(context.Background(), repo, "alpha", "")
 	if err != nil {
 		t.Fatalf("create alpha: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(pa, "f.txt"), []byte("x"), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(pa, "f.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"add", "."}, {"commit", "-qm", "work"}} {
-		if out, err := exec.Command("git", append([]string{"-C", pa}, args...)...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v (%s)", args, err, out)
+		if out, runErr := exec.CommandContext(t.Context(), "git", append([]string{"-C", pa}, args...)...).CombinedOutput(); runErr != nil {
+			t.Fatalf("git %v: %v (%s)", args, runErr, out)
 		}
 	}
-	pb, err := w.Create(repo, "beta", "session/alpha")
+	pb, err := w.Create(context.Background(), repo, "beta", "session/alpha")
 	if err != nil {
 		t.Fatalf("create beta on base: %v", err)
 	}
@@ -397,9 +419,9 @@ func TestCreateWithBaseBranchesOffIt(t *testing.T) {
 }
 
 func TestCreateRejectsFlagLikeBase(t *testing.T) {
-	w := NewWorktreer(context.Background(), "")
+	w := NewWorktreer("")
 	repo := initRepo(t)
-	path, err := w.Create(repo, "x", "--foo")
+	path, err := w.Create(context.Background(), repo, "x", "--foo")
 	if err == nil {
 		t.Fatal("expected error for flag-like base, got nil")
 	}
@@ -412,45 +434,45 @@ func TestCreateRejectsFlagLikeBase(t *testing.T) {
 }
 
 func TestBranchExistsAt(t *testing.T) {
-	w := NewWorktreer(context.Background(), "")
+	w := NewWorktreer("")
 	repo := initRepo(t)
-	pathAlpha, err := w.Create(repo, "alpha", "")
+	pathAlpha, err := w.Create(context.Background(), repo, "alpha", "")
 	if err != nil {
 		t.Fatalf("create alpha: %v", err)
 	}
-	exists, err := w.BranchExistsAt(pathAlpha, "session/alpha")
+	exists, err := w.BranchExistsAt(context.Background(), pathAlpha, "session/alpha")
 	if err != nil || !exists {
 		t.Fatalf("session/alpha should exist: exists=%v err=%v", exists, err)
 	}
-	exists, err = w.BranchExistsAt(pathAlpha, "session/nope")
+	exists, err = w.BranchExistsAt(context.Background(), pathAlpha, "session/nope")
 	if err != nil || exists {
 		t.Fatalf("session/nope should not exist: exists=%v err=%v", exists, err)
 	}
 }
 
 func TestBranchExistsAtNonRepoErrors(t *testing.T) {
-	w := NewWorktreer(context.Background(), "")
-	_, err := w.BranchExistsAt(t.TempDir(), "session/x")
+	w := NewWorktreer("")
+	_, err := w.BranchExistsAt(context.Background(), t.TempDir(), "session/x")
 	if err == nil {
 		t.Fatal("expected error for non-repo path, got nil")
 	}
 }
 
 func TestIsCleanAt(t *testing.T) {
-	w := NewWorktreer(context.Background(), "")
+	w := NewWorktreer("")
 	repo := initRepo(t)
-	p, err := w.Create(repo, "alpha", "")
+	p, err := w.Create(context.Background(), repo, "alpha", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	clean, err := w.IsCleanAt(p)
+	clean, err := w.IsCleanAt(context.Background(), p)
 	if err != nil || !clean {
 		t.Fatalf("fresh worktree should be clean: clean=%v err=%v", clean, err)
 	}
-	if err := os.WriteFile(filepath.Join(p, "dirty.txt"), []byte("x"), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(p, "dirty.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	clean, err = w.IsCleanAt(p)
+	clean, err = w.IsCleanAt(context.Background(), p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,25 +483,25 @@ func TestIsCleanAt(t *testing.T) {
 
 func TestASessionThatComesBackReturnsToItsBranch(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "inst")
+	w := NewWorktreer("inst")
 
-	p, err := w.Create(repo, "ch-1", "")
+	p, err := w.Create(context.Background(), repo, "ch-1", "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(p, "work.txt"), []byte("done"), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(p, "work.txt"), []byte("done"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"add", "."}, {"commit", "-m", "the work"}} {
-		if out, err := exec.Command("git", append([]string{"-C", p}, args...)...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
+		if out, runErr := exec.CommandContext(t.Context(), "git", append([]string{"-C", p}, args...)...).CombinedOutput(); runErr != nil {
+			t.Fatalf("git %v: %v\n%s", args, runErr, out)
 		}
 	}
-	if err := w.Remove(repo, "ch-1", false); err != nil {
+	if err = w.Remove(context.Background(), repo, "ch-1", false); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 
-	p2, err := w.Create(repo, "ch-1", "")
+	p2, err := w.Create(context.Background(), repo, "ch-1", "")
 	if err != nil {
 		t.Fatalf("Create again: %v", err)
 	}
@@ -490,22 +512,22 @@ func TestASessionThatComesBackReturnsToItsBranch(t *testing.T) {
 
 func TestANewSessionStillBranchesFromItsBase(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "inst")
+	w := NewWorktreer("inst")
 
-	first, err := w.Create(repo, "a", "")
+	first, err := w.Create(context.Background(), repo, "a", "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(first, "a.txt"), []byte("a"), 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(first, "a.txt"), []byte("a"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"add", "."}, {"commit", "-m", "a"}} {
-		if out, err := exec.Command("git", append([]string{"-C", first}, args...)...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
+		if out, runErr := exec.CommandContext(t.Context(), "git", append([]string{"-C", first}, args...)...).CombinedOutput(); runErr != nil {
+			t.Fatalf("git %v: %v\n%s", args, runErr, out)
 		}
 	}
 
-	second, err := w.Create(repo, "b", w.Branch("a"))
+	second, err := w.Create(context.Background(), repo, "b", w.Branch("a"))
 	if err != nil {
 		t.Fatalf("Create with base: %v", err)
 	}
@@ -516,10 +538,10 @@ func TestANewSessionStillBranchesFromItsBase(t *testing.T) {
 
 func TestABranchAlreadyCheckedOutIsStillAnError(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer(context.Background(), "inst")
+	w := NewWorktreer("inst")
 	gitAt(t, repo, "worktree", "add", filepath.Join(t.TempDir(), "elsewhere"), "-b", w.Branch("live"))
 
-	if _, err := w.Create(repo, "live", ""); err == nil {
+	if _, err := w.Create(context.Background(), repo, "live", ""); err == nil {
 		t.Fatal("want an error: the branch is checked out by another worktree")
 	}
 }

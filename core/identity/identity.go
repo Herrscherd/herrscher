@@ -64,16 +64,16 @@ func gitConfig(dir, key string) string {
 	return flatten(string(out))
 }
 
-func flatten(v string) string {
-	return strings.TrimSpace(strings.Map(func(r rune) rune {
-		if r == '\t' {
+func flatten(raw string) string {
+	return strings.TrimSpace(strings.Map(func(char rune) rune {
+		if char == '\t' {
 			return ' '
 		}
-		if unicode.IsControl(r) {
+		if unicode.IsControl(char) {
 			return -1
 		}
-		return r
-	}, v))
+		return char
+	}, raw))
 }
 
 // Empty reports whether git answered nothing at all.
@@ -83,7 +83,7 @@ func (i Identity) Empty() bool { return i.Name == "" && i.Email == "" && i.GitHu
 // answer: "Nom <mail> (@github)". An empty Identity renders as "", so a caller
 // can test the rendering rather than the struct when that is what it appends.
 func (i Identity) String() string {
-	parts := make([]string, 0, 3)
+	var parts []string
 	if i.Name != "" {
 		parts = append(parts, i.Name)
 	}

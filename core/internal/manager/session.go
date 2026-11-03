@@ -410,13 +410,13 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 		if _, unsupported := errors.AsType[*UnsupportedHomeTypeError](err); unsupported {
 			return "", err
 		}
-		h.rollbackPlacement(place, req.name)
+		h.rollbackPlacement(ctx, place, req.name)
 		return "", err
 	}
 	sess.ChannelID, sess.Owned, sess.Type = slot.id, slot.owned, slot.typ
 	sess.Approvals = req.mode
 	if err := h.st.AddSession(sess); err != nil {
-		h.rollbackPlacement(place, req.name)
+		h.rollbackPlacement(ctx, place, req.name)
 		if note := h.tidyChannel(ctx, sess); note != "" {
 			h.log.Warn("channel rollback", "session", req.name, "note", note)
 		}
@@ -443,7 +443,7 @@ func (h *Handler) placeSession(ctx context.Context, input contracts.Input, req *
 			return placement{}, projectErr
 		}
 	}
-	space, err := ensureWorkspace(worktrees, repo, *req)
+	space, err := ensureWorkspace(ctx, worktrees, repo, *req)
 	if err != nil {
 		return placement{}, err
 	}
@@ -455,8 +455,8 @@ func (h *Handler) placeSession(ctx context.Context, input contracts.Input, req *
 	return placement{wt: worktrees, repo: repo, project: project, space: space}, nil
 }
 
-func (h *Handler) rollbackPlacement(place placement, name string) {
-	h.rollbackWorkspace(place.wt, place.repo, name, place.space)
+func (h *Handler) rollbackPlacement(ctx context.Context, place placement, name string) {
+	h.rollbackWorkspace(ctx, place.wt, place.repo, name, place.space)
 }
 
 func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input) (createRequest, error) {
@@ -684,12 +684,12 @@ func (h *Handler) resolveProject(ctx context.Context, input contracts.Input, hos
 	return project, nil
 }
 
-func ensureWorkspace(worktrees Worktrees, repo string, req createRequest) (workspace, error) {
+func ensureWorkspace(ctx context.Context, worktrees Worktrees, repo string, req createRequest) (workspace, error) {
 	if req.shared {
 		return workspace{}, nil
 	}
-	reused := worktrees.PreExisting(repo, req.name)
-	path, err := worktrees.Create(repo, req.name, req.base)
+	reused := worktrees.PreExisting(ctx, repo, req.name)
+	path, err := worktrees.Create(ctx, repo, req.name, req.base)
 	if err != nil {
 		return workspace{}, fmt.Errorf("worktree: %w", err)
 	}
@@ -713,7 +713,7 @@ func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktr
 	}
 	agentSpec, found := h.agents.Get(agentName)
 	if !found {
-		h.rollbackWorkspace(worktrees, repo, req.name, *space)
+		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
 		return &UnknownAgentError{Name: agentName}
 	}
 	if req.runtime.vendor == "" {
@@ -723,13 +723,13 @@ func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktr
 		req.runtime.cmd = agentSpec.Cmd
 	}
 	if err := h.materializeOn(ctx, req.hostName, agentSpec, space.path, req.mode != string(approval.ModeBypass)); err != nil {
-		h.rollbackWorkspace(worktrees, repo, req.name, *space)
+		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
 		return fmt.Errorf("provision agent %q: %w", agentName, err)
 	}
 	return nil
 }
 
-func (h *Handler) rollbackWorkspace(worktrees Worktrees, repo, name string, space workspace) {
+func (h *Handler) rollbackWorkspace(ctx context.Context, worktrees Worktrees, repo, name string, space workspace) {
 	if space.reused {
 		return
 	}
@@ -739,7 +739,7 @@ func (h *Handler) rollbackWorkspace(worktrees Worktrees, repo, name string, spac
 		}
 		return
 	}
-	if rmErr := worktrees.Remove(repo, name, true); rmErr != nil {
+	if rmErr := worktrees.Remove(context.WithoutCancel(ctx), repo, name, true); rmErr != nil {
 		h.log.Warn("worktree rollback failed", "session", name, "err", rmErr)
 	}
 }
@@ -835,7 +835,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (s
 	}
 	if sess.Worktree != "" && !sess.Scratch {
 		force := input.Bool("force")
-		if err := wtRoot.Remove(repo, name, force); err != nil {
+		if err := wtRoot.Remove(ctx, repo, name, force); err != nil {
 			h.sup.Start(sess)
 			return "", fmt.Errorf("%w; commit, or close with force:true to discard (branch session/%s is kept)", err, name)
 		}

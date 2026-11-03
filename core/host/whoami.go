@@ -34,7 +34,7 @@ func whoamiReport(id identity.Identity) string {
 			"Set it with: git config --global user.name \"Your Name\" && git config --global user.email you@example.com"
 	}
 	rows := []struct{ label, value, key string }{
-		{"name", id.Name, "user.name"},
+		{paramName, id.Name, "user.name"},
 		{"email", id.Email, "user.email"},
 		{"github", id.GitHub, "github.user"},
 	}

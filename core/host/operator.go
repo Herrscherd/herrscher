@@ -9,7 +9,7 @@ import (
 )
 
 func forwardedLocally() map[string]bool {
-	return map[string]bool{"seed": true}
+	return map[string]bool{verbSeed: true}
 }
 
 func daemonOnly() map[string]bool {
@@ -17,7 +17,7 @@ func daemonOnly() map[string]bool {
 }
 
 func daemonOwned() [][]string {
-	return [][]string{{"session"}, {"host"}, {"approve"}, {"role"}}
+	return [][]string{{nsSession}, {"host"}, {nsApprove}, {"role"}}
 }
 
 func forwardDaemonOwnedCommands(reg *cli.Registry, instID string, forward seedCommandForwarder) {
@@ -48,7 +48,7 @@ func argvOf(cmd contracts.Cmd, in contracts.Input) []string {
 		if !ok {
 			continue
 		}
-		if !p.ValueRequired && v == "true" {
+		if !p.ValueRequired && v == valueTrue {
 			argv = append(argv, "--"+p.Name)
 			continue
 		}

@@ -64,7 +64,7 @@ func readHolder(f *os.File) string {
 }
 
 func readPID(f *os.File) int {
-	b := make([]byte, 32)
+	b := make([]byte, pidReadBytes)
 	n, readErr := f.ReadAt(b, 0)
 	logCleanup(readErr)
 	pid, err := strconv.Atoi(strings.TrimSpace(string(b[:n])))

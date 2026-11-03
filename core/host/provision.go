@@ -43,7 +43,7 @@ func capture(ctx context.Context, run hostRunner, argv ...string) (string, error
 
 func platformFromUname(out string) (string, string, error) {
 	f := strings.Fields(strings.TrimSpace(out))
-	if len(f) != 2 {
+	if len(f) != unameFieldCount {
 		return "", "", &platformUnreadableError{Output: strings.TrimSpace(out)}
 	}
 	var goos, goarch string
@@ -137,7 +137,7 @@ type hostReport struct {
 
 func checkHost(ctx context.Context, run hostRunner, h state.Host, wantVersion string) hostReport {
 	rep := hostReport{Host: h.Name, SSH: h.SSH}
-	if _, err := capture(ctx, run, "true"); err != nil {
+	if _, err := capture(ctx, run, valueTrue); err != nil {
 		rep.Notes = append(rep.Notes, err.Error())
 		return rep
 	}

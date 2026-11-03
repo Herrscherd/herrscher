@@ -86,7 +86,7 @@ func subscribeAt(ctx context.Context, path string) (<-chan DaemonEvent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("events socket %s: %w", path, err)
 	}
-	out := make(chan DaemonEvent, 256)
+	out := make(chan DaemonEvent, daemonEventBuffer)
 	go func() {
 		<-ctx.Done()
 		logCleanup(conn.Close())
@@ -95,7 +95,7 @@ func subscribeAt(ctx context.Context, path string) (<-chan DaemonEvent, error) {
 		defer close(out)
 		defer closeRead(conn)
 		sc := bufio.NewScanner(conn)
-		sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+		sc.Buffer(make([]byte, 0, daemonLineBufferInitial), daemonLineBufferMax)
 		for sc.Scan() {
 			var e DaemonEvent
 			if err := json.Unmarshal(sc.Bytes(), &e); err != nil {
@@ -134,7 +134,7 @@ func parseAttachmentPaths(raw string) ([]contracts.Attachment, error) {
 // process has it, and is it still alive?" It does so without claiming the lock. The check
 // takes the lock only long enough to find out it was free, then drops it.
 func ServingPID(statePath string) (int, bool) {
-	f, err := os.OpenFile(StateLockPath(statePath), os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(StateLockPath(statePath), os.O_CREATE|os.O_RDWR, ownerOnlyFileMode)
 	if err != nil {
 		return 0, false
 	}

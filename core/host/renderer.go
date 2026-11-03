@@ -21,7 +21,7 @@ func newGatewayRenderer(gw contracts.Gateway, ch string) *gatewayRenderer {
 }
 
 func (r *gatewayRenderer) handle(ctx context.Context, e contracts.Event) {
-	if e.T != "reply" || !e.Done || e.Text == "" {
+	if e.T != eventReply || !e.Done || e.Text == "" {
 		return
 	}
 	for _, part := range chunk(e.Text, gatewayMaxLen) {

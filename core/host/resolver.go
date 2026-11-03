@@ -174,7 +174,7 @@ func (e *RemoteResolveError) Unwrap() error { return e.Err }
 func resolveRemoteWithRetry[T any](r *Resolver, ctx context.Context, cat contracts.Category, dial func(context.Context) (T, error)) (T, error) {
 	var zero T
 	start := r.now()
-	bo := &obs.Backoff{Base: retryBackoffBase, Factor: 2, Max: retryBackoffMax, Jitter: 0.2}
+	bo := &obs.Backoff{Base: retryBackoffBase, Factor: backoffFactor, Max: retryBackoffMax, Jitter: retryJitter}
 	var lastErr error
 	attempt := 0
 	for {

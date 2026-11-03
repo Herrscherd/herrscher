@@ -26,7 +26,7 @@ func RunWorktree(ctx context.Context, args []string) error {
 	sub, rest := args[0], args[1:]
 	fs := flag.NewFlagSet("worktree "+sub, flag.ContinueOnError)
 	repo := fs.String("repo", "", "repository root")
-	name := fs.String("name", "", "logical session name")
+	name := fs.String(paramName, "", "logical session name")
 	instance := fs.String("instance", "", "daemon instance id (namespaces the layout)")
 	base := fs.String("base", "", "ref the new branch starts at (create only)")
 	force := fs.Bool("force", false, "remove even with local changes (remove only)")

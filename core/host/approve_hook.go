@@ -50,7 +50,7 @@ type hookAsker func(ctx context.Context, argv []string) (string, bool, error)
 // to answer, which is the one outcome this feature exists to prevent.
 func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer, target func() string, ask hookAsker) {
 	var payload hookInput
-	raw, err := io.ReadAll(io.LimitReader(in, 1<<20))
+	raw, err := io.ReadAll(io.LimitReader(in, maxHookInput))
 	if err == nil {
 		err = json.Unmarshal(raw, &payload)
 	}
@@ -76,7 +76,7 @@ func RunPermissionHook(ctx context.Context, in io.Reader, out, errOut io.Writer,
 		return
 	}
 
-	argv := append([]string{"approve", "ask"}, cli.FlagArg("session", session)...)
+	argv := append([]string{nsApprove, "ask"}, cli.FlagArg(paramSession, session)...)
 	argv = append(argv, cli.FlagArg("tool", payload.ToolName)...)
 	argv = append(argv, cli.FlagArg("subject", approval.SubjectOf(payload.ToolName, payload.ToolInput))...)
 	answer, handled, err := ask(ctx, argv)

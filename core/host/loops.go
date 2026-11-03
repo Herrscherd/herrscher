@@ -33,7 +33,7 @@ func serveHealth(ctx context.Context, addr string, h *health.Health) {
 }
 
 func pingLoop(ctx context.Context, pr contracts.Prober, h *health.Health) {
-	t := time.NewTicker(30 * time.Second)
+	t := time.NewTicker(pingInterval)
 	defer t.Stop()
 	for {
 		select {
@@ -63,7 +63,7 @@ func statusContent(instanceID string, snap health.HealthSnapshot) string {
 }
 
 func statusLoop(ctx context.Context, cr contracts.ChannelReader, channelID string, st *state.State, h *health.Health, instanceID string) {
-	t := time.NewTicker(60 * time.Second)
+	t := time.NewTicker(statusInterval)
 	defer t.Stop()
 	render := func() {
 		snap := h.Snapshot(time.Now(), healthWindow)

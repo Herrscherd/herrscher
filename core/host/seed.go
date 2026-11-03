@@ -55,7 +55,7 @@ func runOneShotSeedCommand(ctx context.Context, st *state.State, name, task, tur
 		runtime.coordinator = coord
 	}
 	if runtime.coordinator == nil && forward != nil {
-		argv := append([]string{"session", "seed", "--name", name}, cli.FlagArg("task", task)...)
+		argv := append([]string{nsSession, verbSeed, "--name", name}, cli.FlagArg("task", task)...)
 		argv = append(argv, "--turn_id", turnID)
 		if runtime.timeout > 0 {
 			argv = append(argv, "--timeout", runtime.timeout.String())
@@ -70,7 +70,7 @@ func runOneShotSeedCommand(ctx context.Context, st *state.State, name, task, tur
 func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, task, turnID string, runtime oneShotSeedRuntime) (string, error) {
 	sess, ok := st.FindSession(name)
 	if !ok {
-		return "", &NotFoundError{Kind: "session", Name: name}
+		return "", &NotFoundError{Kind: kindSession, Name: name}
 	}
 	orch, mem, err := seedOrchestrator(ctx, sess)
 	if err != nil {
@@ -94,7 +94,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	seedCtx, cancel := context.WithTimeout(ctx, turnTimeout)
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
-	fromBridge := make(chan contracts.Event, 8)
+	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
 	d := newSessionDriver(sess.Name, nil, toBridge, fromBridge)
 	d.incarnation = sess.Incarnation
 	d.agent = sess.Agent
@@ -142,7 +142,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 		d.coordinator = runtime.coordinator
 		d.activeTurnID = turnID
 		if coordination := d.maybeCoordinate(seedCtx, reply); coordination != nil {
-			d.fanOut(seedCtx, contracts.Event{T: "reply", Done: true, Text: reply, Coordination: coordination})
+			d.fanOut(seedCtx, contracts.Event{T: eventReply, Done: true, Text: reply, Coordination: coordination})
 		}
 		d.activeTurnID = ""
 	}
@@ -167,7 +167,7 @@ func ApplyOrchestratorScope(cfg *contracts.PluginConfig, session, project, agent
 	if cfg.Settings == nil {
 		cfg.Settings = map[string]string{}
 	}
-	cfg.Settings["session"] = session
+	cfg.Settings[keySession] = session
 	if project != "" {
 		cfg.Settings["memory.project"] = project
 	}

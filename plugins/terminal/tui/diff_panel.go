@@ -64,6 +64,11 @@ type turnStartMsg struct {
 	tree    string
 }
 
+type queuedTurn struct {
+	text string
+	atts []Attachment
+}
+
 func (m *model) diffRepo(channel string) gitRepo {
 	return newGitRepo(m.sessionDir(channel), m.diffRun)
 }
@@ -88,10 +93,7 @@ func (m *model) turnStartCmd(channel string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), gitCallLimit)
 		defer cancel()
-		tree, err := repo.snapshot(ctx)
-		if err != nil {
-			return nil
-		}
+		tree, _ := repo.snapshot(ctx)
 		return turnStartMsg{channel: channel, tree: tree}
 	}
 }
@@ -154,6 +156,10 @@ func (m *model) handleDiffMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case turnStartMsg:
 		if tb := m.tabs[msg.channel]; tb != nil {
 			tb.turnStart = msg.tree
+			for _, turn := range tb.queued {
+				m.tm.Submit(msg.channel, turn.text, turn.atts)
+			}
+			tb.queued, tb.snapshotting = nil, false
 		}
 		return nil, true
 	}

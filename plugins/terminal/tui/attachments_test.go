@@ -73,7 +73,8 @@ func TestSubmitCarriesAttachments(t *testing.T) {
 	t.Cleanup(func() { removeIfPresent(t, path) })
 
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("look at this")})
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	settle(m, cmd)
 
 	if len(f.submitted) != 1 {
 		t.Fatalf("expected one submit, got %d", len(f.submitted))

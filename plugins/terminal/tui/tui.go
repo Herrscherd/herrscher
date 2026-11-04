@@ -126,6 +126,8 @@ type tab struct {
 	todos              []contracts.TodoItem
 	agents             []liveAgent
 	turnStart          string
+	snapshotting       bool
+	queued             []queuedTurn
 }
 
 type liveAgent struct {
@@ -649,11 +651,7 @@ func (m *model) submitTo(channel, text string, atts []Attachment) tea.Cmd {
 	if tab == nil {
 		return nil
 	}
-	var snapshot tea.Cmd
-	if !tab.busy {
-		snapshot = m.turnStartCmd(channel)
-	}
-	m.tm.Submit(channel, text, atts)
+	wasBusy := tab.busy
 	tab.endStream()
 	item := entry{role: roleYou, text: text, attachments: atts}
 	item.preview = previewEscapes(atts, m.caps)
@@ -663,7 +661,18 @@ func (m *model) submitTo(channel, text string, atts []Attachment) tea.Cmd {
 	tab.tokens = 0
 	tab.startedAt = time.Now()
 	m.syncViewport()
-	return snapshot
+	turn := queuedTurn{text: text, atts: atts}
+	switch {
+	case tab.snapshotting:
+		tab.queued = append(tab.queued, turn)
+		return nil
+	case wasBusy:
+		m.tm.Submit(channel, text, atts)
+		return nil
+	}
+	tab.snapshotting = true
+	tab.queued = append(tab.queued, turn)
+	return m.turnStartCmd(channel)
 }
 
 func (m *model) pasteImage() bool {

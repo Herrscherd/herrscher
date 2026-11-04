@@ -51,13 +51,17 @@ func press(m *model, keys ...string) {
 }
 
 func settle(m *model, cmd tea.Cmd) {
-	for steps := 0; cmd != nil && steps < 10; steps++ {
-		switch msg := cmd().(type) {
-		case diffLoadedMsg, diffActionMsg, turnStartMsg:
-			_, cmd = m.Update(msg)
-		default:
-			return
+	if cmd == nil {
+		return
+	}
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		for _, next := range msg {
+			settle(m, next)
 		}
+	case diffLoadedMsg, diffActionMsg, turnStartMsg:
+		_, next := m.Update(msg)
+		settle(m, next)
 	}
 }
 
@@ -321,5 +325,55 @@ func TestFolderOutsideGitShowsAClearMessage(t *testing.T) {
 
 	if !strings.Contains(screen(m), "aucun dépôt git dans le dossier de cette session") {
 		t.Fatalf("a folder outside git must say so:\n%s", screen(m))
+	}
+}
+
+func collectMessages(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		var out []tea.Msg
+		for _, next := range msg {
+			out = append(out, collectMessages(next)...)
+		}
+		return out
+	case nil:
+		return nil
+	default:
+		return []tea.Msg{msg}
+	}
+}
+
+func TestTurnIsSentOnlyOnceTheSnapshotIsTaken(t *testing.T) {
+	dir := initRepo(t)
+	writeRepoFile(t, dir, "a.txt", "one\nTWO\n")
+	m, be := newDiffModel(t, dir, nil, 120, 30)
+	m.input.SetValue("go")
+
+	msgs := collectMessages(m.handleEnter())
+
+	if len(be.submitted) != 0 {
+		t.Fatalf("the turn reached the backend before its snapshot: %+v", be.submitted)
+	}
+	var snapshot turnStartMsg
+	found := false
+	for _, msg := range msgs {
+		if start, ok := msg.(turnStartMsg); ok {
+			snapshot, found = start, true
+		}
+	}
+	if !found {
+		t.Fatalf("no snapshot message produced: %+v", msgs)
+	}
+	if got := gitIn(t, dir, "show", snapshot.tree+":a.txt"); got != "one\nTWO\n" {
+		t.Fatalf("snapshot holds %q, want the state before the turn", got)
+	}
+	for _, msg := range msgs {
+		m.Update(msg)
+	}
+	if len(be.submitted) != 1 || be.submitted[0].text != "go" {
+		t.Fatalf("submitted = %+v, want the turn once the snapshot landed", be.submitted)
 	}
 }

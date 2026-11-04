@@ -11,6 +11,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 )
 
+var (
+	errTestBrief  = errors.New("brief unavailable")
+	errTestCreate = errors.New("create refused")
+)
+
 type handoffRecord struct {
 	briefed  []string
 	created  []contracts.Input
@@ -40,6 +45,7 @@ func fakeHandoff(rec *handoffRecord, clock func() time.Time, known ...string) ha
 			rec.sentTo, rec.sentText = target, text
 			return nil
 		},
+		root:  func(name string) string { return name },
 		limit: newHandoffLimiter(clock),
 	}
 }
@@ -160,26 +166,126 @@ func TestAgentHandoffIsAttachedUnderItsSource(t *testing.T) {
 	}
 }
 
-func TestAgentHandoffQuotaPerSourcePerHour(t *testing.T) {
+func TestAgentChildHandoffSharesTheQuotaOfItsTree(t *testing.T) {
 	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 	clock := func() time.Time { return now }
 	rec := &handoffRecord{}
-	deps := fakeHandoff(rec, clock, "alpha")
-	ctx := withSessionPrincipal(context.Background(), "alpha")
+	deps := fakeHandoff(rec, clock, "alpha", "beta")
+	deps.root = func(name string) string {
+		if name == "beta" {
+			return "alpha"
+		}
+		return name
+	}
+	callers := []context.Context{
+		withSessionPrincipal(context.Background(), "alpha"),
+		withSessionPrincipal(context.Background(), "beta"),
+	}
 	for i := range handoffAgentPerHour {
-		if _, err := runHandoff(ctx, deps, map[string]string{paramTo: "n" + string(rune('a'+i))}); err != nil {
+		if _, err := runHandoff(callers[i%2], deps, map[string]string{paramTo: "n" + string(rune('a'+i))}); err != nil {
 			t.Fatalf("handoff %d: %v", i+1, err)
+		}
+	}
+	if _, err := runHandoff(callers[1], deps, map[string]string{paramTo: "child-over"}); !errors.Is(err, errHandoffQuota) {
+		t.Fatalf("a child handing off past its tree's quota: err = %v, want errHandoffQuota", err)
+	}
+	if _, err := runHandoff(callers[0], deps, map[string]string{paramTo: "root-over"}); !errors.Is(err, errHandoffQuota) {
+		t.Fatalf("the root handing off past its tree's quota: err = %v, want errHandoffQuota", err)
+	}
+	if got := rec.created[1].Args[paramParent]; got != "beta" {
+		t.Fatalf("the child's handoff parent = %q, want beta", got)
+	}
+	now = now.Add(handoffWindow)
+	if _, err := runHandoff(callers[1], deps, map[string]string{paramTo: "later"}); err != nil {
+		t.Fatalf("after the window the tree may hand off again: %v", err)
+	}
+}
+
+func TestAgentFailedHandoffsDoNotUseASlot(t *testing.T) {
+	rec := &handoffRecord{}
+	deps := fakeHandoff(rec, fixedClock(), "alpha")
+	briefFailures := handoffAgentPerHour
+	deps.brief = func(context.Context, string) (string, error) {
+		if briefFailures > 0 {
+			briefFailures--
+			return "", errTestBrief
+		}
+		return "BRIEF", nil
+	}
+	createFailures := 1
+	deps.create = func(_ context.Context, in contracts.Input) (string, error) {
+		if createFailures > 0 {
+			createFailures--
+			return "", errTestCreate
+		}
+		rec.created = append(rec.created, in)
+		return "created " + in.Get(paramName), nil
+	}
+	ctx := withSessionPrincipal(context.Background(), "alpha")
+	for i := range handoffAgentPerHour + 1 {
+		_, err := runHandoff(ctx, deps, map[string]string{paramTo: "fail" + string(rune('a'+i))})
+		if !errors.Is(err, errTestBrief) && !errors.Is(err, errTestCreate) {
+			t.Fatalf("failing attempt %d: err = %v, want the brief or create failure", i+1, err)
+		}
+	}
+	for i := range handoffAgentPerHour {
+		if _, err := runHandoff(ctx, deps, map[string]string{paramTo: "ok" + string(rune('a'+i))}); err != nil {
+			t.Fatalf("handoff %d after failures: %v", i+1, err)
 		}
 	}
 	if _, err := runHandoff(ctx, deps, map[string]string{paramTo: "over"}); !errors.Is(err, errHandoffQuota) {
 		t.Fatalf("handoff beyond the quota: err = %v, want errHandoffQuota", err)
 	}
-	if len(rec.created) != handoffAgentPerHour {
-		t.Fatalf("created %d sessions, want %d", len(rec.created), handoffAgentPerHour)
+}
+
+func TestAgentConcurrentHandoffInTheSameTreeIsRefused(t *testing.T) {
+	started := make(chan struct{})
+	finish := make(chan struct{})
+	rec := &handoffRecord{}
+	deps := fakeHandoff(rec, fixedClock(), "alpha", "beta")
+	deps.root = func(name string) string {
+		if name == "beta" {
+			return "alpha"
+		}
+		return name
 	}
+	deps.brief = func(context.Context, string) (string, error) {
+		close(started)
+		<-finish
+		return "BRIEF", nil
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := runHandoff(withSessionPrincipal(context.Background(), "alpha"), deps, map[string]string{paramTo: "first"})
+		done <- err
+	}()
+	<-started
+	_, err := runHandoff(withSessionPrincipal(context.Background(), "beta"), deps, map[string]string{paramTo: "second"})
+	close(finish)
+	if !errors.Is(err, errHandoffBusy) {
+		t.Fatalf("a child's concurrent handoff in the same tree: err = %v, want errHandoffBusy", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("first handoff: %v", err)
+	}
+}
+
+func TestHandoffLimiterForgetsTreesIdleForAnHour(t *testing.T) {
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	limit := newHandoffLimiter(func() time.Time { return now })
+	settle, err := limit.acquire("alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	settle(true)
 	now = now.Add(handoffWindow)
-	if _, err := runHandoff(ctx, deps, map[string]string{paramTo: "later"}); err != nil {
-		t.Fatalf("after the window the agent may hand off again: %v", err)
+	settle, err = limit.acquire("beta")
+	if err != nil {
+		t.Fatal(err)
+	}
+	settle(false)
+	if _, kept := limit.granted["alpha"]; kept {
+		t.Fatal("a tree whose handoffs are all older than the window must be forgotten")
 	}
 }
 

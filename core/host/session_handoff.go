@@ -38,6 +38,7 @@ var (
 
 type handoffDeps struct {
 	exists func(name string) bool
+	root   func(name string) string
 	brief  func(ctx context.Context, source string) (string, error)
 	create func(ctx context.Context, in contracts.Input) (string, error)
 	send   func(ctx context.Context, target, author, text string) error
@@ -55,27 +56,53 @@ func newHandoffLimiter(now func() time.Time) *handoffLimiter {
 	return &handoffLimiter{now: now, inFlight: make(map[string]bool), granted: make(map[string][]time.Time)}
 }
 
-func (l *handoffLimiter) acquire(source string) (func(), error) {
+func (l *handoffLimiter) acquire(tree string) (func(created bool), error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.inFlight[source] {
+	if l.inFlight[tree] {
 		return nil, errHandoffBusy
 	}
 	now := l.now()
-	recent := slices.DeleteFunc(slices.Clone(l.granted[source]), func(at time.Time) bool {
-		return now.Sub(at) >= handoffWindow
-	})
-	if len(recent) >= handoffAgentPerHour {
-		l.granted[source] = recent
+	l.forgetIdle(now)
+	if len(l.granted[tree]) >= handoffAgentPerHour {
 		return nil, errHandoffQuota
 	}
-	l.granted[source] = append(recent, now)
-	l.inFlight[source] = true
-	return func() {
+	l.inFlight[tree] = true
+	return func(created bool) {
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		delete(l.inFlight, source)
+		delete(l.inFlight, tree)
+		if created {
+			l.granted[tree] = append(l.granted[tree], now)
+		}
 	}, nil
+}
+
+func (l *handoffLimiter) forgetIdle(now time.Time) {
+	for tree := range l.granted {
+		recent := slices.DeleteFunc(slices.Clone(l.granted[tree]), func(at time.Time) bool {
+			return now.Sub(at) >= handoffWindow
+		})
+		if len(recent) == 0 {
+			delete(l.granted, tree)
+			continue
+		}
+		l.granted[tree] = recent
+	}
+}
+
+func sessionTreeRoot(store *state.State, name string) string {
+	seen := make(map[string]bool)
+	current := name
+	for !seen[current] {
+		seen[current] = true
+		session, ok := store.FindSession(current)
+		if !ok || session.Parent == "" {
+			return current
+		}
+		current = session.Parent
+	}
+	return current
 }
 
 func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, instID string, seedCoord *coordinatorSlot) (contracts.Cmd, error) {
@@ -87,6 +114,9 @@ func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions
 		exists: func(name string) bool {
 			_, ok := store.FindSession(name)
 			return ok
+		},
+		root: func(name string) string {
+			return sessionTreeRoot(store, name)
 		},
 		brief: func(ctx context.Context, source string) (string, error) {
 			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTask, "timeout": handoffBriefTimeout}}
@@ -115,7 +145,9 @@ func sessionHandoffVerb(deps handoffDeps) contracts.Cmd {
 		Help("start a new session whose first message is a brief this session writes; without --to it creates nothing and says how to open this session instead. "+
 			"This is not the ⟢ handoff: trailer, which passes a task to another agent inside the coordination flow. "+
 			"An agent caller attaches the new session under its source, cannot pick --under or --channel_id, and gets at most "+
-			"3 handoffs per source an hour, one at a time; the operator has no such bound").
+			"3 handoffs an hour for its whole session tree, one at a time; the operator has no such bound. "+
+			"This bound is a local guard, not a security boundary: the operator socket is reachable by the same user, "+
+			"and its state resets when the daemon restarts").
 		Param(paramName, "session to hand off (default: the calling session)", false).
 		Param(paramTo, "name of the new session; without it nothing is created", false).
 		Param("project", "workspace sub-dir the new session works on", false).
@@ -137,11 +169,8 @@ func (d handoffDeps) run(ctx context.Context, input contracts.Input) (string, er
 	if target == "" {
 		return handoffPointer(source), nil
 	}
-	if input.Get(paramUnder) != "" && input.Get(paramChannel) != "" {
-		return "", errHandoffTargets
-	}
-	if byAgent && (input.Get(paramUnder) != "" || input.Get(paramChannel) != "") {
-		return "", errHandoffAgentTargets
+	if err := checkHandoffTargets(input, byAgent); err != nil {
+		return "", err
 	}
 	if source == "" {
 		return "", errHandoffNoSource
@@ -149,23 +178,53 @@ func (d handoffDeps) run(ctx context.Context, input contracts.Input) (string, er
 	if !d.exists(source) {
 		return "", &NotFoundError{Kind: kindSession, Name: source}
 	}
-	parent := ""
 	if byAgent {
-		release, err := d.limit.acquire(source)
-		if err != nil {
-			return "", err
-		}
-		defer release()
-		parent = source
+		return d.handOffAsAgent(ctx, caller.Session, source, target, input)
 	}
-	brief, err := d.brief(ctx, source)
-	if err != nil {
-		return "", fmt.Errorf("the brief from %q: %w", source, err)
-	}
-	reply, err := d.create(ctx, contracts.Input{Args: newSessionArgs(target, input, parent)})
+	reply, brief, err := d.open(ctx, source, target, "", input)
 	if err != nil {
 		return "", err
 	}
+	return d.deliver(ctx, source, target, reply, brief)
+}
+
+func checkHandoffTargets(input contracts.Input, byAgent bool) error {
+	under, channel := input.Get(paramUnder), input.Get(paramChannel)
+	if under != "" && channel != "" {
+		return errHandoffTargets
+	}
+	if byAgent && (under != "" || channel != "") {
+		return errHandoffAgentTargets
+	}
+	return nil
+}
+
+func (d handoffDeps) handOffAsAgent(ctx context.Context, caller, source, target string, input contracts.Input) (string, error) {
+	settle, err := d.limit.acquire(d.root(caller))
+	if err != nil {
+		return "", err
+	}
+	reply, brief, err := d.open(ctx, source, target, source, input)
+	settle(err == nil)
+	if err != nil {
+		return "", err
+	}
+	return d.deliver(ctx, source, target, reply, brief)
+}
+
+func (d handoffDeps) open(ctx context.Context, source, target, parent string, input contracts.Input) (string, string, error) {
+	brief, err := d.brief(ctx, source)
+	if err != nil {
+		return "", "", fmt.Errorf("the brief from %q: %w", source, err)
+	}
+	reply, err := d.create(ctx, contracts.Input{Args: newSessionArgs(target, input, parent)})
+	if err != nil {
+		return "", "", err
+	}
+	return reply, brief, nil
+}
+
+func (d handoffDeps) deliver(ctx context.Context, source, target, reply, brief string) (string, error) {
 	if err := d.send(ctx, target, "session "+source, handoffMessage(source, brief)); err != nil {
 		return "", fmt.Errorf("session %q was created but the brief did not reach it: %w", target, err)
 	}

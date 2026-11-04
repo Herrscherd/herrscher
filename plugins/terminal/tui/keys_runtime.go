@@ -60,9 +60,10 @@ func (m *model) loadKeys(configDir string) {
 	m.keyTimeout = chordTimeout(load.timeout)
 	m.keyChord = keyPress{}
 	m.keyProblems = load.problems
+	m.installTables()
 	m.syncComposerKeys()
-	if len(load.problems) > 0 {
-		m.flash = "raccourcis : " + joinProblems(load.problems)
+	if len(m.keyProblems) > 0 {
+		m.flash = joinProblems(m.keyProblems)
 	}
 }
 
@@ -70,13 +71,13 @@ func (m *model) syncComposerKeys() {
 	m.input.KeyMap.InsertNewline = key.NewBinding(key.WithKeys(m.newlineKeys()...))
 }
 
-const redirectFallbackNewlineKey = "alt+enter"
-
 func (m *model) newlineKeys() []string {
-	keys := []string{redirectFallbackNewlineKey}
-	for _, chord := range m.activeBindings().chordsOf(actNewline, chatKeyStack()...) {
-		if !strings.Contains(chord, " ") {
-			keys = append(keys, chord)
+	var keys []string
+	for _, action := range []keyAction{actNewline, actQueueRedirect} {
+		for _, chord := range m.activeBindings().chordsOf(action, chatKeyStack()...) {
+			if !strings.Contains(chord, " ") {
+				keys = append(keys, chord)
+			}
 		}
 	}
 	return keys
@@ -124,20 +125,20 @@ func chatRuns() (map[keyAction]chatRun, error) {
 	sendQueue := chatCmd((*model).sendQueueNow)
 	return dispatchOf(
 		bind[chatRun](actInterrupt, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
-			return app.interruptOrQuit()
+			return app.interruptOrQuit(actInterrupt)
 		}),
 		bind[chatRun](actExit, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
 			if app.input.Value() != "" {
 				return nil, false
 			}
-			return app.interruptOrQuit()
+			return app.interruptOrQuit(actExit)
 		}),
 		bind[chatRun](actCancel, stepChat((*model).escapeKey)),
 		bind[chatRun](actSubmit, func(app *model, msg tea.KeyMsg) (tea.Cmd, bool) {
 			return app.enterKey(msg)
 		}),
-		bind[chatRun](actQueueRedirect, func(app *model, msg tea.KeyMsg) (tea.Cmd, bool) {
-			return app.enterKey(msg)
+		bind[chatRun](actQueueRedirect, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
+			return nil, app.enqueueWhileBusy(true)
 		}),
 		bind[chatRun](actNewline, func(*model, tea.KeyMsg) (tea.Cmd, bool) {
 			return nil, false

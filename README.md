@@ -944,7 +944,7 @@ Contexts are read in order: Chat first, then Global.
 | Key | Action | What it does |
 |---|---|---|
 | `⏎` | `chat:submit` | send; while a turn runs, queue the message |
-| `⌥⏎` | `chat:queueRedirect` | while a turn runs, steer it with the message |
+| `⌥⏎` | `chat:queueRedirect` | while a turn runs, steer it with the message; when idle, new line. `"alt+enter": null` removes both |
 | `⌃J`, `⇧⏎`, `\⏎` | `chat:newline` | new line |
 | `échap` | `chat:cancel` | interrupt the running turn |
 | `⇧⇥` | `chat:cycleMode` | cycle the approval mode (Manuel, Édits acceptés, Plan, Auto) |
@@ -980,6 +980,12 @@ Contexts are read in order: Chat first, then Global.
 | `⌃X T` | `app:openTheme` | theme picker |
 | `⌃X V` | `app:toggleSidebar` | toggle the sidebar |
 | `⌃X ⌃A`, `⌃X ⇥` | `abovePrompt:toggle`, `abovePrompt:focus` | no effect yet (see below) |
+| `⌃⇧B` | `app:toggleBrief` | no effect yet |
+| `⌃]` | `app:openArtifact` | no effect yet |
+| `⌥P` | `chat:modelPicker` | no effect yet |
+| `⌥O` | `chat:fastMode` | no effect yet |
+| `⌥W` | `chat:workflowKeywordToggle` | no effect yet |
+| `⌘K` | `chat:clearScreen` | no effect yet |
 | `?` | `chat:helpToggle` | help, when the composer is empty |
 | `n` | `chat:notifyCycle` | cycle the notification, when the composer is empty |
 | `/` `@` `!` | not in the table | command, file mention, shell command |
@@ -1017,34 +1023,37 @@ context prefix, and none is executed here:
 - `autocomplete:next`, `autocomplete:previous`
 - `confirm:cycleMode`, `confirm:next`, `confirm:nextField`, `confirm:previous`, `confirm:previousField`, `confirm:toggle`
 - `diff:back`, `diff:nextSource`, `diff:previousSource`
-- `effortSlider:decreaseEffort`, `effortSlider:increaseEffort`, `effortSlider:toggleUltracode`
-- `footer:clearSelection`, `footer:close`, `footer:down`, `footer:next`, `footer:openSelected`, `footer:previous`, `footer:up`
+- `effortSlider:decreaseEffort`, `effortSlider:increaseEffort`, `effortSlider:thisSessionOnly`, `effortSlider:toggleUltracode`
+- `footer:clearSelection`, `footer:close`, `footer:dismiss`, `footer:down`, `footer:next`, `footer:openSelected`, `footer:previous`, `footer:up`
 - `help:dismiss`
 - `historySearch:cycleScope`, `historySearch:execute`
 - `modelPicker:decreaseEffort`, `modelPicker:increaseEffort`, `modelPicker:thisSessionOnly`
 - `pane:bottom`, `pane:grow`, `pane:pageDown`, `pane:pageUp`, `pane:scrollDown`, `pane:scrollUp`, `pane:shrink`, `pane:top`
 - `permission:toggleDebug`
 - `plugin:cycleMarketplace`, `plugin:favorite`, `plugin:install`, `plugin:toggle`
-- `scroll:bottom`, `scroll:fullPageDown`, `scroll:fullPageUp`, `scroll:halfPageUp`, `scroll:lineDown`, `scroll:lineUp`, `scroll:top`
-- `selection:copy`, `selection:extendDown`, `selection:extendLeft`, `selection:extendLineEnd`, `selection:extendLineStart`, `selection:extendRight`, `selection:extendUp`
-- `settings:retry`, `settings:search`
+- `scroll:bottom`, `scroll:fullPageDown`, `scroll:fullPageUp`, `scroll:halfPageDown`, `scroll:halfPageUp`, `scroll:lineDown`, `scroll:lineUp`, `scroll:top`
+- `selection:clear`, `selection:copy`, `selection:extendDown`, `selection:extendLeft`, `selection:extendLineEnd`, `selection:extendLineStart`, `selection:extendRight`, `selection:extendUp`
+- `settings:fixUsage`, `settings:periodDay`, `settings:periodWeek`, `settings:retry`, `settings:search`, `settings:sortByTokens`
 - `tabs:previous`
 - `theme:toggleSyntaxHighlighting`
 - `transcript:exit`, `transcript:toggleShowAll`
 - `voice:pushToTalk`
 
-Together with the 55 reference actions that herrscher runs, they cover Claude's
-full list of 137 names. The reference is kept in
-`plugins/terminal/tui/keys_claude_reference.go`, and a test loads a Claude file
-for each of them and requires no warning.
+Of Claude's 148 reference names, 44 run here, 14 are bound by default but do
+nothing yet (marked "no effect yet" in the key tables), and these 90 make up the
+rest. The names are kept in `plugins/terminal/tui/keys_claude_reference.go`,
+checked against a frozen copy of the reference in `testdata`, and a test loads a
+Claude file for each of them and requires no warning.
 
 #### Quitting: `⌃C` and `⌃D`
 
-With nothing running, `⌃C` and `⌃D` (with an empty composer) quit at once. When a
-turn runs in the active session, the first press interrupts it and a second press
-quits. When another session is busy, the first press warns and names how many
-sessions will stop, and a second press within 3 seconds quits. Quitting a served
-daemon stops the sessions it runs, as described above.
+With nothing running, `⌃C` and `⌃D` (with an empty composer) quit at once. When
+a turn runs in the active session, the first press interrupts it and a second
+press quits. When another session is busy, the first press warns and names how
+many sessions will stop, and a second press within 3 seconds quits. Inside a
+dialog (a diff note or commit message, an approval reason), `⌃C` closes it as
+`⎋` does and neither quits nor interrupts the turn. Quitting a served daemon
+stops the sessions it runs, as described above.
 
 #### Your keys: `~/.config/herrscher/keybindings.json`
 

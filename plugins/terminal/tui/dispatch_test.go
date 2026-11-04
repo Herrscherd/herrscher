@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -73,7 +74,7 @@ func TestDispatchTablesRefuseDuplicateBindings(t *testing.T) {
 func handlersByContext(tables *dispatchTables) map[keyContext][]keyAction {
 	list := keysOf(tables.nav)
 	handlers := make(map[keyContext][]keyAction)
-	handlers[ctxGlobal] = boundActions(tables)
+	handlers[ctxGlobal] = keysOf(tables.chat)
 	handlers[ctxChat] = keysOf(tables.chat)
 	handlers[ctxToast] = keysOf(tables.toast)
 	handlers[ctxAutocomplete] = append(append(keysOf(tables.palette), keysOf(tables.mention)...), list...)
@@ -104,32 +105,28 @@ func handlersByContext(tables *dispatchTables) map[keyContext][]keyAction {
 	return handlers
 }
 
-func chatFallthroughContexts() []keyContext {
-	return []keyContext{ctxApproval, ctxApprovalReason, ctxMention, ctxAutocomplete, ctxQueue}
+func interruptFallthroughContexts() []keyContext {
+	return []keyContext{ctxApproval, ctxAutocomplete, ctxMention, ctxQueue}
 }
 
-func missingContextHandlers(tables *dispatchTables) []string {
+func missingContextHandlers(tables *dispatchTables, chords map[keyContext]map[string]keyAction) []string {
 	handlers := handlersByContext(tables)
 	silent := make(map[keyAction]bool)
 	for _, action := range defaultsWithoutEffect() {
 		silent[action] = true
 	}
-	chatHandled := make(map[keyAction]bool)
-	for _, action := range keysOf(tables.chat) {
-		chatHandled[action] = true
-	}
 	var missing []string
-	for context, chords := range defaultKeyTable().chords {
+	for context, bound := range chords {
 		handled := make(map[keyAction]bool)
 		for _, action := range handlers[context] {
 			handled[action] = true
 		}
-		for _, action := range chords {
-			if slices.Contains(chatFallthroughContexts(), context) && chatHandled[action] {
+		for chord, action := range bound {
+			if action == actInterrupt && slices.Contains(interruptFallthroughContexts(), context) {
 				continue
 			}
 			if !handled[action] && !silent[action] {
-				missing = append(missing, string(context)+" "+string(action))
+				missing = append(missing, fmt.Sprintf("%s %s (%s)", context, action, chord))
 			}
 		}
 	}
@@ -142,7 +139,7 @@ func TestEveryBoundActionHasAHandlerInItsContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if missing := missingContextHandlers(tables); len(missing) > 0 {
+	if missing := missingContextHandlers(tables, defaultKeyTable().chords); len(missing) > 0 {
 		t.Fatalf("bound actions with no handler in their context: %s", strings.Join(missing, ", "))
 	}
 }
@@ -160,5 +157,18 @@ func TestSilentActionsHaveNoHandler(t *testing.T) {
 		if handled[action] {
 			t.Errorf("%s is listed without effect but has a handler", action)
 		}
+	}
+}
+
+func TestUnhandledCustomBindingIsReported(t *testing.T) {
+	tables, err := newDispatchTables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := `{"bindings":[{"context":"ApprovalReason","bindings":{"ctrl+e":"chat:submit"}}]}`
+	table := loadForTest(t, file, "", keysSection{}).table
+	missing := missingContextHandlers(tables, table.chords)
+	if !slices.Contains(missing, "ApprovalReason chat:submit (ctrl+e)") {
+		t.Fatalf("a bound action without a handler in its context must be reported, got %v", missing)
 	}
 }

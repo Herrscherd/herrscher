@@ -154,16 +154,16 @@ func dispatchOf[Run any](bindings ...keyBinding[Run]) (map[keyAction]Run, error)
 
 func (m *model) tables() *dispatchTables {
 	if m.handlers == nil {
-		m.loadHandlers()
+		m.installTables()
 	}
 	return m.handlers
 }
 
-func (m *model) loadHandlers() {
-	handlers, err := newDispatchTables()
-	m.handlers = handlers
+func (m *model) installTables() {
+	tables, err := m.buildTables()
+	m.handlers = tables
 	if err != nil {
-		m.flash = "raccourcis incohérents : " + err.Error()
+		m.keyProblems = append(m.keyProblems, "raccourcis incohérents : "+err.Error())
 	}
 }
 

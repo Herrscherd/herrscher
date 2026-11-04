@@ -220,7 +220,7 @@ func diffPanelRuns() (map[keyAction]keyRun, error) {
 	return dispatchOf(
 		bind[keyRun](actDiffDismiss, stepKey(func(app *model) { app.diff.open = false })),
 		bind[keyRun](actInterrupt, cmdKey(func(app *model) tea.Cmd {
-			cmd, _ := app.interruptOrQuit()
+			cmd, _ := app.interruptOrQuit(actInterrupt)
 			return cmd
 		})),
 		bind[keyRun](actDiffPrevFile, stepKey(func(app *model) { app.diff.moveSel(-1) })),
@@ -265,10 +265,18 @@ func (m *model) handleDiffNoteKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+func closeDiffDialog(app *model) {
+	app.diff.dlg = dialogNone
+}
+
+func stopDiffEditing(app *model) {
+	app.diff.editing = false
+}
+
 func diffNoteRuns() (map[keyAction]keyRun, error) {
 	return dispatchOf(
-		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
-		bind[keyRun](actDiffDismiss, stepKey(func(app *model) { app.diff.dlg = dialogNone })),
+		bind[keyRun](actInterrupt, stepKey(closeDiffDialog)),
+		bind[keyRun](actDiffDismiss, stepKey(closeDiffDialog)),
 		bind[keyRun](actDiffSendNote, cmdKey((*model).sendDiffNote)),
 	)
 }
@@ -286,8 +294,8 @@ func (m *model) handleDiffCommitKey(msg tea.KeyMsg) tea.Cmd {
 
 func diffDialogRuns() (map[keyAction]keyRun, error) {
 	return dispatchOf(
-		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
-		bind[keyRun](actDiffDismiss, stepKey(func(app *model) { app.diff.dlg = dialogNone })),
+		bind[keyRun](actInterrupt, stepKey(closeDiffDialog)),
+		bind[keyRun](actDiffDismiss, stepKey(closeDiffDialog)),
 		bind[keyRun](actDiffCommit, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(false) })),
 		bind[keyRun](actDiffPR, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(true) })),
 		bind[keyRun](actDiffEdit, stepKey(func(app *model) { app.diff.editing = true })),
@@ -305,8 +313,8 @@ func (m *model) handleDiffMessageEdit(msg tea.KeyMsg) tea.Cmd {
 
 func diffMessageRuns() (map[keyAction]keyRun, error) {
 	return dispatchOf(
-		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
-		bind[keyRun](actDiffStopEdit, stepKey(func(app *model) { app.diff.editing = false })),
+		bind[keyRun](actInterrupt, stepKey(stopDiffEditing)),
+		bind[keyRun](actDiffStopEdit, stepKey(stopDiffEditing)),
 		bind[keyRun](actDiffCommit, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(false) })),
 		bind[keyRun](actNewline, stepKey(func(app *model) { app.diff.message += "\n" })),
 	)

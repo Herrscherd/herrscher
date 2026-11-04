@@ -245,6 +245,7 @@ func spinTick(d time.Duration) tea.Cmd {
 
 type model struct {
 	handlers      *dispatchTables
+	buildTables   func() (*dispatchTables, error)
 	ctx           context.Context
 	limits        contextwindow.Limits
 	st            uiStyles
@@ -510,7 +511,7 @@ func newModel(backend Backend) *model {
 	field.SetHeight(maxComposerLines)
 	field.Focus()
 	match := &model{
-		ctx: context.Background(), tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
+		ctx: context.Background(), buildTables: newDispatchTables, tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
 		st: newStyles(defaultTheme(), false), md: &markdownRenderer{}, theme: defaultTheme(), bar: newBarState(),
 		terminal: detectTerminal(os.LookupEnv),
@@ -518,7 +519,7 @@ func newModel(backend Backend) *model {
 	}
 	match.cmds = localCommands()
 	match.syncComposerKeys()
-	match.loadHandlers()
+	match.installTables()
 	if backend != nil {
 		match.cmds = mergeCommands(match.cmds, backend.Commands())
 	}
@@ -1765,10 +1766,13 @@ func pendingCloseRuns() (map[keyAction]keyRun, error) {
 	return dispatchOf(
 		bind[keyRun](actSessionClose, cmdKey(func(app *model) tea.Cmd { return app.confirmClose() })),
 		bind[keyRun](actInterrupt, cmdKey(func(app *model) tea.Cmd {
-			cmd, _ := app.interruptOrQuit()
+			cmd, _ := app.interruptOrQuit(actInterrupt)
 			return cmd
 		})),
-		bind[keyRun](actExit, cmdKey((*model).overlayCtrlC)),
+		bind[keyRun](actExit, cmdKey(func(app *model) tea.Cmd {
+			cmd, _ := app.interruptOrQuit(actExit)
+			return cmd
+		})),
 	)
 }
 
@@ -2030,18 +2034,18 @@ func (m *model) closeTabKey() (tea.Cmd, bool) {
 
 const quitArmWindow = 3 * time.Second
 
-func (m *model) interruptOrQuit() (tea.Cmd, bool) {
+func (m *model) interruptOrQuit(pressed keyAction) (tea.Cmd, bool) {
 	turn := m.tabs[m.active]
 	if turn != nil && turn.busy && !turn.interruptRequested {
 		turn.interruptRequested = true
 		if !m.interruptActive() {
-			m.flash = "rien à interrompre : " + m.hintOf(actInterrupt) + " à nouveau pour quitter"
+			m.flash = "rien à interrompre : " + m.hintOf(pressed) + " à nouveau pour quitter"
 		}
 		return nil, true
 	}
 	if busy := m.busySessions(); busy > 0 && time.Now().After(m.quitArmedUntil) {
 		m.quitArmedUntil = time.Now().Add(quitArmWindow)
-		m.flash = fmt.Sprintf("%d session(s) en cours seront arrêtées : %s à nouveau pour quitter", busy, m.hintOf(actInterrupt))
+		m.flash = fmt.Sprintf("%d session(s) en cours seront arrêtées : %s à nouveau pour quitter", busy, m.hintOf(pressed))
 		return nil, true
 	}
 	return tea.Quit, true
@@ -2063,7 +2067,7 @@ func (m *model) interruptActive() bool {
 }
 
 func (m *model) overlayCtrlC() tea.Cmd {
-	cmd, _ := m.interruptOrQuit()
+	cmd, _ := m.interruptOrQuit(actInterrupt)
 	return cmd
 }
 

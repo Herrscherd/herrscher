@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -162,7 +163,7 @@ func isKnownKeyContext(ctx keyContext) bool {
 			return true
 		}
 	}
-	return false
+	return slices.Contains(claudeReferenceContexts(), ctx)
 }
 
 func keybindingsSkeleton() []byte {

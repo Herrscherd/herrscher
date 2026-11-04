@@ -407,9 +407,6 @@ func (m *model) handleApprovalReasonKey(target *tab, msg tea.KeyMsg) bool {
 		run(m, target)
 		return true
 	}
-	if chosen == actInterrupt {
-		return false
-	}
 	prompt := &target.approval
 	switch msg.Type {
 	case tea.KeyBackspace:
@@ -424,9 +421,14 @@ func (m *model) handleApprovalReasonKey(target *tab, msg tea.KeyMsg) bool {
 	return true
 }
 
+func closeApprovalReason(_ *model, target *tab) {
+	target.approval.reasonOpen = false
+}
+
 func approvalReasonRuns() (map[keyAction]reasonRun, error) {
 	return dispatchOf(
-		bind[reasonRun](actSelectCancel, func(_ *model, target *tab) { target.approval.reasonOpen = false }),
+		bind[reasonRun](actSelectCancel, closeApprovalReason),
+		bind[reasonRun](actInterrupt, closeApprovalReason),
 		bind[reasonRun](actSelectAccept, func(app *model, target *tab) {
 			app.answerApproval(target, approvalDeny, target.approval.reason)
 		}),

@@ -61,6 +61,7 @@ type Backend interface {
 	// Interrupt cancels a session's in-flight turn (esc-to-interrupt). Reports
 	// false when nothing was interrupted (no live turn by that name).
 	Interrupt(name string) bool
+	Pick(channel, value string) bool
 }
 
 const (
@@ -125,6 +126,8 @@ type tab struct {
 	nextEntryID        uint64
 	todos              []contracts.TodoItem
 	agents             []liveAgent
+	pendingApproval    bool
+	approval           approvalPrompt
 }
 
 type liveAgent struct {
@@ -257,9 +260,6 @@ type model struct {
 	pluginsFindings []string
 	pluginsOutput   string
 	pluginsNotice   string
-
-	choice    *PendingChoice
-	choiceIdx int
 
 	mentionIdx       int
 	mentionCacheKey  string
@@ -894,6 +894,13 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	}
 	target.measureContext(event)
 	switch event.T {
+	case eventApproval:
+		m.applyApprovalDeadline(target, event)
+	case eventMenu:
+		if m.openApproval(target, event) {
+			return
+		}
+		m.renderInto(target, contracts.Event{T: "status", Text: event.Text})
 	case "chunk":
 		target.busy = true
 		target.streamed = true
@@ -1234,6 +1241,7 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case tickMsg:
 		m.syncTabs()
+		m.expireApprovals(time.Now())
 		return tickCmd(), true
 	case spinMsg:
 		return m.handleSpin(), true
@@ -1309,8 +1317,6 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch {
 	case m.pendingClose:
 		return m.handlePendingClose(msg), true
-	case m.choice != nil:
-		return m.handleChoiceKey(msg), true
 	case m.switchOpen:
 		return m.handleSwitchKey(msg), true
 	case m.searchOpen:
@@ -1323,6 +1329,9 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleSkillsKey(msg), true
 	case m.resumeOpen:
 		return m.handleResumeKey(msg), true
+	}
+	if cmd, handled := m.handleApprovalKey(msg); handled {
+		return cmd, true
 	}
 	if cmd, handled := m.handlePaletteKey(msg); handled {
 		return cmd, true
@@ -1346,23 +1355,6 @@ func (m *model) handlePendingClose(msg tea.KeyMsg) tea.Cmd {
 	}
 	if msg.Type == tea.KeyEsc {
 		return tea.Quit
-	}
-	return nil
-}
-
-func (m *model) handleChoiceKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.Type {
-	case tea.KeyUp:
-		m.moveChoice(-1)
-	case tea.KeyDown:
-		m.moveChoice(1)
-	case tea.KeyEsc:
-		m.choiceIdx = len(m.choice.Options) - 1
-		m.chooseChoice()
-	case tea.KeyEnter:
-		m.chooseChoice()
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC()
 	}
 	return nil
 }

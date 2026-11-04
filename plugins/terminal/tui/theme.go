@@ -3,17 +3,21 @@ package tui
 import "github.com/charmbracelet/lipgloss"
 
 const (
-	glyphTool      = "●"
-	glyphResult    = "⎿"
-	glyphPrompt    = ">"
-	glyphCursor    = "❯"
-	glyphUnread    = "•"
-	glyphThinking  = "✳"
-	glyphNotice    = "·"
-	glyphError     = "✗"
-	glyphFold      = "▶"
-	glyphMoreLines = "↵"
-	glyphBolt      = "⚡"
+	glyphTool        = "●"
+	glyphResult      = "⎿"
+	glyphPrompt      = ">"
+	glyphCursor      = "❯"
+	glyphUnread      = "•"
+	glyphThinking    = "✳"
+	glyphNotice      = "·"
+	glyphError       = "✗"
+	glyphFold        = "▶"
+	glyphMoreLines   = "↵"
+	glyphBolt        = "⚡"
+	glyphEllipsis    = "…"
+	glyphCaret       = "▌"
+	glyphEnter       = "⏎"
+	glyphReasonArrow = "›"
 )
 
 func familyGlyphs() map[string]string {

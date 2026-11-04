@@ -9,6 +9,7 @@ package terminal
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -48,6 +49,7 @@ const Kind = "terminal"
 const (
 	eventStatus = "status"
 	eventReply  = "reply"
+	eventMenu   = "menu"
 	sessionVerb = "session"
 )
 
@@ -309,14 +311,29 @@ func (t *Terminal) React(context.Context, contracts.Conversation, contracts.Mess
 	return nil
 }
 
-// Menu prints the prompt and its numbered choices as a status line in the conversation.
+type menuOption struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+type menuPayload struct {
+	Prompt  string       `json:"prompt"`
+	Options []menuOption `json:"options"`
+}
+
 func (t *Terminal) Menu(_ context.Context, conv contracts.Conversation, _ contracts.MessageID, prompt string, opts []contracts.Choice) error {
 	var text strings.Builder
 	text.WriteString(prompt)
+	payload := menuPayload{Prompt: prompt}
 	for _, o := range opts {
 		text.WriteString("\n  • " + o.Value + ": " + o.Label)
+		payload.Options = append(payload.Options, menuOption{Label: o.Label, Value: o.Value})
 	}
-	t.EmitTo(conv, contracts.Event{T: eventStatus, Text: text.String()})
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	t.EmitTo(conv, contracts.Event{T: eventMenu, Text: text.String(), Value: string(encoded)})
 	return nil
 }
 
@@ -337,7 +354,7 @@ func (t *Terminal) emit(routed tui.RoutedEvent) {
 		return
 	default:
 	}
-	if routed.Event.T == "closed" || (routed.Event.T == eventReply && routed.Event.Done) {
+	if routed.Event.T == "closed" || routed.Event.T == eventMenu || (routed.Event.T == eventReply && routed.Event.Done) {
 		select {
 		case t.out <- routed:
 		case <-time.After(frontendCloseWait):
@@ -377,6 +394,19 @@ func (t *Terminal) Resume(name string) (string, error) {
 		return "", err
 	}
 	return "resumed " + name, nil
+}
+
+func (t *Terminal) Pick(channel, value string) bool {
+	control := t.Control()
+	if control == nil {
+		return false
+	}
+	for _, info := range control.Sessions() {
+		if info.ChannelID == channel {
+			return control.Pick(info.Name, value)
+		}
+	}
+	return false
 }
 
 // Interrupt cancels a session's in-flight turn through the bound SessionControl,

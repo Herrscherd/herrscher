@@ -101,6 +101,12 @@ type fakeBackend struct {
 	resumed         []string
 	submitted       []submittedTurn
 	interrupted     []string
+	picks           []pickedChoice
+}
+
+type pickedChoice struct {
+	channel string
+	value   string
 }
 
 type submittedTurn struct {
@@ -131,6 +137,11 @@ func (f *fakeBackend) Scrollback(name string) []contracts.ScrollbackLine {
 func (f *fakeBackend) Resume(name string) (string, error) {
 	f.resumed = append(f.resumed, name)
 	return "resumed " + name, nil
+}
+
+func (f *fakeBackend) Pick(channel, value string) bool {
+	f.picks = append(f.picks, pickedChoice{channel: channel, value: value})
+	return true
 }
 
 func (f *fakeBackend) Interrupt(name string) bool {

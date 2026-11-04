@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,7 +20,9 @@ const (
 	draftRunPrefix = "run-"
 	draftLockName  = ".lock"
 	draftDirMode   = 0o700
-	draftRetention = 7 * 24 * time.Hour
+	draftLockMode  = 0o600
+	draftRetention = 24 * time.Hour
+	draftHeartbeat = time.Hour
 )
 
 var errUnsafeDraftDir = errors.New("dossier des brouillons ouvert à d'autres ou aux droits trop larges")
@@ -30,8 +33,11 @@ type editorDoneMsg struct {
 }
 
 type draftRun struct {
-	dir  string
-	lock *os.File
+	dir    string
+	root   *os.Root
+	lock   *os.File
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 func configuredEditor(env func(string) string) []string {
@@ -62,25 +68,29 @@ func draftsRoot() (string, error) {
 	return filepath.Join(cache, "herrscher", "drafts"), nil
 }
 
-func openDraftRun(root string) (*draftRun, error) {
-	if err := os.MkdirAll(root, draftDirMode); err != nil {
+func openDraftRun(rootPath string) (*draftRun, error) {
+	return startDraftRun(rootPath, draftHeartbeat)
+}
+
+func startDraftRun(rootPath string, every time.Duration) (*draftRun, error) {
+	if err := os.MkdirAll(rootPath, draftDirMode); err != nil {
 		return nil, err
 	}
-	if err := checkPrivateDir(root); err != nil {
+	if err := checkPrivateDir(rootPath); err != nil {
 		return nil, err
 	}
-	dir, err := os.MkdirTemp(root, draftRunPrefix)
+	dir, err := os.MkdirTemp(rootPath, draftRunPrefix)
 	if err != nil {
 		return nil, err
 	}
-	if err = checkPrivateDir(dir); err != nil {
-		return nil, errors.Join(err, os.RemoveAll(dir))
-	}
-	lock, err := lockRunDir(dir)
+	run, err := claimDraftRun(dir)
 	if err != nil {
 		return nil, errors.Join(err, os.RemoveAll(dir))
 	}
-	return &draftRun{dir: dir, lock: lock}, nil
+	ctx, cancel := context.WithCancel(context.Background())
+	run.cancel = cancel
+	go run.keepAlive(ctx, every)
+	return run, nil
 }
 
 func checkPrivateDir(dir string) error {
@@ -115,39 +125,101 @@ func sweepDraftsAtStart() error {
 	return sweepDrafts(root)
 }
 
-func sweepDrafts(root string) error {
-	entries, err := os.ReadDir(root)
+func sweepDrafts(rootPath string) error {
+	root, err := os.OpenRoot(rootPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
+	entries, err := fs.ReadDir(root.FS(), ".")
+	if err != nil {
+		return errors.Join(err, root.Close())
+	}
+	now := time.Now()
 	var failures []error
 	for _, entry := range entries {
-		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), draftRunPrefix) {
+		if !strings.HasPrefix(entry.Name(), draftRunPrefix) || !sweepable(root, entry.Name(), now) {
 			continue
 		}
-		dir := filepath.Join(root, entry.Name())
-		if !sweepable(dir) {
-			continue
-		}
-		if err := os.RemoveAll(dir); err != nil {
+		if err := root.RemoveAll(entry.Name()); err != nil {
 			failures = append(failures, err)
 		}
 	}
-	return errors.Join(failures...)
+	return errors.Join(errors.Join(failures...), root.Close())
 }
 
-func sweepable(dir string) bool {
-	info, err := os.Lstat(dir)
+func sweepable(root *os.Root, name string, now time.Time) bool {
+	info, err := root.Lstat(name)
 	if err != nil || !privateDir(info) {
 		return false
 	}
-	if time.Since(info.ModTime()) < draftRetention {
+	if now.Sub(lastSignOfLife(root, name, info)) < draftRetention {
 		return false
 	}
-	return !runDirHeld(dir)
+	return !runDirHeld(root, name)
+}
+
+func lastSignOfLife(root *os.Root, name string, dirInfo os.FileInfo) time.Time {
+	latest := dirInfo.ModTime()
+	if lock, err := root.Lstat(filepath.Join(name, draftLockName)); err == nil && lock.ModTime().After(latest) {
+		latest = lock.ModTime()
+	}
+	return latest
+}
+
+func claimDraftRun(dir string) (*draftRun, error) {
+	if err := checkPrivateDir(dir); err != nil {
+		return nil, err
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	lock, err := acquireDraftLock(root)
+	if err != nil {
+		return nil, errors.Join(err, root.Close())
+	}
+	return &draftRun{dir: dir, root: root, lock: lock, done: make(chan struct{})}, nil
+}
+
+func (r *draftRun) keepAlive(ctx context.Context, every time.Duration) {
+	defer close(r.done)
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := touchDraftLock(r.root); err != nil {
+				return
+			}
+		}
+	}
+}
+
+func touchDraftLock(root *os.Root) error {
+	now := time.Now()
+	return root.Chtimes(draftLockName, now, now)
+}
+
+func (r *draftRun) release() error {
+	r.cancel()
+	<-r.done
+	var lockErr error
+	if r.lock != nil {
+		lockErr = r.lock.Close()
+	}
+	return errors.Join(lockErr, r.root.Close())
+}
+
+func (m *model) releaseDrafts() error {
+	if m.draftFiles == nil {
+		return nil
+	}
+	return m.draftFiles.release()
 }
 
 func (m *model) openEditor() tea.Cmd {

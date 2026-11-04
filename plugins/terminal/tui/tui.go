@@ -1422,6 +1422,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	}()
 	_, runErr := program.Run()
 	cancel()
+	runErr = errors.Join(runErr, model.releaseDrafts())
 	if err := writeStdout(enhancedKeysOff); err != nil {
 		return errors.Join(runErr, fmt.Errorf("disable enhanced keys: %w", err))
 	}

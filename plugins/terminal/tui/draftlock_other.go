@@ -6,11 +6,15 @@ import "os"
 
 const draftLocksSupported = false
 
-func lockRunDir(string) (*os.File, error) {
-	return nil, nil
+func acquireDraftLock(root *os.Root) (*os.File, error) {
+	lock, err := root.OpenFile(draftLockName, os.O_CREATE|os.O_RDWR, draftLockMode)
+	if err != nil {
+		return nil, err
+	}
+	return nil, lock.Close()
 }
 
-func runDirHeld(string) bool {
+func runDirHeld(*os.Root, string) bool {
 	return false
 }
 

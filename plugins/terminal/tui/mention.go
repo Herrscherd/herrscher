@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -27,9 +28,10 @@ func mentionWord(input string, cursor int) (int, string, bool) {
 const (
 	mentionDepth   = 4
 	mentionEntries = 4000
+	vendorDirName  = "vendor"
 )
 
-var mentionSkipped = map[string]bool{".git": true, "node_modules": true, "vendor": true}
+var mentionSkipped = map[string]bool{".git": true, "node_modules": true, vendorDirName: true}
 
 func mentionCandidates(dir string) []string {
 	var out []string
@@ -38,27 +40,35 @@ func mentionCandidates(dir string) []string {
 		if len(out) >= mentionEntries {
 			return
 		}
-		ents, err := os.ReadDir(filepath.Join(dir, rel))
+		entries, err := os.ReadDir(filepath.Join(dir, rel))
 		if err != nil {
 			return
 		}
-		for _, item := range ents {
-			name := item.Name()
-			if mentionSkipped[name] || (item.IsDir() && strings.HasPrefix(name, ".")) {
+		for _, entry := range entries {
+			if isSkippedMention(entry) {
 				continue
 			}
-			path := filepath.ToSlash(filepath.Join(rel, name))
-			if item.IsDir() {
-				path += "/"
-			}
-			out = append(out, path)
-			if item.IsDir() && depth < mentionDepth {
-				walk(filepath.Join(rel, name), depth+1)
+			out = append(out, mentionPath(rel, entry))
+			if entry.IsDir() && depth < mentionDepth {
+				walk(filepath.Join(rel, entry.Name()), depth+1)
 			}
 		}
 	}
 	walk("", 1)
 	return out
+}
+
+func isSkippedMention(entry fs.DirEntry) bool {
+	name := entry.Name()
+	return mentionSkipped[name] || (entry.IsDir() && strings.HasPrefix(name, "."))
+}
+
+func mentionPath(rel string, entry fs.DirEntry) string {
+	path := filepath.ToSlash(filepath.Join(rel, entry.Name()))
+	if entry.IsDir() {
+		path += "/"
+	}
+	return path
 }
 
 func mentionMatches(dir, prefix string) []string {
@@ -68,9 +78,9 @@ func mentionMatches(dir, prefix string) []string {
 	candidates := mentionCandidates(dir)
 	if prefix == "" {
 		var top []string
-		for _, c := range candidates {
-			if !strings.Contains(strings.TrimSuffix(c, "/"), "/") {
-				top = append(top, c)
+		for _, candidate := range candidates {
+			if !strings.Contains(strings.TrimSuffix(candidate, "/"), "/") {
+				top = append(top, candidate)
 			}
 		}
 		sort.Strings(top)
@@ -177,9 +187,9 @@ func (m *model) mentionView() string {
 	}
 	_, prefix, _ := mentionWord(m.input.Value(), m.mentionCursor())
 	rows := make([]overlayRow, 0, len(paths))
-	for _, p := range paths {
-		row := overlayRow{label: "@" + p}
-		if hit, ok := fuzzyMatch(prefix, p); ok {
+	for _, path := range paths {
+		row := overlayRow{label: "@" + path}
+		if hit, ok := fuzzyMatch(prefix, path); ok {
 			row.hot = shiftPositions(hit.positions, len("@"))
 		}
 		rows = append(rows, row)

@@ -3,7 +3,6 @@ package tui
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -73,7 +72,7 @@ func TestMentionTopLevelWithoutPrefix(t *testing.T) {
 	if contains(got, "sub/x") || len(got) == 0 {
 		t.Fatalf("empty prefix must list top-level entries: %v", got)
 	}
-	if !reflect.DeepEqual(contains(got, "a.txt"), true) {
+	if !contains(got, "a.txt") {
 		t.Fatalf("top-level file missing: %v", got)
 	}
 }

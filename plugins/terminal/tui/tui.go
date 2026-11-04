@@ -1773,9 +1773,10 @@ func (m *model) handleMentionKey(msg tea.KeyMsg) bool {
 }
 
 func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
-	if handled, cmd := m.handleQueueFocus(msg); handled {
-		return cmd, true
+	if m.handleQueueFocus(msg) {
+		return nil, true
 	}
+
 	switch msg.Type {
 	case tea.KeyF12:
 		if msg.Alt {

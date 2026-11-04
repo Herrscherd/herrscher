@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -14,6 +15,9 @@ const (
 	paneGridWidth      = 120
 	paneGridHeight     = 30
 	resumePreviewLines = 3
+	paneColumns        = 2
+	paneGridSide       = 2
+	paneHalves         = 2
 )
 
 type paneState struct {
@@ -34,9 +38,9 @@ func paneGeometry(width, height int, zoom bool) paneLayout {
 	case zoom || width < paneSingleBelow:
 		return paneLayout{cols: 1, rows: 1, capacity: 1, single: true}
 	case width >= paneGridWidth && height >= paneGridHeight:
-		return paneLayout{cols: 2, rows: 2, capacity: 4}
+		return paneLayout{cols: paneGridSide, rows: paneGridSide, capacity: paneGridSide * paneGridSide}
 	default:
-		return paneLayout{cols: 2, rows: 1, capacity: 2}
+		return paneLayout{cols: paneColumns, rows: 1, capacity: paneColumns}
 	}
 }
 
@@ -48,12 +52,14 @@ func (m *model) openPanes() {
 	m.surface = surfacePanes
 	m.refreshOverviews()
 	m.panes = paneState{}
-	for _, row := range m.boardCandidates() {
-		if row.info.Archived || len(m.panes.channels) == paneMax {
+	rows := m.boardCandidates()
+	for index := range rows {
+		info := rows[index].info
+		if info.Archived || len(m.panes.channels) == paneMax {
 			continue
 		}
-		m.panes.channels = append(m.panes.channels, row.info.ChannelID)
-		m.ensureTab(row.info.ChannelID)
+		m.panes.channels = append(m.panes.channels, info.ChannelID)
+		m.ensureTab(info.ChannelID)
 	}
 	m.input.Placeholder = "Le message part dans le volet en surbrillance"
 	m.relayout()
@@ -74,10 +80,6 @@ func (m *model) focusedChannel() string {
 	return m.panes.channels[m.panes.focus]
 }
 
-func (m *model) focusedTab() *tab {
-	return m.tabs[m.focusedChannel()]
-}
-
 func (m *model) paneWindow(layout paneLayout) (int, int) {
 	if layout.single {
 		return m.panes.focus, m.panes.focus + 1
@@ -96,7 +98,7 @@ func paneWidths(width, cols int) []int {
 	if cols == 1 {
 		return []int{width}
 	}
-	left := (width - paneSepWidth) / 2
+	left := (width - paneSepWidth) / paneHalves
 	return []int{left, width - paneSepWidth - left}
 }
 
@@ -112,9 +114,9 @@ func (m *model) paneView(width, height int) string {
 	cellHeight := bodyHeight / layout.rows
 	widths := paneWidths(width, layout.cols)
 	var lines []string
-	for row := 0; row < layout.rows; row++ {
+	for row := range layout.rows {
 		cells := make([][]string, layout.cols)
-		for col := 0; col < layout.cols; col++ {
+		for col := range layout.cols {
 			index := start + row*layout.cols + col
 			if index < end {
 				cells[col] = m.paneCell(index, widths[col], cellHeight)
@@ -122,7 +124,7 @@ func (m *model) paneView(width, height int) string {
 				cells[col] = padLines(nil, cellHeight)
 			}
 		}
-		for line := 0; line < cellHeight; line++ {
+		for line := range cellHeight {
 			parts := make([]string, 0, layout.cols)
 			for col := range cells {
 				parts = append(parts, padTo(cells[col][line], widths[col]))
@@ -135,20 +137,20 @@ func (m *model) paneView(width, height int) string {
 
 func (m *model) paneCell(index, width, height int) []string {
 	channel := m.panes.channels[index]
-	tb := m.tabs[channel]
+	channelTab := m.tabs[channel]
 	info := m.infoForChannel(channel)
-	ov := m.overviewFor(info.Name)
+	overview := m.overviewFor(info.Name)
 	marker := "  "
 	nameStyle := m.st.text
 	if index == m.panes.focus {
 		marker = m.st.accent.Render(m.st.glyphs.cursor) + " "
 		nameStyle = m.st.accent
 	}
-	parts := []string{nameStyle.Render(info.Name), info.Vendor, strings.Join(info.Gateways, "+"), renderContext(info.ContextTokens, info.Vendor, m.st), formatCost(ov.Cost)}
+	parts := []string{nameStyle.Render(info.Name), info.Vendor, strings.Join(info.Gateways, "+"), renderContext(info.ContextTokens, info.Vendor, m.st), formatCost(overview.Cost)}
 	header := marker + m.st.dim.Render(joinNonEmptyDot(parts))
 	lines := []string{truncate(header, width), m.st.rule(m.st.dim, width)}
 	reserved := len(lines)
-	body := tailLines(m.paneTranscript(tb, width), height-reserved)
+	body := tailLines(m.paneTranscript(channelTab, width), height-reserved)
 	lines = append(lines, body...)
 	return padLines(lines, height)
 }
@@ -163,13 +165,13 @@ func joinNonEmptyDot(parts []string) string {
 	return strings.Join(kept, " · ")
 }
 
-func (m *model) paneTranscript(tb *tab, width int) []string {
-	if tb == nil {
+func (m *model) paneTranscript(channelTab *tab, width int) []string {
+	if channelTab == nil {
 		return nil
 	}
 	var out []string
-	for _, item := range tb.entries {
-		out = append(out, strings.Split(renderEntry(item, width, m.displayMode()), "\n")...)
+	for index := range channelTab.entries {
+		out = append(out, strings.Split(renderEntry(channelTab.entries[index], width, m.displayMode()), "\n")...)
 	}
 	return out
 }
@@ -178,12 +180,12 @@ func (m *model) infoForChannel(channel string) contracts.SessionInfo {
 	if m.tm == nil {
 		return contracts.SessionInfo{}
 	}
-	for _, info := range m.tm.Sessions() {
-		if info.ChannelID == channel {
-			return info
-		}
+	sessions := m.tm.Sessions()
+	index := slices.IndexFunc(sessions, func(info contracts.SessionInfo) bool { return info.ChannelID == channel })
+	if index < 0 {
+		return contracts.SessionInfo{}
 	}
-	return contracts.SessionInfo{}
+	return sessions[index]
 }
 
 func (m *model) handlePanesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
@@ -226,19 +228,19 @@ func (m *model) sendFromPane() tea.Cmd {
 	return tea.Batch(m.submitTo(channel, text, nil), m.ensureSpin())
 }
 
-func (m *model) paneCellAt(x, y int) (int, bool) {
+func (m *model) paneCellAt(screenX, screenY int) (int, bool) {
 	top := len(m.buildFrame().above)
-	if y < top {
+	if screenY < top {
 		return 0, false
 	}
 	layout := m.paneLayout()
 	start, end := m.paneWindow(layout)
 	cellHeight := (m.vp.Height - boardFooterRows) / layout.rows
-	row := (y - top) / max(cellHeight, 1)
+	row := (screenY - top) / max(cellHeight, 1)
 	col := 0
 	if layout.cols > 1 {
 		widths := paneWidths(m.vp.Width, layout.cols)
-		if x > widths[0] {
+		if screenX > widths[0] {
 			col = 1
 		}
 	}
@@ -262,7 +264,7 @@ func (m *model) surfaceBody() string {
 		return m.boardSurface(m.vp.Width, m.vp.Height)
 	case surfacePanes:
 		return m.paneView(m.vp.Width, m.vp.Height)
-	default:
-		return ""
+	case surfaceChat:
 	}
+	return ""
 }

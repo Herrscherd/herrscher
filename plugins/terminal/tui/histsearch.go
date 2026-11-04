@@ -76,7 +76,7 @@ func (m *model) handleHistSearchKey(msg tea.KeyMsg) tea.Cmd {
 func (m *model) histView() string {
 	matches := m.histMatches()
 	if len(matches) == 0 {
-		return m.st.dim.Render("  (aucun historique correspondant)")
+		return m.st.dim.Render("  (aucune correspondance)")
 	}
 	visible := m.overlayRows()
 	start, _ := paletteWindow(len(matches), m.histSel, visible)

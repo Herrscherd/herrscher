@@ -85,7 +85,8 @@ func lastTurnStart(entries []entry) int {
 
 func renderCopy(entries []entry) string {
 	var blocks []string
-	for _, item := range entries {
+	for index := range entries {
+		item := &entries[index]
 		text := strings.TrimSpace(item.text)
 		if text == "" {
 			continue

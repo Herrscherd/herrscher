@@ -8,10 +8,12 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func renderAt(t *testing.T, width, height int, prepare func(m *model)) []string {
+const composerRenderRows = 20
+
+func renderAt(t *testing.T, width int, prepare func(m *model)) []string {
 	t.Helper()
 	m, _ := queueFixture(t)
-	m.Update(tea.WindowSizeMsg{Width: width, Height: height})
+	m.Update(tea.WindowSizeMsg{Width: width, Height: composerRenderRows})
 	if prepare != nil {
 		prepare(m)
 	}
@@ -22,8 +24,8 @@ func renderAt(t *testing.T, width, height int, prepare func(m *model)) []string 
 			t.Fatalf("width %d: line %d is %d cols: %q", width, i, w, ansi.Strip(line))
 		}
 	}
-	if len(lines) != height {
-		t.Fatalf("width %d: view has %d rows, want %d", width, len(lines), height)
+	if len(lines) != composerRenderRows {
+		t.Fatalf("width %d: view has %d rows, want %d", width, len(lines), composerRenderRows)
 	}
 	return lines
 }
@@ -31,13 +33,13 @@ func renderAt(t *testing.T, width, height int, prepare func(m *model)) []string 
 func TestRenderFitsWidthsAndHeight(t *testing.T) {
 	widths := []int{60, 80, 120, 200}
 	for _, w := range widths {
-		renderAt(t, w, 20, nil)
+		renderAt(t, w, nil)
 	}
 }
 
 func TestRenderWithQueueFitsWidthsAndHeight(t *testing.T) {
 	for _, w := range []int{60, 80, 120, 200} {
-		renderAt(t, w, 20, func(m *model) {
+		renderAt(t, w, func(m *model) {
 			m.tabs["a"].busy = true
 			m.tabs["a"].queue = []queuedInput{
 				{text: "une très longue demande qui doit être tronquée proprement pour tenir dans la largeur"},
@@ -50,7 +52,7 @@ func TestRenderWithQueueFitsWidthsAndHeight(t *testing.T) {
 }
 
 func TestRenderShellStateShowsWarnTitleAndShellFooter(t *testing.T) {
-	lines := renderAt(t, 120, 20, func(m *model) {
+	lines := renderAt(t, 120, func(m *model) {
 		typeLine(m, "!ls")
 	})
 	joined := ansi.Strip(strings.Join(lines, "\n"))
@@ -63,7 +65,7 @@ func TestRenderShellStateShowsWarnTitleAndShellFooter(t *testing.T) {
 }
 
 func TestRenderEditingStateShowsEditorTitle(t *testing.T) {
-	lines := renderAt(t, 120, 20, func(m *model) {
+	lines := renderAt(t, 120, func(m *model) {
 		m.editing = true
 	})
 	if !strings.Contains(ansi.Strip(strings.Join(lines, "\n")), "Éditeur") {
@@ -72,7 +74,7 @@ func TestRenderEditingStateShowsEditorTitle(t *testing.T) {
 }
 
 func TestRenderBusyFooterOffersQueue(t *testing.T) {
-	lines := renderAt(t, 200, 20, func(m *model) {
+	lines := renderAt(t, 200, func(m *model) {
 		m.tabs["a"].busy = true
 	})
 	if !strings.Contains(ansi.Strip(strings.Join(lines, "\n")), "⌃⏎ envoyer la file") {

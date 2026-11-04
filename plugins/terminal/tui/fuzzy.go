@@ -13,6 +13,7 @@ const (
 	fuzzyWordStartBonus = 6
 	fuzzyConsecutive    = 5
 	fuzzyGapPenalty     = 1
+	noPreviousMatch     = -2
 )
 
 type fuzzyHit struct {
@@ -28,31 +29,39 @@ func fuzzyMatch(query, target string) (fuzzyHit, bool) {
 		return hit, true
 	}
 	next := 0
-	previous := -2
-	for at, r := range haystack {
+	previous := noPreviousMatch
+	for position, char := range haystack {
 		if next == len(needle) {
 			break
 		}
-		if unicode.ToLower(r) != needle[next] {
+		if unicode.ToLower(char) != needle[next] {
 			continue
 		}
 		hit.score += fuzzyMatchScore
-		if at == previous+1 {
+		if position == previous+1 {
 			hit.score += fuzzyConsecutive
 		} else if previous >= 0 {
-			hit.score -= fuzzyGapPenalty * (at - previous - 1)
+			hit.score -= fuzzyGapPenalty * (position - previous - 1)
 		}
-		if at == 0 || !unicode.IsLetter(haystack[at-1]) && !unicode.IsDigit(haystack[at-1]) {
+		if startsWord(haystack, position) {
 			hit.score += fuzzyWordStartBonus
 		}
-		hit.positions = append(hit.positions, at)
-		previous = at
+		hit.positions = append(hit.positions, position)
+		previous = position
 		next++
 	}
 	if next != len(needle) {
 		return fuzzyHit{}, false
 	}
 	return hit, true
+}
+
+func startsWord(runes []rune, position int) bool {
+	if position == 0 {
+		return true
+	}
+	before := runes[position-1]
+	return !unicode.IsLetter(before) && !unicode.IsDigit(before)
 }
 
 func rankFuzzy(query string, items []string) []string {
@@ -68,16 +77,16 @@ func rankFuzzy(query string, items []string) []string {
 	}
 	sort.SliceStable(found, func(i, j int) bool { return found[i].hit.score > found[j].hit.score })
 	out := make([]string, 0, len(found))
-	for _, f := range found {
-		out = append(out, f.text)
+	for _, match := range found {
+		out = append(out, match.text)
 	}
 	return out
 }
 
 func highlightFuzzy(text string, positions []int, plain, hot lipgloss.Style) string {
 	marked := make(map[int]bool, len(positions))
-	for _, at := range positions {
-		marked[at] = true
+	for _, position := range positions {
+		marked[position] = true
 	}
 	var out strings.Builder
 	var run []rune
@@ -93,20 +102,20 @@ func highlightFuzzy(text string, positions []int, plain, hot lipgloss.Style) str
 		out.WriteString(style.Render(string(run)))
 		run = run[:0]
 	}
-	for at, r := range []rune(text) {
-		if marked[at] != runHot {
+	for position, char := range []rune(text) {
+		if marked[position] != runHot {
 			flush()
-			runHot = marked[at]
+			runHot = marked[position]
 		}
-		run = append(run, r)
+		run = append(run, char)
 	}
 	flush()
 	return out.String()
 }
 
-func fuzzyFilter[T any](items []T, query string, text func(T) string) []T {
+func fuzzyFilter[Item any](items []Item, query string, text func(Item) string) []Item {
 	needle := strings.ToLower(strings.TrimSpace(query))
-	out := make([]T, 0, len(items))
+	out := make([]Item, 0, len(items))
 	for _, item := range items {
 		if fuzzySubsequence(needle, text(item)) {
 			out = append(out, item)

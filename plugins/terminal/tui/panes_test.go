@@ -271,3 +271,17 @@ func TestFocusingAPaneMakesItTheComposerTarget(t *testing.T) {
 		t.Fatalf("the active tab must follow the focused pane, active = %q", m.active)
 	}
 }
+
+func TestClosingTheFocusedPaneLeavesNoGhostForTab(t *testing.T) {
+	_, m := paneModel(t)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	focusPaneChannel(t, m, "ch-beta")
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-beta"}, Event: contracts.Event{T: "closed"}})
+	if focused := m.focusedChannel(); focused != m.active {
+		t.Fatalf("the focused pane %q must be the active session %q", focused, m.active)
+	}
+	updateKey(m, tea.KeyMsg{Type: tea.KeyTab})
+	if focused := m.focusedChannel(); focused == "ch-beta" || focused != m.active {
+		t.Fatalf("Tab must land on a live pane and make it active, got focus %q, active %q", focused, m.active)
+	}
+}

@@ -534,6 +534,7 @@ func scrollbackRole(role string) string {
 }
 
 func (m *model) removeTab(channel string) {
+	m.removePane(channel)
 	if _, ok := m.tabs[channel]; !ok {
 		return
 	}
@@ -546,12 +547,19 @@ func (m *model) removeTab(channel string) {
 	}
 	m.order = out
 	if m.active == channel {
-		m.active = ""
-		if len(m.order) > 0 {
-			m.active = m.order[0]
-		}
+		m.active = m.successorTab()
 		m.syncViewport()
 	}
+}
+
+func (m *model) successorTab() string {
+	if focused := m.focusedChannel(); m.surface == surfacePanes && m.tabs[focused] != nil {
+		return focused
+	}
+	if len(m.order) > 0 {
+		return m.order[0]
+	}
+	return ""
 }
 
 func (m *model) route(routed RoutedEvent) tea.Cmd {
@@ -1360,6 +1368,9 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	model.bar.file = model.terminalConfigPath()
 	model.bar.config = loadStatuslineConfig(model.bar.file)
 	model.bar.restoreFields(model.bar.config.Fields)
+	if err := removeStaleDrafts(os.TempDir(), time.Now()); err != nil {
+		model.flash = "brouillons orphelins non supprimés : " + err.Error()
+	}
 	for _, opt := range opts {
 		opt(model)
 	}
@@ -1977,7 +1988,11 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 }
 
 func (m *model) helpView() string {
-	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l’ouvrir · alt+c replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · alt+t replier les tours · ctrl+f chercher · ctrl+s brouillon de côté · ctrl+r historique · ctrl+t sessions · ctrl+x ctrl+e éditeur · ⌥⏎ réoriente · ⌃⏎ envoie la file · ↑ puis suppr retire · alt+↑↓ tour suivant · / commandes · @ fichiers · ! commande shell")
+	help := "⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l’ouvrir · alt+c replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · alt+t replier les tours · ctrl+f chercher · ctrl+s brouillon de côté · ctrl+r historique · ctrl+t sessions · ctrl+x ctrl+e éditeur · ⌥⏎ réoriente · ⌃⏎ envoie la file · ↑ puis suppr retire · alt+↑↓ tour suivant · / commandes · @ fichiers · ! commande shell"
+	if m.width > 0 {
+		help = foldText(help, m.width)
+	}
+	return m.st.dim.Render(help)
 }
 
 func (m *model) View() string {
@@ -1993,6 +2008,7 @@ func (m *model) View() string {
 	if m.surface != surfaceChat {
 		return m.surfaceScreen()
 	}
+	m.applySize()
 	body := m.vp.View()
 	if side := m.sidebarPane(m.vp.Height); side != nil {
 		body = m.joinSidebar(body, side)

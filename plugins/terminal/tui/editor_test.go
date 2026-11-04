@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -86,5 +87,32 @@ func TestCtrlXCtrlEOpensEditor(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
 	if !m.editing {
 		t.Fatal("ctrl+x ctrl+e must open the editor")
+	}
+}
+
+func TestStaleDraftsOfAKilledEditorAreSweptAtStartup(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	stale := filepath.Join(dir, "herrscher-draft-killed.md")
+	fresh := filepath.Join(dir, "herrscher-draft-open.md")
+	foreign := filepath.Join(dir, "notes.md")
+	for path, age := range map[string]time.Duration{stale: 2 * draftMaxAge, fresh: time.Minute, foreign: 2 * draftMaxAge} {
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, now.Add(-age), now.Add(-age)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := removeStaleDrafts(dir, now); err != nil {
+		t.Fatalf("removeStaleDrafts: %v", err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatal("a draft left by a killed editor must be swept")
+	}
+	for _, kept := range []string{fresh, foreign} {
+		if _, err := os.Stat(kept); err != nil {
+			t.Fatalf("%s must survive the sweep: %v", filepath.Base(kept), err)
+		}
 	}
 }

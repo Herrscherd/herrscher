@@ -5,7 +5,9 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -13,6 +15,7 @@ import (
 const (
 	fallbackEditor = "vi"
 	editorPattern  = "herrscher-draft-*.md"
+	draftMaxAge    = 24 * time.Hour
 )
 
 type editorDoneMsg struct {
@@ -51,6 +54,36 @@ func writeDraft(text string) (string, error) {
 		return "", errors.Join(err, os.Remove(file.Name()))
 	}
 	return file.Name(), nil
+}
+
+func removeStaleDrafts(dir string, now time.Time) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	var failures []error
+	for _, entry := range entries {
+		if !isDraftName(entry.Name()) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		if now.Sub(info.ModTime()) < draftMaxAge {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
+}
+
+func isDraftName(name string) bool {
+	matched, err := filepath.Match(editorPattern, name)
+	return err == nil && matched
 }
 
 func (m *model) openEditor() tea.Cmd {

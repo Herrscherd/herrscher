@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -34,6 +37,7 @@ var (
 
 type compactionPolicy struct {
 	percent  int
+	limits   contextwindow.Limits
 	names    []string
 	plugins  map[string]contracts.Compactor
 	backends map[string]bool
@@ -41,7 +45,7 @@ type compactionPolicy struct {
 	warn     func(format string, args ...any)
 }
 
-func newCompactionPolicy(ctx context.Context, percent *int, names []string) (compactionPolicy, error) {
+func newCompactionPolicy(ctx context.Context, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
 	policy := compactionPolicy{
 		percent:  defaultCompactPercent,
 		names:    []string{contracts.CompactStageBackend},
@@ -63,12 +67,17 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string) (com
 		policy.names = names
 	}
 	warnInvalidContextLimit(policy.warn, os.Getenv(contextwindow.EnvVar()))
+	policy.limits = contextwindow.NewLimits(os.Getenv(contextwindow.EnvVar()), perVendor)
 	backends := contracts.Default.Backends()
+	kinds := make([]string, 0, len(backends))
 	for index := range backends {
+		kind := backends[index].Manifest.Kind
+		kinds = append(kinds, kind)
 		if backends[index].Manifest.Capabilities.Compactor {
-			policy.backends[backends[index].Manifest.Kind] = true
+			policy.backends[kind] = true
 		}
 	}
+	warnUnknownContextLimits(policy.warn, perVendor, kinds)
 	for _, name := range policy.names {
 		if name == contracts.CompactStageBackend {
 			continue
@@ -85,6 +94,14 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string) (com
 func warnInvalidContextLimit(warn func(format string, args ...any), raw string) {
 	if err := contextwindow.CheckOverride(raw); err != nil {
 		warn("herrscher serve: %s ignored, %v: the vendor default window applies\n", contextwindow.EnvVar(), err)
+	}
+}
+
+func warnUnknownContextLimits(warn func(format string, args ...any), perVendor map[string]int, kinds []string) {
+	for _, vendor := range slices.Sorted(maps.Keys(perVendor)) {
+		if !slices.ContainsFunc(kinds, func(kind string) bool { return strings.EqualFold(kind, vendor) }) {
+			warn("herrscher serve: contextLimits: no backend %q in this daemon, its window size is unused\n", vendor)
+		}
 	}
 }
 
@@ -135,6 +152,10 @@ func (d *sessionDriver) compactPercent() int {
 	return d.compaction.percent
 }
 
+func (d *sessionDriver) contextLimit() int {
+	return d.compaction.limits.Limit(d.vendor)
+}
+
 func (d *sessionDriver) compactSupported() bool {
 	return d.compaction.supports(d.vendor)
 }
@@ -160,7 +181,7 @@ func crossed(used, limit, percent int) bool {
 
 func (d *sessionDriver) maybeAutoCompact(ctx context.Context) {
 	percent := d.compactPercent()
-	limit := contextwindow.Limit(d.vendor)
+	limit := d.contextLimit()
 	if percent == 0 || d.turnReading == 0 {
 		return
 	}
@@ -188,7 +209,7 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 		d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: err.Error()})
 		return contracts.CompactResult{}, err
 	}
-	limit := contextwindow.Limit(d.vendor)
+	limit := d.contextLimit()
 	measured := d.turnReading > 0
 	req := contracts.CompactRequest{
 		Session:       d.sessionInfo(),

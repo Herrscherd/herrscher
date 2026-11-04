@@ -299,7 +299,7 @@ func (m *model) contextPart(info contracts.SessionInfo, used int) (barPart, bool
 	if used <= 0 {
 		return barPart{}, false
 	}
-	limit := contextLimit(info.Vendor)
+	limit := m.contextLimit(info.Vendor)
 	ratio := contextRatio(used, limit)
 	percent := palierStyle(ratio, m.st).Render(contextPercent(used, limit))
 	part := barPart{layers: []barLayer{

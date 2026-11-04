@@ -2,49 +2,51 @@ package contextwindow
 
 import "testing"
 
-func TestLimitKnownVendors(t *testing.T) {
-	t.Setenv(EnvVar(), "")
+func TestLimitKnownVendorsDefaultWindow(t *testing.T) {
 	cases := map[string]int{"claude": 200_000, "Codex": 200_000, "cursor": 200_000}
 	for vendor, want := range cases {
-		if got := Limit(vendor); got != want {
+		if got := (Limits{}).Limit(vendor); got != want {
 			t.Fatalf("Limit(%q) = %d, want %d", vendor, got, want)
 		}
 	}
 }
 
-func TestLimitCodexIsTheCautiousWindow(t *testing.T) {
-	t.Setenv(EnvVar(), "")
-	if got := Limit("codex"); got != 200_000 {
-		t.Fatalf("Limit(codex) = %d, want the cautious 200000", got)
-	}
-}
-
-func TestLimitCodexIsRaisedByTheEnv(t *testing.T) {
-	t.Setenv(EnvVar(), "400000")
-	if got := Limit("codex"); got != 400_000 {
-		t.Fatalf("Limit(codex) with HERRSCHER_CONTEXT_LIMIT=400000 = %d, want 400000", got)
-	}
-}
-
 func TestLimitFallsBackForUnknownVendor(t *testing.T) {
-	t.Setenv(EnvVar(), "")
-	if got := Limit("nobody-ships-this"); got != Fallback() {
+	if got := (Limits{}).Limit("nobody-ships-this"); got != Fallback() {
 		t.Fatalf("Limit = %d, want fallback %d", got, Fallback())
 	}
 }
 
-func TestLimitEnvOverridesWhenPositive(t *testing.T) {
-	t.Setenv(EnvVar(), "12345")
-	if got := Limit("claude"); got != 12345 {
-		t.Fatalf("Limit = %d, want 12345", got)
+func TestLimitTableOverridesTheDefaultForItsVendor(t *testing.T) {
+	limits := NewLimits("", map[string]int{"codex": 400_000})
+	if got := limits.Limit("codex"); got != 400_000 {
+		t.Fatalf("Limit(codex) = %d, want the table's 400000", got)
+	}
+	if got := limits.Limit("Codex"); got != 400_000 {
+		t.Fatalf("Limit(Codex) = %d, want the table's 400000 whatever the case", got)
+	}
+	if got := limits.Limit("claude"); got != 200_000 {
+		t.Fatalf("Limit(claude) = %d, want the default 200000 untouched by codex's entry", got)
+	}
+}
+
+func TestLimitEnvWinsOverTheTableForEveryVendor(t *testing.T) {
+	limits := NewLimits("12345", map[string]int{"codex": 400_000})
+	for _, vendor := range []string{"codex", "claude", "nobody-ships-this"} {
+		if got := limits.Limit(vendor); got != 12345 {
+			t.Fatalf("Limit(%s) = %d, want the env's 12345", vendor, got)
+		}
 	}
 }
 
 func TestLimitIgnoresInvalidEnv(t *testing.T) {
 	for _, raw := range []string{"0", "-3", "many"} {
-		t.Setenv(EnvVar(), raw)
-		if got := Limit("claude"); got != 200_000 {
-			t.Fatalf("Limit with %q = %d, want 200000", raw, got)
+		limits := NewLimits(raw, map[string]int{"codex": 400_000})
+		if got := limits.Limit("codex"); got != 400_000 {
+			t.Fatalf("Limit(codex) with env %q = %d, want the table's 400000", raw, got)
+		}
+		if got := limits.Limit("claude"); got != 200_000 {
+			t.Fatalf("Limit(claude) with env %q = %d, want 200000", raw, got)
 		}
 	}
 }

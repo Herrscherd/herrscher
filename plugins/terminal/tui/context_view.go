@@ -93,7 +93,7 @@ func (m *model) contextView() string {
 
 func (m *model) contextFigures() (int, int) {
 	info, _ := m.activeInfo()
-	limit := contextLimit(info.Vendor)
+	limit := m.contextLimit(info.Vendor)
 	used := 0
 	if target := m.tabs[m.active]; target != nil {
 		used = m.contextTokens(target)

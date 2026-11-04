@@ -29,6 +29,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/config"
+	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
@@ -244,6 +245,7 @@ func spinTick(d time.Duration) tea.Cmd {
 
 type model struct {
 	ctx           context.Context
+	limits        contextwindow.Limits
 	st            uiStyles
 	md            *markdownRenderer
 	keys          *keyLog
@@ -1395,6 +1397,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 		runErr = errors.Join(runErr, model.releaseDrafts())
 	}()
 	model.loadTheme(filepath.Dir(config.DefaultPath()), lipgloss.HasDarkBackground)
+	model.loadContextLimits(config.DefaultPath(), os.Getenv)
 	model.keys = &keyLog{}
 	model.bar.file = model.terminalConfigPath()
 	model.bar.config = loadStatuslineConfig(model.bar.file)

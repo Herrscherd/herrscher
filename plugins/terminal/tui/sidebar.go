@@ -289,7 +289,7 @@ func (m *model) contextSection(tab *tab, info contracts.SessionInfo, width int, 
 		}
 		return []string{head, sideRow(m.st.dim.Render("pas encore mesuré"), width)}
 	}
-	limit := contextLimit(info.Vendor)
+	limit := m.contextLimit(info.Vendor)
 	ratio := contextRatio(used, limit)
 	style := palierStyle(ratio, m.st)
 	percent := contextPercent(used, limit)

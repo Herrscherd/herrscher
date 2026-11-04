@@ -14,8 +14,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -36,13 +38,14 @@ type HomeRef struct {
 // default for knobs, live state.json for the declarative runtime fields).
 type Config struct {
 	// Daemon knobs (precedence: explicit flag > env > this > built-in default).
-	Cmd           string   `json:"cmd"`
-	HealthAddr    string   `json:"healthAddr"`
-	StatusChannel string   `json:"statusChannel"`
-	Instance      string   `json:"instance"`
-	Owner         string   `json:"owner"`
-	CompactAt     *int     `json:"compactAt,omitempty"`
-	CompactStack  []string `json:"compactStack,omitempty"`
+	Cmd           string         `json:"cmd"`
+	HealthAddr    string         `json:"healthAddr"`
+	StatusChannel string         `json:"statusChannel"`
+	Instance      string         `json:"instance"`
+	Owner         string         `json:"owner"`
+	CompactAt     *int           `json:"compactAt,omitempty"`
+	CompactStack  []string       `json:"compactStack,omitempty"`
+	ContextLimits map[string]int `json:"contextLimits,omitempty"`
 	// Stale threshold for `session clean`: sessions inactive longer than this
 	// many days are reported as stale. 0 disables stale detection. Unset (zero)
 	// means the built-in default (14) is applied by the caller.
@@ -101,13 +104,40 @@ func Load(path string) (Config, error) {
 	if err := ValidateCompactStack(cfg.CompactStack); err != nil {
 		return cfg, fmt.Errorf("parse %s: compactStack: %w", path, err)
 	}
+	if err := ValidateContextLimits(cfg.ContextLimits); err != nil {
+		return cfg, fmt.Errorf("parse %s: contextLimits: %w", path, err)
+	}
 	return cfg, nil
 }
 
 var (
-	errEmptyStage     = errors.New("a stage name is empty")
-	errDuplicateStage = errors.New("a stage name is listed twice")
+	errEmptyStage      = errors.New("a stage name is empty")
+	errDuplicateStage  = errors.New("a stage name is listed twice")
+	errEmptyVendor     = errors.New("a vendor name is empty")
+	errNotPositive     = errors.New("a window size must be a positive number of tokens")
+	errDuplicateVendor = errors.New("a vendor is listed twice under spellings that differ only in case")
 )
+
+// ValidateContextLimits refuses a vendor with an empty name, a window size that is
+// not a positive number of tokens, and a vendor listed twice in two spellings of
+// its name. The vendors are checked in sorted order, so the first refusal is stable.
+func ValidateContextLimits(limits map[string]int) error {
+	seen := make(map[string]bool, len(limits))
+	for _, vendor := range slices.Sorted(maps.Keys(limits)) {
+		if strings.TrimSpace(vendor) == "" {
+			return errEmptyVendor
+		}
+		if limits[vendor] <= 0 {
+			return fmt.Errorf("%q: %w", vendor, errNotPositive)
+		}
+		key := strings.ToLower(vendor)
+		if seen[key] {
+			return fmt.Errorf("%q: %w", vendor, errDuplicateVendor)
+		}
+		seen[key] = true
+	}
+	return nil
+}
 
 // ValidateCompactStack refuses an empty stage name and a name listed twice, the
 // stack running each stage once in the order given.
@@ -174,6 +204,11 @@ func Template(cmd, healthAddr string) string {
   // are reported as stale (acted on only with all:true + stale). 0 disables.
   // Omit to use the built-in default of 14.
   // "sessionMaxIdleDays": 14,
+
+  // Context window size in tokens, per vendor, for the compaction threshold and
+  // the TUI gauge. HERRSCHER_CONTEXT_LIMIT overrides every entry. Omit to use the
+  // built-in sizes.
+  // "contextLimits": { "codex": 400000 },
 
   // Default session home (category or forum). Uncomment and fill to pin it:
   // "home": { "id": "123456789012345678", "type": "category" },

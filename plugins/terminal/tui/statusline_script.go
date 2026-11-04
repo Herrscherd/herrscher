@@ -193,7 +193,7 @@ func (m *model) scriptInput(target *tab) []byte {
 		Mode:       modeSpec(target.modeID()).label,
 		Gateway:    statuslineGateway,
 		Git:        statuslineGit{Repo: info.Project, Branch: branch},
-		Context:    statuslineCtx{Used: used, Percent: int(contextRatio(used, contextLimit(info.Vendor)) * percentScale)},
+		Context:    statuslineCtx{Used: used, Percent: int(contextRatio(used, m.contextLimit(info.Vendor)) * percentScale)},
 		Cost:       statuslineCost{USD: target.costTotal},
 		Queue:      m.bar.queued,
 		Background: m.bar.background,

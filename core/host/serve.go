@@ -67,6 +67,7 @@ type Options struct {
 
 	CompactPercent *int
 	CompactStack   []string
+	ContextLimits  map[string]int
 
 	// InstanceID is the explicit per-daemon namespace (-instance flag /
 	// HERRSCHER_INSTANCE_ID). Empty falls back to HERRSCHER_OWNER_ID, then legacy
@@ -179,7 +180,7 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 	}
 	approvals := newApprovalTable().withRules(store)
 	sessions := newSessionTable()
-	policy, err := newCompactionPolicy(ctx, options.CompactPercent, options.CompactStack)
+	policy, err := newCompactionPolicy(ctx, options.CompactPercent, options.CompactStack, options.ContextLimits)
 	if err != nil {
 		return fmt.Errorf("compaction: %w", err)
 	}

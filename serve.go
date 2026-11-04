@@ -90,6 +90,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 		Source:         cfg.Source,
 		CompactPercent: cfg.CompactAt,
 		CompactStack:   cfg.CompactStack,
+		ContextLimits:  cfg.ContextLimits,
 
 		RemoteCategories:    remoteCategories(),
 		ForegroundBound:     foreground != nil,

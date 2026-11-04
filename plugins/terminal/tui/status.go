@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 )
 
@@ -19,8 +20,17 @@ const (
 	minutesPerHour = 60
 )
 
-func contextLimit(vendor string) int {
-	return contextwindow.Limit(vendor)
+func (m *model) contextLimit(vendor string) int {
+	return m.limits.Limit(vendor)
+}
+
+func (m *model) loadContextLimits(path string, env func(string) string) {
+	cfg, err := config.Load(path)
+	if err != nil {
+		m.flash = "contextLimits ignoré, la taille par défaut s'applique : " + err.Error()
+		cfg = config.Config{}
+	}
+	m.limits = contextwindow.NewLimits(env(contextwindow.EnvVar()), cfg.ContextLimits)
 }
 
 const (
@@ -142,7 +152,7 @@ func (m *model) usageReport(tab *tab) string {
 	if known {
 		vendor = info.Vendor
 	}
-	limit := contextLimit(vendor)
+	limit := m.contextLimit(vendor)
 	lines := []string{"usage · " + tab.label}
 	if vendor != "" {
 		lines = append(lines, "  vendor   "+vendor)

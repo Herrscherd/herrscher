@@ -323,9 +323,9 @@ func (m *model) paneBox(index, width, height int) []string {
 	for _, line := range body {
 		lines = append(lines, side+" "+padTo(cutText(line, width-paneInset), width-paneInset)+" "+side)
 	}
-	ratio := contextRatio(row.info.ContextTokens, contextLimit(row.info.Vendor))
+	ratio := contextRatio(row.info.ContextTokens, m.contextLimit(row.info.Vendor))
 	footLeft := m.st.dim.Render("ctx ") + m.gaugeCells(ratio, paneGaugeCells, identityPaint) +
-		m.tierStyle(ratio).Render(" "+contextPercent(row.info.ContextTokens, contextLimit(row.info.Vendor))) +
+		m.tierStyle(ratio).Render(" "+contextPercent(row.info.ContextTokens, m.contextLimit(row.info.Vendor))) +
 		m.st.dim.Render(" · "+formatCost(row.overview.Cost))
 	footRight := gatewayStyle(m.st, strings.Join(row.overview.Gateways, "+")).Render(strings.Join(row.overview.Gateways, "+"))
 	foot := cutText(joinRow(width-paneInset, footLeft, footRight), width-paneInset)

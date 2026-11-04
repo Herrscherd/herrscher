@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -343,7 +344,7 @@ func TestNoPortWarningIsWrittenOnce(t *testing.T) {
 
 func TestCompactStackRefusesDuplicateStages(t *testing.T) {
 	for _, names := range [][]string{{contracts.CompactStageBackend, contracts.CompactStageBackend}, {"stage", "stage"}} {
-		if _, err := newCompactionPolicy(context.Background(), nil, names); err == nil {
+		if _, err := newCompactionPolicy(context.Background(), nil, names, nil); err == nil {
 			t.Fatalf("newCompactionPolicy(%v) accepted a stage listed twice", names)
 		}
 	}
@@ -379,7 +380,7 @@ func TestCompactionPolicyTakesCodexFromItsManifest(t *testing.T) {
 			return seedBackend{}, nil
 		},
 	})
-	policy, err := newCompactionPolicy(context.Background(), nil, nil)
+	policy, err := newCompactionPolicy(context.Background(), nil, nil, nil)
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -388,5 +389,45 @@ func TestCompactionPolicyTakesCodexFromItsManifest(t *testing.T) {
 	}
 	if policy.supports("cursor") {
 		t.Fatal("cursor declares no Compactor but the policy accepts it")
+	}
+}
+
+func TestContextLimitTableMovesTheAutomaticThreshold(t *testing.T) {
+	t.Setenv(contextwindow.EnvVar(), "")
+	policy := compactPolicy(50)
+	policy.backends["codex"] = true
+	policy.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
+	f := newCompactFixture(t, "codex", policy)
+	openTurn(t, f, 150_000)
+	if compactFrameOrQuiet(t, f, measuredAnswer(20_000)) {
+		t.Fatal("automatic compaction ran at 37 percent of the 400000 window, threshold 50")
+	}
+}
+
+func TestNewCompactionPolicyEnvWinsOverContextLimits(t *testing.T) {
+	t.Setenv(contextwindow.EnvVar(), "")
+	policy, err := newCompactionPolicy(context.Background(), nil, nil, map[string]int{"codex": 400_000})
+	if err != nil {
+		t.Fatalf("newCompactionPolicy: %v", err)
+	}
+	if got := policy.limits.Limit("codex"); got != 400_000 {
+		t.Fatalf("Limit(codex) = %d, want the table's 400000", got)
+	}
+	t.Setenv(contextwindow.EnvVar(), "12345")
+	policy, err = newCompactionPolicy(context.Background(), nil, nil, map[string]int{"codex": 400_000})
+	if err != nil {
+		t.Fatalf("newCompactionPolicy: %v", err)
+	}
+	if got := policy.limits.Limit("codex"); got != 12345 {
+		t.Fatalf("Limit(codex) = %d, want the env's 12345", got)
+	}
+}
+
+func TestUnknownContextLimitVendorIsWarnedAboutOnce(t *testing.T) {
+	var warned []string
+	warn := func(format string, args ...any) { warned = append(warned, fmt.Sprintf(format, args...)) }
+	warnUnknownContextLimits(warn, map[string]int{"codex": 400_000, "Claude": 300_000, "ghost": 1}, []string{"codex", "claude"})
+	if len(warned) != 1 || !strings.Contains(warned[0], `"ghost"`) {
+		t.Fatalf("warnings = %q, want one line naming the unknown vendor ghost", warned)
 	}
 }

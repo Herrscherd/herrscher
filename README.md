@@ -544,11 +544,17 @@ threshold, a percentage of its context window. The default is 92, set with
 refused at load). Each session can override it with
 `herrscher session set-compact --name <name> --percent <percent>` (an empty percent
 restores the default, 0 disables it for that session). The window size comes from
-the vendor: 200000 for `claude`, `cursor` and `codex`. The `codex` figure is a
-cautious assumption, the smallest window verified in the Codex backend catalogue
-(`o4-mini`), so automatic compaction runs early rather than after the provider
-refuses the request. `HERRSCHER_CONTEXT_LIMIT` raises it when the model in use takes
-more. One window per model is a follow-up. After a measured compaction
+the vendor, in this order: `HERRSCHER_CONTEXT_LIMIT` when it is a positive number,
+then the `contextLimits` table of `config.json` (a vendor name to a window in tokens,
+for example `{"contextLimits": {"codex": 400000}}`), then the built-in size of 200000
+for `claude`, `cursor` and `codex`. Vendor names are case-insensitive. `config.json`
+refuses a zero or negative size, an empty vendor name and one vendor listed twice in
+two spellings. `herrscher serve` warns once at start about a vendor that no backend of
+the daemon serves; its entry is then unused. The built-in `codex` figure is a cautious
+assumption, the smallest window verified in the Codex backend catalogue (`o4-mini`),
+so automatic compaction runs early rather than after the provider refuses the request;
+raise it in `contextLimits` when the model in use takes more. The TUI gauge reads the
+same sizes. One window per model is a follow-up. After a measured compaction
 still above the threshold, automatic compaction does not retrigger: it rearms once a
 measured turn lands under the threshold. A compaction the backend does not measure
 never retriggers. `compactStack` lists the stages in order, where `backend` is the

@@ -137,7 +137,7 @@ func TestPaneReleaseDoesNotMoveFocus(t *testing.T) {
 func TestPaneScreenNamesItsHeaderAndKeys(t *testing.T) {
 	_, m := paneModel(t)
 	view := m.View()
-	for _, want := range []string{"Vue en volets", "clic pour viser", "Tab volet suivant · clic viser · o s r approbation de docs-site"} {
+	for _, want := range []string{"Vue en volets", "clic pour viser", "Tab volet suivant · clic viser"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("panes screen must show %q: %s", want, view)
 		}
@@ -160,5 +160,38 @@ func TestPaneComposerShowsThePanePlaceholder(t *testing.T) {
 	m.buildFrame()
 	if m.input.Placeholder != placeholderPanes {
 		t.Fatalf("the panes composer must say where the message goes, got %q", m.input.Placeholder)
+	}
+}
+
+func TestPaneFooterWithoutApprovalOnlyNamesNavigation(t *testing.T) {
+	_, m := paneModel(t)
+	view := m.View()
+	if !strings.Contains(view, "Tab volet suivant · clic viser") {
+		t.Fatalf("the pane footer must name navigation: %s", view)
+	}
+	if strings.Contains(view, "approbation de") {
+		t.Fatalf("the pane footer must not offer approvals without a pending one: %s", view)
+	}
+}
+
+func TestPaneFooterNamesTheApprovalTheKeysAnswer(t *testing.T) {
+	_, m := paneModel(t)
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-beta"}, Event: approvalMenuEvent(t, "make deploy", allApprovalRoles()...)})
+	m.active = "ch-beta"
+	view := m.View()
+	if !strings.Contains(view, "o s r approbation de beta") {
+		t.Fatalf("the pane footer must name the session whose approval o s r answer: %s", view)
+	}
+	if strings.Contains(view, "docs-site") {
+		t.Fatalf("the pane footer must take its name from the session, not from a fixture: %s", view)
+	}
+}
+
+func TestPaneFooterSkipsAnApprovalOutsideTheActivePane(t *testing.T) {
+	_, m := paneModel(t)
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-gamma"}, Event: approvalMenuEvent(t, "make deploy", allApprovalRoles()...)})
+	m.active = "ch-alpha"
+	if view := m.View(); strings.Contains(view, "approbation de") {
+		t.Fatalf("o s r answer the active tab, so a pending approval elsewhere must not be offered: %s", view)
 	}
 }

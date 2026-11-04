@@ -29,7 +29,10 @@ const (
 	paneMinCellHeight  = paneBoxChrome + 3
 )
 
-const paneFooterKeys = "Tab volet suivant · clic viser · o s r approbation de docs-site"
+const (
+	paneNavKeys         = "Tab volet suivant · clic viser"
+	paneApprovalKeysFmt = "o s r approbation de "
+)
 
 type paneState struct {
 	channels []string
@@ -164,7 +167,22 @@ func (m *model) paneHeader(width int) string {
 }
 
 func (m *model) paneFooter(width int) string {
-	return m.st.dim.Render(foldText(" "+paneFooterKeys, width))
+	keys := paneNavKeys
+	if name, ok := m.paneApproval(); ok {
+		keys += footSeparator + paneApprovalKeysFmt + name
+	}
+	return m.st.dim.Render(foldText(" "+keys, width))
+}
+
+func (m *model) paneApproval() (string, bool) {
+	target := m.activeTab()
+	if target == nil || !target.pendingApproval || !slices.Contains(m.panes.channels, target.channel) {
+		return "", false
+	}
+	if name := m.infoForChannel(target.channel).Name; name != "" {
+		return name, true
+	}
+	return target.label, true
 }
 
 func (m *model) paneCounts() string {

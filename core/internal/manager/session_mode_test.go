@@ -34,7 +34,7 @@ func TestSetModeStoresTheModeTheHostEnforces(t *testing.T) {
 	h.SetGateResolver(func(string) (string, string) { return "tool", "" })
 	seedModeSession(t, st, "s1", "claude", "ask")
 
-	for _, mode := range []string{"accept-edits", "plan", "ask", "bypass"} {
+	for _, mode := range []string{"accept-edits", "plan", "ask", "auto", "bypass"} {
 		if _, err := setModeOf(t, h, "s1", mode); err != nil {
 			t.Fatalf("set %s: %v", mode, err)
 		}
@@ -87,5 +87,27 @@ func TestSetModeNeedsAKnownSession(t *testing.T) {
 	h, _, _, _, _, _ := newTestHandler(t, "")
 	if _, err := setModeOf(t, h, "ghost", "plan"); err == nil {
 		t.Fatal("a missing session must be refused")
+	}
+}
+
+func TestGetModeReadsTheStoredStance(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "")
+	seedModeSession(t, st, "s1", "claude", "")
+	seedModeSession(t, st, "s2", "claude", "plan")
+
+	got, err := h.sessionGetModeRun(context.Background(), args("name", "s1"))
+	if err != nil || got != "ask" {
+		t.Fatalf("a session with no stored mode reads %q (%v), want ask", got, err)
+	}
+	got, err = h.sessionGetModeRun(context.Background(), args("name", "s2"))
+	if err != nil || got != "plan" {
+		t.Fatalf("a planning session reads %q (%v), want plan", got, err)
+	}
+}
+
+func TestGetModeRefusesAMissingSession(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "")
+	if _, err := h.sessionGetModeRun(context.Background(), args("name", "ghost")); err == nil {
+		t.Fatal("reading the mode of a missing session must fail")
 	}
 }

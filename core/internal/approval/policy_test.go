@@ -108,6 +108,9 @@ func TestApplyModes(t *testing.T) {
 	}{
 		{"bypass ignores deny", ModeBypass, "Bash", Deny, true, Allow},
 		{"bypass ignores ask", ModeBypass, "Bash", Ask, true, Allow},
+		{"auto lets an unmatched command through", ModeAuto, "Bash", Allow, false, Allow},
+		{"auto lets an asked command through", ModeAuto, "Bash", Ask, true, Allow},
+		{"auto keeps a deny rule", ModeAuto, "Bash", Deny, true, Deny},
 		{"ask keeps a rule's ask", ModeAsk, "Read", Ask, true, Ask},
 		{"ask asks an unmatched edit", ModeAsk, "Edit", Allow, false, Ask},
 		{"ask asks an unmatched command", ModeAsk, "Bash", Allow, false, Ask},

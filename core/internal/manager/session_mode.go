@@ -47,6 +47,21 @@ func (h *Handler) sessionSetModeRun(_ context.Context, input contracts.Input) (s
 	return setModeReply(sess, mode, gate), nil
 }
 
+func (h *Handler) sessionGetModeRun(_ context.Context, input contracts.Input) (string, error) {
+	name, ok := input.Lookup(nameParam)
+	if !ok {
+		return "", ErrMissingName
+	}
+	sess, ok := h.st.FindSession(name)
+	if !ok {
+		return "", &SessionNotFoundError{Name: name}
+	}
+	if sess.Approvals == "" {
+		return string(approval.ModeAsk), nil
+	}
+	return sess.Approvals, nil
+}
+
 func setModeReply(sess state.Session, mode string, gate approvalGate) string {
 	reply := fmt.Sprintf("%s is now %s", sess.Name, mode)
 	if !gate.enforced && mode != string(approval.ModeBypass) {

@@ -135,6 +135,8 @@ const (
 	ModeAcceptEdits Mode = "accept-edits"
 	// ModePlan is read-only: anything that is not a read is refused.
 	ModePlan Mode = "plan"
+	// ModeAuto lets everything through except what a deny rule refuses.
+	ModeAuto Mode = "auto"
 	// ModeBypass skips the approval prompt.
 	ModeBypass Mode = "bypass"
 	// ModeStrict refuses anything the policy does not explicitly allow.
@@ -201,6 +203,11 @@ func Apply(m Mode, tool string, decided Decision, matched bool) Decision {
 	unmatched := decided == Allow && !matched
 	switch m {
 	case ModeBypass:
+		return Allow
+	case ModeAuto:
+		if decided == Deny {
+			return Deny
+		}
 		return Allow
 	case ModePlan:
 		if decided == Deny || !ReadOnly(tool) {

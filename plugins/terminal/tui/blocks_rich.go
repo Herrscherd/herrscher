@@ -57,7 +57,7 @@ func renderDiff(body string, width int, view view) string {
 		class := diffClass(diffLine, inHunk)
 		if class != diffMeta {
 			if !view.expand && spent == diffHunkBudget {
-				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-lineIndex), view.st.dim))
+				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", view.st.glyphs.fold, len(lines)-lineIndex), view.st.dim, view.st.glyphs))
 				break
 			}
 			spent++
@@ -216,7 +216,7 @@ func codeBlocks(text string) []codeBlock {
 
 const foldThreshold = 12
 
-func foldCodeBlocks(text string) string {
+func foldCodeBlocks(text string, glyphs glyphSet) string {
 	var out []string
 	var buf []string
 	lang := ""
@@ -229,7 +229,7 @@ func foldCodeBlocks(text string) string {
 		case inFence && fence == codeFence:
 			inFence = false
 			if len(buf) > foldThreshold {
-				out = append(out, foldSummary(lang, len(buf)))
+				out = append(out, foldSummary(lang, len(buf), glyphs))
 				continue
 			}
 			out = append(out, codeFence+lang)
@@ -248,11 +248,11 @@ func foldCodeBlocks(text string) string {
 	return strings.Join(out, "\n")
 }
 
-func foldSummary(lang string, lines int) string {
+func foldSummary(lang string, lines int, glyphs glyphSet) string {
 	if lang == "" {
 		lang = "text"
 	}
-	return fmt.Sprintf("%s %s · %d lines (ctrl+f)", glyphFold, lang, lines)
+	return fmt.Sprintf("%s %s · %d lines (ctrl+f)", glyphs.fold, lang, lines)
 }
 
 func (m *model) toggleFold() {

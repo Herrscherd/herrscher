@@ -32,7 +32,7 @@ func (m *model) activeInfo() (contracts.SessionInfo, bool) {
 }
 
 func (m *model) emptyState(width int) string {
-	lines := []string{m.st.accent.Render(brand), ""}
+	lines := []string{m.st.accent.Render(m.st.glyphs.brand), ""}
 	lines = append(lines, m.sessionFacts()...)
 	lines = append(lines, m.otherSessions()...)
 	lines = append(lines, "", shortcutRow(m.st))
@@ -91,7 +91,7 @@ func (m *model) otherSessions() []string {
 		}
 		mark := "  "
 		if tab.unread {
-			mark = " " + glyphUnread
+			mark = " " + m.st.glyphs.unread
 		}
 		rows = append(rows, m.st.dim.Render("  "+mark+" "+tab.label))
 	}

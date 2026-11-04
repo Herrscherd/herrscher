@@ -453,6 +453,53 @@ where it was said, so it is rendered in the window that asked and not posted a
 second time in the channel the conversation came from, where nobody asked
 anything.
 
+### Themes and look
+
+Four themes ship in the binary: Sombre (the default), Clair, Terminal, which
+takes the colours of your own terminal palette, and Contraste élevé. `/theme`,
+or `ctrl+x t` from anywhere in the window, opens the picker. Moving through the
+list previews each theme on the spot, and Entrée keeps the one you chose. The
+same overlay holds the look: `g` cycles the glyph set (unicode, nerd, ascii),
+`b` the borders (rounded, square, none), `d` the density (normal, compact), `w`
+bold and `i` italic. `a` turns the automatic theme on or off, which follows the
+terminal's background, and `e` opens the theme in `$EDITOR`. Échap puts back
+what it found.
+
+Under 100 columns the picker stacks its options above its list rather than
+drawing them side by side. `NO_COLOR` strips the colours and keeps the rest.
+
+The choice is stored in `terminal.toml`, beside `config.json`:
+
+```toml
+[terminal]
+theme = "sombre"
+auto_theme = false
+glyphs = "unicode"
+borders = "rounded"
+density = "normal"
+```
+
+A personal theme is a TOML file in the `themes` directory beside it, named after
+its id, so `~/.config/herrscher/themes/mon-theme.toml` shows as a theme in the
+picker. It inherits from a built-in with `base` and overrides only the colours
+and render options it names. The directory is polled, so an edit shows without a
+restart, and a file that does not parse is reported in the picker rather than
+dropped silently.
+
+```toml
+name = "Mon thème"
+base = "sombre"
+
+[colors]
+accent = "#ff8c42"
+err = "ansi:1"
+
+[render]
+borders = "square"
+```
+
+→ `plugins/terminal/tui/theme.go`, `plugins/terminal/tui/theme_catalog.go`
+
 ### Using the terminal you are in
 
 Capabilities are probed once at startup, and every feature that has a richer and

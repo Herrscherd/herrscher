@@ -9,18 +9,18 @@ import (
 )
 
 func TestResultLineIndentsUnderTheToolGlyph(t *testing.T) {
-	got := ansi.Strip(resultLine("214 lignes", newStyles().dim))
-	if !strings.HasPrefix(got, "  "+glyphResult+" ") {
+	got := ansi.Strip(resultLine("214 lignes", testStyles().dim, unicodeGlyphs()))
+	if !strings.HasPrefix(got, "  "+unicodeGlyphs().result+" ") {
 		t.Fatalf("result line = %q", got)
 	}
 }
 
 func TestThinkingLineDropsTheWordThinking(t *testing.T) {
-	got := ansi.Strip(thinkingLine("le hook est global"))
+	got := ansi.Strip(thinkingLine("le hook est global", unicodeGlyphs()))
 	if strings.Contains(got, "Thinking") {
 		t.Fatalf("thinking line still labelled: %q", got)
 	}
-	if !strings.HasPrefix(got, glyphThinking+" ") {
+	if !strings.HasPrefix(got, unicodeGlyphs().thinking+" ") {
 		t.Fatalf("thinking line = %q", got)
 	}
 }

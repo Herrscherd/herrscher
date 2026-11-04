@@ -57,7 +57,7 @@ const minHangWidth = 8
 func renderTool(text string, width int, view view) string {
 	lines := strings.Split(text, "\n")
 	family, rest := toolVerb(lines[0])
-	gutter := familyGlyph(family) + " "
+	gutter := view.st.glyphs.familyGlyph(family) + " "
 	if family != "" {
 		gutter += family + strings.Repeat(" ", max(1, familyWidth-len(family)))
 	}
@@ -65,7 +65,7 @@ func renderTool(text string, width int, view view) string {
 	builder.WriteString(toolPart(gutter, rest, view.st.tool, width, view))
 	for _, line := range lines[1:] {
 		builder.WriteByte('\n')
-		builder.WriteString(toolPart(resultGutter, line, view.st.dim, width, view))
+		builder.WriteString(toolPart(resultGutter(view.st.glyphs), line, view.st.dim, width, view))
 	}
 	return builder.String()
 }
@@ -77,7 +77,7 @@ func toolPart(gutter, body string, style lipgloss.Style, width int, view view) s
 		if len(lines) > toolLineCap {
 			hidden := len(lines) - toolLineCap
 			lines = lines[:toolLineCap]
-			lines[len(lines)-1] = withMoreMarker(lines[len(lines)-1], hidden, width)
+			lines[len(lines)-1] = withMoreMarker(lines[len(lines)-1], hidden, width, view.st.glyphs)
 		}
 	}
 	for i, ln := range lines {
@@ -114,8 +114,8 @@ func wrapPlain(text string, width int) []string {
 	return out
 }
 
-func withMoreMarker(line string, hidden, width int) string {
-	marker := fmt.Sprintf("+%d %s", hidden, glyphMoreLines)
+func withMoreMarker(line string, hidden, width int, glyphs glyphSet) string {
+	marker := fmt.Sprintf("+%d %s", hidden, glyphs.moreLines)
 	room := width - lipgloss.Width(marker) - 1
 	if room < 1 {
 		return line
@@ -160,12 +160,14 @@ func abbreviatePath(token string) string {
 	return opening + "…/" + strings.Join(segs[len(segs)-pathKeep:], "/") + closing
 }
 
-const resultGutter = "  " + glyphResult + " "
-
-func resultLine(text string, style lipgloss.Style) string {
-	return style.Render(resultGutter + text)
+func resultGutter(glyphs glyphSet) string {
+	return "  " + glyphs.result + " "
 }
 
-func thinkingLine(text string) string {
-	return glyphThinking + " " + text
+func resultLine(text string, style lipgloss.Style, glyphs glyphSet) string {
+	return style.Render(resultGutter(glyphs) + text)
+}
+
+func thinkingLine(text string, glyphs glyphSet) string {
+	return glyphs.thinking + " " + text
 }

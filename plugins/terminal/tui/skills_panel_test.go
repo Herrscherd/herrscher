@@ -18,7 +18,7 @@ func TestSkillsPanelRendersRows(t *testing.T) {
 	m.skillsOpen = true
 
 	out := m.skillsView()
-	if !strings.Contains(out, glyphCursor+" pdf-fill") || !strings.Contains(out, "fill PDFs") {
+	if !strings.Contains(out, unicodeGlyphs().cursor+" pdf-fill") || !strings.Contains(out, "fill PDFs") {
 		t.Fatalf("selected row must be prefixed and show its name and description: %q", out)
 	}
 	if !strings.Contains(out, "web") || !strings.Contains(out, "browse") {

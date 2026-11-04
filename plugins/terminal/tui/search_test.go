@@ -95,13 +95,13 @@ func TestEscClosesTheSearchInsteadOfTheSession(t *testing.T) {
 
 func TestTurnBoundariesAreWhereTurnsStart(t *testing.T) {
 	lines := []string{
-		glyphCursor + " ask",
+		unicodeGlyphs().cursor + " ask",
 		"  body",
-		agentTitle + " ─────",
+		unicodeGlyphs().agentTitle() + " ─────",
 		"  answer",
-		glyphCursor + " ask again",
+		unicodeGlyphs().cursor + " ask again",
 	}
-	got := turnBoundaries(lines)
+	got := turnBoundaries(lines, unicodeGlyphs())
 	want := []int{0, 2, 4}
 	if len(got) != len(want) {
 		t.Fatalf("turnBoundaries = %v, want %v", got, want)
@@ -117,7 +117,7 @@ func TestJumpToTurnLandsOnABoundary(t *testing.T) {
 	m := longModel(t)
 	m.vp.GotoTop()
 	m.jumpTurn(1)
-	bounds := turnBoundaries(strings.Split(m.thinkingContent(), "\n"))
+	bounds := turnBoundaries(strings.Split(m.thinkingContent(), "\n"), unicodeGlyphs())
 	if len(bounds) < 2 {
 		t.Fatalf("the fixture needs several turns, got %v", bounds)
 	}
@@ -134,13 +134,13 @@ func TestJumpToTurnLandsOnABoundary(t *testing.T) {
 
 func TestFoldingOldTurnsCollapsesThemAndRestoresExactly(t *testing.T) {
 	lines := []string{
-		glyphCursor + " ask",
+		unicodeGlyphs().cursor + " ask",
 		"  body one",
 		"  body two",
-		agentTitle + " ─",
+		unicodeGlyphs().agentTitle() + " ─",
 		"  answer",
 	}
-	folded := foldTurns(lines, 1, newStyles())
+	folded := foldTurns(lines, 1, testStyles())
 	if len(folded) != 1+len(lines)-3 {
 		t.Fatalf("the first turn must collapse to one line: %q", folded)
 	}
@@ -151,7 +151,7 @@ func TestFoldingOldTurnsCollapsesThemAndRestoresExactly(t *testing.T) {
 		t.Fatalf("the summary must still say which turn it is: %q", folded[0])
 	}
 
-	again := foldTurns(lines, 99, newStyles())
+	again := foldTurns(lines, 99, testStyles())
 	if strings.Join(again, "\n") != strings.Join(lines, "\n") {
 		t.Fatalf("unfolded lines must be identical to the source: %q", again)
 	}

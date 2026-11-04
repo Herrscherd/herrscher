@@ -23,7 +23,7 @@ func floatingList(rows []overlayRow, cursor int, footer string, width int, style
 	for index, row := range rows {
 		head := "  "
 		if index == cursor {
-			head = glyphCursor + " "
+			head = styles.glyphs.cursor + " "
 		}
 		label := row.label
 		if pad := overlayLabelWidth - lipgloss.Width(label); pad > 0 {

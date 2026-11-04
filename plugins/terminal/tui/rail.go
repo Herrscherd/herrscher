@@ -6,15 +6,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const brand = "──◂ HERRSCHER ▸──"
-
 const (
 	railMinGap    = 4
 	railSeparator = "  "
 )
 
 func (m *model) railRow() string {
-	left := m.st.accent.Render(brand)
+	left := m.st.accent.Render(m.st.glyphs.brand)
 	strip := m.tabStrip()
 	right := m.vendorMark()
 	if strip == "" {
@@ -35,7 +33,7 @@ func (m *model) activeMark() string {
 	if tab == nil {
 		return ""
 	}
-	return m.st.accent.Render(glyphCursor + " " + tab.label)
+	return m.st.accent.Render(m.st.glyphs.cursor + " " + tab.label)
 }
 
 func (m *model) tabStrip() string {
@@ -47,10 +45,10 @@ func (m *model) tabStrip() string {
 		}
 		label := tab.label
 		if tab.unread {
-			label = glyphUnread + label
+			label = m.st.glyphs.unread + label
 		}
 		if channel == m.active {
-			out = append(out, m.st.accent.Render(glyphCursor+" "+label))
+			out = append(out, m.st.accent.Render(m.st.glyphs.cursor+" "+label))
 			continue
 		}
 		out = append(out, m.st.dim.Render(label))
@@ -63,7 +61,7 @@ func (m *model) vendorMark() string {
 	if !ok || info.Vendor == "" {
 		return ""
 	}
-	return m.st.dim.Render(glyphBolt + " " + info.Vendor)
+	return m.st.dim.Render(m.st.glyphs.bolt + " " + info.Vendor)
 }
 
 func joinRow(width int, left, right string) string {

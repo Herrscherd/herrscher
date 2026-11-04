@@ -37,7 +37,7 @@ func TestPickerViewsDrawTheSelectedRow(t *testing.T) {
 			m := newModel(&fakeBackend{})
 			tc.set(m, tc.sel)
 			out := tc.view(m)
-			if !strings.Contains(out, glyphCursor) {
+			if !strings.Contains(out, unicodeGlyphs().cursor) {
 				t.Fatalf("no cursor drawn:\n%s", out)
 			}
 			if !strings.Contains(out, rows[tc.sel].Name) {
@@ -54,7 +54,7 @@ func TestSkillsViewDrawsTheSelectedRow(t *testing.T) {
 	}
 	m.skillsIdx = 20
 	out := m.skillsView()
-	if !strings.Contains(out, glyphCursor) || !strings.Contains(out, "skill-20") {
+	if !strings.Contains(out, unicodeGlyphs().cursor) || !strings.Contains(out, "skill-20") {
 		t.Fatalf("selection not drawn:\n%s", out)
 	}
 }

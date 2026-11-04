@@ -19,7 +19,7 @@ func TestRailShowsBrandAndTabs(t *testing.T) {
 	if lipgloss.Width(row) > 74 {
 		t.Fatalf("rail is %d columns, want <= 74", lipgloss.Width(row))
 	}
-	for _, want := range []string{"HERRSCHER", "neublox", "herrscher", glyphUnread} {
+	for _, want := range []string{"HERRSCHER", "neublox", "herrscher", unicodeGlyphs().unread} {
 		if !strings.Contains(row, want) {
 			t.Fatalf("rail %q missing %q", row, want)
 		}

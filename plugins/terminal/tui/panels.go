@@ -29,7 +29,7 @@ func todoPanel(items []contracts.TodoItem, width int, styles uiStyles) []string 
 			active = index
 		}
 	}
-	head := styles.green.Render(truncate(fmt.Sprintf("  ✓ todos %d/%d", done, len(items)), width))
+	head := styles.green.Render(truncate(fmt.Sprintf("  %s todos %d/%d", styles.glyphs.success, done, len(items)), width))
 	if width < narrowStatus {
 		return []string{head}
 	}
@@ -39,18 +39,18 @@ func todoPanel(items []contracts.TodoItem, width int, styles uiStyles) []string 
 		out = append(out, todoRow(it, width, styles))
 	}
 	if hidden := len(items) - (end - start); hidden > 0 {
-		out = append(out, styles.dim.Render(truncate(fmt.Sprintf("  · +%d", hidden), width)))
+		out = append(out, styles.dim.Render(truncate(fmt.Sprintf("  %s +%d", styles.glyphs.notice, hidden), width)))
 	}
 	return out
 }
 
 func todoRow(todo contracts.TodoItem, width int, styles uiStyles) string {
-	mark, style := "·", styles.dim
+	mark, style := styles.glyphs.notice, styles.dim
 	switch todo.State {
 	case stateDone:
-		mark, style = "✓", styles.green
+		mark, style = styles.glyphs.success, styles.green
 	case "active":
-		mark, style = "◆", styles.accent
+		mark, style = styles.glyphs.active, styles.accent
 	}
 	return style.Render(truncate("  "+mark+" "+oneLine(todo.Text), width))
 }
@@ -66,7 +66,7 @@ func subagentPanel(agents []liveAgent, now time.Time, width int, styles uiStyles
 	if len(agents) == 0 {
 		return nil
 	}
-	mark := familyGlyph(familyAgent)
+	mark := styles.glyphs.familyGlyph(familyAgent)
 	if width < narrowStatus {
 		label := fmt.Sprintf("  %s %d sous-agent", mark, len(agents))
 		if len(agents) > 1 {
@@ -89,7 +89,7 @@ func subagentPanel(agents []liveAgent, now time.Time, width int, styles uiStyles
 		out = append(out, styles.accent.Render(truncate(line, width)))
 	}
 	if hidden := len(agents) - len(shown); hidden > 0 {
-		out = append(out, styles.dim.Render(truncate(fmt.Sprintf("  · +%d", hidden), width)))
+		out = append(out, styles.dim.Render(truncate(fmt.Sprintf("  %s +%d", styles.glyphs.notice, hidden), width)))
 	}
 	return out
 }

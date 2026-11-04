@@ -15,6 +15,7 @@ require (
 	github.com/Herrscherd/herrscher-orchestrator v0.4.0
 	github.com/Herrscherd/herrscher-superset-skills v0.3.0
 	github.com/Herrscherd/herrscher-transport v0.4.0
+	github.com/BurntSushi/toml v1.6.0
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10

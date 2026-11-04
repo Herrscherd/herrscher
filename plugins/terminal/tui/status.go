@@ -104,7 +104,7 @@ func renderGauge(used int, vendor string, width int, styles uiStyles) string {
 	if width >= verboseStatus {
 		label += " avant compaction"
 	}
-	return gauge(row, style, styles.dim) + style.Render(label)
+	return gauge(row, style, styles.dim, styles.glyphs) + style.Render(label)
 }
 
 func modelLabel(info contracts.SessionInfo) string {
@@ -152,9 +152,9 @@ func (m *model) statusBar(tab *tab, width int) string {
 
 func (m *model) statusHead(tab *tab, info contracts.SessionInfo, known bool, width int) string {
 	if known && info.Vendor != "" && width >= narrowStatus {
-		return m.st.accent.Render(glyphBolt+" "+info.Vendor) + m.st.dim.Render(" "+tab.label)
+		return m.st.accent.Render(m.st.glyphs.bolt+" "+info.Vendor) + m.st.dim.Render(" "+tab.label)
 	}
-	return m.st.accent.Render(glyphBolt + " " + tab.label)
+	return m.st.accent.Render(m.st.glyphs.bolt + " " + tab.label)
 }
 
 func (m *model) statusDetails(tab *tab, info contracts.SessionInfo, known bool, used, width int) []string {

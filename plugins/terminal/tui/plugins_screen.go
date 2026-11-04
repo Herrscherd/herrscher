@@ -366,7 +366,7 @@ func (m *model) pluginRow(index int) string {
 		row += " · épinglé"
 	}
 	if index == m.pluginsIdx && m.pluginsMode == pluginsList {
-		return m.st.accent.Render(glyphCursor + " " + row)
+		return m.st.accent.Render(m.st.glyphs.cursor + " " + row)
 	}
 	return m.st.dim.Render("  " + row)
 }
@@ -390,7 +390,7 @@ func (m *model) writePluginMenu(builder *strings.Builder) {
 	}
 	for i, opt := range m.pluginsMenu {
 		if i == m.pluginsMenuIdx {
-			builder.WriteString("\n" + m.st.accent.Render(glyphCursor+" "+opt))
+			builder.WriteString("\n" + m.st.accent.Render(m.st.glyphs.cursor+" "+opt))
 		} else {
 			builder.WriteString("\n" + m.st.dim.Render("  "+opt))
 		}

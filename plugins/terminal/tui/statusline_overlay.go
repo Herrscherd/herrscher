@@ -149,7 +149,7 @@ func joinStatuslineColumns(left, right []string, leftWidth int, divider string) 
 	rows := max(len(left), len(right))
 	out := make([]string, 0, rows)
 	for index := range rows {
-		cell := padTo(truncateEllipsis(lineAt(left, index), leftWidth), leftWidth)
+		cell := padTo(cutText(lineAt(left, index), leftWidth), leftWidth)
 		out = append(out, cell+divider+lineAt(right, index))
 	}
 	return out
@@ -173,7 +173,7 @@ func (m *model) statuslineControls(width int) []string {
 	if m.bar.scripted() {
 		footer = statuslineScriptFooter
 	}
-	return append(lines, m.st.dim.Render(truncateEllipsis(statusIndent+footer, width)))
+	return append(lines, m.st.dim.Render(cutText(statusIndent+footer, width)))
 }
 
 func (m *model) statuslineListRows() int {
@@ -209,7 +209,7 @@ func (m *model) statuslineRow(fieldID string, selected bool, width int) string {
 	label := padTo(spec.labelWith(m.st.glyphs), barLabelWidth)
 	if selected {
 		plain := statusIndent + head + mark + " " + label + " " + spec.note
-		return m.st.overlaySel.Render(padTo(truncateEllipsis(plain, width), width))
+		return m.st.overlaySel.Render(padTo(cutText(plain, width), width))
 	}
 	markStyle, labelStyle := m.st.dim, m.st.dim
 	if m.bar.scripted() {
@@ -222,7 +222,7 @@ func (m *model) statuslineRow(fieldID string, selected bool, width int) string {
 		}
 	}
 	row := statusIndent + head + markStyle.Render(mark+" ") + labelStyle.Render(label+" ") + m.st.dim.Render(spec.note)
-	return padTo(truncateEllipsis(row, width), width)
+	return padTo(cutText(row, width), width)
 }
 
 func (m *model) statuslineSourceLine() string {
@@ -247,7 +247,7 @@ func (m *model) statuslinePane(width, budget int) []string {
 	}
 	lines := foldPaneBlocks(blocks, budget)
 	for index, line := range lines {
-		lines[index] = truncateEllipsis(line, width)
+		lines[index] = cutText(line, width)
 	}
 	return lines
 }
@@ -298,7 +298,7 @@ func (m *model) statuslinePreviewCaption(width int) string {
 		}
 	}
 	last := captions[len(captions)-1]
-	return m.st.dim.Render(truncateEllipsis(statusIndent+last, width))
+	return m.st.dim.Render(cutText(statusIndent+last, width))
 }
 
 func statuslinePreviewCaptions() []string {

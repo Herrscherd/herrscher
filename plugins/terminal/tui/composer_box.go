@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -40,7 +39,6 @@ const (
 	footRightBusy    = "échap interrompre"
 	titleEditor      = "⌃X⌃E éditeur"
 	titlePanes       = "⌃P quitter · ⌃W agrandir"
-	footSeparator    = " · "
 	ellipsis         = "…"
 	worktreesMarker  = "/.worktrees/"
 )
@@ -105,7 +103,7 @@ func (m *model) composerTitles() ([]string, string) {
 	case m.editing:
 		return []string{
 			m.st.violet.Bold(true).Render("Éditeur"),
-			m.st.dim.Render(footSeparator + "brouillon ouvert dans " + editorName()),
+			m.st.dim.Render(footerSeparator + "brouillon ouvert dans " + editorName()),
 		}, m.st.dim.Render(titleEditor)
 	case m.isShellInput():
 		return append([]string{m.st.warn.Bold(true).Render("! SHELL")}, m.shellTitleDetail()...), m.st.dim.Render(titleEditor)
@@ -122,9 +120,9 @@ func (m *model) composerTitles() ([]string, string) {
 func (m *model) shellTitleDetail() []string {
 	var parts []string
 	if info, ok := m.activeInfo(); ok && info.Dir != "" {
-		parts = append(parts, m.st.dim.Render(footSeparator+"dans "+sessionDirLabel(info.Dir)))
+		parts = append(parts, m.st.dim.Render(footerSeparator+"dans "+sessionDirLabel(info.Dir)))
 	}
-	return append(parts, m.st.dim.Render(footSeparator+"la sortie entre dans la session"))
+	return append(parts, m.st.dim.Render(footerSeparator+"la sortie entre dans la session"))
 }
 
 func sessionDirLabel(dir string) string {
@@ -155,41 +153,19 @@ func (m *model) composerFoots() (string, string) {
 }
 
 func segmentsOf(text string, paint func(string) string) []string {
-	parts := strings.Split(text, footSeparator)
+	parts := strings.Split(text, footerSeparator)
 	segments := make([]string, 0, len(parts))
 	for index, part := range parts {
 		if index > 0 {
-			part = footSeparator + part
+			part = footerSeparator + part
 		}
 		segments = append(segments, paint(part))
 	}
 	return segments
 }
 
-func foldSegments(segments []string, budget int) string {
-	for count := len(segments); count >= 1; count-- {
-		if line := strings.Join(segments[:count], ""); lipgloss.Width(line) <= budget {
-			return line
-		}
-	}
-	if len(segments) == 0 {
-		return ""
-	}
-	return truncateEllipsis(segments[0], budget)
-}
-
 func foldText(text string, width int) string {
 	return foldSegments(segmentsOf(text, plainText), width)
-}
-
-func truncateEllipsis(text string, width int) string {
-	if width < 1 {
-		return ""
-	}
-	if lipgloss.Width(text) <= width {
-		return text
-	}
-	return ansi.Truncate(text, width, ellipsis)
 }
 
 func boxEdge(corners [2]string, left []string, right string, width int, style lipgloss.Style, horizontal string) string {
@@ -213,7 +189,7 @@ func (m *model) composerZone() []string {
 	if !m.composerBoxed() {
 		out := make([]string, len(body))
 		for i, line := range body {
-			out[i] = truncateEllipsis(line, m.innerWidth())
+			out[i] = cutText(line, m.innerWidth())
 		}
 		return out
 	}
@@ -225,7 +201,7 @@ func (m *model) composerZone() []string {
 	side := style.Render(boxes.v)
 	zone := []string{boxEdge([2]string{boxes.tl, boxes.tr}, titleLeft, titleRight, width, style, boxes.h)}
 	for _, line := range body {
-		line = truncateEllipsis(line, width-composerChrome)
+		line = cutText(line, width-composerChrome)
 		pad := width - composerChrome - lipgloss.Width(line)
 		if pad < 0 {
 			pad = 0

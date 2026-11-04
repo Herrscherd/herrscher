@@ -169,13 +169,13 @@ func (m *model) surfaceScreen() string {
 
 func (m *model) paneHeader(width int) string {
 	left := m.st.violet.Bold(true).Render(" Vue en volets") + m.st.dim.Render("  Tab volet suivant · clic pour viser")
-	return truncateEllipsis(joinRow(width, left, m.paneCounts()), width)
+	return cutText(joinRow(width, left, m.paneCounts()), width)
 }
 
 func (m *model) paneFooter(width int) string {
 	keys := paneNavKeys
 	if name, ok := m.paneApproval(); ok {
-		keys += footSeparator + paneApprovalKeysFmt + name
+		keys += footerSeparator + paneApprovalKeysFmt + name
 	}
 	return m.st.dim.Render(foldText(" "+keys, width))
 }
@@ -278,14 +278,14 @@ func (m *model) paneBox(index, width, height int) []string {
 	side := style.Render(boxes.v)
 	body := padLines(tailLines(m.paneTranscript(m.tabs[channel], width-paneInset), inner), inner)
 	for _, line := range body {
-		lines = append(lines, side+" "+padTo(truncateEllipsis(line, width-paneInset), width-paneInset)+" "+side)
+		lines = append(lines, side+" "+padTo(cutText(line, width-paneInset), width-paneInset)+" "+side)
 	}
 	ratio := contextRatio(row.info.ContextTokens, contextLimit(row.info.Vendor))
 	footLeft := m.st.dim.Render("ctx ") + m.gaugeCells(ratio, paneGaugeCells, identityPaint) +
 		m.tierStyle(ratio).Render(" "+contextPercent(row.info.ContextTokens, contextLimit(row.info.Vendor))) +
 		m.st.dim.Render(" · "+formatCost(row.overview.Cost))
 	footRight := gatewayStyle(m.st, strings.Join(row.overview.Gateways, "+")).Render(strings.Join(row.overview.Gateways, "+"))
-	foot := truncateEllipsis(joinRow(width-paneInset, footLeft, footRight), width-paneInset)
+	foot := cutText(joinRow(width-paneInset, footLeft, footRight), width-paneInset)
 	lines = append(lines, side+" "+padTo(foot, width-paneInset)+" "+side, style.Render(boxes.bl+strings.Repeat(boxes.h, width-composerBorderCols)+boxes.br))
 	return lines
 }

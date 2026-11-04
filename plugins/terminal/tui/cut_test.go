@@ -14,8 +14,8 @@ import (
 
 func TestCutTextMarksTheCut(t *testing.T) {
 	got := cutText("la raison repart à l'agent", 10)
-	if ansi.StringWidth(got) != 10 || !strings.HasSuffix(got, cutMark) {
-		t.Errorf("cutText must end with %q at the width, got %q", cutMark, got)
+	if ansi.StringWidth(got) != 10 || !strings.HasSuffix(got, ellipsis) {
+		t.Errorf("cutText must end with %q at the width, got %q", ellipsis, got)
 	}
 }
 
@@ -47,8 +47,8 @@ func TestFitSegmentsDropsWholeSegments(t *testing.T) {
 
 func TestFitSegmentsKeepsTheFirstSegmentCut(t *testing.T) {
 	got := fitSegments([]string{"revenir à ce message", "fermer"}, 8)
-	if lipgloss.Width(got) > 8 || !strings.HasSuffix(got, cutMark) {
-		t.Errorf("a lone segment too wide must be cut with %q, got %q", cutMark, got)
+	if lipgloss.Width(got) > 8 || !strings.HasSuffix(got, ellipsis) {
+		t.Errorf("a lone segment too wide must be cut with %q, got %q", ellipsis, got)
 	}
 }
 
@@ -111,8 +111,8 @@ func TestToastStaysVisibleAtTwentyRows(t *testing.T) {
 	if !strings.HasPrefix(lines[len(lines)-1], "╰") {
 		t.Errorf("the toast must close with its bottom border, got %q", lines[len(lines)-1])
 	}
-	if rows > 2 && !strings.Contains(lines[len(lines)-2], cutMark) {
-		t.Errorf("the last body row of a squeezed toast must end with %q, got %q", cutMark, lines[len(lines)-2])
+	if rows > 2 && !strings.Contains(lines[len(lines)-2], ellipsis) {
+		t.Errorf("the last body row of a squeezed toast must end with %q, got %q", ellipsis, lines[len(lines)-2])
 	}
 	blank := strings.Repeat(strings.Repeat(" ", 60)+"\n", 19) + strings.Repeat(" ", 60)
 	if !strings.Contains(m.overlayToast(blank), "Approbation attend") {

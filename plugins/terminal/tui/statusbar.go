@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -176,7 +175,7 @@ func (m *model) statusBar(target *tab, width int) string {
 		return ""
 	}
 	if m.bar.scripted() && m.bar.script.line != "" {
-		return truncateEllipsis(m.bar.script.line, width)
+		return cutText(m.bar.script.line, width)
 	}
 	if m.bar.scripted() && m.bar.script.failed {
 		return m.builtinBar(target, width-barFailTail) + " " + m.st.dim.Render(m.st.glyphs.failure)
@@ -196,17 +195,10 @@ func (m *model) builtinBar(target *tab, width int) string {
 		}
 		next, dropped := dropLowestLayer(parts)
 		if !dropped {
-			return truncateEllipsis(line, width)
+			return cutText(line, width)
 		}
 		parts = next
 	}
-}
-
-func truncateEllipsis(text string, width int) string {
-	if width < 1 || lipgloss.Width(text) <= width {
-		return text
-	}
-	return ansi.Truncate(text, width, "…")
 }
 
 func (m *model) barParts(target *tab) []barPart {

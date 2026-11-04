@@ -249,7 +249,7 @@ func TestQueueRowsAlignTheirTextWhateverTheMark(t *testing.T) {
 	m, _ := queueFixture(t)
 	m.tabs["a"].busy = true
 	m.tabs["a"].queue = []queuedInput{{text: "pense aussi"}, {text: "garde l’ordre", steer: true}}
-	lines := m.queueLines(0)
+	lines := m.queueLines(0, unboundedRows)
 	file := textColumn(t, lines[1], "pense aussi")
 	steer := textColumn(t, lines[2], "garde l’ordre")
 	if file != steer {

@@ -116,7 +116,7 @@ func (m *model) draftsView() string {
 		return ""
 	}
 	last := oneLine(m.drafts[len(m.drafts)-1])
-	left := m.st.dim.Render(" ○ brouillons (" + strconv.Itoa(len(m.drafts)) + ") : « " + truncateEllipsis(last, m.innerWidth()/draftPreviewDivisor) + " »")
+	left := m.st.dim.Render(" ○ brouillons (" + strconv.Itoa(len(m.drafts)) + ") : « " + cutText(last, m.innerWidth()/draftPreviewDivisor) + " »")
 	right := m.st.accent.Render(draftsKey) + m.st.dim.Render(" reprendre le dernier")
 	return justifyRow(left, right, m.innerWidth())
 }
@@ -164,7 +164,7 @@ func justifyRow(left, right string, width int) string {
 	if room < 0 {
 		room = 0
 	}
-	left = truncateEllipsis(left, room)
+	left = cutText(left, room)
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		gap = 1

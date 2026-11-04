@@ -246,7 +246,7 @@ func squeezeToastTexts(texts []string, room, inner int) []string {
 		return nil
 	}
 	kept := append([]string(nil), texts[:room]...)
-	kept[room-1] = ansi.Truncate(kept[room-1], max(inner-lipgloss.Width(cutMark), 0), "") + cutMark
+	kept[room-1] = ansi.Truncate(kept[room-1], max(inner-lipgloss.Width(ellipsis), 0), "") + ellipsis
 	return kept
 }
 

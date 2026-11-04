@@ -11,7 +11,7 @@ import (
 )
 
 const boardOverviewJSON = `[
- {"name":"alpha","vendor":"claude","gateways":["terminal"],"state":"done","cost":0.5,"last_ts":"2026-01-01T10:00:00Z","last_text":"fini"},
+ {"name":"alpha","vendor":"claude","gateways":["terminal"],"state":"idle","cost":0.5,"last_ts":"2026-01-01T10:00:00Z","last_text":"fini"},
  {"name":"beta","vendor":"claude","gateways":["discord"],"state":"waiting","cost":1.25,"last_ts":"2026-01-01T10:05:00Z","last_text":"ok ?"},
  {"name":"gamma","vendor":"codex","gateways":["terminal"],"state":"working","cost":0.1,"last_ts":"2026-01-01T10:09:00Z","last_text":"en route"}
 ]`
@@ -44,7 +44,7 @@ func TestBoardGroupsSessionsByState(t *testing.T) {
 			t.Fatalf("board must show group %q: %s", label, view)
 		}
 	}
-	working, waiting, done := strings.Index(view, "gamma"), strings.Index(view, "beta"), strings.Index(view, "alpha")
+	working, waiting, done := listRow(view, "gamma"), listRow(view, "beta"), listRow(view, "alpha")
 	if working < 0 || working >= waiting || waiting >= done {
 		t.Fatalf("groups must read working, waiting, done: gamma=%d beta=%d alpha=%d", working, waiting, done)
 	}
@@ -78,24 +78,58 @@ func TestBoardFilterNarrowsRowsByLetters(t *testing.T) {
 	}
 }
 
-func TestBoardHidesCostThenGatewayWhenNarrow(t *testing.T) {
+func TestBoardFitsEveryWidthAndHeight(t *testing.T) {
+	for _, width := range []int{60, 80, 120, 200} {
+		_, m := boardModel(t)
+		m.width, m.height = width, 20
+		updateKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+		view := m.View()
+		lines := strings.Split(view, "\n")
+		if len(lines) > 20 {
+			t.Fatalf("at %d columns the board is %d lines high, window is 20", width, len(lines))
+		}
+		for _, line := range lines {
+			if w := lipgloss.Width(line); w > width {
+				t.Fatalf("at %d columns a board line is %d wide: %q", width, w, line)
+			}
+		}
+		if !strings.Contains(view, "alpha") || !strings.Contains(view, "gamma") {
+			t.Fatalf("at %d columns the board must list the sessions: %s", width, view)
+		}
+	}
+}
+
+func TestBoardShowsCostAndGatewayWhenThereIsRoom(t *testing.T) {
 	_, m := boardModel(t)
-	m.openBoard()
-	wide := m.boardView(200, 20)
-	if !strings.Contains(wide, "$0.50") || !strings.Contains(wide, "terminal") {
-		t.Fatalf("wide board must show cost and gateway: %s", wide)
+	m.width, m.height = 200, 20
+	updateKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+	view := m.View()
+	if !strings.Contains(view, "$0.50") || !strings.Contains(view, "terminal") {
+		t.Fatalf("a wide board must show the cost and the gateway: %s", view)
 	}
-	medium := m.boardView(60, 20)
-	if strings.Contains(medium, "$0.50") || !strings.Contains(medium, "terminal") {
-		t.Fatalf("at 60 columns cost goes first, gateway stays: %s", medium)
+}
+
+func TestBoardListsEachSessionWithItsStateGlyph(t *testing.T) {
+	_, m := boardModel(t)
+	m.width, m.height = 120, 30
+	updateKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+	view := m.View()
+	glyphs := m.st.glyphs
+	for _, want := range []string{glyphs.attention, glyphs.open} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("board must show the glyph %q for the session states: %s", want, view)
+		}
 	}
-	narrow := m.boardView(40, 20)
-	if strings.Contains(narrow, "terminal") {
-		t.Fatalf("at 40 columns the gateway goes too: %s", narrow)
-	}
-	for _, line := range strings.Split(narrow, "\n") {
-		if lipgloss.Width(line) > 40 {
-			t.Fatalf("board line overflows 40 columns: %q", line)
+}
+
+func TestBoardFooterNamesTheKeys(t *testing.T) {
+	_, m := boardModel(t)
+	m.width, m.height = 120, 30
+	updateKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+	view := m.View()
+	for _, want := range []string{"ouvrir", "échap vider"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("board footer must name the key %q: %s", want, view)
 		}
 	}
 }
@@ -118,11 +152,21 @@ func TestFinishedSessionNotReadIsListedUnderReview(t *testing.T) {
 	f.overview = `[{"name":"gamma","state":"review","cost":0.1}]`
 	updateKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
 	view := m.View()
-	review := strings.Index(view, "À relire")
+	review := listRow(view, "À relire")
 	if review < 0 {
 		t.Fatalf("review group missing from board: %s", view)
 	}
-	if gamma := strings.Index(view, "gamma"); gamma < review {
+	if gamma := listRow(view, "gamma"); gamma < review {
 		t.Fatalf("gamma must sit under À relire, view: %s", view)
 	}
+}
+
+func listRow(view, name string) int {
+	for y, line := range strings.Split(view, "\n") {
+		list, _, _ := strings.Cut(line, "│")
+		if strings.Contains(list, name) {
+			return y
+		}
+	}
+	return -1
 }

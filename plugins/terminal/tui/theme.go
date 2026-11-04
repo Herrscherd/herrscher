@@ -254,7 +254,7 @@ type glyphSet struct {
 	expanded, branchMid, branchEnd, omitted, userBar                 string
 	ticked, unticked, shiftTab                                       string
 	enter, caret, reasonArrow, warn, note                            string
-	waiting, review                                                  string
+	waiting, review, erase                                           string
 	families                                                         map[string]string
 	spin                                                             []string
 }
@@ -279,7 +279,7 @@ func unicodeGlyphs() glyphSet {
 		selected: "▸", attention: "!", open: "○", railMark: "━", filet: "│", minus: "−",
 		expanded: "▾", branchMid: "├", branchEnd: "└", omitted: "⋯", userBar: "┃",
 		ticked: "[✓]", unticked: "[ ]", shiftTab: "⇧⇥",
-		enter: "⏎", caret: "▌", reasonArrow: "›", warn: "⚠", note: "↪", waiting: "◔", review: "◎",
+		enter: "⏎", caret: "▌", reasonArrow: "›", warn: "⚠", note: "↪", waiting: "◔", review: "◎", erase: "⌫",
 		families: map[string]string{
 			familyRead: "◇", familyWrite: "◈", familyRun: "▸", familySearch: "⌕", familyWeb: "⌖", familyAgent: "◆",
 		},
@@ -304,7 +304,7 @@ func asciiGlyphs() glyphSet {
 		selected: ">", attention: "!", open: "o", railMark: "=", filet: "|", minus: "-",
 		expanded: "v", branchMid: "+", branchEnd: "\\", omitted: asciiEllipsis, userBar: "|",
 		ticked: "[v]", unticked: "[ ]", shiftTab: "S-Tab",
-		enter: asciiEnterLabel, caret: "_", reasonArrow: ">", warn: "!", note: "+", waiting: "~", review: "?",
+		enter: asciiEnterLabel, caret: "_", reasonArrow: ">", warn: "!", note: "+", waiting: "~", review: "?", erase: "bksp",
 		families: map[string]string{
 			familyRead: "=", familyWrite: "+", familyRun: ">", familySearch: "?", familyWeb: "@", familyAgent: "*",
 		},

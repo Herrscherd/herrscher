@@ -3,6 +3,8 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -26,21 +28,31 @@ type SessionOverview struct {
 }
 
 const (
-	overviewWaiting = "waiting"
-	overviewWorking = "working"
-	overviewReview  = "review"
+	overviewWaiting  = "waiting"
+	overviewWorking  = "working"
+	overviewReview   = "review"
+	overviewArchived = "archived"
 )
 
 const (
-	boardAgeWidth   = 6
-	boardCostWidth  = 8
-	boardMarkWidth  = 2
-	boardGap        = 2
-	boardTextMin    = 16
-	boardNameMax    = 24
-	boardVendorMax  = 10
-	boardGatewayMax = 12
-	boardFooterRows = 1
+	boardListWidth    = 80
+	boardNameWidth    = 18
+	boardVendorWidth  = 15
+	boardGatewayWidth = 17
+	boardWhatIndent   = 5
+	boardGaugeCells   = 5
+	boardDetailCells  = 12
+	boardPercentWidth = 4
+	boardDetailRows   = 13
+	boardHeaderRows   = 1
+	boardSubtitle     = "terminal et Discord ensemble"
+	boardNoMatch      = "   (aucune session ne correspond)"
+	boardEmpty        = "  aucune session"
+	boardArchivedHint = "/resume pour les reprendre avec aperçu"
+	gatewayTerminal   = "terminal"
+	hintOpenApproval  = "ouvrir l’approbation"
+	hintReviewTurn    = "relire le diff du tour"
+	hintOpenPane      = "ouvrir · ⌃P en volet"
 )
 
 type boardGroupKey uint8
@@ -78,6 +90,8 @@ type boardRow struct {
 	overview SessionOverview
 	info     contracts.SessionInfo
 	group    boardGroupKey
+	unread   int
+	finished bool
 }
 
 type boardState struct {
@@ -85,6 +99,8 @@ type boardState struct {
 	idx   int
 	rows  []boardRow
 }
+
+type rowPaint func(lipgloss.Style) lipgloss.Style
 
 // ParseSessionOverviews reads the JSON list of overviews, an empty text meaning none.
 func ParseSessionOverviews(raw string) ([]SessionOverview, error) {
@@ -96,17 +112,16 @@ func ParseSessionOverviews(raw string) ([]SessionOverview, error) {
 	return out, err
 }
 
-func overviewGroup(state string, unread bool) boardGroupKey {
-	switch {
-	case state == overviewWaiting:
+func overviewGroup(state string) boardGroupKey {
+	switch state {
+	case overviewWaiting:
 		return groupWaiting
-	case state == overviewWorking:
+	case overviewWorking:
 		return groupWorking
-	case unread || state == overviewReview:
+	case overviewReview:
 		return groupReview
-	default:
-		return groupDone
 	}
+	return groupDone
 }
 
 func groupRank(key boardGroupKey) int {
@@ -145,6 +160,30 @@ func (m *model) refreshOverviews() {
 	m.overviews = overviews
 }
 
+func newBoardRow(overview SessionOverview, info contracts.SessionInfo, channelTab *tab) boardRow {
+	row := boardRow{overview: overview, info: info, group: overviewGroup(overview.State)}
+	if channelTab != nil {
+		row.unread = channelTab.unreadCount
+		row.finished = channelTab.finished
+	}
+	return row
+}
+
+func (m *model) sessionRow(channel string) boardRow {
+	info := m.infoForChannel(channel)
+	return newBoardRow(m.overviewFor(info.Name), info, m.tabs[channel])
+}
+
+func (m *model) archivedCount() int {
+	count := 0
+	for index := range m.overviews {
+		if m.overviews[index].State == overviewArchived {
+			count++
+		}
+	}
+	return count
+}
+
 func (m *model) boardCandidates() []boardRow {
 	if m.tm == nil {
 		return nil
@@ -158,12 +197,10 @@ func (m *model) boardCandidates() []boardRow {
 	for index := range m.overviews {
 		overview := &m.overviews[index]
 		info, ok := byName[overview.Name]
-		if !ok || info.ChannelID == "" {
+		if !ok || info.ChannelID == "" || info.Archived || overview.State == overviewArchived {
 			continue
 		}
-		tab := m.tabs[info.ChannelID]
-		unread := tab != nil && tab.unread
-		rows = append(rows, boardRow{overview: *overview, info: info, group: overviewGroup(overview.State, unread)})
+		rows = append(rows, newBoardRow(*overview, info, m.tabs[info.ChannelID]))
 	}
 	sort.SliceStable(rows, func(left, right int) bool {
 		if leftRank, rightRank := groupRank(rows[left].group), groupRank(rows[right].group); leftRank != rightRank {
@@ -222,7 +259,11 @@ func (m *model) moveBoard(delta int) {
 func (m *model) handleBoardKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.closeSurface()
+		if m.board.query != "" {
+			m.setBoardQuery("")
+		} else {
+			m.closeSurface()
+		}
 	case tea.KeyCtrlP:
 		m.openPanes()
 	case tea.KeyUp:
@@ -256,123 +297,269 @@ func (m *model) openBoardRow() tea.Cmd {
 	return m.openChannel(info)
 }
 
-func (m *model) boardView(width, height int) string {
-	lines := []string{m.st.accent.Render("Sessions") + m.st.dim.Render(fmt.Sprintf(" · %d", len(m.board.rows)))}
-	lines = append(lines, m.boardFilterLine())
-	layout := boardLayoutFor(m.board.rows, width)
-	cursorLine := 0
+func (m *model) boardScreenBody(width, height int) []string {
+	if width < panelMinWidth {
+		return m.boardList(width, height)
+	}
+	listWidth := min(boardListWidth, width-panelWidth-1)
+	return joinPanel(m.boardList(listWidth, height), m.boardPanel(), listWidth, height, m.st.dim.Render(m.st.glyphs.divider))
+}
+
+func (m *model) boardList(width, height int) []string {
+	lines, cursor := m.boardBlocks(width)
+	archived := m.archivedCount()
+	reserved := 0
+	if archived > 0 {
+		reserved = 2
+	}
+	body := padLines(windowLines(lines, cursor, height-boardHeaderRows-reserved), height-boardHeaderRows-reserved)
+	out := append([]string{m.boardHeader(width)}, body...)
+	if archived > 0 {
+		hint := fmt.Sprintf("   archivées : %d · %s", archived, boardArchivedHint)
+		out = append(out, "", truncate(m.st.dim.Render(hint), width))
+	}
+	return padLines(out, height)
+}
+
+func (m *model) boardHeader(width int) string {
+	line := m.st.accent.Bold(true).Render(" Sessions et agents") +
+		m.st.dim.Render("  "+boardSubtitle+" · filtre ") +
+		m.st.text.Render(m.board.query) +
+		m.st.accent.Render(m.st.glyphs.caret)
+	if m.board.query == "" {
+		line += m.st.dim.Render(" tape pour filtrer")
+	}
+	return truncate(line, width)
+}
+
+func (m *model) boardBlocks(width int) ([]string, int) {
+	if len(m.board.rows) == 0 {
+		if m.board.query != "" {
+			return []string{m.st.dim.Render(boardNoMatch)}, 0
+		}
+		return []string{m.st.dim.Render(boardEmpty)}, 0
+	}
+	var lines []string
+	cursor := 0
 	var last boardGroupKey
 	for index := range m.board.rows {
 		row := &m.board.rows[index]
 		if row.group != last {
 			last = row.group
-			lines = append(lines, m.st.accent.Render(groupLabel(row.group)))
+			if len(lines) > 0 {
+				lines = append(lines, "")
+			}
+			lines = append(lines, m.boardGroupHeader(row.group, m.groupCount(row.group), width))
 		}
-		if index == m.board.idx {
-			cursorLine = len(lines)
+		selected := index == m.board.idx
+		if selected {
+			cursor = len(lines)
 		}
-		lines = append(lines, m.boardRowLine(row, index == m.board.idx, width, layout))
+		lines = append(lines, m.boardRowLines(row, selected, width)...)
 	}
-	if len(m.board.rows) == 0 {
-		lines = append(lines, m.st.dim.Render("  aucune session"))
-	}
-	body := windowLines(lines, cursorLine, height-boardFooterRows)
-	footer := m.st.dim.Render("↑↓ choisir · ⏎ ouvrir · ⌃P volets · échap fermer")
-	return strings.Join(padLines(append(body, truncate(footer, width)), height), "\n")
+	return lines, cursor
 }
 
-func (m *model) boardFilterLine() string {
-	if m.board.query == "" {
-		return m.st.dim.Render("filtre : tapez pour filtrer")
+func (m *model) groupCount(group boardGroupKey) int {
+	count := 0
+	for index := range m.board.rows {
+		if m.board.rows[index].group == group {
+			count++
+		}
 	}
-	return m.st.dim.Render("filtre : ") + m.board.query
+	return count
 }
 
-func (m *model) boardRowLine(row *boardRow, selected bool, width int, layout boardLayout) string {
-	prefix := "  "
-	if selected {
-		prefix = m.st.accent.Render(m.st.glyphs.cursor) + " "
-	}
-	cells := []string{m.groupMark(row.group), padTo(truncate(row.overview.Name, layout.name), layout.name), padTo(truncate(row.overview.Vendor, layout.vendor), layout.vendor)}
-	if layout.showGateway {
-		cells = append(cells, padTo(truncate(strings.Join(row.overview.Gateways, "+"), layout.gateway), layout.gateway))
-	}
-	cells = append(cells, padTo(overviewAge(row.overview.LastTs, time.Now()), boardAgeWidth))
-	if layout.showCost {
-		cells = append(cells, padTo(formatCost(row.overview.Cost), boardCostWidth))
-	}
-	text := strings.ReplaceAll(row.overview.LastText, "\n", " ")
-	line := prefix + strings.Join(cells, strings.Repeat(" ", boardGap)) + strings.Repeat(" ", boardGap) + m.st.dim.Render(truncate(text, width-layout.fixedWidth()))
-	return truncate(line, width)
-}
-
-func (m *model) groupMark(group boardGroupKey) string {
+func (m *model) groupStyle(group boardGroupKey) lipgloss.Style {
 	switch group {
 	case groupWorking:
-		return padTo(m.st.spinner.Render(m.st.glyphs.tool), boardMarkWidth)
+		return m.st.accent
 	case groupWaiting:
-		return padTo(m.st.warn.Render(m.st.glyphs.waiting), boardMarkWidth)
+		return m.st.warn
 	case groupReview:
-		return padTo(m.st.accent.Render(m.st.glyphs.review), boardMarkWidth)
+		return m.st.green
 	case groupDone:
-		return padTo(m.st.dim.Render(m.st.glyphs.success), boardMarkWidth)
 	}
-	return padTo("", boardMarkWidth)
+	return m.st.dim
 }
 
-type boardLayout struct {
-	name, vendor, gateway int
-	showGateway, showCost bool
+func (m *model) boardGroupHeader(group boardGroupKey, count, width int) string {
+	head := m.groupStyle(group).Bold(true).Render(" "+groupLabel(group)) + m.st.dim.Render(fmt.Sprintf(" %d ", count))
+	fill := max(0, width-lipgloss.Width(head))
+	return truncate(head+m.st.dim.Render(strings.Repeat(m.st.glyphs.ruleChar, fill)), width)
 }
 
-func (l boardLayout) fixedWidth() int {
-	width := boardMarkWidth + boardGap + l.name + boardGap + l.vendor + boardGap + boardAgeWidth + boardGap
-	if l.showGateway {
-		width += l.gateway + boardGap
+func (m *model) paintFor(selected bool) rowPaint {
+	if !selected {
+		return func(style lipgloss.Style) lipgloss.Style { return style }
 	}
-	if l.showCost {
-		width += boardCostWidth + boardGap
-	}
-	return width
+	overlay := m.st.overlaySel
+	return func(style lipgloss.Style) lipgloss.Style { return style.Inherit(overlay) }
 }
 
-func boardLayoutFor(rows []boardRow, width int) boardLayout {
-	layout := boardLayout{
-		name:    widestColumn(rows, func(r *boardRow) string { return r.overview.Name }, boardNameMax),
-		vendor:  widestColumn(rows, func(r *boardRow) string { return r.overview.Vendor }, boardVendorMax),
-		gateway: widestColumn(rows, func(r *boardRow) string { return strings.Join(r.overview.Gateways, "+") }, boardGatewayMax),
+func (m *model) boardRowLines(row *boardRow, selected bool, width int) []string {
+	paint := m.paintFor(selected)
+	cursor := "   "
+	if selected {
+		cursor = " " + m.st.glyphs.prompt + " "
 	}
-	layout.showGateway, layout.showCost = true, true
-	if layout.fixedWidth()+boardTextMin <= width {
-		return layout
+	mark, markStyle := m.sessionMark(row)
+	nameStyle := m.st.text
+	switch {
+	case selected:
+		nameStyle = m.st.strong
+	case row.group == groupDone:
+		nameStyle = m.st.dim
 	}
-	layout.showCost = false
-	if layout.fixedWidth()+boardTextMin <= width {
-		return layout
-	}
-	layout.showGateway = false
-	return layout
+	gateway := strings.Join(row.overview.Gateways, "+")
+	head := paint(m.st.accent.Bold(true)).Render(cursor) +
+		paint(markStyle).Render(mark) +
+		paint(m.st.dim).Render(" ") +
+		paint(nameStyle).Render(padTo(truncate(row.overview.Name, boardNameWidth), boardNameWidth)) +
+		paint(m.st.text).Render(padTo(truncate(row.overview.Vendor, boardVendorWidth), boardVendorWidth)) +
+		paint(gatewayStyle(m.st, gateway)).Render(padTo(truncate(gateway, boardGatewayWidth), boardGatewayWidth))
+	first := head + paint(m.st.dim).Render(truncate(sessionWhere(row.info), max(0, width-lipgloss.Width(head))))
+
+	ratio := contextRatio(row.info.ContextTokens, contextLimit(row.info.Vendor))
+	right := paint(m.st.dim).Render(overviewAge(row.overview.LastTs, time.Now())+" · ") +
+		paint(m.st.warn).Render(formatCost(row.overview.Cost)) +
+		paint(m.st.dim).Render(" ") +
+		m.gaugeCells(ratio, boardGaugeCells, paint) +
+		paint(m.tierStyle(ratio)).Render(fmt.Sprintf(" %*s ", boardPercentWidth, contextPercent(row.info.ContextTokens, contextLimit(row.info.Vendor))))
+	what := strings.ReplaceAll(row.overview.LastText, "\n", " ")
+	second := paint(m.st.dim).Render(strings.Repeat(" ", boardWhatIndent)) +
+		paint(m.sessionTone(row)).Render(truncate(what, width-boardWhatIndent-lipgloss.Width(right)-1))
+	gap := max(1, width-lipgloss.Width(second)-lipgloss.Width(right))
+	second += paint(m.st.dim).Render(strings.Repeat(" ", gap)) + right
+	return []string{truncate(first, width), truncate(second, width)}
 }
 
-func widestColumn(rows []boardRow, text func(*boardRow) string, limit int) int {
-	widest := 0
-	for index := range rows {
-		if w := lipgloss.Width(text(&rows[index])); w > widest {
-			widest = w
+func gatewayStyle(styles uiStyles, gateway string) lipgloss.Style {
+	if gateway == gatewayTerminal {
+		return styles.dim
+	}
+	return styles.violet
+}
+
+func sessionWhere(info contracts.SessionInfo) string {
+	if info.Project != "" {
+		return info.Project
+	}
+	if info.Dir != "" {
+		return filepath.Base(info.Dir)
+	}
+	return ""
+}
+
+func (m *model) sessionMark(row *boardRow) (string, lipgloss.Style) {
+	switch {
+	case row.overview.State == overviewWaiting:
+		return m.st.glyphs.attention, m.st.warn.Bold(true)
+	case row.overview.State == overviewWorking:
+		return m.spinFrame(), m.st.spinner
+	case row.unread > 0:
+		return m.st.glyphs.unread, m.st.accent.Bold(true)
+	case row.group == groupReview || row.finished:
+		return m.st.glyphs.success, m.st.green.Bold(true)
+	}
+	return m.st.glyphs.open, m.st.dim
+}
+
+func (m *model) sessionTone(row *boardRow) lipgloss.Style {
+	switch {
+	case row.overview.State == overviewWaiting:
+		return m.st.warn
+	case row.unread > 0:
+		return m.st.accent
+	case row.group == groupReview:
+		return m.st.green
+	}
+	return m.st.dim
+}
+
+func (m *model) tierStyle(ratio float64) lipgloss.Style {
+	switch {
+	case ratio >= ctxAlarm:
+		return m.st.red
+	case ratio >= ctxWarn:
+		return m.st.warn
+	}
+	return m.st.accent
+}
+
+func (m *model) gaugeCells(ratio float64, cells int, paint rowPaint) string {
+	filled := max(0, min(cells, int(math.Round(ratio*float64(cells)))))
+	return paint(m.tierStyle(ratio)).Render(strings.Repeat(m.st.glyphs.gaugeFull, filled)) +
+		paint(m.st.dim).Render(strings.Repeat(m.st.glyphs.gaugeEmpty, cells-filled))
+}
+
+func (m *model) boardFooter(width int) string {
+	keys := strings.Join([]string{
+		"↑↓ choisir",
+		m.st.glyphs.enter + " ouvrir",
+		"lettres filtrer",
+		m.st.glyphs.erase + " effacer",
+		"échap vider",
+		"⌃P en volets",
+	}, " · ")
+	sessions, vendors, gateways := m.boardTotals()
+	counts := fmt.Sprintf("%d %s · %d %s · %d %s ",
+		sessions, choosePlural(sessions, "session", "sessions"),
+		vendors, choosePlural(vendors, "vendeur", "vendeurs"),
+		gateways, choosePlural(gateways, "passerelle", "passerelles"))
+	return truncate(joinRow(width, m.st.dim.Render(" "+keys), m.st.dim.Render(counts)), width)
+}
+
+func (m *model) boardTotals() (int, int, int) {
+	vendors := make(map[string]bool)
+	gateways := make(map[string]bool)
+	for index := range m.board.rows {
+		overview := &m.board.rows[index].overview
+		if overview.Vendor != "" {
+			vendors[overview.Vendor] = true
+		}
+		for _, gateway := range overview.Gateways {
+			gateways[gateway] = true
 		}
 	}
-	if widest > limit {
-		return limit
-	}
-	return widest
+	return len(m.board.rows), len(vendors), len(gateways)
 }
 
-func overviewAge(lastTs string, now time.Time) string {
-	started, err := time.Parse(time.RFC3339Nano, lastTs)
-	if err != nil {
-		return "-"
+func (m *model) boardPanel() []string {
+	var detail []string
+	if index := m.board.idx; index >= 0 && index < len(m.board.rows) {
+		detail = m.boardDetail(&m.board.rows[index])
 	}
-	return formatDuration(now.Sub(started))
+	return append(padLines(detail, boardDetailRows), m.panelLines()...)
+}
+
+func (m *model) boardDetail(row *boardRow) []string {
+	mark, markStyle := m.sessionMark(row)
+	gateway := strings.Join(row.overview.Gateways, "+")
+	ratio := contextRatio(row.info.ContextTokens, contextLimit(row.info.Vendor))
+	return []string{
+		" " + markStyle.Render(mark) + " " + m.st.strong.Render(row.overview.Name),
+		strings.Repeat(" ", panelIndent) + m.sessionTone(row).Render(row.overview.LastText),
+		"",
+		m.panelRow("vendeur", m.st.text.Render(row.overview.Vendor)),
+		m.panelRow("passerelle", gatewayStyle(m.st, gateway).Render(gateway)),
+		m.panelRow("où", m.st.text.Render(sessionWhere(row.info))),
+		m.panelRow("coût", m.st.warn.Render(formatCost(row.overview.Cost))),
+		m.panelRow("contexte", m.gaugeCells(ratio, boardDetailCells, func(style lipgloss.Style) lipgloss.Style { return style })+
+			m.tierStyle(ratio).Render(" "+contextPercent(row.info.ContextTokens, contextLimit(row.info.Vendor)))),
+		"",
+		strings.Repeat(" ", panelIndent) + m.st.dim.Render(m.st.glyphs.enter+" "+m.boardHint(row)),
+	}
+}
+
+func (m *model) boardHint(row *boardRow) string {
+	switch {
+	case row.overview.State == overviewWaiting:
+		return hintOpenApproval
+	case row.group == groupReview:
+		return hintReviewTurn
+	}
+	return hintOpenPane
 }
 
 func (m *model) overviewFor(name string) SessionOverview {
@@ -381,6 +568,14 @@ func (m *model) overviewFor(name string) SessionOverview {
 		return SessionOverview{}
 	}
 	return m.overviews[index]
+}
+
+func overviewAge(lastTs string, now time.Time) string {
+	started, err := time.Parse(time.RFC3339Nano, lastTs)
+	if err != nil {
+		return "-"
+	}
+	return formatDuration(now.Sub(started))
 }
 
 func clampTo(index, count int) int {

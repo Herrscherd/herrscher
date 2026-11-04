@@ -1982,7 +1982,7 @@ func (m *model) View() string {
 		return m.diffScreen()
 	}
 	if m.surface != surfaceChat {
-		return m.buildFrame().render(m.surfaceBody())
+		return m.surfaceScreen()
 	}
 	body := m.vp.View()
 	if side := m.sidebarPane(m.vp.Height); side != nil {

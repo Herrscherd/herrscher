@@ -1380,9 +1380,12 @@ func OpenOn(session, text string) Option {
 // Run starts the TUI bound to the given gateway backend, blocking until the user
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
-func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) error {
+func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) (runErr error) {
 	model := newModel(backend)
 	model.ctx = ctx
+	defer func() {
+		runErr = errors.Join(runErr, model.releaseDrafts())
+	}()
 	model.loadTheme(filepath.Dir(config.DefaultPath()), lipgloss.HasDarkBackground)
 	model.keys = &keyLog{}
 	model.bar.file = model.terminalConfigPath()
@@ -1420,9 +1423,8 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 			}
 		}
 	}()
-	_, runErr := program.Run()
+	_, runErr = program.Run()
 	cancel()
-	runErr = errors.Join(runErr, model.releaseDrafts())
 	if err := writeStdout(enhancedKeysOff); err != nil {
 		return errors.Join(runErr, fmt.Errorf("disable enhanced keys: %w", err))
 	}

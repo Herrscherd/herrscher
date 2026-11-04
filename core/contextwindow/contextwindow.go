@@ -2,6 +2,8 @@
 package contextwindow
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -24,10 +26,31 @@ func vendorLimit(vendor string) (int, bool) {
 	return 0, false
 }
 
+var errInvalidOverride = errors.New("not a positive integer")
+
+func parseOverride(raw string) (int, error) {
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit <= 0 {
+		return 0, errInvalidOverride
+	}
+	return limit, nil
+}
+
+// CheckOverride reports why a raw HERRSCHER_CONTEXT_LIMIT value cannot be used, nil when it is empty or valid.
+func CheckOverride(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	if _, err := parseOverride(raw); err != nil {
+		return fmt.Errorf("%q: %w", raw, err)
+	}
+	return nil
+}
+
 // Limit returns the context window size for a vendor, HERRSCHER_CONTEXT_LIMIT overriding it when positive.
 func Limit(vendor string) int {
-	if v := os.Getenv(envLimit); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+	if raw := os.Getenv(envLimit); raw != "" {
+		if n, err := parseOverride(raw); err == nil {
 			return n
 		}
 	}

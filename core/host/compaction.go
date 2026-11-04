@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/compactwire"
+	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -54,9 +56,13 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string) (com
 		}
 		policy.percent = *percent
 	}
+	if err := config.ValidateCompactStack(names); err != nil {
+		return compactionPolicy{}, fmt.Errorf("compactStack: %w", err)
+	}
 	if len(names) > 0 {
 		policy.names = names
 	}
+	warnInvalidContextLimit(policy.warn, os.Getenv(contextwindow.EnvVar()))
 	backends := contracts.Default.Backends()
 	for index := range backends {
 		if backends[index].Manifest.Capabilities.Compactor {
@@ -74,6 +80,12 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string) (com
 		policy.plugins[name] = compactor
 	}
 	return policy, nil
+}
+
+func warnInvalidContextLimit(warn func(format string, args ...any), raw string) {
+	if err := contextwindow.CheckOverride(raw); err != nil {
+		warn("herrscher serve: %s ignored, %v: the vendor default window applies\n", contextwindow.EnvVar(), err)
+	}
 }
 
 func customStage(ctx context.Context, name string) (contracts.Compactor, error) {
@@ -223,8 +235,30 @@ func (d *sessionDriver) runCompactNow(ctx context.Context, instruction string) {
 	}
 }
 
-func (d *sessionDriver) requestCompaction(instruction string, origin contracts.Conversation) bool {
-	return d.enqueue(queued{ev: contracts.Event{T: eventCompactNow, Text: instruction}, origin: origin})
+func (d *sessionDriver) requestCompaction(instruction string, origin contracts.Conversation) (bool, bool) {
+	d.compactMu.Lock()
+	if d.compactPending {
+		d.compactInstruction = instruction
+		d.compactMu.Unlock()
+		return true, true
+	}
+	d.compactPending = true
+	d.compactInstruction = instruction
+	d.compactMu.Unlock()
+	if d.enqueue(queued{ev: contracts.Event{T: eventCompactNow}, origin: origin}) {
+		return false, true
+	}
+	d.takeCompactInstruction()
+	return false, false
+}
+
+func (d *sessionDriver) takeCompactInstruction() string {
+	d.compactMu.Lock()
+	defer d.compactMu.Unlock()
+	instruction := d.compactInstruction
+	d.compactPending = false
+	d.compactInstruction = ""
+	return instruction
 }
 
 type bridgeCompactor struct {

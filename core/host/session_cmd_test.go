@@ -40,8 +40,8 @@ func TestCompactQueuesAManualCompactionWithItsInstruction(t *testing.T) {
 	if got.ev.T != eventCompactNow {
 		t.Fatalf("queued event = %q, want %q", got.ev.T, eventCompactNow)
 	}
-	if got.ev.Text != "garde les décisions" {
-		t.Fatalf("queued instruction = %q, want the typed one", got.ev.Text)
+	if instruction := sessions.lookup("api").takeCompactInstruction(); instruction != "garde les décisions" {
+		t.Fatalf("queued instruction = %q, want the typed one", instruction)
 	}
 	if got.origin.Gateway != "terminal" {
 		t.Fatalf("origin gateway = %q, want terminal", got.origin.Gateway)
@@ -67,5 +67,37 @@ func TestCompactUnknownSession(t *testing.T) {
 
 	if _, err := compactSession(context.Background(), store, sessions, input); err == nil {
 		t.Fatal("compactSession on an unknown session must fail")
+	}
+}
+
+func TestCompactRequestsForOneSessionAreMerged(t *testing.T) {
+	store, sessions, queue := compactCmdFixture(t, vendorClaude)
+	ctx := context.Background()
+	request := func(instruction string) contracts.Input {
+		return contracts.Input{Args: map[string]string{paramName: "api", "instruction": instruction}}
+	}
+	if out, err := compactSession(ctx, store, sessions, request("first")); err != nil || out != "" {
+		t.Fatalf("first request = %q, %v, want no output and no error", out, err)
+	}
+	out, err := compactSession(ctx, store, sessions, request("latest"))
+	if err != nil {
+		t.Fatalf("second request: %v", err)
+	}
+	if out == "" {
+		t.Fatal("second request was queued again without telling the operator it was merged")
+	}
+	if n := len(queue); n != 1 {
+		t.Fatalf("queue holds %d compactions for one session, want 1", n)
+	}
+	<-queue
+	driver := sessions.lookup("api")
+	if got := driver.takeCompactInstruction(); got != "latest" {
+		t.Fatalf("instruction taken = %q, want the most recent one %q", got, "latest")
+	}
+	if _, err := compactSession(ctx, store, sessions, request("after")); err != nil {
+		t.Fatalf("request after the queued one ran: %v", err)
+	}
+	if n := len(queue); n != 1 {
+		t.Fatalf("a request after the pending one was taken queued %d items, want 1", n)
 	}
 }

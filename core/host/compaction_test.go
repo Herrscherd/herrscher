@@ -281,3 +281,25 @@ func TestNoPortWarningIsWrittenOnce(t *testing.T) {
 		t.Fatalf("the no-port warning was written %d times, want once", len(warned))
 	}
 }
+
+func TestCompactStackRefusesDuplicateStages(t *testing.T) {
+	for _, names := range [][]string{{contracts.CompactStageBackend, contracts.CompactStageBackend}, {"stage", "stage"}} {
+		if _, err := newCompactionPolicy(context.Background(), nil, names); err == nil {
+			t.Fatalf("newCompactionPolicy(%v) accepted a stage listed twice", names)
+		}
+	}
+}
+
+func TestInvalidContextLimitIsWarnedAboutOnce(t *testing.T) {
+	warnings := 0
+	warn := func(string, ...any) { warnings++ }
+	warnInvalidContextLimit(warn, "many")
+	if warnings != 1 {
+		t.Fatalf("invalid HERRSCHER_CONTEXT_LIMIT wrote %d warnings, want 1", warnings)
+	}
+	warnInvalidContextLimit(warn, "")
+	warnInvalidContextLimit(warn, "12345")
+	if warnings != 1 {
+		t.Fatalf("empty or valid HERRSCHER_CONTEXT_LIMIT wrote warnings: %d total", warnings)
+	}
+}

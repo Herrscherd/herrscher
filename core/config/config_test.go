@@ -78,3 +78,34 @@ func checkCompactAt(t *testing.T, body string, want int, wantErr bool) {
 		t.Fatalf("CompactAt = %v, want %d", cfg.CompactAt, want)
 	}
 }
+
+func TestValidateCompactStack(t *testing.T) {
+	cases := []struct {
+		name    string
+		stack   []string
+		wantErr bool
+	}{
+		{name: "empty stack is accepted", stack: nil},
+		{name: "backend then plugins is accepted", stack: []string{"backend", "summarize"}},
+		{name: "backend listed twice is refused", stack: []string{"backend", "backend"}, wantErr: true},
+		{name: "plugin listed twice is refused", stack: []string{"a", "b", "a"}, wantErr: true},
+		{name: "blank name is refused", stack: []string{"backend", " "}, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := ValidateCompactStack(tc.stack); (err != nil) != tc.wantErr {
+				t.Fatalf("ValidateCompactStack(%v) = %v, want error %t", tc.stack, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestLoadRefusesDuplicateCompactStack(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"compactStack": ["backend", "backend"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("Load accepted a compactStack listing backend twice")
+	}
+}

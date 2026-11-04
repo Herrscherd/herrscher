@@ -34,3 +34,12 @@ func TestLimitIgnoresInvalidEnv(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckOverrideReportsOnlyInvalidValues(t *testing.T) {
+	cases := map[string]bool{"": false, "12345": false, "0": true, "-3": true, "many": true}
+	for raw, wantErr := range cases {
+		if err := CheckOverride(raw); (err != nil) != wantErr {
+			t.Fatalf("CheckOverride(%q) = %v, want error %t", raw, err, wantErr)
+		}
+	}
+}

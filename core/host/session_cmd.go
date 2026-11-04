@@ -200,8 +200,12 @@ func compactSession(_ context.Context, store *state.State, sessions *sessionTabl
 	if !driver.compactSupported() {
 		return "", fmt.Errorf("session %q runs %q: %w", name, driver.vendor, errCompactUnsupported)
 	}
-	if !driver.requestCompaction(input.Get("instruction"), contracts.Conversation{Gateway: input.Get("origin")}) {
+	merged, accepted := driver.requestCompaction(input.Get("instruction"), contracts.Conversation{Gateway: input.Get("origin")})
+	if !accepted {
 		return "", fmt.Errorf("session %q: %w", name, errCompactQueueFull)
+	}
+	if merged {
+		return fmt.Sprintf("compaction of %q already queued: merged into it, the most recent instruction is kept", name), nil
 	}
 	return "", nil
 }

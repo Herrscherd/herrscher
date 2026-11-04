@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
@@ -97,7 +98,31 @@ func Load(path string) (Config, error) {
 			return cfg, fmt.Errorf("parse %s: compactAt: %w", path, err)
 		}
 	}
+	if err := ValidateCompactStack(cfg.CompactStack); err != nil {
+		return cfg, fmt.Errorf("parse %s: compactStack: %w", path, err)
+	}
 	return cfg, nil
+}
+
+var (
+	errEmptyStage     = errors.New("a stage name is empty")
+	errDuplicateStage = errors.New("a stage name is listed twice")
+)
+
+// ValidateCompactStack refuses an empty stage name and a name listed twice, the
+// stack running each stage once in the order given.
+func ValidateCompactStack(stack []string) error {
+	seen := make(map[string]bool, len(stack))
+	for _, name := range stack {
+		if strings.TrimSpace(name) == "" {
+			return errEmptyStage
+		}
+		if seen[name] {
+			return fmt.Errorf("%q: %w", name, errDuplicateStage)
+		}
+		seen[name] = true
+	}
+	return nil
 }
 
 func stripComments(data []byte) []byte {

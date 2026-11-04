@@ -97,11 +97,14 @@ type sessionDriver struct {
 
 	gate budgetGate
 
-	vendor       string
-	compaction   compactionPolicy
-	percentOf    func() int
-	turnReading  int
-	compactSpent bool
+	vendor             string
+	compaction         compactionPolicy
+	percentOf          func() int
+	turnReading        int
+	compactSpent       bool
+	compactMu          sync.Mutex
+	compactPending     bool
+	compactInstruction string
 }
 
 type queued struct {
@@ -546,7 +549,7 @@ func (d *sessionDriver) pump(ctx context.Context) {
 				return
 			}
 			if item.ev.T == eventCompactNow {
-				d.runCompactNow(ctx, item.ev.Text)
+				d.runCompactNow(ctx, d.takeCompactInstruction())
 				d.releaseTurn()
 				continue
 			}

@@ -62,3 +62,20 @@ func TestPumpExitsOnTeardownWhileAClaimIsHeld(t *testing.T) {
 		t.Fatal("a pump blocked by a rewind claim must still exit on teardown")
 	}
 }
+
+func TestInTurnFollowsTheTurnToken(t *testing.T) {
+	driver := newSessionDriver("s1", nil, nil, nil)
+	if driver.inTurn() {
+		t.Fatal("an idle driver must not report a turn")
+	}
+	if !driver.enterTurn(t.Context()) {
+		t.Fatal("entering a turn on an idle driver must succeed")
+	}
+	if !driver.inTurn() {
+		t.Fatal("a driver holding its turn token must report a turn")
+	}
+	driver.releaseTurn()
+	if driver.inTurn() {
+		t.Fatal("a released turn token must not report a turn")
+	}
+}

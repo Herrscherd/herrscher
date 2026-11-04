@@ -55,7 +55,7 @@ func (m *model) composeFrame(panels bool, room int) frame {
 	if panels {
 		stacked.below = append(stacked.below, m.sidePanelLines()...)
 	}
-	surface := m.approvalLines(time.Now())
+	surface := m.approvalLines(time.Now(), room)
 	if m.planMenu != nil {
 		surface = appendLines(surface, m.planMenuView())
 	}

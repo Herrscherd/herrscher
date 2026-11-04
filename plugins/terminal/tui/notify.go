@@ -53,6 +53,7 @@ const (
 	toastTTL       = 6 * time.Second
 	toastTick      = time.Second
 	toastWidth     = 56
+	toastBandBelow = 2 * toastWidth
 	toastMinimum   = 24
 	toastColumn    = 1
 	toastRow       = 2
@@ -208,7 +209,7 @@ func (m *model) toastView() string {
 	if m.toast.title == "" {
 		return ""
 	}
-	width := max(toastMinimum, min(toastWidth, m.width-toastFrameCols))
+	width := m.toastBoxWidth()
 	inner := width - toastChrome
 	edge := m.st.dim
 	titleStyle := m.st.green
@@ -229,6 +230,13 @@ func (m *model) toastView() string {
 		lines[i] = ansi.Truncate(lines[i], m.width, "")
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m *model) toastBoxWidth() int {
+	if m.width < toastBandBelow {
+		return max(toastMinimum, m.width-toastFrameCols)
+	}
+	return max(toastMinimum, min(toastWidth, m.width-toastFrameCols))
 }
 
 func toastTop(edge lipgloss.Style, title, age string, width int) string {
@@ -266,7 +274,7 @@ func overlayAt(base, block string, row, column int) string {
 
 func (m *model) overlayToast(rendered string) string {
 	block := m.toastView()
-	if block == "" {
+	if block == "" || strings.Count(block, "\n")+1 > m.vp.Height {
 		return rendered
 	}
 	column := max(0, m.width-lipgloss.Width(firstLine(block))-toastColumn)

@@ -2,13 +2,15 @@ package approval
 
 const (
 	keyFilePath = "file_path"
+	toolBash    = "Bash"
+	toolRead    = "Read"
 )
 
 func subjectKeys(tool string) []string {
 	switch tool {
-	case "Bash":
+	case toolBash:
 		return []string{"command"}
-	case "Edit", "Write", "Read":
+	case "Edit", "Write", toolRead:
 		return []string{keyFilePath}
 	case "NotebookEdit":
 		return []string{"notebook_path", keyFilePath}

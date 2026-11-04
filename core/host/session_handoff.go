@@ -56,7 +56,7 @@ func newHandoffLimiter(now func() time.Time) *handoffLimiter {
 	return &handoffLimiter{now: now, inFlight: make(map[string]bool), granted: make(map[string][]time.Time)}
 }
 
-func (l *handoffLimiter) acquire(tree string) (func(created bool), error) {
+func (l *handoffLimiter) acquire(tree string) (func(), error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.inFlight[tree] {
@@ -67,14 +67,12 @@ func (l *handoffLimiter) acquire(tree string) (func(created bool), error) {
 	if len(l.granted[tree]) >= handoffAgentPerHour {
 		return nil, errHandoffQuota
 	}
+	l.granted[tree] = append(l.granted[tree], now)
 	l.inFlight[tree] = true
-	return func(created bool) {
+	return func() {
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		delete(l.inFlight, tree)
-		if created {
-			l.granted[tree] = append(l.granted[tree], now)
-		}
 	}, nil
 }
 
@@ -91,20 +89,6 @@ func (l *handoffLimiter) forgetIdle(now time.Time) {
 	}
 }
 
-func sessionTreeRoot(store *state.State, name string) string {
-	seen := make(map[string]bool)
-	current := name
-	for !seen[current] {
-		seen[current] = true
-		session, ok := store.FindSession(current)
-		if !ok || session.Parent == "" {
-			return current
-		}
-		current = session.Parent
-	}
-	return current
-}
-
 func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, instID string, seedCoord *coordinatorSlot) (contracts.Cmd, error) {
 	create, ok := findCommand(managerCmds, nsSession, "create")
 	if !ok {
@@ -116,7 +100,7 @@ func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions
 			return ok
 		},
 		root: func(name string) string {
-			return sessionTreeRoot(store, name)
+			return state.TreeRoot(store.SnapshotSessions(), name)
 		},
 		brief: func(ctx context.Context, source string) (string, error) {
 			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTask, "timeout": handoffBriefTimeout}}
@@ -145,7 +129,7 @@ func sessionHandoffVerb(deps handoffDeps) contracts.Cmd {
 		Help("start a new session whose first message is a brief this session writes; without --to it creates nothing and says how to open this session instead. "+
 			"This is not the ⟢ handoff: trailer, which passes a task to another agent inside the coordination flow. "+
 			"An agent caller attaches the new session under its source, cannot pick --under or --channel_id, and gets at most "+
-			"3 handoffs an hour for its whole session tree, one at a time; the operator has no such bound. "+
+			"3 handoffs an hour for its whole session tree, one at a time, and a handoff counts once its brief starts, even if it then fails; the operator has no such bound. "+
 			"This bound is a local guard, not a security boundary: the operator socket is reachable by the same user, "+
 			"and its state resets when the daemon restarts").
 		Param(paramName, "session to hand off (default: the calling session)", false).
@@ -200,12 +184,12 @@ func checkHandoffTargets(input contracts.Input, byAgent bool) error {
 }
 
 func (d handoffDeps) handOffAsAgent(ctx context.Context, caller, source, target string, input contracts.Input) (string, error) {
-	settle, err := d.limit.acquire(d.root(caller))
+	release, err := d.limit.acquire(d.root(caller))
 	if err != nil {
 		return "", err
 	}
+	defer release()
 	reply, brief, err := d.open(ctx, source, target, source, input)
-	settle(err == nil)
 	if err != nil {
 		return "", err
 	}

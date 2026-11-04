@@ -11,10 +11,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 )
 
-var (
-	errTestBrief  = errors.New("brief unavailable")
-	errTestCreate = errors.New("create refused")
-)
+var errTestBrief = errors.New("brief unavailable")
 
 type handoffRecord struct {
 	briefed  []string
@@ -201,40 +198,30 @@ func TestAgentChildHandoffSharesTheQuotaOfItsTree(t *testing.T) {
 	}
 }
 
-func TestAgentFailedHandoffsDoNotUseASlot(t *testing.T) {
+func TestAgentRefusedBeforeTheBriefIsFreeButAFailedBriefCounts(t *testing.T) {
 	rec := &handoffRecord{}
 	deps := fakeHandoff(rec, fixedClock(), "alpha")
-	briefFailures := handoffAgentPerHour
 	deps.brief = func(context.Context, string) (string, error) {
-		if briefFailures > 0 {
-			briefFailures--
-			return "", errTestBrief
-		}
-		return "BRIEF", nil
-	}
-	createFailures := 1
-	deps.create = func(_ context.Context, in contracts.Input) (string, error) {
-		if createFailures > 0 {
-			createFailures--
-			return "", errTestCreate
-		}
-		rec.created = append(rec.created, in)
-		return "created " + in.Get(paramName), nil
+		return "", errTestBrief
 	}
 	ctx := withSessionPrincipal(context.Background(), "alpha")
 	for i := range handoffAgentPerHour + 1 {
-		_, err := runHandoff(ctx, deps, map[string]string{paramTo: "fail" + string(rune('a'+i))})
-		if !errors.Is(err, errTestBrief) && !errors.Is(err, errTestCreate) {
-			t.Fatalf("failing attempt %d: err = %v, want the brief or create failure", i+1, err)
+		_, err := runHandoff(ctx, deps, map[string]string{paramUnder: "cat", paramTo: "refused" + string(rune('a'+i))})
+		if !errors.Is(err, errHandoffAgentTargets) {
+			t.Fatalf("refused validation %d: err = %v, want errHandoffAgentTargets, which costs no slot", i+1, err)
 		}
 	}
 	for i := range handoffAgentPerHour {
-		if _, err := runHandoff(ctx, deps, map[string]string{paramTo: "ok" + string(rune('a'+i))}); err != nil {
-			t.Fatalf("handoff %d after failures: %v", i+1, err)
+		_, err := runHandoff(ctx, deps, map[string]string{paramTo: "fail" + string(rune('a'+i))})
+		if !errors.Is(err, errTestBrief) {
+			t.Fatalf("failing brief %d: err = %v, want errTestBrief", i+1, err)
 		}
 	}
 	if _, err := runHandoff(ctx, deps, map[string]string{paramTo: "over"}); !errors.Is(err, errHandoffQuota) {
-		t.Fatalf("handoff beyond the quota: err = %v, want errHandoffQuota", err)
+		t.Fatalf("after %d started briefs, err = %v, want errHandoffQuota", handoffAgentPerHour, err)
+	}
+	if len(rec.created) != 0 {
+		t.Fatalf("no session may be created when every brief failed, got %d", len(rec.created))
 	}
 }
 
@@ -273,17 +260,17 @@ func TestAgentConcurrentHandoffInTheSameTreeIsRefused(t *testing.T) {
 func TestHandoffLimiterForgetsTreesIdleForAnHour(t *testing.T) {
 	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 	limit := newHandoffLimiter(func() time.Time { return now })
-	settle, err := limit.acquire("alpha")
+	release, err := limit.acquire("alpha")
 	if err != nil {
 		t.Fatal(err)
 	}
-	settle(true)
+	release()
 	now = now.Add(handoffWindow)
-	settle, err = limit.acquire("beta")
+	release, err = limit.acquire("beta")
 	if err != nil {
 		t.Fatal(err)
 	}
-	settle(false)
+	release()
 	if _, kept := limit.granted["alpha"]; kept {
 		t.Fatal("a tree whose handoffs are all older than the window must be forgotten")
 	}

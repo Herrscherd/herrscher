@@ -18,17 +18,12 @@ import (
 )
 
 const (
-	keyCtrlC     = "ctrl+c"
-	keyCtrlD     = "ctrl+d"
-	keyCtrlJ     = "ctrl+j"
 	keyBackspace = "backspace"
-	keyDown      = "down"
 	keyEnter     = "enter"
 	keyEsc       = "esc"
 	keyPgDown    = "pgdown"
 	keyPgUp      = "pgup"
 	keySpace     = " "
-	keyUp        = "up"
 )
 
 const (
@@ -272,6 +267,7 @@ func (m *model) handleDiffNoteKey(msg tea.KeyMsg) tea.Cmd {
 
 func diffNoteRuns() (map[keyAction]keyRun, error) {
 	return dispatchOf(
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
 		bind[keyRun](actDiffDismiss, stepKey(func(app *model) { app.diff.dlg = dialogNone })),
 		bind[keyRun](actDiffSendNote, cmdKey((*model).sendDiffNote)),
 	)
@@ -290,6 +286,7 @@ func (m *model) handleDiffCommitKey(msg tea.KeyMsg) tea.Cmd {
 
 func diffDialogRuns() (map[keyAction]keyRun, error) {
 	return dispatchOf(
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
 		bind[keyRun](actDiffDismiss, stepKey(func(app *model) { app.diff.dlg = dialogNone })),
 		bind[keyRun](actDiffCommit, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(false) })),
 		bind[keyRun](actDiffPR, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(true) })),
@@ -308,6 +305,7 @@ func (m *model) handleDiffMessageEdit(msg tea.KeyMsg) tea.Cmd {
 
 func diffMessageRuns() (map[keyAction]keyRun, error) {
 	return dispatchOf(
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
 		bind[keyRun](actDiffStopEdit, stepKey(func(app *model) { app.diff.editing = false })),
 		bind[keyRun](actDiffCommit, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(false) })),
 		bind[keyRun](actNewline, stepKey(func(app *model) { app.diff.message += "\n" })),

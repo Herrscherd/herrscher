@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -69,7 +70,84 @@ func TestDispatchTablesRefuseDuplicateBindings(t *testing.T) {
 	}
 }
 
-func TestEveryDefaultBindingHasAHandlerOrIsListedWithoutEffect(t *testing.T) {
+func handlersByContext(tables *dispatchTables) map[keyContext][]keyAction {
+	list := keysOf(tables.nav)
+	handlers := make(map[keyContext][]keyAction)
+	handlers[ctxGlobal] = boundActions(tables)
+	handlers[ctxChat] = keysOf(tables.chat)
+	handlers[ctxToast] = keysOf(tables.toast)
+	handlers[ctxAutocomplete] = append(append(keysOf(tables.palette), keysOf(tables.mention)...), list...)
+	handlers[ctxSessions] = append(keysOf(tables.switchOverlay), list...)
+	handlers[ctxHistorySearch] = keysOf(tables.histSearch)
+	handlers[ctxMessageSelector] = append(append(keysOf(tables.rewindList), keysOf(tables.rewindOptions)...), append(keysOf(tables.rewindSure), list...)...)
+	handlers[ctxThemePicker] = append(append(keysOf(tables.themeLook), keysOf(tables.themeScreen)...), list...)
+	handlers[ctxThemeInstall] = append(append(keysOf(tables.themeScreen), keysOf(tables.themeLook)...), list...)
+	handlers[ctxDiffPanel] = keysOf(tables.diffPanel)
+	handlers[ctxDiffDialog] = keysOf(tables.diffDialog)
+	handlers[ctxDiffNote] = keysOf(tables.diffNote)
+	handlers[ctxDiffMessage] = keysOf(tables.diffMessage)
+	handlers[ctxPane] = keysOf(tables.panes)
+	handlers[ctxPlugin] = append(keysOf(tables.plugins), list...)
+	handlers[ctxBoard] = keysOf(tables.board)
+	handlers[ctxSearch] = keysOf(tables.search)
+	handlers[ctxDiagnostics] = keysOf(tables.diag)
+	handlers[ctxContext] = keysOf(tables.context)
+	handlers[ctxStatusline] = append(append(keysOf(tables.statusline), keysOf(tables.statuslineField)...), list...)
+	handlers[ctxPlan] = keysOf(tables.plan)
+	handlers[ctxSkills] = append(keysOf(tables.skills), list...)
+	handlers[ctxResume] = append(keysOf(tables.resume), list...)
+	handlers[ctxClose] = keysOf(tables.pendingClose)
+	handlers[ctxQueue] = keysOf(tables.queue)
+	handlers[ctxApproval] = keysOf(tables.approval)
+	handlers[ctxApprovalReason] = keysOf(tables.approvalReason)
+	handlers[ctxMention] = keysOf(tables.mention)
+	return handlers
+}
+
+func chatFallthroughContexts() []keyContext {
+	return []keyContext{ctxApproval, ctxApprovalReason, ctxMention, ctxAutocomplete, ctxQueue}
+}
+
+func missingContextHandlers(tables *dispatchTables) []string {
+	handlers := handlersByContext(tables)
+	silent := make(map[keyAction]bool)
+	for _, action := range defaultsWithoutEffect() {
+		silent[action] = true
+	}
+	chatHandled := make(map[keyAction]bool)
+	for _, action := range keysOf(tables.chat) {
+		chatHandled[action] = true
+	}
+	var missing []string
+	for context, chords := range defaultKeyTable().chords {
+		handled := make(map[keyAction]bool)
+		for _, action := range handlers[context] {
+			handled[action] = true
+		}
+		for _, action := range chords {
+			if slices.Contains(chatFallthroughContexts(), context) && chatHandled[action] {
+				continue
+			}
+			if !handled[action] && !silent[action] {
+				missing = append(missing, string(context)+" "+string(action))
+			}
+		}
+	}
+	sort.Strings(missing)
+	return missing
+}
+
+func TestEveryBoundActionHasAHandlerInItsContext(t *testing.T) {
+	tables, err := newDispatchTables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if missing := missingContextHandlers(tables); len(missing) > 0 {
+		t.Fatalf("bound actions with no handler in their context: %s", strings.Join(missing, ", "))
+	}
+}
+
+func TestSilentActionsHaveNoHandler(t *testing.T) {
 	tables, err := newDispatchTables()
 	if err != nil {
 		t.Fatal(err)
@@ -78,23 +156,9 @@ func TestEveryDefaultBindingHasAHandlerOrIsListedWithoutEffect(t *testing.T) {
 	for _, action := range boundActions(tables) {
 		handled[action] = true
 	}
-	silent := make(map[keyAction]bool)
 	for _, action := range defaultsWithoutEffect() {
-		silent[action] = true
 		if handled[action] {
 			t.Errorf("%s is listed without effect but has a handler", action)
 		}
-	}
-	var unhandled []string
-	for _, chords := range defaultKeyTable().chords {
-		for _, action := range chords {
-			if !handled[action] && !silent[action] {
-				unhandled = append(unhandled, string(action))
-			}
-		}
-	}
-	sort.Strings(unhandled)
-	if len(unhandled) > 0 {
-		t.Fatalf("bound actions with no handler and not listed without effect: %s", strings.Join(unhandled, ", "))
 	}
 }

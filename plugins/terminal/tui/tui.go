@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -322,12 +321,13 @@ type model struct {
 	themeScr        *themeScreen
 	noColor         bool
 
-	bindings     *keyTable
-	keyChord     keyPress
-	keyTimeout   time.Duration
-	keyProblems  []string
-	composerUndo []string
-	bar          barState
+	bindings       *keyTable
+	keyChord       keyPress
+	keyTimeout     time.Duration
+	quitArmedUntil time.Time
+	keyProblems    []string
+	composerUndo   []string
+	bar            barState
 
 	ctxOpen bool
 
@@ -507,7 +507,6 @@ func newModel(backend Backend) *model {
 	field.Placeholder = placeholderIdle
 	field.SetPromptFunc(len(composerPrompt), promptAt(composerPrompt))
 	field.ShowLineNumbers = false
-	field.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "shift+enter", "ctrl+j"))
 	field.SetHeight(maxComposerLines)
 	field.Focus()
 	match := &model{
@@ -518,6 +517,7 @@ func newModel(backend Backend) *model {
 		bindings: loadKeyBindings("", "", keysSection{}).table, keyTimeout: defaultChordTimeout,
 	}
 	match.cmds = localCommands()
+	match.syncComposerKeys()
 	match.loadHandlers()
 	if backend != nil {
 		match.cmds = mergeCommands(match.cmds, backend.Commands())
@@ -1768,7 +1768,7 @@ func pendingCloseRuns() (map[keyAction]keyRun, error) {
 			cmd, _ := app.interruptOrQuit()
 			return cmd
 		})),
-		bind[keyRun](actExit, func(*model, tea.KeyMsg) tea.Cmd { return tea.Quit }),
+		bind[keyRun](actExit, cmdKey((*model).overlayCtrlC)),
 	)
 }
 
@@ -2028,16 +2028,33 @@ func (m *model) closeTabKey() (tea.Cmd, bool) {
 	return nil, true
 }
 
+const quitArmWindow = 3 * time.Second
+
 func (m *model) interruptOrQuit() (tea.Cmd, bool) {
 	turn := m.tabs[m.active]
-	if turn == nil || !turn.busy || turn.interruptRequested {
-		return tea.Quit, true
+	if turn != nil && turn.busy && !turn.interruptRequested {
+		turn.interruptRequested = true
+		if !m.interruptActive() {
+			m.flash = "rien à interrompre : " + m.hintOf(actInterrupt) + " à nouveau pour quitter"
+		}
+		return nil, true
 	}
-	turn.interruptRequested = true
-	if !m.interruptActive() {
-		m.flash = "rien à interrompre : Ctrl-C à nouveau pour quitter"
+	if busy := m.busySessions(); busy > 0 && time.Now().After(m.quitArmedUntil) {
+		m.quitArmedUntil = time.Now().Add(quitArmWindow)
+		m.flash = fmt.Sprintf("%d session(s) en cours seront arrêtées : %s à nouveau pour quitter", busy, m.hintOf(actInterrupt))
+		return nil, true
 	}
-	return nil, true
+	return tea.Quit, true
+}
+
+func (m *model) busySessions() int {
+	busy := 0
+	for name, tb := range m.tabs {
+		if tb.busy && (name != m.active || !tb.interruptRequested) {
+			busy++
+		}
+	}
+	return busy
 }
 
 func (m *model) interruptActive() bool {

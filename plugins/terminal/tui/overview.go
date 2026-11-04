@@ -594,7 +594,7 @@ func (m *model) boardDetail(row *boardRow) []string {
 		m.panelRow("contexte", m.gaugeCells(ratio, boardDetailCells, func(style lipgloss.Style) lipgloss.Style { return style })+
 			m.tierStyle(ratio).Render(" "+contextPercent(row.info.ContextTokens, m.windowOf(row.info)))),
 		"",
-		strings.Repeat(" ", panelIndent) + m.st.dim.Render(m.st.glyphs.enter+" "+m.boardHint(row)),
+		strings.Repeat(" ", panelIndent) + m.st.dim.Render(joinWith(" ", m.hintIn(actSelectAccept, ctxBoard), m.boardHint(row))),
 	}
 }
 

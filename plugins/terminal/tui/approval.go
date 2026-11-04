@@ -339,8 +339,7 @@ func (m *model) handleApprovalKey(msg tea.KeyMsg) bool {
 		return false
 	}
 	if target.approval.reasonOpen {
-		m.handleApprovalReasonKey(target, msg)
-		return true
+		return m.handleApprovalReasonKey(target, msg)
 	}
 	action := m.stackAction(msg, ctxApproval)
 	if run, ok := m.tables().approval[action]; ok {
@@ -402,11 +401,14 @@ func (m *model) chooseApproval(target *tab, index int) {
 	m.answerApproval(target, choice.role, "")
 }
 
-func (m *model) handleApprovalReasonKey(target *tab, msg tea.KeyMsg) {
+func (m *model) handleApprovalReasonKey(target *tab, msg tea.KeyMsg) bool {
 	chosen := m.stackAction(msg, ctxApprovalReason)
 	if run, ok := m.tables().approvalReason[chosen]; ok {
 		run(m, target)
-		return
+		return true
+	}
+	if chosen == actInterrupt {
+		return false
 	}
 	prompt := &target.approval
 	switch msg.Type {
@@ -419,6 +421,7 @@ func (m *model) handleApprovalReasonKey(target *tab, msg tea.KeyMsg) {
 	case tea.KeyRunes:
 		prompt.reason += string(msg.Runes)
 	}
+	return true
 }
 
 func approvalReasonRuns() (map[keyAction]reasonRun, error) {

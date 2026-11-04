@@ -242,3 +242,20 @@ func assertFitsScreen(t *testing.T, view string, width, height int) {
 		}
 	}
 }
+
+func TestFitEachLineClipsWithAnEllipsis(t *testing.T) {
+	lines := fitEachLine([]string{"abcdefghij", "ab", "ééééééé"}, 5)
+	want := []string{"abcd…", "ab", "éééé…"}
+	for index, line := range lines {
+		if line != want[index] {
+			t.Fatalf("line %d = %q, want %q", index, line, want[index])
+		}
+		if width := lipgloss.Width(line); width > 5 {
+			t.Fatalf("line %d is %d columns, want at most 5", index, width)
+		}
+	}
+	untouched := fitEachLine([]string{"abcdefghij"}, 0)
+	if untouched[0] != "abcdefghij" {
+		t.Fatalf("width 0 must leave lines untouched, got %q", untouched[0])
+	}
+}

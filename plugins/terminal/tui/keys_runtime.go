@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -59,9 +60,26 @@ func (m *model) loadKeys(configDir string) {
 	m.keyTimeout = chordTimeout(load.timeout)
 	m.keyChord = keyPress{}
 	m.keyProblems = load.problems
+	m.syncComposerKeys()
 	if len(load.problems) > 0 {
 		m.flash = "raccourcis : " + joinProblems(load.problems)
 	}
+}
+
+func (m *model) syncComposerKeys() {
+	m.input.KeyMap.InsertNewline = key.NewBinding(key.WithKeys(m.newlineKeys()...))
+}
+
+const redirectFallbackNewlineKey = "alt+enter"
+
+func (m *model) newlineKeys() []string {
+	keys := []string{redirectFallbackNewlineKey}
+	for _, chord := range m.activeBindings().chordsOf(actNewline, chatKeyStack()...) {
+		if !strings.Contains(chord, " ") {
+			keys = append(keys, chord)
+		}
+	}
+	return keys
 }
 
 func (m *model) stackAction(msg tea.KeyMsg, stack ...keyContext) keyAction {
@@ -72,11 +90,11 @@ func (m *model) stackAction(msg tea.KeyMsg, stack ...keyContext) keyAction {
 	if now.Sub(m.keyChord.started) > m.keyTimeout {
 		m.keyChord = keyPress{}
 	}
-	key, err := canonicalKey(msg.String())
+	chord, err := canonicalKey(msg.String())
 	if err != nil {
 		return ""
 	}
-	action, _ := m.bindings.press(stack, &m.keyChord, key, now, m.keyTimeout)
+	action, _ := m.bindings.press(stack, &m.keyChord, chord, now, m.keyTimeout)
 	return action
 }
 
@@ -87,11 +105,11 @@ func (m *model) pressChatKey(msg tea.KeyMsg, now time.Time) (keyAction, bool) {
 	if now.Sub(m.keyChord.started) > m.keyTimeout {
 		m.keyChord = keyPress{}
 	}
-	key, err := canonicalKey(msg.String())
+	chord, err := canonicalKey(msg.String())
 	if err != nil {
 		return "", false
 	}
-	return m.bindings.press(chatKeyStack(), &m.keyChord, key, now, m.keyTimeout)
+	return m.bindings.press(chatKeyStack(), &m.keyChord, chord, now, m.keyTimeout)
 }
 
 func (m *model) runChatAction(action keyAction, msg tea.KeyMsg) (tea.Cmd, bool) {
@@ -112,7 +130,7 @@ func chatRuns() (map[keyAction]chatRun, error) {
 			if app.input.Value() != "" {
 				return nil, false
 			}
-			return tea.Quit, true
+			return app.interruptOrQuit()
 		}),
 		bind[chatRun](actCancel, stepChat((*model).escapeKey)),
 		bind[chatRun](actSubmit, func(app *model, msg tea.KeyMsg) (tea.Cmd, bool) {
@@ -228,11 +246,11 @@ func (m *model) directAction(msg tea.KeyMsg, stack ...keyContext) keyAction {
 	if m.bindings == nil {
 		return ""
 	}
-	key, err := canonicalKey(msg.String())
+	chord, err := canonicalKey(msg.String())
 	if err != nil {
 		return ""
 	}
-	action, _ := m.bindings.lookup(stack, key)
+	action, _ := m.bindings.lookup(stack, chord)
 	return action
 }
 

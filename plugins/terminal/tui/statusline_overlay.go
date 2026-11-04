@@ -211,7 +211,7 @@ func (m *model) statuslineRow(fieldID string, selected bool, width int) string {
 	if shown {
 		mark = m.st.glyphs.ticked
 	}
-	label := padTo(spec.labelWith(m.st.glyphs), barLabelWidth)
+	label := padTo(spec.labelWith(m.hintIn(actCycleMode, chatKeyStack()...)), barLabelWidth)
 	if selected {
 		plain := statusIndent + head + mark + " " + label + " " + spec.note
 		return m.st.overlaySel.Render(padTo(cutText(plain, width), width))

@@ -286,7 +286,11 @@ func (m *model) planSlash(instruction string) tea.Cmd {
 func (m *model) modeChip(target *tab) string {
 	mode := target.modeID()
 	chip := modeStyle(mode, m.st).Bold(true).Render(modeText(mode, m.st.glyphs))
-	return chip + m.st.dim.Render(" "+m.st.glyphs.shiftTab)
+	hint := m.hintIn(actCycleMode, ctxPlan)
+	if hint == "" {
+		return chip
+	}
+	return chip + m.st.dim.Render(" "+hint)
 }
 
 type modeHit struct {

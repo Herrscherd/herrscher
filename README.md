@@ -81,8 +81,10 @@ archived when the window closes.
 One daemon per state file. A second one over the same state answers every message
 twice and bills it twice. So a bare `herrscher` on a TTY **serves when nothing
 else is** and **attaches** when the service already is, driving the same UI over
-the sockets the running daemon exposes. You see the agent that is actually live,
-and quitting the window leaves that daemon running. Off a TTY there is nothing to
+the sockets the running daemon exposes. You see the agent that is actually live.
+Quitting the window has two outcomes. After an attach, the daemon you found keeps
+running. After a serve, quitting stops that daemon, and the turns still running
+in it are cancelled. Off a TTY there is nothing to
 attach to, so the second daemon is refused and the process holding the state is
 named. Use `--state` if you really want a separate world.
 
@@ -948,8 +950,8 @@ Contexts are read in order: Chat first, then Global.
 | `⇧⇥` | `chat:cycleMode` | cycle the approval mode (Manuel, Édits acceptés, Plan, Auto) |
 | `⇥` | `tabs:next` | next session tab |
 | `↑` `↓` | `chat:previousHistory`, `chat:nextHistory` | history; `↑` on an empty composer focuses the queue |
-| `⌃C` | `app:interrupt` | interrupt, or quit when nothing runs |
-| `⌃D` | `app:exit` | quit, only with an empty composer |
+| `⌃C` | `app:interrupt` | interrupt a running turn; otherwise quit (the guard below) |
+| `⌃D` | `app:exit` | with an empty composer, same guard as `⌃C`; with text in the composer, nothing |
 | `⌃R` | `history:search` | search the prompt history |
 | `⌃V` | `chat:imagePaste` | paste an image |
 | `⌃U` | `chat:removePending` | remove the pending message |
@@ -1004,15 +1006,45 @@ They moved, and the old key does what Claude says it does.
 
 #### Claude actions without an effect here
 
-The table knows these actions, so a file can bind them without an error, but
-herrscher does not run anything for them yet: `app:toggleTodos` (`⌃T`),
-`app:toggleBrief` (`⇧⌃B`), `app:diffFileListUp` and `app:diffFileListDown`
-(`⌃↑` `⌃↓` `alt+↑` `alt+↓`), `app:openArtifact` (`⌃]`),
-`chat:clearScreen` (`cmd+K`), `chat:modelPicker` (`alt+P`, herrscher has no
-model choice to open), `chat:fastMode` (`alt+O`),
-`chat:defaultToNewerModel` (`⌃Y`), `chat:thinkingToggle` (`alt+T`),
-`chat:workflowKeywordToggle` (`alt+W`), `abovePrompt:toggle` (`⌃X ⌃A`),
-`abovePrompt:focus` (`⌃X ⇥`), `task:background` (`⌃B`, `⌃X ⌃B`).
+The table accepts these names of Claude's reference without a message, because
+herrscher does not run them yet. Each is listed by its action name, grouped by
+context prefix, and none is executed here:
+
+- `abovePrompt:highlightNext`, `abovePrompt:highlightPrevious`, `abovePrompt:leave`, `abovePrompt:next`, `abovePrompt:press`, `abovePrompt:previous`
+- `agents:find`, `agents:nextGroup`, `agents:previousGroup`, `agents:rename`, `agents:switchView`, `agents:togglePin`
+- `app:redraw`, `app:toggleDiffNoiseFilter`, `app:toggleDiffPreSession`, `app:toggleReplTab`, `app:toggleTerminal`
+- `attachments:exit`, `attachments:next`, `attachments:previous`, `attachments:remove`
+- `autocomplete:next`, `autocomplete:previous`
+- `confirm:cycleMode`, `confirm:next`, `confirm:nextField`, `confirm:previous`, `confirm:previousField`, `confirm:toggle`
+- `diff:back`, `diff:nextSource`, `diff:previousSource`
+- `effortSlider:decreaseEffort`, `effortSlider:increaseEffort`, `effortSlider:toggleUltracode`
+- `footer:clearSelection`, `footer:close`, `footer:down`, `footer:next`, `footer:openSelected`, `footer:previous`, `footer:up`
+- `help:dismiss`
+- `historySearch:cycleScope`, `historySearch:execute`
+- `modelPicker:decreaseEffort`, `modelPicker:increaseEffort`, `modelPicker:thisSessionOnly`
+- `pane:bottom`, `pane:grow`, `pane:pageDown`, `pane:pageUp`, `pane:scrollDown`, `pane:scrollUp`, `pane:shrink`, `pane:top`
+- `permission:toggleDebug`
+- `plugin:cycleMarketplace`, `plugin:favorite`, `plugin:install`, `plugin:toggle`
+- `scroll:bottom`, `scroll:fullPageDown`, `scroll:fullPageUp`, `scroll:halfPageUp`, `scroll:lineDown`, `scroll:lineUp`, `scroll:top`
+- `selection:copy`, `selection:extendDown`, `selection:extendLeft`, `selection:extendLineEnd`, `selection:extendLineStart`, `selection:extendRight`, `selection:extendUp`
+- `settings:retry`, `settings:search`
+- `tabs:previous`
+- `theme:toggleSyntaxHighlighting`
+- `transcript:exit`, `transcript:toggleShowAll`
+- `voice:pushToTalk`
+
+Together with the 55 reference actions that herrscher runs, they cover Claude's
+full list of 137 names. The reference is kept in
+`plugins/terminal/tui/keys_claude_reference.go`, and a test loads a Claude file
+for each of them and requires no warning.
+
+#### Quitting: `⌃C` and `⌃D`
+
+With nothing running, `⌃C` and `⌃D` (with an empty composer) quit at once. When a
+turn runs in the active session, the first press interrupts it and a second press
+quits. When another session is busy, the first press warns and names how many
+sessions will stop, and a second press within 3 seconds quits. Quitting a served
+daemon stops the sessions it runs, as described above.
 
 #### Your keys: `~/.config/herrscher/keybindings.json`
 

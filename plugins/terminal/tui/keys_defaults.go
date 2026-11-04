@@ -445,5 +445,5 @@ func knownKeyActions() []keyAction {
 }
 
 func isKnownKeyAction(action keyAction) bool {
-	return slices.Contains(knownKeyActions(), action)
+	return slices.Contains(knownKeyActions(), action) || slices.Contains(claudeReferenceActions(), action)
 }

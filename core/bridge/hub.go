@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/internal/lease"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/identity"
@@ -312,14 +314,14 @@ func (s turnEventSink) Emit(event contracts.Event) {
 }
 
 func resumeToken(backend contracts.Backend) string {
-	if ra, ok := backend.(contracts.ResumeAware); ok {
+	if ra, ok := lease.Unwrap(backend).(contracts.ResumeAware); ok {
 		return ra.ResumeToken()
 	}
 	return ""
 }
 
 func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, value string) {
-	inj, ok := backend.(contracts.ChoiceInjector)
+	inj, ok := lease.Unwrap(backend).(contracts.ChoiceInjector)
 	if !ok {
 		return
 	}

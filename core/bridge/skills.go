@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Herrscherd/herrscher/core/internal/lease"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/skills"
@@ -21,7 +23,7 @@ func skillRoots(cwd string, extra []string) []string {
 }
 
 func newSkillEngine(backend contracts.Backend) *skills.Engine {
-	if n, ok := backend.(contracts.SkillNative); ok && n.NativeSkills() {
+	if n, ok := lease.Unwrap(backend).(contracts.SkillNative); ok && n.NativeSkills() {
 		return nil
 	}
 	cfg, err := config.Load(config.DefaultPath())

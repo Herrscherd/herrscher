@@ -89,6 +89,51 @@ func TestKeyFileBehindALinkedDirectoryIsAccepted(t *testing.T) {
 	}
 }
 
+func TestKeyFileBelowAnOthersWritableAncestorIsRefused(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared := filepath.Join(base, "shared")
+	if err = os.Mkdir(shared, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(shared, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	keys := filepath.Join(shared, "keys")
+	if err = os.Mkdir(keys, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(keys, "key")
+	if err = os.WriteFile(path, []byte("sk-ancestor"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, loadErr := loadKeyFile(t, path); !errors.Is(loadErr, errKeyDirUnsafe) {
+		t.Fatalf("writable ancestor: err %v, want errKeyDirUnsafe", loadErr)
+	}
+}
+
+func TestKeyDirectoryOwnedByAnotherUserIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	if os.Getuid() == 0 {
+		if err := os.Lchown(dir, 1234, -1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := int64(info.Sys().(*syscall.Stat_t).Uid)
+	if err := checkKeyDirectory(dir, info, owner+1); !errors.Is(err, errKeyDirUnsafe) {
+		t.Fatalf("directory owned by another user: err %v, want errKeyDirUnsafe", err)
+	}
+	if err := checkKeyDirectory(dir, info, owner); err != nil {
+		t.Fatalf("directory owned by the current user refused: %v", err)
+	}
+}
+
 func TestKeyFileInAnOthersWritableDirectoryIsRefused(t *testing.T) {
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {

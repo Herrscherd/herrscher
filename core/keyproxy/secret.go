@@ -171,7 +171,7 @@ func (l Loader) checkKeyDirectories(path string) error {
 		if statErr != nil {
 			return fmt.Errorf("stat key file directory: %w", statErr)
 		}
-		if dirErr := checkKeyDirectory(dir, info); dirErr != nil {
+		if dirErr := checkKeyDirectory(dir, info, int64(os.Getuid())); dirErr != nil {
 			return dirErr
 		}
 		parent := filepath.Dir(dir)

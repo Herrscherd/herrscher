@@ -19,6 +19,8 @@ func TestConnRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
+	scanned := make(chan struct{})
+	defer func() { <-scanned }()
 	defer closeLogged(t, acc)
 
 	cli, err := control.Dial(sock)
@@ -35,6 +37,7 @@ func TestConnRoundTrip(t *testing.T) {
 	var got contracts.Event
 	done := make(chan struct{})
 	go func() {
+		defer close(scanned)
 		logErr(t, cli.Scan(func(e contracts.Event) error { got = e; close(done); return errStop }))
 	}()
 	select {

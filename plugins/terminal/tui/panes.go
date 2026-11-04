@@ -82,6 +82,7 @@ func (m *model) openPanes() {
 		m.panes.channels = append(m.panes.channels, info.ChannelID)
 		m.ensureTab(info.ChannelID)
 	}
+	m.activate(m.focusedChannel())
 	m.relayout()
 }
 
@@ -90,7 +91,12 @@ func (m *model) movePane(delta int) {
 	if count == 0 {
 		return
 	}
-	m.panes.focus = (m.panes.focus + delta + count) % count
+	m.focusPane((m.panes.focus + delta + count) % count)
+}
+
+func (m *model) focusPane(index int) {
+	m.panes.focus = index
+	m.activate(m.focusedChannel())
 }
 
 func (m *model) focusedChannel() string {
@@ -175,8 +181,8 @@ func (m *model) paneFooter(width int) string {
 }
 
 func (m *model) paneApproval() (string, bool) {
-	target := m.activeTab()
-	if target == nil || !target.pendingApproval || !slices.Contains(m.panes.channels, target.channel) {
+	target := m.tabs[m.focusedChannel()]
+	if target == nil || !target.pendingApproval {
 		return "", false
 	}
 	if name := m.infoForChannel(target.channel).Name; name != "" {
@@ -390,7 +396,7 @@ func (m *model) handlePaneClick(msg tea.MouseMsg) bool {
 		return false
 	}
 	if index, ok := m.paneCellAt(msg.X, msg.Y); ok {
-		m.panes.focus = index
+		m.focusPane(index)
 	}
 	return true
 }

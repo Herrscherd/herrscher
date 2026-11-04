@@ -174,24 +174,57 @@ func TestPaneFooterWithoutApprovalOnlyNamesNavigation(t *testing.T) {
 	}
 }
 
-func TestPaneFooterNamesTheApprovalTheKeysAnswer(t *testing.T) {
+func focusPaneChannel(t *testing.T, m *model, channel string) {
+	t.Helper()
+	for range len(m.panes.channels) {
+		if m.focusedChannel() == channel {
+			return
+		}
+		updateKey(m, tea.KeyMsg{Type: tea.KeyTab})
+	}
+	t.Fatalf("pane %s must be reachable with Tab, panes = %v", channel, m.panes.channels)
+}
+
+func TestPaneFooterNamesTheApprovalOfTheFocusedPane(t *testing.T) {
 	_, m := paneModel(t)
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-beta"}, Event: approvalMenuEvent(t, "make deploy", allApprovalRoles()...)})
-	m.active = "ch-beta"
+	focusPaneChannel(t, m, "ch-beta")
 	view := m.View()
 	if !strings.Contains(view, "o s r approbation de beta") {
-		t.Fatalf("the pane footer must name the session whose approval o s r answer: %s", view)
+		t.Fatalf("the pane footer must name the approval of the focused pane: %s", view)
 	}
 	if strings.Contains(view, "docs-site") {
 		t.Fatalf("the pane footer must take its name from the session, not from a fixture: %s", view)
 	}
 }
 
-func TestPaneFooterSkipsAnApprovalOutsideTheActivePane(t *testing.T) {
-	_, m := paneModel(t)
+func TestPaneApprovalKeyAnswersTheFocusedPaneOnly(t *testing.T) {
+	f, m := paneModel(t)
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-beta"}, Event: approvalMenuEvent(t, "make deploy", allApprovalRoles()...)})
+	focusPaneChannel(t, m, "ch-beta")
+	pressRunes(m, "o")
+	if len(f.picks) != 1 || f.picks[0] != (pickedChoice{channel: "ch-beta", value: testApprovalValue(approvalAllow)}) {
+		t.Fatalf("o must answer the approval of the focused pane, picks = %+v", f.picks)
+	}
+}
+
+func TestPaneApprovalOutsideTheFocusIsNeitherShownNorAnswered(t *testing.T) {
+	f, m := paneModel(t)
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-gamma"}, Event: approvalMenuEvent(t, "make deploy", allApprovalRoles()...)})
-	m.active = "ch-alpha"
+	focusPaneChannel(t, m, "ch-alpha")
 	if view := m.View(); strings.Contains(view, "approbation de") {
-		t.Fatalf("o s r answer the active tab, so a pending approval elsewhere must not be offered: %s", view)
+		t.Fatalf("a pending approval on an unfocused pane must not be offered: %s", view)
+	}
+	pressRunes(m, "o")
+	if len(f.picks) != 0 {
+		t.Fatalf("o must not answer an approval outside the focused pane, picks = %+v", f.picks)
+	}
+}
+
+func TestFocusingAPaneMakesItTheComposerTarget(t *testing.T) {
+	_, m := paneModel(t)
+	focusPaneChannel(t, m, "ch-delta")
+	if m.active != "ch-delta" {
+		t.Fatalf("the active tab must follow the focused pane, active = %q", m.active)
 	}
 }

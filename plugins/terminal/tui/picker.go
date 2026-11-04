@@ -157,11 +157,12 @@ type PendingChoice struct {
 	Channel  string
 }
 
-func (m *model) openChoice(pc *PendingChoice) {
+func (m *model) openChoice(pc *PendingChoice) tea.Cmd {
 	m.choice = pc
 	m.choiceIdx = 0
 	m.applySize()
 	m.syncViewport()
+	return m.notifyApproval(pc.Question)
 }
 
 func (m *model) clampChoice() {

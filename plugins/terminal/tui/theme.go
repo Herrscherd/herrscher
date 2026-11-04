@@ -14,6 +14,8 @@ const (
 	glyphFold      = "▶"
 	glyphMoreLines = "↵"
 	glyphBolt      = "⚡"
+	glyphDone      = "✓"
+	glyphWaiting   = "!"
 )
 
 func familyGlyphs() map[string]string {

@@ -58,11 +58,16 @@ type Capabilities struct {
 	Mouse      bool
 	Colour     Colour
 	Boxes      bool
+	OSC9       bool
 	Terminal   string
 }
 
 func kittyGraphicsPrograms() map[string]bool {
 	return map[string]bool{"ghostty": true, "WezTerm": true}
+}
+
+func osc9Programs() map[string]bool {
+	return map[string]bool{"ghostty": true, "WezTerm": true, "iTerm.app": true}
 }
 
 func hyperlinkPrograms() map[string]bool {
@@ -84,6 +89,7 @@ func Probe(env func(string) string) Capabilities {
 		Terminal:   terminalName(term, program),
 	}
 	caps.Boxes = probeBoxes(env)
+	caps.OSC9 = osc9Programs()[program]
 	caps.Mouse = term != "" && term != "dumb"
 	return caps
 }

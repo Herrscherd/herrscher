@@ -142,6 +142,8 @@ func localCommands() []CommandSpec {
 		{Name: "resume", Desc: "reopen an archived session"},
 		{Name: verbRename, Args: "<nom>", Desc: "rename this session"},
 		{Name: "usage", Desc: "cost, tokens and context for this session"},
+		{Name: "context", Desc: "ce qui occupe le contexte : système, outils, mémoire, skills, fichiers lus, conversation"},
+		{Name: "notify", Desc: "alterner les notifications : fin de tour, approbation, ou les deux"},
 		{Name: "skills", Desc: "list available skills"},
 		{Name: "capabilities", Desc: "what this terminal can render, and what it falls back to"},
 		{Name: "plugins", Desc: "the plugins this binary is made of"},

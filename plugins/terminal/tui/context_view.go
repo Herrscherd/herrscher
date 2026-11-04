@@ -27,11 +27,16 @@ func contextCategories() []contextCategory {
 		{name: "système", need: "taille du prompt système, envoyé à chaque tour"},
 		{name: "outils et MCP", need: "taille des schémas d'outils, par serveur MCP"},
 		{name: "mémoire", need: "taille du bloc mémoire injecté dans le tour"},
-		{name: "skills", need: "taille des descriptions de skills chargées dans le contexte"},
+		{name: categorySkills, need: "taille des descriptions de skills chargées dans le contexte"},
 		{name: "fichiers lus", need: "tokens de chaque fichier lu par l'agent"},
-		{name: "conversation", need: "tokens des tours encore gardés, par tour"},
+		{name: categoryConversation, need: "tokens des tours encore gardés, par tour"},
 	}
 }
+
+const (
+	categorySkills       = "skills"
+	categoryConversation = "conversation"
+)
 
 const unavailable = "n/a"
 
@@ -57,7 +62,7 @@ func (m *model) handleContextKey(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	case "n":
 		return m.cycleNotify()
-	case "z", "esc":
+	case "z", keyEsc:
 		m.closeContext()
 	}
 	return nil
@@ -87,11 +92,12 @@ func (m *model) contextView() string {
 	return strings.Join(lines, "\n")
 }
 
-func (m *model) contextFigures() (used, limit int) {
+func (m *model) contextFigures() (int, int) {
 	info, _ := m.activeInfo()
-	limit = contextLimit(info.Vendor)
-	if tb := m.tabs[m.active]; tb != nil {
-		used = m.contextTokens(tb)
+	limit := contextLimit(info.Vendor)
+	used := 0
+	if target := m.tabs[m.active]; target != nil {
+		used = m.contextTokens(target)
 	}
 	return used, limit
 }
@@ -100,7 +106,7 @@ func (m *model) contextHeader() string {
 	info, _ := m.activeInfo()
 	name := m.activeSessionName()
 	if name == "" {
-		name = "session"
+		name = sessionVerb
 	}
 	return m.st.dim.Render("Contexte  " + joinNonEmpty(name, info.Vendor, modelLabel(info)))
 }

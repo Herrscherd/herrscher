@@ -35,6 +35,12 @@ const (
 	approvalDeny         = "deny"
 )
 
+const (
+	halves            = 2
+	approvalFrameCols = 4
+	approvalLeadGap   = 2
+)
+
 type approvalChoice struct {
 	role  string
 	key   string
@@ -43,11 +49,13 @@ type approvalChoice struct {
 	value string
 }
 
-var approvalCatalog = []approvalChoice{
-	{role: approvalAllow, key: "o", label: "Une fois", note: "seulement cette commande"},
-	{role: approvalAllowSession, key: "s", label: "Pour la session", note: "accepté jusqu’à la fin de la session"},
-	{role: approvalAllowAlways, key: "t", label: "Toujours", note: "règle ajoutée à l’hôte"},
-	{role: approvalDeny, key: "r", label: "Refuser avec une raison", note: "la raison repart à l’agent comme un message"},
+func approvalCatalog() []approvalChoice {
+	return []approvalChoice{
+		{role: approvalAllow, key: "o", label: "Une fois", note: "seulement cette commande"},
+		{role: approvalAllowSession, key: "s", label: "Pour la session", note: "accepté jusqu’à la fin de la session"},
+		{role: approvalAllowAlways, key: "t", label: "Toujours", note: "règle ajoutée à l’hôte"},
+		{role: approvalDeny, key: "r", label: "Refuser avec une raison", note: "la raison repart à l’agent comme un message"},
+	}
 }
 
 type approvalPrompt struct {
@@ -85,7 +93,7 @@ func approvalRole(value string) string {
 		return ""
 	}
 	role := value[idx+1:]
-	for _, entry := range approvalCatalog {
+	for _, entry := range approvalCatalog() {
 		if entry.role == role {
 			return role
 		}
@@ -116,7 +124,7 @@ func newApprovalPrompt(channel string, menu approvalMenu, session contracts.Sess
 		deadline: now.Add(approvalDefaultWait),
 	}
 	prompt.tool, prompt.command = splitApprovalSubject(menu.Prompt)
-	for _, entry := range approvalCatalog {
+	for _, entry := range approvalCatalog() {
 		for _, option := range menu.Options {
 			if approvalRole(option.Value) != entry.role {
 				continue
@@ -133,7 +141,7 @@ func newApprovalPrompt(channel string, menu approvalMenu, session contracts.Sess
 	return prompt, len(prompt.choices) > 0
 }
 
-func (ap approvalPrompt) choice(role string) (approvalChoice, bool) {
+func (ap *approvalPrompt) choice(role string) (approvalChoice, bool) {
 	for _, entry := range ap.choices {
 		if entry.role == role {
 			return entry, true
@@ -150,9 +158,10 @@ func (m *model) sessionInfo(channel string) contracts.SessionInfo {
 	if m.tm == nil {
 		return contracts.SessionInfo{}
 	}
-	for _, info := range m.tm.Sessions() {
-		if info.ChannelID == channel {
-			return info
+	sessions := m.tm.Sessions()
+	for index := range sessions {
+		if sessions[index].ChannelID == channel {
+			return sessions[index]
 		}
 	}
 	return contracts.SessionInfo{}
@@ -186,10 +195,10 @@ func sanitizeApprovalReason(reason string) string {
 	return flat
 }
 
-func (m *model) answerApproval(target *tab, role, reason string) bool {
+func (m *model) answerApproval(target *tab, role, reason string) {
 	choice, ok := target.approval.choice(role)
 	if !ok {
-		return false
+		return
 	}
 	value := choice.value
 	if role == approvalDeny {
@@ -208,7 +217,6 @@ func (m *model) answerApproval(target *tab, role, reason string) bool {
 	target.approval = approvalPrompt{}
 	m.applySize()
 	m.syncViewport()
-	return true
 }
 
 func (m *model) rememberApprovalDeadline(event contracts.Event, now time.Time) {
@@ -240,9 +248,9 @@ func (m *model) applyKnownDeadline(target *tab) {
 }
 
 func (m *model) pruneApprovalDeadlines(now time.Time) {
-	for id, known := range m.approvalDues {
+	for key, known := range m.approvalDues {
 		if now.After(known.keep) {
-			delete(m.approvalDues, id)
+			delete(m.approvalDues, key)
 		}
 	}
 }
@@ -342,7 +350,7 @@ func (m *model) handleApprovalReasonKey(target *tab, msg tea.KeyMsg) {
 func approvalCountdown(deadline, now time.Time) (string, time.Duration) {
 	remaining := max(deadline.Sub(now), 0)
 	seconds := int((remaining + time.Second - 1) / time.Second)
-	return fmt.Sprintf("refus dans %d:%02d", seconds/60, seconds%60), remaining
+	return fmt.Sprintf("refus dans %d:%02d", seconds/secondsPerMinute, seconds%secondsPerMinute), remaining
 }
 
 func middleTruncate(text string, width int, ellipsis string) string {
@@ -351,7 +359,7 @@ func middleTruncate(text string, width int, ellipsis string) string {
 	}
 	runes := []rune(text)
 	for keep := width - 1; keep >= 0; keep-- {
-		head := (keep + 1) / 2
+		head := (keep + 1) / halves
 		candidate := string(runes[:head]) + ellipsis + string(runes[len(runes)-(keep-head):])
 		if lipgloss.Width(candidate) <= width {
 			return candidate
@@ -370,7 +378,7 @@ func (m *model) approvalLines(now time.Time) []string {
 		return nil
 	}
 	box := m.st.boxes(m.caps.Boxes)
-	inner := width - 4
+	inner := width - approvalFrameCols
 	prompt := target.approval
 	lines := []string{m.approvalTop(prompt, width, box, now)}
 	row := func(content string) { lines = append(lines, approvalRow(box, content, inner)) }
@@ -438,7 +446,7 @@ func (m *model) approvalCommand(prompt approvalPrompt, inner int) string {
 	if prompt.command == "" {
 		return lead
 	}
-	room := inner - lipgloss.Width(lead) - 2
+	room := inner - lipgloss.Width(lead) - approvalLeadGap
 	return lead + "  " + m.st.text.Render(middleTruncate(prompt.command, room, m.st.glyphs.ellipsis))
 }
 

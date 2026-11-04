@@ -281,7 +281,7 @@ func TestStatusBarRendersTheModeChip(t *testing.T) {
 	if bar := m.statusBar(tb, 120); !strings.Contains(bar, "Manuel") {
 		t.Errorf("the mode chip must lead with the session mode: %q", bar)
 	}
-	tb.mode = modeAuto
+	tb.setMode(modeAuto)
 	if bar := m.statusBar(tb, 120); !strings.Contains(bar, "Auto") {
 		t.Errorf("the session mode must reach the bar: %q", bar)
 	}

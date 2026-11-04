@@ -55,7 +55,7 @@ func loadStatuslineConfig(path string) statuslineConfig {
 	if path == "" {
 		return cfg
 	}
-	data, err := os.ReadFile(path)
+	data, err := readInRoot(filepath.Dir(path), filepath.Base(path))
 	if err != nil {
 		return cfg
 	}
@@ -107,12 +107,12 @@ func tomlBasicString(raw string) (string, bool) {
 }
 
 func basicStringEnd(raw string) int {
-	for i := 1; i < len(raw); i++ {
-		switch raw[i] {
+	for index := 1; index < len(raw); index++ {
+		switch raw[index] {
 		case '\\':
-			i++
+			index++
 		case '"':
-			return i
+			return index
 		}
 	}
 	return -1
@@ -185,31 +185,31 @@ type statuslineTurn struct {
 	Secs int  `json:"secs"`
 }
 
-func (m *model) scriptInput(tb *tab) []byte {
-	if tb == nil {
-		tb = &tab{}
+func (m *model) scriptInput(target *tab) []byte {
+	if target == nil {
+		target = &tab{}
 	}
 	info, _ := m.activeInfo()
-	used := m.contextTokens(tb)
+	used := m.contextTokens(target)
 	branch, linked := m.gitHeadOf(info.Dir)
 	payload := statuslinePayload{
-		Session:    tb.label,
+		Session:    target.label,
 		Vendor:     info.Vendor,
 		Model:      modelLabel(info),
-		Mode:       modeSpec(tb.modeID()).label,
+		Mode:       modeSpec(target.modeID()).label,
 		Gateway:    statuslineGateway,
 		Git:        statuslineGit{Repo: info.Project, Branch: branch},
 		Context:    statuslineCtx{Used: used, Percent: int(contextRatio(used, contextLimit(info.Vendor)) * percentScale)},
-		Cost:       statuslineCost{USD: tb.costTotal},
+		Cost:       statuslineCost{USD: target.costTotal},
 		Queue:      m.bar.queued,
 		Background: m.bar.background,
-		Turn:       statuslineTurn{Busy: tb.busy},
+		Turn:       statuslineTurn{Busy: target.busy},
 	}
 	if linked {
 		payload.Git.Worktree = info.Dir
 	}
-	if tb.busy && !tb.startedAt.IsZero() {
-		payload.Turn.Secs = int(time.Since(tb.startedAt).Seconds())
+	if target.busy && !target.startedAt.IsZero() {
+		payload.Turn.Secs = int(time.Since(target.startedAt).Seconds())
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

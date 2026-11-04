@@ -15,8 +15,9 @@ const (
 	notifyBoth notifyMode = iota
 	notifyTurnEnd
 	notifyApproval
-	notifyModes
 )
+
+const notifyModeCount = 3
 
 func (mode notifyMode) label() string {
 	switch mode {
@@ -24,9 +25,9 @@ func (mode notifyMode) label() string {
 		return "fin de tour"
 	case notifyApproval:
 		return "approbation"
-	default:
-		return "fin de tour et approbation"
+	case notifyBoth:
 	}
+	return "fin de tour et approbation"
 }
 
 func (mode notifyMode) wants(kind notifyKind) bool {
@@ -35,9 +36,10 @@ func (mode notifyMode) wants(kind notifyKind) bool {
 		return true
 	case notifyTurnEnd:
 		return kind == kindTurnEnd
-	default:
+	case notifyApproval:
 		return kind == kindApproval
 	}
+	return false
 }
 
 type notifyKind int
@@ -48,15 +50,16 @@ const (
 )
 
 const (
-	toastTTL     = 6 * time.Second
-	toastWidth   = 56
-	toastMinimum = 24
-	toastColumn  = 1
-	toastRow     = 1
-	bellSequence = "\a"
-	osc9Prefix   = "\x1b]9;"
-	osc9Suffix   = "\a"
-	osc9Max      = 200
+	toastTTL       = 6 * time.Second
+	toastWidth     = 56
+	toastMinimum   = 24
+	toastColumn    = 1
+	toastRow       = 1
+	toastFrameCols = 2
+	bellSequence   = "\a"
+	osc9Prefix     = "\x1b]9;"
+	osc9Suffix     = "\a"
+	osc9Max        = 200
 )
 
 type toast struct {
@@ -78,7 +81,7 @@ type focusState struct {
 }
 
 func (m *model) cycleNotify() tea.Cmd {
-	m.notifyMode = (m.notifyMode + 1) % notifyModes
+	m.notifyMode = (m.notifyMode + 1) % notifyModeCount
 	m.flash = "notifications : " + m.notifyMode.label()
 	return nil
 }
@@ -87,13 +90,13 @@ func (m *model) shouldSignal() bool {
 	return !m.focus.known || !m.focus.focused
 }
 
-func (m *model) notifyTurnEnd(tb *tab) tea.Cmd {
-	name := m.sessionName(tb.channel)
+func (m *model) notifyTurnEnd(target *tab) tea.Cmd {
+	name := m.sessionName(target.channel)
 	if name == "" {
-		name = tb.label
+		name = target.label
 	}
-	detail := joinNonEmpty(" · ", name, time.Since(tb.startedAt).Round(time.Second).String())
-	return m.announce(kindTurnEnd, m.st.glyphs.success, "Tour fini", tb.channel, detail)
+	detail := joinNonEmpty(name, time.Since(target.startedAt).Round(time.Second).String())
+	return m.announce(kindTurnEnd, m.st.glyphs.success, "Tour fini", target.channel, detail)
 }
 
 func (m *model) notifyApproval(channel, question string) tea.Cmd {
@@ -144,18 +147,24 @@ func bellOrOSC9(caps Capabilities, text string) string {
 }
 
 func osc9Sequence(text string) string {
-	clean := strings.Map(func(r rune) rune {
-		if r < ' ' || r == 0x7f {
+	clean := strings.Map(func(char rune) rune {
+		if char < ' ' || char == 0x7f {
 			return -1
 		}
-		return r
+		return char
 	}, text)
 	return osc9Prefix + ansi.Truncate(clean, osc9Max, "") + osc9Suffix
 }
 
+type signalFailedMsg struct {
+	err error
+}
+
 func writeSignal(sequence string) tea.Cmd {
 	return func() tea.Msg {
-		_ = writeStdout(sequence)
+		if err := writeStdout(sequence); err != nil {
+			return signalFailedMsg{err: err}
+		}
 		return nil
 	}
 }
@@ -174,7 +183,7 @@ func (m *model) toastView() string {
 	if m.toast.title == "" {
 		return ""
 	}
-	inner := min(toastWidth, m.width-2) - 2
+	inner := min(toastWidth, m.width-toastFrameCols) - toastFrameCols
 	if inner < toastMinimum {
 		inner = toastMinimum
 	}

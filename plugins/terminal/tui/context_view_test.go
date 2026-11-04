@@ -4,10 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func contextModel(t *testing.T, used int) *model {

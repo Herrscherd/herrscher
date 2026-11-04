@@ -6,10 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func captureStdout(t *testing.T, run func()) string {
@@ -22,8 +23,8 @@ func captureStdout(t *testing.T, run func()) string {
 	os.Stdout = writer
 	defer func() { os.Stdout = saved }()
 	run()
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close writer: %v", err)
+	if closeErr := writer.Close(); closeErr != nil {
+		t.Fatalf("close writer: %v", closeErr)
 	}
 	out, err := io.ReadAll(reader)
 	if err != nil {
@@ -86,14 +87,14 @@ func TestOSC9TextCannotInjectControlSequences(t *testing.T) {
 	}
 }
 
-func pressRune(m *model, r rune) {
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+func pressN(m *model) {
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 }
 
 func TestNKeyCyclesWhileToastIsVisible(t *testing.T) {
 	m := notifyModel(t, false)
 	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", "api")
-	pressRune(m, 'n')
+	pressN(m)
 	if m.notifyMode != notifyTurnEnd {
 		t.Fatalf("n with a toast on screen must cycle to turn end, got mode %d", m.notifyMode)
 	}
@@ -105,7 +106,7 @@ func TestNKeyCyclesWhileToastIsVisible(t *testing.T) {
 func TestNKeyCyclesNotificationsInContextOverlay(t *testing.T) {
 	m := notifyModel(t, false)
 	m.openContext()
-	pressRune(m, 'n')
+	pressN(m)
 	if m.notifyMode != notifyTurnEnd {
 		t.Fatalf("n in the /context overlay must cycle notifications, got mode %d", m.notifyMode)
 	}
@@ -113,7 +114,7 @@ func TestNKeyCyclesNotificationsInContextOverlay(t *testing.T) {
 
 func TestNKeyIsTypedWithoutToast(t *testing.T) {
 	m := notifyModel(t, false)
-	pressRune(m, 'n')
+	pressN(m)
 	if m.input.Value() != "n" {
 		t.Fatalf("n without a toast must be typed in the composer, got %q", m.input.Value())
 	}
@@ -126,7 +127,7 @@ func TestNKeyIsTypedWhenComposerHasText(t *testing.T) {
 	m := notifyModel(t, false)
 	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", "api")
 	m.input.SetValue("bonjour")
-	pressRune(m, 'n')
+	pressN(m)
 	if m.notifyMode != notifyBoth {
 		t.Fatal("n must not toggle notifications while the composer holds text")
 	}

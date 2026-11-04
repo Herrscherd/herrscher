@@ -241,7 +241,7 @@ func (b *barState) restoreFields(ticked []string) {
 		return
 	}
 	listed := make(map[string]bool, len(ticked))
-	order := make([]string, 0, len(barFieldSpecs))
+	order := make([]string, 0, len(barFieldSpecs()))
 	for _, id := range ticked {
 		if hasBarField(id) && !listed[id] {
 			listed[id] = true
@@ -254,14 +254,14 @@ func (b *barState) restoreFields(ticked []string) {
 		}
 	}
 	b.order = order
-	b.toggled = make(map[string]bool, len(barFieldSpecs))
-	for _, spec := range barFieldSpecs {
+	b.toggled = make(map[string]bool, len(barFieldSpecs()))
+	for _, spec := range barFieldSpecs() {
 		b.toggled[spec.id] = listed[spec.id]
 	}
 }
 
 func hasBarField(id string) bool {
-	for _, spec := range barFieldSpecs {
+	for _, spec := range barFieldSpecs() {
 		if spec.id == id {
 			return true
 		}

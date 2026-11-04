@@ -198,14 +198,14 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 		TokenLimit:    limit,
 		Instruction:   instruction,
 	}
-	d.fanOut(ctx, contracts.Event{T: eventCompactStarted, Value: trigger.String(), Tokens: d.turnReading, TokensIn: limit, Done: measured})
+	d.fanOut(ctx, contracts.Event{T: eventCompactStarted, Value: trigger.String(), Tokens: d.turnReading})
 	result, err := contracts.RunCompactStack(ctx, stages, req, d.compactionProgress(ctx))
 	if err != nil {
 		d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: err.Error()})
 		return contracts.CompactResult{}, err
 	}
 	d.settleCompaction(result, limit)
-	d.fanOut(ctx, contracts.Event{T: eventCompactDone, Value: trigger.String(), Text: result.Note, Tokens: result.TokensAfter, TokensIn: limit, Done: result.TokensMeasured})
+	d.fanOut(ctx, contracts.Event{T: eventCompactDone, Value: trigger.String(), Text: result.Note, Tokens: measuredTokens(result)})
 	return result, nil
 }
 
@@ -215,6 +215,13 @@ func (d *sessionDriver) settleCompaction(result contracts.CompactResult, limit i
 	}
 	d.turnReading = result.TokensAfter
 	d.compactSpent = crossed(result.TokensAfter, limit, d.compactPercent())
+}
+
+func measuredTokens(result contracts.CompactResult) int {
+	if !result.TokensMeasured {
+		return 0
+	}
+	return result.TokensAfter
 }
 
 func (d *sessionDriver) compactionProgress(ctx context.Context) func(contracts.BackendEvent) {

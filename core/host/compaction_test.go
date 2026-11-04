@@ -146,7 +146,7 @@ func TestCompactionNeverOverlapsATurn(t *testing.T) {
 		t.Fatalf("frame after the turn = %+v, want the queued manual compaction", got)
 	}
 	f.from <- measuredAnswer(4_000)
-	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 4_000 || !done.Done {
+	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 4_000 {
 		t.Fatalf("compaction_done = %+v, want 4000 measured", done)
 	}
 }
@@ -233,6 +233,21 @@ func TestCustomStagesRunInConfiguredOrderBeforeTheBackend(t *testing.T) {
 	f.from <- measuredAnswer(30_000)
 	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 30_000 {
 		t.Fatalf("compaction_done = %+v, want the backend result last", done)
+	}
+}
+
+func TestCompactionEventsCarryTokensOnlyWhenMeasured(t *testing.T) {
+	f := newCompactFixture(t, "claude", compactPolicy(92))
+	f.driver.requestCompaction("", contracts.Conversation{})
+	if got := nextFrame(t, f); got.T != compactwire.EventRequest {
+		t.Fatalf("frame = %+v, want the compaction request", got)
+	}
+	if started := waitEmitted(t, f, eventCompactStarted); started.Done || started.Tokens != 0 || started.TokensIn != 0 {
+		t.Fatalf("compaction_started = %+v, want no Done and no tokens without a measured turn", started)
+	}
+	f.from <- compactwire.Result(contracts.CompactResult{TokensAfter: 50_000, Note: "compacté"})
+	if done := waitEmitted(t, f, eventCompactDone); done.Done || done.Tokens != 0 || done.TokensIn != 0 {
+		t.Fatalf("compaction_done = %+v, want no Done and no tokens for a size the stage did not measure", done)
 	}
 }
 

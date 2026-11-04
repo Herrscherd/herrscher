@@ -17,12 +17,12 @@ func TestCompactionEventsDriveTheTabFromStartToNotice(t *testing.T) {
 	tb := m.ensureTab("c")
 	m.active = "c"
 
-	m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "automatic", Tokens: 184_000, TokensIn: 200_000, Done: true})
+	m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "automatic", Tokens: 184_000})
 	if !tb.busy || !tb.compaction.active {
 		t.Fatal("a started compaction must mark the tab busy and active")
 	}
 
-	m.renderInto(tb, contracts.Event{T: eventCompactionDone, Value: "automatic", Text: "résumé", Tokens: 90_000, TokensIn: 200_000, Done: true})
+	m.renderInto(tb, contracts.Event{T: eventCompactionDone, Value: "automatic", Text: "résumé", Tokens: 90_000})
 	if tb.busy || tb.compaction.active {
 		t.Fatal("a finished compaction must release the tab")
 	}
@@ -30,7 +30,7 @@ func TestCompactionEventsDriveTheTabFromStartToNotice(t *testing.T) {
 		t.Fatalf("ctxTokens = %d, want the measured 90000 after compaction", tb.ctxTokens)
 	}
 
-	m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "manual", Tokens: 90_000, TokensIn: 200_000, Done: true})
+	m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "manual", Tokens: 90_000})
 	m.renderInto(tb, contracts.Event{T: eventCompactionFailed, Value: "manual", Text: "le backend a refusé"})
 	if tb.busy {
 		t.Fatal("a failed compaction must release the tab")
@@ -38,6 +38,32 @@ func TestCompactionEventsDriveTheTabFromStartToNotice(t *testing.T) {
 	last := tb.entries[len(tb.entries)-1]
 	if last.role != roleError || last.text != "le backend a refusé" {
 		t.Fatalf("last entry = %+v, want the failure as an error", last)
+	}
+}
+
+func TestCompactionNoticeShowsTheFiguresOnlyWhenMeasured(t *testing.T) {
+	cases := []struct {
+		name          string
+		started, done int
+		want          string
+	}{
+		{name: "measured both ends", started: 184_000, done: 90_000, want: formatTokens(184_000) + arrow + formatTokens(90_000)},
+		{name: "no measured turn and no measured result", started: 0, done: 0, want: formatTokens(0) + arrow + unavailable},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 92}}}
+			m := newModel(f)
+			m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
+			tb := m.ensureTab("c")
+			m.active = "c"
+			m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "automatic", Tokens: tc.started})
+			m.renderInto(tb, contracts.Event{T: eventCompactionDone, Value: "automatic", Tokens: tc.done})
+			last := tb.entries[len(tb.entries)-1]
+			if last.role != roleNotice || last.text != "compacté : "+tc.want {
+				t.Fatalf("notice = %+v, want %q", last, "compacté : "+tc.want)
+			}
+		})
 	}
 }
 

@@ -90,11 +90,11 @@ func (target *tab) finishCompaction() {
 
 func (target *tab) startCompaction(event contracts.Event) {
 	target.busy = true
-	target.compaction = compaction{active: true, from: event.Tokens, measured: event.Done}
+	target.compaction = compaction{active: true, from: event.Tokens, measured: event.Tokens > 0}
 }
 
 func (target *tab) completeCompaction(event contracts.Event) {
-	if event.Done && event.Tokens > 0 {
+	if event.Tokens > 0 {
 		target.compaction.to = event.Tokens
 		target.compaction.measured = true
 		target.ctxTokens = event.Tokens

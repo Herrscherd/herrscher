@@ -7,10 +7,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 const (
-	gitCacheTTL     = 2 * time.Second
+	gitRefreshEvery = 3 * time.Second
 	gitCommandLimit = 2 * time.Second
 )
 
@@ -25,23 +27,57 @@ type gitSnapshot struct {
 }
 
 type gitCacheEntry struct {
-	at   time.Time
+	requested time.Time
+	snap      gitSnapshot
+}
+
+type gitRefreshMsg struct {
+	dir  string
 	snap gitSnapshot
 }
 
 func (m *model) gitStateOf(dir string) gitSnapshot {
+	return m.gitCache[dir].snap
+}
+
+func (m *model) requestGit(dir string, force bool) tea.Cmd {
 	if dir == "" {
-		return gitSnapshot{}
+		return nil
 	}
 	if m.gitCache == nil {
 		m.gitCache = map[string]gitCacheEntry{}
 	}
-	if entry, ok := m.gitCache[dir]; ok && time.Since(entry.at) < gitCacheTTL {
-		return entry.snap
+	entry := m.gitCache[dir]
+	if !force && time.Since(entry.requested) < gitRefreshEvery {
+		return nil
 	}
-	snap := readGitSnapshot(dir)
-	m.gitCache[dir] = gitCacheEntry{at: time.Now(), snap: snap}
-	return snap
+	entry.requested = time.Now()
+	m.gitCache[dir] = entry
+	return func() tea.Msg {
+		return gitRefreshMsg{dir: dir, snap: readGitSnapshot(dir)}
+	}
+}
+
+func (m *model) storeGit(msg gitRefreshMsg) {
+	if m.gitCache == nil {
+		m.gitCache = map[string]gitCacheEntry{}
+	}
+	entry := m.gitCache[msg.dir]
+	entry.snap = msg.snap
+	m.gitCache[msg.dir] = entry
+}
+
+func (m *model) gitTick() tea.Cmd {
+	info, _ := m.activeInfo()
+	return m.requestGit(info.Dir, false)
+}
+
+func (m *model) gitAfterTool(text string) tea.Cmd {
+	if family, _ := toolVerb(text); family != familyWrite {
+		return nil
+	}
+	info, _ := m.activeInfo()
+	return m.requestGit(info.Dir, true)
 }
 
 func readGitSnapshot(dir string) gitSnapshot {

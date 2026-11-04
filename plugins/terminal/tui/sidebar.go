@@ -101,6 +101,7 @@ func (m *model) sidebarBody(tab *tab, width int) []string {
 		m.sessionSection(tab, info, m.gitStateOf(info.Dir).branch, width),
 		m.todoSection(tab, width, short),
 		m.agentSection(tab, width, time.Now(), short),
+		m.backgroundSection(tab, width, short),
 		m.filesSection(tab, info.Dir, width, short),
 		m.contextSection(tab, info, width, short),
 	}
@@ -120,7 +121,7 @@ func (m *model) sidebarBody(tab *tab, width int) []string {
 func (m *model) sessionSection(tab *tab, info contracts.SessionInfo, branch string, width int) []string {
 	title := m.st.text.Bold(true).Render(tab.label)
 	if !tab.openedAt.IsZero() {
-		title += m.st.dim.Render(" · " + formatDuration(time.Since(tab.openedAt)))
+		title += m.st.dim.Render(" · depuis " + formatDuration(time.Since(tab.openedAt)))
 	}
 	lines := []string{m.sideHead("Session", "", width), sideRow(title, width)}
 	var where []string
@@ -182,7 +183,7 @@ func (m *model) agentSection(tab *tab, width int, now time.Time, short bool) []s
 	if len(agents) == 0 {
 		return nil
 	}
-	lines := []string{m.sideHead("Sub-agents", fmt.Sprintf("%d active", len(tab.agents)), width)}
+	lines := []string{m.sideHead("Sous-agents", fmt.Sprintf("%d actifs", len(tab.agents)), width)}
 	if short {
 		return lines
 	}
@@ -221,6 +222,27 @@ func (m *model) agentGlyph(state string) (string, lipgloss.Style) {
 	return m.spinFrame(), m.st.spinner
 }
 
+type backgroundTask struct {
+	ID    string
+	Name  string
+	State string
+}
+
+func (m *model) backgroundSection(tab *tab, width int, short bool) []string {
+	if len(tab.background) == 0 {
+		return nil
+	}
+	lines := []string{m.sideHead("De fond", strconv.Itoa(len(tab.background)), width)}
+	if short {
+		return lines
+	}
+	shown := min(len(tab.background), sidebarAgentRows)
+	for _, task := range tab.background[:shown] {
+		lines = append(lines, sideRow(m.st.dim.Render(glyphOpen)+" "+m.st.text.Render(oneLine(task.Name)), width))
+	}
+	return appendHidden(m, lines, len(tab.background)-shown, width)
+}
+
 func (m *model) filesSection(tab *tab, dir string, width int, short bool) []string {
 	if len(tab.files) == 0 {
 		return nil
@@ -234,11 +256,11 @@ func (m *model) filesSection(tab *tab, dir string, width int, short bool) []stri
 			known++
 		}
 	}
-	extra := fmt.Sprintf("%d files", len(tab.files))
+	extra := fmt.Sprintf("%d fichiers", len(tab.files))
 	if known > 0 {
 		extra = fmt.Sprintf("+%d %s%d", added, glyphMinus, removed)
 	}
-	head := m.sideHead("Files", extra, width)
+	head := m.sideHead("Fichiers", extra, width)
 	if short {
 		return []string{head}
 	}
@@ -258,23 +280,23 @@ func (m *model) filesSection(tab *tab, dir string, width int, short bool) []stri
 func (m *model) contextSection(tab *tab, info contracts.SessionInfo, width int, short bool) []string {
 	used := m.contextTokens(tab)
 	if used <= 0 {
-		head := m.sideHead("Context", "", width)
+		head := m.sideHead("Contexte", "", width)
 		if short {
 			return []string{head}
 		}
-		return []string{head, sideRow(m.st.dim.Render("no measurement yet"), width)}
+		return []string{head, sideRow(m.st.dim.Render("pas encore mesuré"), width)}
 	}
 	limit := contextLimit(info.Vendor)
 	ratio := contextRatio(used, limit)
 	style := palierStyle(ratio, m.st)
-	percent := fmt.Sprintf("%d%%", int(ratio*percentScale))
+	percent := fmt.Sprintf("%d %%", int(ratio*percentScale))
 	if short {
-		return []string{m.sideHead("Context", percent, width)}
+		return []string{m.sideHead("Contexte", percent, width)}
 	}
 	gaugeLine := sidebarIndent + gauge(ratio, style, m.st.dim) + " " + style.Render(percent)
-	detail := fmt.Sprintf("%s / %s · compacts at %d%%", formatTokens(used), formatLimit(limit), int(compactAt*percentScale))
+	detail := fmt.Sprintf("%s / %s · compacte seul à %d %%", formatTokens(used), formatLimit(limit), int(compactAt*percentScale))
 	return []string{
-		m.sideHead("Context", "", width),
+		m.sideHead("Contexte", "", width),
 		truncate(gaugeLine, width),
 		sideRow(m.st.dim.Render(detail), width),
 	}

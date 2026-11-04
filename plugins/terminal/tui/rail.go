@@ -12,7 +12,7 @@ const brand = "──◂ HERRSCHER ▸──"
 
 const (
 	railName       = "herrscher"
-	railHints      = "^P agents · ^T tab"
+	railHints      = "^P agents · ^T onglet"
 	railTabGap     = 2
 	railEdgeGap    = 2
 	railStripFloor = 20

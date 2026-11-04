@@ -128,6 +128,7 @@ type tab struct {
 	todos              []contracts.TodoItem
 	agents             []liveAgent
 	agentsDone         []liveAgent
+	background         []backgroundTask
 	unreadCount        int
 	finished           bool
 	files              []string
@@ -483,20 +484,24 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 			tab.finished = true
 		}
 	}
+	var gitCmd tea.Cmd
 	if tab.channel == m.active {
 		m.syncViewport()
+		if routed.Event.T == "status" {
+			gitCmd = m.gitAfterTool(routed.Event.Text)
+		}
 	}
 	if routed.Event.T != "reply" || len(tab.entries) == 0 {
-		return nil
+		return gitCmd
 	}
 	last := len(tab.entries) - 1
 	for last >= 0 && tab.entries[last].role != roleAgent {
 		last--
 	}
 	if last < 0 {
-		return nil
+		return gitCmd
 	}
-	return m.fetchEntryImages(tab, last)
+	return tea.Batch(gitCmd, m.fetchEntryImages(tab, last))
 }
 
 func (m *model) syncTabs() {
@@ -1271,7 +1276,10 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case tickMsg:
 		m.syncTabs()
-		return tickCmd(), true
+		return tea.Batch(tickCmd(), m.gitTick()), true
+	case gitRefreshMsg:
+		m.storeGit(msg)
+		return nil, true
 	case spinMsg:
 		return m.handleSpin(), true
 	}
@@ -1572,7 +1580,7 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case tea.KeyCtrlS:
 		m.openSearch()
 	case tea.KeyCtrlT:
-		m.toggleTurnFold()
+		m.openSwitch()
 	case tea.KeyCtrlF:
 		m.toggleFold()
 	case tea.KeyCtrlY:
@@ -1663,7 +1671,7 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 }
 
 func (m *model) helpView() string {
-	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · ctrl+b colonne latérale · alt+↑↓ tour suivant · / commandes · @ fichiers")
+	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t changer d'onglet · ctrl+b colonne latérale · alt+↑↓ tour suivant · / commandes · @ fichiers")
 }
 
 func (m *model) View() string {

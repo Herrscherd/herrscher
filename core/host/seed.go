@@ -13,6 +13,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/keyproxy"
 )
 
 const seedConsolidateTimeout = 60 * time.Second
@@ -204,12 +205,15 @@ func ApplyOrchestratorScope(cfg *contracts.PluginConfig, session, project, agent
 // positional parameters; routing would have added a seventh, which made call
 // sites unreadable.
 type BackendRequest struct {
-	Vendor  string
-	Cmd     string
-	Kind    string
-	Dir     string
-	Resume  string
-	ModelID string
+	Vendor      string
+	Cmd         string
+	Kind        string
+	Dir         string
+	Resume      string
+	ModelID     string
+	Account     string
+	AccountRoot string
+	Keys        *keyproxy.Proxy
 
 	resolver remoteBackendResolver
 }
@@ -264,6 +268,11 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 	if cfg.Settings == nil {
 		cfg.Settings = make(map[string]string)
 	}
+	env, err := sessionEnv(req, desired, route)
+	if err != nil {
+		return nil, err
+	}
+	route.env = env
 	applyBackendRequest(cfg.Settings, req, route)
 	return plugin.Backend(ctx, cfg)
 }

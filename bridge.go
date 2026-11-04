@@ -13,7 +13,9 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
+	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/keyproxy"
 	"github.com/Herrscherd/herrscher/core/scope"
 )
 
@@ -56,8 +58,19 @@ func runBridge(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		return err
+	}
+	keys, err := keyproxy.Open(ctx, cfg.Keys, keyproxy.OSLoader(), log)
+	if err != nil && !errors.Is(err, keyproxy.ErrDisabled) {
+		return err
+	}
+	defer closeKeyProxy(ctx, log, keys)
 	newBackend := func(_ string) (contracts.Backend, error) {
-		return newBackendFor(ctx, resolver, backendFlags.request())
+		req := backendFlags.request()
+		req.Keys = keys
+		return newBackendFor(ctx, resolver, req)
 	}
 
 	mem := buildMemory(ctx, log)
@@ -95,6 +108,7 @@ type backendFlags struct {
 	vendor  *string
 	resume  *string
 	modelID *string
+	account *string
 }
 
 func declareBackendFlags(flags *flag.FlagSet) backendFlags {
@@ -104,6 +118,7 @@ func declareBackendFlags(flags *flag.FlagSet) backendFlags {
 		vendor:  flags.String("vendor", "", "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)"),
 		resume:  flags.String("resume", "", "backend resume token to resume the conversation on start"),
 		modelID: flags.String("model", "", "catalog model id (see `herrscher models list`); empty = legacy path, the model rides in --cmd"),
+		account: flags.String("account", "", "account profile of the vendor login (see `herrscher account list`); empty = the vendor default, native = the machine login"),
 	}
 	flags.Bool("stream", true, "deprecated, ignored (accepted for backward compatibility)")
 	return parsed
@@ -111,12 +126,21 @@ func declareBackendFlags(flags *flag.FlagSet) backendFlags {
 
 func (f backendFlags) request() host.BackendRequest {
 	return host.BackendRequest{
-		Vendor: *f.vendor, Cmd: *f.cmd, Kind: *f.kind, Resume: *f.resume, ModelID: *f.modelID,
+		Vendor: *f.vendor, Cmd: *f.cmd, Kind: *f.kind, Resume: *f.resume, ModelID: *f.modelID, Account: *f.account,
 	}
 }
 
 type backendResolver interface {
 	Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, bool, error)
+}
+
+func closeKeyProxy(ctx context.Context, log *slog.Logger, keys *keyproxy.Proxy) {
+	if keys == nil {
+		return
+	}
+	if err := keys.Close(ctx); err != nil {
+		log.Warn("key proxy did not close cleanly", "err", err)
+	}
 }
 
 func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {

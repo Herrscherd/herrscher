@@ -52,6 +52,7 @@ type Session struct {
 	Dir      string `json:"dir,omitempty"`
 	Project  string `json:"project,omitempty"`
 	Agent    string `json:"agent,omitempty"`
+	Account  string `json:"account,omitempty"`
 	// Host names the place this session's process runs, as registered by
 	// `host add`. Empty means this machine, which is every session written
 	// before remote execution existed.

@@ -124,7 +124,6 @@ func (m *model) frameOverlays() []frameOverlay {
 		{m.resumeOpen, m.resumeView},
 		{m.rwOpen, m.rewindView},
 		{m.switchOpen, m.switchView},
-		{m.themeScr != nil, m.themeView},
 		{m.skillsOpen, m.skillsView},
 		{m.diagOpen, m.diagView},
 		{m.ctxOpen, m.contextView},

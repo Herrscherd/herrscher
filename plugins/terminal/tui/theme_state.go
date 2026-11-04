@@ -56,7 +56,20 @@ func (m *model) loadTheme(configDir string, detectDark func() bool) {
 	m.themeCfg = cfg
 	m.themeCat = loadThemeCatalog(themesDirFor(configDir))
 	m.themeStamp = themesStamp(themesDirFor(configDir))
-	m.applyTheme(startupTheme(cfg, m.themeCat, detectDark))
+	m.themeBackground = ""
+	probe := func() bool {
+		dark := detectDark()
+		m.themeBackground = backgroundLabel(dark)
+		return dark
+	}
+	m.applyTheme(startupTheme(cfg, m.themeCat, probe))
+}
+
+func backgroundLabel(dark bool) string {
+	if dark {
+		return "sombre"
+	}
+	return "clair"
 }
 
 func (m *model) applyTheme(next Theme) {

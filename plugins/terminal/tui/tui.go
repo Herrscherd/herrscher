@@ -307,13 +307,14 @@ type model struct {
 
 	diagOpen bool
 
-	theme      Theme
-	themeCat   themeCatalog
-	themeCfg   terminalSection
-	themeDir   string
-	themeStamp string
-	themeScr   *themeScreen
-	noColor    bool
+	theme           Theme
+	themeCat        themeCatalog
+	themeCfg        terminalSection
+	themeBackground string
+	themeDir        string
+	themeStamp      string
+	themeScr        *themeScreen
+	noColor         bool
 
 	leaderArmed time.Time
 	bar         barState
@@ -1985,6 +1986,9 @@ func (m *model) View() string {
 	}
 	if m.diff.open {
 		return m.diffScreen()
+	}
+	if m.themeScr != nil {
+		return m.themeScreenView()
 	}
 	if m.surface != surfaceChat {
 		return m.surfaceScreen()

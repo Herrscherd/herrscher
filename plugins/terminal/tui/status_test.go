@@ -240,7 +240,7 @@ func TestStatusBarFitsEveryWidth(t *testing.T) {
 		if got := lipgloss.Width(bar); got > width {
 			t.Errorf("width %d: bar is %d cells wide: %q", width, got, bar)
 		}
-		if !strings.Contains(bar, "Manuel") {
+		if !strings.Contains(bar, "Man") {
 			t.Errorf("width %d: the mode must always show: %q", width, bar)
 		}
 		if !strings.Contains(bar, "41%") {
@@ -278,18 +278,11 @@ func TestStatusBarShowsTheSpinnerWhileBusy(t *testing.T) {
 
 func TestStatusBarRendersTheModeChip(t *testing.T) {
 	m, tb := barModelAt(t, "")
-	if bar := m.statusBar(tb, 120); !strings.Contains(bar, " Manuel ") {
-		t.Errorf("the mode chip must lead with the default mode: %q", bar)
+	if bar := m.statusBar(tb, 120); !strings.Contains(bar, "Manuel") {
+		t.Errorf("the mode chip must lead with the session mode: %q", bar)
 	}
-	m.bar.setMode("Auto")
-	if bar := m.statusBar(tb, 120); !strings.Contains(bar, " Auto ") {
-		t.Errorf("setMode must reach the bar: %q", bar)
-	}
-}
-
-func TestStatusBarDefaultsToManualMode(t *testing.T) {
-	bar := newBarState()
-	if got := bar.modeName(); got != "Manuel" {
-		t.Fatalf("default mode = %q, want Manual", got)
+	tb.mode = modeAuto
+	if bar := m.statusBar(tb, 120); !strings.Contains(bar, "Auto") {
+		t.Errorf("the session mode must reach the bar: %q", bar)
 	}
 }

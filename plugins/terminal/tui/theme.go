@@ -134,7 +134,7 @@ type glyphSet struct {
 	selected, attention, open, railMark, filet, minus                string
 	expanded, branchMid, branchEnd, omitted, userBar                 string
 	ticked, unticked, shiftTab                                       string
-	enter, caret, reasonArrow                                        string
+	enter, caret, reasonArrow, warn                                  string
 	families                                                         map[string]string
 	spin                                                             []string
 }
@@ -159,7 +159,7 @@ func unicodeGlyphs() glyphSet {
 		selected: "▸", attention: "!", open: "○", railMark: "━", filet: "│", minus: "−",
 		expanded: "▾", branchMid: "├", branchEnd: "└", omitted: "⋯", userBar: "┃",
 		ticked: "[✓]", unticked: "[ ]", shiftTab: "⇧⇥",
-		enter: "⏎", caret: "▌", reasonArrow: "›",
+		enter: "⏎", caret: "▌", reasonArrow: "›", warn: "⚠",
 		families: map[string]string{
 			familyRead: "◇", familyWrite: "◈", familyRun: "▸", familySearch: "⌕", familyWeb: "⌖", familyAgent: "◆",
 		},
@@ -184,7 +184,7 @@ func asciiGlyphs() glyphSet {
 		selected: ">", attention: "!", open: "o", railMark: "=", filet: "|", minus: "-",
 		expanded: "v", branchMid: "+", branchEnd: "\\", omitted: "...", userBar: "|",
 		ticked: "[v]", unticked: "[ ]", shiftTab: "S-Tab",
-		enter: "enter", caret: "_", reasonArrow: ">",
+		enter: "enter", caret: "_", reasonArrow: ">", warn: "!",
 		families: map[string]string{
 			familyRead: "=", familyWrite: "+", familyRun: ">", familySearch: "?", familyWeb: "@", familyAgent: "*",
 		},
@@ -242,6 +242,10 @@ type uiStyles struct {
 	violet     lipgloss.Style
 	addRow     lipgloss.Style
 	delRow     lipgloss.Style
+	modeManual lipgloss.Style
+	modeEdits  lipgloss.Style
+	modePlan   lipgloss.Style
+	modeAuto   lipgloss.Style
 	sep        string
 	heading    string
 
@@ -296,6 +300,10 @@ func newStyles(th Theme, noColor bool) uiStyles {
 		violet:     paint(pal.Violet),
 		addRow:     tint(pal.Add, pal.AddBg),
 		delRow:     tint(pal.Del, pal.DelBg),
+		modeManual: paint(pal.Accent),
+		modeEdits:  paint(pal.Add),
+		modePlan:   paint(pal.Violet),
+		modeAuto:   paint(pal.Err),
 		sep:        dim.Render(" " + glyphs.divider + " "),
 		heading:    headingColor(pal.Accent, noColor),
 		glyphs:     glyphs,

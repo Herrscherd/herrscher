@@ -383,7 +383,7 @@ func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
 	}
 
 	allowed := captureDaemonStderr(t, func() {
-		askApproval(ctx, approvalTab, sessionTab, "s-warn", req, nil, approval.ModeAsk, outlives)
+		askApproval(ctx, approvalTab, sessionTab, "s-warn", req, nil, "", outlives)
 	})
 	if allowed != "" {
 		t.Fatalf("a call nobody is asked about must say nothing, got %q", allowed)

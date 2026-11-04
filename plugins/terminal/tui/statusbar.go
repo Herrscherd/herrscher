@@ -13,8 +13,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-const defaultMode = "Manuel"
-
 const (
 	rankBusy = iota
 	rankExtra
@@ -111,23 +109,14 @@ type barState struct {
 }
 
 func newBarState() barState {
-	return barState{mode: defaultMode, config: defaultStatuslineConfig()}
+	return barState{config: defaultStatuslineConfig()}
 }
-
-func (b *barState) setMode(mode string) { b.mode = mode }
 
 func (b *barState) setQueued(count int) { b.queued = count }
 
 func (b *barState) setBackground(count int) { b.background = count }
 
 func (b *barState) setQuota(text string) { b.quota = text }
-
-func (b *barState) modeName() string {
-	if b.mode == "" {
-		return defaultMode
-	}
-	return b.mode
-}
 
 func (b *barState) fieldIDs() []string {
 	if len(b.order) > 0 {
@@ -179,21 +168,6 @@ func single(text string, rank int) barPart {
 	return barPart{layers: []barLayer{{text: text, rank: rank}}}
 }
 
-func modeChipStyle(mode string, styles uiStyles) lipgloss.Style {
-	var role lipgloss.Style
-	switch mode {
-	case "Auto":
-		role = styles.red
-	case "Plan":
-		role = styles.violet
-	case "Édits acceptés":
-		role = styles.accent
-	default:
-		role = styles.text
-	}
-	return role.Bold(true).Reverse(true)
-}
-
 func (m *model) statusBar(tb *tab, width int) string {
 	if width < 1 {
 		return ""
@@ -211,7 +185,7 @@ func (m *model) builtinBar(tb *tab, width int) string {
 	if width < 1 {
 		return ""
 	}
-	parts := m.barParts(tb)
+	parts := m.barParts(tb, width)
 	for {
 		line := m.composeBar(parts)
 		if lipgloss.Width(line) <= width {
@@ -225,12 +199,12 @@ func (m *model) builtinBar(tb *tab, width int) string {
 	}
 }
 
-func (m *model) barParts(tb *tab) []barPart {
+func (m *model) barParts(tb *tab, width int) []barPart {
 	info, _ := m.activeInfo()
 	used := m.contextTokens(tb)
 	var parts []barPart
 	if m.bar.isShown(barModeID) {
-		parts = append(parts, m.modePart())
+		parts = append(parts, single(m.modeChip(tb, width), rankNever))
 	}
 	for _, id := range m.bar.fieldIDs() {
 		if id == barModeID {
@@ -247,12 +221,6 @@ func (m *model) barParts(tb *tab) []barPart {
 		parts = append(parts, single(mouse, rankExtra))
 	}
 	return parts
-}
-
-func (m *model) modePart() barPart {
-	mode := m.bar.modeName()
-	chip := modeChipStyle(mode, m.st).Render(" " + mode + " ")
-	return single(chip+m.st.dim.Render(" "+m.st.glyphs.shiftTab), rankNever)
 }
 
 func (m *model) fieldPart(id string, tb *tab, info contracts.SessionInfo, used int) (barPart, bool) {

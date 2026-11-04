@@ -149,6 +149,8 @@ type tab struct {
 	flips              map[uint64]bool
 	pendingApproval    bool
 	approval           approvalPrompt
+	mode               string
+	modeAsked          bool
 }
 
 type liveAgent struct {
@@ -296,6 +298,8 @@ type model struct {
 	pluginsFindings []string
 	pluginsOutput   string
 	pluginsNotice   string
+
+	planMenu *planMenu
 
 	mentionIdx       int
 	mentionCacheKey  string
@@ -447,6 +451,7 @@ func (m *model) ensureTab(channel string) *tab {
 	m.order = append(m.order, channel)
 	if m.active == "" {
 		m.active = channel
+		m.applySize()
 	}
 	m.seedScrollback(tab)
 	return tab
@@ -531,6 +536,9 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 	}
 	if last < 0 {
 		return gitCmd
+	}
+	if tab.channel == m.active && tab.modeID() == modePlan && m.planMenu == nil && tab.entries[last].text != "" {
+		m.openPlanMenu(tab.channel)
 	}
 	return tea.Batch(gitCmd, m.fetchEntryImages(tab, last))
 }
@@ -671,6 +679,10 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		return m.toggleMouse(), true
 	case "statusline":
 		return m.openStatusline(), true
+	case "mode":
+		return m.modeSlash(strings.TrimPrefix(text, "/mode")), true
+	case "plan":
+		return m.planSlash(strings.TrimPrefix(text, "/plan")), true
 	default:
 		return nil, false
 	}
@@ -1325,6 +1337,9 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft && m.clickTranscript(msg) {
 			return nil, true
 		}
+		if cmd, handled := m.handleModeClick(msg); handled {
+			return cmd, true
+		}
 	case imageReadyMsg:
 		m.applyImage(msg)
 		return nil, true
@@ -1334,10 +1349,16 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case dispatchResultMsg:
 		m.handleDispatchResult(msg)
 		return nil, true
+	case modeResultMsg:
+		m.handleModeResult(msg)
+		return nil, true
+	case modeLoadedMsg:
+		m.handleModeLoaded(msg)
+		return nil, true
 	case tickMsg:
 		m.syncTabs()
 		m.expireApprovals(time.Now())
-		return tea.Batch(tickCmd(), m.gitTick()), true
+		return tea.Batch(tickCmd(), m.gitTick(), m.loadModesCmd()), true
 	case gitRefreshMsg:
 		m.storeGit(msg)
 	case themeWatchMsg:
@@ -1425,6 +1446,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch {
 	case m.pendingClose:
 		return m.handlePendingClose(msg), true
+	case m.planMenu != nil:
+		return m.handlePlanKey(msg), true
 	case m.switchOpen:
 		return m.handleSwitchKey(msg), true
 	case m.searchOpen:
@@ -1627,7 +1650,7 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case tea.KeyTab:
 		m.switchTab(1)
 	case tea.KeyShiftTab:
-		m.switchTab(-1)
+		return m.cycleMode(), true
 	case tea.KeyCtrlB:
 		m.toggleSidebar()
 		return nil, true

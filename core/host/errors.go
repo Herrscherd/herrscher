@@ -77,7 +77,7 @@ type unknownModeError struct {
 }
 
 func (e *unknownModeError) Error() string {
-	return fmt.Sprintf("unknown mode %q: ask, bypass or strict", e.Mode)
+	return fmt.Sprintf("unknown mode %q: ask, accept-edits, plan, auto, bypass or strict", e.Mode)
 }
 
 type accessDeniedError struct {

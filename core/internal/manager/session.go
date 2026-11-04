@@ -648,7 +648,7 @@ func (h *Handler) resolveHost(input contracts.Input, agentName string) string {
 
 func validateApprovalsMode(mode string) error {
 	switch approval.Mode(mode) {
-	case "", approval.ModeAsk, approval.ModeBypass, approval.ModeStrict, approval.ModeSmart:
+	case "", approval.ModeAsk, approval.ModeAcceptEdits, approval.ModePlan, approval.ModeAuto, approval.ModeBypass, approval.ModeStrict, approval.ModeSmart:
 		return nil
 	}
 	return &UnknownApprovalModeError{Mode: mode}

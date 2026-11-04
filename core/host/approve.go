@@ -119,9 +119,9 @@ func (t *approvalTable) rated(ctx context.Context, sessions *sessionTable, sessi
 
 func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessionTable, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait time.Duration) (approval.Decision, string) {
 	raw, matched := pol.Decide(req)
-	decided := approval.Apply(mode, raw, matched)
+	decided := approval.Apply(mode, req.Tool, raw, matched)
 	if decided == approval.Deny {
-		return approval.Deny, fmt.Sprintf("herrscher: %s was denied by policy", describeRequest(req))
+		return approval.Deny, denialReason(mode, req)
 	}
 	if sessions.remembers(session, req) {
 		return approval.Allow, ""
@@ -171,6 +171,13 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	case <-ctx.Done():
 		return approval.Deny, fmt.Sprintf("herrscher: the wait for approval ended, so %s was denied", describeRequest(req))
 	}
+}
+
+func denialReason(mode approval.Mode, req approval.Request) string {
+	if mode == approval.ModePlan {
+		return fmt.Sprintf("herrscher: %s was refused: this session is in plan mode, which only reads; write the plan, and the operator validates it before anything is written", describeRequest(req))
+	}
+	return fmt.Sprintf("herrscher: %s was denied by policy", describeRequest(req))
 }
 
 func registerApproval(approvals *approvalTable, pending *pendingApproval) (func(), string) {

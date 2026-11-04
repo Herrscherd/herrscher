@@ -103,7 +103,7 @@ type UnknownApprovalModeError struct {
 }
 
 func (e *UnknownApprovalModeError) Error() string {
-	return fmt.Sprintf("unknown approval mode %q: ask, bypass or strict", e.Mode)
+	return fmt.Sprintf("unknown approval mode %q: ask, accept-edits, plan, auto, bypass or strict", e.Mode)
 }
 
 // UnsupportedHomeTypeError reports a home channel kind the manager cannot open sessions in.

@@ -44,12 +44,12 @@ func newApprovalModel(t *testing.T, width int, command string, roles ...string) 
 
 var allApprovalRoles = []string{approvalAllow, approvalAllowSession, approvalAllowAlways, approvalDeny}
 
-func pressKey(m *model, key tea.KeyMsg) {
+func sendKey(m *model, key tea.KeyMsg) {
 	m.Update(key)
 }
 
 func pressRunes(m *model, text string) {
-	pressKey(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)})
+	sendKey(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)})
 }
 
 func TestApprovalMenuOpensBoxAboveComposer(t *testing.T) {
@@ -98,7 +98,7 @@ func TestApprovalDenyWithReasonSendsTheReason(t *testing.T) {
 		t.Fatal("r must open the reason field")
 	}
 	pressRunes(m, "pas de push: relis d'abord")
-	pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	sendKey(m, tea.KeyMsg{Type: tea.KeyEnter})
 	want := testApprovalValue(approvalDeny) + ":pas de push: relis d'abord"
 	if len(fb.picks) != 1 || fb.picks[0].value != want {
 		t.Fatalf("picks = %+v, want value %q", fb.picks, want)
@@ -108,7 +108,7 @@ func TestApprovalDenyWithReasonSendsTheReason(t *testing.T) {
 func TestApprovalDenyWithEmptyReasonSendsPlainDeny(t *testing.T) {
 	m, fb := newApprovalModel(t, 120, "git push", allApprovalRoles...)
 	pressRunes(m, "r")
-	pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	sendKey(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if len(fb.picks) != 1 || fb.picks[0].value != testApprovalValue(approvalDeny) {
 		t.Fatalf("picks = %+v, want a plain deny", fb.picks)
 	}
@@ -117,7 +117,7 @@ func TestApprovalDenyWithEmptyReasonSendsPlainDeny(t *testing.T) {
 func TestApprovalEscLeavesTheReasonField(t *testing.T) {
 	m, fb := newApprovalModel(t, 120, "git push", allApprovalRoles...)
 	pressRunes(m, "r")
-	pressKey(m, tea.KeyMsg{Type: tea.KeyEsc})
+	sendKey(m, tea.KeyMsg{Type: tea.KeyEsc})
 	if len(fb.picks) != 0 || !m.tabs["a"].pendingApproval {
 		t.Fatalf("esc in the reason field must neither answer nor clear the approval, picks=%+v", fb.picks)
 	}
@@ -125,9 +125,9 @@ func TestApprovalEscLeavesTheReasonField(t *testing.T) {
 
 func TestApprovalArrowsAndEnterChooseTheRow(t *testing.T) {
 	m, fb := newApprovalModel(t, 120, "git push", allApprovalRoles...)
-	pressKey(m, tea.KeyMsg{Type: tea.KeyDown})
-	pressKey(m, tea.KeyMsg{Type: tea.KeyDown})
-	pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	sendKey(m, tea.KeyMsg{Type: tea.KeyDown})
+	sendKey(m, tea.KeyMsg{Type: tea.KeyDown})
+	sendKey(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if len(fb.picks) != 1 || fb.picks[0].value != testApprovalValue(approvalAllowAlways) {
 		t.Fatalf("picks = %+v, want the allow-always value", fb.picks)
 	}

@@ -6,8 +6,10 @@ import (
 )
 
 type frame struct {
-	above []string
-	below []string
+	above     []string
+	below     []string
+	stripRow  int
+	stripDown bool
 }
 
 func (f frame) height() int {
@@ -29,6 +31,14 @@ func (m *model) buildFrame() frame {
 		stacked.below = append(stacked.below, subagentPanel(tab.agents, time.Now(), m.innerWidth(), m.st)...)
 	}
 	stacked.below = append(stacked.below, m.approvalLines(time.Now())...)
+	if m.planMenu != nil {
+		stacked.below = appendLines(stacked.below, m.planMenuView())
+	}
+	if tab := m.tabs[m.active]; tab != nil {
+		stacked.stripRow = len(stacked.above) + m.vp.Height + len(stacked.below)
+		stacked.stripDown = true
+		stacked.below = append(stacked.below, m.modeStripView(tab, m.innerWidth())...)
+	}
 	if m.paletteOpen() {
 		stacked.below = appendLines(stacked.below, m.paletteView())
 	}

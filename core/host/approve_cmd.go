@@ -212,9 +212,9 @@ func approveAskVerb(store *state.State, agents *agent.Store, approvals *approval
 
 func approveModeVerb(store *state.State) contracts.Cmd {
 	return contracts.New(nsApprove, "mode").
-		Help("set a session's stance: ask (default), bypass, strict, or smart (a model rates each call)").
+		Help("set a session's stance: ask (default), accept-edits, plan, auto, bypass, strict, or smart (a model rates each call)").
 		ValueParam(paramSession, "session name; also takes a bare argument", false).
-		ValueParam("mode", "ask | bypass | strict | smart; also takes a second bare argument", false).
+		ValueParam("mode", "ask | accept-edits | plan | auto | bypass | strict | smart; also takes a second bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			return setApprovalMode(store, in)
 		})
@@ -227,7 +227,7 @@ func setApprovalMode(store *state.State, in contracts.Input) (string, error) {
 		return "", errApproveModeUsage
 	}
 	switch approval.Mode(mode) {
-	case approval.ModeAsk, approval.ModeBypass, approval.ModeStrict, approval.ModeSmart:
+	case approval.ModeAsk, approval.ModeAcceptEdits, approval.ModePlan, approval.ModeAuto, approval.ModeBypass, approval.ModeStrict, approval.ModeSmart:
 	default:
 		return "", &unknownModeError{Mode: mode}
 	}

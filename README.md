@@ -260,8 +260,9 @@ Nobody answering within the approval wait, 5 minutes by default, is a refusal,
 said to the model in words it can act on. The gateways are told the deadline,
 so a menu can show when the question expires.
 
-A session is `ask`, `strict` (everything a rule does not name is asked about too),
-`smart` or `bypass` (no hook at all).
+A session is `ask`, `accept-edits`, `plan`, `auto` (everything passes except what a
+deny rule refuses, the hook stays installed), `strict` (everything a rule does not
+name is asked about too), `smart`, or `bypass` (no hook at all).
 
 `smart` lets a model rate each call that no rule settles, except reads (`Read`,
 `Glob`, `Grep`, `LS`), which pass as before. A `low` rating passes the call,
@@ -465,6 +466,19 @@ and see the result in a live preview. In `~/.config/herrscher/terminal.toml`, a
 `command`, `interval`): it receives the state as JSON on stdin and its first line
 becomes the bar. A script that fails or runs past one second leaves the built-in bar
 with a discreet ✗.
+
+A session has one of four modes, cycled with shift+tab or set with `/mode
+[manuel|edits|plan|auto]`. The strip under the plan box shows them with the
+current one highlighted, a left click on a segment switches to it, and the status
+bar opens with the mode. A tab starts from the mode the session has stored
+(`session get-mode`). The TUI sends the change to the daemon through
+`session set-mode`, so the host enforces it: manual asks before each edit and
+command, accept edits lets edits through and still asks for commands, plan is
+read only and refuses writes, and auto lets everything through except what a
+deny rule refuses. A refused switch is shown and the mode stays as it was. A plan reply
+opens a three-choice menu: validate and switch to accept edits, validate in
+manual, or keep planning. `/plan <instruction>` switches to plan and sends the
+instruction.
 
 A session's name is chosen when you know the least about what it will become, so
 `/rename <nom>` changes it: the row keeps its identity and its id, the transcript

@@ -230,7 +230,7 @@ func TestSessionCloseRemovesTheWorktreeWhereItIs(t *testing.T) {
 func TestSessionCreateRefusesUnknownApprovalMode(t *testing.T) {
 	h, _, localWT, st := handlerWithHosts(t)
 	_, err := h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "loose"))
-	if err == nil || !strings.Contains(err.Error(), "ask, bypass or strict") {
+	if err == nil || !strings.Contains(err.Error(), "ask, accept-edits, plan, auto, bypass or strict") {
 		t.Fatalf("got %v, want a refusal naming the three modes", err)
 	}
 	if _, ok := st.FindSession("demo"); ok {

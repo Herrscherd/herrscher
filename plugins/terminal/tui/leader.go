@@ -1,16 +1,18 @@
 package tui
 
 import (
-	"sort"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const leaderWindow = 1500 * time.Millisecond
-
-const leaderKey = "ctrl+x"
+const (
+	leaderWindow = 1500 * time.Millisecond
+	leaderKey    = "ctrl+x"
+	leaderTheme  = "t"
+	leaderEditor = "ctrl+e"
+	leaderEnter  = "enter"
+)
 
 type leaderBinding struct {
 	label string
@@ -19,14 +21,14 @@ type leaderBinding struct {
 
 func leaderBindings() map[string]leaderBinding {
 	return map[string]leaderBinding{
-		"t": {label: "thème", run: func(m *model) tea.Cmd {
+		leaderTheme: {label: "thème", run: func(m *model) tea.Cmd {
 			m.openTheme()
 			return nil
 		}},
-		"ctrl+e": {label: "éditeur", run: func(m *model) tea.Cmd {
+		leaderEditor: {label: "éditeur", run: func(m *model) tea.Cmd {
 			return m.openEditor()
 		}},
-		"enter": {label: "envoyer la file", run: func(m *model) tea.Cmd {
+		leaderEnter: {label: "envoyer la file", run: func(m *model) tea.Cmd {
 			return m.sendQueueNow()
 		}},
 	}
@@ -47,18 +49,4 @@ func (m *model) handleLeader(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, false
 	}
 	return binding.run(m), true
-}
-
-func leaderHelp() string {
-	bindings := leaderBindings()
-	keys := make([]string, 0, len(bindings))
-	for key := range bindings {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	var out strings.Builder
-	for _, key := range keys {
-		out.WriteString(" · " + leaderKey + " " + key + " " + bindings[key].label)
-	}
-	return out.String()
 }

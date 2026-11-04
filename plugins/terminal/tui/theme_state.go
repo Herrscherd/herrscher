@@ -23,29 +23,33 @@ func defaultTheme() Theme {
 }
 
 func startupTheme(cfg terminalSection, catalog themeCatalog, detectDark func() bool) Theme {
-	id := cfg.themeID()
-	if cfg.autoTheme() && (id == "sombre" || id == "clair") {
-		id = "clair"
+	themeName := cfg.themeID()
+	if cfg.autoTheme() && (themeName == themeSombre || themeName == themeClair) {
+		themeName = themeClair
 		if detectDark() {
-			id = "sombre"
+			themeName = themeSombre
 		}
 	}
-	th, ok := catalog.find(id)
+	found, ok := catalog.find(themeName)
 	if !ok {
-		th = defaultTheme()
+		found = defaultTheme()
 	}
-	return cfg.applyLook(th)
+	return cfg.applyLook(found)
+}
+
+func (m *model) terminalConfigPath() string {
+	return filepath.Join(m.themeDir, terminalConfigFile)
 }
 
 func (m *model) loadTheme(configDir string, detectDark func() bool) {
 	m.themeDir = configDir
 	m.noColor = os.Getenv("NO_COLOR") != ""
-	cfg, err := readTerminalConfig(filepath.Join(configDir, terminalConfigFile))
+	cfg, err := readTerminalConfig(m.terminalConfigPath())
 	if err != nil {
 		m.flash = "terminal.toml ignoré : " + err.Error()
 		cfg = terminalSection{}
 	}
-	if err := cfg.validate(); err != nil {
+	if _, err := cfg.look(defaultRenderOptions()); err != nil {
 		m.flash = "terminal.toml : " + err.Error()
 		cfg.Glyphs, cfg.Borders, cfg.Density = nil, nil, nil
 	}
@@ -55,9 +59,9 @@ func (m *model) loadTheme(configDir string, detectDark func() bool) {
 	m.applyTheme(startupTheme(cfg, m.themeCat, detectDark))
 }
 
-func (m *model) applyTheme(th Theme) {
-	m.theme = th
-	m.st = newStyles(th, m.noColor)
+func (m *model) applyTheme(next Theme) {
+	m.theme = next
+	m.st = newStyles(next, m.noColor)
 	m.md = &markdownRenderer{}
 	m.tsCache.valid = false
 }
@@ -81,17 +85,16 @@ func (m *model) reloadThemes() {
 		m.applyTheme(m.themeScr.preview())
 		return
 	}
-	th, ok := m.themeCat.find(m.theme.ID)
+	found, ok := m.themeCat.find(m.theme.ID)
 	if !ok {
-		th = defaultTheme()
-		m.flash = fmt.Sprintf("thème %s introuvable : retour au thème %s", m.theme.ID, th.ID)
+		found = defaultTheme()
+		m.flash = fmt.Sprintf("thème %s introuvable : retour au thème %s", m.theme.ID, found.ID)
 	}
-	m.applyTheme(m.themeCfg.applyLook(th))
+	m.applyTheme(m.themeCfg.applyLook(found))
 }
 
 func (m *model) saveThemeConfig(section terminalSection) error {
-	path := filepath.Join(m.themeDir, terminalConfigFile)
-	if err := updateTomlFile(path, terminalSectionName, themeKeyValues(section)...); err != nil {
+	if err := updateTomlFile(m.terminalConfigPath(), terminalSectionName, themeKeyValues(section)...); err != nil {
 		return err
 	}
 	m.themeCfg = section

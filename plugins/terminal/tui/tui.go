@@ -1337,7 +1337,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	model.ctx = ctx
 	model.loadTheme(filepath.Dir(config.DefaultPath()), lipgloss.HasDarkBackground)
 	model.keys = &keyLog{}
-	model.bar.file = statuslineConfigFile()
+	model.bar.file = model.terminalConfigPath()
 	model.bar.config = loadStatuslineConfig(model.bar.file)
 	model.bar.restoreFields(model.bar.config.Fields)
 	for _, opt := range opts {
@@ -1434,6 +1434,12 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		}
 	case imageReadyMsg:
 		m.applyImage(msg)
+		return nil, true
+	case themeWatchMsg:
+		m.watchThemes()
+		return themeWatchTick(), true
+	case themeEditedMsg:
+		m.handleThemeEdited(msg)
 		return nil, true
 	case enhancedKeysFailedMsg:
 		m.flash = "touches étendues indisponibles : " + msg.err.Error()

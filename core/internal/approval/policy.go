@@ -278,17 +278,18 @@ func Judged(m Mode, tool string, decided Decision, matched bool) bool {
 	return m == ModeSmart && !IsRead(tool) && decided != Deny && (decided != Allow || !matched)
 }
 
+const shellOperators = ";&|`$<>()\\"
+
 // RuleFor proposes the rule that allows a call like this one from now on. It
 // reports false when the subject cannot be written as a safe rule.
 func RuleFor(tool, subject string) (Rule, bool) {
 	if tool == "" || subject == "" || strings.ContainsAny(tool, "()* \r\n") || strings.ContainsAny(subject, "*?\r\n") {
 		return Rule{}, false
 	}
-	pattern := subject
-	if words := strings.Fields(subject); tool == toolBash && len(words) > 1 {
-		pattern = words[0] + " " + words[1] + "*"
+	if tool == toolBash && strings.ContainsAny(subject, shellOperators) {
+		return Rule{}, false
 	}
-	rule := Rule{Decision: Allow, Tool: tool, Pattern: pattern}
+	rule := Rule{Decision: Allow, Tool: tool, Pattern: subject}
 	parsed, err := ParseRule(rule.String())
 	if err != nil || parsed != rule {
 		return Rule{}, false

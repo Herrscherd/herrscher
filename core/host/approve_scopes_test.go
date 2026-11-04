@@ -420,7 +420,7 @@ func TestAllowAlwaysLabelShowsTheRuleBeforeItIsPressed(t *testing.T) {
 	choices := approvalChoices("id1", approval.Request{Tool: "Bash", Subject: "git push origin feat/x"})
 	for _, c := range choices {
 		if c.Value == approvalPickPrefix+"id1:allow-always" {
-			if c.Label != "allow-always Bash(git push*)" {
+			if c.Label != "allow-always Bash(git push origin feat/x)" {
 				t.Fatalf("label %q: the rule that will be written must be shown", c.Label)
 			}
 			return

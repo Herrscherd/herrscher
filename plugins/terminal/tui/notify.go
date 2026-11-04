@@ -291,12 +291,16 @@ func overlayAt(base, block string, row, column int) string {
 }
 
 func (m *model) overlayToast(rendered string) string {
-	block := m.toastView(m.vp.Height)
+	block := m.toastView(m.toastRows())
 	if block == "" {
 		return rendered
 	}
 	column := max(0, m.width-lipgloss.Width(firstLine(block))-toastColumn)
 	return overlayAt(rendered, block, toastRow, column)
+}
+
+func (m *model) toastRows() int {
+	return m.height - toastRow
 }
 
 func firstLine(block string) string {

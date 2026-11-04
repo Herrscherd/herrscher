@@ -90,3 +90,94 @@ func TestRetireWithoutManifestDoesNothing(t *testing.T) {
 		t.Fatal("retire must not write a manifest where none existed")
 	}
 }
+
+func TestInstallNeverAdoptsASymbolicLink(t *testing.T) {
+	shippedBody := []byte("---\nname: linked\n---\nshipped")
+	elsewhere := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(elsewhere, "linked"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(elsewhere, "linked", "SKILL.md"), shippedBody, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "linked")
+	if err := os.Symlink(filepath.Join(elsewhere, "linked"), dest); err != nil {
+		t.Fatal(err)
+	}
+	out, err := Install(fstest.MapFS{"linked/SKILL.md": &fstest.MapFile{Data: shippedBody}}, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Diverged) != 1 || len(out.Installed) != 0 || len(out.Updated) != 0 {
+		t.Fatalf("outcome = %+v, want the link reported as diverged and nothing written", out)
+	}
+	info, err := os.Lstat(dest)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the operator's symbolic link must stay a link, got %v, %v", info, err)
+	}
+	if _, err := Retire(dir, nil); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(dest); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("retire must never remove a symbolic link, got %v, %v", info, err)
+	}
+}
+
+func TestRetireNeverRemovesASymbolicLink(t *testing.T) {
+	body := []byte("---\nname: retired\n---\nold")
+	dir := installedDir(t, fstest.MapFS{"retired/SKILL.md": &fstest.MapFile{Data: body}})
+	dest := filepath.Join(dir, "retired")
+	elsewhere := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(elsewhere, "retired"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(elsewhere, "retired", "SKILL.md"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(dest); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(elsewhere, "retired"), dest); err != nil {
+		t.Fatal(err)
+	}
+	out, err := Retire(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Removed) != 0 || len(out.Diverged) != 1 {
+		t.Fatalf("outcome = %+v, want the link kept and reported", out)
+	}
+	if info, err := os.Lstat(dest); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the symbolic link must stay, got %v, %v", info, err)
+	}
+	if _, err := os.Stat(filepath.Join(elsewhere, "retired", "SKILL.md")); err != nil {
+		t.Fatalf("the target of the link must not be touched: %v", err)
+	}
+}
+
+func TestRetireKeepsASkillHoldingAnInnerSymbolicLink(t *testing.T) {
+	body := []byte("---\nname: retired\n---\nold")
+	dir := installedDir(t, fstest.MapFS{"retired/SKILL.md": &fstest.MapFile{Data: body}})
+	inner := filepath.Join(dir, "retired", "SKILL.md")
+	elsewhere := filepath.Join(t.TempDir(), "SKILL.md")
+	if err := os.WriteFile(elsewhere, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(inner); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, inner); err != nil {
+		t.Fatal(err)
+	}
+	out, err := Retire(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Removed) != 0 || len(out.Diverged) != 1 {
+		t.Fatalf("outcome = %+v, want a skill with an inner link kept and reported", out)
+	}
+	if info, err := os.Lstat(inner); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the inner symbolic link must stay, got %v, %v", info, err)
+	}
+}

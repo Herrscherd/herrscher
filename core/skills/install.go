@@ -71,7 +71,7 @@ func installPlaybook(src fs.FS, dir, name string, man manifest, out *Outcome) er
 		return err
 	}
 	dest := filepath.Join(dir, name)
-	_, err = os.Stat(dest)
+	info, err := os.Lstat(dest)
 	if errors.Is(err, fs.ErrNotExist) {
 		if writeErr := write(src, name, dest, false); writeErr != nil {
 			return writeErr
@@ -83,7 +83,15 @@ func installPlaybook(src fs.FS, dir, name string, man manifest, out *Outcome) er
 	if err != nil {
 		return err
 	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		out.Diverged = append(out.Diverged, name)
+		return nil
+	}
 	disk, err := hashDir(dest)
+	if errors.Is(err, errLinked) {
+		out.Diverged = append(out.Diverged, name)
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -156,6 +164,8 @@ func hashFS(src fs.FS, root string) (map[string]string, error) {
 	return out, nil
 }
 
+var errLinked = errors.New("a symbolic link sits in the skill directory")
+
 func hashDir(dest string) (map[string]string, error) {
 	root, err := os.OpenRoot(dest)
 	if err != nil {
@@ -163,9 +173,12 @@ func hashDir(dest string) (map[string]string, error) {
 	}
 	defer func() { logFailure("close hashed directory", root.Close()) }()
 	out := make(map[string]string)
-	err = fs.WalkDir(root.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+	err = fs.WalkDir(root.FS(), ".", func(rel string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
 			return err
+		}
+		if entry.Type()&fs.ModeSymlink != 0 {
+			return errLinked
 		}
 		payload, err := fs.ReadFile(root.FS(), rel)
 		if err != nil {

@@ -37,7 +37,7 @@ func Retire(dir string, shipped []string) (Outcome, error) {
 
 func retirePlaybook(dir, name string, man manifest, out *Outcome) error {
 	dest := filepath.Join(dir, name)
-	_, err := os.Stat(dest)
+	info, err := os.Lstat(dest)
 	if errors.Is(err, fs.ErrNotExist) {
 		delete(man, name)
 		return nil
@@ -45,7 +45,15 @@ func retirePlaybook(dir, name string, man manifest, out *Outcome) error {
 	if err != nil {
 		return err
 	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		out.Diverged = append(out.Diverged, name)
+		return nil
+	}
 	disk, err := hashDir(dest)
+	if errors.Is(err, errLinked) {
+		out.Diverged = append(out.Diverged, name)
+		return nil
+	}
 	if err != nil {
 		return err
 	}

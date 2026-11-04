@@ -109,6 +109,7 @@ type Session struct {
 	// Budget caps (0 = uncapped), persisted from contracts.CreateSession.
 	CostCap        float64 `json:"cost_cap,omitempty"`
 	TokenCap       uint64  `json:"token_cap,omitempty"`
+	CompactPercent *int    `json:"compact_percent,omitempty"`
 	CohortCostCap  float64 `json:"cohort_cost_cap,omitempty"`
 	CohortTokenCap uint64  `json:"cohort_token_cap,omitempty"`
 	// PausedReason is non-empty when the session was halted by a budget cap:
@@ -468,6 +469,20 @@ func (s *State) SetBudget(name string, costCap float64, tokenCap uint64, cohortC
 		return s.saveLocked()
 	}
 	return nil
+}
+
+// SetCompactPercent stores a session's automatic compaction threshold, nil dropping the override so the config default applies. It returns false when no session matches name.
+func (s *State) SetCompactPercent(name string, percent *int) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name != name {
+			continue
+		}
+		s.Sessions[idx].CompactPercent = percent
+		return true, s.saveLocked()
+	}
+	return false, nil
 }
 
 // SetBackendTarget re-points a live session's backend: it rewrites Vendor and the

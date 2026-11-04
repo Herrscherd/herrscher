@@ -79,15 +79,17 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	}
 
 	opts := host.Options{
-		StatePath:     *statePath,
-		DefaultCmd:    *defaultCmd,
-		HealthAddr:    *healthAddr,
-		StatusChannel: *statusChannel,
-		InstanceID:    *instanceID,
-		Owner:         owner,
-		Home:          home,
-		Workspace:     cfg.Workspace,
-		Source:        cfg.Source,
+		StatePath:      *statePath,
+		DefaultCmd:     *defaultCmd,
+		HealthAddr:     *healthAddr,
+		StatusChannel:  *statusChannel,
+		InstanceID:     *instanceID,
+		Owner:          owner,
+		Home:           home,
+		Workspace:      cfg.Workspace,
+		Source:         cfg.Source,
+		CompactPercent: cfg.CompactAt,
+		CompactStack:   cfg.CompactStack,
 
 		RemoteCategories:    remoteCategories(),
 		ForegroundBound:     foreground != nil,

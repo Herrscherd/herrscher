@@ -17,6 +17,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/envx"
 )
@@ -33,11 +36,13 @@ type HomeRef struct {
 // default for knobs, live state.json for the declarative runtime fields).
 type Config struct {
 	// Daemon knobs (precedence: explicit flag > env > this > built-in default).
-	Cmd           string `json:"cmd"`
-	HealthAddr    string `json:"healthAddr"`
-	StatusChannel string `json:"statusChannel"`
-	Instance      string `json:"instance"`
-	Owner         string `json:"owner"`
+	Cmd           string   `json:"cmd"`
+	HealthAddr    string   `json:"healthAddr"`
+	StatusChannel string   `json:"statusChannel"`
+	Instance      string   `json:"instance"`
+	Owner         string   `json:"owner"`
+	CompactAt     *int     `json:"compactAt,omitempty"`
+	CompactStack  []string `json:"compactStack,omitempty"`
 	// Stale threshold for `session clean`: sessions inactive longer than this
 	// many days are reported as stale. 0 disables stale detection. Unset (zero)
 	// means the built-in default (14) is applied by the caller.
@@ -88,7 +93,36 @@ func Load(path string) (Config, error) {
 	if err := json.Unmarshal(stripComments(buf), &cfg); err != nil {
 		return cfg, fmt.Errorf("parse %s: %w", path, err)
 	}
+	if cfg.CompactAt != nil {
+		if err := contracts.ValidateAutoCompactPercent(*cfg.CompactAt); err != nil {
+			return cfg, fmt.Errorf("parse %s: compactAt: %w", path, err)
+		}
+	}
+	if err := ValidateCompactStack(cfg.CompactStack); err != nil {
+		return cfg, fmt.Errorf("parse %s: compactStack: %w", path, err)
+	}
 	return cfg, nil
+}
+
+var (
+	errEmptyStage     = errors.New("a stage name is empty")
+	errDuplicateStage = errors.New("a stage name is listed twice")
+)
+
+// ValidateCompactStack refuses an empty stage name and a name listed twice, the
+// stack running each stage once in the order given.
+func ValidateCompactStack(stack []string) error {
+	seen := make(map[string]bool, len(stack))
+	for _, name := range stack {
+		if strings.TrimSpace(name) == "" {
+			return errEmptyStage
+		}
+		if seen[name] {
+			return fmt.Errorf("%q: %w", name, errDuplicateStage)
+		}
+		seen[name] = true
+	}
+	return nil
 }
 
 func stripComments(data []byte) []byte {

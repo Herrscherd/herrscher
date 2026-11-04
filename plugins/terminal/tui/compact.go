@@ -2,14 +2,19 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 const (
-	verbCompact    = "compact"
-	originTerminal = "terminal"
-	argName        = "--name"
-	argOrigin      = "--origin"
-	arrow          = " → "
+	verbCompact            = "compact"
+	eventCompactionStarted = "compaction_started"
+	eventCompactionDone    = "compaction_done"
+	eventCompactionFailed  = "compaction_failed"
+	originTerminal         = "terminal"
+	argName                = "--name"
+	argOrigin              = "--origin"
+	arrow                  = " → "
 )
 
 type compaction struct {
@@ -81,6 +86,38 @@ func (target *tab) finishCompaction() {
 	target.appendEntry(entry{role: roleNotice, text: "compacté : " + formatTokens(target.compaction.from) + arrow + after})
 	target.lastCompact = target.compaction
 	target.compaction = compaction{}
+}
+
+func isCompactionEvent(kind string) bool {
+	return kind == eventCompactionStarted || kind == eventCompactionDone || kind == eventCompactionFailed
+}
+
+func (target *tab) startCompaction(event contracts.Event) {
+	target.busy = true
+	target.compaction = compaction{active: true, from: event.Tokens, measured: event.Tokens > 0}
+}
+
+func (target *tab) completeCompaction(event contracts.Event) {
+	if event.Tokens > 0 {
+		target.compaction.to = event.Tokens
+		target.compaction.measured = true
+		target.ctxTokens = event.Tokens
+		target.ctxMeasured = true
+	} else {
+		target.ctxTokens = 0
+		target.ctxMeasured = false
+	}
+	target.finishCompaction()
+	if event.Text != "" {
+		target.appendEntry(entry{role: roleNotice, text: event.Text})
+	}
+	target.busy = false
+}
+
+func (target *tab) failCompaction(event contracts.Event) {
+	target.compaction = compaction{}
+	target.busy = false
+	target.appendEntry(entry{role: roleError, text: event.Text})
 }
 
 func (m *model) lastCompactNote() string {

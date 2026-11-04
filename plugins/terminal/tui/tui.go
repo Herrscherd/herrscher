@@ -1086,7 +1086,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.disconnected = false
 	}
 	previous := target.tokens
-	if event.Tokens > 0 {
+	if event.Tokens > 0 && !isCompactionEvent(event.T) {
 		target.tokens = event.Tokens
 	}
 	target.measureContext(event)
@@ -1128,6 +1128,12 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.ctxMeasured = false
 		target.endStream()
 		target.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
+	case eventCompactionStarted:
+		target.startCompaction(event)
+	case eventCompactionDone:
+		target.completeCompaction(event)
+	case eventCompactionFailed:
+		target.failCompaction(event)
 	case "abandoned":
 		target.busy = false
 		target.interruptRequested = false

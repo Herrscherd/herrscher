@@ -89,6 +89,7 @@ func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 		{"session", "close"},
 		{"session", "archive"},
 		{"session", "switch"},
+		{"session", "set-compact"},
 	}
 	for _, path := range refused {
 		if ok, _ := Decide(req(p, path...), RoleAgent); ok {

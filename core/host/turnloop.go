@@ -96,6 +96,14 @@ type sessionDriver struct {
 	emitTap func(contracts.Event)
 
 	gate budgetGate
+
+	vendor         string
+	compaction     compactionPolicy
+	percentOf      func() int
+	turnReading    int
+	compactSpent   bool
+	compactMu      sync.Mutex
+	compactWaiting *compactRequest
 }
 
 type queued struct {
@@ -335,6 +343,17 @@ type sessionTable struct {
 	mu          sync.Mutex
 	m           map[string]*sessionDriver
 	checkpoints checkpoint.Store
+	compaction  compactionPolicy
+	store       *state.State
+}
+
+func (t *sessionTable) percentOfSession(name string) int {
+	if t.store != nil {
+		if sess, ok := t.store.FindSession(name); ok {
+			return t.compaction.percentFor(sess)
+		}
+	}
+	return t.compaction.percent
 }
 
 func newSessionTable() *sessionTable {
@@ -528,13 +547,20 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			if !d.enterTurn(ctx) {
 				return
 			}
+			if item.ev.T == eventCompactNow {
+				d.runCompactNow(ctx, d.takeCompactInstruction())
+				d.releaseTurn()
+				continue
+			}
 			event, guard, ok := d.prepareTurn(ctx, item)
 			if !ok {
 				d.releaseTurn()
 				continue
 			}
+			d.turnReading = 0
 			d.runTurn(ctx, event, guard)
 			d.activeTurnID = ""
+			d.maybeAutoCompact(ctx)
 			d.releaseTurn()
 		}
 	}
@@ -659,6 +685,7 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 }
 
 func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event, turnStart time.Time, live int) {
+	d.turnReading = contextReading(live, event)
 	event.Coordination = d.maybeCoordinate(ctx, event.Text)
 	d.fanOut(ctx, event)
 	if d.sink.Resume != nil && event.Resume != "" {
@@ -923,6 +950,7 @@ func (d *sessionDriver) renderChannel(gateway contracts.GatewaySet) string {
 type sessionIdentity struct {
 	incarnation string
 	agent       string
+	vendor      string
 }
 
 // RunSession drives a session without a declared identity until ctx is done.
@@ -943,6 +971,9 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.coordinator = coord
 	driver.sink = sink
 	driver.emitTap = emit
+	driver.vendor = identity.vendor
+	driver.compaction = sessions.compaction
+	driver.percentOf = func() int { return sessions.percentOfSession(name) }
 	if gate != nil {
 		driver.gate = gate
 	}

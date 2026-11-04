@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/contextwindow"
 )
 
 func TestContextOccupancyDerivesFromTheThreeCounters(t *testing.T) {
@@ -56,10 +57,10 @@ func TestContextLimitFollowsTheVendorAndTheEnv(t *testing.T) {
 	if got := contextLimit("codex"); got != 400_000 {
 		t.Errorf("codex limit = %d", got)
 	}
-	if got := contextLimit("nobody-ships-this"); got != defaultContextLimit {
+	if got := contextLimit("nobody-ships-this"); got != contextwindow.Fallback() {
 		t.Errorf("unknown vendor must fall back: %d", got)
 	}
-	t.Setenv(contextLimitEnv, "12345")
+	t.Setenv(contextwindow.EnvVar(), "12345")
 	if got := contextLimit("claude"); got != 12345 {
 		t.Errorf("the env must win: %d", got)
 	}
@@ -188,16 +189,16 @@ func TestStatusBarFallsBackOnTheHubReading(t *testing.T) {
 }
 
 func TestContextLeftCountsDownToTheCompaction(t *testing.T) {
-	if got := contextLeft(0, 200_000); got != 1 {
+	if got := contextLeft(0, 200_000, 92); got != 1 {
 		t.Errorf("une fenetre vide laisse tout le budget: %v", got)
 	}
-	if got := contextLeft(184_000, 200_000); got != 0 {
+	if got := contextLeft(184_000, 200_000, 92); got != 0 {
 		t.Errorf("le seuil de compaction laisse zero: %v", got)
 	}
-	if got := contextLeft(200_000, 200_000); got != 0 {
+	if got := contextLeft(200_000, 200_000, 92); got != 0 {
 		t.Errorf("au-dela du seuil le reste ne devient pas negatif: %v", got)
 	}
-	if got := contextLeft(92_000, 200_000); got < 0.49 || got > 0.51 {
+	if got := contextLeft(92_000, 200_000, 92); got < 0.49 || got > 0.51 {
 		t.Errorf("la moitie du budget doit se lire 50 %%: %v", got)
 	}
 }
@@ -207,7 +208,7 @@ func barModelAt(t *testing.T, dir string) (*model, *tab) {
 	be := &countingBackend{}
 	be.sessions = []contracts.SessionInfo{{
 		Name: "a", ChannelID: "c1", Vendor: "claude", Model: "claude-opus-5", Effort: "high",
-		Project: "herrscher", Dir: dir,
+		Project: "herrscher", Dir: dir, AutoCompactPercent: 92,
 	}}
 	m := newModel(be)
 	tb := m.ensureTab("c1")

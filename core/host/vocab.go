@@ -28,6 +28,7 @@ const (
 	authorSeed     = "seed"
 	valueTrue      = "true"
 	backendCodex   = "codex"
+	vendorClaude   = "claude"
 	codexAgentName = "codex"
 	homeTerminalID = "terminal"
 )

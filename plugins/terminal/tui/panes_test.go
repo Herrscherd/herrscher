@@ -39,7 +39,7 @@ func TestPaneGridFitsEachWidth(t *testing.T) {
 		visible       []string
 		hidden        []string
 	}{
-		{60, 30, []string{"alpha"}, []string{"beta", "gamma", "delta"}},
+		{60, 30, []string{"alpha", "beta"}, []string{"gamma", "delta"}},
 		{80, 30, []string{"alpha", "beta"}, []string{"gamma", "delta"}},
 		{120, 30, []string{"alpha", "beta", "gamma", "delta"}, nil},
 		{200, 30, []string{"alpha", "beta", "gamma", "delta"}, nil},
@@ -141,5 +141,24 @@ func TestPaneScreenNamesItsHeaderAndKeys(t *testing.T) {
 		if !strings.Contains(view, want) {
 			t.Fatalf("panes screen must show %q: %s", want, view)
 		}
+	}
+}
+
+func TestNarrowPanesReachTheRowsBelow(t *testing.T) {
+	_, m := paneModel(t)
+	m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	updateKey(m, tea.KeyMsg{Type: tea.KeyTab})
+	updateKey(m, tea.KeyMsg{Type: tea.KeyTab})
+	view := m.View()
+	if !strings.Contains(view, "gamma · ") {
+		t.Fatalf("a narrow grid must bring the hidden rows into view with Tab: %s", view)
+	}
+}
+
+func TestPaneComposerShowsThePanePlaceholder(t *testing.T) {
+	_, m := paneModel(t)
+	m.buildFrame()
+	if m.input.Placeholder != placeholderPanes {
+		t.Fatalf("the panes composer must say where the message goes, got %q", m.input.Placeholder)
 	}
 }

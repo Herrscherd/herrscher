@@ -25,6 +25,8 @@ const (
 	paneInset          = 4
 	paneBoxChrome      = 3
 	paneGaugeCells     = 6
+	paneStackRows      = 2
+	paneMinCellHeight  = paneBoxChrome + 3
 )
 
 const paneFooterKeys = "Tab volet suivant · clic viser · o s r approbation · ⌃W agrandir · ⌃P quitter"
@@ -42,10 +44,16 @@ type paneLayout struct {
 	single   bool
 }
 
-func paneGeometry(width, height int, zoom bool) paneLayout {
+func paneGeometry(width, height, bodyHeight int, zoom bool) paneLayout {
+	single := paneLayout{cols: 1, rows: 1, capacity: 1, single: true}
 	switch {
-	case zoom || width < paneSingleBelow:
-		return paneLayout{cols: 1, rows: 1, capacity: 1, single: true}
+	case zoom:
+		return single
+	case width < paneSingleBelow:
+		if bodyHeight >= paneStackRows*paneMinCellHeight {
+			return paneLayout{cols: 1, rows: paneStackRows, capacity: paneStackRows}
+		}
+		return single
 	case width >= paneGridWidth && height >= paneGridHeight:
 		return paneLayout{cols: paneGridSide, rows: paneGridSide, capacity: paneGridSide * paneGridSide}
 	default:
@@ -54,7 +62,8 @@ func paneGeometry(width, height int, zoom bool) paneLayout {
 }
 
 func (m *model) paneLayout() paneLayout {
-	return paneGeometry(m.width, m.height, m.panes.zoom)
+	top, bottom := m.surfaceChrome()
+	return paneGeometry(m.width, m.height, m.surfaceHeight(top, bottom), m.panes.zoom)
 }
 
 func (m *model) openPanes() {
@@ -70,7 +79,6 @@ func (m *model) openPanes() {
 		m.panes.channels = append(m.panes.channels, info.ChannelID)
 		m.ensureTab(info.ChannelID)
 	}
-	m.input.Placeholder = "Le message part dans le volet en surbrillance"
 	m.relayout()
 }
 
@@ -152,11 +160,11 @@ func (m *model) surfaceScreen() string {
 
 func (m *model) paneHeader(width int) string {
 	left := m.st.violet.Bold(true).Render(" Vue en volets") + m.st.dim.Render("  Tab volet suivant · clic pour viser")
-	return truncate(joinRow(width, left, m.paneCounts()), width)
+	return truncateEllipsis(joinRow(width, left, m.paneCounts()), width)
 }
 
 func (m *model) paneFooter(width int) string {
-	return truncate(m.st.dim.Render(" "+paneFooterKeys), width)
+	return m.st.dim.Render(foldText(" "+paneFooterKeys, width))
 }
 
 func (m *model) paneCounts() string {
@@ -236,24 +244,24 @@ func (m *model) paneBox(index, width, height int) []string {
 		style = m.st.warn
 	}
 	mark, markStyle := m.sessionMark(&row)
-	title := markStyle.Render(mark) + " " + nameStyle.Render(row.overview.Name)
+	titleParts := []string{markStyle.Render(mark) + " " + nameStyle.Render(row.overview.Name)}
 	if row.info.Vendor != "" {
-		title += m.st.dim.Render(" · " + row.info.Vendor)
+		titleParts = append(titleParts, m.st.dim.Render(" · "+row.info.Vendor))
 	}
 	boxes := m.st.boxes(m.caps.Boxes)
-	lines := []string{boxEdge([2]string{boxes.tl, boxes.tr}, title, m.paneStateLabel(&row), width, style, boxes.h)}
+	lines := []string{boxEdge([2]string{boxes.tl, boxes.tr}, titleParts, m.paneStateLabel(&row), width, style, boxes.h)}
 	inner := height - paneBoxChrome
 	side := style.Render(boxes.v)
 	body := padLines(tailLines(m.paneTranscript(m.tabs[channel], width-paneInset), inner), inner)
 	for _, line := range body {
-		lines = append(lines, side+" "+padTo(truncate(line, width-paneInset), width-paneInset)+" "+side)
+		lines = append(lines, side+" "+padTo(truncateEllipsis(line, width-paneInset), width-paneInset)+" "+side)
 	}
 	ratio := contextRatio(row.info.ContextTokens, contextLimit(row.info.Vendor))
 	footLeft := m.st.dim.Render("ctx ") + m.gaugeCells(ratio, paneGaugeCells, identityPaint) +
 		m.tierStyle(ratio).Render(" "+contextPercent(row.info.ContextTokens, contextLimit(row.info.Vendor))) +
 		m.st.dim.Render(" · "+formatCost(row.overview.Cost))
 	footRight := gatewayStyle(m.st, strings.Join(row.overview.Gateways, "+")).Render(strings.Join(row.overview.Gateways, "+"))
-	foot := truncate(joinRow(width-paneInset, footLeft, footRight), width-paneInset)
+	foot := truncateEllipsis(joinRow(width-paneInset, footLeft, footRight), width-paneInset)
 	lines = append(lines, side+" "+padTo(foot, width-paneInset)+" "+side, style.Render(boxes.bl+strings.Repeat(boxes.h, width-composerBorderCols)+boxes.br))
 	return lines
 }

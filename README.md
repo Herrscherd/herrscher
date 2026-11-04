@@ -409,6 +409,37 @@ build may use. `all` runs on this machine's own vendor logins. `gateway-only`
 runs every turn through a gateway you supply, and refuses the two ways around the
 catalog: a free-form `--cmd`, or a session with no model at all.
 
+When a session names no model, the first of these that fits applies:
+
+1. the session's own `--model`;
+2. the agent's model, read from the `model` file in its home;
+3. the vendor's default, from `HERRSCHER_DEFAULT_MODEL_<VENDOR>` (for example `HERRSCHER_DEFAULT_MODEL_CLAUDE`);
+4. the global default, from `HERRSCHER_DEFAULT_MODEL`;
+5. the backend's own default, when none of the above is set.
+
+A fallback that belongs to another vendor than the one requested is skipped, and
+logged unless it is the global default. An explicit `--model` that the catalog
+refuses is an error.
+
+Backends that can list their models are asked at startup, in the background, and
+their answers are cached on disk. Discovered models are added to the static
+catalog; they never remove one. `herrscher models list` shows where each model
+comes from (`catalog` or `discovered`), and `herrscher models refresh` asks again
+right away.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `HERRSCHER_MODELS_DISCOVER` | every backend | comma-separated vendors that may be asked (`claude,codex`), or `none` |
+| `HERRSCHER_MODELS_TTL` | `24h` | how long a cached list is kept before it is asked again |
+| `HERRSCHER_MODELS_TIMEOUT` | `15s` | longest wait for one vendor's answer |
+| `HERRSCHER_MODELS_HIDDEN` | none | comma-separated model IDs hidden from the catalog |
+| `HERRSCHER_DEFAULT_MODEL_<VENDOR>` | none | default model of one vendor |
+
+The cache is `models-discovered.json` in `HERRSCHER_STATE_DIR`, or in
+`~/.config/herrscher` when that is unset. A vendor that fails or stays silent past
+its timeout keeps its last known list, and the daemon logs a warning. The daemon
+never waits for discovery to start.
+
 ### Also
 
 Cross-backend skills, where one `SKILL.md` works on every backend. That includes

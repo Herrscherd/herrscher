@@ -3,6 +3,7 @@ package host
 import (
 	"log/slog"
 	"sort"
+	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -118,6 +119,11 @@ const (
 	EnvRoutePolicy  = "HERRSCHER_ROUTE_POLICY"
 	EnvDefaultModel = "HERRSCHER_DEFAULT_MODEL"
 )
+
+// VendorDefaultModelEnv names the variable holding the default model of one vendor, such as HERRSCHER_DEFAULT_MODEL_CLAUDE.
+func VendorDefaultModelEnv(vendor string) string {
+	return "HERRSCHER_DEFAULT_MODEL_" + strings.ToUpper(strings.ReplaceAll(vendor, "-", "_"))
+}
 
 // ResolvePolicy reads the route policy from the environment. Missing or
 // unrecognized, it falls back to PolicyAll, the behavior that predates this

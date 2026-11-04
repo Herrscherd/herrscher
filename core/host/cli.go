@@ -103,6 +103,7 @@ func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *st
 	hdl.SetHosts(newHostPlacer(hostState, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly })
 	hdl.SetDefaultModel(os.Getenv(EnvDefaultModel))
+	hdl.SetVendorDefaultModel(func(vendor string) string { return os.Getenv(VendorDefaultModelEnv(vendor)) })
 	hdl.SetModelValidator(validateModelChoice)
 	hdl.SetGateResolver(GateFor)
 }

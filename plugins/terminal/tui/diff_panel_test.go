@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func newDiffModel(t *testing.T, repo string, run commandRunner, width, height int) (*model, *fakeBackend) {
@@ -269,33 +270,48 @@ func TestReviewCommandOpensThePanelInReviewMode(t *testing.T) {
 	}
 }
 
+const (
+	nestedDir  = "internal/deep/nested/module"
+	nestedFile = "internal/deep/nested/module/a.txt"
+)
+
+func initNestedChange(t *testing.T) string {
+	t.Helper()
+	dir := initRepo(t)
+	if err := os.MkdirAll(filepath.Join(dir, nestedDir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeRepoFile(t, dir, nestedFile, "base\n")
+	gitIn(t, dir, "add", "-A")
+	gitIn(t, dir, "commit", "-q", "-m", "add nested")
+	writeRepoFile(t, dir, nestedFile, strings.Repeat("ligne très longue ", 12)+"\nTWO\n")
+	return dir
+}
+
+func assertPanelFits(t *testing.T, view string, width, height int) {
+	t.Helper()
+	lines := strings.Split(view, "\n")
+	if len(lines) != height {
+		t.Fatalf("rendered %d lines, want %d", len(lines), height)
+	}
+	for index, line := range lines {
+		if w := lipgloss.Width(line); w > width {
+			t.Fatalf("line %d is %d columns, want at most %d: %q", index, w, width, line)
+		}
+	}
+	if !strings.Contains(view, "TWO") {
+		t.Fatalf("the change must stay visible:\n%s", view)
+	}
+}
+
 func TestPanelFillsTheScreenAndNeverOverflowsAtEachWidth(t *testing.T) {
 	for _, width := range []int{60, 80, 120, 200} {
 		for _, height := range []int{20, 30} {
 			t.Run(fmt.Sprintf("%dx%d", width, height), func(t *testing.T) {
-				dir := initRepo(t)
-				if err := os.MkdirAll(filepath.Join(dir, "internal/deep/nested/module"), 0o700); err != nil {
-					t.Fatal(err)
-				}
-				writeRepoFile(t, dir, "internal/deep/nested/module/a.txt", "base\n")
-				gitIn(t, dir, "add", "-A")
-				gitIn(t, dir, "commit", "-q", "-m", "add nested")
-				writeRepoFile(t, dir, "internal/deep/nested/module/a.txt", strings.Repeat("ligne très longue ", 12)+"\nTWO\n")
-				m, _ := newDiffModel(t, dir, nil, width, height)
+				m, _ := newDiffModel(t, initNestedChange(t), nil, width, height)
 				press(m, "ctrl+d")
 
-				lines := strings.Split(screen(m), "\n")
-				if len(lines) != height {
-					t.Fatalf("rendered %d lines, want %d", len(lines), height)
-				}
-				for i, line := range lines {
-					if w := lipgloss.Width(line); w > width {
-						t.Fatalf("line %d is %d columns, want at most %d: %q", i, w, width, line)
-					}
-				}
-				if !strings.Contains(screen(m), "TWO") {
-					t.Fatalf("the change must stay visible:\n%s", screen(m))
-				}
+				assertPanelFits(t, screen(m), width, height)
 			})
 		}
 	}

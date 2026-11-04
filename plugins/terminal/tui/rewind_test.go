@@ -14,6 +14,7 @@ import (
 
 type rewindBackend struct {
 	fakeBackend
+
 	checkpoints []rewindRow
 }
 
@@ -21,7 +22,10 @@ func (r *rewindBackend) Dispatch(args []string) (string, error) {
 	r.dispatched = append(r.dispatched, args)
 	switch {
 	case len(args) >= 2 && args[0] == "session" && args[1] == "checkpoints":
-		raw, _ := json.Marshal(r.checkpoints)
+		raw, err := json.Marshal(r.checkpoints)
+		if err != nil {
+			return "", err
+		}
 		return string(raw), nil
 	case len(args) >= 2 && args[0] == "session" && args[1] == "fork":
 		return `{"name":"alpha-fork"}`, nil
@@ -127,7 +131,7 @@ func TestRewindScreenFitsEveryWidth(t *testing.T) {
 		m, _ := rewindModel(t)
 		m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 		openByDoubleEsc(t, m)
-		for _, step := range []int{rewindStepList, rewindStepOpts, rewindStepSure} {
+		for _, step := range []rewindStep{rewindStepList, rewindStepOptions, rewindStepSure} {
 			m.rwStep = step
 			for _, line := range strings.Split(m.rewindView(), "\n") {
 				if w := lipgloss.Width(line); w > width {
@@ -230,7 +234,7 @@ func TestCodeRestoreCanBeCancelled(t *testing.T) {
 			t.Fatal("a refused confirmation must not restore")
 		}
 	}
-	if m.rwStep != rewindStepOpts {
+	if m.rwStep != rewindStepOptions {
 		t.Fatalf("n must return to the options, step = %d", m.rwStep)
 	}
 }
@@ -258,7 +262,7 @@ func TestConversationRestoreAsksForConfirmationWhenTheMessageHasAPosition(t *tes
 	pressMsg(m, tea.KeyMsg{Type: tea.KeyEnter})
 	pressMsg(m, tea.KeyMsg{Type: tea.KeyDown})
 	pressMsg(m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.rwStep != rewindStepSure || m.rwWhat != "conversation" {
+	if m.rwStep != rewindStepSure || m.rwWhat != rewindWhatConversation {
 		t.Fatalf("the conversation option must ask first, step = %d what = %q", m.rwStep, m.rwWhat)
 	}
 	runCmd(typeRune(m, 'y'))

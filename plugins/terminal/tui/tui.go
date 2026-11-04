@@ -279,11 +279,11 @@ type model struct {
 	resumeRows []contracts.SessionInfo
 
 	rwOpen bool
-	rwStep int
+	rwStep rewindStep
 	rwIdx  int
-	rwOpt  int
+	rwOpt  rewindOption
 	rwRows []rewindRow
-	rwWhat string
+	rwWhat rewindWhat
 	escAt  time.Time
 
 	switchOpen bool
@@ -1789,7 +1789,8 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			}
 			return nil, true
 		}
-		return m.escapeIdle(), true
+		m.escapeIdle()
+		return nil, true
 	case tea.KeyCtrlC:
 		return m.interruptOrQuit()
 	case tea.KeyTab:

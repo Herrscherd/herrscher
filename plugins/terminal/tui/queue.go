@@ -48,9 +48,9 @@ func (m *model) enqueueInput(steer bool) bool {
 	return true
 }
 
-func (m *model) flushQueue(tb *tab, event string) {
+func (m *model) flushQueue(tb *tab, event string) tea.Cmd {
 	if tb == nil || len(tb.queue) == 0 || tb.disconnected {
-		return
+		return nil
 	}
 	index := -1
 	switch {
@@ -60,11 +60,11 @@ func (m *model) flushQueue(tb *tab, event string) {
 		index = steerIndex(tb.queue)
 	}
 	if index < 0 {
-		return
+		return nil
 	}
 	next := tb.queue[index]
 	tb.queue = append(tb.queue[:index], tb.queue[index+1:]...)
-	m.submitTo(tb.channel, next.text, next.atts)
+	return m.submitTo(tb.channel, next.text, next.atts)
 }
 
 func steerIndex(queue []queuedInput) int {
@@ -76,19 +76,20 @@ func steerIndex(queue []queuedInput) int {
 	return -1
 }
 
-func (m *model) sendQueueNow() {
+func (m *model) sendQueueNow() tea.Cmd {
 	tb := m.activeTab()
 	if tb == nil || len(tb.queue) == 0 {
-		return
+		return nil
 	}
 	if tb.busy {
 		if name := m.sessionName(m.active); name != "" {
 			m.tm.Interrupt(name)
 		}
-		return
+		return nil
 	}
-	m.flushQueue(tb, "")
+	cmd := m.flushQueue(tb, "")
 	m.syncViewport()
+	return cmd
 }
 
 func (m *model) stashDraft() {

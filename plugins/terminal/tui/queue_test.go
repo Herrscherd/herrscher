@@ -34,7 +34,7 @@ func TestEnterWhileBusyQueuesUntilTurnEnds(t *testing.T) {
 	if len(f.submitted) != 0 {
 		t.Fatal("a queued item must not be sent during the turn")
 	}
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "fini", Done: true}})
+	settle(m, m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "fini", Done: true}}))
 	if len(f.submitted) != 1 || f.submitted[0].text != "premier" {
 		t.Fatalf("queued item must be sent when the turn ends: %+v", f.submitted)
 	}
@@ -48,7 +48,7 @@ func TestAltEnterSteersAfterNextTool(t *testing.T) {
 	if len(m.tabs["a"].queue) != 1 || !m.tabs["a"].queue[0].steer {
 		t.Fatalf("alt+enter must queue a steer item: %+v", m.tabs["a"].queue)
 	}
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "status", Text: "bash"}})
+	settle(m, m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "status", Text: "bash"}}))
 	if len(f.submitted) != 1 || f.submitted[0].text != "réoriente" {
 		t.Fatalf("steer item must be sent after the next tool: %+v", f.submitted)
 	}
@@ -73,7 +73,8 @@ func TestEscInterruptsAndKeepsQueue(t *testing.T) {
 func TestCtrlEnterSendsQueueNowWhenIdle(t *testing.T) {
 	m, f := queueFixture(t)
 	m.tabs["a"].queue = []queuedInput{{text: "un"}, {text: "deux"}}
-	m.Update(tea.KeyMsg{Type: tea.KeyF12, Alt: true})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyF12, Alt: true})
+	settle(m, cmd)
 	if len(f.submitted) != 1 || f.submitted[0].text != "un" {
 		t.Fatalf("ctrl+enter must send the first queued item: %+v", f.submitted)
 	}
@@ -96,7 +97,8 @@ func TestLeaderEnterSendsQueue(t *testing.T) {
 	m, f := queueFixture(t)
 	m.tabs["a"].queue = []queuedInput{{text: "via leader"}}
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	settle(m, cmd)
 	if len(f.submitted) != 1 || f.submitted[0].text != "via leader" {
 		t.Fatalf("ctrl+x enter must send the queue: %+v", f.submitted)
 	}

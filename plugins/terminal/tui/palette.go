@@ -177,6 +177,7 @@ func localCommands() []CommandSpec {
 		{Name: "plugins", Desc: "the plugins this binary is made of"},
 		{Name: "attach", Args: "<path>", Desc: "stage a local file with the next message"},
 		{Name: "copy", Args: "[reply|turn|all]", Desc: "put the last answer (or the turn, or everything) on the clipboard"},
+		{Name: "review", Desc: "revue guidée des fichiers du tour : relus, consignes, commit et PR"},
 		{Name: "mouse", Desc: "hand the mouse to the terminal so its own selection works (ctrl+g)"},
 		{Name: "statusline", Desc: "configure the status bar: fields, their order, or a script that draws it"},
 		{Name: "queue", Desc: "voir la file de messages", PR: "PR 2"},

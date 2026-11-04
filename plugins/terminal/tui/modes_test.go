@@ -136,7 +136,8 @@ func TestPlanMenuFirstChoiceSwitchesToAcceptEditsThenSubmits(t *testing.T) {
 	m.tabs["a"].mode = modePlan
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "1. read", Done: true}})
 
-	pressKey(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	cmd, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	settle(m, cmd)
 
 	if m.planMenu != nil {
 		t.Fatal("choosing an option must close the plan menu")

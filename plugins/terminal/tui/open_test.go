@@ -14,7 +14,7 @@ func TestOpenOnFocusesSessionAndSendsTask(t *testing.T) {
 	m := newModel(be)
 	OpenOn("read-the-thread-u25m", "read the thread")(m)
 
-	m.syncTabs()
+	settle(m, m.syncTabs())
 
 	if m.active != "c2" {
 		t.Fatalf("active = %q, want c2", m.active)
@@ -35,9 +35,9 @@ func TestOpenOnSendsOnlyOnce(t *testing.T) {
 	m := newModel(be)
 	OpenOn("s", "go")(m)
 
-	m.syncTabs()
+	settle(m, m.syncTabs())
 	m.tabSig = ""
-	m.syncTabs()
+	settle(m, m.syncTabs())
 
 	if len(be.submitted) != 1 {
 		t.Fatalf("submitted %d turns, want 1", len(be.submitted))
@@ -49,13 +49,13 @@ func TestOpenOnWaitsForTheSession(t *testing.T) {
 	m := newModel(be)
 	OpenOn("later", "go")(m)
 
-	m.syncTabs()
+	settle(m, m.syncTabs())
 	if len(be.submitted) != 0 {
 		t.Fatalf("submitted %+v before the session existed", be.submitted)
 	}
 
 	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
-	m.syncTabs()
+	settle(m, m.syncTabs())
 
 	if m.active != "c2" || len(be.submitted) != 1 {
 		t.Fatalf("active = %q, submitted = %+v", m.active, be.submitted)
@@ -70,7 +70,7 @@ func TestOpenOnWithoutTextSendsNothing(t *testing.T) {
 	m := newModel(be)
 	OpenOn("other", "")(m)
 
-	m.syncTabs()
+	settle(m, m.syncTabs())
 
 	if m.active != "c2" {
 		t.Fatalf("active = %q, want c2", m.active)

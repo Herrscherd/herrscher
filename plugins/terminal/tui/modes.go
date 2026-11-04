@@ -206,10 +206,10 @@ func (m *model) handleModeClick(msg tea.MouseMsg) (tea.Cmd, bool) {
 	return nil, false
 }
 
-func (m *model) handleModeResult(msg modeResultMsg) {
+func (m *model) handleModeResult(msg modeResultMsg) tea.Cmd {
 	tb := m.tabs[msg.channel]
 	if tb == nil {
-		return
+		return nil
 	}
 	if msg.err != nil {
 		if tb.mode == msg.mode {
@@ -217,11 +217,12 @@ func (m *model) handleModeResult(msg modeResultMsg) {
 		}
 		tb.appendEntry(entry{role: roleError, text: msg.err.Error()})
 		m.syncViewport()
-		return
+		return nil
 	}
-	if msg.submit != "" {
-		m.submitTo(msg.channel, msg.submit, nil)
+	if msg.submit == "" {
+		return nil
 	}
+	return m.submitTo(msg.channel, msg.submit, nil)
 }
 
 func (m *model) modeSlash(arg string) tea.Cmd {

@@ -27,8 +27,7 @@ func leaderBindings() map[string]leaderBinding {
 			return m.openEditor()
 		}},
 		"enter": {label: "envoyer la file", run: func(m *model) tea.Cmd {
-			m.sendQueueNow()
-			return nil
+			return m.sendQueueNow()
 		}},
 	}
 }

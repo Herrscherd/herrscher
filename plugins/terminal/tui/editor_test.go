@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -460,5 +461,75 @@ func TestBeatFailureFlashesOnceAndDoesNotLoop(t *testing.T) {
 	case extra := <-again:
 		t.Fatalf("healthy beats must not produce another message, got %#v", extra)
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func brokenDraftRun(t *testing.T, broken *atomic.Bool) *draftRun {
+	t.Helper()
+	touch := func(root *os.Root) error {
+		if broken.Load() {
+			return errors.New("panne")
+		}
+		return touchDraftLock(root)
+	}
+	run, err := startDraftRun(context.Background(), filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond, touch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := run.release(); err != nil {
+			t.Errorf("release: %v", err)
+		}
+	})
+	t.Cleanup(func() {
+		broken.Store(false)
+		waitForBeat(t, run, false)
+	})
+	return run
+}
+
+func waitForBeat(t *testing.T, run *draftRun, wantFailing bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for (run.heartbeatError() != nil) != wantFailing {
+		if time.Now().After(deadline) {
+			t.Fatalf("heartbeat never reached failing=%v", wantFailing)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestBeatFailureWaitsBehindAFlashThenShows(t *testing.T) {
+	var broken atomic.Bool
+	broken.Store(true)
+	run := brokenDraftRun(t, &broken)
+	waitForBeat(t, run, true)
+	m := newTestModel()
+	m.draftFiles = run
+	m.flash = "éditeur indisponible : test"
+	m.handleMsg(draftBeatFailedMsg{err: errors.New("panne")})
+	if m.flash != "éditeur indisponible : test" {
+		t.Fatalf("a beat failure must not overwrite the visible flash, got %q", m.flash)
+	}
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+	if !strings.Contains(m.flash, "signe de vie du brouillon interrompu") {
+		t.Fatalf("the waiting beat failure must show once the flash clears, got %q", m.flash)
+	}
+}
+
+func TestRepairedBeatLeavesNothingBehind(t *testing.T) {
+	var broken atomic.Bool
+	broken.Store(true)
+	run := brokenDraftRun(t, &broken)
+	waitForBeat(t, run, true)
+	m := newTestModel()
+	m.draftFiles = run
+	m.flash = "éditeur indisponible : test"
+	m.handleMsg(draftBeatFailedMsg{err: errors.New("panne")})
+	broken.Store(false)
+	waitForBeat(t, run, false)
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+	if m.flash != "" {
+		t.Fatalf("a repaired beat must show nothing, got %q", m.flash)
 	}
 }

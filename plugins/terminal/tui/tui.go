@@ -359,6 +359,7 @@ type model struct {
 	editing          bool
 	draftFiles       *draftRun
 	draftBeatWatched bool
+	pendingBeatFlash string
 	queueSel         int
 	queueFocus       bool
 	queueHits        []queueHit
@@ -1526,7 +1527,7 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.applyEditorResult(msg)
 		return nil, true
 	case draftBeatFailedMsg:
-		m.flash = draftBeatFlash + msg.err.Error()
+		m.queueBeatFlash(msg.err)
 		return m.watchDraftBeat(), true
 	case compactResultMsg:
 		m.handleCompactResult(msg)
@@ -1637,7 +1638,7 @@ func (m *model) updateComponents(msg tea.Msg) tea.Cmd {
 
 func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	m.keys.write("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
-	m.flash = ""
+	m.flash = m.takePendingBeatFlash()
 	if msg.Type == tea.KeyCtrlP && m.toast.title != "" {
 		m.jumpToToast()
 		return nil, true

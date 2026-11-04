@@ -64,6 +64,7 @@ func sessionArgs() map[string]string {
 		"session set-budget": paramName,
 		"session set-mode":   paramName,
 		"session get-mode":   paramName,
+		"session shell":      paramName,
 		"approve ask":        paramSession,
 		"approve mode":       paramSession,
 		"schedule add":       paramSession,

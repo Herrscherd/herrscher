@@ -25,6 +25,7 @@ func (f frame) render(viewport string) string {
 }
 
 func (m *model) buildFrame() frame {
+	m.input.Placeholder = m.placeholderText()
 	stacked := frame{above: m.railLines()}
 	if tab := m.tabs[m.active]; tab != nil && !m.sidebarVisible() {
 		stacked.below = append(stacked.below, todoPanel(tab.todos, m.innerWidth(), m.st)...)
@@ -72,9 +73,15 @@ func (m *model) buildFrame() frame {
 	if m.bar.open {
 		stacked.below = appendLines(stacked.below, m.statuslineView())
 	}
+	if m.histOpen {
+		stacked.below = appendLines(stacked.below, m.histView())
+	}
 	if chips := chipRow(m.pending, m.st); chips != "" {
 		stacked.below = appendLines(stacked.below, chips+"  "+m.st.dim.Render("⌃U retirer"))
 	}
+	base := len(stacked.above) + m.vp.Height + len(stacked.below)
+	stacked.below = appendLines(stacked.below, strings.Join(m.queueLines(base), "\n"))
+	stacked.below = appendLines(stacked.below, m.draftsView())
 	stacked.below = append(stacked.below, m.composerZone()...)
 	stacked.below = append(stacked.below, m.statusZone()...)
 	return stacked

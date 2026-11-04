@@ -23,6 +23,13 @@ func leaderBindings() map[string]leaderBinding {
 			m.openTheme()
 			return nil
 		}},
+		"ctrl+e": {label: "éditeur", run: func(m *model) tea.Cmd {
+			return m.openEditor()
+		}},
+		"enter": {label: "envoyer la file", run: func(m *model) tea.Cmd {
+			m.sendQueueNow()
+			return nil
+		}},
 	}
 }
 

@@ -341,14 +341,6 @@ func sideRow(text string, width int) string {
 	return truncate(sidebarIndent+text, width)
 }
 
-func justifyRow(left, right string, width int) string {
-	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 1 {
-		return truncate(left+" "+right, width)
-	}
-	return left + strings.Repeat(" ", gap) + right
-}
-
 func padCells(text string, width int) string {
 	return text + strings.Repeat(" ", max(0, width-lipgloss.Width(text)))
 }

@@ -44,6 +44,8 @@ func writeStdout(sequence string) error {
 	return err
 }
 
+const ctrlEnterKey = "\x1b[24;3~"
+
 const minModFields = 2
 
 const (
@@ -66,6 +68,9 @@ func legacyKey(seq []byte) []byte {
 	bytes, ok := legacyKeyBytes(code, mask)
 	if !ok {
 		return nil
+	}
+	if code == ctrlCR && mask&modCtrl != 0 {
+		return []byte(ctrlEnterKey)
 	}
 	if code == ctrlCR && mask&modShift != 0 {
 		return []byte{ctrlESC, '\r'}

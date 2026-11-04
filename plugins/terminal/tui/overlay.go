@@ -11,6 +11,8 @@ type overlayRow struct {
 	mark   string
 	label  string
 	detail string
+	hot    []int
+	tag    string
 }
 
 const overlayLabelWidth = 16
@@ -26,10 +28,17 @@ func floatingList(rows []overlayRow, cursor int, footer string, width int, style
 			head = styles.glyphs.cursor + " "
 		}
 		label := row.label
+		if len(row.hot) > 0 {
+			label = highlightFuzzy(row.label, row.hot, lipgloss.NewStyle(), styles.accent)
+		}
 		if pad := overlayLabelWidth - lipgloss.Width(label); pad > 0 {
 			label += strings.Repeat(" ", pad)
 		}
-		body := padTo(truncate("  "+head+row.mark+label+row.detail, width), width)
+		tail := row.detail
+		if row.tag != "" {
+			tail += "  " + styles.dim.Render(row.tag)
+		}
+		body := padTo(truncate("  "+head+row.mark+label+tail, width), width)
 		if index == cursor {
 			out = append(out, styles.overlaySel.Render(body))
 			continue

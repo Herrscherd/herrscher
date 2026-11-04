@@ -185,14 +185,10 @@ type statuslineTurn struct {
 	Secs int  `json:"secs"`
 }
 
-func (m *model) activeTab() *tab {
-	if tb := m.tabs[m.active]; tb != nil {
-		return tb
-	}
-	return &tab{}
-}
-
 func (m *model) scriptInput(tb *tab) []byte {
+	if tb == nil {
+		tb = &tab{}
+	}
 	info, _ := m.activeInfo()
 	used := m.contextTokens(tb)
 	branch, linked := m.gitHeadOf(info.Dir)

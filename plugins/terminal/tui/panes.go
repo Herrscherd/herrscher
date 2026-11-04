@@ -333,7 +333,7 @@ func (m *model) handlePaneClick(msg tea.MouseMsg) bool {
 func (m *model) surfaceBody() string {
 	switch m.surface {
 	case surfaceBoard:
-		return m.boardView(m.vp.Width, m.vp.Height)
+		return m.boardSurface(m.vp.Width, m.vp.Height)
 	case surfacePanes:
 		return m.paneView(m.vp.Width, m.vp.Height)
 	default:

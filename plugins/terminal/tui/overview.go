@@ -26,6 +26,7 @@ type SessionOverview struct {
 const (
 	overviewWaiting = "waiting"
 	overviewWorking = "working"
+	overviewReview  = "review"
 
 	groupWorking = "working"
 	groupWaiting = "waiting"
@@ -90,7 +91,7 @@ func overviewGroup(state string, unread bool) string {
 		return groupWaiting
 	case state == overviewWorking:
 		return groupWorking
-	case unread:
+	case unread || state == overviewReview:
 		return groupReview
 	default:
 		return groupDone
@@ -168,12 +169,13 @@ func (m *model) rebuildBoard() {
 	m.board.idx = clampTo(m.board.idx, len(m.board.rows))
 }
 
-func (m *model) openBoard() {
+func (m *model) openBoard() tea.Cmd {
 	m.surface = surfaceBoard
 	m.board = boardState{}
 	m.refreshOverviews()
 	m.rebuildBoard()
 	m.relayout()
+	return m.summaryRefresh()
 }
 
 func (m *model) closeSurface() {

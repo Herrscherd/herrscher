@@ -62,6 +62,7 @@ type Backend interface {
 	// false when nothing was interrupted (no live turn by that name).
 	Interrupt(name string) bool
 	Overview() (string, error)
+	Seen(name string)
 }
 
 const (
@@ -245,10 +246,12 @@ type model struct {
 	resumeAll   []contracts.SessionInfo
 	resumeQuery string
 
-	surface   surface
-	board     boardState
-	overviews []SessionOverview
-	panes     paneState
+	surface     surface
+	board       boardState
+	overviews   []SessionOverview
+	summary     panelSummary
+	summaryBusy bool
+	panes       paneState
 
 	diagOpen bool
 
@@ -603,7 +606,7 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 	case "resume":
 		m.openResume()
 	case "agents":
-		m.openBoard()
+		return m.openBoard(), true
 	case "clear":
 		m.clearActive()
 	case "help":
@@ -1246,8 +1249,13 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case tickMsg:
 		m.syncTabs()
+		m.markVisibleSeen()
 		m.refreshSurface()
-		return tickCmd(), true
+		return tea.Batch(tickCmd(), m.summaryRefresh()), true
+	case summaryMsg:
+		m.summaryBusy = false
+		m.summary = panelSummary(msg)
+		return nil, true
 	case tea.MouseMsg:
 		return nil, m.handlePaneClick(msg)
 	case spinMsg:
@@ -1583,8 +1591,7 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case tea.KeyDown:
 		return m.handleHistoryKey(msg, 1)
 	case tea.KeyCtrlP:
-		m.openBoard()
-		return nil, true
+		return m.openBoard(), true
 	case tea.KeyCtrlW:
 		if m.input.Value() != "" {
 			return nil, false

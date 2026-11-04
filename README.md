@@ -491,6 +491,14 @@ Fini), with its vendor, gateway, age, cost and last activity. Letters filter the
 rows, `↑↓` choose, `Enter` opens or switches to the session. When the width is
 short the cost column goes first, then the gateway column.
 
+From 100 columns a RÉSUMÉ panel sits beside the list. It shows the vendors and
+gateways in use, the learned skills (and how many wait for approval), the live
+schedules with the next window, and the approval policy (rules and how many
+refuse). Each row is read from the host when the board opens and refreshed while
+it stays open; a row the host does not answer for is not drawn. A session whose
+last answer finished while nobody was looking is listed under À relire until it
+is opened or stays on screen.
+
 Inside the board, `ctrl+p` switches to the panes: up to four live sessions side
 by side, each header carrying vendor, gateway, context gauge and cost, and the
 end of its transcript. The grid is two by two from 120 columns and 30 rows, two

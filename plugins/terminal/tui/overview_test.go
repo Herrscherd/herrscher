@@ -111,3 +111,17 @@ func TestParseSessionOverviewsReadsHostJSON(t *testing.T) {
 		t.Fatal("garbled overview must be an error")
 	}
 }
+
+func TestFinishedSessionNotReadIsListedUnderReview(t *testing.T) {
+	f, m := boardModel(t)
+	f.overview = `[{"name":"gamma","state":"review","cost":0.1}]`
+	pressKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+	view := m.View()
+	review := strings.Index(view, "À relire")
+	if review < 0 {
+		t.Fatalf("review group missing from board: %s", view)
+	}
+	if gamma := strings.Index(view, "gamma"); gamma < review {
+		t.Fatalf("gamma must sit under À relire, view: %s", view)
+	}
+}

@@ -366,6 +366,12 @@ func (t *Terminal) Scrollback(name string) []contracts.ScrollbackLine {
 	return nil
 }
 
+// Seen records that the operator is looking at a session, which clears its
+// review mark on the sessions board once its last answer is read.
+func (t *Terminal) Seen(name string) {
+	_, _ = t.Dispatch([]string{sessionVerb, "seen", sessionNameFlag, name})
+}
+
 // Overview returns the host's per-session overview as JSON (state, cost, last
 // activity) for the sessions board and the side-by-side panes.
 func (t *Terminal) Overview() (string, error) {
@@ -427,6 +433,8 @@ func withTerminalDefault(args []string) []string {
 	return append(out, "--terminal_only")
 }
 
+const sessionNameFlag = "--name"
+
 func terminalVerbs() map[string]bool {
 	return map[string]bool{
 		sessionVerb: true,
@@ -441,6 +449,19 @@ func terminalVerbs() map[string]bool {
 // same daemon over a socket and must draw the same palette; two copies of this
 // judgement would be two chances to disagree about what a tab may run.
 func OperatorVerb(verb string) bool { return terminalVerbs()[verb] }
+
+var readOnlyCommands = map[string]bool{
+	"skill list":    true,
+	"schedule list": true,
+	"approve list":  true,
+	"approve rule":  true,
+}
+
+// ReadOnlyCommand reports whether argv is one of the read-only queries the
+// sessions board runs beside its list (skills, schedules, approval rules).
+func ReadOnlyCommand(args []string) bool {
+	return len(args) == 2 && readOnlyCommands[args[0]+" "+args[1]]
+}
 
 func allowedVerbs() string {
 	out := make([]string, 0, len(terminalVerbs()))
@@ -484,7 +505,7 @@ func (t *Terminal) Commands() []tui.CommandSpec {
 // so TUI-created sessions bind to this terminal and appear as tabs. The first
 // token is gated against terminalVerbs() before it ever reaches the registry.
 func (t *Terminal) Dispatch(args []string) (string, error) {
-	if len(args) == 0 || !terminalVerbs()[args[0]] {
+	if len(args) == 0 || !(terminalVerbs()[args[0]] || ReadOnlyCommand(args)) {
 		verb := ""
 		if len(args) > 0 {
 			verb = args[0]

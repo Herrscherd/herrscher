@@ -125,3 +125,33 @@ func TestPaneEnterSendsToFocusedPane(t *testing.T) {
 		t.Fatalf("Enter must send to the focused pane: %+v", f.submitted)
 	}
 }
+
+func paneCellPosition(t *testing.T, m *model, header string) (int, int) {
+	t.Helper()
+	for y, line := range strings.Split(m.View(), "\n") {
+		if index := strings.Index(line, header); index >= 0 {
+			return lipgloss.Width(line[:index]), y
+		}
+	}
+	t.Fatalf("no pane header %q on screen", header)
+	return 0, 0
+}
+
+func TestPaneClickFocusesThePaneUnderThePointer(t *testing.T) {
+	_, m := paneModel(t)
+	x, y := paneCellPosition(t, m, "beta · ")
+	m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	if got := m.panes.channels[m.panes.focus]; got != "ch-beta" {
+		t.Fatalf("a left click on beta must focus it, focused channel = %q", got)
+	}
+}
+
+func TestPaneReleaseDoesNotMoveFocus(t *testing.T) {
+	_, m := paneModel(t)
+	before := m.panes.focus
+	x, y := paneCellPosition(t, m, "gamma · ")
+	m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
+	if m.panes.focus != before {
+		t.Fatalf("a release must not move focus, focus = %d, was %d", m.panes.focus, before)
+	}
+}

@@ -75,6 +75,9 @@ func (m *model) chooseResume() tea.Cmd {
 }
 
 func (m *model) openChannel(session contracts.SessionInfo) tea.Cmd {
+	if m.tm != nil {
+		m.tm.Seen(session.Name)
+	}
 	m.ensureTab(session.ChannelID)
 	m.active = session.ChannelID
 	if tb := m.tabs[session.ChannelID]; tb != nil {

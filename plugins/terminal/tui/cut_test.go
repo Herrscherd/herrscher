@@ -92,3 +92,30 @@ func TestApprovalKeepsEveryChoiceAtTwentyRows(t *testing.T) {
 		}
 	}
 }
+
+func TestToastStaysVisibleAtTwentyRows(t *testing.T) {
+	m, _ := barModelAt(t, "")
+	m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	m.toast = toast{glyph: m.st.glyphs.attention, title: "Approbation attend", signal: "OSC 9 envoyé", at: time.Now()}
+	for range 40 {
+		m.toast.body = append(m.toast.body, "une ligne du corps du toast qui déborde la place")
+	}
+	rows := m.vp.Height
+	lines := strings.Split(m.toastView(rows), "\n")
+	if len(lines) != max(rows, 2) {
+		t.Fatalf("the toast must fill the rows it is given: want %d lines, got %d", max(rows, 2), len(lines))
+	}
+	if !strings.Contains(lines[0], "Approbation attend") {
+		t.Errorf("the toast must keep its title border, got %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[len(lines)-1], "╰") {
+		t.Errorf("the toast must close with its bottom border, got %q", lines[len(lines)-1])
+	}
+	if rows > 2 && !strings.Contains(lines[len(lines)-2], cutMark) {
+		t.Errorf("the last body row of a squeezed toast must end with %q, got %q", cutMark, lines[len(lines)-2])
+	}
+	blank := strings.Repeat(strings.Repeat(" ", 60)+"\n", 19) + strings.Repeat(" ", 60)
+	if !strings.Contains(m.overlayToast(blank), "Approbation attend") {
+		t.Errorf("the toast must be drawn over the screen at 60x20")
+	}
+}

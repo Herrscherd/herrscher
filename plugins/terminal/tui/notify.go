@@ -50,21 +50,22 @@ const (
 )
 
 const (
-	toastTTL       = 6 * time.Second
-	toastTick      = time.Second
-	toastWidth     = 56
-	toastBandBelow = 2 * toastWidth
-	toastMinimum   = 24
-	toastColumn    = 1
-	toastRow       = 2
-	toastFrameCols = 2
-	toastChrome    = 4
-	toastCorner    = 2
-	toastTopFrame  = 8
-	bellSequence   = "\a"
-	osc9Prefix     = "\x1b]9;"
-	osc9Suffix     = "\a"
-	osc9Max        = 200
+	toastTTL        = 6 * time.Second
+	toastTick       = time.Second
+	toastWidth      = 56
+	toastBandBelow  = 2 * toastWidth
+	toastMinimum    = 24
+	toastColumn     = 1
+	toastRow        = 2
+	toastBorderRows = 2
+	toastFrameCols  = 2
+	toastChrome     = 4
+	toastCorner     = 2
+	toastTopFrame   = 8
+	bellSequence    = "\a"
+	osc9Prefix      = "\x1b]9;"
+	osc9Suffix      = "\a"
+	osc9Max         = 200
 )
 
 type toast struct {
@@ -205,7 +206,7 @@ func (m *model) handleFocus(focused bool) {
 	m.focus = focusState{focused: focused, known: true}
 }
 
-func (m *model) toastView() string {
+func (m *model) toastView(rows int) string {
 	if m.toast.title == "" {
 		return ""
 	}
@@ -217,19 +218,36 @@ func (m *model) toastView() string {
 		titleStyle = m.st.warn
 	}
 	lines := []string{toastTop(edge, titleStyle.Render(m.toast.glyph+" "+m.toast.title), m.st.dim.Render("il y a "+elapsed(time.Since(m.toast.at))), width)}
-	for _, text := range m.toast.body {
-		if text != "" {
-			lines = append(lines, toastRowLine(edge, m.st.text.Render(text), inner))
-		}
+	for _, text := range squeezeToastTexts(m.toastTexts(), rows-toastBorderRows, inner) {
+		lines = append(lines, toastRowLine(edge, text, inner))
 	}
-	lines = append(lines,
-		toastRowLine(edge, m.st.dim.Render(m.toast.signal+" · ⌃P y aller"), inner),
-		edge.Render("╰"+strings.Repeat("─", width-toastCorner)+"╯"),
-	)
+	lines = append(lines, edge.Render("╰"+strings.Repeat("─", width-toastCorner)+"╯"))
 	for i := range lines {
 		lines[i] = ansi.Truncate(lines[i], m.width, "")
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m *model) toastTexts() []string {
+	var texts []string
+	for _, text := range m.toast.body {
+		if text != "" {
+			texts = append(texts, m.st.text.Render(text))
+		}
+	}
+	return append(texts, m.st.dim.Render(m.toast.signal+" · ⌃P y aller"))
+}
+
+func squeezeToastTexts(texts []string, room, inner int) []string {
+	if len(texts) <= room {
+		return texts
+	}
+	if room <= 0 {
+		return nil
+	}
+	kept := append([]string(nil), texts[:room]...)
+	kept[room-1] = ansi.Truncate(kept[room-1], max(inner-lipgloss.Width(cutMark), 0), "") + cutMark
+	return kept
 }
 
 func (m *model) toastBoxWidth() int {
@@ -273,8 +291,8 @@ func overlayAt(base, block string, row, column int) string {
 }
 
 func (m *model) overlayToast(rendered string) string {
-	block := m.toastView()
-	if block == "" || strings.Count(block, "\n")+1 > m.vp.Height {
+	block := m.toastView(m.vp.Height)
+	if block == "" {
 		return rendered
 	}
 	column := max(0, m.width-lipgloss.Width(firstLine(block))-toastColumn)

@@ -97,14 +97,13 @@ type sessionDriver struct {
 
 	gate budgetGate
 
-	vendor             string
-	compaction         compactionPolicy
-	percentOf          func() int
-	turnReading        int
-	compactSpent       bool
-	compactMu          sync.Mutex
-	compactPending     bool
-	compactInstruction string
+	vendor         string
+	compaction     compactionPolicy
+	percentOf      func() int
+	turnReading    int
+	compactSpent   bool
+	compactMu      sync.Mutex
+	compactWaiting *compactRequest
 }
 
 type queued struct {

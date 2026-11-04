@@ -70,6 +70,27 @@ func TestCompactUnknownSession(t *testing.T) {
 	}
 }
 
+func TestEmptyCompactRequestKeepsTheQueuedInstruction(t *testing.T) {
+	store, sessions, queue := compactCmdFixture(t, vendorClaude)
+	ctx := context.Background()
+	focus := contracts.Input{Args: map[string]string{paramName: "api", "instruction": "focus sur l'API"}}
+	empty := contracts.Input{Args: map[string]string{paramName: "api"}}
+	if _, err := compactSession(ctx, store, sessions, focus); err != nil {
+		t.Fatalf("first request: %v", err)
+	}
+	out, err := compactSession(ctx, store, sessions, empty)
+	if err != nil {
+		t.Fatalf("empty request: %v", err)
+	}
+	if want := "compaction de \"api\" déjà en file : fusionnée avec la demande en attente, la consigne en file est conservée"; out != want {
+		t.Fatalf("empty request reply = %q, want %q", out, want)
+	}
+	<-queue
+	if got := sessions.lookup("api").takeCompactInstruction(); got != "focus sur l'API" {
+		t.Fatalf("instruction after an empty request = %q, want the queued one kept", got)
+	}
+}
+
 func TestCompactRequestsForOneSessionAreMerged(t *testing.T) {
 	store, sessions, queue := compactCmdFixture(t, vendorClaude)
 	ctx := context.Background()

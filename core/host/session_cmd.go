@@ -205,9 +205,16 @@ func compactSession(_ context.Context, store *state.State, sessions *sessionTabl
 		return "", fmt.Errorf("session %q: %w", name, errCompactQueueFull)
 	}
 	if merged {
-		return fmt.Sprintf("compaction of %q already queued: merged into it, the most recent instruction is kept", name), nil
+		return mergedCompactNotice(name, input.Get("instruction")), nil
 	}
 	return "", nil
+}
+
+func mergedCompactNotice(name, instruction string) string {
+	if instruction == "" {
+		return fmt.Sprintf("compaction de %q déjà en file : fusionnée avec la demande en attente, la consigne en file est conservée", name)
+	}
+	return fmt.Sprintf("compaction de %q déjà en file : fusionnée avec la demande en attente, la consigne en file est remplacée par la plus récente", name)
 }
 
 func sessionSetCompactVerb(store *state.State) contracts.Cmd {

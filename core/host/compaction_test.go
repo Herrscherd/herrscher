@@ -251,6 +251,36 @@ func TestCompactionEventsCarryTokensOnlyWhenMeasured(t *testing.T) {
 	}
 }
 
+func TestMergedRequestIsNotAcceptedWhenTheFirstEnqueueFails(t *testing.T) {
+	queue := make(chan queued, 1)
+	queue <- queued{ev: contracts.Event{T: eventInput}}
+	d := &sessionDriver{queue: queue, enqueueTimeout: 100 * time.Millisecond}
+	first := make(chan [2]bool, 1)
+	go func() {
+		merged, accepted := d.requestCompaction("premier", contracts.Conversation{})
+		first <- [2]bool{merged, accepted}
+	}()
+	for !waitingCompaction(d) {
+		time.Sleep(time.Millisecond)
+	}
+	merged, accepted := d.requestCompaction("second", contracts.Conversation{})
+	if !merged || accepted {
+		t.Fatalf("second request while the first waits = merged %t accepted %t, want merged and refused", merged, accepted)
+	}
+	if got := <-first; got[0] || got[1] {
+		t.Fatalf("first request = merged %t accepted %t, want refused", got[0], got[1])
+	}
+	if n := len(queue); n != 1 {
+		t.Fatalf("queue holds %d items, want only the filler", n)
+	}
+}
+
+func waitingCompaction(d *sessionDriver) bool {
+	d.compactMu.Lock()
+	defer d.compactMu.Unlock()
+	return d.compactWaiting != nil
+}
+
 func TestMeasuredCompactionStillAboveThresholdDoesNotLoop(t *testing.T) {
 	f := newCompactFixture(t, "claude", compactPolicy(50))
 	openTurn(t, f, 150_000)

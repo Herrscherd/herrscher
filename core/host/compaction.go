@@ -242,30 +242,50 @@ func (d *sessionDriver) runCompactNow(ctx context.Context, instruction string) {
 	}
 }
 
+type compactRequest struct {
+	instruction string
+	done        chan struct{}
+	queued      bool
+}
+
 func (d *sessionDriver) requestCompaction(instruction string, origin contracts.Conversation) (bool, bool) {
 	d.compactMu.Lock()
-	if d.compactPending {
-		d.compactInstruction = instruction
+	if waiting := d.compactWaiting; waiting != nil {
+		if instruction != "" {
+			waiting.instruction = instruction
+		}
 		d.compactMu.Unlock()
-		return true, true
+		<-waiting.done
+		return true, waiting.queued
 	}
-	d.compactPending = true
-	d.compactInstruction = instruction
+	request := &compactRequest{instruction: instruction, done: make(chan struct{})}
+	d.compactWaiting = request
 	d.compactMu.Unlock()
-	if d.enqueue(queued{ev: contracts.Event{T: eventCompactNow}, origin: origin}) {
-		return false, true
+	request.queued = d.enqueue(queued{ev: contracts.Event{T: eventCompactNow}, origin: origin})
+	if !request.queued {
+		d.clearCompactWaiting(request)
 	}
-	d.takeCompactInstruction()
-	return false, false
+	close(request.done)
+	return false, request.queued
+}
+
+func (d *sessionDriver) clearCompactWaiting(request *compactRequest) {
+	d.compactMu.Lock()
+	defer d.compactMu.Unlock()
+	if d.compactWaiting == request {
+		d.compactWaiting = nil
+	}
 }
 
 func (d *sessionDriver) takeCompactInstruction() string {
 	d.compactMu.Lock()
 	defer d.compactMu.Unlock()
-	instruction := d.compactInstruction
-	d.compactPending = false
-	d.compactInstruction = ""
-	return instruction
+	waiting := d.compactWaiting
+	if waiting == nil {
+		return ""
+	}
+	d.compactWaiting = nil
+	return waiting.instruction
 }
 
 type bridgeCompactor struct {

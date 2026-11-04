@@ -1086,7 +1086,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.disconnected = false
 	}
 	previous := target.tokens
-	if event.Tokens > 0 {
+	if event.Tokens > 0 && !isCompactionEvent(event.T) {
 		target.tokens = event.Tokens
 	}
 	target.measureContext(event)

@@ -67,6 +67,47 @@ func TestCompactionNoticeShowsTheFiguresOnlyWhenMeasured(t *testing.T) {
 	}
 }
 
+func TestCompactionEventsDoNotOverwriteTheTokenCounter(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 92}}}
+	m := newModel(f)
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
+	tb := m.ensureTab("c")
+	m.active = "c"
+	tb.tokens = 1234
+	m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "automatic", Tokens: 184_000})
+	m.renderInto(tb, contracts.Event{T: eventCompactionDone, Value: "automatic", Tokens: 90_000})
+	if tb.tokens != 1234 {
+		t.Fatalf("tokens = %d after a compaction, want the thinking and tool counter kept at 1234", tb.tokens)
+	}
+}
+
+func TestUnmeasuredCompactionReturnsTheGaugeToItsEstimate(t *testing.T) {
+	for _, size := range []tea.WindowSizeMsg{{Width: 60, Height: 20}, {Width: 80, Height: 30}} {
+		f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", ContextTokens: 42_000, AutoCompactPercent: 92}}}
+		m := newModel(f)
+		m.handleWindowSize(size)
+		tb := m.ensureTab("c")
+		m.active = "c"
+		tb.measureContext(contracts.Event{TokensIn: 150_000})
+		m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "manual"})
+		m.renderInto(tb, contracts.Event{T: eventCompactionDone, Value: "manual", Text: "compacté"})
+		if tb.ctxMeasured || tb.ctxTokens != 0 {
+			t.Fatalf("%dx%d: gauge still holds the pre-compaction reading: measured %t, tokens %d", size.Width, size.Height, tb.ctxMeasured, tb.ctxTokens)
+		}
+		if got := m.contextTokens(tb); got != 42_000 {
+			t.Fatalf("%dx%d: gauge = %d, want the estimate 42000", size.Width, size.Height, got)
+		}
+		m.openContext()
+		view := ansi.Strip(m.contextView())
+		if strings.Contains(view, formatTokens(150_000)) {
+			t.Errorf("%dx%d: context view still shows the pre-compaction 150000:\n%s", size.Width, size.Height, view)
+		}
+		if rows := strings.Count(view, "\n") + 1; rows > size.Height {
+			t.Errorf("%dx%d: the context view takes %d rows, more than the window", size.Width, size.Height, rows)
+		}
+	}
+}
+
 func TestContextViewSaysNoAutoCompactionInSmallWindows(t *testing.T) {
 	for _, size := range []tea.WindowSizeMsg{{Width: 60, Height: 20}, {Width: 80, Height: 30}} {
 		f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 0}}}

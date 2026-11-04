@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -335,8 +337,8 @@ func TestHeartbeatSurvivesATransientFailure(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	if err := run.release(); err == nil || !strings.Contains(err.Error(), "toucher transitoire") {
-		t.Fatalf("release must report the failure it saw, got %v", err)
+	if err := run.release(); err != nil {
+		t.Fatalf("release after a recovered beat must be nil, got %v", err)
 	}
 }
 
@@ -352,5 +354,111 @@ func TestReleaseDraftsTwiceIsSafe(t *testing.T) {
 	}
 	if err := m.releaseDrafts(); err != nil {
 		t.Fatalf("second release must be a no-op, got %v", err)
+	}
+}
+
+func TestReleaseReportsNoBeatErrorAfterARecovery(t *testing.T) {
+	var calls atomic.Int32
+	touch := func(root *os.Root) error {
+		if calls.Add(1) == 1 {
+			return errors.New("panne transitoire")
+		}
+		return touchDraftLock(root)
+	}
+	run, err := startDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond, touch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for calls.Load() < 3 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if err := run.release(); err != nil {
+		t.Fatalf("a beat that recovered must not fail the release, got %v", err)
+	}
+}
+
+func TestReleaseReportsAFailureAtTheLastBeat(t *testing.T) {
+	var calls atomic.Int32
+	failing := make(chan struct{})
+	var signal sync.Once
+	touch := func(root *os.Root) error {
+		if calls.Add(1) < 3 {
+			return touchDraftLock(root)
+		}
+		signal.Do(func() { close(failing) })
+		return errors.New("panne finale")
+	}
+	run, err := startDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond, touch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-failing:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the failing beat never ran")
+	}
+	if err := run.release(); err == nil || !strings.Contains(err.Error(), "panne finale") {
+		t.Fatalf("release must report the failure of the last beat, got %v", err)
+	}
+}
+
+func TestDraftRunReleaseIsIdempotent(t *testing.T) {
+	run, err := startDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"), time.Hour, touchDraftLock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := run.release(); err != nil {
+		t.Fatalf("first release: %v", err)
+	}
+	if err := run.release(); err != nil {
+		t.Fatalf("second direct release must be a no-op, got %v", err)
+	}
+}
+
+func TestBeatFailureFlashesOnceAndDoesNotLoop(t *testing.T) {
+	var calls atomic.Int32
+	touch := func(root *os.Root) error {
+		if calls.Add(1) == 1 {
+			return errors.New("panne durable")
+		}
+		return touchDraftLock(root)
+	}
+	run, err := startDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond, touch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := run.release(); err != nil {
+			t.Errorf("release: %v", err)
+		}
+	}()
+	m := newTestModel()
+	m.draftFiles = run
+	first := make(chan tea.Msg, 1)
+	go func() { first <- m.armDraftBeatWatch()() }()
+	var msg tea.Msg
+	select {
+	case msg = <-first:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the failed beat was never reported")
+	}
+	failure, ok := msg.(draftBeatFailedMsg)
+	if !ok {
+		t.Fatalf("want draftBeatFailedMsg, got %T", msg)
+	}
+	cmd, _ := m.handleMsg(failure)
+	if !strings.Contains(m.flash, "panne durable") {
+		t.Fatalf("the flash must name the failure, got %q", m.flash)
+	}
+	if cmd == nil {
+		t.Fatal("the watch must be re-armed for a later transition")
+	}
+	again := make(chan tea.Msg, 1)
+	go func() { again <- cmd() }()
+	select {
+	case extra := <-again:
+		t.Fatalf("healthy beats must not produce another message, got %#v", extra)
+	case <-time.After(100 * time.Millisecond):
 	}
 }

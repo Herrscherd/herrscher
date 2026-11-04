@@ -350,17 +350,18 @@ type model struct {
 	mentionCacheKey  string
 	mentionCacheRows []string
 
-	history    []string
-	histIdx    int
-	drafts     []string
-	histOpen   bool
-	histQuery  string
-	histSel    int
-	editing    bool
-	draftFiles *draftRun
-	queueSel   int
-	queueFocus bool
-	queueHits  []queueHit
+	history          []string
+	histIdx          int
+	drafts           []string
+	histOpen         bool
+	histQuery        string
+	histSel          int
+	editing          bool
+	draftFiles       *draftRun
+	draftBeatWatched bool
+	queueSel         int
+	queueFocus       bool
+	queueHits        []queueHit
 
 	clip      clipboard
 	pending   []Attachment
@@ -1524,6 +1525,9 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case editorDoneMsg:
 		m.applyEditorResult(msg)
 		return nil, true
+	case draftBeatFailedMsg:
+		m.flash = draftBeatFlash + msg.err.Error()
+		return m.watchDraftBeat(), true
 	case compactResultMsg:
 		m.handleCompactResult(msg)
 		return nil, true

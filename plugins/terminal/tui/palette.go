@@ -185,7 +185,7 @@ func localCommands() []CommandSpec {
 		{Name: cmdTheme, Desc: "pick the colour theme and the render options"},
 		{Name: "capabilities", Desc: "what this terminal can render, and what it falls back to"},
 		{Name: "plugins", Desc: "the plugins this binary is made of"},
-		{Name: cmdAccount, Args: "[profil]", Desc: "lister les comptes de la session, ou en choisir un (sans argument : la liste)"},
+		{Name: cmdAccount, Args: "[profil] [fresh]", Desc: "lister les comptes de la session, ou en choisir un (sans argument : la liste ; fresh ouvre une nouvelle conversation sous ce compte)"},
 		{Name: "attach", Args: "<path>", Desc: "stage a local file with the next message"},
 		{Name: "copy", Args: "[reply|turn|all]", Desc: "put the last answer (or the turn, or everything) on the clipboard"},
 		{Name: "review", Desc: "revue guidée des fichiers du tour : relus, consignes, commit et PR"},

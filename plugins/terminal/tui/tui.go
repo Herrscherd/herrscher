@@ -900,7 +900,17 @@ func (m *model) accountCmd(args []string) tea.Cmd {
 	if len(args) == 0 {
 		return m.dispatchCmd(m.active, []string{"session", "accounts", m.active})
 	}
-	return m.dispatchCmd(m.active, []string{"session", "set-account", m.active, args[0]})
+	return m.dispatchCmd(m.active, setAccountArgv(m.active, args))
+}
+
+const freshWord = "fresh"
+
+func setAccountArgv(session string, args []string) []string {
+	argv := []string{"session", "set-account", session, args[0]}
+	if len(args) > 1 && args[1] == freshWord {
+		argv = append(argv, freshWord)
+	}
+	return argv
 }
 
 func (m *model) dispatchCmd(origin string, args []string) tea.Cmd {

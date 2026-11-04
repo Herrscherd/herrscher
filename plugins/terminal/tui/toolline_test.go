@@ -133,7 +133,7 @@ func TestThinkingFoldedShowsLabelAndHint(t *testing.T) {
 		assertFitsWidth(t, out, width)
 	}
 	got := ansi.Strip(renderThinking(item, 120, toolTestView(false)))
-	for _, want := range []string{"▸", "Réflexion · 14s · 1.2k tokens", "ctrl+o"} {
+	for _, want := range []string{"▸", "Réflexion · 14s · 1.2k tokens", "⌃O"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("folded thinking missing %q: %q", want, got)
 		}
@@ -199,5 +199,27 @@ func TestBusyLineCarriesVerbTimeTokensCostAndEscape(t *testing.T) {
 	}
 	if !strings.HasSuffix(got, "Échap interrompre") {
 		t.Fatalf("the escape hint must sit on the right: %q", got)
+	}
+}
+
+func TestThinkingHeadNamesTheFoldKeyWithItsVerb(t *testing.T) {
+	folded := ansi.Strip(renderThinking(entry{role: roleThinking, text: "x", span: time.Second}, 120, toolTestView(false)))
+	if !strings.Contains(folded, "déplier ⌃O") {
+		t.Fatalf("folded thinking must offer to unfold with ⌃O: %q", folded)
+	}
+	open := ansi.Strip(renderThinking(entry{role: roleThinking, text: "x", span: time.Second, open: true}, 120, toolTestView(false)))
+	if !strings.Contains(open, "replier ⌃O") {
+		t.Fatalf("open thinking must offer to fold with ⌃O: %q", open)
+	}
+}
+
+func TestThinkingSpanNeverGoesNegative(t *testing.T) {
+	m := notifyModel(t, false)
+	tb := m.tabs["c"]
+	tb.appendThinking("pondération", 0, 0)
+	tb.appendThinking(" des options", 0, 0)
+	got := m.enrichEntry(tb, len(tb.entries)-1, time.Now())
+	if got.span < 0 {
+		t.Fatalf("a finished thinking block must never read a negative duration, got %v", got.span)
 	}
 }

@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -59,7 +60,7 @@ func TestRenderShellStateShowsWarnTitleAndShellFooter(t *testing.T) {
 	if !strings.Contains(joined, "! SHELL") {
 		t.Fatal("shell state must show the ! SHELL title")
 	}
-	if !strings.Contains(joined, "la commande passe par la politique d'outils de l'hôte") {
+	if !strings.Contains(joined, "la commande passe par la politique d’outils de l’hôte") {
 		t.Fatal("shell state must show the shell footer")
 	}
 }
@@ -93,7 +94,65 @@ func TestComposerStyleFollowsState(t *testing.T) {
 	}
 	typeLine(m, "")
 	m.editing = true
-	if m.composerStyle().Render("x") != m.st.accent.Render("x") {
-		t.Fatal("editing composer uses the accent border")
+	if m.composerStyle().Render("x") != m.st.violet.Render("x") {
+		t.Fatal("editing composer uses the violet border")
 	}
+}
+
+func TestShellTitleNamesTheSessionDirectory(t *testing.T) {
+	m, f := queueFixture(t)
+	f.sessions[0].Dir = "/srv/projets/herrscher/.worktrees/tui-v2"
+	m.infoAt = time.Time{}
+	typeLine(m, "!ls")
+	title := ansi.Strip(m.composerTitleLeft())
+	if !strings.Contains(title, "! SHELL · dans …/.worktrees/tui-v2 · la sortie entre dans la session") {
+		t.Fatalf("shell title must name the session directory, got %q", title)
+	}
+}
+
+func TestShellTitleDropsTheDirectoryWhenUnknown(t *testing.T) {
+	m, _ := queueFixture(t)
+	typeLine(m, "!ls")
+	title := ansi.Strip(m.composerTitleLeft())
+	if strings.Contains(title, "· dans ") {
+		t.Fatalf("an unknown directory must leave no « dans » segment, got %q", title)
+	}
+	if !strings.Contains(title, "la sortie entre dans la session") {
+		t.Fatalf("shell title must keep its explanation, got %q", title)
+	}
+}
+
+func TestShellPromptStaysAngleBracketAndTextTurnsWarn(t *testing.T) {
+	m, _ := queueFixture(t)
+	typeLine(m, "!ls")
+	m.buildFrame()
+	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "> !ls") {
+		t.Fatalf("shell mode keeps the > prompt and shows the typed bang, got %q", got)
+	}
+	if m.input.FocusedStyle.Text.GetForeground() != m.st.warn.GetForeground() {
+		t.Fatal("shell mode must colour the typed text with the warn style")
+	}
+	typeLine(m, "ls")
+	m.buildFrame()
+	if m.input.FocusedStyle.Text.GetForeground() == m.st.warn.GetForeground() {
+		t.Fatal("leaving shell mode must restore the normal text colour")
+	}
+}
+
+func TestComposerFrameColoursFollowShellAndEditor(t *testing.T) {
+	m, _ := queueFixture(t)
+	typeLine(m, "!ls")
+	if m.composerStyle().GetForeground() != m.st.warn.GetForeground() {
+		t.Fatal("shell mode must draw the frame in the warn colour")
+	}
+	typeLine(m, "")
+	m.editing = true
+	if m.composerStyle().GetForeground() != m.st.violet.GetForeground() {
+		t.Fatal("editor mode must draw the frame in violet")
+	}
+}
+
+func (m *model) composerTitleLeft() string {
+	left, _ := m.composerTitles()
+	return left
 }

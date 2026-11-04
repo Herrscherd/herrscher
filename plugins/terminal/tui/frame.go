@@ -26,6 +26,7 @@ func (f frame) render(viewport string) string {
 
 func (m *model) buildFrame() frame {
 	m.input.Placeholder = m.placeholderText()
+	m.syncPrompt()
 	stacked := frame{above: m.railLines()}
 	m.appendSidePanels(&stacked)
 	stacked.below = append(stacked.below, m.approvalLines(time.Now())...)

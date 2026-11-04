@@ -286,3 +286,12 @@ func TestStatusBarRendersTheModeChip(t *testing.T) {
 		t.Errorf("the session mode must reach the bar: %q", bar)
 	}
 }
+
+func TestCostShowsZeroBeforeAnyTurn(t *testing.T) {
+	if got := costLabel(0); got != "$0.00" {
+		t.Fatalf("a tab without cost must read $0.00, got %q", got)
+	}
+	if got := costLabel(1.42); got != "$1.42" {
+		t.Fatalf("costLabel(1.42) = %q, want $1.42", got)
+	}
+}

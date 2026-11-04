@@ -51,11 +51,15 @@ const (
 
 const (
 	toastTTL       = 6 * time.Second
+	toastTick      = time.Second
 	toastWidth     = 56
 	toastMinimum   = 24
 	toastColumn    = 1
-	toastRow       = 1
+	toastRow       = 2
 	toastFrameCols = 2
+	toastChrome    = 4
+	toastCorner    = 2
+	toastTopFrame  = 8
 	bellSequence   = "\a"
 	osc9Prefix     = "\x1b]9;"
 	osc9Suffix     = "\a"
@@ -67,11 +71,16 @@ type toast struct {
 	channel string
 	glyph   string
 	title   string
-	detail  string
+	body    []string
 	signal  string
+	at      time.Time
 }
 
 type toastExpiredMsg struct {
+	seq int
+}
+
+type toastTickMsg struct {
 	seq int
 }
 
@@ -95,13 +104,19 @@ func (m *model) notifyTurnEnd(target *tab) tea.Cmd {
 	if name == "" {
 		name = target.label
 	}
-	detail := joinNonEmpty(name, time.Since(target.startedAt).Round(time.Second).String())
-	return m.announce(kindTurnEnd, m.st.glyphs.success, "Tour fini", target.channel, detail)
+	var duration string
+	if !target.startedAt.IsZero() {
+		duration = elapsed(time.Since(target.startedAt))
+	}
+	info := m.sessionInfo(target.channel)
+	subject := joinNonEmpty(name, duration, info.Vendor, strings.Join(info.Gateways, "+"))
+	return m.announce(kindTurnEnd, m.st.glyphs.success, "Tour fini", target.channel, []string{subject})
 }
 
 func (m *model) notifyApproval(channel, question string) tea.Cmd {
-	detail := joinNonEmpty(m.sessionName(channel), question)
-	return m.announce(kindApproval, m.st.glyphs.attention, "Approbation en attente", channel, detail)
+	info := m.sessionInfo(channel)
+	subject := joinNonEmpty(m.sessionName(channel), info.Vendor, strings.Join(info.Gateways, "+"))
+	return m.announce(kindApproval, m.st.glyphs.attention, "Approbation en attente", channel, []string{subject, question})
 }
 
 func (m *model) jumpToToast() {
@@ -110,15 +125,15 @@ func (m *model) jumpToToast() {
 	m.activate(channel)
 }
 
-func (m *model) announce(kind notifyKind, glyph, title, channel, detail string) tea.Cmd {
+func (m *model) announce(kind notifyKind, glyph, title, channel string, body []string) tea.Cmd {
 	if !m.notifyMode.wants(kind) {
 		return nil
 	}
 	m.toastSeq++
-	m.toast = toast{seq: m.toastSeq, channel: channel, glyph: glyph, title: title, detail: detail, signal: deliveryLabel(m.caps, m.shouldSignal())}
+	m.toast = toast{seq: m.toastSeq, channel: channel, glyph: glyph, title: title, body: body, signal: deliveryLabel(m.caps, m.shouldSignal()), at: time.Now()}
 	seq := m.toastSeq
 	expire := tea.Tick(toastTTL, func(time.Time) tea.Msg { return toastExpiredMsg{seq: seq} })
-	return tea.Batch(m.signalCmd(title+": "+detail), expire)
+	return tea.Batch(m.signalCmd(title+": "+joinNonEmpty(body...)), expire, toastTicker(seq))
 }
 
 func (m *model) signalCmd(text string) tea.Cmd {
@@ -174,6 +189,17 @@ func (m *model) handleToastExpired(msg toastExpiredMsg) {
 	}
 }
 
+func toastTicker(seq int) tea.Cmd {
+	return tea.Tick(toastTick, func(time.Time) tea.Msg { return toastTickMsg{seq: seq} })
+}
+
+func (m *model) handleToastTick(msg toastTickMsg) tea.Cmd {
+	if m.toast.title == "" || msg.seq != m.toast.seq {
+		return nil
+	}
+	return toastTicker(msg.seq)
+}
+
 func (m *model) handleFocus(focused bool) {
 	m.focus = focusState{focused: focused, known: true}
 }
@@ -182,23 +208,38 @@ func (m *model) toastView() string {
 	if m.toast.title == "" {
 		return ""
 	}
-	inner := min(toastWidth, m.width-toastFrameCols) - toastFrameCols
-	if inner < toastMinimum {
-		inner = toastMinimum
-	}
+	width := max(toastMinimum, min(toastWidth, m.width-toastFrameCols))
+	inner := width - toastChrome
+	edge := m.st.dim
 	titleStyle := m.st.green
 	if m.toast.glyph == m.st.glyphs.attention {
 		titleStyle = m.st.warn
 	}
-	lines := []string{
-		titleStyle.Render(m.toast.glyph + " " + m.toast.title),
-		m.st.text.Render(m.toast.detail),
-		m.st.dim.Render(m.toast.signal + " · ctrl+p y aller"),
+	lines := []string{toastTop(edge, titleStyle.Render(m.toast.glyph+" "+m.toast.title), m.st.dim.Render("il y a "+elapsed(time.Since(m.toast.at))), width)}
+	for _, text := range m.toast.body {
+		if text != "" {
+			lines = append(lines, toastRowLine(edge, m.st.text.Render(text), inner))
+		}
 	}
+	lines = append(lines,
+		toastRowLine(edge, m.st.dim.Render(m.toast.signal+" · ⌃P y aller"), inner),
+		edge.Render("╰"+strings.Repeat("─", width-toastCorner)+"╯"),
+	)
 	for i := range lines {
-		lines[i] = ansi.Truncate(lines[i], inner, "…")
+		lines[i] = ansi.Truncate(lines[i], m.width, "")
 	}
-	return m.st.dim.Border(lipgloss.RoundedBorder()).Padding(0, 1).Render(strings.Join(lines, "\n"))
+	return strings.Join(lines, "\n")
+}
+
+func toastTop(edge lipgloss.Style, title, age string, width int) string {
+	fill := max(1, width-toastTopFrame-lipgloss.Width(title)-lipgloss.Width(age))
+	return edge.Render("╭─ ") + title + edge.Render(" "+strings.Repeat("─", fill)+" ") + age + edge.Render(" ─╮")
+}
+
+func toastRowLine(edge lipgloss.Style, text string, inner int) string {
+	clipped := ansi.Truncate(text, inner, "…")
+	padding := strings.Repeat(" ", max(0, inner-lipgloss.Width(clipped)))
+	return edge.Render("│ ") + clipped + padding + edge.Render(" │")
 }
 
 func overlayAt(base, block string, row, column int) string {

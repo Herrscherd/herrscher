@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -150,5 +151,32 @@ func TestGitRefreshIsThrottled(t *testing.T) {
 	}
 	if m.requestGit(dir, true) == nil {
 		t.Fatal("a forced request must refresh even inside the window")
+	}
+}
+
+func TestCountWordAgreesInNumber(t *testing.T) {
+	cases := map[int]string{0: "0 actif", 1: "1 actif", 2: "2 actifs"}
+	for count, want := range cases {
+		if got := countWord(count, "actif", "actifs"); got != want {
+			t.Errorf("countWord(%d) = %q, want %q", count, got, want)
+		}
+	}
+}
+
+func TestSidebarContextGaugeHasTwentyFourCellsWithoutBrackets(t *testing.T) {
+	m := sidebarModel(t, 120)
+	tb := m.tabs["alfa"]
+	tb.ctxTokens = 82_000
+	info := contracts.SessionInfo{Vendor: "claude"}
+	lines := m.contextSection(tb, info, 40, false)
+	gaugeLine := ansi.Strip(lines[1])
+	if cells := strings.Count(gaugeLine, unicodeGlyphs().gaugeFull) + strings.Count(gaugeLine, unicodeGlyphs().gaugeEmpty); cells != sidebarGaugeCells {
+		t.Fatalf("the sidebar gauge must have %d cells, got %d in %q", sidebarGaugeCells, cells, gaugeLine)
+	}
+	if strings.ContainsAny(gaugeLine, "[]") {
+		t.Fatalf("the sidebar gauge must not be bracketed: %q", gaugeLine)
+	}
+	if !strings.Contains(ansi.Strip(lines[2]), "compacte seul à 92%") {
+		t.Fatalf("the sidebar must say compaction happens at 92%%: %q", ansi.Strip(lines[2]))
 	}
 }

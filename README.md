@@ -426,7 +426,7 @@ At 110 columns and wider a side column runs down the right of the transcript,
 separated by a vertical rule. It shows the session (project, branch, worktree,
 gateways), the todos with their `n/m` count, the sub-agents still running and those
 just finished, background tasks when the backend reports them, the files the session wrote with their `+added −removed` line counts
-against git, and the context gauge with the compaction threshold (92 %). `ctrl+b` hides or
+against git, and the context gauge (24 cells) with the compaction threshold (92 %). `ctrl+b` hides or
 shows it. Under 24 rows the bottom sections fold to their summary line. The
 transcript keeps the full width below 110 columns, and the todos and sub-agents
 panels stay in the stack above the composer whenever the column is hidden.
@@ -460,7 +460,7 @@ turns it was. The status bar leads with the mode as an inverse chip (Manuel, Éd
 acceptés, Plan, Auto in red), then names what the session runs on (vendor, model,
 reasoning effort), its project and branch, and how much room is left before the
 backend compacts the conversation: a gauge that turns amber at 80 % and red at 95 %,
-with the figures `41%  82k/200k`. Cost and queued messages follow, and the fields
+with the figures `41%  82k/200k`. Cost (`$0.00` until the first turn) and queued messages follow, and the fields
 drop by priority as the window narrows. `/usage` spells the numbers out.
 
 `/statusline` opens the bar's settings: tick the fields, reorder them with shift+↑↓,
@@ -522,8 +522,11 @@ new figure. A compaction the backend does not report on reads `n/a` after.
 ### Notifications
 
 When a turn finishes, and when an approval waits for you, a toast appears at the
-top right of the window and fades after a few seconds. The toast only signals: it
-never answers an approval or opens anything.
+top right of the window and fades after a few seconds. It is a bordered box: the
+title with the age of the event, the session with its vendor and gateways (and the
+duration of the turn), the approval question when one waits, and the way out, which
+is `ctrl+p` to the session. The toast only signals: it never answers an approval or
+opens anything.
 
 The window also tells the terminal, but only when the window lacks focus. The
 terminal gets an OSC 9 notification (`ESC ] 9 ; text BEL`) where it is known to

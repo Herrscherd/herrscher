@@ -31,6 +31,7 @@ const (
 	sidebarFileRows      = 6
 	sidebarSeparatorCols = 1
 	sidebarIndent        = " "
+	sidebarGaugeCells    = 24
 )
 
 func (m *model) sidebarVisible() bool {
@@ -185,7 +186,7 @@ func (m *model) agentSection(tab *tab, width int, now time.Time, short bool) []s
 	if len(agents) == 0 {
 		return nil
 	}
-	lines := []string{m.sideHead("Sous-agents", fmt.Sprintf("%d actifs", len(tab.agents)), width)}
+	lines := []string{m.sideHead("Sous-agents", countWord(len(tab.agents), "actif", "actifs"), width)}
 	if short {
 		return lines
 	}
@@ -258,7 +259,7 @@ func (m *model) filesSection(tab *tab, dir string, width int, short bool) []stri
 			known++
 		}
 	}
-	extra := fmt.Sprintf("%d fichiers", len(tab.files))
+	extra := countWord(len(tab.files), "fichier", "fichiers")
 	if known > 0 {
 		extra = fmt.Sprintf("+%d %s%d", added, m.st.glyphs.minus, removed)
 	}
@@ -291,17 +292,24 @@ func (m *model) contextSection(tab *tab, info contracts.SessionInfo, width int, 
 	limit := contextLimit(info.Vendor)
 	ratio := contextRatio(used, limit)
 	style := palierStyle(ratio, m.st)
-	percent := fmt.Sprintf("%d %%", int(ratio*percentScale))
+	percent := contextPercent(used, limit)
 	if short {
 		return []string{m.sideHead("Contexte", percent, width)}
 	}
-	gaugeLine := sidebarIndent + gauge(ratio, style, m.st.dim, m.st.glyphs) + " " + style.Render(percent)
-	detail := fmt.Sprintf("%s / %s · compacte seul à %d %%", formatTokens(used), formatLimit(limit), int(compactAt*percentScale))
+	gaugeLine := sidebarIndent + barGauge(ratio, sidebarGaugeCells, style, m.st.dim, m.st.glyphs) + " " + style.Render(percent)
+	detail := fmt.Sprintf("%s / %s · compacte seul à %d%%", formatContextTokens(used), formatContextTokens(limit), int(compactAt*percentScale))
 	return []string{
 		m.sideHead("Contexte", "", width),
 		truncate(gaugeLine, width),
 		sideRow(m.st.dim.Render(detail), width),
 	}
+}
+
+func countWord(count int, singular, plural string) string {
+	if count > 1 {
+		return strconv.Itoa(count) + " " + plural
+	}
+	return strconv.Itoa(count) + " " + singular
 }
 
 func (m *model) sideHead(title, extra string, width int) string {

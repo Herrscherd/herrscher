@@ -50,7 +50,7 @@ func TestComposerKeepsEveryLineOnANewline(t *testing.T) {
 	if got := m.input.Value(); got != "A\nB" {
 		t.Fatalf("composer holds %q", got)
 	}
-	want := []string{"A", "B"}
+	want := []string{"> A", "B"}
 	got := composerLines(t, m)
 	if len(got) != len(want) {
 		t.Fatalf("composer drew %d rows %q, want %d", len(got), got, len(want))
@@ -71,7 +71,7 @@ func TestComposerKeepsEveryLineWhenTheDraftWraps(t *testing.T) {
 	if len(rows) < 2 {
 		t.Fatalf("a wrapped draft drew %d rows: %q", len(rows), rows)
 	}
-	if !strings.HasPrefix(rows[0], "aaaaaaaaaa") {
+	if !strings.HasPrefix(rows[0], "> aaaaaaaaaa") {
 		t.Fatalf("the first row of a wrapped draft is %q, want the text it started with (all rows: %q)", rows[0], rows)
 	}
 }

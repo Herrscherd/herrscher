@@ -14,7 +14,6 @@ const (
 	contextBarCols  = 12
 	contextValCols  = 14
 	defaultWidth    = 80
-	autoCompactPct  = 95
 )
 
 type contextCategory struct {
@@ -123,7 +122,7 @@ func (m *model) contextTotalLine(used, limit, width int) string {
 	if used <= 0 {
 		bar = m.st.dim.Render(strings.Repeat(m.st.glyphs.gaugeEmpty, gaugeWidth))
 	}
-	return m.contextRow("total", bar, value+" · "+pct, "compacte seul à "+fmt.Sprintf("%d%%", autoCompactPct), width)
+	return m.contextRow("total", bar, value+" · "+pct, "compacte seul à "+fmt.Sprintf("%d%%", int(compactAt*percentScale)), width)
 }
 
 func (m *model) contextCategoryLine(category contextCategory, width int) string {

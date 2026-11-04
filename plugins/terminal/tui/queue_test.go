@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -231,5 +233,62 @@ func TestBusyPlaceholderMatchesMockup(t *testing.T) {
 	m.View()
 	if got := m.input.Placeholder; got != "Tape un message, / ou @, ou !commande" {
 		t.Fatalf("idle placeholder = %q", got)
+	}
+}
+
+func textColumn(t *testing.T, line, text string) int {
+	t.Helper()
+	index := strings.Index(line, text)
+	if index < 0 {
+		t.Fatalf("%q must be on the row %q", text, ansi.Strip(line))
+	}
+	return lipgloss.Width(line[:index])
+}
+
+func TestQueueRowsAlignTheirTextWhateverTheMark(t *testing.T) {
+	m, _ := queueFixture(t)
+	m.tabs["a"].busy = true
+	m.tabs["a"].queue = []queuedInput{{text: "pense aussi"}, {text: "garde l’ordre", steer: true}}
+	lines := m.queueLines(0)
+	file := textColumn(t, lines[1], "pense aussi")
+	steer := textColumn(t, lines[2], "garde l’ordre")
+	if file != steer {
+		t.Fatalf("the file and steer rows must start their text in the same column, got %d and %d", file, steer)
+	}
+}
+
+func TestQueueRowCutsLongTextWithEllipsis(t *testing.T) {
+	lines := renderAt(t, 60, func(m *model) {
+		m.tabs["a"].busy = true
+		m.tabs["a"].queue = []queuedInput{{text: "pense aussi au mode étroit, sous 60 colonnes, la file tient"}}
+		m.applySize()
+		m.syncViewport()
+	})
+	for _, line := range lines {
+		stripped := ansi.Strip(line)
+		if !strings.Contains(stripped, "pense aussi au m") {
+			continue
+		}
+		if !strings.Contains(stripped, "…") || !strings.Contains(stripped, "✕ retirer") {
+			t.Fatalf("a cut queue row must end with an ellipsis and keep its remove label, got %q", stripped)
+		}
+		return
+	}
+	t.Fatal("the queued row must be visible at 60 columns")
+}
+
+func TestQueueHeaderFoldsWholeSegmentsAtSixtyColumns(t *testing.T) {
+	lines := renderAt(t, 60, func(m *model) {
+		m.tabs["a"].busy = true
+		m.tabs["a"].queue = []queuedInput{{text: "une demande"}}
+		m.applySize()
+		m.syncViewport()
+	})
+	stripped := ansi.Strip(strings.Join(lines, "\n"))
+	if !strings.Contains(stripped, "○ En file (1) · partent dans l’ordre à la fin du tour") {
+		t.Fatalf("the queue header must keep its whole first segments at 60 columns:\n%s", stripped)
+	}
+	if strings.Contains(stripped, "tout envoyer") {
+		t.Fatal("the queue header must fold away its last segment rather than cut it")
 	}
 }

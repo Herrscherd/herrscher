@@ -18,6 +18,7 @@ const (
 	queueAfterMark      = "↪ réorienter"
 	queueFileMark       = "○ file"
 	queueHeaderMark     = "○"
+	queueMarkWidth      = 14
 	queueFocusHint      = "○ En file · ↑↓ choisir · ⇧↑⇧↓ réordonner · suppr retirer · échap quitter"
 )
 
@@ -115,8 +116,9 @@ func (m *model) draftsView() string {
 		return ""
 	}
 	last := oneLine(m.drafts[len(m.drafts)-1])
-	text := "○ brouillons (" + strconv.Itoa(len(m.drafts)) + ") : « " + truncate(last, m.innerWidth()/draftPreviewDivisor) + " » " + draftsKey + " de côté · reprendre le dernier"
-	return m.st.dim.Render(truncate(text, m.innerWidth()))
+	left := m.st.dim.Render(" ○ brouillons (" + strconv.Itoa(len(m.drafts)) + ") : « " + truncateEllipsis(last, m.innerWidth()/draftPreviewDivisor) + " »")
+	right := m.st.accent.Render(draftsKey) + m.st.dim.Render(" reprendre le dernier")
+	return justifyRow(left, right, m.innerWidth())
 }
 
 func (m *model) queueLines(base int) []string {
@@ -136,13 +138,13 @@ func (m *model) queueLines(base int) []string {
 	if m.queueFocus {
 		header = queueFocusHint
 	}
-	lines := []string{m.st.dim.Render(truncate(header, width))}
+	lines := []string{m.st.dim.Render(foldText(header, width))}
 	for index, item := range current.queue {
 		mark, when := queueFileMark, queueEndOfTurn
 		if item.steer {
 			mark, when = queueAfterMark, queueAfterTool
 		}
-		left := queueIndent + strconv.Itoa(index+1) + "  " + mark + "  " + oneLine(item.text)
+		left := queueIndent + strconv.Itoa(index+1) + "  " + padTo(mark, queueMarkWidth) + oneLine(item.text)
 		right := when + "  " + queueRemoveLabel
 		row := justifyRow(left, m.st.dim.Render(right), width)
 		if m.queueFocus && index == m.queueSel {
@@ -159,7 +161,7 @@ func justifyRow(left, right string, width int) string {
 	if room < 0 {
 		room = 0
 	}
-	left = truncate(left, room)
+	left = truncateEllipsis(left, room)
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		gap = 1

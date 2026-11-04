@@ -1,14 +1,17 @@
 package tui
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const (
 	composerChrome     = 4
 	composerBorderCols = 2
+	edgeSpacing        = 3
 )
 
 const composerBoxMinWidth = 60
@@ -25,19 +28,21 @@ func (m *model) composerTextWidth() int {
 }
 
 const (
-	composerPrompt  = "> "
-	escKey          = "échap"
-	placeholderIdle = "Tape un message, / ou @, ou !commande"
-	placeholderBusy = "Écris pendant que l’agent travaille : ⏎ met en file, ⌥⏎ réoriente"
-	footIdle        = "⏎ envoyer · @ fichier · / commande · ! shell · ⌃R historique · ⌃S de côté"
-	footBusy        = "⏎ en file · ⌥⏎ réorienter · ⌃⏎ envoyer la file · ! shell · ⌃R historique · ⌃S de côté"
-	footShell       = "⏎ lancer · la commande passe par la politique d’outils de l’hôte · échap annuler"
-	footRightIdle   = escKey + " " + escKey + " retour"
-	footRightBusy   = "échap interrompre"
-	footRightShell  = "échap annuler"
-	titleEditor     = "⌃X⌃E éditeur"
-	titleEditing    = "brouillon ouvert dans l’éditeur"
-	titlePanes      = "⌃P quitter · ⌃W agrandir"
+	composerPrompt   = "> "
+	escKey           = "échap"
+	placeholderIdle  = "Tape un message, / ou @, ou !commande"
+	placeholderBusy  = "Écris pendant que l’agent travaille : ⏎ met en file, ⌥⏎ réoriente"
+	placeholderPanes = "Le message part dans le volet en surbrillance"
+	footIdle         = "⏎ envoyer · @ fichier · / commande · ! shell · ⌃R historique · ⌃S de côté"
+	footBusy         = "⏎ en file · ⌥⏎ réorienter · ⌃⏎ envoyer la file · ! shell · ⌃R historique · ⌃S de côté"
+	footShell        = "⏎ lancer · la commande passe par la politique d’outils de l’hôte · échap annuler"
+	footRightIdle    = escKey + " " + escKey + " retour"
+	footRightBusy    = "échap interrompre"
+	titleEditor      = "⌃X⌃E éditeur"
+	titlePanes       = "⌃P quitter · ⌃W agrandir"
+	footSeparator    = " · "
+	ellipsis         = "…"
+	worktreesMarker  = "/.worktrees/"
 )
 
 func promptAt(prompt string) func(int) string {
@@ -64,7 +69,12 @@ func (m *model) syncPrompt() {
 }
 
 func (m *model) placeholderText() string {
-	if m.isBusy() {
+	switch {
+	case m.editing:
+		return editorName() + " est ouvert sur le brouillon, :wq pour revenir"
+	case m.surface == surfacePanes:
+		return placeholderPanes
+	case m.isBusy():
 		return placeholderBusy
 	}
 	return placeholderIdle
@@ -90,67 +100,111 @@ func (m *model) composerStyle() lipgloss.Style {
 	}
 }
 
-func (m *model) composerTitles() (string, string) {
+func (m *model) composerTitles() ([]string, string) {
 	switch {
 	case m.editing:
-		return m.st.violet.Bold(true).Render("Éditeur") + m.st.dim.Render(" · "+titleEditing), m.st.dim.Render(titleEditor)
+		return []string{
+			m.st.violet.Bold(true).Render("Éditeur"),
+			m.st.dim.Render(footSeparator + "brouillon ouvert dans " + editorName()),
+		}, m.st.dim.Render(titleEditor)
 	case m.isShellInput():
-		return m.st.warn.Render("! SHELL") + m.st.dim.Render(" · "+m.shellTitleDetail()), m.st.dim.Render(titleEditor)
+		return append([]string{m.st.warn.Bold(true).Render("! SHELL")}, m.shellTitleDetail()...), m.st.dim.Render(titleEditor)
 	case m.surface == surfacePanes:
-		return m.st.dim.Render("vers ") + m.st.accent.Render(m.paneFocusName()), m.st.dim.Render(titlePanes)
+		return []string{m.st.dim.Render("vers ") + m.st.accent.Render(m.paneFocusName())}, m.st.dim.Render(titlePanes)
 	}
 	name := "herrscher"
 	if tb := m.activeTab(); tb != nil && tb.label != "" {
 		name = tb.label
 	}
-	return m.st.text.Render(name), m.st.dim.Render(titleEditor)
+	return []string{m.st.text.Render(name)}, m.st.dim.Render(titleEditor)
 }
 
-func (m *model) shellTitleDetail() string {
+func (m *model) shellTitleDetail() []string {
 	var parts []string
 	if info, ok := m.activeInfo(); ok && info.Dir != "" {
-		parts = append(parts, "dans "+compactDir(info.Dir))
+		parts = append(parts, m.st.dim.Render(footSeparator+"dans "+sessionDirLabel(info.Dir)))
 	}
-	return strings.Join(append(parts, "la sortie entre dans la session"), " · ")
+	return append(parts, m.st.dim.Render(footSeparator+"la sortie entre dans la session"))
 }
 
-func compactDir(dir string) string {
-	const keptSegments = 2
-	short := shortPath(dir)
-	parts := strings.Split(short, "/")
-	if len(parts) <= keptSegments+1 {
-		return short
+func sessionDirLabel(dir string) string {
+	if index := strings.LastIndex(dir, worktreesMarker); index >= 0 {
+		return dir[index+1:]
 	}
-	return "…/" + strings.Join(parts[len(parts)-keptSegments:], "/")
+	return shortPath(dir)
+}
+
+func editorName() string {
+	argv := editorArgv("")
+	return filepath.Base(argv[0])
 }
 
 func (m *model) composerFoots() (string, string) {
+	footRight := footRightIdle
+	if m.isBusy() {
+		footRight = footRightBusy
+	}
 	switch {
 	case m.isShellInput():
-		return footShell, footRightShell
+		return footShell, footRight
 	case m.isBusy():
-		return footBusy, footRightBusy
+		return footBusy, footRight
 	default:
-		return footIdle, footRightIdle
+		return footIdle, footRight
 	}
 }
 
-func boxEdge(corners [2]string, left, right string, width int, style lipgloss.Style, horizontal string) string {
+func segmentsOf(text string, paint func(string) string) []string {
+	parts := strings.Split(text, footSeparator)
+	segments := make([]string, 0, len(parts))
+	for index, part := range parts {
+		if index > 0 {
+			part = footSeparator + part
+		}
+		segments = append(segments, paint(part))
+	}
+	return segments
+}
+
+func foldSegments(segments []string, budget int) string {
+	for count := len(segments); count >= 1; count-- {
+		if line := strings.Join(segments[:count], ""); lipgloss.Width(line) <= budget {
+			return line
+		}
+	}
+	if len(segments) == 0 {
+		return ""
+	}
+	return truncateEllipsis(segments[0], budget)
+}
+
+func foldText(text string, width int) string {
+	return foldSegments(segmentsOf(text, plainText), width)
+}
+
+func truncateEllipsis(text string, width int) string {
+	if width < 1 {
+		return ""
+	}
+	if lipgloss.Width(text) <= width {
+		return text
+	}
+	return ansi.Truncate(text, width, ellipsis)
+}
+
+func boxEdge(corners [2]string, left []string, right string, width int, style lipgloss.Style, horizontal string) string {
 	inner := width - composerBorderCols
-	leftPart := " " + left + " "
-	rightPart := " " + right + " "
-	if right == "" {
+	rightPart := ""
+	if right != "" {
+		rightPart = " " + right + " "
+	}
+	leftBudget := inner - edgeSpacing - lipgloss.Width(rightPart)
+	if leftBudget < 1 {
 		rightPart = ""
+		leftBudget = inner - edgeSpacing
 	}
-	fill := inner - lipgloss.Width(leftPart) - lipgloss.Width(rightPart)
-	if fill < 1 {
-		rightPart = ""
-		leftPart = truncate(leftPart, inner-1)
-		fill = inner - lipgloss.Width(leftPart)
-	}
-	if fill < 0 {
-		fill = 0
-	}
+	leftPart := " " + foldSegments(left, leftBudget) + " "
+	fill := max(inner-lipgloss.Width(leftPart)-lipgloss.Width(rightPart), 0)
 	return style.Render(corners[0]) + leftPart + style.Render(strings.Repeat(horizontal, fill)) + rightPart + style.Render(corners[1])
 }
 
@@ -159,7 +213,7 @@ func (m *model) composerZone() []string {
 	if !m.composerBoxed() {
 		out := make([]string, len(body))
 		for i, line := range body {
-			out[i] = truncate(line, m.innerWidth())
+			out[i] = truncateEllipsis(line, m.innerWidth())
 		}
 		return out
 	}
@@ -171,13 +225,21 @@ func (m *model) composerZone() []string {
 	side := style.Render(boxes.v)
 	zone := []string{boxEdge([2]string{boxes.tl, boxes.tr}, titleLeft, titleRight, width, style, boxes.h)}
 	for _, line := range body {
-		line = truncate(line, width-composerChrome)
+		line = truncateEllipsis(line, width-composerChrome)
 		pad := width - composerChrome - lipgloss.Width(line)
 		if pad < 0 {
 			pad = 0
 		}
 		zone = append(zone, side+" "+line+strings.Repeat(" ", pad)+" "+side)
 	}
-	zone = append(zone, boxEdge([2]string{boxes.bl, boxes.br}, m.st.dim.Render(footLeft), m.st.dim.Render(footRight), width, style, boxes.h))
+	zone = append(zone, boxEdge([2]string{boxes.bl, boxes.br}, segmentsOf(footLeft, m.paintDim), m.st.dim.Render(footRight), width, style, boxes.h))
 	return zone
+}
+
+func plainText(text string) string {
+	return text
+}
+
+func (m *model) paintDim(text string) string {
+	return m.st.dim.Render(text)
 }

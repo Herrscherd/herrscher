@@ -39,7 +39,7 @@ func TestPaneGridFitsEachWidth(t *testing.T) {
 		visible       []string
 		hidden        []string
 	}{
-		{60, 30, []string{"alpha"}, []string{"beta", "gamma", "delta"}},
+		{60, 30, []string{"alpha", "beta"}, []string{"gamma", "delta"}},
 		{80, 30, []string{"alpha", "beta"}, []string{"gamma", "delta"}},
 		{120, 30, []string{"alpha", "beta", "gamma", "delta"}, nil},
 		{200, 30, []string{"alpha", "beta", "gamma", "delta"}, nil},
@@ -137,9 +137,94 @@ func TestPaneReleaseDoesNotMoveFocus(t *testing.T) {
 func TestPaneScreenNamesItsHeaderAndKeys(t *testing.T) {
 	_, m := paneModel(t)
 	view := m.View()
-	for _, want := range []string{"Vue en volets", "clic pour viser", "Tab volet suivant", "⌃W agrandir", "⌃P quitter"} {
+	for _, want := range []string{"Vue en volets", "clic pour viser", "Tab volet suivant · clic viser"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("panes screen must show %q: %s", want, view)
 		}
+	}
+}
+
+func TestNarrowPanesReachTheRowsBelow(t *testing.T) {
+	_, m := paneModel(t)
+	m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	updateKey(m, tea.KeyMsg{Type: tea.KeyTab})
+	updateKey(m, tea.KeyMsg{Type: tea.KeyTab})
+	view := m.View()
+	if !strings.Contains(view, "gamma · ") {
+		t.Fatalf("a narrow grid must bring the hidden rows into view with Tab: %s", view)
+	}
+}
+
+func TestPaneComposerShowsThePanePlaceholder(t *testing.T) {
+	_, m := paneModel(t)
+	m.buildFrame()
+	if m.input.Placeholder != placeholderPanes {
+		t.Fatalf("the panes composer must say where the message goes, got %q", m.input.Placeholder)
+	}
+}
+
+func TestPaneFooterWithoutApprovalOnlyNamesNavigation(t *testing.T) {
+	_, m := paneModel(t)
+	view := m.View()
+	if !strings.Contains(view, "Tab volet suivant · clic viser") {
+		t.Fatalf("the pane footer must name navigation: %s", view)
+	}
+	if strings.Contains(view, "approbation de") {
+		t.Fatalf("the pane footer must not offer approvals without a pending one: %s", view)
+	}
+}
+
+func focusPaneChannel(t *testing.T, m *model, channel string) {
+	t.Helper()
+	for range len(m.panes.channels) {
+		if m.focusedChannel() == channel {
+			return
+		}
+		updateKey(m, tea.KeyMsg{Type: tea.KeyTab})
+	}
+	t.Fatalf("pane %s must be reachable with Tab, panes = %v", channel, m.panes.channels)
+}
+
+func TestPaneFooterNamesTheApprovalOfTheFocusedPane(t *testing.T) {
+	_, m := paneModel(t)
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-beta"}, Event: approvalMenuEvent(t, "make deploy", allApprovalRoles()...)})
+	focusPaneChannel(t, m, "ch-beta")
+	view := m.View()
+	if !strings.Contains(view, "o s r approbation de beta") {
+		t.Fatalf("the pane footer must name the approval of the focused pane: %s", view)
+	}
+	if strings.Contains(view, "docs-site") {
+		t.Fatalf("the pane footer must take its name from the session, not from a fixture: %s", view)
+	}
+}
+
+func TestPaneApprovalKeyAnswersTheFocusedPaneOnly(t *testing.T) {
+	f, m := paneModel(t)
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-beta"}, Event: approvalMenuEvent(t, "make deploy", allApprovalRoles()...)})
+	focusPaneChannel(t, m, "ch-beta")
+	pressRunes(m, "o")
+	if len(f.picks) != 1 || f.picks[0] != (pickedChoice{channel: "ch-beta", value: testApprovalValue(approvalAllow)}) {
+		t.Fatalf("o must answer the approval of the focused pane, picks = %+v", f.picks)
+	}
+}
+
+func TestPaneApprovalOutsideTheFocusIsNeitherShownNorAnswered(t *testing.T) {
+	f, m := paneModel(t)
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-gamma"}, Event: approvalMenuEvent(t, "make deploy", allApprovalRoles()...)})
+	focusPaneChannel(t, m, "ch-alpha")
+	if view := m.View(); strings.Contains(view, "approbation de") {
+		t.Fatalf("a pending approval on an unfocused pane must not be offered: %s", view)
+	}
+	pressRunes(m, "o")
+	if len(f.picks) != 0 {
+		t.Fatalf("o must not answer an approval outside the focused pane, picks = %+v", f.picks)
+	}
+}
+
+func TestFocusingAPaneMakesItTheComposerTarget(t *testing.T) {
+	_, m := paneModel(t)
+	focusPaneChannel(t, m, "ch-delta")
+	if m.active != "ch-delta" {
+		t.Fatalf("the active tab must follow the focused pane, active = %q", m.active)
 	}
 }

@@ -7,6 +7,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const (
+	keyEsc   = "esc"
+	keyCtrlC = "ctrl+c"
+)
+
 const statuslineFooter = "↑↓ choisir · espace cocher · ⇧↑⇧↓ ordre · s source · échap fermer"
 
 func (m *model) openStatusline() tea.Cmd {
@@ -29,9 +34,9 @@ func (m *model) handleStatuslineKey(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 	switch msg.String() {
-	case "esc":
+	case keyEsc:
 		m.closeStatusline()
-	case "ctrl+c":
+	case keyCtrlC:
 		return m.overlayCtrlC()
 	case "shift+up":
 		m.moveStatuslineField(-1)
@@ -77,10 +82,10 @@ func (m *model) switchStatuslineSource() tea.Cmd {
 func (m *model) statuslineView() string {
 	ids := m.bar.fieldIDs()
 	rows := make([]overlayRow, 0, len(ids))
-	for _, id := range ids {
-		spec := barFieldSpecOf(id)
+	for _, fieldID := range ids {
+		spec := barFieldSpecOf(fieldID)
 		mark := m.st.glyphs.unticked
-		if m.bar.isShown(id) {
+		if m.bar.isShown(fieldID) {
 			mark = m.st.glyphs.ticked
 		}
 		rows = append(rows, overlayRow{mark: mark + " ", label: spec.labelWith(m.st.glyphs), detail: " " + spec.note})
@@ -112,9 +117,9 @@ func (m *model) statuslineSourceLine() string {
 }
 
 func (m *model) statusLeftPreview() string {
-	tab := m.tabs[m.active]
-	if tab == nil {
+	target := m.tabs[m.active]
+	if target == nil {
 		return ""
 	}
-	return m.statusBar(tab, m.innerWidth()-lipgloss.Width(statusIndent))
+	return m.statusBar(target, m.innerWidth()-lipgloss.Width(statusIndent))
 }

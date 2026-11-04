@@ -2,13 +2,14 @@ package tui
 
 import (
 	"errors"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func compactModel(t *testing.T, backend *fakeBackend) *model {
@@ -27,7 +28,7 @@ func TestCompactSendsSessionCompactThroughTheHost(t *testing.T) {
 	cmd := m.runSlash("/compact")
 	runCmd(cmd)
 	want := []string{"session", "compact", "--name", "api", "--origin", "terminal"}
-	if len(backend.dispatched) != 1 || !reflect.DeepEqual(backend.dispatched[0], want) {
+	if len(backend.dispatched) != 1 || !slices.Equal(backend.dispatched[0], want) {
 		t.Fatalf("dispatched %v, want %v", backend.dispatched, want)
 	}
 }
@@ -91,10 +92,10 @@ func TestRefusedCompactionReleasesTheTab(t *testing.T) {
 	}
 }
 
-func entryTexts(tb *tab) []string {
-	texts := make([]string, 0, len(tb.entries))
-	for _, e := range tb.entries {
-		texts = append(texts, e.text)
+func entryTexts(target *tab) []string {
+	texts := make([]string, 0, len(target.entries))
+	for index := range target.entries {
+		texts = append(texts, target.entries[index].text)
 	}
 	return texts
 }

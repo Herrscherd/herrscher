@@ -58,7 +58,10 @@ func TestShiftTabCyclesFourModesAndTellsTheHost(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
 
-	want := []struct{ mode, host string }{
+	want := []struct {
+		mode modeID
+		host string
+	}{
 		{modeEdits, "accept-edits"},
 		{modePlan, "plan"},
 		{modeAuto, "auto"},
@@ -123,7 +126,7 @@ func TestPlanReplyOpensTheValidationMenuOnlyInPlanMode(t *testing.T) {
 		t.Fatal("a reply outside plan mode must not open the plan menu")
 	}
 
-	m.tabs["a"].mode = modePlan
+	m.tabs["a"].setMode(modePlan)
 	m.route(reply)
 	if m.planMenu == nil {
 		t.Fatal("a plan reply must open the plan validation menu")
@@ -133,7 +136,7 @@ func TestPlanReplyOpensTheValidationMenuOnlyInPlanMode(t *testing.T) {
 func TestPlanMenuFirstChoiceSwitchesToAcceptEditsThenSubmits(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
-	m.tabs["a"].mode = modePlan
+	m.tabs["a"].setMode(modePlan)
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "1. read", Done: true}})
 
 	cmd, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
@@ -153,7 +156,7 @@ func TestPlanMenuFirstChoiceSwitchesToAcceptEditsThenSubmits(t *testing.T) {
 func TestPlanMenuSecondChoiceValidatesInManual(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
-	m.tabs["a"].mode = modePlan
+	m.tabs["a"].setMode(modePlan)
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "1. read", Done: true}})
 
 	pressKey(m, tea.KeyMsg{Type: tea.KeyDown})
@@ -170,7 +173,7 @@ func TestPlanMenuSecondChoiceValidatesInManual(t *testing.T) {
 func TestPlanMenuEscKeepsPlanningWithoutTouchingTheHost(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
-	m.tabs["a"].mode = modePlan
+	m.tabs["a"].setMode(modePlan)
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "1. read", Done: true}})
 	before := len(f.dispatched)
 
@@ -191,33 +194,35 @@ func TestPlanMenuEscKeepsPlanningWithoutTouchingTheHost(t *testing.T) {
 }
 
 func TestModeStripAndStatusFitEveryWidth(t *testing.T) {
-	widths := []int{60, 80, 120, 200}
-	for _, width := range widths {
+	for _, width := range []int{60, 80, 120, 200} {
 		f := &fakeBackend{sessions: namedSession()}
 		m := modeSession(f)
-		m.tabs["a"].mode = modePlan
+		m.tabs["a"].setMode(modePlan)
+		checkModeStripFits(t, m, width)
+	}
+}
 
-		strip := m.modeStripView(m.tabs["a"], width)
-		if len(strip) != 2 {
-			t.Fatalf("width %d: strip must be two lines, got %d", width, len(strip))
+func checkModeStripFits(t *testing.T, m *model, width int) {
+	t.Helper()
+	strip := m.modeStripView(m.tabs["a"], width)
+	if len(strip) != 2 {
+		t.Fatalf("width %d: strip must be two lines, got %d", width, len(strip))
+	}
+	for _, line := range strip {
+		if w := lipgloss.Width(line); w > width {
+			t.Fatalf("width %d: strip line is %d columns: %q", width, w, ansi.Strip(line))
 		}
-		for _, line := range strip {
-			if w := lipgloss.Width(line); w > width {
-				t.Fatalf("width %d: strip line is %d columns: %q", width, w, ansi.Strip(line))
-			}
-		}
-		plain := ansi.Strip(strip[0])
-		if width < modeShortBelow && !strings.Contains(plain, "Plan") {
-			t.Fatalf("width %d: strip must name the current mode: %q", width, plain)
-		}
-		if width >= modeShortBelow && !strings.Contains(plain, "Édits acceptés") {
-			t.Fatalf("width %d: strip must use long labels: %q", width, plain)
-		}
-
-		status := ansi.Strip(m.modeChip(m.tabs["a"], width))
-		if !strings.HasPrefix(status, "Plan") {
-			t.Fatalf("width %d: the mode chip must come first in the status bar: %q", width, status)
-		}
+	}
+	plain := ansi.Strip(strip[0])
+	if width < modeShortBelow && !strings.Contains(plain, "Plan") {
+		t.Fatalf("width %d: strip must name the current mode: %q", width, plain)
+	}
+	if width >= modeShortBelow && !strings.Contains(plain, "Édits acceptés") {
+		t.Fatalf("width %d: strip must use long labels: %q", width, plain)
+	}
+	status := ansi.Strip(m.modeChip(m.tabs["a"], width))
+	if !strings.HasPrefix(status, "Plan") {
+		t.Fatalf("width %d: the mode chip must come first in the status bar: %q", width, status)
 	}
 }
 
@@ -237,6 +242,7 @@ func TestPlanMenuFitsNarrowWidths(t *testing.T) {
 
 type replyBackend struct {
 	fakeBackend
+
 	reply string
 }
 
@@ -246,7 +252,7 @@ func (r *replyBackend) Dispatch(args []string) (string, error) {
 }
 
 func TestTabStartsFromTheSessionStoredMode(t *testing.T) {
-	cases := map[string]string{"plan": modePlan, "accept-edits": modeEdits, "bypass": modeAuto, "strict": modeManual}
+	cases := map[string]modeID{"plan": modePlan, "accept-edits": modeEdits, "bypass": modeAuto, "strict": modeManual}
 	for host, want := range cases {
 		f := &replyBackend{fakeBackend: fakeBackend{sessions: namedSession()}, reply: host}
 		m := newModel(f)
@@ -274,8 +280,8 @@ func TestUnknownStoredReplyLeavesTheTabAlone(t *testing.T) {
 func TestClickOnAStripSegmentSwitchesMode(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
-	tb := m.tabs["a"]
-	hits := m.modeStripHits(tb, m.innerWidth())
+	target := m.tabs["a"]
+	hits := m.modeStripHits(target, m.innerWidth())
 	strip := m.buildFrame()
 	if !strip.stripDown {
 		t.Fatal("the mode strip must be part of the frame")
@@ -283,7 +289,7 @@ func TestClickOnAStripSegmentSwitchesMode(t *testing.T) {
 
 	_, cmd := m.Update(tea.MouseMsg{X: hits[2].start, Y: strip.stripRow, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
 	m.Update(runCmd(cmd))
-	if got := tb.modeID(); got != modePlan {
+	if got := target.modeID(); got != modePlan {
 		t.Fatalf("clicking the Plan segment left the mode at %q", got)
 	}
 	if got := lastDispatch(t, f); got[len(got)-1] != "plan" {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -29,6 +30,8 @@ const (
 
 const (
 	barModeID     = "mode"
+	fieldVendor   = "vendor"
+	fieldQueue    = "queue"
 	barFailTail   = 2
 	gitDirPrefix  = "gitdir: "
 	headRefPrefix = "ref: refs/heads/"
@@ -41,18 +44,20 @@ type barFieldSpec struct {
 	defaultOn bool
 }
 
-var barFieldSpecs = []barFieldSpec{
-	{id: barModeID, label: "mode et", note: "Manuel, Édits acceptés, Plan, Auto en rouge", defaultOn: true},
-	{id: "vendor", label: "vendeur et modèle", note: "claude, codex, cursor", defaultOn: true},
-	{id: "repo", label: "dépôt et branche", note: "herrscher:feat/tui-v2", defaultOn: true},
-	{id: "wt", label: "worktree", note: "(worktree) si à elle", defaultOn: true},
-	{id: "ctx", label: "jauge de contexte", note: "█ ░, or 80 %, rouge 95 %", defaultOn: true},
-	{id: "detail", label: "tokens du contexte", note: "82k/200k", defaultOn: true},
-	{id: "cost", label: "coût", note: "facturation réelle", defaultOn: true},
-	{id: "queue", label: "file en attente", note: "○ file, ↪ réorientations", defaultOn: true},
-	{id: "bg", label: "tâches de fond", note: "go test -race en fond", defaultOn: true},
-	{id: "dur", label: "durée du tour", note: "1m12s", defaultOn: false},
-	{id: "quota", label: "quotas 5 h et 7 j", note: "abonnement Claude", defaultOn: false},
+func barFieldSpecs() []barFieldSpec {
+	return []barFieldSpec{
+		{id: barModeID, label: "mode et", note: "Manuel, Édits acceptés, Plan, Auto en rouge", defaultOn: true},
+		{id: fieldVendor, label: "vendeur et modèle", note: "claude, codex, cursor", defaultOn: true},
+		{id: "repo", label: "dépôt et branche", note: "herrscher:feat/tui-v2", defaultOn: true},
+		{id: "wt", label: "worktree", note: "(worktree) si à elle", defaultOn: true},
+		{id: "ctx", label: "jauge de contexte", note: "█ ░, or 80 %, rouge 95 %", defaultOn: true},
+		{id: "detail", label: "tokens du contexte", note: "82k/200k", defaultOn: true},
+		{id: "cost", label: "coût", note: "facturation réelle", defaultOn: true},
+		{id: fieldQueue, label: "file en attente", note: "○ file, ↪ réorientations", defaultOn: true},
+		{id: "bg", label: "tâches de fond", note: "go test -race en fond", defaultOn: true},
+		{id: "dur", label: "durée du tour", note: "1m12s", defaultOn: false},
+		{id: "quota", label: "quotas 5 h et 7 j", note: "abonnement Claude", defaultOn: false},
+	}
 }
 
 func (s barFieldSpec) labelWith(glyphs glyphSet) string {
@@ -62,18 +67,18 @@ func (s barFieldSpec) labelWith(glyphs glyphSet) string {
 	return s.label
 }
 
-func barFieldSpecOf(id string) barFieldSpec {
-	for _, spec := range barFieldSpecs {
-		if spec.id == id {
+func barFieldSpecOf(fieldID string) barFieldSpec {
+	for _, spec := range barFieldSpecs() {
+		if spec.id == fieldID {
 			return spec
 		}
 	}
-	return barFieldSpec{id: id, label: id}
+	return barFieldSpec{id: fieldID, label: fieldID}
 }
 
 func defaultBarOrder() []string {
-	ids := make([]string, 0, len(barFieldSpecs))
-	for _, spec := range barFieldSpecs {
+	ids := make([]string, 0, len(barFieldSpecs()))
+	for _, spec := range barFieldSpecs() {
 		ids = append(ids, spec.id)
 	}
 	return ids
@@ -94,7 +99,6 @@ type gitHead struct {
 }
 
 type barState struct {
-	mode       string
 	queued     int
 	background int
 	quota      string
@@ -116,8 +120,6 @@ func (b *barState) setQueued(count int) { b.queued = count }
 
 func (b *barState) setBackground(count int) { b.background = count }
 
-func (b *barState) setQuota(text string) { b.quota = text }
-
 func (b *barState) fieldIDs() []string {
 	if len(b.order) > 0 {
 		return b.order
@@ -125,18 +127,18 @@ func (b *barState) fieldIDs() []string {
 	return defaultBarOrder()
 }
 
-func (b *barState) isShown(id string) bool {
-	if shown, ok := b.toggled[id]; ok {
+func (b *barState) isShown(fieldID string) bool {
+	if shown, ok := b.toggled[fieldID]; ok {
 		return shown
 	}
-	return barFieldSpecOf(id).defaultOn
+	return barFieldSpecOf(fieldID).defaultOn
 }
 
-func (b *barState) toggle(id string) {
+func (b *barState) toggle(fieldID string) {
 	if b.toggled == nil {
 		b.toggled = make(map[string]bool)
 	}
-	b.toggled[id] = !b.isShown(id)
+	b.toggled[fieldID] = !b.isShown(fieldID)
 }
 
 func (b *barState) moveField(index, delta int) bool {
@@ -168,7 +170,7 @@ func single(text string, rank int) barPart {
 	return barPart{layers: []barLayer{{text: text, rank: rank}}}
 }
 
-func (m *model) statusBar(tb *tab, width int) string {
+func (m *model) statusBar(target *tab, width int) string {
 	if width < 1 {
 		return ""
 	}
@@ -176,16 +178,16 @@ func (m *model) statusBar(tb *tab, width int) string {
 		return truncate(m.bar.script.line, width)
 	}
 	if m.bar.scripted() && m.bar.script.failed {
-		return m.builtinBar(tb, width-barFailTail) + " " + m.st.dim.Render(m.st.glyphs.failure)
+		return m.builtinBar(target, width-barFailTail) + " " + m.st.dim.Render(m.st.glyphs.failure)
 	}
-	return m.builtinBar(tb, width)
+	return m.builtinBar(target, width)
 }
 
-func (m *model) builtinBar(tb *tab, width int) string {
+func (m *model) builtinBar(target *tab, width int) string {
 	if width < 1 {
 		return ""
 	}
-	parts := m.barParts(tb, width)
+	parts := m.barParts(target, width)
 	for {
 		line := m.composeBar(parts)
 		if lipgloss.Width(line) <= width {
@@ -199,23 +201,23 @@ func (m *model) builtinBar(tb *tab, width int) string {
 	}
 }
 
-func (m *model) barParts(tb *tab, width int) []barPart {
+func (m *model) barParts(target *tab, width int) []barPart {
 	info, _ := m.activeInfo()
-	used := m.contextTokens(tb)
+	used := m.contextTokens(target)
 	var parts []barPart
 	if m.bar.isShown(barModeID) {
-		parts = append(parts, single(m.modeChip(tb, width), rankNever))
+		parts = append(parts, single(m.modeChip(target, width), rankNever))
 	}
-	for _, id := range m.bar.fieldIDs() {
-		if id == barModeID {
+	for _, fieldID := range m.bar.fieldIDs() {
+		if fieldID == barModeID {
 			continue
 		}
-		if part, ok := m.fieldPart(id, tb, info, used); ok {
+		if part, ok := m.fieldPart(fieldID, target, info, used); ok {
 			parts = append(parts, part)
 		}
 	}
-	if tb.busy {
-		parts = append(parts, single(m.st.spinner.Render(m.spinnerHint(tb)), rankBusy))
+	if target.busy {
+		parts = append(parts, single(m.st.spinner.Render(m.spinnerHint(target)), rankBusy))
 	}
 	if mouse := m.mouseStatus(); mouse != "" {
 		parts = append(parts, single(mouse, rankExtra))
@@ -223,22 +225,22 @@ func (m *model) barParts(tb *tab, width int) []barPart {
 	return parts
 }
 
-func (m *model) fieldPart(id string, tb *tab, info contracts.SessionInfo, used int) (barPart, bool) {
-	if !m.bar.isShown(id) {
+func (m *model) fieldPart(fieldID string, target *tab, info contracts.SessionInfo, used int) (barPart, bool) {
+	if !m.bar.isShown(fieldID) {
 		return barPart{}, false
 	}
-	switch id {
-	case "vendor":
+	switch fieldID {
+	case fieldVendor:
 		return m.vendorPart(info)
 	case "repo":
 		return m.repoPart(info)
 	case "ctx":
 		return m.contextPart(info, used)
 	case "cost":
-		if tb.costTotal > 0 {
-			return single(m.st.green.Render(formatCost(tb.costTotal)), rankCost), true
+		if target.costTotal > 0 {
+			return single(m.st.green.Render(formatCost(target.costTotal)), rankCost), true
 		}
-	case "queue":
+	case fieldQueue:
 		if m.bar.queued > 0 {
 			return single(m.st.text.Render(fmt.Sprintf("%d en file", m.bar.queued)), rankQueue), true
 		}
@@ -247,8 +249,8 @@ func (m *model) fieldPart(id string, tb *tab, info contracts.SessionInfo, used i
 			return single(m.st.dim.Render(m.spinFrame()+fmt.Sprintf(" %d en fond", m.bar.background)), rankBackground), true
 		}
 	case "dur":
-		if tb.busy && !tb.startedAt.IsZero() {
-			return single(m.st.dim.Render("turn ")+m.st.text.Render(formatDuration(time.Since(tb.startedAt))), rankExtra), true
+		if target.busy && !target.startedAt.IsZero() {
+			return single(m.st.dim.Render("turn ")+m.st.text.Render(formatDuration(time.Since(target.startedAt))), rankExtra), true
 		}
 	case "quota":
 		if m.bar.quota != "" {
@@ -318,28 +320,28 @@ func (m *model) composeBar(parts []barPart) string {
 }
 
 func dropLowestLayer(parts []barPart) ([]barPart, bool) {
-	at, layerAt := -1, -1
-	for i, part := range parts {
-		for j, layer := range part.layers {
+	dropPart, dropLayer := -1, -1
+	for partIndex, part := range parts {
+		for layerIndex, layer := range part.layers {
 			if layer.rank == rankNever {
 				continue
 			}
-			if at < 0 || layer.rank < parts[at].layers[layerAt].rank {
-				at, layerAt = i, j
+			if dropPart < 0 || layer.rank < parts[dropPart].layers[dropLayer].rank {
+				dropPart, dropLayer = partIndex, layerIndex
 			}
 		}
 	}
-	if at < 0 {
+	if dropPart < 0 {
 		return parts, false
 	}
-	remaining := make([]barLayer, 0, len(parts[at].layers)-1)
-	remaining = append(remaining, parts[at].layers[:layerAt]...)
-	remaining = append(remaining, parts[at].layers[layerAt+1:]...)
+	remaining := make([]barLayer, 0, len(parts[dropPart].layers)-1)
+	remaining = append(remaining, parts[dropPart].layers[:dropLayer]...)
+	remaining = append(remaining, parts[dropPart].layers[dropLayer+1:]...)
 	out := append([]barPart(nil), parts...)
 	if len(remaining) == 0 {
-		return append(out[:at], out[at+1:]...), true
+		return append(out[:dropPart], out[dropPart+1:]...), true
 	}
-	out[at] = barPart{layers: remaining}
+	out[dropPart] = barPart{layers: remaining}
 	return out, true
 }
 
@@ -364,12 +366,12 @@ func readGitHead(dir string) (string, bool) {
 	gitDir, linked := dotGit, false
 	if !stat.IsDir() {
 		linked = true
-		gitDir = linkedGitDir(dir, dotGit)
+		gitDir = linkedGitDir(dir)
 		if gitDir == "" {
 			return "", linked
 		}
 	}
-	head, err := os.ReadFile(filepath.Join(gitDir, "HEAD"))
+	head, err := readInRoot(gitDir, "HEAD")
 	if err != nil {
 		return "", linked
 	}
@@ -380,8 +382,8 @@ func readGitHead(dir string) (string, bool) {
 	return branch, linked
 }
 
-func linkedGitDir(dir, dotGit string) string {
-	data, err := os.ReadFile(dotGit)
+func linkedGitDir(dir string) string {
+	data, err := readInRoot(dir, ".git")
 	if err != nil {
 		return ""
 	}
@@ -393,4 +395,14 @@ func linkedGitDir(dir, dotGit string) string {
 		target = filepath.Join(dir, target)
 	}
 	return target
+}
+
+func readInRoot(dir, name string) ([]byte, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	data, readErr := root.ReadFile(name)
+	closeErr := root.Close()
+	return data, errors.Join(readErr, closeErr)
 }

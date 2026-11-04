@@ -26,23 +26,23 @@ type compactResultMsg struct {
 }
 
 func (m *model) compactCmd() tea.Cmd {
-	tb := m.tabs[m.active]
-	if tb == nil {
+	target := m.tabs[m.active]
+	if target == nil {
 		return nil
 	}
-	if tb.busy || tb.compaction.active {
+	if target.busy || target.compaction.active {
 		m.flash = "le compactage attend la fin du tour en cours"
 		return nil
 	}
-	name := m.sessionName(tb.channel)
+	name := m.sessionName(target.channel)
 	if name == "" {
 		m.flash = "aucune session vivante à compacter"
 		return nil
 	}
-	tb.busy = true
-	tb.compaction = compaction{active: true, from: m.contextTokens(tb)}
+	target.busy = true
+	target.compaction = compaction{active: true, from: m.contextTokens(target)}
 	backend := m.tm
-	channel := tb.channel
+	channel := target.channel
 	args := []string{sessionVerb, verbCompact, argName, name, argOrigin, originTerminal}
 	return func() tea.Msg {
 		out, err := backend.Dispatch(args)
@@ -51,46 +51,46 @@ func (m *model) compactCmd() tea.Cmd {
 }
 
 func (m *model) handleCompactResult(msg compactResultMsg) {
-	tb := m.tabs[msg.channel]
-	if tb == nil || msg.err == nil {
+	target := m.tabs[msg.channel]
+	if target == nil || msg.err == nil {
 		return
 	}
-	tb.compaction = compaction{}
-	tb.busy = false
-	tb.appendEntry(entry{role: roleError, text: msg.err.Error()})
+	target.compaction = compaction{}
+	target.busy = false
+	target.appendEntry(entry{role: roleError, text: msg.err.Error()})
 	m.syncViewport()
 }
 
-func (tb *tab) measureCompaction(used int) {
-	if !tb.compaction.active || used <= 0 {
+func (target *tab) measureCompaction(used int) {
+	if !target.compaction.active || used <= 0 {
 		return
 	}
-	tb.compaction.to = used
-	tb.compaction.measured = true
-	tb.ctxTokens = used
+	target.compaction.to = used
+	target.compaction.measured = true
+	target.ctxTokens = used
 }
 
-func (tb *tab) finishCompaction() {
-	if !tb.compaction.active {
+func (target *tab) finishCompaction() {
+	if !target.compaction.active {
 		return
 	}
 	after := unavailable
-	if tb.compaction.measured {
-		after = formatTokens(tb.compaction.to)
+	if target.compaction.measured {
+		after = formatTokens(target.compaction.to)
 	}
-	tb.appendEntry(entry{role: roleNotice, text: "compacté : " + formatTokens(tb.compaction.from) + arrow + after})
-	tb.lastCompact = tb.compaction
-	tb.compaction = compaction{}
+	target.appendEntry(entry{role: roleNotice, text: "compacté : " + formatTokens(target.compaction.from) + arrow + after})
+	target.lastCompact = target.compaction
+	target.compaction = compaction{}
 }
 
 func (m *model) lastCompactNote() string {
-	tb := m.tabs[m.active]
-	if tb == nil || tb.lastCompact.from == 0 {
+	target := m.tabs[m.active]
+	if target == nil || target.lastCompact.from == 0 {
 		return ""
 	}
 	after := unavailable
-	if tb.lastCompact.measured {
-		after = formatTokens(tb.lastCompact.to)
+	if target.lastCompact.measured {
+		after = formatTokens(target.lastCompact.to)
 	}
-	return "dernier compactage : " + formatTokens(tb.lastCompact.from) + arrow + after
+	return "dernier compactage : " + formatTokens(target.lastCompact.from) + arrow + after
 }

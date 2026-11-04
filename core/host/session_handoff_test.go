@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -14,11 +15,10 @@ type handoffRecord struct {
 	briefed  []string
 	created  []contracts.Input
 	sentTo   string
-	sentBy   string
 	sentText string
 }
 
-func fakeHandoff(rec *handoffRecord, known ...string) handoffDeps {
+func fakeHandoff(rec *handoffRecord, clock func() time.Time, known ...string) handoffDeps {
 	return handoffDeps{
 		exists: func(name string) bool {
 			for _, k := range known {
@@ -36,21 +36,27 @@ func fakeHandoff(rec *handoffRecord, known ...string) handoffDeps {
 			rec.created = append(rec.created, in)
 			return "created " + in.Get(paramName), nil
 		},
-		send: func(_ context.Context, target, author, text string) error {
-			rec.sentTo, rec.sentBy, rec.sentText = target, author, text
+		send: func(_ context.Context, target, _, text string) error {
+			rec.sentTo, rec.sentText = target, text
 			return nil
 		},
+		limit: newHandoffLimiter(clock),
 	}
 }
 
-func runHandoff(t *testing.T, deps handoffDeps, args map[string]string) (string, error) {
-	t.Helper()
-	return sessionHandoffVerb(deps).Run(context.Background(), contracts.Input{Args: args})
+func fixedClock() func() time.Time {
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	return func() time.Time { return now }
+}
+
+func runHandoff(ctx context.Context, deps handoffDeps, args map[string]string) (string, error) {
+	return sessionHandoffVerb(deps).Run(ctx, contracts.Input{Args: args})
 }
 
 func TestHandoffSendsTheBriefAsTheFirstMessageOfTheNewSession(t *testing.T) {
 	rec := &handoffRecord{}
-	out, err := runHandoff(t, fakeHandoff(rec, "alpha"), map[string]string{paramName: "alpha", paramTo: "beta"})
+	out, err := runHandoff(withLocalPrincipal(context.Background()), fakeHandoff(rec, fixedClock(), "alpha"),
+		map[string]string{paramName: "alpha", paramTo: "beta"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +73,8 @@ func TestHandoffSendsTheBriefAsTheFirstMessageOfTheNewSession(t *testing.T) {
 
 func TestHandoffWithoutATargetCreatesNothing(t *testing.T) {
 	rec := &handoffRecord{}
-	out, err := runHandoff(t, fakeHandoff(rec, "alpha"), map[string]string{paramName: "alpha"})
+	out, err := runHandoff(withLocalPrincipal(context.Background()), fakeHandoff(rec, fixedClock(), "alpha"),
+		map[string]string{paramName: "alpha"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,8 +88,8 @@ func TestHandoffWithoutATargetCreatesNothing(t *testing.T) {
 
 func TestHandoffRefusesUnderAndChannelTogether(t *testing.T) {
 	rec := &handoffRecord{}
-	_, err := runHandoff(t, fakeHandoff(rec, "alpha"), map[string]string{
-		paramName: "alpha", paramTo: "beta", "under": "cat", "channel_id": "123",
+	_, err := runHandoff(withLocalPrincipal(context.Background()), fakeHandoff(rec, fixedClock(), "alpha"), map[string]string{
+		paramName: "alpha", paramTo: "beta", paramUnder: "cat", paramChannel: "123",
 	})
 	if !errors.Is(err, errHandoffTargets) {
 		t.Fatalf("err = %v, want errHandoffTargets", err)
@@ -94,7 +101,8 @@ func TestHandoffRefusesUnderAndChannelTogether(t *testing.T) {
 
 func TestHandoffUnknownSourceIsNotFound(t *testing.T) {
 	rec := &handoffRecord{}
-	_, err := runHandoff(t, fakeHandoff(rec), map[string]string{paramName: "ghost", paramTo: "beta"})
+	_, err := runHandoff(withLocalPrincipal(context.Background()), fakeHandoff(rec, fixedClock()),
+		map[string]string{paramName: "ghost", paramTo: "beta"})
 	var nf *NotFoundError
 	if !errors.As(err, &nf) {
 		t.Fatalf("err = %v, want a NotFoundError", err)
@@ -106,19 +114,117 @@ func TestHandoffUnknownSourceIsNotFound(t *testing.T) {
 
 func TestHandoffPassesOptionsOnlyWhenSet(t *testing.T) {
 	rec := &handoffRecord{}
-	_, err := runHandoff(t, fakeHandoff(rec, "alpha"), map[string]string{
-		paramName: "alpha", paramTo: "beta", "model": "m1", "under": "cat",
+	_, err := runHandoff(withLocalPrincipal(context.Background()), fakeHandoff(rec, fixedClock(), "alpha"), map[string]string{
+		paramName: "alpha", paramTo: "beta", "model": "m1", paramUnder: "cat",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := rec.created[0].Args
-	if got["model"] != "m1" || got["under"] != "cat" {
+	if got["model"] != "m1" || got[paramUnder] != "cat" {
 		t.Fatalf("create args = %v, want model and under forwarded", got)
 	}
-	for _, key := range []string{"project", "vendor", "channel_id"} {
+	for _, key := range []string{"project", "vendor", paramChannel, paramParent} {
 		if _, set := got[key]; set {
 			t.Fatalf("create args = %v, %s must not be forwarded when unset", got, key)
+		}
+	}
+}
+
+func TestAgentCannotChooseUnderOrChannel(t *testing.T) {
+	for _, extra := range []map[string]string{{paramUnder: "cat"}, {paramChannel: "123"}} {
+		rec := &handoffRecord{}
+		args := map[string]string{paramName: "alpha", paramTo: "beta"}
+		for k, v := range extra {
+			args[k] = v
+		}
+		_, err := runHandoff(withSessionPrincipal(context.Background(), "alpha"), fakeHandoff(rec, fixedClock(), "alpha"), args)
+		if !errors.Is(err, errHandoffAgentTargets) {
+			t.Fatalf("args %v: err = %v, want errHandoffAgentTargets", extra, err)
+		}
+		if len(rec.created) != 0 || len(rec.briefed) != 0 {
+			t.Fatalf("args %v: a refused agent handoff must create nothing", extra)
+		}
+	}
+}
+
+func TestAgentHandoffIsAttachedUnderItsSource(t *testing.T) {
+	rec := &handoffRecord{}
+	_, err := runHandoff(withSessionPrincipal(context.Background(), "alpha"), fakeHandoff(rec, fixedClock(), "alpha"),
+		map[string]string{paramTo: "beta", "model": "m1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.created[0].Args[paramParent]; got != "alpha" {
+		t.Fatalf("parent = %q, want the source alpha", got)
+	}
+}
+
+func TestAgentHandoffQuotaPerSourcePerHour(t *testing.T) {
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return now }
+	rec := &handoffRecord{}
+	deps := fakeHandoff(rec, clock, "alpha")
+	ctx := withSessionPrincipal(context.Background(), "alpha")
+	for i := range handoffAgentPerHour {
+		if _, err := runHandoff(ctx, deps, map[string]string{paramTo: "n" + string(rune('a'+i))}); err != nil {
+			t.Fatalf("handoff %d: %v", i+1, err)
+		}
+	}
+	if _, err := runHandoff(ctx, deps, map[string]string{paramTo: "over"}); !errors.Is(err, errHandoffQuota) {
+		t.Fatalf("handoff beyond the quota: err = %v, want errHandoffQuota", err)
+	}
+	if len(rec.created) != handoffAgentPerHour {
+		t.Fatalf("created %d sessions, want %d", len(rec.created), handoffAgentPerHour)
+	}
+	now = now.Add(handoffWindow)
+	if _, err := runHandoff(ctx, deps, map[string]string{paramTo: "later"}); err != nil {
+		t.Fatalf("after the window the agent may hand off again: %v", err)
+	}
+}
+
+func TestAgentConcurrentHandoffFromSameSourceIsRefused(t *testing.T) {
+	started := make(chan struct{})
+	finish := make(chan struct{})
+	rec := &handoffRecord{}
+	deps := fakeHandoff(rec, fixedClock(), "alpha")
+	deps.brief = func(context.Context, string) (string, error) {
+		close(started)
+		<-finish
+		return "BRIEF", nil
+	}
+	ctx := withSessionPrincipal(context.Background(), "alpha")
+	done := make(chan error, 1)
+	go func() {
+		_, err := runHandoff(ctx, deps, map[string]string{paramTo: "first"})
+		done <- err
+	}()
+	<-started
+	if _, err := runHandoff(ctx, deps, map[string]string{paramTo: "second"}); !errors.Is(err, errHandoffBusy) {
+		t.Fatalf("second concurrent handoff: err = %v, want errHandoffBusy", err)
+	}
+	close(finish)
+	if err := <-done; err != nil {
+		t.Fatalf("first handoff: %v", err)
+	}
+}
+
+func TestOperatorIsNotBoundedByTheAgentLimits(t *testing.T) {
+	rec := &handoffRecord{}
+	deps := fakeHandoff(rec, fixedClock(), "alpha")
+	ctx := withLocalPrincipal(context.Background())
+	for i := range handoffAgentPerHour + 2 {
+		_, err := runHandoff(ctx, deps, map[string]string{paramName: "alpha", paramTo: "op" + string(rune('a'+i)), paramUnder: "cat"})
+		if err != nil {
+			t.Fatalf("operator handoff %d: %v", i+1, err)
+		}
+	}
+	if len(rec.created) != handoffAgentPerHour+2 {
+		t.Fatalf("created %d sessions, want all of the operator's", len(rec.created))
+	}
+	for _, in := range rec.created {
+		if _, set := in.Args[paramParent]; set {
+			t.Fatalf("an operator handoff must not be attached to the source: %v", in.Args)
 		}
 	}
 }

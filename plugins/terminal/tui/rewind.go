@@ -3,38 +3,106 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 const (
-	escDoubleWindow       = 700 * time.Millisecond
-	rewindStepList        = 0
-	rewindStepOpts        = 1
-	rewindStepSure        = 2
-	rewindOptBoth         = 0
-	rewindOptConversation = 1
-	rewindOptCode         = 2
-	rewindOptFork         = 3
-	rewindOptCancel       = 4
-	rewindMinSplit        = 80
+	escDoubleWindow  = 700 * time.Millisecond
+	rewindMinSplit   = 80
+	rewindListGap    = 3
+	rewindOptionGap  = 2
+	rewindFileIndent = "      "
+	noConversation   = "none"
+	argTo            = "--to"
+	argWhat          = "--what"
+	doubleEscLabel   = "échap" + " " + "échap"
 )
 
-var rewindOptions = []struct {
-	label, detail     string
+const rewindUnsupportedNote = "conversation non reprise : le backend de cette session ne garde pas de position par message"
+
+type rewindStep int
+
+const (
+	rewindStepList rewindStep = iota + 1
+	rewindStepOptions
+	rewindStepSure
+)
+
+type rewindOption int
+
+const (
+	rewindOptionBoth rewindOption = iota + 1
+	rewindOptionConversation
+	rewindOptionCode
+	rewindOptionFork
+	rewindOptionCancel
+)
+
+type rewindOptionSpec struct {
+	label             string
+	detail            string
 	needsConversation bool
-}{
-	{label: "Restaurer le code et la conversation", detail: "le code et la conversation reviennent à ce message", needsConversation: true},
-	{label: "Restaurer la conversation seulement", detail: "la conversation reprend à ce message", needsConversation: true},
-	{label: "Restaurer le code seulement", detail: "la conversation reste"},
-	{label: "Forker à partir d’ici", detail: "/fork : nouvelle session, l’originale intacte"},
-	{label: "Annuler"},
 }
 
-const rewindUnsupportedNote = "conversation non reprise : le backend de cette session ne garde pas de position par message"
+func rewindOptionOrder() []rewindOption {
+	return []rewindOption{rewindOptionBoth, rewindOptionConversation, rewindOptionCode, rewindOptionFork, rewindOptionCancel}
+}
+
+func (option rewindOption) spec() rewindOptionSpec {
+	switch option {
+	case rewindOptionBoth:
+		return rewindOptionSpec{label: "Restaurer le code et la conversation", detail: "le code et la conversation reviennent à ce message", needsConversation: true}
+	case rewindOptionConversation:
+		return rewindOptionSpec{label: "Restaurer la conversation seulement", detail: "la conversation reprend à ce message", needsConversation: true}
+	case rewindOptionCode:
+		return rewindOptionSpec{label: "Restaurer le code seulement", detail: "la conversation reste"}
+	case rewindOptionFork:
+		return rewindOptionSpec{label: "Forker à partir d’ici", detail: "/fork : nouvelle session, l’originale intacte"}
+	case rewindOptionCancel:
+		return rewindOptionSpec{label: "Annuler"}
+	}
+	return rewindOptionSpec{}
+}
+
+type rewindWhat int
+
+const (
+	rewindWhatCode rewindWhat = iota + 1
+	rewindWhatBoth
+	rewindWhatConversation
+)
+
+func (what rewindWhat) String() string {
+	switch what {
+	case rewindWhatCode:
+		return "code"
+	case rewindWhatBoth:
+		return "both"
+	case rewindWhatConversation:
+		return "conversation"
+	}
+	return ""
+}
+
+func (what rewindWhat) doneLabel() string {
+	switch what {
+	case rewindWhatCode:
+		return "code restauré"
+	case rewindWhatBoth:
+		return "code et conversation restaurés"
+	case rewindWhatConversation:
+		return "conversation reprise"
+	}
+	return ""
+}
 
 type rewindFile struct {
 	Path    string `json:"path"`
@@ -52,13 +120,13 @@ type rewindRow struct {
 }
 
 func (row rewindRow) conversationRestorable() bool {
-	return row.Conversation != "" && row.Conversation != "none"
+	return row.Conversation != "" && row.Conversation != noConversation
 }
 
 type rewindDoneMsg struct {
 	session string
 	text    string
-	what    string
+	what    rewindWhat
 	index   int
 	err     error
 }
@@ -68,19 +136,18 @@ type forkDoneMsg struct {
 	err  error
 }
 
-func (m *model) escapeIdle() tea.Cmd {
+func (m *model) escapeIdle() {
 	if m.input.Value() != "" {
 		m.escAt = time.Time{}
-		return nil
+		return
 	}
 	now := time.Now()
 	if !m.escAt.IsZero() && now.Sub(m.escAt) < escDoubleWindow {
 		m.escAt = time.Time{}
 		m.openRewind()
-		return nil
+		return
 	}
 	m.escAt = now
-	return nil
 }
 
 func (m *model) openRewind() {
@@ -89,7 +156,7 @@ func (m *model) openRewind() {
 		m.flash = "retour : aucune session ouverte"
 		return
 	}
-	out, err := m.tm.Dispatch([]string{"session", "checkpoints", "--name", name, "--json"})
+	out, err := m.tm.Dispatch([]string{sessionVerb, "checkpoints", argName, name, "--json"})
 	if err != nil {
 		m.flash = "retour : " + err.Error()
 		return
@@ -105,7 +172,7 @@ func (m *model) openRewind() {
 	}
 	m.rwRows = rows
 	m.rwIdx = len(rows) - 1
-	m.rwOpt = 0
+	m.rwOpt = rewindOptionBoth
 	m.rwStep = rewindStepList
 	m.rwOpen = true
 	m.relayout()
@@ -127,11 +194,12 @@ func (m *model) handleRewindKey(msg tea.KeyMsg) tea.Cmd {
 	switch m.rwStep {
 	case rewindStepList:
 		return m.handleRewindList(msg)
-	case rewindStepOpts:
+	case rewindStepOptions:
 		return m.handleRewindOptions(msg)
-	default:
+	case rewindStepSure:
 		return m.handleRewindSure(msg)
 	}
+	return nil
 }
 
 func (m *model) handleRewindList(msg tea.KeyMsg) tea.Cmd {
@@ -139,17 +207,17 @@ func (m *model) handleRewindList(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 	switch msg.String() {
-	case "enter":
-		m.rwStep = rewindStepOpts
-		m.rwOpt = 0
+	case keyEnter:
+		m.rwStep = rewindStepOptions
+		m.rwOpt = rewindOptionBoth
 	case "f":
-		m.rwOpt = rewindOptFork
+		m.rwOpt = rewindOptionFork
 		return m.chooseRewindOption()
 	case "u":
 		return m.undoRewind()
-	case "esc":
+	case keyEsc:
 		m.closeRewind()
-	case "ctrl+c":
+	case keyCtrlC:
 		return m.overlayCtrlC()
 	}
 	return nil
@@ -174,50 +242,41 @@ func (m *model) handleRewindSure(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "y", "Y":
 		return m.restoreRewind()
-	case "n", "N", "esc":
-		m.rwStep = rewindStepOpts
-	case "ctrl+c":
+	case "n", "N", keyEsc:
+		m.rwStep = rewindStepOptions
+	case keyCtrlC:
 		return m.overlayCtrlC()
 	}
 	return nil
 }
 
 func (m *model) moveRewind(delta int) {
-	m.rwIdx = clampIndex(m.rwIdx+delta, len(m.rwRows))
+	m.rwIdx = clampIndex(m.rwIdx+delta, len(m.rwRows)-1)
 }
 
 func (m *model) moveRewindOpt(delta int) {
-	m.rwOpt = clampIndex(m.rwOpt+delta, len(rewindOptions))
-}
-
-func clampIndex(index, count int) int {
-	if index >= count {
-		return count - 1
-	}
-	if index < 0 {
-		return 0
-	}
-	return index
+	order := rewindOptionOrder()
+	m.rwOpt = order[clampIndex(slices.Index(order, m.rwOpt)+delta, len(order)-1)]
 }
 
 func (m *model) chooseRewindOption() tea.Cmd {
 	row, ok := m.rewindSelected()
 	switch m.rwOpt {
-	case rewindOptCancel:
+	case rewindOptionCancel:
 		m.closeRewind()
-	case rewindOptFork:
+	case rewindOptionFork:
 		return m.forkFromRewind()
-	case rewindOptCode:
-		m.rwWhat = "code"
+	case rewindOptionCode:
+		m.rwWhat = rewindWhatCode
 		m.rwStep = rewindStepSure
-	case rewindOptBoth, rewindOptConversation:
+	case rewindOptionBoth, rewindOptionConversation:
 		if !ok || !row.conversationRestorable() {
 			m.flash = rewindUnsupportedNote
 			return nil
 		}
-		m.rwWhat = "both"
-		if m.rwOpt == rewindOptConversation {
-			m.rwWhat = "conversation"
+		m.rwWhat = rewindWhatBoth
+		if m.rwOpt == rewindOptionConversation {
+			m.rwWhat = rewindWhatConversation
 		}
 		m.rwStep = rewindStepSure
 	}
@@ -235,7 +294,7 @@ func (m *model) restoreRewind() tea.Cmd {
 	backend, index, text, what := m.tm, row.Index, row.Text, m.rwWhat
 	m.closeRewind()
 	return func() tea.Msg {
-		_, err := backend.Dispatch([]string{"session", "rewind", "--name", name, "--to", fmt.Sprint(index), "--what", what})
+		_, err := backend.Dispatch([]string{sessionVerb, "rewind", argName, name, argTo, strconv.Itoa(index), argWhat, what.String()})
 		return rewindDoneMsg{session: name, text: text, what: what, index: index, err: err}
 	}
 }
@@ -248,7 +307,7 @@ func (m *model) undoRewind() tea.Cmd {
 	backend, origin := m.tm, m.active
 	m.closeRewind()
 	return func() tea.Msg {
-		out, err := backend.Dispatch([]string{"session", "undo", "--name", name})
+		out, err := backend.Dispatch([]string{sessionVerb, "undo", argName, name})
 		return dispatchResultMsg{origin: origin, out: out, err: err}
 	}
 }
@@ -263,7 +322,7 @@ func (m *model) forkFromRewind() tea.Cmd {
 	index := row.Index
 	m.closeRewind()
 	return func() tea.Msg {
-		out, err := backend.Dispatch([]string{"session", "fork", "--name", name, "--to", fmt.Sprint(index), "--json"})
+		out, err := backend.Dispatch([]string{sessionVerb, "fork", argName, name, argTo, strconv.Itoa(index), "--json"})
 		var forked struct {
 			Name string `json:"name"`
 		}
@@ -282,7 +341,7 @@ func (m *model) handleRewindDone(msg rewindDoneMsg) {
 	if m.input.Value() == "" {
 		m.input.SetValue(msg.text)
 	}
-	m.flash = fmt.Sprintf("revenu au message %d · %s", msg.index, rewindDoneLabel[msg.what])
+	m.flash = fmt.Sprintf("revenu au message %d · %s", msg.index, msg.what.doneLabel())
 }
 
 func (m *model) handleForkDone(msg forkDoneMsg) {
@@ -290,35 +349,46 @@ func (m *model) handleForkDone(msg forkDoneMsg) {
 		m.flash = "fork refusé : " + msg.err.Error()
 		return
 	}
-	for _, session := range m.tm.Sessions() {
-		if session.Name != msg.name || session.ChannelID == "" {
-			continue
-		}
-		m.ensureTab(session.ChannelID)
-		m.active = session.ChannelID
-		m.syncViewport()
-		m.flash = "fork ouvert : " + msg.name
+	channel := channelOfSession(m.tm.Sessions(), msg.name)
+	if channel == "" {
+		m.flash = "fork créé : " + msg.name
 		return
 	}
-	m.flash = "fork créé : " + msg.name
+	m.ensureTab(channel)
+	m.active = channel
+	m.syncViewport()
+	m.flash = "fork ouvert : " + msg.name
+}
+
+func channelOfSession(sessions []contracts.SessionInfo, name string) string {
+	for index := range sessions {
+		if sessions[index].Name == name && sessions[index].ChannelID != "" {
+			return sessions[index].ChannelID
+		}
+	}
+	return ""
 }
 
 func (m *model) rewindView() string {
 	width := m.overlayWidth()
-	lines := []string{m.rewindHeader(width)}
-	switch m.rwStep {
-	case rewindStepList:
-		lines = append(lines, m.rewindListLines(width)...)
-	case rewindStepOpts:
-		lines = append(lines, m.rewindOptionLines(width)...)
-	default:
-		lines = append(lines, m.rewindSureLines(width)...)
-	}
+	lines := append([]string{m.rewindHeader(width)}, m.rewindBody(width)...)
 	return strings.Join(lines, "\n")
 }
 
+func (m *model) rewindBody(width int) []string {
+	switch m.rwStep {
+	case rewindStepList:
+		return m.rewindListLines(width)
+	case rewindStepOptions:
+		return m.rewindOptionLines(width)
+	case rewindStepSure:
+		return m.rewindSureLines(width)
+	}
+	return nil
+}
+
 func (m *model) rewindHeader(width int) string {
-	title := m.st.accent.Render("Revenir en arrière") + m.st.dim.Render(" · échap échap")
+	title := m.st.accent.Render("Revenir en arrière") + m.st.dim.Render(" · "+doubleEscLabel)
 	return truncate("  "+title, width)
 }
 
@@ -331,25 +401,17 @@ func (m *model) rewindListLines(width int) []string {
 			head = m.st.glyphs.cursor + " "
 		}
 		summary := rewindSummary(row.Files)
-		line := head + row.At + "  " + row.Text
+		line := truncate("  "+head+row.At+"  "+row.Text, width)
 		if width >= rewindMinSplit {
-			line = padTo(truncate("  "+line, width-lipgloss.Width(summary)-3), width-lipgloss.Width(summary)-3) + "  " + summary
-		} else {
-			line = truncate("  "+line, width)
+			line = rightAligned(line, summary, width, rewindListGap)
 		}
 		lines = append(lines, m.rewindRow(line, selected, width))
 		if width < rewindMinSplit && summary != "" {
-			lines = append(lines, truncate("      "+m.st.dim.Render(summary), width))
+			lines = append(lines, truncate(rewindFileIndent+m.st.dim.Render(summary), width))
 		}
 	}
 	footer := "↑↓ choisir · ⏎ revenir à ce message · f forker d’ici · u annuler le retour · échap fermer"
 	return append(lines, truncate("  "+m.st.dim.Render(footer), width))
-}
-
-var rewindDoneLabel = map[string]string{
-	"code":         "code restauré",
-	"both":         "code et conversation restaurés",
-	"conversation": "conversation reprise",
 }
 
 func (m *model) rewindOptionLines(width int) []string {
@@ -361,24 +423,30 @@ func (m *model) rewindOptionLines(width int) []string {
 	if files := rewindFileNames(row.Files); files != "" {
 		lines = append(lines, truncate("  "+m.st.dim.Render("fichiers touchés depuis : ")+m.st.green.Render(files), width))
 	}
-	for index, option := range rewindOptions {
-		selected := index == m.rwOpt
+	for index, option := range rewindOptionOrder() {
+		spec := option.spec()
+		selected := option == m.rwOpt
 		head := "  "
 		if selected {
 			head = m.st.glyphs.cursor + " "
 		}
-		label := fmt.Sprintf("%d. %s", index+1, option.label)
-		detail := option.detail
-		if option.needsConversation && !row.conversationRestorable() {
+		label := fmt.Sprintf("%d. %s", index+1, spec.label)
+		detail := spec.detail
+		if spec.needsConversation && !row.conversationRestorable() {
 			detail = rewindUnsupportedNote
 		}
 		line := "  " + head + label
 		if detail != "" {
-			line = padTo(truncate(line, width-lipgloss.Width(detail)-2), width-lipgloss.Width(detail)-2) + "  " + m.st.dim.Render(detail)
+			line = rightAligned(truncate(line, width), m.st.dim.Render(detail), width, rewindOptionGap)
 		}
 		lines = append(lines, m.rewindRow(truncate(line, width), selected, width))
 	}
 	return append(lines, truncate("  "+m.st.dim.Render("↑↓ choisir · ⏎ valider · échap retour"), width))
+}
+
+func rightAligned(left, right string, width, gap int) string {
+	room := width - lipgloss.Width(right) - gap
+	return padTo(truncate(left, room), room) + "  " + right
 }
 
 func (m *model) rewindSureLines(width int) []string {
@@ -393,15 +461,16 @@ func (m *model) rewindSureLines(width int) []string {
 	}
 }
 
-func rewindQuestion(what, at string) string {
+func rewindQuestion(what rewindWhat, when string) string {
 	switch what {
-	case "both":
-		return fmt.Sprintf("Restaurer le code et la conversation au message de %s ? Les fichiers reviennent à cet état et la conversation reprend à ce message.", at)
-	case "conversation":
-		return fmt.Sprintf("Restaurer la conversation au message de %s ? Les fichiers ne bougent pas.", at)
-	default:
-		return fmt.Sprintf("Restaurer le code au message de %s ? Les fichiers du worktree reviennent à cet état.", at)
+	case rewindWhatBoth:
+		return fmt.Sprintf("Restaurer le code et la conversation au message de %s ? Les fichiers reviennent à cet état et la conversation reprend à ce message.", when)
+	case rewindWhatConversation:
+		return fmt.Sprintf("Restaurer la conversation au message de %s ? Les fichiers ne bougent pas.", when)
+	case rewindWhatCode:
+		return fmt.Sprintf("Restaurer le code au message de %s ? Les fichiers du worktree reviennent à cet état.", when)
 	}
+	return ""
 }
 
 func (m *model) rewindRow(line string, selected bool, width int) string {

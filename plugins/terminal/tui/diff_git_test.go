@@ -12,7 +12,7 @@ import (
 
 func gitIn(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
@@ -30,7 +30,7 @@ func writeRepoFile(t *testing.T, dir, name, content string) {
 func initRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	cmd := exec.Command("git", "-C", dir, "-c", "init.defaultBranch=master", "init")
+	cmd := exec.CommandContext(t.Context(), "git", "-C", dir, "-c", "init.defaultBranch=master", "init")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
@@ -49,19 +49,19 @@ type scriptedRunner struct {
 	ghCalls [][]string
 }
 
-func (s *scriptedRunner) run(ctx context.Context, dir string, env []string, name string, args ...string) (string, error) {
-	if name == "gh" {
+func (s *scriptedRunner) run(ctx context.Context, dir string, env []string, tool cliTool, args ...string) (string, error) {
+	if tool == toolGh {
 		s.ghCalls = append(s.ghCalls, args)
 		return s.prURL, nil
 	}
-	if name == "git" && len(args) > 0 && args[0] == "push" {
+	if len(args) > 0 && args[0] == "push" {
 		return "", nil
 	}
-	return execRunner(ctx, dir, env, name, args...)
+	return execRunner(ctx, dir, env, tool, args...)
 }
 
 type fileExpectation struct {
-	status  byte
+	status  changeKind
 	added   int
 	deleted int
 }
@@ -72,14 +72,14 @@ func TestLoadDiffListsEachFileWithItsStatusAndCounts(t *testing.T) {
 	writeRepoFile(t, dir, "b.txt", "new\n")
 	gitIn(t, dir, "rm", "-q", "c.txt")
 
-	report, err := newGitRepo(dir, nil).loadDiff(context.Background(), diffScopeTurn, "")
+	report, err := newGitRepo(dir, nil).loadDiff(t.Context(), diffScopeTurn, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := map[string]fileExpectation{
-		"a.txt": {'M', 2, 1},
-		"b.txt": {'A', 1, 0},
-		"c.txt": {'D', 0, 1},
+		"a.txt": {changeModified, 2, 1},
+		"b.txt": {changeAdded, 1, 0},
+		"c.txt": {changeDeleted, 0, 1},
 	}
 	if len(report.Files) != len(want) {
 		t.Fatalf("files = %+v, want %d entries", report.Files, len(want))
@@ -90,7 +90,7 @@ func TestLoadDiffListsEachFileWithItsStatusAndCounts(t *testing.T) {
 			t.Fatalf("unexpected file %q", file.Path)
 		}
 		if file.Status != exp.status || file.Added != exp.added || file.Deleted != exp.deleted {
-			t.Fatalf("%s = %c +%d -%d, want %c +%d -%d", file.Path, file.Status, file.Added, file.Deleted, exp.status, exp.added, exp.deleted)
+			t.Fatalf("%s = %v +%d -%d, want %v +%d -%d", file.Path, file.Status, file.Added, file.Deleted, exp.status, exp.added, exp.deleted)
 		}
 	}
 }
@@ -101,7 +101,7 @@ func TestLoadDiffReportsBinaryFilesWithoutTextRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	report, err := newGitRepo(dir, nil).loadDiff(context.Background(), diffScopeTurn, "")
+	report, err := newGitRepo(dir, nil).loadDiff(t.Context(), diffScopeTurn, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,13 +118,13 @@ func TestTurnScopeOnlyShowsChangesAfterTheTurnStarted(t *testing.T) {
 	dir := initRepo(t)
 	writeRepoFile(t, dir, "a.txt", "one\nTWO\n")
 	repo := newGitRepo(dir, nil)
-	turnStart, err := repo.snapshot(context.Background())
+	turnStart, err := repo.snapshot(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	writeRepoFile(t, dir, "b.txt", "during the turn\n")
 
-	report, err := repo.loadDiff(context.Background(), diffScopeTurn, turnStart)
+	report, err := repo.loadDiff(t.Context(), diffScopeTurn, turnStart)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestSnapshotLeavesTheRealIndexAlone(t *testing.T) {
 	dir := initRepo(t)
 	writeRepoFile(t, dir, "b.txt", "untracked\n")
 
-	if _, err := newGitRepo(dir, nil).snapshot(context.Background()); err != nil {
+	if _, err := newGitRepo(dir, nil).snapshot(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -153,7 +153,7 @@ func TestBranchScopeShowsCommitsAheadOfBase(t *testing.T) {
 	writeRepoFile(t, dir, "a.txt", "one\nTWO\n")
 	gitIn(t, dir, "commit", "-q", "-am", "feat: change a")
 
-	report, err := newGitRepo(dir, nil).loadDiff(context.Background(), diffScopeBranch, "")
+	report, err := newGitRepo(dir, nil).loadDiff(t.Context(), diffScopeBranch, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestCommitStagesEverythingWithTheGivenMessage(t *testing.T) {
 	dir := initRepo(t)
 	writeRepoFile(t, dir, "b.txt", "new\n")
 
-	sha, err := newGitRepo(dir, nil).commit(context.Background(), "feat: ajouter b")
+	sha, err := newGitRepo(dir, nil).commit(t.Context(), "feat: ajouter b")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestOpenPRPushesAndReturnsTheCreatedNumber(t *testing.T) {
 	gitIn(t, dir, "checkout", "-q", "-b", "feature")
 	runner := &scriptedRunner{prURL: "https://github.com/o/r/pull/42\n"}
 
-	number, err := newGitRepo(dir, runner.run).openPR(context.Background(), "master", "feat: change", "body")
+	number, err := newGitRepo(dir, runner.run).openPR(t.Context(), "master", "feat: change", "body")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestOpenPRRefusesTheBaseBranch(t *testing.T) {
 	dir := initRepo(t)
 	runner := &scriptedRunner{prURL: "https://github.com/o/r/pull/1\n"}
 
-	_, err := newGitRepo(dir, runner.run).openPR(context.Background(), "master", "t", "b")
+	_, err := newGitRepo(dir, runner.run).openPR(t.Context(), "master", "t", "b")
 	if !errors.Is(err, errOnBase) {
 		t.Fatalf("err = %v, want errOnBase", err)
 	}
@@ -215,7 +215,7 @@ func TestOpenPRRefusesTheBaseBranch(t *testing.T) {
 }
 
 func TestLoadDiffOutsideARepositoryFails(t *testing.T) {
-	_, err := newGitRepo(t.TempDir(), nil).loadDiff(context.Background(), diffScopeTurn, "")
+	_, err := newGitRepo(t.TempDir(), nil).loadDiff(t.Context(), diffScopeTurn, "")
 	if !errors.Is(err, errNotRepo) {
 		t.Fatalf("err = %v, want errNotRepo", err)
 	}
@@ -223,8 +223,8 @@ func TestLoadDiffOutsideARepositoryFails(t *testing.T) {
 
 func TestDraftCommitMessageNamesFilesAndScope(t *testing.T) {
 	files := []diffFile{
-		{Path: "internal/x/a.go", Status: 'A', Added: 3},
-		{Path: "internal/x/b.go", Status: 'M', Added: 1, Deleted: 2},
+		{Path: "internal/x/a.go", Status: changeAdded, Added: 3},
+		{Path: "internal/x/b.go", Status: changeModified, Added: 1, Deleted: 2},
 	}
 
 	message := draftCommitMessage(files)
@@ -254,7 +254,7 @@ func findDiffFile(files []diffFile, path string) (diffFile, bool) {
 }
 
 func containsArgs(args []string, flag, value string) bool {
-	for i := 0; i+1 < len(args); i++ {
+	for i := range len(args) - 1 {
 		if args[i] == flag && args[i+1] == value {
 			return true
 		}
@@ -263,11 +263,11 @@ func containsArgs(args []string, flag, value string) bool {
 }
 
 func TestSnapshotSeesSameSizeEditsRightAfterTheCommit(t *testing.T) {
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		dir := initRepo(t)
 		writeRepoFile(t, dir, "a.txt", "one\nTWO\n")
 
-		tree, err := newGitRepo(dir, nil).snapshot(context.Background())
+		tree, err := newGitRepo(dir, nil).snapshot(t.Context())
 		if err != nil {
 			t.Fatal(err)
 		}

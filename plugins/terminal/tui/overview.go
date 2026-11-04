@@ -394,7 +394,7 @@ func windowLines(lines []string, cursor, height int) []string {
 
 func padLines(lines []string, height int) []string {
 	if len(lines) > height {
-		return lines[:maxInt(height, 0)]
+		return lines[:max(height, 0)]
 	}
 	for len(lines) < height {
 		lines = append(lines, "")

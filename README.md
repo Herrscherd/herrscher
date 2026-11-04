@@ -562,9 +562,9 @@ from the `config.json` of its own process and its own environment. The two can d
 when `herrscher serve -config <file>` reads another file, or when the TUI runs under an
 environment that the daemon does not share; the daemon's figure is the one that counts.
 An invalid `config.json` makes `herrscher serve` refuse to start, while the TUI shows a
-flash naming the file and falls back to the built-in sizes, or to the HERRSCHER_CONTEXT_LIMIT override when it is set. One window per model is a
-follow-up. After a measured compaction
-still above the threshold, automatic compaction does not retrigger: it rearms once a
+flash naming the file and falls back to the built-in sizes, or to the
+`HERRSCHER_CONTEXT_LIMIT` override when it is set. One window per model is a
+follow-up. After a measured compaction still above the threshold, automatic compaction does not retrigger: it rearms once a
 measured turn lands under the threshold. A compaction the backend does not measure
 never retriggers. `compactStack` lists the stages in order, where `backend` is the
 session's own compaction and other names are plugins declaring

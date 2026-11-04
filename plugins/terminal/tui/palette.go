@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -12,19 +13,45 @@ type CommandSpec struct {
 	Name string
 	Args string
 	Desc string
+	PR   string
+}
+
+const flagSeparator = " --"
+
+func commandQuery(query string) string {
+	if at := strings.Index(query, flagSeparator); at >= 0 {
+		query = query[:at]
+	}
+	return strings.TrimSpace(strings.ToLower(query))
 }
 
 func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
-	query = strings.TrimSpace(strings.ToLower(query))
+	query = commandQuery(query)
 	if query == "" {
 		return cmds
 	}
-	var out []CommandSpec
+	type scored struct {
+		cmd   CommandSpec
+		score int
+	}
+	var found []scored
 	for _, cmd := range cmds {
-		name := strings.ToLower(cmd.Name)
-		if strings.Contains(name, query) || strings.HasPrefix(query, name+" ") {
-			out = append(out, cmd)
+		if hit, ok := fuzzyMatch(query, cmd.Name); ok {
+			found = append(found, scored{cmd: cmd, score: hit.score})
 		}
+	}
+	sort.SliceStable(found, func(i, j int) bool { return found[i].score > found[j].score })
+	out := make([]CommandSpec, 0, len(found))
+	for _, f := range found {
+		out = append(out, f.cmd)
+	}
+	return out
+}
+
+func shiftPositions(positions []int, by int) []int {
+	out := make([]int, len(positions))
+	for i, at := range positions {
+		out[i] = at + by
 	}
 	return out
 }
@@ -148,6 +175,7 @@ func localCommands() []CommandSpec {
 		{Name: "attach", Args: "<path>", Desc: "stage a local file with the next message"},
 		{Name: "copy", Args: "[reply|turn|all]", Desc: "put the last answer (or the turn, or everything) on the clipboard"},
 		{Name: "mouse", Desc: "hand the mouse to the terminal so its own selection works (ctrl+g)"},
+		{Name: "queue", Desc: "voir la file de messages", PR: "PR 2"},
 	}
 }
 
@@ -174,7 +202,11 @@ func (m *model) paletteView() string {
 		if cmd.Args != "" {
 			label += " " + cmd.Args
 		}
-		rows = append(rows, overlayRow{label: label, detail: cmd.Desc})
+		row := overlayRow{label: label, detail: cmd.Desc, tag: cmd.PR}
+		if hit, ok := fuzzyMatch(commandQuery(m.input.Value()[1:]), cmd.Name); ok {
+			row.hot = shiftPositions(hit.positions, len("/"))
+		}
+		rows = append(rows, row)
 	}
 	footer := ""
 	if len(filtered) > visible {

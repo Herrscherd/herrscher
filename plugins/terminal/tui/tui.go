@@ -125,6 +125,9 @@ type tab struct {
 	nextEntryID        uint64
 	todos              []contracts.TodoItem
 	agents             []liveAgent
+	queue              []queuedInput
+	shellContext       string
+	shellRunning       bool
 }
 
 type liveAgent struct {
@@ -265,8 +268,17 @@ type model struct {
 	mentionCacheKey  string
 	mentionCacheRows []string
 
-	history []string
-	histIdx int
+	history     []string
+	histIdx     int
+	drafts      []string
+	histOpen    bool
+	histQuery   string
+	histSel     int
+	leaderArmed bool
+	editing     bool
+	queueSel    int
+	queueFocus  bool
+	queueHits   []queueHit
 
 	clip      clipboard
 	pending   []Attachment
@@ -380,7 +392,7 @@ func (m *model) runContext() context.Context {
 
 func newModel(backend Backend) *model {
 	field := textarea.New()
-	field.Placeholder = "type a message…"
+	field.Placeholder = placeholderIdle
 	field.Prompt = ""
 	field.ShowLineNumbers = false
 	field.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "shift+enter", "ctrl+j"))
@@ -466,6 +478,7 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 	tab := m.ensureTab(routed.Conv.ID)
 	before := len(tab.entries)
 	m.renderInto(tab, routed.Event)
+	m.flushQueue(tab, routed.Event.T)
 	if len(tab.entries) != before && tab.channel != m.active {
 		tab.unread = true
 	}
@@ -563,6 +576,9 @@ func (m *model) handleEnter() tea.Cmd {
 	}
 	m.input.Reset()
 	m.resizeComposer()
+	if command, ok := shellCommand(text); ok {
+		return m.runShell(command)
+	}
 	if strings.HasPrefix(text, "/") {
 		return m.runSlash(text)
 	}
@@ -617,6 +633,8 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		m.copyCmd(args[1:])
 	case "mouse":
 		return m.toggleMouse(), true
+	case "queue":
+		m.showQueue()
 	default:
 		return nil, false
 	}
@@ -644,7 +662,7 @@ func (m *model) submitTo(channel, text string, atts []Attachment) {
 	if tab == nil {
 		return
 	}
-	m.tm.Submit(channel, text, atts)
+	m.tm.Submit(channel, tab.withShellContext(text), atts)
 	tab.endStream()
 	item := entry{role: roleYou, text: text, attachments: atts}
 	item.preview = previewEscapes(atts, m.caps)
@@ -1232,11 +1250,19 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case dispatchResultMsg:
 		m.handleDispatchResult(msg)
 		return nil, true
+	case shellResultMsg:
+		m.handleShellResult(msg)
+		return nil, true
+	case editorDoneMsg:
+		m.applyEditorResult(msg)
+		return nil, true
 	case tickMsg:
 		m.syncTabs()
 		return tickCmd(), true
 	case spinMsg:
 		return m.handleSpin(), true
+	case tea.MouseMsg:
+		return nil, m.handleQueueClick(msg)
 	}
 	return nil, false
 }
@@ -1323,6 +1349,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleSkillsKey(msg), true
 	case m.resumeOpen:
 		return m.handleResumeKey(msg), true
+	case m.histOpen:
+		return m.handleHistSearchKey(msg), true
 	}
 	if cmd, handled := m.handlePaletteKey(msg); handled {
 		return cmd, true
@@ -1390,7 +1418,7 @@ func (m *model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.Type {
 	case tea.KeyCtrlC:
 		return m.overlayCtrlC()
-	case tea.KeyEsc, tea.KeyCtrlS:
+	case tea.KeyEsc, tea.KeyCtrlF:
 		m.closeSearch()
 	case tea.KeyEnter, tea.KeyCtrlN:
 		m.searchStep(1)
@@ -1506,7 +1534,26 @@ func (m *model) handleMentionKey(msg tea.KeyMsg) bool {
 }
 
 func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if m.leaderArmed {
+		m.leaderArmed = false
+		if cmd, ok := m.runLeader(msg.String()); ok {
+			return cmd, true
+		}
+	}
+	if handled, cmd := m.handleQueueFocus(msg); handled {
+		return cmd, true
+	}
 	switch msg.Type {
+	case tea.KeyCtrlX:
+		m.leaderArmed = true
+		m.flash = "ctrl+x : e éditeur · ⏎ envoyer la file"
+		return nil, true
+	case tea.KeyF12:
+		if msg.Alt {
+			m.sendQueueNow()
+			return nil, true
+		}
+		return nil, false
 	case tea.KeyEsc:
 		if tb := m.tabs[m.active]; tb != nil && tb.busy {
 			if name := m.sessionName(m.active); name != "" {
@@ -1523,18 +1570,23 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.switchTab(-1)
 	case tea.KeyEnter:
 		if msg.Alt {
-			return nil, false
+			return nil, m.enqueueWhileBusy(true)
 		}
 		if m.continueLine() {
 			return nil, true
 		}
+		if m.enqueueWhileBusy(false) {
+			return nil, true
+		}
 		return tea.Batch(m.handleEnter(), m.ensureSpin()), true
 	case tea.KeyCtrlS:
+		m.stashDraft()
+	case tea.KeyCtrlF:
 		m.openSearch()
+	case tea.KeyCtrlR:
+		m.openHistSearch()
 	case tea.KeyCtrlT:
 		m.toggleTurnFold()
-	case tea.KeyCtrlF:
-		m.toggleFold()
 	case tea.KeyCtrlY:
 		m.copyLastCode()
 	case tea.KeyCtrlG:
@@ -1551,6 +1603,9 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		m.relayout()
 	case tea.KeyUp:
+		if !msg.Alt && m.focusQueueStart() {
+			return nil, true
+		}
 		return m.handleHistoryKey(msg, -1)
 	case tea.KeyDown:
 		return m.handleHistoryKey(msg, 1)
@@ -1615,6 +1670,10 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.copyTarget(copyReply)
 		return nil, true
 	}
+	if msg.Alt && strings.EqualFold(string(msg.Runes), "c") {
+		m.toggleFold()
+		return nil, true
+	}
 	if msg.Alt && strings.EqualFold(string(msg.Runes), "e") {
 		m.toggleToolExpand()
 		return nil, true
@@ -1623,7 +1682,7 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 }
 
 func (m *model) helpView() string {
-	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
+	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · alt+c replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+f chercher · ctrl+s brouillon de côté · ctrl+r historique · ctrl+x ctrl+e éditeur · ⌥⏎ réoriente · ⌃⏎ envoie la file · ↑ puis suppr retire · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers · ! commande shell")
 }
 
 func (m *model) View() string {

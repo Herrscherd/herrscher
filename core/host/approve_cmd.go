@@ -26,6 +26,7 @@ func addApproveCommands(reg *cli.Registry, hostState *state.State, agents *agent
 		approveRuleVerb(hostState),
 		approveAskVerb(hostState, agents, approvals, sessions),
 		approveModeVerb(hostState),
+		sessionShellVerb(hostState, agents, approvals, sessions),
 	)
 }
 

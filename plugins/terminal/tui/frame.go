@@ -58,9 +58,15 @@ func (m *model) buildFrame() frame {
 	if m.showHelp {
 		stacked.below = appendLines(stacked.below, m.helpView())
 	}
+	if m.histOpen {
+		stacked.below = appendLines(stacked.below, m.histView())
+	}
 	if chips := chipRow(m.pending, m.st); chips != "" {
 		stacked.below = appendLines(stacked.below, chips+"  "+m.st.dim.Render("⌃U retirer"))
 	}
+	base := len(stacked.above) + m.vp.Height + len(stacked.below)
+	stacked.below = appendLines(stacked.below, strings.Join(m.queueLines(base), "\n"))
+	stacked.below = appendLines(stacked.below, m.draftsView())
 	stacked.below = append(stacked.below, m.composerZone()...)
 	stacked.below = append(stacked.below, m.statusZone()...)
 	return stacked

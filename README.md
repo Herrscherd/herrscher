@@ -482,13 +482,50 @@ confirmation prompt. The keypress is the consent.
 
 ### Reading a long session
 
-`ctrl+s` searches the transcript as you type, marks every match, cycles them with
+`ctrl+f` searches the transcript as you type, marks every match, cycles them with
 `ctrl+n` and `ctrl+p`, and puts the scroll position back where it was when you
 close it.
 
 `alt+↑` and `alt+↓` jump by turn. `ctrl+t` collapses the history above the
-current exchange to one line per turn, `ctrl+f` folds long code blocks to a
+current exchange to one line per turn, `alt+c` folds long code blocks to a
 summary line, and `ctrl+y` copies the last one to the clipboard as raw text.
+
+`ctrl+r` searches the prompts you sent, newest first, with the same fuzzy
+matching as the command palette: type a fragment, `⏎` recalls the match into the
+composer, `esc` closes it.
+
+### Writing while the agent works
+
+The composer stays open while a turn runs. `⏎` queues the message to go out when
+the turn ends. `⌥⏎` queues it as a steer: it goes out right after the next tool
+call, so the agent can change course without waiting for the whole turn. `esc`
+interrupts the turn and keeps the queue, and `⌃⏎` sends the queue now (it
+interrupts a running turn first). Queued rows sit above the composer with `✕
+retirer` on the right. Remove one by clicking its `✕`, or press `↑` on an empty
+composer to focus the queue, then `suppr` on the row; `esc` leaves the focus.
+
+`/queue` lists the queue as a transcript notice. The command is in the palette
+with the `PR 2` tag, since reordering the queue is the part still to come.
+
+`ctrl+s` parks the current draft on a stack and clears the composer; `ctrl+s` on
+an empty composer brings the last parked draft back. The line above the composer
+names the drafts waiting.
+
+`ctrl+x ctrl+e` opens the draft in `$EDITOR` (then `$VISUAL`, then `vi`). The
+composer is framed in the accent colour while the editor is open, and the saved
+text comes back into it when the editor exits. A terminal that reports `ctrl+⏎`
+through the enhanced keyboard protocol sends the queue directly; the leader
+`ctrl+x ⏎` does the same everywhere else.
+
+`!command` runs a shell command in the session's directory through the host's
+approval policy, the same one that gates the agent's own Bash calls. The output
+is shown in the transcript and enters the session as context on the next message,
+so the agent sees what you ran. The composer frame turns amber while the line
+starts with `!`.
+
+`@` completes a file from the worktree and `/` completes a command. Both are
+fuzzy: the characters you type are highlighted in the match, and command rows show
+the PR that delivers them on the right.
 
 Tool lines carry a budget of two rows apiece. Unbounded, a compound shell command
 becomes a paragraph in a single colour, and the session path it opens with is

@@ -46,7 +46,7 @@ func retirePlaybook(dir, name string, man manifest, out *Outcome) error {
 		return err
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
-		out.Diverged = append(out.Diverged, name)
+		out.Linked = append(out.Linked, name)
 		return nil
 	}
 	disk, err := hashDir(dest)

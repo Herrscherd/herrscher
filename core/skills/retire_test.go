@@ -109,8 +109,8 @@ func TestInstallNeverAdoptsASymbolicLink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Diverged) != 1 || len(out.Installed) != 0 || len(out.Updated) != 0 {
-		t.Fatalf("outcome = %+v, want the link reported as diverged and nothing written", out)
+	if len(out.Linked) != 1 || len(out.Installed) != 0 || len(out.Updated) != 0 {
+		t.Fatalf("outcome = %+v, want the link reported as linked and nothing written", out)
 	}
 	info, err := os.Lstat(dest)
 	if err != nil || info.Mode()&os.ModeSymlink == 0 {
@@ -145,8 +145,8 @@ func TestRetireNeverRemovesASymbolicLink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Removed) != 0 || len(out.Diverged) != 1 {
-		t.Fatalf("outcome = %+v, want the link kept and reported", out)
+	if len(out.Removed) != 0 || len(out.Linked) != 1 || len(out.Diverged) != 0 {
+		t.Fatalf("outcome = %+v, want the link kept and reported as linked", out)
 	}
 	if info, err := os.Lstat(dest); err != nil || info.Mode()&os.ModeSymlink == 0 {
 		t.Fatalf("the symbolic link must stay, got %v, %v", info, err)

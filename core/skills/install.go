@@ -28,13 +28,14 @@ type Outcome struct {
 	Updated   []string
 	Removed   []string
 	Diverged  []string
+	Linked    []string
 	Shipped   []string
 	Partial   []string
 }
 
 // Empty reports whether Install had nothing to say.
 func (o Outcome) Empty() bool {
-	return len(o.Installed) == 0 && len(o.Updated) == 0 && len(o.Removed) == 0 && len(o.Diverged) == 0
+	return len(o.Installed) == 0 && len(o.Updated) == 0 && len(o.Removed) == 0 && len(o.Diverged) == 0 && len(o.Linked) == 0
 }
 
 // Install materializes the skills carried inside src (one directory per skill)
@@ -84,7 +85,7 @@ func installPlaybook(src fs.FS, dir, name string, man manifest, out *Outcome) er
 		return err
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
-		out.Diverged = append(out.Diverged, name)
+		out.Linked = append(out.Linked, name)
 		return nil
 	}
 	disk, err := hashDir(dest)

@@ -44,6 +44,10 @@ func reportRetired(dst string, out skills.Outcome) {
 		fmt.Fprintln(os.Stderr, "herrscher: skill "+name+" is no longer shipped and was edited here; it was left as it is, "+
 			"delete "+filepath.Join(dst, name)+" to remove it")
 	}
+	for _, name := range out.Linked {
+		fmt.Fprintln(os.Stderr, "herrscher: skill "+name+" is a symbolic link here; it was left as it is, "+
+			"delete "+filepath.Join(dst, name)+" to remove the link")
+	}
 }
 
 func reportSkills(dst string, out skills.Outcome, kind string) {
@@ -55,6 +59,10 @@ func reportSkills(dst string, out skills.Outcome, kind string) {
 	}
 	for _, name := range out.Diverged {
 		fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" differs from the one this build ships and was left as it is; "+
+			"delete "+filepath.Join(dst, name)+" to take the shipped version")
+	}
+	for _, name := range out.Linked {
+		fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" is a symbolic link here; it was left as it is, "+
 			"delete "+filepath.Join(dst, name)+" to take the shipped version")
 	}
 }
@@ -99,6 +107,7 @@ func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv
 		all.Installed = append(all.Installed, out.Installed...)
 		all.Updated = append(all.Updated, out.Updated...)
 		all.Diverged = append(all.Diverged, out.Diverged...)
+		all.Linked = append(all.Linked, out.Linked...)
 		all.Shipped = append(all.Shipped, out.Shipped...)
 	}
 	return all, notes

@@ -118,3 +118,119 @@ func TestApplyModes(t *testing.T) {
 		}
 	}
 }
+
+func TestParseRiskReadsTheFirstWord(t *testing.T) {
+	for answer, want := range map[string]Risk{
+		"low":               RiskLow,
+		" Low.\n":           RiskLow,
+		"medium, it pushes": RiskMedium,
+		"HIGH":              RiskHigh,
+	} {
+		got, ok := ParseRisk(answer)
+		if !ok || got != want {
+			t.Fatalf("ParseRisk(%q) = %q, %v; want %q", answer, got, ok, want)
+		}
+	}
+}
+
+func TestParseRiskRefusesAnythingElse(t *testing.T) {
+	for _, answer := range []string{"", "maybe", "I think it is fine", "lowest"} {
+		if got, ok := ParseRisk(answer); ok {
+			t.Fatalf("ParseRisk(%q) = %q, want no rating", answer, got)
+		}
+	}
+}
+
+func TestOnlyALowRiskPasses(t *testing.T) {
+	if RiskLow.Decision() != Allow {
+		t.Fatal("a low risk must pass alone")
+	}
+	for _, risk := range []Risk{RiskMedium, RiskHigh} {
+		if risk.Decision() != Ask {
+			t.Fatalf("risk %q must go to the prompt", risk)
+		}
+	}
+}
+
+func TestSmartRatesOnlyWhatTheRulesLeaveOpen(t *testing.T) {
+	cases := []struct {
+		decided Decision
+		matched bool
+		want    bool
+	}{
+		{Allow, false, true},
+		{Ask, true, true},
+		{Allow, true, false},
+		{Deny, true, false},
+	}
+	for _, c := range cases {
+		if got := Judged(ModeSmart, "Bash", c.decided, c.matched); got != c.want {
+			t.Fatalf("Judged(smart, %s, %v) = %v, want %v", c.decided, c.matched, got, c.want)
+		}
+	}
+	if Judged(ModeSmart, "Read", Allow, false) {
+		t.Fatal("a read is never sent to the model, as before")
+	}
+	if Judged(ModeAsk, "Bash", Allow, false) {
+		t.Fatal("only smart mode asks a model")
+	}
+}
+
+func TestSmartWithoutAnyRuleStillPassesWhenTheModelSaysSo(t *testing.T) {
+	if got := Apply(ModeSmart, Ask, true); got != Ask {
+		t.Fatalf("smart must leave a rule's ask to the model, got %q", got)
+	}
+	if got := Apply(ModeSmart, Allow, false); got != Allow {
+		t.Fatalf("smart must leave an unmatched call to the model, got %q", got)
+	}
+}
+
+func TestRuleForGeneralizesABashCallToItsTwoFirstWords(t *testing.T) {
+	rule, ok := RuleFor("Bash", "git push origin feat/x")
+	if !ok {
+		t.Fatal("a bash command must get a rule")
+	}
+	if rule.String() != "allow Bash(git push*)" {
+		t.Fatalf("got %q", rule.String())
+	}
+	if !(Policy{rule}).matches(Request{Tool: "Bash", Subject: "git push origin feat/x"}) {
+		t.Fatal("the rule must let its own call through")
+	}
+	if (Policy{rule}).matches(Request{Tool: "Bash", Subject: "git status"}) {
+		t.Fatal("the rule must not let another command through")
+	}
+}
+
+func TestRuleForKeepsOneWordBashAndOtherToolsExact(t *testing.T) {
+	for _, c := range []struct{ tool, subject, want string }{
+		{"Bash", "ls", "allow Bash(ls)"},
+		{"Edit", "/repo/a b.go", "allow Edit(/repo/a b.go)"},
+		{"WebFetch", "https://x.dev/a b", "allow WebFetch(https://x.dev/a b)"},
+	} {
+		rule, ok := RuleFor(c.tool, c.subject)
+		if !ok || rule.String() != c.want {
+			t.Fatalf("RuleFor(%q, %q) = %q, %v; want %q", c.tool, c.subject, rule, ok, c.want)
+		}
+	}
+}
+
+func TestRuleForRefusesWhatWouldWiden(t *testing.T) {
+	for _, c := range []struct{ tool, subject string }{
+		{"Bash", ""},
+		{"", "ls"},
+		{"*", "ls"},
+		{"Bash", "git push*"},
+		{"Bash", "ls?"},
+		{"Bash", "echo\nrm -rf x"},
+		{"Ba(sh", "ls"},
+	} {
+		if rule, ok := RuleFor(c.tool, c.subject); ok {
+			t.Fatalf("RuleFor(%q, %q) = %q, must refuse", c.tool, c.subject, rule)
+		}
+	}
+}
+
+func (p Policy) matches(req Request) bool {
+	decided, matched := p.Decide(req)
+	return matched && decided == Allow
+}

@@ -174,7 +174,7 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 	if options.DefaultGateways == nil {
 		options.DefaultGateways = nonTerminalKinds(gws)
 	}
-	approvals := newApprovalTable()
+	approvals := newApprovalTable().withRules(store)
 	sessions := newSessionTable()
 	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, options, store, sup, instID, options.ContributedCommands, approvals, sessions)
 	if err != nil {

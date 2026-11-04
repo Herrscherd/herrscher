@@ -10,6 +10,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
+	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
@@ -67,6 +68,9 @@ type sessionDriver struct {
 	from          <-chan contracts.Event
 	queue         chan queued
 	renderers     map[string]*gatewayRenderer
+	grantMu       sync.Mutex
+	grants        map[approval.Request]bool
+	verdicts      map[approval.Request]approval.Risk
 
 	hangup         chan struct{}
 	enqueueTimeout time.Duration
@@ -189,10 +193,45 @@ func (d *sessionDriver) enqueue(item queued) bool {
 	}
 }
 
-func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID string) {
-	opts := approvalChoices(approvalID)
+func (d *sessionDriver) remember(req approval.Request) {
+	d.grantMu.Lock()
+	defer d.grantMu.Unlock()
+	if d.grants == nil {
+		d.grants = make(map[approval.Request]bool)
+	}
+	d.grants[req] = true
+}
+
+func (d *sessionDriver) remembered(req approval.Request) bool {
+	d.grantMu.Lock()
+	defer d.grantMu.Unlock()
+	return d.grants[req]
+}
+
+func (d *sessionDriver) verdict(req approval.Request) (approval.Risk, bool) {
+	d.grantMu.Lock()
+	defer d.grantMu.Unlock()
+	risk, ok := d.verdicts[req]
+	return risk, ok
+}
+
+func (d *sessionDriver) setVerdict(req approval.Request, risk approval.Risk) {
+	d.grantMu.Lock()
+	defer d.grantMu.Unlock()
+	if d.verdicts == nil {
+		d.verdicts = make(map[approval.Request]approval.Risk)
+	}
+	d.verdicts[req] = risk
+}
+
+func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID string, req approval.Request, deadline time.Time) {
+	opts := approvalChoices(approvalID, req)
 	for _, gateway := range d.gateways {
 		channel := d.renderChannel(gateway)
+		if gateway.Gateway != nil {
+			conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: channel}
+			announceApprovalDeadline(gateway.Gateway, conv, approvalID, deadline)
+		}
 		if mr, ok := gateway.Reader.(contracts.MenuRouter); ok && channel != "" {
 			if _, err := mr.RouteMenu(ctx, channel, "", prompt, d.name, opts); err == nil {
 				continue
@@ -202,16 +241,26 @@ func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID stri
 			continue
 		}
 		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: channel}
-		logCleanup(contracts.Degrade(gateway.Gateway).Menu(ctx, conv, "", prompt+" (answer with `approve allow "+approvalID+"`)", opts))
+		logCleanup(contracts.Degrade(gateway.Gateway).Menu(ctx, conv, "", prompt+" (answer with `approve allow|deny "+approvalID+"`, see `approve allow --help`)", opts))
 	}
 }
 
-func askApprovalOn(ctx context.Context, sessions *sessionTable, session, prompt, approvalID string) {
+func announceApprovalDeadline(gateway contracts.Gateway, conv contracts.Conversation, approvalID string, deadline time.Time) {
+	event := contracts.Event{T: approvalEventKind, Value: approvalID, Text: deadline.UTC().Format(time.RFC3339)}
+	switch sink := gateway.(type) {
+	case contracts.RoutedEventSink:
+		sink.EmitTo(conv, event)
+	case contracts.EventSink:
+		sink.Emit(event)
+	}
+}
+
+func askApprovalOn(ctx context.Context, sessions *sessionTable, session, prompt, approvalID string, req approval.Request, deadline time.Time) {
 	driver := sessions.lookup(session)
 	if driver == nil {
 		return
 	}
-	driver.askApproval(ctx, prompt, approvalID)
+	driver.askApproval(ctx, prompt, approvalID, req, deadline)
 }
 
 const interruptSendTimeout = 2 * time.Second

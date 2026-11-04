@@ -29,7 +29,7 @@ func TestChromeHeightCountsTheBannerAndRule(t *testing.T) {
 	m.applySize()
 	rows := strings.Count(m.View(), "\n") + 1
 	want := m.vp.Height + m.chromeHeight()
-	if rows > want {
+	if rows != want {
 		t.Fatalf("View renders %d rows, budget is %d", rows, want)
 	}
 }

@@ -84,10 +84,86 @@ func TestCtrlDOpensTheTurnDiffWithFilesAndCounts(t *testing.T) {
 	press(m, "ctrl+d")
 
 	view := screen(m)
-	for _, want := range []string{"Diff du tour", "a.txt", "+2 -1", "b.txt", "+1 -0", "relus 0/2"} {
+	for _, want := range []string{"Diff du tour", "a.txt", "+2 −1", "b.txt", "relus 0/2"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("panel misses %q:\n%s", want, view)
 		}
+	}
+	if strings.Contains(view, "-0") {
+		t.Fatalf("a count without deletions must not show -0:\n%s", view)
+	}
+}
+
+func TestListRowsDropTheStatusLetterAndIndentByThree(t *testing.T) {
+	dir := initRepo(t)
+	writeAndCommitBase(t, dir)
+	m, _ := newDiffModel(t, dir, nil, 120, 30)
+	press(m, "ctrl+d")
+
+	row := m.diffFileRow(1, diffListWidth)
+	if !strings.HasPrefix(row, "   ") || strings.Contains(row, "?") || strings.Contains(row, " M ") {
+		t.Fatalf("unselected row %q must start with three spaces and carry no status letter", row)
+	}
+}
+
+func TestListDropsTheFolderTheFilesShare(t *testing.T) {
+	dir := initRepo(t)
+	if err := os.MkdirAll(filepath.Join(dir, "pkg", "tui"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeRepoFile(t, dir, "pkg/tui/one.go", "package tui\n")
+	writeRepoFile(t, dir, "pkg/tui/two.go", "package tui\n")
+	m, _ := newDiffModel(t, dir, nil, 120, 30)
+	press(m, "ctrl+d")
+
+	row := m.diffFileRow(0, diffListWidth)
+	if strings.Contains(row, "pkg/tui/") || !strings.Contains(row, "one.go") {
+		t.Fatalf("list row %q must show the file under the shared folder dropped", row)
+	}
+	if !strings.Contains(screen(m), "pkg/tui/one.go") {
+		t.Fatalf("the pane keeps the full path:\n%s", screen(m))
+	}
+}
+
+func TestPaneHeaderSaysOldAndNewAtEachWidth(t *testing.T) {
+	for _, width := range []int{60, 80, 120, 200} {
+		t.Run(fmt.Sprintf("%dcols", width), func(t *testing.T) {
+			dir := initRepo(t)
+			writeAndCommitBase(t, dir)
+			m, _ := newDiffModel(t, dir, nil, width, 20)
+			press(m, "ctrl+d")
+
+			if !strings.Contains(screen(m), "ancien · nouveau") {
+				t.Fatalf("the pane header must read ancien · nouveau:\n%s", screen(m))
+			}
+		})
+	}
+}
+
+func TestFooterFoldsWholeHintsAtNarrowWidths(t *testing.T) {
+	hints := []string{"⌃D fermer le panneau", "↑↓ fichier", "espace relu", "i consigne", "c commit", "p PR", "b tour ou branche"}
+	for _, size := range []struct{ width, height int }{{60, 20}, {80, 30}} {
+		t.Run(fmt.Sprintf("%dx%d", size.width, size.height), func(t *testing.T) {
+			dir := initRepo(t)
+			writeAndCommitBase(t, dir)
+			m, _ := newDiffModel(t, dir, nil, size.width, size.height)
+			press(m, "ctrl+d")
+
+			lines := strings.Split(screen(m), "\n")
+			footer := strings.TrimRight(lines[len(lines)-1], " ")
+			if !strings.Contains(footer, "⌃D fermer le panneau") {
+				t.Fatalf("the close hint must stay on the footer: %q", footer)
+			}
+			if strings.HasSuffix(footer, "…") {
+				return
+			}
+			for count := 1; count <= len(hints); count++ {
+				if footer == " "+strings.Join(hints[:count], " · ") {
+					return
+				}
+			}
+			t.Fatalf("footer %q cuts a hint without an ellipsis", footer)
+		})
 	}
 }
 
@@ -401,9 +477,12 @@ func TestDiffFileRowKeepsTheFileNameAndTheStats(t *testing.T) {
 	if lipgloss.Width(row) != diffListWidth {
 		t.Errorf("row is %d cells wide, want %d", lipgloss.Width(row), diffListWidth)
 	}
-	for _, want := range []string{"composer_queue.go", "+38 -0", "…"} {
+	for _, want := range []string{"composer_queue.go", "+38"} {
 		if !strings.Contains(row, want) {
 			t.Errorf("row %q must contain %q", row, want)
 		}
+	}
+	if strings.Contains(row, "-0") {
+		t.Errorf("row %q must not show a deletion count when nothing is deleted", row)
 	}
 }

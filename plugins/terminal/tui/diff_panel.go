@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -486,8 +488,30 @@ func (m *model) diffHeaderLine(width int) string {
 	return truncate(left, width)
 }
 
+const diffKeysContext = "comme /review, en panneau "
+
 func (m *model) diffKeysLine(width int) string {
-	return m.st.dim.Render(truncate(" ⌃D fermer · ↑↓ fichier · espace relu · i consigne · c commit · p PR · b tour ou branche · ⏎ éditeur", width))
+	hints := []string{"⌃D fermer le panneau", "↑↓ fichier", "espace relu", "i consigne", "c commit", "p PR", "b tour ou branche"}
+	full := " " + strings.Join(hints, " · ")
+	if lipgloss.Width(full)+1+lipgloss.Width(diffKeysContext) <= width {
+		return m.st.dim.Render(joinRow(width, full, diffKeysContext))
+	}
+	return m.st.dim.Render(foldKeyHints(hints, width))
+}
+
+func foldKeyHints(hints []string, width int) string {
+	shown := ""
+	for count := 1; count <= len(hints); count++ {
+		candidate := " " + strings.Join(hints[:count], " · ")
+		if lipgloss.Width(candidate) > width {
+			break
+		}
+		shown = candidate
+	}
+	if shown == "" {
+		return ansi.Truncate(" "+hints[0], width, "…")
+	}
+	return shown
 }
 
 func (m *model) diffMiddle(width, height int) []string {
@@ -520,12 +544,20 @@ func (m *model) diffFileColumn(width, height int) []string {
 	panel := &m.diff
 	footer := []string{m.diffSummary(width)}
 	if panel.scope == diffScopeBranch {
-		footer = append(footer, m.st.dim.Render(truncate(fmt.Sprintf(" branche : %d commits de plus sur %s", panel.report.Ahead, panel.report.Base), width)))
+		footer = append(footer, m.st.dim.Render(truncate(fmt.Sprintf("   branche : %d commits de plus sur %s", panel.report.Ahead, panel.report.Base), width)))
 	}
-	footer = append(footer, "", m.st.dim.Render(truncate(" espace  marquer relu", width)), m.st.dim.Render(truncate(" i      consigne sur ce fichier", width)),
-		m.st.dim.Render(truncate(" c      commit du tour", width)), m.st.dim.Render(truncate(" p      commit puis PR", width)), m.st.dim.Render(truncate(" ⏎      ouvrir dans $EDITOR", width)))
+	footer = append(footer, "",
+		m.diffAction("espace", "marquer relu", width),
+		m.diffAction("i", "consigne sur ce fichier", width),
+		m.diffAction("c", "commit du tour", width),
+		m.diffAction("p", "commit puis PR", width),
+		m.diffAction("⏎", "ouvrir dans $EDITOR", width))
 	rows := m.diffFileRows(width, max(1, height-len(footer)))
 	return fitLines(append(rows, footer...), height)
+}
+
+func (m *model) diffAction(key, label string, width int) string {
+	return m.st.dim.Render(truncate(fmt.Sprintf("   %-7s%s", key, label), width))
 }
 
 func (m *model) diffFileRows(width, limit int) []string {
@@ -560,32 +592,63 @@ func (m *model) diffFileRow(index, width int) string {
 			mark = m.st.glyphs.success
 		}
 	}
-	prefix := cursor + " " + mark + " " + file.Status.String() + " "
-	stats := fileStats(file)
+	prefix := " " + cursor + " " + mark + " "
+	stats := m.fileStats(file)
 	pathWidth := width - lipgloss.Width(prefix) - lipgloss.Width(stats) - 1
-	row := truncate(joinRow(width, prefix+truncateLeft(file.Path, pathWidth), stats), width)
+	row := truncate(joinRow(width, prefix+truncateLeft(panel.displayPath(file.Path), pathWidth), stats), width)
 	if selected {
 		return m.st.overlaySel.Render(padTo(row, width))
 	}
 	return padTo(row, width)
 }
 
-func fileStats(file diffFile) string {
+func (m *model) fileStats(file diffFile) string {
 	if file.Binary {
 		return "binary"
 	}
-	return fmt.Sprintf("+%d -%d", file.Added, file.Deleted)
+	return m.signedStats(file.Added, file.Deleted)
+}
+
+func (m *model) signedStats(added, deleted int) string {
+	if deleted == 0 {
+		return fmt.Sprintf("+%d", added)
+	}
+	return fmt.Sprintf("+%d %s%d", added, m.st.glyphs.minus, deleted)
+}
+
+func (panel *diffPanel) displayPath(filePath string) string {
+	return strings.TrimPrefix(filePath, commonDirPrefix(panel.report.Files))
+}
+
+func commonDirPrefix(files []diffFile) string {
+	if len(files) == 0 {
+		return ""
+	}
+	dir := path.Dir(files[0].Path)
+	for _, file := range files[1:] {
+		for dir != "." && !strings.HasPrefix(file.Path, dir+"/") {
+			dir = path.Dir(dir)
+		}
+	}
+	if dir == "." {
+		return ""
+	}
+	return dir + "/"
 }
 
 func (m *model) diffSummary(width int) string {
 	panel := &m.diff
-	totalAdded, totalDeleted := 0, 0
-	for _, file := range panel.report.Files {
-		totalAdded += file.Added
-		totalDeleted += file.Deleted
-	}
-	text := fmt.Sprintf(" %d fichiers +%d -%d · relus %d/%d", len(panel.report.Files), totalAdded, totalDeleted, panel.reviewedCount(), len(panel.report.Files))
+	text := fmt.Sprintf("   %d fichiers %s · relus %d/%d", len(panel.report.Files), m.totalStats(panel.report.Files), panel.reviewedCount(), len(panel.report.Files))
 	return m.st.dim.Render(truncate(text, width))
+}
+
+func (m *model) totalStats(files []diffFile) string {
+	added, deleted := 0, 0
+	for _, file := range files {
+		added += file.Added
+		deleted += file.Deleted
+	}
+	return m.signedStats(added, deleted)
 }
 
 func (m *model) diffPane(width, height int) []string {
@@ -598,8 +661,7 @@ func (m *model) diffPane(width, height int) []string {
 		return fitLines([]string{m.st.dim.Render(truncate(" rien à afficher", width))}, height)
 	}
 	twoNums := width >= diffTwoNumsWidth
-	header := m.st.text.Render(truncate(" "+file.Path+"  "+fileStats(file), width))
-	lines := []string{header}
+	lines := []string{m.diffPaneHeader(file, width)}
 	switch {
 	case file.Binary:
 		lines = append(lines, m.st.dim.Render(truncate(" fichier binaire : pas de diff texte", width)))
@@ -613,6 +675,17 @@ func (m *model) diffPane(width, height int) []string {
 		}
 	}
 	return fitLines(lines, height)
+}
+
+func (m *model) diffPaneHeader(file diffFile, width int) string {
+	right := m.st.text.Render(m.fileStats(file)) + m.st.dim.Render("   ancien · nouveau ")
+	tag := ""
+	if file.Status == changeAdded {
+		tag = "  nouveau"
+	}
+	pathWidth := width - lipgloss.Width(right) - lipgloss.Width(tag) - 1
+	left := m.st.text.Render(truncateLeft(" "+file.Path, pathWidth)) + m.st.violet.Render(tag)
+	return truncate(joinRow(width, left, right), width)
 }
 
 func (m *model) diffRowLine(row gitRow, width int, twoNums bool) string {
@@ -688,7 +761,7 @@ func (m *model) diffBelow(width int) []string {
 func (m *model) diffCommitBox(width int) []string {
 	panel := &m.diff
 	files := len(panel.report.Files)
-	title := m.st.strong.Render("Commit") + m.st.dim.Render(fmt.Sprintf(" · %s · %d fichiers %s", panel.report.Branch, files, fileTotals(panel.report.Files)))
+	title := m.st.strong.Render("Commit") + m.st.dim.Render(fmt.Sprintf(" · %s · %d fichiers %s", panel.report.Branch, files, m.totalStats(panel.report.Files)))
 	content := []string{title, m.st.dim.Render("auteur " + panel.report.Author)}
 	for index, line := range strings.Split(panel.message, "\n") {
 		if index == 0 {
@@ -704,19 +777,10 @@ func (m *model) diffCommitBox(width int) []string {
 	return boxLines(content, width)
 }
 
-func fileTotals(files []diffFile) string {
-	added, deleted := 0, 0
-	for _, file := range files {
-		added += file.Added
-		deleted += file.Deleted
-	}
-	return fmt.Sprintf("+%d -%d", added, deleted)
-}
-
 func (m *model) diffNoteBox(width int) []string {
 	panel := &m.diff
 	file, _ := panel.selected()
-	title := m.st.strong.Render(m.st.glyphs.note+" CONSIGNE") + m.st.dim.Render(" · "+file.Path)
+	title := m.st.strong.Render(m.st.glyphs.note+" CONSIGNE") + m.st.dim.Render(" · "+panel.displayPath(file.Path))
 	field := m.st.text.Render(panel.field) + m.st.accent.Render(m.st.glyphs.caret)
 	if panel.field == "" {
 		field = m.st.dim.Render("que doit faire l’agent de ce fichier ?") + m.st.accent.Render(m.st.glyphs.caret)

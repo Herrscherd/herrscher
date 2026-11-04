@@ -188,13 +188,27 @@ func TestZeroPercentDisablesAutomaticCompaction(t *testing.T) {
 }
 
 func TestBackendWithoutCompactorIsRefusedBeforeAnySend(t *testing.T) {
-	f := newCompactFixture(t, "codex", compactPolicy(92))
+	f := newCompactFixture(t, "cursor", compactPolicy(92))
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventCompactFailed)
 	if !strings.Contains(failed.Text, "does not implement Compactor") {
 		t.Fatalf("compaction_failed = %+v, want the refusal", failed)
 	}
 	expectNoFrame(t, f)
+}
+
+func TestCodexWithCompactorIsCompacted(t *testing.T) {
+	policy := compactPolicy(92)
+	policy.backends["codex"] = true
+	f := newCompactFixture(t, "codex", policy)
+	f.driver.requestCompaction("", contracts.Conversation{})
+	if got := nextFrame(t, f); got.T != compactwire.EventRequest {
+		t.Fatalf("frame = %+v, want a compaction request", got)
+	}
+	f.from <- measuredAnswer(30_000)
+	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 30_000 {
+		t.Fatalf("compaction_done = %+v, want 30000 measured", done)
+	}
 }
 
 func TestNoPortAnswerFailsTheCompaction(t *testing.T) {
@@ -346,5 +360,33 @@ func TestInvalidContextLimitIsWarnedAboutOnce(t *testing.T) {
 	warnInvalidContextLimit(warn, "12345")
 	if warnings != 1 {
 		t.Fatalf("empty or valid HERRSCHER_CONTEXT_LIMIT wrote warnings: %d total", warnings)
+	}
+}
+
+func TestCompactionPolicyTakesCodexFromItsManifest(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "codex", Category: contracts.CategoryBackend, Capabilities: contracts.Capabilities{Compactor: true}},
+		Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
+			return seedBackend{}, nil
+		},
+	})
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "cursor", Category: contracts.CategoryBackend},
+		Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
+			return seedBackend{}, nil
+		},
+	})
+	policy, err := newCompactionPolicy(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("newCompactionPolicy: %v", err)
+	}
+	if !policy.supports("codex") {
+		t.Fatal("codex declares Capabilities.Compactor in its manifest but the policy refuses it")
+	}
+	if policy.supports("cursor") {
+		t.Fatal("cursor declares no Compactor but the policy accepts it")
 	}
 }

@@ -11,17 +11,14 @@ import (
 
 const (
 	standard = 200_000
-	large    = 400_000
 	fallback = 200_000
 	envLimit = "HERRSCHER_CONTEXT_LIMIT"
 )
 
 func vendorLimit(vendor string) (int, bool) {
 	switch strings.ToLower(vendor) {
-	case "claude", "cursor":
+	case "claude", "codex", "cursor":
 		return standard, true
-	case "codex":
-		return large, true
 	}
 	return 0, false
 }

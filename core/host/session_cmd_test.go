@@ -49,7 +49,7 @@ func TestCompactQueuesAManualCompactionWithItsInstruction(t *testing.T) {
 }
 
 func TestCompactRefusesBackendWithoutCompactor(t *testing.T) {
-	store, sessions, queue := compactCmdFixture(t, backendCodex)
+	store, sessions, queue := compactCmdFixture(t, "cursor")
 	input := contracts.Input{Args: map[string]string{paramName: "api"}}
 
 	_, err := compactSession(context.Background(), store, sessions, input)
@@ -120,5 +120,18 @@ func TestCompactRequestsForOneSessionAreMerged(t *testing.T) {
 	}
 	if n := len(queue); n != 1 {
 		t.Fatalf("a request after the pending one was taken queued %d items, want 1", n)
+	}
+}
+
+func TestCompactAcceptsCodexWhenItDeclaresCompactor(t *testing.T) {
+	store, sessions, queue := compactCmdFixture(t, backendCodex)
+	sessions.lookup("api").compaction.backends[backendCodex] = true
+	input := contracts.Input{Args: map[string]string{paramName: "api"}}
+
+	if _, err := compactSession(context.Background(), store, sessions, input); err != nil {
+		t.Fatalf("compactSession: %v", err)
+	}
+	if got := <-queue; got.ev.T != eventCompactNow {
+		t.Fatalf("queued event = %q, want %q", got.ev.T, eventCompactNow)
 	}
 }

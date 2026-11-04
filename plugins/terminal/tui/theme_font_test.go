@@ -142,11 +142,26 @@ func TestInstallBlockCopiesAConfigEachTerminalReads(t *testing.T) {
 }
 
 func TestWezTermConfigIsPlacedInsideTheConfigBuilder(t *testing.T) {
-	setup := terminalSetupFor(terminalWezTerm)
-	if !strings.Contains(setup.placement, "wezterm.config_builder()") {
-		t.Fatalf("the WezTerm snippet must say where it goes, got %q", setup.placement)
+	m := themeSized(t, 60, 40)
+	m.terminal = terminalWezTerm
+	block := strings.Join(m.obelInstallLines(60, 40), "\n")
+	for _, want := range []string{
+		"local wezterm = require 'wezterm'",
+		"local config = wezterm.config_builder()",
+		"config.font = wezterm.font 'Obel Mono'",
+		"config.harfbuzz_features = { 'ss01' }",
+		"return config",
+	} {
+		if !strings.Contains(ansi.Strip(block), want) {
+			t.Errorf("the WezTerm block must show %q in full at 60 columns:\n%s", want, ansi.Strip(block))
+		}
 	}
-	if setup.masked {
+	for _, line := range strings.Split(ansi.Strip(block), "\n") {
+		if w := lipgloss.Width(line); w > 60 {
+			t.Errorf("line of %d columns overflows 60: %q", w, line)
+		}
+	}
+	if setup := terminalSetupFor(terminalWezTerm); setup.masked {
 		t.Fatal("WezTerm uses the features route, not the masked family")
 	}
 }

@@ -139,11 +139,12 @@ func detectTerminal(lookup func(string) (string, bool)) terminalKind {
 }
 
 type terminalSetup struct {
-	name      string
-	file      string
-	placement string
-	config    []string
-	masked    bool
+	name   string
+	file   string
+	before []string
+	config []string
+	after  []string
+	masked bool
 }
 
 func terminalSetupFor(kind terminalKind) terminalSetup {
@@ -171,7 +172,8 @@ func terminalSetupFor(kind terminalKind) terminalSetup {
 	case terminalWezTerm:
 		return terminalSetup{
 			name: "WezTerm", file: "~/.wezterm.lua",
-			placement: "à placer dans config = wezterm.config_builder()",
+			before: []string{"local wezterm = require 'wezterm'", "local config = wezterm.config_builder()"},
+			after:  []string{"return config"},
 			config: []string{
 				"config.font = wezterm.font '" + obelFamily + "'",
 				"config.harfbuzz_features = { '" + obelMaskFeature + "' }",
@@ -210,11 +212,14 @@ func (m *model) obelInstallLines(width, rows int) []string {
 		"",
 		terminalHead,
 	}
-	if setup.placement != "" {
-		lines = append(lines, "   "+styles.dim.Render(setup.placement))
+	for _, line := range setup.before {
+		lines = append(lines, "   "+styles.dim.Render(line))
 	}
 	for _, line := range setup.config {
 		lines = append(lines, "   "+styles.text.Render(line))
+	}
+	for _, line := range setup.after {
+		lines = append(lines, "   "+styles.dim.Render(line))
 	}
 	lines = append(lines, "   "+styles.dim.Render(obelMaskNote))
 	if setup.masked {

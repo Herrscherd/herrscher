@@ -5,25 +5,14 @@ package tui
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"syscall"
 )
 
-const (
-	draftLocksSupported = true
-	draftLockMode       = 0o600
-)
+const draftLocksSupported = true
 
-func openDraftLock(dir string, flag int, perm os.FileMode) (*os.File, error) {
-	root, err := os.OpenRoot(dir)
-	if err != nil {
-		return nil, err
-	}
-	lock, openErr := root.OpenFile(draftLockName, flag, perm)
-	return lock, errors.Join(openErr, root.Close())
-}
-
-func lockRunDir(dir string) (*os.File, error) {
-	lock, err := openDraftLock(dir, os.O_CREATE|os.O_RDWR, draftLockMode)
+func acquireDraftLock(root *os.Root) (*os.File, error) {
+	lock, err := root.OpenFile(draftLockName, os.O_CREATE|os.O_RDWR, draftLockMode)
 	if err != nil {
 		return nil, err
 	}
@@ -33,8 +22,8 @@ func lockRunDir(dir string) (*os.File, error) {
 	return lock, nil
 }
 
-func runDirHeld(dir string) bool {
-	lock, err := openDraftLock(dir, os.O_RDWR, 0)
+func runDirHeld(root *os.Root, name string) bool {
+	lock, err := root.OpenFile(filepath.Join(name, draftLockName), os.O_RDWR, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		return false
 	}

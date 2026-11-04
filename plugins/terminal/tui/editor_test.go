@@ -108,28 +108,50 @@ func makeDraftRun(t *testing.T, root, name string, modified time.Time) string {
 	return dir
 }
 
+func holdDraftLock(t *testing.T, dir string) *os.File {
+	t.Helper()
+	runRoot, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, lockErr := acquireDraftLock(runRoot)
+	if err := runRoot.Close(); err != nil {
+		t.Error(err)
+	}
+	if lockErr != nil {
+		t.Fatal(lockErr)
+	}
+	t.Cleanup(func() {
+		if lock == nil {
+			return
+		}
+		if err := lock.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	return lock
+}
+
+func ageLock(t *testing.T, dir string, modified time.Time) {
+	t.Helper()
+	lock := filepath.Join(dir, draftLockName)
+	if err := os.WriteFile(lock, nil, draftLockMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(lock, modified, modified); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDraftRunsAreSweptOnlyWhenUnlockedAndOld(t *testing.T) {
 	if !draftLocksSupported {
 		t.Skip("this platform has no draft locks: the sweep only uses the age")
 	}
 	root := t.TempDir()
-	old := time.Now().Add(-8 * 24 * time.Hour)
+	old := time.Now().Add(-48 * time.Hour)
 	lockedOld := makeDraftRun(t, root, "locked", old)
-	held, err := lockRunDir(lockedOld)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := held.Close(); err != nil {
-			t.Error(err)
-		}
-	})
+	holdDraftLock(t, lockedOld)
 	freeOld := makeDraftRun(t, root, "free", old)
-	if free, err := lockRunDir(freeOld); err != nil {
-		t.Fatal(err)
-	} else if err := free.Close(); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.Chtimes(freeOld, old, old); err != nil {
 		t.Fatal(err)
 	}
@@ -151,6 +173,80 @@ func TestDraftRunsAreSweptOnlyWhenUnlockedAndOld(t *testing.T) {
 		if _, err := os.Stat(kept); err != nil {
 			t.Fatalf("%s must survive the sweep: %v", filepath.Base(kept), err)
 		}
+	}
+}
+
+func TestRunWithAFreshLockIsNeverSwept(t *testing.T) {
+	root := t.TempDir()
+	ancient := time.Now().Add(-8 * 24 * time.Hour)
+	lapsed := time.Now().Add(-48 * time.Hour)
+	live := makeDraftRun(t, root, "live", ancient)
+	ageLock(t, live, time.Now())
+	stale := makeDraftRun(t, root, "stale", lapsed)
+	ageLock(t, stale, lapsed)
+	if err := os.Chtimes(live, ancient, ancient); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(stale, lapsed, lapsed); err != nil {
+		t.Fatal(err)
+	}
+	if err := sweepDrafts(root); err != nil {
+		t.Fatalf("sweepDrafts: %v", err)
+	}
+	if _, err := os.Stat(live); err != nil {
+		t.Fatalf("a run whose lock was refreshed recently must survive: %v", err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatal("a run whose lock is older than the retention must be swept")
+	}
+}
+
+func TestHeartbeatKeepsALiveRunsLockFresh(t *testing.T) {
+	run, err := startDraftRun(filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := run.release(); err != nil {
+			t.Error(err)
+		}
+	})
+	lock := filepath.Join(run.dir, draftLockName)
+	old := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(lock, old, old); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		info, err := os.Stat(lock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if time.Since(info.ModTime()) < time.Hour {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the live run must refresh its lock on its own")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestSweepNeverFollowsALinkOutOfTheRoot(t *testing.T) {
+	outside := t.TempDir()
+	keep := filepath.Join(outside, "keep.md")
+	if err := os.WriteFile(keep, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, draftRunPrefix+"link")); err != nil {
+		t.Skip("symlinks unavailable: " + err.Error())
+	}
+	if err := sweepDrafts(root); err != nil {
+		t.Fatalf("sweepDrafts: %v", err)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("a link out of the drafts root must never be followed: %v", err)
 	}
 }
 
@@ -177,20 +273,32 @@ func TestOpenDraftRunCreatesALockedPrivateRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := run.lock.Close(); err != nil {
-			t.Error(err)
+		if closeErr := run.release(); closeErr != nil {
+			t.Error(closeErr)
 		}
 	})
 	if !strings.HasPrefix(filepath.Base(run.dir), draftRunPrefix) {
 		t.Fatalf("run dir %q must carry the run prefix", run.dir)
 	}
+	if info, statErr := os.Stat(run.dir); statErr != nil || info.Mode().Perm() != draftDirMode {
+		t.Fatalf("run dir must be 0700, got %v (%v)", info, statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(run.dir, draftLockName)); statErr != nil {
+		t.Fatalf("the run must own its lock file: %v", statErr)
+	}
 	if !draftLocksSupported {
 		return
 	}
-	if !runDirHeld(run.dir) {
-		t.Fatal("the run of a live process must hold its lock")
+	parent, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if info, err := os.Stat(run.dir); err != nil || info.Mode().Perm() != draftDirMode {
-		t.Fatalf("run dir must be 0700, got %v (%v)", info, err)
+	defer func() {
+		if err := parent.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	if !runDirHeld(parent, filepath.Base(run.dir)) {
+		t.Fatal("the run of a live process must hold its lock")
 	}
 }

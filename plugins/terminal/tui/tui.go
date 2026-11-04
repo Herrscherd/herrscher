@@ -126,6 +126,7 @@ type tab struct {
 	todos              []contracts.TodoItem
 	agents             []liveAgent
 	mode               string
+	modeAsked          bool
 }
 
 type liveAgent struct {
@@ -1245,9 +1246,15 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case modeResultMsg:
 		m.handleModeResult(msg)
 		return nil, true
+	case modeLoadedMsg:
+		m.handleModeLoaded(msg)
+		return nil, true
+	case tea.MouseMsg:
+		cmd, handled := m.handleModeClick(msg)
+		return cmd, handled
 	case tickMsg:
 		m.syncTabs()
-		return tickCmd(), true
+		return tea.Batch(tickCmd(), m.loadModesCmd()), true
 	case spinMsg:
 		return m.handleSpin(), true
 	}

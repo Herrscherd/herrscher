@@ -17,6 +17,7 @@ const (
 
 	modeShortBelow  = 80
 	modeStripIndent = "     "
+	modeStripSep    = " → "
 	planApproved    = "Plan approved. Implement it."
 	planKeepNotice  = "Le plan reste ouvert. Dis ce qui change : l'agent le réécrit sans rien toucher."
 )
@@ -39,7 +40,7 @@ func modeSpec(id string) sessionMode {
 	case modePlan:
 		return sessionMode{host: "plan", label: "Plan", short: "Plan", say: "lecture seule : l'agent propose un plan, tu le valides avant toute écriture"}
 	case modeAuto:
-		return sessionMode{host: "bypass", label: "Auto", short: "Auto", say: "rien ne demande : éditions et commandes passent sans approbation"}
+		return sessionMode{host: "auto", label: "Auto", short: "Auto", say: "rien ne demande : éditions et commandes passent, sauf ce qu'une règle de refus bloque"}
 	}
 	return sessionMode{host: "ask", label: "Manuel", short: "Man", say: "chaque édition et chaque commande demande une approbation"}
 }
@@ -54,6 +55,20 @@ func modeStyle(id string, styles uiStyles) lipgloss.Style {
 		return styles.modeAuto
 	}
 	return styles.modeManual
+}
+
+func modeIDFromHost(host string) (string, bool) {
+	switch host {
+	case "ask", "strict":
+		return modeManual, true
+	case "accept-edits":
+		return modeEdits, true
+	case "plan":
+		return modePlan, true
+	case "auto", "bypass":
+		return modeAuto, true
+	}
+	return "", false
 }
 
 func modeText(id string, width int) string {
@@ -94,6 +109,11 @@ func (t *tab) modeID() string {
 	return t.mode
 }
 
+type modeLoadedMsg struct {
+	channel string
+	host    string
+}
+
 type modeResultMsg struct {
 	channel  string
 	previous string
@@ -124,6 +144,66 @@ func (m *model) switchModeCmd(channel string, tb *tab, mode, submit string) tea.
 		_, err := backend.Dispatch(args)
 		return modeResultMsg{channel: channel, previous: previous, mode: mode, submit: submit, err: err}
 	}
+}
+
+func (m *model) loadModesCmd() tea.Cmd {
+	var cmds []tea.Cmd
+	for _, channel := range m.order {
+		tb := m.tabs[channel]
+		if tb == nil || tb.modeAsked {
+			continue
+		}
+		name := m.sessionName(channel)
+		if name == "" {
+			continue
+		}
+		tb.modeAsked = true
+		cmds = append(cmds, m.getModeCmd(channel, name))
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *model) getModeCmd(channel, name string) tea.Cmd {
+	backend := m.tm
+	args := []string{sessionVerb, "get-mode", "--name", name}
+	return func() tea.Msg {
+		out, err := backend.Dispatch(args)
+		if err != nil {
+			return nil
+		}
+		return modeLoadedMsg{channel: channel, host: strings.TrimSpace(out)}
+	}
+}
+
+func (m *model) handleModeLoaded(msg modeLoadedMsg) {
+	tb := m.tabs[msg.channel]
+	if tb == nil || tb.mode != "" {
+		return
+	}
+	if id, ok := modeIDFromHost(msg.host); ok {
+		tb.mode = id
+	}
+}
+
+func (m *model) handleModeClick(msg tea.MouseMsg) (tea.Cmd, bool) {
+	tb := m.tabs[m.active]
+	if tb == nil || msg.Action != tea.MouseActionPress || msg.Button != tea.MouseButtonLeft {
+		return nil, false
+	}
+	strip := m.buildFrame()
+	if !strip.stripDown || msg.Y != strip.stripRow {
+		return nil, false
+	}
+	for _, hit := range m.modeStripHits(tb, m.innerWidth()) {
+		if msg.X < hit.start || msg.X >= hit.end {
+			continue
+		}
+		if hit.id == tb.modeID() {
+			return nil, true
+		}
+		return m.switchModeCmd(m.active, tb, hit.id, ""), true
+	}
+	return nil, false
 }
 
 func (m *model) handleModeResult(msg modeResultMsg) {
@@ -178,12 +258,33 @@ func (m *model) modeChip(tb *tab, width int) string {
 	return chip + m.st.dim.Render(" "+glyphShift)
 }
 
+type modeHit struct {
+	id    string
+	start int
+	end   int
+}
+
+func (m *model) modeStripHits(tb *tab, width int) []modeHit {
+	current := tb.modeID()
+	column := lipgloss.Width(" " + glyphShift + " ")
+	var hits []modeHit
+	for index, id := range modeOrder() {
+		if index > 0 {
+			column += lipgloss.Width(modeStripSep)
+		}
+		end := column + lipgloss.Width(modeSegmentLabel(id, current, width))
+		hits = append(hits, modeHit{id: id, start: column, end: end})
+		column = end
+	}
+	return hits
+}
+
 func (m *model) modeStripView(tb *tab, width int) []string {
 	current := tb.modeID()
 	var segments []string
 	for index, id := range modeOrder() {
 		if index > 0 {
-			segments = append(segments, m.st.dim.Render(" → "))
+			segments = append(segments, m.st.dim.Render(modeStripSep))
 		}
 		segments = append(segments, m.modeSegment(id, current, width))
 	}
@@ -196,15 +297,21 @@ func (m *model) modeStripView(tb *tab, width int) []string {
 	return []string{ansi.Truncate(line, width, ""), sayStyle.Render(say)}
 }
 
-func (m *model) modeSegment(id, current string, width int) string {
-	text := modeText(id, width)
+func modeSegmentLabel(id, current string, width int) string {
 	if id == current {
-		return modeStyle(id, m.st).Bold(true).Reverse(true).Render(" " + text + " ")
+		return " " + modeText(id, width) + " "
+	}
+	return modeText(id, width)
+}
+
+func (m *model) modeSegment(id, current string, width int) string {
+	if id == current {
+		return modeStyle(id, m.st).Bold(true).Reverse(true).Render(modeSegmentLabel(id, current, width))
 	}
 	if id == modeAuto {
-		return m.st.modeAuto.Render(text)
+		return m.st.modeAuto.Render(modeSegmentLabel(id, current, width))
 	}
-	return m.st.dim.Render(text)
+	return m.st.dim.Render(modeSegmentLabel(id, current, width))
 }
 
 type planMenu struct {

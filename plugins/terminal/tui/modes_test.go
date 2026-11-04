@@ -61,7 +61,7 @@ func TestShiftTabCyclesFourModesAndTellsTheHost(t *testing.T) {
 	want := []struct{ mode, host string }{
 		{modeEdits, "accept-edits"},
 		{modePlan, "plan"},
-		{modeAuto, "bypass"},
+		{modeAuto, "auto"},
 		{modeManual, "ask"},
 	}
 	for _, step := range want {
@@ -231,5 +231,75 @@ func TestPlanMenuFitsNarrowWidths(t *testing.T) {
 				t.Fatalf("width %d: plan menu line is %d columns: %q", width, w, ansi.Strip(line))
 			}
 		}
+	}
+}
+
+type replyBackend struct {
+	fakeBackend
+	reply string
+}
+
+func (r *replyBackend) Dispatch(args []string) (string, error) {
+	r.dispatched = append(r.dispatched, args)
+	return r.reply, nil
+}
+
+func TestTabStartsFromTheSessionStoredMode(t *testing.T) {
+	cases := map[string]string{"plan": modePlan, "accept-edits": modeEdits, "bypass": modeAuto, "strict": modeManual}
+	for host, want := range cases {
+		f := &replyBackend{fakeBackend: fakeBackend{sessions: namedSession()}, reply: host}
+		m := newModel(f)
+		m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+		m.ensureTab("a")
+		m.active = "a"
+
+		msg := runCmd(m.getModeCmd("a", "s"))
+		m.Update(msg)
+		if got := m.tabs["a"].modeID(); got != want {
+			t.Fatalf("stored %q: tab mode %q, want %q", host, got, want)
+		}
+	}
+}
+
+func TestUnknownStoredReplyLeavesTheTabAlone(t *testing.T) {
+	f := &fakeBackend{sessions: namedSession()}
+	m := modeSession(f)
+	m.Update(modeLoadedMsg{channel: "a", host: "ok"})
+	if m.tabs["a"].mode != "" {
+		t.Fatalf("an unrecognised reply must not set the mode, got %q", m.tabs["a"].mode)
+	}
+}
+
+func TestClickOnAStripSegmentSwitchesMode(t *testing.T) {
+	f := &fakeBackend{sessions: namedSession()}
+	m := modeSession(f)
+	tb := m.tabs["a"]
+	hits := m.modeStripHits(tb, m.innerWidth())
+	strip := m.buildFrame()
+	if !strip.stripDown {
+		t.Fatal("the mode strip must be part of the frame")
+	}
+
+	_, cmd := m.Update(tea.MouseMsg{X: hits[2].start, Y: strip.stripRow, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	m.Update(runCmd(cmd))
+	if got := tb.modeID(); got != modePlan {
+		t.Fatalf("clicking the Plan segment left the mode at %q", got)
+	}
+	if got := lastDispatch(t, f); got[len(got)-1] != "plan" {
+		t.Fatalf("clicking Plan must send plan to the host: %v", got)
+	}
+}
+
+func TestClickOutsideTheStripSegmentsChangesNothing(t *testing.T) {
+	f := &fakeBackend{sessions: namedSession()}
+	m := modeSession(f)
+	strip := m.buildFrame()
+
+	_, cmd := m.Update(tea.MouseMsg{X: 0, Y: strip.stripRow, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	m.Update(runCmd(cmd))
+	_, cmd = m.Update(tea.MouseMsg{X: 5, Y: strip.stripRow - 1, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	m.Update(runCmd(cmd))
+	if len(f.dispatched) != 0 {
+		t.Fatalf("clicks outside the segments must not reach the host: %v", f.dispatched)
 	}
 }

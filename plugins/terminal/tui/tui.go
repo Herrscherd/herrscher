@@ -83,6 +83,8 @@ const (
 	sessionVerb = "session"
 	verbRename  = "rename"
 	stateDone   = "done"
+	stateFailed = "failed"
+	stateError  = "error"
 )
 
 func hostError(text string) (string, bool) {
@@ -128,25 +130,29 @@ type tab struct {
 	nextEntryID        uint64
 	todos              []contracts.TodoItem
 	agents             []liveAgent
+	agentsDone         []liveAgent
+	background         []backgroundTask
+	unreadCount        int
+	finished           bool
+	files              []string
 }
 
 type liveAgent struct {
 	contracts.Subagent
 
 	since time.Time
+	ended time.Time
 }
 
 func (tb *tab) dropAgent(agentID string) {
-	for index, a := range tb.agents {
-		if a.ID == agentID {
-			tb.agents = append(tb.agents[:index], tb.agents[index+1:]...)
-			return
-		}
+	if index := tb.agentIndex(agentID); index >= 0 {
+		tb.agents = append(tb.agents[:index], tb.agents[index+1:]...)
 	}
 }
 
 func (tb *tab) clearPanels() {
 	tb.agents = nil
+	tb.agentsDone = nil
 	for _, t := range tb.todos {
 		if t.State != stateDone {
 			return
@@ -314,6 +320,9 @@ type model struct {
 
 	foldCache overlayCache
 	markCache overlayCache
+
+	sidebar  sidebarMode
+	gitCache map[string]gitCacheEntry
 }
 
 type overlayCache struct {
@@ -380,7 +389,7 @@ func (m *model) applySize() {
 	if !m.ready {
 		return
 	}
-	m.vp.Width = m.innerWidth()
+	m.vp.Width = m.transcriptWidth()
 	m.vp.Height = m.height - m.chromeHeight()
 }
 
@@ -479,23 +488,33 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 	tab := m.ensureTab(routed.Conv.ID)
 	before := len(tab.entries)
 	m.renderInto(tab, routed.Event)
-	if len(tab.entries) != before && tab.channel != m.active {
-		tab.unread = true
+	if tab.channel != m.active {
+		if len(tab.entries) != before {
+			tab.unread = true
+			tab.unreadCount++
+		}
+		if routed.Event.T == "reply" && routed.Event.Done {
+			tab.finished = true
+		}
 	}
+	var gitCmd tea.Cmd
 	if tab.channel == m.active {
 		m.syncViewport()
+		if routed.Event.T == "status" {
+			gitCmd = m.gitAfterTool(routed.Event.Text)
+		}
 	}
 	if routed.Event.T != "reply" || len(tab.entries) == 0 {
-		return nil
+		return gitCmd
 	}
 	last := len(tab.entries) - 1
 	for last >= 0 && tab.entries[last].role != roleAgent {
 		last--
 	}
 	if last < 0 {
-		return nil
+		return gitCmd
 	}
-	return m.fetchEntryImages(tab, last)
+	return tea.Batch(gitCmd, m.fetchEntryImages(tab, last))
 }
 
 func (m *model) syncTabs() {
@@ -896,6 +915,8 @@ func (m *model) activate(channel string) {
 	}
 	m.active = channel
 	m.tabs[channel].unread = false
+	m.tabs[channel].unreadCount = 0
+	m.tabs[channel].finished = false
 	m.syncViewport()
 	m.vp.GotoBottom()
 }
@@ -919,6 +940,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	case "status":
 		target.busy = true
 		target.endStream()
+		target.noteToolFile(event.Text)
 		text, _ := hostError(event.Text)
 		target.appendEntry(entry{role: statusRole(event.Text), text: text})
 	case "reply":
@@ -994,11 +1016,31 @@ func (tb *tab) applySubagent(sub *contracts.Subagent) {
 	if sub == nil {
 		return
 	}
-	if sub.State == stateDone {
-		tb.dropAgent(sub.ID)
+	now := time.Now()
+	index := tb.agentIndex(sub.ID)
+	if sub.State == stateDone || sub.State == stateFailed || sub.State == stateError {
+		since := now
+		if index >= 0 {
+			since = tb.agents[index].since
+			tb.dropAgent(sub.ID)
+		}
+		tb.agentsDone = append(tb.agentsDone, liveAgent{Subagent: *sub, since: since, ended: now})
 		return
 	}
-	tb.agents = append(tb.agents, liveAgent{Subagent: *sub, since: time.Now()})
+	if index >= 0 {
+		tb.agents[index].Subagent = *sub
+		return
+	}
+	tb.agents = append(tb.agents, liveAgent{Subagent: *sub, since: now})
+}
+
+func (tb *tab) agentIndex(agentID string) int {
+	for index, a := range tb.agents {
+		if a.ID == agentID {
+			return index
+		}
+	}
+	return -1
 }
 
 func (m *model) syncViewport() {
@@ -1250,7 +1292,9 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case tickMsg:
 		m.syncTabs()
-		return tickCmd(), true
+		return tea.Batch(tickCmd(), m.gitTick()), true
+	case gitRefreshMsg:
+		m.storeGit(msg)
 	case themeWatchMsg:
 		m.watchThemes()
 		return themeWatchTick(), true
@@ -1548,6 +1592,9 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.switchTab(1)
 	case tea.KeyShiftTab:
 		m.switchTab(-1)
+	case tea.KeyCtrlB:
+		m.toggleSidebar()
+		return nil, true
 	case tea.KeyEnter:
 		if msg.Alt {
 			return nil, false
@@ -1559,7 +1606,7 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case tea.KeyCtrlS:
 		m.openSearch()
 	case tea.KeyCtrlT:
-		m.toggleTurnFold()
+		m.openSwitch()
 	case tea.KeyCtrlF:
 		m.toggleFold()
 	case tea.KeyCtrlY:
@@ -1650,12 +1697,16 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 }
 
 func (m *model) helpView() string {
-	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers" + leaderHelp())
+	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t changer d'onglet · ctrl+b colonne latérale · alt+↑↓ tour suivant · / commandes · @ fichiers" + leaderHelp())
 }
 
 func (m *model) View() string {
 	if !m.ready {
 		return "démarrage…"
 	}
-	return m.st.finish(m.buildFrame().render(m.vp.View()))
+	body := m.vp.View()
+	if side := m.sidebarPane(m.vp.Height); side != nil {
+		body = m.joinSidebar(body, side)
+	}
+	return m.st.finish(m.buildFrame().render(body))
 }

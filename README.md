@@ -389,9 +389,23 @@ same neutral port. The UI is the one that ships in the binary.
 
 ### The shape of the window
 
-A thin rail across the top names the terminal, its open sessions and the vendor
-answering in the active one. Under it the transcript runs the full width. The
-composer sits in a rounded box at the foot, and the status line is glued right
+A rail across the top opens with the name `herrscher`, then lists the open sessions: the active
+one is marked `▸` and underlined, a working one shows a spinner, one waiting for
+approval shows `!`, a finished one `✓`, and an unread one `●` with its count of new
+entries. The hints `^P agents · ^T onglet` sit at the right, and a rule runs under the
+row. When the sessions do not fit, names shorten first, then the rest folds into a
+`+N` count, and the active session always stays visible.
+
+At 110 columns and wider a side column runs down the right of the transcript,
+separated by a vertical rule. It shows the session (project, branch, worktree,
+gateways), the todos with their `n/m` count, the sub-agents still running and those
+just finished, background tasks when the backend reports them, the files the session wrote with their `+added −removed` line counts
+against git, and the context gauge with the compaction threshold (92 %). `ctrl+b` hides or
+shows it. Under 24 rows the bottom sections fold to their summary line. The
+transcript keeps the full width below 110 columns, and the todos and sub-agents
+panels stay in the stack above the composer whenever the column is hidden.
+
+The composer sits in a rounded box at the foot, and the status line is glued right
 under that box, so the two things you act on are one object rather than two rows
 separated by a rule.
 
@@ -533,8 +547,7 @@ confirmation prompt. The keypress is the consent.
 `ctrl+n` and `ctrl+p`, and puts the scroll position back where it was when you
 close it.
 
-`alt+↑` and `alt+↓` jump by turn. `ctrl+t` collapses the history above the
-current exchange to one line per turn, `ctrl+f` folds long code blocks to a
+`alt+↑` and `alt+↓` jump by turn. `ctrl+t` opens the session picker, `ctrl+f` folds long code blocks to a
 summary line, and `ctrl+y` copies the last one to the clipboard as raw text.
 
 Tool lines carry a budget of two rows apiece. Unbounded, a compound shell command

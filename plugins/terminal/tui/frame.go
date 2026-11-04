@@ -23,8 +23,8 @@ func (f frame) render(viewport string) string {
 }
 
 func (m *model) buildFrame() frame {
-	stacked := frame{above: []string{m.railRow()}}
-	if tab := m.tabs[m.active]; tab != nil {
+	stacked := frame{above: m.railLines()}
+	if tab := m.tabs[m.active]; tab != nil && !m.sidebarVisible() {
 		stacked.below = append(stacked.below, todoPanel(tab.todos, m.innerWidth(), m.st)...)
 		stacked.below = append(stacked.below, subagentPanel(tab.agents, time.Now(), m.innerWidth(), m.st)...)
 	}

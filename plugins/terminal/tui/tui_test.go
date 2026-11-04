@@ -323,8 +323,9 @@ func TestResizeSyncsViewport(t *testing.T) {
 	m.tabs["a"].entries = []entry{{role: roleAgent, text: "line1"}, {role: roleAgent, text: "line2"}, {role: roleAgent, text: "line3"}}
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	if m.vp.Width != 100 || m.vp.Height != 25 {
-		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 25)", m.vp.Width, m.vp.Height)
+	wantHeight := 30 - m.chromeHeight()
+	if m.vp.Width != 100 || m.vp.Height != wantHeight {
+		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want %d)", m.vp.Width, m.vp.Height, wantHeight)
 	}
 }
 

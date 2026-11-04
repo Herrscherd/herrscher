@@ -53,15 +53,18 @@ func TestDiscoverMissingRootIsSkipped(t *testing.T) {
 	}
 }
 
-func TestPRJobSkillIsDiscoverable(t *testing.T) {
-	got := Discover([]string{"../../skills"})
-	for _, s := range got {
-		if s.Name == "pr-job" {
-			if s.Description == "" {
-				t.Fatal("pr-job has no description: the menu would show a blank line")
-			}
-			return
-		}
+func TestDiscoveredSkillCarriesItsDescription(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "playbook")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	t.Fatalf("pr-job not discovered in %+v", got)
+	body := "---\nname: playbook\ndescription: a playbook the menu shows\n---\nsteps\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := Discover([]string{root})
+	if len(got) != 1 || got[0].Name != "playbook" || got[0].Description != "a playbook the menu shows" {
+		t.Fatalf("discovered %+v, want the playbook with its description", got)
+	}
 }

@@ -26,12 +26,16 @@ type manifest map[string]map[string]string
 type Outcome struct {
 	Installed []string
 	Updated   []string
+	Removed   []string
 	Diverged  []string
+	Linked    []string
+	Shipped   []string
+	Partial   []string
 }
 
 // Empty reports whether Install had nothing to say.
 func (o Outcome) Empty() bool {
-	return len(o.Installed) == 0 && len(o.Updated) == 0 && len(o.Diverged) == 0
+	return len(o.Installed) == 0 && len(o.Updated) == 0 && len(o.Removed) == 0 && len(o.Diverged) == 0 && len(o.Linked) == 0
 }
 
 // Install materializes the skills carried inside src (one directory per skill)
@@ -53,6 +57,7 @@ func Install(src fs.FS, dir string) (Outcome, error) {
 		if !entry.IsDir() {
 			continue
 		}
+		out.Shipped = append(out.Shipped, entry.Name())
 		if err := installPlaybook(src, dir, entry.Name(), man, &out); err != nil {
 			return out, err
 		}
@@ -67,7 +72,7 @@ func installPlaybook(src fs.FS, dir, name string, man manifest, out *Outcome) er
 		return err
 	}
 	dest := filepath.Join(dir, name)
-	_, err = os.Stat(dest)
+	info, err := os.Lstat(dest)
 	if errors.Is(err, fs.ErrNotExist) {
 		if writeErr := write(src, name, dest, false); writeErr != nil {
 			return writeErr
@@ -79,7 +84,15 @@ func installPlaybook(src fs.FS, dir, name string, man manifest, out *Outcome) er
 	if err != nil {
 		return err
 	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		out.Linked = append(out.Linked, name)
+		return nil
+	}
 	disk, err := hashDir(dest)
+	if errors.Is(err, errLinked) {
+		out.Diverged = append(out.Diverged, name)
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -152,6 +165,8 @@ func hashFS(src fs.FS, root string) (map[string]string, error) {
 	return out, nil
 }
 
+var errLinked = errors.New("a symbolic link sits in the skill directory")
+
 func hashDir(dest string) (map[string]string, error) {
 	root, err := os.OpenRoot(dest)
 	if err != nil {
@@ -159,9 +174,12 @@ func hashDir(dest string) (map[string]string, error) {
 	}
 	defer func() { logFailure("close hashed directory", root.Close()) }()
 	out := make(map[string]string)
-	err = fs.WalkDir(root.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+	err = fs.WalkDir(root.FS(), ".", func(rel string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
 			return err
+		}
+		if entry.Type()&fs.ModeSymlink != 0 {
+			return errLinked
 		}
 		payload, err := fs.ReadFile(root.FS(), rel)
 		if err != nil {

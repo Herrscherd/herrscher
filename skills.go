@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"io/fs"
 	"os"
@@ -12,29 +11,43 @@ import (
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
-//go:embed skills
-var shippedSkills embed.FS
-
 func installShippedSkills(ctx context.Context) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return
 	}
-	src, err := fs.Sub(shippedSkills, "skills")
-	if err != nil {
-		return
-	}
 	dst := filepath.Join(home, ".claude", "skills")
-	out, err := skills.Install(src, dst)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "herrscher: install shipped skills: "+err.Error())
-	}
-	reportSkills(dst, out, "skill")
 	plug, notes := installPluginSkills(ctx, contracts.Default.Plugins(), os.Getenv, dst)
 	for _, n := range notes {
 		fmt.Fprintln(os.Stderr, n)
 	}
 	reportSkills(dst, plug, "plugin skill")
+	retired, err := retireSkills(dst, plug)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "herrscher: retire skills no longer shipped: "+err.Error())
+	}
+	reportRetired(dst, retired)
+}
+
+func retireSkills(dst string, plug skills.Outcome) (skills.Outcome, error) {
+	if len(plug.Partial) > 0 {
+		return skills.Outcome{}, nil
+	}
+	return skills.Retire(dst, plug.Shipped)
+}
+
+func reportRetired(dst string, out skills.Outcome) {
+	for _, name := range out.Removed {
+		fmt.Fprintln(os.Stderr, "herrscher: removed skill "+name+": no build ships it any more")
+	}
+	for _, name := range out.Diverged {
+		fmt.Fprintln(os.Stderr, "herrscher: skill "+name+" is no longer shipped and was edited here; it was left as it is, "+
+			"delete "+filepath.Join(dst, name)+" to remove it")
+	}
+	for _, name := range out.Linked {
+		fmt.Fprintln(os.Stderr, "herrscher: skill "+name+" is a symbolic link here; it was left as it is, "+
+			"delete "+filepath.Join(dst, name)+" to remove the link")
+	}
 }
 
 func reportSkills(dst string, out skills.Outcome, kind string) {
@@ -46,6 +59,10 @@ func reportSkills(dst string, out skills.Outcome, kind string) {
 	}
 	for _, name := range out.Diverged {
 		fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" differs from the one this build ships and was left as it is; "+
+			"delete "+filepath.Join(dst, name)+" to take the shipped version")
+	}
+	for _, name := range out.Linked {
+		fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" is a symbolic link here; it was left as it is, "+
 			"delete "+filepath.Join(dst, name)+" to take the shipped version")
 	}
 }
@@ -62,15 +79,18 @@ func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv
 		cfg, err := pluginSkillsConfig(plugin, getenv)
 		if err != nil {
 			notes = append(notes, "herrscher: skills not configured, skipping: "+plugin.Manifest.Kind+": "+err.Error())
+			all.Partial = append(all.Partial, plugin.Manifest.Kind)
 			continue
 		}
 		tree, err := plugin.Skills(ctx, cfg)
 		if err != nil {
 			notes = append(notes, "herrscher: no skills from plugin "+plugin.Manifest.Kind+": "+err.Error())
+			all.Partial = append(all.Partial, plugin.Manifest.Kind)
 			continue
 		}
 		if tree == nil {
 			notes = append(notes, "herrscher: no skills from plugin "+plugin.Manifest.Kind+": its factory handed over no playbooks")
+			all.Partial = append(all.Partial, plugin.Manifest.Kind)
 			continue
 		}
 		src, dups := reserve(tree, plugin.Manifest.Kind, claimed)
@@ -81,11 +101,14 @@ func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv
 		out, err := skills.Install(src, dst)
 		if err != nil {
 			notes = append(notes, "herrscher: install skills for plugin "+plugin.Manifest.Kind+": "+err.Error())
+			all.Partial = append(all.Partial, plugin.Manifest.Kind)
 			continue
 		}
 		all.Installed = append(all.Installed, out.Installed...)
 		all.Updated = append(all.Updated, out.Updated...)
 		all.Diverged = append(all.Diverged, out.Diverged...)
+		all.Linked = append(all.Linked, out.Linked...)
+		all.Shipped = append(all.Shipped, out.Shipped...)
 	}
 	return all, notes
 }

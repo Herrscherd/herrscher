@@ -129,7 +129,7 @@ func sessionHandoffVerb(deps handoffDeps) contracts.Cmd {
 		Help("start a new session whose first message is a brief this session writes; without --to it creates nothing and says how to open this session instead. "+
 			"This is not the ⟢ handoff: trailer, which passes a task to another agent inside the coordination flow. "+
 			"An agent caller attaches the new session under its source, cannot pick --under or --channel_id, and gets at most "+
-			"3 handoffs an hour for its whole session tree, one at a time, and a handoff counts once its brief starts, even if it then fails; the operator has no such bound. "+
+			"3 handoffs an hour for its whole session tree, one at a time, and a handoff counts once its brief starts, even if it then fails; the operator has no such bound, and when the operator closes the root of a tree, its children become roots and their quota starts again. "+
 			"This bound is a local guard, not a security boundary: the operator socket is reachable by the same user, "+
 			"and its state resets when the daemon restarts").
 		Param(paramName, "session to hand off (default: the calling session)", false).

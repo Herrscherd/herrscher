@@ -33,7 +33,6 @@ const (
 )
 
 const (
-	modeShortBelow  = 80
 	modeStripIndent = "     "
 	modeStripSep    = " → "
 	cursorMarkWidth = 2
@@ -44,7 +43,6 @@ const (
 type sessionMode struct {
 	host  string
 	label string
-	short string
 	say   string
 }
 
@@ -71,14 +69,14 @@ func (mode modeID) String() string {
 func modeSpec(mode modeID) sessionMode {
 	switch mode {
 	case modeEdits:
-		return sessionMode{host: hostAcceptEdits, label: "Édits acceptés", short: "Édits", say: "les éditions passent, les commandes demandent encore"}
+		return sessionMode{host: hostAcceptEdits, label: "Édits acceptés", say: "les éditions passent, les commandes demandent encore"}
 	case modePlan:
-		return sessionMode{host: hostPlan, label: "Plan", short: "Plan", say: "lecture seule : l’agent propose un plan, tu le valides avant toute écriture"}
+		return sessionMode{host: hostPlan, label: "Plan", say: "lecture seule : l’agent propose un plan, tu le valides avant toute écriture"}
 	case modeAuto:
-		return sessionMode{host: hostAuto, label: "Auto", short: "Auto", say: "rien ne demande : éditions et commandes passent, sauf ce qu’une règle de refus bloque"}
+		return sessionMode{host: hostAuto, label: "Auto", say: "rien ne demande : éditions et commandes passent, sauf ce qu’une règle de refus bloque"}
 	case modeNone, modeManual:
 	}
-	return sessionMode{host: hostAsk, label: "Manuel", short: "Man", say: "chaque édition et chaque commande demande une approbation"}
+	return sessionMode{host: hostAsk, label: "Manuel", say: "chaque édition et chaque commande demande une approbation"}
 }
 
 func modeStyle(mode modeID, styles uiStyles) lipgloss.Style {
@@ -108,12 +106,8 @@ func modeIDFromHost(host string) (modeID, bool) {
 	return modeNone, false
 }
 
-func modeText(mode modeID, width int, glyphs glyphSet) string {
-	spec := modeSpec(mode)
-	text := spec.label
-	if width < modeShortBelow {
-		text = spec.short
-	}
+func modeText(mode modeID, glyphs glyphSet) string {
+	text := modeSpec(mode).label
 	if mode == modeAuto {
 		text = glyphs.warn + " " + text
 	}
@@ -233,7 +227,7 @@ func (m *model) handleModeClick(msg tea.MouseMsg) (tea.Cmd, bool) {
 	if !strip.stripDown || msg.Y != strip.stripRow {
 		return nil, false
 	}
-	for _, hit := range m.modeStripHits(m.innerWidth()) {
+	for _, hit := range m.modeStripHits() {
 		if msg.X < hit.start || msg.X >= hit.end {
 			continue
 		}
@@ -289,12 +283,9 @@ func (m *model) planSlash(instruction string) tea.Cmd {
 	return m.switchModeCmd(m.active, target, modePlan, strings.TrimSpace(instruction))
 }
 
-func (m *model) modeChip(target *tab, width int) string {
+func (m *model) modeChip(target *tab) string {
 	mode := target.modeID()
-	chip := modeStyle(mode, m.st).Bold(true).Render(modeText(mode, width, m.st.glyphs))
-	if width < modeShortBelow {
-		return chip
-	}
+	chip := modeStyle(mode, m.st).Bold(true).Render(modeText(mode, m.st.glyphs))
 	return chip + m.st.dim.Render(" "+m.st.glyphs.shiftTab)
 }
 
@@ -304,14 +295,14 @@ type modeHit struct {
 	end   int
 }
 
-func (m *model) modeStripHits(width int) []modeHit {
+func (m *model) modeStripHits() []modeHit {
 	column := lipgloss.Width(" " + m.st.glyphs.shiftTab + " ")
 	var hits []modeHit
 	for index, mode := range modeOrder() {
 		if index > 0 {
 			column += lipgloss.Width(modeStripSep)
 		}
-		end := column + lipgloss.Width(modeSegmentLabel(mode, width, m.st.glyphs))
+		end := column + lipgloss.Width(modeSegmentLabel(mode, m.st.glyphs))
 		hits = append(hits, modeHit{mode: mode, start: column, end: end})
 		column = end
 	}
@@ -325,7 +316,7 @@ func (m *model) modeStripView(target *tab, width int) []string {
 		if index > 0 {
 			segments = append(segments, m.st.dim.Render(modeStripSep))
 		}
-		segments = append(segments, m.modeSegment(mode, current, width))
+		segments = append(segments, m.modeSegment(mode, current))
 	}
 	line := m.st.dim.Render(" "+m.st.glyphs.shiftTab+" ") + strings.Join(segments, "")
 	say := ansi.Truncate(modeStripIndent+modeSpec(current).say, width, "…")
@@ -333,21 +324,21 @@ func (m *model) modeStripView(target *tab, width int) []string {
 	if current == modeAuto {
 		sayStyle = m.st.modeAuto
 	}
-	return []string{ansi.Truncate(line, width, ""), sayStyle.Render(say)}
+	return []string{ansi.Truncate(line, width, "…"), sayStyle.Render(say)}
 }
 
-func modeSegmentLabel(mode modeID, width int, glyphs glyphSet) string {
-	return " " + modeText(mode, width, glyphs) + " "
+func modeSegmentLabel(mode modeID, glyphs glyphSet) string {
+	return " " + modeText(mode, glyphs) + " "
 }
 
-func (m *model) modeSegment(mode, current modeID, width int) string {
+func (m *model) modeSegment(mode, current modeID) string {
 	if mode == current {
-		return modeStyle(mode, m.st).Bold(true).Reverse(true).Render(modeSegmentLabel(mode, width, m.st.glyphs))
+		return modeStyle(mode, m.st).Bold(true).Reverse(true).Render(modeSegmentLabel(mode, m.st.glyphs))
 	}
 	if mode == modeAuto {
-		return m.st.modeAuto.Render(modeSegmentLabel(mode, width, m.st.glyphs))
+		return m.st.modeAuto.Render(modeSegmentLabel(mode, m.st.glyphs))
 	}
-	return m.st.dim.Render(modeSegmentLabel(mode, width, m.st.glyphs))
+	return m.st.dim.Render(modeSegmentLabel(mode, m.st.glyphs))
 }
 
 type planMenu struct {

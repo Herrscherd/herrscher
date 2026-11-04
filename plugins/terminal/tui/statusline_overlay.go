@@ -22,7 +22,7 @@ const (
 	barScriptNote          = " · " + barScriptPath
 	barBottomRows          = 3
 	barHeaderRows          = 4
-	barChromeRows          = 10
+	barChromeRows          = 11
 )
 
 func barScriptSample() []string {

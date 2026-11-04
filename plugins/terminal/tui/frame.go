@@ -33,15 +33,15 @@ func (m *model) buildFrame() frame {
 	m.input.Placeholder = m.placeholderText()
 	m.syncPrompt()
 	panels, room := m.frameBudget()
-	return m.composeFrame(panels, room)
+	return m.composeFrame(panels, room, true)
 }
 
 func (m *model) frameBudget() (bool, int) {
 	if m.height <= 0 {
 		return true, unboundedRows
 	}
-	fixed := m.composeFrame(false, 0).height()
-	natural := m.composeFrame(false, m.height).height() - fixed
+	fixed := m.composeFrame(false, 0, false).height()
+	natural := m.composeFrame(false, m.height, false).height() - fixed
 	avail := m.height - fixed - minTranscriptRows
 	panels := len(m.sidePanelLines())
 	if panels <= avail-natural {
@@ -50,7 +50,7 @@ func (m *model) frameBudget() (bool, int) {
 	return false, avail
 }
 
-func (m *model) composeFrame(panels bool, room int) frame {
+func (m *model) composeFrame(panels bool, room int, flexible bool) frame {
 	stacked := frame{above: m.railLines()}
 	if panels {
 		stacked.below = append(stacked.below, m.sidePanelLines()...)
@@ -62,33 +62,58 @@ func (m *model) composeFrame(panels bool, room int) frame {
 	surface = fitBlock(surface, room)
 	stacked.below = append(stacked.below, surface...)
 	m.appendModeStrip(&stacked)
-	var overlays []string
-	for _, overlay := range m.frameOverlays() {
-		if overlay.open {
-			overlays = appendLines(overlays, overlay.view())
-		}
-	}
-	stacked.below = append(stacked.below, fitBlock(overlays, room-len(surface))...)
-	if chips := chipRow(m.pending, m.st); chips != "" {
-		stacked.below = appendLines(stacked.below, chips+"  "+m.st.dim.Render("⌃U retirer"))
-	}
+	chips := appendLines(nil, m.chipsView())
 	drafts := appendLines(nil, m.draftsView())
 	composer := m.composerZone()
 	status := m.statusZone()
-	reserved := len(stacked.above) + len(stacked.below) + len(drafts) + len(composer) + len(status)
-	base := len(stacked.above) + m.vp.Height + len(stacked.below)
-	stacked.below = appendLines(stacked.below, strings.Join(m.queueLines(base, m.queueRows(reserved)), "\n"))
+	fixedRows := len(stacked.above) + len(stacked.below) + len(chips) + len(drafts) + len(composer) + len(status)
+	var overlays []string
+	if flexible {
+		overlays = fitBlock(m.openOverlayLines(), m.rowsLeft(fixedRows+m.queueMinRows()))
+		stacked.below = append(stacked.below, overlays...)
+	}
+	stacked.below = append(stacked.below, chips...)
+	if flexible {
+		base := len(stacked.above) + m.vp.Height + len(stacked.below)
+		queue := m.queueLines(base, max(1, m.rowsLeft(fixedRows+len(overlays))))
+		stacked.below = appendLines(stacked.below, strings.Join(queue, "\n"))
+	}
 	stacked.below = append(stacked.below, drafts...)
 	stacked.below = append(stacked.below, composer...)
 	stacked.below = append(stacked.below, status...)
 	return stacked
 }
 
-func (m *model) queueRows(reserved int) int {
+func (m *model) openOverlayLines() []string {
+	var overlays []string
+	for _, overlay := range m.frameOverlays() {
+		if overlay.open {
+			overlays = appendLines(overlays, overlay.view())
+		}
+	}
+	return overlays
+}
+
+func (m *model) chipsView() string {
+	chips := chipRow(m.pending, m.st)
+	if chips == "" {
+		return ""
+	}
+	return chips + "  " + m.st.dim.Render("⌃U retirer")
+}
+
+func (m *model) rowsLeft(reserved int) int {
 	if m.height <= 0 {
 		return unboundedRows
 	}
-	return max(1, m.height-minTranscriptRows-reserved)
+	return m.height - minTranscriptRows - reserved
+}
+
+func (m *model) queueMinRows() int {
+	if current := m.activeTab(); current != nil && len(current.queue) > 0 {
+		return 1
+	}
+	return 0
 }
 
 func (m *model) sidePanelLines() []string {

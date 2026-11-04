@@ -597,7 +597,7 @@ func themeGaugeLine(styles uiStyles) string {
 
 func (m *model) themeModeLines(width int) []string {
 	strip := m.modeStripView(&tab{}, width)
-	return []string{strip[0] + "  " + m.st.spinner.Render(m.spinFrame()) + m.st.dim.Render(" En cours…")}
+	return append(strip, m.st.spinner.Render(m.spinFrame())+m.st.dim.Render(" En cours…"))
 }
 
 func (m *model) themeTerminalLines() []string {

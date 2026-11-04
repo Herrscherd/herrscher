@@ -4,8 +4,8 @@ github.com/Herrscherd/dctl v1.9.0 h1:06e9pMxflJCMcgEnxQpf7vlPwO65Qq+OlghxpbQTpIE
 github.com/Herrscherd/dctl v1.9.0/go.mod h1:7hNu0guJ9n7fA+7oXok/Vcfso+Twc62NuKrdPCX0mXk=
 github.com/Herrscherd/herrscher-claude-backend v0.5.1-0.20261104230846-f4499da8e96d h1:jJjq7fgIjyQvjlafRHv1qjlgYKTJnhohvjqfkrJ6dac=
 github.com/Herrscherd/herrscher-claude-backend v0.5.1-0.20261104230846-f4499da8e96d/go.mod h1:QS7+vrXiqqaR8lYYyoikGjGDiHC4cOfnPmwl9e8fLlM=
-github.com/Herrscherd/herrscher-codex-backend v0.4.1-0.20261104231153-ef7a252c8997 h1:ssK0Ivd7UdPt73rjo5uYCjeBHCdlZtBZaph4w2ii4lM=
-github.com/Herrscherd/herrscher-codex-backend v0.4.1-0.20261104231153-ef7a252c8997/go.mod h1:kJB0dqfFXpn0VnKG9mRJLQTNiS+bhCm8f9pD/IlX3V0=
+github.com/Herrscherd/herrscher-codex-backend v0.4.1-0.20261104232139-3c61b899f3a8 h1:Cz1AtxjZtcQJz11E/MVPcrSrXjLlNHbPsUrbyaryaig=
+github.com/Herrscherd/herrscher-codex-backend v0.4.1-0.20261104232139-3c61b899f3a8/go.mod h1:kJB0dqfFXpn0VnKG9mRJLQTNiS+bhCm8f9pD/IlX3V0=
 github.com/Herrscherd/herrscher-contracts v0.14.1-0.20261104230712-0b92580aa48f h1:Cxu6QOdLWmjwAEBS84M/A+mkKtjPiJ8zeI9Vkdonqak=
 github.com/Herrscherd/herrscher-contracts v0.14.1-0.20261104230712-0b92580aa48f/go.mod h1:qUrFuSXT/wSplqrDeThJWJcXMzUpXYv02PraP5nppN8=
 github.com/Herrscherd/herrscher-cursor-backend v0.4.2-0.20261104231318-894849afe4be h1:eFMKnJddMtKksNNyv5+xjQlnSq9u0Jd7dV3t7j08+a0=

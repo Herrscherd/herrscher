@@ -7,7 +7,7 @@ toolchain go1.27.3
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Herrscherd/herrscher-claude-backend v0.5.1-0.20261104230846-f4499da8e96d
-	github.com/Herrscherd/herrscher-codex-backend v0.4.1-0.20261104231153-ef7a252c8997
+	github.com/Herrscherd/herrscher-codex-backend v0.4.1-0.20261104232139-3c61b899f3a8
 	github.com/Herrscherd/herrscher-contracts v0.14.1-0.20261104230712-0b92580aa48f
 	github.com/Herrscherd/herrscher-cursor-backend v0.4.2-0.20261104231318-894849afe4be
 	github.com/Herrscherd/herrscher-discord-gateway v0.23.0

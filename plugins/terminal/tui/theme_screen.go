@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -15,6 +14,12 @@ const (
 	themeScreenSideBySide = 100
 	themeListWidth        = 34
 	themePersonalSuffix   = "-perso"
+	themePersonalName     = "Mon thème"
+	themePreviewMargin    = 4
+	themePreviewMaxInner  = 56
+	themePreviewMinInner  = 20
+	themePreviewFrameEdge = 2
+	themePreviewGauge     = 0.4
 )
 
 type themeScreen struct {
@@ -42,8 +47,8 @@ func (s *themeScreen) refresh(catalog themeCatalog) {
 	s.themes = catalog.themes
 	s.problems = catalog.problems
 	s.cursor = 0
-	for index, th := range s.themes {
-		if th.ID == selected {
+	for index := range s.themes {
+		if s.themes[index].ID == selected {
 			s.cursor = index
 		}
 	}
@@ -57,34 +62,13 @@ func (s *themeScreen) selectedID() string {
 }
 
 func (s *themeScreen) preview() Theme {
-	th := s.themes[s.cursor]
-	th.Render = s.look
-	return th
+	current := s.themes[s.cursor]
+	current.Render = s.look
+	return current
 }
 
 func (s *themeScreen) move(delta int) {
 	s.cursor = min(max(s.cursor+delta, 0), len(s.themes)-1)
-}
-
-func glyphCycle() []string {
-	return []string{glyphsUnicode, glyphsNerd, glyphsASCII}
-}
-
-func borderCycle() []string {
-	return []string{bordersRounded, bordersSquare, bordersNone}
-}
-
-func densityCycle() []string {
-	return []string{densityNormal, densityCompact}
-}
-
-func nextOf(values []string, current string) string {
-	for index, value := range values {
-		if value == current {
-			return values[(index+1)%len(values)]
-		}
-	}
-	return values[0]
 }
 
 func (m *model) openTheme() {
@@ -105,16 +89,16 @@ func (m *model) previewTheme() {
 }
 
 func (m *model) handleThemeKey(msg tea.KeyMsg) tea.Cmd {
-	s := m.themeScr
+	screen := m.themeScr
 	if m.overlayNav(msg, func(delta int) {
-		s.move(delta)
+		screen.move(delta)
 		m.previewTheme()
 	}) {
 		return nil
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.applyTheme(s.origin)
+		m.applyTheme(screen.origin)
 		m.closeTheme()
 		return nil
 	case tea.KeyEnter:
@@ -127,20 +111,20 @@ func (m *model) handleThemeKey(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *model) handleThemeLetter(key string) tea.Cmd {
-	s := m.themeScr
+	screen := m.themeScr
 	switch key {
 	case "g":
-		s.look.Glyphs = nextOf(glyphCycle(), s.look.Glyphs)
+		screen.look.Glyphs = nextOption(glyphModes(), screen.look.Glyphs)
 	case "b":
-		s.look.Borders = nextOf(borderCycle(), s.look.Borders)
+		screen.look.Borders = nextOption(borderStyles(), screen.look.Borders)
 	case "d":
-		s.look.Density = nextOf(densityCycle(), s.look.Density)
+		screen.look.Density = nextOption(densities(), screen.look.Density)
 	case "w":
-		s.look.Bold = !s.look.Bold
+		screen.look.Bold = !screen.look.Bold
 	case "i":
-		s.look.Italic = !s.look.Italic
+		screen.look.Italic = !screen.look.Italic
 	case "a":
-		s.auto = !s.auto
+		screen.auto = !screen.auto
 	case "e":
 		return m.editThemeFile()
 	default:
@@ -151,30 +135,23 @@ func (m *model) handleThemeLetter(key string) tea.Cmd {
 }
 
 func (m *model) commitTheme() {
-	s := m.themeScr
-	preview := s.preview()
-	base := s.themes[s.cursor]
-	id, auto := preview.ID, s.auto
-	section := terminalSection{Theme: &id, AutoTheme: &auto}
-	section.Glyphs = overrideString(preview.Render.Glyphs, base.Render.Glyphs)
-	section.Borders = overrideString(preview.Render.Borders, base.Render.Borders)
-	section.Density = overrideString(preview.Render.Density, base.Render.Density)
-	section.Bold = overrideBool(preview.Render.Bold, base.Render.Bold)
-	section.Italic = overrideBool(preview.Render.Italic, base.Render.Italic)
+	screen := m.themeScr
+	preview := screen.preview()
+	base := screen.themes[screen.cursor]
+	themeName, auto := preview.ID, screen.auto
+	section := terminalSection{Theme: &themeName, AutoTheme: &auto}
+	section.Glyphs = overrideSetting(preview.Render.Glyphs.String(), base.Render.Glyphs.String())
+	section.Borders = overrideSetting(preview.Render.Borders.String(), base.Render.Borders.String())
+	section.Density = overrideSetting(preview.Render.Density.String(), base.Render.Density.String())
+	section.Bold = overrideSetting(preview.Render.Bold, base.Render.Bold)
+	section.Italic = overrideSetting(preview.Render.Italic, base.Render.Italic)
 	if err := m.saveThemeConfig(section); err != nil {
 		m.flash = "thème non enregistré : " + err.Error()
 	}
 	m.closeTheme()
 }
 
-func overrideString(value, inherited string) *string {
-	if value == inherited {
-		return nil
-	}
-	return &value
-}
-
-func overrideBool(value, inherited bool) *bool {
+func overrideSetting[Choice comparable](value, inherited Choice) *Choice {
 	if value == inherited {
 		return nil
 	}
@@ -182,35 +159,29 @@ func overrideBool(value, inherited bool) *bool {
 }
 
 func (m *model) editThemeFile() tea.Cmd {
-	editor := strings.Fields(os.Getenv("EDITOR"))
-	if len(editor) == 0 {
-		m.flash = "EDITOR non défini"
-		return nil
-	}
 	path, err := m.themeFileForEdit()
 	if err != nil {
 		m.flash = "thème non ouvert : " + err.Error()
 		return nil
 	}
-	command := exec.Command(editor[0], append(editor[1:], path)...)
-	return tea.ExecProcess(command, func(err error) tea.Msg { return themeEditedMsg{err: err} })
+	return tea.ExecProcess(editorCommand(path), func(err error) tea.Msg { return themeEditedMsg{err: err} })
 }
 
 func (m *model) themeFileForEdit() (string, error) {
-	id := m.themeScr.preview().ID
-	if path, ok := m.themeCat.paths[id]; ok {
+	themeName := m.themeScr.preview().ID
+	if path, ok := m.themeCat.paths[themeName]; ok {
 		return path, nil
 	}
 	dir := themesDirFor(m.themeDir)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, configDirMode); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, id+themePersonalSuffix+themeFileExt)
+	path := filepath.Join(dir, themeName+themePersonalSuffix+themeFileExt)
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
-	body := fmt.Sprintf("name = %q\nbase = %q\n", "Mon thème", id)
-	return path, os.WriteFile(path, []byte(body), 0o600)
+	body := fmt.Sprintf("name = %q\nbase = %q\n", themePersonalName, themeName)
+	return path, os.WriteFile(path, []byte(body), privateFileMode)
 }
 
 func (m *model) handleThemeEdited(msg themeEditedMsg) {
@@ -221,10 +192,10 @@ func (m *model) handleThemeEdited(msg themeEditedMsg) {
 }
 
 func (m *model) themeView() string {
-	s := m.themeScr
+	screen := m.themeScr
 	width := m.innerWidth()
-	header := m.st.accent.Render("Thème") + "\n" + wrapWith(m.st.dim, s.optionsLine(), width)
-	list := floatingList(s.rows(), s.cursor, s.footer(), min(width, themeListWidth), m.st)
+	header := m.st.accent.Render("Thème") + "\n" + wrapWith(m.st.dim, screen.optionsLine(), width)
+	list := floatingList(screen.rows(), screen.cursor, screen.footer(), min(width, themeListWidth), m.st)
 	preview := m.themePreview(width)
 	if width < themeScreenSideBySide {
 		return strings.Join(append([]string{header, list, ""}, preview...), "\n")
@@ -247,8 +218,8 @@ func onOff(on bool) string {
 
 func (s *themeScreen) rows() []overlayRow {
 	rows := make([]overlayRow, 0, len(s.themes))
-	for _, th := range s.themes {
-		rows = append(rows, overlayRow{label: th.Label})
+	for index := range s.themes {
+		rows = append(rows, overlayRow{label: s.themes[index].Label})
 	}
 	return rows
 }
@@ -261,21 +232,22 @@ func (s *themeScreen) footer() string {
 }
 
 func (m *model) themePreview(width int) []string {
-	st := m.st
-	glyphs := st.glyphs
-	boxes := st.boxes(true)
-	inner := max(min(width-4, 56), 20)
+	styles := m.st
+	glyphs := styles.glyphs
+	boxes := styles.boxes(true)
+	inner := max(min(width-themePreviewMargin, themePreviewMaxInner), themePreviewMinInner)
+	frameLine := strings.Repeat(boxes.h, inner+themePreviewFrameEdge)
 	body := func(text string) string {
-		return st.dim.Render(boxes.v) + " " + padTo(truncate(text, inner), inner) + " " + st.dim.Render(boxes.v)
+		return styles.dim.Render(boxes.v) + " " + padTo(truncate(text, inner), inner) + " " + styles.dim.Render(boxes.v)
 	}
 	frame := []string{
-		st.accent.Render(boxes.tl + strings.Repeat(boxes.h, inner+2) + boxes.tr),
-		body(st.text.Render("Texte de réponse, en couleur normale")),
-		body(st.green.Render(glyphs.success+" ajouté") + "  " + st.del.Render(glyphs.failure+" retiré") + "  " + st.warn.Render(glyphs.bolt+" attente")),
-		body(st.overlaySel.Render(" sélection ") + "  " + st.dim.Render(glyphs.notice+" notice") + "  " + st.red.Render("erreur")),
-		body(gauge(0.4, st.green, st.dim, glyphs)),
-		st.accent.Render(boxes.bl + strings.Repeat(boxes.h, inner+2) + boxes.br),
+		styles.accent.Render(boxes.tl + frameLine + boxes.tr),
+		body(styles.text.Render("Texte de réponse, en couleur normale")),
+		body(styles.green.Render(glyphs.success+" ajouté") + "  " + styles.del.Render(glyphs.failure+" retiré") + "  " + styles.warn.Render(glyphs.bolt+" attente")),
+		body(styles.overlaySel.Render(" sélection ") + "  " + styles.dim.Render(glyphs.notice+" notice") + "  " + styles.red.Render("erreur")),
+		body(gauge(themePreviewGauge, styles.green, styles.dim, glyphs)),
+		styles.accent.Render(boxes.bl + frameLine + boxes.br),
 	}
-	title := st.accent.Render(glyphs.agentTitle()) + st.dim.Render(" aperçu : "+m.themeScr.preview().Label)
+	title := styles.accent.Render(glyphs.agentTitle()) + styles.dim.Render(" aperçu : "+m.themeScr.preview().Label)
 	return append([]string{title, ""}, frame...)
 }

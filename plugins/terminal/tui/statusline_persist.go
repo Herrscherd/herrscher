@@ -12,8 +12,9 @@ import (
 const (
 	statuslineFieldsKey = "fields"
 	statuslineSourceKey = "source"
-	configDirMode       = 0o755
+	configDirMode       = 0o750
 	defaultConfigMode   = 0o644
+	tempConfigPattern   = ".terminal-*.toml"
 )
 
 type tomlEntry struct {
@@ -32,8 +33,8 @@ type tomlKeyValue struct {
 func scanTomlEntries(lines []string) []tomlEntry {
 	var entries []tomlEntry
 	section := ""
-	for i := 0; i < len(lines); i++ {
-		line := strings.TrimSpace(lines[i])
+	for index := range lines {
+		line := strings.TrimSpace(lines[index])
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -45,7 +46,7 @@ func scanTomlEntries(lines []string) []tomlEntry {
 		if !ok {
 			continue
 		}
-		entry := tomlEntry{section: section, key: strings.TrimSpace(key), first: i, last: i}
+		entry := tomlEntry{section: section, key: strings.TrimSpace(key), first: index, last: index}
 		value := strings.TrimSpace(raw)
 		for strings.HasPrefix(value, "[") && !strings.Contains(value, "]") && entry.last+1 < len(lines) {
 			entry.last++
@@ -55,6 +56,12 @@ func scanTomlEntries(lines []string) []tomlEntry {
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+type tomlArrayStep struct {
+	value    string
+	hasValue bool
+	rest     string
 }
 
 func tomlStringArray(raw string) ([]string, bool) {
@@ -69,43 +76,65 @@ func tomlStringArray(raw string) ([]string, bool) {
 		if rest == "" {
 			return nil, false
 		}
-		switch rest[0] {
-		case ']':
+		if rest[0] == ']' {
 			return items, true
-		case '#':
-			newline := strings.IndexByte(rest, '\n')
-			if newline < 0 {
-				return nil, false
-			}
-			rest = rest[newline:]
-		case '"':
-			end := basicStringEnd(rest)
-			if end < 0 {
-				return nil, false
-			}
-			value, err := strconv.Unquote(rest[:end+1])
-			if err != nil {
-				return nil, false
-			}
-			items = append(items, value)
-			rest = rest[end+1:]
-		case '\'':
-			end := strings.IndexByte(rest[1:], '\'')
-			if end < 0 {
-				return nil, false
-			}
-			items = append(items, rest[1:end+1])
-			rest = rest[end+2:]
-		default:
+		}
+		step, ok := readTomlArrayStep(rest)
+		if !ok {
 			return nil, false
 		}
+		if step.hasValue {
+			items = append(items, step.value)
+		}
+		rest = step.rest
 	}
+}
+
+func readTomlArrayStep(rest string) (tomlArrayStep, bool) {
+	switch rest[0] {
+	case '#':
+		return skipTomlComment(rest)
+	case '"':
+		return readBasicArrayString(rest)
+	case '\'':
+		return readLiteralArrayString(rest)
+	default:
+		return tomlArrayStep{}, false
+	}
+}
+
+func skipTomlComment(rest string) (tomlArrayStep, bool) {
+	newline := strings.IndexByte(rest, '\n')
+	if newline < 0 {
+		return tomlArrayStep{}, false
+	}
+	return tomlArrayStep{rest: rest[newline:]}, true
+}
+
+func readBasicArrayString(rest string) (tomlArrayStep, bool) {
+	end := basicStringEnd(rest)
+	if end < 0 {
+		return tomlArrayStep{}, false
+	}
+	value, err := strconv.Unquote(rest[:end+1])
+	if err != nil {
+		return tomlArrayStep{}, false
+	}
+	return tomlArrayStep{value: value, hasValue: true, rest: rest[end+1:]}, true
+}
+
+func readLiteralArrayString(rest string) (tomlArrayStep, bool) {
+	end := strings.IndexByte(rest[1:], '\'')
+	if end < 0 {
+		return tomlArrayStep{}, false
+	}
+	return tomlArrayStep{value: rest[1 : end+1], hasValue: true, rest: rest[end+2:]}, true
 }
 
 func formatTomlStringArray(items []string) string {
 	quoted := make([]string, len(items))
-	for i, item := range items {
-		quoted[i] = strconv.Quote(item)
+	for index, item := range items {
+		quoted[index] = strconv.Quote(item)
 	}
 	return "[" + strings.Join(quoted, ", ") + "]"
 }
@@ -169,10 +198,10 @@ func insertTomlLines(lines []string, section string, block []string) []string {
 }
 
 func tomlHeaderIndex(lines []string, section string) int {
-	for i, raw := range lines {
+	for index, raw := range lines {
 		line := strings.TrimSpace(raw)
 		if strings.HasPrefix(line, "[") && !strings.HasPrefix(line, "[[") && tomlSectionName(line) == section {
-			return i
+			return index
 		}
 	}
 	return -1
@@ -189,18 +218,33 @@ func saveStatuslineChoice(path string, bar *barState) error {
 }
 
 func updateTomlFile(path, section string, pairs ...tomlKeyValue) error {
-	data, err := os.ReadFile(path)
-	mode := os.FileMode(defaultConfigMode)
-	switch {
-	case err == nil:
-		if info, statErr := os.Stat(path); statErr == nil {
-			mode = info.Mode().Perm()
-		}
-	case !errors.Is(err, fs.ErrNotExist):
+	data, mode, err := readConfigFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	text := writeTomlKeys(string(data), section, pairs...)
 	return writeFileAtomic(path, []byte(text), mode)
+}
+
+func readConfigFile(path string) ([]byte, os.FileMode, error) {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return nil, defaultConfigMode, err
+	}
+	data, mode, readErr := readFromRoot(root, filepath.Base(path))
+	return data, mode, errors.Join(readErr, root.Close())
+}
+
+func readFromRoot(root *os.Root, name string) ([]byte, os.FileMode, error) {
+	info, err := root.Stat(name)
+	if err != nil {
+		return nil, defaultConfigMode, err
+	}
+	data, err := root.ReadFile(name)
+	if err != nil {
+		return nil, defaultConfigMode, err
+	}
+	return data, info.Mode().Perm(), nil
 }
 
 func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
@@ -208,29 +252,31 @@ func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 	if err := os.MkdirAll(dir, configDirMode); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".terminal-*.toml")
+	tmp, err := os.CreateTemp(dir, tempConfigPattern)
 	if err != nil {
 		return err
 	}
 	name := tmp.Name()
-	_, writeErr := tmp.Write(data)
-	closeErr := tmp.Close()
-	if err := errors.Join(writeErr, closeErr, os.Chmod(name, mode)); err != nil {
-		_ = os.Remove(name)
-		return err
+	if err := stageTempFile(tmp, data, mode); err != nil {
+		return errors.Join(err, os.Remove(name))
 	}
 	if err := os.Rename(name, path); err != nil {
-		_ = os.Remove(name)
-		return err
+		return errors.Join(err, os.Remove(name))
 	}
 	return nil
 }
 
+func stageTempFile(tmp *os.File, data []byte, mode os.FileMode) error {
+	_, writeErr := tmp.Write(data)
+	closeErr := tmp.Close()
+	return errors.Join(writeErr, closeErr, os.Chmod(tmp.Name(), mode))
+}
+
 func (b *barState) tickedIDs() []string {
 	ticked := []string{}
-	for _, id := range b.fieldIDs() {
-		if b.isShown(id) {
-			ticked = append(ticked, id)
+	for _, fieldID := range b.fieldIDs() {
+		if b.isShown(fieldID) {
+			ticked = append(ticked, fieldID)
 		}
 	}
 	return ticked
@@ -240,17 +286,17 @@ func (b *barState) restoreFields(ticked []string) {
 	if ticked == nil {
 		return
 	}
-	listed := make(map[string]bool, len(ticked))
+	listed := make(map[string]bool, len(barFieldSpecs()))
 	order := make([]string, 0, len(barFieldSpecs()))
-	for _, id := range ticked {
-		if hasBarField(id) && !listed[id] {
-			listed[id] = true
-			order = append(order, id)
+	for _, fieldID := range ticked {
+		if hasBarField(fieldID) && !listed[fieldID] {
+			listed[fieldID] = true
+			order = append(order, fieldID)
 		}
 	}
-	for _, id := range defaultBarOrder() {
-		if !listed[id] {
-			order = append(order, id)
+	for _, fieldID := range defaultBarOrder() {
+		if !listed[fieldID] {
+			order = append(order, fieldID)
 		}
 	}
 	b.order = order
@@ -260,9 +306,9 @@ func (b *barState) restoreFields(ticked []string) {
 	}
 }
 
-func hasBarField(id string) bool {
+func hasBarField(fieldID string) bool {
 	for _, spec := range barFieldSpecs() {
-		if spec.id == id {
+		if spec.id == fieldID {
 			return true
 		}
 	}

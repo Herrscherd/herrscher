@@ -1,65 +1,170 @@
 package tui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
+const workingVerb = "En cours…"
+
+const borderNoneName = "none"
+
 const (
-	glyphsUnicode = "unicode"
-	glyphsNerd    = "nerd"
-	glyphsASCII   = "ascii"
-
-	bordersRounded = "rounded"
-	bordersSquare  = "square"
-	bordersNone    = "none"
-
-	densityCompact = "compact"
-	densityNormal  = "normal"
+	themeSombre    = "sombre"
+	themeClair     = "clair"
+	themeTerminal  = "terminal"
+	themeContraste = "contraste"
 )
 
-const workingVerb = "En cours…"
+type glyphMode int
+
+const (
+	glyphsUnicode glyphMode = iota + 1
+	glyphsNerd
+	glyphsASCII
+)
+
+func glyphModes() []glyphMode {
+	return []glyphMode{glyphsUnicode, glyphsNerd, glyphsASCII}
+}
+
+func (mode glyphMode) String() string {
+	switch mode {
+	case glyphsUnicode:
+		return "unicode"
+	case glyphsNerd:
+		return "nerd"
+	case glyphsASCII:
+		return "ascii"
+	}
+	return ""
+}
+
+type borderStyle int
+
+const (
+	borderRounded borderStyle = iota + 1
+	borderSquare
+	borderNone
+)
+
+func borderStyles() []borderStyle {
+	return []borderStyle{borderRounded, borderSquare, borderNone}
+}
+
+func (style borderStyle) String() string {
+	switch style {
+	case borderRounded:
+		return "rounded"
+	case borderSquare:
+		return "square"
+	case borderNone:
+		return borderNoneName
+	}
+	return ""
+}
+
+type density int
+
+const (
+	densityNormal density = iota + 1
+	densityCompact
+)
+
+func densities() []density {
+	return []density{densityNormal, densityCompact}
+}
+
+func (level density) String() string {
+	switch level {
+	case densityNormal:
+		return "normal"
+	case densityCompact:
+		return "compact"
+	}
+	return ""
+}
+
+type closedOption interface {
+	comparable
+	String() string
+}
+
+func parseOption[Choice closedOption](key, value string, options []Choice) (Choice, error) {
+	for _, option := range options {
+		if option.String() == value {
+			return option, nil
+		}
+	}
+	var zero Choice
+	return zero, fmt.Errorf("%w pour %s : %q (attendu %s)", errUnknownOption, key, value, joinOptions(options))
+}
+
+func joinOptions[Choice closedOption](options []Choice) string {
+	names := make([]string, 0, len(options))
+	for _, option := range options {
+		names = append(names, option.String())
+	}
+	return strings.Join(names, ", ")
+}
+
+func nextOption[Choice comparable](options []Choice, current Choice) Choice {
+	for index, option := range options {
+		if option == current {
+			return options[(index+1)%len(options)]
+		}
+	}
+	return options[0]
+}
 
 type colorValue string
 
-func (v colorValue) glamour() string {
-	if index, ok := ansiIndex(string(v)); ok {
+func (value colorValue) glamour() string {
+	if index, ok := ansiIndex(string(value)); ok {
 		return strconv.Itoa(index)
 	}
-	return string(v)
+	return string(value)
 }
 
-func (v colorValue) color() lipgloss.TerminalColor {
-	if index, ok := ansiIndex(string(v)); ok {
+func (value colorValue) color() lipgloss.TerminalColor {
+	if index, ok := ansiIndex(string(value)); ok {
 		return lipgloss.ANSIColor(index)
 	}
-	return lipgloss.Color(string(v))
+	return lipgloss.Color(string(value))
 }
 
-func ansiIndex(v string) (int, bool) {
-	rest, ok := strings.CutPrefix(v, "ansi:")
+const (
+	ansiPrefix   = "ansi:"
+	ansiMaxIndex = 15
+	hexColorLen  = 7
+	hexDigits    = "0123456789abcdefABCDEF"
+)
+
+func ansiIndex(value string) (int, bool) {
+	rest, ok := strings.CutPrefix(value, ansiPrefix)
 	if !ok {
 		return 0, false
 	}
-	n, err := strconv.Atoi(rest)
-	if err != nil || n < 0 || n > 15 {
+	index, err := strconv.Atoi(rest)
+	if err != nil || index < 0 || index > ansiMaxIndex {
 		return 0, false
 	}
-	return n, true
+	return index, true
 }
 
-func validColor(v string) bool {
-	if _, ok := ansiIndex(v); ok {
+func validColor(value string) bool {
+	if _, ok := ansiIndex(value); ok {
 		return true
 	}
-	return len(v) == 7 && v[0] == '#' && isHex(v[1:])
+	return len(value) == hexColorLen && value[0] == '#' && isHex(value[1:])
 }
 
-func isHex(s string) bool {
-	for _, r := range s {
-		if !strings.ContainsRune("0123456789abcdefABCDEF", r) {
+func isHex(text string) bool {
+	for _, character := range text {
+		if !strings.ContainsRune(hexDigits, character) {
 			return false
 		}
 	}
@@ -82,13 +187,18 @@ type palette struct {
 }
 
 type renderOptions struct {
-	Glyphs  string
-	Borders string
-	Density string
+	Glyphs  glyphMode
+	Borders borderStyle
+	Density density
 	Bold    bool
 	Italic  bool
 }
 
+func defaultRenderOptions() renderOptions {
+	return renderOptions{Glyphs: glyphsUnicode, Borders: borderRounded, Density: densityNormal, Bold: true, Italic: true}
+}
+
+// Theme est un thème complet : couleurs de la palette et réglages de rendu.
 type Theme struct {
 	ID     string
 	Label  string
@@ -96,32 +206,41 @@ type Theme struct {
 	Render renderOptions
 }
 
+const (
+	sombreInk   = "#e4e4e4"
+	sombreDim   = "#8f8f8f"
+	clairInk    = "#1a1a1a"
+	clairDim    = "#666666"
+	contrastInk = "#ffffff"
+)
+
 func builtinThemes() []Theme {
-	defaultRender := renderOptions{Glyphs: glyphsUnicode, Borders: bordersRounded, Density: densityNormal, Bold: true, Italic: true}
+	render := defaultRenderOptions()
 	return []Theme{
 		{
-			ID: "sombre", Label: "Sombre", Render: defaultRender,
-			Colors: palette{Text: "#e4e4e4", Dim: "#8f8f8f", Accent: "#e4e4e4", Violet: "#e4e4e4", Add: "#7fb08a", AddBg: "#14231a", Del: "#d0706b", DelBg: "#2a1515", Wait: "#c9a55a", Err: "#d0706b", Sel: "#e4e4e4", SelText: "#111111"},
+			ID: themeSombre, Label: "Sombre", Render: render,
+			Colors: palette{Text: sombreInk, Dim: sombreDim, Accent: sombreInk, Violet: sombreInk, Add: "#7fb08a", AddBg: "#14231a", Del: "#d0706b", DelBg: "#2a1515", Wait: "#c9a55a", Err: "#d0706b", Sel: sombreInk, SelText: "#111111"},
 		},
 		{
-			ID: "clair", Label: "Clair", Render: defaultRender,
-			Colors: palette{Text: "#1a1a1a", Dim: "#666666", Accent: "#1a1a1a", Violet: "#1a1a1a", Add: "#2f7a45", AddBg: "#e3f1e6", Del: "#b03a35", DelBg: "#f7e1e0", Wait: "#8a6a1c", Err: "#b03a35", Sel: "#1a1a1a", SelText: "#ffffff"},
+			ID: themeClair, Label: "Clair", Render: render,
+			Colors: palette{Text: clairInk, Dim: clairDim, Accent: clairInk, Violet: clairInk, Add: "#2f7a45", AddBg: "#e3f1e6", Del: "#b03a35", DelBg: "#f7e1e0", Wait: "#8a6a1c", Err: "#b03a35", Sel: clairInk, SelText: "#ffffff"},
 		},
 		{
-			ID: "terminal", Label: "Terminal", Render: defaultRender,
+			ID: themeTerminal, Label: "Terminal", Render: render,
 			Colors: palette{Text: "ansi:7", Dim: "ansi:8", Accent: "ansi:6", Violet: "ansi:5", Add: "ansi:2", AddBg: "#0c2a1d", Del: "ansi:1", DelBg: "#2c1111", Wait: "ansi:3", Err: "ansi:1", Sel: "ansi:7", SelText: "ansi:0"},
 		},
 		{
-			ID: "contraste", Label: "Contraste élevé", Render: defaultRender,
-			Colors: palette{Text: "#ffffff", Dim: "#d0d0d0", Accent: "#ffff00", Violet: "#ffffff", Add: "#5cff8a", AddBg: "#003314", Del: "#ff6b6b", DelBg: "#4a0000", Wait: "#ffd700", Err: "#ff6b6b", Sel: "#ffffff", SelText: "#000000"},
+			ID: themeContraste, Label: "Contraste élevé", Render: render,
+			Colors: palette{Text: contrastInk, Dim: "#d0d0d0", Accent: "#ffff00", Violet: contrastInk, Add: "#5cff8a", AddBg: "#003314", Del: "#ff6b6b", DelBg: "#4a0000", Wait: "#ffd700", Err: "#ff6b6b", Sel: contrastInk, SelText: "#000000"},
 		},
 	}
 }
 
-func builtinTheme(id string) (Theme, bool) {
-	for _, th := range builtinThemes() {
-		if th.ID == id {
-			return th, true
+func builtinTheme(themeName string) (Theme, bool) {
+	themes := builtinThemes()
+	for index := range themes {
+		if themes[index].ID == themeName {
+			return themes[index], true
 		}
 	}
 	return Theme{}, false
@@ -169,23 +288,23 @@ func unicodeGlyphs() glyphSet {
 }
 
 func nerdGlyphs() glyphSet {
-	g := unicodeGlyphs()
-	g.tool, g.unread, g.bolt = "\uf111", "\uf111", "●"
-	g.thinking, g.cursor, g.fold = "\uf10c", "\uf0da", "\uf0da"
-	g.failure, g.success = "\uf00d", "\uf00c"
-	return g
+	glyphs := unicodeGlyphs()
+	glyphs.tool, glyphs.unread, glyphs.bolt = "", "", "●"
+	glyphs.thinking, glyphs.cursor, glyphs.fold = "", "", ""
+	glyphs.failure, glyphs.success = "", ""
+	return glyphs
 }
 
 func asciiGlyphs() glyphSet {
 	return glyphSet{
 		tool: "*", result: "\\", cursor: ">", unread: "*", thinking: "o", notice: ".",
 		failure: "x", success: "v", fold: ">", moreLines: "<", bolt: "*", prompt: ">",
-		ellipsis: "...", divider: "|", ruleChar: "-", gaugeFull: "#", gaugeEmpty: ".",
+		ellipsis: asciiEllipsis, divider: "|", ruleChar: "-", gaugeFull: "#", gaugeEmpty: ".",
 		brand: "--< HERRSCHER >--", agent: "*", active: "*",
 		selected: ">", attention: "!", open: "o", railMark: "=", filet: "|", minus: "-",
-		expanded: "v", branchMid: "+", branchEnd: "\\", omitted: "...", userBar: "|",
+		expanded: "v", branchMid: "+", branchEnd: "\\", omitted: asciiEllipsis, userBar: "|",
 		ticked: "[v]", unticked: "[ ]", shiftTab: "S-Tab",
-		enter: "enter", caret: "_", reasonArrow: ">", warn: "!", note: "+", waiting: "~", review: "?",
+		enter: asciiEnterLabel, caret: "_", reasonArrow: ">", warn: "!", note: "+", waiting: "~", review: "?",
 		families: map[string]string{
 			familyRead: "=", familyWrite: "+", familyRun: ">", familySearch: "?", familyWeb: "@", familyAgent: "*",
 		},
@@ -193,30 +312,32 @@ func asciiGlyphs() glyphSet {
 	}
 }
 
-func glyphsFor(name string) glyphSet {
-	switch name {
+func glyphsFor(mode glyphMode) glyphSet {
+	switch mode {
 	case glyphsNerd:
 		return nerdGlyphs()
 	case glyphsASCII:
 		return asciiGlyphs()
-	default:
+	case glyphsUnicode:
 		return unicodeGlyphs()
 	}
+	return unicodeGlyphs()
 }
 
 type boxSet struct {
 	tl, tr, bl, br, h, v string
 }
 
-func boxesFor(borders string) boxSet {
-	switch borders {
-	case bordersSquare:
+func boxesFor(style borderStyle) boxSet {
+	switch style {
+	case borderSquare:
 		return boxSet{"┌", "┐", "└", "┘", "─", "│"}
-	case bordersNone:
+	case borderNone:
 		return boxSet{" ", " ", " ", " ", " ", " "}
-	default:
+	case borderRounded:
 		return boxSet{"╭", "╮", "╰", "╯", "─", "│"}
 	}
+	return boxSet{"╭", "╮", "╰", "╯", "─", "│"}
 }
 
 func asciiBoxes() boxSet {
@@ -251,7 +372,7 @@ type uiStyles struct {
 	heading    string
 
 	glyphs  glyphSet
-	borders string
+	borders borderStyle
 	ascii   bool
 	compact bool
 	bold    bool
@@ -259,17 +380,17 @@ type uiStyles struct {
 
 func newStyles(th Theme, noColor bool) uiStyles {
 	pal, look := th.Colors, th.Render
-	paint := func(v colorValue) lipgloss.Style {
+	paint := func(value colorValue) lipgloss.Style {
 		if noColor {
 			return lipgloss.NewStyle()
 		}
-		return lipgloss.NewStyle().Foreground(v.color())
+		return lipgloss.NewStyle().Foreground(value.color())
 	}
-	tint := func(fg, bg colorValue) lipgloss.Style {
+	tint := func(foreground, background colorValue) lipgloss.Style {
 		if noColor {
 			return lipgloss.NewStyle()
 		}
-		return lipgloss.NewStyle().Foreground(fg.color()).Background(bg.color())
+		return lipgloss.NewStyle().Foreground(foreground.color()).Background(background.color())
 	}
 	dim := paint(pal.Dim)
 	if noColor {
@@ -337,7 +458,7 @@ func (s uiStyles) boxes(supported bool) boxSet {
 }
 
 func (s uiStyles) ruleGlyph() string {
-	if s.borders == bordersNone {
+	if s.borders == borderNone {
 		return " "
 	}
 	return s.glyphs.ruleChar

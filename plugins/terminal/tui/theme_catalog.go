@@ -17,8 +17,17 @@ const (
 	terminalConfigFile  = "terminal.toml"
 	terminalSectionName = "terminal"
 	themesDirName       = "themes"
-	defaultThemeID      = "sombre"
+	defaultThemeID      = themeSombre
 	themeFileExt        = ".toml"
+	keyTheme            = "theme"
+)
+
+var (
+	errThemeCycle    = errors.New("base de thème cyclique")
+	errUnknownKey    = errors.New("clé inconnue")
+	errInvalidColor  = errors.New("couleur invalide")
+	errUnknownBase   = errors.New("base inconnue")
+	errUnknownOption = errors.New("valeur inconnue")
 )
 
 type themeFile struct {
@@ -51,8 +60,6 @@ type renderFile struct {
 	Italic  *bool   `toml:"italic"`
 }
 
-var errThemeCycle = errors.New("base de thème circulaire")
-
 func readThemeFile(path string) (themeFile, error) {
 	var file themeFile
 	meta, err := toml.DecodeFile(path, &file)
@@ -60,85 +67,89 @@ func readThemeFile(path string) (themeFile, error) {
 		return themeFile{}, err
 	}
 	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
-		return themeFile{}, fmt.Errorf("clé inconnue %s", undecoded[0])
+		return themeFile{}, fmt.Errorf("%w %s", errUnknownKey, undecoded[0])
 	}
 	return file, nil
 }
 
-func (f themeFile) overlay(base Theme, id string) (Theme, error) {
-	th := base
-	th.ID = id
-	th.Label = id
+func (f themeFile) overlay(base Theme, themeName string) (Theme, error) {
+	resolved := base
+	resolved.ID = themeName
+	resolved.Label = themeName
 	if f.Name != "" {
-		th.Label = f.Name
+		resolved.Label = f.Name
 	}
-	colors := []struct {
+	if err := f.Colors.applyTo(&resolved.Colors); err != nil {
+		return Theme{}, err
+	}
+	look, err := f.Render.applyTo(base.Render)
+	if err != nil {
+		return Theme{}, err
+	}
+	resolved.Render = look
+	return resolved, nil
+}
+
+func (c colorsFile) applyTo(pal *palette) error {
+	overrides := []struct {
 		dst *colorValue
 		src *string
 	}{
-		{&th.Colors.Text, f.Colors.Text},
-		{&th.Colors.Dim, f.Colors.Dim},
-		{&th.Colors.Accent, f.Colors.Accent},
-		{&th.Colors.Add, f.Colors.Add},
-		{&th.Colors.Del, f.Colors.Del},
-		{&th.Colors.Wait, f.Colors.Wait},
-		{&th.Colors.Err, f.Colors.Err},
-		{&th.Colors.Sel, f.Colors.Sel},
-		{&th.Colors.SelText, f.Colors.SelText},
-		{&th.Colors.Violet, f.Colors.Violet},
-		{&th.Colors.AddBg, f.Colors.AddBg},
-		{&th.Colors.DelBg, f.Colors.DelBg},
+		{&pal.Text, c.Text},
+		{&pal.Dim, c.Dim},
+		{&pal.Accent, c.Accent},
+		{&pal.Add, c.Add},
+		{&pal.Del, c.Del},
+		{&pal.Wait, c.Wait},
+		{&pal.Err, c.Err},
+		{&pal.Sel, c.Sel},
+		{&pal.SelText, c.SelText},
+		{&pal.Violet, c.Violet},
+		{&pal.AddBg, c.AddBg},
+		{&pal.DelBg, c.DelBg},
 	}
-	for _, color := range colors {
-		if color.src == nil {
+	for _, override := range overrides {
+		if override.src == nil {
 			continue
 		}
-		if !validColor(*color.src) {
-			return Theme{}, fmt.Errorf("couleur invalide %q (attendu #rrggbb ou ansi:0 à ansi:15)", *color.src)
+		if !validColor(*override.src) {
+			return fmt.Errorf("%w %q (attendu #rrggbb ou ansi:0 à ansi:15)", errInvalidColor, *override.src)
 		}
-		*color.dst = colorValue(*color.src)
-	}
-	if f.Render.Glyphs != nil {
-		th.Render.Glyphs = *f.Render.Glyphs
-	}
-	if f.Render.Borders != nil {
-		th.Render.Borders = *f.Render.Borders
-	}
-	if f.Render.Density != nil {
-		th.Render.Density = *f.Render.Density
-	}
-	if f.Render.Bold != nil {
-		th.Render.Bold = *f.Render.Bold
-	}
-	if f.Render.Italic != nil {
-		th.Render.Italic = *f.Render.Italic
-	}
-	if err := th.Render.validate(); err != nil {
-		return Theme{}, err
-	}
-	return th, nil
-}
-
-func (r renderOptions) validate() error {
-	if !oneOf(r.Glyphs, glyphsUnicode, glyphsNerd, glyphsASCII) {
-		return fmt.Errorf("glyphs inconnu %q (unicode, nerd ou ascii)", r.Glyphs)
-	}
-	if !oneOf(r.Borders, bordersRounded, bordersSquare, bordersNone) {
-		return fmt.Errorf("borders inconnu %q (rounded, square ou none)", r.Borders)
-	}
-	if !oneOf(r.Density, densityNormal, densityCompact) {
-		return fmt.Errorf("density inconnu %q (normal ou compact)", r.Density)
+		*override.dst = colorValue(*override.src)
 	}
 	return nil
 }
 
-func oneOf(value string, allowed ...string) bool {
-	for _, candidate := range allowed {
-		if value == candidate {
-			return true
+func (f renderFile) applyTo(base renderOptions) (renderOptions, error) {
+	look := base
+	if f.Glyphs != nil {
+		mode, err := parseOption("glyphs", *f.Glyphs, glyphModes())
+		if err != nil {
+			return renderOptions{}, err
 		}
+		look.Glyphs = mode
 	}
-	return false
+	if f.Borders != nil {
+		style, err := parseOption("borders", *f.Borders, borderStyles())
+		if err != nil {
+			return renderOptions{}, err
+		}
+		look.Borders = style
+	}
+	if f.Density != nil {
+		level, err := parseOption("density", *f.Density, densities())
+		if err != nil {
+			return renderOptions{}, err
+		}
+		look.Density = level
+	}
+	if f.Bold != nil {
+		look.Bold = *f.Bold
+	}
+	if f.Italic != nil {
+		look.Italic = *f.Italic
+	}
+	return look, nil
 }
 
 type themeCatalog struct {
@@ -148,83 +159,83 @@ type themeCatalog struct {
 }
 
 func loadThemeCatalog(dir string) themeCatalog {
-	catalog := themeCatalog{themes: builtinThemes(), paths: map[string]string{}}
+	catalog := themeCatalog{themes: builtinThemes(), paths: make(map[string]string)}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return catalog
 	}
-	raws := map[string]themeFile{}
-	var ids []string
+	raws := make(map[string]themeFile)
+	var names []string
 	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || filepath.Ext(name) != themeFileExt {
+		fileName := entry.Name()
+		if entry.IsDir() || filepath.Ext(fileName) != themeFileExt {
 			continue
 		}
-		id := strings.TrimSuffix(name, themeFileExt)
-		if _, builtin := builtinTheme(id); builtin {
-			catalog.problems = append(catalog.problems, fmt.Sprintf("thème %s ignoré : ce nom est intégré", name))
+		themeName := strings.TrimSuffix(fileName, themeFileExt)
+		if _, builtin := builtinTheme(themeName); builtin {
+			catalog.problems = append(catalog.problems, fmt.Sprintf("thème %s ignoré : ce nom est intégré", fileName))
 			continue
 		}
-		path := filepath.Join(dir, name)
+		path := filepath.Join(dir, fileName)
 		file, err := readThemeFile(path)
 		if err != nil {
-			catalog.problems = append(catalog.problems, fmt.Sprintf("thème %s ignoré : %v", name, err))
+			catalog.problems = append(catalog.problems, fmt.Sprintf("thème %s ignoré : %v", fileName, err))
 			continue
 		}
-		raws[id] = file
-		catalog.paths[id] = path
-		ids = append(ids, id)
+		raws[themeName] = file
+		catalog.paths[themeName] = path
+		names = append(names, themeName)
 	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		th, err := resolveTheme(id, raws, map[string]bool{})
+	sort.Strings(names)
+	for _, themeName := range names {
+		resolved, err := resolveTheme(themeName, raws, make(map[string]bool))
 		if err != nil {
-			catalog.problems = append(catalog.problems, fmt.Sprintf("thème %s ignoré : %v", id, err))
-			delete(catalog.paths, id)
+			catalog.problems = append(catalog.problems, fmt.Sprintf("thème %s ignoré : %v", themeName, err))
+			delete(catalog.paths, themeName)
 			continue
 		}
-		catalog.themes = append(catalog.themes, th)
+		catalog.themes = append(catalog.themes, resolved)
 	}
 	return catalog
 }
 
-func resolveTheme(id string, raws map[string]themeFile, seen map[string]bool) (Theme, error) {
-	if seen[id] {
+func resolveTheme(themeName string, raws map[string]themeFile, seen map[string]bool) (Theme, error) {
+	if seen[themeName] {
 		return Theme{}, errThemeCycle
 	}
-	seen[id] = true
-	file := raws[id]
-	baseID := file.Base
-	if baseID == "" {
-		baseID = defaultThemeID
+	seen[themeName] = true
+	file := raws[themeName]
+	baseName := file.Base
+	if baseName == "" {
+		baseName = defaultThemeID
 	}
-	base, builtin := builtinTheme(baseID)
+	base, builtin := builtinTheme(baseName)
 	if !builtin {
-		if _, custom := raws[baseID]; !custom {
-			return Theme{}, fmt.Errorf("base inconnue %q", baseID)
+		if _, custom := raws[baseName]; !custom {
+			return Theme{}, fmt.Errorf("%w %q", errUnknownBase, baseName)
 		}
-		parent, err := resolveTheme(baseID, raws, seen)
+		parent, err := resolveTheme(baseName, raws, seen)
 		if err != nil {
 			return Theme{}, err
 		}
 		base = parent
 	}
-	return file.overlay(base, id)
+	return file.overlay(base, themeName)
 }
 
-func (c themeCatalog) find(id string) (Theme, bool) {
-	for _, th := range c.themes {
-		if th.ID == id {
-			return th, true
+func (c themeCatalog) find(themeName string) (Theme, bool) {
+	for index := range c.themes {
+		if c.themes[index].ID == themeName {
+			return c.themes[index], true
 		}
 	}
 	return Theme{}, false
 }
 
-func (c themeCatalog) indexOf(id string) int {
-	for i, th := range c.themes {
-		if th.ID == id {
-			return i
+func (c themeCatalog) indexOf(themeName string) int {
+	for index := range c.themes {
+		if c.themes[index].ID == themeName {
+			return index
 		}
 	}
 	return -1
@@ -257,7 +268,7 @@ func readTerminalConfig(path string) (terminalSection, error) {
 
 func themeKeyValues(section terminalSection) []tomlKeyValue {
 	return []tomlKeyValue{
-		{key: "theme", value: quotedOrEmpty(section.Theme)},
+		{key: keyTheme, value: quotedOrEmpty(section.Theme)},
 		{key: "auto_theme", value: boolOrEmpty(section.AutoTheme)},
 		{key: "glyphs", value: quotedOrEmpty(section.Glyphs)},
 		{key: "borders", value: quotedOrEmpty(section.Borders)},
@@ -292,37 +303,21 @@ func (s terminalSection) autoTheme() bool {
 	return s.AutoTheme != nil && *s.AutoTheme
 }
 
-func (s terminalSection) applyLook(th Theme) Theme {
-	if s.Glyphs != nil {
-		th.Render.Glyphs = *s.Glyphs
-	}
-	if s.Borders != nil {
-		th.Render.Borders = *s.Borders
-	}
-	if s.Density != nil {
-		th.Render.Density = *s.Density
-	}
-	if s.Bold != nil {
-		th.Render.Bold = *s.Bold
-	}
-	if s.Italic != nil {
-		th.Render.Italic = *s.Italic
-	}
-	return th
+func (s terminalSection) renderFile() renderFile {
+	return renderFile{Glyphs: s.Glyphs, Borders: s.Borders, Density: s.Density, Bold: s.Bold, Italic: s.Italic}
 }
 
-func (s terminalSection) validate() error {
-	look := renderOptions{Glyphs: glyphsUnicode, Borders: bordersRounded, Density: densityNormal}
-	if s.Glyphs != nil {
-		look.Glyphs = *s.Glyphs
+func (s terminalSection) look(base renderOptions) (renderOptions, error) {
+	return s.renderFile().applyTo(base)
+}
+
+func (s terminalSection) applyLook(current Theme) Theme {
+	look, err := s.look(current.Render)
+	if err != nil {
+		return current
 	}
-	if s.Borders != nil {
-		look.Borders = *s.Borders
-	}
-	if s.Density != nil {
-		look.Density = *s.Density
-	}
-	return look.validate()
+	current.Render = look
+	return current
 }
 
 func themesDirFor(configDir string) string {

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -40,14 +39,6 @@ type statuslineConfig struct {
 
 func defaultStatuslineConfig() statuslineConfig {
 	return statuslineConfig{Source: barSourceBuiltin, Interval: statuslineDefaultInterval}
-}
-
-func statuslineConfigFile() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".config", "herrscher", "terminal.toml")
 }
 
 func loadStatuslineConfig(path string) statuslineConfig {

@@ -18,10 +18,10 @@ func testStyles() uiStyles {
 
 func writeFile(t *testing.T, path, body string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), configDirMode); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(body), privateFileMode); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -37,14 +37,14 @@ func themeModel(t *testing.T, width int) (*model, string) {
 }
 
 func TestBuiltinThemesAndGlyphSetsAreComplete(t *testing.T) {
-	ids := map[string]bool{}
+	ids := make(map[string]bool)
 	for _, th := range builtinThemes() {
 		ids[th.ID] = true
 		if !validColor(string(th.Colors.Text)) || !validColor(string(th.Colors.SelText)) {
 			t.Fatalf("theme %s has an invalid colour: %+v", th.ID, th.Colors)
 		}
 	}
-	for _, want := range []string{"sombre", "clair", "terminal", "contraste"} {
+	for _, want := range []string{themeSombre, themeClair, themeTerminal, themeContraste} {
 		if !ids[want] {
 			t.Fatalf("missing built-in theme %s", want)
 		}
@@ -110,13 +110,13 @@ func TestPersonalThemeCycleAndBadColourAreReported(t *testing.T) {
 func TestStartupAutoThemeFollowsBackground(t *testing.T) {
 	catalog := loadThemeCatalog(filepath.Join(t.TempDir(), "none"))
 	auto := terminalSection{AutoTheme: boolPtr(true)}
-	if got := startupTheme(auto, catalog, func() bool { return false }); got.ID != "clair" {
+	if got := startupTheme(auto, catalog, func() bool { return false }); got.ID != themeClair {
 		t.Fatalf("light background must pick clair, got %s", got.ID)
 	}
-	if got := startupTheme(auto, catalog, func() bool { return true }); got.ID != "sombre" {
+	if got := startupTheme(auto, catalog, func() bool { return true }); got.ID != themeSombre {
 		t.Fatalf("dark background must pick sombre, got %s", got.ID)
 	}
-	if got := startupTheme(terminalSection{Theme: strPtr("terminal")}, catalog, func() bool { return false }); got.ID != "terminal" {
+	if got := startupTheme(terminalSection{Theme: strPtr(themeTerminal)}, catalog, func() bool { return false }); got.ID != "terminal" {
 		t.Fatalf("auto off must keep the chosen theme, got %s", got.ID)
 	}
 }
@@ -147,7 +147,7 @@ func TestThemeOverlayCommitWritesOnlyChangedLook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Glyphs == nil || *cfg.Glyphs != glyphsNerd {
+	if cfg.Glyphs == nil || *cfg.Glyphs != glyphsNerd.String() {
 		t.Fatalf("changed glyphs must be persisted, got %+v", cfg)
 	}
 	if cfg.Borders != nil {

@@ -499,6 +499,40 @@ An attached window follows the live turn, because every driven session taps the
 daemon's event socket. Esc stops a turn as an interruption rather than an error,
 keeping whatever the agent had already written.
 
+### Context, and what fills it
+
+`/context` opens the window's room: the total used against the session's window,
+and a line for each part that fills it (system prompt, tools and MCP servers,
+memory, skills, files read, conversation), with what is free. Only the total is
+known: the backends report one count of input tokens per turn, not a breakdown,
+so each part reads `n/a` until a backend reports it. Without any count yet, the
+total reads `n/a` too, and no percentage is invented. Below 80 columns the bars
+go and the overlay becomes a plain list. `esc` or `z` closes it, `k` re-reads the
+figures.
+
+`/compact`, or `c` inside `/context`, asks the agent to compact its conversation
+through the host (`herrscher session compact <name>`, claude sessions only). A
+turn in progress must finish first. The transcript then records the window before
+and after, as the backend reports it, and the gauge in the status bar follows the
+new figure. A compaction the backend does not report on reads `n/a` after.
+
+### Notifications
+
+When a turn finishes, and when an approval waits for you, a toast appears at the
+top right of the window and fades after a few seconds. The toast only signals: it
+never answers an approval or opens anything.
+
+The window also tells the terminal, but only when the window lacks focus. The
+terminal gets an OSC 9 notification (`ESC ] 9 ; text BEL`) where it is known to
+handle one (iTerm2, WezTerm, ghostty), and a plain BEL everywhere else. A
+terminal that reports focus lets the window know when it is in the background; a
+terminal that does not report focus is signalled on every event, since nothing
+says whether the window is looked at. The BEL fallback is a heuristic on the
+terminal's name, not a check that the terminal rang.
+
+`n` (with an empty composer) or `/notify` cycles which events notify: turn end
+and approval, turn end only, or approval only.
+
 ### What the agent is doing right now
 
 A todo list and a running sub-agent are state, not transcript: written into the
@@ -609,7 +643,7 @@ what is not, and what each unavailable feature falls back to.
 ### Nothing opens on its own
 
 A link is followed because the operator asked, never because a message arrived or
-a turn completed.
+a turn completed. A notification does not open a link either: it only signals.
 
 `ctrl+l` walks the links in the transcript. While one is selected the status line
 shows its *resolved target*, since a markdown label can name one destination and

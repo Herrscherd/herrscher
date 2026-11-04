@@ -61,6 +61,9 @@ func (m *model) buildFrame() frame {
 	if m.diagOpen {
 		stacked.below = appendLines(stacked.below, m.diagView())
 	}
+	if m.ctxOpen {
+		stacked.below = appendLines(stacked.below, m.contextView())
+	}
 	if m.pluginsOpen {
 		stacked.below = appendLines(stacked.below, m.pluginsView())
 	}

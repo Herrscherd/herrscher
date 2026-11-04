@@ -19,6 +19,7 @@ func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID stri
 		sessionInfoVerb(store, partDir),
 		sessionScrollbackVerb(partDir),
 		sessionInterruptVerb(sessions),
+		sessionCompactVerb(store, sessions),
 	)
 }
 
@@ -139,4 +140,41 @@ func sessionInterruptVerb(sessions *sessionTable) contracts.Cmd {
 			}
 			return "interrupted " + input.Get(paramName), nil
 		})
+}
+
+const (
+	verbCompact    = "compact"
+	compactCommand = "/compact"
+	vendorClaude   = "claude"
+)
+
+func sessionCompactVerb(store *state.State, sessions *sessionTable) contracts.Cmd {
+	return contracts.New(nsSession, verbCompact).
+		Help("ask a claude session to compact its context (sends /compact into its turn queue)").
+		Param(paramName, "session name", true).
+		Param("origin", "gateway kind this was typed in (e.g. terminal): the turn is rendered there "+
+			"instead of in every channel the session is bound to", false).
+		Do(func(ctx context.Context, in contracts.Input) (string, error) {
+			return compactSession(ctx, store, sessions, in)
+		})
+}
+
+func compactSession(ctx context.Context, store *state.State, sessions *sessionTable, input contracts.Input) (string, error) {
+	name := input.Get(paramName)
+	live, ok := store.FindSession(name)
+	if !ok {
+		return "", &NotFoundError{Kind: "session", Name: name}
+	}
+	if live.Vendor != vendorClaude {
+		return "", fmt.Errorf("session %q runs %q: /compact is only available on claude sessions", name, live.Vendor)
+	}
+	if !sessions.Submit(ctx, name, contracts.Inbound{
+		Author:       "you",
+		AuthorID:     "local",
+		Text:         compactCommand,
+		Conversation: contracts.Conversation{Gateway: input.Get("origin")},
+	}) {
+		return "", &NotFoundError{Kind: "live session", Name: name}
+	}
+	return "", nil
 }

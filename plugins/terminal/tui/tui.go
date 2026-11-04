@@ -136,6 +136,8 @@ type tab struct {
 	costTotal          float64
 	ctxTokens          int
 	ctxMeasured        bool
+	compaction         compaction
+	lastCompact        compaction
 	openedAt           time.Time
 	nextEntryID        uint64
 	todos              []contracts.TodoItem
@@ -285,6 +287,13 @@ type model struct {
 
 	leaderArmed time.Time
 	bar         barState
+
+	ctxOpen bool
+
+	toast      toast
+	toastSeq   int
+	notifyMode notifyMode
+	focus      focusState
 
 	skillsOpen bool
 	skillsIdx  int
@@ -539,20 +548,24 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 			gitCmd = m.gitAfterTool(routed.Event.Text)
 		}
 	}
+	var notice tea.Cmd
+	if routed.Event.T == "reply" && routed.Event.Done {
+		notice = m.notifyTurnEnd(tab)
+	}
 	if routed.Event.T != "reply" || len(tab.entries) == 0 {
-		return gitCmd
+		return tea.Batch(gitCmd, notice)
 	}
 	last := len(tab.entries) - 1
 	for last >= 0 && tab.entries[last].role != roleAgent {
 		last--
 	}
 	if last < 0 {
-		return gitCmd
+		return tea.Batch(gitCmd, notice)
 	}
 	if tab.channel == m.active && tab.modeID() == modePlan && m.planMenu == nil && tab.entries[last].text != "" {
 		m.openPlanMenu(tab.channel)
 	}
-	return tea.Batch(gitCmd, m.fetchEntryImages(tab, last))
+	return tea.Batch(gitCmd, notice, m.fetchEntryImages(tab, last))
 }
 
 func (m *model) syncTabs() {
@@ -673,6 +686,12 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		m.openTheme()
 	case sessionVerb:
 		return m.sessionSlash(args)
+	case "context":
+		m.openContext()
+	case "compact":
+		return m.compactCmd(), true
+	case "notify":
+		return m.cycleNotify(), true
 	case "usage":
 		if tb := m.tabs[m.active]; tb != nil {
 			tb.appendEntry(entry{role: roleNotice, text: m.usageReport(tb)})
@@ -839,6 +858,9 @@ func (m *model) toggleHelp() {
 }
 
 func (m *model) sessionName(channel string) string {
+	if m.tm == nil {
+		return ""
+	}
 	sessions := m.tm.Sessions()
 	for i := range sessions {
 		session := &sessions[i]
@@ -1028,6 +1050,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 
 func (tb *tab) measureContext(event contracts.Event) {
 	used := event.TokensIn + event.CacheRead + event.CacheCreate
+	tb.measureCompaction(used)
 	if used <= 0 {
 		return
 	}
@@ -1070,6 +1093,7 @@ func (tb *tab) appendReply(event contracts.Event) {
 		tb.appendEntry(entry{role: roleCost, text: formatCost(event.Cost)})
 	}
 	if event.Done {
+		tb.finishCompaction()
 		tb.busy = false
 		tb.interruptRequested = false
 		tb.streamed = false
@@ -1288,6 +1312,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	program := tea.NewProgram(model,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
+		tea.WithReportFocus(),
 		tea.WithInput(newFilteredStdin(model.keys)),
 	)
 	go func() {
@@ -1374,11 +1399,24 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case modeLoadedMsg:
 		m.handleModeLoaded(msg)
+		return nil, true
 	case shellResultMsg:
 		m.handleShellResult(msg)
 		return nil, true
 	case editorDoneMsg:
 		m.applyEditorResult(msg)
+		return nil, true
+	case compactResultMsg:
+		m.handleCompactResult(msg)
+		return nil, true
+	case toastExpiredMsg:
+		m.handleToastExpired(msg)
+		return nil, true
+	case tea.FocusMsg:
+		m.handleFocus(true)
+		return nil, true
+	case tea.BlurMsg:
+		m.handleFocus(false)
 		return nil, true
 	case tickMsg:
 		m.syncTabs()
@@ -1468,6 +1506,9 @@ func (m *model) updateComponents(msg tea.Msg) tea.Cmd {
 func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	m.keys.write("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
 	m.flash = ""
+	if msg.Type == tea.KeyCtrlP && m.toast.title != "" {
+		return m.jumpToToast(), true
+	}
 	switch {
 	case m.pendingClose:
 		return m.handlePendingClose(msg), true
@@ -1479,6 +1520,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleSearchKey(msg), true
 	case m.diagOpen:
 		return m.handleDiagKey(msg), true
+	case m.ctxOpen:
+		return m.handleContextKey(msg), true
 	case m.pluginsOpen:
 		return m.handlePluginsOverlayKey(msg), true
 	case m.skillsOpen:
@@ -1788,6 +1831,9 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.toggleHelp()
 		return nil, true
 	}
+	if msg.String() == "n" && m.input.Value() == "" && m.toast.title != "" {
+		return m.cycleNotify(), true
+	}
 	if msg.Alt && strings.EqualFold(string(msg.Runes), "y") {
 		m.copyTarget(copyReply)
 		return nil, true
@@ -1819,7 +1865,7 @@ func (m *model) View() string {
 	if side := m.sidebarPane(m.vp.Height); side != nil {
 		body = m.joinSidebar(body, side)
 	}
-	return m.st.finish(m.buildFrame().render(body))
+	return m.overlayToast(m.st.finish(m.buildFrame().render(body)))
 }
 
 func (tb *tab) recordTrail(sub contracts.Subagent) {

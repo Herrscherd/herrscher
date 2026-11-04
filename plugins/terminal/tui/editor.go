@@ -9,12 +9,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 const (
+	draftBeatFlash = "signe de vie du brouillon interrompu : "
 	fallbackEditor = "vi"
 	draftFile      = "draft-*.md"
 	draftRunPrefix = "run-"
@@ -33,11 +35,20 @@ type editorDoneMsg struct {
 }
 
 type draftRun struct {
-	dir    string
-	root   *os.Root
-	lock   *os.File
-	cancel context.CancelFunc
-	done   chan struct{}
+	dir      string
+	root     *os.Root
+	lock     *os.File
+	touch    func(*os.Root) error
+	cancel   context.CancelFunc
+	done     chan struct{}
+	failures chan error
+	once     sync.Once
+	mu       sync.Mutex
+	beatErr  error
+}
+
+type draftBeatFailedMsg struct {
+	err error
 }
 
 func configuredEditor(env func(string) string) []string {
@@ -68,11 +79,11 @@ func draftsRoot() (string, error) {
 	return filepath.Join(cache, "herrscher", "drafts"), nil
 }
 
-func openDraftRun(rootPath string) (*draftRun, error) {
-	return startDraftRun(rootPath, draftHeartbeat)
+func openDraftRun(parent context.Context, rootPath string) (*draftRun, error) {
+	return startDraftRun(parent, rootPath, draftHeartbeat, touchDraftLock)
 }
 
-func startDraftRun(rootPath string, every time.Duration) (*draftRun, error) {
+func startDraftRun(parent context.Context, rootPath string, every time.Duration, touch func(*os.Root) error) (*draftRun, error) {
 	if err := os.MkdirAll(rootPath, draftDirMode); err != nil {
 		return nil, err
 	}
@@ -87,8 +98,9 @@ func startDraftRun(rootPath string, every time.Duration) (*draftRun, error) {
 	if err != nil {
 		return nil, errors.Join(err, os.RemoveAll(dir))
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(parent)
 	run.cancel = cancel
+	run.touch = touch
 	go run.keepAlive(ctx, every)
 	return run, nil
 }
@@ -181,11 +193,12 @@ func claimDraftRun(dir string) (*draftRun, error) {
 	if err != nil {
 		return nil, errors.Join(err, root.Close())
 	}
-	return &draftRun{dir: dir, root: root, lock: lock, done: make(chan struct{})}, nil
+	return &draftRun{dir: dir, root: root, lock: lock, done: make(chan struct{}), failures: make(chan error, 1)}, nil
 }
 
 func (r *draftRun) keepAlive(ctx context.Context, every time.Duration) {
 	defer close(r.done)
+	defer close(r.failures)
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	for {
@@ -193,10 +206,38 @@ func (r *draftRun) keepAlive(ctx context.Context, every time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := touchDraftLock(r.root); err != nil {
-				return
-			}
+			r.recordBeat(r.touch(r.root))
 		}
+	}
+}
+
+func (r *draftRun) recordBeat(err error) {
+	r.mu.Lock()
+	wasFailing := r.beatErr != nil
+	r.beatErr = err
+	r.mu.Unlock()
+	if err == nil || wasFailing {
+		return
+	}
+	select {
+	case r.failures <- err:
+	default:
+	}
+}
+
+func (r *draftRun) heartbeatError() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.beatErr
+}
+
+func (r *draftRun) watchBeat() tea.Cmd {
+	return func() tea.Msg {
+		err, ok := <-r.failures
+		if !ok {
+			return nil
+		}
+		return draftBeatFailedMsg{err: err}
 	}
 }
 
@@ -206,32 +247,87 @@ func touchDraftLock(root *os.Root) error {
 }
 
 func (r *draftRun) release() error {
+	var err error
+	r.once.Do(func() {
+		err = r.closeRun()
+	})
+	return err
+}
+
+func (r *draftRun) closeRun() error {
 	r.cancel()
 	<-r.done
 	var lockErr error
 	if r.lock != nil {
 		lockErr = r.lock.Close()
 	}
-	return errors.Join(lockErr, r.root.Close())
+	return errors.Join(r.heartbeatError(), lockErr, r.root.Close())
 }
 
 func (m *model) releaseDrafts() error {
-	if m.draftFiles == nil {
+	run := m.draftFiles
+	m.draftFiles = nil
+	if run == nil {
 		return nil
 	}
-	return m.draftFiles.release()
+	return run.release()
 }
 
 func (m *model) openEditor() tea.Cmd {
 	path, err := m.writeDraft(m.input.Value())
 	if err != nil {
 		m.flash = "éditeur indisponible : " + err.Error()
-		return nil
+		return m.armDraftBeatWatch()
+	}
+	if m.draftFiles != nil {
+		if beatErr := m.draftFiles.heartbeatError(); beatErr != nil {
+			m.flash = draftBeatFlash + beatErr.Error()
+		}
 	}
 	m.editing = true
-	return tea.ExecProcess(editorCommand(m.runContext(), path), func(err error) tea.Msg {
+	return tea.Batch(m.armDraftBeatWatch(), tea.ExecProcess(editorCommand(m.runContext(), path), func(err error) tea.Msg {
 		return editorDoneMsg{path: path, err: err}
-	})
+	}))
+}
+
+func (m *model) armDraftBeatWatch() tea.Cmd {
+	if m.draftFiles == nil || m.draftBeatWatched {
+		return nil
+	}
+	m.draftBeatWatched = true
+	return m.draftFiles.watchBeat()
+}
+
+func (m *model) draftBeatStillFailing() bool {
+	return m.draftFiles != nil && m.draftFiles.heartbeatError() != nil
+}
+
+func (m *model) queueBeatFlash(err error) {
+	if !m.draftBeatStillFailing() {
+		return
+	}
+	text := draftBeatFlash + err.Error()
+	if m.flash != "" {
+		m.pendingBeatFlash = text
+		return
+	}
+	m.flash = text
+}
+
+func (m *model) takePendingBeatFlash() string {
+	text := m.pendingBeatFlash
+	m.pendingBeatFlash = ""
+	if text == "" || !m.draftBeatStillFailing() {
+		return ""
+	}
+	return text
+}
+
+func (m *model) watchDraftBeat() tea.Cmd {
+	if m.draftFiles == nil {
+		return nil
+	}
+	return m.draftFiles.watchBeat()
 }
 
 func (m *model) writeDraft(text string) (string, error) {
@@ -240,7 +336,7 @@ func (m *model) writeDraft(text string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		run, err := openDraftRun(root)
+		run, err := openDraftRun(m.runContext(), root)
 		if err != nil {
 			return "", err
 		}

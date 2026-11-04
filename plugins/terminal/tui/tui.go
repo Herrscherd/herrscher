@@ -350,17 +350,19 @@ type model struct {
 	mentionCacheKey  string
 	mentionCacheRows []string
 
-	history    []string
-	histIdx    int
-	drafts     []string
-	histOpen   bool
-	histQuery  string
-	histSel    int
-	editing    bool
-	draftFiles *draftRun
-	queueSel   int
-	queueFocus bool
-	queueHits  []queueHit
+	history          []string
+	histIdx          int
+	drafts           []string
+	histOpen         bool
+	histQuery        string
+	histSel          int
+	editing          bool
+	draftFiles       *draftRun
+	draftBeatWatched bool
+	pendingBeatFlash string
+	queueSel         int
+	queueFocus       bool
+	queueHits        []queueHit
 
 	clip      clipboard
 	pending   []Attachment
@@ -1386,9 +1388,12 @@ func OpenOn(session, text string) Option {
 // Run starts the TUI bound to the given gateway backend, blocking until the user
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
-func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) error {
+func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) (runErr error) {
 	model := newModel(backend)
 	model.ctx = ctx
+	defer func() {
+		runErr = errors.Join(runErr, model.releaseDrafts())
+	}()
 	model.loadTheme(filepath.Dir(config.DefaultPath()), lipgloss.HasDarkBackground)
 	model.keys = &keyLog{}
 	model.bar.file = model.terminalConfigPath()
@@ -1426,9 +1431,8 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 			}
 		}
 	}()
-	_, runErr := program.Run()
+	_, runErr = program.Run()
 	cancel()
-	runErr = errors.Join(runErr, model.releaseDrafts())
 	if err := writeStdout(enhancedKeysOff); err != nil {
 		return errors.Join(runErr, fmt.Errorf("disable enhanced keys: %w", err))
 	}
@@ -1528,6 +1532,9 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case editorDoneMsg:
 		m.applyEditorResult(msg)
 		return nil, true
+	case draftBeatFailedMsg:
+		m.queueBeatFlash(msg.err)
+		return m.watchDraftBeat(), true
 	case compactResultMsg:
 		m.handleCompactResult(msg)
 		return nil, true
@@ -1638,6 +1645,14 @@ func (m *model) updateComponents(msg tea.Msg) tea.Cmd {
 func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	m.keys.write("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
 	m.flash = ""
+	cmd, handled := m.dispatchKey(msg)
+	if m.flash == "" {
+		m.flash = m.takePendingBeatFlash()
+	}
+	return cmd, handled
+}
+
+func (m *model) dispatchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if msg.Type == tea.KeyCtrlP && m.toast.title != "" {
 		m.jumpToToast()
 		return nil, true

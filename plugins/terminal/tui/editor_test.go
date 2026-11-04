@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -202,7 +205,7 @@ func TestRunWithAFreshLockIsNeverSwept(t *testing.T) {
 }
 
 func TestHeartbeatKeepsALiveRunsLockFresh(t *testing.T) {
-	run, err := startDraftRun(filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond)
+	run, err := startDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond, touchDraftLock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,14 +264,14 @@ func TestOpenDraftRunRefusesAWideRoot(t *testing.T) {
 	if err := os.Chmod(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := openDraftRun(root); !errors.Is(err, errUnsafeDraftDir) {
+	if _, err := openDraftRun(t.Context(), root); !errors.Is(err, errUnsafeDraftDir) {
 		t.Fatalf("a drafts root open to others must be refused, got %v", err)
 	}
 }
 
 func TestOpenDraftRunCreatesALockedPrivateRun(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "drafts")
-	run, err := openDraftRun(root)
+	run, err := openDraftRun(t.Context(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,5 +303,254 @@ func TestOpenDraftRunCreatesALockedPrivateRun(t *testing.T) {
 	}()
 	if !runDirHeld(parent, filepath.Base(run.dir)) {
 		t.Fatal("the run of a live process must hold its lock")
+	}
+}
+
+func TestHeartbeatSurvivesATransientFailure(t *testing.T) {
+	failedOnce := false
+	touch := func(root *os.Root) error {
+		if !failedOnce {
+			failedOnce = true
+			return errors.New("toucher transitoire")
+		}
+		return touchDraftLock(root)
+	}
+	run, err := startDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond, touch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock := filepath.Join(run.dir, draftLockName)
+	old := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(lock, old, old); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		info, err := os.Stat(lock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if time.Since(info.ModTime()) < time.Hour {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("a transient failure must not stop the heartbeat: the next tick must refresh the lock")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := run.release(); err != nil {
+		t.Fatalf("release after a recovered beat must be nil, got %v", err)
+	}
+}
+
+func TestReleaseDraftsTwiceIsSafe(t *testing.T) {
+	run, err := openDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newTestModel()
+	m.draftFiles = run
+	if err := m.releaseDrafts(); err != nil {
+		t.Fatalf("first release: %v", err)
+	}
+	if err := m.releaseDrafts(); err != nil {
+		t.Fatalf("second release must be a no-op, got %v", err)
+	}
+}
+
+func TestReleaseReportsNoBeatErrorAfterARecovery(t *testing.T) {
+	var calls atomic.Int32
+	touch := func(root *os.Root) error {
+		if calls.Add(1) == 1 {
+			return errors.New("panne transitoire")
+		}
+		return touchDraftLock(root)
+	}
+	run, err := startDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond, touch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for calls.Load() < 3 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if err := run.release(); err != nil {
+		t.Fatalf("a beat that recovered must not fail the release, got %v", err)
+	}
+}
+
+func TestReleaseReportsAFailureAtTheLastBeat(t *testing.T) {
+	var calls atomic.Int32
+	failing := make(chan struct{})
+	var signal sync.Once
+	touch := func(root *os.Root) error {
+		if calls.Add(1) < 3 {
+			return touchDraftLock(root)
+		}
+		signal.Do(func() { close(failing) })
+		return errors.New("panne finale")
+	}
+	run, err := startDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond, touch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-failing:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the failing beat never ran")
+	}
+	if err := run.release(); err == nil || !strings.Contains(err.Error(), "panne finale") {
+		t.Fatalf("release must report the failure of the last beat, got %v", err)
+	}
+}
+
+func TestDraftRunReleaseIsIdempotent(t *testing.T) {
+	run, err := startDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"), time.Hour, touchDraftLock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := run.release(); err != nil {
+		t.Fatalf("first release: %v", err)
+	}
+	if err := run.release(); err != nil {
+		t.Fatalf("second direct release must be a no-op, got %v", err)
+	}
+}
+
+func TestBeatFailureFlashesOnceAndDoesNotLoop(t *testing.T) {
+	var calls atomic.Int32
+	touch := func(root *os.Root) error {
+		if calls.Add(1) == 1 {
+			return errors.New("panne durable")
+		}
+		return touchDraftLock(root)
+	}
+	run, err := startDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond, touch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := run.release(); err != nil {
+			t.Errorf("release: %v", err)
+		}
+	}()
+	m := newTestModel()
+	m.draftFiles = run
+	first := make(chan tea.Msg, 1)
+	go func() { first <- m.armDraftBeatWatch()() }()
+	var msg tea.Msg
+	select {
+	case msg = <-first:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the failed beat was never reported")
+	}
+	failure, ok := msg.(draftBeatFailedMsg)
+	if !ok {
+		t.Fatalf("want draftBeatFailedMsg, got %T", msg)
+	}
+	cmd, _ := m.handleMsg(failure)
+	if !strings.Contains(m.flash, "panne durable") {
+		t.Fatalf("the flash must name the failure, got %q", m.flash)
+	}
+	if cmd == nil {
+		t.Fatal("the watch must be re-armed for a later transition")
+	}
+	again := make(chan tea.Msg, 1)
+	go func() { again <- cmd() }()
+	select {
+	case extra := <-again:
+		t.Fatalf("healthy beats must not produce another message, got %#v", extra)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func brokenDraftRun(t *testing.T, broken *atomic.Bool) *draftRun {
+	t.Helper()
+	touch := func(root *os.Root) error {
+		if broken.Load() {
+			return errors.New("panne")
+		}
+		return touchDraftLock(root)
+	}
+	run, err := startDraftRun(context.Background(), filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond, touch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := run.release(); err != nil {
+			t.Errorf("release: %v", err)
+		}
+	})
+	t.Cleanup(func() {
+		broken.Store(false)
+		waitForBeat(t, run, false)
+	})
+	return run
+}
+
+func waitForBeat(t *testing.T, run *draftRun, wantFailing bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for (run.heartbeatError() != nil) != wantFailing {
+		if time.Now().After(deadline) {
+			t.Fatalf("heartbeat never reached failing=%v", wantFailing)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestBeatFailureWaitsBehindAFlashThenShows(t *testing.T) {
+	var broken atomic.Bool
+	broken.Store(true)
+	run := brokenDraftRun(t, &broken)
+	waitForBeat(t, run, true)
+	m := newTestModel()
+	m.draftFiles = run
+	m.flash = "éditeur indisponible : test"
+	m.handleMsg(draftBeatFailedMsg{err: errors.New("panne")})
+	if m.flash != "éditeur indisponible : test" {
+		t.Fatalf("a beat failure must not overwrite the visible flash, got %q", m.flash)
+	}
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+	if !strings.Contains(m.flash, "signe de vie du brouillon interrompu") {
+		t.Fatalf("the waiting beat failure must show once the flash clears, got %q", m.flash)
+	}
+}
+
+func TestRepairedBeatLeavesNothingBehind(t *testing.T) {
+	var broken atomic.Bool
+	broken.Store(true)
+	run := brokenDraftRun(t, &broken)
+	waitForBeat(t, run, true)
+	m := newTestModel()
+	m.draftFiles = run
+	m.flash = "éditeur indisponible : test"
+	m.handleMsg(draftBeatFailedMsg{err: errors.New("panne")})
+	broken.Store(false)
+	waitForBeat(t, run, false)
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+	if m.flash != "" {
+		t.Fatalf("a repaired beat must show nothing, got %q", m.flash)
+	}
+}
+
+func TestActionFlashWinsOverAPendingBeatFailure(t *testing.T) {
+	var broken atomic.Bool
+	broken.Store(true)
+	run := brokenDraftRun(t, &broken)
+	waitForBeat(t, run, true)
+	m := newTestModel()
+	m.draftFiles = run
+	m.flash = "éditeur indisponible : test"
+	m.handleMsg(draftBeatFailedMsg{err: errors.New("panne")})
+	m.input.SetValue("/rename")
+	m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if !strings.Contains(m.flash, "/rename <nom>") {
+		t.Fatalf("the action's own flash must show over a pending beat failure, got %q", m.flash)
+	}
+	m.input.SetValue("")
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+	if !strings.Contains(m.flash, "signe de vie du brouillon interrompu") {
+		t.Fatalf("the pending beat failure must show on the next key without a flash, got %q", m.flash)
 	}
 }

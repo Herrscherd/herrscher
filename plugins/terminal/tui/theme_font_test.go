@@ -165,3 +165,29 @@ func TestWezTermConfigIsPlacedInsideTheConfigBuilder(t *testing.T) {
 		t.Fatal("WezTerm uses the features route, not the masked family")
 	}
 }
+
+func TestInstallNotesStayWholeInSmallWindows(t *testing.T) {
+	for _, size := range []struct{ width, height int }{{60, 20}, {80, 30}} {
+		for _, terminal := range []terminalKind{terminalWezTerm, terminalKitty} {
+			checkInstallNotesFit(t, size.width, size.height, terminal)
+		}
+	}
+}
+
+func checkInstallNotesFit(t *testing.T, width, height int, terminal terminalKind) {
+	t.Helper()
+	m := themeSized(t, width, height)
+	m.terminal = terminal
+	lines := m.obelInstallLines(width, height)
+	for _, line := range lines {
+		if w := lipgloss.Width(line); w > width {
+			t.Errorf("%dx%d %v: line of %d columns overflows: %q", width, height, terminal, w, ansi.Strip(line))
+		}
+	}
+	text := strings.Join(strings.Fields(ansi.Strip(strings.Join(lines, "\n"))), " ")
+	for _, want := range []string{"licence SIL OFL 1.1", "garde tout"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("%dx%d %v: %q must be shown whole:\n%s", width, height, terminal, want, ansi.Strip(strings.Join(lines, "\n")))
+		}
+	}
+}

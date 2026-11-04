@@ -632,8 +632,10 @@ Masked is the family for kitty and Alacritty. Alacritty's `[font]` section has
 no OpenType feature option, so it can only select the family. kitty's
 `font_features` is indexed by the font's PostScript name, which this variable
 font cannot guarantee, so kitty also gets the family. WezTerm (`harfbuzz_features`)
-and foot (`fontfeatures`) select Obel Mono with `ss01`. Échap closes the
-block first.
+and foot (`fontfeatures`) select Obel Mono with `ss01`. The Obel Mono page
+says of that feature: "Keys show as dots on screen; the file and your clipboard
+keep every character." So `ss01` masks API keys on screen only, and the
+configuration copied by `y` keeps them intact. Échap closes the block first.
 
 The preview sits beside the list from 100 columns, and under it below that. When
 the window is too short for it, the preview is left out so the controls stay on

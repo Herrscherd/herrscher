@@ -266,10 +266,6 @@ func (g glyphSet) familyGlyph(family string) string {
 	return g.tool
 }
 
-func (g glyphSet) agentTitle() string {
-	return g.agent + " Herrscher"
-}
-
 func unicodeGlyphs() glyphSet {
 	return glyphSet{
 		tool: "●", result: "└", cursor: "▸", unread: "●", thinking: "○", notice: "·",

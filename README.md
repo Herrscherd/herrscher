@@ -587,16 +587,18 @@ anything.
 
 Four themes ship in the binary: Sombre (the default), Clair, Terminal, which
 takes the colours of your own terminal palette, and Contraste élevé. `/theme`,
-or `ctrl+x t` from anywhere in the window, opens the picker. Moving through the
-list previews each theme on the spot, and Entrée keeps the one you chose. The
-same overlay holds the look: `g` cycles the glyph set (unicode, nerd, ascii),
+or `ctrl+x t` from anywhere in the window, opens the theme screen, which takes
+the whole window. Moving through the list previews each theme on the spot, and
+Entrée keeps the one you chose. The current theme carries a ✓. The same screen
+holds the look under RENDU: `g` cycles the glyph set (unicode, nerd, ascii),
 `b` the borders (rounded, square, none), `d` the density (normal, compact), `w`
 bold and `i` italic. `a` turns the automatic theme on or off, which follows the
-terminal's background, and `e` opens the theme in `$EDITOR`. Échap puts back
-what it found.
+terminal's background, and `e` or `ctrl+e` opens `themes/perso.toml` in
+`$EDITOR`. Échap puts back what it found.
 
-Under 100 columns the picker stacks its options above its list rather than
-drawing them side by side. `NO_COLOR` strips the colours and keeps the rest.
+The preview sits beside the list from 100 columns, and under it below that. When
+the window is too short for it, the preview is left out so the controls stay on
+screen. `NO_COLOR` strips the colours and keeps the rest.
 
 The choice is stored in `terminal.toml`, beside `config.json`:
 
@@ -617,12 +619,14 @@ source = "builtin"
 Every writer rewrites only its own keys: the theme picker and `/statusline` share
 the file, and the other's settings and your comments survive either one.
 
-A personal theme is a TOML file in the `themes` directory beside it, named after
-its id, so `~/.config/herrscher/themes/mon-theme.toml` shows as a theme in the
-picker. It inherits from a built-in with `base` and overrides only the colours
-and render options it names. The directory is polled, so an edit shows without a
-restart, and a file that does not parse is reported in the picker rather than
-dropped silently.
+The personal theme is `~/.config/herrscher/themes/perso.toml`. The list always
+shows it as Mon thème, even before the file exists, and `e` or `ctrl+e` creates
+it from a template when it is missing. Keeping Mon thème while its file is absent
+is refused, with a message naming the file. Any other TOML file in the `themes`
+directory also shows as a theme, named after its id. A theme inherits from a
+built-in with `base` and overrides only the colours and render options it names.
+The directory is polled, so an edit shows without a restart, and a file that does
+not parse is reported on the screen rather than dropped silently.
 
 ```toml
 name = "Mon thème"

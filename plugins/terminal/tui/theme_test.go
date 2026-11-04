@@ -123,18 +123,139 @@ func TestStartupAutoThemeFollowsBackground(t *testing.T) {
 
 func boolPtr(v bool) *bool { return &v }
 
-func TestThemeOverlayFitsEveryWidth(t *testing.T) {
-	for _, width := range []int{60, 80, 120, 200} {
-		m, _ := themeModel(t, width)
-		m.openTheme()
-		for _, line := range strings.Split(m.themeView(), "\n") {
-			if got := lipgloss.Width(line); got > width {
-				t.Fatalf("width %d: line is %d cells: %q", width, got, ansi.Strip(line))
+func themeSized(t *testing.T, width, height int) *model {
+	t.Helper()
+	m, dir := themeModel(t, width)
+	m.handleWindowSize(tea.WindowSizeMsg{Width: width, Height: height})
+	m.loadTheme(dir, func() bool { return true })
+	m.openTheme()
+	return m
+}
+
+func TestThemeScreenFitsTheWindow(t *testing.T) {
+	for _, height := range []int{20, 30} {
+		for _, width := range []int{60, 80, 120, 200} {
+			m := themeSized(t, width, height)
+			lines := strings.Split(m.View(), "\n")
+			if len(lines) > height {
+				t.Fatalf("%dx%d: view is %d lines", width, height, len(lines))
+			}
+			for _, line := range lines {
+				if got := lipgloss.Width(line); got > width {
+					t.Fatalf("%dx%d: line is %d cells: %q", width, height, got, ansi.Strip(line))
+				}
 			}
 		}
-		if width < themeScreenSideBySide && !strings.Contains(m.themeView(), "aperçu") {
-			t.Fatalf("width %d must stack the preview under the list", width)
+	}
+}
+
+func TestThemeScreenHeaderAndHelpFitOnOneLine(t *testing.T) {
+	for _, height := range []int{20, 30} {
+		plain := ansi.Strip(themeSized(t, 80, height).View())
+		if !strings.Contains(plain, "Thème · /theme · aperçu en direct") {
+			t.Fatalf("%d lines: header must name the screen and the live preview", height)
 		}
+		for _, want := range []string{"↑↓ aperçu en direct · ⏎ garder · échap revenir", "⌃X puis t : thème suivant"} {
+			if !lineContains(plain, want) {
+				t.Fatalf("%d lines: help %q must sit on one line", height, want)
+			}
+		}
+	}
+}
+
+func lineContains(text, want string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestThemeScreenListShowsDescriptionAndCurrentMark(t *testing.T) {
+	plain := ansi.Strip(themeSized(t, 120, 30).View())
+	if !lineContains(plain, "✓ Sombre") {
+		t.Fatal("the kept theme must carry the ✓ mark")
+	}
+	if !lineContains(plain, "fond sombre · défaut") || !lineContains(plain, "16 couleurs ANSI du terminal") {
+		t.Fatal("built-in themes must show their description")
+	}
+}
+
+func TestThemeScreenListsPersonalThemeWhenFileExists(t *testing.T) {
+	m, dir := themeModel(t, 120)
+	writeFile(t, filepath.Join(themesDirFor(dir), themePersonalFile), "name = \"Mon thème\"\nbase = \"sombre\"\n")
+	m.loadTheme(dir, func() bool { return true })
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m.openTheme()
+	plain := ansi.Strip(m.View())
+	if strings.Count(plain, "Mon thème") != 1 || !lineContains(plain, "themes/perso.toml") {
+		t.Fatalf("perso.toml must be listed once with its file name:\n%s", plain)
+	}
+}
+
+func TestThemeScreenShowsPersonalPlaceholderWithoutFile(t *testing.T) {
+	plain := ansi.Strip(themeSized(t, 120, 30).View())
+	if !lineContains(plain, "Mon thème") || !lineContains(plain, "themes/perso.toml") {
+		t.Fatalf("the personal theme must stay in the list before its file exists:\n%s", plain)
+	}
+}
+
+func TestThemeScreenRefusesToKeepMissingPersonalTheme(t *testing.T) {
+	m := themeSized(t, 120, 30)
+	m.themeScr.move(len(m.themeScr.themes))
+	m.commitTheme()
+	if m.themeScr == nil {
+		t.Fatal("a missing personal theme must not close the screen")
+	}
+	if !strings.Contains(m.flash, themePersonalFile) {
+		t.Fatalf("the refusal must name the missing file, got %q", m.flash)
+	}
+}
+
+func TestThemeScreenRenderOptionsAreVisibleAndCycle(t *testing.T) {
+	m := themeSized(t, 120, 30)
+	plain := ansi.Strip(m.View())
+	for _, want := range []string{"glyphes", "unicode", "arrondies", "compacte", "[✓] gras", "[✓] italique", "[ ] auto"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("RENDU must show %q:\n%s", want, plain)
+		}
+	}
+	m.handleThemeLetter("b")
+	m.handleThemeLetter("d")
+	m.handleThemeLetter("w")
+	m.handleThemeLetter("i")
+	m.handleThemeLetter("a")
+	if m.themeScr.look.Borders != borderSquare || m.themeScr.look.Density != densityCompact || m.themeScr.look.Bold || m.themeScr.look.Italic || !m.themeScr.auto {
+		t.Fatalf("the option keys must change the look: %+v auto=%v", m.themeScr.look, m.themeScr.auto)
+	}
+}
+
+func TestThemeScreenPreviewElementsAreShown(t *testing.T) {
+	plain := ansi.Strip(themeSized(t, 120, 30).View())
+	for _, want := range []string{"Aperçu · Sombre · gardé", "✓ ajouté", "✗ retiré", "● attente", "> ligne sélectionnée", "· notice", "erreur", "ctx"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("preview must show %q:\n%s", want, plain)
+		}
+	}
+}
+
+func TestThemeScreenPreviewStepsAsideOnNarrowWindows(t *testing.T) {
+	if !strings.Contains(ansi.Strip(themeSized(t, 60, 30).View()), "Aperçu") {
+		t.Fatal("a 30-line window must stack the preview under the list")
+	}
+	if strings.Contains(ansi.Strip(themeSized(t, 60, 20).View()), "Aperçu") {
+		t.Fatal("a 20-line window must hide the preview rather than overflow")
+	}
+}
+
+func TestThemeScreenCtrlEOpensPersonalFile(t *testing.T) {
+	m := themeSized(t, 120, 30)
+	if cmd := m.handleThemeKey(tea.KeyMsg{Type: tea.KeyCtrlE}); cmd == nil {
+		t.Fatal("ctrl+e must open the personal theme file")
+	}
+	if _, err := os.Stat(filepath.Join(themesDirFor(m.themeDir), themePersonalFile)); err != nil {
+		t.Fatalf("ctrl+e must create perso.toml: %v", err)
 	}
 }
 

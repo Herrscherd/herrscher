@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,18 +13,20 @@ import (
 
 const (
 	themeScreenSideBySide = 100
-	themeListWidth        = 34
-	themePersonalSuffix   = "-perso"
+	themeLeftWidth        = 56
+	themeLabelWidth       = 16
+	themeKeyColumn        = 11
+	themeGaugeCells       = 6
+	themeHeadGap          = 2
+	themePersonalID       = "perso"
+	themePersonalFile     = themePersonalID + themeFileExt
 	themePersonalName     = "Mon thème"
-	themePreviewMargin    = 4
-	themePreviewMaxInner  = 56
-	themePreviewMinInner  = 20
-	themePreviewFrameEdge = 2
-	themePreviewGauge     = 0.4
+	themePersonalMissing  = "themes/" + themePersonalFile + " absent : e ou ⌃E pour le créer"
 )
 
 type themeScreen struct {
 	themes   []Theme
+	paths    map[string]string
 	cursor   int
 	origin   Theme
 	look     renderOptions
@@ -44,7 +47,14 @@ func newThemeScreen(current Theme, catalog themeCatalog, auto bool) *themeScreen
 
 func (s *themeScreen) refresh(catalog themeCatalog) {
 	selected := s.selectedID()
-	s.themes = catalog.themes
+	s.themes = append([]Theme(nil), catalog.themes...)
+	if catalog.indexOf(themePersonalID) < 0 {
+		placeholder := s.origin
+		placeholder.ID = themePersonalID
+		placeholder.Label = themePersonalName
+		s.themes = append(s.themes, placeholder)
+	}
+	s.paths = catalog.paths
 	s.problems = catalog.problems
 	s.cursor = 0
 	for index := range s.themes {
@@ -69,6 +79,46 @@ func (s *themeScreen) preview() Theme {
 
 func (s *themeScreen) move(delta int) {
 	s.cursor = min(max(s.cursor+delta, 0), len(s.themes)-1)
+}
+
+func (s *themeScreen) keepable() bool {
+	themeID := s.selectedID()
+	if _, builtin := builtinTheme(themeID); builtin {
+		return true
+	}
+	_, installed := s.paths[themeID]
+	return installed
+}
+
+func themeDescription(themeID string) (string, bool) {
+	switch themeID {
+	case themeSombre:
+		return "fond sombre · défaut", true
+	case themeClair:
+		return "le même sur fond clair", true
+	case themeTerminal:
+		return "16 couleurs ANSI du terminal", true
+	case themeContraste:
+		return "écarts maximaux", true
+	}
+	return "", false
+}
+
+func (s *themeScreen) detail(themeID string) string {
+	if text, ok := themeDescription(themeID); ok {
+		return text
+	}
+	if path, ok := s.paths[themeID]; ok {
+		return "themes/" + filepath.Base(path)
+	}
+	return "themes/" + themePersonalFile
+}
+
+func (s *themeScreen) baseID() string {
+	if s.origin.ID == themePersonalID {
+		return defaultThemeID
+	}
+	return s.origin.ID
 }
 
 func (m *model) openTheme() {
@@ -104,6 +154,8 @@ func (m *model) handleThemeKey(msg tea.KeyMsg) tea.Cmd {
 	case tea.KeyEnter:
 		m.commitTheme()
 		return nil
+	case tea.KeyCtrlE:
+		return m.editThemeFile()
 	case tea.KeyCtrlC:
 		return m.overlayCtrlC()
 	}
@@ -136,6 +188,10 @@ func (m *model) handleThemeLetter(key string) tea.Cmd {
 
 func (m *model) commitTheme() {
 	screen := m.themeScr
+	if !screen.keepable() {
+		m.flash = themePersonalMissing
+		return
+	}
 	preview := screen.preview()
 	base := screen.themes[screen.cursor]
 	themeName, auto := preview.ID, screen.auto
@@ -168,19 +224,18 @@ func (m *model) editThemeFile() tea.Cmd {
 }
 
 func (m *model) themeFileForEdit() (string, error) {
-	themeName := m.themeScr.preview().ID
-	if path, ok := m.themeCat.paths[themeName]; ok {
+	if path, ok := m.themeCat.paths[themePersonalID]; ok {
 		return path, nil
 	}
 	dir := themesDirFor(m.themeDir)
 	if err := os.MkdirAll(dir, configDirMode); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, themeName+themePersonalSuffix+themeFileExt)
+	path := filepath.Join(dir, themePersonalFile)
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
-	body := fmt.Sprintf("name = %q\nbase = %q\n", themePersonalName, themeName)
+	body := fmt.Sprintf("name = %q\nbase = %q\n", themePersonalName, m.themeScr.baseID())
 	return path, os.WriteFile(path, []byte(body), privateFileMode)
 }
 
@@ -191,63 +246,245 @@ func (m *model) handleThemeEdited(msg themeEditedMsg) {
 	}
 }
 
-func (m *model) themeView() string {
+func (m *model) themeScreenView() string {
+	top := m.railLines()
+	bottom := m.statusZone()
+	rows := max(m.height-len(top)-len(bottom), 0)
+	lines := make([]string, 0, m.height)
+	lines = append(lines, top...)
+	lines = append(lines, m.themeBody(m.innerWidth(), rows)...)
+	lines = append(lines, bottom...)
+	return m.st.finish(strings.Join(clipLines(lines, m.height), "\n"))
+}
+
+func (m *model) themeBody(width, rows int) []string {
+	if width >= themeScreenSideBySide {
+		left := m.themeControlsFitting(themeLeftWidth, rows)
+		right := m.themePreview(width - themeLeftWidth - 1)
+		return themeColumns(left, right, themeLeftWidth, m.st.dim.Render(m.st.glyphs.divider), rows)
+	}
+	body := m.themeControlsFitting(width, rows)
+	if preview := m.themePreview(width); rows-len(body) > len(preview) {
+		body = append(body, "")
+		body = append(body, preview...)
+	}
+	return clipLines(body, rows)
+}
+
+func (m *model) themeControlsFitting(width, rows int) []string {
+	full := m.themeControls(width, true)
+	if len(full) <= rows {
+		return full
+	}
+	return m.themeControls(width, false)
+}
+
+func (m *model) themeControls(width int, gaps bool) []string {
+	styles := m.st
 	screen := m.themeScr
-	width := m.innerWidth()
-	header := m.st.accent.Render("Thème") + "\n" + wrapWith(m.st.dim, screen.optionsLine(), width)
-	list := floatingList(screen.rows(), screen.cursor, screen.footer(), min(width, themeListWidth), m.st)
-	preview := m.themePreview(width)
-	if width < themeScreenSideBySide {
-		return strings.Join(append([]string{header, list, ""}, preview...), "\n")
+	var lines []string
+	gap := func() {
+		if gaps {
+			lines = append(lines, "")
+		}
 	}
-	left := lipgloss.NewStyle().Width(themeListWidth).Render(list)
-	return header + "\n" + lipgloss.JoinHorizontal(lipgloss.Top, left, strings.Join(preview, "\n"))
+	lines = append(lines, styles.strong.Render("Thème")+styles.dim.Render(" · /theme · aperçu en direct"))
+	lines = append(lines, m.themeListLines(width)...)
+	if len(screen.problems) > 0 {
+		lines = append(lines, styles.dim.Render("thème ignoré : "+screen.problems[0]))
+	}
+	gap()
+	lines = append(lines,
+		styles.dim.Render("↑↓ aperçu en direct · ⏎ garder · échap revenir"),
+		styles.dim.Render("⌃X puis t : thème suivant, depuis n’importe où"),
+		styles.dim.Render("e ou ⌃E éditer themes/"+themePersonalFile),
+	)
+	gap()
+	lines = append(lines,
+		themeSectionHead(styles, "Rendu", "dans le thème", width),
+		themeOptionRow(styles, "glyphes", glyphModes(), screen.look.Glyphs, glyphLabel, "g"),
+		themeOptionRow(styles, "bordures", borderStyles(), screen.look.Borders, borderLabel, "b"),
+		themeOptionRow(styles, "densité", []density{densityCompact, densityNormal}, screen.look.Density, densityLabel, "d"),
+		themeFlagRow(styles, screen.look.Bold, screen.look.Italic),
+	)
+	gap()
+	lines = append(lines,
+		themeSectionHead(styles, "Détection", "", width),
+		themeAutoRow(styles, screen.auto),
+	)
+	for index := range lines {
+		lines[index] = truncate(lines[index], width)
+	}
+	return lines
 }
 
-func (s *themeScreen) optionsLine() string {
-	return fmt.Sprintf("g glyphes %s · b bordures %s · d densité %s · w gras %s · i italique %s · a auto %s · e éditer · ⏎ valider · échap annuler",
-		s.look.Glyphs, s.look.Borders, s.look.Density, onOff(s.look.Bold), onOff(s.look.Italic), onOff(s.auto))
+func (m *model) themeListLines(width int) []string {
+	screen := m.themeScr
+	lines := make([]string, 0, len(screen.themes))
+	for index := range screen.themes {
+		theme := &screen.themes[index]
+		lines = append(lines, m.themeListLine(theme, index == screen.cursor, theme.ID == screen.origin.ID, width))
+	}
+	return lines
 }
 
-func onOff(on bool) string {
+func (m *model) themeListLine(theme *Theme, selected, current bool, width int) string {
+	styles := m.st
+	glyphs := styles.glyphs
+	head, mark := "  ", glyphs.open
+	if selected {
+		head = glyphs.cursor + " "
+	}
+	if current {
+		mark = glyphs.success
+	}
+	label := padTo(theme.Label, themeLabelWidth)
+	detail := m.themeScr.detail(theme.ID)
+	if selected {
+		return styles.overlaySel.Render(padTo(truncate(head+mark+" "+label+"  "+detail, width), width))
+	}
+	markStyle := styles.dim
+	if current {
+		markStyle = styles.green.Bold(true)
+	}
+	return padTo(truncate(styles.dim.Render(head)+markStyle.Render(mark)+" "+styles.text.Render(label)+styles.dim.Render(detail), width), width)
+}
+
+func themeSectionHead(styles uiStyles, title, extra string, width int) string {
+	used := lipgloss.Width(title) + themeHeadGap
+	head := styles.strong.Render(title)
+	if extra != "" {
+		used += lipgloss.Width(extra) + 1
+		head += styles.dim.Render(" " + extra)
+	}
+	rule := strings.Repeat(styles.glyphs.ruleChar, max(width-used, 1))
+	return head + " " + styles.dim.Render(rule)
+}
+
+func themeOptionRow[Choice comparable](styles uiStyles, label string, choices []Choice, current Choice, name func(Choice) string, key string) string {
+	var row strings.Builder
+	row.WriteString("   " + padTo(label, themeKeyColumn))
+	for _, choice := range choices {
+		if choice == current {
+			row.WriteString(styles.chip.Render(name(choice)))
+		} else {
+			row.WriteString(styles.dim.Render(" " + name(choice) + " "))
+		}
+		row.WriteString(" ")
+	}
+	row.WriteString(styles.dim.Render(key))
+	return row.String()
+}
+
+func themeFlagRow(styles uiStyles, bold, italic bool) string {
+	return "   " + padTo("texte", themeKeyColumn) + themeFlag(styles, bold, "gras") + "  " +
+		themeFlag(styles, italic, "italique") + "  " + styles.dim.Render("w i")
+}
+
+func themeAutoRow(styles uiStyles, auto bool) string {
+	return "   " + themeFlag(styles, auto, "auto") +
+		styles.dim.Render(" : fond sombre → Sombre, clair → Clair") + "  " + styles.dim.Render("a")
+}
+
+func themeFlag(styles uiStyles, on bool, label string) string {
 	if on {
-		return "on"
+		return styles.text.Render(styles.glyphs.ticked + " " + label)
 	}
-	return "off"
+	return styles.dim.Render(styles.glyphs.unticked + " " + label)
 }
 
-func (s *themeScreen) rows() []overlayRow {
-	rows := make([]overlayRow, 0, len(s.themes))
-	for index := range s.themes {
-		rows = append(rows, overlayRow{label: s.themes[index].Label})
+func glyphLabel(mode glyphMode) string {
+	if mode == glyphsNerd {
+		return "nerd font"
 	}
-	return rows
+	return mode.String()
 }
 
-func (s *themeScreen) footer() string {
-	if len(s.problems) == 0 {
-		return ""
+func borderLabel(style borderStyle) string {
+	switch style {
+	case borderSquare:
+		return "carrées"
+	case borderNone:
+		return "aucune"
+	case borderRounded:
+		return "arrondies"
 	}
-	return "thème ignoré : " + s.problems[0]
+	return "arrondies"
+}
+
+func densityLabel(level density) string {
+	if level == densityCompact {
+		return "compacte"
+	}
+	return "normale"
 }
 
 func (m *model) themePreview(width int) []string {
 	styles := m.st
 	glyphs := styles.glyphs
-	boxes := styles.boxes(true)
-	inner := max(min(width-themePreviewMargin, themePreviewMaxInner), themePreviewMinInner)
-	frameLine := strings.Repeat(boxes.h, inner+themePreviewFrameEdge)
-	body := func(text string) string {
-		return styles.dim.Render(boxes.v) + " " + padTo(truncate(text, inner), inner) + " " + styles.dim.Render(boxes.v)
+	screen := m.themeScr
+	shown := screen.preview()
+	kept := " · pas encore gardé"
+	if shown.ID == screen.origin.ID {
+		kept = " · gardé"
 	}
-	frame := []string{
-		styles.accent.Render(boxes.tl + frameLine + boxes.tr),
-		body(styles.text.Render("Texte de réponse, en couleur normale")),
-		body(styles.green.Render(glyphs.success+" ajouté") + "  " + styles.del.Render(glyphs.failure+" retiré") + "  " + styles.warn.Render(glyphs.bolt+" attente")),
-		body(styles.overlaySel.Render(" sélection ") + "  " + styles.dim.Render(glyphs.notice+" notice") + "  " + styles.red.Render("erreur")),
-		body(gauge(themePreviewGauge, styles.green, styles.dim, glyphs)),
-		styles.accent.Render(boxes.bl + frameLine + boxes.br),
+	lines := []string{
+		styles.strong.Render("Aperçu") + styles.dim.Render(" · "+shown.Label+kept),
+		"",
+		styles.text.Render("Entrée pendant un tour met maintenant le message en file."),
+		styles.green.Render(glyphs.success+" ajouté") + "  " + styles.del.Render(glyphs.failure+" retiré") + "  " + styles.warn.Render(glyphs.bolt+" attente"),
+		styles.overlaySel.Render(padTo(truncate("> ligne sélectionnée, en vidéo inverse", width), width)),
+		styles.dim.Render(glyphs.notice+" notice") + "  " + styles.red.Render("erreur"),
+		themeBarLine(styles),
 	}
-	title := styles.accent.Render(glyphs.agentTitle()) + styles.dim.Render(" aperçu : "+m.themeScr.preview().Label)
-	return append([]string{title, ""}, frame...)
+	for index := range lines {
+		lines[index] = truncate(lines[index], width)
+	}
+	return lines
+}
+
+func themeBarLine(styles uiStyles) string {
+	parts := []string{styles.dim.Render("ctx")}
+	for _, ratio := range []float64{0.41, 0.85, 0.97} {
+		parts = append(parts, themeBar(styles, ratio))
+	}
+	return strings.Join(parts, "  ")
+}
+
+func themeBar(styles uiStyles, ratio float64) string {
+	filled := int(math.Round(ratio * themeGaugeCells))
+	fill := styles.accent
+	switch {
+	case ratio >= ctxAlarm:
+		fill = styles.red
+	case ratio >= ctxWarn:
+		fill = styles.warn
+	}
+	percent := int(math.Round(ratio * percentScale))
+	return fill.Render(strings.Repeat(styles.glyphs.gaugeFull, filled)) +
+		styles.dim.Render(strings.Repeat(styles.glyphs.gaugeEmpty, themeGaugeCells-filled)) +
+		styles.dim.Render(fmt.Sprintf(" %d%%", percent))
+}
+
+func themeColumns(left, right []string, leftWidth int, divider string, rows int) []string {
+	height := max(len(left), len(right))
+	lines := make([]string, 0, height)
+	for index := range height {
+		var leftLine, rightLine string
+		if index < len(left) {
+			leftLine = left[index]
+		}
+		if index < len(right) {
+			rightLine = right[index]
+		}
+		lines = append(lines, padTo(leftLine, leftWidth)+divider+rightLine)
+	}
+	return clipLines(lines, rows)
+}
+
+func clipLines(lines []string, limit int) []string {
+	if len(lines) > limit {
+		return lines[:limit]
+	}
+	return lines
 }

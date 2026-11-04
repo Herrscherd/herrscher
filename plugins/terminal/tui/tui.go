@@ -1981,6 +1981,9 @@ func (m *model) View() string {
 	if m.diff.open {
 		return m.diffScreen()
 	}
+	if m.themeScr != nil {
+		return m.themeScreenView()
+	}
 	if m.surface != surfaceChat {
 		return m.buildFrame().render(m.surfaceBody())
 	}

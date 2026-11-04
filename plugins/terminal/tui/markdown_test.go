@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestMarkdownRendersStructure(t *testing.T) {
@@ -17,7 +18,7 @@ func TestMarkdownRendersStructure(t *testing.T) {
 		{"code block", "```go\nfmt.Println(1)\n```", "Println"},
 	}
 	for _, c := range cases {
-		out := renderEntry(entry{role: roleAgent, text: c.in}, 60, view{st: testStyles()})
+		out := renderEntry(entry{role: roleAgent, text: c.in}, 60, view{})
 		if !strings.Contains(out, c.want) {
 			t.Errorf("%s: rendered output must keep its content, got %q", c.name, out)
 		}
@@ -29,7 +30,7 @@ func TestMarkdownRendersStructure(t *testing.T) {
 
 func TestStreamingMarkdownStaysRaw(t *testing.T) {
 	in := "here it is:\n```go\nfmt.Println("
-	out := renderEntry(entry{role: roleAgent, text: in, streaming: true}, 60, view{st: testStyles()})
+	out := renderEntry(entry{role: roleAgent, text: in, streaming: true}, 60, view{})
 	if !strings.Contains(out, "```go") {
 		t.Fatalf("a streaming block must render raw: %q", out)
 	}
@@ -37,8 +38,8 @@ func TestStreamingMarkdownStaysRaw(t *testing.T) {
 
 func TestMarkdownRewrapsOnWidth(t *testing.T) {
 	body := strings.Repeat("lorem ipsum dolor sit amet ", 10)
-	narrow := renderMarkdown(body, 30, view{caps: Capabilities{}, st: testStyles()})
-	wide := renderMarkdown(body, 90, view{caps: Capabilities{}, st: testStyles()})
+	narrow := renderMarkdown(body, 30, view{caps: Capabilities{}})
+	wide := renderMarkdown(body, 90, view{caps: Capabilities{}})
 	if strings.Count(narrow, "\n") <= strings.Count(wide, "\n") {
 		t.Fatalf("narrow must wrap to more lines: narrow=%d wide=%d",
 			strings.Count(narrow, "\n"), strings.Count(wide, "\n"))
@@ -52,17 +53,15 @@ func TestMarkdownRewrapsOnWidth(t *testing.T) {
 
 func TestDiffBlockColoursItsLineClasses(t *testing.T) {
 	in := "before:\n```diff\n@@ -1,2 +1,2 @@\n-old line\n+new line\n context\n```\nafter."
-	out := renderEntry(entry{role: roleAgent, text: in}, 60, view{st: testStyles()})
-	add := testStyles().green.Render("+new line")
-	del := testStyles().red.Render("-old line")
-	if !strings.Contains(out, add) {
+	out := renderEntry(entry{role: roleAgent, text: in}, 60, view{})
+	if !strings.Contains(out, ansiGreen) || !strings.Contains(out, "+ new line") {
 		t.Errorf("an added line must render green: %q", out)
 	}
-	if !strings.Contains(out, del) {
+	if !strings.Contains(out, ansiRed) || !strings.Contains(out, "- old line") {
 		t.Errorf("a removed line must render red: %q", out)
 	}
-	if !strings.Contains(out, testStyles().dim.Render("@@ -1,2 +1,2 @@")) {
-		t.Errorf("a hunk header must render dim: %q", out)
+	if !strings.Contains(ansi.Strip(out), "@@") {
+		t.Errorf("a hunk header must be drawn as a separator: %q", out)
 	}
 	for _, want := range []string{"before", "after"} {
 		if !strings.Contains(out, want) {
@@ -86,7 +85,7 @@ func TestUnclosedDiffFenceTakesTheRest(t *testing.T) {
 }
 
 func TestDiffLineIsClippedNotWrapped(t *testing.T) {
-	out := renderDiff("+"+strings.Repeat("x", 80), 20, view{caps: Capabilities{}, st: testStyles()})
+	out := renderDiff("+"+strings.Repeat("x", 80), 20, view{caps: Capabilities{}})
 	if strings.Contains(out, "\n") {
 		t.Fatalf("a diff line must be clipped, not folded: %q", out)
 	}

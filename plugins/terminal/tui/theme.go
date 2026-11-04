@@ -70,8 +70,11 @@ type palette struct {
 	Text    colorValue
 	Dim     colorValue
 	Accent  colorValue
+	Violet  colorValue
 	Add     colorValue
+	AddBg   colorValue
 	Del     colorValue
+	DelBg   colorValue
 	Wait    colorValue
 	Err     colorValue
 	Sel     colorValue
@@ -98,19 +101,19 @@ func builtinThemes() []Theme {
 	return []Theme{
 		{
 			ID: "sombre", Label: "Sombre", Render: defaultRender,
-			Colors: palette{Text: "#e4e4e4", Dim: "#8f8f8f", Accent: "#e4e4e4", Add: "#7fb08a", Del: "#d0706b", Wait: "#c9a55a", Err: "#d0706b", Sel: "#e4e4e4", SelText: "#111111"},
+			Colors: palette{Text: "#e4e4e4", Dim: "#8f8f8f", Accent: "#e4e4e4", Violet: "#e4e4e4", Add: "#7fb08a", AddBg: "#14231a", Del: "#d0706b", DelBg: "#2a1515", Wait: "#c9a55a", Err: "#d0706b", Sel: "#e4e4e4", SelText: "#111111"},
 		},
 		{
 			ID: "clair", Label: "Clair", Render: defaultRender,
-			Colors: palette{Text: "#1a1a1a", Dim: "#666666", Accent: "#1a1a1a", Add: "#2f7a45", Del: "#b03a35", Wait: "#8a6a1c", Err: "#b03a35", Sel: "#1a1a1a", SelText: "#ffffff"},
+			Colors: palette{Text: "#1a1a1a", Dim: "#666666", Accent: "#1a1a1a", Violet: "#1a1a1a", Add: "#2f7a45", AddBg: "#e3f1e6", Del: "#b03a35", DelBg: "#f7e1e0", Wait: "#8a6a1c", Err: "#b03a35", Sel: "#1a1a1a", SelText: "#ffffff"},
 		},
 		{
 			ID: "terminal", Label: "Terminal", Render: defaultRender,
-			Colors: palette{Text: "ansi:7", Dim: "ansi:8", Accent: "ansi:6", Add: "ansi:2", Del: "ansi:1", Wait: "ansi:3", Err: "ansi:1", Sel: "ansi:7", SelText: "ansi:0"},
+			Colors: palette{Text: "ansi:7", Dim: "ansi:8", Accent: "ansi:6", Violet: "ansi:5", Add: "ansi:2", AddBg: "#0c2a1d", Del: "ansi:1", DelBg: "#2c1111", Wait: "ansi:3", Err: "ansi:1", Sel: "ansi:7", SelText: "ansi:0"},
 		},
 		{
 			ID: "contraste", Label: "Contraste élevé", Render: defaultRender,
-			Colors: palette{Text: "#ffffff", Dim: "#d0d0d0", Accent: "#ffff00", Add: "#5cff8a", Del: "#ff6b6b", Wait: "#ffd700", Err: "#ff6b6b", Sel: "#ffffff", SelText: "#000000"},
+			Colors: palette{Text: "#ffffff", Dim: "#d0d0d0", Accent: "#ffff00", Violet: "#ffffff", Add: "#5cff8a", AddBg: "#003314", Del: "#ff6b6b", DelBg: "#4a0000", Wait: "#ffd700", Err: "#ff6b6b", Sel: "#ffffff", SelText: "#000000"},
 		},
 	}
 }
@@ -129,6 +132,7 @@ type glyphSet struct {
 	fold, moreLines, bolt, prompt, ellipsis, divider, ruleChar       string
 	gaugeFull, gaugeEmpty, brand, agent, active                      string
 	selected, attention, open, railMark, filet, minus                string
+	expanded, branchMid, branchEnd, omitted, userBar                 string
 	families                                                         map[string]string
 	spin                                                             []string
 }
@@ -146,11 +150,12 @@ func (g glyphSet) agentTitle() string {
 
 func unicodeGlyphs() glyphSet {
 	return glyphSet{
-		tool: "●", result: "⎿", cursor: "▸", unread: "●", thinking: "○", notice: "·",
+		tool: "●", result: "└", cursor: "▸", unread: "●", thinking: "○", notice: "·",
 		failure: "✗", success: "✓", fold: "▸", moreLines: "↵", bolt: "●", prompt: ">",
 		ellipsis: "…", divider: "│", ruleChar: "─", gaugeFull: "█", gaugeEmpty: "░",
 		brand: "──◂ HERRSCHER ▸──", agent: "⚡", active: "◆",
 		selected: "▸", attention: "!", open: "○", railMark: "━", filet: "│", minus: "−",
+		expanded: "▾", branchMid: "├", branchEnd: "└", omitted: "⋯", userBar: "┃",
 		families: map[string]string{
 			familyRead: "◇", familyWrite: "◈", familyRun: "▸", familySearch: "⌕", familyWeb: "⌖", familyAgent: "◆",
 		},
@@ -173,6 +178,7 @@ func asciiGlyphs() glyphSet {
 		ellipsis: "...", divider: "|", ruleChar: "-", gaugeFull: "#", gaugeEmpty: ".",
 		brand: "--< HERRSCHER >--", agent: "*", active: "*",
 		selected: ">", attention: "!", open: "o", railMark: "=", filet: "|", minus: "-",
+		expanded: "v", branchMid: "+", branchEnd: "\\", omitted: "...", userBar: "|",
 		families: map[string]string{
 			familyRead: "=", familyWrite: "+", familyRun: ">", familySearch: "?", familyWeb: "@", familyAgent: "*",
 		},
@@ -226,6 +232,10 @@ type uiStyles struct {
 	link       lipgloss.Style
 	chip       lipgloss.Style
 	overlaySel lipgloss.Style
+	strong     lipgloss.Style
+	violet     lipgloss.Style
+	addRow     lipgloss.Style
+	delRow     lipgloss.Style
 	sep        string
 	heading    string
 
@@ -243,6 +253,12 @@ func newStyles(th Theme, noColor bool) uiStyles {
 			return lipgloss.NewStyle()
 		}
 		return lipgloss.NewStyle().Foreground(v.color())
+	}
+	tint := func(fg, bg colorValue) lipgloss.Style {
+		if noColor {
+			return lipgloss.NewStyle()
+		}
+		return lipgloss.NewStyle().Foreground(fg.color()).Background(bg.color())
 	}
 	dim := paint(pal.Dim)
 	if noColor {
@@ -270,6 +286,10 @@ func newStyles(th Theme, noColor bool) uiStyles {
 		link:       paint(pal.Accent).Underline(true),
 		chip:       selected.Padding(0, 1),
 		overlaySel: selected,
+		strong:     paint(pal.Text).Bold(true),
+		violet:     paint(pal.Violet),
+		addRow:     tint(pal.Add, pal.AddBg),
+		delRow:     tint(pal.Del, pal.DelBg),
 		sep:        dim.Render(" " + glyphs.divider + " "),
 		heading:    headingColor(pal.Accent, noColor),
 		glyphs:     glyphs,

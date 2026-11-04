@@ -197,18 +197,12 @@ func (m *model) searchView() string {
 		m.st.dim.Render("  "+pos+"  ctrl+n/ctrl+p · échap")
 }
 
-func turnBoundaries(lines []string, glyphs glyphSet) []int {
-	var out []int
-	for index, ln := range lines {
-		if strings.Contains(ln, glyphs.cursor) || strings.Contains(ln, glyphs.agentTitle()) {
-			out = append(out, index)
-		}
-	}
-	return out
-}
-
 func (m *model) jumpTurn(delta int) {
-	bounds := turnBoundaries(m.transcriptLines(), m.st.glyphs)
+	tab := m.tabs[m.active]
+	if tab == nil {
+		return
+	}
+	bounds := m.layoutTranscript(tab, m.vp.Width).turns
 	if len(bounds) == 0 {
 		return
 	}
@@ -232,11 +226,10 @@ func (m *model) jumpTurn(delta int) {
 	m.vp.SetYOffset(bounds[0])
 }
 
-func foldTurns(lines []string, keep int, styles uiStyles) []string {
+func foldTurns(lines []string, bounds []int, keep int, styles uiStyles) []string {
 	if keep < 1 {
 		keep = 1
 	}
-	bounds := turnBoundaries(lines, styles.glyphs)
 	if len(bounds) <= keep {
 		return lines
 	}

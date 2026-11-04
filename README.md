@@ -420,9 +420,10 @@ The window speaks French.
 
 ### Sessions as tabs
 
-Several sessions render as live tabs. Each answer opens with a titled rule, so a
-turn keeps its shape when colour does not survive, and nothing else is ruled,
-since a frame drawn around every turn marks none of them.
+Several sessions render as live tabs. Each answer opens on a `●` gutter and each
+message you send on a `┃` bar, so a turn keeps its shape when colour does not
+survive, and nothing is framed, since a frame drawn around every turn marks none
+of them.
 
 Events are typed by role (reasoning, tool family, notice, error). The agent's
 markdown and diffs are rendered, a resumed session's history is replayed as the
@@ -458,7 +459,10 @@ of the stream (`TodoWrite` and `Task` never reach the transcript) and they rende
 as two panels under it: the list windowed around the task in hand with its
 `done/total` count, and one line per live sub-agent with its kind and its age. A
 sub-agent leaves the panel when it hands back, and the end of a turn clears both,
-keeping an unfinished list.
+keeping an unfinished list. The sub-agents of a turn also hang under the `Task`
+that started them as a tree (`├`, `└`, `│`), each with a spinner while it runs, a
+`✓` when it hands back, a `✗` when it fails, and `délai dépassé, relancé` when it
+timed out and was run again.
 
 → `plugins/terminal/tui/panels.go`
 
@@ -539,7 +543,8 @@ a turn completed.
 shows its *resolved target*, since a markdown label can name one destination and
 point at another, and `ctrl+o` opens it: a URL through the desktop handler, a
 `file.go:42` reference through `$EDITOR` at that line. That is display, not a
-confirmation prompt. The keypress is the consent.
+confirmation prompt. The keypress is the consent. With no link selected, `ctrl+o`
+folds or unfolds the latest reasoning block or tool output instead.
 
 ### Reading a long session
 
@@ -550,6 +555,13 @@ close it.
 `alt+↑` and `alt+↓` jump by turn. `ctrl+t` opens the session picker, `ctrl+f` folds long code blocks to a
 summary line, and `ctrl+y` copies the last one to the clipboard as raw text.
 
+Each tool call is one line: its family verb in bold, its argument in grey, a
+summary, its duration, and on the right `✓`, `✗`, or a spinner while it runs. Its
+results hang under it behind `└`, and a click or `alt+e` folds them. Reasoning is a
+`▸` block headed `Réflexion · 14s · 1.2k tokens`, in italics, and unfolds to `▾`.
+While a turn runs, the transcript ends on a busy line: `En cours…`, the elapsed
+time, the tokens sent, the cost, and `Échap interrompre` on the right.
+
 Tool lines carry a budget of two rows apiece. Unbounded, a compound shell command
 becomes a paragraph in a single colour, and the session path it opens with is
 identical on every call. So a continuation hangs under the target it belongs to,
@@ -557,11 +569,15 @@ an absolute path deep enough to cost a row is said in the two segments that
 identify it, and what is left over is counted rather than dropped: `+3 ↵`.
 `alt+e` lifts the budget and spells every command out as it was run.
 
-Diffs are coloured by hunk, and by the basic ANSI pair on a 16-colour terminal,
-where a hex green would be approximated away. A hunk is worth four lines before it
-folds to `▶ n lignes de plus (alt+e)`, since a fifty-line diff quoted mid-answer
-buries the sentence that follows it; `alt+e`, the same key that spells a command
-out, unfolds it. Tables truncate their widest column instead of wrapping into
+Edits show an inline diff with a line number column for the old file and one for
+the new, so an insertion shifts the numbers below it and each row says where it sits
+in both. Each hunk opens with an `@@` separator, and additions and deletions carry
+their own background, falling back to the basic ANSI pair on a 16-colour terminal,
+where a hex green would be approximated away. Under 70 columns the diff keeps a
+single number column. A hunk is worth four lines before it folds to
+`▶ n lignes de plus (alt+e)`, since a fifty-line diff quoted mid-answer buries the
+sentence that follows it; `alt+e`, the same key that spells a command out, unfolds
+it. Tables truncate their widest column instead of wrapping into
 confetti.
 
 → `reference/keybindings`

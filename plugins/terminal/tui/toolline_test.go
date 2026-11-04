@@ -3,237 +3,198 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
-func plainLines(s string) []string {
-	out := strings.Split(ansi.Strip(s), "\n")
-	for i := range out {
-		out[i] = strings.TrimRight(out[i], " ")
-	}
-	return out
+var transcriptWidths = []int{60, 80, 120, 200}
+
+func toolTestView(expand bool) view {
+	return view{caps: Capabilities{Colour: ColourTrue}, st: testStyles(), spin: "⣾", expand: expand}
 }
 
-func TestToolEntryRendersBulletAndResult(t *testing.T) {
-	out := renderEntry(entry{role: roleTool, text: "Bash(ls build/)\nremoved 3 files"}, 60, view{st: testStyles()})
-	if !strings.Contains(out, unicodeGlyphs().tool+" Bash(ls build/)") {
-		t.Fatalf("tool call must render `● Bash(ls build/)`: %q", out)
-	}
-	if !strings.Contains(out, unicodeGlyphs().result+" removed 3 files") {
-		t.Fatalf("tool result must render `⎿ removed 3 files`: %q", out)
-	}
-}
-
-func TestToolVerbSplitsKnownTools(t *testing.T) {
-	cases := []struct {
-		in        string
-		fam, rest string
-	}{
-		{"Read core/parse.go", familyRead, "core/parse.go"},
-		{"bash go test ./...", familyRun, "go test ./..."},
-		{"Grep errPrefix core/", familySearch, "errPrefix core/"},
-		{"WebFetch https://x.dev", familyWeb, "https://x.dev"},
-		{"Task review the diff", familyAgent, "review the diff"},
-		{"Edit core/parse.go", familyWrite, "core/parse.go"},
-		{"Reading the envfile", "", "Reading the envfile"},
-		{"bash", familyRun, ""},
-		{"", "", ""},
-		{"   ", "", ""},
-	}
-	for _, c := range cases {
-		fam, rest := toolVerb(c.in)
-		if fam != c.fam || rest != c.rest {
-			t.Errorf("toolVerb(%q) = (%q, %q), want (%q, %q)", c.in, fam, rest, c.fam, c.rest)
-		}
-	}
-}
-
-func TestTypedToolRendersItsFamilyGlyph(t *testing.T) {
-	out := renderEntry(entry{role: roleTool, text: "Read core/parse.go"}, 60, view{st: testStyles()})
-	if !strings.Contains(out, unicodeGlyphs().familyGlyph(familyRead)) {
-		t.Fatalf("a read must carry the read glyph: %q", out)
-	}
-	if !strings.Contains(out, "core/parse.go") {
-		t.Fatalf("a tool line must keep its target: %q", out)
-	}
-	unknown := renderEntry(entry{role: roleTool, text: "pondering deeply"}, 60, view{st: testStyles()})
-	if !strings.Contains(unknown, unicodeGlyphs().tool+" pondering deeply") {
-		t.Fatalf("an unknown tool falls back to the generic bullet: %q", unknown)
-	}
-}
-
-func TestAbbreviatePathsShortensDeepAbsolutePaths(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{
-			"cd /home/shan/dev/enderbot/.herrscher-sessions/u03787009/ch-8688/core",
-			"cd …/ch-8688/core",
-		},
-		{"cd /a/b/c/d; ls", "cd …/c/d; ls"},
-		{"(/a/b/c/d)", "(…/c/d)"},
-		{`"/a/b/c/d"`, `"…/c/d"`},
-		{"/a/b/c/d", "…/c/d"},
-		{"/home/shan/dev", "/home/shan/dev"},
-		{"/etc/hosts", "/etc/hosts"},
-		{"~/a/b/c/d", "…/c/d"},
-		{"~/dev/herrscher", "~/dev/herrscher"},
-		{"sed -n '1,120p' src/common/utils/Components/Modal/Modal.ts", "sed -n '1,120p' src/common/utils/Components/Modal/Modal.ts"},
-		{"grep -rln modal: src/modules --include=*.ts", "grep -rln modal: src/modules --include=*.ts"},
-		{"cd  /a/b/c/d   ls", "cd  …/c/d   ls"},
-		{"", ""},
-	}
-	for _, c := range cases {
-		if got := abbreviatePaths(c.in); got != c.want {
-			t.Errorf("abbreviatePaths(%q) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}
-
-func TestToolLineHangsContinuationsUnderTheTarget(t *testing.T) {
-	out := renderTool("bash grep -n needle one two three four five six seven", 40, view{st: testStyles(), expand: true})
-	lines := plainLines(out)
-	if len(lines) < 2 {
-		t.Fatalf("the command must fold at width 40: %q", lines)
-	}
-	if !strings.HasPrefix(lines[1], strings.Repeat(" ", toolTargetColumn)) {
-		t.Fatalf("a continuation must hang under the target column:\n%q", lines)
-	}
-	if strings.HasPrefix(lines[1], strings.Repeat(" ", toolTargetColumn+1)) {
-		t.Fatalf("a continuation must hang exactly at the target column:\n%q", lines)
-	}
-}
-
-func TestUnknownToolLineHangsUnderItsBullet(t *testing.T) {
-	out := renderTool("pondering one two three four five six seven eight nine ten", 40, view{st: testStyles(), expand: true})
-	lines := plainLines(out)
-	if len(lines) < 2 {
-		t.Fatalf("the line must fold at width 40: %q", lines)
-	}
-	if !strings.HasPrefix(lines[1], "  ") || strings.HasPrefix(lines[1], "   ") {
-		t.Fatalf("an unknown tool hangs under its bullet, two cells in:\n%q", lines)
-	}
-}
-
-func TestToolLineIsCappedWithACount(t *testing.T) {
-	long := "bash cd /a/b/c/d; echo one two three four five six seven eight nine ten eleven twelve thirteen fourteen"
-	lines := plainLines(renderTool(long, 40, view{st: testStyles()}))
-	if len(lines) != toolLineCap {
-		t.Fatalf("a long command is capped at %d lines, got %d:\n%q", toolLineCap, len(lines), lines)
-	}
-	if !strings.Contains(lines[len(lines)-1], unicodeGlyphs().moreLines) {
-		t.Fatalf("a capped line must say what it kept back:\n%q", lines)
-	}
-	if !strings.Contains(lines[len(lines)-1], "+") {
-		t.Fatalf("the marker must carry a count:\n%q", lines)
-	}
-	for _, ln := range lines {
-		if w := ansi.StringWidth(ln); w > 40 {
-			t.Fatalf("a capped line must stay inside the width, got %d: %q", w, ln)
-		}
-	}
-}
-
-func TestShortToolLineCarriesNoMarker(t *testing.T) {
-	out := renderTool("Read core/parse.go", 60, view{st: testStyles()})
-	if strings.Contains(out, unicodeGlyphs().moreLines) {
-		t.Fatalf("a line under the cap must carry no marker: %q", out)
-	}
-	if lines := plainLines(out); len(lines) != 1 {
-		t.Fatalf("a short line stays one line: %q", lines)
-	}
-}
-
-func TestExpandedToolLineKeepsTheWholeCommand(t *testing.T) {
-	const cmd = "bash cd /home/shan/dev/enderbot/.herrscher-sessions/u03787009/ch-8688/core; sed -n '1,120p' src/common/utils/Components/Modal/Modal.ts"
-	expanded := plainLines(renderTool(cmd, 40, view{st: testStyles(), expand: true}))
-	joined := strings.Join(expanded, "")
-	squashed := strings.ReplaceAll(joined, " ", "")
-	if !strings.Contains(squashed, "/home/shan/dev/enderbot/.herrscher-sessions/u03787009/ch-8688/core") {
-		t.Fatalf("an expanded line keeps its path whole:\n%q", expanded)
-	}
-	if strings.Contains(joined, "…") {
-		t.Fatalf("an expanded line abbreviates nothing:\n%q", expanded)
-	}
-	if len(expanded) <= toolLineCap {
-		t.Fatalf("an expanded line is not capped, got %d lines:\n%q", len(expanded), expanded)
-	}
-	if strings.Contains(joined, unicodeGlyphs().moreLines) {
-		t.Fatalf("an expanded line kept nothing back, so it must not claim to:\n%q", expanded)
-	}
-}
-
-func TestNarrowToolLineStaysLegible(t *testing.T) {
-	lines := plainLines(renderTool("bash go test ./...", 12, view{st: testStyles(), expand: true}))
-	if strings.Join(lines, "") == "" {
-		t.Fatal("a narrow window must still render the line")
-	}
-	for _, ln := range lines {
-		if strings.TrimSpace(ln) == "" {
-			t.Fatalf("a narrow render must not produce blank rows:\n%q", lines)
-		}
-	}
-	if !strings.Contains(strings.Join(lines, ""), "test") {
-		t.Fatalf("a narrow render must keep the command:\n%q", lines)
-	}
-}
-
-func TestToolResultTakesTheSameBudget(t *testing.T) {
-	entryText := "Read core/parse.go\n" + strings.Repeat("a long summary of what came back ", 6)
-	lines := plainLines(renderTool(entryText, 40, view{st: testStyles()}))
-	if len(lines) != 1+toolLineCap {
-		t.Fatalf("the head plus a capped result is %d lines, got %d:\n%q", 1+toolLineCap, len(lines), lines)
-	}
-	if !strings.Contains(lines[1], unicodeGlyphs().result) {
-		t.Fatalf("the result keeps its own mark:\n%q", lines)
-	}
-	if !strings.Contains(lines[len(lines)-1], unicodeGlyphs().moreLines) {
-		t.Fatalf("a capped result says what it kept back:\n%q", lines)
-	}
-}
-
-func toolModel(t *testing.T) *model {
+func assertFitsWidth(t *testing.T, out string, width int) {
 	t.Helper()
-	m := readyModel(&fakeBackend{})
-	tb := m.ensureTab("a")
-	m.active = "a"
-	tb.appendEntry(entry{role: roleTool, text: "bash cd /home/shan/dev/enderbot/.herrscher-sessions/u03787009/ch-8688/core; sed -n '1,120p' src/common/utils/Components/Modal/Modal.ts; grep -n getValue src/common/commands/context/ModalContext.ts"})
-	m.syncViewport()
-	return m
-}
-
-func TestToggleToolExpandIsReversible(t *testing.T) {
-	m := toolModel(t)
-	before := m.thinkingContent()
-	m.toggleToolExpand()
-	after := m.thinkingContent()
-	if after == before {
-		t.Fatal("expanding must change what is shown")
-	}
-	if !strings.Contains(ansi.Strip(after), ".herrscher-sessions") {
-		t.Fatalf("an expanded transcript spells the path out:\n%s", ansi.Strip(after))
-	}
-	if strings.Contains(ansi.Strip(before), ".herrscher-sessions") {
-		t.Fatalf("a budgeted transcript abbreviates it:\n%s", ansi.Strip(before))
-	}
-	m.toggleToolExpand()
-	if m.thinkingContent() != before {
-		t.Fatal("collapsing must restore the transcript exactly")
+	for _, ln := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(ln); w > width {
+			t.Fatalf("width %d: line is %d cols: %q", width, w, ansi.Strip(ln))
+		}
 	}
 }
 
-func TestAltEExpandsToolLines(t *testing.T) {
-	m := toolModel(t)
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}, Alt: true})
-	if !m.expandTools {
-		t.Fatal("alt+e must lift the tool-line budget")
+func TestToolHeadKeepsVerbAndStateAtEveryWidth(t *testing.T) {
+	item := entry{role: roleTool, text: "Edit internal/very/long/path/to/some/deeply/nested/file.go", span: 1200 * time.Millisecond}
+	for _, width := range transcriptWidths {
+		out := renderEntry(item, width, toolTestView(false))
+		assertFitsWidth(t, out, width)
+		head := ansi.Strip(strings.Split(out, "\n")[0])
+		if !strings.Contains(head, "Edit") || !strings.Contains(head, "✓") {
+			t.Fatalf("width %d: verb or state lost: %q", width, head)
+		}
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}, Alt: true})
-	if m.expandTools {
-		t.Fatal("alt+e must put it back")
+}
+
+func TestToolHeadRightAlignsDurationAndState(t *testing.T) {
+	item := entry{role: roleTool, text: "Read tui/tui.go", span: 100 * time.Millisecond}
+	head := ansi.Strip(renderTool(item, 120, toolTestView(false)))
+	if !strings.HasSuffix(head, "0.1s ✓") {
+		t.Fatalf("duration and state must sit on the right edge: %q", head)
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
-	if m.expandTools {
-		t.Fatal("ctrl+e belongs to the composer, not to the transcript")
+	if lipgloss.Width(head) != 120 {
+		t.Fatalf("right side must reach the edge: %d cols", lipgloss.Width(head))
+	}
+}
+
+func TestToolHeadShowsRunningSpinnerAndFailure(t *testing.T) {
+	live := ansi.Strip(renderTool(entry{role: roleTool, text: "Bash go test", live: true}, 80, toolTestView(false)))
+	if !strings.Contains(live, "⣾") {
+		t.Fatalf("a running tool shows the spinner: %q", live)
+	}
+	failed := ansi.Strip(renderTool(entry{role: roleTool, text: "Bash go test", failed: true}, 80, toolTestView(false)))
+	if !strings.Contains(failed, unicodeGlyphs().failure) {
+		t.Fatalf("a failed tool shows the cross: %q", failed)
+	}
+}
+
+func TestToolResultsCollapseToTwoLinesAndOpen(t *testing.T) {
+	text := "Bash go test\nline one\nline two\nline three\nline four"
+	closed := ansi.Strip(renderTool(entry{role: roleTool, text: text, foldable: true}, 80, toolTestView(false)))
+	if strings.Contains(closed, "line one") {
+		t.Fatalf("a closed tool hides its results: %q", closed)
+	}
+	open := ansi.Strip(renderTool(entry{role: roleTool, text: text, foldable: true, open: true}, 80, toolTestView(false)))
+	if !strings.Contains(open, "    "+unicodeGlyphs().result+" line one") || !strings.Contains(open, "+2") {
+		t.Fatalf("an open tool shows two results and the hidden count: %q", open)
+	}
+	expanded := ansi.Strip(renderTool(entry{role: roleTool, text: text, foldable: true, open: true}, 80, toolTestView(true)))
+	if !strings.Contains(expanded, "line four") {
+		t.Fatalf("alt+e must show every result: %q", expanded)
+	}
+}
+
+const editBody = "Edit tui/tui.go\n@@ -10,3 +10,4 @@ func f()\n ctx\n-old\n+new one\n+new two\n tail"
+
+func TestDiffNumbersInsertionsAndShiftsLaterLines(t *testing.T) {
+	out := ansi.Strip(renderTool(entry{role: roleTool, text: editBody, open: true}, 120, toolTestView(true)))
+	for _, want := range []string{"ctx", "+ new one", "+ new two", "tail"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("diff row %q missing: %q", want, out)
+		}
+	}
+	if !strings.Contains(out, "+2 −1") {
+		t.Fatalf("header must count the additions and deletions: %q", out)
+	}
+	if !strings.Contains(out, "⋯") || !strings.Contains(out, "@@ func f()") {
+		t.Fatalf("hunk separator missing: %q", out)
+	}
+}
+
+func TestDiffHasTwoNumberColumnsWideAndOneNarrow(t *testing.T) {
+	wide := ansi.Strip(renderDiff("@@ -10,3 +10,4 @@\n+new one", 120, toolTestView(false)))
+	if !strings.Contains(wide, "        10 + new one") {
+		t.Fatalf("120 columns must draw old and new columns: %q", wide)
+	}
+	narrow := ansi.Strip(renderDiff("@@ -10,3 +10,4 @@\n+new one", 60, toolTestView(false)))
+	if !strings.Contains(narrow, "│   10 + new one") {
+		t.Fatalf("under 70 columns the diff draws one column: %q", narrow)
+	}
+}
+
+func TestDiffFitsEveryTranscriptWidth(t *testing.T) {
+	long := "Edit tui/tui.go\n@@ -1 +1 @@ func x()\n+" + strings.Repeat("x", 300) + "\n-short"
+	for _, width := range transcriptWidths {
+		out := renderEntry(entry{role: roleTool, text: long, open: true}, width, toolTestView(false))
+		assertFitsWidth(t, out, width)
+	}
+}
+
+func TestDiffFoldsAfterFourLinesUnlessExpanded(t *testing.T) {
+	body := "Edit a.go\n@@ -1,6 +1,6 @@\n+a\n+b\n+c\n+d\n+e\n+f"
+	folded := ansi.Strip(renderTool(entry{role: roleTool, text: body, open: true}, 120, toolTestView(false)))
+	if !strings.Contains(folded, "2 lignes de plus (alt+e)") {
+		t.Fatalf("a diff past four lines folds with the count: %q", folded)
+	}
+	expanded := ansi.Strip(renderTool(entry{role: roleTool, text: body, open: true}, 120, toolTestView(true)))
+	if strings.Contains(expanded, "lignes de plus") || !strings.Contains(expanded, "+ f") {
+		t.Fatalf("alt+e must lift the fold: %q", expanded)
+	}
+}
+
+func TestThinkingFoldedShowsLabelAndHint(t *testing.T) {
+	item := entry{role: roleThinking, text: "weighing two options", span: 14 * time.Second, tokens: 1200}
+	for _, width := range transcriptWidths {
+		out := renderThinking(item, width, toolTestView(false))
+		assertFitsWidth(t, out, width)
+	}
+	got := ansi.Strip(renderThinking(item, 120, toolTestView(false)))
+	for _, want := range []string{"▸", "Réflexion · 14s · 1.2k tokens", "ctrl+o"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("folded thinking missing %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "weighing") {
+		t.Fatalf("folded thinking must hide its text: %q", got)
+	}
+}
+
+func TestThinkingUnfoldedShowsTheText(t *testing.T) {
+	item := entry{role: roleThinking, text: "weighing two options", span: 14 * time.Second, open: true}
+	got := ansi.Strip(renderThinking(item, 80, toolTestView(false)))
+	if !strings.Contains(got, "▾") || !strings.Contains(got, "weighing two options") {
+		t.Fatalf("unfolded thinking must show its text: %q", got)
+	}
+	if strings.Contains(got, "tokens") {
+		t.Fatalf("no token count without a reported figure: %q", got)
+	}
+}
+
+func TestSubagentTreeMarksEachState(t *testing.T) {
+	now := time.Now()
+	agents := []liveAgent{
+		{Subagent: contracts.Subagent{ID: "a", Name: "explore", Kind: "claude", State: stateDone}, since: now.Add(-5 * time.Second), ended: now.Add(-1 * time.Second)},
+		{Subagent: contracts.Subagent{ID: "b", Name: "tests", Kind: "codex", State: "running"}, since: now.Add(-8 * time.Second)},
+		{Subagent: contracts.Subagent{ID: "c", Name: "review", Kind: "gemini", State: stateTimeout}, since: now.Add(-20 * time.Second), ended: now.Add(-2 * time.Second)},
+	}
+	for _, width := range transcriptWidths {
+		rows := subagentRows(agents, now, width, toolTestView(false))
+		for _, row := range rows {
+			if lipgloss.Width(row) > width {
+				t.Fatalf("width %d: subagent row is %d cols: %q", width, lipgloss.Width(row), ansi.Strip(row))
+			}
+		}
+	}
+	rows := make([]string, 0, len(agents))
+	for _, row := range subagentRows(agents, now, 120, toolTestView(false)) {
+		rows = append(rows, ansi.Strip(row))
+	}
+	for index, want := range []string{"├", "├", "└"} {
+		if !strings.Contains(rows[index], want) {
+			t.Fatalf("row %d must carry %q: %q", index, want, rows[index])
+		}
+	}
+	if !strings.Contains(rows[0], unicodeGlyphs().success) || !strings.Contains(rows[1], "⣾") || !strings.Contains(rows[2], unicodeGlyphs().failure) {
+		t.Fatalf("states must show check, spinner and cross: %q", rows)
+	}
+	if !strings.Contains(rows[2], subagentRetryNote) {
+		t.Fatalf("a timed out agent must say it was retried: %q", rows[2])
+	}
+}
+
+func TestBusyLineCarriesVerbTimeTokensCostAndEscape(t *testing.T) {
+	for _, width := range transcriptWidths {
+		out := busyLine(width, testStyles(), "⣾", "1m12s", "4.2k", "$0.31")
+		assertFitsWidth(t, out, width)
+	}
+	got := ansi.Strip(busyLine(120, testStyles(), "⣾", "1m12s", "4.2k", "$0.31"))
+	for _, want := range []string{workingVerb, "1m12s", "↑ 4.2k", "$0.31", "Échap interrompre"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("busy line %q missing %q", got, want)
+		}
+	}
+	if !strings.HasSuffix(got, "Échap interrompre") {
+		t.Fatalf("the escape hint must sit on the right: %q", got)
 	}
 }

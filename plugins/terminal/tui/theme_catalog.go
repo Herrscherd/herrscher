@@ -36,6 +36,9 @@ type colorsFile struct {
 	Err     *string `toml:"err"`
 	Sel     *string `toml:"sel"`
 	SelText *string `toml:"sel_text"`
+	Violet  *string `toml:"violet"`
+	AddBg   *string `toml:"add_bg"`
+	DelBg   *string `toml:"del_bg"`
 }
 
 type renderFile struct {
@@ -74,6 +77,7 @@ func (f themeFile) overlay(base Theme, id string) (Theme, error) {
 		{&th.Colors.Text, f.Colors.Text}, {&th.Colors.Dim, f.Colors.Dim}, {&th.Colors.Accent, f.Colors.Accent},
 		{&th.Colors.Add, f.Colors.Add}, {&th.Colors.Del, f.Colors.Del}, {&th.Colors.Wait, f.Colors.Wait},
 		{&th.Colors.Err, f.Colors.Err}, {&th.Colors.Sel, f.Colors.Sel}, {&th.Colors.SelText, f.Colors.SelText},
+		{&th.Colors.Violet, f.Colors.Violet}, {&th.Colors.AddBg, f.Colors.AddBg}, {&th.Colors.DelBg, f.Colors.DelBg},
 	}
 	for _, color := range colors {
 		if color.src == nil {

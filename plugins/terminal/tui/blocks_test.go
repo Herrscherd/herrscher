@@ -5,35 +5,31 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestAgentAnswerOpensWithARuleAndIsNotClosed(t *testing.T) {
 	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 60, view{st: testStyles()})
 	lines := strings.Split(out, "\n")
-	if !strings.Contains(lines[0], unicodeGlyphs().agentTitle()) {
-		t.Fatalf("the opening rule must name whose voice this is: %q", lines[0])
+	if got := ansi.Strip(lines[0]); !strings.HasPrefix(got, blockIndent+unicodeGlyphs().tool+" the answer") {
+		t.Fatalf("the answer must open on the prose gutter: %q", got)
 	}
-	if last := lines[len(lines)-1]; strings.Contains(last, strings.Repeat(unicodeGlyphs().ruleChar, 4)) {
-		t.Fatalf("a finished answer must not be closed off by a rule: %q", last)
-	}
-	if !strings.Contains(out, blockIndent+"the answer") {
-		t.Fatalf("the body must sit in the block gutter: %q", out)
+	for _, ln := range lines {
+		if strings.Contains(ln, strings.Repeat(unicodeGlyphs().ruleChar, 4)) {
+			t.Fatalf("an answer must not be framed by a rule: %q", ln)
+		}
 	}
 }
 
 func TestStreamingAnswerIsLeftOpen(t *testing.T) {
 	out := renderEntry(entry{role: roleAgent, text: "half an ans", streaming: true}, 60, view{st: testStyles()})
-	lines := strings.Split(out, "\n")
-	if !strings.Contains(lines[0], unicodeGlyphs().agentTitle()) {
-		t.Fatalf("a streaming block still announces itself: %q", out)
-	}
-	if strings.Contains(lines[len(lines)-1], strings.Repeat(unicodeGlyphs().ruleChar, 4)) {
-		t.Fatalf("a streaming block must not be closed off: %q", out)
+	if got := ansi.Strip(out); !strings.HasPrefix(got, blockIndent+unicodeGlyphs().tool+" half an ans") {
+		t.Fatalf("a streaming answer keeps the prose gutter: %q", got)
 	}
 }
 
 func TestNarrowTitledRuleDropsItsTitle(t *testing.T) {
-	out := testStyles().titledRule(testStyles().accent, unicodeGlyphs().agentTitle(), 4)
+	out := testStyles().titledRule(testStyles().accent, "⚡ Herrscher", 4)
 	if strings.Contains(out, "Herrscher") {
 		t.Fatalf("a title that does not fit must be dropped, not clipped: %q", out)
 	}

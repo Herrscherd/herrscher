@@ -38,3 +38,38 @@ func TestLoadSkillsConfig(t *testing.T) {
 		t.Fatalf("want roots=[/opt/skills], got %+v", c.Skills)
 	}
 }
+
+func TestLoadCompactAtBounds(t *testing.T) {
+	cases := []struct {
+		name    string
+		body    string
+		want    int
+		wantErr bool
+	}{
+		{name: "above 100 is refused", body: `{"compactAt": 150}`, wantErr: true},
+		{name: "negative is refused", body: `{"compactAt": -1}`, wantErr: true},
+		{name: "zero disables", body: `{"compactAt": 0}`, want: 0},
+		{name: "default percent is accepted", body: `{"compactAt": 92}`, want: 92},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("Load(%s) accepted an out-of-range compactAt", tc.body)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load(%s): %v", tc.body, err)
+			}
+			if cfg.CompactAt == nil || *cfg.CompactAt != tc.want {
+				t.Fatalf("CompactAt = %v, want %d", cfg.CompactAt, tc.want)
+			}
+		})
+	}
+}

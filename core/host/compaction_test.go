@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -64,6 +65,7 @@ func compactPolicy(percent int, names ...string) compactionPolicy {
 		plugins:  make(map[string]contracts.Compactor),
 		backends: map[string]bool{"claude": true},
 		warnOnce: &sync.Once{},
+		warn:     func(string, ...any) {},
 	}
 }
 
@@ -231,5 +233,51 @@ func TestCustomStagesRunInConfiguredOrderBeforeTheBackend(t *testing.T) {
 	f.from <- measuredAnswer(30_000)
 	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 30_000 {
 		t.Fatalf("compaction_done = %+v, want the backend result last", done)
+	}
+}
+
+func TestMeasuredCompactionStillAboveThresholdDoesNotLoop(t *testing.T) {
+	f := newCompactFixture(t, "claude", compactPolicy(50))
+	openTurn(t, f, 150_000)
+	if !compactFrameOrQuiet(t, f, measuredAnswer(150_000)) {
+		t.Fatal("first automatic compaction did not run")
+	}
+	openTurn(t, f, 150_000)
+	if compactFrameOrQuiet(t, f, measuredAnswer(120_000)) {
+		t.Fatal("compaction retriggered after a measured result still above the threshold: loop")
+	}
+	openTurn(t, f, 10_000)
+	openTurn(t, f, 150_000)
+	if !compactFrameOrQuiet(t, f, measuredAnswer(20_000)) {
+		t.Fatal("compaction did not rearm after a measured turn under the threshold")
+	}
+}
+
+func TestAbortedTurnDoesNotReuseThePreviousReading(t *testing.T) {
+	f := newCompactFixture(t, "claude", compactPolicy(50))
+	var percent atomic.Int32
+	f.driver.percentOf = func() int { return int(percent.Load()) }
+	openTurn(t, f, 150_000)
+	expectNoFrame(t, f)
+	percent.Store(50)
+	f.driver.queue <- queued{ev: contracts.Event{T: eventInput, Text: "tour coupé"}}
+	if in := nextFrame(t, f); in.T != eventInput {
+		t.Fatalf("frame = %+v, want the input turn", in)
+	}
+	close(f.driver.hangup)
+	expectNoFrame(t, f)
+	if started := f.emittedOf(eventCompactStarted); len(started) != 0 {
+		t.Fatalf("an aborted turn started a compaction on the reading of the previous turn: %+v", started)
+	}
+}
+
+func TestNoPortWarningIsWrittenOnce(t *testing.T) {
+	policy := compactPolicy(92)
+	var warned []string
+	policy.warn = func(format string, _ ...any) { warned = append(warned, format) }
+	policy.warnNoPort("claude")
+	policy.warnNoPort("claude")
+	if len(warned) != 1 {
+		t.Fatalf("the no-port warning was written %d times, want once", len(warned))
 	}
 }

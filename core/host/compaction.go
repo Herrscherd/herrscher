@@ -36,6 +36,7 @@ type compactionPolicy struct {
 	plugins  map[string]contracts.Compactor
 	backends map[string]bool
 	warnOnce *sync.Once
+	warn     func(format string, args ...any)
 }
 
 func newCompactionPolicy(ctx context.Context, percent *int, names []string) (compactionPolicy, error) {
@@ -45,6 +46,7 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string) (com
 		plugins:  make(map[string]contracts.Compactor),
 		backends: make(map[string]bool),
 		warnOnce: &sync.Once{},
+		warn:     warnStderr,
 	}
 	if percent != nil {
 		if err := contracts.ValidateAutoCompactPercent(*percent); err != nil {
@@ -110,7 +112,7 @@ func (p compactionPolicy) supports(vendor string) bool {
 
 func (p compactionPolicy) warnNoPort(vendor string) {
 	p.warnOnce.Do(func() {
-		warnStderr("herrscher serve: backend %q declares Capabilities.Compactor but its instance does not implement the port, its compaction is refused\n", vendor)
+		p.warn("herrscher serve: backend %q declares Capabilities.Compactor but its instance does not implement the port, its compaction is refused\n", vendor)
 	})
 }
 

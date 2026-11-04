@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -188,5 +189,45 @@ func TestStatusBarDropsTheTokenDetailBeforeTheCost(t *testing.T) {
 	}
 	if lipgloss.Width(bar) > 60 {
 		t.Errorf("the bar must fit 60 columns: %q", bar)
+	}
+}
+
+func TestStatuslineTOMLUsesTheRefreshKey(t *testing.T) {
+	m, _ := barModelAt(t, "")
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m.openStatusline()
+	view := m.statuslineView()
+	if !strings.Contains(view, `refresh = "300ms"`) {
+		t.Errorf("the TOML pane must document the refresh key")
+	}
+	if strings.Contains(view, "interval") {
+		t.Errorf("the TOML pane must not mention the interval key")
+	}
+}
+
+func TestStatusBarKeepsTheContextLabelWhenTheGaugeFolds(t *testing.T) {
+	m, tb := barModelAt(t, "")
+	tb.ctxTokens = 82_000
+	for width := 40; width <= 120; width++ {
+		bar := ansi.Strip(m.statusBar(tb, width))
+		if index := strings.Index(bar, "41%"); index >= 0 && !strings.Contains(bar[:index], "ctx") {
+			t.Errorf("width %d: the percentage must keep its ctx label: %q", width, bar)
+		}
+	}
+}
+
+func TestQueueHeaderStaysVisibleInAShortWindow(t *testing.T) {
+	m, tb := barModelAt(t, "")
+	tb.busy = true
+	for index := range 25 {
+		tb.queue = append(tb.queue, queuedInput{text: "message " + strconv.Itoa(index)})
+	}
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	view := m.View()
+	if !strings.Contains(view, "En file (25)") {
+		t.Errorf("the queue header must stay visible while the transcript keeps room")
+	}
+	if rows := len(strings.Split(view, "\n")); rows > 30 {
+		t.Errorf("the view has %d rows for a 30 row window", rows)
 	}
 }

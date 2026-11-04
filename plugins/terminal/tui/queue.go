@@ -119,7 +119,7 @@ func (m *model) draftsView() string {
 	return m.st.dim.Render(truncate(text, m.innerWidth()))
 }
 
-func (m *model) queueLines(base int) []string {
+func (m *model) queueLines(base, rows int) []string {
 	m.queueHits = nil
 	current := m.activeTab()
 	if current == nil || len(current.queue) == 0 {
@@ -138,6 +138,9 @@ func (m *model) queueLines(base int) []string {
 	}
 	lines := []string{m.st.dim.Render(truncate(header, width))}
 	for index, item := range current.queue {
+		if len(lines) >= rows {
+			break
+		}
 		mark, when := queueFileMark, queueEndOfTurn
 		if item.steer {
 			mark, when = queueAfterMark, queueAfterTool

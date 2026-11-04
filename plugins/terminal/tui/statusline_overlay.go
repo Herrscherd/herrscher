@@ -212,6 +212,9 @@ func (m *model) statuslineRow(fieldID string, selected bool, width int) string {
 		return m.st.overlaySel.Render(padTo(truncateEllipsis(plain, width), width))
 	}
 	markStyle, labelStyle := m.st.dim, m.st.dim
+	if m.bar.scripted() {
+		markStyle, labelStyle = m.st.scrollback, m.st.scrollback
+	}
 	if shown {
 		markStyle = m.st.accent
 		if !m.bar.scripted() {
@@ -283,7 +286,7 @@ func (m *model) statuslineTOMLLines() []string {
 		m.st.dim.Render(barPaneIndent + "[statusline]"),
 		sourceStyle.Render(barPaneIndent + `source  = "` + source + `"`),
 		m.st.dim.Render(barPaneIndent + `command = "` + barScriptPath + `"`),
-		m.st.dim.Render(barPaneIndent + `interval = "300ms"`),
+		m.st.dim.Render(barPaneIndent + `refresh = "300ms"`),
 	}
 }
 

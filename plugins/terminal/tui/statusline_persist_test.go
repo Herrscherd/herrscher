@@ -16,7 +16,7 @@ accent = "#ff8800" # couleur d'accent
 [statusline]
 # ma commande
 command = "cat"
-interval = "300ms"
+refresh = "300ms"
 
 [other]
 fields = ["cost"]
@@ -40,7 +40,7 @@ func assertKeepsUnrelatedText(t *testing.T, path string) {
 		"# bloc statusline",
 		"# ma commande",
 		`command = "cat"`,
-		`interval = "300ms"`,
+		`refresh = "300ms"`,
 		"[other]\nfields = [\"cost\"]",
 	} {
 		if !strings.Contains(text, keep) {

@@ -127,7 +127,7 @@ func applyStatuslineKey(cfg statuslineConfig, key, raw string) statuslineConfig 
 		}
 	case "command":
 		cfg.Command = value
-	case "interval":
+	case "refresh":
 		if d, err := time.ParseDuration(value); err == nil && d > 0 {
 			cfg.Interval = max(d, statuslineMinInterval)
 		}

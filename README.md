@@ -468,7 +468,7 @@ and see the result in a live preview. Beside the list, a pane shows the script
 contract: the JSON it receives on stdin and the `[statusline]` keys. `s` switches
 between the built-in bar and the script. In `~/.config/herrscher/terminal.toml`, a
 `[statusline]` section can replace the bar with a script (`source = "script"`,
-`command`, `interval`): it receives the state as JSON on stdin and its first line
+`command`, `refresh`): it receives the state as JSON on stdin and its first line
 becomes the bar. A script that fails or runs past one second leaves the built-in bar
 with a discreet ✗.
 

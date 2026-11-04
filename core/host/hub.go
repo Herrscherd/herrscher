@@ -12,6 +12,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
@@ -109,6 +110,19 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 						warnStderr("herrscher serve: session %q: transcript entry dropped: %v\n", sess.Name, err)
 					}
 				},
+				Checkpoint: func(turnID, text string) {
+					if !checkpointable(sess) {
+						return
+					}
+					current, ok := h.st.FindSession(sess.Name)
+					if !ok {
+						current = sess
+					}
+					meta := checkpoint.Meta{Turn: turnID, Text: text, Conversation: conversationPosition(current)}
+					if _, err := checkpoint.Take(context.Background(), sess.Worktree, sess.Name, meta); err != nil {
+						warnStderr("herrscher serve: session %q: checkpoint not taken, /rewind cannot return to this message: %v\n", sess.Name, err)
+					}
+				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent}, h.gate)
@@ -184,6 +198,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 	if err := h.authorize(ctx, args); err != nil {
 		return "", err
 	}
+	ctx = withRestarter(ctx, h)
 
 	if isSessionSeedCommand(args) {
 		runtime := oneShotSeedRuntime{
@@ -197,6 +212,10 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 			},
 		}
 		return h.reg.Dispatch(withOneShotSeedRuntime(ctx, runtime), args)
+	}
+
+	if isSessionForkCommand(args) {
+		return h.reg.Dispatch(withForker(ctx, h.forkSession), args)
 	}
 
 	if h.isContributedCommand(args) {
@@ -361,6 +380,21 @@ func scrollbackOf(partDir, name string) []contracts.ScrollbackLine {
 		out = append(out, contracts.ScrollbackLine{Role: e.Role, Text: e.Text})
 	}
 	return out
+}
+
+func (h *hub) RestartWithResume(name, token string) error {
+	sess, ok := h.st.FindSession(name)
+	if !ok {
+		return &NotFoundError{Kind: kindSession, Name: name}
+	}
+	h.goDead(name)
+	if err := h.st.SetResumeToken(name, token); err != nil {
+		return err
+	}
+	sess.ResumeToken = token
+	h.goLive(context.Background(), sess)
+	h.sup.Start(sess)
+	return nil
 }
 
 func (h *hub) Resume(name string) error {

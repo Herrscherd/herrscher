@@ -30,7 +30,7 @@ func TestClassifySessionPrefersWaitingThenWorkingThenArchived(t *testing.T) {
 
 func TestTallyCountsCostAndLastEntryIncrementally(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "s.jsonl")
-	writeTranscript(t, path, `{"ts":"2026-01-01T10:00:00Z","role":"user","text":"salut"}`+"\n"+
+	writeSessionTranscript(t, path, `{"ts":"2026-01-01T10:00:00Z","role":"user","text":"salut"}`+"\n"+
 		`{"ts":"2026-01-01T10:00:05Z","role":"assistant","text":"bonjour","cost":0.25}`+"\n")
 	cache := newTallyCache()
 
@@ -48,7 +48,7 @@ func TestTallyCountsCostAndLastEntryIncrementally(t *testing.T) {
 
 func TestTallyIgnoresPartialLineUntilComplete(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "s.jsonl")
-	writeTranscript(t, path, `{"ts":"2026-01-01T10:00:00Z","role":"assistant","text":"a","cost":1`)
+	writeSessionTranscript(t, path, `{"ts":"2026-01-01T10:00:00Z","role":"assistant","text":"a","cost":1`)
 	cache := newTallyCache()
 	if got := cache.tally(path); got.cost != 0 {
 		t.Fatalf("partial line counted: %+v", got)
@@ -66,7 +66,7 @@ func TestTallyOfMissingTranscriptIsEmpty(t *testing.T) {
 	}
 }
 
-func writeTranscript(t *testing.T, path, body string) {
+func writeSessionTranscript(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)

@@ -536,6 +536,32 @@ terminal's name, not a check that the terminal rang.
 `n` (with an empty composer) or `/notify` cycles which events notify: turn end
 and approval, turn end only, or approval only.
 
+### Rewinding
+
+Before each message sent, the host takes a checkpoint of the session's worktree (a
+git snapshot under `refs/herrscher/checkpoints/`, without touching the index or the
+files). On an empty composer and outside a turn, `Esc Esc` opens the "Rewind"
+screen: the list of messages with the files each one touched, side by side when
+wide (under 80 columns, the files move below the message).
+
+From this screen, `Enter` opens the choices: "restore the code and the conversation",
+"restore the conversation only" and "restore the code only", each with a
+confirmation (`y`). The conversation returns to the message by relaunching the
+backend on a copy of its transcript, cut just before that message, under a new
+session identifier: the original stays intact. Only the Claude backend provides this
+position today; elsewhere both conversation options are disabled with the reason
+shown, and nothing changes. Restoring the code alone does not touch the
+conversation. `u` undoes the last code restore (one level); a conversation restore
+cannot be undone yet. `f`, or "fork from here", runs `/fork`.
+
+`/fork [--name <name>] --to <n>` creates the session `<name>-fork` with its own
+worktree at the checkpoint, resumes the conversation up to that same message, and
+opens a new tab; the original stays intact. A fork refused by the backend (one with
+no per-message position) creates nothing.
+
+A single `Esc` always interrupts a turn in progress, as above. Files ignored by git
+are not covered by checkpoints.
+
 ### What the agent is doing right now
 
 A todo list and a running sub-agent are state, not transcript: written into the

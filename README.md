@@ -553,6 +553,29 @@ borders = "square"
 
 → `plugins/terminal/tui/theme.go`, `plugins/terminal/tui/theme_catalog.go`
 
+### Approvals
+
+When the agent asks to run something the host does not allow on its own, the
+gateway's menu opens an approval box in the session tab, above the composer. It
+names the tool and the command (a long command is cut in the middle with `…`),
+the project and the worktree, and offers the choices the host sent: `o` allows
+once, `s` allows for the session, `t` always allows (the box shows the exact rule
+the host will write), and `r` refuses with a reason. Arrows and Enter pick a row
+too. Letters only answer while the composer is empty, so typing is never taken
+for a choice.
+
+The reason field takes whatever you type; Enter sends the refusal with it, and
+an empty reason is a plain refusal. Each answer goes back to the host as the
+menu value, so the host decides; the TUI only forwards it.
+
+The box counts down to a refusal. Its deadline is the one the host announces
+(an `approval` event), or five minutes when the host gives none; `x` jumps the
+countdown to 0:05, and it turns red under a minute. At zero the approval is
+refused without a reason, as if nobody answered.
+
+The box is drawn from 60 to 240 columns: below 80 each choice takes two rows.
+The tab carries a `pendingApproval` flag for the rest of the window to mark it.
+
 ### Using the terminal you are in
 
 Capabilities are probed once at startup, and every feature that has a richer and

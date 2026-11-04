@@ -217,6 +217,17 @@ func (a *attachedDaemon) Interrupt(name string) bool {
 	return err == nil
 }
 
+func (a *attachedDaemon) Pick(channel, value string) bool {
+	for _, info := range a.Sessions() {
+		if info.ChannelID != channel {
+			continue
+		}
+		_, err := a.dispatch(append([]string{verbSession, "pick", argName, info.Name}, cli.FlagArg("value", value)...))
+		return err == nil
+	}
+	return false
+}
+
 func (a *attachedDaemon) Scrollback(name string) []contracts.ScrollbackLine {
 	out, err := a.dispatch([]string{verbSession, "scrollback", argName, name})
 	if err != nil {

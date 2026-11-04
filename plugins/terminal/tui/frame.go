@@ -28,9 +28,7 @@ func (m *model) buildFrame() frame {
 		stacked.below = append(stacked.below, todoPanel(tab.todos, m.innerWidth(), m.st)...)
 		stacked.below = append(stacked.below, subagentPanel(tab.agents, time.Now(), m.innerWidth(), m.st)...)
 	}
-	if m.choice != nil {
-		stacked.below = appendLines(stacked.below, m.choiceView())
-	}
+	stacked.below = append(stacked.below, m.approvalLines(time.Now())...)
 	if m.paletteOpen() {
 		stacked.below = appendLines(stacked.below, m.paletteView())
 	}

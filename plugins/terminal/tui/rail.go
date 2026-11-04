@@ -173,7 +173,7 @@ func (m *model) railCell(channel string, limit int) railCell {
 
 func (m *model) railMarker(channel string, tab *tab) (string, lipgloss.Style) {
 	switch {
-	case m.choice != nil && m.choice.Channel == channel:
+	case tab.pendingApproval:
 		return m.st.glyphs.attention, m.st.warn.Bold(true)
 	case tab.busy:
 		return m.spinFrame(), m.st.spinner

@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -10,10 +11,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, sessions *sessionTable, seedCoord *coordinatorSlot) error {
+func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot) error {
 	return addVerbs(reg,
 		seedVerb(store, instID, seedCoord),
 		sessionSendVerb(sessions),
+		sessionPickVerb(approvals, sessions),
 		sessionInfoVerb(store, partDir),
 		sessionScrollbackVerb(partDir),
 		sessionInterruptVerb(sessions),
@@ -110,6 +112,20 @@ func sessionScrollbackVerb(partDir string) contracts.Cmd {
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			b, err := json.Marshal(scrollbackOf(partDir, in.Get(paramName)))
 			return string(b), err
+		})
+}
+
+func sessionPickVerb(approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+	return contracts.New(nsSession, "pick").
+		Help("answer a session's pending choice (an approval) with a menu value").
+		Param(paramName, "session name", true).
+		ValueParam("value", "menu value to answer with", true).
+		Do(func(_ context.Context, input contracts.Input) (string, error) {
+			name, value := input.Get(paramName), input.Get("value")
+			if answerApprovalPick(approvals, sessions, name, value) || sessions.pick(name, value) {
+				return "picked " + name, nil
+			}
+			return "", fmt.Errorf("session %q has no pending choice", name)
 		})
 }
 

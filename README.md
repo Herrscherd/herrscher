@@ -553,8 +553,17 @@ two spellings. `herrscher serve` warns once at start about a vendor that no back
 the daemon serves; its entry is then unused. The built-in `codex` figure is a cautious
 assumption, the smallest window verified in the Codex backend catalogue (`o4-mini`),
 so automatic compaction runs early rather than after the provider refuses the request;
-raise it in `contextLimits` when the model in use takes more. The TUI gauge reads the
-same sizes. One window per model is a follow-up. After a measured compaction
+raise it in `contextLimits` when the model in use takes more. The daemon is the only
+source of the window it compacts against: each session carries the window the daemon
+resolved for its vendor (`SessionInfo.ContextWindow`), and the TUI gauge, sidebar,
+status bar and statusline read that figure. The TUI resolves the same table itself
+only as a fallback, when the daemon gives no size (a daemon older than this field),
+from the `config.json` of its own process and its own environment. The two can differ
+when `herrscher serve -config <file>` reads another file, or when the TUI runs under an
+environment that the daemon does not share; the daemon's figure is the one that counts.
+An invalid `config.json` makes `herrscher serve` refuse to start, while the TUI shows a
+flash naming the file and falls back to the built-in sizes. One window per model is a
+follow-up. After a measured compaction
 still above the threshold, automatic compaction does not retrigger: it rearms once a
 measured turn lands under the threshold. A compaction the backend does not measure
 never retriggers. `compactStack` lists the stages in order, where `backend` is the

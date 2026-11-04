@@ -2,7 +2,9 @@ package host
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -12,6 +14,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 const quietWindow = 150 * time.Millisecond
@@ -429,5 +432,41 @@ func TestUnknownContextLimitVendorIsWarnedAboutOnce(t *testing.T) {
 	warnUnknownContextLimits(warn, map[string]int{"codex": 400_000, "Claude": 300_000, "ghost": 1}, []string{"codex", "claude"})
 	if len(warned) != 1 || !strings.Contains(warned[0], `"ghost"`) {
 		t.Fatalf("warnings = %q, want one line naming the unknown vendor ghost", warned)
+	}
+}
+
+func TestSessionInfosCarryTheResolvedWindowPerVendor(t *testing.T) {
+	st, err := state.LoadState(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if err = st.AddSession(state.Session{Name: "codexA", ChannelID: "c1", Vendor: "codex"}); err != nil {
+		t.Fatalf("AddSession: %v", err)
+	}
+	if err = st.AddSession(state.Session{Name: "claudeA", ChannelID: "c2", Vendor: "claude"}); err != nil {
+		t.Fatalf("AddSession: %v", err)
+	}
+	policy := compactPolicy(50)
+	policy.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
+	infos := sessionInfos(st, t.TempDir(), policy)
+	byName := make(map[string]contracts.SessionInfo, len(infos))
+	for _, info := range infos {
+		byName[info.Name] = info
+	}
+	if got := byName["codexA"].ContextWindow; got != 400_000 {
+		t.Fatalf("codex session ContextWindow = %d, want the table's 400000", got)
+	}
+	if got := byName["claudeA"].ContextWindow; got != 200_000 {
+		t.Fatalf("claude session ContextWindow = %d, want the built-in 200000", got)
+	}
+	if got := byName["codexA"].AutoCompactPercent; got != 50 {
+		t.Fatalf("codex session AutoCompactPercent = %d, want 50", got)
+	}
+	raw, err := json.Marshal(infos)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"ContextWindow":400000`) {
+		t.Fatalf("session info wire JSON lacks the window: %s", raw)
 	}
 }

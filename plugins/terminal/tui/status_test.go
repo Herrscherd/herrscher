@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -366,5 +367,42 @@ func TestGaugeFullAndEmptyStayDistinctInColor(t *testing.T) {
 	overview := ansi.Strip(m.gaugeCells(0.6, boardGaugeCells, func(style lipgloss.Style) lipgloss.Style { return style }))
 	if strings.Count(overview, glyphs.gaugeEmpty) == 0 || strings.Count(overview, glyphs.gaugeFull) == 0 {
 		t.Errorf("the overview gauge must show both cell kinds in color, got %q", overview)
+	}
+}
+
+func TestRunModelReadsTheConfigFileIntoTheGauge(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HERRSCHER_STATE_DIR", dir)
+	t.Setenv(contextwindow.EnvVar(), "")
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"contextLimits": {"codex": 400000}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "codex"}}}
+	m := newRunModel(context.Background(), f)
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m.active = "c"
+	m.ensureTab("c").measureContext(contracts.Event{TokensIn: 184_000})
+	if got := contextPercent(184_000, m.contextLimit("codex")); got != "46%" {
+		t.Fatalf("contextPercent with the config.json window = %q, want 46%%", got)
+	}
+	m.openContext()
+	if view := ansi.Strip(m.contextView()); !strings.Contains(view, "400k") {
+		t.Fatalf("the gauge must show the config.json window 400k:\n%s", view)
+	}
+}
+
+func TestDaemonContextWindowWinsOverTheLocalTable(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "codex", ContextWindow: 368_000}}}
+	m := newModel(f)
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
+	m.active = "c"
+	m.ensureTab("c").measureContext(contracts.Event{TokensIn: 184_000})
+	if used, limit := m.contextFigures(); used != 184_000 || limit != 368_000 {
+		t.Fatalf("contextFigures = %d/%d, want the daemon's 184000/368000", used, limit)
+	}
+	m.openContext()
+	if view := ansi.Strip(m.contextView()); !strings.Contains(view, "368k") || strings.Contains(view, "400k") {
+		t.Fatalf("the gauge must show the daemon's 368k window, not the local 400k:\n%s", view)
 	}
 }

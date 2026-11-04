@@ -426,12 +426,12 @@ func (m *model) boardRowLines(row *boardRow, selected bool, width int) []string 
 		paint(gatewayStyle(m.st, gateway)).Render(padTo(cutText(gateway, boardGatewayWidth), boardGatewayWidth))
 	first := head + paint(m.st.dim).Render(cutText(sessionWhere(row.info), max(0, width-lipgloss.Width(head))))
 
-	ratio := contextRatio(row.info.ContextTokens, m.contextLimit(row.info.Vendor))
+	ratio := contextRatio(row.info.ContextTokens, m.windowOf(row.info))
 	right := paint(m.st.dim).Render(overviewAge(row.overview.LastTs, time.Now())+" · ") +
 		paint(m.st.warn).Render(formatCost(row.overview.Cost)) +
 		paint(m.st.dim).Render(" ") +
 		m.gaugeCells(ratio, boardGaugeCells, paint) +
-		paint(m.tierStyle(ratio)).Render(fmt.Sprintf(" %*s ", boardPercentWidth, contextPercent(row.info.ContextTokens, m.contextLimit(row.info.Vendor))))
+		paint(m.tierStyle(ratio)).Render(fmt.Sprintf(" %*s ", boardPercentWidth, contextPercent(row.info.ContextTokens, m.windowOf(row.info))))
 	what := strings.ReplaceAll(row.overview.LastText, "\n", " ")
 	second := paint(m.st.dim).Render(strings.Repeat(" ", boardWhatIndent)) +
 		paint(m.sessionTone(row)).Render(cutText(what, width-boardWhatIndent-lipgloss.Width(right)-1))
@@ -574,7 +574,7 @@ func (m *model) boardPanel() []string {
 func (m *model) boardDetail(row *boardRow) []string {
 	mark, markStyle := m.sessionMark(row)
 	gateway := strings.Join(row.overview.Gateways, "+")
-	ratio := contextRatio(row.info.ContextTokens, m.contextLimit(row.info.Vendor))
+	ratio := contextRatio(row.info.ContextTokens, m.windowOf(row.info))
 	return []string{
 		" " + markStyle.Render(mark) + " " + m.st.strong.Render(row.overview.Name),
 		strings.Repeat(" ", panelIndent) + m.sessionTone(row).Render(row.overview.LastText),
@@ -584,7 +584,7 @@ func (m *model) boardDetail(row *boardRow) []string {
 		m.panelRow("où", m.st.text.Render(sessionWhere(row.info))),
 		m.panelRow("coût", m.st.warn.Render(formatCost(row.overview.Cost))),
 		m.panelRow("contexte", m.gaugeCells(ratio, boardDetailCells, func(style lipgloss.Style) lipgloss.Style { return style })+
-			m.tierStyle(ratio).Render(" "+contextPercent(row.info.ContextTokens, m.contextLimit(row.info.Vendor)))),
+			m.tierStyle(ratio).Render(" "+contextPercent(row.info.ContextTokens, m.windowOf(row.info)))),
 		"",
 		strings.Repeat(" ", panelIndent) + m.st.dim.Render(m.st.glyphs.enter+" "+m.boardHint(row)),
 	}

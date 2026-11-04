@@ -293,10 +293,10 @@ func (h *hub) Close(ctx context.Context, name string, force bool) (string, error
 }
 
 func (h *hub) Sessions() []contracts.SessionInfo {
-	return sessionInfos(h.st, h.partDir, h.sessions.compaction.percentFor)
+	return sessionInfos(h.st, h.partDir, h.sessions.compaction)
 }
 
-func sessionInfos(st *state.State, partDir string, percentOf func(state.Session) int) []contracts.SessionInfo {
+func sessionInfos(st *state.State, partDir string, policy compactionPolicy) []contracts.SessionInfo {
 	sessions := st.SnapshotSessions()
 	out := make([]contracts.SessionInfo, 0, len(sessions))
 	for idx := range sessions {
@@ -317,7 +317,8 @@ func sessionInfos(st *state.State, partDir string, percentOf func(state.Session)
 			LastTs:             sum.LastTs,
 			ContextTokens:      sum.ContextTokens,
 			Dir:                sessionDir(live),
-			AutoCompactPercent: percentOf(live),
+			AutoCompactPercent: policy.percentFor(live),
+			ContextWindow:      policy.limits.Limit(live.Vendor),
 		})
 	}
 	return out

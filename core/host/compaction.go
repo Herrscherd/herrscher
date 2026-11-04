@@ -254,7 +254,7 @@ func (d *sessionDriver) compactionProgress(ctx context.Context) func(contracts.B
 }
 
 func (d *sessionDriver) sessionInfo() contracts.SessionInfo {
-	return contracts.SessionInfo{Name: d.name, Incarnation: d.incarnation, Vendor: d.vendor, AutoCompactPercent: d.compactPercent()}
+	return contracts.SessionInfo{Name: d.name, Incarnation: d.incarnation, Vendor: d.vendor, AutoCompactPercent: d.compactPercent(), ContextWindow: d.contextLimit()}
 }
 
 func (d *sessionDriver) runCompactNow(ctx context.Context, instruction string) {

@@ -287,11 +287,13 @@ func TestComposerPromptShowsDollarInShellMode(t *testing.T) {
 	m := notifyModel(t, false)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.input.SetValue("!ls")
+	m.syncComposer()
 	m.buildFrame()
 	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "$ !ls") {
 		t.Fatalf("shell mode shows the $ prompt, got %q", got)
 	}
 	m.input.SetValue("ls")
+	m.syncComposer()
 	m.buildFrame()
 	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "> ls") {
 		t.Fatalf("outside shell mode the prompt must be >, got %q", got)

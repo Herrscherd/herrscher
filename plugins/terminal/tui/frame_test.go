@@ -148,6 +148,20 @@ func TestShortScreensNeverOverflow(t *testing.T) {
 	}
 }
 
+func TestTinyScreensNeverPanic(t *testing.T) {
+	for name, open := range fitScenarios() {
+		for height := 1; height < 10; height++ {
+			t.Run(fmt.Sprintf("%s %dx%d", name, 80, height), func(t *testing.T) {
+				m, _ := barModelAt(t, "")
+				m.Update(tea.WindowSizeMsg{Width: 80, Height: height})
+				open(t, m)
+				m.relayout()
+				m.View()
+			})
+		}
+	}
+}
+
 func TestViewDoesNotChangeTheLayout(t *testing.T) {
 	m, _ := barModelAt(t, "")
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
@@ -156,6 +170,27 @@ func TestViewDoesNotChangeTheLayout(t *testing.T) {
 	m.View()
 	if m.vp.Height != before {
 		t.Fatalf("View changed the transcript height from %d to %d; only Update may resize", before, m.vp.Height)
+	}
+}
+
+func TestViewDoesNotChangeTheComposer(t *testing.T) {
+	m, _ := barModelAt(t, "")
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	placeholder := m.input.Placeholder
+	text := m.input.FocusedStyle.Text.Render("probe")
+	prompt := m.input.FocusedStyle.Prompt.Render("probe")
+	m.activeTab().busy = true
+	m.input.SetValue("!ls")
+	m.View()
+	if m.input.Placeholder != placeholder {
+		t.Fatalf("View changed the placeholder from %q to %q", placeholder, m.input.Placeholder)
+	}
+	if m.input.FocusedStyle.Text.Render("probe") != text || m.input.FocusedStyle.Prompt.Render("probe") != prompt {
+		t.Fatal("View changed the composer text or prompt style")
+	}
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	if m.input.Placeholder != placeholderBusy {
+		t.Fatalf("Update must sync the placeholder to the busy state, got %q", m.input.Placeholder)
 	}
 }
 

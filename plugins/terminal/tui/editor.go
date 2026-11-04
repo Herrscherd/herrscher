@@ -3,12 +3,12 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -16,13 +16,22 @@ import (
 const (
 	fallbackEditor = "vi"
 	draftFile      = "draft-*.md"
-	draftDirPrefix = "herrscher-drafts-"
+	draftRunPrefix = "run-"
+	draftLockName  = ".lock"
 	draftDirMode   = 0o700
+	draftRetention = 7 * 24 * time.Hour
 )
+
+var errUnsafeDraftDir = errors.New("dossier des brouillons ouvert à d'autres ou aux droits trop larges")
 
 type editorDoneMsg struct {
 	path string
 	err  error
+}
+
+type draftRun struct {
+	dir  string
+	lock *os.File
 }
 
 func configuredEditor(env func(string) string) []string {
@@ -45,15 +54,47 @@ func editorCommand(ctx context.Context, path string) *exec.Cmd {
 	return exec.CommandContext(ctx, argv[0], argv[1:]...)
 }
 
-func draftDir(root string) string {
-	return filepath.Join(root, draftDirPrefix+strconv.Itoa(os.Getpid()))
-}
-
-func writeDraft(text string) (string, error) {
-	dir := draftDir(os.TempDir())
-	if err := os.MkdirAll(dir, draftDirMode); err != nil {
+func draftsRoot() (string, error) {
+	cache, err := os.UserCacheDir()
+	if err != nil {
 		return "", err
 	}
+	return filepath.Join(cache, "herrscher", "drafts"), nil
+}
+
+func openDraftRun(root string) (*draftRun, error) {
+	if err := os.MkdirAll(root, draftDirMode); err != nil {
+		return nil, err
+	}
+	if err := checkPrivateDir(root); err != nil {
+		return nil, err
+	}
+	dir, err := os.MkdirTemp(root, draftRunPrefix)
+	if err != nil {
+		return nil, err
+	}
+	if err = checkPrivateDir(dir); err != nil {
+		return nil, errors.Join(err, os.RemoveAll(dir))
+	}
+	lock, err := lockRunDir(dir)
+	if err != nil {
+		return nil, errors.Join(err, os.RemoveAll(dir))
+	}
+	return &draftRun{dir: dir, lock: lock}, nil
+}
+
+func checkPrivateDir(dir string) error {
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	if !privateDir(info) {
+		return fmt.Errorf("%w: %s", errUnsafeDraftDir, dir)
+	}
+	return nil
+}
+
+func writeDraftFile(dir, text string) (string, error) {
 	file, err := os.CreateTemp(dir, draftFile)
 	if err != nil {
 		return "", err
@@ -66,44 +107,51 @@ func writeDraft(text string) (string, error) {
 	return file.Name(), nil
 }
 
-func processAlive(pid int) bool {
-	proc, err := os.FindProcess(pid)
+func sweepDraftsAtStart() error {
+	root, err := draftsRoot()
 	if err != nil {
-		return false
+		return err
 	}
-	err = proc.Signal(syscall.Signal(0))
-	return !errors.Is(err, syscall.ESRCH) && !errors.Is(err, os.ErrProcessDone)
+	return sweepDrafts(root)
 }
 
-func removeOrphanDrafts(root string) error {
+func sweepDrafts(root string) error {
 	entries, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
 	var failures []error
 	for _, entry := range entries {
-		pid, ok := draftOwner(entry.Name())
-		if !ok || processAlive(pid) {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), draftRunPrefix) {
 			continue
 		}
-		if err := os.RemoveAll(filepath.Join(root, entry.Name())); err != nil {
+		dir := filepath.Join(root, entry.Name())
+		if !sweepable(dir) {
+			continue
+		}
+		if err := os.RemoveAll(dir); err != nil {
 			failures = append(failures, err)
 		}
 	}
 	return errors.Join(failures...)
 }
 
-func draftOwner(name string) (int, bool) {
-	rest, found := strings.CutPrefix(name, draftDirPrefix)
-	if !found {
-		return 0, false
+func sweepable(dir string) bool {
+	info, err := os.Lstat(dir)
+	if err != nil || !privateDir(info) {
+		return false
 	}
-	pid, err := strconv.Atoi(rest)
-	return pid, err == nil && pid > 0
+	if time.Since(info.ModTime()) < draftRetention {
+		return false
+	}
+	return !runDirHeld(dir)
 }
 
 func (m *model) openEditor() tea.Cmd {
-	path, err := writeDraft(m.input.Value())
+	path, err := m.writeDraft(m.input.Value())
 	if err != nil {
 		m.flash = "éditeur indisponible : " + err.Error()
 		return nil
@@ -112,6 +160,21 @@ func (m *model) openEditor() tea.Cmd {
 	return tea.ExecProcess(editorCommand(m.runContext(), path), func(err error) tea.Msg {
 		return editorDoneMsg{path: path, err: err}
 	})
+}
+
+func (m *model) writeDraft(text string) (string, error) {
+	if m.draftFiles == nil {
+		root, err := draftsRoot()
+		if err != nil {
+			return "", err
+		}
+		run, err := openDraftRun(root)
+		if err != nil {
+			return "", err
+		}
+		m.draftFiles = run
+	}
+	return writeDraftFile(m.draftFiles.dir, text)
 }
 
 func (m *model) removeDraft(path string) {

@@ -32,8 +32,6 @@ func (f frame) render(viewport string) string {
 }
 
 func (m *model) buildFrame() frame {
-	m.input.Placeholder = m.placeholderText()
-	m.syncPrompt()
 	panels, room := m.frameBudget()
 	return m.composeFrame(panels, room, true)
 }

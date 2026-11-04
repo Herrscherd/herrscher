@@ -60,6 +60,11 @@ func (m *model) promptGlyph() string {
 	return m.st.glyphs.prompt + " "
 }
 
+func (m *model) syncComposer() {
+	m.input.Placeholder = m.placeholderText()
+	m.syncPrompt()
+}
+
 func (m *model) syncPrompt() {
 	prompt := m.promptGlyph()
 	m.input.SetPromptFunc(lipgloss.Width(prompt), promptAt(prompt))

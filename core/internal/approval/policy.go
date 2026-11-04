@@ -307,7 +307,7 @@ func (p Policy) Decide(req Request) (Decision, bool) {
 		if rule.Tool != "*" && rule.Tool != req.Tool {
 			continue
 		}
-		if rule.Pattern != "" && !glob(rule.Pattern, req.Subject) {
+		if rule.Pattern != "" && !ruleCovers(rule, req) {
 			continue
 		}
 		matched = true
@@ -393,18 +393,28 @@ func planVerdict(tool string, decided Decision) Decision {
 	return decided
 }
 
-func glob(pattern, subject string) bool {
+const wildcardStops = ";&|`$<>()\r\n"
+
+func ruleCovers(rule Rule, req Request) bool {
+	if rule.Decision == Allow && req.Tool == toolBash {
+		return match(rule.Pattern, req.Subject, wildcardStops)
+	}
+	return match(rule.Pattern, req.Subject, "")
+}
+
+func match(pattern, subject, stops string) bool {
+	free := func(c byte) bool { return strings.IndexByte(stops, c) < 0 }
 	var textPos, patPos, star, mark int
 	star = -1
 	for textPos < len(subject) {
 		switch {
-		case patPos < len(pattern) && (pattern[patPos] == subject[textPos] || pattern[patPos] == '?'):
+		case patPos < len(pattern) && (pattern[patPos] == subject[textPos] || pattern[patPos] == '?' && free(subject[textPos])):
 			textPos++
 			patPos++
 		case patPos < len(pattern) && pattern[patPos] == '*':
 			star, mark = patPos, textPos
 			patPos++
-		case star >= 0:
+		case star >= 0 && free(subject[mark]):
 			patPos = star + 1
 			mark++
 			textPos = mark

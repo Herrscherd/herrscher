@@ -12,6 +12,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/Herrscherd/herrscher/internal/boundedbuf"
 )
 
 const (
@@ -20,6 +22,7 @@ const (
 	statuslineSection         = "statusline"
 	statuslineTimeout         = time.Second
 	statuslineWaitDelay       = 100 * time.Millisecond
+	statuslineOutputCap       = 16 << 10
 	statuslineDefaultInterval = time.Second
 	statuslineMinInterval     = 100 * time.Millisecond
 	statuslineGateway         = "terminal"
@@ -229,8 +232,8 @@ func execStatusline(command string, payload []byte) (string, error) {
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Stdin = bytes.NewReader(payload)
 	cmd.WaitDelay = statuslineWaitDelay
-	var out bytes.Buffer
-	cmd.Stdout = &out
+	out := boundedbuf.New(statuslineOutputCap)
+	cmd.Stdout = out
 	if err := cmd.Run(); err != nil {
 		return "", err
 	}

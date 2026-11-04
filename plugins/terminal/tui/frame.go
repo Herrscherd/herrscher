@@ -31,6 +31,12 @@ func (m *model) buildFrame() frame {
 	if m.choice != nil {
 		stacked.below = appendLines(stacked.below, m.choiceView())
 	}
+	if m.planMenu != nil {
+		stacked.below = appendLines(stacked.below, m.planMenuView())
+	}
+	if tab := m.tabs[m.active]; tab != nil {
+		stacked.below = append(stacked.below, m.modeStripView(tab, m.innerWidth())...)
+	}
 	if m.paletteOpen() {
 		stacked.below = appendLines(stacked.below, m.paletteView())
 	}

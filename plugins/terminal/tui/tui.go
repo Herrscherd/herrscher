@@ -125,6 +125,7 @@ type tab struct {
 	nextEntryID        uint64
 	todos              []contracts.TodoItem
 	agents             []liveAgent
+	mode               string
 }
 
 type liveAgent struct {
@@ -259,6 +260,7 @@ type model struct {
 	pluginsNotice   string
 
 	choice    *PendingChoice
+	planMenu  *planMenu
 	choiceIdx int
 
 	mentionIdx       int
@@ -407,6 +409,7 @@ func (m *model) ensureTab(channel string) *tab {
 	m.order = append(m.order, channel)
 	if m.active == "" {
 		m.active = channel
+		m.applySize()
 	}
 	m.seedScrollback(tab)
 	return tab
@@ -481,6 +484,9 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 	}
 	if last < 0 {
 		return nil
+	}
+	if tab.channel == m.active && tab.modeID() == modePlan && m.planMenu == nil && tab.entries[last].text != "" {
+		m.openPlanMenu(tab.channel)
 	}
 	return m.fetchEntryImages(tab, last)
 }
@@ -617,6 +623,10 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		m.copyCmd(args[1:])
 	case "mouse":
 		return m.toggleMouse(), true
+	case "mode":
+		return m.modeSlash(strings.TrimPrefix(text, "/mode")), true
+	case "plan":
+		return m.planSlash(strings.TrimPrefix(text, "/plan")), true
 	default:
 		return nil, false
 	}
@@ -1232,6 +1242,9 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case dispatchResultMsg:
 		m.handleDispatchResult(msg)
 		return nil, true
+	case modeResultMsg:
+		m.handleModeResult(msg)
+		return nil, true
 	case tickMsg:
 		m.syncTabs()
 		return tickCmd(), true
@@ -1309,6 +1322,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch {
 	case m.pendingClose:
 		return m.handlePendingClose(msg), true
+	case m.planMenu != nil:
+		return m.handlePlanKey(msg), true
 	case m.choice != nil:
 		return m.handleChoiceKey(msg), true
 	case m.switchOpen:
@@ -1520,7 +1535,7 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case tea.KeyTab:
 		m.switchTab(1)
 	case tea.KeyShiftTab:
-		m.switchTab(-1)
+		return m.cycleMode(), true
 	case tea.KeyEnter:
 		if msg.Alt {
 			return nil, false

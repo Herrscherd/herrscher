@@ -416,6 +416,17 @@ turns it was, and the status bar names what the session runs on (vendor, model,
 reasoning effort), what it has cost, and how much room is left before the backend
 compacts the conversation. `/usage` spells that out.
 
+A session has one of four modes, cycled with shift+tab or set with `/mode
+[manuel|edits|plan|auto]`. The strip under the plan box shows them with the
+current one highlighted, and the status bar opens with the mode. The TUI sends
+the change to the daemon through `session set-mode`, so the host enforces it:
+manual asks before each edit and command, accept edits lets edits through and
+still asks for commands, plan is read only and refuses writes, and auto asks for
+nothing. A refused switch is shown and the mode stays as it was. A plan reply
+opens a three-choice menu: validate and switch to accept edits, validate in
+manual, or keep planning. `/plan <instruction>` switches to plan and sends the
+instruction.
+
 A session's name is chosen when you know the least about what it will become, so
 `/rename <nom>` changes it: the row keeps its identity and its id, the transcript
 and the participants journal follow, any schedule that targets the session by

@@ -134,7 +134,7 @@ func formatLimit(limit int) string {
 
 func (m *model) statusBar(tab *tab, width int) string {
 	info, known := m.activeInfo()
-	segs := []string{m.statusHead(tab, info, known, width)}
+	segs := []string{m.modeChip(tab, width), m.statusHead(tab, info, known, width)}
 	if width >= narrowStatus && known {
 		if label := modelLabel(info); label != "" {
 			segs = append(segs, m.st.text.Render(label))

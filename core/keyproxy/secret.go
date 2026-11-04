@@ -29,7 +29,7 @@ var (
 	// ErrKeyFileOpen reports a key file readable or writable by anyone but its owner.
 	ErrKeyFileOpen       = errors.New("key file is readable by others than its owner, chmod 600 it")
 	errKeyFileNotRegular = errors.New("key file must be a regular file, not a link, pipe or device")
-	errKeyFileLinkedDir  = errors.New("key file directory must not be a symbolic link")
+	errKeyDirUnsafe      = errors.New("key file directory must belong to the user or root, and must not be writable by its group or others")
 	// ErrKeyEmpty reports a key source that yields a blank key.
 	ErrKeyEmpty = errors.New("key source yields an empty key")
 	// ErrKeyCommand reports a key_cmd that failed; its output is never included.
@@ -139,8 +139,8 @@ func (l Loader) fromFile(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if linkErr := l.refuseLinkedParents(resolved); linkErr != nil {
-		return "", linkErr
+	if dirErr := l.checkKeyDirectories(resolved); dirErr != nil {
+		return "", dirErr
 	}
 	file, openErr := l.OpenFile(resolved)
 	if openErr != nil {
@@ -157,18 +157,22 @@ func (l Loader) fromFile(path string) (string, error) {
 	return value, nil
 }
 
-func (l Loader) refuseLinkedParents(path string) error {
+func (l Loader) checkKeyDirectories(path string) error {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("resolve key file path: %w", err)
 	}
-	for dir := filepath.Dir(absolute); ; {
+	resolved, err := filepath.EvalSymlinks(filepath.Dir(absolute))
+	if err != nil {
+		return fmt.Errorf("resolve key file directory: %w", err)
+	}
+	for dir := resolved; ; {
 		info, statErr := l.Lstat(dir)
 		if statErr != nil {
 			return fmt.Errorf("stat key file directory: %w", statErr)
 		}
-		if info.Mode()&fs.ModeSymlink != 0 {
-			return fmt.Errorf("%s: %w", dir, errKeyFileLinkedDir)
+		if dirErr := checkKeyDirectory(dir, info); dirErr != nil {
+			return dirErr
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {

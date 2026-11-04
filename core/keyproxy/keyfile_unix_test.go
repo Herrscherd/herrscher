@@ -67,20 +67,45 @@ func TestKeyFileIsReadThroughTheOpenedDescriptor(t *testing.T) {
 	}
 }
 
-func TestKeyFileBehindALinkedDirectoryIsRefused(t *testing.T) {
-	dir := t.TempDir()
-	realDir := filepath.Join(dir, "real")
-	if err := os.Mkdir(realDir, 0o700); err != nil {
+func TestKeyFileBehindALinkedDirectoryIsAccepted(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(realDir, "key"), []byte("sk-behind"), 0o600); err != nil {
+	realDir := filepath.Join(dir, "real")
+	if err = os.Mkdir(realDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(realDir, "key"), []byte("sk-behind"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	linked := filepath.Join(dir, "linked")
-	if err := os.Symlink(realDir, linked); err != nil {
+	if err = os.Symlink(realDir, linked); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := loadKeyFile(t, filepath.Join(linked, "key")); !errors.Is(err, errKeyFileLinkedDir) {
-		t.Fatalf("linked directory: err %v, want errKeyFileLinkedDir", err)
+	secret, loadErr := loadKeyFile(t, filepath.Join(linked, "key"))
+	if loadErr != nil || secret.Value() != "sk-behind" {
+		t.Fatalf("linked directory: value %q err %v, want the key read through the link", secret.Value(), loadErr)
+	}
+}
+
+func TestKeyFileInAnOthersWritableDirectoryIsRefused(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared := filepath.Join(dir, "shared")
+	if err = os.Mkdir(shared, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(shared, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(shared, "key")
+	if err = os.WriteFile(path, []byte("sk-shared"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, loadErr := loadKeyFile(t, path); !errors.Is(loadErr, errKeyDirUnsafe) {
+		t.Fatalf("writable directory: err %v, want errKeyDirUnsafe", loadErr)
 	}
 }

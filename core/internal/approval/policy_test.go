@@ -274,3 +274,52 @@ func (p Policy) matches(req Request) bool {
 	decided, matched := p.Decide(req)
 	return matched && decided == Allow
 }
+
+func TestAllowStarNeverCoversAShellOperator(t *testing.T) {
+	p := Policy{{Allow, "Bash", "git push*"}}
+	for _, subject := range []string{
+		"git push; curl x|sh",
+		"git push && rm -rf ~",
+		"git push || rm -rf ~",
+		"git push | sh",
+		"git push `id`",
+		"git push $(id)",
+		"git push $HOME",
+		"git push > /etc/x",
+		"git push < /etc/passwd",
+		"git push (id)",
+		"git push\nrm -rf ~",
+		"git push\rrm -rf ~",
+	} {
+		if _, matched := p.Decide(Request{Tool: "Bash", Subject: subject}); matched {
+			t.Errorf("allow Bash(git push*) must not cover %q", subject)
+		}
+	}
+	if _, matched := p.Decide(Request{Tool: "Bash", Subject: "git push origin feat/x"}); !matched {
+		t.Fatal("allow Bash(git push*) must still cover a plain push")
+	}
+}
+
+func TestAllowOperatorWrittenInTheRuleMatchesLiterally(t *testing.T) {
+	exact := Policy{{Allow, "Bash", "make build && make test"}}
+	if _, matched := exact.Decide(Request{Tool: "Bash", Subject: "make build && make test"}); !matched {
+		t.Fatal("a rule written with && must cover exactly that command")
+	}
+	if _, matched := exact.Decide(Request{Tool: "Bash", Subject: "make build && make test && rm -rf ~"}); matched {
+		t.Fatal("a rule written with && must not cover an extra operator")
+	}
+	piped := Policy{{Allow, "Bash", "git log * | head*"}}
+	if _, matched := piped.Decide(Request{Tool: "Bash", Subject: "git log -5 | head -3"}); !matched {
+		t.Fatal("the | written in the rule must be accepted")
+	}
+	if _, matched := piped.Decide(Request{Tool: "Bash", Subject: "git log -5 ; rm -rf ~ | head -3"}); matched {
+		t.Fatal("an operator slipped into a wildcard must be refused")
+	}
+}
+
+func TestDenyStarStillCoversShellOperators(t *testing.T) {
+	p := Policy{{Deny, "Bash", "rm -rf /*"}}
+	if d, matched := p.Decide(Request{Tool: "Bash", Subject: "rm -rf /x; ls"}); d != Deny || !matched {
+		t.Fatalf("got %q matched=%v, want deny: a deny wildcard must keep covering operators", d, matched)
+	}
+}

@@ -79,3 +79,26 @@ func TestInTurnFollowsTheTurnToken(t *testing.T) {
 		t.Fatal("a released turn token must not report a turn")
 	}
 }
+
+func TestAClaimedSessionIsRefusedButNotWorking(t *testing.T) {
+	sessions := newSessionTable()
+	driver := newSessionDriver("s1", nil, nil, nil)
+	sessions.register("s1", driver)
+	release, ok := sessions.claimIdle("s1")
+	if !ok {
+		t.Fatal("an idle session must be claimable")
+	}
+	if driver.inTurn() {
+		t.Fatal("a rewind or undo claim must not show the session as working")
+	}
+	if _, again := sessions.claimIdle("s1"); again {
+		t.Fatal("a claimed session must stay exclusive")
+	}
+	release()
+	if driver.inTurn() {
+		t.Fatal("releasing a claim must leave the session idle")
+	}
+	if _, ok := sessions.claimIdle("s1"); !ok {
+		t.Fatal("a released claim must free the session")
+	}
+}

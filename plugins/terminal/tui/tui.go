@@ -357,6 +357,7 @@ type model struct {
 	histQuery  string
 	histSel    int
 	editing    bool
+	draftFiles *draftRun
 	queueSel   int
 	queueFocus bool
 	queueHits  []queueHit
@@ -481,7 +482,7 @@ func (m *model) applySize() {
 		return
 	}
 	m.vp.Width = m.transcriptWidth()
-	m.vp.Height = m.height - m.chromeHeight()
+	m.vp.Height = max(0, m.height-m.chromeHeight())
 }
 
 func (m *model) runContext() context.Context {
@@ -1387,7 +1388,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	model.bar.file = model.terminalConfigPath()
 	model.bar.config = loadStatuslineConfig(model.bar.file)
 	model.bar.restoreFields(model.bar.config.Fields)
-	if err := removeOrphanDrafts(os.TempDir()); err != nil {
+	if err := sweepDraftsAtStart(); err != nil {
 		model.flash = "brouillons orphelins non supprimés : " + err.Error()
 	}
 	for _, opt := range opts {
@@ -1441,6 +1442,7 @@ func (m *model) ensureSpin() tea.Cmd {
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	model, cmd := m.dispatch(msg)
+	m.syncComposer()
 	m.resizeComposer()
 	m.applySize()
 	return model, cmd
@@ -1462,6 +1464,7 @@ func (m *model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) relayout() {
+	m.syncComposer()
 	m.resizeComposer()
 	m.applySize()
 	m.syncViewport()

@@ -1,13 +1,13 @@
 package tui
 
 import (
+	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -38,6 +38,7 @@ func TestEditorArgvPrefersEditorThenVisual(t *testing.T) {
 }
 
 func TestOpenEditorMarksEditingAndSeedsFile(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("EDITOR", fakeEditor(t, "x"))
 	m, _ := queueFixture(t)
 	typeLine(m, "brouillon initial")
@@ -82,6 +83,7 @@ func TestEditorErrorKeepsComposerAndSetsFlash(t *testing.T) {
 }
 
 func TestCtrlXCtrlEOpensEditor(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("EDITOR", fakeEditor(t, "x"))
 	m, _ := queueFixture(t)
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
@@ -91,32 +93,104 @@ func TestCtrlXCtrlEOpensEditor(t *testing.T) {
 	}
 }
 
-func TestDraftsOfDeadEditorsAreSweptButALiveOneIsKept(t *testing.T) {
-	root := t.TempDir()
-	child := exec.CommandContext(t.Context(), "true")
-	if err := child.Run(); err != nil {
+func makeDraftRun(t *testing.T, root, name string, modified time.Time) string {
+	t.Helper()
+	dir := filepath.Join(root, draftRunPrefix+name)
+	if err := os.Mkdir(dir, draftDirMode); err != nil {
 		t.Fatal(err)
 	}
-	deadDir := filepath.Join(root, draftDirPrefix+strconv.Itoa(child.Process.Pid))
-	liveDir := draftDir(root)
+	if _, err := writeDraftFile(dir, "x"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(dir, modified, modified); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestDraftRunsAreSweptOnlyWhenUnlockedAndOld(t *testing.T) {
+	if !draftLocksSupported {
+		t.Skip("this platform has no draft locks: the sweep only uses the age")
+	}
+	root := t.TempDir()
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	lockedOld := makeDraftRun(t, root, "locked", old)
+	held, err := lockRunDir(lockedOld)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := held.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	freeOld := makeDraftRun(t, root, "free", old)
+	if free, err := lockRunDir(freeOld); err != nil {
+		t.Fatal(err)
+	} else if err := free.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(freeOld, old, old); err != nil {
+		t.Fatal(err)
+	}
+	recent := makeDraftRun(t, root, "recent", time.Now())
 	unrelated := filepath.Join(root, "notes")
-	for _, dir := range []string{deadDir, liveDir, unrelated} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "draft-x.md"), []byte("x"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.MkdirAll(unrelated, draftDirMode); err != nil {
+		t.Fatal(err)
 	}
-	if err := removeOrphanDrafts(root); err != nil {
-		t.Fatalf("removeOrphanDrafts: %v", err)
+	if err := os.Chtimes(unrelated, old, old); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(deadDir); !os.IsNotExist(err) {
-		t.Fatal("the drafts of a dead editor must be swept")
+	if err := sweepDrafts(root); err != nil {
+		t.Fatalf("sweepDrafts: %v", err)
 	}
-	for _, kept := range []string{liveDir, unrelated} {
+	if _, err := os.Stat(freeOld); !os.IsNotExist(err) {
+		t.Fatal("an unlocked run older than the retention must be swept")
+	}
+	for _, kept := range []string{lockedOld, recent, unrelated} {
 		if _, err := os.Stat(kept); err != nil {
 			t.Fatalf("%s must survive the sweep: %v", filepath.Base(kept), err)
 		}
+	}
+}
+
+func TestOpenDraftRunRefusesAWideRoot(t *testing.T) {
+	if !draftLocksSupported {
+		t.Skip("this platform does not check the mode bits")
+	}
+	root := filepath.Join(t.TempDir(), "drafts")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openDraftRun(root); !errors.Is(err, errUnsafeDraftDir) {
+		t.Fatalf("a drafts root open to others must be refused, got %v", err)
+	}
+}
+
+func TestOpenDraftRunCreatesALockedPrivateRun(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "drafts")
+	run, err := openDraftRun(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := run.lock.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if !strings.HasPrefix(filepath.Base(run.dir), draftRunPrefix) {
+		t.Fatalf("run dir %q must carry the run prefix", run.dir)
+	}
+	if !draftLocksSupported {
+		return
+	}
+	if !runDirHeld(run.dir) {
+		t.Fatal("the run of a live process must hold its lock")
+	}
+	if info, err := os.Stat(run.dir); err != nil || info.Mode().Perm() != draftDirMode {
+		t.Fatalf("run dir must be 0700, got %v (%v)", info, err)
 	}
 }

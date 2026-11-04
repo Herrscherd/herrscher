@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -64,6 +65,7 @@ type sessionDriver struct {
 	agent         string
 	activeTurnID  string
 	turn          chan struct{}
+	running       atomic.Bool
 	channel       string
 	saidElsewhere bool
 	gateways      []contracts.GatewaySet
@@ -367,7 +369,7 @@ func (t *sessionTable) claimIdle(session string) (func(), bool) {
 	if len(driver.queue) > 0 || !driver.claimTurn() {
 		return nil, false
 	}
-	return driver.releaseTurn, true
+	return driver.releaseClaim, true
 }
 
 func (t *sessionTable) pick(session, value string) bool {
@@ -541,6 +543,7 @@ func (d *sessionDriver) pump(ctx context.Context) {
 func (d *sessionDriver) enterTurn(ctx context.Context) bool {
 	select {
 	case d.turn <- struct{}{}:
+		d.running.Store(true)
 		return true
 	case <-ctx.Done():
 		return false
@@ -557,11 +560,16 @@ func (d *sessionDriver) claimTurn() bool {
 }
 
 func (d *sessionDriver) releaseTurn() {
+	d.running.Store(false)
+	<-d.turn
+}
+
+func (d *sessionDriver) releaseClaim() {
 	<-d.turn
 }
 
 func (d *sessionDriver) inTurn() bool {
-	return len(d.turn) > 0
+	return d.running.Load()
 }
 
 func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts.Event, tokenGuard, bool) {

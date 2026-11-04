@@ -226,11 +226,13 @@ func TestShiftUpAtTopDoesNothing(t *testing.T) {
 func TestBusyPlaceholderMatchesMockup(t *testing.T) {
 	m, _ := queueFixture(t)
 	m.tabs["a"].busy = true
+	m.syncComposer()
 	m.View()
 	if got := m.input.Placeholder; got != "Écris pendant que l’agent travaille : ⏎ met en file, ⌥⏎ réoriente" {
 		t.Fatalf("busy placeholder = %q", got)
 	}
 	m.tabs["a"].busy = false
+	m.syncComposer()
 	m.View()
 	if got := m.input.Placeholder; got != "Tape un message, / ou @, ou !commande" {
 		t.Fatalf("idle placeholder = %q", got)

@@ -628,9 +628,11 @@ installed (`fc-list` on Linux, `~/Library/Fonts` on macOS), absent, or unknown.
 `f` opens the INSTALLER OBEL MONO block: the install command, which `c` copies,
 and the configuration for the terminal it detects, which `y` copies. The TUI
 never writes that configuration and never runs the install script. Obel Mono
-Masked is the family for kitty and Alacritty, which cannot take `ss01` reliably
-here; WezTerm and foot select Obel Mono with `ss01`, which hides API keys on
-screen while the clipboard keeps the full text. Échap closes the
+Masked is the family for kitty and Alacritty. Alacritty's `[font]` section has
+no OpenType feature option, so it can only select the family. kitty's
+`font_features` is indexed by the font's PostScript name, which this variable
+font cannot guarantee, so kitty also gets the family. WezTerm (`harfbuzz_features`)
+and foot (`fontfeatures`) select Obel Mono with `ss01`. Échap closes the
 block first.
 
 The preview sits beside the list from 100 columns, and under it below that. When

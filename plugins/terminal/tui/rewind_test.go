@@ -271,3 +271,20 @@ func TestConversationRestoreAsksForConfirmationWhenTheMessageHasAPosition(t *tes
 		t.Fatalf("confirmed conversation restore dispatched %v", got)
 	}
 }
+
+func TestRewindSummaryOmitsZeroCounts(t *testing.T) {
+	cases := []struct {
+		files []rewindFile
+		want  string
+	}{
+		{[]rewindFile{{Path: "a.go", Added: 38}}, "+38 · 1 fichier"},
+		{[]rewindFile{{Path: "a.go", Added: 14, Removed: 9}, {Path: "b.go"}}, "+14 −9 · 2 fichiers"},
+		{[]rewindFile{{Path: "a.go", Removed: 4}}, "−4 · 1 fichier"},
+		{nil, "aucun fichier"},
+	}
+	for _, tc := range cases {
+		if got := rewindSummary(tc.files); got != tc.want {
+			t.Errorf("rewindSummary(%v) = %q, want %q", tc.files, got, tc.want)
+		}
+	}
+}

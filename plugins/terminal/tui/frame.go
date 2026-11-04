@@ -5,6 +5,11 @@ import (
 	"time"
 )
 
+const (
+	minTranscriptRows = 2
+	unboundedRows     = 1 << 30
+)
+
 type frame struct {
 	above     []string
 	below     []string
@@ -26,18 +31,43 @@ func (f frame) render(viewport string) string {
 
 func (m *model) buildFrame() frame {
 	m.input.Placeholder = m.placeholderText()
-	stacked := frame{above: m.railLines()}
-	m.appendSidePanels(&stacked)
-	stacked.below = append(stacked.below, m.approvalLines(time.Now())...)
-	if m.planMenu != nil {
-		stacked.below = appendLines(stacked.below, m.planMenuView())
+	panels, room := m.frameBudget()
+	return m.composeFrame(panels, room)
+}
+
+func (m *model) frameBudget() (bool, int) {
+	if m.height <= 0 {
+		return true, unboundedRows
 	}
+	fixed := m.composeFrame(false, 0).height()
+	natural := m.composeFrame(false, m.height).height() - fixed
+	avail := m.height - fixed - minTranscriptRows
+	panels := len(m.sidePanelLines())
+	if panels <= avail-natural {
+		return true, avail - panels
+	}
+	return false, avail
+}
+
+func (m *model) composeFrame(panels bool, room int) frame {
+	stacked := frame{above: m.railLines()}
+	if panels {
+		stacked.below = append(stacked.below, m.sidePanelLines()...)
+	}
+	surface := m.approvalLines(time.Now())
+	if m.planMenu != nil {
+		surface = appendLines(surface, m.planMenuView())
+	}
+	surface = fitBlock(surface, room)
+	stacked.below = append(stacked.below, surface...)
 	m.appendModeStrip(&stacked)
+	var overlays []string
 	for _, overlay := range m.frameOverlays() {
 		if overlay.open {
-			stacked.below = appendLines(stacked.below, overlay.view())
+			overlays = appendLines(overlays, overlay.view())
 		}
 	}
+	stacked.below = append(stacked.below, fitBlock(overlays, room-len(surface))...)
 	if chips := chipRow(m.pending, m.st); chips != "" {
 		stacked.below = appendLines(stacked.below, chips+"  "+m.st.dim.Render("⌃U retirer"))
 	}
@@ -49,13 +79,26 @@ func (m *model) buildFrame() frame {
 	return stacked
 }
 
-func (m *model) appendSidePanels(stacked *frame) {
+func (m *model) sidePanelLines() []string {
 	tab := m.tabs[m.active]
 	if tab == nil || m.sidebarVisible() {
-		return
+		return nil
 	}
-	stacked.below = append(stacked.below, todoPanel(tab.todos, m.innerWidth(), m.st)...)
-	stacked.below = append(stacked.below, subagentPanel(tab.agents, time.Now(), m.innerWidth(), m.st)...)
+	lines := todoPanel(tab.todos, m.innerWidth(), m.st)
+	return append(lines, subagentPanel(tab.agents, time.Now(), m.innerWidth(), m.st)...)
+}
+
+func fitBlock(lines []string, room int) []string {
+	if len(lines) <= room {
+		return lines
+	}
+	if room <= 0 {
+		return nil
+	}
+	if room == 1 {
+		return lines[:1]
+	}
+	return append(append([]string{}, lines[:room-1]...), lines[len(lines)-1])
 }
 
 func (m *model) appendModeStrip(stacked *frame) {

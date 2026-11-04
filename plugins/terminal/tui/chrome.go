@@ -128,3 +128,10 @@ func truncate(text string, width int) string {
 	}
 	return ansi.Truncate(text, width, "")
 }
+
+func truncateLeft(text string, width int) string {
+	if width < 2 || lipgloss.Width(text) <= width {
+		return truncate(text, width)
+	}
+	return ansi.TruncateLeft(text, lipgloss.Width(text)-width+1, "…")
+}

@@ -394,7 +394,9 @@ func (m *model) rewindHeader(width int) string {
 
 func (m *model) rewindListLines(width int) []string {
 	lines := []string{truncate("  "+m.st.dim.Render("un checkpoint avant chaque message"), width)}
-	for index, row := range m.rwRows {
+	start, end := paletteWindow(len(m.rwRows), m.rwIdx, m.overlayRows())
+	for index := start; index < end; index++ {
+		row := m.rwRows[index]
 		selected := index == m.rwIdx
 		head := "  "
 		if selected {
@@ -493,7 +495,22 @@ func rewindSummary(files []rewindFile) string {
 	if len(files) == 1 {
 		noun = "fichier"
 	}
-	return fmt.Sprintf("+%d −%d · %d %s", added, removed, len(files), noun)
+	count := fmt.Sprintf("%d %s", len(files), noun)
+	if lines := changedLines(added, removed); lines != "" {
+		return lines + " · " + count
+	}
+	return count
+}
+
+func changedLines(added, removed int) string {
+	var parts []string
+	if added > 0 {
+		parts = append(parts, fmt.Sprintf("+%d", added))
+	}
+	if removed > 0 {
+		parts = append(parts, fmt.Sprintf("−%d", removed))
+	}
+	return strings.Join(parts, " ")
 }
 
 func rewindFileNames(files []rewindFile) string {

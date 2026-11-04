@@ -23,6 +23,7 @@ const (
 	approvalEarlyTTL     = 10 * time.Minute
 	approvalMaxWidth     = 240
 	approvalTwoRowWidth  = 80
+	approvalShortRows    = 24
 	approvalNoteColumn   = 34
 	approvalPromptTail   = " (answer with"
 	approvalAllowPrefix  = "allow "
@@ -33,6 +34,9 @@ const (
 	approvalAllowSession = "allow-session"
 	approvalAllowAlways  = "allow-always"
 	approvalDeny         = "deny"
+	riskLowName          = "low"
+	riskMediumName       = "medium"
+	riskHighName         = "high"
 )
 
 const (
@@ -65,6 +69,7 @@ type approvalPrompt struct {
 	command    string
 	project    string
 	worktree   string
+	risk       string
 	choices    []approvalChoice
 	cursor     int
 	deadline   time.Time
@@ -84,7 +89,20 @@ type approvalMenuOption struct {
 
 type approvalMenu struct {
 	Prompt  string               `json:"prompt"`
+	Risk    string               `json:"risk,omitempty"`
 	Options []approvalMenuOption `json:"options"`
+}
+
+func (m *model) approvalRiskLine(risk string) string {
+	switch risk {
+	case riskLowName:
+		return m.st.dim.Render("  juge      ") + m.st.green.Render("risque faible")
+	case riskMediumName:
+		return m.st.dim.Render("  juge      ") + m.st.warn.Render("risque moyen")
+	case riskHighName:
+		return m.st.dim.Render("  juge      ") + m.st.red.Render("risque élevé")
+	}
+	return ""
 }
 
 func approvalRole(value string) string {
@@ -122,6 +140,7 @@ func newApprovalPrompt(channel string, menu approvalMenu, session contracts.Sess
 		project:  session.Project,
 		worktree: session.Dir,
 		deadline: now.Add(approvalDefaultWait),
+		risk:     menu.Risk,
 	}
 	prompt.tool, prompt.command = splitApprovalSubject(menu.Prompt)
 	for _, entry := range approvalCatalog() {
@@ -389,14 +408,21 @@ func (m *model) approvalLines(now time.Time) []string {
 	if prompt.worktree != "" {
 		row(m.st.dim.Render("  worktree  ") + prompt.worktree)
 	}
-	row("")
+	if line := m.approvalRiskLine(prompt.risk); line != "" {
+		row(line)
+	}
+	if !m.approvalShort() {
+		row("")
+	}
 	for index, entry := range prompt.choices {
 		for _, line := range m.approvalChoiceLines(entry, index == prompt.cursor, width >= approvalTwoRowWidth) {
 			row(line)
 		}
 	}
 	if prompt.reasonOpen {
-		row("")
+		if !m.approvalShort() {
+			row("")
+		}
 		row(m.approvalReasonLine(prompt))
 	}
 	lines = append(lines, m.approvalBottom(prompt, width, box))
@@ -461,7 +487,14 @@ func (m *model) approvalChoiceLines(entry approvalChoice, selected, wide bool) [
 	if wide {
 		return []string{padTo(head, approvalNoteColumn) + m.st.dim.Render(entry.note)}
 	}
+	if m.approvalShort() {
+		return []string{head + "  " + m.st.dim.Render(entry.note)}
+	}
 	return []string{head, "     " + m.st.dim.Render(entry.note)}
+}
+
+func (m *model) approvalShort() bool {
+	return m.height < approvalShortRows
 }
 
 func (m *model) approvalReasonLine(prompt approvalPrompt) string {

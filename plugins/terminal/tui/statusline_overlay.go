@@ -9,6 +9,16 @@ import (
 
 const statuslineFooter = "↑↓ choisir · espace cocher · ⇧↑⇧↓ ordre · s source · échap fermer"
 
+const barLabelWidth = 20
+
+func statuslinePreviewCaptions() []string {
+	return []string{
+		"aperçu en direct, ligne suivante : la barre telle qu’elle sera dans le terminal",
+		"aperçu en direct, la barre telle qu’elle sera dans le terminal",
+		"aperçu en direct",
+	}
+}
+
 func (m *model) openStatusline() tea.Cmd {
 	m.bar.open = true
 	m.bar.cursor = 0
@@ -83,7 +93,7 @@ func (m *model) statuslineView() string {
 		if m.bar.isShown(fieldID) {
 			mark = m.st.glyphs.ticked
 		}
-		rows = append(rows, overlayRow{mark: mark + " ", label: spec.labelWith(m.st.glyphs), detail: " " + spec.note})
+		rows = append(rows, overlayRow{mark: mark + " ", label: padTo(spec.labelWith(m.st.glyphs), barLabelWidth), detail: " " + spec.note})
 	}
 	start, end := paletteWindow(len(rows), m.bar.cursor, m.overlayRows())
 	list := floatingList(rows[start:end], m.bar.cursor-start, statuslineFooter, m.innerWidth(), m.st)
@@ -93,10 +103,21 @@ func (m *model) statuslineView() string {
 		"",
 		list,
 		"",
-		statusIndent + m.st.dim.Render("aperçu en direct, ligne suivante : la barre telle qu’elle sera dans le terminal"),
+		m.statuslinePreviewCaption(m.innerWidth()),
 		statusIndent + m.statusLeftPreview(),
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m *model) statuslinePreviewCaption(width int) string {
+	captions := statuslinePreviewCaptions()
+	for _, caption := range captions {
+		if lipgloss.Width(statusIndent+caption) <= width {
+			return statusIndent + m.st.dim.Render(caption)
+		}
+	}
+	last := captions[len(captions)-1]
+	return m.st.dim.Render(truncate(statusIndent+last, width))
 }
 
 func (m *model) statuslineSourceLine() string {

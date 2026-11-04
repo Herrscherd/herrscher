@@ -484,3 +484,19 @@ func TestThemeFileLineUsesNerdIconsOnlyInNerdMode(t *testing.T) {
 		}
 	}
 }
+
+func TestThemePreviewNeverShowsItsTitleAlone(t *testing.T) {
+	for _, height := range []int{20, 30, 40} {
+		for _, width := range []int{60, 80, 120} {
+			lines := strings.Split(ansi.Strip(themeSized(t, width, height).View()), "\n")
+			for index, line := range lines {
+				if !strings.HasPrefix(line, "Aperçu ·") {
+					continue
+				}
+				if index+2 >= len(lines) || strings.TrimSpace(lines[index+1]+lines[index+2]) == "" {
+					t.Fatalf("%dx%d: the preview title has no body under it", width, height)
+				}
+			}
+		}
+	}
+}

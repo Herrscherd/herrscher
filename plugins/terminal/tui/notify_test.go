@@ -412,3 +412,20 @@ func TestToastStaysVisibleAtTwentyRows(t *testing.T) {
 		t.Errorf("the toast must be drawn over the screen at 60x20")
 	}
 }
+
+func TestToastHidesTheLineBehindItUpToTheEdge(t *testing.T) {
+	for _, width := range []int{80, 120, 200} {
+		m := notifyModel(t, false)
+		m.handleWindowSize(tea.WindowSizeMsg{Width: width, Height: 30})
+		behind := strings.Repeat("x", width)
+		rendered := strings.Repeat(behind+"\n", 30)
+		m.announce(kindApproval, unicodeGlyphs().attention, "Approbation en attente", "c", []string{"Bash ls"})
+		toast := m.toastView(m.toastRows())
+		column := m.width - lipgloss.Width(firstLine(toast)) - toastColumn
+		for _, line := range strings.Split(m.overlayToast(rendered), "\n")[toastRow : toastRow+strings.Count(toast, "\n")+1] {
+			if tail := ansi.Strip(line)[column:]; strings.Contains(tail, "x") {
+				t.Fatalf("width %d: the line behind the toast shows through on its right: %q", width, ansi.Strip(line))
+			}
+		}
+	}
+}

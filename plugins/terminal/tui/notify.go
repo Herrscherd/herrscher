@@ -296,11 +296,21 @@ func (m *model) overlayToast(rendered string) string {
 		return rendered
 	}
 	column := max(0, m.width-lipgloss.Width(firstLine(block))-toastColumn)
-	return overlayAt(rendered, block, toastRow, column)
+	return overlayAt(rendered, withRightGutter(block, m.width-column), toastRow, column)
 }
 
 func (m *model) toastRows() int {
 	return m.height - toastRow
+}
+
+func withRightGutter(block string, width int) string {
+	lines := strings.Split(block, "\n")
+	for index, line := range lines {
+		if gap := width - lipgloss.Width(line); gap > 0 {
+			lines[index] = line + strings.Repeat(" ", gap)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func firstLine(block string) string {

@@ -281,6 +281,11 @@ func (m *model) themeBody(width, rows int) []string {
 		return themeColumns(left, right, themeLeftWidth, m.st.dim.Render(m.st.glyphs.divider), rows)
 	}
 	body := m.themeControlsFitting(width, rows)
+	if previewRoom := rows - m.themePreviewMinRows(width) - 1; len(body) > previewRoom {
+		if folded := m.themeControlsFitting(width, previewRoom); len(folded) <= previewRoom {
+			body = folded
+		}
+	}
 	if room := rows - len(body) - 1; room > 0 {
 		if preview := m.themePreview(width, room); len(preview) > 0 {
 			body = append(body, "")
@@ -480,12 +485,23 @@ func densityLabel(level density) string {
 	return "normale"
 }
 
+const minPreviewBlocks = 2
+
+func (m *model) themePreviewMinRows(width int) int {
+	rows := 0
+	for _, block := range m.themePreviewBlocks(width)[:minPreviewBlocks] {
+		rows += len(block.lines)
+	}
+	return rows
+}
+
 func (m *model) themePreview(width, rows int) []string {
 	return fitThemeBlocks(m.themePreviewBlocks(width), width, rows)
 }
 
 func fitThemeBlocks(blocks []themeBlock, width, rows int) []string {
 	var out []string
+	fitted := 0
 	for _, block := range blocks {
 		if len(block.lines) == 0 {
 			continue
@@ -501,6 +517,10 @@ func fitThemeBlocks(blocks []themeBlock, width, rows int) []string {
 			break
 		}
 		out = append(out, lines...)
+		fitted++
+	}
+	if fitted < minPreviewBlocks {
+		return nil
 	}
 	return out
 }

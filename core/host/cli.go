@@ -59,7 +59,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, extra...); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addSessionVerbs(reg, hostState, partDir, instID, sessions, seedCoord); err != nil {
+	if err := addSessionVerbs(reg, hostState, partDir, instID, sessions, approvals, seedCoord); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addMemoryVerbs(reg); err != nil {

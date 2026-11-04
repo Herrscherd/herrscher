@@ -10,11 +10,12 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, sessions *sessionTable, seedCoord *coordinatorSlot) error {
+func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, sessions *sessionTable, approvals *approvalTable, seedCoord *coordinatorSlot) error {
 	return addVerbs(reg,
 		seedVerb(store, instID, seedCoord),
 		sessionSendVerb(sessions),
 		sessionInfoVerb(store, partDir),
+		sessionOverviewVerb(overviewSource{st: store, partDir: partDir, sessions: sessions, approvals: approvals, tallies: newTallyCache()}),
 		sessionScrollbackVerb(partDir),
 		sessionInterruptVerb(sessions),
 	)
@@ -99,6 +100,15 @@ func sessionInfoVerb(store *state.State, partDir string) contracts.Cmd {
 		Help("list sessions as a frontend sees them (channel, vendor, dir, archived). JSON only").
 		Do(func(_ context.Context, _ contracts.Input) (string, error) {
 			b, err := json.Marshal(sessionInfos(store, partDir))
+			return string(b), err
+		})
+}
+
+func sessionOverviewVerb(src overviewSource) contracts.Cmd {
+	return contracts.New(nsSession, "overview").
+		Help("list every session with its live state (waiting, working, archived, idle), cost and last activity. JSON only").
+		Do(func(_ context.Context, _ contracts.Input) (string, error) {
+			b, err := json.Marshal(src.overviews())
 			return string(b), err
 		})
 }

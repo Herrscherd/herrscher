@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -60,6 +61,7 @@ type sessionDriver struct {
 	incarnation   string
 	agent         string
 	activeTurnID  string
+	busy          atomic.Bool
 	channel       string
 	saidElsewhere bool
 	gateways      []contracts.GatewaySet
@@ -452,7 +454,9 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			if !ok {
 				continue
 			}
+			d.busy.Store(true)
 			d.runTurn(ctx, event, guard)
+			d.busy.Store(false)
 			d.activeTurnID = ""
 		}
 	}

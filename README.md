@@ -607,7 +607,15 @@ auto_theme = false
 glyphs = "unicode"
 borders = "rounded"
 density = "normal"
+bold = true
+italic = true
+
+[statusline]
+source = "builtin"
 ```
+
+Every writer rewrites only its own keys: the theme picker and `/statusline` share
+the file, and the other's settings and your comments survive either one.
 
 A personal theme is a TOML file in the `themes` directory beside it, named after
 its id, so `~/.config/herrscher/themes/mon-theme.toml` shows as a theme in the
@@ -777,7 +785,7 @@ sentence that follows it; `alt+e`, the same key that spells a command out, unfol
 it. Tables truncate their widest column instead of wrapping into
 confetti.
 
-→ `reference/keybindings`
+→ [Keys](#keys)
 
 ### Reviewing what a turn changed
 
@@ -822,6 +830,49 @@ recorded, rather than from nothing until the next turn.
 
 The percentage beside the gauge counts down rather than up: it is what remains
 before a compaction, which is the question one actually asks of a context gauge.
+
+### Keys
+
+`/help` lists the same keys. A key has one meaning in the main window;
+an open panel (diff, sessions, search, rewind, theme, status bar) takes the keys
+it names in its own footer first.
+
+| Key | What it does |
+|---|---|
+| `⏎` | send; while a turn runs, queue the message |
+| `⌥⏎` | while a turn runs, steer it with the message |
+| `⌃⏎` | send the queue now |
+| `⇧⏎`, `\⏎` | new line |
+| `↑` `↓` | history; `↑` on an empty composer focuses the queue, then `suppr` removes and `⇧↑` `⇧↓` reorder |
+| `alt+↑` `alt+↓` | previous or next turn |
+| `échap` | interrupt the running turn |
+| `échap échap` | on an idle session with an empty composer, rewind to an earlier message |
+| `ctrl+c` | interrupt, or quit when nothing runs |
+| `tab` | next session tab |
+| `shift+tab` | cycle the approval mode (Manuel, Édits acceptés, Plan, Auto) |
+| `ctrl+t` | session switcher |
+| `ctrl+p` | the session a notification points at, or the sessions board |
+| `ctrl+w` | close the tab |
+| `ctrl+b` | toggle the sidebar |
+| `ctrl+d` | diff panel for the turn or the branch |
+| `ctrl+f` | search the transcript |
+| `ctrl+r` | search the prompt history |
+| `ctrl+s` | set the draft aside |
+| `ctrl+l` | select the next link; `ctrl+o` opens it |
+| `ctrl+o` | without a selected link, show or hide the thinking |
+| `ctrl+y` | copy the last code block; `alt+y` copies the whole answer |
+| `alt+c` | fold code blocks |
+| `alt+e` | spell out commands and unfold diffs |
+| `alt+t` | fold the turns |
+| `ctrl+v` | paste an image |
+| `ctrl+g` | release the mouse so the terminal can select |
+| `ctrl+x t` | theme picker |
+| `ctrl+x ctrl+e` | edit the draft in `$EDITOR` (then `$VISUAL`) |
+| `ctrl+x ⏎` | send the queue now |
+| `n` | with a notification or `/context` open, the next item |
+| `/` `@` `!` | commands, files, a shell command run under the approval policy |
+
+→ `plugins/terminal/tui/tui.go`, `plugins/terminal/tui/leader.go`
 
 ## Plugins
 

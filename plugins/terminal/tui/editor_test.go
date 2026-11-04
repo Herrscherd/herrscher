@@ -54,7 +54,7 @@ func TestEditorRunWritesBackIntoComposer(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.editing = true
-	if err := editorCommand(path).Run(); err != nil {
+	if err := editorCommand(t.Context(), path).Run(); err != nil {
 		t.Fatalf("fake editor failed: %v", err)
 	}
 	m.applyEditorResult(editorDoneMsg{path: path})

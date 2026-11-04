@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -34,9 +35,9 @@ func editorArgv(path string) []string {
 	return append(fields, path)
 }
 
-func editorCommand(path string) *exec.Cmd {
+func editorCommand(ctx context.Context, path string) *exec.Cmd {
 	argv := editorArgv(path)
-	return exec.Command(argv[0], argv[1:]...)
+	return exec.CommandContext(ctx, argv[0], argv[1:]...)
 }
 
 func writeDraft(text string) (string, error) {
@@ -59,7 +60,7 @@ func (m *model) openEditor() tea.Cmd {
 		return nil
 	}
 	m.editing = true
-	return tea.ExecProcess(editorCommand(path), func(err error) tea.Msg {
+	return tea.ExecProcess(editorCommand(m.runContext(), path), func(err error) tea.Msg {
 		return editorDoneMsg{path: path, err: err}
 	})
 }

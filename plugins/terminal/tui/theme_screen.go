@@ -164,7 +164,7 @@ func (m *model) editThemeFile() tea.Cmd {
 		m.flash = "thème non ouvert : " + err.Error()
 		return nil
 	}
-	return tea.ExecProcess(editorCommand(path), func(err error) tea.Msg { return themeEditedMsg{err: err} })
+	return tea.ExecProcess(editorCommand(m.runContext(), path), func(err error) tea.Msg { return themeEditedMsg{err: err} })
 }
 
 func (m *model) themeFileForEdit() (string, error) {

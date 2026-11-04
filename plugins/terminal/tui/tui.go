@@ -157,7 +157,7 @@ type tab struct {
 	flips              map[uint64]bool
 	pendingApproval    bool
 	approval           approvalPrompt
-	mode               string
+	mode               modeID
 	modeAsked          bool
 	queue              []queuedInput
 	shellContext       string

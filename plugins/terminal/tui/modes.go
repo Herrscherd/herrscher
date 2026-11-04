@@ -140,14 +140,14 @@ func modeIDFromArg(arg string) (modeID, bool) {
 }
 
 func (target *tab) modeID() modeID {
-	if mode, ok := modeIDFromArg(target.mode); ok {
-		return mode
+	if target.mode == modeNone {
+		return modeManual
 	}
-	return modeManual
+	return target.mode
 }
 
 func (target *tab) setMode(mode modeID) {
-	target.mode = mode.String()
+	target.mode = mode
 }
 
 type modeLoadedMsg struct {
@@ -216,7 +216,7 @@ func (m *model) getModeCmd(channel, name string) tea.Cmd {
 
 func (m *model) handleModeLoaded(msg modeLoadedMsg) {
 	target := m.tabs[msg.channel]
-	if target == nil || target.mode != "" || msg.err != nil {
+	if target == nil || target.mode != modeNone || msg.err != nil {
 		return
 	}
 	if mode, ok := modeIDFromHost(msg.host); ok {

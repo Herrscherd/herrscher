@@ -272,8 +272,8 @@ func TestUnknownStoredReplyLeavesTheTabAlone(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
 	m.Update(modeLoadedMsg{channel: "a", host: "ok"})
-	if m.tabs["a"].mode != "" {
-		t.Fatalf("an unrecognised reply must not set the mode, got %q", m.tabs["a"].mode)
+	if m.tabs["a"].mode != modeNone {
+		t.Fatalf("an unrecognised reply must not set the mode, got %s", m.tabs["a"].mode)
 	}
 }
 

@@ -219,6 +219,7 @@ type model struct {
 	width        int
 	height       int
 	flash        string
+	approvalDues map[string]approvalDue
 	tabSig       string
 	spin         int
 	cmds         []CommandSpec
@@ -895,7 +896,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	target.measureContext(event)
 	switch event.T {
 	case eventApproval:
-		m.applyApprovalDeadline(target, event)
+		m.rememberApprovalDeadline(event, time.Now())
 	case eventMenu:
 		if m.openApproval(target, event) {
 			return

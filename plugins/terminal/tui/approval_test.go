@@ -271,3 +271,28 @@ func TestApprovalAlwaysShowsTheExactRule(t *testing.T) {
 		t.Fatalf("allow-always must show the rule the host will write:\n%s", m.View())
 	}
 }
+
+func TestApprovalDeadlineArrivingBeforeTheMenuApplies(t *testing.T) {
+	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a"}}}
+	m := newModel(fb)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	due := time.Now().Add(42 * time.Second).UTC().Format(time.RFC3339)
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApproval, Value: testApprovalID, Text: due}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: approvalMenuEvent(t, "git push", allApprovalRoles...)})
+	m.active = "a"
+	if view := m.View(); !strings.Contains(view, "refus dans 0:4") {
+		t.Fatalf("an approval event sent before the menu must drive the countdown:\n%s", view)
+	}
+}
+
+func TestApprovalDeadlineExpiresWhenTheMenuNeverComes(t *testing.T) {
+	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a"}}}
+	m := newModel(fb)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	due := time.Now().Add(42 * time.Second).UTC().Format(time.RFC3339)
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApproval, Value: testApprovalID, Text: due}})
+	m.expireApprovals(time.Now().Add(approvalEarlyTTL + time.Second))
+	if _, ok := m.approvalDues[testApprovalID]; ok {
+		t.Fatal("an unmatched approval deadline must be forgotten after its retention")
+	}
+}

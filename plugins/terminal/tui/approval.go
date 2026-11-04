@@ -20,6 +20,7 @@ const (
 	approvalQuickWait    = 5 * time.Second
 	approvalUrgentWindow = time.Minute
 	approvalReasonMax    = 200
+	approvalEarlyTTL     = 10 * time.Minute
 	approvalMaxWidth     = 240
 	approvalTwoRowWidth  = 80
 	approvalNoteColumn   = 34
@@ -61,6 +62,11 @@ type approvalPrompt struct {
 	deadline   time.Time
 	reasonOpen bool
 	reason     string
+}
+
+type approvalDue struct {
+	deadline time.Time
+	keep     time.Time
 }
 
 type approvalMenuOption struct {
@@ -166,6 +172,7 @@ func (m *model) openApproval(target *tab, event contracts.Event) bool {
 	if target.channel != m.active {
 		target.unread = true
 	}
+	m.applyKnownDeadline(target)
 	m.applySize()
 	return true
 }
@@ -204,18 +211,44 @@ func (m *model) answerApproval(target *tab, role, reason string) bool {
 	return true
 }
 
-func (m *model) applyApprovalDeadline(target *tab, event contracts.Event) {
-	if !target.pendingApproval || target.approval.id == "" || event.Value != target.approval.id {
-		return
-	}
+func (m *model) rememberApprovalDeadline(event contracts.Event, now time.Time) {
 	due, err := time.Parse(time.RFC3339, event.Text)
-	if err != nil {
+	if err != nil || event.Value == "" {
 		return
 	}
-	target.approval.deadline = due
+	if m.approvalDues == nil {
+		m.approvalDues = make(map[string]approvalDue)
+	}
+	m.approvalDues[event.Value] = approvalDue{deadline: due, keep: now.Add(approvalEarlyTTL)}
+	for _, channel := range m.order {
+		if target := m.tabs[channel]; target != nil {
+			m.applyKnownDeadline(target)
+		}
+	}
+}
+
+func (m *model) applyKnownDeadline(target *tab) {
+	if !target.pendingApproval || target.approval.id == "" {
+		return
+	}
+	known, ok := m.approvalDues[target.approval.id]
+	if !ok {
+		return
+	}
+	target.approval.deadline = known.deadline
+	delete(m.approvalDues, target.approval.id)
+}
+
+func (m *model) pruneApprovalDeadlines(now time.Time) {
+	for id, known := range m.approvalDues {
+		if now.After(known.keep) {
+			delete(m.approvalDues, id)
+		}
+	}
 }
 
 func (m *model) expireApprovals(now time.Time) {
+	m.pruneApprovalDeadlines(now)
 	for _, channel := range m.order {
 		target := m.tabs[channel]
 		if target == nil || !target.pendingApproval || now.Before(target.approval.deadline) {

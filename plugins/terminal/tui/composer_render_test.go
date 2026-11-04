@@ -245,3 +245,42 @@ func TestEditorTitleFallsBackToViWithoutEditorVariables(t *testing.T) {
 		t.Fatalf("without EDITOR or VISUAL the title must name vi, got %q", title)
 	}
 }
+
+func TestEditorNameFollowsTheLauncherOrder(t *testing.T) {
+	t.Setenv("EDITOR", "/usr/bin/nvim")
+	t.Setenv("VISUAL", "/usr/bin/code")
+	m, _ := queueFixture(t)
+	m.editing = true
+	if title := ansi.Strip(m.composerTitleLeft()); !strings.HasSuffix(title, "brouillon ouvert dans nvim") {
+		t.Fatalf("EDITOR must win over VISUAL in the title, as it does for the launch, got %q", title)
+	}
+	if got := editorArgv("/tmp/x.md"); got[0] != "/usr/bin/nvim" {
+		t.Fatalf("the launcher must run EDITOR first, got %v", got)
+	}
+}
+
+func TestEditingPlaceholderNamesTheEditor(t *testing.T) {
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "/usr/bin/nvim")
+	m, _ := queueFixture(t)
+	m.editing = true
+	want := "nvim est ouvert sur le brouillon, :wq pour revenir"
+	if got := m.placeholderText(); got != want {
+		t.Fatalf("the editing placeholder must name the editor, got %q", got)
+	}
+}
+
+func TestDraftLineKeepsTheResumeHintRightAligned(t *testing.T) {
+	m, _ := queueFixture(t)
+	m.drafts = []string{"relis le plan"}
+	line := ansi.Strip(m.draftsView())
+	if !strings.HasPrefix(line, " ○ brouillons (1) : « relis le plan »") {
+		t.Fatalf("the draft line must open with its count and preview, got %q", line)
+	}
+	if !strings.HasSuffix(line, "⌃S reprendre le dernier") {
+		t.Fatalf("the draft line must end with the right-aligned resume hint, got %q", line)
+	}
+	if ansi.StringWidth(line) != m.innerWidth() {
+		t.Fatalf("the draft line must span the composer width, got %d of %d", ansi.StringWidth(line), m.innerWidth())
+	}
+}

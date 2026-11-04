@@ -116,8 +116,9 @@ func (m *model) draftsView() string {
 		return ""
 	}
 	last := oneLine(m.drafts[len(m.drafts)-1])
-	text := "○ brouillons (" + strconv.Itoa(len(m.drafts)) + ") : « " + truncateEllipsis(last, m.innerWidth()/draftPreviewDivisor) + " » " + draftsKey + " de côté · reprendre le dernier"
-	return m.st.dim.Render(truncateEllipsis(text, m.innerWidth()))
+	left := m.st.dim.Render(" ○ brouillons (" + strconv.Itoa(len(m.drafts)) + ") : « " + truncateEllipsis(last, m.innerWidth()/draftPreviewDivisor) + " »")
+	right := m.st.accent.Render(draftsKey) + m.st.dim.Render(" reprendre le dernier")
+	return justifyRow(left, right, m.innerWidth())
 }
 
 func (m *model) queueLines(base int) []string {

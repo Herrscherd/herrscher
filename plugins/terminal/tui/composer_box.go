@@ -70,6 +70,8 @@ func (m *model) syncPrompt() {
 
 func (m *model) placeholderText() string {
 	switch {
+	case m.editing:
+		return editorName() + " est ouvert sur le brouillon, :wq pour revenir"
 	case m.surface == surfacePanes:
 		return placeholderPanes
 	case m.isBusy():

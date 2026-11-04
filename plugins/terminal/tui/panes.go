@@ -29,7 +29,7 @@ const (
 	paneMinCellHeight  = paneBoxChrome + 3
 )
 
-const paneFooterKeys = "Tab volet suivant · clic viser · o s r approbation · ⌃W agrandir · ⌃P quitter"
+const paneFooterKeys = "Tab volet suivant · clic viser · o s r approbation de docs-site"
 
 type paneState struct {
 	channels []string

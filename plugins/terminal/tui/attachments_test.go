@@ -73,7 +73,8 @@ func TestSubmitCarriesAttachments(t *testing.T) {
 	t.Cleanup(func() { removeIfPresent(t, path) })
 
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("look at this")})
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	settle(m, cmd)
 
 	if len(f.submitted) != 1 {
 		t.Fatalf("expected one submit, got %d", len(f.submitted))
@@ -90,7 +91,7 @@ func TestSubmitCarriesAttachments(t *testing.T) {
 	if last.role != roleYou || len(last.attachments) != 1 || last.attachments[0].Path != path {
 		t.Fatalf("you turn must echo the attachment: %+v", last)
 	}
-	if !strings.Contains(renderEntry(last, 80, view{}), filepath.Base(path)) {
+	if !strings.Contains(renderEntry(last, 80, view{st: testStyles()}), filepath.Base(path)) {
 		t.Fatalf("rendered you turn must show the attachment chip")
 	}
 }

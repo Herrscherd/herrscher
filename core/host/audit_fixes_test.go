@@ -26,7 +26,7 @@ func TestAnswerApprovalPickIsSessionScoped(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := newTestPendingApproval(tc.owner)
 			defer registerTestApproval(t, approvalTab, p)()
-			if got := answerApprovalPick(approvalTab, tc.clicker, approvalPickPrefix+p.id+":allow"); got != tc.swallowd {
+			if got := answerApprovalPick(approvalTab, newSessionTable(), tc.clicker, approvalPickPrefix+p.id+":allow"); got != tc.swallowd {
 				t.Fatalf("answerApprovalPick = %v, want %v", got, tc.swallowd)
 			}
 			assertSettlement(t, p, tc.answered)
@@ -125,8 +125,8 @@ func TestApprovalIDsAreRandomAndWellFormed(t *testing.T) {
 	seen := make(map[string]bool, 4096)
 	for range 4096 {
 		id := newApprovalID()
-		if len(id) != 8 {
-			t.Fatalf("newApprovalID() = %q, want 8 hex characters", id)
+		if len(id) != 2*approvalIDBytes {
+			t.Fatalf("newApprovalID() = %q, want %d hex characters", id, 2*approvalIDBytes)
 		}
 		if _, err := hex.DecodeString(id); err != nil {
 			t.Fatalf("newApprovalID() = %q, not hex: %v", id, err)

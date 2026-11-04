@@ -54,7 +54,7 @@ const (
 	pluginWarnProceed = "continuer"
 	pluginWarnAbort   = "annuler, ne rien changer"
 
-	pluginFailRestore = "remettre l'arbre comme il était"
+	pluginFailRestore = "remettre l’arbre comme il était"
 	pluginFailKeep    = "le garder, je répare à la main"
 )
 
@@ -114,7 +114,7 @@ func (m *model) openPlugins() tea.Cmd {
 	m.pluginsRows = nil
 	m.pluginsNotice = ""
 	if m.pluginsSeam == nil {
-		m.pluginsNotice = "la gestion des plugins n'est pas disponible dans ce binaire"
+		m.pluginsNotice = "la gestion des plugins n’est pas disponible dans ce binaire"
 		return nil
 	}
 	seam, ctx := m.pluginsSeam, m.runContext()
@@ -150,10 +150,10 @@ func (m *model) handlePluginsMsg(msg tea.Msg) bool {
 			m.pluginsMode = pluginsFailed
 			break
 		}
-		m.pluginsNotice = "le changement est sur le disque ; il s'applique au prochain démarrage"
+		m.pluginsNotice = "le changement est sur le disque ; il s’applique au prochain démarrage"
 		m.pluginsMode = pluginsDone
 	case pluginsRestoredMsg:
-		m.pluginsNotice = "l'arbre est revenu comme il était ; rien n'a été installé"
+		m.pluginsNotice = "l’arbre est revenu comme il était ; rien n’a été installé"
 		m.pluginsMode = pluginsDone
 	case pluginsErrMsg:
 		m.pluginsNotice = msg.err.Error()
@@ -219,7 +219,7 @@ func (m *model) choosePlugins() tea.Cmd {
 				return pluginsRestoredMsg{}
 			}
 		}
-		m.pluginsNotice = "l'arbre est laissé tel quel ; répare-le et relance la construction"
+		m.pluginsNotice = "l’arbre est laissé tel quel ; répare-le et relance la construction"
 		m.pluginsMode = pluginsDone
 	case pluginsDone:
 		return m.openPlugins()
@@ -366,7 +366,7 @@ func (m *model) pluginRow(index int) string {
 		row += " · épinglé"
 	}
 	if index == m.pluginsIdx && m.pluginsMode == pluginsList {
-		return m.st.accent.Render(glyphCursor + " " + row)
+		return m.st.accent.Render(m.st.glyphs.cursor) + " " + m.st.text.Render(row)
 	}
 	return m.st.dim.Render("  " + row)
 }
@@ -390,7 +390,7 @@ func (m *model) writePluginMenu(builder *strings.Builder) {
 	}
 	for i, opt := range m.pluginsMenu {
 		if i == m.pluginsMenuIdx {
-			builder.WriteString("\n" + m.st.accent.Render(glyphCursor+" "+opt))
+			builder.WriteString("\n" + m.st.accent.Render(m.st.glyphs.cursor) + " " + m.st.text.Render(opt))
 		} else {
 			builder.WriteString("\n" + m.st.dim.Render("  "+opt))
 		}

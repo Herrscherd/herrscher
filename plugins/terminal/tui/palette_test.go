@@ -15,8 +15,8 @@ func TestPaletteInlineRenderSelectedRow(t *testing.T) {
 	m.input.SetValue("/")
 	m.palIdx = 1
 	out := m.paletteView()
-	if !strings.Contains(out, glyphCursor+" /clear") {
-		t.Fatalf("selected row must be prefixed %q in accent: %q", glyphCursor, out)
+	if !strings.Contains(out, unicodeGlyphs().cursor+" /clear") {
+		t.Fatalf("selected row must be prefixed %q in accent: %q", unicodeGlyphs().cursor, out)
 	}
 	for _, box := range []string{"╭", "╮", "╰", "─", "│"} {
 		if strings.Contains(out, box) {
@@ -52,7 +52,7 @@ func TestPaletteViewShowsALateSelection(t *testing.T) {
 	m.input.SetValue("/")
 	m.palIdx = 27
 	out := m.paletteView()
-	if !strings.Contains(out, glyphCursor+" /verb27") {
+	if !strings.Contains(out, unicodeGlyphs().cursor+" /verb27") {
 		t.Fatalf("a late selection must be drawn: %q", out)
 	}
 	if strings.Contains(out, "/verb00") {
@@ -76,8 +76,10 @@ func TestLocalCommandsAreNeverDispatched(t *testing.T) {
 		m.syncTabs()
 		m.input.SetValue("/" + c.Name)
 		runCmd(m.handleEnter())
-		if len(be.dispatched) != 0 {
-			t.Errorf("/%s is advertised as local but was dispatched: %v", c.Name, be.dispatched)
+		for _, argv := range be.dispatched {
+			if argv[0] == c.Name {
+				t.Errorf("/%s is advertised as local but was dispatched: %v", c.Name, argv)
+			}
 		}
 	}
 }

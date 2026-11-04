@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -24,8 +25,10 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
@@ -61,6 +64,9 @@ type Backend interface {
 	// Interrupt cancels a session's in-flight turn (esc-to-interrupt). Reports
 	// false when nothing was interrupted (no live turn by that name).
 	Interrupt(name string) bool
+	Pick(channel, value string) bool
+	Overview() (string, error)
+	Seen(name string)
 }
 
 const (
@@ -80,6 +86,12 @@ const (
 	sessionVerb = "session"
 	verbRename  = "rename"
 	stateDone   = "done"
+	stateActive = "active"
+	eventReply  = "reply"
+	eventStatus = "status"
+
+	stateFailed = "failed"
+	stateError  = "error"
 )
 
 func hostError(text string) (string, bool) {
@@ -104,6 +116,15 @@ type entry struct {
 	streaming   bool
 	attachments []Attachment
 	preview     string
+	at          time.Time
+	ended       time.Time
+	base        int
+	tokens      int
+	span        time.Duration
+	live        bool
+	failed      bool
+	foldable    bool
+	open        bool
 }
 
 type tab struct {
@@ -121,29 +142,47 @@ type tab struct {
 	costTotal          float64
 	ctxTokens          int
 	ctxMeasured        bool
+	compaction         compaction
+	lastCompact        compaction
 	openedAt           time.Time
 	nextEntryID        uint64
 	todos              []contracts.TodoItem
 	agents             []liveAgent
+	agentsDone         []liveAgent
+	background         []backgroundTask
+	unreadCount        int
+	finished           bool
+	files              []string
+	trail              []liveAgent
+	flips              map[uint64]bool
+	pendingApproval    bool
+	approval           approvalPrompt
+	mode               modeID
+	modeAsked          bool
+	queue              []queuedInput
+	shellContext       string
+	shellRunning       bool
+	turnStart          string
+	snapshotting       bool
+	queued             []queuedTurn
 }
 
 type liveAgent struct {
 	contracts.Subagent
 
 	since time.Time
+	ended time.Time
 }
 
 func (tb *tab) dropAgent(agentID string) {
-	for index, a := range tb.agents {
-		if a.ID == agentID {
-			tb.agents = append(tb.agents[:index], tb.agents[index+1:]...)
-			return
-		}
+	if index := tb.agentIndex(agentID); index >= 0 {
+		tb.agents = append(tb.agents[:index], tb.agents[index+1:]...)
 	}
 }
 
 func (tb *tab) clearPanels() {
 	tb.agents = nil
+	tb.agentsDone = nil
 	for _, t := range tb.todos {
 		if t.State != stateDone {
 			return
@@ -157,6 +196,10 @@ const maxTabLines = 5000
 func (tb *tab) appendEntry(item entry) {
 	tb.nextEntryID++
 	item.id = tb.nextEntryID
+	item.at = time.Now()
+	if item.role == roleYou {
+		tb.trail = nil
+	}
 	tb.entries = append(tb.entries, item)
 	if len(tb.entries) > maxTabLines {
 		tb.entries = append([]entry(nil), tb.entries[len(tb.entries)-maxTabLines:]...)
@@ -193,36 +236,40 @@ func tickCmd() tea.Cmd {
 
 type spinMsg struct{}
 
-const fastTick = 200 * time.Millisecond
+const fastTick = 60 * time.Millisecond
 
 func spinTick(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return spinMsg{} })
 }
 
 type model struct {
-	ctx          context.Context
-	st           uiStyles
-	md           *markdownRenderer
-	keys         *keyLog
-	tm           Backend
-	vp           viewport.Model
-	input        textarea.Model
-	tabs         map[string]*tab
-	order        []string
-	active       string
-	ready        bool
-	showHelp     bool
-	pendingClose bool
-	width        int
-	height       int
-	flash        string
-	tabSig       string
-	spin         int
-	cmds         []CommandSpec
-	palIdx       int
-	palWasOpen   bool
-	spinning     bool
-	composerRows int
+	ctx           context.Context
+	st            uiStyles
+	md            *markdownRenderer
+	keys          *keyLog
+	tm            Backend
+	vp            viewport.Model
+	input         textarea.Model
+	tabs          map[string]*tab
+	order         []string
+	active        string
+	ready         bool
+	showHelp      bool
+	pendingClose  bool
+	width         int
+	height        int
+	flash         string
+	approvalDues  map[string]approvalDue
+	approvalRisks map[string]approvalRating
+	tabSig        string
+	spin          int
+	cmds          []CommandSpec
+	diff          diffPanel
+	diffRun       commandRunner
+	palIdx        int
+	palWasOpen    bool
+	spinning      bool
+	composerRows  int
 
 	infoCache   contracts.SessionInfo
 	infoKnown   bool
@@ -236,11 +283,50 @@ type model struct {
 	resumeIdx  int
 	resumeRows []contracts.SessionInfo
 
+	rwOpen bool
+	rwStep rewindStep
+	rwIdx  int
+	rwOpt  rewindOption
+	rwRows []rewindRow
+	rwWhat rewindWhat
+	escAt  time.Time
+
 	switchOpen bool
 	switchIdx  int
 	switchRows []contracts.SessionInfo
 
+	resumeAll   []contracts.SessionInfo
+	resumeQuery string
+
+	surface     surface
+	board       boardState
+	overviews   []SessionOverview
+	summary     panelSummary
+	summaryBusy bool
+	panes       paneState
+
 	diagOpen bool
+
+	theme           Theme
+	themeCat        themeCatalog
+	themeCfg        terminalSection
+	themeBackground string
+	obelFont        fontPresence
+	terminal        terminalKind
+	themeDir        string
+	themeStamp      string
+	themeScr        *themeScreen
+	noColor         bool
+
+	leaderArmed time.Time
+	bar         barState
+
+	ctxOpen bool
+
+	toast      toast
+	toastSeq   int
+	notifyMode notifyMode
+	focus      focusState
 
 	skillsOpen bool
 	skillsIdx  int
@@ -258,15 +344,25 @@ type model struct {
 	pluginsOutput   string
 	pluginsNotice   string
 
-	choice    *PendingChoice
-	choiceIdx int
+	planMenu *planMenu
 
 	mentionIdx       int
 	mentionCacheKey  string
 	mentionCacheRows []string
 
-	history []string
-	histIdx int
+	history          []string
+	histIdx          int
+	drafts           []string
+	histOpen         bool
+	histQuery        string
+	histSel          int
+	editing          bool
+	draftFiles       *draftRun
+	draftBeatWatched bool
+	pendingBeatFlash string
+	queueSel         int
+	queueFocus       bool
+	queueHits        []queueHit
 
 	clip      clipboard
 	pending   []Attachment
@@ -297,10 +393,14 @@ type model struct {
 
 	expandTools bool
 
-	tsCache transcriptCache
+	tsCache  transcriptCache
+	tsLayout transcriptLayout
 
 	foldCache overlayCache
 	markCache overlayCache
+
+	sidebar  sidebarMode
+	gitCache map[string]gitCacheEntry
 }
 
 type overlayCache struct {
@@ -345,11 +445,27 @@ func (m *model) resizeComposer() {
 	if height > maxComposerLines {
 		height = maxComposerLines
 	}
+	height = m.fitComposerRows(height)
 	if height != m.composerRows {
 		m.composerRows = height
 		m.applySize()
 		m.syncViewport()
 	}
+}
+
+func (m *model) fitComposerRows(want int) int {
+	if m.height <= 0 {
+		return want
+	}
+	saved := m.composerRows
+	defer func() { m.composerRows = saved }()
+	for rows := want; rows > 1; rows-- {
+		m.composerRows = rows
+		if m.chromeHeight() <= m.height-minTranscriptRows {
+			return rows
+		}
+	}
+	return 1
 }
 
 func (m *model) chromeHeight() int {
@@ -367,8 +483,8 @@ func (m *model) applySize() {
 	if !m.ready {
 		return
 	}
-	m.vp.Width = m.innerWidth()
-	m.vp.Height = m.height - m.chromeHeight()
+	m.vp.Width = m.transcriptWidth()
+	m.vp.Height = max(0, m.height-m.chromeHeight())
 }
 
 func (m *model) runContext() context.Context {
@@ -380,8 +496,8 @@ func (m *model) runContext() context.Context {
 
 func newModel(backend Backend) *model {
 	field := textarea.New()
-	field.Placeholder = "type a message…"
-	field.Prompt = ""
+	field.Placeholder = placeholderIdle
+	field.SetPromptFunc(len(composerPrompt), promptAt(composerPrompt))
 	field.ShowLineNumbers = false
 	field.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "shift+enter", "ctrl+j"))
 	field.SetHeight(maxComposerLines)
@@ -389,7 +505,8 @@ func newModel(backend Backend) *model {
 	match := &model{
 		ctx: context.Background(), tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
-		st: newStyles(), md: &markdownRenderer{},
+		st: newStyles(defaultTheme(), false), md: &markdownRenderer{}, theme: defaultTheme(), bar: newBarState(),
+		terminal: detectTerminal(os.LookupEnv),
 	}
 	match.cmds = localCommands()
 	if backend != nil {
@@ -407,6 +524,7 @@ func (m *model) ensureTab(channel string) *tab {
 	m.order = append(m.order, channel)
 	if m.active == "" {
 		m.active = channel
+		m.applySize()
 	}
 	m.seedScrollback(tab)
 	return tab
@@ -438,6 +556,7 @@ func scrollbackRole(role string) string {
 }
 
 func (m *model) removeTab(channel string) {
+	m.removePane(channel)
 	if _, ok := m.tabs[channel]; !ok {
 		return
 	}
@@ -450,12 +569,19 @@ func (m *model) removeTab(channel string) {
 	}
 	m.order = out
 	if m.active == channel {
-		m.active = ""
-		if len(m.order) > 0 {
-			m.active = m.order[0]
-		}
+		m.active = m.successorTab()
 		m.syncViewport()
 	}
+}
+
+func (m *model) successorTab() string {
+	if focused := m.focusedChannel(); m.surface == surfacePanes && m.tabs[focused] != nil {
+		return focused
+	}
+	if len(m.order) > 0 {
+		return m.order[0]
+	}
+	return ""
 }
 
 func (m *model) route(routed RoutedEvent) tea.Cmd {
@@ -466,29 +592,59 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 	tab := m.ensureTab(routed.Conv.ID)
 	before := len(tab.entries)
 	m.renderInto(tab, routed.Event)
-	if len(tab.entries) != before && tab.channel != m.active {
-		tab.unread = true
+	flushCmd := m.flushQueue(tab, routed.Event.T)
+	isReply := routed.Event.T == eventReply
+	isTurnDone := isReply && routed.Event.Done
+	if tab.channel != m.active {
+		if len(tab.entries) != before {
+			tab.unread = true
+			tab.unreadCount++
+		}
+		if isTurnDone {
+			tab.finished = true
+		}
 	}
+	var gitCmd tea.Cmd
 	if tab.channel == m.active {
 		m.syncViewport()
+		if routed.Event.T == eventStatus {
+			gitCmd = m.gitAfterTool(routed.Event.Text)
+		}
 	}
-	if routed.Event.T != "reply" || len(tab.entries) == 0 {
-		return nil
+	var notice tea.Cmd
+	if isTurnDone {
+		notice = m.notifyTurnEnd(tab)
 	}
-	last := len(tab.entries) - 1
-	for last >= 0 && tab.entries[last].role != roleAgent {
-		last--
+	var images tea.Cmd
+	if isReply && len(tab.entries) > 0 {
+		images = m.replyImages(tab)
 	}
+	return tea.Batch(flushCmd, gitCmd, notice, images)
+}
+
+func (m *model) replyImages(tab *tab) tea.Cmd {
+	last := lastAgentIndex(tab.entries)
 	if last < 0 {
 		return nil
+	}
+	if tab.channel == m.active && tab.modeID() == modePlan && m.planMenu == nil && tab.entries[last].text != "" {
+		m.openPlanMenu(tab.channel)
 	}
 	return m.fetchEntryImages(tab, last)
 }
 
-func (m *model) syncTabs() {
+func lastAgentIndex(entries []entry) int {
+	last := len(entries) - 1
+	for last >= 0 && entries[last].role != roleAgent {
+		last--
+	}
+	return last
+}
+
+func (m *model) syncTabs() tea.Cmd {
 	infos := m.tm.Sessions()
 	if infos == nil {
-		return
+		return nil
 	}
 	var builder strings.Builder
 	for i := range infos {
@@ -500,7 +656,7 @@ func (m *model) syncTabs() {
 	}
 	sig := builder.String()
 	if sig == m.tabSig {
-		return
+		return nil
 	}
 	m.tabSig = sig
 	live := make(map[string]bool)
@@ -520,12 +676,12 @@ func (m *model) syncTabs() {
 			m.removeTab(channel)
 		}
 	}
-	m.focusOpen(infos)
+	return m.focusOpen(infos)
 }
 
-func (m *model) focusOpen(infos []contracts.SessionInfo) {
+func (m *model) focusOpen(infos []contracts.SessionInfo) tea.Cmd {
 	if m.openSession == "" {
-		return
+		return nil
 	}
 	channel := ""
 	for i := range infos {
@@ -536,14 +692,15 @@ func (m *model) focusOpen(infos []contracts.SessionInfo) {
 		}
 	}
 	if channel == "" || m.tabs[channel] == nil {
-		return
+		return nil
 	}
 	text := m.openText
 	m.openSession, m.openText = "", ""
 	m.active = channel
-	if text != "" {
-		m.submitTo(channel, text, nil)
+	if text == "" {
+		return nil
 	}
+	return m.submitTo(channel, text, nil)
 }
 
 func (m *model) continueLine() bool {
@@ -563,6 +720,9 @@ func (m *model) handleEnter() tea.Cmd {
 	}
 	m.input.Reset()
 	m.resizeComposer()
+	if command, ok := shellCommand(text); ok {
+		return m.runShell(command)
+	}
 	if strings.HasPrefix(text, "/") {
 		return m.runSlash(text)
 	}
@@ -573,8 +733,7 @@ func (m *model) handleEnter() tea.Cmd {
 	m.pending = nil
 	m.applySize()
 	m.recordHistory(text)
-	m.submitTo(m.active, text, atts)
-	return nil
+	return m.submitTo(m.active, text, atts)
 }
 
 func (m *model) runSlash(text string) tea.Cmd {
@@ -592,12 +751,24 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 	switch args[0] {
 	case "resume":
 		m.openResume()
+	case "agents":
+		return m.openBoard(), true
 	case "clear":
 		m.clearActive()
 	case "help":
 		m.toggleHelp()
+	case cmdTheme:
+		m.openTheme()
 	case sessionVerb:
 		return m.sessionSlash(args)
+	case "context":
+		m.openContext()
+	case "compact":
+		return m.compactCmd(), true
+	case "notify":
+		return m.cycleNotify(), true
+	case "review":
+		return m.openDiff(true), true
 	case "usage":
 		if tb := m.tabs[m.active]; tb != nil {
 			tb.appendEntry(entry{role: roleNotice, text: m.usageReport(tb)})
@@ -605,7 +776,7 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		}
 	case "capabilities":
 		m.openDiagnostics()
-	case "skills":
+	case cmdSkills:
 		m.openSkills()
 	case "plugins":
 		return m.openPlugins(), true
@@ -617,6 +788,14 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		m.copyCmd(args[1:])
 	case "mouse":
 		return m.toggleMouse(), true
+	case "statusline":
+		return m.openStatusline(), true
+	case "mode":
+		return m.modeSlash(strings.TrimPrefix(text, "/mode")), true
+	case cmdPlan:
+		return m.planSlash(strings.TrimPrefix(text, "/plan")), true
+	case cmdQueue:
+		m.showQueue()
 	default:
 		return nil, false
 	}
@@ -639,12 +818,12 @@ func (m *model) sessionSlash(args []string) (tea.Cmd, bool) {
 	return nil, false
 }
 
-func (m *model) submitTo(channel, text string, atts []Attachment) {
+func (m *model) submitTo(channel, text string, atts []Attachment) tea.Cmd {
 	tab := m.tabs[channel]
 	if tab == nil {
-		return
+		return nil
 	}
-	m.tm.Submit(channel, text, atts)
+	wasBusy := tab.busy
 	tab.endStream()
 	item := entry{role: roleYou, text: text, attachments: atts}
 	item.preview = previewEscapes(atts, m.caps)
@@ -654,6 +833,18 @@ func (m *model) submitTo(channel, text string, atts []Attachment) {
 	tab.tokens = 0
 	tab.startedAt = time.Now()
 	m.syncViewport()
+	turn := queuedTurn{text: text, atts: atts}
+	switch {
+	case tab.snapshotting:
+		tab.queued = append(tab.queued, turn)
+		return nil
+	case wasBusy:
+		m.tm.Submit(channel, tab.withShellContext(text), atts)
+		return nil
+	}
+	tab.snapshotting = true
+	tab.queued = append(tab.queued, turn)
+	return m.turnStartCmd(channel)
 }
 
 func (m *model) pasteImage() bool {
@@ -756,6 +947,9 @@ func (m *model) toggleHelp() {
 }
 
 func (m *model) sessionName(channel string) string {
+	if m.tm == nil {
+		return ""
+	}
 	sessions := m.tm.Sessions()
 	for i := range sessions {
 		session := &sessions[i]
@@ -816,7 +1010,7 @@ func (m *model) renameCmd(rest []string) tea.Cmd {
 		m.flash = "aucune session à renommer ici"
 		return nil
 	}
-	return m.dispatchCmd(m.active, []string{sessionVerb, verbRename, "--name", name, "--to", target})
+	return m.dispatchCmd(m.active, []string{sessionVerb, verbRename, argName, name, argTo, target})
 }
 
 func renameTarget(rest []string) string {
@@ -824,7 +1018,7 @@ func renameTarget(rest []string) string {
 	for index := 0; index < len(rest); index++ {
 		tok := rest[index]
 		switch {
-		case tok == "--to":
+		case tok == argTo:
 			if index+1 < len(rest) && !strings.HasPrefix(rest[index+1], "--") {
 				words = append(words, rest[index+1])
 				index++
@@ -846,7 +1040,7 @@ func closeTarget(rest []string) (string, bool) {
 		switch {
 		case tok == "--force":
 			force = true
-		case tok == "--name":
+		case tok == argName:
 			if index+1 < len(rest) && !strings.HasPrefix(rest[index+1], "--") {
 				name = rest[index+1]
 				index++
@@ -881,6 +1075,8 @@ func (m *model) activate(channel string) {
 	}
 	m.active = channel
 	m.tabs[channel].unread = false
+	m.tabs[channel].unreadCount = 0
+	m.tabs[channel].finished = false
 	m.syncViewport()
 	m.vp.GotoBottom()
 }
@@ -889,24 +1085,35 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	if event.T != "abandoned" {
 		target.disconnected = false
 	}
+	previous := target.tokens
 	if event.Tokens > 0 {
 		target.tokens = event.Tokens
 	}
 	target.measureContext(event)
 	switch event.T {
+	case eventApproval:
+		m.rememberApprovalDeadline(event, time.Now())
+	case eventApprovalRisk:
+		m.rememberApprovalRisk(event, time.Now())
+	case eventMenu:
+		if m.openApproval(target, event) {
+			return
+		}
+		m.renderInto(target, contracts.Event{T: eventStatus, Text: event.Text})
 	case "chunk":
 		target.busy = true
 		target.streamed = true
 		target.appendChunk(event.Text)
 	case "thinking":
 		target.busy = true
-		target.appendThinking(event.Text)
-	case "status":
+		target.appendThinking(event.Text, target.tokens, previous)
+	case eventStatus:
 		target.busy = true
 		target.endStream()
+		target.noteToolFile(event.Text)
 		text, _ := hostError(event.Text)
 		target.appendEntry(entry{role: statusRole(event.Text), text: text})
-	case "reply":
+	case eventReply:
 		target.appendReply(event)
 	case "todos":
 		target.busy = true
@@ -934,6 +1141,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 
 func (tb *tab) measureContext(event contracts.Event) {
 	used := event.TokensIn + event.CacheRead + event.CacheCreate
+	tb.measureCompaction(used)
 	if used <= 0 {
 		return
 	}
@@ -944,12 +1152,21 @@ func (tb *tab) measureContext(event contracts.Event) {
 	}
 }
 
-func (tb *tab) appendThinking(text string) {
+func (tb *tab) appendThinking(text string, tokens, before int) {
 	if strings.TrimSpace(text) == "" {
 		return
 	}
 	tb.endStream()
-	tb.appendEntry(entry{role: roleThinking, text: text})
+	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleThinking {
+		last := &tb.entries[n-1]
+		last.text += text
+		last.ended = time.Now()
+		if tokens > 0 {
+			last.tokens = tokens
+		}
+		return
+	}
+	tb.appendEntry(entry{role: roleThinking, text: text, tokens: tokens, base: before})
 }
 
 func (tb *tab) appendReply(event contracts.Event) {
@@ -967,6 +1184,7 @@ func (tb *tab) appendReply(event contracts.Event) {
 		tb.appendEntry(entry{role: roleCost, text: formatCost(event.Cost)})
 	}
 	if event.Done {
+		tb.finishCompaction()
 		tb.busy = false
 		tb.interruptRequested = false
 		tb.streamed = false
@@ -979,11 +1197,32 @@ func (tb *tab) applySubagent(sub *contracts.Subagent) {
 	if sub == nil {
 		return
 	}
-	if sub.State == stateDone {
-		tb.dropAgent(sub.ID)
+	tb.recordTrail(*sub)
+	now := time.Now()
+	index := tb.agentIndex(sub.ID)
+	if sub.State == stateDone || sub.State == stateFailed || sub.State == stateError {
+		since := now
+		if index >= 0 {
+			since = tb.agents[index].since
+			tb.dropAgent(sub.ID)
+		}
+		tb.agentsDone = append(tb.agentsDone, liveAgent{Subagent: *sub, since: since, ended: now})
 		return
 	}
-	tb.agents = append(tb.agents, liveAgent{Subagent: *sub, since: time.Now()})
+	if index >= 0 {
+		tb.agents[index].Subagent = *sub
+		return
+	}
+	tb.agents = append(tb.agents, liveAgent{Subagent: *sub, since: now})
+}
+
+func (tb *tab) agentIndex(agentID string) int {
+	for index, a := range tb.agents {
+		if a.ID == agentID {
+			return index
+		}
+	}
+	return -1
 }
 
 func (m *model) syncViewport() {
@@ -1010,7 +1249,7 @@ func (m *model) anyBusy() bool {
 	return false
 }
 
-func (m *model) spinFrame() string { return spinFrames()[m.spin%len(spinFrames())] }
+func (m *model) spinFrame() string { return m.st.spinFrame(m.spin) }
 
 func (m *model) thinkingContent() string {
 	return m.contentWith(m.searchQuery)
@@ -1029,7 +1268,7 @@ func (m *model) contentWith(query string) string {
 	content := m.cachedTranscript(tab)
 	if m.foldTurnsOn {
 		content = m.foldCache.get(content, "", func(s string) string {
-			return strings.Join(foldTurns(strings.Split(s, "\n"), turnFoldKeep, m.st), "\n")
+			return strings.Join(foldTurns(strings.Split(s, "\n"), m.tsLayout.turns, turnFoldKeep, m.st), "\n")
 		})
 	}
 	if m.searchOpen && strings.TrimSpace(query) != "" {
@@ -1037,8 +1276,8 @@ func (m *model) contentWith(query string) string {
 			return strings.Join(highlightMatches(strings.Split(s, "\n"), query), "\n")
 		})
 	}
-	if tab.busy && !tab.streamed {
-		line := m.st.spinner.Render(m.spinFrame() + " thinking…")
+	if tab.busy {
+		line := m.busyRow(tab)
 		if content != "" {
 			content += "\n" + line
 		} else {
@@ -1060,7 +1299,9 @@ func (m *model) cachedTranscript(tab *tab) string {
 		cache.entries == len(tab.entries) && cache.lastLen == lastLen && cache.lastStr == lastStr {
 		return cache.out
 	}
-	out := m.renderTranscript(tab, width)
+	layout := m.layoutTranscript(tab, width)
+	m.tsLayout = layout
+	out := layout.text
 	*cache = transcriptCache{
 		ch: tab.channel, width: width, entries: len(tab.entries),
 		lastLen: lastLen, lastStr: lastStr, out: out, valid: true,
@@ -1080,24 +1321,21 @@ func (m *model) hintText() string {
 	if m.paletteOpen() {
 		return m.st.dim.Render("↑↓ naviguer · ⇞⇟ page · Tab compléter · Échap fermer")
 	}
-	return m.st.dim.Render("? raccourcis")
+	return m.st.dim.Render("? aide")
 }
 
-func (m *model) footer() string {
+func (m *model) footer(width int) string {
 	if s := m.linkStatus(); s != "" {
-		return s
+		return truncate(s, width)
 	}
 	tab := m.tabs[m.active]
 	if tab == nil {
 		return ""
 	}
-	if tab.busy {
-		return m.st.spinner.Render(m.spinnerHint(tab))
-	}
 	if tab.disconnected {
 		return m.st.dim.Render("· déconnecté")
 	}
-	return m.statusBar(tab, m.innerWidth())
+	return m.statusBar(tab, width)
 }
 
 func (m *model) spinnerHint(tab *tab) string {
@@ -1144,10 +1382,20 @@ func OpenOn(session, text string) Option {
 // Run starts the TUI bound to the given gateway backend, blocking until the user
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
-func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) error {
+func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) (runErr error) {
 	model := newModel(backend)
 	model.ctx = ctx
+	defer func() {
+		runErr = errors.Join(runErr, model.releaseDrafts())
+	}()
+	model.loadTheme(filepath.Dir(config.DefaultPath()), lipgloss.HasDarkBackground)
 	model.keys = &keyLog{}
+	model.bar.file = model.terminalConfigPath()
+	model.bar.config = loadStatuslineConfig(model.bar.file)
+	model.bar.restoreFields(model.bar.config.Fields)
+	if err := sweepDraftsAtStart(); err != nil {
+		model.flash = "brouillons orphelins non supprimés : " + err.Error()
+	}
 	for _, opt := range opts {
 		opt(model)
 	}
@@ -1161,6 +1409,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	program := tea.NewProgram(model,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
+		tea.WithReportFocus(),
 		tea.WithInput(newFilteredStdin(model.keys)),
 	)
 	go func() {
@@ -1176,7 +1425,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 			}
 		}
 	}()
-	_, runErr := program.Run()
+	_, runErr = program.Run()
 	cancel()
 	if err := writeStdout(enhancedKeysOff); err != nil {
 		return errors.Join(runErr, fmt.Errorf("disable enhanced keys: %w", err))
@@ -1185,7 +1434,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, tickCmd(), enableEnhancedKeys)
+	return tea.Batch(textarea.Blink, tickCmd(), themeWatchTick(), enableEnhancedKeys, m.armStatusline(), fontProbeCmd())
 }
 
 func (m *model) ensureSpin() tea.Cmd {
@@ -1197,6 +1446,14 @@ func (m *model) ensureSpin() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	model, cmd := m.dispatch(msg)
+	m.syncComposer()
+	m.resizeComposer()
+	m.applySize()
+	return model, cmd
+}
+
+func (m *model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if handled := m.handlePluginsMsg(msg); handled {
 		return m, nil
 	}
@@ -1212,31 +1469,106 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) relayout() {
+	m.syncComposer()
+	m.resizeComposer()
 	m.applySize()
 	m.syncViewport()
 }
 
 func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
+	if cmd, handled := m.handleDiffMsg(msg); handled {
+		return cmd, true
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.handleWindowSize(msg)
 	case eventMsg:
 		cmd := m.route(RoutedEvent(msg))
 		return tea.Batch(cmd, m.ensureSpin()), true
+	case tea.MouseMsg:
+		if m.handlePaneClick(msg) {
+			return nil, true
+		}
+		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft && m.clickTranscript(msg) {
+			return nil, true
+		}
+		if cmd, handled := m.handleModeClick(msg); handled {
+			return cmd, true
+		}
+		if m.handleQueueClick(msg) {
+			return nil, true
+		}
 	case imageReadyMsg:
 		m.applyImage(msg)
+		return nil, true
+	case themeWatchMsg:
+		m.watchThemes()
+		return themeWatchTick(), true
+	case themeEditedMsg:
+		m.handleThemeEdited(msg)
 		return nil, true
 	case enhancedKeysFailedMsg:
 		m.flash = "touches étendues indisponibles : " + msg.err.Error()
 		return nil, true
 	case dispatchResultMsg:
-		m.handleDispatchResult(msg)
+		return m.handleDispatchResult(msg), true
+	case modeResultMsg:
+		return m.handleModeResult(msg), true
+	case modeLoadedMsg:
+		m.handleModeLoaded(msg)
+		return nil, true
+	case shellResultMsg:
+		m.handleShellResult(msg)
+		return nil, true
+	case signalFailedMsg:
+		m.flash = "notification impossible : " + msg.err.Error()
+		return nil, true
+	case editorDoneMsg:
+		m.applyEditorResult(msg)
+		return nil, true
+	case draftBeatFailedMsg:
+		m.queueBeatFlash(msg.err)
+		return m.watchDraftBeat(), true
+	case compactResultMsg:
+		m.handleCompactResult(msg)
+		return nil, true
+	case toastExpiredMsg:
+		m.handleToastExpired(msg)
+		return nil, true
+	case toastTickMsg:
+		return m.handleToastTick(msg), true
+	case tea.FocusMsg:
+		m.handleFocus(true)
+		return nil, true
+	case tea.BlurMsg:
+		m.handleFocus(false)
+		return nil, true
+	case rewindDoneMsg:
+		m.handleRewindDone(msg)
+		return nil, true
+	case forkDoneMsg:
+		m.handleForkDone(msg)
 		return nil, true
 	case tickMsg:
-		m.syncTabs()
-		return tickCmd(), true
+		syncCmd := m.syncTabs()
+		m.expireApprovals(time.Now())
+		m.markVisibleSeen()
+		m.refreshSurface()
+		return tea.Batch(syncCmd, tickCmd(), m.gitTick(), m.loadModesCmd(), m.summaryRefresh()), true
+	case summaryMsg:
+		m.summaryBusy = false
+		m.summary = panelSummary(msg)
+		return nil, true
 	case spinMsg:
 		return m.handleSpin(), true
+	case fontProbeMsg:
+		m.obelFont = msg.presence
+		return nil, true
+	case scriptTickMsg:
+		return m.handleScriptTick(), true
+	case scriptDoneMsg:
+		m.receiveScript(msg)
+		return nil, true
 	}
 	return nil, false
 }
@@ -1254,14 +1586,14 @@ func (m *model) handleWindowSize(msg tea.WindowSizeMsg) {
 	m.syncViewport()
 }
 
-func (m *model) handleDispatchResult(msg dispatchResultMsg) {
-	m.syncTabs()
+func (m *model) handleDispatchResult(msg dispatchResultMsg) tea.Cmd {
+	cmd := m.syncTabs()
 	line, role := msg.out, roleNotice
 	if msg.err != nil {
 		line, role = msg.err.Error(), roleError
 	}
 	if line == "" {
-		return
+		return cmd
 	}
 	tab := m.tabs[msg.origin]
 	if tab == nil {
@@ -1269,10 +1601,11 @@ func (m *model) handleDispatchResult(msg dispatchResultMsg) {
 	}
 	if tab == nil {
 		m.flash = line
-		return
+		return cmd
 	}
 	tab.appendEntry(entry{role: role, text: line})
 	m.syncViewport()
+	return cmd
 }
 
 func (m *model) handleSpin() tea.Cmd {
@@ -1306,23 +1639,60 @@ func (m *model) updateComponents(msg tea.Msg) tea.Cmd {
 func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	m.keys.write("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
 	m.flash = ""
+	cmd, handled := m.dispatchKey(msg)
+	if m.flash == "" {
+		m.flash = m.takePendingBeatFlash()
+	}
+	return cmd, handled
+}
+
+func (m *model) dispatchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if msg.Type == tea.KeyCtrlP && m.toast.title != "" {
+		m.jumpToToast()
+		return nil, true
+	}
 	switch {
+	case m.diff.open:
+		return m.handleDiffKey(msg), true
 	case m.pendingClose:
 		return m.handlePendingClose(msg), true
-	case m.choice != nil:
-		return m.handleChoiceKey(msg), true
+	case m.planMenu != nil:
+		return m.handlePlanKey(msg), true
+	case m.surface == surfaceBoard:
+		return m.handleBoardKey(msg), true
 	case m.switchOpen:
 		return m.handleSwitchKey(msg), true
 	case m.searchOpen:
 		return m.handleSearchKey(msg), true
 	case m.diagOpen:
 		return m.handleDiagKey(msg), true
+	case m.ctxOpen:
+		return m.handleContextKey(msg), true
 	case m.pluginsOpen:
 		return m.handlePluginsOverlayKey(msg), true
 	case m.skillsOpen:
 		return m.handleSkillsKey(msg), true
 	case m.resumeOpen:
 		return m.handleResumeKey(msg), true
+	case m.themeScr != nil:
+		return m.handleThemeKey(msg), true
+	case m.bar.open:
+		return m.handleStatuslineKey(msg), true
+	case m.histOpen:
+		return m.handleHistSearchKey(msg), true
+	case m.rwOpen:
+		return m.handleRewindKey(msg), true
+	}
+	if cmd, handled := m.handleLeader(msg); handled {
+		return cmd, true
+	}
+	if cmd, handled := m.handleApprovalKey(msg); handled {
+		return cmd, true
+	}
+	if m.surface == surfacePanes {
+		if cmd, handled := m.handlePanesKey(msg); handled {
+			return cmd, true
+		}
 	}
 	if cmd, handled := m.handlePaletteKey(msg); handled {
 		return cmd, true
@@ -1350,23 +1720,6 @@ func (m *model) handlePendingClose(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *model) handleChoiceKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.Type {
-	case tea.KeyUp:
-		m.moveChoice(-1)
-	case tea.KeyDown:
-		m.moveChoice(1)
-	case tea.KeyEsc:
-		m.choiceIdx = len(m.choice.Options) - 1
-		m.chooseChoice()
-	case tea.KeyEnter:
-		m.chooseChoice()
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC()
-	}
-	return nil
-}
-
 func (m *model) handleSwitchKey(msg tea.KeyMsg) tea.Cmd {
 	if m.overlayNav(msg, m.moveSwitch) {
 		return nil
@@ -1390,7 +1743,7 @@ func (m *model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.Type {
 	case tea.KeyCtrlC:
 		return m.overlayCtrlC()
-	case tea.KeyEsc, tea.KeyCtrlS:
+	case tea.KeyEsc, tea.KeyCtrlF:
 		m.closeSearch()
 	case tea.KeyEnter, tea.KeyCtrlN:
 		m.searchStep(1)
@@ -1445,6 +1798,12 @@ func (m *model) handleResumeKey(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 	switch msg.Type {
+	case tea.KeyBackspace:
+		m.eraseResume()
+	case tea.KeySpace:
+		m.typeResume(" ")
+	case tea.KeyRunes:
+		m.typeResume(string(msg.Runes))
 	case tea.KeyEsc:
 		m.resumeOpen = false
 		m.relayout()
@@ -1506,64 +1865,108 @@ func (m *model) handleMentionKey(msg tea.KeyMsg) bool {
 }
 
 func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if m.handleQueueFocus(msg) {
+		return nil, true
+	}
+
 	switch msg.Type {
-	case tea.KeyEsc:
-		if tb := m.tabs[m.active]; tb != nil && tb.busy {
-			if name := m.sessionName(m.active); name != "" {
-				m.tm.Interrupt(name)
-			}
-			return nil, true
+	case tea.KeyF12:
+		if msg.Alt {
+			return m.sendQueueNow(), true
 		}
-		return tea.Quit, true
+		return nil, false
+	case tea.KeyEsc:
+		m.escapeKey()
+		return nil, true
 	case tea.KeyCtrlC:
 		return m.interruptOrQuit()
 	case tea.KeyTab:
 		m.switchTab(1)
 	case tea.KeyShiftTab:
-		m.switchTab(-1)
+		return m.cycleMode(), true
+	case tea.KeyCtrlB:
+		m.toggleSidebar()
+		return nil, true
 	case tea.KeyEnter:
-		if msg.Alt {
-			return nil, false
-		}
-		if m.continueLine() {
-			return nil, true
-		}
-		return tea.Batch(m.handleEnter(), m.ensureSpin()), true
+		return m.enterKey(msg)
 	case tea.KeyCtrlS:
-		m.openSearch()
-	case tea.KeyCtrlT:
-		m.toggleTurnFold()
+		m.stashDraft()
 	case tea.KeyCtrlF:
-		m.toggleFold()
+		m.openSearch()
+	case tea.KeyCtrlR:
+		m.openHistSearch()
+	case tea.KeyCtrlT:
+		m.openSwitch()
 	case tea.KeyCtrlY:
 		m.copyLastCode()
+	case tea.KeyCtrlD:
+		return m.openDiff(false), true
 	case tea.KeyCtrlG:
 		return m.toggleMouse(), true
 	case tea.KeyCtrlL:
 		m.selectNextLink()
 	case tea.KeyCtrlO:
-		m.openSelectedLink()
+		m.openOrFold()
 	case tea.KeyCtrlV:
 		return nil, m.pasteImage()
 	case tea.KeyCtrlU:
-		if !m.removeLastPending() {
-			return nil, false
-		}
-		m.relayout()
+		return m.removePendingKey()
 	case tea.KeyUp:
-		return m.handleHistoryKey(msg, -1)
+		return m.upKey(msg)
 	case tea.KeyDown:
 		return m.handleHistoryKey(msg, 1)
+	case tea.KeyCtrlP:
+		return m.openBoard(), true
 	case tea.KeyCtrlW:
-		if m.input.Value() != "" {
-			return nil, false
-		}
-		m.pendingClose = true
+		return m.closeTabKey()
 	case tea.KeyRunes:
 		return m.handleRunesKey(msg)
 	default:
 		return nil, false
 	}
+	return nil, true
+}
+
+func (m *model) escapeKey() {
+	if tb := m.tabs[m.active]; tb != nil && tb.busy {
+		if name := m.sessionName(m.active); name != "" {
+			m.tm.Interrupt(name)
+		}
+		return
+	}
+	m.escapeIdle()
+}
+
+func (m *model) enterKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if msg.Alt {
+		return nil, m.enqueueWhileBusy(true)
+	}
+	if m.continueLine() || m.enqueueWhileBusy(false) {
+		return nil, true
+	}
+	return tea.Batch(m.handleEnter(), m.ensureSpin()), true
+}
+
+func (m *model) removePendingKey() (tea.Cmd, bool) {
+	if !m.removeLastPending() {
+		return nil, false
+	}
+	m.relayout()
+	return nil, true
+}
+
+func (m *model) upKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if !msg.Alt && m.focusQueueStart() {
+		return nil, true
+	}
+	return m.handleHistoryKey(msg, -1)
+}
+
+func (m *model) closeTabKey() (tea.Cmd, bool) {
+	if m.input.Value() != "" {
+		return nil, false
+	}
+	m.pendingClose = true
 	return nil, true
 }
 
@@ -1611,8 +2014,19 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.toggleHelp()
 		return nil, true
 	}
+	if msg.String() == "n" && m.input.Value() == "" && m.toast.title != "" {
+		return m.cycleNotify(), true
+	}
 	if msg.Alt && strings.EqualFold(string(msg.Runes), "y") {
 		m.copyTarget(copyReply)
+		return nil, true
+	}
+	if msg.Alt && strings.EqualFold(string(msg.Runes), "c") {
+		m.toggleFold()
+		return nil, true
+	}
+	if msg.Alt && strings.EqualFold(string(msg.Runes), "t") {
+		m.toggleTurnFold()
 		return nil, true
 	}
 	if msg.Alt && strings.EqualFold(string(msg.Runes), "e") {
@@ -1623,12 +2037,130 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 }
 
 func (m *model) helpView() string {
-	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
+	help := "⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l’ouvrir · alt+c replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · alt+t replier les tours · ctrl+f chercher · ctrl+s brouillon de côté · ctrl+r historique · ctrl+t sessions · ctrl+x ctrl+e éditeur · ⌥⏎ réoriente · ⌃⏎ envoie la file · ↑ puis suppr retire · alt+↑↓ tour suivant · / commandes · @ fichiers · ! commande shell"
+	if m.width > 0 {
+		help = foldText(help, m.width)
+	}
+	return m.st.dim.Render(help)
 }
 
 func (m *model) View() string {
 	if !m.ready {
 		return "démarrage…"
 	}
-	return m.buildFrame().render(m.vp.View())
+	if m.diff.open {
+		return m.diffScreen()
+	}
+	if m.themeScr != nil {
+		return m.themeScreenView()
+	}
+	if m.surface != surfaceChat {
+		return m.surfaceScreen()
+	}
+	body := ""
+	if m.vp.Height > 0 {
+		body = m.vp.View()
+	}
+	if side := m.sidebarPane(m.vp.Height); side != nil {
+		body = m.joinSidebar(body, side)
+	}
+	return m.overlayToast(m.st.finish(m.buildFrame().render(body)))
+}
+
+func (tb *tab) recordTrail(sub contracts.Subagent) {
+	now := time.Now()
+	for index := range tb.trail {
+		if tb.trail[index].ID == sub.ID {
+			tb.trail[index].Subagent = sub
+			if isTerminalAgent(sub.State) && tb.trail[index].ended.IsZero() {
+				tb.trail[index].ended = now
+			}
+			return
+		}
+	}
+	tb.trail = append(tb.trail, liveAgent{Subagent: sub, since: now})
+}
+
+func isTerminalAgent(state string) bool {
+	return state == stateDone || state == stateFailed || state == stateTimeout
+}
+
+func foldableEntry(item entry) bool {
+	switch item.role {
+	case roleThinking:
+		return item.text != ""
+	case roleTool:
+		return strings.Contains(item.text, "\n")
+	}
+	return false
+}
+
+func (m *model) openOrFold() {
+	if _, ok := m.selectedLink(); ok {
+		m.openSelectedLink()
+		return
+	}
+	tab := m.tabs[m.active]
+	if tab == nil {
+		return
+	}
+	for index := len(tab.entries) - 1; index >= 0; index-- {
+		if foldableEntry(tab.entries[index]) {
+			m.toggleEntryFold(tab, tab.entries[index].id)
+			return
+		}
+	}
+	m.flash = "rien à replier dans ce tour"
+}
+
+func (m *model) toggleEntryFold(tab *tab, entryID uint64) {
+	if tab.flips == nil {
+		tab.flips = make(map[uint64]bool)
+	}
+	tab.flips[entryID] = !tab.flips[entryID]
+	m.tsCache.valid = false
+	m.syncViewport()
+}
+
+func (m *model) frameTop() int {
+	top := 0
+	for _, line := range m.buildFrame().above {
+		top += strings.Count(line, "\n") + 1
+	}
+	return top
+}
+
+func (m *model) clickTranscript(msg tea.MouseMsg) bool {
+	tab := m.tabs[m.active]
+	if tab == nil || m.foldTurnsOn {
+		return false
+	}
+	row := msg.Y - m.frameTop() + m.vp.YOffset
+	if row < 0 || row >= len(m.tsLayout.owners) {
+		return false
+	}
+	owner := m.tsLayout.owners[row]
+	for index := range tab.entries {
+		if tab.entries[index].id == owner && owner != 0 && foldableEntry(tab.entries[index]) {
+			m.toggleEntryFold(tab, owner)
+			return true
+		}
+	}
+	return false
+}
+
+func (m *model) busyRow(tab *tab) string {
+	elapsedText := ""
+	if !tab.startedAt.IsZero() {
+		elapsedText = elapsed(time.Since(tab.startedAt))
+	}
+	tokens := ""
+	if tab.tokens > 0 {
+		tokens = formatTokens(tab.tokens)
+	}
+	cost := ""
+	if tab.costTotal > 0 {
+		cost = formatCost(tab.costTotal)
+	}
+	return busyLine(m.vp.Width, m.st, m.spinFrame(), elapsedText, tokens, cost)
 }

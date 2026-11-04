@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,14 +19,17 @@ import (
 
 const approvalsFile = "APPROVALS"
 
+var errScopeConflict = errors.New("--session and --always are two scopes: pick one")
+
 func addApproveCommands(reg *cli.Registry, hostState *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
 	return addVerbs(reg,
 		approveListVerb(approvals),
-		approveAllowVerb(approvals),
-		approveDenyVerb(approvals),
+		approveAllowVerb(approvals, sessions),
+		approveDenyVerb(approvals, sessions),
 		approveRuleVerb(hostState),
 		approveAskVerb(hostState, agents, approvals, sessions),
 		approveModeVerb(hostState),
+		sessionShellVerb(hostState, agents, approvals, sessions),
 	)
 }
 
@@ -59,23 +63,57 @@ func listApprovals(approvals *approvalTable, asJSON bool) (string, error) {
 	return strings.TrimRight(body.String(), "\n"), nil
 }
 
-func approveAllowVerb(approvals *approvalTable) contracts.Cmd {
+func approveAllowVerb(approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "allow").
-		Help("let a waiting action run").
+		Help("let a waiting action run; --session keeps it for this session, --always writes a rule for it").
 		ValueParam("id", "request id; also takes a bare argument", false).
+		Param(paramSession, "let the same action run for the rest of the session", false).
+		Param("always", "write a rule that lets this exact action run from now on", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			approvalID := firstOf(in.Get("id"), in.Rest)
-			if approvalID == "" {
-				return "", errRequestNameMissing
+			approvalID, scope, err := allowOperands(in)
+			if err != nil {
+				return "", err
 			}
-			if !answerApproval(approvals, approvalID, approval.Allow, "") {
+			if !settleApproval(approvals, sessions, approvalID, approvalAnswer{scope: scope}) {
 				return "", &requestNotWaitingError{ID: approvalID}
 			}
 			return "allowed " + approvalID, nil
 		})
 }
 
-func approveDenyVerb(approvals *approvalTable) contracts.Cmd {
+func allowOperands(input contracts.Input) (string, approvalScope, error) {
+	operands := append([]string{}, input.Rest...)
+	if id := input.Get("id"); id != "" {
+		operands = append([]string{id}, operands...)
+	}
+	var scopes []approvalScope
+	for _, flag := range []struct {
+		name  string
+		scope approvalScope
+	}{{paramSession, scopeSession}, {"always", scopeAlways}} {
+		value := input.Get(flag.name)
+		if value == "" {
+			continue
+		}
+		scopes = append(scopes, flag.scope)
+		if value != "true" {
+			operands = append(operands, value)
+		}
+	}
+	if len(scopes) > 1 {
+		return "", 0, errScopeConflict
+	}
+	if len(operands) == 0 {
+		return "", 0, errRequestNameMissing
+	}
+	scope := scopeOnce
+	if len(scopes) == 1 {
+		scope = scopes[0]
+	}
+	return operands[0], scope, nil
+}
+
+func approveDenyVerb(approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "deny").
 		Help("refuse a waiting action; the reason is what the agent reads").
 		ValueParam("id", "request id; also takes a bare argument", false).
@@ -85,11 +123,8 @@ func approveDenyVerb(approvals *approvalTable) contracts.Cmd {
 			if approvalID == "" {
 				return "", errRequestNameMissing
 			}
-			reason := strings.TrimSpace(input.Get("reason"))
-			if reason != "" {
-				reason = "herrscher: the operator refused: " + reason
-			}
-			if !answerApproval(approvals, approvalID, approval.Deny, reason) {
+			answer := approvalAnswer{scope: scopeDeny, reason: operatorRefusal(input.Get("reason"))}
+			if !settleApproval(approvals, sessions, approvalID, answer) {
 				return "", &requestNotWaitingError{ID: approvalID}
 			}
 			return "denied " + approvalID, nil
@@ -171,16 +206,16 @@ func approveAskVerb(store *state.State, agents *agent.Store, approvals *approval
 			payload, err := json.Marshal(struct {
 				Decision string `json:"decision"`
 				Reason   string `json:"reason,omitempty"`
-			}{Decision: string(decision), Reason: reason})
+			}{Decision: decision.String(), Reason: reason})
 			return string(payload), err
 		})
 }
 
 func approveModeVerb(store *state.State) contracts.Cmd {
 	return contracts.New(nsApprove, "mode").
-		Help("set a session's stance: ask (default), bypass, or strict").
+		Help("set a session's stance: ask (default), accept-edits, plan, auto, bypass, strict, or smart (a model rates each call)").
 		ValueParam(paramSession, "session name; also takes a bare argument", false).
-		ValueParam("mode", "ask | bypass | strict; also takes a second bare argument", false).
+		ValueParam("mode", "ask | accept-edits | plan | auto | bypass | strict | smart; also takes a second bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			return setApprovalMode(store, in)
 		})
@@ -192,15 +227,17 @@ func setApprovalMode(store *state.State, in contracts.Input) (string, error) {
 	if name == "" || mode == "" {
 		return "", errApproveModeUsage
 	}
-	switch approval.Mode(mode) {
-	case approval.ModeAsk, approval.ModeBypass, approval.ModeStrict:
-	default:
+	parsed, ok := approval.ParseMode(mode)
+	if !ok {
 		return "", &unknownModeError{Mode: mode}
 	}
 	if err := store.SetSessionApprovals(name, mode); err != nil {
 		return "", err
 	}
-	if mode != string(approval.ModeBypass) {
+	if parsed == approval.ModeSmart && !riskModelConfigured() {
+		return fmt.Sprintf("%s is now %s, but no LLM backend is configured to rate the calls: until one is, smart decides as ask does, so a call no rule names runs unasked", name, mode), nil
+	}
+	if mode != approval.ModeBypass.String() {
 		return fmt.Sprintf("%s is now %s (a session created with --approvals bypass has no hook: recreate it for this to bite)", name, mode), nil
 	}
 	return fmt.Sprintf("%s is now %s", name, mode), nil
@@ -269,7 +306,7 @@ func sessionPolicy(hostState *state.State, agents *agent.Store, session string) 
 	for idx := range sessions {
 		entry := sessions[idx]
 		if entry.Name == session {
-			mode = approval.Mode(entry.Approvals)
+			mode, _ = approval.ParseMode(entry.Approvals)
 			if agents != nil && entry.Agent != "" {
 				if a, ok := agents.Get(entry.Agent); ok {
 					home = a.Home

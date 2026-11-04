@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -12,20 +13,53 @@ type CommandSpec struct {
 	Name string
 	Args string
 	Desc string
+	PR   string
+}
+
+const (
+	flagSeparator = " --"
+	cmdSkills     = "skills"
+	cmdTheme      = "theme"
+	cmdQueue      = "queue"
+	cmdPlan       = "plan"
+)
+
+func commandQuery(query string) string {
+	if at := strings.Index(query, flagSeparator); at >= 0 {
+		query = query[:at]
+	}
+	return strings.TrimSpace(strings.ToLower(query))
 }
 
 func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
-	query = strings.TrimSpace(strings.ToLower(query))
+	query = commandQuery(query)
 	if query == "" {
 		return cmds
 	}
-	var out []CommandSpec
+	type scored struct {
+		cmd   CommandSpec
+		score int
+	}
+	var found []scored
 	for _, cmd := range cmds {
-		name := strings.ToLower(cmd.Name)
-		if strings.Contains(name, query) || strings.HasPrefix(query, name+" ") {
-			out = append(out, cmd)
+		if hit, ok := fuzzyMatch(query, cmd.Name); ok {
+			found = append(found, scored{cmd: cmd, score: hit.score})
 		}
 	}
+	sort.SliceStable(found, func(i, j int) bool { return found[i].score > found[j].score })
+	out := make([]CommandSpec, 0, len(found))
+	for _, f := range found {
+		out = append(out, f.cmd)
+	}
+	return out
+}
+
+func shiftPositions(positions []int, offset int) []int {
+	out := make([]int, len(positions))
+	for index, position := range positions {
+		out[index] = position + offset
+	}
+
 	return out
 }
 
@@ -140,14 +174,21 @@ func localCommands() []CommandSpec {
 		{Name: "clear", Desc: "clear this tab's transcript"},
 		{Name: "session switch", Desc: "switch between live sessions"},
 		{Name: "resume", Desc: "reopen an archived session"},
+		{Name: "agents", Desc: "voir toutes les sessions par état"},
 		{Name: verbRename, Args: "<nom>", Desc: "rename this session"},
 		{Name: "usage", Desc: "cost, tokens and context for this session"},
-		{Name: "skills", Desc: "list available skills"},
+		{Name: "context", Desc: "ce qui occupe le contexte : système, outils, mémoire, skills, fichiers lus, conversation"},
+		{Name: "notify", Desc: "alterner les notifications : fin de tour, approbation, ou les deux"},
+		{Name: cmdSkills, Desc: "list available skills"},
+		{Name: cmdTheme, Desc: "pick the colour theme and the render options"},
 		{Name: "capabilities", Desc: "what this terminal can render, and what it falls back to"},
 		{Name: "plugins", Desc: "the plugins this binary is made of"},
 		{Name: "attach", Args: "<path>", Desc: "stage a local file with the next message"},
 		{Name: "copy", Args: "[reply|turn|all]", Desc: "put the last answer (or the turn, or everything) on the clipboard"},
+		{Name: "review", Desc: "revue guidée des fichiers du tour : relus, consignes, commit et PR"},
 		{Name: "mouse", Desc: "hand the mouse to the terminal so its own selection works (ctrl+g)"},
+		{Name: "statusline", Desc: "configure the status bar: fields, their order, or a script that draws it"},
+		{Name: cmdQueue, Desc: "voir la file de messages", PR: "PR 2"},
 	}
 }
 
@@ -174,7 +215,11 @@ func (m *model) paletteView() string {
 		if cmd.Args != "" {
 			label += " " + cmd.Args
 		}
-		rows = append(rows, overlayRow{label: label, detail: cmd.Desc})
+		row := overlayRow{label: label, detail: cmd.Desc, tag: cmd.PR}
+		if hit, ok := fuzzyMatch(commandQuery(m.input.Value()[1:]), cmd.Name); ok {
+			row.hot = shiftPositions(hit.positions, len("/"))
+		}
+		rows = append(rows, row)
 	}
 	footer := ""
 	if len(filtered) > visible {

@@ -6,30 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const ruleChar = "─"
-
 const titleGap = " "
-
-func rule(style lipgloss.Style, width int) string {
-	if width < 1 {
-		return ""
-	}
-	return style.Render(strings.Repeat(ruleChar, width))
-}
-
-func titledRule(style lipgloss.Style, title string, width int) string {
-	if width < 1 {
-		return ""
-	}
-	lead := ruleChar + titleGap
-	tail := titleGap
-	spent := lipgloss.Width(lead) + lipgloss.Width(title) + lipgloss.Width(tail)
-	if spent >= width {
-		return rule(style, width)
-	}
-	return style.Render(lead) + style.Bold(true).Render(title) +
-		style.Render(tail+strings.Repeat(ruleChar, width-spent))
-}
 
 const blockIndent = "   "
 
@@ -41,25 +18,23 @@ func indent(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-const gaugeWidth = 10
+const gaugeWidth = 16
 
-const (
-	gaugeFull  = "█"
-	gaugeEmpty = "░"
-)
+func gauge(ratio float64, style, empty lipgloss.Style, glyphs glyphSet) string {
+	return empty.Render("[") + barGauge(ratio, gaugeWidth, style, empty, glyphs) + empty.Render("]")
+}
 
-func gauge(ratio float64, style, empty lipgloss.Style) string {
+func barGauge(ratio float64, cells int, style, empty lipgloss.Style, glyphs glyphSet) string {
 	if ratio < 0 {
 		ratio = 0
 	}
 	if ratio > 1 {
 		ratio = 1
 	}
-	filled := int(ratio * gaugeWidth)
+	filled := int(ratio * float64(cells))
 	if filled == 0 && ratio > 0 {
 		filled = 1
 	}
-	return empty.Render("[") +
-		style.Render(strings.Repeat(gaugeFull, filled)) +
-		empty.Render(strings.Repeat(gaugeEmpty, gaugeWidth-filled)+"]")
+	return style.Render(strings.Repeat(glyphs.gaugeFull, filled)) +
+		empty.Render(strings.Repeat(glyphs.gaugeEmpty, cells-filled))
 }

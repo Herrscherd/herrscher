@@ -197,18 +197,12 @@ func (m *model) searchView() string {
 		m.st.dim.Render("  "+pos+"  ctrl+n/ctrl+p · échap")
 }
 
-func turnBoundaries(lines []string) []int {
-	var out []int
-	for index, ln := range lines {
-		if strings.Contains(ln, glyphCursor) || strings.Contains(ln, agentTitle) {
-			out = append(out, index)
-		}
-	}
-	return out
-}
-
 func (m *model) jumpTurn(delta int) {
-	bounds := turnBoundaries(m.transcriptLines())
+	tab := m.tabs[m.active]
+	if tab == nil {
+		return
+	}
+	bounds := m.layoutTranscript(tab, m.vp.Width).turns
 	if len(bounds) == 0 {
 		return
 	}
@@ -232,11 +226,10 @@ func (m *model) jumpTurn(delta int) {
 	m.vp.SetYOffset(bounds[0])
 }
 
-func foldTurns(lines []string, keep int, styles uiStyles) []string {
+func foldTurns(lines []string, bounds []int, keep int, styles uiStyles) []string {
 	if keep < 1 {
 		keep = 1
 	}
-	bounds := turnBoundaries(lines)
 	if len(bounds) <= keep {
 		return lines
 	}
@@ -257,7 +250,7 @@ func foldTurns(lines []string, keep int, styles uiStyles) []string {
 }
 
 func foldedTurnLine(head string, lines int, st uiStyles) string {
-	return truncate(head, foldedHeadWidth) + st.dim.Render(fmt.Sprintf(" %s %d lines", glyphFold, lines))
+	return truncate(head, foldedHeadWidth) + st.dim.Render(fmt.Sprintf(" %s %d lines", st.glyphs.fold, lines))
 }
 
 const turnFoldKeep = 2

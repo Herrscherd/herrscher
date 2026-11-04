@@ -16,7 +16,7 @@ func sizedTestModel(t *testing.T, width int) *model {
 }
 
 func TestBoxRunesFallBackToAscii(t *testing.T) {
-	g := boxRunes(false)
+	g := testStyles().boxes(false)
 	for _, got := range []string{g.tl, g.tr, g.bl, g.br} {
 		if got != "+" {
 			t.Fatalf("corner = %q, want +", got)
@@ -28,7 +28,7 @@ func TestBoxRunesFallBackToAscii(t *testing.T) {
 }
 
 func TestBoxRunesUseRoundedWhenSupported(t *testing.T) {
-	g := boxRunes(true)
+	g := testStyles().boxes(true)
 	if g.tl != "╭" || g.br != "╯" || g.h != "─" || g.v != "│" {
 		t.Fatalf("rounded runes wrong: %q %q %q %q", g.tl, g.br, g.h, g.v)
 	}

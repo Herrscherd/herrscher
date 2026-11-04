@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -10,82 +11,177 @@ import (
 const codeFence = "```"
 
 const (
-	diffAdd     = "add"
-	diffDel     = "del"
-	diffMeta    = "meta"
-	diffContext = "context"
-)
-
-func diffClass(line string, inHunk bool) string {
-	switch {
-	case strings.HasPrefix(line, "@@"):
-		return diffMeta
-	case !inHunk && isDiffHeader(line):
-		return diffMeta
-	case !inHunk:
-		return diffContext
-	case strings.HasPrefix(line, "+"):
-		return diffAdd
-	case strings.HasPrefix(line, "-"):
-		return diffDel
-	}
-	return diffContext
-}
-
-func isDiffHeader(line string) bool {
-	return strings.HasPrefix(line, "@@") || strings.HasPrefix(line, "+++") ||
-		strings.HasPrefix(line, "---") || strings.HasPrefix(line, "diff ") ||
-		strings.HasPrefix(line, "index ")
-}
-
-const (
 	ansiGreen = "\x1b[32m"
 	ansiRed   = "\x1b[31m"
 )
 
-const diffHunkBudget = 4
+const (
+	diffHunkBudget     = 4
+	diffNumberWidth    = 5
+	diffTwoColumnsFrom = 70
+	diffTabSpaces      = "  "
+	diffMore           = "lignes de plus (alt+e)"
+)
 
-func renderDiff(body string, width int, view view) string {
-	lines := strings.Split(body, "\n")
-	out := make([]string, 0, len(lines)+1)
-	inHunk := len(lines) > 0 && !isDiffHeader(lines[0])
-	spent := 0
-	for lineIndex, diffLine := range lines {
-		if !inHunk && !isDiffHeader(diffLine) {
-			inHunk = true
-		}
-		class := diffClass(diffLine, inHunk)
-		if class != diffMeta {
-			if !view.expand && spent == diffHunkBudget {
-				out = append(out, resultLine(fmt.Sprintf("%s %d lignes de plus (alt+e)", glyphFold, len(lines)-lineIndex), view.st.dim))
-				break
-			}
-			spent++
-		}
-		out = append(out, paintDiff(truncate(diffLine, width), class, view.caps, view.st))
-	}
-	return strings.Join(out, "\n")
+func renderDiff(body string, width int, display view) string {
+	return strings.Join(diffRows(strings.Split(body, "\n"), width, display), "\n")
 }
 
-func paintDiff(line, class string, caps Capabilities, styles uiStyles) string {
-	if caps.Colour == Colour16 {
-		switch class {
-		case diffAdd:
-			return ansiGreen + line + ansiReset
-		case diffDel:
-			return ansiRed + line + ansiReset
+func diffRows(lines []string, width int, display view) []string {
+	out := make([]string, 0, len(lines))
+	oldNo, newNo := 1, 1
+	spent := 0
+	for index, line := range lines {
+		if strings.HasPrefix(line, "@@") {
+			oldNo, newNo = hunkStart(line)
+			out = append(out, diffHunk(line, width, display))
+			continue
 		}
-		return line
+		if isFileHeader(line) {
+			continue
+		}
+		if !display.expand && spent == diffHunkBudget {
+			out = append(out, display.st.dim.Render(fmt.Sprintf("%s %d %s", display.st.glyphs.fold, countDiffRows(lines[index:]), diffMore)))
+			break
+		}
+		sign, code := diffSign(line)
+		oldCell, newCell := "", ""
+		switch sign {
+		case "+":
+			newCell = strconv.Itoa(newNo)
+			newNo++
+		case "-":
+			oldCell = strconv.Itoa(oldNo)
+			oldNo++
+		default:
+			oldCell, newCell = strconv.Itoa(oldNo), strconv.Itoa(newNo)
+			oldNo++
+			newNo++
+		}
+		out = append(out, diffRow(sign, diffNumbers(oldCell, newCell, width), code, width, display))
+		spent++
 	}
-	switch class {
-	case diffAdd:
-		return styles.green.Render(line)
-	case diffDel:
-		return styles.red.Render(line)
-	case diffMeta:
-		return styles.dim.Render(line)
+	return out
+}
+
+func diffNumbers(oldCell, newCell string, width int) string {
+	if width < diffTwoColumnsFrom {
+		if newCell != "" {
+			return padLeftCells(newCell)
+		}
+		return padLeftCells(oldCell)
 	}
-	return styles.text.Render(line)
+	return padLeftCells(oldCell) + padLeftCells(newCell)
+}
+
+func padLeftCells(s string) string {
+	return strings.Repeat(" ", max(0, diffNumberWidth-lipgloss.Width(s))) + s
+}
+
+func diffRow(sign, numbers, code string, width int, display view) string {
+	gutter := "│" + numbers + " "
+	body := truncate(sign+" "+strings.ReplaceAll(code, "\t", diffTabSpaces), max(1, width-lipgloss.Width(gutter)))
+	switch {
+	case display.caps.Colour == Colour16:
+		return paintColour16(sign, gutter+body, width)
+	case sign == "+":
+		return display.st.addRow.Render(padCells(gutter+body, width))
+	case sign == "-":
+		return display.st.delRow.Render(padCells(gutter+body, width))
+	}
+	return display.st.dim.Render(gutter) + display.st.text.Render(body)
+}
+
+func paintColour16(sign, line string, width int) string {
+	switch sign {
+	case "+":
+		return ansiGreen + padCells(line, width) + ansiReset
+	case "-":
+		return ansiRed + padCells(line, width) + ansiReset
+	}
+	return line
+}
+
+func diffHunk(line string, width int, display view) string {
+	code := ""
+	if _, after, found := strings.Cut(strings.TrimPrefix(line, "@@"), "@@"); found {
+		code = strings.TrimSpace(after)
+	}
+	gutter := "│" + diffNumbers(display.st.glyphs.omitted, display.st.glyphs.omitted, width) + " "
+	text := truncate("@@ "+code, max(1, width-lipgloss.Width(gutter)))
+	return display.st.dim.Render(gutter) + display.st.violet.Render(text)
+}
+
+func diffHeader(path string, body []string, display view) string {
+	added, removed := 0, 0
+	for _, line := range body {
+		sign, _ := diffSign(line)
+		switch {
+		case sign == "+" && !isFileHeader(line):
+			added++
+		case sign == "-" && !isFileHeader(line):
+			removed++
+		}
+	}
+	return display.st.dim.Render("╭ ") + display.st.text.Render(path) + display.st.dim.Render(
+		fmt.Sprintf("  +%d −%d   ancien · nouveau   ⌃D panneau de diff", added, removed),
+	)
+}
+
+func isFileHeader(line string) bool {
+	return strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "---") ||
+		strings.HasPrefix(line, "diff ") || strings.HasPrefix(line, "index ")
+}
+
+func isDiffBody(lines []string) bool {
+	for _, line := range lines {
+		if strings.HasPrefix(line, "@@") || strings.HasPrefix(line, "+++ ") {
+			return true
+		}
+	}
+	return false
+}
+
+func diffSign(line string) (string, string) {
+	if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
+		return line[:1], line[1:]
+	}
+	if strings.HasPrefix(line, " ") {
+		return " ", line[1:]
+	}
+	return " ", line
+}
+
+func hunkStart(line string) (int, int) {
+	oldNo, newNo := 1, 1
+	for _, field := range strings.Fields(line) {
+		switch {
+		case strings.HasPrefix(field, "-"):
+			oldNo = leadingInt(field[1:], oldNo)
+		case strings.HasPrefix(field, "+"):
+			newNo = leadingInt(field[1:], newNo)
+		}
+	}
+	return oldNo, newNo
+}
+
+func leadingInt(s string, fallback int) int {
+	head, _, _ := strings.Cut(s, ",")
+	number, err := strconv.Atoi(head)
+	if err != nil {
+		return fallback
+	}
+	return number
+}
+
+func countDiffRows(lines []string) int {
+	count := 0
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "@@") && !isFileHeader(line) {
+			count++
+		}
+	}
+	return count
 }
 
 const tableGap = "  "
@@ -155,7 +251,7 @@ func tableRow(rowCells []string, widths []int, header bool, styles uiStyles) str
 			cell += strings.Repeat(" ", pad)
 		}
 		if header {
-			cell = styles.accent.Render(cell)
+			cell = styles.strong.Render(cell)
 		}
 		cells[index] = cell
 	}
@@ -216,7 +312,7 @@ func codeBlocks(text string) []codeBlock {
 
 const foldThreshold = 12
 
-func foldCodeBlocks(text string) string {
+func foldCodeBlocks(text string, glyphs glyphSet) string {
 	var out []string
 	var buf []string
 	lang := ""
@@ -229,7 +325,7 @@ func foldCodeBlocks(text string) string {
 		case inFence && fence == codeFence:
 			inFence = false
 			if len(buf) > foldThreshold {
-				out = append(out, foldSummary(lang, len(buf)))
+				out = append(out, foldSummary(lang, len(buf), glyphs))
 				continue
 			}
 			out = append(out, codeFence+lang)
@@ -248,11 +344,11 @@ func foldCodeBlocks(text string) string {
 	return strings.Join(out, "\n")
 }
 
-func foldSummary(lang string, lines int) string {
+func foldSummary(lang string, lines int, glyphs glyphSet) string {
 	if lang == "" {
 		lang = "text"
 	}
-	return fmt.Sprintf("%s %s · %d lines (ctrl+f)", glyphFold, lang, lines)
+	return fmt.Sprintf("%s %s · %d lines (ctrl+f)", glyphs.fold, lang, lines)
 }
 
 func (m *model) toggleFold() {

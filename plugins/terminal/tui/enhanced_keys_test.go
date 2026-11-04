@@ -14,6 +14,7 @@ func TestLegacyKeyTranslatesTheEnhancedReports(t *testing.T) {
 	}{
 		{"shift+enter becomes the newline chord", "\x1b[13;2u", "\x1b\r"},
 		{"plain enter stays a carriage return", "\x1b[13u", "\r"},
+		{"ctrl+enter becomes alt+f12, the queue send key", "\x1b[13;5u", "\x1b[24;3~"},
 		{"ctrl+j keeps its control byte", "\x1b[106;5u", "\n"},
 		{"alt+b keeps its escape prefix", "\x1b[98;3u", "\x1bb"},
 		{"a shifted letter is its capital", "\x1b[97;2u", "A"},

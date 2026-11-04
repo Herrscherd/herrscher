@@ -21,7 +21,7 @@ func diagRows(caps Capabilities) []diagRow {
 		graphics.feature = "images en ligne en demi-blocs unicode"
 	}
 
-	links := diagRow{name: "hyperliens", value: yesNo(caps.Hyperlinks), feature: "les liens s'ouvrent depuis le terminal (OSC 8)"}
+	links := diagRow{name: "hyperliens", value: yesNo(caps.Hyperlinks), feature: "les liens s’ouvrent depuis le terminal (OSC 8)"}
 	if !caps.Hyperlinks {
 		links.feature = "les liens sont du texte stylé, ouverts à la touche"
 	}
@@ -56,7 +56,7 @@ func diagnosticsView(caps Capabilities, styles uiStyles) string {
 		builder.WriteString("\n" + styles.dim.Render("  "+row.name+strings.Repeat(" ", max(1, factWidth-len(row.name)))) +
 			styles.text.Render(row.value) + pad + styles.dim.Render(row.feature))
 	}
-	builder.WriteString("\n" + styles.dim.Render("  kitty, ghostty et WezTerm ont tous les rendus ; ailleurs l'image"))
+	builder.WriteString("\n" + styles.dim.Render("  kitty, ghostty et WezTerm ont tous les rendus ; ailleurs l’image"))
 	builder.WriteString("\n" + styles.dim.Render("  est dessinée en demi-blocs et un lien reste du texte sélectionnable."))
 	return builder.String()
 }

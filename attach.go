@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -174,7 +175,7 @@ func (a *attachedDaemon) notify(channel, text string) {
 }
 
 func (a *attachedDaemon) Dispatch(args []string) (string, error) {
-	if len(args) == 0 || !attachedVerbs()[args[0]] {
+	if len(args) == 0 || (!attachedVerbs()[args[0]] && !terminal.ReadOnlyCommand(args)) {
 		verb := ""
 		if len(args) > 0 {
 			verb = args[0]
@@ -212,9 +213,31 @@ func (a *attachedDaemon) Resume(name string) (string, error) {
 	return a.dispatch([]string{verbSession, "resume", argName, name})
 }
 
+func (a *attachedDaemon) Seen(name string) {
+	if _, err := a.dispatch([]string{verbSession, "seen", argName, name}); err != nil {
+		slog.Debug("review mark not cleared", "session", name, "error", err)
+	}
+}
+
+func (a *attachedDaemon) Overview() (string, error) {
+	return a.dispatch([]string{verbSession, "overview"})
+}
+
 func (a *attachedDaemon) Interrupt(name string) bool {
 	_, err := a.dispatch([]string{verbSession, "interrupt", argName, name})
 	return err == nil
+}
+
+func (a *attachedDaemon) Pick(channel, value string) bool {
+	sessions := a.Sessions()
+	for index := range sessions {
+		if sessions[index].ChannelID != channel {
+			continue
+		}
+		_, err := a.dispatch(append([]string{verbSession, "pick", argName, sessions[index].Name}, cli.FlagArg("value", value)...))
+		return err == nil
+	}
+	return false
 }
 
 func (a *attachedDaemon) Scrollback(name string) []contracts.ScrollbackLine {

@@ -9,35 +9,36 @@ import (
 )
 
 type markdownRenderer struct {
-	r     *glamour.TermRenderer
-	width int
+	r       *glamour.TermRenderer
+	width   int
+	heading string
 }
 
-func (md *markdownRenderer) termRenderer(width int) (*glamour.TermRenderer, error) {
-	if md.r == nil || md.width != width {
+func (md *markdownRenderer) termRenderer(width int, heading string) (*glamour.TermRenderer, error) {
+	if md.r == nil || md.width != width || md.heading != heading {
 		renderer, err := glamour.NewTermRenderer(
-			glamour.WithStyles(mdStyle()),
+			glamour.WithStyles(mdStyle(heading)),
 			glamour.WithWordWrap(width),
 			glamour.WithEmoji(),
 		)
 		if err != nil {
 			return nil, err
 		}
-		md.r, md.width = renderer, width
+		md.r, md.width, md.heading = renderer, width, heading
 	}
 	return md.r, nil
 }
 
-func mdStyle() ansi.StyleConfig {
+func mdStyle(heading string) ansi.StyleConfig {
 	style := styles.DarkStyleConfig
 	zero := uint(0)
 	style.Document.Margin = &zero
 	style.Document.BlockPrefix = ""
 	style.Document.BlockSuffix = ""
 	style.Document.Color = nil
-	style.Heading.Color = strPtr(colViolet)
+	style.Heading.Color = strPtr(heading)
 	style.H1.BackgroundColor = nil
-	style.H1.Color = strPtr(colViolet)
+	style.H1.Color = strPtr(heading)
 	style.CodeBlock.Margin = &zero
 	return style
 }
@@ -132,7 +133,7 @@ func renderGlamour(text string, width int, view view) string {
 	if markdown == nil {
 		markdown = &markdownRenderer{}
 	}
-	renderer, err := markdown.termRenderer(width)
+	renderer, err := markdown.termRenderer(width, view.st.heading)
 	if err != nil {
 		return wrapWith(view.st.text, text, width)
 	}

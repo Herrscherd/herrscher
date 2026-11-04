@@ -241,12 +241,53 @@ reads `allow Read`, `ask Bash(git push*)` or `deny Write(/etc/*)`, the strictest
 match wins, and an agent's own `APPROVALS` file can only tighten what the daemon
 set, never widen it.
 
-On `ask` the question goes to the session's own gateways as a two-button menu and
-the tool call waits. An answer settles it, and nobody answering within the
-timeout is a refusal, said to the model in words it can act on.
+In an `allow` rule on a shell command, `*` and `?` never cover a shell operator
+(`; & | ` $ < > ( )`) or a line break, so `allow Bash(git push*)` passes
+`git push origin feat/x` but not `git push && rm -rf ~`, `git push; curl x|sh`
+or `git push $(id)`. An operator written out in the rule matches literally:
+`allow Bash(make build && make test)` covers exactly that command. `deny` and
+`ask` rules keep their wildcards unrestricted, so `deny Bash(rm -rf /*)` also
+blocks `rm -rf /x; ls`.
 
-A session is `ask`, `strict` (everything a rule does not name is asked about too)
-or `bypass` (no hook at all).
+That restriction closes shell operators only. It does not stop a program that an
+argument runs: `allow Bash(git *)` still passes `git -c core.pager='sh -c id' log`,
+and `allow Bash(find *)` still passes `find . -exec id {} +`. The same holds for
+`sh -c`, `bash -c`, `npm run`, `make`, and `xargs`. For those, write a targeted
+deny, which has no operator restriction and wins over any allow:
+`deny Bash(git -c*)` refuses the `-c` form while `allow Bash(git *)` keeps
+passing the other git calls.
+
+On `ask` the question goes to the session's own gateways as a menu of four
+answers, and the tool call waits. The four are:
+
+- `allow`: this call runs, and the next identical one asks again.
+- `allow --session`: this call runs, and the same call passes for the rest of
+  the session. The grant lives with the session and ends when it stops.
+- `allow --always`: this call runs, and a rule is written the way `approve rule`
+  writes one, so it keeps passing after restarts. The rule names the exact
+  subject as it ran (`Bash(git push origin feat/x)` for a shell command), and
+  the menu shows the rule before you press it. A subject holding a wildcard, a
+  shell operator or a line break gets no rule, and the operator is told so.
+- `deny`, optionally with `--reason`: the call is refused, and the reason is
+  what the agent reads in its refusal.
+
+Nobody answering within the approval wait, 5 minutes by default, is a refusal,
+said to the model in words it can act on. The gateways are told the deadline,
+so a menu can show when the question expires.
+
+A session is `ask`, `accept-edits`, `plan`, `auto` (everything passes except what a
+deny rule refuses, the hook stays installed), `strict` (everything a rule does not
+name is asked about too), `smart`, or `bypass` (no hook at all).
+
+`smart` lets a model rate each call that no rule settles, except reads (`Read`,
+`Glob`, `Grep`, `LS`), which pass as before. A `low` rating passes the call,
+`medium` and `high` ask you as `ask` does. The rating is kept for the session,
+so the same subject is not rated twice. The model is the first installed
+LLM backend, the one the memory extractor uses, and `HERRSCHER_CURATION_MODEL`
+overrides its model. Without any LLM backend, or when
+the rating fails, smart decides as `ask` does and says so to the operator: a call
+no rule names runs unasked, a call a rule asks about is put to you. Smart costs
+one model call per distinct unmatched subject.
 
 How it is wired in depends on the backend, and each backend says for itself what
 it can enforce. Claude Code gets a `PreToolUse` hook materialized into the
@@ -274,12 +315,12 @@ Every failure allows and says why, on both paths. This is a guardrail against
 mistakes, not a sandbox, and a daemon that has gone away must not stop a `claude`
 run by hand.
 
-`approve list`, `approve allow <id>`, `approve deny <id> --reason '…'`,
-`approve rule` and `approve mode` are the whole surface. With no rule configured
-nothing is ever asked, which is exactly how herrscher behaved before this
-existed.
-
-→ `architecture/approvals`
+`approve list`, `approve allow <id> [--session | --always]`,
+`approve deny <id> [--reason '…']`, `approve rule`, `approve ask` and
+`approve mode` (`ask`, `bypass`, `strict` or `smart`) are the whole surface.
+Flags come after the id or before it: `approve allow --session <id>` works too.
+With no rule configured nothing is ever asked, which is exactly how herrscher
+behaved before this existed.
 
 ### A daemon that knows who is calling
 
@@ -389,11 +430,28 @@ same neutral port. The UI is the one that ships in the binary.
 
 ### The shape of the window
 
-A thin rail across the top names the terminal, its open sessions and the vendor
-answering in the active one. Under it the transcript runs the full width. The
-composer sits in a rounded box at the foot, and the status line is glued right
+A rail across the top opens with the name `herrscher`, then lists the open sessions: the active
+one is marked `▸` and underlined, a working one shows a spinner, one waiting for
+approval shows `!`, a finished one `✓`, and an unread one `●` with its count of new
+entries. The hints `^P agents · ^T onglet` sit at the right, and a rule runs under the
+row. When the sessions do not fit, names shorten first, then the rest folds into a
+`+N` count, and the active session always stays visible.
+
+At 110 columns and wider a side column runs down the right of the transcript,
+separated by a vertical rule. It shows the session (project, branch, worktree,
+gateways), the todos with their `n/m` count, the sub-agents still running and those
+just finished, background tasks when the backend reports them, the files the session wrote with their `+added −removed` line counts
+against git, and the context gauge (24 cells) with the compaction threshold (92 %). `ctrl+b` hides or
+shows it. Under 24 rows the bottom sections fold to their summary line. The
+transcript keeps the full width below 110 columns, and the todos and sub-agents
+panels stay in the stack above the composer whenever the column is hidden.
+
+The composer sits in a rounded box at the foot, and the status line is glued right
 under that box, so the two things you act on are one object rather than two rows
 separated by a rule.
+
+`/resume` filters as you type (a fuzzy match on name, project, vendor and gateway)
+and shows the last lines of the selected session above the list.
 
 Every list the window opens (the `/` palette, `@` completion, `/resume`,
 `/session switch`, `/skills`) shares one grammar: unbordered rows floating just
@@ -406,15 +464,41 @@ The window speaks French.
 
 ### Sessions as tabs
 
-Several sessions render as live tabs. Each answer opens with a titled rule, so a
-turn keeps its shape when colour does not survive, and nothing else is ruled,
-since a frame drawn around every turn marks none of them.
+Several sessions render as live tabs. Each answer opens on a `●` gutter and each
+message you send on a `┃` bar, so a turn keeps its shape when colour does not
+survive, and nothing is framed, since a frame drawn around every turn marks none
+of them.
 
 Events are typed by role (reasoning, tool family, notice, error). The agent's
 markdown and diffs are rendered, a resumed session's history is replayed as the
-turns it was, and the status bar names what the session runs on (vendor, model,
-reasoning effort), what it has cost, and how much room is left before the backend
-compacts the conversation. `/usage` spells that out.
+turns it was. The status bar leads with the mode as an inverse chip (Manuel, Édits
+acceptés, Plan, Auto in red), then names what the session runs on (vendor, model,
+reasoning effort), its project and branch, and how much room is left before the
+backend compacts the conversation: a gauge that turns amber at 80 % and red at 95 %,
+with the figures `41%  82k/200k`. Cost (`$0.00` until the first turn) and queued messages follow, and the fields
+drop by priority as the window narrows. `/usage` spells the numbers out.
+
+`/statusline` opens the bar's settings: tick the fields, reorder them with shift+↑↓,
+and see the result in a live preview. Beside the list, a pane shows the script
+contract: the JSON it receives on stdin and the `[statusline]` keys. `s` switches
+between the built-in bar and the script. In `~/.config/herrscher/terminal.toml`, a
+`[statusline]` section can replace the bar with a script (`source = "script"`,
+`command`, `refresh`): it receives the state as JSON on stdin and its first line
+becomes the bar. A script that fails or runs past one second leaves the built-in bar
+with a discreet ✗.
+
+A session has one of four modes, cycled with shift+tab or set with `/mode
+[manuel|edits|plan|auto]`. The strip under the plan box shows them with the
+current one highlighted, a left click on a segment switches to it, and the status
+bar opens with the mode. A tab starts from the mode the session has stored
+(`session get-mode`). The TUI sends the change to the daemon through
+`session set-mode`, so the host enforces it: manual asks before each edit and
+command, accept edits lets edits through and still asks for commands, plan is
+read only and refuses writes, and auto lets everything through except what a
+deny rule refuses. A refused switch is shown and the mode stays as it was. A plan reply
+opens a three-choice menu: validate and switch to accept edits, validate in
+manual, or keep planning. `/plan <instruction>` switches to plan and sends the
+instruction.
 
 A session's name is chosen when you know the least about what it will become, so
 `/rename <nom>` changes it: the row keeps its identity and its id, the transcript
@@ -435,6 +519,69 @@ An attached window follows the live turn, because every driven session taps the
 daemon's event socket. Esc stops a turn as an interruption rather than an error,
 keeping whatever the agent had already written.
 
+### Context, and what fills it
+
+`/context` opens the window's room: the total used against the session's window,
+and a line for each part that fills it (system prompt, tools and MCP servers,
+memory, skills, files read, conversation), with what is free. Only the total is
+known: the backends report one count of input tokens per turn, not a breakdown,
+so each part reads `n/a` until a backend reports it. Without any count yet, the
+total reads `n/a` too, and no percentage is invented. Below 80 columns the bars
+go and the overlay becomes a plain list. `esc` or `z` closes it, `k` re-reads the
+figures.
+
+`/compact`, or `c` inside `/context`, asks the agent to compact its conversation
+through the host (`herrscher session compact <name>`, claude sessions only). A
+turn in progress must finish first. The transcript then records the window before
+and after, as the backend reports it, and the gauge in the status bar follows the
+new figure. A compaction the backend does not report on reads `n/a` after.
+
+### Notifications
+
+When a turn finishes, and when an approval waits for you, a toast appears at the
+top right of the window and fades after a few seconds. It is a bordered box: the
+title with the age of the event, the session with its vendor and gateways (and the
+duration of the turn), the approval question when one waits, and the way out, which
+is `ctrl+p` to the session. The toast only signals: it never answers an approval or
+opens anything.
+
+The window also tells the terminal, but only when the window lacks focus. The
+terminal gets an OSC 9 notification (`ESC ] 9 ; text BEL`) where it is known to
+handle one (iTerm2, WezTerm, ghostty), and a plain BEL everywhere else. A
+terminal that reports focus lets the window know when it is in the background; a
+terminal that does not report focus is signalled on every event, since nothing
+says whether the window is looked at. The BEL fallback is a heuristic on the
+terminal's name, not a check that the terminal rang.
+
+`n` (with an empty composer) or `/notify` cycles which events notify: turn end
+and approval, turn end only, or approval only.
+
+### Rewinding
+
+Before each message sent, the host takes a checkpoint of the session's worktree (a
+git snapshot under `refs/herrscher/checkpoints/`, without touching the index or the
+files). On an empty composer and outside a turn, `Esc Esc` opens the "Rewind"
+screen: the list of messages with the files each one touched, side by side when
+wide (under 80 columns, the files move below the message).
+
+From this screen, `Enter` opens the choices: "restore the code and the conversation",
+"restore the conversation only" and "restore the code only", each with a
+confirmation (`y`). The conversation returns to the message by relaunching the
+backend on a copy of its transcript, cut just before that message, under a new
+session identifier: the original stays intact. Only the Claude backend provides this
+position today; elsewhere both conversation options are disabled with the reason
+shown, and nothing changes. Restoring the code alone does not touch the
+conversation. `u` undoes the last code restore (one level); a conversation restore
+cannot be undone yet. `f`, or "fork from here", runs `/fork`.
+
+`/fork [--name <name>] --to <n>` creates the session `<name>-fork` with its own
+worktree at the checkpoint, resumes the conversation up to that same message, and
+opens a new tab; the original stays intact. A fork refused by the backend (one with
+no per-message position) creates nothing.
+
+A single `Esc` always interrupts a turn in progress, as above. Files ignored by git
+are not covered by checkpoints.
+
 ### What the agent is doing right now
 
 A todo list and a running sub-agent are state, not transcript: written into the
@@ -444,7 +591,10 @@ of the stream (`TodoWrite` and `Task` never reach the transcript) and they rende
 as two panels under it: the list windowed around the task in hand with its
 `done/total` count, and one line per live sub-agent with its kind and its age. A
 sub-agent leaves the panel when it hands back, and the end of a turn clears both,
-keeping an unfinished list.
+keeping an unfinished list. The sub-agents of a turn also hang under the `Task`
+that started them as a tree (`├`, `└`, `│`), each with a spinner while it runs, a
+`✓` when it hands back, a `✗` when it fails, and `délai dépassé, relancé` when it
+timed out and was run again.
 
 → `plugins/terminal/tui/panels.go`
 
@@ -452,6 +602,109 @@ Picking up a chat session's tab and typing there answers you *there*. A turn say
 where it was said, so it is rendered in the window that asked and not posted a
 second time in the channel the conversation came from, where nobody asked
 anything.
+
+### Themes and look
+
+Four themes ship in the binary: Sombre (the default), Clair, Terminal, which
+takes the colours of your own terminal palette, and Contraste élevé. `/theme`,
+or `ctrl+x t` from anywhere in the window, opens the theme screen, which takes
+the whole window. Moving through the list previews each theme on the spot, and
+Entrée keeps the one you chose and the screen stays open, with the line
+"enregistré à l’instant" beside the `terminal.toml` block. The current theme
+carries a ✓. The same screen
+holds the look under RENDU: `g` cycles the glyph set (unicode, nerd, ascii),
+`b` the borders (rounded, square, none), `d` the density (normal, compact), `w`
+bold and `i` italic. `a` turns the automatic theme on or off, which follows the
+terminal's background, and `e` or `ctrl+e` opens `themes/perso.toml` in
+`$EDITOR`. Échap closes the screen and puts back the theme it last kept.
+
+The style follows Obel Mono: the accent is #FF3C05 on Sombre and a darker
+#C42D00 on Clair, which keeps 5.64:1 contrast on white. Progress bars are 16
+`━` cells, filled in the accent, and the spinner turns through braille frames.
+
+The screen also has a police row. The TUI cannot change the font of the
+terminal, so the row only recommends Obel Mono and reports whether it is
+installed (`fc-list` on Linux, `~/Library/Fonts` on macOS), absent, or unknown.
+`f` opens the INSTALLER OBEL MONO block: the install command, which `c` copies,
+and the configuration for the terminal it detects, which `y` copies. The TUI
+never writes that configuration and never runs the install script. Obel Mono
+Masked is the family for kitty and Alacritty. Alacritty's `[font]` section has
+no OpenType feature option, so it can only select the family. kitty's
+`font_features` is indexed by the font's PostScript name, which this variable
+font cannot guarantee, so kitty also gets the family. WezTerm (`harfbuzz_features`)
+and foot (`fontfeatures`) select Obel Mono with `ss01`. The Obel Mono page
+says of that feature: "Keys show as dots on screen; the file and your clipboard
+keep every character." So `ss01` masks API keys on screen only, and the
+configuration copied by `y` keeps them intact. Échap closes the block first.
+
+The preview sits beside the list from 100 columns, and under it below that. When
+the window is too short for it, the preview is left out so the controls stay on
+screen. `NO_COLOR` strips the colours and keeps the rest.
+
+The choice is stored in `terminal.toml`, beside `config.json`:
+
+```toml
+[terminal]
+theme = "sombre"
+auto_theme = false
+glyphs = "unicode"
+borders = "rounded"
+density = "normal"
+bold = true
+italic = true
+
+[statusline]
+source = "builtin"
+```
+
+Every writer rewrites only its own keys: the theme picker and `/statusline` share
+the file, and the other's settings and your comments survive either one.
+
+The personal theme is `~/.config/herrscher/themes/perso.toml`. The list always
+shows it as Mon thème, even before the file exists, and `e` or `ctrl+e` creates
+it from a template when it is missing. Keeping Mon thème while its file is absent
+is refused, with a message naming the file. Any other TOML file in the `themes`
+directory also shows as a theme, named after its id. A theme inherits from a
+built-in with `base` and overrides only the colours and render options it names.
+The directory is polled, so an edit shows without a restart, and a file that does
+not parse is reported on the screen rather than dropped silently.
+
+```toml
+name = "Mon thème"
+base = "sombre"
+
+[colors]
+accent = "#ff8c42"
+err = "ansi:1"
+
+[render]
+borders = "square"
+```
+
+→ `plugins/terminal/tui/theme.go`, `plugins/terminal/tui/theme_catalog.go`
+
+### Approvals
+
+When the agent asks to run something the host does not allow on its own, the
+gateway's menu opens an approval box in the session tab, above the composer. It
+names the tool and the command (a long command is cut in the middle with `…`),
+the project and the worktree, and offers the choices the host sent: `o` allows
+once, `s` allows for the session, `t` always allows (the box shows the exact rule
+the host will write), and `r` refuses with a reason. Arrows and Enter pick a row
+too. Letters only answer while the composer is empty, so typing is never taken
+for a choice.
+
+The reason field takes whatever you type; Enter sends the refusal with it, and
+an empty reason is a plain refusal. Each answer goes back to the host as the
+menu value, so the host decides; the TUI only forwards it.
+
+The box counts down to a refusal. Its deadline is the one the host announces
+(an `approval` event), or five minutes when the host gives none; `x` jumps the
+countdown to 0:05, and it turns red under a minute. At zero the approval is
+refused without a reason, as if nobody answered.
+
+The box is drawn from 60 to 240 columns: below 80 each choice takes two rows.
+The tab carries a `pendingApproval` flag for the rest of the window to mark it.
 
 ### Using the terminal you are in
 
@@ -472,23 +725,97 @@ what is not, and what each unavailable feature falls back to.
 ### Nothing opens on its own
 
 A link is followed because the operator asked, never because a message arrived or
-a turn completed.
+a turn completed. A notification does not open a link either: it only signals.
 
 `ctrl+l` walks the links in the transcript. While one is selected the status line
 shows its *resolved target*, since a markdown label can name one destination and
 point at another, and `ctrl+o` opens it: a URL through the desktop handler, a
 `file.go:42` reference through `$EDITOR` at that line. That is display, not a
-confirmation prompt. The keypress is the consent.
+confirmation prompt. The keypress is the consent. With no link selected, `ctrl+o`
+folds or unfolds the latest reasoning block or tool output instead.
+
+### Sessions board and panes
+
+`ctrl+p` (or `/agents`) opens the sessions board: every session, terminal and
+other gateways alike, grouped by state (Au travail, Attend une réponse, À relire,
+Fini). Each session takes two lines: its state glyph, name, vendor, gateway and
+project, then its age, cost, context gauge and last activity. Its running sub-agents
+hang under it, one line each with name, vendor and task (three at most, then a
+count); a session without a tab in this terminal shows none. Letters filter the
+rows, `↑↓` choose, `Enter` opens or switches to the session, and `Esc` clears the
+filter before it closes the board. Below 100 columns the board is the list alone.
+
+From 100 columns a Résumé panel sits beside the list. It shows the vendors and
+gateways in use, the memory and skills (and how many wait for approval), the
+number of live schedules with the next window, and the approval policy (rules and
+how many refuse). Each value is read from the host when the board opens and
+refreshed while it stays open; a value the host does not answer for reads `n/a`.
+A session whose last answer finished while nobody was looking is listed under À
+relire until it is opened or stays on screen.
+
+Inside the board, `ctrl+p` switches to the panes: up to four live sessions side
+by side, each in a box whose title carries its state glyph, name and vendor, whose
+body ends with the last lines of its transcript, and whose foot shows the context
+gauge, cost and gateway. The grid is two by two from 120 columns and 30 rows, two
+panes side by side from 80 columns, and a single pane moved with `←` `→` below
+80. `Tab` changes the focused pane, `ctrl+w` zooms it, and `Enter` sends the
+composer text to it. A click on a pane focuses it. When a pane shows an approval,
+`o` (once), `s` (session) or `r` (refuse) answers it without leaving the pane.
+`ctrl+p` returns to the chat.
 
 ### Reading a long session
 
-`ctrl+s` searches the transcript as you type, marks every match, cycles them with
+`ctrl+f` searches the transcript as you type, marks every match, cycles them with
 `ctrl+n` and `ctrl+p`, and puts the scroll position back where it was when you
 close it.
 
-`alt+↑` and `alt+↓` jump by turn. `ctrl+t` collapses the history above the
-current exchange to one line per turn, `ctrl+f` folds long code blocks to a
-summary line, and `ctrl+y` copies the last one to the clipboard as raw text.
+`alt+↑` and `alt+↓` jump by turn. `ctrl+t` opens the session picker, `alt+t`
+collapses the history above the current exchange to one line per turn, `alt+c`
+folds long code blocks to a summary line, and `ctrl+y` copies the last one to the
+clipboard as raw text.
+
+Each tool call is one line: its family verb in bold, its argument in grey, a
+summary, its duration, and on the right `✓`, `✗`, or a spinner while it runs. Its
+results hang under it behind `└`, and a click or `alt+e` folds them. Reasoning is a
+`▸` block headed `Réflexion · 14s · 1.2k tokens`, in italics, and unfolds to `▾`.
+While a turn runs, the transcript ends on a busy line: `En cours…`, the elapsed
+time, the tokens sent, the cost, and `Échap interrompre` on the right.
+
+`ctrl+r` searches the prompts you sent, newest first, with the same fuzzy
+matching as the command palette: type a fragment, `⏎` recalls the match into the
+composer, `esc` closes it.
+
+### Writing while the agent works
+
+The composer stays open while a turn runs. `⏎` queues the message to go out when
+the turn ends. `⌥⏎` queues it as a steer: it goes out right after the next tool
+call, so the agent can change course without waiting for the whole turn. `esc`
+interrupts the turn and keeps the queue, and `⌃⏎` sends the queue now (it
+interrupts a running turn first). Queued rows sit above the composer with `✕
+retirer` on the right. Remove one by clicking its `✕`, or press `↑` on an empty
+composer to focus the queue, then `suppr` on the row; `esc` leaves the focus.
+
+`/queue` lists the queue as a transcript notice.
+
+`ctrl+s` parks the current draft on a stack and clears the composer; `ctrl+s` on
+an empty composer brings the last parked draft back. The line above the composer
+names the drafts waiting.
+
+`ctrl+x ctrl+e` opens the draft in `$EDITOR` (then `$VISUAL`, then `vi`). The
+composer is framed in the accent colour while the editor is open, and the saved
+text comes back into it when the editor exits. A terminal that reports `ctrl+⏎`
+through the enhanced keyboard protocol sends the queue directly; the leader
+`ctrl+x ⏎` does the same everywhere else.
+
+`!command` runs a shell command in the session's directory through the host's
+approval policy, the same one that gates the agent's own Bash calls. The output
+is shown in the transcript and enters the session as context on the next message,
+so the agent sees what you ran. The composer frame turns amber while the line
+starts with `!`.
+
+`@` completes a file from the worktree and `/` completes a command. Both are
+fuzzy: the characters you type are highlighted in the match, and command rows show
+the PR that delivers them on the right.
 
 Tool lines carry a budget of two rows apiece. Unbounded, a compound shell command
 becomes a paragraph in a single colour, and the session path it opens with is
@@ -497,14 +824,34 @@ an absolute path deep enough to cost a row is said in the two segments that
 identify it, and what is left over is counted rather than dropped: `+3 ↵`.
 `alt+e` lifts the budget and spells every command out as it was run.
 
-Diffs are coloured by hunk, and by the basic ANSI pair on a 16-colour terminal,
-where a hex green would be approximated away. A hunk is worth four lines before it
-folds to `▶ n lignes de plus (alt+e)`, since a fifty-line diff quoted mid-answer
-buries the sentence that follows it; `alt+e`, the same key that spells a command
-out, unfolds it. Tables truncate their widest column instead of wrapping into
+Edits show an inline diff with a line number column for the old file and one for
+the new, so an insertion shifts the numbers below it and each row says where it sits
+in both. Each hunk opens with an `@@` separator, and additions and deletions carry
+their own background, falling back to the basic ANSI pair on a 16-colour terminal,
+where a hex green would be approximated away. Under 70 columns the diff keeps a
+single number column. A hunk is worth four lines before it folds to
+`▶ n lignes de plus (alt+e)`, since a fifty-line diff quoted mid-answer buries the
+sentence that follows it; `alt+e`, the same key that spells a command out, unfolds
+it. Tables truncate their widest column instead of wrapping into
 confetti.
 
-→ `reference/keybindings`
+→ [Keys](#keys)
+
+### Reviewing what a turn changed
+
+`ctrl+d` opens the diff panel over the window. It lists the files the session
+touched, with their status (M, A, D), their counts and a reviewed mark, and shows
+the selected file as a two-column numbered diff. Scope is the current turn by
+default, or the branch against its base when you press `b`. Untracked files count,
+and the snapshot runs against a temporary index, so your real index and worktree
+are left as they were.
+
+Inside the panel, `space` marks a file reviewed, `i` sends a note to the agent about
+the selected file (the message starts with its path), `c` opens the commit message
+generated from the changes so you can edit it, `enter` opens the file in `$EDITOR`,
+and `p` commits and opens a pull request with `gh`, showing its number. `/review`
+opens the same panel in review mode. Git and `gh` calls have a timeout and run in
+the session's folder.
 
 ### Getting text back out
 
@@ -533,6 +880,49 @@ recorded, rather than from nothing until the next turn.
 
 The percentage beside the gauge counts down rather than up: it is what remains
 before a compaction, which is the question one actually asks of a context gauge.
+
+### Keys
+
+`/help` lists the same keys. A key has one meaning in the main window;
+an open panel (diff, sessions, search, rewind, theme, status bar) takes the keys
+it names in its own footer first.
+
+| Key | What it does |
+|---|---|
+| `⏎` | send; while a turn runs, queue the message |
+| `⌥⏎` | while a turn runs, steer it with the message |
+| `⌃⏎` | send the queue now |
+| `⇧⏎`, `\⏎` | new line |
+| `↑` `↓` | history; `↑` on an empty composer focuses the queue, then `suppr` removes and `⇧↑` `⇧↓` reorder |
+| `alt+↑` `alt+↓` | previous or next turn |
+| `échap` | interrupt the running turn |
+| `échap échap` | on an idle session with an empty composer, rewind to an earlier message |
+| `ctrl+c` | interrupt, or quit when nothing runs |
+| `tab` | next session tab |
+| `shift+tab` | cycle the approval mode (Manuel, Édits acceptés, Plan, Auto) |
+| `ctrl+t` | session switcher |
+| `ctrl+p` | the session a notification points at, or the sessions board |
+| `ctrl+w` | close the tab |
+| `ctrl+b` | toggle the sidebar |
+| `ctrl+d` | diff panel for the turn or the branch |
+| `ctrl+f` | search the transcript |
+| `ctrl+r` | search the prompt history |
+| `ctrl+s` | set the draft aside |
+| `ctrl+l` | select the next link; `ctrl+o` opens it |
+| `ctrl+o` | without a selected link, show or hide the thinking |
+| `ctrl+y` | copy the last code block; `alt+y` copies the whole answer |
+| `alt+c` | fold code blocks |
+| `alt+e` | spell out commands and unfold diffs |
+| `alt+t` | fold the turns |
+| `ctrl+v` | paste an image |
+| `ctrl+g` | release the mouse so the terminal can select |
+| `ctrl+x t` | theme picker |
+| `ctrl+x ctrl+e` | edit the draft in `$EDITOR` (then `$VISUAL`) |
+| `ctrl+x ⏎` | send the queue now |
+| `n` | with a notification or `/context` open, the next item |
+| `/` `@` `!` | commands, files, a shell command run under the approval policy |
+
+→ `plugins/terminal/tui/tui.go`, `plugins/terminal/tui/leader.go`
 
 ## Plugins
 

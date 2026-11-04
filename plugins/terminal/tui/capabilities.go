@@ -2,7 +2,12 @@ package tui
 
 import "strings"
 
-const programKitty = "kitty"
+const (
+	programKitty   = "kitty"
+	programGhostty = "ghostty"
+	programWezTerm = "WezTerm"
+	programITerm   = "iTerm.app"
+)
 
 // Graphics is the inline-image protocol a terminal speaks, in descending order
 // of fidelity. The zero value is the honest default: no protocol at all.
@@ -58,16 +63,21 @@ type Capabilities struct {
 	Mouse      bool
 	Colour     Colour
 	Boxes      bool
+	OSC9       bool
 	Terminal   string
 }
 
 func kittyGraphicsPrograms() map[string]bool {
-	return map[string]bool{"ghostty": true, "WezTerm": true}
+	return map[string]bool{programGhostty: true, programWezTerm: true}
+}
+
+func osc9Programs() map[string]bool {
+	return map[string]bool{programGhostty: true, programWezTerm: true, programITerm: true}
 }
 
 func hyperlinkPrograms() map[string]bool {
 	return map[string]bool{
-		"ghostty": true, "WezTerm": true, "iTerm.app": true, programKitty: true,
+		programGhostty: true, programWezTerm: true, programITerm: true, programKitty: true,
 	}
 }
 
@@ -84,6 +94,7 @@ func Probe(env func(string) string) Capabilities {
 		Terminal:   terminalName(term, program),
 	}
 	caps.Boxes = probeBoxes(env)
+	caps.OSC9 = osc9Programs()[program]
 	caps.Mouse = term != "" && term != "dumb"
 	return caps
 }

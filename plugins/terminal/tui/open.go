@@ -14,7 +14,7 @@ var (
 	errRefusedTarget    = errors.New("refusing a")
 	errOptionTarget     = errors.New("refusing a target that reads as an option")
 	errControlByte      = errors.New("refusing a target carrying a control byte")
-	errNoEditor         = errors.New("no $EDITOR set to open")
+	errNoEditor         = errors.New("aucun $EDITOR ni $VISUAL pour ouvrir")
 	errNoEditorLauncher = errors.New("no editor launcher configured")
 	errNoSystemLauncher = errors.New("no system launcher configured")
 )
@@ -79,12 +79,11 @@ func editorLauncher(env func(string) string) launcher {
 		if err := checkTarget(target); err != nil {
 			return err
 		}
-		editor := strings.TrimSpace(env("EDITOR"))
-		if editor == "" {
+		fields := configuredEditor(env)
+		if len(fields) == 0 {
 			return fmt.Errorf("%w %s", errNoEditor, target)
 		}
 		file, line := splitFileRef(target)
-		fields := strings.Fields(editor)
 		args := fields[1:]
 		if line != "" {
 			args = append(args, "+"+line)

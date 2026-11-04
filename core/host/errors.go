@@ -11,7 +11,7 @@ import (
 
 var (
 	errRequestNameMissing          = errors.New("name a request (see `approve list`)")
-	errApproveModeUsage            = errors.New("usage: approve mode <session> <ask|bypass|strict>")
+	errApproveModeUsage            = errors.New("usage: approve mode <session> <ask|bypass|strict|smart>")
 	errMemoryLocateUnsupported     = errors.New("memory backend does not support locate")
 	errMemoryForgetUnsupported     = errors.New("memory backend does not support forget")
 	errCommandSocketEmpty          = errors.New("command socket: empty response")
@@ -77,7 +77,7 @@ type unknownModeError struct {
 }
 
 func (e *unknownModeError) Error() string {
-	return fmt.Sprintf("unknown mode %q: ask, bypass or strict", e.Mode)
+	return fmt.Sprintf("unknown mode %q: ask, accept-edits, plan, auto, bypass or strict", e.Mode)
 }
 
 type accessDeniedError struct {

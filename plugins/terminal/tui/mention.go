@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -23,24 +25,74 @@ func mentionWord(input string, cursor int) (int, string, bool) {
 	return start, word[1:], true
 }
 
+const (
+	mentionDepth   = 4
+	mentionEntries = 4000
+	vendorDirName  = "vendor"
+)
+
+func isMentionSkippedName(name string) bool {
+	switch name {
+	case ".git", "node_modules", vendorDirName:
+		return true
+	}
+	return false
+}
+
+func mentionCandidates(dir string) []string {
+	var out []string
+	var walk func(rel string, depth int)
+	walk = func(rel string, depth int) {
+		if len(out) >= mentionEntries {
+			return
+		}
+		entries, err := os.ReadDir(filepath.Join(dir, rel))
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			if isSkippedMention(entry) {
+				continue
+			}
+			out = append(out, mentionPath(rel, entry))
+			if entry.IsDir() && depth < mentionDepth {
+				walk(filepath.Join(rel, entry.Name()), depth+1)
+			}
+		}
+	}
+	walk("", 1)
+	return out
+}
+
+func isSkippedMention(entry fs.DirEntry) bool {
+	name := entry.Name()
+	return isMentionSkippedName(name) || (entry.IsDir() && strings.HasPrefix(name, "."))
+}
+
+func mentionPath(rel string, entry fs.DirEntry) string {
+	path := filepath.ToSlash(filepath.Join(rel, entry.Name()))
+	if entry.IsDir() {
+		path += "/"
+	}
+	return path
+}
+
 func mentionMatches(dir, prefix string) []string {
-	ents, err := os.ReadDir(dir)
-	if err != nil {
+	if _, err := os.ReadDir(dir); err != nil {
 		return nil
 	}
-	var out []string
-	for _, item := range ents {
-		name := item.Name()
-		if !strings.HasPrefix(name, prefix) {
-			continue
+	candidates := mentionCandidates(dir)
+	if prefix == "" {
+		var top []string
+		for _, candidate := range candidates {
+			if !strings.Contains(strings.TrimSuffix(candidate, "/"), "/") {
+				top = append(top, candidate)
+			}
 		}
-		if item.IsDir() {
-			name += "/"
-		}
-		out = append(out, name)
+		sort.Strings(top)
+		return top
 	}
-	sort.Strings(out)
-	return out
+	return rankFuzzy(prefix, candidates)
 }
 
 func completeMention(input string, cursor int, match string) (string, int) {
@@ -54,19 +106,7 @@ func completeMention(input string, cursor int, match string) (string, int) {
 }
 
 func (m *model) worktreeDir() string {
-	if name := m.sessionName(m.active); name != "" {
-		sessions := m.tm.Sessions()
-		for i := range sessions {
-			session := &sessions[i]
-			if session.Name == name && session.Dir != "" {
-				return session.Dir
-			}
-		}
-	}
-	if wd, err := os.Getwd(); err == nil {
-		return wd
-	}
-	return "."
+	return m.sessionDir(m.active)
 }
 
 func (m *model) mentionCursor() int {
@@ -151,9 +191,14 @@ func (m *model) mentionView() string {
 	if len(paths) == 0 {
 		return ""
 	}
+	_, prefix, _ := mentionWord(m.input.Value(), m.mentionCursor())
 	rows := make([]overlayRow, 0, len(paths))
-	for _, p := range paths {
-		rows = append(rows, overlayRow{label: "@" + p})
+	for _, path := range paths {
+		row := overlayRow{label: "@" + path}
+		if hit, ok := fuzzyMatch(prefix, path); ok {
+			row.hot = shiftPositions(hit.positions, len("@"))
+		}
+		rows = append(rows, row)
 	}
 	return floatingList(rows, m.mentionIdx, "Tab compléter · Échap fermer", m.overlayWidth(), m.st)
 }

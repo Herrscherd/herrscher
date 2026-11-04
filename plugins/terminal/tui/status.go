@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -72,13 +73,45 @@ func palierStyle(ratio float64, styles uiStyles) lipgloss.Style {
 	}
 }
 
-func renderContext(used int, vendor string, styles uiStyles) string {
-	if used <= 0 {
-		return ""
+func formatContextTokens(tokens int) string {
+	if tokens < thousand {
+		return strconv.Itoa(tokens)
 	}
-	limit := contextLimit(vendor)
-	text := fmt.Sprintf("%s/%s", formatTokens(used), formatLimit(limit))
-	return palierStyle(contextRatio(used, limit), styles).Render(text)
+	return strconv.Itoa(int(math.Round(float64(tokens)/thousand))) + "k"
+}
+
+func formatContext(used, limit int) string {
+	return formatContextTokens(used) + "/" + formatContextTokens(limit)
+}
+
+func formatLimit(limit int) string {
+	if limit >= 1000 && limit%1000 == 0 {
+		return fmt.Sprintf("%dk", limit/thousand)
+	}
+	return formatTokens(limit)
+}
+
+func contextPercent(used, limit int) string {
+	return fmt.Sprintf("%d%%", int(contextRatio(used, limit)*percentScale))
+}
+
+const (
+	contextCells    = 16
+	barContextCells = 8
+)
+
+func contextGauge(ratio float64, styles uiStyles) string {
+	return contextGaugeCells(ratio, contextCells, styles)
+}
+
+func contextGaugeCells(ratio float64, cells int, styles uiStyles) string {
+	filled := max(0, min(cells, int(ratio*float64(cells))))
+	fill := styles.accent
+	if ratio >= ctxWarn {
+		fill = palierStyle(ratio, styles)
+	}
+	return fill.Render(strings.Repeat(styles.glyphs.gaugeFull, filled)) +
+		styles.dim.Render(strings.Repeat(styles.glyphs.gaugeEmpty, cells-filled))
 }
 
 const compactAt = 0.92
@@ -89,22 +122,6 @@ func contextLeft(used, limit int) float64 {
 		return 0
 	}
 	return left
-}
-
-const verboseStatus = 100
-
-func renderGauge(used int, vendor string, width int, styles uiStyles) string {
-	if used <= 0 {
-		return ""
-	}
-	limit := contextLimit(vendor)
-	row := contextRatio(used, limit)
-	style := palierStyle(row, styles)
-	label := fmt.Sprintf(" reste %d %%", int(contextLeft(used, limit)*percentScale))
-	if width >= verboseStatus {
-		label += " avant compaction"
-	}
-	return gauge(row, style, styles.dim) + style.Render(label)
 }
 
 func modelLabel(info contracts.SessionInfo) string {
@@ -123,58 +140,6 @@ func (m *model) contextTokens(tab *tab) int {
 		return info.ContextTokens
 	}
 	return 0
-}
-
-func formatLimit(limit int) string {
-	if limit >= 1000 && limit%1000 == 0 {
-		return fmt.Sprintf("%dk", limit/thousand)
-	}
-	return formatTokens(limit)
-}
-
-func (m *model) statusBar(tab *tab, width int) string {
-	info, known := m.activeInfo()
-	segs := []string{m.statusHead(tab, info, known, width)}
-	if width >= narrowStatus && known {
-		if label := modelLabel(info); label != "" {
-			segs = append(segs, m.st.text.Render(label))
-		}
-	}
-	used := m.contextTokens(tab)
-	if ctx := renderContext(used, info.Vendor, m.st); ctx != "" {
-		segs = append(segs, ctx)
-	}
-	if width >= narrowStatus {
-		segs = append(segs, m.statusDetails(tab, info, known, used, width)...)
-	}
-	return strings.Join(segs, m.st.sep)
-}
-
-func (m *model) statusHead(tab *tab, info contracts.SessionInfo, known bool, width int) string {
-	if known && info.Vendor != "" && width >= narrowStatus {
-		return m.st.accent.Render(glyphBolt+" "+info.Vendor) + m.st.dim.Render(" "+tab.label)
-	}
-	return m.st.accent.Render(glyphBolt + " " + tab.label)
-}
-
-func (m *model) statusDetails(tab *tab, info contracts.SessionInfo, known bool, used, width int) []string {
-	var segs []string
-	if g := renderGauge(used, info.Vendor, width, m.st); g != "" {
-		segs = append(segs, g)
-	}
-	if known && info.Project != "" {
-		segs = append(segs, m.st.dim.Render(info.Project))
-	}
-	if ms := m.mouseStatus(); ms != "" {
-		segs = append(segs, ms)
-	}
-	if tab.costTotal > 0 {
-		segs = append(segs, m.st.dim.Render(formatCost(tab.costTotal)))
-	}
-	if !tab.openedAt.IsZero() {
-		segs = append(segs, m.st.dim.Render(formatDuration(time.Since(tab.openedAt))))
-	}
-	return segs
 }
 
 func (m *model) usageReport(tab *tab) string {
@@ -198,9 +163,8 @@ func (m *model) usageReport(tab *tab) string {
 		lines = append(lines, "  project  "+info.Project)
 	}
 	if used := m.contextTokens(tab); used > 0 {
-		ratio := contextRatio(used, limit)
 		lines = append(lines,
-			fmt.Sprintf("  context  %s / %s  (%d%%)", formatTokens(used), formatLimit(limit), int(ratio*percentScale)),
+			fmt.Sprintf("  context  %s  (%s)", formatContext(used, limit), contextPercent(used, limit)),
 			fmt.Sprintf("  reste    %d %% avant compaction", int(contextLeft(used, limit)*percentScale)),
 		)
 	} else {

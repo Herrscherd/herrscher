@@ -3,21 +3,48 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, sessions *sessionTable, seedCoord *coordinatorSlot) error {
+var (
+	errNoPendingChoice    = errors.New("has no pending choice")
+	errCompactNeedsClaude = errors.New("/compact is only available on claude sessions")
+)
+
+func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot) error {
+	seen := newSeenTable(time.Now())
 	return addVerbs(reg,
 		seedVerb(store, instID, seedCoord),
 		sessionSendVerb(sessions),
+		sessionPickVerb(approvals, sessions),
 		sessionInfoVerb(store, partDir),
+		sessionOverviewVerb(overviewSource{st: store, partDir: partDir, sessions: sessions, approvals: approvals, tallies: newTallyCache(), seen: seen}),
+		sessionSeenVerb(seen),
 		sessionScrollbackVerb(partDir),
 		sessionInterruptVerb(sessions),
+		sessionCompactVerb(store, sessions),
 	)
+}
+
+func sessionSeenVerb(seen *seenTable) contracts.Cmd {
+	return contracts.New(nsSession, "seen").
+		Help("record that the operator has read a session's last answer, which clears its review mark").
+		Param(paramName, "session name", true).
+		Do(func(_ context.Context, input contracts.Input) (string, error) {
+			seen.mark(input.Get(paramName), time.Now())
+			return "", nil
+		})
+}
+
+func addCheckpointCommands(reg *cli.Registry, store *state.State, sessions *sessionTable) error {
+	return addVerbs(reg, addCheckpointVerbs(store, sessions)...)
 }
 
 func seedVerb(store *state.State, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
@@ -103,6 +130,15 @@ func sessionInfoVerb(store *state.State, partDir string) contracts.Cmd {
 		})
 }
 
+func sessionOverviewVerb(src overviewSource) contracts.Cmd {
+	return contracts.New(nsSession, "overview").
+		Help("list every session with its live state (waiting, working, archived, review, idle), cost and last activity. JSON only").
+		Do(func(_ context.Context, _ contracts.Input) (string, error) {
+			b, err := json.Marshal(src.overviews())
+			return string(b), err
+		})
+}
+
 func sessionScrollbackVerb(partDir string) contracts.Cmd {
 	return contracts.New(nsSession, "scrollback").
 		Help("dump a session's replayable history as the frontend renders it. JSON only").
@@ -110,6 +146,20 @@ func sessionScrollbackVerb(partDir string) contracts.Cmd {
 		Do(func(_ context.Context, in contracts.Input) (string, error) {
 			b, err := json.Marshal(scrollbackOf(partDir, in.Get(paramName)))
 			return string(b), err
+		})
+}
+
+func sessionPickVerb(approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+	return contracts.New(nsSession, "pick").
+		Help("answer a session's pending choice (an approval) with a menu value").
+		Param(paramName, "session name", true).
+		ValueParam("value", "menu value to answer with", true).
+		Do(func(_ context.Context, input contracts.Input) (string, error) {
+			name, value := input.Get(paramName), input.Get("value")
+			if answerApprovalPick(approvals, sessions, name, value) || sessions.pick(name, value) {
+				return "picked " + name, nil
+			}
+			return "", fmt.Errorf("session %q %w", name, errNoPendingChoice)
 		})
 }
 
@@ -123,4 +173,41 @@ func sessionInterruptVerb(sessions *sessionTable) contracts.Cmd {
 			}
 			return "interrupted " + input.Get(paramName), nil
 		})
+}
+
+const (
+	verbCompact    = "compact"
+	compactCommand = "/compact"
+	vendorClaude   = "claude"
+)
+
+func sessionCompactVerb(store *state.State, sessions *sessionTable) contracts.Cmd {
+	return contracts.New(nsSession, verbCompact).
+		Help("ask a claude session to compact its context (sends /compact into its turn queue)").
+		Param(paramName, "session name", true).
+		Param("origin", "gateway kind this was typed in (e.g. terminal): the turn is rendered there "+
+			"instead of in every channel the session is bound to", false).
+		Do(func(ctx context.Context, in contracts.Input) (string, error) {
+			return compactSession(ctx, store, sessions, in)
+		})
+}
+
+func compactSession(ctx context.Context, store *state.State, sessions *sessionTable, input contracts.Input) (string, error) {
+	name := input.Get(paramName)
+	live, ok := store.FindSession(name)
+	if !ok {
+		return "", &NotFoundError{Kind: "session", Name: name}
+	}
+	if live.Vendor != vendorClaude {
+		return "", fmt.Errorf("session %q runs %q: %w", name, live.Vendor, errCompactNeedsClaude)
+	}
+	if !sessions.Submit(ctx, name, contracts.Inbound{
+		Author:       "you",
+		AuthorID:     "local",
+		Text:         compactCommand,
+		Conversation: contracts.Conversation{Gateway: input.Get("origin")},
+	}) {
+		return "", &NotFoundError{Kind: "live session", Name: name}
+	}
+	return "", nil
 }

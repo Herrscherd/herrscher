@@ -55,9 +55,7 @@ type Session struct {
 	// Host names the place this session's process runs, as registered by
 	// `host add`. Empty means this machine, which is every session written
 	// before remote execution existed.
-	Host string `json:"host,omitempty"`
-	// Approvals is this session's approval mode: "" or "ask" applies the policy,
-	// "bypass" never asks, "strict" asks for anything no rule explicitly allows.
+	Host      string `json:"host,omitempty"`
 	Approvals string `json:"approvals,omitempty"`
 	// MemoryProject and MemoryAgent are the memory roots this session files what
 	// it learns under. They are separate from Project and Agent on purpose: those

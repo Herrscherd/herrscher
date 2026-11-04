@@ -21,7 +21,7 @@ func assertFloatingList(t *testing.T, name, out string) {
 		t.Fatalf("%s drew nothing", name)
 	}
 	rows := strings.Split(out, "\n")
-	if !strings.Contains(ansi.Strip(rows[0]), glyphCursor) {
+	if !strings.Contains(ansi.Strip(rows[0]), unicodeGlyphs().cursor) {
 		t.Fatalf("%s must mark its selected row: %q", name, rows[0])
 	}
 	for i, r := range rows {

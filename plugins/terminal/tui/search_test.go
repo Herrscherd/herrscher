@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func longModel(t *testing.T) *model {
@@ -93,22 +94,21 @@ func TestEscClosesTheSearchInsteadOfTheSession(t *testing.T) {
 	}
 }
 
-func TestTurnBoundariesAreWhereTurnsStart(t *testing.T) {
-	lines := []string{
-		glyphCursor + " ask",
-		"  body",
-		agentTitle + " ─────",
-		"  answer",
-		glyphCursor + " ask again",
+func TestTurnStartsAreRecordedInTheLayout(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.active = "a"
+	tb.appendEntry(entry{role: roleYou, text: "ask"})
+	tb.appendEntry(entry{role: roleAgent, text: "answer"})
+	tb.appendEntry(entry{role: roleYou, text: "ask again"})
+	layout := m.layoutTranscript(tb, 60)
+	if len(layout.turns) != 3 {
+		t.Fatalf("turns = %v, want three", layout.turns)
 	}
-	got := turnBoundaries(lines)
-	want := []int{0, 2, 4}
-	if len(got) != len(want) {
-		t.Fatalf("turnBoundaries = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("turnBoundaries = %v, want %v", got, want)
+	lines := strings.Split(ansi.Strip(layout.text), "\n")
+	for index, want := range []string{"ask", "answer", "ask again"} {
+		if !strings.Contains(lines[layout.turns[index]], want) {
+			t.Fatalf("turn %d must start on %q: %q", index, want, lines[layout.turns[index]])
 		}
 	}
 }
@@ -117,7 +117,8 @@ func TestJumpToTurnLandsOnABoundary(t *testing.T) {
 	m := longModel(t)
 	m.vp.GotoTop()
 	m.jumpTurn(1)
-	bounds := turnBoundaries(strings.Split(m.thinkingContent(), "\n"))
+	m.thinkingContent()
+	bounds := m.tsLayout.turns
 	if len(bounds) < 2 {
 		t.Fatalf("the fixture needs several turns, got %v", bounds)
 	}
@@ -134,13 +135,14 @@ func TestJumpToTurnLandsOnABoundary(t *testing.T) {
 
 func TestFoldingOldTurnsCollapsesThemAndRestoresExactly(t *testing.T) {
 	lines := []string{
-		glyphCursor + " ask",
+		unicodeGlyphs().userBar + " ask",
 		"  body one",
 		"  body two",
-		agentTitle + " ─",
+		unicodeGlyphs().tool + " answer",
 		"  answer",
 	}
-	folded := foldTurns(lines, 1, newStyles())
+	bounds := []int{0, 3}
+	folded := foldTurns(lines, bounds, 1, testStyles())
 	if len(folded) != 1+len(lines)-3 {
 		t.Fatalf("the first turn must collapse to one line: %q", folded)
 	}
@@ -151,7 +153,7 @@ func TestFoldingOldTurnsCollapsesThemAndRestoresExactly(t *testing.T) {
 		t.Fatalf("the summary must still say which turn it is: %q", folded[0])
 	}
 
-	again := foldTurns(lines, 99, newStyles())
+	again := foldTurns(lines, bounds, 99, testStyles())
 	if strings.Join(again, "\n") != strings.Join(lines, "\n") {
 		t.Fatalf("unfolded lines must be identical to the source: %q", again)
 	}
@@ -190,10 +192,10 @@ func TestFoldKeysRepaintRatherThanServingTheCachedFrame(t *testing.T) {
 	long := "```go\n" + strings.Repeat("x := 1\n", foldThreshold+5) + "```"
 	for _, c := range []struct {
 		name string
-		key  tea.KeyType
+		key  tea.KeyMsg
 	}{
-		{"code fold", tea.KeyCtrlF},
-		{"link selection", tea.KeyCtrlL},
+		{"code fold", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c"), Alt: true}},
+		{"link selection", tea.KeyMsg{Type: tea.KeyCtrlL}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			m := newTestModel()
@@ -203,7 +205,7 @@ func TestFoldKeysRepaintRatherThanServingTheCachedFrame(t *testing.T) {
 			m.applySize()
 			before := m.baseContent()
 
-			m.Update(tea.KeyMsg{Type: c.key})
+			m.Update(c.key)
 			if after := m.baseContent(); after == before {
 				t.Fatalf("%s must change the painted frame, not serve the cached one", c.name)
 			}

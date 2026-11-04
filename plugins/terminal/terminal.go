@@ -9,8 +9,10 @@ package terminal
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -29,6 +31,7 @@ import (
 const (
 	routeEventBufferSize = 256
 	frontendCloseWait    = 2 * time.Second
+	readOnlyCommandWords = 2
 )
 
 var (
@@ -48,6 +51,7 @@ const Kind = "terminal"
 const (
 	eventStatus = "status"
 	eventReply  = "reply"
+	eventMenu   = "menu"
 	sessionVerb = "session"
 )
 
@@ -309,14 +313,31 @@ func (t *Terminal) React(context.Context, contracts.Conversation, contracts.Mess
 	return nil
 }
 
-// Menu prints the prompt and its numbered choices as a status line in the conversation.
+type menuOption struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+type menuPayload struct {
+	Prompt  string       `json:"prompt"`
+	Options []menuOption `json:"options"`
+}
+
+// Menu sends a prompt with its choices to the conversation as a menu the TUI
+// draws, and mirrors the choices in the text of the message.
 func (t *Terminal) Menu(_ context.Context, conv contracts.Conversation, _ contracts.MessageID, prompt string, opts []contracts.Choice) error {
 	var text strings.Builder
 	text.WriteString(prompt)
-	for _, o := range opts {
-		text.WriteString("\n  • " + o.Value + ": " + o.Label)
+	payload := menuPayload{Prompt: prompt}
+	for _, option := range opts {
+		text.WriteString("\n  • " + option.Value + ": " + option.Label)
+		payload.Options = append(payload.Options, menuOption{Label: option.Label, Value: option.Value})
 	}
-	t.EmitTo(conv, contracts.Event{T: eventStatus, Text: text.String()})
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	t.EmitTo(conv, contracts.Event{T: eventMenu, Text: text.String(), Value: string(encoded)})
 	return nil
 }
 
@@ -337,7 +358,7 @@ func (t *Terminal) emit(routed tui.RoutedEvent) {
 		return
 	default:
 	}
-	if routed.Event.T == "closed" || (routed.Event.T == eventReply && routed.Event.Done) {
+	if routed.Event.T == "closed" || routed.Event.T == eventMenu || (routed.Event.T == eventReply && routed.Event.Done) {
 		select {
 		case t.out <- routed:
 		case <-time.After(frontendCloseWait):
@@ -366,6 +387,20 @@ func (t *Terminal) Scrollback(name string) []contracts.ScrollbackLine {
 	return nil
 }
 
+// Seen records that the operator is looking at a session, which clears its
+// review mark on the sessions board once its last answer is read.
+func (t *Terminal) Seen(name string) {
+	if _, err := t.Dispatch([]string{sessionVerb, "seen", sessionNameFlag, name}); err != nil {
+		slog.Debug("review mark not cleared", "session", name, "error", err)
+	}
+}
+
+// Overview returns the host's per-session overview as JSON (state, cost, last
+// activity) for the sessions board and the side-by-side panes.
+func (t *Terminal) Overview() (string, error) {
+	return t.Dispatch([]string{sessionVerb, "overview"})
+}
+
 // Resume revives an archived session by name through the bound SessionControl,
 // for the /resume picker.
 func (t *Terminal) Resume(name string) (string, error) {
@@ -377,6 +412,23 @@ func (t *Terminal) Resume(name string) (string, error) {
 		return "", err
 	}
 	return "resumed " + name, nil
+}
+
+// Pick answers the choice value of the session bound to channel, through the
+// bound SessionControl. It reports false when no control is bound or no session
+// owns the channel.
+func (t *Terminal) Pick(channel, value string) bool {
+	control := t.Control()
+	if control == nil {
+		return false
+	}
+	sessions := control.Sessions()
+	for index := range sessions {
+		if sessions[index].ChannelID == channel {
+			return control.Pick(sessions[index].Name, value)
+		}
+	}
+	return false
 }
 
 // Interrupt cancels a session's in-flight turn through the bound SessionControl,
@@ -421,6 +473,8 @@ func withTerminalDefault(args []string) []string {
 	return append(out, "--terminal_only")
 }
 
+const sessionNameFlag = "--name"
+
 func terminalVerbs() map[string]bool {
 	return map[string]bool{
 		sessionVerb: true,
@@ -435,6 +489,19 @@ func terminalVerbs() map[string]bool {
 // same daemon over a socket and must draw the same palette; two copies of this
 // judgement would be two chances to disagree about what a tab may run.
 func OperatorVerb(verb string) bool { return terminalVerbs()[verb] }
+
+// ReadOnlyCommand reports whether argv is one of the read-only queries the
+// sessions board runs beside its list (skills, schedules, approval rules).
+func ReadOnlyCommand(args []string) bool {
+	if len(args) != readOnlyCommandWords {
+		return false
+	}
+	switch args[0] + " " + args[1] {
+	case "skill list", "schedule list", "approve list", "approve rule":
+		return true
+	}
+	return false
+}
 
 func allowedVerbs() string {
 	out := make([]string, 0, len(terminalVerbs()))
@@ -478,7 +545,7 @@ func (t *Terminal) Commands() []tui.CommandSpec {
 // so TUI-created sessions bind to this terminal and appear as tabs. The first
 // token is gated against terminalVerbs() before it ever reaches the registry.
 func (t *Terminal) Dispatch(args []string) (string, error) {
-	if len(args) == 0 || !terminalVerbs()[args[0]] {
+	if len(args) == 0 || (!terminalVerbs()[args[0]] && !ReadOnlyCommand(args)) {
 		verb := ""
 		if len(args) > 0 {
 			verb = args[0]

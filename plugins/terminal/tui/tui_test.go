@@ -94,6 +94,8 @@ type closedSession struct {
 type fakeBackend struct {
 	refuseInterrupt bool
 	dispatched      [][]string
+	replies         map[string]string
+	seen            []string
 	closed          []closedSession
 	sessions        []contracts.SessionInfo
 	fe              chan RoutedEvent
@@ -101,7 +103,17 @@ type fakeBackend struct {
 	resumed         []string
 	submitted       []submittedTurn
 	interrupted     []string
+	picks           []pickedChoice
+	overview        string
+	overviewErr     error
 }
+
+type pickedChoice struct {
+	channel string
+	value   string
+}
+
+func (f *fakeBackend) Overview() (string, error) { return f.overview, f.overviewErr }
 
 type submittedTurn struct {
 	channel string
@@ -116,8 +128,13 @@ func (f *fakeBackend) Submit(channel, text string, atts []Attachment) {
 func (f *fakeBackend) Sessions() []contracts.SessionInfo { return f.sessions }
 func (f *fakeBackend) Dispatch(args []string) (string, error) {
 	f.dispatched = append(f.dispatched, args)
+	if reply, ok := f.replies[strings.Join(args, " ")]; ok {
+		return reply, nil
+	}
 	return "ok", nil
 }
+
+func (f *fakeBackend) Seen(name string) { f.seen = append(f.seen, name) }
 
 func (f *fakeBackend) Close(name string, force bool) (string, error) {
 	f.closed = append(f.closed, closedSession{name: name, force: force})
@@ -131,6 +148,11 @@ func (f *fakeBackend) Scrollback(name string) []contracts.ScrollbackLine {
 func (f *fakeBackend) Resume(name string) (string, error) {
 	f.resumed = append(f.resumed, name)
 	return "resumed " + name, nil
+}
+
+func (f *fakeBackend) Pick(channel, value string) bool {
+	f.picks = append(f.picks, pickedChoice{channel: channel, value: value})
+	return true
 }
 
 func (f *fakeBackend) Interrupt(name string) bool {
@@ -323,8 +345,9 @@ func TestResizeSyncsViewport(t *testing.T) {
 	m.tabs["a"].entries = []entry{{role: roleAgent, text: "line1"}, {role: roleAgent, text: "line2"}, {role: roleAgent, text: "line3"}}
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	if m.vp.Width != 100 || m.vp.Height != 25 {
-		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want 25)", m.vp.Width, m.vp.Height)
+	wantHeight := 30 - m.chromeHeight()
+	if m.vp.Width != 100 || m.vp.Height != wantHeight {
+		t.Fatalf("resize: vp.Width=%d (want 100), vp.Height=%d (want %d)", m.vp.Width, m.vp.Height, wantHeight)
 	}
 }
 
@@ -588,16 +611,16 @@ func TestPendingCloseOtherKeyCancels(t *testing.T) {
 
 func tabText(tb *tab) string {
 	parts := make([]string, len(tb.entries))
-	for i, e := range tb.entries {
-		parts[i] = e.text
+	for index := range tb.entries {
+		parts[index] = tb.entries[index].text
 	}
 	return strings.Join(parts, "\n")
 }
 
 func tabLineCount(tb *tab, needle string) int {
 	n := 0
-	for _, e := range tb.entries {
-		if strings.Contains(e.text, needle) {
+	for index := range tb.entries {
+		if strings.Contains(tb.entries[index].text, needle) {
 			n++
 		}
 	}
@@ -645,19 +668,19 @@ func TestNonStreamedReplyRendersOnce(t *testing.T) {
 }
 
 func TestThinkingLineDerivedWhileBusyNoStream(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := sizedTestModel(t, 80)
 	tb := m.ensureTab("a")
 	tb.busy = true
 	tb.streamed = false
 	if tabLineCount(tb, "thinking") != 0 {
 		t.Fatal("thinking indicator must not be appended to tab.lines")
 	}
-	if !strings.Contains(m.thinkingContent(), "thinking") {
-		t.Fatal("thinkingContent must show the thinking line while busy and unstreamed")
+	if !strings.Contains(m.thinkingContent(), workingVerb) {
+		t.Fatal("thinkingContent must show the busy line while the turn runs")
 	}
-	tb.streamed = true
-	if strings.Contains(m.thinkingContent(), "thinking") {
-		t.Fatal("once streamed, the thinking line must disappear (the reply is arriving)")
+	tb.busy = false
+	if strings.Contains(m.thinkingContent(), workingVerb) {
+		t.Fatal("the busy line must disappear once the turn is over")
 	}
 }
 

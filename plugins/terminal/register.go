@@ -7,7 +7,7 @@ func init() {
 		Manifest: contracts.Manifest{
 			Kind:         Kind,
 			Category:     contracts.CategoryGateway,
-			Capabilities: contracts.Capabilities{Replies: true},
+			Capabilities: contracts.Capabilities{Replies: true, SelectMenus: true},
 			Config:       settings(),
 		},
 		Gateway: newGatewaySet,

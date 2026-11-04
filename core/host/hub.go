@@ -109,6 +109,9 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 						warnStderr("herrscher serve: session %q: transcript entry dropped: %v\n", sess.Name, err)
 					}
 				},
+				Checkpoint: func(turnID, text string) {
+					h.takeCheckpoint(ctx, sess, turnID, text)
+				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent}, h.gate)
@@ -184,6 +187,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 	if err := h.authorize(ctx, args); err != nil {
 		return "", err
 	}
+	ctx = withRestarter(ctx, h)
 
 	if isSessionSeedCommand(args) {
 		runtime := oneShotSeedRuntime{
@@ -197,6 +201,10 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 			},
 		}
 		return h.reg.Dispatch(withOneShotSeedRuntime(ctx, runtime), args)
+	}
+
+	if isSessionForkCommand(args) {
+		return h.reg.Dispatch(withForker(ctx, h.forkSession), args)
 	}
 
 	if h.isContributedCommand(args) {
@@ -363,6 +371,21 @@ func scrollbackOf(partDir, name string) []contracts.ScrollbackLine {
 	return out
 }
 
+func (h *hub) RestartWithResume(name, token string) error {
+	sess, ok := h.st.FindSession(name)
+	if !ok {
+		return &NotFoundError{Kind: kindSession, Name: name}
+	}
+	h.goDead(name)
+	if err := h.st.SetResumeToken(name, token); err != nil {
+		return err
+	}
+	sess.ResumeToken = token
+	h.goLive(context.Background(), sess)
+	h.sup.Start(sess)
+	return nil
+}
+
 func (h *hub) Resume(name string) error {
 	sess, ok := h.st.FindSession(name)
 	if !ok {
@@ -388,7 +411,7 @@ func (h *hub) Submit(name string, in contracts.Inbound) bool {
 }
 
 func (h *hub) Pick(name, value string) bool {
-	if answerApprovalPick(h.approvals, name, value) {
+	if answerApprovalPick(h.approvals, h.sessions, name, value) {
 		return true
 	}
 	return h.sessions.pick(name, value)

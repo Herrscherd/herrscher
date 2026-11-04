@@ -5,75 +5,67 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestAgentAnswerOpensWithARuleAndIsNotClosed(t *testing.T) {
-	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 60, view{})
+	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 60, view{st: testStyles()})
 	lines := strings.Split(out, "\n")
-	if !strings.Contains(lines[0], agentTitle) {
-		t.Fatalf("the opening rule must name whose voice this is: %q", lines[0])
+	if got := ansi.Strip(lines[0]); !strings.HasPrefix(got, blockIndent+unicodeGlyphs().tool+" the answer") {
+		t.Fatalf("the answer must open on the prose gutter: %q", got)
 	}
-	if last := lines[len(lines)-1]; strings.Contains(last, strings.Repeat(ruleChar, 4)) {
-		t.Fatalf("a finished answer must not be closed off by a rule: %q", last)
-	}
-	if !strings.Contains(out, blockIndent+"the answer") {
-		t.Fatalf("the body must sit in the block gutter: %q", out)
+	for _, ln := range lines {
+		if strings.Contains(ln, strings.Repeat(unicodeGlyphs().ruleChar, 4)) {
+			t.Fatalf("an answer must not be framed by a rule: %q", ln)
+		}
 	}
 }
 
 func TestStreamingAnswerIsLeftOpen(t *testing.T) {
-	out := renderEntry(entry{role: roleAgent, text: "half an ans", streaming: true}, 60, view{})
-	lines := strings.Split(out, "\n")
-	if !strings.Contains(lines[0], agentTitle) {
-		t.Fatalf("a streaming block still announces itself: %q", out)
-	}
-	if strings.Contains(lines[len(lines)-1], strings.Repeat(ruleChar, 4)) {
-		t.Fatalf("a streaming block must not be closed off: %q", out)
+	out := renderEntry(entry{role: roleAgent, text: "half an ans", streaming: true}, 60, view{st: testStyles()})
+	if got := ansi.Strip(out); !strings.HasPrefix(got, blockIndent+unicodeGlyphs().tool+" half an ans") {
+		t.Fatalf("a streaming answer keeps the prose gutter: %q", got)
 	}
 }
 
 func TestNarrowTitledRuleDropsItsTitle(t *testing.T) {
-	out := titledRule(newStyles().accent, agentTitle, 4)
+	out := testStyles().titledRule(testStyles().accent, "⚡ Herrscher", 4)
 	if strings.Contains(out, "Herrscher") {
 		t.Fatalf("a title that does not fit must be dropped, not clipped: %q", out)
 	}
-	if !strings.Contains(out, ruleChar) {
+	if !strings.Contains(out, unicodeGlyphs().ruleChar) {
 		t.Fatalf("what is left must still be a rule: %q", out)
 	}
 }
 
 func TestGaugeShowsAnySpend(t *testing.T) {
-	if got := gauge(0.001, newStyles().dim, newStyles().dim); !strings.Contains(got, gaugeFull) {
+	glyphs := gaugeGlyphsFor(unicodeGlyphs(), true)
+	if got := gauge(0.001, testStyles().dim, testStyles().dim, glyphs); !strings.Contains(got, glyphs.gaugeFull) {
 		t.Fatalf("a small spend must still fill a cell: %q", got)
 	}
-	if got := gauge(0, newStyles().dim, newStyles().dim); strings.Contains(got, gaugeFull) {
+	if got := gauge(0, testStyles().dim, testStyles().dim, glyphs); strings.Contains(got, glyphs.gaugeFull) {
 		t.Fatalf("nothing spent must read as empty: %q", got)
 	}
-	if got := gauge(1, newStyles().dim, newStyles().dim); strings.Contains(got, gaugeEmpty) {
+	if got := gauge(1, testStyles().dim, testStyles().dim, glyphs); strings.Contains(got, glyphs.gaugeEmpty) {
 		t.Fatalf("a full window must leave no empty cell: %q", got)
 	}
 }
 
 func TestGaugeTakesThePalierColour(t *testing.T) {
-	alarm := renderGauge(199_000, "claude", 120, newStyles())
-	calm := renderGauge(1_000, "claude", 120, newStyles())
-	if alarm == "" || calm == "" {
+	if contextGauge(0.995, testStyles()) == "" {
 		t.Fatal("a spent context must render a gauge")
 	}
-	if alarm == calm {
-		t.Fatal("a full window and an empty one must not render alike")
-	}
 	fg := func(r float64) string {
-		color, ok := palierStyle(r, newStyles()).GetForeground().(lipgloss.Color)
+		color, ok := palierStyle(r, testStyles()).GetForeground().(lipgloss.Color)
 		if !ok {
 			t.Fatalf("palier %v foreground is not a lipgloss.Color", r)
 		}
 		return string(color)
 	}
-	if fg(0.99) != colRed {
+	if fg(0.99) != string(defaultTheme().Colors.Err) {
 		t.Fatalf("a window past the alarm palier must take the Herrscher red: %s", fg(0.99))
 	}
-	if fg(0.85) != colWarn || fg(0.1) != colDim {
+	if fg(0.85) != string(defaultTheme().Colors.Wait) || fg(0.1) != string(defaultTheme().Colors.Dim) {
 		t.Fatalf("the middle palier warns (%s) and the low one stays dim (%s)", fg(0.85), fg(0.1))
 	}
 }

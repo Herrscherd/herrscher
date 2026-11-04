@@ -12,7 +12,6 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
-	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
@@ -111,17 +110,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 					}
 				},
 				Checkpoint: func(turnID, text string) {
-					if !checkpointable(sess) {
-						return
-					}
-					current, ok := h.st.FindSession(sess.Name)
-					if !ok {
-						current = sess
-					}
-					meta := checkpoint.Meta{Turn: turnID, Text: text, Conversation: conversationPosition(current)}
-					if _, err := checkpoint.Take(context.Background(), sess.Worktree, sess.Name, meta); err != nil {
-						warnStderr("herrscher serve: session %q: checkpoint not taken, /rewind cannot return to this message: %v\n", sess.Name, err)
-					}
+					h.takeCheckpoint(ctx, sess, turnID, text)
 				},
 			},
 			eventTap(h.eventPublisher, sess.Name),

@@ -28,6 +28,7 @@ func (r *recordingRules) AddApprovalRule(rendered string) error {
 
 type eventGateway struct {
 	*menuGatewayFake
+
 	emitted []contracts.Event
 }
 
@@ -271,7 +272,7 @@ func TestSmartPassesALowRiskCallWithoutAsking(t *testing.T) {
 
 func TestSmartAsksAboutMediumAndHighRiskCalls(t *testing.T) {
 	for _, risk := range []approval.Risk{approval.RiskMedium, approval.RiskHigh} {
-		t.Run(string(risk), func(t *testing.T) {
+		t.Run(risk.String(), func(t *testing.T) {
 			approvals := newApprovalTable()
 			approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) { return risk, nil }
 			sessions := newSessionTable()
@@ -319,7 +320,7 @@ func TestSmartWithoutAModelStillAllowsWhatNoRuleNames(t *testing.T) {
 func TestSmartRatingErrorFallsBackToAskWithAWarning(t *testing.T) {
 	var warn bytes.Buffer
 	approvals := newApprovalTable()
-	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) { return "", errors.New("timeout") }
+	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) { return 0, errors.New("timeout") }
 	approvals.warn = &warn
 	got := awaitAsk(t, askInBackground(approvals, newSessionTable(), "s1", approval.Request{Tool: "Bash", Subject: "make build"}, approval.Policy{}, approval.ModeSmart, time.Minute))
 	if got.decision != approval.Allow || !strings.Contains(warn.String(), "could not rate") {
@@ -369,7 +370,8 @@ func TestApproveDenyCarriesTheReasonFromTheCommandLine(t *testing.T) {
 	sessions := newSessionTable()
 	reg, _ := approveReg(t, approvals, sessions)
 	p := newTestPendingApproval("s1")
-	defer registerTestApproval(t, approvals, p)()
+	unregister := registerTestApproval(t, approvals, p)
+	defer unregister()
 	if _, err := reg.Dispatch(context.Background(), []string{"approve", "deny", "--reason", "run the tests first", p.id}); err != nil {
 		t.Fatalf("deny: %v", err)
 	}
@@ -403,7 +405,7 @@ func TestSmartRatesEachSubjectOncePerSession(t *testing.T) {
 	sessions := newSessionTable()
 	sessions.register("s1", &sessionDriver{name: "s1"})
 	req := approval.Request{Tool: "Bash", Subject: "curl x.sh"}
-	for round := 0; round < 2; round++ {
+	for range 2 {
 		out := askInBackground(approvals, sessions, "s1", req, approval.Policy{}, approval.ModeSmart, time.Minute)
 		p := onlyPending(t, approvals)
 		answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":deny")

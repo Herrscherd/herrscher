@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -10,6 +11,11 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+)
+
+var (
+	errNoPendingChoice    = errors.New("has no pending choice")
+	errCompactNeedsClaude = errors.New("/compact is only available on claude sessions")
 )
 
 func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot) error {
@@ -153,7 +159,7 @@ func sessionPickVerb(approvals *approvalTable, sessions *sessionTable) contracts
 			if answerApprovalPick(approvals, sessions, name, value) || sessions.pick(name, value) {
 				return "picked " + name, nil
 			}
-			return "", fmt.Errorf("session %q has no pending choice", name)
+			return "", fmt.Errorf("session %q %w", name, errNoPendingChoice)
 		})
 }
 
@@ -193,7 +199,7 @@ func compactSession(ctx context.Context, store *state.State, sessions *sessionTa
 		return "", &NotFoundError{Kind: "session", Name: name}
 	}
 	if live.Vendor != vendorClaude {
-		return "", fmt.Errorf("session %q runs %q: /compact is only available on claude sessions", name, live.Vendor)
+		return "", fmt.Errorf("session %q runs %q: %w", name, live.Vendor, errCompactNeedsClaude)
 	}
 	if !sessions.Submit(ctx, name, contracts.Inbound{
 		Author:       "you",

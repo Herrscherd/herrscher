@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -174,7 +175,7 @@ func (a *attachedDaemon) notify(channel, text string) {
 }
 
 func (a *attachedDaemon) Dispatch(args []string) (string, error) {
-	if len(args) == 0 || !(attachedVerbs()[args[0]] || terminal.ReadOnlyCommand(args)) {
+	if len(args) == 0 || (!attachedVerbs()[args[0]] && !terminal.ReadOnlyCommand(args)) {
 		verb := ""
 		if len(args) > 0 {
 			verb = args[0]
@@ -213,7 +214,9 @@ func (a *attachedDaemon) Resume(name string) (string, error) {
 }
 
 func (a *attachedDaemon) Seen(name string) {
-	_, _ = a.dispatch([]string{verbSession, "seen", argName, name})
+	if _, err := a.dispatch([]string{verbSession, "seen", argName, name}); err != nil {
+		slog.Debug("review mark not cleared", "session", name, "error", err)
+	}
 }
 
 func (a *attachedDaemon) Overview() (string, error) {
@@ -226,11 +229,12 @@ func (a *attachedDaemon) Interrupt(name string) bool {
 }
 
 func (a *attachedDaemon) Pick(channel, value string) bool {
-	for _, info := range a.Sessions() {
-		if info.ChannelID != channel {
+	sessions := a.Sessions()
+	for index := range sessions {
+		if sessions[index].ChannelID != channel {
 			continue
 		}
-		_, err := a.dispatch(append([]string{verbSession, "pick", argName, info.Name}, cli.FlagArg("value", value)...))
+		_, err := a.dispatch(append([]string{verbSession, "pick", argName, sessions[index].Name}, cli.FlagArg("value", value)...))
 		return err == nil
 	}
 	return false

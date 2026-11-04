@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,7 +38,7 @@ func TestPositionWithoutTokenIsTheStart(t *testing.T) {
 
 func TestPositionWithoutTranscriptIsUnsupported(t *testing.T) {
 	_, err := Position(t.TempDir(), "/work/tree", "thread-of-another-backend")
-	if err == nil || !strings.Contains(err.Error(), ErrUnsupported.Error()) {
+	if !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("a token with no Claude transcript must be unsupported, err = %v", err)
 	}
 }
@@ -57,7 +58,10 @@ func TestForkCopiesTheTranscriptUpToThePositionUnderANewID(t *testing.T) {
 	if strings.Contains(string(raw), `"uuid":"c"`) || !strings.Contains(string(raw), `"sessionId":"new"`) {
 		t.Fatalf("forked transcript wrong: %s", raw)
 	}
-	original, _ := os.ReadFile(TranscriptPath(home, "/src", "old"))
+	original, err := os.ReadFile(TranscriptPath(home, "/src", "old"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(original), `"uuid":"c"`) {
 		t.Fatal("the source transcript must be left whole")
 	}
@@ -75,7 +79,10 @@ func TestNewTokenIsAUUIDAndUnique(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, _ := NewToken()
+	second, err := NewToken()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(first) != 36 || first == second || first[14] != '4' {
 		t.Fatalf("tokens = %q, %q", first, second)
 	}

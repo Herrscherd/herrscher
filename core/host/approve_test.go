@@ -68,7 +68,7 @@ func TestAskApprovalWaitsThenIsAnswered(t *testing.T) {
 			done <- d
 		}()
 		id := awaitPending(t, approvalTab, 1)[0].ID
-		if !answerApproval(approvalTab, id, approval.Allow, "") {
+		if !answerApproval(approvalTab, id, approval.Allow) {
 			t.Fatal("answerApproval reported no such request")
 		}
 		if d := <-done; d != approval.Allow {
@@ -97,12 +97,12 @@ func TestAskApprovalTimesOutIntoADenial(t *testing.T) {
 	}
 }
 
-func answerApproval(approvalTab *approvalTable, id string, decision approval.Decision, reason string) bool {
+func answerApproval(approvalTab *approvalTable, id string, decision approval.Decision) bool {
 	scope := scopeOnce
 	if decision == approval.Deny {
 		scope = scopeDeny
 	}
-	return settleApproval(approvalTab, newSessionTable(), id, approvalAnswer{scope: scope, reason: reason})
+	return settleApproval(approvalTab, newSessionTable(), id, approvalAnswer{scope: scope})
 }
 
 func waitingFor(approvalTab *approvalTable, session string) int {
@@ -142,7 +142,7 @@ func fillApprovals(t *testing.T, approvalTab *approvalTable, sessionTab *session
 	}, "every session's approval registered")
 	return func() {
 		for _, id := range ids {
-			answerApproval(approvalTab, id, approval.Deny, "")
+			answerApproval(approvalTab, id, approval.Deny)
 		}
 		wg.Wait()
 	}
@@ -230,7 +230,7 @@ func TestATimedOutRequestFreesItsSlot(t *testing.T) {
 
 func TestAnswerApprovalUnknownID(t *testing.T) {
 	approvalTab := newApprovalTable()
-	if answerApproval(approvalTab, "nope", approval.Allow, "") {
+	if answerApproval(approvalTab, "nope", approval.Allow) {
 		t.Fatal("answering an unknown id must report false")
 	}
 }
@@ -244,7 +244,7 @@ func TestTwoSessionsWaitIndependently(t *testing.T) {
 		for _, name := range []string{"s1", "s2"} {
 			go func(session string) {
 				d, _ := askApproval(context.Background(), approvalTab, sessionTab, session, approval.Request{Tool: "Bash", Subject: session}, pol, approval.ModeAsk, 5*time.Second)
-				got <- session + ":" + string(d)
+				got <- session + ":" + d.String()
 			}(name)
 		}
 		var byID map[string]string
@@ -274,10 +274,10 @@ func pendingBySession(approvalTab *approvalTable) map[string]string {
 func answerSessionsApart(approvalTab *approvalTable, byID map[string]string) {
 	for id, session := range byID {
 		if session == "s1" {
-			answerApproval(approvalTab, id, approval.Allow, "")
+			answerApproval(approvalTab, id, approval.Allow)
 			continue
 		}
-		answerApproval(approvalTab, id, approval.Deny, "")
+		answerApproval(approvalTab, id, approval.Deny)
 	}
 }
 
@@ -383,7 +383,7 @@ func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
 	}
 
 	allowed := captureDaemonStderr(t, func() {
-		askApproval(ctx, approvalTab, sessionTab, "s-warn", req, nil, "", outlives)
+		askApproval(ctx, approvalTab, sessionTab, "s-warn", req, nil, 0, outlives)
 	})
 	if allowed != "" {
 		t.Fatalf("a call nobody is asked about must say nothing, got %q", allowed)

@@ -38,26 +38,26 @@ func riskModelPlugin(plugins []contracts.Plugin) (contracts.Plugin, bool) {
 func registryRiskJudge(ctx context.Context, req approval.Request) (approval.Risk, error) {
 	plugin, ok := riskModelPlugin(contracts.Default.Backends())
 	if !ok {
-		return "", errNoRiskModel
+		return 0, errNoRiskModel
 	}
 	ctx, cancel := context.WithTimeout(ctx, riskModelTimeout)
 	defer cancel()
 	cfg, err := contracts.Resolve(plugin.Manifest.Config, curationEnv(os.Getenv))
 	if err != nil {
-		return "", err
+		return 0, err
 	}
 	backend, err := plugin.Backend(ctx, cfg)
 	if err != nil {
-		return "", err
+		return 0, err
 	}
 	defer func() { logCleanup(backend.Close()) }()
 	answer, err := backend.Respond(ctx, contracts.Prompt{Content: riskPrompt(req)}, nil)
 	if err != nil {
-		return "", err
+		return 0, err
 	}
 	risk, ok := approval.ParseRisk(answer)
 	if !ok {
-		return "", errRiskUnreadable
+		return 0, errRiskUnreadable
 	}
 	return risk, nil
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -19,6 +20,8 @@ const (
 	overviewTextMax  = 240
 )
 
+// SessionOverview is one row of the sessions board: a session's state, what it
+// has cost, and the last thing it said.
 type SessionOverview struct {
 	Name       string   `json:"name"`
 	Vendor     string   `json:"vendor"`
@@ -59,7 +62,7 @@ type tallyCache struct {
 }
 
 func newTallyCache() *tallyCache {
-	return &tallyCache{files: map[string]*transcriptTally{}}
+	return &tallyCache{files: make(map[string]*transcriptTally)}
 }
 
 func (c *tallyCache) tally(path string) transcriptTally {
@@ -75,11 +78,16 @@ func (c *tallyCache) tally(path string) transcriptTally {
 }
 
 func advanceTally(path string, cur *transcriptTally) {
-	file, err := os.Open(path)
+	root, err := os.OpenRoot(filepath.Dir(path))
 	if err != nil {
 		return
 	}
-	defer func() { _ = file.Close() }()
+	defer func() { logCleanup(root.Close()) }()
+	file, err := root.Open(filepath.Base(path))
+	if err != nil {
+		return
+	}
+	defer func() { logCleanup(file.Close()) }()
 	info, err := file.Stat()
 	if err != nil {
 		return
@@ -136,13 +144,14 @@ type overviewSource struct {
 }
 
 func (src overviewSource) overviews() []SessionOverview {
-	waiting := map[string]bool{}
+	waiting := make(map[string]bool)
 	for _, pending := range pendingApprovals(src.approvals) {
 		waiting[pending.Session] = true
 	}
 	sessions := src.st.SnapshotSessions()
 	out := make([]SessionOverview, 0, len(sessions))
-	for _, live := range sessions {
+	for index := range sessions {
+		live := &sessions[index]
 		tally := src.tallies.tally(state.TranscriptPath(src.partDir, live.Name))
 		driver := src.sessions.lookup(live.Name)
 		working := driver != nil && driver.busy.Load()

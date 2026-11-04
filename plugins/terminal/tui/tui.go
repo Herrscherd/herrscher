@@ -320,7 +320,10 @@ type model struct {
 	themeScr        *themeScreen
 	noColor         bool
 
-	leaderArmed time.Time
+	bindings    *keyTable
+	keyChord    keyPress
+	keyTimeout  time.Duration
+	keyProblems []string
 	bar         barState
 
 	ctxOpen bool
@@ -509,6 +512,7 @@ func newModel(backend Backend) *model {
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
 		st: newStyles(defaultTheme(), false), md: &markdownRenderer{}, theme: defaultTheme(), bar: newBarState(),
 		terminal: detectTerminal(os.LookupEnv),
+		bindings: loadKeyBindings("", "", keysSection{}).table, keyTimeout: defaultChordTimeout,
 	}
 	match.cmds = localCommands()
 	if backend != nil {
@@ -761,6 +765,8 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		m.toggleHelp()
 	case cmdTheme:
 		m.openTheme()
+	case cmdKeybindings:
+		return m.openKeybindings(), true
 	case sessionVerb:
 		return m.sessionSlash(args)
 	case "context":
@@ -1540,6 +1546,9 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case editorDoneMsg:
 		m.applyEditorResult(msg)
 		return nil, true
+	case keybindingsDoneMsg:
+		m.applyKeybindingsDone(msg)
+		return nil, true
 	case draftBeatFailedMsg:
 		m.queueBeatFlash(msg.err)
 		return m.watchDraftBeat(), true
@@ -1696,9 +1705,6 @@ func (m *model) dispatchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleHistSearchKey(msg), true
 	case m.rwOpen:
 		return m.handleRewindKey(msg), true
-	}
-	if cmd, handled := m.handleLeader(msg); handled {
-		return cmd, true
 	}
 	if cmd, handled := m.handleApprovalKey(msg); handled {
 		return cmd, true
@@ -1882,63 +1888,17 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if m.handleQueueFocus(msg) {
 		return nil, true
 	}
-
-	switch msg.Type {
-	case tea.KeyF12:
-		if msg.Alt {
-			return m.sendQueueNow(), true
+	action, matched := m.pressChatKey(msg, time.Now())
+	if !matched {
+		if msg.Type == tea.KeyRunes {
+			return m.handleRunesKey(msg)
 		}
 		return nil, false
-	case tea.KeyEsc:
-		m.escapeKey()
-		return nil, true
-	case tea.KeyCtrlC:
-		return m.interruptOrQuit()
-	case tea.KeyTab:
-		m.switchTab(1)
-	case tea.KeyShiftTab:
-		return m.cycleMode(), true
-	case tea.KeyCtrlB:
-		m.toggleSidebar()
-		return nil, true
-	case tea.KeyEnter:
-		return m.enterKey(msg)
-	case tea.KeyCtrlS:
-		m.stashDraft()
-	case tea.KeyCtrlF:
-		m.openSearch()
-	case tea.KeyCtrlR:
-		m.openHistSearch()
-	case tea.KeyCtrlT:
-		m.openSwitch()
-	case tea.KeyCtrlY:
-		m.copyLastCode()
-	case tea.KeyCtrlD:
-		return m.openDiff(false), true
-	case tea.KeyCtrlG:
-		return m.toggleMouse(), true
-	case tea.KeyCtrlL:
-		m.selectNextLink()
-	case tea.KeyCtrlO:
-		m.openOrFold()
-	case tea.KeyCtrlV:
-		return nil, m.pasteImage()
-	case tea.KeyCtrlU:
-		return m.removePendingKey()
-	case tea.KeyUp:
-		return m.upKey(msg)
-	case tea.KeyDown:
-		return m.handleHistoryKey(msg, 1)
-	case tea.KeyCtrlP:
-		return m.openBoard(), true
-	case tea.KeyCtrlW:
-		return m.closeTabKey()
-	case tea.KeyRunes:
-		return m.handleRunesKey(msg)
-	default:
-		return nil, false
 	}
-	return nil, true
+	if action == "" {
+		return nil, true
+	}
+	return m.runChatAction(action, msg)
 }
 
 func (m *model) escapeKey() {
@@ -1970,7 +1930,7 @@ func (m *model) removePendingKey() (tea.Cmd, bool) {
 }
 
 func (m *model) upKey(msg tea.KeyMsg) (tea.Cmd, bool) {
-	if !msg.Alt && m.focusQueueStart() {
+	if m.focusQueueStart() {
 		return nil, true
 	}
 	return m.handleHistoryKey(msg, -1)
@@ -2006,11 +1966,7 @@ func (m *model) overlayCtrlC() tea.Cmd {
 	return cmd
 }
 
-func (m *model) handleHistoryKey(msg tea.KeyMsg, dir int) (tea.Cmd, bool) {
-	if msg.Alt {
-		m.jumpTurn(dir)
-		return nil, true
-	}
+func (m *model) handleHistoryKey(_ tea.KeyMsg, dir int) (tea.Cmd, bool) {
 	if dir < 0 {
 		if m.input.LineCount() <= 1 && (m.input.Value() == "" || m.histIdx < len(m.history)) && m.recallHistory(-1) {
 			return nil, true
@@ -2031,27 +1987,11 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if msg.String() == "n" && m.input.Value() == "" && m.toast.title != "" {
 		return m.cycleNotify(), true
 	}
-	if msg.Alt && strings.EqualFold(string(msg.Runes), "y") {
-		m.copyTarget(copyReply)
-		return nil, true
-	}
-	if msg.Alt && strings.EqualFold(string(msg.Runes), "c") {
-		m.toggleFold()
-		return nil, true
-	}
-	if msg.Alt && strings.EqualFold(string(msg.Runes), "t") {
-		m.toggleTurnFold()
-		return nil, true
-	}
-	if msg.Alt && strings.EqualFold(string(msg.Runes), "e") {
-		m.toggleToolExpand()
-		return nil, true
-	}
 	return nil, false
 }
 
 func (m *model) helpView() string {
-	help := "⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l’ouvrir · alt+c replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · alt+t replier les tours · ctrl+f chercher · ctrl+s brouillon de côté · ctrl+r historique · ctrl+t sessions · ctrl+x ctrl+e éditeur · ⌥⏎ réoriente · ⌃⏎ envoie la file · ↑ puis suppr retire · alt+↑↓ tour suivant · / commandes · @ fichiers · ! commande shell"
+	help := m.keyHelpLine()
 	if m.width > 0 {
 		help = foldText(help, m.width)
 	}

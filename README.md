@@ -441,7 +441,7 @@ At 110 columns and wider a side column runs down the right of the transcript,
 separated by a vertical rule. It shows the session (project, branch, worktree,
 gateways), the todos with their `n/m` count, the sub-agents still running and those
 just finished, background tasks when the backend reports them, the files the session wrote with their `+added −removed` line counts
-against git, and the context gauge (24 cells) with the compaction threshold (92 %). `ctrl+b` hides or
+against git, and the context gauge (24 cells) with the compaction threshold (92 %). `ctrl+x v` hides or
 shows it. Under 24 rows the bottom sections fold to their summary line. The
 transcript keeps the full width below 110 columns, and the todos and sub-agents
 panels stay in the stack above the composer whenever the column is hidden.
@@ -769,11 +769,11 @@ what is not, and what each unavailable feature falls back to.
 A link is followed because the operator asked, never because a message arrived or
 a turn completed. A notification does not open a link either: it only signals.
 
-`ctrl+l` walks the links in the transcript. While one is selected the status line
+`ctrl+x l` walks the links in the transcript. While one is selected the status line
 shows its *resolved target*, since a markdown label can name one destination and
-point at another, and `ctrl+o` opens it: a URL through the desktop handler, a
+point at another, and `ctrl+x o` opens it: a URL through the desktop handler, a
 `file.go:42` reference through `$EDITOR` at that line. That is display, not a
-confirmation prompt. The keypress is the consent. With no link selected, `ctrl+o`
+confirmation prompt. The keypress is the consent. With no link selected, `ctrl+x o`
 folds or unfolds the latest reasoning block or tool output instead.
 
 ### Sessions board and panes
@@ -811,9 +811,9 @@ composer text to it. A click on a pane focuses it. When a pane shows an approval
 `ctrl+n` and `ctrl+p`, and puts the scroll position back where it was when you
 close it.
 
-`alt+↑` and `alt+↓` jump by turn. `ctrl+t` opens the session picker, `alt+t`
+`ctrl+x k` and `ctrl+x j` jump by turn. `ctrl+x s` opens the session picker, `ctrl+x f`
 collapses the history above the current exchange to one line per turn, `alt+c`
-folds long code blocks to a summary line, and `ctrl+y` copies the last one to the
+folds long code blocks to a summary line, and `ctrl+x c` copies the last one to the
 clipboard as raw text.
 
 Each tool call is one line: its family verb in bold, its argument in grey, a
@@ -846,7 +846,7 @@ names the drafts waiting.
 `ctrl+x ctrl+e` opens the draft in `$EDITOR` (then `$VISUAL`, then `vi`). The
 composer is framed in the accent colour while the editor is open, and the saved
 text comes back into it when the editor exits. A terminal that reports `ctrl+⏎`
-through the enhanced keyboard protocol sends the queue directly; the leader
+through the enhanced keyboard protocol sends the queue directly; the chord
 `ctrl+x ⏎` does the same everywhere else.
 
 `!command` runs a shell command in the session's directory through the host's
@@ -881,7 +881,7 @@ confetti.
 
 ### Reviewing what a turn changed
 
-`ctrl+d` opens the diff panel over the window. It lists the files the session
+`ctrl+x d` opens the diff panel over the window. It lists the files the session
 touched, with their status (M, A, D), their counts and a reviewed mark, and shows
 the selected file as a two-column numbered diff. Scope is the current turn by
 default, or the branch against its base when you press `b`. Untracked files count,
@@ -907,9 +907,9 @@ the answer, the whole exchange that produced it, or the tab's transcript. What
 was said only, never this window's tool lines, reasoning, costs or notices, which
 are noise in a paste.
 
-`ctrl+g` (or `/mouse`) hands the mouse back to the terminal so its own selection
+`ctrl+x m` (or `/mouse`) hands the mouse back to the terminal so its own selection
 works as always. The status bar says `mouse → terminal` while it is released,
-`pgup` and `pgdn` still scroll, and `ctrl+g` takes it back.
+`pgup` and `pgdn` still scroll, and `ctrl+x m` takes it back.
 
 ### Numbers that mean what they say
 
@@ -927,46 +927,148 @@ instead.
 
 ### Keys
 
-`/help` lists the same keys. A key has one meaning in the main window;
-an open panel (diff, sessions, search, rewind, theme, status bar) takes the keys
-it names in its own footer first.
+Every key of the terminal is one table: a context, an action id and the chords
+that run it. The defaults are Claude Code's own (same context names, action ids
+and keys). Where herrscher had another function on a key Claude uses, Claude's
+key wins and the herrscher function moved under `ctrl+x` with a mnemonic letter.
+`/help` shows the keys of the main window as they are now, and `/keybindings`
+opens your overrides file.
 
-| Key | What it does |
-|---|---|
-| `⏎` | send; while a turn runs, queue the message |
-| `⌥⏎` | while a turn runs, steer it with the message |
-| `⌃⏎` | send the queue now |
-| `⇧⏎`, `\⏎` | new line |
-| `↑` `↓` | history; `↑` on an empty composer focuses the queue, then `suppr` removes and `⇧↑` `⇧↓` reorder |
-| `alt+↑` `alt+↓` | previous or next turn |
-| `échap` | interrupt the running turn |
-| `échap échap` | on an idle session with an empty composer, rewind to an earlier message |
-| `ctrl+c` | interrupt, or quit when nothing runs |
-| `tab` | next session tab |
-| `shift+tab` | cycle the approval mode (Manuel, Édits acceptés, Plan, Auto) |
-| `ctrl+t` | session switcher |
-| `ctrl+p` | the session a notification points at, or the sessions board |
-| `ctrl+w` | close the tab |
-| `ctrl+b` | toggle the sidebar |
-| `ctrl+d` | diff panel for the turn or the branch |
-| `ctrl+f` | search the transcript |
-| `ctrl+r` | search the prompt history |
-| `ctrl+s` | set the draft aside |
-| `ctrl+l` | select the next link; `ctrl+o` opens it |
-| `ctrl+o` | without a selected link, show or hide the thinking |
-| `ctrl+y` | copy the last code block; `alt+y` copies the whole answer |
-| `alt+c` | fold code blocks |
-| `alt+e` | spell out commands and unfold diffs |
-| `alt+t` | fold the turns |
-| `ctrl+v` | paste an image |
-| `ctrl+g` | release the mouse so the terminal can select |
-| `ctrl+x t` | theme picker |
-| `ctrl+x ctrl+e` | edit the draft in `$EDITOR` (then `$VISUAL`) |
-| `ctrl+x ⏎` | send the queue now |
-| `n` | with a notification or `/context` open, the next item |
-| `/` `@` `!` | commands, files, a shell command run under the approval policy |
+#### Main window
 
-→ `plugins/terminal/tui/tui.go`, `plugins/terminal/tui/leader.go`
+Contexts are read in order: Chat first, then Global.
+
+| Key | Action | What it does |
+|---|---|---|
+| `⏎` | `chat:submit` | send; while a turn runs, queue the message |
+| `⌥⏎` | `chat:queueRedirect` | while a turn runs, steer it with the message |
+| `⌃J`, `⇧⏎`, `\⏎` | `chat:newline` | new line |
+| `échap` | `chat:cancel` | interrupt the running turn |
+| `⇧⇥` | `chat:cycleMode` | cycle the approval mode (Manuel, Édits acceptés, Plan, Auto) |
+| `⇥` | `tabs:next` | next session tab |
+| `↑` `↓` | `chat:previousHistory`, `chat:nextHistory` | history; `↑` on an empty composer focuses the queue |
+| `⌃C` | `app:interrupt` | interrupt, or quit when nothing runs |
+| `⌃D` | `app:exit` | quit, only with an empty composer |
+| `⌃R` | `history:search` | search the prompt history |
+| `⌃V` | `chat:imagePaste` | paste an image |
+| `⌃U` | `chat:removePending` | remove the pending message |
+| `⌃S` | `chat:stash` | set the draft aside |
+| `⌃L` | `chat:clearInput` | clear the composer |
+| `⌃F` | `chat:search` | search the transcript |
+| `⌃W` | `app:closeTab` | close the tab |
+| `⌃P` | `chat:openBoard` | sessions board |
+| `⌃G`, `⌃X ⌃E` | `chat:externalEditor` | edit the draft in `$EDITOR` (then `$VISUAL`) |
+| `⌃X ⏎` | `chat:queueSubmit` | send the queue now |
+| `⌃X ⌃S`, `alt+F12` | `chat:sendNow` | send now |
+| `⌃X ⌃K` | `chat:killAgents` | no effect yet (see below) |
+| `⌃X C` | `chat:copyCode` | copy the last code block |
+| `alt+Y` | `chat:copyReply` | copy the last answer |
+| `alt+C` | `chat:toggleCodeFold` | fold long code blocks |
+| `alt+E` | `chat:toggleToolExpand` | spell out commands and unfold diffs |
+| `⌃X F` | `chat:toggleTurnFold` | fold the turns |
+| `⌃X O` | `chat:openOrFold` | open the selected link, or fold the latest block |
+| `⌃X L` | `chat:nextLink` | select the next link |
+| `⌃X J` `⌃X K` | `chat:nextTurn`, `chat:previousTurn` | next or previous turn |
+| `⌃X M` | `app:toggleMouse` | release the mouse so the terminal can select |
+| `⌃X D` | `app:openDiff` | diff panel for the turn or the branch |
+| `⌃X S` | `app:openSessions` | session switcher |
+| `⌃X T` | `app:openTheme` | theme picker |
+| `⌃X V` | `app:toggleSidebar` | toggle the sidebar |
+| `⌃X ⌃A`, `⌃X ⇥` | `abovePrompt:toggle`, `abovePrompt:focus` | no effect yet (see below) |
+| `?` `n` `/` `@` `!` | not in the table | help, notifications, commands, files, shell command |
+
+`?` and `n` are typed keys: they are read only when the composer is empty and
+are not yet configurable.
+
+#### Moved keys
+
+These herrscher functions had a key that Claude now uses for its own action.
+They moved, and the old key does what Claude says it does.
+
+| Function | Before | Now | Claude's action on the old key |
+|---|---|---|---|
+| diff panel | `⌃D` | `⌃X D` | `app:exit` (quit with an empty composer) |
+| session switcher | `⌃T` | `⌃X S` | `app:toggleTodos` (no effect yet) |
+| mouse release | `⌃G` | `⌃X M` | `chat:externalEditor` (opens `$EDITOR`) |
+| next link | `⌃L` | `⌃X L` | `chat:clearInput` (clears the composer) |
+| open the link, or fold | `⌃O` | `⌃X O` | `app:toggleTranscript` (no effect yet) |
+| copy the last code block | `⌃Y` | `⌃X C` | `chat:defaultToNewerModel` (no effect yet) |
+| sidebar | `⌃B` | `⌃X V` | `task:background` (no effect yet) |
+| fold the turns | `alt+T` | `⌃X F` | `chat:thinkingToggle` (no effect yet) |
+| previous or next turn | `alt+↑` `alt+↓` | `⌃X K` `⌃X J` | `app:diffFileListUp` and `app:diffFileListDown` (no effect outside the diff panel) |
+
+#### Claude actions without an effect here
+
+The table knows these actions, so a file can bind them without an error, but
+herrscher does not run anything for them yet: `app:toggleTodos` (`⌃T`),
+`app:toggleTranscript` (`⌃O`), `app:toggleBrief` (`⇧⌃B`),
+`app:diffFileListUp` and `app:diffFileListDown` (`⌃↑` `⌃↓` `alt+↑` `alt+↓`
+outside the diff panel), `app:openArtifact` (`⌃]`), `chat:killAgents`
+(`⌃X ⌃K`), `chat:clearScreen` (`cmd+K`), `chat:undo` (`⌃_`, `⌃-`, `⌃⇧-`,
+`⌃⇧_`), `chat:modelPicker` (`alt+P`), `chat:fastMode` (`alt+O`),
+`chat:defaultToNewerModel` (`⌃Y`), `chat:thinkingToggle` (`alt+T`),
+`chat:workflowKeywordToggle` (`alt+W`), `abovePrompt:toggle` (`⌃X ⌃A`),
+`abovePrompt:focus` (`⌃X ⇥`), `task:background` (`⌃B`, `⌃X ⌃B`).
+
+#### Your keys: `~/.config/herrscher/keybindings.json`
+
+The file has Claude Code's exact format, so a file copied from
+`~/.claude/keybindings.json` works as it is:
+
+```json
+{
+  "$schema": "https://www.schemastore.org/claude-code-keybindings.json",
+  "$docs": "https://code.claude.com/docs/en/keybindings",
+  "bindings": [
+    { "context": "Chat", "bindings": { "ctrl+e": "chat:externalEditor", "ctrl+g": null } }
+  ]
+}
+```
+
+- Your bindings are added after the defaults. A later binding on the same chord
+  in the same context replaces the default, and `null` removes a default.
+- A chord is one or more keys separated by a space (`ctrl+x ctrl+e`). Modifiers
+  are `ctrl`, `alt` (also `meta`, `opt`), `shift` and `cmd` (also `super`, `win`).
+- Not remappable: `ctrl+c`, `ctrl+m`, `ctrl+[`, `ctrl+i`, `ctrl+h` (they are the
+  same bytes as other keys in a terminal), and `ctrl+d` as an exit key. `ctrl+z`
+  and `ctrl+\` are reserved by the terminal.
+- An invalid entry is skipped and reported in the banner: an unknown context,
+  an unknown modifier, an unknown action, a duplicate in one context, a key that
+  cannot be used, or a value that is neither an action nor `null`. The rest of
+  the file still applies. A file that is not valid JSON is skipped as a whole,
+  and reported.
+
+#### Claude's file and `[keys]`
+
+By default herrscher also reads `~/.claude/keybindings.json` before its own
+file, so your Claude personalisations apply here too. Claude actions that
+herrscher does not run are accepted without a message, while an action name
+that neither product knows is reported. The `[keys]` section of
+`terminal.toml` controls this:
+
+```toml
+[keys]
+import_claude = false
+chord_timeout = 3
+```
+
+`chord_timeout` is the delay in seconds between two keys of a chord (default 3).
+
+#### `/keybindings`
+
+`/keybindings` opens the herrscher file in `$EDITOR`. It creates the file with
+`$schema`, `$docs` and `bindings: []` when it does not exist, and reloads the
+table when the editor closes, flashing the problems if there are any.
+
+#### Not yet in the table
+
+The overlays (diff, sessions, search, rewind, theme, status bar, plugins) still
+read their own keys, and their footers and the composer placeholder still show
+the built-in keys. A changed key shows in `/help` and in the chat bindings, not
+yet in those footers.
+
+→ `plugins/terminal/tui/keys.go`, `plugins/terminal/tui/keys_defaults.go`,
+`plugins/terminal/tui/keys_file.go`, `plugins/terminal/tui/keys_runtime.go`
 
 ## Plugins
 

@@ -297,7 +297,7 @@ func TestThemeOverlayEscRevertsPreview(t *testing.T) {
 	}
 }
 
-func TestLeaderOpensThemeOverlay(t *testing.T) {
+func TestChordOpensThemeOverlay(t *testing.T) {
 	m, _ := themeModel(t, 120)
 	m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlX})
 	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
@@ -306,10 +306,10 @@ func TestLeaderOpensThemeOverlay(t *testing.T) {
 	}
 }
 
-func TestLeaderTimesOut(t *testing.T) {
+func TestChordTimesOut(t *testing.T) {
 	m, _ := themeModel(t, 120)
 	m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlX})
-	m.leaderArmed = time.Now().Add(-2 * leaderWindow)
+	m.keyChord.started = time.Now().Add(-2 * defaultChordTimeout)
 	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
 	if m.themeScr != nil {
 		t.Fatal("a late second key must not run the leader binding")

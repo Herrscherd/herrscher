@@ -694,7 +694,9 @@ folds or unfolds the latest reasoning block or tool output instead.
 `ctrl+p` (or `/agents`) opens the sessions board: every session, terminal and
 other gateways alike, grouped by state (Au travail, Attend une réponse, À relire,
 Fini). Each session takes two lines: its state glyph, name, vendor, gateway and
-project, then its age, cost, context gauge and last activity. Letters filter the
+project, then its age, cost, context gauge and last activity. Its running sub-agents
+hang under it, one line each with name, vendor and task (three at most, then a
+count); a session without a tab in this terminal shows none. Letters filter the
 rows, `↑↓` choose, `Enter` opens or switches to the session, and `Esc` clears the
 filter before it closes the board. Below 100 columns the board is the list alone.
 

@@ -35,24 +35,29 @@ const (
 )
 
 const (
-	boardListWidth    = 80
-	boardNameWidth    = 18
-	boardVendorWidth  = 15
-	boardGatewayWidth = 17
-	boardWhatIndent   = 5
-	boardGaugeCells   = 5
-	boardDetailCells  = 12
-	boardPercentWidth = 4
-	boardDetailRows   = 13
-	boardHeaderRows   = 1
-	boardSubtitle     = "terminal et Discord ensemble"
-	boardNoMatch      = "   (aucune session ne correspond)"
-	boardEmpty        = "  aucune session"
-	boardArchivedHint = "/resume pour les reprendre avec aperçu"
-	gatewayTerminal   = "terminal"
-	hintOpenApproval  = "ouvrir l’approbation"
-	hintReviewTurn    = "relire le diff du tour"
-	hintOpenPane      = "ouvrir · ⌃P en volet"
+	boardListWidth        = 80
+	boardNameWidth        = 18
+	boardVendorWidth      = 15
+	boardGatewayWidth     = 17
+	boardWhatIndent       = 5
+	boardAgentIndent      = 5
+	boardAgentRows        = 3
+	boardAgentNameWidth   = 9
+	boardAgentVendorWidth = 14
+	boardAgentWhatMin     = 10
+	boardGaugeCells       = 5
+	boardDetailCells      = 12
+	boardPercentWidth     = 4
+	boardDetailRows       = 13
+	boardHeaderRows       = 1
+	boardSubtitle         = "terminal et Discord ensemble"
+	boardNoMatch          = "   (aucune session ne correspond)"
+	boardEmpty            = "  aucune session"
+	boardArchivedHint     = "/resume pour les reprendre avec aperçu"
+	gatewayTerminal       = "terminal"
+	hintOpenApproval      = "ouvrir l’approbation"
+	hintReviewTurn        = "relire le diff du tour"
+	hintOpenPane          = "ouvrir · ⌃P en volet"
 )
 
 type boardGroupKey uint8
@@ -92,6 +97,7 @@ type boardRow struct {
 	group    boardGroupKey
 	unread   int
 	finished bool
+	agents   []liveAgent
 }
 
 type boardState struct {
@@ -165,6 +171,7 @@ func newBoardRow(overview SessionOverview, info contracts.SessionInfo, channelTa
 	if channelTab != nil {
 		row.unread = channelTab.unreadCount
 		row.finished = channelTab.finished
+		row.agents = channelTab.agents
 	}
 	return row
 }
@@ -431,7 +438,42 @@ func (m *model) boardRowLines(row *boardRow, selected bool, width int) []string 
 		paint(m.sessionTone(row)).Render(truncate(what, width-boardWhatIndent-lipgloss.Width(right)-1))
 	gap := max(1, width-lipgloss.Width(second)-lipgloss.Width(right))
 	second += paint(m.st.dim).Render(strings.Repeat(" ", gap)) + right
-	return []string{truncate(first, width), truncate(second, width)}
+	lines := []string{truncate(first, width), truncate(second, width)}
+	return append(lines, m.boardAgentLines(row, width)...)
+}
+
+func (m *model) boardAgentLines(row *boardRow, width int) []string {
+	shown := min(len(row.agents), boardAgentRows)
+	hidden := len(row.agents) - shown
+	lines := make([]string, 0, shown+1)
+	for index := range shown {
+		branch := m.st.glyphs.branchMid
+		if hidden == 0 && index == shown-1 {
+			branch = m.st.glyphs.branchEnd
+		}
+		glyph, glyphStyle := m.boardAgentGlyph(row.agents[index])
+		line := m.st.dim.Render(strings.Repeat(" ", boardAgentIndent)+branch+" ") + glyphStyle.Render(glyph) + " " +
+			m.st.text.Render(padTo(truncate(oneLine(row.agents[index].Name), boardAgentNameWidth), boardAgentNameWidth))
+		if width-lipgloss.Width(line)-boardAgentVendorWidth >= boardAgentWhatMin {
+			line += m.st.dim.Render(padTo(truncate(row.overview.Vendor, boardAgentVendorWidth), boardAgentVendorWidth))
+		}
+		line += m.st.dim.Render(truncate(oneLine(row.agents[index].Kind), max(0, width-lipgloss.Width(line))))
+		lines = append(lines, truncate(line, width))
+	}
+	if hidden > 0 {
+		lines = append(lines, truncate(m.st.dim.Render(fmt.Sprintf("%s%s +%d", strings.Repeat(" ", boardAgentIndent), m.st.glyphs.branchEnd+" ", hidden)), width))
+	}
+	return lines
+}
+
+func (m *model) boardAgentGlyph(agent liveAgent) (string, lipgloss.Style) {
+	switch agent.State {
+	case stateDone:
+		return m.st.glyphs.success, m.st.green.Bold(true)
+	case stateFailed, stateError, stateTimeout:
+		return m.st.glyphs.failure, m.st.red.Bold(true)
+	}
+	return m.spinFrame(), m.st.spinner
 }
 
 func gatewayStyle(styles uiStyles, gateway string) lipgloss.Style {

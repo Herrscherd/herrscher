@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -169,4 +171,67 @@ func listRow(view, name string) int {
 		}
 	}
 	return -1
+}
+
+func boardModelWithAgents(t *testing.T, count int) *model {
+	t.Helper()
+	_, m := boardModel(t)
+	tb := m.ensureTab("ch-alpha")
+	for index := range count {
+		tb.agents = append(tb.agents, liveAgent{Subagent: contracts.Subagent{ID: strconv.Itoa(index), Name: fmt.Sprintf("explore-%d", index), Kind: "lecture du code", State: "running"}})
+	}
+	return m
+}
+
+func TestBoardShowsSubagentsUnderTheirSession(t *testing.T) {
+	m := boardModelWithAgents(t, 2)
+	m.width, m.height = 120, 30
+	updateKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+	view := m.View()
+	first, last := lineContaining(view, "explore-0"), lineContaining(view, "explore-1")
+	if !strings.Contains(first, "├ ") || !strings.Contains(last, "└ ") {
+		t.Fatalf("sub-agents must hang under their session with branches, lines %q / %q", first, last)
+	}
+	if !strings.Contains(first, "lecture du code") {
+		t.Fatalf("a sub-agent line must say what it does: %q", first)
+	}
+}
+
+func TestBoardSubagentRowsFallBackAsTheWidthShrinks(t *testing.T) {
+	m := boardModelWithAgents(t, 1)
+	m.width, m.height = 40, 20
+	updateKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+	line := lineContaining(m.View(), "explore-0")
+	if strings.Contains(line, "claude") {
+		t.Fatalf("at 40 columns the vendor must go before the task is cut: %q", line)
+	}
+	if !strings.Contains(line, "lecture") {
+		t.Fatalf("at 40 columns the task must stay readable: %q", line)
+	}
+}
+
+func TestBoardFitsTwentyLinesWithManySubagents(t *testing.T) {
+	for _, width := range []int{60, 80, 120, 200} {
+		m := boardModelWithAgents(t, 6)
+		m.width, m.height = width, 20
+		updateKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+		view := m.View()
+		if lines := strings.Split(view, "\n"); len(lines) > 20 {
+			t.Fatalf("at %d columns the board is %d lines high, window is 20", width, len(lines))
+		}
+		for _, line := range strings.Split(view, "\n") {
+			if w := lipgloss.Width(line); w > width {
+				t.Fatalf("at %d columns a line is %d wide: %q", width, w, line)
+			}
+		}
+	}
+}
+
+func TestBoardCapsSubagentRowsPerSession(t *testing.T) {
+	m := boardModelWithAgents(t, 5)
+	m.width, m.height = 120, 30
+	updateKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+	if !strings.Contains(m.View(), "+2") {
+		t.Fatal("five sub-agents must show three rows and a +2 for the rest")
+	}
 }

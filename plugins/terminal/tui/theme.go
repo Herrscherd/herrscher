@@ -4,7 +4,7 @@ import "github.com/charmbracelet/lipgloss"
 
 const (
 	glyphTool      = "●"
-	glyphResult    = "⎿"
+	glyphResult    = "└"
 	glyphPrompt    = ">"
 	glyphCursor    = "❯"
 	glyphUnread    = "•"
@@ -14,6 +14,13 @@ const (
 	glyphFold      = "▶"
 	glyphMoreLines = "↵"
 	glyphBolt      = "⚡"
+	glyphOK        = "✓"
+	glyphUserBar   = "┃"
+	glyphBranchMid = "├"
+	glyphBranchEnd = "└"
+	glyphCollapsed = "▸"
+	glyphExpanded  = "▾"
+	glyphOmitted   = "⋯"
 )
 
 func familyGlyphs() map[string]string {
@@ -35,7 +42,7 @@ func familyGlyph(family string) string {
 }
 
 func spinFrames() []string {
-	return []string{"✳", "✵", "✶", "✷", "✸", "✹"}
+	return []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"}
 }
 
 const (
@@ -47,6 +54,8 @@ const (
 	colWarn   = "#e2b04a"
 	colRed    = "#e04760"
 	colSelBg  = "#16202e"
+	colAddBg  = "#14281f"
+	colDelBg  = "#2c1620"
 )
 
 type uiStyles struct {
@@ -64,6 +73,10 @@ type uiStyles struct {
 	link       lipgloss.Style
 	chip       lipgloss.Style
 	overlaySel lipgloss.Style
+	strong     lipgloss.Style
+	violet     lipgloss.Style
+	addRow     lipgloss.Style
+	delRow     lipgloss.Style
 	sep        string
 }
 
@@ -84,8 +97,12 @@ func newStyles() uiStyles {
 		link:       lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent)).Underline(true),
 		chip:       lipgloss.NewStyle().Foreground(lipgloss.Color(colText)).Background(lipgloss.Color(colSelBg)).Padding(0, 1),
 		overlaySel: lipgloss.NewStyle().Background(lipgloss.Color(colSelBg)).Foreground(lipgloss.Color(colAccent)),
+		strong:     lipgloss.NewStyle().Foreground(lipgloss.Color(colText)).Bold(true),
+		violet:     lipgloss.NewStyle().Foreground(lipgloss.Color(colViolet)),
+		addRow:     lipgloss.NewStyle().Foreground(lipgloss.Color(colGreen)).Background(lipgloss.Color(colAddBg)),
+		delRow:     lipgloss.NewStyle().Foreground(lipgloss.Color(colRed)).Background(lipgloss.Color(colDelBg)),
 		sep:        dim.Render(" │ "),
 	}
 }
 
-const workingVerb = "Herrschering…"
+const workingVerb = "En cours…"

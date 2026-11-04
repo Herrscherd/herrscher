@@ -104,6 +104,15 @@ type entry struct {
 	streaming   bool
 	attachments []Attachment
 	preview     string
+	at          time.Time
+	ended       time.Time
+	base        int
+	tokens      int
+	span        time.Duration
+	live        bool
+	failed      bool
+	foldable    bool
+	open        bool
 }
 
 type tab struct {
@@ -125,12 +134,15 @@ type tab struct {
 	nextEntryID        uint64
 	todos              []contracts.TodoItem
 	agents             []liveAgent
+	trail              []liveAgent
+	flips              map[uint64]bool
 }
 
 type liveAgent struct {
 	contracts.Subagent
 
 	since time.Time
+	ended time.Time
 }
 
 func (tb *tab) dropAgent(agentID string) {
@@ -157,6 +169,10 @@ const maxTabLines = 5000
 func (tb *tab) appendEntry(item entry) {
 	tb.nextEntryID++
 	item.id = tb.nextEntryID
+	item.at = time.Now()
+	if item.role == roleYou {
+		tb.trail = nil
+	}
 	tb.entries = append(tb.entries, item)
 	if len(tb.entries) > maxTabLines {
 		tb.entries = append([]entry(nil), tb.entries[len(tb.entries)-maxTabLines:]...)
@@ -297,7 +313,8 @@ type model struct {
 
 	expandTools bool
 
-	tsCache transcriptCache
+	tsCache  transcriptCache
+	tsLayout transcriptLayout
 
 	foldCache overlayCache
 	markCache overlayCache
@@ -889,6 +906,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	if event.T != "abandoned" {
 		target.disconnected = false
 	}
+	previous := target.tokens
 	if event.Tokens > 0 {
 		target.tokens = event.Tokens
 	}
@@ -900,7 +918,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.appendChunk(event.Text)
 	case "thinking":
 		target.busy = true
-		target.appendThinking(event.Text)
+		target.appendThinking(event.Text, target.tokens, previous)
 	case "status":
 		target.busy = true
 		target.endStream()
@@ -944,12 +962,21 @@ func (tb *tab) measureContext(event contracts.Event) {
 	}
 }
 
-func (tb *tab) appendThinking(text string) {
+func (tb *tab) appendThinking(text string, tokens, before int) {
 	if strings.TrimSpace(text) == "" {
 		return
 	}
 	tb.endStream()
-	tb.appendEntry(entry{role: roleThinking, text: text})
+	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleThinking {
+		last := &tb.entries[n-1]
+		last.text += text
+		last.ended = time.Now()
+		if tokens > 0 {
+			last.tokens = tokens
+		}
+		return
+	}
+	tb.appendEntry(entry{role: roleThinking, text: text, tokens: tokens, base: before, ended: time.Now()})
 }
 
 func (tb *tab) appendReply(event contracts.Event) {
@@ -979,6 +1006,7 @@ func (tb *tab) applySubagent(sub *contracts.Subagent) {
 	if sub == nil {
 		return
 	}
+	tb.recordTrail(*sub)
 	if sub.State == stateDone {
 		tb.dropAgent(sub.ID)
 		return
@@ -1029,7 +1057,7 @@ func (m *model) contentWith(query string) string {
 	content := m.cachedTranscript(tab)
 	if m.foldTurnsOn {
 		content = m.foldCache.get(content, "", func(s string) string {
-			return strings.Join(foldTurns(strings.Split(s, "\n"), turnFoldKeep, m.st), "\n")
+			return strings.Join(foldTurns(strings.Split(s, "\n"), m.tsLayout.turns, turnFoldKeep, m.st), "\n")
 		})
 	}
 	if m.searchOpen && strings.TrimSpace(query) != "" {
@@ -1037,8 +1065,8 @@ func (m *model) contentWith(query string) string {
 			return strings.Join(highlightMatches(strings.Split(s, "\n"), query), "\n")
 		})
 	}
-	if tab.busy && !tab.streamed {
-		line := m.st.spinner.Render(m.spinFrame() + " thinking…")
+	if tab.busy {
+		line := m.busyRow(tab)
 		if content != "" {
 			content += "\n" + line
 		} else {
@@ -1060,7 +1088,9 @@ func (m *model) cachedTranscript(tab *tab) string {
 		cache.entries == len(tab.entries) && cache.lastLen == lastLen && cache.lastStr == lastStr {
 		return cache.out
 	}
-	out := m.renderTranscript(tab, width)
+	layout := m.layoutTranscript(tab, width)
+	m.tsLayout = layout
+	out := layout.text
 	*cache = transcriptCache{
 		ch: tab.channel, width: width, entries: len(tab.entries),
 		lastLen: lastLen, lastStr: lastStr, out: out, valid: true,
@@ -1223,6 +1253,10 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case eventMsg:
 		cmd := m.route(RoutedEvent(msg))
 		return tea.Batch(cmd, m.ensureSpin()), true
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft && m.clickTranscript(msg) {
+			return nil, true
+		}
 	case imageReadyMsg:
 		m.applyImage(msg)
 		return nil, true
@@ -1542,7 +1576,7 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case tea.KeyCtrlL:
 		m.selectNextLink()
 	case tea.KeyCtrlO:
-		m.openSelectedLink()
+		m.openOrFold()
 	case tea.KeyCtrlV:
 		return nil, m.pasteImage()
 	case tea.KeyCtrlU:
@@ -1623,7 +1657,7 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 }
 
 func (m *model) helpView() string {
-	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
+	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o ouvrir ou replier · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
 }
 
 func (m *model) View() string {
@@ -1631,4 +1665,102 @@ func (m *model) View() string {
 		return "démarrage…"
 	}
 	return m.buildFrame().render(m.vp.View())
+}
+
+func (tb *tab) recordTrail(sub contracts.Subagent) {
+	now := time.Now()
+	for index := range tb.trail {
+		if tb.trail[index].ID == sub.ID {
+			tb.trail[index].Subagent = sub
+			if isTerminalAgent(sub.State) && tb.trail[index].ended.IsZero() {
+				tb.trail[index].ended = now
+			}
+			return
+		}
+	}
+	tb.trail = append(tb.trail, liveAgent{Subagent: sub, since: now})
+}
+
+func isTerminalAgent(state string) bool {
+	return state == stateDone || state == stateFailed || state == stateTimeout
+}
+
+func foldableEntry(item entry) bool {
+	switch item.role {
+	case roleThinking:
+		return item.text != ""
+	case roleTool:
+		return strings.Contains(item.text, "\n")
+	}
+	return false
+}
+
+func (m *model) openOrFold() {
+	if _, ok := m.selectedLink(); ok {
+		m.openSelectedLink()
+		return
+	}
+	tab := m.tabs[m.active]
+	if tab == nil {
+		return
+	}
+	for index := len(tab.entries) - 1; index >= 0; index-- {
+		if foldableEntry(tab.entries[index]) {
+			m.toggleEntryFold(tab, tab.entries[index].id)
+			return
+		}
+	}
+	m.flash = "rien à replier dans ce tour"
+}
+
+func (m *model) toggleEntryFold(tab *tab, id uint64) {
+	if tab.flips == nil {
+		tab.flips = map[uint64]bool{}
+	}
+	tab.flips[id] = !tab.flips[id]
+	m.tsCache.valid = false
+	m.syncViewport()
+}
+
+func (m *model) frameTop() int {
+	top := 0
+	for _, line := range m.buildFrame().above {
+		top += strings.Count(line, "\n") + 1
+	}
+	return top
+}
+
+func (m *model) clickTranscript(msg tea.MouseMsg) bool {
+	tab := m.tabs[m.active]
+	if tab == nil || m.foldTurnsOn {
+		return false
+	}
+	row := msg.Y - m.frameTop() + m.vp.YOffset
+	if row < 0 || row >= len(m.tsLayout.owners) {
+		return false
+	}
+	owner := m.tsLayout.owners[row]
+	for _, item := range tab.entries {
+		if item.id == owner && owner != 0 && foldableEntry(item) {
+			m.toggleEntryFold(tab, owner)
+			return true
+		}
+	}
+	return false
+}
+
+func (m *model) busyRow(tab *tab) string {
+	elapsedText := ""
+	if !tab.startedAt.IsZero() {
+		elapsedText = elapsed(time.Since(tab.startedAt))
+	}
+	tokens := ""
+	if tab.tokens > 0 {
+		tokens = formatTokens(tab.tokens)
+	}
+	cost := ""
+	if tab.costTotal > 0 {
+		cost = formatCost(tab.costTotal)
+	}
+	return busyLine(m.vp.Width, m.st, m.spinFrame(), elapsedText, tokens, cost)
 }

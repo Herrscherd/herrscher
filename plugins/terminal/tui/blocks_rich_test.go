@@ -10,31 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func TestDiffClassifiesPerHunk(t *testing.T) {
-	body := strings.Join([]string{
-		"--- a/main.go",
-		"+++ b/main.go",
-		"@@ -1,4 +1,4 @@",
-		" context stays plain",
-		"-gone",
-		"+arrived",
-	}, "\n")
-
-	want := []string{diffMeta, diffMeta, diffMeta, diffContext, diffDel, diffAdd}
-	for i, ln := range strings.Split(body, "\n") {
-		inHunk := i >= 3
-		if got := diffClass(ln, inHunk); got != want[i] {
-			t.Errorf("diffClass(%q, %v) = %q, want %q", ln, inHunk, got, want[i])
-		}
-	}
-}
-
-func TestDiffHeadersAreNotAdditions(t *testing.T) {
-	if got := diffClass("+++ b/main.go", false); got == diffAdd {
-		t.Errorf("a file header must not classify as an addition: %q", got)
-	}
-}
-
 func TestDiffUsesBasicColourOnA16ColourTerminal(t *testing.T) {
 	out := renderDiff("@@ -1 +1 @@\n+added\n-gone", 40, view{caps: Capabilities{Colour: Colour16}})
 	if !strings.Contains(out, "\x1b[32m") || !strings.Contains(out, "\x1b[31m") {

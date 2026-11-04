@@ -9,7 +9,7 @@ import (
 
 func TestUserEntryIsOneUnruledRow(t *testing.T) {
 	out := renderEntry(entry{role: roleYou, text: "hello there"}, 40, view{})
-	if !strings.Contains(out, glyphCursor+" hello there") {
+	if !strings.Contains(out, glyphUserBar+" hello there") {
 		t.Fatalf("user entry must render its request: %q", out)
 	}
 	lines := strings.Split(out, "\n")
@@ -29,8 +29,8 @@ func TestAgentEntryRendersBare(t *testing.T) {
 	if !strings.Contains(out, "the answer") {
 		t.Fatalf("agent prose must render its text: %q", out)
 	}
-	if strings.Contains(out, glyphPrompt) || strings.Contains(out, glyphTool) {
-		t.Fatalf("agent prose must be bare, no prompt/tool glyph: %q", out)
+	if !strings.Contains(out, glyphTool+" the answer") {
+		t.Fatalf("agent prose must open on the prose gutter: %q", out)
 	}
 }
 
@@ -38,7 +38,7 @@ func TestRoleGlyphsAreDistinct(t *testing.T) {
 	think := renderEntry(entry{role: roleThinking, text: "weighing two options"}, 60, view{})
 	notice := renderEntry(entry{role: roleNotice, text: "tour reinitialise"}, 60, view{})
 	fail := renderEntry(entry{role: roleError, text: "exit status 1"}, 60, view{})
-	if !strings.Contains(think, glyphThinking) {
+	if !strings.Contains(think, glyphCollapsed) {
 		t.Fatalf("reasoning must carry its glyph: %q", think)
 	}
 	if !strings.Contains(notice, glyphNotice+" tour reinitialise") {

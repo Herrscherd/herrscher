@@ -645,19 +645,19 @@ func TestNonStreamedReplyRendersOnce(t *testing.T) {
 }
 
 func TestThinkingLineDerivedWhileBusyNoStream(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := sizedTestModel(t, 80)
 	tb := m.ensureTab("a")
 	tb.busy = true
 	tb.streamed = false
 	if tabLineCount(tb, "thinking") != 0 {
 		t.Fatal("thinking indicator must not be appended to tab.lines")
 	}
-	if !strings.Contains(m.thinkingContent(), "thinking") {
-		t.Fatal("thinkingContent must show the thinking line while busy and unstreamed")
+	if !strings.Contains(m.thinkingContent(), workingVerb) {
+		t.Fatal("thinkingContent must show the busy line while the turn runs")
 	}
-	tb.streamed = true
-	if strings.Contains(m.thinkingContent(), "thinking") {
-		t.Fatal("once streamed, the thinking line must disappear (the reply is arriving)")
+	tb.busy = false
+	if strings.Contains(m.thinkingContent(), workingVerb) {
+		t.Fatal("the busy line must disappear once the turn is over")
 	}
 }
 

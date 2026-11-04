@@ -165,12 +165,14 @@ func TestCountWordAgreesInNumber(t *testing.T) {
 
 func TestSidebarContextGaugeHasSixteenCellsWithoutBrackets(t *testing.T) {
 	m := sidebarModel(t, 120)
+	m.st = newStyles(defaultTheme(), true)
 	tb := m.tabs["alfa"]
 	tb.ctxTokens = 82_000
 	info := contracts.SessionInfo{Vendor: "claude"}
 	lines := m.contextSection(tb, info, 40, false)
 	gaugeLine := ansi.Strip(lines[1])
-	if cells := strings.Count(gaugeLine, unicodeGlyphs().gaugeFull); cells != sidebarGaugeCells {
+	glyphs := m.st.glyphs
+	if cells := strings.Count(gaugeLine, glyphs.gaugeFull) + strings.Count(gaugeLine, glyphs.gaugeEmpty); cells != sidebarGaugeCells {
 		t.Fatalf("the sidebar gauge must have %d cells, got %d in %q", sidebarGaugeCells, cells, gaugeLine)
 	}
 	if strings.ContainsAny(gaugeLine, "[]") {

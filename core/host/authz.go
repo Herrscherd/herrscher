@@ -63,6 +63,7 @@ func sessionArgs() map[string]string {
 		"session rename":      paramName,
 		"session resume":      paramName,
 		"session switch":      paramName,
+		"session handoff":     paramName,
 		"session set-budget":  paramName,
 		"session set-compact": paramName,
 		"session set-mode":    paramName,

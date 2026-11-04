@@ -66,6 +66,14 @@ type Route struct {
 type Grant struct {
 	BaseURL string
 	Token   string
+	release func()
+}
+
+// Release revokes the grant's token; calling it again is harmless.
+func (g Grant) Release() {
+	if g.release != nil {
+		g.release()
+	}
 }
 
 type grant struct {
@@ -82,8 +90,10 @@ type Proxy struct {
 	server    *http.Server
 	served    chan struct{}
 
+	budget *bodyBudget
+
 	mu     sync.Mutex
-	grants []*grant
+	grants map[string]*grant
 	closed bool
 }
 
@@ -106,6 +116,8 @@ func Open(ctx context.Context, keys *config.KeysConfig, loader Loader, log *slog
 		transport: newTransport(),
 		listener:  listener,
 		served:    make(chan struct{}),
+		budget:    &bodyBudget{limit: maxBufferedBytes},
+		grants:    make(map[string]*grant),
 	}
 	proxy.server = &http.Server{Handler: proxy, ReadHeaderTimeout: readHeaderTimeout}
 	go proxy.serve()
@@ -203,8 +215,12 @@ func (p *Proxy) Grant(route Route) (Grant, error) {
 	if p.closed {
 		return Grant{}, ErrProxyClosed
 	}
-	p.grants = append(p.grants, &grant{route: route, token: token})
-	return Grant{BaseURL: "http://" + p.listener.Addr().String(), Token: token}, nil
+	p.grants[token] = &grant{route: route, token: token}
+	return Grant{
+		BaseURL: "http://" + p.listener.Addr().String(),
+		Token:   token,
+		release: func() { p.Revoke(token) },
+	}, nil
 }
 
 func newToken() (string, error) {
@@ -219,13 +235,7 @@ func newToken() (string, error) {
 func (p *Proxy) Revoke(token string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	kept := p.grants[:0]
-	for _, entry := range p.grants {
-		if entry.token != token {
-			kept = append(kept, entry)
-		}
-	}
-	p.grants = kept
+	delete(p.grants, token)
 }
 
 // Close revokes every grant and stops the listener.
@@ -236,7 +246,7 @@ func (p *Proxy) Close(ctx context.Context) error {
 		return nil
 	}
 	p.closed = true
-	p.grants = nil
+	clear(p.grants)
 	p.mu.Unlock()
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
 	defer cancel()

@@ -17,6 +17,7 @@ import (
 const (
 	drainLimitBytes          = 64 << 10
 	flushEveryWrite          = -1
+	maxRetryAfter            = time.Hour
 	unavailableMessage       = "every key is cooling down\n"
 	unreachableMessage       = "upstream unreachable"
 	unavailableStatusMessage = "503 Service Unavailable"
@@ -34,10 +35,15 @@ type rotatingTransport struct {
 }
 
 func (p *Proxy) forward(writer http.ResponseWriter, request *http.Request, route Route) {
-	body, err := bufferBody(request, route.Pool.options.MaxBody)
+	body, held, err := p.bufferBody(request, route.Pool.options.MaxBody)
+	defer p.budget.give(held)
 	switch {
 	case errors.Is(err, errBodyTooLarge):
 		http.Error(writer, errBodyTooLarge.Error(), http.StatusRequestEntityTooLarge)
+		return
+	case errors.Is(err, errBodyBudget):
+		writer.Header().Set("Retry-After", "1")
+		http.Error(writer, errBodyBudget.Error(), http.StatusServiceUnavailable)
 		return
 	case err != nil:
 		http.Error(writer, errBodyUnread.Error(), http.StatusBadRequest)
@@ -54,20 +60,6 @@ func (p *Proxy) forward(writer http.ResponseWriter, request *http.Request, route
 		},
 	}
 	reverse.ServeHTTP(writer, request)
-}
-
-func bufferBody(request *http.Request, limit int64) ([]byte, error) {
-	if request.Body == nil || request.Body == http.NoBody {
-		return nil, nil
-	}
-	buffered, err := io.ReadAll(io.LimitReader(request.Body, limit+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(buffered)) > limit {
-		return nil, errBodyTooLarge
-	}
-	return buffered, nil
 }
 
 func rewriteUpstream(route Route) func(*httputil.ProxyRequest) {
@@ -163,10 +155,17 @@ func closeBody(body io.Closer, log *slog.Logger) {
 func retryAfter(header http.Header, now time.Time) time.Duration {
 	value := header.Get("Retry-After")
 	if seconds, err := strconv.Atoi(value); err == nil && seconds >= 0 {
-		return time.Duration(seconds) * time.Second
+		return boundedSeconds(seconds)
 	}
 	if at, err := http.ParseTime(value); err == nil {
-		return max(at.Sub(now), 0)
+		return min(max(at.Sub(now), 0), maxRetryAfter)
 	}
 	return 0
+}
+
+func boundedSeconds(seconds int) time.Duration {
+	if seconds >= int(maxRetryAfter/time.Second) {
+		return maxRetryAfter
+	}
+	return time.Duration(seconds) * time.Second
 }

@@ -27,7 +27,8 @@ var errKeyOutputTooLarge = errors.New("key command printed more than its output 
 
 var (
 	// ErrKeyFileOpen reports a key file readable or writable by anyone but its owner.
-	ErrKeyFileOpen = errors.New("key file is readable by others than its owner, chmod 600 it")
+	ErrKeyFileOpen       = errors.New("key file is readable by others than its owner, chmod 600 it")
+	errKeyFileNotRegular = errors.New("key file must be a regular file, not a link, pipe or device")
 	// ErrKeyEmpty reports a key source that yields a blank key.
 	ErrKeyEmpty = errors.New("key source yields an empty key")
 	// ErrKeyCommand reports a key_cmd that failed; its output is never included.
@@ -64,7 +65,7 @@ func (s Secret) GoString() string {
 // Loader reads key sources; its fields are replaceable in tests.
 type Loader struct {
 	Getenv   func(string) string
-	Stat     func(string) (fs.FileInfo, error)
+	Lstat    func(string) (fs.FileInfo, error)
 	ReadFile func(string) ([]byte, error)
 	Run      func(ctx context.Context, argv []string) ([]byte, error)
 	Home     func() (string, error)
@@ -74,7 +75,7 @@ type Loader struct {
 func OSLoader() Loader {
 	return Loader{
 		Getenv:   os.Getenv,
-		Stat:     os.Stat,
+		Lstat:    os.Lstat,
 		ReadFile: os.ReadFile,
 		Run:      runKeyCommand,
 		Home:     os.UserHomeDir,
@@ -137,9 +138,12 @@ func (l Loader) fromFile(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	info, err := l.Stat(resolved)
+	info, err := l.Lstat(resolved)
 	if err != nil {
 		return "", fmt.Errorf("stat key file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%s: %w", filepath.Base(resolved), errKeyFileNotRegular)
 	}
 	if info.Mode().Perm()&keyFileForbiddenBits != 0 {
 		return "", fmt.Errorf("%s: %w", filepath.Base(resolved), ErrKeyFileOpen)

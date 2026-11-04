@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -11,14 +12,26 @@ import (
 )
 
 func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, sessions *sessionTable, approvals *approvalTable, seedCoord *coordinatorSlot) error {
+	seen := newSeenTable(time.Now())
 	return addVerbs(reg,
 		seedVerb(store, instID, seedCoord),
 		sessionSendVerb(sessions),
 		sessionInfoVerb(store, partDir),
-		sessionOverviewVerb(overviewSource{st: store, partDir: partDir, sessions: sessions, approvals: approvals, tallies: newTallyCache()}),
+		sessionOverviewVerb(overviewSource{st: store, partDir: partDir, sessions: sessions, approvals: approvals, tallies: newTallyCache(), seen: seen}),
+		sessionSeenVerb(seen),
 		sessionScrollbackVerb(partDir),
 		sessionInterruptVerb(sessions),
 	)
+}
+
+func sessionSeenVerb(seen *seenTable) contracts.Cmd {
+	return contracts.New(nsSession, "seen").
+		Help("record that the operator has read a session's last answer, which clears its review mark").
+		Param(paramName, "session name", true).
+		Do(func(_ context.Context, input contracts.Input) (string, error) {
+			seen.mark(input.Get(paramName), time.Now())
+			return "", nil
+		})
 }
 
 func seedVerb(store *state.State, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
@@ -106,7 +119,7 @@ func sessionInfoVerb(store *state.State, partDir string) contracts.Cmd {
 
 func sessionOverviewVerb(src overviewSource) contracts.Cmd {
 	return contracts.New(nsSession, "overview").
-		Help("list every session with its live state (waiting, working, archived, idle), cost and last activity. JSON only").
+		Help("list every session with its live state (waiting, working, archived, review, idle), cost and last activity. JSON only").
 		Do(func(_ context.Context, _ contracts.Input) (string, error) {
 			b, err := json.Marshal(src.overviews())
 			return string(b), err

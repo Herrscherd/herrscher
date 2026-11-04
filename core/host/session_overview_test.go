@@ -4,22 +4,24 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestClassifySessionPrefersWaitingThenWorkingThenArchived(t *testing.T) {
 	cases := []struct {
-		name                       string
-		waiting, working, archived bool
-		want                       string
+		name                               string
+		waiting, working, archived, review bool
+		want                               string
 	}{
-		{"waiting beats everything", true, true, true, overviewWaiting},
-		{"working beats archived", false, true, true, overviewWorking},
-		{"archived when quiet", false, false, true, overviewArchived},
-		{"idle otherwise", false, false, false, overviewIdle},
+		{"waiting beats everything", true, true, true, true, overviewWaiting},
+		{"working beats archived", false, true, true, true, overviewWorking},
+		{"archived when quiet", false, false, true, true, overviewArchived},
+		{"unread finished answer is review", false, false, false, true, overviewReview},
+		{"idle otherwise", false, false, false, false, overviewIdle},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := classifySession(tc.waiting, tc.working, tc.archived); got != tc.want {
+			if got := classifySession(tc.waiting, tc.working, tc.archived, tc.review); got != tc.want {
 				t.Fatalf("classifySession = %q, want %q", got, tc.want)
 			}
 		})
@@ -82,5 +84,25 @@ func appendTranscript(t *testing.T, path, body string) {
 	}
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestFinishedAnswerNeedsReviewUntilOperatorSeesIt(t *testing.T) {
+	floor := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	seen := newSeenTable(floor)
+	const done = "2026-01-01T10:30:00Z"
+	if !needsReview(done, seen.since("alpha")) {
+		t.Fatal("an answer finished after the daemon started must need review")
+	}
+	seen.mark("alpha", time.Date(2026, 1, 1, 10, 31, 0, 0, time.UTC))
+	if needsReview(done, seen.since("alpha")) {
+		t.Fatal("an answer read after it finished must not need review")
+	}
+}
+
+func TestAnswerFinishedBeforeDaemonStartIsNotReview(t *testing.T) {
+	floor := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	if needsReview("2026-01-01T09:00:00Z", newSeenTable(floor).since("alpha")) {
+		t.Fatal("an answer from before the daemon started must not need review")
 	}
 }

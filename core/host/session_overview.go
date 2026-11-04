@@ -15,20 +15,22 @@ const (
 	overviewWorking  = "working"
 	overviewArchived = "archived"
 	overviewIdle     = "idle"
+	overviewReview   = "review"
 	overviewTextMax  = 240
 )
 
 type SessionOverview struct {
-	Name     string   `json:"name"`
-	Vendor   string   `json:"vendor"`
-	Gateways []string `json:"gateways"`
-	State    string   `json:"state"`
-	Cost     float64  `json:"cost"`
-	LastTs   string   `json:"last_ts"`
-	LastText string   `json:"last_text"`
+	Name       string   `json:"name"`
+	Vendor     string   `json:"vendor"`
+	Gateways   []string `json:"gateways"`
+	State      string   `json:"state"`
+	Cost       float64  `json:"cost"`
+	LastTs     string   `json:"last_ts"`
+	LastDoneTs string   `json:"last_done_ts"`
+	LastText   string   `json:"last_text"`
 }
 
-func classifySession(waiting, working, archived bool) string {
+func classifySession(waiting, working, archived, review bool) string {
 	switch {
 	case waiting:
 		return overviewWaiting
@@ -36,6 +38,8 @@ func classifySession(waiting, working, archived bool) string {
 		return overviewWorking
 	case archived:
 		return overviewArchived
+	case review:
+		return overviewReview
 	default:
 		return overviewIdle
 	}
@@ -45,6 +49,7 @@ type transcriptTally struct {
 	offset   int64
 	cost     float64
 	lastTs   string
+	lastDone string
 	lastText string
 }
 
@@ -105,6 +110,9 @@ func applyTranscriptLine(cur *transcriptTally, line []byte) {
 	if entry.Ts != "" {
 		cur.lastTs = entry.Ts
 	}
+	if entry.Role == "assistant" && entry.Ts != "" {
+		cur.lastDone = entry.Ts
+	}
 	if entry.Text != "" {
 		cur.lastText = clipOverviewText(entry.Text)
 	}
@@ -124,6 +132,7 @@ type overviewSource struct {
 	sessions  *sessionTable
 	approvals *approvalTable
 	tallies   *tallyCache
+	seen      *seenTable
 }
 
 func (src overviewSource) overviews() []SessionOverview {
@@ -138,13 +147,14 @@ func (src overviewSource) overviews() []SessionOverview {
 		driver := src.sessions.lookup(live.Name)
 		working := driver != nil && driver.busy.Load()
 		out = append(out, SessionOverview{
-			Name:     live.Name,
-			Vendor:   live.Vendor,
-			Gateways: live.BoundGateways(),
-			State:    classifySession(waiting[live.Name], working, live.Archived),
-			Cost:     tally.cost,
-			LastTs:   tally.lastTs,
-			LastText: tally.lastText,
+			Name:       live.Name,
+			Vendor:     live.Vendor,
+			Gateways:   live.BoundGateways(),
+			State:      classifySession(waiting[live.Name], working, live.Archived, needsReview(tally.lastDone, src.seen.since(live.Name))),
+			Cost:       tally.cost,
+			LastTs:     tally.lastTs,
+			LastDoneTs: tally.lastDone,
+			LastText:   tally.lastText,
 		})
 	}
 	return out

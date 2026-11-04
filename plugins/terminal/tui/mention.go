@@ -54,19 +54,7 @@ func completeMention(input string, cursor int, match string) (string, int) {
 }
 
 func (m *model) worktreeDir() string {
-	if name := m.sessionName(m.active); name != "" {
-		sessions := m.tm.Sessions()
-		for i := range sessions {
-			session := &sessions[i]
-			if session.Name == name && session.Dir != "" {
-				return session.Dir
-			}
-		}
-	}
-	if wd, err := os.Getwd(); err == nil {
-		return wd
-	}
-	return "."
+	return m.sessionDir(m.active)
 }
 
 func (m *model) mentionCursor() int {

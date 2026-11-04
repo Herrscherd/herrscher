@@ -506,6 +506,22 @@ confetti.
 
 → `reference/keybindings`
 
+### Reviewing what a turn changed
+
+`ctrl+d` opens the diff panel over the window. It lists the files the session
+touched, with their status (M, A, D), their counts and a reviewed mark, and shows
+the selected file as a two-column numbered diff. Scope is the current turn by
+default, or the branch against its base when you press `b`. Untracked files count,
+and the snapshot runs against a temporary index, so your real index and worktree
+are left as they were.
+
+Inside the panel, `space` marks a file reviewed, `i` sends a note to the agent about
+the selected file (the message starts with its path), `c` opens the commit message
+generated from the changes so you can edit it, `enter` opens the file in `$EDITOR`,
+and `p` commits and opens a pull request with `gh`, showing its number. `/review`
+opens the same panel in review mode. Git and `gh` calls have a timeout and run in
+the session's folder.
+
 ### Getting text back out
 
 The window runs on the alternate screen with the mouse captured. That is what

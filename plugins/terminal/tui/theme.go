@@ -3,17 +3,21 @@ package tui
 import "github.com/charmbracelet/lipgloss"
 
 const (
-	glyphTool      = "●"
-	glyphResult    = "⎿"
-	glyphPrompt    = ">"
-	glyphCursor    = "❯"
-	glyphUnread    = "•"
-	glyphThinking  = "✳"
-	glyphNotice    = "·"
-	glyphError     = "✗"
-	glyphFold      = "▶"
-	glyphMoreLines = "↵"
-	glyphBolt      = "⚡"
+	glyphTool       = "●"
+	glyphResult     = "⎿"
+	glyphPrompt     = ">"
+	glyphCursor     = "❯"
+	glyphUnread     = "•"
+	glyphThinking   = "✳"
+	glyphNotice     = "·"
+	glyphError      = "✗"
+	glyphFold       = "▶"
+	glyphMoreLines  = "↵"
+	glyphBolt       = "⚡"
+	glyphReviewed   = "✓"
+	glyphOpenFile   = "○"
+	glyphNote       = "↪"
+	glyphTextCursor = "▌"
 )
 
 func familyGlyphs() map[string]string {
@@ -64,6 +68,7 @@ type uiStyles struct {
 	link       lipgloss.Style
 	chip       lipgloss.Style
 	overlaySel lipgloss.Style
+	strong     lipgloss.Style
 	sep        string
 }
 
@@ -84,6 +89,7 @@ func newStyles() uiStyles {
 		link:       lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent)).Underline(true),
 		chip:       lipgloss.NewStyle().Foreground(lipgloss.Color(colText)).Background(lipgloss.Color(colSelBg)).Padding(0, 1),
 		overlaySel: lipgloss.NewStyle().Background(lipgloss.Color(colSelBg)).Foreground(lipgloss.Color(colAccent)),
+		strong:     lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(colText)),
 		sep:        dim.Render(" │ "),
 	}
 }

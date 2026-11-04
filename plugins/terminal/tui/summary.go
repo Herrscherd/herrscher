@@ -2,28 +2,32 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 const (
-	panelMinWidth  = 100
-	panelWidth     = 40
-	panelKeyWidth  = 12
-	panelIndent    = 3
-	panelNoteStart = panelIndent + panelKeyWidth
-	skillPrivate   = "private"
-	scheduleLive   = "live"
-	nextPrefix     = "next "
-	denyPrefix     = "deny "
-	rulePrefix     = "- "
-	skillFields    = 3
-	scheduleFields = 6
+	panelMinWidth   = 100
+	panelWidth      = 40
+	panelKeyWidth   = 12
+	panelIndent     = 3
+	panelNoteStart  = panelIndent + panelKeyWidth
+	panelValueWidth = 24
+	panelTitle      = "Résumé"
+	skillPrivate    = "private"
+	scheduleLive    = "live"
+	nextPrefix      = "next "
+	denyPrefix      = "deny "
+	rulePrefix      = "- "
+	skillFields     = 3
+	scheduleFields  = 6
 )
 
 type skillCount struct {
@@ -148,7 +152,15 @@ func (m *model) panelFacets() ([]string, []string) {
 			gatewaySet[gateway] = true
 		}
 	}
-	return sortedKeys(vendorSet), sortedKeys(gatewaySet)
+	return sortedKeys(vendorSet), terminalFirst(sortedKeys(gatewaySet))
+}
+
+func terminalFirst(gateways []string) []string {
+	ordered := slices.DeleteFunc(slices.Clone(gateways), func(gateway string) bool { return gateway == gatewayTerminal })
+	if len(ordered) < len(gateways) {
+		return slices.Insert(ordered, 0, gatewayTerminal)
+	}
+	return ordered
 }
 
 func sortedKeys(set map[string]bool) []string {
@@ -161,35 +173,83 @@ func sortedKeys(set map[string]bool) []string {
 }
 
 func (m *model) panelLines() []string {
-	var rows []string
 	vendors, gateways := m.panelFacets()
-	if len(vendors) > 0 {
-		rows = append(rows, m.panelRow("vendeurs", strings.Join(vendors, " ")))
-	}
-	if len(gateways) > 0 {
-		rows = append(rows, m.panelRow("passerelles", strings.Join(gateways, " ")))
-	}
-	if skills := m.summary.skills; skills != nil {
-		rows = append(rows,
-			m.panelRow("skills", fmt.Sprintf("%d · %d à approuver", skills.total, skills.pending)),
-			m.panelNote("écrite par l'agent"))
-	}
-	if cron := m.summary.cron; cron != nil {
-		value := fmt.Sprintf("%d %s", cron.live, choosePlural(cron.live, "active", "actives"))
-		if cron.next != "" {
-			value += " · " + cron.next
+	rows := []string{m.st.titledRule(m.st.dim, panelTitle, panelWidth)}
+	rows = append(rows, m.panelRow("vendeurs", m.st.accent.Render(valueOrNA(strings.Join(vendors, " ")))))
+	for index, line := range wrapWords(gateways, panelValueWidth) {
+		key := ""
+		if index == 0 {
+			key = "passerelles"
 		}
-		rows = append(rows, m.panelRow("cron", value))
+		rows = append(rows, m.panelRow(key, m.st.violet.Render(line)))
 	}
-	if rules := m.summary.rules; rules != nil {
-		rows = append(rows,
-			m.panelRow("politique", fmt.Sprintf("%d %s · %d %s", rules.total, choosePlural(rules.total, "règle", "règles"), rules.deny, choosePlural(rules.deny, "noire", "noires"))),
-			m.panelNote("même règle partout"))
+	rows = append(rows,
+		m.panelRow("mémoire", m.st.text.Render(unavailable)),
+		m.panelRow("skills", m.st.green.Render(m.skillsValue())),
+		m.panelNote("écrite par l’agent"),
+		m.panelRow("cron", m.st.text.Render(m.cronValue())),
+		m.panelRow("politique", m.st.text.Render(m.policyValue())),
+		m.panelNote("même règle partout"),
+	)
+	return rows
+}
+
+func (m *model) skillsValue() string {
+	skills := m.summary.skills
+	if skills == nil {
+		return unavailable
 	}
-	if len(rows) == 0 {
-		return nil
+	return fmt.Sprintf("%d · %d à approuver", skills.total, skills.pending)
+}
+
+func (m *model) cronValue() string {
+	cron := m.summary.cron
+	if cron == nil {
+		return unavailable
 	}
-	return append([]string{m.st.accent.Render("RÉSUMÉ"), ""}, rows...)
+	value := fmt.Sprintf("%d %s", cron.live, choosePlural(cron.live, "tour", "tours"))
+	if cron.next != "" {
+		value += " · " + cron.next
+	}
+	return value
+}
+
+func (m *model) policyValue() string {
+	rules := m.summary.rules
+	if rules == nil {
+		return unavailable
+	}
+	return fmt.Sprintf("%d %s · %d %s", rules.total, choosePlural(rules.total, "règle", "règles"), rules.deny, choosePlural(rules.deny, "noire", "noires"))
+}
+
+func valueOrNA(value string) string {
+	if value == "" {
+		return unavailable
+	}
+	return value
+}
+
+func wrapWords(words []string, width int) []string {
+	var lines []string
+	current := ""
+	for _, word := range words {
+		switch {
+		case current == "":
+			current = word
+		case lipgloss.Width(current)+1+lipgloss.Width(word) <= width:
+			current += " " + word
+		default:
+			lines = append(lines, current)
+			current = word
+		}
+	}
+	if current != "" {
+		lines = append(lines, current)
+	}
+	if len(lines) == 0 {
+		return []string{unavailable}
+	}
+	return lines
 }
 
 func choosePlural(count int, one, many string) string {
@@ -207,34 +267,13 @@ func (m *model) panelNote(text string) string {
 	return strings.Repeat(" ", panelNoteStart) + m.st.dim.Render(text)
 }
 
-func (m *model) boardSurface(width, height int) string {
-	if width < panelMinWidth {
-		return m.boardView(width, height)
+func joinPanel(left, right []string, leftWidth, height int, separator string) []string {
+	left, right = padLines(left, height), padLines(right, height)
+	out := make([]string, height)
+	for index := range height {
+		out[index] = padTo(truncate(left[index], leftWidth), leftWidth) + separator + truncate(right[index], panelWidth)
 	}
-	panel := m.panelLines()
-	if len(panel) == 0 {
-		return m.boardView(width, height)
-	}
-	boardWidth := width - panelWidth - 1
-	board := strings.Split(m.boardView(boardWidth, height), "\n")
-	return m.joinPanel(board, panel, boardWidth)
-}
-
-func (m *model) joinPanel(left, right []string, leftWidth int) string {
-	separator := m.st.dim.Render(m.st.glyphs.divider)
-	rows := max(len(left), len(right))
-	out := make([]string, 0, rows)
-	for index := range rows {
-		out = append(out, padTo(truncate(lineAt(left, index), leftWidth), leftWidth)+separator+truncate(lineAt(right, index), panelWidth))
-	}
-	return strings.Join(out, "\n")
-}
-
-func lineAt(lines []string, index int) string {
-	if index < len(lines) {
-		return lines[index]
-	}
-	return ""
+	return out
 }
 
 func (m *model) markVisibleSeen() {

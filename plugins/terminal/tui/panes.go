@@ -1,10 +1,13 @@
 package tui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -18,7 +21,13 @@ const (
 	paneColumns        = 2
 	paneGridSide       = 2
 	paneHalves         = 2
+	paneSepWidth       = 2
+	paneInset          = 4
+	paneBoxChrome      = 3
+	paneGaugeCells     = 6
 )
+
+const paneFooterKeys = "Tab volet suivant · clic viser · o s r approbation · ⌃W agrandir · ⌃P quitter"
 
 type paneState struct {
 	channels []string
@@ -80,6 +89,14 @@ func (m *model) focusedChannel() string {
 	return m.panes.channels[m.panes.focus]
 }
 
+func (m *model) paneFocusName() string {
+	channel := m.focusedChannel()
+	if channel == "" {
+		return ""
+	}
+	return m.infoForChannel(channel).Name
+}
+
 func (m *model) paneWindow(layout paneLayout) (int, int) {
 	if layout.single {
 		return m.panes.focus, m.panes.focus + 1
@@ -92,8 +109,6 @@ func (m *model) paneWindow(layout paneLayout) (int, int) {
 	return start, end
 }
 
-const paneSepWidth = 1
-
 func paneWidths(width, cols int) []int {
 	if cols == 1 {
 		return []int{width}
@@ -102,24 +117,93 @@ func paneWidths(width, cols int) []int {
 	return []int{left, width - paneSepWidth - left}
 }
 
-func (m *model) paneView(width, height int) string {
-	footer := m.st.dim.Render("Tab volet suivant · o s r approbation · ⌃W agrandir · ⌃P quitter")
+func (m *model) surfaceChrome() ([]string, []string) {
+	width := m.innerWidth()
+	switch m.surface {
+	case surfaceBoard:
+		return m.railLines(), slices.Concat([]string{m.st.rule(m.st.dim, width), m.boardFooter(width)}, m.statusZone())
+	case surfacePanes:
+		header := m.paneHeader(width)
+		return slices.Concat(m.railLines(), []string{header}), slices.Concat([]string{m.paneFooter(width)}, m.composerZone(), m.statusZone())
+	case surfaceChat:
+	}
+	return nil, nil
+}
+
+func (m *model) surfaceHeight(top, bottom []string) int {
+	return max(m.height-len(top)-len(bottom), 0)
+}
+
+func (m *model) surfaceScreen() string {
+	width := m.innerWidth()
+	top, bottom := m.surfaceChrome()
+	height := m.surfaceHeight(top, bottom)
+	var body []string
+	switch m.surface {
+	case surfaceBoard:
+		body = m.boardScreenBody(width, height)
+	case surfacePanes:
+		body = m.paneBody(width, height)
+	case surfaceChat:
+		return ""
+	}
+	return strings.Join(slices.Concat(top, padLines(body, height), bottom), "\n")
+}
+
+func (m *model) paneHeader(width int) string {
+	left := m.st.violet.Bold(true).Render(" Vue en volets") + m.st.dim.Render("  Tab volet suivant · clic pour viser")
+	return truncate(joinRow(width, left, m.paneCounts()), width)
+}
+
+func (m *model) paneFooter(width int) string {
+	return truncate(m.st.dim.Render(" "+paneFooterKeys), width)
+}
+
+func (m *model) paneCounts() string {
+	var working, waiting, unread, finished int
+	var cost float64
+	for _, channel := range m.panes.channels {
+		row := m.sessionRow(channel)
+		cost += row.overview.Cost
+		switch row.overview.State {
+		case overviewWaiting:
+			waiting++
+		case overviewWorking:
+			working++
+		}
+		if row.unread > 0 {
+			unread++
+		}
+		if row.group == groupReview || row.finished {
+			finished++
+		}
+	}
+	parts := []string{
+		m.st.accent.Render(fmt.Sprintf("%d au travail", working)),
+		m.st.warn.Render(fmt.Sprintf("%d approbation", waiting)),
+		m.st.accent.Render(fmt.Sprintf("%d non lus", unread)),
+		m.st.green.Render(fmt.Sprintf("%d fini", finished)),
+		m.st.dim.Render(formatCost(cost)),
+	}
+	return strings.Join(parts, m.st.dim.Render(" · ")) + " "
+}
+
+func (m *model) paneBody(width, height int) []string {
 	if len(m.panes.channels) == 0 {
-		lines := []string{m.st.dim.Render("aucune session vivante")}
-		return strings.Join(padLines(append(lines, truncate(footer, width)), height), "\n")
+		return padLines([]string{m.st.dim.Render("aucune session vivante")}, height)
 	}
 	layout := m.paneLayout()
 	start, end := m.paneWindow(layout)
-	bodyHeight := height - boardFooterRows
-	cellHeight := bodyHeight / layout.rows
+	cellHeight := height / layout.rows
 	widths := paneWidths(width, layout.cols)
+	separator := strings.Repeat(" ", paneSepWidth)
 	var lines []string
 	for row := range layout.rows {
 		cells := make([][]string, layout.cols)
 		for col := range layout.cols {
 			index := start + row*layout.cols + col
 			if index < end {
-				cells[col] = m.paneCell(index, widths[col], cellHeight)
+				cells[col] = m.paneBox(index, widths[col], cellHeight)
 			} else {
 				cells[col] = padLines(nil, cellHeight)
 			}
@@ -129,40 +213,67 @@ func (m *model) paneView(width, height int) string {
 			for col := range cells {
 				parts = append(parts, padTo(cells[col][line], widths[col]))
 			}
-			lines = append(lines, strings.Join(parts, m.st.dim.Render(m.st.glyphs.divider)))
+			lines = append(lines, strings.Join(parts, separator))
 		}
 	}
-	return strings.Join(padLines(append(lines, truncate(footer, width)), height), "\n")
-}
-
-func (m *model) paneCell(index, width, height int) []string {
-	channel := m.panes.channels[index]
-	channelTab := m.tabs[channel]
-	info := m.infoForChannel(channel)
-	overview := m.overviewFor(info.Name)
-	marker := "  "
-	nameStyle := m.st.text
-	if index == m.panes.focus {
-		marker = m.st.accent.Render(m.st.glyphs.cursor) + " "
-		nameStyle = m.st.accent
-	}
-	parts := []string{nameStyle.Render(info.Name), info.Vendor, strings.Join(info.Gateways, "+"), renderContext(info.ContextTokens, info.Vendor, m.st), formatCost(overview.Cost)}
-	header := marker + m.st.dim.Render(joinNonEmptyDot(parts))
-	lines := []string{truncate(header, width), m.st.rule(m.st.dim, width)}
-	reserved := len(lines)
-	body := tailLines(m.paneTranscript(channelTab, width), height-reserved)
-	lines = append(lines, body...)
 	return padLines(lines, height)
 }
 
-func joinNonEmptyDot(parts []string) string {
-	kept := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if part != "" {
-			kept = append(kept, part)
-		}
+func (m *model) paneBox(index, width, height int) []string {
+	if height < paneBoxChrome || width < paneInset {
+		return padLines(nil, height)
 	}
-	return strings.Join(kept, " · ")
+	channel := m.panes.channels[index]
+	row := m.sessionRow(channel)
+	focused := index == m.panes.focus
+	style := m.st.dim
+	nameStyle := m.st.text
+	switch {
+	case focused:
+		style = m.st.accent
+		nameStyle = m.st.accent.Bold(true)
+	case row.overview.State == overviewWaiting:
+		style = m.st.warn
+	}
+	mark, markStyle := m.sessionMark(&row)
+	title := markStyle.Render(mark) + " " + nameStyle.Render(row.overview.Name)
+	if row.info.Vendor != "" {
+		title += m.st.dim.Render(" · " + row.info.Vendor)
+	}
+	boxes := m.st.boxes(m.caps.Boxes)
+	lines := []string{boxEdge([2]string{boxes.tl, boxes.tr}, title, m.paneStateLabel(&row), width, style, boxes.h)}
+	inner := height - paneBoxChrome
+	side := style.Render(boxes.v)
+	body := padLines(tailLines(m.paneTranscript(m.tabs[channel], width-paneInset), inner), inner)
+	for _, line := range body {
+		lines = append(lines, side+" "+padTo(truncate(line, width-paneInset), width-paneInset)+" "+side)
+	}
+	ratio := contextRatio(row.info.ContextTokens, contextLimit(row.info.Vendor))
+	footLeft := m.st.dim.Render("ctx ") + m.gaugeCells(ratio, paneGaugeCells, identityPaint) +
+		m.tierStyle(ratio).Render(" "+contextPercent(row.info.ContextTokens, contextLimit(row.info.Vendor))) +
+		m.st.dim.Render(" · "+formatCost(row.overview.Cost))
+	footRight := gatewayStyle(m.st, strings.Join(row.overview.Gateways, "+")).Render(strings.Join(row.overview.Gateways, "+"))
+	foot := truncate(joinRow(width-paneInset, footLeft, footRight), width-paneInset)
+	lines = append(lines, side+" "+padTo(foot, width-paneInset)+" "+side, style.Render(boxes.bl+strings.Repeat(boxes.h, width-composerBorderCols)+boxes.br))
+	return lines
+}
+
+func identityPaint(style lipgloss.Style) lipgloss.Style {
+	return style
+}
+
+func (m *model) paneStateLabel(row *boardRow) string {
+	switch {
+	case row.overview.State == overviewWaiting:
+		return m.st.warn.Render("approbation")
+	case row.unread > 0:
+		return m.st.accent.Render(fmt.Sprintf("%d non lus", row.unread))
+	case row.group == groupReview || row.finished:
+		return m.st.green.Render("fini " + overviewAge(row.overview.LastTs, time.Now()))
+	case row.overview.State == overviewWorking:
+		return m.st.dim.Render(overviewAge(row.overview.LastTs, time.Now()))
+	}
+	return m.st.dim.Render("au repos")
 }
 
 func (m *model) paneTranscript(channelTab *tab, width int) []string {
@@ -229,18 +340,18 @@ func (m *model) sendFromPane() tea.Cmd {
 }
 
 func (m *model) paneCellAt(screenX, screenY int) (int, bool) {
-	top := len(m.buildFrame().above)
-	if screenY < top {
+	top, bottom := m.surfaceChrome()
+	if screenY < len(top) {
 		return 0, false
 	}
 	layout := m.paneLayout()
 	start, end := m.paneWindow(layout)
-	cellHeight := (m.vp.Height - boardFooterRows) / layout.rows
-	row := (screenY - top) / max(cellHeight, 1)
+	cellHeight := max(m.surfaceHeight(top, bottom)/layout.rows, 1)
+	row := (screenY - len(top)) / cellHeight
 	col := 0
 	if layout.cols > 1 {
-		widths := paneWidths(m.vp.Width, layout.cols)
-		if screenX > widths[0] {
+		widths := paneWidths(m.innerWidth(), layout.cols)
+		if screenX >= widths[0]+paneSepWidth {
 			col = 1
 		}
 	}
@@ -256,15 +367,4 @@ func (m *model) handlePaneClick(msg tea.MouseMsg) bool {
 		m.panes.focus = index
 	}
 	return true
-}
-
-func (m *model) surfaceBody() string {
-	switch m.surface {
-	case surfaceBoard:
-		return m.boardSurface(m.vp.Width, m.vp.Height)
-	case surfacePanes:
-		return m.paneView(m.vp.Width, m.vp.Height)
-	case surfaceChat:
-	}
-	return ""
 }

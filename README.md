@@ -696,25 +696,30 @@ folds or unfolds the latest reasoning block or tool output instead.
 
 `ctrl+p` (or `/agents`) opens the sessions board: every session, terminal and
 other gateways alike, grouped by state (Au travail, Attend une réponse, À relire,
-Fini), with its vendor, gateway, age, cost and last activity. Letters filter the
-rows, `↑↓` choose, `Enter` opens or switches to the session. When the width is
-short the cost column goes first, then the gateway column.
+Fini). Each session takes two lines: its state glyph, name, vendor, gateway and
+project, then its age, cost, context gauge and last activity. Its running sub-agents
+hang under it, one line each with name, vendor and task (three at most, then a
+count); a session without a tab in this terminal shows none. Letters filter the
+rows, `↑↓` choose, `Enter` opens or switches to the session, and `Esc` clears the
+filter before it closes the board. Below 100 columns the board is the list alone.
 
-From 100 columns a RÉSUMÉ panel sits beside the list. It shows the vendors and
-gateways in use, the learned skills (and how many wait for approval), the live
-schedules with the next window, and the approval policy (rules and how many
-refuse). Each row is read from the host when the board opens and refreshed while
-it stays open; a row the host does not answer for is not drawn. A session whose
-last answer finished while nobody was looking is listed under À relire until it
-is opened or stays on screen.
+From 100 columns a Résumé panel sits beside the list. It shows the vendors and
+gateways in use, the memory and skills (and how many wait for approval), the
+number of live schedules with the next window, and the approval policy (rules and
+how many refuse). Each value is read from the host when the board opens and
+refreshed while it stays open; a value the host does not answer for reads `n/a`.
+A session whose last answer finished while nobody was looking is listed under À
+relire until it is opened or stays on screen.
 
 Inside the board, `ctrl+p` switches to the panes: up to four live sessions side
-by side, each header carrying vendor, gateway, context gauge and cost, and the
-end of its transcript. The grid is two by two from 120 columns and 30 rows, two
+by side, each in a box whose title carries its state glyph, name and vendor, whose
+body ends with the last lines of its transcript, and whose foot shows the context
+gauge, cost and gateway. The grid is two by two from 120 columns and 30 rows, two
 panes side by side from 80 columns, and a single pane moved with `←` `→` below
 80. `Tab` changes the focused pane, `ctrl+w` zooms it, and `Enter` sends the
-composer text to it. When a pane shows an approval, `o` (once), `s` (session) or
-`r` (refuse) answers it without leaving the pane. `ctrl+p` returns to the chat.
+composer text to it. A click on a pane focuses it. When a pane shows an approval,
+`o` (once), `s` (session) or `r` (refuse) answers it without leaving the pane.
+`ctrl+p` returns to the chat.
 
 ### Reading a long session
 

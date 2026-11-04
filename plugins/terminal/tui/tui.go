@@ -1976,7 +1976,7 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 }
 
 func (m *model) helpView() string {
-	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · alt+c replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · alt+t replier les tours · ctrl+f chercher · ctrl+s brouillon de côté · ctrl+r historique · ctrl+t sessions · ctrl+x ctrl+e éditeur · ⌥⏎ réoriente · ⌃⏎ envoie la file · ↑ puis suppr retire · alt+↑↓ tour suivant · / commandes · @ fichiers · ! commande shell")
+	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l’ouvrir · alt+c replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · alt+t replier les tours · ctrl+f chercher · ctrl+s brouillon de côté · ctrl+r historique · ctrl+t sessions · ctrl+x ctrl+e éditeur · ⌥⏎ réoriente · ⌃⏎ envoie la file · ↑ puis suppr retire · alt+↑↓ tour suivant · / commandes · @ fichiers · ! commande shell")
 }
 
 func (m *model) View() string {
@@ -1987,7 +1987,7 @@ func (m *model) View() string {
 		return m.diffScreen()
 	}
 	if m.surface != surfaceChat {
-		return m.buildFrame().render(m.surfaceBody())
+		return m.surfaceScreen()
 	}
 	body := m.vp.View()
 	if side := m.sidebarPane(m.vp.Height); side != nil {

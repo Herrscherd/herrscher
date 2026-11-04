@@ -36,7 +36,7 @@ func TestPanelAppearsOnlyWhenTheBoardIsWideEnough(t *testing.T) {
 	for _, width := range []int{60, 100, 120, 200} {
 		m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 		view := m.View()
-		shown := strings.Contains(view, "RÉSUMÉ")
+		shown := strings.Contains(view, "Résumé")
 		if want := width >= panelMinWidth; shown != want {
 			t.Fatalf("width %d: panel shown = %t, want %t", width, shown, want)
 		}
@@ -48,7 +48,7 @@ func TestPanelAppearsOnlyWhenTheBoardIsWideEnough(t *testing.T) {
 	}
 }
 
-func TestPanelShowsSkillsOnlyWhenTheHostAnswered(t *testing.T) {
+func TestPanelShowsSkillsFromTheHostAndNAForTheRest(t *testing.T) {
 	f, m := boardModel(t)
 	f.replies = map[string]string{"skill list": "alpha-skill\tactive\tprivate\tlast used never\nbeta-skill\tactive\tapproved\tlast used 2026-01-01\n"}
 	openBoardAndSettle(m)
@@ -56,10 +56,8 @@ func TestPanelShowsSkillsOnlyWhenTheHostAnswered(t *testing.T) {
 	if !strings.Contains(view, "2 · 1 à approuver") {
 		t.Fatalf("skills row missing from panel: %s", view)
 	}
-	for _, absent := range []string{"cron", "politique", "vendeurs", "passerelles"} {
-		if strings.Contains(view, absent) {
-			t.Fatalf("%q has no data from the host and must stay hidden", absent)
-		}
+	if line := lineContaining(view, "cron"); !strings.Contains(line, "n/a") {
+		t.Fatalf("cron without a host answer must read n/a, line = %q", line)
 	}
 }
 
@@ -76,20 +74,33 @@ func TestPanelShowsCronAndPolicyFromTheHost(t *testing.T) {
 	}
 	openBoardAndSettle(m)
 	view := m.View()
-	if want := "1 active · " + when.Local().Format("15:04"); !strings.Contains(view, want) {
-		t.Fatalf("cron row %q missing from panel", want)
+	if want := "1 tour · " + when.Local().Format("15:04"); !strings.Contains(view, want) {
+		t.Fatalf("cron row %q missing from panel: %s", want, view)
 	}
 	if !strings.Contains(view, "3 règles · 1 noire") {
 		t.Fatalf("policy row missing from panel: %s", view)
 	}
 }
 
-func TestPanelIsHiddenWhenTheHostAnswersNothing(t *testing.T) {
+func TestPanelShowsNAWhenTheHostAnswersNothing(t *testing.T) {
 	_, m := boardModel(t)
 	openBoardAndSettle(m)
-	if strings.Contains(m.View(), "RÉSUMÉ") {
-		t.Fatal("a panel without any host data must not be drawn")
+	view := m.View()
+	if !strings.Contains(view, "Résumé") {
+		t.Fatal("the panel must be drawn at this width even without host data")
 	}
+	if line := lineContaining(view, "politique"); !strings.Contains(line, "n/a") {
+		t.Fatalf("policy without a host answer must read n/a, line = %q", line)
+	}
+}
+
+func lineContaining(view, want string) string {
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, want) {
+			return line
+		}
+	}
+	return ""
 }
 
 func TestOpeningASessionMarksItSeenWhileItIsShown(t *testing.T) {

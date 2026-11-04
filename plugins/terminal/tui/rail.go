@@ -160,29 +160,29 @@ func (m *model) railCell(channel string, limit int) railCell {
 		name = shortenName(name, limit)
 	}
 	if channel == m.active {
-		text := m.st.accent.Render(m.st.glyphs.selected) + " " + m.st.accent.Bold(true).Underline(true).Render(name)
+		text := m.st.overlaySel.Render(" " + m.st.glyphs.selected + " " + name + " ")
 		return railCell{text: text, width: lipgloss.Width(text), active: true}
 	}
-	marker, style := m.railMarker(tab)
-	text := style.Render(marker) + " " + m.st.dim.Render(name)
+	marker, markerStyle, nameStyle := m.railMarker(tab)
+	text := markerStyle.Render(marker) + " " + nameStyle.Render(name)
 	if tab.unreadCount > 0 {
 		text += " " + m.st.accent.Render(strconv.Itoa(tab.unreadCount))
 	}
 	return railCell{text: text, width: lipgloss.Width(text)}
 }
 
-func (m *model) railMarker(tab *tab) (string, lipgloss.Style) {
+func (m *model) railMarker(tab *tab) (string, lipgloss.Style, lipgloss.Style) {
 	switch {
 	case tab.pendingApproval:
-		return m.st.glyphs.attention, m.st.warn.Bold(true)
+		return m.st.glyphs.attention, m.st.warn.Bold(true), m.st.warn
 	case tab.busy:
-		return m.spinFrame(), m.st.spinner
-	case tab.unreadCount > 0:
-		return m.st.glyphs.unread, m.st.accent
+		return m.spinFrame(), m.st.spinner, m.st.text
 	case tab.finished:
-		return m.st.glyphs.success, m.st.green
+		return m.st.glyphs.success, m.st.green.Bold(true), m.st.dim
+	case tab.unreadCount > 0:
+		return m.st.glyphs.unread, m.st.accent.Bold(true), m.st.text
 	}
-	return m.st.glyphs.open, m.st.dim
+	return m.st.glyphs.open, m.st.dim, m.st.dim
 }
 
 func shortenName(name string, limit int) string {

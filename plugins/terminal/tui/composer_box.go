@@ -36,7 +36,8 @@ const (
 	footRightBusy   = "échap interrompre"
 	footRightShell  = "échap annuler"
 	titleEditor     = "⌃X⌃E éditeur"
-	titleEditing    = "brouillon ouvert dans l'éditeur"
+	titleEditing    = "brouillon ouvert dans l’éditeur"
+	titlePanes      = "⌃P quitter · ⌃W agrandir"
 )
 
 func promptAt(prompt string) func(int) string {
@@ -95,6 +96,8 @@ func (m *model) composerTitles() (string, string) {
 		return m.st.violet.Bold(true).Render("Éditeur") + m.st.dim.Render(" · "+titleEditing), m.st.dim.Render(titleEditor)
 	case m.isShellInput():
 		return m.st.warn.Render("! SHELL") + m.st.dim.Render(" · "+m.shellTitleDetail()), m.st.dim.Render(titleEditor)
+	case m.surface == surfacePanes:
+		return m.st.dim.Render("vers ") + m.st.accent.Render(m.paneFocusName()), m.st.dim.Render(titlePanes)
 	}
 	name := "herrscher"
 	if tb := m.activeTab(); tb != nil && tb.label != "" {

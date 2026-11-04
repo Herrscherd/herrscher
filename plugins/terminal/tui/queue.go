@@ -129,7 +129,7 @@ func (m *model) queueLines(base int) []string {
 	width := m.innerWidth()
 	header := queueHeaderMark + " En file (" + strconv.Itoa(len(current.queue)) + ")"
 	if current.busy {
-		header += " · partent dans l'ordre à la fin du tour · ⌃⏎ tout envoyer maintenant"
+		header += " · partent dans l’ordre à la fin du tour · ⌃⏎ tout envoyer maintenant"
 	} else {
 		header += " · prêts à partir"
 	}

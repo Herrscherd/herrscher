@@ -133,3 +133,13 @@ func TestPaneReleaseDoesNotMoveFocus(t *testing.T) {
 		t.Fatalf("a release must not move focus, focus = %d, was %d", m.panes.focus, before)
 	}
 }
+
+func TestPaneScreenNamesItsHeaderAndKeys(t *testing.T) {
+	_, m := paneModel(t)
+	view := m.View()
+	for _, want := range []string{"Vue en volets", "clic pour viser", "Tab volet suivant", "⌃W agrandir", "⌃P quitter"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("panes screen must show %q: %s", want, view)
+		}
+	}
+}

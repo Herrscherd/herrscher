@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -34,7 +35,17 @@ const (
 	sourceDiscovered = "discovered"
 )
 
-var errDiscoveryNoAnswer = errors.New("no answer before the discovery deadline")
+const (
+	envStateDir      = "HERRSCHER_STATE_DIR"
+	cacheDirMode     = 0o700
+	cacheLockTimeout = 10 * time.Second
+	cacheLockPoll    = 10 * time.Millisecond
+)
+
+var (
+	errDiscoveryNoAnswer = errors.New("no answer before the discovery deadline")
+	errCacheLockBusy     = errors.New("model cache is held by another writer")
+)
 
 type discoverySettings struct {
 	ttl     time.Duration
@@ -64,6 +75,29 @@ type cachedModel struct {
 type Sources struct {
 	discovered discoveryCache
 	hidden     map[string]bool
+	notices    *clashNotices
+}
+
+type clashNotices struct {
+	mu   sync.Mutex
+	seen map[string]bool
+}
+
+func newClashNotices() *clashNotices {
+	return &clashNotices{seen: make(map[string]bool)}
+}
+
+func (n *clashNotices) first(modelID string) bool {
+	if n == nil {
+		return true
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.seen[modelID] {
+		return false
+	}
+	n.seen[modelID] = true
+	return true
 }
 
 type discoveryOutcome struct {
@@ -86,7 +120,7 @@ type discoveryAnswer struct {
 
 // LoadSources reads the discovered cache and the hidden IDs from the environment.
 func LoadSources() Sources {
-	sources := Sources{hidden: splitSet(envx.Getenv(envModelsHidden))}
+	sources := Sources{hidden: splitSet(envx.Getenv(envModelsHidden)), notices: newClashNotices()}
 	path, err := discoveryCachePath()
 	if err != nil {
 		slog.Warn("model cache disabled", "err", err)
@@ -199,6 +233,11 @@ func discoveryCachePath() (string, error) {
 	return filepath.Join(home, ".config", "herrscher", discoveryCacheName), nil
 }
 
+// PinStateDir makes the directory of the daemon state file the one every model reader uses.
+func PinStateDir(statePath string) error {
+	return os.Setenv(envStateDir, filepath.Dir(statePath))
+}
+
 func loadDiscoveryCache(path string) (discoveryCache, error) {
 	empty := discoveryCache{Vendors: make(map[string]vendorDiscovery)}
 	data, err := os.ReadFile(filepath.Clean(path))
@@ -223,7 +262,11 @@ func saveDiscoveryCache(path string, cache discoveryCache) error {
 	if err != nil {
 		return fmt.Errorf("encode model cache: %w", err)
 	}
-	root, err := os.OpenRoot(filepath.Dir(path))
+	dir := filepath.Dir(path)
+	if mkdirErr := os.MkdirAll(dir, cacheDirMode); mkdirErr != nil {
+		return fmt.Errorf("create model cache dir: %w", mkdirErr)
+	}
+	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return fmt.Errorf("open model cache dir: %w", err)
 	}
@@ -246,16 +289,56 @@ func saveDiscoveryCache(path string, cache discoveryCache) error {
 }
 
 func persistRefreshed(path string, next discoveryCache, outcomes []discoveryOutcome) error {
-	latest, err := loadDiscoveryCache(path)
-	if err != nil {
-		slog.Warn("model cache unreadable, writing only the refreshed vendors", "path", path, "err", err)
-	}
-	for _, outcome := range outcomes {
-		if outcome.Refreshed {
-			latest.Vendors[outcome.Vendor] = next.Vendors[outcome.Vendor]
+	return withCacheLock(path, func() error {
+		latest, err := loadDiscoveryCache(path)
+		if err != nil {
+			slog.Warn("model cache unreadable, writing only the refreshed vendors", "path", path, "err", err)
 		}
+		for _, outcome := range outcomes {
+			if outcome.Refreshed {
+				latest.Vendors[outcome.Vendor] = next.Vendors[outcome.Vendor]
+			}
+		}
+		return saveDiscoveryCache(path, latest)
+	})
+}
+
+func withCacheLock(path string, critical func() error) error {
+	lockPath := cacheLockPath(path)
+	if err := os.MkdirAll(filepath.Dir(lockPath), cacheDirMode); err != nil {
+		return fmt.Errorf("create model cache dir: %w", err)
 	}
-	return saveDiscoveryCache(path, latest)
+	lockFile, err := os.OpenFile(filepath.Clean(lockPath), os.O_CREATE|os.O_RDWR, cacheFileMode)
+	if err != nil {
+		return fmt.Errorf("open model cache lock: %w", err)
+	}
+	defer func() { logCleanup(lockFile.Close()) }()
+	if err := acquireCacheLock(lockFile); err != nil {
+		return err
+	}
+	return critical()
+}
+
+func cacheLockPath(path string) string {
+	dir, base := filepath.Split(path)
+	return filepath.Join(dir, "."+base+".lock")
+}
+
+func acquireCacheLock(lockFile *os.File) error {
+	deadline := time.Now().Add(cacheLockTimeout)
+	for {
+		locked, err := tryLock(lockFile)
+		if err != nil {
+			return fmt.Errorf("lock model cache: %w", err)
+		}
+		if locked {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return errCacheLockBusy
+		}
+		time.Sleep(cacheLockPoll)
+	}
 }
 
 func writeAndClose(file *os.File, data []byte) error {
@@ -292,7 +375,7 @@ func refreshDiscovery(ctx context.Context, plugins []contracts.Plugin, cache dis
 	if credsErr != nil {
 		slog.Warn("gateway credentials unusable for model discovery, listing without them", "err", credsErr)
 	}
-	jobs := discoveryJobs(plugins, cache, settings, now, force)
+	jobs := discoveryJobs(plugins, cache, settings, now, force, credsErr == nil)
 	access := contracts.DiscoveryAccess{Gateway: creds, Getenv: envx.Getenv}
 	answers := askVendors(ctx, jobs, settings.timeout, access)
 	next := cloneCache(cache)
@@ -308,8 +391,8 @@ func refreshDiscovery(ctx context.Context, plugins []contracts.Plugin, cache dis
 	return next, outcomes
 }
 
-func discoveryJobs(plugins []contracts.Plugin, cache discoveryCache, settings discoverySettings, now time.Time, force bool) []discoveryJob {
-	if settings.policy == contracts.PolicyGatewayOnly {
+func discoveryJobs(plugins []contracts.Plugin, cache discoveryCache, settings discoverySettings, now time.Time, force, gatewayReady bool) []discoveryJob {
+	if settings.policy == contracts.PolicyGatewayOnly && !gatewayReady {
 		return nil
 	}
 	var jobs []discoveryJob

@@ -7,6 +7,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
@@ -101,15 +102,15 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable) {
 	hdl.SetSeeder(sessions.Seed)
 	hdl.SetHosts(newHostPlacer(hostState, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
-	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly })
-	hdl.SetDefaultModel(os.Getenv(EnvDefaultModel))
-	hdl.SetVendorDefaultModel(func(vendor string) string { return os.Getenv(VendorDefaultModelEnv(vendor)) })
+	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly })
+	hdl.SetDefaultModel(envx.Getenv(EnvDefaultModel))
+	hdl.SetVendorDefaultModel(func(vendor string) string { return envx.Getenv(VendorDefaultModelEnv(vendor)) })
 	hdl.SetModelValidator(validateModelChoice)
 	hdl.SetGateResolver(GateFor)
 }
 
 func validateModelChoice(vendor, modelID string) error {
-	entry, err := LookupModelWith(contracts.Default.Backends(), ResolvePolicy(os.Getenv), LoadSources(), modelID)
+	entry, err := LookupModelWith(contracts.Default.Backends(), ResolvePolicy(envx.Getenv), LoadSources(), modelID)
 	if err != nil {
 		return err
 	}

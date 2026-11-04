@@ -12,6 +12,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -235,7 +236,7 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 		desired = os.Getenv("HERRSCHER_BACKEND")
 	}
 	plugins := contracts.Default.Backends()
-	if req.ModelID == "" && ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly {
+	if req.ModelID == "" && ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly {
 		return nil, errGatewayOnlyNoModel
 	}
 	var route modelRoute
@@ -274,7 +275,7 @@ type modelRoute struct {
 }
 
 func resolveModelRoute(modelID string, plugins []contracts.Plugin, desired string) (string, modelRoute, error) {
-	entry, err := LookupModelWith(plugins, ResolvePolicy(os.Getenv), LoadSources(), modelID)
+	entry, err := LookupModelWith(plugins, ResolvePolicy(envx.Getenv), LoadSources(), modelID)
 	if err != nil {
 		return "", modelRoute{}, err
 	}

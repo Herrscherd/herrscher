@@ -65,6 +65,9 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 			return loadErr
 		}
 	}
+	if pinErr := host.PinStateDir(*statePath); pinErr != nil {
+		return pinErr
+	}
 	owner := or(envx.Get("OWNER_ID"), cfg.Owner)
 	var home *host.HomeRef
 	if cfg.Home != nil && cfg.Home.ID != "" {

@@ -52,7 +52,7 @@ func buildCatalog(plugins []contracts.Plugin, policy contracts.RoutePolicy, sour
 		plugin := &plugins[idx]
 		kind := plugin.Manifest.Kind
 		static := plugin.Manifest.Models
-		merged := mergedModels(kind, static, sources.discovered, owner)
+		merged := mergedModels(kind, static, sources.discovered, owner, sources.notices)
 		out = append(out, offeredEntries(kind, static, merged, policy, hidden)...)
 	}
 	sort.SliceStable(out, func(left, right int) bool {
@@ -145,8 +145,8 @@ func ResolvePolicy(getenv func(string) string) contracts.RoutePolicy {
 	return contracts.PolicyAll
 }
 
-func mergedModels(kind string, static []contracts.ModelSpec, discovered discoveryCache, owner map[string]string) []contracts.ModelSpec {
-	cached := unclaimedBy(kind, discovered.modelsOf(kind), owner)
+func mergedModels(kind string, static []contracts.ModelSpec, discovered discoveryCache, owner map[string]string, notices *clashNotices) []contracts.ModelSpec {
+	cached := unclaimedBy(kind, discovered.modelsOf(kind), owner, notices)
 	if len(cached) == 0 {
 		return static
 	}
@@ -159,11 +159,13 @@ func mergedModels(kind string, static []contracts.ModelSpec, discovered discover
 	return merged
 }
 
-func unclaimedBy(kind string, models []contracts.ModelSpec, owner map[string]string) []contracts.ModelSpec {
+func unclaimedBy(kind string, models []contracts.ModelSpec, owner map[string]string, notices *clashNotices) []contracts.ModelSpec {
 	kept := make([]contracts.ModelSpec, 0, len(models))
 	for _, model := range models {
 		if other, taken := owner[model.ID]; taken && other != kind {
-			slog.Warn("discovered model ID is served by another backend, discarded", "vendor", kind, "model", model.ID, "owner", other)
+			if notices.first(model.ID) {
+				slog.Warn("discovered model ID is served by another backend, discarded", "vendor", kind, "model", model.ID, "owner", other)
+			}
 			continue
 		}
 		kept = append(kept, model)

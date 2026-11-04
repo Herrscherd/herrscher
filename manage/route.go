@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
@@ -32,8 +33,8 @@ type routeCurrent struct {
 
 func currentRoute() routeCurrent {
 	return routeCurrent{
-		policy:   host.ResolvePolicy(os.Getenv),
-		model:    os.Getenv(host.EnvDefaultModel),
+		policy:   host.ResolvePolicy(envx.Getenv),
+		model:    envx.Getenv(host.EnvDefaultModel),
 		haveCred: len(host.GatewayEnvPairs()) > 0,
 	}
 }

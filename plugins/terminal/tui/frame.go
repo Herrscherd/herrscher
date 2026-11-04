@@ -58,6 +58,9 @@ func (m *model) buildFrame() frame {
 	if m.showHelp {
 		stacked.below = appendLines(stacked.below, m.helpView())
 	}
+	if m.bar.open {
+		stacked.below = appendLines(stacked.below, m.statuslineView())
+	}
 	if chips := chipRow(m.pending, m.st); chips != "" {
 		stacked.below = appendLines(stacked.below, chips+"  "+m.st.dim.Render("⌃U retirer"))
 	}

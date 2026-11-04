@@ -14,6 +14,9 @@ const (
 	glyphFold      = "▶"
 	glyphMoreLines = "↵"
 	glyphBolt      = "⚡"
+	glyphTicked    = "[✓]"
+	glyphUnticked  = "[ ]"
+	glyphShiftTab  = "⇧⇥"
 )
 
 func familyGlyphs() map[string]string {
@@ -64,6 +67,7 @@ type uiStyles struct {
 	link       lipgloss.Style
 	chip       lipgloss.Style
 	overlaySel lipgloss.Style
+	violet     lipgloss.Style
 	sep        string
 }
 
@@ -84,6 +88,7 @@ func newStyles() uiStyles {
 		link:       lipgloss.NewStyle().Foreground(lipgloss.Color(colAccent)).Underline(true),
 		chip:       lipgloss.NewStyle().Foreground(lipgloss.Color(colText)).Background(lipgloss.Color(colSelBg)).Padding(0, 1),
 		overlaySel: lipgloss.NewStyle().Background(lipgloss.Color(colSelBg)).Foreground(lipgloss.Color(colAccent)),
+		violet:     lipgloss.NewStyle().Foreground(lipgloss.Color(colViolet)),
 		sep:        dim.Render(" │ "),
 	}
 }

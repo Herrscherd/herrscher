@@ -412,9 +412,19 @@ since a frame drawn around every turn marks none of them.
 
 Events are typed by role (reasoning, tool family, notice, error). The agent's
 markdown and diffs are rendered, a resumed session's history is replayed as the
-turns it was, and the status bar names what the session runs on (vendor, model,
-reasoning effort), what it has cost, and how much room is left before the backend
-compacts the conversation. `/usage` spells that out.
+turns it was. The status bar leads with the mode as an inverse chip (Manuel, Édits
+acceptés, Plan, Auto in red), then names what the session runs on (vendor, model,
+reasoning effort), its project and branch, and how much room is left before the
+backend compacts the conversation: a gauge that turns amber at 80 % and red at 95 %,
+with the figures `41%  82k/200k`. Cost and queued messages follow, and the fields
+drop by priority as the window narrows. `/usage` spells the numbers out.
+
+`/statusline` opens the bar's settings: tick the fields, reorder them with shift+↑↓,
+and see the result in a live preview. In `~/.config/herrscher/terminal.toml`, a
+`[statusline]` section can replace the bar with a script (`source = "script"`,
+`command`, `interval`): it receives the state as JSON on stdin and its first line
+becomes the bar. A script that fails or runs past one second leaves the built-in bar
+with a discreet ✗.
 
 A session's name is chosen when you know the least about what it will become, so
 `/rename <nom>` changes it: the row keeps its identity and its id, the transcript

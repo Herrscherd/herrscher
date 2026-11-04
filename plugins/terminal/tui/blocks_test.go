@@ -55,8 +55,8 @@ func TestGaugeShowsAnySpend(t *testing.T) {
 }
 
 func TestGaugeTakesThePalierColour(t *testing.T) {
-	alarm := renderGauge(199_000, "claude", 120, newStyles())
-	calm := renderGauge(1_000, "claude", 120, newStyles())
+	alarm := contextGauge(0.995, contextCells, newStyles())
+	calm := contextGauge(0.005, contextCells, newStyles())
 	if alarm == "" || calm == "" {
 		t.Fatal("a spent context must render a gauge")
 	}
@@ -73,7 +73,7 @@ func TestGaugeTakesThePalierColour(t *testing.T) {
 	if fg(0.99) != colRed {
 		t.Fatalf("a window past the alarm palier must take the Herrscher red: %s", fg(0.99))
 	}
-	if fg(0.85) != colWarn || fg(0.1) != colDim {
+	if fg(0.85) != colWarn || fg(0.1) != colAccent {
 		t.Fatalf("the middle palier warns (%s) and the low one stays dim (%s)", fg(0.85), fg(0.1))
 	}
 }

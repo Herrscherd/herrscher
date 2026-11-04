@@ -148,6 +148,7 @@ func localCommands() []CommandSpec {
 		{Name: "attach", Args: "<path>", Desc: "stage a local file with the next message"},
 		{Name: "copy", Args: "[reply|turn|all]", Desc: "put the last answer (or the turn, or everything) on the clipboard"},
 		{Name: "mouse", Desc: "hand the mouse to the terminal so its own selection works (ctrl+g)"},
+		{Name: "statusline", Desc: "configure the status bar: fields, their order, or a script that draws it"},
 	}
 }
 

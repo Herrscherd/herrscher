@@ -54,7 +54,7 @@ func TestUsageReportNamesTheNumbers(t *testing.T) {
 	tb.ctxTokens = 50_000
 	tb.costTotal = 1.25
 	out := m.usageReport(tb)
-	for _, want := range []string{"context", "50.0k", "200k", "25%", "cost", "$1.25"} {
+	for _, want := range []string{"context", "50k", "200k", "25%", "cost", "$1.25"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("usage report missing %q:\n%s", want, out)
 		}

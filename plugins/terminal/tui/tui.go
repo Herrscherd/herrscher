@@ -242,6 +242,8 @@ type model struct {
 
 	diagOpen bool
 
+	bar barState
+
 	skillsOpen bool
 	skillsIdx  int
 	skillsRows []skills.Skill
@@ -389,7 +391,7 @@ func newModel(backend Backend) *model {
 	match := &model{
 		ctx: context.Background(), tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
-		st: newStyles(), md: &markdownRenderer{},
+		st: newStyles(), md: &markdownRenderer{}, bar: newBarState(),
 	}
 	match.cmds = localCommands()
 	if backend != nil {
@@ -617,6 +619,8 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		m.copyCmd(args[1:])
 	case "mouse":
 		return m.toggleMouse(), true
+	case "statusline":
+		return m.openStatusline(), true
 	default:
 		return nil, false
 	}
@@ -1083,21 +1087,18 @@ func (m *model) hintText() string {
 	return m.st.dim.Render("? raccourcis")
 }
 
-func (m *model) footer() string {
+func (m *model) footer(width int) string {
 	if s := m.linkStatus(); s != "" {
-		return s
+		return truncate(s, width)
 	}
 	tab := m.tabs[m.active]
 	if tab == nil {
 		return ""
 	}
-	if tab.busy {
-		return m.st.spinner.Render(m.spinnerHint(tab))
-	}
 	if tab.disconnected {
 		return m.st.dim.Render("· déconnecté")
 	}
-	return m.statusBar(tab, m.innerWidth())
+	return m.statusBar(tab, width)
 }
 
 func (m *model) spinnerHint(tab *tab) string {
@@ -1148,6 +1149,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	model := newModel(backend)
 	model.ctx = ctx
 	model.keys = &keyLog{}
+	model.bar.config = loadStatuslineConfig(statuslineConfigFile())
 	for _, opt := range opts {
 		opt(model)
 	}
@@ -1185,7 +1187,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, tickCmd(), enableEnhancedKeys)
+	return tea.Batch(textarea.Blink, tickCmd(), enableEnhancedKeys, m.armStatusline())
 }
 
 func (m *model) ensureSpin() tea.Cmd {
@@ -1237,6 +1239,11 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return tickCmd(), true
 	case spinMsg:
 		return m.handleSpin(), true
+	case scriptTickMsg:
+		return m.handleScriptTick(), true
+	case scriptDoneMsg:
+		m.receiveScript(msg)
+		return nil, true
 	}
 	return nil, false
 }
@@ -1323,6 +1330,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleSkillsKey(msg), true
 	case m.resumeOpen:
 		return m.handleResumeKey(msg), true
+	case m.bar.open:
+		return m.handleStatuslineKey(msg), true
 	}
 	if cmd, handled := m.handlePaletteKey(msg); handled {
 		return cmd, true

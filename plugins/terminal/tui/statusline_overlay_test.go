@@ -74,13 +74,13 @@ func TestStatuslinePaneSitsBesideTheListWhenWide(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m.openStatusline()
 	view := m.statuslineView()
-	for _, want := range []string{"Script", "statusline.sh", "JSON reçu", "terminal.toml"} {
+	for _, want := range []string{"SCRIPT", "statusline.sh", "JSON REÇU", "TERMINAL.TOML"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the wide overlay must show %q beside the list", want)
 		}
 	}
 	for _, line := range strings.Split(view, "\n") {
-		if strings.Contains(line, "Script") && !strings.Contains(line, "│") {
+		if strings.Contains(line, "SCRIPT") && !strings.Contains(line, "│") {
 			t.Errorf("the script pane must share a row with the list divider: %q", line)
 		}
 	}
@@ -96,7 +96,7 @@ func TestStatuslinePaneStacksUnderTheListWhenNarrow(t *testing.T) {
 		if strings.Contains(line, "espace cocher") {
 			footer = index
 		}
-		if strings.Contains(line, "Script") && script < 0 {
+		if strings.Contains(line, "SCRIPT") && script < 0 {
 			script = index
 		}
 	}

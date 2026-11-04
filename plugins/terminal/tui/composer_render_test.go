@@ -122,12 +122,12 @@ func TestShellTitleDropsTheDirectoryWhenUnknown(t *testing.T) {
 	}
 }
 
-func TestShellPromptStaysAngleBracketAndTextTurnsWarn(t *testing.T) {
+func TestShellPromptShowsTheDollarAndTextTurnsWarn(t *testing.T) {
 	m, _ := queueFixture(t)
 	typeLine(m, "!ls")
 	m.buildFrame()
-	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "> !ls") {
-		t.Fatalf("shell mode keeps the > prompt and shows the typed bang, got %q", got)
+	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "$ !ls") {
+		t.Fatalf("shell mode shows the $ prompt and the typed bang, got %q", got)
 	}
 	if m.input.FocusedStyle.Text.GetForeground() != m.st.warn.GetForeground() {
 		t.Fatal("shell mode must colour the typed text with the warn style")

@@ -41,7 +41,7 @@ func TestBoardGroupsSessionsByState(t *testing.T) {
 	_, m := boardModel(t)
 	updateKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
 	view := m.View()
-	for _, label := range []string{"Au travail", "Attend une réponse", "Fini"} {
+	for _, label := range []string{"AU TRAVAIL", "ATTEND UNE RÉPONSE", "FINI"} {
 		if !strings.Contains(view, label) {
 			t.Fatalf("board must show group %q: %s", label, view)
 		}
@@ -154,7 +154,7 @@ func TestFinishedSessionNotReadIsListedUnderReview(t *testing.T) {
 	f.overview = `[{"name":"gamma","state":"review","cost":0.1}]`
 	updateKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
 	view := m.View()
-	review := listRow(view, "À relire")
+	review := listRow(view, "À RELIRE")
 	if review < 0 {
 		t.Fatalf("review group missing from board: %s", view)
 	}

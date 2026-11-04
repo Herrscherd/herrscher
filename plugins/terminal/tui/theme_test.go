@@ -234,7 +234,7 @@ func TestThemeScreenRenderOptionsAreVisibleAndCycle(t *testing.T) {
 
 func TestThemeScreenPreviewElementsAreShown(t *testing.T) {
 	plain := ansi.Strip(themeSized(t, 120, 30).View())
-	for _, want := range []string{"Aperçu · Sombre · gardé", "✓ ajouté", "✗ retiré", "● attente", "> ligne sélectionnée", "· notice", "erreur", "ctx"} {
+	for _, want := range []string{"APERÇU · Sombre · gardé", "✓ ajouté", "✗ retiré", "● attente", "> ligne sélectionnée", "· notice", "erreur", "ctx"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("preview must show %q:\n%s", want, plain)
 		}
@@ -242,10 +242,10 @@ func TestThemeScreenPreviewElementsAreShown(t *testing.T) {
 }
 
 func TestThemeScreenPreviewStepsAsideOnNarrowWindows(t *testing.T) {
-	if !strings.Contains(ansi.Strip(themeSized(t, 60, 30).View()), "Aperçu") {
+	if !strings.Contains(ansi.Strip(themeSized(t, 60, 30).View()), "APERÇU") {
 		t.Fatal("a 30-line window must stack the preview under the list")
 	}
-	if strings.Contains(ansi.Strip(themeSized(t, 60, 20).View()), "Aperçu") {
+	if strings.Contains(ansi.Strip(themeSized(t, 60, 20).View()), "APERÇU") {
 		t.Fatal("a 20-line window must hide the preview rather than overflow")
 	}
 }
@@ -346,7 +346,7 @@ func TestWorkingVerbIsFrench(t *testing.T) {
 
 func TestThemeScreenShowsRenderSection(t *testing.T) {
 	plain := ansi.Strip(themeSized(t, 120, 30).View())
-	for _, want := range []string{"police", "celle du terminal", "un TUI ne choisit pas sa police : seule une appli", "qui dessine sa propre fenêtre le peut"} {
+	for _, want := range []string{"police", "Obel Mono · recommandée", "un TUI ne choisit pas sa police : seule une appli", "qui dessine sa propre fenêtre le peut"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("RENDU must show %q:\n%s", want, plain)
 		}
@@ -430,9 +430,9 @@ func TestThemePreviewDropsBottomBlocksFirst(t *testing.T) {
 func TestThemeControlsFoldByWholeBlocks(t *testing.T) {
 	for _, width := range []int{60, 120} {
 		plain := ansi.Strip(themeSized(t, width, 20).View())
-		requireAll(t, plain, fmt.Sprintf("%dx20", width), "Mon thème", "Terminal", "Rendu", "glyphes", "bordures", "densité", "texte", "police", "⏎ garder")
+		requireAll(t, plain, fmt.Sprintf("%dx20", width), "Mon thème", "Terminal", "RENDU", "glyphes", "bordures", "densité", "texte", "police", "⏎ garder")
 		requireBoth(t, plain, fmt.Sprintf("%dx20 font explanation", width), "un TUI ne choisit pas sa police", "qui dessine sa propre fenêtre le peut")
-		requireAllOrNone(t, plain, fmt.Sprintf("%dx20 DÉTECTION", width), "Détection", "auto : fond sombre", "NO_COLOR respecté")
+		requireAllOrNone(t, plain, fmt.Sprintf("%dx20 DÉTECTION", width), "DÉTECTION", "auto : fond sombre", "NO_COLOR respecté")
 	}
 }
 
@@ -490,7 +490,7 @@ func TestThemePreviewNeverShowsItsTitleAlone(t *testing.T) {
 		for _, width := range []int{60, 80, 120} {
 			lines := strings.Split(ansi.Strip(themeSized(t, width, height).View()), "\n")
 			for index, line := range lines {
-				if !strings.HasPrefix(line, "Aperçu ·") {
+				if !strings.HasPrefix(line, "APERÇU ·") {
 					continue
 				}
 				if index+2 >= len(lines) || strings.TrimSpace(lines[index+1]+lines[index+2]) == "" {

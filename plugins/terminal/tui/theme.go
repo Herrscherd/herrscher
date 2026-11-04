@@ -207,11 +207,13 @@ type Theme struct {
 }
 
 const (
-	sombreInk   = "#e4e4e4"
-	sombreDim   = "#8f8f8f"
-	clairInk    = "#1a1a1a"
-	clairDim    = "#666666"
-	contrastInk = "#ffffff"
+	sombreInk    = "#e4e4e4"
+	sombreDim    = "#8a8a88"
+	sombreAccent = "#ff3c05"
+	clairInk     = "#1a1a1a"
+	clairDim     = "#666666"
+	clairAccent  = "#c42d00"
+	contrastInk  = "#ffffff"
 )
 
 func builtinThemes() []Theme {
@@ -219,11 +221,11 @@ func builtinThemes() []Theme {
 	return []Theme{
 		{
 			ID: themeSombre, Label: "Sombre", Render: render,
-			Colors: palette{Text: sombreInk, Dim: sombreDim, Accent: sombreInk, Violet: sombreInk, Add: "#7fb08a", AddBg: "#14231a", Del: "#d0706b", DelBg: "#2a1515", Wait: "#c9a55a", Err: "#d0706b", Sel: sombreInk, SelText: "#111111"},
+			Colors: palette{Text: sombreInk, Dim: sombreDim, Accent: sombreAccent, Violet: sombreInk, Add: "#7fb08a", AddBg: "#14231a", Del: "#d0706b", DelBg: "#2a1515", Wait: "#c9a55a", Err: "#d0706b", Sel: sombreInk, SelText: "#111111"},
 		},
 		{
 			ID: themeClair, Label: "Clair", Render: render,
-			Colors: palette{Text: clairInk, Dim: clairDim, Accent: clairInk, Violet: clairInk, Add: "#2f7a45", AddBg: "#e3f1e6", Del: "#b03a35", DelBg: "#f7e1e0", Wait: "#8a6a1c", Err: "#b03a35", Sel: clairInk, SelText: "#ffffff"},
+			Colors: palette{Text: clairInk, Dim: clairDim, Accent: clairAccent, Violet: clairInk, Add: "#2f7a45", AddBg: "#e3f1e6", Del: "#b03a35", DelBg: "#f7e1e0", Wait: "#8a6a1c", Err: "#b03a35", Sel: clairInk, SelText: "#ffffff"},
 		},
 		{
 			ID: themeTerminal, Label: "Terminal", Render: render,
@@ -255,7 +257,7 @@ type glyphSet struct {
 	ticked, unticked, shiftTab                                       string
 	enter, caret, reasonArrow, warn, note                            string
 	waiting, review, erase                                           string
-	fileGo, fileDoc, branch                                          string
+	fileGo, fileDoc, branch, shellPrompt                             string
 	families                                                         map[string]string
 	spin                                                             []string
 }
@@ -270,8 +272,8 @@ func (g glyphSet) familyGlyph(family string) string {
 func unicodeGlyphs() glyphSet {
 	return glyphSet{
 		tool: "●", result: "└", cursor: "▸", unread: "●", thinking: "○", notice: "·",
-		failure: "✗", success: "✓", fold: "▸", moreLines: "↵", bolt: "●", prompt: ">",
-		ellipsis: "…", divider: "│", ruleChar: "─", gaugeFull: "█", gaugeEmpty: "░",
+		failure: "✗", success: "✓", fold: "▸", moreLines: "↵", bolt: "●", prompt: ">", shellPrompt: "$",
+		ellipsis: "…", divider: "│", ruleChar: "─", gaugeFull: "━", gaugeEmpty: "━",
 		brand: "──◂ HERRSCHER ▸──", agent: "⚡", active: "◆",
 		selected: "▸", attention: "!", open: "○", railMark: "━", filet: "│", minus: "−",
 		expanded: "▾", branchMid: "├", branchEnd: "└", omitted: "⋯", userBar: "┃",
@@ -280,7 +282,7 @@ func unicodeGlyphs() glyphSet {
 		families: map[string]string{
 			familyRead: "◇", familyWrite: "◈", familyRun: "▸", familySearch: "⌕", familyWeb: "⌖", familyAgent: "◆",
 		},
-		spin: []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"},
+		spin: []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
 	}
 }
 
@@ -296,7 +298,7 @@ func nerdGlyphs() glyphSet {
 func asciiGlyphs() glyphSet {
 	return glyphSet{
 		tool: "*", result: "\\", cursor: ">", unread: "*", thinking: "o", notice: ".",
-		failure: "x", success: "v", fold: ">", moreLines: "<", bolt: "*", prompt: ">",
+		failure: "x", success: "v", fold: ">", moreLines: "<", bolt: "*", prompt: ">", shellPrompt: "$",
 		ellipsis: asciiEllipsis, divider: "|", ruleChar: "-", gaugeFull: "#", gaugeEmpty: ".",
 		brand: "--< HERRSCHER >--", agent: "*", active: "*",
 		selected: ">", attention: "!", open: "o", railMark: "=", filet: "|", minus: "-",
@@ -308,6 +310,15 @@ func asciiGlyphs() glyphSet {
 		},
 		spin: []string{"|", "/", "-", "\\"},
 	}
+}
+
+const noColorGaugeEmpty = "░"
+
+func gaugeGlyphsFor(glyphs glyphSet, noColor bool) glyphSet {
+	if noColor && glyphs.gaugeEmpty == glyphs.gaugeFull {
+		glyphs.gaugeEmpty = noColorGaugeEmpty
+	}
+	return glyphs
 }
 
 func glyphsFor(mode glyphMode) glyphSet {
@@ -399,7 +410,7 @@ func newStyles(th Theme, noColor bool) uiStyles {
 		selected = lipgloss.NewStyle().Reverse(true)
 	}
 	selected = selected.Bold(look.Bold)
-	glyphs := glyphsFor(look.Glyphs)
+	glyphs := gaugeGlyphsFor(glyphsFor(look.Glyphs), noColor)
 	return uiStyles{
 		text:       paint(pal.Text),
 		dim:        dim,

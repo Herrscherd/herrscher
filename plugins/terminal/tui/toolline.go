@@ -286,6 +286,6 @@ func busyLine(width int, styles uiStyles, spin, elapsedText, tokens, cost string
 	if cost != "" {
 		parts = append(parts, cost)
 	}
-	left := styles.spinner.Render(spin) + " " + styles.accent.Render(workingVerb) + "  " + styles.dim.Render(strings.Join(parts, " · "))
+	left := styles.spinner.Render(spin) + " " + styles.text.Render(workingVerb) + "  " + styles.dim.Render(strings.Join(parts, " · "))
 	return spreadRight([]string{left}, []string{styles.dim.Render("Échap interrompre")}, width)
 }

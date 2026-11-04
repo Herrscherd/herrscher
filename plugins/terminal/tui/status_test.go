@@ -102,13 +102,13 @@ func TestContextPaliersTakeTheTierThresholds(t *testing.T) {
 	}
 }
 
-func TestContextGaugeFillsTenCells(t *testing.T) {
-	gauge := contextGauge(0.5, testStyles())
-	if filled := strings.Count(gauge, unicodeGlyphs().gaugeFull); filled != 5 {
-		t.Errorf("half a window must fill 5 cells, got %d in %q", filled, gauge)
+func TestContextGaugeFillsSixteenCells(t *testing.T) {
+	gauge := contextGauge(0.5, newStyles(defaultTheme(), true))
+	if filled := strings.Count(gauge, unicodeGlyphs().gaugeFull); filled != 8 {
+		t.Errorf("half a window must fill 8 cells, got %d in %q", filled, gauge)
 	}
-	if empty := strings.Count(gauge, unicodeGlyphs().gaugeEmpty); empty != 5 {
-		t.Errorf("half a window must leave 5 cells, got %d in %q", empty, gauge)
+	if empty := strings.Count(gauge, unicodeGlyphs().gaugeEmpty); empty != 8 {
+		t.Errorf("half a window must leave 8 cells, got %d in %q", empty, gauge)
 	}
 }
 

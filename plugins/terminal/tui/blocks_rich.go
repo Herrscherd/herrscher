@@ -251,7 +251,7 @@ func tableRow(rowCells []string, widths []int, header bool, styles uiStyles) str
 			cell += strings.Repeat(" ", pad)
 		}
 		if header {
-			cell = styles.accent.Render(cell)
+			cell = styles.strong.Render(cell)
 		}
 		cells[index] = cell
 	}

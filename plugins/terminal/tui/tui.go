@@ -236,7 +236,7 @@ func tickCmd() tea.Cmd {
 
 type spinMsg struct{}
 
-const fastTick = 200 * time.Millisecond
+const fastTick = 60 * time.Millisecond
 
 func spinTick(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return spinMsg{} })
@@ -311,6 +311,8 @@ type model struct {
 	themeCat        themeCatalog
 	themeCfg        terminalSection
 	themeBackground string
+	obelFont        fontPresence
+	terminal        terminalKind
 	themeDir        string
 	themeStamp      string
 	themeScr        *themeScreen
@@ -501,6 +503,7 @@ func newModel(backend Backend) *model {
 		ctx: context.Background(), tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
 		st: newStyles(defaultTheme(), false), md: &markdownRenderer{}, theme: defaultTheme(), bar: newBarState(),
+		terminal: detectTerminal(os.LookupEnv),
 	}
 	match.cmds = localCommands()
 	if backend != nil {
@@ -1425,7 +1428,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, tickCmd(), themeWatchTick(), enableEnhancedKeys, m.armStatusline())
+	return tea.Batch(textarea.Blink, tickCmd(), themeWatchTick(), enableEnhancedKeys, m.armStatusline(), fontProbeCmd())
 }
 
 func (m *model) ensureSpin() tea.Cmd {
@@ -1547,6 +1550,9 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case spinMsg:
 		return m.handleSpin(), true
+	case fontProbeMsg:
+		m.obelFont = msg.presence
+		return nil, true
 	case scriptTickMsg:
 		return m.handleScriptTick(), true
 	case scriptDoneMsg:

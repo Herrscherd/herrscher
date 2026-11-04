@@ -175,7 +175,7 @@ func sortedKeys(set map[string]bool) []string {
 func (m *model) panelLines() []string {
 	vendors, gateways := m.panelFacets()
 	rows := []string{m.st.titledRule(m.st.dim, panelTitle, panelWidth)}
-	rows = append(rows, m.panelRow("vendeurs", m.st.accent.Render(valueOrNA(strings.Join(vendors, " ")))))
+	rows = append(rows, m.panelRow("vendeurs", m.st.text.Render(valueOrNA(strings.Join(vendors, " ")))))
 	for index, line := range wrapWords(gateways, panelValueWidth) {
 		key := ""
 		if index == 0 {

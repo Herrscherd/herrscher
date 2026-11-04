@@ -40,6 +40,7 @@ type themeScreen struct {
 	look     renderOptions
 	auto     bool
 	saved    bool
+	install  bool
 	problems []string
 }
 
@@ -163,6 +164,10 @@ func (m *model) handleThemeKey(msg tea.KeyMsg) tea.Cmd {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
+		if screen.install {
+			screen.install = false
+			return nil
+		}
 		m.applyTheme(screen.origin)
 		m.closeTheme()
 		return nil
@@ -179,7 +184,13 @@ func (m *model) handleThemeKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m *model) handleThemeLetter(key string) tea.Cmd {
 	screen := m.themeScr
+	if screen.install {
+		return m.handleInstallLetter(key)
+	}
 	switch key {
+	case "f":
+		screen.install = true
+		return nil
 	case "g":
 		screen.look.Glyphs = nextOption(glyphModes(), screen.look.Glyphs)
 	case "b":
@@ -198,6 +209,18 @@ func (m *model) handleThemeLetter(key string) tea.Cmd {
 		return nil
 	}
 	m.previewTheme()
+	return nil
+}
+
+func (m *model) handleInstallLetter(key string) tea.Cmd {
+	switch key {
+	case "f":
+		m.themeScr.install = false
+	case "c":
+		m.copyObel(obelInstallCommand, "commande")
+	case "y":
+		m.copyObel(m.obelConfigText(), "configuration")
+	}
 	return nil
 }
 
@@ -275,6 +298,9 @@ func (m *model) themeScreenView() string {
 }
 
 func (m *model) themeBody(width, rows int) []string {
+	if m.themeScr.install {
+		return m.obelInstallLines(width, rows)
+	}
 	if width >= themeScreenSideBySide {
 		left := m.themeControlsFitting(themeLeftWidth, rows)
 		right := m.themePreview(width-themeLeftWidth-1, rows)
@@ -340,7 +366,7 @@ func (m *model) themeControls(width int, fold themeFold) []string {
 		themeOptionRow(styles, "bordures", borderStyles(), screen.look.Borders, borderLabel, "b"),
 		themeOptionRow(styles, "densité", []density{densityCompact, densityNormal}, screen.look.Density, densityLabel, "d"),
 		themeFlagRow(styles, screen.look.Bold, screen.look.Italic),
-		themeFontRow(styles),
+		themeFontRow(styles, m.obelFont),
 	)
 	if fold < themeFoldFontExplain {
 		lines = append(lines,
@@ -374,10 +400,6 @@ func (m *model) themeBackgroundRow() string {
 
 func themeNoColorRow(styles uiStyles) string {
 	return "   " + styles.dim.Render("NO_COLOR respecté : marqueurs et gras seuls")
-}
-
-func themeFontRow(styles uiStyles) string {
-	return "   " + padTo("police", themeKeyColumn) + styles.text.Render("celle du terminal")
 }
 
 func themeFontExplainRow(styles uiStyles, text string) string {
@@ -418,7 +440,7 @@ func (m *model) themeListLine(theme *Theme, selected, current bool, width int) s
 
 func themeSectionHead(styles uiStyles, title, extra string, width int) string {
 	used := lipgloss.Width(title) + themeHeadGap
-	head := styles.strong.Render(title)
+	head := styles.dim.Render(strings.ToUpper(title))
 	if extra != "" {
 		used += lipgloss.Width(extra) + 1
 		head += styles.dim.Render(" " + extra)
@@ -534,7 +556,7 @@ func (m *model) themePreviewBlocks(width int) []themeBlock {
 		kept = " · gardé"
 	}
 	return []themeBlock{
-		{lines: []string{styles.strong.Render("Aperçu") + styles.dim.Render(" · "+shown.Label+kept)}},
+		{lines: []string{styles.dim.Render("APERÇU · " + shown.Label + kept)}},
 		{lines: m.railLines()},
 		{lines: []string{m.themeFileLine(width)}},
 		{lines: m.themeToolLines(width)},
@@ -610,7 +632,7 @@ func themeGaugeLine(styles uiStyles) string {
 	parts := []string{styles.dim.Render("ctx")}
 	for _, ratio := range []float64{0.41, 0.85, 0.97} {
 		percent := int(math.Round(ratio * percentScale))
-		parts = append(parts, contextGauge(ratio, styles)+styles.dim.Render(fmt.Sprintf(" %d%%", percent)))
+		parts = append(parts, contextGaugeCells(ratio, barContextCells, styles)+styles.dim.Render(fmt.Sprintf(" %d%%", percent)))
 	}
 	return strings.Join(parts, "  ")
 }

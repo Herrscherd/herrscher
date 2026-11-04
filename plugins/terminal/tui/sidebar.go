@@ -31,7 +31,7 @@ const (
 	sidebarFileRows      = 6
 	sidebarSeparatorCols = 1
 	sidebarIndent        = " "
-	sidebarGaugeCells    = 24
+	sidebarGaugeCells    = 16
 )
 
 func (m *model) sidebarVisible() bool {
@@ -132,7 +132,7 @@ func (m *model) sessionSection(tab *tab, info contracts.SessionInfo, branch stri
 		where = append(where, m.st.text.Render(info.Project))
 	}
 	if branch != "" {
-		where = append(where, m.st.accent.Render(branch))
+		where = append(where, m.st.text.Render(branch))
 	}
 	if len(where) > 0 {
 		lines = append(lines, sideRow(strings.Join(where, m.st.dim.Render(" : ")), width))
@@ -313,8 +313,8 @@ func countWord(count int, singular, plural string) string {
 }
 
 func (m *model) sideHead(title, extra string, width int) string {
-	head := " " + m.st.text.Bold(true).Render(title)
-	used := 1 + lipgloss.Width(title)
+	head := " " + m.st.dim.Render(strings.ToUpper(title))
+	used := 1 + lipgloss.Width(strings.ToUpper(title))
 	if extra != "" {
 		head += " " + m.st.dim.Render(extra)
 		used += 1 + lipgloss.Width(extra)

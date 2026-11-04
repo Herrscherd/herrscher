@@ -283,13 +283,13 @@ func TestToastTickStopsWhenTheToastIsGone(t *testing.T) {
 	}
 }
 
-func TestComposerPromptStaysAngleBracketInShellMode(t *testing.T) {
+func TestComposerPromptShowsDollarInShellMode(t *testing.T) {
 	m := notifyModel(t, false)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.input.SetValue("!ls")
 	m.buildFrame()
-	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "> !ls") {
-		t.Fatalf("shell mode keeps the > prompt, got %q", got)
+	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "$ !ls") {
+		t.Fatalf("shell mode shows the $ prompt, got %q", got)
 	}
 	m.input.SetValue("ls")
 	m.buildFrame()

@@ -264,7 +264,7 @@ func foldPaneBlocks(blocks [][]string, budget int) []string {
 }
 
 func (m *model) paneHeading(style lipgloss.Style, title, note string) string {
-	return " " + style.Render(title) + m.st.dim.Render(note)
+	return " " + style.Render(strings.ToUpper(title)) + m.st.dim.Render(note)
 }
 
 func paneBody(style lipgloss.Style, lines []string) []string {

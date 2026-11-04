@@ -42,7 +42,7 @@ func sizedTestModelVisible(t *testing.T, width int) bool {
 
 func TestSidebarShowsItsSectionsWhenVisible(t *testing.T) {
 	view := sidebarModel(t, 120).View()
-	for _, want := range []string{"Session", "Todos 1/2", "Sous-agents", "Fichiers", "Contexte", unicodeGlyphs().filet} {
+	for _, want := range []string{"SESSION", "TODOS 1/2", "SOUS-AGENTS", "FICHIERS", "CONTEXTE", unicodeGlyphs().filet} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("the sidebar must show %q at 120 columns", want)
 		}
@@ -52,7 +52,7 @@ func TestSidebarShowsItsSectionsWhenVisible(t *testing.T) {
 func TestSidebarStaysHiddenBelowTheThreshold(t *testing.T) {
 	for _, width := range []int{60, 80} {
 		view := sidebarModel(t, width).View()
-		if strings.Contains(view, "Sous-agents") || strings.Contains(view, "Todos") {
+		if strings.Contains(view, "SOUS-AGENTS") || strings.Contains(view, "Todos") {
 			t.Fatalf("at %d columns the sidebar must stay hidden", width)
 		}
 	}
@@ -68,7 +68,7 @@ func TestSidebarFoldsItsBottomSectionsBelowTwentyFourRows(t *testing.T) {
 	if strings.Contains(view, "explore") {
 		t.Fatal("below 24 rows the sub-agent section must fold to its summary line")
 	}
-	if !strings.Contains(view, "Sous-agents") {
+	if !strings.Contains(view, "SOUS-AGENTS") {
 		t.Fatal("the folded sub-agent section must keep its summary line")
 	}
 }
@@ -110,12 +110,12 @@ func TestParseNumstatReadsAddedAndRemovedLines(t *testing.T) {
 
 func TestBackgroundSectionAppearsOnlyWithTasks(t *testing.T) {
 	m := sidebarModel(t, 120)
-	if strings.Contains(m.View(), "De fond") {
+	if strings.Contains(m.View(), "DE FOND") {
 		t.Fatal("the background section must stay hidden without tasks")
 	}
 	m.tabs[m.active].background = []backgroundTask{{ID: "b1", Name: "npm run build", State: "running"}}
 	view := m.View()
-	if !strings.Contains(view, "De fond") || !strings.Contains(view, "npm run build") {
+	if !strings.Contains(view, "DE FOND") || !strings.Contains(view, "npm run build") {
 		t.Fatal("the background section must list its tasks")
 	}
 }
@@ -163,14 +163,14 @@ func TestCountWordAgreesInNumber(t *testing.T) {
 	}
 }
 
-func TestSidebarContextGaugeHasTwentyFourCellsWithoutBrackets(t *testing.T) {
+func TestSidebarContextGaugeHasSixteenCellsWithoutBrackets(t *testing.T) {
 	m := sidebarModel(t, 120)
 	tb := m.tabs["alfa"]
 	tb.ctxTokens = 82_000
 	info := contracts.SessionInfo{Vendor: "claude"}
 	lines := m.contextSection(tb, info, 40, false)
 	gaugeLine := ansi.Strip(lines[1])
-	if cells := strings.Count(gaugeLine, unicodeGlyphs().gaugeFull) + strings.Count(gaugeLine, unicodeGlyphs().gaugeEmpty); cells != sidebarGaugeCells {
+	if cells := strings.Count(gaugeLine, unicodeGlyphs().gaugeFull); cells != sidebarGaugeCells {
 		t.Fatalf("the sidebar gauge must have %d cells, got %d in %q", sidebarGaugeCells, cells, gaugeLine)
 	}
 	if strings.ContainsAny(gaugeLine, "[]") {

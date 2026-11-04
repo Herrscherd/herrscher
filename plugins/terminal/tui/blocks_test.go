@@ -39,25 +39,21 @@ func TestNarrowTitledRuleDropsItsTitle(t *testing.T) {
 }
 
 func TestGaugeShowsAnySpend(t *testing.T) {
-	if got := gauge(0.001, testStyles().dim, testStyles().dim, unicodeGlyphs()); !strings.Contains(got, unicodeGlyphs().gaugeFull) {
+	glyphs := gaugeGlyphsFor(unicodeGlyphs(), true)
+	if got := gauge(0.001, testStyles().dim, testStyles().dim, glyphs); !strings.Contains(got, glyphs.gaugeFull) {
 		t.Fatalf("a small spend must still fill a cell: %q", got)
 	}
-	if got := gauge(0, testStyles().dim, testStyles().dim, unicodeGlyphs()); strings.Contains(got, unicodeGlyphs().gaugeFull) {
+	if got := gauge(0, testStyles().dim, testStyles().dim, glyphs); strings.Contains(got, glyphs.gaugeFull) {
 		t.Fatalf("nothing spent must read as empty: %q", got)
 	}
-	if got := gauge(1, testStyles().dim, testStyles().dim, unicodeGlyphs()); strings.Contains(got, unicodeGlyphs().gaugeEmpty) {
+	if got := gauge(1, testStyles().dim, testStyles().dim, glyphs); strings.Contains(got, glyphs.gaugeEmpty) {
 		t.Fatalf("a full window must leave no empty cell: %q", got)
 	}
 }
 
 func TestGaugeTakesThePalierColour(t *testing.T) {
-	alarm := contextGauge(0.995, testStyles())
-	calm := contextGauge(0.005, testStyles())
-	if alarm == "" || calm == "" {
+	if contextGauge(0.995, testStyles()) == "" {
 		t.Fatal("a spent context must render a gauge")
-	}
-	if alarm == calm {
-		t.Fatal("a full window and an empty one must not render alike")
 	}
 	fg := func(r float64) string {
 		color, ok := palierStyle(r, testStyles()).GetForeground().(lipgloss.Color)

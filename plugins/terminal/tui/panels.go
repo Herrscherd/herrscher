@@ -72,7 +72,7 @@ func subagentPanel(agents []liveAgent, now time.Time, width int, styles uiStyles
 		if len(agents) > 1 {
 			label += "s"
 		}
-		return []string{styles.accent.Render(truncate(label, width))}
+		return []string{styles.text.Render(truncate(label, width))}
 	}
 	shown := agents
 	if len(shown) > subagentPanelMax {
@@ -86,7 +86,7 @@ func subagentPanel(agents []liveAgent, now time.Time, width int, styles uiStyles
 		}
 		cols = append(cols, elapsed(now.Sub(area.since)))
 		line := "  " + mark + " " + strings.Join(cols, "  ")
-		out = append(out, styles.accent.Render(truncate(line, width)))
+		out = append(out, styles.text.Render(truncate(line, width)))
 	}
 	if hidden := len(agents) - len(shown); hidden > 0 {
 		out = append(out, styles.dim.Render(truncate(fmt.Sprintf("  %s +%d", styles.glyphs.notice, hidden), width)))

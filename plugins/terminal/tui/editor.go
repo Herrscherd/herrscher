@@ -298,6 +298,31 @@ func (m *model) armDraftBeatWatch() tea.Cmd {
 	return m.draftFiles.watchBeat()
 }
 
+func (m *model) draftBeatStillFailing() bool {
+	return m.draftFiles != nil && m.draftFiles.heartbeatError() != nil
+}
+
+func (m *model) queueBeatFlash(err error) {
+	if !m.draftBeatStillFailing() {
+		return
+	}
+	text := draftBeatFlash + err.Error()
+	if m.flash != "" {
+		m.pendingBeatFlash = text
+		return
+	}
+	m.flash = text
+}
+
+func (m *model) takePendingBeatFlash() string {
+	text := m.pendingBeatFlash
+	m.pendingBeatFlash = ""
+	if text == "" || !m.draftBeatStillFailing() {
+		return ""
+	}
+	return text
+}
+
 func (m *model) watchDraftBeat() tea.Cmd {
 	if m.draftFiles == nil {
 		return nil

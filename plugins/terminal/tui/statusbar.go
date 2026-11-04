@@ -225,6 +225,13 @@ func (m *model) barParts(target *tab, width int) []barPart {
 	return parts
 }
 
+func costLabel(total float64) string {
+	if total <= 0 {
+		return "$0.00"
+	}
+	return formatCost(total)
+}
+
 func (m *model) fieldPart(fieldID string, target *tab, info contracts.SessionInfo, used int) (barPart, bool) {
 	if !m.bar.isShown(fieldID) {
 		return barPart{}, false
@@ -237,9 +244,7 @@ func (m *model) fieldPart(fieldID string, target *tab, info contracts.SessionInf
 	case "ctx":
 		return m.contextPart(info, used)
 	case "cost":
-		if target.costTotal > 0 {
-			return single(m.st.green.Render(formatCost(target.costTotal)), rankCost), true
-		}
+		return single(m.st.green.Render(costLabel(target.costTotal)), rankCost), true
 	case fieldQueue:
 		if m.bar.queued > 0 {
 			return single(m.st.text.Render(fmt.Sprintf("%d en file", m.bar.queued)), rankQueue), true

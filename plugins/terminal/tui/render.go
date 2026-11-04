@@ -98,7 +98,7 @@ func (m *model) enrichEntry(tab *tab, index int, now time.Time) entry {
 		end = now
 	}
 	if !end.IsZero() {
-		item.span = end.Sub(item.at)
+		item.span = max(0, end.Sub(item.at))
 	}
 	item.live = last && tab.busy && item.role == roleTool
 	item.failed = item.role == roleTool && index+1 < len(tab.entries) && tab.entries[index+1].role == roleError

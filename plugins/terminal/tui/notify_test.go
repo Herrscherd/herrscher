@@ -93,7 +93,7 @@ func pressN(m *model) {
 
 func TestNKeyCyclesWhileToastIsVisible(t *testing.T) {
 	m := notifyModel(t, false)
-	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", "api")
+	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", []string{"api"})
 	pressN(m)
 	if m.notifyMode != notifyTurnEnd {
 		t.Fatalf("n with a toast on screen must cycle to turn end, got mode %d", m.notifyMode)
@@ -125,7 +125,7 @@ func TestNKeyIsTypedWithoutToast(t *testing.T) {
 
 func TestNKeyIsTypedWhenComposerHasText(t *testing.T) {
 	m := notifyModel(t, false)
-	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", "api")
+	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", []string{"api"})
 	m.input.SetValue("bonjour")
 	pressN(m)
 	if m.notifyMode != notifyBoth {
@@ -152,8 +152,8 @@ func TestApprovalToastJumpsToItsSession(t *testing.T) {
 	m.ensureTab("a")
 	m.active = "c"
 	m.notifyApproval("a", "run Bash(npm run deploy)")
-	if !strings.Contains(m.toast.detail, "run Bash") {
-		t.Fatalf("the approval toast must name what waits, got %q", m.toast.detail)
+	if !strings.Contains(strings.Join(m.toast.body, " "), "run Bash") {
+		t.Fatalf("the approval toast must name what waits, got %q", m.toast.body)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
 	if m.active != "a" {
@@ -186,20 +186,43 @@ func TestTurnEndToastAppearsAndExpires(t *testing.T) {
 
 func TestStaleToastTimerKeepsNewerToast(t *testing.T) {
 	m := notifyModel(t, false)
-	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", "a")
+	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", []string{"a"})
 	first := m.toast.seq
-	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", "b")
+	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", []string{"b"})
 	m.Update(toastExpiredMsg{seq: first})
 	if m.toast.title == "" {
 		t.Fatal("an older timer must not remove a newer toast")
 	}
 }
 
+func TestToastShowsAgeDeliveryAndJumpHint(t *testing.T) {
+	for _, width := range []int{60, 80, 120, 200} {
+		m := notifyModel(t, true)
+		m.handleWindowSize(tea.WindowSizeMsg{Width: width, Height: 20})
+		m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", []string{"api"})
+		view := ansi.Strip(m.View())
+		for _, want := range []string{"il y a 0s", "OSC 9 envoyé", "⌃P y aller"} {
+			if !strings.Contains(view, want) {
+				t.Fatalf("width %d: the toast must show %q, window:\n%s", width, want, view)
+			}
+		}
+	}
+}
+
+func TestTurnEndToastWithoutStartTimeDoesNotPanic(t *testing.T) {
+	m := notifyModel(t, false)
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: "reply", Done: true}})
+	if !strings.Contains(ansi.Strip(m.View()), "Tour fini") {
+		t.Fatal("a turn without a start time must still raise the toast")
+	}
+}
+
 func TestToastFitsAnyWidth(t *testing.T) {
 	for _, width := range []int{60, 80, 120, 200} {
 		m := notifyModel(t, false)
-		m.handleWindowSize(tea.WindowSizeMsg{Width: width, Height: 24})
-		m.announce(kindApproval, unicodeGlyphs().attention, "Approbation en attente", "c", strings.Repeat("Bash npm run deploy ", 12))
+		m.handleWindowSize(tea.WindowSizeMsg{Width: width, Height: 20})
+		m.announce(kindApproval, unicodeGlyphs().attention, "Approbation en attente", "c", []string{strings.Repeat("Bash npm run deploy ", 12)})
 		for _, line := range strings.Split(m.View(), "\n") {
 			if lipgloss.Width(line) > width {
 				t.Fatalf("width %d: line of %d cells overflows: %q", width, lipgloss.Width(line), ansi.Strip(line))

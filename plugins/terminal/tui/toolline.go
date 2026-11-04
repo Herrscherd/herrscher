@@ -259,21 +259,20 @@ func subagentMark(agent liveAgent, display view) (string, string) {
 }
 
 func renderThinking(item entry, width int, display view) string {
-	arrow, hint := display.st.glyphs.fold, "ctrl+o"
+	arrow, verb := display.st.glyphs.fold, "déplier"
 	if item.open {
-		arrow = display.st.glyphs.expanded
+		arrow, verb = display.st.glyphs.expanded, "replier"
 	}
-	label := "Réflexion · " + formatSpan(item.span)
+	label := display.st.dim.Render(arrow+" ") + display.st.text.Italic(true).Render("Réflexion") + display.st.dim.Render(" · "+formatSpan(item.span))
 	if item.tokens > 0 {
-		label += " · " + formatTokens(item.tokens) + " tokens"
+		label += display.st.dim.Render(" · " + formatTokens(item.tokens) + " tokens")
 	}
-	left := display.st.dim.Render(arrow+" ") + display.st.thinking.Render(label)
-	head := spreadRight([]string{left}, []string{display.st.dim.Render(arrow + " " + hint)}, width)
+	head := spreadRight([]string{label}, []string{display.st.dim.Render(arrow + " " + verb + " ⌃O")}, width)
 	if !item.open {
 		return head
 	}
 	lines := []string{head}
-	for _, ln := range strings.Split(wrapWith(display.st.thinking, item.text, max(1, width-len(resultGutter(display.st.glyphs)))), "\n") {
+	for _, ln := range strings.Split(wrapWith(display.st.violet.Italic(true), item.text, max(1, width-len(resultGutter(display.st.glyphs)))), "\n") {
 		lines = append(lines, "    "+ln)
 	}
 	return strings.Join(lines, "\n")

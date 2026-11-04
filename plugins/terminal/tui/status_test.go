@@ -184,13 +184,13 @@ func TestContextLeftCountsDownToTheCompaction(t *testing.T) {
 	if got := contextLeft(0, 200_000); got != 1 {
 		t.Errorf("une fenetre vide laisse tout le budget: %v", got)
 	}
-	if got := contextLeft(184_000, 200_000); got != 0 {
+	if got := contextLeft(190_000, 200_000); got != 0 {
 		t.Errorf("le seuil de compaction laisse zero: %v", got)
 	}
 	if got := contextLeft(200_000, 200_000); got != 0 {
 		t.Errorf("au-dela du seuil le reste ne devient pas negatif: %v", got)
 	}
-	if got := contextLeft(92_000, 200_000); got < 0.49 || got > 0.51 {
+	if got := contextLeft(95_000, 200_000); got < 0.49 || got > 0.51 {
 		t.Errorf("la moitie du budget doit se lire 50 %%: %v", got)
 	}
 }
@@ -284,5 +284,14 @@ func TestStatusBarRendersTheModeChip(t *testing.T) {
 	tb.setMode(modeAuto)
 	if bar := m.statusBar(tb, 120); !strings.Contains(bar, "Auto") {
 		t.Errorf("the session mode must reach the bar: %q", bar)
+	}
+}
+
+func TestCostShowsZeroBeforeAnyTurn(t *testing.T) {
+	if got := costLabel(0); got != "$0.00" {
+		t.Fatalf("a tab without cost must read $0.00, got %q", got)
+	}
+	if got := costLabel(1.42); got != "$1.42" {
+		t.Fatalf("costLabel(1.42) = %q, want $1.42", got)
 	}
 }

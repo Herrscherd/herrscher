@@ -25,6 +25,8 @@ func (m *model) composerTextWidth() int {
 }
 
 const (
+	composerPrompt  = "> "
+	composerIndent  = "  "
 	escKey          = "échap"
 	placeholderIdle = "Tape un message, / ou @, ou !commande"
 	placeholderBusy = "Écris pendant que l’agent travaille : ⏎ met en file, ⌥⏎ réoriente"
@@ -38,6 +40,18 @@ const (
 	titleShell      = "! SHELL · la sortie entre dans la session"
 	titleEditing    = "brouillon ouvert dans l'éditeur"
 )
+
+func composerPromptAt(line int) string {
+	if line == 0 {
+		return composerPrompt
+	}
+	return composerIndent
+}
+
+func (m *model) syncPrompt() {
+	m.input.FocusedStyle.Prompt = m.st.accent.Bold(true)
+	m.input.BlurredStyle.Prompt = m.st.accent.Bold(true)
+}
 
 func (m *model) placeholderText() string {
 	if m.isBusy() {
@@ -69,7 +83,7 @@ func (m *model) composerStyle() lipgloss.Style {
 func (m *model) composerTitles() (string, string) {
 	switch {
 	case m.editing:
-		return m.st.accent.Render("Éditeur") + m.st.dim.Render(" · "+titleEditing), m.st.dim.Render(titleEditor)
+		return m.st.violet.Bold(true).Render("Éditeur") + m.st.dim.Render(" · "+titleEditing), m.st.dim.Render(titleEditor)
 	case m.isShellInput():
 		return m.st.warn.Render("! SHELL") + m.st.dim.Render(strings.TrimPrefix(titleShell, "! SHELL")), m.st.dim.Render(titleEditor)
 	}
@@ -77,7 +91,7 @@ func (m *model) composerTitles() (string, string) {
 	if tb := m.activeTab(); tb != nil && tb.label != "" {
 		name = tb.label
 	}
-	return m.st.dim.Render(name), m.st.dim.Render(titleEditor)
+	return m.st.text.Render(name), m.st.dim.Render(titleEditor)
 }
 
 func (m *model) composerFoots() (string, string) {

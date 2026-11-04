@@ -65,6 +65,8 @@ type Backend interface {
 	// false when nothing was interrupted (no live turn by that name).
 	Interrupt(name string) bool
 	Pick(channel, value string) bool
+	Overview() (string, error)
+	Seen(name string)
 }
 
 const (
@@ -279,6 +281,16 @@ type model struct {
 	switchOpen bool
 	switchIdx  int
 	switchRows []contracts.SessionInfo
+
+	resumeAll   []contracts.SessionInfo
+	resumeQuery string
+
+	surface     surface
+	board       boardState
+	overviews   []SessionOverview
+	summary     panelSummary
+	summaryBusy bool
+	panes       paneState
 
 	diagOpen bool
 
@@ -683,6 +695,8 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 	switch args[0] {
 	case "resume":
 		m.openResume()
+	case "agents":
+		return m.openBoard(), true
 	case "clear":
 		m.clearActive()
 	case "help":
@@ -1398,6 +1412,9 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		cmd := m.route(RoutedEvent(msg))
 		return tea.Batch(cmd, m.ensureSpin()), true
 	case tea.MouseMsg:
+		if m.handlePaneClick(msg) {
+			return nil, true
+		}
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft && m.clickTranscript(msg) {
 			return nil, true
 		}
@@ -1441,7 +1458,13 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case tickMsg:
 		syncCmd := m.syncTabs()
 		m.expireApprovals(time.Now())
-		return tea.Batch(syncCmd, tickCmd(), m.gitTick(), m.loadModesCmd()), true
+		m.markVisibleSeen()
+		m.refreshSurface()
+		return tea.Batch(syncCmd, tickCmd(), m.gitTick(), m.loadModesCmd(), m.summaryRefresh()), true
+	case summaryMsg:
+		m.summaryBusy = false
+		m.summary = panelSummary(msg)
+		return nil, true
 	case spinMsg:
 		return m.handleSpin(), true
 	case scriptTickMsg:
@@ -1529,6 +1552,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handlePendingClose(msg), true
 	case m.planMenu != nil:
 		return m.handlePlanKey(msg), true
+	case m.surface == surfaceBoard:
+		return m.handleBoardKey(msg), true
 	case m.switchOpen:
 		return m.handleSwitchKey(msg), true
 	case m.searchOpen:
@@ -1555,6 +1580,11 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 	if cmd, handled := m.handleApprovalKey(msg); handled {
 		return cmd, true
+	}
+	if m.surface == surfacePanes {
+		if cmd, handled := m.handlePanesKey(msg); handled {
+			return cmd, true
+		}
 	}
 	if cmd, handled := m.handlePaletteKey(msg); handled {
 		return cmd, true
@@ -1660,6 +1690,12 @@ func (m *model) handleResumeKey(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 	switch msg.Type {
+	case tea.KeyBackspace:
+		m.eraseResume()
+	case tea.KeySpace:
+		m.typeResume(" ")
+	case tea.KeyRunes:
+		m.typeResume(string(msg.Runes))
 	case tea.KeyEsc:
 		m.resumeOpen = false
 		m.relayout()
@@ -1790,6 +1826,8 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleHistoryKey(msg, -1)
 	case tea.KeyDown:
 		return m.handleHistoryKey(msg, 1)
+	case tea.KeyCtrlP:
+		return m.openBoard(), true
 	case tea.KeyCtrlW:
 		if m.input.Value() != "" {
 			return nil, false
@@ -1879,6 +1917,9 @@ func (m *model) View() string {
 	}
 	if m.diff.open {
 		return m.diffScreen()
+	}
+	if m.surface != surfaceChat {
+		return m.buildFrame().render(m.surfaceBody())
 	}
 	body := m.vp.View()
 	if side := m.sidebarPane(m.vp.Height); side != nil {

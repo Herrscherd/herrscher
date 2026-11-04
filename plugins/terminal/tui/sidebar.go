@@ -33,7 +33,7 @@ const (
 )
 
 func (m *model) sidebarVisible() bool {
-	if m.innerWidth() < narrowStatus {
+	if m.surface != surfaceChat || m.innerWidth() < narrowStatus {
 		return false
 	}
 	switch m.sidebar {

@@ -174,7 +174,7 @@ func (a *attachedDaemon) notify(channel, text string) {
 }
 
 func (a *attachedDaemon) Dispatch(args []string) (string, error) {
-	if len(args) == 0 || !attachedVerbs()[args[0]] {
+	if len(args) == 0 || !(attachedVerbs()[args[0]] || terminal.ReadOnlyCommand(args)) {
 		verb := ""
 		if len(args) > 0 {
 			verb = args[0]
@@ -210,6 +210,14 @@ func (a *attachedDaemon) Close(name string, force bool) (string, error) {
 
 func (a *attachedDaemon) Resume(name string) (string, error) {
 	return a.dispatch([]string{verbSession, "resume", argName, name})
+}
+
+func (a *attachedDaemon) Seen(name string) {
+	_, _ = a.dispatch([]string{verbSession, "seen", argName, name})
+}
+
+func (a *attachedDaemon) Overview() (string, error) {
+	return a.dispatch([]string{verbSession, "overview"})
 }
 
 func (a *attachedDaemon) Interrupt(name string) bool {

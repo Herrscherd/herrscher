@@ -55,6 +55,7 @@ func sessionArgs() map[string]string {
 		"session interrupt":  paramName,
 		"session pick":       paramName,
 		"session compact":    paramName,
+		"session seen":       paramName,
 		"session who":        paramName,
 		"session log":        paramName,
 		"session close":      paramName,

@@ -94,6 +94,8 @@ type closedSession struct {
 type fakeBackend struct {
 	refuseInterrupt bool
 	dispatched      [][]string
+	replies         map[string]string
+	seen            []string
 	closed          []closedSession
 	sessions        []contracts.SessionInfo
 	fe              chan RoutedEvent
@@ -102,12 +104,16 @@ type fakeBackend struct {
 	submitted       []submittedTurn
 	interrupted     []string
 	picks           []pickedChoice
+	overview        string
+	overviewErr     error
 }
 
 type pickedChoice struct {
 	channel string
 	value   string
 }
+
+func (f *fakeBackend) Overview() (string, error) { return f.overview, f.overviewErr }
 
 type submittedTurn struct {
 	channel string
@@ -122,8 +128,13 @@ func (f *fakeBackend) Submit(channel, text string, atts []Attachment) {
 func (f *fakeBackend) Sessions() []contracts.SessionInfo { return f.sessions }
 func (f *fakeBackend) Dispatch(args []string) (string, error) {
 	f.dispatched = append(f.dispatched, args)
+	if reply, ok := f.replies[strings.Join(args, " ")]; ok {
+		return reply, nil
+	}
 	return "ok", nil
 }
+
+func (f *fakeBackend) Seen(name string) { f.seen = append(f.seen, name) }
 
 func (f *fakeBackend) Close(name string, force bool) (string, error) {
 	f.closed = append(f.closed, closedSession{name: name, force: force})

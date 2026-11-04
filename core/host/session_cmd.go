@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -12,15 +13,28 @@ import (
 )
 
 func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot) error {
+	seen := newSeenTable(time.Now())
 	return addVerbs(reg,
 		seedVerb(store, instID, seedCoord),
 		sessionSendVerb(sessions),
 		sessionPickVerb(approvals, sessions),
 		sessionInfoVerb(store, partDir),
+		sessionOverviewVerb(overviewSource{st: store, partDir: partDir, sessions: sessions, approvals: approvals, tallies: newTallyCache(), seen: seen}),
+		sessionSeenVerb(seen),
 		sessionScrollbackVerb(partDir),
 		sessionInterruptVerb(sessions),
 		sessionCompactVerb(store, sessions),
 	)
+}
+
+func sessionSeenVerb(seen *seenTable) contracts.Cmd {
+	return contracts.New(nsSession, "seen").
+		Help("record that the operator has read a session's last answer, which clears its review mark").
+		Param(paramName, "session name", true).
+		Do(func(_ context.Context, input contracts.Input) (string, error) {
+			seen.mark(input.Get(paramName), time.Now())
+			return "", nil
+		})
 }
 
 func seedVerb(store *state.State, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
@@ -102,6 +116,15 @@ func sessionInfoVerb(store *state.State, partDir string) contracts.Cmd {
 		Help("list sessions as a frontend sees them (channel, vendor, dir, archived). JSON only").
 		Do(func(_ context.Context, _ contracts.Input) (string, error) {
 			b, err := json.Marshal(sessionInfos(store, partDir))
+			return string(b), err
+		})
+}
+
+func sessionOverviewVerb(src overviewSource) contracts.Cmd {
+	return contracts.New(nsSession, "overview").
+		Help("list every session with its live state (waiting, working, archived, review, idle), cost and last activity. JSON only").
+		Do(func(_ context.Context, _ contracts.Input) (string, error) {
+			b, err := json.Marshal(src.overviews())
 			return string(b), err
 		})
 }

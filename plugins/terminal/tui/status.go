@@ -95,6 +95,15 @@ func contextPercent(used, limit int) string {
 	return fmt.Sprintf("%d%%", int(contextRatio(used, limit)*percentScale))
 }
 
+func renderContext(used int, vendor string, styles uiStyles) string {
+	if used <= 0 {
+		return ""
+	}
+	limit := contextLimit(vendor)
+	text := formatTokens(used) + "/" + formatLimit(limit)
+	return palierStyle(contextRatio(used, limit), styles).Render(text)
+}
+
 const contextCells = 10
 
 func contextGauge(ratio float64, cells int, styles uiStyles) string {

@@ -135,7 +135,52 @@ const (
 	ModeBypass Mode = "bypass"
 	// ModeStrict refuses anything the policy does not explicitly allow.
 	ModeStrict Mode = "strict"
+	ModeSmart  Mode = "smart"
 )
+
+type Risk string
+
+const (
+	RiskLow    Risk = "low"
+	RiskMedium Risk = "medium"
+	RiskHigh   Risk = "high"
+)
+
+func ParseRisk(answer string) (Risk, bool) {
+	words := strings.Fields(strings.ToLower(answer))
+	if len(words) == 0 {
+		return "", false
+	}
+	risk := Risk(strings.Trim(words[0], ".,;:!?`'\"*"))
+	switch risk {
+	case RiskLow, RiskMedium, RiskHigh:
+		return risk, true
+	}
+	return "", false
+}
+
+func (r Risk) Decision() Decision {
+	if r == RiskLow {
+		return Allow
+	}
+	return Ask
+}
+
+func Judged(m Mode, decided Decision, matched bool) bool {
+	return m == ModeSmart && decided != Deny && (decided != Allow || !matched)
+}
+
+func RuleFor(tool, subject string) (Rule, bool) {
+	if tool == "" || subject == "" || strings.ContainsAny(tool, "()* \r\n") || strings.ContainsAny(subject, "*?\r\n") {
+		return Rule{}, false
+	}
+	rule := Rule{Decision: Allow, Tool: tool, Pattern: subject}
+	parsed, err := ParseRule(rule.String())
+	if err != nil || parsed != rule {
+		return Rule{}, false
+	}
+	return rule, true
+}
 
 // Decide returns the strictest decision any rule reaches for req, and whether
 // any rule matched at all. Nothing matching is Allow: an empty policy is the
@@ -176,7 +221,7 @@ func Apply(m Mode, decided Decision, matched bool) Decision {
 		if decided == Allow && !matched {
 			return Ask
 		}
-	case ModeAsk:
+	case ModeAsk, ModeSmart:
 	}
 	return decided
 }

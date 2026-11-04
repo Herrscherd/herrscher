@@ -26,7 +26,7 @@ func TestAnswerApprovalPickIsSessionScoped(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := newTestPendingApproval(tc.owner)
 			defer registerTestApproval(t, approvalTab, p)()
-			if got := answerApprovalPick(approvalTab, tc.clicker, approvalPickPrefix+p.id+":allow"); got != tc.swallowd {
+			if got := answerApprovalPick(approvalTab, newSessionTable(), tc.clicker, approvalPickPrefix+p.id+":allow"); got != tc.swallowd {
 				t.Fatalf("answerApprovalPick = %v, want %v", got, tc.swallowd)
 			}
 			assertSettlement(t, p, tc.answered)

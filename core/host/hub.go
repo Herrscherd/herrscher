@@ -388,7 +388,7 @@ func (h *hub) Submit(name string, in contracts.Inbound) bool {
 }
 
 func (h *hub) Pick(name, value string) bool {
-	if answerApprovalPick(h.approvals, name, value) {
+	if answerApprovalPick(h.approvals, h.sessions, name, value) {
 		return true
 	}
 	return h.sessions.pick(name, value)

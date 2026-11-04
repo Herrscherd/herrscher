@@ -69,19 +69,20 @@ func sessionArgs() map[string]string {
 
 func notASessionArgs() map[string]bool {
 	return map[string]bool{
-		"session create name":  true,
-		"agent create name":    true,
-		"agent show name":      true,
-		"agent set-soul name":  true,
-		"host add name":        true,
-		"host check name":      true,
-		"host provision name":  true,
-		"host rm name":         true,
-		"schedule add name":    true,
-		"schedule rm name":     true,
-		"schedule run name":    true,
-		"schedule pause name":  true,
-		"schedule resume name": true,
+		"session create name":   true,
+		"agent create name":     true,
+		"agent show name":       true,
+		"agent set-soul name":   true,
+		"host add name":         true,
+		"host check name":       true,
+		"host provision name":   true,
+		"host rm name":          true,
+		"approve allow session": true,
+		"schedule add name":     true,
+		"schedule rm name":      true,
+		"schedule run name":     true,
+		"schedule pause name":   true,
+		"schedule resume name":  true,
 	}
 }
 

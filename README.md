@@ -241,12 +241,33 @@ reads `allow Read`, `ask Bash(git push*)` or `deny Write(/etc/*)`, the strictest
 match wins, and an agent's own `APPROVALS` file can only tighten what the daemon
 set, never widen it.
 
-On `ask` the question goes to the session's own gateways as a two-button menu and
-the tool call waits. An answer settles it, and nobody answering within the
-timeout is a refusal, said to the model in words it can act on.
+On `ask` the question goes to the session's own gateways as a menu of four
+answers, and the tool call waits. The four are:
 
-A session is `ask`, `strict` (everything a rule does not name is asked about too)
-or `bypass` (no hook at all).
+- `allow`: this call runs, and the next identical one asks again.
+- `allow --session`: this call runs, and the same call passes for the rest of
+  the session. The grant lives with the session and ends when it stops.
+- `allow --always`: this call runs, and a rule for it is written the way
+  `approve rule` writes one, so it keeps passing after restarts. A call whose
+  subject holds a wildcard or a line break gets no rule, and the operator is
+  told so.
+- `deny`, optionally with `--reason`: the call is refused, and the reason is
+  what the agent reads in its refusal.
+
+Nobody answering within the approval wait, 5 minutes by default, is a refusal,
+said to the model in words it can act on. The gateways are told the deadline,
+so a menu can show when the question expires.
+
+A session is `ask`, `strict` (everything a rule does not name is asked about too),
+`smart` or `bypass` (no hook at all).
+
+`smart` lets a model rate each call that no rule settles: a `low` rating passes
+the call, `medium` and `high` ask you as `ask` does. The model is the first installed
+LLM backend, the one the memory extractor uses, and `HERRSCHER_CURATION_MODEL`
+overrides its model. Without any LLM backend, or when
+the rating fails, smart decides as `ask` does and says so to the operator: a call
+no rule names runs unasked, a call a rule asks about is put to you. Smart costs
+one model call per unmatched tool call, reads included.
 
 How it is wired in depends on the backend, and each backend says for itself what
 it can enforce. Claude Code gets a `PreToolUse` hook materialized into the
@@ -274,12 +295,12 @@ Every failure allows and says why, on both paths. This is a guardrail against
 mistakes, not a sandbox, and a daemon that has gone away must not stop a `claude`
 run by hand.
 
-`approve list`, `approve allow <id>`, `approve deny <id> --reason '…'`,
-`approve rule` and `approve mode` are the whole surface. With no rule configured
-nothing is ever asked, which is exactly how herrscher behaved before this
-existed.
-
-→ `architecture/approvals`
+`approve list`, `approve allow <id> [--session | --always]`,
+`approve deny <id> [--reason '…']`, `approve rule`, `approve ask` and
+`approve mode` (`ask`, `bypass`, `strict` or `smart`) are the whole surface.
+Flags come after the id or before it: `approve allow --session <id>` works too.
+With no rule configured nothing is ever asked, which is exactly how herrscher
+behaved before this existed.
 
 ### A daemon that knows who is calling
 

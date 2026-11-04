@@ -533,3 +533,24 @@ func TestRepairedBeatLeavesNothingBehind(t *testing.T) {
 		t.Fatalf("a repaired beat must show nothing, got %q", m.flash)
 	}
 }
+
+func TestActionFlashWinsOverAPendingBeatFailure(t *testing.T) {
+	var broken atomic.Bool
+	broken.Store(true)
+	run := brokenDraftRun(t, &broken)
+	waitForBeat(t, run, true)
+	m := newTestModel()
+	m.draftFiles = run
+	m.flash = "éditeur indisponible : test"
+	m.handleMsg(draftBeatFailedMsg{err: errors.New("panne")})
+	m.input.SetValue("/rename")
+	m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if !strings.Contains(m.flash, "/rename <nom>") {
+		t.Fatalf("the action's own flash must show over a pending beat failure, got %q", m.flash)
+	}
+	m.input.SetValue("")
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+	if !strings.Contains(m.flash, "signe de vie du brouillon interrompu") {
+		t.Fatalf("the pending beat failure must show on the next key without a flash, got %q", m.flash)
+	}
+}

@@ -11,28 +11,30 @@ import (
 )
 
 const (
-	escDoubleWindow = 700 * time.Millisecond
-	rewindStepList  = 0
-	rewindStepOpts  = 1
-	rewindStepSure  = 2
-	rewindOptCode   = 2
-	rewindOptFork   = 3
-	rewindOptCancel = 4
-	rewindMinSplit  = 80
+	escDoubleWindow       = 700 * time.Millisecond
+	rewindStepList        = 0
+	rewindStepOpts        = 1
+	rewindStepSure        = 2
+	rewindOptBoth         = 0
+	rewindOptConversation = 1
+	rewindOptCode         = 2
+	rewindOptFork         = 3
+	rewindOptCancel       = 4
+	rewindMinSplit        = 80
 )
 
 var rewindOptions = []struct {
-	label, detail string
-	unsupported   bool
+	label, detail     string
+	needsConversation bool
 }{
-	{label: "Restaurer le code et la conversation", detail: "conversation non reprise", unsupported: true},
-	{label: "Restaurer la conversation seulement", detail: "non pris en charge par le backend", unsupported: true},
+	{label: "Restaurer le code et la conversation", detail: "le code et la conversation reviennent à ce message", needsConversation: true},
+	{label: "Restaurer la conversation seulement", detail: "la conversation reprend à ce message", needsConversation: true},
 	{label: "Restaurer le code seulement", detail: "la conversation reste"},
 	{label: "Forker à partir d’ici", detail: "/fork : nouvelle session, l’originale intacte"},
 	{label: "Annuler"},
 }
 
-const rewindUnsupportedNote = "conversation non reprise : le backend Claude ne revient pas à un message"
+const rewindUnsupportedNote = "conversation non reprise : le backend de cette session ne garde pas de position par message"
 
 type rewindFile struct {
 	Path    string `json:"path"`
@@ -41,16 +43,22 @@ type rewindFile struct {
 }
 
 type rewindRow struct {
-	Index int          `json:"index"`
-	At    string       `json:"at"`
-	Turn  string       `json:"turn"`
-	Text  string       `json:"text"`
-	Files []rewindFile `json:"files"`
+	Index        int          `json:"index"`
+	At           string       `json:"at"`
+	Turn         string       `json:"turn"`
+	Text         string       `json:"text"`
+	Conversation string       `json:"conversation"`
+	Files        []rewindFile `json:"files"`
+}
+
+func (row rewindRow) conversationRestorable() bool {
+	return row.Conversation != "" && row.Conversation != "none"
 }
 
 type rewindDoneMsg struct {
 	session string
 	text    string
+	what    string
 	index   int
 	err     error
 }
@@ -165,7 +173,7 @@ func (m *model) handleRewindOptions(msg tea.KeyMsg) tea.Cmd {
 func (m *model) handleRewindSure(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "y", "Y":
-		return m.restoreRewindCode()
+		return m.restoreRewind()
 	case "n", "N", "esc":
 		m.rwStep = rewindStepOpts
 	case "ctrl+c":
@@ -193,32 +201,42 @@ func clampIndex(index, count int) int {
 }
 
 func (m *model) chooseRewindOption() tea.Cmd {
+	row, ok := m.rewindSelected()
 	switch m.rwOpt {
 	case rewindOptCancel:
 		m.closeRewind()
 	case rewindOptFork:
 		return m.forkFromRewind()
 	case rewindOptCode:
+		m.rwWhat = "code"
 		m.rwStep = rewindStepSure
-	default:
-		m.flash = rewindUnsupportedNote
+	case rewindOptBoth, rewindOptConversation:
+		if !ok || !row.conversationRestorable() {
+			m.flash = rewindUnsupportedNote
+			return nil
+		}
+		m.rwWhat = "both"
+		if m.rwOpt == rewindOptConversation {
+			m.rwWhat = "conversation"
+		}
+		m.rwStep = rewindStepSure
 	}
 	return nil
 }
 
 func (m *model) rewindName() string { return m.sessionName(m.active) }
 
-func (m *model) restoreRewindCode() tea.Cmd {
+func (m *model) restoreRewind() tea.Cmd {
 	row, ok := m.rewindSelected()
 	name := m.rewindName()
 	if !ok || name == "" {
 		return nil
 	}
-	backend, index, text := m.tm, row.Index, row.Text
+	backend, index, text, what := m.tm, row.Index, row.Text, m.rwWhat
 	m.closeRewind()
 	return func() tea.Msg {
-		_, err := backend.Dispatch([]string{"session", "rewind", "--name", name, "--to", fmt.Sprint(index), "--what", "code"})
-		return rewindDoneMsg{session: name, text: text, index: index, err: err}
+		_, err := backend.Dispatch([]string{"session", "rewind", "--name", name, "--to", fmt.Sprint(index), "--what", what})
+		return rewindDoneMsg{session: name, text: text, what: what, index: index, err: err}
 	}
 }
 
@@ -264,7 +282,7 @@ func (m *model) handleRewindDone(msg rewindDoneMsg) {
 	if m.input.Value() == "" {
 		m.input.SetValue(msg.text)
 	}
-	m.flash = fmt.Sprintf("revenu au message %d · code restauré", msg.index)
+	m.flash = fmt.Sprintf("revenu au message %d · %s", msg.index, rewindDoneLabel[msg.what])
 }
 
 func (m *model) handleForkDone(msg forkDoneMsg) {
@@ -328,6 +346,12 @@ func (m *model) rewindListLines(width int) []string {
 	return append(lines, truncate("  "+m.st.dim.Render(footer), width))
 }
 
+var rewindDoneLabel = map[string]string{
+	"code":         "code restauré",
+	"both":         "code et conversation restaurés",
+	"conversation": "conversation reprise",
+}
+
 func (m *model) rewindOptionLines(width int) []string {
 	row, ok := m.rewindSelected()
 	if !ok {
@@ -345,7 +369,7 @@ func (m *model) rewindOptionLines(width int) []string {
 		}
 		label := fmt.Sprintf("%d. %s", index+1, option.label)
 		detail := option.detail
-		if option.unsupported {
+		if option.needsConversation && !row.conversationRestorable() {
 			detail = rewindUnsupportedNote
 		}
 		line := "  " + head + label
@@ -362,10 +386,21 @@ func (m *model) rewindSureLines(width int) []string {
 	if !ok {
 		return nil
 	}
-	question := fmt.Sprintf("Restaurer le code au message de %s ? Les fichiers du worktree reviennent à cet état.", row.At)
+	question := rewindQuestion(m.rwWhat, row.At)
 	return []string{
 		truncate("  "+m.st.warn.Render(question), width),
 		truncate("  "+m.st.dim.Render("y confirmer · n annuler"), width),
+	}
+}
+
+func rewindQuestion(what, at string) string {
+	switch what {
+	case "both":
+		return fmt.Sprintf("Restaurer le code et la conversation au message de %s ? Les fichiers reviennent à cet état et la conversation reprend à ce message.", at)
+	case "conversation":
+		return fmt.Sprintf("Restaurer la conversation au message de %s ? Les fichiers ne bougent pas.", at)
+	default:
+		return fmt.Sprintf("Restaurer le code au message de %s ? Les fichiers du worktree reviennent à cet état.", at)
 	}
 }
 

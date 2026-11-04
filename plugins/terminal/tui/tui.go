@@ -241,6 +241,7 @@ type model struct {
 	rwIdx  int
 	rwOpt  int
 	rwRows []rewindRow
+	rwWhat string
 	escAt  time.Time
 
 	switchOpen bool

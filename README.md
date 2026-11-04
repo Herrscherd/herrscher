@@ -443,16 +443,20 @@ aux fichiers). Sur un composer vide et hors tour, `Échap Échap` ouvre l'écran
 « Revenir en arrière » : la liste des messages avec les fichiers que chacun a
 touchés, de large à étroit (sous 80 colonnes, les fichiers passent sous le message).
 
-Depuis cet écran, `⏎` ouvre trois choix : « restaurer le code et la conversation »
-et « restaurer la conversation seulement » sont refusés, le backend Claude ne
-revenant pas à un message passé, et la raison est affichée ; « restaurer le code
-seulement » demande confirmation (`y`), remet le worktree de la session à l'état
-du checkpoint et recopie le message dans le composer. `u` annule le dernier retour
-(un seul niveau, pour le code). `f` ou « forker à partir d'ici » lance `/fork`.
+Depuis cet écran, `⏎` ouvre les choix : « restaurer le code et la conversation »,
+« restaurer la conversation seulement » et « restaurer le code seulement », chacun
+avec confirmation (`y`). La conversation revient au message en relançant le backend
+sur une copie de sa transcription, tronquée juste avant ce message, sous un nouvel
+identifiant de session : l'original reste intact. Seul le backend Claude fournit
+cette position aujourd'hui ; ailleurs, les deux options sont désactivées avec la
+raison affichée, et rien ne change. Restaurer le code seul ne touche pas à la
+conversation. `u` annule le dernier retour de code (un seul niveau) ; un retour de
+conversation ne se défait pas encore. `f` ou « forker à partir d'ici » lance `/fork`.
 
 `/fork [--name <nom>] --to <n>` crée la session `<nom>-fork` avec son propre
-worktree, placé au checkpoint, dans un nouvel onglet ; l'originale reste intacte.
-La mémoire de la conversation n'est pas reprise par le fork.
+worktree au checkpoint, reprend la conversation jusqu'à ce même message, et ouvre
+un nouvel onglet ; l'originale reste intacte. Un fork refusé (backend sans position
+par message) ne crée rien.
 
 Un seul Échap interrompt toujours un tour en cours, comme plus haut. Les fichiers
 ignorés par git ne sont pas couverts par les checkpoints.

@@ -31,8 +31,8 @@ func (r *rewindBackend) Dispatch(args []string) (string, error) {
 
 func sampleCheckpoints() []rewindRow {
 	return []rewindRow{
-		{Index: 1, At: "14:02", Text: "ajoute une file de messages au composer", Files: []rewindFile{{Path: "tui/composer_queue.go", Added: 38}}},
-		{Index: 2, At: "14:09", Text: "pense aussi au mode étroit, sous 60 colonnes", Files: []rewindFile{{Path: "tui/frame.go", Added: 14, Removed: 9}, {Path: "tui/tui.go", Added: 1}}},
+		{Index: 1, At: "14:02", Text: "ajoute une file de messages au composer", Conversation: "start", Files: []rewindFile{{Path: "tui/composer_queue.go", Added: 38}}},
+		{Index: 2, At: "14:09", Text: "pense aussi au mode étroit, sous 60 colonnes", Conversation: "u-2", Files: []rewindFile{{Path: "tui/frame.go", Added: 14, Removed: 9}, {Path: "tui/tui.go", Added: 1}}},
 		{Index: 3, At: "14:15", Text: "lance les tests et corrige ce qui casse"},
 	}
 }
@@ -248,5 +248,22 @@ func TestForkOpensNewTabForTheForkedSession(t *testing.T) {
 	m.Update(forked)
 	if m.active != "f" {
 		t.Fatalf("the fork must open its own tab, active = %q", m.active)
+	}
+}
+
+func TestConversationRestoreAsksForConfirmationWhenTheMessageHasAPosition(t *testing.T) {
+	m, backend := rewindModel(t)
+	openByDoubleEsc(t, m)
+	press(m, tea.KeyMsg{Type: tea.KeyUp})
+	press(m, tea.KeyMsg{Type: tea.KeyEnter})
+	press(m, tea.KeyMsg{Type: tea.KeyDown})
+	press(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.rwStep != rewindStepSure || m.rwWhat != "conversation" {
+		t.Fatalf("the conversation option must ask first, step = %d what = %q", m.rwStep, m.rwWhat)
+	}
+	runCmd(typeRune(m, 'y'))
+	got := backend.dispatched[len(backend.dispatched)-1]
+	if strings.Join(got, " ") != "session rewind --name alpha --to 2 --what conversation" {
+		t.Fatalf("confirmed conversation restore dispatched %v", got)
 	}
 }

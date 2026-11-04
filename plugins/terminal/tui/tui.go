@@ -1470,6 +1470,9 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case shellResultMsg:
 		m.handleShellResult(msg)
 		return nil, true
+	case signalFailedMsg:
+		m.flash = "notification impossible : " + msg.err.Error()
+		return nil, true
 	case editorDoneMsg:
 		m.applyEditorResult(msg)
 		return nil, true
@@ -1579,7 +1582,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	m.keys.write("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
 	m.flash = ""
 	if msg.Type == tea.KeyCtrlP && m.toast.title != "" {
-		return m.jumpToToast(), true
+		m.jumpToToast()
+		return nil, true
 	}
 	switch {
 	case m.diff.open:
@@ -1806,7 +1810,8 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		return nil, false
 	case tea.KeyEsc:
-		return m.escapeKey(), true
+		m.escapeKey()
+		return nil, true
 	case tea.KeyCtrlC:
 		return m.interruptOrQuit()
 	case tea.KeyTab:
@@ -1856,15 +1861,14 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	return nil, true
 }
 
-func (m *model) escapeKey() tea.Cmd {
+func (m *model) escapeKey() {
 	if tb := m.tabs[m.active]; tb != nil && tb.busy {
 		if name := m.sessionName(m.active); name != "" {
 			m.tm.Interrupt(name)
 		}
-		return nil
+		return
 	}
 	m.escapeIdle()
-	return nil
 }
 
 func (m *model) enterKey(msg tea.KeyMsg) (tea.Cmd, bool) {

@@ -19,12 +19,15 @@ type editorDoneMsg struct {
 	err  error
 }
 
-func editorArgv(path string) []string {
-	editor := os.Getenv("EDITOR")
-	if strings.TrimSpace(editor) == "" {
-		editor = os.Getenv("VISUAL")
+func configuredEditor(env func(string) string) []string {
+	if fields := strings.Fields(env("EDITOR")); len(fields) > 0 {
+		return fields
 	}
-	fields := strings.Fields(editor)
+	return strings.Fields(env("VISUAL"))
+}
+
+func editorArgv(path string) []string {
+	fields := configuredEditor(os.Getenv)
 	if len(fields) == 0 {
 		fields = []string{fallbackEditor}
 	}

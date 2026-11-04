@@ -23,7 +23,7 @@ const (
 	noConversation   = "none"
 	argTo            = "--to"
 	argWhat          = "--what"
-	doubleEscLabel   = "échap" + " " + "échap"
+	doubleEscLabel   = "échap échap"
 )
 
 const rewindUnsupportedNote = "conversation non reprise : le backend de cette session ne garde pas de position par message"

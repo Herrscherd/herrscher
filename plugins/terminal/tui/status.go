@@ -106,11 +106,11 @@ func renderContext(used int, vendor string, styles uiStyles) string {
 
 const contextCells = 10
 
-func contextGauge(ratio float64, cells int, styles uiStyles) string {
-	filled := int(math.Round(ratio * float64(cells)))
-	filled = max(0, min(cells, filled))
+func contextGauge(ratio float64, styles uiStyles) string {
+	filled := int(math.Round(ratio * float64(contextCells)))
+	filled = max(0, min(contextCells, filled))
 	return palierStyle(ratio, styles).Render(strings.Repeat(styles.glyphs.gaugeFull, filled)) +
-		styles.dim.Render(strings.Repeat(styles.glyphs.gaugeEmpty, cells-filled))
+		styles.dim.Render(strings.Repeat(styles.glyphs.gaugeEmpty, contextCells-filled))
 }
 
 const compactAt = 0.92

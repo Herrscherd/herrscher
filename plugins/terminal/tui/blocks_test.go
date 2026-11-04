@@ -51,8 +51,8 @@ func TestGaugeShowsAnySpend(t *testing.T) {
 }
 
 func TestGaugeTakesThePalierColour(t *testing.T) {
-	alarm := contextGauge(0.995, contextCells, testStyles())
-	calm := contextGauge(0.005, contextCells, testStyles())
+	alarm := contextGauge(0.995, testStyles())
+	calm := contextGauge(0.005, testStyles())
 	if alarm == "" || calm == "" {
 		t.Fatal("a spent context must render a gauge")
 	}

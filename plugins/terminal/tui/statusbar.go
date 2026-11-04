@@ -298,7 +298,7 @@ func (m *model) contextPart(info contracts.SessionInfo, used int) (barPart, bool
 	ratio := contextRatio(used, limit)
 	percent := palierStyle(ratio, m.st).Render(contextPercent(used, limit))
 	part := barPart{layers: []barLayer{
-		{text: contextGauge(ratio, contextCells, m.st) + " ", rank: rankGauge},
+		{text: contextGauge(ratio, m.st) + " ", rank: rankGauge},
 		{text: percent, rank: rankNever},
 	}}
 	if m.bar.isShown("detail") {

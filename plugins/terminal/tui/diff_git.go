@@ -105,17 +105,14 @@ func execRunner(ctx context.Context, dir string, env []string, tool cliTool, arg
 }
 
 func commandFor(ctx context.Context, tool cliTool, args []string) (*exec.Cmd, error) {
-	var cmd *exec.Cmd
 	switch tool {
 	case toolGit:
-		cmd = exec.CommandContext(ctx, "git")
+		return exec.CommandContext(ctx, "git", args...), nil
 	case toolGh:
-		cmd = exec.CommandContext(ctx, "gh")
+		return exec.CommandContext(ctx, "gh", args...), nil
 	default:
 		return nil, errUnknownTool
 	}
-	cmd.Args = append(cmd.Args, args...)
-	return cmd, nil
 }
 
 func commandFailure(tool cliTool, verb, stderr string, cause error) error {

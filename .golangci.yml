@@ -69,6 +69,9 @@ linters:
     - varnamelen
     - wastedassign
   settings:
+    dupword:
+      ignore:
+        - échap
     depguard:
       rules:
         banned:
@@ -215,7 +218,7 @@ linters:
       - path: ^plugins/terminal/tui/image_decode\.go$
         linters: [revive]
         text: "blank-imports"
-      - path: ^plugins/terminal/tui/(clipboard|open)\.go$
+      - path: ^plugins/terminal/tui/(clipboard|open|editor|sidebar_git|statusline_script|diff_git)\.go$
         linters: [gosec]
         text: "^G204:"
       - path: ^plugins/terminal/tui/keylog\.go$

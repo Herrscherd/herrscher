@@ -263,7 +263,7 @@ func (m *model) expireApprovals(now time.Time) {
 			continue
 		}
 		m.answerApproval(target, approvalDeny, "")
-		m.flash = "approval refused by default: nobody answered in time"
+		m.flash = "approbation refusée par défaut : personne n’a répondu à temps"
 	}
 }
 

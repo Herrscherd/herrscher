@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -52,7 +53,9 @@ func TestSessionShellReportsExitCode(t *testing.T) {
 
 func TestSessionShellGoesThroughTheApprovalPolicy(t *testing.T) {
 	st, approvals, sessions, dir := shellFixture(t, "strict")
-	_, err := runSessionShell(context.Background(), st, nil, approvals, sessions, "s1", "touch "+filepath.Join(dir, "x"))
+	unanswered, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	_, err := runSessionShell(unanswered, st, nil, approvals, sessions, "s1", "touch "+filepath.Join(dir, "x"))
 	if !errors.Is(err, errShellRefused) {
 		t.Fatalf("a strict session must refuse an unapproved command, got %v", err)
 	}

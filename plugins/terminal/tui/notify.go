@@ -104,11 +104,10 @@ func (m *model) notifyApproval(channel, question string) tea.Cmd {
 	return m.announce(kindApproval, m.st.glyphs.attention, "Approbation en attente", channel, detail)
 }
 
-func (m *model) jumpToToast() tea.Cmd {
+func (m *model) jumpToToast() {
 	channel := m.toast.channel
 	m.toast = toast{}
 	m.activate(channel)
-	return nil
 }
 
 func (m *model) announce(kind notifyKind, glyph, title, channel, detail string) tea.Cmd {

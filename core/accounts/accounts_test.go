@@ -61,7 +61,7 @@ func TestResolvePrefersSessionOverDefaultAndFallsBackToNative(t *testing.T) {
 	}
 
 	name, dir, err := store.Resolve("boulot", contracts.VendorClaude)
-	if err != nil || name != "boulot" || dir != store.Dir(contracts.VendorClaude, mustName(t, "boulot")) {
+	if err != nil || name != "boulot" || dir != dirOf(t, store, contracts.VendorClaude, mustName(t, "boulot")) {
 		t.Fatalf("session choice: got %q %q %v, want boulot", name, dir, err)
 	}
 	name, _, err = store.Resolve("", contracts.VendorClaude)
@@ -90,7 +90,7 @@ func TestRemoveRefusesAProfileInUse(t *testing.T) {
 	if err := store.Remove(contracts.VendorClaude, name, true); !errors.Is(err, ErrInUse) {
 		t.Fatalf("Remove while in use = %v, want ErrInUse", err)
 	}
-	if _, err := os.Stat(store.Dir(contracts.VendorClaude, name)); err != nil {
+	if _, err := os.Stat(dirOf(t, store, contracts.VendorClaude, name)); err != nil {
 		t.Fatalf("profile dir should survive a refused remove: %v", err)
 	}
 }
@@ -157,5 +157,51 @@ func TestStatusReadsEachVendorsAnswer(t *testing.T) {
 		if err != nil || got != tc.want {
 			t.Fatalf("Status(%s, %q) = %v %v, want %v", tc.vendor, tc.out, got, err, tc.want)
 		}
+	}
+}
+
+func dirOf(t *testing.T, store Store, vendor string, name contracts.ProfileName) string {
+	t.Helper()
+	dir, err := store.Dir(vendor, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestDirRefusesAVendorWithoutAProfileHome(t *testing.T) {
+	store := newStore(t)
+	if _, err := store.Dir("victim", mustName(t, "perso")); !errors.Is(err, contracts.ErrNoProfileHome) {
+		t.Fatalf("Dir of an unknown vendor = %v, want ErrNoProfileHome", err)
+	}
+}
+
+func TestRemoveRefusesAnUnknownVendorAndKeepsItsDirectory(t *testing.T) {
+	store := newStore(t)
+	victim := filepath.Join(store.Root, "victim", "perso")
+	if err := os.MkdirAll(victim, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Remove("victim", mustName(t, "perso"), false); !errors.Is(err, contracts.ErrNoProfileHome) {
+		t.Fatalf("Remove of an unknown vendor = %v, want ErrNoProfileHome", err)
+	}
+	if _, err := os.Stat(victim); err != nil {
+		t.Fatalf("directory of the unknown vendor was touched: %v", err)
+	}
+}
+
+func TestResolveMissingProfileNeverFallsBackToTheDefault(t *testing.T) {
+	store := newStore(t)
+	if _, err := store.Create(contracts.VendorClaude, mustName(t, "perso")); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetDefault(contracts.VendorClaude, mustName(t, "perso")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(dirOf(t, store, contracts.VendorClaude, mustName(t, "perso"))); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.Resolve("", contracts.VendorClaude); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Resolve of a removed default = %v, want ErrNotFound and no silent fallback", err)
 	}
 }

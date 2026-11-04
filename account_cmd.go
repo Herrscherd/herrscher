@@ -62,6 +62,9 @@ func accountArgs(args []string) (string, contracts.ProfileName, error) {
 	if len(args) != accountArgCount {
 		return "", "", errAccountUsage
 	}
+	if _, err := contracts.ProfileHomeEnv(args[1]); err != nil {
+		return "", "", err
+	}
 	name, err := contracts.ParseProfileName(args[2])
 	if err != nil {
 		return "", "", err
@@ -133,12 +136,16 @@ func addAccount(ctx context.Context, store accounts.Store, vendor string, name c
 }
 
 func removeAccount(store accounts.Store, vendor string, name contracts.ProfileName, input io.Reader, output io.Writer) error {
-	inUse, err := host.ProfileInUse(vendor, string(name))
+	defaultName, err := store.Default(vendor)
 	if err != nil {
 		return err
 	}
-	if inUse {
-		return fmt.Errorf("%s/%s: %w", vendor, name, accounts.ErrInUse)
+	users, err := host.ProfileUsers(vendor, string(name), defaultName == string(name))
+	if err != nil {
+		return err
+	}
+	if refuseErr := refuseProfileInUse(vendor, name, users); refuseErr != nil {
+		return refuseErr
 	}
 	if promptErr := emitf(output, "Supprimer le profil %s/%s et son dossier de connexion ? (oui/non) ", vendor, name); promptErr != nil {
 		return promptErr
@@ -153,11 +160,22 @@ func removeAccount(store accounts.Store, vendor string, name contracts.ProfileNa
 	return store.Remove(vendor, name, false)
 }
 
+func refuseProfileInUse(vendor string, name contracts.ProfileName, users []string) error {
+	if len(users) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s/%s used by session(s) %s, move them with herrscher session set-account first: %w", vendor, name, strings.Join(users, ", "), accounts.ErrInUse)
+}
+
 func warnResumingSessions(vendor string, output io.Writer) error {
 	names, err := host.ResumingSessions(vendor)
 	if err != nil {
 		return err
 	}
+	return warnResuming(vendor, names, output)
+}
+
+func warnResuming(vendor string, names []string, output io.Writer) error {
 	if len(names) == 0 {
 		return nil
 	}

@@ -49,26 +49,29 @@ func DefaultRoot(home string) string {
 	return filepath.Join(home, ".config", "herrscher", "accounts")
 }
 
-// Dir returns the directory of one profile.
-func (s Store) Dir(vendor string, name contracts.ProfileName) string {
-	return filepath.Join(s.Root, vendor, string(name))
+// Dir returns the directory of one profile, refusing a vendor that has no profile home.
+func (s Store) Dir(vendor string, name contracts.ProfileName) (string, error) {
+	if _, err := contracts.ProfileHomeEnv(vendor); err != nil {
+		return "", err
+	}
+	return filepath.Join(s.Root, vendor, string(name)), nil
 }
 
 // Create makes a private profile directory and refuses an existing one.
 func (s Store) Create(vendor string, name contracts.ProfileName) (string, error) {
-	if _, err := contracts.ProfileHomeEnv(vendor); err != nil {
+	dir, err := s.Dir(vendor, name)
+	if err != nil {
 		return "", err
 	}
-	dir := s.Dir(vendor, name)
-	if _, err := os.Stat(dir); err == nil {
+	if _, statErr := os.Stat(dir); statErr == nil {
 		return "", fmt.Errorf("%s/%s: %w", vendor, name, ErrExists)
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("stat profile dir: %w", err)
+	} else if !errors.Is(statErr, fs.ErrNotExist) {
+		return "", fmt.Errorf("stat profile dir: %w", statErr)
 	}
-	if err := os.MkdirAll(dir, dirMode); err != nil {
+	if err = os.MkdirAll(dir, dirMode); err != nil {
 		return "", fmt.Errorf("create profile dir: %w", err)
 	}
-	if err := os.Chmod(dir, dirMode); err != nil {
+	if err = os.Chmod(dir, dirMode); err != nil {
 		return "", fmt.Errorf("restrict profile dir: %w", err)
 	}
 	return dir, nil
@@ -113,10 +116,14 @@ func (s Store) listVendor(vendor string, defaults map[string]string) ([]Profile,
 		if err != nil || !entry.IsDir() {
 			continue
 		}
+		dir, dirErr := s.Dir(vendor, name)
+		if dirErr != nil {
+			return nil, dirErr
+		}
 		profiles = append(profiles, Profile{
 			Vendor:  vendor,
 			Name:    string(name),
-			Dir:     s.Dir(vendor, name),
+			Dir:     dir,
 			Default: defaults[vendor] == string(name),
 		})
 	}
@@ -132,10 +139,11 @@ func compareProfiles(left, right Profile) int {
 
 // SetDefault makes a stored profile the vendor default.
 func (s Store) SetDefault(vendor string, name contracts.ProfileName) error {
-	if _, err := contracts.ProfileHomeEnv(vendor); err != nil {
+	dir, err := s.Dir(vendor, name)
+	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(s.Dir(vendor, name)); err != nil {
+	if _, statErr := os.Stat(dir); statErr != nil {
 		return fmt.Errorf("%s/%s: %w", vendor, name, ErrNotFound)
 	}
 	defaults, err := s.loadDefaults()
@@ -157,14 +165,17 @@ func (s Store) Default(vendor string) (string, error) {
 
 // Remove deletes a profile directory unless a live session uses it.
 func (s Store) Remove(vendor string, name contracts.ProfileName, inUse bool) error {
+	dir, err := s.Dir(vendor, name)
+	if err != nil {
+		return err
+	}
 	if inUse {
 		return fmt.Errorf("%s/%s: %w", vendor, name, ErrInUse)
 	}
-	dir := s.Dir(vendor, name)
-	if _, err := os.Stat(dir); err != nil {
+	if _, statErr := os.Stat(dir); statErr != nil {
 		return fmt.Errorf("%s/%s: %w", vendor, name, ErrNotFound)
 	}
-	if err := os.RemoveAll(dir); err != nil {
+	if err = os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("remove profile dir: %w", err)
 	}
 	defaults, err := s.loadDefaults()
@@ -191,15 +202,15 @@ func (s Store) Resolve(session, vendor string) (string, string, error) {
 	if name == "" || name == contracts.NativeProfile {
 		return "", "", nil
 	}
-	if _, err := contracts.ProfileHomeEnv(vendor); err != nil {
-		return "", "", err
-	}
 	profile, err := contracts.ParseProfileName(name)
 	if err != nil {
 		return "", "", err
 	}
-	dir := s.Dir(vendor, profile)
-	if _, err := os.Stat(dir); err != nil {
+	dir, err := s.Dir(vendor, profile)
+	if err != nil {
+		return "", "", err
+	}
+	if _, statErr := os.Stat(dir); statErr != nil {
 		return "", "", fmt.Errorf("%s/%s: %w", vendor, name, ErrNotFound)
 	}
 	return name, dir, nil

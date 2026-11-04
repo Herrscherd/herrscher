@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/envx"
 )
 
 type modelJSON struct {
@@ -58,7 +58,7 @@ func modelsListText(entries []CatalogEntry) string {
 
 func modelsRefreshText(outcomes []discoveryOutcome) string {
 	if len(outcomes) == 0 {
-		return "no vendor is due for discovery (see HERRSCHER_MODELS_DISCOVER)"
+		return "no vendor is due for discovery (see HERRSCHER_MODELS_DISCOVER and HERRSCHER_ROUTE_POLICY)"
 	}
 	var builder strings.Builder
 	for _, outcome := range outcomes {
@@ -87,9 +87,9 @@ func refreshModels(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	next, outcomes := refreshDiscovery(ctx, contracts.Default.Backends(), cache, resolveDiscoverySettings(os.Getenv), time.Now(), true)
+	next, outcomes := refreshDiscovery(ctx, contracts.Default.Backends(), cache, resolveDiscoverySettings(), time.Now(), true)
 	if anyRefreshed(outcomes) {
-		if err := saveDiscoveryCache(path, next); err != nil {
+		if err := persistRefreshed(path, next, outcomes); err != nil {
 			return "", err
 		}
 	}
@@ -102,7 +102,7 @@ func ModelsCommands() []contracts.Cmd {
 		contracts.New("models", "list").
 			Help("list the models every compiled backend offers, under the active route policy, with their source; --json for the app").
 			Do(func(_ context.Context, input contracts.Input) (string, error) {
-				entries, err := CatalogWith(contracts.Default.Backends(), ResolvePolicy(os.Getenv), LoadSources(os.Getenv))
+				entries, err := CatalogWith(contracts.Default.Backends(), ResolvePolicy(envx.Getenv), LoadSources())
 				if err != nil {
 					return "", err
 				}

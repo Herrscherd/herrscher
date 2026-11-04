@@ -32,20 +32,28 @@ func Catalog(plugins []contracts.Plugin, policy contracts.RoutePolicy) ([]Catalo
 
 // CatalogWith is Catalog with the discovered models and the hidden IDs of the given sources applied.
 func CatalogWith(plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources) ([]CatalogEntry, error) {
-	out := []CatalogEntry{}
+	return buildCatalog(plugins, policy, sources, sources.hidden)
+}
+
+func buildCatalog(plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources, hidden map[string]bool) ([]CatalogEntry, error) {
 	owner := make(map[string]string)
 	for idx := range plugins {
 		plugin := &plugins[idx]
 		kind := plugin.Manifest.Kind
+		if err := contracts.ValidateModels(kind, plugin.Manifest.Models); err != nil {
+			return nil, err
+		}
+		if err := claimModelIDs(owner, kind, plugin.Manifest.Models); err != nil {
+			return nil, err
+		}
+	}
+	out := []CatalogEntry{}
+	for idx := range plugins {
+		plugin := &plugins[idx]
+		kind := plugin.Manifest.Kind
 		static := plugin.Manifest.Models
-		if err := contracts.ValidateModels(kind, static); err != nil {
-			return nil, err
-		}
-		merged := mergedModels(kind, static, sources.discovered)
-		if err := claimModelIDs(owner, kind, merged); err != nil {
-			return nil, err
-		}
-		out = append(out, offeredEntries(kind, static, merged, policy, sources.hidden)...)
+		merged := mergedModels(kind, static, sources.discovered, owner)
+		out = append(out, offeredEntries(kind, static, merged, policy, hidden)...)
 	}
 	sort.SliceStable(out, func(left, right int) bool {
 		if out[left].Vendor != out[right].Vendor {
@@ -96,7 +104,7 @@ func LookupModel(plugins []contracts.Plugin, policy contracts.RoutePolicy, model
 
 // LookupModelWith is LookupModel over the catalog with the given sources applied.
 func LookupModelWith(plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources, modelID string) (CatalogEntry, error) {
-	entries, err := CatalogWith(plugins, policy, sources)
+	entries, err := buildCatalog(plugins, policy, sources, nil)
 	if err != nil {
 		return CatalogEntry{}, err
 	}
@@ -120,7 +128,7 @@ const (
 	EnvDefaultModel = "HERRSCHER_DEFAULT_MODEL"
 )
 
-// VendorDefaultModelEnv names the variable holding the default model of one vendor, such as HERRSCHER_DEFAULT_MODEL_CLAUDE.
+// VendorDefaultModelEnv names the variable holding the default model of one vendor.
 func VendorDefaultModelEnv(vendor string) string {
 	return "HERRSCHER_DEFAULT_MODEL_" + strings.ToUpper(strings.ReplaceAll(vendor, "-", "_"))
 }
@@ -137,8 +145,8 @@ func ResolvePolicy(getenv func(string) string) contracts.RoutePolicy {
 	return contracts.PolicyAll
 }
 
-func mergedModels(kind string, static []contracts.ModelSpec, discovered discoveryCache) []contracts.ModelSpec {
-	cached := discovered.modelsOf(kind)
+func mergedModels(kind string, static []contracts.ModelSpec, discovered discoveryCache, owner map[string]string) []contracts.ModelSpec {
+	cached := unclaimedBy(kind, discovered.modelsOf(kind), owner)
 	if len(cached) == 0 {
 		return static
 	}
@@ -147,5 +155,26 @@ func mergedModels(kind string, static []contracts.ModelSpec, discovered discover
 		slog.Warn("cached models rejected, using the static catalog", "vendor", kind, "err", err)
 		return static
 	}
+	claimDiscoveredIDs(owner, kind, merged)
 	return merged
+}
+
+func unclaimedBy(kind string, models []contracts.ModelSpec, owner map[string]string) []contracts.ModelSpec {
+	kept := make([]contracts.ModelSpec, 0, len(models))
+	for _, model := range models {
+		if other, taken := owner[model.ID]; taken && other != kind {
+			slog.Warn("discovered model ID is served by another backend, discarded", "vendor", kind, "model", model.ID, "owner", other)
+			continue
+		}
+		kept = append(kept, model)
+	}
+	return kept
+}
+
+func claimDiscoveredIDs(owner map[string]string, kind string, models []contracts.ModelSpec) {
+	for idx := range models {
+		if _, taken := owner[models[idx].ID]; !taken {
+			owner[models[idx].ID] = kind
+		}
+	}
 }

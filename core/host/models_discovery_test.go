@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -146,12 +147,10 @@ func TestSilentVendorDoesNotBlockPastItsDeadline(t *testing.T) {
 }
 
 func TestDiscoverySettingsFromEnvironment(t *testing.T) {
-	env := map[string]string{
-		envModelsTTL:      "2h",
-		envModelsTimeout:  "3s",
-		envModelsDiscover: "claude, codex",
-	}
-	settings := resolveDiscoverySettings(func(name string) string { return env[name] })
+	t.Setenv(envModelsTTL, "2h")
+	t.Setenv(envModelsTimeout, "3s")
+	t.Setenv(envModelsDiscover, "claude, codex")
+	settings := resolveDiscoverySettings()
 	if settings.ttl != 2*time.Hour || settings.timeout != 3*time.Second {
 		t.Fatalf("durations = %v %v", settings.ttl, settings.timeout)
 	}
@@ -161,7 +160,10 @@ func TestDiscoverySettingsFromEnvironment(t *testing.T) {
 }
 
 func TestDiscoveryDefaultsWhenEnvironmentIsEmpty(t *testing.T) {
-	settings := resolveDiscoverySettings(func(string) string { return "" })
+	t.Setenv(envModelsTTL, "")
+	t.Setenv(envModelsTimeout, "")
+	t.Setenv(envModelsDiscover, "")
+	settings := resolveDiscoverySettings()
 	if settings.ttl != defaultModelsTTL || settings.timeout != defaultModelsTimeout {
 		t.Fatalf("defaults = %v %v", settings.ttl, settings.timeout)
 	}
@@ -171,12 +173,8 @@ func TestDiscoveryDefaultsWhenEnvironmentIsEmpty(t *testing.T) {
 }
 
 func TestNoneDisablesEveryVendor(t *testing.T) {
-	settings := resolveDiscoverySettings(func(name string) string {
-		if name == envModelsDiscover {
-			return "none"
-		}
-		return ""
-	})
+	t.Setenv(envModelsDiscover, "none")
+	settings := resolveDiscoverySettings()
 	if settings.enabled("claude") {
 		t.Fatal("HERRSCHER_MODELS_DISCOVER=none still enables claude")
 	}
@@ -216,12 +214,8 @@ func TestLoadSourcesReadsCacheFromStateDir(t *testing.T) {
 	if err := saveDiscoveryCache(filepath.Join(dir, discoveryCacheName), cache); err != nil {
 		t.Fatal(err)
 	}
-	sources := LoadSources(func(name string) string {
-		if name == envModelsHidden {
-			return "a-native"
-		}
-		return ""
-	})
+	t.Setenv(envModelsHidden, "a-native")
+	sources := LoadSources()
 	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, sources)
 	if err != nil {
 		t.Fatalf("CatalogWith: %v", err)
@@ -233,4 +227,127 @@ func TestLoadSourcesReadsCacheFromStateDir(t *testing.T) {
 	if !ids["a-live"] || ids["a-native"] {
 		t.Fatalf("catalog from state dir = %v, want a-live and no a-native", ids)
 	}
+}
+
+func TestHiddenModelStillResumes(t *testing.T) {
+	sources := Sources{hidden: map[string]bool{"a-native": true}}
+	if _, err := LookupModelWith(fakePlugins(), contracts.PolicyAll, sources, "a-native"); err != nil {
+		t.Fatalf("hidden model a-native no longer resumes: %v", err)
+	}
+}
+
+func TestDiscoveredIDServedByOtherBackendIsDiscarded(t *testing.T) {
+	cache := cacheWith(time.Now(),
+		cachedModel{ID: "b-native", Label: "clash", Arg: "clash", Route: "native"},
+		cachedModel{ID: "a-live", Label: "A live", Arg: "live", Route: "native"},
+	)
+	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, Sources{discovered: cache})
+	if err != nil {
+		t.Fatalf("CatalogWith rejected the whole catalog for one clashing ID: %v", err)
+	}
+	counts := make(map[string]int)
+	for _, entry := range got {
+		counts[entry.ID]++
+		if entry.ID == "b-native" && entry.Vendor != "beta" {
+			t.Fatalf("b-native served by %q, want beta", entry.Vendor)
+		}
+	}
+	if counts["b-native"] != 1 || counts["a-live"] != 1 {
+		t.Fatalf("catalog counts = %v, want b-native once and a-live once", counts)
+	}
+}
+
+func TestFutureFetchedAtIsStale(t *testing.T) {
+	plugins := discoveringPlugins(liveAnswer(contracts.ModelSpec{ID: "a-new", Label: "A new", Arg: "new", Route: contracts.RouteNative}))
+	settings := discoverySettings{ttl: time.Hour, timeout: time.Second}
+	now := time.Now()
+	cache := cacheWith(now.Add(time.Hour), cachedModel{ID: "a-old", Label: "A old", Arg: "old", Route: "native"})
+	_, outcomes := refreshDiscovery(context.Background(), plugins, cache, settings, now, false)
+	if len(outcomes) != 1 || !outcomes[0].Refreshed {
+		t.Fatalf("cache dated in the future was not refreshed: %+v", outcomes)
+	}
+}
+
+func TestGatewayOnlyNeverCallsNativeDiscovery(t *testing.T) {
+	called := false
+	plugins := discoveringPlugins(func(context.Context, contracts.DiscoveryAccess) ([]contracts.ModelSpec, error) {
+		called = true
+		return nil, nil
+	})
+	settings := discoverySettings{ttl: time.Hour, timeout: time.Second, policy: contracts.PolicyGatewayOnly}
+	_, outcomes := refreshDiscovery(context.Background(), plugins, cacheWith(time.Now().Add(-2*time.Hour)), settings, time.Now(), true)
+	if called || len(outcomes) != 0 {
+		t.Fatalf("gateway-only policy called native discovery: called=%v outcomes=%+v", called, outcomes)
+	}
+}
+
+func TestInvalidAnswerKeepsPreviousCache(t *testing.T) {
+	plugins := discoveringPlugins(liveAnswer(contracts.ModelSpec{ID: "", Label: "broken", Arg: "broken", Route: contracts.RouteNative}))
+	settings := discoverySettings{ttl: time.Hour, timeout: time.Second}
+	cache := cacheWith(time.Now().Add(-2*time.Hour), cachedModel{ID: "a-live", Label: "A live", Arg: "live", Route: "native"})
+	next, outcomes := refreshDiscovery(context.Background(), plugins, cache, settings, time.Now(), false)
+	if len(outcomes) != 1 || outcomes[0].Refreshed || !outcomes[0].Kept {
+		t.Fatalf("invalid answer outcome = %+v, want kept and not refreshed", outcomes)
+	}
+	if models := next.modelsOf("alpha"); len(models) != 1 || models[0].ID != "a-live" {
+		t.Fatalf("invalid answer replaced the cache: %+v", models)
+	}
+}
+
+func TestPersistRefreshedKeepsVendorsWrittenByOthers(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "models-discovered.json")
+	now := time.Now()
+	onDisk := discoveryCache{Vendors: map[string]vendorDiscovery{
+		"beta": {FetchedAt: now, Models: []cachedModel{{ID: "b-live", Label: "B live", Arg: "live", Route: "native"}}},
+	}}
+	if err := saveDiscoveryCache(path, onDisk); err != nil {
+		t.Fatal(err)
+	}
+	next := discoveryCache{Vendors: map[string]vendorDiscovery{
+		"alpha": {FetchedAt: now, Models: []cachedModel{{ID: "a-new", Label: "A new", Arg: "new", Route: "native"}}},
+	}}
+	if err := persistRefreshed(path, next, []discoveryOutcome{{Vendor: "alpha", Refreshed: true}}); err != nil {
+		t.Fatalf("persistRefreshed: %v", err)
+	}
+	got, err := loadDiscoveryCache(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.modelsOf("alpha")) != 1 || len(got.modelsOf("beta")) != 1 {
+		t.Fatalf("cache after persist = %+v, want alpha and beta both kept", got.Vendors)
+	}
+}
+
+func TestGatewayRoutesDroppedWithoutCredentials(t *testing.T) {
+	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
+	t.Setenv(EnvGatewayURL, "")
+	t.Setenv(EnvGatewayToken, "")
+	cache := cacheWith(time.Now(),
+		cachedModel{ID: "a-via-gw", Label: "via gw", Arg: "gw", Route: "gateway"},
+		cachedModel{ID: "a-live", Label: "A live", Arg: "live", Route: "native"},
+	)
+	if err := saveDiscoveryCache(filepath.Join(os.Getenv("HERRSCHER_STATE_DIR"), discoveryCacheName), cache); err != nil {
+		t.Fatal(err)
+	}
+	if ids := catalogIDs(t); ids["a-via-gw"] || !ids["a-live"] {
+		t.Fatalf("without gateway credentials, catalog = %v, want a-live and no a-via-gw", ids)
+	}
+	t.Setenv(EnvGatewayURL, "https://gateway.example")
+	t.Setenv(EnvGatewayToken, "token")
+	if ids := catalogIDs(t); !ids["a-via-gw"] {
+		t.Fatalf("with gateway credentials, catalog = %v, want a-via-gw", ids)
+	}
+}
+
+func catalogIDs(t *testing.T) map[string]bool {
+	t.Helper()
+	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, LoadSources())
+	if err != nil {
+		t.Fatalf("CatalogWith: %v", err)
+	}
+	ids := make(map[string]bool)
+	for idx := range got {
+		ids[got[idx].ID] = true
+	}
+	return ids
 }

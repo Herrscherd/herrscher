@@ -27,7 +27,7 @@ const (
 	defaultModelsTTL     = 24 * time.Hour
 	defaultModelsTimeout = 15 * time.Second
 	discoveryGrace       = 2 * time.Second
-	cacheDirMode         = 0o700
+	cacheFileMode        = 0o600
 	noneVendors          = "none"
 
 	sourceCatalog    = "catalog"
@@ -40,6 +40,7 @@ type discoverySettings struct {
 	ttl     time.Duration
 	timeout time.Duration
 	vendors map[string]bool
+	policy  contracts.RoutePolicy
 }
 
 type discoveryCache struct {
@@ -59,7 +60,7 @@ type cachedModel struct {
 	Route   string   `json:"route"`
 }
 
-// Sources carries the discovered model lists and the hidden model IDs that shape the catalog.
+// Sources carries the discovered model lists and the hidden model IDs.
 type Sources struct {
 	discovered discoveryCache
 	hidden     map[string]bool
@@ -83,9 +84,9 @@ type discoveryAnswer struct {
 	err    error
 }
 
-// LoadSources reads the discovered cache and the hidden IDs from the environment; an unreadable cache is logged and ignored.
-func LoadSources(getenv func(string) string) Sources {
-	sources := Sources{hidden: splitSet(getenv(envModelsHidden))}
+// LoadSources reads the discovered cache and the hidden IDs from the environment.
+func LoadSources() Sources {
+	sources := Sources{hidden: splitSet(envx.Getenv(envModelsHidden))}
 	path, err := discoveryCachePath()
 	if err != nil {
 		slog.Warn("model cache disabled", "err", err)
@@ -95,11 +96,29 @@ func LoadSources(getenv func(string) string) Sources {
 	if err != nil {
 		slog.Warn("model cache unreadable, using the static catalog", "path", path, "err", err)
 	}
+	if _, credsErr := loadGatewayCreds(envx.Getenv); credsErr != nil {
+		cache = withoutGatewayRoutes(cache)
+	}
 	sources.discovered = cache
 	return sources
 }
 
-// StartBackgroundDiscovery refreshes the stale vendor lists in the background, never blocking the daemon start.
+func withoutGatewayRoutes(cache discoveryCache) discoveryCache {
+	kept := discoveryCache{Vendors: make(map[string]vendorDiscovery, len(cache.Vendors))}
+	for vendor, entry := range cache.Vendors {
+		models := make([]cachedModel, 0, len(entry.Models))
+		for _, model := range entry.Models {
+			if contracts.Route(model.Route) != contracts.RouteGateway {
+				models = append(models, model)
+			}
+		}
+		entry.Models = models
+		kept.Vendors[vendor] = entry
+	}
+	return kept
+}
+
+// StartBackgroundDiscovery refreshes the stale vendor lists in the background.
 func StartBackgroundDiscovery(ctx context.Context, plugins []contracts.Plugin) {
 	go func() {
 		path, err := discoveryCachePath()
@@ -111,21 +130,22 @@ func StartBackgroundDiscovery(ctx context.Context, plugins []contracts.Plugin) {
 		if err != nil {
 			slog.Warn("model cache unreadable, refreshing from the backends", "path", path, "err", err)
 		}
-		next, outcomes := refreshDiscovery(ctx, plugins, cache, resolveDiscoverySettings(os.Getenv), time.Now(), false)
+		next, outcomes := refreshDiscovery(ctx, plugins, cache, resolveDiscoverySettings(), time.Now(), false)
 		if !anyRefreshed(outcomes) {
 			return
 		}
-		if err := saveDiscoveryCache(path, next); err != nil {
+		if err := persistRefreshed(path, next, outcomes); err != nil {
 			slog.Warn("model cache not saved", "path", path, "err", err)
 		}
 	}()
 }
 
-func resolveDiscoverySettings(getenv func(string) string) discoverySettings {
+func resolveDiscoverySettings() discoverySettings {
 	return discoverySettings{
-		ttl:     durationSetting(getenv, envModelsTTL, defaultModelsTTL),
-		timeout: durationSetting(getenv, envModelsTimeout, defaultModelsTimeout),
-		vendors: vendorSetting(getenv(envModelsDiscover)),
+		ttl:     durationSetting(envModelsTTL, defaultModelsTTL),
+		timeout: durationSetting(envModelsTimeout, defaultModelsTimeout),
+		vendors: vendorSetting(envx.Getenv(envModelsDiscover)),
+		policy:  ResolvePolicy(envx.Getenv),
 	}
 }
 
@@ -133,8 +153,8 @@ func (s discoverySettings) enabled(vendor string) bool {
 	return s.vendors == nil || s.vendors[vendor]
 }
 
-func durationSetting(getenv func(string) string, name string, fallback time.Duration) time.Duration {
-	text := strings.TrimSpace(getenv(name))
+func durationSetting(name string, fallback time.Duration) time.Duration {
+	text := strings.TrimSpace(envx.Getenv(name))
 	if text == "" {
 		return fallback
 	}
@@ -199,28 +219,43 @@ func loadDiscoveryCache(path string) (discoveryCache, error) {
 }
 
 func saveDiscoveryCache(path string, cache discoveryCache) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, cacheDirMode); err != nil {
-		return fmt.Errorf("create model cache dir: %w", err)
-	}
 	data, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode model cache: %w", err)
 	}
-	temp, err := os.CreateTemp(dir, ".models-discovered-*.json")
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("open model cache dir: %w", err)
+	}
+	defer func() { logCleanup(root.Close()) }()
+	name := filepath.Base(path)
+	tempName := fmt.Sprintf(".%s-%d.tmp", name, time.Now().UnixNano())
+	temp, err := root.OpenFile(tempName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, cacheFileMode)
 	if err != nil {
 		return fmt.Errorf("create model cache temp file: %w", err)
 	}
-	name := temp.Name()
 	if err := writeAndClose(temp, data); err != nil {
-		logCleanup(os.Remove(name))
+		logCleanup(root.Remove(tempName))
 		return fmt.Errorf("write model cache: %w", err)
 	}
-	if err := os.Rename(name, path); err != nil {
-		logCleanup(os.Remove(name))
+	if err := root.Rename(tempName, name); err != nil {
+		logCleanup(root.Remove(tempName))
 		return fmt.Errorf("replace model cache: %w", err)
 	}
 	return nil
+}
+
+func persistRefreshed(path string, next discoveryCache, outcomes []discoveryOutcome) error {
+	latest, err := loadDiscoveryCache(path)
+	if err != nil {
+		slog.Warn("model cache unreadable, writing only the refreshed vendors", "path", path, "err", err)
+	}
+	for _, outcome := range outcomes {
+		if outcome.Refreshed {
+			latest.Vendors[outcome.Vendor] = next.Vendors[outcome.Vendor]
+		}
+	}
+	return saveDiscoveryCache(path, latest)
 }
 
 func writeAndClose(file *os.File, data []byte) error {
@@ -230,7 +265,11 @@ func writeAndClose(file *os.File, data []byte) error {
 
 func (c discoveryCache) stale(vendor string, now time.Time, ttl time.Duration) bool {
 	entry, ok := c.Vendors[vendor]
-	return !ok || now.Sub(entry.FetchedAt) > ttl
+	if !ok {
+		return true
+	}
+	age := now.Sub(entry.FetchedAt)
+	return age < 0 || age > ttl
 }
 
 func (c discoveryCache) modelsOf(vendor string) []contracts.ModelSpec {
@@ -249,12 +288,12 @@ func (c discoveryCache) modelsOf(vendor string) []contracts.ModelSpec {
 }
 
 func refreshDiscovery(ctx context.Context, plugins []contracts.Plugin, cache discoveryCache, settings discoverySettings, now time.Time, force bool) (discoveryCache, []discoveryOutcome) {
-	creds, credsErr := loadGatewayCreds(os.Getenv)
+	creds, credsErr := loadGatewayCreds(envx.Getenv)
 	if credsErr != nil {
 		slog.Warn("gateway credentials unusable for model discovery, listing without them", "err", credsErr)
 	}
 	jobs := discoveryJobs(plugins, cache, settings, now, force)
-	access := contracts.DiscoveryAccess{Gateway: creds, Getenv: os.Getenv}
+	access := contracts.DiscoveryAccess{Gateway: creds, Getenv: envx.Getenv}
 	answers := askVendors(ctx, jobs, settings.timeout, access)
 	next := cloneCache(cache)
 	outcomes := make([]discoveryOutcome, 0, len(jobs))
@@ -270,6 +309,9 @@ func refreshDiscovery(ctx context.Context, plugins []contracts.Plugin, cache dis
 }
 
 func discoveryJobs(plugins []contracts.Plugin, cache discoveryCache, settings discoverySettings, now time.Time, force bool) []discoveryJob {
+	if settings.policy == contracts.PolicyGatewayOnly {
+		return nil
+	}
 	var jobs []discoveryJob
 	for idx := range plugins {
 		plugin := &plugins[idx]

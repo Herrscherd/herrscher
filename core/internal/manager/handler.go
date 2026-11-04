@@ -74,8 +74,7 @@ func (h *Handler) materializeOn(ctx context.Context, hostName string, profile ag
 // never an override: an explicit --model always wins.
 func (h *Handler) SetDefaultModel(id string) { h.defaultModel = id }
 
-// SetVendorDefaultModel wires the per-vendor default. It sits between the agent's
-// model and the global default in the resolution order.
+// SetVendorDefaultModel wires the per-vendor default model lookup.
 func (h *Handler) SetVendorDefaultModel(fn func(vendor string) string) { h.vendorDefault = fn }
 
 type fallbackModel struct {

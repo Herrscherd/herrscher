@@ -274,7 +274,7 @@ type modelRoute struct {
 }
 
 func resolveModelRoute(modelID string, plugins []contracts.Plugin, desired string) (string, modelRoute, error) {
-	entry, err := LookupModelWith(plugins, ResolvePolicy(os.Getenv), LoadSources(os.Getenv), modelID)
+	entry, err := LookupModelWith(plugins, ResolvePolicy(os.Getenv), LoadSources(), modelID)
 	if err != nil {
 		return "", modelRoute{}, err
 	}

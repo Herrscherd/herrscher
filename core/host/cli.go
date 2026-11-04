@@ -109,7 +109,7 @@ func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *st
 }
 
 func validateModelChoice(vendor, modelID string) error {
-	entry, err := LookupModelWith(contracts.Default.Backends(), ResolvePolicy(os.Getenv), LoadSources(os.Getenv), modelID)
+	entry, err := LookupModelWith(contracts.Default.Backends(), ResolvePolicy(os.Getenv), LoadSources(), modelID)
 	if err != nil {
 		return err
 	}

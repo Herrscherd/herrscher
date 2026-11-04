@@ -429,10 +429,10 @@ right away.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `HERRSCHER_MODELS_DISCOVER` | every backend | comma-separated vendors that may be asked (`claude,codex`), or `none` |
+| `HERRSCHER_MODELS_DISCOVER` | every backend | comma-separated vendors that may be asked (`claude,codex`), or `none`; with `HERRSCHER_ROUTE_POLICY=gateway-only` no vendor is asked |
 | `HERRSCHER_MODELS_TTL` | `24h` | how long a cached list is kept before it is asked again |
 | `HERRSCHER_MODELS_TIMEOUT` | `15s` | longest wait for one vendor's answer |
-| `HERRSCHER_MODELS_HIDDEN` | none | comma-separated model IDs hidden from the catalog |
+| `HERRSCHER_MODELS_HIDDEN` | none | comma-separated model IDs hidden from the list and the selector; a session already on one still resumes it |
 | `HERRSCHER_DEFAULT_MODEL_<VENDOR>` | none | default model of one vendor |
 
 The cache is `models-discovered.json` in `HERRSCHER_STATE_DIR`, or in

@@ -611,16 +611,16 @@ func TestPendingCloseOtherKeyCancels(t *testing.T) {
 
 func tabText(tb *tab) string {
 	parts := make([]string, len(tb.entries))
-	for i, e := range tb.entries {
-		parts[i] = e.text
+	for index := range tb.entries {
+		parts[index] = tb.entries[index].text
 	}
 	return strings.Join(parts, "\n")
 }
 
 func tabLineCount(tb *tab, needle string) int {
 	n := 0
-	for _, e := range tb.entries {
-		if strings.Contains(e.text, needle) {
+	for index := range tb.entries {
+		if strings.Contains(tb.entries[index].text, needle) {
 			n++
 		}
 	}

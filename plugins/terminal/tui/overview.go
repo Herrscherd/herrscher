@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
+// SessionOverview is one session as the overview endpoint reports it.
 type SessionOverview struct {
 	Name     string   `json:"name"`
 	Vendor   string   `json:"vendor"`
@@ -27,12 +29,9 @@ const (
 	overviewWaiting = "waiting"
 	overviewWorking = "working"
 	overviewReview  = "review"
+)
 
-	groupWorking = "working"
-	groupWaiting = "waiting"
-	groupReview  = "review"
-	groupDone    = "done"
-
+const (
 	boardAgeWidth   = 6
 	boardCostWidth  = 8
 	boardMarkWidth  = 2
@@ -44,16 +43,27 @@ const (
 	boardFooterRows = 1
 )
 
+type boardGroupKey uint8
+
+const (
+	groupWorking boardGroupKey = iota + 1
+	groupWaiting
+	groupReview
+	groupDone
+)
+
 type boardGroup struct {
-	key   string
+	key   boardGroupKey
 	label string
 }
 
-var boardGroups = []boardGroup{
-	{groupWorking, "Au travail"},
-	{groupWaiting, "Attend une réponse"},
-	{groupReview, "À relire"},
-	{groupDone, "Fini"},
+func boardGroups() []boardGroup {
+	return []boardGroup{
+		{groupWorking, "Au travail"},
+		{groupWaiting, "Attend une réponse"},
+		{groupReview, "À relire"},
+		{groupDone, "Fini"},
+	}
 }
 
 type surface int
@@ -67,7 +77,7 @@ const (
 type boardRow struct {
 	overview SessionOverview
 	info     contracts.SessionInfo
-	group    string
+	group    boardGroupKey
 }
 
 type boardState struct {
@@ -76,6 +86,7 @@ type boardState struct {
 	rows  []boardRow
 }
 
+// ParseSessionOverviews reads the JSON list of overviews, an empty text meaning none.
 func ParseSessionOverviews(raw string) ([]SessionOverview, error) {
 	if strings.TrimSpace(raw) == "" {
 		return nil, nil
@@ -85,7 +96,7 @@ func ParseSessionOverviews(raw string) ([]SessionOverview, error) {
 	return out, err
 }
 
-func overviewGroup(state string, unread bool) string {
+func overviewGroup(state string, unread bool) boardGroupKey {
 	switch {
 	case state == overviewWaiting:
 		return groupWaiting
@@ -98,22 +109,23 @@ func overviewGroup(state string, unread bool) string {
 	}
 }
 
-func groupRank(key string) int {
-	for index, group := range boardGroups {
+func groupRank(key boardGroupKey) int {
+	groups := boardGroups()
+	for index, group := range groups {
 		if group.key == key {
 			return index
 		}
 	}
-	return len(boardGroups)
+	return len(groups)
 }
 
-func groupLabel(key string) string {
-	for _, group := range boardGroups {
+func groupLabel(key boardGroupKey) string {
+	for _, group := range boardGroups() {
 		if group.key == key {
 			return group.label
 		}
 	}
-	return key
+	return ""
 }
 
 func (m *model) refreshOverviews() {
@@ -137,25 +149,27 @@ func (m *model) boardCandidates() []boardRow {
 	if m.tm == nil {
 		return nil
 	}
-	byName := map[string]contracts.SessionInfo{}
-	for _, info := range m.tm.Sessions() {
-		byName[info.Name] = info
+	byName := make(map[string]contracts.SessionInfo)
+	sessions := m.tm.Sessions()
+	for index := range sessions {
+		byName[sessions[index].Name] = sessions[index]
 	}
 	rows := make([]boardRow, 0, len(m.overviews))
-	for _, ov := range m.overviews {
-		info, ok := byName[ov.Name]
+	for index := range m.overviews {
+		overview := &m.overviews[index]
+		info, ok := byName[overview.Name]
 		if !ok || info.ChannelID == "" {
 			continue
 		}
-		tb := m.tabs[info.ChannelID]
-		unread := tb != nil && tb.unread
-		rows = append(rows, boardRow{overview: ov, info: info, group: overviewGroup(ov.State, unread)})
+		tab := m.tabs[info.ChannelID]
+		unread := tab != nil && tab.unread
+		rows = append(rows, boardRow{overview: *overview, info: info, group: overviewGroup(overview.State, unread)})
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		if ri, rj := groupRank(rows[i].group), groupRank(rows[j].group); ri != rj {
-			return ri < rj
+	sort.SliceStable(rows, func(left, right int) bool {
+		if leftRank, rightRank := groupRank(rows[left].group), groupRank(rows[right].group); leftRank != rightRank {
+			return leftRank < rightRank
 		}
-		return rows[i].overview.LastTs > rows[j].overview.LastTs
+		return rows[left].overview.LastTs > rows[right].overview.LastTs
 	})
 	return rows
 }
@@ -191,6 +205,7 @@ func (m *model) refreshSurface() {
 		m.rebuildBoard()
 	case surfacePanes:
 		m.refreshOverviews()
+	case surfaceChat:
 	}
 }
 
@@ -246,8 +261,9 @@ func (m *model) boardView(width, height int) string {
 	lines = append(lines, m.boardFilterLine())
 	layout := boardLayoutFor(m.board.rows, width)
 	cursorLine := 0
-	last := ""
-	for index, row := range m.board.rows {
+	var last boardGroupKey
+	for index := range m.board.rows {
+		row := &m.board.rows[index]
 		if row.group != last {
 			last = row.group
 			lines = append(lines, m.st.accent.Render(groupLabel(row.group)))
@@ -272,7 +288,7 @@ func (m *model) boardFilterLine() string {
 	return m.st.dim.Render("filtre : ") + m.board.query
 }
 
-func (m *model) boardRowLine(row boardRow, selected bool, width int, layout boardLayout) string {
+func (m *model) boardRowLine(row *boardRow, selected bool, width int, layout boardLayout) string {
 	prefix := "  "
 	if selected {
 		prefix = m.st.accent.Render(m.st.glyphs.cursor) + " "
@@ -290,7 +306,7 @@ func (m *model) boardRowLine(row boardRow, selected bool, width int, layout boar
 	return truncate(line, width)
 }
 
-func (m *model) groupMark(group string) string {
+func (m *model) groupMark(group boardGroupKey) string {
 	switch group {
 	case groupWorking:
 		return padTo(m.st.spinner.Render(m.st.glyphs.tool), boardMarkWidth)
@@ -298,9 +314,10 @@ func (m *model) groupMark(group string) string {
 		return padTo(m.st.warn.Render(m.st.glyphs.waiting), boardMarkWidth)
 	case groupReview:
 		return padTo(m.st.accent.Render(m.st.glyphs.review), boardMarkWidth)
-	default:
+	case groupDone:
 		return padTo(m.st.dim.Render(m.st.glyphs.success), boardMarkWidth)
 	}
+	return padTo("", boardMarkWidth)
 }
 
 type boardLayout struct {
@@ -321,9 +338,9 @@ func (l boardLayout) fixedWidth() int {
 
 func boardLayoutFor(rows []boardRow, width int) boardLayout {
 	layout := boardLayout{
-		name:    widestColumn(rows, func(r boardRow) string { return r.overview.Name }, boardNameMax),
-		vendor:  widestColumn(rows, func(r boardRow) string { return r.overview.Vendor }, boardVendorMax),
-		gateway: widestColumn(rows, func(r boardRow) string { return strings.Join(r.overview.Gateways, "+") }, boardGatewayMax),
+		name:    widestColumn(rows, func(r *boardRow) string { return r.overview.Name }, boardNameMax),
+		vendor:  widestColumn(rows, func(r *boardRow) string { return r.overview.Vendor }, boardVendorMax),
+		gateway: widestColumn(rows, func(r *boardRow) string { return strings.Join(r.overview.Gateways, "+") }, boardGatewayMax),
 	}
 	layout.showGateway, layout.showCost = true, true
 	if layout.fixedWidth()+boardTextMin <= width {
@@ -337,10 +354,10 @@ func boardLayoutFor(rows []boardRow, width int) boardLayout {
 	return layout
 }
 
-func widestColumn(rows []boardRow, text func(boardRow) string, limit int) int {
+func widestColumn(rows []boardRow, text func(*boardRow) string, limit int) int {
 	widest := 0
-	for _, row := range rows {
-		if w := lipgloss.Width(text(row)); w > widest {
+	for index := range rows {
+		if w := lipgloss.Width(text(&rows[index])); w > widest {
 			widest = w
 		}
 	}
@@ -351,20 +368,19 @@ func widestColumn(rows []boardRow, text func(boardRow) string, limit int) int {
 }
 
 func overviewAge(lastTs string, now time.Time) string {
-	at, err := time.Parse(time.RFC3339Nano, lastTs)
+	started, err := time.Parse(time.RFC3339Nano, lastTs)
 	if err != nil {
 		return "-"
 	}
-	return formatDuration(now.Sub(at))
+	return formatDuration(now.Sub(started))
 }
 
 func (m *model) overviewFor(name string) SessionOverview {
-	for _, ov := range m.overviews {
-		if ov.Name == name {
-			return ov
-		}
+	index := slices.IndexFunc(m.overviews, func(overview SessionOverview) bool { return overview.Name == name })
+	if index < 0 {
+		return SessionOverview{}
 	}
-	return SessionOverview{}
+	return m.overviews[index]
 }
 
 func clampTo(index, count int) int {

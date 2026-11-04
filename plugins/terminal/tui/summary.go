@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	tea "github.com/charmbracelet/bubbletea"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 const (
@@ -21,6 +22,8 @@ const (
 	nextPrefix     = "next "
 	denyPrefix     = "deny "
 	rulePrefix     = "- "
+	skillFields    = 3
+	scheduleFields = 6
 )
 
 type skillCount struct {
@@ -71,7 +74,7 @@ func parseSkillList(text string) *skillCount {
 	var count skillCount
 	for _, line := range strings.Split(text, "\n") {
 		fields := strings.Split(line, "\t")
-		if len(fields) < 3 {
+		if len(fields) < skillFields {
 			continue
 		}
 		count.total++
@@ -91,7 +94,7 @@ func parseScheduleList(text string) *cronCount {
 	rows := 0
 	for _, line := range strings.Split(text, "\n") {
 		fields := strings.Split(line, "\t")
-		if len(fields) < 6 {
+		if len(fields) < scheduleFields {
 			continue
 		}
 		rows++
@@ -130,12 +133,14 @@ func parseRuleList(text string) *ruleCount {
 	return &count
 }
 
-func (m *model) panelFacets() (vendors, gateways []string) {
+func (m *model) panelFacets() ([]string, []string) {
 	if m.tm == nil {
 		return nil, nil
 	}
-	vendorSet, gatewaySet := map[string]bool{}, map[string]bool{}
-	for _, info := range m.tm.Sessions() {
+	vendorSet, gatewaySet := make(map[string]bool), make(map[string]bool)
+	sessions := m.tm.Sessions()
+	for index := range sessions {
+		info := &sessions[index]
 		if info.Vendor != "" {
 			vendorSet[info.Vendor] = true
 		}
@@ -248,9 +253,9 @@ func (m *model) visibleSessionNames() []string {
 		channels = []string{m.active}
 	case surfacePanes:
 		channels = m.panes.channels
-	default:
-		return nil
+	case surfaceBoard:
 	}
+
 	var names []string
 	for _, channel := range channels {
 		if name := m.infoForChannel(channel).Name; name != "" {

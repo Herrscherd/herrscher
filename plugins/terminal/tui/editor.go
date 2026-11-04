@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"strings"
@@ -35,21 +36,22 @@ func editorCommand(path string) *exec.Cmd {
 	return exec.Command(argv[0], argv[1:]...)
 }
 
-func (m *model) openEditor() tea.Cmd {
+func writeDraft(text string) (string, error) {
 	file, err := os.CreateTemp("", editorPattern)
 	if err != nil {
-		m.flash = "éditeur indisponible : " + err.Error()
-		return nil
+		return "", err
 	}
-	path := file.Name()
-	if _, err := file.WriteString(m.input.Value()); err != nil {
-		file.Close()
-		os.Remove(path)
-		m.flash = "éditeur indisponible : " + err.Error()
-		return nil
+	_, writeErr := file.WriteString(text)
+	closeErr := file.Close()
+	if err := errors.Join(writeErr, closeErr); err != nil {
+		return "", errors.Join(err, os.Remove(file.Name()))
 	}
-	if err := file.Close(); err != nil {
-		os.Remove(path)
+	return file.Name(), nil
+}
+
+func (m *model) openEditor() tea.Cmd {
+	path, err := writeDraft(m.input.Value())
+	if err != nil {
 		m.flash = "éditeur indisponible : " + err.Error()
 		return nil
 	}
@@ -59,9 +61,15 @@ func (m *model) openEditor() tea.Cmd {
 	})
 }
 
+func (m *model) removeDraft(path string) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		m.flash = "brouillon non supprimé : " + err.Error()
+	}
+}
+
 func (m *model) applyEditorResult(msg editorDoneMsg) {
 	m.editing = false
-	defer os.Remove(msg.path)
+	defer m.removeDraft(msg.path)
 	if msg.err != nil {
 		m.flash = "éditeur fermé en erreur : " + msg.err.Error()
 		return

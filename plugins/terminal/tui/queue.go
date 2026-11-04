@@ -9,15 +9,16 @@ import (
 )
 
 const (
-	queueEndOfTurn   = "fin du tour"
-	queueAfterTool   = "après le prochain outil"
-	queueRemoveLabel = "✕ retirer"
-	queueIndent      = "   "
-	draftsKey        = "⌃S"
-	queueAfterMark   = "↪ réorienter"
-	queueFileMark    = "○ file"
-	queueHeaderMark  = "○"
-	queueFocusHint   = "○ En file · ↑↓ choisir · ⇧↑⇧↓ réordonner · suppr retirer · échap quitter"
+	draftPreviewDivisor = 2
+	queueEndOfTurn      = "fin du tour"
+	queueAfterTool      = "après le prochain outil"
+	queueRemoveLabel    = "✕ retirer"
+	queueIndent         = "   "
+	draftsKey           = "⌃S"
+	queueAfterMark      = "↪ réorienter"
+	queueFileMark       = "○ file"
+	queueHeaderMark     = "○"
+	queueFocusHint      = "○ En file · ↑↓ choisir · ⇧↑⇧↓ réordonner · suppr retirer · échap quitter"
 )
 
 type queueHit struct {
@@ -33,12 +34,12 @@ type queuedInput struct {
 func (m *model) activeTab() *tab { return m.tabs[m.active] }
 
 func (m *model) enqueueInput(steer bool) bool {
-	tb := m.activeTab()
+	current := m.activeTab()
 	text := strings.TrimSpace(m.input.Value())
-	if tb == nil || (text == "" && len(m.pending) == 0) {
+	if current == nil || (text == "" && len(m.pending) == 0) {
 		return false
 	}
-	tb.queue = append(tb.queue, queuedInput{text: text, steer: steer, atts: m.pending})
+	current.queue = append(current.queue, queuedInput{text: text, steer: steer, atts: m.pending})
 	m.pending = nil
 	m.input.Reset()
 	m.resizeComposer()
@@ -48,59 +49,59 @@ func (m *model) enqueueInput(steer bool) bool {
 	return true
 }
 
-func (m *model) flushQueue(tb *tab, event string) tea.Cmd {
-	if tb == nil || len(tb.queue) == 0 || tb.disconnected {
+func (m *model) flushQueue(current *tab, event string) tea.Cmd {
+	if current == nil || len(current.queue) == 0 || current.disconnected {
 		return nil
 	}
 	index := -1
 	switch {
-	case !tb.busy:
+	case !current.busy:
 		index = 0
-	case event == "status":
-		index = steerIndex(tb.queue)
+	case event == eventStatus:
+		index = steerIndex(current.queue)
 	}
 	if index < 0 {
 		return nil
 	}
-	next := tb.queue[index]
-	tb.queue = append(tb.queue[:index], tb.queue[index+1:]...)
-	return m.submitTo(tb.channel, next.text, next.atts)
+	next := current.queue[index]
+	current.queue = append(current.queue[:index], current.queue[index+1:]...)
+	return m.submitTo(current.channel, next.text, next.atts)
 }
 
 func steerIndex(queue []queuedInput) int {
-	for i, item := range queue {
+	for index, item := range queue {
 		if item.steer {
-			return i
+			return index
 		}
 	}
 	return -1
 }
 
 func (m *model) sendQueueNow() tea.Cmd {
-	tb := m.activeTab()
-	if tb == nil || len(tb.queue) == 0 {
+	current := m.activeTab()
+	if current == nil || len(current.queue) == 0 {
 		return nil
 	}
-	if tb.busy {
+	if current.busy {
 		if name := m.sessionName(m.active); name != "" {
 			m.tm.Interrupt(name)
 		}
 		return nil
 	}
-	cmd := m.flushQueue(tb, "")
+	cmd := m.flushQueue(current, "")
 	m.syncViewport()
 	return cmd
 }
 
 func (m *model) stashDraft() {
 	if strings.TrimSpace(m.input.Value()) == "" {
-		n := len(m.drafts)
-		if n == 0 {
+		count := len(m.drafts)
+		if count == 0 {
 			return
 		}
-		m.input.SetValue(m.drafts[n-1])
+		m.input.SetValue(m.drafts[count-1])
 		m.input.CursorEnd()
-		m.drafts = m.drafts[:n-1]
+		m.drafts = m.drafts[:count-1]
 		m.resizeComposer()
 		return
 	}
@@ -114,20 +115,20 @@ func (m *model) draftsView() string {
 		return ""
 	}
 	last := oneLine(m.drafts[len(m.drafts)-1])
-	text := "○ brouillons (" + strconv.Itoa(len(m.drafts)) + ") : « " + truncate(last, m.innerWidth()/2) + " » " + draftsKey + " de côté · reprendre le dernier"
+	text := "○ brouillons (" + strconv.Itoa(len(m.drafts)) + ") : « " + truncate(last, m.innerWidth()/draftPreviewDivisor) + " » " + draftsKey + " de côté · reprendre le dernier"
 	return m.st.dim.Render(truncate(text, m.innerWidth()))
 }
 
 func (m *model) queueLines(base int) []string {
 	m.queueHits = nil
-	tb := m.activeTab()
-	if tb == nil || len(tb.queue) == 0 {
+	current := m.activeTab()
+	if current == nil || len(current.queue) == 0 {
 		return nil
 	}
 	m.clampQueueSel()
 	width := m.innerWidth()
-	header := queueHeaderMark + " En file (" + strconv.Itoa(len(tb.queue)) + ")"
-	if tb.busy {
+	header := queueHeaderMark + " En file (" + strconv.Itoa(len(current.queue)) + ")"
+	if current.busy {
 		header += " · partent dans l'ordre à la fin du tour · ⌃⏎ tout envoyer maintenant"
 	} else {
 		header += " · prêts à partir"
@@ -136,18 +137,18 @@ func (m *model) queueLines(base int) []string {
 		header = queueFocusHint
 	}
 	lines := []string{m.st.dim.Render(truncate(header, width))}
-	for i, item := range tb.queue {
+	for index, item := range current.queue {
 		mark, when := queueFileMark, queueEndOfTurn
 		if item.steer {
 			mark, when = queueAfterMark, queueAfterTool
 		}
-		left := queueIndent + strconv.Itoa(i+1) + "  " + mark + "  " + oneLine(item.text)
+		left := queueIndent + strconv.Itoa(index+1) + "  " + mark + "  " + oneLine(item.text)
 		right := when + "  " + queueRemoveLabel
 		row := justifyRow(left, m.st.dim.Render(right), width)
-		if m.queueFocus && i == m.queueSel {
+		if m.queueFocus && index == m.queueSel {
 			row = m.st.overlaySel.Render(justifyRow(left, right, width))
 		}
-		m.queueHits = append(m.queueHits, queueHit{row: base + len(lines), from: width - lipgloss.Width(queueRemoveLabel), to: width, index: i})
+		m.queueHits = append(m.queueHits, queueHit{row: base + len(lines), from: width - lipgloss.Width(queueRemoveLabel), to: width, index: index})
 		lines = append(lines, row)
 	}
 	return lines
@@ -167,10 +168,10 @@ func justifyRow(left, right string, width int) string {
 }
 
 func (m *model) clampQueueSel() {
-	tb := m.activeTab()
+	current := m.activeTab()
 	count := 0
-	if tb != nil {
-		count = len(tb.queue)
+	if current != nil {
+		count = len(current.queue)
 	}
 	if count == 0 {
 		m.queueFocus = false
@@ -186,18 +187,18 @@ func (m *model) clampQueueSel() {
 }
 
 func (m *model) focusQueueStart() bool {
-	tb := m.activeTab()
-	if tb == nil || len(tb.queue) == 0 || m.input.Value() != "" {
+	current := m.activeTab()
+	if current == nil || len(current.queue) == 0 || m.input.Value() != "" {
 		return false
 	}
 	m.queueFocus = true
-	m.queueSel = len(tb.queue) - 1
+	m.queueSel = len(current.queue) - 1
 	return true
 }
 
-func (m *model) handleQueueFocus(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (m *model) handleQueueFocus(msg tea.KeyMsg) bool {
 	if !m.queueFocus {
-		return false, nil
+		return false
 	}
 	switch msg.Type {
 	case tea.KeyUp:
@@ -220,29 +221,28 @@ func (m *model) handleQueueFocus(msg tea.KeyMsg) (bool, tea.Cmd) {
 		m.queueFocus = false
 	default:
 		m.queueFocus = false
-		return false, nil
-	}
-	return true, nil
-}
-
-func (m *model) moveQueued(index, delta int) bool {
-	tb := m.activeTab()
-	target := index + delta
-	if tb == nil || index < 0 || index >= len(tb.queue) || target < 0 || target >= len(tb.queue) {
 		return false
 	}
-	tb.queue[index], tb.queue[target] = tb.queue[target], tb.queue[index]
-	m.queueSel = target
-	m.syncViewport()
 	return true
 }
 
+func (m *model) moveQueued(index, delta int) {
+	current := m.activeTab()
+	target := index + delta
+	if current == nil || index < 0 || index >= len(current.queue) || target < 0 || target >= len(current.queue) {
+		return
+	}
+	current.queue[index], current.queue[target] = current.queue[target], current.queue[index]
+	m.queueSel = target
+	m.syncViewport()
+}
+
 func (m *model) removeQueued(index int) bool {
-	tb := m.activeTab()
-	if tb == nil || index < 0 || index >= len(tb.queue) {
+	current := m.activeTab()
+	if current == nil || index < 0 || index >= len(current.queue) {
 		return false
 	}
-	tb.queue = append(tb.queue[:index], tb.queue[index+1:]...)
+	current.queue = append(current.queue[:index], current.queue[index+1:]...)
 	m.clampQueueSel()
 	m.applySize()
 	m.syncViewport()
@@ -262,27 +262,28 @@ func (m *model) handleQueueClick(msg tea.MouseMsg) bool {
 }
 
 func (m *model) showQueue() {
-	tb := m.activeTab()
-	if tb == nil {
+	current := m.activeTab()
+	if current == nil {
 		return
 	}
-	if len(tb.queue) == 0 {
-		tb.appendEntry(entry{role: roleNotice, text: "la file est vide"})
+	if len(current.queue) == 0 {
+		current.appendEntry(entry{role: roleNotice, text: "la file est vide"})
 		m.syncViewport()
 		return
 	}
-	lines := make([]string, 0, len(tb.queue))
-	for i, item := range tb.queue {
-		lines = append(lines, strconv.Itoa(i+1)+". "+oneLine(item.text))
+	lines := make([]string, 0, len(current.queue))
+	for index, item := range current.queue {
+		lines = append(lines, strconv.Itoa(index+1)+". "+oneLine(item.text))
 	}
-	tb.appendEntry(entry{role: roleNotice, text: "file (" + strconv.Itoa(len(lines)) + ") :\n" + strings.Join(lines, "\n")})
+
+	current.appendEntry(entry{role: roleNotice, text: "file (" + strconv.Itoa(len(lines)) + ") :\n" + strings.Join(lines, "\n")})
 	m.syncViewport()
 }
 
 func (m *model) enqueueWhileBusy(steer bool) bool {
-	tb := m.activeTab()
+	current := m.activeTab()
 	text := strings.TrimSpace(m.input.Value())
-	if tb == nil || !tb.busy || strings.HasPrefix(text, "/") || strings.HasPrefix(text, "!") {
+	if current == nil || !current.busy || strings.HasPrefix(text, "/") || strings.HasPrefix(text, "!") {
 		return false
 	}
 	return m.enqueueInput(steer)

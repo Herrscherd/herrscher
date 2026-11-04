@@ -23,25 +23,25 @@ const (
 	diffMore           = "lignes de plus (alt+e)"
 )
 
-func renderDiff(body string, width int, v view) string {
-	return strings.Join(diffRows(strings.Split(body, "\n"), width, v), "\n")
+func renderDiff(body string, width int, display view) string {
+	return strings.Join(diffRows(strings.Split(body, "\n"), width, display), "\n")
 }
 
-func diffRows(lines []string, width int, v view) []string {
+func diffRows(lines []string, width int, display view) []string {
 	out := make([]string, 0, len(lines))
 	oldNo, newNo := 1, 1
 	spent := 0
 	for index, line := range lines {
 		if strings.HasPrefix(line, "@@") {
 			oldNo, newNo = hunkStart(line)
-			out = append(out, diffHunk(line, width, v))
+			out = append(out, diffHunk(line, width, display))
 			continue
 		}
 		if isFileHeader(line) {
 			continue
 		}
-		if !v.expand && spent == diffHunkBudget {
-			out = append(out, v.st.dim.Render(fmt.Sprintf("%s %d %s", v.st.glyphs.fold, countDiffRows(lines[index:]), diffMore)))
+		if !display.expand && spent == diffHunkBudget {
+			out = append(out, display.st.dim.Render(fmt.Sprintf("%s %d %s", display.st.glyphs.fold, countDiffRows(lines[index:]), diffMore)))
 			break
 		}
 		sign, code := diffSign(line)
@@ -58,7 +58,7 @@ func diffRows(lines []string, width int, v view) []string {
 			oldNo++
 			newNo++
 		}
-		out = append(out, diffRow(sign, diffNumbers(oldCell, newCell, width), code, width, v))
+		out = append(out, diffRow(sign, diffNumbers(oldCell, newCell, width), code, width, display))
 		spent++
 	}
 	return out
@@ -67,29 +67,29 @@ func diffRows(lines []string, width int, v view) []string {
 func diffNumbers(oldCell, newCell string, width int) string {
 	if width < diffTwoColumnsFrom {
 		if newCell != "" {
-			return padLeftCells(newCell, diffNumberWidth)
+			return padLeftCells(newCell)
 		}
-		return padLeftCells(oldCell, diffNumberWidth)
+		return padLeftCells(oldCell)
 	}
-	return padLeftCells(oldCell, diffNumberWidth) + padLeftCells(newCell, diffNumberWidth)
+	return padLeftCells(oldCell) + padLeftCells(newCell)
 }
 
-func padLeftCells(s string, n int) string {
-	return strings.Repeat(" ", max(0, n-lipgloss.Width(s))) + s
+func padLeftCells(s string) string {
+	return strings.Repeat(" ", max(0, diffNumberWidth-lipgloss.Width(s))) + s
 }
 
-func diffRow(sign, numbers, code string, width int, v view) string {
+func diffRow(sign, numbers, code string, width int, display view) string {
 	gutter := "│" + numbers + " "
 	body := truncate(sign+" "+strings.ReplaceAll(code, "\t", diffTabSpaces), max(1, width-lipgloss.Width(gutter)))
 	switch {
-	case v.caps.Colour == Colour16:
+	case display.caps.Colour == Colour16:
 		return paintColour16(sign, gutter+body, width)
 	case sign == "+":
-		return v.st.addRow.Render(padCells(gutter+body, width))
+		return display.st.addRow.Render(padCells(gutter+body, width))
 	case sign == "-":
-		return v.st.delRow.Render(padCells(gutter+body, width))
+		return display.st.delRow.Render(padCells(gutter+body, width))
 	}
-	return v.st.dim.Render(gutter) + v.st.text.Render(body)
+	return display.st.dim.Render(gutter) + display.st.text.Render(body)
 }
 
 func paintColour16(sign, line string, width int) string {
@@ -102,17 +102,17 @@ func paintColour16(sign, line string, width int) string {
 	return line
 }
 
-func diffHunk(line string, width int, v view) string {
+func diffHunk(line string, width int, display view) string {
 	code := ""
 	if _, after, found := strings.Cut(strings.TrimPrefix(line, "@@"), "@@"); found {
 		code = strings.TrimSpace(after)
 	}
-	gutter := "│" + diffNumbers(v.st.glyphs.omitted, v.st.glyphs.omitted, width) + " "
+	gutter := "│" + diffNumbers(display.st.glyphs.omitted, display.st.glyphs.omitted, width) + " "
 	text := truncate("@@ "+code, max(1, width-lipgloss.Width(gutter)))
-	return v.st.dim.Render(gutter) + v.st.violet.Render(text)
+	return display.st.dim.Render(gutter) + display.st.violet.Render(text)
 }
 
-func diffHeader(path string, body []string, v view) string {
+func diffHeader(path string, body []string, display view) string {
 	added, removed := 0, 0
 	for _, line := range body {
 		sign, _ := diffSign(line)
@@ -123,8 +123,9 @@ func diffHeader(path string, body []string, v view) string {
 			removed++
 		}
 	}
-	return v.st.dim.Render("╭ ") + v.st.text.Render(path) + v.st.dim.Render(
-		fmt.Sprintf("  +%d −%d   ancien · nouveau   ⌃D panneau de diff", added, removed))
+	return display.st.dim.Render("╭ ") + display.st.text.Render(path) + display.st.dim.Render(
+		fmt.Sprintf("  +%d −%d   ancien · nouveau   ⌃D panneau de diff", added, removed),
+	)
 }
 
 func isFileHeader(line string) bool {
@@ -166,11 +167,11 @@ func hunkStart(line string) (int, int) {
 
 func leadingInt(s string, fallback int) int {
 	head, _, _ := strings.Cut(s, ",")
-	n, err := strconv.Atoi(head)
+	number, err := strconv.Atoi(head)
 	if err != nil {
 		return fallback
 	}
-	return n
+	return number
 }
 
 func countDiffRows(lines []string) int {

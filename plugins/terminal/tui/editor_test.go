@@ -3,7 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -22,7 +22,7 @@ func fakeEditor(t *testing.T, body string) string {
 func TestEditorArgvPrefersEditorThenVisual(t *testing.T) {
 	t.Setenv("EDITOR", "code -w")
 	t.Setenv("VISUAL", "vim")
-	if got := editorArgv("/tmp/x.md"); !reflect.DeepEqual(got, []string{"code", "-w", "/tmp/x.md"}) {
+	if got := editorArgv("/tmp/x.md"); !slices.Equal(got, []string{"code", "-w", "/tmp/x.md"}) {
 		t.Fatalf("argv = %v", got)
 	}
 	t.Setenv("EDITOR", "")

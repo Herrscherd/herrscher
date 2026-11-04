@@ -47,25 +47,29 @@ func TestPaneGridFitsEachWidth(t *testing.T) {
 	for _, tc := range cases {
 		_, m := paneModel(t)
 		m.Update(tea.WindowSizeMsg{Width: tc.width, Height: tc.height})
-		view := m.View()
-		for _, name := range tc.visible {
-			if !strings.Contains(view, name+" · ") {
-				t.Fatalf("width %d: pane %q must be visible: %s", tc.width, name, view)
-			}
+		assertPaneGrid(t, m.View(), tc.width, tc.height, tc.visible, tc.hidden)
+	}
+}
+
+func assertPaneGrid(t *testing.T, view string, width, height int, visible, hidden []string) {
+	t.Helper()
+	for _, name := range visible {
+		if !strings.Contains(view, name+" · ") {
+			t.Fatalf("width %d: pane %q must be visible: %s", width, name, view)
 		}
-		for _, name := range tc.hidden {
-			if strings.Contains(view, name+" · ") {
-				t.Fatalf("width %d: pane %q must not be visible", tc.width, name)
-			}
+	}
+	for _, name := range hidden {
+		if strings.Contains(view, name+" · ") {
+			t.Fatalf("width %d: pane %q must not be visible", width, name)
 		}
-		lines := strings.Split(view, "\n")
-		if len(lines) > tc.height {
-			t.Fatalf("width %d: %d lines for height %d", tc.width, len(lines), tc.height)
-		}
-		for _, line := range lines {
-			if lipgloss.Width(line) > tc.width {
-				t.Fatalf("width %d: line overflows: %q", tc.width, line)
-			}
+	}
+	lines := strings.Split(view, "\n")
+	if len(lines) > height {
+		t.Fatalf("width %d: %d lines for height %d", width, len(lines), height)
+	}
+	for _, line := range lines {
+		if lipgloss.Width(line) > width {
+			t.Fatalf("width %d: line overflows: %q", width, line)
 		}
 	}
 }

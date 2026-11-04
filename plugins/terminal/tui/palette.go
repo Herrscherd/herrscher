@@ -16,7 +16,12 @@ type CommandSpec struct {
 	PR   string
 }
 
-const flagSeparator = " --"
+const (
+	flagSeparator = " --"
+	cmdSkills     = "skills"
+	cmdTheme      = "theme"
+	cmdQueue      = "queue"
+)
 
 func commandQuery(query string) string {
 	if at := strings.Index(query, flagSeparator); at >= 0 {
@@ -48,11 +53,12 @@ func filterCommands(cmds []CommandSpec, query string) []CommandSpec {
 	return out
 }
 
-func shiftPositions(positions []int, by int) []int {
+func shiftPositions(positions []int, offset int) []int {
 	out := make([]int, len(positions))
-	for i, at := range positions {
-		out[i] = at + by
+	for index, position := range positions {
+		out[index] = position + offset
 	}
+
 	return out
 }
 
@@ -172,8 +178,8 @@ func localCommands() []CommandSpec {
 		{Name: "usage", Desc: "cost, tokens and context for this session"},
 		{Name: "context", Desc: "ce qui occupe le contexte : système, outils, mémoire, skills, fichiers lus, conversation"},
 		{Name: "notify", Desc: "alterner les notifications : fin de tour, approbation, ou les deux"},
-		{Name: "skills", Desc: "list available skills"},
-		{Name: "theme", Desc: "pick the colour theme and the render options"},
+		{Name: cmdSkills, Desc: "list available skills"},
+		{Name: cmdTheme, Desc: "pick the colour theme and the render options"},
 		{Name: "capabilities", Desc: "what this terminal can render, and what it falls back to"},
 		{Name: "plugins", Desc: "the plugins this binary is made of"},
 		{Name: "attach", Args: "<path>", Desc: "stage a local file with the next message"},
@@ -181,7 +187,7 @@ func localCommands() []CommandSpec {
 		{Name: "review", Desc: "revue guidée des fichiers du tour : relus, consignes, commit et PR"},
 		{Name: "mouse", Desc: "hand the mouse to the terminal so its own selection works (ctrl+g)"},
 		{Name: "statusline", Desc: "configure the status bar: fields, their order, or a script that draws it"},
-		{Name: "queue", Desc: "voir la file de messages", PR: "PR 2"},
+		{Name: cmdQueue, Desc: "voir la file de messages", PR: "PR 2"},
 	}
 }
 

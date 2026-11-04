@@ -8,8 +8,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const brand = "──◂ HERRSCHER ▸──"
-
 const (
 	railName       = "herrscher"
 	railHints      = "^P agents · ^T onglet"
@@ -19,7 +17,9 @@ const (
 	railFoldLimit  = 5
 )
 
-var railNameLimits = []int{0, 12, 8, railFoldLimit}
+func railNameLimits() []int {
+	return []int{0, 12, 8, railFoldLimit}
+}
 
 type railCell struct {
 	text   string
@@ -68,7 +68,7 @@ func (m *model) railStrip(room int) (string, int, int) {
 	if len(channels) == 0 || room < 1 {
 		return "", 0, 0
 	}
-	for _, limit := range railNameLimits {
+	for _, limit := range railNameLimits() {
 		cells := m.railCells(channels, limit)
 		if railCellsWidth(cells) <= room {
 			return joinRail(cells)
@@ -92,20 +92,20 @@ func (m *model) railFold(channels []string, room int) (string, int, int) {
 		text := truncate(cells[active].text, room)
 		return text, 0, lipgloss.Width(text)
 	}
-	from, to := active, active
+	from, last := active, active
 	for grown := true; grown; {
 		grown = false
-		if to+1 < len(cells) && fits(from, to+1) {
-			to++
+		if last+1 < len(cells) && fits(from, last+1) {
+			last++
 			grown = true
 		}
-		if from > 0 && fits(from-1, to) {
+		if from > 0 && fits(from-1, last) {
 			from--
 			grown = true
 		}
 	}
-	strip, start, span := joinRail(cells[from : to+1])
-	if hidden := len(cells) - (to - from + 1); hidden > 0 {
+	strip, start, span := joinRail(cells[from : last+1])
+	if hidden := len(cells) - (last - from + 1); hidden > 0 {
 		strip += strings.Repeat(" ", railTabGap) + m.st.dim.Render("+"+strconv.Itoa(hidden))
 	}
 	return strip, start, span
@@ -163,7 +163,7 @@ func (m *model) railCell(channel string, limit int) railCell {
 		text := m.st.accent.Render(m.st.glyphs.selected) + " " + m.st.accent.Bold(true).Underline(true).Render(name)
 		return railCell{text: text, width: lipgloss.Width(text), active: true}
 	}
-	marker, style := m.railMarker(channel, tab)
+	marker, style := m.railMarker(tab)
 	text := style.Render(marker) + " " + m.st.dim.Render(name)
 	if tab.unreadCount > 0 {
 		text += " " + m.st.accent.Render(strconv.Itoa(tab.unreadCount))
@@ -171,7 +171,7 @@ func (m *model) railCell(channel string, limit int) railCell {
 	return railCell{text: text, width: lipgloss.Width(text)}
 }
 
-func (m *model) railMarker(channel string, tab *tab) (string, lipgloss.Style) {
+func (m *model) railMarker(tab *tab) (string, lipgloss.Style) {
 	switch {
 	case tab.pendingApproval:
 		return m.st.glyphs.attention, m.st.warn.Bold(true)

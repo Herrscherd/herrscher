@@ -25,12 +25,13 @@ func (m *model) composerTextWidth() int {
 }
 
 const (
+	escKey          = "échap"
 	placeholderIdle = "Tape un message, / ou @, ou !commande"
 	placeholderBusy = "Écris pendant que l’agent travaille : ⏎ met en file, ⌥⏎ réoriente"
 	footIdle        = "⏎ envoyer · @ fichier · / commande · ! shell · ⌃R historique · ⌃S de côté"
 	footBusy        = "⏎ en file · ⌥⏎ réorienter · ⌃⏎ envoyer la file · ! shell · ⌃R historique · ⌃S de côté"
 	footShell       = "⏎ lancer · la commande passe par la politique d'outils de l'hôte · échap annuler"
-	footRightIdle   = "échap échap retour"
+	footRightIdle   = escKey + " " + escKey + " retour"
 	footRightBusy   = "échap interrompre"
 	footRightShell  = "échap annuler"
 	titleEditor     = "⌃X⌃E éditeur"
@@ -118,13 +119,13 @@ func (m *model) composerZone() []string {
 		}
 		return out
 	}
-	g := m.st.boxes(m.caps.Boxes)
+	boxes := m.st.boxes(m.caps.Boxes)
 	width := m.innerWidth()
 	style := m.composerStyle()
 	titleLeft, titleRight := m.composerTitles()
 	footLeft, footRight := m.composerFoots()
-	side := style.Render(g.v)
-	zone := []string{boxEdge([2]string{g.tl, g.tr}, titleLeft, titleRight, width, style, g.h)}
+	side := style.Render(boxes.v)
+	zone := []string{boxEdge([2]string{boxes.tl, boxes.tr}, titleLeft, titleRight, width, style, boxes.h)}
 	for _, line := range body {
 		line = truncate(line, width-composerChrome)
 		pad := width - composerChrome - lipgloss.Width(line)
@@ -133,6 +134,6 @@ func (m *model) composerZone() []string {
 		}
 		zone = append(zone, side+" "+line+strings.Repeat(" ", pad)+" "+side)
 	}
-	zone = append(zone, boxEdge([2]string{g.bl, g.br}, m.st.dim.Render(footLeft), m.st.dim.Render(footRight), width, style, g.h))
+	zone = append(zone, boxEdge([2]string{boxes.bl, boxes.br}, m.st.dim.Render(footLeft), m.st.dim.Render(footRight), width, style, boxes.h))
 	return zone
 }

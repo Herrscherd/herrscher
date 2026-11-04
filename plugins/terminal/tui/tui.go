@@ -86,6 +86,11 @@ const (
 	sessionVerb = "session"
 	verbRename  = "rename"
 	stateDone   = "done"
+	stateActive = "active"
+	eventReply  = "reply"
+	eventStatus = "status"
+	argTo       = "--to"
+
 	stateFailed = "failed"
 	stateError  = "error"
 )
@@ -557,40 +562,52 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 	before := len(tab.entries)
 	m.renderInto(tab, routed.Event)
 	flushCmd := m.flushQueue(tab, routed.Event.T)
+	isReply := routed.Event.T == eventReply
+	isTurnDone := isReply && routed.Event.Done
 	if tab.channel != m.active {
 		if len(tab.entries) != before {
 			tab.unread = true
 			tab.unreadCount++
 		}
-		if routed.Event.T == "reply" && routed.Event.Done {
+		if isTurnDone {
 			tab.finished = true
 		}
 	}
 	var gitCmd tea.Cmd
 	if tab.channel == m.active {
 		m.syncViewport()
-		if routed.Event.T == "status" {
+		if routed.Event.T == eventStatus {
 			gitCmd = m.gitAfterTool(routed.Event.Text)
 		}
 	}
 	var notice tea.Cmd
-	if routed.Event.T == "reply" && routed.Event.Done {
+	if isTurnDone {
 		notice = m.notifyTurnEnd(tab)
 	}
-	if routed.Event.T != "reply" || len(tab.entries) == 0 {
-		return tea.Batch(flushCmd, gitCmd, notice)
+	var images tea.Cmd
+	if isReply && len(tab.entries) > 0 {
+		images = m.replyImages(tab)
 	}
-	last := len(tab.entries) - 1
-	for last >= 0 && tab.entries[last].role != roleAgent {
-		last--
-	}
+	return tea.Batch(flushCmd, gitCmd, notice, images)
+}
+
+func (m *model) replyImages(tab *tab) tea.Cmd {
+	last := lastAgentIndex(tab.entries)
 	if last < 0 {
-		return tea.Batch(flushCmd, gitCmd, notice)
+		return nil
 	}
 	if tab.channel == m.active && tab.modeID() == modePlan && m.planMenu == nil && tab.entries[last].text != "" {
 		m.openPlanMenu(tab.channel)
 	}
-	return tea.Batch(flushCmd, gitCmd, notice, m.fetchEntryImages(tab, last))
+	return m.fetchEntryImages(tab, last)
+}
+
+func lastAgentIndex(entries []entry) int {
+	last := len(entries) - 1
+	for last >= 0 && entries[last].role != roleAgent {
+		last--
+	}
+	return last
 }
 
 func (m *model) syncTabs() tea.Cmd {
@@ -709,7 +726,7 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		m.clearActive()
 	case "help":
 		m.toggleHelp()
-	case "theme":
+	case cmdTheme:
 		m.openTheme()
 	case sessionVerb:
 		return m.sessionSlash(args)
@@ -728,7 +745,7 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		}
 	case "capabilities":
 		m.openDiagnostics()
-	case "skills":
+	case cmdSkills:
 		m.openSkills()
 	case "plugins":
 		return m.openPlugins(), true
@@ -744,9 +761,9 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		return m.openStatusline(), true
 	case "mode":
 		return m.modeSlash(strings.TrimPrefix(text, "/mode")), true
-	case "plan":
+	case modePlan:
 		return m.planSlash(strings.TrimPrefix(text, "/plan")), true
-	case "queue":
+	case cmdQueue:
 		m.showQueue()
 	default:
 		return nil, false
@@ -962,7 +979,7 @@ func (m *model) renameCmd(rest []string) tea.Cmd {
 		m.flash = "aucune session à renommer ici"
 		return nil
 	}
-	return m.dispatchCmd(m.active, []string{sessionVerb, verbRename, "--name", name, "--to", target})
+	return m.dispatchCmd(m.active, []string{sessionVerb, verbRename, argName, name, argTo, target})
 }
 
 func renameTarget(rest []string) string {
@@ -970,7 +987,7 @@ func renameTarget(rest []string) string {
 	for index := 0; index < len(rest); index++ {
 		tok := rest[index]
 		switch {
-		case tok == "--to":
+		case tok == argTo:
 			if index+1 < len(rest) && !strings.HasPrefix(rest[index+1], "--") {
 				words = append(words, rest[index+1])
 				index++
@@ -992,7 +1009,7 @@ func closeTarget(rest []string) (string, bool) {
 		switch {
 		case tok == "--force":
 			force = true
-		case tok == "--name":
+		case tok == argName:
 			if index+1 < len(rest) && !strings.HasPrefix(rest[index+1], "--") {
 				name = rest[index+1]
 				index++
@@ -1049,7 +1066,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		if m.openApproval(target, event) {
 			return
 		}
-		m.renderInto(target, contracts.Event{T: "status", Text: event.Text})
+		m.renderInto(target, contracts.Event{T: eventStatus, Text: event.Text})
 	case "chunk":
 		target.busy = true
 		target.streamed = true
@@ -1057,13 +1074,13 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	case "thinking":
 		target.busy = true
 		target.appendThinking(event.Text, target.tokens, previous)
-	case "status":
+	case eventStatus:
 		target.busy = true
 		target.endStream()
 		target.noteToolFile(event.Text)
 		text, _ := hostError(event.Text)
 		target.appendEntry(entry{role: statusRole(event.Text), text: text})
-	case "reply":
+	case eventReply:
 		target.appendReply(event)
 	case "todos":
 		target.busy = true
@@ -1779,9 +1796,10 @@ func (m *model) handleMentionKey(msg tea.KeyMsg) bool {
 }
 
 func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
-	if handled, cmd := m.handleQueueFocus(msg); handled {
-		return cmd, true
+	if m.handleQueueFocus(msg) {
+		return nil, true
 	}
+
 	switch msg.Type {
 	case tea.KeyF12:
 		if msg.Alt {
@@ -1789,14 +1807,7 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		return nil, false
 	case tea.KeyEsc:
-		if tb := m.tabs[m.active]; tb != nil && tb.busy {
-			if name := m.sessionName(m.active); name != "" {
-				m.tm.Interrupt(name)
-			}
-			return nil, true
-		}
-		m.escapeIdle()
-		return nil, true
+		return m.escapeKey(), true
 	case tea.KeyCtrlC:
 		return m.interruptOrQuit()
 	case tea.KeyTab:
@@ -1807,16 +1818,7 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.toggleSidebar()
 		return nil, true
 	case tea.KeyEnter:
-		if msg.Alt {
-			return nil, m.enqueueWhileBusy(true)
-		}
-		if m.continueLine() {
-			return nil, true
-		}
-		if m.enqueueWhileBusy(false) {
-			return nil, true
-		}
-		return tea.Batch(m.handleEnter(), m.ensureSpin()), true
+		return m.enterKey(msg)
 	case tea.KeyCtrlS:
 		m.stashDraft()
 	case tea.KeyCtrlF:
@@ -1838,29 +1840,64 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case tea.KeyCtrlV:
 		return nil, m.pasteImage()
 	case tea.KeyCtrlU:
-		if !m.removeLastPending() {
-			return nil, false
-		}
-		m.relayout()
+		return m.removePendingKey()
 	case tea.KeyUp:
-		if !msg.Alt && m.focusQueueStart() {
-			return nil, true
-		}
-		return m.handleHistoryKey(msg, -1)
+		return m.upKey(msg)
 	case tea.KeyDown:
 		return m.handleHistoryKey(msg, 1)
 	case tea.KeyCtrlP:
 		return m.openBoard(), true
 	case tea.KeyCtrlW:
-		if m.input.Value() != "" {
-			return nil, false
-		}
-		m.pendingClose = true
+		return m.closeTabKey()
 	case tea.KeyRunes:
 		return m.handleRunesKey(msg)
 	default:
 		return nil, false
 	}
+	return nil, true
+}
+
+func (m *model) escapeKey() tea.Cmd {
+	if tb := m.tabs[m.active]; tb != nil && tb.busy {
+		if name := m.sessionName(m.active); name != "" {
+			m.tm.Interrupt(name)
+		}
+		return nil
+	}
+	m.escapeIdle()
+	return nil
+}
+
+func (m *model) enterKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if msg.Alt {
+		return nil, m.enqueueWhileBusy(true)
+	}
+	if m.continueLine() || m.enqueueWhileBusy(false) {
+		return nil, true
+	}
+	return tea.Batch(m.handleEnter(), m.ensureSpin()), true
+}
+
+func (m *model) removePendingKey() (tea.Cmd, bool) {
+	if !m.removeLastPending() {
+		return nil, false
+	}
+	m.relayout()
+	return nil, true
+}
+
+func (m *model) upKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if !msg.Alt && m.focusQueueStart() {
+		return nil, true
+	}
+	return m.handleHistoryKey(msg, -1)
+}
+
+func (m *model) closeTabKey() (tea.Cmd, bool) {
+	if m.input.Value() != "" {
+		return nil, false
+	}
+	m.pendingClose = true
 	return nil, true
 }
 
@@ -1997,11 +2034,11 @@ func (m *model) openOrFold() {
 	m.flash = "rien à replier dans ce tour"
 }
 
-func (m *model) toggleEntryFold(tab *tab, id uint64) {
+func (m *model) toggleEntryFold(tab *tab, entryID uint64) {
 	if tab.flips == nil {
-		tab.flips = map[uint64]bool{}
+		tab.flips = make(map[uint64]bool)
 	}
-	tab.flips[id] = !tab.flips[id]
+	tab.flips[entryID] = !tab.flips[entryID]
 	m.tsCache.valid = false
 	m.syncViewport()
 }
@@ -2024,8 +2061,8 @@ func (m *model) clickTranscript(msg tea.MouseMsg) bool {
 		return false
 	}
 	owner := m.tsLayout.owners[row]
-	for _, item := range tab.entries {
-		if item.id == owner && owner != 0 && foldableEntry(item) {
+	for index := range tab.entries {
+		if tab.entries[index].id == owner && owner != 0 && foldableEntry(tab.entries[index]) {
 			m.toggleEntryFold(tab, owner)
 			return true
 		}

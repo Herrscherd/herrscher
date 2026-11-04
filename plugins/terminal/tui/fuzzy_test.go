@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -13,7 +13,7 @@ func TestFuzzyMatchIsSubsequenceAndCaseInsensitive(t *testing.T) {
 	if !ok {
 		t.Fatal("fb must match foo bar")
 	}
-	if !reflect.DeepEqual(hit.positions, []int{0, 4}) {
+	if !slices.Equal(hit.positions, []int{0, 4}) {
 		t.Fatalf("positions = %v, want [0 4]", hit.positions)
 	}
 	if _, ok := fuzzyMatch("zz", "foo bar"); ok {
@@ -32,14 +32,14 @@ func TestFuzzyMatchPrefersConsecutiveAndWordStarts(t *testing.T) {
 func TestRankFuzzyOrdersByScoreStably(t *testing.T) {
 	got := rankFuzzy("abc", []string{"a_x_b_x_c", "abc", "zzz", "abc-2"})
 	want := []string{"abc", "abc-2", "a_x_b_x_c"}
-	if !reflect.DeepEqual(got, want) {
+	if !slices.Equal(got, want) {
 		t.Fatalf("rankFuzzy = %v, want %v", got, want)
 	}
 }
 
 func TestRankFuzzyEmptyQueryKeepsOrder(t *testing.T) {
 	got := rankFuzzy("", []string{"b", "a"})
-	if !reflect.DeepEqual(got, []string{"b", "a"}) {
+	if !slices.Equal(got, []string{"b", "a"}) {
 		t.Fatalf("empty query must keep order: %v", got)
 	}
 }
@@ -57,7 +57,7 @@ func TestFuzzyFilterKeepsOrderAndDropsMisses(t *testing.T) {
 	names := []string{"alice-api", "bob", "ali-docs", "carol"}
 	got := fuzzyFilter(names, "ali", func(s string) string { return s })
 	want := []string{"alice-api", "ali-docs"}
-	if !reflect.DeepEqual(got, want) {
+	if !slices.Equal(got, want) {
 		t.Fatalf("fuzzyFilter = %v, want %v", got, want)
 	}
 }
@@ -65,7 +65,7 @@ func TestFuzzyFilterKeepsOrderAndDropsMisses(t *testing.T) {
 func TestFuzzyFilterIsCaseInsensitiveAndSubsequence(t *testing.T) {
 	names := []string{"Docs-Site", "neublox"}
 	got := fuzzyFilter(names, "DS", func(s string) string { return s })
-	if !reflect.DeepEqual(got, []string{"Docs-Site"}) {
+	if !slices.Equal(got, []string{"Docs-Site"}) {
 		t.Fatalf("fuzzyFilter = %v", got)
 	}
 }

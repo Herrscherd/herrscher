@@ -14,6 +14,7 @@ import (
 const (
 	gitRefreshEvery = 3 * time.Second
 	gitCommandLimit = 2 * time.Second
+	numstatFields   = 3
 )
 
 type lineStat struct {
@@ -45,7 +46,7 @@ func (m *model) requestGit(dir string, force bool) tea.Cmd {
 		return nil
 	}
 	if m.gitCache == nil {
-		m.gitCache = map[string]gitCacheEntry{}
+		m.gitCache = make(map[string]gitCacheEntry)
 	}
 	entry := m.gitCache[dir]
 	if !force && time.Since(entry.requested) < gitRefreshEvery {
@@ -60,7 +61,7 @@ func (m *model) requestGit(dir string, force bool) tea.Cmd {
 
 func (m *model) storeGit(msg gitRefreshMsg) {
 	if m.gitCache == nil {
-		m.gitCache = map[string]gitCacheEntry{}
+		m.gitCache = make(map[string]gitCacheEntry)
 	}
 	entry := m.gitCache[msg.dir]
 	entry.snap = msg.snap
@@ -85,7 +86,10 @@ func readGitSnapshot(dir string) gitSnapshot {
 	if err != nil {
 		return gitSnapshot{}
 	}
-	numstat, _ := gitOutput(dir, "diff", "--numstat", "--relative", "HEAD")
+	numstat, diffErr := gitOutput(dir, "diff", "--numstat", "--relative", "HEAD")
+	if diffErr != nil {
+		return gitSnapshot{branch: strings.TrimSpace(branch)}
+	}
 	return gitSnapshot{branch: strings.TrimSpace(branch), changes: parseNumstat(numstat)}
 }
 
@@ -97,10 +101,10 @@ func gitOutput(dir string, args ...string) (string, error) {
 }
 
 func parseNumstat(out string) map[string]lineStat {
-	stats := map[string]lineStat{}
+	stats := make(map[string]lineStat)
 	for _, line := range strings.Split(out, "\n") {
-		fields := strings.SplitN(line, "\t", 3)
-		if len(fields) != 3 {
+		fields := strings.SplitN(line, "\t", numstatFields)
+		if len(fields) != numstatFields {
 			continue
 		}
 		added, errAdded := strconv.Atoi(fields[0])

@@ -18,7 +18,7 @@ func indent(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-const gaugeWidth = 10
+const gaugeWidth = 16
 
 func gauge(ratio float64, style, empty lipgloss.Style, glyphs glyphSet) string {
 	return empty.Render("[") + barGauge(ratio, gaugeWidth, style, empty, glyphs) + empty.Render("]")

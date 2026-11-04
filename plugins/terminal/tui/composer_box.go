@@ -53,8 +53,15 @@ func promptAt(prompt string) func(int) string {
 	}
 }
 
+func (m *model) promptGlyph() string {
+	if m.isShellInput() {
+		return m.st.glyphs.shellPrompt + " "
+	}
+	return m.st.glyphs.prompt + " "
+}
+
 func (m *model) syncPrompt() {
-	prompt := m.st.glyphs.prompt + " "
+	prompt := m.promptGlyph()
 	m.input.SetPromptFunc(lipgloss.Width(prompt), promptAt(prompt))
 	m.input.FocusedStyle.Prompt = m.st.accent.Bold(true)
 	m.input.BlurredStyle.Prompt = m.st.accent.Bold(true)

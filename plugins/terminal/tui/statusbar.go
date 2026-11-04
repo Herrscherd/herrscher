@@ -50,7 +50,7 @@ func barFieldSpecs() []barFieldSpec {
 		{id: fieldVendor, label: "vendeur et modèle", note: "claude, codex, cursor", defaultOn: true},
 		{id: "repo", label: "dépôt et branche", note: "herrscher:feat/tui-v2", defaultOn: true},
 		{id: "wt", label: "worktree", note: "(worktree) si à elle", defaultOn: true},
-		{id: "ctx", label: "jauge de contexte", note: "█ ░, or 80 %, rouge 95 %", defaultOn: true},
+		{id: "ctx", label: "jauge de contexte", note: "━, palier 80 %, rouge 95 %", defaultOn: true},
 		{id: "detail", label: "tokens du contexte", note: "82k/200k", defaultOn: true},
 		{id: "cost", label: "coût", note: "facturation réelle", defaultOn: true},
 		{id: fieldQueue, label: "file en attente", note: "○ file, ↪ réorientations", defaultOn: true},
@@ -304,7 +304,7 @@ func (m *model) contextPart(info contracts.SessionInfo, used int) (barPart, bool
 	percent := palierStyle(ratio, m.st).Render(contextPercent(used, limit))
 	part := barPart{layers: []barLayer{
 		{text: m.st.dim.Render("ctx "), rank: rankNever},
-		{text: contextGauge(ratio, m.st) + " ", rank: rankGauge},
+		{text: contextGaugeCells(ratio, barContextCells, m.st) + " ", rank: rankGauge},
 		{text: percent, rank: rankNever},
 	}}
 	if m.bar.isShown("detail") {

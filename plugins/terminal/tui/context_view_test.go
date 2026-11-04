@@ -79,10 +79,10 @@ func TestContextOverlayIsAListUnderEightyColumns(t *testing.T) {
 	wide := contextModel(t, 82_000)
 	wide.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 24})
 
-	if strings.Contains(ansi.Strip(narrow.contextView()), "░") {
+	if strings.Contains(ansi.Strip(narrow.contextView()), unicodeGlyphs().gaugeEmpty) {
 		t.Fatal("under 80 columns the categories must be a list without bars")
 	}
-	if !strings.Contains(ansi.Strip(wide.contextView()), "░") {
+	if !strings.Contains(ansi.Strip(wide.contextView()), unicodeGlyphs().gaugeEmpty) {
 		t.Fatal("at 120 columns the categories must keep their bar column")
 	}
 }

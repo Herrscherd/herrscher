@@ -10,7 +10,7 @@ import (
 const (
 	narrowContext   = 80
 	contextNameCols = 16
-	contextBarCols  = 12
+	contextBarCols  = 16
 	contextValCols  = 20
 	defaultWidth    = 80
 )

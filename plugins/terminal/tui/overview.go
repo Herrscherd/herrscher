@@ -390,7 +390,7 @@ func (m *model) groupStyle(group boardGroupKey) lipgloss.Style {
 }
 
 func (m *model) boardGroupHeader(group boardGroupKey, count, width int) string {
-	head := m.groupStyle(group).Bold(true).Render(" "+groupLabel(group)) + m.st.dim.Render(fmt.Sprintf(" %d ", count))
+	head := m.groupStyle(group).Bold(true).Render(" "+strings.ToUpper(groupLabel(group))) + m.st.dim.Render(fmt.Sprintf(" %d ", count))
 	fill := max(0, width-lipgloss.Width(head))
 	return cutText(head+m.st.dim.Render(strings.Repeat(m.st.glyphs.ruleChar, fill)), width)
 }

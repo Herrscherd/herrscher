@@ -603,6 +603,20 @@ bold and `i` italic. `a` turns the automatic theme on or off, which follows the
 terminal's background, and `e` or `ctrl+e` opens `themes/perso.toml` in
 `$EDITOR`. Échap closes the screen and puts back the theme it last kept.
 
+The style follows Obel Mono: the accent is #FF3C05 on Sombre and a darker
+#C42D00 on Clair, which keeps 5.64:1 contrast on white. Progress bars are 16
+`━` cells, filled in the accent, and the spinner turns through braille frames.
+
+The screen also has a police row. The TUI cannot change the font of the
+terminal, so the row only recommends Obel Mono and reports whether it is
+installed (`fc-list` on Linux, `~/Library/Fonts` on macOS), absent, or unknown.
+`f` opens the INSTALLER OBEL MONO block: the install command, which `c` copies,
+and the configuration for the terminal it detects, which `y` copies. The TUI
+never writes that configuration and never runs the install script. Obel Mono
+Masked is the family for terminals without feature settings, since `ss01` hides
+API keys on screen while the clipboard keeps the full text. Échap closes the
+block first.
+
 The preview sits beside the list from 100 columns, and under it below that. When
 the window is too short for it, the preview is left out so the controls stay on
 screen. `NO_COLOR` strips the colours and keeps the rest.

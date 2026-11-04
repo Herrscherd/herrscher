@@ -95,13 +95,23 @@ func contextPercent(used, limit int) string {
 	return fmt.Sprintf("%d%%", int(contextRatio(used, limit)*percentScale))
 }
 
-const contextCells = 10
+const (
+	contextCells    = 16
+	barContextCells = 8
+)
 
 func contextGauge(ratio float64, styles uiStyles) string {
-	filled := int(math.Round(ratio * float64(contextCells)))
-	filled = max(0, min(contextCells, filled))
-	return palierStyle(ratio, styles).Render(strings.Repeat(styles.glyphs.gaugeFull, filled)) +
-		styles.dim.Render(strings.Repeat(styles.glyphs.gaugeEmpty, contextCells-filled))
+	return contextGaugeCells(ratio, contextCells, styles)
+}
+
+func contextGaugeCells(ratio float64, cells int, styles uiStyles) string {
+	filled := max(0, min(cells, int(ratio*float64(cells))))
+	fill := styles.accent
+	if ratio >= ctxWarn {
+		fill = palierStyle(ratio, styles)
+	}
+	return fill.Render(strings.Repeat(styles.glyphs.gaugeFull, filled)) +
+		styles.dim.Render(strings.Repeat(styles.glyphs.gaugeEmpty, cells-filled))
 }
 
 const compactAt = 0.92

@@ -531,24 +531,30 @@ go and the overlay becomes a plain list. `esc` or `z` closes it, `k` re-reads th
 figures.
 
 `/compact`, or `c` inside `/context`, asks the session to compact its conversation
-through the host (`herrscher session compact <name> [--instruction <text>]`). The
-compaction runs under the session's turn, queued after a turn in progress, through
-the compaction stack. Its backend stage needs a backend that declares
-`Capabilities.Compactor` (claude sessions); a session without one is refused before
+through the host (`herrscher session compact --name <name> [--instruction <text>]`).
+The compaction goes through the session's stack, queued after a turn in progress.
+A session whose backend does not declare `Capabilities.Compactor` is refused before
 anything is sent. The transcript then records the window before and after, as the
 backend reports it, and the gauge follows the new figure. A compaction the backend
 does not report on reads `n/a` after.
 
 Automatic compaction runs when the last measured usage reaches the session's
 threshold, a percentage of its context window. The default is 92, set with
-`compactAt` in `config.json` (0 disables it), and each session can override it with
-`herrscher session set-compact <name> <percent>` (an empty percent restores the
-default). The window size comes from the vendor, and `HERRSCHER_CONTEXT_LIMIT`
-overrides it. Automatic compaction does not retrigger while usage stays above the
-threshold: it rearms once a measured turn lands under it. `compactStack` lists the
-stages in order, where `backend` is the session's own compaction and other names are
-plugins declaring `Capabilities.Compactor`. A plugin that declares the capability
-without implementing the port is reported once and its compaction is refused.
+`compactAt` in `config.json` (0 disables it, values above 100 or below 0 are
+refused at load). Each session can override it with
+`herrscher session set-compact --name <name> --percent <percent>` (an empty percent
+restores the default, 0 disables it for that session). The window size comes from
+the vendor, and `HERRSCHER_CONTEXT_LIMIT` overrides it. After a measured compaction
+still above the threshold, automatic compaction does not retrigger: it rearms once a
+measured turn lands under the threshold. A compaction the backend does not measure
+never retriggers. `compactStack` lists the stages in order, where `backend` is the
+session's own compaction and other names are plugins declaring
+`Capabilities.Compactor`.
+
+When a backend declares `Capabilities.Compactor` but its running instance does not
+implement the port, the host writes one warning line to stderr the first time that
+instance answers without the port, and each compaction of that session is then
+refused with the same error. The host does not repair the instance.
 
 ### Notifications
 

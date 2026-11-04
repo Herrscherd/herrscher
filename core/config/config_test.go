@@ -53,23 +53,28 @@ func TestLoadCompactAtBounds(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "config.json")
-			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			cfg, err := Load(path)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("Load(%s) accepted an out-of-range compactAt", tc.body)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Load(%s): %v", tc.body, err)
-			}
-			if cfg.CompactAt == nil || *cfg.CompactAt != tc.want {
-				t.Fatalf("CompactAt = %v, want %d", cfg.CompactAt, tc.want)
-			}
+			checkCompactAt(t, tc.body, tc.want, tc.wantErr)
 		})
+	}
+}
+
+func checkCompactAt(t *testing.T, body string, want int, wantErr bool) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if wantErr {
+		if err == nil {
+			t.Fatalf("Load(%s) accepted an out-of-range compactAt", body)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("Load(%s): %v", body, err)
+	}
+	if cfg.CompactAt == nil || *cfg.CompactAt != want {
+		t.Fatalf("CompactAt = %v, want %d", cfg.CompactAt, want)
 	}
 }

@@ -89,7 +89,6 @@ const (
 	stateActive = "active"
 	eventReply  = "reply"
 	eventStatus = "status"
-	argTo       = "--to"
 
 	stateFailed = "failed"
 	stateError  = "error"
@@ -761,7 +760,7 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		return m.openStatusline(), true
 	case "mode":
 		return m.modeSlash(strings.TrimPrefix(text, "/mode")), true
-	case modePlan:
+	case cmdPlan:
 		return m.planSlash(strings.TrimPrefix(text, "/plan")), true
 	case cmdQueue:
 		m.showQueue()

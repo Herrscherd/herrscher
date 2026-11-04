@@ -21,6 +21,7 @@ const (
 	cmdSkills     = "skills"
 	cmdTheme      = "theme"
 	cmdQueue      = "queue"
+	cmdPlan       = "plan"
 )
 
 func commandQuery(query string) string {

@@ -7,11 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const (
-	keyEsc   = "esc"
-	keyCtrlC = "ctrl+c"
-)
-
 const statuslineFooter = "↑↓ choisir · espace cocher · ⇧↑⇧↓ ordre · s source · échap fermer"
 
 func (m *model) openStatusline() tea.Cmd {

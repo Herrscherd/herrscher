@@ -14,7 +14,6 @@ import (
 const (
 	gitRefreshEvery = 3 * time.Second
 	gitCommandLimit = 2 * time.Second
-	numstatFields   = 3
 )
 
 type lineStat struct {

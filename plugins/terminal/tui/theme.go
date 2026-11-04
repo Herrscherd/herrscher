@@ -273,7 +273,7 @@ func unicodeGlyphs() glyphSet {
 	return glyphSet{
 		tool: "●", result: "└", cursor: "▸", unread: "●", thinking: "○", notice: "·",
 		failure: "✗", success: "✓", fold: "▸", moreLines: "↵", bolt: "●", prompt: ">", shellPrompt: "$",
-		ellipsis: "…", divider: "│", ruleChar: "─", gaugeFull: "━", gaugeEmpty: "━",
+		ellipsis: "…", divider: "│", ruleChar: "─", gaugeFull: gaugeFullGlyph, gaugeEmpty: gaugeEmptyGlyph,
 		brand: "──◂ HERRSCHER ▸──", agent: "⚡", active: "◆",
 		selected: "▸", attention: "!", open: "○", railMark: "━", filet: "│", minus: "−",
 		expanded: "▾", branchMid: "├", branchEnd: "└", omitted: "⋯", userBar: "┃",
@@ -312,10 +312,14 @@ func asciiGlyphs() glyphSet {
 	}
 }
 
-const noColorGaugeEmpty = "░"
+const (
+	gaugeFullGlyph    = "━"
+	gaugeEmptyGlyph   = "─"
+	noColorGaugeEmpty = "░"
+)
 
 func gaugeGlyphsFor(glyphs glyphSet, noColor bool) glyphSet {
-	if noColor && glyphs.gaugeEmpty == glyphs.gaugeFull {
+	if noColor && glyphs.gaugeEmpty == gaugeEmptyGlyph {
 		glyphs.gaugeEmpty = noColorGaugeEmpty
 	}
 	return glyphs

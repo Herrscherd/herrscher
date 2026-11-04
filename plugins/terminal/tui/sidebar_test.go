@@ -165,7 +165,7 @@ func TestCountWordAgreesInNumber(t *testing.T) {
 
 func TestSidebarContextGaugeHasSixteenCellsWithoutBrackets(t *testing.T) {
 	m := sidebarModel(t, 120)
-	m.st = newStyles(defaultTheme(), true)
+	m.st = newStyles(defaultTheme(), false)
 	tb := m.tabs["alfa"]
 	tb.ctxTokens = 82_000
 	info := contracts.SessionInfo{Vendor: "claude"}

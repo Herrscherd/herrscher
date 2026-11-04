@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -105,8 +106,8 @@ func TestContextPaliersTakeTheTierThresholds(t *testing.T) {
 func TestContextGaugeFillsSixteenCells(t *testing.T) {
 	styles := newStyles(defaultTheme(), true)
 	gauge := contextGauge(0.5, styles)
-	filled := strings.Count(gauge, unicodeGlyphs().gaugeFull)
-	empty := strings.Count(gauge, unicodeGlyphs().gaugeEmpty)
+	filled := strings.Count(gauge, styles.glyphs.gaugeFull)
+	empty := strings.Count(gauge, styles.glyphs.gaugeEmpty)
 	if filled != 8 {
 		t.Errorf("half a window must fill 8 cells, got %d in %q", filled, gauge)
 	}
@@ -299,5 +300,27 @@ func TestCostShowsZeroBeforeAnyTurn(t *testing.T) {
 	}
 	if got := costLabel(1.42); got != "$1.42" {
 		t.Fatalf("costLabel(1.42) = %q, want $1.42", got)
+	}
+}
+
+func TestGaugeFullAndEmptyStayDistinctInColor(t *testing.T) {
+	styles := newStyles(defaultTheme(), false)
+	glyphs := unicodeGlyphs()
+	if glyphs.gaugeFull == glyphs.gaugeEmpty {
+		t.Fatalf("full and empty cells must differ without relying on color: both are %q", glyphs.gaugeFull)
+	}
+	for _, cells := range []int{barContextCells, contextCells, boardGaugeCells, sidebarGaugeCells} {
+		gauge := ansi.Strip(contextGaugeCells(0.5, cells, styles))
+		filled := strings.Count(gauge, glyphs.gaugeFull)
+		empty := strings.Count(gauge, glyphs.gaugeEmpty)
+		if filled+empty != cells || filled == 0 || empty == 0 {
+			t.Errorf("a %d-cell gauge at half must show %d full and empty cells in color, got %d and %d in %q", cells, cells/2, filled, empty, gauge)
+		}
+	}
+	m := newTestModel()
+	m.st = styles
+	overview := ansi.Strip(m.gaugeCells(0.6, boardGaugeCells, func(style lipgloss.Style) lipgloss.Style { return style }))
+	if strings.Count(overview, glyphs.gaugeEmpty) == 0 || strings.Count(overview, glyphs.gaugeFull) == 0 {
+		t.Errorf("the overview gauge must show both cell kinds in color, got %q", overview)
 	}
 }

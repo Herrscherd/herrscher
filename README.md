@@ -620,8 +620,9 @@ installed (`fc-list` on Linux, `~/Library/Fonts` on macOS), absent, or unknown.
 `f` opens the INSTALLER OBEL MONO block: the install command, which `c` copies,
 and the configuration for the terminal it detects, which `y` copies. The TUI
 never writes that configuration and never runs the install script. Obel Mono
-Masked is the family for terminals without feature settings, since `ss01` hides
-API keys on screen while the clipboard keeps the full text. Échap closes the
+Masked is the family for kitty and Alacritty, which cannot take `ss01` reliably
+here; WezTerm and foot select Obel Mono with `ss01`, which hides API keys on
+screen while the clipboard keeps the full text. Échap closes the
 block first.
 
 The preview sits beside the list from 100 columns, and under it below that. When

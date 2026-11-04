@@ -17,6 +17,7 @@ const (
 	obelMaskedFamily   = "Obel Mono Masked"
 	obelInstallCommand = "curl -fsSL https://typographic.systems/install.sh | sh"
 	obelInstallNote    = "sans sudo, vérifie le SHA-256 de chaque zip · licence SIL OFL 1.1"
+	obelMaskFeature    = "ss01"
 	obelMaskNote       = "ss01 masque les clés d’API à l’écran, le presse-papiers garde tout"
 	obelMaskedNote     = "sans réglage de features : famille « Obel Mono Masked »"
 	obelFontKeys       = "c copier la commande · y copier la config · f fermer"
@@ -138,10 +139,11 @@ func detectTerminal(lookup func(string) (string, bool)) terminalKind {
 }
 
 type terminalSetup struct {
-	name   string
-	file   string
-	config []string
-	masked bool
+	name      string
+	file      string
+	placement string
+	config    []string
+	masked    bool
 }
 
 func terminalSetupFor(kind terminalKind) terminalSetup {
@@ -164,12 +166,16 @@ func terminalSetupFor(kind terminalKind) terminalSetup {
 	case terminalFoot:
 		return terminalSetup{
 			name: "foot", file: "~/.config/foot/foot.ini",
-			config: []string{"[main]", "font=" + obelMaskedFamily}, masked: true,
+			config: []string{"[main]", "font=" + obelFamily + ":fontfeatures=" + obelMaskFeature},
 		}
 	case terminalWezTerm:
 		return terminalSetup{
 			name: "WezTerm", file: "~/.wezterm.lua",
-			config: []string{obelMaskedFamily}, masked: true,
+			placement: "à placer dans config = wezterm.config_builder()",
+			config: []string{
+				"config.font = wezterm.font '" + obelFamily + "'",
+				"config.harfbuzz_features = { '" + obelMaskFeature + "' }",
+			},
 		}
 	case terminalUnidentified:
 	}
@@ -203,6 +209,9 @@ func (m *model) obelInstallLines(width, rows int) []string {
 		"   " + styles.dim.Render(obelFontKeys),
 		"",
 		terminalHead,
+	}
+	if setup.placement != "" {
+		lines = append(lines, "   "+styles.dim.Render(setup.placement))
 	}
 	for _, line := range setup.config {
 		lines = append(lines, "   "+styles.text.Render(line))

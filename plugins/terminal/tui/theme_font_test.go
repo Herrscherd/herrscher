@@ -115,3 +115,38 @@ func TestEscapeClosesTheInstallBlockBeforeTheTheme(t *testing.T) {
 		t.Fatal("the second escape must leave the theme screen")
 	}
 }
+
+func TestInstallBlockCopiesAConfigEachTerminalReads(t *testing.T) {
+	cases := []struct {
+		kind terminalKind
+		want string
+	}{
+		{terminalGhostty, "font-family = \"Obel Mono\"\nfont-feature = ss01"},
+		{terminalKitty, "font_family Obel Mono Masked"},
+		{terminalAlacritty, "[font.normal]\nfamily = \"Obel Mono Masked\""},
+		{terminalFoot, "[main]\nfont=Obel Mono:fontfeatures=ss01"},
+		{terminalWezTerm, "config.font = wezterm.font 'Obel Mono'\nconfig.harfbuzz_features = { 'ss01' }"},
+		{terminalUnidentified, obelFamily},
+	}
+	for _, tc := range cases {
+		m := themeSized(t, 80, 20)
+		clip := &fakeWriteClipboard{}
+		m.clip = clip
+		m.terminal = tc.kind
+		m.handleThemeLetter("f")
+		m.handleThemeLetter("y")
+		if clip.wrote != tc.want {
+			t.Errorf("terminal %v: y must copy %q, got %q", tc.kind, tc.want, clip.wrote)
+		}
+	}
+}
+
+func TestWezTermConfigIsPlacedInsideTheConfigBuilder(t *testing.T) {
+	setup := terminalSetupFor(terminalWezTerm)
+	if !strings.Contains(setup.placement, "wezterm.config_builder()") {
+		t.Fatalf("the WezTerm snippet must say where it goes, got %q", setup.placement)
+	}
+	if setup.masked {
+		t.Fatal("WezTerm uses the features route, not the masked family")
+	}
+}

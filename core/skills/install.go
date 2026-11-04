@@ -26,12 +26,15 @@ type manifest map[string]map[string]string
 type Outcome struct {
 	Installed []string
 	Updated   []string
+	Removed   []string
 	Diverged  []string
+	Shipped   []string
+	Partial   []string
 }
 
 // Empty reports whether Install had nothing to say.
 func (o Outcome) Empty() bool {
-	return len(o.Installed) == 0 && len(o.Updated) == 0 && len(o.Diverged) == 0
+	return len(o.Installed) == 0 && len(o.Updated) == 0 && len(o.Removed) == 0 && len(o.Diverged) == 0
 }
 
 // Install materializes the skills carried inside src (one directory per skill)
@@ -53,6 +56,7 @@ func Install(src fs.FS, dir string) (Outcome, error) {
 		if !entry.IsDir() {
 			continue
 		}
+		out.Shipped = append(out.Shipped, entry.Name())
 		if err := installPlaybook(src, dir, entry.Name(), man, &out); err != nil {
 			return out, err
 		}

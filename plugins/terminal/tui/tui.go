@@ -440,11 +440,27 @@ func (m *model) resizeComposer() {
 	if height > maxComposerLines {
 		height = maxComposerLines
 	}
+	height = m.fitComposerRows(height)
 	if height != m.composerRows {
 		m.composerRows = height
 		m.applySize()
 		m.syncViewport()
 	}
+}
+
+func (m *model) fitComposerRows(want int) int {
+	if m.height <= 0 {
+		return want
+	}
+	saved := m.composerRows
+	defer func() { m.composerRows = saved }()
+	for rows := want; rows > 1; rows-- {
+		m.composerRows = rows
+		if m.chromeHeight() <= m.height-minTranscriptRows {
+			return rows
+		}
+	}
+	return 1
 }
 
 func (m *model) chromeHeight() int {
@@ -1368,7 +1384,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	model.bar.file = model.terminalConfigPath()
 	model.bar.config = loadStatuslineConfig(model.bar.file)
 	model.bar.restoreFields(model.bar.config.Fields)
-	if err := removeStaleDrafts(os.TempDir(), time.Now()); err != nil {
+	if err := removeOrphanDrafts(os.TempDir()); err != nil {
 		model.flash = "brouillons orphelins non supprimés : " + err.Error()
 	}
 	for _, opt := range opts {
@@ -1421,6 +1437,13 @@ func (m *model) ensureSpin() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	model, cmd := m.dispatch(msg)
+	m.resizeComposer()
+	m.applySize()
+	return model, cmd
+}
+
+func (m *model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if handled := m.handlePluginsMsg(msg); handled {
 		return m, nil
 	}
@@ -1436,6 +1459,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) relayout() {
+	m.resizeComposer()
 	m.applySize()
 	m.syncViewport()
 }
@@ -2008,8 +2032,10 @@ func (m *model) View() string {
 	if m.surface != surfaceChat {
 		return m.surfaceScreen()
 	}
-	m.applySize()
-	body := m.vp.View()
+	body := ""
+	if m.vp.Height > 0 {
+		body = m.vp.View()
+	}
 	if side := m.sidebarPane(m.vp.Height); side != nil {
 		body = m.joinSidebar(body, side)
 	}

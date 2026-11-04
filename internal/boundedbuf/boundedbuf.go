@@ -1,6 +1,8 @@
 // Package boundedbuf collects the head of a command's output and drains the rest.
 package boundedbuf
 
+import "unicode/utf8"
+
 // Buffer keeps at most limit bytes of what is written to it and accepts every
 // write in full, so a child process never blocks on a full pipe.
 type Buffer struct {
@@ -30,7 +32,23 @@ func (b *Buffer) Write(data []byte) (int, error) {
 
 // String returns the kept bytes.
 func (b *Buffer) String() string {
-	return string(b.data)
+	data := b.data
+	if b.truncated {
+		data = withoutPartialRune(data)
+	}
+	return string(data)
+}
+
+func withoutPartialRune(data []byte) []byte {
+	for start := len(data) - 1; start >= 0 && start >= len(data)-utf8.UTFMax; start-- {
+		if utf8.RuneStart(data[start]) {
+			if !utf8.FullRune(data[start:]) {
+				return data[:start]
+			}
+			return data
+		}
+	}
+	return data
 }
 
 // Truncated reports whether some written bytes were dropped.

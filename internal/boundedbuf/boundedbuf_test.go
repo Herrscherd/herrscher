@@ -46,3 +46,13 @@ func TestBufferKeepsTheHeadAcrossSmallWrites(t *testing.T) {
 		t.Fatalf("String = %q, Truncated = %v", buf.String(), buf.Truncated())
 	}
 }
+
+func TestBufferNeverEndsOnAPartialRune(t *testing.T) {
+	buf := New(2)
+	if _, err := buf.Write([]byte("aé")); err != nil {
+		t.Fatal(err)
+	}
+	if got := buf.String(); got != "a" || !buf.Truncated() {
+		t.Fatalf("String = %q, Truncated = %v; the cut must not split é", got, buf.Truncated())
+	}
+}

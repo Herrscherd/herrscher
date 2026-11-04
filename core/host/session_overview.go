@@ -154,7 +154,7 @@ func (src overviewSource) overviews() []SessionOverview {
 		live := &sessions[index]
 		tally := src.tallies.tally(state.TranscriptPath(src.partDir, live.Name))
 		driver := src.sessions.lookup(live.Name)
-		working := driver != nil && driver.busy.Load()
+		working := driver != nil && driver.inTurn()
 		out = append(out, SessionOverview{
 			Name:       live.Name,
 			Vendor:     live.Vendor,

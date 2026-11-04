@@ -120,16 +120,42 @@ func fitScenarios() map[string]func(t *testing.T, m *model) {
 }
 
 func TestSurfacesFillTheScreenExactlyAtEverySize(t *testing.T) {
-	sizes := []struct{ width, height int }{{60, 20}, {80, 30}, {120, 42}, {200, 30}, {240, 50}}
+	sizes := []struct{ width, height int }{{60, 20}, {60, 30}, {80, 30}, {120, 30}, {120, 42}, {200, 30}, {240, 50}}
 	for name, open := range fitScenarios() {
 		for _, size := range sizes {
 			t.Run(fmt.Sprintf("%s %dx%d", name, size.width, size.height), func(t *testing.T) {
 				m, _ := barModelAt(t, "")
 				m.Update(tea.WindowSizeMsg{Width: size.width, Height: size.height})
 				open(t, m)
+				m.relayout()
 				assertFitsScreen(t, m.View(), size.width, size.height)
 			})
 		}
+	}
+}
+
+func TestShortScreensNeverOverflow(t *testing.T) {
+	for name, open := range fitScenarios() {
+		for height := 10; height <= 16; height++ {
+			t.Run(fmt.Sprintf("%s %dx%d", name, 80, height), func(t *testing.T) {
+				m, _ := barModelAt(t, "")
+				m.Update(tea.WindowSizeMsg{Width: 80, Height: height})
+				open(t, m)
+				m.relayout()
+				assertFitsScreen(t, m.View(), 80, height)
+			})
+		}
+	}
+}
+
+func TestViewDoesNotChangeTheLayout(t *testing.T) {
+	m, _ := barModelAt(t, "")
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	before := m.vp.Height
+	m.showHelp = true
+	m.View()
+	if m.vp.Height != before {
+		t.Fatalf("View changed the transcript height from %d to %d; only Update may resize", before, m.vp.Height)
 	}
 }
 

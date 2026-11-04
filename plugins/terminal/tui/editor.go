@@ -6,16 +6,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"time"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 const (
 	fallbackEditor = "vi"
-	editorPattern  = "herrscher-draft-*.md"
-	draftMaxAge    = 24 * time.Hour
+	draftFile      = "draft-*.md"
+	draftDirPrefix = "herrscher-drafts-"
+	draftDirMode   = 0o700
 )
 
 type editorDoneMsg struct {
@@ -43,8 +45,16 @@ func editorCommand(ctx context.Context, path string) *exec.Cmd {
 	return exec.CommandContext(ctx, argv[0], argv[1:]...)
 }
 
+func draftDir(root string) string {
+	return filepath.Join(root, draftDirPrefix+strconv.Itoa(os.Getpid()))
+}
+
 func writeDraft(text string) (string, error) {
-	file, err := os.CreateTemp("", editorPattern)
+	dir := draftDir(os.TempDir())
+	if err := os.MkdirAll(dir, draftDirMode); err != nil {
+		return "", err
+	}
+	file, err := os.CreateTemp(dir, draftFile)
 	if err != nil {
 		return "", err
 	}
@@ -56,34 +66,40 @@ func writeDraft(text string) (string, error) {
 	return file.Name(), nil
 }
 
-func removeStaleDrafts(dir string, now time.Time) error {
-	entries, err := os.ReadDir(dir)
+func processAlive(pid int) bool {
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = proc.Signal(syscall.Signal(0))
+	return !errors.Is(err, syscall.ESRCH) && !errors.Is(err, os.ErrProcessDone)
+}
+
+func removeOrphanDrafts(root string) error {
+	entries, err := os.ReadDir(root)
 	if err != nil {
 		return err
 	}
 	var failures []error
 	for _, entry := range entries {
-		if !isDraftName(entry.Name()) {
+		pid, ok := draftOwner(entry.Name())
+		if !ok || processAlive(pid) {
 			continue
 		}
-		info, err := entry.Info()
-		if err != nil {
-			failures = append(failures, err)
-			continue
-		}
-		if now.Sub(info.ModTime()) < draftMaxAge {
-			continue
-		}
-		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := os.RemoveAll(filepath.Join(root, entry.Name())); err != nil {
 			failures = append(failures, err)
 		}
 	}
 	return errors.Join(failures...)
 }
 
-func isDraftName(name string) bool {
-	matched, err := filepath.Match(editorPattern, name)
-	return err == nil && matched
+func draftOwner(name string) (int, bool) {
+	rest, found := strings.CutPrefix(name, draftDirPrefix)
+	if !found {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(rest)
+	return pid, err == nil && pid > 0
 }
 
 func (m *model) openEditor() tea.Cmd {

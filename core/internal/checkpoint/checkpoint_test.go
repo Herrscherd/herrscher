@@ -199,3 +199,36 @@ func TestRemoveInsideNeverFollowsASymlinkOutOfTheWorktree(t *testing.T) {
 		t.Fatalf("the file outside the worktree was deleted: %v", err)
 	}
 }
+
+func TestRestoreNeverWritesOutsideTheWorktreeThroughASymlinkedDir(t *testing.T) {
+	var store Store
+	dir := initRepo(t)
+	ctx := context.Background()
+	if _, err := store.Take(ctx, dir, "alpha", Meta{Turn: "t1", Text: "avant"}); err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "tui/frame.go", "package tui // after\n")
+	if _, err := store.Take(ctx, dir, "alpha", Meta{Turn: "t2", Text: "après"}); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.RemoveAll(filepath.Join(dir, "tui")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "tui")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Restore(ctx, dir, "alpha", 1); err != nil {
+		t.Fatalf("restore over a symlinked directory: %v", err)
+	}
+	if got := read(t, dir, "tui/frame.go"); got != "package tui\n" {
+		t.Fatalf("frame.go not restored inside the worktree: %q", got)
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("restore wrote outside the worktree through a symlink: %v", entries)
+	}
+}

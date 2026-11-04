@@ -24,7 +24,9 @@ func (f frame) height() int {
 func (f frame) render(viewport string) string {
 	parts := make([]string, 0, f.height()+1)
 	parts = append(parts, f.above...)
-	parts = append(parts, viewport)
+	if viewport != "" {
+		parts = append(parts, viewport)
+	}
 	parts = append(parts, f.below...)
 	return strings.Join(parts, "\n")
 }

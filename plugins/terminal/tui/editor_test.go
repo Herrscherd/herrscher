@@ -2,11 +2,12 @@ package tui
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -90,27 +91,30 @@ func TestCtrlXCtrlEOpensEditor(t *testing.T) {
 	}
 }
 
-func TestStaleDraftsOfAKilledEditorAreSweptAtStartup(t *testing.T) {
-	dir := t.TempDir()
-	now := time.Now()
-	stale := filepath.Join(dir, "herrscher-draft-killed.md")
-	fresh := filepath.Join(dir, "herrscher-draft-open.md")
-	foreign := filepath.Join(dir, "notes.md")
-	for path, age := range map[string]time.Duration{stale: 2 * draftMaxAge, fresh: time.Minute, foreign: 2 * draftMaxAge} {
-		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+func TestDraftsOfDeadEditorsAreSweptButALiveOneIsKept(t *testing.T) {
+	root := t.TempDir()
+	child := exec.CommandContext(t.Context(), "true")
+	if err := child.Run(); err != nil {
+		t.Fatal(err)
+	}
+	deadDir := filepath.Join(root, draftDirPrefix+strconv.Itoa(child.Process.Pid))
+	liveDir := draftDir(root)
+	unrelated := filepath.Join(root, "notes")
+	for _, dir := range []string{deadDir, liveDir, unrelated} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Chtimes(path, now.Add(-age), now.Add(-age)); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "draft-x.md"), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := removeStaleDrafts(dir, now); err != nil {
-		t.Fatalf("removeStaleDrafts: %v", err)
+	if err := removeOrphanDrafts(root); err != nil {
+		t.Fatalf("removeOrphanDrafts: %v", err)
 	}
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Fatal("a draft left by a killed editor must be swept")
+	if _, err := os.Stat(deadDir); !os.IsNotExist(err) {
+		t.Fatal("the drafts of a dead editor must be swept")
 	}
-	for _, kept := range []string{fresh, foreign} {
+	for _, kept := range []string{liveDir, unrelated} {
 		if _, err := os.Stat(kept); err != nil {
 			t.Fatalf("%s must survive the sweep: %v", filepath.Base(kept), err)
 		}

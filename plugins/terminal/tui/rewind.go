@@ -15,15 +15,16 @@ import (
 )
 
 const (
-	escDoubleWindow  = 700 * time.Millisecond
-	rewindMinSplit   = 80
-	rewindListGap    = 3
-	rewindOptionGap  = 2
-	rewindFileIndent = "      "
-	noConversation   = "none"
-	argTo            = "--to"
-	argWhat          = "--what"
-	doubleEscLabel   = "échap échap"
+	escDoubleWindow    = 700 * time.Millisecond
+	rewindMinSplit     = 80
+	rewindListGap      = 3
+	rewindOptionGap    = 2
+	rewindFileIndent   = "      "
+	rewindFooterIndent = 2
+	noConversation     = "none"
+	argTo              = "--to"
+	argWhat            = "--what"
+	doubleEscLabel     = "échap échap"
 )
 
 const rewindUnsupportedNote = "conversation non reprise : le backend de cette session ne garde pas de position par message"
@@ -389,31 +390,31 @@ func (m *model) rewindBody(width int) []string {
 
 func (m *model) rewindHeader(width int) string {
 	title := m.st.accent.Render("Revenir en arrière") + m.st.dim.Render(" · "+doubleEscLabel)
-	return truncate("  "+title, width)
+	return cutText("  "+title, width)
 }
 
 func (m *model) rewindListLines(width int) []string {
-	lines := []string{truncate("  "+m.st.dim.Render("un checkpoint avant chaque message"), width)}
+	lines := []string{cutText("  "+m.st.dim.Render("un checkpoint avant chaque message"), width)}
 	start, end := paletteWindow(len(m.rwRows), m.rwIdx, m.overlayRows())
 	for index := start; index < end; index++ {
 		row := m.rwRows[index]
 		selected := index == m.rwIdx
 		head := "  "
 		if selected {
-			head = m.st.glyphs.cursor + " "
+			head = m.st.glyphs.prompt + " "
 		}
 		summary := rewindSummary(row.Files)
-		line := truncate("  "+head+row.At+"  "+row.Text, width)
+		line := cutText("  "+head+row.At+"  "+row.Text, width)
 		if width >= rewindMinSplit {
 			line = rightAligned(line, summary, width, rewindListGap)
 		}
 		lines = append(lines, m.rewindRow(line, selected, width))
 		if width < rewindMinSplit && summary != "" {
-			lines = append(lines, truncate(rewindFileIndent+m.st.dim.Render(summary), width))
+			lines = append(lines, cutText(rewindFileIndent+m.st.dim.Render(summary), width))
 		}
 	}
-	footer := "↑↓ choisir · ⏎ revenir à ce message · f forker d’ici · u annuler le retour · échap fermer"
-	return append(lines, truncate("  "+m.st.dim.Render(footer), width))
+	footer := fitSegments([]string{hintChoose, "⏎ revenir à ce message", "f forker d’ici", "u annuler le retour", "échap fermer"}, width-rewindFooterIndent)
+	return append(lines, "  "+m.st.dim.Render(footer))
 }
 
 func (m *model) rewindOptionLines(width int) []string {
@@ -421,16 +422,16 @@ func (m *model) rewindOptionLines(width int) []string {
 	if !ok {
 		return nil
 	}
-	lines := []string{truncate("  "+m.st.text.Render("Message de "+row.At+" : « "+row.Text+" »"), width)}
+	lines := []string{cutText("  "+m.st.text.Render("Message de "+row.At+" : « "+row.Text+" »"), width)}
 	if files := rewindFileNames(row.Files); files != "" {
-		lines = append(lines, truncate("  "+m.st.dim.Render("fichiers touchés depuis : ")+m.st.green.Render(files), width))
+		lines = append(lines, cutText("  "+m.st.dim.Render("fichiers touchés depuis : ")+m.st.green.Render(files), width))
 	}
 	for index, option := range rewindOptionOrder() {
 		spec := option.spec()
 		selected := option == m.rwOpt
 		head := "  "
 		if selected {
-			head = m.st.glyphs.cursor + " "
+			head = m.st.glyphs.prompt + " "
 		}
 		label := fmt.Sprintf("%d. %s", index+1, spec.label)
 		detail := spec.detail
@@ -439,16 +440,17 @@ func (m *model) rewindOptionLines(width int) []string {
 		}
 		line := "  " + head + label
 		if detail != "" {
-			line = rightAligned(truncate(line, width), m.st.dim.Render(detail), width, rewindOptionGap)
+			line = rightAligned(cutText(line, width), m.st.dim.Render(detail), width, rewindOptionGap)
 		}
-		lines = append(lines, m.rewindRow(truncate(line, width), selected, width))
+		lines = append(lines, m.rewindRow(cutText(line, width), selected, width))
 	}
-	return append(lines, truncate("  "+m.st.dim.Render("↑↓ choisir · ⏎ valider · échap retour"), width))
+	footer := fitSegments([]string{hintChoose, "⏎ valider", "échap retour"}, width-rewindFooterIndent)
+	return append(lines, "  "+m.st.dim.Render(footer))
 }
 
 func rightAligned(left, right string, width, gap int) string {
 	room := width - lipgloss.Width(right) - gap
-	return padTo(truncate(left, room), room) + "  " + right
+	return padTo(cutText(left, room), room) + "  " + right
 }
 
 func (m *model) rewindSureLines(width int) []string {
@@ -458,8 +460,8 @@ func (m *model) rewindSureLines(width int) []string {
 	}
 	question := rewindQuestion(m.rwWhat, row.At)
 	return []string{
-		truncate("  "+m.st.warn.Render(question), width),
-		truncate("  "+m.st.dim.Render("y confirmer · n annuler"), width),
+		cutText("  "+m.st.warn.Render(question), width),
+		cutText("  "+m.st.dim.Render("y confirmer · n annuler"), width),
 	}
 }
 

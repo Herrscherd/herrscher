@@ -40,6 +40,7 @@ const (
 	boardVendorWidth    = 15
 	boardGatewayWidth   = 17
 	boardWhatIndent     = 5
+	boardFooterIndent   = 2
 	boardAgentIndent    = 5
 	boardAgentRows      = 3
 	boardAgentNameWidth = 9
@@ -321,7 +322,7 @@ func (m *model) boardList(width, height int) []string {
 	out := append([]string{m.boardHeader(width)}, body...)
 	if archived > 0 {
 		hint := fmt.Sprintf("   archivées : %d · %s", archived, boardArchivedHint)
-		out = append(out, "", truncate(m.st.dim.Render(hint), width))
+		out = append(out, "", cutText(m.st.dim.Render(hint), width))
 	}
 	return padLines(out, height)
 }
@@ -334,7 +335,7 @@ func (m *model) boardHeader(width int) string {
 	if m.board.query == "" {
 		line += m.st.dim.Render(" tape pour filtrer")
 	}
-	return truncate(line, width)
+	return cutText(line, width)
 }
 
 func (m *model) boardBlocks(width int) ([]string, int) {
@@ -391,7 +392,7 @@ func (m *model) groupStyle(group boardGroupKey) lipgloss.Style {
 func (m *model) boardGroupHeader(group boardGroupKey, count, width int) string {
 	head := m.groupStyle(group).Bold(true).Render(" "+groupLabel(group)) + m.st.dim.Render(fmt.Sprintf(" %d ", count))
 	fill := max(0, width-lipgloss.Width(head))
-	return truncate(head+m.st.dim.Render(strings.Repeat(m.st.glyphs.ruleChar, fill)), width)
+	return cutText(head+m.st.dim.Render(strings.Repeat(m.st.glyphs.ruleChar, fill)), width)
 }
 
 func (m *model) paintFor(selected bool) rowPaint {
@@ -420,10 +421,10 @@ func (m *model) boardRowLines(row *boardRow, selected bool, width int) []string 
 	head := paint(m.st.accent.Bold(true)).Render(cursor) +
 		paint(markStyle).Render(mark) +
 		paint(m.st.dim).Render(" ") +
-		paint(nameStyle).Render(padTo(truncate(row.overview.Name, boardNameWidth), boardNameWidth)) +
-		paint(m.st.text).Render(padTo(truncate(row.overview.Vendor, boardVendorWidth), boardVendorWidth)) +
-		paint(gatewayStyle(m.st, gateway)).Render(padTo(truncate(gateway, boardGatewayWidth), boardGatewayWidth))
-	first := head + paint(m.st.dim).Render(truncate(sessionWhere(row.info), max(0, width-lipgloss.Width(head))))
+		paint(nameStyle).Render(padTo(cutText(row.overview.Name, boardNameWidth), boardNameWidth)) +
+		paint(m.st.text).Render(padTo(cutText(row.overview.Vendor, boardVendorWidth), boardVendorWidth)) +
+		paint(gatewayStyle(m.st, gateway)).Render(padTo(cutText(gateway, boardGatewayWidth), boardGatewayWidth))
+	first := head + paint(m.st.dim).Render(cutText(sessionWhere(row.info), max(0, width-lipgloss.Width(head))))
 
 	ratio := contextRatio(row.info.ContextTokens, contextLimit(row.info.Vendor))
 	right := paint(m.st.dim).Render(overviewAge(row.overview.LastTs, time.Now())+" · ") +
@@ -433,10 +434,10 @@ func (m *model) boardRowLines(row *boardRow, selected bool, width int) []string 
 		paint(m.tierStyle(ratio)).Render(fmt.Sprintf(" %*s ", boardPercentWidth, contextPercent(row.info.ContextTokens, contextLimit(row.info.Vendor))))
 	what := strings.ReplaceAll(row.overview.LastText, "\n", " ")
 	second := paint(m.st.dim).Render(strings.Repeat(" ", boardWhatIndent)) +
-		paint(m.sessionTone(row)).Render(truncate(what, width-boardWhatIndent-lipgloss.Width(right)-1))
+		paint(m.sessionTone(row)).Render(cutText(what, width-boardWhatIndent-lipgloss.Width(right)-1))
 	gap := max(1, width-lipgloss.Width(second)-lipgloss.Width(right))
 	second += paint(m.st.dim).Render(strings.Repeat(" ", gap)) + right
-	lines := []string{truncate(first, width), truncate(second, width)}
+	lines := []string{cutText(first, width), cutText(second, width)}
 	return append(lines, m.boardAgentLines(row, width)...)
 }
 
@@ -451,12 +452,12 @@ func (m *model) boardAgentLines(row *boardRow, width int) []string {
 		}
 		glyph, glyphStyle := m.boardAgentGlyph(row.agents[index])
 		line := m.st.dim.Render(strings.Repeat(" ", boardAgentIndent)+branch+" ") + glyphStyle.Render(glyph) + " " +
-			m.st.text.Render(padTo(truncate(oneLine(row.agents[index].Name), boardAgentNameWidth), boardAgentNameWidth))
-		line += m.st.dim.Render(truncate(oneLine(row.agents[index].Kind), max(0, width-lipgloss.Width(line))))
-		lines = append(lines, truncate(line, width))
+			m.st.text.Render(padTo(cutText(oneLine(row.agents[index].Name), boardAgentNameWidth), boardAgentNameWidth))
+		line += m.st.dim.Render(cutText(oneLine(row.agents[index].Kind), max(0, width-lipgloss.Width(line))))
+		lines = append(lines, cutText(line, width))
 	}
 	if hidden > 0 {
-		lines = append(lines, truncate(m.st.dim.Render(fmt.Sprintf("%s%s +%d", strings.Repeat(" ", boardAgentIndent), m.st.glyphs.branchEnd+" ", hidden)), width))
+		lines = append(lines, cutText(m.st.dim.Render(fmt.Sprintf("%s%s +%d", strings.Repeat(" ", boardAgentIndent), m.st.glyphs.branchEnd+" ", hidden)), width))
 	}
 	return lines
 }
@@ -531,20 +532,20 @@ func (m *model) gaugeCells(ratio float64, cells int, paint rowPaint) string {
 }
 
 func (m *model) boardFooter(width int) string {
-	keys := strings.Join([]string{
-		"↑↓ choisir",
+	keys := fitSegments([]string{
+		hintChoose,
 		m.st.glyphs.enter + " ouvrir",
 		"lettres filtrer",
 		m.st.glyphs.erase + " effacer",
 		"échap vider",
 		"⌃P en volets",
-	}, " · ")
+	}, width-boardFooterIndent)
 	sessions, vendors, gateways := m.boardTotals()
 	counts := fmt.Sprintf("%d %s · %d %s · %d %s ",
 		sessions, choosePlural(sessions, "session", "sessions"),
 		vendors, choosePlural(vendors, "vendeur", "vendeurs"),
 		gateways, choosePlural(gateways, "passerelle", "passerelles"))
-	return truncate(joinRow(width, m.st.dim.Render(" "+keys), m.st.dim.Render(counts)), width)
+	return cutText(joinRow(width, m.st.dim.Render(" "+keys), m.st.dim.Render(counts)), width)
 }
 
 func (m *model) boardTotals() (int, int, int) {

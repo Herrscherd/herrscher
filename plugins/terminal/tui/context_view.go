@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -86,7 +85,7 @@ func (m *model) contextView() string {
 	}
 	lines = append(lines, m.st.dim.Render("c compacter · k réafficher · z revenir · échap fermer"))
 	for i := range lines {
-		lines[i] = ansi.Truncate(lines[i], width, "")
+		lines[i] = cutText(lines[i], width)
 	}
 	return strings.Join(lines, "\n")
 }

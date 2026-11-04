@@ -269,7 +269,7 @@ func (m *model) themeScreenView() string {
 	rows := max(m.height-len(top)-len(bottom), 0)
 	lines := make([]string, 0, m.height)
 	lines = append(lines, top...)
-	lines = append(lines, m.themeBody(m.innerWidth(), rows)...)
+	lines = append(lines, padLines(m.themeBody(m.innerWidth(), rows), rows)...)
 	lines = append(lines, bottom...)
 	return m.st.finish(strings.Join(clipLines(lines, m.height), "\n"))
 }
@@ -353,7 +353,7 @@ func (m *model) themeControls(width int, fold themeFold) []string {
 		)
 	}
 	for index := range lines {
-		lines[index] = truncate(lines[index], width)
+		lines[index] = cutText(lines[index], width)
 	}
 	return lines
 }
@@ -392,9 +392,9 @@ func (m *model) themeListLines(width int) []string {
 func (m *model) themeListLine(theme *Theme, selected, current bool, width int) string {
 	styles := m.st
 	glyphs := styles.glyphs
-	head, mark := "  ", glyphs.open
+	head, mark := "   ", glyphs.open
 	if selected {
-		head = glyphs.cursor + " "
+		head = " " + glyphs.prompt + " "
 	}
 	if current {
 		mark = glyphs.success
@@ -402,13 +402,13 @@ func (m *model) themeListLine(theme *Theme, selected, current bool, width int) s
 	label := padTo(theme.Label, themeLabelWidth)
 	detail := m.themeScr.detail(theme.ID)
 	if selected {
-		return styles.overlaySel.Render(padTo(truncate(head+mark+" "+label+"  "+detail, width), width))
+		return styles.overlaySel.Render(padTo(cutText(head+mark+" "+label+"  "+detail, width), width))
 	}
 	markStyle := styles.dim
 	if current {
 		markStyle = styles.green.Bold(true)
 	}
-	return padTo(truncate(styles.dim.Render(head)+markStyle.Render(mark)+" "+styles.text.Render(label)+styles.dim.Render(detail), width), width)
+	return padTo(cutText(styles.dim.Render(head)+markStyle.Render(mark)+" "+styles.text.Render(label)+styles.dim.Render(detail), width), width)
 }
 
 func themeSectionHead(styles uiStyles, title, extra string, width int) string {
@@ -495,7 +495,7 @@ func fitThemeBlocks(blocks []themeBlock, width, rows int) []string {
 			lines = append(lines, "")
 		}
 		for _, line := range block.lines {
-			lines = append(lines, truncate(line, width))
+			lines = append(lines, cutText(line, width))
 		}
 		if len(out)+len(lines) > rows {
 			break
@@ -522,7 +522,7 @@ func (m *model) themePreviewBlocks(width int) []themeBlock {
 		{lines: m.themeApprovalLines(width)},
 		{lines: m.themeLegendLines()},
 		{lines: []string{themeGaugeLine(styles)}},
-		{lines: []string{styles.overlaySel.Render(padTo(truncate("> ligne sélectionnée, en vidéo inverse", width), width))}},
+		{lines: []string{styles.overlaySel.Render(padTo(cutText("> ligne sélectionnée, en vidéo inverse", width), width))}},
 		{lines: m.themeModeLines(width)},
 		{gap: true, lines: m.themeTerminalLines()},
 		{gap: true, lines: m.themePersonalLines(shown)},
@@ -533,13 +533,13 @@ func (m *model) themeFileLine(width int) string {
 	styles := m.st
 	glyphs := styles.glyphs
 	if glyphs.fileGo == "" {
-		return truncate(styles.text.Render("tui/theme.go  tui/rail.go  README.md")+"  "+styles.dim.Render("feat/tui-v2"), width)
+		return cutText(styles.text.Render("tui/theme.go  tui/rail.go  README.md")+"  "+styles.dim.Render("feat/tui-v2"), width)
 	}
 	line := styles.accent.Render(glyphs.fileGo) + " " + styles.text.Render("theme.go") + "  " +
 		styles.accent.Render(glyphs.fileGo) + " " + styles.text.Render("rail.go") + "  " +
 		styles.dim.Render(glyphs.fileDoc) + " " + styles.text.Render("README.md") + "  " +
 		styles.violet.Render(glyphs.branch) + " " + styles.dim.Render("feat/tui-v2")
-	return truncate(line, width)
+	return cutText(line, width)
 }
 
 func (m *model) themeToolLines(width int) []string {

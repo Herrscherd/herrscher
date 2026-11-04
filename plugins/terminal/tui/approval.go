@@ -426,7 +426,13 @@ func middleTruncate(text string, width int, ellipsis string) string {
 	return ""
 }
 
-func (m *model) approvalLines(now time.Time) []string {
+type approvalLayout struct {
+	context bool
+	blank   bool
+	notes   bool
+}
+
+func (m *model) approvalLines(now time.Time, rows int) []string {
 	target := m.tabs[m.active]
 	if target == nil || !target.pendingApproval {
 		return nil
@@ -435,41 +441,60 @@ func (m *model) approvalLines(now time.Time) []string {
 	if width < approvalTwoRowWidth-approvalNoteColumn {
 		return nil
 	}
+	layouts := []approvalLayout{
+		{context: true, blank: true, notes: true},
+		{context: true, notes: true},
+		{notes: true},
+		{},
+	}
+	var lines []string
+	for _, layout := range layouts {
+		lines = m.approvalBox(target.approval, width, now, layout)
+		if len(lines) <= rows {
+			return lines
+		}
+	}
+	return lines
+}
+
+func (m *model) approvalBox(prompt approvalPrompt, width int, now time.Time, layout approvalLayout) []string {
 	box := m.st.boxes(m.caps.Boxes)
 	inner := width - approvalFrameCols
-	prompt := target.approval
+	blank := layout.blank && !m.approvalShort()
 	lines := []string{m.approvalTop(prompt, width, box, now)}
 	row := func(content string) { lines = append(lines, approvalRow(box, content, inner)) }
 	row(m.approvalCommand(prompt, inner))
-	if prompt.project != "" {
-		row(m.st.dim.Render("  projet    ") + prompt.project)
+	if layout.context {
+		if prompt.project != "" {
+			row(m.st.dim.Render("  projet    ") + prompt.project)
+		}
+		if prompt.worktree != "" {
+			row(m.st.dim.Render("  worktree  ") + prompt.worktree)
+		}
+		if line := m.approvalRiskLine(prompt.risk); line != "" {
+			row(line)
+		}
 	}
-	if prompt.worktree != "" {
-		row(m.st.dim.Render("  worktree  ") + prompt.worktree)
-	}
-	if line := m.approvalRiskLine(prompt.risk); line != "" {
-		row(line)
-	}
-	if !m.approvalShort() {
+	if blank {
 		row("")
 	}
+	wide := width >= approvalTwoRowWidth
 	for index, entry := range prompt.choices {
-		for _, line := range m.approvalChoiceLines(entry, index == prompt.cursor, width >= approvalTwoRowWidth) {
+		for _, line := range m.approvalChoiceLines(entry, index == prompt.cursor, wide, layout.notes) {
 			row(line)
 		}
 	}
 	if prompt.reasonOpen {
-		if !m.approvalShort() {
+		if blank {
 			row("")
 		}
 		row(m.approvalReasonLine(prompt))
 	}
-	lines = append(lines, m.approvalBottom(prompt, width, box))
-	return lines
+	return append(lines, m.approvalBottom(prompt, width, box))
 }
 
 func approvalRow(box boxSet, content string, inner int) string {
-	return box.v + " " + padTo(truncate(content, inner), inner) + " " + box.v
+	return box.v + " " + padTo(cutText(content, inner), inner) + " " + box.v
 }
 
 func (m *model) approvalTop(prompt approvalPrompt, width int, box boxSet, now time.Time) string {
@@ -501,7 +526,7 @@ func (m *model) approvalBottom(prompt approvalPrompt, width int, box boxSet) str
 func (m *model) approvalBorder(head, tail, fill string, width int) string {
 	gap := width - lipgloss.Width(head) - lipgloss.Width(tail)
 	if gap < 0 {
-		return truncate(head+tail, width)
+		return cutText(head, width-lipgloss.Width(tail)) + tail
 	}
 	return head + m.st.dim.Render(strings.Repeat(fill, gap)) + tail
 }
@@ -515,21 +540,24 @@ func (m *model) approvalCommand(prompt approvalPrompt, inner int) string {
 	return lead + "  " + m.st.text.Render(middleTruncate(prompt.command, room, m.st.glyphs.ellipsis))
 }
 
-func (m *model) approvalChoiceLines(entry approvalChoice, selected, wide bool) []string {
+func (m *model) approvalChoiceLines(entry approvalChoice, selected, wide, notes bool) []string {
 	mark := "  "
 	labelStyle := m.st.text
 	if selected {
-		mark = m.st.accent.Render(m.st.glyphs.cursor) + " "
+		mark = m.st.accent.Render(m.st.glyphs.prompt) + " "
 		labelStyle = m.st.accent.Bold(true)
 	}
 	head := mark + m.st.green.Render(entry.key) + "  " + labelStyle.Render(entry.label)
-	if wide {
-		return []string{padTo(head, approvalNoteColumn) + m.st.dim.Render(entry.note)}
+	note := m.st.dim.Render(entry.note)
+	switch {
+	case wide:
+		return []string{padTo(head, approvalNoteColumn) + note}
+	case !notes:
+		return []string{head}
+	case m.approvalShort():
+		return []string{head + "  " + note}
 	}
-	if m.approvalShort() {
-		return []string{head + "  " + m.st.dim.Render(entry.note)}
-	}
-	return []string{head, "     " + m.st.dim.Render(entry.note)}
+	return []string{head, "     " + note}
 }
 
 func (m *model) approvalShort() bool {

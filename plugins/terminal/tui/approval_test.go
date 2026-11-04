@@ -318,7 +318,7 @@ func TestApprovalShowsTheJudgeRisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c1"}, Event: contracts.Event{T: eventMenu, Text: menu.Prompt, Value: string(encoded)}})
-	if !strings.Contains(strings.Join(m.approvalLines(time.Now()), "\n"), "risque élevé") {
+	if !strings.Contains(strings.Join(m.approvalLines(time.Now(), unboundedRows), "\n"), "risque élevé") {
 		t.Errorf("the approval must show the judge risk when the host sends one")
 	}
 }
@@ -327,7 +327,7 @@ func TestApprovalWithoutRiskHasNoJudgeLine(t *testing.T) {
 	m, _ := barModelAt(t, "")
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c1"}, Event: approvalMenuEvent(t, "go test ./...", allApprovalRoles()...)})
-	if strings.Contains(strings.Join(m.approvalLines(time.Now()), "\n"), "juge") {
+	if strings.Contains(strings.Join(m.approvalLines(time.Now(), unboundedRows), "\n"), "juge") {
 		t.Errorf("the approval must not show a judge line without a risk")
 	}
 }

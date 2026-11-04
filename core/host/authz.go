@@ -53,6 +53,7 @@ func sessionArgs() map[string]string {
 		"session send":       paramName,
 		"session scrollback": paramName,
 		"session interrupt":  paramName,
+		"session compact":    paramName,
 		"session who":        paramName,
 		"session log":        paramName,
 		"session close":      paramName,

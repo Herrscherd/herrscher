@@ -10,6 +10,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -206,12 +208,11 @@ func (m *model) obelInstallLines(width, rows int) []string {
 	lines := []string{
 		themeSectionHead(styles, "installer Obel Mono", "", width),
 		"   " + styles.accent.Render("$") + " " + styles.text.Render(obelInstallCommand),
-		"   " + styles.dim.Render(obelInstallNote),
-		"",
-		"   " + styles.dim.Render(obelFontKeys),
-		"",
-		terminalHead,
 	}
+	lines = append(lines, noteLines(styles.dim, obelInstallNote, width)...)
+	lines = append(lines, "")
+	lines = append(lines, noteLines(styles.dim, obelFontKeys, width)...)
+	lines = append(lines, "", terminalHead)
 	for _, line := range setup.before {
 		lines = append(lines, "   "+styles.dim.Render(line))
 	}
@@ -221,14 +222,25 @@ func (m *model) obelInstallLines(width, rows int) []string {
 	for _, line := range setup.after {
 		lines = append(lines, "   "+styles.dim.Render(line))
 	}
-	lines = append(lines, "   "+styles.dim.Render(obelMaskNote))
+	lines = append(lines, noteLines(styles.dim, obelMaskNote, width)...)
 	if setup.masked {
-		lines = append(lines, "   "+styles.dim.Render(obelMaskedNote))
+		lines = append(lines, noteLines(styles.dim, obelMaskedNote, width)...)
 	}
 	for index := range lines {
 		lines[index] = cutText(lines[index], width)
 	}
 	return clipLines(lines, rows)
+}
+
+const noteIndent = "   "
+
+func noteLines(style lipgloss.Style, note string, width int) []string {
+	wrapped := strings.Split(ansi.Wrap(note, max(width-len(noteIndent), 1), " "), "\n")
+	lines := make([]string, 0, len(wrapped))
+	for _, line := range wrapped {
+		lines = append(lines, noteIndent+style.Render(line))
+	}
+	return lines
 }
 
 func (m *model) obelConfigText() string {

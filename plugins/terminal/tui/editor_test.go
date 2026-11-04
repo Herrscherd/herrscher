@@ -202,7 +202,7 @@ func TestRunWithAFreshLockIsNeverSwept(t *testing.T) {
 }
 
 func TestHeartbeatKeepsALiveRunsLockFresh(t *testing.T) {
-	run, err := startDraftRun(filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond)
+	run, err := startDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond, touchDraftLock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,14 +261,14 @@ func TestOpenDraftRunRefusesAWideRoot(t *testing.T) {
 	if err := os.Chmod(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := openDraftRun(root); !errors.Is(err, errUnsafeDraftDir) {
+	if _, err := openDraftRun(t.Context(), root); !errors.Is(err, errUnsafeDraftDir) {
 		t.Fatalf("a drafts root open to others must be refused, got %v", err)
 	}
 }
 
 func TestOpenDraftRunCreatesALockedPrivateRun(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "drafts")
-	run, err := openDraftRun(root)
+	run, err := openDraftRun(t.Context(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,5 +300,57 @@ func TestOpenDraftRunCreatesALockedPrivateRun(t *testing.T) {
 	}()
 	if !runDirHeld(parent, filepath.Base(run.dir)) {
 		t.Fatal("the run of a live process must hold its lock")
+	}
+}
+
+func TestHeartbeatSurvivesATransientFailure(t *testing.T) {
+	failedOnce := false
+	touch := func(root *os.Root) error {
+		if !failedOnce {
+			failedOnce = true
+			return errors.New("toucher transitoire")
+		}
+		return touchDraftLock(root)
+	}
+	run, err := startDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"), 5*time.Millisecond, touch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock := filepath.Join(run.dir, draftLockName)
+	old := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(lock, old, old); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		info, err := os.Stat(lock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if time.Since(info.ModTime()) < time.Hour {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("a transient failure must not stop the heartbeat: the next tick must refresh the lock")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := run.release(); err == nil || !strings.Contains(err.Error(), "toucher transitoire") {
+		t.Fatalf("release must report the failure it saw, got %v", err)
+	}
+}
+
+func TestReleaseDraftsTwiceIsSafe(t *testing.T) {
+	run, err := openDraftRun(t.Context(), filepath.Join(t.TempDir(), "drafts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newTestModel()
+	m.draftFiles = run
+	if err := m.releaseDrafts(); err != nil {
+		t.Fatalf("first release: %v", err)
+	}
+	if err := m.releaseDrafts(); err != nil {
+		t.Fatalf("second release must be a no-op, got %v", err)
 	}
 }

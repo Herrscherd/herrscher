@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,11 +34,15 @@ type editorDoneMsg struct {
 }
 
 type draftRun struct {
-	dir    string
-	root   *os.Root
-	lock   *os.File
-	cancel context.CancelFunc
-	done   chan struct{}
+	dir         string
+	root        *os.Root
+	lock        *os.File
+	touch       func(*os.Root) error
+	cancel      context.CancelFunc
+	done        chan struct{}
+	mu          sync.Mutex
+	beatErr     error
+	beatFailing bool
 }
 
 func configuredEditor(env func(string) string) []string {
@@ -68,11 +73,11 @@ func draftsRoot() (string, error) {
 	return filepath.Join(cache, "herrscher", "drafts"), nil
 }
 
-func openDraftRun(rootPath string) (*draftRun, error) {
-	return startDraftRun(rootPath, draftHeartbeat)
+func openDraftRun(parent context.Context, rootPath string) (*draftRun, error) {
+	return startDraftRun(parent, rootPath, draftHeartbeat, touchDraftLock)
 }
 
-func startDraftRun(rootPath string, every time.Duration) (*draftRun, error) {
+func startDraftRun(parent context.Context, rootPath string, every time.Duration, touch func(*os.Root) error) (*draftRun, error) {
 	if err := os.MkdirAll(rootPath, draftDirMode); err != nil {
 		return nil, err
 	}
@@ -87,8 +92,9 @@ func startDraftRun(rootPath string, every time.Duration) (*draftRun, error) {
 	if err != nil {
 		return nil, errors.Join(err, os.RemoveAll(dir))
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(parent)
 	run.cancel = cancel
+	run.touch = touch
 	go run.keepAlive(ctx, every)
 	return run, nil
 }
@@ -193,11 +199,27 @@ func (r *draftRun) keepAlive(ctx context.Context, every time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := touchDraftLock(r.root); err != nil {
-				return
-			}
+			r.recordBeat(r.touch(r.root))
 		}
 	}
+}
+
+func (r *draftRun) recordBeat(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err != nil {
+		r.beatErr = err
+	}
+	r.beatFailing = err != nil
+}
+
+func (r *draftRun) heartbeatError() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.beatFailing {
+		return r.beatErr
+	}
+	return nil
 }
 
 func touchDraftLock(root *os.Root) error {
@@ -212,14 +234,19 @@ func (r *draftRun) release() error {
 	if r.lock != nil {
 		lockErr = r.lock.Close()
 	}
-	return errors.Join(lockErr, r.root.Close())
+	r.mu.Lock()
+	beatErr := r.beatErr
+	r.mu.Unlock()
+	return errors.Join(beatErr, lockErr, r.root.Close())
 }
 
 func (m *model) releaseDrafts() error {
-	if m.draftFiles == nil {
+	run := m.draftFiles
+	m.draftFiles = nil
+	if run == nil {
 		return nil
 	}
-	return m.draftFiles.release()
+	return run.release()
 }
 
 func (m *model) openEditor() tea.Cmd {
@@ -227,6 +254,11 @@ func (m *model) openEditor() tea.Cmd {
 	if err != nil {
 		m.flash = "éditeur indisponible : " + err.Error()
 		return nil
+	}
+	if m.draftFiles != nil {
+		if beatErr := m.draftFiles.heartbeatError(); beatErr != nil {
+			m.flash = "signe de vie du brouillon interrompu : " + beatErr.Error()
+		}
 	}
 	m.editing = true
 	return tea.ExecProcess(editorCommand(m.runContext(), path), func(err error) tea.Msg {
@@ -240,7 +272,7 @@ func (m *model) writeDraft(text string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		run, err := openDraftRun(root)
+		run, err := openDraftRun(m.runContext(), root)
 		if err != nil {
 			return "", err
 		}

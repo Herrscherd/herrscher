@@ -16,22 +16,22 @@ func TestFloatingListMarksTheCursorRow(t *testing.T) {
 		{label: "/resume", detail: "reprendre une session"},
 		{label: "/review", detail: "relire le diff"},
 	}
-	out := floatingList(rows, 0, "↑↓ naviguer", 74, newStyles())
+	out := floatingList(rows, 0, "↑↓ naviguer", 74, testStyles())
 	lines := strings.Split(out, "\n")
 	if len(lines) != 3 {
 		t.Fatalf("got %d lines, want 3", len(lines))
 	}
-	if !strings.Contains(lines[0], glyphCursor) {
+	if !strings.Contains(lines[0], unicodeGlyphs().cursor) {
 		t.Fatalf("cursor row missing chevron: %q", lines[0])
 	}
-	if strings.Contains(lines[1], glyphCursor) {
+	if strings.Contains(lines[1], unicodeGlyphs().cursor) {
 		t.Fatalf("non-cursor row has a chevron: %q", lines[1])
 	}
 }
 
 func TestFloatingListRowsAreFullWidth(t *testing.T) {
 	rows := []overlayRow{{label: "/resume", detail: "reprendre"}}
-	for _, line := range strings.Split(floatingList(rows, 0, "", 74, newStyles()), "\n") {
+	for _, line := range strings.Split(floatingList(rows, 0, "", 74, testStyles()), "\n") {
 		if lipgloss.Width(line) != 74 {
 			t.Fatalf("line %q is %d columns, want 74", line, lipgloss.Width(line))
 		}
@@ -40,7 +40,7 @@ func TestFloatingListRowsAreFullWidth(t *testing.T) {
 
 func TestFloatingListTruncatesLongDetail(t *testing.T) {
 	rows := []overlayRow{{label: "/resume", detail: strings.Repeat("x", 200)}}
-	for _, line := range strings.Split(floatingList(rows, 0, "", 40, newStyles()), "\n") {
+	for _, line := range strings.Split(floatingList(rows, 0, "", 40, testStyles()), "\n") {
 		if lipgloss.Width(line) > 40 {
 			t.Fatalf("line is %d columns, want <= 40", lipgloss.Width(line))
 		}
@@ -48,7 +48,7 @@ func TestFloatingListTruncatesLongDetail(t *testing.T) {
 }
 
 func TestFloatingListWithoutRowsIsEmpty(t *testing.T) {
-	if got := floatingList(nil, 0, "footer", 74, newStyles()); got != "" {
+	if got := floatingList(nil, 0, "footer", 74, testStyles()); got != "" {
 		t.Fatalf("empty list rendered %q", got)
 	}
 }
@@ -89,7 +89,7 @@ func TestPaletteWalksTheWholeListFromTheKeyboard(t *testing.T) {
 	if m.palIdx != 34 {
 		t.Fatalf("end: palIdx = %d, want the last row", m.palIdx)
 	}
-	if out := m.paletteView(); !strings.Contains(out, glyphCursor+" /verb34") {
+	if out := m.paletteView(); !strings.Contains(out, unicodeGlyphs().cursor+" /verb34") {
 		t.Fatalf("the last verb must be reachable and drawn: %q", out)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyHome})

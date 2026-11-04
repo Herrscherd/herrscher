@@ -43,6 +43,9 @@ func (m *model) buildFrame() frame {
 	if m.switchOpen {
 		stacked.below = appendLines(stacked.below, m.switchView())
 	}
+	if m.themeScr != nil {
+		stacked.below = appendLines(stacked.below, m.themeView())
+	}
 	if m.skillsOpen {
 		stacked.below = appendLines(stacked.below, m.skillsView())
 	}

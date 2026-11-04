@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -24,8 +25,10 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
@@ -242,6 +245,16 @@ type model struct {
 
 	diagOpen bool
 
+	theme      Theme
+	themeCat   themeCatalog
+	themeCfg   terminalSection
+	themeDir   string
+	themeStamp string
+	themeScr   *themeScreen
+	noColor    bool
+
+	leaderArmed time.Time
+
 	skillsOpen bool
 	skillsIdx  int
 	skillsRows []skills.Skill
@@ -389,7 +402,7 @@ func newModel(backend Backend) *model {
 	match := &model{
 		ctx: context.Background(), tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
-		st: newStyles(), md: &markdownRenderer{},
+		st: newStyles(defaultTheme(), false), md: &markdownRenderer{}, theme: defaultTheme(),
 	}
 	match.cmds = localCommands()
 	if backend != nil {
@@ -596,6 +609,8 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		m.clearActive()
 	case "help":
 		m.toggleHelp()
+	case "theme":
+		m.openTheme()
 	case sessionVerb:
 		return m.sessionSlash(args)
 	case "usage":
@@ -1010,7 +1025,7 @@ func (m *model) anyBusy() bool {
 	return false
 }
 
-func (m *model) spinFrame() string { return spinFrames()[m.spin%len(spinFrames())] }
+func (m *model) spinFrame() string { return m.st.spinFrame(m.spin) }
 
 func (m *model) thinkingContent() string {
 	return m.contentWith(m.searchQuery)
@@ -1147,6 +1162,7 @@ func OpenOn(session, text string) Option {
 func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) error {
 	model := newModel(backend)
 	model.ctx = ctx
+	model.loadTheme(filepath.Dir(config.DefaultPath()), lipgloss.HasDarkBackground)
 	model.keys = &keyLog{}
 	for _, opt := range opts {
 		opt(model)
@@ -1185,7 +1201,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, tickCmd(), enableEnhancedKeys)
+	return tea.Batch(textarea.Blink, tickCmd(), themeWatchTick(), enableEnhancedKeys)
 }
 
 func (m *model) ensureSpin() tea.Cmd {
@@ -1235,6 +1251,12 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case tickMsg:
 		m.syncTabs()
 		return tickCmd(), true
+	case themeWatchMsg:
+		m.watchThemes()
+		return themeWatchTick(), true
+	case themeEditedMsg:
+		m.handleThemeEdited(msg)
+		return nil, true
 	case spinMsg:
 		return m.handleSpin(), true
 	}
@@ -1323,6 +1345,11 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleSkillsKey(msg), true
 	case m.resumeOpen:
 		return m.handleResumeKey(msg), true
+	case m.themeScr != nil:
+		return m.handleThemeKey(msg), true
+	}
+	if cmd, handled := m.handleLeader(msg); handled {
+		return cmd, true
 	}
 	if cmd, handled := m.handlePaletteKey(msg); handled {
 		return cmd, true
@@ -1623,12 +1650,12 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 }
 
 func (m *model) helpView() string {
-	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers")
+	return m.st.dim.Render("⏎ envoyer · ⇧⏎ ou \\⏎ nouvelle ligne · ↑↓ historique · molette/pgup défiler · shift+glisser sélectionner · ctrl+g libérer la souris · échap interrompre · ctrl+v coller une image · ctrl+l lien suivant · ctrl+o l'ouvrir · ctrl+f replier le code · ctrl+y copier le code · alt+y copier la réponse · alt+e déplier commandes et diffs · ctrl+s chercher · ctrl+t replier les tours · alt+↑↓ tour suivant · / commandes · @ fichiers" + leaderHelp())
 }
 
 func (m *model) View() string {
 	if !m.ready {
 		return "démarrage…"
 	}
-	return m.buildFrame().render(m.vp.View())
+	return m.st.finish(m.buildFrame().render(m.vp.View()))
 }

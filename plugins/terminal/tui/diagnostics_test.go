@@ -16,7 +16,7 @@ func TestDiagnosticsNamesEachResolvedValueAndItsFeature(t *testing.T) {
 		Colour:     ColourTrue,
 		Terminal:   "kitty",
 	}
-	out := diagnosticsView(caps, newStyles())
+	out := diagnosticsView(caps, testStyles())
 	for _, want := range []string{
 		"kitty",
 		"truecolor",
@@ -34,7 +34,7 @@ func TestDiagnosticsNamesEachResolvedValueAndItsFeature(t *testing.T) {
 }
 
 func TestDiagnosticsNamesTheFallbackRatherThanHidingTheRow(t *testing.T) {
-	out := diagnosticsView(Capabilities{Terminal: "xterm"}, newStyles())
+	out := diagnosticsView(Capabilities{Terminal: "xterm"}, testStyles())
 	for _, want := range []string{"graphismes", "none", "demi-blocs", "hyperliens", "texte stylé"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("a plain terminal must still be told what it gets, missing %q:\n%s", want, out)

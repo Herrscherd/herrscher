@@ -17,7 +17,7 @@ func TestBannerCarriesTheActiveTab(t *testing.T) {
 	if !strings.Contains(out, "HERRSCHER") {
 		t.Fatalf("banner must carry the brand: %q", out)
 	}
-	if !strings.Contains(out, glyphCursor+" "+m.tabs["beta"].label) {
+	if !strings.Contains(out, unicodeGlyphs().cursor+" "+m.tabs["beta"].label) {
 		t.Fatalf("the active tab must be marked: %q", out)
 	}
 	if !strings.Contains(out, m.tabs["alpha"].label) {
@@ -47,7 +47,7 @@ func TestUnreadTabCarriesItsPip(t *testing.T) {
 	m.ensureTab("alpha")
 	m.ensureTab("beta")
 	m.tabs["beta"].unread = true
-	if !strings.Contains(m.tabStrip(), glyphUnread) {
+	if !strings.Contains(m.tabStrip(), unicodeGlyphs().unread) {
 		t.Fatalf("an unread tab must carry its pip: %q", m.tabStrip())
 	}
 }

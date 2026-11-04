@@ -21,8 +21,8 @@ func TestPermissionMenuRendersClaudeShape(t *testing.T) {
 	if !strings.Contains(out, "run Bash(rm -rf build/)") {
 		t.Fatalf("menu must frame the action: %q", out)
 	}
-	if !strings.Contains(out, glyphCursor+" 1. Yes") {
-		t.Fatalf("selected row must be %q 1. Yes: %q", glyphCursor, out)
+	if !strings.Contains(out, unicodeGlyphs().cursor+" 1. Yes") {
+		t.Fatalf("selected row must be %q 1. Yes: %q", unicodeGlyphs().cursor, out)
 	}
 	if !strings.Contains(out, "2. Yes, don't ask again") {
 		t.Fatalf("second option must be numbered: %q", out)

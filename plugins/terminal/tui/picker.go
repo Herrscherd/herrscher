@@ -130,7 +130,7 @@ func (m *model) switchView() string {
 		row := m.switchRows[i]
 		mark := "  "
 		if tb := m.tabs[row.ChannelID]; tb != nil && tb.unread {
-			mark = glyphUnread + " "
+			mark = m.st.glyphs.unread + " "
 		}
 		rows = append(rows, overlayRow{mark: mark, label: row.Name, detail: row.Project})
 	}
@@ -201,14 +201,14 @@ func (m *model) choiceView() string {
 		return ""
 	}
 	var builder strings.Builder
-	builder.WriteString(m.st.accent.Render(glyphTool + " " + m.choice.Question))
+	builder.WriteString(m.st.accent.Render(m.st.glyphs.tool + " " + m.choice.Question))
 	for index, o := range m.choice.Options {
 		label := fmt.Sprintf("%d. %s", index+1, o.Label)
 		if index == len(m.choice.Options)-1 {
 			label += "  (esc)"
 		}
 		if index == m.choiceIdx {
-			builder.WriteString("\n" + m.st.accent.Render(glyphCursor+" "+label))
+			builder.WriteString("\n" + m.st.accent.Render(m.st.glyphs.cursor+" "+label))
 		} else {
 			builder.WriteString("\n" + m.st.dim.Render("  "+label))
 		}

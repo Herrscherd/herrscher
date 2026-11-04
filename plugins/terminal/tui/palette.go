@@ -143,6 +143,7 @@ func localCommands() []CommandSpec {
 		{Name: verbRename, Args: "<nom>", Desc: "rename this session"},
 		{Name: "usage", Desc: "cost, tokens and context for this session"},
 		{Name: "skills", Desc: "list available skills"},
+		{Name: "theme", Desc: "pick the colour theme and the render options"},
 		{Name: "capabilities", Desc: "what this terminal can render, and what it falls back to"},
 		{Name: "plugins", Desc: "the plugins this binary is made of"},
 		{Name: "attach", Args: "<path>", Desc: "stage a local file with the next message"},

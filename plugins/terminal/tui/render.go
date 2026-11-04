@@ -20,7 +20,7 @@ func (m *model) renderTranscript(tab *tab, width int) string {
 			}
 		}
 		if m.foldCode && item.role == roleAgent && !item.streaming {
-			item.text = foldCodeBlocks(item.text)
+			item.text = foldCodeBlocks(item.text, m.st.glyphs)
 		}
 		builder.WriteString(renderEntry(item, width, m.displayMode()))
 	}
@@ -58,46 +58,44 @@ func renderEntry(item entry, width int, view view) string {
 		return renderYou(item, width, view.st)
 	case roleAgent:
 		if item.streaming {
-			return titledRule(view.st.accent, agentTitle, width) + "\n" +
+			return view.st.titledRule(view.st.accent, view.st.glyphs.agentTitle(), width) + "\n" +
 				indent(wrapWith(view.st.text, item.text, body))
 		}
-		out := openBlock(view.st.accent, agentTitle, renderMarkdown(item.text, body, view), width)
+		out := openBlock(view.st, view.st.accent, view.st.glyphs.agentTitle(), renderMarkdown(item.text, body, view), width)
 		if item.preview != "" {
 			out += "\n" + item.preview
 		}
 		return out
 	case roleThinking:
-		return indent(wrapWith(view.st.thinking, thinkingLine(item.text), body))
+		return indent(wrapWith(view.st.thinking, thinkingLine(item.text, view.st.glyphs), body))
 	case roleTool:
 		return indent(renderTool(item.text, body, view))
 	case roleNotice:
-		return indent(wrapWith(view.st.dim, glyphNotice+" "+item.text, body))
+		return indent(wrapWith(view.st.dim, view.st.glyphs.notice+" "+item.text, body))
 	case roleError:
-		return block(view.st.red, glyphError+" error", wrapWith(view.st.red, item.text, body), width)
+		return block(view.st, view.st.red, view.st.glyphs.failure+" error", wrapWith(view.st.red, item.text, body), width)
 	case roleCost:
 		return indent(view.st.dim.Render(item.text))
 	case roleScrollback:
-		return titledRule(view.st.scrollback, item.text, width)
+		return view.st.titledRule(view.st.scrollback, item.text, width)
 	default:
 		return indent(wrapWith(view.st.dim, item.text, body))
 	}
 }
 
-const agentTitle = "⚡ Herrscher"
-
-func block(style lipgloss.Style, title, body string, width int) string {
-	return titledRule(style, title, width) + "\n" +
+func block(st uiStyles, style lipgloss.Style, title, body string, width int) string {
+	return st.titledRule(style, title, width) + "\n" +
 		indent(body) + "\n" +
-		rule(style, width)
+		st.rule(style, width)
 }
 
-func openBlock(style lipgloss.Style, title, body string, width int) string {
-	return titledRule(style, title, width) + "\n" + indent(body)
+func openBlock(st uiStyles, style lipgloss.Style, title, body string, width int) string {
+	return st.titledRule(style, title, width) + "\n" + indent(body)
 }
 
 func renderYou(item entry, width int, styles uiStyles) string {
 	body := width - lipgloss.Width(blockIndent)
-	out := indent(wrapWith(styles.user, glyphCursor+" "+item.text, body))
+	out := indent(wrapWith(styles.user, styles.glyphs.cursor+" "+item.text, body))
 	if chips := chipRow(item.attachments, styles); chips != "" {
 		out += "\n" + indent(chips)
 	}

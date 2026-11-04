@@ -61,6 +61,7 @@ type Backend interface {
 	// Interrupt cancels a session's in-flight turn (esc-to-interrupt). Reports
 	// false when nothing was interrupted (no live turn by that name).
 	Interrupt(name string) bool
+	Overview() (string, error)
 }
 
 const (
@@ -125,6 +126,7 @@ type tab struct {
 	nextEntryID        uint64
 	todos              []contracts.TodoItem
 	agents             []liveAgent
+	approval           *PendingChoice
 }
 
 type liveAgent struct {
@@ -239,6 +241,14 @@ type model struct {
 	switchOpen bool
 	switchIdx  int
 	switchRows []contracts.SessionInfo
+
+	resumeAll   []contracts.SessionInfo
+	resumeQuery string
+
+	surface   surface
+	board     boardState
+	overviews []SessionOverview
+	panes     paneState
 
 	diagOpen bool
 
@@ -592,6 +602,8 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 	switch args[0] {
 	case "resume":
 		m.openResume()
+	case "agents":
+		m.openBoard()
 	case "clear":
 		m.clearActive()
 	case "help":
@@ -1234,7 +1246,10 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case tickMsg:
 		m.syncTabs()
+		m.refreshSurface()
 		return tickCmd(), true
+	case tea.MouseMsg:
+		return nil, m.handlePaneClick(msg)
 	case spinMsg:
 		return m.handleSpin(), true
 	}
@@ -1311,6 +1326,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handlePendingClose(msg), true
 	case m.choice != nil:
 		return m.handleChoiceKey(msg), true
+	case m.surface == surfaceBoard:
+		return m.handleBoardKey(msg), true
 	case m.switchOpen:
 		return m.handleSwitchKey(msg), true
 	case m.searchOpen:
@@ -1323,6 +1340,11 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleSkillsKey(msg), true
 	case m.resumeOpen:
 		return m.handleResumeKey(msg), true
+	}
+	if m.surface == surfacePanes {
+		if cmd, handled := m.handlePanesKey(msg); handled {
+			return cmd, true
+		}
 	}
 	if cmd, handled := m.handlePaletteKey(msg); handled {
 		return cmd, true
@@ -1445,6 +1467,12 @@ func (m *model) handleResumeKey(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 	switch msg.Type {
+	case tea.KeyBackspace:
+		m.eraseResume()
+	case tea.KeySpace:
+		m.typeResume(" ")
+	case tea.KeyRunes:
+		m.typeResume(string(msg.Runes))
 	case tea.KeyEsc:
 		m.resumeOpen = false
 		m.relayout()
@@ -1554,6 +1582,9 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleHistoryKey(msg, -1)
 	case tea.KeyDown:
 		return m.handleHistoryKey(msg, 1)
+	case tea.KeyCtrlP:
+		m.openBoard()
+		return nil, true
 	case tea.KeyCtrlW:
 		if m.input.Value() != "" {
 			return nil, false
@@ -1629,6 +1660,9 @@ func (m *model) helpView() string {
 func (m *model) View() string {
 	if !m.ready {
 		return "démarrage…"
+	}
+	if m.surface != surfaceChat {
+		return m.buildFrame().render(m.surfaceBody())
 	}
 	return m.buildFrame().render(m.vp.View())
 }

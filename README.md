@@ -395,6 +395,9 @@ composer sits in a rounded box at the foot, and the status line is glued right
 under that box, so the two things you act on are one object rather than two rows
 separated by a rule.
 
+`/resume` filters as you type (a fuzzy match on name, project, vendor and gateway)
+and shows the last lines of the selected session above the list.
+
 Every list the window opens (the `/` palette, `@` completion, `/resume`,
 `/session switch`, `/skills`) shares one grammar: unbordered rows floating just
 above the box, the selected one on a filled background, a footer that says what
@@ -479,6 +482,22 @@ shows its *resolved target*, since a markdown label can name one destination and
 point at another, and `ctrl+o` opens it: a URL through the desktop handler, a
 `file.go:42` reference through `$EDITOR` at that line. That is display, not a
 confirmation prompt. The keypress is the consent.
+
+### Sessions board and panes
+
+`ctrl+p` (or `/agents`) opens the sessions board: every session, terminal and
+other gateways alike, grouped by state (Au travail, Attend une réponse, À relire,
+Fini), with its vendor, gateway, age, cost and last activity. Letters filter the
+rows, `↑↓` choose, `Enter` opens or switches to the session. When the width is
+short the cost column goes first, then the gateway column.
+
+Inside the board, `ctrl+p` switches to the panes: up to four live sessions side
+by side, each header carrying vendor, gateway, context gauge and cost, and the
+end of its transcript. The grid is two by two from 120 columns and 30 rows, two
+panes side by side from 80 columns, and a single pane moved with `←` `→` below
+80. `Tab` changes the focused pane, `ctrl+w` zooms it, and `Enter` sends the
+composer text to it. When a pane shows an approval, `o` (once), `s` (session) or
+`r` (refuse) answers it without leaving the pane. `ctrl+p` returns to the chat.
 
 ### Reading a long session
 

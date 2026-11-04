@@ -366,6 +366,12 @@ func (t *Terminal) Scrollback(name string) []contracts.ScrollbackLine {
 	return nil
 }
 
+// Overview returns the host's per-session overview as JSON (state, cost, last
+// activity) for the sessions board and the side-by-side panes.
+func (t *Terminal) Overview() (string, error) {
+	return t.Dispatch([]string{sessionVerb, "overview"})
+}
+
 // Resume revives an archived session by name through the bound SessionControl,
 // for the /resume picker.
 func (t *Terminal) Resume(name string) (string, error) {

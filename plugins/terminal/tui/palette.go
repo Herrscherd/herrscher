@@ -140,6 +140,7 @@ func localCommands() []CommandSpec {
 		{Name: "clear", Desc: "clear this tab's transcript"},
 		{Name: "session switch", Desc: "switch between live sessions"},
 		{Name: "resume", Desc: "reopen an archived session"},
+		{Name: "agents", Desc: "voir toutes les sessions par état"},
 		{Name: verbRename, Args: "<nom>", Desc: "rename this session"},
 		{Name: "usage", Desc: "cost, tokens and context for this session"},
 		{Name: "skills", Desc: "list available skills"},

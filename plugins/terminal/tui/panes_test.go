@@ -1,0 +1,127 @@
+package tui
+
+import (
+	"strings"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+)
+
+func paneModel(t *testing.T) (*fakeBackend, *model) {
+	t.Helper()
+	f := &fakeBackend{
+		fe: make(chan RoutedEvent),
+		sessions: []contracts.SessionInfo{
+			{Name: "alpha", ChannelID: "ch-alpha", Vendor: "claude"},
+			{Name: "beta", ChannelID: "ch-beta", Vendor: "claude"},
+			{Name: "gamma", ChannelID: "ch-gamma", Vendor: "codex"},
+			{Name: "delta", ChannelID: "ch-delta", Vendor: "claude"},
+		},
+		overview: `[
+		 {"name":"alpha","state":"working","cost":0.2},
+		 {"name":"beta","state":"waiting","cost":0.4},
+		 {"name":"gamma","state":"done","cost":0.1},
+		 {"name":"delta","state":"done","cost":0.3}]`,
+	}
+	m := readyModel(f)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	pressKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+	pressKey(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+	return f, m
+}
+
+func TestPaneGridFitsEachWidth(t *testing.T) {
+	cases := []struct {
+		width, height int
+		visible       []string
+		hidden        []string
+	}{
+		{60, 30, []string{"alpha"}, []string{"beta", "gamma", "delta"}},
+		{80, 30, []string{"alpha", "beta"}, []string{"gamma", "delta"}},
+		{120, 30, []string{"alpha", "beta", "gamma", "delta"}, nil},
+		{200, 30, []string{"alpha", "beta", "gamma", "delta"}, nil},
+	}
+	for _, tc := range cases {
+		_, m := paneModel(t)
+		m.Update(tea.WindowSizeMsg{Width: tc.width, Height: tc.height})
+		view := m.View()
+		for _, name := range tc.visible {
+			if !strings.Contains(view, name+" · ") {
+				t.Fatalf("width %d: pane %q must be visible: %s", tc.width, name, view)
+			}
+		}
+		for _, name := range tc.hidden {
+			if strings.Contains(view, name+" · ") {
+				t.Fatalf("width %d: pane %q must not be visible", tc.width, name)
+			}
+		}
+		lines := strings.Split(view, "\n")
+		if len(lines) > tc.height {
+			t.Fatalf("width %d: %d lines for height %d", tc.width, len(lines), tc.height)
+		}
+		for _, line := range lines {
+			if lipgloss.Width(line) > tc.width {
+				t.Fatalf("width %d: line overflows: %q", tc.width, line)
+			}
+		}
+	}
+}
+
+func TestPaneShowsVendorGatewayAndCost(t *testing.T) {
+	_, m := paneModel(t)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	view := m.View()
+	if !strings.Contains(view, "claude") || !strings.Contains(view, "$0.20") {
+		t.Fatalf("pane header must carry vendor and cost: %s", view)
+	}
+}
+
+func TestPaneKeyRoutesApprovalWithoutSwitchingTab(t *testing.T) {
+	f, m := paneModel(t)
+	tb := m.tabs["ch-alpha"]
+	tb.approval = &PendingChoice{
+		Question: "lancer Bash(make)",
+		Channel:  "ch-alpha",
+		Options: []ChoiceOption{
+			{Label: "une fois", Value: "once-value"},
+			{Label: "session", Value: "session-value"},
+			{Label: "refuser", Value: "refuse-value"},
+		},
+	}
+	m.panes.focus = 0
+	before := m.active
+	pressKey(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	if len(f.submitted) != 1 || f.submitted[0].channel != "ch-alpha" || f.submitted[0].text != "refuse-value" {
+		t.Fatalf("r must refuse the focused pane approval: %+v", f.submitted)
+	}
+	if tb.approval != nil {
+		t.Fatal("approval must clear once answered")
+	}
+	if m.active != before {
+		t.Fatal("answering from a pane must not switch tabs")
+	}
+}
+
+func TestPaneLetterWithoutApprovalGoesToComposer(t *testing.T) {
+	f, m := paneModel(t)
+	pressKey(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	if len(f.submitted) != 0 {
+		t.Fatalf("o without pending approval must not submit: %+v", f.submitted)
+	}
+	if m.input.Value() != "o" {
+		t.Fatalf("o must be typed in the composer, got %q", m.input.Value())
+	}
+}
+
+func TestPaneEnterSendsToFocusedPane(t *testing.T) {
+	f, m := paneModel(t)
+	pressKey(m, tea.KeyMsg{Type: tea.KeyTab})
+	m.input.SetValue("bonjour")
+	pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if len(f.submitted) != 1 || f.submitted[0].channel != "ch-beta" || f.submitted[0].text != "bonjour" {
+		t.Fatalf("Enter must send to the focused pane: %+v", f.submitted)
+	}
+}

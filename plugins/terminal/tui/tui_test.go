@@ -101,7 +101,11 @@ type fakeBackend struct {
 	resumed         []string
 	submitted       []submittedTurn
 	interrupted     []string
+	overview        string
+	overviewErr     error
 }
+
+func (f *fakeBackend) Overview() (string, error) { return f.overview, f.overviewErr }
 
 type submittedTurn struct {
 	channel string

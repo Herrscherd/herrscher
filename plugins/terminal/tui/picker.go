@@ -13,9 +13,46 @@ import (
 func (m *model) openResume() {
 	rows := append([]contracts.SessionInfo(nil), m.tm.Sessions()...)
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].LastTs > rows[j].LastTs })
-	m.resumeRows = rows
-	m.resumeIdx = 0
+	m.resumeAll = rows
+	m.resumeQuery = ""
+	m.applyResumeFilter()
 	m.resumeOpen = true
+}
+
+func sessionSearchText(info contracts.SessionInfo) string {
+	return strings.Join(append([]string{info.Name, info.Project, info.Vendor}, info.Gateways...), " ")
+}
+
+func (m *model) applyResumeFilter() {
+	m.resumeRows = fuzzyFilter(m.resumeAll, m.resumeQuery, sessionSearchText)
+	m.resumeIdx = 0
+}
+
+func (m *model) typeResume(text string) {
+	m.resumeQuery += text
+	m.applyResumeFilter()
+}
+
+func (m *model) eraseResume() {
+	runes := []rune(m.resumeQuery)
+	if len(runes) == 0 {
+		return
+	}
+	m.resumeQuery = string(runes[:len(runes)-1])
+	m.applyResumeFilter()
+}
+
+func (m *model) resumePreview(width int) string {
+	if m.tm == nil || m.resumeIdx < 0 || m.resumeIdx >= len(m.resumeRows) {
+		return ""
+	}
+	lines := tailLines(m.tm.Scrollback(m.resumeRows[m.resumeIdx].Name), resumePreviewLines)
+	rendered := make([]string, 0, len(lines))
+	for _, line := range lines {
+		text := strings.ReplaceAll(line.Text, "\n", " ")
+		rendered = append(rendered, m.st.dim.Render(truncate("  "+text, width)))
+	}
+	return strings.Join(rendered, "\n")
 }
 
 func (m *model) clampResume() {
@@ -34,7 +71,10 @@ func (m *model) chooseResume() tea.Cmd {
 	if m.resumeIdx < 0 || m.resumeIdx >= len(m.resumeRows) {
 		return nil
 	}
-	session := m.resumeRows[m.resumeIdx]
+	return m.openChannel(m.resumeRows[m.resumeIdx])
+}
+
+func (m *model) openChannel(session contracts.SessionInfo) tea.Cmd {
 	m.ensureTab(session.ChannelID)
 	m.active = session.ChannelID
 	if tb := m.tabs[session.ChannelID]; tb != nil {
@@ -84,7 +124,14 @@ func (m *model) resumeView() string {
 	if hidden := len(m.resumeRows) - (end - start); hidden > 0 {
 		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}
-	return floatingList(rows, m.resumeIdx-start, footer, m.overlayWidth(), m.st)
+	if m.resumeQuery != "" {
+		footer = "filtre : " + m.resumeQuery + " · " + footer
+	}
+	list := floatingList(rows, m.resumeIdx-start, footer, m.overlayWidth(), m.st)
+	if preview := m.resumePreview(m.innerWidth()); preview != "" {
+		list += "\n" + preview
+	}
+	return list
 }
 
 func (m *model) openSwitch() {

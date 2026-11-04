@@ -212,6 +212,10 @@ func (a *attachedDaemon) Resume(name string) (string, error) {
 	return a.dispatch([]string{verbSession, "resume", argName, name})
 }
 
+func (a *attachedDaemon) Overview() (string, error) {
+	return a.dispatch([]string{verbSession, "overview"})
+}
+
 func (a *attachedDaemon) Interrupt(name string) bool {
 	_, err := a.dispatch([]string{verbSession, "interrupt", argName, name})
 	return err == nil

@@ -429,14 +429,15 @@ right away.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `HERRSCHER_MODELS_DISCOVER` | every backend | comma-separated vendors that may be asked (`claude,codex`), or `none`; with `HERRSCHER_ROUTE_POLICY=gateway-only` no vendor is asked |
+| `HERRSCHER_MODELS_DISCOVER` | every backend | comma-separated vendors that may be asked (`claude,codex`), or `none`; with `HERRSCHER_ROUTE_POLICY=gateway-only` vendors are asked only through the gateway, and only when its credentials are set |
 | `HERRSCHER_MODELS_TTL` | `24h` | how long a cached list is kept before it is asked again |
 | `HERRSCHER_MODELS_TIMEOUT` | `15s` | longest wait for one vendor's answer |
 | `HERRSCHER_MODELS_HIDDEN` | none | comma-separated model IDs hidden from the list and the selector; a session already on one still resumes it |
 | `HERRSCHER_DEFAULT_MODEL_<VENDOR>` | none | default model of one vendor |
 
-The cache is `models-discovered.json` in `HERRSCHER_STATE_DIR`, or in
-`~/.config/herrscher` when that is unset. A vendor that fails or stays silent past
+The cache is `models-discovered.json`, next to the daemon state file: the directory of
+`--state` when given, otherwise `HERRSCHER_STATE_DIR`, otherwise `~/.config/herrscher`.
+It is created on first write, readable by its owner only. A vendor that fails or stays silent past
 its timeout keeps its last known list, and the daemon logs a warning. The daemon
 never waits for discovery to start.
 

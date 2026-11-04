@@ -188,13 +188,27 @@ func TestZeroPercentDisablesAutomaticCompaction(t *testing.T) {
 }
 
 func TestBackendWithoutCompactorIsRefusedBeforeAnySend(t *testing.T) {
-	f := newCompactFixture(t, "codex", compactPolicy(92))
+	f := newCompactFixture(t, "cursor", compactPolicy(92))
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventCompactFailed)
 	if !strings.Contains(failed.Text, "does not implement Compactor") {
 		t.Fatalf("compaction_failed = %+v, want the refusal", failed)
 	}
 	expectNoFrame(t, f)
+}
+
+func TestCodexWithCompactorIsCompacted(t *testing.T) {
+	policy := compactPolicy(92)
+	policy.backends["codex"] = true
+	f := newCompactFixture(t, "codex", policy)
+	f.driver.requestCompaction("", contracts.Conversation{})
+	if got := nextFrame(t, f); got.T != compactwire.EventRequest {
+		t.Fatalf("frame = %+v, want a compaction request", got)
+	}
+	f.from <- measuredAnswer(30_000)
+	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 30_000 {
+		t.Fatalf("compaction_done = %+v, want 30000 measured", done)
+	}
 }
 
 func TestNoPortAnswerFailsTheCompaction(t *testing.T) {

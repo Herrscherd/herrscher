@@ -589,12 +589,14 @@ Four themes ship in the binary: Sombre (the default), Clair, Terminal, which
 takes the colours of your own terminal palette, and Contraste élevé. `/theme`,
 or `ctrl+x t` from anywhere in the window, opens the theme screen, which takes
 the whole window. Moving through the list previews each theme on the spot, and
-Entrée keeps the one you chose. The current theme carries a ✓. The same screen
+Entrée keeps the one you chose and the screen stays open, with the line
+"enregistré à l’instant" beside the `terminal.toml` block. The current theme
+carries a ✓. The same screen
 holds the look under RENDU: `g` cycles the glyph set (unicode, nerd, ascii),
 `b` the borders (rounded, square, none), `d` the density (normal, compact), `w`
 bold and `i` italic. `a` turns the automatic theme on or off, which follows the
 terminal's background, and `e` or `ctrl+e` opens `themes/perso.toml` in
-`$EDITOR`. Échap puts back what it found.
+`$EDITOR`. Échap closes the screen and puts back the theme it last kept.
 
 The preview sits beside the list from 100 columns, and under it below that. When
 the window is too short for it, the preview is left out so the controls stay on

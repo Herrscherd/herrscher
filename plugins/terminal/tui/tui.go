@@ -306,13 +306,14 @@ type model struct {
 
 	diagOpen bool
 
-	theme      Theme
-	themeCat   themeCatalog
-	themeCfg   terminalSection
-	themeDir   string
-	themeStamp string
-	themeScr   *themeScreen
-	noColor    bool
+	theme           Theme
+	themeCat        themeCatalog
+	themeCfg        terminalSection
+	themeBackground string
+	themeDir        string
+	themeStamp      string
+	themeScr        *themeScreen
+	noColor         bool
 
 	leaderArmed time.Time
 	bar         barState

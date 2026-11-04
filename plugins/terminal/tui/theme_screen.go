@@ -5,7 +5,9 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -16,12 +18,17 @@ const (
 	themeLeftWidth        = 56
 	themeLabelWidth       = 16
 	themeKeyColumn        = 11
-	themeGaugeCells       = 6
 	themeHeadGap          = 2
 	themePersonalID       = "perso"
 	themePersonalFile     = themePersonalID + themeFileExt
 	themePersonalName     = "Mon thème"
 	themePersonalMissing  = "themes/" + themePersonalFile + " absent : e ou ⌃E pour le créer"
+	themeApprovalAt       = 4*time.Minute + 12*time.Second
+	themeApprovalMinWidth = 30
+	themeTokenColumn      = 8
+	themeReadSpan         = 100 * time.Millisecond
+	themeEditSpan         = 200 * time.Millisecond
+	themeBashSpan         = 3100 * time.Millisecond
 )
 
 type themeScreen struct {
@@ -31,10 +38,16 @@ type themeScreen struct {
 	origin   Theme
 	look     renderOptions
 	auto     bool
+	saved    bool
 	problems []string
 }
 
 type themeEditedMsg struct{ err error }
+
+type themeBlock struct {
+	lines []string
+	gap   bool
+}
 
 func newThemeScreen(current Theme, catalog themeCatalog, auto bool) *themeScreen {
 	screen := &themeScreen{origin: current, look: current.Render, auto: auto}
@@ -135,6 +148,7 @@ func (m *model) closeTheme() {
 }
 
 func (m *model) previewTheme() {
+	m.themeScr.saved = false
 	m.applyTheme(m.themeScr.preview())
 }
 
@@ -203,8 +217,10 @@ func (m *model) commitTheme() {
 	section.Italic = overrideSetting(preview.Render.Italic, base.Render.Italic)
 	if err := m.saveThemeConfig(section); err != nil {
 		m.flash = "thème non enregistré : " + err.Error()
+		return
 	}
-	m.closeTheme()
+	screen.origin = preview
+	screen.saved = true
 }
 
 func overrideSetting[Choice comparable](value, inherited Choice) *Choice {
@@ -260,13 +276,15 @@ func (m *model) themeScreenView() string {
 func (m *model) themeBody(width, rows int) []string {
 	if width >= themeScreenSideBySide {
 		left := m.themeControlsFitting(themeLeftWidth, rows)
-		right := m.themePreview(width - themeLeftWidth - 1)
+		right := m.themePreview(width-themeLeftWidth-1, rows)
 		return themeColumns(left, right, themeLeftWidth, m.st.dim.Render(m.st.glyphs.divider), rows)
 	}
 	body := m.themeControlsFitting(width, rows)
-	if preview := m.themePreview(width); rows-len(body) > len(preview) {
-		body = append(body, "")
-		body = append(body, preview...)
+	if room := rows - len(body) - 1; room > 0 {
+		if preview := m.themePreview(width, room); len(preview) > 0 {
+			body = append(body, "")
+			body = append(body, preview...)
+		}
 	}
 	return clipLines(body, rows)
 }
@@ -306,16 +324,42 @@ func (m *model) themeControls(width int, gaps bool) []string {
 		themeOptionRow(styles, "bordures", borderStyles(), screen.look.Borders, borderLabel, "b"),
 		themeOptionRow(styles, "densité", []density{densityCompact, densityNormal}, screen.look.Density, densityLabel, "d"),
 		themeFlagRow(styles, screen.look.Bold, screen.look.Italic),
+		themeFontRow(styles),
+		themeFontExplainRow(styles, "un TUI ne choisit pas sa police : seule une appli"),
+		themeFontExplainRow(styles, "qui dessine sa propre fenêtre le peut"),
 	)
 	gap()
 	lines = append(lines,
 		themeSectionHead(styles, "Détection", "", width),
+		m.themeBackgroundRow(),
 		themeAutoRow(styles, screen.auto),
+		themeNoColorRow(styles),
 	)
 	for index := range lines {
 		lines[index] = truncate(lines[index], width)
 	}
 	return lines
+}
+
+func (m *model) themeBackgroundRow() string {
+	if m.themeBackground == "" {
+		return "   " + m.st.text.Render(padTo("fond", themeKeyColumn)) +
+			m.st.text.Render("inconnu") + m.st.dim.Render(" · pas lu au démarrage")
+	}
+	return "   " + m.st.text.Render(padTo("fond", themeKeyColumn)) +
+		m.st.text.Render(m.themeBackground) + m.st.dim.Render(" · lu par OSC 11 au démarrage")
+}
+
+func themeNoColorRow(styles uiStyles) string {
+	return "   " + styles.dim.Render("NO_COLOR respecté : marqueurs et gras seuls")
+}
+
+func themeFontRow(styles uiStyles) string {
+	return "   " + padTo("police", themeKeyColumn) + styles.text.Render("celle du terminal")
+}
+
+func themeFontExplainRow(styles uiStyles, text string) string {
+	return "   " + styles.dim.Render(text)
 }
 
 func (m *model) themeListLines(width int) []string {
@@ -419,51 +463,158 @@ func densityLabel(level density) string {
 	return "normale"
 }
 
-func (m *model) themePreview(width int) []string {
+func (m *model) themePreview(width, rows int) []string {
+	return fitThemeBlocks(m.themePreviewBlocks(width), width, rows)
+}
+
+func fitThemeBlocks(blocks []themeBlock, width, rows int) []string {
+	var out []string
+	for _, block := range blocks {
+		if len(block.lines) == 0 {
+			continue
+		}
+		var lines []string
+		if block.gap && len(out) > 0 {
+			lines = append(lines, "")
+		}
+		for _, line := range block.lines {
+			lines = append(lines, truncate(line, width))
+		}
+		if len(out)+len(lines) > rows {
+			break
+		}
+		out = append(out, lines...)
+	}
+	return out
+}
+
+func (m *model) themePreviewBlocks(width int) []themeBlock {
 	styles := m.st
-	glyphs := styles.glyphs
 	screen := m.themeScr
 	shown := screen.preview()
 	kept := " · pas encore gardé"
 	if shown.ID == screen.origin.ID {
 		kept = " · gardé"
 	}
-	lines := []string{
-		styles.strong.Render("Aperçu") + styles.dim.Render(" · "+shown.Label+kept),
-		"",
-		styles.text.Render("Entrée pendant un tour met maintenant le message en file."),
-		styles.green.Render(glyphs.success+" ajouté") + "  " + styles.del.Render(glyphs.failure+" retiré") + "  " + styles.warn.Render(glyphs.bolt+" attente"),
-		styles.overlaySel.Render(padTo(truncate("> ligne sélectionnée, en vidéo inverse", width), width)),
-		styles.dim.Render(glyphs.notice+" notice") + "  " + styles.red.Render("erreur"),
-		themeBarLine(styles),
+	return []themeBlock{
+		{lines: []string{styles.strong.Render("Aperçu") + styles.dim.Render(" · "+shown.Label+kept)}},
+		{lines: m.railLines()},
+		{lines: []string{styles.text.Render("tui/theme.go  tui/rail.go  README.md") + "  " + styles.dim.Render("feat/tui-v2")}},
+		{lines: m.themeToolLines(width)},
+		{lines: m.themeDiffLines(width)},
+		{lines: m.themeApprovalLines(width)},
+		{lines: m.themeLegendLines()},
+		{lines: []string{themeGaugeLine(styles)}},
+		{lines: []string{styles.overlaySel.Render(padTo(truncate("> ligne sélectionnée, en vidéo inverse", width), width))}},
+		{lines: m.themeModeLines(width)},
+		{gap: true, lines: m.themeTerminalLines()},
+		{gap: true, lines: m.themePersonalLines(shown)},
 	}
-	for index := range lines {
-		lines[index] = truncate(lines[index], width)
-	}
-	return lines
 }
 
-func themeBarLine(styles uiStyles) string {
+func (m *model) themeToolLines(width int) []string {
+	display := m.displayMode()
+	return []string{
+		renderTool(entry{text: "Read tui/theme.go", span: themeReadSpan}, width, display),
+		renderTool(entry{text: "Edit tui/theme.go +12 −4", span: themeEditSpan}, width, display),
+		renderTool(entry{text: "Bash go vet ./...", span: themeBashSpan, failed: true}, width, display),
+	}
+}
+
+func (m *model) themeDiffLines(width int) []string {
+	return diffRows([]string{
+		"-\tcolText   = \"#c6d0e0\"",
+		"+\ttext  = theme.Text",
+		"+\taccent = theme.Accent",
+	}, width, m.displayMode())
+}
+
+func (m *model) themeApprovalLines(width int) []string {
+	box := m.st.boxes(m.caps.Boxes)
+	boxWidth := min(width, approvalMaxWidth)
+	if boxWidth < themeApprovalMinWidth {
+		return nil
+	}
+	now := time.Now()
+	prompt := approvalPrompt{tool: "Bash", command: "git push origin feat/tui-v2", deadline: now.Add(themeApprovalAt)}
+	inner := boxWidth - approvalFrameCols
+	footer := box.bl + box.h + " " + m.st.dim.Render("↑↓ choisir · "+m.st.glyphs.enter+" valider · x accélérer le délai") + " "
+	return []string{
+		m.approvalTop(prompt, boxWidth, box, now),
+		approvalRow(box, m.approvalCommand(prompt, inner), inner),
+		m.approvalBorder(footer, box.br, box.h, boxWidth),
+	}
+}
+
+func (m *model) themeLegendLines() []string {
+	styles := m.st
+	glyphs := styles.glyphs
+	return []string{
+		styles.text.Render("Entrée pendant un tour met maintenant le message en file."),
+		styles.green.Render(glyphs.success+" ajouté") + "  " + styles.del.Render(glyphs.failure+" retiré") + "  " + styles.warn.Render(glyphs.bolt+" attente"),
+		styles.dim.Render(glyphs.notice+" notice") + "  " + styles.red.Render("erreur"),
+	}
+}
+
+func themeGaugeLine(styles uiStyles) string {
 	parts := []string{styles.dim.Render("ctx")}
 	for _, ratio := range []float64{0.41, 0.85, 0.97} {
-		parts = append(parts, themeBar(styles, ratio))
+		percent := int(math.Round(ratio * percentScale))
+		parts = append(parts, contextGauge(ratio, styles)+styles.dim.Render(fmt.Sprintf(" %d%%", percent)))
 	}
 	return strings.Join(parts, "  ")
 }
 
-func themeBar(styles uiStyles, ratio float64) string {
-	filled := int(math.Round(ratio * themeGaugeCells))
-	fill := styles.accent
-	switch {
-	case ratio >= ctxAlarm:
-		fill = styles.red
-	case ratio >= ctxWarn:
-		fill = styles.warn
+func (m *model) themeModeLines(width int) []string {
+	strip := m.modeStripView(&tab{}, width)
+	return []string{strip[0] + "  " + m.st.spinner.Render(m.spinFrame()) + m.st.dim.Render(" En cours…")}
+}
+
+func (m *model) themeTerminalLines() []string {
+	styles := m.st
+	screen := m.themeScr
+	themeID, auto := m.themeCfg.themeID(), m.themeCfg.autoTheme()
+	saved := ""
+	if screen.saved {
+		themeID, auto = screen.origin.ID, screen.auto
+		saved = styles.dim.Render("   enregistré à l’instant")
 	}
-	percent := int(math.Round(ratio * percentScale))
-	return fill.Render(strings.Repeat(styles.glyphs.gaugeFull, filled)) +
-		styles.dim.Render(strings.Repeat(styles.glyphs.gaugeEmpty, themeGaugeCells-filled)) +
-		styles.dim.Render(fmt.Sprintf(" %d%%", percent))
+	return []string{
+		styles.text.Bold(true).Render(m.terminalConfigPath()),
+		styles.dim.Render("[terminal]"),
+		styles.text.Render("theme      = ") + styles.accent.Bold(true).Render(quoteTheme(themeID)) + saved,
+		styles.text.Render("auto_theme = " + strconv.FormatBool(auto)),
+	}
+}
+
+func (m *model) themePersonalLines(shown Theme) []string {
+	styles := m.st
+	render := shown.Render
+	tokens := [][2]string{
+		{"name", quoteTheme(themePersonalName)},
+		{"base", quoteTheme(m.themeScr.baseID())},
+		{"accent", quoteTheme(string(shown.Colors.Accent))},
+		{"add", quoteTheme(string(shown.Colors.Add))},
+		{"del", quoteTheme(string(shown.Colors.Del))},
+		{"wait", quoteTheme(string(shown.Colors.Wait))},
+		{"glyphs", quoteTheme(render.Glyphs.String())},
+		{"borders", quoteTheme(render.Borders.String())},
+		{"density", quoteTheme(render.Density.String())},
+		{"bold", strconv.FormatBool(render.Bold)},
+		{"italic", strconv.FormatBool(render.Italic)},
+	}
+	lines := []string{styles.text.Bold(true).Render(filepath.Join(themesDirFor(m.themeDir), themePersonalFile))}
+	for _, token := range tokens {
+		lines = append(lines, "   "+styles.text.Render(padTo(token[0], themeTokenColumn))+styles.dim.Render("= ")+styles.text.Render(token[1]))
+	}
+	return append(lines,
+		styles.dim.Render("hérite de base, ne nomme que ce qui change"),
+		styles.dim.Render("autres thèmes intégrés : clair, terminal, contraste élevé"),
+	)
+}
+
+func quoteTheme(value string) string {
+	return "\"" + value + "\""
 }
 
 func themeColumns(left, right []string, leftWidth int, divider string, rows int) []string {

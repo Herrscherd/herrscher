@@ -164,11 +164,14 @@ func TestSmartRatesOnlyWhatTheRulesLeaveOpen(t *testing.T) {
 		{Deny, true, false},
 	}
 	for _, c := range cases {
-		if got := Judged(ModeSmart, c.decided, c.matched); got != c.want {
+		if got := Judged(ModeSmart, "Bash", c.decided, c.matched); got != c.want {
 			t.Fatalf("Judged(smart, %s, %v) = %v, want %v", c.decided, c.matched, got, c.want)
 		}
 	}
-	if Judged(ModeAsk, Allow, false) {
+	if Judged(ModeSmart, "Read", Allow, false) {
+		t.Fatal("a read is never sent to the model, as before")
+	}
+	if Judged(ModeAsk, "Bash", Allow, false) {
 		t.Fatal("only smart mode asks a model")
 	}
 }
@@ -182,19 +185,32 @@ func TestSmartWithoutAnyRuleStillPassesWhenTheModelSaysSo(t *testing.T) {
 	}
 }
 
-func TestRuleForNamesOnlyTheSameCall(t *testing.T) {
+func TestRuleForGeneralizesABashCallToItsTwoFirstWords(t *testing.T) {
 	rule, ok := RuleFor("Bash", "git push origin feat/x")
 	if !ok {
-		t.Fatal("an exact subject must get a rule")
+		t.Fatal("a bash command must get a rule")
 	}
-	if rule.String() != "allow Bash(git push origin feat/x)" {
+	if rule.String() != "allow Bash(git push*)" {
 		t.Fatalf("got %q", rule.String())
 	}
 	if !(Policy{rule}).matches(Request{Tool: "Bash", Subject: "git push origin feat/x"}) {
 		t.Fatal("the rule must let its own call through")
 	}
-	if (Policy{rule}).matches(Request{Tool: "Bash", Subject: "git push origin feat/x --force"}) {
-		t.Fatal("the rule must not let a longer call through")
+	if (Policy{rule}).matches(Request{Tool: "Bash", Subject: "git status"}) {
+		t.Fatal("the rule must not let another command through")
+	}
+}
+
+func TestRuleForKeepsOneWordBashAndOtherToolsExact(t *testing.T) {
+	for _, c := range []struct{ tool, subject, want string }{
+		{"Bash", "ls", "allow Bash(ls)"},
+		{"Edit", "/repo/a b.go", "allow Edit(/repo/a b.go)"},
+		{"WebFetch", "https://x.dev/a b", "allow WebFetch(https://x.dev/a b)"},
+	} {
+		rule, ok := RuleFor(c.tool, c.subject)
+		if !ok || rule.String() != c.want {
+			t.Fatalf("RuleFor(%q, %q) = %q, %v; want %q", c.tool, c.subject, rule, ok, c.want)
+		}
 	}
 }
 

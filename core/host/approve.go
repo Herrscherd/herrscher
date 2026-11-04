@@ -100,7 +100,10 @@ func (t *approvalTable) warnf(format string, args ...any) {
 	logWriteFailure(fmt.Fprintf(t.warn, format, args...))
 }
 
-func (t *approvalTable) rated(ctx context.Context, req approval.Request, fallback approval.Decision) approval.Decision {
+func (t *approvalTable) rated(ctx context.Context, sessions *sessionTable, session string, req approval.Request, fallback approval.Decision) approval.Decision {
+	if risk, ok := sessions.verdict(session, req); ok {
+		return risk.Decision()
+	}
 	if t.judge == nil {
 		t.warnf("approvals: smart mode has no model to rate %s, so it is decided as in ask mode\n", describeRequest(req))
 		return fallback
@@ -110,6 +113,7 @@ func (t *approvalTable) rated(ctx context.Context, req approval.Request, fallbac
 		t.warnf("approvals: smart mode could not rate %s (%v), so it is decided as in ask mode\n", describeRequest(req), err)
 		return fallback
 	}
+	sessions.setVerdict(session, req, risk)
 	return risk.Decision()
 }
 
@@ -122,8 +126,8 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	if sessions.remembers(session, req) {
 		return approval.Allow, ""
 	}
-	if approval.Judged(mode, decided, matched) {
-		decided = approvals.rated(ctx, req, decided)
+	if approval.Judged(mode, req.Tool, decided, matched) {
+		decided = approvals.rated(ctx, sessions, session, req, decided)
 	}
 	if decided == approval.Allow {
 		return approval.Allow, ""
@@ -149,7 +153,7 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	warnWaitOutlivesTheHook(os.Stderr, wait)
 
 	octx, cancel := context.WithTimeout(ctx, wait)
-	askApprovalOn(octx, sessions, session, approvalPrompt(req), pending.id, time.Now().Add(wait))
+	askApprovalOn(octx, sessions, session, approvalPrompt(req), pending.id, req, time.Now().Add(wait))
 	cancel()
 
 	select {
@@ -243,6 +247,26 @@ func (t *approvalTable) addRule(req approval.Request) {
 	}
 	if err := t.rules.AddApprovalRule(rule.String()); err != nil {
 		t.warnf("approvals: %s was allowed once: the rule %q was not saved: %v\n", describeRequest(req), rule.String(), err)
+	}
+}
+
+func (s *sessionTable) verdict(session string, req approval.Request) (approval.Risk, bool) {
+	if s == nil {
+		return "", false
+	}
+	driver := s.lookup(session)
+	if driver == nil {
+		return "", false
+	}
+	return driver.verdict(req)
+}
+
+func (s *sessionTable) setVerdict(session string, req approval.Request, risk approval.Risk) {
+	if s == nil {
+		return
+	}
+	if driver := s.lookup(session); driver != nil {
+		driver.setVerdict(req, risk)
 	}
 }
 
@@ -352,10 +376,21 @@ func clip(text string) string {
 	return string(runes)
 }
 
-func approvalChoices(approvalID string) []contracts.Choice {
+func approvalChoices(approvalID string, req approval.Request) []contracts.Choice {
 	choices := make([]contracts.Choice, 0, len(approvalScopes))
 	for _, scope := range approvalScopes {
-		choices = append(choices, contracts.Choice{Label: string(scope), Value: approvalPickPrefix + approvalID + ":" + string(scope)})
+		choices = append(choices, contracts.Choice{Label: scopeLabel(scope, req), Value: approvalPickPrefix + approvalID + ":" + string(scope)})
 	}
 	return choices
+}
+
+func scopeLabel(scope approvalScope, req approval.Request) string {
+	if scope != scopeAlways {
+		return string(scope)
+	}
+	rule, ok := approval.RuleFor(req.Tool, req.Subject)
+	if !ok {
+		return string(scope)
+	}
+	return string(scope) + " " + rule.Tool + "(" + rule.Pattern + ")"
 }

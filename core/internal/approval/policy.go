@@ -166,15 +166,25 @@ func (r Risk) Decision() Decision {
 	return Ask
 }
 
-func Judged(m Mode, decided Decision, matched bool) bool {
-	return m == ModeSmart && decided != Deny && (decided != Allow || !matched)
+var readOnlyTools = map[string]bool{"Read": true, "Glob": true, "Grep": true, "LS": true}
+
+func IsRead(tool string) bool {
+	return readOnlyTools[tool]
+}
+
+func Judged(m Mode, tool string, decided Decision, matched bool) bool {
+	return m == ModeSmart && !IsRead(tool) && decided != Deny && (decided != Allow || !matched)
 }
 
 func RuleFor(tool, subject string) (Rule, bool) {
 	if tool == "" || subject == "" || strings.ContainsAny(tool, "()* \r\n") || strings.ContainsAny(subject, "*?\r\n") {
 		return Rule{}, false
 	}
-	rule := Rule{Decision: Allow, Tool: tool, Pattern: subject}
+	pattern := subject
+	if words := strings.Fields(subject); tool == "Bash" && len(words) > 1 {
+		pattern = words[0] + " " + words[1] + "*"
+	}
+	rule := Rule{Decision: Allow, Tool: tool, Pattern: pattern}
 	parsed, err := ParseRule(rule.String())
 	if err != nil || parsed != rule {
 		return Rule{}, false

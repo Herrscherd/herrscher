@@ -247,10 +247,12 @@ answers, and the tool call waits. The four are:
 - `allow`: this call runs, and the next identical one asks again.
 - `allow --session`: this call runs, and the same call passes for the rest of
   the session. The grant lives with the session and ends when it stops.
-- `allow --always`: this call runs, and a rule for it is written the way
-  `approve rule` writes one, so it keeps passing after restarts. A call whose
-  subject holds a wildcard or a line break gets no rule, and the operator is
-  told so.
+- `allow --always`: this call runs, and a rule is written the way `approve rule`
+  writes one, so it keeps passing after restarts. For a shell command the rule
+  names its first two words and what follows them (`Bash(git push*)`; a
+  one-word command stays exact); other tools name the exact subject. The menu
+  shows the rule before you press it. A subject holding a wildcard or a line
+  break gets no rule, and the operator is told so.
 - `deny`, optionally with `--reason`: the call is refused, and the reason is
   what the agent reads in its refusal.
 
@@ -261,13 +263,15 @@ so a menu can show when the question expires.
 A session is `ask`, `strict` (everything a rule does not name is asked about too),
 `smart` or `bypass` (no hook at all).
 
-`smart` lets a model rate each call that no rule settles: a `low` rating passes
-the call, `medium` and `high` ask you as `ask` does. The model is the first installed
+`smart` lets a model rate each call that no rule settles, except reads (`Read`,
+`Glob`, `Grep`, `LS`), which pass as before. A `low` rating passes the call,
+`medium` and `high` ask you as `ask` does. The rating is kept for the session,
+so the same subject is not rated twice. The model is the first installed
 LLM backend, the one the memory extractor uses, and `HERRSCHER_CURATION_MODEL`
 overrides its model. Without any LLM backend, or when
 the rating fails, smart decides as `ask` does and says so to the operator: a call
 no rule names runs unasked, a call a rule asks about is put to you. Smart costs
-one model call per unmatched tool call, reads included.
+one model call per distinct unmatched subject.
 
 How it is wired in depends on the backend, and each backend says for itself what
 it can enforce. Claude Code gets a `PreToolUse` hook materialized into the

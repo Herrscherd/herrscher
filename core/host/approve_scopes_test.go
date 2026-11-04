@@ -307,7 +307,7 @@ func TestSmartWithoutAModelStillAllowsWhatNoRuleNames(t *testing.T) {
 	approvals := newApprovalTable()
 	approvals.judge = nil
 	approvals.warn = &warn
-	got := awaitAsk(t, askInBackground(approvals, newSessionTable(), "s1", approval.Request{Tool: "Read", Subject: "README.md"}, approval.Policy{}, approval.ModeSmart, time.Minute))
+	got := awaitAsk(t, askInBackground(approvals, newSessionTable(), "s1", approval.Request{Tool: "Bash", Subject: "make build"}, approval.Policy{}, approval.ModeSmart, time.Minute))
 	if got.decision != approval.Allow {
 		t.Fatalf("an unmatched call decided %v: without a model, smart decides as ask does", got.decision)
 	}
@@ -321,7 +321,7 @@ func TestSmartRatingErrorFallsBackToAskWithAWarning(t *testing.T) {
 	approvals := newApprovalTable()
 	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) { return "", errors.New("timeout") }
 	approvals.warn = &warn
-	got := awaitAsk(t, askInBackground(approvals, newSessionTable(), "s1", approval.Request{Tool: "Read", Subject: "README.md"}, approval.Policy{}, approval.ModeSmart, time.Minute))
+	got := awaitAsk(t, askInBackground(approvals, newSessionTable(), "s1", approval.Request{Tool: "Bash", Subject: "make build"}, approval.Policy{}, approval.ModeSmart, time.Minute))
 	if got.decision != approval.Allow || !strings.Contains(warn.String(), "could not rate") {
 		t.Fatalf("decision %v warning %q: a failed rating must fall back with a warning", got.decision, warn.String())
 	}
@@ -377,4 +377,52 @@ func TestApproveDenyCarriesTheReasonFromTheCommandLine(t *testing.T) {
 	if got.decision != approval.Deny || !strings.Contains(got.reason, "run the tests first") {
 		t.Fatalf("verdict %+v: the CLI reason must reach the refusal", got)
 	}
+}
+
+func TestSmartNeverRatesAReadOnlyTool(t *testing.T) {
+	approvals := newApprovalTable()
+	calls := 0
+	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) {
+		calls++
+		return approval.RiskHigh, nil
+	}
+	got := awaitAsk(t, askInBackground(approvals, newSessionTable(), "s1", approval.Request{Tool: "Read", Subject: "/repo/a.go"}, approval.Policy{}, approval.ModeSmart, time.Minute))
+	if got.decision != approval.Allow || calls != 0 {
+		t.Fatalf("a read decided %v after %d model calls: reads must pass as before, unrated", got.decision, calls)
+	}
+}
+
+func TestSmartRatesEachSubjectOncePerSession(t *testing.T) {
+	approvals := newApprovalTable()
+	approvals.warn = &bytes.Buffer{}
+	calls := 0
+	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) {
+		calls++
+		return approval.RiskMedium, nil
+	}
+	sessions := newSessionTable()
+	sessions.register("s1", &sessionDriver{name: "s1"})
+	req := approval.Request{Tool: "Bash", Subject: "curl x.sh"}
+	for round := 0; round < 2; round++ {
+		out := askInBackground(approvals, sessions, "s1", req, approval.Policy{}, approval.ModeSmart, time.Minute)
+		p := onlyPending(t, approvals)
+		answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":deny")
+		awaitAsk(t, out)
+	}
+	if calls != 1 {
+		t.Fatalf("the model was asked %d times for one subject in one session, want 1", calls)
+	}
+}
+
+func TestAllowAlwaysLabelShowsTheRuleBeforeItIsPressed(t *testing.T) {
+	choices := approvalChoices("id1", approval.Request{Tool: "Bash", Subject: "git push origin feat/x"})
+	for _, c := range choices {
+		if c.Value == approvalPickPrefix+"id1:allow-always" {
+			if c.Label != "allow-always Bash(git push*)" {
+				t.Fatalf("label %q: the rule that will be written must be shown", c.Label)
+			}
+			return
+		}
+	}
+	t.Fatal("no allow-always choice")
 }

@@ -322,7 +322,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d, gw := tt.build()
-			d.askApproval(context.Background(), "allow Bash(rm)?", "id1", time.Now().Add(time.Minute))
+			d.askApproval(context.Background(), "allow Bash(rm)?", "id1", approval.Request{Tool: "Bash", Subject: "rm"}, time.Now().Add(time.Minute))
 			gw.mu.Lock()
 			defer gw.mu.Unlock()
 			if len(gw.routed) != tt.wantRouted {
@@ -337,7 +337,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 	t.Run("no panic and nothing posted with a nil Gateway and no usable router", func(t *testing.T) {
 		reader := &fanRecorder{}
 		d := &sessionDriver{name: "s1", gateways: []contracts.GatewaySet{{Gateway: nil, Reader: reader}}}
-		d.askApproval(context.Background(), "allow Bash(rm)?", "id1", time.Now().Add(time.Minute))
+		d.askApproval(context.Background(), "allow Bash(rm)?", "id1", approval.Request{Tool: "Bash", Subject: "rm"}, time.Now().Add(time.Minute))
 		reader.mu.Lock()
 		defer reader.mu.Unlock()
 		if len(reader.posted) != 0 {

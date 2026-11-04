@@ -70,6 +70,7 @@ type sessionDriver struct {
 	renderers     map[string]*gatewayRenderer
 	grantMu       sync.Mutex
 	grants        map[approval.Request]bool
+	verdicts      map[approval.Request]approval.Risk
 
 	hangup         chan struct{}
 	enqueueTimeout time.Duration
@@ -207,8 +208,24 @@ func (d *sessionDriver) remembered(req approval.Request) bool {
 	return d.grants[req]
 }
 
-func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID string, deadline time.Time) {
-	opts := approvalChoices(approvalID)
+func (d *sessionDriver) verdict(req approval.Request) (approval.Risk, bool) {
+	d.grantMu.Lock()
+	defer d.grantMu.Unlock()
+	risk, ok := d.verdicts[req]
+	return risk, ok
+}
+
+func (d *sessionDriver) setVerdict(req approval.Request, risk approval.Risk) {
+	d.grantMu.Lock()
+	defer d.grantMu.Unlock()
+	if d.verdicts == nil {
+		d.verdicts = make(map[approval.Request]approval.Risk)
+	}
+	d.verdicts[req] = risk
+}
+
+func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID string, req approval.Request, deadline time.Time) {
+	opts := approvalChoices(approvalID, req)
 	for _, gateway := range d.gateways {
 		channel := d.renderChannel(gateway)
 		if gateway.Gateway != nil {
@@ -238,12 +255,12 @@ func announceApprovalDeadline(gateway contracts.Gateway, conv contracts.Conversa
 	}
 }
 
-func askApprovalOn(ctx context.Context, sessions *sessionTable, session, prompt, approvalID string, deadline time.Time) {
+func askApprovalOn(ctx context.Context, sessions *sessionTable, session, prompt, approvalID string, req approval.Request, deadline time.Time) {
 	driver := sessions.lookup(session)
 	if driver == nil {
 		return
 	}
-	driver.askApproval(ctx, prompt, approvalID, deadline)
+	driver.askApproval(ctx, prompt, approvalID, req, deadline)
 }
 
 const interruptSendTimeout = 2 * time.Second

@@ -1291,7 +1291,7 @@ func (m *model) hintText() string {
 	if m.paletteOpen() {
 		return m.st.dim.Render("↑↓ naviguer · ⇞⇟ page · Tab compléter · Échap fermer")
 	}
-	return m.st.dim.Render("? raccourcis")
+	return m.st.dim.Render("? aide")
 }
 
 func (m *model) footer(width int) string {

@@ -320,3 +320,23 @@ func TestModeStripKeepsOneGapAroundEverySegment(t *testing.T) {
 		t.Errorf("mode strip = %q, want an even gap around each segment", strip)
 	}
 }
+
+func TestPlanMenuShiftTabLeavesTheMenuForTheNextMode(t *testing.T) {
+	f := &fakeBackend{sessions: namedSession()}
+	m := modeSession(f)
+	m.tabs["a"].setMode(modePlan)
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "1. read", Done: true}})
+	if !strings.Contains(ansi.Strip(m.planMenuView()), "⇧⇥ changer de mode") {
+		t.Fatalf("the plan menu footer must offer ⇧⇥: %q", ansi.Strip(m.planMenuView()))
+	}
+
+	cmd, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyShiftTab})
+	settle(m, cmd)
+
+	if m.planMenu != nil {
+		t.Fatal("⇧⇥ must close the plan menu")
+	}
+	if got := m.tabs["a"].modeID(); got != nextModeID(modePlan) {
+		t.Fatalf("⇧⇥ from the plan menu must move to %s, got %s", nextModeID(modePlan), got)
+	}
+}

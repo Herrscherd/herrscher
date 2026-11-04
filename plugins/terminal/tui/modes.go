@@ -413,6 +413,9 @@ func (m *model) handlePlanKey(msg tea.KeyMsg) tea.Cmd {
 		return m.choosePlan(m.planMenu.sel)
 	case tea.KeyEsc:
 		return m.choosePlan(len(planOptions()) - 1)
+	case tea.KeyShiftTab:
+		m.planMenu = nil
+		return m.cycleMode()
 	case tea.KeyCtrlC:
 		return m.overlayCtrlC()
 	case tea.KeyRunes:
@@ -438,6 +441,6 @@ func (m *model) planMenuView() string {
 		}
 		lines = append(lines, m.st.dim.Render(ansi.Truncate(modeStripIndent+option.say, width, "…")))
 	}
-	footer := "↑↓ choisir · ⏎ valider · échap continuer à planifier"
+	footer := "↑↓ choisir · ⏎ valider · ⇧⇥ changer de mode"
 	return strings.Join(append(lines, m.st.dim.Render(ansi.Truncate(footer, width, "…"))), "\n")
 }

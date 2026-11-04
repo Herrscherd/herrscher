@@ -29,6 +29,7 @@ var (
 	// ErrKeyFileOpen reports a key file readable or writable by anyone but its owner.
 	ErrKeyFileOpen       = errors.New("key file is readable by others than its owner, chmod 600 it")
 	errKeyFileNotRegular = errors.New("key file must be a regular file, not a link, pipe or device")
+	errKeyFileLinkedDir  = errors.New("key file directory must not be a symbolic link")
 	// ErrKeyEmpty reports a key source that yields a blank key.
 	ErrKeyEmpty = errors.New("key source yields an empty key")
 	// ErrKeyCommand reports a key_cmd that failed; its output is never included.
@@ -66,7 +67,7 @@ func (s Secret) GoString() string {
 type Loader struct {
 	Getenv   func(string) string
 	Lstat    func(string) (fs.FileInfo, error)
-	ReadFile func(string) ([]byte, error)
+	OpenFile func(string) (*os.File, error)
 	Run      func(ctx context.Context, argv []string) ([]byte, error)
 	Home     func() (string, error)
 }
@@ -76,7 +77,7 @@ func OSLoader() Loader {
 	return Loader{
 		Getenv:   os.Getenv,
 		Lstat:    os.Lstat,
-		ReadFile: os.ReadFile,
+		OpenFile: openKeyFile,
 		Run:      runKeyCommand,
 		Home:     os.UserHomeDir,
 	}
@@ -138,17 +139,57 @@ func (l Loader) fromFile(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	info, err := l.Lstat(resolved)
+	if linkErr := l.refuseLinkedParents(resolved); linkErr != nil {
+		return "", linkErr
+	}
+	file, openErr := l.OpenFile(resolved)
+	if openErr != nil {
+		return "", fmt.Errorf("open key file: %w", openErr)
+	}
+	value, readErr := readOpenKey(file)
+	closeErr := file.Close()
+	if readErr != nil {
+		return "", readErr
+	}
+	if closeErr != nil {
+		return "", fmt.Errorf("close key file: %w", closeErr)
+	}
+	return value, nil
+}
+
+func (l Loader) refuseLinkedParents(path string) error {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("resolve key file path: %w", err)
+	}
+	for dir := filepath.Dir(absolute); ; {
+		info, statErr := l.Lstat(dir)
+		if statErr != nil {
+			return fmt.Errorf("stat key file directory: %w", statErr)
+		}
+		if info.Mode()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("%s: %w", dir, errKeyFileLinkedDir)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return nil
+		}
+		dir = parent
+	}
+}
+
+func readOpenKey(file *os.File) (string, error) {
+	info, err := file.Stat()
 	if err != nil {
 		return "", fmt.Errorf("stat key file: %w", err)
 	}
 	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("%s: %w", filepath.Base(resolved), errKeyFileNotRegular)
+		return "", fmt.Errorf("%s: %w", filepath.Base(file.Name()), errKeyFileNotRegular)
 	}
 	if info.Mode().Perm()&keyFileForbiddenBits != 0 {
-		return "", fmt.Errorf("%s: %w", filepath.Base(resolved), ErrKeyFileOpen)
+		return "", fmt.Errorf("%s: %w", filepath.Base(file.Name()), ErrKeyFileOpen)
 	}
-	data, err := l.ReadFile(resolved)
+	data, err := io.ReadAll(file)
 	if err != nil {
 		return "", fmt.Errorf("read key file: %w", err)
 	}

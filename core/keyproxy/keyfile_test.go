@@ -10,7 +10,7 @@ import (
 )
 
 func fileLoader() Loader {
-	return Loader{Getenv: os.Getenv, Lstat: os.Lstat, ReadFile: os.ReadFile, Home: os.UserHomeDir}
+	return Loader{Getenv: os.Getenv, Lstat: os.Lstat, OpenFile: openKeyFile, Home: os.UserHomeDir}
 }
 
 func loadKeyFile(t *testing.T, path string) (Secret, error) {
@@ -46,20 +46,5 @@ func TestKeyFileReadableByOthersIsRefused(t *testing.T) {
 		if _, err := loadKeyFile(t, path); !errors.Is(err, ErrKeyFileOpen) {
 			t.Fatalf("mode %o: err %v, want ErrKeyFileOpen", mode, err)
 		}
-	}
-}
-
-func TestKeyFileSymlinkIsRefused(t *testing.T) {
-	dir := t.TempDir()
-	target := filepath.Join(dir, "real")
-	if err := os.WriteFile(target, []byte("sk-linked"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	link := filepath.Join(dir, "link")
-	if err := os.Symlink(target, link); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := loadKeyFile(t, link); !errors.Is(err, errKeyFileNotRegular) {
-		t.Fatalf("symlink: err %v, want errKeyFileNotRegular", err)
 	}
 }

@@ -2,10 +2,10 @@ package checkpoint
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -22,7 +22,7 @@ func initRepo(t *testing.T) string {
 
 func run(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(t.Context(), "git", args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -52,13 +52,14 @@ func read(t *testing.T, dir, rel string) string {
 }
 
 func TestTakeLeavesIndexAndWorktreeAlone(t *testing.T) {
+	var store Store
 	dir := initRepo(t)
 	write(t, dir, "tui/frame.go", "package tui // edited\n")
 	write(t, dir, "new.txt", "untracked\n")
 	indexBefore := run(t, dir, "ls-files", "-s")
 	stagedBefore := run(t, dir, "diff", "--cached", "--name-only")
 
-	if _, err := Take(context.Background(), dir, "alpha", Meta{Turn: "t1", Text: "premier message"}); err != nil {
+	if _, err := store.Take(context.Background(), dir, "alpha", Meta{Turn: "t1", Text: "premier message"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -74,17 +75,18 @@ func TestTakeLeavesIndexAndWorktreeAlone(t *testing.T) {
 }
 
 func TestListReturnsCheckpointsInOrderWithMessage(t *testing.T) {
+	var store Store
 	dir := initRepo(t)
 	ctx := context.Background()
 	write(t, dir, "a.txt", "one\n")
-	if _, err := Take(ctx, dir, "alpha", Meta{Turn: "t1", Text: "ajoute un fichier"}); err != nil {
+	if _, err := store.Take(ctx, dir, "alpha", Meta{Turn: "t1", Text: "ajoute un fichier"}); err != nil {
 		t.Fatal(err)
 	}
 	write(t, dir, "a.txt", "two\n")
-	if _, err := Take(ctx, dir, "alpha", Meta{Turn: "t2", Text: "modifie le fichier"}); err != nil {
+	if _, err := store.Take(ctx, dir, "alpha", Meta{Turn: "t2", Text: "modifie le fichier"}); err != nil {
 		t.Fatal(err)
 	}
-	entries, err := List(ctx, dir, "alpha")
+	entries, err := store.List(ctx, dir, "alpha")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,22 +96,23 @@ func TestListReturnsCheckpointsInOrderWithMessage(t *testing.T) {
 	if entries[0].Text != "ajoute un fichier" || entries[1].Turn != "t2" {
 		t.Fatalf("entries lost their message or turn: %+v", entries)
 	}
-	other, err := List(ctx, dir, "beta")
+	other, err := store.List(ctx, dir, "beta")
 	if err != nil || len(other) != 0 {
 		t.Fatalf("other session sees checkpoints: %+v %v", other, err)
 	}
 }
 
 func TestChangesListsFilesTouchedBetweenCheckpoints(t *testing.T) {
+	var store Store
 	dir := initRepo(t)
 	ctx := context.Background()
-	first, err := Take(ctx, dir, "alpha", Meta{Turn: "t1", Text: "premier"})
+	first, err := store.Take(ctx, dir, "alpha", Meta{Turn: "t1", Text: "premier"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	write(t, dir, "tui/frame.go", "package tui\nvar x = 1\n")
 	write(t, dir, "added.go", "package x\n")
-	second, err := Take(ctx, dir, "alpha", Meta{Turn: "t2", Text: "second"})
+	second, err := store.Take(ctx, dir, "alpha", Meta{Turn: "t2", Text: "second"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +120,7 @@ func TestChangesListsFilesTouchedBetweenCheckpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[string]Change{}
+	got := make(map[string]Change)
 	for _, change := range changes {
 		got[change.Path] = change
 	}
@@ -130,15 +133,16 @@ func TestChangesListsFilesTouchedBetweenCheckpoints(t *testing.T) {
 }
 
 func TestRestoreRevertsCodeToCheckpointAndUndoBringsBackCurrent(t *testing.T) {
+	var store Store
 	dir := initRepo(t)
 	ctx := context.Background()
-	if _, err := Take(ctx, dir, "alpha", Meta{Turn: "t1", Text: "avant"}); err != nil {
+	if _, err := store.Take(ctx, dir, "alpha", Meta{Turn: "t1", Text: "avant"}); err != nil {
 		t.Fatal(err)
 	}
 	write(t, dir, "tui/frame.go", "package tui // after\n")
 	write(t, dir, "created.go", "package x\n")
 
-	if _, err := Restore(ctx, dir, "alpha", 1); err != nil {
+	if _, err := store.Restore(ctx, dir, "alpha", 1); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, dir, "tui/frame.go"); got != "package tui\n" {
@@ -147,11 +151,11 @@ func TestRestoreRevertsCodeToCheckpointAndUndoBringsBackCurrent(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "created.go")); !os.IsNotExist(err) {
 		t.Fatalf("file created after checkpoint still present: %v", err)
 	}
-	if !HasUndo(ctx, dir, "alpha") {
+	if !store.HasUndo(ctx, dir, "alpha") {
 		t.Fatal("restore did not keep an undo point")
 	}
 
-	if err := Undo(ctx, dir, "alpha"); err != nil {
+	if err := store.Undo(ctx, dir, "alpha"); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, dir, "tui/frame.go"); got != "package tui // after\n" {
@@ -163,15 +167,17 @@ func TestRestoreRevertsCodeToCheckpointAndUndoBringsBackCurrent(t *testing.T) {
 }
 
 func TestUndoWithoutRestoreFails(t *testing.T) {
+	var store Store
 	dir := initRepo(t)
-	if err := Undo(context.Background(), dir, "alpha"); err == nil || !strings.Contains(err.Error(), "nothing to undo") {
+	if err := store.Undo(context.Background(), dir, "alpha"); !errors.Is(err, ErrNoUndo) {
 		t.Fatalf("undo err = %v", err)
 	}
 }
 
 func TestRejectsSessionNameWithSeparator(t *testing.T) {
+	var store Store
 	dir := initRepo(t)
-	if _, err := Take(context.Background(), dir, "a/b", Meta{}); err == nil {
+	if _, err := store.Take(context.Background(), dir, "a/b", Meta{}); err == nil {
 		t.Fatal("session name with / accepted")
 	}
 }

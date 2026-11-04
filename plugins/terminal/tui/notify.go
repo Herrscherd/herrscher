@@ -235,7 +235,7 @@ func (m *model) toastTexts() []string {
 			texts = append(texts, m.st.text.Render(text))
 		}
 	}
-	return append(texts, m.st.dim.Render(m.toast.signal+" · ⌃P y aller"))
+	return append(texts, m.st.dim.Render(joinNonEmpty(m.toast.signal, m.labelledHint(actToastJump, "y aller", ctxToast))))
 }
 
 func squeezeToastTexts(texts []string, room, inner int) []string {

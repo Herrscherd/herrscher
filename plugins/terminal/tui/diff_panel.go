@@ -214,56 +214,104 @@ func (m *model) handleDiffKey(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *model) handleDiffPanelKey(msg tea.KeyMsg) tea.Cmd {
-	panel := &m.diff
-	switch msg.String() {
-	case keyEsc, keyCtrlD:
-		panel.open = false
-	case keyCtrlC:
-		cmd, _ := m.interruptOrQuit()
-		return cmd
-	case keyUp:
-		panel.moveSel(-1)
-	case keyDown:
-		panel.moveSel(1)
-	case keyPgUp:
-		panel.scrollBy(-diffPageRows)
-	case keyPgDown:
-		panel.scrollBy(diffPageRows)
-	case keySpace:
-		panel.toggleReviewed()
-	case keyEnter:
-		return m.editDiffFile()
-	case "i":
-		if _, ok := panel.selected(); ok {
-			panel.dlg, panel.field = dialogNote, ""
-		}
-	case "c":
-		panel.dlg, panel.message, panel.editing = dialogCommit, draftCommitMessage(panel.report.Files), false
-	case "p":
-		panel.message = draftCommitMessage(panel.report.Files)
-		return m.commitCmd(true)
-	case "b":
-		panel.toggleScope()
-		return m.loadDiffCmd()
+	chosen := m.stackAction(msg, ctxDiffPanel)
+	if run, ok := m.tables().diffPanel[chosen]; ok {
+		return run(m, msg)
 	}
 	return nil
 }
 
+func diffPanelRuns() map[keyAction]keyRun {
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actDiffDismiss, stepKey(func(app *model) { app.diff.open = false }))
+		set(actInterrupt, cmdKey(func(app *model) tea.Cmd {
+			cmd, _ := app.interruptOrQuit()
+			return cmd
+		}))
+		set(actDiffPrevFile, stepKey(func(app *model) { app.diff.moveSel(-1) }))
+		set(actDiffNextFile, stepKey(func(app *model) { app.diff.moveSel(1) }))
+		set(actScrollPageUp, stepKey(func(app *model) { app.diff.scrollBy(-diffPageRows) }))
+		set(actScrollPageDown, stepKey(func(app *model) { app.diff.scrollBy(diffPageRows) }))
+		set(actDiffReviewed, stepKey(func(app *model) { app.diff.toggleReviewed() }))
+		set(actDiffOpenFile, cmdKey((*model).editDiffFile))
+		set(actDiffNote, stepKey(openDiffNote))
+		set(actDiffCommit, stepKey(openDiffCommit))
+		set(actDiffPR, cmdKey(draftAndCommitPR))
+		set(actCycleDiffBase, cmdKey(toggleDiffBase))
+	})
+}
+
+func openDiffNote(app *model) {
+	if _, ok := app.diff.selected(); ok {
+		app.diff.dlg, app.diff.field = dialogNote, ""
+	}
+}
+
+func openDiffCommit(m *model) {
+	m.diff.dlg, m.diff.message, m.diff.editing = dialogCommit, draftCommitMessage(m.diff.report.Files), false
+}
+
+func draftAndCommitPR(app *model) tea.Cmd {
+	app.diff.message = draftCommitMessage(app.diff.report.Files)
+	return app.commitCmd(true)
+}
+
+func toggleDiffBase(app *model) tea.Cmd {
+	app.diff.toggleScope()
+	return app.loadDiffCmd()
+}
+
 func (m *model) handleDiffNoteKey(msg tea.KeyMsg) tea.Cmd {
-	panel := &m.diff
-	switch msg.String() {
-	case keyEsc:
-		panel.dlg = dialogNone
-	case keyEnter:
-		return m.sendDiffNote()
-	case keyBackspace:
-		panel.field = dropLastRune(panel.field)
-	default:
-		if typed, ok := typedText(msg); ok {
-			panel.field += typed
-		}
+	chosen := m.stackAction(msg, ctxDiffNote)
+	if run, ok := m.tables().diffNote[chosen]; ok {
+		return run(m, msg)
+	}
+	m.diff.field = editDraft(m.diff.field, msg)
+	return nil
+}
+
+func diffNoteRuns() map[keyAction]keyRun {
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actDiffDismiss, stepKey(func(app *model) { app.diff.dlg = dialogNone }))
+		set(actDiffSendNote, cmdKey((*model).sendDiffNote))
+	})
+}
+
+func (m *model) handleDiffCommitKey(msg tea.KeyMsg) tea.Cmd {
+	if m.diff.editing {
+		return m.handleDiffMessageEdit(msg)
+	}
+	chosen := m.stackAction(msg, ctxDiffDialog)
+	if run, ok := m.tables().diffDialog[chosen]; ok {
+		return run(m, msg)
 	}
 	return nil
+}
+
+func diffDialogRuns() map[keyAction]keyRun {
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actDiffDismiss, stepKey(func(app *model) { app.diff.dlg = dialogNone }))
+		set(actDiffCommit, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(false) }))
+		set(actDiffPR, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(true) }))
+		set(actDiffEdit, stepKey(func(app *model) { app.diff.editing = true }))
+	})
+}
+
+func (m *model) handleDiffMessageEdit(msg tea.KeyMsg) tea.Cmd {
+	chosen := m.stackAction(msg, ctxDiffMessage)
+	if run, ok := m.tables().diffMessage[chosen]; ok {
+		return run(m, msg)
+	}
+	m.diff.message = editDraft(m.diff.message, msg)
+	return nil
+}
+
+func diffMessageRuns() map[keyAction]keyRun {
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actDiffStopEdit, stepKey(func(app *model) { app.diff.editing = false }))
+		set(actDiffCommit, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(false) }))
+		set(actNewline, stepKey(func(app *model) { app.diff.message += "\n" }))
+	})
 }
 
 func (m *model) sendDiffNote() tea.Cmd {
@@ -278,41 +326,14 @@ func (m *model) sendDiffNote() tea.Cmd {
 	return m.submitTo(panel.channel, file.Path+": "+text, nil)
 }
 
-func (m *model) handleDiffCommitKey(msg tea.KeyMsg) tea.Cmd {
-	panel := &m.diff
-	if panel.editing {
-		return m.handleDiffMessageEdit(msg)
+func editDraft(text string, msg tea.KeyMsg) string {
+	if msg.Type == tea.KeyBackspace {
+		return dropLastRune(text)
 	}
-	switch msg.String() {
-	case keyEsc:
-		panel.dlg = dialogNone
-	case keyEnter:
-		return m.commitCmd(false)
-	case "p":
-		return m.commitCmd(true)
-	case "e":
-		panel.editing = true
+	if typed, ok := typedText(msg); ok {
+		return text + typed
 	}
-	return nil
-}
-
-func (m *model) handleDiffMessageEdit(msg tea.KeyMsg) tea.Cmd {
-	panel := &m.diff
-	switch msg.String() {
-	case keyEsc:
-		panel.editing = false
-	case keyEnter:
-		return m.commitCmd(false)
-	case keyCtrlJ:
-		panel.message += "\n"
-	case keyBackspace:
-		panel.message = dropLastRune(panel.message)
-	default:
-		if typed, ok := typedText(msg); ok {
-			panel.message += typed
-		}
-	}
-	return nil
+	return text
 }
 
 func (m *model) commitCmd(withPR bool) tea.Cmd {
@@ -493,12 +514,24 @@ func (m *model) diffHeaderLine(width int) string {
 const diffKeysContext = "comme /review, en panneau "
 
 func (m *model) diffKeysLine(width int) string {
-	hints := []string{"⌃D fermer le panneau", "↑↓ fichier", "espace relu", "i consigne", "c commit", "p PR", "b tour ou branche"}
+	hints := m.diffFooterHints()
 	full := " " + strings.Join(hints, " · ")
 	if lipgloss.Width(full)+1+lipgloss.Width(diffKeysContext) <= width {
 		return m.st.dim.Render(joinRow(width, full, diffKeysContext))
 	}
 	return m.st.dim.Render(foldKeyHints(hints, width))
+}
+
+func (m *model) diffFooterHints() []string {
+	return []string{
+		m.labelledHint(actDiffDismiss, "fermer le panneau", ctxDiffPanel),
+		m.pairHint(actDiffPrevFile, actDiffNextFile, "fichier", ctxDiffPanel),
+		m.labelledHint(actDiffReviewed, "relu", ctxDiffPanel),
+		m.labelledHint(actDiffNote, "consigne", ctxDiffPanel),
+		m.labelledHint(actDiffCommit, "commit", ctxDiffPanel),
+		m.labelledHint(actDiffPR, "PR", ctxDiffPanel),
+		m.labelledHint(actCycleDiffBase, "tour ou branche", ctxDiffPanel),
+	}
 }
 
 func foldKeyHints(hints []string, width int) string {
@@ -549,17 +582,17 @@ func (m *model) diffFileColumn(width, height int) []string {
 		footer = append(footer, m.st.dim.Render(truncate(fmt.Sprintf("   branche : %d commits de plus sur %s", panel.report.Ahead, panel.report.Base), width)))
 	}
 	footer = append(footer, "",
-		m.diffAction("espace", "marquer relu", width),
-		m.diffAction("i", "consigne sur ce fichier", width),
-		m.diffAction("c", "commit du tour", width),
-		m.diffAction("p", "commit puis PR", width),
-		m.diffAction("⏎", "ouvrir dans $EDITOR", width))
+		m.diffAction(actDiffReviewed, "marquer relu", width),
+		m.diffAction(actDiffNote, "consigne sur ce fichier", width),
+		m.diffAction(actDiffCommit, "commit du tour", width),
+		m.diffAction(actDiffPR, "commit puis PR", width),
+		m.diffAction(actDiffOpenFile, "ouvrir dans $EDITOR", width))
 	rows := m.diffFileRows(width, max(1, height-len(footer)))
 	return fitLines(append(rows, footer...), height)
 }
 
-func (m *model) diffAction(key, label string, width int) string {
-	return m.st.dim.Render(truncate(fmt.Sprintf("   %-7s%s", key, label), width))
+func (m *model) diffAction(action keyAction, label string, width int) string {
+	return m.st.dim.Render(truncate(fmt.Sprintf("   %-7s%s", m.hintIn(action, ctxDiffPanel), label), width))
 }
 
 func (m *model) diffFileRows(width, limit int) []string {
@@ -780,9 +813,9 @@ func (m *model) diffCommitBox(width int) []string {
 		content = append(content, m.st.text.Render(line))
 	}
 	if panel.editing {
-		content = append(content, m.st.dim.Render("ctrl+j nouvelle ligne · échap fin d’édition · ⏎ commit"))
+		content = append(content, m.st.dim.Render(joinNonEmpty(m.labelledHint(actNewline, "nouvelle ligne", ctxDiffMessage), m.labelledHint(actDiffStopEdit, "fin d’édition", ctxDiffMessage), m.labelledHint(actDiffCommit, "commit", ctxDiffMessage))))
 	} else {
-		content = append(content, m.st.dim.Render("⏎ commit · p commit puis PR · e modifier · échap annuler"))
+		content = append(content, m.st.dim.Render(joinNonEmpty(m.labelledHint(actDiffCommit, "commit", ctxDiffDialog), m.labelledHint(actDiffPR, "commit puis PR", ctxDiffDialog), m.labelledHint(actDiffEdit, "modifier", ctxDiffDialog), m.labelledHint(actDiffDismiss, "annuler", ctxDiffDialog))))
 	}
 	return boxLines(content, width)
 }
@@ -795,7 +828,7 @@ func (m *model) diffNoteBox(width int) []string {
 	if panel.field == "" {
 		field = m.st.dim.Render("que doit faire l’agent de ce fichier ?") + m.st.accent.Render(m.st.glyphs.caret)
 	}
-	content := []string{title, m.st.text.Render("› ") + field, m.st.dim.Render("⏎ envoyer à " + panel.session + " · échap annuler")}
+	content := []string{title, m.st.text.Render("› ") + field, m.st.dim.Render(joinNonEmpty(m.labelledHint(actDiffSendNote, "envoyer à "+panel.session, ctxDiffNote), m.labelledHint(actDiffDismiss, "annuler", ctxDiffNote)))}
 	return boxLines(content, width)
 }
 

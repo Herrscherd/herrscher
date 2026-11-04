@@ -271,6 +271,9 @@ func reliableChord(chord string) error {
 }
 
 func keyHintGlyph(chord string) string {
+	if chord == keySpace {
+		return keyHintToken(keySpace)
+	}
 	tokens := strings.Split(chord, " ")
 	parts := make([]string, 0, len(tokens))
 	for _, token := range tokens {
@@ -333,6 +336,9 @@ func keyHintToken(token string) string {
 		default:
 			if glyph, ok := keyHintBase(base); ok {
 				return prefix.String() + glyph
+			}
+			if prefix.Len() == 0 && len(base) == 1 {
+				return base
 			}
 			return prefix.String() + strings.ToUpper(base)
 		}

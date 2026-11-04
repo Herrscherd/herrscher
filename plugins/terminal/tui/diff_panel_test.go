@@ -142,17 +142,17 @@ func TestPaneHeaderSaysOldAndNewAtEachWidth(t *testing.T) {
 }
 
 func TestFooterFoldsWholeHintsAtNarrowWidths(t *testing.T) {
-	hints := []string{"⌃D fermer le panneau", "↑↓ fichier", "espace relu", "i consigne", "c commit", "p PR", "b tour ou branche"}
 	for _, size := range []struct{ width, height int }{{60, 20}, {80, 30}} {
 		t.Run(fmt.Sprintf("%dx%d", size.width, size.height), func(t *testing.T) {
 			dir := initRepo(t)
 			writeAndCommitBase(t, dir)
 			m, _ := newDiffModel(t, dir, nil, size.width, size.height)
+			hints := m.diffFooterHints()
 			press(m, "ctrl+x", "d")
 
 			lines := strings.Split(screen(m), "\n")
 			footer := strings.TrimRight(lines[len(lines)-2], " ")
-			if !strings.Contains(footer, "⌃D fermer le panneau") {
+			if !strings.Contains(footer, hints[0]) {
 				t.Fatalf("the close hint must stay on the footer: %q", footer)
 			}
 			if strings.HasSuffix(footer, "…") {

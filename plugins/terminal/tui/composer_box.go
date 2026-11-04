@@ -28,17 +28,8 @@ func (m *model) composerTextWidth() int {
 
 const (
 	composerPrompt   = "> "
-	escKey           = "échap"
 	placeholderIdle  = "Tape un message, / ou @, ou !commande"
-	placeholderBusy  = "Écris pendant que l’agent travaille : ⏎ met en file, ⌥⏎ réoriente"
 	placeholderPanes = "Le message part dans le volet en surbrillance"
-	footIdle         = "⏎ envoyer · @ fichier · / commande · ! shell · ⌃R historique · ⌃S de côté"
-	footBusy         = "⏎ en file · ⌥⏎ réorienter · ⌃⏎ envoyer la file · ! shell · ⌃R historique · ⌃S de côté"
-	footShell        = "⏎ lancer · la commande passe par la politique d’outils de l’hôte · échap annuler"
-	footRightIdle    = escKey + " " + escKey + " retour"
-	footRightBusy    = "échap interrompre"
-	titleEditor      = "⌃X⌃E éditeur"
-	titlePanes       = "⌃P quitter · ⌃W agrandir"
 	ellipsis         = "…"
 	worktreesMarker  = "/.worktrees/"
 )
@@ -85,7 +76,7 @@ func (m *model) placeholderText() string {
 	case m.surface == surfacePanes:
 		return placeholderPanes
 	case m.isBusy():
-		return placeholderBusy
+		return m.placeholderBusyText()
 	}
 	return placeholderIdle
 }
@@ -116,17 +107,17 @@ func (m *model) composerTitles() ([]string, string) {
 		return []string{
 			m.st.violet.Bold(true).Render("Éditeur"),
 			m.st.dim.Render(footerSeparator + "brouillon ouvert dans " + editorName()),
-		}, m.st.dim.Render(titleEditor)
+		}, m.st.dim.Render(m.editorTitle())
 	case m.isShellInput():
-		return append([]string{m.st.warn.Bold(true).Render("! SHELL")}, m.shellTitleDetail()...), m.st.dim.Render(titleEditor)
+		return append([]string{m.st.warn.Bold(true).Render("! SHELL")}, m.shellTitleDetail()...), m.st.dim.Render(m.editorTitle())
 	case m.surface == surfacePanes:
-		return []string{m.st.dim.Render("vers ") + m.st.accent.Render(m.paneFocusName())}, m.st.dim.Render(titlePanes)
+		return []string{m.st.dim.Render("vers ") + m.st.accent.Render(m.paneFocusName())}, m.st.dim.Render(m.panesTitleHint())
 	}
 	name := "herrscher"
 	if tb := m.activeTab(); tb != nil && tb.label != "" {
 		name = tb.label
 	}
-	return []string{m.st.text.Render(name)}, m.st.dim.Render(titleEditor)
+	return []string{m.st.text.Render(name)}, m.st.dim.Render(m.editorTitle())
 }
 
 func (m *model) shellTitleDetail() []string {
@@ -150,18 +141,69 @@ func editorName() string {
 }
 
 func (m *model) composerFoots() (string, string) {
-	footRight := footRightIdle
+	footRight := m.doubleEscHint()
 	if m.isBusy() {
-		footRight = footRightBusy
+		footRight = m.labelledHint(actCancel, "interrompre", chatKeyStack()...)
 	}
 	switch {
 	case m.isShellInput():
-		return footShell, footRight
+		return m.footShellText(), footRight
 	case m.isBusy():
-		return footBusy, footRight
+		return m.footBusyText(), footRight
 	default:
-		return footIdle, footRight
+		return m.footIdleText(), footRight
 	}
+}
+
+func (m *model) placeholderBusyText() string {
+	return "Écris pendant que l’agent travaille : " + joinWith(", ",
+		m.labelledHint(actSubmit, "met en file", chatKeyStack()...),
+		m.labelledHint(actQueueRedirect, "réoriente", chatKeyStack()...),
+	)
+}
+
+func (m *model) footIdleText() string {
+	return joinNonEmpty(
+		m.labelledHint(actSubmit, "envoyer", chatKeyStack()...),
+		"@ fichier", "/ commande", "! shell",
+		m.labelledHint(actHistorySearch, "historique", chatKeyStack()...),
+		m.labelledHint(actStash, "de côté", chatKeyStack()...),
+	)
+}
+
+func (m *model) footBusyText() string {
+	return joinNonEmpty(
+		m.labelledHint(actSubmit, "en file", chatKeyStack()...),
+		m.labelledHint(actQueueRedirect, "réorienter", chatKeyStack()...),
+		m.labelledHint(actQueueSubmit, "envoyer la file", chatKeyStack()...),
+		"! shell",
+		m.labelledHint(actHistorySearch, "historique", chatKeyStack()...),
+		m.labelledHint(actStash, "de côté", chatKeyStack()...),
+	)
+}
+
+func (m *model) footShellText() string {
+	return joinNonEmpty(
+		m.labelledHint(actSubmit, "lancer", chatKeyStack()...),
+		"la commande passe par la politique d’outils de l’hôte",
+		m.labelledHint(actCancel, "annuler", chatKeyStack()...),
+	)
+}
+
+func (m *model) doubleEscHint() string {
+	glyph := m.hintIn(actCancel, chatKeyStack()...)
+	return joinWith(" ", glyph, glyph, "retour")
+}
+
+func (m *model) editorTitle() string {
+	return m.labelledHint(actExternalEditor, "éditeur", chatKeyStack()...)
+}
+
+func (m *model) panesTitleHint() string {
+	return joinNonEmpty(
+		m.labelledHint(actPaneClose, "quitter", ctxPane),
+		m.labelledHint(actPaneZoom, "agrandir", ctxPane),
+	)
 }
 
 func segmentsOf(text string, paint func(string) string) []string {

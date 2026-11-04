@@ -244,6 +244,7 @@ func spinTick(d time.Duration) tea.Cmd {
 }
 
 type model struct {
+	handlers      *dispatchTables
 	ctx           context.Context
 	limits        contextwindow.Limits
 	st            uiStyles
@@ -320,11 +321,12 @@ type model struct {
 	themeScr        *themeScreen
 	noColor         bool
 
-	bindings    *keyTable
-	keyChord    keyPress
-	keyTimeout  time.Duration
-	keyProblems []string
-	bar         barState
+	bindings     *keyTable
+	keyChord     keyPress
+	keyTimeout   time.Duration
+	keyProblems  []string
+	composerUndo []string
+	bar          barState
 
 	ctxOpen bool
 
@@ -1333,9 +1335,14 @@ func (m *model) inputRow() string {
 
 func (m *model) hintText() string {
 	if m.paletteOpen() {
-		return m.st.dim.Render("↑↓ naviguer · ⇞⇟ page · Tab compléter · Échap fermer")
+		return m.st.dim.Render(joinNonEmpty(
+			m.labelledHint(actSelectPrevious, "naviguer", ctxAutocomplete),
+			m.labelledHint(actSelectPageDown, "page", ctxAutocomplete),
+			m.labelledHint(actAutoAccept, "compléter", ctxAutocomplete),
+			m.labelledHint(actAutoDismiss, "fermer", ctxAutocomplete),
+		))
 	}
-	return m.st.dim.Render("? aide")
+	return m.st.dim.Render(m.labelledHint(actHelpToggle, "aide", chatKeyStack()...))
 }
 
 func (m *model) footer(width int) string {
@@ -1353,7 +1360,7 @@ func (m *model) footer(width int) string {
 }
 
 func (m *model) spinnerHint(tab *tab) string {
-	segs := []string{"échap pour interrompre"}
+	segs := []string{m.labelledHint(actCancel, "pour interrompre", chatKeyStack()...)}
 	if !tab.startedAt.IsZero() {
 		segs = append(segs, fmt.Sprintf("%ds", int(time.Since(tab.startedAt).Seconds())))
 	}
@@ -1644,7 +1651,11 @@ func (m *model) handleSpin() tea.Cmd {
 func (m *model) updateComponents(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
 	var cmd tea.Cmd
+	previous := m.input.Value()
 	m.input, cmd = m.input.Update(msg)
+	if m.input.Value() != previous {
+		m.rememberComposer(previous)
+	}
 	cmds = append(cmds, cmd)
 	m.vp, cmd = m.vp.Update(msg)
 	cmds = append(cmds, cmd)
@@ -1670,7 +1681,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 }
 
 func (m *model) dispatchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
-	if msg.Type == tea.KeyCtrlP && m.toast.title != "" {
+	if m.toast.title != "" && m.directAction(msg, ctxToast) == actToastJump {
 		m.jumpToToast()
 		return nil, true
 	}
@@ -1724,51 +1735,65 @@ func (m *model) dispatchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 }
 
 func (m *model) handlePendingClose(msg tea.KeyMsg) tea.Cmd {
-	if msg.String() == "y" {
+	action := m.stackAction(msg, ctxClose)
+	if action == actSessionClose {
 		cmd := m.confirmClose()
 		m.pendingClose = false
 		return cmd
 	}
 	m.pendingClose = false
-	if msg.Type == tea.KeyCtrlC {
-		cmd, _ := m.interruptOrQuit()
-		return cmd
-	}
-	if msg.Type == tea.KeyEsc {
-		return tea.Quit
+	if run, ok := m.tables().pendingClose[action]; ok {
+		return run(m, msg)
 	}
 	return nil
+}
+
+func pendingCloseRuns() map[keyAction]keyRun {
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actInterrupt, cmdKey(func(app *model) tea.Cmd {
+			cmd, _ := app.interruptOrQuit()
+			return cmd
+		}))
+		set(actExit, func(*model, tea.KeyMsg) tea.Cmd { return tea.Quit })
+	})
 }
 
 func (m *model) handleSwitchKey(msg tea.KeyMsg) tea.Cmd {
-	if m.overlayNav(msg, m.moveSwitch) {
+	action := m.stackAction(msg, ctxSessions)
+	if m.overlayNav(action, m.moveSwitch) {
 		return nil
 	}
-	switch msg.Type {
-	case tea.KeyEsc:
-		m.switchOpen = false
-		m.relayout()
-	case tea.KeyEnter:
-		m.chooseSwitch()
-		m.switchOpen = false
-		m.relayout()
-		return m.ensureSpin()
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC()
+	if run, ok := m.tables().switchOverlay[action]; ok {
+		return run(m, msg)
 	}
 	return nil
 }
 
+func switchOverlayRuns() map[keyAction]keyRun {
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actSelectCancel, stepKey(func(app *model) {
+			app.switchOpen = false
+			app.relayout()
+		}))
+		set(actSelectAccept, cmdKey(func(app *model) tea.Cmd {
+			app.chooseSwitch()
+			app.switchOpen = false
+			app.relayout()
+			return app.ensureSpin()
+		}))
+		set(actInterrupt, cmdKey((*model).overlayCtrlC))
+	})
+}
+
 func (m *model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
+	action := m.stackAction(msg, ctxSearch)
+	if run, ok := m.tables().search[action]; ok {
+		return run(m, msg)
+	}
+	if action != "" {
+		return nil
+	}
 	switch msg.Type {
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC()
-	case tea.KeyEsc, tea.KeyCtrlF:
-		m.closeSearch()
-	case tea.KeyEnter, tea.KeyCtrlN:
-		m.searchStep(1)
-	case tea.KeyCtrlP:
-		m.searchStep(-1)
 	case tea.KeyBackspace:
 		if q := m.searchQuery; q != "" {
 			m.typeSearch(q[:len(q)-1])
@@ -1783,38 +1808,69 @@ func (m *model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+func searchRuns() map[keyAction]keyRun {
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actInterrupt, cmdKey((*model).overlayCtrlC))
+		set(actSearchClose, stepKey((*model).closeSearch))
+		set(actSearchNext, stepKey(func(app *model) { app.searchStep(1) }))
+		set(actSearchPrevious, stepKey(func(app *model) { app.searchStep(-1) }))
+	})
+}
+
 func (m *model) handleDiagKey(msg tea.KeyMsg) tea.Cmd {
-	if msg.Type == tea.KeyCtrlC {
-		return m.overlayCtrlC()
+	chosen := m.stackAction(msg, ctxDiagnostics)
+	if run, ok := m.tables().diag[chosen]; ok {
+		return run(m, msg)
 	}
-	m.diagOpen = false
-	m.relayout()
 	return nil
 }
 
+func diagRuns() map[keyAction]keyRun {
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actInterrupt, cmdKey((*model).overlayCtrlC))
+		set(actDiagnosticsClose, stepKey(func(app *model) {
+			app.diagOpen = false
+			app.relayout()
+		}))
+	})
+}
+
 func (m *model) handlePluginsOverlayKey(msg tea.KeyMsg) tea.Cmd {
-	if msg.Type == tea.KeyCtrlC {
-		return m.overlayCtrlC()
-	}
 	return m.handlePluginsKey(msg)
 }
 
 func (m *model) handleSkillsKey(msg tea.KeyMsg) tea.Cmd {
-	if m.overlayNav(msg, m.moveSkills) {
+	action := m.stackAction(msg, ctxSkills)
+	if m.overlayNav(action, m.moveSkills) {
 		return nil
 	}
-	switch msg.Type {
-	case tea.KeyEsc, tea.KeyEnter:
-		m.skillsOpen = false
-		m.relayout()
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC()
+	if run, ok := m.tables().skills[action]; ok {
+		return run(m, msg)
 	}
 	return nil
 }
 
+func skillsRuns() map[keyAction]keyRun {
+	closeSkills := stepKey(func(app *model) {
+		app.skillsOpen = false
+		app.relayout()
+	})
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actSelectCancel, closeSkills)
+		set(actSelectAccept, closeSkills)
+		set(actInterrupt, cmdKey((*model).overlayCtrlC))
+	})
+}
+
 func (m *model) handleResumeKey(msg tea.KeyMsg) tea.Cmd {
-	if m.overlayNav(msg, m.moveResume) {
+	action := m.stackAction(msg, ctxResume)
+	if m.overlayNav(action, m.moveResume) {
+		return nil
+	}
+	if run, ok := m.tables().resume[action]; ok {
+		return run(m, msg)
+	}
+	if action != "" {
 		return nil
 	}
 	switch msg.Type {
@@ -1824,64 +1880,81 @@ func (m *model) handleResumeKey(msg tea.KeyMsg) tea.Cmd {
 		m.typeResume(" ")
 	case tea.KeyRunes:
 		m.typeResume(string(msg.Runes))
-	case tea.KeyEsc:
-		m.resumeOpen = false
-		m.relayout()
-	case tea.KeyEnter:
-		cmd := m.chooseResume()
-		m.resumeOpen = false
-		m.relayout()
-		return tea.Batch(cmd, m.ensureSpin())
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC()
 	}
 	return nil
+}
+
+func resumeRuns() map[keyAction]keyRun {
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actSelectCancel, stepKey(func(app *model) {
+			app.resumeOpen = false
+			app.relayout()
+		}))
+		set(actSelectAccept, cmdKey(func(app *model) tea.Cmd {
+			cmd := app.chooseResume()
+			app.resumeOpen = false
+			app.relayout()
+			return tea.Batch(cmd, app.ensureSpin())
+		}))
+		set(actInterrupt, cmdKey((*model).overlayCtrlC))
+	})
 }
 
 func (m *model) handlePaletteKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if !m.paletteOpen() {
 		return nil, false
 	}
-	if m.overlayNav(msg, m.movePal) {
+	action := m.stackAction(msg, ctxAutocomplete)
+	if m.overlayNav(action, m.movePal) {
 		return nil, true
 	}
-	switch msg.Type {
-	case tea.KeyTab:
-		m.completePal()
-		m.relayout()
-	case tea.KeyEsc:
-		m.input.SetValue("")
-		m.palIdx = 0
-		m.relayout()
-	case tea.KeyEnter:
-		cmd := m.handleEnter()
-		m.palIdx = 0
-		m.relayout()
-		return tea.Batch(cmd, m.ensureSpin()), true
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC(), true
-	default:
-		return nil, false
+	if run, ok := m.tables().palette[action]; ok {
+		return run(m, msg)
 	}
-	return nil, true
+	return nil, false
+}
+
+func paletteRuns() map[keyAction]chatRun {
+	return dispatchTable(func(set func(keyAction, chatRun)) {
+		set(actAutoAccept, stepChat(func(app *model) {
+			app.completePal()
+			app.relayout()
+		}))
+		set(actAutoDismiss, stepChat(func(app *model) {
+			app.input.SetValue("")
+			app.palIdx = 0
+			app.relayout()
+		}))
+		set(actSelectAccept, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
+			cmd := app.handleEnter()
+			app.palIdx = 0
+			app.relayout()
+			return tea.Batch(cmd, app.ensureSpin()), true
+		})
+		set(actInterrupt, chatCmd((*model).overlayCtrlC))
+	})
 }
 
 func (m *model) handleMentionKey(msg tea.KeyMsg) bool {
 	if !m.mentionOpen() {
 		return false
 	}
-	switch msg.Type {
-	case tea.KeyUp:
-		m.moveMention(-1)
-	case tea.KeyDown:
-		m.moveMention(1)
-	case tea.KeyTab:
-		m.completeActiveMention()
-		m.relayout()
-	default:
-		return false
+	chosen := m.stackAction(msg, ctxMention)
+	if run, ok := m.tables().mention[chosen]; ok {
+		return run(m, msg)
 	}
-	return true
+	return false
+}
+
+func mentionRuns() map[keyAction]flagRun {
+	return dispatchTable(func(set func(keyAction, flagRun)) {
+		set(actSelectPrevious, stepFlag(func(app *model) { app.moveMention(-1) }))
+		set(actSelectNext, stepFlag(func(app *model) { app.moveMention(1) }))
+		set(actAutoAccept, stepFlag(func(app *model) {
+			app.completeActiveMention()
+			app.relayout()
+		}))
+	})
 }
 
 func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
@@ -1890,9 +1963,6 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 	action, matched := m.pressChatKey(msg, time.Now())
 	if !matched {
-		if msg.Type == tea.KeyRunes {
-			return m.handleRunesKey(msg)
-		}
 		return nil, false
 	}
 	if action == "" {
@@ -1975,17 +2045,6 @@ func (m *model) handleHistoryKey(_ tea.KeyMsg, dir int) (tea.Cmd, bool) {
 	}
 	if m.input.LineCount() <= 1 && m.histIdx < len(m.history) && m.recallHistory(1) {
 		return nil, true
-	}
-	return nil, false
-}
-
-func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
-	if msg.String() == "?" && m.input.Value() == "" {
-		m.toggleHelp()
-		return nil, true
-	}
-	if msg.String() == "n" && m.input.Value() == "" && m.toast.title != "" {
-		return m.cycleNotify(), true
 	}
 	return nil, false
 }
@@ -2116,5 +2175,5 @@ func (m *model) busyRow(tab *tab) string {
 	if tab.costTotal > 0 {
 		cost = formatCost(tab.costTotal)
 	}
-	return busyLine(m.vp.Width, m.st, m.spinFrame(), elapsedText, tokens, cost)
+	return busyLine(m.vp.Width, m.st, m.spinFrame(), elapsedText, tokens, cost, m.labelledHint(actCancel, "interrompre", chatKeyStack()...))
 }

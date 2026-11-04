@@ -99,7 +99,7 @@ func (m *model) chipsView() string {
 	if chips == "" {
 		return ""
 	}
-	return chips + "  " + m.st.dim.Render("⌃U retirer")
+	return chips + "  " + m.st.dim.Render(m.labelledHint(actRemovePending, "retirer", chatKeyStack()...))
 }
 
 func (m *model) rowsLeft(reserved int) int {

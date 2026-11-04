@@ -22,14 +22,12 @@ const (
 	themePersonalID       = "perso"
 	themePersonalFile     = themePersonalID + themeFileExt
 	themePersonalName     = "Mon thème"
-	themePersonalMissing  = "themes/" + themePersonalFile + " absent : e ou ⌃E pour le créer"
 	themeApprovalAt       = 4*time.Minute + 12*time.Second
 	themeApprovalMinWidth = 30
 	themeTokenColumn      = 8
 	themeReadSpan         = 100 * time.Millisecond
 	themeEditSpan         = 200 * time.Millisecond
 	themeBashSpan         = 3100 * time.Millisecond
-	themeHelpShort        = "↑↓ aperçu · ⏎ garder · échap revenir · e éditer"
 )
 
 type themeScreen struct {
@@ -156,78 +154,91 @@ func (m *model) previewTheme() {
 
 func (m *model) handleThemeKey(msg tea.KeyMsg) tea.Cmd {
 	screen := m.themeScr
-	if m.overlayNav(msg, func(delta int) {
+	stack := ctxThemePicker
+	if screen.install {
+		stack = ctxThemeInstall
+	}
+	action := m.stackAction(msg, stack)
+	if m.overlayNav(action, func(delta int) {
 		screen.move(delta)
 		m.previewTheme()
 	}) {
 		return nil
 	}
-	switch msg.Type {
-	case tea.KeyEsc:
-		if screen.install {
-			screen.install = false
+	if run, ok := m.tables().themeScreen[action]; ok {
+		return run(m, msg)
+	}
+	return m.handleThemeAction(action)
+}
+
+func themeScreenRuns() map[keyAction]keyRun {
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actSelectCancel, cmdKey(func(app *model) tea.Cmd {
+			if app.themeScr.install {
+				app.themeScr.install = false
+				return nil
+			}
+			app.applyTheme(app.themeScr.origin)
+			app.closeTheme()
 			return nil
-		}
-		m.applyTheme(screen.origin)
-		m.closeTheme()
-		return nil
-	case tea.KeyEnter:
-		m.commitTheme()
-		return nil
-	case tea.KeyCtrlE:
-		return m.editThemeFile()
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC()
-	}
-	return m.handleThemeLetter(msg.String())
+		}))
+		set(actSelectAccept, stepKey((*model).commitTheme))
+		set(actThemeEdit, cmdKey((*model).editThemeFile))
+		set(actInterrupt, cmdKey((*model).overlayCtrlC))
+	})
 }
 
-func (m *model) handleThemeLetter(key string) tea.Cmd {
-	screen := m.themeScr
-	if screen.install {
-		return m.handleInstallLetter(key)
+func (m *model) handleThemeAction(action keyAction) tea.Cmd {
+	if run, ok := m.tables().themeLook[action]; ok {
+		return run(m)
 	}
-	switch key {
-	case "f":
-		screen.install = true
-		return nil
-	case "g":
-		screen.look.Glyphs = nextOption(glyphModes(), screen.look.Glyphs)
-	case "b":
-		screen.look.Borders = nextOption(borderStyles(), screen.look.Borders)
-	case "d":
-		screen.look.Density = nextOption(densities(), screen.look.Density)
-	case "w":
-		screen.look.Bold = !screen.look.Bold
-	case "i":
-		screen.look.Italic = !screen.look.Italic
-	case "a":
-		screen.auto = !screen.auto
-	case "e":
-		return m.editThemeFile()
-	default:
-		return nil
-	}
-	m.previewTheme()
 	return nil
 }
 
-func (m *model) handleInstallLetter(key string) tea.Cmd {
-	switch key {
-	case "f":
-		m.themeScr.install = false
-	case "c":
-		m.copyObel(obelInstallCommand, "commande")
-	case "y":
-		m.copyObel(m.obelConfigText(), "configuration")
+func themeLookRuns() map[keyAction]modelRun {
+	return dispatchTable(func(set func(keyAction, modelRun)) {
+		set(actThemeInstall, func(app *model) tea.Cmd {
+			app.themeScr.install = !app.themeScr.install
+			return nil
+		})
+		set(actThemeCopyCommand, func(app *model) tea.Cmd {
+			app.copyObel(obelInstallCommand, "commande")
+			return nil
+		})
+		set(actThemeCopyConfig, func(app *model) tea.Cmd {
+			app.copyObel(app.obelConfigText(), "configuration")
+			return nil
+		})
+		set(actThemeGlyphs, themeTweak(func(s *themeScreen) { s.look.Glyphs = nextOption(glyphModes(), s.look.Glyphs) }))
+		set(actThemeBorders, themeTweak(func(s *themeScreen) { s.look.Borders = nextOption(borderStyles(), s.look.Borders) }))
+		set(actThemeDensity, themeTweak(func(s *themeScreen) { s.look.Density = nextOption(densities(), s.look.Density) }))
+		set(actThemeBold, themeTweak(func(s *themeScreen) { s.look.Bold = !s.look.Bold }))
+		set(actThemeItalic, themeTweak(func(s *themeScreen) { s.look.Italic = !s.look.Italic }))
+		set(actThemeAuto, themeTweak(func(s *themeScreen) { s.auto = !s.auto }))
+	})
+}
+
+func themeTweak(change func(*themeScreen)) modelRun {
+	return func(app *model) tea.Cmd {
+		change(app.themeScr)
+		app.previewTheme()
+		return nil
 	}
-	return nil
+}
+
+func (m *model) themeHelpShort() string {
+	return joinNonEmpty(
+		m.pairHint(actSelectPrevious, actSelectNext, "aperçu", ctxThemePicker),
+		m.labelledHint(actSelectAccept, "garder", ctxThemePicker),
+		m.labelledHint(actSelectCancel, "revenir", ctxThemePicker),
+		m.labelledHint(actThemeEdit, "éditer", ctxThemePicker),
+	)
 }
 
 func (m *model) commitTheme() {
 	screen := m.themeScr
 	if !screen.keepable() {
-		m.flash = themePersonalMissing
+		m.flash = "themes/" + themePersonalFile + " absent : " + m.labelledHint(actThemeEdit, "pour le créer", ctxThemePicker)
 		return
 	}
 	preview := screen.preview()
@@ -351,12 +362,16 @@ func (m *model) themeControls(width int, fold themeFold) []string {
 	}
 	lines = append(lines, "")
 	if fold >= themeFoldHelp {
-		lines = append(lines, styles.dim.Render(themeHelpShort))
+		lines = append(lines, styles.dim.Render(m.themeHelpShort()))
 	} else {
 		lines = append(lines,
-			styles.dim.Render("↑↓ aperçu en direct · ⏎ garder · échap revenir"),
-			styles.dim.Render("⌃X puis t : thème suivant, depuis n’importe où"),
-			styles.dim.Render("e ou ⌃E éditer themes/"+themePersonalFile),
+			styles.dim.Render(joinNonEmpty(
+				m.pairHint(actSelectPrevious, actSelectNext, "aperçu en direct", ctxThemePicker),
+				m.labelledHint(actSelectAccept, "garder", ctxThemePicker),
+				m.labelledHint(actSelectCancel, "revenir", ctxThemePicker),
+			)),
+			styles.dim.Render(m.labelledHint(actOpenTheme, "thème, depuis n’importe où", chatKeyStack()...)),
+			styles.dim.Render(m.labelledHint(actThemeEdit, "éditer themes/"+themePersonalFile, ctxThemePicker)),
 		)
 	}
 	lines = append(lines,
@@ -610,7 +625,7 @@ func (m *model) themeApprovalLines(width int) []string {
 	now := time.Now()
 	prompt := approvalPrompt{tool: "Bash", command: "git push origin feat/tui-v2", deadline: now.Add(themeApprovalAt)}
 	inner := boxWidth - approvalFrameCols
-	footer := box.bl + box.h + " " + m.st.dim.Render("↑↓ choisir · "+m.st.glyphs.enter+" valider · x accélérer le délai") + " "
+	footer := box.bl + box.h + " " + m.st.dim.Render(joinNonEmpty(m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxApproval), m.labelledHint(actSelectAccept, "valider", ctxApproval), m.labelledHint(actApprovalAccelerate, "accélérer le délai", ctxApproval))) + " "
 	return []string{
 		m.approvalTop(prompt, boxWidth, box, now),
 		approvalRow(box, m.approvalCommand(prompt, inner), inner),
@@ -622,7 +637,7 @@ func (m *model) themeLegendLines() []string {
 	styles := m.st
 	glyphs := styles.glyphs
 	return []string{
-		styles.text.Render("Entrée pendant un tour met maintenant le message en file."),
+		styles.text.Render(m.hintIn(actSubmit, chatKeyStack()...) + " pendant un tour met maintenant le message en file."),
 		styles.green.Render(glyphs.success+" ajouté") + "  " + styles.del.Render(glyphs.failure+" retiré") + "  " + styles.warn.Render(glyphs.bolt+" attente"),
 		styles.dim.Render(glyphs.notice+" notice") + "  " + styles.red.Render("erreur"),
 	}

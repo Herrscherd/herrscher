@@ -117,7 +117,7 @@ func TestDiffFitsEveryTranscriptWidth(t *testing.T) {
 func TestDiffFoldsAfterFourLinesUnlessExpanded(t *testing.T) {
 	body := "Edit a.go\n@@ -1,6 +1,6 @@\n+a\n+b\n+c\n+d\n+e\n+f"
 	folded := ansi.Strip(renderTool(entry{role: roleTool, text: body, open: true}, 120, toolTestView(false)))
-	if !strings.Contains(folded, "2 lignes de plus (alt+e)") {
+	if !strings.Contains(folded, "2 ⌥E lignes de plus") {
 		t.Fatalf("a diff past four lines folds with the count: %q", folded)
 	}
 	expanded := ansi.Strip(renderTool(entry{role: roleTool, text: body, open: true}, 120, toolTestView(true)))
@@ -188,27 +188,27 @@ func TestSubagentTreeMarksEachState(t *testing.T) {
 
 func TestBusyLineCarriesVerbTimeTokensCostAndEscape(t *testing.T) {
 	for _, width := range transcriptWidths() {
-		out := busyLine(width, testStyles(), "⣾", "1m12s", "4.2k", "$0.31")
+		out := busyLine(width, testStyles(), "⣾", "1m12s", "4.2k", "$0.31", "échap interrompre")
 		assertFitsWidth(t, out, width)
 	}
-	got := ansi.Strip(busyLine(120, testStyles(), "⣾", "1m12s", "4.2k", "$0.31"))
-	for _, want := range []string{workingVerb, "1m12s", "↑ 4.2k", "$0.31", "Échap interrompre"} {
+	got := ansi.Strip(busyLine(120, testStyles(), "⣾", "1m12s", "4.2k", "$0.31", "échap interrompre"))
+	for _, want := range []string{workingVerb, "1m12s", "↑ 4.2k", "$0.31", "échap interrompre"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("busy line %q missing %q", got, want)
 		}
 	}
-	if !strings.HasSuffix(got, "Échap interrompre") {
+	if !strings.HasSuffix(got, "échap interrompre") {
 		t.Fatalf("the escape hint must sit on the right: %q", got)
 	}
 }
 
 func TestThinkingHeadNamesTheFoldKeyWithItsVerb(t *testing.T) {
 	folded := ansi.Strip(renderThinking(entry{role: roleThinking, text: "x", span: time.Second}, 120, toolTestView(false)))
-	if !strings.Contains(folded, "déplier ⌃O") {
+	if !strings.Contains(folded, "déplier · ⌃O") {
 		t.Fatalf("folded thinking must offer to unfold with ⌃O: %q", folded)
 	}
 	open := ansi.Strip(renderThinking(entry{role: roleThinking, text: "x", span: time.Second, open: true}, 120, toolTestView(false)))
-	if !strings.Contains(open, "replier ⌃O") {
+	if !strings.Contains(open, "replier · ⌃O") {
 		t.Fatalf("open thinking must offer to fold with ⌃O: %q", open)
 	}
 }

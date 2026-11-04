@@ -167,17 +167,22 @@ func (m *model) handlePluginsMsg(msg tea.Msg) bool {
 }
 
 func (m *model) handlePluginsKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.Type {
-	case tea.KeyUp:
-		m.movePlugins(-1)
-	case tea.KeyDown:
-		m.movePlugins(1)
-	case tea.KeyEsc:
-		m.backPlugins()
-	case tea.KeyEnter:
-		return m.choosePlugins()
+	action := m.stackAction(msg, ctxPlugin)
+	if m.overlayNav(action, m.movePlugins) {
+		return nil
+	}
+	if run, ok := m.tables().plugins[action]; ok {
+		return run(m, msg)
 	}
 	return nil
+}
+
+func pluginsRuns() map[keyAction]keyRun {
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actSelectCancel, stepKey((*model).backPlugins))
+		set(actSelectAccept, cmdKey((*model).choosePlugins))
+		set(actInterrupt, cmdKey((*model).overlayCtrlC))
+	})
 }
 
 func (m *model) backPlugins() {
@@ -329,7 +334,11 @@ func (m *model) clampPluginsMenu() {
 
 func (m *model) pluginsView() string {
 	var builder strings.Builder
-	builder.WriteString(m.st.dim.Render("plugins · ↑↓ naviguer · ⏎ choisir · échap retour"))
+	builder.WriteString(m.st.dim.Render(joinNonEmpty("plugins",
+		m.pairHint(actSelectPrevious, actSelectNext, "naviguer", ctxPlugin),
+		m.labelledHint(actSelectAccept, "choisir", ctxPlugin),
+		m.labelledHint(actSelectCancel, "retour", ctxPlugin),
+	)))
 	m.writePluginNotices(&builder)
 	m.writePluginRows(&builder)
 	m.writePluginDetail(&builder)

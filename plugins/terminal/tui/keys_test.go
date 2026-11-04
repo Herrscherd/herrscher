@@ -252,11 +252,11 @@ func TestBrokenJSONIsReportedAndDefaultsSurvive(t *testing.T) {
 }
 
 func TestChangedBindingShowsInHelp(t *testing.T) {
-	herrscher := `{"bindings":[{"context":"Chat","bindings":{"ctrl+x q":"app:openSessions"}}]}`
+	herrscher := `{"bindings":[{"context":"Chat","bindings":{"ctrl+x a":"chat:nextLink"}}]}`
 	m := newTestModel()
 	m.bindings = loadForTest(t, herrscher, "", keysSection{}).table
 	help := ansi.Strip(m.helpView())
-	if !strings.Contains(help, "⌃XQ sessions") {
+	if !strings.Contains(help, "⌃Xa lien suivant") {
 		t.Fatalf("changed binding missing from help: %s", help)
 	}
 }

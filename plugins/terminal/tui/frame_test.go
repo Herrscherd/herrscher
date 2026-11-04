@@ -189,7 +189,7 @@ func TestViewDoesNotChangeTheComposer(t *testing.T) {
 		t.Fatal("View changed the composer text or prompt style")
 	}
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
-	if m.input.Placeholder != placeholderBusy {
+	if m.input.Placeholder != m.placeholderBusyText() {
 		t.Fatalf("Update must sync the placeholder to the busy state, got %q", m.input.Placeholder)
 	}
 }

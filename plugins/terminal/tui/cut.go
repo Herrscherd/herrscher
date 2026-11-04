@@ -9,7 +9,6 @@ import (
 
 const (
 	footerSeparator = " · "
-	hintChoose      = "↑↓ choisir"
 )
 
 func cutText(text string, width int) string {
@@ -20,6 +19,7 @@ func cutText(text string, width int) string {
 }
 
 func fitSegments(segments []string, width int) string {
+	segments = withoutEmpty(segments)
 	joined := make([]string, len(segments))
 	for index, segment := range segments {
 		if index > 0 {
@@ -28,6 +28,16 @@ func fitSegments(segments []string, width int) string {
 		joined[index] = segment
 	}
 	return foldSegments(joined, width)
+}
+
+func withoutEmpty(segments []string) []string {
+	kept := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		if segment != "" {
+			kept = append(kept, segment)
+		}
+	}
+	return kept
 }
 
 func foldSegments(segments []string, budget int) string {

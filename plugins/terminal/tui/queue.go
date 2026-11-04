@@ -14,13 +14,11 @@ const (
 	queueAfterTool      = "après le prochain outil"
 	queueRemoveLabel    = "✕ retirer"
 	queueIndent         = "   "
-	draftsKey           = "⌃S"
 	queueAfterMark      = "↪ réorienter"
 	queueFileMark       = "○ file"
 	queueHeaderMark     = "○"
 	queueMarkWidth      = 14
 	queueFoldRows       = 2
-	queueFocusHint      = "○ En file · ↑↓ choisir · ⇧↑⇧↓ réordonner · suppr retirer · échap quitter"
 )
 
 type queueHit struct {
@@ -118,7 +116,7 @@ func (m *model) draftsView() string {
 	}
 	last := oneLine(m.drafts[len(m.drafts)-1])
 	left := m.st.dim.Render(" ○ brouillons (" + strconv.Itoa(len(m.drafts)) + ") : « " + cutText(last, m.innerWidth()/draftPreviewDivisor) + " »")
-	right := m.st.accent.Render(draftsKey) + m.st.dim.Render(" reprendre le dernier")
+	right := m.st.accent.Render(m.hintIn(actStash, chatKeyStack()...)) + m.st.dim.Render(" reprendre le dernier")
 	return justifyRow(left, right, m.innerWidth())
 }
 
@@ -132,12 +130,12 @@ func (m *model) queueLines(base, rows int) []string {
 	width := m.innerWidth()
 	header := queueHeaderMark + " En file (" + strconv.Itoa(len(current.queue)) + ")"
 	if current.busy {
-		header += " · partent dans l’ordre à la fin du tour · ⌃⏎ tout envoyer maintenant"
+		header += footerSeparator + joinNonEmpty("partent dans l’ordre à la fin du tour", m.labelledHint(actQueueSubmit, "tout envoyer maintenant", chatKeyStack()...))
 	} else {
 		header += " · prêts à partir"
 	}
 	if m.queueFocus {
-		header = queueFocusHint
+		header = m.queueFocusText()
 	}
 	lines := []string{m.st.dim.Render(foldText(header, width))}
 	shown := queueShown(len(current.queue), rows)
@@ -219,30 +217,33 @@ func (m *model) handleQueueFocus(msg tea.KeyMsg) bool {
 	if !m.queueFocus {
 		return false
 	}
-	switch msg.Type {
-	case tea.KeyUp:
-		if m.queueSel > 0 {
-			m.queueSel--
-		}
-	case tea.KeyDown:
-		if m.queueSel < len(m.activeTab().queue)-1 {
-			m.queueSel++
-		} else {
-			m.queueFocus = false
-		}
-	case tea.KeyShiftUp:
-		m.moveQueued(m.queueSel, -1)
-	case tea.KeyShiftDown:
-		m.moveQueued(m.queueSel, 1)
-	case tea.KeyDelete:
-		m.removeQueued(m.queueSel)
-	case tea.KeyEsc:
-		m.queueFocus = false
-	default:
-		m.queueFocus = false
-		return false
+	chosen := m.stackAction(msg, ctxQueue)
+	if run, ok := m.tables().queue[chosen]; ok {
+		return run(m, msg)
 	}
-	return true
+	m.queueFocus = false
+	return false
+}
+
+func queueRuns() map[keyAction]flagRun {
+	return dispatchTable(func(set func(keyAction, flagRun)) {
+		set(actQueuePrevious, stepFlag(func(app *model) {
+			if app.queueSel > 0 {
+				app.queueSel--
+			}
+		}))
+		set(actQueueNext, stepFlag(func(app *model) {
+			if app.queueSel < len(app.activeTab().queue)-1 {
+				app.queueSel++
+			} else {
+				app.queueFocus = false
+			}
+		}))
+		set(actQueueMoveUp, stepFlag(func(app *model) { app.moveQueued(app.queueSel, -1) }))
+		set(actQueueMoveDown, stepFlag(func(app *model) { app.moveQueued(app.queueSel, 1) }))
+		set(actQueueRemove, stepFlag(func(app *model) { app.removeQueued(app.queueSel) }))
+		set(actQueueLeave, stepFlag(func(app *model) { app.queueFocus = false }))
+	})
 }
 
 func (m *model) moveQueued(index, delta int) {
@@ -306,4 +307,13 @@ func (m *model) enqueueWhileBusy(steer bool) bool {
 		return false
 	}
 	return m.enqueueInput(steer)
+}
+
+func (m *model) queueFocusText() string {
+	return "○ En file" + footerSeparator + joinNonEmpty(
+		m.pairHint(actQueuePrevious, actQueueNext, "choisir", ctxQueue),
+		m.pairHint(actQueueMoveUp, actQueueMoveDown, "réordonner", ctxQueue),
+		m.labelledHint(actQueueRemove, "retirer", ctxQueue),
+		m.labelledHint(actQueueLeave, "quitter", ctxQueue),
+	)
 }

@@ -49,21 +49,21 @@ func (m *model) closeContext() {
 }
 
 func (m *model) handleContextKey(msg tea.KeyMsg) tea.Cmd {
-	if msg.Type == tea.KeyCtrlC {
-		return m.overlayCtrlC()
-	}
-	switch msg.String() {
-	case "c":
-		return m.compactCmd()
-	case "k":
-		m.syncTabs()
-		return nil
-	case "n":
-		return m.cycleNotify()
-	case "z", keyEsc:
-		m.closeContext()
+	chosen := m.stackAction(msg, ctxContext)
+	if run, ok := m.tables().context[chosen]; ok {
+		return run(m, msg)
 	}
 	return nil
+}
+
+func contextRuns() map[keyAction]keyRun {
+	return dispatchTable(func(set func(keyAction, keyRun)) {
+		set(actInterrupt, cmdKey((*model).overlayCtrlC))
+		set(actContextCompact, cmdKey((*model).compactCmd))
+		set(actContextSync, stepKey(func(app *model) { app.syncTabs() }))
+		set(actNotifyCycle, cmdKey((*model).cycleNotify))
+		set(actContextClose, stepKey((*model).closeContext))
+	})
 }
 
 func (m *model) contextView() string {
@@ -84,7 +84,11 @@ func (m *model) contextView() string {
 	if note := m.lastCompactNote(); note != "" {
 		lines = append(lines, m.st.dim.Render(note))
 	}
-	lines = append(lines, m.st.dim.Render("c compacter · k réafficher · z revenir · échap fermer"))
+	lines = append(lines, m.st.dim.Render(joinNonEmpty(
+		m.labelledHint(actContextCompact, "compacter", ctxContext),
+		m.labelledHint(actContextSync, "réafficher", ctxContext),
+		m.labelledHint(actContextClose, "fermer", ctxContext),
+	)))
 	for i := range lines {
 		lines[i] = cutText(lines[i], width)
 	}

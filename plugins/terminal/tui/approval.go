@@ -47,19 +47,19 @@ const (
 )
 
 type approvalChoice struct {
-	role  string
-	key   string
-	label string
-	note  string
-	value string
+	role   string
+	action keyAction
+	label  string
+	note   string
+	value  string
 }
 
 func approvalCatalog() []approvalChoice {
 	return []approvalChoice{
-		{role: approvalAllow, key: "o", label: "Une fois", note: "seulement cette commande"},
-		{role: approvalAllowSession, key: "s", label: "Pour la session", note: "accepté jusqu’à la fin de la session"},
-		{role: approvalAllowAlways, key: "t", label: "Toujours", note: "règle ajoutée à l’hôte"},
-		{role: approvalDeny, key: "r", label: "Refuser avec une raison", note: "la raison repart à l’agent comme un message"},
+		{role: approvalAllow, action: actApprovalAllow, label: "Une fois", note: "seulement cette commande"},
+		{role: approvalAllowSession, action: actApprovalAllowSession, label: "Pour la session", note: "accepté jusqu’à la fin de la session"},
+		{role: approvalAllowAlways, action: actApprovalAllowAlways, label: "Toujours", note: "règle ajoutée à l’hôte"},
+		{role: approvalDeny, action: actApprovalDeny, label: "Refuser avec une raison", note: "la raison repart à l’agent comme un message"},
 	}
 }
 
@@ -342,28 +342,31 @@ func (m *model) handleApprovalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.handleApprovalReasonKey(target, msg)
 		return nil, true
 	}
-	switch msg.Type {
-	case tea.KeyUp:
-		target.approval.moveCursor(-1)
-	case tea.KeyDown:
-		target.approval.moveCursor(1)
-	case tea.KeyEnter:
-		m.chooseApproval(target, target.approval.cursor)
-	case tea.KeyRunes:
-		return m.approvalShortcut(target, string(msg.Runes))
-	default:
-		return nil, false
+	action := m.stackAction(msg, ctxApproval)
+	if run, ok := m.tables().approval[action]; ok {
+		run(m, target)
+		return nil, true
 	}
-	return nil, true
+	return m.approvalShortcut(target, action)
 }
 
-func (m *model) approvalShortcut(target *tab, key string) (tea.Cmd, bool) {
-	if key == "x" {
+func approvalRuns() map[keyAction]approvalRun {
+	return dispatchTable(func(set func(keyAction, approvalRun)) {
+		set(actSelectPrevious, func(_ *model, target *tab) { target.approval.moveCursor(-1) })
+		set(actSelectNext, func(_ *model, target *tab) { target.approval.moveCursor(1) })
+		set(actSelectAccept, func(app *model, target *tab) {
+			app.chooseApproval(target, target.approval.cursor)
+		})
+	})
+}
+
+func (m *model) approvalShortcut(target *tab, action keyAction) (tea.Cmd, bool) {
+	if action == actApprovalAccelerate {
 		target.approval.deadline = accelerateDeadline(target.approval.deadline, time.Now())
 		return nil, true
 	}
 	for index, entry := range target.approval.choices {
-		if entry.key == key {
+		if entry.action == action {
 			m.chooseApproval(target, index)
 			return nil, true
 		}
@@ -388,12 +391,13 @@ func (m *model) chooseApproval(target *tab, index int) {
 }
 
 func (m *model) handleApprovalReasonKey(target *tab, msg tea.KeyMsg) {
+	chosen := m.stackAction(msg, ctxApprovalReason)
+	if run, ok := m.tables().approvalReason[chosen]; ok {
+		run(m, target)
+		return
+	}
 	prompt := &target.approval
 	switch msg.Type {
-	case tea.KeyEsc:
-		prompt.reasonOpen = false
-	case tea.KeyEnter:
-		m.answerApproval(target, approvalDeny, prompt.reason)
 	case tea.KeyBackspace:
 		if runes := []rune(prompt.reason); len(runes) > 0 {
 			prompt.reason = string(runes[:len(runes)-1])
@@ -403,6 +407,15 @@ func (m *model) handleApprovalReasonKey(target *tab, msg tea.KeyMsg) {
 	case tea.KeyRunes:
 		prompt.reason += string(msg.Runes)
 	}
+}
+
+func approvalReasonRuns() map[keyAction]approvalRun {
+	return dispatchTable(func(set func(keyAction, approvalRun)) {
+		set(actSelectCancel, func(_ *model, target *tab) { target.approval.reasonOpen = false })
+		set(actSelectAccept, func(app *model, target *tab) {
+			app.answerApproval(target, approvalDeny, target.approval.reason)
+		})
+	})
 }
 
 func approvalCountdown(deadline, now time.Time) (string, time.Duration) {
@@ -515,9 +528,9 @@ func (m *model) approvalTop(prompt approvalPrompt, width int, box boxSet, now ti
 func (m *model) approvalBottom(prompt approvalPrompt, width int, box boxSet) string {
 	keys := make([]string, 0, len(prompt.choices))
 	for _, entry := range prompt.choices {
-		keys = append(keys, entry.key)
+		keys = append(keys, m.approvalKey(entry))
 	}
-	footer := "↑↓ choisir · " + m.st.glyphs.enter + " valider · " + strings.Join(keys, " ") + " · x accélérer le délai"
+	footer := joinNonEmpty(m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxApproval), m.labelledHint(actSelectAccept, "valider", ctxApproval), strings.Join(keys, " "), m.labelledHint(actApprovalAccelerate, "accélérer le délai", ctxApproval))
 	head := box.bl + box.h + " " + m.st.dim.Render(footer) + " "
 	tail := box.br
 	return m.approvalBorder(head, tail, box.h, width)
@@ -547,7 +560,7 @@ func (m *model) approvalChoiceLines(entry approvalChoice, selected, wide, notes 
 		mark = m.st.accent.Render(m.st.glyphs.prompt) + " "
 		labelStyle = m.st.accent.Bold(true)
 	}
-	head := mark + m.st.green.Render(entry.key) + "  " + labelStyle.Render(entry.label)
+	head := mark + m.st.green.Render(m.approvalKey(entry)) + "  " + labelStyle.Render(entry.label)
 	note := m.st.dim.Render(entry.note)
 	switch {
 	case wide:
@@ -569,5 +582,9 @@ func (m *model) approvalReasonLine(prompt approvalPrompt) string {
 	if prompt.reason == "" {
 		line += m.st.dim.Render("raison envoyée à l’agent")
 	}
-	return line + m.st.dim.Render("   "+m.st.glyphs.enter+" envoyer · échap revenir")
+	return line + m.st.dim.Render("   "+joinNonEmpty(m.labelledHint(actSelectAccept, "envoyer", ctxApprovalReason), m.labelledHint(actSelectCancel, "revenir", ctxApprovalReason)))
+}
+
+func (m *model) approvalKey(entry approvalChoice) string {
+	return m.hintIn(entry.action, ctxApproval)
 }

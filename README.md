@@ -954,17 +954,19 @@ Contexts are read in order: Chat first, then Global.
 | `⌃U` | `chat:removePending` | remove the pending message |
 | `⌃S` | `chat:stash` | set the draft aside |
 | `⌃L` | `chat:clearInput` | clear the composer |
+| `⌃_`, `⌃-`, `⌃⇧-`, `⌃⇧_` | `chat:undo` | undo the last change of the composer (200 steps) |
 | `⌃F` | `chat:search` | search the transcript |
 | `⌃W` | `app:closeTab` | close the tab |
 | `⌃P` | `chat:openBoard` | sessions board |
 | `⌃G`, `⌃X ⌃E` | `chat:externalEditor` | edit the draft in `$EDITOR` (then `$VISUAL`) |
 | `⌃X ⏎` | `chat:queueSubmit` | send the queue now |
 | `⌃X ⌃S`, `alt+F12` | `chat:sendNow` | send now |
-| `⌃X ⌃K` | `chat:killAgents` | no effect yet (see below) |
+| `⌃X ⌃K` | `chat:killAgents` | interrupt every busy session of this window |
 | `⌃X C` | `chat:copyCode` | copy the last code block |
 | `alt+Y` | `chat:copyReply` | copy the last answer |
 | `alt+C` | `chat:toggleCodeFold` | fold long code blocks |
 | `alt+E` | `chat:toggleToolExpand` | spell out commands and unfold diffs |
+| `⌃O` | `app:toggleTranscript` | the same toggle as `alt+E` |
 | `⌃X F` | `chat:toggleTurnFold` | fold the turns |
 | `⌃X O` | `chat:openOrFold` | open the selected link, or fold the latest block |
 | `⌃X L` | `chat:nextLink` | select the next link |
@@ -975,10 +977,12 @@ Contexts are read in order: Chat first, then Global.
 | `⌃X T` | `app:openTheme` | theme picker |
 | `⌃X V` | `app:toggleSidebar` | toggle the sidebar |
 | `⌃X ⌃A`, `⌃X ⇥` | `abovePrompt:toggle`, `abovePrompt:focus` | no effect yet (see below) |
-| `?` `n` `/` `@` `!` | not in the table | help, notifications, commands, files, shell command |
+| `?` | `chat:helpToggle` | help, when the composer is empty |
+| `n` | `chat:notifyCycle` | cycle the notification, when the composer is empty |
+| `/` `@` `!` | not in the table | command, file mention, shell command |
 
-`?` and `n` are typed keys: they are read only when the composer is empty and
-are not yet configurable.
+`?` and `n` are typed keys: the table reads them only when the composer is empty,
+so they can be rebound like the other keys but still type a character otherwise.
 
 #### Moved keys
 
@@ -991,21 +995,20 @@ They moved, and the old key does what Claude says it does.
 | session switcher | `⌃T` | `⌃X S` | `app:toggleTodos` (no effect yet) |
 | mouse release | `⌃G` | `⌃X M` | `chat:externalEditor` (opens `$EDITOR`) |
 | next link | `⌃L` | `⌃X L` | `chat:clearInput` (clears the composer) |
-| open the link, or fold | `⌃O` | `⌃X O` | `app:toggleTranscript` (no effect yet) |
+| open the link, or fold | `⌃O` | `⌃X O` | `app:toggleTranscript` (now toggles the tool detail, see the main table) |
 | copy the last code block | `⌃Y` | `⌃X C` | `chat:defaultToNewerModel` (no effect yet) |
 | sidebar | `⌃B` | `⌃X V` | `task:background` (no effect yet) |
 | fold the turns | `alt+T` | `⌃X F` | `chat:thinkingToggle` (no effect yet) |
-| previous or next turn | `alt+↑` `alt+↓` | `⌃X K` `⌃X J` | `app:diffFileListUp` and `app:diffFileListDown` (no effect outside the diff panel) |
+| previous or next turn | `alt+↑` `alt+↓` | `⌃X K` `⌃X J` | `app:diffFileListUp` and `app:diffFileListDown` (no effect yet) |
 
 #### Claude actions without an effect here
 
 The table knows these actions, so a file can bind them without an error, but
 herrscher does not run anything for them yet: `app:toggleTodos` (`⌃T`),
-`app:toggleTranscript` (`⌃O`), `app:toggleBrief` (`⇧⌃B`),
-`app:diffFileListUp` and `app:diffFileListDown` (`⌃↑` `⌃↓` `alt+↑` `alt+↓`
-outside the diff panel), `app:openArtifact` (`⌃]`), `chat:killAgents`
-(`⌃X ⌃K`), `chat:clearScreen` (`cmd+K`), `chat:undo` (`⌃_`, `⌃-`, `⌃⇧-`,
-`⌃⇧_`), `chat:modelPicker` (`alt+P`), `chat:fastMode` (`alt+O`),
+`app:toggleBrief` (`⇧⌃B`), `app:diffFileListUp` and `app:diffFileListDown`
+(`⌃↑` `⌃↓` `alt+↑` `alt+↓`), `app:openArtifact` (`⌃]`),
+`chat:clearScreen` (`cmd+K`), `chat:modelPicker` (`alt+P`, herrscher has no
+model choice to open), `chat:fastMode` (`alt+O`),
 `chat:defaultToNewerModel` (`⌃Y`), `chat:thinkingToggle` (`alt+T`),
 `chat:workflowKeywordToggle` (`alt+W`), `abovePrompt:toggle` (`⌃X ⌃A`),
 `abovePrompt:focus` (`⌃X ⇥`), `task:background` (`⌃B`, `⌃X ⌃B`).

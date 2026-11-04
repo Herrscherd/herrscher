@@ -102,7 +102,7 @@ func TestContextViewShowsTheRealThresholdAndTheBackKey(t *testing.T) {
 	if !strings.Contains(view, "  compacte seul à 92%") {
 		t.Errorf("the total line must show the real compaction threshold after a gap:\n%s", view)
 	}
-	if !strings.Contains(view, "z revenir") {
-		t.Errorf("the footer must name the z key:\n%s", view)
+	if !strings.Contains(view, "échap fermer") {
+		t.Errorf("the footer must name the back key:\n%s", view)
 	}
 }

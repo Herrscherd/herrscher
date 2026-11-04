@@ -3,7 +3,6 @@ package tui
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -84,22 +83,26 @@ func (m *model) overlayRows() int {
 
 const overlayJump = 1 << 30
 
-func (m *model) overlayNav(msg tea.KeyMsg, move func(int)) bool {
-	switch msg.Type {
-	case tea.KeyUp, tea.KeyCtrlP:
-		move(-1)
-	case tea.KeyDown, tea.KeyCtrlN:
-		move(1)
-	case tea.KeyPgUp:
-		move(-m.overlayRows())
-	case tea.KeyPgDown:
-		move(m.overlayRows())
-	case tea.KeyHome:
-		move(-overlayJump)
-	case tea.KeyEnd:
-		move(overlayJump)
-	default:
-		return false
+func (m *model) overlayNav(action keyAction, move func(int)) bool {
+	if run, ok := m.tables().nav[action]; ok {
+		return run(m, move)
 	}
-	return true
+	return false
+}
+
+func navRuns() map[keyAction]navRun {
+	return dispatchTable(func(set func(keyAction, navRun)) {
+		set(actSelectPrevious, func(_ *model, move func(int)) bool { move(-1); return true })
+		set(actSelectNext, func(_ *model, move func(int)) bool { move(1); return true })
+		set(actSelectPageUp, func(app *model, move func(int)) bool {
+			move(-app.overlayRows())
+			return true
+		})
+		set(actSelectPageDown, func(app *model, move func(int)) bool {
+			move(app.overlayRows())
+			return true
+		})
+		set(actSelectFirst, func(_ *model, move func(int)) bool { move(-overlayJump); return true })
+		set(actSelectLast, func(_ *model, move func(int)) bool { move(overlayJump); return true })
+	})
 }

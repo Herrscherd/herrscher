@@ -11,7 +11,7 @@ const capabilitiesIntro = "You are one session of a running Herrscher daemon: it
 	"you may run, and the daemon refuses the rest to a session. " +
 	"A verb that ends a session, rewrites the approval policy, or acts on a session other than yours is the " +
 	"operator's to run, and asking them is the way to it. " +
-	"A handoff (`session handoff`) opens a new session with a brief of this one: run it only when the operator asks for it."
+	"A handoff (`session handoff`) opens a new session with a brief of this one: run it only when the operator asks for it. Its limit per session tree is a local guard that resets when the daemon restarts."
 
 func withCapabilities(baseCtx, summary string) string {
 	summary = strings.TrimSpace(summary)

@@ -1,19 +1,29 @@
 package keyproxy
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Herrscherd/herrscher/core/config"
 )
 
-const keyFileForbiddenBits fs.FileMode = 0o077
+const (
+	keyFileForbiddenBits  fs.FileMode = 0o077
+	keyCommandTimeout                 = 30 * time.Second
+	keyCommandWaitDelay               = 2 * time.Second
+	keyCommandOutputBytes             = 16 << 10
+)
+
+var errKeyOutputTooLarge = errors.New("key command printed more than its output cap")
 
 var (
 	// ErrKeyFileOpen reports a key file readable or writable by anyone but its owner.
@@ -72,7 +82,29 @@ func OSLoader() Loader {
 }
 
 func runKeyCommand(ctx context.Context, argv []string) ([]byte, error) {
-	return exec.CommandContext(ctx, argv[0], argv[1:]...).Output()
+	runCtx, cancel := context.WithTimeout(ctx, keyCommandTimeout)
+	defer cancel()
+	command := exec.CommandContext(runCtx, argv[0], argv[1:]...)
+	command.WaitDelay = keyCommandWaitDelay
+	output := &boundedOutput{limit: keyCommandOutputBytes}
+	command.Stdout = output
+	command.Stderr = io.Discard
+	if err := command.Run(); err != nil {
+		return nil, err
+	}
+	return output.buf.Bytes(), nil
+}
+
+type boundedOutput struct {
+	buf   bytes.Buffer
+	limit int
+}
+
+func (o *boundedOutput) Write(chunk []byte) (int, error) {
+	if o.buf.Len()+len(chunk) > o.limit {
+		return 0, errKeyOutputTooLarge
+	}
+	return o.buf.Write(chunk)
 }
 
 // Load reads the key a source names and rejects a blank one.

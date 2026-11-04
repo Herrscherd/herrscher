@@ -1,6 +1,8 @@
 package keyproxy
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -43,6 +45,11 @@ func (s *stubUpstream) calls() []string {
 
 func openProxy(t *testing.T, upstreamURL string, provider config.ProviderKeys, keys ...string) *Proxy {
 	t.Helper()
+	return openProxyWithLog(t, upstreamURL, provider, slog.New(slog.DiscardHandler), keys...)
+}
+
+func openProxyWithLog(t *testing.T, upstreamURL string, provider config.ProviderKeys, log *slog.Logger, keys ...string) *Proxy {
+	t.Helper()
 	env := make(map[string]string)
 	sources := make([]config.KeySource, 0, len(keys))
 	for index, value := range keys {
@@ -54,7 +61,7 @@ func openProxy(t *testing.T, upstreamURL string, provider config.ProviderKeys, k
 	provider.Sources = sources
 	loader := Loader{Getenv: func(name string) string { return env[name] }}
 	keysConfig := &config.KeysConfig{Providers: map[string]config.ProviderKeys{config.ProviderAnthropic: provider}}
-	proxy, err := Open(context.Background(), keysConfig, loader, slog.New(slog.DiscardHandler))
+	proxy, err := Open(context.Background(), keysConfig, loader, log)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -241,5 +248,147 @@ func TestPoolRetryAfterOverridesCooldown(t *testing.T) {
 	index, ok := pool.pick(now.Add(3*time.Second), make(map[int]bool))
 	if !ok || index != 0 {
 		t.Fatalf("pick after Retry-After elapsed = %d %v, want key 0 back", index, ok)
+	}
+}
+
+func TestFailoverMovesToNextKeyOn401(t *testing.T) {
+	upstream := &stubUpstream{respond: func(key string) (int, string) {
+		if key == "first" {
+			return http.StatusUnauthorized, "revoked"
+		}
+		return http.StatusOK, "answer"
+	}}
+	server := httptest.NewServer(upstream)
+	t.Cleanup(server.Close)
+	proxy := openProxy(t, server.URL, config.ProviderKeys{}, "first", "second")
+
+	status, body := post(t, grantFor(t, proxy), `{}`)
+
+	if status != http.StatusOK || body != "answer" {
+		t.Fatalf("got %d %q, want 200 answer after a 401 failover", status, body)
+	}
+}
+
+func TestAnswerIsRelayedOnceWithoutRotation(t *testing.T) {
+	upstream := &stubUpstream{respond: func(string) (int, string) { return http.StatusOK, "answer" }}
+	server := httptest.NewServer(upstream)
+	t.Cleanup(server.Close)
+	proxy := openProxy(t, server.URL, config.ProviderKeys{}, "first", "second")
+
+	status, body := post(t, grantFor(t, proxy), `{}`)
+
+	if status != http.StatusOK || body != "answer" {
+		t.Fatalf("got %d %q, want 200 answer", status, body)
+	}
+	if got := upstream.calls(); len(got) != 1 {
+		t.Fatalf("upstream saw %v, want a single call", got)
+	}
+}
+
+func eventStreamUpstream(release <-chan struct{}, waitedOut chan<- struct{}) http.HandlerFunc {
+	return func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "text/event-stream")
+		if _, err := io.WriteString(writer, "data: first\n\n"); err != nil {
+			return
+		}
+		if err := http.NewResponseController(writer).Flush(); err != nil {
+			return
+		}
+		select {
+		case <-release:
+		case <-time.After(5 * time.Second):
+			waitedOut <- struct{}{}
+		}
+		if _, err := io.WriteString(writer, "data: second\n\n"); err != nil {
+			return
+		}
+	}
+}
+
+func openEventStream(t *testing.T, grant Grant) *bufio.Reader {
+	t.Helper()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, grant.BaseURL+"/v1/messages", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("X-Api-Key", grant.Token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := response.Body.Close(); closeErr != nil {
+			t.Errorf("close event stream: %v", closeErr)
+		}
+	})
+	return bufio.NewReader(response.Body)
+}
+
+func TestEventStreamIsForwardedChunkByChunk(t *testing.T) {
+	release := make(chan struct{})
+	waitedOut := make(chan struct{}, 1)
+	server := httptest.NewServer(eventStreamUpstream(release, waitedOut))
+	t.Cleanup(server.Close)
+	proxy := openProxy(t, server.URL, config.ProviderKeys{}, "first")
+	reader := openEventStream(t, grantFor(t, proxy))
+
+	first, err := reader.ReadString('\n')
+	if err != nil || first != "data: first\n" {
+		t.Fatalf("first chunk = %q, %v", first, err)
+	}
+	select {
+	case <-waitedOut:
+		t.Fatal("the first chunk was held back until the upstream finished")
+	default:
+	}
+	close(release)
+	rest, err := io.ReadAll(reader)
+	if err != nil || !strings.Contains(string(rest), "data: second") {
+		t.Fatalf("rest = %q, %v", rest, err)
+	}
+}
+
+func TestSecretsNeverReachTheLog(t *testing.T) {
+	upstream := &stubUpstream{respond: func(key string) (int, string) {
+		if key == "sk-first-secret" {
+			return http.StatusTooManyRequests, "limited"
+		}
+		return http.StatusOK, "answer"
+	}}
+	server := httptest.NewServer(upstream)
+	t.Cleanup(server.Close)
+	var logs bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	proxy := openProxyWithLog(t, server.URL, config.ProviderKeys{}, log, "sk-first-secret", "sk-second-secret")
+
+	if status, _ := post(t, grantFor(t, proxy), `{}`); status != http.StatusOK {
+		t.Fatalf("status %d, want the failover answer", status)
+	}
+	if strings.Contains(logs.String(), "sk-") {
+		t.Fatalf("a key value reached the log: %s", logs.String())
+	}
+}
+
+func TestKeyCommandOutputIsCapped(t *testing.T) {
+	_, err := runKeyCommand(t.Context(), []string{"head", "-c", "20000", "/dev/zero"})
+	if !errors.Is(err, errKeyOutputTooLarge) {
+		t.Fatalf("err = %v, want the output cap", err)
+	}
+}
+
+func TestKeyCommandStopsWhenCancelled(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	_, err := runKeyCommand(ctx, []string{"sleep", "10"})
+	if err == nil || time.Since(started) > 3*time.Second {
+		t.Fatalf("err = %v after %s, want the command stopped early", err, time.Since(started))
+	}
+}
+
+func TestKeyCommandStderrNeverReachesTheError(t *testing.T) {
+	_, err := runKeyCommand(t.Context(), []string{"sh", "-c", "echo leaked-key-material 1>&2; exit 3"})
+	if err == nil || strings.Contains(err.Error(), "leaked-key-material") {
+		t.Fatalf("err = %v, want a failure without the stderr", err)
 	}
 }

@@ -77,7 +77,7 @@ type grant struct {
 type Proxy struct {
 	log       *slog.Logger
 	providers map[string]Route
-	client    *http.Client
+	transport *http.Transport
 	listener  net.Listener
 	server    *http.Server
 	served    chan struct{}
@@ -103,7 +103,7 @@ func Open(ctx context.Context, keys *config.KeysConfig, loader Loader, log *slog
 	proxy := &Proxy{
 		log:       log,
 		providers: providers,
-		client:    newClient(),
+		transport: newTransport(),
 		listener:  listener,
 		served:    make(chan struct{}),
 	}
@@ -112,20 +112,14 @@ func Open(ctx context.Context, keys *config.KeysConfig, loader Loader, log *slog
 	return proxy, nil
 }
 
-func newClient() *http.Client {
-	transport := &http.Transport{
+func newTransport() *http.Transport {
+	return &http.Transport{
 		DialContext:           (&net.Dialer{Timeout: dialTimeout}).DialContext,
 		TLSHandshakeTimeout:   tlsHandshakeLimit,
 		ResponseHeaderTimeout: responseTimeout,
 		IdleConnTimeout:       idleConnTimeout,
 		MaxIdleConns:          maxIdleConns,
 		ForceAttemptHTTP2:     true,
-	}
-	return &http.Client{
-		Transport: transport,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
 	}
 }
 

@@ -331,3 +331,15 @@ func TestApprovalWithoutRiskHasNoJudgeLine(t *testing.T) {
 		t.Errorf("the approval must not show a judge line without a risk")
 	}
 }
+
+func TestApprovalRiskSentBeforeTheMenuIsShown(t *testing.T) {
+	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a"}}}
+	m := newModel(fb)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApprovalRisk, Value: testApprovalID, Text: riskHighName}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: approvalMenuEvent(t, "git push", allApprovalRoles()...)})
+	m.active = "a"
+	if view := m.View(); !strings.Contains(view, "risque élevé") {
+		t.Fatalf("a risk event sent before the menu must show the judge line:\n%s", view)
+	}
+}

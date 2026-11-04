@@ -15,6 +15,7 @@ import (
 const (
 	eventMenu            = "menu"
 	eventApproval        = "approval"
+	eventApprovalRisk    = "approval_risk"
 	approvalTitle        = "! Approbation"
 	approvalDefaultWait  = 5 * time.Minute
 	approvalQuickWait    = 5 * time.Second
@@ -80,6 +81,11 @@ type approvalPrompt struct {
 type approvalDue struct {
 	deadline time.Time
 	keep     time.Time
+}
+
+type approvalRating struct {
+	level string
+	keep  time.Time
 }
 
 type approvalMenuOption struct {
@@ -200,6 +206,7 @@ func (m *model) openApproval(target *tab, event contracts.Event) bool {
 	if target.channel != m.active {
 		target.unread = true
 	}
+	m.applyKnownRisk(target)
 	m.applyKnownDeadline(target)
 	m.applySize()
 	return true
@@ -254,6 +261,33 @@ func (m *model) rememberApprovalDeadline(event contracts.Event, now time.Time) {
 	}
 }
 
+func (m *model) rememberApprovalRisk(event contracts.Event, now time.Time) {
+	if event.Value == "" {
+		return
+	}
+	if m.approvalRisks == nil {
+		m.approvalRisks = make(map[string]approvalRating)
+	}
+	m.approvalRisks[event.Value] = approvalRating{level: event.Text, keep: now.Add(approvalEarlyTTL)}
+	for _, channel := range m.order {
+		if target := m.tabs[channel]; target != nil {
+			m.applyKnownRisk(target)
+		}
+	}
+}
+
+func (m *model) applyKnownRisk(target *tab) {
+	if !target.pendingApproval || target.approval.id == "" || target.approval.risk != "" {
+		return
+	}
+	known, ok := m.approvalRisks[target.approval.id]
+	if !ok {
+		return
+	}
+	target.approval.risk = known.level
+	delete(m.approvalRisks, target.approval.id)
+}
+
 func (m *model) applyKnownDeadline(target *tab) {
 	if !target.pendingApproval || target.approval.id == "" {
 		return
@@ -267,6 +301,11 @@ func (m *model) applyKnownDeadline(target *tab) {
 }
 
 func (m *model) pruneApprovalDeadlines(now time.Time) {
+	for key, known := range m.approvalRisks {
+		if now.After(known.keep) {
+			delete(m.approvalRisks, key)
+		}
+	}
 	for key, known := range m.approvalDues {
 		if now.After(known.keep) {
 			delete(m.approvalDues, key)

@@ -243,32 +243,33 @@ func spinTick(d time.Duration) tea.Cmd {
 }
 
 type model struct {
-	ctx          context.Context
-	st           uiStyles
-	md           *markdownRenderer
-	keys         *keyLog
-	tm           Backend
-	vp           viewport.Model
-	input        textarea.Model
-	tabs         map[string]*tab
-	order        []string
-	active       string
-	ready        bool
-	showHelp     bool
-	pendingClose bool
-	width        int
-	height       int
-	flash        string
-	approvalDues map[string]approvalDue
-	tabSig       string
-	spin         int
-	cmds         []CommandSpec
-	diff         diffPanel
-	diffRun      commandRunner
-	palIdx       int
-	palWasOpen   bool
-	spinning     bool
-	composerRows int
+	ctx           context.Context
+	st            uiStyles
+	md            *markdownRenderer
+	keys          *keyLog
+	tm            Backend
+	vp            viewport.Model
+	input         textarea.Model
+	tabs          map[string]*tab
+	order         []string
+	active        string
+	ready         bool
+	showHelp      bool
+	pendingClose  bool
+	width         int
+	height        int
+	flash         string
+	approvalDues  map[string]approvalDue
+	approvalRisks map[string]approvalRating
+	tabSig        string
+	spin          int
+	cmds          []CommandSpec
+	diff          diffPanel
+	diffRun       commandRunner
+	palIdx        int
+	palWasOpen    bool
+	spinning      bool
+	composerRows  int
 
 	infoCache   contracts.SessionInfo
 	infoKnown   bool
@@ -1061,6 +1062,8 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	switch event.T {
 	case eventApproval:
 		m.rememberApprovalDeadline(event, time.Now())
+	case eventApprovalRisk:
+		m.rememberApprovalRisk(event, time.Now())
 	case eventMenu:
 		if m.openApproval(target, event) {
 			return

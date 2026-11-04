@@ -177,12 +177,12 @@ func (m *model) handlePluginsKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func pluginsRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actSelectCancel, stepKey((*model).backPlugins))
-		set(actSelectAccept, cmdKey((*model).choosePlugins))
-		set(actInterrupt, cmdKey((*model).overlayCtrlC))
-	})
+func pluginsRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actSelectCancel, stepKey((*model).backPlugins)),
+		bind[keyRun](actSelectAccept, cmdKey((*model).choosePlugins)),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+	)
 }
 
 func (m *model) backPlugins() {

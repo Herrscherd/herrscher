@@ -221,24 +221,24 @@ func (m *model) handleDiffPanelKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func diffPanelRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actDiffDismiss, stepKey(func(app *model) { app.diff.open = false }))
-		set(actInterrupt, cmdKey(func(app *model) tea.Cmd {
+func diffPanelRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actDiffDismiss, stepKey(func(app *model) { app.diff.open = false })),
+		bind[keyRun](actInterrupt, cmdKey(func(app *model) tea.Cmd {
 			cmd, _ := app.interruptOrQuit()
 			return cmd
-		}))
-		set(actDiffPrevFile, stepKey(func(app *model) { app.diff.moveSel(-1) }))
-		set(actDiffNextFile, stepKey(func(app *model) { app.diff.moveSel(1) }))
-		set(actScrollPageUp, stepKey(func(app *model) { app.diff.scrollBy(-diffPageRows) }))
-		set(actScrollPageDown, stepKey(func(app *model) { app.diff.scrollBy(diffPageRows) }))
-		set(actDiffReviewed, stepKey(func(app *model) { app.diff.toggleReviewed() }))
-		set(actDiffOpenFile, cmdKey((*model).editDiffFile))
-		set(actDiffNote, stepKey(openDiffNote))
-		set(actDiffCommit, stepKey(openDiffCommit))
-		set(actDiffPR, cmdKey(draftAndCommitPR))
-		set(actCycleDiffBase, cmdKey(toggleDiffBase))
-	})
+		})),
+		bind[keyRun](actDiffPrevFile, stepKey(func(app *model) { app.diff.moveSel(-1) })),
+		bind[keyRun](actDiffNextFile, stepKey(func(app *model) { app.diff.moveSel(1) })),
+		bind[keyRun](actScrollPageUp, stepKey(func(app *model) { app.diff.scrollBy(-diffPageRows) })),
+		bind[keyRun](actScrollPageDown, stepKey(func(app *model) { app.diff.scrollBy(diffPageRows) })),
+		bind[keyRun](actDiffReviewed, stepKey(func(app *model) { app.diff.toggleReviewed() })),
+		bind[keyRun](actDiffOpenFile, cmdKey((*model).editDiffFile)),
+		bind[keyRun](actDiffNote, stepKey(openDiffNote)),
+		bind[keyRun](actDiffCommit, stepKey(openDiffCommit)),
+		bind[keyRun](actDiffPR, cmdKey(draftAndCommitPR)),
+		bind[keyRun](actCycleDiffBase, cmdKey(toggleDiffBase)),
+	)
 }
 
 func openDiffNote(app *model) {
@@ -270,11 +270,11 @@ func (m *model) handleDiffNoteKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func diffNoteRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actDiffDismiss, stepKey(func(app *model) { app.diff.dlg = dialogNone }))
-		set(actDiffSendNote, cmdKey((*model).sendDiffNote))
-	})
+func diffNoteRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actDiffDismiss, stepKey(func(app *model) { app.diff.dlg = dialogNone })),
+		bind[keyRun](actDiffSendNote, cmdKey((*model).sendDiffNote)),
+	)
 }
 
 func (m *model) handleDiffCommitKey(msg tea.KeyMsg) tea.Cmd {
@@ -288,13 +288,13 @@ func (m *model) handleDiffCommitKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func diffDialogRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actDiffDismiss, stepKey(func(app *model) { app.diff.dlg = dialogNone }))
-		set(actDiffCommit, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(false) }))
-		set(actDiffPR, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(true) }))
-		set(actDiffEdit, stepKey(func(app *model) { app.diff.editing = true }))
-	})
+func diffDialogRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actDiffDismiss, stepKey(func(app *model) { app.diff.dlg = dialogNone })),
+		bind[keyRun](actDiffCommit, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(false) })),
+		bind[keyRun](actDiffPR, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(true) })),
+		bind[keyRun](actDiffEdit, stepKey(func(app *model) { app.diff.editing = true })),
+	)
 }
 
 func (m *model) handleDiffMessageEdit(msg tea.KeyMsg) tea.Cmd {
@@ -306,12 +306,12 @@ func (m *model) handleDiffMessageEdit(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func diffMessageRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actDiffStopEdit, stepKey(func(app *model) { app.diff.editing = false }))
-		set(actDiffCommit, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(false) }))
-		set(actNewline, stepKey(func(app *model) { app.diff.message += "\n" }))
-	})
+func diffMessageRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actDiffStopEdit, stepKey(func(app *model) { app.diff.editing = false })),
+		bind[keyRun](actDiffCommit, cmdKey(func(app *model) tea.Cmd { return app.commitCmd(false) })),
+		bind[keyRun](actNewline, stepKey(func(app *model) { app.diff.message += "\n" })),
+	)
 }
 
 func (m *model) sendDiffNote() tea.Cmd {

@@ -116,11 +116,27 @@ func fitScenarios() map[string]func(t *testing.T, m *model) {
 			m.drafts = []string{"brouillon"}
 			m.relayout()
 		},
+		"recherche":   func(_ *testing.T, m *model) { m.openSearch() },
+		"sessions":    func(_ *testing.T, m *model) { m.openSwitch() },
+		"reprise":     func(_ *testing.T, m *model) { m.openResume() },
+		"compétences": func(_ *testing.T, m *model) { m.openSkills() },
+		"diagnostic":  func(_ *testing.T, m *model) { m.openDiagnostics() },
+		"plugins":     func(_ *testing.T, m *model) { _ = m.openPlugins() },
+		"historique":  func(_ *testing.T, m *model) { m.openHistSearch() },
+		"thème":       func(_ *testing.T, m *model) { m.openTheme() },
+		"volets":      func(_ *testing.T, m *model) { m.openPanes() },
+		"diff":        func(_ *testing.T, m *model) { _ = m.openDiff(false) },
+		"mention": func(_ *testing.T, m *model) {
+			m.input.SetValue("@")
+			m.mentionCacheKey = m.worktreeDir() + "\x00"
+			m.mentionCacheRows = []string{"internal/very/long/path/to/a/file/whose/name/keeps/going/on/and/on.go", "README.md"}
+			m.resizeComposer()
+		},
 	}
 }
 
 func TestSurfacesFillTheScreenExactlyAtEverySize(t *testing.T) {
-	sizes := []struct{ width, height int }{{60, 20}, {60, 30}, {80, 30}, {120, 30}, {120, 42}, {200, 30}, {240, 50}}
+	sizes := []struct{ width, height int }{{60, 20}, {80, 20}, {120, 20}, {200, 20}, {60, 30}, {80, 30}, {120, 30}, {120, 42}, {200, 30}, {240, 50}}
 	for name, open := range fitScenarios() {
 		for _, size := range sizes {
 			t.Run(fmt.Sprintf("%s %dx%d", name, size.width, size.height), func(t *testing.T) {
@@ -131,6 +147,26 @@ func TestSurfacesFillTheScreenExactlyAtEverySize(t *testing.T) {
 				assertFitsScreen(t, m.View(), size.width, size.height)
 			})
 		}
+	}
+}
+
+func TestEveryOverlayChangesTheMainView(t *testing.T) {
+	base, _ := barModelAt(t, "")
+	base.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	mainView := base.View()
+	for name, open := range fitScenarios() {
+		if name == "repos" {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			m, _ := barModelAt(t, "")
+			m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+			open(t, m)
+			m.relayout()
+			if m.View() == mainView {
+				t.Fatalf("scenario %q renders the main view unchanged, the opener did not open its surface", name)
+			}
+		})
 	}
 }
 

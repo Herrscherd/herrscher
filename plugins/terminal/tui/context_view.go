@@ -56,14 +56,14 @@ func (m *model) handleContextKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func contextRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actInterrupt, cmdKey((*model).overlayCtrlC))
-		set(actContextCompact, cmdKey((*model).compactCmd))
-		set(actContextSync, stepKey(func(app *model) { app.syncTabs() }))
-		set(actNotifyCycle, cmdKey((*model).cycleNotify))
-		set(actContextClose, stepKey((*model).closeContext))
-	})
+func contextRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+		bind[keyRun](actContextCompact, cmdKey((*model).compactCmd)),
+		bind[keyRun](actContextSync, stepKey(func(app *model) { app.syncTabs() })),
+		bind[keyRun](actNotifyCycle, cmdKey((*model).cycleNotify)),
+		bind[keyRun](actContextClose, stepKey((*model).closeContext)),
+	)
 }
 
 func (m *model) contextView() string {

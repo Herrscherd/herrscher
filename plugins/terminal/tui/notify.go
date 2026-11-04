@@ -317,3 +317,7 @@ func firstLine(block string) string {
 	head, _, _ := strings.Cut(block, "\n")
 	return head
 }
+
+func toastRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(bind[keyRun](actToastJump, stepKey(func(app *model) { app.jumpToToast() })))
+}

@@ -419,17 +419,17 @@ func (m *model) handlePanesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	return nil, false
 }
 
-func panesRuns() map[keyAction]chatRun {
-	return dispatchTable(func(set func(keyAction, chatRun)) {
-		set(actPaneClose, stepChat((*model).closeSurface))
-		set(actPaneNext, stepChat(func(app *model) { app.movePane(1) }))
-		set(actPanePrevious, stepChat(func(app *model) { app.movePane(-1) }))
-		set(actPaneZoom, stepChat(func(app *model) { app.panes.zoom = !app.panes.zoom }))
-		set(actPaneSideNext, paneSideStep(1))
-		set(actPaneSidePrevious, paneSideStep(-1))
-		set(actPaneSend, chatCmd((*model).sendFromPane))
-		set(actInterrupt, chatCmd((*model).overlayCtrlC))
-	})
+func panesRuns() (map[keyAction]chatRun, error) {
+	return dispatchOf(
+		bind[chatRun](actPaneClose, stepChat((*model).closeSurface)),
+		bind[chatRun](actPaneNext, stepChat(func(app *model) { app.movePane(1) })),
+		bind[chatRun](actPanePrevious, stepChat(func(app *model) { app.movePane(-1) })),
+		bind[chatRun](actPaneZoom, stepChat(func(app *model) { app.panes.zoom = !app.panes.zoom })),
+		bind[chatRun](actPaneSideNext, paneSideStep(1)),
+		bind[chatRun](actPaneSidePrevious, paneSideStep(-1)),
+		bind[chatRun](actPaneSend, chatCmd((*model).sendFromPane)),
+		bind[chatRun](actInterrupt, chatCmd((*model).overlayCtrlC)),
+	)
 }
 
 func paneSideStep(step int) chatRun {

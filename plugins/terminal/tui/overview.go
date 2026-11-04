@@ -272,21 +272,21 @@ func (m *model) handleBoardKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func boardRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actSelectCancel, stepKey(func(app *model) {
+func boardRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actSelectCancel, stepKey(func(app *model) {
 			if app.board.query != "" {
 				app.setBoardQuery("")
 			} else {
 				app.closeSurface()
 			}
-		}))
-		set(actBoardPanes, stepKey((*model).openPanes))
-		set(actSelectPrevious, stepKey(func(app *model) { app.moveBoard(-1) }))
-		set(actSelectNext, stepKey(func(app *model) { app.moveBoard(1) }))
-		set(actSelectAccept, cmdKey((*model).openBoardRow))
-		set(actInterrupt, cmdKey((*model).overlayCtrlC))
-	})
+		})),
+		bind[keyRun](actBoardPanes, stepKey((*model).openPanes)),
+		bind[keyRun](actSelectPrevious, stepKey(func(app *model) { app.moveBoard(-1) })),
+		bind[keyRun](actSelectNext, stepKey(func(app *model) { app.moveBoard(1) })),
+		bind[keyRun](actSelectAccept, cmdKey((*model).openBoardRow)),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+	)
 }
 
 func (m *model) typeBoardQuery(msg tea.KeyMsg) {

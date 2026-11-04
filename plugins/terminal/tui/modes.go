@@ -402,24 +402,24 @@ func (m *model) handlePlanKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func planRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actSelectPrevious, stepKey(func(app *model) { app.movePlan(-1) }))
-		set(actSelectNext, stepKey(func(app *model) { app.movePlan(1) }))
-		set(actSelectAccept, cmdKey(func(app *model) tea.Cmd { return app.choosePlan(app.planMenu.sel) }))
-		set(actPlanSkip, cmdKey(func(app *model) tea.Cmd { return app.choosePlan(len(planOptions()) - 1) }))
-		set(actCycleMode, cmdKey(func(app *model) tea.Cmd {
+func planRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actSelectPrevious, stepKey(func(app *model) { app.movePlan(-1) })),
+		bind[keyRun](actSelectNext, stepKey(func(app *model) { app.movePlan(1) })),
+		bind[keyRun](actSelectAccept, cmdKey(func(app *model) tea.Cmd { return app.choosePlan(app.planMenu.sel) })),
+		bind[keyRun](actPlanSkip, cmdKey(func(app *model) tea.Cmd { return app.choosePlan(len(planOptions()) - 1) })),
+		bind[keyRun](actCycleMode, cmdKey(func(app *model) tea.Cmd {
 			app.planMenu = nil
 			return app.cycleMode()
-		}))
-		set(actInterrupt, cmdKey((*model).overlayCtrlC))
-		set(actPlanChoose, func(app *model, msg tea.KeyMsg) tea.Cmd {
+		})),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+		bind[keyRun](actPlanChoose, func(app *model, msg tea.KeyMsg) tea.Cmd {
 			if index := int(msg.Runes[0] - '1'); len(msg.Runes) == 1 && index < len(planOptions()) {
 				return app.choosePlan(index)
 			}
 			return nil
-		})
-	})
+		}),
+	)
 }
 
 func (m *model) planMenuView() string {

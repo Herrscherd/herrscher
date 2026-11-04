@@ -213,20 +213,20 @@ func (m *model) handleRewindList(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func rewindListRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actSelectAccept, stepKey(func(app *model) {
+func rewindListRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actSelectAccept, stepKey(func(app *model) {
 			app.rwStep = rewindStepOptions
 			app.rwOpt = rewindOptionBoth
-		}))
-		set(actRewindFork, cmdKey(func(app *model) tea.Cmd {
+		})),
+		bind[keyRun](actRewindFork, cmdKey(func(app *model) tea.Cmd {
 			app.rwOpt = rewindOptionFork
 			return app.chooseRewindOption()
-		}))
-		set(actRewindUndo, cmdKey((*model).undoRewind))
-		set(actSelectCancel, stepKey((*model).closeRewind))
-		set(actInterrupt, cmdKey((*model).overlayCtrlC))
-	})
+		})),
+		bind[keyRun](actRewindUndo, cmdKey((*model).undoRewind)),
+		bind[keyRun](actSelectCancel, stepKey((*model).closeRewind)),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+	)
 }
 
 func (m *model) handleRewindOptions(msg tea.KeyMsg) tea.Cmd {
@@ -240,12 +240,12 @@ func (m *model) handleRewindOptions(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func rewindOptionsRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actSelectAccept, cmdKey((*model).chooseRewindOption))
-		set(actSelectCancel, stepKey(func(app *model) { app.rwStep = rewindStepList }))
-		set(actInterrupt, cmdKey((*model).overlayCtrlC))
-	})
+func rewindOptionsRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actSelectAccept, cmdKey((*model).chooseRewindOption)),
+		bind[keyRun](actSelectCancel, stepKey(func(app *model) { app.rwStep = rewindStepList })),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+	)
 }
 
 func (m *model) handleRewindSure(msg tea.KeyMsg) tea.Cmd {
@@ -256,13 +256,13 @@ func (m *model) handleRewindSure(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func rewindSureRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actConfirmYes, cmdKey((*model).restoreRewind))
-		set(actConfirmNo, stepKey(func(app *model) { app.rwStep = rewindStepOptions }))
-		set(actSelectCancel, stepKey(func(app *model) { app.rwStep = rewindStepOptions }))
-		set(actInterrupt, cmdKey((*model).overlayCtrlC))
-	})
+func rewindSureRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actConfirmYes, cmdKey((*model).restoreRewind)),
+		bind[keyRun](actConfirmNo, stepKey(func(app *model) { app.rwStep = rewindStepOptions })),
+		bind[keyRun](actSelectCancel, stepKey(func(app *model) { app.rwStep = rewindStepOptions })),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+	)
 }
 
 func (m *model) moveRewind(delta int) {

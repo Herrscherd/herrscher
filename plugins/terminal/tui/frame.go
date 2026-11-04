@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -91,7 +93,17 @@ func (m *model) openOverlayLines() []string {
 			overlays = appendLines(overlays, overlay.view())
 		}
 	}
-	return overlays
+	return fitEachLine(overlays, m.width)
+}
+
+func fitEachLine(lines []string, width int) []string {
+	if width < 1 {
+		return lines
+	}
+	for index, line := range lines {
+		lines[index] = ansi.Truncate(line, width, "…")
+	}
+	return lines
 }
 
 func (m *model) chipsView() string {

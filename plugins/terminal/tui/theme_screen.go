@@ -171,9 +171,9 @@ func (m *model) handleThemeKey(msg tea.KeyMsg) tea.Cmd {
 	return m.handleThemeAction(action)
 }
 
-func themeScreenRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actSelectCancel, cmdKey(func(app *model) tea.Cmd {
+func themeScreenRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actSelectCancel, cmdKey(func(app *model) tea.Cmd {
 			if app.themeScr.install {
 				app.themeScr.install = false
 				return nil
@@ -181,11 +181,11 @@ func themeScreenRuns() map[keyAction]keyRun {
 			app.applyTheme(app.themeScr.origin)
 			app.closeTheme()
 			return nil
-		}))
-		set(actSelectAccept, stepKey((*model).commitTheme))
-		set(actThemeEdit, cmdKey((*model).editThemeFile))
-		set(actInterrupt, cmdKey((*model).overlayCtrlC))
-	})
+		})),
+		bind[keyRun](actSelectAccept, stepKey((*model).commitTheme)),
+		bind[keyRun](actThemeEdit, cmdKey((*model).editThemeFile)),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+	)
 }
 
 func (m *model) handleThemeAction(action keyAction) tea.Cmd {
@@ -195,27 +195,27 @@ func (m *model) handleThemeAction(action keyAction) tea.Cmd {
 	return nil
 }
 
-func themeLookRuns() map[keyAction]modelRun {
-	return dispatchTable(func(set func(keyAction, modelRun)) {
-		set(actThemeInstall, func(app *model) tea.Cmd {
+func themeLookRuns() (map[keyAction]modelRun, error) {
+	return dispatchOf(
+		bind[modelRun](actThemeInstall, func(app *model) tea.Cmd {
 			app.themeScr.install = !app.themeScr.install
 			return nil
-		})
-		set(actThemeCopyCommand, func(app *model) tea.Cmd {
+		}),
+		bind[modelRun](actThemeCopyCommand, func(app *model) tea.Cmd {
 			app.copyObel(obelInstallCommand, "commande")
 			return nil
-		})
-		set(actThemeCopyConfig, func(app *model) tea.Cmd {
+		}),
+		bind[modelRun](actThemeCopyConfig, func(app *model) tea.Cmd {
 			app.copyObel(app.obelConfigText(), "configuration")
 			return nil
-		})
-		set(actThemeGlyphs, themeTweak(func(s *themeScreen) { s.look.Glyphs = nextOption(glyphModes(), s.look.Glyphs) }))
-		set(actThemeBorders, themeTweak(func(s *themeScreen) { s.look.Borders = nextOption(borderStyles(), s.look.Borders) }))
-		set(actThemeDensity, themeTweak(func(s *themeScreen) { s.look.Density = nextOption(densities(), s.look.Density) }))
-		set(actThemeBold, themeTweak(func(s *themeScreen) { s.look.Bold = !s.look.Bold }))
-		set(actThemeItalic, themeTweak(func(s *themeScreen) { s.look.Italic = !s.look.Italic }))
-		set(actThemeAuto, themeTweak(func(s *themeScreen) { s.auto = !s.auto }))
-	})
+		}),
+		bind[modelRun](actThemeGlyphs, themeTweak(func(s *themeScreen) { s.look.Glyphs = nextOption(glyphModes(), s.look.Glyphs) })),
+		bind[modelRun](actThemeBorders, themeTweak(func(s *themeScreen) { s.look.Borders = nextOption(borderStyles(), s.look.Borders) })),
+		bind[modelRun](actThemeDensity, themeTweak(func(s *themeScreen) { s.look.Density = nextOption(densities(), s.look.Density) })),
+		bind[modelRun](actThemeBold, themeTweak(func(s *themeScreen) { s.look.Bold = !s.look.Bold })),
+		bind[modelRun](actThemeItalic, themeTweak(func(s *themeScreen) { s.look.Italic = !s.look.Italic })),
+		bind[modelRun](actThemeAuto, themeTweak(func(s *themeScreen) { s.auto = !s.auto })),
+	)
 }
 
 func themeTweak(change func(*themeScreen)) modelRun {

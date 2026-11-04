@@ -78,20 +78,20 @@ func (m *model) handleStatuslineKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func statuslineRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actStatuslineClose, stepKey((*model).closeStatusline))
-		set(actInterrupt, cmdKey((*model).overlayCtrlC))
-		set(actStatuslineSource, cmdKey((*model).switchStatuslineSource))
-	})
+func statuslineRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actStatuslineClose, stepKey((*model).closeStatusline)),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+		bind[keyRun](actStatuslineSource, cmdKey((*model).switchStatuslineSource)),
+	)
 }
 
-func statuslineFieldRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actStatuslineUp, stepKey(func(app *model) { app.moveStatuslineField(-1) }))
-		set(actStatuslineDown, stepKey(func(app *model) { app.moveStatuslineField(1) }))
-		set(actStatuslineToggle, stepKey((*model).toggleStatuslineField))
-	})
+func statuslineFieldRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actStatuslineUp, stepKey(func(app *model) { app.moveStatuslineField(-1) })),
+		bind[keyRun](actStatuslineDown, stepKey(func(app *model) { app.moveStatuslineField(1) })),
+		bind[keyRun](actStatuslineToggle, stepKey((*model).toggleStatuslineField)),
+	)
 }
 
 func (m *model) moveStatuslineCursor(delta int) {

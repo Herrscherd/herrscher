@@ -56,22 +56,22 @@ func (m *model) handleHistSearchKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func histSearchRuns() map[keyAction]keyRun {
-	return dispatchTable(func(set func(keyAction, keyRun)) {
-		set(actInterrupt, cmdKey((*model).overlayCtrlC))
-		set(actHistoryCancel, stepKey((*model).closeHistSearch))
-		set(actHistoryAccept, stepKey(func(app *model) {
+func histSearchRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+		bind[keyRun](actHistoryCancel, stepKey((*model).closeHistSearch)),
+		bind[keyRun](actHistoryAccept, stepKey(func(app *model) {
 			if matches := app.histMatches(); len(matches) > 0 {
 				app.input.SetValue(matches[app.histSel])
 				app.input.CursorEnd()
 				app.resizeComposer()
 			}
 			app.closeHistSearch()
-		}))
-		set(actSelectPrevious, stepKey(func(app *model) { app.moveHistSel(-1) }))
-		set(actSelectNext, stepKey(func(app *model) { app.moveHistSel(1) }))
-		set(actHistoryNextMatch, stepKey(func(app *model) { app.moveHistSel(1) }))
-	})
+		})),
+		bind[keyRun](actSelectPrevious, stepKey(func(app *model) { app.moveHistSel(-1) })),
+		bind[keyRun](actSelectNext, stepKey(func(app *model) { app.moveHistSel(1) })),
+		bind[keyRun](actHistoryNextMatch, stepKey(func(app *model) { app.moveHistSel(1) })),
+	)
 }
 
 func (m *model) typeHistQuery(msg tea.KeyMsg) {

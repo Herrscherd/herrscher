@@ -225,25 +225,25 @@ func (m *model) handleQueueFocus(msg tea.KeyMsg) bool {
 	return false
 }
 
-func queueRuns() map[keyAction]flagRun {
-	return dispatchTable(func(set func(keyAction, flagRun)) {
-		set(actQueuePrevious, stepFlag(func(app *model) {
+func queueRuns() (map[keyAction]flagRun, error) {
+	return dispatchOf(
+		bind[flagRun](actQueuePrevious, stepFlag(func(app *model) {
 			if app.queueSel > 0 {
 				app.queueSel--
 			}
-		}))
-		set(actQueueNext, stepFlag(func(app *model) {
+		})),
+		bind[flagRun](actQueueNext, stepFlag(func(app *model) {
 			if app.queueSel < len(app.activeTab().queue)-1 {
 				app.queueSel++
 			} else {
 				app.queueFocus = false
 			}
-		}))
-		set(actQueueMoveUp, stepFlag(func(app *model) { app.moveQueued(app.queueSel, -1) }))
-		set(actQueueMoveDown, stepFlag(func(app *model) { app.moveQueued(app.queueSel, 1) }))
-		set(actQueueRemove, stepFlag(func(app *model) { app.removeQueued(app.queueSel) }))
-		set(actQueueLeave, stepFlag(func(app *model) { app.queueFocus = false }))
-	})
+		})),
+		bind[flagRun](actQueueMoveUp, stepFlag(func(app *model) { app.moveQueued(app.queueSel, -1) })),
+		bind[flagRun](actQueueMoveDown, stepFlag(func(app *model) { app.moveQueued(app.queueSel, 1) })),
+		bind[flagRun](actQueueRemove, stepFlag(func(app *model) { app.removeQueued(app.queueSel) })),
+		bind[flagRun](actQueueLeave, stepFlag(func(app *model) { app.queueFocus = false })),
+	)
 }
 
 func (m *model) moveQueued(index, delta int) {

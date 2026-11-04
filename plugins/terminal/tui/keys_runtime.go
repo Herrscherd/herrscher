@@ -101,89 +101,89 @@ func (m *model) runChatAction(action keyAction, msg tea.KeyMsg) (tea.Cmd, bool) 
 	return nil, true
 }
 
-func chatRuns() map[keyAction]chatRun {
+func chatRuns() (map[keyAction]chatRun, error) {
 	toggleTool := stepChat((*model).toggleToolExpand)
 	sendQueue := chatCmd((*model).sendQueueNow)
-	return dispatchTable(func(set func(keyAction, chatRun)) {
-		set(actInterrupt, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
+	return dispatchOf(
+		bind[chatRun](actInterrupt, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
 			return app.interruptOrQuit()
-		})
-		set(actExit, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actExit, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
 			if app.input.Value() != "" {
 				return nil, false
 			}
 			return tea.Quit, true
-		})
-		set(actCancel, stepChat((*model).escapeKey))
-		set(actSubmit, func(app *model, msg tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actCancel, stepChat((*model).escapeKey)),
+		bind[chatRun](actSubmit, func(app *model, msg tea.KeyMsg) (tea.Cmd, bool) {
 			return app.enterKey(msg)
-		})
-		set(actQueueRedirect, func(app *model, msg tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actQueueRedirect, func(app *model, msg tea.KeyMsg) (tea.Cmd, bool) {
 			return app.enterKey(msg)
-		})
-		set(actNewline, func(*model, tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actNewline, func(*model, tea.KeyMsg) (tea.Cmd, bool) {
 			return nil, false
-		})
-		set(actCycleMode, chatCmd((*model).cycleMode))
-		set(actTabsNext, stepChat(func(app *model) { app.switchTab(1) }))
-		set(actHistoryPrevious, func(app *model, msg tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actCycleMode, chatCmd((*model).cycleMode)),
+		bind[chatRun](actTabsNext, stepChat(func(app *model) { app.switchTab(1) })),
+		bind[chatRun](actHistoryPrevious, func(app *model, msg tea.KeyMsg) (tea.Cmd, bool) {
 			return app.upKey(msg)
-		})
-		set(actHistoryNext, func(app *model, msg tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actHistoryNext, func(app *model, msg tea.KeyMsg) (tea.Cmd, bool) {
 			return app.handleHistoryKey(msg, 1)
-		})
-		set(actImagePaste, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actImagePaste, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
 			return nil, app.pasteImage()
-		})
-		set(actRemovePending, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actRemovePending, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
 			return app.removePendingKey()
-		})
-		set(actStash, stepChat((*model).stashDraft))
-		set(actClearInput, stepChat(func(app *model) { app.input.Reset(); app.relayout() }))
-		set(actChatUndo, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actStash, stepChat((*model).stashDraft)),
+		bind[chatRun](actClearInput, stepChat(func(app *model) { app.input.Reset(); app.relayout() })),
+		bind[chatRun](actChatUndo, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
 			return nil, app.undoComposer()
-		})
-		set(actChatSearch, stepChat((*model).openSearch))
-		set(actHistorySearch, stepChat((*model).openHistSearch))
-		set(actOpenSessions, stepChat((*model).openSwitch))
-		set(actCloseTab, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actChatSearch, stepChat((*model).openSearch)),
+		bind[chatRun](actHistorySearch, stepChat((*model).openHistSearch)),
+		bind[chatRun](actOpenSessions, stepChat((*model).openSwitch)),
+		bind[chatRun](actCloseTab, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
 			return app.closeTabKey()
-		})
-		set(actOpenBoard, chatCmd((*model).openBoard))
-		set(actExternalEditor, chatCmd((*model).openEditor))
-		set(actQueueSubmit, sendQueue)
-		set(actSendNow, sendQueue)
-		set(actCopyCode, stepChat((*model).copyLastCode))
-		set(actCopyReply, stepChat(func(app *model) { app.copyTarget(copyReply) }))
-		set(actToggleCodeFold, stepChat((*model).toggleFold))
-		set(actToggleToolExpand, toggleTool)
-		set(actToggleTranscript, toggleTool)
-		set(actToggleTurnFold, stepChat((*model).toggleTurnFold))
-		set(actOpenOrFold, stepChat((*model).openOrFold))
-		set(actNextLink, stepChat((*model).selectNextLink))
-		set(actNextTurn, stepChat(func(app *model) { app.jumpTurn(1) }))
-		set(actPreviousTurn, stepChat(func(app *model) { app.jumpTurn(-1) }))
-		set(actToggleMouse, chatCmd((*model).toggleMouse))
-		set(actOpenDiff, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actOpenBoard, chatCmd((*model).openBoard)),
+		bind[chatRun](actExternalEditor, chatCmd((*model).openEditor)),
+		bind[chatRun](actQueueSubmit, sendQueue),
+		bind[chatRun](actSendNow, sendQueue),
+		bind[chatRun](actCopyCode, stepChat((*model).copyLastCode)),
+		bind[chatRun](actCopyReply, stepChat(func(app *model) { app.copyTarget(copyReply) })),
+		bind[chatRun](actToggleCodeFold, stepChat((*model).toggleFold)),
+		bind[chatRun](actToggleToolExpand, toggleTool),
+		bind[chatRun](actToggleTranscript, toggleTool),
+		bind[chatRun](actToggleTurnFold, stepChat((*model).toggleTurnFold)),
+		bind[chatRun](actOpenOrFold, stepChat((*model).openOrFold)),
+		bind[chatRun](actNextLink, stepChat((*model).selectNextLink)),
+		bind[chatRun](actNextTurn, stepChat(func(app *model) { app.jumpTurn(1) })),
+		bind[chatRun](actPreviousTurn, stepChat(func(app *model) { app.jumpTurn(-1) })),
+		bind[chatRun](actToggleMouse, chatCmd((*model).toggleMouse)),
+		bind[chatRun](actOpenDiff, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
 			return app.openDiff(false), true
-		})
-		set(actOpenTheme, stepChat((*model).openTheme))
-		set(actToggleSidebar, stepChat((*model).toggleSidebar))
-		set(actKillAgents, stepChat((*model).interruptBusySessions))
-		set(actHelpToggle, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actOpenTheme, stepChat((*model).openTheme)),
+		bind[chatRun](actToggleSidebar, stepChat((*model).toggleSidebar)),
+		bind[chatRun](actKillAgents, stepChat((*model).interruptBusySessions)),
+		bind[chatRun](actHelpToggle, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
 			if app.input.Value() != "" {
 				return nil, false
 			}
 			app.toggleHelp()
 			return nil, true
-		})
-		set(actNotifyCycle, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
+		}),
+		bind[chatRun](actNotifyCycle, func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
 			if app.input.Value() != "" || app.toast.title == "" {
 				return nil, false
 			}
 			return app.cycleNotify(), true
-		})
-	})
+		}),
+	)
 }
 
 func (m *model) interruptBusySessions() {

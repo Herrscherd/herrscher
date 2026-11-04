@@ -333,45 +333,57 @@ func (m *model) approvalKeysOwned() (*tab, bool) {
 	return target, target.approval.reasonOpen || m.input.Value() == ""
 }
 
-func (m *model) handleApprovalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (m *model) handleApprovalKey(msg tea.KeyMsg) bool {
 	target, owned := m.approvalKeysOwned()
 	if !owned {
-		return nil, false
+		return false
 	}
 	if target.approval.reasonOpen {
 		m.handleApprovalReasonKey(target, msg)
-		return nil, true
+		return true
 	}
 	action := m.stackAction(msg, ctxApproval)
 	if run, ok := m.tables().approval[action]; ok {
-		run(m, target)
-		return nil, true
+		return run(m, target)
 	}
-	return m.approvalShortcut(target, action)
+	return false
 }
 
-func approvalRuns() map[keyAction]approvalRun {
-	return dispatchTable(func(set func(keyAction, approvalRun)) {
-		set(actSelectPrevious, func(_ *model, target *tab) { target.approval.moveCursor(-1) })
-		set(actSelectNext, func(_ *model, target *tab) { target.approval.moveCursor(1) })
-		set(actSelectAccept, func(app *model, target *tab) {
+func approvalRuns() (map[keyAction]approvalRun, error) {
+	bindings := []keyBinding[approvalRun]{
+		bind[approvalRun](actSelectPrevious, func(_ *model, target *tab) bool {
+			target.approval.moveCursor(-1)
+			return true
+		}),
+		bind[approvalRun](actSelectNext, func(_ *model, target *tab) bool {
+			target.approval.moveCursor(1)
+			return true
+		}),
+		bind[approvalRun](actSelectAccept, func(app *model, target *tab) bool {
 			app.chooseApproval(target, target.approval.cursor)
-		})
-	})
+			return true
+		}),
+		bind[approvalRun](actApprovalAccelerate, func(_ *model, target *tab) bool {
+			target.approval.deadline = accelerateDeadline(target.approval.deadline, time.Now())
+			return true
+		}),
+	}
+	for _, choice := range approvalCatalog() {
+		bindings = append(bindings, bind[approvalRun](choice.action, chooseApprovalAction(choice.action)))
+	}
+	return dispatchOf(bindings...)
 }
 
-func (m *model) approvalShortcut(target *tab, action keyAction) (tea.Cmd, bool) {
-	if action == actApprovalAccelerate {
-		target.approval.deadline = accelerateDeadline(target.approval.deadline, time.Now())
-		return nil, true
-	}
-	for index, entry := range target.approval.choices {
-		if entry.action == action {
-			m.chooseApproval(target, index)
-			return nil, true
+func chooseApprovalAction(action keyAction) approvalRun {
+	return func(app *model, target *tab) bool {
+		for index, entry := range target.approval.choices {
+			if entry.action == action {
+				app.chooseApproval(target, index)
+				return true
+			}
 		}
+		return false
 	}
-	return nil, false
 }
 
 func accelerateDeadline(deadline, now time.Time) time.Time {
@@ -409,13 +421,13 @@ func (m *model) handleApprovalReasonKey(target *tab, msg tea.KeyMsg) {
 	}
 }
 
-func approvalReasonRuns() map[keyAction]approvalRun {
-	return dispatchTable(func(set func(keyAction, approvalRun)) {
-		set(actSelectCancel, func(_ *model, target *tab) { target.approval.reasonOpen = false })
-		set(actSelectAccept, func(app *model, target *tab) {
+func approvalReasonRuns() (map[keyAction]reasonRun, error) {
+	return dispatchOf(
+		bind[reasonRun](actSelectCancel, func(_ *model, target *tab) { target.approval.reasonOpen = false }),
+		bind[reasonRun](actSelectAccept, func(app *model, target *tab) {
 			app.answerApproval(target, approvalDeny, target.approval.reason)
-		})
-	})
+		}),
+	)
 }
 
 func approvalCountdown(deadline, now time.Time) (string, time.Duration) {

@@ -90,19 +90,19 @@ func (m *model) overlayNav(action keyAction, move func(int)) bool {
 	return false
 }
 
-func navRuns() map[keyAction]navRun {
-	return dispatchTable(func(set func(keyAction, navRun)) {
-		set(actSelectPrevious, func(_ *model, move func(int)) bool { move(-1); return true })
-		set(actSelectNext, func(_ *model, move func(int)) bool { move(1); return true })
-		set(actSelectPageUp, func(app *model, move func(int)) bool {
+func navRuns() (map[keyAction]navRun, error) {
+	return dispatchOf(
+		bind[navRun](actSelectPrevious, func(_ *model, move func(int)) bool { move(-1); return true }),
+		bind[navRun](actSelectNext, func(_ *model, move func(int)) bool { move(1); return true }),
+		bind[navRun](actSelectPageUp, func(app *model, move func(int)) bool {
 			move(-app.overlayRows())
 			return true
-		})
-		set(actSelectPageDown, func(app *model, move func(int)) bool {
+		}),
+		bind[navRun](actSelectPageDown, func(app *model, move func(int)) bool {
 			move(app.overlayRows())
 			return true
-		})
-		set(actSelectFirst, func(_ *model, move func(int)) bool { move(-overlayJump); return true })
-		set(actSelectLast, func(_ *model, move func(int)) bool { move(overlayJump); return true })
-	})
+		}),
+		bind[navRun](actSelectFirst, func(_ *model, move func(int)) bool { move(-overlayJump); return true }),
+		bind[navRun](actSelectLast, func(_ *model, move func(int)) bool { move(overlayJump); return true }),
+	)
 }

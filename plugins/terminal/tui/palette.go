@@ -178,6 +178,7 @@ func localCommands() []CommandSpec {
 		{Name: "resume", Desc: "reopen an archived session"},
 		{Name: "agents", Desc: "voir toutes les sessions par état"},
 		{Name: verbRename, Args: "<nom>", Desc: "rename this session"},
+		{Name: verbHandoff, Args: "<nom>", Desc: "ouvrir une nouvelle session avec le brief de celle-ci"},
 		{Name: "usage", Desc: "cost, tokens and context for this session"},
 		{Name: "context", Desc: "ce qui occupe le contexte : système, outils, mémoire, skills, fichiers lus, conversation"},
 		{Name: "notify", Desc: "alterner les notifications : fin de tour, approbation, ou les deux"},

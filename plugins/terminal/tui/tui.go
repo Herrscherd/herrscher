@@ -86,6 +86,7 @@ const hostErrPrefix = "⚠️ "
 const (
 	sessionVerb = "session"
 	verbRename  = "rename"
+	verbHandoff = "handoff"
 	stateDone   = "done"
 	stateActive = "active"
 	eventReply  = "reply"
@@ -788,6 +789,8 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		m.stageAttachment(strings.TrimSpace(strings.TrimPrefix(text, "/attach")))
 	case verbRename:
 		return m.renameCmd(args[1:]), true
+	case verbHandoff:
+		return m.handoffCmd(args[1:]), true
 	case "copy":
 		m.copyCmd(args[1:])
 	case "mouse":
@@ -1032,6 +1035,19 @@ func (m *model) renameCmd(rest []string) tea.Cmd {
 		return nil
 	}
 	return m.dispatchCmd(m.active, []string{sessionVerb, verbRename, argName, name, argTo, target})
+}
+
+func (m *model) handoffCmd(rest []string) tea.Cmd {
+	name := m.activeSessionName()
+	if name == "" {
+		m.flash = "aucune session à passer ici"
+		return nil
+	}
+	args := []string{sessionVerb, verbHandoff, argName, name}
+	if target := strings.Join(rest, " "); target != "" {
+		args = append(args, argTo, target)
+	}
+	return m.dispatchCmd(m.active, args)
 }
 
 func renameTarget(rest []string) string {

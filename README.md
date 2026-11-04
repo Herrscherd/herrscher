@@ -411,13 +411,14 @@ catalog: a free-form `--cmd`, or a session with no model at all.
 
 ### Also
 
-Cross-backend skills, where one `SKILL.md` works on every backend. That includes
-the playbooks the binary ships with and installs into `~/.claude/skills`, kept
-current, because a playbook is instructions and a stale one is the agent
+Cross-backend skills, where one `SKILL.md` works on every backend. The playbooks
+come from the plugins in the build and are installed into `~/.claude/skills`,
+kept current, because a playbook is instructions and a stale one is the agent
 following last release's rules. A copy still bytewise the one we wrote is
-replaced when the shipped text changes. A copy you edited is left alone and named
-at startup, so you learn the rewrite is not in effect instead of finding your
-version gone. See `guide/skills`.
+replaced when the shipped text changes, and removed when no build ships it any
+more. A copy you edited is left alone and named at startup, so you learn the
+rewrite is not in effect instead of finding your version gone. See
+`guide/skills`.
 
 And per-node memory budgets, in `guide/budgets`.
 

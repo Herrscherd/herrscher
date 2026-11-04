@@ -16,6 +16,7 @@ import (
 )
 
 const (
+	draftBeatFlash = "signe de vie du brouillon interrompu : "
 	fallbackEditor = "vi"
 	draftFile      = "draft-*.md"
 	draftRunPrefix = "run-"
@@ -34,15 +35,20 @@ type editorDoneMsg struct {
 }
 
 type draftRun struct {
-	dir         string
-	root        *os.Root
-	lock        *os.File
-	touch       func(*os.Root) error
-	cancel      context.CancelFunc
-	done        chan struct{}
-	mu          sync.Mutex
-	beatErr     error
-	beatFailing bool
+	dir      string
+	root     *os.Root
+	lock     *os.File
+	touch    func(*os.Root) error
+	cancel   context.CancelFunc
+	done     chan struct{}
+	failures chan error
+	once     sync.Once
+	mu       sync.Mutex
+	beatErr  error
+}
+
+type draftBeatFailedMsg struct {
+	err error
 }
 
 func configuredEditor(env func(string) string) []string {
@@ -187,11 +193,12 @@ func claimDraftRun(dir string) (*draftRun, error) {
 	if err != nil {
 		return nil, errors.Join(err, root.Close())
 	}
-	return &draftRun{dir: dir, root: root, lock: lock, done: make(chan struct{})}, nil
+	return &draftRun{dir: dir, root: root, lock: lock, done: make(chan struct{}), failures: make(chan error, 1)}, nil
 }
 
 func (r *draftRun) keepAlive(ctx context.Context, every time.Duration) {
 	defer close(r.done)
+	defer close(r.failures)
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	for {
@@ -206,20 +213,32 @@ func (r *draftRun) keepAlive(ctx context.Context, every time.Duration) {
 
 func (r *draftRun) recordBeat(err error) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if err != nil {
-		r.beatErr = err
+	wasFailing := r.beatErr != nil
+	r.beatErr = err
+	r.mu.Unlock()
+	if err == nil || wasFailing {
+		return
 	}
-	r.beatFailing = err != nil
+	select {
+	case r.failures <- err:
+	default:
+	}
 }
 
 func (r *draftRun) heartbeatError() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.beatFailing {
-		return r.beatErr
+	return r.beatErr
+}
+
+func (r *draftRun) watchBeat() tea.Cmd {
+	return func() tea.Msg {
+		err, ok := <-r.failures
+		if !ok {
+			return nil
+		}
+		return draftBeatFailedMsg{err: err}
 	}
-	return nil
 }
 
 func touchDraftLock(root *os.Root) error {
@@ -228,16 +247,21 @@ func touchDraftLock(root *os.Root) error {
 }
 
 func (r *draftRun) release() error {
+	var err error
+	r.once.Do(func() {
+		err = r.closeRun()
+	})
+	return err
+}
+
+func (r *draftRun) closeRun() error {
 	r.cancel()
 	<-r.done
 	var lockErr error
 	if r.lock != nil {
 		lockErr = r.lock.Close()
 	}
-	r.mu.Lock()
-	beatErr := r.beatErr
-	r.mu.Unlock()
-	return errors.Join(beatErr, lockErr, r.root.Close())
+	return errors.Join(r.heartbeatError(), lockErr, r.root.Close())
 }
 
 func (m *model) releaseDrafts() error {
@@ -253,17 +277,32 @@ func (m *model) openEditor() tea.Cmd {
 	path, err := m.writeDraft(m.input.Value())
 	if err != nil {
 		m.flash = "éditeur indisponible : " + err.Error()
-		return nil
+		return m.armDraftBeatWatch()
 	}
 	if m.draftFiles != nil {
 		if beatErr := m.draftFiles.heartbeatError(); beatErr != nil {
-			m.flash = "signe de vie du brouillon interrompu : " + beatErr.Error()
+			m.flash = draftBeatFlash + beatErr.Error()
 		}
 	}
 	m.editing = true
-	return tea.ExecProcess(editorCommand(m.runContext(), path), func(err error) tea.Msg {
+	return tea.Batch(m.armDraftBeatWatch(), tea.ExecProcess(editorCommand(m.runContext(), path), func(err error) tea.Msg {
 		return editorDoneMsg{path: path, err: err}
-	})
+	}))
+}
+
+func (m *model) armDraftBeatWatch() tea.Cmd {
+	if m.draftFiles == nil || m.draftBeatWatched {
+		return nil
+	}
+	m.draftBeatWatched = true
+	return m.draftFiles.watchBeat()
+}
+
+func (m *model) watchDraftBeat() tea.Cmd {
+	if m.draftFiles == nil {
+		return nil
+	}
+	return m.draftFiles.watchBeat()
 }
 
 func (m *model) writeDraft(text string) (string, error) {

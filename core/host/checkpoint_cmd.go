@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
+	"github.com/Herrscherd/herrscher/core/internal/conversation"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -24,12 +26,32 @@ const (
 	whatCode          = "code"
 	whatConversation  = "conversation"
 	whatBoth          = "both"
+	noConversation    = "none"
 	forkSuffix        = "-fork"
 	checkpointTimeFmt = "15:04"
 )
 
-var errConversationRestore = errors.New("conversation restore is not supported by the claude backend " +
-	"(it resumes a session at its latest state only, not at a message); nothing was changed")
+var (
+	errConversationRestore = errors.New("conversation restore is not available at this checkpoint: " +
+		"its backend keeps no message position to return to; nothing was changed")
+	errConversationFork = errors.New("fork refused: the conversation cannot be taken to this checkpoint " +
+		"(its backend keeps no message position); nothing was created")
+)
+
+type sessionRestarter interface {
+	RestartWithResume(name, token string) error
+}
+
+type restarterKey struct{}
+
+func withRestarter(ctx context.Context, restarter sessionRestarter) context.Context {
+	return context.WithValue(ctx, restarterKey{}, restarter)
+}
+
+func restarterFrom(ctx context.Context) (sessionRestarter, bool) {
+	restarter, ok := ctx.Value(restarterKey{}).(sessionRestarter)
+	return restarter, ok && restarter != nil
+}
 
 type forkFunc func(context.Context, contracts.Input) (string, error)
 
@@ -55,11 +77,12 @@ type checkpointFile struct {
 }
 
 type checkpointView struct {
-	Index int              `json:"index"`
-	At    string           `json:"at"`
-	Turn  string           `json:"turn"`
-	Text  string           `json:"text"`
-	Files []checkpointFile `json:"files"`
+	Index        int              `json:"index"`
+	At           string           `json:"at"`
+	Turn         string           `json:"turn"`
+	Text         string           `json:"text"`
+	Conversation string           `json:"conversation"`
+	Files        []checkpointFile `json:"files"`
 }
 
 func addCheckpointVerbs(store *state.State, sessions *sessionTable) []contracts.Cmd {
@@ -94,7 +117,7 @@ func checkpointsVerb(store *state.State) contracts.Cmd {
 
 func rewindVerb(store *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbRewind).
-		Help("restore a session's code to the checkpoint before a message (conversation restore is not supported)").
+		Help("restore a session's code, its conversation, or both to the checkpoint before a message").
 		Param(paramName, "session name", true).
 		ValueParam(paramTo, "checkpoint number, as listed by session checkpoints", true).
 		ValueParam(paramWhat, "code, conversation or both", true).
@@ -103,20 +126,38 @@ func rewindVerb(store *state.State, sessions *sessionTable) contracts.Cmd {
 			if err != nil {
 				return "", err
 			}
-			switch in.Get(paramWhat) {
-			case whatCode:
-			case whatConversation, whatBoth:
-				return "", errConversationRestore
-			default:
+			what := in.Get(paramWhat)
+			if what != whatCode && what != whatConversation && what != whatBoth {
 				return "", fmt.Errorf("--what must be %s, %s or %s", whatCode, whatConversation, whatBoth)
 			}
 			if sessions.Busy(sess.Name) {
 				return "", busyRewindError(sess.Name)
 			}
-			if _, err := checkpoint.Restore(ctx, sess.Worktree, sess.Name, index); err != nil {
+			entry, err := checkpoint.Get(ctx, sess.Worktree, sess.Name, index)
+			if err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("rewound %s to checkpoint %d (code)", sess.Name, index), nil
+			resumeToken := ""
+			if what != whatCode {
+				if resumeToken, err = forkConversation(sess, entry, sess); err != nil {
+					return "", err
+				}
+			}
+			if what != whatConversation {
+				if _, err := checkpoint.Restore(ctx, sess.Worktree, sess.Name, index); err != nil {
+					return "", err
+				}
+			}
+			if what != whatCode {
+				restarter, ok := restarterFrom(ctx)
+				if !ok {
+					return "", errors.New("session rewind is only available from the running daemon")
+				}
+				if err := restarter.RestartWithResume(sess.Name, resumeToken); err != nil {
+					return "", fmt.Errorf("rewind %s: conversation not resumed: %w", sess.Name, err)
+				}
+			}
+			return fmt.Sprintf("rewound %s to checkpoint %d (%s)", sess.Name, index, what), nil
 		})
 }
 
@@ -157,6 +198,7 @@ func forkVerb() contracts.Cmd {
 type forkHost interface {
 	CreateCoordinated(ctx context.Context, spec contracts.CreateSession, vendor string) (string, error)
 	Close(ctx context.Context, name string, force bool) (string, error)
+	RestartWithResume(name, token string) error
 }
 
 func (h *hub) forkSession(ctx context.Context, input contracts.Input) (string, error) {
@@ -175,6 +217,9 @@ func forkCheckpoint(ctx context.Context, host forkHost, st *state.State, input c
 	entry, err := checkpoint.Get(ctx, source.Worktree, source.Name, index)
 	if err != nil {
 		return "", err
+	}
+	if !conversationRestorable(entry) {
+		return "", errConversationFork
 	}
 	head, err := checkpoint.Head(ctx, source.Worktree)
 	if err != nil {
@@ -204,6 +249,17 @@ func forkCheckpoint(ctx context.Context, host forkHost, st *state.State, input c
 		rollbackFork(ctx, host, forkName)
 		return "", fmt.Errorf("fork %q: checkpoint %d not applied: %w", forkName, index, err)
 	}
+	token, err := forkConversation(source, entry, fork)
+	if err != nil {
+		rollbackFork(ctx, host, forkName)
+		return "", fmt.Errorf("fork %q: conversation not taken to checkpoint %d: %w", forkName, index, err)
+	}
+	if token != "" {
+		if err := host.RestartWithResume(forkName, token); err != nil {
+			rollbackFork(ctx, host, forkName)
+			return "", fmt.Errorf("fork %q: conversation not resumed: %w", forkName, err)
+		}
+	}
 	if input.JSON {
 		b, err := json.Marshal(map[string]any{"name": forkName, "from": source.Name, "checkpoint": index})
 		return string(b), err
@@ -214,6 +270,45 @@ func forkCheckpoint(ctx context.Context, host forkHost, st *state.State, input c
 func rollbackFork(ctx context.Context, host forkHost, name string) {
 	_, err := host.Close(context.WithoutCancel(ctx), name, true)
 	logCleanup(err)
+}
+
+func conversationRestorable(entry checkpoint.Entry) bool {
+	return entry.Conversation != "" && entry.Conversation != noConversation
+}
+
+func conversationPosition(sess state.Session) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return noConversation
+	}
+	position, err := conversation.Position(home, backendDir(sess), sess.ResumeToken)
+	if err != nil {
+		return noConversation
+	}
+	return position
+}
+
+func forkConversation(source state.Session, entry checkpoint.Entry, target state.Session) (string, error) {
+	if !conversationRestorable(entry) {
+		return "", errConversationRestore
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	token, err := conversation.NewToken()
+	if err != nil {
+		return "", err
+	}
+	return conversation.Fork(home, backendDir(source), source.ResumeToken, entry.Conversation, backendDir(target), token)
+}
+
+func backendDir(sess state.Session) string {
+	dir := sess.Dir
+	if dir == "" {
+		dir = sess.Worktree
+	}
+	return resolveBackendDir(dir)
 }
 
 func checkpointable(sess state.Session) bool {
@@ -276,11 +371,12 @@ func checkpointViews(ctx context.Context, worktree, name string) ([]checkpointVi
 			files = append(files, checkpointFile{Path: change.Path, Added: change.Added, Removed: change.Removed})
 		}
 		views = append(views, checkpointView{
-			Index: entry.Index,
-			At:    entry.At.Local().Format(checkpointTimeFmt),
-			Turn:  entry.Turn,
-			Text:  entry.Text,
-			Files: files,
+			Index:        entry.Index,
+			At:           entry.At.Local().Format(checkpointTimeFmt),
+			Turn:         entry.Turn,
+			Text:         entry.Text,
+			Conversation: entry.Conversation,
+			Files:        files,
 		})
 	}
 	return views, nil

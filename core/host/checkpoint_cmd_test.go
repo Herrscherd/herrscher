@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
+	"github.com/Herrscherd/herrscher/core/internal/conversation"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -107,7 +109,7 @@ func TestRewindRestoresCodeAndRefusesConversation(t *testing.T) {
 	reg := checkpointRegistry(st, newSessionTable())
 
 	_, err := reg.Dispatch(ctx, []string{nsSession, verbRewind, "--name", "alpha", "--to", "1", "--what", "both"})
-	if err == nil || !strings.Contains(err.Error(), "not supported") {
+	if err == nil || !strings.Contains(err.Error(), "not available") {
 		t.Fatalf("conversation restore must be refused explicitly, err = %v", err)
 	}
 	if got := readFile(t, repo, "frame.go"); got != "v2\n" {
@@ -149,9 +151,28 @@ func TestRewindRefusedWhileTurnInFlight(t *testing.T) {
 }
 
 type fakeForkHost struct {
-	t    *testing.T
-	repo string
-	st   *state.State
+	t        *testing.T
+	repo     string
+	st       *state.State
+	restarts []restart
+}
+
+type restart struct {
+	name, token string
+}
+
+type fakeRestarter struct {
+	restarts []restart
+}
+
+func (f *fakeRestarter) RestartWithResume(name, token string) error {
+	f.restarts = append(f.restarts, restart{name: name, token: token})
+	return nil
+}
+
+func (f *fakeForkHost) RestartWithResume(name, token string) error {
+	f.restarts = append(f.restarts, restart{name: name, token: token})
+	return nil
 }
 
 func (f *fakeForkHost) CreateCoordinated(_ context.Context, spec contracts.CreateSession, _ string) (string, error) {
@@ -171,7 +192,7 @@ func TestForkCreatesOwnWorktreeAtCheckpointAndLeavesOriginal(t *testing.T) {
 	repo := checkpointRepo(t)
 	ctx := context.Background()
 	st := checkpointState(t, repo, "alpha")
-	if _, err := checkpoint.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
+	if _, err := checkpoint.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: conversation.Start}); err != nil {
 		t.Fatal(err)
 	}
 	writeFile(t, repo, "frame.go", "v2\n")
@@ -193,5 +214,108 @@ func TestForkCreatesOwnWorktreeAtCheckpointAndLeavesOriginal(t *testing.T) {
 	}
 	if got := readFile(t, repo, "frame.go"); got != "v2\n" {
 		t.Fatalf("original session was touched: %q", got)
+	}
+}
+
+func writeTranscript(t *testing.T, home, dir, token string, uuids ...string) {
+	t.Helper()
+	var b strings.Builder
+	for _, id := range uuids {
+		fmt.Fprintf(&b, `{"uuid":%q,"sessionId":%q,"type":"user"}`+"\n", id, token)
+	}
+	path := conversation.TranscriptPath(home, dir, token)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRewindConversationResumesAtTheCheckpointPosition(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repo := checkpointRepo(t)
+	ctx := context.Background()
+	st := checkpointState(t, repo, "alpha")
+	if err := st.SetResumeToken("alpha", "tok-1"); err != nil {
+		t.Fatal(err)
+	}
+	writeTranscript(t, home, repo, "tok-1", "u1", "u2", "u3")
+	if _, err := checkpoint.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: "u2"}); err != nil {
+		t.Fatal(err)
+	}
+	restarter := &fakeRestarter{}
+	reg := checkpointRegistry(st, newSessionTable())
+
+	if _, err := reg.Dispatch(withRestarter(ctx, restarter), []string{nsSession, verbRewind, "--name", "alpha", "--to", "1", "--what", "conversation"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(restarter.restarts) != 1 || restarter.restarts[0].name != "alpha" || restarter.restarts[0].token == "" || restarter.restarts[0].token == "tok-1" {
+		t.Fatalf("rewind must restart alpha on a forked conversation, restarts = %+v", restarter.restarts)
+	}
+	forked := restarter.restarts[0].token
+	raw, err := os.ReadFile(conversation.TranscriptPath(home, repo, forked))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines := strings.Count(string(raw), "\n"); lines != 2 || !strings.Contains(string(raw), `"sessionId":"`+forked+`"`) {
+		t.Fatalf("forked transcript must stop at u2 under its new id, got %d lines: %s", lines, raw)
+	}
+	original, err := os.ReadFile(conversation.TranscriptPath(home, repo, "tok-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(original), "\n") != 3 {
+		t.Fatal("the original transcript must be left untouched")
+	}
+}
+
+func TestForkCarriesTheConversationToTheCheckpoint(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repo := checkpointRepo(t)
+	ctx := context.Background()
+	st := checkpointState(t, repo, "alpha")
+	if err := st.SetResumeToken("alpha", "tok-1"); err != nil {
+		t.Fatal(err)
+	}
+	writeTranscript(t, home, repo, "tok-1", "u1", "u2", "u3")
+	if _, err := checkpoint.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: "u1"}); err != nil {
+		t.Fatal(err)
+	}
+	host := &fakeForkHost{t: t, repo: repo, st: st}
+
+	if _, err := forkCheckpoint(ctx, host, st, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}}); err != nil {
+		t.Fatal(err)
+	}
+	fork, _ := st.FindSession("alpha-fork")
+	if len(host.restarts) != 1 || host.restarts[0].name != "alpha-fork" {
+		t.Fatalf("the fork must resume its own conversation, restarts = %+v", host.restarts)
+	}
+	raw, err := os.ReadFile(conversation.TranscriptPath(home, fork.Worktree, host.restarts[0].token))
+	if err != nil {
+		t.Fatalf("the fork transcript must live in the fork's own project directory: %v", err)
+	}
+	if strings.Count(string(raw), "\n") != 1 {
+		t.Fatalf("the fork must stop at u1, got %q", raw)
+	}
+}
+
+func TestForkRefusedWhenTheCheckpointHasNoConversationPosition(t *testing.T) {
+	repo := checkpointRepo(t)
+	ctx := context.Background()
+	st := checkpointState(t, repo, "alpha")
+	if _, err := checkpoint.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
+		t.Fatal(err)
+	}
+	host := &fakeForkHost{t: t, repo: repo, st: st}
+
+	_, err := forkCheckpoint(ctx, host, st, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}})
+	if err == nil || !strings.Contains(err.Error(), "nothing was created") {
+		t.Fatalf("fork without a conversation position must be refused, err = %v", err)
+	}
+	if _, ok := st.FindSession("alpha-fork"); ok {
+		t.Fatal("a refused fork must not create a session")
 	}
 }

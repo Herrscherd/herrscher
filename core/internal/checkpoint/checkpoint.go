@@ -17,12 +17,13 @@ import (
 )
 
 const (
-	checkpointRefRoot = "refs/herrscher/checkpoints/"
-	undoRefRoot       = "refs/herrscher/undo/"
-	turnTrailer       = "Herrscher-Turn"
-	entryFormat       = "%(refname)%00%(objectname)%00%(creatordate:unix)%00%(contents:subject)%00%(trailers:key=" + turnTrailer + ",valueonly,separator=%x20)"
-	identityName      = "herrscher"
-	identityMail      = "checkpoint@herrscher.invalid"
+	checkpointRefRoot   = "refs/herrscher/checkpoints/"
+	undoRefRoot         = "refs/herrscher/undo/"
+	turnTrailer         = "Herrscher-Turn"
+	conversationTrailer = "Herrscher-Conversation"
+	entryFormat         = "%(refname)%00%(objectname)%00%(creatordate:unix)%00%(contents:subject)%00%(trailers:key=" + turnTrailer + ",valueonly,separator=%x20)%00%(trailers:key=" + conversationTrailer + ",valueonly,separator=%x20)"
+	identityName        = "herrscher"
+	identityMail        = "checkpoint@herrscher.invalid"
 )
 
 var (
@@ -34,16 +35,18 @@ var (
 )
 
 type Meta struct {
-	Turn string
-	Text string
+	Turn         string
+	Text         string
+	Conversation string
 }
 
 type Entry struct {
-	Index  int
-	Commit string
-	Turn   string
-	Text   string
-	At     time.Time
+	Index        int
+	Commit       string
+	Turn         string
+	Text         string
+	Conversation string
+	At           time.Time
 }
 
 type Change struct {
@@ -74,7 +77,7 @@ func Take(ctx context.Context, dir, session string, meta Meta) (Entry, error) {
 	if _, err := git(ctx, dir, nil, nil, "update-ref", ref, commit); err != nil {
 		return Entry{}, err
 	}
-	return Entry{Index: next, Commit: commit, Turn: meta.Turn, Text: meta.Text, At: time.Now().UTC()}, nil
+	return Entry{Index: next, Commit: commit, Turn: meta.Turn, Text: meta.Text, Conversation: meta.Conversation, At: time.Now().UTC()}, nil
 }
 
 func List(ctx context.Context, dir, session string) ([]Entry, error) {
@@ -313,14 +316,14 @@ func commitMessage(meta Meta) string {
 	if subject == "" {
 		subject = "(message vide)"
 	}
-	return subject + "\n\n" + turnTrailer + ": " + meta.Turn + "\n"
+	return subject + "\n\n" + turnTrailer + ": " + meta.Turn + "\n" + conversationTrailer + ": " + meta.Conversation + "\n"
 }
 
 func parseEntries(out []byte, prefix string) []Entry {
 	var entries []Entry
 	for _, record := range strings.Split(string(out), "\n") {
 		fields := strings.Split(record, "\x00")
-		if len(fields) < 5 {
+		if len(fields) < 6 {
 			continue
 		}
 		index, err := strconv.Atoi(strings.TrimPrefix(fields[0], prefix))
@@ -329,11 +332,12 @@ func parseEntries(out []byte, prefix string) []Entry {
 		}
 		unix, _ := strconv.ParseInt(fields[2], 10, 64)
 		entries = append(entries, Entry{
-			Index:  index,
-			Commit: fields[1],
-			Text:   fields[3],
-			Turn:   strings.TrimSpace(fields[4]),
-			At:     time.Unix(unix, 0).UTC(),
+			Index:        index,
+			Commit:       fields[1],
+			Text:         fields[3],
+			Turn:         strings.TrimSpace(fields[4]),
+			Conversation: strings.TrimSpace(fields[5]),
+			At:           time.Unix(unix, 0).UTC(),
 		})
 	}
 	return entries

@@ -114,7 +114,12 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 					if !checkpointable(sess) {
 						return
 					}
-					if _, err := checkpoint.Take(context.Background(), sess.Worktree, sess.Name, checkpoint.Meta{Turn: turnID, Text: text}); err != nil {
+					current, ok := h.st.FindSession(sess.Name)
+					if !ok {
+						current = sess
+					}
+					meta := checkpoint.Meta{Turn: turnID, Text: text, Conversation: conversationPosition(current)}
+					if _, err := checkpoint.Take(context.Background(), sess.Worktree, sess.Name, meta); err != nil {
 						warnStderr("herrscher serve: session %q: checkpoint not taken, /rewind cannot return to this message: %v\n", sess.Name, err)
 					}
 				},
@@ -193,6 +198,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 	if err := h.authorize(ctx, args); err != nil {
 		return "", err
 	}
+	ctx = withRestarter(ctx, h)
 
 	if isSessionSeedCommand(args) {
 		runtime := oneShotSeedRuntime{
@@ -374,6 +380,21 @@ func scrollbackOf(partDir, name string) []contracts.ScrollbackLine {
 		out = append(out, contracts.ScrollbackLine{Role: e.Role, Text: e.Text})
 	}
 	return out
+}
+
+func (h *hub) RestartWithResume(name, token string) error {
+	sess, ok := h.st.FindSession(name)
+	if !ok {
+		return &NotFoundError{Kind: kindSession, Name: name}
+	}
+	h.goDead(name)
+	if err := h.st.SetResumeToken(name, token); err != nil {
+		return err
+	}
+	sess.ResumeToken = token
+	h.goLive(context.Background(), sess)
+	h.sup.Start(sess)
+	return nil
 }
 
 func (h *hub) Resume(name string) error {

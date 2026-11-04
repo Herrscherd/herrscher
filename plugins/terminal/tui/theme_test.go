@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -423,5 +424,63 @@ func TestThemePreviewDropsBottomBlocksFirst(t *testing.T) {
 	}
 	if strings.Contains(short, "hérite de base") && !strings.Contains(short, "[terminal]") {
 		t.Fatalf("perso.toml must go before terminal.toml when short:\n%s", short)
+	}
+}
+
+func TestThemeControlsFoldByWholeBlocks(t *testing.T) {
+	for _, width := range []int{60, 120} {
+		plain := ansi.Strip(themeSized(t, width, 20).View())
+		requireAll(t, plain, fmt.Sprintf("%dx20", width), "Mon thème", "Terminal", "Rendu", "glyphes", "bordures", "densité", "texte", "police", "⏎ garder")
+		requireBoth(t, plain, fmt.Sprintf("%dx20 font explanation", width), "un TUI ne choisit pas sa police", "qui dessine sa propre fenêtre le peut")
+		requireAllOrNone(t, plain, fmt.Sprintf("%dx20 DÉTECTION", width), "Détection", "auto : fond sombre", "NO_COLOR respecté")
+	}
+}
+
+func requireAll(t *testing.T, plain, where string, wants ...string) {
+	t.Helper()
+	for _, want := range wants {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("%s must show %q:\n%s", where, want, plain)
+		}
+	}
+}
+
+func requireBoth(t *testing.T, plain, where, first, second string) {
+	t.Helper()
+	if strings.Contains(plain, first) != strings.Contains(plain, second) {
+		t.Fatalf("%s must fold as one block:\n%s", where, plain)
+	}
+}
+
+func requireAllOrNone(t *testing.T, plain, where string, wants ...string) {
+	t.Helper()
+	shown := strings.Contains(plain, wants[0])
+	for _, want := range wants[1:] {
+		if strings.Contains(plain, want) != shown {
+			t.Fatalf("%s must show all of its rows or none (%q):\n%s", where, want, plain)
+		}
+	}
+}
+
+func TestThemeFileLineUsesNerdIconsOnlyInNerdMode(t *testing.T) {
+	icons := []string{"\ue627", "\ue73e", "\ue0a0"}
+	m, dir := themeModel(t, 120)
+	writeFile(t, filepath.Join(dir, terminalConfigFile), "[terminal]\nglyphs = \"nerd\"\n")
+	m.loadTheme(dir, func() bool { return true })
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m.openTheme()
+	for _, icon := range icons {
+		if !strings.Contains(m.View(), icon) {
+			t.Fatalf("nerd mode must show the file icon %q", icon)
+		}
+	}
+	m, dir = themeModel(t, 120)
+	m.loadTheme(dir, func() bool { return true })
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m.openTheme()
+	for _, icon := range icons {
+		if strings.Contains(m.View(), icon) {
+			t.Fatalf("unicode mode must not show the nerd icon %q", icon)
+		}
 	}
 }

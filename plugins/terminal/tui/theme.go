@@ -255,6 +255,7 @@ type glyphSet struct {
 	ticked, unticked, shiftTab                                       string
 	enter, caret, reasonArrow, warn, note                            string
 	waiting, review                                                  string
+	fileGo, fileDoc, branch                                          string
 	families                                                         map[string]string
 	spin                                                             []string
 }
@@ -288,6 +289,7 @@ func nerdGlyphs() glyphSet {
 	glyphs.tool, glyphs.unread, glyphs.bolt = "", "", "●"
 	glyphs.thinking, glyphs.cursor, glyphs.fold = "", "", ""
 	glyphs.failure, glyphs.success = "", ""
+	glyphs.fileGo, glyphs.fileDoc, glyphs.branch = "", "", ""
 	return glyphs
 }
 

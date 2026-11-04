@@ -29,6 +29,7 @@ const (
 	themeReadSpan         = 100 * time.Millisecond
 	themeEditSpan         = 200 * time.Millisecond
 	themeBashSpan         = 3100 * time.Millisecond
+	themeHelpShort        = "↑↓ aperçu · ⏎ garder · échap revenir · e éditer"
 )
 
 type themeScreen struct {
@@ -289,52 +290,68 @@ func (m *model) themeBody(width, rows int) []string {
 	return clipLines(body, rows)
 }
 
-func (m *model) themeControlsFitting(width, rows int) []string {
-	full := m.themeControls(width, true)
-	if len(full) <= rows {
-		return full
-	}
-	return m.themeControls(width, false)
-}
+type themeFold int
 
-func (m *model) themeControls(width int, gaps bool) []string {
-	styles := m.st
-	screen := m.themeScr
+const (
+	themeFoldNone themeFold = iota
+	themeFoldFontExplain
+	themeFoldDetection
+	themeFoldHelp
+)
+
+func (m *model) themeControlsFitting(width, rows int) []string {
 	var lines []string
-	gap := func() {
-		if gaps {
-			lines = append(lines, "")
+	for fold := themeFoldNone; fold <= themeFoldHelp; fold++ {
+		lines = m.themeControls(width, fold)
+		if len(lines) <= rows {
+			return lines
 		}
 	}
-	lines = append(lines, styles.strong.Render("Thème")+styles.dim.Render(" · /theme · aperçu en direct"))
+	return lines
+}
+
+func (m *model) themeControls(width int, fold themeFold) []string {
+	styles := m.st
+	screen := m.themeScr
+	lines := []string{styles.strong.Render("Thème") + styles.dim.Render(" · /theme · aperçu en direct")}
 	lines = append(lines, m.themeListLines(width)...)
 	if len(screen.problems) > 0 {
 		lines = append(lines, styles.dim.Render("thème ignoré : "+screen.problems[0]))
 	}
-	gap()
+	lines = append(lines, "")
+	if fold >= themeFoldHelp {
+		lines = append(lines, styles.dim.Render(themeHelpShort))
+	} else {
+		lines = append(lines,
+			styles.dim.Render("↑↓ aperçu en direct · ⏎ garder · échap revenir"),
+			styles.dim.Render("⌃X puis t : thème suivant, depuis n’importe où"),
+			styles.dim.Render("e ou ⌃E éditer themes/"+themePersonalFile),
+		)
+	}
 	lines = append(lines,
-		styles.dim.Render("↑↓ aperçu en direct · ⏎ garder · échap revenir"),
-		styles.dim.Render("⌃X puis t : thème suivant, depuis n’importe où"),
-		styles.dim.Render("e ou ⌃E éditer themes/"+themePersonalFile),
-	)
-	gap()
-	lines = append(lines,
+		"",
 		themeSectionHead(styles, "Rendu", "dans le thème", width),
 		themeOptionRow(styles, "glyphes", glyphModes(), screen.look.Glyphs, glyphLabel, "g"),
 		themeOptionRow(styles, "bordures", borderStyles(), screen.look.Borders, borderLabel, "b"),
 		themeOptionRow(styles, "densité", []density{densityCompact, densityNormal}, screen.look.Density, densityLabel, "d"),
 		themeFlagRow(styles, screen.look.Bold, screen.look.Italic),
 		themeFontRow(styles),
-		themeFontExplainRow(styles, "un TUI ne choisit pas sa police : seule une appli"),
-		themeFontExplainRow(styles, "qui dessine sa propre fenêtre le peut"),
 	)
-	gap()
-	lines = append(lines,
-		themeSectionHead(styles, "Détection", "", width),
-		m.themeBackgroundRow(),
-		themeAutoRow(styles, screen.auto),
-		themeNoColorRow(styles),
-	)
+	if fold < themeFoldFontExplain {
+		lines = append(lines,
+			themeFontExplainRow(styles, "un TUI ne choisit pas sa police : seule une appli"),
+			themeFontExplainRow(styles, "qui dessine sa propre fenêtre le peut"),
+		)
+	}
+	if fold < themeFoldDetection {
+		lines = append(lines,
+			"",
+			themeSectionHead(styles, "Détection", "", width),
+			m.themeBackgroundRow(),
+			themeAutoRow(styles, screen.auto),
+			themeNoColorRow(styles),
+		)
+	}
 	for index := range lines {
 		lines[index] = truncate(lines[index], width)
 	}
@@ -499,7 +516,7 @@ func (m *model) themePreviewBlocks(width int) []themeBlock {
 	return []themeBlock{
 		{lines: []string{styles.strong.Render("Aperçu") + styles.dim.Render(" · "+shown.Label+kept)}},
 		{lines: m.railLines()},
-		{lines: []string{styles.text.Render("tui/theme.go  tui/rail.go  README.md") + "  " + styles.dim.Render("feat/tui-v2")}},
+		{lines: []string{m.themeFileLine(width)}},
 		{lines: m.themeToolLines(width)},
 		{lines: m.themeDiffLines(width)},
 		{lines: m.themeApprovalLines(width)},
@@ -510,6 +527,19 @@ func (m *model) themePreviewBlocks(width int) []themeBlock {
 		{gap: true, lines: m.themeTerminalLines()},
 		{gap: true, lines: m.themePersonalLines(shown)},
 	}
+}
+
+func (m *model) themeFileLine(width int) string {
+	styles := m.st
+	glyphs := styles.glyphs
+	if glyphs.fileGo == "" {
+		return truncate(styles.text.Render("tui/theme.go  tui/rail.go  README.md")+"  "+styles.dim.Render("feat/tui-v2"), width)
+	}
+	line := styles.accent.Render(glyphs.fileGo) + " " + styles.text.Render("theme.go") + "  " +
+		styles.accent.Render(glyphs.fileGo) + " " + styles.text.Render("rail.go") + "  " +
+		styles.dim.Render(glyphs.fileDoc) + " " + styles.text.Render("README.md") + "  " +
+		styles.violet.Render(glyphs.branch) + " " + styles.dim.Render("feat/tui-v2")
+	return truncate(line, width)
 }
 
 func (m *model) themeToolLines(width int) []string {

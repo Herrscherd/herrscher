@@ -206,7 +206,7 @@ func (m *model) barParts(target *tab) []barPart {
 	used := m.contextTokens(target)
 	var parts []barPart
 	if m.bar.isShown(barModeID) {
-		parts = append(parts, single(m.modeChip(target, modeShortBelow), rankNever))
+		parts = append(parts, single(m.modeChip(target), rankNever))
 	}
 	for _, fieldID := range m.bar.fieldIDs() {
 		if fieldID == barModeID {

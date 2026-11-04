@@ -214,13 +214,10 @@ func checkModeStripFits(t *testing.T, m *model, width int) {
 		}
 	}
 	plain := ansi.Strip(strip[0])
-	if width < modeShortBelow && !strings.Contains(plain, "Plan") {
+	if !strings.Contains(plain, "Plan") {
 		t.Fatalf("width %d: strip must name the current mode: %q", width, plain)
 	}
-	if width >= modeShortBelow && !strings.Contains(plain, "Édits acceptés") {
-		t.Fatalf("width %d: strip must use long labels: %q", width, plain)
-	}
-	status := ansi.Strip(m.modeChip(m.tabs["a"], width))
+	status := ansi.Strip(m.modeChip(m.tabs["a"]))
 	if !strings.HasPrefix(status, "Plan") {
 		t.Fatalf("width %d: the mode chip must come first in the status bar: %q", width, status)
 	}
@@ -281,7 +278,7 @@ func TestClickOnAStripSegmentSwitchesMode(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
 	target := m.tabs["a"]
-	hits := m.modeStripHits(m.innerWidth())
+	hits := m.modeStripHits()
 	strip := m.buildFrame()
 	if !strip.stripDown {
 		t.Fatal("the mode strip must be part of the frame")
@@ -338,5 +335,19 @@ func TestPlanMenuShiftTabLeavesTheMenuForTheNextMode(t *testing.T) {
 	}
 	if got := m.tabs["a"].modeID(); got != nextModeID(modePlan) {
 		t.Fatalf("⇧⇥ from the plan menu must move to %s, got %s", nextModeID(modePlan), got)
+	}
+}
+
+func TestModeLabelsStayWholeInShortWindows(t *testing.T) {
+	for _, size := range []struct{ width, height int }{{60, 20}, {80, 30}, {120, 30}} {
+		m, _ := barModelAt(t, "")
+		m.Update(tea.WindowSizeMsg{Width: size.width, Height: size.height})
+		view := ansi.Strip(m.View())
+		if !strings.Contains(view, "Manuel  →  Édits acceptés  →  Plan") && size.width >= 60 {
+			t.Fatalf("%dx%d: the mode strip must keep whole labels:\n%s", size.width, size.height, view)
+		}
+		if strings.Contains(view, "Man  →") || strings.Contains(view, "Édits  →") {
+			t.Fatalf("%dx%d: a mode label must not be shortened:\n%s", size.width, size.height, view)
+		}
 	}
 }

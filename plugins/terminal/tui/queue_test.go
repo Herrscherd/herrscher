@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -290,5 +291,83 @@ func TestQueueHeaderFoldsWholeSegmentsAtSixtyColumns(t *testing.T) {
 	}
 	if strings.Contains(stripped, "tout envoyer") {
 		t.Fatal("the queue header must fold away its last segment rather than cut it")
+	}
+}
+
+func queueOfSize(m *model, count int) {
+	tb := m.tabs["c1"]
+	tb.busy = true
+	for index := range count {
+		tb.queue = append(tb.queue, queuedInput{text: "message " + strconv.Itoa(index+1)})
+	}
+}
+
+func TestQueueFoldsUnderTheOpenOverlay(t *testing.T) {
+	m, _ := barModelAt(t, "")
+	queueOfSize(m, 15)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m.openStatusline()
+	view := ansi.Strip(m.View())
+	if !strings.Contains(view, "Barre d’état · /statusline") {
+		t.Fatalf("the open overlay must keep its title ahead of the queue:\n%s", view)
+	}
+	if !strings.Contains(view, "En file (15)") {
+		t.Fatalf("the queue header must stay visible:\n%s", view)
+	}
+	if strings.Contains(view, "message 15") {
+		t.Fatalf("the queue must fold instead of showing every entry:\n%s", view)
+	}
+	if rows := len(strings.Split(view, "\n")); rows > 30 {
+		t.Fatalf("the view has %d rows for a 30 row window", rows)
+	}
+}
+
+func queueRowsInView(view string) (int, int) {
+	shown, hidden := 0, 0
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, " ○ file ") {
+			shown++
+		}
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "… "); ok {
+			if count, found := strings.CutSuffix(rest, " de plus"); found {
+				if n, err := strconv.Atoi(count); err == nil {
+					hidden = n
+				}
+			}
+		}
+	}
+	return shown, hidden
+}
+
+func TestQueueFoldsWithAnOverflowLineInShortWindows(t *testing.T) {
+	for _, size := range []struct{ width, height int }{{60, 20}, {80, 30}} {
+		m, _ := barModelAt(t, "")
+		queueOfSize(m, 20)
+		m.Update(tea.WindowSizeMsg{Width: size.width, Height: size.height})
+		shown, hidden := queueRowsInView(ansi.Strip(m.View()))
+		if hidden == 0 {
+			t.Fatalf("%dx%d: a folded queue must say how many entries are hidden", size.width, size.height)
+		}
+		if shown+hidden != 20 {
+			t.Fatalf("%dx%d: %d shown and %d hidden, want 20 in all", size.width, size.height, shown, hidden)
+		}
+	}
+}
+
+func TestQueueNumbersAlignPastNine(t *testing.T) {
+	m, _ := barModelAt(t, "")
+	queueOfSize(m, 12)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	var nine, ten int
+	for _, line := range strings.Split(ansi.Strip(m.View()), "\n") {
+		if strings.Contains(line, "message 9 ") {
+			nine = strings.Index(line, "○")
+		}
+		if strings.Contains(line, "message 10 ") {
+			ten = strings.Index(line, "○")
+		}
+	}
+	if nine == 0 || nine != ten {
+		t.Fatalf("the mark column must not move past nine: entry 9 at %d, entry 10 at %d", nine, ten)
 	}
 }

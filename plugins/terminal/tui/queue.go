@@ -19,6 +19,7 @@ const (
 	queueFileMark       = "○ file"
 	queueHeaderMark     = "○"
 	queueMarkWidth      = 14
+	queueFoldRows       = 2
 	queueFocusHint      = "○ En file · ↑↓ choisir · ⇧↑⇧↓ réordonner · suppr retirer · échap quitter"
 )
 
@@ -139,15 +140,14 @@ func (m *model) queueLines(base, rows int) []string {
 		header = queueFocusHint
 	}
 	lines := []string{m.st.dim.Render(foldText(header, width))}
-	for index, item := range current.queue {
-		if len(lines) >= rows {
-			break
-		}
+	shown := queueShown(len(current.queue), rows)
+	numberWidth := len(strconv.Itoa(len(current.queue)))
+	for index, item := range current.queue[:shown] {
 		mark, when := queueFileMark, queueEndOfTurn
 		if item.steer {
 			mark, when = queueAfterMark, queueAfterTool
 		}
-		left := queueIndent + strconv.Itoa(index+1) + "  " + padTo(mark, queueMarkWidth) + oneLine(item.text)
+		left := queueIndent + padLeft(strconv.Itoa(index+1), numberWidth) + "  " + padTo(mark, queueMarkWidth) + oneLine(item.text)
 		right := when + "  " + queueRemoveLabel
 		row := justifyRow(left, m.st.dim.Render(right), width)
 		if m.queueFocus && index == m.queueSel {
@@ -156,7 +156,21 @@ func (m *model) queueLines(base, rows int) []string {
 		m.queueHits = append(m.queueHits, queueHit{row: base + len(lines), from: width - lipgloss.Width(queueRemoveLabel), to: width, index: index})
 		lines = append(lines, row)
 	}
+	if hidden := len(current.queue) - shown; hidden > 0 && rows >= queueFoldRows {
+		lines = append(lines, m.st.dim.Render(queueIndent+"… "+strconv.Itoa(hidden)+" de plus"))
+	}
 	return lines
+}
+
+func queueShown(total, rows int) int {
+	if total <= rows-1 {
+		return total
+	}
+	return max(0, rows-queueFoldRows)
+}
+
+func padLeft(text string, width int) string {
+	return strings.Repeat(" ", max(0, width-len(text))) + text
 }
 
 func justifyRow(left, right string, width int) string {

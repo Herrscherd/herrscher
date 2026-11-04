@@ -30,6 +30,7 @@ type Handler struct {
 	coord           coordinationReader
 	seed            func(name, task string) bool
 	validateModel   func(vendor, modelID string) error
+	validateAccount func(vendor, profile string) error
 	gate            func(vendor string) (grain, why string)
 	gatewayOnly     func() bool
 	defaultModel    string
@@ -118,6 +119,9 @@ func (h *Handler) checkSpawnSource(cmdExplicit bool, modelID string) error {
 // spawn failure, or worse, as a turn silently run on the machine's own login.
 func (h *Handler) SetModelValidator(fn func(vendor, modelID string) error) { h.validateModel = fn }
 
+// SetAccountValidator wires the profile check applied to --account at session creation.
+func (h *Handler) SetAccountValidator(fn func(vendor, profile string) error) { h.validateAccount = fn }
+
 // SetGateResolver wires the per-vendor approval granularity, read by the host
 // from the compiled backends' manifests. Until it is set, every vendor reports
 // that it enforces nothing, which is the only truthful answer a daemon with
@@ -149,6 +153,13 @@ func (h *Handler) checkModel(vendor, modelID string) error {
 		return nil
 	}
 	return h.validateModel(vendor, modelID)
+}
+
+func (h *Handler) checkAccount(vendor, profile string) error {
+	if profile == "" || vendor == "" || h.validateAccount == nil {
+		return nil
+	}
+	return h.validateAccount(vendor, profile)
 }
 
 // CoordView mirrors host.CoordinationView so the manager stays decoupled from

@@ -495,6 +495,9 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	}
 	base, _ := input.Lookup("base")
 	explicitAccount, _ := input.Lookup("account")
+	if err := h.checkAccount(h.vendorOf(runtime), explicitAccount); err != nil {
+		return createRequest{}, err
+	}
 	return createRequest{
 		name:     name,
 		base:     base,
@@ -633,6 +636,16 @@ func optionalNonNegative(input contracts.Input, key string) (int, error) {
 		return 0, &InvalidValueError{Field: key, Value: value, Hint: nonNegativeHint}
 	}
 	return count, nil
+}
+
+func (h *Handler) vendorOf(runtime runtimeChoice) string {
+	if runtime.vendor != "" {
+		return runtime.vendor
+	}
+	if agentSpec, found := h.agents.Get(runtime.agent); found {
+		return agentSpec.Backend
+	}
+	return ""
 }
 
 func chooseSessionAccount(explicit, agentAccount string) string {

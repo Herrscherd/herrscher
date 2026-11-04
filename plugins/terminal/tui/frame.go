@@ -75,7 +75,7 @@ func (m *model) composeFrame(panels bool, room int, flexible bool) frame {
 	stacked.below = append(stacked.below, chips...)
 	if flexible {
 		base := len(stacked.above) + m.vp.Height + len(stacked.below)
-		queue := m.queueLines(base, max(1, m.rowsLeft(fixedRows+len(overlays))))
+		queue := m.queueLines(base, m.rowsLeft(fixedRows+len(overlays)))
 		stacked.below = appendLines(stacked.below, strings.Join(queue, "\n"))
 	}
 	stacked.below = append(stacked.below, drafts...)

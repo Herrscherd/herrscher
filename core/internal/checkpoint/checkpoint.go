@@ -372,11 +372,15 @@ func removeInside(dir, rel string) error {
 	if !filepath.IsLocal(rel) {
 		return fmt.Errorf("%w: %q", ErrOutsideWorktree, rel)
 	}
-	err := os.Remove(filepath.Join(dir, rel))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
 		return err
 	}
-	return nil
+	removeErr := root.Remove(rel)
+	if errors.Is(removeErr, os.ErrNotExist) {
+		removeErr = nil
+	}
+	return errors.Join(removeErr, root.Close())
 }
 
 func validSession(session string) error {

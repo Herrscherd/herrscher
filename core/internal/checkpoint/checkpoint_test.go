@@ -181,3 +181,21 @@ func TestRejectsSessionNameWithSeparator(t *testing.T) {
 		t.Fatal("session name with / accepted")
 	}
 }
+
+func TestRemoveInsideNeverFollowsASymlinkOutOfTheWorktree(t *testing.T) {
+	worktree := t.TempDir()
+	outside := t.TempDir()
+	victim := filepath.Join(outside, "victim.txt")
+	if err := os.WriteFile(victim, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(worktree, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeInside(worktree, filepath.Join("link", "victim.txt")); err == nil {
+		t.Fatal("removing through a symlink that leaves the worktree must fail")
+	}
+	if _, err := os.Stat(victim); err != nil {
+		t.Fatalf("the file outside the worktree was deleted: %v", err)
+	}
+}

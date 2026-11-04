@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -68,5 +69,35 @@ func TestSessionShellRefusesEmptyAndUnknown(t *testing.T) {
 	}
 	if _, err := runSessionShell(context.Background(), st, nil, approvals, sessions, "nope", "ls"); err == nil {
 		t.Fatal("an unknown session must be refused")
+	}
+}
+
+func TestSessionShellRefusesARemoteSessionBeforeAnyApproval(t *testing.T) {
+	st, approvals, sessions, dir := shellFixture(t, "bypass")
+	if err := st.AddSession(state.Session{Name: "distante", ChannelID: "c2", Dir: dir, Host: "box-distante"}); err != nil {
+		t.Fatalf("AddSession: %v", err)
+	}
+	marker := filepath.Join(dir, "touched")
+	_, err := runSessionShell(t.Context(), st, nil, approvals, sessions, "distante", "touch "+marker)
+	if !errors.Is(err, errRemoteShellSession) {
+		t.Fatalf("a remote session must be refused, got %v", err)
+	}
+	if _, statErr := os.Stat(marker); !os.IsNotExist(statErr) {
+		t.Fatal("a refused remote command must not run")
+	}
+}
+
+func TestSessionShellReturnsWhenABackgroundChildHoldsOutput(t *testing.T) {
+	st, approvals, sessions, _ := shellFixture(t, "bypass")
+	started := time.Now()
+	out, err := runSessionShell(t.Context(), st, nil, approvals, sessions, "s1", "sleep 6 & echo lance")
+	if err != nil {
+		t.Fatalf("runSessionShell: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 5*time.Second {
+		t.Fatalf("the call waited %v for a background child that kept the output pipe", elapsed)
+	}
+	if !strings.Contains(out, "lance") {
+		t.Fatalf("output %q must keep the text of the command", out)
 	}
 }

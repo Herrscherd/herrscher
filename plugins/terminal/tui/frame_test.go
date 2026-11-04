@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -47,8 +48,30 @@ func TestFitBlockKeepsHeadAndFooter(t *testing.T) {
 	}
 }
 
-func surfaceOpeners() map[string]func(t *testing.T, m *model) {
+func TestFlexibleRowsNeverOverflowTheScreen(t *testing.T) {
+	m, _ := barModelAt(t, "")
+	m.Update(tea.WindowSizeMsg{Width: 60, Height: 16})
+	typeComposerLines(m, 10)
+	queueItems(m, 3)
+	assertFitsScreen(t, m.View(), 60, 16)
+}
+
+func typeComposerLines(m *model, lines int) {
+	m.input.SetValue(strings.TrimSuffix(strings.Repeat("ligne\n", lines), "\n"))
+	m.resizeComposer()
+}
+
+func queueItems(m *model, count int) {
+	tb := m.tabs["c1"]
+	for index := range count {
+		tb.queue = append(tb.queue, queuedInput{text: "message " + strconv.Itoa(index+1)})
+	}
+	m.relayout()
+}
+
+func fitScenarios() map[string]func(t *testing.T, m *model) {
 	return map[string]func(t *testing.T, m *model){
+		"repos": func(_ *testing.T, _ *model) {},
 		"approbation": func(t *testing.T, m *model) {
 			t.Helper()
 			m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c1"}, Event: approvalMenuEvent(t, "go test ./plugins/terminal/tui/", allApprovalRoles()...)})
@@ -64,12 +87,42 @@ func surfaceOpeners() map[string]func(t *testing.T, m *model) {
 			m.rwOpen = true
 			m.relayout()
 		},
+		"tableau": func(_ *testing.T, m *model) { m.openBoard() },
+		"composeur 10 lignes": func(_ *testing.T, m *model) {
+			typeComposerLines(m, 10)
+		},
+		"composeur 25 lignes": func(_ *testing.T, m *model) {
+			typeComposerLines(m, 25)
+		},
+		"file de 3": func(_ *testing.T, m *model) {
+			queueItems(m, 3)
+		},
+		"palette": func(_ *testing.T, m *model) {
+			m.input.SetValue("/")
+			m.resizeComposer()
+		},
+		"aide": func(_ *testing.T, m *model) {
+			m.showHelp = true
+			m.relayout()
+		},
+		"chips": func(_ *testing.T, m *model) {
+			m.pending = []Attachment{{Name: "capture.png", Mime: "image/png", Size: 2048}}
+			m.relayout()
+		},
+		"combine": func(_ *testing.T, m *model) {
+			queueItems(m, 3)
+			typeComposerLines(m, 10)
+			m.pending = []Attachment{{Name: "capture.png", Mime: "image/png", Size: 2048}}
+			m.drafts = []string{"brouillon"}
+			m.relayout()
+		},
 	}
 }
 
-func TestSurfacesFitTheScreenAtEverySize(t *testing.T) {
-	for name, open := range surfaceOpeners() {
-		for _, size := range []struct{ width, height int }{{60, 20}, {60, 30}, {80, 30}, {120, 30}, {200, 30}} {
+func TestSurfacesFillTheScreenExactlyAtEverySize(t *testing.T) {
+	sizes := []struct{ width, height int }{{60, 20}, {80, 30}, {120, 42}, {200, 30}, {240, 50}}
+	for name, open := range fitScenarios() {
+		for _, size := range sizes {
 			t.Run(fmt.Sprintf("%s %dx%d", name, size.width, size.height), func(t *testing.T) {
 				m, _ := barModelAt(t, "")
 				m.Update(tea.WindowSizeMsg{Width: size.width, Height: size.height})
@@ -83,7 +136,7 @@ func TestSurfacesFitTheScreenAtEverySize(t *testing.T) {
 func assertFitsScreen(t *testing.T, view string, width, height int) {
 	t.Helper()
 	lines := strings.Split(view, "\n")
-	if len(lines) > height {
+	if len(lines) != height {
 		t.Errorf("view has %d lines, the screen has %d", len(lines), height)
 	}
 	for index, line := range lines {

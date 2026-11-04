@@ -125,7 +125,7 @@ func (m *model) draftsView() string {
 func (m *model) queueLines(base, rows int) []string {
 	m.queueHits = nil
 	current := m.activeTab()
-	if current == nil || len(current.queue) == 0 {
+	if current == nil || len(current.queue) == 0 || rows < 1 {
 		return nil
 	}
 	m.clampQueueSel()

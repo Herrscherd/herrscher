@@ -1,7 +1,6 @@
 package host
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,11 +12,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/internal/boundedbuf"
 )
 
 const (
 	paramCommand       = "cmd"
 	shellTimeout       = 2 * time.Minute
+	shellWaitDelay     = 2 * time.Second
 	shellOutputCap     = 16 << 10
 	shellToolName      = "Bash"
 	shellExitFormat    = "\n[sortie %d]"
@@ -28,6 +29,7 @@ var (
 	errShellRefused        = errors.New("commande refusée")
 	errEmptyShellCommand   = errors.New("session shell : la commande est vide")
 	errUnknownShellSession = errors.New("session shell : session inconnue")
+	errRemoteShellSession  = errors.New("session shell : session distante, commande refusée")
 )
 
 func sessionShellVerb(store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
@@ -49,6 +51,9 @@ func runSessionShell(ctx context.Context, store *state.State, agents *agent.Stor
 	if !ok {
 		return "", fmt.Errorf("%w %q", errUnknownShellSession, name)
 	}
+	if session.Host != "" {
+		return "", fmt.Errorf("%w %q", errRemoteShellSession, name)
+	}
 	pol, mode := sessionPolicy(store, agents, name)
 	req := approval.Request{Tool: shellToolName, Subject: command}
 	decision, reason := askApproval(ctx, approvals, sessions, name, req, pol, mode, store.ApprovalWait())
@@ -57,15 +62,19 @@ func runSessionShell(ctx context.Context, store *state.State, agents *agent.Stor
 	}
 	runCtx, cancel := context.WithTimeout(ctx, shellTimeout)
 	defer cancel()
-	var out bytes.Buffer
+	out := boundedbuf.New(shellOutputCap)
 	cmd := exec.CommandContext(runCtx, "sh", "-c", command)
 	cmd.Dir = sessionDir(session)
-	cmd.Stdout = &out
-	cmd.Stderr = &out
+	cmd.Stdout = out
+	cmd.Stderr = out
+	cmd.WaitDelay = shellWaitDelay
 	runErr := cmd.Run()
+	if errors.Is(runErr, exec.ErrWaitDelay) {
+		runErr = nil
+	}
 	text := out.String()
-	if len(text) > shellOutputCap {
-		text = text[:shellOutputCap] + shellTruncatedNote
+	if out.Truncated() {
+		text += shellTruncatedNote
 	}
 	var exit *exec.ExitError
 	if errors.As(runErr, &exit) {

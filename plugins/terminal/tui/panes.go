@@ -99,6 +99,20 @@ func (m *model) focusPane(index int) {
 	m.activate(m.focusedChannel())
 }
 
+func (m *model) removePane(channel string) {
+	index := slices.Index(m.panes.channels, channel)
+	if index < 0 {
+		return
+	}
+	m.panes.channels = slices.Delete(m.panes.channels, index, index+1)
+	switch {
+	case m.panes.focus >= len(m.panes.channels):
+		m.panes.focus = max(0, len(m.panes.channels)-1)
+	case m.panes.focus > index:
+		m.panes.focus--
+	}
+}
+
 func (m *model) focusedChannel() string {
 	if m.panes.focus < 0 || m.panes.focus >= len(m.panes.channels) {
 		return ""

@@ -205,19 +205,39 @@ func TestSmartWithoutAnyRuleStillPassesWhenTheModelSaysSo(t *testing.T) {
 	}
 }
 
-func TestRuleForGeneralizesABashCallToItsTwoFirstWords(t *testing.T) {
+func TestRuleForAllowsABashCallExactlyAsRun(t *testing.T) {
 	rule, ok := RuleFor("Bash", "git push origin feat/x")
 	if !ok {
 		t.Fatal("a bash command must get a rule")
 	}
-	if rule.String() != "allow Bash(git push*)" {
+	if rule.String() != "allow Bash(git push origin feat/x)" {
 		t.Fatalf("got %q", rule.String())
 	}
 	if !(Policy{rule}).matches(Request{Tool: "Bash", Subject: "git push origin feat/x"}) {
 		t.Fatal("the rule must let its own call through")
 	}
-	if (Policy{rule}).matches(Request{Tool: "Bash", Subject: "git status"}) {
-		t.Fatal("the rule must not let another command through")
+	for _, other := range []string{"git push origin feat/x --force", "git status"} {
+		if (Policy{rule}).matches(Request{Tool: "Bash", Subject: other}) {
+			t.Fatalf("the rule must not let %q through", other)
+		}
+	}
+}
+
+func TestRuleForRefusesABashCommandWithShellOperators(t *testing.T) {
+	for _, subject := range []string{
+		"git status; rm -rf /",
+		"git status && rm -rf /",
+		"git log | sh",
+		"echo `rm -rf /`",
+		"echo $(rm -rf /)",
+		"cat /etc/passwd > /tmp/x",
+		"sh < script",
+		"(cd / && ls)",
+		"ls\\ -la",
+	} {
+		if rule, ok := RuleFor("Bash", subject); ok {
+			t.Fatalf("RuleFor(Bash, %q) = %q, must refuse a compound command", subject, rule)
+		}
 	}
 }
 

@@ -236,6 +236,13 @@ type model struct {
 	resumeIdx  int
 	resumeRows []contracts.SessionInfo
 
+	rwOpen bool
+	rwStep int
+	rwIdx  int
+	rwOpt  int
+	rwRows []rewindRow
+	escAt  time.Time
+
 	switchOpen bool
 	switchIdx  int
 	switchRows []contracts.SessionInfo
@@ -1232,6 +1239,12 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case dispatchResultMsg:
 		m.handleDispatchResult(msg)
 		return nil, true
+	case rewindDoneMsg:
+		m.handleRewindDone(msg)
+		return nil, true
+	case forkDoneMsg:
+		m.handleForkDone(msg)
+		return nil, true
 	case tickMsg:
 		m.syncTabs()
 		return tickCmd(), true
@@ -1323,6 +1336,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleSkillsKey(msg), true
 	case m.resumeOpen:
 		return m.handleResumeKey(msg), true
+	case m.rwOpen:
+		return m.handleRewindKey(msg), true
 	}
 	if cmd, handled := m.handlePaletteKey(msg); handled {
 		return cmd, true
@@ -1514,7 +1529,7 @@ func (m *model) handleMainKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			}
 			return nil, true
 		}
-		return tea.Quit, true
+		return m.escapeIdle(), true
 	case tea.KeyCtrlC:
 		return m.interruptOrQuit()
 	case tea.KeyTab:

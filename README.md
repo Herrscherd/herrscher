@@ -435,6 +435,28 @@ An attached window follows the live turn, because every driven session taps the
 daemon's event socket. Esc stops a turn as an interruption rather than an error,
 keeping whatever the agent had already written.
 
+### Revenir en arrière
+
+Avant chaque message envoyé, l'hôte prend un checkpoint du worktree de la session
+(un instantané git sous `refs/herrscher/checkpoints/`, sans toucher à l'index ni
+aux fichiers). Sur un composer vide et hors tour, `Échap Échap` ouvre l'écran
+« Revenir en arrière » : la liste des messages avec les fichiers que chacun a
+touchés, de large à étroit (sous 80 colonnes, les fichiers passent sous le message).
+
+Depuis cet écran, `⏎` ouvre trois choix : « restaurer le code et la conversation »
+et « restaurer la conversation seulement » sont refusés, le backend Claude ne
+revenant pas à un message passé, et la raison est affichée ; « restaurer le code
+seulement » demande confirmation (`y`), remet le worktree de la session à l'état
+du checkpoint et recopie le message dans le composer. `u` annule le dernier retour
+(un seul niveau, pour le code). `f` ou « forker à partir d'ici » lance `/fork`.
+
+`/fork [--name <nom>] --to <n>` crée la session `<nom>-fork` avec son propre
+worktree, placé au checkpoint, dans un nouvel onglet ; l'originale reste intacte.
+La mémoire de la conversation n'est pas reprise par le fork.
+
+Un seul Échap interrompt toujours un tour en cours, comme plus haut. Les fichiers
+ignorés par git ne sont pas couverts par les checkpoints.
+
 ### What the agent is doing right now
 
 A todo list and a running sub-agent are state, not transcript: written into the

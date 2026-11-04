@@ -40,6 +40,9 @@ func (m *model) buildFrame() frame {
 	if m.resumeOpen {
 		stacked.below = appendLines(stacked.below, m.resumeView())
 	}
+	if m.rwOpen {
+		stacked.below = appendLines(stacked.below, m.rewindView())
+	}
 	if m.switchOpen {
 		stacked.below = appendLines(stacked.below, m.switchView())
 	}

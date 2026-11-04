@@ -146,9 +146,11 @@ func rewindSession(ctx context.Context, sessionStore *state.State, sessions *ses
 	if what != whatCode && what != whatConversation && what != whatBoth {
 		return "", errWhatInvalid
 	}
-	if sessions.Busy(sess.Name) {
+	release, ok := sessions.claimIdle(sess.Name)
+	if !ok {
 		return "", busyRewindError(sess.Name)
 	}
+	defer release()
 	entry, err := sessions.checkpoints.Get(ctx, sess.Worktree, sess.Name, position)
 	if err != nil {
 		return "", err
@@ -192,9 +194,11 @@ func undoVerb(sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 			if err != nil {
 				return "", err
 			}
-			if sessions.Busy(sess.Name) {
+			release, ok := sessions.claimIdle(sess.Name)
+			if !ok {
 				return "", busyRewindError(sess.Name)
 			}
+			defer release()
 			if err := sessions.checkpoints.Undo(ctx, sess.Worktree, sess.Name); err != nil {
 				return "", err
 			}

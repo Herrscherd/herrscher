@@ -147,7 +147,9 @@ func TestRewindRefusedWhileTurnInFlight(t *testing.T) {
 	}
 	sessions := newSessionTable()
 	driver := newSessionDriver("alpha", nil, nil, nil)
-	driver.busy.Store(true)
+	if !driver.claimTurn() {
+		t.Fatal("the fixture must put a turn in flight")
+	}
 	sessions.register("alpha", driver)
 	reg := checkpointRegistry(st, sessions)
 

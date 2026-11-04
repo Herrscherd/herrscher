@@ -65,6 +65,7 @@ type sessionDriver struct {
 	agent         string
 	activeTurnID  string
 	busy          atomic.Bool
+	turn          chan struct{}
 	channel       string
 	saidElsewhere bool
 	gateways      []contracts.GatewaySet
@@ -109,6 +110,7 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		toBridge:  toBridge,
 		from:      fromBridge,
 		queue:     make(chan queued, turnQueueCapacity),
+		turn:      make(chan struct{}, 1),
 		renderers: make(map[string]*gatewayRenderer),
 		hangup:    make(chan struct{}, 1),
 		seen:      make(map[string]bool),
@@ -359,9 +361,15 @@ func (t *sessionTable) lookup(name string) *sessionDriver {
 	return t.m[name]
 }
 
-func (t *sessionTable) Busy(session string) bool {
+func (t *sessionTable) claimIdle(session string) (func(), bool) {
 	driver := t.lookup(session)
-	return driver != nil && (driver.busy.Load() || len(driver.queue) > 0)
+	if driver == nil {
+		return func() {}, true
+	}
+	if len(driver.queue) > 0 || !driver.claimTurn() {
+		return nil, false
+	}
+	return driver.releaseTurn, true
 }
 
 func (t *sessionTable) pick(session, value string) bool {
@@ -517,19 +525,44 @@ func (d *sessionDriver) pump(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case item := <-d.queue:
+			if !d.enterTurn(ctx) {
+				return
+			}
 			d.busy.Store(true)
 			event, guard, ok := d.prepareTurn(ctx, item)
 			if !ok {
 				d.busy.Store(false)
+				d.releaseTurn()
 				continue
 			}
-			d.busy.Store(true)
 			d.runTurn(ctx, event, guard)
-			d.busy.Store(false)
 			d.activeTurnID = ""
 			d.busy.Store(false)
+			d.releaseTurn()
 		}
 	}
+}
+
+func (d *sessionDriver) enterTurn(ctx context.Context) bool {
+	select {
+	case d.turn <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (d *sessionDriver) claimTurn() bool {
+	select {
+	case d.turn <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (d *sessionDriver) releaseTurn() {
+	<-d.turn
 }
 
 func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts.Event, tokenGuard, bool) {

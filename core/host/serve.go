@@ -65,6 +65,9 @@ type Options struct {
 	HealthAddr    string
 	StatusChannel string
 
+	CompactPercent *int
+	CompactStack   []string
+
 	// InstanceID is the explicit per-daemon namespace (-instance flag /
 	// HERRSCHER_INSTANCE_ID). Empty falls back to HERRSCHER_OWNER_ID, then legacy
 	// mode.
@@ -176,6 +179,12 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 	}
 	approvals := newApprovalTable().withRules(store)
 	sessions := newSessionTable()
+	policy, err := newCompactionPolicy(ctx, options.CompactPercent, options.CompactStack)
+	if err != nil {
+		return fmt.Errorf("compaction: %w", err)
+	}
+	sessions.compaction = policy
+	sessions.store = store
 	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, options, store, sup, instID, options.ContributedCommands, approvals, sessions)
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)

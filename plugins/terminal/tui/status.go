@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"math"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -11,38 +10,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/contextwindow"
 )
 
 const (
-	contextWindowStandard = 200_000
-	contextWindowLarge    = 400_000
-	percentScale          = 100
-	thousand              = 1000
-	minutesPerHour        = 60
+	percentScale   = 100
+	thousand       = 1000
+	minutesPerHour = 60
 )
 
-func contextLimits() map[string]int {
-	return map[string]int{
-		"claude": contextWindowStandard,
-		"codex":  contextWindowLarge,
-		"cursor": contextWindowStandard,
-	}
-}
-
-const defaultContextLimit = 200_000
-
-const contextLimitEnv = "HERRSCHER_CONTEXT_LIMIT"
-
 func contextLimit(vendor string) int {
-	if v := os.Getenv(contextLimitEnv); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
-	if n, ok := contextLimits()[strings.ToLower(vendor)]; ok {
-		return n
-	}
-	return defaultContextLimit
+	return contextwindow.Limit(vendor)
 }
 
 const (
@@ -114,14 +92,30 @@ func contextGaugeCells(ratio float64, cells int, styles uiStyles) string {
 		styles.dim.Render(strings.Repeat(styles.glyphs.gaugeEmpty, cells-filled))
 }
 
-const compactAt = 0.92
+func compactThresholdLabel(percent int) string {
+	if percent == 0 {
+		return "pas de compaction auto"
+	}
+	return fmt.Sprintf("compacte seul à %d%%", percent)
+}
 
-func contextLeft(used, limit int) float64 {
-	left := (compactAt - contextRatio(used, limit)) / compactAt
+func contextLeft(used, limit, percent int) float64 {
+	if percent <= 0 {
+		return 0
+	}
+	threshold := float64(percent) / percentScale
+	left := (threshold - contextRatio(used, limit)) / threshold
 	if left < 0 {
 		return 0
 	}
 	return left
+}
+
+func contextRemainingLabel(used, limit, percent int) string {
+	if percent == 0 {
+		return "pas de compaction auto"
+	}
+	return fmt.Sprintf("%d %% avant compaction", int(contextLeft(used, limit, percent)*percentScale))
 }
 
 func modelLabel(info contracts.SessionInfo) string {
@@ -165,7 +159,7 @@ func (m *model) usageReport(tab *tab) string {
 	if used := m.contextTokens(tab); used > 0 {
 		lines = append(lines,
 			fmt.Sprintf("  context  %s  (%s)", formatContext(used, limit), contextPercent(used, limit)),
-			fmt.Sprintf("  reste    %d %% avant compaction", int(contextLeft(used, limit)*percentScale)),
+			"  reste    "+contextRemainingLabel(used, limit, info.AutoCompactPercent),
 		)
 	} else {
 		lines = append(lines, "  context  no measurement yet")

@@ -75,7 +75,8 @@ func (m *model) contextView() string {
 		width = defaultWidth
 	}
 	used, limit := m.contextFigures()
-	lines := []string{m.contextHeader(), m.contextTotalLine(used, limit, width)}
+	info, _ := m.activeInfo()
+	lines := []string{m.contextHeader(), m.contextTotalLine(used, limit, info.AutoCompactPercent, width)}
 	for _, category := range contextCategories() {
 		lines = append(lines, m.contextCategoryLine(category, width))
 	}
@@ -109,7 +110,7 @@ func (m *model) contextHeader() string {
 	return m.st.dim.Render("Contexte  " + joinNonEmpty(name, info.Vendor, modelLabel(info)))
 }
 
-func (m *model) contextTotalLine(used, limit, width int) string {
+func (m *model) contextTotalLine(used, limit, percent, width int) string {
 	ratio := contextRatio(used, limit)
 	value := unavailable + "/" + formatLimit(limit)
 	pct := unavailable
@@ -121,7 +122,7 @@ func (m *model) contextTotalLine(used, limit, width int) string {
 	if used <= 0 {
 		bar = m.st.dim.Render(strings.Repeat(m.st.glyphs.gaugeEmpty, gaugeWidth))
 	}
-	return m.contextRow("total", bar, value+" · "+pct, "compacte seul à "+fmt.Sprintf("%d%%", int(compactAt*percentScale)), width)
+	return m.contextRow("total", bar, value+" · "+pct, compactThresholdLabel(percent), width)
 }
 
 func (m *model) contextCategoryLine(category contextCategory, width int) string {

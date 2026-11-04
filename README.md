@@ -530,11 +530,25 @@ total reads `n/a` too, and no percentage is invented. Below 80 columns the bars
 go and the overlay becomes a plain list. `esc` or `z` closes it, `k` re-reads the
 figures.
 
-`/compact`, or `c` inside `/context`, asks the agent to compact its conversation
-through the host (`herrscher session compact <name>`, claude sessions only). A
-turn in progress must finish first. The transcript then records the window before
-and after, as the backend reports it, and the gauge in the status bar follows the
-new figure. A compaction the backend does not report on reads `n/a` after.
+`/compact`, or `c` inside `/context`, asks the session to compact its conversation
+through the host (`herrscher session compact <name> [--instruction <text>]`). The
+compaction runs under the session's turn, queued after a turn in progress, through
+the compaction stack. Its backend stage needs a backend that declares
+`Capabilities.Compactor` (claude sessions); a session without one is refused before
+anything is sent. The transcript then records the window before and after, as the
+backend reports it, and the gauge follows the new figure. A compaction the backend
+does not report on reads `n/a` after.
+
+Automatic compaction runs when the last measured usage reaches the session's
+threshold, a percentage of its context window. The default is 92, set with
+`compactAt` in `config.json` (0 disables it), and each session can override it with
+`herrscher session set-compact <name> <percent>` (an empty percent restores the
+default). The window size comes from the vendor, and `HERRSCHER_CONTEXT_LIMIT`
+overrides it. Automatic compaction does not retrigger while usage stays above the
+threshold: it rearms once a measured turn lands under it. `compactStack` lists the
+stages in order, where `backend` is the session's own compaction and other names are
+plugins declaring `Capabilities.Compactor`. A plugin that declares the capability
+without implementing the port is reported once and its compaction is refused.
 
 ### Notifications
 
@@ -877,7 +891,9 @@ session that was already running starts from the last measurement the host
 recorded, rather than from nothing until the next turn.
 
 The percentage beside the gauge counts down rather than up: it is what remains
-before a compaction, which is the question one actually asks of a context gauge.
+before a compaction, which is the question one actually asks of a context gauge. When
+automatic compaction is off for a session the gauge reads `pas de compaction auto`
+instead.
 
 ### Keys
 

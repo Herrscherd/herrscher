@@ -114,7 +114,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
-			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent}, h.gate)
+			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, vendor: sess.Vendor}, h.gate)
 	}()
 
 	serveCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name), asSession{disp: h, session: sess.Name})
@@ -293,30 +293,31 @@ func (h *hub) Close(ctx context.Context, name string, force bool) (string, error
 }
 
 func (h *hub) Sessions() []contracts.SessionInfo {
-	return sessionInfos(h.st, h.partDir)
+	return sessionInfos(h.st, h.partDir, h.sessions.compaction.percentFor)
 }
 
-func sessionInfos(st *state.State, partDir string) []contracts.SessionInfo {
+func sessionInfos(st *state.State, partDir string, percentOf func(state.Session) int) []contracts.SessionInfo {
 	sessions := st.SnapshotSessions()
 	out := make([]contracts.SessionInfo, 0, len(sessions))
 	for idx := range sessions {
 		live := sessions[idx]
 		sum := state.ReadTranscriptSummary(state.TranscriptPath(partDir, live.Name))
 		out = append(out, contracts.SessionInfo{
-			Name:          live.Name,
-			Incarnation:   live.Incarnation,
-			ChannelID:     live.ChannelID,
-			Type:          live.Type,
-			Gateways:      live.BoundGateways(),
-			Vendor:        live.Vendor,
-			Model:         sessionModel(live),
-			Effort:        sessionEffort(live),
-			Project:       live.Project,
-			Archived:      live.Archived,
-			Resumable:     live.ResumeToken != "",
-			LastTs:        sum.LastTs,
-			ContextTokens: sum.ContextTokens,
-			Dir:           sessionDir(live),
+			Name:               live.Name,
+			Incarnation:        live.Incarnation,
+			ChannelID:          live.ChannelID,
+			Type:               live.Type,
+			Gateways:           live.BoundGateways(),
+			Vendor:             live.Vendor,
+			Model:              sessionModel(live),
+			Effort:             sessionEffort(live),
+			Project:            live.Project,
+			Archived:           live.Archived,
+			Resumable:          live.ResumeToken != "",
+			LastTs:             sum.LastTs,
+			ContextTokens:      sum.ContextTokens,
+			Dir:                sessionDir(live),
+			AutoCompactPercent: percentOf(live),
 		})
 	}
 	return out

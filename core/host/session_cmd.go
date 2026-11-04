@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -13,10 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-var (
-	errNoPendingChoice    = errors.New("has no pending choice")
-	errCompactNeedsClaude = errors.New("/compact is only available on claude sessions")
-)
+var errNoPendingChoice = errors.New("has no pending choice")
 
 func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot) error {
 	seen := newSeenTable(time.Now())
@@ -24,12 +22,13 @@ func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID stri
 		seedVerb(store, instID, seedCoord),
 		sessionSendVerb(sessions),
 		sessionPickVerb(approvals, sessions),
-		sessionInfoVerb(store, partDir),
+		sessionInfoVerb(store, partDir, sessions),
 		sessionOverviewVerb(overviewSource{st: store, partDir: partDir, sessions: sessions, approvals: approvals, tallies: newTallyCache(), seen: seen}),
 		sessionSeenVerb(seen),
 		sessionScrollbackVerb(partDir),
 		sessionInterruptVerb(sessions),
 		sessionCompactVerb(store, sessions),
+		sessionSetCompactVerb(store),
 	)
 }
 
@@ -121,11 +120,11 @@ func sendToSession(ctx context.Context, sessions *sessionTable, input contracts.
 	return "", nil
 }
 
-func sessionInfoVerb(store *state.State, partDir string) contracts.Cmd {
+func sessionInfoVerb(store *state.State, partDir string, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, "info").
 		Help("list sessions as a frontend sees them (channel, vendor, dir, archived). JSON only").
 		Do(func(_ context.Context, _ contracts.Input) (string, error) {
-			b, err := json.Marshal(sessionInfos(store, partDir))
+			b, err := json.Marshal(sessionInfos(store, partDir, sessions.compaction.percentFor))
 			return string(b), err
 		})
 }
@@ -175,16 +174,13 @@ func sessionInterruptVerb(sessions *sessionTable) contracts.Cmd {
 		})
 }
 
-const (
-	verbCompact    = "compact"
-	compactCommand = "/compact"
-	vendorClaude   = "claude"
-)
+const verbCompact = "compact"
 
 func sessionCompactVerb(store *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbCompact).
-		Help("ask a claude session to compact its context (sends /compact into its turn queue)").
+		Help("compact a session's context now, through its compaction stack, queued after the turn in progress").
 		Param(paramName, "session name", true).
+		Param("instruction", "free text for the compaction, empty for none", false).
 		Param("origin", "gateway kind this was typed in (e.g. terminal): the turn is rendered there "+
 			"instead of in every channel the session is bound to", false).
 		Do(func(ctx context.Context, in contracts.Input) (string, error) {
@@ -192,22 +188,52 @@ func sessionCompactVerb(store *state.State, sessions *sessionTable) contracts.Cm
 		})
 }
 
-func compactSession(ctx context.Context, store *state.State, sessions *sessionTable, input contracts.Input) (string, error) {
+func compactSession(_ context.Context, store *state.State, sessions *sessionTable, input contracts.Input) (string, error) {
 	name := input.Get(paramName)
-	live, ok := store.FindSession(name)
-	if !ok {
+	if _, ok := store.FindSession(name); !ok {
 		return "", &NotFoundError{Kind: "session", Name: name}
 	}
-	if live.Vendor != vendorClaude {
-		return "", fmt.Errorf("session %q runs %q: %w", name, live.Vendor, errCompactNeedsClaude)
-	}
-	if !sessions.Submit(ctx, name, contracts.Inbound{
-		Author:       "you",
-		AuthorID:     "local",
-		Text:         compactCommand,
-		Conversation: contracts.Conversation{Gateway: input.Get("origin")},
-	}) {
+	driver := sessions.lookup(name)
+	if driver == nil {
 		return "", &NotFoundError{Kind: "live session", Name: name}
 	}
+	if !driver.compactSupported() {
+		return "", fmt.Errorf("session %q runs %q: %w", name, driver.vendor, errCompactUnsupported)
+	}
+	if !driver.requestCompaction(input.Get("instruction"), contracts.Conversation{Gateway: input.Get("origin")}) {
+		return "", fmt.Errorf("session %q: %w", name, errCompactQueueFull)
+	}
 	return "", nil
+}
+
+func sessionSetCompactVerb(store *state.State) contracts.Cmd {
+	return contracts.New(nsSession, "set-compact").
+		Help("set a session's automatic compaction threshold, in percent of its context window: 0 disables it, empty falls back to the config default").
+		Param(paramName, "session name", true).
+		Param("percent", "0 to 100, or empty for the config default", false).
+		Do(func(_ context.Context, input contracts.Input) (string, error) {
+			name := input.Get(paramName)
+			ok, err := applyCompactPercent(store, name, input.Get("percent"))
+			if err != nil {
+				return "", err
+			}
+			if !ok {
+				return "", &NotFoundError{Kind: "session", Name: name}
+			}
+			return "", nil
+		})
+}
+
+func applyCompactPercent(store *state.State, name, raw string) (bool, error) {
+	if raw == "" {
+		return store.SetCompactPercent(name, nil)
+	}
+	percent, err := strconv.Atoi(raw)
+	if err != nil {
+		return false, fmt.Errorf("percent %q: %w", raw, err)
+	}
+	if err := contracts.ValidateAutoCompactPercent(percent); err != nil {
+		return false, err
+	}
+	return store.SetCompactPercent(name, &percent)
 }

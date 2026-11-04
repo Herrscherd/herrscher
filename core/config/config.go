@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"strconv"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
+
 	"github.com/Herrscherd/herrscher/core/envx"
 )
 
@@ -33,11 +35,13 @@ type HomeRef struct {
 // default for knobs, live state.json for the declarative runtime fields).
 type Config struct {
 	// Daemon knobs (precedence: explicit flag > env > this > built-in default).
-	Cmd           string `json:"cmd"`
-	HealthAddr    string `json:"healthAddr"`
-	StatusChannel string `json:"statusChannel"`
-	Instance      string `json:"instance"`
-	Owner         string `json:"owner"`
+	Cmd           string   `json:"cmd"`
+	HealthAddr    string   `json:"healthAddr"`
+	StatusChannel string   `json:"statusChannel"`
+	Instance      string   `json:"instance"`
+	Owner         string   `json:"owner"`
+	CompactAt     *int     `json:"compactAt,omitempty"`
+	CompactStack  []string `json:"compactStack,omitempty"`
 	// Stale threshold for `session clean`: sessions inactive longer than this
 	// many days are reported as stale. 0 disables stale detection. Unset (zero)
 	// means the built-in default (14) is applied by the caller.
@@ -87,6 +91,11 @@ func Load(path string) (Config, error) {
 	}
 	if err := json.Unmarshal(stripComments(buf), &cfg); err != nil {
 		return cfg, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if cfg.CompactAt != nil {
+		if err := contracts.ValidateAutoCompactPercent(*cfg.CompactAt); err != nil {
+			return cfg, fmt.Errorf("parse %s: compactAt: %w", path, err)
+		}
 	}
 	return cfg, nil
 }

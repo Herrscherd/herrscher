@@ -119,7 +119,7 @@ func definitionOf(role Role) (definition, bool) {
 				"skill approve", "memory forget",
 				"session create",
 				"session close", "session archive", "session resume", "session interrupt",
-				"session switch", "session set-budget",
+				"session switch", "session set-budget", "session set-compact",
 			},
 			plugins: true,
 		}, true

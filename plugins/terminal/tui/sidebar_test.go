@@ -168,7 +168,7 @@ func TestSidebarContextGaugeHasSixteenCellsWithoutBrackets(t *testing.T) {
 	m.st = newStyles(defaultTheme(), false)
 	tb := m.tabs["alfa"]
 	tb.ctxTokens = 82_000
-	info := contracts.SessionInfo{Vendor: "claude"}
+	info := contracts.SessionInfo{Vendor: "claude", AutoCompactPercent: 92}
 	lines := m.contextSection(tb, info, 40, false)
 	gaugeLine := ansi.Strip(lines[1])
 	glyphs := m.st.glyphs

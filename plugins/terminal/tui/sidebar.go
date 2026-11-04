@@ -297,7 +297,7 @@ func (m *model) contextSection(tab *tab, info contracts.SessionInfo, width int, 
 		return []string{m.sideHead("Contexte", percent, width)}
 	}
 	gaugeLine := sidebarIndent + barGauge(ratio, sidebarGaugeCells, style, m.st.dim, m.st.glyphs) + " " + style.Render(percent)
-	detail := fmt.Sprintf("%s / %s · compacte seul à %d%%", formatContextTokens(used), formatContextTokens(limit), int(compactAt*percentScale))
+	detail := fmt.Sprintf("%s / %s · %s", formatContextTokens(used), formatContextTokens(limit), compactThresholdLabel(info.AutoCompactPercent))
 	return []string{
 		m.sideHead("Contexte", "", width),
 		truncate(gaugeLine, width),

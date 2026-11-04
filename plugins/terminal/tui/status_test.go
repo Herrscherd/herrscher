@@ -1,9 +1,13 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -60,21 +64,51 @@ func TestContextLimitFollowsTheVendorAndTheEnv(t *testing.T) {
 	}
 }
 
-func TestContextPaliersColourDifferently(t *testing.T) {
-	calm := renderContext(40_000, "claude", testStyles())
-	warn := renderContext(170_000, "claude", testStyles())
-	alarm := renderContext(195_000, "claude", testStyles())
-	if calm == warn || warn == alarm || calm == alarm {
-		t.Fatalf("the three paliers must differ: %q %q %q", calm, warn, alarm)
+func TestContextFormatsTheSameNumbersEverywhere(t *testing.T) {
+	if got := formatContext(82_000, 200_000); got != "82k/200k" {
+		t.Errorf("formatContext = %q, want 82k/200k", got)
 	}
-	if warn != testStyles().warn.Render("170.0k/200k") {
-		t.Fatalf("the warn palier must take the warn style: %q", warn)
+	if got := formatContext(500, 200_000); got != "500/200k" {
+		t.Errorf("a count under a thousand stays plain: %q", got)
 	}
-	if alarm != testStyles().red.Render("195.0k/200k") {
-		t.Fatalf("the alarm palier must take the Herrscher red: %q", alarm)
+	if got := contextPercent(82_000, 200_000); got != "41%" {
+		t.Errorf("contextPercent = %q, want 41%%", got)
 	}
-	if renderContext(0, "claude", testStyles()) != "" {
-		t.Fatal("an unmeasured context must render nothing")
+}
+
+func TestContextPaliersTakeTheTierThresholds(t *testing.T) {
+	fg := func(ratio float64) string {
+		color, ok := palierStyle(ratio, testStyles()).GetForeground().(lipgloss.Color)
+		if !ok {
+			t.Fatalf("palier %v has no colour", ratio)
+		}
+		return string(color)
+	}
+	cases := []struct {
+		ratio float64
+		want  string
+	}{
+		{0.10, string(defaultTheme().Colors.Dim)},
+		{0.79, string(defaultTheme().Colors.Dim)},
+		{0.80, string(defaultTheme().Colors.Wait)},
+		{0.94, string(defaultTheme().Colors.Wait)},
+		{0.95, string(defaultTheme().Colors.Err)},
+		{1.00, string(defaultTheme().Colors.Err)},
+	}
+	for _, c := range cases {
+		if got := fg(c.ratio); got != c.want {
+			t.Errorf("palier at %v = %s, want %s", c.ratio, got, c.want)
+		}
+	}
+}
+
+func TestContextGaugeFillsTenCells(t *testing.T) {
+	gauge := contextGauge(0.5, contextCells, testStyles())
+	if filled := strings.Count(gauge, unicodeGlyphs().gaugeFull); filled != 5 {
+		t.Errorf("half a window must fill 5 cells, got %d in %q", filled, gauge)
+	}
+	if empty := strings.Count(gauge, unicodeGlyphs().gaugeEmpty); empty != 5 {
+		t.Errorf("half a window must leave 5 cells, got %d in %q", empty, gauge)
 	}
 }
 
@@ -91,28 +125,6 @@ func TestCostAccumulatesAcrossTurns(t *testing.T) {
 	}
 	if got := m.tabs["a"].lastCost; got != 0.03 {
 		t.Fatalf("lastCost must stay the last turn's: %v", got)
-	}
-}
-
-func TestStatusBarReducesWhenNarrow(t *testing.T) {
-	m := newTestModel()
-	tb := m.ensureTab("alpha")
-	tb.ctxTokens = 40_000
-	tb.costTotal = 1.23
-	tb.openedAt = time.Now().Add(-90 * time.Minute)
-
-	wide := m.statusBar(tb, 120)
-	narrow := m.statusBar(tb, 40)
-	for _, want := range []string{"alpha", "40.0k"} {
-		if !strings.Contains(narrow, want) {
-			t.Errorf("the narrow bar must keep %q: %q", want, narrow)
-		}
-	}
-	if strings.Contains(narrow, "$1.23") {
-		t.Errorf("the narrow bar must drop the cost: %q", narrow)
-	}
-	if !strings.Contains(wide, "$1.23") || !strings.Contains(wide, "1h30m") {
-		t.Errorf("the wide bar must carry cost and age: %q", wide)
 	}
 }
 
@@ -142,11 +154,8 @@ func TestStatusBarNamesTheModelAndTheEffort(t *testing.T) {
 	m.active = "c1"
 
 	bar := m.statusBar(tb, 120)
-	if !strings.Contains(bar, "opus-5") {
-		t.Errorf("la barre doit nommer le modele: %q", bar)
-	}
-	if !strings.Contains(bar, "high") {
-		t.Errorf("la barre doit nommer l'effort: %q", bar)
+	if !strings.Contains(bar, "opus-5 · high") {
+		t.Errorf("la barre doit nommer le modele et l'effort: %q", bar)
 	}
 	if strings.Contains(bar, "claude-opus-5") {
 		t.Errorf("le vendeur mene deja la barre, le prefixe est redondant: %q", bar)
@@ -162,16 +171,16 @@ func TestStatusBarFallsBackOnTheHubReading(t *testing.T) {
 	tb := m.ensureTab("c1")
 	m.active = "c1"
 
-	if !strings.Contains(m.statusBar(tb, 120), "96.0k") {
+	if !strings.Contains(m.statusBar(tb, 120), "96k/200k") {
 		t.Fatalf("un onglet sans tour vu doit lire la mesure du hub: %q", m.statusBar(tb, 120))
 	}
 	tb.ctxTokens = 120_000
-	if !strings.Contains(m.statusBar(tb, 120), "120.0k") {
+	if !strings.Contains(m.statusBar(tb, 120), "120k/200k") {
 		t.Fatalf("un tour vu passer doit primer sur la fiche: %q", m.statusBar(tb, 120))
 	}
 }
 
-func TestGaugeCountsDownToTheCompaction(t *testing.T) {
+func TestContextLeftCountsDownToTheCompaction(t *testing.T) {
 	if got := contextLeft(0, 200_000); got != 1 {
 		t.Errorf("une fenetre vide laisse tout le budget: %v", got)
 	}
@@ -184,12 +193,103 @@ func TestGaugeCountsDownToTheCompaction(t *testing.T) {
 	if got := contextLeft(92_000, 200_000); got < 0.49 || got > 0.51 {
 		t.Errorf("la moitie du budget doit se lire 50 %%: %v", got)
 	}
-	wide := renderGauge(92_000, "claude", 120, testStyles())
-	narrow := renderGauge(92_000, "claude", 70, testStyles())
-	if !strings.Contains(wide, "reste 50 %") || !strings.Contains(wide, "avant compaction") {
-		t.Errorf("une barre large doit epeler ce que le compte decompte: %q", wide)
+}
+
+func barModelAt(t *testing.T, dir string) (*model, *tab) {
+	t.Helper()
+	be := &countingBackend{}
+	be.sessions = []contracts.SessionInfo{{
+		Name: "a", ChannelID: "c1", Vendor: "claude", Model: "claude-opus-5", Effort: "high",
+		Project: "herrscher", Dir: dir,
+	}}
+	m := newModel(be)
+	tb := m.ensureTab("c1")
+	m.active = "c1"
+	tb.ctxTokens = 82_000
+	tb.costTotal = 1.42
+	return m, tb
+}
+
+func writeWorktreeRepo(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	gitDir := filepath.Join(root, "gitdir")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(narrow, "reste 50 %") || strings.Contains(narrow, "avant compaction") {
-		t.Errorf("une barre etroite garde le chiffre et lache la glose: %q", narrow)
+	if err := os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/feat/tui-v2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "wt")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: "+gitDir+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestStatusBarFitsEveryWidth(t *testing.T) {
+	m, tb := barModelAt(t, writeWorktreeRepo(t))
+	tb.busy = true
+	m.bar.setQueued(2)
+	m.bar.setBackground(1)
+	for _, width := range []int{60, 80, 120, 200} {
+		bar := m.statusBar(tb, width)
+		if got := lipgloss.Width(bar); got > width {
+			t.Errorf("width %d: bar is %d cells wide: %q", width, got, bar)
+		}
+		if !strings.Contains(bar, "Manuel") {
+			t.Errorf("width %d: the mode must always show: %q", width, bar)
+		}
+		if !strings.Contains(bar, "41%") {
+			t.Errorf("width %d: the context percentage must always show: %q", width, bar)
+		}
+	}
+}
+
+func TestStatusBarDropsItsFieldsByPriorityAsItNarrows(t *testing.T) {
+	m, tb := barModelAt(t, writeWorktreeRepo(t))
+	m.bar.setBackground(1)
+	wide := m.statusBar(tb, 200)
+	for _, want := range []string{"Manuel", "opus-5", "feat/tui-v2", "(worktree)", "82k/200k", "$1.42", "1 en fond"} {
+		if !strings.Contains(wide, want) {
+			t.Errorf("200 columns must carry %q: %q", want, wide)
+		}
+	}
+	mid := m.statusBar(tb, 60)
+	if strings.Contains(mid, "1 en fond") {
+		t.Errorf("the background tasks go first when narrow: %q", mid)
+	}
+	if !strings.Contains(mid, "41%") {
+		t.Errorf("60 columns keeps the percentage: %q", mid)
+	}
+}
+
+func TestStatusBarShowsTheSpinnerWhileBusy(t *testing.T) {
+	m, tb := barModelAt(t, "")
+	tb.busy = true
+	tb.startedAt = time.Now()
+	if bar := m.statusBar(tb, 200); !strings.Contains(bar, "échap pour interrompre") {
+		t.Errorf("a busy tab must keep the working hint in the bar: %q", bar)
+	}
+}
+
+func TestStatusBarRendersTheModeChip(t *testing.T) {
+	m, tb := barModelAt(t, "")
+	if bar := m.statusBar(tb, 120); !strings.Contains(bar, " Manuel ") {
+		t.Errorf("the mode chip must lead with the default mode: %q", bar)
+	}
+	m.bar.setMode("Auto")
+	if bar := m.statusBar(tb, 120); !strings.Contains(bar, " Auto ") {
+		t.Errorf("setMode must reach the bar: %q", bar)
+	}
+}
+
+func TestStatusBarDefaultsToManualMode(t *testing.T) {
+	bar := newBarState()
+	if got := bar.modeName(); got != "Manuel" {
+		t.Fatalf("default mode = %q, want Manual", got)
 	}
 }

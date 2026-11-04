@@ -7,16 +7,18 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
 )
 
 const (
-	terminalConfigFile = "terminal.toml"
-	themesDirName      = "themes"
-	defaultThemeID     = "sombre"
-	themeFileExt       = ".toml"
+	terminalConfigFile  = "terminal.toml"
+	terminalSectionName = "terminal"
+	themesDirName       = "themes"
+	defaultThemeID      = "sombre"
+	themeFileExt        = ".toml"
 )
 
 type themeFile struct {
@@ -245,22 +247,30 @@ func readTerminalConfig(path string) (terminalSection, error) {
 	return file.Terminal, nil
 }
 
-func writeTerminalConfig(path string, section terminalSection) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+func themeKeyValues(section terminalSection) []tomlKeyValue {
+	return []tomlKeyValue{
+		{key: "theme", value: quotedOrEmpty(section.Theme)},
+		{key: "auto_theme", value: boolOrEmpty(section.AutoTheme)},
+		{key: "glyphs", value: quotedOrEmpty(section.Glyphs)},
+		{key: "borders", value: quotedOrEmpty(section.Borders)},
+		{key: "density", value: quotedOrEmpty(section.Density)},
+		{key: "bold", value: boolOrEmpty(section.Bold)},
+		{key: "italic", value: boolOrEmpty(section.Italic)},
 	}
-	tmp := path + ".tmp"
-	file, err := os.Create(tmp)
-	if err != nil {
-		return err
+}
+
+func quotedOrEmpty(value *string) string {
+	if value == nil {
+		return ""
 	}
-	encodeErr := toml.NewEncoder(file).Encode(terminalFile{Terminal: section})
-	closeErr := file.Close()
-	if err := errors.Join(encodeErr, closeErr); err != nil {
-		_ = os.Remove(tmp)
-		return err
+	return strconv.Quote(*value)
+}
+
+func boolOrEmpty(value *bool) string {
+	if value == nil {
+		return ""
 	}
-	return os.Rename(tmp, path)
+	return strconv.FormatBool(*value)
 }
 
 func (s terminalSection) themeID() string {

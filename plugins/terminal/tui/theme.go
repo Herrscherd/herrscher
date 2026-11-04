@@ -133,6 +133,7 @@ type glyphSet struct {
 	gaugeFull, gaugeEmpty, brand, agent, active                      string
 	selected, attention, open, railMark, filet, minus                string
 	expanded, branchMid, branchEnd, omitted, userBar                 string
+	ticked, unticked, shiftTab                                       string
 	families                                                         map[string]string
 	spin                                                             []string
 }
@@ -156,6 +157,7 @@ func unicodeGlyphs() glyphSet {
 		brand: "──◂ HERRSCHER ▸──", agent: "⚡", active: "◆",
 		selected: "▸", attention: "!", open: "○", railMark: "━", filet: "│", minus: "−",
 		expanded: "▾", branchMid: "├", branchEnd: "└", omitted: "⋯", userBar: "┃",
+		ticked: "[✓]", unticked: "[ ]", shiftTab: "⇧⇥",
 		families: map[string]string{
 			familyRead: "◇", familyWrite: "◈", familyRun: "▸", familySearch: "⌕", familyWeb: "⌖", familyAgent: "◆",
 		},
@@ -179,6 +181,7 @@ func asciiGlyphs() glyphSet {
 		brand: "--< HERRSCHER >--", agent: "*", active: "*",
 		selected: ">", attention: "!", open: "o", railMark: "=", filet: "|", minus: "-",
 		expanded: "v", branchMid: "+", branchEnd: "\\", omitted: "...", userBar: "|",
+		ticked: "[v]", unticked: "[ ]", shiftTab: "S-Tab",
 		families: map[string]string{
 			familyRead: "=", familyWrite: "+", familyRun: ">", familySearch: "?", familyWeb: "@", familyAgent: "*",
 		},

@@ -91,7 +91,7 @@ func (m *model) reloadThemes() {
 
 func (m *model) saveThemeConfig(section terminalSection) error {
 	path := filepath.Join(m.themeDir, terminalConfigFile)
-	if err := writeTerminalConfig(path, section); err != nil {
+	if err := updateTomlFile(path, terminalSectionName, themeKeyValues(section)...); err != nil {
 		return err
 	}
 	m.themeCfg = section

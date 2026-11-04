@@ -275,6 +275,7 @@ type model struct {
 	noColor    bool
 
 	leaderArmed time.Time
+	bar         barState
 
 	skillsOpen bool
 	skillsIdx  int
@@ -427,7 +428,7 @@ func newModel(backend Backend) *model {
 	match := &model{
 		ctx: context.Background(), tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
-		st: newStyles(defaultTheme(), false), md: &markdownRenderer{}, theme: defaultTheme(),
+		st: newStyles(defaultTheme(), false), md: &markdownRenderer{}, theme: defaultTheme(), bar: newBarState(),
 	}
 	match.cmds = localCommands()
 	if backend != nil {
@@ -667,6 +668,8 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		m.copyCmd(args[1:])
 	case "mouse":
 		return m.toggleMouse(), true
+	case "statusline":
+		return m.openStatusline(), true
 	default:
 		return nil, false
 	}
@@ -1169,21 +1172,18 @@ func (m *model) hintText() string {
 	return m.st.dim.Render("? raccourcis")
 }
 
-func (m *model) footer() string {
+func (m *model) footer(width int) string {
 	if s := m.linkStatus(); s != "" {
-		return s
+		return truncate(s, width)
 	}
 	tab := m.tabs[m.active]
 	if tab == nil {
 		return ""
 	}
-	if tab.busy {
-		return m.st.spinner.Render(m.spinnerHint(tab))
-	}
 	if tab.disconnected {
 		return m.st.dim.Render("· déconnecté")
 	}
-	return m.statusBar(tab, m.innerWidth())
+	return m.statusBar(tab, width)
 }
 
 func (m *model) spinnerHint(tab *tab) string {
@@ -1235,6 +1235,9 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	model.ctx = ctx
 	model.loadTheme(filepath.Dir(config.DefaultPath()), lipgloss.HasDarkBackground)
 	model.keys = &keyLog{}
+	model.bar.file = statuslineConfigFile()
+	model.bar.config = loadStatuslineConfig(model.bar.file)
+	model.bar.restoreFields(model.bar.config.Fields)
 	for _, opt := range opts {
 		opt(model)
 	}
@@ -1272,7 +1275,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, tickCmd(), themeWatchTick(), enableEnhancedKeys)
+	return tea.Batch(textarea.Blink, tickCmd(), themeWatchTick(), enableEnhancedKeys, m.armStatusline())
 }
 
 func (m *model) ensureSpin() tea.Cmd {
@@ -1336,6 +1339,11 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case spinMsg:
 		return m.handleSpin(), true
+	case scriptTickMsg:
+		return m.handleScriptTick(), true
+	case scriptDoneMsg:
+		m.receiveScript(msg)
+		return nil, true
 	}
 	return nil, false
 }
@@ -1424,6 +1432,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleResumeKey(msg), true
 	case m.themeScr != nil:
 		return m.handleThemeKey(msg), true
+	case m.bar.open:
+		return m.handleStatuslineKey(msg), true
 	}
 	if cmd, handled := m.handleLeader(msg); handled {
 		return cmd, true

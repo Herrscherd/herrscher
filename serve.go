@@ -102,6 +102,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	withCompactionConfig(&opts, cfg)
 
 	openOnForeground(open, foreground)
+	host.StartBackgroundDiscovery(ctx, contracts.Default.Backends())
 	return runHubForeground(ctx, *statePath, gws, closers, foreground, opts)
 }
 

@@ -16,9 +16,9 @@ func fakeCatalog(p contracts.RoutePolicy) ([]host.CatalogEntry, error) {
 		{Vendor: "claude", ModelSpec: contracts.ModelSpec{ID: "local-opus", Route: contracts.RouteNative}},
 	}
 	out := []host.CatalogEntry{}
-	for _, e := range all {
-		if p.Allows(e.Route) {
-			out = append(out, e)
+	for idx := range all {
+		if p.Allows(all[idx].Route) {
+			out = append(out, all[idx])
 		}
 	}
 	return out, nil

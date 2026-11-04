@@ -21,7 +21,7 @@ var (
 type catalogFn func(contracts.RoutePolicy) ([]host.CatalogEntry, error)
 
 func liveCatalog(p contracts.RoutePolicy) ([]host.CatalogEntry, error) {
-	return host.Catalog(contracts.Default.Backends(), p)
+	return host.CatalogWith(contracts.Default.Backends(), p, host.LoadSources(os.Getenv))
 }
 
 type routeCurrent struct {
@@ -153,7 +153,8 @@ func chooseDefaultModel(sty style, input *bufio.Reader, entries []host.CatalogEn
 		return "", nil
 	}
 	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, "default model"))
-	for idx, entry := range entries {
+	for idx := range entries {
+		entry := &entries[idx]
 		padded, tag := fmt.Sprintf("%-24s", entry.ID), ""
 		if entry.ID == cur {
 			padded, tag = sty.wrap(sty.green, padded), sty.wrap(sty.dim, "  current")
@@ -178,8 +179,8 @@ func chooseDefaultModel(sty style, input *bufio.Reader, entries []host.CatalogEn
 		}
 		return "", fmt.Errorf("default model: %w: %d", errChoiceOutOfRange, choice)
 	}
-	for _, e := range entries {
-		if e.ID == ans {
+	for idx := range entries {
+		if entries[idx].ID == ans {
 			return ans, nil
 		}
 	}

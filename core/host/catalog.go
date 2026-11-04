@@ -1,6 +1,7 @@
 package host
 
 import (
+	"log/slog"
 	"sort"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -13,6 +14,7 @@ type CatalogEntry struct {
 	contracts.ModelSpec
 
 	Vendor string
+	Source string
 }
 
 // Catalog aggregates the Models of every registered backend and applies the
@@ -24,23 +26,25 @@ type CatalogEntry struct {
 // across two backends) is an error, not a warning: the daemon must refuse to
 // start rather than silently serve a wrong selector.
 func Catalog(plugins []contracts.Plugin, policy contracts.RoutePolicy) ([]CatalogEntry, error) {
+	return CatalogWith(plugins, policy, Sources{})
+}
+
+// CatalogWith is Catalog with the discovered models and the hidden IDs of the given sources applied.
+func CatalogWith(plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources) ([]CatalogEntry, error) {
 	out := []CatalogEntry{}
 	owner := make(map[string]string)
 	for idx := range plugins {
-		plugin := plugins[idx]
+		plugin := &plugins[idx]
 		kind := plugin.Manifest.Kind
-		if err := contracts.ValidateModels(kind, plugin.Manifest.Models); err != nil {
+		static := plugin.Manifest.Models
+		if err := contracts.ValidateModels(kind, static); err != nil {
 			return nil, err
 		}
-		for _, model := range plugin.Manifest.Models {
-			if prev, clash := owner[model.ID]; clash {
-				return nil, &duplicateModelError{ID: model.ID, First: prev, Second: kind}
-			}
-			owner[model.ID] = kind
+		merged := mergedModels(kind, static, sources.discovered)
+		if err := claimModelIDs(owner, kind, merged); err != nil {
+			return nil, err
 		}
-		for _, m := range contracts.FilterModels(plugin.Manifest.Models, policy) {
-			out = append(out, CatalogEntry{Vendor: kind, ModelSpec: m})
-		}
+		out = append(out, offeredEntries(kind, static, merged, policy, sources.hidden)...)
 	}
 	sort.SliceStable(out, func(left, right int) bool {
 		if out[left].Vendor != out[right].Vendor {
@@ -51,18 +55,53 @@ func Catalog(plugins []contracts.Plugin, policy contracts.RoutePolicy) ([]Catalo
 	return out, nil
 }
 
+func claimModelIDs(owner map[string]string, kind string, models []contracts.ModelSpec) error {
+	for idx := range models {
+		modelID := models[idx].ID
+		if prev, clash := owner[modelID]; clash {
+			return &duplicateModelError{ID: modelID, First: prev, Second: kind}
+		}
+		owner[modelID] = kind
+	}
+	return nil
+}
+
+func offeredEntries(kind string, static, merged []contracts.ModelSpec, policy contracts.RoutePolicy, hidden map[string]bool) []CatalogEntry {
+	staticIDs := make(map[string]bool, len(static))
+	for idx := range static {
+		staticIDs[static[idx].ID] = true
+	}
+	var entries []CatalogEntry
+	for _, model := range contracts.FilterModels(merged, policy) {
+		if hidden[model.ID] {
+			continue
+		}
+		source := sourceDiscovered
+		if staticIDs[model.ID] {
+			source = sourceCatalog
+		}
+		entries = append(entries, CatalogEntry{Vendor: kind, ModelSpec: model, Source: source})
+	}
+	return entries
+}
+
 // LookupModel resolves a model ID to its catalog entry, under the given
 // policy. A model the policy excludes is NOT FOUND, not merely hidden: a
 // persisted session naming it fails to resume, which is the intended
 // behavior when a public build inherits internal state.
 func LookupModel(plugins []contracts.Plugin, policy contracts.RoutePolicy, modelID string) (CatalogEntry, error) {
-	entries, err := Catalog(plugins, policy)
+	return LookupModelWith(plugins, policy, Sources{}, modelID)
+}
+
+// LookupModelWith is LookupModel over the catalog with the given sources applied.
+func LookupModelWith(plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources, modelID string) (CatalogEntry, error) {
+	entries, err := CatalogWith(plugins, policy, sources)
 	if err != nil {
 		return CatalogEntry{}, err
 	}
-	for _, entry := range entries {
-		if entry.ID == modelID {
-			return entry, nil
+	for idx := range entries {
+		if entries[idx].ID == modelID {
+			return entries[idx], nil
 		}
 	}
 	name := string(policy)
@@ -90,4 +129,17 @@ func ResolvePolicy(getenv func(string) string) contracts.RoutePolicy {
 		return contracts.PolicyGatewayOnly
 	}
 	return contracts.PolicyAll
+}
+
+func mergedModels(kind string, static []contracts.ModelSpec, discovered discoveryCache) []contracts.ModelSpec {
+	cached := discovered.modelsOf(kind)
+	if len(cached) == 0 {
+		return static
+	}
+	merged, err := contracts.MergeDiscovered(kind, static, cached)
+	if err != nil {
+		slog.Warn("cached models rejected, using the static catalog", "vendor", kind, "err", err)
+		return static
+	}
+	return merged
 }

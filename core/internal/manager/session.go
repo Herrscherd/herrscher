@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -65,16 +66,6 @@ func cohortTotals(target state.Session, all []state.Session,
 			children[session.Parent] = append(children[session.Parent], session.Name)
 		}
 	}
-	root := target
-	seen := map[string]bool{root.Name: true}
-	for root.Parent != "" && root.Parent != root.Name {
-		parent, ok := byName[root.Parent]
-		if !ok || seen[parent.Name] {
-			break
-		}
-		seen[parent.Name] = true
-		root = parent
-	}
 	var totalCost float64
 	var totalTokens uint64
 	visited := make(map[string]bool)
@@ -95,7 +86,7 @@ func cohortTotals(target state.Session, all []state.Session,
 			walk(ch)
 		}
 	}
-	walk(root.Name)
+	walk(state.TreeRoot(all, target.Name))
 	return sessionUsage{cost: totalCost, tokens: totalTokens}
 }
 
@@ -488,6 +479,9 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	if err != nil {
 		return createRequest{}, err
 	}
+	if err := checkParentCycle(name, options.parent, h.st.SnapshotSessions()); err != nil {
+		return createRequest{}, err
+	}
 	mode := strings.TrimSpace(input.Get("approvals"))
 	if err := validateApprovalsMode(mode); err != nil {
 		return createRequest{}, err
@@ -558,6 +552,13 @@ func (h *Handler) chooseRuntime(input contracts.Input) (runtimeChoice, error) {
 		return runtimeChoice{}, err
 	}
 	return runtime, nil
+}
+
+func checkParentCycle(name, parent string, all []state.Session) error {
+	if parent == "" || !slices.Contains(state.TreeChain(all, parent), name) {
+		return nil
+	}
+	return &InvalidValueError{Field: "parent", Value: parent, Hint: "it would make " + name + " its own ancestor"}
 }
 
 func (h *Handler) parseSessionOptions(input contracts.Input, terminalOnly bool) (sessionOptions, error) {

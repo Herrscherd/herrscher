@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -150,7 +151,7 @@ func TestFooterFoldsWholeHintsAtNarrowWidths(t *testing.T) {
 			press(m, "ctrl+d")
 
 			lines := strings.Split(screen(m), "\n")
-			footer := strings.TrimRight(lines[len(lines)-1], " ")
+			footer := strings.TrimRight(lines[len(lines)-2], " ")
 			if !strings.Contains(footer, "⌃D fermer le panneau") {
 				t.Fatalf("the close hint must stay on the footer: %q", footer)
 			}
@@ -390,6 +391,29 @@ func TestPanelFillsTheScreenAndNeverOverflowsAtEachWidth(t *testing.T) {
 				assertPanelFits(t, screen(m), width, height)
 			})
 		}
+	}
+}
+
+func TestDiffScreenRulesTheFooterAndEndsOnTheStatusBar(t *testing.T) {
+	for _, size := range []struct{ width, height int }{{60, 20}, {80, 30}, {120, 30}, {200, 30}} {
+		t.Run(fmt.Sprintf("%dx%d", size.width, size.height), func(t *testing.T) {
+			dir := initRepo(t)
+			writeAndCommitBase(t, dir)
+			m, _ := newDiffModel(t, dir, nil, size.width, size.height)
+			press(m, "ctrl+d")
+
+			view := screen(m)
+			assertPanelFits(t, view, size.width, size.height)
+			lines := strings.Split(view, "\n")
+			rule := ansi.Strip(lines[len(lines)-3])
+			if rule == "" || strings.Trim(rule, "─") != "" {
+				t.Fatalf("a rule must sit above the key hints, got %q", rule)
+			}
+			status := strings.TrimRight(lines[len(lines)-1], " ")
+			if want := strings.TrimRight(m.statusZone()[0], " "); status != want {
+				t.Fatalf("the last line must be the shared status bar\nwant %q\ngot  %q", want, status)
+			}
+		})
 	}
 }
 

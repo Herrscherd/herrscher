@@ -6,6 +6,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -443,10 +445,10 @@ func typedText(msg tea.KeyMsg) (string, bool) {
 }
 
 func (m *model) diffScreen() string {
-	lines := m.railLines()
-	lines = append(lines, m.diffBody(m.width, m.height-len(lines)-1)...)
-	lines = append(lines, m.diffKeysLine(m.width))
-	return strings.Join(lines, "\n")
+	top := m.railLines()
+	bottom := append([]string{m.st.rule(m.st.dim, m.width), m.diffKeysLine(m.width)}, m.statusZone()...)
+	body := m.diffBody(m.width, m.height-len(top)-len(bottom))
+	return strings.Join(slices.Concat(top, body, bottom), "\n")
 }
 
 func (m *model) diffBody(width, height int) []string {
@@ -593,27 +595,34 @@ func (m *model) diffFileRow(index, width int) string {
 		}
 	}
 	prefix := " " + cursor + " " + mark + " "
-	stats := m.fileStats(file)
+	stats := m.fileStats(file, selected)
 	pathWidth := width - lipgloss.Width(prefix) - lipgloss.Width(stats) - 1
-	row := truncate(joinRow(width, prefix+truncateLeft(panel.displayPath(file.Path), pathWidth), stats), width)
-	if selected {
-		return m.st.overlaySel.Render(padTo(row, width))
-	}
-	return padTo(row, width)
+	left := prefix + truncateLeft(panel.displayPath(file.Path), pathWidth)
+	gap := m.paint(lipgloss.NewStyle(), strings.Repeat(" ", max(width-lipgloss.Width(left)-lipgloss.Width(stats), 1)), selected)
+	return truncate(m.paint(lipgloss.NewStyle(), left, selected)+gap+stats, width)
 }
 
-func (m *model) fileStats(file diffFile) string {
+func (m *model) fileStats(file diffFile, selected bool) string {
 	if file.Binary {
-		return "binary"
+		return m.paint(m.st.dim, "binary", selected)
 	}
-	return m.signedStats(file.Added, file.Deleted)
+	return m.signedStats(file.Added, file.Deleted, selected)
 }
 
-func (m *model) signedStats(added, deleted int) string {
+func (m *model) signedStats(added, deleted int, selected bool) string {
+	plus := m.paint(m.st.green, fmt.Sprintf("+%d", added), selected)
 	if deleted == 0 {
-		return fmt.Sprintf("+%d", added)
+		return plus
 	}
-	return fmt.Sprintf("+%d %s%d", added, m.st.glyphs.minus, deleted)
+	minus := m.paint(m.st.red, m.st.glyphs.minus+strconv.Itoa(deleted), selected)
+	return plus + m.paint(lipgloss.NewStyle(), " ", selected) + minus
+}
+
+func (m *model) paint(style lipgloss.Style, text string, selected bool) string {
+	if selected {
+		style = style.Inherit(m.st.overlaySel)
+	}
+	return style.Render(text)
 }
 
 func (panel *diffPanel) displayPath(filePath string) string {
@@ -638,8 +647,9 @@ func commonDirPrefix(files []diffFile) string {
 
 func (m *model) diffSummary(width int) string {
 	panel := &m.diff
-	text := fmt.Sprintf("   %d fichiers %s · relus %d/%d", len(panel.report.Files), m.totalStats(panel.report.Files), panel.reviewedCount(), len(panel.report.Files))
-	return m.st.dim.Render(truncate(text, width))
+	text := m.st.dim.Render(fmt.Sprintf("   %d fichiers ", len(panel.report.Files))) + m.totalStats(panel.report.Files) +
+		m.st.dim.Render(fmt.Sprintf(" · relus %d/%d", panel.reviewedCount(), len(panel.report.Files)))
+	return truncate(text, width)
 }
 
 func (m *model) totalStats(files []diffFile) string {
@@ -648,7 +658,7 @@ func (m *model) totalStats(files []diffFile) string {
 		added += file.Added
 		deleted += file.Deleted
 	}
-	return m.signedStats(added, deleted)
+	return m.signedStats(added, deleted, false)
 }
 
 func (m *model) diffPane(width, height int) []string {
@@ -678,7 +688,7 @@ func (m *model) diffPane(width, height int) []string {
 }
 
 func (m *model) diffPaneHeader(file diffFile, width int) string {
-	right := m.st.text.Render(m.fileStats(file)) + m.st.dim.Render("   ancien · nouveau ")
+	right := m.fileStats(file, false) + m.st.dim.Render("   ancien · nouveau ")
 	tag := ""
 	if file.Status == changeAdded {
 		tag = "  nouveau"
@@ -761,7 +771,7 @@ func (m *model) diffBelow(width int) []string {
 func (m *model) diffCommitBox(width int) []string {
 	panel := &m.diff
 	files := len(panel.report.Files)
-	title := m.st.strong.Render("Commit") + m.st.dim.Render(fmt.Sprintf(" · %s · %d fichiers %s", panel.report.Branch, files, m.totalStats(panel.report.Files)))
+	title := m.st.strong.Render("Commit") + m.st.dim.Render(fmt.Sprintf(" · %s · %d fichiers ", panel.report.Branch, files)) + m.totalStats(panel.report.Files)
 	content := []string{title, m.st.dim.Render("auteur " + panel.report.Author)}
 	for index, line := range strings.Split(panel.message, "\n") {
 		if index == 0 {

@@ -3,9 +3,11 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -153,6 +155,47 @@ func TestNarrowPanesReachTheRowsBelow(t *testing.T) {
 	if !strings.Contains(view, "gamma · ") {
 		t.Fatalf("a narrow grid must bring the hidden rows into view with Tab: %s", view)
 	}
+}
+
+func TestNarrowPanesSayHowManyAreHidden(t *testing.T) {
+	_, m := paneModel(t)
+	m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	if view := m.View(); !strings.Contains(view, "+2 volets · Tab pour les voir") {
+		t.Fatalf("a narrow grid must count the panes it hides: %s", view)
+	}
+}
+
+func TestNarrowPanesKeepTheFocusedPaneVisible(t *testing.T) {
+	_, m := paneModel(t)
+	m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	for _, channel := range []string{"ch-alpha", "ch-beta", "ch-gamma", "ch-delta", "ch-alpha"} {
+		focusPaneChannel(t, m, channel)
+		name := m.infoForChannel(channel).Name
+		if view := m.View(); !strings.Contains(view, name+" · ") {
+			t.Fatalf("the focused pane %s must be shown at 60x20: %s", name, view)
+		}
+	}
+}
+
+func TestPaneToolRowCutsTheTargetBeforeItsState(t *testing.T) {
+	_, m := paneModel(t)
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	m.tabs["ch-alpha"].entries = append(m.tabs["ch-alpha"].entries, entry{
+		role: roleTool,
+		text: "Bash go test ./plugins/terminal/tui/ ./plugins/terminal/...",
+		span: 1200 * time.Millisecond,
+	})
+	for _, line := range strings.Split(ansi.Strip(m.View()), "\n") {
+		if !strings.Contains(line, "Bash") {
+			continue
+		}
+		trimmed := strings.TrimRight(line, " │")
+		if !strings.HasSuffix(trimmed, "✓") || !strings.Contains(trimmed, "…") {
+			t.Fatalf("a cut pane tool row must keep its state after an ellipsis: %q", line)
+		}
+		return
+	}
+	t.Fatal("the pane must show the tool row at 80x30")
 }
 
 func TestPaneComposerShowsThePanePlaceholder(t *testing.T) {

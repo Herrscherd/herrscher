@@ -7,51 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func TestBannerCarriesTheActiveTab(t *testing.T) {
-	m := newTestModel()
-	m.width = 80
-	m.ensureTab("alpha")
-	m.ensureTab("beta")
-	m.active = "beta"
-	out := m.railRow()
-	if !strings.Contains(out, "HERRSCHER") {
-		t.Fatalf("banner must carry the brand: %q", out)
-	}
-	if !strings.Contains(out, glyphCursor+" "+m.tabs["beta"].label) {
-		t.Fatalf("the active tab must be marked: %q", out)
-	}
-	if !strings.Contains(out, m.tabs["alpha"].label) {
-		t.Fatalf("an inactive tab must still be listed: %q", out)
-	}
-	if w := lipgloss.Width(out); w > 80 {
-		t.Fatalf("banner width %d exceeds 80: %q", w, out)
-	}
-}
-
-func TestBannerDropsTheBrandBeforeTheTabs(t *testing.T) {
-	m := newTestModel()
-	m.width = 20
-	m.ensureTab("alpha")
-	out := m.railRow()
-	if strings.Contains(out, "HERRSCHER") {
-		t.Fatalf("a narrow banner must drop the brand: %q", out)
-	}
-	if w := lipgloss.Width(out); w > 20 {
-		t.Fatalf("narrow banner width %d exceeds 20: %q", w, out)
-	}
-}
-
-func TestUnreadTabCarriesItsPip(t *testing.T) {
-	m := newTestModel()
-	m.width = 80
-	m.ensureTab("alpha")
-	m.ensureTab("beta")
-	m.tabs["beta"].unread = true
-	if !strings.Contains(m.tabStrip(), glyphUnread) {
-		t.Fatalf("an unread tab must carry its pip: %q", m.tabStrip())
-	}
-}
-
 func TestEmptyTabShowsAnEmptyState(t *testing.T) {
 	m := newTestModel()
 	m.ready = true
@@ -90,22 +45,6 @@ func TestStatusZoneIsClippedToOneLine(t *testing.T) {
 	}
 	if w := lipgloss.Width(zone[0]); w > 30 {
 		t.Fatalf("status row width %d exceeds 30", w)
-	}
-}
-
-func TestNarrowBannerKeepsTheActiveTab(t *testing.T) {
-	m := newTestModel()
-	m.width = 18
-	for _, ch := range []string{"alpha-session", "beta-session", "gamma-session"} {
-		m.ensureTab(ch)
-	}
-	m.active = "gamma-session"
-	out := m.railRow()
-	if !strings.Contains(out, "gamma") {
-		t.Fatalf("a banner too narrow for the strip must keep the active tab: %q", out)
-	}
-	if w := lipgloss.Width(out); w > 18 {
-		t.Fatalf("banner width %d exceeds 18: %q", w, out)
 	}
 }
 

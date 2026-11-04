@@ -38,7 +38,7 @@ func (h *Handler) sessionSetModeRun(_ context.Context, input contracts.Input) (s
 		return "", &SessionNotFoundError{Name: name}
 	}
 	gate := h.gateFor(sess.Vendor)
-	if approval.Mode(mode) == approval.ModePlan && !gate.enforced {
+	if parsed, _ := approval.ParseMode(mode); parsed == approval.ModePlan && !gate.enforced {
 		return "", &planUnsupportedError{Session: name, Vendor: sess.Vendor, Why: gate.why}
 	}
 	if err := h.st.SetSessionApprovals(name, mode); err != nil {
@@ -57,17 +57,17 @@ func (h *Handler) sessionGetModeRun(_ context.Context, input contracts.Input) (s
 		return "", &SessionNotFoundError{Name: name}
 	}
 	if sess.Approvals == "" {
-		return string(approval.ModeAsk), nil
+		return approval.ModeAsk.String(), nil
 	}
 	return sess.Approvals, nil
 }
 
 func setModeReply(sess state.Session, mode string, gate approvalGate) string {
 	reply := fmt.Sprintf("%s is now %s", sess.Name, mode)
-	if !gate.enforced && mode != string(approval.ModeBypass) {
+	if !gate.enforced && mode != approval.ModeBypass.String() {
 		reply += fmt.Sprintf(" (%s cannot enforce it, so %s runs ungated)", vendorLabel(sess.Vendor), sess.Name)
 	}
-	if sess.Approvals == string(approval.ModeBypass) && mode != string(approval.ModeBypass) {
+	if sess.Approvals == approval.ModeBypass.String() && mode != approval.ModeBypass.String() {
 		reply += " (a session created with --approvals bypass has no hook: recreate it for this to bite)"
 	}
 	return reply

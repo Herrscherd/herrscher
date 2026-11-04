@@ -647,8 +647,10 @@ func (h *Handler) resolveHost(input contracts.Input, agentName string) string {
 }
 
 func validateApprovalsMode(mode string) error {
-	switch approval.Mode(mode) {
-	case "", approval.ModeAsk, approval.ModeAcceptEdits, approval.ModePlan, approval.ModeAuto, approval.ModeBypass, approval.ModeStrict, approval.ModeSmart:
+	if mode == "" {
+		return nil
+	}
+	if _, ok := approval.ParseMode(mode); ok {
 		return nil
 	}
 	return &UnknownApprovalModeError{Mode: mode}
@@ -722,7 +724,7 @@ func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktr
 	if !req.runtime.explicit && agentSpec.Cmd != "" {
 		req.runtime.cmd = agentSpec.Cmd
 	}
-	if err := h.materializeOn(ctx, req.hostName, agentSpec, space.path, req.mode != string(approval.ModeBypass)); err != nil {
+	if err := h.materializeOn(ctx, req.hostName, agentSpec, space.path, req.mode != approval.ModeBypass.String()); err != nil {
 		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
 		return fmt.Errorf("provision agent %q: %w", agentName, err)
 	}
@@ -746,7 +748,7 @@ func (h *Handler) rollbackWorkspace(ctx context.Context, worktrees Worktrees, re
 
 func (h *Handler) approvalsNote(ctx context.Context, req createRequest, space workspace) string {
 	mode := req.mode
-	if mode == "" || mode == string(approval.ModeBypass) {
+	if mode == "" || mode == approval.ModeBypass.String() {
 		return ""
 	}
 	vendor, name, agentName := req.runtime.vendor, req.name, req.runtime.agent
@@ -991,7 +993,7 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, input contracts.Input) (
 
 func (h *Handler) switchApprovalsNote(sess state.Session) string {
 	mode := sess.Approvals
-	if mode == "" || mode == string(approval.ModeBypass) {
+	if mode == "" || mode == approval.ModeBypass.String() {
 		return ""
 	}
 	gate := h.gateFor(sess.Vendor)

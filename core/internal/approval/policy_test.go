@@ -323,3 +323,20 @@ func TestDenyStarStillCoversShellOperators(t *testing.T) {
 		t.Fatalf("got %q matched=%v, want deny: a deny wildcard must keep covering operators", d, matched)
 	}
 }
+
+func TestAllowWildcardDoesNotProtectAnArgument(t *testing.T) {
+	p := Policy{{Allow, "Bash", "git *"}}
+	if _, matched := p.Decide(Request{Tool: "Bash", Subject: "git -c core.pager='sh -c id' log"}); !matched {
+		t.Fatal("allow Bash(git *) keeps covering an argument that runs a program: the limit is documented, not changed")
+	}
+}
+
+func TestDenyOnAnArgumentWinsOverAllowWildcard(t *testing.T) {
+	p := Policy{{Allow, "Bash", "git *"}, {Deny, "Bash", "git -c*"}}
+	if d, matched := p.Decide(Request{Tool: "Bash", Subject: "git -c core.pager='sh -c id' log"}); d != Deny || !matched {
+		t.Fatalf("got %q matched=%v, want deny: a targeted deny beats the allow wildcard", d, matched)
+	}
+	if d, _ := p.Decide(Request{Tool: "Bash", Subject: "git log --oneline"}); d != Allow {
+		t.Fatalf("got %q, want allow: the targeted deny must not catch other git calls", d)
+	}
+}

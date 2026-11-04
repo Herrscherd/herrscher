@@ -249,6 +249,14 @@ or `git push $(id)`. An operator written out in the rule matches literally:
 `ask` rules keep their wildcards unrestricted, so `deny Bash(rm -rf /*)` also
 blocks `rm -rf /x; ls`.
 
+That restriction closes shell operators only. It does not stop a program that an
+argument runs: `allow Bash(git *)` still passes `git -c core.pager='sh -c id' log`,
+and `allow Bash(find *)` still passes `find . -exec id {} +`. The same holds for
+`sh -c`, `bash -c`, `npm run`, `make`, and `xargs`. For those, write a targeted
+deny, which has no operator restriction and wins over any allow:
+`deny Bash(git -c*)` refuses the `-c` form while `allow Bash(git *)` keeps
+passing the other git calls.
+
 On `ask` the question goes to the session's own gateways as a menu of four
 answers, and the tool call waits. The four are:
 

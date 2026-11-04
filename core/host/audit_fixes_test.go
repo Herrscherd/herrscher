@@ -125,8 +125,8 @@ func TestApprovalIDsAreRandomAndWellFormed(t *testing.T) {
 	seen := make(map[string]bool, 4096)
 	for range 4096 {
 		id := newApprovalID()
-		if len(id) != 8 {
-			t.Fatalf("newApprovalID() = %q, want 8 hex characters", id)
+		if len(id) != 2*approvalIDBytes {
+			t.Fatalf("newApprovalID() = %q, want %d hex characters", id, 2*approvalIDBytes)
 		}
 		if _, err := hex.DecodeString(id); err != nil {
 			t.Fatalf("newApprovalID() = %q, not hex: %v", id, err)

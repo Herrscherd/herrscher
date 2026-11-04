@@ -24,7 +24,11 @@ const (
 	shellTruncatedNote = "\n[sortie tronquée]"
 )
 
-var errShellRefused = errors.New("commande refusée")
+var (
+	errShellRefused        = errors.New("commande refusée")
+	errEmptyShellCommand   = errors.New("session shell : la commande est vide")
+	errUnknownShellSession = errors.New("session shell : session inconnue")
+)
 
 func sessionShellVerb(store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, "shell").
@@ -39,11 +43,11 @@ func sessionShellVerb(store *state.State, agents *agent.Store, approvals *approv
 func runSessionShell(ctx context.Context, store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable, name, command string) (string, error) {
 	command = strings.TrimSpace(command)
 	if command == "" {
-		return "", errors.New("session shell : la commande est vide")
+		return "", errEmptyShellCommand
 	}
 	session, ok := store.FindSession(name)
 	if !ok {
-		return "", fmt.Errorf("session shell : session %q inconnue", name)
+		return "", fmt.Errorf("%w %q", errUnknownShellSession, name)
 	}
 	pol, mode := sessionPolicy(store, agents, name)
 	req := approval.Request{Tool: shellToolName, Subject: command}

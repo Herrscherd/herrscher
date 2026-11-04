@@ -41,16 +41,32 @@ type approvalVerdict struct {
 	reason   string
 }
 
-type approvalScope string
+type approvalScope uint8
 
 const (
-	scopeOnce    approvalScope = "allow"
-	scopeSession approvalScope = "allow-session"
-	scopeAlways  approvalScope = "allow-always"
-	scopeDeny    approvalScope = "deny"
+	scopeOnce approvalScope = iota + 1
+	scopeSession
+	scopeAlways
+	scopeDeny
 )
 
-var approvalScopes = []approvalScope{scopeOnce, scopeSession, scopeAlways, scopeDeny}
+func approvalScopes() []approvalScope {
+	return []approvalScope{scopeOnce, scopeSession, scopeAlways, scopeDeny}
+}
+
+func (s approvalScope) String() string {
+	switch s {
+	case scopeOnce:
+		return "allow"
+	case scopeSession:
+		return "allow-session"
+	case scopeAlways:
+		return "allow-always"
+	case scopeDeny:
+		return "deny"
+	}
+	return ""
+}
 
 type approvalAnswer struct {
 	scope  approvalScope
@@ -259,11 +275,11 @@ func (t *approvalTable) addRule(req approval.Request) {
 
 func (s *sessionTable) verdict(session string, req approval.Request) (approval.Risk, bool) {
 	if s == nil {
-		return "", false
+		return 0, false
 	}
 	driver := s.lookup(session)
 	if driver == nil {
-		return "", false
+		return 0, false
 	}
 	return driver.verdict(req)
 }
@@ -331,12 +347,12 @@ func parseApprovalPick(value string) (string, approvalAnswer, bool) {
 }
 
 func scopeNamed(word string) (approvalScope, bool) {
-	for _, scope := range approvalScopes {
-		if string(scope) == word {
+	for _, scope := range approvalScopes() {
+		if scope.String() == word {
 			return scope, true
 		}
 	}
-	return "", false
+	return 0, false
 }
 
 func operatorRefusal(reason string) string {
@@ -357,8 +373,10 @@ func approvalSession(approvals *approvalTable, approvalID string) (string, bool)
 	return pending.session, true
 }
 
+const approvalIDBytes = 8
+
 func newApprovalID() string {
-	var randomBytes [4]byte
+	var randomBytes [approvalIDBytes]byte
 	_, _ = rand.Read(randomBytes[:])
 	return hex.EncodeToString(randomBytes[:])
 }
@@ -384,20 +402,21 @@ func clip(text string) string {
 }
 
 func approvalChoices(approvalID string, req approval.Request) []contracts.Choice {
-	choices := make([]contracts.Choice, 0, len(approvalScopes))
-	for _, scope := range approvalScopes {
-		choices = append(choices, contracts.Choice{Label: scopeLabel(scope, req), Value: approvalPickPrefix + approvalID + ":" + string(scope)})
+	scopes := approvalScopes()
+	choices := make([]contracts.Choice, 0, len(scopes))
+	for _, scope := range scopes {
+		choices = append(choices, contracts.Choice{Label: scopeLabel(scope, req), Value: approvalPickPrefix + approvalID + ":" + scope.String()})
 	}
 	return choices
 }
 
 func scopeLabel(scope approvalScope, req approval.Request) string {
 	if scope != scopeAlways {
-		return string(scope)
+		return scope.String()
 	}
 	rule, ok := approval.RuleFor(req.Tool, req.Subject)
 	if !ok {
-		return string(scope)
+		return scope.String()
 	}
-	return string(scope) + " " + rule.Tool + "(" + rule.Pattern + ")"
+	return scope.String() + " " + rule.Tool + "(" + rule.Pattern + ")"
 }

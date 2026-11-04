@@ -81,9 +81,9 @@ func approveAllowVerb(approvals *approvalTable, sessions *sessionTable) contract
 		})
 }
 
-func allowOperands(in contracts.Input) (string, approvalScope, error) {
-	operands := append([]string{}, in.Rest...)
-	if id := in.Get("id"); id != "" {
+func allowOperands(input contracts.Input) (string, approvalScope, error) {
+	operands := append([]string{}, input.Rest...)
+	if id := input.Get("id"); id != "" {
 		operands = append([]string{id}, operands...)
 	}
 	var scopes []approvalScope
@@ -91,7 +91,7 @@ func allowOperands(in contracts.Input) (string, approvalScope, error) {
 		name  string
 		scope approvalScope
 	}{{paramSession, scopeSession}, {"always", scopeAlways}} {
-		value := in.Get(flag.name)
+		value := input.Get(flag.name)
 		if value == "" {
 			continue
 		}
@@ -101,10 +101,10 @@ func allowOperands(in contracts.Input) (string, approvalScope, error) {
 		}
 	}
 	if len(scopes) > 1 {
-		return "", "", errScopeConflict
+		return "", 0, errScopeConflict
 	}
 	if len(operands) == 0 {
-		return "", "", errRequestNameMissing
+		return "", 0, errRequestNameMissing
 	}
 	scope := scopeOnce
 	if len(scopes) == 1 {
@@ -206,7 +206,7 @@ func approveAskVerb(store *state.State, agents *agent.Store, approvals *approval
 			payload, err := json.Marshal(struct {
 				Decision string `json:"decision"`
 				Reason   string `json:"reason,omitempty"`
-			}{Decision: string(decision), Reason: reason})
+			}{Decision: decision.String(), Reason: reason})
 			return string(payload), err
 		})
 }
@@ -227,18 +227,17 @@ func setApprovalMode(store *state.State, in contracts.Input) (string, error) {
 	if name == "" || mode == "" {
 		return "", errApproveModeUsage
 	}
-	switch approval.Mode(mode) {
-	case approval.ModeAsk, approval.ModeAcceptEdits, approval.ModePlan, approval.ModeAuto, approval.ModeBypass, approval.ModeStrict, approval.ModeSmart:
-	default:
+	parsed, ok := approval.ParseMode(mode)
+	if !ok {
 		return "", &unknownModeError{Mode: mode}
 	}
 	if err := store.SetSessionApprovals(name, mode); err != nil {
 		return "", err
 	}
-	if approval.Mode(mode) == approval.ModeSmart && !riskModelConfigured() {
+	if parsed == approval.ModeSmart && !riskModelConfigured() {
 		return fmt.Sprintf("%s is now %s, but no LLM backend is configured to rate the calls: until one is, smart decides as ask does, so a call no rule names runs unasked", name, mode), nil
 	}
-	if mode != string(approval.ModeBypass) {
+	if mode != approval.ModeBypass.String() {
 		return fmt.Sprintf("%s is now %s (a session created with --approvals bypass has no hook: recreate it for this to bite)", name, mode), nil
 	}
 	return fmt.Sprintf("%s is now %s", name, mode), nil
@@ -307,7 +306,7 @@ func sessionPolicy(hostState *state.State, agents *agent.Store, session string) 
 	for idx := range sessions {
 		entry := sessions[idx]
 		if entry.Name == session {
-			mode = approval.Mode(entry.Approvals)
+			mode, _ = approval.ParseMode(entry.Approvals)
 			if agents != nil && entry.Agent != "" {
 				if a, ok := agents.Get(entry.Agent); ok {
 					home = a.Home

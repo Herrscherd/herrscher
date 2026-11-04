@@ -12,7 +12,7 @@ type seenTable struct {
 }
 
 func newSeenTable(floor time.Time) *seenTable {
-	return &seenTable{floor: floor, at: map[string]time.Time{}}
+	return &seenTable{floor: floor, at: make(map[string]time.Time)}
 }
 
 func (t *seenTable) mark(name string, now time.Time) {

@@ -36,6 +36,13 @@ var (
 		"its backend keeps no message position to return to; nothing was changed")
 	errConversationFork = errors.New("fork refused: the conversation cannot be taken to this checkpoint " +
 		"(its backend keeps no message position); nothing was created")
+	errWhatInvalid       = errors.New("--what must be code, conversation or both")
+	errRewindNeedsDaemon = errors.New("session rewind is only available from the running daemon")
+	errForkNeedsDaemon   = errors.New("session fork is only available from the running daemon")
+	errTurnInFlight      = errors.New("has a turn in flight: interrupt it (esc) before rewinding")
+	errCheckpointNumber  = errors.New("checkpoint number must be a positive integer")
+	errNotCheckpointable = errors.New("has no checkpoints: it runs in no worktree of its own")
+	errForkNoWorktree    = errors.New("the new session has no worktree")
 )
 
 type sessionRestarter interface {
@@ -85,95 +92,110 @@ type checkpointView struct {
 	Files        []checkpointFile `json:"files"`
 }
 
-func addCheckpointVerbs(store *state.State, sessions *sessionTable) []contracts.Cmd {
+func addCheckpointVerbs(sessionStore *state.State, sessions *sessionTable) []contracts.Cmd {
 	return []contracts.Cmd{
-		checkpointsVerb(store),
-		rewindVerb(store, sessions),
-		undoVerb(store, sessions),
+		checkpointsVerb(sessionStore, &sessions.checkpoints),
+		rewindVerb(sessionStore, sessions),
+		undoVerb(sessionStore, sessions),
 		forkVerb(),
 	}
 }
 
-func checkpointsVerb(store *state.State) contracts.Cmd {
+func checkpointsVerb(sessionStore *state.State, checkpoints *checkpoint.Store) contracts.Cmd {
 	return contracts.New(nsSession, verbCheckpoints).
 		Help("list a session's checkpoints, one before each user message, with the files each one touched").
 		Param(paramName, "session name", true).
-		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			sess, err := checkpointSession(store, in.Get(paramName))
+		Do(func(ctx context.Context, input contracts.Input) (string, error) {
+			sess, err := checkpointSession(sessionStore, input.Get(paramName))
 			if err != nil {
 				return "", err
 			}
-			views, err := checkpointViews(ctx, sess.Worktree, sess.Name)
+			views, err := checkpointViews(ctx, checkpoints, sess.Worktree, sess.Name)
 			if err != nil {
 				return "", err
 			}
-			if in.JSON {
-				b, err := json.Marshal(views)
-				return string(b), err
+			if input.JSON {
+				return marshalJSON(views)
 			}
 			return formatCheckpoints(views), nil
 		})
 }
 
-func rewindVerb(store *state.State, sessions *sessionTable) contracts.Cmd {
+func marshalJSON[T any](value T) (string, error) {
+	payload, err := json.Marshal(value)
+	return string(payload), err
+}
+
+func rewindVerb(sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbRewind).
 		Help("restore a session's code, its conversation, or both to the checkpoint before a message").
 		Param(paramName, "session name", true).
 		ValueParam(paramTo, "checkpoint number, as listed by session checkpoints", true).
 		ValueParam(paramWhat, "code, conversation or both", true).
-		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			sess, index, err := checkpointTarget(store, in)
-			if err != nil {
-				return "", err
-			}
-			what := in.Get(paramWhat)
-			if what != whatCode && what != whatConversation && what != whatBoth {
-				return "", fmt.Errorf("--what must be %s, %s or %s", whatCode, whatConversation, whatBoth)
-			}
-			if sessions.Busy(sess.Name) {
-				return "", busyRewindError(sess.Name)
-			}
-			entry, err := checkpoint.Get(ctx, sess.Worktree, sess.Name, index)
-			if err != nil {
-				return "", err
-			}
-			resumeToken := ""
-			if what != whatCode {
-				if resumeToken, err = forkConversation(sess, entry, sess); err != nil {
-					return "", err
-				}
-			}
-			if what != whatConversation {
-				if _, err := checkpoint.Restore(ctx, sess.Worktree, sess.Name, index); err != nil {
-					return "", err
-				}
-			}
-			if what != whatCode {
-				restarter, ok := restarterFrom(ctx)
-				if !ok {
-					return "", errors.New("session rewind is only available from the running daemon")
-				}
-				if err := restarter.RestartWithResume(sess.Name, resumeToken); err != nil {
-					return "", fmt.Errorf("rewind %s: conversation not resumed: %w", sess.Name, err)
-				}
-			}
-			return fmt.Sprintf("rewound %s to checkpoint %d (%s)", sess.Name, index, what), nil
+		Do(func(ctx context.Context, input contracts.Input) (string, error) {
+			return rewindSession(ctx, sessionStore, sessions, input)
 		})
 }
 
-func undoVerb(store *state.State, sessions *sessionTable) contracts.Cmd {
+func rewindSession(ctx context.Context, sessionStore *state.State, sessions *sessionTable, input contracts.Input) (string, error) {
+	sess, position, err := checkpointTarget(sessionStore, input)
+	if err != nil {
+		return "", err
+	}
+	what := input.Get(paramWhat)
+	if what != whatCode && what != whatConversation && what != whatBoth {
+		return "", errWhatInvalid
+	}
+	if sessions.Busy(sess.Name) {
+		return "", busyRewindError(sess.Name)
+	}
+	entry, err := sessions.checkpoints.Get(ctx, sess.Worktree, sess.Name, position)
+	if err != nil {
+		return "", err
+	}
+	resumeToken := ""
+	if what != whatCode {
+		if resumeToken, err = forkConversation(sess, entry, sess); err != nil {
+			return "", err
+		}
+	}
+	if what != whatConversation {
+		if _, err = sessions.checkpoints.Restore(ctx, sess.Worktree, sess.Name, position); err != nil {
+			return "", err
+		}
+	}
+	if what != whatCode {
+		if err := restartWithConversation(ctx, sess.Name, resumeToken); err != nil {
+			return "", err
+		}
+	}
+	return fmt.Sprintf("rewound %s to checkpoint %d (%s)", sess.Name, position, what), nil
+}
+
+func restartWithConversation(ctx context.Context, name, token string) error {
+	restarter, ok := restarterFrom(ctx)
+	if !ok {
+		return errRewindNeedsDaemon
+	}
+	if err := restarter.RestartWithResume(name, token); err != nil {
+		return fmt.Errorf("rewind %s: conversation not resumed: %w", name, err)
+	}
+	return nil
+}
+
+func undoVerb(sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbUndo).
 		Help("undo the last rewind of a session's code").
 		Param(paramName, "session name", true).
-		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			sess, err := checkpointSession(store, in.Get(paramName))
+		Do(func(ctx context.Context, input contracts.Input) (string, error) {
+			sess, err := checkpointSession(sessionStore, input.Get(paramName))
 			if err != nil {
 				return "", err
 			}
 			if sessions.Busy(sess.Name) {
 				return "", busyRewindError(sess.Name)
 			}
-			if err := checkpoint.Undo(ctx, sess.Worktree, sess.Name); err != nil {
+			if err := sessions.checkpoints.Undo(ctx, sess.Worktree, sess.Name); err != nil {
 				return "", err
 			}
 			return "undid the last rewind of " + sess.Name, nil
@@ -186,12 +208,12 @@ func forkVerb() contracts.Cmd {
 		Param(paramName, "session to fork", true).
 		ValueParam(paramTo, "checkpoint number, as listed by session checkpoints", true).
 		ValueParam(paramForkAs, "name of the new session (default <name>-fork)", false).
-		Do(func(ctx context.Context, in contracts.Input) (string, error) {
+		Do(func(ctx context.Context, input contracts.Input) (string, error) {
 			fork, ok := forkerFrom(ctx)
 			if !ok {
-				return "", errors.New("session fork is only available from the running daemon")
+				return "", errForkNeedsDaemon
 			}
-			return fork(ctx, in)
+			return fork(ctx, input)
 		})
 }
 
@@ -202,11 +224,11 @@ type forkHost interface {
 }
 
 func (h *hub) forkSession(ctx context.Context, input contracts.Input) (string, error) {
-	return forkCheckpoint(ctx, h, h.st, input)
+	return forkCheckpoint(ctx, h, h.st, &h.sessions.checkpoints, input)
 }
 
-func forkCheckpoint(ctx context.Context, host forkHost, st *state.State, input contracts.Input) (string, error) {
-	source, err := checkpointSession(st, input.Get(paramName))
+func forkCheckpoint(ctx context.Context, host forkHost, sessionStore *state.State, checkpoints *checkpoint.Store, input contracts.Input) (string, error) {
+	source, err := checkpointSession(sessionStore, input.Get(paramName))
 	if err != nil {
 		return "", err
 	}
@@ -214,7 +236,7 @@ func forkCheckpoint(ctx context.Context, host forkHost, st *state.State, input c
 	if err != nil {
 		return "", err
 	}
-	entry, err := checkpoint.Get(ctx, source.Worktree, source.Name, index)
+	entry, err := checkpoints.Get(ctx, source.Worktree, source.Name, index)
 	if err != nil {
 		return "", err
 	}
@@ -229,7 +251,7 @@ func forkCheckpoint(ctx context.Context, host forkHost, st *state.State, input c
 	if forkName == "" {
 		forkName = source.Name + forkSuffix
 	}
-	if _, err := host.CreateCoordinated(ctx, contracts.CreateSession{
+	if _, err = host.CreateCoordinated(ctx, contracts.CreateSession{
 		Name:         forkName,
 		Project:      source.Project,
 		Cmd:          source.Cmd,
@@ -240,12 +262,12 @@ func forkCheckpoint(ctx context.Context, host forkHost, st *state.State, input c
 	}, source.Vendor); err != nil {
 		return "", fmt.Errorf("fork %q: %w", source.Name, err)
 	}
-	fork, ok := st.FindSession(forkName)
+	fork, ok := sessionStore.FindSession(forkName)
 	if !ok || fork.Worktree == "" {
 		rollbackFork(ctx, host, forkName)
-		return "", fmt.Errorf("fork %q: the new session has no worktree", forkName)
+		return "", fmt.Errorf("fork %q: %w", forkName, errForkNoWorktree)
 	}
-	if err := checkpoint.Materialize(ctx, fork.Worktree, entry.Commit); err != nil {
+	if err = checkpoints.Materialize(ctx, fork.Worktree, entry.Commit); err != nil {
 		rollbackFork(ctx, host, forkName)
 		return "", fmt.Errorf("fork %q: checkpoint %d not applied: %w", forkName, index, err)
 	}
@@ -255,16 +277,29 @@ func forkCheckpoint(ctx context.Context, host forkHost, st *state.State, input c
 		return "", fmt.Errorf("fork %q: conversation not taken to checkpoint %d: %w", forkName, index, err)
 	}
 	if token != "" {
-		if err := host.RestartWithResume(forkName, token); err != nil {
+		if err = host.RestartWithResume(forkName, token); err != nil {
 			rollbackFork(ctx, host, forkName)
 			return "", fmt.Errorf("fork %q: conversation not resumed: %w", forkName, err)
 		}
 	}
 	if input.JSON {
-		b, err := json.Marshal(map[string]any{"name": forkName, "from": source.Name, "checkpoint": index})
-		return string(b), err
+		return marshalJSON(map[string]any{"name": forkName, "from": source.Name, "checkpoint": index})
 	}
 	return forkName, nil
+}
+
+func (h *hub) takeCheckpoint(ctx context.Context, sess state.Session, turnID, text string) {
+	if !checkpointable(sess) {
+		return
+	}
+	current, ok := h.st.FindSession(sess.Name)
+	if !ok {
+		current = sess
+	}
+	meta := checkpoint.Meta{Turn: turnID, Text: text, Conversation: conversationPosition(current)}
+	if _, err := h.sessions.checkpoints.Take(context.WithoutCancel(ctx), sess.Worktree, sess.Name, meta); err != nil {
+		warnStderr("herrscher serve: session %q: checkpoint not taken, /rewind cannot return to this message: %v\n", sess.Name, err)
+	}
 }
 
 func rollbackFork(ctx context.Context, host forkHost, name string) {
@@ -315,52 +350,52 @@ func checkpointable(sess state.Session) bool {
 	return sess.Worktree != "" && !sess.Scratch && sess.Host == ""
 }
 
-func checkpointSession(store *state.State, name string) (state.Session, error) {
-	sess, ok := store.FindSession(name)
+func checkpointSession(sessionStore *state.State, name string) (state.Session, error) {
+	sess, ok := sessionStore.FindSession(name)
 	if !ok {
 		return state.Session{}, &NotFoundError{Kind: kindSession, Name: name}
 	}
 	if !checkpointable(sess) {
-		return state.Session{}, fmt.Errorf("session %q has no checkpoints: it runs in no worktree of its own", name)
+		return state.Session{}, fmt.Errorf("session %q %w", name, errNotCheckpointable)
 	}
 	return sess, nil
 }
 
-func checkpointTarget(store *state.State, in contracts.Input) (state.Session, int, error) {
-	sess, err := checkpointSession(store, in.Get(paramName))
+func checkpointTarget(sessionStore *state.State, input contracts.Input) (state.Session, int, error) {
+	sess, err := checkpointSession(sessionStore, input.Get(paramName))
 	if err != nil {
 		return state.Session{}, 0, err
 	}
-	index, err := checkpointIndex(in.Get(paramTo))
+	index, err := checkpointIndex(input.Get(paramTo))
 	return sess, index, err
 }
 
 func checkpointIndex(raw string) (int, error) {
 	index, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || index < 1 {
-		return 0, fmt.Errorf("checkpoint number must be a positive integer, got %q", raw)
+		return 0, fmt.Errorf("%w, got %q", errCheckpointNumber, raw)
 	}
 	return index, nil
 }
 
 func busyRewindError(name string) error {
-	return fmt.Errorf("session %q has a turn in flight: interrupt it (esc) before rewinding", name)
+	return fmt.Errorf("session %q %w", name, errTurnInFlight)
 }
 
-func checkpointViews(ctx context.Context, worktree, name string) ([]checkpointView, error) {
+func checkpointViews(ctx context.Context, checkpoints *checkpoint.Store, worktree, name string) ([]checkpointView, error) {
 	views := make([]checkpointView, 0)
-	entries, err := checkpoint.List(ctx, worktree, name)
+	entries, err := checkpoints.List(ctx, worktree, name)
 	if err != nil || len(entries) == 0 {
 		return views, err
 	}
-	current, err := checkpoint.Current(ctx, worktree)
+	current, err := checkpoints.Current(ctx, worktree)
 	if err != nil {
 		return nil, err
 	}
-	for i, entry := range entries {
+	for position, entry := range entries {
 		next := current
-		if i+1 < len(entries) {
-			next = entries[i+1].Commit
+		if position+1 < len(entries) {
+			next = entries[position+1].Commit
 		}
 		changes, err := checkpoint.Changes(ctx, worktree, entry.Commit, next)
 		if err != nil {
@@ -386,12 +421,12 @@ func formatCheckpoints(views []checkpointView) string {
 	if len(views) == 0 {
 		return "no checkpoints"
 	}
-	var b strings.Builder
+	var text strings.Builder
 	for _, view := range views {
-		fmt.Fprintf(&b, "%d  %s  %s\n", view.Index, view.At, view.Text)
+		fmt.Fprintf(&text, "%d  %s  %s\n", view.Index, view.At, view.Text)
 		for _, file := range view.Files {
-			fmt.Fprintf(&b, "      %s  +%d -%d\n", file.Path, file.Added, file.Removed)
+			fmt.Fprintf(&text, "      %s  +%d -%d\n", file.Path, file.Added, file.Removed)
 		}
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return strings.TrimRight(text.String(), "\n")
 }

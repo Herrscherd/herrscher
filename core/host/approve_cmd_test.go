@@ -166,8 +166,8 @@ func TestSessionPolicyOfAnUnknownSession(t *testing.T) {
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
 	pol, mode := sessionPolicy(st, nil, "never-created")
-	if mode != "" {
-		t.Fatalf("mode = %q, want the unset mode of a session that is not there", mode)
+	if mode != 0 {
+		t.Fatalf("mode = %v, want the unset mode of a session that is not there", mode)
 	}
 	if d, _ := pol.Decide(approval.Request{Tool: "Bash", Subject: "rm -rf /"}); d != approval.Deny {
 		t.Fatalf("got %q, want deny: the daemon's rules apply with or without a session row", d)

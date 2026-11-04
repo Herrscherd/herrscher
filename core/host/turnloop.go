@@ -12,6 +12,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
+	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
@@ -319,8 +320,9 @@ func (d *sessionDriver) SeedAndWaitWithTurnID(ctx context.Context, task, turnID 
 }
 
 type sessionTable struct {
-	mu sync.Mutex
-	m  map[string]*sessionDriver
+	mu          sync.Mutex
+	m           map[string]*sessionDriver
+	checkpoints checkpoint.Store
 }
 
 func newSessionTable() *sessionTable {
@@ -504,9 +506,9 @@ func (d *sessionDriver) pump(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case q := <-d.queue:
+		case item := <-d.queue:
 			d.busy.Store(true)
-			event, guard, ok := d.prepareTurn(ctx, q)
+			event, guard, ok := d.prepareTurn(ctx, item)
 			if !ok {
 				d.busy.Store(false)
 				continue

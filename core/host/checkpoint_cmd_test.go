@@ -17,9 +17,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func gitIn(t *testing.T, dir string, args ...string) {
+const frameFile = "frame.go"
+
+func gitIn(ctx context.Context, t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %s: %v", args, out, err)
@@ -29,31 +31,33 @@ func gitIn(t *testing.T, dir string, args ...string) {
 func checkpointRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	gitIn(t, dir, "init", "-q")
-	writeFile(t, dir, "frame.go", "v1\n")
-	gitIn(t, dir, "add", "-A")
-	gitIn(t, dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init")
+	ctx := t.Context()
+	gitIn(ctx, t, dir, "init", "-q")
+	writeFrame(t, dir, "v1\n")
+	gitIn(ctx, t, dir, "add", "-A")
+	gitIn(ctx, t, dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init")
 	return dir
 }
 
-func writeFile(t *testing.T, dir, rel, content string) {
+func writeFrame(t *testing.T, dir, content string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, rel), []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, frameFile), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func readFile(t *testing.T, dir, rel string) string {
+func readFrame(t *testing.T, dir string) string {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(dir, rel))
+	raw, err := os.ReadFile(filepath.Join(dir, frameFile))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return string(raw)
 }
 
-func checkpointState(t *testing.T, worktree, name string) *state.State {
+func checkpointState(t *testing.T, worktree string) *state.State {
 	t.Helper()
+	const name = "alpha"
 	st, err := state.LoadState(filepath.Join(t.TempDir(), "state.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -75,11 +79,12 @@ func checkpointRegistry(st *state.State, sessions *sessionTable) *cli.Registry {
 func TestCheckpointsListsMessagesWithTheFilesTheyTouched(t *testing.T) {
 	repo := checkpointRepo(t)
 	ctx := context.Background()
-	st := checkpointState(t, repo, "alpha")
-	if _, err := checkpoint.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "ajoute une file"}); err != nil {
+	checkpoints := &checkpoint.Store{}
+	st := checkpointState(t, repo)
+	if _, err := checkpoints.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "ajoute une file"}); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, repo, "frame.go", "v2\nv2b\n")
+	writeFrame(t, repo, "v2\nv2b\n")
 	reg := checkpointRegistry(st, newSessionTable())
 
 	out, err := reg.Dispatch(ctx, []string{nsSession, verbCheckpoints, "--name", "alpha", "--json"})
@@ -101,32 +106,33 @@ func TestCheckpointsListsMessagesWithTheFilesTheyTouched(t *testing.T) {
 func TestRewindRestoresCodeAndRefusesConversation(t *testing.T) {
 	repo := checkpointRepo(t)
 	ctx := context.Background()
-	st := checkpointState(t, repo, "alpha")
-	if _, err := checkpoint.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
+	checkpoints := &checkpoint.Store{}
+	st := checkpointState(t, repo)
+	if _, err := checkpoints.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, repo, "frame.go", "v2\n")
+	writeFrame(t, repo, "v2\n")
 	reg := checkpointRegistry(st, newSessionTable())
 
 	_, err := reg.Dispatch(ctx, []string{nsSession, verbRewind, "--name", "alpha", "--to", "1", "--what", "both"})
 	if err == nil || !strings.Contains(err.Error(), "not available") {
 		t.Fatalf("conversation restore must be refused explicitly, err = %v", err)
 	}
-	if got := readFile(t, repo, "frame.go"); got != "v2\n" {
+	if got := readFrame(t, repo); got != "v2\n" {
 		t.Fatalf("refused rewind still touched the code: %q", got)
 	}
 
 	if _, err := reg.Dispatch(ctx, []string{nsSession, verbRewind, "--name", "alpha", "--to", "1", "--what", "code"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := readFile(t, repo, "frame.go"); got != "v1\n" {
+	if got := readFrame(t, repo); got != "v1\n" {
 		t.Fatalf("code not restored: %q", got)
 	}
 
 	if _, err := reg.Dispatch(ctx, []string{nsSession, verbUndo, "--name", "alpha"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := readFile(t, repo, "frame.go"); got != "v2\n" {
+	if got := readFrame(t, repo); got != "v2\n" {
 		t.Fatalf("undo did not bring the code back: %q", got)
 	}
 }
@@ -134,8 +140,9 @@ func TestRewindRestoresCodeAndRefusesConversation(t *testing.T) {
 func TestRewindRefusedWhileTurnInFlight(t *testing.T) {
 	repo := checkpointRepo(t)
 	ctx := context.Background()
-	st := checkpointState(t, repo, "alpha")
-	if _, err := checkpoint.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
+	checkpoints := &checkpoint.Store{}
+	st := checkpointState(t, repo)
+	if _, err := checkpoints.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
 		t.Fatal(err)
 	}
 	sessions := newSessionTable()
@@ -175,9 +182,9 @@ func (f *fakeForkHost) RestartWithResume(name, token string) error {
 	return nil
 }
 
-func (f *fakeForkHost) CreateCoordinated(_ context.Context, spec contracts.CreateSession, _ string) (string, error) {
+func (f *fakeForkHost) CreateCoordinated(ctx context.Context, spec contracts.CreateSession, _ string) (string, error) {
 	dir := filepath.Join(f.t.TempDir(), spec.Name)
-	gitIn(f.t, f.repo, "worktree", "add", "-q", dir, "-b", spec.Name, spec.Base)
+	gitIn(ctx, f.t, f.repo, "worktree", "add", "-q", dir, "-b", spec.Name, spec.Base)
 	if err := f.st.AddSession(state.Session{Name: spec.Name, ChannelID: "chan-" + spec.Name, Worktree: dir}); err != nil {
 		return "", err
 	}
@@ -191,14 +198,15 @@ func (f *fakeForkHost) Close(_ context.Context, _ string, _ bool) (string, error
 func TestForkCreatesOwnWorktreeAtCheckpointAndLeavesOriginal(t *testing.T) {
 	repo := checkpointRepo(t)
 	ctx := context.Background()
-	st := checkpointState(t, repo, "alpha")
-	if _, err := checkpoint.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: conversation.Start}); err != nil {
+	checkpoints := &checkpoint.Store{}
+	st := checkpointState(t, repo)
+	if _, err := checkpoints.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: conversation.Start}); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, repo, "frame.go", "v2\n")
+	writeFrame(t, repo, "v2\n")
 	host := &fakeForkHost{t: t, repo: repo, st: st}
 
-	out, err := forkCheckpoint(ctx, host, st, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}})
+	out, err := forkCheckpoint(ctx, host, st, checkpoints, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,10 +217,10 @@ func TestForkCreatesOwnWorktreeAtCheckpointAndLeavesOriginal(t *testing.T) {
 	if !ok || fork.Worktree == "" || fork.Worktree == repo {
 		t.Fatalf("fork has no worktree of its own: %+v", fork)
 	}
-	if got := readFile(t, fork.Worktree, "frame.go"); got != "v1\n" {
+	if got := readFrame(t, fork.Worktree); got != "v1\n" {
 		t.Fatalf("fork not at checkpoint: %q", got)
 	}
-	if got := readFile(t, repo, "frame.go"); got != "v2\n" {
+	if got := readFrame(t, repo); got != "v2\n" {
 		t.Fatalf("original session was touched: %q", got)
 	}
 }
@@ -237,12 +245,13 @@ func TestRewindConversationResumesAtTheCheckpointPosition(t *testing.T) {
 	t.Setenv("HOME", home)
 	repo := checkpointRepo(t)
 	ctx := context.Background()
-	st := checkpointState(t, repo, "alpha")
+	checkpoints := &checkpoint.Store{}
+	st := checkpointState(t, repo)
 	if err := st.SetResumeToken("alpha", "tok-1"); err != nil {
 		t.Fatal(err)
 	}
 	writeTranscript(t, home, repo, "tok-1", "u1", "u2", "u3")
-	if _, err := checkpoint.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: "u2"}); err != nil {
+	if _, err := checkpoints.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: "u2"}); err != nil {
 		t.Fatal(err)
 	}
 	restarter := &fakeRestarter{}
@@ -276,17 +285,18 @@ func TestForkCarriesTheConversationToTheCheckpoint(t *testing.T) {
 	t.Setenv("HOME", home)
 	repo := checkpointRepo(t)
 	ctx := context.Background()
-	st := checkpointState(t, repo, "alpha")
+	checkpoints := &checkpoint.Store{}
+	st := checkpointState(t, repo)
 	if err := st.SetResumeToken("alpha", "tok-1"); err != nil {
 		t.Fatal(err)
 	}
 	writeTranscript(t, home, repo, "tok-1", "u1", "u2", "u3")
-	if _, err := checkpoint.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: "u1"}); err != nil {
+	if _, err := checkpoints.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: "u1"}); err != nil {
 		t.Fatal(err)
 	}
 	host := &fakeForkHost{t: t, repo: repo, st: st}
 
-	if _, err := forkCheckpoint(ctx, host, st, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}}); err != nil {
+	if _, err := forkCheckpoint(ctx, host, st, checkpoints, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}}); err != nil {
 		t.Fatal(err)
 	}
 	fork, _ := st.FindSession("alpha-fork")
@@ -305,13 +315,14 @@ func TestForkCarriesTheConversationToTheCheckpoint(t *testing.T) {
 func TestForkRefusedWhenTheCheckpointHasNoConversationPosition(t *testing.T) {
 	repo := checkpointRepo(t)
 	ctx := context.Background()
-	st := checkpointState(t, repo, "alpha")
-	if _, err := checkpoint.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
+	checkpoints := &checkpoint.Store{}
+	st := checkpointState(t, repo)
+	if _, err := checkpoints.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
 		t.Fatal(err)
 	}
 	host := &fakeForkHost{t: t, repo: repo, st: st}
 
-	_, err := forkCheckpoint(ctx, host, st, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}})
+	_, err := forkCheckpoint(ctx, host, st, checkpoints, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}})
 	if err == nil || !strings.Contains(err.Error(), "nothing was created") {
 		t.Fatalf("fork without a conversation position must be refused, err = %v", err)
 	}

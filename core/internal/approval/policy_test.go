@@ -99,22 +99,39 @@ func TestMergeTightens(t *testing.T) {
 
 func TestApplyModes(t *testing.T) {
 	cases := []struct {
+		name    string
 		mode    Mode
+		tool    string
 		in      Decision
 		matched bool
 		want    Decision
 	}{
-		{ModeBypass, Deny, true, Allow},
-		{ModeBypass, Ask, true, Allow},
-		{ModeAsk, Ask, true, Ask},
-		{"", Deny, true, Deny},
-		{ModeStrict, Allow, false, Ask},
-		{ModeStrict, Allow, true, Allow},
-		{ModeStrict, Deny, true, Deny},
+		{"bypass ignores deny", ModeBypass, "Bash", Deny, true, Allow},
+		{"bypass ignores ask", ModeBypass, "Bash", Ask, true, Allow},
+		{"ask keeps a rule's ask", ModeAsk, "Read", Ask, true, Ask},
+		{"ask asks an unmatched edit", ModeAsk, "Edit", Allow, false, Ask},
+		{"ask asks an unmatched command", ModeAsk, "Bash", Allow, false, Ask},
+		{"ask lets an unmatched read through", ModeAsk, "Read", Allow, false, Allow},
+		{"ask honours an allow rule on a command", ModeAsk, "Bash", Allow, true, Allow},
+		{"legacy empty mode keeps the policy only", "", "Bash", Allow, false, Allow},
+		{"legacy empty mode keeps a deny", "", "Bash", Deny, true, Deny},
+		{"accept-edits lets an unmatched edit through", ModeAcceptEdits, "Edit", Allow, false, Allow},
+		{"accept-edits lets a write through", ModeAcceptEdits, "Write", Allow, false, Allow},
+		{"accept-edits asks an unmatched command", ModeAcceptEdits, "Bash", Allow, false, Ask},
+		{"accept-edits keeps a deny on an edit", ModeAcceptEdits, "Edit", Deny, true, Deny},
+		{"plan refuses an edit", ModePlan, "Edit", Allow, false, Deny},
+		{"plan refuses a command", ModePlan, "Bash", Allow, false, Deny},
+		{"plan refuses a command an allow rule names", ModePlan, "Bash", Allow, true, Deny},
+		{"plan refuses an unknown tool", ModePlan, "mcp__x__write", Allow, false, Deny},
+		{"plan lets a read through", ModePlan, "Read", Allow, false, Allow},
+		{"plan keeps a read's ask", ModePlan, "Grep", Ask, true, Ask},
+		{"strict asks an unmatched tool", ModeStrict, "Read", Allow, false, Ask},
+		{"strict honours an allow rule", ModeStrict, "Read", Allow, true, Allow},
+		{"strict keeps a deny", ModeStrict, "Read", Deny, true, Deny},
 	}
 	for _, c := range cases {
-		if got := Apply(c.mode, c.in, c.matched); got != c.want {
-			t.Fatalf("Apply(%q,%q,%v): got %q, want %q", c.mode, c.in, c.matched, got, c.want)
+		if got := Apply(c.mode, c.tool, c.in, c.matched); got != c.want {
+			t.Fatalf("%s: Apply(%q,%q,%q,%v): got %q, want %q", c.name, c.mode, c.tool, c.in, c.matched, got, c.want)
 		}
 	}
 }

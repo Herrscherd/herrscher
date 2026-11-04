@@ -23,7 +23,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("shared", "run in the main checkout instead of an isolated worktree", false).
 			Param("agent", "provision the session from a durable agent (its persona + MCP + zero-prompt settings)", false).
 			Param("host", "run this session on a registered host (see `host list`); empty or `local` = this machine", false).
-			Param("approvals", "approval stance: ask (default), bypass, strict (see `approve rule`)", false).
+			Param("approvals", "approval stance: ask (default), accept-edits, plan, bypass, strict (see `approve rule`)", false).
 			Param("memory_project", "memory project this session files what it learns under (does NOT move the session: see project)", false).
 			Param("memory_agent", "memory agent root for this session's private learned skills (does NOT provision an agent: see agent)", false).
 			Param("project_pinned", "the memory project is a human's choice, not a guess: never revise it", false).
@@ -84,6 +84,11 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("cohort_token_cap", "cohort token cap (0 = uncapped)", false).
 			Param("scope", "session (default) | cohort", false).
 			Do(h.sessionSetBudgetRun),
+		contracts.New("session", "set-mode").
+			Help("set a live session's approval stance: ask (manual), accept-edits, plan (read-only), bypass (auto)").
+			Param("name", "session name", true).
+			Param("mode", "ask | accept-edits | plan | bypass | strict", true).
+			Do(h.sessionSetModeRun),
 		contracts.New("agent", "create").
 			Help("create a durable companion agent (persona + MCP + zero-prompt settings)").
 			Param("name", "agent name (slugified to a safe slug)", true).

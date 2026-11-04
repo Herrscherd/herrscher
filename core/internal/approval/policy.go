@@ -129,8 +129,12 @@ type Request struct {
 type Mode string
 
 const (
-	// ModeAsk routes actions through the approval prompt.
+	// ModeAsk routes file edits and commands through the approval prompt.
 	ModeAsk Mode = "ask"
+	// ModeAcceptEdits lets file edits through and still asks before a command.
+	ModeAcceptEdits Mode = "accept-edits"
+	// ModePlan is read-only: anything that is not a read is refused.
+	ModePlan Mode = "plan"
 	// ModeBypass skips the approval prompt.
 	ModeBypass Mode = "bypass"
 	// ModeStrict refuses anything the policy does not explicitly allow.
@@ -167,16 +171,53 @@ func Merge(daemon, agent Policy) Policy {
 	return append(append(out, daemon...), agent...)
 }
 
-// Apply folds the session's mode into a verdict.
-func Apply(m Mode, decided Decision, matched bool) Decision {
+// ReadOnly reports whether a tool only reads: the only tools plan mode lets run.
+// Anything unknown, an MCP tool or a sub-agent included, counts as a write.
+func ReadOnly(tool string) bool {
+	switch tool {
+	case "Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "TodoWrite":
+		return true
+	}
+	return false
+}
+
+func editsFiles(tool string) bool {
+	switch tool {
+	case "Edit", "Write", "NotebookEdit":
+		return true
+	}
+	return false
+}
+
+func runsCommand(tool string) bool {
+	return tool == "Bash"
+}
+
+// Apply folds the session's mode into a verdict. Manual (ask) and accept-edits
+// only assume an unmatched file edit or command should be asked about, so a rule
+// that names the tool still decides it. Plan refuses every tool that is not a
+// read, whatever the rules say.
+func Apply(m Mode, tool string, decided Decision, matched bool) Decision {
+	unmatched := decided == Allow && !matched
 	switch m {
 	case ModeBypass:
 		return Allow
+	case ModePlan:
+		if decided == Deny || !ReadOnly(tool) {
+			return Deny
+		}
+	case ModeAcceptEdits:
+		if unmatched && runsCommand(tool) {
+			return Ask
+		}
 	case ModeStrict:
-		if decided == Allow && !matched {
+		if unmatched {
 			return Ask
 		}
 	case ModeAsk:
+		if unmatched && (editsFiles(tool) || runsCommand(tool)) {
+			return Ask
+		}
 	}
 	return decided
 }

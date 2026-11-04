@@ -51,6 +51,7 @@ const (
 
 const (
 	toastTTL       = 6 * time.Second
+	toastTick      = time.Second
 	toastWidth     = 56
 	toastMinimum   = 24
 	toastColumn    = 1
@@ -76,6 +77,10 @@ type toast struct {
 }
 
 type toastExpiredMsg struct {
+	seq int
+}
+
+type toastTickMsg struct {
 	seq int
 }
 
@@ -128,7 +133,7 @@ func (m *model) announce(kind notifyKind, glyph, title, channel string, body []s
 	m.toast = toast{seq: m.toastSeq, channel: channel, glyph: glyph, title: title, body: body, signal: deliveryLabel(m.caps, m.shouldSignal()), at: time.Now()}
 	seq := m.toastSeq
 	expire := tea.Tick(toastTTL, func(time.Time) tea.Msg { return toastExpiredMsg{seq: seq} })
-	return tea.Batch(m.signalCmd(title+": "+joinNonEmpty(body...)), expire)
+	return tea.Batch(m.signalCmd(title+": "+joinNonEmpty(body...)), expire, toastTicker(seq))
 }
 
 func (m *model) signalCmd(text string) tea.Cmd {
@@ -182,6 +187,17 @@ func (m *model) handleToastExpired(msg toastExpiredMsg) {
 	if msg.seq == m.toast.seq {
 		m.toast = toast{}
 	}
+}
+
+func toastTicker(seq int) tea.Cmd {
+	return tea.Tick(toastTick, func(time.Time) tea.Msg { return toastTickMsg{seq: seq} })
+}
+
+func (m *model) handleToastTick(msg toastTickMsg) tea.Cmd {
+	if m.toast.title == "" || msg.seq != m.toast.seq {
+		return nil
+	}
+	return toastTicker(msg.seq)
 }
 
 func (m *model) handleFocus(focused bool) {

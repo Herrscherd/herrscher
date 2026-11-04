@@ -113,7 +113,7 @@ func contextGauge(ratio float64, styles uiStyles) string {
 		styles.dim.Render(strings.Repeat(styles.glyphs.gaugeEmpty, contextCells-filled))
 }
 
-const compactAt = 0.95
+const compactAt = 0.92
 
 func contextLeft(used, limit int) float64 {
 	left := (compactAt - contextRatio(used, limit)) / compactAt

@@ -184,13 +184,13 @@ func TestContextLeftCountsDownToTheCompaction(t *testing.T) {
 	if got := contextLeft(0, 200_000); got != 1 {
 		t.Errorf("une fenetre vide laisse tout le budget: %v", got)
 	}
-	if got := contextLeft(190_000, 200_000); got != 0 {
+	if got := contextLeft(184_000, 200_000); got != 0 {
 		t.Errorf("le seuil de compaction laisse zero: %v", got)
 	}
 	if got := contextLeft(200_000, 200_000); got != 0 {
 		t.Errorf("au-dela du seuil le reste ne devient pas negatif: %v", got)
 	}
-	if got := contextLeft(95_000, 200_000); got < 0.49 || got > 0.51 {
+	if got := contextLeft(92_000, 200_000); got < 0.49 || got > 0.51 {
 		t.Errorf("la moitie du budget doit se lire 50 %%: %v", got)
 	}
 }

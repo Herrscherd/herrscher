@@ -26,7 +26,6 @@ func (m *model) composerTextWidth() int {
 
 const (
 	composerPrompt  = "> "
-	composerIndent  = "  "
 	escKey          = "échap"
 	placeholderIdle = "Tape un message, / ou @, ou !commande"
 	placeholderBusy = "Écris pendant que l’agent travaille : ⏎ met en file, ⌥⏎ réoriente"
@@ -41,16 +40,24 @@ const (
 	titleEditing    = "brouillon ouvert dans l'éditeur"
 )
 
-func composerPromptAt(line int) string {
-	if line == 0 {
-		return composerPrompt
+func promptAt(prompt string) func(int) string {
+	indent := strings.Repeat(" ", lipgloss.Width(prompt))
+	return func(line int) string {
+		if line == 0 {
+			return prompt
+		}
+		return indent
 	}
-	return composerIndent
 }
 
 func (m *model) syncPrompt() {
-	m.input.FocusedStyle.Prompt = m.st.accent.Bold(true)
-	m.input.BlurredStyle.Prompt = m.st.accent.Bold(true)
+	prompt, style := m.st.glyphs.prompt+" ", m.st.accent.Bold(true)
+	if m.isShellInput() {
+		prompt, style = m.st.glyphs.shellPrompt+" ", m.st.warn.Bold(true)
+	}
+	m.input.SetPromptFunc(lipgloss.Width(prompt), promptAt(prompt))
+	m.input.FocusedStyle.Prompt = style
+	m.input.BlurredStyle.Prompt = style
 }
 
 func (m *model) placeholderText() string {

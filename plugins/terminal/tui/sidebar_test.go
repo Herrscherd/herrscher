@@ -176,7 +176,7 @@ func TestSidebarContextGaugeHasTwentyFourCellsWithoutBrackets(t *testing.T) {
 	if strings.ContainsAny(gaugeLine, "[]") {
 		t.Fatalf("the sidebar gauge must not be bracketed: %q", gaugeLine)
 	}
-	if !strings.Contains(ansi.Strip(lines[2]), "compacte seul à 95%") {
-		t.Fatalf("the sidebar must say compaction happens at 95%%: %q", ansi.Strip(lines[2]))
+	if !strings.Contains(ansi.Strip(lines[2]), "compacte seul à 92%") {
+		t.Fatalf("the sidebar must say compaction happens at 92%%: %q", ansi.Strip(lines[2]))
 	}
 }

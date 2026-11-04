@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -250,5 +251,48 @@ func TestFocusReportsPassThroughTheInputFilter(t *testing.T) {
 	focusIn, focusOut := "\x1b[I", "\x1b[O"
 	if got := string(filter([]byte(focusIn + focusOut))); got != focusIn+focusOut {
 		t.Fatalf("focus reports rewritten to %q, must reach bubbletea unchanged", got)
+	}
+}
+
+func TestToastAgeAdvancesOnEachTick(t *testing.T) {
+	m := notifyModel(t, false)
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", []string{"api"})
+	m.toast.at = time.Now().Add(-3 * time.Second)
+	if !strings.Contains(ansi.Strip(m.View()), "il y a 3s") {
+		t.Fatal("the toast must show the age of its event")
+	}
+	m.toast.at = time.Now().Add(-4 * time.Second)
+	_, cmd := m.Update(toastTickMsg{seq: m.toast.seq})
+	if cmd == nil {
+		t.Fatal("a tick while the toast shows must schedule the next tick")
+	}
+	if !strings.Contains(ansi.Strip(m.View()), "il y a 4s") {
+		t.Fatal("the age must advance when a tick arrives")
+	}
+}
+
+func TestToastTickStopsWhenTheToastIsGone(t *testing.T) {
+	m := notifyModel(t, false)
+	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", []string{"api"})
+	seq := m.toast.seq
+	m.Update(toastExpiredMsg{seq: seq})
+	if _, cmd := m.Update(toastTickMsg{seq: seq}); cmd != nil {
+		t.Fatal("a tick for a vanished toast must not be rescheduled")
+	}
+}
+
+func TestComposerPromptIsBangInShellMode(t *testing.T) {
+	m := notifyModel(t, false)
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.input.SetValue("!ls")
+	m.buildFrame()
+	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "! ") {
+		t.Fatalf("shell mode must prompt with !, got %q", got)
+	}
+	m.input.SetValue("ls")
+	m.buildFrame()
+	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "> ") {
+		t.Fatalf("outside shell mode the prompt must be >, got %q", got)
 	}
 }

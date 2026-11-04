@@ -426,7 +426,7 @@ At 110 columns and wider a side column runs down the right of the transcript,
 separated by a vertical rule. It shows the session (project, branch, worktree,
 gateways), the todos with their `n/m` count, the sub-agents still running and those
 just finished, background tasks when the backend reports them, the files the session wrote with their `+added −removed` line counts
-against git, and the context gauge (24 cells) with the compaction threshold (95 %). `ctrl+b` hides or
+against git, and the context gauge (24 cells) with the compaction threshold (92 %). `ctrl+b` hides or
 shows it. Under 24 rows the bottom sections fold to their summary line. The
 transcript keeps the full width below 110 columns, and the todos and sub-agents
 panels stay in the stack above the composer whenever the column is hidden.

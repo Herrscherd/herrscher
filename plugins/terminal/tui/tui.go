@@ -474,7 +474,7 @@ func (m *model) runContext() context.Context {
 func newModel(backend Backend) *model {
 	field := textarea.New()
 	field.Placeholder = placeholderIdle
-	field.SetPromptFunc(len(composerPrompt), composerPromptAt)
+	field.SetPromptFunc(len(composerPrompt), promptAt(composerPrompt))
 	field.ShowLineNumbers = false
 	field.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "shift+enter", "ctrl+j"))
 	field.SetHeight(maxComposerLines)
@@ -1482,6 +1482,8 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case toastExpiredMsg:
 		m.handleToastExpired(msg)
 		return nil, true
+	case toastTickMsg:
+		return m.handleToastTick(msg), true
 	case tea.FocusMsg:
 		m.handleFocus(true)
 		return nil, true

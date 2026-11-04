@@ -247,16 +247,16 @@ func builtinTheme(themeName string) (Theme, bool) {
 }
 
 type glyphSet struct {
-	tool, result, cursor, unread, thinking, notice, failure, success string
-	fold, moreLines, bolt, prompt, ellipsis, divider, ruleChar       string
-	gaugeFull, gaugeEmpty, brand, agent, active                      string
-	selected, attention, open, railMark, filet, minus                string
-	expanded, branchMid, branchEnd, omitted, userBar                 string
-	ticked, unticked, shiftTab                                       string
-	enter, caret, reasonArrow, warn, note                            string
-	waiting, review                                                  string
-	families                                                         map[string]string
-	spin                                                             []string
+	tool, result, cursor, unread, thinking, notice, failure, success        string
+	fold, moreLines, bolt, prompt, shellPrompt, ellipsis, divider, ruleChar string
+	gaugeFull, gaugeEmpty, brand, agent, active                             string
+	selected, attention, open, railMark, filet, minus                       string
+	expanded, branchMid, branchEnd, omitted, userBar                        string
+	ticked, unticked, shiftTab                                              string
+	enter, caret, reasonArrow, warn, note                                   string
+	waiting, review                                                         string
+	families                                                                map[string]string
+	spin                                                                    []string
 }
 
 func (g glyphSet) familyGlyph(family string) string {
@@ -273,7 +273,7 @@ func (g glyphSet) agentTitle() string {
 func unicodeGlyphs() glyphSet {
 	return glyphSet{
 		tool: "●", result: "└", cursor: "▸", unread: "●", thinking: "○", notice: "·",
-		failure: "✗", success: "✓", fold: "▸", moreLines: "↵", bolt: "●", prompt: ">",
+		failure: "✗", success: "✓", fold: "▸", moreLines: "↵", bolt: "●", prompt: ">", shellPrompt: "!",
 		ellipsis: "…", divider: "│", ruleChar: "─", gaugeFull: "█", gaugeEmpty: "░",
 		brand: "──◂ HERRSCHER ▸──", agent: "⚡", active: "◆",
 		selected: "▸", attention: "!", open: "○", railMark: "━", filet: "│", minus: "−",
@@ -298,7 +298,7 @@ func nerdGlyphs() glyphSet {
 func asciiGlyphs() glyphSet {
 	return glyphSet{
 		tool: "*", result: "\\", cursor: ">", unread: "*", thinking: "o", notice: ".",
-		failure: "x", success: "v", fold: ">", moreLines: "<", bolt: "*", prompt: ">",
+		failure: "x", success: "v", fold: ">", moreLines: "<", bolt: "*", prompt: ">", shellPrompt: "!",
 		ellipsis: asciiEllipsis, divider: "|", ruleChar: "-", gaugeFull: "#", gaugeEmpty: ".",
 		brand: "--< HERRSCHER >--", agent: "*", active: "*",
 		selected: ">", attention: "!", open: "o", railMark: "=", filet: "|", minus: "-",

@@ -1638,7 +1638,15 @@ func (m *model) updateComponents(msg tea.Msg) tea.Cmd {
 
 func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	m.keys.write("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
-	m.flash = m.takePendingBeatFlash()
+	m.flash = ""
+	cmd, handled := m.dispatchKey(msg)
+	if m.flash == "" {
+		m.flash = m.takePendingBeatFlash()
+	}
+	return cmd, handled
+}
+
+func (m *model) dispatchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if msg.Type == tea.KeyCtrlP && m.toast.title != "" {
 		m.jumpToToast()
 		return nil, true

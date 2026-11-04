@@ -189,3 +189,45 @@ func TestDraftsViewListsParkedDrafts(t *testing.T) {
 		t.Fatalf("draft line missing: %q", got)
 	}
 }
+
+func TestShiftArrowsReorderFocusedRow(t *testing.T) {
+	m, _ := queueFixture(t)
+	m.tabs["a"].busy = true
+	m.tabs["a"].queue = []queuedInput{{text: "un"}, {text: "deux"}, {text: "trois"}}
+	m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m.Update(tea.KeyMsg{Type: tea.KeyShiftUp})
+	got := m.tabs["a"].queue
+	if got[0].text != "deux" || got[1].text != "un" || m.queueSel != 0 {
+		t.Fatalf("shift+up must move the focused row up and follow it: %+v sel=%d", got, m.queueSel)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyShiftDown})
+	if m.tabs["a"].queue[0].text != "un" || m.tabs["a"].queue[1].text != "deux" || m.queueSel != 1 {
+		t.Fatalf("shift+down must move it back: %+v sel=%d", m.tabs["a"].queue, m.queueSel)
+	}
+}
+
+func TestShiftUpAtTopDoesNothing(t *testing.T) {
+	m, _ := queueFixture(t)
+	m.tabs["a"].queue = []queuedInput{{text: "un"}, {text: "deux"}}
+	m.queueFocus = true
+	m.queueSel = 0
+	m.Update(tea.KeyMsg{Type: tea.KeyShiftUp})
+	if m.tabs["a"].queue[0].text != "un" {
+		t.Fatalf("the first row cannot move up: %+v", m.tabs["a"].queue)
+	}
+}
+
+func TestBusyPlaceholderMatchesMockup(t *testing.T) {
+	m, _ := queueFixture(t)
+	m.tabs["a"].busy = true
+	m.View()
+	if got := m.input.Placeholder; got != "Écris pendant que l’agent travaille : ⏎ met en file, ⌥⏎ réoriente" {
+		t.Fatalf("busy placeholder = %q", got)
+	}
+	m.tabs["a"].busy = false
+	m.View()
+	if got := m.input.Placeholder; got != "Tape un message, / ou @, ou !commande" {
+		t.Fatalf("idle placeholder = %q", got)
+	}
+}

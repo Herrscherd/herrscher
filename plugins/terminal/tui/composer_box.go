@@ -36,7 +36,8 @@ func (m *model) composerTextWidth() int {
 }
 
 const (
-	placeholderIdle = "Écris un message…"
+	placeholderIdle = "Tape un message, / ou @, ou !commande"
+	placeholderBusy = "Écris pendant que l’agent travaille : ⏎ met en file, ⌥⏎ réoriente"
 	footIdle        = "⏎ envoyer · @ fichier · / commande · ! shell · ⌃R historique · ⌃S de côté"
 	footBusy        = "⏎ en file · ⌥⏎ réorienter · ⌃⏎ envoyer la file · ! shell · ⌃R historique · ⌃S de côté"
 	footShell       = "⏎ lancer · la commande passe par la politique d'outils de l'hôte · échap annuler"
@@ -47,6 +48,13 @@ const (
 	titleShell      = "! SHELL · la sortie entre dans la session"
 	titleEditing    = "brouillon ouvert dans l'éditeur"
 )
+
+func (m *model) placeholderText() string {
+	if m.isBusy() {
+		return placeholderBusy
+	}
+	return placeholderIdle
+}
 
 func (m *model) isShellInput() bool {
 	return strings.HasPrefix(m.input.Value(), shellPrefix)

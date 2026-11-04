@@ -17,6 +17,7 @@ const (
 	queueAfterMark   = "↪ réorienter"
 	queueFileMark    = "○ file"
 	queueHeaderMark  = "○"
+	queueFocusHint   = "○ En file · ↑↓ choisir · ⇧↑⇧↓ réordonner · suppr retirer · échap quitter"
 )
 
 type queueHit struct {
@@ -130,6 +131,9 @@ func (m *model) queueLines(base int) []string {
 	} else {
 		header += " · prêts à partir"
 	}
+	if m.queueFocus {
+		header = queueFocusHint
+	}
 	lines := []string{m.st.dim.Render(truncate(header, width))}
 	for i, item := range tb.queue {
 		mark, when := queueFileMark, queueEndOfTurn
@@ -205,6 +209,10 @@ func (m *model) handleQueueFocus(msg tea.KeyMsg) (bool, tea.Cmd) {
 		} else {
 			m.queueFocus = false
 		}
+	case tea.KeyShiftUp:
+		m.moveQueued(m.queueSel, -1)
+	case tea.KeyShiftDown:
+		m.moveQueued(m.queueSel, 1)
 	case tea.KeyDelete:
 		m.removeQueued(m.queueSel)
 	case tea.KeyEsc:
@@ -214,6 +222,18 @@ func (m *model) handleQueueFocus(msg tea.KeyMsg) (bool, tea.Cmd) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func (m *model) moveQueued(index, delta int) bool {
+	tb := m.activeTab()
+	target := index + delta
+	if tb == nil || index < 0 || index >= len(tb.queue) || target < 0 || target >= len(tb.queue) {
+		return false
+	}
+	tb.queue[index], tb.queue[target] = tb.queue[target], tb.queue[index]
+	m.queueSel = target
+	m.syncViewport()
+	return true
 }
 
 func (m *model) removeQueued(index int) bool {

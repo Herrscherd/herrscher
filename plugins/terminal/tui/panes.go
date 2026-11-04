@@ -220,13 +220,38 @@ func (m *model) paneCounts() string {
 	return strings.Join(parts, m.st.dim.Render(" · ")) + " "
 }
 
+func (m *model) paneHidden(layout paneLayout) int {
+	start, end := m.paneWindow(layout)
+	return len(m.panes.channels) - (end - start)
+}
+
+func (m *model) paneCellHeight(layout paneLayout, height int) int {
+	return max(height-m.paneHiddenReserve(layout), 0) / layout.rows
+}
+
+func (m *model) paneHiddenReserve(layout paneLayout) int {
+	if m.paneHidden(layout) > 0 {
+		return 1
+	}
+	return 0
+}
+
+func (m *model) paneHiddenLine(hidden int) string {
+	noun := "volets"
+	if hidden == 1 {
+		noun = "volet"
+	}
+	return m.st.dim.Render(fmt.Sprintf(" +%d %s · Tab pour les voir", hidden, noun))
+}
+
 func (m *model) paneBody(width, height int) []string {
 	if len(m.panes.channels) == 0 {
 		return padLines([]string{m.st.dim.Render("aucune session vivante")}, height)
 	}
 	layout := m.paneLayout()
 	start, end := m.paneWindow(layout)
-	cellHeight := height / layout.rows
+	cellsArea := max(height-m.paneHiddenReserve(layout), 0)
+	cellHeight := m.paneCellHeight(layout, height)
 	widths := paneWidths(width, layout.cols)
 	separator := strings.Repeat(" ", paneSepWidth)
 	var lines []string
@@ -248,7 +273,11 @@ func (m *model) paneBody(width, height int) []string {
 			lines = append(lines, strings.Join(parts, separator))
 		}
 	}
-	return padLines(lines, height)
+	body := padLines(lines, cellsArea)
+	if hidden := m.paneHidden(layout); hidden > 0 {
+		body = append(body, m.paneHiddenLine(hidden))
+	}
+	return padLines(body, height)
 }
 
 func (m *model) paneBox(index, width, height int) []string {
@@ -314,9 +343,43 @@ func (m *model) paneTranscript(channelTab *tab, width int) []string {
 	}
 	var out []string
 	for index := range channelTab.entries {
-		out = append(out, strings.Split(renderEntry(channelTab.entries[index], width, m.displayMode()), "\n")...)
+		item := channelTab.entries[index]
+		if item.role == roleTool {
+			out = append(out, m.paneToolRow(item, width))
+			continue
+		}
+		out = append(out, strings.Split(renderEntry(item, width, m.displayMode()), "\n")...)
 	}
 	return out
+}
+
+func (m *model) paneToolRow(item entry, width int) string {
+	display := m.displayMode()
+	family, target := toolVerb(strings.Split(item.text, "\n")[0])
+	name := ""
+	if family != "" {
+		name = toolName(strings.Split(item.text, "\n")[0])
+	}
+	mark := familyStyle(display.st, family)
+	stateMark := display.st.green.Render(display.st.glyphs.success)
+	switch {
+	case item.failed:
+		mark = display.st.red
+		stateMark = display.st.red.Render(display.st.glyphs.failure)
+	case item.live:
+		stateMark = display.st.spinner.Render(display.spin)
+	}
+	right := stateMark
+	if item.span > 0 || item.live {
+		right = display.st.dim.Render(formatSpan(item.span)) + " " + stateMark
+	}
+	room := width - lipgloss.Width(right) - 1
+	if room < 1 {
+		return cutText(right, width)
+	}
+	left := cutText(toolLeft(mark, family, name, target, display), room)
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
+	return left + strings.Repeat(" ", gap) + right
 }
 
 func (m *model) infoForChannel(channel string) contracts.SessionInfo {
@@ -378,7 +441,7 @@ func (m *model) paneCellAt(screenX, screenY int) (int, bool) {
 	}
 	layout := m.paneLayout()
 	start, end := m.paneWindow(layout)
-	cellHeight := max(m.surfaceHeight(top, bottom)/layout.rows, 1)
+	cellHeight := max(m.paneCellHeight(layout, m.surfaceHeight(top, bottom)), 1)
 	row := (screenY - len(top)) / cellHeight
 	col := 0
 	if layout.cols > 1 {

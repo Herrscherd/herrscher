@@ -1343,6 +1343,9 @@ func (m *model) updateComponents(msg tea.Msg) tea.Cmd {
 func (m *model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	m.keys.write("key type=%d alt=%v str=%q", msg.Type, msg.Alt, msg.String())
 	m.flash = ""
+	if msg.Type == tea.KeyCtrlP && m.toast.title != "" {
+		return m.jumpToToast(), true
+	}
 	switch {
 	case m.pendingClose:
 		return m.handlePendingClose(msg), true
@@ -1650,7 +1653,7 @@ func (m *model) handleRunesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.toggleHelp()
 		return nil, true
 	}
-	if msg.String() == "n" && m.input.Value() == "" {
+	if msg.String() == "n" && m.input.Value() == "" && m.toast.title != "" {
 		return m.cycleNotify(), true
 	}
 	if msg.Alt && strings.EqualFold(string(msg.Runes), "y") {

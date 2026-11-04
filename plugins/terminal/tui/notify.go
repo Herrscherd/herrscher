@@ -60,11 +60,12 @@ const (
 )
 
 type toast struct {
-	seq    int
-	glyph  string
-	title  string
-	detail string
-	signal string
+	seq     int
+	channel string
+	glyph   string
+	title   string
+	detail  string
+	signal  string
 }
 
 type toastExpiredMsg struct {
@@ -92,19 +93,27 @@ func (m *model) notifyTurnEnd(tb *tab) tea.Cmd {
 		name = tb.label
 	}
 	detail := joinNonEmpty(" · ", name, time.Since(tb.startedAt).Round(time.Second).String())
-	return m.announce(kindTurnEnd, glyphDone, "Tour fini", detail)
+	return m.announce(kindTurnEnd, glyphDone, "Tour fini", tb.channel, detail)
 }
 
-func (m *model) notifyApproval(question string) tea.Cmd {
-	return m.announce(kindApproval, glyphWaiting, "Approbation en attente", question)
+func (m *model) notifyApproval(channel, question string) tea.Cmd {
+	detail := joinNonEmpty(m.sessionName(channel), question)
+	return m.announce(kindApproval, glyphWaiting, "Approbation en attente", channel, detail)
 }
 
-func (m *model) announce(kind notifyKind, glyph, title, detail string) tea.Cmd {
+func (m *model) jumpToToast() tea.Cmd {
+	channel := m.toast.channel
+	m.toast = toast{}
+	m.activate(channel)
+	return nil
+}
+
+func (m *model) announce(kind notifyKind, glyph, title, channel, detail string) tea.Cmd {
 	if !m.notifyMode.wants(kind) {
 		return nil
 	}
 	m.toastSeq++
-	m.toast = toast{seq: m.toastSeq, glyph: glyph, title: title, detail: detail, signal: deliveryLabel(m.caps, m.shouldSignal())}
+	m.toast = toast{seq: m.toastSeq, channel: channel, glyph: glyph, title: title, detail: detail, signal: deliveryLabel(m.caps, m.shouldSignal())}
 	seq := m.toastSeq
 	expire := tea.Tick(toastTTL, func(time.Time) tea.Msg { return toastExpiredMsg{seq: seq} })
 	return tea.Batch(m.signalCmd(title+": "+detail), expire)
@@ -176,7 +185,7 @@ func (m *model) toastView() string {
 	lines := []string{
 		titleStyle.Render(m.toast.glyph + " " + m.toast.title),
 		m.st.text.Render(m.toast.detail),
-		m.st.dim.Render(m.toast.signal),
+		m.st.dim.Render(m.toast.signal + " · ctrl+p y aller"),
 	}
 	for i := range lines {
 		lines[i] = ansi.Truncate(lines[i], inner, "…")

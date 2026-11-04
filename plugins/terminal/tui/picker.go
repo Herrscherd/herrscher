@@ -162,7 +162,7 @@ func (m *model) openChoice(pc *PendingChoice) tea.Cmd {
 	m.choiceIdx = 0
 	m.applySize()
 	m.syncViewport()
-	return m.notifyApproval(pc.Question)
+	return m.notifyApproval(pc.Channel, pc.Question)
 }
 
 func (m *model) clampChoice() {

@@ -55,6 +55,8 @@ func (m *model) handleContextKey(msg tea.KeyMsg) tea.Cmd {
 	case "k":
 		m.syncTabs()
 		return nil
+	case "n":
+		return m.cycleNotify()
 	case "z", "esc":
 		m.closeContext()
 	}

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestStatuslineCommandOpensTheOverlayBelowTheComposer(t *testing.T) {
@@ -39,5 +40,29 @@ func TestUntickedFieldLeavesTheBar(t *testing.T) {
 	m.handleKey(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
 	if strings.Contains(m.statusBar(tb, 200), "$1.42") {
 		t.Errorf("an unticked cost must leave the bar: %q", m.statusBar(tb, 200))
+	}
+}
+
+func TestStatuslineNotesStartOnTheSameColumn(t *testing.T) {
+	m, _ := barModelAt(t, "")
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m.openStatusline()
+	lines := strings.Split(m.statuslineView(), "\n")
+	var columns []int
+	for _, note := range []string{"claude, codex", "herrscher:feat", "(worktree)", "go test -race"} {
+		for _, line := range lines {
+			if index := strings.Index(line, note); index >= 0 {
+				columns = append(columns, lipgloss.Width(line[:index]))
+				break
+			}
+		}
+	}
+	if len(columns) != 4 {
+		t.Fatalf("found %d notes in the overlay, want 4", len(columns))
+	}
+	for _, column := range columns {
+		if column != columns[0] {
+			t.Errorf("notes start at columns %v, want one column", columns)
+		}
 	}
 }

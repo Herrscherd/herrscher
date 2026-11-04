@@ -428,3 +428,25 @@ func TestAllowAlwaysLabelShowsTheRuleBeforeItIsPressed(t *testing.T) {
 	}
 	t.Fatal("no allow-always choice")
 }
+
+func TestTheRiskReachesTheGatewayAsASemanticEvent(t *testing.T) {
+	approvals := newApprovalTable()
+	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) { return approval.RiskHigh, nil }
+	sessions := newSessionTable()
+	gw := &eventGateway{menuGatewayFake: &menuGatewayFake{channel: "chan1"}}
+	driver := &sessionDriver{name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+	sessions.register("s1", driver)
+	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "rm -rf build"}, approval.Policy{}, approval.ModeSmart, 5*time.Minute)
+	p := onlyPending(t, approvals)
+	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":deny")
+	awaitAsk(t, out)
+
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+	for _, event := range gw.emitted {
+		if event.T == approvalRiskEventKind && event.Value == p.ID && event.Text == approval.RiskHigh.String() {
+			return
+		}
+	}
+	t.Fatalf("no high risk event for %s was emitted, got %v", p.ID, gw.emitted)
+}

@@ -281,7 +281,7 @@ func TestClickOnAStripSegmentSwitchesMode(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
 	target := m.tabs["a"]
-	hits := m.modeStripHits(target, m.innerWidth())
+	hits := m.modeStripHits(m.innerWidth())
 	strip := m.buildFrame()
 	if !strip.stripDown {
 		t.Fatal("the mode strip must be part of the frame")
@@ -308,5 +308,15 @@ func TestClickOutsideTheStripSegmentsChangesNothing(t *testing.T) {
 	m.Update(runCmd(cmd))
 	if len(f.dispatched) != 0 {
 		t.Fatalf("clicks outside the segments must not reach the host: %v", f.dispatched)
+	}
+}
+
+func TestModeStripKeepsOneGapAroundEverySegment(t *testing.T) {
+	m, tb := barModelAt(t, "")
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	tb.setMode(modeManual)
+	strip := ansi.Strip(m.modeStripView(tb, 120)[0])
+	if !strings.Contains(strip, "Manuel  →  Édits acceptés  →  Plan  →  ⚠ Auto") {
+		t.Errorf("mode strip = %q, want an even gap around each segment", strip)
 	}
 }

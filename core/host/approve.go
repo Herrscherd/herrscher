@@ -21,6 +21,8 @@ const approvalPickPrefix = "herrscher-approval:"
 
 const approvalEventKind = "approval"
 
+const approvalRiskEventKind = "approval_risk"
+
 const subjectMaxLen = 200
 
 const (

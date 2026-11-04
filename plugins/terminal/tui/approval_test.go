@@ -305,3 +305,41 @@ func TestApprovalDeadlineExpiresWhenTheMenuNeverComes(t *testing.T) {
 		t.Fatal("an unmatched approval deadline must be forgotten after its retention")
 	}
 }
+
+func TestApprovalShowsTheJudgeRisk(t *testing.T) {
+	m, _ := barModelAt(t, "")
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	menu := approvalMenu{Prompt: "allow Bash(go test ./...)? (answer with `approve allow " + testApprovalID + "`)", Risk: riskHighName}
+	for _, role := range []string{approvalAllow, approvalDeny} {
+		menu.Options = append(menu.Options, approvalMenuOption{Label: role, Value: testApprovalValue(role)})
+	}
+	encoded, err := json.Marshal(menu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c1"}, Event: contracts.Event{T: eventMenu, Text: menu.Prompt, Value: string(encoded)}})
+	if !strings.Contains(strings.Join(m.approvalLines(time.Now()), "\n"), "risque élevé") {
+		t.Errorf("the approval must show the judge risk when the host sends one")
+	}
+}
+
+func TestApprovalWithoutRiskHasNoJudgeLine(t *testing.T) {
+	m, _ := barModelAt(t, "")
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c1"}, Event: approvalMenuEvent(t, "go test ./...", allApprovalRoles()...)})
+	if strings.Contains(strings.Join(m.approvalLines(time.Now()), "\n"), "juge") {
+		t.Errorf("the approval must not show a judge line without a risk")
+	}
+}
+
+func TestApprovalRiskSentBeforeTheMenuIsShown(t *testing.T) {
+	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a"}}}
+	m := newModel(fb)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApprovalRisk, Value: testApprovalID, Text: riskHighName}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: approvalMenuEvent(t, "git push", allApprovalRoles()...)})
+	m.active = "a"
+	if view := m.View(); !strings.Contains(view, "risque élevé") {
+		t.Fatalf("a risk event sent before the menu must show the judge line:\n%s", view)
+	}
+}

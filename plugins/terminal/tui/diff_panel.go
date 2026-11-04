@@ -29,7 +29,7 @@ const (
 
 const (
 	diffWideWidth      = 100
-	diffListWidth      = 42
+	diffListWidth      = 46
 	diffNumWidth       = 4
 	diffTwoNumsWidth   = 70
 	diffStackedFiles   = 6
@@ -560,7 +560,10 @@ func (m *model) diffFileRow(index, width int) string {
 			mark = m.st.glyphs.success
 		}
 	}
-	row := truncate(joinRow(width, cursor+" "+mark+" "+file.Status.String()+" "+file.Path, fileStats(file)), width)
+	prefix := cursor + " " + mark + " " + file.Status.String() + " "
+	stats := fileStats(file)
+	pathWidth := width - lipgloss.Width(prefix) - lipgloss.Width(stats) - 1
+	row := truncate(joinRow(width, prefix+truncateLeft(file.Path, pathWidth), stats), width)
 	if selected {
 		return m.st.overlaySel.Render(padTo(row, width))
 	}
@@ -694,7 +697,7 @@ func (m *model) diffCommitBox(width int) []string {
 		content = append(content, m.st.text.Render(line))
 	}
 	if panel.editing {
-		content = append(content, m.st.dim.Render("ctrl+j nouvelle ligne · échap fin d'édition · ⏎ commit"))
+		content = append(content, m.st.dim.Render("ctrl+j nouvelle ligne · échap fin d’édition · ⏎ commit"))
 	} else {
 		content = append(content, m.st.dim.Render("⏎ commit · p commit puis PR · e modifier · échap annuler"))
 	}
@@ -716,7 +719,7 @@ func (m *model) diffNoteBox(width int) []string {
 	title := m.st.strong.Render(m.st.glyphs.note+" CONSIGNE") + m.st.dim.Render(" · "+file.Path)
 	field := m.st.text.Render(panel.field) + m.st.accent.Render(m.st.glyphs.caret)
 	if panel.field == "" {
-		field = m.st.dim.Render("que doit faire l'agent de ce fichier ?") + m.st.accent.Render(m.st.glyphs.caret)
+		field = m.st.dim.Render("que doit faire l’agent de ce fichier ?") + m.st.accent.Render(m.st.glyphs.caret)
 	}
 	content := []string{title, m.st.text.Render("› ") + field, m.st.dim.Render("⏎ envoyer à " + panel.session + " · échap annuler")}
 	return boxLines(content, width)

@@ -38,7 +38,7 @@ const (
 	modeStripSep    = " → "
 	cursorMarkWidth = 2
 	planApproved    = "Plan approved. Implement it."
-	planKeepNotice  = "Le plan reste ouvert. Dis ce qui change : l'agent le réécrit sans rien toucher."
+	planKeepNotice  = "Le plan reste ouvert. Dis ce qui change : l’agent le réécrit sans rien toucher."
 )
 
 type sessionMode struct {
@@ -73,9 +73,9 @@ func modeSpec(mode modeID) sessionMode {
 	case modeEdits:
 		return sessionMode{host: hostAcceptEdits, label: "Édits acceptés", short: "Édits", say: "les éditions passent, les commandes demandent encore"}
 	case modePlan:
-		return sessionMode{host: hostPlan, label: "Plan", short: "Plan", say: "lecture seule : l'agent propose un plan, tu le valides avant toute écriture"}
+		return sessionMode{host: hostPlan, label: "Plan", short: "Plan", say: "lecture seule : l’agent propose un plan, tu le valides avant toute écriture"}
 	case modeAuto:
-		return sessionMode{host: hostAuto, label: "Auto", short: "Auto", say: "rien ne demande : éditions et commandes passent, sauf ce qu'une règle de refus bloque"}
+		return sessionMode{host: hostAuto, label: "Auto", short: "Auto", say: "rien ne demande : éditions et commandes passent, sauf ce qu’une règle de refus bloque"}
 	case modeNone, modeManual:
 	}
 	return sessionMode{host: hostAsk, label: "Manuel", short: "Man", say: "chaque édition et chaque commande demande une approbation"}
@@ -233,7 +233,7 @@ func (m *model) handleModeClick(msg tea.MouseMsg) (tea.Cmd, bool) {
 	if !strip.stripDown || msg.Y != strip.stripRow {
 		return nil, false
 	}
-	for _, hit := range m.modeStripHits(target, m.innerWidth()) {
+	for _, hit := range m.modeStripHits(m.innerWidth()) {
 		if msg.X < hit.start || msg.X >= hit.end {
 			continue
 		}
@@ -304,15 +304,14 @@ type modeHit struct {
 	end   int
 }
 
-func (m *model) modeStripHits(target *tab, width int) []modeHit {
-	current := target.modeID()
+func (m *model) modeStripHits(width int) []modeHit {
 	column := lipgloss.Width(" " + m.st.glyphs.shiftTab + " ")
 	var hits []modeHit
 	for index, mode := range modeOrder() {
 		if index > 0 {
 			column += lipgloss.Width(modeStripSep)
 		}
-		end := column + lipgloss.Width(modeSegmentLabel(mode, current, width, m.st.glyphs))
+		end := column + lipgloss.Width(modeSegmentLabel(mode, width, m.st.glyphs))
 		hits = append(hits, modeHit{mode: mode, start: column, end: end})
 		column = end
 	}
@@ -337,21 +336,18 @@ func (m *model) modeStripView(target *tab, width int) []string {
 	return []string{ansi.Truncate(line, width, ""), sayStyle.Render(say)}
 }
 
-func modeSegmentLabel(mode, current modeID, width int, glyphs glyphSet) string {
-	if mode == current {
-		return " " + modeText(mode, width, glyphs) + " "
-	}
-	return modeText(mode, width, glyphs)
+func modeSegmentLabel(mode modeID, width int, glyphs glyphSet) string {
+	return " " + modeText(mode, width, glyphs) + " "
 }
 
 func (m *model) modeSegment(mode, current modeID, width int) string {
 	if mode == current {
-		return modeStyle(mode, m.st).Bold(true).Reverse(true).Render(modeSegmentLabel(mode, current, width, m.st.glyphs))
+		return modeStyle(mode, m.st).Bold(true).Reverse(true).Render(modeSegmentLabel(mode, width, m.st.glyphs))
 	}
 	if mode == modeAuto {
-		return m.st.modeAuto.Render(modeSegmentLabel(mode, current, width, m.st.glyphs))
+		return m.st.modeAuto.Render(modeSegmentLabel(mode, width, m.st.glyphs))
 	}
-	return m.st.dim.Render(modeSegmentLabel(mode, current, width, m.st.glyphs))
+	return m.st.dim.Render(modeSegmentLabel(mode, width, m.st.glyphs))
 }
 
 type planMenu struct {
@@ -368,7 +364,7 @@ type planOption struct {
 
 func planOptions() []planOption {
 	return []planOption{
-		{label: "Valider et passer en édits acceptés", say: "l'agent écrit sans redemander, les commandes demandent", mode: modeEdits, submit: planApproved},
+		{label: "Valider et passer en édits acceptés", say: "l’agent écrit sans redemander, les commandes demandent", mode: modeEdits, submit: planApproved},
 		{label: "Valider en manuel", say: "chaque édition passera par une approbation", mode: modeManual, submit: planApproved},
 		{label: "Continuer à planifier", say: "dire ce qui change dans le plan"},
 	}
@@ -432,7 +428,7 @@ func (m *model) planMenuView() string {
 		return ""
 	}
 	width := m.innerWidth()
-	lines := []string{ansi.Truncate(m.st.accent.Render(m.st.glyphs.tool+" Plan proposé")+m.st.dim.Render(" · rien n'est écrit avant ta validation"), width, "…")}
+	lines := []string{ansi.Truncate(m.st.accent.Render(m.st.glyphs.tool+" Plan proposé")+m.st.dim.Render(" · rien n’est écrit avant ta validation"), width, "…")}
 	for index, option := range planOptions() {
 		row := fmt.Sprintf("%d. %s", index+1, option.label)
 		if index == m.planMenu.sel {

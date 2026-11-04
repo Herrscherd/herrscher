@@ -393,3 +393,17 @@ func TestTurnIsSentOnlyOnceTheSnapshotIsTaken(t *testing.T) {
 		t.Fatalf("submitted = %+v, want the turn once the snapshot landed", be.submitted)
 	}
 }
+
+func TestDiffFileRowKeepsTheFileNameAndTheStats(t *testing.T) {
+	m, _ := barModelAt(t, "")
+	m.diff.report = diffReport{Files: []diffFile{{Path: "plugins/terminal/tui/composer_queue.go", Added: 38}}}
+	row := m.diffFileRow(0, diffListWidth)
+	if lipgloss.Width(row) != diffListWidth {
+		t.Errorf("row is %d cells wide, want %d", lipgloss.Width(row), diffListWidth)
+	}
+	for _, want := range []string{"composer_queue.go", "+38 -0", "…"} {
+		if !strings.Contains(row, want) {
+			t.Errorf("row %q must contain %q", row, want)
+		}
+	}
+}

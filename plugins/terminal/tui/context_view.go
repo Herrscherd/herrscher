@@ -12,7 +12,7 @@ const (
 	narrowContext   = 80
 	contextNameCols = 16
 	contextBarCols  = 12
-	contextValCols  = 14
+	contextValCols  = 20
 	defaultWidth    = 80
 )
 
@@ -24,10 +24,10 @@ type contextCategory struct {
 func contextCategories() []contextCategory {
 	return []contextCategory{
 		{name: "système", need: "taille du prompt système, envoyé à chaque tour"},
-		{name: "outils et MCP", need: "taille des schémas d'outils, par serveur MCP"},
+		{name: "outils et MCP", need: "taille des schémas d’outils, par serveur MCP"},
 		{name: "mémoire", need: "taille du bloc mémoire injecté dans le tour"},
 		{name: categorySkills, need: "taille des descriptions de skills chargées dans le contexte"},
-		{name: "fichiers lus", need: "tokens de chaque fichier lu par l'agent"},
+		{name: "fichiers lus", need: "tokens de chaque fichier lu par l’agent"},
 		{name: categoryConversation, need: "tokens des tours encore gardés, par tour"},
 	}
 }
@@ -84,7 +84,7 @@ func (m *model) contextView() string {
 	if note := m.lastCompactNote(); note != "" {
 		lines = append(lines, m.st.dim.Render(note))
 	}
-	lines = append(lines, m.st.dim.Render("c compacter · k réafficher · échap fermer"))
+	lines = append(lines, m.st.dim.Render("c compacter · k réafficher · z revenir · échap fermer"))
 	for i := range lines {
 		lines[i] = ansi.Truncate(lines[i], width, "")
 	}
@@ -142,5 +142,5 @@ func (m *model) contextRow(name, bar, value, note string, width int) string {
 		return m.st.dim.Render(padTo(name, contextNameCols)) + m.st.text.Render(value) + "  " + m.st.dim.Render(note)
 	}
 	return m.st.dim.Render(padTo(name, contextNameCols)) + bar + "  " +
-		m.st.text.Render(padTo(value, contextValCols)) + m.st.dim.Render(note)
+		m.st.text.Render(padTo(value, contextValCols)) + "  " + m.st.dim.Render(note)
 }

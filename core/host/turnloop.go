@@ -235,6 +235,9 @@ func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID stri
 		if gateway.Gateway != nil {
 			conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: channel}
 			announceApprovalDeadline(gateway.Gateway, conv, approvalID, deadline)
+			if risk, ok := d.verdict(req); ok {
+				announceApprovalRisk(gateway.Gateway, conv, approvalID, risk)
+			}
 		}
 		if mr, ok := gateway.Reader.(contracts.MenuRouter); ok && channel != "" {
 			if _, err := mr.RouteMenu(ctx, channel, "", prompt, d.name, opts); err == nil {
@@ -250,7 +253,14 @@ func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID stri
 }
 
 func announceApprovalDeadline(gateway contracts.Gateway, conv contracts.Conversation, approvalID string, deadline time.Time) {
-	event := contracts.Event{T: approvalEventKind, Value: approvalID, Text: deadline.UTC().Format(time.RFC3339)}
+	emitApprovalEvent(gateway, conv, contracts.Event{T: approvalEventKind, Value: approvalID, Text: deadline.UTC().Format(time.RFC3339)})
+}
+
+func announceApprovalRisk(gateway contracts.Gateway, conv contracts.Conversation, approvalID string, risk approval.Risk) {
+	emitApprovalEvent(gateway, conv, contracts.Event{T: approvalRiskEventKind, Value: approvalID, Text: risk.String()})
+}
+
+func emitApprovalEvent(gateway contracts.Gateway, conv contracts.Conversation, event contracts.Event) {
 	switch sink := gateway.(type) {
 	case contracts.RoutedEventSink:
 		sink.EmitTo(conv, event)

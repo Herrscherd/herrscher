@@ -38,7 +38,7 @@ func sessionSetAccountVerb(store *state.State) contracts.Cmd {
 		Param(paramProfile, "profile name, native, or empty for the vendor default", false).
 		Param(paramFresh, "fresh to start a new conversation under the new account", false).
 		Do(func(_ context.Context, input contracts.Input) (string, error) {
-			return "", setSessionAccount(store, input.Get(paramName), input.Get(paramProfile), input.Get(paramFresh) == freshMarker)
+			return setSessionAccount(store, input.Get(paramName), input.Get(paramProfile), input.Get(paramFresh) == freshMarker)
 		})
 }
 
@@ -86,26 +86,44 @@ func profileLine(profile accounts.Profile, chosen string) string {
 	return line
 }
 
-func setSessionAccount(store *state.State, name, profile string, fresh bool) error {
+func setSessionAccount(store *state.State, name, profile string, fresh bool) (string, error) {
 	sess, ok := findSession(store, name)
 	if !ok {
-		return &NotFoundError{Kind: kindSession, Name: name}
+		return "", &NotFoundError{Kind: kindSession, Name: name}
 	}
 	stored := strings.TrimSpace(profile)
 	if err := validateProfileChoice(sess.Vendor, stored); err != nil {
-		return err
+		return "", err
 	}
 	if accountChangeBlocked(sess, stored, fresh) {
-		return fmt.Errorf("%s: %w", name, errConversationAccount)
+		return "", fmt.Errorf("%s: %w", name, errConversationAccount)
 	}
 	found, err := store.SetAccount(name, stored, fresh)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !found {
-		return &NotFoundError{Kind: kindSession, Name: name}
+		return "", &NotFoundError{Kind: kindSession, Name: name}
 	}
-	return nil
+	return accountChangeNotice(name, stored, fresh), nil
+}
+
+func accountChangeNotice(name, profile string, fresh bool) string {
+	account := accountLabel(profile)
+	if fresh {
+		return fmt.Sprintf("compte de %s réglé sur %s : au prochain lancement, la conversation précédente n'est plus reprise et une nouvelle s'ouvre sous ce compte ; le bridge en cours garde l'ancien compte jusqu'au prochain lancement", name, account)
+	}
+	return fmt.Sprintf("compte de %s réglé sur %s : effectif au prochain lancement de la session ; le bridge en cours garde l'ancien compte", name, account)
+}
+
+func accountLabel(profile string) string {
+	switch profile {
+	case noProfileChoice:
+		return "le défaut du vendeur"
+	case nativeChoice:
+		return "le compte natif"
+	}
+	return profile
 }
 
 func accountChangeBlocked(sess state.Session, profile string, fresh bool) bool {

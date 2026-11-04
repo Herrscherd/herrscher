@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -51,7 +52,7 @@ func keysWith(t *testing.T, provider string, env map[string]string) *keyproxy.Pr
 
 func TestNativeClaudeSpawnCarriesNoProfileVariable(t *testing.T) {
 	root, _ := profileRoot(t, contracts.VendorClaude, "perso")
-	env, err := sessionEnv(BackendRequest{AccountRoot: root}, contracts.VendorClaude, modelRoute{})
+	env, _, err := sessionEnv(BackendRequest{AccountRoot: root}, contracts.VendorClaude, modelRoute{})
 	if err != nil {
 		t.Fatalf("sessionEnv: %v", err)
 	}
@@ -69,11 +70,11 @@ func TestSessionAccountWinsOverTheVendorDefault(t *testing.T) {
 	if setErr := store.SetDefault(contracts.VendorClaude, perso); setErr != nil {
 		t.Fatal(setErr)
 	}
-	env, err := sessionEnv(BackendRequest{AccountRoot: root, Account: "boulot"}, contracts.VendorClaude, modelRoute{})
+	env, _, err := sessionEnv(BackendRequest{AccountRoot: root, Account: "boulot"}, contracts.VendorClaude, modelRoute{})
 	if err != nil {
 		t.Fatalf("sessionEnv: %v", err)
 	}
-	want := store.Dir(contracts.VendorClaude, mustProfile(t, "boulot"))
+	want := dirOf(t, store, contracts.VendorClaude, mustProfile(t, "boulot"))
 	if env[contracts.EnvClaudeConfigDir] != want {
 		t.Fatalf("CLAUDE_CONFIG_DIR = %q, want the session profile %q", env[contracts.EnvClaudeConfigDir], want)
 	}
@@ -84,11 +85,11 @@ func TestDefaultProfileAppliesWhenTheSessionChoosesNone(t *testing.T) {
 	if err := store.SetDefault(contracts.VendorCodex, mustProfile(t, "perso")); err != nil {
 		t.Fatal(err)
 	}
-	env, err := sessionEnv(BackendRequest{AccountRoot: root}, contracts.VendorCodex, modelRoute{})
+	env, _, err := sessionEnv(BackendRequest{AccountRoot: root}, contracts.VendorCodex, modelRoute{})
 	if err != nil {
 		t.Fatalf("sessionEnv: %v", err)
 	}
-	if env[contracts.EnvCodexHome] != store.Dir(contracts.VendorCodex, mustProfile(t, "perso")) {
+	if env[contracts.EnvCodexHome] != dirOf(t, store, contracts.VendorCodex, mustProfile(t, "perso")) {
 		t.Fatalf("CODEX_HOME = %q, want the vendor default", env[contracts.EnvCodexHome])
 	}
 }
@@ -96,7 +97,7 @@ func TestDefaultProfileAppliesWhenTheSessionChoosesNone(t *testing.T) {
 func TestGatewayRouteIgnoresTheProfile(t *testing.T) {
 	root, _ := profileRoot(t, contracts.VendorClaude, "perso")
 	gateway := modelRoute{env: map[string]string{contracts.EnvAnthropicBaseURL: "https://gw.example"}}
-	env, err := sessionEnv(BackendRequest{AccountRoot: root, Account: "perso"}, contracts.VendorClaude, gateway)
+	env, _, err := sessionEnv(BackendRequest{AccountRoot: root, Account: "perso"}, contracts.VendorClaude, gateway)
 	if err != nil {
 		t.Fatalf("sessionEnv: %v", err)
 	}
@@ -108,7 +109,7 @@ func TestGatewayRouteIgnoresTheProfile(t *testing.T) {
 func TestCodexProfileGoesThroughTheProxyInItsOwnHome(t *testing.T) {
 	root, _ := profileRoot(t, contracts.VendorCodex, "perso")
 	keys := keysWith(t, "openai", map[string]string{"KEY_MAIN": "sk-real"})
-	env, err := sessionEnv(BackendRequest{AccountRoot: root, Account: "perso", Keys: keys}, contracts.VendorCodex, modelRoute{})
+	env, _, err := sessionEnv(BackendRequest{AccountRoot: root, Account: "perso", Keys: keys}, contracts.VendorCodex, modelRoute{})
 	if err != nil {
 		t.Fatalf("sessionEnv: %v", err)
 	}
@@ -137,7 +138,7 @@ func TestGatewayRouteGoesThroughTheProxyWhenEnabled(t *testing.T) {
 		return map[string]string{EnvGatewayURL: "https://gw.example/anthropic", EnvGatewayToken: "nbx-secret-token"}[name]
 	}
 	entry := CatalogEntry{ID: "neublox-claude", Vendor: contracts.VendorClaude, Route: contracts.RouteGateway}
-	env, err := spawnEnvVia(entry, getenv, keys)
+	env, _, err := spawnEnvVia(entry, getenv, keys)
 	if err != nil {
 		t.Fatalf("spawnEnvVia: %v", err)
 	}
@@ -159,7 +160,7 @@ func TestGatewayRouteWithoutProxyKeepsTheGatewayPair(t *testing.T) {
 		return map[string]string{EnvGatewayURL: "https://gw.example/anthropic", EnvGatewayToken: "nbx-secret-token"}[name]
 	}
 	entry := CatalogEntry{ID: "neublox-claude", Vendor: contracts.VendorClaude, Route: contracts.RouteGateway}
-	env, err := spawnEnvVia(entry, getenv, nil)
+	env, _, err := spawnEnvVia(entry, getenv, nil)
 	if err != nil {
 		t.Fatalf("spawnEnvVia: %v", err)
 	}
@@ -204,7 +205,7 @@ func TestResumingUnderFollowsOnlySessionsWithoutAnAccount(t *testing.T) {
 func TestClaudeProxySpawnHoldsOnlyTheGrant(t *testing.T) {
 	root, _ := profileRoot(t, contracts.VendorClaude)
 	keys := keysWith(t, "anthropic", map[string]string{"KEY_MAIN": "sk-ant-real-value"})
-	env, err := sessionEnv(BackendRequest{AccountRoot: root, Keys: keys}, contracts.VendorClaude, modelRoute{})
+	env, _, err := sessionEnv(BackendRequest{AccountRoot: root, Keys: keys}, contracts.VendorClaude, modelRoute{})
 	if err != nil {
 		t.Fatalf("sessionEnv: %v", err)
 	}
@@ -222,7 +223,7 @@ func TestClaudeProxySpawnHoldsOnlyTheGrant(t *testing.T) {
 }
 
 func TestCursorWithoutProfileNeedsNoEnv(t *testing.T) {
-	env, err := sessionEnv(BackendRequest{AccountRoot: t.TempDir()}, contracts.VendorCursor, modelRoute{})
+	env, _, err := sessionEnv(BackendRequest{AccountRoot: t.TempDir()}, contracts.VendorCursor, modelRoute{})
 	if err != nil || len(env) != 0 {
 		t.Fatalf("cursor sessionEnv = %v %v, want an empty env and no error", env, err)
 	}
@@ -235,4 +236,31 @@ func mustProfile(t *testing.T, raw string) contracts.ProfileName {
 		t.Fatal(err)
 	}
 	return name
+}
+
+func dirOf(t *testing.T, store accounts.Store, vendor string, name contracts.ProfileName) string {
+	t.Helper()
+	dir, err := store.Dir(vendor, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestProfileUsersCountsSessionsFollowingTheDefault(t *testing.T) {
+	sessions := []state.Session{
+		{Name: "explicite", Vendor: contracts.VendorClaude, Account: "perso"},
+		{Name: "defaut", Vendor: contracts.VendorClaude},
+		{Name: "autre", Vendor: contracts.VendorClaude, Account: "boulot"},
+		{Name: "codex", Vendor: contracts.VendorCodex},
+	}
+	if got := profileUsers(sessions, contracts.VendorClaude, "perso", false); !slices.Equal(got, []string{"explicite"}) {
+		t.Fatalf("users of a non-default profile = %v, want the session that chose it", got)
+	}
+	if got := profileUsers(sessions, contracts.VendorClaude, "perso", true); !slices.Equal(got, []string{"explicite", "defaut"}) {
+		t.Fatalf("users of the default profile = %v, want the chooser and the follower", got)
+	}
+	if got := profileUsers(sessions, contracts.VendorClaude, "boulot", false); !slices.Equal(got, []string{"autre"}) {
+		t.Fatalf("users of boulot = %v, want autre only", got)
+	}
 }

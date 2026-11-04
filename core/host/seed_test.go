@@ -3,13 +3,17 @@ package host
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -118,7 +122,7 @@ func TestNewSeedBackendResolvesRelativeWorktreeOnce(t *testing.T) {
 	})
 
 	sess := state.Session{Vendor: "codex", Worktree: relative}
-	if _, err := newSeedBackend(context.Background(), sess); err != nil {
+	if _, err := newSeedBackend(context.Background(), sess, nil); err != nil {
 		t.Fatalf("newSeedBackend: %v", err)
 	}
 	if gotDir != worker {
@@ -239,7 +243,7 @@ func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
 	t.Setenv("NEUBLOX_GATEWAY_TOKEN", "")
 
 	sess := state.Session{Vendor: "codex", ModelID: "gpt-gateway"}
-	_, err := newSeedBackend(context.Background(), sess)
+	_, err := newSeedBackend(context.Background(), sess, nil)
 	if err == nil {
 		t.Fatal("newSeedBackend succeeded with a gateway-route model and no gateway credentials; want fail-closed error")
 	}
@@ -248,7 +252,7 @@ func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
 	}
 
 	legacy := state.Session{Vendor: "codex"}
-	if _, err := newSeedBackend(context.Background(), legacy); err != nil {
+	if _, err := newSeedBackend(context.Background(), legacy, nil); err != nil {
 		t.Fatalf("legacy path (no ModelID) failed: %v", err)
 	}
 }
@@ -324,5 +328,86 @@ func TestASeedWithACadenceDoesNotConsolidateTwice(t *testing.T) {
 	}
 	if spy.called {
 		t.Fatal("expected no closing Consolidate when the orchestrator has a cadence")
+	}
+}
+
+func TestSeedBackendUsesTheStoredAccountThroughTheProxy(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	store := accounts.Store{Root: accounts.DefaultRoot(home)}
+	name, err := contracts.ParseProfileName("perso")
+	if err != nil {
+		t.Fatal(err)
+	}
+	profileDir, err := store.Create(contracts.VendorClaude, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var seenKey atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		seenKey.Store(request.Header.Get("X-Api-Key"))
+		writer.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	keys := keysWithUpstream(t, "anthropic", upstream.URL, map[string]string{"KEY_MAIN": "sk-main"})
+
+	settings := registerClaudeWithSettings(t, func() (contracts.Backend, error) { return seedBackend{}, nil })
+	if _, err := newSeedBackend(context.Background(), state.Session{Vendor: contracts.VendorClaude, Account: "perso"}, keys); err != nil {
+		t.Fatalf("newSeedBackend: %v", err)
+	}
+	env := contracts.ParseEnvSetting(settings()["env"])
+	if got := env[contracts.EnvClaudeConfigDir]; got != profileDir {
+		t.Fatalf("seed profile dir = %q, want the stored account %q", got, profileDir)
+	}
+	token := env[contracts.EnvAnthropicAPIKey]
+	if token == "" || token == "sk-main" {
+		t.Fatalf("seed carries %q, want a grant token and never the real key", token)
+	}
+	if status := askProxy(t, env[contracts.EnvAnthropicBaseURL], token); status != http.StatusOK {
+		t.Fatalf("grant token status %d, want 200 through the proxy", status)
+	}
+	if got := seenKey.Load(); got != "sk-main" {
+		t.Fatalf("upstream got key %v, want the real key injected by the proxy", got)
+	}
+}
+
+func TestSeedBackendNeverCarriesTheGatewayTokenWithAProxy(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("HERRSCHER_ROUTE_POLICY", "")
+	t.Setenv("NEUBLOX_GATEWAY_URL", "https://gateway.example")
+	t.Setenv("NEUBLOX_GATEWAY_TOKEN", "neublox-secret")
+	keys := keysWithUpstream(t, "openai", "https://api.openai.example", map[string]string{"KEY_MAIN": "sk-openai"})
+
+	var settings map[string]string
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{
+			Kind:     "codex",
+			Category: contracts.CategoryBackend,
+			Models: []contracts.ModelSpec{
+				{ID: "gpt-gateway", Label: "GPT Gateway", Arg: "gpt-gateway", Route: contracts.RouteGateway},
+			},
+		},
+		Backend: func(_ context.Context, cfg contracts.PluginConfig) (contracts.Backend, error) {
+			settings = cfg.Settings
+			return seedBackend{}, nil
+		},
+	})
+	if _, err := newSeedBackend(context.Background(), state.Session{Vendor: "codex", ModelID: "gpt-gateway"}, keys); err != nil {
+		t.Fatalf("newSeedBackend: %v", err)
+	}
+	for name, value := range contracts.ParseEnvSetting(settings["env"]) {
+		if strings.Contains(value, "neublox-secret") {
+			t.Fatalf("seed env %s carries the Neublox token", name)
+		}
+	}
+	if base := contracts.ParseEnvSetting(settings["env"])[contracts.EnvOpenAIBaseURL]; !strings.HasPrefix(base, "http://127.0.0.1") {
+		t.Fatalf("gateway base = %q, want the local key proxy", base)
 	}
 }

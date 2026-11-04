@@ -51,47 +51,51 @@ func accountStore(req BackendRequest) (accounts.Store, error) {
 	return accounts.Store{Root: root}, nil
 }
 
-func sessionEnv(req BackendRequest, vendor string, route modelRoute) (map[string]string, error) {
+func sessionEnv(req BackendRequest, vendor string, route modelRoute) (map[string]string, func(), error) {
 	if len(route.env) > 0 {
-		return route.env, nil
+		return route.env, route.lease(), nil
 	}
 	env := make(map[string]string)
 	store, err := accountStore(req)
 	if err != nil {
-		return nil, err
+		return nil, noRelease, err
 	}
 	_, profileDir, err := store.Resolve(req.Account, vendor)
 	if err != nil {
-		return nil, err
+		return nil, noRelease, err
 	}
 	if profileDir != "" {
 		profileVars, profileErr := contracts.ProfileEnv(vendor, profileDir)
 		if profileErr != nil {
-			return nil, profileErr
+			return nil, noRelease, profileErr
 		}
 		mergeInto(env, profileVars)
 	}
-	if req.Keys == nil {
-		return env, nil
-	}
 	provider, known := providerByVendor(vendor)
-	if !known {
-		return env, nil
+	if req.Keys == nil || !known {
+		return env, noRelease, nil
 	}
 	upstream, configured := req.Keys.Provider(provider)
 	if !configured {
-		return env, nil
+		return env, noRelease, nil
 	}
 	grant, err := req.Keys.Grant(upstream)
 	if err != nil {
-		return nil, err
+		return nil, noRelease, err
 	}
 	if vendor == contracts.VendorCodex && profileDir != "" {
-		return codexProfileProxyEnv(profileDir, grant)
+		proxyEnv, proxyErr := codexProfileProxyEnv(profileDir, grant)
+		if proxyErr != nil {
+			grant.Release()
+			return nil, noRelease, proxyErr
+		}
+		return proxyEnv, grant.Release, nil
 	}
 	mergeInto(env, proxyEnvFor(vendor, grant))
-	return env, nil
+	return env, grant.Release, nil
 }
+
+func noRelease() {}
 
 func proxyEnvFor(vendor string, grant keyproxy.Grant) map[string]string {
 	if vendor == contracts.VendorCodex {
@@ -154,22 +158,27 @@ func persistedSessions() ([]state.Session, error) {
 	return persisted.SnapshotSessions(), nil
 }
 
-// ProfileInUse reports whether a persisted session references the profile.
-func ProfileInUse(vendor, name string) (bool, error) {
+// ProfileUsers lists the persisted sessions using a profile, following the vendor default when isDefault.
+func ProfileUsers(vendor, name string, isDefault bool) ([]string, error) {
 	sessions, err := persistedSessions()
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return profileInUse(sessions, vendor, name), nil
+	return profileUsers(sessions, vendor, name, isDefault), nil
 }
 
-func profileInUse(sessions []state.Session, vendor, name string) bool {
+func profileUsers(sessions []state.Session, vendor, name string, isDefault bool) []string {
+	var names []string
 	for index := range sessions {
-		if sessions[index].Vendor == vendor && sessions[index].Account == name {
-			return true
+		session := &sessions[index]
+		if session.Vendor != vendor {
+			continue
+		}
+		if session.Account == name || (isDefault && session.Account == "") {
+			names = append(names, session.Name)
 		}
 	}
-	return false
+	return names
 }
 
 // ResumingSessions lists the sessions of vendor resuming under the vendor default.
@@ -193,28 +202,29 @@ func resumingUnder(sessions []state.Session, vendor string) []string {
 
 const neubloxKeyName = "neublox"
 
-func spawnEnvVia(entry CatalogEntry, getenv func(string) string, keys *keyproxy.Proxy) (map[string]string, error) {
+func spawnEnvVia(entry CatalogEntry, getenv func(string) string, keys *keyproxy.Proxy) (map[string]string, func(), error) {
 	if entry.Route != contracts.RouteGateway || keys == nil {
-		return spawnEnvFor(entry, getenv)
+		env, err := spawnEnvFor(entry, getenv)
+		return env, noRelease, err
 	}
 	creds, err := loadGatewayCreds(getenv)
 	if err != nil {
-		return nil, fmt.Errorf("model %q needs the Neublox gateway: %w", entry.ID, err)
+		return nil, noRelease, fmt.Errorf("model %q needs the Neublox gateway: %w", entry.ID, err)
 	}
 	env := gatewayEnvFor(entry.Vendor, creds, entry.Arg)
 	if len(env) == 0 {
-		return nil, &modelNotRedirectableError{Model: entry.ID, Backend: entry.Vendor}
+		return nil, noRelease, &modelNotRedirectableError{Model: entry.ID, Backend: entry.Vendor}
 	}
 	upstream, err := url.Parse(creds.BaseURL())
 	if err != nil {
-		return nil, fmt.Errorf("gateway base URL: %w", err)
+		return nil, noRelease, fmt.Errorf("gateway base URL: %w", err)
 	}
 	route := keyproxy.GatewayRoute(upstream, gatewayAuthStyle(entry.Vendor), keyproxy.NewSecret(neubloxKeyName, creds.Token()))
 	grant, err := keys.Grant(route)
 	if err != nil {
-		return nil, fmt.Errorf("gateway through the key proxy: %w", err)
+		return nil, noRelease, fmt.Errorf("gateway through the key proxy: %w", err)
 	}
-	return gatewayEnvThroughProxy(entry.Vendor, env, grant), nil
+	return gatewayEnvThroughProxy(entry.Vendor, env, grant), grant.Release, nil
 }
 
 func gatewayAuthStyle(vendor string) keyproxy.AuthStyle {

@@ -66,7 +66,7 @@ func runBridge(ctx context.Context, args []string) error {
 	if err != nil && !errors.Is(err, keyproxy.ErrDisabled) {
 		return err
 	}
-	defer closeKeyProxy(ctx, log, keys)
+	defer host.CloseKeyProxy(ctx, log, keys)
 	newBackend := func(_ string) (contracts.Backend, error) {
 		req := backendFlags.request()
 		req.Keys = keys
@@ -132,15 +132,6 @@ func (f backendFlags) request() host.BackendRequest {
 
 type backendResolver interface {
 	Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, bool, error)
-}
-
-func closeKeyProxy(ctx context.Context, log *slog.Logger, keys *keyproxy.Proxy) {
-	if keys == nil {
-		return
-	}
-	if err := keys.Close(ctx); err != nil {
-		log.Warn("key proxy did not close cleanly", "err", err)
-	}
 }
 
 func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {

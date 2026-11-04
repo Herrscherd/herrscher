@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -53,6 +54,7 @@ type sessionSink struct {
 	Resume     func(token string)
 	Project    func(project string)
 	Transcript func(state.TranscriptEntry)
+	Checkpoint func(turnID, text string)
 }
 
 type sessionDriver struct {
@@ -87,6 +89,8 @@ type sessionDriver struct {
 	emitTap func(contracts.Event)
 
 	gate budgetGate
+
+	busy atomic.Bool
 }
 
 type queued struct {
@@ -295,6 +299,11 @@ func (t *sessionTable) lookup(name string) *sessionDriver {
 	return t.m[name]
 }
 
+func (t *sessionTable) Busy(session string) bool {
+	driver := t.lookup(session)
+	return driver != nil && (driver.busy.Load() || len(driver.queue) > 0)
+}
+
 func (t *sessionTable) pick(session, value string) bool {
 	driver := t.lookup(session)
 	if driver == nil {
@@ -448,12 +457,15 @@ func (d *sessionDriver) pump(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case q := <-d.queue:
+			d.busy.Store(true)
 			event, guard, ok := d.prepareTurn(ctx, q)
 			if !ok {
+				d.busy.Store(false)
 				continue
 			}
 			d.runTurn(ctx, event, guard)
 			d.activeTurnID = ""
+			d.busy.Store(false)
 		}
 	}
 }
@@ -480,6 +492,9 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 	event.SessionIncarnation = d.incarnation
 	event.Agent = d.agent
 	d.activeTurnID = event.TurnID
+	if d.sink.Checkpoint != nil {
+		d.sink.Checkpoint(event.TurnID, event.Text)
+	}
 	d.recordEntry("user", event.Text, 0, turnUsage{})
 	d.fanOut(ctx, contracts.Event{T: "human", Who: event.Who, Text: event.Text})
 	return event, tokenGuard{headroom: verdict.Headroom, capped: verdict.Capped}, true

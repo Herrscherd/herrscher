@@ -20,6 +20,10 @@ func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID stri
 	)
 }
 
+func addCheckpointCommands(reg *cli.Registry, store *state.State, sessions *sessionTable) error {
+	return addVerbs(reg, addCheckpointVerbs(store, sessions)...)
+}
+
 func seedVerb(store *state.State, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
 	return contracts.New(nsSession, verbSeed).
 		Help("run one agent turn in a session and print the reply").

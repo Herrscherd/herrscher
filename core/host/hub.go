@@ -12,6 +12,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
@@ -109,6 +110,14 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 						warnStderr("herrscher serve: session %q: transcript entry dropped: %v\n", sess.Name, err)
 					}
 				},
+				Checkpoint: func(turnID, text string) {
+					if !checkpointable(sess) {
+						return
+					}
+					if _, err := checkpoint.Take(context.Background(), sess.Worktree, sess.Name, checkpoint.Meta{Turn: turnID, Text: text}); err != nil {
+						warnStderr("herrscher serve: session %q: checkpoint not taken, /rewind cannot return to this message: %v\n", sess.Name, err)
+					}
+				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent}, h.gate)
@@ -197,6 +206,10 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 			},
 		}
 		return h.reg.Dispatch(withOneShotSeedRuntime(ctx, runtime), args)
+	}
+
+	if isSessionForkCommand(args) {
+		return h.reg.Dispatch(withForker(ctx, h.forkSession), args)
 	}
 
 	if h.isContributedCommand(args) {

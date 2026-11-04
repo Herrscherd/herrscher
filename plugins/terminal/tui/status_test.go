@@ -54,7 +54,7 @@ func TestContextLimitFollowsTheVendorAndTheEnv(t *testing.T) {
 	if got := contextLimit("claude"); got != 200_000 {
 		t.Errorf("claude limit = %d", got)
 	}
-	if got := contextLimit("codex"); got != 400_000 {
+	if got := contextLimit("codex"); got != 200_000 {
 		t.Errorf("codex limit = %d", got)
 	}
 	if got := contextLimit("nobody-ships-this"); got != contextwindow.Fallback() {

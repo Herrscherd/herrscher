@@ -544,7 +544,11 @@ threshold, a percentage of its context window. The default is 92, set with
 refused at load). Each session can override it with
 `herrscher session set-compact --name <name> --percent <percent>` (an empty percent
 restores the default, 0 disables it for that session). The window size comes from
-the vendor, and `HERRSCHER_CONTEXT_LIMIT` overrides it. After a measured compaction
+the vendor: 200000 for `claude`, `cursor` and `codex`. The `codex` figure is a
+cautious assumption, the smallest window verified in the Codex backend catalogue
+(`o4-mini`), so automatic compaction runs early rather than after the provider
+refuses the request. `HERRSCHER_CONTEXT_LIMIT` raises it when the model in use takes
+more. One window per model is a follow-up. After a measured compaction
 still above the threshold, automatic compaction does not retrigger: it rearms once a
 measured turn lands under the threshold. A compaction the backend does not measure
 never retriggers. `compactStack` lists the stages in order, where `backend` is the
@@ -554,7 +558,10 @@ session's own compaction and other names are plugins declaring
 When a backend declares `Capabilities.Compactor` but its running instance does not
 implement the port, the host writes one warning line to stderr the first time that
 instance answers without the port, and each compaction of that session is then
-refused with the same error. The host does not repair the instance.
+refused with the same error. The host does not repair the instance. A `codex`
+session in one-shot mode is such an instance: `CODEX_STREAM=false`, or
+`HERRSCHER_CODEX_ONESHOT_WINDOWS=1` on Windows, runs the one-shot responder, which
+has no port.
 
 ### Notifications
 

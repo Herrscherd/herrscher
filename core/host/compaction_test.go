@@ -362,3 +362,31 @@ func TestInvalidContextLimitIsWarnedAboutOnce(t *testing.T) {
 		t.Fatalf("empty or valid HERRSCHER_CONTEXT_LIMIT wrote warnings: %d total", warnings)
 	}
 }
+
+func TestCompactionPolicyTakesCodexFromItsManifest(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "codex", Category: contracts.CategoryBackend, Capabilities: contracts.Capabilities{Compactor: true}},
+		Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
+			return seedBackend{}, nil
+		},
+	})
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "cursor", Category: contracts.CategoryBackend},
+		Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
+			return seedBackend{}, nil
+		},
+	})
+	policy, err := newCompactionPolicy(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("newCompactionPolicy: %v", err)
+	}
+	if !policy.supports("codex") {
+		t.Fatal("codex declares Capabilities.Compactor in its manifest but the policy refuses it")
+	}
+	if policy.supports("cursor") {
+		t.Fatal("cursor declares no Compactor but the policy accepts it")
+	}
+}

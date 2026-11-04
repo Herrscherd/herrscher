@@ -119,9 +119,6 @@ func (h *Handler) checkSpawnSource(cmdExplicit bool, modelID string) error {
 // spawn failure, or worse, as a turn silently run on the machine's own login.
 func (h *Handler) SetModelValidator(fn func(vendor, modelID string) error) { h.validateModel = fn }
 
-// SetAccountValidator wires the profile check applied to --account at session creation.
-func (h *Handler) SetAccountValidator(fn func(vendor, profile string) error) { h.validateAccount = fn }
-
 // SetGateResolver wires the per-vendor approval granularity, read by the host
 // from the compiled backends' manifests. Until it is set, every vendor reports
 // that it enforces nothing, which is the only truthful answer a daemon with
@@ -155,8 +152,7 @@ func (h *Handler) checkModel(vendor, modelID string) error {
 	return h.validateModel(vendor, modelID)
 }
 
-// CheckAccount refuses a profile that the wired account validator does not know.
-func (h *Handler) CheckAccount(vendor, profile string) error {
+func (h *Handler) checkAccount(vendor, profile string) error {
 	if profile == "" || vendor == "" || h.validateAccount == nil {
 		return nil
 	}
@@ -182,8 +178,8 @@ type coordinationReader interface {
 // session is created without an explicit cmd. partDir is the directory under
 // which per-session participant journals live (participants/<name>.log). agents
 // owns the durable agent homes used to provision sessions.
-func NewHandler(d channelAdmin, sup supervisor, wt Worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string) *Handler {
-	return &Handler{log: obs.NewLogger(os.Stderr, slog.LevelInfo), d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways}
+func NewHandler(d channelAdmin, sup supervisor, wt Worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string, validateAccount func(vendor, profile string) error) *Handler {
+	return &Handler{log: obs.NewLogger(os.Stderr, slog.LevelInfo), d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways, validateAccount: validateAccount}
 }
 
 // SetTerminalAdmin wires the terminal (TUI) channel admin used to route

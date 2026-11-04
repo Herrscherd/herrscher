@@ -29,16 +29,16 @@ func TestAccountGateRefusesAnUnknownProfileBeforeCreate(t *testing.T) {
 		}
 		return nil
 	}}
-	if err := h.CheckAccount("claude", "ghost"); err == nil {
+	if err := h.checkAccount("claude", "ghost"); err == nil {
 		t.Fatal("checkAccount accepted an unknown profile")
 	}
-	if err := h.CheckAccount("claude", "perso"); err != nil {
+	if err := h.checkAccount("claude", "perso"); err != nil {
 		t.Fatalf("checkAccount refused a known profile: %v", err)
 	}
-	if err := h.CheckAccount("claude", ""); err != nil {
+	if err := h.checkAccount("claude", ""); err != nil {
 		t.Fatalf("checkAccount refused the vendor default: %v", err)
 	}
-	if err := h.CheckAccount("", "ghost"); err != nil {
+	if err := h.checkAccount("", "ghost"); err != nil {
 		t.Fatalf("checkAccount without a known vendor = %v, want the check left to the spawn", err)
 	}
 }
@@ -46,12 +46,12 @@ func TestAccountGateRefusesAnUnknownProfileBeforeCreate(t *testing.T) {
 func TestCreateRefusesAnUnknownAccountThroughParseCreateRequest(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "forum")
 	st.Home = state.HomeRef{ID: "home", Type: "forum"}
-	h.SetAccountValidator(func(_, profile string) error {
+	h.validateAccount = func(_, profile string) error {
 		if profile == "ghost" {
 			return errors.New("no such profile")
 		}
 		return nil
-	})
+	}
 	if _, err := h.parseCreateRequest(t.Context(), args("name", "control", "vendor", "claude", "account", "perso")); err != nil {
 		t.Fatalf("known account refused: %v", err)
 	}

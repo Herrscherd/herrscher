@@ -35,7 +35,7 @@ func TestSessionCreateRollsBackWhenPersistFails(t *testing.T) {
 			wt := &fakeWT{path: t.TempDir(), scratchBase: t.TempDir()}
 			st := unwritableState(t)
 			st.Home = tc.home
-			h := NewHandler(d, sup, wt, &fakeForge{}, &fakeUpdater{}, agent.NewStore(t.TempDir()), st, "claude", t.TempDir(), []string{"chat"})
+			h := NewHandler(d, sup, wt, &fakeForge{}, &fakeUpdater{}, agent.NewStore(t.TempDir()), st, "claude", t.TempDir(), []string{"chat"}, nil)
 
 			if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err == nil {
 				t.Fatal("expected a persist error")

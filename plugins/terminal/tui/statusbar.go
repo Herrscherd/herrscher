@@ -10,19 +10,20 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 const (
-	rankBusy = iota
+	rankDetail = iota
+	rankWorktree
+	rankBusy
 	rankExtra
 	rankBackground
-	rankWorktree
 	rankModel
 	rankCost
 	rankQueue
-	rankDetail
 	rankGauge
 	rankRepo
 	rankNever = math.MaxInt
@@ -175,7 +176,7 @@ func (m *model) statusBar(target *tab, width int) string {
 		return ""
 	}
 	if m.bar.scripted() && m.bar.script.line != "" {
-		return truncate(m.bar.script.line, width)
+		return truncateEllipsis(m.bar.script.line, width)
 	}
 	if m.bar.scripted() && m.bar.script.failed {
 		return m.builtinBar(target, width-barFailTail) + " " + m.st.dim.Render(m.st.glyphs.failure)
@@ -187,7 +188,7 @@ func (m *model) builtinBar(target *tab, width int) string {
 	if width < 1 {
 		return ""
 	}
-	parts := m.barParts(target, width)
+	parts := m.barParts(target)
 	for {
 		line := m.composeBar(parts)
 		if lipgloss.Width(line) <= width {
@@ -195,18 +196,25 @@ func (m *model) builtinBar(target *tab, width int) string {
 		}
 		next, dropped := dropLowestLayer(parts)
 		if !dropped {
-			return truncate(line, width)
+			return truncateEllipsis(line, width)
 		}
 		parts = next
 	}
 }
 
-func (m *model) barParts(target *tab, width int) []barPart {
+func truncateEllipsis(text string, width int) string {
+	if width < 1 || lipgloss.Width(text) <= width {
+		return text
+	}
+	return ansi.Truncate(text, width, "…")
+}
+
+func (m *model) barParts(target *tab) []barPart {
 	info, _ := m.activeInfo()
 	used := m.contextTokens(target)
 	var parts []barPart
 	if m.bar.isShown(barModeID) {
-		parts = append(parts, single(m.modeChip(target, width), rankNever))
+		parts = append(parts, single(m.modeChip(target, modeShortBelow), rankNever))
 	}
 	for _, fieldID := range m.bar.fieldIDs() {
 		if fieldID == barModeID {
@@ -303,7 +311,8 @@ func (m *model) contextPart(info contracts.SessionInfo, used int) (barPart, bool
 	ratio := contextRatio(used, limit)
 	percent := palierStyle(ratio, m.st).Render(contextPercent(used, limit))
 	part := barPart{layers: []barLayer{
-		{text: m.st.dim.Render("ctx ") + contextGauge(ratio, m.st) + " ", rank: rankGauge},
+		{text: m.st.dim.Render("ctx "), rank: rankNever},
+		{text: contextGauge(ratio, m.st) + " ", rank: rankGauge},
 		{text: percent, rank: rankNever},
 	}}
 	if m.bar.isShown("detail") {

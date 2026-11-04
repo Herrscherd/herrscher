@@ -464,9 +464,11 @@ with the figures `41%  82k/200k`. Cost (`$0.00` until the first turn) and queued
 drop by priority as the window narrows. `/usage` spells the numbers out.
 
 `/statusline` opens the bar's settings: tick the fields, reorder them with shift+↑↓,
-and see the result in a live preview. In `~/.config/herrscher/terminal.toml`, a
+and see the result in a live preview. Beside the list, a pane shows the script
+contract: the JSON it receives on stdin and the `[statusline]` keys. `s` switches
+between the built-in bar and the script. In `~/.config/herrscher/terminal.toml`, a
 `[statusline]` section can replace the bar with a script (`source = "script"`,
-`command`, `interval`): it receives the state as JSON on stdin and its first line
+`command`, `refresh`): it receives the state as JSON on stdin and its first line
 becomes the bar. A script that fails or runs past one second leaves the built-in bar
 with a discreet ✗.
 

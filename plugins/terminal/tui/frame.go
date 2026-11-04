@@ -72,12 +72,23 @@ func (m *model) composeFrame(panels bool, room int) frame {
 	if chips := chipRow(m.pending, m.st); chips != "" {
 		stacked.below = appendLines(stacked.below, chips+"  "+m.st.dim.Render("⌃U retirer"))
 	}
+	drafts := appendLines(nil, m.draftsView())
+	composer := m.composerZone()
+	status := m.statusZone()
+	reserved := len(stacked.above) + len(stacked.below) + len(drafts) + len(composer) + len(status)
 	base := len(stacked.above) + m.vp.Height + len(stacked.below)
-	stacked.below = appendLines(stacked.below, strings.Join(m.queueLines(base), "\n"))
-	stacked.below = appendLines(stacked.below, m.draftsView())
-	stacked.below = append(stacked.below, m.composerZone()...)
-	stacked.below = append(stacked.below, m.statusZone()...)
+	stacked.below = appendLines(stacked.below, strings.Join(m.queueLines(base, m.queueRows(reserved)), "\n"))
+	stacked.below = append(stacked.below, drafts...)
+	stacked.below = append(stacked.below, composer...)
+	stacked.below = append(stacked.below, status...)
 	return stacked
+}
+
+func (m *model) queueRows(reserved int) int {
+	if m.height <= 0 {
+		return unboundedRows
+	}
+	return max(1, m.height-minTranscriptRows-reserved)
 }
 
 func (m *model) sidePanelLines() []string {

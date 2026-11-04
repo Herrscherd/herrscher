@@ -17,7 +17,7 @@ auto_theme = true
 [statusline]
 source = "script"
 command = "~/bin/bar.sh --json"
-interval = "300ms"
+refresh = "300ms"
 
 [other]
 source = "builtin"
@@ -30,7 +30,7 @@ source = "builtin"
 		t.Errorf("command = %q", cfg.Command)
 	}
 	if cfg.Interval != 300*time.Millisecond {
-		t.Errorf("interval = %v, want 300ms", cfg.Interval)
+		t.Errorf("refresh = %v, want 300ms", cfg.Interval)
 	}
 }
 

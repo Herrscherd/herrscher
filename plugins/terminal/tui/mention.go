@@ -31,7 +31,13 @@ const (
 	vendorDirName  = "vendor"
 )
 
-var mentionSkipped = map[string]bool{".git": true, "node_modules": true, vendorDirName: true}
+func isMentionSkippedName(name string) bool {
+	switch name {
+	case ".git", "node_modules", vendorDirName:
+		return true
+	}
+	return false
+}
 
 func mentionCandidates(dir string) []string {
 	var out []string
@@ -60,7 +66,7 @@ func mentionCandidates(dir string) []string {
 
 func isSkippedMention(entry fs.DirEntry) bool {
 	name := entry.Name()
-	return mentionSkipped[name] || (entry.IsDir() && strings.HasPrefix(name, "."))
+	return isMentionSkippedName(name) || (entry.IsDir() && strings.HasPrefix(name, "."))
 }
 
 func mentionPath(rel string, entry fs.DirEntry) string {

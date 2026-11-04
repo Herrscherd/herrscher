@@ -150,8 +150,9 @@ func (m *model) boardCandidates() []boardRow {
 		return nil
 	}
 	byName := make(map[string]contracts.SessionInfo)
-	for _, info := range m.tm.Sessions() {
-		byName[info.Name] = info
+	sessions := m.tm.Sessions()
+	for index := range sessions {
+		byName[sessions[index].Name] = sessions[index]
 	}
 	rows := make([]boardRow, 0, len(m.overviews))
 	for index := range m.overviews {
@@ -164,11 +165,11 @@ func (m *model) boardCandidates() []boardRow {
 		unread := tab != nil && tab.unread
 		rows = append(rows, boardRow{overview: *overview, info: info, group: overviewGroup(overview.State, unread)})
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		if ri, rj := groupRank(rows[i].group), groupRank(rows[j].group); ri != rj {
-			return ri < rj
+	sort.SliceStable(rows, func(left, right int) bool {
+		if leftRank, rightRank := groupRank(rows[left].group), groupRank(rows[right].group); leftRank != rightRank {
+			return leftRank < rightRank
 		}
-		return rows[i].overview.LastTs > rows[j].overview.LastTs
+		return rows[left].overview.LastTs > rows[right].overview.LastTs
 	})
 	return rows
 }

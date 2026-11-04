@@ -124,7 +124,8 @@ func diffHeader(path string, body []string, display view) string {
 		}
 	}
 	return display.st.dim.Render("╭ ") + display.st.text.Render(path) + display.st.dim.Render(
-		fmt.Sprintf("  +%d −%d   ancien · nouveau   ⌃D panneau de diff", added, removed))
+		fmt.Sprintf("  +%d −%d   ancien · nouveau   ⌃D panneau de diff", added, removed),
+	)
 }
 
 func isFileHeader(line string) bool {

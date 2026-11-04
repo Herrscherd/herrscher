@@ -21,6 +21,7 @@ const (
 )
 
 const (
+	sidebarShareDivisor  = 3
 	sidebarAutoWidth     = 110
 	sidebarMinCols       = 34
 	sidebarMaxCols       = 40
@@ -41,6 +42,7 @@ func (m *model) sidebarVisible() bool {
 		return true
 	case sidebarHidden:
 		return false
+	case sidebarAuto:
 	}
 	return m.innerWidth() >= sidebarAutoWidth
 }
@@ -58,7 +60,7 @@ func (m *model) sidebarWidth() int {
 	if !m.sidebarVisible() {
 		return 0
 	}
-	return min(max(m.innerWidth()/3, sidebarMinCols), sidebarMaxCols)
+	return min(max(m.innerWidth()/sidebarShareDivisor, sidebarMinCols), sidebarMaxCols)
 }
 
 func (m *model) transcriptWidth() int {
@@ -152,7 +154,7 @@ func (m *model) todoSection(tab *tab, width int, short bool) []string {
 		switch todo.State {
 		case stateDone:
 			done++
-		case "active":
+		case stateActive:
 			active = index
 		}
 	}
@@ -164,7 +166,7 @@ func (m *model) todoSection(tab *tab, width int, short bool) []string {
 	for _, todo := range tab.todos[start:end] {
 		lines = append(lines, m.todoRow(todo, width))
 	}
-	return appendHidden(m, lines, len(tab.todos)-(end-start), width)
+	return appendHidden(m.st, lines, len(tab.todos)-(end-start), width)
 }
 
 func (m *model) todoRow(todo contracts.TodoItem, width int) string {
@@ -172,7 +174,7 @@ func (m *model) todoRow(todo contracts.TodoItem, width int) string {
 	switch todo.State {
 	case stateDone:
 		return sideRow(m.st.green.Render(m.st.glyphs.success)+" "+m.st.dim.Render(text), width)
-	case "active":
+	case stateActive:
 		return sideRow(m.spinFrame()+" "+m.st.text.Bold(true).Render(text), width)
 	}
 	return sideRow(m.st.dim.Render(m.st.glyphs.open)+" "+m.st.text.Render(text), width)
@@ -191,7 +193,7 @@ func (m *model) agentSection(tab *tab, width int, now time.Time, short bool) []s
 	for _, agent := range agents[:shown] {
 		lines = append(lines, m.agentRow(agent, width, now))
 	}
-	return appendHidden(m, lines, len(agents)-shown, width)
+	return appendHidden(m.st, lines, len(agents)-shown, width)
 }
 
 func (m *model) agentRow(agent liveAgent, width int, now time.Time) string {
@@ -240,7 +242,7 @@ func (m *model) backgroundSection(tab *tab, width int, short bool) []string {
 	for _, task := range tab.background[:shown] {
 		lines = append(lines, sideRow(m.st.dim.Render(m.st.glyphs.open)+" "+m.st.text.Render(oneLine(task.Name)), width))
 	}
-	return appendHidden(m, lines, len(tab.background)-shown, width)
+	return appendHidden(m.st, lines, len(tab.background)-shown, width)
 }
 
 func (m *model) filesSection(tab *tab, dir string, width int, short bool) []string {
@@ -274,7 +276,7 @@ func (m *model) filesSection(tab *tab, dir string, width int, short bool) []stri
 		}
 		lines = append(lines, justifyRow(left, right, width))
 	}
-	return appendHidden(m, lines, len(tab.files)-shown, width)
+	return appendHidden(m.st, lines, len(tab.files)-shown, width)
 }
 
 func (m *model) contextSection(tab *tab, info contracts.SessionInfo, width int, short bool) []string {
@@ -330,9 +332,9 @@ func (tb *tab) noteToolFile(text string) {
 	tb.files = append(tb.files, fields[0])
 }
 
-func appendHidden(m *model, lines []string, hidden, width int) []string {
+func appendHidden(styles uiStyles, lines []string, hidden, width int) []string {
 	if hidden > 0 {
-		lines = append(lines, truncate(sidebarIndent+m.st.dim.Render("· +"+strconv.Itoa(hidden)), width))
+		lines = append(lines, truncate(sidebarIndent+styles.dim.Render("· +"+strconv.Itoa(hidden)), width))
 	}
 	return lines
 }

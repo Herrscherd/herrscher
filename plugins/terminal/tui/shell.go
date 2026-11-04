@@ -24,34 +24,36 @@ func shellCommand(text string) (string, bool) {
 }
 
 func (m *model) runShell(command string) tea.Cmd {
-	tb := m.activeTab()
+	channelTab := m.activeTab()
 	name := m.sessionName(m.active)
-	if tb == nil || name == "" {
+	if channelTab == nil || name == "" {
 		m.flash = "!commande : aucune session ouverte"
 		return nil
 	}
-	tb.shellRunning = true
+	channelTab.shellRunning = true
 	channel := m.active
 	backend := m.tm
 	return func() tea.Msg {
-		out, err := backend.Dispatch([]string{"session", "shell", "--name", name, "--cmd", command})
+		out, err := backend.Dispatch([]string{sessionVerb, "shell", argName, name, "--cmd", command})
 		return shellResultMsg{channel: channel, command: command, out: out, err: err}
 	}
 }
 
 func (m *model) handleShellResult(msg shellResultMsg) {
-	tb := m.tabs[msg.channel]
-	if tb == nil {
+	channelTab := m.tabs[msg.channel]
+	if channelTab == nil {
 		return
 	}
-	tb.shellRunning = false
+	channelTab.shellRunning = false
 	if msg.err != nil {
-		tb.appendEntry(entry{role: roleError, text: msg.err.Error()})
+		channelTab.appendEntry(entry{role: roleError, text: msg.err.Error()})
+
 		m.syncViewport()
 		return
 	}
-	tb.appendEntry(entry{role: roleNotice, text: "$ " + msg.command + "\n" + msg.out})
-	tb.shellContext += "$ " + msg.command + "\n" + msg.out + "\n"
+	channelTab.appendEntry(entry{role: roleNotice, text: "$ " + msg.command + "\n" + msg.out})
+	channelTab.shellContext += "$ " + msg.command + "\n" + msg.out + "\n"
+
 	m.syncViewport()
 }
 

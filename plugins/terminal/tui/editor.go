@@ -63,7 +63,6 @@ func (m *model) openEditor() tea.Cmd {
 
 func (m *model) removeDraft(path string) {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-
 		m.flash = "brouillon non supprimé : " + err.Error()
 	}
 }

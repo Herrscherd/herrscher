@@ -7,7 +7,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var railChannelNames = []string{"alfa", "bravo", "cite", "delta", "echo", "fox", "golf", "hotel", "india", "juliet"}
+func railChannelNames() []string {
+	return []string{"alfa", "bravo", "cite", "delta", "echo", "fox", "golf", "hotel", "india", "juliet"}
+}
 
 func railModel(t *testing.T, width int, names ...string) *model {
 	t.Helper()
@@ -21,7 +23,7 @@ func railModel(t *testing.T, width int, names ...string) *model {
 
 func TestRailFitsEveryWidth(t *testing.T) {
 	for _, width := range []int{60, 80, 120, 200} {
-		m := railModel(t, width, railChannelNames...)
+		m := railModel(t, width, railChannelNames()...)
 		for _, line := range m.railLines() {
 			if w := lipgloss.Width(line); w > width {
 				t.Fatalf("at %d columns the rail is %d wide: %q", width, w, line)
@@ -61,7 +63,7 @@ func TestRailHasARuleUnderTheRow(t *testing.T) {
 }
 
 func TestRailKeepsTheActiveTabAtTenTabsAt60Columns(t *testing.T) {
-	m := railModel(t, 60, railChannelNames...)
+	m := railModel(t, 60, railChannelNames()...)
 	m.active = "golf"
 	row := m.railLines()[0]
 	if !strings.Contains(row, "golf") {
@@ -73,7 +75,7 @@ func TestRailKeepsTheActiveTabAtTenTabsAt60Columns(t *testing.T) {
 }
 
 func TestRailFoldReportsTheHiddenTabs(t *testing.T) {
-	m := railModel(t, 40, railChannelNames...)
+	m := railModel(t, 40, railChannelNames()...)
 	row := m.railLines()[0]
 	if !strings.Contains(row, "+") {
 		t.Fatalf("a folded rail must report its hidden tabs: %q", row)

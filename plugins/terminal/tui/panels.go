@@ -25,7 +25,7 @@ func todoPanel(items []contracts.TodoItem, width int, styles uiStyles) []string 
 		switch it.State {
 		case stateDone:
 			done++
-		case "active":
+		case stateActive:
 			active = index
 		}
 	}
@@ -49,7 +49,7 @@ func todoRow(todo contracts.TodoItem, width int, styles uiStyles) string {
 	switch todo.State {
 	case stateDone:
 		mark, style = styles.glyphs.success, styles.green
-	case "active":
+	case stateActive:
 		mark, style = styles.glyphs.active, styles.accent
 	}
 	return style.Render(truncate("  "+mark+" "+oneLine(todo.Text), width))

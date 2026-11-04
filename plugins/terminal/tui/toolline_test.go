@@ -11,7 +11,9 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-var transcriptWidths = []int{60, 80, 120, 200}
+func transcriptWidths() []int {
+	return []int{60, 80, 120, 200}
+}
 
 func toolTestView(expand bool) view {
 	return view{caps: Capabilities{Colour: ColourTrue}, st: testStyles(), spin: "⣾", expand: expand}
@@ -28,7 +30,7 @@ func assertFitsWidth(t *testing.T, out string, width int) {
 
 func TestToolHeadKeepsVerbAndStateAtEveryWidth(t *testing.T) {
 	item := entry{role: roleTool, text: "Edit internal/very/long/path/to/some/deeply/nested/file.go", span: 1200 * time.Millisecond}
-	for _, width := range transcriptWidths {
+	for _, width := range transcriptWidths() {
 		out := renderEntry(item, width, toolTestView(false))
 		assertFitsWidth(t, out, width)
 		head := ansi.Strip(strings.Split(out, "\n")[0])
@@ -106,7 +108,7 @@ func TestDiffHasTwoNumberColumnsWideAndOneNarrow(t *testing.T) {
 
 func TestDiffFitsEveryTranscriptWidth(t *testing.T) {
 	long := "Edit tui/tui.go\n@@ -1 +1 @@ func x()\n+" + strings.Repeat("x", 300) + "\n-short"
-	for _, width := range transcriptWidths {
+	for _, width := range transcriptWidths() {
 		out := renderEntry(entry{role: roleTool, text: long, open: true}, width, toolTestView(false))
 		assertFitsWidth(t, out, width)
 	}
@@ -126,7 +128,7 @@ func TestDiffFoldsAfterFourLinesUnlessExpanded(t *testing.T) {
 
 func TestThinkingFoldedShowsLabelAndHint(t *testing.T) {
 	item := entry{role: roleThinking, text: "weighing two options", span: 14 * time.Second, tokens: 1200}
-	for _, width := range transcriptWidths {
+	for _, width := range transcriptWidths() {
 		out := renderThinking(item, width, toolTestView(false))
 		assertFitsWidth(t, out, width)
 	}
@@ -159,7 +161,7 @@ func TestSubagentTreeMarksEachState(t *testing.T) {
 		{Subagent: contracts.Subagent{ID: "b", Name: "tests", Kind: "codex", State: "running"}, since: now.Add(-8 * time.Second)},
 		{Subagent: contracts.Subagent{ID: "c", Name: "review", Kind: "gemini", State: stateTimeout}, since: now.Add(-20 * time.Second), ended: now.Add(-2 * time.Second)},
 	}
-	for _, width := range transcriptWidths {
+	for _, width := range transcriptWidths() {
 		rows := subagentRows(agents, now, width, toolTestView(false))
 		for _, row := range rows {
 			if lipgloss.Width(row) > width {
@@ -185,7 +187,7 @@ func TestSubagentTreeMarksEachState(t *testing.T) {
 }
 
 func TestBusyLineCarriesVerbTimeTokensCostAndEscape(t *testing.T) {
-	for _, width := range transcriptWidths {
+	for _, width := range transcriptWidths() {
 		out := busyLine(width, testStyles(), "⣾", "1m12s", "4.2k", "$0.31")
 		assertFitsWidth(t, out, width)
 	}

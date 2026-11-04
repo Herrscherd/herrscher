@@ -61,6 +61,8 @@ const toolVerbWidth = 6
 
 const toolLineCap = 2
 
+const agentNameWidth = 10
+
 func resultGutter(glyphs glyphSet) string {
 	return "    " + glyphs.result + " "
 }
@@ -75,79 +77,79 @@ const (
 	subagentRetryNote = "délai dépassé, relancé"
 )
 
-func renderTool(item entry, width int, v view) string {
+func renderTool(item entry, width int, display view) string {
 	lines := strings.Split(item.text, "\n")
 	family, target := toolVerb(lines[0])
 	name := ""
 	if family != "" {
 		name = toolName(lines[0])
 	}
-	out := []string{toolHead(item, family, name, target, width, v)}
+	out := []string{toolHead(item, family, name, target, width, display)}
 	if item.open {
-		out = append(out, toolBody(lines[1:], target, width, v)...)
+		out = append(out, toolBody(lines[1:], target, width, display)...)
 	}
 	return strings.Join(out, "\n")
 }
 
 const diffGutter = "    "
 
-func toolBody(results []string, target string, width int, v view) []string {
+func toolBody(results []string, target string, width int, display view) []string {
 	if !isDiffBody(results) {
-		return toolResults(results, width, v)
+		return toolResults(results, width, display)
 	}
-	out := []string{diffGutter + truncate(diffHeader(target, results, v), width-len(diffGutter))}
-	for _, row := range diffRows(results, width-len(diffGutter), v) {
+	out := []string{diffGutter + truncate(diffHeader(target, results, display), width-len(diffGutter))}
+	for _, row := range diffRows(results, width-len(diffGutter), display) {
 		out = append(out, diffGutter+row)
 	}
-	return append(out, diffGutter+v.st.dim.Render("╰"))
+	return append(out, diffGutter+display.st.dim.Render("╰"))
 }
 
-func familyStyle(st uiStyles, family string) lipgloss.Style {
+func familyStyle(styles uiStyles, family string) lipgloss.Style {
 	switch family {
 	case familyWrite:
-		return st.warn
+		return styles.warn
 	case familyAgent:
-		return st.violet
+		return styles.violet
 	}
-	return st.accent
+	return styles.accent
 }
 
-func toolHead(item entry, family, name, target string, width int, v view) string {
-	mark := familyStyle(v.st, family)
-	stateMark := v.st.green.Render(v.st.glyphs.success)
+func toolHead(item entry, family, name, target string, width int, display view) string {
+	mark := familyStyle(display.st, family)
+	stateMark := display.st.green.Render(display.st.glyphs.success)
 	switch {
 	case item.failed:
-		mark = v.st.red
-		stateMark = v.st.red.Render(v.st.glyphs.failure)
+		mark = display.st.red
+		stateMark = display.st.red.Render(display.st.glyphs.failure)
 	case item.live:
-		stateMark = v.st.spinner.Render(v.spin)
+		stateMark = display.st.spinner.Render(display.spin)
 	}
-	lefts := []string{toolLeft(mark, family, name, target, v)}
+	lefts := []string{toolLeft(mark, family, name, target, display)}
 	if short := abbreviatePaths(target); short != target {
-		lefts = append(lefts, toolLeft(mark, family, name, short, v))
+		lefts = append(lefts, toolLeft(mark, family, name, short, display))
 	}
 	arrow := ""
 	if item.foldable {
-		arrow = " " + v.st.dim.Render(v.st.glyphs.fold)
+		arrow = " " + display.st.dim.Render(display.st.glyphs.fold)
 		if item.open {
-			arrow = " " + v.st.dim.Render(v.st.glyphs.expanded)
+			arrow = " " + display.st.dim.Render(display.st.glyphs.expanded)
 		}
 	}
 	rights := []string{stateMark + arrow}
 	if item.span > 0 || item.live {
-		rights = append([]string{v.st.dim.Render(formatSpan(item.span)) + " " + stateMark + arrow}, rights...)
+		rights = append([]string{display.st.dim.Render(formatSpan(item.span)) + " " + stateMark + arrow}, rights...)
 	}
 	return spreadRight(lefts, rights, width)
 }
 
-func toolLeft(mark lipgloss.Style, family, name, target string, v view) string {
-	left := mark.Render(v.st.glyphs.tool)
+func toolLeft(mark lipgloss.Style, family, name, target string, display view) string {
+	left := mark.Render(display.st.glyphs.tool)
 	if family == "" {
-		return left + " " + v.st.text.Render(target)
+		return left + " " + display.st.text.Render(target)
 	}
-	left += " " + v.st.strong.Render(padCells(name, toolVerbWidth))
+	left += " " + display.st.strong.Render(padCells(name, toolVerbWidth))
 	if target != "" {
-		left += " " + v.st.dim.Render(target)
+		left += " " + display.st.dim.Render(target)
 	}
 	return left
 }
@@ -168,32 +170,32 @@ func spreadRight(lefts, rights []string, width int) string {
 	return truncate(lefts[len(lefts)-1], room) + " " + right
 }
 
-func formatSpan(d time.Duration) string {
-	if d < 10*time.Second {
-		return fmt.Sprintf("%.1fs", d.Seconds())
+func formatSpan(span time.Duration) string {
+	if span < 10*time.Second {
+		return fmt.Sprintf("%.1fs", span.Seconds())
 	}
-	return elapsed(d)
+	return elapsed(span)
 }
 
-func toolResults(results []string, width int, v view) []string {
+func toolResults(results []string, width int, display view) []string {
 	shown := len(results)
-	if !v.expand {
+	if !display.expand {
 		shown = min(shown, toolLineCap)
 	}
 	out := make([]string, 0, shown+1)
 	for _, line := range results[:shown] {
-		out = append(out, truncate(v.st.dim.Render(resultGutter(v.st.glyphs)+line), width))
+		out = append(out, truncate(display.st.dim.Render(resultGutter(display.st.glyphs)+line), width))
 	}
 	if hidden := len(results) - shown; hidden > 0 {
-		out = append(out, truncate(v.st.dim.Render(resultGutter(v.st.glyphs)+fmt.Sprintf("%s +%d", v.st.glyphs.moreLines, hidden)), width))
+		out = append(out, truncate(display.st.dim.Render(resultGutter(display.st.glyphs)+fmt.Sprintf("%s +%d", display.st.glyphs.moreLines, hidden)), width))
 	}
 	return out
 }
 
 func abbreviatePaths(s string) string {
 	fields := strings.Split(s, " ")
-	for i, f := range fields {
-		fields[i] = abbreviatePath(f)
+	for index, f := range fields {
+		fields[index] = abbreviatePath(f)
 	}
 	return strings.Join(fields, " ")
 }
@@ -220,64 +222,64 @@ func abbreviatePath(token string) string {
 	return opening + "…/" + strings.Join(segs[len(segs)-pathKeep:], "/") + closing
 }
 
-func subagentRows(agents []liveAgent, now time.Time, width int, v view) []string {
+func subagentRows(agents []liveAgent, now time.Time, width int, display view) []string {
 	out := make([]string, 0, len(agents))
 	for index, agent := range agents {
-		branch := v.st.glyphs.branchMid
+		branch := display.st.glyphs.branchMid
 		if index == len(agents)-1 {
-			branch = v.st.glyphs.branchEnd
+			branch = display.st.glyphs.branchEnd
 		}
-		mark, note := subagentMark(agent, v)
-		left := v.st.dim.Render("    "+branch+" ") + mark + " " + v.st.text.Render(padCells(oneLine(agent.Name), 10))
+		mark, note := subagentMark(agent, display)
+		left := display.st.dim.Render("    "+branch+" ") + mark + " " + display.st.text.Render(padCells(oneLine(agent.Name), agentNameWidth))
 		if kind := oneLine(agent.Kind); kind != "" {
-			left += " " + v.st.dim.Render(kind)
+			left += " " + display.st.dim.Render(kind)
 		}
 		if note != "" {
-			left += " " + v.st.red.Render(note)
+			left += " " + display.st.red.Render(note)
 		}
 		end := now
 		if !agent.ended.IsZero() {
 			end = agent.ended
 		}
-		out = append(out, spreadRight([]string{left}, []string{v.st.dim.Render(elapsed(end.Sub(agent.since)))}, width))
+		out = append(out, spreadRight([]string{left}, []string{display.st.dim.Render(elapsed(end.Sub(agent.since)))}, width))
 	}
 	return out
 }
 
-func subagentMark(agent liveAgent, v view) (string, string) {
+func subagentMark(agent liveAgent, display view) (string, string) {
 	switch agent.State {
 	case stateDone:
-		return v.st.green.Render(v.st.glyphs.success), ""
+		return display.st.green.Render(display.st.glyphs.success), ""
 	case stateTimeout:
-		return v.st.red.Render(v.st.glyphs.failure), subagentRetryNote
+		return display.st.red.Render(display.st.glyphs.failure), subagentRetryNote
 	case stateFailed:
-		return v.st.red.Render(v.st.glyphs.failure), ""
+		return display.st.red.Render(display.st.glyphs.failure), ""
 	}
-	return v.st.spinner.Render(v.spin), ""
+	return display.st.spinner.Render(display.spin), ""
 }
 
-func renderThinking(item entry, width int, v view) string {
-	arrow, hint := v.st.glyphs.fold, "ctrl+o"
+func renderThinking(item entry, width int, display view) string {
+	arrow, hint := display.st.glyphs.fold, "ctrl+o"
 	if item.open {
-		arrow = v.st.glyphs.expanded
+		arrow = display.st.glyphs.expanded
 	}
 	label := "Réflexion · " + formatSpan(item.span)
 	if item.tokens > 0 {
 		label += " · " + formatTokens(item.tokens) + " tokens"
 	}
-	left := v.st.dim.Render(arrow+" ") + v.st.thinking.Render(label)
-	head := spreadRight([]string{left}, []string{v.st.dim.Render(arrow + " " + hint)}, width)
+	left := display.st.dim.Render(arrow+" ") + display.st.thinking.Render(label)
+	head := spreadRight([]string{left}, []string{display.st.dim.Render(arrow + " " + hint)}, width)
 	if !item.open {
 		return head
 	}
 	lines := []string{head}
-	for _, ln := range strings.Split(wrapWith(v.st.thinking, item.text, max(1, width-len(resultGutter(v.st.glyphs)))), "\n") {
+	for _, ln := range strings.Split(wrapWith(display.st.thinking, item.text, max(1, width-len(resultGutter(display.st.glyphs)))), "\n") {
 		lines = append(lines, "    "+ln)
 	}
 	return strings.Join(lines, "\n")
 }
 
-func busyLine(width int, st uiStyles, spin, elapsedText, tokens, cost string) string {
+func busyLine(width int, styles uiStyles, spin, elapsedText, tokens, cost string) string {
 	parts := []string{elapsedText}
 	if tokens != "" {
 		parts = append(parts, "↑ "+tokens)
@@ -285,6 +287,6 @@ func busyLine(width int, st uiStyles, spin, elapsedText, tokens, cost string) st
 	if cost != "" {
 		parts = append(parts, cost)
 	}
-	left := st.spinner.Render(spin) + " " + st.accent.Render(workingVerb) + "  " + st.dim.Render(strings.Join(parts, " · "))
-	return spreadRight([]string{left}, []string{st.dim.Render("Échap interrompre")}, width)
+	left := styles.spinner.Render(spin) + " " + styles.accent.Render(workingVerb) + "  " + styles.dim.Render(strings.Join(parts, " · "))
+	return spreadRight([]string{left}, []string{styles.dim.Render("Échap interrompre")}, width)
 }

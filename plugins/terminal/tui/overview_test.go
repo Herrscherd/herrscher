@@ -45,7 +45,7 @@ func TestBoardGroupsSessionsByState(t *testing.T) {
 		}
 	}
 	working, waiting, done := strings.Index(view, "gamma"), strings.Index(view, "beta"), strings.Index(view, "alpha")
-	if !(working >= 0 && working < waiting && waiting < done) {
+	if working < 0 || working >= waiting || waiting >= done {
 		t.Fatalf("groups must read working, waiting, done: gamma=%d beta=%d alpha=%d", working, waiting, done)
 	}
 }

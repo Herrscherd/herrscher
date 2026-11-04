@@ -18,45 +18,52 @@ func (m *model) renderTranscript(tab *tab, width int) string {
 }
 
 func (m *model) layoutTranscript(tab *tab, width int) transcriptLayout {
-	if width < 1 {
-		width = 1
-	}
+	width = max(width, 1)
 	now := time.Now()
 	treeOwner := lastAgentToolIndex(tab.entries)
-	var lines []string
-	var owners []uint64
-	var turns []int
+	var built transcriptBuilder
 	for index := range tab.entries {
 		item := m.enrichEntry(tab, index, now)
-		if index > 0 && (item.role == roleYou || item.role == roleAgent) {
-			lines = append(lines, "")
-			owners = append(owners, 0)
+		isTurn := item.role == roleYou || item.role == roleAgent
+		if index > 0 && isTurn {
+			built.addBlank()
 		}
-		if item.role == roleYou || item.role == roleAgent {
-			turns = append(turns, len(lines))
+		if isTurn {
+			built.turns = append(built.turns, len(built.lines))
 		}
 		if m.foldCode && item.role == roleAgent && !item.streaming {
 			item.text = foldCodeBlocks(item.text, m.st.glyphs)
 		}
-		for _, ln := range strings.Split(renderEntry(item, width, m.displayMode()), "\n") {
-			lines = append(lines, ln)
-			owners = append(owners, item.id)
-		}
+		built.add(strings.Split(renderEntry(item, width, m.displayMode()), "\n"), item.id)
 		if index == treeOwner && len(tab.trail) > 0 {
 			rows := subagentRows(tab.trail, now, width-lipgloss.Width(blockIndent), m.displayMode())
-			for _, ln := range strings.Split(indent(strings.Join(rows, "\n")), "\n") {
-				lines = append(lines, ln)
-				owners = append(owners, item.id)
-			}
+			built.add(strings.Split(indent(strings.Join(rows, "\n")), "\n"), item.id)
 		}
 	}
-	m.links = findLinks(lines)
+	m.links = findLinks(built.lines)
 	m.clampLink()
 	return transcriptLayout{
-		text:   strings.Join(applyLinks(lines, m.links, m.caps, m.linkIdx, m.st), "\n"),
-		owners: owners,
-		turns:  turns,
+		text:   strings.Join(applyLinks(built.lines, m.links, m.caps, m.linkIdx, m.st), "\n"),
+		owners: built.owners,
+		turns:  built.turns,
 	}
+}
+
+type transcriptBuilder struct {
+	lines  []string
+	owners []uint64
+	turns  []int
+}
+
+func (b *transcriptBuilder) add(lines []string, owner uint64) {
+	for _, line := range lines {
+		b.lines = append(b.lines, line)
+		b.owners = append(b.owners, owner)
+	}
+}
+
+func (b *transcriptBuilder) addBlank() {
+	b.add([]string{""}, 0)
 }
 
 func (m *model) clampLink() {
@@ -154,13 +161,14 @@ func renderAgent(item entry, width int, view view) string {
 		text = renderMarkdown(item.text, body, view)
 	}
 	lines := strings.Split(text, "\n")
-	for i := range lines {
+	for index := range lines {
 		prefix := strings.Repeat(" ", lipgloss.Width(lead))
-		if i == 0 {
+		if index == 0 {
 			prefix = view.st.text.Render(lead)
 		}
-		lines[i] = prefix + lines[i]
+		lines[index] = prefix + lines[index]
 	}
+
 	out := indent(strings.Join(lines, "\n"))
 	if item.preview != "" {
 		out += "\n" + item.preview
@@ -168,22 +176,22 @@ func renderAgent(item entry, width int, view view) string {
 	return out
 }
 
-func block(st uiStyles, style lipgloss.Style, title, body string, width int) string {
-	return st.titledRule(style, title, width) + "\n" +
+func block(styles uiStyles, style lipgloss.Style, title, body string, width int) string {
+	return styles.titledRule(style, title, width) + "\n" +
 		indent(body) + "\n" +
-		st.rule(style, width)
+		styles.rule(style, width)
 }
 
-func renderYou(item entry, width int, v view) string {
-	lead := v.st.glyphs.userBar + " "
+func renderYou(item entry, width int, display view) string {
+	lead := display.st.glyphs.userBar + " "
 	body := width - lipgloss.Width(blockIndent) - lipgloss.Width(lead)
-	bar := v.st.accent.Render(lead)
+	bar := display.st.accent.Render(lead)
 	var lines []string
-	for _, ln := range strings.Split(wrapWith(v.st.text, item.text, body), "\n") {
+	for _, ln := range strings.Split(wrapWith(display.st.text, item.text, body), "\n") {
 		lines = append(lines, bar+ln)
 	}
 	out := indent(strings.Join(lines, "\n"))
-	if chips := chipRow(item.attachments, v.st); chips != "" {
+	if chips := chipRow(item.attachments, display.st); chips != "" {
 		out += "\n" + indent(chips)
 	}
 	if item.preview != "" {

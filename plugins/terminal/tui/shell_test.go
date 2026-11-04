@@ -53,12 +53,12 @@ func TestShellResultEntersSessionContextOnce(t *testing.T) {
 func TestShellErrorIsShownWithoutContext(t *testing.T) {
 	m, _ := queueFixture(t)
 	tb := m.tabs["a"]
-	m.handleShellResult(shellResultMsg{channel: "a", command: "rm", err: errShellTest{}})
+	m.handleShellResult(shellResultMsg{channel: "a", command: "rm", err: shellTestError{}})
 	if tb.shellContext != "" {
 		t.Fatal("a failed command must not enter the session context")
 	}
 }
 
-type errShellTest struct{}
+type shellTestError struct{}
 
-func (errShellTest) Error() string { return "refusé" }
+func (shellTestError) Error() string { return "refusé" }

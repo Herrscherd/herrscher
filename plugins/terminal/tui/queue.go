@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	eventStatusName     = "status"
 	draftPreviewDivisor = 2
 	queueEndOfTurn      = "fin du tour"
 	queueAfterTool      = "après le prochain outil"
@@ -58,7 +57,7 @@ func (m *model) flushQueue(current *tab, event string) tea.Cmd {
 	switch {
 	case !current.busy:
 		index = 0
-	case event == eventStatusName:
+	case event == eventStatus:
 		index = steerIndex(current.queue)
 	}
 	if index < 0 {

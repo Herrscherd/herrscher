@@ -155,7 +155,8 @@ func (h *Handler) checkModel(vendor, modelID string) error {
 	return h.validateModel(vendor, modelID)
 }
 
-func (h *Handler) checkAccount(vendor, profile string) error {
+// CheckAccount refuses a profile that the wired account validator does not know.
+func (h *Handler) CheckAccount(vendor, profile string) error {
 	if profile == "" || vendor == "" || h.validateAccount == nil {
 		return nil
 	}

@@ -3,14 +3,12 @@ package bridge
 import (
 	"context"
 
-	"github.com/Herrscherd/herrscher/core/internal/lease"
-
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 )
 
 func runCompact(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, ctrl *turnController, event contracts.Event) {
-	compactor, ok := lease.Unwrap(backend).(contracts.Compactor)
+	compactor, ok := compactorOf(backend)
 	if !ok {
 		sink.Emit(compactwire.NoPort())
 		return

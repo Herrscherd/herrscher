@@ -3,6 +3,8 @@ package manager
 import (
 	"errors"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 func TestSessionAccountPriorityIsSessionThenAgentThenDefault(t *testing.T) {
@@ -27,16 +29,33 @@ func TestAccountGateRefusesAnUnknownProfileBeforeCreate(t *testing.T) {
 		}
 		return nil
 	}}
-	if err := h.checkAccount("claude", "ghost"); err == nil {
+	if err := h.CheckAccount("claude", "ghost"); err == nil {
 		t.Fatal("checkAccount accepted an unknown profile")
 	}
-	if err := h.checkAccount("claude", "perso"); err != nil {
+	if err := h.CheckAccount("claude", "perso"); err != nil {
 		t.Fatalf("checkAccount refused a known profile: %v", err)
 	}
-	if err := h.checkAccount("claude", ""); err != nil {
+	if err := h.CheckAccount("claude", ""); err != nil {
 		t.Fatalf("checkAccount refused the vendor default: %v", err)
 	}
-	if err := h.checkAccount("", "ghost"); err != nil {
+	if err := h.CheckAccount("", "ghost"); err != nil {
 		t.Fatalf("checkAccount without a known vendor = %v, want the check left to the spawn", err)
+	}
+}
+
+func TestCreateRefusesAnUnknownAccountThroughParseCreateRequest(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "forum")
+	st.Home = state.HomeRef{ID: "home", Type: "forum"}
+	h.SetAccountValidator(func(_, profile string) error {
+		if profile == "ghost" {
+			return errors.New("no such profile")
+		}
+		return nil
+	})
+	if _, err := h.parseCreateRequest(t.Context(), args("name", "control", "vendor", "claude", "account", "perso")); err != nil {
+		t.Fatalf("known account refused: %v", err)
+	}
+	if _, err := h.parseCreateRequest(t.Context(), args("name", "ghost-session", "vendor", "claude", "account", "ghost")); err == nil {
+		t.Fatal("parseCreateRequest accepted an unknown account")
 	}
 }

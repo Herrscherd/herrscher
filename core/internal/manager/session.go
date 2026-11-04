@@ -495,7 +495,7 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	}
 	base, _ := input.Lookup("base")
 	explicitAccount, _ := input.Lookup("account")
-	if err := h.checkAccount(h.vendorOf(runtime), explicitAccount); err != nil {
+	if err := h.CheckAccount(h.vendorOf(runtime), explicitAccount); err != nil {
 		return createRequest{}, err
 	}
 	return createRequest{

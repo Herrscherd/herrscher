@@ -2,6 +2,9 @@ package host
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -11,6 +14,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 const quietWindow = 150 * time.Millisecond
@@ -343,7 +347,7 @@ func TestNoPortWarningIsWrittenOnce(t *testing.T) {
 
 func TestCompactStackRefusesDuplicateStages(t *testing.T) {
 	for _, names := range [][]string{{contracts.CompactStageBackend, contracts.CompactStageBackend}, {"stage", "stage"}} {
-		if _, err := newCompactionPolicy(context.Background(), nil, names); err == nil {
+		if _, err := newCompactionPolicy(context.Background(), nil, names, nil); err == nil {
 			t.Fatalf("newCompactionPolicy(%v) accepted a stage listed twice", names)
 		}
 	}
@@ -379,7 +383,7 @@ func TestCompactionPolicyTakesCodexFromItsManifest(t *testing.T) {
 			return seedBackend{}, nil
 		},
 	})
-	policy, err := newCompactionPolicy(context.Background(), nil, nil)
+	policy, err := newCompactionPolicy(context.Background(), nil, nil, nil)
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -388,5 +392,81 @@ func TestCompactionPolicyTakesCodexFromItsManifest(t *testing.T) {
 	}
 	if policy.supports("cursor") {
 		t.Fatal("cursor declares no Compactor but the policy accepts it")
+	}
+}
+
+func TestContextLimitTableMovesTheAutomaticThreshold(t *testing.T) {
+	t.Setenv(contextwindow.EnvVar(), "")
+	policy := compactPolicy(50)
+	policy.backends["codex"] = true
+	policy.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
+	f := newCompactFixture(t, "codex", policy)
+	openTurn(t, f, 150_000)
+	if compactFrameOrQuiet(t, f, measuredAnswer(20_000)) {
+		t.Fatal("automatic compaction ran at 37 percent of the 400000 window, threshold 50")
+	}
+}
+
+func TestNewCompactionPolicyEnvWinsOverContextLimits(t *testing.T) {
+	t.Setenv(contextwindow.EnvVar(), "")
+	policy, err := newCompactionPolicy(context.Background(), nil, nil, map[string]int{"codex": 400_000})
+	if err != nil {
+		t.Fatalf("newCompactionPolicy: %v", err)
+	}
+	if got := policy.limits.Limit("codex"); got != 400_000 {
+		t.Fatalf("Limit(codex) = %d, want the table's 400000", got)
+	}
+	t.Setenv(contextwindow.EnvVar(), "12345")
+	policy, err = newCompactionPolicy(context.Background(), nil, nil, map[string]int{"codex": 400_000})
+	if err != nil {
+		t.Fatalf("newCompactionPolicy: %v", err)
+	}
+	if got := policy.limits.Limit("codex"); got != 12345 {
+		t.Fatalf("Limit(codex) = %d, want the env's 12345", got)
+	}
+}
+
+func TestUnknownContextLimitVendorIsWarnedAboutOnce(t *testing.T) {
+	var warned []string
+	warn := func(format string, args ...any) { warned = append(warned, fmt.Sprintf(format, args...)) }
+	warnUnknownContextLimits(warn, map[string]int{"codex": 400_000, "Claude": 300_000, "ghost": 1}, []string{"codex", "claude"})
+	if len(warned) != 1 || !strings.Contains(warned[0], `"ghost"`) {
+		t.Fatalf("warnings = %q, want one line naming the unknown vendor ghost", warned)
+	}
+}
+
+func TestSessionInfosCarryTheResolvedWindowPerVendor(t *testing.T) {
+	st, err := state.LoadState(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if err = st.AddSession(state.Session{Name: "codexA", ChannelID: "c1", Vendor: "codex"}); err != nil {
+		t.Fatalf("AddSession: %v", err)
+	}
+	if err = st.AddSession(state.Session{Name: "claudeA", ChannelID: "c2", Vendor: "claude"}); err != nil {
+		t.Fatalf("AddSession: %v", err)
+	}
+	policy := compactPolicy(50)
+	policy.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
+	infos := sessionInfos(st, t.TempDir(), policy)
+	byName := make(map[string]contracts.SessionInfo, len(infos))
+	for _, info := range infos {
+		byName[info.Name] = info
+	}
+	if got := byName["codexA"].ContextWindow; got != 400_000 {
+		t.Fatalf("codex session ContextWindow = %d, want the table's 400000", got)
+	}
+	if got := byName["claudeA"].ContextWindow; got != 200_000 {
+		t.Fatalf("claude session ContextWindow = %d, want the built-in 200000", got)
+	}
+	if got := byName["codexA"].AutoCompactPercent; got != 50 {
+		t.Fatalf("codex session AutoCompactPercent = %d, want 50", got)
+	}
+	raw, err := json.Marshal(infos)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"ContextWindow":400000`) {
+		t.Fatalf("session info wire JSON lacks the window: %s", raw)
 	}
 }

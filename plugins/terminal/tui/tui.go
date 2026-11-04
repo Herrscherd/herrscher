@@ -29,6 +29,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/config"
+	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
@@ -244,6 +245,7 @@ func spinTick(d time.Duration) tea.Cmd {
 
 type model struct {
 	ctx           context.Context
+	limits        contextwindow.Limits
 	st            uiStyles
 	md            *markdownRenderer
 	keys          *keyLog
@@ -1385,20 +1387,26 @@ func OpenOn(session, text string) Option {
 	return func(m *model) { m.openSession, m.openText = session, text }
 }
 
-// Run starts the TUI bound to the given gateway backend, blocking until the user
-// quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
-// cleanly.
-func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) (runErr error) {
+func newRunModel(ctx context.Context, backend Backend) *model {
 	model := newModel(backend)
 	model.ctx = ctx
-	defer func() {
-		runErr = errors.Join(runErr, model.releaseDrafts())
-	}()
 	model.loadTheme(filepath.Dir(config.DefaultPath()), lipgloss.HasDarkBackground)
+	model.loadContextLimits(config.DefaultPath(), os.Getenv)
 	model.keys = &keyLog{}
 	model.bar.file = model.terminalConfigPath()
 	model.bar.config = loadStatuslineConfig(model.bar.file)
 	model.bar.restoreFields(model.bar.config.Fields)
+	return model
+}
+
+// Run starts the TUI bound to the given gateway backend, blocking until the user
+// quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
+// cleanly.
+func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) (runErr error) {
+	model := newRunModel(ctx, backend)
+	defer func() {
+		runErr = errors.Join(runErr, model.releaseDrafts())
+	}()
 	if err := sweepDraftsAtStart(); err != nil {
 		model.flash = "brouillons orphelins non supprimés : " + err.Error()
 	}

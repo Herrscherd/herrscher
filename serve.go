@@ -34,6 +34,12 @@ func or(first, second string) string {
 	return second
 }
 
+func withCompactionConfig(opts *host.Options, cfg config.Config) {
+	opts.CompactPercent = cfg.CompactAt
+	opts.CompactStack = cfg.CompactStack
+	opts.ContextLimits = cfg.ContextLimits
+}
+
 func runServe(ctx context.Context, args []string, open *openWindow) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.String("config", config.DefaultPath(), "path to the declarative config.json (optional)")
@@ -79,22 +85,21 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	}
 
 	opts := host.Options{
-		StatePath:      *statePath,
-		DefaultCmd:     *defaultCmd,
-		HealthAddr:     *healthAddr,
-		StatusChannel:  *statusChannel,
-		InstanceID:     *instanceID,
-		Owner:          owner,
-		Home:           home,
-		Workspace:      cfg.Workspace,
-		Source:         cfg.Source,
-		CompactPercent: cfg.CompactAt,
-		CompactStack:   cfg.CompactStack,
-
+		StatePath:           *statePath,
+		DefaultCmd:          *defaultCmd,
+		HealthAddr:          *healthAddr,
+		StatusChannel:       *statusChannel,
+		InstanceID:          *instanceID,
+		Owner:               owner,
+		Home:                home,
+		Workspace:           cfg.Workspace,
+		Source:              cfg.Source,
 		RemoteCategories:    remoteCategories(),
 		ForegroundBound:     foreground != nil,
 		ContributedCommands: extra,
 	}
+
+	withCompactionConfig(&opts, cfg)
 
 	openOnForeground(open, foreground)
 	return runHubForeground(ctx, *statePath, gws, closers, foreground, opts)

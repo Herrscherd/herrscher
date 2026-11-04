@@ -4,7 +4,6 @@ package contextwindow
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -44,15 +43,40 @@ func CheckOverride(raw string) error {
 	return nil
 }
 
-// Limit returns the context window size for a vendor, HERRSCHER_CONTEXT_LIMIT overriding it when positive.
-func Limit(vendor string) int {
-	if raw := os.Getenv(envLimit); raw != "" {
-		if n, err := parseOverride(raw); err == nil {
-			return n
+// Limits is the set of window sizes one process answers with: the environment
+// override, then the per-vendor table of config.json, then the built-in sizes.
+// The zero value answers with the built-in sizes alone.
+type Limits struct {
+	override  int
+	perVendor map[string]int
+}
+
+// NewLimits builds the window sizes from the raw HERRSCHER_CONTEXT_LIMIT value and
+// the contextLimits table. An empty or invalid environment value is ignored, as
+// CheckOverride reports it; the table is validated when config.json is loaded.
+func NewLimits(envRaw string, perVendor map[string]int) Limits {
+	limits := Limits{perVendor: make(map[string]int, len(perVendor))}
+	if envRaw != "" {
+		if n, err := parseOverride(envRaw); err == nil {
+			limits.override = n
 		}
 	}
-	if n, ok := vendorLimit(vendor); ok {
-		return n
+	for vendor, size := range perVendor {
+		limits.perVendor[strings.ToLower(vendor)] = size
+	}
+	return limits
+}
+
+// Limit returns the context window size for a vendor.
+func (l Limits) Limit(vendor string) int {
+	if l.override > 0 {
+		return l.override
+	}
+	if size, ok := l.perVendor[strings.ToLower(vendor)]; ok {
+		return size
+	}
+	if size, ok := vendorLimit(vendor); ok {
+		return size
 	}
 	return fallback
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -107,5 +108,56 @@ func TestLoadRefusesDuplicateCompactStack(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("Load accepted a compactStack listing backend twice")
+	}
+}
+
+func TestValidateContextLimits(t *testing.T) {
+	cases := []struct {
+		name    string
+		limits  map[string]int
+		wantErr bool
+	}{
+		{name: "absent table is accepted", limits: nil},
+		{name: "positive sizes are accepted", limits: map[string]int{"codex": 400_000, "claude": 1}},
+		{name: "zero is refused", limits: map[string]int{"codex": 0}, wantErr: true},
+		{name: "negative is refused", limits: map[string]int{"codex": -1}, wantErr: true},
+		{name: "empty vendor is refused", limits: map[string]int{"": 400_000}, wantErr: true},
+		{name: "blank vendor is refused", limits: map[string]int{"  ": 400_000}, wantErr: true},
+		{name: "one vendor in two cases is refused", limits: map[string]int{"codex": 400_000, "Codex": 300_000}, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := ValidateContextLimits(tc.limits); (err != nil) != tc.wantErr {
+				t.Fatalf("ValidateContextLimits(%v) = %v, want error %t", tc.limits, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestLoadRefusesInvalidContextLimitNamingTheVendor(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"contextLimits": {"codex": 0}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load accepted a zero window size")
+	}
+	if !strings.Contains(err.Error(), `"codex"`) {
+		t.Fatalf("Load error %q does not name the vendor", err)
+	}
+}
+
+func TestLoadReadsContextLimits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"contextLimits": {"codex": 400000}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ContextLimits["codex"] != 400_000 {
+		t.Fatalf("ContextLimits = %v, want codex 400000", cfg.ContextLimits)
 	}
 }

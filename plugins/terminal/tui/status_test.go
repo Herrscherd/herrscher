@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
@@ -51,18 +53,60 @@ func TestContextOccupancyTakesTheTotalsOfAOneMessageTurn(t *testing.T) {
 }
 
 func TestContextLimitFollowsTheVendorAndTheEnv(t *testing.T) {
-	if got := contextLimit("claude"); got != 200_000 {
+	m := newTestModel()
+	if got := m.contextLimit("claude"); got != 200_000 {
 		t.Errorf("claude limit = %d", got)
 	}
-	if got := contextLimit("codex"); got != 200_000 {
+	if got := m.contextLimit("codex"); got != 200_000 {
 		t.Errorf("codex limit = %d", got)
 	}
-	if got := contextLimit("nobody-ships-this"); got != contextwindow.Fallback() {
+	if got := m.contextLimit("nobody-ships-this"); got != contextwindow.Fallback() {
 		t.Errorf("unknown vendor must fall back: %d", got)
 	}
-	t.Setenv(contextwindow.EnvVar(), "12345")
-	if got := contextLimit("claude"); got != 12345 {
+	m.limits = contextwindow.NewLimits("12345", nil)
+	if got := m.contextLimit("claude"); got != 12345 {
 		t.Errorf("the env must win: %d", got)
+	}
+}
+
+func TestContextGaugeFollowsTheContextLimitsTable(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "codex"}}}
+	m := newModel(f)
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
+	m.active = "c"
+	m.ensureTab("c").measureContext(contracts.Event{TokensIn: 100_000})
+	if got := contextPercent(100_000, m.contextLimit("codex")); got != "25%" {
+		t.Fatalf("contextPercent with the table's 400000 window = %q, want 25%%", got)
+	}
+	m.openContext()
+	if view := ansi.Strip(m.contextView()); !strings.Contains(view, "400k") {
+		t.Fatalf("the gauge must show the table's 400k window:\n%s", view)
+	}
+}
+
+func TestLoadContextLimitsReadsTheTableAndFlagsAnInvalidFile(t *testing.T) {
+	dir := t.TempDir()
+	valid := filepath.Join(dir, "valid.json")
+	if err := os.WriteFile(valid, []byte(`{"contextLimits": {"codex": 400000}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := newTestModel()
+	m.loadContextLimits(valid, func(string) string { return "" })
+	if got := m.contextLimit("codex"); got != 400_000 {
+		t.Fatalf("loaded contextLimits: codex = %d, want 400000", got)
+	}
+	invalid := filepath.Join(dir, "invalid.json")
+	if err := os.WriteFile(invalid, []byte(`{"contextLimits": {"codex": -1}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m = newTestModel()
+	m.loadContextLimits(invalid, func(string) string { return "" })
+	if got := m.contextLimit("codex"); got != 200_000 {
+		t.Fatalf("an invalid file must leave the default window, got %d", got)
+	}
+	if !strings.Contains(m.flash, "contextLimits") {
+		t.Fatalf("flash = %q, want the invalid contextLimits named", m.flash)
 	}
 }
 
@@ -323,5 +367,42 @@ func TestGaugeFullAndEmptyStayDistinctInColor(t *testing.T) {
 	overview := ansi.Strip(m.gaugeCells(0.6, boardGaugeCells, func(style lipgloss.Style) lipgloss.Style { return style }))
 	if strings.Count(overview, glyphs.gaugeEmpty) == 0 || strings.Count(overview, glyphs.gaugeFull) == 0 {
 		t.Errorf("the overview gauge must show both cell kinds in color, got %q", overview)
+	}
+}
+
+func TestRunModelReadsTheConfigFileIntoTheGauge(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HERRSCHER_STATE_DIR", dir)
+	t.Setenv(contextwindow.EnvVar(), "")
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"contextLimits": {"codex": 400000}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "codex"}}}
+	m := newRunModel(context.Background(), f)
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m.active = "c"
+	m.ensureTab("c").measureContext(contracts.Event{TokensIn: 184_000})
+	if got := contextPercent(184_000, m.contextLimit("codex")); got != "46%" {
+		t.Fatalf("contextPercent with the config.json window = %q, want 46%%", got)
+	}
+	m.openContext()
+	if view := ansi.Strip(m.contextView()); !strings.Contains(view, "400k") {
+		t.Fatalf("the gauge must show the config.json window 400k:\n%s", view)
+	}
+}
+
+func TestDaemonContextWindowWinsOverTheLocalTable(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "codex", ContextWindow: 368_000}}}
+	m := newModel(f)
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
+	m.active = "c"
+	m.ensureTab("c").measureContext(contracts.Event{TokensIn: 184_000})
+	if used, limit := m.contextFigures(); used != 184_000 || limit != 368_000 {
+		t.Fatalf("contextFigures = %d/%d, want the daemon's 184000/368000", used, limit)
+	}
+	m.openContext()
+	if view := ansi.Strip(m.contextView()); !strings.Contains(view, "368k") || strings.Contains(view, "400k") {
+		t.Fatalf("the gauge must show the daemon's 368k window, not the local 400k:\n%s", view)
 	}
 }

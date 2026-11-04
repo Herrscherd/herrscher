@@ -18,6 +18,9 @@ func (m *model) openStatusline() tea.Cmd {
 
 func (m *model) closeStatusline() {
 	m.bar.open = false
+	if err := saveStatuslineChoice(m.bar.file, &m.bar); err != nil {
+		m.flash = "terminal.toml non écrit : " + err.Error()
+	}
 	m.relayout()
 }
 

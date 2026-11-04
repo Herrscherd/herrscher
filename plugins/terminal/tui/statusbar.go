@@ -100,6 +100,7 @@ type barState struct {
 	open       bool
 	script     scriptRun
 	git        gitHead
+	file       string
 }
 
 func newBarState() barState {

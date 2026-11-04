@@ -35,6 +35,7 @@ type statuslineConfig struct {
 	Source   string
 	Command  string
 	Interval time.Duration
+	Fields   []string
 }
 
 func defaultStatuslineConfig() statuslineConfig {
@@ -62,21 +63,9 @@ func loadStatuslineConfig(path string) statuslineConfig {
 }
 
 func parseStatuslineSection(text string, cfg statuslineConfig) statuslineConfig {
-	section := ""
-	for _, raw := range strings.Split(text, "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if strings.HasPrefix(line, "[") {
-			section = tomlSectionName(line)
-			continue
-		}
-		if section != statuslineSection {
-			continue
-		}
-		if key, value, ok := tomlKeyValue(line); ok {
-			cfg = applyStatuslineKey(cfg, key, value)
+	for _, entry := range scanTomlEntries(strings.Split(text, "\n")) {
+		if entry.section == statuslineSection {
+			cfg = applyStatuslineKey(cfg, entry.key, entry.value)
 		}
 	}
 	return cfg
@@ -88,18 +77,6 @@ func tomlSectionName(line string) string {
 		return ""
 	}
 	return strings.TrimSpace(strings.Trim(line[:end], "[ "))
-}
-
-func tomlKeyValue(line string) (string, string, bool) {
-	key, rest, ok := strings.Cut(line, "=")
-	if !ok {
-		return "", "", false
-	}
-	value, ok := tomlValue(strings.TrimSpace(rest))
-	if !ok {
-		return "", "", false
-	}
-	return strings.TrimSpace(key), value, true
 }
 
 func tomlValue(raw string) (string, bool) {
@@ -121,19 +98,37 @@ func tomlValue(raw string) (string, bool) {
 }
 
 func tomlBasicString(raw string) (string, bool) {
+	end := basicStringEnd(raw)
+	if end < 0 {
+		return "", false
+	}
+	value, err := strconv.Unquote(raw[:end+1])
+	return value, err == nil
+}
+
+func basicStringEnd(raw string) int {
 	for i := 1; i < len(raw); i++ {
 		switch raw[i] {
 		case '\\':
 			i++
 		case '"':
-			value, err := strconv.Unquote(raw[:i+1])
-			return value, err == nil
+			return i
 		}
 	}
-	return "", false
+	return -1
 }
 
-func applyStatuslineKey(cfg statuslineConfig, key, value string) statuslineConfig {
+func applyStatuslineKey(cfg statuslineConfig, key, raw string) statuslineConfig {
+	if key == statuslineFieldsKey {
+		if fields, ok := tomlStringArray(raw); ok {
+			cfg.Fields = fields
+		}
+		return cfg
+	}
+	value, ok := tomlValue(raw)
+	if !ok {
+		return cfg
+	}
 	switch key {
 	case "source":
 		if value == barSourceBuiltin || value == barSourceScript {

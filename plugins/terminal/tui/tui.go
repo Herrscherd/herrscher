@@ -1149,7 +1149,9 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	model := newModel(backend)
 	model.ctx = ctx
 	model.keys = &keyLog{}
-	model.bar.config = loadStatuslineConfig(statuslineConfigFile())
+	model.bar.file = statuslineConfigFile()
+	model.bar.config = loadStatuslineConfig(model.bar.file)
+	model.bar.restoreFields(model.bar.config.Fields)
 	for _, opt := range opts {
 		opt(model)
 	}

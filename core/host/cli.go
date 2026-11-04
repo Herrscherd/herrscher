@@ -43,7 +43,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
 		agents.SetUserBudget(n)
 	}
-	hdl := newManagerHandler(deps, options, hostState, sup, worktrees, updater, agents)
+	hdl := newManagerHandler(deps, options, partDir, hostState, sup, worktrees, updater, agents)
 	wireManagerHandler(ctx, hdl, hostState, instID, worktrees, sessions)
 	wireSupervisor(sup, hostState, instID)
 	seedCoord := &coordinatorSlot{}
@@ -105,8 +105,8 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 	return nil
 }
 
-func newManagerHandler(deps Deps, options Options, hostState *state.State, sup *supervisor.Supervisor, worktrees *worktree.Worktreer, updater serviceUpdater, agents *agent.Store) *manager.Handler {
-	return manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, filepath.Dir(options.StatePath), options.DefaultGateways, validateProfileChoice)
+func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store) *manager.Handler {
+	return manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice)
 }
 
 func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable) {

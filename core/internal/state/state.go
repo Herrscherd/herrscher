@@ -486,6 +486,23 @@ func (s *State) SetCompactPercent(name string, percent *int) (bool, error) {
 	return false, nil
 }
 
+// SetAccount sets a session account profile, dropping its resume token when fresh; false when no session matches.
+func (s *State) SetAccount(name, account string, fresh bool) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name != name {
+			continue
+		}
+		s.Sessions[idx].Account = account
+		if fresh {
+			s.Sessions[idx].ResumeToken = ""
+		}
+		return true, s.saveLocked()
+	}
+	return false, nil
+}
+
 // SetBackendTarget re-points a live session's backend: it rewrites Vendor and the
 // opaque Cmd string (which carries model+effort) and clears the resume token,
 // which is backend-specific and meaningless once the vendor/model changes. The

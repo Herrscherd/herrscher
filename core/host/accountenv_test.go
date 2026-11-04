@@ -2,8 +2,8 @@ package host
 
 import (
 	"context"
-	"errors"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +11,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/config"
+	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
 )
 
@@ -104,12 +105,99 @@ func TestGatewayRouteIgnoresTheProfile(t *testing.T) {
 	}
 }
 
-func TestCodexProfileIsRefusedThroughTheProxy(t *testing.T) {
+func TestCodexProfileGoesThroughTheProxyInItsOwnHome(t *testing.T) {
 	root, _ := profileRoot(t, contracts.VendorCodex, "perso")
 	keys := keysWith(t, "openai", map[string]string{"KEY_MAIN": "sk-real"})
-	_, err := sessionEnv(BackendRequest{AccountRoot: root, Account: "perso", Keys: keys}, contracts.VendorCodex, modelRoute{})
-	if !errors.Is(err, ErrAccountProxyCodex) {
-		t.Fatalf("sessionEnv = %v, want ErrAccountProxyCodex", err)
+	env, err := sessionEnv(BackendRequest{AccountRoot: root, Account: "perso", Keys: keys}, contracts.VendorCodex, modelRoute{})
+	if err != nil {
+		t.Fatalf("sessionEnv: %v", err)
+	}
+	home := filepath.Join(root, contracts.VendorCodex, "perso", codexProxyHomeDir)
+	if env[contracts.EnvCodexHome] != home {
+		t.Fatalf("CODEX_HOME = %q, want %q", env[contracts.EnvCodexHome], home)
+	}
+	if _, ok := env[contracts.EnvOpenAIBaseURL]; ok {
+		t.Fatal("OPENAI_BASE_URL set: the codex backend would replace the profile home")
+	}
+	if !strings.HasPrefix(env[codexProxyGrantEnv], "hsk_") {
+		t.Fatalf("%s = %q, want a proxy grant", codexProxyGrantEnv, env[codexProxyGrantEnv])
+	}
+	written, err := os.ReadFile(filepath.Join(home, codexProxyConfigFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(written), `base_url = "http://127.0.0.1:`) || !strings.Contains(string(written), `env_key = "HERRSCHER_KEY_PROXY_GRANT"`) {
+		t.Fatalf("codex proxy config = %s", written)
+	}
+}
+
+func TestGatewayRouteGoesThroughTheProxyWhenEnabled(t *testing.T) {
+	keys := keysWith(t, "anthropic", map[string]string{"KEY_MAIN": "sk-ant-real"})
+	getenv := func(name string) string {
+		return map[string]string{EnvGatewayURL: "https://gw.example/anthropic", EnvGatewayToken: "nbx-secret-token"}[name]
+	}
+	entry := CatalogEntry{ID: "neublox-claude", Vendor: contracts.VendorClaude, Route: contracts.RouteGateway}
+	env, err := spawnEnvVia(entry, getenv, keys)
+	if err != nil {
+		t.Fatalf("spawnEnvVia: %v", err)
+	}
+	if !strings.HasPrefix(env[contracts.EnvAnthropicBaseURL], "http://127.0.0.1:") {
+		t.Fatalf("base URL = %q, want the loopback proxy", env[contracts.EnvAnthropicBaseURL])
+	}
+	if !strings.HasPrefix(env[contracts.EnvAnthropicAPIKey], "hsk_") {
+		t.Fatalf("API key = %q, want a proxy grant", env[contracts.EnvAnthropicAPIKey])
+	}
+	for _, value := range env {
+		if strings.Contains(value, "nbx-secret-token") {
+			t.Fatal("the Neublox token reached the vendor child env")
+		}
+	}
+}
+
+func TestGatewayRouteWithoutProxyKeepsTheGatewayPair(t *testing.T) {
+	getenv := func(name string) string {
+		return map[string]string{EnvGatewayURL: "https://gw.example/anthropic", EnvGatewayToken: "nbx-secret-token"}[name]
+	}
+	entry := CatalogEntry{ID: "neublox-claude", Vendor: contracts.VendorClaude, Route: contracts.RouteGateway}
+	env, err := spawnEnvVia(entry, getenv, nil)
+	if err != nil {
+		t.Fatalf("spawnEnvVia: %v", err)
+	}
+	if env[contracts.EnvAnthropicBaseURL] != "https://gw.example/anthropic" || env[contracts.EnvAnthropicAPIKey] != "nbx-secret-token" {
+		t.Fatalf("gateway env = %v, want the gateway pair", env)
+	}
+}
+
+func TestAccountChangeIsBlockedOnlyWithAConversationUnderAnotherAccount(t *testing.T) {
+	cases := []struct {
+		name    string
+		sess    state.Session
+		profile string
+		fresh   bool
+		blocked bool
+	}{
+		{"no conversation yet", state.Session{Account: "perso"}, "pro", false, false},
+		{"same account", state.Session{Account: "perso", ResumeToken: "t"}, "perso", false, false},
+		{"conversation, other account", state.Session{Account: "perso", ResumeToken: "t"}, "pro", false, true},
+		{"conversation, fresh", state.Session{Account: "perso", ResumeToken: "t"}, "pro", true, false},
+	}
+	for _, tc := range cases {
+		if got := accountChangeBlocked(tc.sess, tc.profile, tc.fresh); got != tc.blocked {
+			t.Fatalf("%s: blocked = %v, want %v", tc.name, got, tc.blocked)
+		}
+	}
+}
+
+func TestResumingUnderFollowsOnlySessionsWithoutAnAccount(t *testing.T) {
+	sessions := []state.Session{
+		{Name: "a", Vendor: contracts.VendorClaude, ResumeToken: "t"},
+		{Name: "b", Vendor: contracts.VendorClaude, Account: "perso", ResumeToken: "t"},
+		{Name: "c", Vendor: contracts.VendorClaude},
+		{Name: "d", Vendor: contracts.VendorCodex, ResumeToken: "t"},
+	}
+	got := resumingUnder(sessions, contracts.VendorClaude)
+	if len(got) != 1 || got[0] != "a" {
+		t.Fatalf("resumingUnder = %v, want [a]", got)
 	}
 }
 

@@ -30,6 +30,11 @@ type Secret struct {
 	value string
 }
 
+// NewSecret wraps a key obtained in code, such as the gateway token, under a name for logs.
+func NewSecret(name, value string) Secret {
+	return Secret{name: name, value: value}
+}
+
 // Name returns the key name given in the config.
 func (s Secret) Name() string { return s.name }
 

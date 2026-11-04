@@ -3,7 +3,10 @@ package host
 import (
 	"errors"
 	"fmt"
+	"io/fs"
+	"net/url"
 	"os"
+	"path/filepath"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/accounts"
@@ -11,8 +14,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/keyproxy"
 )
 
-// ErrAccountProxyCodex reports a codex profile combined with the key proxy, which the codex backend cannot carry.
-var ErrAccountProxyCodex = errors.New("a codex account profile cannot run through the key proxy: the codex backend replaces CODEX_HOME on that route")
+const (
+	codexProxyHomeDir    = "herrscher-proxy"
+	codexProxyConfigFile = "config.toml"
+	codexProxyGrantEnv   = "HERRSCHER_KEY_PROXY_GRANT"
+	proxyDirMode         = 0o700
+	proxyFileMode        = 0o600
+)
 
 func providerByVendor(vendor string) (string, bool) {
 	switch vendor {
@@ -24,15 +32,23 @@ func providerByVendor(vendor string) (string, bool) {
 	return "", false
 }
 
-func accountStore(req BackendRequest) (accounts.Store, error) {
+func accountRoot(req BackendRequest) (string, error) {
 	if req.AccountRoot != "" {
-		return accounts.Store{Root: req.AccountRoot}, nil
+		return req.AccountRoot, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return accounts.Store{}, fmt.Errorf("resolve home for account profiles: %w", err)
+		return "", fmt.Errorf("resolve home for account profiles: %w", err)
 	}
-	return accounts.Store{Root: accounts.DefaultRoot(home)}, nil
+	return accounts.DefaultRoot(home), nil
+}
+
+func accountStore(req BackendRequest) (accounts.Store, error) {
+	root, err := accountRoot(req)
+	if err != nil {
+		return accounts.Store{}, err
+	}
+	return accounts.Store{Root: root}, nil
 }
 
 func sessionEnv(req BackendRequest, vendor string, route modelRoute) (map[string]string, error) {
@@ -66,12 +82,12 @@ func sessionEnv(req BackendRequest, vendor string, route modelRoute) (map[string
 	if !configured {
 		return env, nil
 	}
-	if vendor == contracts.VendorCodex && profileDir != "" {
-		return nil, ErrAccountProxyCodex
-	}
 	grant, err := req.Keys.Grant(upstream)
 	if err != nil {
 		return nil, err
+	}
+	if vendor == contracts.VendorCodex && profileDir != "" {
+		return codexProfileProxyEnv(profileDir, grant)
 	}
 	mergeInto(env, proxyEnvFor(vendor, grant))
 	return env, nil
@@ -90,23 +106,130 @@ func proxyEnvFor(vendor string, grant keyproxy.Grant) map[string]string {
 	}
 }
 
+func codexProfileProxyEnv(profileDir string, grant keyproxy.Grant) (map[string]string, error) {
+	root, err := os.OpenRoot(profileDir)
+	if err != nil {
+		return nil, fmt.Errorf("open account profile: %w", err)
+	}
+	writeErr := errors.Join(writeCodexProxyHome(root, codexProxyConfig(grant.BaseURL+"/v1")), root.Close())
+	if writeErr != nil {
+		return nil, fmt.Errorf("codex proxy home: %w", writeErr)
+	}
+	return map[string]string{
+		contracts.EnvCodexHome: filepath.Join(profileDir, codexProxyHomeDir),
+		codexProxyGrantEnv:     grant.Token,
+	}, nil
+}
+
+func writeCodexProxyHome(root *os.Root, config string) error {
+	if mkErr := root.Mkdir(codexProxyHomeDir, proxyDirMode); mkErr != nil && !errors.Is(mkErr, fs.ErrExist) {
+		return fmt.Errorf("create codex proxy home: %w", mkErr)
+	}
+	file, err := root.OpenFile(filepath.Join(codexProxyHomeDir, codexProxyConfigFile), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, proxyFileMode)
+	if err != nil {
+		return fmt.Errorf("open codex proxy config: %w", err)
+	}
+	_, writeErr := file.WriteString(config)
+	if joined := errors.Join(writeErr, file.Close()); joined != nil {
+		return fmt.Errorf("write codex proxy config: %w", joined)
+	}
+	return nil
+}
+
+func codexProxyConfig(baseURL string) string {
+	return fmt.Sprintf("model_provider = \"herrscher\"\n\n[model_providers.herrscher]\nname = \"Herrscher key proxy\"\nbase_url = %q\nenv_key = %q\nwire_api = \"responses\"\n", baseURL, codexProxyGrantEnv)
+}
+
 func mergeInto(dst, src map[string]string) {
 	for key, value := range src {
 		dst[key] = value
 	}
 }
 
-// ProfileInUse reports whether a persisted session references the profile.
-func ProfileInUse(vendor, name string) (bool, error) {
+func persistedSessions() ([]state.Session, error) {
 	persisted, err := state.LoadState(DefaultStatePath())
 	if err != nil {
-		return false, fmt.Errorf("read sessions: %w", err)
+		return nil, fmt.Errorf("read sessions: %w", err)
 	}
-	sessions := persisted.SnapshotSessions()
+	return persisted.SnapshotSessions(), nil
+}
+
+// ProfileInUse reports whether a persisted session references the profile.
+func ProfileInUse(vendor, name string) (bool, error) {
+	sessions, err := persistedSessions()
+	if err != nil {
+		return false, err
+	}
+	return profileInUse(sessions, vendor, name), nil
+}
+
+func profileInUse(sessions []state.Session, vendor, name string) bool {
 	for index := range sessions {
 		if sessions[index].Vendor == vendor && sessions[index].Account == name {
-			return true, nil
+			return true
 		}
 	}
-	return false, nil
+	return false
+}
+
+// ResumingSessions lists the sessions of vendor resuming under the vendor default.
+func ResumingSessions(vendor string) ([]string, error) {
+	sessions, err := persistedSessions()
+	if err != nil {
+		return nil, err
+	}
+	return resumingUnder(sessions, vendor), nil
+}
+
+func resumingUnder(sessions []state.Session, vendor string) []string {
+	var names []string
+	for index := range sessions {
+		if sessions[index].Vendor == vendor && sessions[index].Account == "" && sessions[index].ResumeToken != "" {
+			names = append(names, sessions[index].Name)
+		}
+	}
+	return names
+}
+
+const neubloxKeyName = "neublox"
+
+func spawnEnvVia(entry CatalogEntry, getenv func(string) string, keys *keyproxy.Proxy) (map[string]string, error) {
+	if entry.Route != contracts.RouteGateway || keys == nil {
+		return spawnEnvFor(entry, getenv)
+	}
+	creds, err := loadGatewayCreds(getenv)
+	if err != nil {
+		return nil, fmt.Errorf("model %q needs the Neublox gateway: %w", entry.ID, err)
+	}
+	env := gatewayEnvFor(entry.Vendor, creds, entry.Arg)
+	if len(env) == 0 {
+		return nil, &modelNotRedirectableError{Model: entry.ID, Backend: entry.Vendor}
+	}
+	upstream, err := url.Parse(creds.BaseURL())
+	if err != nil {
+		return nil, fmt.Errorf("gateway base URL: %w", err)
+	}
+	route := keyproxy.GatewayRoute(upstream, gatewayAuthStyle(entry.Vendor), keyproxy.NewSecret(neubloxKeyName, creds.Token()))
+	grant, err := keys.Grant(route)
+	if err != nil {
+		return nil, fmt.Errorf("gateway through the key proxy: %w", err)
+	}
+	return gatewayEnvThroughProxy(entry.Vendor, env, grant), nil
+}
+
+func gatewayAuthStyle(vendor string) keyproxy.AuthStyle {
+	if vendor == backendCodex {
+		return keyproxy.AuthBearer
+	}
+	return keyproxy.AuthXAPIKey
+}
+
+func gatewayEnvThroughProxy(vendor string, env map[string]string, grant keyproxy.Grant) map[string]string {
+	baseKey, tokenKey := contracts.EnvAnthropicBaseURL, contracts.EnvAnthropicAPIKey
+	if vendor == backendCodex {
+		baseKey, tokenKey = contracts.EnvOpenAIBaseURL, contracts.EnvNeubloxToken
+	}
+	env[baseKey] = grant.BaseURL
+	env[tokenKey] = grant.Token
+	return env
 }

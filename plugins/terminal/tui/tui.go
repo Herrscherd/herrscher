@@ -767,6 +767,8 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		m.openContext()
 	case "compact":
 		return m.compactCmd(), true
+	case cmdAccount:
+		return m.accountCmd(args[1:]), true
 	case "notify":
 		return m.cycleNotify(), true
 	case "review":
@@ -892,6 +894,13 @@ func (m *model) removeLastPending() bool {
 	}
 	m.pending = m.pending[:len(m.pending)-1]
 	return true
+}
+
+func (m *model) accountCmd(args []string) tea.Cmd {
+	if len(args) == 0 {
+		return m.dispatchCmd(m.active, []string{"session", "accounts", m.active})
+	}
+	return m.dispatchCmd(m.active, []string{"session", "set-account", m.active, args[0]})
 }
 
 func (m *model) dispatchCmd(origin string, args []string) tea.Cmd {

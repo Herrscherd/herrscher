@@ -73,13 +73,12 @@ func bufferBody(request *http.Request, limit int64) ([]byte, error) {
 }
 
 func (p *Proxy) send(request *http.Request, route Route, index int, body []byte) (*http.Response, error) {
-	target := *route.Upstream
-	target.Path = path.Join("/", route.Upstream.Path, request.URL.Path)
-	target.RawQuery = request.URL.RawQuery
-	outbound, err := http.NewRequestWithContext(request.Context(), request.Method, target.String(), bytes.NewReader(body))
+	outbound, err := http.NewRequestWithContext(request.Context(), request.Method, route.Upstream.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("build upstream request: %w", err)
 	}
+	outbound.URL.Path = path.Join("/", route.Upstream.Path, request.URL.Path)
+	outbound.URL.RawQuery = request.URL.RawQuery
 	copyRequestHeaders(outbound.Header, request.Header)
 	setAuth(outbound.Header, route.Auth, route.Pool.key(index))
 	return p.client.Do(outbound)

@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	loginSubcommand  = "login"
 	defaultsFileName = "defaults.json"
 	dirMode          = 0o700
 	fileMode         = 0o600
@@ -237,46 +236,48 @@ func (s Store) saveDefaults(defaults map[string]string) error {
 	return os.Rename(staging, target)
 }
 
-// Runner runs a vendor CLI with extra environment and returns its standard output.
-type Runner func(ctx context.Context, env map[string]string, argv []string) ([]byte, error)
+// Runner runs the status check of a vendor CLI under the extra environment and returns its standard output.
+type Runner func(ctx context.Context, vendor string, env map[string]string) ([]byte, error)
 
-// OSRunner runs a command on the real system with the extra environment merged in.
-func OSRunner(ctx context.Context, env map[string]string, argv []string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+// OSRunner runs the status check of a vendor CLI on the real system with the extra environment merged in.
+func OSRunner(ctx context.Context, vendor string, env map[string]string) ([]byte, error) {
+	cmd, err := statusCommand(ctx, vendor)
+	if err != nil {
+		return nil, err
+	}
 	cmd.Env = contracts.MergeEnv(os.Environ(), env)
 	return cmd.Output()
 }
 
-// LoginArgv returns the login command of a vendor CLI.
-func LoginArgv(vendor string) ([]string, error) {
+// LoginCommand returns the login command of a vendor CLI, not started yet.
+func LoginCommand(ctx context.Context, vendor string) (*exec.Cmd, error) {
 	switch vendor {
 	case contracts.VendorClaude:
-		return []string{"claude", "auth", loginSubcommand}, nil
+		return exec.CommandContext(ctx, "claude", "auth", "login"), nil
 	case contracts.VendorCodex:
-		return []string{"codex", loginSubcommand}, nil
+		return exec.CommandContext(ctx, "codex", "login"), nil
 	}
 	return nil, fmt.Errorf("vendor %q: %w", vendor, contracts.ErrNoProfileHome)
 }
 
 // Status reports whether the vendor CLI is logged in under env.
 func Status(ctx context.Context, run Runner, vendor string, env map[string]string) (bool, error) {
-	argv, err := statusArgv(vendor)
-	if err != nil {
+	if _, err := contracts.ProfileHomeEnv(vendor); err != nil {
 		return false, err
 	}
-	out, err := run(ctx, env, argv)
+	out, err := run(ctx, vendor, env)
 	if err != nil {
 		return false, fmt.Errorf("%s status: %w", vendor, err)
 	}
 	return parseLoggedIn(vendor, out)
 }
 
-func statusArgv(vendor string) ([]string, error) {
+func statusCommand(ctx context.Context, vendor string) (*exec.Cmd, error) {
 	switch vendor {
 	case contracts.VendorClaude:
-		return []string{"claude", "auth", "status"}, nil
+		return exec.CommandContext(ctx, "claude", "auth", "status"), nil
 	case contracts.VendorCodex:
-		return []string{"codex", loginSubcommand, "status"}, nil
+		return exec.CommandContext(ctx, "codex", "login", "status"), nil
 	}
 	return nil, fmt.Errorf("vendor %q: %w", vendor, contracts.ErrNoProfileHome)
 }

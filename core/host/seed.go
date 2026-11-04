@@ -245,7 +245,7 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 	var route modelRoute
 	if req.ModelID != "" {
 		var err error
-		if desired, route, err = resolveModelRoute(req.ModelID, plugins, desired); err != nil {
+		if desired, route, err = resolveModelRoute(req.ModelID, plugins, desired, req.Keys); err != nil {
 			return nil, err
 		}
 	}
@@ -282,7 +282,7 @@ type modelRoute struct {
 	arg string
 }
 
-func resolveModelRoute(modelID string, plugins []contracts.Plugin, desired string) (string, modelRoute, error) {
+func resolveModelRoute(modelID string, plugins []contracts.Plugin, desired string, keys *keyproxy.Proxy) (string, modelRoute, error) {
 	entry, err := LookupModel(plugins, ResolvePolicy(os.Getenv), modelID)
 	if err != nil {
 		return "", modelRoute{}, err
@@ -292,7 +292,7 @@ func resolveModelRoute(modelID string, plugins []contracts.Plugin, desired strin
 	} else if desired != entry.Vendor {
 		return "", modelRoute{}, &modelBackendMismatchError{Model: modelID, Owner: entry.Vendor, Requested: desired}
 	}
-	env, err := spawnEnvFor(entry, os.Getenv)
+	env, err := spawnEnvVia(entry, os.Getenv, keys)
 	if err != nil {
 		return "", modelRoute{}, err
 	}

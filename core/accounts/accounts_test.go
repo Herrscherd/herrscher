@@ -143,7 +143,7 @@ func TestStatusReadsEachVendorsAnswer(t *testing.T) {
 		{contracts.VendorCodex, "Not logged in\n", false},
 	}
 	for _, tc := range cases {
-		run := func(_ context.Context, env map[string]string, _ []string) ([]byte, error) {
+		run := func(_ context.Context, _ string, env map[string]string) ([]byte, error) {
 			if len(env) != 1 {
 				t.Fatalf("%s status env = %v, want only the home variable", tc.vendor, env)
 			}

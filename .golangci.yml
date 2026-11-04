@@ -207,15 +207,6 @@ linters:
       - path: ^core/service/service\.go$
         linters: [gosec]
         text: "^G703:"
-      - path: ^(account_cmd|core/accounts/accounts)\.go$
-        linters: [gosec]
-        text: "^G(204|702):"
-      - path: ^core/keyproxy/secret\.go$
-        linters: [gosec]
-        text: "^G204:"
-      - path: ^core/keyproxy/forward\.go$
-        linters: [gosec]
-        text: "^G704:"
       - path: ^core/envx/hide\.go$
         linters: [gochecknoglobals]
         text: "^hidden is a global variable"

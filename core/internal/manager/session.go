@@ -364,6 +364,7 @@ type createRequest struct {
 	runtime    runtimeChoice
 	options    sessionOptions
 	hostName   string
+	account    string
 	mode       string
 	shared     bool
 }
@@ -493,6 +494,7 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 		return createRequest{}, err
 	}
 	base, _ := input.Lookup("base")
+	explicitAccount, _ := input.Lookup("account")
 	return createRequest{
 		name:     name,
 		base:     base,
@@ -502,6 +504,7 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 		runtime:  runtime,
 		options:  options,
 		hostName: h.resolveHost(input, runtime.agent),
+		account:  chooseSessionAccount(explicitAccount, h.agentAccount(runtime.agent)),
 		mode:     mode,
 		shared:   input.Bool("shared"),
 	}, nil
@@ -630,6 +633,23 @@ func optionalNonNegative(input contracts.Input, key string) (int, error) {
 		return 0, &InvalidValueError{Field: key, Value: value, Hint: nonNegativeHint}
 	}
 	return count, nil
+}
+
+func chooseSessionAccount(explicit, agentAccount string) string {
+	if explicit != "" {
+		return explicit
+	}
+	return agentAccount
+}
+
+func (h *Handler) agentAccount(agentName string) string {
+	if agentName == "" {
+		return ""
+	}
+	if a, ok := h.agents.Get(agentName); ok {
+		return a.Account
+	}
+	return ""
 }
 
 func (h *Handler) resolveHost(input contracts.Input, agentName string) string {
@@ -782,6 +802,7 @@ func newSessionRecord(req createRequest, space workspace, project, runDir string
 		Parent: options.parent, Gateways: options.gateways, Extractor: options.extractor, Journal: options.journal,
 		ConsolidateEvery: options.consolidateEvery, CostCap: options.caps.cost, TokenCap: options.caps.tokens,
 		CohortCostCap: options.caps.cohortCost, CohortTokenCap: options.caps.cohortTokens, Host: req.hostName,
+		Account: req.account,
 	}
 }
 

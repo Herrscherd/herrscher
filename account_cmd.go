@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -51,7 +50,10 @@ func runAccount(ctx context.Context, args []string) error {
 		if setErr := store.SetDefault(vendor, name); setErr != nil {
 			return setErr
 		}
-		return emitf(os.Stdout, "%s default: %s\n", vendor, name)
+		if defaultErr := emitf(os.Stdout, "%s default: %s\n", vendor, name); defaultErr != nil {
+			return defaultErr
+		}
+		return warnResumingSessions(vendor, os.Stdout)
 	}
 	return errAccountUsage
 }
@@ -118,11 +120,10 @@ func addAccount(ctx context.Context, store accounts.Store, vendor string, name c
 	if err != nil {
 		return err
 	}
-	argv, err := accounts.LoginArgv(vendor)
+	login, err := accounts.LoginCommand(ctx, vendor)
 	if err != nil {
 		return err
 	}
-	login := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	login.Env = contracts.MergeEnv(os.Environ(), env)
 	login.Stdin, login.Stdout, login.Stderr = input, output, os.Stderr
 	if runErr := login.Run(); runErr != nil {
@@ -150,6 +151,17 @@ func removeAccount(store accounts.Store, vendor string, name contracts.ProfileNa
 		return emitf(output, "annulé\n")
 	}
 	return store.Remove(vendor, name, false)
+}
+
+func warnResumingSessions(vendor string, output io.Writer) error {
+	names, err := host.ResumingSessions(vendor)
+	if err != nil {
+		return err
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	return emitf(output, "attention: %d session(s) %s vont reprendre sous ce défaut: %s. Pour les garder sur un autre compte, utilise herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation).\n", len(names), vendor, strings.Join(names, ", "))
 }
 
 func confirmed(answer string) bool {

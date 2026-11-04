@@ -282,17 +282,17 @@ func TestToastTickStopsWhenTheToastIsGone(t *testing.T) {
 	}
 }
 
-func TestComposerPromptIsBangInShellMode(t *testing.T) {
+func TestComposerPromptStaysAngleBracketInShellMode(t *testing.T) {
 	m := notifyModel(t, false)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.input.SetValue("!ls")
 	m.buildFrame()
-	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "! ") {
-		t.Fatalf("shell mode must prompt with !, got %q", got)
+	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "> !ls") {
+		t.Fatalf("shell mode keeps the > prompt, got %q", got)
 	}
 	m.input.SetValue("ls")
 	m.buildFrame()
-	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "> ") {
+	if got := ansi.Strip(m.inputRow()); !strings.HasPrefix(got, "> ls") {
 		t.Fatalf("outside shell mode the prompt must be >, got %q", got)
 	}
 }

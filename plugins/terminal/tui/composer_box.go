@@ -31,12 +31,11 @@ const (
 	placeholderBusy = "Écris pendant que l’agent travaille : ⏎ met en file, ⌥⏎ réoriente"
 	footIdle        = "⏎ envoyer · @ fichier · / commande · ! shell · ⌃R historique · ⌃S de côté"
 	footBusy        = "⏎ en file · ⌥⏎ réorienter · ⌃⏎ envoyer la file · ! shell · ⌃R historique · ⌃S de côté"
-	footShell       = "⏎ lancer · la commande passe par la politique d'outils de l'hôte · échap annuler"
+	footShell       = "⏎ lancer · la commande passe par la politique d’outils de l’hôte · échap annuler"
 	footRightIdle   = escKey + " " + escKey + " retour"
 	footRightBusy   = "échap interrompre"
 	footRightShell  = "échap annuler"
 	titleEditor     = "⌃X⌃E éditeur"
-	titleShell      = "! SHELL · la sortie entre dans la session"
 	titleEditing    = "brouillon ouvert dans l'éditeur"
 )
 
@@ -51,13 +50,16 @@ func promptAt(prompt string) func(int) string {
 }
 
 func (m *model) syncPrompt() {
-	prompt, style := m.st.glyphs.prompt+" ", m.st.accent.Bold(true)
-	if m.isShellInput() {
-		prompt, style = m.st.glyphs.shellPrompt+" ", m.st.warn.Bold(true)
-	}
+	prompt := m.st.glyphs.prompt + " "
 	m.input.SetPromptFunc(lipgloss.Width(prompt), promptAt(prompt))
-	m.input.FocusedStyle.Prompt = style
-	m.input.BlurredStyle.Prompt = style
+	m.input.FocusedStyle.Prompt = m.st.accent.Bold(true)
+	m.input.BlurredStyle.Prompt = m.st.accent.Bold(true)
+	m.input.FocusedStyle.Text = m.st.text
+	m.input.BlurredStyle.Text = m.st.text
+	if m.isShellInput() {
+		m.input.FocusedStyle.Text = m.st.warn
+		m.input.BlurredStyle.Text = m.st.warn
+	}
 }
 
 func (m *model) placeholderText() string {
@@ -79,7 +81,7 @@ func (m *model) isBusy() bool {
 func (m *model) composerStyle() lipgloss.Style {
 	switch {
 	case m.editing:
-		return m.st.accent
+		return m.st.violet
 	case m.isShellInput():
 		return m.st.warn
 	default:
@@ -92,13 +94,31 @@ func (m *model) composerTitles() (string, string) {
 	case m.editing:
 		return m.st.violet.Bold(true).Render("Éditeur") + m.st.dim.Render(" · "+titleEditing), m.st.dim.Render(titleEditor)
 	case m.isShellInput():
-		return m.st.warn.Render("! SHELL") + m.st.dim.Render(strings.TrimPrefix(titleShell, "! SHELL")), m.st.dim.Render(titleEditor)
+		return m.st.warn.Render("! SHELL") + m.st.dim.Render(" · "+m.shellTitleDetail()), m.st.dim.Render(titleEditor)
 	}
 	name := "herrscher"
 	if tb := m.activeTab(); tb != nil && tb.label != "" {
 		name = tb.label
 	}
 	return m.st.text.Render(name), m.st.dim.Render(titleEditor)
+}
+
+func (m *model) shellTitleDetail() string {
+	var parts []string
+	if info, ok := m.activeInfo(); ok && info.Dir != "" {
+		parts = append(parts, "dans "+compactDir(info.Dir))
+	}
+	return strings.Join(append(parts, "la sortie entre dans la session"), " · ")
+}
+
+func compactDir(dir string) string {
+	const keptSegments = 2
+	short := shortPath(dir)
+	parts := strings.Split(short, "/")
+	if len(parts) <= keptSegments+1 {
+		return short
+	}
+	return "…/" + strings.Join(parts[len(parts)-keptSegments:], "/")
 }
 
 func (m *model) composerFoots() (string, string) {

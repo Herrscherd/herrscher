@@ -999,12 +999,33 @@ func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
 	}
 	for index := range tests {
 		t.Run(tests[index].name, func(t *testing.T) {
-			requireCoordinatorRefusalStatus(t, tests[index].trailer, tests[index].want)
+			requireCoordinatorStatus(t, &erroringCoord{err: errors.New("boom")}, i18n.French, tests[index].trailer, tests[index].want)
 		})
 	}
 }
 
-func requireCoordinatorRefusalStatus(t *testing.T, trailer, want string) {
+func TestDriverAnnouncesCoordinatorSuccessInSessionLanguage(t *testing.T) {
+	tests := []struct {
+		name    string
+		trailer string
+		lang    i18n.Language
+		want    string
+	}{
+		{name: "route in french", trailer: "⟢ route: relire le module", lang: i18n.French, want: "routé vers netter : alpha-netter"},
+		{name: "route in english", trailer: "⟢ route: relire le module", lang: i18n.English, want: "routed to netter: alpha-netter"},
+		{name: "seal in french", trailer: "⟢ seal: 4", lang: i18n.French, want: "cohorte scellée à 4"},
+		{name: "seal in english", trailer: "⟢ seal: 4", lang: i18n.English, want: "cohort sealed at 4"},
+		{name: "merge in french", trailer: "⟢ merge: worker-1", lang: i18n.French, want: "merge traité pour lead"},
+		{name: "merge in english", trailer: "⟢ merge: worker-1", lang: i18n.English, want: "merge handled for lead"},
+	}
+	for index := range tests {
+		t.Run(tests[index].name, func(t *testing.T) {
+			requireCoordinatorStatus(t, &recordingCoord{}, tests[index].lang, tests[index].trailer, tests[index].want)
+		})
+	}
+}
+
+func requireCoordinatorStatus(t *testing.T, coord contracts.Coordinator, lang i18n.Language, trailer, want string) {
 	t.Helper()
 	synctest.Test(t, func(t *testing.T) {
 		rec := &sinkRecorder{}
@@ -1012,8 +1033,8 @@ func requireCoordinatorRefusalStatus(t *testing.T, trailer, want string) {
 		d := newSessionDriver("alpha",
 			[]contracts.GatewaySet{{Gateway: rec}},
 			make(chan contracts.Event, 1), from)
-		d.coordinator = &erroringCoord{err: errors.New("boom")}
-		d.lang = i18n.French
+		d.coordinator = coord
+		d.lang = lang
 
 		from <- contracts.Event{T: "reply", Done: true, Text: "fait.\n" + trailer}
 		if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {

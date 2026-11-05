@@ -53,5 +53,20 @@
     "id": "compaction.failed",
     "description": "Une compaction échoue pour une raison sans code propre, Detail porte le texte technique",
     "other": "échec de la compaction : {{.Detail}}"
+  },
+  {
+    "id": "coordination.routed",
+    "description": "Le coordinateur route une tâche vers un agent, Agent le nomme et Session nomme la session qui la prend",
+    "other": "routé vers {{.Agent}} : {{.Session}}"
+  },
+  {
+    "id": "coordination.sealed",
+    "description": "Le coordinateur scelle une cohorte au nœud qu'il nomme",
+    "other": "cohorte scellée à {{.Node}}"
+  },
+  {
+    "id": "coordination.merged",
+    "description": "Le coordinateur fusionne la branche d'un worker, Lead nomme la session pilote qui la reçoit",
+    "other": "merge traité pour {{.Lead}}"
   }
 ]

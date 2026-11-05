@@ -858,7 +858,7 @@ func (d *sessionDriver) routeTask(ctx context.Context, task string) {
 		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.route_refused", map[string]any{detailParam: err.Error()})})
 		return
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "routé vers " + toAgent + " : " + session})
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.routed", map[string]any{"Agent": toAgent, "Session": session})})
 }
 
 func (d *sessionDriver) sealCohort(ctx context.Context, node int) {
@@ -868,7 +868,7 @@ func (d *sessionDriver) sealCohort(ctx context.Context, node int) {
 		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.seal_refused", map[string]any{detailParam: err.Error()})})
 		return
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "cohorte scellée à " + strconv.Itoa(node)})
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.sealed", map[string]any{"Node": node})})
 }
 
 func (d *sessionDriver) mergeWorker(ctx context.Context, worker string) {
@@ -879,7 +879,7 @@ func (d *sessionDriver) mergeWorker(ctx context.Context, worker string) {
 		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.merge_refused", map[string]any{detailParam: err.Error()})})
 		return
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "merge traité pour " + lead})
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.merged", map[string]any{"Lead": lead})})
 }
 
 func (d *sessionDriver) handoffTask(ctx context.Context, toAgent, task string) {

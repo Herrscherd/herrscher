@@ -53,5 +53,20 @@
     "id": "compaction.failed",
     "description": "A compaction fails for a reason with no code of its own; Detail holds the technical text",
     "other": "compaction failed: {{.Detail}}"
+  },
+  {
+    "id": "coordination.routed",
+    "description": "The coordinator routed a task to an agent; Agent names it and Session names the session that takes the task",
+    "other": "routed to {{.Agent}}: {{.Session}}"
+  },
+  {
+    "id": "coordination.sealed",
+    "description": "The coordinator sealed a cohort at the node it names",
+    "other": "cohort sealed at {{.Node}}"
+  },
+  {
+    "id": "coordination.merged",
+    "description": "The coordinator merged a worker branch; Lead names the lead session that receives it",
+    "other": "merge handled for {{.Lead}}"
   }
 ]

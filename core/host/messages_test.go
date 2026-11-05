@@ -67,6 +67,9 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"compaction.not_compactor_port":  nil,
 		"compaction.no_compactor_plugin": nil,
 		"compaction.failed":              {"Detail"},
+		"coordination.routed":            {"Agent", "Session"},
+		"coordination.sealed":            {"Node"},
+		"coordination.merged":            {"Lead"},
 	}
 	i18ntest.CheckDeclared(t, declared, hostLocaleSource(t))
 }

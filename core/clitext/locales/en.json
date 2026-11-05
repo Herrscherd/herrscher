@@ -1270,5 +1270,176 @@
     "id": "cli.session.rename.schedule_owns",
     "description": "Note after a session rename when a schedule names the session",
     "other": "⚠️ the schedule {{.Schedule}} owns this session by its name: its next window will reopen one under {{.Name}}."
+  },
+  {
+    "id": "cli.session.budget.updated",
+    "description": "Confirmation of set-budget, with the number of sessions it changed (Count selects the plural form)",
+    "one": "✅ budget updated for 1 session",
+    "other": "✅ budget updated for {{.Count}} sessions"
+  },
+  {
+    "id": "cli.session.switch.no_resume",
+    "description": "Confirmation of session switch when the session starts fresh on the new target, with the approvals note appended",
+    "other": "session {{.Name}} re-targeted to {{.Vendor}} (no resume){{.Note}}"
+  },
+  {
+    "id": "cli.session.switch.unconfirmed",
+    "description": "Confirmation of session switch when the handoff of the conversation was not confirmed by the session, with the approvals note appended",
+    "other": "session {{.Name}} re-targeted to {{.Vendor}} (resume {{.Handoff}} not confirmed){{.Note}}"
+  },
+  {
+    "id": "cli.session.switch.resumed",
+    "description": "Confirmation of session switch when the conversation was handed off to the new target, with the approvals note appended",
+    "other": "session {{.Name}} re-targeted to {{.Vendor}} (resume {{.Handoff}}){{.Note}}"
+  },
+  {
+    "id": "cli.session.switch.restart_restored",
+    "description": "Error of session switch when the backend restart failed and the session was put back on its previous target",
+    "other": "backend restart: {{.Err}} (session {{.Name}} restored on {{.Vendor}})"
+  },
+  {
+    "id": "cli.session.switch.restart_lost",
+    "description": "Error of session switch when the backend restart failed and the previous target could not be restored either",
+    "other": "backend restart: {{.Err}}; rollback failed, session {{.Name}} out of service: {{.RollbackErr}}"
+  },
+  {
+    "id": "cli.session.approvals.unenforced",
+    "description": "Warning on session create: the vendor cannot enforce the approval mode, so the session runs ungated",
+    "other": "⚠️ approvals: {{.Vendor}} cannot enforce them ({{.Why}}), so **{{.Name}}** runs ungated."
+  },
+  {
+    "id": "cli.session.approvals.unenforced_now",
+    "description": "Warning on session switch: the new vendor cannot enforce the approval mode, so the session now runs ungated",
+    "other": "⚠️ approvals: {{.Vendor}} cannot enforce them ({{.Why}}), so **{{.Name}}** now runs ungated."
+  },
+  {
+    "id": "cli.session.approvals.no_channel",
+    "description": "Reason given when a vendor exposes no approval channel to enforce the approval mode",
+    "other": "it exposes no approval channel"
+  },
+  {
+    "id": "cli.session.approvals.shared",
+    "description": "Warning on session create: a shared session has no isolated worktree to gate, so it runs ungated",
+    "other": "⚠️ approvals: a shared session has no isolated worktree to gate, so **{{.Name}}** runs ungated."
+  },
+  {
+    "id": "cli.session.approvals.remote_no_agent",
+    "description": "Warning on session create: a remote session without an agent has no way to materialize the approval hook, so it runs ungated",
+    "other": "⚠️ approvals: a remote session without an agent has no materialization channel, so **{{.Name}}** runs ungated."
+  },
+  {
+    "id": "cli.session.approvals.hook_failed",
+    "description": "Warning on session create: the approval hook could not be written, so the session runs ungated (Err is the cause)",
+    "other": "⚠️ approvals: the hook could not be written ({{.Err}}), so **{{.Name}}** runs ungated."
+  },
+  {
+    "id": "cli.session.banner.ready",
+    "description": "First line of the banner posted in the channel of a new session",
+    "other": "🚀 Session **{{.Name}}** ready."
+  },
+  {
+    "id": "cli.session.banner.project_cwd",
+    "description": "Banner line: the session runs in the current directory, not in a named project",
+    "other": "• Project: **(cwd)**"
+  },
+  {
+    "id": "cli.session.banner.project",
+    "description": "Banner line: the project of the session, its name and its path",
+    "other": "• Project: **{{.Name}}** ({{.Repo}})"
+  },
+  {
+    "id": "cli.session.banner.worktree",
+    "description": "Banner lines: the session works in an isolated worktree, with its path and its branch",
+    "other": "• Mode: isolated worktree\n• Worktree: {{.Path}}\n• Branch: {{.Branch}}"
+  },
+  {
+    "id": "cli.session.banner.shared",
+    "description": "Banner lines: the session works in the main checkout, on the current branch",
+    "other": "• Mode: shared (main checkout)\n• Branch: none (runs on current branch)"
+  },
+  {
+    "id": "cli.session.banner.not_git",
+    "description": "Banner line: the session works in a shared directory that is not a git repository",
+    "other": "• Mode: shared (not a git repo)"
+  },
+  {
+    "id": "cli.session.banner.command",
+    "description": "Banner line: the command the session runs",
+    "other": "• Command: {{.Command}}"
+  },
+  {
+    "id": "cli.session.banner.model",
+    "description": "Banner line: the model the session runs, shown only when one is set; it starts with a line break",
+    "other": "\n• Model: {{.Model}}"
+  },
+  {
+    "id": "cli.session.running",
+    "description": "Reply of session create: the session runs on the channel, followed by its banner and its approvals note",
+    "other": "✅ Running on {{.Channel}}.\n\n{{.Banner}}{{.Approvals}}"
+  },
+  {
+    "id": "cli.session.resumed",
+    "description": "Confirmation of session resume, for an archived session that runs again",
+    "other": "⟲ Session **{{.Name}}** resumed."
+  },
+  {
+    "id": "cli.session.mode.set",
+    "description": "Confirmation of session set-mode: the session now has this approval mode, with a note appended when it is not enforced",
+    "other": "{{.Name}} is now {{.Mode}}"
+  },
+  {
+    "id": "cli.session.mode.unenforced",
+    "description": "Note appended to the set-mode confirmation when the vendor cannot enforce the approval mode",
+    "other": " ({{.Vendor}} cannot enforce it, so {{.Name}} runs ungated)"
+  },
+  {
+    "id": "cli.session.mode.bypass_recreate",
+    "description": "Note appended to the set-mode confirmation when the session was created with bypass, which has no hook to change",
+    "other": " (a session created with --approvals bypass has no hook: recreate it for this to bite)"
+  },
+  {
+    "id": "cli.session.picked",
+    "description": "Confirmation of session pick: the pending choice of the session was answered",
+    "other": "picked {{.Name}}"
+  },
+  {
+    "id": "cli.session.interrupted",
+    "description": "Confirmation of session interrupt: the turn in flight was cancelled",
+    "other": "interrupted {{.Name}}"
+  },
+  {
+    "id": "cli.session.compact.merged_kept",
+    "description": "Reply of session compact without instruction when a compaction is already queued: the queued instruction is kept",
+    "other": "compaction of \"{{.Name}}\" already queued: merged with the pending request, the queued instruction is kept"
+  },
+  {
+    "id": "cli.session.compact.merged_replaced",
+    "description": "Reply of session compact with an instruction when a compaction is already queued: the queued instruction is replaced by the newest",
+    "other": "compaction of \"{{.Name}}\" already queued: merged with the pending request, the queued instruction is replaced by the newest"
+  },
+  {
+    "id": "cli.session.account.notice",
+    "description": "Confirmation of session set-account: the account applies at the next launch and the running bridge keeps the old one",
+    "other": "account of {{.Name}} set to {{.Account}}: effective at the next launch of the session; the running bridge keeps the old account"
+  },
+  {
+    "id": "cli.session.account.notice_fresh",
+    "description": "Confirmation of session set-account with fresh: the previous conversation is no longer resumed at the next launch",
+    "other": "account of {{.Name}} set to {{.Account}}: at the next launch the previous conversation is no longer resumed and a new one opens under this account; the running bridge keeps the old account until the next launch"
+  },
+  {
+    "id": "cli.session.account.vendor_default",
+    "description": "Account label: the default account of the vendor, when no profile is chosen",
+    "other": "the vendor default"
+  },
+  {
+    "id": "cli.session.account.native",
+    "description": "Account label: the login the vendor keeps outside herrscher profiles",
+    "other": "the native account"
+  },
+  {
+    "id": "cli.session.account.this",
+    "description": "Listing: marks the profile the session currently spends on",
+    "other": "(this session)"
   }
 ]

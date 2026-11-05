@@ -13,7 +13,6 @@ const (
 	ParamFile    = "File"
 	ParamLine    = "Line"
 	ParamMarker  = "Marker"
-	ParamCommand = "Command"
 	ParamAction  = "Action"
 )
 

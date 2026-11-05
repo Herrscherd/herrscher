@@ -1270,5 +1270,176 @@
     "id": "cli.session.rename.schedule_owns",
     "description": "Note après un renommage quand un horaire désigne la session par son nom",
     "other": "⚠️ l'horaire {{.Schedule}} possède cette session par son nom : sa prochaine fenêtre en rouvrira une sous {{.Name}}."
+  },
+  {
+    "id": "cli.session.budget.updated",
+    "description": "Confirmation de set-budget, avec le nombre de sessions modifiées (Count choisit la forme plurielle)",
+    "one": "✅ budget mis à jour pour 1 session",
+    "other": "✅ budget mis à jour pour {{.Count}} sessions"
+  },
+  {
+    "id": "cli.session.switch.no_resume",
+    "description": "Confirmation de session switch quand la session repart à neuf sur la nouvelle cible, suivie de la note sur les approbations",
+    "other": "session {{.Name}} re-ciblée sur {{.Vendor}} (sans reprise){{.Note}}"
+  },
+  {
+    "id": "cli.session.switch.unconfirmed",
+    "description": "Confirmation de session switch quand la reprise de la conversation n'a pas été confirmée par la session, suivie de la note sur les approbations",
+    "other": "session {{.Name}} re-ciblée sur {{.Vendor}} (reprise {{.Handoff}} non confirmée){{.Note}}"
+  },
+  {
+    "id": "cli.session.switch.resumed",
+    "description": "Confirmation de session switch quand la conversation a été transmise à la nouvelle cible, suivie de la note sur les approbations",
+    "other": "session {{.Name}} re-ciblée sur {{.Vendor}} (reprise {{.Handoff}}){{.Note}}"
+  },
+  {
+    "id": "cli.session.switch.restart_restored",
+    "description": "Erreur de session switch quand le redémarrage du backend a échoué et que la session a été remise sur sa cible précédente",
+    "other": "redémarrage backend : {{.Err}} (session {{.Name}} restaurée sur {{.Vendor}})"
+  },
+  {
+    "id": "cli.session.switch.restart_lost",
+    "description": "Erreur de session switch quand le redémarrage du backend a échoué et que la cible précédente n'a pas pu non plus être restaurée",
+    "other": "redémarrage backend : {{.Err}} ; le retour arrière a échoué, session {{.Name}} hors service : {{.RollbackErr}}"
+  },
+  {
+    "id": "cli.session.approvals.unenforced",
+    "description": "Avertissement à la création de session : le fournisseur ne peut pas appliquer le mode d'approbation, la session tourne sans contrôle",
+    "other": "⚠️ approbations : {{.Vendor}} ne peut pas les appliquer ({{.Why}}), donc **{{.Name}}** tourne sans contrôle."
+  },
+  {
+    "id": "cli.session.approvals.unenforced_now",
+    "description": "Avertissement au changement de cible : le nouveau fournisseur ne peut pas appliquer le mode d'approbation, la session tourne désormais sans contrôle",
+    "other": "⚠️ approbations : {{.Vendor}} ne peut pas les appliquer ({{.Why}}), donc **{{.Name}}** tourne désormais sans contrôle."
+  },
+  {
+    "id": "cli.session.approvals.no_channel",
+    "description": "Motif donné quand un fournisseur n'expose aucun canal pour appliquer le mode d'approbation",
+    "other": "il n'expose aucun canal d'approbation"
+  },
+  {
+    "id": "cli.session.approvals.shared",
+    "description": "Avertissement à la création de session : une session partagée n'a pas d'arbre de travail isolé à contrôler, elle tourne sans contrôle",
+    "other": "⚠️ approbations : une session partagée n'a pas d'arbre de travail isolé à contrôler, donc **{{.Name}}** tourne sans contrôle."
+  },
+  {
+    "id": "cli.session.approvals.remote_no_agent",
+    "description": "Avertissement à la création de session : une session distante sans agent ne peut pas matérialiser le point d'accroche, elle tourne sans contrôle",
+    "other": "⚠️ approbations : une session distante sans agent n'a pas de canal de matérialisation, donc **{{.Name}}** tourne sans contrôle."
+  },
+  {
+    "id": "cli.session.approvals.hook_failed",
+    "description": "Avertissement à la création de session : le point d'accroche des approbations n'a pas pu être écrit, la session tourne sans contrôle (Err est la cause)",
+    "other": "⚠️ approbations : le point d'accroche n'a pas pu être écrit ({{.Err}}), donc **{{.Name}}** tourne sans contrôle."
+  },
+  {
+    "id": "cli.session.banner.ready",
+    "description": "Première ligne de la bannière publiée dans le salon d'une nouvelle session",
+    "other": "🚀 Session **{{.Name}}** prête."
+  },
+  {
+    "id": "cli.session.banner.project_cwd",
+    "description": "Ligne de bannière : la session tourne dans le dossier courant, sans projet nommé",
+    "other": "• Projet : **(cwd)**"
+  },
+  {
+    "id": "cli.session.banner.project",
+    "description": "Ligne de bannière : le projet de la session, son nom et son chemin",
+    "other": "• Projet : **{{.Name}}** ({{.Repo}})"
+  },
+  {
+    "id": "cli.session.banner.worktree",
+    "description": "Lignes de bannière : la session travaille dans un arbre de travail isolé, avec son chemin et sa branche",
+    "other": "• Mode : arbre de travail isolé\n• Arbre de travail : {{.Path}}\n• Branche : {{.Branch}}"
+  },
+  {
+    "id": "cli.session.banner.shared",
+    "description": "Lignes de bannière : la session travaille dans la copie principale, sur la branche courante",
+    "other": "• Mode : partagé (copie principale)\n• Branche : aucune (tourne sur la branche courante)"
+  },
+  {
+    "id": "cli.session.banner.not_git",
+    "description": "Ligne de bannière : la session travaille dans un dossier partagé qui n'est pas un dépôt git",
+    "other": "• Mode : partagé (pas un dépôt git)"
+  },
+  {
+    "id": "cli.session.banner.command",
+    "description": "Ligne de bannière : la commande que la session lance",
+    "other": "• Commande : {{.Command}}"
+  },
+  {
+    "id": "cli.session.banner.model",
+    "description": "Ligne de bannière : le modèle de la session, affiché seulement s'il est défini ; elle commence par un saut de ligne",
+    "other": "\n• Modèle : {{.Model}}"
+  },
+  {
+    "id": "cli.session.running",
+    "description": "Réponse de session create : la session est démarrée sur le salon, suivie de sa bannière et de sa note sur les approbations",
+    "other": "✅ Démarrée sur {{.Channel}}.\n\n{{.Banner}}{{.Approvals}}"
+  },
+  {
+    "id": "cli.session.resumed",
+    "description": "Confirmation de session resume, pour une session archivée qui repart",
+    "other": "⟲ Session **{{.Name}}** reprise."
+  },
+  {
+    "id": "cli.session.mode.set",
+    "description": "Confirmation de session set-mode : la session a désormais ce mode d'approbation, avec une note ajoutée s'il n'est pas appliqué",
+    "other": "{{.Name}} est maintenant en mode {{.Mode}}"
+  },
+  {
+    "id": "cli.session.mode.unenforced",
+    "description": "Note ajoutée à la confirmation de set-mode quand le fournisseur ne peut pas appliquer le mode d'approbation",
+    "other": " ({{.Vendor}} ne peut pas l'appliquer, donc {{.Name}} tourne sans contrôle)"
+  },
+  {
+    "id": "cli.session.mode.bypass_recreate",
+    "description": "Note ajoutée à la confirmation de set-mode quand la session a été créée en bypass, qui n'a pas de point d'accroche à modifier",
+    "other": " (une session créée avec --approvals bypass n'a pas de point d'accroche : recréez-la pour que cela prenne effet)"
+  },
+  {
+    "id": "cli.session.picked",
+    "description": "Confirmation de session pick : le choix en attente de la session a reçu sa réponse",
+    "other": "choix pris pour {{.Name}}"
+  },
+  {
+    "id": "cli.session.interrupted",
+    "description": "Confirmation de session interrupt : le tour en cours a été annulé",
+    "other": "tour de {{.Name}} interrompu"
+  },
+  {
+    "id": "cli.session.compact.merged_kept",
+    "description": "Réponse de session compact sans consigne quand une compaction est déjà en file : la consigne en file est conservée",
+    "other": "compaction de \"{{.Name}}\" déjà en file : fusionnée avec la demande en attente, la consigne en file est conservée"
+  },
+  {
+    "id": "cli.session.compact.merged_replaced",
+    "description": "Réponse de session compact avec une consigne quand une compaction est déjà en file : la consigne en file est remplacée par la plus récente",
+    "other": "compaction de \"{{.Name}}\" déjà en file : fusionnée avec la demande en attente, la consigne en file est remplacée par la plus récente"
+  },
+  {
+    "id": "cli.session.account.notice",
+    "description": "Confirmation de session set-account : le compte s'applique au prochain lancement et le bridge en cours garde l'ancien",
+    "other": "compte de {{.Name}} réglé sur {{.Account}} : effectif au prochain lancement de la session ; le bridge en cours garde l'ancien compte"
+  },
+  {
+    "id": "cli.session.account.notice_fresh",
+    "description": "Confirmation de session set-account avec fresh : la conversation précédente n'est plus reprise au prochain lancement",
+    "other": "compte de {{.Name}} réglé sur {{.Account}} : au prochain lancement, la conversation précédente n'est plus reprise et une nouvelle s'ouvre sous ce compte ; le bridge en cours garde l'ancien compte jusqu'au prochain lancement"
+  },
+  {
+    "id": "cli.session.account.vendor_default",
+    "description": "Libellé de compte : le compte par défaut du fournisseur, quand aucun profil n'est choisi",
+    "other": "le défaut du vendeur"
+  },
+  {
+    "id": "cli.session.account.native",
+    "description": "Libellé de compte : le compte connecté hors des profils herrscher",
+    "other": "le compte natif"
+  },
+  {
+    "id": "cli.session.account.this",
+    "description": "Liste : marque le profil que la session dépense actuellement",
+    "other": "(cette session)"
   }
 ]

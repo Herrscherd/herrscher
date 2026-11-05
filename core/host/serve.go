@@ -12,6 +12,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
@@ -64,6 +65,7 @@ type Deps = contracts.GatewaySet
 // Options holds the parsed flags for the serve daemon.
 type Options struct {
 	StatePath     string
+	Language      i18n.Language
 	Models        *ModelDiscovery
 	DefaultCmd    string
 	HealthAddr    string
@@ -210,6 +212,7 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 	}
 	defer CloseKeyProxy(ctx, log, keys)
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
+	runningHub.lang = options.Language
 	runningHub.models = options.modelDiscovery()
 	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
 		return newSeedBackend(seedCtx, sess, keys, runningHub.models)
@@ -299,7 +302,7 @@ func serveHubSockets(ctx context.Context, instID string, hubCore *hub) {
 	events := newEventSocket()
 	serveEventsSocket(ctx, EventsSocketPath(instID), events)
 	hubCore.eventPublisher = events.Publish
-	serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{hubCore})
+	serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{disp: hubCore, lang: hubCore.lang})
 }
 
 func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Supervisor, hostState *state.State, host *health.Health) {

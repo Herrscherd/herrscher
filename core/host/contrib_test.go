@@ -22,7 +22,9 @@ func (f fakeContributor) Commands() []contracts.Cmd {
 	out := make([]contracts.Cmd, 0, len(f.paths))
 	for _, p := range f.paths {
 		out = append(out, contracts.New(p...).Help("fake").Do(
-			func(context.Context, contracts.Input) (string, error) { return f.kind, nil },
+			func(context.Context, contracts.Input) (contracts.Result, error) {
+				return contracts.DataResult(f.kind), nil
+			},
 		))
 	}
 	return out
@@ -118,7 +120,7 @@ func TestPrefixingPreservesTheHandler(t *testing.T) {
 	if err != nil || len(cmds) != 1 {
 		t.Fatalf("expected one command, got %d (%v)", len(cmds), err)
 	}
-	out, err := cmds[0].Run(context.Background(), contracts.Input{})
+	out, err := cli.Plain(cmds[0].Run(context.Background(), contracts.Input{}))
 	if err != nil || out != "alpha" {
 		t.Fatalf("the plugin's own handler must survive prefixing: %q %v", out, err)
 	}
@@ -137,7 +139,7 @@ func TestContributedCommandDispatches(t *testing.T) {
 			t.Fatalf("add: %v", addErr)
 		}
 	}
-	out, err := reg.Dispatch(context.Background(), []string{"alpha", "channel", "read"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"alpha", "channel", "read"}))
 	if err != nil {
 		t.Fatalf("a contributed command must dispatch: %v", err)
 	}

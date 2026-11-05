@@ -28,8 +28,8 @@ func addRoleCommands(reg *cli.Registry, hostState *state.State) error {
 func roleListVerb(store *state.State) contracts.Cmd {
 	return contracts.New("role", "list").
 		Help("who holds which role, and what each role runs").
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return listRoles(store, in.JSON)
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(listRoles(store, in.JSON))
 		})
 }
 
@@ -70,8 +70,8 @@ func roleGrantVerb(store *state.State) contracts.Cmd {
 		ValueParam("principal", "who, as a refusal spells it, e.g. chat:1234; also takes a bare argument", false).
 		ValueParam("role", "one of: "+strings.Join(authz.GrantableRoles(), ", ")+"; also takes a second bare argument", false).
 		ValueParam("label", "a readable name for `role list`; it decides nothing", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return grantRole(store, in)
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(grantRole(store, in))
 		})
 }
 
@@ -114,8 +114,8 @@ func roleRevokeVerb(store *state.State) contracts.Cmd {
 	return contracts.New("role", "revoke").
 		Help("take a principal's role back").
 		ValueParam("principal", "who, as `role list` spells it; also takes a bare argument", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return revokeRole(store, in)
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(revokeRole(store, in))
 		})
 }
 
@@ -141,8 +141,8 @@ func roleShowVerb(store *state.State) contracts.Cmd {
 	return contracts.New("role", "show").
 		Help("what one principal may run").
 		ValueParam("principal", "who, as `role list` spells it; also takes a bare argument", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return showRole(store, in)
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(showRole(store, in))
 		})
 }
 

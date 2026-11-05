@@ -8,7 +8,22 @@ import (
 	"net"
 	"os"
 	"time"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/cli"
 )
+
+func textOf(res contracts.Result, err error, lang i18n.Language) (string, error) {
+	if err != nil {
+		return "", cli.Localize(err, lang)
+	}
+	return cli.Text(res, lang)
+}
+
+type resultDispatcher interface {
+	Dispatch(context.Context, []string) (contracts.Result, error)
+}
 
 type dispatcher interface {
 	Dispatch(context.Context, []string) (string, error)

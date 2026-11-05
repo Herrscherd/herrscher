@@ -34,7 +34,9 @@ func (talker) Menu(context.Context, contracts.Conversation, contracts.MessageID,
 
 func (talker) Commands() []contracts.Cmd {
 	return []contracts.Cmd{contracts.New("channel", "read").Help("fake").Do(
-		func(context.Context, contracts.Input) (string, error) { return "ok", nil },
+		func(context.Context, contracts.Input) (contracts.Result, error) {
+			return contracts.DataResult("ok"), nil
+		},
 	)}
 }
 func (t talker) RunForeground(context.Context, context.CancelFunc) error { return nil }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
@@ -116,10 +117,12 @@ func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions
 			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTask, "timeout": handoffBriefTimeout}}
 			return runSeedVerb(ctx, in, store, instID, seedCoord.coord)
 		},
-		create: create.Run,
+		create: func(ctx context.Context, in contracts.Input) (string, error) {
+			res, err := create.Run(ctx, in)
+			return textOf(res, err, i18n.English)
+		},
 		send: func(ctx context.Context, target, author, text string) error {
-			_, err := sendToSession(ctx, sessions, contracts.Input{Args: map[string]string{paramName: target, "author": author, "text": text}})
-			return err
+			return sendToSession(ctx, sessions, contracts.Input{Args: map[string]string{paramName: target, "author": author, "text": text}})
 		},
 		limit:        newHandoffLimiter(time.Now),
 		checkAccount: checkAccount,
@@ -151,7 +154,7 @@ func sessionHandoffVerb(deps handoffDeps) contracts.Cmd {
 		Param("account", "account profile for the new session, resolved in its vendor (default: the source session's account; --account \"\" starts on the vendor default)", false).
 		Param(paramUnder, "create the new conversation under this category/forum instead of the daemon's home (operator only)", false).
 		Param(paramChannel, "adopt this existing conversation for the new session (operator only)", false).
-		Do(deps.run)
+		Do(cli.Handler(deps.run))
 }
 
 func (d handoffDeps) run(ctx context.Context, input contracts.Input) (string, error) {

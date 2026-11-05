@@ -17,6 +17,18 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
+type dispatcherFunc func(context.Context, []string) (string, error)
+
+func textDispatch(reg *cli.Registry) dispatcherFunc {
+	return func(ctx context.Context, argv []string) (string, error) {
+		return cli.Plain(reg.Dispatch(ctx, argv))
+	}
+}
+
+func (f dispatcherFunc) Dispatch(ctx context.Context, argv []string) (string, error) {
+	return f(ctx, argv)
+}
+
 func TestResolveTurnIDPreservesSuppliedValueExactly(t *testing.T) {
 	const supplied = "request-01_alpha.beta~v2"
 	got, err := resolveTurnID(supplied, true)
@@ -177,9 +189,9 @@ func TestSeedTurnIDRoundTripsThroughShellAndCommandSocket(t *testing.T) {
 	reg, sess, events, ctx := identitySeedRegistry(t)
 
 	const shellTurnID = "shell.turn-01"
-	out, err := reg.Dispatch(ctx, []string{
+	out, err := cli.Plain(reg.Dispatch(ctx, []string{
 		"session", "seed", "--name", "solo", "--task", "first", "--turn_id", shellTurnID,
-	})
+	}))
 	if err != nil || out != "seeded" {
 		t.Fatalf("shell seed = %q, %v", out, err)
 	}
@@ -187,7 +199,7 @@ func TestSeedTurnIDRoundTripsThroughShellAndCommandSocket(t *testing.T) {
 
 	*events = nil
 	const socketTurnID = "socket_turn-02"
-	response := dispatchCommandPipe(ctx, t, reg, []string{
+	response := dispatchCommandPipe(ctx, t, textDispatch(reg), []string{
 		"session", "seed", "--name", "solo", "--task", "second", "--turn_id", socketTurnID,
 	})
 	if response.Err != nil {
@@ -230,12 +242,12 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 		return delegateSeedBackend{}, nil
 	}
 
-	reply, err := h.Dispatch(ctx, []string{
+	reply, err := cli.Plain(h.Dispatch(ctx, []string{
 		"session", "seed",
 		"--name", "orchestrator",
 		"--task", "Délègue une inspection strictement en lecture seule.",
 		"--turn_id", "turn-live-safe",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +286,7 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 
 func TestSeedCommandSocketReportsInvalidTurnIDClearly(t *testing.T) {
 	reg, _, _, ctx := identitySeedRegistry(t)
-	response := dispatchCommandPipe(ctx, t, reg, []string{
+	response := dispatchCommandPipe(ctx, t, textDispatch(reg), []string{
 		"session", "seed", "--name", "solo", "--task", "bad", "--turn_id", "not safe",
 	})
 	if response.Err == nil || !strings.Contains(*response.Err, "invalid turn_id") {
@@ -291,7 +303,7 @@ func TestSeedRequiresValueAfterTurnIDFlag(t *testing.T) {
 		t.Fatalf("shell valueless turn_id error = %v", err)
 	}
 
-	response := dispatchCommandPipe(ctx, t, reg, []string{
+	response := dispatchCommandPipe(ctx, t, textDispatch(reg), []string{
 		"session", "seed", "--name", "solo", "--task", "bad", "--turn_id",
 	})
 	if response.Err == nil || !strings.Contains(*response.Err, "flag --turn_id needs a value") {

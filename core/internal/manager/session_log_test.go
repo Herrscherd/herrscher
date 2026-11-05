@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -46,7 +48,7 @@ func TestSessionLogRun_JSONShapeAndOrder(t *testing.T) {
 		{Ts: "t2", Role: "assistant", Text: "bonjour", Cost: 0.02},
 	})
 
-	out, err := h.sessionLogRun(context.Background(), contractsInputJSON("alpha"))
+	out, err := cli.Plain(h.sessionLogRun(context.Background(), contractsInputJSON("alpha")))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -64,7 +66,7 @@ func TestSessionLogRun_JSONShapeAndOrder(t *testing.T) {
 
 func TestSessionLogRun_UnknownSessionIsEmptyArray(t *testing.T) {
 	h := &Handler{partDir: t.TempDir()}
-	out, err := h.sessionLogRun(context.Background(), contractsInputJSON("ghost"))
+	out, err := cli.Plain(h.sessionLogRun(context.Background(), contractsInputJSON("ghost")))
 	if err != nil {
 		t.Fatalf("unknown session must not error, got %v", err)
 	}
@@ -75,7 +77,7 @@ func TestSessionLogRun_UnknownSessionIsEmptyArray(t *testing.T) {
 
 func TestSessionLogRun_TraversalNameIsEmpty(t *testing.T) {
 	h := &Handler{partDir: t.TempDir()}
-	out, err := h.sessionLogRun(context.Background(), contractsInputJSON("../../../etc/passwd"))
+	out, err := cli.Plain(h.sessionLogRun(context.Background(), contractsInputJSON("../../../etc/passwd")))
 	if err != nil {
 		t.Fatalf("crafted name must not error, got %v", err)
 	}

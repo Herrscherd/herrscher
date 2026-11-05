@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/cli"
 )
 
 func gateHandler(t *testing.T, dir, grain, why string) *Handler {
@@ -19,7 +21,7 @@ func gateHandler(t *testing.T, dir, grain, why string) *Handler {
 func TestSessionCreateGatesASessionWithoutAnAgent(t *testing.T) {
 	dir := t.TempDir()
 	h := gateHandler(t, dir, "tool", "")
-	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "strict"))
+	out, err := cli.Plain(h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "strict")))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -61,7 +63,7 @@ func TestSessionCreateLeavesATrackedSettingsFileAlone(t *testing.T) {
 func TestSessionCreateWarnsWhenTheVendorCannotEnforce(t *testing.T) {
 	dir := t.TempDir()
 	h := gateHandler(t, dir, "", "cursor-agent exposes no permission hook")
-	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "vendor", "cursor", "approvals", "strict"))
+	out, err := cli.Plain(h.sessionCreateRun(context.Background(), args("name", "demo", "vendor", "cursor", "approvals", "strict")))
 	if err != nil {
 		t.Fatalf("create must not refuse: %v", err)
 	}
@@ -78,7 +80,7 @@ func TestSessionCreateWarnsWhenTheVendorCannotEnforce(t *testing.T) {
 
 func TestSessionCreateWarnsOnASharedSession(t *testing.T) {
 	h := gateHandler(t, t.TempDir(), "tool", "")
-	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "strict", "shared", "true"))
+	out, err := cli.Plain(h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "strict", "shared", "true")))
 	if err != nil {
 		t.Fatalf("create must not refuse: %v", err)
 	}
@@ -89,7 +91,7 @@ func TestSessionCreateWarnsOnASharedSession(t *testing.T) {
 
 func TestSessionCreateWarnsOnARemoteSessionWithoutAnAgent(t *testing.T) {
 	h := gateHandler(t, t.TempDir(), "tool", "")
-	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "host", "build1", "approvals", "strict"))
+	out, err := cli.Plain(h.sessionCreateRun(context.Background(), args("name", "demo", "host", "build1", "approvals", "strict")))
 	if err != nil {
 		t.Fatalf("create must not refuse: %v", err)
 	}
@@ -102,7 +104,7 @@ func TestSessionCreateStaysQuietAndUngatedOnBypass(t *testing.T) {
 	dir := t.TempDir()
 	h := gateHandler(t, dir, "tool", "")
 	for _, mode := range []string{"", "bypass"} {
-		out, err := h.sessionCreateRun(context.Background(), args("name", "demo"+mode, "approvals", mode))
+		out, err := cli.Plain(h.sessionCreateRun(context.Background(), args("name", "demo"+mode, "approvals", mode)))
 		if err != nil {
 			t.Fatalf("create %q: %v", mode, err)
 		}
@@ -117,7 +119,7 @@ func TestSessionCreateStaysQuietAndUngatedOnBypass(t *testing.T) {
 
 func TestSessionCreateWithNoResolverWarnsRatherThanAssumes(t *testing.T) {
 	h, _, _, _ := handlerWithHosts(t)
-	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "ask"))
+	out, err := cli.Plain(h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "ask")))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

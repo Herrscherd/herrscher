@@ -21,7 +21,7 @@ const (
 )
 
 type sessionCreator interface {
-	CreateCoordinated(context.Context, contracts.CreateSession, string) (string, error)
+	CreateCoordinated(context.Context, contracts.CreateSession, string) (contracts.Result, error)
 }
 type agentLookup interface {
 	Get(name string) (agent.Agent, bool)
@@ -37,7 +37,7 @@ type sessionLister interface {
 	SnapshotSessions() []state.Session
 }
 type sessionCloser interface {
-	Close(ctx context.Context, name string, force bool) (string, error)
+	Close(ctx context.Context, name string, force bool) (contracts.Result, error)
 }
 
 type coordinator struct {

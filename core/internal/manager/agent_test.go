@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -19,7 +21,7 @@ func TestAgentListJSON(t *testing.T) {
 		args("name", "Roblox Dev", "soul", "PERSONA", "backend", "codex", "tags", "role:scripter luau")); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	out, err := h.agentListRun(context.Background(), contracts.Input{JSON: true})
+	out, err := cli.Plain(h.agentListRun(context.Background(), contracts.Input{JSON: true}))
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -51,7 +53,7 @@ func TestAgentShowJSON(t *testing.T) {
 		args("name", "reviewer", "soul", "You review diffs.", "tags", "role:reviewer")); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	out, err := h.agentShowRun(context.Background(), contracts.Input{Args: map[string]string{"name": "reviewer"}, JSON: true})
+	out, err := cli.Plain(h.agentShowRun(context.Background(), contracts.Input{Args: map[string]string{"name": "reviewer"}, JSON: true}))
 	if err != nil {
 		t.Fatalf("show: %v", err)
 	}
@@ -73,7 +75,7 @@ func TestAgentShowJSON(t *testing.T) {
 func TestAgentCreateAndList(t *testing.T) {
 	h, _, _, _, _, _ := newTestHandler(t, "")
 
-	out, err := h.agentListRun(context.Background(), args())
+	out, err := cli.Plain(h.agentListRun(context.Background(), args()))
 	if err != nil || !strings.Contains(out, "No agents") {
 		t.Fatalf("empty list: out=%q err=%v", out, err)
 	}
@@ -85,7 +87,7 @@ func TestAgentCreateAndList(t *testing.T) {
 		t.Fatalf("agent should exist under slug roblox-dev")
 	}
 
-	out, err = h.agentListRun(context.Background(), args())
+	out, err = cli.Plain(h.agentListRun(context.Background(), args()))
 	if err != nil || !strings.Contains(out, "roblox-dev") {
 		t.Fatalf("list should mention agent: out=%q err=%v", out, err)
 	}

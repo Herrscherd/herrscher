@@ -22,7 +22,7 @@ type scheduleStore interface {
 }
 
 type scheduleCreator interface {
-	Create(context.Context, contracts.CreateSession) (string, error)
+	Create(context.Context, contracts.CreateSession) (contracts.Result, error)
 }
 
 type scheduleRunner interface {

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/internal/authz"
 )
 
@@ -33,18 +34,24 @@ func principalOf(ctx context.Context) authz.Principal {
 }
 
 type asSession struct {
-	disp    dispatcher
+	disp    resultDispatcher
 	session string
+	lang    i18n.Language
 }
 
 func (a asSession) Dispatch(ctx context.Context, args []string) (string, error) {
-	return a.disp.Dispatch(withSessionPrincipal(ctx, a.session), args)
+	res, err := a.disp.Dispatch(withSessionPrincipal(ctx, a.session), args)
+	return textOf(res, err, a.lang)
 }
 
-type asOperator struct{ disp dispatcher }
+type asOperator struct {
+	disp resultDispatcher
+	lang i18n.Language
+}
 
 func (a asOperator) Dispatch(ctx context.Context, args []string) (string, error) {
-	return a.disp.Dispatch(withLocalPrincipal(ctx), args)
+	res, err := a.disp.Dispatch(withLocalPrincipal(ctx), args)
+	return textOf(res, err, a.lang)
 }
 
 func sessionArgs() map[string]string {

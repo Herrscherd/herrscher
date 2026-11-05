@@ -23,8 +23,8 @@ func authzHub(t *testing.T, st *state.State, verbs ...[]string) *hub {
 		if path[0] == "approve" {
 			cmd = cmd.ValueParam("session", "session name", false)
 		}
-		if err := reg.Add(cmd.Do(func(context.Context, contracts.Input) (string, error) {
-			return "ran", nil
+		if err := reg.Add(cmd.Do(func(context.Context, contracts.Input) (contracts.Result, error) {
+			return contracts.DataResult("ran"), nil
 		})); err != nil {
 			t.Fatal(err)
 		}
@@ -159,9 +159,9 @@ func TestDispatchRefusesBeforeReachingTheRegistry(t *testing.T) {
 	reg := &cli.Registry{}
 	if err := reg.Add(contracts.New("approve", "rule").
 		Help("test verb").
-		Do(func(context.Context, contracts.Input) (string, error) {
+		Do(func(context.Context, contracts.Input) (contracts.Result, error) {
 			ran = true
-			return "ran", nil
+			return contracts.DataResult("ran"), nil
 		})); err != nil {
 		t.Fatal(err)
 	}

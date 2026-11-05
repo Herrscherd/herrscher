@@ -36,7 +36,7 @@ func TestApproveRuleAddsListsRemoves(t *testing.T) {
 	if _, err := reg.Dispatch(ctx, []string{"approve", "rule", "ask Bash(git push*)"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	out, err := reg.Dispatch(ctx, []string{"approve", "rule"})
+	out, err := cli.Plain(reg.Dispatch(ctx, []string{"approve", "rule"}))
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestApproveRuleAddsListsRemoves(t *testing.T) {
 	if _, err := reg.Dispatch(ctx, []string{"approve", "rule", "--rm", "ask Bash(git push*)"}); err != nil {
 		t.Fatalf("rm: %v", err)
 	}
-	out, dispatchErr := reg.Dispatch(ctx, []string{"approve", "rule"})
+	out, dispatchErr := cli.Plain(reg.Dispatch(ctx, []string{"approve", "rule"}))
 	logCleanup(dispatchErr)
 	if strings.Contains(out, "git push") {
 		t.Fatalf("list %q must no longer show the rule", out)
@@ -91,7 +91,7 @@ func TestApproveEmptyJSONIsAnEmptyList(t *testing.T) {
 	sessionTab := newSessionTable()
 	reg, _ := approveReg(t, approvalTab, sessionTab)
 	for _, argv := range [][]string{{"approve", "rule", "--json"}, {"approve", "list", "--json"}} {
-		out, err := reg.Dispatch(context.Background(), argv)
+		out, err := cli.Plain(reg.Dispatch(context.Background(), argv))
 		if err != nil {
 			t.Fatalf("%v: %v", argv, err)
 		}
@@ -114,7 +114,7 @@ func TestApproveListEmpty(t *testing.T) {
 	approvalTab := newApprovalTable()
 	sessionTab := newSessionTable()
 	reg, _ := approveReg(t, approvalTab, sessionTab)
-	out, err := reg.Dispatch(context.Background(), []string{"approve", "list"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"approve", "list"}))
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestApproveAllowSettlesAWaitingRequest(t *testing.T) {
 		}()
 
 		id := awaitPending(t, approvalTab, 1)[0].ID
-		out, err := reg.Dispatch(context.Background(), []string{"approve", "allow", id})
+		out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"approve", "allow", id}))
 		if err != nil {
 			t.Fatalf("allow: %v", err)
 		}
@@ -209,7 +209,7 @@ func TestApproveAllowUnknownIDReportsIt(t *testing.T) {
 	approvalTab := newApprovalTable()
 	sessionTab := newSessionTable()
 	reg, _ := approveReg(t, approvalTab, sessionTab)
-	out, err := reg.Dispatch(context.Background(), []string{"approve", "allow", "nope"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"approve", "allow", "nope"}))
 	if err == nil {
 		t.Fatalf("out = %q, want an error: claiming success for a request nobody is waiting on reads as an allowed call", out)
 	}

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -26,8 +28,8 @@ func sessionAccountsVerb(store *state.State) contracts.Cmd {
 	return contracts.New(nsSession, "accounts").
 		Help(listAccountsHelp).
 		Param(paramName, "session name", true).
-		Do(func(_ context.Context, input contracts.Input) (string, error) {
-			return listSessionAccounts(store, input.Get(paramName))
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
+			return cli.Data(listSessionAccounts(store, input.Get(paramName)))
 		})
 }
 
@@ -37,8 +39,8 @@ func sessionSetAccountVerb(store *state.State) contracts.Cmd {
 		Param(paramName, "session name", true).
 		Param(paramProfile, "profile name, native, or empty for the vendor default", false).
 		Param(paramFresh, "fresh to start a new conversation under the new account", false).
-		Do(func(_ context.Context, input contracts.Input) (string, error) {
-			return setSessionAccount(store, input.Get(paramName), input.Get(paramProfile), input.Get(paramFresh) == freshMarker)
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
+			return cli.Data(setSessionAccount(store, input.Get(paramName), input.Get(paramProfile), input.Get(paramFresh) == freshMarker))
 		})
 }
 

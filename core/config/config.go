@@ -37,6 +37,7 @@ type HomeRef struct {
 // falls through to the next source in the precedence chain (env / built-in
 // default for knobs, live state.json for the declarative runtime fields).
 type Config struct {
+	Language string `json:"language,omitempty"`
 	// Daemon knobs (precedence: explicit flag > env > this > built-in default).
 	Cmd           string         `json:"cmd"`
 	HealthAddr    string         `json:"healthAddr"`

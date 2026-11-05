@@ -6,16 +6,16 @@ toolchain go1.27.3
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/Herrscherd/herrscher-claude-backend v0.7.0
-	github.com/Herrscherd/herrscher-codex-backend v0.6.0
-	github.com/Herrscherd/herrscher-contracts v0.16.0
-	github.com/Herrscherd/herrscher-cursor-backend v0.6.0
-	github.com/Herrscherd/herrscher-discord-gateway v0.23.0
-	github.com/Herrscherd/herrscher-llm-extractor v0.3.0
-	github.com/Herrscherd/herrscher-obsidian-memory v0.5.0
-	github.com/Herrscherd/herrscher-orchestrator v0.4.0
+	github.com/Herrscherd/herrscher-claude-backend v0.8.0
+	github.com/Herrscherd/herrscher-codex-backend v0.7.0
+	github.com/Herrscherd/herrscher-contracts v0.18.0
+	github.com/Herrscherd/herrscher-cursor-backend v0.7.0
+	github.com/Herrscherd/herrscher-discord-gateway v0.24.0
+	github.com/Herrscherd/herrscher-llm-extractor v0.4.0
+	github.com/Herrscherd/herrscher-obsidian-memory v0.6.0
+	github.com/Herrscherd/herrscher-orchestrator v0.5.0
 	github.com/Herrscherd/herrscher-superset-skills v0.4.0
-	github.com/Herrscherd/herrscher-transport v0.4.0
+	github.com/Herrscherd/herrscher-transport v0.5.0
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
@@ -29,12 +29,12 @@ require (
 	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0
-	golang.org/x/text v0.42.0
+	golang.org/x/text v0.43.0
 	google.golang.org/grpc v1.83.2
 )
 
 require (
-	github.com/Herrscherd/dctl v1.9.0 // indirect
+	github.com/Herrscherd/dctl v1.10.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.20.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
@@ -63,6 +63,7 @@ require (
 	github.com/nats-io/jwt/v2 v2.5.8 // indirect
 	github.com/nats-io/nkeys v0.4.7 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
+	github.com/nicksnyder/go-i18n/v2 v2.7.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.7.17 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect

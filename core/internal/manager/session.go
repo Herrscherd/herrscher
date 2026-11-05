@@ -13,6 +13,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
@@ -159,18 +160,18 @@ func applyBudget(session state.Session, patch budgetPatch, curCost float64, curT
 	return session
 }
 
-func (h *Handler) sessionSetBudgetRun(_ context.Context, input contracts.Input) (string, error) {
+func (h *Handler) sessionSetBudgetRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	sess, ok := h.st.FindSession(name)
 	if !ok {
-		return "", &SessionNotFoundError{Name: name}
+		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	patch, err := parseBudgetPatch(input)
 	if err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
 	targets := []state.Session{sess}
 	if scope, _ := input.Lookup("scope"); scope == "cohort" {
@@ -178,10 +179,10 @@ func (h *Handler) sessionSetBudgetRun(_ context.Context, input contracts.Input) 
 	}
 	for i := range targets {
 		if applyErr := h.applyBudgetTo(targets[i], patch); applyErr != nil {
-			return "", applyErr
+			return contracts.Result{}, applyErr
 		}
 	}
-	return fmt.Sprintf("✅ budget updated for %d session(s)", len(targets)), nil
+	return contracts.DataResult(fmt.Sprintf("✅ budget updated for %d session(s)", len(targets))), nil
 }
 
 func parseBudgetPatch(input contracts.Input) (budgetPatch, error) {
@@ -358,6 +359,7 @@ type createRequest struct {
 	account    string
 	mode       string
 	shared     bool
+	lang       string
 }
 
 type workspace struct {
@@ -379,17 +381,17 @@ type placement struct {
 	space   workspace
 }
 
-func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (string, error) {
+func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 	req, err := h.parseCreateRequest(ctx, input)
 	if err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
 	if readyErr := h.checkHostReady(req.hostName); readyErr != nil {
-		return "", readyErr
+		return contracts.Result{}, readyErr
 	}
 	place, err := h.placeSession(ctx, input, &req)
 	if err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
 	approvalsNote := h.approvalsNote(ctx, req, place.space)
 	runDir := place.space.path
@@ -400,10 +402,10 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 	slot, err := openChannel(ctx, req, h.st.QualifiedName(req.name))
 	if err != nil {
 		if _, unsupported := errors.AsType[*UnsupportedHomeTypeError](err); unsupported {
-			return "", err
+			return contracts.Result{}, err
 		}
 		h.rollbackPlacement(ctx, place, req.name)
-		return "", err
+		return contracts.Result{}, err
 	}
 	sess.ChannelID, sess.Owned, sess.Type = slot.id, slot.owned, slot.typ
 	sess.Approvals = req.mode
@@ -412,12 +414,12 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 		if note := h.tidyChannel(ctx, sess); note != "" {
 			h.log.Warn("channel rollback", "session", req.name, "note", note)
 		}
-		return "", fmt.Errorf("persist: %w", err)
+		return contracts.Result{}, fmt.Errorf("persist: %w", err)
 	}
 	h.sup.Start(sess)
 	banner := sessionBanner(place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared)
 	h.warnIfFailed(req.admin.Send(ctx, sess.ChannelID, banner), "send banner for "+req.name)
-	return fmt.Sprintf("✅ Running on %s.\n\n%s%s", req.admin.ChannelRef(sess.ChannelID), banner, approvalsNote), nil
+	return contracts.DataResult(fmt.Sprintf("✅ Running on %s.\n\n%s%s", req.admin.ChannelRef(sess.ChannelID), banner, approvalsNote)), nil
 }
 
 func (h *Handler) placeSession(ctx context.Context, input contracts.Input, req *createRequest) (placement, error) {
@@ -484,15 +486,20 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	if err != nil {
 		return createRequest{}, err
 	}
-	if err := checkParentCycle(name, options.parent, h.st.SnapshotSessions()); err != nil {
-		return createRequest{}, err
+	if cycleErr := checkParentCycle(name, options.parent, h.st.SnapshotSessions()); cycleErr != nil {
+		return createRequest{}, cycleErr
 	}
 	mode := strings.TrimSpace(input.Get("approvals"))
-	if err := validateApprovalsMode(mode); err != nil {
-		return createRequest{}, err
+	if modeErr := validateApprovalsMode(mode); modeErr != nil {
+		return createRequest{}, modeErr
 	}
 	base, _ := input.Lookup("base")
+	lang, err := parseSessionLanguage(input)
+	if err != nil {
+		return createRequest{}, err
+	}
 	return createRequest{
+		lang:     lang,
 		name:     name,
 		base:     base,
 		home:     home,
@@ -848,8 +855,22 @@ func newSessionRecord(req createRequest, space workspace, project, runDir string
 		Parent: options.parent, Gateways: options.gateways, Extractor: options.extractor, Journal: options.journal,
 		ConsolidateEvery: options.consolidateEvery, CostCap: options.caps.cost, TokenCap: options.caps.tokens,
 		CohortCostCap: options.caps.cohortCost, CohortTokenCap: options.caps.cohortTokens, Host: req.hostName,
-		Account: req.account,
+		Account: req.account, Language: req.lang,
 	}
+}
+
+const langParam = "lang"
+
+func parseSessionLanguage(input contracts.Input) (string, error) {
+	raw, ok := input.Lookup(langParam)
+	if !ok || strings.TrimSpace(raw) == "" {
+		return "", nil
+	}
+	lang, err := i18n.ParseLanguage(raw)
+	if err != nil {
+		return "", &InvalidValueError{Field: langParam, Value: raw, Hint: "use en or fr"}
+	}
+	return lang.String(), nil
 }
 
 func openChannel(ctx context.Context, req createRequest, title string) (channelSlot, error) {
@@ -881,60 +902,63 @@ func (h *Handler) adminFor(sess state.Session) channelAdmin {
 	return h.d
 }
 
-func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (string, error) {
+func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", &SessionNotFoundError{Name: name}
+		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	wtRoot, repoRoot, err := h.worktreesOn(sess.Host)
 	if err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
 	h.warnIfFailed(h.sup.Stop(name), "stop "+name)
 	repo := repoFor(repoRoot, sess.Project)
 	if sess.Worktree != "" && sess.Scratch {
 		if err := wtRoot.RemoveScratch(repo, name); err != nil {
 			h.sup.Start(sess)
-			return "", err
+			return contracts.Result{}, err
 		}
 	}
 	if sess.Worktree != "" && !sess.Scratch {
 		force := input.Bool("force")
 		if err := wtRoot.Remove(ctx, repo, name, force); err != nil {
 			h.sup.Start(sess)
-			return "", fmt.Errorf("%w; commit, or close with force:true to discard (branch session/%s is kept)", err, name)
+			return contracts.Result{}, fmt.Errorf("%w; commit, or close with force:true to discard (branch session/%s is kept)", err, name)
 		}
 	}
 	note := h.tidyChannel(ctx, sess)
 	if err := h.st.RemoveSession(name); err != nil {
 		sess.Worktree, sess.Dir = "", repo
 		h.sup.Start(sess)
-		return "", fmt.Errorf("persist: %w", err)
+		return contracts.Result{}, fmt.Errorf("persist: %w", err)
 	}
 	h.warnIfFailed(state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name)), "remove participants of "+name)
 	h.warnIfFailed(state.RemoveTranscript(state.TranscriptPath(h.partDir, name)), "remove transcript of "+name)
-	return fmt.Sprintf("🗄️ Session **%s** closed.%s", name, note), nil
+	if note == "" {
+		return contracts.NoticeResult(sessionNotice(contracts.CodeSessionClosed, name)), nil
+	}
+	return contracts.DataResult(fmt.Sprintf("🗄️ Session **%s** closed.%s", name, note)), nil
 }
 
-func (h *Handler) sessionArchiveRun(ctx context.Context, input contracts.Input) (string, error) {
+func (h *Handler) sessionArchiveRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", &SessionNotFoundError{Name: name}
+		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	h.warnIfFailed(h.sup.Stop(name), "stop "+name)
 	note := h.tidyChannel(ctx, sess)
 	if err := h.st.SetArchived(name, true); err != nil {
-		return "", fmt.Errorf("persist: %w", err)
+		return contracts.Result{}, fmt.Errorf("persist: %w", err)
 	}
-	return fmt.Sprintf("📦 Session **%s** archived. Resume it from /resume.%s", name, note), nil
+	return contracts.DataResult(fmt.Sprintf("📦 Session **%s** archived. Resume it from /resume.%s", name, note)), nil
 }
 
 func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
@@ -947,33 +971,33 @@ func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
 	return ""
 }
 
-func (h *Handler) sessionRenameRun(_ context.Context, input contracts.Input) (string, error) {
+func (h *Handler) sessionRenameRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	raw, ok := input.Lookup("to")
 	if !ok {
-		return "", ErrMissingTo
+		return contracts.Result{}, ErrMissingTo
 	}
 	target := slugify(raw)
 	if target == "" || !sessionNameRe.MatchString(target) {
-		return "", &InvalidValueError{Field: nameParam, Value: raw, Hint: "use letters, digits, - or _ (max 64, no /, spaces or ..)"}
+		return contracts.Result{}, &InvalidValueError{Field: nameParam, Value: raw, Hint: "use letters, digits, - or _ (max 64, no /, spaces or ..)"}
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", &SessionNotFoundError{Name: name}
+		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	if target == name {
-		return fmt.Sprintf("session **%s** porte déjà ce nom", name), nil
+		return contracts.DataResult(fmt.Sprintf("session **%s** porte déjà ce nom", name)), nil
 	}
 	if _, taken := h.st.FindSession(target); taken {
-		return "", &SessionExistsError{Name: target}
+		return contracts.Result{}, &SessionExistsError{Name: target}
 	}
 	h.warnIfFailed(h.sup.Stop(name), "stop "+name)
 	if err := h.st.RenameSession(name, target); err != nil {
 		h.sup.Start(sess)
-		return "", fmt.Errorf("persist: %w", err)
+		return contracts.Result{}, fmt.Errorf("persist: %w", err)
 	}
 	note := ""
 	if err := state.MoveSessionFile(state.TranscriptPath(h.partDir, name), state.TranscriptPath(h.partDir, target)); err != nil {
@@ -987,7 +1011,7 @@ func (h *Handler) sessionRenameRun(_ context.Context, input contracts.Input) (st
 	}
 	sess.Name = target
 	h.sup.Start(sess)
-	return fmt.Sprintf("✎ Session **%s** renommée en **%s**.%s", name, target, note), nil
+	return contracts.DataResult(fmt.Sprintf("✎ Session **%s** renommée en **%s**.%s", name, target, note)), nil
 }
 
 func scheduleOwning(schedules []schedule.Schedule, session string) string {
@@ -1000,27 +1024,27 @@ func scheduleOwning(schedules []schedule.Schedule, session string) string {
 	return ""
 }
 
-func (h *Handler) sessionResumeRun(_ context.Context, input contracts.Input) (string, error) {
+func (h *Handler) sessionResumeRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", &SessionNotFoundError{Name: name}
+		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	if err := h.st.SetArchived(name, false); err != nil {
-		return "", fmt.Errorf("persist: %w", err)
+		return contracts.Result{}, fmt.Errorf("persist: %w", err)
 	}
 	sess.Archived = false
 	h.sup.Start(sess)
-	return fmt.Sprintf("⟲ Session **%s** resumed.", name), nil
+	return contracts.DataResult(fmt.Sprintf("⟲ Session **%s** resumed.", name)), nil
 }
 
-func (h *Handler) sessionSwitchRun(ctx context.Context, input contracts.Input) (string, error) {
+func (h *Handler) sessionSwitchRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	vendor := input.Get("vendor")
 	cmd, cmdSupplied := input.Lookup("cmd")
@@ -1031,31 +1055,31 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, input contracts.Input) (
 	}
 	prior, exists := h.st.FindSession(name)
 	if !exists {
-		return "", &SessionNotFoundError{Name: name}
+		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	modelID := prior.ModelID
 	if v, supplied := input.Lookup("model"); supplied {
 		modelID = v
 	}
 	if err := h.checkModel(vendor, modelID); err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
 	if err := h.checkSpawnSource(cmdSupplied, modelID); err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
 	targeted, persistErr := h.st.SetBackendTarget(name, vendor, cmd, modelID)
 	if !targeted {
-		return "", &SessionNotFoundError{Name: name}
+		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	if persistErr != nil {
-		return "", fmt.Errorf("persist: %w", persistErr)
+		return contracts.Result{}, fmt.Errorf("persist: %w", persistErr)
 	}
 	sess, _ := h.st.FindSession(name)
 	switchNote := h.switchApprovalsNote(sess)
 	if err := h.sup.Restart(sess); err != nil {
-		return "", h.revertSwitch(name, prior, err)
+		return contracts.Result{}, h.revertSwitch(name, prior, err)
 	}
-	return h.switchReply(ctx, name, vendor, handoff, switchNote), nil
+	return contracts.DataResult(h.switchReply(ctx, name, vendor, handoff, switchNote)), nil
 }
 
 func (h *Handler) switchApprovalsNote(sess state.Session) string {
@@ -1118,7 +1142,7 @@ func (h *Handler) rollbackSwitch(name, oldVendor, oldCmd, oldModelID, oldToken s
 	return errors.Join(persistErr, h.sup.Restart(sess))
 }
 
-func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (string, error) {
+func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	sessions := h.st.SnapshotSessions()
 	if input.JSON {
 		rows := make([]sessionJSON, 0, len(sessions))
@@ -1138,10 +1162,10 @@ func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (stri
 			rows = append(rows, row)
 		}
 		b, err := json.Marshal(rows)
-		return string(b), err
+		return contracts.DataResult(string(b)), err
 	}
 	if len(sessions) == 0 {
-		return "No active sessions.", nil
+		return contracts.DataResult("No active sessions."), nil
 	}
 	var out strings.Builder
 	out.WriteString("Active sessions:\n")
@@ -1149,34 +1173,34 @@ func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (stri
 		s := sessions[i]
 		fmt.Fprintf(&out, "• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
 	}
-	return out.String(), nil
+	return contracts.DataResult(out.String()), nil
 }
 
-func (h *Handler) sessionWhoRun(_ context.Context, input contracts.Input) (string, error) {
+func (h *Handler) sessionWhoRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
-		return "", &SessionNotFoundError{Name: name}
+		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	if input.JSON {
 		row := sessionJSONRow(sess)
 		h.attachUsage(&row)
 		b, err := json.Marshal(row)
-		return string(b), err
+		return contracts.DataResult(string(b)), err
 	}
 	ids := state.ReadParticipants(state.ParticipantsPath(h.partDir, name))
 	if len(ids) == 0 {
-		return "Personne n'a encore écrit dans cette session.", nil
+		return contracts.DataResult("Personne n'a encore écrit dans cette session."), nil
 	}
 	var out strings.Builder
 	fmt.Fprintf(&out, "Participants observed in **%s**:\n", name)
 	for _, id := range ids {
 		fmt.Fprintf(&out, "• <@%s>\n", id)
 	}
-	return out.String(), nil
+	return contracts.DataResult(out.String()), nil
 }
 
 const sessionLogTranscriptCap = 200
@@ -1189,17 +1213,17 @@ const (
 	nonNegativeHint = "use a non-negative integer"
 )
 
-func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (string, error) {
+func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	raw, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
 		if input.JSON {
-			return "[]", nil
+			return contracts.DataResult("[]"), nil
 		}
-		return "No transcript yet.", nil
+		return contracts.DataResult("No transcript yet."), nil
 	}
 	limit := sessionLogTranscriptCap
 	if lraw, ok := input.Lookup("limit"); ok {
@@ -1213,16 +1237,16 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (strin
 			entries = []state.TranscriptEntry{}
 		}
 		b, err := json.Marshal(entries)
-		return string(b), err
+		return contracts.DataResult(string(b)), err
 	}
 	if len(entries) == 0 {
-		return "No transcript yet.", nil
+		return contracts.DataResult("No transcript yet."), nil
 	}
 	var out strings.Builder
 	for _, e := range entries {
 		fmt.Fprintf(&out, "**%s** %s\n", e.Role, e.Text)
 	}
-	return out.String(), nil
+	return contracts.DataResult(out.String()), nil
 }
 
 func (h *Handler) warnIfFailed(err error, action string) {

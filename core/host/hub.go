@@ -11,6 +11,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/control"
@@ -23,6 +24,7 @@ import (
 const defaultTeardownGrace = 5 * time.Second
 
 type hub struct {
+	lang    i18n.Language
 	st      *state.State
 	sup     *supervisor.Supervisor
 	gws     []Deps
@@ -120,7 +122,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms}, h.gate)
 	}()
 
-	serveCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name), asSession{disp: h, session: sess.Name})
+	serveCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name), asSession{disp: h, session: sess.Name, lang: h.lang})
 }
 
 func (h *hub) stopLive() {
@@ -186,9 +188,9 @@ func (h *hub) reconcile(ctx context.Context) {
 	}
 }
 
-func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
+func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, error) {
 	if err := h.authorize(ctx, args); err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
 	ctx = withRestarter(ctx, h)
 
@@ -234,15 +236,15 @@ func isSessionSeedCommand(args []string) bool {
 	return len(args) >= 2 && args[0] == nsSession && args[1] == verbSeed
 }
 
-func (h *hub) Create(ctx context.Context, spec contracts.CreateSession) (string, error) {
+func (h *hub) Create(ctx context.Context, spec contracts.CreateSession) (contracts.Result, error) {
 	return h.create(ctx, spec, "")
 }
 
-func (h *hub) CreateCoordinated(ctx context.Context, spec contracts.CreateSession, vendor string) (string, error) {
+func (h *hub) CreateCoordinated(ctx context.Context, spec contracts.CreateSession, vendor string) (contracts.Result, error) {
 	return h.create(ctx, spec, vendor)
 }
 
-func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor string) (string, error) {
+func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor string) (contracts.Result, error) {
 	args := map[string]string{paramName: spec.Name}
 	setStr := func(key, value string) {
 		if value != "" {
@@ -284,7 +286,7 @@ func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor s
 	return out, err
 }
 
-func (h *hub) Close(ctx context.Context, name string, force bool) (string, error) {
+func (h *hub) Close(ctx context.Context, name string, force bool) (contracts.Result, error) {
 	args := map[string]string{paramName: name}
 	if force {
 		args["force"] = valueTrue

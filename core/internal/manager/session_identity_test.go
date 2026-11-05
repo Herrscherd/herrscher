@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -21,7 +23,7 @@ func TestSessionListJSONCarriesIncarnation(t *testing.T) {
 	}
 
 	h := &Handler{st: st}
-	out, err := h.sessionListRun(context.Background(), contracts.Input{JSON: true})
+	out, err := cli.Plain(h.sessionListRun(context.Background(), contracts.Input{JSON: true}))
 	if err != nil {
 		t.Fatal(err)
 	}

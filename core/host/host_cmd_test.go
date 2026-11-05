@@ -27,7 +27,7 @@ func runHostVerb(t *testing.T, reg *cli.Registry, verb string, kv map[string]str
 	for k, v := range kv {
 		in.Args[k] = v
 	}
-	return reg.Run(context.Background(), []string{"host", verb}, in)
+	return cli.Plain(reg.Run(context.Background(), []string{"host", verb}, in))
 }
 
 func TestHostAddRefusesTheNameLocal(t *testing.T) {

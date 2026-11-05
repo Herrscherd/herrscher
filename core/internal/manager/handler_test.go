@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -86,7 +88,7 @@ func TestSessionListUsesGatewayChannelRef(t *testing.T) {
 	if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err != nil {
 		t.Fatal(err)
 	}
-	out, err := h.sessionListRun(context.Background(), contracts.Input{})
+	out, err := cli.Plain(h.sessionListRun(context.Background(), contracts.Input{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +104,7 @@ func TestSessionListJSON(t *testing.T) {
 		{Name: "alpha", Agent: "roblox", Parent: ""},
 		{Name: "beta", Agent: "roblox", Parent: "alpha"},
 	}
-	out, err := h.sessionListRun(context.Background(), contracts.Input{JSON: true})
+	out, err := cli.Plain(h.sessionListRun(context.Background(), contracts.Input{JSON: true}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +137,7 @@ func TestSessionListAggregatesUsage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	out, err := h.sessionListRun(context.Background(), contracts.Input{JSON: true})
+	out, err := cli.Plain(h.sessionListRun(context.Background(), contracts.Input{JSON: true}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +179,7 @@ func TestSessionListEmitsCoordination(t *testing.T) {
 	h.SetCoordinationReader(fakeCoordReader{views: map[string]CoordView{
 		"lead1": {Role: "lead", Lead: "lead1", Reported: 2, Expected: 3, Complete: false},
 	}})
-	out, err := h.sessionListRun(context.Background(), contracts.Input{JSON: true})
+	out, err := cli.Plain(h.sessionListRun(context.Background(), contracts.Input{JSON: true}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +210,7 @@ func TestSessionListEmitsCoordination(t *testing.T) {
 func TestSessionListOmitsCoordinationWhenUnwired(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{{Name: "s1", Agent: "roblox"}}
-	out, err := h.sessionListRun(context.Background(), contracts.Input{JSON: true})
+	out, err := cli.Plain(h.sessionListRun(context.Background(), contracts.Input{JSON: true}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,9 +222,9 @@ func TestSessionListOmitsCoordinationWhenUnwired(t *testing.T) {
 func TestSessionWhoJSON(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "category")
 	st.Sessions = []state.Session{{Name: "alpha", Agent: "roblox", Parent: "lead"}}
-	out, err := h.sessionWhoRun(context.Background(), contracts.Input{
+	out, err := cli.Plain(h.sessionWhoRun(context.Background(), contracts.Input{
 		Args: map[string]string{"name": "alpha"}, JSON: true,
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +242,7 @@ func TestSessionCreateUsesGatewayChannelRef(t *testing.T) {
 	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := h.sessionCreateRun(context.Background(), args("name", "demo"))
+	out, err := cli.Plain(h.sessionCreateRun(context.Background(), args("name", "demo")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,6 +484,38 @@ func TestSessionCreateShared(t *testing.T) {
 	}
 }
 
+func TestSessionCreateStoresLanguage(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "")
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "beta", "lang", "fr")); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	sess, ok := st.FindSession("beta")
+	if !ok {
+		t.Fatal("session beta not persisted")
+	}
+	if sess.Language != "fr" {
+		t.Fatalf("language %q, want fr", sess.Language)
+	}
+}
+
+func TestSessionCreateRejectsUnknownLanguage(t *testing.T) {
+	h, d, _, wt, _, st := newTestHandler(t, "")
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := h.sessionCreateRun(context.Background(), args("name", "beta", "lang", "klingon"))
+	var invalid *InvalidValueError
+	if !errors.As(err, &invalid) || invalid.Field != langParam {
+		t.Fatalf("err %v, want InvalidValueError on %s", err, langParam)
+	}
+	if len(wt.created) != 0 || len(d.created) != 0 {
+		t.Fatalf("nothing should be created on rejection (wt=%v ch=%v)", wt.created, d.created)
+	}
+}
+
 func TestSessionCreateRejectsUnsafeName(t *testing.T) {
 	for _, name := range []string{"..", "/", "---", "   ", "🙂", ""} {
 		h, d, _, wt, _, st := newTestHandler(t, "")
@@ -565,7 +599,7 @@ func TestSessionCreateTerminalHome(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := h.sessionCreateRun(context.Background(), args("name", "alpha", "terminal_only", "true", "shared", "true"))
+	out, err := cli.Plain(h.sessionCreateRun(context.Background(), args("name", "alpha", "terminal_only", "true", "shared", "true")))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -833,7 +867,7 @@ func assertCreateBanner(t *testing.T, tc createBannerCase) {
 	if tc.shared {
 		in.Args["shared"] = "true"
 	}
-	reply, err := h.sessionCreateRun(context.Background(), in)
+	reply, err := cli.Plain(h.sessionCreateRun(context.Background(), in))
 	if err != nil {
 		t.Fatalf("create failed: %v", err)
 	}
@@ -865,7 +899,7 @@ func TestSessionCreateSendFailureDoesNotFail(t *testing.T) {
 	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
 		t.Fatal(err)
 	}
-	reply, err := h.sessionCreateRun(context.Background(), args("name", "demo"))
+	reply, err := cli.Plain(h.sessionCreateRun(context.Background(), args("name", "demo")))
 	if err != nil {
 		t.Fatalf("create must still succeed when Send fails: %v", err)
 	}
@@ -1155,13 +1189,13 @@ func TestSessionCreateCloneErrorSurfaces(t *testing.T) {
 
 func TestSessionListEmptyAndPopulated(t *testing.T) {
 	h, _, _, _, _, st := newTestHandler(t, "")
-	if out, err := h.sessionListRun(context.Background(), args()); err != nil || !strings.Contains(out, "No active sessions") {
+	if out, err := cli.Plain(h.sessionListRun(context.Background(), args())); err != nil || !strings.Contains(out, "No active sessions") {
 		t.Fatalf("empty list: out=%q err=%v", out, err)
 	}
 	if err := st.AddSession(state.Session{Name: "demo", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := h.sessionListRun(context.Background(), args())
+	out, err := cli.Plain(h.sessionListRun(context.Background(), args()))
 	if err != nil || !strings.Contains(out, "demo") {
 		t.Fatalf("populated list should mention demo: out=%q err=%v", out, err)
 	}
@@ -1175,7 +1209,7 @@ func TestSessionListNeutralForTerminalHome(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "alpha", ChannelID: "terminal/alpha-1", Type: "text"}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := h.sessionListRun(context.Background(), args())
+	out, err := cli.Plain(h.sessionListRun(context.Background(), args()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1215,7 +1249,7 @@ func TestSessionWhoListsParticipants(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := h.sessionWhoRun(context.Background(), args("name", "demo"))
+	out, err := cli.Plain(h.sessionWhoRun(context.Background(), args("name", "demo")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1229,7 +1263,7 @@ func TestSessionWhoEmpty(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "demo", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := h.sessionWhoRun(context.Background(), args("name", "demo"))
+	out, err := cli.Plain(h.sessionWhoRun(context.Background(), args("name", "demo")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1260,7 +1294,7 @@ func TestSessionClosePurgesParticipants(t *testing.T) {
 
 func TestServiceRestart(t *testing.T) {
 	h, up, _, _, _, _, _ := newTestHandlerWithUpdater(t, "")
-	out, err := h.serviceRestartRun(context.Background(), args())
+	out, err := cli.Plain(h.serviceRestartRun(context.Background(), args()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1277,7 +1311,7 @@ func TestServiceRestart(t *testing.T) {
 
 func TestServiceUpdatePullsBuildsRestarts(t *testing.T) {
 	h, up, _, _, _, _, _ := newTestHandlerWithUpdater(t, "")
-	out, err := h.serviceUpdateRun(context.Background(), args())
+	out, err := cli.Plain(h.serviceUpdateRun(context.Background(), args()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1315,7 +1349,7 @@ func TestServiceUpdateBuildFailsNoRestart(t *testing.T) {
 
 func TestSessionCreateAdoptsAnExistingChannel(t *testing.T) {
 	h, d, sup, _, _, st := newTestHandler(t, "")
-	out, err := h.sessionCreateRun(context.Background(), args("name", "ch-123", "channel_id", "123", "shared", "true"))
+	out, err := cli.Plain(h.sessionCreateRun(context.Background(), args("name", "ch-123", "channel_id", "123", "shared", "true")))
 	if err != nil {
 		t.Fatalf("create with channel_id failed: %v", err)
 	}
@@ -1351,7 +1385,7 @@ func TestClosingAGuestSessionLeavesTheChannelAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := h.sessionCloseRun(context.Background(), args("name", "ch-42"))
+	out, err := cli.Plain(h.sessionCloseRun(context.Background(), args("name", "ch-42")))
 	if err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -1396,7 +1430,7 @@ func TestAChannelThatCannotBeTidiedDoesNotStrandTheSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := h.sessionCloseRun(context.Background(), args("name", "demo"))
+	out, err := cli.Plain(h.sessionCloseRun(context.Background(), args("name", "demo")))
 	if err != nil {
 		t.Fatalf("close: %v", err)
 	}

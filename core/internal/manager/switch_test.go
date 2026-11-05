@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -115,9 +117,9 @@ func TestSessionSwitchWarnsWhenTheNewBackendCannotGate(t *testing.T) {
 		}
 		return "", "cursor-agent exposes no permission hook"
 	})
-	out, err := h.sessionSwitchRun(context.Background(), args(
+	out, err := cli.Plain(h.sessionSwitchRun(context.Background(), args(
 		"name", "gamma", "vendor", "cursor", "cmd", "cursor-agent", "handoff", "none",
-	))
+	)))
 	if err != nil {
 		t.Fatalf("switch: %v", err)
 	}
@@ -132,9 +134,9 @@ func TestSessionSwitchIsQuietWhenTheNewBackendGates(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.SetGateResolver(func(string) (string, string) { return "tool", "" })
-	out, err := h.sessionSwitchRun(context.Background(), args(
+	out, err := cli.Plain(h.sessionSwitchRun(context.Background(), args(
 		"name", "delta", "vendor", "claude", "cmd", "claude", "handoff", "none",
-	))
+	)))
 	if err != nil {
 		t.Fatalf("switch: %v", err)
 	}

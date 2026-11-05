@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 type recordingDispatcher struct {
@@ -14,13 +16,13 @@ type recordingDispatcher struct {
 	fail  map[string]error
 }
 
-func (r *recordingDispatcher) Dispatch(_ context.Context, argv []string) (string, error) {
+func (r *recordingDispatcher) Dispatch(_ context.Context, argv []string) (contracts.Result, error) {
 	r.seen = append(r.seen, append([]string(nil), argv...))
 	key := strings.Join(argv[:2], " ")
 	if err := r.fail[key]; err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
-	return r.reply[key], nil
+	return contracts.DataResult(r.reply[key]), nil
 }
 
 func argOf(argv []string, flag string) (string, bool) {

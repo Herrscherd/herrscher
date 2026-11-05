@@ -36,8 +36,8 @@ func addApproveCommands(reg *cli.Registry, hostState *state.State, agents *agent
 func approveListVerb(approvals *approvalTable) contracts.Cmd {
 	return contracts.New(nsApprove, "list").
 		Help("list the actions waiting for an answer").
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return listApprovals(approvals, in.JSON)
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(listApprovals(approvals, in.JSON))
 		})
 }
 
@@ -69,15 +69,15 @@ func approveAllowVerb(approvals *approvalTable, sessions *sessionTable) contract
 		ValueParam("id", "request id; also takes a bare argument", false).
 		Param(paramSession, "let the same action run for the rest of the session", false).
 		Param("always", "write a rule that lets this exact action run from now on", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			approvalID, scope, err := allowOperands(in)
 			if err != nil {
-				return "", err
+				return contracts.Result{}, err
 			}
 			if !settleApproval(approvals, sessions, approvalID, approvalAnswer{scope: scope}) {
-				return "", &requestNotWaitingError{ID: approvalID}
+				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}
-			return "allowed " + approvalID, nil
+			return contracts.DataResult("allowed " + approvalID), nil
 		})
 }
 
@@ -118,16 +118,16 @@ func approveDenyVerb(approvals *approvalTable, sessions *sessionTable) contracts
 		Help("refuse a waiting action; the reason is what the agent reads").
 		ValueParam("id", "request id; also takes a bare argument", false).
 		ValueParam("reason", "why, in the agent's own transcript", false).
-		Do(func(_ context.Context, input contracts.Input) (string, error) {
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			approvalID := firstOf(input.Get("id"), input.Rest)
 			if approvalID == "" {
-				return "", errRequestNameMissing
+				return contracts.Result{}, errRequestNameMissing
 			}
 			answer := approvalAnswer{scope: scopeDeny, reason: operatorRefusal(input.Get("reason"))}
 			if !settleApproval(approvals, sessions, approvalID, answer) {
-				return "", &requestNotWaitingError{ID: approvalID}
+				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}
-			return "denied " + approvalID, nil
+			return contracts.DataResult("denied " + approvalID), nil
 		})
 }
 
@@ -136,15 +136,15 @@ func approveRuleVerb(store *state.State) contracts.Cmd {
 		Help("add a rule, remove one with --rm, or list them with no argument").
 		ValueParam("rule", "e.g. `ask Bash(git push*)`; also takes a bare argument", false).
 		ValueParam("rm", "the rule to remove, written exactly as it is listed", false).
-		Do(func(_ context.Context, input contracts.Input) (string, error) {
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			if rm := strings.TrimSpace(input.Get("rm")); rm != "" {
-				return removeApprovalRule(store, rm)
+				return cli.Data(removeApprovalRule(store, rm))
 			}
 			raw := firstOf(input.Get("rule"), input.Rest)
 			if raw == "" {
-				return listApprovalRules(store, input.JSON)
+				return cli.Data(listApprovalRules(store, input.JSON))
 			}
-			return addApprovalRule(store, raw)
+			return cli.Data(addApprovalRule(store, raw))
 		})
 }
 
@@ -195,7 +195,7 @@ func approveAskVerb(store *state.State, agents *agent.Store, approvals *approval
 		ValueParam(paramSession, "the session the call belongs to", true).
 		ValueParam("tool", "tool name, e.g. Bash", true).
 		ValueParam("subject", "the part a rule matches: the command, the path, the url", false).
-		Do(func(ctx context.Context, input contracts.Input) (string, error) {
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			session := strings.TrimSpace(input.Get(paramSession))
 			req := approval.Request{
 				Tool:    strings.TrimSpace(input.Get("tool")),
@@ -207,7 +207,7 @@ func approveAskVerb(store *state.State, agents *agent.Store, approvals *approval
 				Decision string `json:"decision"`
 				Reason   string `json:"reason,omitempty"`
 			}{Decision: decision.String(), Reason: reason})
-			return string(payload), err
+			return contracts.DataResult(string(payload)), err
 		})
 }
 
@@ -216,8 +216,8 @@ func approveModeVerb(store *state.State) contracts.Cmd {
 		Help("set a session's stance: ask (default), accept-edits, plan, auto, bypass, strict, or smart (a model rates each call)").
 		ValueParam(paramSession, "session name; also takes a bare argument", false).
 		ValueParam("mode", "ask | accept-edits | plan | auto | bypass | strict | smart; also takes a second bare argument", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return setApprovalMode(store, in)
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(setApprovalMode(store, in))
 		})
 }
 

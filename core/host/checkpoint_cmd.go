@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/conversation"
@@ -105,19 +107,19 @@ func checkpointsVerb(sessionStore *state.State, checkpoints *checkpoint.Store) c
 	return contracts.New(nsSession, verbCheckpoints).
 		Help("list a session's checkpoints, one before each user message, with the files each one touched").
 		Param(paramName, "session name", true).
-		Do(func(ctx context.Context, input contracts.Input) (string, error) {
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			sess, err := checkpointSession(sessionStore, input.Get(paramName))
 			if err != nil {
-				return "", err
+				return contracts.Result{}, err
 			}
 			views, err := checkpointViews(ctx, checkpoints, sess.Worktree, sess.Name)
 			if err != nil {
-				return "", err
+				return contracts.Result{}, err
 			}
 			if input.JSON {
-				return marshalJSON(views)
+				return cli.Data(marshalJSON(views))
 			}
-			return formatCheckpoints(views), nil
+			return contracts.DataResult(formatCheckpoints(views)), nil
 		})
 }
 
@@ -132,8 +134,8 @@ func rewindVerb(sessionStore *state.State, sessions *sessionTable) contracts.Cmd
 		Param(paramName, "session name", true).
 		ValueParam(paramTo, "checkpoint number, as listed by session checkpoints", true).
 		ValueParam(paramWhat, "code, conversation or both", true).
-		Do(func(ctx context.Context, input contracts.Input) (string, error) {
-			return rewindSession(ctx, sessionStore, sessions, input)
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+			return cli.Data(rewindSession(ctx, sessionStore, sessions, input))
 		})
 }
 
@@ -189,20 +191,20 @@ func undoVerb(sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbUndo).
 		Help("undo the last rewind of a session's code").
 		Param(paramName, "session name", true).
-		Do(func(ctx context.Context, input contracts.Input) (string, error) {
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			sess, err := checkpointSession(sessionStore, input.Get(paramName))
 			if err != nil {
-				return "", err
+				return contracts.Result{}, err
 			}
 			release, ok := sessions.claimIdle(sess.Name)
 			if !ok {
-				return "", busyRewindError(sess.Name)
+				return contracts.Result{}, busyRewindError(sess.Name)
 			}
 			defer release()
 			if err := sessions.checkpoints.Undo(ctx, sess.Worktree, sess.Name); err != nil {
-				return "", err
+				return contracts.Result{}, err
 			}
-			return "undid the last rewind of " + sess.Name, nil
+			return contracts.DataResult("undid the last rewind of " + sess.Name), nil
 		})
 }
 
@@ -212,18 +214,18 @@ func forkVerb() contracts.Cmd {
 		Param(paramName, "session to fork", true).
 		ValueParam(paramTo, "checkpoint number, as listed by session checkpoints", true).
 		ValueParam(paramForkAs, "name of the new session (default <name>-fork)", false).
-		Do(func(ctx context.Context, input contracts.Input) (string, error) {
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			fork, ok := forkerFrom(ctx)
 			if !ok {
-				return "", errForkNeedsDaemon
+				return contracts.Result{}, errForkNeedsDaemon
 			}
-			return fork(ctx, input)
+			return cli.Data(fork(ctx, input))
 		})
 }
 
 type forkHost interface {
-	CreateCoordinated(ctx context.Context, spec contracts.CreateSession, vendor string) (string, error)
-	Close(ctx context.Context, name string, force bool) (string, error)
+	CreateCoordinated(ctx context.Context, spec contracts.CreateSession, vendor string) (contracts.Result, error)
+	Close(ctx context.Context, name string, force bool) (contracts.Result, error)
 	RestartWithResume(name, token string) error
 }
 

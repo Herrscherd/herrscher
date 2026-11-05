@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
@@ -16,7 +18,7 @@ func TestMemorySearchVerbReturnsFormattedHits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := reg.Dispatch(context.Background(), []string{"memory", "search", "--text", "decision"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"memory", "search", "--text", "decision"}))
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}

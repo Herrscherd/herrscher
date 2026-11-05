@@ -15,10 +15,12 @@ import (
 	"golang.org/x/term"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/language"
 	"github.com/Herrscherd/herrscher/core/scope"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
@@ -46,6 +48,10 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	cfg, err := config.Load(scanFlag(args, "config", config.DefaultPath()))
 	if err != nil {
 		return err
+	}
+	operatorLang := language.Operator(slog.Default(), cfg.Language)
+	if exportErr := language.Export(operatorLang); exportErr != nil {
+		return exportErr
 	}
 
 	statePath := flags.String("state", host.DefaultStatePath(), "path to the daemon state file")
@@ -87,6 +93,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 
 	opts := host.Options{
 		StatePath:           *statePath,
+		Language:            operatorLang,
 		Models:              models,
 		DefaultCmd:          *defaultCmd,
 		HealthAddr:          *healthAddr,
@@ -255,6 +262,9 @@ func newOperatorRegistry(ctx context.Context) (*cli.Registry, error) {
 	if err != nil {
 		return nil, err
 	}
+	if exportErr := language.Export(language.Client(slog.Default(), cfg.Language)); exportErr != nil {
+		return nil, exportErr
+	}
 	gws, err := buildGateways(ctx)
 	if err != nil {
 		return nil, err
@@ -279,7 +289,11 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 	if err != nil {
 		return err
 	}
-	out, err := reg.Dispatch(ctx, append([]string{verb}, args...))
+	res, err := reg.Dispatch(ctx, append([]string{verb}, args...))
+	if err != nil {
+		return cli.Localize(err, clientLanguage())
+	}
+	out, err := cli.Text(res, clientLanguage())
 	if err != nil {
 		return err
 	}
@@ -293,7 +307,15 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 const promptTimeout = 30 * time.Minute
 
 type verbDispatcher interface {
-	Dispatch(context.Context, []string) (string, error)
+	Dispatch(context.Context, []string) (contracts.Result, error)
+}
+
+func clientLanguage() i18n.Language {
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		return language.Client(slog.Default(), "")
+	}
+	return language.Client(slog.Default(), cfg.Language)
 }
 
 func runPrompt(ctx context.Context, task task) error {
@@ -354,9 +376,13 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 	}
 	argv := append([]string{verbSession, "seed", argName, name}, cli.FlagArg("task", prompt)...)
 	argv = append(argv, "--timeout", promptTimeout.String())
-	reply, err := dispatcher.Dispatch(ctx, argv)
+	res, err := dispatcher.Dispatch(ctx, argv)
 	if err != nil {
-		return fmt.Errorf("session %s: %w", name, err)
+		return fmt.Errorf("session %s: %w", name, cli.Localize(err, clientLanguage()))
+	}
+	reply, err := cli.Text(res, clientLanguage())
+	if err != nil {
+		return err
 	}
 	if reply != "" {
 		if _, err := fmt.Fprintln(stdout, reply); err != nil {

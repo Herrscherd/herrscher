@@ -16,14 +16,14 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
-func (h *Handler) agentCreateRun(_ context.Context, input contracts.Input) (string, error) {
+func (h *Handler) agentCreateRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	raw, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
-		return "", &InvalidValueError{Field: nameParam, Value: raw, Hint: "use letters, digits, - or _ (max 64)"}
+		return contracts.Result{}, &InvalidValueError{Field: nameParam, Value: raw, Hint: "use letters, digits, - or _ (max 64)"}
 	}
 	soul, _ := input.Lookup("soul")
 	mcp, _ := input.Lookup("mcp")
@@ -34,15 +34,15 @@ func (h *Handler) agentCreateRun(_ context.Context, input contracts.Input) (stri
 	tags := strings.Fields(strings.ReplaceAll(tagsRaw, ",", " "))
 	created, err := h.agents.Create(agent.CreateSpec{Name: name, Soul: soul, MCP: mcp, Backend: backend, Cmd: cmd, Host: strings.TrimSpace(host), Tags: tags})
 	if err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
-	return fmt.Sprintf("🤖 Agent **%s** created at %#q.", created.Name, created.Home), nil
+	return contracts.DataResult(fmt.Sprintf("🤖 Agent **%s** created at %#q.", created.Name, created.Home)), nil
 }
 
-func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (string, error) {
+func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	agents, err := h.agents.List()
 	if err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
 	if input.JSON {
 		type row struct {
@@ -62,12 +62,12 @@ func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (string
 		}
 		buf, err := json.Marshal(rows)
 		if err != nil {
-			return "", err
+			return contracts.Result{}, err
 		}
-		return string(buf), nil
+		return contracts.DataResult(string(buf)), nil
 	}
 	if len(agents) == 0 {
-		return "No agents. Create one with `agent create <name>`.", nil
+		return contracts.DataResult("No agents. Create one with `agent create <name>`."), nil
 	}
 	var out strings.Builder
 	out.WriteString("Agents:\n")
@@ -75,21 +75,21 @@ func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (string
 		a := &agents[i]
 		fmt.Fprintf(&out, "• **%s** (%#q)\n", a.Name, a.Home)
 	}
-	return out.String(), nil
+	return contracts.DataResult(out.String()), nil
 }
 
-func (h *Handler) agentShowRun(_ context.Context, input contracts.Input) (string, error) {
+func (h *Handler) agentShowRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	candidate, ok := h.agents.Get(slugify(name))
 	if !ok {
-		return "", &agent.NotFoundError{Name: name}
+		return contracts.Result{}, &agent.NotFoundError{Name: name}
 	}
 	soul, err := os.ReadFile(filepath.Join(candidate.Home, "SOUL.md"))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("read soul: %w", err)
+		return contracts.Result{}, fmt.Errorf("read soul: %w", err)
 	}
 	if input.JSON {
 		tags := candidate.Tags
@@ -103,24 +103,24 @@ func (h *Handler) agentShowRun(_ context.Context, input contracts.Input) (string
 			Soul    string   `json:"soul"`
 		}{candidate.Name, tags, candidate.Backend, string(soul)})
 		if err != nil {
-			return "", err
+			return contracts.Result{}, err
 		}
-		return string(buf), nil
+		return contracts.DataResult(string(buf)), nil
 	}
-	return fmt.Sprintf("**%s** (%#q)\n\n%s", candidate.Name, candidate.Home, string(soul)), nil
+	return contracts.DataResult(fmt.Sprintf("**%s** (%#q)\n\n%s", candidate.Name, candidate.Home, string(soul))), nil
 }
 
-func (h *Handler) agentSetSoulRun(_ context.Context, input contracts.Input) (string, error) {
+func (h *Handler) agentSetSoulRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	soul, ok := input.Lookup("soul")
 	if !ok {
-		return "", ErrMissingSoul
+		return contracts.Result{}, ErrMissingSoul
 	}
 	if err := h.agents.SetSoul(slugify(name), soul); err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
-	return fmt.Sprintf("🖊 Soul updated for **%s** (applies to new sessions).", slugify(name)), nil
+	return contracts.DataResult(fmt.Sprintf("🖊 Soul updated for **%s** (applies to new sessions).", slugify(name))), nil
 }

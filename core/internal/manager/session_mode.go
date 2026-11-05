@@ -20,46 +20,46 @@ func (e *planUnsupportedError) Error() string {
 	return fmt.Sprintf("session %s cannot run in plan mode: %s cannot enforce it (%s), so its writes would run; choose another mode", e.Session, vendorLabel(e.Vendor), e.Why)
 }
 
-func (h *Handler) sessionSetModeRun(_ context.Context, input contracts.Input) (string, error) {
+func (h *Handler) sessionSetModeRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	rawMode, _ := input.Lookup("mode")
 	mode := strings.TrimSpace(rawMode)
 	if mode == "" {
-		return "", &UnknownApprovalModeError{Mode: mode}
+		return contracts.Result{}, &UnknownApprovalModeError{Mode: mode}
 	}
 	if err := validateApprovalsMode(mode); err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
 	sess, ok := h.st.FindSession(name)
 	if !ok {
-		return "", &SessionNotFoundError{Name: name}
+		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	gate := h.gateFor(sess.Vendor)
 	if parsed, _ := approval.ParseMode(mode); parsed == approval.ModePlan && !gate.enforced {
-		return "", &planUnsupportedError{Session: name, Vendor: sess.Vendor, Why: gate.why}
+		return contracts.Result{}, &planUnsupportedError{Session: name, Vendor: sess.Vendor, Why: gate.why}
 	}
 	if err := h.st.SetSessionApprovals(name, mode); err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
-	return setModeReply(sess, mode, gate), nil
+	return contracts.DataResult(setModeReply(sess, mode, gate)), nil
 }
 
-func (h *Handler) sessionGetModeRun(_ context.Context, input contracts.Input) (string, error) {
+func (h *Handler) sessionGetModeRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return "", ErrMissingName
+		return contracts.Result{}, ErrMissingName
 	}
 	sess, ok := h.st.FindSession(name)
 	if !ok {
-		return "", &SessionNotFoundError{Name: name}
+		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	if sess.Approvals == "" {
-		return approval.ModeAsk.String(), nil
+		return contracts.DataResult(approval.ModeAsk.String()), nil
 	}
-	return sess.Approvals, nil
+	return contracts.DataResult(sess.Approvals), nil
 }
 
 func setModeReply(sess state.Session, mode string, gate approvalGate) string {

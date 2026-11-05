@@ -10,8 +10,8 @@ import (
 )
 
 func leaf(path ...string) contracts.Cmd {
-	return contracts.New(path...).Do(func(context.Context, contracts.Input) (string, error) {
-		return "ran " + path[len(path)-1], nil
+	return contracts.New(path...).Do(func(context.Context, contracts.Input) (contracts.Result, error) {
+		return contracts.DataResult("ran " + path[len(path)-1]), nil
 	})
 }
 
@@ -32,6 +32,14 @@ func TestAddRejectsEmptyPath(t *testing.T) {
 	}
 }
 
+func dispatchText(r *cli.Registry, args []string) (string, error) {
+	return cli.Plain(r.Dispatch(context.Background(), args))
+}
+
+func runText(r *cli.Registry, path []string, input contracts.Input) (string, error) {
+	return cli.Plain(r.Run(context.Background(), path, input))
+}
+
 func build(t *testing.T, cmds ...contracts.Cmd) *cli.Registry {
 	t.Helper()
 	var r cli.Registry
@@ -46,17 +54,17 @@ func build(t *testing.T, cmds ...contracts.Cmd) *cli.Registry {
 func TestDispatchResolvesLongestPath(t *testing.T) {
 	got := ""
 	r := build(t,
-		contracts.New("session", "list").Do(func(_ context.Context, _ contracts.Input) (string, error) {
+		contracts.New("session", "list").Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
 			got = "list"
-			return "", nil
+			return contracts.Result{}, nil
 		}),
 		contracts.New("session", "create").Param("name", "", true).
-			Do(func(_ context.Context, in contracts.Input) (string, error) {
+			Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 				got = "create:" + in.Get("name")
-				return "", nil
+				return contracts.Result{}, nil
 			}),
 	)
-	if _, err := r.Dispatch(context.Background(), []string{"session", "create", "--name", "x"}); err != nil {
+	if _, err := dispatchText(r, []string{"session", "create", "--name", "x"}); err != nil {
 		t.Fatal(err)
 	}
 	if got != "create:x" {
@@ -66,15 +74,15 @@ func TestDispatchResolvesLongestPath(t *testing.T) {
 
 func TestDispatchUnknownCommand(t *testing.T) {
 	r := build(t, leaf("session", "list"))
-	if _, err := r.Dispatch(context.Background(), []string{"nope"}); err == nil {
+	if _, err := dispatchText(r, []string{"nope"}); err == nil {
 		t.Fatal("unknown command must error")
 	}
 }
 
 func TestDispatchMissingRequiredParam(t *testing.T) {
 	r := build(t, contracts.New("set", "home").Param("channel", "", true).
-		Do(func(context.Context, contracts.Input) (string, error) { return "", nil }))
-	if _, err := r.Dispatch(context.Background(), []string{"set", "home"}); err == nil {
+		Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil }))
+	if _, err := dispatchText(r, []string{"set", "home"}); err == nil {
 		t.Fatal("missing required param must error")
 	}
 }
@@ -83,8 +91,11 @@ func TestDispatchBoolFlagAndRest(t *testing.T) {
 	var in contracts.Input
 	r := build(t, contracts.New("session", "create").
 		Param("name", "", true).Param("shared", "", false).
-		Do(func(_ context.Context, got contracts.Input) (string, error) { in = got; return "", nil }))
-	_, err := r.Dispatch(context.Background(), []string{"session", "create", "extra", "--name", "x", "--shared"})
+		Do(func(_ context.Context, got contracts.Input) (contracts.Result, error) {
+			in = got
+			return contracts.Result{}, nil
+		}))
+	_, err := dispatchText(r, []string{"session", "create", "extra", "--name", "x", "--shared"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,15 +110,15 @@ func TestDispatchBoolFlagAndRest(t *testing.T) {
 func TestDispatchOptionalValueParamRequiresValueWhenPresent(t *testing.T) {
 	r := build(t, contracts.New("session", "seed").
 		ValueParam("turn_id", "", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return in.Get("turn_id"), nil
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return contracts.DataResult(in.Get("turn_id")), nil
 		}))
 
-	if _, err := r.Dispatch(context.Background(), []string{"session", "seed", "--turn_id"}); err == nil ||
+	if _, err := dispatchText(r, []string{"session", "seed", "--turn_id"}); err == nil ||
 		!strings.Contains(err.Error(), "flag --turn_id needs a value") {
 		t.Fatalf("valueless optional parameter error = %v", err)
 	}
-	got, err := r.Dispatch(context.Background(), []string{"session", "seed", "--turn_id", "true"})
+	got, err := dispatchText(r, []string{"session", "seed", "--turn_id", "true"})
 	if err != nil || got != "true" {
 		t.Fatalf("explicit value true = %q, %v; want preserved", got, err)
 	}
@@ -116,17 +127,17 @@ func TestDispatchOptionalValueParamRequiresValueWhenPresent(t *testing.T) {
 func TestDispatchInlineValueCarriesAFlagLookingValue(t *testing.T) {
 	r := build(t, contracts.New("session", "seed").
 		Param("name", "", true).Param("task", "", true).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return in.Get("name") + "|" + in.Get("task"), nil
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return contracts.DataResult(in.Get("name") + "|" + in.Get("task")), nil
 		}))
 
-	if _, err := r.Dispatch(context.Background(), []string{
+	if _, err := dispatchText(r, []string{
 		"session", "seed", "--name", "s", "--task", "--no-tests please",
 	}); err == nil || !strings.Contains(err.Error(), "flag --task needs a value") {
 		t.Fatalf("separate-token form error = %v; want the mistake still named", err)
 	}
 
-	got, err := r.Dispatch(context.Background(), []string{
+	got, err := dispatchText(r, []string{
 		"session", "seed", "--name", "s", "--task=--no-tests please",
 	})
 	if err != nil || got != "s|--no-tests please" {
@@ -137,21 +148,21 @@ func TestDispatchInlineValueCarriesAFlagLookingValue(t *testing.T) {
 func TestDispatchInlineValueEdgeCases(t *testing.T) {
 	r := build(t, contracts.New("memory", "record").
 		Param("key", "", true).Param("body", "", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return in.Get("key") + "|" + in.Get("body"), nil
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return contracts.DataResult(in.Get("key") + "|" + in.Get("body")), nil
 		}))
 
-	got, err := r.Dispatch(context.Background(), []string{"memory", "record", "--key=a/b", "--body=x=1"})
+	got, err := dispatchText(r, []string{"memory", "record", "--key=a/b", "--body=x=1"})
 	if err != nil || got != "a/b|x=1" {
 		t.Fatalf("got %q, %v; want the split to stop at the first =", got, err)
 	}
 
-	got, err = r.Dispatch(context.Background(), []string{"memory", "record", "--key=a/b", "--body="})
+	got, err = dispatchText(r, []string{"memory", "record", "--key=a/b", "--body="})
 	if err != nil || got != "a/b|" {
 		t.Fatalf("got %q, %v; want an empty body to count as given", got, err)
 	}
 
-	if _, err := r.Dispatch(context.Background(), []string{"memory", "record", "--nope=1"}); err == nil ||
+	if _, err := dispatchText(r, []string{"memory", "record", "--nope=1"}); err == nil ||
 		!strings.Contains(err.Error(), "unknown flag --nope") {
 		t.Fatalf("unknown inline flag error = %v", err)
 	}
@@ -175,11 +186,13 @@ func TestFlagArgUsesTheInlineFormOnlyWhenNeeded(t *testing.T) {
 func TestFlagArgRoundTripsThroughDispatch(t *testing.T) {
 	r := build(t, contracts.New("session", "send").
 		Param("text", "", true).
-		Do(func(_ context.Context, in contracts.Input) (string, error) { return in.Get("text"), nil }))
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return contracts.DataResult(in.Get("text")), nil
+		}))
 
 	for _, text := range []string{"hello", "--no-tests", "--", "x=1", "-p", "  spaced  ", "--a=--b"} {
 		argv := append([]string{"session", "send"}, cli.FlagArg("text", text)...)
-		got, err := r.Dispatch(context.Background(), argv)
+		got, err := dispatchText(r, argv)
 		if err != nil || got != text {
 			t.Fatalf("text %q came back %q, %v", text, got, err)
 		}
@@ -188,7 +201,7 @@ func TestFlagArgRoundTripsThroughDispatch(t *testing.T) {
 
 func TestDispatchReturnsHandlerOutput(t *testing.T) {
 	r := build(t, leaf("session", "list"))
-	out, err := r.Dispatch(context.Background(), []string{"session", "list"})
+	out, err := dispatchText(r, []string{"session", "list"})
 	if err != nil || out != "ran list" {
 		t.Fatalf("out=%q err=%v", out, err)
 	}
@@ -200,14 +213,14 @@ func TestDispatchGlobalJSONFlag(t *testing.T) {
 	if err := r.Add(contracts.Cmd{
 		Path:   []string{"session", "list"},
 		Params: nil,
-		Run: func(_ context.Context, in contracts.Input) (string, error) {
+		Run: func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			gotJSON = in.JSON
-			return "ok", nil
+			return contracts.DataResult("ok"), nil
 		},
 	}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	if _, err := r.Dispatch(context.Background(), []string{"session", "list", "--json"}); err != nil {
+	if _, err := dispatchText(r, []string{"session", "list", "--json"}); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 	if !gotJSON {
@@ -218,9 +231,9 @@ func TestDispatchGlobalJSONFlag(t *testing.T) {
 func TestHelpRendersSortedUsage(t *testing.T) {
 	r := build(t,
 		contracts.New("set", "home").Help("set home").Param("channel", "", true).
-			Do(func(context.Context, contracts.Input) (string, error) { return "", nil }),
+			Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil }),
 		contracts.New("session", "list").Help("list sessions").
-			Do(func(context.Context, contracts.Input) (string, error) { return "", nil }),
+			Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil }),
 	)
 	h := r.Help()
 	if want := "  session list"; !strings.Contains(h, want) {
@@ -235,12 +248,12 @@ func TestRunInvokesCommandByExactPathWithTypedInput(t *testing.T) {
 	var gotName string
 	r := build(t,
 		contracts.New("session", "create").Param("name", "", true).
-			Do(func(_ context.Context, in contracts.Input) (string, error) {
+			Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 				gotName = in.Get("name")
-				return "created", nil
+				return contracts.DataResult("created"), nil
 			}),
 	)
-	out, err := r.Run(context.Background(), []string{"session", "create"},
+	out, err := runText(r, []string{"session", "create"},
 		contracts.Input{Args: map[string]string{"name": "main"}})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -252,7 +265,7 @@ func TestRunInvokesCommandByExactPathWithTypedInput(t *testing.T) {
 
 func TestRunRejectsUnknownPath(t *testing.T) {
 	r := build(t, leaf("session", "list"))
-	if _, err := r.Run(context.Background(), []string{"session", "nope"}, contracts.Input{}); err == nil {
+	if _, err := runText(r, []string{"session", "nope"}, contracts.Input{}); err == nil {
 		t.Fatal("Run must reject an unknown path")
 	}
 }
@@ -260,9 +273,9 @@ func TestRunRejectsUnknownPath(t *testing.T) {
 func TestRunChecksRequiredParams(t *testing.T) {
 	r := build(t,
 		contracts.New("session", "create").Param("name", "", true).
-			Do(func(context.Context, contracts.Input) (string, error) { return "", nil }),
+			Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil }),
 	)
-	if _, err := r.Run(context.Background(), []string{"session", "create"}, contracts.Input{Args: make(map[string]string)}); err == nil {
+	if _, err := runText(r, []string{"session", "create"}, contracts.Input{Args: make(map[string]string)}); err == nil {
 		t.Fatal("Run must reject missing required param")
 	}
 }
@@ -274,7 +287,7 @@ func TestSpecsDescribeTheWholeRegistry(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	okRun := func(context.Context, contracts.Input) (string, error) { return "", nil }
+	okRun := func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil }
 	must(r.Add(contracts.New("zulu").Help("last").Do(okRun)))
 	must(r.Add(contracts.New("alpha", "one").
 		Help("first").
@@ -298,9 +311,9 @@ func TestResolveReadsThePathAndTheFlagsWithoutRunning(t *testing.T) {
 	var reg cli.Registry
 	if err := reg.Add(contracts.New("session", "send").
 		Param("name", "session name", true).
-		Do(func(context.Context, contracts.Input) (string, error) {
+		Do(func(context.Context, contracts.Input) (contracts.Result, error) {
 			ran = true
-			return "", nil
+			return contracts.Result{}, nil
 		})); err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +346,7 @@ func TestResolveNamesThePathEvenWhenTheFlagsDoNotParse(t *testing.T) {
 	var reg cli.Registry
 	if err := reg.Add(contracts.New("host", "add").
 		Param("ssh", "ssh target", true).
-		Do(func(context.Context, contracts.Input) (string, error) { return "", nil })); err != nil {
+		Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil })); err != nil {
 		t.Fatal(err)
 	}
 	path, _, ok := reg.Resolve([]string{"host", "add"})

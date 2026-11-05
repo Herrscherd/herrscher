@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -280,7 +282,7 @@ func TestSessionCreateOnHostMaterializesWithAHookByDefault(t *testing.T) {
 
 func TestSessionCreateKeepsTheModeItWarnedAbout(t *testing.T) {
 	h, _, _, st := handlerWithHosts(t)
-	out, err := h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "ask"))
+	out, err := cli.Plain(h.sessionCreateRun(context.Background(), args("name", "demo", "approvals", "ask")))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

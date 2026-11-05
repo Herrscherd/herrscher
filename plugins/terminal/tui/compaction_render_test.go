@@ -126,3 +126,34 @@ func TestContextViewSaysNoAutoCompactionInSmallWindows(t *testing.T) {
 		}
 	}
 }
+
+func TestNoticeEventAddsANoticeLine(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 92}}}
+	m := newModel(f)
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
+	tb := m.ensureTab("c")
+	m.active = "c"
+
+	m.renderInto(tb, contracts.Event{T: eventNotice, Text: "contexte compacté"})
+	if len(tb.entries) == 0 {
+		t.Fatal("no entry rendered for the notice")
+	}
+	last := tb.entries[len(tb.entries)-1]
+	if last.role != roleNotice || last.text != "contexte compacté" {
+		t.Fatalf("last entry = %+v, want the notice as a notice line", last)
+	}
+}
+
+func TestFailureWithoutTextAddsNoErrorLine(t *testing.T) {
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 92}}}
+	m := newModel(f)
+	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
+	tb := m.ensureTab("c")
+	m.active = "c"
+
+	before := len(tb.entries)
+	m.renderInto(tb, contracts.Event{T: eventCompactionFailed, Value: "manual"})
+	if tb.busy || len(tb.entries) != before {
+		t.Fatalf("a failure without text must release the tab and add no line, entries %d -> %d", before, len(tb.entries))
+	}
+}

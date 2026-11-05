@@ -56,6 +56,7 @@ const (
 	eventStatus = "status"
 	eventReply  = "reply"
 	eventMenu   = "menu"
+	eventNotice = "notice"
 	sessionVerb = "session"
 )
 
@@ -309,6 +310,16 @@ func (t *Terminal) Post(_ context.Context, conv contracts.Conversation, text str
 // Reply emits text as a finished reply in the conversation and returns no message id.
 func (t *Terminal) Reply(_ context.Context, conv contracts.Conversation, _ contracts.MessageID, text string) (contracts.MessageID, error) {
 	t.EmitTo(conv, contracts.Event{T: eventReply, Text: text, Done: true})
+	return "", nil
+}
+
+// Notify renders the notice in lang and shows it as a notice line of the conversation's tab.
+func (t *Terminal) Notify(_ context.Context, conv contracts.Conversation, lang i18n.Language, notice contracts.Notice) (contracts.MessageID, error) {
+	text, err := contracts.NewRenderer().Render(lang, notice)
+	if err != nil {
+		return "", err
+	}
+	t.EmitTo(conv, contracts.Event{T: eventNotice, Text: text})
 	return "", nil
 }
 

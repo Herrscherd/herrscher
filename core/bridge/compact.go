@@ -29,5 +29,10 @@ func runCompact(ctx context.Context, sink contracts.EventSink, backend contracts
 		sink.Emit(compactwire.Failure(err))
 		return
 	}
-	sink.Emit(compactwire.Result(result))
+	frame, err := compactwire.Result(result)
+	if err != nil {
+		sink.Emit(compactwire.Failure(err))
+		return
+	}
+	sink.Emit(frame)
 }

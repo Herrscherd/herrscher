@@ -37,16 +37,75 @@ func TestRequestRejectsUnknownTrigger(t *testing.T) {
 
 func TestResultRoundTrip(t *testing.T) {
 	want := contracts.CompactResult{TokensAfter: 12_000, TokensMeasured: true, Note: "compacté"}
-	if got := DecodeResult(Result(want)); got != want {
+	frame := mustResult(t, want)
+	got, err := DecodeResult(frame)
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
+	if got.TokensAfter != want.TokensAfter || got.TokensMeasured != want.TokensMeasured || got.Note != want.Note || got.Notice.Code != 0 || len(got.Notice.Args) != 0 {
 		t.Fatalf("round trip = %+v, want %+v", got, want)
 	}
 }
 
+func TestResultCarriesTypedNotice(t *testing.T) {
+	want := contracts.CompactResult{
+		TokensAfter:    12_000,
+		TokensMeasured: true,
+		Notice: contracts.Notice{Code: contracts.CodeSettingInvalid, Args: []contracts.Arg{
+			contracts.Text("Setting", "compactAt"),
+			contracts.Count(3),
+			contracts.Ref("Channel", "4242"),
+		}},
+	}
+	got, err := DecodeResult(mustResult(t, want))
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
+	if got.Notice.Code != contracts.CodeSettingInvalid || len(got.Notice.Args) != 3 {
+		t.Fatalf("notice = %+v, want setting.invalid with three arguments", got.Notice)
+	}
+	text, count, ref := got.Notice.Args[0], got.Notice.Args[1], got.Notice.Args[2]
+	if text.Name() != "Setting" || text.Kind() != contracts.ArgText || text.Value() != "compactAt" {
+		t.Fatalf("text argument = %s %d %v", text.Name(), text.Kind(), text.Value())
+	}
+	if count.Name() != "Count" || count.Kind() != contracts.ArgCount || count.Value() != 3 {
+		t.Fatalf("count argument = %s %d %v", count.Name(), count.Kind(), count.Value())
+	}
+	if ref.Name() != "Channel" || ref.Kind() != contracts.ArgRef || ref.Value() != "4242" {
+		t.Fatalf("ref argument = %s %d %v", ref.Name(), ref.Kind(), ref.Value())
+	}
+}
+
 func TestResultUnmeasuredKeepsFlag(t *testing.T) {
-	got := DecodeResult(Result(contracts.CompactResult{TokensMeasured: false}))
+	got, err := DecodeResult(mustResult(t, contracts.CompactResult{TokensMeasured: false}))
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
 	if got.TokensMeasured {
 		t.Fatal("an unmeasured result decoded as measured")
 	}
+}
+
+func TestDecodeResultKeepsTheNoteWhenTheNoticeIsMalformed(t *testing.T) {
+	for _, value := range []string{"{", `{"code":1,"args":[{"name":"X","kind":9,"value":"a"}]}`} {
+		frame := contracts.Event{T: EventResult, Text: "compacté", Tokens: 42, Done: true, Value: value}
+		got, err := DecodeResult(frame)
+		if !errors.Is(err, ErrNoticeMalformed) {
+			t.Fatalf("DecodeResult(%q) error = %v, want ErrNoticeMalformed", value, err)
+		}
+		if got.Note != "compacté" || got.TokensAfter != 42 || !got.TokensMeasured || got.Notice.Code != 0 {
+			t.Fatalf("DecodeResult(%q) = %+v, want the note and the figures without a notice", value, got)
+		}
+	}
+}
+
+func mustResult(t *testing.T, res contracts.CompactResult) contracts.Event {
+	t.Helper()
+	frame, err := Result(res)
+	if err != nil {
+		t.Fatalf("Result: %v", err)
+	}
+	return frame
 }
 
 func TestNoPortCarriesCode(t *testing.T) {

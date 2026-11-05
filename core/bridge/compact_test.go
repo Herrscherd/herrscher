@@ -44,9 +44,35 @@ func TestRunCompactReturnsTheBackendResult(t *testing.T) {
 	if len(sink.events) != 1 {
 		t.Fatalf("events = %+v, want one result", sink.events)
 	}
-	got := compactwire.DecodeResult(sink.events[0])
+	got, err := compactwire.DecodeResult(sink.events[0])
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
 	if got.TokensAfter != 7 || !got.TokensMeasured || got.Note != "ok" {
 		t.Fatalf("result = %+v, want 7 measured ok", got)
+	}
+}
+
+type noticingBackend struct {
+	fakeBackend
+}
+
+func (noticingBackend) Compact(_ context.Context, _ contracts.CompactRequest, _ func(contracts.BackendEvent)) (contracts.CompactResult, error) {
+	return contracts.CompactResult{TokensAfter: 7, TokensMeasured: true, Note: "ok", Notice: contracts.Notice{Code: contracts.CodeCompacted}}, nil
+}
+
+func TestRunCompactCarriesTheNoticeToTheHost(t *testing.T) {
+	sink := &collectSink{}
+	runCompact(context.Background(), sink, noticingBackend{}, nil, compactFrame(t))
+	if len(sink.events) != 1 {
+		t.Fatalf("events = %+v, want one result", sink.events)
+	}
+	got, err := compactwire.DecodeResult(sink.events[0])
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
+	if got.Notice.Code != contracts.CodeCompacted || len(got.Notice.Args) != 0 {
+		t.Fatalf("notice = %+v, want compaction.done without arguments", got.Notice)
 	}
 }
 

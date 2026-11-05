@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
@@ -68,6 +69,8 @@ type sessionDriver struct {
 	running       atomic.Bool
 	channel       string
 	saidElsewhere bool
+	notices       chan noticeDelivery
+	noticeLog     *slog.Logger
 	gateways      []contracts.GatewaySet
 	toBridge      chan<- contracts.Event
 	from          <-chan contracts.Event
@@ -97,13 +100,15 @@ type sessionDriver struct {
 
 	gate budgetGate
 
-	terms          func() modelTerms
-	compaction     compactionPolicy
-	percentOf      func() int
-	turnReading    int
-	compactSpent   bool
-	compactMu      sync.Mutex
-	compactWaiting *compactRequest
+	terms             func() modelTerms
+	compaction        compactionPolicy
+	percentOf         func() int
+	turnReading       int
+	compactSpent      bool
+	compactMu         sync.Mutex
+	compactWaiting    *compactRequest
+	compactRegistered func()
+	lang              i18n.Language
 }
 
 type queued struct {
@@ -122,6 +127,8 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		renderers: make(map[string]*gatewayRenderer),
 		hangup:    make(chan struct{}, 1),
 		seen:      make(map[string]bool),
+		notices:   make(chan noticeDelivery, noticeQueueCapacity),
+		noticeLog: obs.Stderr(false),
 		gate:      noBudgetGate{},
 
 		enqueueTimeout: defaultEnqueueTimeout,
@@ -430,6 +437,7 @@ func (d *sessionDriver) run(ctx context.Context) {
 			go d.poll(ctx, gateway.Reader)
 		}
 	}
+	go d.deliverNotices(ctx)
 	d.pump(ctx)
 }
 
@@ -905,26 +913,36 @@ func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {
 	if d.saidElsewhere {
 		return
 	}
+	d.eachGateway(func(index int, gateway contracts.GatewaySet) {
+		d.emitToGateway(ctx, index, gateway, event)
+	})
+}
+
+func (d *sessionDriver) eachGateway(visit func(index int, gateway contracts.GatewaySet)) {
 	for index, gateway := range d.gateways {
-		if rs, ok := gateway.Gateway.(contracts.RoutedEventSink); ok {
-			rs.EmitTo(contracts.Conversation{
-				Gateway: gateway.Gateway.Manifest().Kind,
-				ID:      d.renderChannel(gateway),
-			}, event)
-			continue
-		}
-		if sink, ok := gateway.Gateway.(contracts.EventSink); ok {
-			sink.Emit(event)
-			continue
-		}
-		key := strconv.Itoa(index) + ":" + gateway.Gateway.Manifest().Kind
-		renderer := d.renderers[key]
-		if renderer == nil {
-			renderer = newGatewayRenderer(gateway.Gateway, d.renderChannel(gateway))
-			d.renderers[key] = renderer
-		}
-		renderer.handle(ctx, event)
+		visit(index, gateway)
 	}
+}
+
+func (d *sessionDriver) emitToGateway(ctx context.Context, index int, gateway contracts.GatewaySet, event contracts.Event) {
+	if rs, ok := gateway.Gateway.(contracts.RoutedEventSink); ok {
+		rs.EmitTo(contracts.Conversation{
+			Gateway: gateway.Gateway.Manifest().Kind,
+			ID:      d.renderChannel(gateway),
+		}, event)
+		return
+	}
+	if sink, ok := gateway.Gateway.(contracts.EventSink); ok {
+		sink.Emit(event)
+		return
+	}
+	key := strconv.Itoa(index) + ":" + gateway.Gateway.Manifest().Kind
+	renderer := d.renderers[key]
+	if renderer == nil {
+		renderer = newGatewayRenderer(gateway.Gateway, d.renderChannel(gateway))
+		d.renderers[key] = renderer
+	}
+	renderer.handle(ctx, event)
 }
 
 func outsideBoundGateways(origin contracts.Conversation, gws []contracts.GatewaySet) bool {
@@ -957,6 +975,7 @@ type sessionIdentity struct {
 	incarnation string
 	agent       string
 	terms       func() modelTerms
+	lang        i18n.Language
 }
 
 // RunSession drives a session without a declared identity until ctx is done.
@@ -978,6 +997,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.sink = sink
 	driver.emitTap = emit
 	driver.terms = identity.terms
+	driver.lang = identity.lang
 	driver.compaction = sessions.compaction
 	driver.percentOf = func() int { return sessions.percentOfSession(name) }
 	if gate != nil {

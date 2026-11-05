@@ -25,12 +25,17 @@ type compactFixture struct {
 	from     chan contracts.Event
 	mu       sync.Mutex
 	emitted  []contracts.Event
+	seen     chan struct{}
 }
 
 func (f *compactFixture) tap(event contracts.Event) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.emitted = append(f.emitted, event)
+	f.mu.Unlock()
+	select {
+	case f.seen <- struct{}{}:
+	default:
+	}
 }
 
 func (f *compactFixture) emittedOf(kind string) []contracts.Event {
@@ -47,12 +52,18 @@ func (f *compactFixture) emittedOf(kind string) []contracts.Event {
 
 func newCompactFixture(t *testing.T, vendor string, policy compactionPolicy) *compactFixture {
 	t.Helper()
+	return newConfiguredCompactFixture(t, vendor, policy, func(*sessionDriver) {})
+}
+
+func newConfiguredCompactFixture(t *testing.T, vendor string, policy compactionPolicy, configure func(*sessionDriver)) *compactFixture {
+	t.Helper()
 	t.Setenv(contextwindow.EnvVar(), "")
-	f := &compactFixture{toBridge: make(chan contracts.Event, 16), from: make(chan contracts.Event, 16)}
+	f := &compactFixture{toBridge: make(chan contracts.Event, 16), from: make(chan contracts.Event, 16), seen: make(chan struct{}, 64)}
 	f.driver = newSessionDriver("s1", nil, f.toBridge, f.from)
 	f.driver.terms = func() modelTerms { return modelTerms{vendor: vendor} }
 	f.driver.compaction = policy
 	f.driver.emitTap = f.tap
+	configure(f.driver)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go f.driver.run(ctx)
@@ -118,23 +129,37 @@ func compactFrameOrQuiet(t *testing.T, f *compactFixture, answer contracts.Event
 
 func waitEmitted(t *testing.T, f *compactFixture, kind string) contracts.Event {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	deadline := time.After(2 * time.Second)
+	for {
 		if events := f.emittedOf(kind); len(events) > 0 {
 			return events[len(events)-1]
 		}
-		time.Sleep(5 * time.Millisecond)
+		select {
+		case <-f.seen:
+		case <-deadline:
+			t.Fatalf("no %s event was emitted", kind)
+			return contracts.Event{}
+		}
 	}
-	t.Fatalf("no %s event was emitted", kind)
-	return contracts.Event{}
 }
 
-func measuredAnswer(after int) contracts.Event {
-	return compactwire.Result(contracts.CompactResult{TokensAfter: after, TokensMeasured: true, Note: "compacté"})
+func measuredAnswer(t *testing.T, after int) contracts.Event {
+	t.Helper()
+	return mustAnswer(t, contracts.CompactResult{TokensAfter: after, TokensMeasured: true, Note: "compacté"})
 }
 
-func unmeasuredAnswer() contracts.Event {
-	return compactwire.Result(contracts.CompactResult{Note: "compacté"})
+func unmeasuredAnswer(t *testing.T) contracts.Event {
+	t.Helper()
+	return mustAnswer(t, contracts.CompactResult{Note: "compacté"})
+}
+
+func mustAnswer(t *testing.T, result contracts.CompactResult) contracts.Event {
+	t.Helper()
+	frame, err := compactwire.Result(result)
+	if err != nil {
+		t.Fatalf("compactwire.Result: %v", err)
+	}
+	return frame
 }
 
 func TestCompactionNeverOverlapsATurn(t *testing.T) {
@@ -149,7 +174,7 @@ func TestCompactionNeverOverlapsATurn(t *testing.T) {
 	if got := nextFrame(t, f); got.T != compactwire.EventRequest || got.Value != contracts.TriggerManual.String() {
 		t.Fatalf("frame after the turn = %+v, want the queued manual compaction", got)
 	}
-	f.from <- measuredAnswer(4_000)
+	f.from <- measuredAnswer(t, 4_000)
 	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 4_000 {
 		t.Fatalf("compaction_done = %+v, want 4000 measured", done)
 	}
@@ -158,7 +183,7 @@ func TestCompactionNeverOverlapsATurn(t *testing.T) {
 func TestAutomaticCompactionRunsOnceTheThresholdIsCrossed(t *testing.T) {
 	f := newCompactFixture(t, "claude", compactPolicy(50))
 	openTurn(t, f, 150_000)
-	if !compactFrameOrQuiet(t, f, measuredAnswer(20_000)) {
+	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 20_000)) {
 		t.Fatal("no automatic compaction after a turn at 75 percent of the window, threshold 50")
 	}
 	if done := waitEmitted(t, f, eventCompactDone); done.Value != contracts.TriggerAutomatic.String() || done.Tokens != 20_000 {
@@ -169,16 +194,16 @@ func TestAutomaticCompactionRunsOnceTheThresholdIsCrossed(t *testing.T) {
 func TestAutomaticCompactionDoesNotLoopOnAnUnmeasuredResult(t *testing.T) {
 	f := newCompactFixture(t, "claude", compactPolicy(50))
 	openTurn(t, f, 150_000)
-	if !compactFrameOrQuiet(t, f, unmeasuredAnswer()) {
+	if !compactFrameOrQuiet(t, f, unmeasuredAnswer(t)) {
 		t.Fatal("first automatic compaction did not run")
 	}
 	openTurn(t, f, 150_000)
-	if compactFrameOrQuiet(t, f, measuredAnswer(1)) {
+	if compactFrameOrQuiet(t, f, measuredAnswer(t, 1)) {
 		t.Fatal("compaction retriggered while usage stayed above the threshold: loop")
 	}
 	openTurn(t, f, 10_000)
 	openTurn(t, f, 150_000)
-	if !compactFrameOrQuiet(t, f, measuredAnswer(20_000)) {
+	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 20_000)) {
 		t.Fatal("compaction did not rearm after usage dropped under the threshold")
 	}
 }
@@ -186,7 +211,7 @@ func TestAutomaticCompactionDoesNotLoopOnAnUnmeasuredResult(t *testing.T) {
 func TestZeroPercentDisablesAutomaticCompaction(t *testing.T) {
 	f := newCompactFixture(t, "claude", compactPolicy(0))
 	openTurn(t, f, 190_000)
-	if compactFrameOrQuiet(t, f, measuredAnswer(1)) {
+	if compactFrameOrQuiet(t, f, measuredAnswer(t, 1)) {
 		t.Fatal("automatic compaction ran with AutoCompactPercent 0")
 	}
 }
@@ -209,7 +234,7 @@ func TestCodexWithCompactorIsCompacted(t *testing.T) {
 	if got := nextFrame(t, f); got.T != compactwire.EventRequest {
 		t.Fatalf("frame = %+v, want a compaction request", got)
 	}
-	f.from <- measuredAnswer(30_000)
+	f.from <- measuredAnswer(t, 30_000)
 	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 30_000 {
 		t.Fatalf("compaction_done = %+v, want 30000 measured", done)
 	}
@@ -248,7 +273,7 @@ func TestCustomStagesRunInConfiguredOrderBeforeTheBackend(t *testing.T) {
 	if strings.Join(order, ",") != "custom" {
 		t.Fatalf("custom stage ran %v before the backend, want once", order)
 	}
-	f.from <- measuredAnswer(30_000)
+	f.from <- measuredAnswer(t, 30_000)
 	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 30_000 {
 		t.Fatalf("compaction_done = %+v, want the backend result last", done)
 	}
@@ -263,7 +288,7 @@ func TestCompactionEventsCarryTokensOnlyWhenMeasured(t *testing.T) {
 	if started := waitEmitted(t, f, eventCompactStarted); started.Done || started.Tokens != 0 || started.TokensIn != 0 {
 		t.Fatalf("compaction_started = %+v, want no Done and no tokens without a measured turn", started)
 	}
-	f.from <- compactwire.Result(contracts.CompactResult{TokensAfter: 50_000, Note: "compacté"})
+	f.from <- mustAnswer(t, contracts.CompactResult{TokensAfter: 50_000, Note: "compacté"})
 	if done := waitEmitted(t, f, eventCompactDone); done.Done || done.Tokens != 0 || done.TokensIn != 0 {
 		t.Fatalf("compaction_done = %+v, want no Done and no tokens for a size the stage did not measure", done)
 	}
@@ -274,12 +299,16 @@ func TestMergedRequestIsNotAcceptedWhenTheFirstEnqueueFails(t *testing.T) {
 	queue <- queued{ev: contracts.Event{T: eventInput}}
 	d := &sessionDriver{queue: queue, enqueueTimeout: 100 * time.Millisecond}
 	first := make(chan [2]bool, 1)
+	registered := make(chan struct{})
+	d.compactRegistered = func() { close(registered) }
 	go func() {
 		merged, accepted := d.requestCompaction("premier", contracts.Conversation{})
 		first <- [2]bool{merged, accepted}
 	}()
-	for !waitingCompaction(d) {
-		time.Sleep(time.Millisecond)
+	select {
+	case <-registered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first request never registered")
 	}
 	merged, accepted := d.requestCompaction("second", contracts.Conversation{})
 	if !merged || accepted {
@@ -293,25 +322,19 @@ func TestMergedRequestIsNotAcceptedWhenTheFirstEnqueueFails(t *testing.T) {
 	}
 }
 
-func waitingCompaction(d *sessionDriver) bool {
-	d.compactMu.Lock()
-	defer d.compactMu.Unlock()
-	return d.compactWaiting != nil
-}
-
 func TestMeasuredCompactionStillAboveThresholdDoesNotLoop(t *testing.T) {
 	f := newCompactFixture(t, "claude", compactPolicy(50))
 	openTurn(t, f, 150_000)
-	if !compactFrameOrQuiet(t, f, measuredAnswer(150_000)) {
+	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 150_000)) {
 		t.Fatal("first automatic compaction did not run")
 	}
 	openTurn(t, f, 150_000)
-	if compactFrameOrQuiet(t, f, measuredAnswer(120_000)) {
+	if compactFrameOrQuiet(t, f, measuredAnswer(t, 120_000)) {
 		t.Fatal("compaction retriggered after a measured result still above the threshold: loop")
 	}
 	openTurn(t, f, 10_000)
 	openTurn(t, f, 150_000)
-	if !compactFrameOrQuiet(t, f, measuredAnswer(20_000)) {
+	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 20_000)) {
 		t.Fatal("compaction did not rearm after a measured turn under the threshold")
 	}
 }
@@ -402,7 +425,7 @@ func TestContextLimitTableMovesTheAutomaticThreshold(t *testing.T) {
 	policy.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
 	f := newCompactFixture(t, "codex", policy)
 	openTurn(t, f, 150_000)
-	if compactFrameOrQuiet(t, f, measuredAnswer(20_000)) {
+	if compactFrameOrQuiet(t, f, measuredAnswer(t, 20_000)) {
 		t.Fatal("automatic compaction ran at 37 percent of the 400000 window, threshold 50")
 	}
 }

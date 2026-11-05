@@ -117,7 +117,9 @@ func (target *tab) completeCompaction(event contracts.Event) {
 func (target *tab) failCompaction(event contracts.Event) {
 	target.compaction = compaction{}
 	target.busy = false
-	target.appendEntry(entry{role: roleError, text: event.Text})
+	if event.Text != "" {
+		target.appendEntry(entry{role: roleError, text: event.Text})
+	}
 }
 
 func (m *model) lastCompactNote() string {

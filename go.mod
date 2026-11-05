@@ -6,16 +6,16 @@ toolchain go1.27.3
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/Herrscherd/herrscher-claude-backend v0.8.0
-	github.com/Herrscherd/herrscher-codex-backend v0.7.0
-	github.com/Herrscherd/herrscher-contracts v0.18.0
+	github.com/Herrscherd/herrscher-claude-backend v0.9.0
+	github.com/Herrscherd/herrscher-codex-backend v0.8.0
+	github.com/Herrscherd/herrscher-contracts v0.19.1
 	github.com/Herrscherd/herrscher-cursor-backend v0.7.0
-	github.com/Herrscherd/herrscher-discord-gateway v0.24.0
+	github.com/Herrscherd/herrscher-discord-gateway v0.26.0
 	github.com/Herrscherd/herrscher-llm-extractor v0.4.0
 	github.com/Herrscherd/herrscher-obsidian-memory v0.6.0
-	github.com/Herrscherd/herrscher-orchestrator v0.5.0
+	github.com/Herrscherd/herrscher-orchestrator v0.6.0
 	github.com/Herrscherd/herrscher-superset-skills v0.4.0
-	github.com/Herrscherd/herrscher-transport v0.5.0
+	github.com/Herrscherd/herrscher-transport v0.6.0
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10

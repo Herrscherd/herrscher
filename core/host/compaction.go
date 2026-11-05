@@ -273,16 +273,18 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 }
 
 func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.CompactTrigger, err error) {
-	typed, ok := errors.AsType[contracts.NoticeError](err)
-	if !ok || !d.noticeRenders(typed.Notice()) {
-		d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: compactFailureText(d.lang, err)})
-		return
+	if typed, ok := errors.AsType[contracts.NoticeError](err); ok && d.noticeRenders(typed.Notice()) {
+		d.notifyGateways(typed.Notice())
 	}
-	d.notifyGateways(typed.Notice())
-	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String()})
+	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: compactFailureText(d.lang, err)})
 }
 
 func compactFailureText(lang i18n.Language, err error) string {
+	if typed, ok := errors.AsType[contracts.NoticeError](err); ok {
+		if text, renderErr := contracts.NewRenderer().Render(lang, typed.Notice()); renderErr == nil {
+			return text
+		}
+	}
 	if key, known := knownCompactFailure(err); known {
 		return hostText(lang, key, nil)
 	}

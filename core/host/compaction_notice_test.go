@@ -193,13 +193,12 @@ func TestUnsupportedCompactionFailureTravelsAsANotice(t *testing.T) {
 		d.lang = i18n.French
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
-	if failed := waitEmitted(t, f, eventCompactFailed); failed.Text != "" {
-		t.Fatalf("compaction_failed text = %q, want none once the notice carries the reason", failed.Text)
-	}
+	failed := waitEmitted(t, f, eventCompactFailed)
 	got := awaitNotice(t, gateway)
 	if got.notice.Code != contracts.CodeCompactUnavailable {
 		t.Fatalf("notice = %+v, want compact.unavailable", got.notice)
 	}
+	requireRenderedText(t, failed.Text, got.notice, i18n.French)
 	if reason := reasonText(t, got.notice); !strings.Contains(reason, `"s1"`) || !strings.Contains(reason, `"codex"`) {
 		t.Fatalf("reason = %q, want the session and its vendor", reason)
 	}

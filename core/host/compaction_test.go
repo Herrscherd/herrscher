@@ -224,13 +224,24 @@ func TestBackendWithoutCompactorIsRefusedBeforeAnySend(t *testing.T) {
 		d.lang = i18n.French
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
-	if failed := waitEmitted(t, f, eventCompactFailed); failed.Text != "" {
-		t.Fatalf("compaction_failed text = %q, want none once the notice carries the refusal", failed.Text)
-	}
-	if got := awaitNotice(t, gateway); got.notice.Code != contracts.CodeCompactUnavailable {
+	failed := waitEmitted(t, f, eventCompactFailed)
+	got := awaitNotice(t, gateway)
+	if got.notice.Code != contracts.CodeCompactUnavailable {
 		t.Fatalf("notice code = %v, want %v", got.notice.Code, contracts.CodeCompactUnavailable)
 	}
+	requireRenderedText(t, failed.Text, got.notice, i18n.French)
 	expectNoFrame(t, f)
+}
+
+func requireRenderedText(t *testing.T, text string, notice contracts.Notice, lang i18n.Language) {
+	t.Helper()
+	want, err := contracts.NewRenderer().Render(lang, notice)
+	if err != nil {
+		t.Fatalf("render %v in %s: %v", notice.Code, lang, err)
+	}
+	if text != want {
+		t.Fatalf("compaction_failed text = %q, want the notice rendered in %s: %q", text, lang, want)
+	}
 }
 
 func TestCodexWithCompactorIsCompacted(t *testing.T) {

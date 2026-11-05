@@ -153,7 +153,7 @@ func (d *sessionDriver) compactPercent() int {
 }
 
 func (d *sessionDriver) contextLimit() int {
-	return d.compaction.limits.LimitFor(d.vendor, d.modelWindow)
+	return d.compaction.limits.LimitFor(d.vendor, d.terms.window)
 }
 
 func (d *sessionDriver) compactSupported() bool {

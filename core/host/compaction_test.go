@@ -448,7 +448,7 @@ func TestSessionInfosCarryTheResolvedWindowPerVendor(t *testing.T) {
 	}
 	policy := compactPolicy(50)
 	policy.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
-	infos := sessionInfos(st, t.TempDir(), policy, modelWindows(nil))
+	infos := sessionInfos(st, t.TempDir(), policy, modelTermsFor(nil))
 	byName := make(map[string]contracts.SessionInfo, len(infos))
 	for _, info := range infos {
 		byName[info.Name] = info
@@ -479,13 +479,13 @@ func TestSessionInfosUseTheResolvedModelWindow(t *testing.T) {
 	if err = st.AddSession(state.Session{Name: "claudeLong", ChannelID: "c3", Vendor: "claude", ModelID: "claude-long"}); err != nil {
 		t.Fatalf("AddSession: %v", err)
 	}
-	windows := func(session state.Session) int {
+	terms := func(session state.Session) modelTerms {
 		if session.ModelID == "claude-long" {
-			return 1_000_000
+			return modelTerms{window: 1_000_000}
 		}
-		return 0
+		return modelTerms{}
 	}
-	infos := sessionInfos(st, t.TempDir(), compactPolicy(50), windows)
+	infos := sessionInfos(st, t.TempDir(), compactPolicy(50), terms)
 	if len(infos) != 1 || infos[0].ContextWindow != 1_000_000 {
 		t.Fatalf("ContextWindow = %+v, want the model's 1000000", infos)
 	}

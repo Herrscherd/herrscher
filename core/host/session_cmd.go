@@ -126,7 +126,7 @@ func sessionInfoVerb(store *state.State, partDir string, sessions *sessionTable,
 	return contracts.New(nsSession, "info").
 		Help("list sessions as a frontend sees them (channel, vendor, dir, archived). JSON only").
 		Do(func(_ context.Context, _ contracts.Input) (string, error) {
-			b, err := json.Marshal(sessionInfos(store, partDir, sessions.compaction, modelWindows(models)))
+			b, err := json.Marshal(sessionInfos(store, partDir, sessions.compaction, modelTermsFor(models)))
 			return string(b), err
 		})
 }

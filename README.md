@@ -440,8 +440,17 @@ another model in its place.
 are in USD per million tokens (`inputPrice`, `outputPrice`, `cacheReadPrice`,
 `cacheWritePrice`), and a price of 0 means the price is unknown, never free.
 `contextWindow` is the model's window in tokens, 0 when its backend declares none.
-The host computes no cost of its own: the cost shown for a turn is the one the
-backend reports, and a backend that reports none shows none.
+A turn's cost is the one its backend reports. When the backend reports none, the host
+estimates it from the turn's tokens and the resolved model's prices: uncached input,
+output, cache read and cache write, each times its price, summed and divided by
+1000000. The estimate is stored as the turn's cost, so the transcript, the cost line
+and `CostCap` all count it. It is computed only when every category the turn used has
+a known price: a turn that uses a category priced 0 keeps no estimate and shows no
+cost, so a partial figure is never shown as a cost. A gateway route has no prices and
+gets no estimate. Claude reports its cost on each turn's result, so the estimate is a
+fallback for it. Claude's `input_tokens` leaves out cache, which is why the estimate
+prices cache separately. Codex and cursor report neither token counts nor a cost, so
+their turns show no cost.
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -604,7 +613,9 @@ the session's model and vendor, in this order: `HERRSCHER_CONTEXT_LIMIT` when it
 then the `contextLimits` table of `config.json` (a vendor name to a window in tokens,
 for example `{"contextLimits": {"codex": 400000}}`), then the window the resolved model declares (its `contextWindow`, when it is positive),
 then the built-in size of 200000 for `claude`, `cursor` and `codex`, for a model that
-declares none. Vendor names are case-insensitive. `config.json`
+declares none. `HERRSCHER_CONTEXT_LIMIT` and `contextLimits` are settings you make on
+purpose, so they take precedence over the window the catalogue declares for the model.
+Vendor names are case-insensitive. `config.json`
 refuses a zero or negative size, an empty vendor name and one vendor listed twice in
 two spellings. `herrscher serve` warns once at start about a vendor that no backend of
 the daemon serves; its entry is then unused. The built-in `codex` figure is a cautious

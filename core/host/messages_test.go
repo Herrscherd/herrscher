@@ -14,6 +14,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher-contracts/i18n/i18ntest"
+	"github.com/Herrscherd/herrscher/core/cli"
 )
 
 func hostLocaleSource(t *testing.T) fs.FS {
@@ -217,6 +218,15 @@ func TestSkillApprovalFailureTravelsAsAnUnexpectedNotice(t *testing.T) {
 	}
 	if code := noticed.Notice().Code; code != contracts.CodeUnexpected {
 		t.Fatalf("code = %v, want %v", code, contracts.CodeUnexpected)
+	}
+}
+
+func TestSkillApprovalFailureRendersInFrenchThroughTheCLI(t *testing.T) {
+	input := contracts.Input{Args: map[string]string{"key": "skill/x"}}
+	_, err := setSkillApproval(context.Background(), recallFailingMemory{err: errors.New("store locked")}, input)
+	got := cli.Localize(err, i18n.French).Error()
+	if !strings.HasPrefix(got, "erreur inattendue : ") || !strings.Contains(got, "store locked") {
+		t.Fatalf("cli.Localize(%v, French) = %q, want the French unexpected notice carrying the cause", err, got)
 	}
 }
 

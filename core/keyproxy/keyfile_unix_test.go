@@ -125,7 +125,11 @@ func TestKeyDirectoryOwnedByAnotherUserIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner := int64(info.Sys().(*syscall.Stat_t).Uid)
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Fatal("no unix stat for the directory")
+	}
+	owner := int64(stat.Uid)
 	if err := checkKeyDirectory(dir, info, owner+1); !errors.Is(err, errKeyDirUnsafe) {
 		t.Fatalf("directory owned by another user: err %v, want errKeyDirUnsafe", err)
 	}

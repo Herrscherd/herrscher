@@ -60,3 +60,16 @@ func TestSharedCliTextFollowsTheTuiLanguage(t *testing.T) {
 		t.Fatalf("the shared CLI text must render in English, got %q", got)
 	}
 }
+
+func TestSharedCliTextLoadsTheCatalogOnce(t *testing.T) {
+	trans := newTranslator().in(i18n.French)
+	allocs := testing.AllocsPerRun(3, func() {
+		for range 200 {
+			trans.shared("cli.manage.pinned_tag")
+		}
+	})
+	const budget = 150000
+	if allocs > budget {
+		t.Fatalf("200 shared texts allocated %.0f times, above the budget of %d allocations: the CLI catalogue is reloaded per text", allocs, budget)
+	}
+}

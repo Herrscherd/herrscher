@@ -31,10 +31,11 @@ var localeFiles embed.FS
 type translator struct {
 	lang    i18n.Language
 	catalog func() (*i18n.Catalog, error)
+	cli     *clitext.Translator
 }
 
 func newTranslator() translator {
-	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales)}
+	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales), cli: clitext.For(i18n.English)}
 }
 
 func loadLocales() (*i18n.Catalog, error) {
@@ -47,6 +48,7 @@ func loadLocales() (*i18n.Catalog, error) {
 
 func (trans translator) in(lang i18n.Language) translator {
 	trans.lang = lang
+	trans.cli = clitext.For(lang)
 	return trans
 }
 
@@ -65,7 +67,11 @@ func (trans translator) t(key string, params map[string]any) string {
 }
 
 func (trans translator) shared(key clitext.Key) string {
-	return clitext.For(trans.lang).Text(key, nil)
+	text := trans.cli.Text(key, nil)
+	if err := trans.cli.Err(); err != nil {
+		slog.Error("tui shared message not rendered", "key", key, "err", err)
+	}
+	return text
 }
 
 // Language sets the language the TUI renders its texts in. The zero value

@@ -11,7 +11,7 @@ import (
 
 func TestTheCompiledInPluginsShipUsableSkills(t *testing.T) {
 	dst := t.TempDir()
-	out, notes := installPluginSkills(context.Background(), contracts.Default.Plugins(), os.Getenv, dst)
+	out, notes := installPluginSkills(context.Background(), testTranslator(), contracts.Default.Plugins(), os.Getenv, dst)
 
 	if len(out.Installed) == 0 && len(notes) == 0 {
 		t.Fatal("this build compiles in plugins that carry playbooks; none installed and nothing explained why")
@@ -37,7 +37,7 @@ func TestTheCompiledInPluginsShipUsableSkills(t *testing.T) {
 			t.Errorf("plugin %q is registered under the skills category and carries none", kind)
 			continue
 		}
-		alone, why := installPluginSkills(context.Background(), []contracts.Plugin{p}, os.Getenv, t.TempDir())
+		alone, why := installPluginSkills(context.Background(), testTranslator(), []contracts.Plugin{p}, os.Getenv, t.TempDir())
 		if alone.Empty() && len(why) == 0 {
 			t.Errorf("plugin %q installed nothing and never said why", kind)
 		}

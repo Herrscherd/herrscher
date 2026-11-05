@@ -11,6 +11,8 @@ import (
 	"testing/fstest"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func tree(name string, seen *contracts.PluginConfig) contracts.SkillsFactory {
@@ -36,7 +38,7 @@ func treeOf(files map[string]string) contracts.SkillsFactory {
 
 func TestPluginSkillsAreInstalled(t *testing.T) {
 	dst := t.TempDir()
-	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{{
+	out, notes := installPluginSkills(context.Background(), testTranslator(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{Kind: "fake", Category: contracts.CategoryGateway},
 		Skills:   tree("demo", nil),
 	}}, noEnv, dst)
@@ -64,7 +66,7 @@ func TestPluginSkillsNeverOverwrite(t *testing.T) {
 	if err := os.WriteFile(mine, []byte("mine"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	out, _ := installPluginSkills(context.Background(), []contracts.Plugin{{
+	out, _ := installPluginSkills(context.Background(), testTranslator(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{Kind: "fake"},
 		Skills:   tree("demo", nil),
 	}}, noEnv, dst)
@@ -79,7 +81,7 @@ func TestPluginSkillsNeverOverwrite(t *testing.T) {
 
 func TestPluginWithoutSkillsIsSkipped(t *testing.T) {
 	dst := t.TempDir()
-	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{{
+	out, notes := installPluginSkills(context.Background(), testTranslator(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{Kind: "bare"},
 	}}, noEnv, dst)
 	if !out.Empty() || len(notes) != 0 {
@@ -94,7 +96,7 @@ func TestPluginWithoutSkillsIsSkipped(t *testing.T) {
 func TestAGatewayMissingItsTokenStillShipsItsPlaybook(t *testing.T) {
 	dst := t.TempDir()
 	var seen contracts.PluginConfig
-	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{{
+	out, notes := installPluginSkills(context.Background(), testTranslator(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{
 			Kind:     "chat",
 			Category: contracts.CategoryGateway,
@@ -118,7 +120,7 @@ func TestAGatewayMissingItsTokenStillShipsItsPlaybook(t *testing.T) {
 
 func TestAnUnconfiguredSkillsPluginIsSkipped(t *testing.T) {
 	dst := t.TempDir()
-	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{{
+	out, notes := installPluginSkills(context.Background(), testTranslator(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{
 			Kind:     "superset",
 			Category: contracts.CategorySkills,
@@ -141,7 +143,7 @@ func TestAnUnconfiguredSkillsPluginIsSkipped(t *testing.T) {
 
 func TestASkillsFactoryThatDeclinesIsReportedAndIsolated(t *testing.T) {
 	dst := t.TempDir()
-	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{
+	out, notes := installPluginSkills(context.Background(), testTranslator(), []contracts.Plugin{
 		{
 			Manifest: contracts.Manifest{Kind: "superset", Category: contracts.CategorySkills},
 			Skills: func(context.Context, contracts.PluginConfig) (fs.FS, error) {
@@ -166,7 +168,7 @@ func TestASkillsFactoryThatDeclinesIsReportedAndIsolated(t *testing.T) {
 
 func TestASkillsFactoryReturningNothingIsReported(t *testing.T) {
 	dst := t.TempDir()
-	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{{
+	out, notes := installPluginSkills(context.Background(), testTranslator(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{Kind: "empty", Category: contracts.CategorySkills},
 		Skills: func(context.Context, contracts.PluginConfig) (fs.FS, error) {
 			return nil, errors.New("nothing")
@@ -180,6 +182,18 @@ func TestASkillsFactoryReturningNothingIsReported(t *testing.T) {
 	}
 }
 
+func TestTheClashNoteIsRenderedInFrench(t *testing.T) {
+	plugs := []contracts.Plugin{
+		{Manifest: contracts.Manifest{Kind: "first"}, Skills: treeOf(map[string]string{"demo": "# from first"})},
+		{Manifest: contracts.Manifest{Kind: "second"}, Skills: treeOf(map[string]string{"demo": "# from second"})},
+	}
+	_, notes := installPluginSkills(context.Background(), clitext.For(i18n.French), plugs, noEnv, t.TempDir())
+	want := "herrscher : la compétence demo du plugin second a été écartée : le plugin first en livre déjà une de ce nom"
+	if len(notes) != 1 || notes[0] != want {
+		t.Fatalf("the clash note in French = %v, want %q", notes, want)
+	}
+}
+
 func TestTwoPluginsClaimingOneSkillNameDoNotFightOverIt(t *testing.T) {
 	dst := t.TempDir()
 	plugs := []contracts.Plugin{
@@ -187,7 +201,7 @@ func TestTwoPluginsClaimingOneSkillNameDoNotFightOverIt(t *testing.T) {
 		{Manifest: contracts.Manifest{Kind: "second"}, Skills: treeOf(map[string]string{"demo": "# from second"})},
 	}
 
-	out, notes := installPluginSkills(context.Background(), plugs, noEnv, dst)
+	out, notes := installPluginSkills(context.Background(), testTranslator(), plugs, noEnv, dst)
 	if len(out.Installed) != 1 || out.Installed[0] != "demo" {
 		t.Fatalf("the first claim must be installed once, got %+v", out)
 	}
@@ -198,7 +212,7 @@ func TestTwoPluginsClaimingOneSkillNameDoNotFightOverIt(t *testing.T) {
 		t.Fatalf("the first claim must be the one on disk, got %q", b)
 	}
 
-	again, _ := installPluginSkills(context.Background(), plugs, noEnv, dst)
+	again, _ := installPluginSkills(context.Background(), testTranslator(), plugs, noEnv, dst)
 	if !again.Empty() {
 		t.Fatalf("a second start must find nothing to do, got %+v", again)
 	}
@@ -206,7 +220,7 @@ func TestTwoPluginsClaimingOneSkillNameDoNotFightOverIt(t *testing.T) {
 
 func TestOnlyTheClashingSkillIsLeftOut(t *testing.T) {
 	dst := t.TempDir()
-	out, notes := installPluginSkills(context.Background(), []contracts.Plugin{
+	out, notes := installPluginSkills(context.Background(), testTranslator(), []contracts.Plugin{
 		{Manifest: contracts.Manifest{Kind: "first"}, Skills: treeOf(map[string]string{"demo": "# from first"})},
 		{Manifest: contracts.Manifest{Kind: "second"}, Skills: treeOf(map[string]string{
 			"demo": "# from second", "other": "# other",

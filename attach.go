@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/plugins/terminal"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
@@ -19,6 +21,7 @@ import (
 var errNotAvailableFromTerminal = errors.New("not available from the terminal")
 
 type attachedDaemon struct {
+	lang     i18n.Language
 	done     <-chan struct{}
 	send     func(argv []string) (string, error)
 	instance string
@@ -33,12 +36,13 @@ type attachedDaemon struct {
 
 const sessionCacheTTL = time.Second
 
-func newAttachedDaemon(ctx context.Context, instance string) (*attachedDaemon, error) {
+func newAttachedDaemon(ctx context.Context, instance string, lang i18n.Language) (*attachedDaemon, error) {
 	stream, err := host.SubscribeDaemonEvents(ctx, instance)
 	if err != nil {
 		return nil, err
 	}
 	daemon := &attachedDaemon{
+		lang:      lang,
 		done:      ctx.Done(),
 		instance:  instance,
 		events:    make(chan tui.RoutedEvent, attachBuffer),
@@ -111,7 +115,7 @@ func (a *attachedDaemon) dispatch(argv []string) (string, error) {
 func runAttached(ctx context.Context, instance string, opts ...tui.Option) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	daemon, err := newAttachedDaemon(ctx, instance)
+	daemon, err := newAttachedDaemon(ctx, instance, clitext.ClientLanguage())
 	if err != nil {
 		return err
 	}
@@ -145,7 +149,7 @@ func (a *attachedDaemon) Submit(channel, text string, attachments []tui.Attachme
 		a.mu.Unlock()
 	}
 	if !ok {
-		a.notify(channel, "no session is bound to this tab any more")
+		a.notify(channel, clitext.AttachNoSession, nil)
 		return
 	}
 	argv := append([]string{verbSession, "send", argName, name, "--origin", terminal.Kind}, cli.FlagArg("text", text)...)
@@ -160,15 +164,15 @@ func (a *attachedDaemon) Submit(channel, text string, attachments []tui.Attachme
 		}
 	}
 	if _, err := a.dispatch(argv); err != nil {
-		a.notify(channel, err.Error())
+		a.notify(channel, clitext.ErrorLine, clitext.Params{"Message": err.Error()})
 	}
 }
 
-func (a *attachedDaemon) notify(channel, text string) {
+func (a *attachedDaemon) notify(channel string, key clitext.Key, params clitext.Params) {
 	select {
 	case a.events <- tui.RoutedEvent{
 		Conv:  contracts.Conversation{Gateway: kindTerminal, ID: channel},
-		Event: contracts.Event{T: cmdStatus, Text: "herrscher: " + text},
+		Event: contracts.Event{T: cmdStatus, Text: render(a.lang, key, params)},
 	}:
 	default:
 	}
@@ -180,7 +184,7 @@ func (a *attachedDaemon) Dispatch(args []string) (string, error) {
 		if len(args) > 0 {
 			verb = args[0]
 		}
-		return "", fmt.Errorf("command %q is %w (allowed: session, agent)", verb, errNotAvailableFromTerminal)
+		return "", renderError(a.lang, errNotAvailableFromTerminal, clitext.AttachNotAvailable, clitext.Params{"Verb": strconv.Quote(verb)})
 	}
 	return a.dispatch(withTerminalOnly(args))
 }

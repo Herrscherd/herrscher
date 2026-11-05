@@ -6,7 +6,16 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
+
+var testLang = i18n.English
+
+func testTranslator() *clitext.Translator {
+	return clitext.For(testLang)
+}
 
 func closeQuietly(c io.Closer) {
 	if err := c.Close(); err != nil {

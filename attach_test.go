@@ -12,8 +12,51 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
+
+func TestSubmittingFromAnUnboundTabNoticesInFrench(t *testing.T) {
+	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a, err := newAttachedDaemon(ctx, d.instance, i18n.French)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Submit("unbound-tab", "bonjour", nil)
+	select {
+	case ev := <-a.Frontend():
+		const want = "herrscher : aucune session n'est plus liée à cet onglet"
+		if ev.Event.Text != want || ev.Conv.ID != "unbound-tab" {
+			t.Fatalf("notice = %q on %q, want %q on unbound-tab", ev.Event.Text, ev.Conv.ID, want)
+		}
+	default:
+		t.Fatal("no notice was emitted for a tab without a session")
+	}
+}
+
+func TestAttachedNoticeIsRenderedInFrench(t *testing.T) {
+	events := make(chan tui.RoutedEvent, 1)
+	a := &attachedDaemon{lang: i18n.French, events: events}
+	a.notify("tab-1", clitext.AttachNoSession, nil)
+	ev := <-events
+	const want = "herrscher : aucune session n'est plus liée à cet onglet"
+	if ev.Event.Text != want || ev.Conv.ID != "tab-1" {
+		t.Fatalf("notice = %q on %q, want %q on tab-1", ev.Event.Text, ev.Conv.ID, want)
+	}
+}
+
+func TestAttachedRefusalIsRenderedInFrench(t *testing.T) {
+	a := &attachedDaemon{lang: i18n.French}
+	_, err := a.Dispatch([]string{"bogus"})
+	const want = `commande "bogus" indisponible depuis le terminal (autorisées : session, agent)`
+	if err == nil || err.Error() != want {
+		t.Fatalf("refusal = %v, want %q", err, want)
+	}
+}
 
 type fakeDaemon struct {
 	instance       string
@@ -123,7 +166,7 @@ func TestAttachedFrontendRoutesAnEventToItsTab(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance)
+	a, err := newAttachedDaemon(ctx, d.instance, testLang)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +194,7 @@ func TestAttachedFrontendSendsTypedLinesToTheRightSession(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance)
+	a, err := newAttachedDaemon(ctx, d.instance, testLang)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +216,7 @@ func TestAttachedFrontendRefusesVerbsTheTerminalDoesNotOwn(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance)
+	a, err := newAttachedDaemon(ctx, d.instance, testLang)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +244,7 @@ func TestAttachedFrontendBindsANewSessionToTheTerminal(t *testing.T) {
 
 func TestAttachingWithoutADaemonFails(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
-	if _, err := newAttachedDaemon(context.Background(), "nobody"); err == nil {
+	if _, err := newAttachedDaemon(context.Background(), "nobody", testLang); err == nil {
 		t.Fatal("expected an error with no daemon listening")
 	}
 }
@@ -219,7 +262,7 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance)
+	a, err := newAttachedDaemon(ctx, d.instance, testLang)
 	if err != nil {
 		t.Fatal(err)
 	}

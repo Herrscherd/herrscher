@@ -8,25 +8,29 @@ import (
 	"path/filepath"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
-func installShippedSkills(ctx context.Context) {
+func installShippedSkills(ctx context.Context, lang i18n.Language) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return
+		return nil
 	}
 	dst := filepath.Join(home, ".claude", "skills")
-	plug, notes := installPluginSkills(ctx, contracts.Default.Plugins(), os.Getenv, dst)
+	tr := clitext.For(lang)
+	plug, notes := installPluginSkills(ctx, tr, contracts.Default.Plugins(), os.Getenv, dst)
 	for _, n := range notes {
 		fmt.Fprintln(os.Stderr, n)
 	}
-	reportSkills(dst, plug, "plugin skill")
+	reportSkills(tr, dst, plug)
 	retired, err := retireSkills(dst, plug)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "herrscher: retire skills no longer shipped: "+err.Error())
+		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillsRetireFailed, clitext.Params{"Err": err.Error()}))
 	}
-	reportRetired(dst, retired)
+	reportRetired(tr, dst, retired)
+	return tr.Err()
 }
 
 func retireSkills(dst string, plug skills.Outcome) (skills.Outcome, error) {
@@ -36,38 +40,34 @@ func retireSkills(dst string, plug skills.Outcome) (skills.Outcome, error) {
 	return skills.Retire(dst, plug.Shipped)
 }
 
-func reportRetired(dst string, out skills.Outcome) {
+func reportRetired(tr *clitext.Translator, dst string, out skills.Outcome) {
 	for _, name := range out.Removed {
-		fmt.Fprintln(os.Stderr, "herrscher: removed skill "+name+": no build ships it any more")
+		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillRemoved, clitext.Params{"Name": name}))
 	}
 	for _, name := range out.Diverged {
-		fmt.Fprintln(os.Stderr, "herrscher: skill "+name+" is no longer shipped and was edited here; it was left as it is, "+
-			"delete "+filepath.Join(dst, name)+" to remove it")
+		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillRetiredDiverged, clitext.Params{"Name": name, "Path": filepath.Join(dst, name)}))
 	}
 	for _, name := range out.Linked {
-		fmt.Fprintln(os.Stderr, "herrscher: skill "+name+" is a symbolic link here; it was left as it is, "+
-			"delete "+filepath.Join(dst, name)+" to remove the link")
+		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillRetiredLinked, clitext.Params{"Name": name, "Path": filepath.Join(dst, name)}))
 	}
 }
 
-func reportSkills(dst string, out skills.Outcome, kind string) {
+func reportSkills(tr *clitext.Translator, dst string, out skills.Outcome) {
 	for _, name := range out.Installed {
-		fmt.Fprintln(os.Stderr, "herrscher: installed "+kind+" "+name)
+		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillInstalled, clitext.Params{"Name": name}))
 	}
 	for _, name := range out.Updated {
-		fmt.Fprintln(os.Stderr, "herrscher: updated "+kind+" "+name+" to the shipped version")
+		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillUpdated, clitext.Params{"Name": name}))
 	}
 	for _, name := range out.Diverged {
-		fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" differs from the one this build ships and was left as it is; "+
-			"delete "+filepath.Join(dst, name)+" to take the shipped version")
+		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillDiverged, clitext.Params{"Name": name, "Path": filepath.Join(dst, name)}))
 	}
 	for _, name := range out.Linked {
-		fmt.Fprintln(os.Stderr, "herrscher: "+kind+" "+name+" is a symbolic link here; it was left as it is, "+
-			"delete "+filepath.Join(dst, name)+" to take the shipped version")
+		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillLinked, clitext.Params{"Name": name, "Path": filepath.Join(dst, name)}))
 	}
 }
 
-func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv func(string) string, dst string) (skills.Outcome, []string) {
+func installPluginSkills(ctx context.Context, tr *clitext.Translator, plugins []contracts.Plugin, getenv func(string) string, dst string) (skills.Outcome, []string) {
 	var all skills.Outcome
 	var notes []string
 	claimed := make(map[string]string)
@@ -76,32 +76,33 @@ func installPluginSkills(ctx context.Context, plugins []contracts.Plugin, getenv
 		if plugin.Skills == nil {
 			continue
 		}
+		kind := plugin.Manifest.Kind
 		cfg, err := pluginSkillsConfig(plugin, getenv)
 		if err != nil {
-			notes = append(notes, "herrscher: skills not configured, skipping: "+plugin.Manifest.Kind+": "+err.Error())
-			all.Partial = append(all.Partial, plugin.Manifest.Kind)
+			notes = append(notes, tr.Text(clitext.SkillsNotConfigured, clitext.Params{"Kind": kind, "Err": err.Error()}))
+			all.Partial = append(all.Partial, kind)
 			continue
 		}
 		tree, err := plugin.Skills(ctx, cfg)
 		if err != nil {
-			notes = append(notes, "herrscher: no skills from plugin "+plugin.Manifest.Kind+": "+err.Error())
-			all.Partial = append(all.Partial, plugin.Manifest.Kind)
+			notes = append(notes, tr.Text(clitext.SkillsPluginFailed, clitext.Params{"Kind": kind, "Err": err.Error()}))
+			all.Partial = append(all.Partial, kind)
 			continue
 		}
 		if tree == nil {
-			notes = append(notes, "herrscher: no skills from plugin "+plugin.Manifest.Kind+": its factory handed over no playbooks")
-			all.Partial = append(all.Partial, plugin.Manifest.Kind)
+			notes = append(notes, tr.Text(clitext.SkillsNoContent, clitext.Params{"Kind": kind}))
+			all.Partial = append(all.Partial, kind)
 			continue
 		}
-		src, dups := reserve(tree, plugin.Manifest.Kind, claimed)
+		src, dups := reserve(tr, tree, kind, claimed)
 		notes = append(notes, dups...)
 		if src == nil {
 			continue
 		}
 		out, err := skills.Install(src, dst)
 		if err != nil {
-			notes = append(notes, "herrscher: install skills for plugin "+plugin.Manifest.Kind+": "+err.Error())
-			all.Partial = append(all.Partial, plugin.Manifest.Kind)
+			notes = append(notes, tr.Text(clitext.SkillsInstallFailed, clitext.Params{"Kind": kind, "Err": err.Error()}))
+			all.Partial = append(all.Partial, kind)
 			continue
 		}
 		all.Installed = append(all.Installed, out.Installed...)
@@ -121,7 +122,7 @@ func pluginSkillsConfig(plugin *contracts.Plugin, getenv func(string) string) (c
 	return cfg, nil
 }
 
-func reserve(tree fs.FS, kind string, claimed map[string]string) (fs.FS, []string) {
+func reserve(tr *clitext.Translator, tree fs.FS, kind string, claimed map[string]string) (fs.FS, []string) {
 	entries, err := fs.ReadDir(tree, ".")
 	if err != nil {
 		return tree, nil
@@ -135,8 +136,7 @@ func reserve(tree fs.FS, kind string, claimed map[string]string) (fs.FS, []strin
 		}
 		if owner, taken := claimed[entry.Name()]; taken {
 			hidden[entry.Name()] = true
-			notes = append(notes, "herrscher: skill "+entry.Name()+" from plugin "+kind+
-				" was left out: plugin "+owner+" already ships one by that name")
+			notes = append(notes, tr.Text(clitext.SkillDuplicate, clitext.Params{"Name": entry.Name(), "Kind": kind, "Owner": owner}))
 			continue
 		}
 		claimed[entry.Name()] = kind

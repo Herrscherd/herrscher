@@ -82,7 +82,7 @@ func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.
 		return err
 	}
 	if *envFile != "" {
-		if loadErr := loadEnvFile(*envFile); loadErr != nil {
+		if loadErr := loadEnvFile(*envFile, langs.Operator); loadErr != nil {
 			return loadErr
 		}
 	}
@@ -99,7 +99,9 @@ func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.
 	}
 	defer unlock()
 
-	installShippedSkills(ctx)
+	if err := installShippedSkills(ctx, langs.Operator); err != nil {
+		return err
+	}
 
 	gws, closers, foreground, extra, err := startGateways(ctx)
 	if err != nil {

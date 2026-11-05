@@ -5,8 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
@@ -20,7 +21,7 @@ func usage(lang i18n.Language) error {
 		verb    = renderer.NewStyle().Bold(true)
 		hint    = renderer.NewStyle().Faint(true)
 	)
-	tr := clitext.For(lang)
+	translator := clitext.For(lang)
 
 	const col = 34
 	row := func(value string, help clitext.Key) string {
@@ -28,16 +29,16 @@ func usage(lang i18n.Language) error {
 		if pad < 1 {
 			pad = 1
 		}
-		return "    " + verb.Render(value) + strings.Repeat(" ", pad) + hint.Render(tr.Text(help, nil))
+		return "    " + verb.Render(value) + strings.Repeat(" ", pad) + hint.Render(translator.Text(help, nil))
 	}
 
 	group := func(title clitext.Key, rows ...string) string {
-		return "  " + section.Render(tr.Text(title, nil)) + "\n" + strings.Join(rows, "\n")
+		return "  " + section.Render(translator.Text(title, nil)) + "\n" + strings.Join(rows, "\n")
 	}
 
 	blocks := []string{
 		"  " + banner.Render("⛧ HERRSCHER"),
-		"  " + tagline.Render(tr.Text(clitext.UsageTagline, nil)),
+		"  " + tagline.Render(translator.Text(clitext.UsageTagline, nil)),
 		"",
 		group(clitext.UsageGroupStart,
 			row("herrscher \"<texte>\"", clitext.UsageStartTask),
@@ -69,16 +70,16 @@ func usage(lang i18n.Language) error {
 			row("install", clitext.UsageInstall),
 		),
 		"",
-		"  " + hint.Render(tr.Text(clitext.UsageHelpFooter, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageHelpFooter, nil)),
 		"",
-		"  " + hint.Render(tr.Text(clitext.UsageEnvDiscord, nil)),
-		"  " + hint.Render(tr.Text(clitext.UsageEnvOwner, nil)),
-		"  " + hint.Render(tr.Text(clitext.UsageEnvRoute, nil)),
-		"  " + hint.Render(tr.Text(clitext.UsageEnvGateway, nil)),
-		"  " + hint.Render(tr.Text(clitext.UsageEnvDefaultModel, nil)),
-		"  " + hint.Render(tr.Text(clitext.UsageEnvInit, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvDiscord, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvOwner, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvRoute, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvGateway, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvDefaultModel, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvInit, nil)),
 	}
-	if err := tr.Err(); err != nil {
+	if err := translator.Err(); err != nil {
 		return fmt.Errorf("usage: %w", err)
 	}
 

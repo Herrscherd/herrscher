@@ -35,8 +35,8 @@ func scheduleAddVerb(store *state.State, agents agentLookup) contracts.Cmd {
 		Param("cron", "five-field cron in the daemon's local time, e.g. '0 9 * * 1-5' (exclusive with --every)", false).
 		Param("task", "the task handed to the session on each firing", true).
 		Param("grace", "how late a window missed while the daemon was down may still fire (default 1h)", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return addSchedule(store, agents, in)
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(addSchedule(store, agents, in))
 		})
 }
 
@@ -87,8 +87,8 @@ func checkNewSchedule(store *state.State, agents agentLookup, definition schedul
 func scheduleListVerb(store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "list").
 		Help("list the schedules, with their target, cadence, state and next window").
-		Do(func(_ context.Context, _ contracts.Input) (string, error) {
-			return listSchedules(store), nil
+		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
+			return contracts.DataResult(listSchedules(store)), nil
 		})
 }
 
@@ -139,16 +139,16 @@ func scheduleRmVerb(store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "rm").
 		Help("remove a schedule; the session it opened is left alone").
 		Param(paramName, "schedule name", true).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			name := strings.TrimSpace(in.Get(paramName))
 			ok, err := store.RemoveSchedule(name)
 			if err != nil {
-				return "", err
+				return contracts.Result{}, err
 			}
 			if !ok {
-				return "", &NotFoundError{Kind: kindSchedule, Name: name}
+				return contracts.Result{}, &NotFoundError{Kind: kindSchedule, Name: name}
 			}
-			return "removed " + name + " (its session, if any, is still there; close it with `session close`)", nil
+			return contracts.DataResult("removed " + name + " (its session, if any, is still there; close it with `session close`)"), nil
 		})
 }
 
@@ -156,8 +156,8 @@ func schedulePauseVerb(store *state.State, verb string, paused bool, help string
 	return contracts.New(nsSchedule, verb).
 		Help(help).
 		Param(paramName, "schedule name", true).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return setSchedulePaused(store, verb, paused, strings.TrimSpace(in.Get(paramName)))
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(setSchedulePaused(store, verb, paused, strings.TrimSpace(in.Get(paramName))))
 		})
 }
 
@@ -181,15 +181,15 @@ func scheduleRunVerb(slot *schedulerSlot) contracts.Cmd {
 	return contracts.New(nsSchedule, "run").
 		Help("fire a schedule right now, out of band; the cadence is not moved").
 		Param(paramName, "schedule name", true).
-		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
+		Do(func(cmdCtx context.Context, in contracts.Input) (contracts.Result, error) {
 			name := strings.TrimSpace(in.Get(paramName))
 			if slot == nil || slot.sched == nil {
-				return "", &noDaemonToFireError{Name: name}
+				return contracts.Result{}, &noDaemonToFireError{Name: name}
 			}
 			if err := slot.sched.fireNow(cmdCtx, name); err != nil {
-				return "", err
+				return contracts.Result{}, err
 			}
-			return "fired " + name, nil
+			return contracts.DataResult("fired " + name), nil
 		})
 }
 

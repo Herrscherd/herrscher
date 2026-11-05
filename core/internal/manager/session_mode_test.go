@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -17,7 +19,7 @@ func seedModeSession(t *testing.T, st *state.State, name, vendor, approvals stri
 
 func setModeOf(t *testing.T, h *Handler, name, mode string) (string, error) {
 	t.Helper()
-	return h.sessionSetModeRun(context.Background(), args("name", name, "mode", mode))
+	return cli.Plain(h.sessionSetModeRun(context.Background(), args("name", name, "mode", mode)))
 }
 
 func storedMode(t *testing.T, st *state.State, name string) string {
@@ -95,11 +97,11 @@ func TestGetModeReadsTheStoredStance(t *testing.T) {
 	seedModeSession(t, st, "s1", "claude", "")
 	seedModeSession(t, st, "s2", "claude", "plan")
 
-	got, err := h.sessionGetModeRun(context.Background(), args("name", "s1"))
+	got, err := cli.Plain(h.sessionGetModeRun(context.Background(), args("name", "s1")))
 	if err != nil || got != "ask" {
 		t.Fatalf("a session with no stored mode reads %q (%v), want ask", got, err)
 	}
-	got, err = h.sessionGetModeRun(context.Background(), args("name", "s2"))
+	got, err = cli.Plain(h.sessionGetModeRun(context.Background(), args("name", "s2")))
 	if err != nil || got != "plan" {
 		t.Fatalf("a planning session reads %q (%v), want plan", got, err)
 	}

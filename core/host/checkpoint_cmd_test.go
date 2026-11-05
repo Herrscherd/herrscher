@@ -87,7 +87,7 @@ func TestCheckpointsListsMessagesWithTheFilesTheyTouched(t *testing.T) {
 	writeFrame(t, repo, "v2\nv2b\n")
 	reg := checkpointRegistry(st, newSessionTable())
 
-	out, err := reg.Dispatch(ctx, []string{nsSession, verbCheckpoints, "--name", "alpha", "--json"})
+	out, err := cli.Plain(reg.Dispatch(ctx, []string{nsSession, verbCheckpoints, "--name", "alpha", "--json"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,17 +184,17 @@ func (f *fakeForkHost) RestartWithResume(name, token string) error {
 	return nil
 }
 
-func (f *fakeForkHost) CreateCoordinated(ctx context.Context, spec contracts.CreateSession, _ string) (string, error) {
+func (f *fakeForkHost) CreateCoordinated(ctx context.Context, spec contracts.CreateSession, _ string) (contracts.Result, error) {
 	dir := filepath.Join(f.t.TempDir(), spec.Name)
 	gitIn(ctx, f.t, f.repo, "worktree", "add", "-q", dir, "-b", spec.Name, spec.Base)
 	if err := f.st.AddSession(state.Session{Name: spec.Name, ChannelID: "chan-" + spec.Name, Worktree: dir}); err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
-	return spec.Name, nil
+	return contracts.DataResult(spec.Name), nil
 }
 
-func (f *fakeForkHost) Close(_ context.Context, _ string, _ bool) (string, error) {
-	return "", nil
+func (f *fakeForkHost) Close(_ context.Context, _ string, _ bool) (contracts.Result, error) {
+	return contracts.Result{}, nil
 }
 
 func TestForkCreatesOwnWorktreeAtCheckpointAndLeavesOriginal(t *testing.T) {

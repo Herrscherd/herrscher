@@ -3,6 +3,8 @@ package manager
 import (
 	"errors"
 	"fmt"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 var (
@@ -113,4 +115,23 @@ type UnsupportedHomeTypeError struct {
 
 func (e *UnsupportedHomeTypeError) Error() string {
 	return fmt.Sprintf("home type %q unsupported", e.Type)
+}
+
+// Notice returns the shared notice naming the missing session.
+func (e *SessionNotFoundError) Notice() contracts.Notice {
+	return sessionNotice(contracts.CodeSessionNotFound, e.Name)
+}
+
+// Notice returns the shared notice naming the existing session.
+func (e *SessionExistsError) Notice() contracts.Notice {
+	return sessionNotice(contracts.CodeSessionExists, e.Name)
+}
+
+// Notice returns the shared notice naming the unknown agent.
+func (e *UnknownAgentError) Notice() contracts.Notice {
+	return sessionNotice(contracts.CodeUnknownAgent, e.Name)
+}
+
+func sessionNotice(code contracts.Code, name string) contracts.Notice {
+	return contracts.Notice{Code: code, Args: []contracts.Arg{contracts.Text("Name", name)}}
 }

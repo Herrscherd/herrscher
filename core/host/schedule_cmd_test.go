@@ -117,7 +117,7 @@ func assertDuplicateScheduleRefused(ctx context.Context, t *testing.T, reg *cli.
 
 func assertDigestListed(ctx context.Context, t *testing.T, reg *cli.Registry) {
 	t.Helper()
-	out, err := reg.Dispatch(ctx, []string{"schedule", "list"})
+	out, err := cli.Plain(reg.Dispatch(ctx, []string{"schedule", "list"}))
 	if err != nil {
 		t.Fatalf("schedule list: %v", err)
 	}
@@ -175,10 +175,10 @@ func TestScheduleResumeRestartsTheCadenceFromNow(t *testing.T) {
 func TestScheduleAddSaysWhenTheNamedSessionIsNotThere(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	reg := testScheduleRegistry(t, st, nil)
-	out, err := reg.Dispatch(context.Background(), []string{
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{
 		"schedule", "add", "--name", "digest",
 		"--session", "typo", "--every", "30m", "--task", "t",
-	})
+	}))
 	if err != nil {
 		t.Fatalf("schedule add: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestScheduleListCountsTheNextWindowFromTheAnchor(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("PutSchedule: %v", err)
 	}
-	out, err := reg.Dispatch(context.Background(), []string{"schedule", "list"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"schedule", "list"}))
 	if err != nil {
 		t.Fatalf("schedule list: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestScheduleListNamesNoWindowForAPausedSchedule(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("PutSchedule: %v", err)
 	}
-	out, err := reg.Dispatch(context.Background(), []string{"schedule", "list"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"schedule", "list"}))
 	if err != nil {
 		t.Fatalf("schedule list: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestScheduleListNamesNoWindowForAPausedSchedule(t *testing.T) {
 func TestScheduleListSaysWhenThereIsNothing(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	reg := testScheduleRegistry(t, st, nil)
-	out, err := reg.Dispatch(context.Background(), []string{"schedule", "list"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"schedule", "list"}))
 	if err != nil {
 		t.Fatalf("schedule list: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestScheduleVerbsAreInTheRealRegistry(t *testing.T) {
 	}); dispatchErr != nil {
 		t.Fatalf("schedule add: %v", dispatchErr)
 	}
-	out, err := reg.Dispatch(ctx, []string{"schedule", "list"})
+	out, err := cli.Plain(reg.Dispatch(ctx, []string{"schedule", "list"}))
 	if err != nil {
 		t.Fatalf("schedule list: %v", err)
 	}

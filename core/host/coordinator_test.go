@@ -18,15 +18,15 @@ type fakeCreator struct {
 	err    error
 }
 
-func (f *fakeCreator) Create(_ context.Context, s contracts.CreateSession) (string, error) {
+func (f *fakeCreator) Create(_ context.Context, s contracts.CreateSession) (contracts.Result, error) {
 	f.spec = s
-	return s.Name, f.err
+	return contracts.DataResult(s.Name), f.err
 }
 
-func (f *fakeCreator) CreateCoordinated(_ context.Context, s contracts.CreateSession, vendor string) (string, error) {
+func (f *fakeCreator) CreateCoordinated(_ context.Context, s contracts.CreateSession, vendor string) (contracts.Result, error) {
 	f.spec = s
 	f.vendor = vendor
-	return s.Name, f.err
+	return contracts.DataResult(s.Name), f.err
 }
 
 type fakeAgents struct {
@@ -79,9 +79,9 @@ func (f fakeSessions) SnapshotSessions() []state.Session { return f.list }
 
 type fakeCloser struct{ closed []string }
 
-func (f *fakeCloser) Close(_ context.Context, name string, _ bool) (string, error) {
+func (f *fakeCloser) Close(_ context.Context, name string, _ bool) (contracts.Result, error) {
 	f.closed = append(f.closed, name)
-	return "", nil
+	return contracts.Result{}, nil
 }
 
 func newTestCoordinator(cr *fakeCreator, known []string, clean bool, sessions []state.Session, seeded *[]string) *coordinator {
@@ -1001,13 +1001,13 @@ type nthFailCreator struct {
 	last   contracts.CreateSession
 }
 
-func (c *nthFailCreator) CreateCoordinated(_ context.Context, s contracts.CreateSession, _ string) (string, error) {
+func (c *nthFailCreator) CreateCoordinated(_ context.Context, s contracts.CreateSession, _ string) (contracts.Result, error) {
 	c.n++
 	c.last = s
 	if c.n == c.failAt {
-		return "", fmt.Errorf("create boom at call %d", c.n)
+		return contracts.Result{}, fmt.Errorf("create boom at call %d", c.n)
 	}
-	return s.Name, nil
+	return contracts.DataResult(s.Name), nil
 }
 
 func TestFanOutSpawnsCohort(t *testing.T) {

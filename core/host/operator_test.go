@@ -13,10 +13,10 @@ import (
 func operatorReg(t *testing.T, ran *[]string) *cli.Registry {
 	t.Helper()
 	reg := &cli.Registry{}
-	local := func(name string) func(context.Context, contracts.Input) (string, error) {
-		return func(context.Context, contracts.Input) (string, error) {
+	local := func(name string) func(context.Context, contracts.Input) (contracts.Result, error) {
+		return func(context.Context, contracts.Input) (contracts.Result, error) {
 			*ran = append(*ran, name)
-			return "local " + name, nil
+			return contracts.DataResult("local " + name), nil
 		}
 	}
 	for _, c := range []contracts.Cmd{
@@ -48,7 +48,7 @@ func TestASessionVerbIsDecidedByTheRunningDaemon(t *testing.T) {
 		return "daemon closed it", true, nil
 	})
 
-	out, err := reg.Dispatch(context.Background(), []string{"session", "close", "--name", "main", "--force"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"session", "close", "--name", "main", "--force"}))
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestAHostVerbIsDecidedByTheRunningDaemon(t *testing.T) {
 		return "registered build1", true, nil
 	})
 
-	out, err := reg.Dispatch(context.Background(), []string{"host", "add", "--name", "build1"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"host", "add", "--name", "build1"}))
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestWithNoDaemonListeningTheCommandStillRuns(t *testing.T) {
 		return "", false, nil
 	})
 
-	out, err := reg.Dispatch(context.Background(), []string{"session", "close", "--name", "main"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"session", "close", "--name", "main"}))
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestApproveAskWithNoDaemonFailsFastInsteadOfWaiting(t *testing.T) {
 		t.Fatalf("ran locally: %v, want no request opened in a process that exits", ran)
 	}
 
-	if out, err := reg.Dispatch(context.Background(), []string{"approve", "list"}); err != nil || out != "local approve list" {
+	if out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"approve", "list"})); err != nil || out != "local approve list" {
 		t.Fatalf("out = %q err = %v, want the other approve verbs to still fall back", out, err)
 	}
 }
@@ -165,7 +165,7 @@ func TestTheWholeInvocationSurvivesTheTrip(t *testing.T) {
 	if err := reg.Add(contracts.New("session", "create").
 		Param("name", "session name", true).
 		ValueParam("model", "model id", false).
-		Do(func(context.Context, contracts.Input) (string, error) { return "", nil })); err != nil {
+		Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil })); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 	forwardDaemonOwnedCommands(reg, "inst", func(_ context.Context, _ string, argv []string) (string, bool, error) {

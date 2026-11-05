@@ -32,7 +32,8 @@ type HomeRef struct {
 
 // Session is one bridged channel/post supervised by the daemon.
 type Session struct {
-	ID string `json:"id,omitempty"`
+	ID       string `json:"id,omitempty"`
+	Language string `json:"language,omitempty"`
 	// Incarnation is an opaque identity for this specific persisted session
 	// object. Closing and recreating the same Name generates a different value.
 	Incarnation string `json:"incarnation,omitempty"`

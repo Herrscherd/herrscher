@@ -13,10 +13,10 @@ func TestHubDispatchSeedAllowsCoordinatorReentry(t *testing.T) {
 	reg := &cli.Registry{}
 	h := &hub{reg: reg}
 	if err := reg.Add(contracts.New("session", "seed").
-		Do(func(context.Context, contracts.Input) (string, error) {
+		Do(func(context.Context, contracts.Input) (contracts.Result, error) {
 			h.dispatchMu.Lock()
 			defer h.dispatchMu.Unlock()
-			return "seeded", nil
+			return contracts.DataResult("seeded"), nil
 		})); err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestHubDispatchSeedAllowsCoordinatorReentry(t *testing.T) {
 	var out string
 	var err error
 	go func() {
-		out, err = h.Dispatch(context.Background(), []string{"session", "seed"})
+		out, err = cli.Plain(h.Dispatch(context.Background(), []string{"session", "seed"}))
 		close(done)
 	}()
 

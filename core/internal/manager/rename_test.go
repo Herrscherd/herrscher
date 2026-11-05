@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -23,7 +25,7 @@ func TestSessionRenameCarriesTheTranscriptAndTheJournal(t *testing.T) {
 	seedTranscriptAndJournal(t, h, old)
 	sup.started, sup.stopped = nil, nil
 
-	out, err := h.sessionRenameRun(context.Background(), args("name", "avant", "to", "Apres Le Renommage"))
+	out, err := cli.Plain(h.sessionRenameRun(context.Background(), args("name", "avant", "to", "Apres Le Renommage")))
 	if err != nil {
 		t.Fatalf("rename: %v", err)
 	}
@@ -98,7 +100,7 @@ func TestSessionRenameRefusesTheImpossible(t *testing.T) {
 	if _, err := h.sessionRenameRun(context.Background(), args("name", "un", "to", "../")); err == nil {
 		t.Errorf("un nom qui ne laisse aucun slug doit echouer")
 	}
-	if out, err := h.sessionRenameRun(context.Background(), args("name", "un", "to", "un")); err != nil || !strings.Contains(out, "déjà") {
+	if out, err := cli.Plain(h.sessionRenameRun(context.Background(), args("name", "un", "to", "un"))); err != nil || !strings.Contains(out, "déjà") {
 		t.Errorf("renommer vers le meme nom ne fait rien et le dit: %q %v", out, err)
 	}
 	if _, ok := st.FindSession("un"); !ok {
@@ -153,7 +155,7 @@ func TestSessionRenameWarnsWhenAScheduleOwnsTheName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := h.sessionRenameRun(context.Background(), args("name", "schedule-veille", "to", "veille-manuelle"))
+	out, err := cli.Plain(h.sessionRenameRun(context.Background(), args("name", "schedule-veille", "to", "veille-manuelle")))
 	if err != nil {
 		t.Fatalf("rename: %v", err)
 	}

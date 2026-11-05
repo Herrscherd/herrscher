@@ -6,6 +6,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 type recordingDispatcher struct {
@@ -14,13 +18,13 @@ type recordingDispatcher struct {
 	fail  map[string]error
 }
 
-func (r *recordingDispatcher) Dispatch(_ context.Context, argv []string) (string, error) {
+func (r *recordingDispatcher) Dispatch(_ context.Context, argv []string) (contracts.Result, error) {
 	r.seen = append(r.seen, append([]string(nil), argv...))
 	key := strings.Join(argv[:2], " ")
 	if err := r.fail[key]; err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
-	return r.reply[key], nil
+	return contracts.DataResult(r.reply[key]), nil
 }
 
 func argOf(argv []string, flag string) (string, bool) {
@@ -36,7 +40,7 @@ func TestRunPromptCreatesThenSeeds(t *testing.T) {
 	d := &recordingDispatcher{reply: map[string]string{"session seed": "voilà le plan"}}
 	var out, errOut strings.Builder
 
-	if err := runPromptWith(context.Background(), d, "lis-le-thread-a3fq", "lis le thread X", &out, &errOut); err != nil {
+	if err := runPromptWith(context.Background(), d, "lis-le-thread-a3fq", "lis le thread X", i18n.English, &out, &errOut); err != nil {
 		t.Fatalf("runPromptWith: %v", err)
 	}
 	if len(d.seen) != 2 {
@@ -64,7 +68,7 @@ func TestRunPromptCreatesThenSeeds(t *testing.T) {
 func TestRunPromptCreatesATerminalOnlySession(t *testing.T) {
 	d := &recordingDispatcher{reply: map[string]string{"session seed": "ok"}}
 	var out, errOut strings.Builder
-	if err := runPromptWith(context.Background(), d, "n-a3fq", "x y", &out, &errOut); err != nil {
+	if err := runPromptWith(context.Background(), d, "n-a3fq", "x y", i18n.English, &out, &errOut); err != nil {
 		t.Fatalf("runPromptWith: %v", err)
 	}
 	if !slicesContain(d.seen[0], "--terminal_only") {
@@ -84,7 +88,7 @@ func slicesContain(s []string, want string) bool {
 func TestRunPromptSplitsReplyFromTheSessionName(t *testing.T) {
 	d := &recordingDispatcher{reply: map[string]string{"session seed": "voilà le plan"}}
 	var out, errOut strings.Builder
-	if err := runPromptWith(context.Background(), d, "n-a3fq", "x y", &out, &errOut); err != nil {
+	if err := runPromptWith(context.Background(), d, "n-a3fq", "x y", i18n.English, &out, &errOut); err != nil {
 		t.Fatalf("runPromptWith: %v", err)
 	}
 	if got := strings.TrimSpace(out.String()); got != "voilà le plan" {
@@ -98,7 +102,7 @@ func TestRunPromptSplitsReplyFromTheSessionName(t *testing.T) {
 func TestRunPromptDoesNotSeedWhenCreateFails(t *testing.T) {
 	d := &recordingDispatcher{fail: map[string]error{"session create": errors.New("worktree: boom")}}
 	var out, errOut strings.Builder
-	err := runPromptWith(context.Background(), d, "n-a3fq", "x y", &out, &errOut)
+	err := runPromptWith(context.Background(), d, "n-a3fq", "x y", i18n.English, &out, &errOut)
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("err = %v, want the create failure", err)
 	}
@@ -110,7 +114,7 @@ func TestRunPromptDoesNotSeedWhenCreateFails(t *testing.T) {
 func TestRunPromptNamesTheSessionWhenSeedFails(t *testing.T) {
 	d := &recordingDispatcher{fail: map[string]error{"session seed": errors.New("seed timeout")}}
 	var out, errOut strings.Builder
-	err := runPromptWith(context.Background(), d, "n-a3fq", "x y", &out, &errOut)
+	err := runPromptWith(context.Background(), d, "n-a3fq", "x y", i18n.English, &out, &errOut)
 	if err == nil || !strings.Contains(err.Error(), "n-a3fq") {
 		t.Fatalf("err = %v, want it to name the session left behind", err)
 	}
@@ -120,7 +124,7 @@ func TestATaskLaunchAsksToLearn(t *testing.T) {
 	t.Setenv("TERMINAL_PROJECT", "Mon Projet")
 	d := &recordingDispatcher{reply: map[string]string{"session seed": "ok"}}
 	var out, errOut strings.Builder
-	if err := runPromptWith(context.Background(), d, "n-a3fq", "x y", &out, &errOut); err != nil {
+	if err := runPromptWith(context.Background(), d, "n-a3fq", "x y", i18n.English, &out, &errOut); err != nil {
 		t.Fatalf("runPromptWith: %v", err)
 	}
 	create := d.seen[0]
@@ -144,7 +148,7 @@ func TestATaskLaunchToldNotToLearnSaysNothing(t *testing.T) {
 	t.Setenv("TERMINAL_LEARN", "false")
 	d := &recordingDispatcher{reply: map[string]string{"session seed": "ok"}}
 	var out, errOut strings.Builder
-	if err := runPromptWith(context.Background(), d, "n-a3fq", "x y", &out, &errOut); err != nil {
+	if err := runPromptWith(context.Background(), d, "n-a3fq", "x y", i18n.English, &out, &errOut); err != nil {
 		t.Fatalf("runPromptWith: %v", err)
 	}
 	want := []string{"session", "create", "--name", "n-a3fq", "--terminal_only"}

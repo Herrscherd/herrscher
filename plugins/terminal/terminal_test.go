@@ -203,22 +203,22 @@ type fakeSessionControl struct {
 	commandsJSON string
 }
 
-func (f *fakeSessionControl) Dispatch(_ context.Context, args []string) (string, error) {
+func (f *fakeSessionControl) Dispatch(_ context.Context, args []string) (contracts.Result, error) {
 	f.lastArgs = args
 	if len(args) > 0 && args[0] == "commands" {
-		return f.commandsJSON, nil
+		return contracts.DataResult(f.commandsJSON), nil
 	}
-	return "ok", nil
+	return contracts.DataResult("ok"), nil
 }
 
-func (f *fakeSessionControl) Create(_ context.Context, spec contracts.CreateSession) (string, error) {
+func (f *fakeSessionControl) Create(_ context.Context, spec contracts.CreateSession) (contracts.Result, error) {
 	f.created = append(f.created, spec)
-	return "ok", nil
+	return contracts.DataResult("ok"), nil
 }
 
-func (f *fakeSessionControl) Close(_ context.Context, name string, force bool) (string, error) {
+func (f *fakeSessionControl) Close(_ context.Context, name string, force bool) (contracts.Result, error) {
 	f.closed = append(f.closed, closeCall{name: name, force: force})
-	return "ok", nil
+	return contracts.DataResult("ok"), nil
 }
 
 func (f *fakeSessionControl) Sessions() []contracts.SessionInfo { return f.sessions }

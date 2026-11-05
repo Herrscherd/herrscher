@@ -26,14 +26,14 @@ func forwardDaemonOwnedCommands(reg *cli.Registry, instID string, forward seedCo
 			if len(cmd.Path) > 1 && forwardedLocally()[cmd.Path[1]] {
 				return next
 			}
-			return func(ctx context.Context, input contracts.Input) (string, error) {
+			return func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 				target := commandSocketTarget(instID)
 				out, handled, err := forward(ctx, target, argvOf(cmd, input))
 				if handled {
-					return out, err
+					return contracts.DataResult(out), err
 				}
 				if path := strings.Join(cmd.Path, " "); daemonOnly()[path] {
-					return "", &daemonRequiredError{Command: path, Target: target}
+					return contracts.Result{}, &daemonRequiredError{Command: path, Target: target}
 				}
 				return next(ctx, input)
 			}

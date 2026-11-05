@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
@@ -22,7 +24,7 @@ func TestModelsListAllShowsHiddenWhenRequested(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	list := modelsVerb(t, "list")
 
-	plain, err := list.Run(context.Background(), contracts.Input{JSON: true, Args: map[string]string{"state": statePath}})
+	plain, err := cli.Plain(list.Run(context.Background(), contracts.Input{JSON: true, Args: map[string]string{"state": statePath}}))
 	if err != nil {
 		t.Fatalf("models list --json: %v", err)
 	}
@@ -30,7 +32,7 @@ func TestModelsListAllShowsHiddenWhenRequested(t *testing.T) {
 		t.Fatalf("default listing offers the hidden model: %s", plain)
 	}
 
-	all, err := list.Run(context.Background(), contracts.Input{JSON: true, Args: map[string]string{"state": statePath, "all": "true"}})
+	all, err := cli.Plain(list.Run(context.Background(), contracts.Input{JSON: true, Args: map[string]string{"state": statePath, "all": "true"}}))
 	if err != nil {
 		t.Fatalf("models list --all --json: %v", err)
 	}

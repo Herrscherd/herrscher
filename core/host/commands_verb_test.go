@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -22,7 +24,7 @@ func TestCommandsVerbDescribesTheRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := reg.Dispatch(ctx, []string{"commands", "--json"})
+	out, err := cli.Plain(reg.Dispatch(ctx, []string{"commands", "--json"}))
 	if err != nil {
 		t.Fatalf("commands --json: %v", err)
 	}
@@ -43,7 +45,7 @@ func TestCommandsVerbDescribesTheRegistry(t *testing.T) {
 		}
 	}
 
-	if text, err := reg.Dispatch(ctx, []string{"commands"}); err != nil || !strings.Contains(text, "session create") {
+	if text, err := cli.Plain(reg.Dispatch(ctx, []string{"commands"})); err != nil || !strings.Contains(text, "session create") {
 		t.Fatalf("bare commands = %q, %v", text, err)
 	}
 }

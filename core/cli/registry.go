@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
 var (
@@ -44,22 +45,43 @@ func (r *Registry) Add(cmd contracts.Cmd) error {
 	return nil
 }
 
-// Dispatch resolves args to the command whose Path is the longest prefix of
-// args, parses the remainder into an Input (--flag value pairs into Args, or
-// --flag=value where the value would itself read as a flag; a valueless optional
-// boolean param becomes "true", while an optional ValueRequired param still
-// needs a following value; anything left over goes to Rest), checks required
-// params, and runs it. It returns the handler's output string.
-func (r *Registry) Dispatch(ctx context.Context, args []string) (string, error) {
+// Dispatch runs the command named by args and returns its result unrendered.
+func (r *Registry) Dispatch(ctx context.Context, args []string) (contracts.Result, error) {
 	cmd, rest := r.match(args)
 	if cmd == nil {
-		return "", fmt.Errorf("%w %q", errUnknownCommand, strings.Join(args, " "))
+		return contracts.Result{}, fmt.Errorf("%w %q", errUnknownCommand, strings.Join(args, " "))
 	}
 	input, err := parse(*cmd, rest)
 	if err != nil {
-		return "", err
+		return contracts.Result{}, err
 	}
 	return cmd.Run(ctx, input)
+}
+
+// Text renders result in lang: its notice when it has one, otherwise its data.
+func Text(result contracts.Result, lang i18n.Language) (string, error) {
+	lang = orEnglish(lang)
+	notice, ok := result.Notice()
+	if ok {
+		return contracts.NewRenderer().Render(lang, notice)
+	}
+	data := result.Data()
+	if data == nil {
+		return "", nil
+	}
+	if text, isText := data.(string); isText {
+		return text, nil
+	}
+	return fmt.Sprint(data), nil
+}
+
+// Render returns the text of a command outcome in lang: the error rendered in lang when it failed,
+// otherwise the result rendered by Text.
+func Render(res contracts.Result, err error, lang i18n.Language) (string, error) {
+	if err != nil {
+		return "", Localize(err, lang)
+	}
+	return Text(res, lang)
 }
 
 // Resolve reports the command args address and the Input parsed for it, without
@@ -89,7 +111,7 @@ func (r *Registry) Resolve(args []string) ([]string, contracts.Input, bool) {
 // SessionControl methods) so they never assemble stringly-typed flag argv that
 // could silently drift from the declared params. Required params are still
 // checked, so a typed caller gets the same validation as the CLI.
-func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input) (string, error) {
+func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input) (contracts.Result, error) {
 	var cmd *contracts.Cmd
 	for index := range r.cmds {
 		if key(r.cmds[index].Path) == key(path) {
@@ -98,7 +120,7 @@ func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input
 		}
 	}
 	if cmd == nil {
-		return "", fmt.Errorf("%w %q", errUnknownCommand, key(path))
+		return contracts.Result{}, fmt.Errorf("%w %q", errUnknownCommand, key(path))
 	}
 	if input.Args == nil {
 		input.Args = make(map[string]string)
@@ -106,7 +128,7 @@ func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input
 	for _, param := range cmd.Params {
 		if param.Required {
 			if _, ok := input.Args[param.Name]; !ok {
-				return "", fmt.Errorf("%s: %w --%s", key(cmd.Path), errMissingRequired, param.Name)
+				return contracts.Result{}, fmt.Errorf("%s: %w --%s", key(cmd.Path), errMissingRequired, param.Name)
 			}
 		}
 	}
@@ -114,7 +136,7 @@ func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input
 }
 
 // Runner is a command's handler, named so a caller can wrap one.
-type Runner func(context.Context, contracts.Input) (string, error)
+type Runner func(context.Context, contracts.Input) (contracts.Result, error)
 
 // Intercept wraps the handler of every registered command whose Path starts with
 // prefix. wrap receives the command as declared and its current handler, and
@@ -286,4 +308,56 @@ func (r *Registry) Help() string {
 	}
 	sort.Strings(lines)
 	return strings.Join(lines, "\n")
+}
+
+// Data wraps the output of a text handler as a Result.
+func Data(text string, err error) (contracts.Result, error) {
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	return contracts.DataResult(text), nil
+}
+
+func orEnglish(lang i18n.Language) i18n.Language {
+	if lang == 0 {
+		return i18n.English
+	}
+	return lang
+}
+
+type renderedError struct {
+	text string
+	err  error
+}
+
+func (e renderedError) Error() string { return e.text }
+
+func (e renderedError) Unwrap() error { return e.err }
+
+// Localize returns err with its notice rendered in lang, or err itself when it carries none.
+func Localize(err error, lang i18n.Language) error {
+	var noticed contracts.NoticeError
+	if err == nil || !errors.As(err, &noticed) {
+		return err
+	}
+	text, renderErr := contracts.NewRenderer().Render(orEnglish(lang), noticed.Notice())
+	if renderErr != nil {
+		return err
+	}
+	return renderedError{text: text, err: err}
+}
+
+// Handler adapts a text handler to the Result form a command runs.
+func Handler(handle func(context.Context, contracts.Input) (string, error)) func(context.Context, contracts.Input) (contracts.Result, error) {
+	return func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+		return Data(handle(ctx, input))
+	}
+}
+
+// Plain renders res or err as the English text a text-only caller expects.
+func Plain(res contracts.Result, err error) (string, error) {
+	if err != nil {
+		return "", Localize(err, i18n.English)
+	}
+	return Text(res, i18n.English)
 }

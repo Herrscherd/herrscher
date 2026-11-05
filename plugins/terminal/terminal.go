@@ -24,6 +24,10 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/config"
+	"github.com/Herrscherd/herrscher/core/language"
 	"github.com/Herrscherd/herrscher/core/scope"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
@@ -529,7 +533,7 @@ func (t *Terminal) Commands() []tui.CommandSpec {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	out, err := call.Dispatch(ctx, []string{"commands", "--json"})
+	out, err := textResult(call.Dispatch(ctx, []string{"commands", "--json"}))
 	if err != nil {
 		return nil
 	}
@@ -561,7 +565,7 @@ func (t *Terminal) Dispatch(args []string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return call.Dispatch(ctx, withTerminalDefault(args))
+	return textResult(call.Dispatch(ctx, withTerminalDefault(args)))
 }
 
 // Close tears a session down through the typed SessionControl seam, so the TUI's
@@ -576,7 +580,7 @@ func (t *Terminal) Close(name string, force bool) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return control.Close(ctx, name, force)
+	return textResult(control.Close(ctx, name, force))
 }
 
 // Kind reports every attachment as text, since the terminal has no richer kinds.
@@ -629,3 +633,15 @@ func slug(text string) string {
 }
 
 func bestEffort(_ error) {}
+
+func textResult(res contracts.Result, err error) (string, error) {
+	return cli.Render(res, err, clientLanguage())
+}
+
+func clientLanguage() i18n.Language {
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		return language.ForClient("")
+	}
+	return language.ForClient(cfg.Language)
+}

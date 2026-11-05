@@ -27,7 +27,7 @@ func TestMemoryLocateVerb(t *testing.T) {
 	if _, err := reg.Dispatch(ctx, []string{"memory", "record", "--key", "a/b", "--kind", "decision", "--title", "T"}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := reg.Dispatch(ctx, []string{"memory", "locate", "--key", "a/b", "--json"})
+	out, err := cli.Plain(reg.Dispatch(ctx, []string{"memory", "locate", "--key", "a/b", "--json"}))
 	if err != nil {
 		t.Fatal(err)
 	}

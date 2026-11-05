@@ -18,12 +18,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-type dispatcherFunc func(context.Context, []string) (string, error)
-
-func (f dispatcherFunc) Dispatch(ctx context.Context, argv []string) (string, error) {
-	return f(ctx, argv)
-}
-
 func TestHookThroughTheCommandSocket(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -88,7 +82,7 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRe
 func startApprovalSocket(ctx context.Context, t *testing.T, reg *cli.Registry) string {
 	t.Helper()
 	sock := filepath.Join(t.TempDir(), "cmd.sock")
-	serveCommandSocket(ctx, sock, dispatcherFunc(reg.Dispatch))
+	serveCommandSocket(ctx, sock, textDispatch(reg))
 	return sock
 }
 

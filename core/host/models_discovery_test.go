@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/envx"
 )
@@ -449,7 +451,7 @@ func TestModelsListFollowsTheStateFlag(t *testing.T) {
 	if err := saveDiscoveryCache(discoveryCacheIn(dir), cache); err != nil {
 		t.Fatal(err)
 	}
-	out, err := modelsVerb(t, "list").Run(context.Background(), contracts.Input{Args: map[string]string{"state": filepath.Join(dir, "state.json")}})
+	out, err := cli.Plain(modelsVerb(t, "list").Run(context.Background(), contracts.Input{Args: map[string]string{"state": filepath.Join(dir, "state.json")}}))
 	if err != nil {
 		t.Fatalf("models list --state: %v", err)
 	}

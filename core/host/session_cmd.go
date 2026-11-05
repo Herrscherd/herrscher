@@ -38,9 +38,9 @@ func sessionSeenVerb(seen *seenTable) contracts.Cmd {
 	return contracts.New(nsSession, "seen").
 		Help("record that the operator has read a session's last answer, which clears its review mark").
 		Param(paramName, "session name", true).
-		Do(func(_ context.Context, input contracts.Input) (string, error) {
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			seen.mark(input.Get(paramName), time.Now())
-			return "", nil
+			return contracts.Result{}, nil
 		})
 }
 
@@ -55,8 +55,8 @@ func seedVerb(store *state.State, instID string, seedCoord *coordinatorSlot) con
 		Param("task", "opening task", true).
 		ValueParam("turn_id", "optional caller-supplied turn identity", false).
 		ValueParam("timeout", "cap this turn (Go duration, e.g. 30m); default HERRSCHER_SEED_TIMEOUT then 120s", false).
-		Do(func(cmdCtx context.Context, in contracts.Input) (string, error) {
-			return runSeedVerb(cmdCtx, in, store, instID, seedCoord.coord)
+		Do(func(cmdCtx context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(runSeedVerb(cmdCtx, in, store, instID, seedCoord.coord))
 		})
 }
 
@@ -96,15 +96,15 @@ func sessionSendVerb(sessions *sessionTable) contracts.Cmd {
 		Param("attachments", "JSON array of local file paths to attach", false).
 		Param("origin", "gateway kind this was typed in (e.g. terminal): the turn is rendered there "+
 			"instead of in every channel the session is bound to", false).
-		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			return sendToSession(ctx, sessions, in)
+		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
+			return contracts.Result{}, sendToSession(ctx, sessions, in)
 		})
 }
 
-func sendToSession(ctx context.Context, sessions *sessionTable, input contracts.Input) (string, error) {
+func sendToSession(ctx context.Context, sessions *sessionTable, input contracts.Input) error {
 	atts, err := parseAttachmentPaths(input.Get("attachments"))
 	if err != nil {
-		return "", err
+		return err
 	}
 	author := input.Get("author")
 	if author == "" {
@@ -117,26 +117,26 @@ func sendToSession(ctx context.Context, sessions *sessionTable, input contracts.
 		Attachments:  atts,
 		Conversation: contracts.Conversation{Gateway: input.Get("origin")},
 	}) {
-		return "", &NotFoundError{Kind: "live session", Name: input.Get(paramName)}
+		return &NotFoundError{Kind: "live session", Name: input.Get(paramName)}
 	}
-	return "", nil
+	return nil
 }
 
 func sessionInfoVerb(store *state.State, partDir string, sessions *sessionTable, models *ModelDiscovery) contracts.Cmd {
 	return contracts.New(nsSession, "info").
 		Help("list sessions as a frontend sees them (channel, vendor, dir, archived). JSON only").
-		Do(func(_ context.Context, _ contracts.Input) (string, error) {
+		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
 			b, err := json.Marshal(sessionInfos(store, partDir, sessions.compaction, modelTermsFor(models)))
-			return string(b), err
+			return contracts.DataResult(string(b)), err
 		})
 }
 
 func sessionOverviewVerb(src overviewSource) contracts.Cmd {
 	return contracts.New(nsSession, "overview").
 		Help("list every session with its live state (waiting, working, archived, review, idle), cost and last activity. JSON only").
-		Do(func(_ context.Context, _ contracts.Input) (string, error) {
+		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
 			b, err := json.Marshal(src.overviews())
-			return string(b), err
+			return contracts.DataResult(string(b)), err
 		})
 }
 
@@ -144,9 +144,9 @@ func sessionScrollbackVerb(partDir string) contracts.Cmd {
 	return contracts.New(nsSession, "scrollback").
 		Help("dump a session's replayable history as the frontend renders it. JSON only").
 		Param(paramName, "session name", true).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			b, err := json.Marshal(scrollbackOf(partDir, in.Get(paramName)))
-			return string(b), err
+			return contracts.DataResult(string(b)), err
 		})
 }
 
@@ -155,12 +155,12 @@ func sessionPickVerb(approvals *approvalTable, sessions *sessionTable) contracts
 		Help("answer a session's pending choice (an approval) with a menu value").
 		Param(paramName, "session name", true).
 		ValueParam("value", "menu value to answer with", true).
-		Do(func(_ context.Context, input contracts.Input) (string, error) {
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			name, value := input.Get(paramName), input.Get("value")
 			if answerApprovalPick(approvals, sessions, name, value) || sessions.pick(name, value) {
-				return "picked " + name, nil
+				return contracts.DataResult("picked " + name), nil
 			}
-			return "", fmt.Errorf("session %q %w", name, errNoPendingChoice)
+			return contracts.Result{}, fmt.Errorf("session %q %w", name, errNoPendingChoice)
 		})
 }
 
@@ -168,11 +168,11 @@ func sessionInterruptVerb(sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, "interrupt").
 		Help("cancel a session's in-flight turn").
 		Param(paramName, "session name", true).
-		Do(func(_ context.Context, input contracts.Input) (string, error) {
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			if !sessions.Interrupt(input.Get(paramName)) {
-				return "", &noTurnInFlightError{Session: input.Get(paramName)}
+				return contracts.Result{}, &noTurnInFlightError{Session: input.Get(paramName)}
 			}
-			return "interrupted " + input.Get(paramName), nil
+			return contracts.DataResult("interrupted " + input.Get(paramName)), nil
 		})
 }
 
@@ -185,8 +185,8 @@ func sessionCompactVerb(store *state.State, sessions *sessionTable) contracts.Cm
 		Param("instruction", "free text for the compaction, empty for none", false).
 		Param("origin", "gateway kind this was typed in (e.g. terminal): the turn is rendered there "+
 			"instead of in every channel the session is bound to", false).
-		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			return compactSession(ctx, store, sessions, in)
+		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(compactSession(ctx, store, sessions, in))
 		})
 }
 
@@ -224,16 +224,16 @@ func sessionSetCompactVerb(store *state.State) contracts.Cmd {
 		Help("set a session's automatic compaction threshold, in percent of its context window: 0 disables it, empty falls back to the config default").
 		Param(paramName, "session name", true).
 		Param("percent", "0 to 100, or empty for the config default", false).
-		Do(func(_ context.Context, input contracts.Input) (string, error) {
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			name := input.Get(paramName)
 			ok, err := applyCompactPercent(store, name, input.Get("percent"))
 			if err != nil {
-				return "", err
+				return contracts.Result{}, err
 			}
 			if !ok {
-				return "", &NotFoundError{Kind: "session", Name: name}
+				return contracts.Result{}, &NotFoundError{Kind: "session", Name: name}
 			}
-			return "", nil
+			return contracts.Result{}, nil
 		})
 }
 

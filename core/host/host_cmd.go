@@ -29,8 +29,8 @@ func hostAddVerb(store *state.State) contracts.Cmd {
 		ValueParam(paramName, "host name (unique; `local` is reserved); also takes a bare argument", false).
 		Param("ssh", "ssh target, e.g. me@build1", true).
 		Param("workspace", "absolute path to the workspace root over there", true).
-		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			return addHost(ctx, store, in)
+		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(addHost(ctx, store, in))
 		})
 }
 
@@ -75,8 +75,8 @@ func checkNewHost(hostState *state.State, host state.Host) error {
 func hostListVerb(store *state.State) contracts.Cmd {
 	return contracts.New("host", "list").
 		Help("list the places a session can run").
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return listHosts(store, in.JSON)
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(listHosts(store, in.JSON))
 		})
 }
 
@@ -100,8 +100,8 @@ func hostCheckVerb(store *state.State) contracts.Cmd {
 	return contracts.New("host", "check").
 		Help("say whether a host can carry a session: ssh, herrscher, workspace, git").
 		ValueParam(paramName, "host name; also takes a bare argument", false).
-		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			return checkRegisteredHost(ctx, store, in)
+		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(checkRegisteredHost(ctx, store, in))
 		})
 }
 
@@ -136,8 +136,8 @@ func hostProvisionVerb(store *state.State) contracts.Cmd {
 	return contracts.New("host", "provision").
 		Help("rebuild and reinstall herrscher on a host from the configured source").
 		ValueParam(paramName, "host name; also takes a bare argument", false).
-		Do(func(ctx context.Context, in contracts.Input) (string, error) {
-			return provisionRegisteredHost(ctx, store, in)
+		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(provisionRegisteredHost(ctx, store, in))
 		})
 }
 
@@ -161,8 +161,8 @@ func hostRmVerb(store *state.State) contracts.Cmd {
 	return contracts.New("host", "rm").
 		Help("forget a host (refused while sessions still run on it)").
 		ValueParam(paramName, "host name; also takes a bare argument", false).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
-			return forgetHost(store, in)
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+			return cli.Data(forgetHost(store, in))
 		})
 }
 

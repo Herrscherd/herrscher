@@ -7,31 +7,31 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-func (h *Handler) serviceRestartRun(ctx context.Context, _ contracts.Input) (string, error) {
+func (h *Handler) serviceRestartRun(ctx context.Context, _ contracts.Input) (contracts.Result, error) {
 	if h.up == nil {
-		return "", ErrServiceControlUnavailable
+		return contracts.Result{}, ErrServiceControlUnavailable
 	}
 	if err := h.up.Restart(ctx); err != nil {
-		return "", fmt.Errorf("restart: %w", err)
+		return contracts.Result{}, fmt.Errorf("restart: %w", err)
 	}
-	return "🔄 Restarting the daemon…", nil
+	return contracts.DataResult("🔄 Restarting the daemon…"), nil
 }
 
-func (h *Handler) serviceUpdateRun(ctx context.Context, input contracts.Input) (string, error) {
+func (h *Handler) serviceUpdateRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 	if h.up == nil {
-		return "", ErrServiceControlUnavailable
+		return contracts.Result{}, ErrServiceControlUnavailable
 	}
 	pull := !input.Bool("no_pull")
 	version, err := h.up.Build(ctx, pull)
 	if err != nil {
-		return "", fmt.Errorf("update: %w", err)
+		return contracts.Result{}, fmt.Errorf("update: %w", err)
 	}
 	if err := h.up.Restart(ctx); err != nil {
-		return "", fmt.Errorf("rebuilt %s but restart failed: %w", version, err)
+		return contracts.Result{}, fmt.Errorf("rebuilt %s but restart failed: %w", version, err)
 	}
 	reported := version
 	if reported == "" {
 		reported = "(unknown)"
 	}
-	return fmt.Sprintf("✅ Rebuilt %#q, restarting the daemon…", reported), nil
+	return contracts.DataResult(fmt.Sprintf("✅ Rebuilt %#q, restarting the daemon…", reported)), nil
 }

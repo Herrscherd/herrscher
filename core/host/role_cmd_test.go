@@ -24,14 +24,14 @@ func roleRegistry(t *testing.T) (*cli.Registry, *state.State) {
 
 func TestTheFirstGrantWarnsThatEveryoneElseBecomesAnObserver(t *testing.T) {
 	reg, _ := roleRegistry(t)
-	out, err := reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:1", "--role", "owner"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:1", "--role", "owner"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out, "observer") {
 		t.Fatalf("the first grant said %q, which does not warn about the cliff", out)
 	}
-	out, err = reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:2", "--role", "operator"})
+	out, err = cli.Plain(reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:2", "--role", "operator"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestGrantStoresTheLabelAndListShowsIt(t *testing.T) {
 	if got := st.RoleAssignments()["chat:1"].Label; got != "shan" {
 		t.Fatalf("label = %q, want shan", got)
 	}
-	out, err := reg.Dispatch(context.Background(), []string{"role", "list"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"role", "list"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestGrantStoresTheLabelAndListShowsIt(t *testing.T) {
 
 func TestListSaysWhenNothingIsAssigned(t *testing.T) {
 	reg, _ := roleRegistry(t)
-	out, err := reg.Dispatch(context.Background(), []string{"role", "list"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"role", "list"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestShowNamesTheRoleAndWhatItRuns(t *testing.T) {
 	if _, err := reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:1", "--role", "observer"}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := reg.Dispatch(context.Background(), []string{"role", "show", "--principal", "chat:1"})
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"role", "show", "--principal", "chat:1"}))
 	if err != nil {
 		t.Fatal(err)
 	}

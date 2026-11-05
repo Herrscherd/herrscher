@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/cli"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
@@ -37,8 +39,8 @@ func sessionShellVerb(store *state.State, agents *agent.Store, approvals *approv
 		Help("lance une commande dans le dossier de la session, après la politique d'approbation ; sa sortie entre dans le prochain message").
 		Param(paramName, "nom de la session", true).
 		Param(paramCommand, "la ligne de commande, lancée avec sh -c", true).
-		Do(func(ctx context.Context, input contracts.Input) (string, error) {
-			return runSessionShell(ctx, store, agents, approvals, sessions, input.Get(paramName), input.Get(paramCommand))
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+			return cli.Data(runSessionShell(ctx, store, agents, approvals, sessions, input.Get(paramName), input.Get(paramCommand)))
 		})
 }
 

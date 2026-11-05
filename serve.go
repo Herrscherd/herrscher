@@ -15,10 +15,12 @@ import (
 	"golang.org/x/term"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/language"
 	"github.com/Herrscherd/herrscher/core/scope"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
@@ -41,12 +43,31 @@ func withCompactionConfig(opts *host.Options, cfg config.Config) {
 }
 
 func runServe(ctx context.Context, args []string, open *openWindow) error {
-	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
-	flags.String("config", config.DefaultPath(), "path to the declarative config.json (optional)")
 	cfg, err := config.Load(scanFlag(args, "config", config.DefaultPath()))
 	if err != nil {
 		return err
 	}
+	langs, err := prepareLanguages(cfg)
+	if err != nil {
+		return err
+	}
+	return serveWith(ctx, args, open, cfg, langs)
+}
+
+func prepareLanguages(cfg config.Config) (language.Languages, error) {
+	langs := language.Resolve(slog.Default(), cfg.Language)
+	if !language.Explicit(cfg.Language) {
+		return langs, nil
+	}
+	if err := language.Export(langs.Operator); err != nil {
+		return language.Languages{}, err
+	}
+	return langs, nil
+}
+
+func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.Config, langs language.Languages) error {
+	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
+	flags.String("config", config.DefaultPath(), "path to the declarative config.json (optional)")
 
 	statePath := flags.String("state", host.DefaultStatePath(), "path to the daemon state file")
 	defaultCmd := flags.String("cmd", or(cfg.Cmd, "claude"), "default bridged base command for new sessions (stream-json mode adds -p and the stream flags)")
@@ -54,7 +75,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	statusChannel := flags.String("status-channel", cfg.StatusChannel, "if set, maintain a self-updating status embed there")
 	instanceID := flags.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID then config.json")
 	envFile := flags.String("env-file", "", "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)")
-	if err = flags.Parse(args); err != nil {
+	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
@@ -87,6 +108,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 
 	opts := host.Options{
 		StatePath:           *statePath,
+		Language:            langs.Operator,
 		Models:              models,
 		DefaultCmd:          *defaultCmd,
 		HealthAddr:          *healthAddr,
@@ -250,11 +272,16 @@ func runModels(ctx context.Context, args []string) error {
 	return runRegistryVerb(ctx, "models", args)
 }
 
-func newOperatorRegistry(ctx context.Context) (*cli.Registry, error) {
+func loadOperator() (config.Config, language.Languages, error) {
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
-		return nil, err
+		return config.Config{}, language.Languages{}, err
 	}
+	langs, err := prepareLanguages(cfg)
+	return cfg, langs, err
+}
+
+func newOperatorRegistry(ctx context.Context, cfg config.Config) (*cli.Registry, error) {
 	gws, err := buildGateways(ctx)
 	if err != nil {
 		return nil, err
@@ -275,11 +302,16 @@ func newOperatorRegistry(ctx context.Context) (*cli.Registry, error) {
 }
 
 func runRegistryVerb(ctx context.Context, verb string, args []string) error {
-	reg, err := newOperatorRegistry(ctx)
+	cfg, langs, err := loadOperator()
 	if err != nil {
 		return err
 	}
-	out, err := reg.Dispatch(ctx, append([]string{verb}, args...))
+	reg, err := newOperatorRegistry(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	res, dispatchErr := reg.Dispatch(ctx, append([]string{verb}, args...))
+	out, err := cli.Render(res, dispatchErr, langs.Client)
 	if err != nil {
 		return err
 	}
@@ -293,17 +325,21 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 const promptTimeout = 30 * time.Minute
 
 type verbDispatcher interface {
-	Dispatch(context.Context, []string) (string, error)
+	Dispatch(context.Context, []string) (contracts.Result, error)
 }
 
 func runPrompt(ctx context.Context, task task) error {
 	name := sessionNameFor(task.Text)
 	if task.printsTo(term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway()) {
-		reg, err := newOperatorRegistry(ctx)
+		cfg, langs, err := loadOperator()
 		if err != nil {
 			return err
 		}
-		return runPromptWith(ctx, reg, name, task.Text, os.Stdout, os.Stderr)
+		reg, err := newOperatorRegistry(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		return runPromptWith(ctx, reg, name, task.Text, langs.Client, os.Stdout, os.Stderr)
 	}
 	return runPromptWindow(ctx, name, task.Text)
 }
@@ -325,7 +361,11 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 		return runAttached(ctx, instance, tui.OpenOn(name, text))
 	}
 	unlock()
-	reg, err := newOperatorRegistry(ctx)
+	cfg, langs, err := loadOperator()
+	if err != nil {
+		return err
+	}
+	reg, err := newOperatorRegistry(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -333,7 +373,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "session: "+name)
-	return runServe(ctx, nil, &openWindow{session: name, text: text})
+	return serveWith(ctx, nil, &openWindow{session: name, text: text}, cfg, langs)
 }
 
 type openWindow struct {
@@ -345,7 +385,7 @@ type foregroundOpener interface {
 	OpenOn(session, text string)
 }
 
-func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt string, stdout, stderr io.Writer) error {
+func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt string, lang i18n.Language, stdout, stderr io.Writer) error {
 	if _, err := dispatcher.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
 		return err
 	}
@@ -354,9 +394,13 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 	}
 	argv := append([]string{verbSession, "seed", argName, name}, cli.FlagArg("task", prompt)...)
 	argv = append(argv, "--timeout", promptTimeout.String())
-	reply, err := dispatcher.Dispatch(ctx, argv)
+	res, err := dispatcher.Dispatch(ctx, argv)
 	if err != nil {
-		return fmt.Errorf("session %s: %w", name, err)
+		return fmt.Errorf("session %s: %w", name, cli.Localize(err, lang))
+	}
+	reply, err := cli.Text(res, lang)
+	if err != nil {
+		return err
 	}
 	if reply != "" {
 		if _, err := fmt.Fprintln(stdout, reply); err != nil {

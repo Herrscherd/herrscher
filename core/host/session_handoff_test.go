@@ -59,7 +59,7 @@ func fixedClock() func() time.Time {
 }
 
 func runHandoff(ctx context.Context, deps handoffDeps, args map[string]string) (string, error) {
-	return sessionHandoffVerb(deps).Run(ctx, contracts.Input{Args: args})
+	return cli.Plain(sessionHandoffVerb(deps).Run(ctx, contracts.Input{Args: args}))
 }
 
 func TestHandoffSendsTheBriefAsTheFirstMessageOfTheNewSession(t *testing.T) {

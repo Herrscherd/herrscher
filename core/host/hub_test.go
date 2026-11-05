@@ -24,9 +24,9 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
 	var r cli.Registry
 	cmd := contracts.New(path...).Param("name", "", true).
-		Do(func(_ context.Context, in contracts.Input) (string, error) {
+		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			*got = in
-			return "ok", nil
+			return contracts.DataResult("ok"), nil
 		})
 	if err := r.Add(cmd); err != nil {
 		t.Fatal(err)
@@ -41,13 +41,13 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 	t.Cleanup(cancel)
 	entered, release := make(chan struct{}), make(chan struct{})
 	var r cli.Registry
-	slow := contracts.New("plug", "read").Do(func(context.Context, contracts.Input) (string, error) {
+	slow := contracts.New("plug", "read").Do(func(context.Context, contracts.Input) (contracts.Result, error) {
 		close(entered)
 		<-release
-		return "slow", nil
+		return contracts.DataResult("slow"), nil
 	})
-	quick := contracts.New("session", "list").Do(func(context.Context, contracts.Input) (string, error) {
-		return "quick", nil
+	quick := contracts.New("session", "list").Do(func(context.Context, contracts.Input) (contracts.Result, error) {
+		return contracts.DataResult("quick"), nil
 	})
 	for _, c := range []contracts.Cmd{slow, quick} {
 		if err := r.Add(c); err != nil {
@@ -63,7 +63,7 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 
 	done := make(chan string, 1)
 	go func() {
-		out, err := h.Dispatch(ctx, []string{"session", "list"})
+		out, err := cli.Plain(h.Dispatch(ctx, []string{"session", "list"}))
 		if err != nil {
 			t.Errorf("session list: %v", err)
 		}

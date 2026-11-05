@@ -40,15 +40,15 @@ type fakeScheduleCreator struct {
 	err      error
 }
 
-func (f *fakeScheduleCreator) Create(_ context.Context, spec contracts.CreateSession) (string, error) {
+func (f *fakeScheduleCreator) Create(_ context.Context, spec contracts.CreateSession) (contracts.Result, error) {
 	if f.err != nil {
-		return "", f.err
+		return contracts.Result{}, f.err
 	}
 	f.created = append(f.created, spec.Name)
 	if f.sessions != nil {
 		f.sessions.rows = append(f.sessions.rows, state.Session{Name: spec.Name})
 	}
-	return spec.Name, nil
+	return contracts.DataResult(spec.Name), nil
 }
 
 func mkHostTime(t *testing.T, s string) time.Time {

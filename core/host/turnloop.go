@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -70,6 +71,7 @@ type sessionDriver struct {
 	channel       string
 	saidElsewhere bool
 	notices       chan noticeDelivery
+	failures      chan compactFailure
 	noticeLog     *slog.Logger
 	gateways      []contracts.GatewaySet
 	toBridge      chan<- contracts.Event
@@ -109,6 +111,7 @@ type sessionDriver struct {
 	compactWaiting    *compactRequest
 	compactRegistered func()
 	lang              i18n.Language
+	messages          *hostMessages
 }
 
 type queued struct {
@@ -118,6 +121,7 @@ type queued struct {
 
 func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event) *sessionDriver {
 	return &sessionDriver{
+		messages:  newHostMessages(),
 		name:      name,
 		gateways:  gws,
 		toBridge:  toBridge,
@@ -128,6 +132,7 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		hangup:    make(chan struct{}, 1),
 		seen:      make(map[string]bool),
 		notices:   make(chan noticeDelivery, noticeQueueCapacity),
+		failures:  make(chan compactFailure, noticeQueueCapacity),
 		noticeLog: obs.Stderr(false),
 		gate:      noBudgetGate{},
 
@@ -551,6 +556,8 @@ func (d *sessionDriver) pump(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case failure := <-d.failures:
+			d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: failure.trigger.String(), Text: failure.text})
 		case item := <-d.queue:
 			if !d.enterTurn(ctx) {
 				return
@@ -838,13 +845,13 @@ func (d *sessionDriver) launchCohort(ctx context.Context, toAgent string, tasks 
 	if err != nil {
 		d.fanOut(ctx, contracts.Event{
 			T:    eventStatus,
-			Text: "fanout partiel: " + strconv.Itoa(len(spawned)) + " lancés puis " + err.Error(),
+			Text: d.hostText("coordination.fanout_partial", map[string]any{"Launched": len(spawned), detailParam: err.Error()}),
 		})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{
 		T:    eventStatus,
-		Text: "cohorte lancée : " + strconv.Itoa(len(spawned)) + " workers (" + strings.Join(spawned, ", ") + ")",
+		Text: d.hostText("coordination.launched", map[string]any{"Count": len(spawned), "Workers": strings.Join(spawned, ", ")}),
 	})
 }
 
@@ -853,20 +860,20 @@ func (d *sessionDriver) routeTask(ctx context.Context, task string) {
 		FromSession: d.name, Task: task,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "route refusé: " + err.Error()})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.route_refused", map[string]any{detailParam: err.Error()})})
 		return
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "routé vers " + toAgent + " : " + session})
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.routed", map[string]any{"Agent": toAgent, "Session": session})})
 }
 
 func (d *sessionDriver) sealCohort(ctx context.Context, node int) {
 	if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
 		FromSession: d.name, Expected: node,
 	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "seal refusé: " + err.Error()})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.seal_refused", map[string]any{detailParam: err.Error()})})
 		return
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "cohorte scellée à " + strconv.Itoa(node)})
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.sealed", map[string]any{"Node": node})})
 }
 
 func (d *sessionDriver) mergeWorker(ctx context.Context, worker string) {
@@ -874,27 +881,31 @@ func (d *sessionDriver) mergeWorker(ctx context.Context, worker string) {
 		FromSession: d.name, Worker: worker,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "merge refusé: " + err.Error()})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.merge_refused", map[string]any{detailParam: err.Error()})})
 		return
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "merge traité pour " + lead})
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.merged", map[string]any{"Lead": lead})})
 }
 
 func (d *sessionDriver) handoffTask(ctx context.Context, toAgent, task string) {
 	if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
 		FromSession: d.name, ToAgent: toAgent, Task: task,
 	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "handoff refusé: " + err.Error()})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.handoff_refused", map[string]any{detailParam: err.Error()})})
 	}
 }
 
 func sanitizeCoordinationError(err error) string {
 	const maxLen = 160
 	message := strings.Join(strings.Fields(err.Error()), " ")
-	if len(message) > maxLen {
-		message = message[:maxLen]
+	if len(message) <= maxLen {
+		return message
 	}
-	return message
+	cut := maxLen
+	for cut > 0 && !utf8.RuneStart(message[cut]) {
+		cut--
+	}
+	return message[:cut]
 }
 
 func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {

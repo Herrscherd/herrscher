@@ -44,9 +44,9 @@ func remoteCategories() map[contracts.Category]bool {
 
 func tlsConfigFromEnv() transport.TLSConfig {
 	return transport.TLSConfig{
-		CAFile:   os.Getenv("HERRSCHER_TLS_CA"),
-		CertFile: os.Getenv("HERRSCHER_TLS_CERT"),
-		KeyFile:  os.Getenv("HERRSCHER_TLS_KEY"),
+		CAFile:   os.Getenv(transport.EnvTLSCA),
+		CertFile: os.Getenv(transport.EnvTLSCert),
+		KeyFile:  os.Getenv(transport.EnvTLSKey),
 	}
 }
 

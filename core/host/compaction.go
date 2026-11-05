@@ -241,8 +241,7 @@ func (d *sessionDriver) maybeAutoCompact(ctx context.Context) {
 		return
 	}
 	if crossed(result.TokensAfter, limit, percent) {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: fmt.Sprintf(
-			"compaction automatique sans effet : le contexte reste au-dessus de %d %%, pas de nouvelle tentative avant qu'il repasse sous le seuil", percent)})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("compaction.no_effect", map[string]any{"Percent": percent})})
 	}
 }
 
@@ -274,13 +273,45 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 }
 
 func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.CompactTrigger, err error) {
+	var text string
+	if !d.queueFailureNotice(trigger, err) {
+		text = compactFailureText(d.messages, d.lang, err)
+	}
+	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: text})
+}
+
+func (d *sessionDriver) queueFailureNotice(trigger contracts.CompactTrigger, err error) bool {
 	typed, ok := errors.AsType[contracts.NoticeError](err)
 	if !ok || !d.noticeRenders(typed.Notice()) {
-		d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: err.Error()})
-		return
+		return false
 	}
-	d.notifyGateways(typed.Notice())
-	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String()})
+	return d.notifyGateways(trigger, typed.Notice())
+}
+
+func compactFailureText(messages *hostMessages, lang i18n.Language, err error) string {
+	if typed, ok := errors.AsType[contracts.NoticeError](err); ok {
+		if text, renderErr := contracts.NewRenderer().Render(lang, typed.Notice()); renderErr == nil {
+			return text
+		}
+	}
+	if key, known := knownCompactFailure(err); known {
+		return messages.text(lang, key, nil)
+	}
+	return messages.text(lang, "compaction.failed", map[string]any{detailParam: err.Error()})
+}
+
+func knownCompactFailure(err error) (string, bool) {
+	switch {
+	case errors.Is(err, errBridgeGone):
+		return "compaction.bridge_gone", true
+	case errors.Is(err, errNoBackendFactory):
+		return "compaction.no_backend_factory", true
+	case errors.Is(err, errNotCompactorPort):
+		return "compaction.not_compactor_port", true
+	case errors.Is(err, errNoCompactorPlugin):
+		return "compaction.no_compactor_plugin", true
+	}
+	return "", false
 }
 
 func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contracts.CompactTrigger, result contracts.CompactResult) {
@@ -288,7 +319,7 @@ func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contract
 		d.fanOut(ctx, contracts.Event{T: eventCompactDone, Value: trigger.String(), Text: result.Note, Tokens: measuredTokens(result)})
 		return
 	}
-	d.notifyGateways(result.Notice)
+	d.notifyGateways(trigger, result.Notice)
 	d.fanOut(ctx, contracts.Event{T: eventCompactDone, Value: trigger.String(), Tokens: measuredTokens(result)})
 }
 
@@ -298,28 +329,43 @@ func (d *sessionDriver) noticeRenders(notice contracts.Notice) bool {
 }
 
 type noticeDelivery struct {
-	sink   contracts.NoticeSink
-	conv   contracts.Conversation
-	lang   i18n.Language
-	notice contracts.Notice
+	sink    contracts.NoticeSink
+	conv    contracts.Conversation
+	lang    i18n.Language
+	notice  contracts.Notice
+	trigger contracts.CompactTrigger
+	report  *sync.Once
 }
 
-func (d *sessionDriver) notifyGateways(notice contracts.Notice) {
+type compactFailure struct {
+	trigger contracts.CompactTrigger
+	text    string
+}
+
+func (d *sessionDriver) notifyGateways(trigger contracts.CompactTrigger, notice contracts.Notice) bool {
+	report := &sync.Once{}
+	queued := false
 	d.eachGateway(func(_ int, gateway contracts.GatewaySet) {
 		sink, ok := gateway.Gateway.(contracts.NoticeSink)
 		if !ok {
 			return
 		}
 		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
-		d.enqueueNotice(noticeDelivery{sink: sink, conv: conv, lang: d.lang, notice: notice})
+		delivery := noticeDelivery{sink: sink, conv: conv, lang: d.lang, notice: notice, trigger: trigger, report: report}
+		if d.enqueueNotice(delivery) {
+			queued = true
+		}
 	})
+	return queued
 }
 
-func (d *sessionDriver) enqueueNotice(delivery noticeDelivery) {
+func (d *sessionDriver) enqueueNotice(delivery noticeDelivery) bool {
 	select {
 	case d.notices <- delivery:
+		return true
 	default:
 		d.noticeLog.Warn("compaction notice dropped, the gateway's queue is full", keySession, d.name, "code", delivery.notice.Code, "gateway", delivery.conv.Gateway)
+		return false
 	}
 }
 
@@ -329,16 +375,32 @@ func (d *sessionDriver) deliverNotices(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case delivery := <-d.notices:
-			deliverNotice(ctx, delivery)
+			d.deliverNotice(ctx, delivery)
 		}
 	}
 }
 
-func deliverNotice(parent context.Context, delivery noticeDelivery) {
+func (d *sessionDriver) deliverNotice(parent context.Context, delivery noticeDelivery) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), noticeTimeout)
 	defer cancel()
 	if _, err := delivery.sink.Notify(ctx, delivery.conv, delivery.lang, delivery.notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
 		logCleanup(err)
+		delivery.report.Do(func() { d.relayNoticeFailure(parent, d.noticeFailure(delivery)) })
+	}
+}
+
+func (d *sessionDriver) noticeFailure(delivery noticeDelivery) compactFailure {
+	text, err := contracts.NewRenderer().Render(delivery.lang, delivery.notice)
+	if err != nil {
+		text = compactFailureText(d.messages, delivery.lang, err)
+	}
+	return compactFailure{trigger: delivery.trigger, text: text}
+}
+
+func (d *sessionDriver) relayNoticeFailure(parent context.Context, failure compactFailure) {
+	select {
+	case d.failures <- failure:
+	case <-parent.Done():
 	}
 }
 

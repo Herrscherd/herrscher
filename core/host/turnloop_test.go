@@ -5,13 +5,16 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
+	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -943,6 +946,24 @@ func TestSanitizeCoordinationErrorTruncatesTo160Bytes(t *testing.T) {
 	}
 }
 
+func TestSanitizeCoordinationErrorNeverCutsBeforeTheFirstByte(t *testing.T) {
+	got := sanitizeCoordinationError(errors.New(strings.Repeat("\x80", 200)))
+	if got != "" {
+		t.Fatalf("sanitizeCoordinationError() = %q, want empty: no rune start exists to cut on", got)
+	}
+}
+
+func TestSanitizeCoordinationErrorCutsOnARuneBoundary(t *testing.T) {
+	got := sanitizeCoordinationError(errors.New(strings.Repeat("x", 159) + "é" + "y"))
+	want := strings.Repeat("x", 159)
+	if got != want {
+		t.Fatalf("sanitizeCoordinationError() = %q, want %q: a cut inside the accented rune must step back", got, want)
+	}
+	if !utf8.ValidString(got) {
+		t.Fatalf("sanitizeCoordinationError() returned invalid UTF-8 %q", got)
+	}
+}
+
 func TestCoordinationRefusalStatusUsesStablePublicLabel(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -986,18 +1007,85 @@ func TestCoordinationRefusalStatusUsesStablePublicLabel(t *testing.T) {
 }
 
 func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
+	tests := []struct {
+		name    string
+		trailer string
+		want    string
+	}{
+		{name: "handoff", trailer: "⟢ handoff: scripter \u2014 finir le module", want: "passation refusée : boom"},
+		{name: "seal", trailer: "⟢ seal: 4", want: "scellement refusé : boom"},
+		{name: "merge", trailer: "⟢ merge: worker-1", want: "fusion refusée : boom"},
+		{name: "route", trailer: "⟢ route: relire le module", want: "routage refusé : boom"},
+	}
+	for index := range tests {
+		t.Run(tests[index].name, func(t *testing.T) {
+			requireCoordinatorStatus(t, &erroringCoord{err: errors.New("boom")}, i18n.French, tests[index].trailer, tests[index].want)
+		})
+	}
+}
+
+func TestDriverAnnouncesCoordinatorSuccessInSessionLanguage(t *testing.T) {
+	tests := []struct {
+		name    string
+		trailer string
+		lang    i18n.Language
+		want    string
+	}{
+		{name: "route in french", trailer: "⟢ route: relire le module", lang: i18n.French, want: "routé vers netter : alpha-netter"},
+		{name: "route in english", trailer: "⟢ route: relire le module", lang: i18n.English, want: "routed to netter: alpha-netter"},
+		{name: "seal in french", trailer: "⟢ seal: 4", lang: i18n.French, want: "cohorte scellée à 4"},
+		{name: "seal in english", trailer: "⟢ seal: 4", lang: i18n.English, want: "cohort sealed at 4"},
+		{name: "merge in french", trailer: "⟢ merge: worker-1", lang: i18n.French, want: "fusion traitée pour lead"},
+		{name: "merge in english", trailer: "⟢ merge: worker-1", lang: i18n.English, want: "merge handled for lead"},
+	}
+	for index := range tests {
+		t.Run(tests[index].name, func(t *testing.T) {
+			requireCoordinatorStatus(t, &recordingCoord{}, tests[index].lang, tests[index].trailer, tests[index].want)
+		})
+	}
+}
+
+func TestDriverAnnouncesLaunchedCohortWithEachWorkerName(t *testing.T) {
+	tests := []struct {
+		name string
+		lang i18n.Language
+		want string
+	}{
+		{name: "in french", lang: i18n.French, want: "cohorte lancée : 2 workers (scripter-w1, scripter-w2)"},
+		{name: "in english", lang: i18n.English, want: "cohort launched: 2 workers (scripter-w1, scripter-w2)"},
+	}
+	for index := range tests {
+		t.Run(tests[index].name, func(t *testing.T) {
+			requireCoordinatorStatus(t, &distinctWorkersCoord{}, tests[index].lang, "⟢ fanout: scripter \u2014 a ;; b", tests[index].want)
+		})
+	}
+}
+
+type distinctWorkersCoord struct {
+	recordingCoord
+}
+
+func (r *distinctWorkersCoord) FanOut(_ context.Context, req contracts.FanOutRequest) ([]string, error) {
+	r.fanouts = append(r.fanouts, req)
+	spawned := make([]string, len(req.Tasks))
+	for i := range req.Tasks {
+		spawned[i] = req.ToAgent + "-w" + strconv.Itoa(i+1)
+	}
+	return spawned, nil
+}
+
+func requireCoordinatorStatus(t *testing.T, coord contracts.Coordinator, lang i18n.Language, trailer, want string) {
+	t.Helper()
 	synctest.Test(t, func(t *testing.T) {
 		rec := &sinkRecorder{}
 		from := make(chan contracts.Event, 2)
 		d := newSessionDriver("alpha",
 			[]contracts.GatewaySet{{Gateway: rec}},
 			make(chan contracts.Event, 1), from)
-		d.coordinator = &erroringCoord{err: errors.New("boom")}
+		d.coordinator = coord
+		d.lang = lang
 
-		from <- contracts.Event{
-			T: "reply", Done: true,
-			Text: "fait.\n⟢ handoff: scripter \u2014 finir le module",
-		}
+		from <- contracts.Event{T: "reply", Done: true, Text: "fait.\n" + trailer}
 		if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
 			t.Fatal("awaitTurn should complete on reply{done}")
 		}
@@ -1005,8 +1093,8 @@ func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
 		requireSettled(t, func() bool {
 			rec.mu.Lock()
 			defer rec.mu.Unlock()
-			for _, e := range rec.emitted {
-				if e.T == "status" && e.Text == "handoff refusé: boom" {
+			for index := range rec.emitted {
+				if rec.emitted[index].T == "status" && rec.emitted[index].Text == want {
 					return true
 				}
 			}

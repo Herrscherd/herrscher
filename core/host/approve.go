@@ -106,7 +106,11 @@ type approvalTable struct {
 }
 
 func newApprovalTable() *approvalTable {
-	return &approvalTable{m: make(map[string]*pendingApproval), judge: registryRiskJudge, warn: os.Stderr}
+	return newApprovalTableWith(os.Stderr)
+}
+
+func newApprovalTableWith(warn io.Writer) *approvalTable {
+	return &approvalTable{m: make(map[string]*pendingApproval), judge: registryRiskJudge, warn: warn}
 }
 
 func (t *approvalTable) withRules(rules approvalRules) *approvalTable {
@@ -168,7 +172,7 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	}
 	defer release()
 
-	warnWaitOutlivesTheHook(os.Stderr, wait)
+	warnWaitOutlivesTheHook(approvals.warn, wait)
 
 	octx, cancel := context.WithTimeout(ctx, wait)
 	askApprovalOn(octx, sessions, session, approvalPrompt(req), pending.id, req, time.Now().Add(wait))

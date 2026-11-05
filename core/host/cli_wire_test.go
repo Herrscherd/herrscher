@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
@@ -64,6 +65,25 @@ func TestWiredManagerRefusesAnUnknownAccount(t *testing.T) {
 	}
 	if _, runErr := create.Run(t.Context(), sessionCreateInput("perso-session", "perso")); !errors.Is(runErr, errStopAfterGuard) {
 		t.Fatalf("session create with a known account: err %v, want the placement to be reached", runErr)
+	}
+}
+
+func TestWiredSessionVerbsRenderInTheOperatorLanguage(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	if err := st.SetHome(state.HomeRef{ID: "home", Type: "forum"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddSession(state.Session{Name: "budget-fr", Vendor: "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude", Language: i18n.French}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
+	setBudget := mustCommand(t, hdl.Commands(), "session", "set-budget")
+	result, err := setBudget.Run(t.Context(), contracts.Input{Args: map[string]string{"name": "budget-fr", "cost_cap": "5"}})
+	if err != nil {
+		t.Fatalf("set-budget: %v", err)
+	}
+	if got, _ := result.Data().(string); !strings.Contains(got, "budget mis à jour") {
+		t.Fatalf("set-budget reply = %q, want it rendered in the operator language (French)", got)
 	}
 }
 

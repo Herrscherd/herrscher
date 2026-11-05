@@ -80,7 +80,7 @@ func TestPrepareLanguagesDefaultsToEnglishWithoutPublishing(t *testing.T) {
 	}
 }
 
-func TestPrepareLanguagesLeavesAnInvalidHerrscherLangToTheGateway(t *testing.T) {
+func TestPrepareLanguagesWarnsOnceForAnInvalidHerrscherLang(t *testing.T) {
 	clearPublishedLanguage(t)
 	t.Setenv(language.EnvVar, "klingon")
 	t.Setenv("LANG", "")
@@ -95,8 +95,8 @@ func TestPrepareLanguagesLeavesAnInvalidHerrscherLangToTheGateway(t *testing.T) 
 	if langs.Operator != i18n.English {
 		t.Fatalf("operator = %v, want English", langs.Operator)
 	}
-	if n := strings.Count(out.String(), "language ignored"); n != 0 {
-		t.Fatalf("host warnings = %d, want none: the gateway reports an invalid %s itself:\n%s", n, language.EnvVar, out.String())
+	if n := strings.Count(out.String(), "language ignored"); n != 1 {
+		t.Fatalf("warnings = %d, want exactly one for an invalid %s:\n%s", n, language.EnvVar, out.String())
 	}
 }
 

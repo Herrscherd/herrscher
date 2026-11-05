@@ -71,6 +71,7 @@ type sessionDriver struct {
 	channel       string
 	saidElsewhere bool
 	notices       chan noticeDelivery
+	failures      chan compactFailure
 	noticeLog     *slog.Logger
 	gateways      []contracts.GatewaySet
 	toBridge      chan<- contracts.Event
@@ -131,6 +132,7 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		hangup:    make(chan struct{}, 1),
 		seen:      make(map[string]bool),
 		notices:   make(chan noticeDelivery, noticeQueueCapacity),
+		failures:  make(chan compactFailure, noticeQueueCapacity),
 		noticeLog: obs.Stderr(false),
 		gate:      noBudgetGate{},
 
@@ -554,6 +556,8 @@ func (d *sessionDriver) pump(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case failure := <-d.failures:
+			d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: failure.trigger.String(), Text: failure.text})
 		case item := <-d.queue:
 			if !d.enterTurn(ctx) {
 				return

@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -311,7 +312,7 @@ func TestNoticeIsDeliveredWhenTheParentContextIsCancelledDuringANotify(t *testin
 	parent, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go d.deliverNotices(parent)
-	d.notifyGateways(contracts.Notice{Code: contracts.CodeCompacted})
+	d.notifyGateways(contracts.TriggerManual, contracts.Notice{Code: contracts.CodeCompacted})
 	select {
 	case <-gateway.entered:
 	case <-time.After(2 * time.Second):
@@ -332,7 +333,7 @@ func TestNoticesReachTheGatewayInTheOrderTheyWereRaised(t *testing.T) {
 	go d.deliverNotices(ctx)
 	codes := []contracts.Code{contracts.CodeCompacted, contracts.CodeCompactUnavailable, contracts.Code(99)}
 	for _, code := range codes {
-		d.notifyGateways(contracts.Notice{Code: code})
+		d.notifyGateways(contracts.TriggerManual, contracts.Notice{Code: code})
 	}
 	for _, code := range codes {
 		if got := awaitNotice(t, gateway); got.notice.Code != code {
@@ -411,5 +412,97 @@ func TestFullNoticeQueueDropsTheNoticeAndTheTurnAdvances(t *testing.T) {
 	}
 	if out := logs.String(); !strings.Contains(out, "dropped") || !strings.Contains(out, "session=s1") || !strings.Contains(out, "code=1") {
 		t.Fatalf("log = %q, want the dropped notice with its session and code", out)
+	}
+}
+
+type failingNoticeGateway struct {
+	fakeGateway
+
+	calls chan struct{}
+}
+
+func (g *failingNoticeGateway) Notify(context.Context, contracts.Conversation, i18n.Language, contracts.Notice) (contracts.MessageID, error) {
+	g.calls <- struct{}{}
+	return "", errors.New("gateway down")
+}
+
+func awaitCall(t *testing.T, calls chan struct{}) {
+	t.Helper()
+	select {
+	case <-calls:
+	case <-time.After(2 * time.Second):
+		t.Fatal("gateway was never asked to deliver the notice")
+	}
+}
+
+func TestNoticeDeliveryFailureReachesTheSessionOnce(t *testing.T) {
+	first := &failingNoticeGateway{calls: make(chan struct{}, 1)}
+	second := &failingNoticeGateway{calls: make(chan struct{}, 1)}
+	f := newConfiguredCompactFixture(t, "claude", compactPolicy(92), func(d *sessionDriver) {
+		d.gateways = []contracts.GatewaySet{{Gateway: first}, {Gateway: second}}
+		d.lang = i18n.French
+	})
+	f.driver.requestCompaction("", contracts.Conversation{})
+	nextFrame(t, f)
+	f.from <- mustAnswer(t, contracts.CompactResult{TokensAfter: 50_000, TokensMeasured: true, Note: "compacted", Notice: contracts.Notice{Code: contracts.CodeCompacted}})
+	failed := waitEmitted(t, f, eventCompactFailed)
+	requireRenderedText(t, failed.Text, contracts.Notice{Code: contracts.CodeCompacted}, i18n.French)
+	awaitCall(t, first.calls)
+	awaitCall(t, second.calls)
+	<-time.After(100 * time.Millisecond)
+	if n := len(f.emittedOf(eventCompactFailed)); n != 1 {
+		t.Fatalf("compaction_failed emitted %d times, want exactly once for the notice", n)
+	}
+}
+
+type postOnlyGateway struct {
+	fakeGateway
+
+	posted chan string
+}
+
+func (g *postOnlyGateway) Post(_ context.Context, _ contracts.Conversation, text string) (contracts.MessageID, error) {
+	g.posted <- text
+	return "", nil
+}
+
+func awaitPosted(t *testing.T, gateway *postOnlyGateway) string {
+	t.Helper()
+	select {
+	case text := <-gateway.posted:
+		return text
+	case <-time.After(2 * time.Second):
+		t.Fatal("post-only gateway received no text")
+	}
+	return ""
+}
+
+func TestPostOnlyGatewayAndNoticeSinkEachReceiveTheNoticeOnce(t *testing.T) {
+	postOnly := &postOnlyGateway{posted: make(chan string, 4)}
+	sink := newNoticeGateway()
+	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
+		d.gateways = []contracts.GatewaySet{{Gateway: contracts.Degrade(postOnly)}, {Gateway: sink}}
+		d.lang = i18n.French
+	})
+	f.driver.requestCompaction("", contracts.Conversation{})
+	failed := waitEmitted(t, f, eventCompactFailed)
+	if failed.Text != "" {
+		t.Fatalf("compaction_failed text = %q, want none while the notice is queued", failed.Text)
+	}
+	got := awaitNotice(t, sink)
+	if got.notice.Code != contracts.CodeCompactUnavailable {
+		t.Fatalf("notice = %+v, want compact.unavailable", got.notice)
+	}
+	want, err := contracts.NewRenderer().Render(i18n.French, got.notice)
+	if err != nil {
+		t.Fatalf("Render fr: %v", err)
+	}
+	if text := awaitPosted(t, postOnly); text != want {
+		t.Fatalf("post-only gateway text = %q, want %q", text, want)
+	}
+	select {
+	case text := <-postOnly.posted:
+		t.Fatalf("post-only gateway received a second text %q, want one", text)
+	case <-time.After(100 * time.Millisecond):
 	}
 }

@@ -106,7 +106,9 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 }
 
 func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store) *manager.Handler {
-	return manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launchVendor)
+	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launchVendor)
+	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
+	return hdl
 }
 
 func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable) {

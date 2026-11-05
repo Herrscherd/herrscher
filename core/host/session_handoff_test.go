@@ -12,6 +12,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 )
 
 var errTestBrief = errors.New("brief unavailable")
@@ -428,5 +429,63 @@ func TestAgentReceivesTheHandoffCapability(t *testing.T) {
 	}
 	if strings.Contains(summary, "close") {
 		t.Fatalf("the agent must not gain verbs it is denied, got %q", summary)
+	}
+}
+
+func handoffRefusedFor(t *testing.T, refusal error) error {
+	t.Helper()
+	rec := &handoffRecord{}
+	deps := fakeHandoff(rec, fixedClock(), "alpha")
+	deps.account = func(string) string { return "work" }
+	deps.create = func(context.Context, contracts.Input) (string, error) {
+		return "", fmt.Errorf("refused: %w", refusal)
+	}
+	_, err := runHandoff(withLocalPrincipal(context.Background()), deps,
+		map[string]string{paramName: "alpha", paramTo: "beta", "vendor": "claude"})
+	return err
+}
+
+func TestHandoffEmptyAccountFlagClearsTheInheritedAccount(t *testing.T) {
+	rec := &handoffRecord{}
+	deps := fakeHandoff(rec, fixedClock(), "alpha")
+	deps.account = func(string) string { return "work" }
+	_, err := runHandoff(withLocalPrincipal(context.Background()), deps,
+		map[string]string{paramName: "alpha", paramTo: "beta", "vendor": "claude", "account": ""})
+	if err != nil {
+		t.Fatalf("handoff with --account \"\": %v", err)
+	}
+	if len(rec.created) != 1 {
+		t.Fatalf("created %d sessions, want 1", len(rec.created))
+	}
+	if account, given := rec.created[0].Lookup("account"); given {
+		t.Fatalf("create got account %q, want none so the target starts on the vendor default", account)
+	}
+}
+
+func TestHandoffRefusedInheritedHostAccountIsExplained(t *testing.T) {
+	err := handoffRefusedFor(t, manager.ErrAccountHost)
+	if !errors.Is(err, manager.ErrAccountHost) {
+		t.Fatalf("err = %v, want the refusal to stay manager.ErrAccountHost", err)
+	}
+	if !strings.Contains(err.Error(), `inherited from session "alpha"`) {
+		t.Fatalf("err = %q, want it to name the source session", err)
+	}
+}
+
+func TestHandoffRefusedInheritedRemoteAccountIsExplained(t *testing.T) {
+	err := handoffRefusedFor(t, manager.ErrAccountRemote)
+	if !errors.Is(err, manager.ErrAccountRemote) {
+		t.Fatalf("err = %v, want the refusal to stay manager.ErrAccountRemote", err)
+	}
+	if !strings.Contains(err.Error(), `inherited from session "alpha"`) {
+		t.Fatalf("err = %q, want it to name the source session", err)
+	}
+}
+
+func TestHandoffRefusalGivesTheExactRetryCommand(t *testing.T) {
+	err := handoffRefusedFor(t, manager.ErrAccountRemote)
+	want := `herrscher session handoff --name alpha --to beta --account ""`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %q, want the exact retry command %q", err, want)
 	}
 }

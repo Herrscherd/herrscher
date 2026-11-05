@@ -345,6 +345,11 @@ func (req BackendRequest) remoteRefusal(route modelRoute) error {
 	if len(route.env) > 0 {
 		return &gatewayEnvUnsupportedError{Model: req.ModelID}
 	}
+	return req.RemoteAccountRefusal()
+}
+
+// RemoteAccountRefusal refuses an account on a remote backend, which resolves accounts in its own store.
+func (req BackendRequest) RemoteAccountRefusal() error {
 	if req.Account != "" {
 		return &remoteAccountError{Account: req.Account}
 	}

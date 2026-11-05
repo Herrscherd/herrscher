@@ -140,6 +140,9 @@ func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequ
 		return nil, err
 	}
 	if fromRemote {
+		if err := req.RemoteAccountRefusal(); err != nil {
+			return nil, err
+		}
 		if req.ModelID != "" {
 			return nil, fmt.Errorf("model %q %w (HERRSCHER_REMOTE=backend): the proxy cannot carry the model's spawn environment", req.ModelID, errModelNotRoutable)
 		}

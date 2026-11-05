@@ -79,3 +79,18 @@ func mustCommand(t *testing.T, cmds []contracts.Cmd, path ...string) contracts.C
 	t.Fatalf("command %v is not registered", path)
 	return contracts.Cmd{}
 }
+
+func TestWiredManagerRefusesAccountWithRemoteBackend(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	if err := st.SetHome(state.HomeRef{ID: "home", Type: "forum"}); err != nil {
+		t.Fatal(err)
+	}
+	remote := make(map[contracts.Category]bool)
+	remote[contracts.CategoryBackend] = true
+	options := Options{DefaultCmd: "claude", RemoteCategories: remote}
+	hdl := newManagerHandler(Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()))
+	create := mustCommand(t, hdl.Commands(), "session", "create")
+	if _, runErr := create.Run(t.Context(), sessionCreateInput("remote-session", "perso")); !errors.Is(runErr, manager.ErrAccountRemote) {
+		t.Fatalf("session create with an account and a remote backend: err %v, want manager.ErrAccountRemote before any placement", runErr)
+	}
+}

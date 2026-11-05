@@ -144,7 +144,7 @@ func sessionHandoffVerb(deps handoffDeps) contracts.Cmd {
 		Param("project", "workspace sub-dir the new session works on", false).
 		Param("model", "catalog model id for the new session (see `herrscher models list`)", false).
 		Param("vendor", "agent backend vendor for the new session: claude | codex | cursor", false).
-		Param("account", "account profile for the new session, resolved in its vendor (default: the source session's account)", false).
+		Param("account", "account profile for the new session, resolved in its vendor (default: the source session's account; --account \"\" starts on the vendor default)", false).
 		Param(paramUnder, "create the new conversation under this category/forum instead of the daemon's home (operator only)", false).
 		Param(paramChannel, "adopt this existing conversation for the new session (operator only)", false).
 		Do(deps.run)
@@ -218,20 +218,22 @@ func (d handoffDeps) open(ctx context.Context, source, target, parent string, in
 }
 
 func handoffAccount(input contracts.Input, inherited string) string {
-	if explicit := input.Get("account"); explicit != "" {
+	if explicit, given := input.Lookup("account"); given {
 		return explicit
 	}
 	return inherited
 }
 
 func inheritedAccountError(input contracts.Input, source, account string, err error) error {
-	if input.Get("account") != "" || account == "" {
+	if _, given := input.Lookup("account"); given || account == "" {
 		return err
 	}
-	if !errors.Is(err, accounts.ErrNotFound) && !errors.Is(err, manager.ErrAccountVendor) {
+	if !errors.Is(err, accounts.ErrNotFound) && !errors.Is(err, manager.ErrAccountVendor) &&
+		!errors.Is(err, manager.ErrAccountHost) && !errors.Is(err, manager.ErrAccountRemote) {
 		return err
 	}
-	return fmt.Errorf("the account %q inherited from session %q is refused for the new session: %w; pass --account <profile> to choose another", account, source, err)
+	return fmt.Errorf("the account %q inherited from session %q is refused for the new session: %w; retry with `herrscher session handoff --name %s --to %s --account \"\"` to start on the vendor default, or pass --account <profile>",
+		account, source, err, source, input.Get(paramTo))
 }
 
 func (d handoffDeps) deliver(ctx context.Context, source, target, reply, brief, account string) (string, error) {

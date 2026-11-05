@@ -311,7 +311,7 @@ func modelTermsFor(models *ModelDiscovery) func(state.Session) modelTerms {
 	return func(session state.Session) modelTerms {
 		terms, err := resolve(session)
 		if err != nil {
-			return terms
+			return modelTerms{vendor: session.Vendor}
 		}
 		return terms
 	}

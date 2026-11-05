@@ -71,6 +71,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"coordination.routed":            {"Agent", "Session"},
 		"coordination.sealed":            {"Node"},
 		"coordination.merged":            {"Lead"},
+		"coordination.launched":          {"Count", "Workers"},
 	}
 	i18ntest.CheckDeclared(t, declared, hostLocaleSource(t))
 }

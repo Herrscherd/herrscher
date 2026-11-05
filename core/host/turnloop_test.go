@@ -945,6 +945,13 @@ func TestSanitizeCoordinationErrorTruncatesTo160Bytes(t *testing.T) {
 	}
 }
 
+func TestSanitizeCoordinationErrorNeverCutsBeforeTheFirstByte(t *testing.T) {
+	got := sanitizeCoordinationError(errors.New(strings.Repeat("\x80", 200)))
+	if got != "" {
+		t.Fatalf("sanitizeCoordinationError() = %q, want empty: no rune start exists to cut on", got)
+	}
+}
+
 func TestSanitizeCoordinationErrorCutsOnARuneBoundary(t *testing.T) {
 	got := sanitizeCoordinationError(errors.New(strings.Repeat("x", 159) + "é" + "y"))
 	want := strings.Repeat("x", 159)
@@ -1027,8 +1034,10 @@ func TestDriverAnnouncesCoordinatorSuccessInSessionLanguage(t *testing.T) {
 		{name: "route in english", trailer: "⟢ route: relire le module", lang: i18n.English, want: "routed to netter: alpha-netter"},
 		{name: "seal in french", trailer: "⟢ seal: 4", lang: i18n.French, want: "cohorte scellée à 4"},
 		{name: "seal in english", trailer: "⟢ seal: 4", lang: i18n.English, want: "cohort sealed at 4"},
-		{name: "merge in french", trailer: "⟢ merge: worker-1", lang: i18n.French, want: "merge traité pour lead"},
+		{name: "merge in french", trailer: "⟢ merge: worker-1", lang: i18n.French, want: "fusion traitée pour lead"},
 		{name: "merge in english", trailer: "⟢ merge: worker-1", lang: i18n.English, want: "merge handled for lead"},
+		{name: "launch in french", trailer: "⟢ fanout: scripter \u2014 a ;; b", lang: i18n.French, want: "cohorte lancée : 2 workers (scripter-w, scripter-w)"},
+		{name: "launch in english", trailer: "⟢ fanout: scripter \u2014 a ;; b", lang: i18n.English, want: "cohort launched: 2 workers (scripter-w, scripter-w)"},
 	}
 	for index := range tests {
 		t.Run(tests[index].name, func(t *testing.T) {

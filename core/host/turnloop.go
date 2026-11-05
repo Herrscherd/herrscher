@@ -847,7 +847,7 @@ func (d *sessionDriver) launchCohort(ctx context.Context, toAgent string, tasks 
 	}
 	d.fanOut(ctx, contracts.Event{
 		T:    eventStatus,
-		Text: "cohorte lancée : " + strconv.Itoa(len(spawned)) + " workers (" + strings.Join(spawned, ", ") + ")",
+		Text: d.hostText("coordination.launched", map[string]any{"Count": len(spawned), "Workers": strings.Join(spawned, ", ")}),
 	})
 }
 
@@ -898,7 +898,7 @@ func sanitizeCoordinationError(err error) string {
 		return message
 	}
 	cut := maxLen
-	for !utf8.RuneStart(message[cut]) {
+	for cut > 0 && !utf8.RuneStart(message[cut]) {
 		cut--
 	}
 	return message[:cut]

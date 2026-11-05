@@ -67,6 +67,11 @@
   {
     "id": "coordination.merged",
     "description": "Le coordinateur fusionne la branche d'un worker, Lead nomme la session pilote qui la reçoit",
-    "other": "merge traité pour {{.Lead}}"
+    "other": "fusion traitée pour {{.Lead}}"
+  },
+  {
+    "id": "coordination.launched",
+    "description": "Une cohorte de workers est lancée sans incident, Count donne leur nombre et Workers leurs noms",
+    "other": "cohorte lancée : {{.Count}} workers ({{.Workers}})"
   }
 ]

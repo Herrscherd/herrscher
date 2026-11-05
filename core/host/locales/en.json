@@ -68,5 +68,10 @@
     "id": "coordination.merged",
     "description": "The coordinator merged a worker branch; Lead names the lead session that receives it",
     "other": "merge handled for {{.Lead}}"
+  },
+  {
+    "id": "coordination.launched",
+    "description": "A cohort of workers launches without incident; Count gives their number and Workers their names",
+    "other": "cohort launched: {{.Count}} workers ({{.Workers}})"
   }
 ]

@@ -35,7 +35,7 @@ var (
 )
 
 func declaredKeys() map[Key][]string {
-	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys())
+	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys())
 }
 
 func loadCatalog() (*i18n.Catalog, error) {
@@ -48,19 +48,32 @@ func loadCatalog() (*i18n.Catalog, error) {
 
 // Names of the params shared by several keys.
 const (
-	ParamErr      = "Err"
-	ParamKey      = "Key"
-	ParamName     = "Name"
-	ParamKind     = "Kind"
-	ParamPath     = "Path"
-	ParamMessage  = "Message"
-	ParamVerb     = "Verb"
-	ParamArg      = "Arg"
-	ParamCategory = "Category"
-	ParamOwner    = "Owner"
-	ParamFailure  = "Failure"
-	ParamWait     = "Wait"
-	ParamModel    = "Model"
+	ParamErr       = "Err"
+	ParamKey       = "Key"
+	ParamName      = "Name"
+	ParamKind      = "Kind"
+	ParamPath      = "Path"
+	ParamMessage   = "Message"
+	ParamVerb      = "Verb"
+	ParamArg       = "Arg"
+	ParamCategory  = "Category"
+	ParamOwner     = "Owner"
+	ParamFailure   = "Failure"
+	ParamWait      = "Wait"
+	ParamModel     = "Model"
+	ParamCount     = "Count"
+	ParamOS        = "OS"
+	ParamArch      = "Arch"
+	ParamOutput    = "Output"
+	ParamSessions  = "Sessions"
+	ParamUsage     = "Usage"
+	ParamEnvFile   = "EnvFile"
+	ParamStart     = "Start"
+	ParamTask      = "Task"
+	ParamVersion   = "Version"
+	ParamInstalled = "Installed"
+	ParamRan       = "Ran"
+	ParamVendor    = "Vendor"
 )
 
 // Text renders key in lang with params. It refuses an undeclared key, and params
@@ -72,6 +85,26 @@ func Text(lang i18n.Language, key Key, params Params) (string, error) {
 	}
 	return render(cat, lang, key, params)
 }
+
+// Failure returns an error that reads as key rendered in lang with params, and
+// that still matches cause through errors.Is and errors.As. When key cannot be
+// rendered, it returns that rendering error instead.
+func Failure(lang i18n.Language, cause error, key Key, params Params) error {
+	text, err := Text(lang, key, params)
+	if err != nil {
+		return err
+	}
+	return renderedFailure{text: text, cause: cause}
+}
+
+type renderedFailure struct {
+	text  string
+	cause error
+}
+
+func (e renderedFailure) Error() string { return e.text }
+
+func (e renderedFailure) Unwrap() error { return e.cause }
 
 func render(cat *i18n.Catalog, lang i18n.Language, key Key, params Params) (string, error) {
 	fields, known := declaredKeys()[key]

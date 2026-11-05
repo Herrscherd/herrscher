@@ -498,5 +498,165 @@
     "id": "cli.bridge.env_stdin_failed",
     "description": "Erreur quand une ligne KEY=VALUE lue sur l'entrée standard ne peut pas être posée dans l'environnement",
     "other": "application de {{.Key}} depuis l'entrée standard : {{.Err}}"
+  },
+  {
+    "id": "cli.service.usage",
+    "description": "Ligne d'usage de herrscher service, avec ses sous-commandes et ses options",
+    "other": "usage : herrscher service <install|uninstall|status|restart|update> [--health-addr ADDR] [--env-file PATH] [--cmd 'claude …'] [--source DIR] [--no-pull]"
+  },
+  {
+    "id": "cli.service.unknown_subcommand",
+    "description": "Erreur : le premier argument de herrscher service ne nomme aucune sous-commande",
+    "other": "herrscher service : sous-commande inconnue {{.Name}} (valeurs possibles : install|uninstall|status|restart|update)"
+  },
+  {
+    "id": "cli.service.unexpected_argument",
+    "description": "Erreur : herrscher service a reçu un argument qu'il n'accepte pas, suivi de l'usage",
+    "other": "herrscher service {{.Verb}} : argument inattendu {{.Arg}}\n{{.Usage}}"
+  },
+  {
+    "id": "cli.service.update.unexpected_argument",
+    "description": "Erreur : herrscher service update a reçu un argument qu'il n'accepte pas",
+    "other": "herrscher service update : argument inattendu {{.Arg}}"
+  },
+  {
+    "id": "cli.service.restarted",
+    "description": "Confirmation : le service a été redémarré",
+    "other": "herrscher service : redémarré"
+  },
+  {
+    "id": "cli.service.removed",
+    "description": "Confirmation : le service a été désinstallé",
+    "other": "herrscher service : supprimé"
+  },
+  {
+    "id": "cli.service.update.rebuilding",
+    "description": "Avis : la mise à jour recompile le binaire installé, et non celui qui a été lancé",
+    "other": "herrscher service : reconstruction du binaire installé {{.Installed}} (vous avez lancé {{.Ran}})"
+  },
+  {
+    "id": "cli.service.update.rebuilt",
+    "description": "Confirmation : la mise à jour a recompilé les sources à cette version et redémarré le service",
+    "other": "herrscher service : {{.Version}} reconstruit et redémarré"
+  },
+  {
+    "id": "cli.service.flag.health_addr",
+    "description": "Description de l'option --health-addr de herrscher service",
+    "other": "valeur de serve --health-addr (vide désactive le point de terminaison de santé)"
+  },
+  {
+    "id": "cli.service.flag.env_file",
+    "description": "Description de l'option --env-file de herrscher service",
+    "other": "chemin du fichier de secrets 0600 que charge le service"
+  },
+  {
+    "id": "cli.service.flag.cmd",
+    "description": "Description de l'option --cmd de herrscher service",
+    "other": "commande de pont par défaut, préremplie dans config.json (ex. 'claude --model claude-opus-4-8 --effort low')"
+  },
+  {
+    "id": "cli.service.flag.source",
+    "description": "Description de l'option --source de herrscher service update",
+    "other": "chemin du dépôt source de herrscher à compiler"
+  },
+  {
+    "id": "cli.service.flag.no_pull",
+    "description": "Description de l'option --no-pull de herrscher service update",
+    "other": "ne pas lancer `git pull --ff-only` avant la compilation"
+  },
+  {
+    "id": "cli.service.unsupported_os",
+    "description": "Erreur : le système d'exploitation n'a pas de lanceur de service",
+    "other": "système d'exploitation non pris en charge {{.OS}}"
+  },
+  {
+    "id": "cli.service.no_source_dir",
+    "description": "Erreur : service update n'a aucun dépôt source à compiler",
+    "other": "aucun dossier source défini"
+  },
+  {
+    "id": "cli.service.not_checkout.no_module",
+    "description": "Erreur : le dossier source n'a pas de fichier go.mod",
+    "other": "pas un dépôt source de herrscher (pas de go.mod) : {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.service.not_checkout.wrong_module",
+    "description": "Erreur : le dossier source contient un autre module Go",
+    "other": "pas un dépôt source de herrscher (mauvais module) : {{.Path}}"
+  },
+  {
+    "id": "cli.service.no_go_toolchain",
+    "description": "Erreur : la commande go est absente de PATH, herrscher ne peut pas être compilé",
+    "other": "chaîne d'outils go introuvable dans PATH"
+  },
+  {
+    "id": "cli.service.no_binary_path",
+    "description": "Erreur : le test de fumée n'a aucun binaire à lancer",
+    "other": "aucun chemin de binaire pour le test de fumée"
+  },
+  {
+    "id": "cli.service.git_pull_failed",
+    "description": "Erreur : git pull --ff-only a échoué sur le dépôt source",
+    "other": "git pull : {{.Err}} : {{.Output}}"
+  },
+  {
+    "id": "cli.service.go_build_failed",
+    "description": "Erreur : go build a échoué sur le dépôt source",
+    "other": "go build : {{.Err}} : {{.Output}}"
+  },
+  {
+    "id": "cli.service.go_build_for_failed",
+    "description": "Erreur : go build a échoué pour une autre plateforme",
+    "other": "go build ({{.OS}}/{{.Arch}}) : {{.Err}} : {{.Output}}"
+  },
+  {
+    "id": "cli.service.smoke_failed",
+    "description": "Erreur : le binaire fraîchement compilé ne répond pas à --help",
+    "other": "le nouveau binaire échoue au test de fumée ({{.Path}} --help) : {{.Err}} : {{.Output}}"
+  },
+  {
+    "id": "cli.service.locate_binary",
+    "description": "Erreur : le chemin du binaire herrscher en cours d'exécution est illisible",
+    "other": "localisation du binaire herrscher : {{.Err}}"
+  },
+  {
+    "id": "cli.service.locate_home",
+    "description": "Erreur : le dossier personnel est introuvable",
+    "other": "localisation du dossier personnel : {{.Err}}"
+  },
+  {
+    "id": "cli.service.stat_failed",
+    "description": "Erreur : un fichier du service ne peut pas être examiné",
+    "other": "impossible d'examiner {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.service.mkdir_failed",
+    "description": "Erreur : un dossier du service ne peut pas être créé",
+    "other": "création du dossier {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.service.write_failed",
+    "description": "Erreur : un fichier du service ne peut pas être écrit",
+    "other": "écriture de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.service.note.unit_path",
+    "description": "Avis : le PATH de l'unité a été réécrit pendant une mise à jour",
+    "other": "herrscher service : PATH de l'unité mis à jour pour que les agents trouvent les outils sous votre dossier personnel"
+  },
+  {
+    "id": "cli.service.note.not_started",
+    "description": "Avis : le service est installé mais pas lancé, des secrets requis manquent",
+    "other": "herrscher service : installé et activé au démarrage, mais PAS lancé : renseignez les secrets requis dans {{.EnvFile}}, puis : {{.Start}}"
+  },
+  {
+    "id": "cli.service.note.running",
+    "description": "Avis : le service tourne, et l'emplacement de ses secrets",
+    "other": "herrscher service : en cours d'exécution. Les secrets sont dans {{.EnvFile}} ; modifiez-le puis redémarrez pour les changer."
+  },
+  {
+    "id": "cli.service.note.windows_edit",
+    "description": "Avis : sous Windows, le fichier de secrets à remplir et la commande qui lance la tâche maintenant",
+    "other": "herrscher service : modifiez {{.EnvFile}} avec votre jeton ; la tâche lance herrscher à votre prochaine ouverture de session (ou lancez-la maintenant avec schtasks /run /tn {{.Task}})."
   }
 ]

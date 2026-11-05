@@ -32,7 +32,7 @@ func TestEveryDeclaredKeyHasItsTextInEveryLanguage(t *testing.T) {
 }
 
 func TestEveryKeyFileIsDeclaredOnce(t *testing.T) {
-	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys()}
+	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys()}
 	total := 0
 	for _, group := range groups {
 		total += len(group)
@@ -82,6 +82,9 @@ func TestRenderedMessagesInEachLanguage(t *testing.T) {
 		{"env set failed", EnvSetFailed, Params{"Key": "A", "Err": "bad"}, "set A: bad", "définition de A : bad"},
 		{"attach not available", AttachNotAvailable, Params{"Verb": `"agent"`}, `command "agent" is not available from the terminal (allowed: session, agent)`, `commande "agent" indisponible depuis le terminal (autorisées : session, agent)`},
 		{"serve state flag", ServeFlagState, nil, "path to the daemon state file", "chemin du fichier d'état du démon"},
+		{"service restarted", ServiceRestarted, nil, "herrscher service: restarted", "herrscher service : redémarré"},
+		{"service unknown subcommand", ServiceUnknownSubcommand, Params{"Name": `"x"`}, `herrscher service: unknown subcommand "x" (want install|uninstall|status|restart|update)`, `herrscher service : sous-commande inconnue "x" (valeurs possibles : install|uninstall|status|restart|update)`},
+		{"service note running", ServiceNoteRunning, Params{"EnvFile": "/e"}, "herrscher service: running. Secrets live in /e; edit it and restart to change them.", "herrscher service : en cours d'exécution. Les secrets sont dans /e ; modifiez-le puis redémarrez pour les changer."},
 		{"serve gateway retrying", ServeGatewayRetrying, Params{"Failure": "relay: offline", "Wait": "2s"}, "herrscher: gateway not up yet: relay: offline; retrying in 2s", "herrscher : passerelle pas encore prête : relay: offline ; nouvel essai dans 2s"},
 		{"serve no gateway", ServeNoGateway, nil, "no gateway built", "aucune passerelle construite"},
 		{"bridge model not routable", BridgeModelNotRoutable, Params{"Model": `"gw-claude"`}, `model "gw-claude" cannot be routed through the remote backend resolver (HERRSCHER_REMOTE=backend): the proxy cannot carry the model's spawn environment`, `le modèle "gw-claude" ne peut pas passer par le résolveur de backend distant (HERRSCHER_REMOTE=backend) : le proxy ne transporte pas l'environnement de lancement du modèle`},

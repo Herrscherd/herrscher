@@ -18,11 +18,7 @@ const (
 	obelFamily         = "Obel Mono"
 	obelMaskedFamily   = "Obel Mono Masked"
 	obelInstallCommand = "curl -fsSL https://typographic.systems/install.sh | sh"
-	obelInstallNote    = "sans sudo, vérifie le SHA-256 de chaque zip · licence SIL OFL 1.1"
 	obelMaskFeature    = "ss01"
-	obelMaskNote       = "ss01 masque les clés d’API à l’écran, le presse-papiers garde tout"
-	obelMaskedNote     = "sans réglage de features : famille « Obel Mono Masked »"
-	obelFontKeys       = "c copier la commande · y copier la config · f fermer"
 	obelUserFontGlob   = "ObelMono*.ttf"
 	fontProbeLimit     = 2 * time.Second
 	fontListSeparator  = ","
@@ -94,17 +90,17 @@ func probeUserFonts() fontPresence {
 	return fontInstalled
 }
 
-func fontStatus(presence fontPresence) string {
+func fontStatus(trans translator, presence fontPresence) string {
 	switch presence {
 	case fontInstalled:
-		return "installée"
+		return trans.t("tui.theme.font.installed", nil)
 	case fontAbsent:
-		return "absente"
+		return trans.t("tui.theme.font.absent", nil)
 	case fontUnknown:
-		return "inconnue"
+		return trans.t("tui.theme.font.unknown", nil)
 	case fontUnchecked:
 	}
-	return "vérification…"
+	return trans.t("tui.theme.font.checking", nil)
 }
 
 type terminalKind int
@@ -188,30 +184,30 @@ func terminalSetupFor(kind terminalKind) terminalSetup {
 
 func (m *model) copyObel(text, label string) {
 	if m.clip == nil {
-		m.flash = "copie impossible"
+		m.flash = m.tr.t("tui.theme.copy_failed", nil)
 		return
 	}
 	if err := m.clip.WriteText(m.runContext(), text); err != nil {
-		m.flash = "copie impossible : " + err.Error()
+		m.flash = m.tr.t("tui.copy.failed", map[string]any{tplArgReason: err.Error()})
 		return
 	}
-	m.flash = label + " copiée"
+	m.flash = m.tr.t("tui.theme.copied", map[string]any{tplArgLabel: label})
 }
 
 func (m *model) obelInstallLines(width, rows int) []string {
 	styles := m.st
 	setup := terminalSetupFor(m.terminal)
-	terminalHead := themeSectionHead(styles, "terminal détecté", setup.name+" · "+setup.file, width)
+	terminalHead := themeSectionHead(styles, m.tr.t("tui.theme.font.head_terminal", nil), setup.name+" · "+setup.file, width)
 	if m.terminal == terminalUnidentified {
-		terminalHead = themeSectionHead(styles, "terminal non reconnu", "", width)
+		terminalHead = themeSectionHead(styles, m.tr.t("tui.theme.font.head_unknown", nil), "", width)
 	}
 	lines := []string{
-		themeSectionHead(styles, "installer Obel Mono", "", width),
+		themeSectionHead(styles, m.tr.t("tui.theme.font.head_install", nil), "", width),
 		"   " + styles.accent.Render("$") + " " + styles.text.Render(obelInstallCommand),
 	}
-	lines = append(lines, noteLines(styles.dim, obelInstallNote, width)...)
+	lines = append(lines, noteLines(styles.dim, m.tr.t("tui.theme.font.install_note", nil), width)...)
 	lines = append(lines, "")
-	lines = append(lines, noteLines(styles.dim, obelFontKeys, width)...)
+	lines = append(lines, noteLines(styles.dim, m.tr.t("tui.theme.font.keys", nil), width)...)
 	lines = append(lines, "", terminalHead)
 	for _, line := range setup.before {
 		lines = append(lines, "   "+styles.dim.Render(line))
@@ -222,9 +218,9 @@ func (m *model) obelInstallLines(width, rows int) []string {
 	for _, line := range setup.after {
 		lines = append(lines, "   "+styles.dim.Render(line))
 	}
-	lines = append(lines, noteLines(styles.dim, obelMaskNote, width)...)
+	lines = append(lines, noteLines(styles.dim, m.tr.t("tui.theme.font.mask_note", nil), width)...)
 	if setup.masked {
-		lines = append(lines, noteLines(styles.dim, obelMaskedNote, width)...)
+		lines = append(lines, noteLines(styles.dim, m.tr.t("tui.theme.font.masked_note", nil), width)...)
 	}
 	for index := range lines {
 		lines[index] = cutText(lines[index], width)
@@ -247,10 +243,11 @@ func (m *model) obelConfigText() string {
 	return strings.Join(terminalSetupFor(m.terminal).config, "\n")
 }
 
-func themeFontRow(styles uiStyles, presence fontPresence) string {
-	status := styles.dim.Render(fontStatus(presence))
+func themeFontRow(styles uiStyles, trans translator, presence fontPresence) string {
+	status := styles.dim.Render(fontStatus(trans, presence))
 	if presence == fontInstalled {
-		status = styles.accent.Render("✓ " + fontStatus(presence))
+		status = styles.accent.Render("✓ " + fontStatus(trans, presence))
 	}
-	return "   " + padTo("police", themeKeyColumn) + styles.text.Render(obelFamily+" · recommandée") + "  " + status + "  " + styles.dim.Render("f")
+	family := trans.t("tui.theme.font.family_line", map[string]any{"Family": obelFamily})
+	return "   " + padTo(trans.t("tui.theme.font.row", nil), themeKeyColumn) + styles.text.Render(family) + "  " + status + "  " + styles.dim.Render("f")
 }

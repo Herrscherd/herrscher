@@ -32,7 +32,7 @@ func (m *model) layoutTranscript(tab *tab, width int) transcriptLayout {
 			built.turns = append(built.turns, len(built.lines))
 		}
 		if m.foldCode && item.role == roleAgent && !item.streaming {
-			item.text = foldCodeBlocks(item.text, m.st.glyphs, m.hintIn(actToggleCodeFold, chatKeyStack()...))
+			item.text = foldCodeBlocks(m.tr, item.text, m.st.glyphs, m.hintIn(actToggleCodeFold, chatKeyStack()...))
 		}
 		built.add(strings.Split(renderEntry(item, width, m.displayMode()), "\n"), item.id)
 		if index == treeOwner && len(tab.trail) > 0 {
@@ -115,6 +115,7 @@ func defaultOpen(item entry) bool {
 }
 
 type view struct {
+	tr   translator
 	caps Capabilities
 	st   uiStyles
 	md   *markdownRenderer
@@ -125,15 +126,15 @@ type view struct {
 }
 
 func (m *model) displayMode() view {
-	return view{caps: m.caps, st: m.st, md: m.md, keys: m.bindings, expand: m.expandTools, spin: m.spinFrame()}
+	return view{tr: m.tr, caps: m.caps, st: m.st, md: m.md, keys: m.bindings, expand: m.expandTools, spin: m.spinFrame()}
 }
 
 func (v view) glyph(action keyAction) string {
 	table := v.keys
 	if table == nil {
-		table = defaultKeyTable()
+		table = defaultKeyTable(v.tr)
 	}
-	return table.hintFor(action, chatKeyStack()...)
+	return table.hintFor(v.tr, action, chatKeyStack()...)
 }
 
 func (v view) hint(action keyAction, label string) string {
@@ -154,7 +155,7 @@ func renderEntry(item entry, width int, view view) string {
 	case roleNotice:
 		return indent(wrapWith(view.st.dim, view.st.glyphs.notice+" "+item.text, body))
 	case roleError:
-		return block(view.st, view.st.red, view.st.glyphs.failure+" error", wrapWith(view.st.red, item.text, body), width)
+		return block(view.st, view.st.red, view.st.glyphs.failure+" "+view.tr.t("tui.render.error_label", nil), wrapWith(view.st.red, item.text, body), width)
 	case roleCost:
 		return indent(view.st.dim.Render(item.text))
 	case roleScrollback:

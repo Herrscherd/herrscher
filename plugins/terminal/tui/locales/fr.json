@@ -1,0 +1,2546 @@
+[
+  {
+    "id": "tui.copy.what",
+    "other": "copier quoi ? {{.Targets}}"
+  },
+  {
+    "id": "tui.copy.nothing",
+    "other": "rien à copier ici"
+  },
+  {
+    "id": "tui.copy.failed",
+    "other": "copie impossible : {{.Reason}}"
+  },
+  {
+    "id": "tui.copy.done",
+    "one": "{{.Target}} copié, {{.Count}} ligne",
+    "other": "{{.Target}} copié, {{.Count}} lignes"
+  },
+  {
+    "id": "tui.copy.you",
+    "other": "toi"
+  },
+  {
+    "id": "tui.copy.agent",
+    "other": "agent"
+  },
+  {
+    "id": "tui.copy.entry",
+    "other": "{{.Label}} : {{.Text}}"
+  },
+  {
+    "id": "tui.copy.code_done",
+    "one": "{{.Count}} ligne de code copiée",
+    "other": "{{.Count}} lignes de code copiées"
+  },
+  {
+    "id": "tui.copy.no_code_block",
+    "other": "aucun bloc de code dans la dernière réponse"
+  },
+  {
+    "id": "tui.fold.code",
+    "one": "{{.Glyph}} {{.Lang}} · {{.Count}} ligne ({{.Toggle}})",
+    "other": "{{.Glyph}} {{.Lang}} · {{.Count}} lignes ({{.Toggle}})"
+  },
+  {
+    "id": "tui.diff.panel_label",
+    "other": "panneau de diff"
+  },
+  {
+    "id": "tui.diff.header_counts",
+    "other": "  +{{.Added}} −{{.Removed}}   ancien · nouveau   {{.Hint}}"
+  },
+  {
+    "id": "tui.diff.more_rows",
+    "other": "lignes de plus"
+  },
+  {
+    "id": "tui.common.close",
+    "other": "fermer"
+  },
+  {
+    "id": "tui.common.cancel",
+    "other": "annuler"
+  },
+  {
+    "id": "tui.common.send",
+    "other": "envoyer"
+  },
+  {
+    "id": "tui.common.help",
+    "other": "aide"
+  },
+  {
+    "id": "tui.common.interrupt",
+    "other": "interrompre"
+  },
+  {
+    "id": "tui.common.yes",
+    "other": "oui"
+  },
+  {
+    "id": "tui.common.no",
+    "other": "non"
+  },
+  {
+    "id": "tui.common.history",
+    "other": "historique"
+  },
+  {
+    "id": "tui.common.editor",
+    "other": "éditeur"
+  },
+  {
+    "id": "tui.common.starting",
+    "other": "démarrage…"
+  },
+  {
+    "id": "tui.common.open",
+    "other": "ouvrir"
+  },
+  {
+    "id": "tui.common.no_session",
+    "other": "aucune session ouverte"
+  },
+  {
+    "id": "tui.chrome.fact_session",
+    "other": "session"
+  },
+  {
+    "id": "tui.chrome.fact_repo",
+    "other": "dépôt"
+  },
+  {
+    "id": "tui.chrome.fact_model",
+    "other": "modèle"
+  },
+  {
+    "id": "tui.chrome.fact_open",
+    "other": "ouvert"
+  },
+  {
+    "id": "tui.chrome.other_sessions",
+    "other": "autres sessions"
+  },
+  {
+    "id": "tui.chrome.hint_commands",
+    "other": "/ commandes"
+  },
+  {
+    "id": "tui.chrome.hint_files",
+    "other": "@ fichiers"
+  },
+  {
+    "id": "tui.chrome.switch_session",
+    "other": "changer de session"
+  },
+  {
+    "id": "tui.compose.placeholder_idle",
+    "other": "Tape un message, / ou @, ou !commande"
+  },
+  {
+    "id": "tui.compose.placeholder_panes",
+    "other": "Le message part dans le volet en surbrillance"
+  },
+  {
+    "id": "tui.compose.editor_title",
+    "other": "Éditeur"
+  },
+  {
+    "id": "tui.compose.draft_open_in",
+    "other": "brouillon ouvert dans {{.Editor}}"
+  },
+  {
+    "id": "tui.compose.to_prefix",
+    "other": "vers "
+  },
+  {
+    "id": "tui.compose.editor_open",
+    "other": "{{.Editor}} est ouvert sur le brouillon, :wq pour revenir"
+  },
+  {
+    "id": "tui.compose.in_dir",
+    "other": "dans {{.Dir}}"
+  },
+  {
+    "id": "tui.compose.output_enters",
+    "other": "la sortie entre dans la session"
+  },
+  {
+    "id": "tui.compose.busy_placeholder",
+    "other": "Écris pendant que l’agent travaille : {{.Actions}}"
+  },
+  {
+    "id": "tui.compose.queue_submit",
+    "other": "met en file"
+  },
+  {
+    "id": "tui.compose.redirect",
+    "other": "réoriente"
+  },
+  {
+    "id": "tui.compose.hint_file",
+    "other": "@ fichier"
+  },
+  {
+    "id": "tui.compose.hint_command",
+    "other": "/ commande"
+  },
+  {
+    "id": "tui.compose.stash",
+    "other": "de côté"
+  },
+  {
+    "id": "tui.compose.queued",
+    "other": "en file"
+  },
+  {
+    "id": "tui.compose.redirect_verb",
+    "other": "réorienter"
+  },
+  {
+    "id": "tui.compose.send_queue",
+    "other": "envoyer la file"
+  },
+  {
+    "id": "tui.compose.run",
+    "other": "lancer"
+  },
+  {
+    "id": "tui.compose.shell_policy",
+    "other": "la commande passe par la politique d’outils de l’hôte"
+  },
+  {
+    "id": "tui.compose.back",
+    "other": "retour"
+  },
+  {
+    "id": "tui.compose.pane_close",
+    "other": "quitter"
+  },
+  {
+    "id": "tui.compose.pane_zoom",
+    "other": "agrandir"
+  },
+  {
+    "id": "tui.statusline.script_footer",
+    "other": "les cases ne servent plus : le script décide"
+  },
+  {
+    "id": "tui.statusline.sample_queue",
+    "other": "en file"
+  },
+  {
+    "id": "tui.statusline.script_heading",
+    "other": "Script"
+  },
+  {
+    "id": "tui.statusline.json_caption",
+    "other": "JSON reçu sur l’entrée standard"
+  },
+  {
+    "id": "tui.statusline.json_note",
+    "other": " · à chaque événement"
+  },
+  {
+    "id": "tui.statusline.title",
+    "other": "Barre d’état"
+  },
+  {
+    "id": "tui.statusline.builtin",
+    "other": "intégrée"
+  },
+  {
+    "id": "tui.statusline.script",
+    "other": "script"
+  },
+  {
+    "id": "tui.statusline.source",
+    "other": "source"
+  },
+  {
+    "id": "tui.statusline.toggle",
+    "other": "s basculer"
+  },
+  {
+    "id": "tui.statusline.not_written",
+    "other": "terminal.toml non écrit : {{.Reason}}"
+  },
+  {
+    "id": "tui.statusline.preview_next_line",
+    "other": "aperçu en direct, ligne suivante : la barre telle qu’elle sera dans le terminal"
+  },
+  {
+    "id": "tui.statusline.preview_bar",
+    "other": "aperçu en direct, la barre telle qu’elle sera dans le terminal"
+  },
+  {
+    "id": "tui.statusline.preview_live",
+    "other": "aperçu en direct"
+  },
+  {
+    "id": "tui.statusline.choose",
+    "other": "choisir"
+  },
+  {
+    "id": "tui.statusline.check",
+    "other": "cocher"
+  },
+  {
+    "id": "tui.statusline.order",
+    "other": "l’ordre suit la liste"
+  },
+  {
+    "id": "tui.overview.subtitle",
+    "other": "terminal et Discord ensemble"
+  },
+  {
+    "id": "tui.overview.no_match",
+    "other": "   (aucune session ne correspond)"
+  },
+  {
+    "id": "tui.overview.empty",
+    "other": "  aucune session"
+  },
+  {
+    "id": "tui.overview.archived_hint",
+    "other": "/resume pour les reprendre avec aperçu"
+  },
+  {
+    "id": "tui.overview.archived",
+    "one": "   archivée : {{.Count}} · {{.Hint}}",
+    "other": "   archivées : {{.Count}} · {{.Hint}}"
+  },
+  {
+    "id": "tui.overview.hint_open_approval",
+    "other": "ouvrir l’approbation"
+  },
+  {
+    "id": "tui.overview.hint_review",
+    "other": "relire le diff du tour"
+  },
+  {
+    "id": "tui.overview.group_working",
+    "other": "Au travail"
+  },
+  {
+    "id": "tui.overview.group_waiting",
+    "other": "Attend une réponse"
+  },
+  {
+    "id": "tui.overview.group_review",
+    "other": "À relire"
+  },
+  {
+    "id": "tui.overview.group_done",
+    "other": "Fini"
+  },
+  {
+    "id": "tui.compose.placeholder_chat",
+    "other": "tape un message…"
+  },
+  {
+    "id": "tui.overview.in_pane",
+    "other": "en volet"
+  },
+  {
+    "id": "tui.overview.title",
+    "other": "Sessions et agents"
+  },
+  {
+    "id": "tui.overview.filter",
+    "other": "filtre"
+  },
+  {
+    "id": "tui.overview.type_to_filter",
+    "other": "tape pour filtrer"
+  },
+  {
+    "id": "tui.overview.choose",
+    "other": "choisir"
+  },
+  {
+    "id": "tui.overview.letters_filter",
+    "other": "lettres filtrer"
+  },
+  {
+    "id": "tui.overview.clear",
+    "other": "vider"
+  },
+  {
+    "id": "tui.overview.in_panes",
+    "other": "en volets"
+  },
+  {
+    "id": "tui.overview.sessions",
+    "one": "{{.Count}} session",
+    "other": "{{.Count}} sessions"
+  },
+  {
+    "id": "tui.overview.vendors",
+    "one": "{{.Count}} vendeur",
+    "other": "{{.Count}} vendeurs"
+  },
+  {
+    "id": "tui.overview.gateways",
+    "one": "{{.Count}} passerelle",
+    "other": "{{.Count}} passerelles"
+  },
+  {
+    "id": "tui.overview.field_vendor",
+    "other": "vendeur"
+  },
+  {
+    "id": "tui.overview.field_gateway",
+    "other": "passerelle"
+  },
+  {
+    "id": "tui.overview.field_where",
+    "other": "où"
+  },
+  {
+    "id": "tui.overview.field_cost",
+    "other": "coût"
+  },
+  {
+    "id": "tui.overview.field_context",
+    "other": "contexte"
+  },
+  {
+    "id": "tui.overview.preview_unavailable",
+    "other": "aperçu indisponible : {{.Reason}}"
+  },
+  {
+    "id": "tui.overview.preview_unreadable",
+    "other": "aperçu illisible : {{.Reason}}"
+  },
+  {
+    "id": "tui.panel.todos",
+    "other": "todos {{.Done}}/{{.Total}}"
+  },
+  {
+    "id": "tui.panel.subagents",
+    "one": "{{.Count}} sous-agent",
+    "other": "{{.Count}} sous-agents"
+  },
+  {
+    "id": "tui.panel.approval_keys",
+    "other": "o s r approbation de {{.Name}}"
+  },
+  {
+    "id": "tui.panel.next_pane",
+    "other": "volet suivant"
+  },
+  {
+    "id": "tui.panel.click_aim",
+    "other": "clic viser"
+  },
+  {
+    "id": "tui.panel.click_to_aim",
+    "other": "clic pour viser"
+  },
+  {
+    "id": "tui.panel.title",
+    "other": "Vue en volets"
+  },
+  {
+    "id": "tui.panel.count_working",
+    "one": "{{.Count}} au travail",
+    "other": "{{.Count}} au travail"
+  },
+  {
+    "id": "tui.panel.count_waiting",
+    "one": "{{.Count}} approbation",
+    "other": "{{.Count}} approbations"
+  },
+  {
+    "id": "tui.panel.count_unread",
+    "one": "{{.Count}} non lu",
+    "other": "{{.Count}} non lus"
+  },
+  {
+    "id": "tui.panel.count_finished",
+    "one": "{{.Count}} fini",
+    "other": "{{.Count}} finis"
+  },
+  {
+    "id": "tui.panel.hidden",
+    "one": "+{{.Count}} volet · {{.Hint}}",
+    "other": "+{{.Count}} volets · {{.Hint}}"
+  },
+  {
+    "id": "tui.panel.see_them",
+    "other": "pour les voir"
+  },
+  {
+    "id": "tui.panel.no_live_session",
+    "other": "aucune session vivante"
+  },
+  {
+    "id": "tui.panel.state_waiting",
+    "other": "approbation"
+  },
+  {
+    "id": "tui.panel.state_idle",
+    "other": "au repos"
+  },
+  {
+    "id": "tui.panel.state_finished",
+    "other": "fini"
+  },
+  {
+    "id": "tui.rail.hints",
+    "other": "^P agents · ^T onglet"
+  },
+  {
+    "id": "tui.context.cat_system",
+    "other": "système"
+  },
+  {
+    "id": "tui.context.cat_system_need",
+    "other": "taille du prompt système, envoyé à chaque tour"
+  },
+  {
+    "id": "tui.context.cat_tools",
+    "other": "outils et MCP"
+  },
+  {
+    "id": "tui.context.cat_tools_need",
+    "other": "taille des schémas d’outils, par serveur MCP"
+  },
+  {
+    "id": "tui.context.cat_memory",
+    "other": "mémoire"
+  },
+  {
+    "id": "tui.context.cat_memory_need",
+    "other": "taille du bloc mémoire injecté dans le tour"
+  },
+  {
+    "id": "tui.context.cat_skills",
+    "other": "skills"
+  },
+  {
+    "id": "tui.context.cat_skills_need",
+    "other": "taille des descriptions de skills chargées dans le contexte"
+  },
+  {
+    "id": "tui.context.cat_files",
+    "other": "fichiers lus"
+  },
+  {
+    "id": "tui.context.cat_files_need",
+    "other": "tokens de chaque fichier lu par l’agent"
+  },
+  {
+    "id": "tui.context.cat_conversation",
+    "other": "conversation"
+  },
+  {
+    "id": "tui.context.cat_conversation_need",
+    "other": "tokens des tours encore gardés, par tour"
+  },
+  {
+    "id": "tui.context.compact",
+    "other": "compacter"
+  },
+  {
+    "id": "tui.context.show_again",
+    "other": "réafficher"
+  },
+  {
+    "id": "tui.context.title",
+    "other": "Contexte"
+  },
+  {
+    "id": "tui.context.total",
+    "other": "total"
+  },
+  {
+    "id": "tui.context.free",
+    "other": "libre"
+  },
+  {
+    "id": "tui.context.free_note",
+    "other": "place avant que la fenêtre soit pleine"
+  },
+  {
+    "id": "tui.render.error_label",
+    "other": "erreur"
+  },
+  {
+    "id": "tui.drafts.orphans",
+    "other": "brouillons orphelins : {{.Reason}}"
+  },
+  {
+    "id": "tui.status.limits_ignored",
+    "other": "contextLimits ignoré, la taille par défaut s'applique : {{.Reason}}"
+  },
+  {
+    "id": "tui.status.no_auto_compact",
+    "other": "pas de compaction auto"
+  },
+  {
+    "id": "tui.status.compacts_at",
+    "other": "compacte seul à {{.Percent}}%"
+  },
+  {
+    "id": "tui.status.before_compaction",
+    "other": "{{.Percent}} % avant compaction"
+  },
+  {
+    "id": "tui.status.usage_title",
+    "other": "usage · {{.Tab}}"
+  },
+  {
+    "id": "tui.status.label_vendor",
+    "other": "vendeur"
+  },
+  {
+    "id": "tui.status.label_model",
+    "other": "modèle"
+  },
+  {
+    "id": "tui.status.label_effort",
+    "other": "effort"
+  },
+  {
+    "id": "tui.status.label_project",
+    "other": "projet"
+  },
+  {
+    "id": "tui.status.label_context",
+    "other": "contexte"
+  },
+  {
+    "id": "tui.status.label_left",
+    "other": "reste"
+  },
+  {
+    "id": "tui.status.label_cost",
+    "other": "coût"
+  },
+  {
+    "id": "tui.status.label_open",
+    "other": "ouvert"
+  },
+  {
+    "id": "tui.status.no_measurement",
+    "other": "aucune mesure pour l’instant"
+  },
+  {
+    "id": "tui.status.since_open",
+    "other": "depuis l’ouverture de cet onglet"
+  },
+  {
+    "id": "tui.render.compacted",
+    "other": "compacté : {{.Range}}"
+  },
+  {
+    "id": "tui.render.last_compact",
+    "other": "dernier compactage : {{.Range}}"
+  },
+  {
+    "id": "tui.status.compact_waits",
+    "other": "le compactage attend la fin du tour en cours"
+  },
+  {
+    "id": "tui.status.compact_no_session",
+    "other": "aucune session vivante à compacter"
+  },
+  {
+    "id": "tui.statusline.field_mode",
+    "other": "mode et"
+  },
+  {
+    "id": "tui.statusline.note_mode",
+    "other": "Manuel, Édits acceptés, Plan, Auto en rouge"
+  },
+  {
+    "id": "tui.statusline.field_vendor",
+    "other": "vendeur et modèle"
+  },
+  {
+    "id": "tui.statusline.note_vendor",
+    "other": "claude, codex, cursor"
+  },
+  {
+    "id": "tui.statusline.field_repo",
+    "other": "dépôt et branche"
+  },
+  {
+    "id": "tui.statusline.note_repo",
+    "other": "herrscher:feat/tui-v2"
+  },
+  {
+    "id": "tui.statusline.field_wt",
+    "other": "worktree"
+  },
+  {
+    "id": "tui.statusline.note_wt",
+    "other": "(worktree) si à elle"
+  },
+  {
+    "id": "tui.statusline.field_ctx",
+    "other": "jauge de contexte"
+  },
+  {
+    "id": "tui.statusline.note_ctx",
+    "other": "━, palier 80 %, rouge 95 %"
+  },
+  {
+    "id": "tui.statusline.field_detail",
+    "other": "tokens du contexte"
+  },
+  {
+    "id": "tui.statusline.note_detail",
+    "other": "82k/200k"
+  },
+  {
+    "id": "tui.statusline.field_cost",
+    "other": "coût"
+  },
+  {
+    "id": "tui.statusline.note_cost",
+    "other": "facturation réelle"
+  },
+  {
+    "id": "tui.statusline.field_queue",
+    "other": "file en attente"
+  },
+  {
+    "id": "tui.statusline.note_queue",
+    "other": "○ file, ↪ réorientations"
+  },
+  {
+    "id": "tui.statusline.field_bg",
+    "other": "tâches de fond"
+  },
+  {
+    "id": "tui.statusline.note_bg",
+    "other": "go test -race en fond"
+  },
+  {
+    "id": "tui.statusline.field_dur",
+    "other": "durée du tour"
+  },
+  {
+    "id": "tui.statusline.note_dur",
+    "other": "1m12s"
+  },
+  {
+    "id": "tui.statusline.field_quota",
+    "other": "quotas 5 h et 7 j"
+  },
+  {
+    "id": "tui.statusline.note_quota",
+    "other": "abonnement Claude"
+  },
+  {
+    "id": "tui.status.queued_count",
+    "one": "{{.Count}} en file",
+    "other": "{{.Count}} en file"
+  },
+  {
+    "id": "tui.status.background_count",
+    "one": "{{.Count}} en fond",
+    "other": "{{.Count}} en fond"
+  },
+  {
+    "id": "tui.status.turn",
+    "other": "tour"
+  },
+  {
+    "id": "tui.status.worktree_mark",
+    "other": "(worktree)"
+  },
+  {
+    "id": "tui.summary.title",
+    "other": "Résumé"
+  },
+  {
+    "id": "tui.summary.field_vendors",
+    "other": "vendeurs"
+  },
+  {
+    "id": "tui.summary.field_gateways",
+    "other": "passerelles"
+  },
+  {
+    "id": "tui.summary.field_memory",
+    "other": "mémoire"
+  },
+  {
+    "id": "tui.summary.field_skills",
+    "other": "skills"
+  },
+  {
+    "id": "tui.summary.field_cron",
+    "other": "cron"
+  },
+  {
+    "id": "tui.summary.field_policy",
+    "other": "politique"
+  },
+  {
+    "id": "tui.summary.note_agent_written",
+    "other": "écrite par l’agent"
+  },
+  {
+    "id": "tui.summary.note_same_rule",
+    "other": "même règle partout"
+  },
+  {
+    "id": "tui.summary.skills_value",
+    "other": "{{.Total}} · {{.Pending}} à approuver"
+  },
+  {
+    "id": "tui.summary.cron_turns",
+    "one": "{{.Count}} tour",
+    "other": "{{.Count}} tours"
+  },
+  {
+    "id": "tui.summary.rules",
+    "one": "{{.Count}} règle",
+    "other": "{{.Count}} règles"
+  },
+  {
+    "id": "tui.summary.denies",
+    "one": "{{.Count}} noire",
+    "other": "{{.Count}} noires"
+  },
+  {
+    "id": "tui.render.subagent_retry",
+    "other": "délai dépassé, relancé"
+  },
+  {
+    "id": "tui.render.unfold",
+    "other": "déplier"
+  },
+  {
+    "id": "tui.render.fold",
+    "other": "replier"
+  },
+  {
+    "id": "tui.render.thinking",
+    "other": "Réflexion"
+  },
+  {
+    "id": "tui.render.tokens_unit",
+    "other": "tokens"
+  },
+  {
+    "id": "tui.compose.remove_pending",
+    "other": "retirer"
+  },
+  {
+    "id": "tui.status.clipboard_failed",
+    "other": "collage impossible : {{.Reason}}"
+  },
+  {
+    "id": "tui.session.close_none",
+    "other": "aucune session à fermer ici"
+  },
+  {
+    "id": "tui.session.rename_usage",
+    "other": "/rename <nom> : donne le nouveau nom de la session"
+  },
+  {
+    "id": "tui.session.rename_none",
+    "other": "aucune session à renommer ici"
+  },
+  {
+    "id": "tui.session.handoff_none",
+    "other": "aucune session à passer ici"
+  },
+  {
+    "id": "tui.render.earlier",
+    "other": "plus tôt"
+  },
+  {
+    "id": "tui.render.turn_reset",
+    "other": "tour réinitialisé"
+  },
+  {
+    "id": "tui.render.turn_abandoned",
+    "other": "tour abandonné"
+  },
+  {
+    "id": "tui.palette.navigate",
+    "other": "naviguer"
+  },
+  {
+    "id": "tui.palette.page",
+    "other": "page"
+  },
+  {
+    "id": "tui.palette.complete",
+    "other": "compléter"
+  },
+  {
+    "id": "tui.status.disconnected",
+    "other": "· déconnecté"
+  },
+  {
+    "id": "tui.spinner.interrupt",
+    "other": "pour interrompre"
+  },
+  {
+    "id": "tui.status.enhanced_keys_unavailable",
+    "other": "touches étendues indisponibles : {{.Reason}}"
+  },
+  {
+    "id": "tui.status.notify_failed",
+    "other": "notification impossible : {{.Reason}}"
+  },
+  {
+    "id": "tui.status.nothing_to_interrupt",
+    "other": "rien à interrompre : {{.Key}} à nouveau pour quitter"
+  },
+  {
+    "id": "tui.status.quit_busy",
+    "one": "{{.Count}} session en cours sera arrêtée : {{.Key}} à nouveau pour quitter",
+    "other": "{{.Count}} sessions en cours seront arrêtées : {{.Key}} à nouveau pour quitter"
+  },
+  {
+    "id": "tui.render.nothing_to_fold",
+    "other": "rien à replier dans ce tour"
+  },
+  {
+    "id": "tui.approval.accelerate",
+    "other": "accélérer le délai"
+  },
+  {
+    "id": "tui.approval.allow_always",
+    "other": "Toujours"
+  },
+  {
+    "id": "tui.approval.allow_always_note",
+    "other": "règle ajoutée à l’hôte"
+  },
+  {
+    "id": "tui.approval.allow_once",
+    "other": "Une fois"
+  },
+  {
+    "id": "tui.approval.allow_once_note",
+    "other": "seulement cette commande"
+  },
+  {
+    "id": "tui.approval.allow_session",
+    "other": "Pour la session"
+  },
+  {
+    "id": "tui.approval.allow_session_note",
+    "other": "accepté jusqu’à la fin de la session"
+  },
+  {
+    "id": "tui.approval.asked_by_host",
+    "other": " · demandée par l’hôte"
+  },
+  {
+    "id": "tui.approval.countdown",
+    "other": "refus dans {{.Time}}"
+  },
+  {
+    "id": "tui.approval.deny_reason",
+    "other": "Refuser avec une raison"
+  },
+  {
+    "id": "tui.approval.deny_reason_note",
+    "other": "la raison repart à l’agent comme un message"
+  },
+  {
+    "id": "tui.approval.judge",
+    "other": "juge"
+  },
+  {
+    "id": "tui.approval.project",
+    "other": "projet"
+  },
+  {
+    "id": "tui.approval.reason_label",
+    "other": "raison"
+  },
+  {
+    "id": "tui.approval.reason_sent",
+    "other": "raison envoyée à l’agent"
+  },
+  {
+    "id": "tui.approval.risk_high",
+    "other": "risque élevé"
+  },
+  {
+    "id": "tui.approval.risk_low",
+    "other": "risque faible"
+  },
+  {
+    "id": "tui.approval.risk_medium",
+    "other": "risque moyen"
+  },
+  {
+    "id": "tui.approval.timed_out",
+    "other": "approbation refusée par défaut : personne n’a répondu à temps"
+  },
+  {
+    "id": "tui.approval.title",
+    "other": "! Approbation"
+  },
+  {
+    "id": "tui.approval.worktree",
+    "other": "worktree"
+  },
+  {
+    "id": "tui.common.accept",
+    "other": "valider"
+  },
+  {
+    "id": "tui.common.back",
+    "other": "retour"
+  },
+  {
+    "id": "tui.common.change_mode",
+    "other": "changer de mode"
+  },
+  {
+    "id": "tui.common.choose",
+    "other": "choisir"
+  },
+  {
+    "id": "tui.common.page",
+    "other": "page"
+  },
+  {
+    "id": "tui.common.switch",
+    "other": "basculer"
+  },
+  {
+    "id": "tui.editor.closed_error",
+    "other": "éditeur fermé en erreur : {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.binding_failed",
+    "other": "{{.Label}} : {{.Spec}} : {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.commands",
+    "other": "/ commandes"
+  },
+  {
+    "id": "tui.keys.default_binding",
+    "other": "liaison par défaut {{.Chord}} : {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.duplicate",
+    "other": "{{.Label}} : {{.Reason}} : {{.Spec}}"
+  },
+  {
+    "id": "tui.keys.file_failed",
+    "other": "keybindings.json impossible : {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.file_ignored",
+    "other": "{{.Label}} ignoré : {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.files",
+    "other": "@ fichiers"
+  },
+  {
+    "id": "tui.keys.help.copy_code",
+    "other": "copier le code"
+  },
+  {
+    "id": "tui.keys.help.copy_reply",
+    "other": "copier la réponse"
+  },
+  {
+    "id": "tui.keys.help.fold_code",
+    "other": "replier le code"
+  },
+  {
+    "id": "tui.keys.help.fold_turns",
+    "other": "replier les tours"
+  },
+  {
+    "id": "tui.keys.help.history",
+    "other": "recherche historique"
+  },
+  {
+    "id": "tui.keys.help.image_paste",
+    "other": "coller une image"
+  },
+  {
+    "id": "tui.keys.help.mouse",
+    "other": "libérer la souris"
+  },
+  {
+    "id": "tui.keys.help.next_link",
+    "other": "lien suivant"
+  },
+  {
+    "id": "tui.keys.help.next_turn",
+    "other": "tour suivant"
+  },
+  {
+    "id": "tui.keys.help.open",
+    "other": "l’ouvrir"
+  },
+  {
+    "id": "tui.keys.help.previous_turn",
+    "other": "tour précédent"
+  },
+  {
+    "id": "tui.keys.help.queue_submit",
+    "other": "envoie la file"
+  },
+  {
+    "id": "tui.keys.help.redirect",
+    "other": "réoriente"
+  },
+  {
+    "id": "tui.keys.help.search",
+    "other": "chercher"
+  },
+  {
+    "id": "tui.keys.help.sessions",
+    "other": "sessions"
+  },
+  {
+    "id": "tui.keys.help.stash",
+    "other": "brouillon de côté"
+  },
+  {
+    "id": "tui.keys.help.tool_expand",
+    "other": "déplier commandes et diffs"
+  },
+  {
+    "id": "tui.keys.ignored",
+    "other": "terminal.toml [keys] ignoré : {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.inconsistent",
+    "other": "raccourcis incohérents : {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.interrupted",
+    "one": "session interrompue : {{.Count}}",
+    "other": "sessions interrompues : {{.Count}}"
+  },
+  {
+    "id": "tui.keys.newline",
+    "other": "{{.Keys}} ou \\⏎ nouvelle ligne"
+  },
+  {
+    "id": "tui.keys.newline_idle",
+    "other": ", {{.Keys}} nouvelle ligne au repos"
+  },
+  {
+    "id": "tui.keys.no_config_dir",
+    "other": "dossier de configuration inconnu"
+  },
+  {
+    "id": "tui.keys.none_busy",
+    "other": "aucune session occupée"
+  },
+  {
+    "id": "tui.keys.reloaded",
+    "other": "raccourcis rechargés"
+  },
+  {
+    "id": "tui.keys.shell",
+    "other": "! commande shell"
+  },
+  {
+    "id": "tui.keys.unavailable",
+    "other": "{{.Action}} n'est pas encore disponible dans herrscher"
+  },
+  {
+    "id": "tui.keys.unavailable_moved",
+    "other": "{{.Action}} n'est pas encore disponible dans herrscher : la fonction est sur {{.Chord}}"
+  },
+  {
+    "id": "tui.keys.unknown_action",
+    "other": "{{.Label}} : {{.Spec}} : {{.Reason}} : {{.Action}}"
+  },
+  {
+    "id": "tui.keys.unknown_context",
+    "other": "{{.Label}} : {{.Reason}} : {{.Context}}"
+  },
+  {
+    "id": "tui.mode.auto.label",
+    "other": "Auto"
+  },
+  {
+    "id": "tui.mode.auto.say",
+    "other": "rien ne demande : éditions et commandes passent, sauf ce qu’une règle de refus bloque"
+  },
+  {
+    "id": "tui.mode.edits.label",
+    "other": "Édits acceptés"
+  },
+  {
+    "id": "tui.mode.edits.say",
+    "other": "les éditions passent, les commandes demandent encore"
+  },
+  {
+    "id": "tui.mode.manual.label",
+    "other": "Manuel"
+  },
+  {
+    "id": "tui.mode.manual.say",
+    "other": "chaque édition et chaque commande demande une approbation"
+  },
+  {
+    "id": "tui.mode.no_session",
+    "other": "aucune session pour changer de mode"
+  },
+  {
+    "id": "tui.mode.plan.label",
+    "other": "Plan"
+  },
+  {
+    "id": "tui.mode.plan.say",
+    "other": "lecture seule : l’agent propose un plan, tu le valides avant toute écriture"
+  },
+  {
+    "id": "tui.mode.plan_continue.label",
+    "other": "Continuer à planifier"
+  },
+  {
+    "id": "tui.mode.plan_continue.say",
+    "other": "dire ce qui change dans le plan"
+  },
+  {
+    "id": "tui.mode.plan_edits.label",
+    "other": "Valider et passer en édits acceptés"
+  },
+  {
+    "id": "tui.mode.plan_edits.say",
+    "other": "l’agent écrit sans redemander, les commandes demandent"
+  },
+  {
+    "id": "tui.mode.plan_kept",
+    "other": "Le plan reste ouvert. Dis ce qui change : l’agent le réécrit sans rien toucher."
+  },
+  {
+    "id": "tui.mode.plan_manual.label",
+    "other": "Valider en manuel"
+  },
+  {
+    "id": "tui.mode.plan_manual.say",
+    "other": "chaque édition passera par une approbation"
+  },
+  {
+    "id": "tui.mode.plan_nothing_written",
+    "other": "rien n’est écrit avant ta validation"
+  },
+  {
+    "id": "tui.mode.plan_proposed",
+    "other": "Plan proposé"
+  },
+  {
+    "id": "tui.palette.cmd.account",
+    "other": "lister les comptes de la session, ou en choisir un (sans argument : la liste ; fresh ouvre une nouvelle conversation sous ce compte)"
+  },
+  {
+    "id": "tui.palette.cmd.agents",
+    "other": "voir toutes les sessions par état"
+  },
+  {
+    "id": "tui.palette.cmd.attach",
+    "other": "joindre un fichier local au prochain message"
+  },
+  {
+    "id": "tui.palette.cmd.capabilities",
+    "other": "ce que ce terminal sait afficher, et ce vers quoi il retombe"
+  },
+  {
+    "id": "tui.palette.cmd.clear",
+    "other": "vider la transcription de cet onglet"
+  },
+  {
+    "id": "tui.palette.cmd.context",
+    "other": "ce qui occupe le contexte : système, outils, mémoire, skills, fichiers lus, conversation"
+  },
+  {
+    "id": "tui.palette.cmd.copy",
+    "other": "copier la dernière réponse (ou le tour, ou tout) dans le presse-papiers"
+  },
+  {
+    "id": "tui.palette.cmd.handoff",
+    "other": "ouvrir une nouvelle session avec le brief de celle-ci"
+  },
+  {
+    "id": "tui.palette.cmd.help",
+    "other": "afficher les raccourcis"
+  },
+  {
+    "id": "tui.palette.cmd.keybindings",
+    "other": "ouvrir keybindings.json pour changer les raccourcis"
+  },
+  {
+    "id": "tui.palette.cmd.mouse",
+    "other": "rendre la souris au terminal pour que sa sélection native fonctionne"
+  },
+  {
+    "id": "tui.palette.cmd.notify",
+    "other": "alterner les notifications : fin de tour, approbation, ou les deux"
+  },
+  {
+    "id": "tui.palette.cmd.plugins",
+    "other": "les plugins dont ce binaire est composé"
+  },
+  {
+    "id": "tui.palette.cmd.queue",
+    "other": "voir la file de messages"
+  },
+  {
+    "id": "tui.palette.cmd.rename",
+    "other": "renommer cette session"
+  },
+  {
+    "id": "tui.palette.cmd.resume",
+    "other": "rouvrir une session archivée"
+  },
+  {
+    "id": "tui.palette.cmd.review",
+    "other": "revue guidée des fichiers du tour : relus, consignes, commit et PR"
+  },
+  {
+    "id": "tui.palette.cmd.session_switch",
+    "other": "basculer entre les sessions ouvertes"
+  },
+  {
+    "id": "tui.palette.cmd.skills",
+    "other": "lister les skills disponibles"
+  },
+  {
+    "id": "tui.palette.cmd.statusline",
+    "other": "configurer la barre d’état : champs, ordre, ou un script qui la dessine"
+  },
+  {
+    "id": "tui.palette.cmd.theme",
+    "other": "choisir le thème de couleurs et les options de rendu"
+  },
+  {
+    "id": "tui.palette.cmd.usage",
+    "other": "coût, jetons et contexte de cette session"
+  },
+  {
+    "id": "tui.palette.no_match",
+    "other": "aucune correspondance"
+  },
+  {
+    "id": "tui.picker.empty",
+    "other": "aucune session"
+  },
+  {
+    "id": "tui.picker.filtered",
+    "other": "filtre : {{.Query}} · {{.Footer}}"
+  },
+  {
+    "id": "tui.picker.more",
+    "one": "+1 autre",
+    "other": "+{{.Count}} autres"
+  },
+  {
+    "id": "tui.picker.state_archived",
+    "other": "archivée"
+  },
+  {
+    "id": "tui.picker.state_live",
+    "other": "active"
+  },
+  {
+    "id": "tui.queue.after_tool",
+    "other": "après le prochain outil"
+  },
+  {
+    "id": "tui.queue.busy_note",
+    "other": "partent dans l’ordre à la fin du tour"
+  },
+  {
+    "id": "tui.queue.drafts",
+    "one": "brouillon ({{.Count}}) : « {{.Text}} »",
+    "other": "brouillons ({{.Count}}) : « {{.Text}} »"
+  },
+  {
+    "id": "tui.queue.empty",
+    "other": "la file est vide"
+  },
+  {
+    "id": "tui.queue.end_of_turn",
+    "other": "fin du tour"
+  },
+  {
+    "id": "tui.queue.file_mark",
+    "other": "○ file"
+  },
+  {
+    "id": "tui.queue.leave",
+    "other": "quitter"
+  },
+  {
+    "id": "tui.queue.list",
+    "one": "file ({{.Count}}) :\n{{.Lines}}",
+    "other": "file ({{.Count}}) :\n{{.Lines}}"
+  },
+  {
+    "id": "tui.queue.more",
+    "one": "… {{.Count}} de plus",
+    "other": "… {{.Count}} de plus"
+  },
+  {
+    "id": "tui.queue.ready",
+    "other": "prêts à partir"
+  },
+  {
+    "id": "tui.queue.redirect_mark",
+    "other": "↪ réorienter"
+  },
+  {
+    "id": "tui.queue.remove",
+    "other": "✕ retirer"
+  },
+  {
+    "id": "tui.queue.remove_action",
+    "other": "retirer"
+  },
+  {
+    "id": "tui.queue.reorder",
+    "other": "réordonner"
+  },
+  {
+    "id": "tui.queue.resume_last",
+    "other": "reprendre le dernier"
+  },
+  {
+    "id": "tui.queue.send_all",
+    "other": "tout envoyer maintenant"
+  },
+  {
+    "id": "tui.queue.title",
+    "other": "En file"
+  },
+  {
+    "id": "tui.rewind.both.detail",
+    "other": "le code et la conversation reviennent à ce message"
+  },
+  {
+    "id": "tui.rewind.both.label",
+    "other": "Restaurer le code et la conversation"
+  },
+  {
+    "id": "tui.rewind.cancel",
+    "other": "Annuler"
+  },
+  {
+    "id": "tui.rewind.code.detail",
+    "other": "la conversation reste"
+  },
+  {
+    "id": "tui.rewind.code.label",
+    "other": "Restaurer le code seulement"
+  },
+  {
+    "id": "tui.rewind.confirm_keys",
+    "other": "y confirmer · n annuler"
+  },
+  {
+    "id": "tui.rewind.conversation.detail",
+    "other": "la conversation reprend à ce message"
+  },
+  {
+    "id": "tui.rewind.conversation.label",
+    "other": "Restaurer la conversation seulement"
+  },
+  {
+    "id": "tui.rewind.done",
+    "other": "revenu au message {{.Index}} · {{.What}}"
+  },
+  {
+    "id": "tui.rewind.done.both",
+    "other": "code et conversation restaurés"
+  },
+  {
+    "id": "tui.rewind.done.code",
+    "other": "code restauré"
+  },
+  {
+    "id": "tui.rewind.done.conversation",
+    "other": "conversation reprise"
+  },
+  {
+    "id": "tui.rewind.failed",
+    "other": "retour : {{.Reason}}"
+  },
+  {
+    "id": "tui.rewind.files",
+    "one": "{{.Count}} fichier",
+    "other": "{{.Count}} fichiers"
+  },
+  {
+    "id": "tui.rewind.files_since",
+    "other": "fichiers touchés depuis : "
+  },
+  {
+    "id": "tui.rewind.fork.detail",
+    "other": "/fork : nouvelle session, l’originale intacte"
+  },
+  {
+    "id": "tui.rewind.fork.label",
+    "other": "Forker à partir d’ici"
+  },
+  {
+    "id": "tui.rewind.fork_created",
+    "other": "fork créé : {{.Name}}"
+  },
+  {
+    "id": "tui.rewind.fork_here",
+    "other": "forker d’ici"
+  },
+  {
+    "id": "tui.rewind.fork_opened",
+    "other": "fork ouvert : {{.Name}}"
+  },
+  {
+    "id": "tui.rewind.fork_refused",
+    "other": "fork refusé : {{.Reason}}"
+  },
+  {
+    "id": "tui.rewind.go_to",
+    "other": "revenir à ce message"
+  },
+  {
+    "id": "tui.rewind.hint",
+    "other": "un checkpoint avant chaque message"
+  },
+  {
+    "id": "tui.rewind.message",
+    "other": "Message de {{.At}} : « {{.Text}} »"
+  },
+  {
+    "id": "tui.rewind.no_checkpoint",
+    "other": "retour : aucun checkpoint pour {{.Name}}"
+  },
+  {
+    "id": "tui.rewind.no_file",
+    "other": "aucun fichier"
+  },
+  {
+    "id": "tui.rewind.no_session",
+    "other": "retour : aucune session ouverte"
+  },
+  {
+    "id": "tui.rewind.refused",
+    "other": "retour refusé : {{.Reason}}"
+  },
+  {
+    "id": "tui.rewind.sure_both",
+    "other": "Restaurer le code et la conversation au message de {{.When}} ? Les fichiers reviennent à cet état et la conversation reprend à ce message."
+  },
+  {
+    "id": "tui.rewind.sure_code",
+    "other": "Restaurer le code au message de {{.When}} ? Les fichiers du worktree reviennent à cet état."
+  },
+  {
+    "id": "tui.rewind.sure_conversation",
+    "other": "Restaurer la conversation au message de {{.When}} ? Les fichiers ne bougent pas."
+  },
+  {
+    "id": "tui.rewind.title",
+    "other": "Revenir en arrière"
+  },
+  {
+    "id": "tui.rewind.undo",
+    "other": "annuler le retour"
+  },
+  {
+    "id": "tui.rewind.unreadable",
+    "other": "retour : réponse illisible"
+  },
+  {
+    "id": "tui.rewind.unsupported",
+    "other": "conversation non reprise : le backend de cette session ne garde pas de position par message"
+  },
+  {
+    "id": "tui.search.label",
+    "other": "recherche : "
+  },
+  {
+    "id": "tui.search.lines",
+    "one": "{{.Count}} ligne",
+    "other": "{{.Count}} lignes"
+  },
+  {
+    "id": "tui.search.take",
+    "other": "reprendre"
+  },
+  {
+    "id": "tui.theme.name.sombre",
+    "other": "Sombre"
+  },
+  {
+    "id": "tui.theme.name.clair",
+    "other": "Clair"
+  },
+  {
+    "id": "tui.theme.name.terminal",
+    "other": "Terminal"
+  },
+  {
+    "id": "tui.theme.name.contraste",
+    "other": "Contraste élevé"
+  },
+  {
+    "id": "tui.common.working",
+    "other": "En cours…"
+  },
+  {
+    "id": "tui.theme.problem.builtin",
+    "other": "thème {{.Name}} ignoré : ce nom est intégré"
+  },
+  {
+    "id": "tui.theme.problem.rejected",
+    "other": "thème {{.Name}} ignoré : {{.Reason}}"
+  },
+  {
+    "id": "tui.theme.toml_ignored",
+    "other": "terminal.toml ignoré : {{.Reason}}"
+  },
+  {
+    "id": "tui.theme.toml_invalid",
+    "other": "terminal.toml : {{.Reason}}"
+  },
+  {
+    "id": "tui.theme.missing",
+    "other": "thème {{.Name}} introuvable : retour au thème {{.Fallback}}"
+  },
+  {
+    "id": "tui.theme.font.installed",
+    "other": "installée"
+  },
+  {
+    "id": "tui.theme.font.absent",
+    "other": "absente"
+  },
+  {
+    "id": "tui.theme.font.unknown",
+    "other": "inconnue"
+  },
+  {
+    "id": "tui.theme.font.checking",
+    "other": "vérification…"
+  },
+  {
+    "id": "tui.theme.copy_failed",
+    "other": "copie impossible"
+  },
+  {
+    "id": "tui.theme.copied",
+    "other": "{{.Label}} copiée"
+  },
+  {
+    "id": "tui.theme.font.head_terminal",
+    "other": "terminal détecté"
+  },
+  {
+    "id": "tui.theme.font.head_unknown",
+    "other": "terminal non reconnu"
+  },
+  {
+    "id": "tui.theme.font.head_install",
+    "other": "installer Obel Mono"
+  },
+  {
+    "id": "tui.theme.font.install_note",
+    "other": "sans sudo, vérifie le SHA-256 de chaque zip · licence SIL OFL 1.1"
+  },
+  {
+    "id": "tui.theme.font.mask_note",
+    "other": "ss01 masque les clés d’API à l’écran, le presse-papiers garde tout"
+  },
+  {
+    "id": "tui.theme.font.masked_note",
+    "other": "sans réglage de features : famille « Obel Mono Masked »"
+  },
+  {
+    "id": "tui.theme.font.keys",
+    "other": "c copier la commande · y copier la config · f fermer"
+  },
+  {
+    "id": "tui.theme.font.family_line",
+    "other": "{{.Family}} · recommandée"
+  },
+  {
+    "id": "tui.theme.font.row",
+    "other": "police"
+  },
+  {
+    "id": "tui.theme.desc.sombre",
+    "other": "fond sombre · défaut"
+  },
+  {
+    "id": "tui.theme.desc.clair",
+    "other": "le même sur fond clair"
+  },
+  {
+    "id": "tui.theme.desc.terminal",
+    "other": "16 couleurs ANSI du terminal"
+  },
+  {
+    "id": "tui.theme.desc.contraste",
+    "other": "écarts maximaux"
+  },
+  {
+    "id": "tui.theme.file_absent",
+    "other": "{{.File}} absent : {{.Action}}"
+  },
+  {
+    "id": "tui.theme.create_it",
+    "other": "pour le créer"
+  },
+  {
+    "id": "tui.theme.not_saved",
+    "other": "thème non enregistré : {{.Reason}}"
+  },
+  {
+    "id": "tui.theme.not_opened",
+    "other": "thème non ouvert : {{.Reason}}"
+  },
+  {
+    "id": "tui.theme.editor_failed",
+    "other": "éditeur : {{.Reason}}"
+  },
+  {
+    "id": "tui.theme.title",
+    "other": "Thème"
+  },
+  {
+    "id": "tui.theme.live_preview",
+    "other": "aperçu en direct"
+  },
+  {
+    "id": "tui.theme.font.explain_one",
+    "other": "un TUI ne choisit pas sa police : seule une appli"
+  },
+  {
+    "id": "tui.theme.font.explain_two",
+    "other": "qui dessine sa propre fenêtre le peut"
+  },
+  {
+    "id": "tui.theme.detection",
+    "other": "Détection"
+  },
+  {
+    "id": "tui.theme.keep",
+    "other": "garder"
+  },
+  {
+    "id": "tui.theme.back",
+    "other": "revenir"
+  },
+  {
+    "id": "tui.theme.anywhere",
+    "other": "thème, depuis n’importe où"
+  },
+  {
+    "id": "tui.theme.edit_file",
+    "other": "éditer {{.File}}"
+  },
+  {
+    "id": "tui.theme.render",
+    "other": "Rendu"
+  },
+  {
+    "id": "tui.theme.in_theme",
+    "other": "dans le thème"
+  },
+  {
+    "id": "tui.theme.row.glyphs",
+    "other": "glyphes"
+  },
+  {
+    "id": "tui.theme.row.borders",
+    "other": "bordures"
+  },
+  {
+    "id": "tui.theme.row.density",
+    "other": "densité"
+  },
+  {
+    "id": "tui.theme.row.text",
+    "other": "texte"
+  },
+  {
+    "id": "tui.theme.row.background",
+    "other": "fond"
+  },
+  {
+    "id": "tui.theme.background.unknown",
+    "other": "inconnu"
+  },
+  {
+    "id": "tui.theme.background.not_read",
+    "other": "pas lu au démarrage"
+  },
+  {
+    "id": "tui.theme.background.read_osc11",
+    "other": "lu par OSC 11 au démarrage"
+  },
+  {
+    "id": "tui.theme.background.dark",
+    "other": "sombre"
+  },
+  {
+    "id": "tui.theme.background.light",
+    "other": "clair"
+  },
+  {
+    "id": "tui.theme.no_color",
+    "other": "NO_COLOR respecté : marqueurs et gras seuls"
+  },
+  {
+    "id": "tui.theme.glyph.nerd",
+    "other": "nerd font"
+  },
+  {
+    "id": "tui.theme.border.square",
+    "other": "carrées"
+  },
+  {
+    "id": "tui.theme.border.none",
+    "other": "aucune"
+  },
+  {
+    "id": "tui.theme.border.rounded",
+    "other": "arrondies"
+  },
+  {
+    "id": "tui.theme.density.compact",
+    "other": "compacte"
+  },
+  {
+    "id": "tui.theme.density.normal",
+    "other": "normale"
+  },
+  {
+    "id": "tui.theme.flag.bold",
+    "other": "gras"
+  },
+  {
+    "id": "tui.theme.flag.italic",
+    "other": "italique"
+  },
+  {
+    "id": "tui.theme.flag.auto",
+    "other": "auto"
+  },
+  {
+    "id": "tui.theme.auto_hint",
+    "other": "fond sombre → Sombre, clair → Clair"
+  },
+  {
+    "id": "tui.theme.preview_label",
+    "other": "APERÇU · {{.Name}}{{.State}}"
+  },
+  {
+    "id": "tui.theme.not_kept",
+    "other": " · pas encore gardé"
+  },
+  {
+    "id": "tui.theme.kept",
+    "other": " · gardé"
+  },
+  {
+    "id": "tui.theme.selected_line",
+    "other": "ligne sélectionnée, en vidéo inverse"
+  },
+  {
+    "id": "tui.theme.approval.choose",
+    "other": "choisir"
+  },
+  {
+    "id": "tui.theme.approval.accept",
+    "other": "valider"
+  },
+  {
+    "id": "tui.theme.approval.speed_up",
+    "other": "accélérer le délai"
+  },
+  {
+    "id": "tui.theme.legend.queue",
+    "other": "{{.Key}} pendant un tour met maintenant le message en file."
+  },
+  {
+    "id": "tui.theme.legend.added",
+    "other": "ajouté"
+  },
+  {
+    "id": "tui.theme.legend.removed",
+    "other": "retiré"
+  },
+  {
+    "id": "tui.theme.legend.waiting",
+    "other": "attente"
+  },
+  {
+    "id": "tui.theme.legend.notice",
+    "other": "notice"
+  },
+  {
+    "id": "tui.theme.legend.error",
+    "other": "erreur"
+  },
+  {
+    "id": "tui.theme.gauge_label",
+    "other": "ctx"
+  },
+  {
+    "id": "tui.theme.saved_now",
+    "other": "enregistré à l’instant"
+  },
+  {
+    "id": "tui.theme.personal_inherits",
+    "other": "hérite de base, ne nomme que ce qui change"
+  },
+  {
+    "id": "tui.theme.personal_others",
+    "other": "autres thèmes intégrés : clair, terminal, contraste élevé"
+  },
+  {
+    "id": "tui.theme.preview_short",
+    "other": "aperçu"
+  },
+  {
+    "id": "tui.theme.edit",
+    "other": "éditer"
+  },
+  {
+    "id": "tui.theme.copy.command",
+    "other": "commande"
+  },
+  {
+    "id": "tui.theme.copy.config",
+    "other": "configuration"
+  },
+  {
+    "id": "tui.plugins.title",
+    "other": "plugins"
+  },
+  {
+    "id": "tui.plugins.navigate",
+    "other": "naviguer"
+  },
+  {
+    "id": "tui.plugins.choose",
+    "other": "choisir"
+  },
+  {
+    "id": "tui.plugins.none_compiled",
+    "other": "(aucun plugin compilé dans ce binaire)"
+  },
+  {
+    "id": "tui.plugins.more_above",
+    "one": "… {{.Count}} au-dessus",
+    "other": "… {{.Count}} au-dessus"
+  },
+  {
+    "id": "tui.plugins.more_below",
+    "one": "… {{.Count}} en dessous",
+    "other": "… {{.Count}} en dessous"
+  },
+  {
+    "id": "tui.plugins.pinned",
+    "other": "épinglé"
+  },
+  {
+    "id": "tui.plugins.notice.unavailable",
+    "other": "la gestion des plugins n’est pas disponible dans ce binaire"
+  },
+  {
+    "id": "tui.plugins.notice.on_disk",
+    "other": "le changement est sur le disque ; il s’applique au prochain démarrage"
+  },
+  {
+    "id": "tui.plugins.notice.restored",
+    "other": "l’arbre est revenu comme il était ; rien n’a été installé"
+  },
+  {
+    "id": "tui.plugins.notice.left_as_is",
+    "other": "l’arbre est laissé tel quel ; répare-le et relance la construction"
+  },
+  {
+    "id": "tui.plugins.menu.bump",
+    "other": "passer à la dernière version"
+  },
+  {
+    "id": "tui.plugins.menu.pin",
+    "other": "épingler la version installée"
+  },
+  {
+    "id": "tui.plugins.menu.unpin",
+    "other": "désépingler"
+  },
+  {
+    "id": "tui.plugins.menu.version",
+    "other": "version…"
+  },
+  {
+    "id": "tui.plugins.menu.remove",
+    "other": "retirer de la composition"
+  },
+  {
+    "id": "tui.plugins.menu.proceed",
+    "other": "continuer"
+  },
+  {
+    "id": "tui.plugins.menu.abort",
+    "other": "annuler, ne rien changer"
+  },
+  {
+    "id": "tui.plugins.menu.restore",
+    "other": "remettre l’arbre comme il était"
+  },
+  {
+    "id": "tui.plugins.menu.keep",
+    "other": "le garder, je répare à la main"
+  },
+  {
+    "id": "tui.diag.graphics",
+    "other": "graphismes"
+  },
+  {
+    "id": "tui.diag.graphics_kitty",
+    "other": "images en ligne, pleine résolution"
+  },
+  {
+    "id": "tui.diag.graphics_sixel",
+    "other": "images en ligne, résolution sixel"
+  },
+  {
+    "id": "tui.diag.graphics_none",
+    "other": "images en ligne en demi-blocs unicode"
+  },
+  {
+    "id": "tui.diag.links",
+    "other": "hyperliens"
+  },
+  {
+    "id": "tui.diag.links_on",
+    "other": "les liens s’ouvrent depuis le terminal (OSC 8)"
+  },
+  {
+    "id": "tui.diag.links_off",
+    "other": "les liens sont du texte stylé, ouverts à la touche"
+  },
+  {
+    "id": "tui.diag.mouse",
+    "other": "souris"
+  },
+  {
+    "id": "tui.diag.mouse_on",
+    "other": "molette et clic pour choisir un onglet"
+  },
+  {
+    "id": "tui.diag.mouse_off",
+    "other": "défilement par {{.Paging}}"
+  },
+  {
+    "id": "tui.diag.colour",
+    "other": "couleur"
+  },
+  {
+    "id": "tui.diag.colour_true",
+    "other": "la palette exactement comme dessinée"
+  },
+  {
+    "id": "tui.diag.colour_reduced",
+    "other": "la palette ramenée à la couleur la plus proche"
+  },
+  {
+    "id": "tui.diag.terminal",
+    "other": "terminal"
+  },
+  {
+    "id": "tui.diag.note_one",
+    "other": "kitty, ghostty et WezTerm ont tous les rendus ; ailleurs l’image"
+  },
+  {
+    "id": "tui.diag.note_two",
+    "other": "est dessinée en demi-blocs et un lien reste du texte sélectionnable."
+  },
+  {
+    "id": "tui.diag.title",
+    "other": "capacités"
+  },
+  {
+    "id": "tui.diag.remote_off",
+    "other": "désactivé"
+  },
+  {
+    "id": "tui.diag.remote_off_feature",
+    "other": "une image liée par l’agent reste un lien"
+  },
+  {
+    "id": "tui.diag.remote_on",
+    "other": "activé"
+  },
+  {
+    "id": "tui.diag.remote_on_feature",
+    "other": "images récupérées depuis {{.Hosts}}"
+  },
+  {
+    "id": "tui.diag.remote_images",
+    "other": "images distantes"
+  },
+  {
+    "id": "tui.skills.none",
+    "other": "(aucune skill dans {{.Dir}})"
+  },
+  {
+    "id": "tui.skills.browse",
+    "other": "parcourir"
+  },
+  {
+    "id": "tui.skills.page",
+    "other": "page"
+  },
+  {
+    "id": "tui.skills.more",
+    "one": "+{{.Count}} autre · {{.Footer}}",
+    "other": "+{{.Count}} autres · {{.Footer}}"
+  },
+  {
+    "id": "tui.sidebar.since",
+    "other": "· depuis {{.Duration}}"
+  },
+  {
+    "id": "tui.sidebar.session",
+    "other": "Session"
+  },
+  {
+    "id": "tui.sidebar.worktree",
+    "other": "worktree"
+  },
+  {
+    "id": "tui.sidebar.via",
+    "other": "via"
+  },
+  {
+    "id": "tui.sidebar.todos",
+    "other": "Todos"
+  },
+  {
+    "id": "tui.sidebar.subagents",
+    "other": "Sous-agents"
+  },
+  {
+    "id": "tui.sidebar.active_one",
+    "other": "actif"
+  },
+  {
+    "id": "tui.sidebar.active_other",
+    "other": "actifs"
+  },
+  {
+    "id": "tui.sidebar.background",
+    "other": "De fond"
+  },
+  {
+    "id": "tui.sidebar.file_one",
+    "other": "fichier"
+  },
+  {
+    "id": "tui.sidebar.file_other",
+    "other": "fichiers"
+  },
+  {
+    "id": "tui.sidebar.files",
+    "other": "Fichiers"
+  },
+  {
+    "id": "tui.sidebar.context",
+    "other": "Contexte"
+  },
+  {
+    "id": "tui.sidebar.unmeasured",
+    "other": "pas encore mesuré"
+  },
+  {
+    "id": "tui.notify.mode_turn_end",
+    "other": "fin de tour"
+  },
+  {
+    "id": "tui.notify.mode_approval",
+    "other": "approbation"
+  },
+  {
+    "id": "tui.notify.mode_both",
+    "other": "fin de tour et approbation"
+  },
+  {
+    "id": "tui.notify.mode",
+    "other": "notifications : {{.Mode}}"
+  },
+  {
+    "id": "tui.notify.turn_done",
+    "other": "Tour fini"
+  },
+  {
+    "id": "tui.notify.approval_pending",
+    "other": "Approbation en attente"
+  },
+  {
+    "id": "tui.notify.delivery_none",
+    "other": "fenêtre active, rien envoyé"
+  },
+  {
+    "id": "tui.notify.delivery_osc9",
+    "other": "OSC 9 envoyé"
+  },
+  {
+    "id": "tui.notify.delivery_bel",
+    "other": "repli BEL envoyé"
+  },
+  {
+    "id": "tui.notify.ago",
+    "other": "il y a {{.Elapsed}}"
+  },
+  {
+    "id": "tui.notify.jump",
+    "other": "y aller"
+  },
+  {
+    "id": "tui.shell.no_session",
+    "other": "!commande : aucune session ouverte"
+  },
+  {
+    "id": "tui.editor.beat_failed",
+    "other": "signe de vie du brouillon interrompu : {{.Reason}}"
+  },
+  {
+    "id": "tui.editor.not_removed",
+    "other": "brouillon non supprimé : {{.Reason}}"
+  },
+  {
+    "id": "tui.editor.reread_failed",
+    "other": "relecture impossible : {{.Reason}}"
+  },
+  {
+    "id": "tui.editor.unavailable",
+    "other": "éditeur indisponible : {{.Reason}}"
+  },
+  {
+    "id": "tui.mention.complete",
+    "other": "compléter"
+  },
+  {
+    "id": "tui.mouse.drag_select",
+    "other": "glisser pour sélectionner comme d’habitude"
+  },
+  {
+    "id": "tui.mouse.freed",
+    "other": "souris libérée"
+  },
+  {
+    "id": "tui.mouse.resume_hint",
+    "other": "la reprend"
+  },
+  {
+    "id": "tui.mouse.resumed",
+    "other": "souris reprise · la molette fait de nouveau défiler la conversation"
+  },
+  {
+    "id": "tui.mouse.scroll",
+    "other": "défiler"
+  },
+  {
+    "id": "tui.mouse.status",
+    "other": "souris → terminal"
+  },
+  {
+    "id": "tui.open.failed",
+    "other": "ouverture impossible : {{.Reason}}"
+  },
+  {
+    "id": "tui.open.none",
+    "other": "aucun lien sélectionné"
+  },
+  {
+    "id": "tui.open.opening",
+    "other": "ouverture de {{.Target}}"
+  },
+  {
+    "id": "tui.open.pick_one",
+    "other": "en choisit un"
+  },
+  {
+    "id": "tui.open.verb_edit",
+    "other": "↵ éditer"
+  },
+  {
+    "id": "tui.open.verb_open",
+    "other": "↵ ouvrir"
+  },
+  {
+    "id": "tui.diffgit.not_repo",
+    "other": "aucun dépôt git dans le dossier de cette session"
+  },
+  {
+    "id": "tui.diffgit.no_base",
+    "other": "aucune branche de base trouvée (origin/HEAD, master ou main)"
+  },
+  {
+    "id": "tui.diffgit.on_base",
+    "other": "cette branche est la branche de base : pas de PR depuis elle"
+  },
+  {
+    "id": "tui.diffgit.no_arguments",
+    "other": "commande sans argument"
+  },
+  {
+    "id": "tui.diffgit.unknown_tool",
+    "other": "outil inconnu"
+  },
+  {
+    "id": "tui.diffgit.unknown_scope",
+    "other": "portée de diff inconnue"
+  },
+  {
+    "id": "tui.diffgit.unknown_change",
+    "other": "statut de fichier git inconnu"
+  },
+  {
+    "id": "tui.diffgit.malformed_stat",
+    "other": "sortie git inattendue"
+  },
+  {
+    "id": "tui.diffgit.no_pull_number",
+    "other": "aucun numéro de PR dans la sortie de gh"
+  },
+  {
+    "id": "tui.diffpanel.snapshot_failed",
+    "other": "instantané du tour impossible : {{.Reason}}"
+  },
+  {
+    "id": "tui.diffpanel.sent_to",
+    "other": "consigne envoyée sur {{.Path}}"
+  },
+  {
+    "id": "tui.diffpanel.nothing_to_commit",
+    "other": "rien à commiter dans cette portée"
+  },
+  {
+    "id": "tui.diffpanel.commit_failed",
+    "other": "commit échoué : {{.Reason}}"
+  },
+  {
+    "id": "tui.diffpanel.committed",
+    "other": "commit {{.Sha}} {{.Subject}}"
+  },
+  {
+    "id": "tui.diffpanel.pr_failed",
+    "other": "commit {{.Sha}}, PR échouée : {{.Reason}}"
+  },
+  {
+    "id": "tui.diffpanel.pr_opened",
+    "other": "commit {{.Sha}}, PR #{{.Number}} ouverte contre {{.Base}}"
+  },
+  {
+    "id": "tui.diffpanel.title_turn",
+    "other": "Diff du tour"
+  },
+  {
+    "id": "tui.diffpanel.title_review",
+    "other": "Revue"
+  },
+  {
+    "id": "tui.diffpanel.turn",
+    "other": "tour"
+  },
+  {
+    "id": "tui.diffpanel.turn_at",
+    "other": "tour {{.Time}}"
+  },
+  {
+    "id": "tui.diffpanel.branch",
+    "other": "branche"
+  },
+  {
+    "id": "tui.diffpanel.keys_context",
+    "other": "comme /review, en panneau "
+  },
+  {
+    "id": "tui.diffpanel.hint_close",
+    "other": "fermer le panneau"
+  },
+  {
+    "id": "tui.diffpanel.hint_file",
+    "other": "fichier"
+  },
+  {
+    "id": "tui.diffpanel.hint_reviewed",
+    "other": "relu"
+  },
+  {
+    "id": "tui.diffpanel.hint_note",
+    "other": "consigne"
+  },
+  {
+    "id": "tui.diffpanel.commit",
+    "other": "commit"
+  },
+  {
+    "id": "tui.diffpanel.pr",
+    "other": "PR"
+  },
+  {
+    "id": "tui.diffpanel.hint_base",
+    "other": "tour ou branche"
+  },
+  {
+    "id": "tui.diffpanel.loading",
+    "other": "chargement…"
+  },
+  {
+    "id": "tui.diffpanel.branch_ahead",
+    "one": "   branche : {{.Count}} commit de plus sur {{.Base}}",
+    "other": "   branche : {{.Count}} commits de plus sur {{.Base}}"
+  },
+  {
+    "id": "tui.diffpanel.act_reviewed",
+    "other": "marquer relu"
+  },
+  {
+    "id": "tui.diffpanel.act_note",
+    "other": "consigne sur ce fichier"
+  },
+  {
+    "id": "tui.diffpanel.act_commit",
+    "other": "commit du tour"
+  },
+  {
+    "id": "tui.diffpanel.act_commit_pr",
+    "other": "commit puis PR"
+  },
+  {
+    "id": "tui.diffpanel.act_open_editor",
+    "other": "ouvrir dans $EDITOR"
+  },
+  {
+    "id": "tui.diffpanel.no_change_scope",
+    "other": "aucun changement dans cette portée"
+  },
+  {
+    "id": "tui.diffpanel.binary",
+    "other": "binaire"
+  },
+  {
+    "id": "tui.diffpanel.files_summary",
+    "one": "   {{.Count}} fichier ",
+    "other": "   {{.Count}} fichiers "
+  },
+  {
+    "id": "tui.diffpanel.reviewed_count",
+    "other": " · relus {{.Done}}/{{.Total}}"
+  },
+  {
+    "id": "tui.diffpanel.nothing_to_show",
+    "other": "rien à afficher"
+  },
+  {
+    "id": "tui.diffpanel.binary_no_text",
+    "other": "fichier binaire : pas de diff texte"
+  },
+  {
+    "id": "tui.diffpanel.no_text_change",
+    "other": "aucun changement textuel"
+  },
+  {
+    "id": "tui.diffpanel.old_new",
+    "other": "   ancien · nouveau "
+  },
+  {
+    "id": "tui.diffpanel.added",
+    "other": "nouveau"
+  },
+  {
+    "id": "tui.diffpanel.commit_title",
+    "other": "Commit"
+  },
+  {
+    "id": "tui.diffpanel.commit_meta",
+    "one": " · {{.Branch}} · {{.Count}} fichier ",
+    "other": " · {{.Branch}} · {{.Count}} fichiers "
+  },
+  {
+    "id": "tui.diffpanel.author",
+    "other": "auteur "
+  },
+  {
+    "id": "tui.diffpanel.newline",
+    "other": "nouvelle ligne"
+  },
+  {
+    "id": "tui.diffpanel.end_edit",
+    "other": "fin d’édition"
+  },
+  {
+    "id": "tui.diffpanel.edit",
+    "other": "modifier"
+  },
+  {
+    "id": "tui.diffpanel.note_title",
+    "other": "CONSIGNE"
+  },
+  {
+    "id": "tui.diffpanel.note_prompt",
+    "other": "que doit faire l’agent de ce fichier ?"
+  },
+  {
+    "id": "tui.diffpanel.send_to",
+    "other": "envoyer à {{.Session}}"
+  },
+  {
+    "id": "tui.theme.name.personal",
+    "other": "Mon thème"
+  },
+  {
+    "id": "tui.keys.name.esc",
+    "other": "échap"
+  },
+  {
+    "id": "tui.keys.name.space",
+    "other": "espace"
+  },
+  {
+    "id": "tui.keys.name.delete",
+    "other": "suppr"
+  },
+  {
+    "id": "tui.keys.name.home",
+    "other": "début"
+  },
+  {
+    "id": "tui.keys.name.end",
+    "other": "fin"
+  },
+  {
+    "id": "tui.keys.or",
+    "other": "ou"
+  },
+  {
+    "id": "tui.copy.target.reply",
+    "other": "réponse"
+  },
+  {
+    "id": "tui.copy.target.turn",
+    "other": "tour"
+  },
+  {
+    "id": "tui.copy.target.all",
+    "other": "tout"
+  }
+]

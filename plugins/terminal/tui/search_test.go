@@ -142,7 +142,7 @@ func TestFoldingOldTurnsCollapsesThemAndRestoresExactly(t *testing.T) {
 		"  answer",
 	}
 	bounds := []int{0, 3}
-	folded := foldTurns(lines, bounds, 1, testStyles())
+	folded := foldTurns(newTranslator(), lines, bounds, 1, testStyles())
 	if len(folded) != 1+len(lines)-3 {
 		t.Fatalf("the first turn must collapse to one line: %q", folded)
 	}
@@ -153,7 +153,7 @@ func TestFoldingOldTurnsCollapsesThemAndRestoresExactly(t *testing.T) {
 		t.Fatalf("the summary must still say which turn it is: %q", folded[0])
 	}
 
-	again := foldTurns(lines, bounds, 99, testStyles())
+	again := foldTurns(newTranslator(), lines, bounds, 99, testStyles())
 	if strings.Join(again, "\n") != strings.Join(lines, "\n") {
 		t.Fatalf("unfolded lines must be identical to the source: %q", again)
 	}

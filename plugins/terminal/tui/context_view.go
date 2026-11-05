@@ -16,25 +16,20 @@ const (
 )
 
 type contextCategory struct {
-	name string
-	need string
+	nameKey string
+	needKey string
 }
 
 func contextCategories() []contextCategory {
 	return []contextCategory{
-		{name: "système", need: "taille du prompt système, envoyé à chaque tour"},
-		{name: "outils et MCP", need: "taille des schémas d’outils, par serveur MCP"},
-		{name: "mémoire", need: "taille du bloc mémoire injecté dans le tour"},
-		{name: categorySkills, need: "taille des descriptions de skills chargées dans le contexte"},
-		{name: "fichiers lus", need: "tokens de chaque fichier lu par l’agent"},
-		{name: categoryConversation, need: "tokens des tours encore gardés, par tour"},
+		{nameKey: "tui.context.cat_system", needKey: "tui.context.cat_system_need"},
+		{nameKey: "tui.context.cat_tools", needKey: "tui.context.cat_tools_need"},
+		{nameKey: "tui.context.cat_memory", needKey: "tui.context.cat_memory_need"},
+		{nameKey: "tui.context.cat_skills", needKey: "tui.context.cat_skills_need"},
+		{nameKey: "tui.context.cat_files", needKey: "tui.context.cat_files_need"},
+		{nameKey: "tui.context.cat_conversation", needKey: "tui.context.cat_conversation_need"},
 	}
 }
-
-const (
-	categorySkills       = "skills"
-	categoryConversation = "conversation"
-)
 
 const unavailable = "n/a"
 
@@ -85,9 +80,9 @@ func (m *model) contextView() string {
 		lines = append(lines, m.st.dim.Render(note))
 	}
 	lines = append(lines, m.st.dim.Render(joinNonEmpty(
-		m.labelledHint(actContextCompact, "compacter", ctxContext),
-		m.labelledHint(actContextSync, "réafficher", ctxContext),
-		m.labelledHint(actContextClose, "fermer", ctxContext),
+		m.labelledHint(actContextCompact, m.tr.t("tui.context.compact", nil), ctxContext),
+		m.labelledHint(actContextSync, m.tr.t("tui.context.show_again", nil), ctxContext),
+		m.labelledHint(actContextClose, m.tr.t("tui.common.close", nil), ctxContext),
 	)))
 	for i := range lines {
 		lines[i] = cutText(lines[i], width)
@@ -111,7 +106,7 @@ func (m *model) contextHeader() string {
 	if name == "" {
 		name = sessionVerb
 	}
-	return m.st.dim.Render("Contexte  " + joinNonEmpty(name, info.Vendor, modelLabel(info)))
+	return m.st.dim.Render(m.tr.t("tui.context.title", nil) + "  " + joinNonEmpty(name, info.Vendor, modelLabel(info)))
 }
 
 func (m *model) contextTotalLine(used, limit, percent, width int) string {
@@ -126,11 +121,11 @@ func (m *model) contextTotalLine(used, limit, percent, width int) string {
 	if used <= 0 {
 		bar = m.st.dim.Render(strings.Repeat(m.st.glyphs.gaugeEmpty, gaugeWidth))
 	}
-	return m.contextRow("total", bar, value+" · "+pct, compactThresholdLabel(percent), width)
+	return m.contextRow(m.tr.t("tui.context.total", nil), bar, value+" · "+pct, compactThresholdLabel(m.tr, percent), width)
 }
 
 func (m *model) contextCategoryLine(category contextCategory, width int) string {
-	return m.contextRow(category.name, m.st.dim.Render(strings.Repeat(m.st.glyphs.gaugeEmpty, contextBarCols)), unavailable, category.need, width)
+	return m.contextRow(m.tr.t(category.nameKey, nil), m.st.dim.Render(strings.Repeat(m.st.glyphs.gaugeEmpty, contextBarCols)), unavailable, m.tr.t(category.needKey, nil), width)
 }
 
 func (m *model) contextFreeLine(used, limit, width int) string {
@@ -138,7 +133,7 @@ func (m *model) contextFreeLine(used, limit, width int) string {
 	if used > 0 {
 		value = formatTokens(max(0, limit-used))
 	}
-	return m.contextRow("libre", m.st.dim.Render(strings.Repeat(m.st.glyphs.gaugeEmpty, contextBarCols)), value, "place avant que la fenêtre soit pleine", width)
+	return m.contextRow(m.tr.t("tui.context.free", nil), m.st.dim.Render(strings.Repeat(m.st.glyphs.gaugeEmpty, contextBarCols)), value, m.tr.t("tui.context.free_note", nil), width)
 }
 
 func (m *model) contextRow(name, bar, value, note string, width int) string {

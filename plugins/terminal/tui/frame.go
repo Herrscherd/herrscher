@@ -111,7 +111,7 @@ func (m *model) chipsView() string {
 	if chips == "" {
 		return ""
 	}
-	return chips + "  " + m.st.dim.Render(m.labelledHint(actRemovePending, "retirer", chatKeyStack()...))
+	return chips + "  " + m.st.dim.Render(m.labelledHint(actRemovePending, m.tr.t("tui.compose.remove_pending", nil), chatKeyStack()...))
 }
 
 func (m *model) rowsLeft(reserved int) int {
@@ -133,8 +133,8 @@ func (m *model) sidePanelLines() []string {
 	if tab == nil || m.sidebarVisible() {
 		return nil
 	}
-	lines := todoPanel(tab.todos, m.innerWidth(), m.st)
-	return append(lines, subagentPanel(tab.agents, time.Now(), m.innerWidth(), m.st)...)
+	lines := todoPanel(m.tr, tab.todos, m.innerWidth(), m.st)
+	return append(lines, subagentPanel(m.tr, tab.agents, time.Now(), m.innerWidth(), m.st)...)
 }
 
 func fitBlock(lines []string, room int) []string {

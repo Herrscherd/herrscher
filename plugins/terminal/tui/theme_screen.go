@@ -39,7 +39,7 @@ type themeScreen struct {
 	auto     bool
 	saved    bool
 	install  bool
-	problems []string
+	problems []themeProblem
 }
 
 type themeEditedMsg struct{ err error }
@@ -64,7 +64,6 @@ func (s *themeScreen) refresh(catalog themeCatalog) {
 	if catalog.indexOf(themePersonalID) < 0 {
 		placeholder := s.origin
 		placeholder.ID = themePersonalID
-		placeholder.Label = themePersonalName
 		s.themes = append(s.themes, placeholder)
 	}
 	s.paths = catalog.paths
@@ -103,22 +102,22 @@ func (s *themeScreen) keepable() bool {
 	return installed
 }
 
-func themeDescription(themeID string) (string, bool) {
+func themeDescription(trans translator, themeID string) (string, bool) {
 	switch themeID {
 	case themeSombre:
-		return "fond sombre · défaut", true
+		return trans.t("tui.theme.desc.sombre", nil), true
 	case themeClair:
-		return "le même sur fond clair", true
+		return trans.t("tui.theme.desc.clair", nil), true
 	case themeTerminal:
-		return "16 couleurs ANSI du terminal", true
+		return trans.t("tui.theme.desc.terminal", nil), true
 	case themeContraste:
-		return "écarts maximaux", true
+		return trans.t("tui.theme.desc.contraste", nil), true
 	}
 	return "", false
 }
 
-func (s *themeScreen) detail(themeID string) string {
-	if text, ok := themeDescription(themeID); ok {
+func (s *themeScreen) detail(trans translator, themeID string) string {
+	if text, ok := themeDescription(trans, themeID); ok {
 		return text
 	}
 	if path, ok := s.paths[themeID]; ok {
@@ -202,11 +201,11 @@ func themeLookRuns() (map[keyAction]modelRun, error) {
 			return nil
 		}),
 		bind[modelRun](actThemeCopyCommand, func(app *model) tea.Cmd {
-			app.copyObel(obelInstallCommand, "commande")
+			app.copyObel(obelInstallCommand, app.tr.t("tui.theme.copy.command", nil))
 			return nil
 		}),
 		bind[modelRun](actThemeCopyConfig, func(app *model) tea.Cmd {
-			app.copyObel(app.obelConfigText(), "configuration")
+			app.copyObel(app.obelConfigText(), app.tr.t("tui.theme.copy.config", nil))
 			return nil
 		}),
 		bind[modelRun](actThemeGlyphs, themeTweak(func(s *themeScreen) { s.look.Glyphs = nextOption(glyphModes(), s.look.Glyphs) })),
@@ -228,17 +227,17 @@ func themeTweak(change func(*themeScreen)) modelRun {
 
 func (m *model) themeHelpShort() string {
 	return joinNonEmpty(
-		m.pairHint(actSelectPrevious, actSelectNext, "aperçu", ctxThemePicker),
-		m.labelledHint(actSelectAccept, "garder", ctxThemePicker),
-		m.labelledHint(actSelectCancel, "revenir", ctxThemePicker),
-		m.labelledHint(actThemeEdit, "éditer", ctxThemePicker),
+		m.pairHint(actSelectPrevious, actSelectNext, m.tr.t("tui.theme.preview_short", nil), ctxThemePicker),
+		m.labelledHint(actSelectAccept, m.tr.t("tui.theme.keep", nil), ctxThemePicker),
+		m.labelledHint(actSelectCancel, m.tr.t("tui.theme.back", nil), ctxThemePicker),
+		m.labelledHint(actThemeEdit, m.tr.t("tui.theme.edit", nil), ctxThemePicker),
 	)
 }
 
 func (m *model) commitTheme() {
 	screen := m.themeScr
 	if !screen.keepable() {
-		m.flash = "themes/" + themePersonalFile + " absent : " + m.labelledHint(actThemeEdit, "pour le créer", ctxThemePicker)
+		m.flash = m.tr.t("tui.theme.file_absent", map[string]any{"File": "themes/" + themePersonalFile, tplArgAction: m.labelledHint(actThemeEdit, m.tr.t("tui.theme.create_it", nil), ctxThemePicker)})
 		return
 	}
 	preview := screen.preview()
@@ -251,7 +250,7 @@ func (m *model) commitTheme() {
 	section.Bold = overrideSetting(preview.Render.Bold, base.Render.Bold)
 	section.Italic = overrideSetting(preview.Render.Italic, base.Render.Italic)
 	if err := m.saveThemeConfig(section); err != nil {
-		m.flash = "thème non enregistré : " + err.Error()
+		m.flash = m.tr.t("tui.theme.not_saved", map[string]any{tplArgReason: err.Error()})
 		return
 	}
 	screen.origin = preview
@@ -268,7 +267,7 @@ func overrideSetting[Choice comparable](value, inherited Choice) *Choice {
 func (m *model) editThemeFile() tea.Cmd {
 	path, err := m.themeFileForEdit()
 	if err != nil {
-		m.flash = "thème non ouvert : " + err.Error()
+		m.flash = m.tr.t("tui.theme.not_opened", map[string]any{tplArgReason: err.Error()})
 		return nil
 	}
 	return tea.ExecProcess(editorCommand(m.runContext(), path), func(err error) tea.Msg { return themeEditedMsg{err: err} })
@@ -293,7 +292,7 @@ func (m *model) themeFileForEdit() (string, error) {
 func (m *model) handleThemeEdited(msg themeEditedMsg) {
 	m.reloadThemes()
 	if msg.err != nil {
-		m.flash = "éditeur : " + msg.err.Error()
+		m.flash = m.tr.t("tui.theme.editor_failed", map[string]any{tplArgReason: msg.err.Error()})
 	}
 }
 
@@ -355,10 +354,10 @@ func (m *model) themeControlsFitting(width, rows int) []string {
 func (m *model) themeControls(width int, fold themeFold) []string {
 	styles := m.st
 	screen := m.themeScr
-	lines := []string{styles.strong.Render("Thème") + styles.dim.Render(" · /theme · aperçu en direct")}
+	lines := []string{styles.strong.Render(m.tr.t("tui.theme.title", nil)) + styles.dim.Render(" · /theme · "+m.tr.t("tui.theme.live_preview", nil))}
 	lines = append(lines, m.themeListLines(width)...)
 	if len(screen.problems) > 0 {
-		lines = append(lines, styles.dim.Render("thème ignoré : "+screen.problems[0]))
+		lines = append(lines, styles.dim.Render(screen.problems[0].text(m.tr)))
 	}
 	lines = append(lines, "")
 	if fold >= themeFoldHelp {
@@ -366,36 +365,36 @@ func (m *model) themeControls(width int, fold themeFold) []string {
 	} else {
 		lines = append(lines,
 			styles.dim.Render(joinNonEmpty(
-				m.pairHint(actSelectPrevious, actSelectNext, "aperçu en direct", ctxThemePicker),
-				m.labelledHint(actSelectAccept, "garder", ctxThemePicker),
-				m.labelledHint(actSelectCancel, "revenir", ctxThemePicker),
+				m.pairHint(actSelectPrevious, actSelectNext, m.tr.t("tui.theme.live_preview", nil), ctxThemePicker),
+				m.labelledHint(actSelectAccept, m.tr.t("tui.theme.keep", nil), ctxThemePicker),
+				m.labelledHint(actSelectCancel, m.tr.t("tui.theme.back", nil), ctxThemePicker),
 			)),
-			styles.dim.Render(m.labelledHint(actOpenTheme, "thème, depuis n’importe où", chatKeyStack()...)),
-			styles.dim.Render(m.labelledHint(actThemeEdit, "éditer themes/"+themePersonalFile, ctxThemePicker)),
+			styles.dim.Render(m.labelledHint(actOpenTheme, m.tr.t("tui.theme.anywhere", nil), chatKeyStack()...)),
+			styles.dim.Render(m.labelledHint(actThemeEdit, m.tr.t("tui.theme.edit_file", map[string]any{"File": "themes/" + themePersonalFile}), ctxThemePicker)),
 		)
 	}
 	lines = append(lines,
 		"",
-		themeSectionHead(styles, "Rendu", "dans le thème", width),
-		themeOptionRow(styles, "glyphes", glyphModes(), screen.look.Glyphs, glyphLabel, "g"),
-		themeOptionRow(styles, "bordures", borderStyles(), screen.look.Borders, borderLabel, "b"),
-		themeOptionRow(styles, "densité", []density{densityCompact, densityNormal}, screen.look.Density, densityLabel, "d"),
-		themeFlagRow(styles, screen.look.Bold, screen.look.Italic),
-		themeFontRow(styles, m.obelFont),
+		themeSectionHead(styles, m.tr.t("tui.theme.render", nil), m.tr.t("tui.theme.in_theme", nil), width),
+		themeOptionRow(styles, m.tr, m.tr.t("tui.theme.row.glyphs", nil), glyphModes(), screen.look.Glyphs, glyphLabel, "g"),
+		themeOptionRow(styles, m.tr, m.tr.t("tui.theme.row.borders", nil), borderStyles(), screen.look.Borders, borderLabel, "b"),
+		themeOptionRow(styles, m.tr, m.tr.t("tui.theme.row.density", nil), []density{densityCompact, densityNormal}, screen.look.Density, densityLabel, "d"),
+		themeFlagRow(styles, m.tr, screen.look.Bold, screen.look.Italic),
+		themeFontRow(styles, m.tr, m.obelFont),
 	)
 	if fold < themeFoldFontExplain {
 		lines = append(lines,
-			themeFontExplainRow(styles, "un TUI ne choisit pas sa police : seule une appli"),
-			themeFontExplainRow(styles, "qui dessine sa propre fenêtre le peut"),
+			themeFontExplainRow(styles, m.tr.t("tui.theme.font.explain_one", nil)),
+			themeFontExplainRow(styles, m.tr.t("tui.theme.font.explain_two", nil)),
 		)
 	}
 	if fold < themeFoldDetection {
 		lines = append(lines,
 			"",
-			themeSectionHead(styles, "Détection", "", width),
+			themeSectionHead(styles, m.tr.t("tui.theme.detection", nil), "", width),
 			m.themeBackgroundRow(),
-			themeAutoRow(styles, screen.auto),
-			themeNoColorRow(styles),
+			themeAutoRow(styles, m.tr, screen.auto),
+			themeNoColorRow(styles, m.tr),
 		)
 	}
 	for index := range lines {
@@ -405,16 +404,24 @@ func (m *model) themeControls(width int, fold themeFold) []string {
 }
 
 func (m *model) themeBackgroundRow() string {
+	label := m.st.text.Render(padTo(m.tr.t("tui.theme.row.background", nil), themeKeyColumn))
 	if m.themeBackground == "" {
-		return "   " + m.st.text.Render(padTo("fond", themeKeyColumn)) +
-			m.st.text.Render("inconnu") + m.st.dim.Render(" · pas lu au démarrage")
+		return "   " + label + m.st.text.Render(m.tr.t("tui.theme.background.unknown", nil)) +
+			m.st.dim.Render(" · "+m.tr.t("tui.theme.background.not_read", nil))
 	}
-	return "   " + m.st.text.Render(padTo("fond", themeKeyColumn)) +
-		m.st.text.Render(m.themeBackground) + m.st.dim.Render(" · lu par OSC 11 au démarrage")
+	return "   " + label + m.st.text.Render(backgroundName(m.tr, m.themeBackground)) +
+		m.st.dim.Render(" · "+m.tr.t("tui.theme.background.read_osc11", nil))
 }
 
-func themeNoColorRow(styles uiStyles) string {
-	return "   " + styles.dim.Render("NO_COLOR respecté : marqueurs et gras seuls")
+func backgroundName(trans translator, code string) string {
+	if code == backgroundDark {
+		return trans.t("tui.theme.background.dark", nil)
+	}
+	return trans.t("tui.theme.background.light", nil)
+}
+
+func themeNoColorRow(styles uiStyles, trans translator) string {
+	return "   " + styles.dim.Render(trans.t("tui.theme.no_color", nil))
 }
 
 func themeFontExplainRow(styles uiStyles, text string) string {
@@ -441,8 +448,8 @@ func (m *model) themeListLine(theme *Theme, selected, current bool, width int) s
 	if current {
 		mark = glyphs.success
 	}
-	label := padTo(theme.Label, themeLabelWidth)
-	detail := m.themeScr.detail(theme.ID)
+	label := padTo(theme.displayName(m.tr), themeLabelWidth)
+	detail := m.themeScr.detail(m.tr, theme.ID)
 	if selected {
 		return styles.overlaySel.Render(padTo(cutText(head+mark+" "+label+"  "+detail, width), width))
 	}
@@ -464,14 +471,14 @@ func themeSectionHead(styles uiStyles, title, extra string, width int) string {
 	return head + " " + styles.dim.Render(rule)
 }
 
-func themeOptionRow[Choice comparable](styles uiStyles, label string, choices []Choice, current Choice, name func(Choice) string, key string) string {
+func themeOptionRow[Choice comparable](styles uiStyles, trans translator, label string, choices []Choice, current Choice, name func(translator, Choice) string, key string) string {
 	var row strings.Builder
 	row.WriteString("   " + padTo(label, themeKeyColumn))
 	for _, choice := range choices {
 		if choice == current {
-			row.WriteString(styles.chip.Render(name(choice)))
+			row.WriteString(styles.chip.Render(name(trans, choice)))
 		} else {
-			row.WriteString(styles.dim.Render(" " + name(choice) + " "))
+			row.WriteString(styles.dim.Render(" " + name(trans, choice) + " "))
 		}
 		row.WriteString(" ")
 	}
@@ -479,14 +486,14 @@ func themeOptionRow[Choice comparable](styles uiStyles, label string, choices []
 	return row.String()
 }
 
-func themeFlagRow(styles uiStyles, bold, italic bool) string {
-	return "   " + padTo("texte", themeKeyColumn) + themeFlag(styles, bold, "gras") + "  " +
-		themeFlag(styles, italic, "italique") + "  " + styles.dim.Render("w i")
+func themeFlagRow(styles uiStyles, trans translator, bold, italic bool) string {
+	return "   " + padTo(trans.t("tui.theme.row.text", nil), themeKeyColumn) + themeFlag(styles, bold, trans.t("tui.theme.flag.bold", nil)) + "  " +
+		themeFlag(styles, italic, trans.t("tui.theme.flag.italic", nil)) + "  " + styles.dim.Render("w i")
 }
 
-func themeAutoRow(styles uiStyles, auto bool) string {
-	return "   " + themeFlag(styles, auto, "auto") +
-		styles.dim.Render(" : fond sombre → Sombre, clair → Clair") + "  " + styles.dim.Render("a")
+func themeAutoRow(styles uiStyles, trans translator, auto bool) string {
+	return "   " + themeFlag(styles, auto, trans.t("tui.theme.flag.auto", nil)) +
+		styles.dim.Render(" : "+trans.t("tui.theme.auto_hint", nil)) + "  " + styles.dim.Render("a")
 }
 
 func themeFlag(styles uiStyles, on bool, label string) string {
@@ -496,30 +503,30 @@ func themeFlag(styles uiStyles, on bool, label string) string {
 	return styles.dim.Render(styles.glyphs.unticked + " " + label)
 }
 
-func glyphLabel(mode glyphMode) string {
+func glyphLabel(trans translator, mode glyphMode) string {
 	if mode == glyphsNerd {
-		return "nerd font"
+		return trans.t("tui.theme.glyph.nerd", nil)
 	}
 	return mode.String()
 }
 
-func borderLabel(style borderStyle) string {
+func borderLabel(trans translator, style borderStyle) string {
 	switch style {
 	case borderSquare:
-		return "carrées"
+		return trans.t("tui.theme.border.square", nil)
 	case borderNone:
-		return "aucune"
+		return trans.t("tui.theme.border.none", nil)
 	case borderRounded:
-		return "arrondies"
+		return trans.t("tui.theme.border.rounded", nil)
 	}
-	return "arrondies"
+	return trans.t("tui.theme.border.rounded", nil)
 }
 
-func densityLabel(level density) string {
+func densityLabel(trans translator, level density) string {
 	if level == densityCompact {
-		return "compacte"
+		return trans.t("tui.theme.density.compact", nil)
 	}
-	return "normale"
+	return trans.t("tui.theme.density.normal", nil)
 }
 
 const minPreviewBlocks = 2
@@ -566,20 +573,20 @@ func (m *model) themePreviewBlocks(width int) []themeBlock {
 	styles := m.st
 	screen := m.themeScr
 	shown := screen.preview()
-	kept := " · pas encore gardé"
+	kept := m.tr.t("tui.theme.not_kept", nil)
 	if shown.ID == screen.origin.ID {
-		kept = " · gardé"
+		kept = m.tr.t("tui.theme.kept", nil)
 	}
 	return []themeBlock{
-		{lines: []string{styles.dim.Render("APERÇU · " + shown.Label + kept)}},
+		{lines: []string{styles.dim.Render(m.tr.t("tui.theme.preview_label", map[string]any{tplArgName: shown.displayName(m.tr), "State": kept}))}},
 		{lines: m.railLines()},
 		{lines: []string{m.themeFileLine(width)}},
 		{lines: m.themeToolLines(width)},
 		{lines: m.themeDiffLines(width)},
 		{lines: m.themeApprovalLines(width)},
 		{lines: m.themeLegendLines()},
-		{lines: []string{themeGaugeLine(styles)}},
-		{lines: []string{styles.overlaySel.Render(padTo(cutText("> ligne sélectionnée, en vidéo inverse", width), width))}},
+		{lines: []string{themeGaugeLine(styles, m.tr)}},
+		{lines: []string{styles.overlaySel.Render(padTo(cutText("> "+m.tr.t("tui.theme.selected_line", nil), width), width))}},
 		{lines: m.themeModeLines(width)},
 		{gap: true, lines: m.themeTerminalLines()},
 		{gap: true, lines: m.themePersonalLines(shown)},
@@ -625,7 +632,7 @@ func (m *model) themeApprovalLines(width int) []string {
 	now := time.Now()
 	prompt := approvalPrompt{tool: "Bash", command: "git push origin feat/tui-v2", deadline: now.Add(themeApprovalAt)}
 	inner := boxWidth - approvalFrameCols
-	footer := box.bl + box.h + " " + m.st.dim.Render(joinNonEmpty(m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxApproval), m.labelledHint(actSelectAccept, "valider", ctxApproval), m.labelledHint(actApprovalAccelerate, "accélérer le délai", ctxApproval))) + " "
+	footer := box.bl + box.h + " " + m.st.dim.Render(joinNonEmpty(m.pairHint(actSelectPrevious, actSelectNext, m.tr.t("tui.theme.approval.choose", nil), ctxApproval), m.labelledHint(actSelectAccept, m.tr.t("tui.theme.approval.accept", nil), ctxApproval), m.labelledHint(actApprovalAccelerate, m.tr.t("tui.theme.approval.speed_up", nil), ctxApproval))) + " "
 	return []string{
 		m.approvalTop(prompt, boxWidth, box, now),
 		approvalRow(box, m.approvalCommand(prompt, inner), inner),
@@ -637,14 +644,14 @@ func (m *model) themeLegendLines() []string {
 	styles := m.st
 	glyphs := styles.glyphs
 	return []string{
-		styles.text.Render(m.hintIn(actSubmit, chatKeyStack()...) + " pendant un tour met maintenant le message en file."),
-		styles.green.Render(glyphs.success+" ajouté") + "  " + styles.del.Render(glyphs.failure+" retiré") + "  " + styles.warn.Render(glyphs.bolt+" attente"),
-		styles.dim.Render(glyphs.notice+" notice") + "  " + styles.red.Render("erreur"),
+		styles.text.Render(m.tr.t("tui.theme.legend.queue", map[string]any{tplArgKey: m.hintIn(actSubmit, chatKeyStack()...)})),
+		styles.green.Render(glyphs.success+" "+m.tr.t("tui.theme.legend.added", nil)) + "  " + styles.del.Render(glyphs.failure+" "+m.tr.t("tui.theme.legend.removed", nil)) + "  " + styles.warn.Render(glyphs.bolt+" "+m.tr.t("tui.theme.legend.waiting", nil)),
+		styles.dim.Render(glyphs.notice+" "+m.tr.t("tui.theme.legend.notice", nil)) + "  " + styles.red.Render(m.tr.t("tui.theme.legend.error", nil)),
 	}
 }
 
-func themeGaugeLine(styles uiStyles) string {
-	parts := []string{styles.dim.Render("ctx")}
+func themeGaugeLine(styles uiStyles, trans translator) string {
+	parts := []string{styles.dim.Render(trans.t("tui.theme.gauge_label", nil))}
 	for _, ratio := range []float64{0.41, 0.85, 0.97} {
 		percent := int(math.Round(ratio * percentScale))
 		parts = append(parts, contextGaugeCells(ratio, barContextCells, styles)+styles.dim.Render(fmt.Sprintf(" %d%%", percent)))
@@ -654,7 +661,7 @@ func themeGaugeLine(styles uiStyles) string {
 
 func (m *model) themeModeLines(width int) []string {
 	strip := m.modeStripView(&tab{}, width)
-	return append(strip, m.st.spinner.Render(m.spinFrame())+m.st.dim.Render(" En cours…"))
+	return append(strip, m.st.spinner.Render(m.spinFrame())+m.st.dim.Render(" "+m.tr.t("tui.common.working", nil)))
 }
 
 func (m *model) themeTerminalLines() []string {
@@ -664,7 +671,7 @@ func (m *model) themeTerminalLines() []string {
 	saved := ""
 	if screen.saved {
 		themeID, auto = screen.origin.ID, screen.auto
-		saved = styles.dim.Render("   enregistré à l’instant")
+		saved = styles.dim.Render("   " + m.tr.t("tui.theme.saved_now", nil))
 	}
 	return []string{
 		styles.text.Bold(true).Render(m.terminalConfigPath()),
@@ -695,8 +702,8 @@ func (m *model) themePersonalLines(shown Theme) []string {
 		lines = append(lines, "   "+styles.text.Render(padTo(token[0], themeTokenColumn))+styles.dim.Render("= ")+styles.text.Render(token[1]))
 	}
 	return append(lines,
-		styles.dim.Render("hérite de base, ne nomme que ce qui change"),
-		styles.dim.Render("autres thèmes intégrés : clair, terminal, contraste élevé"),
+		styles.dim.Render(m.tr.t("tui.theme.personal_inherits", nil)),
+		styles.dim.Render(m.tr.t("tui.theme.personal_others", nil)),
 	)
 }
 

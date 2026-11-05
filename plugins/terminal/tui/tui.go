@@ -245,6 +245,7 @@ func spinTick(d time.Duration) tea.Cmd {
 }
 
 type model struct {
+	tr            translator
 	handlers      *dispatchTables
 	buildTables   func() (*dispatchTables, error)
 	ctx           context.Context
@@ -505,20 +506,21 @@ func (m *model) runContext() context.Context {
 }
 
 func newModel(backend Backend) *model {
+	trans := newTranslator()
 	field := textarea.New()
-	field.Placeholder = placeholderIdle
+	field.Placeholder = idlePlaceholder(trans)
 	field.SetPromptFunc(len(composerPrompt), promptAt(composerPrompt))
 	field.ShowLineNumbers = false
 	field.SetHeight(maxComposerLines)
 	field.Focus()
 	match := &model{
-		ctx: context.Background(), buildTables: newDispatchTables, tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
+		ctx: context.Background(), tr: trans, buildTables: newDispatchTables, tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
 		st: newStyles(defaultTheme(), false), md: &markdownRenderer{}, theme: defaultTheme(), bar: newBarState(),
 		terminal: detectTerminal(os.LookupEnv),
-		bindings: loadKeyBindings("", "", keysSection{}).table, keyTimeout: defaultChordTimeout,
+		bindings: loadKeyBindings(trans, "", "", keysSection{}).table, keyTimeout: defaultChordTimeout,
 	}
-	match.cmds = localCommands()
+	match.cmds = localCommands(trans)
 	match.syncComposerKeys()
 	match.installTables()
 	if backend != nil {
@@ -557,7 +559,7 @@ func (m *model) seedScrollback(tab *tab) {
 	for _, ln := range lines {
 		tab.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
 	}
-	tab.appendEntry(entry{role: roleScrollback, text: "earlier"})
+	tab.appendEntry(entry{role: roleScrollback, text: m.tr.t("tui.render.earlier", nil)})
 }
 
 func scrollbackRole(role string) string {
@@ -875,7 +877,7 @@ func (m *model) pasteImage() bool {
 	}
 	data, err := m.clip.ReadImage(m.runContext(), mime)
 	if err != nil {
-		m.flash = "collage impossible : " + err.Error()
+		m.flash = m.tr.t("tui.status.clipboard_failed", map[string]any{tplArgReason: err.Error()})
 		return true
 	}
 	att, err := saveClipboardImage(data, mime, m.attachSeq)
@@ -1028,7 +1030,7 @@ func (m *model) closeCmd(rest []string) tea.Cmd {
 		name = m.activeSessionName()
 	}
 	if name == "" {
-		m.flash = "aucune session à fermer ici"
+		m.flash = m.tr.t("tui.session.close_none", nil)
 		return nil
 	}
 	return m.closeSession(name, force)
@@ -1037,12 +1039,12 @@ func (m *model) closeCmd(rest []string) tea.Cmd {
 func (m *model) renameCmd(rest []string) tea.Cmd {
 	target := renameTarget(rest)
 	if target == "" {
-		m.flash = "/rename <nom> : donne le nouveau nom de la session"
+		m.flash = m.tr.t("tui.session.rename_usage", nil)
 		return nil
 	}
 	name := m.activeSessionName()
 	if name == "" {
-		m.flash = "aucune session à renommer ici"
+		m.flash = m.tr.t("tui.session.rename_none", nil)
 		return nil
 	}
 	return m.dispatchCmd(m.active, []string{sessionVerb, verbRename, argName, name, argTo, target})
@@ -1051,7 +1053,7 @@ func (m *model) renameCmd(rest []string) tea.Cmd {
 func (m *model) handoffCmd(rest []string) tea.Cmd {
 	name := m.activeSessionName()
 	if name == "" {
-		m.flash = "aucune session à passer ici"
+		m.flash = m.tr.t("tui.session.handoff_none", nil)
 		return nil
 	}
 	args := []string{sessionVerb, verbHandoff, argName, name}
@@ -1162,7 +1164,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		text, _ := hostError(event.Text)
 		target.appendEntry(entry{role: statusRole(event.Text), text: text})
 	case eventReply:
-		target.appendReply(event)
+		target.appendReply(m.tr, event)
 	case "todos":
 		target.busy = true
 		target.todos = event.Todos
@@ -1175,13 +1177,13 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.streamed = false
 		target.ctxMeasured = false
 		target.endStream()
-		target.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
+		target.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.render.turn_reset", nil)})
 	case eventNotice:
 		target.appendEntry(entry{role: roleNotice, text: event.Text})
 	case eventCompactionStarted:
 		target.startCompaction(event)
 	case eventCompactionDone:
-		target.completeCompaction(event)
+		target.completeCompaction(m.tr, event)
 	case eventCompactionFailed:
 		target.failCompaction(event)
 	case "abandoned":
@@ -1191,7 +1193,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.ctxMeasured = false
 		target.disconnected = true
 		target.endStream()
-		target.appendEntry(entry{role: roleNotice, text: "tour abandonné"})
+		target.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.render.turn_abandoned", nil)})
 	}
 }
 
@@ -1225,7 +1227,7 @@ func (tb *tab) appendThinking(text string, tokens, before int) {
 	tb.appendEntry(entry{role: roleThinking, text: text, tokens: tokens, base: before})
 }
 
-func (tb *tab) appendReply(event contracts.Event) {
+func (tb *tab) appendReply(trans translator, event contracts.Event) {
 	if event.Text != "" && !tb.streamed {
 		if text, isErr := hostError(event.Text); isErr {
 			tb.appendEntry(entry{role: roleError, text: text})
@@ -1240,7 +1242,7 @@ func (tb *tab) appendReply(event contracts.Event) {
 		tb.appendEntry(entry{role: roleCost, text: formatCost(event.Cost)})
 	}
 	if event.Done {
-		tb.finishCompaction()
+		tb.finishCompaction(trans)
 		tb.busy = false
 		tb.interruptRequested = false
 		tb.streamed = false
@@ -1324,7 +1326,7 @@ func (m *model) contentWith(query string) string {
 	content := m.cachedTranscript(tab)
 	if m.foldTurnsOn {
 		content = m.foldCache.get(content, "", func(s string) string {
-			return strings.Join(foldTurns(strings.Split(s, "\n"), m.tsLayout.turns, turnFoldKeep, m.st), "\n")
+			return strings.Join(foldTurns(m.tr, strings.Split(s, "\n"), m.tsLayout.turns, turnFoldKeep, m.st), "\n")
 		})
 	}
 	if m.searchOpen && strings.TrimSpace(query) != "" {
@@ -1376,13 +1378,13 @@ func (m *model) inputRow() string {
 func (m *model) hintText() string {
 	if m.paletteOpen() {
 		return m.st.dim.Render(joinNonEmpty(
-			m.labelledHint(actSelectPrevious, "naviguer", ctxAutocomplete),
-			m.labelledHint(actSelectPageDown, "page", ctxAutocomplete),
-			m.labelledHint(actAutoAccept, "compléter", ctxAutocomplete),
-			m.labelledHint(actAutoDismiss, "fermer", ctxAutocomplete),
+			m.labelledHint(actSelectPrevious, m.tr.t("tui.palette.navigate", nil), ctxAutocomplete),
+			m.labelledHint(actSelectPageDown, m.tr.t("tui.palette.page", nil), ctxAutocomplete),
+			m.labelledHint(actAutoAccept, m.tr.t("tui.palette.complete", nil), ctxAutocomplete),
+			m.labelledHint(actAutoDismiss, m.tr.t("tui.common.close", nil), ctxAutocomplete),
 		))
 	}
-	return m.st.dim.Render(m.labelledHint(actHelpToggle, "aide", chatKeyStack()...))
+	return m.st.dim.Render(m.labelledHint(actHelpToggle, m.tr.t("tui.common.help", nil), chatKeyStack()...))
 }
 
 func (m *model) footer(width int) string {
@@ -1394,13 +1396,13 @@ func (m *model) footer(width int) string {
 		return ""
 	}
 	if tab.disconnected {
-		return m.st.dim.Render("· déconnecté")
+		return m.st.dim.Render(m.tr.t("tui.status.disconnected", nil))
 	}
 	return m.statusBar(tab, width)
 }
 
 func (m *model) spinnerHint(tab *tab) string {
-	segs := []string{m.labelledHint(actCancel, "pour interrompre", chatKeyStack()...)}
+	segs := []string{m.labelledHint(actCancel, m.tr.t("tui.spinner.interrupt", nil), chatKeyStack()...)}
 	if !tab.startedAt.IsZero() {
 		segs = append(segs, fmt.Sprintf("%ds", int(time.Since(tab.startedAt).Seconds())))
 	}
@@ -1410,7 +1412,7 @@ func (m *model) spinnerHint(tab *tab) string {
 	if tab.lastCost > 0 {
 		segs = append(segs, formatCost(tab.lastCost))
 	}
-	return m.spinFrame() + " " + workingVerb + " (" + strings.Join(segs, " · ") + ")"
+	return m.spinFrame() + " " + m.tr.t("tui.common.working", nil) + " (" + strings.Join(segs, " · ") + ")"
 }
 
 const minDisplayedCost = 0.01
@@ -1460,11 +1462,11 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	defer func() {
 		runErr = errors.Join(runErr, model.releaseDrafts())
 	}()
-	if err := sweepDraftsAtStart(); err != nil {
-		model.flash = "brouillons orphelins non supprimés : " + err.Error()
-	}
 	for _, opt := range opts {
 		opt(model)
+	}
+	if err := sweepDraftsAtStart(); err != nil {
+		model.flash = model.tr.t("tui.drafts.orphans", map[string]any{tplArgReason: err.Error()})
 	}
 	if seam, err := newManageSeam(); err == nil {
 		model.SetPluginSeam(seam)
@@ -1575,7 +1577,7 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.handleThemeEdited(msg)
 		return nil, true
 	case enhancedKeysFailedMsg:
-		m.flash = "touches étendues indisponibles : " + msg.err.Error()
+		m.flash = m.tr.t("tui.status.enhanced_keys_unavailable", map[string]any{tplArgReason: msg.err.Error()})
 		return nil, true
 	case dispatchResultMsg:
 		return m.handleDispatchResult(msg), true
@@ -1588,7 +1590,7 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.handleShellResult(msg)
 		return nil, true
 	case signalFailedMsg:
-		m.flash = "notification impossible : " + msg.err.Error()
+		m.flash = m.tr.t("tui.status.notify_failed", map[string]any{tplArgReason: msg.err.Error()})
 		return nil, true
 	case editorDoneMsg:
 		m.applyEditorResult(msg)
@@ -2061,13 +2063,13 @@ func (m *model) interruptOrQuit(pressed keyAction) (tea.Cmd, bool) {
 	if turn != nil && turn.busy && !turn.interruptRequested {
 		turn.interruptRequested = true
 		if !m.interruptActive() {
-			m.flash = "rien à interrompre : " + m.hintOf(pressed) + " à nouveau pour quitter"
+			m.flash = m.tr.t("tui.status.nothing_to_interrupt", map[string]any{tplArgKey: m.hintOf(pressed)})
 		}
 		return nil, true
 	}
 	if busy := m.busySessions(); busy > 0 && time.Now().After(m.quitArmedUntil) {
 		m.quitArmedUntil = time.Now().Add(quitArmWindow)
-		m.flash = fmt.Sprintf("%d session(s) en cours seront arrêtées : %s à nouveau pour quitter", busy, m.hintOf(pressed))
+		m.flash = m.tr.t("tui.status.quit_busy", map[string]any{tplArgCount: busy, tplArgKey: m.hintOf(pressed)})
 		return nil, true
 	}
 	return tea.Quit, true
@@ -2116,7 +2118,7 @@ func (m *model) helpView() string {
 
 func (m *model) View() string {
 	if !m.ready {
-		return "démarrage…"
+		return m.tr.t("tui.common.starting", nil)
 	}
 	if m.diff.open {
 		return m.diffScreen()
@@ -2180,7 +2182,7 @@ func (m *model) openOrFold() {
 			return
 		}
 	}
-	m.flash = "rien à replier dans ce tour"
+	m.flash = m.tr.t("tui.render.nothing_to_fold", nil)
 }
 
 func (m *model) toggleEntryFold(tab *tab, entryID uint64) {
@@ -2232,5 +2234,5 @@ func (m *model) busyRow(tab *tab) string {
 	if tab.costTotal > 0 {
 		cost = formatCost(tab.costTotal)
 	}
-	return busyLine(m.vp.Width, m.st, m.spinFrame(), elapsedText, tokens, cost, m.labelledHint(actCancel, "interrompre", chatKeyStack()...))
+	return busyLine(m.tr, m.vp.Width, m.st, m.spinFrame(), elapsedText, tokens, cost, m.labelledHint(actCancel, m.tr.t("tui.common.interrupt", nil), chatKeyStack()...))
 }

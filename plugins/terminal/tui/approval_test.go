@@ -57,7 +57,7 @@ func pressRunes(m *model, text string) {
 func TestApprovalMenuOpensBoxAboveComposer(t *testing.T) {
 	m, _ := newApprovalModel(t, 120, "go test ./plugins/terminal/tui/", allApprovalRoles()...)
 	view := m.View()
-	for _, want := range []string{"! Approbation", "demandée par l’hôte", "go test ./plugins/terminal/tui/", "Une fois", "Pour la session", "Toujours", "Refuser avec une raison", "refus dans 5:00"} {
+	for _, want := range []string{"! Approval", "asked by the host", "go test ./plugins/terminal/tui/", "Once", "For the session", "Always", "Deny with a reason", "deny in 5:00"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("approval box misses %q:\n%s", want, view)
 		}
@@ -96,7 +96,7 @@ func TestApprovalKeysSendExactValues(t *testing.T) {
 func TestApprovalDenyWithReasonSendsTheReason(t *testing.T) {
 	m, fb := newApprovalModel(t, 120, "git push", allApprovalRoles()...)
 	pressRunes(m, "r")
-	if !strings.Contains(m.View(), "raison") {
+	if !strings.Contains(m.View(), "reason") {
 		t.Fatal("r must open the reason field")
 	}
 	pressRunes(m, "pas de push: relis d'abord")
@@ -138,7 +138,7 @@ func TestApprovalArrowsAndEnterChooseTheRow(t *testing.T) {
 func TestApprovalOffersOnlyTheRolesTheHostSent(t *testing.T) {
 	m, fb := newApprovalModel(t, 120, "git push", approvalAllow, approvalDeny)
 	view := m.View()
-	if strings.Contains(view, "Toujours") || strings.Contains(view, "Pour la session") {
+	if strings.Contains(view, "Always") || strings.Contains(view, "For the session") {
 		t.Fatalf("roles not offered by the host must not appear:\n%s", view)
 	}
 	pressRunes(m, "s")
@@ -162,7 +162,7 @@ func TestApprovalLetterKeysYieldToTypingInTheComposer(t *testing.T) {
 func TestApprovalCountdownJumpsToFiveSecondsWithX(t *testing.T) {
 	m, _ := newApprovalModel(t, 120, "git push", allApprovalRoles()...)
 	pressRunes(m, "x")
-	if !strings.Contains(m.View(), "refus dans 0:05") {
+	if !strings.Contains(m.View(), "deny in 0:05") {
 		t.Fatalf("x must jump the countdown to 0:05:\n%s", m.View())
 	}
 }
@@ -214,7 +214,7 @@ func checkApprovalFits(t *testing.T, view string, width int) {
 			t.Fatalf("width %d: line of %d columns overflows: %q", width, w, line)
 		}
 	}
-	for _, want := range []string{"! Approbation", "refus dans 5:00", "Une fois", "END"} {
+	for _, want := range []string{"! Approval", "deny in 5:00", "Once", "END"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("width %d misses %q:\n%s", width, want, view)
 		}
@@ -227,7 +227,7 @@ func checkApprovalFits(t *testing.T, view string, width int) {
 func TestApprovalWideLayoutKeepsNotesOnTheSameRow(t *testing.T) {
 	m, _ := newApprovalModel(t, 120, "git push", allApprovalRoles()...)
 	for _, line := range strings.Split(m.View(), "\n") {
-		if strings.Contains(line, "Une fois") && !strings.Contains(line, "seulement cette commande") {
+		if strings.Contains(line, "Once") && !strings.Contains(line, "only this command") {
 			t.Fatalf("at 120 columns the note belongs on the choice row: %q", line)
 		}
 	}
@@ -236,11 +236,11 @@ func TestApprovalWideLayoutKeepsNotesOnTheSameRow(t *testing.T) {
 func TestApprovalNarrowLayoutPutsNotesBelowTheChoice(t *testing.T) {
 	m, _ := newApprovalModel(t, 60, "git push", allApprovalRoles()...)
 	view := m.View()
-	if !strings.Contains(view, "seulement cette commande") {
+	if !strings.Contains(view, "only this command") {
 		t.Fatalf("narrow layout must still show the note:\n%s", view)
 	}
 	for _, line := range strings.Split(view, "\n") {
-		if strings.Contains(line, "Une fois") && strings.Contains(line, "seulement cette commande") {
+		if strings.Contains(line, "Once") && strings.Contains(line, "only this command") {
 			t.Fatalf("under 80 columns each choice takes two rows: %q", line)
 		}
 	}
@@ -257,7 +257,7 @@ func TestApprovalEventSetsTheRealDeadline(t *testing.T) {
 	m, _ := newApprovalModel(t, 120, "git push", allApprovalRoles()...)
 	due := time.Now().Add(42 * time.Second).UTC().Format(time.RFC3339)
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApproval, Value: testApprovalID, Text: due}})
-	if view := m.View(); !strings.Contains(view, "refus dans 0:4") {
+	if view := m.View(); !strings.Contains(view, "deny in 0:4") {
 		t.Fatalf("the host deadline must drive the countdown:\n%s", view)
 	}
 }
@@ -289,7 +289,7 @@ func TestApprovalDeadlineArrivingBeforeTheMenuApplies(t *testing.T) {
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApproval, Value: testApprovalID, Text: due}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: approvalMenuEvent(t, "git push", allApprovalRoles()...)})
 	m.active = "a"
-	if view := m.View(); !strings.Contains(view, "refus dans 0:4") {
+	if view := m.View(); !strings.Contains(view, "deny in 0:4") {
 		t.Fatalf("an approval event sent before the menu must drive the countdown:\n%s", view)
 	}
 }
@@ -318,7 +318,7 @@ func TestApprovalShowsTheJudgeRisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c1"}, Event: contracts.Event{T: eventMenu, Text: menu.Prompt, Value: string(encoded)}})
-	if !strings.Contains(strings.Join(m.approvalLines(time.Now(), unboundedRows), "\n"), "risque élevé") {
+	if !strings.Contains(strings.Join(m.approvalLines(time.Now(), unboundedRows), "\n"), "high risk") {
 		t.Errorf("the approval must show the judge risk when the host sends one")
 	}
 }
@@ -327,7 +327,7 @@ func TestApprovalWithoutRiskHasNoJudgeLine(t *testing.T) {
 	m, _ := barModelAt(t, "")
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c1"}, Event: approvalMenuEvent(t, "go test ./...", allApprovalRoles()...)})
-	if strings.Contains(strings.Join(m.approvalLines(time.Now(), unboundedRows), "\n"), "juge") {
+	if strings.Contains(strings.Join(m.approvalLines(time.Now(), unboundedRows), "\n"), "judged") {
 		t.Errorf("the approval must not show a judge line without a risk")
 	}
 }
@@ -339,7 +339,7 @@ func TestApprovalRiskSentBeforeTheMenuIsShown(t *testing.T) {
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApprovalRisk, Value: testApprovalID, Text: riskHighName}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: approvalMenuEvent(t, "git push", allApprovalRoles()...)})
 	m.active = "a"
-	if view := m.View(); !strings.Contains(view, "risque élevé") {
+	if view := m.View(); !strings.Contains(view, "high risk") {
 		t.Fatalf("a risk event sent before the menu must show the judge line:\n%s", view)
 	}
 }

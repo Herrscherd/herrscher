@@ -23,11 +23,11 @@ const (
 )
 
 var (
-	errThemeCycle    = errors.New("base de thème cyclique")
-	errUnknownKey    = errors.New("clé inconnue")
-	errInvalidColor  = errors.New("couleur invalide")
-	errUnknownBase   = errors.New("base inconnue")
-	errUnknownOption = errors.New("valeur inconnue")
+	errThemeCycle    = errors.New("theme base cycle")
+	errUnknownKey    = errors.New("unknown key")
+	errInvalidColor  = errors.New("invalid colour")
+	errUnknownBase   = errors.New("unknown base")
+	errUnknownOption = errors.New("unknown value")
 )
 
 type themeFile struct {
@@ -113,7 +113,7 @@ func (c colorsFile) applyTo(pal *palette) error {
 			continue
 		}
 		if !validColor(*override.src) {
-			return fmt.Errorf("%w %q (attendu #rrggbb ou ansi:0 à ansi:15)", errInvalidColor, *override.src)
+			return fmt.Errorf("%w %q (expected #rrggbb or ansi:0 to ansi:15)", errInvalidColor, *override.src)
 		}
 		*override.dst = colorValue(*override.src)
 	}
@@ -155,7 +155,20 @@ func (f renderFile) applyTo(base renderOptions) (renderOptions, error) {
 type themeCatalog struct {
 	themes   []Theme
 	paths    map[string]string
-	problems []string
+	problems []themeProblem
+}
+
+type themeProblem struct {
+	name    string
+	reason  error
+	builtin bool
+}
+
+func (problem themeProblem) text(trans translator) string {
+	if problem.builtin {
+		return trans.t("tui.theme.problem.builtin", map[string]any{tplArgName: problem.name})
+	}
+	return trans.t("tui.theme.problem.rejected", map[string]any{tplArgName: problem.name, tplArgReason: problem.reason.Error()})
 }
 
 func loadThemeCatalog(dir string) themeCatalog {
@@ -173,13 +186,13 @@ func loadThemeCatalog(dir string) themeCatalog {
 		}
 		themeName := strings.TrimSuffix(fileName, themeFileExt)
 		if _, builtin := builtinTheme(themeName); builtin {
-			catalog.problems = append(catalog.problems, fmt.Sprintf("thème %s ignoré : ce nom est intégré", fileName))
+			catalog.problems = append(catalog.problems, themeProblem{name: fileName, builtin: true})
 			continue
 		}
 		path := filepath.Join(dir, fileName)
 		file, err := readThemeFile(path)
 		if err != nil {
-			catalog.problems = append(catalog.problems, fmt.Sprintf("thème %s ignoré : %v", fileName, err))
+			catalog.problems = append(catalog.problems, themeProblem{name: fileName, reason: err})
 			continue
 		}
 		raws[themeName] = file
@@ -190,7 +203,7 @@ func loadThemeCatalog(dir string) themeCatalog {
 	for _, themeName := range names {
 		resolved, err := resolveTheme(themeName, raws, make(map[string]bool))
 		if err != nil {
-			catalog.problems = append(catalog.problems, fmt.Sprintf("thème %s ignoré : %v", themeName, err))
+			catalog.problems = append(catalog.problems, themeProblem{name: themeName, reason: err})
 			delete(catalog.paths, themeName)
 			continue
 		}

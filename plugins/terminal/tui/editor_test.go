@@ -80,7 +80,7 @@ func TestEditorErrorKeepsComposerAndSetsFlash(t *testing.T) {
 	typeLine(m, "intact")
 	m.editing = true
 	m.applyEditorResult(editorDoneMsg{path: filepath.Join(t.TempDir(), "absent.md"), err: os.ErrClosed})
-	if m.input.Value() != "intact" || !strings.Contains(m.flash, "erreur") {
+	if m.input.Value() != "intact" || !strings.Contains(m.flash, "error") {
 		t.Fatalf("editor error must keep the composer: input=%q flash=%q", m.input.Value(), m.flash)
 	}
 }
@@ -512,7 +512,7 @@ func TestBeatFailureWaitsBehindAFlashThenShows(t *testing.T) {
 		t.Fatalf("a beat failure must not overwrite the visible flash, got %q", m.flash)
 	}
 	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
-	if !strings.Contains(m.flash, "signe de vie du brouillon interrompu") {
+	if !strings.Contains(m.flash, "draft heartbeat interrupted") {
 		t.Fatalf("the waiting beat failure must show once the flash clears, got %q", m.flash)
 	}
 }
@@ -545,12 +545,12 @@ func TestActionFlashWinsOverAPendingBeatFailure(t *testing.T) {
 	m.handleMsg(draftBeatFailedMsg{err: errors.New("panne")})
 	m.input.SetValue("/rename")
 	m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
-	if !strings.Contains(m.flash, "/rename <nom>") {
+	if !strings.Contains(m.flash, "/rename <name>") {
 		t.Fatalf("the action's own flash must show over a pending beat failure, got %q", m.flash)
 	}
 	m.input.SetValue("")
 	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
-	if !strings.Contains(m.flash, "signe de vie du brouillon interrompu") {
+	if !strings.Contains(m.flash, "draft heartbeat interrupted") {
 		t.Fatalf("the pending beat failure must show on the next key without a flash, got %q", m.flash)
 	}
 }

@@ -124,9 +124,9 @@ func (m *model) sidebarBody(tab *tab, width int) []string {
 func (m *model) sessionSection(tab *tab, info contracts.SessionInfo, branch string, width int) []string {
 	title := m.st.text.Bold(true).Render(tab.label)
 	if !tab.openedAt.IsZero() {
-		title += m.st.dim.Render(" · depuis " + formatDuration(time.Since(tab.openedAt)))
+		title += m.st.dim.Render(" " + m.tr.t("tui.sidebar.since", map[string]any{"Duration": formatDuration(time.Since(tab.openedAt))}))
 	}
-	lines := []string{m.sideHead("Session", "", width), sideRow(title, width)}
+	lines := []string{m.sideHead(m.tr.t("tui.sidebar.session", nil), "", width), sideRow(title, width)}
 	var where []string
 	if info.Project != "" {
 		where = append(where, m.st.text.Render(info.Project))
@@ -138,10 +138,10 @@ func (m *model) sessionSection(tab *tab, info contracts.SessionInfo, branch stri
 		lines = append(lines, sideRow(strings.Join(where, m.st.dim.Render(" : ")), width))
 	}
 	if info.Dir != "" {
-		lines = append(lines, sideRow(m.st.dim.Render("worktree ")+m.st.text.Render(shortPath(info.Dir)), width))
+		lines = append(lines, sideRow(m.st.dim.Render(m.tr.t("tui.sidebar.worktree", nil)+" ")+m.st.text.Render(shortPath(info.Dir)), width))
 	}
 	if len(info.Gateways) > 0 {
-		lines = append(lines, sideRow(m.st.dim.Render("via ")+m.st.text.Render(strings.Join(info.Gateways, ", ")), width))
+		lines = append(lines, sideRow(m.st.dim.Render(m.tr.t("tui.sidebar.via", nil)+" ")+m.st.text.Render(strings.Join(info.Gateways, ", ")), width))
 	}
 	return lines
 }
@@ -159,7 +159,7 @@ func (m *model) todoSection(tab *tab, width int, short bool) []string {
 			active = index
 		}
 	}
-	lines := []string{m.sideHead("Todos", fmt.Sprintf("%d/%d", done, len(tab.todos)), width)}
+	lines := []string{m.sideHead(m.tr.t("tui.sidebar.todos", nil), fmt.Sprintf("%d/%d", done, len(tab.todos)), width)}
 	if short {
 		return lines
 	}
@@ -186,7 +186,7 @@ func (m *model) agentSection(tab *tab, width int, now time.Time, short bool) []s
 	if len(agents) == 0 {
 		return nil
 	}
-	lines := []string{m.sideHead("Sous-agents", countWord(len(tab.agents), "actif", "actifs"), width)}
+	lines := []string{m.sideHead(m.tr.t("tui.sidebar.subagents", nil), countWord(len(tab.agents), m.tr.t("tui.sidebar.active_one", nil), m.tr.t("tui.sidebar.active_other", nil)), width)}
 	if short {
 		return lines
 	}
@@ -235,7 +235,7 @@ func (m *model) backgroundSection(tab *tab, width int, short bool) []string {
 	if len(tab.background) == 0 {
 		return nil
 	}
-	lines := []string{m.sideHead("De fond", strconv.Itoa(len(tab.background)), width)}
+	lines := []string{m.sideHead(m.tr.t("tui.sidebar.background", nil), strconv.Itoa(len(tab.background)), width)}
 	if short {
 		return lines
 	}
@@ -259,11 +259,11 @@ func (m *model) filesSection(tab *tab, dir string, width int, short bool) []stri
 			known++
 		}
 	}
-	extra := countWord(len(tab.files), "fichier", "fichiers")
+	extra := countWord(len(tab.files), m.tr.t("tui.sidebar.file_one", nil), m.tr.t("tui.sidebar.file_other", nil))
 	if known > 0 {
 		extra = fmt.Sprintf("+%d %s%d", added, m.st.glyphs.minus, removed)
 	}
-	head := m.sideHead("Fichiers", extra, width)
+	head := m.sideHead(m.tr.t("tui.sidebar.files", nil), extra, width)
 	if short {
 		return []string{head}
 	}
@@ -283,23 +283,23 @@ func (m *model) filesSection(tab *tab, dir string, width int, short bool) []stri
 func (m *model) contextSection(tab *tab, info contracts.SessionInfo, width int, short bool) []string {
 	used := m.contextTokens(tab)
 	if used <= 0 {
-		head := m.sideHead("Contexte", "", width)
+		head := m.sideHead(m.tr.t("tui.sidebar.context", nil), "", width)
 		if short {
 			return []string{head}
 		}
-		return []string{head, sideRow(m.st.dim.Render("pas encore mesuré"), width)}
+		return []string{head, sideRow(m.st.dim.Render(m.tr.t("tui.sidebar.unmeasured", nil)), width)}
 	}
 	limit := m.windowOf(info)
 	ratio := contextRatio(used, limit)
 	style := palierStyle(ratio, m.st)
 	percent := contextPercent(used, limit)
 	if short {
-		return []string{m.sideHead("Contexte", percent, width)}
+		return []string{m.sideHead(m.tr.t("tui.sidebar.context", nil), percent, width)}
 	}
 	gaugeLine := sidebarIndent + barGauge(ratio, sidebarGaugeCells, style, m.st.dim, m.st.glyphs) + " " + style.Render(percent)
-	detail := fmt.Sprintf("%s / %s · %s", formatContextTokens(used), formatContextTokens(limit), compactThresholdLabel(info.AutoCompactPercent))
+	detail := fmt.Sprintf("%s / %s · %s", formatContextTokens(used), formatContextTokens(limit), compactThresholdLabel(m.tr, info.AutoCompactPercent))
 	return []string{
-		m.sideHead("Contexte", "", width),
+		m.sideHead(m.tr.t("tui.sidebar.context", nil), "", width),
 		truncate(gaugeLine, width),
 		sideRow(m.st.dim.Render(detail), width),
 	}

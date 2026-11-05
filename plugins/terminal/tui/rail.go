@@ -10,7 +10,6 @@ import (
 
 const (
 	railName       = "herrscher"
-	railHints      = "^P agents · ^T onglet"
 	railTabGap     = 2
 	railEdgeGap    = 2
 	railStripFloor = 20
@@ -30,7 +29,7 @@ type railCell struct {
 func (m *model) railLines() []string {
 	width := m.innerWidth()
 	prefix := m.st.text.Bold(true).Render(railName) + strings.Repeat(" ", railEdgeGap)
-	suffix := m.st.dim.Render(railHints)
+	suffix := m.st.dim.Render(m.tr.t("tui.rail.hints", nil))
 	if width-lipgloss.Width(prefix)-lipgloss.Width(suffix) < railStripFloor {
 		suffix = ""
 	}

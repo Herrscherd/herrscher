@@ -171,30 +171,30 @@ func mergeCommands(local, remote []CommandSpec) []CommandSpec {
 
 const cmdAccount = "account"
 
-func localCommands() []CommandSpec {
+func localCommands(trans translator) []CommandSpec {
 	return []CommandSpec{
-		{Name: "help", Desc: "show the shortcuts"},
-		{Name: "clear", Desc: "clear this tab's transcript"},
-		{Name: "session switch", Desc: "switch between live sessions"},
-		{Name: "resume", Desc: "reopen an archived session"},
-		{Name: "agents", Desc: "voir toutes les sessions par état"},
-		{Name: verbRename, Args: "<nom>", Desc: "rename this session"},
-		{Name: verbHandoff, Args: "<nom>", Desc: "ouvrir une nouvelle session avec le brief de celle-ci"},
-		{Name: "usage", Desc: "cost, tokens and context for this session"},
-		{Name: "context", Desc: "ce qui occupe le contexte : système, outils, mémoire, skills, fichiers lus, conversation"},
-		{Name: "notify", Desc: "alterner les notifications : fin de tour, approbation, ou les deux"},
-		{Name: cmdSkills, Desc: "list available skills"},
-		{Name: cmdTheme, Desc: "pick the colour theme and the render options"},
-		{Name: "capabilities", Desc: "what this terminal can render, and what it falls back to"},
-		{Name: "plugins", Desc: "the plugins this binary is made of"},
-		{Name: cmdAccount, Args: "[profil] [fresh]", Desc: "lister les comptes de la session, ou en choisir un (sans argument : la liste ; fresh ouvre une nouvelle conversation sous ce compte)"},
-		{Name: "attach", Args: "<path>", Desc: "stage a local file with the next message"},
-		{Name: "copy", Args: "[reply|turn|all]", Desc: "put the last answer (or the turn, or everything) on the clipboard"},
-		{Name: "review", Desc: "revue guidée des fichiers du tour : relus, consignes, commit et PR"},
-		{Name: "mouse", Desc: "hand the mouse to the terminal so its own selection works"},
-		{Name: cmdKeybindings, Desc: "ouvrir keybindings.json pour changer les raccourcis"},
-		{Name: "statusline", Desc: "configure the status bar: fields, their order, or a script that draws it"},
-		{Name: cmdQueue, Desc: "voir la file de messages", PR: "PR 2"},
+		{Name: "help", Desc: trans.t("tui.palette.cmd.help", nil)},
+		{Name: "clear", Desc: trans.t("tui.palette.cmd.clear", nil)},
+		{Name: "session switch", Desc: trans.t("tui.palette.cmd.session_switch", nil)},
+		{Name: "resume", Desc: trans.t("tui.palette.cmd.resume", nil)},
+		{Name: "agents", Desc: trans.t("tui.palette.cmd.agents", nil)},
+		{Name: verbRename, Args: "<nom>", Desc: trans.t("tui.palette.cmd.rename", nil)},
+		{Name: verbHandoff, Args: "<nom>", Desc: trans.t("tui.palette.cmd.handoff", nil)},
+		{Name: "usage", Desc: trans.t("tui.palette.cmd.usage", nil)},
+		{Name: "context", Desc: trans.t("tui.palette.cmd.context", nil)},
+		{Name: "notify", Desc: trans.t("tui.palette.cmd.notify", nil)},
+		{Name: cmdSkills, Desc: trans.t("tui.palette.cmd.skills", nil)},
+		{Name: cmdTheme, Desc: trans.t("tui.palette.cmd.theme", nil)},
+		{Name: "capabilities", Desc: trans.t("tui.palette.cmd.capabilities", nil)},
+		{Name: "plugins", Desc: trans.t("tui.palette.cmd.plugins", nil)},
+		{Name: cmdAccount, Args: "[profil] [fresh]", Desc: trans.t("tui.palette.cmd.account", nil)},
+		{Name: "attach", Args: "<path>", Desc: trans.t("tui.palette.cmd.attach", nil)},
+		{Name: "copy", Args: "[reply|turn|all]", Desc: trans.t("tui.palette.cmd.copy", nil)},
+		{Name: "review", Desc: trans.t("tui.palette.cmd.review", nil)},
+		{Name: "mouse", Desc: trans.t("tui.palette.cmd.mouse", nil)},
+		{Name: cmdKeybindings, Desc: trans.t("tui.palette.cmd.keybindings", nil)},
+		{Name: "statusline", Desc: trans.t("tui.palette.cmd.statusline", nil)},
+		{Name: cmdQueue, Desc: trans.t("tui.palette.cmd.queue", nil), PR: "PR 2"},
 	}
 }
 
@@ -204,7 +204,7 @@ func (m *model) paletteView() string {
 	}
 	filtered := m.filtered()
 	if len(filtered) == 0 {
-		return m.st.dim.Render("  (aucune correspondance)")
+		return m.st.dim.Render("  (" + m.tr.t("tui.palette.no_match", nil) + ")")
 	}
 	sel := m.palIdx
 	if sel >= len(filtered) {

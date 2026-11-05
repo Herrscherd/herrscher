@@ -73,8 +73,7 @@ const (
 )
 
 const (
-	stateTimeout      = "timeout"
-	subagentRetryNote = "délai dépassé, relancé"
+	stateTimeout = "timeout"
 )
 
 func renderTool(item entry, width int, display view) string {
@@ -251,7 +250,7 @@ func subagentMark(agent liveAgent, display view) (string, string) {
 	case stateDone:
 		return display.st.green.Render(display.st.glyphs.success), ""
 	case stateTimeout:
-		return display.st.red.Render(display.st.glyphs.failure), subagentRetryNote
+		return display.st.red.Render(display.st.glyphs.failure), display.tr.t("tui.render.subagent_retry", nil)
 	case stateFailed:
 		return display.st.red.Render(display.st.glyphs.failure), ""
 	}
@@ -259,13 +258,13 @@ func subagentMark(agent liveAgent, display view) (string, string) {
 }
 
 func renderThinking(item entry, width int, display view) string {
-	arrow, verb := display.st.glyphs.fold, "déplier"
+	arrow, verb := display.st.glyphs.fold, display.tr.t("tui.render.unfold", nil)
 	if item.open {
-		arrow, verb = display.st.glyphs.expanded, "replier"
+		arrow, verb = display.st.glyphs.expanded, display.tr.t("tui.render.fold", nil)
 	}
-	label := display.st.dim.Render(arrow+" ") + display.st.text.Italic(true).Render("Réflexion") + display.st.dim.Render(" · "+formatSpan(item.span))
+	label := display.st.dim.Render(arrow+" ") + display.st.text.Italic(true).Render(display.tr.t("tui.render.thinking", nil)) + display.st.dim.Render(" · "+formatSpan(item.span))
 	if item.tokens > 0 {
-		label += display.st.dim.Render(" · " + formatTokens(item.tokens) + " tokens")
+		label += display.st.dim.Render(" · " + formatTokens(item.tokens) + " " + display.tr.t("tui.render.tokens_unit", nil))
 	}
 	head := spreadRight([]string{label}, []string{display.st.dim.Render(joinNonEmpty(arrow+" "+verb, display.glyph(actToggleTranscript)))}, width)
 	if !item.open {
@@ -278,7 +277,7 @@ func renderThinking(item entry, width int, display view) string {
 	return strings.Join(lines, "\n")
 }
 
-func busyLine(width int, styles uiStyles, spin, elapsedText, tokens, cost, interrupt string) string {
+func busyLine(trans translator, width int, styles uiStyles, spin, elapsedText, tokens, cost, interrupt string) string {
 	parts := []string{elapsedText}
 	if tokens != "" {
 		parts = append(parts, "↑ "+tokens)
@@ -286,6 +285,6 @@ func busyLine(width int, styles uiStyles, spin, elapsedText, tokens, cost, inter
 	if cost != "" {
 		parts = append(parts, cost)
 	}
-	left := styles.spinner.Render(spin) + " " + styles.text.Render(workingVerb) + "  " + styles.dim.Render(strings.Join(parts, " · "))
+	left := styles.spinner.Render(spin) + " " + styles.text.Render(trans.t("tui.common.working", nil)) + "  " + styles.dim.Render(strings.Join(parts, " · "))
 	return spreadRight([]string{left}, []string{styles.dim.Render(interrupt)}, width)
 }

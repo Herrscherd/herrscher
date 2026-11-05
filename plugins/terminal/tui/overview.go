@@ -49,13 +49,7 @@ const (
 	boardPercentWidth   = 4
 	boardDetailRows     = 13
 	boardHeaderRows     = 1
-	boardSubtitle       = "terminal et Discord ensemble"
-	boardNoMatch        = "   (aucune session ne correspond)"
-	boardEmpty          = "  aucune session"
-	boardArchivedHint   = "/resume pour les reprendre avec aperçu"
 	gatewayTerminal     = "terminal"
-	hintOpenApproval    = "ouvrir l’approbation"
-	hintReviewTurn      = "relire le diff du tour"
 )
 
 type boardGroupKey uint8
@@ -68,16 +62,16 @@ const (
 )
 
 type boardGroup struct {
-	key   boardGroupKey
-	label string
+	key      boardGroupKey
+	labelKey string
 }
 
 func boardGroups() []boardGroup {
 	return []boardGroup{
-		{groupWorking, "Au travail"},
-		{groupWaiting, "Attend une réponse"},
-		{groupReview, "À relire"},
-		{groupDone, "Fini"},
+		{groupWorking, "tui.overview.group_working"},
+		{groupWaiting, "tui.overview.group_waiting"},
+		{groupReview, "tui.overview.group_review"},
+		{groupDone, "tui.overview.group_done"},
 	}
 }
 
@@ -138,10 +132,10 @@ func groupRank(key boardGroupKey) int {
 	return len(groups)
 }
 
-func groupLabel(key boardGroupKey) string {
+func groupLabel(trans translator, key boardGroupKey) string {
 	for _, group := range boardGroups() {
 		if group.key == key {
-			return group.label
+			return trans.t(group.labelKey, nil)
 		}
 	}
 	return ""
@@ -153,12 +147,12 @@ func (m *model) refreshOverviews() {
 	}
 	raw, err := m.tm.Overview()
 	if err != nil {
-		m.flash = "aperçu indisponible : " + err.Error()
+		m.flash = m.tr.t("tui.overview.preview_unavailable", map[string]any{tplArgReason: err.Error()})
 		return
 	}
 	overviews, err := ParseSessionOverviews(raw)
 	if err != nil {
-		m.flash = "aperçu illisible : " + err.Error()
+		m.flash = m.tr.t("tui.overview.preview_unreadable", map[string]any{tplArgReason: err.Error()})
 		return
 	}
 	m.overviews = overviews
@@ -236,7 +230,7 @@ func (m *model) openBoard() tea.Cmd {
 
 func (m *model) closeSurface() {
 	m.surface = surfaceChat
-	m.input.Placeholder = "type a message…"
+	m.input.Placeholder = m.tr.t("tui.compose.placeholder_chat", nil)
 	m.relayout()
 }
 
@@ -330,19 +324,19 @@ func (m *model) boardList(width, height int) []string {
 	body := padLines(windowLines(lines, cursor, height-boardHeaderRows-reserved), height-boardHeaderRows-reserved)
 	out := append([]string{m.boardHeader(width)}, body...)
 	if archived > 0 {
-		hint := fmt.Sprintf("   archivées : %d · %s", archived, boardArchivedHint)
+		hint := m.tr.t("tui.overview.archived", map[string]any{tplArgCount: archived, tplArgHint: m.tr.t("tui.overview.archived_hint", nil)})
 		out = append(out, "", cutText(m.st.dim.Render(hint), width))
 	}
 	return padLines(out, height)
 }
 
 func (m *model) boardHeader(width int) string {
-	line := m.st.accent.Bold(true).Render(" Sessions et agents") +
-		m.st.dim.Render("  "+boardSubtitle+" · filtre ") +
+	line := m.st.accent.Bold(true).Render(" "+m.tr.t("tui.overview.title", nil)) +
+		m.st.dim.Render("  "+m.tr.t("tui.overview.subtitle", nil)+" · "+m.tr.t("tui.overview.filter", nil)+" ") +
 		m.st.text.Render(m.board.query) +
 		m.st.accent.Render(m.st.glyphs.caret)
 	if m.board.query == "" {
-		line += m.st.dim.Render(" tape pour filtrer")
+		line += m.st.dim.Render(" " + m.tr.t("tui.overview.type_to_filter", nil))
 	}
 	return cutText(line, width)
 }
@@ -350,9 +344,9 @@ func (m *model) boardHeader(width int) string {
 func (m *model) boardBlocks(width int) ([]string, int) {
 	if len(m.board.rows) == 0 {
 		if m.board.query != "" {
-			return []string{m.st.dim.Render(boardNoMatch)}, 0
+			return []string{m.st.dim.Render(m.tr.t("tui.overview.no_match", nil))}, 0
 		}
-		return []string{m.st.dim.Render(boardEmpty)}, 0
+		return []string{m.st.dim.Render(m.tr.t("tui.overview.empty", nil))}, 0
 	}
 	var lines []string
 	cursor := 0
@@ -399,7 +393,7 @@ func (m *model) groupStyle(group boardGroupKey) lipgloss.Style {
 }
 
 func (m *model) boardGroupHeader(group boardGroupKey, count, width int) string {
-	head := m.groupStyle(group).Bold(true).Render(" "+strings.ToUpper(groupLabel(group))) + m.st.dim.Render(fmt.Sprintf(" %d ", count))
+	head := m.groupStyle(group).Bold(true).Render(" "+strings.ToUpper(groupLabel(m.tr, group))) + m.st.dim.Render(fmt.Sprintf(" %d ", count))
 	fill := max(0, width-lipgloss.Width(head))
 	return cutText(head+m.st.dim.Render(strings.Repeat(m.st.glyphs.ruleChar, fill)), width)
 }
@@ -542,17 +536,16 @@ func (m *model) gaugeCells(ratio float64, cells int, paint rowPaint) string {
 
 func (m *model) boardFooter(width int) string {
 	keys := fitSegments([]string{
-		m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxBoard),
-		m.labelledHint(actSelectAccept, "ouvrir", ctxBoard),
-		"lettres filtrer",
-		m.labelledHint(actSelectCancel, "vider", ctxBoard),
-		m.labelledHint(actBoardPanes, "en volets", ctxBoard),
+		m.pairHint(actSelectPrevious, actSelectNext, m.tr.t("tui.overview.choose", nil), ctxBoard),
+		m.labelledHint(actSelectAccept, m.tr.t("tui.common.open", nil), ctxBoard),
+		m.tr.t("tui.overview.letters_filter", nil),
+		m.labelledHint(actSelectCancel, m.tr.t("tui.overview.clear", nil), ctxBoard),
+		m.labelledHint(actBoardPanes, m.tr.t("tui.overview.in_panes", nil), ctxBoard),
 	}, width-boardFooterIndent)
 	sessions, vendors, gateways := m.boardTotals()
-	counts := fmt.Sprintf("%d %s · %d %s · %d %s ",
-		sessions, choosePlural(sessions, "session", "sessions"),
-		vendors, choosePlural(vendors, "vendeur", "vendeurs"),
-		gateways, choosePlural(gateways, "passerelle", "passerelles"))
+	counts := m.tr.t("tui.overview.sessions", map[string]any{tplArgCount: sessions}) + " · " +
+		m.tr.t("tui.overview.vendors", map[string]any{tplArgCount: vendors}) + " · " +
+		m.tr.t("tui.overview.gateways", map[string]any{tplArgCount: gateways}) + " "
 	return cutText(joinRow(width, m.st.dim.Render(" "+keys), m.st.dim.Render(counts)), width)
 }
 
@@ -587,11 +580,11 @@ func (m *model) boardDetail(row *boardRow) []string {
 		" " + markStyle.Render(mark) + " " + m.st.strong.Render(row.overview.Name),
 		strings.Repeat(" ", panelIndent) + m.sessionTone(row).Render(row.overview.LastText),
 		"",
-		m.panelRow("vendeur", m.st.text.Render(row.overview.Vendor)),
-		m.panelRow("passerelle", gatewayStyle(m.st, gateway).Render(gateway)),
-		m.panelRow("où", m.st.text.Render(sessionWhere(row.info))),
-		m.panelRow("coût", m.st.warn.Render(formatCost(row.overview.Cost))),
-		m.panelRow("contexte", m.gaugeCells(ratio, boardDetailCells, func(style lipgloss.Style) lipgloss.Style { return style })+
+		m.panelRow(m.tr.t("tui.overview.field_vendor", nil), m.st.text.Render(row.overview.Vendor)),
+		m.panelRow(m.tr.t("tui.overview.field_gateway", nil), gatewayStyle(m.st, gateway).Render(gateway)),
+		m.panelRow(m.tr.t("tui.overview.field_where", nil), m.st.text.Render(sessionWhere(row.info))),
+		m.panelRow(m.tr.t("tui.overview.field_cost", nil), m.st.warn.Render(formatCost(row.overview.Cost))),
+		m.panelRow(m.tr.t("tui.overview.field_context", nil), m.gaugeCells(ratio, boardDetailCells, func(style lipgloss.Style) lipgloss.Style { return style })+
 			m.tierStyle(ratio).Render(" "+contextPercent(row.info.ContextTokens, m.windowOf(row.info)))),
 		"",
 		strings.Repeat(" ", panelIndent) + m.st.dim.Render(joinWith(" ", m.hintIn(actSelectAccept, ctxBoard), m.boardHint(row))),
@@ -601,11 +594,11 @@ func (m *model) boardDetail(row *boardRow) []string {
 func (m *model) boardHint(row *boardRow) string {
 	switch {
 	case row.overview.State == overviewWaiting:
-		return hintOpenApproval
+		return m.tr.t("tui.overview.hint_open_approval", nil)
 	case row.group == groupReview:
-		return hintReviewTurn
+		return m.tr.t("tui.overview.hint_review", nil)
 	}
-	return joinNonEmpty("ouvrir", m.labelledHint(actBoardPanes, "en volet", ctxBoard))
+	return joinNonEmpty(m.tr.t("tui.common.open", nil), m.labelledHint(actBoardPanes, m.tr.t("tui.overview.in_pane", nil), ctxBoard))
 }
 
 func (m *model) overviewFor(name string) SessionOverview {

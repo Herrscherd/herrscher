@@ -124,12 +124,12 @@ func (t *keyTable) chordsOf(action keyAction, stack ...keyContext) []string {
 	return found
 }
 
-func (t *keyTable) hintFor(action keyAction, stack ...keyContext) string {
+func (t *keyTable) hintFor(trans translator, action keyAction, stack ...keyContext) string {
 	chords := t.chordsOf(action, stack...)
 	if len(chords) == 0 {
 		return ""
 	}
-	return keyHintGlyph(chords[0])
+	return keyHintGlyph(trans, chords[0])
 }
 
 func keyBaseName(lower string) (string, bool) {
@@ -271,32 +271,32 @@ func reliableChord(chord string) error {
 	return nil
 }
 
-func keyHintGlyph(chord string) string {
+func keyHintGlyph(trans translator, chord string) string {
 	if chord == keySpace {
-		return keyHintToken(keySpace)
+		return keyHintToken(trans, keySpace)
 	}
 	tokens := strings.Split(chord, " ")
 	parts := make([]string, 0, len(tokens))
 	for _, token := range tokens {
-		parts = append(parts, keyHintToken(token))
+		parts = append(parts, keyHintToken(trans, token))
 	}
 	return strings.Join(parts, "")
 }
 
-func keyHintBase(base string) (string, bool) {
+func keyHintBase(trans translator, base string) (string, bool) {
 	switch base {
 	case keyEnter:
 		return "⏎", true
 	case keyEsc:
-		return "échap", true
+		return trans.t("tui.keys.name.esc", nil), true
 	case keyTab:
 		return "⇥", true
 	case keySpace:
-		return "espace", true
+		return trans.t("tui.keys.name.space", nil), true
 	case keyBackspace:
 		return "⌫", true
 	case keyDelete:
-		return "suppr", true
+		return trans.t("tui.keys.name.delete", nil), true
 	case "up":
 		return "↑", true
 	case "down":
@@ -306,9 +306,9 @@ func keyHintBase(base string) (string, bool) {
 	case "right":
 		return "→", true
 	case "home":
-		return "début", true
+		return trans.t("tui.keys.name.home", nil), true
 	case "end":
-		return "fin", true
+		return trans.t("tui.keys.name.end", nil), true
 	case keyPgUp:
 		return keyPgUp, true
 	case keyPgDown:
@@ -317,7 +317,7 @@ func keyHintBase(base string) (string, bool) {
 	return "", false
 }
 
-func keyHintToken(token string) string {
+func keyHintToken(trans translator, token string) string {
 	base := token
 	var prefix strings.Builder
 	for {
@@ -335,7 +335,7 @@ func keyHintToken(token string) string {
 			prefix.WriteString("⇧")
 			base = base[len("shift+"):]
 		default:
-			if glyph, ok := keyHintBase(base); ok {
+			if glyph, ok := keyHintBase(trans, base); ok {
 				return prefix.String() + glyph
 			}
 			if prefix.Len() == 0 && len(base) == 1 {

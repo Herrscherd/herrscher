@@ -55,7 +55,7 @@ func TestChangedBindingShowsInBusyFooter(t *testing.T) {
 	m, _ := queueFixture(t)
 	m.bindings = loadForTest(t, `{"bindings":[{"context":"Chat","bindings":{"alt+a":"chat:queueRedirect"}}]}`, "", keysSection{}).table
 	m.tabs["a"].busy = true
-	if view := ansi.Strip(m.View()); !strings.Contains(view, "⌥A réorienter") {
+	if view := ansi.Strip(m.View()); !strings.Contains(view, "⌥A redirect") {
 		t.Fatalf("the busy footer must show the rebound chord: %s", view)
 	}
 }

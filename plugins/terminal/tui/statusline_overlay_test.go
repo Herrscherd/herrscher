@@ -74,7 +74,7 @@ func TestStatuslinePaneSitsBesideTheListWhenWide(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m.openStatusline()
 	view := m.statuslineView()
-	for _, want := range []string{"SCRIPT", "statusline.sh", "JSON REÇU", "TERMINAL.TOML"} {
+	for _, want := range []string{"SCRIPT", "statusline.sh", "JSON RECEIVED", "TERMINAL.TOML"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the wide overlay must show %q beside the list", want)
 		}
@@ -93,7 +93,7 @@ func TestStatuslinePaneStacksUnderTheListWhenNarrow(t *testing.T) {
 	lines := strings.Split(m.statuslineView(), "\n")
 	footer, script := -1, -1
 	for index, line := range lines {
-		if strings.Contains(line, "espace cocher") {
+		if strings.Contains(line, "space check") {
 			footer = index
 		}
 		if strings.Contains(line, "SCRIPT") && script < 0 {
@@ -125,7 +125,7 @@ func TestStatuslineFitsEveryWindowSize(t *testing.T) {
 				t.Errorf("%dx%d: row wider than the window: %q", size.width, size.height, line)
 			}
 		}
-		if !strings.Contains(m.View(), "espace cocher") {
+		if !strings.Contains(m.View(), "space check") {
 			t.Errorf("%dx%d: the list footer must stay visible", size.width, size.height)
 		}
 	}
@@ -135,7 +135,7 @@ func TestStatuslineSourceLineOffersTheSwitch(t *testing.T) {
 	m, _ := barModelAt(t, "")
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m.openStatusline()
-	if !strings.Contains(m.statuslineView(), "s basculer") {
+	if !strings.Contains(m.statuslineView(), "s to switch") {
 		t.Errorf("the source line must say how to switch the source")
 	}
 }
@@ -145,7 +145,7 @@ func TestStatuslineFooterDoesNotAdvertiseReordering(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m.openStatusline()
 	view := m.statuslineView()
-	if !strings.Contains(view, "l’ordre suit la liste") {
+	if !strings.Contains(view, "order follows the list") {
 		t.Errorf("the list footer must say that the order follows the list")
 	}
 	if strings.Contains(view, "⇧↑⇧↓") {
@@ -162,7 +162,7 @@ func TestStatuslineScriptModeLeavesTheListAlone(t *testing.T) {
 	if m.bar.cursor != 0 {
 		t.Errorf("the list must not move while the script decides, cursor %d", m.bar.cursor)
 	}
-	if !strings.Contains(m.statuslineView(), "le script décide") {
+	if !strings.Contains(m.statuslineView(), "the script decides") {
 		t.Errorf("the list footer must say that the script decides")
 	}
 }
@@ -172,7 +172,7 @@ func TestStatusBarKeepsTheModeLabelWhole(t *testing.T) {
 	tb.setMode(modeEdits)
 	for _, width := range []int{60, 80} {
 		bar := ansi.Strip(m.statusBar(tb, width))
-		if !strings.Contains(bar, "Édits acceptés") {
+		if !strings.Contains(bar, "Edits accepted") {
 			t.Errorf("width %d: the mode label must stay whole, got %q", width, bar)
 		}
 	}
@@ -224,7 +224,7 @@ func TestQueueHeaderStaysVisibleInAShortWindow(t *testing.T) {
 	}
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	view := m.View()
-	if !strings.Contains(view, "En file (25)") {
+	if !strings.Contains(view, "queued (25)") {
 		t.Errorf("the queue header must stay visible while the transcript keeps room")
 	}
 	if rows := len(strings.Split(view, "\n")); rows > 30 {

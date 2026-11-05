@@ -2,7 +2,6 @@ package tui
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -39,32 +38,46 @@ const (
 
 type barFieldSpec struct {
 	id        string
-	label     string
-	note      string
+	labelKey  string
+	noteKey   string
 	defaultOn bool
 }
 
 func barFieldSpecs() []barFieldSpec {
 	return []barFieldSpec{
-		{id: barModeID, label: "mode et", note: "Manuel, Édits acceptés, Plan, Auto en rouge", defaultOn: true},
-		{id: fieldVendor, label: "vendeur et modèle", note: "claude, codex, cursor", defaultOn: true},
-		{id: "repo", label: "dépôt et branche", note: "herrscher:feat/tui-v2", defaultOn: true},
-		{id: "wt", label: "worktree", note: "(worktree) si à elle", defaultOn: true},
-		{id: "ctx", label: "jauge de contexte", note: "━, palier 80 %, rouge 95 %", defaultOn: true},
-		{id: "detail", label: "tokens du contexte", note: "82k/200k", defaultOn: true},
-		{id: "cost", label: "coût", note: "facturation réelle", defaultOn: true},
-		{id: fieldQueue, label: "file en attente", note: "○ file, ↪ réorientations", defaultOn: true},
-		{id: "bg", label: "tâches de fond", note: "go test -race en fond", defaultOn: true},
-		{id: "dur", label: "durée du tour", note: "1m12s", defaultOn: false},
-		{id: "quota", label: "quotas 5 h et 7 j", note: "abonnement Claude", defaultOn: false},
+		{id: barModeID, labelKey: "tui.statusline.field_mode", noteKey: "tui.statusline.note_mode", defaultOn: true},
+		{id: fieldVendor, labelKey: "tui.statusline.field_vendor", noteKey: "tui.statusline.note_vendor", defaultOn: true},
+		{id: "repo", labelKey: "tui.statusline.field_repo", noteKey: "tui.statusline.note_repo", defaultOn: true},
+		{id: "wt", labelKey: "tui.statusline.field_wt", noteKey: "tui.statusline.note_wt", defaultOn: true},
+		{id: "ctx", labelKey: "tui.statusline.field_ctx", noteKey: "tui.statusline.note_ctx", defaultOn: true},
+		{id: "detail", labelKey: "tui.statusline.field_detail", noteKey: "tui.statusline.note_detail", defaultOn: true},
+		{id: "cost", labelKey: "tui.statusline.field_cost", noteKey: "tui.statusline.note_cost", defaultOn: true},
+		{id: fieldQueue, labelKey: "tui.statusline.field_queue", noteKey: "tui.statusline.note_queue", defaultOn: true},
+		{id: "bg", labelKey: "tui.statusline.field_bg", noteKey: "tui.statusline.note_bg", defaultOn: true},
+		{id: "dur", labelKey: "tui.statusline.field_dur", noteKey: "tui.statusline.note_dur", defaultOn: false},
+		{id: "quota", labelKey: "tui.statusline.field_quota", noteKey: "tui.statusline.note_quota", defaultOn: false},
 	}
 }
 
-func (s barFieldSpec) labelWith(hint string) string {
-	if s.id == barModeID {
-		return joinWith(" ", s.label, hint)
+func (s barFieldSpec) label(trans translator) string {
+	if s.labelKey == "" {
+		return s.id
 	}
-	return s.label
+	return trans.t(s.labelKey, nil)
+}
+
+func (s barFieldSpec) note(trans translator) string {
+	if s.noteKey == "" {
+		return ""
+	}
+	return trans.t(s.noteKey, nil)
+}
+
+func (s barFieldSpec) labelWith(trans translator, hint string) string {
+	if s.id == barModeID {
+		return joinWith(" ", s.label(trans), hint)
+	}
+	return s.label(trans)
 }
 
 func barFieldSpecOf(fieldID string) barFieldSpec {
@@ -73,7 +86,7 @@ func barFieldSpecOf(fieldID string) barFieldSpec {
 			return spec
 		}
 	}
-	return barFieldSpec{id: fieldID, label: fieldID}
+	return barFieldSpec{id: fieldID}
 }
 
 func defaultBarOrder() []string {
@@ -247,15 +260,15 @@ func (m *model) fieldPart(fieldID string, target *tab, info contracts.SessionInf
 		return single(m.st.green.Render(costLabel(target.costTotal)), rankCost), true
 	case fieldQueue:
 		if m.bar.queued > 0 {
-			return single(m.st.text.Render(fmt.Sprintf("%d en file", m.bar.queued)), rankQueue), true
+			return single(m.st.text.Render(m.tr.t("tui.status.queued_count", map[string]any{tplArgCount: m.bar.queued})), rankQueue), true
 		}
 	case "bg":
 		if m.bar.background > 0 {
-			return single(m.st.dim.Render(m.spinFrame()+fmt.Sprintf(" %d en fond", m.bar.background)), rankBackground), true
+			return single(m.st.dim.Render(m.spinFrame()+" "+m.tr.t("tui.status.background_count", map[string]any{tplArgCount: m.bar.background})), rankBackground), true
 		}
 	case "dur":
 		if target.busy && !target.startedAt.IsZero() {
-			return single(m.st.dim.Render("turn ")+m.st.text.Render(formatDuration(time.Since(target.startedAt))), rankExtra), true
+			return single(m.st.dim.Render(m.tr.t("tui.status.turn", nil)+" ")+m.st.text.Render(formatDuration(time.Since(target.startedAt))), rankExtra), true
 		}
 	case "quota":
 		if m.bar.quota != "" {
@@ -290,7 +303,7 @@ func (m *model) repoPart(info contracts.SessionInfo) (barPart, bool) {
 	}
 	part := barPart{layers: []barLayer{{text: m.st.text.Render(label), rank: rankRepo}}}
 	if linked && m.bar.isShown("wt") {
-		part.layers = append(part.layers, barLayer{text: " " + m.st.dim.Render("(worktree)"), rank: rankWorktree})
+		part.layers = append(part.layers, barLayer{text: " " + m.st.dim.Render(m.tr.t("tui.status.worktree_mark", nil)), rank: rankWorktree})
 	}
 	return part, true
 }

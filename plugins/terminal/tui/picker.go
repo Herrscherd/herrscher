@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
@@ -96,15 +95,15 @@ func (m *model) openChannel(session contracts.SessionInfo) tea.Cmd {
 
 func (m *model) resumeView() string {
 	if len(m.resumeRows) == 0 {
-		return m.st.dim.Render("  (aucune session)")
+		return m.st.dim.Render("  (" + m.tr.t("tui.picker.empty", nil) + ")")
 	}
 	start, end := paletteWindow(len(m.resumeRows), m.resumeIdx, m.overlayRows())
 	rows := make([]overlayRow, 0, end-start)
 	for i := start; i < end; i++ {
 		row := m.resumeRows[i]
-		state := "live"
+		state := m.tr.t("tui.picker.state_live", nil)
 		if row.Archived {
-			state = "archivée"
+			state = m.tr.t("tui.picker.state_archived", nil)
 		}
 		cols := []string{}
 		if row.Project != "" {
@@ -123,12 +122,12 @@ func (m *model) resumeView() string {
 		}
 		rows = append(rows, overlayRow{mark: mark, label: row.Name, detail: strings.Join(cols, " · ")})
 	}
-	footer := m.listFooter(ctxResume, "ouvrir")
+	footer := m.listFooter(ctxResume, m.tr.t("tui.common.open", nil))
 	if hidden := len(m.resumeRows) - (end - start); hidden > 0 {
-		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
+		footer = m.tr.t("tui.picker.more", map[string]any{tplArgCount: hidden}) + " · " + footer
 	}
 	if m.resumeQuery != "" {
-		footer = "filtre : " + m.resumeQuery + " · " + footer
+		footer = m.tr.t("tui.picker.filtered", map[string]any{"Query": m.resumeQuery, "Footer": footer})
 	}
 	list := floatingList(rows, m.resumeIdx-start, footer, m.overlayWidth(), m.st)
 	if preview := m.resumePreview(m.innerWidth()); preview != "" {
@@ -172,7 +171,7 @@ func (m *model) chooseSwitch() {
 
 func (m *model) switchView() string {
 	if len(m.switchRows) == 0 {
-		return m.st.dim.Render("  (aucune session)")
+		return m.st.dim.Render("  (" + m.tr.t("tui.picker.empty", nil) + ")")
 	}
 	start, end := paletteWindow(len(m.switchRows), m.switchIdx, m.overlayRows())
 	rows := make([]overlayRow, 0, end-start)
@@ -184,18 +183,18 @@ func (m *model) switchView() string {
 		}
 		rows = append(rows, overlayRow{mark: mark, label: row.Name, detail: row.Project})
 	}
-	footer := m.listFooter(ctxSessions, "basculer")
+	footer := m.listFooter(ctxSessions, m.tr.t("tui.common.switch", nil))
 	if hidden := len(m.switchRows) - (end - start); hidden > 0 {
-		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
+		footer = m.tr.t("tui.picker.more", map[string]any{tplArgCount: hidden}) + " · " + footer
 	}
 	return floatingList(rows, m.switchIdx-start, footer, m.overlayWidth(), m.st)
 }
 
 func (m *model) listFooter(context keyContext, accept string) string {
 	return joinNonEmpty(
-		m.pairHint(actSelectPrevious, actSelectNext, "choisir", context),
-		m.pairHint(actSelectPageUp, actSelectPageDown, "page", context),
+		m.pairHint(actSelectPrevious, actSelectNext, m.tr.t("tui.common.choose", nil), context),
+		m.pairHint(actSelectPageUp, actSelectPageDown, m.tr.t("tui.common.page", nil), context),
 		m.labelledHint(actSelectAccept, accept, context),
-		m.labelledHint(actSelectCancel, "annuler", context),
+		m.labelledHint(actSelectCancel, m.tr.t("tui.common.cancel", nil), context),
 	)
 }

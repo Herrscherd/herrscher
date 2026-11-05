@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,44 +17,44 @@ func chatKeyStack() []keyContext {
 }
 
 type helpEntry struct {
-	action keyAction
-	label  string
+	action   keyAction
+	labelKey string
 }
 
 func helpEntries() []helpEntry {
 	return []helpEntry{
-		{actSubmit, "envoyer"},
-		{actQueueRedirect, "réoriente"},
-		{actQueueSubmit, "envoie la file"},
-		{actCancel, "interrompre"},
-		{actImagePaste, "coller une image"},
-		{actExternalEditor, "éditeur"},
-		{actToggleMouse, "libérer la souris"},
-		{actNextLink, "lien suivant"},
-		{actOpenOrFold, "l’ouvrir"},
-		{actCopyCode, "copier le code"},
-		{actCopyReply, "copier la réponse"},
-		{actToggleCodeFold, "replier le code"},
-		{actToggleToolExpand, "déplier commandes et diffs"},
-		{actToggleTurnFold, "replier les tours"},
-		{actChatSearch, "chercher"},
-		{actStash, "brouillon de côté"},
-		{actHistorySearch, "recherche historique"},
-		{actOpenSessions, "sessions"},
+		{actSubmit, "tui.common.send"},
+		{actQueueRedirect, "tui.keys.help.redirect"},
+		{actQueueSubmit, "tui.keys.help.queue_submit"},
+		{actCancel, "tui.common.interrupt"},
+		{actImagePaste, "tui.keys.help.image_paste"},
+		{actExternalEditor, "tui.common.editor"},
+		{actToggleMouse, "tui.keys.help.mouse"},
+		{actNextLink, "tui.keys.help.next_link"},
+		{actOpenOrFold, "tui.keys.help.open"},
+		{actCopyCode, "tui.keys.help.copy_code"},
+		{actCopyReply, "tui.keys.help.copy_reply"},
+		{actToggleCodeFold, "tui.keys.help.fold_code"},
+		{actToggleToolExpand, "tui.keys.help.tool_expand"},
+		{actToggleTurnFold, "tui.keys.help.fold_turns"},
+		{actChatSearch, "tui.keys.help.search"},
+		{actStash, "tui.keys.help.stash"},
+		{actHistorySearch, "tui.keys.help.history"},
+		{actOpenSessions, "tui.keys.help.sessions"},
 	}
 }
 
 func (m *model) loadKeys(configDir string) {
 	section, err := readKeysSection(filepath.Join(configDir, terminalConfigFile))
 	if err != nil {
-		m.flash = "terminal.toml [keys] ignoré : " + err.Error()
+		m.flash = m.tr.t("tui.keys.ignored", map[string]any{tplArgReason: err.Error()})
 		section = keysSection{}
 	}
 	claudePath := ""
 	if home, homeErr := os.UserHomeDir(); homeErr == nil {
 		claudePath = filepath.Join(home, ".claude", keybindingsFile)
 	}
-	load := loadKeyBindings(claudePath, filepath.Join(configDir, keybindingsFile), section)
+	load := loadKeyBindings(m.tr, claudePath, filepath.Join(configDir, keybindingsFile), section)
 	m.bindings = load.table
 	m.keyTimeout = chordTimeout(load.timeout)
 	m.keyChord = keyPress{}
@@ -133,16 +132,15 @@ func movedActions() map[keyAction]keyAction {
 }
 
 func (m *model) unavailableNotice(action keyAction) string {
-	notice := string(action) + " n'est pas encore disponible dans herrscher"
 	target, moved := movedActions()[action]
 	if !moved {
-		return notice
+		return m.tr.t("tui.keys.unavailable", map[string]any{tplArgAction: string(action)})
 	}
 	chord := m.hintOf(target)
 	if chord == "" {
-		return notice
+		return m.tr.t("tui.keys.unavailable", map[string]any{tplArgAction: string(action)})
 	}
-	return notice + " : la fonction est sur " + chord
+	return m.tr.t("tui.keys.unavailable_moved", map[string]any{tplArgAction: string(action), "Chord": chord})
 }
 
 func chatRuns() (map[keyAction]chatRun, error) {
@@ -242,10 +240,10 @@ func (m *model) interruptBusySessions() {
 		}
 	}
 	if count == 0 {
-		m.flash = "aucune session occupée"
+		m.flash = m.tr.t("tui.keys.none_busy", nil)
 		return
 	}
-	m.flash = "sessions interrompues : " + strconv.Itoa(count)
+	m.flash = m.tr.t("tui.keys.interrupted", map[string]any{tplArgCount: count})
 }
 
 func (m *model) undoComposer() bool {
@@ -284,22 +282,22 @@ func (m *model) keyHelpLine() string {
 	var entries []string
 	for _, entry := range helpEntries() {
 		if glyph := m.hintOf(entry.action); glyph != "" {
-			entries = append(entries, glyph+" "+entry.label)
+			entries = append(entries, glyph+" "+m.tr.t(entry.labelKey, nil))
 		}
 	}
 	if newline := m.hintsOf(actNewline); newline != "" {
-		line := newline + " ou \\⏎ nouvelle ligne"
+		line := m.tr.t("tui.keys.newline", map[string]any{"Keys": newline})
 		if idle := m.hintsOf(actQueueRedirect); idle != "" {
-			line += ", " + idle + " nouvelle ligne au repos"
+			line += m.tr.t("tui.keys.newline_idle", map[string]any{"Keys": idle})
 		}
 		entries = append(entries, line)
 	}
-	for _, turn := range []helpEntry{{actPreviousTurn, "tour précédent"}, {actNextTurn, "tour suivant"}} {
+	for _, turn := range []helpEntry{{actPreviousTurn, "tui.keys.help.previous_turn"}, {actNextTurn, "tui.keys.help.next_turn"}} {
 		if glyph := m.hintOf(turn.action); glyph != "" {
-			entries = append(entries, glyph+" "+turn.label)
+			entries = append(entries, glyph+" "+m.tr.t(turn.labelKey, nil))
 		}
 	}
-	entries = append(entries, "/ commandes", "@ fichiers", "! commande shell")
+	entries = append(entries, m.tr.t("tui.keys.commands", nil), m.tr.t("tui.keys.files", nil), m.tr.t("tui.keys.shell", nil))
 	return strings.Join(entries, " · ")
 }
 
@@ -308,18 +306,18 @@ func (m *model) hintOf(action keyAction) string {
 }
 
 func (m *model) hintIn(action keyAction, stack ...keyContext) string {
-	return m.activeBindings().hintFor(action, stack...)
+	return m.activeBindings().hintFor(m.tr, action, stack...)
 }
 
 func (m *model) activeBindings() *keyTable {
 	if m.bindings != nil {
 		return m.bindings
 	}
-	return defaultKeyTable()
+	return defaultKeyTable(m.tr)
 }
 
-func defaultKeyTable() *keyTable {
-	return loadKeyBindings("", "", keysSection{}).table
+func defaultKeyTable(trans translator) *keyTable {
+	return loadKeyBindings(trans, "", "", keysSection{}).table
 }
 
 func (m *model) hintsOf(action keyAction) string {
@@ -328,9 +326,9 @@ func (m *model) hintsOf(action keyAction) string {
 	}
 	glyphs := make([]string, 0, len(m.bindings.chordsOf(action, chatKeyStack()...)))
 	for _, chord := range m.bindings.chordsOf(action, chatKeyStack()...) {
-		glyphs = append(glyphs, keyHintGlyph(chord))
+		glyphs = append(glyphs, keyHintGlyph(m.tr, chord))
 	}
-	return strings.Join(glyphs, " ou ")
+	return strings.Join(glyphs, " "+m.tr.t("tui.keys.or", nil)+" ")
 }
 
 func (m *model) labelledHint(action keyAction, label string, stack ...keyContext) string {
@@ -362,17 +360,17 @@ type keybindingsDoneMsg struct {
 
 func (m *model) openKeybindings() tea.Cmd {
 	if m.themeDir == "" {
-		m.flash = "dossier de configuration inconnu"
+		m.flash = m.tr.t("tui.keys.no_config_dir", nil)
 		return nil
 	}
 	path := filepath.Join(m.themeDir, keybindingsFile)
 	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 		if err := os.MkdirAll(m.themeDir, privateDirMode); err != nil {
-			m.flash = "keybindings.json impossible : " + err.Error()
+			m.flash = m.tr.t("tui.keys.file_failed", map[string]any{tplArgReason: err.Error()})
 			return nil
 		}
 		if err := os.WriteFile(path, keybindingsSkeleton(), privateFileMode); err != nil {
-			m.flash = "keybindings.json impossible : " + err.Error()
+			m.flash = m.tr.t("tui.keys.file_failed", map[string]any{tplArgReason: err.Error()})
 			return nil
 		}
 	}
@@ -385,10 +383,10 @@ func (m *model) openKeybindings() tea.Cmd {
 func (m *model) applyKeybindingsDone(msg keybindingsDoneMsg) {
 	m.editing = false
 	if msg.err != nil {
-		m.flash = "éditeur fermé en erreur : " + msg.err.Error()
+		m.flash = m.tr.t("tui.editor.closed_error", map[string]any{tplArgReason: msg.err.Error()})
 	}
 	m.loadKeys(m.themeDir)
 	if len(m.keyProblems) == 0 && msg.err == nil {
-		m.flash = "raccourcis rechargés"
+		m.flash = m.tr.t("tui.keys.reloaded", nil)
 	}
 }

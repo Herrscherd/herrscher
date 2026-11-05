@@ -36,7 +36,7 @@ func TestPanelAppearsOnlyWhenTheBoardIsWideEnough(t *testing.T) {
 	for _, width := range []int{60, 100, 120, 200} {
 		m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 		view := m.View()
-		shown := strings.Contains(view, "Résumé")
+		shown := strings.Contains(view, "Summary")
 		if want := width >= panelMinWidth; shown != want {
 			t.Fatalf("width %d: panel shown = %t, want %t", width, shown, want)
 		}
@@ -53,7 +53,7 @@ func TestPanelShowsSkillsFromTheHostAndNAForTheRest(t *testing.T) {
 	f.replies = map[string]string{"skill list": "alpha-skill\tactive\tprivate\tlast used never\nbeta-skill\tactive\tapproved\tlast used 2026-01-01\n"}
 	openBoardAndSettle(m)
 	view := m.View()
-	if !strings.Contains(view, "2 · 1 à approuver") {
+	if !strings.Contains(view, "2 · 1 to approve") {
 		t.Fatalf("skills row missing from panel: %s", view)
 	}
 	if line := lineContaining(view, "cron"); !strings.Contains(line, "n/a") {
@@ -74,10 +74,10 @@ func TestPanelShowsCronAndPolicyFromTheHost(t *testing.T) {
 	}
 	openBoardAndSettle(m)
 	view := m.View()
-	if want := "1 tour · " + when.Local().Format("15:04"); !strings.Contains(view, want) {
+	if want := "1 turn · " + when.Local().Format("15:04"); !strings.Contains(view, want) {
 		t.Fatalf("cron row %q missing from panel: %s", want, view)
 	}
-	if !strings.Contains(view, "3 règles · 1 noire") {
+	if !strings.Contains(view, "3 rules · 1 deny rule") {
 		t.Fatalf("policy row missing from panel: %s", view)
 	}
 }
@@ -86,10 +86,10 @@ func TestPanelShowsNAWhenTheHostAnswersNothing(t *testing.T) {
 	_, m := boardModel(t)
 	openBoardAndSettle(m)
 	view := m.View()
-	if !strings.Contains(view, "Résumé") {
+	if !strings.Contains(view, "Summary") {
 		t.Fatal("the panel must be drawn at this width even without host data")
 	}
-	if line := lineContaining(view, "politique"); !strings.Contains(line, "n/a") {
+	if line := lineContaining(view, "policy"); !strings.Contains(line, "n/a") {
 		t.Fatalf("policy without a host answer must read n/a, line = %q", line)
 	}
 }

@@ -36,7 +36,7 @@ func TestRailShowsNameHintsAndTabMarkers(t *testing.T) {
 	m := railModel(t, 120, "alfa", "bravo")
 	m.tabs["bravo"].unreadCount = 3
 	row := m.railLines()[0]
-	for _, want := range []string{railName, railHints, "alfa", "bravo", unicodeGlyphs().selected, unicodeGlyphs().unread, "3"} {
+	for _, want := range []string{railName, newTranslator().t("tui.rail.hints", nil), "alfa", "bravo", unicodeGlyphs().selected, unicodeGlyphs().unread, "3"} {
 		if !strings.Contains(row, want) {
 			t.Fatalf("rail %q missing %q", row, want)
 		}

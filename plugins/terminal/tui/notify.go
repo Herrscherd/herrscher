@@ -19,15 +19,15 @@ const (
 
 const notifyModeCount = 3
 
-func (mode notifyMode) label() string {
+func (mode notifyMode) label(trans translator) string {
 	switch mode {
 	case notifyTurnEnd:
-		return "fin de tour"
+		return trans.t("tui.notify.mode_turn_end", nil)
 	case notifyApproval:
-		return "approbation"
+		return trans.t("tui.notify.mode_approval", nil)
 	case notifyBoth:
 	}
-	return "fin de tour et approbation"
+	return trans.t("tui.notify.mode_both", nil)
 }
 
 func (mode notifyMode) wants(kind notifyKind) bool {
@@ -93,7 +93,7 @@ type focusState struct {
 
 func (m *model) cycleNotify() tea.Cmd {
 	m.notifyMode = (m.notifyMode + 1) % notifyModeCount
-	m.flash = "notifications : " + m.notifyMode.label()
+	m.flash = m.tr.t("tui.notify.mode", map[string]any{"Mode": m.notifyMode.label(m.tr)})
 	return nil
 }
 
@@ -112,13 +112,13 @@ func (m *model) notifyTurnEnd(target *tab) tea.Cmd {
 	}
 	info := m.sessionInfo(target.channel)
 	subject := joinNonEmpty(name, duration, info.Vendor, strings.Join(info.Gateways, "+"))
-	return m.announce(kindTurnEnd, m.st.glyphs.success, "Tour fini", target.channel, []string{subject})
+	return m.announce(kindTurnEnd, m.st.glyphs.success, m.tr.t("tui.notify.turn_done", nil), target.channel, []string{subject})
 }
 
 func (m *model) notifyApproval(channel, question string) tea.Cmd {
 	info := m.sessionInfo(channel)
 	subject := joinNonEmpty(m.sessionName(channel), info.Vendor, strings.Join(info.Gateways, "+"))
-	return m.announce(kindApproval, m.st.glyphs.attention, "Approbation en attente", channel, []string{subject, question})
+	return m.announce(kindApproval, m.st.glyphs.attention, m.tr.t("tui.notify.approval_pending", nil), channel, []string{subject, question})
 }
 
 func (m *model) jumpToToast() {
@@ -132,7 +132,7 @@ func (m *model) announce(kind notifyKind, glyph, title, channel string, body []s
 		return nil
 	}
 	m.toastSeq++
-	m.toast = toast{seq: m.toastSeq, channel: channel, glyph: glyph, title: title, body: body, signal: deliveryLabel(m.caps, m.shouldSignal()), at: time.Now()}
+	m.toast = toast{seq: m.toastSeq, channel: channel, glyph: glyph, title: title, body: body, signal: deliveryLabel(m.tr, m.caps, m.shouldSignal()), at: time.Now()}
 	seq := m.toastSeq
 	expire := tea.Tick(toastTTL, func(time.Time) tea.Msg { return toastExpiredMsg{seq: seq} })
 	return tea.Batch(m.signalCmd(title+": "+joinNonEmpty(body...)), expire, toastTicker(seq))
@@ -145,14 +145,14 @@ func (m *model) signalCmd(text string) tea.Cmd {
 	return writeSignal(bellOrOSC9(m.caps, text))
 }
 
-func deliveryLabel(caps Capabilities, signalled bool) string {
+func deliveryLabel(trans translator, caps Capabilities, signalled bool) string {
 	if !signalled {
-		return "fenêtre active, rien envoyé"
+		return trans.t("tui.notify.delivery_none", nil)
 	}
 	if caps.OSC9 {
-		return "OSC 9 envoyé"
+		return trans.t("tui.notify.delivery_osc9", nil)
 	}
-	return "repli BEL envoyé"
+	return trans.t("tui.notify.delivery_bel", nil)
 }
 
 func bellOrOSC9(caps Capabilities, text string) string {
@@ -217,7 +217,7 @@ func (m *model) toastView(rows int) string {
 	if m.toast.glyph == m.st.glyphs.attention {
 		titleStyle = m.st.warn
 	}
-	lines := []string{toastTop(edge, titleStyle.Render(m.toast.glyph+" "+m.toast.title), m.st.dim.Render("il y a "+elapsed(time.Since(m.toast.at))), width)}
+	lines := []string{toastTop(edge, titleStyle.Render(m.toast.glyph+" "+m.toast.title), m.st.dim.Render(m.tr.t("tui.notify.ago", map[string]any{"Elapsed": elapsed(time.Since(m.toast.at))})), width)}
 	for _, text := range squeezeToastTexts(m.toastTexts(), rows-toastBorderRows, inner) {
 		lines = append(lines, toastRowLine(edge, text, inner))
 	}
@@ -235,7 +235,7 @@ func (m *model) toastTexts() []string {
 			texts = append(texts, m.st.text.Render(text))
 		}
 	}
-	return append(texts, m.st.dim.Render(joinNonEmpty(m.toast.signal, m.labelledHint(actToastJump, "y aller", ctxToast))))
+	return append(texts, m.st.dim.Render(joinNonEmpty(m.toast.signal, m.labelledHint(actToastJump, m.tr.t("tui.notify.jump", nil), ctxToast))))
 }
 
 func squeezeToastTexts(texts []string, room, inner int) []string {

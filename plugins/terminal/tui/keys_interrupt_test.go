@@ -98,7 +98,7 @@ func TestCtrlDQuitGuardNamesTheKeyPressed(t *testing.T) {
 	if isQuit(cmd) {
 		t.Fatal("the first ctrl+d with a busy session must only arm the guard")
 	}
-	if !strings.Contains(m.flash, want+" à nouveau pour quitter") {
+	if !strings.Contains(m.flash, want+" again to quit") {
 		t.Fatalf("the guard must name the key pressed (%s), got flash %q", want, m.flash)
 	}
 }

@@ -16,7 +16,6 @@ const (
 	eventMenu            = "menu"
 	eventApproval        = "approval"
 	eventApprovalRisk    = "approval_risk"
-	approvalTitle        = "! Approbation"
 	approvalDefaultWait  = 5 * time.Minute
 	approvalQuickWait    = 5 * time.Second
 	approvalUrgentWindow = time.Minute
@@ -26,6 +25,7 @@ const (
 	approvalTwoRowWidth  = 80
 	approvalShortRows    = 24
 	approvalNoteColumn   = 34
+	approvalLabelWidth   = 10
 	approvalPromptTail   = " (answer with"
 	approvalAllowPrefix  = "allow "
 )
@@ -47,19 +47,20 @@ const (
 )
 
 type approvalChoice struct {
-	role   string
-	action keyAction
-	label  string
-	note   string
-	value  string
+	role     string
+	action   keyAction
+	labelKey string
+	noteKey  string
+	note     string
+	value    string
 }
 
 func approvalCatalog() []approvalChoice {
 	return []approvalChoice{
-		{role: approvalAllow, action: actApprovalAllow, label: "Une fois", note: "seulement cette commande"},
-		{role: approvalAllowSession, action: actApprovalAllowSession, label: "Pour la session", note: "accepté jusqu’à la fin de la session"},
-		{role: approvalAllowAlways, action: actApprovalAllowAlways, label: "Toujours", note: "règle ajoutée à l’hôte"},
-		{role: approvalDeny, action: actApprovalDeny, label: "Refuser avec une raison", note: "la raison repart à l’agent comme un message"},
+		{role: approvalAllow, action: actApprovalAllow, labelKey: "tui.approval.allow_once", noteKey: "tui.approval.allow_once_note"},
+		{role: approvalAllowSession, action: actApprovalAllowSession, labelKey: "tui.approval.allow_session", noteKey: "tui.approval.allow_session_note"},
+		{role: approvalAllowAlways, action: actApprovalAllowAlways, labelKey: "tui.approval.allow_always", noteKey: "tui.approval.allow_always_note"},
+		{role: approvalDeny, action: actApprovalDeny, labelKey: "tui.approval.deny_reason", noteKey: "tui.approval.deny_reason_note"},
 	}
 }
 
@@ -102,11 +103,11 @@ type approvalMenu struct {
 func (m *model) approvalRiskLine(risk string) string {
 	switch risk {
 	case riskLowName:
-		return m.st.dim.Render("  juge      ") + m.st.green.Render("risque faible")
+		return m.st.dim.Render("  "+padTo(m.tr.t("tui.approval.judge", nil), approvalLabelWidth)) + m.st.green.Render(m.tr.t("tui.approval.risk_low", nil))
 	case riskMediumName:
-		return m.st.dim.Render("  juge      ") + m.st.warn.Render("risque moyen")
+		return m.st.dim.Render("  "+padTo(m.tr.t("tui.approval.judge", nil), approvalLabelWidth)) + m.st.warn.Render(m.tr.t("tui.approval.risk_medium", nil))
 	case riskHighName:
-		return m.st.dim.Render("  juge      ") + m.st.red.Render("risque élevé")
+		return m.st.dim.Render("  "+padTo(m.tr.t("tui.approval.judge", nil), approvalLabelWidth)) + m.st.red.Render(m.tr.t("tui.approval.risk_high", nil))
 	}
 	return ""
 }
@@ -321,7 +322,7 @@ func (m *model) expireApprovals(now time.Time) {
 			continue
 		}
 		m.answerApproval(target, approvalDeny, "")
-		m.flash = "approbation refusée par défaut : personne n’a répondu à temps"
+		m.flash = m.tr.t("tui.approval.timed_out", nil)
 	}
 }
 
@@ -435,10 +436,11 @@ func approvalReasonRuns() (map[keyAction]reasonRun, error) {
 	)
 }
 
-func approvalCountdown(deadline, now time.Time) (string, time.Duration) {
+func approvalCountdown(trans translator, deadline, now time.Time) (string, time.Duration) {
 	remaining := max(deadline.Sub(now), 0)
 	seconds := int((remaining + time.Second - 1) / time.Second)
-	return fmt.Sprintf("refus dans %d:%02d", seconds/secondsPerMinute, seconds%secondsPerMinute), remaining
+	clock := fmt.Sprintf("%d:%02d", seconds/secondsPerMinute, seconds%secondsPerMinute)
+	return trans.t("tui.approval.countdown", map[string]any{"Time": clock}), remaining
 }
 
 func middleTruncate(text string, width int, ellipsis string) string {
@@ -496,10 +498,10 @@ func (m *model) approvalBox(prompt approvalPrompt, width int, now time.Time, lay
 	row(m.approvalCommand(prompt, inner))
 	if layout.context {
 		if prompt.project != "" {
-			row(m.st.dim.Render("  projet    ") + prompt.project)
+			row(m.st.dim.Render("  "+padTo(m.tr.t("tui.approval.project", nil), approvalLabelWidth)) + prompt.project)
 		}
 		if prompt.worktree != "" {
-			row(m.st.dim.Render("  worktree  ") + prompt.worktree)
+			row(m.st.dim.Render("  "+padTo(m.tr.t("tui.approval.worktree", nil), approvalLabelWidth)) + prompt.worktree)
 		}
 		if line := m.approvalRiskLine(prompt.risk); line != "" {
 			row(line)
@@ -528,14 +530,14 @@ func approvalRow(box boxSet, content string, inner int) string {
 }
 
 func (m *model) approvalTop(prompt approvalPrompt, width int, box boxSet, now time.Time) string {
-	countdown, remaining := approvalCountdown(prompt.deadline, now)
+	countdown, remaining := approvalCountdown(m.tr, prompt.deadline, now)
 	urgency := m.st.green
 	if remaining < approvalUrgentWindow {
 		urgency = m.st.red
 	}
-	title := m.st.green.Bold(true).Render(approvalTitle)
+	title := m.st.green.Bold(true).Render(m.tr.t("tui.approval.title", nil))
 	if width >= approvalTwoRowWidth {
-		title += m.st.dim.Render(" · demandée par l’hôte")
+		title += m.st.dim.Render(m.tr.t("tui.approval.asked_by_host", nil))
 	}
 	head := box.tl + box.h + " " + title + " "
 	tail := " " + urgency.Render(countdown) + " " + box.h + box.tr
@@ -547,7 +549,7 @@ func (m *model) approvalBottom(prompt approvalPrompt, width int, box boxSet) str
 	for _, entry := range prompt.choices {
 		keys = append(keys, m.approvalKey(entry))
 	}
-	footer := joinNonEmpty(m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxApproval), m.labelledHint(actSelectAccept, "valider", ctxApproval), strings.Join(keys, " "), m.labelledHint(actApprovalAccelerate, "accélérer le délai", ctxApproval))
+	footer := joinNonEmpty(m.pairHint(actSelectPrevious, actSelectNext, m.tr.t("tui.common.choose", nil), ctxApproval), m.labelledHint(actSelectAccept, m.tr.t("tui.common.accept", nil), ctxApproval), strings.Join(keys, " "), m.labelledHint(actApprovalAccelerate, m.tr.t("tui.approval.accelerate", nil), ctxApproval))
 	head := box.bl + box.h + " " + m.st.dim.Render(footer) + " "
 	tail := box.br
 	return m.approvalBorder(head, tail, box.h, width)
@@ -577,8 +579,12 @@ func (m *model) approvalChoiceLines(entry approvalChoice, selected, wide, notes 
 		mark = m.st.accent.Render(m.st.glyphs.prompt) + " "
 		labelStyle = m.st.accent.Bold(true)
 	}
-	head := mark + m.st.green.Render(m.approvalKey(entry)) + "  " + labelStyle.Render(entry.label)
-	note := m.st.dim.Render(entry.note)
+	head := mark + m.st.green.Render(m.approvalKey(entry)) + "  " + labelStyle.Render(m.tr.t(entry.labelKey, nil))
+	noteText := entry.note
+	if noteText == "" {
+		noteText = m.tr.t(entry.noteKey, nil)
+	}
+	note := m.st.dim.Render(noteText)
 	switch {
 	case wide:
 		return []string{padTo(head, approvalNoteColumn) + note}
@@ -595,11 +601,11 @@ func (m *model) approvalShort() bool {
 }
 
 func (m *model) approvalReasonLine(prompt approvalPrompt) string {
-	line := m.st.dim.Render("  raison "+m.st.glyphs.reasonArrow+" ") + m.st.text.Render(prompt.reason) + m.st.accent.Render(m.st.glyphs.caret)
+	line := m.st.dim.Render("  "+m.tr.t("tui.approval.reason_label", nil)+" "+m.st.glyphs.reasonArrow+" ") + m.st.text.Render(prompt.reason) + m.st.accent.Render(m.st.glyphs.caret)
 	if prompt.reason == "" {
-		line += m.st.dim.Render("raison envoyée à l’agent")
+		line += m.st.dim.Render(m.tr.t("tui.approval.reason_sent", nil))
 	}
-	return line + m.st.dim.Render("   "+joinNonEmpty(m.labelledHint(actSelectAccept, "envoyer", ctxApprovalReason), m.labelledHint(actSelectCancel, "revenir", ctxApprovalReason)))
+	return line + m.st.dim.Render("   "+joinNonEmpty(m.labelledHint(actSelectAccept, m.tr.t("tui.common.send", nil), ctxApprovalReason), m.labelledHint(actSelectCancel, m.tr.t("tui.common.back", nil), ctxApprovalReason)))
 }
 
 func (m *model) approvalKey(entry approvalChoice) string {

@@ -27,7 +27,7 @@ func TestUnavailableChatKeyFlashesAndKeepsTheDraft(t *testing.T) {
 				t.Fatalf("%s must have a key in herrscher to point to", tc.moved)
 			}
 			m.handleKey(tc.key)
-			if !strings.Contains(m.flash, string(tc.action)) || !strings.Contains(m.flash, "pas encore disponible dans herrscher") {
+			if !strings.Contains(m.flash, string(tc.action)) || !strings.Contains(m.flash, "is not available in herrscher yet") {
 				t.Fatalf("flash must name the action and say it is not available yet, got %q", m.flash)
 			}
 			if !strings.Contains(m.flash, newKey) {
@@ -46,7 +46,7 @@ func TestAltEnterAtRestIsAdvertisedAsANewLine(t *testing.T) {
 	if altEnter == "" {
 		t.Fatal("alt+enter must have a hint")
 	}
-	if !strings.Contains(m.keyHelpLine(), altEnter+" nouvelle ligne au repos") {
+	if !strings.Contains(m.keyHelpLine(), altEnter+" newline when idle") {
 		t.Fatalf("the help line must show alt+enter as a new line at rest, got %q", m.keyHelpLine())
 	}
 }

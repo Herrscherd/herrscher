@@ -190,7 +190,7 @@ func (m *model) scriptInput(target *tab) []byte {
 		Session:    target.label,
 		Vendor:     info.Vendor,
 		Model:      modelLabel(info),
-		Mode:       modeSpec(target.modeID()).label,
+		Mode:       m.tr.t(modeSpec(target.modeID()).labelKey, nil),
 		Gateway:    statuslineGateway,
 		Git:        statuslineGit{Repo: info.Project, Branch: branch},
 		Context:    statuslineCtx{Used: used, Percent: int(contextRatio(used, m.windowOf(info)) * percentScale)},

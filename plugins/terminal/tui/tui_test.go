@@ -81,7 +81,7 @@ func TestRenderEventOmitsZeroCost(t *testing.T) {
 func TestRenderEventMarksAbandonedPerTab(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "abandoned"}})
-	if !strings.Contains(tabText(m.tabs["a"]), "abandonné") {
+	if !strings.Contains(tabText(m.tabs["a"]), "turn abandoned") {
 		t.Fatal("abandoned not surfaced")
 	}
 }
@@ -480,7 +480,7 @@ func TestQuestionMarkTypedWhenInputNonEmpty(t *testing.T) {
 func TestShortcutsPanelListsClaudeKeys(t *testing.T) {
 	m := newTestModel()
 	panel := m.helpView()
-	for _, want := range []string{"échap interrompre", "\\⏎ nouvelle ligne", "/ commandes", "@ fichiers"} {
+	for _, want := range []string{"esc interrupt", "\\⏎ newline", "/ commands", "@ files"} {
 		if !strings.Contains(panel, want) {
 			t.Fatalf("shortcuts panel missing %q: %q", want, panel)
 		}
@@ -514,7 +514,7 @@ func TestSpinnerHintShowsTokensAndCost(t *testing.T) {
 		startedAt: time.Now().Add(-5 * time.Second),
 	}
 	hint := m.spinnerHint(tb)
-	for _, want := range []string{"échap pour interrompre", "5s", "↑ 3.4k", "$0.02"} {
+	for _, want := range []string{"esc to interrupt", "5s", "↑ 3.4k", "$0.02"} {
 		if !strings.Contains(hint, want) {
 			t.Fatalf("spinner hint missing %q: %q", want, hint)
 		}
@@ -675,11 +675,11 @@ func TestThinkingLineDerivedWhileBusyNoStream(t *testing.T) {
 	if tabLineCount(tb, "thinking") != 0 {
 		t.Fatal("thinking indicator must not be appended to tab.lines")
 	}
-	if !strings.Contains(m.thinkingContent(), workingVerb) {
+	if !strings.Contains(m.thinkingContent(), newTranslator().t("tui.common.working", nil)) {
 		t.Fatal("thinkingContent must show the busy line while the turn runs")
 	}
 	tb.busy = false
-	if strings.Contains(m.thinkingContent(), workingVerb) {
+	if strings.Contains(m.thinkingContent(), newTranslator().t("tui.common.working", nil)) {
 		t.Fatal("the busy line must disappear once the turn is over")
 	}
 }

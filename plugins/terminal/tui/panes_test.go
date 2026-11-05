@@ -139,7 +139,7 @@ func TestPaneReleaseDoesNotMoveFocus(t *testing.T) {
 func TestPaneScreenNamesItsHeaderAndKeys(t *testing.T) {
 	_, m := paneModel(t)
 	view := m.View()
-	for _, want := range []string{"Vue en volets", "clic pour viser", "⇥ volet suivant · clic viser"} {
+	for _, want := range []string{"Panes view", "click to aim", "⇥ next pane · click to aim"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("panes screen must show %q: %s", want, view)
 		}
@@ -160,7 +160,7 @@ func TestNarrowPanesReachTheRowsBelow(t *testing.T) {
 func TestNarrowPanesSayHowManyAreHidden(t *testing.T) {
 	_, m := paneModel(t)
 	m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
-	if view := m.View(); !strings.Contains(view, "+2 volets · ⇥ pour les voir") {
+	if view := m.View(); !strings.Contains(view, "+2 panes · ⇥ to see them") {
 		t.Fatalf("a narrow grid must count the panes it hides: %s", view)
 	}
 }
@@ -201,7 +201,7 @@ func TestPaneToolRowCutsTheTargetBeforeItsState(t *testing.T) {
 func TestPaneComposerShowsThePanePlaceholder(t *testing.T) {
 	_, m := paneModel(t)
 	m.buildFrame()
-	if m.input.Placeholder != placeholderPanes {
+	if m.input.Placeholder != newTranslator().t("tui.compose.placeholder_panes", nil) {
 		t.Fatalf("the panes composer must say where the message goes, got %q", m.input.Placeholder)
 	}
 }
@@ -209,10 +209,10 @@ func TestPaneComposerShowsThePanePlaceholder(t *testing.T) {
 func TestPaneFooterWithoutApprovalOnlyNamesNavigation(t *testing.T) {
 	_, m := paneModel(t)
 	view := m.View()
-	if !strings.Contains(view, "⇥ volet suivant · clic viser") {
+	if !strings.Contains(view, "⇥ next pane · click to aim") {
 		t.Fatalf("the pane footer must name navigation: %s", view)
 	}
-	if strings.Contains(view, "approbation de") {
+	if strings.Contains(view, "approval of") {
 		t.Fatalf("the pane footer must not offer approvals without a pending one: %s", view)
 	}
 }
@@ -233,7 +233,7 @@ func TestPaneFooterNamesTheApprovalOfTheFocusedPane(t *testing.T) {
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-beta"}, Event: approvalMenuEvent(t, "make deploy", allApprovalRoles()...)})
 	focusPaneChannel(t, m, "ch-beta")
 	view := m.View()
-	if !strings.Contains(view, "o s r approbation de beta") {
+	if !strings.Contains(view, "o s r approval of beta") {
 		t.Fatalf("the pane footer must name the approval of the focused pane: %s", view)
 	}
 	if strings.Contains(view, "docs-site") {
@@ -255,7 +255,7 @@ func TestPaneApprovalOutsideTheFocusIsNeitherShownNorAnswered(t *testing.T) {
 	f, m := paneModel(t)
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-gamma"}, Event: approvalMenuEvent(t, "make deploy", allApprovalRoles()...)})
 	focusPaneChannel(t, m, "ch-alpha")
-	if view := m.View(); strings.Contains(view, "approbation de") {
+	if view := m.View(); strings.Contains(view, "approval of") {
 		t.Fatalf("a pending approval on an unfocused pane must not be offered: %s", view)
 	}
 	pressRunes(m, "o")

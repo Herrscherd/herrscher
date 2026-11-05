@@ -85,7 +85,7 @@ func TestCtrlDOpensTheTurnDiffWithFilesAndCounts(t *testing.T) {
 	press(m, "ctrl+x", "d")
 
 	view := screen(m)
-	for _, want := range []string{"Diff du tour", "a.txt", "+2 −1", "b.txt", "relus 0/2"} {
+	for _, want := range []string{"Turn diff", "a.txt", "+2 −1", "b.txt", "reviewed 0/2"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("panel misses %q:\n%s", want, view)
 		}
@@ -134,7 +134,7 @@ func TestPaneHeaderSaysOldAndNewAtEachWidth(t *testing.T) {
 			m, _ := newDiffModel(t, dir, nil, width, 20)
 			press(m, "ctrl+x", "d")
 
-			if !strings.Contains(screen(m), "ancien · nouveau") {
+			if !strings.Contains(screen(m), "old · new") {
 				t.Fatalf("the pane header must read ancien · nouveau:\n%s", screen(m))
 			}
 		})
@@ -176,7 +176,7 @@ func TestEscClosesThePanel(t *testing.T) {
 
 	press(m, "esc")
 
-	if strings.Contains(screen(m), "Diff du tour") {
+	if strings.Contains(screen(m), "Turn diff") {
 		t.Fatal("esc must close the diff panel")
 	}
 }
@@ -190,7 +190,7 @@ func TestSpaceMarksTheFileReviewedAndMovesOn(t *testing.T) {
 	press(m, " ")
 
 	view := screen(m)
-	if !strings.Contains(view, "relus 1/2") {
+	if !strings.Contains(view, "reviewed 1/2") {
 		t.Fatalf("le résumé doit compter le fichier relu:\n%s", view)
 	}
 	if !strings.Contains(view, "+ new") {
@@ -239,7 +239,7 @@ func TestNoteStaysEditableUntilSent(t *testing.T) {
 	if len(be.submitted) != 0 {
 		t.Fatalf("esc must not send: %+v", be.submitted)
 	}
-	if strings.Contains(screen(m), "envoyer à") {
+	if strings.Contains(screen(m), "send to") {
 		t.Fatal("esc must close the note box")
 	}
 }
@@ -270,7 +270,7 @@ func TestCommitWithNothingToCommitShowsANotice(t *testing.T) {
 	m, _ := newDiffModel(t, dir, nil, 120, 30)
 	press(m, "ctrl+x", "d", "c", "enter")
 
-	if !strings.Contains(screen(m), "rien à commiter dans cette portée") {
+	if !strings.Contains(screen(m), "nothing to commit in this scope") {
 		t.Fatalf("notice missing:\n%s", screen(m))
 	}
 }
@@ -285,7 +285,7 @@ func TestPRCommitsThenOpensAndShowsTheNumber(t *testing.T) {
 
 	press(m, "p")
 
-	if !strings.Contains(screen(m), "PR #42 ouverte contre master") {
+	if !strings.Contains(screen(m), "PR #42 opened against master") {
 		t.Fatalf("PR number missing:\n%s", screen(m))
 	}
 	if len(runner.ghCalls) != 1 {
@@ -304,7 +304,7 @@ func TestBranchToggleShowsCommitsAheadOfBase(t *testing.T) {
 	press(m, "b")
 
 	view := screen(m)
-	if !strings.Contains(view, "branche : 1 commits de plus sur master") {
+	if !strings.Contains(view, "branch: 1 more commit on master") {
 		t.Fatalf("branch footer missing:\n%s", view)
 	}
 	if !strings.Contains(view, "a.txt") {
@@ -342,7 +342,7 @@ func TestReviewCommandOpensThePanelInReviewMode(t *testing.T) {
 	if !m.diff.open || !m.diff.review {
 		t.Fatalf("/review must open the panel in review mode: %+v", m.diff.open)
 	}
-	if !strings.Contains(screen(m), "Revue") {
+	if !strings.Contains(screen(m), "Review") {
 		t.Fatalf("review title missing:\n%s", screen(m))
 	}
 }
@@ -439,7 +439,7 @@ func TestFolderOutsideGitShowsAClearMessage(t *testing.T) {
 	m, _ := newDiffModel(t, t.TempDir(), nil, 120, 30)
 	press(m, "ctrl+x", "d")
 
-	if !strings.Contains(screen(m), "aucun dépôt git dans le dossier de cette session") {
+	if !strings.Contains(screen(m), "no git repository in this session's folder") {
 		t.Fatalf("a folder outside git must say so:\n%s", screen(m))
 	}
 }

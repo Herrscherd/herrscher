@@ -16,7 +16,7 @@ const (
 	subagentPanelMax = 3
 )
 
-func todoPanel(items []contracts.TodoItem, width int, styles uiStyles) []string {
+func todoPanel(trans translator, items []contracts.TodoItem, width int, styles uiStyles) []string {
 	if len(items) == 0 {
 		return nil
 	}
@@ -29,7 +29,7 @@ func todoPanel(items []contracts.TodoItem, width int, styles uiStyles) []string 
 			active = index
 		}
 	}
-	head := styles.green.Render(truncate(fmt.Sprintf("  %s todos %d/%d", styles.glyphs.success, done, len(items)), width))
+	head := styles.green.Render(truncate("  "+styles.glyphs.success+" "+trans.t("tui.panel.todos", map[string]any{"Done": done, tplArgTotal: len(items)}), width))
 	if width < narrowStatus {
 		return []string{head}
 	}
@@ -62,16 +62,13 @@ func oneLine(s string) string {
 	return strings.Join(fields, " ")
 }
 
-func subagentPanel(agents []liveAgent, now time.Time, width int, styles uiStyles) []string {
+func subagentPanel(trans translator, agents []liveAgent, now time.Time, width int, styles uiStyles) []string {
 	if len(agents) == 0 {
 		return nil
 	}
 	mark := styles.glyphs.familyGlyph(familyAgent)
 	if width < narrowStatus {
-		label := fmt.Sprintf("  %s %d sous-agent", mark, len(agents))
-		if len(agents) > 1 {
-			label += "s"
-		}
+		label := "  " + mark + " " + trans.t("tui.panel.subagents", map[string]any{tplArgCount: len(agents)})
 		return []string{styles.text.Render(truncate(label, width))}
 	}
 	shown := agents

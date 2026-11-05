@@ -27,11 +27,9 @@ func (m *model) composerTextWidth() int {
 }
 
 const (
-	composerPrompt   = "> "
-	placeholderIdle  = "Tape un message, / ou @, ou !commande"
-	placeholderPanes = "Le message part dans le volet en surbrillance"
-	ellipsis         = "…"
-	worktreesMarker  = "/.worktrees/"
+	composerPrompt  = "> "
+	ellipsis        = "…"
+	worktreesMarker = "/.worktrees/"
 )
 
 func promptAt(prompt string) func(int) string {
@@ -72,13 +70,13 @@ func (m *model) syncPrompt() {
 func (m *model) placeholderText() string {
 	switch {
 	case m.editing:
-		return editorName() + " est ouvert sur le brouillon, :wq pour revenir"
+		return m.tr.t("tui.compose.editor_open", map[string]any{"Editor": editorName()})
 	case m.surface == surfacePanes:
-		return placeholderPanes
+		return m.tr.t("tui.compose.placeholder_panes", nil)
 	case m.isBusy():
 		return m.placeholderBusyText()
 	}
-	return placeholderIdle
+	return m.tr.t("tui.compose.placeholder_idle", nil)
 }
 
 func (m *model) isShellInput() bool {
@@ -105,13 +103,13 @@ func (m *model) composerTitles() ([]string, string) {
 	switch {
 	case m.editing:
 		return []string{
-			m.st.violet.Bold(true).Render("Éditeur"),
-			m.st.dim.Render(footerSeparator + "brouillon ouvert dans " + editorName()),
+			m.st.violet.Bold(true).Render(m.tr.t("tui.compose.editor_title", nil)),
+			m.st.dim.Render(footerSeparator + m.tr.t("tui.compose.draft_open_in", map[string]any{"Editor": editorName()})),
 		}, m.st.dim.Render(m.editorTitle())
 	case m.isShellInput():
 		return append([]string{m.st.warn.Bold(true).Render("! SHELL")}, m.shellTitleDetail()...), m.st.dim.Render(m.editorTitle())
 	case m.surface == surfacePanes:
-		return []string{m.st.dim.Render("vers ") + m.st.accent.Render(m.paneFocusName())}, m.st.dim.Render(m.panesTitleHint())
+		return []string{m.st.dim.Render(m.tr.t("tui.compose.to_prefix", nil)) + m.st.accent.Render(m.paneFocusName())}, m.st.dim.Render(m.panesTitleHint())
 	}
 	name := "herrscher"
 	if tb := m.activeTab(); tb != nil && tb.label != "" {
@@ -123,9 +121,9 @@ func (m *model) composerTitles() ([]string, string) {
 func (m *model) shellTitleDetail() []string {
 	var parts []string
 	if info, ok := m.activeInfo(); ok && info.Dir != "" {
-		parts = append(parts, m.st.dim.Render(footerSeparator+"dans "+sessionDirLabel(info.Dir)))
+		parts = append(parts, m.st.dim.Render(footerSeparator+m.tr.t("tui.compose.in_dir", map[string]any{"Dir": sessionDirLabel(info.Dir)})))
 	}
-	return append(parts, m.st.dim.Render(footerSeparator+"la sortie entre dans la session"))
+	return append(parts, m.st.dim.Render(footerSeparator+m.tr.t("tui.compose.output_enters", nil)))
 }
 
 func sessionDirLabel(dir string) string {
@@ -143,7 +141,7 @@ func editorName() string {
 func (m *model) composerFoots() (string, string) {
 	footRight := m.doubleEscHint()
 	if m.isBusy() {
-		footRight = m.labelledHint(actCancel, "interrompre", chatKeyStack()...)
+		footRight = m.labelledHint(actCancel, m.tr.t("tui.common.interrupt", nil), chatKeyStack()...)
 	}
 	switch {
 	case m.isShellInput():
@@ -156,53 +154,53 @@ func (m *model) composerFoots() (string, string) {
 }
 
 func (m *model) placeholderBusyText() string {
-	return "Écris pendant que l’agent travaille : " + joinWith(", ",
-		m.labelledHint(actSubmit, "met en file", chatKeyStack()...),
-		m.labelledHint(actQueueRedirect, "réoriente", chatKeyStack()...),
-	)
+	return m.tr.t("tui.compose.busy_placeholder", map[string]any{"Actions": joinWith(", ",
+		m.labelledHint(actSubmit, m.tr.t("tui.compose.queue_submit", nil), chatKeyStack()...),
+		m.labelledHint(actQueueRedirect, m.tr.t("tui.compose.redirect", nil), chatKeyStack()...),
+	)})
 }
 
 func (m *model) footIdleText() string {
 	return joinNonEmpty(
-		m.labelledHint(actSubmit, "envoyer", chatKeyStack()...),
-		"@ fichier", "/ commande", "! shell",
-		m.labelledHint(actHistorySearch, "historique", chatKeyStack()...),
-		m.labelledHint(actStash, "de côté", chatKeyStack()...),
+		m.labelledHint(actSubmit, m.tr.t("tui.common.send", nil), chatKeyStack()...),
+		m.tr.t("tui.compose.hint_file", nil), m.tr.t("tui.compose.hint_command", nil), "! shell",
+		m.labelledHint(actHistorySearch, m.tr.t("tui.common.history", nil), chatKeyStack()...),
+		m.labelledHint(actStash, m.tr.t("tui.compose.stash", nil), chatKeyStack()...),
 	)
 }
 
 func (m *model) footBusyText() string {
 	return joinNonEmpty(
-		m.labelledHint(actSubmit, "en file", chatKeyStack()...),
-		m.labelledHint(actQueueRedirect, "réorienter", chatKeyStack()...),
-		m.labelledHint(actQueueSubmit, "envoyer la file", chatKeyStack()...),
+		m.labelledHint(actSubmit, m.tr.t("tui.compose.queued", nil), chatKeyStack()...),
+		m.labelledHint(actQueueRedirect, m.tr.t("tui.compose.redirect_verb", nil), chatKeyStack()...),
+		m.labelledHint(actQueueSubmit, m.tr.t("tui.compose.send_queue", nil), chatKeyStack()...),
 		"! shell",
-		m.labelledHint(actHistorySearch, "historique", chatKeyStack()...),
-		m.labelledHint(actStash, "de côté", chatKeyStack()...),
+		m.labelledHint(actHistorySearch, m.tr.t("tui.common.history", nil), chatKeyStack()...),
+		m.labelledHint(actStash, m.tr.t("tui.compose.stash", nil), chatKeyStack()...),
 	)
 }
 
 func (m *model) footShellText() string {
 	return joinNonEmpty(
-		m.labelledHint(actSubmit, "lancer", chatKeyStack()...),
-		"la commande passe par la politique d’outils de l’hôte",
-		m.labelledHint(actCancel, "annuler", chatKeyStack()...),
+		m.labelledHint(actSubmit, m.tr.t("tui.compose.run", nil), chatKeyStack()...),
+		m.tr.t("tui.compose.shell_policy", nil),
+		m.labelledHint(actCancel, m.tr.t("tui.common.cancel", nil), chatKeyStack()...),
 	)
 }
 
 func (m *model) doubleEscHint() string {
 	glyph := m.hintIn(actCancel, chatKeyStack()...)
-	return joinWith(" ", glyph, glyph, "retour")
+	return joinWith(" ", glyph, glyph, m.tr.t("tui.compose.back", nil))
 }
 
 func (m *model) editorTitle() string {
-	return m.labelledHint(actExternalEditor, "éditeur", chatKeyStack()...)
+	return m.labelledHint(actExternalEditor, m.tr.t("tui.common.editor", nil), chatKeyStack()...)
 }
 
 func (m *model) panesTitleHint() string {
 	return joinNonEmpty(
-		m.labelledHint(actPaneClose, "quitter", ctxPane),
-		m.labelledHint(actPaneZoom, "agrandir", ctxPane),
+		m.labelledHint(actPaneClose, m.tr.t("tui.compose.pane_close", nil), ctxPane),
+		m.labelledHint(actPaneZoom, m.tr.t("tui.compose.pane_zoom", nil), ctxPane),
 	)
 }
 

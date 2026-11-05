@@ -1,0 +1,2546 @@
+[
+  {
+    "id": "tui.copy.what",
+    "other": "copy what? {{.Targets}}"
+  },
+  {
+    "id": "tui.copy.nothing",
+    "other": "nothing to copy here"
+  },
+  {
+    "id": "tui.copy.failed",
+    "other": "copy failed: {{.Reason}}"
+  },
+  {
+    "id": "tui.copy.done",
+    "one": "{{.Target}} copied, {{.Count}} line",
+    "other": "{{.Target}} copied, {{.Count}} lines"
+  },
+  {
+    "id": "tui.copy.you",
+    "other": "you"
+  },
+  {
+    "id": "tui.copy.agent",
+    "other": "agent"
+  },
+  {
+    "id": "tui.copy.entry",
+    "other": "{{.Label}}: {{.Text}}"
+  },
+  {
+    "id": "tui.copy.code_done",
+    "one": "{{.Count}} line of code copied",
+    "other": "{{.Count}} lines of code copied"
+  },
+  {
+    "id": "tui.copy.no_code_block",
+    "other": "no code block in the last answer"
+  },
+  {
+    "id": "tui.fold.code",
+    "one": "{{.Glyph}} {{.Lang}} · {{.Count}} line ({{.Toggle}})",
+    "other": "{{.Glyph}} {{.Lang}} · {{.Count}} lines ({{.Toggle}})"
+  },
+  {
+    "id": "tui.diff.panel_label",
+    "other": "diff panel"
+  },
+  {
+    "id": "tui.diff.header_counts",
+    "other": "  +{{.Added}} −{{.Removed}}   old · new   {{.Hint}}"
+  },
+  {
+    "id": "tui.diff.more_rows",
+    "other": "more lines"
+  },
+  {
+    "id": "tui.common.close",
+    "other": "close"
+  },
+  {
+    "id": "tui.common.cancel",
+    "other": "cancel"
+  },
+  {
+    "id": "tui.common.send",
+    "other": "send"
+  },
+  {
+    "id": "tui.common.help",
+    "other": "help"
+  },
+  {
+    "id": "tui.common.interrupt",
+    "other": "interrupt"
+  },
+  {
+    "id": "tui.common.yes",
+    "other": "yes"
+  },
+  {
+    "id": "tui.common.no",
+    "other": "no"
+  },
+  {
+    "id": "tui.common.history",
+    "other": "history"
+  },
+  {
+    "id": "tui.common.editor",
+    "other": "editor"
+  },
+  {
+    "id": "tui.common.starting",
+    "other": "starting…"
+  },
+  {
+    "id": "tui.common.open",
+    "other": "open"
+  },
+  {
+    "id": "tui.common.no_session",
+    "other": "no session open"
+  },
+  {
+    "id": "tui.chrome.fact_session",
+    "other": "session"
+  },
+  {
+    "id": "tui.chrome.fact_repo",
+    "other": "repo"
+  },
+  {
+    "id": "tui.chrome.fact_model",
+    "other": "model"
+  },
+  {
+    "id": "tui.chrome.fact_open",
+    "other": "open"
+  },
+  {
+    "id": "tui.chrome.other_sessions",
+    "other": "other sessions"
+  },
+  {
+    "id": "tui.chrome.hint_commands",
+    "other": "/ commands"
+  },
+  {
+    "id": "tui.chrome.hint_files",
+    "other": "@ files"
+  },
+  {
+    "id": "tui.chrome.switch_session",
+    "other": "switch session"
+  },
+  {
+    "id": "tui.compose.placeholder_idle",
+    "other": "Type a message, / or @, or !command"
+  },
+  {
+    "id": "tui.compose.placeholder_panes",
+    "other": "The message goes to the highlighted pane"
+  },
+  {
+    "id": "tui.compose.editor_title",
+    "other": "editor"
+  },
+  {
+    "id": "tui.compose.draft_open_in",
+    "other": "draft open in {{.Editor}}"
+  },
+  {
+    "id": "tui.compose.to_prefix",
+    "other": "to "
+  },
+  {
+    "id": "tui.compose.editor_open",
+    "other": "{{.Editor}} is open on the draft, :wq to come back"
+  },
+  {
+    "id": "tui.compose.in_dir",
+    "other": "in {{.Dir}}"
+  },
+  {
+    "id": "tui.compose.output_enters",
+    "other": "output goes into the session"
+  },
+  {
+    "id": "tui.compose.busy_placeholder",
+    "other": "Type while the agent works: {{.Actions}}"
+  },
+  {
+    "id": "tui.compose.queue_submit",
+    "other": "queue"
+  },
+  {
+    "id": "tui.compose.redirect",
+    "other": "redirect"
+  },
+  {
+    "id": "tui.compose.hint_file",
+    "other": "@ file"
+  },
+  {
+    "id": "tui.compose.hint_command",
+    "other": "/ command"
+  },
+  {
+    "id": "tui.compose.stash",
+    "other": "aside"
+  },
+  {
+    "id": "tui.compose.queued",
+    "other": "queued"
+  },
+  {
+    "id": "tui.compose.redirect_verb",
+    "other": "redirect"
+  },
+  {
+    "id": "tui.compose.send_queue",
+    "other": "send queue"
+  },
+  {
+    "id": "tui.compose.run",
+    "other": "run"
+  },
+  {
+    "id": "tui.compose.shell_policy",
+    "other": "the command goes through the host's tool policy"
+  },
+  {
+    "id": "tui.compose.back",
+    "other": "back"
+  },
+  {
+    "id": "tui.compose.pane_close",
+    "other": "quit"
+  },
+  {
+    "id": "tui.compose.pane_zoom",
+    "other": "zoom"
+  },
+  {
+    "id": "tui.statusline.script_footer",
+    "other": "the boxes no longer matter: the script decides"
+  },
+  {
+    "id": "tui.statusline.sample_queue",
+    "other": "queued"
+  },
+  {
+    "id": "tui.statusline.script_heading",
+    "other": "Script"
+  },
+  {
+    "id": "tui.statusline.json_caption",
+    "other": "JSON received on standard input"
+  },
+  {
+    "id": "tui.statusline.json_note",
+    "other": " · on every event"
+  },
+  {
+    "id": "tui.statusline.title",
+    "other": "Status bar"
+  },
+  {
+    "id": "tui.statusline.builtin",
+    "other": "built-in"
+  },
+  {
+    "id": "tui.statusline.script",
+    "other": "script"
+  },
+  {
+    "id": "tui.statusline.source",
+    "other": "source"
+  },
+  {
+    "id": "tui.statusline.toggle",
+    "other": "s to switch"
+  },
+  {
+    "id": "tui.statusline.not_written",
+    "other": "terminal.toml not written: {{.Reason}}"
+  },
+  {
+    "id": "tui.statusline.preview_next_line",
+    "other": "live preview, next line: the bar as it will look in the terminal"
+  },
+  {
+    "id": "tui.statusline.preview_bar",
+    "other": "live preview, the bar as it will look in the terminal"
+  },
+  {
+    "id": "tui.statusline.preview_live",
+    "other": "live preview"
+  },
+  {
+    "id": "tui.statusline.choose",
+    "other": "choose"
+  },
+  {
+    "id": "tui.statusline.check",
+    "other": "check"
+  },
+  {
+    "id": "tui.statusline.order",
+    "other": "order follows the list"
+  },
+  {
+    "id": "tui.overview.subtitle",
+    "other": "terminal and Discord together"
+  },
+  {
+    "id": "tui.overview.no_match",
+    "other": "   (no session matches)"
+  },
+  {
+    "id": "tui.overview.empty",
+    "other": "  no session"
+  },
+  {
+    "id": "tui.overview.archived_hint",
+    "other": "/resume to pick them up again with a preview"
+  },
+  {
+    "id": "tui.overview.archived",
+    "one": "   archived: {{.Count}} · {{.Hint}}",
+    "other": "   archived: {{.Count}} · {{.Hint}}"
+  },
+  {
+    "id": "tui.overview.hint_open_approval",
+    "other": "open the approval"
+  },
+  {
+    "id": "tui.overview.hint_review",
+    "other": "review the turn's diff"
+  },
+  {
+    "id": "tui.overview.group_working",
+    "other": "Working"
+  },
+  {
+    "id": "tui.overview.group_waiting",
+    "other": "Waiting for an answer"
+  },
+  {
+    "id": "tui.overview.group_review",
+    "other": "To review"
+  },
+  {
+    "id": "tui.overview.group_done",
+    "other": "Done"
+  },
+  {
+    "id": "tui.compose.placeholder_chat",
+    "other": "type a message…"
+  },
+  {
+    "id": "tui.overview.in_pane",
+    "other": "in pane"
+  },
+  {
+    "id": "tui.overview.title",
+    "other": "Sessions and agents"
+  },
+  {
+    "id": "tui.overview.filter",
+    "other": "filter"
+  },
+  {
+    "id": "tui.overview.type_to_filter",
+    "other": "type to filter"
+  },
+  {
+    "id": "tui.overview.choose",
+    "other": "choose"
+  },
+  {
+    "id": "tui.overview.letters_filter",
+    "other": "letters filter"
+  },
+  {
+    "id": "tui.overview.clear",
+    "other": "clear"
+  },
+  {
+    "id": "tui.overview.in_panes",
+    "other": "in panes"
+  },
+  {
+    "id": "tui.overview.sessions",
+    "one": "{{.Count}} session",
+    "other": "{{.Count}} sessions"
+  },
+  {
+    "id": "tui.overview.vendors",
+    "one": "{{.Count}} vendor",
+    "other": "{{.Count}} vendors"
+  },
+  {
+    "id": "tui.overview.gateways",
+    "one": "{{.Count}} gateway",
+    "other": "{{.Count}} gateways"
+  },
+  {
+    "id": "tui.overview.field_vendor",
+    "other": "vendor"
+  },
+  {
+    "id": "tui.overview.field_gateway",
+    "other": "gateway"
+  },
+  {
+    "id": "tui.overview.field_where",
+    "other": "where"
+  },
+  {
+    "id": "tui.overview.field_cost",
+    "other": "cost"
+  },
+  {
+    "id": "tui.overview.field_context",
+    "other": "context"
+  },
+  {
+    "id": "tui.overview.preview_unavailable",
+    "other": "preview unavailable: {{.Reason}}"
+  },
+  {
+    "id": "tui.overview.preview_unreadable",
+    "other": "preview unreadable: {{.Reason}}"
+  },
+  {
+    "id": "tui.panel.todos",
+    "other": "todos {{.Done}}/{{.Total}}"
+  },
+  {
+    "id": "tui.panel.subagents",
+    "one": "{{.Count}} subagent",
+    "other": "{{.Count}} subagents"
+  },
+  {
+    "id": "tui.panel.approval_keys",
+    "other": "o s r approval of {{.Name}}"
+  },
+  {
+    "id": "tui.panel.next_pane",
+    "other": "next pane"
+  },
+  {
+    "id": "tui.panel.click_aim",
+    "other": "click to aim"
+  },
+  {
+    "id": "tui.panel.click_to_aim",
+    "other": "click to aim"
+  },
+  {
+    "id": "tui.panel.title",
+    "other": "Panes view"
+  },
+  {
+    "id": "tui.panel.count_working",
+    "one": "{{.Count}} working",
+    "other": "{{.Count}} working"
+  },
+  {
+    "id": "tui.panel.count_waiting",
+    "one": "{{.Count}} approval",
+    "other": "{{.Count}} approvals"
+  },
+  {
+    "id": "tui.panel.count_unread",
+    "one": "{{.Count}} unread",
+    "other": "{{.Count}} unread"
+  },
+  {
+    "id": "tui.panel.count_finished",
+    "one": "{{.Count}} finished",
+    "other": "{{.Count}} finished"
+  },
+  {
+    "id": "tui.panel.hidden",
+    "one": "+{{.Count}} pane · {{.Hint}}",
+    "other": "+{{.Count}} panes · {{.Hint}}"
+  },
+  {
+    "id": "tui.panel.see_them",
+    "other": "to see them"
+  },
+  {
+    "id": "tui.panel.no_live_session",
+    "other": "no live session"
+  },
+  {
+    "id": "tui.panel.state_waiting",
+    "other": "approval"
+  },
+  {
+    "id": "tui.panel.state_idle",
+    "other": "idle"
+  },
+  {
+    "id": "tui.panel.state_finished",
+    "other": "finished"
+  },
+  {
+    "id": "tui.rail.hints",
+    "other": "^P agents · ^T tab"
+  },
+  {
+    "id": "tui.context.cat_system",
+    "other": "system"
+  },
+  {
+    "id": "tui.context.cat_system_need",
+    "other": "size of the system prompt, sent every turn"
+  },
+  {
+    "id": "tui.context.cat_tools",
+    "other": "tools and MCP"
+  },
+  {
+    "id": "tui.context.cat_tools_need",
+    "other": "size of the tool schemas, per MCP server"
+  },
+  {
+    "id": "tui.context.cat_memory",
+    "other": "memory"
+  },
+  {
+    "id": "tui.context.cat_memory_need",
+    "other": "size of the memory block injected into the turn"
+  },
+  {
+    "id": "tui.context.cat_skills",
+    "other": "skills"
+  },
+  {
+    "id": "tui.context.cat_skills_need",
+    "other": "size of the skill descriptions loaded in the context"
+  },
+  {
+    "id": "tui.context.cat_files",
+    "other": "files read"
+  },
+  {
+    "id": "tui.context.cat_files_need",
+    "other": "tokens of each file the agent read"
+  },
+  {
+    "id": "tui.context.cat_conversation",
+    "other": "conversation"
+  },
+  {
+    "id": "tui.context.cat_conversation_need",
+    "other": "tokens of the turns still kept, per turn"
+  },
+  {
+    "id": "tui.context.compact",
+    "other": "compact"
+  },
+  {
+    "id": "tui.context.show_again",
+    "other": "show again"
+  },
+  {
+    "id": "tui.context.title",
+    "other": "Context"
+  },
+  {
+    "id": "tui.context.total",
+    "other": "total"
+  },
+  {
+    "id": "tui.context.free",
+    "other": "free"
+  },
+  {
+    "id": "tui.context.free_note",
+    "other": "room before the window is full"
+  },
+  {
+    "id": "tui.render.error_label",
+    "other": "error"
+  },
+  {
+    "id": "tui.drafts.orphans",
+    "other": "orphaned drafts: {{.Reason}}"
+  },
+  {
+    "id": "tui.status.limits_ignored",
+    "other": "contextLimits ignored, the default size applies: {{.Reason}}"
+  },
+  {
+    "id": "tui.status.no_auto_compact",
+    "other": "no auto-compaction"
+  },
+  {
+    "id": "tui.status.compacts_at",
+    "other": "compacts alone at {{.Percent}}%"
+  },
+  {
+    "id": "tui.status.before_compaction",
+    "other": "{{.Percent}}% before compaction"
+  },
+  {
+    "id": "tui.status.usage_title",
+    "other": "usage · {{.Tab}}"
+  },
+  {
+    "id": "tui.status.label_vendor",
+    "other": "vendor"
+  },
+  {
+    "id": "tui.status.label_model",
+    "other": "model"
+  },
+  {
+    "id": "tui.status.label_effort",
+    "other": "effort"
+  },
+  {
+    "id": "tui.status.label_project",
+    "other": "project"
+  },
+  {
+    "id": "tui.status.label_context",
+    "other": "context"
+  },
+  {
+    "id": "tui.status.label_left",
+    "other": "left"
+  },
+  {
+    "id": "tui.status.label_cost",
+    "other": "cost"
+  },
+  {
+    "id": "tui.status.label_open",
+    "other": "open"
+  },
+  {
+    "id": "tui.status.no_measurement",
+    "other": "no measurement yet"
+  },
+  {
+    "id": "tui.status.since_open",
+    "other": "since this tab opened"
+  },
+  {
+    "id": "tui.render.compacted",
+    "other": "compacted: {{.Range}}"
+  },
+  {
+    "id": "tui.render.last_compact",
+    "other": "last compaction: {{.Range}}"
+  },
+  {
+    "id": "tui.status.compact_waits",
+    "other": "compaction waits for the current turn to finish"
+  },
+  {
+    "id": "tui.status.compact_no_session",
+    "other": "no live session to compact"
+  },
+  {
+    "id": "tui.statusline.field_mode",
+    "other": "mode and"
+  },
+  {
+    "id": "tui.statusline.note_mode",
+    "other": "Manual, Edits accepted, Plan, Auto in red"
+  },
+  {
+    "id": "tui.statusline.field_vendor",
+    "other": "vendor and model"
+  },
+  {
+    "id": "tui.statusline.note_vendor",
+    "other": "claude, codex, cursor"
+  },
+  {
+    "id": "tui.statusline.field_repo",
+    "other": "repo and branch"
+  },
+  {
+    "id": "tui.statusline.note_repo",
+    "other": "herrscher:feat/tui-v2"
+  },
+  {
+    "id": "tui.statusline.field_wt",
+    "other": "worktree"
+  },
+  {
+    "id": "tui.statusline.note_wt",
+    "other": "(worktree) if it is one"
+  },
+  {
+    "id": "tui.statusline.field_ctx",
+    "other": "context gauge"
+  },
+  {
+    "id": "tui.statusline.note_ctx",
+    "other": "━, 80 % tier, 95 % red"
+  },
+  {
+    "id": "tui.statusline.field_detail",
+    "other": "context tokens"
+  },
+  {
+    "id": "tui.statusline.note_detail",
+    "other": "82k/200k"
+  },
+  {
+    "id": "tui.statusline.field_cost",
+    "other": "cost"
+  },
+  {
+    "id": "tui.statusline.note_cost",
+    "other": "actual billing"
+  },
+  {
+    "id": "tui.statusline.field_queue",
+    "other": "waiting queue"
+  },
+  {
+    "id": "tui.statusline.note_queue",
+    "other": "○ queue, ↪ redirects"
+  },
+  {
+    "id": "tui.statusline.field_bg",
+    "other": "background tasks"
+  },
+  {
+    "id": "tui.statusline.note_bg",
+    "other": "go test -race in background"
+  },
+  {
+    "id": "tui.statusline.field_dur",
+    "other": "turn duration"
+  },
+  {
+    "id": "tui.statusline.note_dur",
+    "other": "1m12s"
+  },
+  {
+    "id": "tui.statusline.field_quota",
+    "other": "5 h and 7 d quotas"
+  },
+  {
+    "id": "tui.statusline.note_quota",
+    "other": "Claude subscription"
+  },
+  {
+    "id": "tui.status.queued_count",
+    "one": "{{.Count}} queued",
+    "other": "{{.Count}} queued"
+  },
+  {
+    "id": "tui.status.background_count",
+    "one": "{{.Count}} background",
+    "other": "{{.Count}} background"
+  },
+  {
+    "id": "tui.status.turn",
+    "other": "turn"
+  },
+  {
+    "id": "tui.status.worktree_mark",
+    "other": "(worktree)"
+  },
+  {
+    "id": "tui.summary.title",
+    "other": "Summary"
+  },
+  {
+    "id": "tui.summary.field_vendors",
+    "other": "vendors"
+  },
+  {
+    "id": "tui.summary.field_gateways",
+    "other": "gateways"
+  },
+  {
+    "id": "tui.summary.field_memory",
+    "other": "memory"
+  },
+  {
+    "id": "tui.summary.field_skills",
+    "other": "skills"
+  },
+  {
+    "id": "tui.summary.field_cron",
+    "other": "cron"
+  },
+  {
+    "id": "tui.summary.field_policy",
+    "other": "policy"
+  },
+  {
+    "id": "tui.summary.note_agent_written",
+    "other": "written by the agent"
+  },
+  {
+    "id": "tui.summary.note_same_rule",
+    "other": "same rule everywhere"
+  },
+  {
+    "id": "tui.summary.skills_value",
+    "other": "{{.Total}} · {{.Pending}} to approve"
+  },
+  {
+    "id": "tui.summary.cron_turns",
+    "one": "{{.Count}} turn",
+    "other": "{{.Count}} turns"
+  },
+  {
+    "id": "tui.summary.rules",
+    "one": "{{.Count}} rule",
+    "other": "{{.Count}} rules"
+  },
+  {
+    "id": "tui.summary.denies",
+    "one": "{{.Count}} deny rule",
+    "other": "{{.Count}} deny rules"
+  },
+  {
+    "id": "tui.render.subagent_retry",
+    "other": "timed out, retried"
+  },
+  {
+    "id": "tui.render.unfold",
+    "other": "unfold"
+  },
+  {
+    "id": "tui.render.fold",
+    "other": "fold"
+  },
+  {
+    "id": "tui.render.thinking",
+    "other": "Thinking"
+  },
+  {
+    "id": "tui.render.tokens_unit",
+    "other": "tokens"
+  },
+  {
+    "id": "tui.compose.remove_pending",
+    "other": "remove"
+  },
+  {
+    "id": "tui.status.clipboard_failed",
+    "other": "clipboard image failed: {{.Reason}}"
+  },
+  {
+    "id": "tui.session.close_none",
+    "other": "no session to close here"
+  },
+  {
+    "id": "tui.session.rename_usage",
+    "other": "/rename <name>: give the session its new name"
+  },
+  {
+    "id": "tui.session.rename_none",
+    "other": "no session to rename here"
+  },
+  {
+    "id": "tui.session.handoff_none",
+    "other": "no session to hand off here"
+  },
+  {
+    "id": "tui.render.earlier",
+    "other": "earlier"
+  },
+  {
+    "id": "tui.render.turn_reset",
+    "other": "turn reset"
+  },
+  {
+    "id": "tui.render.turn_abandoned",
+    "other": "turn abandoned"
+  },
+  {
+    "id": "tui.palette.navigate",
+    "other": "navigate"
+  },
+  {
+    "id": "tui.palette.page",
+    "other": "page"
+  },
+  {
+    "id": "tui.palette.complete",
+    "other": "complete"
+  },
+  {
+    "id": "tui.status.disconnected",
+    "other": "· disconnected"
+  },
+  {
+    "id": "tui.spinner.interrupt",
+    "other": "to interrupt"
+  },
+  {
+    "id": "tui.status.enhanced_keys_unavailable",
+    "other": "enhanced keys unavailable: {{.Reason}}"
+  },
+  {
+    "id": "tui.status.notify_failed",
+    "other": "notification failed: {{.Reason}}"
+  },
+  {
+    "id": "tui.status.nothing_to_interrupt",
+    "other": "nothing to interrupt: {{.Key}} again to quit"
+  },
+  {
+    "id": "tui.status.quit_busy",
+    "one": "{{.Count}} session still running will be stopped: {{.Key}} again to quit",
+    "other": "{{.Count}} sessions still running will be stopped: {{.Key}} again to quit"
+  },
+  {
+    "id": "tui.render.nothing_to_fold",
+    "other": "nothing to fold in this turn"
+  },
+  {
+    "id": "tui.approval.accelerate",
+    "other": "speed up the timeout"
+  },
+  {
+    "id": "tui.approval.allow_always",
+    "other": "Always"
+  },
+  {
+    "id": "tui.approval.allow_always_note",
+    "other": "rule added to the host"
+  },
+  {
+    "id": "tui.approval.allow_once",
+    "other": "Once"
+  },
+  {
+    "id": "tui.approval.allow_once_note",
+    "other": "only this command"
+  },
+  {
+    "id": "tui.approval.allow_session",
+    "other": "For the session"
+  },
+  {
+    "id": "tui.approval.allow_session_note",
+    "other": "accepted until the end of the session"
+  },
+  {
+    "id": "tui.approval.asked_by_host",
+    "other": " · asked by the host"
+  },
+  {
+    "id": "tui.approval.countdown",
+    "other": "deny in {{.Time}}"
+  },
+  {
+    "id": "tui.approval.deny_reason",
+    "other": "Deny with a reason"
+  },
+  {
+    "id": "tui.approval.deny_reason_note",
+    "other": "the reason goes back to the agent as a message"
+  },
+  {
+    "id": "tui.approval.judge",
+    "other": "judged"
+  },
+  {
+    "id": "tui.approval.project",
+    "other": "project"
+  },
+  {
+    "id": "tui.approval.reason_label",
+    "other": "reason"
+  },
+  {
+    "id": "tui.approval.reason_sent",
+    "other": "reason sent to the agent"
+  },
+  {
+    "id": "tui.approval.risk_high",
+    "other": "high risk"
+  },
+  {
+    "id": "tui.approval.risk_low",
+    "other": "low risk"
+  },
+  {
+    "id": "tui.approval.risk_medium",
+    "other": "medium risk"
+  },
+  {
+    "id": "tui.approval.timed_out",
+    "other": "approval denied by default: nobody answered in time"
+  },
+  {
+    "id": "tui.approval.title",
+    "other": "! Approval"
+  },
+  {
+    "id": "tui.approval.worktree",
+    "other": "worktree"
+  },
+  {
+    "id": "tui.common.accept",
+    "other": "accept"
+  },
+  {
+    "id": "tui.common.back",
+    "other": "back"
+  },
+  {
+    "id": "tui.common.change_mode",
+    "other": "change mode"
+  },
+  {
+    "id": "tui.common.choose",
+    "other": "choose"
+  },
+  {
+    "id": "tui.common.page",
+    "other": "page"
+  },
+  {
+    "id": "tui.common.switch",
+    "other": "switch"
+  },
+  {
+    "id": "tui.editor.closed_error",
+    "other": "editor closed with an error: {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.binding_failed",
+    "other": "{{.Label}}: {{.Spec}}: {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.commands",
+    "other": "/ commands"
+  },
+  {
+    "id": "tui.keys.default_binding",
+    "other": "default binding {{.Chord}}: {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.duplicate",
+    "other": "{{.Label}}: {{.Reason}}: {{.Spec}}"
+  },
+  {
+    "id": "tui.keys.file_failed",
+    "other": "keybindings.json failed: {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.file_ignored",
+    "other": "{{.Label}} ignored: {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.files",
+    "other": "@ files"
+  },
+  {
+    "id": "tui.keys.help.copy_code",
+    "other": "copy code"
+  },
+  {
+    "id": "tui.keys.help.copy_reply",
+    "other": "copy reply"
+  },
+  {
+    "id": "tui.keys.help.fold_code",
+    "other": "fold code"
+  },
+  {
+    "id": "tui.keys.help.fold_turns",
+    "other": "fold turns"
+  },
+  {
+    "id": "tui.keys.help.history",
+    "other": "history search"
+  },
+  {
+    "id": "tui.keys.help.image_paste",
+    "other": "paste an image"
+  },
+  {
+    "id": "tui.keys.help.mouse",
+    "other": "release the mouse"
+  },
+  {
+    "id": "tui.keys.help.next_link",
+    "other": "next link"
+  },
+  {
+    "id": "tui.keys.help.next_turn",
+    "other": "next turn"
+  },
+  {
+    "id": "tui.keys.help.open",
+    "other": "open it"
+  },
+  {
+    "id": "tui.keys.help.previous_turn",
+    "other": "previous turn"
+  },
+  {
+    "id": "tui.keys.help.queue_submit",
+    "other": "send the queue"
+  },
+  {
+    "id": "tui.keys.help.redirect",
+    "other": "redirect"
+  },
+  {
+    "id": "tui.keys.help.search",
+    "other": "search"
+  },
+  {
+    "id": "tui.keys.help.sessions",
+    "other": "sessions"
+  },
+  {
+    "id": "tui.keys.help.stash",
+    "other": "side draft"
+  },
+  {
+    "id": "tui.keys.help.tool_expand",
+    "other": "unfold commands and diffs"
+  },
+  {
+    "id": "tui.keys.ignored",
+    "other": "terminal.toml [keys] ignored: {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.inconsistent",
+    "other": "inconsistent shortcuts: {{.Reason}}"
+  },
+  {
+    "id": "tui.keys.interrupted",
+    "one": "session interrupted: {{.Count}}",
+    "other": "sessions interrupted: {{.Count}}"
+  },
+  {
+    "id": "tui.keys.newline",
+    "other": "{{.Keys}} or \\⏎ newline"
+  },
+  {
+    "id": "tui.keys.newline_idle",
+    "other": ", {{.Keys}} newline when idle"
+  },
+  {
+    "id": "tui.keys.no_config_dir",
+    "other": "unknown config folder"
+  },
+  {
+    "id": "tui.keys.none_busy",
+    "other": "no busy session"
+  },
+  {
+    "id": "tui.keys.reloaded",
+    "other": "shortcuts reloaded"
+  },
+  {
+    "id": "tui.keys.shell",
+    "other": "! shell command"
+  },
+  {
+    "id": "tui.keys.unavailable",
+    "other": "{{.Action}} is not available in herrscher yet"
+  },
+  {
+    "id": "tui.keys.unavailable_moved",
+    "other": "{{.Action}} is not available in herrscher yet: the function is on {{.Chord}}"
+  },
+  {
+    "id": "tui.keys.unknown_action",
+    "other": "{{.Label}}: {{.Spec}}: {{.Reason}}: {{.Action}}"
+  },
+  {
+    "id": "tui.keys.unknown_context",
+    "other": "{{.Label}}: {{.Reason}}: {{.Context}}"
+  },
+  {
+    "id": "tui.mode.auto.label",
+    "other": "Auto"
+  },
+  {
+    "id": "tui.mode.auto.say",
+    "other": "nothing asks: edits and commands go through, unless a deny rule blocks them"
+  },
+  {
+    "id": "tui.mode.edits.label",
+    "other": "Edits accepted"
+  },
+  {
+    "id": "tui.mode.edits.say",
+    "other": "edits go through, commands still ask"
+  },
+  {
+    "id": "tui.mode.manual.label",
+    "other": "Manual"
+  },
+  {
+    "id": "tui.mode.manual.say",
+    "other": "each edit and each command asks for approval"
+  },
+  {
+    "id": "tui.mode.no_session",
+    "other": "no session to change the mode of"
+  },
+  {
+    "id": "tui.mode.plan.label",
+    "other": "Plan"
+  },
+  {
+    "id": "tui.mode.plan.say",
+    "other": "read-only: the agent proposes a plan, you approve it before any write"
+  },
+  {
+    "id": "tui.mode.plan_continue.label",
+    "other": "Keep planning"
+  },
+  {
+    "id": "tui.mode.plan_continue.say",
+    "other": "say what changes in the plan"
+  },
+  {
+    "id": "tui.mode.plan_edits.label",
+    "other": "Approve and switch to edits accepted"
+  },
+  {
+    "id": "tui.mode.plan_edits.say",
+    "other": "the agent writes without asking again, commands still ask"
+  },
+  {
+    "id": "tui.mode.plan_kept",
+    "other": "The plan stays open. Say what changes: the agent rewrites it without touching anything."
+  },
+  {
+    "id": "tui.mode.plan_manual.label",
+    "other": "Approve in manual"
+  },
+  {
+    "id": "tui.mode.plan_manual.say",
+    "other": "each edit will go through an approval"
+  },
+  {
+    "id": "tui.mode.plan_nothing_written",
+    "other": "nothing is written before your approval"
+  },
+  {
+    "id": "tui.mode.plan_proposed",
+    "other": "Plan proposed"
+  },
+  {
+    "id": "tui.palette.cmd.account",
+    "other": "list this session's accounts, or pick one (no argument: the list; fresh opens a new conversation under that account)"
+  },
+  {
+    "id": "tui.palette.cmd.agents",
+    "other": "see all sessions by state"
+  },
+  {
+    "id": "tui.palette.cmd.attach",
+    "other": "stage a local file with the next message"
+  },
+  {
+    "id": "tui.palette.cmd.capabilities",
+    "other": "what this terminal can render, and what it falls back to"
+  },
+  {
+    "id": "tui.palette.cmd.clear",
+    "other": "clear this tab's transcript"
+  },
+  {
+    "id": "tui.palette.cmd.context",
+    "other": "what fills the context: system, tools, memory, skills, files read, conversation"
+  },
+  {
+    "id": "tui.palette.cmd.copy",
+    "other": "put the last answer (or the turn, or everything) on the clipboard"
+  },
+  {
+    "id": "tui.palette.cmd.handoff",
+    "other": "open a new session with this session's brief"
+  },
+  {
+    "id": "tui.palette.cmd.help",
+    "other": "show the shortcuts"
+  },
+  {
+    "id": "tui.palette.cmd.keybindings",
+    "other": "open keybindings.json to change the shortcuts"
+  },
+  {
+    "id": "tui.palette.cmd.mouse",
+    "other": "hand the mouse to the terminal so its own selection works"
+  },
+  {
+    "id": "tui.palette.cmd.notify",
+    "other": "toggle notifications: end of turn, approval, or both"
+  },
+  {
+    "id": "tui.palette.cmd.plugins",
+    "other": "the plugins this binary is made of"
+  },
+  {
+    "id": "tui.palette.cmd.queue",
+    "other": "see the message queue"
+  },
+  {
+    "id": "tui.palette.cmd.rename",
+    "other": "rename this session"
+  },
+  {
+    "id": "tui.palette.cmd.resume",
+    "other": "reopen an archived session"
+  },
+  {
+    "id": "tui.palette.cmd.review",
+    "other": "guided review of the turn's files: read, instructions, commit and PR"
+  },
+  {
+    "id": "tui.palette.cmd.session_switch",
+    "other": "switch between live sessions"
+  },
+  {
+    "id": "tui.palette.cmd.skills",
+    "other": "list available skills"
+  },
+  {
+    "id": "tui.palette.cmd.statusline",
+    "other": "configure the status bar: fields, their order, or a script that draws it"
+  },
+  {
+    "id": "tui.palette.cmd.theme",
+    "other": "pick the colour theme and the render options"
+  },
+  {
+    "id": "tui.palette.cmd.usage",
+    "other": "cost, tokens and context for this session"
+  },
+  {
+    "id": "tui.palette.no_match",
+    "other": "no match"
+  },
+  {
+    "id": "tui.picker.empty",
+    "other": "no session"
+  },
+  {
+    "id": "tui.picker.filtered",
+    "other": "filter: {{.Query}} · {{.Footer}}"
+  },
+  {
+    "id": "tui.picker.more",
+    "one": "+1 more",
+    "other": "+{{.Count}} more"
+  },
+  {
+    "id": "tui.picker.state_archived",
+    "other": "archived"
+  },
+  {
+    "id": "tui.picker.state_live",
+    "other": "live"
+  },
+  {
+    "id": "tui.queue.after_tool",
+    "other": "after the next tool"
+  },
+  {
+    "id": "tui.queue.busy_note",
+    "other": "sent in order at the end of the turn"
+  },
+  {
+    "id": "tui.queue.drafts",
+    "one": "draft ({{.Count}}): « {{.Text}} »",
+    "other": "drafts ({{.Count}}): « {{.Text}} »"
+  },
+  {
+    "id": "tui.queue.empty",
+    "other": "the queue is empty"
+  },
+  {
+    "id": "tui.queue.end_of_turn",
+    "other": "end of turn"
+  },
+  {
+    "id": "tui.queue.file_mark",
+    "other": "○ queued"
+  },
+  {
+    "id": "tui.queue.leave",
+    "other": "leave"
+  },
+  {
+    "id": "tui.queue.list",
+    "one": "queue ({{.Count}}) :\n{{.Lines}}",
+    "other": "queue ({{.Count}}) :\n{{.Lines}}"
+  },
+  {
+    "id": "tui.queue.more",
+    "one": "… {{.Count}} more",
+    "other": "… {{.Count}} more"
+  },
+  {
+    "id": "tui.queue.ready",
+    "other": "ready to go"
+  },
+  {
+    "id": "tui.queue.redirect_mark",
+    "other": "↪ redirect"
+  },
+  {
+    "id": "tui.queue.remove",
+    "other": "✕ remove"
+  },
+  {
+    "id": "tui.queue.remove_action",
+    "other": "remove"
+  },
+  {
+    "id": "tui.queue.reorder",
+    "other": "reorder"
+  },
+  {
+    "id": "tui.queue.resume_last",
+    "other": "resume the last one"
+  },
+  {
+    "id": "tui.queue.send_all",
+    "other": "send all now"
+  },
+  {
+    "id": "tui.queue.title",
+    "other": "queued"
+  },
+  {
+    "id": "tui.rewind.both.detail",
+    "other": "code and conversation go back to this message"
+  },
+  {
+    "id": "tui.rewind.both.label",
+    "other": "Restore code and conversation"
+  },
+  {
+    "id": "tui.rewind.cancel",
+    "other": "Cancel"
+  },
+  {
+    "id": "tui.rewind.code.detail",
+    "other": "the conversation stays"
+  },
+  {
+    "id": "tui.rewind.code.label",
+    "other": "Restore code only"
+  },
+  {
+    "id": "tui.rewind.confirm_keys",
+    "other": "y confirm · n cancel"
+  },
+  {
+    "id": "tui.rewind.conversation.detail",
+    "other": "the conversation resumes at this message"
+  },
+  {
+    "id": "tui.rewind.conversation.label",
+    "other": "Restore conversation only"
+  },
+  {
+    "id": "tui.rewind.done",
+    "other": "back to message {{.Index}} · {{.What}}"
+  },
+  {
+    "id": "tui.rewind.done.both",
+    "other": "code and conversation restored"
+  },
+  {
+    "id": "tui.rewind.done.code",
+    "other": "code restored"
+  },
+  {
+    "id": "tui.rewind.done.conversation",
+    "other": "conversation resumed"
+  },
+  {
+    "id": "tui.rewind.failed",
+    "other": "back: {{.Reason}}"
+  },
+  {
+    "id": "tui.rewind.files",
+    "one": "{{.Count}} file",
+    "other": "{{.Count}} files"
+  },
+  {
+    "id": "tui.rewind.files_since",
+    "other": "files touched since: "
+  },
+  {
+    "id": "tui.rewind.fork.detail",
+    "other": "/fork: new session, the original left intact"
+  },
+  {
+    "id": "tui.rewind.fork.label",
+    "other": "Fork from here"
+  },
+  {
+    "id": "tui.rewind.fork_created",
+    "other": "fork created: {{.Name}}"
+  },
+  {
+    "id": "tui.rewind.fork_here",
+    "other": "fork from here"
+  },
+  {
+    "id": "tui.rewind.fork_opened",
+    "other": "fork opened: {{.Name}}"
+  },
+  {
+    "id": "tui.rewind.fork_refused",
+    "other": "fork refused: {{.Reason}}"
+  },
+  {
+    "id": "tui.rewind.go_to",
+    "other": "go back to this message"
+  },
+  {
+    "id": "tui.rewind.hint",
+    "other": "a checkpoint before each message"
+  },
+  {
+    "id": "tui.rewind.message",
+    "other": "Message from {{.At}}: « {{.Text}} »"
+  },
+  {
+    "id": "tui.rewind.no_checkpoint",
+    "other": "back: no checkpoint for {{.Name}}"
+  },
+  {
+    "id": "tui.rewind.no_file",
+    "other": "no file"
+  },
+  {
+    "id": "tui.rewind.no_session",
+    "other": "back: no session open"
+  },
+  {
+    "id": "tui.rewind.refused",
+    "other": "back refused: {{.Reason}}"
+  },
+  {
+    "id": "tui.rewind.sure_both",
+    "other": "Restore code and conversation to the message from {{.When}}? The files go back to that state and the conversation resumes at this message."
+  },
+  {
+    "id": "tui.rewind.sure_code",
+    "other": "Restore the code to the message from {{.When}}? The worktree files go back to that state."
+  },
+  {
+    "id": "tui.rewind.sure_conversation",
+    "other": "Restore the conversation to the message from {{.When}}? The files do not move."
+  },
+  {
+    "id": "tui.rewind.title",
+    "other": "Go back"
+  },
+  {
+    "id": "tui.rewind.undo",
+    "other": "undo the rewind"
+  },
+  {
+    "id": "tui.rewind.unreadable",
+    "other": "back: unreadable reply"
+  },
+  {
+    "id": "tui.rewind.unsupported",
+    "other": "conversation not resumed: this session's backend does not keep a position per message"
+  },
+  {
+    "id": "tui.search.label",
+    "other": "search: "
+  },
+  {
+    "id": "tui.search.lines",
+    "one": "{{.Count}} line",
+    "other": "{{.Count}} lines"
+  },
+  {
+    "id": "tui.search.take",
+    "other": "take"
+  },
+  {
+    "id": "tui.theme.name.sombre",
+    "other": "Dark"
+  },
+  {
+    "id": "tui.theme.name.clair",
+    "other": "Light"
+  },
+  {
+    "id": "tui.theme.name.terminal",
+    "other": "Terminal"
+  },
+  {
+    "id": "tui.theme.name.contraste",
+    "other": "High contrast"
+  },
+  {
+    "id": "tui.common.working",
+    "other": "working…"
+  },
+  {
+    "id": "tui.theme.problem.builtin",
+    "other": "theme {{.Name}} ignored: this name is built in"
+  },
+  {
+    "id": "tui.theme.problem.rejected",
+    "other": "theme {{.Name}} ignored: {{.Reason}}"
+  },
+  {
+    "id": "tui.theme.toml_ignored",
+    "other": "terminal.toml ignored: {{.Reason}}"
+  },
+  {
+    "id": "tui.theme.toml_invalid",
+    "other": "terminal.toml: {{.Reason}}"
+  },
+  {
+    "id": "tui.theme.missing",
+    "other": "theme {{.Name}} not found: back to theme {{.Fallback}}"
+  },
+  {
+    "id": "tui.theme.font.installed",
+    "other": "installed"
+  },
+  {
+    "id": "tui.theme.font.absent",
+    "other": "absent"
+  },
+  {
+    "id": "tui.theme.font.unknown",
+    "other": "unknown"
+  },
+  {
+    "id": "tui.theme.font.checking",
+    "other": "checking…"
+  },
+  {
+    "id": "tui.theme.copy_failed",
+    "other": "copy failed"
+  },
+  {
+    "id": "tui.theme.copied",
+    "other": "{{.Label}} copied"
+  },
+  {
+    "id": "tui.theme.font.head_terminal",
+    "other": "detected terminal"
+  },
+  {
+    "id": "tui.theme.font.head_unknown",
+    "other": "unrecognised terminal"
+  },
+  {
+    "id": "tui.theme.font.head_install",
+    "other": "install Obel Mono"
+  },
+  {
+    "id": "tui.theme.font.install_note",
+    "other": "no sudo, checks the SHA-256 of each zip · SIL OFL 1.1 licence"
+  },
+  {
+    "id": "tui.theme.font.mask_note",
+    "other": "ss01 hides API keys on screen, the clipboard keeps everything"
+  },
+  {
+    "id": "tui.theme.font.masked_note",
+    "other": "no feature setting: family “Obel Mono Masked”"
+  },
+  {
+    "id": "tui.theme.font.keys",
+    "other": "c copy the command · y copy the config · f close"
+  },
+  {
+    "id": "tui.theme.font.family_line",
+    "other": "{{.Family}} · recommended"
+  },
+  {
+    "id": "tui.theme.font.row",
+    "other": "font"
+  },
+  {
+    "id": "tui.theme.desc.sombre",
+    "other": "dark background · default"
+  },
+  {
+    "id": "tui.theme.desc.clair",
+    "other": "the same on a light background"
+  },
+  {
+    "id": "tui.theme.desc.terminal",
+    "other": "the terminal's 16 ANSI colours"
+  },
+  {
+    "id": "tui.theme.desc.contraste",
+    "other": "maximum contrast"
+  },
+  {
+    "id": "tui.theme.file_absent",
+    "other": "{{.File}} missing: {{.Action}}"
+  },
+  {
+    "id": "tui.theme.create_it",
+    "other": "to create it"
+  },
+  {
+    "id": "tui.theme.not_saved",
+    "other": "theme not saved: {{.Reason}}"
+  },
+  {
+    "id": "tui.theme.not_opened",
+    "other": "theme not opened: {{.Reason}}"
+  },
+  {
+    "id": "tui.theme.editor_failed",
+    "other": "editor: {{.Reason}}"
+  },
+  {
+    "id": "tui.theme.title",
+    "other": "Theme"
+  },
+  {
+    "id": "tui.theme.live_preview",
+    "other": "live preview"
+  },
+  {
+    "id": "tui.theme.font.explain_one",
+    "other": "a TUI does not choose its font: only an app"
+  },
+  {
+    "id": "tui.theme.font.explain_two",
+    "other": "that draws its own window can"
+  },
+  {
+    "id": "tui.theme.detection",
+    "other": "Detection"
+  },
+  {
+    "id": "tui.theme.keep",
+    "other": "keep"
+  },
+  {
+    "id": "tui.theme.back",
+    "other": "back"
+  },
+  {
+    "id": "tui.theme.anywhere",
+    "other": "theme, from anywhere"
+  },
+  {
+    "id": "tui.theme.edit_file",
+    "other": "edit {{.File}}"
+  },
+  {
+    "id": "tui.theme.render",
+    "other": "Render"
+  },
+  {
+    "id": "tui.theme.in_theme",
+    "other": "in the theme"
+  },
+  {
+    "id": "tui.theme.row.glyphs",
+    "other": "glyphs"
+  },
+  {
+    "id": "tui.theme.row.borders",
+    "other": "borders"
+  },
+  {
+    "id": "tui.theme.row.density",
+    "other": "density"
+  },
+  {
+    "id": "tui.theme.row.text",
+    "other": "text"
+  },
+  {
+    "id": "tui.theme.row.background",
+    "other": "background"
+  },
+  {
+    "id": "tui.theme.background.unknown",
+    "other": "unknown"
+  },
+  {
+    "id": "tui.theme.background.not_read",
+    "other": "not read at startup"
+  },
+  {
+    "id": "tui.theme.background.read_osc11",
+    "other": "read by OSC 11 at startup"
+  },
+  {
+    "id": "tui.theme.background.dark",
+    "other": "dark"
+  },
+  {
+    "id": "tui.theme.background.light",
+    "other": "light"
+  },
+  {
+    "id": "tui.theme.no_color",
+    "other": "NO_COLOR respected: markers and bold only"
+  },
+  {
+    "id": "tui.theme.glyph.nerd",
+    "other": "nerd font"
+  },
+  {
+    "id": "tui.theme.border.square",
+    "other": "square"
+  },
+  {
+    "id": "tui.theme.border.none",
+    "other": "none"
+  },
+  {
+    "id": "tui.theme.border.rounded",
+    "other": "rounded"
+  },
+  {
+    "id": "tui.theme.density.compact",
+    "other": "compact"
+  },
+  {
+    "id": "tui.theme.density.normal",
+    "other": "normal"
+  },
+  {
+    "id": "tui.theme.flag.bold",
+    "other": "bold"
+  },
+  {
+    "id": "tui.theme.flag.italic",
+    "other": "italic"
+  },
+  {
+    "id": "tui.theme.flag.auto",
+    "other": "auto"
+  },
+  {
+    "id": "tui.theme.auto_hint",
+    "other": "dark background → Dark, light → Light"
+  },
+  {
+    "id": "tui.theme.preview_label",
+    "other": "PREVIEW · {{.Name}}{{.State}}"
+  },
+  {
+    "id": "tui.theme.not_kept",
+    "other": " · not kept yet"
+  },
+  {
+    "id": "tui.theme.kept",
+    "other": " · kept"
+  },
+  {
+    "id": "tui.theme.selected_line",
+    "other": "selected line, in reverse video"
+  },
+  {
+    "id": "tui.theme.approval.choose",
+    "other": "choose"
+  },
+  {
+    "id": "tui.theme.approval.accept",
+    "other": "approve"
+  },
+  {
+    "id": "tui.theme.approval.speed_up",
+    "other": "speed up the timeout"
+  },
+  {
+    "id": "tui.theme.legend.queue",
+    "other": "{{.Key}} during a turn now queues the message."
+  },
+  {
+    "id": "tui.theme.legend.added",
+    "other": "added"
+  },
+  {
+    "id": "tui.theme.legend.removed",
+    "other": "removed"
+  },
+  {
+    "id": "tui.theme.legend.waiting",
+    "other": "waiting"
+  },
+  {
+    "id": "tui.theme.legend.notice",
+    "other": "notice"
+  },
+  {
+    "id": "tui.theme.legend.error",
+    "other": "error"
+  },
+  {
+    "id": "tui.theme.gauge_label",
+    "other": "ctx"
+  },
+  {
+    "id": "tui.theme.saved_now",
+    "other": "saved just now"
+  },
+  {
+    "id": "tui.theme.personal_inherits",
+    "other": "inherits from base, only names what changes"
+  },
+  {
+    "id": "tui.theme.personal_others",
+    "other": "other built-in themes: light, terminal, high contrast"
+  },
+  {
+    "id": "tui.theme.preview_short",
+    "other": "preview"
+  },
+  {
+    "id": "tui.theme.edit",
+    "other": "edit"
+  },
+  {
+    "id": "tui.theme.copy.command",
+    "other": "command"
+  },
+  {
+    "id": "tui.theme.copy.config",
+    "other": "config"
+  },
+  {
+    "id": "tui.plugins.title",
+    "other": "plugins"
+  },
+  {
+    "id": "tui.plugins.navigate",
+    "other": "navigate"
+  },
+  {
+    "id": "tui.plugins.choose",
+    "other": "choose"
+  },
+  {
+    "id": "tui.plugins.none_compiled",
+    "other": "(no plugin compiled into this binary)"
+  },
+  {
+    "id": "tui.plugins.more_above",
+    "one": "… {{.Count}} above",
+    "other": "… {{.Count}} above"
+  },
+  {
+    "id": "tui.plugins.more_below",
+    "one": "… {{.Count}} below",
+    "other": "… {{.Count}} below"
+  },
+  {
+    "id": "tui.plugins.pinned",
+    "other": "pinned"
+  },
+  {
+    "id": "tui.plugins.notice.unavailable",
+    "other": "plugin management is not available in this binary"
+  },
+  {
+    "id": "tui.plugins.notice.on_disk",
+    "other": "the change is on disk; it applies at the next start"
+  },
+  {
+    "id": "tui.plugins.notice.restored",
+    "other": "the tree is back as it was; nothing was installed"
+  },
+  {
+    "id": "tui.plugins.notice.left_as_is",
+    "other": "the tree is left as it is; repair it and rerun the build"
+  },
+  {
+    "id": "tui.plugins.menu.bump",
+    "other": "move to the latest version"
+  },
+  {
+    "id": "tui.plugins.menu.pin",
+    "other": "pin the installed version"
+  },
+  {
+    "id": "tui.plugins.menu.unpin",
+    "other": "unpin"
+  },
+  {
+    "id": "tui.plugins.menu.version",
+    "other": "version…"
+  },
+  {
+    "id": "tui.plugins.menu.remove",
+    "other": "remove from the composition"
+  },
+  {
+    "id": "tui.plugins.menu.proceed",
+    "other": "continue"
+  },
+  {
+    "id": "tui.plugins.menu.abort",
+    "other": "cancel, change nothing"
+  },
+  {
+    "id": "tui.plugins.menu.restore",
+    "other": "put the tree back as it was"
+  },
+  {
+    "id": "tui.plugins.menu.keep",
+    "other": "keep it, I'll repair it by hand"
+  },
+  {
+    "id": "tui.diag.graphics",
+    "other": "graphics"
+  },
+  {
+    "id": "tui.diag.graphics_kitty",
+    "other": "inline images, full resolution"
+  },
+  {
+    "id": "tui.diag.graphics_sixel",
+    "other": "inline images, sixel resolution"
+  },
+  {
+    "id": "tui.diag.graphics_none",
+    "other": "inline images as half blocks in unicode"
+  },
+  {
+    "id": "tui.diag.links",
+    "other": "links"
+  },
+  {
+    "id": "tui.diag.links_on",
+    "other": "links open from the terminal (OSC 8)"
+  },
+  {
+    "id": "tui.diag.links_off",
+    "other": "links are styled text, opened with a key"
+  },
+  {
+    "id": "tui.diag.mouse",
+    "other": "mouse"
+  },
+  {
+    "id": "tui.diag.mouse_on",
+    "other": "wheel and click to choose a tab"
+  },
+  {
+    "id": "tui.diag.mouse_off",
+    "other": "scrolling by {{.Paging}}"
+  },
+  {
+    "id": "tui.diag.colour",
+    "other": "colour"
+  },
+  {
+    "id": "tui.diag.colour_true",
+    "other": "the palette exactly as drawn"
+  },
+  {
+    "id": "tui.diag.colour_reduced",
+    "other": "the palette reduced to the nearest colour"
+  },
+  {
+    "id": "tui.diag.terminal",
+    "other": "terminal"
+  },
+  {
+    "id": "tui.diag.note_one",
+    "other": "kitty, ghostty and WezTerm render everything; elsewhere the image"
+  },
+  {
+    "id": "tui.diag.note_two",
+    "other": "is drawn as half blocks and a link stays selectable text."
+  },
+  {
+    "id": "tui.diag.title",
+    "other": "capabilities"
+  },
+  {
+    "id": "tui.diag.remote_off",
+    "other": "off"
+  },
+  {
+    "id": "tui.diag.remote_off_feature",
+    "other": "an image the agent links to stays a link"
+  },
+  {
+    "id": "tui.diag.remote_on",
+    "other": "on"
+  },
+  {
+    "id": "tui.diag.remote_on_feature",
+    "other": "images fetched from {{.Hosts}}"
+  },
+  {
+    "id": "tui.diag.remote_images",
+    "other": "remote images"
+  },
+  {
+    "id": "tui.skills.none",
+    "other": "(no skill in {{.Dir}})"
+  },
+  {
+    "id": "tui.skills.browse",
+    "other": "browse"
+  },
+  {
+    "id": "tui.skills.page",
+    "other": "page"
+  },
+  {
+    "id": "tui.skills.more",
+    "one": "+{{.Count}} more · {{.Footer}}",
+    "other": "+{{.Count}} more · {{.Footer}}"
+  },
+  {
+    "id": "tui.sidebar.since",
+    "other": "· since {{.Duration}}"
+  },
+  {
+    "id": "tui.sidebar.session",
+    "other": "Session"
+  },
+  {
+    "id": "tui.sidebar.worktree",
+    "other": "worktree"
+  },
+  {
+    "id": "tui.sidebar.via",
+    "other": "via"
+  },
+  {
+    "id": "tui.sidebar.todos",
+    "other": "Todos"
+  },
+  {
+    "id": "tui.sidebar.subagents",
+    "other": "Sub-agents"
+  },
+  {
+    "id": "tui.sidebar.active_one",
+    "other": "active"
+  },
+  {
+    "id": "tui.sidebar.active_other",
+    "other": "active"
+  },
+  {
+    "id": "tui.sidebar.background",
+    "other": "Background"
+  },
+  {
+    "id": "tui.sidebar.file_one",
+    "other": "file"
+  },
+  {
+    "id": "tui.sidebar.file_other",
+    "other": "files"
+  },
+  {
+    "id": "tui.sidebar.files",
+    "other": "Files"
+  },
+  {
+    "id": "tui.sidebar.context",
+    "other": "Context"
+  },
+  {
+    "id": "tui.sidebar.unmeasured",
+    "other": "not measured yet"
+  },
+  {
+    "id": "tui.notify.mode_turn_end",
+    "other": "turn end"
+  },
+  {
+    "id": "tui.notify.mode_approval",
+    "other": "approval"
+  },
+  {
+    "id": "tui.notify.mode_both",
+    "other": "turn end and approval"
+  },
+  {
+    "id": "tui.notify.mode",
+    "other": "notifications: {{.Mode}}"
+  },
+  {
+    "id": "tui.notify.turn_done",
+    "other": "Turn finished"
+  },
+  {
+    "id": "tui.notify.approval_pending",
+    "other": "Approval pending"
+  },
+  {
+    "id": "tui.notify.delivery_none",
+    "other": "window active, nothing sent"
+  },
+  {
+    "id": "tui.notify.delivery_osc9",
+    "other": "OSC 9 sent"
+  },
+  {
+    "id": "tui.notify.delivery_bel",
+    "other": "BEL fallback sent"
+  },
+  {
+    "id": "tui.notify.ago",
+    "other": "{{.Elapsed}} ago"
+  },
+  {
+    "id": "tui.notify.jump",
+    "other": "go there"
+  },
+  {
+    "id": "tui.shell.no_session",
+    "other": "!command: no session open"
+  },
+  {
+    "id": "tui.editor.beat_failed",
+    "other": "draft heartbeat interrupted: {{.Reason}}"
+  },
+  {
+    "id": "tui.editor.not_removed",
+    "other": "draft not removed: {{.Reason}}"
+  },
+  {
+    "id": "tui.editor.reread_failed",
+    "other": "cannot reread draft: {{.Reason}}"
+  },
+  {
+    "id": "tui.editor.unavailable",
+    "other": "editor unavailable: {{.Reason}}"
+  },
+  {
+    "id": "tui.mention.complete",
+    "other": "complete"
+  },
+  {
+    "id": "tui.mouse.drag_select",
+    "other": "drag to select as usual"
+  },
+  {
+    "id": "tui.mouse.freed",
+    "other": "mouse freed"
+  },
+  {
+    "id": "tui.mouse.resume_hint",
+    "other": "take it back"
+  },
+  {
+    "id": "tui.mouse.resumed",
+    "other": "mouse back · the wheel scrolls the conversation again"
+  },
+  {
+    "id": "tui.mouse.scroll",
+    "other": "scroll"
+  },
+  {
+    "id": "tui.mouse.status",
+    "other": "mouse → terminal"
+  },
+  {
+    "id": "tui.open.failed",
+    "other": "cannot open: {{.Reason}}"
+  },
+  {
+    "id": "tui.open.none",
+    "other": "no link selected"
+  },
+  {
+    "id": "tui.open.opening",
+    "other": "opening {{.Target}}"
+  },
+  {
+    "id": "tui.open.pick_one",
+    "other": "pick one"
+  },
+  {
+    "id": "tui.open.verb_edit",
+    "other": "↵ edit"
+  },
+  {
+    "id": "tui.open.verb_open",
+    "other": "↵ open"
+  },
+  {
+    "id": "tui.diffgit.not_repo",
+    "other": "no git repository in this session's folder"
+  },
+  {
+    "id": "tui.diffgit.no_base",
+    "other": "no base branch found (origin/HEAD, master or main)"
+  },
+  {
+    "id": "tui.diffgit.on_base",
+    "other": "this branch is the base branch: no PR from it"
+  },
+  {
+    "id": "tui.diffgit.no_arguments",
+    "other": "command without argument"
+  },
+  {
+    "id": "tui.diffgit.unknown_tool",
+    "other": "unknown tool"
+  },
+  {
+    "id": "tui.diffgit.unknown_scope",
+    "other": "unknown diff scope"
+  },
+  {
+    "id": "tui.diffgit.unknown_change",
+    "other": "unknown git file status"
+  },
+  {
+    "id": "tui.diffgit.malformed_stat",
+    "other": "unexpected git output"
+  },
+  {
+    "id": "tui.diffgit.no_pull_number",
+    "other": "no PR number in gh output"
+  },
+  {
+    "id": "tui.diffpanel.snapshot_failed",
+    "other": "turn snapshot impossible: {{.Reason}}"
+  },
+  {
+    "id": "tui.diffpanel.sent_to",
+    "other": "instruction sent on {{.Path}}"
+  },
+  {
+    "id": "tui.diffpanel.nothing_to_commit",
+    "other": "nothing to commit in this scope"
+  },
+  {
+    "id": "tui.diffpanel.commit_failed",
+    "other": "commit failed: {{.Reason}}"
+  },
+  {
+    "id": "tui.diffpanel.committed",
+    "other": "commit {{.Sha}} {{.Subject}}"
+  },
+  {
+    "id": "tui.diffpanel.pr_failed",
+    "other": "commit {{.Sha}}, PR failed: {{.Reason}}"
+  },
+  {
+    "id": "tui.diffpanel.pr_opened",
+    "other": "commit {{.Sha}}, PR #{{.Number}} opened against {{.Base}}"
+  },
+  {
+    "id": "tui.diffpanel.title_turn",
+    "other": "Turn diff"
+  },
+  {
+    "id": "tui.diffpanel.title_review",
+    "other": "Review"
+  },
+  {
+    "id": "tui.diffpanel.turn",
+    "other": "turn"
+  },
+  {
+    "id": "tui.diffpanel.turn_at",
+    "other": "turn {{.Time}}"
+  },
+  {
+    "id": "tui.diffpanel.branch",
+    "other": "branch"
+  },
+  {
+    "id": "tui.diffpanel.keys_context",
+    "other": "like /review, in panel "
+  },
+  {
+    "id": "tui.diffpanel.hint_close",
+    "other": "close panel"
+  },
+  {
+    "id": "tui.diffpanel.hint_file",
+    "other": "file"
+  },
+  {
+    "id": "tui.diffpanel.hint_reviewed",
+    "other": "reviewed"
+  },
+  {
+    "id": "tui.diffpanel.hint_note",
+    "other": "note"
+  },
+  {
+    "id": "tui.diffpanel.commit",
+    "other": "commit"
+  },
+  {
+    "id": "tui.diffpanel.pr",
+    "other": "PR"
+  },
+  {
+    "id": "tui.diffpanel.hint_base",
+    "other": "turn or branch"
+  },
+  {
+    "id": "tui.diffpanel.loading",
+    "other": "loading…"
+  },
+  {
+    "id": "tui.diffpanel.branch_ahead",
+    "one": "   branch: {{.Count}} more commit on {{.Base}}",
+    "other": "   branch: {{.Count}} more commits on {{.Base}}"
+  },
+  {
+    "id": "tui.diffpanel.act_reviewed",
+    "other": "mark reviewed"
+  },
+  {
+    "id": "tui.diffpanel.act_note",
+    "other": "note on this file"
+  },
+  {
+    "id": "tui.diffpanel.act_commit",
+    "other": "turn commit"
+  },
+  {
+    "id": "tui.diffpanel.act_commit_pr",
+    "other": "commit then PR"
+  },
+  {
+    "id": "tui.diffpanel.act_open_editor",
+    "other": "open in $EDITOR"
+  },
+  {
+    "id": "tui.diffpanel.no_change_scope",
+    "other": "no change in this scope"
+  },
+  {
+    "id": "tui.diffpanel.binary",
+    "other": "binary"
+  },
+  {
+    "id": "tui.diffpanel.files_summary",
+    "one": "   {{.Count}} file ",
+    "other": "   {{.Count}} files "
+  },
+  {
+    "id": "tui.diffpanel.reviewed_count",
+    "other": " · reviewed {{.Done}}/{{.Total}}"
+  },
+  {
+    "id": "tui.diffpanel.nothing_to_show",
+    "other": "nothing to show"
+  },
+  {
+    "id": "tui.diffpanel.binary_no_text",
+    "other": "binary file: no text diff"
+  },
+  {
+    "id": "tui.diffpanel.no_text_change",
+    "other": "no textual change"
+  },
+  {
+    "id": "tui.diffpanel.old_new",
+    "other": "   old · new "
+  },
+  {
+    "id": "tui.diffpanel.added",
+    "other": "added"
+  },
+  {
+    "id": "tui.diffpanel.commit_title",
+    "other": "Commit"
+  },
+  {
+    "id": "tui.diffpanel.commit_meta",
+    "one": " · {{.Branch}} · {{.Count}} file ",
+    "other": " · {{.Branch}} · {{.Count}} files "
+  },
+  {
+    "id": "tui.diffpanel.author",
+    "other": "author "
+  },
+  {
+    "id": "tui.diffpanel.newline",
+    "other": "new line"
+  },
+  {
+    "id": "tui.diffpanel.end_edit",
+    "other": "end editing"
+  },
+  {
+    "id": "tui.diffpanel.edit",
+    "other": "edit"
+  },
+  {
+    "id": "tui.diffpanel.note_title",
+    "other": "NOTE"
+  },
+  {
+    "id": "tui.diffpanel.note_prompt",
+    "other": "what should the agent do with this file?"
+  },
+  {
+    "id": "tui.diffpanel.send_to",
+    "other": "send to {{.Session}}"
+  },
+  {
+    "id": "tui.theme.name.personal",
+    "other": "My theme"
+  },
+  {
+    "id": "tui.keys.name.esc",
+    "other": "esc"
+  },
+  {
+    "id": "tui.keys.name.space",
+    "other": "space"
+  },
+  {
+    "id": "tui.keys.name.delete",
+    "other": "del"
+  },
+  {
+    "id": "tui.keys.name.home",
+    "other": "home"
+  },
+  {
+    "id": "tui.keys.name.end",
+    "other": "end"
+  },
+  {
+    "id": "tui.keys.or",
+    "other": "or"
+  },
+  {
+    "id": "tui.copy.target.reply",
+    "other": "reply"
+  },
+  {
+    "id": "tui.copy.target.turn",
+    "other": "turn"
+  },
+  {
+    "id": "tui.copy.target.all",
+    "other": "all"
+  }
+]

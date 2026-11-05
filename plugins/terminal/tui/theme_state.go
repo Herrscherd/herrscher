@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -46,11 +45,11 @@ func (m *model) loadTheme(configDir string, detectDark func() bool) {
 	m.noColor = os.Getenv("NO_COLOR") != ""
 	cfg, err := readTerminalConfig(m.terminalConfigPath())
 	if err != nil {
-		m.flash = "terminal.toml ignoré : " + err.Error()
+		m.flash = m.tr.t("tui.theme.toml_ignored", map[string]any{tplArgReason: err.Error()})
 		cfg = terminalSection{}
 	}
 	if _, err := cfg.look(defaultRenderOptions()); err != nil {
-		m.flash = "terminal.toml : " + err.Error()
+		m.flash = m.tr.t("tui.theme.toml_invalid", map[string]any{tplArgReason: err.Error()})
 		cfg.Glyphs, cfg.Borders, cfg.Density = nil, nil, nil
 	}
 	m.themeCfg = cfg
@@ -60,18 +59,23 @@ func (m *model) loadTheme(configDir string, detectDark func() bool) {
 	m.themeBackground = ""
 	probe := func() bool {
 		dark := detectDark()
-		m.themeBackground = backgroundLabel(dark)
+		m.themeBackground = backgroundCode(dark)
 		return dark
 	}
 	m.applyTheme(startupTheme(cfg, m.themeCat, probe))
 }
 
-func backgroundLabel(dark bool) string {
+func backgroundCode(dark bool) string {
 	if dark {
-		return "sombre"
+		return backgroundDark
 	}
-	return "clair"
+	return backgroundLight
 }
+
+const (
+	backgroundDark  = "dark"
+	backgroundLight = "light"
+)
 
 func (m *model) applyTheme(next Theme) {
 	m.theme = next
@@ -102,7 +106,7 @@ func (m *model) reloadThemes() {
 	found, ok := m.themeCat.find(m.theme.ID)
 	if !ok {
 		found = defaultTheme()
-		m.flash = fmt.Sprintf("thème %s introuvable : retour au thème %s", m.theme.ID, found.ID)
+		m.flash = m.tr.t("tui.theme.missing", map[string]any{tplArgName: m.theme.ID, "Fallback": found.ID})
 	}
 	m.applyTheme(m.themeCfg.applyLook(found))
 }

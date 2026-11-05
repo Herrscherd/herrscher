@@ -29,7 +29,7 @@ func TestCopyTakesTheLastAnswerByDefault(t *testing.T) {
 	if clip.wrote != "second answer" {
 		t.Fatalf("/copy must take the last answer alone, got %q", clip.wrote)
 	}
-	if !strings.Contains(m.flash, "copié") {
+	if !strings.Contains(m.flash, "copied") {
 		t.Fatalf("the copy must be acknowledged: %q", m.flash)
 	}
 }
@@ -105,7 +105,7 @@ func TestCopyOnAnEmptyTabSaysSo(t *testing.T) {
 	if clip.wrote != "" {
 		t.Fatalf("nothing to copy must write nothing, got %q", clip.wrote)
 	}
-	if m.flash == "" || strings.Contains(m.flash, "copié") {
+	if m.flash == "" || strings.Contains(m.flash, "copied") {
 		t.Fatalf("an empty copy must say why: %q", m.flash)
 	}
 }
@@ -145,7 +145,7 @@ func TestToggleMouseHandsTheMouseOverAndTakesItBack(t *testing.T) {
 	if msg := runCmd(cmd); msg == nil {
 		t.Fatal("releasing the mouse must emit the terminal mode change")
 	}
-	if !strings.Contains(m.statusBar(m.tabs[m.active], 120), "souris") {
+	if !strings.Contains(m.statusBar(m.tabs[m.active], 120), "mouse → terminal") {
 		t.Fatalf("a released mouse must be named on the status bar: %q", m.statusBar(m.tabs[m.active], 120))
 	}
 
@@ -156,7 +156,7 @@ func TestToggleMouseHandsTheMouseOverAndTakesItBack(t *testing.T) {
 	if msg := runCmd(cmd); msg == nil {
 		t.Fatal("taking the mouse back must emit the terminal mode change")
 	}
-	if strings.Contains(m.statusBar(m.tabs[m.active], 120), "souris") {
+	if strings.Contains(m.statusBar(m.tabs[m.active], 120), "mouse → terminal") {
 		t.Fatal("the default capture needs no announcement")
 	}
 }

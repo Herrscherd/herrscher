@@ -9,7 +9,7 @@ import (
 )
 
 func TestAgentAnswerOpensWithARuleAndIsNotClosed(t *testing.T) {
-	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 60, view{st: testStyles()})
+	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 60, view{tr: newTranslator(), st: testStyles()})
 	lines := strings.Split(out, "\n")
 	if got := ansi.Strip(lines[0]); !strings.HasPrefix(got, blockIndent+unicodeGlyphs().tool+" the answer") {
 		t.Fatalf("the answer must open on the prose gutter: %q", got)
@@ -22,7 +22,7 @@ func TestAgentAnswerOpensWithARuleAndIsNotClosed(t *testing.T) {
 }
 
 func TestStreamingAnswerIsLeftOpen(t *testing.T) {
-	out := renderEntry(entry{role: roleAgent, text: "half an ans", streaming: true}, 60, view{st: testStyles()})
+	out := renderEntry(entry{role: roleAgent, text: "half an ans", streaming: true}, 60, view{tr: newTranslator(), st: testStyles()})
 	if got := ansi.Strip(out); !strings.HasPrefix(got, blockIndent+unicodeGlyphs().tool+" half an ans") {
 		t.Fatalf("a streaming answer keeps the prose gutter: %q", got)
 	}
@@ -76,7 +76,7 @@ func TestEmptyStateListsTheOtherSessions(t *testing.T) {
 	m.ensureTab("b")
 	m.active = "a"
 	out := m.emptyState(80)
-	if !strings.Contains(out, "autres sessions") || !strings.Contains(out, "b") {
+	if !strings.Contains(out, "other sessions") || !strings.Contains(out, "b") {
 		t.Fatalf("the other session must be listed: %q", out)
 	}
 	if strings.Count(out, "\n  ❯") > 0 {
@@ -87,7 +87,7 @@ func TestEmptyStateListsTheOtherSessions(t *testing.T) {
 func TestEmptyStateOmitsTheListWhenAlone(t *testing.T) {
 	m := newTestModel()
 	m.ensureTab("a")
-	if out := m.emptyState(80); strings.Contains(out, "autres sessions") {
+	if out := m.emptyState(80); strings.Contains(out, "other sessions") {
 		t.Fatalf("a lone session must not be told about its peers: %q", out)
 	}
 }

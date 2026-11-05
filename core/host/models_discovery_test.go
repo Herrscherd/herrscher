@@ -542,3 +542,41 @@ func oneVendorCache(vendor string) discoveryCache {
 		vendor: {FetchedAt: time.Now(), Models: []cachedModel{{ID: vendor + "-live", Label: vendor, Arg: "live", Route: "native"}}},
 	}}
 }
+
+func TestGatewayOnlyDropsNativeAnswersOfABackendThatIgnoresThePolicy(t *testing.T) {
+	t.Setenv(EnvGatewayURL, "https://gateway.example")
+	t.Setenv(EnvGatewayToken, "token")
+	plugins := discoveringPlugins(liveAnswer(
+		contracts.ModelSpec{ID: "leaked-native", Label: "Leaked", Arg: "leaked", Route: contracts.RouteNative},
+		contracts.ModelSpec{ID: "via-gateway", Label: "Via", Arg: "via", Route: contracts.RouteGateway},
+	))
+	settings := discoverySettings{ttl: time.Hour, timeout: time.Second, policy: contracts.PolicyGatewayOnly}
+	next, _ := refreshDiscovery(context.Background(), plugins, cacheWith(time.Now().Add(-2*time.Hour)), settings, time.Now(), true)
+	ids := make(map[string]bool)
+	for _, model := range next.Vendors["alpha"].Models {
+		ids[model.ID] = true
+	}
+	if ids["leaked-native"] || !ids["via-gateway"] {
+		t.Fatalf("gateway-only cache = %v, want via-gateway and no leaked-native", ids)
+	}
+}
+
+func TestBridgeModelDiscoveryReadsTheCacheBesideItsStateFile(t *testing.T) {
+	stateDir := t.TempDir()
+	cache := cacheWith(time.Now(), cachedModel{ID: "a-live", Label: "A live", Arg: "live", Route: "native"})
+	if err := saveDiscoveryCache(filepath.Join(stateDir, discoveryCacheName), cache); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
+	sources := BridgeModelDiscovery(filepath.Join(stateDir, "state.json")).Sources()
+	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, sources)
+	if err != nil {
+		t.Fatalf("CatalogWith: %v", err)
+	}
+	for _, entry := range got {
+		if entry.ID == "a-live" {
+			return
+		}
+	}
+	t.Fatal("bridge catalog lacks a-live: it did not read the cache beside --state")
+}

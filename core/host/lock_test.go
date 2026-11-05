@@ -1,5 +1,3 @@
-//go:build unix
-
 package host
 
 import (
@@ -8,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLockStateRefusesASecondDaemon(t *testing.T) {
@@ -74,5 +73,36 @@ func TestStateLockSitsBesideTheStateFile(t *testing.T) {
 	want := filepath.Join(string(filepath.Separator), "var", "lib", "herrscher", ".state.json.lock")
 	if got != want {
 		t.Errorf("StateLockPath = %q, want %q", got, want)
+	}
+}
+
+func TestCacheLockHoldsOffASecondWriter(t *testing.T) {
+	path := filepath.Join(t.TempDir(), discoveryCacheName)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	first := make(chan error, 1)
+	go func() {
+		first <- withCacheLock(path, func() error {
+			close(entered)
+			<-release
+			return nil
+		})
+	}()
+	<-entered
+	second := make(chan error, 1)
+	go func() {
+		second <- withCacheLock(path, func() error { return nil })
+	}()
+	select {
+	case err := <-second:
+		t.Fatalf("second writer returned while the first held the cache lock: %v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	close(release)
+	if err := <-first; err != nil {
+		t.Fatalf("first writer: %v", err)
+	}
+	if err := <-second; err != nil {
+		t.Fatalf("second writer after release: %v", err)
 	}
 }

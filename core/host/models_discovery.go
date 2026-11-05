@@ -117,6 +117,11 @@ type discoveryAnswer struct {
 	err    error
 }
 
+func (a discoveryAnswer) under(policy contracts.RoutePolicy) discoveryAnswer {
+	a.models = contracts.FilterModels(a.models, policy)
+	return a
+}
+
 // ModelDiscovery reads and refreshes the model cache beside one daemon state file.
 type ModelDiscovery struct {
 	dir     string
@@ -243,6 +248,14 @@ func DefaultModelDiscovery() *ModelDiscovery {
 	return ModelDiscoveryFor(DefaultStatePath())
 }
 
+// BridgeModelDiscovery returns the model discovery a bridge reads: the one beside statePath, or the default one when the bridge was started without --state.
+func BridgeModelDiscovery(statePath string) *ModelDiscovery {
+	if statePath == "" {
+		return DefaultModelDiscovery()
+	}
+	return ModelDiscoveryFor(statePath)
+}
+
 func (o Options) modelDiscovery() *ModelDiscovery {
 	if o.Models != nil {
 		return o.Models
@@ -255,11 +268,6 @@ func (o Options) modelDiscovery() *ModelDiscovery {
 
 func (d *ModelDiscovery) cachePath() string {
 	return discoveryCacheIn(d.dir)
-}
-
-// CachePath returns the model cache file this discovery reads and writes.
-func (d *ModelDiscovery) CachePath() string {
-	return d.cachePath()
 }
 
 func loadDiscoveryCache(path string) (discoveryCache, error) {
@@ -409,7 +417,7 @@ func refreshDiscovery(ctx context.Context, plugins []contracts.Plugin, cache dis
 		if !answered {
 			answer = discoveryAnswer{err: errDiscoveryNoAnswer}
 		}
-		outcomes = append(outcomes, applyAnswer(&next, job, answer, now))
+		outcomes = append(outcomes, applyAnswer(&next, job, answer.under(settings.policy), now))
 	}
 	sort.Slice(outcomes, func(left, right int) bool { return outcomes[left].Vendor < outcomes[right].Vendor })
 	return next, outcomes

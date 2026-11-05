@@ -57,8 +57,9 @@ func runBridge(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	requestFor := bridgeRequests(backendFlags, *statePath)
 	newBackend := func(_ string) (contracts.Backend, error) {
-		return newBackendFor(ctx, resolver, backendFlags.request(*statePath))
+		return newBackendFor(ctx, resolver, requestFor())
 	}
 
 	mem := buildMemory(ctx, log)
@@ -110,18 +111,18 @@ func declareBackendFlags(flags *flag.FlagSet) backendFlags {
 	return parsed
 }
 
-func (f backendFlags) request(statePath string) host.BackendRequest {
+func (f backendFlags) request(models *host.ModelDiscovery) host.BackendRequest {
 	return host.BackendRequest{
 		Vendor: *f.vendor, Cmd: *f.cmd, Kind: *f.kind, Resume: *f.resume, ModelID: *f.modelID,
-		Models: bridgeModels(statePath),
+		Models: models,
 	}
 }
 
-func bridgeModels(statePath string) *host.ModelDiscovery {
-	if statePath == "" {
-		return host.DefaultModelDiscovery()
+func bridgeRequests(flags backendFlags, statePath string) func() host.BackendRequest {
+	models := host.BridgeModelDiscovery(statePath)
+	return func() host.BackendRequest {
+		return flags.request(models)
 	}
-	return host.ModelDiscoveryFor(statePath)
 }
 
 type backendResolver interface {

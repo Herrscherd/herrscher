@@ -2,18 +2,15 @@ package main
 
 import (
 	"flag"
-	"path/filepath"
 	"testing"
 )
 
-func TestBridgeReadsTheCacheBesideItsStateFile(t *testing.T) {
-	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
-	stateDir := t.TempDir()
-	statePath := filepath.Join(stateDir, "state.json")
+func TestBridgeKeepsOneModelDiscoveryForItsLifetime(t *testing.T) {
 	flags := declareBackendFlags(flag.NewFlagSet("bridge", flag.ContinueOnError))
-	got := flags.request(statePath).Models.CachePath()
-	want := filepath.Join(stateDir, "models-discovered.json")
-	if got != want {
-		t.Fatalf("bridge model cache = %q, want %q (beside --state)", got, want)
+	requestFor := bridgeRequests(flags, "")
+	first := requestFor().Models
+	second := requestFor().Models
+	if first != second {
+		t.Fatal("each backend request built its own model discovery, so clash notices repeat per request")
 	}
 }

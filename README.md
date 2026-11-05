@@ -442,6 +442,12 @@ It is created on first write, readable by its owner only. Writers take an exclus
 (`flock` on Unix, `LockFileEx` on Windows), so two writers never drop each other's vendor.
 A vendor that fails or stays silent past its timeout keeps its last known list, and the
 daemon logs a warning. The daemon never waits for discovery to start.
+A bridge started by a local daemon receives that daemon's `--state` and reads its cache; a
+remote bridge reads the cache of its own machine and receives no `--state`. A clash warning
+is logged once per model ID per cache for the life of the process, and each bridge keeps one
+model discovery for its whole life. Under `gateway-only` the host drops every native answer
+whatever the backend returned; a backend that ignores the policy would still launch its own
+CLI, which only that backend's gate prevents.
 
 ### Also
 

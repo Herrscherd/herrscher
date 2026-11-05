@@ -1278,6 +1278,16 @@
     "other": "backend restart: {{.Err}} (session {{.Name}} restored on {{.Vendor}})"
   },
   {
+    "id": "cli.session.switch.restart_lost",
+    "description": "Error of session switch when the backend restart failed and the previous target could not be restored either",
+    "other": "backend restart: {{.Err}}; rollback failed, session {{.Name}} out of service: {{.RollbackErr}}"
+  },
+  {
+    "id": "cli.session.close.dirty_worktree",
+    "description": "Error of session close when the worktree has uncommitted work and the close was not forced: the branch is kept",
+    "other": "{{.Err}}; commit, or close with force:true to discard (branch session/{{.Name}} is kept)"
+  },
+  {
     "id": "cli.session.approvals.unenforced",
     "description": "Warning on session create: the vendor cannot enforce the approval mode, so the session runs ungated",
     "other": "⚠️ approvals: {{.Vendor}} cannot enforce them ({{.Why}}), so **{{.Name}}** runs ungated."

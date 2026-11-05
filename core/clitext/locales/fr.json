@@ -1278,6 +1278,16 @@
     "other": "redémarrage backend : {{.Err}} (session {{.Name}} restaurée sur {{.Vendor}})"
   },
   {
+    "id": "cli.session.switch.restart_lost",
+    "description": "Erreur de session switch quand le redémarrage du backend a échoué et que la cible précédente n'a pas pu non plus être restaurée",
+    "other": "redémarrage backend : {{.Err}} ; le retour arrière a échoué, session {{.Name}} hors service : {{.RollbackErr}}"
+  },
+  {
+    "id": "cli.session.close.dirty_worktree",
+    "description": "Erreur de fermeture de session quand le worktree contient du travail non commité et que la fermeture n'est pas forcée : la branche est conservée",
+    "other": "{{.Err}} ; fais un commit, ou ferme avec force:true pour l'abandonner (la branche session/{{.Name}} est conservée)"
+  },
+  {
     "id": "cli.session.approvals.unenforced",
     "description": "Avertissement à la création de session : le fournisseur ne peut pas appliquer le mode d'approbation, la session tourne sans contrôle",
     "other": "⚠️ approbations : {{.Vendor}} ne peut pas les appliquer ({{.Why}}), donc **{{.Name}}** tourne sans contrôle."

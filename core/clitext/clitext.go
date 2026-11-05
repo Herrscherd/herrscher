@@ -90,6 +90,8 @@ const (
 	ParamMode      = "Mode"
 )
 
+const ParamRollbackErr = "RollbackErr"
+
 // Text renders key in lang with params. It refuses an undeclared key, and params
 // that do not name exactly the fields the key declares.
 func Text(lang i18n.Language, key Key, params Params) (string, error) {

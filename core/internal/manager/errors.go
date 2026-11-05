@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 var (
@@ -169,21 +171,42 @@ func (e *SessionLimitError) Notice() contracts.Notice {
 	return contracts.Notice{Code: contracts.CodeSessionLimit, Args: []contracts.Arg{contracts.Count(e.Max)}}
 }
 
-type technicalError struct {
-	msg    string
-	causes []error
+type localizedError struct {
+	english string
+	text    string
+	causes  []error
 }
 
-func (e *technicalError) Error() string {
-	return e.msg
+func localize(lang i18n.Language, english string, key clitext.Key, params clitext.Params, causes ...error) error {
+	text, err := clitext.Text(lang, key, params)
+	if err != nil {
+		text = english
+	}
+	return &localizedError{english: english, text: text, causes: causes}
 }
 
-func (e *technicalError) Unwrap() []error {
+func restartLostError(lang i18n.Language, name string, restartErr, rollbackErr error) error {
+	english := fmt.Sprintf("backend restart: %v; rollback failed, session %s out of service: %v", restartErr, name, rollbackErr)
+	params := clitext.Params{clitext.ParamName: name, clitext.ParamErr: restartErr.Error(), clitext.ParamRollbackErr: rollbackErr.Error()}
+	return localize(lang, english, clitext.SessionSwitchRestartLost, params, restartErr, rollbackErr)
+}
+
+func dirtyWorktreeError(lang i18n.Language, name string, cause error) error {
+	english := fmt.Sprintf("%v; commit, or close with force:true to discard (branch session/%s is kept)", cause, name)
+	params := clitext.Params{clitext.ParamName: name, clitext.ParamErr: cause.Error()}
+	return localize(lang, english, clitext.SessionCloseDirtyWorktree, params, cause)
+}
+
+func (e *localizedError) Error() string {
+	return e.english
+}
+
+func (e *localizedError) Unwrap() []error {
 	return e.causes
 }
 
-func (e *technicalError) Notice() contracts.Notice {
-	return contracts.Notice{Code: contracts.CodeUnexpected, Args: []contracts.Arg{contracts.Text("Detail", e.msg)}}
+func (e *localizedError) Notice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeUnexpected, Args: []contracts.Arg{contracts.Text("Detail", e.text)}}
 }
 
 type sentinelError struct {

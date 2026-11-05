@@ -922,7 +922,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 		force := input.Bool("force")
 		if err := wtRoot.Remove(ctx, repo, name, force); err != nil {
 			h.sup.Start(sess)
-			return contracts.Result{}, &technicalError{msg: fmt.Sprintf("%v; commit, or close with force:true to discard (branch session/%s is kept)", err, name), causes: []error{err}}
+			return contracts.Result{}, dirtyWorktreeError(h.lang, name, err)
 		}
 	}
 	note := h.tidyChannel(ctx, sess)
@@ -1095,7 +1095,7 @@ func (h *Handler) switchApprovalsNote(sess state.Session) string {
 
 func (h *Handler) revertSwitch(name string, prior state.Session, restartErr error) error {
 	if rbErr := h.rollbackSwitch(name, prior.Vendor, prior.Cmd, prior.ModelID, prior.ResumeToken); rbErr != nil {
-		return &technicalError{msg: fmt.Sprintf("redémarrage backend: %v; rollback échoué, session %s hors service: %v", restartErr, name, rbErr), causes: []error{restartErr, rbErr}}
+		return restartLostError(h.lang, name, restartErr, rbErr)
 	}
 	return clitext.Failure(h.lang, restartErr, clitext.SessionSwitchRestartRestored, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: prior.Vendor, clitext.ParamErr: restartErr.Error()})
 }

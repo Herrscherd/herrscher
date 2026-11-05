@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"net"
 	"path/filepath"
 	"testing"
@@ -38,5 +39,21 @@ func TestDispatchLiveCommandReturnsWhenItsContextIsCancelled(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("dispatchLiveCommand stayed blocked on a silent daemon after its context was cancelled")
+	}
+}
+
+func TestDispatchLiveCommandReportsCancellationBeforeDial(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cmd.sock")
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { logCleanup(listener.Close()) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _, dispatchErr := dispatchLiveCommand(ctx, path, []string{"status"})
+	if !errors.Is(dispatchErr, context.Canceled) {
+		t.Fatalf("dispatchLiveCommand error = %v, want context.Canceled", dispatchErr)
 	}
 }

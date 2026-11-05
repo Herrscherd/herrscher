@@ -540,12 +540,13 @@ func (h *Handler) checkSessionAccount(input contracts.Input, runtime runtimeChoi
 	explicitAccount, _ := input.Lookup("account")
 	hostName := h.resolveHost(input, runtime.agent)
 	account := chooseSessionAccount(explicitAccount, h.agentAccount(runtime.agent))
-	if err := h.checkAccountUsable(hostName, account); err != nil {
-		return "", "", err
+	err := h.checkAccountUsable(hostName, account)
+	if err == nil {
+		err = h.checkAccount(runtime, account)
 	}
-	if err := h.checkAccount(runtime, account); err != nil {
+	if err != nil {
 		if account != explicitAccount {
-			return "", "", fmt.Errorf("the account of agent %q: %w", runtime.agent, err)
+			err = fmt.Errorf("the account of agent %q: %w", runtime.agent, err)
 		}
 		return "", "", err
 	}

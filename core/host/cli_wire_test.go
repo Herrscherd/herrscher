@@ -178,3 +178,35 @@ func TestWiredManagerValidatesMemoryProjectBeforeTheAccount(t *testing.T) {
 		t.Fatalf("err %v, want the memory_project validation before the account check", runErr)
 	}
 }
+
+func TestWiredManagerWrapsEveryRefusalOfAnAgentAccount(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	name, err := contracts.ParseProfileName("pro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (accounts.Store{Root: accounts.DefaultRoot(home)}).Create("claude", name); err != nil {
+		t.Fatal(err)
+	}
+	agents := agent.NewStore(t.TempDir())
+	if _, err := agents.Create(agent.CreateSpec{Name: "far", Host: "elsewhere"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agents.Root(), "far", "account"), []byte("pro\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	if err := st.SetHome(state.HomeRef{ID: "home", Type: "forum"}); err != nil {
+		t.Fatal(err)
+	}
+	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agents)
+	create := mustCommand(t, hdl.Commands(), "session", "create")
+	_, runErr := create.Run(t.Context(), contracts.Input{Args: map[string]string{"name": "far-session", "agent": "far", "vendor": "claude"}})
+	if !errors.Is(runErr, manager.ErrAccountHost) {
+		t.Fatalf("session create for an agent on another host with its account: err %v, want manager.ErrAccountHost", runErr)
+	}
+	if !strings.Contains(runErr.Error(), `the account of agent "far"`) {
+		t.Fatalf("err %q must say the host refusal comes from the agent's account", runErr)
+	}
+}

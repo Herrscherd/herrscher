@@ -11,6 +11,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/accounts"
+	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -267,10 +268,12 @@ func retryCommand(source string, input contracts.Input) string {
 }
 
 func retryFlag(key, value string) string {
-	if strings.HasPrefix(value, "--") {
-		return shellQuote("--" + key + "=" + value)
+	tokens := cli.FlagArg(key, value)
+	quoted := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		quoted = append(quoted, shellQuote(token))
 	}
-	return "--" + key + " " + shellQuote(value)
+	return strings.Join(quoted, " ")
 }
 
 func shellQuote(value string) string {

@@ -17,20 +17,37 @@ const (
 	SkillDuplicate       = "cli.skills.duplicate"
 )
 
+const (
+	ServeFlagConfig        = "cli.serve.flag.config"
+	ServeFlagState         = "cli.serve.flag.state"
+	ServeFlagCmd           = "cli.serve.flag.cmd"
+	ServeFlagHealthAddr    = "cli.serve.flag.health_addr"
+	ServeFlagStatusChannel = "cli.serve.flag.status_channel"
+	ServeFlagInstance      = "cli.serve.flag.instance"
+	ServeFlagEnvFile       = "cli.serve.flag.env_file"
+)
+
 func serveKeys() map[Key][]string {
 	return map[Key][]string{
-		SkillsRetireFailed:   {ParamErr},
-		SkillRemoved:         {ParamName},
-		SkillRetiredDiverged: {ParamName, ParamPath},
-		SkillRetiredLinked:   {ParamName, ParamPath},
-		SkillInstalled:       {ParamName},
-		SkillUpdated:         {ParamName},
-		SkillDiverged:        {ParamName, ParamPath},
-		SkillLinked:          {ParamName, ParamPath},
-		SkillsNotConfigured:  {ParamKind, ParamErr},
-		SkillsPluginFailed:   {ParamKind, ParamErr},
-		SkillsNoContent:      {ParamKind},
-		SkillsInstallFailed:  {ParamKind, ParamErr},
-		SkillDuplicate:       {ParamName, ParamKind, ParamOwner},
+		ServeFlagConfig:        nil,
+		ServeFlagState:         nil,
+		ServeFlagCmd:           nil,
+		ServeFlagHealthAddr:    nil,
+		ServeFlagStatusChannel: nil,
+		ServeFlagInstance:      nil,
+		ServeFlagEnvFile:       nil,
+		SkillsRetireFailed:     {ParamErr},
+		SkillRemoved:           {ParamName},
+		SkillRetiredDiverged:   {ParamName, ParamPath},
+		SkillRetiredLinked:     {ParamName, ParamPath},
+		SkillInstalled:         {ParamName},
+		SkillUpdated:           {ParamName},
+		SkillDiverged:          {ParamName, ParamPath},
+		SkillLinked:            {ParamName, ParamPath},
+		SkillsNotConfigured:    {ParamKind, ParamErr},
+		SkillsPluginFailed:     {ParamKind, ParamErr},
+		SkillsNoContent:        {ParamKind},
+		SkillsInstallFailed:    {ParamKind, ParamErr},
+		SkillDuplicate:         {ParamName, ParamKind, ParamOwner},
 	}
 }

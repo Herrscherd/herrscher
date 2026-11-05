@@ -17,6 +17,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/host"
@@ -66,15 +67,19 @@ func prepareLanguages(cfg config.Config) (language.Languages, error) {
 }
 
 func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.Config, langs language.Languages) error {
+	translator := clitext.For(langs.Operator)
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
-	flags.String("config", config.DefaultPath(), "path to the declarative config.json (optional)")
+	flags.String("config", config.DefaultPath(), translator.Text(clitext.ServeFlagConfig, nil))
 
-	statePath := flags.String("state", host.DefaultStatePath(), "path to the daemon state file")
-	defaultCmd := flags.String("cmd", or(cfg.Cmd, "claude"), "default bridged base command for new sessions (stream-json mode adds -p and the stream flags)")
-	healthAddr := flags.String("health-addr", cfg.HealthAddr, "if set (e.g. :8787), serve GET /health")
-	statusChannel := flags.String("status-channel", cfg.StatusChannel, "if set, maintain a self-updating status embed there")
-	instanceID := flags.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID then config.json")
-	envFile := flags.String("env-file", "", "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)")
+	statePath := flags.String("state", host.DefaultStatePath(), translator.Text(clitext.ServeFlagState, nil))
+	defaultCmd := flags.String("cmd", or(cfg.Cmd, "claude"), translator.Text(clitext.ServeFlagCmd, nil))
+	healthAddr := flags.String("health-addr", cfg.HealthAddr, translator.Text(clitext.ServeFlagHealthAddr, nil))
+	statusChannel := flags.String("status-channel", cfg.StatusChannel, translator.Text(clitext.ServeFlagStatusChannel, nil))
+	instanceID := flags.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), translator.Text(clitext.ServeFlagInstance, nil))
+	envFile := flags.String("env-file", "", translator.Text(clitext.ServeFlagEnvFile, nil))
+	if err := translator.Err(); err != nil {
+		return err
+	}
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil

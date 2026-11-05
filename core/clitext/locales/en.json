@@ -318,5 +318,40 @@
     "id": "cli.attach.no_session",
     "description": "Notice in an attached tab whose session is gone",
     "other": "herrscher: no session is bound to this tab any more"
+  },
+  {
+    "id": "cli.serve.flag.config",
+    "description": "Help of the --config flag of serve",
+    "other": "path to the declarative config.json (optional)"
+  },
+  {
+    "id": "cli.serve.flag.state",
+    "description": "Help of the --state flag of serve",
+    "other": "path to the daemon state file"
+  },
+  {
+    "id": "cli.serve.flag.cmd",
+    "description": "Help of the --cmd flag of serve",
+    "other": "default bridged base command for new sessions (stream-json mode adds -p and the stream flags)"
+  },
+  {
+    "id": "cli.serve.flag.health_addr",
+    "description": "Help of the --health-addr flag of serve",
+    "other": "if set (e.g. :8787), serve GET /health"
+  },
+  {
+    "id": "cli.serve.flag.status_channel",
+    "description": "Help of the --status-channel flag of serve",
+    "other": "if set, maintain a self-updating status embed there"
+  },
+  {
+    "id": "cli.serve.flag.instance",
+    "description": "Help of the --instance flag of serve",
+    "other": "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID then config.json"
+  },
+  {
+    "id": "cli.serve.flag.env_file",
+    "description": "Help of the --env-file flag of serve",
+    "other": "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)"
   }
 ]

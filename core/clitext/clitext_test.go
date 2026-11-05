@@ -81,6 +81,7 @@ func TestRenderedMessagesInEachLanguage(t *testing.T) {
 		{"unknown command", CommandUnknown, Params{"Name": `"x"`}, `unknown command "x"`, `commande inconnue "x"`},
 		{"env set failed", EnvSetFailed, Params{"Key": "A", "Err": "bad"}, "set A: bad", "définition de A : bad"},
 		{"attach not available", AttachNotAvailable, Params{"Verb": `"agent"`}, `command "agent" is not available from the terminal (allowed: session, agent)`, `commande "agent" indisponible depuis le terminal (autorisées : session, agent)`},
+		{"serve health flag", ServeFlagHealthAddr, nil, "if set (e.g. :8787), serve GET /health", "si elle est renseignée (par exemple :8787), sert GET /health"},
 		{"skill duplicate", SkillDuplicate, Params{"Name": "demo", "Kind": "bundle", "Owner": "core"}, "herrscher: skill demo from plugin bundle was left out: plugin core already ships one by that name", "herrscher : la compétence demo du plugin bundle a été écartée : le plugin core en livre déjà une de ce nom"},
 	}
 	for _, tc := range cases {

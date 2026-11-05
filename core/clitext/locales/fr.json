@@ -926,12 +926,12 @@
     "other": "action de plugin inconnue {{.Action}}"
   },
   {
-    "id": "cli.manage.no_gateway_creds",
+    "id": "cli.manage.gateway_pair_missing",
     "description": "Error: the gateway-only policy was chosen with no gateway credentials",
     "other": "gateway-only sans identifiants de passerelle : chaque session échouerait au démarrage ; renseignez {{.URL}} et {{.Token}}"
   },
   {
-    "id": "cli.manage.incomplete_creds",
+    "id": "cli.manage.gateway_pair_partial",
     "description": "Error: only one of the two gateway credentials was given",
     "other": "identifiants de passerelle incomplets : {{.URL}} et {{.Token}} vont ensemble ; l'un sans l'autre ferait tourner les tours sur le compte propre de cette machine"
   },
@@ -1057,7 +1057,7 @@
     "other": "{{.Path}} créé à partir de .env.example : renseignez vos secrets"
   },
   {
-    "id": "cli.manage.secrets_write_failed",
+    "id": "cli.manage.env_write_failed",
     "description": "Error: init could not write the secrets",
     "other": "écriture des secrets : {{.Err}}"
   },
@@ -1112,22 +1112,22 @@
     "other": "modèle par défaut"
   },
   {
-    "id": "cli.manage.credentials.header",
+    "id": "cli.manage.gateway_pair.header",
     "description": "Heading of the gateway credentials step of the wizard",
     "other": "passerelle · identifiants"
   },
   {
-    "id": "cli.manage.credentials.required",
+    "id": "cli.manage.gateway_pair.required",
     "description": "Note under the gateway credentials heading when none is set yet",
     "other": "(les deux sont requis ; la saisie du jeton est masquée)"
   },
   {
-    "id": "cli.manage.credentials.keep",
+    "id": "cli.manage.gateway_pair.keep",
     "description": "Note under the gateway credentials heading when a pair is already set",
     "other": "(déjà renseignés : Entrée pour garder ; la saisie du jeton est masquée)"
   },
   {
-    "id": "cli.manage.secrets.header",
+    "id": "cli.manage.env.header",
     "description": "Heading of the Discord secrets step, Kind is the gateway kind",
     "other": "{{.Kind}} · secrets"
   },
@@ -1195,5 +1195,15 @@
     "id": "cli.manage.start_with",
     "description": "Line after the wizard: the command that starts the daemon",
     "other": "lancez-le avec : {{.Command}}"
+  },
+  {
+    "id": "cli.manage.stack_header",
+    "description": "Heading of the stack summary printed after init composes the plugin list",
+    "other": "pile"
+  },
+  {
+    "id": "cli.manage.current_tag",
+    "description": "Tag marking the route policy or default model that is already set",
+    "other": "actuel"
   }
 ]

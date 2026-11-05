@@ -926,12 +926,12 @@
     "other": "unknown plugin action {{.Action}}"
   },
   {
-    "id": "cli.manage.no_gateway_creds",
+    "id": "cli.manage.gateway_pair_missing",
     "description": "Error: the gateway-only policy was chosen with no gateway credentials",
     "other": "gateway-only with no gateway credentials: every session would fail to start; set {{.URL}} and {{.Token}}"
   },
   {
-    "id": "cli.manage.incomplete_creds",
+    "id": "cli.manage.gateway_pair_partial",
     "description": "Error: only one of the two gateway credentials was given",
     "other": "incomplete gateway credentials: {{.URL}} and {{.Token}} go together; one without the other would run turns on this machine's own account"
   },
@@ -1057,7 +1057,7 @@
     "other": "seeded {{.Path}} from .env.example: fill in your secrets"
   },
   {
-    "id": "cli.manage.secrets_write_failed",
+    "id": "cli.manage.env_write_failed",
     "description": "Error: init could not write the secrets",
     "other": "write secrets: {{.Err}}"
   },
@@ -1112,22 +1112,22 @@
     "other": "default model"
   },
   {
-    "id": "cli.manage.credentials.header",
+    "id": "cli.manage.gateway_pair.header",
     "description": "Heading of the gateway credentials step of the wizard",
     "other": "gateway · credentials"
   },
   {
-    "id": "cli.manage.credentials.required",
+    "id": "cli.manage.gateway_pair.required",
     "description": "Note under the gateway credentials heading when none is set yet",
     "other": "(both are required; token entry is hidden)"
   },
   {
-    "id": "cli.manage.credentials.keep",
+    "id": "cli.manage.gateway_pair.keep",
     "description": "Note under the gateway credentials heading when a pair is already set",
     "other": "(already set: enter to keep; token entry is hidden)"
   },
   {
-    "id": "cli.manage.secrets.header",
+    "id": "cli.manage.env.header",
     "description": "Heading of the Discord secrets step, Kind is the gateway kind",
     "other": "{{.Kind}} · secrets"
   },
@@ -1195,5 +1195,15 @@
     "id": "cli.manage.start_with",
     "description": "Line after the wizard: the command that starts the daemon",
     "other": "start it with: {{.Command}}"
+  },
+  {
+    "id": "cli.manage.stack_header",
+    "description": "Heading of the stack summary printed after init composes the plugin list",
+    "other": "stack"
+  },
+  {
+    "id": "cli.manage.current_tag",
+    "description": "Tag marking the route policy or default model that is already set",
+    "other": "current"
   }
 ]

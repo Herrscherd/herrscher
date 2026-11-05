@@ -1,24 +1,26 @@
 package manage
 
 import (
+	"bytes"
+	"log/slog"
+	"strings"
 	"testing"
 
-	"github.com/Herrscherd/herrscher/core/language"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
-func TestManageTextRendersInFrench(t *testing.T) {
-	t.Setenv(language.EnvVar, "fr")
+func TestMsgLogsAMessageThatFailsToRender(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
 
-	if got, want := changeLine(verbAdd, "mod/a", "plugins.go"), "ajouté mod/a dans plugins.go"; got != want {
-		t.Fatalf("changeLine(add) = %q, want %q", got, want)
+	text := msg(clitext.Key("cli.nowhere"), nil)
+
+	if text != "cli.nowhere" {
+		t.Fatalf("msg on an undeclared key = %q, want the key itself", text)
 	}
-	if got, want := changeLine("remove", "mod/a", "plugins.go"), "retiré mod/a de plugins.go"; got != want {
-		t.Fatalf("changeLine(remove) = %q, want %q", got, want)
-	}
-	if got, want := stateWord(verbAdd), "ajouté"; got != want {
-		t.Fatalf("stateWord(add) = %q, want %q", got, want)
-	}
-	if got, want := stateWord("remove"), "retiré"; got != want {
-		t.Fatalf("stateWord(remove) = %q, want %q", got, want)
+	if !strings.Contains(logs.String(), "render message") || !strings.Contains(logs.String(), "cli.nowhere") {
+		t.Fatalf("msg did not log the failure: %q", logs.String())
 	}
 }

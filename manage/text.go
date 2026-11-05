@@ -1,9 +1,18 @@
 package manage
 
-import "github.com/Herrscherd/herrscher/core/clitext"
+import (
+	"log/slog"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
+)
 
 func msg(key clitext.Key, params clitext.Params) string {
-	return clitext.For(clitext.ClientLanguage()).Text(key, params)
+	translator := clitext.For(clitext.ClientLanguage())
+	text := translator.Text(key, params)
+	if err := translator.Err(); err != nil {
+		slog.Error("render message", "key", key, "err", err)
+	}
+	return text
 }
 
 func failure(cause error, key clitext.Key, params clitext.Params) error {

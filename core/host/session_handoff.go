@@ -119,7 +119,7 @@ func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions
 		},
 		create: func(ctx context.Context, in contracts.Input) (string, error) {
 			res, err := create.Run(ctx, in)
-			return textOf(res, err, i18n.English)
+			return cli.Render(res, err, i18n.English)
 		},
 		send: func(ctx context.Context, target, author, text string) error {
 			return sendToSession(ctx, sessions, contracts.Input{Args: map[string]string{paramName: target, "author": author, "text": text}})

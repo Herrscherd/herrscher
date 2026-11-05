@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -27,8 +30,8 @@ func TestPrepareLanguagesKeepsTheClientLocaleOutOfTheDaemon(t *testing.T) {
 	if langs.Operator != i18n.English {
 		t.Fatalf("operator = %v, want English: the daemon does not read LANG", langs.Operator)
 	}
-	if got := os.Getenv(language.EnvVar); got != "en" {
-		t.Fatalf("%s = %q, want the operator language only: the daemon would inherit the client locale", language.EnvVar, got)
+	if got := os.Getenv(language.EnvVar); got != "" {
+		t.Fatalf("%s = %q, want nothing published: the daemon would inherit the client locale", language.EnvVar, got)
 	}
 }
 
@@ -62,13 +65,32 @@ func TestPrepareLanguagesKeepsAPublishedLanguageWithoutConfig(t *testing.T) {
 	}
 }
 
-func TestPrepareLanguagesDefaultsToEnglish(t *testing.T) {
+func TestPrepareLanguagesDefaultsToEnglishWithoutPublishing(t *testing.T) {
 	clearPublishedLanguage(t)
 	t.Setenv("LANG", "")
-	if _, err := prepareLanguages(config.Config{}); err != nil {
+	langs, err := prepareLanguages(config.Config{})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got := os.Getenv(language.EnvVar); got != "en" {
-		t.Fatalf("%s = %q, want en", language.EnvVar, got)
+	if langs.Operator != i18n.English {
+		t.Fatalf("operator = %v, want English", langs.Operator)
+	}
+	if got := os.Getenv(language.EnvVar); got != "" {
+		t.Fatalf("%s = %q, want nothing published without an explicit language", language.EnvVar, got)
+	}
+}
+
+func TestPrepareLanguagesWarnsOnceThroughTheProcessLogger(t *testing.T) {
+	clearPublishedLanguage(t)
+	t.Setenv("LANG", "fr_FR.UTF-8")
+	var out bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	if _, err := prepareLanguages(config.Config{Language: "klingon"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(out.String(), "language ignored"); n != 1 {
+		t.Fatalf("warnings = %d, want exactly one for the operator value:\n%s", n, out.String())
 	}
 }

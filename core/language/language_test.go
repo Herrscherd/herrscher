@@ -3,6 +3,7 @@ package language
 import (
 	"bytes"
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
 
@@ -106,17 +107,27 @@ func TestResolveWarnsOnceForAnInvalidConfigLanguage(t *testing.T) {
 	}
 }
 
-func TestActiveReadsThePublishedLanguageWithoutWarning(t *testing.T) {
-	t.Setenv(EnvVar, "fr")
-	if got := Active(); got != i18n.French {
-		t.Fatalf("Active = %v, want French from the published value", got)
-	}
-	t.Setenv(EnvVar, "klingon")
-	if got := Active(); got != i18n.English {
-		t.Fatalf("Active = %v, want English for an invalid published value", got)
-	}
+func TestExplicitOnlyForASupportedValue(t *testing.T) {
 	t.Setenv(EnvVar, "")
-	if got := Active(); got != i18n.English {
-		t.Fatalf("Active = %v, want English when nothing is published", got)
+	if Explicit("") || Explicit("klingon") {
+		t.Fatal("nothing named, or an unsupported value, is not explicit")
+	}
+	if !Explicit("fr") {
+		t.Fatal("a supported config value is explicit")
+	}
+	t.Setenv(EnvVar, "fr")
+	if !Explicit("") {
+		t.Fatal("a supported HERRSCHER_LANG is explicit")
+	}
+}
+
+func TestForClientFollowsLocaleWithoutExportingIt(t *testing.T) {
+	t.Setenv(EnvVar, "")
+	t.Setenv("LANG", "fr_FR.UTF-8")
+	if got := ForClient(""); got != i18n.French {
+		t.Fatalf("ForClient = %v, want French from LANG", got)
+	}
+	if got := os.Getenv(EnvVar); got != "" {
+		t.Fatalf("ForClient published %q, want nothing", got)
 	}
 }

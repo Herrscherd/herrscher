@@ -56,6 +56,9 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 
 func prepareLanguages(cfg config.Config) (language.Languages, error) {
 	langs := language.Resolve(slog.Default(), cfg.Language)
+	if !language.Explicit(cfg.Language) {
+		return langs, nil
+	}
 	if err := language.Export(langs.Operator); err != nil {
 		return language.Languages{}, err
 	}

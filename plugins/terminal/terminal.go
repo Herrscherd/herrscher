@@ -24,7 +24,9 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/language"
 	"github.com/Herrscherd/herrscher/core/scope"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
@@ -633,5 +635,13 @@ func slug(text string) string {
 func bestEffort(_ error) {}
 
 func textResult(res contracts.Result, err error) (string, error) {
-	return cli.Render(res, err, language.Active())
+	return cli.Render(res, err, clientLanguage())
+}
+
+func clientLanguage() i18n.Language {
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		return language.ForClient("")
+	}
+	return language.ForClient(cfg.Language)
 }

@@ -54,30 +54,36 @@ func Client(log *slog.Logger, configured string) i18n.Language {
 	)
 }
 
-// Languages is the operator language, which plugins inherit through EnvVar, and the client language,
-// which renders the output of the command the user typed.
+// Languages holds the operator language and the client language of one process.
 type Languages struct {
 	Operator i18n.Language
 	Client   i18n.Language
 }
 
-// Resolve resolves both languages once. The warning about an ignored value is emitted by Operator
-// only, so a process that resolves its languages warns at most once.
+// Resolve resolves both languages once, and warns about an ignored value only through Operator.
 func Resolve(log *slog.Logger, configured string) Languages {
 	return Languages{
 		Operator: Operator(log, configured),
-		Client:   Client(discard(), configured),
+		Client:   ForClient(configured),
 	}
 }
 
-// Active returns the language already published in EnvVar, English when none is. It never warns: the
-// process that published the value already did.
-func Active() i18n.Language {
-	return Pick(discard(), Source{Origin: EnvVar, Value: os.Getenv(EnvVar), Quiet: true})
+// ForClient resolves the language of a client rendering text in this process, without warning.
+func ForClient(configured string) i18n.Language {
+	return Client(slog.New(slog.DiscardHandler), configured)
 }
 
-func discard() *slog.Logger {
-	return slog.New(slog.DiscardHandler)
+// Explicit reports whether config.json or HERRSCHER_LANG names a supported language.
+func Explicit(configured string) bool {
+	return supported(configured) || supported(os.Getenv(EnvVar))
+}
+
+func supported(value string) bool {
+	if value == "" {
+		return false
+	}
+	_, err := i18n.ParseLanguage(value)
+	return err == nil
 }
 
 // Export publishes lang in HERRSCHER_LANG so that plugins read the same language.

@@ -1,0 +1,77 @@
+[
+  {
+    "id": "coordination.fanout_partial",
+    "description": "Un lancement de cohorte s'arrête après quelques workers, l'hôte signale combien sont partis et pourquoi il s'arrête",
+    "other": "lancement partiel : {{.Launched}} lancés, puis {{.Detail}}"
+  },
+  {
+    "id": "coordination.route_refused",
+    "description": "Le coordinateur refuse de router une tâche vers un agent, Detail porte la raison technique",
+    "other": "routage refusé : {{.Detail}}"
+  },
+  {
+    "id": "coordination.seal_refused",
+    "description": "Le coordinateur refuse de sceller une cohorte, Detail porte la raison technique",
+    "other": "scellement refusé : {{.Detail}}"
+  },
+  {
+    "id": "coordination.merge_refused",
+    "description": "Le coordinateur refuse de fusionner la branche d'un worker, Detail porte la raison technique",
+    "other": "fusion refusée : {{.Detail}}"
+  },
+  {
+    "id": "coordination.handoff_refused",
+    "description": "Le coordinateur refuse une passation de tâche à un agent, Detail porte la raison technique",
+    "other": "passation refusée : {{.Detail}}"
+  },
+  {
+    "id": "compaction.no_effect",
+    "description": "La compaction automatique n'a pas fait repasser le contexte sous le seuil, aucune nouvelle tentative n'est faite avant ce passage",
+    "other": "compaction automatique sans effet : le contexte reste au-dessus de {{.Percent}} %, pas de nouvelle tentative avant qu'il repasse sous le seuil"
+  },
+  {
+    "id": "compaction.bridge_gone",
+    "description": "Le bridge de la session a été fermé pendant une compaction",
+    "other": "le relais s'est fermé pendant une compaction"
+  },
+  {
+    "id": "compaction.no_backend_factory",
+    "description": "Un plugin déclare la capacité Compactor mais ne fournit aucune fabrique de backend",
+    "other": "le plugin déclare Capabilities.Compactor mais ne fournit aucune fabrique de backend"
+  },
+  {
+    "id": "compaction.not_compactor_port",
+    "description": "Un plugin déclare la capacité Compactor mais n'implémente pas le port correspondant",
+    "other": "le plugin déclare Capabilities.Compactor mais n'implémente pas le port"
+  },
+  {
+    "id": "compaction.no_compactor_plugin",
+    "description": "Aucun plugin ne déclare la capacité Compactor sous le nom demandé",
+    "other": "aucun plugin ne déclare Capabilities.Compactor sous ce nom"
+  },
+  {
+    "id": "compaction.failed",
+    "description": "Une compaction échoue pour une raison sans code propre, Detail porte le texte technique",
+    "other": "échec de la compaction : {{.Detail}}"
+  },
+  {
+    "id": "coordination.routed",
+    "description": "Le coordinateur route une tâche vers un agent, Agent le nomme et Session nomme la session qui la prend",
+    "other": "routé vers {{.Agent}} : {{.Session}}"
+  },
+  {
+    "id": "coordination.sealed",
+    "description": "Le coordinateur scelle une cohorte au nœud qu'il nomme",
+    "other": "cohorte scellée à {{.Node}}"
+  },
+  {
+    "id": "coordination.merged",
+    "description": "Le coordinateur fusionne la branche d'un worker, Lead nomme la session pilote qui la reçoit",
+    "other": "fusion traitée pour {{.Lead}}"
+  },
+  {
+    "id": "coordination.launched",
+    "description": "Une cohorte de workers est lancée sans incident, Count donne leur nombre et Workers leurs noms",
+    "other": "cohorte lancée : {{.Count}} workers ({{.Workers}})"
+  }
+]

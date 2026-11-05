@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -220,7 +221,7 @@ func setSkillApproval(ctx context.Context, mem contracts.Memory, input contracts
 	key := input.Get("key")
 	approve := !input.Bool("revoke")
 	if err := orchestrator.ApproveSkill(ctx, mem, key, approve); err != nil {
-		return "", err
+		return "", approvalFailure(err)
 	}
 	if !approve {
 		return "revoked " + key + " (a promotion already made stands; unmake it with `memory unlink` and `memory restore`)", nil
@@ -311,4 +312,27 @@ func commandSpecsJSON(specs []cli.Spec) []commandSpecJSON {
 		out = append(out, commandSpecJSON{Path: spec.Path, Help: spec.Help, Params: params})
 	}
 	return out
+}
+
+type unexpectedError struct {
+	cause error
+}
+
+func (e unexpectedError) Error() string {
+	return e.cause.Error()
+}
+
+func (e unexpectedError) Unwrap() error {
+	return e.cause
+}
+
+func (e unexpectedError) Notice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeUnexpected, Args: []contracts.Arg{contracts.Text(detailParam, e.cause.Error())}}
+}
+
+func approvalFailure(err error) error {
+	if _, typed := errors.AsType[contracts.NoticeError](err); typed {
+		return err
+	}
+	return unexpectedError{cause: err}
 }

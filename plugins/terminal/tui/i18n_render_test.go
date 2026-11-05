@@ -50,3 +50,13 @@ func copyNothingFlash(m *model) string {
 	m.copyTarget(copyReply)
 	return m.flash
 }
+
+func TestSharedCliTextFollowsTheTuiLanguage(t *testing.T) {
+	trans := newTranslator()
+	if got := trans.in(i18n.French).shared("cli.manage.state.added"); got != "ajouté" {
+		t.Fatalf("the shared CLI text must render in French, got %q", got)
+	}
+	if got := trans.in(i18n.English).shared("cli.manage.state.added"); got != "added" {
+		t.Fatalf("the shared CLI text must render in English, got %q", got)
+	}
+}

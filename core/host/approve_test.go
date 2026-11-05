@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -367,7 +365,8 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 }
 
 func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
-	approvalTab := newApprovalTable()
+	var warnings bytes.Buffer
+	approvalTab := newApprovalTableWith(&warnings)
 	sessionTab := newSessionTable()
 	ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	req := approval.Request{Tool: "Bash", Subject: "git push"}
@@ -375,56 +374,24 @@ func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	quiet := captureDaemonStderr(t, func() {
-		askApproval(ctx, approvalTab, sessionTab, "s-warn", req, ask, approval.ModeAsk, fits)
-	})
-	if quiet != "" {
-		t.Fatalf("a wait the vendor will sit through must say nothing, got %q", quiet)
+	askApproval(ctx, approvalTab, sessionTab, "s-warn", req, ask, approval.ModeAsk, fits)
+	if warnings.Len() != 0 {
+		t.Fatalf("a wait the vendor will sit through must say nothing, got %q", warnings.String())
 	}
 
-	allowed := captureDaemonStderr(t, func() {
-		askApproval(ctx, approvalTab, sessionTab, "s-warn", req, nil, 0, outlives)
-	})
-	if allowed != "" {
-		t.Fatalf("a call nobody is asked about must say nothing, got %q", allowed)
+	askApproval(ctx, approvalTab, sessionTab, "s-warn", req, nil, 0, outlives)
+	if warnings.Len() != 0 {
+		t.Fatalf("a call nobody is asked about must say nothing, got %q", warnings.String())
 	}
 
-	got := captureDaemonStderr(t, func() {
-		askApproval(ctx, approvalTab, sessionTab, "s-warn", req, ask, approval.ModeAsk, outlives)
-	})
+	askApproval(ctx, approvalTab, sessionTab, "s-warn", req, ask, approval.ModeAsk, outlives)
+	got := warnings.String()
 	if !strings.Contains(got, outlives.String()) {
 		t.Fatalf("warning %q must name the wait that was asked for", got)
 	}
 	if !strings.Contains(got, agent.HookWait.String()) {
 		t.Fatalf("warning %q must name what the vendor will wait", got)
 	}
-}
-
-func captureDaemonStderr(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	saved := os.Stderr
-	os.Stderr = w
-	defer func() { os.Stderr = saved }()
-	read := make(chan string, 1)
-	go func() {
-		var b bytes.Buffer
-		_, copyErr := io.Copy(&b, r)
-		logCleanup(copyErr)
-		read <- b.String()
-	}()
-	fn()
-	if err := w.Close(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
-	out := <-read
-	if err := r.Close(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
-	return out
 }
 
 func awaitPending(t *testing.T, tab *approvalTable, want int) []PendingApproval {

@@ -34,7 +34,7 @@ func TestLoadEnvFile(t *testing.T) {
 			}
 		})
 	}
-	if err := loadEnvFile(path); err != nil {
+	if err := loadEnvFile(path, testLang()); err != nil {
 		t.Fatal(err)
 	}
 	cases := map[string]string{
@@ -60,7 +60,7 @@ func TestLoadEnvFileRespectsExistingEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("HERRSCHER_TEST_PRESET", "fromenv")
-	if err := loadEnvFile(path); err != nil {
+	if err := loadEnvFile(path, testLang()); err != nil {
 		t.Fatal(err)
 	}
 	if got := os.Getenv("HERRSCHER_TEST_PRESET"); got != "fromenv" {
@@ -69,7 +69,7 @@ func TestLoadEnvFileRespectsExistingEnv(t *testing.T) {
 }
 
 func TestLoadEnvFileMissingIsOK(t *testing.T) {
-	if err := loadEnvFile(filepath.Join(t.TempDir(), "absent.env")); err != nil {
+	if err := loadEnvFile(filepath.Join(t.TempDir(), "absent.env"), testLang()); err != nil {
 		t.Errorf("missing env file should be a no-op, got %v", err)
 	}
 }

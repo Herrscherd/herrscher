@@ -63,14 +63,38 @@ func TestOperatorIgnoresTheLocale(t *testing.T) {
 	}
 }
 
-func TestOperatorReadsConfigThenEnv(t *testing.T) {
+func TestOperatorReadsEnvThenConfig(t *testing.T) {
 	log, _ := silentLog()
 	t.Setenv(EnvVar, "en")
-	if got := Operator(log, "fr"); got != i18n.French {
-		t.Fatalf("Operator = %v, want the config value to win", got)
+	if got := Operator(log, "fr"); got != i18n.English {
+		t.Fatalf("Operator = %v, want the env value to win over config", got)
 	}
-	if got := Operator(log, ""); got != i18n.English {
-		t.Fatalf("Operator = %v, want the env value", got)
+	t.Setenv(EnvVar, "")
+	if got := Operator(log, "fr"); got != i18n.French {
+		t.Fatalf("Operator = %v, want the config value when env is unset", got)
+	}
+}
+
+func TestClientOrderIsEnvThenConfigThenLocaleThenEnglish(t *testing.T) {
+	cases := []struct {
+		name, env, configured, locale string
+		want                          i18n.Language
+	}{
+		{"env beats config and locale", "fr", "en", "de_DE.UTF-8", i18n.French},
+		{"config beats locale", "", "fr", "de_DE.UTF-8", i18n.French},
+		{"locale when nothing else names a language", "", "", "fr_FR.UTF-8", i18n.French},
+		{"English when nothing names a language", "", "", "", i18n.English},
+		{"English for an untranslated locale", "", "", "de_DE.UTF-8", i18n.English},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			log, _ := silentLog()
+			t.Setenv(EnvVar, tc.env)
+			t.Setenv("LANG", tc.locale)
+			if got := Client(log, tc.configured); got != tc.want {
+				t.Fatalf("Client = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

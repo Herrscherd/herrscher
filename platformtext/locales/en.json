@@ -1,0 +1,22 @@
+[
+  {
+    "id": "cli.usage.tagline",
+    "description": "The one-line tagline under the banner of the usage",
+    "other": "modular Discord ⇄ Claude agent harness host"
+  },
+  {
+    "id": "cli.usage.env.bot",
+    "description": "Environment line: the Discord variables",
+    "other": "env: DISCORD_BOT_TOKEN (required), DISCORD_USER_ID (the user the bot obeys)"
+  },
+  {
+    "id": "cli.serve.flag.instance",
+    "description": "Help of the --instance flag of serve",
+    "other": "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID then config.json"
+  },
+  {
+    "id": "cli.serve.flag.env_file",
+    "description": "Help of the --env-file flag of serve",
+    "other": "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)"
+  }
+]

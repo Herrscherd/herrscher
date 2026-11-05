@@ -20,9 +20,12 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
@@ -58,6 +61,8 @@ type Config struct {
 
 	ConfigPath string
 	DefaultCmd string
+
+	Lang i18n.Language
 
 	// Path is the PATH the daemon, and so every agent it spawns, runs with.
 	// Captured from the installing shell, because a launcher supplies almost
@@ -161,15 +166,19 @@ func envFileWrite(c Config) FileWrite {
 // scaffolds the declarative config.json (template, never clobbered).
 func BuildPlan(cfg Config) (Plan, error) {
 	var plan Plan
+	var err error
 	switch goos(cfg) {
 	case goosLinux:
-		plan = linuxPlan(cfg)
+		plan, err = linuxPlan(cfg)
 	case goosDarwin:
-		plan = macPlan(cfg)
+		plan, err = macPlan(cfg)
 	case goosWindows:
-		plan = windowsPlan(cfg)
+		plan, err = windowsPlan(cfg)
 	default:
-		return Plan{}, fmt.Errorf("%w %q", errUnsupportedOS, goos(cfg))
+		return Plan{}, unsupportedOS(cfg)
+	}
+	if err != nil {
+		return Plan{}, err
 	}
 	if cfg.ConfigPath != "" {
 		plan.Files = append(plan.Files, configFileWrite(cfg))
@@ -202,8 +211,16 @@ func BuildUninstall(cfg Config) (Plan, error) {
 			{Argv: []string{cmdSchtasks, "/delete", flagTaskName, winTaskName, "/f"}},
 		}}, nil
 	default:
-		return Plan{}, fmt.Errorf("%w %q", errUnsupportedOS, goos(cfg))
+		return Plan{}, unsupportedOS(cfg)
 	}
+}
+
+func unsupportedOS(cfg Config) error {
+	return clitext.Failure(cfg.language(), errUnsupportedOS, clitext.ServiceUnsupportedOS, clitext.Params{clitext.ParamOS: strconv.Quote(goos(cfg))})
+}
+
+func (c Config) language() i18n.Language {
+	return i18n.Resolve(c.Lang)
 }
 
 // StatusCommand returns the command that reports whether the service is active.
@@ -216,7 +233,7 @@ func StatusCommand(cfg Config) (Command, error) {
 	case goosWindows:
 		return Command{Argv: []string{cmdSchtasks, "/query", flagTaskName, winTaskName, "/v"}, IgnoreErr: true}, nil
 	default:
-		return Command{}, fmt.Errorf("%w %q", errUnsupportedOS, goos(cfg))
+		return Command{}, unsupportedOS(cfg)
 	}
 }
 
@@ -235,7 +252,7 @@ func RestartCommands(cfg Config) ([]Command, error) {
 			{Argv: []string{cmdSchtasks, "/run", flagTaskName, winTaskName}},
 		}, nil
 	default:
-		return nil, fmt.Errorf("%w %q", errUnsupportedOS, goos(cfg))
+		return nil, unsupportedOS(cfg)
 	}
 }
 
@@ -273,19 +290,20 @@ func RestartDetached(ctx context.Context, cfg Config) error {
 }
 
 func validateSource(src string) error {
+	lang := clitext.ClientLanguage()
 	if src == "" {
-		return errNoSourceDir
+		return clitext.Failure(lang, errNoSourceDir, clitext.ServiceNoSourceDir, nil)
 	}
 	data, err := os.ReadFile(filepath.Clean(filepath.Join(src, "go.mod")))
 	if err != nil {
-		return fmt.Errorf("%w (no go.mod): %s: %w", errNotSourceCheckout, src, err)
+		return clitext.Failure(lang, errNotSourceCheckout, clitext.ServiceNotCheckoutNoModule, clitext.Params{clitext.ParamPath: src, clitext.ParamErr: err.Error()})
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		if strings.TrimSpace(line) == "module github.com/Herrscherd/herrscher" {
 			return nil
 		}
 	}
-	return fmt.Errorf("%w (wrong module): %s", errNotSourceCheckout, src)
+	return clitext.Failure(lang, errNotSourceCheckout, clitext.ServiceNotCheckoutWrongModule, clitext.Params{clitext.ParamPath: src})
 }
 
 // Pull fast-forwards the source checkout. --ff-only fails loudly rather than
@@ -295,7 +313,7 @@ func Pull(ctx context.Context, src string) error {
 		return err
 	}
 	if out, err := runCapture(ctx, src, "git", "pull", "--ff-only"); err != nil {
-		return fmt.Errorf("git pull: %w: %s", err, redact.Output(out))
+		return clitext.Failure(clitext.ClientLanguage(), err, clitext.ServiceGitPullFailed, clitext.Params{clitext.ParamErr: err.Error(), clitext.ParamOutput: redact.Output(out)})
 	}
 	return nil
 }
@@ -308,10 +326,10 @@ func Build(ctx context.Context, src, binPath string) error {
 		return err
 	}
 	if _, err := exec.LookPath("go"); err != nil {
-		return errNoGoToolchain
+		return clitext.Failure(clitext.ClientLanguage(), errNoGoToolchain, clitext.ServiceNoGoToolchain, nil)
 	}
 	if out, err := runCapture(ctx, src, "go", "build", "-o", binPath, "."); err != nil {
-		return fmt.Errorf("go build: %w: %s", err, redact.Output(out))
+		return clitext.Failure(clitext.ClientLanguage(), err, clitext.ServiceGoBuildFailed, clitext.Params{clitext.ParamErr: err.Error(), clitext.ParamOutput: redact.Output(out)})
 	}
 	return nil
 }
@@ -325,14 +343,19 @@ func BuildFor(ctx context.Context, src, binPath, goos, goarch string) error {
 		return err
 	}
 	if _, err := exec.LookPath("go"); err != nil {
-		return errNoGoToolchain
+		return clitext.Failure(clitext.ClientLanguage(), errNoGoToolchain, clitext.ServiceNoGoToolchain, nil)
 	}
 	cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, ".")
 	cmd.Dir = src
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("go build (%s/%s): %w: %s", goos, goarch, err, redact.Output(out))
+		return clitext.Failure(clitext.ClientLanguage(), err, clitext.ServiceGoBuildForFailed, clitext.Params{
+			clitext.ParamOS:     goos,
+			clitext.ParamArch:   goarch,
+			clitext.ParamErr:    err.Error(),
+			clitext.ParamOutput: redact.Output(out),
+		})
 	}
 	return nil
 }
@@ -353,10 +376,14 @@ func SourceVersion(ctx context.Context, src string) string {
 // daemon keeps running its old in-memory image; only the on-disk file changed.
 func Smoke(ctx context.Context, binPath string) error {
 	if binPath == "" {
-		return errNoBinaryPath
+		return clitext.Failure(clitext.ClientLanguage(), errNoBinaryPath, clitext.ServiceNoBinaryPath, nil)
 	}
 	if out, err := runCapture(ctx, "", binPath, "--help"); err != nil {
-		return fmt.Errorf("new binary failed smoke test (%s --help): %w: %s", binPath, err, redact.Output(out))
+		return clitext.Failure(clitext.ClientLanguage(), err, clitext.ServiceSmokeFailed, clitext.Params{
+			clitext.ParamPath:   binPath,
+			clitext.ParamErr:    err.Error(),
+			clitext.ParamOutput: redact.Output(out),
+		})
 	}
 	return nil
 }
@@ -427,7 +454,11 @@ func Update(ctx context.Context, cfg Config, src string, pull bool) error {
 		if err := runCommand(ctx, Command{Argv: []string{cmdSystemctl, flagUser, subDaemonReload}}); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "herrscher service: unit PATH updated so agents can find tools under your home")
+		note, err := clitext.Text(cfg.language(), clitext.ServiceNoteUnitPath, nil)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, note)
 	}
 	return Restart(ctx, cfg)
 }
@@ -511,7 +542,7 @@ func volatileFree(dir string) bool {
 	return true
 }
 
-func linuxPlan(cfg Config) Plan {
+func linuxPlan(cfg Config) (Plan, error) {
 	unit := filepath.Join(cfg.Home, ".config", "systemd", "user", linuxUnitName)
 	content := "[Unit]\n" +
 		"Description=herrscher gateway daemon\n" +
@@ -538,14 +569,18 @@ func linuxPlan(cfg Config) Plan {
 	if cfg.User != "" {
 		cmds = append(cmds, Command{Argv: []string{"loginctl", "enable-linger", cfg.User}, IgnoreErr: true})
 	}
+	note, err := startNote(cfg, "systemctl --user start "+linuxUnitName)
+	if err != nil {
+		return Plan{}, err
+	}
 	return Plan{
 		Files:    []FileWrite{{Path: unit, Content: content, Mode: unitFileMode}, envFileWrite(cfg)},
 		Commands: cmds,
-		Notes:    []string{startNote(cfg, "systemctl --user start "+linuxUnitName)},
-	}
+		Notes:    []string{note},
+	}, nil
 }
 
-func macPlan(cfg Config) Plan {
+func macPlan(cfg Config) (Plan, error) {
 	plist := filepath.Join(cfg.Home, "Library", "LaunchAgents", macLabel+".plist")
 	logPath := filepath.Join(cfg.Home, ".local", "state", "herrscher", "herrscher.log")
 	argv := append([]string{cfg.BinPath}, serveArgs(cfg)...)
@@ -573,24 +608,32 @@ func macPlan(cfg Config) Plan {
 	if !cfg.SkipStart {
 		cmds = append(cmds, Command{Argv: []string{cmdLaunchctl, "load", "-w", plist}})
 	}
+	note, err := startNote(cfg, "launchctl load -w "+plist)
+	if err != nil {
+		return Plan{}, err
+	}
 	return Plan{
 		Files:    []FileWrite{{Path: plist, Content: content, Mode: unitFileMode}, envFileWrite(cfg)},
 		Commands: cmds,
-		Notes:    []string{startNote(cfg, "launchctl load -w "+plist)},
-	}
+		Notes:    []string{note},
+	}, nil
 }
 
-func windowsPlan(cfg Config) Plan {
+func windowsPlan(cfg Config) (Plan, error) {
 	launcher := filepath.Join(cfg.Home, "AppData", "Local", "herrscher", "herrscher-serve.cmd")
 	content := "@echo off\r\n" +
 		joinQuoted(cmdQuote, cfg.BinPath, serveArgs(cfg)) + "\r\n"
+	note, err := clitext.Text(cfg.language(), clitext.ServiceNoteWindowsEdit, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile, clitext.ParamTask: winTaskName})
+	if err != nil {
+		return Plan{}, err
+	}
 	return Plan{
 		Files: []FileWrite{{Path: launcher, Content: content, Mode: unitFileMode}, envFileWrite(cfg)},
 		Commands: []Command{
 			{Argv: []string{cmdSchtasks, "/create", flagTaskName, winTaskName, "/tr", launcher, "/sc", "onlogon", "/rl", "limited", "/f"}},
 		},
-		Notes: []string{"Edit " + cfg.EnvFile + " with your token; the task runs herrscher at your next logon (or run it now: schtasks /run /tn " + winTaskName + ")."},
-	}
+		Notes: []string{note},
+	}, nil
 }
 
 const xmlHeader = `<?xml version="1.0" encoding="UTF-8"?>
@@ -602,12 +645,11 @@ func xmlEscape(value string) string {
 	return r.Replace(value)
 }
 
-func startNote(cfg Config, startCmd string) string {
+func startNote(cfg Config, startCmd string) (string, error) {
 	if cfg.SkipStart {
-		return "installed and enabled at boot, but NOT started: fill the required secrets in " +
-			cfg.EnvFile + ", then: " + startCmd
+		return clitext.Text(cfg.language(), clitext.ServiceNoteNotStarted, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile, clitext.ParamStart: startCmd})
 	}
-	return "running. Secrets live in " + cfg.EnvFile + "; edit it and restart to change them."
+	return clitext.Text(cfg.language(), clitext.ServiceNoteRunning, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile})
 }
 
 func envFileHasRequired(path string, vars []EnvVar) bool {
@@ -675,19 +717,21 @@ func cmdQuote(value string) string {
 // DefaultConfig fills a Config from the current environment (binary path, home,
 // user, default env-file location and health address).
 func DefaultConfig() (Config, error) {
+	lang := clitext.ClientLanguage()
 	bin, err := os.Executable()
 	if err != nil {
-		return Config{}, fmt.Errorf("locate herrscher binary: %w", err)
+		return Config{}, clitext.Failure(lang, err, clitext.ServiceLocateBinary, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return Config{}, fmt.Errorf("locate home dir: %w", err)
+		return Config{}, clitext.Failure(lang, err, clitext.ServiceLocateHome, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	uname := ""
 	if u, err := user.Current(); err == nil {
 		uname = u.Username
 	}
 	return Config{
+		Lang:       lang,
 		BinPath:    bin,
 		Home:       home,
 		User:       uname,
@@ -764,25 +808,27 @@ func runPlan(ctx context.Context, plan Plan) error {
 		}
 	}
 	for _, n := range plan.Notes {
-		fmt.Fprintln(os.Stderr, "herrscher service: "+n)
+		fmt.Fprintln(os.Stderr, n)
 	}
 	return nil
 }
 
 func writeFile(write FileWrite) error {
+	lang := clitext.ClientLanguage()
 	if write.Template {
 		switch _, err := os.Stat(write.Path); {
 		case err == nil:
 			return nil
 		case !errors.Is(err, fs.ErrNotExist):
-			return fmt.Errorf("stat %s: %w", write.Path, err)
+			return clitext.Failure(lang, err, clitext.ServiceStatFailed, clitext.Params{clitext.ParamPath: write.Path, clitext.ParamErr: err.Error()})
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(write.Path), privateDirMode); err != nil {
-		return fmt.Errorf("mkdir %s: %w", filepath.Dir(write.Path), err)
+	dir := filepath.Dir(write.Path)
+	if err := os.MkdirAll(dir, privateDirMode); err != nil {
+		return clitext.Failure(lang, err, clitext.ServiceMkdirFailed, clitext.Params{clitext.ParamPath: dir, clitext.ParamErr: err.Error()})
 	}
 	if err := os.WriteFile(write.Path, []byte(write.Content), write.Mode); err != nil {
-		return fmt.Errorf("write %s: %w", write.Path, err)
+		return clitext.Failure(lang, err, clitext.ServiceWriteFailed, clitext.Params{clitext.ParamPath: write.Path, clitext.ParamErr: err.Error()})
 	}
 	return nil
 }

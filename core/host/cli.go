@@ -61,7 +61,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, extra...); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addSessionVerbs(reg, hostState, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
+	if err := addSessionVerbs(reg, options.Language, hostState, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
 		return nil, hostDeps{}, err
 	}
 	handoff, err := sessionHandoffCmd(hdl.Commands(), hostState, sessions, instID, seedCoord, hdl.PreflightAccount)
@@ -111,6 +111,7 @@ func newManagerHandler(deps Deps, options Options, partDir string, hostState *st
 	launch := func(vendor, modelID string) (string, error) { return launchVendor(models, vendor, modelID) }
 	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
+	hdl.SetLanguage(options.Language)
 	return hdl
 }
 

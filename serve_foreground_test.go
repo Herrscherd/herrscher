@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/host"
 )
@@ -46,7 +47,7 @@ func (c *closingTalker) Close(context.Context) error {
 func TestBindingKeepsTheRawGatewayAsItsCloser(t *testing.T) {
 	gateway := &closingTalker{}
 
-	gws, closers, _, _, err := bindGateways([]host.Deps{{Gateway: gateway}})
+	gws, closers, _, _, err := bindGateways([]host.Deps{{Gateway: gateway}}, i18n.English)
 	if err != nil {
 		t.Fatalf("bind: %v", err)
 	}

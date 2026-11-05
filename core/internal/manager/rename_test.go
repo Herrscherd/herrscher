@@ -100,7 +100,7 @@ func TestSessionRenameRefusesTheImpossible(t *testing.T) {
 	if _, err := h.sessionRenameRun(context.Background(), args("name", "un", "to", "../")); err == nil {
 		t.Errorf("un nom qui ne laisse aucun slug doit echouer")
 	}
-	if out, err := cli.Plain(h.sessionRenameRun(context.Background(), args("name", "un", "to", "un"))); err != nil || !strings.Contains(out, "déjà") {
+	if out, err := cli.Plain(h.sessionRenameRun(context.Background(), args("name", "un", "to", "un"))); err != nil || !strings.Contains(out, "already has this name") {
 		t.Errorf("renommer vers le meme nom ne fait rien et le dit: %q %v", out, err)
 	}
 	if _, ok := st.FindSession("un"); !ok {

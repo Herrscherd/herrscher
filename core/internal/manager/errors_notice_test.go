@@ -156,12 +156,15 @@ func TestSentinelsKeepTheirIdentityAndRenderInFrench(t *testing.T) {
 	}
 }
 
-func TestTechnicalErrorKeepsEveryCause(t *testing.T) {
-	err := &technicalError{msg: "restart failed; rollback failed", causes: []error{ErrNoHome, ErrSessionLimit}}
+func TestLocalizedErrorKeepsEveryCause(t *testing.T) {
+	err := &localizedError{english: "restart failed; rollback failed", text: "red\u00e9marrage échoué ; retour arrière échoué", causes: []error{ErrNoHome, ErrSessionLimit}}
 	if !errors.Is(err, ErrNoHome) || !errors.Is(err, ErrSessionLimit) {
-		t.Fatal("technicalError must expose every cause to errors.Is")
+		t.Fatal("localizedError must expose every cause to errors.Is")
 	}
-	if got := renderNotice(t, i18n.French, err); got != "erreur inattendue : restart failed; rollback failed" {
+	if got := err.Error(); got != "restart failed; rollback failed" {
+		t.Fatalf("Error() = %q, want the English text", got)
+	}
+	if got := renderNotice(t, i18n.French, err); got != "erreur inattendue : red\u00e9marrage échoué ; retour arrière échoué" {
 		t.Fatalf("fr = %q", got)
 	}
 }

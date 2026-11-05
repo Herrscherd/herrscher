@@ -3,29 +3,30 @@ package main
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-func loadEnvFile(path string) error {
+func loadEnvFile(path string, lang i18n.Language) error {
 	defer hideGatewayKeys()
 	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return fmt.Errorf("open env file: %w", err)
+		return renderError(lang, err, clitext.EnvOpenFailed, clitext.Params{clitext.ParamErr: err.Error()})
 	}
-	return errors.Join(scanEnvFile(file), file.Close())
+	return errors.Join(scanEnvFile(file, lang), file.Close())
 }
 
-func scanEnvFile(r io.Reader) error {
+func scanEnvFile(r io.Reader, lang i18n.Language) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, envLineInitial), envLineLimit)
 	for scanner.Scan() {
@@ -37,10 +38,13 @@ func scanEnvFile(r io.Reader) error {
 			continue
 		}
 		if err := os.Setenv(key, unquoteEnv(val)); err != nil {
-			return fmt.Errorf("set %s: %w", key, err)
+			return renderError(lang, err, clitext.EnvSetFailed, clitext.Params{clitext.ParamKey: key, clitext.ParamErr: err.Error()})
 		}
 	}
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return renderError(lang, err, clitext.EnvReadFailed, clitext.Params{clitext.ParamErr: err.Error()})
+	}
+	return nil
 }
 
 func parseEnvLine(raw string) (string, string, bool) {

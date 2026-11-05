@@ -10,27 +10,33 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 var errNoPendingChoice = errors.New("has no pending choice")
 
-func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery) error {
+func sessionText(lang i18n.Language) *clitext.Translator {
+	return clitext.For(i18n.Resolve(lang))
+}
+
+func addSessionVerbs(reg *cli.Registry, lang i18n.Language, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery) error {
 	seen := newSeenTable(time.Now())
 	return addVerbs(reg,
 		seedVerb(store, instID, seedCoord),
 		sessionSendVerb(sessions),
-		sessionPickVerb(approvals, sessions),
+		sessionPickVerb(lang, approvals, sessions),
 		sessionInfoVerb(store, partDir, sessions, models),
 		sessionOverviewVerb(overviewSource{st: store, partDir: partDir, sessions: sessions, approvals: approvals, tallies: newTallyCache(), seen: seen}),
 		sessionSeenVerb(seen),
 		sessionScrollbackVerb(partDir),
-		sessionInterruptVerb(sessions),
-		sessionCompactVerb(store, sessions),
+		sessionInterruptVerb(lang, sessions),
+		sessionCompactVerb(lang, store, sessions),
 		sessionSetCompactVerb(store),
-		sessionSetAccountVerb(store),
-		sessionAccountsVerb(store),
+		sessionSetAccountVerb(lang, store),
+		sessionAccountsVerb(lang, store),
 	)
 }
 
@@ -150,7 +156,7 @@ func sessionScrollbackVerb(partDir string) contracts.Cmd {
 		})
 }
 
-func sessionPickVerb(approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func sessionPickVerb(lang i18n.Language, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, "pick").
 		Help("answer a session's pending choice (an approval) with a menu value").
 		Param(paramName, "session name", true).
@@ -158,13 +164,13 @@ func sessionPickVerb(approvals *approvalTable, sessions *sessionTable) contracts
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			name, value := input.Get(paramName), input.Get("value")
 			if answerApprovalPick(approvals, sessions, name, value) || sessions.pick(name, value) {
-				return contracts.DataResult("picked " + name), nil
+				return contracts.DataResult(sessionText(lang).Text(clitext.SessionPicked, clitext.Params{clitext.ParamName: name})), nil
 			}
 			return contracts.Result{}, fmt.Errorf("session %q %w", name, errNoPendingChoice)
 		})
 }
 
-func sessionInterruptVerb(sessions *sessionTable) contracts.Cmd {
+func sessionInterruptVerb(lang i18n.Language, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, "interrupt").
 		Help("cancel a session's in-flight turn").
 		Param(paramName, "session name", true).
@@ -172,13 +178,13 @@ func sessionInterruptVerb(sessions *sessionTable) contracts.Cmd {
 			if !sessions.Interrupt(input.Get(paramName)) {
 				return contracts.Result{}, &noTurnInFlightError{Session: input.Get(paramName)}
 			}
-			return contracts.DataResult("interrupted " + input.Get(paramName)), nil
+			return contracts.DataResult(sessionText(lang).Text(clitext.SessionInterrupted, clitext.Params{clitext.ParamName: input.Get(paramName)})), nil
 		})
 }
 
 const verbCompact = "compact"
 
-func sessionCompactVerb(store *state.State, sessions *sessionTable) contracts.Cmd {
+func sessionCompactVerb(lang i18n.Language, store *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbCompact).
 		Help("compact a session's context now, through its compaction stack, queued after the turn in progress").
 		Param(paramName, "session name", true).
@@ -186,11 +192,11 @@ func sessionCompactVerb(store *state.State, sessions *sessionTable) contracts.Cm
 		Param("origin", "gateway kind this was typed in (e.g. terminal): the turn is rendered there "+
 			"instead of in every channel the session is bound to", false).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(compactSession(ctx, store, sessions, in))
+			return cli.Data(compactSession(ctx, lang, store, sessions, in))
 		})
 }
 
-func compactSession(_ context.Context, store *state.State, sessions *sessionTable, input contracts.Input) (string, error) {
+func compactSession(_ context.Context, lang i18n.Language, store *state.State, sessions *sessionTable, input contracts.Input) (string, error) {
 	name := input.Get(paramName)
 	if _, ok := store.FindSession(name); !ok {
 		return "", &NotFoundError{Kind: "session", Name: name}
@@ -207,16 +213,17 @@ func compactSession(_ context.Context, store *state.State, sessions *sessionTabl
 		return "", queueFullCompaction(name)
 	}
 	if merged {
-		return mergedCompactNotice(name, input.Get("instruction")), nil
+		return mergedCompactNotice(lang, name, input.Get("instruction")), nil
 	}
 	return "", nil
 }
 
-func mergedCompactNotice(name, instruction string) string {
-	if instruction == "" {
-		return fmt.Sprintf("compaction de %q déjà en file : fusionnée avec la demande en attente, la consigne en file est conservée", name)
+func mergedCompactNotice(lang i18n.Language, name, instruction string) string {
+	var key clitext.Key = clitext.SessionCompactMergedKept
+	if instruction != "" {
+		key = clitext.SessionCompactMergedReplaced
 	}
-	return fmt.Sprintf("compaction de %q déjà en file : fusionnée avec la demande en attente, la consigne en file est remplacée par la plus récente", name)
+	return sessionText(lang).Text(key, clitext.Params{clitext.ParamName: name})
 }
 
 func sessionSetCompactVerb(store *state.State) contracts.Cmd {

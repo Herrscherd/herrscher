@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -33,7 +34,7 @@ func TestCompactQueuesAManualCompactionWithItsInstruction(t *testing.T) {
 	store, sessions, queue := compactCmdFixture(t, vendorClaude)
 	input := contracts.Input{Args: map[string]string{paramName: "api", "instruction": "garde les décisions", "origin": "terminal"}}
 
-	if _, err := compactSession(context.Background(), store, sessions, input); err != nil {
+	if _, err := compactSession(context.Background(), i18n.French, store, sessions, input); err != nil {
 		t.Fatalf("compactSession: %v", err)
 	}
 	got := <-queue
@@ -52,7 +53,7 @@ func TestCompactRefusesBackendWithoutCompactor(t *testing.T) {
 	store, sessions, queue := compactCmdFixture(t, "cursor")
 	input := contracts.Input{Args: map[string]string{paramName: "api"}}
 
-	_, err := compactSession(context.Background(), store, sessions, input)
+	_, err := compactSession(context.Background(), i18n.French, store, sessions, input)
 	if !errors.Is(err, errCompactUnsupported) {
 		t.Fatalf("compactSession error = %v, want errCompactUnsupported", err)
 	}
@@ -65,7 +66,7 @@ func TestCompactUnknownSession(t *testing.T) {
 	store, sessions, _ := compactCmdFixture(t, vendorClaude)
 	input := contracts.Input{Args: map[string]string{paramName: "ghost"}}
 
-	if _, err := compactSession(context.Background(), store, sessions, input); err == nil {
+	if _, err := compactSession(context.Background(), i18n.French, store, sessions, input); err == nil {
 		t.Fatal("compactSession on an unknown session must fail")
 	}
 }
@@ -75,10 +76,10 @@ func TestEmptyCompactRequestKeepsTheQueuedInstruction(t *testing.T) {
 	ctx := context.Background()
 	focus := contracts.Input{Args: map[string]string{paramName: "api", "instruction": "focus sur l'API"}}
 	empty := contracts.Input{Args: map[string]string{paramName: "api"}}
-	if _, err := compactSession(ctx, store, sessions, focus); err != nil {
+	if _, err := compactSession(ctx, i18n.French, store, sessions, focus); err != nil {
 		t.Fatalf("first request: %v", err)
 	}
-	out, err := compactSession(ctx, store, sessions, empty)
+	out, err := compactSession(ctx, i18n.French, store, sessions, empty)
 	if err != nil {
 		t.Fatalf("empty request: %v", err)
 	}
@@ -97,10 +98,10 @@ func TestCompactRequestsForOneSessionAreMerged(t *testing.T) {
 	request := func(instruction string) contracts.Input {
 		return contracts.Input{Args: map[string]string{paramName: "api", "instruction": instruction}}
 	}
-	if out, err := compactSession(ctx, store, sessions, request("first")); err != nil || out != "" {
+	if out, err := compactSession(ctx, i18n.French, store, sessions, request("first")); err != nil || out != "" {
 		t.Fatalf("first request = %q, %v, want no output and no error", out, err)
 	}
-	out, err := compactSession(ctx, store, sessions, request("latest"))
+	out, err := compactSession(ctx, i18n.French, store, sessions, request("latest"))
 	if err != nil {
 		t.Fatalf("second request: %v", err)
 	}
@@ -115,7 +116,7 @@ func TestCompactRequestsForOneSessionAreMerged(t *testing.T) {
 	if got := driver.takeCompactInstruction(); got != "latest" {
 		t.Fatalf("instruction taken = %q, want the most recent one %q", got, "latest")
 	}
-	if _, err := compactSession(ctx, store, sessions, request("after")); err != nil {
+	if _, err := compactSession(ctx, i18n.French, store, sessions, request("after")); err != nil {
 		t.Fatalf("request after the queued one ran: %v", err)
 	}
 	if n := len(queue); n != 1 {
@@ -128,7 +129,7 @@ func TestCompactAcceptsCodexWhenItDeclaresCompactor(t *testing.T) {
 	sessions.lookup("api").compaction.backends[backendCodex] = true
 	input := contracts.Input{Args: map[string]string{paramName: "api"}}
 
-	if _, err := compactSession(context.Background(), store, sessions, input); err != nil {
+	if _, err := compactSession(context.Background(), i18n.French, store, sessions, input); err != nil {
 		t.Fatalf("compactSession: %v", err)
 	}
 	if got := <-queue; got.ev.T != eventCompactNow {

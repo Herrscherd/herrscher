@@ -6,27 +6,29 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
-const serviceUsage = "usage: herrscher service <install|uninstall|status|restart|update> [--health-addr ADDR] [--env-file PATH] [--cmd 'claude …'] [--source DIR] [--no-pull]"
-
 var (
-	errServiceUsage       = errors.New(serviceUsage)
+	errServiceUsage       = errors.New("service usage")
 	errUnknownSubcommand  = errors.New("unknown subcommand")
 	errUnexpectedArgument = errors.New("unexpected argument")
 )
 
 func runService(ctx context.Context, args []string) error {
+	lang := clitext.ClientLanguage()
 	if len(args) == 0 {
-		return errServiceUsage
+		return serviceUsageError(lang)
 	}
 	sub := args[0]
 	switch sub {
 	case cmdInstall, "uninstall", cmdStatus, "restart", cmdUpdate:
 	default:
-		return fmt.Errorf("herrscher service: %w %q (want install|uninstall|status|restart|update)", errUnknownSubcommand, sub)
+		return unknownSubcommand(lang, sub)
 	}
 
 	cfg, err := service.DefaultConfig()
@@ -39,21 +41,25 @@ func runService(ctx context.Context, args []string) error {
 		if err := service.Restart(ctx, cfg); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "herrscher service: restarted")
+		fmt.Fprintln(os.Stderr, render(lang, clitext.ServiceRestarted, nil))
 		return nil
 	case cmdUpdate:
 		return runServiceUpdate(ctx, cfg, args[1:])
 	}
 
+	translator := clitext.For(lang)
 	flags := flag.NewFlagSet("service", flag.ContinueOnError)
-	healthAddr := flags.String("health-addr", cfg.HealthAddr, "value for serve --health-addr (empty disables the health endpoint)")
-	envFile := flags.String("env-file", cfg.EnvFile, "path to the 0600 secrets file the service sources")
-	defaultCmd := flags.String("cmd", "", "default bridged command pre-filled into config.json (e.g. 'claude --model claude-opus-4-8 --effort low')")
+	healthAddr := flags.String("health-addr", cfg.HealthAddr, translator.Text(clitext.ServiceFlagHealthAddr, nil))
+	envFile := flags.String("env-file", cfg.EnvFile, translator.Text(clitext.ServiceFlagEnvFile, nil))
+	defaultCmd := flags.String("cmd", "", translator.Text(clitext.ServiceFlagCmd, nil))
+	if err := translator.Err(); err != nil {
+		return err
+	}
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
 	if flags.NArg() > 0 {
-		return fmt.Errorf("herrscher service %s: %w %q\n%s", sub, errUnexpectedArgument, flags.Arg(0), serviceUsage)
+		return unexpectedArgument(lang, sub, flags.Arg(0))
 	}
 	cfg.HealthAddr = *healthAddr
 	cfg.EnvFile = *envFile
@@ -66,37 +72,58 @@ func runService(ctx context.Context, args []string) error {
 		if err := service.Uninstall(ctx, cfg); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "herrscher service: removed")
+		fmt.Fprintln(os.Stderr, render(lang, clitext.ServiceRemoved, nil))
 		return nil
 	case cmdStatus:
 		return service.Status(ctx, cfg)
 	default:
-		return fmt.Errorf("herrscher service: %w %q (want install|uninstall|status)", errUnknownSubcommand, sub)
+		return unknownSubcommand(lang, sub)
 	}
 }
 
+func serviceUsageError(lang i18n.Language) error {
+	return clitext.Failure(lang, errServiceUsage, clitext.ServiceUsage, nil)
+}
+
+func unknownSubcommand(lang i18n.Language, sub string) error {
+	return clitext.Failure(lang, errUnknownSubcommand, clitext.ServiceUnknownSubcommand, clitext.Params{clitext.ParamName: strconv.Quote(sub)})
+}
+
+func unexpectedArgument(lang i18n.Language, sub, arg string) error {
+	return clitext.Failure(lang, errUnexpectedArgument, clitext.ServiceUnexpectedArgument, clitext.Params{
+		clitext.ParamVerb:  sub,
+		clitext.ParamArg:   strconv.Quote(arg),
+		clitext.ParamUsage: render(lang, clitext.ServiceUsage, nil),
+	})
+}
+
 func runServiceUpdate(ctx context.Context, cfg service.Config, args []string) error {
+	lang := clitext.ClientLanguage()
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
+	translator := clitext.For(lang)
 	flags := flag.NewFlagSet("service update", flag.ContinueOnError)
-	source := flags.String("source", cwd, "path to the herrscher source checkout to build from")
-	noPull := flags.Bool("no-pull", false, "skip `git pull --ff-only` before building")
+	source := flags.String("source", cwd, translator.Text(clitext.ServiceFlagSource, nil))
+	noPull := flags.Bool("no-pull", false, translator.Text(clitext.ServiceFlagNoPull, nil))
+	if err := translator.Err(); err != nil {
+		return err
+	}
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() > 0 {
-		return fmt.Errorf("herrscher service update: %w %q", errUnexpectedArgument, flags.Arg(0))
+		return clitext.Failure(lang, errUnexpectedArgument, clitext.ServiceUpdateUnexpectedArg, clitext.Params{clitext.ParamArg: strconv.Quote(flags.Arg(0))})
 	}
 	if installed, ok := service.InstalledBinPath(cfg); ok && installed != cfg.BinPath {
-		fmt.Fprintf(os.Stderr, "herrscher service: rebuilding the installed binary %s (you ran %s)\n", installed, cfg.BinPath)
+		fmt.Fprintln(os.Stderr, render(lang, clitext.ServiceUpdateRebuilding, clitext.Params{clitext.ParamInstalled: installed, clitext.ParamRan: cfg.BinPath}))
 		cfg.BinPath = installed
 	}
 	if err := service.Update(ctx, cfg, *source, !*noPull); err != nil {
 		return err
 	}
 	v := service.SourceVersion(ctx, *source)
-	fmt.Fprintf(os.Stderr, "herrscher service: rebuilt %s and restarted\n", v)
+	fmt.Fprintln(os.Stderr, render(lang, clitext.ServiceUpdateRebuilt, clitext.Params{clitext.ParamVersion: v}))
 	return nil
 }

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "cli.usage.tagline",
+    "description": "La devise d'une ligne sous la bannière de l'aide",
+    "other": "hôte modulaire de harnais d'agents Discord ⇄ Claude"
+  },
+  {
+    "id": "cli.usage.env.bot",
+    "description": "Ligne de variables : les variables Discord",
+    "other": "env : DISCORD_BOT_TOKEN (requis), DISCORD_USER_ID (l'utilisateur que le bot écoute)"
+  },
+  {
+    "id": "cli.serve.flag.instance",
+    "description": "Aide de l'option --instance de serve",
+    "other": "identifiant d'instance du démon (slug) qui cloisonne les ressources partagées Discord et git ; par défaut HERRSCHER_INSTANCE_ID, puis config.json"
+  },
+  {
+    "id": "cli.serve.flag.env_file",
+    "description": "Aide de l'option --env-file de serve",
+    "other": "charge DISCORD_BOT_TOKEN et les autres variables de ce fichier avant le démarrage (utilisé par `herrscher service`)"
+  }
+]

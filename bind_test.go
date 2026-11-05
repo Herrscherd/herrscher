@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/host"
 )
@@ -44,7 +45,7 @@ func (t talker) RunForeground(context.Context, context.CancelFunc) error { retur
 func TestContributedCommandsSurviveDegrading(t *testing.T) {
 	sets := []host.Deps{{Gateway: talker{}}}
 
-	gws, _, fg, extra, err := bindGateways(sets)
+	gws, _, fg, extra, err := bindGateways(sets, i18n.English)
 	if err != nil {
 		t.Fatalf("bind: %v", err)
 	}

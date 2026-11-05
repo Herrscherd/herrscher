@@ -418,9 +418,9 @@ func TestDraftRunReleaseIsIdempotent(t *testing.T) {
 }
 
 func TestBeatFailureFlashesOnceAndDoesNotLoop(t *testing.T) {
-	var calls atomic.Int32
+	var recovered atomic.Bool
 	touch := func(root *os.Root) error {
-		if calls.Add(1) == 1 {
+		if !recovered.Load() {
 			return errors.New("panne durable")
 		}
 		return touchDraftLock(root)
@@ -452,6 +452,7 @@ func TestBeatFailureFlashesOnceAndDoesNotLoop(t *testing.T) {
 	if !strings.Contains(m.flash, "panne durable") {
 		t.Fatalf("the flash must name the failure, got %q", m.flash)
 	}
+	recovered.Store(true)
 	if cmd == nil {
 		t.Fatal("the watch must be re-armed for a later transition")
 	}

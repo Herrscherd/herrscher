@@ -55,7 +55,7 @@ func TestHostTextRendersEachLanguage(t *testing.T) {
 			lang:   i18n.French,
 			key:    "coordination.route_refused",
 			params: map[string]any{"Detail": "boom"},
-			want:   "route refusé : boom",
+			want:   "routage refusé : boom",
 		},
 		{
 			name:   "route refusal in english",
@@ -105,7 +105,7 @@ func TestCompactFailureTextMapsUntypedCauses(t *testing.T) {
 		{
 			name: "bridge closed",
 			err:  fmt.Errorf("stage: %w", errBridgeGone),
-			fr:   "le bridge s'est fermé pendant une compaction",
+			fr:   "le relais s'est fermé pendant une compaction",
 			en:   "the bridge closed during a compaction",
 		},
 		{

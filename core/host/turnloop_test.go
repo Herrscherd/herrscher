@@ -992,10 +992,10 @@ func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
 		trailer string
 		want    string
 	}{
-		{name: "handoff", trailer: "⟢ handoff: scripter \u2014 finir le module", want: "handoff refusé : boom"},
-		{name: "seal", trailer: "⟢ seal: 4", want: "seal refusé : boom"},
-		{name: "merge", trailer: "⟢ merge: worker-1", want: "merge refusé : boom"},
-		{name: "route", trailer: "⟢ route: relire le module", want: "route refusé : boom"},
+		{name: "handoff", trailer: "⟢ handoff: scripter \u2014 finir le module", want: "passation refusée : boom"},
+		{name: "seal", trailer: "⟢ seal: 4", want: "scellement refusé : boom"},
+		{name: "merge", trailer: "⟢ merge: worker-1", want: "fusion refusée : boom"},
+		{name: "route", trailer: "⟢ route: relire le module", want: "routage refusé : boom"},
 	}
 	for index := range tests {
 		t.Run(tests[index].name, func(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 )
 
 func runCompact(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, ctrl *turnController, event contracts.Event) {
-	compactor, ok := backend.(contracts.Compactor)
+	compactor, ok := compactorOf(backend)
 	if !ok {
 		sink.Emit(compactwire.NoPort())
 		return

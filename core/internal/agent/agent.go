@@ -29,6 +29,7 @@ const (
 	backendFile  = "backend"
 	cmdFile      = "cmd"
 	hostFile     = "host"
+	accountFile  = "account"
 )
 
 const worktreeToken = "{{WORKTREE}}"
@@ -207,6 +208,8 @@ type Agent struct {
 	// Empty = this machine. A session's explicit --host still wins: this is a
 	// default, not a rule.
 	Host string
+	// Account is the default account profile of this agent's sessions, from <home>/account. Empty = the vendor default.
+	Account string
 }
 
 // Materialize provisions the agent into a session worktree by writing the files

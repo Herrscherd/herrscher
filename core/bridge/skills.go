@@ -21,7 +21,7 @@ func skillRoots(cwd string, extra []string) []string {
 }
 
 func newSkillEngine(backend contracts.Backend) *skills.Engine {
-	if n, ok := backend.(contracts.SkillNative); ok && n.NativeSkills() {
+	if n, ok := skillNativeOf(backend); ok && n.NativeSkills() {
 		return nil
 	}
 	cfg, err := config.Load(config.DefaultPath())

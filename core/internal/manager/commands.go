@@ -22,6 +22,7 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("terminal_only", "bind the session to the terminal gateway only", false).
 			Param("shared", "run in the main checkout instead of an isolated worktree", false).
 			Param("agent", "provision the session from a durable agent (its persona + MCP + zero-prompt settings)", false).
+			Param("account", "account profile this session spends on (a profile name, or native); empty = the agent's, then the vendor default", false).
 			Param("host", "run this session on a registered host (see `host list`); empty or `local` = this machine", false).
 			Param("approvals", "approval stance: ask (default), accept-edits, plan, auto, bypass, strict (see `approve rule`)", false).
 			Param("memory_project", "memory project this session files what it learns under (does NOT move the session: see project)", false).

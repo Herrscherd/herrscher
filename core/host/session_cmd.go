@@ -29,6 +29,8 @@ func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID stri
 		sessionInterruptVerb(sessions),
 		sessionCompactVerb(store, sessions),
 		sessionSetCompactVerb(store),
+		sessionSetAccountVerb(store),
+		sessionAccountsVerb(store),
 	)
 }
 

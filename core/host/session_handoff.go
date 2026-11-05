@@ -10,6 +10,9 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/accounts"
+	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -19,6 +22,7 @@ const (
 	paramChannel        = "channel_id"
 	paramParent         = "parent"
 	handoffBriefTimeout = "10m"
+	shellSafeChars      = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/:=+-"
 	handoffAgentPerHour = 3
 	handoffWindow       = time.Hour
 	handoffBriefTask    = "Rédige le brief de passation de cette conversation, pour une session qui n'a pas ton historique : " +
@@ -37,12 +41,14 @@ var (
 )
 
 type handoffDeps struct {
-	exists func(name string) bool
-	root   func(name string) string
-	brief  func(ctx context.Context, source string) (string, error)
-	create func(ctx context.Context, in contracts.Input) (string, error)
-	send   func(ctx context.Context, target, author, text string) error
-	limit  *handoffLimiter
+	exists       func(name string) bool
+	root         func(name string) string
+	account      func(name string) string
+	brief        func(ctx context.Context, source string) (string, error)
+	create       func(ctx context.Context, in contracts.Input) (string, error)
+	send         func(ctx context.Context, target, author, text string) error
+	limit        *handoffLimiter
+	checkAccount func(input contracts.Input) error
 }
 
 type handoffLimiter struct {
@@ -89,7 +95,7 @@ func (l *handoffLimiter) forgetIdle(now time.Time) {
 	}
 }
 
-func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, instID string, seedCoord *coordinatorSlot) (contracts.Cmd, error) {
+func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, instID string, seedCoord *coordinatorSlot, checkAccount func(contracts.Input) error) (contracts.Cmd, error) {
 	create, ok := findCommand(managerCmds, nsSession, "create")
 	if !ok {
 		return contracts.Cmd{}, errHandoffNoCreate
@@ -102,6 +108,10 @@ func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions
 		root: func(name string) string {
 			return state.TreeRoot(store.SnapshotSessions(), name)
 		},
+		account: func(name string) string {
+			session, _ := store.FindSession(name)
+			return session.Account
+		},
 		brief: func(ctx context.Context, source string) (string, error) {
 			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTask, "timeout": handoffBriefTimeout}}
 			return runSeedVerb(ctx, in, store, instID, seedCoord.coord)
@@ -111,7 +121,8 @@ func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions
 			_, err := sendToSession(ctx, sessions, contracts.Input{Args: map[string]string{paramName: target, "author": author, "text": text}})
 			return err
 		},
-		limit: newHandoffLimiter(time.Now),
+		limit:        newHandoffLimiter(time.Now),
+		checkAccount: checkAccount,
 	}), nil
 }
 
@@ -129,7 +140,7 @@ func sessionHandoffVerb(deps handoffDeps) contracts.Cmd {
 		Help("start a new session whose first message is a brief this session writes; without --to it creates nothing and says how to open this session instead. "+
 			"This is not the ⟢ handoff: trailer, which passes a task to another agent inside the coordination flow. "+
 			"An agent caller attaches the new session under its source, cannot pick --under or --channel_id, and gets at most "+
-			"3 handoffs an hour for its whole session tree, one at a time, and a handoff counts once its brief starts, even if it then fails; the operator has no such bound. When the operator closes a session, its direct children become roots and their quota starts again. "+
+			"3 handoffs an hour for its whole session tree, one at a time, and a handoff counts once its brief starts, even if it then fails; a refused account costs neither a brief nor a slot, unless its profile is removed between the check and the creation; the operator has no such bound. When the operator closes a session, its direct children become roots and their quota starts again. "+
 			"This bound is a local guard, not a security boundary: the operator socket is reachable by the same user, "+
 			"and its state resets when the daemon restarts").
 		Param(paramName, "session to hand off (default: the calling session)", false).
@@ -137,6 +148,7 @@ func sessionHandoffVerb(deps handoffDeps) contracts.Cmd {
 		Param("project", "workspace sub-dir the new session works on", false).
 		Param("model", "catalog model id for the new session (see `herrscher models list`)", false).
 		Param("vendor", "agent backend vendor for the new session: claude | codex | cursor", false).
+		Param("account", "account profile for the new session, resolved in its vendor (default: the source session's account; --account \"\" starts on the vendor default)", false).
 		Param(paramUnder, "create the new conversation under this category/forum instead of the daemon's home (operator only)", false).
 		Param(paramChannel, "adopt this existing conversation for the new session (operator only)", false).
 		Do(deps.run)
@@ -165,11 +177,15 @@ func (d handoffDeps) run(ctx context.Context, input contracts.Input) (string, er
 	if byAgent {
 		return d.handOffAsAgent(ctx, caller.Session, source, target, input)
 	}
-	reply, brief, err := d.open(ctx, source, target, "", input)
+	args, account, err := d.checkedArgs(source, target, "", input)
 	if err != nil {
 		return "", err
 	}
-	return d.deliver(ctx, source, target, reply, brief)
+	reply, brief, err := d.launch(ctx, source, input, account, args)
+	if err != nil {
+		return "", err
+	}
+	return d.deliver(ctx, source, target, reply, brief, account)
 }
 
 func checkHandoffTargets(input contracts.Input, byAgent bool) error {
@@ -184,39 +200,101 @@ func checkHandoffTargets(input contracts.Input, byAgent bool) error {
 }
 
 func (d handoffDeps) handOffAsAgent(ctx context.Context, caller, source, target string, input contracts.Input) (string, error) {
+	args, account, err := d.checkedArgs(source, target, source, input)
+	if err != nil {
+		return "", err
+	}
 	release, err := d.limit.acquire(d.root(caller))
 	if err != nil {
 		return "", err
 	}
 	defer release()
-	reply, brief, err := d.open(ctx, source, target, source, input)
+	reply, brief, err := d.launch(ctx, source, input, account, args)
 	if err != nil {
 		return "", err
 	}
-	return d.deliver(ctx, source, target, reply, brief)
+	return d.deliver(ctx, source, target, reply, brief, account)
 }
 
-func (d handoffDeps) open(ctx context.Context, source, target, parent string, input contracts.Input) (string, string, error) {
+func (d handoffDeps) checkedArgs(source, target, parent string, input contracts.Input) (map[string]string, string, error) {
+	account := handoffAccount(input, d.account(source))
+	args := newSessionArgs(target, account, input, parent)
+	if err := d.checkAccount(contracts.Input{Args: args}); err != nil {
+		return nil, "", inheritedAccountError(input, source, account, err)
+	}
+	return args, account, nil
+}
+
+func (d handoffDeps) launch(ctx context.Context, source string, input contracts.Input, account string, args map[string]string) (string, string, error) {
 	brief, err := d.brief(ctx, source)
 	if err != nil {
 		return "", "", fmt.Errorf("the brief from %q: %w", source, err)
 	}
-	reply, err := d.create(ctx, contracts.Input{Args: newSessionArgs(target, input, parent)})
+	reply, err := d.create(ctx, contracts.Input{Args: args})
 	if err != nil {
-		return "", "", err
+		return "", "", inheritedAccountError(input, source, account, err)
 	}
 	return reply, brief, nil
 }
 
-func (d handoffDeps) deliver(ctx context.Context, source, target, reply, brief string) (string, error) {
+func handoffAccount(input contracts.Input, inherited string) string {
+	if explicit, given := input.Lookup("account"); given {
+		return explicit
+	}
+	return inherited
+}
+
+func isAccountRefusal(err error) bool {
+	return errors.Is(err, accounts.ErrNotFound) || errors.Is(err, manager.ErrAccountVendor) ||
+		errors.Is(err, manager.ErrAccountHost) || errors.Is(err, manager.ErrAccountRemote)
+}
+
+func inheritedAccountError(input contracts.Input, source, account string, err error) error {
+	if _, given := input.Lookup("account"); given || account == "" || !isAccountRefusal(err) {
+		return err
+	}
+	return fmt.Errorf("the account %q inherited from session %q is refused for the new session: %w; retry with `%s` to start on the vendor default, or replace its --account \"\" with --account <profile>",
+		account, source, err, retryCommand(source, input))
+}
+
+func retryCommand(source string, input contracts.Input) string {
+	parts := []string{"herrscher", paramSession, verbHandoff, retryFlag(paramName, source)}
+	for _, key := range []string{paramTo, "project", "model", "vendor", paramUnder, paramChannel} {
+		if value := input.Get(key); value != "" {
+			parts = append(parts, retryFlag(key, value))
+		}
+	}
+	return strings.Join(append(parts, "--account", `""`), " ")
+}
+
+func retryFlag(key, value string) string {
+	tokens := cli.FlagArg(key, value)
+	quoted := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		quoted = append(quoted, shellQuote(token))
+	}
+	return strings.Join(quoted, " ")
+}
+
+func shellQuote(value string) string {
+	if strings.Trim(value, shellSafeChars) == "" {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}
+
+func (d handoffDeps) deliver(ctx context.Context, source, target, reply, brief, account string) (string, error) {
 	if err := d.send(ctx, target, "session "+source, handoffMessage(source, brief)); err != nil {
 		return "", fmt.Errorf("session %q was created but the brief did not reach it: %w", target, err)
 	}
-	return handoffReport(source, target, reply, brief), nil
+	return handoffReport(source, target, reply, brief, account), nil
 }
 
-func newSessionArgs(target string, input contracts.Input, parent string) map[string]string {
+func newSessionArgs(target, account string, input contracts.Input, parent string) map[string]string {
 	args := map[string]string{paramName: target}
+	if account != "" {
+		args["account"] = account
+	}
 	for _, key := range []string{"project", "model", "vendor", paramUnder, paramChannel} {
 		if value := input.Get(key); value != "" {
 			args[key] = value
@@ -242,7 +320,10 @@ func handoffMessage(source, brief string) string {
 	return "[Passation depuis la session " + source + "]\n\n" + brief
 }
 
-func handoffReport(source, target, reply, brief string) string {
-	return fmt.Sprintf("Session %s created from %s, brief sent as its first message.\n\n%s\n\nBrief:\n%s",
-		target, source, strings.TrimSpace(reply), strings.TrimSpace(brief))
+func handoffReport(source, target, reply, brief, account string) string {
+	if account == "" {
+		account = "the vendor default"
+	}
+	return fmt.Sprintf("Session %s created from %s with account %s, brief sent as its first message.\n\n%s\n\nBrief:\n%s",
+		target, source, account, strings.TrimSpace(reply), strings.TrimSpace(brief))
 }

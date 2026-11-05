@@ -43,7 +43,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
 		agents.SetUserBudget(n)
 	}
-	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways)
+	hdl := newManagerHandler(deps, options, partDir, hostState, sup, worktrees, updater, agents)
 	wireManagerHandler(ctx, hdl, hostState, instID, worktrees, sessions)
 	wireSupervisor(sup, hostState, instID)
 	seedCoord := &coordinatorSlot{}
@@ -62,7 +62,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addSessionVerbs(reg, hostState, partDir, instID, approvals, sessions, seedCoord); err != nil {
 		return nil, hostDeps{}, err
 	}
-	handoff, err := sessionHandoffCmd(hdl.Commands(), hostState, sessions, instID, seedCoord)
+	handoff, err := sessionHandoffCmd(hdl.Commands(), hostState, sessions, instID, seedCoord, hdl.PreflightAccount)
 	if err != nil {
 		return nil, hostDeps{}, err
 	}
@@ -105,6 +105,12 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 	return nil
 }
 
+func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store) *manager.Handler {
+	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launchVendor)
+	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
+	return hdl
+}
+
 func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable) {
 	hdl.SetSeeder(sessions.Seed)
 	hdl.SetHosts(newHostPlacer(hostState, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
@@ -112,6 +118,22 @@ func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *st
 	hdl.SetDefaultModel(os.Getenv(EnvDefaultModel))
 	hdl.SetModelValidator(validateModelChoice)
 	hdl.SetGateResolver(GateFor)
+}
+
+func launchVendor(vendor, modelID string) (string, error) {
+	plugins := contracts.Default.Backends()
+	chosen, _, err := chooseVendor(vendor, modelID, plugins)
+	if err != nil {
+		return "", err
+	}
+	if chosen != "" {
+		return chosen, nil
+	}
+	plugin, err := selectBackend("", plugins)
+	if err != nil {
+		return "", err
+	}
+	return plugin.Manifest.Kind, nil
 }
 
 func validateModelChoice(vendor, modelID string) error {

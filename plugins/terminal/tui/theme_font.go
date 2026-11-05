@@ -188,7 +188,7 @@ func (m *model) copyObel(text, label string) {
 		return
 	}
 	if err := m.clip.WriteText(m.runContext(), text); err != nil {
-		m.flash = m.tr.t("tui.copy.failed", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.copy.failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return
 	}
 	m.flash = m.tr.t("tui.theme.copied", map[string]any{tplArgLabel: label})

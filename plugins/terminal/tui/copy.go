@@ -50,7 +50,7 @@ func (m *model) copyTarget(target string) {
 		return
 	}
 	if err := m.clip.WriteText(m.runContext(), text); err != nil {
-		m.flash = m.tr.t("tui.copy.failed", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.copy.failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return
 	}
 	n := len(strings.Split(text, "\n"))

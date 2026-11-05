@@ -2,8 +2,10 @@ package tui
 
 import (
 	"embed"
+	"errors"
 	"io/fs"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -32,10 +34,11 @@ type translator struct {
 	lang    i18n.Language
 	catalog func() (*i18n.Catalog, error)
 	cli     *clitext.Translator
+	cliOnce *sync.Once
 }
 
 func newTranslator() translator {
-	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales), cli: clitext.For(i18n.English)}
+	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales), cli: clitext.For(i18n.English), cliOnce: new(sync.Once)}
 }
 
 func loadLocales() (*i18n.Catalog, error) {
@@ -49,6 +52,7 @@ func loadLocales() (*i18n.Catalog, error) {
 func (trans translator) in(lang i18n.Language) translator {
 	trans.lang = lang
 	trans.cli = clitext.For(lang)
+	trans.cliOnce = new(sync.Once)
 	return trans
 }
 
@@ -69,9 +73,48 @@ func (trans translator) t(key string, params map[string]any) string {
 func (trans translator) shared(key clitext.Key) string {
 	text := trans.cli.Text(key, nil)
 	if err := trans.cli.Err(); err != nil {
-		slog.Error("tui shared message not rendered", "key", key, "err", err)
+		trans.cliOnce.Do(func() {
+			slog.Error("tui shared message not rendered", "key", key, "err", err)
+		})
 	}
 	return text
+}
+
+type reasonKey struct {
+	sentinel error
+	key      string
+}
+
+func reasonKeys() []reasonKey {
+	return []reasonKey{
+		{errNotRepo, "tui.diffgit.not_repo"},
+		{errNoBase, "tui.diffgit.no_base"},
+		{errOnBase, "tui.diffgit.on_base"},
+		{errNoArguments, "tui.diffgit.no_arguments"},
+		{errUnknownTool, "tui.diffgit.unknown_tool"},
+		{errUnknownScope, "tui.diffgit.unknown_scope"},
+		{errUnknownChange, "tui.diffgit.unknown_change"},
+		{errMalformedStat, "tui.diffgit.malformed_stat"},
+		{errNoPullNumber, "tui.diffgit.no_pull_number"},
+		{errThemeCycle, "tui.reason.theme_cycle"},
+		{errUnknownKey, "tui.reason.unknown_key"},
+		{errInvalidColor, "tui.reason.invalid_color"},
+		{errUnknownBase, "tui.reason.unknown_base"},
+		{errUnknownOption, "tui.reason.unknown_option"},
+		{errUnsafeDraftDir, "tui.reason.unsafe_draft_dir"},
+		{errDuplicateBinding, "tui.reason.duplicate_binding"},
+		{errNoEditor, "tui.reason.no_editor"},
+	}
+}
+
+func localizedReason(trans translator, err error) string {
+	message := err.Error()
+	for _, known := range reasonKeys() {
+		if errors.Is(err, known.sentinel) {
+			return strings.Replace(message, known.sentinel.Error(), trans.t(known.key, nil), 1)
+		}
+	}
+	return message
 }
 
 // Language sets the language the TUI renders its texts in. The zero value

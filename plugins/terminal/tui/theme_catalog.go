@@ -23,11 +23,11 @@ const (
 )
 
 var (
-	errThemeCycle    = errors.New("base de thème cyclique")
-	errUnknownKey    = errors.New("clé inconnue")
-	errInvalidColor  = errors.New("couleur invalide")
-	errUnknownBase   = errors.New("base inconnue")
-	errUnknownOption = errors.New("valeur inconnue")
+	errThemeCycle    = errors.New("theme base cycle")
+	errUnknownKey    = errors.New("unknown key")
+	errInvalidColor  = errors.New("invalid colour")
+	errUnknownBase   = errors.New("unknown base")
+	errUnknownOption = errors.New("unknown value")
 )
 
 type themeFile struct {
@@ -168,7 +168,7 @@ func (problem themeProblem) text(trans translator) string {
 	if problem.builtin {
 		return trans.t("tui.theme.problem.builtin", map[string]any{tplArgName: problem.name})
 	}
-	return trans.t("tui.theme.problem.rejected", map[string]any{tplArgName: problem.name, tplArgReason: problem.reason.Error()})
+	return trans.t("tui.theme.problem.rejected", map[string]any{tplArgName: problem.name, tplArgReason: localizedReason(trans, problem.reason)})
 }
 
 func loadThemeCatalog(dir string) themeCatalog {

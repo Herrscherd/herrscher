@@ -47,7 +47,7 @@ func helpEntries() []helpEntry {
 func (m *model) loadKeys(configDir string) {
 	section, err := readKeysSection(filepath.Join(configDir, terminalConfigFile))
 	if err != nil {
-		m.flash = m.tr.t("tui.keys.ignored", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.keys.ignored", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		section = keysSection{}
 	}
 	claudePath := ""
@@ -366,11 +366,11 @@ func (m *model) openKeybindings() tea.Cmd {
 	path := filepath.Join(m.themeDir, keybindingsFile)
 	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 		if err := os.MkdirAll(m.themeDir, privateDirMode); err != nil {
-			m.flash = m.tr.t("tui.keys.file_failed", map[string]any{tplArgReason: err.Error()})
+			m.flash = m.tr.t("tui.keys.file_failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 			return nil
 		}
 		if err := os.WriteFile(path, keybindingsSkeleton(), privateFileMode); err != nil {
-			m.flash = m.tr.t("tui.keys.file_failed", map[string]any{tplArgReason: err.Error()})
+			m.flash = m.tr.t("tui.keys.file_failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 			return nil
 		}
 	}
@@ -383,7 +383,7 @@ func (m *model) openKeybindings() tea.Cmd {
 func (m *model) applyKeybindingsDone(msg keybindingsDoneMsg) {
 	m.editing = false
 	if msg.err != nil {
-		m.flash = m.tr.t("tui.editor.closed_error", map[string]any{tplArgReason: msg.err.Error()})
+		m.flash = m.tr.t("tui.editor.closed_error", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
 	}
 	m.loadKeys(m.themeDir)
 	if len(m.keyProblems) == 0 && msg.err == nil {

@@ -147,12 +147,12 @@ func (m *model) refreshOverviews() {
 	}
 	raw, err := m.tm.Overview()
 	if err != nil {
-		m.flash = m.tr.t("tui.overview.preview_unavailable", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.overview.preview_unavailable", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return
 	}
 	overviews, err := ParseSessionOverviews(raw)
 	if err != nil {
-		m.flash = m.tr.t("tui.overview.preview_unreadable", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.overview.preview_unreadable", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return
 	}
 	m.overviews = overviews

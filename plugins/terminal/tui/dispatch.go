@@ -125,7 +125,7 @@ func newDispatchTables() (*dispatchTables, error) {
 	return tables, errors.Join(errs...)
 }
 
-var errDuplicateBinding = errors.New("action liée deux fois dans une même table")
+var errDuplicateBinding = errors.New("action bound twice in the same table")
 
 type keyBinding[Run any] struct {
 	action keyAction
@@ -163,7 +163,7 @@ func (m *model) installTables() {
 	tables, err := m.buildTables()
 	m.handlers = tables
 	if err != nil {
-		m.keyProblems = append(m.keyProblems, m.tr.t("tui.keys.inconsistent", map[string]any{tplArgReason: err.Error()}))
+		m.keyProblems = append(m.keyProblems, m.tr.t("tui.keys.inconsistent", map[string]any{tplArgReason: localizedReason(m.tr, err)}))
 	}
 }
 

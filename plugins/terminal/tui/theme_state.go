@@ -45,11 +45,11 @@ func (m *model) loadTheme(configDir string, detectDark func() bool) {
 	m.noColor = os.Getenv("NO_COLOR") != ""
 	cfg, err := readTerminalConfig(m.terminalConfigPath())
 	if err != nil {
-		m.flash = m.tr.t("tui.theme.toml_ignored", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.theme.toml_ignored", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		cfg = terminalSection{}
 	}
 	if _, err := cfg.look(defaultRenderOptions()); err != nil {
-		m.flash = m.tr.t("tui.theme.toml_invalid", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.theme.toml_invalid", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		cfg.Glyphs, cfg.Borders, cfg.Density = nil, nil, nil
 	}
 	m.themeCfg = cfg

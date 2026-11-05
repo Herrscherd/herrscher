@@ -53,7 +53,7 @@ func (m *model) openStatusline() tea.Cmd {
 func (m *model) closeStatusline() {
 	m.bar.open = false
 	if err := saveStatuslineChoice(m.bar.file, &m.bar); err != nil {
-		m.flash = m.tr.t("tui.statusline.not_written", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.statusline.not_written", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 	}
 	m.relayout()
 }

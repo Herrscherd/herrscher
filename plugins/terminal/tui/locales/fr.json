@@ -2309,6 +2309,38 @@
     "other": "aucun numéro de PR dans la sortie de gh"
   },
   {
+    "id": "tui.reason.theme_cycle",
+    "other": "base de thème cyclique"
+  },
+  {
+    "id": "tui.reason.unknown_key",
+    "other": "clé inconnue"
+  },
+  {
+    "id": "tui.reason.invalid_color",
+    "other": "couleur invalide"
+  },
+  {
+    "id": "tui.reason.unknown_base",
+    "other": "base inconnue"
+  },
+  {
+    "id": "tui.reason.unknown_option",
+    "other": "valeur inconnue"
+  },
+  {
+    "id": "tui.reason.unsafe_draft_dir",
+    "other": "dossier des brouillons ouvert à d'autres ou aux droits trop larges"
+  },
+  {
+    "id": "tui.reason.duplicate_binding",
+    "other": "action liée deux fois dans une même table"
+  },
+  {
+    "id": "tui.reason.no_editor",
+    "other": "aucun $EDITOR ni $VISUAL pour ouvrir"
+  },
+  {
     "id": "tui.diffpanel.snapshot_failed",
     "other": "instantané du tour impossible : {{.Reason}}"
   },

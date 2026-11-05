@@ -14,7 +14,7 @@ var (
 	errRefusedTarget    = errors.New("refusing a")
 	errOptionTarget     = errors.New("refusing a target that reads as an option")
 	errControlByte      = errors.New("refusing a target carrying a control byte")
-	errNoEditor         = errors.New("aucun $EDITOR ni $VISUAL pour ouvrir")
+	errNoEditor         = errors.New("no $EDITOR or $VISUAL to open with")
 	errNoEditorLauncher = errors.New("no editor launcher configured")
 	errNoSystemLauncher = errors.New("no system launcher configured")
 )
@@ -145,7 +145,7 @@ func (m *model) openSelectedLink() {
 		return
 	}
 	if err := openLink(m.runContext(), launch, m.sys, m.edit); err != nil {
-		m.flash = m.tr.t("tui.open.failed", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.open.failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return
 	}
 	m.flash = m.tr.t("tui.open.opening", map[string]any{"Target": launch.Target})

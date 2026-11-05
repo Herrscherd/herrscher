@@ -156,7 +156,7 @@ func (m *model) openRewind() {
 	}
 	out, err := m.tm.Dispatch([]string{sessionVerb, "checkpoints", argName, name, "--json"})
 	if err != nil {
-		m.flash = m.tr.t("tui.rewind.failed", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.rewind.failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return
 	}
 	var rows []rewindRow
@@ -348,7 +348,7 @@ func (m *model) forkFromRewind() tea.Cmd {
 
 func (m *model) handleRewindDone(msg rewindDoneMsg) {
 	if msg.err != nil {
-		m.flash = m.tr.t("tui.rewind.refused", map[string]any{tplArgReason: msg.err.Error()})
+		m.flash = m.tr.t("tui.rewind.refused", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
 		return
 	}
 	if m.input.Value() == "" {
@@ -359,7 +359,7 @@ func (m *model) handleRewindDone(msg rewindDoneMsg) {
 
 func (m *model) handleForkDone(msg forkDoneMsg) {
 	if msg.err != nil {
-		m.flash = m.tr.t("tui.rewind.fork_refused", map[string]any{tplArgReason: msg.err.Error()})
+		m.flash = m.tr.t("tui.rewind.fork_refused", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
 		return
 	}
 	channel := channelOfSession(m.tm.Sessions(), msg.name)

@@ -877,7 +877,7 @@ func (m *model) pasteImage() bool {
 	}
 	data, err := m.clip.ReadImage(m.runContext(), mime)
 	if err != nil {
-		m.flash = m.tr.t("tui.status.clipboard_failed", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.status.clipboard_failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return true
 	}
 	att, err := saveClipboardImage(data, mime, m.attachSeq)
@@ -1466,7 +1466,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 		opt(model)
 	}
 	if err := sweepDraftsAtStart(); err != nil {
-		model.flash = model.tr.t("tui.drafts.orphans", map[string]any{tplArgReason: err.Error()})
+		model.flash = model.tr.t("tui.drafts.orphans", map[string]any{tplArgReason: localizedReason(model.tr, err)})
 	}
 	if seam, err := newManageSeam(); err == nil {
 		model.SetPluginSeam(seam)
@@ -1577,7 +1577,7 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.handleThemeEdited(msg)
 		return nil, true
 	case enhancedKeysFailedMsg:
-		m.flash = m.tr.t("tui.status.enhanced_keys_unavailable", map[string]any{tplArgReason: msg.err.Error()})
+		m.flash = m.tr.t("tui.status.enhanced_keys_unavailable", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
 		return nil, true
 	case dispatchResultMsg:
 		return m.handleDispatchResult(msg), true
@@ -1590,7 +1590,7 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.handleShellResult(msg)
 		return nil, true
 	case signalFailedMsg:
-		m.flash = m.tr.t("tui.status.notify_failed", map[string]any{tplArgReason: msg.err.Error()})
+		m.flash = m.tr.t("tui.status.notify_failed", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
 		return nil, true
 	case editorDoneMsg:
 		m.applyEditorResult(msg)

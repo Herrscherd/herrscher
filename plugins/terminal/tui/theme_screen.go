@@ -250,7 +250,7 @@ func (m *model) commitTheme() {
 	section.Bold = overrideSetting(preview.Render.Bold, base.Render.Bold)
 	section.Italic = overrideSetting(preview.Render.Italic, base.Render.Italic)
 	if err := m.saveThemeConfig(section); err != nil {
-		m.flash = m.tr.t("tui.theme.not_saved", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.theme.not_saved", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return
 	}
 	screen.origin = preview
@@ -267,7 +267,7 @@ func overrideSetting[Choice comparable](value, inherited Choice) *Choice {
 func (m *model) editThemeFile() tea.Cmd {
 	path, err := m.themeFileForEdit()
 	if err != nil {
-		m.flash = m.tr.t("tui.theme.not_opened", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.theme.not_opened", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return nil
 	}
 	return tea.ExecProcess(editorCommand(m.runContext(), path), func(err error) tea.Msg { return themeEditedMsg{err: err} })
@@ -292,7 +292,7 @@ func (m *model) themeFileForEdit() (string, error) {
 func (m *model) handleThemeEdited(msg themeEditedMsg) {
 	m.reloadThemes()
 	if msg.err != nil {
-		m.flash = m.tr.t("tui.theme.editor_failed", map[string]any{tplArgReason: msg.err.Error()})
+		m.flash = m.tr.t("tui.theme.editor_failed", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
 	}
 }
 

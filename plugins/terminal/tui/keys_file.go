@@ -62,7 +62,7 @@ func loadKeyBindings(trans translator, claudePath, herrscherPath string, section
 	for _, def := range defaultKeyBindings() {
 		canon, err := canonicalChord(def.chord)
 		if err != nil {
-			load.problems = append(load.problems, trans.t("tui.keys.default_binding", map[string]any{"Chord": def.chord, tplArgReason: err.Error()}))
+			load.problems = append(load.problems, trans.t("tui.keys.default_binding", map[string]any{"Chord": def.chord, tplArgReason: localizedReason(trans, err)}))
 			continue
 		}
 		load.table.bind(def.ctx, canon, def.action)
@@ -86,12 +86,12 @@ func (l *keyLoad) applyFile(path, label string) {
 		return
 	}
 	if err != nil {
-		l.problems = append(l.problems, l.tr.t("tui.keys.file_ignored", map[string]any{tplArgLabel: label, tplArgReason: err.Error()}))
+		l.problems = append(l.problems, l.tr.t("tui.keys.file_ignored", map[string]any{tplArgLabel: label, tplArgReason: localizedReason(l.tr, err)}))
 		return
 	}
 	var file keyFile
 	if err := json.Unmarshal(raw, &file); err != nil {
-		l.problems = append(l.problems, l.tr.t("tui.keys.file_ignored", map[string]any{tplArgLabel: label, tplArgReason: err.Error()}))
+		l.problems = append(l.problems, l.tr.t("tui.keys.file_ignored", map[string]any{tplArgLabel: label, tplArgReason: localizedReason(l.tr, err)}))
 		return
 	}
 	seen := make(map[keyContext]map[string]bool)
@@ -103,7 +103,7 @@ func (l *keyLoad) applyFile(path, label string) {
 func (l *keyLoad) applyEntry(entry keyFileEntry, label string, seen map[keyContext]map[string]bool) {
 	ctx := keyContext(entry.Context)
 	if !isKnownKeyContext(ctx) {
-		l.problems = append(l.problems, l.tr.t("tui.keys.unknown_context", map[string]any{tplArgLabel: label, tplArgReason: errKeyUnknownCtx.Error(), "Context": entry.Context}))
+		l.problems = append(l.problems, l.tr.t("tui.keys.unknown_context", map[string]any{tplArgLabel: label, tplArgReason: localizedReason(l.tr, errKeyUnknownCtx), "Context": entry.Context}))
 		return
 	}
 	if seen[ctx] == nil {
@@ -120,7 +120,7 @@ func (l *keyLoad) applyEntry(entry keyFileEntry, label string, seen map[keyConte
 			continue
 		}
 		if seen[ctx][canon] {
-			l.problems = append(l.problems, l.tr.t("tui.keys.duplicate", map[string]any{tplArgLabel: label, tplArgReason: errKeyDuplicate.Error(), tplArgSpec: spec}))
+			l.problems = append(l.problems, l.tr.t("tui.keys.duplicate", map[string]any{tplArgLabel: label, tplArgReason: localizedReason(l.tr, errKeyDuplicate), tplArgSpec: spec}))
 			continue
 		}
 		seen[ctx][canon] = true
@@ -134,7 +134,7 @@ func (l *keyLoad) checkChord(spec, label string) (string, error) {
 		err = reliableChord(canon)
 	}
 	if err != nil {
-		l.problems = append(l.problems, l.tr.t("tui.keys.binding_failed", map[string]any{tplArgLabel: label, tplArgSpec: spec, tplArgReason: err.Error()}))
+		l.problems = append(l.problems, l.tr.t("tui.keys.binding_failed", map[string]any{tplArgLabel: label, tplArgSpec: spec, tplArgReason: localizedReason(l.tr, err)}))
 		return "", err
 	}
 	return canon, nil
@@ -147,11 +147,11 @@ func (l *keyLoad) applyValue(ctx keyContext, canon, spec string, value json.RawM
 	}
 	var action string
 	if err := json.Unmarshal(value, &action); err != nil {
-		l.problems = append(l.problems, l.tr.t("tui.keys.binding_failed", map[string]any{tplArgLabel: label, tplArgSpec: spec, tplArgReason: errKeyBadValue.Error()}))
+		l.problems = append(l.problems, l.tr.t("tui.keys.binding_failed", map[string]any{tplArgLabel: label, tplArgSpec: spec, tplArgReason: localizedReason(l.tr, errKeyBadValue)}))
 		return
 	}
 	if !isKnownKeyAction(keyAction(action)) {
-		l.problems = append(l.problems, l.tr.t("tui.keys.unknown_action", map[string]any{tplArgLabel: label, tplArgSpec: spec, tplArgReason: errKeyUnknownAction.Error(), tplArgAction: action}))
+		l.problems = append(l.problems, l.tr.t("tui.keys.unknown_action", map[string]any{tplArgLabel: label, tplArgSpec: spec, tplArgReason: localizedReason(l.tr, errKeyUnknownAction), tplArgAction: action}))
 		return
 	}
 	l.table.bind(ctx, canon, keyAction(action))

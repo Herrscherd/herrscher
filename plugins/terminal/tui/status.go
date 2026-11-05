@@ -34,7 +34,7 @@ func (m *model) windowOf(info contracts.SessionInfo) int {
 func (m *model) loadContextLimits(path string, env func(string) string) {
 	cfg, err := config.Load(path)
 	if err != nil {
-		m.flash = m.tr.t("tui.status.limits_ignored", map[string]any{tplArgReason: err.Error()})
+		m.flash = m.tr.t("tui.status.limits_ignored", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		cfg = config.Config{}
 	}
 	m.limits = contextwindow.NewLimits(env(contextwindow.EnvVar()), cfg.ContextLimits)

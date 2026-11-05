@@ -2309,6 +2309,38 @@
     "other": "no PR number in gh output"
   },
   {
+    "id": "tui.reason.theme_cycle",
+    "other": "theme base cycle"
+  },
+  {
+    "id": "tui.reason.unknown_key",
+    "other": "unknown key"
+  },
+  {
+    "id": "tui.reason.invalid_color",
+    "other": "invalid colour"
+  },
+  {
+    "id": "tui.reason.unknown_base",
+    "other": "unknown base"
+  },
+  {
+    "id": "tui.reason.unknown_option",
+    "other": "unknown value"
+  },
+  {
+    "id": "tui.reason.unsafe_draft_dir",
+    "other": "draft folder open to others or with too-wide rights"
+  },
+  {
+    "id": "tui.reason.duplicate_binding",
+    "other": "action bound twice in the same table"
+  },
+  {
+    "id": "tui.reason.no_editor",
+    "other": "no $EDITOR or $VISUAL to open with"
+  },
+  {
     "id": "tui.diffpanel.snapshot_failed",
     "other": "turn snapshot impossible: {{.Reason}}"
   },

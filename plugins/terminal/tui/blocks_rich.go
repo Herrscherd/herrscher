@@ -377,7 +377,7 @@ func (m *model) copyLastCode() {
 		}
 		body := blocks[len(blocks)-1].body
 		if err := m.clip.WriteText(m.runContext(), body); err != nil {
-			m.flash = m.tr.t("tui.copy.failed", map[string]any{tplArgReason: err.Error()})
+			m.flash = m.tr.t("tui.copy.failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 			return
 		}
 		n := len(strings.Split(body, "\n"))

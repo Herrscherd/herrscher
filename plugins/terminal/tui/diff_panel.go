@@ -188,7 +188,7 @@ func (m *model) releaseQueuedTurns(msg turnStartMsg) {
 		return
 	}
 	if msg.err != nil {
-		m.flash = m.tr.t("tui.diffpanel.snapshot_failed", map[string]any{tplArgReason: localizedDiffError(m.tr, msg.err)})
+		m.flash = m.tr.t("tui.diffpanel.snapshot_failed", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
 	}
 	chat.turnStart = msg.tree
 	for _, turn := range chat.queued {
@@ -361,14 +361,14 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 		defer cancel()
 		sha, err := repo.commit(ctx, message)
 		if err != nil {
-			return diffActionMsg{notice: trans.t("tui.diffpanel.commit_failed", map[string]any{tplArgReason: localizedDiffError(trans, err)}), bad: true}
+			return diffActionMsg{notice: trans.t("tui.diffpanel.commit_failed", map[string]any{tplArgReason: localizedReason(trans, err)}), bad: true}
 		}
 		if !withPR {
 			return diffActionMsg{notice: trans.t("tui.diffpanel.committed", map[string]any{tplArgSha: sha, "Subject": subject})}
 		}
 		number, err := repo.openPR(ctx, base, subject, body)
 		if err != nil {
-			return diffActionMsg{notice: trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedDiffError(trans, err)}), bad: true}
+			return diffActionMsg{notice: trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(trans, err)}), bad: true}
 		}
 		return diffActionMsg{notice: trans.t("tui.diffpanel.pr_opened", map[string]any{tplArgSha: sha, "Number": number, "Base": base})}
 	}
@@ -560,7 +560,7 @@ func (m *model) diffMiddle(width, height int) []string {
 		return nil
 	}
 	if panel.err != nil {
-		return fitLines([]string{m.st.red.Render(truncate(" "+localizedDiffError(m.tr, panel.err), width))}, height)
+		return fitLines([]string{m.st.red.Render(truncate(" "+localizedReason(m.tr, panel.err), width))}, height)
 	}
 	if panel.loading && len(panel.report.Files) == 0 {
 		return fitLines([]string{m.st.dim.Render(" " + m.tr.t("tui.diffpanel.loading", nil))}, height)
@@ -835,34 +835,6 @@ func (m *model) diffNoteBox(width int) []string {
 	}
 	content := []string{title, m.st.text.Render("› ") + field, m.st.dim.Render(joinNonEmpty(m.labelledHint(actDiffSendNote, m.tr.t("tui.diffpanel.send_to", map[string]any{"Session": panel.session}), ctxDiffNote), m.labelledHint(actDiffDismiss, m.tr.t("tui.common.cancel", nil), ctxDiffNote)))}
 	return boxLines(content, width)
-}
-
-type diffErrorKey struct {
-	sentinel error
-	key      string
-}
-
-func diffErrorKeys() []diffErrorKey {
-	return []diffErrorKey{
-		{errNotRepo, "tui.diffgit.not_repo"},
-		{errNoBase, "tui.diffgit.no_base"},
-		{errOnBase, "tui.diffgit.on_base"},
-		{errNoArguments, "tui.diffgit.no_arguments"},
-		{errUnknownTool, "tui.diffgit.unknown_tool"},
-		{errUnknownScope, "tui.diffgit.unknown_scope"},
-		{errUnknownChange, "tui.diffgit.unknown_change"},
-		{errMalformedStat, "tui.diffgit.malformed_stat"},
-		{errNoPullNumber, "tui.diffgit.no_pull_number"},
-	}
-}
-
-func localizedDiffError(trans translator, err error) string {
-	for _, known := range diffErrorKeys() {
-		if detail, ok := strings.CutPrefix(err.Error(), known.sentinel.Error()); ok {
-			return trans.t(known.key, nil) + detail
-		}
-	}
-	return err.Error()
 }
 
 func boxLines(content []string, width int) []string {

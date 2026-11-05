@@ -353,5 +353,45 @@
     "id": "cli.serve.flag.env_file",
     "description": "Help of the --env-file flag of serve",
     "other": "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)"
+  },
+  {
+    "id": "cli.serve.attach_failed",
+    "description": "Stderr line when serve cannot attach to the daemon already running",
+    "other": "herrscher: could not attach to the running daemon: {{.Err}}"
+  },
+  {
+    "id": "cli.serve.gateway_skipped",
+    "description": "Stderr line for a gateway left out because its config is absent",
+    "other": "herrscher: gateway not configured, skipping: {{.Failure}}"
+  },
+  {
+    "id": "cli.serve.gateway_retrying",
+    "description": "Stderr line for a gateway still down at startup, before the next retry",
+    "other": "herrscher: gateway not up yet: {{.Failure}}; retrying in {{.Wait}}"
+  },
+  {
+    "id": "cli.serve.gateway_unavailable",
+    "description": "Stderr line for a gateway that stayed down at startup",
+    "other": "herrscher: gateway unavailable: {{.Failure}}"
+  },
+  {
+    "id": "cli.serve.gateway_commands",
+    "description": "Error when the commands of the gateways cannot be bound",
+    "other": "gateway commands: {{.Err}}"
+  },
+  {
+    "id": "cli.serve.no_gateway",
+    "description": "Error when no gateway could be built for an operator command",
+    "other": "no gateway built"
+  },
+  {
+    "id": "cli.serve.session_started",
+    "description": "Stderr line naming the session a prompt opened",
+    "other": "session: {{.Name}}"
+  },
+  {
+    "id": "cli.serve.session_failed",
+    "description": "Error of a prompt whose session did not answer",
+    "other": "session {{.Name}}: {{.Err}}"
   }
 ]

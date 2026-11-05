@@ -98,7 +98,7 @@ func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.
 		home = &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
 	}
 
-	unlock, attached, err := lockOrAttach(ctx, *statePath, *instanceID, open)
+	unlock, attached, err := lockOrAttach(ctx, langs.Operator, *statePath, *instanceID, open)
 	if attached || err != nil {
 		return err
 	}
@@ -108,7 +108,7 @@ func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.
 		return skillsErr
 	}
 
-	gws, closers, foreground, extra, err := startGateways(ctx)
+	gws, closers, foreground, extra, err := startGateways(ctx, langs.Operator)
 	if err != nil {
 		return err
 	}
@@ -146,7 +146,7 @@ func openOnForeground(open *openWindow, foreground contracts.Foreground) {
 	}
 }
 
-func lockOrAttach(ctx context.Context, statePath, instanceID string, open *openWindow) (func(), bool, error) {
+func lockOrAttach(ctx context.Context, lang i18n.Language, statePath, instanceID string, open *openWindow) (func(), bool, error) {
 	unlock, err := host.LockState(statePath)
 	if err == nil {
 		return unlock, false, nil
@@ -160,26 +160,26 @@ func lockOrAttach(ctx context.Context, statePath, instanceID string, open *openW
 		if aerr == nil {
 			return nil, true, nil
 		}
-		fmt.Fprintf(os.Stderr, "herrscher: could not attach to the running daemon: %v\n", aerr)
+		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeAttachFailed, clitext.Params{clitext.ParamErr: aerr.Error()}))
 	}
 	return nil, false, err
 }
 
-func startGateways(ctx context.Context) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
+func startGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
 	hub, err := host.BuildHub(ctx, contracts.Default.Gateways(), os.Getenv)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 	for _, f := range hub.Unconfigured() {
-		fmt.Fprintln(os.Stderr, "herrscher: gateway not configured, skipping: "+f)
+		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewaySkipped, clitext.Params{clitext.ParamFailure: f}))
 	}
 	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, wait time.Duration) {
 		for _, f := range failures {
-			fmt.Fprintf(os.Stderr, "herrscher: gateway not up yet: %s; retrying in %s\n", f, wait)
+			fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewayRetrying, clitext.Params{clitext.ParamFailure: f, clitext.ParamWait: wait.String()}))
 		}
 	})
 	for _, f := range hub.Failures() {
-		fmt.Fprintln(os.Stderr, "herrscher: gateway unavailable: "+f)
+		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewayUnavailable, clitext.Params{clitext.ParamFailure: f}))
 	}
 	var raw []host.Deps
 	for _, kind := range hub.Kinds() {
@@ -187,7 +187,7 @@ func startGateways(ctx context.Context) ([]host.Deps, []contracts.Gateway, contr
 			raw = append(raw, set)
 		}
 	}
-	return bindGateways(raw)
+	return bindGateways(raw, lang)
 }
 
 func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, closers []contracts.Gateway, foreground contracts.Foreground, opts host.Options) error {
@@ -228,10 +228,10 @@ func runHub(ctx context.Context, gws []host.Deps, closers []contracts.Gateway, o
 	return host.RunHub(ctx, gws, closers, opts)
 }
 
-func bindGateways(sets []host.Deps) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
+func bindGateways(sets []host.Deps, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
 	extra, err := host.CollectCommands(sets)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("gateway commands: %w", err)
+		return nil, nil, nil, nil, renderError(lang, err, clitext.ServeGatewayCommands, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	var foreground contracts.Foreground
 	gws := make([]host.Deps, 0, len(sets))
@@ -288,8 +288,8 @@ func loadOperator() (config.Config, language.Languages, error) {
 	return cfg, langs, err
 }
 
-func newOperatorRegistry(ctx context.Context, cfg config.Config) (*cli.Registry, error) {
-	gws, err := buildGateways(ctx)
+func newOperatorRegistry(ctx context.Context, cfg config.Config, lang i18n.Language) (*cli.Registry, error) {
+	gws, err := buildGateways(ctx, lang)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +313,7 @@ func runRegistryVerb(ctx context.Context, verb string, args []string) error {
 	if err != nil {
 		return err
 	}
-	reg, err := newOperatorRegistry(ctx, cfg)
+	reg, err := newOperatorRegistry(ctx, cfg, langs.Client)
 	if err != nil {
 		return err
 	}
@@ -342,7 +342,7 @@ func runPrompt(ctx context.Context, task task) error {
 		if err != nil {
 			return err
 		}
-		reg, err := newOperatorRegistry(ctx, cfg)
+		reg, err := newOperatorRegistry(ctx, cfg, langs.Client)
 		if err != nil {
 			return err
 		}
@@ -357,6 +357,7 @@ func createTaskSession(ctx context.Context, name string) []string {
 }
 
 func runPromptWindow(ctx context.Context, name, text string) error {
+	lang := clitext.ClientLanguage()
 	statePath := host.DefaultStatePath()
 	unlock, lerr := host.LockState(statePath)
 	if lerr != nil {
@@ -364,7 +365,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 		if _, err := host.DaemonDispatch(ctx, instance, createTaskSession(ctx, name)); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "session: "+name)
+		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
 		return runAttached(ctx, instance, tui.OpenOn(name, text))
 	}
 	unlock()
@@ -372,14 +373,14 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 	if err != nil {
 		return err
 	}
-	reg, err := newOperatorRegistry(ctx, cfg)
+	reg, err := newOperatorRegistry(ctx, cfg, langs.Client)
 	if err != nil {
 		return err
 	}
 	if _, err := reg.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, "session: "+name)
+	fmt.Fprintln(os.Stderr, render(lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
 	return serveWith(ctx, nil, &openWindow{session: name, text: text}, cfg, langs)
 }
 
@@ -396,14 +397,15 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 	if _, err := dispatcher.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintln(stderr, "session: "+name); err != nil {
+	if _, err := fmt.Fprintln(stderr, render(lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name})); err != nil {
 		return err
 	}
 	argv := append([]string{verbSession, "seed", argName, name}, cli.FlagArg("task", prompt)...)
 	argv = append(argv, "--timeout", promptTimeout.String())
 	res, err := dispatcher.Dispatch(ctx, argv)
 	if err != nil {
-		return fmt.Errorf("session %s: %w", name, cli.Localize(err, lang))
+		localized := cli.Localize(err, lang)
+		return renderError(lang, localized, clitext.ServeSessionFailed, clitext.Params{clitext.ParamName: name, clitext.ParamErr: localized.Error()})
 	}
 	reply, err := cli.Text(res, lang)
 	if err != nil {
@@ -431,7 +433,7 @@ func forwardUnknownVerb(ctx context.Context, argv []string) (string, bool, error
 	return host.ForwardToDaemon(ctx, host.DefaultStatePath(), instance, argv)
 }
 
-func buildGateways(ctx context.Context) ([]host.Deps, error) {
+func buildGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, error) {
 	hub, err := host.BuildHub(ctx, contracts.Default.Gateways(), os.Getenv)
 	if err != nil {
 		return nil, err
@@ -443,7 +445,7 @@ func buildGateways(ctx context.Context) ([]host.Deps, error) {
 		}
 	}
 	if len(sets) == 0 {
-		return nil, errNoGateway
+		return nil, renderError(lang, errNoGateway, clitext.ServeNoGateway, nil)
 	}
 	return sets, nil
 }

@@ -353,5 +353,45 @@
     "id": "cli.serve.flag.env_file",
     "description": "Aide de l'option --env-file de serve",
     "other": "charge DISCORD_BOT_TOKEN et les autres variables de ce fichier avant le démarrage (utilisé par `herrscher service`)"
+  },
+  {
+    "id": "cli.serve.attach_failed",
+    "description": "Ligne d'erreur quand serve ne peut pas s'attacher au démon déjà lancé",
+    "other": "herrscher : impossible de s'attacher au démon en cours : {{.Err}}"
+  },
+  {
+    "id": "cli.serve.gateway_skipped",
+    "description": "Ligne d'erreur pour une passerelle écartée parce que sa configuration est absente",
+    "other": "herrscher : passerelle non configurée, ignorée : {{.Failure}}"
+  },
+  {
+    "id": "cli.serve.gateway_retrying",
+    "description": "Ligne d'erreur pour une passerelle encore indisponible au démarrage, avant le prochain essai",
+    "other": "herrscher : passerelle pas encore prête : {{.Failure}} ; nouvel essai dans {{.Wait}}"
+  },
+  {
+    "id": "cli.serve.gateway_unavailable",
+    "description": "Ligne d'erreur pour une passerelle restée indisponible au démarrage",
+    "other": "herrscher : passerelle indisponible : {{.Failure}}"
+  },
+  {
+    "id": "cli.serve.gateway_commands",
+    "description": "Erreur quand les commandes des passerelles ne peuvent pas être rattachées",
+    "other": "commandes de passerelle : {{.Err}}"
+  },
+  {
+    "id": "cli.serve.no_gateway",
+    "description": "Erreur quand aucune passerelle ne peut être construite pour une commande de l'opérateur",
+    "other": "aucune passerelle construite"
+  },
+  {
+    "id": "cli.serve.session_started",
+    "description": "Ligne d'erreur qui nomme la session ouverte par un prompt",
+    "other": "session : {{.Name}}"
+  },
+  {
+    "id": "cli.serve.session_failed",
+    "description": "Erreur d'un prompt dont la session n'a pas répondu",
+    "other": "session {{.Name}} : {{.Err}}"
   }
 ]

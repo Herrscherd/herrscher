@@ -558,3 +558,26 @@ func TestRefusedAccountNeverCallsTheBriefGenerator(t *testing.T) {
 		}
 	}
 }
+
+func TestRetryCommandParsesWithTheRealRegistry(t *testing.T) {
+	input := contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "--x", "project": "myproj", "model": "--m", "vendor": "claude"}}
+	cmd := retryCommand("alpha", input)
+	want := `herrscher session handoff --name alpha --to=--x --project myproj --model=--m --vendor claude --account ""`
+	if cmd != want {
+		t.Fatalf("retry command = %q, want %q", cmd, want)
+	}
+	reg := &cli.Registry{}
+	if err := reg.Add(sessionHandoffVerb(fakeHandoff(&handoffRecord{}, fixedClock(), "alpha"))); err != nil {
+		t.Fatal(err)
+	}
+	tokens := strings.Fields(strings.TrimSuffix(cmd, ` --account ""`))[1:]
+	_, parsed, ok := reg.Resolve(tokens)
+	if !ok {
+		t.Fatalf("the retry command %q must resolve to the handoff verb", cmd)
+	}
+	for key, value := range map[string]string{paramName: "alpha", paramTo: "--x", "model": "--m", "vendor": "claude", "project": "myproj"} {
+		if got := parsed.Get(key); got != value {
+			t.Fatalf("parsed --%s = %q, want %q: the retry command must give back every refused parameter", key, got, value)
+		}
+	}
+}

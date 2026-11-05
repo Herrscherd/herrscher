@@ -476,11 +476,11 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	if err != nil {
 		return createRequest{}, err
 	}
-	hostName, account, err := h.checkSessionAccount(input, runtime)
+	options, err := h.parseSessionOptions(input, terminalOnly)
 	if err != nil {
 		return createRequest{}, err
 	}
-	options, err := h.parseSessionOptions(input, terminalOnly)
+	hostName, account, err := h.checkSessionAccount(input, runtime)
 	if err != nil {
 		return createRequest{}, err
 	}
@@ -543,7 +543,10 @@ func (h *Handler) checkSessionAccount(input contracts.Input, runtime runtimeChoi
 	if err := h.checkAccountUsable(hostName, account); err != nil {
 		return "", "", err
 	}
-	if err := h.checkAccount(runtime, explicitAccount); err != nil {
+	if err := h.checkAccount(runtime, account); err != nil {
+		if account != explicitAccount {
+			return "", "", fmt.Errorf("the account of agent %q: %w", runtime.agent, err)
+		}
 		return "", "", err
 	}
 	return hostName, account, nil

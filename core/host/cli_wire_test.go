@@ -3,8 +3,10 @@ package host
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -115,5 +117,64 @@ func TestWiredManagerResolvesTheVendorFromTheBackendEnvironment(t *testing.T) {
 	noVendor := contracts.Input{Args: map[string]string{"name": "pro-session", "account": "pro"}}
 	if _, runErr := create.Run(t.Context(), noVendor); !errors.Is(runErr, errStopAfterGuard) {
 		t.Fatalf("session create with account pro and vendor from HERRSCHER_BACKEND=codex: err %v, want the placement to be reached", runErr)
+	}
+}
+
+func TestWiredManagerChecksTheAccountOfAnAgent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	name, err := contracts.ParseProfileName("pro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (accounts.Store{Root: accounts.DefaultRoot(home)}).Create("claude", name); err != nil {
+		t.Fatal(err)
+	}
+	agents := agent.NewStore(t.TempDir())
+	if _, err := agents.Create(agent.CreateSpec{Name: "bot"}); err != nil {
+		t.Fatal(err)
+	}
+	setAgentAccount := func(profile string) {
+		if err := os.WriteFile(filepath.Join(agents.Root(), "bot", "account"), []byte(profile+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	if err := st.SetHome(state.HomeRef{ID: "home", Type: "forum"}); err != nil {
+		t.Fatal(err)
+	}
+	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agents)
+	create := mustCommand(t, hdl.Commands(), "session", "create")
+	agentInput := contracts.Input{Args: map[string]string{"name": "bot-session", "agent": "bot", "vendor": "claude"}}
+
+	setAgentAccount("ghost")
+	_, runErr := create.Run(t.Context(), agentInput)
+	if !errors.Is(runErr, accounts.ErrNotFound) {
+		t.Fatalf("session create for an agent whose account is missing: err %v, want accounts.ErrNotFound", runErr)
+	}
+	if !strings.Contains(runErr.Error(), `the account of agent "bot"`) {
+		t.Fatalf("err %q must say the account comes from the agent", runErr)
+	}
+
+	setAgentAccount("pro")
+	if _, runErr := create.Run(t.Context(), agentInput); !errors.Is(runErr, errStopAfterGuard) {
+		t.Fatalf("session create for an agent whose account exists: err %v, want the placement to be reached", runErr)
+	}
+}
+
+func TestWiredManagerValidatesMemoryProjectBeforeTheAccount(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	if err := st.SetHome(state.HomeRef{ID: "home", Type: "forum"}); err != nil {
+		t.Fatal(err)
+	}
+	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()))
+	create := mustCommand(t, hdl.Commands(), "session", "create")
+	input := contracts.Input{Args: map[string]string{"name": "mp-session", "vendor": "claude", "account": "ghost", "memory_project": "a/b"}}
+	_, runErr := create.Run(t.Context(), input)
+	var invalid *manager.InvalidValueError
+	if !errors.As(runErr, &invalid) || invalid.Field != "memory_project" {
+		t.Fatalf("err %v, want the memory_project validation before the account check", runErr)
 	}
 }

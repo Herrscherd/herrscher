@@ -139,7 +139,7 @@ func sessionHandoffVerb(deps handoffDeps) contracts.Cmd {
 		Help("start a new session whose first message is a brief this session writes; without --to it creates nothing and says how to open this session instead. "+
 			"This is not the ⟢ handoff: trailer, which passes a task to another agent inside the coordination flow. "+
 			"An agent caller attaches the new session under its source, cannot pick --under or --channel_id, and gets at most "+
-			"3 handoffs an hour for its whole session tree, one at a time, and a handoff counts once its brief starts, even if it then fails; a refused account costs neither a brief nor a slot; the operator has no such bound. When the operator closes a session, its direct children become roots and their quota starts again. "+
+			"3 handoffs an hour for its whole session tree, one at a time, and a handoff counts once its brief starts, even if it then fails; a refused account costs neither a brief nor a slot, unless its profile is removed between the check and the creation; the operator has no such bound. When the operator closes a session, its direct children become roots and their quota starts again. "+
 			"This bound is a local guard, not a security boundary: the operator socket is reachable by the same user, "+
 			"and its state resets when the daemon restarts").
 		Param(paramName, "session to hand off (default: the calling session)", false).
@@ -257,13 +257,20 @@ func inheritedAccountError(input contracts.Input, source, account string, err er
 }
 
 func retryCommand(source string, input contracts.Input) string {
-	parts := []string{"herrscher", paramSession, verbHandoff, "--name", shellQuote(source)}
+	parts := []string{"herrscher", paramSession, verbHandoff, retryFlag(paramName, source)}
 	for _, key := range []string{paramTo, "project", "model", "vendor", paramUnder, paramChannel} {
 		if value := input.Get(key); value != "" {
-			parts = append(parts, "--"+key, shellQuote(value))
+			parts = append(parts, retryFlag(key, value))
 		}
 	}
 	return strings.Join(append(parts, "--account", `""`), " ")
+}
+
+func retryFlag(key, value string) string {
+	if strings.HasPrefix(value, "--") {
+		return shellQuote("--" + key + "=" + value)
+	}
+	return "--" + key + " " + shellQuote(value)
 }
 
 func shellQuote(value string) string {

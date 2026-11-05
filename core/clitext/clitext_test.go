@@ -32,7 +32,7 @@ func TestEveryDeclaredKeyHasItsTextInEveryLanguage(t *testing.T) {
 }
 
 func TestEveryKeyFileIsDeclaredOnce(t *testing.T) {
-	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), sessionKeys(), pluginKeys()}
+	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys()}
 	total := 0
 	for _, group := range groups {
 		total += len(group)
@@ -84,6 +84,8 @@ func TestRenderedMessagesInEachLanguage(t *testing.T) {
 		{"serve health flag", ServeFlagHealthAddr, nil, "if set (e.g. :8787), serve GET /health", "si elle est renseignée (par exemple :8787), sert GET /health"},
 		{"serve gateway retrying", ServeGatewayRetrying, Params{"Failure": "relay: offline", "Wait": "2s"}, "herrscher: gateway not up yet: relay: offline; retrying in 2s", "herrscher : passerelle pas encore prête : relay: offline ; nouvel essai dans 2s"},
 		{"serve no gateway", ServeNoGateway, nil, "no gateway built", "aucune passerelle construite"},
+		{"bridge env stdin flag", BridgeFlagEnvStdin, nil, "read KEY=VALUE lines from stdin until a blank line and put them in this process's environment (how a remote bridge gets its gateway credentials)", "lit des lignes KEY=VALUE sur l'entrée standard jusqu'à une ligne vide et les place dans l'environnement de ce processus (c'est ainsi qu'un bridge distant reçoit ses identifiants de passerelle)"},
+		{"bridge vendor flag", BridgeFlagVendor, nil, "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)", "fournisseur du backend : claude | codex | cursor (vide = premier enregistré, ou HERRSCHER_BACKEND)"},
 		{"serve session failed", ServeSessionFailed, Params{"Name": "demo", "Err": "boom"}, "session demo: boom", "session demo : boom"},
 		{"skill duplicate", SkillDuplicate, Params{"Name": "demo", "Kind": "bundle", "Owner": "core"}, "herrscher: skill demo from plugin bundle was left out: plugin core already ships one by that name", "herrscher : la compétence demo du plugin bundle a été écartée : le plugin core en livre déjà une de ce nom"},
 	}

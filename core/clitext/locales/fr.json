@@ -393,5 +393,100 @@
     "id": "cli.serve.session_failed",
     "description": "Erreur d'un prompt dont la session n'a pas répondu",
     "other": "session {{.Name}} : {{.Err}}"
+  },
+  {
+    "id": "cli.bridge.flag.session",
+    "description": "Aide de l'option --session de bridge",
+    "other": "nom de la session (cloisonne le dossier de l'orchestrateur et des pièces jointes)"
+  },
+  {
+    "id": "cli.bridge.flag.project",
+    "description": "Aide de l'option --project de bridge",
+    "other": "nom du projet, portée de mémoire partagée (P1 : chaque agent de ce jeu s'en souvient)"
+  },
+  {
+    "id": "cli.bridge.flag.agent",
+    "description": "Aide de l'option --agent de bridge",
+    "other": "nom de l'agent, portée de mémoire privée (P1 : les compétences apprises par cet agent)"
+  },
+  {
+    "id": "cli.bridge.flag.project_pinned",
+    "description": "Aide de l'option --project-pinned de bridge",
+    "other": "le projet de mémoire a été choisi par un humain, non deviné d'après un dossier : ne jamais le réviser"
+  },
+  {
+    "id": "cli.bridge.flag.verbose",
+    "description": "Aide de l'option -v de bridge",
+    "other": "journalise l'activité sur la sortie d'erreur"
+  },
+  {
+    "id": "cli.bridge.flag.hub_socket",
+    "description": "Aide de l'option --hub-socket de bridge",
+    "other": "socket Unix du hub du démon : si renseignée, tourne en simple exécuteur de backend (sans interroger les passerelles)"
+  },
+  {
+    "id": "cli.bridge.flag.agents_root",
+    "description": "Aide de l'option --agents-root de bridge",
+    "other": "dossier qui héberge les espaces des agents pour la liste de délégation (vide = valeur par défaut du démon, à côté de state.json)"
+  },
+  {
+    "id": "cli.bridge.flag.extractor",
+    "description": "Aide de l'option --extractor de bridge",
+    "other": "nom d'un extracteur de curation enregistré ; il active la boucle d'apprentissage P1 (vide = Curator simple, sans apprentissage)"
+  },
+  {
+    "id": "cli.bridge.flag.journal",
+    "description": "Aide de l'option --journal de bridge",
+    "other": "chemin du journal des appels que lit Consolidate (un chemin relatif à l'arbre de travail est accepté) ; utilisé seulement avec --extractor"
+  },
+  {
+    "id": "cli.bridge.flag.consolidate_every",
+    "description": "Aide de l'option --consolidate-every de bridge",
+    "other": "lance Consolidate tous les N tours (0 = manuel seulement) ; utilisé seulement avec --extractor"
+  },
+  {
+    "id": "cli.bridge.flag.state",
+    "description": "Aide de l'option --state de bridge",
+    "other": "chemin du fichier d'état du démon dont le bridge lit le cache des modèles (vide = fichier d'état par défaut)"
+  },
+  {
+    "id": "cli.bridge.flag.env_stdin",
+    "description": "Aide de l'option --env-stdin de bridge",
+    "other": "lit des lignes KEY=VALUE sur l'entrée standard jusqu'à une ligne vide et les place dans l'environnement de ce processus (c'est ainsi qu'un bridge distant reçoit ses identifiants de passerelle)"
+  },
+  {
+    "id": "cli.bridge.flag.cmd",
+    "description": "Aide de l'option --cmd de bridge",
+    "other": "commande de base (par défaut 'claude' en mode stream ; le programme par message en mode oneshot)"
+  },
+  {
+    "id": "cli.bridge.flag.backend",
+    "description": "Aide de l'option --backend de bridge",
+    "other": "backend qui répond : stream (par défaut) | oneshot"
+  },
+  {
+    "id": "cli.bridge.flag.vendor",
+    "description": "Aide de l'option --vendor de bridge",
+    "other": "fournisseur du backend : claude | codex | cursor (vide = premier enregistré, ou HERRSCHER_BACKEND)"
+  },
+  {
+    "id": "cli.bridge.flag.resume",
+    "description": "Aide de l'option --resume de bridge",
+    "other": "jeton de reprise du backend pour reprendre la conversation au démarrage"
+  },
+  {
+    "id": "cli.bridge.flag.model",
+    "description": "Aide de l'option --model de bridge",
+    "other": "identifiant de modèle du catalogue (voir `herrscher models list`) ; vide = chemin historique, le modèle passe dans --cmd"
+  },
+  {
+    "id": "cli.bridge.flag.account",
+    "description": "Aide de l'option --account de bridge",
+    "other": "profil de compte de la connexion du fournisseur (voir `herrscher account list`) ; vide = le défaut du fournisseur, native = la connexion de la machine"
+  },
+  {
+    "id": "cli.bridge.flag.stream",
+    "description": "Aide de l'option --stream de bridge, obsolète",
+    "other": "obsolète, ignoré (accepté pour la compatibilité)"
   }
 ]

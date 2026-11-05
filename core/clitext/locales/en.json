@@ -393,5 +393,100 @@
     "id": "cli.serve.session_failed",
     "description": "Error of a prompt whose session did not answer",
     "other": "session {{.Name}}: {{.Err}}"
+  },
+  {
+    "id": "cli.bridge.flag.session",
+    "description": "Help of the --session flag of bridge",
+    "other": "session name (scopes the orchestrator/attachment dir)"
+  },
+  {
+    "id": "cli.bridge.flag.project",
+    "description": "Help of the --project flag of bridge",
+    "other": "project name, the shared memory scope (P1: every agent of this game recalls it)"
+  },
+  {
+    "id": "cli.bridge.flag.agent",
+    "description": "Help of the --agent flag of bridge",
+    "other": "agent name, the private memory scope (P1: this agent's learned skills)"
+  },
+  {
+    "id": "cli.bridge.flag.project_pinned",
+    "description": "Help of the --project-pinned flag of bridge",
+    "other": "the memory project was chosen by a human, not guessed from a directory: never revise it"
+  },
+  {
+    "id": "cli.bridge.flag.verbose",
+    "description": "Help of the -v flag of bridge",
+    "other": "log activity to stderr"
+  },
+  {
+    "id": "cli.bridge.flag.hub_socket",
+    "description": "Help of the --hub-socket flag of bridge",
+    "other": "unix socket of the daemon hub: when set, run as a pure backend runner (no gateway polling)"
+  },
+  {
+    "id": "cli.bridge.flag.agents_root",
+    "description": "Help of the --agents-root flag of bridge",
+    "other": "directory holding agent homes for the delegation roster (empty = the daemon default beside state.json)"
+  },
+  {
+    "id": "cli.bridge.flag.extractor",
+    "description": "Help of the --extractor flag of bridge",
+    "other": "name of a registered curation extractor. It enables the P1 learning loop (empty = plain Curator, no learning)"
+  },
+  {
+    "id": "cli.bridge.flag.journal",
+    "description": "Help of the --journal flag of bridge",
+    "other": "path to the call journal Consolidate reads (worktree-relative ok); only used with --extractor"
+  },
+  {
+    "id": "cli.bridge.flag.consolidate_every",
+    "description": "Help of the --consolidate-every flag of bridge",
+    "other": "run Consolidate every N turns (0 = manual only); only used with --extractor"
+  },
+  {
+    "id": "cli.bridge.flag.state",
+    "description": "Help of the --state flag of bridge",
+    "other": "path to the daemon state file whose model cache the bridge reads (empty = the default state file)"
+  },
+  {
+    "id": "cli.bridge.flag.env_stdin",
+    "description": "Help of the --env-stdin flag of bridge",
+    "other": "read KEY=VALUE lines from stdin until a blank line and put them in this process's environment (how a remote bridge gets its gateway credentials)"
+  },
+  {
+    "id": "cli.bridge.flag.cmd",
+    "description": "Help of the --cmd flag of bridge",
+    "other": "base command (default 'claude' in stream mode; the per-message program in one-shot mode)"
+  },
+  {
+    "id": "cli.bridge.flag.backend",
+    "description": "Help of the --backend flag of bridge",
+    "other": "responder backend: stream (default) | oneshot"
+  },
+  {
+    "id": "cli.bridge.flag.vendor",
+    "description": "Help of the --vendor flag of bridge",
+    "other": "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)"
+  },
+  {
+    "id": "cli.bridge.flag.resume",
+    "description": "Help of the --resume flag of bridge",
+    "other": "backend resume token to resume the conversation on start"
+  },
+  {
+    "id": "cli.bridge.flag.model",
+    "description": "Help of the --model flag of bridge",
+    "other": "catalog model id (see `herrscher models list`); empty = legacy path, the model rides in --cmd"
+  },
+  {
+    "id": "cli.bridge.flag.account",
+    "description": "Help of the --account flag of bridge",
+    "other": "account profile of the vendor login (see `herrscher account list`); empty = the vendor default, native = the machine login"
+  },
+  {
+    "id": "cli.bridge.flag.stream",
+    "description": "Help of the deprecated --stream flag of bridge",
+    "other": "deprecated, ignored (accepted for backward compatibility)"
   }
 ]

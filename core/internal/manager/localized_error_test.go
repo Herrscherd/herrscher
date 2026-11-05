@@ -32,7 +32,7 @@ func TestLocalizedErrorsKeepAnEnglishErrorAndRenderTheCatalogueOnce(t *testing.T
 			name:         "restart lost in french",
 			err:          restartLostError(i18n.French, "s1", restartErr, rollbackErr),
 			wantError:    restartEnglish,
-			wantRendered: "erreur inattendue : redémarrage backend : agent exited ; le retour arrière a échoué, session s1 hors service : state locked",
+			wantRendered: "erreur inattendue : red\u00e9marrage backend : agent exited ; le retour arrière a échoué, session s1 hors service : state locked",
 			causes:       []error{restartErr, rollbackErr},
 		},
 		{
@@ -75,7 +75,7 @@ func TestLocalizedErrorsRenderTheirCatalogueTextOnce(t *testing.T) {
 		want string
 	}{
 		{"restart lost en", i18n.English, restartLostError(i18n.English, "s1", restartErr, rollbackErr), "unexpected error: backend restart: agent exited; rollback failed, session s1 out of service: state locked"},
-		{"restart lost fr", i18n.French, restartLostError(i18n.French, "s1", restartErr, rollbackErr), "erreur inattendue : redémarrage backend : agent exited ; le retour arrière a échoué, session s1 hors service : state locked"},
+		{"restart lost fr", i18n.French, restartLostError(i18n.French, "s1", restartErr, rollbackErr), "erreur inattendue : red\u00e9marrage backend : agent exited ; le retour arrière a échoué, session s1 hors service : state locked"},
 		{"dirty worktree en", i18n.English, dirtyWorktreeError(i18n.English, "s1", dirtyErr), "unexpected error: worktree has uncommitted changes; commit, or close with force:true to discard (branch session/s1 is kept)"},
 		{"dirty worktree fr", i18n.French, dirtyWorktreeError(i18n.French, "s1", dirtyErr), "erreur inattendue : worktree has uncommitted changes ; fais un commit, ou ferme avec force:true pour l'abandonner (la branche session/s1 est conservée)"},
 	}

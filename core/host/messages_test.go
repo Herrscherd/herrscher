@@ -2,9 +2,11 @@ package host
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -23,6 +25,31 @@ func hostLocaleSource(t *testing.T) fs.FS {
 
 func TestHostCatalogIsParityComplete(t *testing.T) {
 	i18ntest.Check(t, hostLocaleSource(t))
+}
+
+func TestEnglishCatalogDescriptionsAreEnglish(t *testing.T) {
+	raw, err := fs.ReadFile(hostLocaleSource(t), "en.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries []struct {
+		ID          string `json:"id"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		t.Fatal(err)
+	}
+	frenchWords := map[string]bool{"le": true, "la": true, "les": true, "un": true, "une": true, "des": true, "du": true, "de": true, "est": true, "pas": true, "sans": true, "pour": true, "dans": true, "qui": true}
+	for _, entry := range entries {
+		if strings.ContainsAny(entry.Description, "àâçéèêëîïôûùüÿœ") {
+			t.Errorf("%s: description %q is not in English", entry.ID, entry.Description)
+		}
+		for _, word := range strings.Fields(strings.ToLower(entry.Description)) {
+			if frenchWords[strings.Trim(word, ".,;:")] {
+				t.Errorf("%s: description %q is not in English", entry.ID, entry.Description)
+			}
+		}
+	}
 }
 
 func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {

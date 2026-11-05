@@ -14,6 +14,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
@@ -182,7 +183,7 @@ func (h *Handler) sessionSetBudgetRun(_ context.Context, input contracts.Input) 
 			return contracts.Result{}, applyErr
 		}
 	}
-	return contracts.DataResult(fmt.Sprintf("✅ budget updated for %d session(s)", len(targets))), nil
+	return contracts.DataResult(h.text(clitext.SessionBudgetUpdated, clitext.Params{clitext.ParamCount: len(targets)})), nil
 }
 
 func parseBudgetPatch(input contracts.Input) (budgetPatch, error) {
@@ -300,27 +301,24 @@ func sessionJSONRow(session state.Session) sessionJSON {
 	}
 }
 
-func sessionBanner(repo, name, worktree, branch, cmd, modelID string, shared bool) string {
-	banner := fmt.Sprintf("🚀 Session **%s** ready.\n", name)
+func (h *Handler) sessionBanner(lang i18n.Language, repo, name, worktree, branch, cmd, modelID string, shared bool) string {
+	banner := h.textIn(lang, clitext.SessionBannerReady, clitext.Params{clitext.ParamName: name}) + "\n"
 	if repo == "" {
-		banner += "• Project: **(cwd)**\n"
+		banner += h.textIn(lang, clitext.SessionBannerProjectCwd, nil) + "\n"
 	} else {
-		banner += fmt.Sprintf("• Project: **%s** (%#q)\n", filepath.Base(repo), repo)
+		banner += h.textIn(lang, clitext.SessionBannerProject, clitext.Params{clitext.ParamName: filepath.Base(repo), clitext.ParamRepo: fmt.Sprintf("%#q", repo)}) + "\n"
 	}
 	switch {
 	case worktree != "":
-		banner += "• Mode: isolated worktree\n"
-		banner += fmt.Sprintf("• Worktree: %#q\n", worktree)
-		banner += fmt.Sprintf("• Branch: %#q\n", branch)
+		banner += h.textIn(lang, clitext.SessionBannerWorktree, clitext.Params{clitext.ParamPath: fmt.Sprintf("%#q", worktree), clitext.ParamBranch: fmt.Sprintf("%#q", branch)}) + "\n"
 	case shared:
-		banner += "• Mode: shared (main checkout)\n"
-		banner += "• Branch: none (runs on current branch)\n"
+		banner += h.textIn(lang, clitext.SessionBannerShared, nil) + "\n"
 	default:
-		banner += "• Mode: shared (not a git repo)\n"
+		banner += h.textIn(lang, clitext.SessionBannerNotGit, nil) + "\n"
 	}
-	banner += fmt.Sprintf("• Command: %#q", cmd)
+	banner += h.textIn(lang, clitext.SessionBannerCommand, clitext.Params{clitext.ParamCommand: fmt.Sprintf("%#q", cmd)})
 	if modelID != "" {
-		banner += fmt.Sprintf("\n• Model: %#q", modelID)
+		banner += h.textIn(lang, clitext.SessionBannerModel, clitext.Params{clitext.ParamModel: fmt.Sprintf("%#q", modelID)})
 	}
 	return banner
 }
@@ -417,9 +415,9 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 		return contracts.Result{}, fmt.Errorf("persist: %w", err)
 	}
 	h.sup.Start(sess)
-	banner := sessionBanner(place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared)
+	banner := h.sessionBanner(h.noticeLanguage(req.lang), place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared)
 	h.warnIfFailed(req.admin.Send(ctx, sess.ChannelID, banner), "send banner for "+req.name)
-	return contracts.DataResult(fmt.Sprintf("✅ Running on %s.\n\n%s%s", req.admin.ChannelRef(sess.ChannelID), banner, approvalsNote)), nil
+	return contracts.DataResult(h.text(clitext.SessionRunning, clitext.Params{clitext.ParamChannel: req.admin.ChannelRef(sess.ChannelID), clitext.ParamBanner: banner, clitext.ParamApprovals: approvalsNote})), nil
 }
 
 func (h *Handler) placeSession(ctx context.Context, input contracts.Input, req *createRequest) (placement, error) {
@@ -466,7 +464,7 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 		return createRequest{}, &SessionExistsError{Name: name}
 	}
 	if n := len(h.st.SnapshotSessions()); n >= maxSessions {
-		return createRequest{}, fmt.Errorf("%w (%d): close a session before creating another", ErrSessionLimit, maxSessions)
+		return createRequest{}, &SessionLimitError{Max: maxSessions}
 	}
 	terminalOnly := input.Bool("terminal_only")
 	adopted, _ := input.Lookup("channel_id")
@@ -828,19 +826,15 @@ func (h *Handler) approvalsNote(ctx context.Context, req createRequest, space wo
 	gate := h.gateFor(vendor)
 	switch {
 	case !gate.enforced:
-		why := gate.why
-		if why == "" {
-			why = "it exposes no approval channel"
-		}
-		return fmt.Sprintf("\n\n⚠️ approvals: %#q cannot enforce them (%s), so **%s** runs ungated.", vendorLabel(vendor), why, name)
+		return "\n\n" + h.text(clitext.SessionApprovalsUnenforced, clitext.Params{clitext.ParamVendor: fmt.Sprintf("%#q", vendorLabel(vendor)), clitext.ParamWhy: h.gateReason(gate), clitext.ParamName: name})
 	case req.shared || space.path == "":
-		return fmt.Sprintf("\n\n⚠️ approvals: a shared session has no isolated worktree to gate, so **%s** runs ungated.", name)
+		return "\n\n" + h.text(clitext.SessionApprovalsShared, clitext.Params{clitext.ParamName: name})
 	case req.hostName != "" && agentName == "":
-		return fmt.Sprintf("\n\n⚠️ approvals: a remote session without an agent has no materialization channel, so **%s** runs ungated.", name)
+		return "\n\n" + h.text(clitext.SessionApprovalsRemoteNoAgent, clitext.Params{clitext.ParamName: name})
 	case agentName == "":
 		if err := agent.MaterializeHook(ctx, space.path, agent.SelfBin()); err != nil {
 			h.log.Warn("materialize hook failed", "session", name, "err", err)
-			return fmt.Sprintf("\n\n⚠️ approvals: the hook could not be written (%v), so **%s** runs ungated.", err, name)
+			return "\n\n" + h.text(clitext.SessionApprovalsHookFailed, clitext.Params{clitext.ParamErr: err.Error(), clitext.ParamName: name})
 		}
 	}
 	return ""
@@ -928,7 +922,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 		force := input.Bool("force")
 		if err := wtRoot.Remove(ctx, repo, name, force); err != nil {
 			h.sup.Start(sess)
-			return contracts.Result{}, fmt.Errorf("%w; commit, or close with force:true to discard (branch session/%s is kept)", err, name)
+			return contracts.Result{}, dirtyWorktreeError(h.lang, name, err)
 		}
 	}
 	note := h.tidyChannel(ctx, sess)
@@ -940,7 +934,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 	h.warnIfFailed(state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name)), "remove participants of "+name)
 	h.warnIfFailed(state.RemoveTranscript(state.TranscriptPath(h.partDir, name)), "remove transcript of "+name)
 	if note != "" {
-		return contracts.DataResult(fmt.Sprintf("🗄️ Session **%s** closed.%s", name, note)), nil
+		return contracts.DataResult(h.text(clitext.SessionClosed, clitext.Params{clitext.ParamName: name}) + note), nil
 	}
 	return contracts.NoticeResult(sessionNotice(contracts.CodeSessionClosed, name)), nil
 }
@@ -959,7 +953,7 @@ func (h *Handler) sessionArchiveRun(ctx context.Context, input contracts.Input) 
 	if err := h.st.SetArchived(name, true); err != nil {
 		return contracts.Result{}, fmt.Errorf("persist: %w", err)
 	}
-	return contracts.DataResult(fmt.Sprintf("📦 Session **%s** archived. Resume it from /resume.%s", name, note)), nil
+	return contracts.DataResult(h.text(clitext.SessionArchived, clitext.Params{clitext.ParamName: name}) + note), nil
 }
 
 func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
@@ -967,7 +961,7 @@ func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
 		return ""
 	}
 	if err := h.adminFor(sess).Archive(ctx, sess.ChannelID); err != nil {
-		return fmt.Sprintf("\n⚠️ le salon est resté ouvert : %v", err)
+		return "\n" + h.text(clitext.SessionChannelLeftOpen, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	return ""
 }
@@ -990,7 +984,7 @@ func (h *Handler) sessionRenameRun(_ context.Context, input contracts.Input) (co
 		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	if target == name {
-		return contracts.DataResult(fmt.Sprintf("session **%s** porte déjà ce nom", name)), nil
+		return contracts.DataResult(h.text(clitext.SessionRenameSameName, clitext.Params{clitext.ParamName: name})), nil
 	}
 	if _, taken := h.st.FindSession(target); taken {
 		return contracts.Result{}, &SessionExistsError{Name: target}
@@ -1002,17 +996,21 @@ func (h *Handler) sessionRenameRun(_ context.Context, input contracts.Input) (co
 	}
 	note := ""
 	if err := state.MoveSessionFile(state.TranscriptPath(h.partDir, name), state.TranscriptPath(h.partDir, target)); err != nil {
-		note += fmt.Sprintf("\n⚠️ le transcript est resté sous %#q : %v", name, err)
+		note += "\n" + h.text(clitext.SessionTranscriptLeft, clitext.Params{clitext.ParamName: quoted(name), clitext.ParamErr: err.Error()})
 	}
 	if err := state.MoveSessionFile(state.ParticipantsPath(h.partDir, name), state.ParticipantsPath(h.partDir, target)); err != nil {
-		note += fmt.Sprintf("\n⚠️ le journal des participants est resté sous %#q : %v", name, err)
+		note += "\n" + h.text(clitext.SessionParticipantsLeft, clitext.Params{clitext.ParamName: quoted(name), clitext.ParamErr: err.Error()})
 	}
 	if sc := scheduleOwning(h.st.SnapshotSchedules(), name); sc != "" {
-		note += fmt.Sprintf("\n⚠️ l'horaire %#q possède cette session par son nom : sa prochaine fenêtre en rouvrira une sous %#q.", sc, name)
+		note += "\n" + h.text(clitext.SessionScheduleOwnsSession, clitext.Params{clitext.ParamSchedule: quoted(sc), clitext.ParamName: quoted(name)})
 	}
 	sess.Name = target
 	h.sup.Start(sess)
-	return contracts.DataResult(fmt.Sprintf("✎ Session **%s** renommée en **%s**.%s", name, target, note)), nil
+	return contracts.DataResult(h.text(clitext.SessionRenamed, clitext.Params{clitext.ParamName: name, clitext.ParamTo: target}) + note), nil
+}
+
+func quoted(value string) string {
+	return fmt.Sprintf("%#q", value)
 }
 
 func scheduleOwning(schedules []schedule.Schedule, session string) string {
@@ -1039,7 +1037,7 @@ func (h *Handler) sessionResumeRun(_ context.Context, input contracts.Input) (co
 	}
 	sess.Archived = false
 	h.sup.Start(sess)
-	return contracts.DataResult(fmt.Sprintf("⟲ Session **%s** resumed.", name)), nil
+	return contracts.DataResult(h.text(clitext.SessionResumed, clitext.Params{clitext.ParamName: name})), nil
 }
 
 func (h *Handler) sessionSwitchRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
@@ -1092,32 +1090,28 @@ func (h *Handler) switchApprovalsNote(sess state.Session) string {
 	if gate.enforced {
 		return ""
 	}
-	why := gate.why
-	if why == "" {
-		why = "it exposes no approval channel"
-	}
-	return fmt.Sprintf("\n\n⚠️ approvals: %#q cannot enforce them (%s), so **%s** now runs ungated.", vendorLabel(sess.Vendor), why, sess.Name)
+	return "\n\n" + h.text(clitext.SessionApprovalsUnenforcedNow, clitext.Params{clitext.ParamVendor: fmt.Sprintf("%#q", vendorLabel(sess.Vendor)), clitext.ParamWhy: h.gateReason(gate), clitext.ParamName: sess.Name})
 }
 
 func (h *Handler) revertSwitch(name string, prior state.Session, restartErr error) error {
 	if rbErr := h.rollbackSwitch(name, prior.Vendor, prior.Cmd, prior.ModelID, prior.ResumeToken); rbErr != nil {
-		return fmt.Errorf("redémarrage backend: %w; rollback échoué, session %s hors service: %w", restartErr, name, rbErr)
+		return restartLostError(h.lang, name, restartErr, rbErr)
 	}
-	return fmt.Errorf("redémarrage backend: %w (session %s restaurée sur %s)", restartErr, name, prior.Vendor)
+	return clitext.Failure(h.lang, restartErr, clitext.SessionSwitchRestartRestored, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: prior.Vendor, clitext.ParamErr: restartErr.Error()})
 }
 
 func (h *Handler) switchReply(ctx context.Context, name, vendor, handoff, switchNote string) string {
 	if handoff == "none" {
-		return fmt.Sprintf("session %s re-ciblée sur %s (sans reprise)%s", name, vendor, switchNote)
+		return h.text(clitext.SessionSwitchedNoResume, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: vendor, clitext.ParamNote: switchNote})
 	}
 	seedText := buildHandoffSeed(
 		state.ReadTranscript(state.TranscriptPath(h.partDir, name), sessionLogTranscriptCap),
 		handoff,
 	)
 	if seedText != "" && h.seed != nil && !h.injectSeed(ctx, name, seedText) {
-		return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s non confirmée)%s", name, vendor, handoff, switchNote)
+		return h.text(clitext.SessionSwitchUnconfirmed, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: vendor, clitext.ParamHandoff: handoff, clitext.ParamNote: switchNote})
 	}
-	return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s)%s", name, vendor, handoff, switchNote)
+	return h.text(clitext.SessionSwitchedResumed, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: vendor, clitext.ParamHandoff: handoff, clitext.ParamNote: switchNote})
 }
 
 const seedRetryDelay = 150 * time.Millisecond
@@ -1166,10 +1160,10 @@ func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (cont
 		return contracts.DataResult(string(b)), err
 	}
 	if len(sessions) == 0 {
-		return contracts.DataResult("No active sessions."), nil
+		return contracts.DataResult(h.text(clitext.SessionListEmpty, nil)), nil
 	}
 	var out strings.Builder
-	out.WriteString("Active sessions:\n")
+	out.WriteString(h.text(clitext.SessionListHeader, nil) + "\n")
 	for i := range sessions {
 		s := sessions[i]
 		fmt.Fprintf(&out, "• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
@@ -1194,10 +1188,10 @@ func (h *Handler) sessionWhoRun(_ context.Context, input contracts.Input) (contr
 	}
 	ids := state.ReadParticipants(state.ParticipantsPath(h.partDir, name))
 	if len(ids) == 0 {
-		return contracts.DataResult("Personne n'a encore écrit dans cette session."), nil
+		return contracts.DataResult(h.text(clitext.SessionWhoEmpty, nil)), nil
 	}
 	var out strings.Builder
-	fmt.Fprintf(&out, "Participants observed in **%s**:\n", name)
+	out.WriteString(h.text(clitext.SessionWhoHeader, clitext.Params{clitext.ParamName: name}) + "\n")
 	for _, id := range ids {
 		fmt.Fprintf(&out, "• <@%s>\n", id)
 	}
@@ -1224,7 +1218,7 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contr
 		if input.JSON {
 			return contracts.DataResult("[]"), nil
 		}
-		return contracts.DataResult("No transcript yet."), nil
+		return contracts.DataResult(h.text(clitext.SessionLogEmpty, nil)), nil
 	}
 	limit := sessionLogTranscriptCap
 	if lraw, ok := input.Lookup("limit"); ok {
@@ -1241,7 +1235,7 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contr
 		return contracts.DataResult(string(b)), err
 	}
 	if len(entries) == 0 {
-		return contracts.DataResult("No transcript yet."), nil
+		return contracts.DataResult(h.text(clitext.SessionLogEmpty, nil)), nil
 	}
 	var out strings.Builder
 	for _, e := range entries {

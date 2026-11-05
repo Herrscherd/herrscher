@@ -16,9 +16,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/Herrscherd/herrscher/internal/errwriter"
@@ -26,6 +28,8 @@ import (
 	"golang.org/x/term"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/manage"
 )
@@ -66,7 +70,7 @@ func run() int {
 
 	if task, ok := promptOf(cmd, args); ok {
 		if task.Text == "" {
-			fmt.Fprintf(os.Stderr, "herrscher: %s needs a task, e.g. herrscher %s refactor\n", cmd, cmd)
+			fmt.Fprintln(os.Stderr, render(clitext.ClientLanguage(), clitext.TaskNeedsText, clitext.Params{clitext.ParamVerb: cmd}))
 			return exitUsage
 		}
 		return reportOutcome(ctx, runPrompt(ctx, task))
@@ -78,7 +82,9 @@ func run() int {
 
 	switch cmd {
 	case "-h", "--help", "help":
-		usage()
+		if err := usage(clitext.ClientLanguage()); err != nil {
+			return reportError(err)
+		}
 		return 0
 	}
 
@@ -118,11 +124,12 @@ func loadHostEnv() error {
 	if err := os.Setenv("HERRSCHER_ENV_FILE", envPath); err != nil {
 		return err
 	}
-	if err := loadEnvFile(envPath); err != nil {
+	lang := clitext.ClientLanguage()
+	if err := loadEnvFile(envPath, lang); err != nil {
 		if explicit {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "herrscher: "+err.Error()+" (continuing)")
+		fmt.Fprintln(os.Stderr, render(lang, clitext.EnvContinuing, clitext.Params{clitext.ParamErr: err.Error()}))
 	}
 	return nil
 }
@@ -131,7 +138,9 @@ func runWithoutCommand(ctx context.Context) error {
 	if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
 		return runServe(ctx, nil, nil)
 	}
-	usage()
+	if err := usage(clitext.ClientLanguage()); err != nil {
+		return err
+	}
 	return exitStatusError{code: exitUsage}
 }
 
@@ -190,10 +199,13 @@ func runCommand(ctx context.Context, cmd string, args []string) error {
 }
 
 func runForwarded(ctx context.Context, cmd string, args []string) error {
-	out, code, derr := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
+	lang := clitext.ClientLanguage()
+	out, code, derr := dispatchUnknown(ctx, lang, cmd, args, forwardUnknownVerb)
 	if code != 0 {
-		fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
-		usage()
+		fmt.Fprintln(os.Stderr, render(lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: derr.Error()}))
+		if err := usage(lang); err != nil {
+			return err
+		}
 		return exitStatusError{code: code}
 	}
 	if derr != nil {
@@ -222,21 +234,25 @@ func reportError(err error) int {
 	if errors.As(err, &status) {
 		return status.code
 	}
-	fmt.Fprintln(os.Stderr, "herrscher: "+err.Error())
+	fmt.Fprintln(os.Stderr, render(clitext.ClientLanguage(), clitext.ErrorLine, clitext.Params{clitext.ParamMessage: err.Error()}))
 	return 1
 }
 
-func dispatchUnknown(ctx context.Context, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (string, int, error) {
+func dispatchUnknown(ctx context.Context, lang i18n.Language, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (string, int, error) {
 	out, handled, derr := fwd(ctx, append([]string{cmd}, args...))
 	if !handled {
-		return "", exitUsage, fmt.Errorf("%w %q", errUnknownCommand, cmd)
+		return "", exitUsage, renderError(lang, errUnknownCommand, clitext.CommandUnknown, clitext.Params{clitext.ParamName: strconv.Quote(cmd)})
 	}
 	return out, 0, derr
 }
 
 func channelFlag(flags *flag.FlagSet) *string {
-	channel := flags.String("channel", "", "conversation id this bridge answers in")
-	flags.StringVar(channel, "c", "", "channel id (shorthand)")
+	translator := clitext.For(clitext.ClientLanguage())
+	channel := flags.String("channel", "", translator.Text(clitext.FlagChannel, nil))
+	flags.StringVar(channel, "c", "", translator.Text(clitext.FlagChannelShort, nil))
+	if err := translator.Err(); err != nil {
+		slog.Error("channel flag help", "err", err)
+	}
 	return channel
 }
 
@@ -255,7 +271,7 @@ func runWhoami(ctx context.Context, args []string) error {
 	asJSON := false
 	for _, arg := range args {
 		if arg != argJSON {
-			return fmt.Errorf("whoami: %w %q (only --json)", errUnknownArgument, arg)
+			return renderError(clitext.ClientLanguage(), errUnknownArgument, clitext.WhoamiUnknownArgument, clitext.Params{clitext.ParamArg: strconv.Quote(arg)})
 		}
 		asJSON = true
 	}
@@ -273,3 +289,29 @@ func writeFailureCode(w *errwriter.Writer) int {
 	}
 	return 0
 }
+
+func render(lang i18n.Language, key clitext.Key, params clitext.Params) string {
+	translator := clitext.For(lang)
+	text := translator.Text(key, params)
+	if err := translator.Err(); err != nil {
+		slog.Error("render message", "key", key, "err", err)
+	}
+	return text
+}
+
+func renderError(lang i18n.Language, cause error, key clitext.Key, params clitext.Params) error {
+	text, err := clitext.Text(lang, key, params)
+	if err != nil {
+		return err
+	}
+	return renderedError{text: text, cause: cause}
+}
+
+type renderedError struct {
+	text  string
+	cause error
+}
+
+func (e renderedError) Error() string { return e.text }
+
+func (e renderedError) Unwrap() error { return e.cause }

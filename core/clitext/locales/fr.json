@@ -1,0 +1,1430 @@
+[
+  {
+    "id": "cli.usage.group.start",
+    "description": "Titre des commandes qui lancent une session",
+    "other": "DÉMARRER"
+  },
+  {
+    "id": "cli.usage.group.sessions",
+    "description": "Titre des commandes sur les sessions, les agents et les machines",
+    "other": "SESSIONS ET AGENTS"
+  },
+  {
+    "id": "cli.usage.group.daemon",
+    "description": "Titre des commandes sur le démon et son service",
+    "other": "DÉMON ET SERVICE"
+  },
+  {
+    "id": "cli.usage.group.setup",
+    "description": "Titre des commandes d'installation et de maintenance",
+    "other": "INSTALLATION ET MAINTENANCE"
+  },
+  {
+    "id": "cli.usage.start.task",
+    "description": "Ligne d'aide : ouvrir une session sur une tâche dans le TUI",
+    "other": "ouvre une session sur cette tâche, dans le TUI"
+  },
+  {
+    "id": "cli.usage.start.print",
+    "description": "Ligne d'aide : jouer un seul tour et afficher la réponse",
+    "other": "idem, mais joue un seul tour et affiche la réponse"
+  },
+  {
+    "id": "cli.usage.start.tui",
+    "description": "Ligne d'aide : ouvrir le TUI terminal multi-sessions",
+    "other": "ouvre le TUI terminal multi-sessions"
+  },
+  {
+    "id": "cli.usage.start.version",
+    "description": "Ligne d'aide : afficher la version du binaire",
+    "other": "affiche la version du binaire"
+  },
+  {
+    "id": "cli.usage.start.init",
+    "description": "Ligne d'aide : composer la pile de plugins et les secrets",
+    "other": "compose la pile de plugins et les secrets (assistant)"
+  },
+  {
+    "id": "cli.usage.session.verbs",
+    "description": "Ligne d'aide : les verbes de session",
+    "other": "canal relié + worktree + backend"
+  },
+  {
+    "id": "cli.usage.agent.verbs",
+    "description": "Ligne d'aide : les verbes d'agent",
+    "other": "agents compagnons durables (persona/MCP)"
+  },
+  {
+    "id": "cli.usage.host.verbs",
+    "description": "Ligne d'aide : les verbes de machine",
+    "other": "machines où une session peut tourner (`session create --host`)"
+  },
+  {
+    "id": "cli.usage.approve.verbs",
+    "description": "Ligne d'aide : les verbes d'approbation",
+    "other": "actions qui attendent l'accord d'un humain avant de s'exécuter"
+  },
+  {
+    "id": "cli.usage.memory.verbs",
+    "description": "Ligne d'aide : les verbes de mémoire",
+    "other": "inspecte et modifie le graphe de mémoire"
+  },
+  {
+    "id": "cli.usage.models.verbs",
+    "description": "Ligne d'aide : le verbe des modèles",
+    "other": "liste les modèles proposés par les backends compilés"
+  },
+  {
+    "id": "cli.usage.serve",
+    "description": "Ligne d'aide : serve",
+    "other": "démon passerelle permanent (24/7)"
+  },
+  {
+    "id": "cli.usage.bridge",
+    "description": "Ligne d'aide : bridge",
+    "other": "relie un canal à une seule commande"
+  },
+  {
+    "id": "cli.usage.service",
+    "description": "Ligne d'aide : service",
+    "other": "lance serve comme service de démarrage natif"
+  },
+  {
+    "id": "cli.usage.commands",
+    "description": "Ligne d'aide : commands",
+    "other": "chaque verbe accepté par le démon en cours (nécessite `serve`)"
+  },
+  {
+    "id": "cli.usage.plugin.verbs",
+    "description": "Ligne d'aide : les verbes de plugin",
+    "other": "modifie l'ensemble des plugins compilés et recompile"
+  },
+  {
+    "id": "cli.usage.update",
+    "description": "Ligne d'aide : update",
+    "other": "met à jour chaque plugin non épinglé, recompile et réinstalle"
+  },
+  {
+    "id": "cli.usage.install",
+    "description": "Ligne d'aide : install",
+    "other": "compile, puis installe le service"
+  },
+  {
+    "id": "cli.usage.help.footer",
+    "description": "Indication sous les lignes d'aide, sur l'aide de chaque commande",
+    "other": "Lance `herrscher <commande> --help` pour voir les options de chaque commande."
+  },
+  {
+    "id": "cli.usage.env.owner",
+    "description": "Ligne de variables : le propriétaire et le dossier d'état",
+    "other": "     HERRSCHER_OWNER_ID (repli sur l'identifiant d'instance), HERRSCHER_STATE_DIR (dossier d'état)"
+  },
+  {
+    "id": "cli.usage.env.route",
+    "description": "Ligne de variables : la politique de routage",
+    "other": "     HERRSCHER_ROUTE_POLICY=gateway-only (n'offre que les modèles passerelle)"
+  },
+  {
+    "id": "cli.usage.env.gateway",
+    "description": "Ligne de variables : l'URL et le jeton de la passerelle",
+    "other": "     NEUBLOX_GATEWAY_URL + NEUBLOX_GATEWAY_TOKEN (les deux, sinon une session passerelle échoue)"
+  },
+  {
+    "id": "cli.usage.env.default_model",
+    "description": "Ligne de variables : le modèle par défaut",
+    "other": "     HERRSCHER_DEFAULT_MODEL (modèle pris quand `session create` n'en nomme aucun)"
+  },
+  {
+    "id": "cli.usage.env.init",
+    "description": "Ligne de variables : `herrscher init` pose les questions",
+    "other": "     `herrscher init` pose ces trois questions, inutile de les écrire à la main"
+  },
+  {
+    "id": "cli.task.needs_text",
+    "description": "Erreur quand un prompt sans verbe n'a pas de texte",
+    "other": "herrscher : {{.Verb}} attend une tâche, par exemple herrscher {{.Verb}} refactor"
+  },
+  {
+    "id": "cli.error.line",
+    "description": "Ligne écrite sur la sortie d'erreur avant qu'une commande échoue",
+    "other": "herrscher : {{.Message}}"
+  },
+  {
+    "id": "cli.command.unknown",
+    "description": "Erreur pour une commande qu'aucun verbe ne prend en charge",
+    "other": "commande inconnue {{.Name}}"
+  },
+  {
+    "id": "cli.whoami.unknown_argument",
+    "description": "Erreur pour un argument que whoami n'accepte pas",
+    "other": "whoami : argument inconnu {{.Arg}} (seulement --json)"
+  },
+  {
+    "id": "cli.env.continuing",
+    "description": "Avertissement quand le fichier d'environnement par défaut est illisible",
+    "other": "herrscher : {{.Err}} (le démarrage se poursuit)"
+  },
+  {
+    "id": "cli.env.open_failed",
+    "description": "Erreur quand un fichier d'environnement nommé explicitement ne s'ouvre pas",
+    "other": "ouverture du fichier d'environnement : {{.Err}}"
+  },
+  {
+    "id": "cli.env.set_failed",
+    "description": "Erreur quand une variable du fichier d'environnement ne peut pas être définie",
+    "other": "définition de {{.Key}} : {{.Err}}"
+  },
+  {
+    "id": "cli.flag.channel",
+    "description": "Aide de l'option --channel de bridge",
+    "other": "identifiant de la conversation à laquelle répond ce pont"
+  },
+  {
+    "id": "cli.flag.channel_short",
+    "description": "Aide du raccourci -c de l'option de canal",
+    "other": "identifiant du canal (raccourci)"
+  },
+  {
+    "id": "cli.plugin_host.flag.category",
+    "description": "Aide de l'option --category de plugin-host",
+    "other": "catégorie de plugin à héberger (par exemple memory, orchestrator)"
+  },
+  {
+    "id": "cli.plugin_host.flag.nats",
+    "description": "Aide de l'option --nats de plugin-host",
+    "other": "URL du serveur NATS"
+  },
+  {
+    "id": "cli.plugin_host.flag.instance",
+    "description": "Aide de l'option --instance de plugin-host",
+    "other": "identifiant d'instance du processus"
+  },
+  {
+    "id": "cli.plugin_host.unsupported_category",
+    "description": "Erreur pour une catégorie que plugin-host ne sait pas héberger",
+    "other": "plugin-host : catégorie non prise en charge {{.Category}}"
+  },
+  {
+    "id": "cli.plugin_host.no_skeleton",
+    "description": "Erreur pour une catégorie admise par le filtre mais sans squelette",
+    "other": "plugin-host : la catégorie {{.Category}} est prise en charge mais n'a pas de squelette"
+  },
+  {
+    "id": "cli.plugin_host.failed",
+    "description": "Erreur relayée par plugin-host",
+    "other": "plugin-host : {{.Err}}"
+  },
+  {
+    "id": "cli.plugin_host.orchestrator",
+    "description": "Erreur du plugin orchestrateur",
+    "other": "plugin-host orchestrateur : {{.Err}}"
+  },
+  {
+    "id": "cli.plugin_host.backend",
+    "description": "Erreur du plugin backend",
+    "other": "plugin-host backend : {{.Err}}"
+  },
+  {
+    "id": "cli.plugin_host.no_orchestrator",
+    "description": "Erreur quand aucun plugin orchestrateur n'est enregistré",
+    "other": "plugin-host : aucun plugin orchestrateur enregistré"
+  },
+  {
+    "id": "cli.plugin_host.no_backend",
+    "description": "Erreur quand aucun plugin backend n'est enregistré",
+    "other": "plugin-host : aucun plugin backend enregistré"
+  },
+  {
+    "id": "cli.skills.retire_failed",
+    "description": "Avertissement quand les compétences plus livrées ne peuvent pas être retirées",
+    "other": "herrscher : retrait des compétences qui ne sont plus livrées : {{.Err}}"
+  },
+  {
+    "id": "cli.skills.removed",
+    "description": "Notice d'une compétence retirée parce qu'aucune version ne la livre plus",
+    "other": "herrscher : compétence {{.Name}} retirée, aucune version ne la livre plus"
+  },
+  {
+    "id": "cli.skills.retired_diverged",
+    "description": "Notice d'une compétence retirée, modifiée localement et laissée telle quelle",
+    "other": "herrscher : la compétence {{.Name}} n'est plus livrée et a été modifiée ici ; elle est laissée telle quelle, supprime {{.Path}} pour la retirer"
+  },
+  {
+    "id": "cli.skills.retired_linked",
+    "description": "Notice d'une compétence retirée qui est un lien symbolique, laissée telle quelle",
+    "other": "herrscher : la compétence {{.Name}} est ici un lien symbolique ; elle est laissée telle quelle, supprime {{.Path}} pour retirer le lien"
+  },
+  {
+    "id": "cli.skills.installed",
+    "description": "Notice d'une compétence de plugin installée pour la première fois",
+    "other": "herrscher : compétence de plugin {{.Name}} installée"
+  },
+  {
+    "id": "cli.skills.updated",
+    "description": "Notice d'une compétence de plugin mise à la version livrée",
+    "other": "herrscher : compétence de plugin {{.Name}} mise à jour vers la version livrée"
+  },
+  {
+    "id": "cli.skills.diverged",
+    "description": "Notice d'une compétence de plugin qui diffère de la version livrée, laissée telle quelle",
+    "other": "herrscher : la compétence de plugin {{.Name}} diffère de celle livrée par cette version et a été laissée telle quelle ; supprime {{.Path}} pour reprendre la version livrée"
+  },
+  {
+    "id": "cli.skills.linked",
+    "description": "Notice d'une compétence de plugin qui est un lien symbolique, laissée telle quelle",
+    "other": "herrscher : la compétence de plugin {{.Name}} est ici un lien symbolique ; elle est laissée telle quelle, supprime {{.Path}} pour reprendre la version livrée"
+  },
+  {
+    "id": "cli.skills.not_configured",
+    "description": "Notice d'un plugin de compétences ignoré faute de configuration",
+    "other": "herrscher : compétences non configurées, ignorées : {{.Kind}} : {{.Err}}"
+  },
+  {
+    "id": "cli.skills.plugin_failed",
+    "description": "Notice d'un plugin qui n'a fourni aucune compétence",
+    "other": "herrscher : aucune compétence du plugin {{.Kind}} : {{.Err}}"
+  },
+  {
+    "id": "cli.skills.no_content",
+    "description": "Notice d'un plugin dont la fabrique n'a fourni aucun contenu de compétence",
+    "other": "herrscher : aucune compétence du plugin {{.Kind}} : sa fabrique n'a fourni aucun contenu de compétence"
+  },
+  {
+    "id": "cli.skills.install_failed",
+    "description": "Notice d'un plugin dont les compétences ne peuvent pas être installées",
+    "other": "herrscher : installation des compétences du plugin {{.Kind}} : {{.Err}}"
+  },
+  {
+    "id": "cli.skills.duplicate",
+    "description": "Notice d'une compétence écartée parce qu'un autre plugin en livre une de ce nom",
+    "other": "herrscher : la compétence {{.Name}} du plugin {{.Kind}} a été écartée : le plugin {{.Owner}} en livre déjà une de ce nom"
+  },
+  {
+    "id": "cli.attach.not_available",
+    "description": "Erreur pour une commande que le terminal attaché n'exécute pas",
+    "other": "commande {{.Verb}} indisponible depuis le terminal (autorisées : session, agent)"
+  },
+  {
+    "id": "cli.attach.no_session",
+    "description": "Notice dans un onglet attaché dont la session a disparu",
+    "other": "herrscher : aucune session n'est plus liée à cet onglet"
+  },
+  {
+    "id": "cli.serve.flag.config",
+    "description": "Aide de l'option --config de serve",
+    "other": "chemin du fichier config.json déclaratif (facultatif)"
+  },
+  {
+    "id": "cli.serve.flag.state",
+    "description": "Aide de l'option --state de serve",
+    "other": "chemin du fichier d'état du démon"
+  },
+  {
+    "id": "cli.serve.flag.cmd",
+    "description": "Aide de l'option --cmd de serve",
+    "other": "commande de base reliée par le pont pour les nouvelles sessions (le mode stream-json ajoute -p et les options de flux)"
+  },
+  {
+    "id": "cli.serve.flag.health_addr",
+    "description": "Aide de l'option --health-addr de serve",
+    "other": "si elle est renseignée (par exemple :8787), sert GET /health"
+  },
+  {
+    "id": "cli.serve.flag.status_channel",
+    "description": "Aide de l'option --status-channel de serve",
+    "other": "si renseigné, maintient à jour à cet emplacement un message d'état qui se rafraîchit seul"
+  },
+  {
+    "id": "cli.serve.attach_failed",
+    "description": "Ligne d'erreur quand serve ne peut pas s'attacher au démon déjà lancé",
+    "other": "herrscher : impossible de s'attacher au démon en cours : {{.Err}}"
+  },
+  {
+    "id": "cli.serve.gateway_skipped",
+    "description": "Ligne d'erreur pour une passerelle écartée parce que sa configuration est absente",
+    "other": "herrscher : passerelle non configurée, ignorée : {{.Failure}}"
+  },
+  {
+    "id": "cli.serve.gateway_retrying",
+    "description": "Ligne d'erreur pour une passerelle encore indisponible au démarrage, avant le prochain essai",
+    "other": "herrscher : passerelle pas encore prête : {{.Failure}} ; nouvel essai dans {{.Wait}}"
+  },
+  {
+    "id": "cli.serve.gateway_unavailable",
+    "description": "Ligne d'erreur pour une passerelle restée indisponible au démarrage",
+    "other": "herrscher : passerelle indisponible : {{.Failure}}"
+  },
+  {
+    "id": "cli.serve.gateway_commands",
+    "description": "Erreur quand les commandes des passerelles ne peuvent pas être rattachées",
+    "other": "commandes de passerelle : {{.Err}}"
+  },
+  {
+    "id": "cli.serve.no_gateway",
+    "description": "Erreur quand aucune passerelle ne peut être construite pour une commande de l'opérateur",
+    "other": "aucune passerelle construite"
+  },
+  {
+    "id": "cli.serve.session_started",
+    "description": "Ligne d'erreur qui nomme la session ouverte par un prompt",
+    "other": "session : {{.Name}}"
+  },
+  {
+    "id": "cli.serve.session_failed",
+    "description": "Erreur d'un prompt dont la session n'a pas répondu",
+    "other": "session {{.Name}} : {{.Err}}"
+  },
+  {
+    "id": "cli.bridge.flag.session",
+    "description": "Aide de l'option --session de bridge",
+    "other": "nom de la session (cloisonne le dossier de l'orchestrateur et des pièces jointes)"
+  },
+  {
+    "id": "cli.bridge.flag.project",
+    "description": "Aide de l'option --project de bridge",
+    "other": "nom du projet, portée de mémoire partagée (P1 : chaque agent de ce jeu s'en souvient)"
+  },
+  {
+    "id": "cli.bridge.flag.agent",
+    "description": "Aide de l'option --agent de bridge",
+    "other": "nom de l'agent, portée de mémoire privée (P1 : les compétences apprises par cet agent)"
+  },
+  {
+    "id": "cli.bridge.flag.project_pinned",
+    "description": "Aide de l'option --project-pinned de bridge",
+    "other": "le projet de mémoire a été choisi par un humain, non deviné d'après un dossier : ne jamais le réviser"
+  },
+  {
+    "id": "cli.bridge.flag.verbose",
+    "description": "Aide de l'option -v de bridge",
+    "other": "journalise l'activité sur la sortie d'erreur"
+  },
+  {
+    "id": "cli.bridge.flag.hub_socket",
+    "description": "Aide de l'option --hub-socket de bridge",
+    "other": "socket Unix du hub du démon : si renseignée, tourne en simple exécuteur de backend (sans interroger les passerelles)"
+  },
+  {
+    "id": "cli.bridge.flag.agents_root",
+    "description": "Aide de l'option --agents-root de bridge",
+    "other": "dossier qui héberge les espaces des agents pour la liste de délégation (vide = valeur par défaut du démon, à côté de state.json)"
+  },
+  {
+    "id": "cli.bridge.flag.extractor",
+    "description": "Aide de l'option --extractor de bridge",
+    "other": "nom d'un extracteur de curation enregistré ; il active la boucle d'apprentissage P1 (vide = Curator simple, sans apprentissage)"
+  },
+  {
+    "id": "cli.bridge.flag.journal",
+    "description": "Aide de l'option --journal de bridge",
+    "other": "chemin du journal des appels que lit Consolidate (un chemin relatif à l'arbre de travail est accepté) ; utilisé seulement avec --extractor"
+  },
+  {
+    "id": "cli.bridge.flag.consolidate_every",
+    "description": "Aide de l'option --consolidate-every de bridge",
+    "other": "lance Consolidate tous les N tours (0 = manuel seulement) ; utilisé seulement avec --extractor"
+  },
+  {
+    "id": "cli.bridge.flag.state",
+    "description": "Aide de l'option --state de bridge",
+    "other": "chemin du fichier d'état du démon dont le pont lit le cache des modèles (vide = fichier d'état par défaut)"
+  },
+  {
+    "id": "cli.bridge.flag.env_stdin",
+    "description": "Aide de l'option --env-stdin de bridge",
+    "other": "lit des lignes KEY=VALUE sur l'entrée standard jusqu'à une ligne vide et les place dans l'environnement de ce processus (c'est ainsi qu'un pont distant reçoit ses identifiants de passerelle)"
+  },
+  {
+    "id": "cli.bridge.flag.cmd",
+    "description": "Aide de l'option --cmd de bridge",
+    "other": "commande de base (par défaut 'claude' en mode stream ; le programme par message en mode oneshot)"
+  },
+  {
+    "id": "cli.bridge.flag.backend",
+    "description": "Aide de l'option --backend de bridge",
+    "other": "backend qui répond : stream (par défaut) | oneshot"
+  },
+  {
+    "id": "cli.bridge.flag.vendor",
+    "description": "Aide de l'option --vendor de bridge",
+    "other": "fournisseur du backend : claude | codex | cursor (vide = premier enregistré, ou HERRSCHER_BACKEND)"
+  },
+  {
+    "id": "cli.bridge.flag.resume",
+    "description": "Aide de l'option --resume de bridge",
+    "other": "jeton de reprise du backend pour reprendre la conversation au démarrage"
+  },
+  {
+    "id": "cli.bridge.flag.model",
+    "description": "Aide de l'option --model de bridge",
+    "other": "identifiant de modèle du catalogue (voir `herrscher models list`) ; vide = chemin historique, le modèle passe dans --cmd"
+  },
+  {
+    "id": "cli.bridge.flag.account",
+    "description": "Aide de l'option --account de bridge",
+    "other": "profil de compte de la connexion du fournisseur (voir `herrscher account list`) ; vide = le défaut du fournisseur, native = la connexion de la machine"
+  },
+  {
+    "id": "cli.bridge.flag.stream",
+    "description": "Aide de l'option --stream de bridge, obsolète",
+    "other": "obsolète, ignoré (accepté pour la compatibilité)"
+  },
+  {
+    "id": "cli.bridge.model_not_routable",
+    "description": "Erreur quand --model est donné alors que le backend passe par le résolveur distant",
+    "other": "le modèle {{.Model}} ne peut pas passer par le résolveur de backend distant (HERRSCHER_REMOTE=backend) : le proxy ne transporte pas l'environnement de lancement du modèle"
+  },
+  {
+    "id": "cli.bridge.env_stdin_failed",
+    "description": "Erreur quand une ligne KEY=VALUE lue sur l'entrée standard ne peut pas être posée dans l'environnement",
+    "other": "application de {{.Key}} depuis l'entrée standard : {{.Err}}"
+  },
+  {
+    "id": "cli.service.usage",
+    "description": "Ligne d'usage de herrscher service, avec ses sous-commandes et ses options",
+    "other": "usage : herrscher service <install|uninstall|status|restart|update> [--health-addr ADDR] [--env-file PATH] [--cmd 'claude …'] [--source DIR] [--no-pull]"
+  },
+  {
+    "id": "cli.service.unknown_subcommand",
+    "description": "Erreur : le premier argument de herrscher service ne nomme aucune sous-commande",
+    "other": "herrscher service : sous-commande inconnue {{.Name}} (valeurs possibles : install|uninstall|status|restart|update)"
+  },
+  {
+    "id": "cli.service.unexpected_argument",
+    "description": "Erreur : herrscher service a reçu un argument qu'il n'accepte pas, suivi de l'usage",
+    "other": "herrscher service {{.Verb}} : argument inattendu {{.Arg}}\n{{.Usage}}"
+  },
+  {
+    "id": "cli.service.update.unexpected_argument",
+    "description": "Erreur : herrscher service update a reçu un argument qu'il n'accepte pas",
+    "other": "herrscher service update : argument inattendu {{.Arg}}"
+  },
+  {
+    "id": "cli.service.restarted",
+    "description": "Confirmation : le service a été redémarré",
+    "other": "herrscher service : redémarré"
+  },
+  {
+    "id": "cli.service.removed",
+    "description": "Confirmation : le service a été désinstallé",
+    "other": "herrscher service : supprimé"
+  },
+  {
+    "id": "cli.service.update.rebuilding",
+    "description": "Avis : la mise à jour recompile le binaire installé, et non celui qui a été lancé",
+    "other": "herrscher service : reconstruction du binaire installé {{.Installed}} (tu as lancé {{.Ran}})"
+  },
+  {
+    "id": "cli.service.update.rebuilt",
+    "description": "Confirmation : la mise à jour a recompilé les sources à cette version et redémarré le service",
+    "other": "herrscher service : {{.Version}} reconstruit et redémarré"
+  },
+  {
+    "id": "cli.service.flag.health_addr",
+    "description": "Description de l'option --health-addr de herrscher service",
+    "other": "valeur de serve --health-addr (vide désactive le point de terminaison de santé)"
+  },
+  {
+    "id": "cli.service.flag.env_file",
+    "description": "Description de l'option --env-file de herrscher service",
+    "other": "chemin du fichier de secrets 0600 que charge le service"
+  },
+  {
+    "id": "cli.service.flag.cmd",
+    "description": "Description de l'option --cmd de herrscher service",
+    "other": "commande de pont par défaut, préremplie dans config.json (ex. 'claude --model claude-opus-4-8 --effort low')"
+  },
+  {
+    "id": "cli.service.flag.source",
+    "description": "Description de l'option --source de herrscher service update",
+    "other": "chemin du dépôt source de herrscher à compiler"
+  },
+  {
+    "id": "cli.service.flag.no_pull",
+    "description": "Description de l'option --no-pull de herrscher service update",
+    "other": "ne pas lancer `git pull --ff-only` avant la compilation"
+  },
+  {
+    "id": "cli.service.unsupported_os",
+    "description": "Erreur : le système d'exploitation n'a pas de lanceur de service",
+    "other": "système d'exploitation non pris en charge {{.OS}}"
+  },
+  {
+    "id": "cli.service.no_source_dir",
+    "description": "Erreur : service update n'a aucun dépôt source à compiler",
+    "other": "aucun dossier source défini"
+  },
+  {
+    "id": "cli.service.not_checkout.no_module",
+    "description": "Erreur : le dossier source n'a pas de fichier go.mod",
+    "other": "pas un dépôt source de herrscher (pas de go.mod) : {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.service.not_checkout.wrong_module",
+    "description": "Erreur : le dossier source contient un autre module Go",
+    "other": "pas un dépôt source de herrscher (mauvais module) : {{.Path}}"
+  },
+  {
+    "id": "cli.service.no_go_toolchain",
+    "description": "Erreur : la commande go est absente de PATH, herrscher ne peut pas être compilé",
+    "other": "chaîne d'outils go introuvable dans PATH"
+  },
+  {
+    "id": "cli.service.no_binary_path",
+    "description": "Erreur : le test de fumée n'a aucun binaire à lancer",
+    "other": "aucun chemin de binaire pour le test de fumée"
+  },
+  {
+    "id": "cli.service.git_pull_failed",
+    "description": "Erreur : git pull --ff-only a échoué sur le dépôt source",
+    "other": "git pull : {{.Err}} : {{.Output}}"
+  },
+  {
+    "id": "cli.service.go_build_failed",
+    "description": "Erreur : go build a échoué sur le dépôt source",
+    "other": "go build : {{.Err}} : {{.Output}}"
+  },
+  {
+    "id": "cli.service.go_build_for_failed",
+    "description": "Erreur : go build a échoué pour une autre plateforme",
+    "other": "go build ({{.OS}}/{{.Arch}}) : {{.Err}} : {{.Output}}"
+  },
+  {
+    "id": "cli.service.smoke_failed",
+    "description": "Erreur : le binaire fraîchement compilé ne répond pas à --help",
+    "other": "le nouveau binaire échoue au test de fumée ({{.Path}} --help) : {{.Err}} : {{.Output}}"
+  },
+  {
+    "id": "cli.service.locate_binary",
+    "description": "Erreur : le chemin du binaire herrscher en cours d'exécution est illisible",
+    "other": "localisation du binaire herrscher : {{.Err}}"
+  },
+  {
+    "id": "cli.service.locate_home",
+    "description": "Erreur : le dossier personnel est introuvable",
+    "other": "localisation du dossier personnel : {{.Err}}"
+  },
+  {
+    "id": "cli.service.stat_failed",
+    "description": "Erreur : un fichier du service ne peut pas être examiné",
+    "other": "impossible d'examiner {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.service.mkdir_failed",
+    "description": "Erreur : un dossier du service ne peut pas être créé",
+    "other": "création du dossier {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.service.write_failed",
+    "description": "Erreur : un fichier du service ne peut pas être écrit",
+    "other": "écriture de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.service.note.unit_path",
+    "description": "Avis : le PATH de l'unité a été réécrit pendant une mise à jour",
+    "other": "herrscher service : PATH de l'unité mis à jour pour que les agents trouvent les outils sous ton dossier personnel"
+  },
+  {
+    "id": "cli.service.note.not_started",
+    "description": "Avis : le service est installé mais pas lancé, des secrets requis manquent",
+    "other": "herrscher service : installé et activé au démarrage, mais PAS lancé : renseigne les secrets requis dans {{.EnvFile}}, puis : {{.Start}}"
+  },
+  {
+    "id": "cli.service.note.running",
+    "description": "Avis : le service tourne, et l'emplacement de ses secrets",
+    "other": "herrscher service : en cours d'exécution. Les secrets sont dans {{.EnvFile}} ; modifie-le puis redémarre pour les changer."
+  },
+  {
+    "id": "cli.service.note.windows_edit",
+    "description": "Avis : sous Windows, le fichier de secrets à remplir et la commande qui lance la tâche maintenant",
+    "other": "herrscher service : modifie {{.EnvFile}} avec ton jeton ; la tâche lance herrscher à ta prochaine ouverture de session (ou lance-la maintenant avec schtasks /run /tn {{.Task}})."
+  },
+  {
+    "id": "cli.account.usage",
+    "description": "Ligne d'usage de herrscher account, avec ses sous-commandes",
+    "other": "usage : herrscher account list | add <vendor> <nom> | remove <vendor> <nom> | default <vendor> <nom>"
+  },
+  {
+    "id": "cli.account.resolve_home",
+    "description": "Erreur : herrscher account ne trouve pas le dossier personnel",
+    "other": "dossier personnel introuvable : {{.Err}}"
+  },
+  {
+    "id": "cli.account.default",
+    "description": "Confirmation : le compte par défaut d'un fournisseur est désormais ce profil",
+    "other": "{{.Vendor}} par défaut : {{.Name}}"
+  },
+  {
+    "id": "cli.account.default_marker",
+    "description": "Liste : marque le profil qui est le défaut de son fournisseur",
+    "other": "(par défaut)"
+  },
+  {
+    "id": "cli.account.native_label",
+    "description": "Liste : libellé de la ligne du compte connecté hors des profils herrscher",
+    "other": "natif"
+  },
+  {
+    "id": "cli.account.state.unknown",
+    "description": "Liste : l'état de connexion d'un profil n'a pas pu être lu",
+    "other": "statut inconnu"
+  },
+  {
+    "id": "cli.account.state.connected",
+    "description": "Liste : le profil est connecté",
+    "other": "connecté"
+  },
+  {
+    "id": "cli.account.state.disconnected",
+    "description": "Liste : le profil n'est pas connecté",
+    "other": "non connecté"
+  },
+  {
+    "id": "cli.account.login_failed",
+    "description": "Erreur : la connexion du fournisseur pour un nouveau profil a échoué, et son dossier est conservé",
+    "other": "connexion {{.Vendor}} pour {{.Name}} : {{.Err}} (le dossier du profil est conservé, relance add ou supprime-le)"
+  },
+  {
+    "id": "cli.account.added",
+    "description": "Confirmation : un profil est connecté, avec son état final",
+    "other": "{{.Vendor}}/{{.Name}} : {{.State}}"
+  },
+  {
+    "id": "cli.account.remove_prompt",
+    "description": "Question : demande à l'opérateur de confirmer la suppression d'un profil, sans retour à la ligne",
+    "other": "Supprimer le profil {{.Vendor}}/{{.Name}} et son dossier de connexion ? (oui/non) "
+  },
+  {
+    "id": "cli.account.read_confirmation",
+    "description": "Erreur : la réponse à la question de suppression n'a pas pu être lue",
+    "other": "lecture de la confirmation : {{.Err}}"
+  },
+  {
+    "id": "cli.account.cancelled",
+    "description": "Confirmation : la suppression a été refusée",
+    "other": "annulé"
+  },
+  {
+    "id": "cli.account.in_use",
+    "description": "Erreur : un profil ne peut être supprimé ou remplacé tant que des sessions actives l'utilisent",
+    "other": "{{.Vendor}}/{{.Name}} utilisé par la ou les sessions {{.Sessions}}, déplace-les d'abord avec herrscher session set-account"
+  },
+  {
+    "id": "cli.account.resuming",
+    "description": "Avertissement : des sessions vont reprendre sous un nouveau compte par défaut de leur fournisseur, avec la manière de les garder ailleurs (Count choisit la forme plurielle)",
+    "one": "attention : 1 session {{.Vendor}} va reprendre sous ce défaut : {{.Sessions}}. Pour la garder sur un autre compte, utilise herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation).",
+    "other": "attention : {{.Count}} sessions {{.Vendor}} vont reprendre sous ce défaut : {{.Sessions}}. Pour les garder sur un autre compte, utilise herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation)."
+  },
+  {
+    "id": "cli.env.read_failed",
+    "description": "Erreur : le fichier d'environnement a été ouvert mais n'a pas pu être lu jusqu'au bout",
+    "other": "lecture du fichier d'environnement : {{.Err}}"
+  },
+  {
+    "id": "cli.transport.announce_key_unset",
+    "description": "Erreur : le transport distant est activé mais aucune clé d'annonce n'est définie",
+    "other": "HERRSCHER_ANNOUNCE_KEY n'est pas défini : le transport distant en a besoin pour authentifier les annonces"
+  },
+  {
+    "id": "cli.transport.announce_key_invalid",
+    "description": "Erreur : la clé d'annonce est définie mais refusée par le transport",
+    "other": "HERRSCHER_ANNOUNCE_KEY : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.plugin.usage",
+    "description": "Usage line: herrscher plugin, with its subcommands",
+    "other": "usage : herrscher plugin <list|add|remove|pin|unpin> [module[@version]]"
+  },
+  {
+    "id": "cli.manage.plugin.unknown_subcommand",
+    "description": "Error: herrscher plugin got a subcommand it does not know",
+    "other": "sous-commande de plugin inconnue {{.Name}}"
+  },
+  {
+    "id": "cli.manage.plugin.edit_usage",
+    "description": "Usage line: herrscher plugin with a verb that takes one module",
+    "other": "usage : herrscher plugin {{.Verb}} <module>"
+  },
+  {
+    "id": "cli.manage.plugin.pin_usage",
+    "description": "Usage line: herrscher plugin pin, which also takes a version",
+    "other": "usage : herrscher plugin pin <module> [version]"
+  },
+  {
+    "id": "cli.manage.plugin.added",
+    "description": "Confirmation: a plugin was added to plugins.go",
+    "other": "ajouté {{.Module}} dans {{.Path}}"
+  },
+  {
+    "id": "cli.manage.plugin.removed",
+    "description": "Confirmation: a plugin was removed from plugins.go",
+    "other": "retiré {{.Module}} de {{.Path}}"
+  },
+  {
+    "id": "cli.manage.plugin.no_change",
+    "description": "Notice: the plugin edit changes nothing, State names the state it already has",
+    "other": "aucun changement : {{.Module}} est déjà {{.State}}"
+  },
+  {
+    "id": "cli.manage.plugin.moved",
+    "description": "Confirmation: a plugin already present was moved to another version",
+    "other": "{{.Module}} était déjà dans {{.Path}} ; basculé sur {{.Version}}"
+  },
+  {
+    "id": "cli.manage.plugin.skipped_build",
+    "description": "Notice: the build was skipped by --no-build, and how to run it",
+    "other": "compilation ignorée (--no-build) ; lance `go build` dans l'hôte pour appliquer"
+  },
+  {
+    "id": "cli.manage.plugin.version_not_installed",
+    "description": "Notice: a requested version was not installed by --no-build",
+    "other": "la version n'a pas été installée : {{.Module}}@{{.Version}} demande `go get`"
+  },
+  {
+    "id": "cli.manage.plugin.pinned",
+    "description": "Confirmation: a module was pinned",
+    "other": "{{.Module}} épinglé"
+  },
+  {
+    "id": "cli.manage.plugin.unpinned",
+    "description": "Confirmation: a module was unpinned",
+    "other": "{{.Module}} n'est plus épinglé"
+  },
+  {
+    "id": "cli.manage.pinned_tag",
+    "description": "List: the mark of a module that is pinned",
+    "other": "épinglé"
+  },
+  {
+    "id": "cli.manage.state.added",
+    "description": "Word: the state of a plugin that is compiled in",
+    "other": "ajouté"
+  },
+  {
+    "id": "cli.manage.state.removed",
+    "description": "Word: the state of a plugin that is no longer compiled in",
+    "other": "retiré"
+  },
+  {
+    "id": "cli.manage.aborted",
+    "description": "Notice: the operator refused the change, nothing was written",
+    "other": "annulé ; rien n'a été écrit"
+  },
+  {
+    "id": "cli.manage.aborted_pinned",
+    "description": "Notice: the operator refused the pin, which needed a go get first",
+    "other": "annulé ; rien n'a été écrit ni épinglé"
+  },
+  {
+    "id": "cli.manage.finding.moves_back",
+    "description": "Finding: a requested version is older than the one installed",
+    "other": "{{.Module}} revient de {{.Current}} à {{.Version}}"
+  },
+  {
+    "id": "cli.manage.finding.contracts",
+    "description": "Finding: a requested version wants another minor of contracts than the composition resolves",
+    "other": "{{.Module}}@{{.Version}} demande contracts {{.Want}} ; la composition résout {{.Have}}"
+  },
+  {
+    "id": "cli.manage.no_host_module",
+    "description": "Error: no host module was found where the command looked",
+    "other": "aucun module hôte trouvé (plugins.go recherché) ; passe --host DIR"
+  },
+  {
+    "id": "cli.manage.not_compiled_in",
+    "description": "Error: a module is not compiled in, so it cannot be pinned or unpinned",
+    "other": "{{.Module}} n'est pas compilé ; lance d'abord `herrscher plugin add {{.Module}}`"
+  },
+  {
+    "id": "cli.manage.read_failed",
+    "description": "Error: a file could not be read",
+    "other": "lecture de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.write_failed",
+    "description": "Error: a file could not be written",
+    "other": "écriture de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.save_failed",
+    "description": "Error: the composition files could not be saved before a change",
+    "other": "sauvegarde de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.restore_failed",
+    "description": "Error: the composition files could not be put back after a failure",
+    "other": "restauration de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.command_failed",
+    "description": "Error: a command run by the verb failed",
+    "other": "échec de {{.Name}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.choice_out_of_range",
+    "description": "Error: a numbered answer is outside the list it names, Name is the list's label",
+    "other": "{{.Name}} : choix hors de la liste : {{.Choice}}"
+  },
+  {
+    "id": "cli.manage.unknown_kind",
+    "description": "Error: a module kind typed at the wizard is not in the catalog",
+    "other": "{{.Category}} : type inconnu {{.Kind}}"
+  },
+  {
+    "id": "cli.manage.unknown_kind.listed",
+    "description": "Error: a module kind given as a flag is not in the catalog, with the way to list it",
+    "other": "{{.Category}} : type inconnu {{.Kind}} (essaie `herrscher init --list`)"
+  },
+  {
+    "id": "cli.manage.invalid_module_path",
+    "description": "Error: a module given with --with is not a usable path",
+    "other": "chemin de module invalide {{.Module}}"
+  },
+  {
+    "id": "cli.manage.empty_stack",
+    "description": "Error: every category of the wizard or flags was set to none",
+    "other": "pile vide : toutes les catégories sont à none"
+  },
+  {
+    "id": "cli.manage.default_tag",
+    "description": "List: the mark of the kind that a category uses by default",
+    "other": "(par défaut)"
+  },
+  {
+    "id": "cli.manage.unknown_policy",
+    "description": "Error: a route policy typed at the wizard is unknown",
+    "other": "politique de routage inconnue {{.Policy}}"
+  },
+  {
+    "id": "cli.manage.unknown_model",
+    "description": "Error: a default model typed at the wizard is not offered under the chosen policy",
+    "other": "modèle inconnu {{.Model}} (non proposé avec cette politique de routage)"
+  },
+  {
+    "id": "cli.manage.unknown_action",
+    "description": "Error: the plugin front end asked for an action the plugin verbs do not know",
+    "other": "action de plugin inconnue {{.Action}}"
+  },
+  {
+    "id": "cli.manage.gateway_pair_missing",
+    "description": "Error: the gateway-only policy was chosen with no gateway credentials",
+    "other": "gateway-only sans identifiants de passerelle : chaque session échouerait au démarrage ; renseigne {{.URL}} et {{.Token}}"
+  },
+  {
+    "id": "cli.manage.gateway_pair_partial",
+    "description": "Error: only one of the two gateway credentials was given",
+    "other": "identifiants de passerelle incomplets : {{.URL}} et {{.Token}} vont ensemble ; l'un sans l'autre ferait tourner les tours sur le compte propre de cette machine"
+  },
+  {
+    "id": "cli.manage.pins.line",
+    "description": "Error: a line of the pins file is not a module path, File is the pins file name",
+    "other": "{{.File}}, ligne {{.Line}} : {{.Module}} n'est pas un chemin de module"
+  },
+  {
+    "id": "cli.manage.marker.end_not_found",
+    "description": "Error: the end marker of the managed region is missing from plugins.go",
+    "other": "marqueur de fin {{.Marker}} : marqueur introuvable"
+  },
+  {
+    "id": "cli.manage.marker.region_not_found",
+    "description": "Error: the managed region of plugins.go is missing its markers",
+    "other": "zone gérée : marqueur introuvable"
+  },
+  {
+    "id": "cli.manage.marker.duplicate",
+    "description": "Error: a marker of the managed region appears twice in plugins.go",
+    "other": "marqueur {{.Marker}} en double"
+  },
+  {
+    "id": "cli.manage.marker.order",
+    "description": "Error: the end marker of the managed region comes before its begin marker",
+    "other": "le marqueur de fin précède le marqueur de début"
+  },
+  {
+    "id": "cli.manage.skipped_pinned",
+    "description": "Notice: a module was left out of the update because it is pinned",
+    "other": "{{.Module}} ignoré (épinglé à {{.Version}})"
+  },
+  {
+    "id": "cli.manage.no_plugins",
+    "description": "Notice: the update found no plugin compiled in",
+    "other": "aucun plugin à mettre à jour"
+  },
+  {
+    "id": "cli.manage.all_pinned",
+    "description": "Notice: the update found every plugin pinned",
+    "other": "tous les plugins sont épinglés ; rien à mettre à jour"
+  },
+  {
+    "id": "cli.manage.updated_no_build",
+    "description": "Confirmation: the plugins were fetched but not built, and how to build them",
+    "other": "plugins mis à jour (--no-build) ; lance `go mod tidy && go build` dans l'hôte pour appliquer"
+  },
+  {
+    "id": "cli.manage.updated",
+    "description": "Confirmation: the plugins were updated and the host reinstalled",
+    "other": "plugins mis à jour et hôte réinstallé ; redémarre le service pour le lancer"
+  },
+  {
+    "id": "cli.manage.flag.host",
+    "description": "Flag help: the --host flag of the plugin, init, update and install verbs",
+    "other": "chemin du module hôte"
+  },
+  {
+    "id": "cli.manage.flag.plugin_no_build",
+    "description": "Flag help: the --no-build flag of herrscher plugin",
+    "other": "modifie plugins.go sans lancer go get ni la compilation"
+  },
+  {
+    "id": "cli.manage.flag.update_no_build",
+    "description": "Flag help: the --no-build flag of herrscher update",
+    "other": "lance go get -u sur les plugins, sans tidy ni compilation"
+  },
+  {
+    "id": "cli.manage.flag.init_no_build",
+    "description": "Flag help: the --no-build flag of herrscher init",
+    "other": "écrit plugins.go sans lancer go get ni la compilation"
+  },
+  {
+    "id": "cli.manage.flag.yes",
+    "description": "Flag help: the --yes flag, which answers the confirmations without asking",
+    "other": "répond aux deux confirmations sans les poser"
+  },
+  {
+    "id": "cli.manage.flag.list",
+    "description": "Flag help: the --list flag of herrscher init",
+    "other": "affiche le catalogue catalog() des modules, puis quitte"
+  },
+  {
+    "id": "cli.manage.flag.init_yes",
+    "description": "Flag help: the --yes flag of herrscher init, which skips the wizard",
+    "other": "passe l'assistant interactif ; utilise les options et les valeurs par défaut"
+  },
+  {
+    "id": "cli.manage.flag.category",
+    "description": "Flag help: a stack flag of herrscher init, Category is the flag's category",
+    "other": "type de module {{.Category}} (ou none)"
+  },
+  {
+    "id": "cli.manage.flag.with",
+    "description": "Flag help: the --with flag of herrscher init, which adds a module path",
+    "other": "ajoute un chemin de module tel quel, sans le résoudre (répétable)"
+  },
+  {
+    "id": "cli.manage.init.wrote_no_build",
+    "description": "Confirmation: init wrote plugins.go without building, and how to build it",
+    "other": "plugins.go écrit (--no-build) ; lance `go mod tidy && go build` dans l'hôte pour appliquer"
+  },
+  {
+    "id": "cli.manage.wrote_settings",
+    "description": "Confirmation: init wrote settings to an env file, Count selects the plural form",
+    "one": "1 réglage écrit dans {{.Path}}",
+    "other": "{{.Count}} réglages écrits dans {{.Path}}"
+  },
+  {
+    "id": "cli.manage.build_restored",
+    "description": "Notice: the build of the wizard failed, and plugins.go was put back",
+    "other": "échec de la compilation ; {{.Path}} restauré"
+  },
+  {
+    "id": "cli.manage.seed_failed",
+    "description": "Error: init could not copy .env.example to .env",
+    "other": "amorçage de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.seeded",
+    "description": "Confirmation: init copied .env.example to .env",
+    "other": "{{.Path}} créé à partir de .env.example : renseigne tes secrets"
+  },
+  {
+    "id": "cli.manage.env_write_failed",
+    "description": "Error: init could not write the secrets",
+    "other": "écriture des secrets : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.catalog_failed",
+    "description": "Error: the model catalog could not be read for the wizard",
+    "other": "catalogue des modèles : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.route.default_model_later",
+    "description": "Notice: init skipped the default model question, and how to answer it later",
+    "other": "modèle par défaut : relance `herrscher init` après la recompilation pour en choisir un"
+  },
+  {
+    "id": "cli.manage.route.no_model_offered",
+    "description": "Notice: no compiled backend offers a default model under the chosen policy",
+    "other": "modèle par défaut : aucun backend compilé n'en propose sous cette politique"
+  },
+  {
+    "id": "cli.manage.route.gateway_no_model",
+    "description": "Warning: gateway-only with no default model forces every session create to name a model",
+    "other": "sans modèle par défaut, chaque `session create` doit passer --model, ce qu'exige gateway-only"
+  },
+  {
+    "id": "cli.manage.route.routing_header",
+    "description": "Heading of the routing step of the wizard",
+    "other": "routage"
+  },
+  {
+    "id": "cli.manage.route.routing_note",
+    "description": "Subtitle of the routing step: where agent turns run",
+    "other": "où tournent les tours des agents"
+  },
+  {
+    "id": "cli.manage.route.policy_header",
+    "description": "Heading of the route policy list of the wizard",
+    "other": "politique de routage"
+  },
+  {
+    "id": "cli.manage.route.policy_all",
+    "description": "Help line of the all route policy in the wizard",
+    "other": "modèles natifs et passerelle (version interne)"
+  },
+  {
+    "id": "cli.manage.route.policy_gateway_only",
+    "description": "Help line of the gateway-only route policy in the wizard",
+    "other": "la passerelle du produit seule (version publique)"
+  },
+  {
+    "id": "cli.manage.route.default_model_header",
+    "description": "Heading of the default model list of the wizard",
+    "other": "modèle par défaut"
+  },
+  {
+    "id": "cli.manage.gateway_pair.header",
+    "description": "Heading of the gateway credentials step of the wizard",
+    "other": "passerelle · identifiants"
+  },
+  {
+    "id": "cli.manage.gateway_pair.required",
+    "description": "Note under the gateway credentials heading when none is set yet",
+    "other": "(les deux sont requis ; la saisie du jeton est masquée)"
+  },
+  {
+    "id": "cli.manage.gateway_pair.keep",
+    "description": "Note under the gateway credentials heading when a pair is already set",
+    "other": "(déjà renseignés : Entrée pour garder ; la saisie du jeton est masquée)"
+  },
+  {
+    "id": "cli.manage.env.header",
+    "description": "Heading of the secrets step of a gateway, Kind is the gateway kind",
+    "other": "{{.Kind}} · secrets"
+  },
+  {
+    "id": "cli.manage.token_hidden",
+    "description": "Note: a token typed at a prompt is not shown on screen",
+    "other": "(la saisie du jeton est masquée)"
+  },
+  {
+    "id": "cli.manage.wizard.compose",
+    "description": "Subtitle of the init wizard when it composes the plugin stack",
+    "other": "compose ta pile de plugins : Entrée accepte la valeur par défaut"
+  },
+  {
+    "id": "cli.manage.wizard.configure",
+    "description": "Subtitle of the init wizard when it configures an installed host",
+    "other": "configure l'hôte installé : Entrée pour passer un champ"
+  },
+  {
+    "id": "cli.manage.decider.before_writing",
+    "description": "Heading of the warning shown before a composition change is written",
+    "other": "avant l'écriture"
+  },
+  {
+    "id": "cli.manage.decider.nothing_known",
+    "description": "Line shown when no finding is known against a composition change",
+    "other": "rien de connu sur ce changement"
+  },
+  {
+    "id": "cli.manage.decider.build_failed",
+    "description": "Heading shown when the composition does not build",
+    "other": "la composition ne se compile pas"
+  },
+  {
+    "id": "cli.manage.prompt.proceed",
+    "description": "Question: write the change despite the findings",
+    "other": "continuer ?"
+  },
+  {
+    "id": "cli.manage.prompt.restore",
+    "description": "Question: put the host tree back as it was after a failed build",
+    "other": "restaurer les fichiers tels qu'ils étaient ?"
+  },
+  {
+    "id": "cli.manage.prompt.hint_yes_default",
+    "description": "Hint of a yes/no question whose default is yes",
+    "other": "[O/n]"
+  },
+  {
+    "id": "cli.manage.prompt.hint_no_default",
+    "description": "Hint of a yes/no question whose default is no",
+    "other": "[o/N]"
+  },
+  {
+    "id": "cli.manage.nothing_entered",
+    "description": "Notice: the wizard got no value for an env file, which stays as it was",
+    "other": "rien saisi ; {{.Path}} reste inchangé"
+  },
+  {
+    "id": "cli.manage.installed_note",
+    "description": "Note after the wizard: the installed binary already has its plugins compiled in",
+    "other": "le binaire installé a déjà ses plugins compilés."
+  },
+  {
+    "id": "cli.manage.start_with",
+    "description": "Line after the wizard: the command that starts the daemon",
+    "other": "lance-le avec : {{.Command}}"
+  },
+  {
+    "id": "cli.manage.stack_header",
+    "description": "Heading of the stack summary printed after init composes the plugin list",
+    "other": "pile"
+  },
+  {
+    "id": "cli.manage.current_tag",
+    "description": "Tag marking the route policy or default model that is already set",
+    "other": "actuel"
+  },
+  {
+    "id": "cli.session.list.empty",
+    "description": "Affiché par session list quand aucune session n'existe",
+    "other": "Aucune session active."
+  },
+  {
+    "id": "cli.session.list.header",
+    "description": "En-tête de la liste des sessions",
+    "other": "Sessions actives :"
+  },
+  {
+    "id": "cli.session.who.empty",
+    "description": "Affiché par session who quand personne n'a encore écrit dans la session",
+    "other": "Personne n'a encore écrit dans cette session."
+  },
+  {
+    "id": "cli.session.who.header",
+    "description": "En-tête des participants listés par session who",
+    "other": "Participants observés dans **{{.Name}}** :"
+  },
+  {
+    "id": "cli.session.log.empty",
+    "description": "Affiché par session log quand la session n'a pas encore de transcription",
+    "other": "Aucune transcription pour l'instant."
+  },
+  {
+    "id": "cli.session.closed",
+    "description": "Confirmation de la fermeture d'une session, avant une éventuelle note sur le salon",
+    "other": "🗄️ Session **{{.Name}}** fermée."
+  },
+  {
+    "id": "cli.session.archived",
+    "description": "Confirmation de l'archivage d'une session, avant une éventuelle note sur le salon",
+    "other": "📦 Session **{{.Name}}** archivée. Reprends-la depuis /resume."
+  },
+  {
+    "id": "cli.session.renamed",
+    "description": "Confirmation du renommage d'une session, avant une éventuelle note sur les fichiers déplacés",
+    "other": "✎ Session **{{.Name}}** renommée en **{{.To}}**."
+  },
+  {
+    "id": "cli.session.rename.same_name",
+    "description": "Réponse quand un renommage demande le nom que la session porte déjà",
+    "other": "session **{{.Name}}** porte déjà ce nom"
+  },
+  {
+    "id": "cli.session.channel.left_open",
+    "description": "Note après la fermeture ou l'archivage d'une session dont le salon n'a pas pu être archivé",
+    "other": "⚠️ le salon est resté ouvert : {{.Err}}"
+  },
+  {
+    "id": "cli.session.rename.transcript_left",
+    "description": "Note après un renommage dont la transcription n'a pas pu être déplacée",
+    "other": "⚠️ la transcription est restée sous {{.Name}} : {{.Err}}"
+  },
+  {
+    "id": "cli.session.rename.participants_left",
+    "description": "Note après un renommage dont le journal des participants n'a pas pu être déplacé",
+    "other": "⚠️ le journal des participants est resté sous {{.Name}} : {{.Err}}"
+  },
+  {
+    "id": "cli.session.rename.schedule_owns",
+    "description": "Note après un renommage quand un horaire désigne la session par son nom",
+    "other": "⚠️ l'horaire {{.Schedule}} possède cette session par son nom : sa prochaine fenêtre en rouvrira une sous {{.Name}}."
+  },
+  {
+    "id": "cli.session.budget.updated",
+    "description": "Confirmation de set-budget, avec le nombre de sessions modifiées (Count choisit la forme plurielle)",
+    "one": "✅ budget mis à jour pour 1 session",
+    "other": "✅ budget mis à jour pour {{.Count}} sessions"
+  },
+  {
+    "id": "cli.session.switch.no_resume",
+    "description": "Confirmation de session switch quand la session repart à neuf sur la nouvelle cible, suivie de la note sur les approbations",
+    "other": "session {{.Name}} re-ciblée sur {{.Vendor}} (sans reprise){{.Note}}"
+  },
+  {
+    "id": "cli.session.switch.unconfirmed",
+    "description": "Confirmation de session switch quand la reprise de la conversation n'a pas été confirmée par la session, suivie de la note sur les approbations",
+    "other": "session {{.Name}} re-ciblée sur {{.Vendor}} (reprise {{.Handoff}} non confirmée){{.Note}}"
+  },
+  {
+    "id": "cli.session.switch.resumed",
+    "description": "Confirmation de session switch quand la conversation a été transmise à la nouvelle cible, suivie de la note sur les approbations",
+    "other": "session {{.Name}} re-ciblée sur {{.Vendor}} (reprise {{.Handoff}}){{.Note}}"
+  },
+  {
+    "id": "cli.session.switch.restart_restored",
+    "description": "Erreur de session switch quand le redémarrage du backend a échoué et que la session a été remise sur sa cible précédente",
+    "other": "redémarrage backend : {{.Err}} (session {{.Name}} restaurée sur {{.Vendor}})"
+  },
+  {
+    "id": "cli.session.switch.restart_lost",
+    "description": "Erreur de session switch quand le redémarrage du backend a échoué et que la cible précédente n'a pas pu non plus être restaurée",
+    "other": "redémarrage backend : {{.Err}} ; le retour arrière a échoué, session {{.Name}} hors service : {{.RollbackErr}}"
+  },
+  {
+    "id": "cli.session.close.dirty_worktree",
+    "description": "Erreur de fermeture de session quand le worktree contient du travail non commité et que la fermeture n'est pas forcée : la branche est conservée",
+    "other": "{{.Err}} ; fais un commit, ou ferme avec force:true pour l'abandonner (la branche session/{{.Name}} est conservée)"
+  },
+  {
+    "id": "cli.session.approvals.unenforced",
+    "description": "Avertissement à la création de session : le fournisseur ne peut pas appliquer le mode d'approbation, la session tourne sans contrôle",
+    "other": "⚠️ approbations : {{.Vendor}} ne peut pas les appliquer ({{.Why}}), donc **{{.Name}}** tourne sans contrôle."
+  },
+  {
+    "id": "cli.session.approvals.unenforced_now",
+    "description": "Avertissement au changement de cible : le nouveau fournisseur ne peut pas appliquer le mode d'approbation, la session tourne désormais sans contrôle",
+    "other": "⚠️ approbations : {{.Vendor}} ne peut pas les appliquer ({{.Why}}), donc **{{.Name}}** tourne désormais sans contrôle."
+  },
+  {
+    "id": "cli.session.approvals.no_channel",
+    "description": "Motif donné quand un fournisseur n'expose aucun canal pour appliquer le mode d'approbation",
+    "other": "il n'expose aucun canal d'approbation"
+  },
+  {
+    "id": "cli.session.approvals.shared",
+    "description": "Avertissement à la création de session : une session partagée n'a pas d'arbre de travail isolé à contrôler, elle tourne sans contrôle",
+    "other": "⚠️ approbations : une session partagée n'a pas d'arbre de travail isolé à contrôler, donc **{{.Name}}** tourne sans contrôle."
+  },
+  {
+    "id": "cli.session.approvals.remote_no_agent",
+    "description": "Avertissement à la création de session : une session distante sans agent ne peut pas matérialiser le point d'accroche, elle tourne sans contrôle",
+    "other": "⚠️ approbations : une session distante sans agent n'a pas de canal de matérialisation, donc **{{.Name}}** tourne sans contrôle."
+  },
+  {
+    "id": "cli.session.approvals.hook_failed",
+    "description": "Avertissement à la création de session : le point d'accroche des approbations n'a pas pu être écrit, la session tourne sans contrôle (Err est la cause)",
+    "other": "⚠️ approbations : le point d'accroche n'a pas pu être écrit ({{.Err}}), donc **{{.Name}}** tourne sans contrôle."
+  },
+  {
+    "id": "cli.session.banner.ready",
+    "description": "Première ligne de la bannière publiée dans le salon d'une nouvelle session",
+    "other": "🚀 Session **{{.Name}}** prête."
+  },
+  {
+    "id": "cli.session.banner.project_cwd",
+    "description": "Ligne de bannière : la session tourne dans le dossier courant, sans projet nommé",
+    "other": "• Projet : **(cwd)**"
+  },
+  {
+    "id": "cli.session.banner.project",
+    "description": "Ligne de bannière : le projet de la session, son nom et son chemin",
+    "other": "• Projet : **{{.Name}}** ({{.Repo}})"
+  },
+  {
+    "id": "cli.session.banner.worktree",
+    "description": "Lignes de bannière : la session travaille dans un arbre de travail isolé, avec son chemin et sa branche",
+    "other": "• Mode : arbre de travail isolé\n• Arbre de travail : {{.Path}}\n• Branche : {{.Branch}}"
+  },
+  {
+    "id": "cli.session.banner.shared",
+    "description": "Lignes de bannière : la session travaille dans la copie principale, sur la branche courante",
+    "other": "• Mode : partagé (copie principale)\n• Branche : aucune (tourne sur la branche courante)"
+  },
+  {
+    "id": "cli.session.banner.not_git",
+    "description": "Ligne de bannière : la session travaille dans un dossier partagé qui n'est pas un dépôt git",
+    "other": "• Mode : partagé (pas un dépôt git)"
+  },
+  {
+    "id": "cli.session.banner.command",
+    "description": "Ligne de bannière : la commande que la session lance",
+    "other": "• Commande : {{.Command}}"
+  },
+  {
+    "id": "cli.session.banner.model",
+    "description": "Ligne de bannière : le modèle de la session, affiché seulement s'il est défini ; elle commence par un saut de ligne",
+    "other": "\n• Modèle : {{.Model}}"
+  },
+  {
+    "id": "cli.session.running",
+    "description": "Réponse de session create : la session est démarrée sur le salon, suivie de sa bannière et de sa note sur les approbations",
+    "other": "✅ Démarrée sur {{.Channel}}.\n\n{{.Banner}}{{.Approvals}}"
+  },
+  {
+    "id": "cli.session.resumed",
+    "description": "Confirmation de session resume, pour une session archivée qui repart",
+    "other": "⟲ Session **{{.Name}}** reprise."
+  },
+  {
+    "id": "cli.session.mode.set",
+    "description": "Confirmation de session set-mode : la session a désormais ce mode d'approbation, avec une note ajoutée s'il n'est pas appliqué",
+    "other": "{{.Name}} est maintenant en mode {{.Mode}}"
+  },
+  {
+    "id": "cli.session.mode.unenforced",
+    "description": "Note ajoutée à la confirmation de set-mode quand le fournisseur ne peut pas appliquer le mode d'approbation",
+    "other": " ({{.Vendor}} ne peut pas l'appliquer, donc {{.Name}} tourne sans contrôle)"
+  },
+  {
+    "id": "cli.session.mode.bypass_recreate",
+    "description": "Note ajoutée à la confirmation de set-mode quand la session a été créée en bypass, qui n'a pas de point d'accroche à modifier",
+    "other": " (une session créée avec --approvals bypass n'a pas de point d'accroche : recrée-la pour que cela prenne effet)"
+  },
+  {
+    "id": "cli.session.picked",
+    "description": "Confirmation de session pick : le choix en attente de la session a reçu sa réponse",
+    "other": "choix pris pour {{.Name}}"
+  },
+  {
+    "id": "cli.session.interrupted",
+    "description": "Confirmation de session interrupt : le tour en cours a été annulé",
+    "other": "tour de {{.Name}} interrompu"
+  },
+  {
+    "id": "cli.session.compact.merged_kept",
+    "description": "Réponse de session compact sans consigne quand une compaction est déjà en file : la consigne en file est conservée",
+    "other": "compaction de \"{{.Name}}\" déjà en file : fusionnée avec la demande en attente, la consigne en file est conservée"
+  },
+  {
+    "id": "cli.session.compact.merged_replaced",
+    "description": "Réponse de session compact avec une consigne quand une compaction est déjà en file : la consigne en file est remplacée par la plus récente",
+    "other": "compaction de \"{{.Name}}\" déjà en file : fusionnée avec la demande en attente, la consigne en file est remplacée par la plus récente"
+  },
+  {
+    "id": "cli.session.account.notice",
+    "description": "Confirmation de session set-account : le compte s'applique au prochain lancement et le bridge en cours garde l'ancien",
+    "other": "compte de {{.Name}} réglé sur {{.Account}} : effectif au prochain lancement de la session ; le pont en cours garde l'ancien compte"
+  },
+  {
+    "id": "cli.session.account.notice_fresh",
+    "description": "Confirmation de session set-account avec fresh : la conversation précédente n'est plus reprise au prochain lancement",
+    "other": "compte de {{.Name}} réglé sur {{.Account}} : au prochain lancement, la conversation précédente n'est plus reprise et une nouvelle s'ouvre sous ce compte ; le pont en cours garde l'ancien compte jusqu'au prochain lancement"
+  },
+  {
+    "id": "cli.session.account.vendor_default",
+    "description": "Libellé de compte : le compte par défaut du fournisseur, quand aucun profil n'est choisi",
+    "other": "le défaut du vendeur"
+  },
+  {
+    "id": "cli.session.account.native",
+    "description": "Libellé de compte : le compte connecté hors des profils herrscher",
+    "other": "le compte natif"
+  },
+  {
+    "id": "cli.session.account.this",
+    "description": "Liste : marque le profil que la session dépense actuellement",
+    "other": "(cette session)"
+  }
+]

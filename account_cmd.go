@@ -10,22 +10,24 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/accounts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
 const accountArgCount = 3
 
-var errAccountUsage = errors.New("usage: herrscher account list | add <vendor> <name> | remove <vendor> <name> | default <vendor> <name>")
+var errAccountUsage = errors.New("account usage")
 
 func runAccount(ctx context.Context, args []string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("resolve home: %w", err)
+		return clitext.Failure(clitext.ClientLanguage(), err, clitext.AccountResolveHome, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	store := accounts.Store{Root: accounts.DefaultRoot(home)}
 	if len(args) == 0 {
-		return errAccountUsage
+		return accountUsage(clitext.ClientLanguage())
 	}
 	switch args[0] {
 	case "list":
@@ -50,17 +52,22 @@ func runAccount(ctx context.Context, args []string) error {
 		if setErr := store.SetDefault(vendor, name); setErr != nil {
 			return setErr
 		}
-		if defaultErr := emitf(os.Stdout, "%s default: %s\n", vendor, name); defaultErr != nil {
+		translator := clitext.For(clitext.ClientLanguage())
+		if defaultErr := writeText(os.Stdout, translator, clitext.AccountDefault, clitext.Params{clitext.ParamVendor: vendor, clitext.ParamName: string(name)}); defaultErr != nil {
 			return defaultErr
 		}
 		return warnResumingSessions(vendor, os.Stdout)
 	}
-	return errAccountUsage
+	return accountUsage(clitext.ClientLanguage())
+}
+
+func accountUsage(lang i18n.Language) error {
+	return clitext.Failure(lang, errAccountUsage, clitext.AccountUsage, nil)
 }
 
 func accountArgs(args []string) (string, contracts.ProfileName, error) {
 	if len(args) != accountArgCount {
-		return "", "", errAccountUsage
+		return "", "", accountUsage(clitext.ClientLanguage())
 	}
 	if _, err := contracts.ProfileHomeEnv(args[1]); err != nil {
 		return "", "", err
@@ -77,13 +84,23 @@ func emitf(output io.Writer, format string, values ...any) error {
 	return err
 }
 
+func writeText(output io.Writer, translator *clitext.Translator, key clitext.Key, params clitext.Params) error {
+	text := translator.Text(key, params)
+	if err := translator.Err(); err != nil {
+		return err
+	}
+	return emitf(output, "%s\n", text)
+}
+
 func listAccounts(ctx context.Context, store accounts.Store, output io.Writer) error {
+	translator := clitext.For(clitext.ClientLanguage())
 	profiles, err := store.List()
 	if err != nil {
 		return err
 	}
+	native := translator.Text(clitext.AccountNativeLabel, nil)
 	for _, vendor := range []string{contracts.VendorClaude, contracts.VendorCodex} {
-		if err := emitf(output, "%-8s native     %s\n", vendor, loginState(ctx, vendor, nil)); err != nil {
+		if err := emitf(output, "%-8s %-10s %s\n", vendor, native, loginState(ctx, translator, vendor, nil)); err != nil {
 			return err
 		}
 	}
@@ -94,27 +111,29 @@ func listAccounts(ctx context.Context, store accounts.Store, output io.Writer) e
 		}
 		marker := ""
 		if profile.Default {
-			marker = " (default)"
+			marker = " " + translator.Text(clitext.AccountDefaultMarker, nil)
 		}
-		if err := emitf(output, "%-8s %-10s %s%s\n", profile.Vendor, profile.Name, loginState(ctx, profile.Vendor, env), marker); err != nil {
+		if err := emitf(output, "%-8s %-10s %s%s\n", profile.Vendor, profile.Name, loginState(ctx, translator, profile.Vendor, env), marker); err != nil {
 			return err
 		}
 	}
-	return nil
+	return translator.Err()
 }
 
-func loginState(ctx context.Context, vendor string, env map[string]string) string {
+func loginState(ctx context.Context, translator *clitext.Translator, vendor string, env map[string]string) string {
 	connected, err := accounts.Status(ctx, accounts.OSRunner, vendor, env)
 	switch {
 	case err != nil:
-		return "statut inconnu"
+		return translator.Text(clitext.AccountStateUnknown, nil)
 	case connected:
-		return "connecté"
+		return translator.Text(clitext.AccountStateConnected, nil)
 	}
-	return "non connecté"
+	return translator.Text(clitext.AccountStateDisconnected, nil)
 }
 
 func addAccount(ctx context.Context, store accounts.Store, vendor string, name contracts.ProfileName, input io.Reader, output io.Writer) error {
+	lang := clitext.ClientLanguage()
+	translator := clitext.For(lang)
 	dir, err := store.Create(vendor, name)
 	if err != nil {
 		return err
@@ -130,12 +149,21 @@ func addAccount(ctx context.Context, store accounts.Store, vendor string, name c
 	login.Env = contracts.MergeEnv(os.Environ(), env)
 	login.Stdin, login.Stdout, login.Stderr = input, output, os.Stderr
 	if runErr := login.Run(); runErr != nil {
-		return fmt.Errorf("%s login for %s: %w (the profile directory is kept, run add again or remove it)", vendor, name, runErr)
+		return clitext.Failure(lang, runErr, clitext.AccountLoginFailed, clitext.Params{
+			clitext.ParamVendor: vendor,
+			clitext.ParamName:   string(name),
+			clitext.ParamErr:    runErr.Error(),
+		})
 	}
-	return emitf(output, "%s/%s: %s\n", vendor, name, loginState(ctx, vendor, env))
+	return writeText(output, translator, clitext.AccountAdded, clitext.Params{
+		clitext.ParamVendor: vendor,
+		clitext.ParamName:   string(name),
+		clitext.ParamState:  loginState(ctx, translator, vendor, env),
+	})
 }
 
 func removeAccount(store accounts.Store, vendor string, name contracts.ProfileName, input io.Reader, output io.Writer) error {
+	translator := clitext.For(clitext.ClientLanguage())
 	defaultName, err := store.Default(vendor)
 	if err != nil {
 		return err
@@ -147,15 +175,19 @@ func removeAccount(store accounts.Store, vendor string, name contracts.ProfileNa
 	if refuseErr := refuseProfileInUse(vendor, name, users); refuseErr != nil {
 		return refuseErr
 	}
-	if promptErr := emitf(output, "Supprimer le profil %s/%s et son dossier de connexion ? (oui/non) ", vendor, name); promptErr != nil {
+	prompt := translator.Text(clitext.AccountRemovePrompt, clitext.Params{clitext.ParamVendor: vendor, clitext.ParamName: string(name)})
+	if textErr := translator.Err(); textErr != nil {
+		return textErr
+	}
+	if promptErr := emitf(output, "%s", prompt); promptErr != nil {
 		return promptErr
 	}
 	answer, err := bufio.NewReader(input).ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
-		return fmt.Errorf("read confirmation: %w", err)
+		return clitext.Failure(clitext.ClientLanguage(), err, clitext.AccountReadConfirmation, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	if !confirmed(answer) {
-		return emitf(output, "annulé\n")
+		return writeText(output, translator, clitext.AccountCancelled, nil)
 	}
 	return store.Remove(vendor, name, false)
 }
@@ -164,7 +196,11 @@ func refuseProfileInUse(vendor string, name contracts.ProfileName, users []strin
 	if len(users) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%s/%s used by session(s) %s, move them with herrscher session set-account first: %w", vendor, name, strings.Join(users, ", "), accounts.ErrInUse)
+	return clitext.Failure(clitext.ClientLanguage(), accounts.ErrInUse, clitext.AccountInUse, clitext.Params{
+		clitext.ParamVendor:   vendor,
+		clitext.ParamName:     string(name),
+		clitext.ParamSessions: strings.Join(users, ", "),
+	})
 }
 
 func warnResumingSessions(vendor string, output io.Writer) error {
@@ -179,7 +215,12 @@ func warnResuming(vendor string, names []string, output io.Writer) error {
 	if len(names) == 0 {
 		return nil
 	}
-	return emitf(output, "attention: %d session(s) %s vont reprendre sous ce défaut: %s. Pour les garder sur un autre compte, utilise herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation).\n", len(names), vendor, strings.Join(names, ", "))
+	translator := clitext.For(clitext.ClientLanguage())
+	return writeText(output, translator, clitext.AccountResuming, clitext.Params{
+		clitext.ParamCount:    len(names),
+		clitext.ParamVendor:   vendor,
+		clitext.ParamSessions: strings.Join(names, ", "),
+	})
 }
 
 func confirmed(answer string) bool {

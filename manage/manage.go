@@ -15,8 +15,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/internal/errwriter"
 )
 
@@ -48,11 +50,11 @@ type pluginEnv struct {
 
 func pluginHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
 	flags := flag.NewFlagSet("plugin", flag.ContinueOnError)
-	hostDir := flags.String("host", "", "path to the host module")
-	noBuild := flags.Bool("no-build", false, "edit plugins.go but skip go get/build")
-	yes := flags.Bool("yes", false, "answer both confirmations without asking")
+	hostDir := flags.String("host", "", msg(clitext.ManageFlagHost, nil))
+	noBuild := flags.Bool("no-build", false, msg(clitext.ManageFlagPluginNoBuild, nil))
+	yes := flags.Bool("yes", false, msg(clitext.ManageFlagYes, nil))
 	if len(args) == 0 {
-		errOut.Println("usage: herrscher plugin <list|add|remove|pin|unpin> [module[@version]]")
+		errOut.Println(msg(clitext.ManagePluginUsage, nil))
 		return exitUsage
 	}
 	sub := args[0]
@@ -75,10 +77,10 @@ func pluginHost(ctx context.Context, out, errOut *errwriter.Writer, args []strin
 		errOut.Println(err)
 		return 1
 	}
-	manifest := filepath.Join(dir, "plugins.go")
+	manifest := filepath.Join(dir, manifestFile)
 	src, err := os.ReadFile(manifest)
 	if err != nil {
-		errOut.Printf("read %s: %v\n", manifest, err)
+		errOut.Println(failure(err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: manifest, clitext.ParamErr: err.Error()}))
 		return 1
 	}
 	env := pluginEnv{dir: dir, manifest: manifest, src: string(src), out: out, errOut: errOut, yes: *yes, noBuild: *noBuild}
@@ -91,7 +93,7 @@ func pluginHost(ctx context.Context, out, errOut *errwriter.Writer, args []strin
 	case verbPin, verbUnpin:
 		return pluginPin(ctx, env, sub, positionals)
 	default:
-		errOut.Printf("unknown plugin subcommand %q\n", sub)
+		errOut.Println(msg(clitext.ManagePluginUnknownSubcommand, clitext.Params{clitext.ParamName: strconv.Quote(sub)}))
 		return exitUsage
 	}
 }
@@ -106,7 +108,7 @@ func pluginList(ctx context.Context, env pluginEnv) int {
 
 func pluginAddRemove(ctx context.Context, env pluginEnv, sub string, positionals []string) int {
 	if len(positionals) != 1 {
-		env.errOut.Printf("usage: herrscher plugin %s <module>\n", sub)
+		env.errOut.Println(msg(clitext.ManagePluginEditUsage, clitext.Params{clitext.ParamVerb: sub}))
 		return exitUsage
 	}
 	module, version := moduleArg(sub, positionals[0])
@@ -116,18 +118,18 @@ func pluginAddRemove(ctx context.Context, env pluginEnv, sub string, positionals
 		return 1
 	}
 	if !changed && version == "" {
-		env.out.Printf("no change: %s already %s\n", module, pastTense(sub))
+		env.out.Println(msg(clitext.ManagePluginNoChange, clitext.Params{clitext.ParamModule: module, clitext.ParamState: stateWord(sub)}))
 		return 0
 	}
 	if env.noBuild {
 		if writeErr := os.WriteFile(env.manifest, []byte(rendered), modeFile); writeErr != nil {
-			env.errOut.Printf("write %s: %v\n", env.manifest, writeErr)
+			env.errOut.Println(failure(writeErr, clitext.ManageWriteFailed, clitext.Params{clitext.ParamPath: env.manifest, clitext.ParamErr: writeErr.Error()}))
 			return 1
 		}
-		env.out.Printf("%s %s in %s\n", pastTense(sub), module, env.manifest)
-		env.out.Println("skipped build (--no-build); run `go build` in the host to apply")
+		env.out.Println(changeLine(sub, module, env.manifest))
+		env.out.Println(msg(clitext.ManagePluginSkippedBuild, nil))
 		if version != "" {
-			env.out.Printf("the version was not installed: %s@%s needs `go get`\n", module, version)
+			env.out.Println(msg(clitext.ManagePluginVersionNotInstalled, clitext.Params{clitext.ParamModule: module, clitext.ParamVersion: version}))
 		}
 		return 0
 	}
@@ -142,14 +144,14 @@ func pluginAddRemove(ctx context.Context, env pluginEnv, sub string, positionals
 		return 1
 	}
 	if !applied {
-		env.out.Println("aborted; nothing was written")
+		env.out.Println(msg(clitext.ManageAborted, nil))
 		return 0
 	}
 	if !changed {
-		env.out.Printf("%s was already in %s; moved to %s\n", module, env.manifest, version)
+		env.out.Println(msg(clitext.ManagePluginMoved, clitext.Params{clitext.ParamModule: module, clitext.ParamPath: env.manifest, clitext.ParamVersion: version}))
 		return 0
 	}
-	env.out.Printf("%s %s in %s\n", pastTense(sub), module, env.manifest)
+	env.out.Println(changeLine(sub, module, env.manifest))
 	return 0
 }
 
@@ -162,7 +164,7 @@ func renderPluginEdit(sub, src, module string) (string, bool, error) {
 
 func pluginPin(ctx context.Context, env pluginEnv, sub string, positionals []string) int {
 	if len(positionals) < 1 || len(positionals) > 2 || (sub == verbUnpin && len(positionals) != 1) {
-		env.errOut.Printf("usage: herrscher plugin %s <module>%s\n", sub, pinUsageTail(sub))
+		env.errOut.Println(pinUsage(sub))
 		return exitUsage
 	}
 	module, version := splitModuleVersion(positionals[0])
@@ -181,7 +183,7 @@ func pluginPin(ctx context.Context, env pluginEnv, sub string, positionals []str
 			return 1
 		}
 		if !applied {
-			env.out.Println("aborted; nothing was written and nothing was pinned")
+			env.out.Println(msg(clitext.ManageAbortedPinned, nil))
 			return 0
 		}
 	}
@@ -189,8 +191,22 @@ func pluginPin(ctx context.Context, env pluginEnv, sub string, positionals []str
 		env.errOut.Println(err)
 		return 1
 	}
-	env.out.Printf("%sned %s\n", sub, module)
+	env.out.Println(pinChangeLine(sub, module))
 	return 0
+}
+
+func pinUsage(sub string) string {
+	if sub == verbPin {
+		return msg(clitext.ManagePluginPinUsage, nil)
+	}
+	return msg(clitext.ManagePluginEditUsage, clitext.Params{clitext.ParamVerb: sub})
+}
+
+func pinChangeLine(sub, module string) string {
+	if sub == verbPin {
+		return msg(clitext.ManagePluginPinned, clitext.Params{clitext.ParamModule: module})
+	}
+	return msg(clitext.ManagePluginUnpinned, clitext.Params{clitext.ParamModule: module})
 }
 
 func moduleArg(sub, arg string) (string, string) {
@@ -200,31 +216,17 @@ func moduleArg(sub, arg string) (string, string) {
 	return splitModuleVersion(arg)
 }
 
-func pinUsageTail(sub string) string {
-	if sub == verbPin {
-		return " [version]"
-	}
-	return ""
-}
-
-func pastTense(sub string) string {
-	if sub == verbAdd {
-		return "added"
-	}
-	return "removed"
-}
-
 func resolveHost(explicit string) (string, error) {
 	candidates := []string{explicit, ".", "herrscher"}
 	for _, candidate := range candidates {
 		if candidate == "" {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(candidate, "plugins.go")); err == nil {
+		if _, err := os.Stat(filepath.Join(candidate, manifestFile)); err == nil {
 			return candidate, nil
 		}
 	}
-	return "", fmt.Errorf("%w; pass --host DIR", errNoHostModule)
+	return "", failure(errNoHostModule, clitext.ManageNoHostModule, nil)
 }
 
 func buildCommands() [][]string {
@@ -245,16 +247,20 @@ func addCommands(module, version string) [][]string {
 
 func removeCommands() [][]string { return buildCommands() }
 
-func updatePlan(mods []string, pins map[string]bool, installed map[string]string) ([][]string, []string) {
+type pinnedSkip struct {
+	module, version string
+}
+
+func updatePlan(mods []string, pins map[string]bool, installed map[string]string) ([][]string, []pinnedSkip) {
 	var cmds [][]string
-	var skipped []string
+	var skipped []pinnedSkip
 	for _, module := range mods {
 		if pins[module] {
 			version := installed[module]
 			if version == "" {
 				version = "?"
 			}
-			skipped = append(skipped, fmt.Sprintf("skipped %s (pinned %s)", module, version))
+			skipped = append(skipped, pinnedSkip{module: module, version: version})
 			continue
 		}
 		cmds = append(cmds, []string{"go", verbGet, "-u", module})
@@ -311,11 +317,11 @@ func addFindings(ctx context.Context, dir, module, version string) []string {
 	var findings []string
 	if installed, err := installedVersions(ctx, toolchain, []string{module, contractsModule}); err == nil {
 		if cur := installed[module]; cur != "" && semverLess(version, cur) {
-			findings = append(findings, fmt.Sprintf("%s moves back from %s to %s", module, cur, version))
+			findings = append(findings, msg(clitext.ManageFindingMovesBack, clitext.Params{clitext.ParamModule: module, clitext.ParamCurrent: cur, clitext.ParamVersion: version}))
 		}
 		if want, err := contractsRequirement(ctx, toolchain, module, version); err == nil && want != "" {
 			if have := installed[contractsModule]; have != "" && minorOf(want) != minorOf(have) {
-				findings = append(findings, fmt.Sprintf("%s@%s wants contracts %s; the composition resolves %s", module, version, want, have))
+				findings = append(findings, msg(clitext.ManageFindingContracts, clitext.Params{clitext.ParamModule: module, clitext.ParamVersion: version, clitext.ParamWant: want, clitext.ParamHave: have}))
 			}
 		}
 	}
@@ -403,10 +409,16 @@ func listWithVersions(ctx context.Context, dir, src string, out io.Writer) error
 	if err != nil {
 		return err
 	}
+	return writePluginRows(out, rows)
+}
+
+func writePluginRows(out io.Writer, rows []PluginVersion) error {
+	translator := clitext.For(clitext.ClientLanguage())
+	defer logRenderErr(translator)
 	for _, row := range rows {
 		pin := ""
 		if row.Pinned {
-			pin = "  pinned"
+			pin = "  " + translator.Text(clitext.ManagePinnedTag, nil)
 		}
 		if _, err := fmt.Fprintf(out, "%s  %s  %s%s\n", row.Module, row.Installed, row.Latest, pin); err != nil {
 			return err
@@ -421,15 +433,15 @@ func loadPins(dir string) (map[string]bool, error) {
 		return make(map[string]bool), nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", pinFile, err)
+		return nil, failure(err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: pinFile, clitext.ParamErr: err.Error()})
 	}
 	return readPins(string(src))
 }
 
 func compiledIn(dir, module string) error {
-	src, err := os.ReadFile(filepath.Join(dir, "plugins.go"))
+	src, err := os.ReadFile(filepath.Join(dir, manifestFile))
 	if err != nil {
-		return fmt.Errorf("read plugins.go: %w", err)
+		return failure(err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: manifestFile, clitext.ParamErr: err.Error()})
 	}
 	mods, err := listPlugins(string(src))
 	if err != nil {
@@ -440,7 +452,7 @@ func compiledIn(dir, module string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("%s is %w; `herrscher plugin add %s` first", module, errNotCompiledIn, module)
+	return failure(errNotCompiledIn, clitext.ManageNotCompiledIn, clitext.Params{clitext.ParamModule: module})
 }
 
 func pinModule(dir, module string, pinned bool) error {
@@ -475,7 +487,7 @@ func run(ctx context.Context, errOut *errwriter.Writer, dir, name string, args .
 	}
 	errOut.Println(line.String())
 	if err := cmd.Run(); err != nil {
-		errOut.Printf("%s failed: %v\n", name, err)
+		errOut.Println(failure(err, clitext.ManageCommandFailed, clitext.Params{clitext.ParamName: name, clitext.ParamErr: err.Error()}))
 		return 1
 	}
 	return 0

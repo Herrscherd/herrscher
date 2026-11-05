@@ -1,6 +1,7 @@
 package manage
 
 const (
+	manifestFile    = "plugins.go"
 	catGateway      = "gateway"
 	catBackend      = "backend"
 	catMemory       = "memory"

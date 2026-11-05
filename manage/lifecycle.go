@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/internal/errwriter"
 )
 
@@ -20,9 +21,9 @@ func UpdateCmd(ctx context.Context, args []string) int {
 
 func updateHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
 	flags := flag.NewFlagSet("update", flag.ContinueOnError)
-	hostDir := flags.String("host", "", "path to the host module")
-	noBuild := flags.Bool("no-build", false, "go get -u the plugins but skip tidy/build")
-	yes := flags.Bool("yes", false, "answer both confirmations without asking")
+	hostDir := flags.String("host", "", msg(clitext.ManageFlagHost, nil))
+	noBuild := flags.Bool("no-build", false, msg(clitext.ManageFlagUpdateNoBuild, nil))
+	yes := flags.Bool("yes", false, msg(clitext.ManageFlagYes, nil))
 	if err := flags.Parse(args); err != nil {
 		return parseExit(err)
 	}
@@ -37,7 +38,7 @@ func updateHost(ctx context.Context, out, errOut *errwriter.Writer, args []strin
 		return code
 	}
 	if len(mods) == 0 {
-		out.Println("no plugins to update")
+		out.Println(msg(clitext.ManageNoPlugins, nil))
 		return 0
 	}
 
@@ -50,7 +51,7 @@ func updateHost(ctx context.Context, out, errOut *errwriter.Writer, args []strin
 		if code := fetchPluginUpdates(ctx, errOut, dir, cmds); code != 0 {
 			return code
 		}
-		out.Println("updated plugins (--no-build); run `go mod tidy && go build` in the host to apply")
+		out.Println(msg(clitext.ManageUpdatedNoBuild, nil))
 		return 0
 	}
 	applied, err := apply(ctx, dir, nil, osDecider(*yes), cmdSteps(errOut, dir, cmds))
@@ -59,17 +60,17 @@ func updateHost(ctx context.Context, out, errOut *errwriter.Writer, args []strin
 		return 1
 	}
 	if !applied {
-		out.Println("aborted; nothing was written")
+		out.Println(msg(clitext.ManageAborted, nil))
 		return 0
 	}
-	out.Println("updated plugins and reinstalled the host; restart the service to run it")
+	out.Println(msg(clitext.ManageUpdated, nil))
 	return 0
 }
 
 func readPluginModules(errOut *errwriter.Writer, dir string) ([]string, int) {
-	src, err := os.ReadFile(filepath.Join(dir, "plugins.go"))
+	src, err := os.ReadFile(filepath.Join(dir, manifestFile))
 	if err != nil {
-		errOut.Printf("read plugins.go: %v\n", err)
+		errOut.Println(failure(err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: manifestFile, clitext.ParamErr: err.Error()}))
 		return nil, 1
 	}
 	mods, err := listPlugins(string(src))
@@ -91,11 +92,13 @@ func planPluginUpdates(ctx context.Context, out, errOut *errwriter.Writer, dir s
 		installed = nil
 	}
 	cmds, skipped := updatePlan(mods, pins, installed)
-	for _, line := range skipped {
-		out.Println(line)
+	translator := clitext.For(clitext.ClientLanguage())
+	for _, skip := range skipped {
+		out.Println(translator.Text(clitext.ManageSkippedPinned, clitext.Params{clitext.ParamModule: skip.module, clitext.ParamVersion: skip.version}))
 	}
+	logRenderErr(translator)
 	if cmds == nil {
-		out.Println("every plugin is pinned; nothing to update")
+		out.Println(msg(clitext.ManageAllPinned, nil))
 	}
 	return cmds, 0
 }
@@ -124,7 +127,7 @@ func InstallCmd(ctx context.Context, args []string) int {
 
 func installHost(ctx context.Context, _, errOut *errwriter.Writer, args []string) int {
 	flags := flag.NewFlagSet("install", flag.ContinueOnError)
-	hostDir := flags.String("host", "", "path to the host module")
+	hostDir := flags.String("host", "", msg(clitext.ManageFlagHost, nil))
 	if err := flags.Parse(args); err != nil {
 		return parseExit(err)
 	}

@@ -1,14 +1,20 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/platformtext"
 )
 
-func usage() {
+func usage(lang i18n.Language) error {
 	renderer := lipgloss.NewRenderer(os.Stderr)
 	var (
 		banner  = renderer.NewStyle().Bold(true).Foreground(lipgloss.Color("13"))
@@ -17,63 +23,69 @@ func usage() {
 		verb    = renderer.NewStyle().Bold(true)
 		hint    = renderer.NewStyle().Faint(true)
 	)
+	translator := clitext.For(lang)
+	platform := platformtext.For(lang)
 
 	const col = 34
-	row := func(value, help string) string {
+	row := func(value string, help clitext.Key) string {
 		pad := col - len([]rune(value))
 		if pad < 1 {
 			pad = 1
 		}
-		return "    " + verb.Render(value) + strings.Repeat(" ", pad) + hint.Render(help)
+		return "    " + verb.Render(value) + strings.Repeat(" ", pad) + hint.Render(translator.Text(help, nil))
 	}
 
-	group := func(title string, rows ...string) string {
-		return "  " + section.Render(title) + "\n" + strings.Join(rows, "\n")
+	group := func(title clitext.Key, rows ...string) string {
+		return "  " + section.Render(translator.Text(title, nil)) + "\n" + strings.Join(rows, "\n")
 	}
 
 	blocks := []string{
 		"  " + banner.Render("⛧ HERRSCHER"),
-		"  " + tagline.Render("modular Discord ⇄ Claude agent harness host"),
+		"  " + tagline.Render(platform.Text(platformtext.UsageTagline)),
 		"",
-		group("DÉMARRER",
-			row("herrscher \"<texte>\"", "open a session on this task, in the TUI"),
-			row("herrscher --print \"<texte>\"", "same, but run one turn and print the reply"),
-			row("herrscher", "open the multi-session terminal TUI"),
-			row("herrscher version", "print the build version"),
-			row("herrscher init", "compose the plugin stack + secrets (wizard)"),
+		group(clitext.UsageGroupStart,
+			row("herrscher \"<texte>\"", clitext.UsageStartTask),
+			row("herrscher --print \"<texte>\"", clitext.UsageStartPrint),
+			row("herrscher", clitext.UsageStartTUI),
+			row("herrscher version", clitext.UsageStartVersion),
+			row("herrscher init", clitext.UsageStartInit),
 		),
 		"",
-		group("SESSIONS & AGENTS",
-			row("session <create|close|list|who>", "bridged channel + worktree + backend"),
-			row("agent   <create|list>", "durable companion agents (persona/MCP)"),
-			row("host    <add|list|check|provision|rm>", "machines a session can run on (`session create --host`)"),
-			row("approve <list|allow|deny|rule|mode>", "actions that need a human's go-ahead before they run"),
-			row("memory  <locate|forget|record>", "inspect/edit the memory graph"),
-			row("models  list", "list the models the compiled backends offer"),
+		group(clitext.UsageGroupSessions,
+			row("session <create|close|list|who>", clitext.UsageSessionVerbs),
+			row("agent   <create|list>", clitext.UsageAgentVerbs),
+			row("host    <add|list|check|provision|rm>", clitext.UsageHostVerbs),
+			row("approve <list|allow|deny|rule|mode>", clitext.UsageApproveVerbs),
+			row("memory  <locate|forget|record>", clitext.UsageMemoryVerbs),
+			row("models  list", clitext.UsageModelsVerbs),
 		),
 		"",
-		group("DAEMON & SERVICE",
-			row("serve", "always-on gateway daemon (24/7)"),
-			row("bridge  --cmd '<command>'", "link a channel to one command"),
-			row("service <install|uninstall|…>", "run serve as a native boot service"),
-			row("commands", "every verb the running daemon accepts (needs `serve`)"),
+		group(clitext.UsageGroupDaemon,
+			row("serve", clitext.UsageServe),
+			row("bridge  --cmd '<command>'", clitext.UsageBridge),
+			row("service <install|uninstall|…>", clitext.UsageService),
+			row("commands", clitext.UsageCommands),
 		),
 		"",
-		group("SETUP & MAINTENANCE",
-			row("plugin  <list|add|remove|pin|unpin>", "edit the compiled-in plugin set + rebuild"),
-			row("update", "bump every unpinned plugin + rebuild + reinstall"),
-			row("install", "build then run the service install"),
+		group(clitext.UsageGroupSetup,
+			row("plugin  <list|add|remove|pin|unpin>", clitext.UsagePluginVerbs),
+			row("update", clitext.UsageUpdate),
+			row("install", clitext.UsageInstall),
 		),
 		"",
-		"  " + hint.Render("Run `herrscher <command> --help` for flags and options."),
+		"  " + hint.Render(translator.Text(clitext.UsageHelpFooter, nil)),
 		"",
-		"  " + hint.Render("env: DISCORD_BOT_TOKEN (required), DISCORD_USER_ID (the user the bot obeys)"),
-		"  " + hint.Render("     HERRSCHER_OWNER_ID (instance-id fallback), HERRSCHER_STATE_DIR (state dir)"),
-		"  " + hint.Render("     HERRSCHER_ROUTE_POLICY=gateway-only (n'offre que les modèles passerelle)"),
-		"  " + hint.Render("     NEUBLOX_GATEWAY_URL + NEUBLOX_GATEWAY_TOKEN (les deux, sinon une session passerelle échoue)"),
-		"  " + hint.Render("     HERRSCHER_DEFAULT_MODEL (modèle pris quand `session create` n'en nomme aucun)"),
-		"  " + hint.Render("     `herrscher init` pose ces trois questions, pas besoin de les écrire à la main"),
+		"  " + hint.Render(platform.Text(platformtext.UsageEnvBot)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvOwner, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvRoute, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvGateway, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvDefaultModel, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvInit, nil)),
+	}
+	if err := errors.Join(translator.Err(), platform.Err()); err != nil {
+		return fmt.Errorf("usage: %w", err)
 	}
 
 	fmt.Fprintln(os.Stderr, strings.Join(blocks, "\n"))
+	return nil
 }

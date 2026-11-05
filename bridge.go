@@ -5,14 +5,15 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
@@ -22,21 +23,25 @@ import (
 var errModelNotRoutable = errors.New("cannot be routed through the remote backend resolver")
 
 func runBridge(ctx context.Context, args []string) error {
+	translator := clitext.For(clitext.ClientLanguage())
 	flags := flag.NewFlagSet("bridge", flag.ContinueOnError)
 	channel := channelFlag(flags)
-	backendFlags := declareBackendFlags(flags)
-	session := flags.String("session", "", "session name (scopes the orchestrator/attachment dir)")
-	project := flags.String("project", "", "project name, the shared memory scope (P1: every agent of this game recalls it)")
-	agent := flags.String("agent", "", "agent name, the private memory scope (P1: this agent's learned skills)")
-	projectPinned := flags.Bool("project-pinned", false, "the memory project was chosen by a human, not guessed from a directory: never revise it")
-	verbose := flags.Bool("v", false, "log activity to stderr")
-	hubSocket := flags.String("hub-socket", "", "unix socket of the daemon hub: when set, run as a pure backend runner (no gateway polling)")
-	agentsRoot := flags.String("agents-root", "", "directory holding agent homes for the delegation roster (empty = the daemon default beside state.json)")
-	extractor := flags.String("extractor", "", "name of a registered curation extractor. It enables the P1 learning loop (empty = plain Curator, no learning)")
-	journal := flags.String("journal", "", "path to the call journal Consolidate reads (worktree-relative ok); only used with --extractor")
-	consolidateEvery := flags.Int("consolidate-every", 0, "run Consolidate every N turns (0 = manual only); only used with --extractor")
-	statePath := flags.String("state", "", "path to the daemon state file whose model cache the bridge reads (empty = the default state file)")
-	envStdin := flags.Bool("env-stdin", false, "read KEY=VALUE lines from stdin until a blank line and put them in this process's environment (how a remote bridge gets its gateway credentials)")
+	backendFlags := declareBackendFlags(flags, translator)
+	session := flags.String("session", "", translator.Text(clitext.BridgeFlagSession, nil))
+	project := flags.String("project", "", translator.Text(clitext.BridgeFlagProject, nil))
+	agent := flags.String("agent", "", translator.Text(clitext.BridgeFlagAgent, nil))
+	projectPinned := flags.Bool("project-pinned", false, translator.Text(clitext.BridgeFlagProjectPinned, nil))
+	verbose := flags.Bool("v", false, translator.Text(clitext.BridgeFlagVerbose, nil))
+	hubSocket := flags.String("hub-socket", "", translator.Text(clitext.BridgeFlagHubSocket, nil))
+	agentsRoot := flags.String("agents-root", "", translator.Text(clitext.BridgeFlagAgentsRoot, nil))
+	extractor := flags.String("extractor", "", translator.Text(clitext.BridgeFlagExtractor, nil))
+	journal := flags.String("journal", "", translator.Text(clitext.BridgeFlagJournal, nil))
+	consolidateEvery := flags.Int("consolidate-every", 0, translator.Text(clitext.BridgeFlagConsolidateEvery, nil))
+	statePath := flags.String("state", "", translator.Text(clitext.BridgeFlagState, nil))
+	envStdin := flags.Bool("env-stdin", false, translator.Text(clitext.BridgeFlagEnvStdin, nil))
+	if err := translator.Err(); err != nil {
+		return err
+	}
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -113,16 +118,16 @@ type backendFlags struct {
 	account *string
 }
 
-func declareBackendFlags(flags *flag.FlagSet) backendFlags {
+func declareBackendFlags(flags *flag.FlagSet, translator *clitext.Translator) backendFlags {
 	parsed := backendFlags{
-		cmd:     flags.String("cmd", "", "base command (default 'claude' in stream mode; the per-message program in one-shot mode)"),
-		kind:    flags.String("backend", "", "responder backend: stream (default) | oneshot"),
-		vendor:  flags.String("vendor", "", "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)"),
-		resume:  flags.String("resume", "", "backend resume token to resume the conversation on start"),
-		modelID: flags.String("model", "", "catalog model id (see `herrscher models list`); empty = legacy path, the model rides in --cmd"),
-		account: flags.String("account", "", "account profile of the vendor login (see `herrscher account list`); empty = the vendor default, native = the machine login"),
+		cmd:     flags.String("cmd", "", translator.Text(clitext.BridgeFlagCmd, nil)),
+		kind:    flags.String("backend", "", translator.Text(clitext.BridgeFlagBackend, nil)),
+		vendor:  flags.String("vendor", "", translator.Text(clitext.BridgeFlagVendor, nil)),
+		resume:  flags.String("resume", "", translator.Text(clitext.BridgeFlagResume, nil)),
+		modelID: flags.String("model", "", translator.Text(clitext.BridgeFlagModel, nil)),
+		account: flags.String("account", "", translator.Text(clitext.BridgeFlagAccount, nil)),
 	}
-	flags.Bool("stream", true, "deprecated, ignored (accepted for backward compatibility)")
+	flags.Bool("stream", true, translator.Text(clitext.BridgeFlagStream, nil))
 	return parsed
 }
 
@@ -154,7 +159,7 @@ func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequ
 			return nil, err
 		}
 		if req.ModelID != "" {
-			return nil, fmt.Errorf("model %q %w (HERRSCHER_REMOTE=backend): the proxy cannot carry the model's spawn environment", req.ModelID, errModelNotRoutable)
+			return nil, renderError(clitext.ClientLanguage(), errModelNotRoutable, clitext.BridgeModelNotRoutable, clitext.Params{clitext.ParamModel: strconv.Quote(req.ModelID)})
 		}
 		return backend, nil
 	}
@@ -279,7 +284,7 @@ func applyEnvFromStdin(r io.Reader) error {
 	}
 	for key, v := range contracts.ParseEnvSetting(block.String()) {
 		if err := os.Setenv(key, v); err != nil {
-			return fmt.Errorf("apply %s from stdin: %w", key, err)
+			return renderError(clitext.ClientLanguage(), err, clitext.BridgeEnvStdinFailed, clitext.Params{clitext.ParamKey: key, clitext.ParamErr: err.Error()})
 		}
 	}
 	return nil

@@ -42,7 +42,7 @@ func TestWarnResumingNamesTheSessionsAndTheWayOut(t *testing.T) {
 	if err := warnResuming(contracts.VendorClaude, []string{"alpha"}, &loud); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"1 session(s)", "alpha", "set-account"} {
+	for _, want := range []string{"1 session", "alpha", "set-account"} {
 		if !strings.Contains(loud.String(), want) {
 			t.Fatalf("warning %q lacks %q", loud.String(), want)
 		}

@@ -3,11 +3,13 @@ package manage
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 var errUnknownAction = errors.New("unknown plugin action")
@@ -35,9 +37,9 @@ func NewPluginOps(hostDir string) (*PluginOps, error) {
 // state and the newest published version, degrading unknowns to "?" rather than
 // failing: knowing what is compiled in does not depend on being online.
 func (o *PluginOps) List(ctx context.Context) ([]PluginVersion, error) {
-	src, err := os.ReadFile(filepath.Join(o.dir, "plugins.go"))
+	src, err := os.ReadFile(filepath.Join(o.dir, manifestFile))
 	if err != nil {
-		return nil, fmt.Errorf("read plugins.go: %w", err)
+		return nil, failure(err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: manifestFile, clitext.ParamErr: err.Error()})
 	}
 	return pluginVersions(ctx, o.dir, string(src))
 }
@@ -70,15 +72,15 @@ func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (
 
 	switch action {
 	case verbRemove:
-		src, err := os.ReadFile(filepath.Join(o.dir, "plugins.go"))
+		src, err := os.ReadFile(filepath.Join(o.dir, manifestFile))
 		if err != nil {
-			return "", fmt.Errorf("read plugins.go: %w", err)
+			return "", failure(err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: manifestFile, clitext.ParamErr: err.Error()})
 		}
 		out, _, err := removePlugin(string(src), module)
 		if err != nil {
 			return "", err
 		}
-		if err := os.WriteFile(filepath.Join(o.dir, "plugins.go"), []byte(out), modeFile); err != nil {
+		if err := os.WriteFile(filepath.Join(o.dir, manifestFile), []byte(out), modeFile); err != nil {
 			return "", err
 		}
 		return o.run(ctx, buildCommands())
@@ -87,7 +89,7 @@ func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (
 	case "version":
 		return o.run(ctx, addCommands(module, version))
 	}
-	return "", fmt.Errorf("%w %q", errUnknownAction, action)
+	return "", failure(errUnknownAction, clitext.ManageUnknownAction, clitext.Params{clitext.ParamAction: strconv.Quote(action)})
 }
 
 // Restore puts the composition back as it was before the last Apply.

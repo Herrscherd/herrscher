@@ -9,7 +9,9 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/accounts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -24,23 +26,23 @@ const (
 
 var errConversationAccount = errors.New("the session has a conversation under another account: rerun with fresh to start a new conversation, or cancel")
 
-func sessionAccountsVerb(store *state.State) contracts.Cmd {
+func sessionAccountsVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New(nsSession, "accounts").
 		Help(listAccountsHelp).
 		Param(paramName, "session name", true).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-			return cli.Data(listSessionAccounts(store, input.Get(paramName)))
+			return cli.Data(listSessionAccounts(lang, store, input.Get(paramName)))
 		})
 }
 
-func sessionSetAccountVerb(store *state.State) contracts.Cmd {
+func sessionSetAccountVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New(nsSession, "set-account").
 		Help("set a session's account profile: a profile name, native for the machine's own login, or empty for the vendor default; a session with a conversation under another account needs fresh").
 		Param(paramName, "session name", true).
 		Param(paramProfile, "profile name, native, or empty for the vendor default", false).
 		Param(paramFresh, "fresh to start a new conversation under the new account", false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-			return cli.Data(setSessionAccount(store, input.Get(paramName), input.Get(paramProfile), input.Get(paramFresh) == freshMarker))
+			return cli.Data(setSessionAccount(lang, store, input.Get(paramName), input.Get(paramProfile), input.Get(paramFresh) == freshMarker))
 		})
 }
 
@@ -54,7 +56,7 @@ func findSession(store *state.State, name string) (state.Session, bool) {
 	return state.Session{}, false
 }
 
-func listSessionAccounts(store *state.State, name string) (string, error) {
+func listSessionAccounts(lang i18n.Language, store *state.State, name string) (string, error) {
 	sess, ok := findSession(store, name)
 	if !ok {
 		return "", &NotFoundError{Kind: kindSession, Name: name}
@@ -67,28 +69,29 @@ func listSessionAccounts(store *state.State, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	lines := []string{sess.Vendor + ": native"}
+	text := sessionText(lang)
+	lines := []string{sess.Vendor + ": " + text.Text(clitext.AccountNativeLabel, nil)}
 	for _, profile := range profiles {
 		if profile.Vendor != sess.Vendor {
 			continue
 		}
-		lines = append(lines, profileLine(profile, sess.Account))
+		lines = append(lines, profileLine(text, profile, sess.Account))
 	}
 	return strings.Join(lines, "\n"), nil
 }
 
-func profileLine(profile accounts.Profile, chosen string) string {
+func profileLine(text *clitext.Translator, profile accounts.Profile, chosen string) string {
 	line := profile.Name
 	if profile.Default {
-		line += " (default)"
+		line += " " + text.Text(clitext.AccountDefaultMarker, nil)
 	}
 	if chosen == profile.Name {
-		line += " (this session)"
+		line += " " + text.Text(clitext.SessionAccountThis, nil)
 	}
 	return line
 }
 
-func setSessionAccount(store *state.State, name, profile string, fresh bool) (string, error) {
+func setSessionAccount(lang i18n.Language, store *state.State, name, profile string, fresh bool) (string, error) {
 	sess, ok := findSession(store, name)
 	if !ok {
 		return "", &NotFoundError{Kind: kindSession, Name: name}
@@ -107,23 +110,24 @@ func setSessionAccount(store *state.State, name, profile string, fresh bool) (st
 	if !found {
 		return "", &NotFoundError{Kind: kindSession, Name: name}
 	}
-	return accountChangeNotice(name, stored, fresh), nil
+	return accountChangeNotice(lang, name, stored, fresh), nil
 }
 
-func accountChangeNotice(name, profile string, fresh bool) string {
-	account := accountLabel(profile)
+func accountChangeNotice(lang i18n.Language, name, profile string, fresh bool) string {
+	text := sessionText(lang)
+	var key clitext.Key = clitext.SessionAccountNotice
 	if fresh {
-		return fmt.Sprintf("compte de %s réglé sur %s : au prochain lancement, la conversation précédente n'est plus reprise et une nouvelle s'ouvre sous ce compte ; le bridge en cours garde l'ancien compte jusqu'au prochain lancement", name, account)
+		key = clitext.SessionAccountNoticeFresh
 	}
-	return fmt.Sprintf("compte de %s réglé sur %s : effectif au prochain lancement de la session ; le bridge en cours garde l'ancien compte", name, account)
+	return text.Text(key, clitext.Params{clitext.ParamName: name, clitext.ParamAccount: accountLabel(text, profile)})
 }
 
-func accountLabel(profile string) string {
+func accountLabel(text *clitext.Translator, profile string) string {
 	switch profile {
 	case noProfileChoice:
-		return "le défaut du vendeur"
+		return text.Text(clitext.SessionAccountVendorDefault, nil)
 	case nativeChoice:
-		return "le compte natif"
+		return text.Text(clitext.SessionAccountNative, nil)
 	}
 	return profile
 }

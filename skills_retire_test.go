@@ -19,11 +19,11 @@ func TestPluginStillShippingASkillKeepsItAfterRetirement(t *testing.T) {
 		Manifest: contracts.Manifest{Kind: "fake"},
 		Skills:   tree("demo", nil),
 	}}
-	first, _ := installPluginSkills(context.Background(), plugin, noEnv, dst)
+	first, _ := installPluginSkills(context.Background(), testTranslator(), plugin, noEnv, dst)
 	if len(first.Installed) != 1 {
 		t.Fatalf("first install = %+v, want demo installed", first)
 	}
-	out, _ := installPluginSkills(context.Background(), plugin, noEnv, dst)
+	out, _ := installPluginSkills(context.Background(), testTranslator(), plugin, noEnv, dst)
 	retired, err := retireSkills(dst, out)
 	if err != nil {
 		t.Fatal(err)
@@ -38,7 +38,7 @@ func TestPluginStillShippingASkillKeepsItAfterRetirement(t *testing.T) {
 
 func TestSkillOfAnUnloadedPluginIsNotRetired(t *testing.T) {
 	dst := t.TempDir()
-	installPluginSkills(context.Background(), []contracts.Plugin{{
+	installPluginSkills(context.Background(), testTranslator(), []contracts.Plugin{{
 		Manifest: contracts.Manifest{Kind: "fake"},
 		Skills:   tree("demo", nil),
 	}}, noEnv, dst)
@@ -48,7 +48,7 @@ func TestSkillOfAnUnloadedPluginIsNotRetired(t *testing.T) {
 			return nil, errors.New("the tool is not installed")
 		},
 	}}
-	out, _ := installPluginSkills(context.Background(), broken, noEnv, dst)
+	out, _ := installPluginSkills(context.Background(), testTranslator(), broken, noEnv, dst)
 	if len(out.Partial) != 1 {
 		t.Fatalf("a plugin that failed to load must be reported partial, got %+v", out)
 	}
@@ -69,7 +69,7 @@ func TestRetiredSkillsAreReportedOnTheirOwn(t *testing.T) {
 	if _, err := skills.Install(fstest.MapFS{"old/SKILL.md": &fstest.MapFile{Data: []byte("---\nname: old\n---\nx")}}, dst); err != nil {
 		t.Fatal(err)
 	}
-	out, _ := installPluginSkills(context.Background(), nil, noEnv, dst)
+	out, _ := installPluginSkills(context.Background(), testTranslator(), nil, noEnv, dst)
 	retired, err := retireSkills(dst, out)
 	if err != nil {
 		t.Fatal(err)

@@ -37,19 +37,19 @@ func Pick(log *slog.Logger, sources ...Source) i18n.Language {
 	return i18n.English
 }
 
-// Operator resolves the operator language from config.json, then HERRSCHER_LANG, and warns once about an ignored value.
+// Operator resolves the operator language from HERRSCHER_LANG, then config.json, and warns once about an ignored value.
 func Operator(log *slog.Logger, configured string) i18n.Language {
 	return Pick(log,
-		Source{Origin: "config.json language", Value: configured},
 		Source{Origin: EnvVar, Value: os.Getenv(EnvVar)},
+		Source{Origin: "config.json language", Value: configured},
 	)
 }
 
-// Client resolves a client language from config.json, then HERRSCHER_LANG, then LANG without warning.
+// Client resolves a client language from HERRSCHER_LANG, then config.json, then LANG without warning.
 func Client(log *slog.Logger, configured string) i18n.Language {
 	return Pick(log,
-		Source{Origin: "config.json language", Value: configured},
 		Source{Origin: EnvVar, Value: os.Getenv(EnvVar)},
+		Source{Origin: "config.json language", Value: configured},
 		Source{Origin: "LANG", Value: os.Getenv("LANG"), Quiet: true},
 	)
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	transport "github.com/Herrscherd/herrscher-transport"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
@@ -22,11 +22,11 @@ var (
 func announceKeyFromEnv() (transport.AnnounceKey, error) {
 	secret := strings.TrimSpace(host.AnnounceKeySecret())
 	if secret == "" {
-		return transport.AnnounceKey{}, errAnnounceKeyUnset
+		return transport.AnnounceKey{}, clitext.Failure(clitext.ClientLanguage(), errAnnounceKeyUnset, clitext.TransportAnnounceKeyUnset, nil)
 	}
 	key, err := transport.ParseAnnounceKey([]byte(secret))
 	if err != nil {
-		return transport.AnnounceKey{}, fmt.Errorf("HERRSCHER_ANNOUNCE_KEY: %w", err)
+		return transport.AnnounceKey{}, clitext.Failure(clitext.ClientLanguage(), err, clitext.TransportAnnounceKeyInvalid, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	return key, nil
 }
@@ -44,9 +44,9 @@ func remoteCategories() map[contracts.Category]bool {
 
 func tlsConfigFromEnv() transport.TLSConfig {
 	return transport.TLSConfig{
-		CAFile:   os.Getenv("HERRSCHER_TLS_CA"),
-		CertFile: os.Getenv("HERRSCHER_TLS_CERT"),
-		KeyFile:  os.Getenv("HERRSCHER_TLS_KEY"),
+		CAFile:   os.Getenv(transport.EnvTLSCA),
+		CertFile: os.Getenv(transport.EnvTLSCert),
+		KeyFile:  os.Getenv(transport.EnvTLSKey),
 	}
 }
 

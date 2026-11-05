@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	orchestrator "github.com/Herrscherd/herrscher-orchestrator"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
@@ -36,7 +38,7 @@ func TestBuildOrchestratorCuratorWhenNoExtractor(t *testing.T) {
 
 func TestBackendFlagsCarryModelID(t *testing.T) {
 	fs := flag.NewFlagSet("bridge", flag.ContinueOnError)
-	f := declareBackendFlags(fs)
+	f := declareBackendFlags(fs, clitext.For(i18n.English))
 	if err := fs.Parse([]string{"--cmd", "claude", "--vendor", "claude", "--model", "gw-claude-opus-5"}); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -49,7 +51,7 @@ func TestBackendFlagsCarryModelID(t *testing.T) {
 	}
 
 	fs = flag.NewFlagSet("bridge", flag.ContinueOnError)
-	f = declareBackendFlags(fs)
+	f = declareBackendFlags(fs, clitext.For(i18n.English))
 	if err := fs.Parse([]string{"--cmd", "claude"}); err != nil {
 		t.Fatalf("parse: %v", err)
 	}

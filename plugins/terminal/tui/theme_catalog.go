@@ -23,11 +23,11 @@ const (
 )
 
 var (
-	errThemeCycle    = errors.New("theme base cycle")
-	errUnknownKey    = errors.New("unknown key")
-	errInvalidColor  = errors.New("invalid colour")
-	errUnknownBase   = errors.New("unknown base")
-	errUnknownOption = errors.New("unknown value")
+	errThemeCycle    = errors.New("base de thème cyclique")
+	errUnknownKey    = errors.New("clé inconnue")
+	errInvalidColor  = errors.New("couleur invalide")
+	errUnknownBase   = errors.New("base inconnue")
+	errUnknownOption = errors.New("valeur inconnue")
 )
 
 type themeFile struct {

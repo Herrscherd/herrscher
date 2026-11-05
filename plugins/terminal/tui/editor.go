@@ -26,7 +26,7 @@ const (
 	draftHeartbeat = time.Hour
 )
 
-var errUnsafeDraftDir = errors.New("draft folder open to others or with too-wide rights")
+var errUnsafeDraftDir = errors.New("dossier des brouillons ouvert à d'autres ou aux droits trop larges")
 
 type editorDoneMsg struct {
 	path string

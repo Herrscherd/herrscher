@@ -14,7 +14,7 @@ var (
 	errRefusedTarget    = errors.New("refusing a")
 	errOptionTarget     = errors.New("refusing a target that reads as an option")
 	errControlByte      = errors.New("refusing a target carrying a control byte")
-	errNoEditor         = errors.New("no $EDITOR or $VISUAL to open with")
+	errNoEditor         = errors.New("aucun $EDITOR ni $VISUAL pour ouvrir")
 	errNoEditorLauncher = errors.New("no editor launcher configured")
 	errNoSystemLauncher = errors.New("no system launcher configured")
 )

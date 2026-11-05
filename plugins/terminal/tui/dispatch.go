@@ -125,7 +125,7 @@ func newDispatchTables() (*dispatchTables, error) {
 	return tables, errors.Join(errs...)
 }
 
-var errDuplicateBinding = errors.New("action bound twice in the same table")
+var errDuplicateBinding = errors.New("action liée deux fois dans une même table")
 
 type keyBinding[Run any] struct {
 	action keyAction

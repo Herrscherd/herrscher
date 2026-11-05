@@ -75,7 +75,7 @@ func Progress(line string) contracts.Event {
 
 // Result encodes the outcome of a compaction.
 func Result(res contracts.CompactResult) (contracts.Event, error) {
-	notice, err := encodeNotice(res.Notice)
+	notice, err := EncodeNotice(res.Notice)
 	if err != nil {
 		return contracts.Event{}, err
 	}
@@ -95,7 +95,7 @@ func DecodeResult(frame contracts.Event) (contracts.CompactResult, error) {
 		TokensMeasured: frame.Done,
 		Note:           frame.Text,
 	}
-	notice, err := decodeNotice(frame.Value)
+	notice, err := DecodeNotice(frame.Value)
 	if err != nil {
 		return res, fmt.Errorf("%w: %w", ErrNoticeMalformed, err)
 	}
@@ -103,7 +103,9 @@ func DecodeResult(frame contracts.Event) (contracts.CompactResult, error) {
 	return res, nil
 }
 
-func encodeNotice(notice contracts.Notice) (string, error) {
+// EncodeNotice encodes a notice in the wire form shared by the compaction events and the
+// command socket. A notice without a code encodes to the empty string.
+func EncodeNotice(notice contracts.Notice) (string, error) {
 	if notice.Code == 0 {
 		return "", nil
 	}
@@ -122,7 +124,9 @@ func encodeNotice(notice contracts.Notice) (string, error) {
 	return string(encoded), nil
 }
 
-func decodeNotice(value string) (contracts.Notice, error) {
+// DecodeNotice decodes a notice encoded by EncodeNotice. The empty string decodes to the
+// zero notice.
+func DecodeNotice(value string) (contracts.Notice, error) {
 	if value == "" {
 		return contracts.Notice{}, nil
 	}

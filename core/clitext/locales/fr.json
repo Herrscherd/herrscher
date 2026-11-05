@@ -1278,11 +1278,6 @@
     "other": "redémarrage backend : {{.Err}} (session {{.Name}} restaurée sur {{.Vendor}})"
   },
   {
-    "id": "cli.session.switch.restart_lost",
-    "description": "Erreur de session switch quand le redémarrage du backend a échoué et que la cible précédente n'a pas pu non plus être restaurée",
-    "other": "redémarrage backend : {{.Err}} ; le retour arrière a échoué, session {{.Name}} hors service : {{.RollbackErr}}"
-  },
-  {
     "id": "cli.session.approvals.unenforced",
     "description": "Avertissement à la création de session : le fournisseur ne peut pas appliquer le mode d'approbation, la session tourne sans contrôle",
     "other": "⚠️ approbations : {{.Vendor}} ne peut pas les appliquer ({{.Why}}), donc **{{.Name}}** tourne sans contrôle."

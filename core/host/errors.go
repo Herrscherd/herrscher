@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
+
 	"github.com/Herrscherd/herrscher/core/internal/authz"
 )
 
@@ -46,6 +48,19 @@ func (e *NotFoundError) Error() string {
 	return fmt.Sprintf("no %s named %q", e.Kind, e.Name)
 }
 
+// Notice returns the notice that renders NotFoundError in the caller's language.
+func (e *NotFoundError) Notice() contracts.Notice {
+	switch e.Kind {
+	case kindSession, liveSessionKind:
+		return namedNotice(contracts.CodeSessionNotFound, e.Name)
+	case kindAgent:
+		return namedNotice(contracts.CodeAgentNotFound, e.Name)
+	case kindSchedule:
+		return namedNotice(contracts.CodeScheduleNotFound, e.Name)
+	}
+	return contracts.Notice{Code: contracts.CodeEntityNotFound, Args: []contracts.Arg{contracts.Text("Kind", e.Kind), contracts.Text("Name", e.Name)}}
+}
+
 // UnknownError reports that Name is not a known entity of Kind.
 type UnknownError struct {
 	Kind string
@@ -54,6 +69,18 @@ type UnknownError struct {
 
 func (e *UnknownError) Error() string {
 	return fmt.Sprintf("unknown %s %q", e.Kind, e.Name)
+}
+
+// Notice returns the notice that renders UnknownError in the caller's language.
+func (e *UnknownError) Notice() contracts.Notice {
+	if e.Kind == kindAgent {
+		return namedNotice(contracts.CodeUnknownAgent, e.Name)
+	}
+	return contracts.Notice{Code: contracts.CodeEntityUnknown, Args: []contracts.Arg{contracts.Text("Kind", e.Kind), contracts.Text("Name", e.Name)}}
+}
+
+func namedNotice(code contracts.Code, name string) contracts.Notice {
+	return contracts.Notice{Code: code, Args: []contracts.Arg{contracts.Text("Name", name)}}
 }
 
 type requestNotWaitingError struct {
@@ -130,6 +157,16 @@ type commandSocketError struct {
 
 func (e *commandSocketError) Error() string {
 	return e.Message
+}
+
+type noticedSocketError struct {
+	commandSocketError
+
+	notice contracts.Notice
+}
+
+func (e *noticedSocketError) Notice() contracts.Notice {
+	return e.notice
 }
 
 type contributionClashError struct {

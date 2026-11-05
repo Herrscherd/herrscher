@@ -3,6 +3,8 @@ package agent
 import (
 	"errors"
 	"fmt"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 var (
@@ -23,6 +25,11 @@ func (e *ExistsError) Error() string {
 	return fmt.Sprintf("agent %q already exists", e.Name)
 }
 
+// Notice returns the notice that renders ExistsError in the caller's language.
+func (e *ExistsError) Notice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeAgentExists, Args: []contracts.Arg{contracts.Text("Name", e.Name)}}
+}
+
 // InvalidNameError reports an agent name that is not a usable slug.
 type InvalidNameError struct {
 	Name string
@@ -32,6 +39,11 @@ func (e *InvalidNameError) Error() string {
 	return fmt.Sprintf("invalid agent name %q", e.Name)
 }
 
+// Notice returns the notice that renders InvalidNameError in the caller's language.
+func (e *InvalidNameError) Notice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeAgentInvalidName, Args: []contracts.Arg{contracts.Text("Name", e.Name)}}
+}
+
 // NotFoundError reports a reference to an agent that does not exist.
 type NotFoundError struct {
 	Name string
@@ -39,6 +51,11 @@ type NotFoundError struct {
 
 func (e *NotFoundError) Error() string {
 	return fmt.Sprintf("no agent %q", e.Name)
+}
+
+// Notice returns the notice that renders NotFoundError in the caller's language.
+func (e *NotFoundError) Notice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeAgentNotFound, Args: []contracts.Arg{contracts.Text("Name", e.Name)}}
 }
 
 // SettingsShapeError reports a settings document whose shape is not the expected one.

@@ -257,12 +257,12 @@
   {
     "id": "cli.skills.retired_diverged",
     "description": "Notice d'une compétence retirée, modifiée localement et laissée telle quelle",
-    "other": "herrscher : la compétence {{.Name}} n'est plus livrée et a été modifiée ici ; elle est laissée telle quelle, supprimez {{.Path}} pour la retirer"
+    "other": "herrscher : la compétence {{.Name}} n'est plus livrée et a été modifiée ici ; elle est laissée telle quelle, supprime {{.Path}} pour la retirer"
   },
   {
     "id": "cli.skills.retired_linked",
     "description": "Notice d'une compétence retirée qui est un lien symbolique, laissée telle quelle",
-    "other": "herrscher : la compétence {{.Name}} est ici un lien symbolique ; elle est laissée telle quelle, supprimez {{.Path}} pour retirer le lien"
+    "other": "herrscher : la compétence {{.Name}} est ici un lien symbolique ; elle est laissée telle quelle, supprime {{.Path}} pour retirer le lien"
   },
   {
     "id": "cli.skills.installed",
@@ -277,12 +277,12 @@
   {
     "id": "cli.skills.diverged",
     "description": "Notice d'une compétence de plugin qui diffère de la version livrée, laissée telle quelle",
-    "other": "herrscher : la compétence de plugin {{.Name}} diffère de celle livrée par cette version et a été laissée telle quelle ; supprimez {{.Path}} pour reprendre la version livrée"
+    "other": "herrscher : la compétence de plugin {{.Name}} diffère de celle livrée par cette version et a été laissée telle quelle ; supprime {{.Path}} pour reprendre la version livrée"
   },
   {
     "id": "cli.skills.linked",
     "description": "Notice d'une compétence de plugin qui est un lien symbolique, laissée telle quelle",
-    "other": "herrscher : la compétence de plugin {{.Name}} est ici un lien symbolique ; elle est laissée telle quelle, supprimez {{.Path}} pour reprendre la version livrée"
+    "other": "herrscher : la compétence de plugin {{.Name}} est ici un lien symbolique ; elle est laissée telle quelle, supprime {{.Path}} pour reprendre la version livrée"
   },
   {
     "id": "cli.skills.not_configured",
@@ -532,7 +532,7 @@
   {
     "id": "cli.service.update.rebuilding",
     "description": "Avis : la mise à jour recompile le binaire installé, et non celui qui a été lancé",
-    "other": "herrscher service : reconstruction du binaire installé {{.Installed}} (vous avez lancé {{.Ran}})"
+    "other": "herrscher service : reconstruction du binaire installé {{.Installed}} (tu as lancé {{.Ran}})"
   },
   {
     "id": "cli.service.update.rebuilt",
@@ -642,22 +642,22 @@
   {
     "id": "cli.service.note.unit_path",
     "description": "Avis : le PATH de l'unité a été réécrit pendant une mise à jour",
-    "other": "herrscher service : PATH de l'unité mis à jour pour que les agents trouvent les outils sous votre dossier personnel"
+    "other": "herrscher service : PATH de l'unité mis à jour pour que les agents trouvent les outils sous ton dossier personnel"
   },
   {
     "id": "cli.service.note.not_started",
     "description": "Avis : le service est installé mais pas lancé, des secrets requis manquent",
-    "other": "herrscher service : installé et activé au démarrage, mais PAS lancé : renseignez les secrets requis dans {{.EnvFile}}, puis : {{.Start}}"
+    "other": "herrscher service : installé et activé au démarrage, mais PAS lancé : renseigne les secrets requis dans {{.EnvFile}}, puis : {{.Start}}"
   },
   {
     "id": "cli.service.note.running",
     "description": "Avis : le service tourne, et l'emplacement de ses secrets",
-    "other": "herrscher service : en cours d'exécution. Les secrets sont dans {{.EnvFile}} ; modifiez-le puis redémarrez pour les changer."
+    "other": "herrscher service : en cours d'exécution. Les secrets sont dans {{.EnvFile}} ; modifie-le puis redémarre pour les changer."
   },
   {
     "id": "cli.service.note.windows_edit",
     "description": "Avis : sous Windows, le fichier de secrets à remplir et la commande qui lance la tâche maintenant",
-    "other": "herrscher service : modifiez {{.EnvFile}} avec votre jeton ; la tâche lance herrscher à votre prochaine ouverture de session (ou lancez-la maintenant avec schtasks /run /tn {{.Task}})."
+    "other": "herrscher service : modifie {{.EnvFile}} avec ton jeton ; la tâche lance herrscher à ta prochaine ouverture de session (ou lance-la maintenant avec schtasks /run /tn {{.Task}})."
   },
   {
     "id": "cli.account.usage",
@@ -702,7 +702,7 @@
   {
     "id": "cli.account.login_failed",
     "description": "Erreur : la connexion du fournisseur pour un nouveau profil a échoué, et son dossier est conservé",
-    "other": "connexion {{.Vendor}} pour {{.Name}} : {{.Err}} (le dossier du profil est conservé, relancez add ou supprimez-le)"
+    "other": "connexion {{.Vendor}} pour {{.Name}} : {{.Err}} (le dossier du profil est conservé, relance add ou supprime-le)"
   },
   {
     "id": "cli.account.added",
@@ -727,13 +727,13 @@
   {
     "id": "cli.account.in_use",
     "description": "Erreur : un profil ne peut être supprimé ou remplacé tant que des sessions actives l'utilisent",
-    "other": "{{.Vendor}}/{{.Name}} utilisé par la ou les sessions {{.Sessions}}, déplacez-les d'abord avec herrscher session set-account"
+    "other": "{{.Vendor}}/{{.Name}} utilisé par la ou les sessions {{.Sessions}}, déplace-les d'abord avec herrscher session set-account"
   },
   {
     "id": "cli.account.resuming",
     "description": "Avertissement : des sessions vont reprendre sous un nouveau compte par défaut de leur fournisseur, avec la manière de les garder ailleurs (Count choisit la forme plurielle)",
-    "one": "attention : 1 session {{.Vendor}} va reprendre sous ce défaut : {{.Sessions}}. Pour la garder sur un autre compte, utilisez herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation).",
-    "other": "attention : {{.Count}} sessions {{.Vendor}} vont reprendre sous ce défaut : {{.Sessions}}. Pour les garder sur un autre compte, utilisez herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation)."
+    "one": "attention : 1 session {{.Vendor}} va reprendre sous ce défaut : {{.Sessions}}. Pour la garder sur un autre compte, utilise herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation).",
+    "other": "attention : {{.Count}} sessions {{.Vendor}} vont reprendre sous ce défaut : {{.Sessions}}. Pour les garder sur un autre compte, utilise herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation)."
   },
   {
     "id": "cli.env.read_failed",
@@ -793,7 +793,7 @@
   {
     "id": "cli.manage.plugin.skipped_build",
     "description": "Notice: the build was skipped by --no-build, and how to run it",
-    "other": "compilation ignorée (--no-build) ; lancez `go build` dans l'hôte pour appliquer"
+    "other": "compilation ignorée (--no-build) ; lance `go build` dans l'hôte pour appliquer"
   },
   {
     "id": "cli.manage.plugin.version_not_installed",
@@ -848,12 +848,12 @@
   {
     "id": "cli.manage.no_host_module",
     "description": "Error: no host module was found where the command looked",
-    "other": "aucun module hôte trouvé (plugins.go recherché) ; passez --host DIR"
+    "other": "aucun module hôte trouvé (plugins.go recherché) ; passe --host DIR"
   },
   {
     "id": "cli.manage.not_compiled_in",
     "description": "Error: a module is not compiled in, so it cannot be pinned or unpinned",
-    "other": "{{.Module}} n'est pas compilé ; lancez d'abord `herrscher plugin add {{.Module}}`"
+    "other": "{{.Module}} n'est pas compilé ; lance d'abord `herrscher plugin add {{.Module}}`"
   },
   {
     "id": "cli.manage.read_failed",
@@ -893,7 +893,7 @@
   {
     "id": "cli.manage.unknown_kind.listed",
     "description": "Error: a module kind given as a flag is not in the catalog, with the way to list it",
-    "other": "{{.Category}} : type inconnu {{.Kind}} (essayez `herrscher init --list`)"
+    "other": "{{.Category}} : type inconnu {{.Kind}} (essaie `herrscher init --list`)"
   },
   {
     "id": "cli.manage.invalid_module_path",
@@ -928,7 +928,7 @@
   {
     "id": "cli.manage.gateway_pair_missing",
     "description": "Error: the gateway-only policy was chosen with no gateway credentials",
-    "other": "gateway-only sans identifiants de passerelle : chaque session échouerait au démarrage ; renseignez {{.URL}} et {{.Token}}"
+    "other": "gateway-only sans identifiants de passerelle : chaque session échouerait au démarrage ; renseigne {{.URL}} et {{.Token}}"
   },
   {
     "id": "cli.manage.gateway_pair_partial",
@@ -978,12 +978,12 @@
   {
     "id": "cli.manage.updated_no_build",
     "description": "Confirmation: the plugins were fetched but not built, and how to build them",
-    "other": "plugins mis à jour (--no-build) ; lancez `go mod tidy && go build` dans l'hôte pour appliquer"
+    "other": "plugins mis à jour (--no-build) ; lance `go mod tidy && go build` dans l'hôte pour appliquer"
   },
   {
     "id": "cli.manage.updated",
     "description": "Confirmation: the plugins were updated and the host reinstalled",
-    "other": "plugins mis à jour et hôte réinstallé ; redémarrez le service pour le lancer"
+    "other": "plugins mis à jour et hôte réinstallé ; redémarre le service pour le lancer"
   },
   {
     "id": "cli.manage.flag.host",
@@ -1033,7 +1033,7 @@
   {
     "id": "cli.manage.init.wrote_no_build",
     "description": "Confirmation: init wrote plugins.go without building, and how to build it",
-    "other": "plugins.go écrit (--no-build) ; lancez `go mod tidy && go build` dans l'hôte pour appliquer"
+    "other": "plugins.go écrit (--no-build) ; lance `go mod tidy && go build` dans l'hôte pour appliquer"
   },
   {
     "id": "cli.manage.wrote_settings",
@@ -1054,7 +1054,7 @@
   {
     "id": "cli.manage.seeded",
     "description": "Confirmation: init copied .env.example to .env",
-    "other": "{{.Path}} créé à partir de .env.example : renseignez vos secrets"
+    "other": "{{.Path}} créé à partir de .env.example : renseigne tes secrets"
   },
   {
     "id": "cli.manage.env_write_failed",
@@ -1069,7 +1069,7 @@
   {
     "id": "cli.manage.route.default_model_later",
     "description": "Notice: init skipped the default model question, and how to answer it later",
-    "other": "modèle par défaut : relancez `herrscher init` après la recompilation pour en choisir un"
+    "other": "modèle par défaut : relance `herrscher init` après la recompilation pour en choisir un"
   },
   {
     "id": "cli.manage.route.no_model_offered",
@@ -1139,12 +1139,12 @@
   {
     "id": "cli.manage.wizard.compose",
     "description": "Subtitle of the init wizard when it composes the plugin stack",
-    "other": "composez votre pile de plugins : Entrée accepte la valeur par défaut"
+    "other": "compose ta pile de plugins : Entrée accepte la valeur par défaut"
   },
   {
     "id": "cli.manage.wizard.configure",
     "description": "Subtitle of the init wizard when it configures an installed host",
-    "other": "configurez l'hôte installé : Entrée pour passer un champ"
+    "other": "configure l'hôte installé : Entrée pour passer un champ"
   },
   {
     "id": "cli.manage.decider.before_writing",
@@ -1194,7 +1194,7 @@
   {
     "id": "cli.manage.start_with",
     "description": "Line after the wizard: the command that starts the daemon",
-    "other": "lancez-le avec : {{.Command}}"
+    "other": "lance-le avec : {{.Command}}"
   },
   {
     "id": "cli.manage.stack_header",
@@ -1239,7 +1239,7 @@
   {
     "id": "cli.session.archived",
     "description": "Confirmation de l'archivage d'une session, avant une éventuelle note sur le salon",
-    "other": "📦 Session **{{.Name}}** archivée. Reprenez-la depuis /resume."
+    "other": "📦 Session **{{.Name}}** archivée. Reprends-la depuis /resume."
   },
   {
     "id": "cli.session.renamed",
@@ -1395,7 +1395,7 @@
   {
     "id": "cli.session.mode.bypass_recreate",
     "description": "Note ajoutée à la confirmation de set-mode quand la session a été créée en bypass, qui n'a pas de point d'accroche à modifier",
-    "other": " (une session créée avec --approvals bypass n'a pas de point d'accroche : recréez-la pour que cela prenne effet)"
+    "other": " (une session créée avec --approvals bypass n'a pas de point d'accroche : recrée-la pour que cela prenne effet)"
   },
   {
     "id": "cli.session.picked",

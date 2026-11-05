@@ -163,11 +163,11 @@ func TestToggleMouseHandsTheMouseOverAndTakesItBack(t *testing.T) {
 
 func TestCtrlGTogglesTheMouse(t *testing.T) {
 	m := newTestModel()
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	pressChord(m, "ctrl+x m")
 	if !m.mouseFree {
 		t.Fatal("ctrl+g must release the mouse")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	pressChord(m, "ctrl+x m")
 	if m.mouseFree {
 		t.Fatal("ctrl+g must take the mouse back")
 	}

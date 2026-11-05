@@ -51,7 +51,11 @@ func (m *model) skillsView() string {
 		s := m.skillsRows[i]
 		rows = append(rows, overlayRow{label: s.Name, detail: s.Description})
 	}
-	footer := "↑↓ parcourir · ⇞⇟ page · Échap fermer"
+	footer := joinNonEmpty(
+		m.pairHint(actSelectPrevious, actSelectNext, "parcourir", ctxSkills),
+		m.pairHint(actSelectPageUp, actSelectPageDown, "page", ctxSkills),
+		m.labelledHint(actSelectCancel, "fermer", ctxSkills),
+	)
 	if hidden := len(m.skillsRows) - (end - start); hidden > 0 {
 		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}

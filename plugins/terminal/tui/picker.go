@@ -123,7 +123,7 @@ func (m *model) resumeView() string {
 		}
 		rows = append(rows, overlayRow{mark: mark, label: row.Name, detail: strings.Join(cols, " · ")})
 	}
-	footer := "↑↓ choisir · ⇞⇟ page · Entrée ouvrir · Échap annuler"
+	footer := m.listFooter(ctxResume, "ouvrir")
 	if hidden := len(m.resumeRows) - (end - start); hidden > 0 {
 		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}
@@ -184,9 +184,18 @@ func (m *model) switchView() string {
 		}
 		rows = append(rows, overlayRow{mark: mark, label: row.Name, detail: row.Project})
 	}
-	footer := "↑↓ choisir · ⇞⇟ page · Entrée basculer · Échap annuler"
+	footer := m.listFooter(ctxSessions, "basculer")
 	if hidden := len(m.switchRows) - (end - start); hidden > 0 {
 		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
 	}
 	return floatingList(rows, m.switchIdx-start, footer, m.overlayWidth(), m.st)
+}
+
+func (m *model) listFooter(context keyContext, accept string) string {
+	return joinNonEmpty(
+		m.pairHint(actSelectPrevious, actSelectNext, "choisir", context),
+		m.pairHint(actSelectPageUp, actSelectPageDown, "page", context),
+		m.labelledHint(actSelectAccept, accept, context),
+		m.labelledHint(actSelectCancel, "annuler", context),
+	)
 }

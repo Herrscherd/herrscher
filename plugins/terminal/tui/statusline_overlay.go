@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	statuslineFooter       = "↑↓ choisir · espace cocher · l’ordre suit la liste"
 	statuslineScriptFooter = "les cases ne servent plus : le script décide"
 	barLabelWidth          = 20
 	barListWidth           = 54
@@ -63,30 +62,36 @@ func (m *model) closeStatusline() {
 }
 
 func (m *model) handleStatuslineKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case keyEsc:
-		m.closeStatusline()
-		return nil
-	case keyCtrlC:
-		return m.overlayCtrlC()
-	case "s":
-		return m.switchStatuslineSource()
+	action := m.stackAction(msg, ctxStatusline)
+	if run, ok := m.tables().statusline[action]; ok {
+		return run(m, msg)
 	}
 	if m.bar.scripted() {
 		return nil
 	}
-	if m.overlayNav(msg, m.moveStatuslineCursor) {
+	if m.overlayNav(action, m.moveStatuslineCursor) {
 		return nil
 	}
-	switch msg.String() {
-	case "shift+up":
-		m.moveStatuslineField(-1)
-	case "shift+down":
-		m.moveStatuslineField(1)
-	case " ":
-		m.toggleStatuslineField()
+	if run, ok := m.tables().statuslineField[action]; ok {
+		return run(m, msg)
 	}
 	return nil
+}
+
+func statuslineRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actStatuslineClose, stepKey((*model).closeStatusline)),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+		bind[keyRun](actStatuslineSource, cmdKey((*model).switchStatuslineSource)),
+	)
+}
+
+func statuslineFieldRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actStatuslineUp, stepKey(func(app *model) { app.moveStatuslineField(-1) })),
+		bind[keyRun](actStatuslineDown, stepKey(func(app *model) { app.moveStatuslineField(1) })),
+		bind[keyRun](actStatuslineToggle, stepKey((*model).toggleStatuslineField)),
+	)
 }
 
 func (m *model) moveStatuslineCursor(delta int) {
@@ -169,7 +174,7 @@ func (m *model) statuslineControls(width int) []string {
 		"",
 	}
 	lines = append(lines, m.statuslineRows(width)...)
-	footer := statuslineFooter
+	footer := m.statuslineFooter()
 	if m.bar.scripted() {
 		footer = statuslineScriptFooter
 	}
@@ -206,7 +211,7 @@ func (m *model) statuslineRow(fieldID string, selected bool, width int) string {
 	if shown {
 		mark = m.st.glyphs.ticked
 	}
-	label := padTo(spec.labelWith(m.st.glyphs), barLabelWidth)
+	label := padTo(spec.labelWith(m.hintIn(actCycleMode, chatKeyStack()...)), barLabelWidth)
 	if selected {
 		plain := statusIndent + head + mark + " " + label + " " + spec.note
 		return m.st.overlaySel.Render(padTo(cutText(plain, width), width))
@@ -315,4 +320,12 @@ func (m *model) statusLeftPreview() string {
 		return ""
 	}
 	return m.statusBar(target, m.innerWidth()-lipgloss.Width(statusIndent))
+}
+
+func (m *model) statuslineFooter() string {
+	return joinNonEmpty(
+		m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxStatusline),
+		m.labelledHint(actStatuslineToggle, "cocher", ctxStatusline),
+		"l’ordre suit la liste",
+	)
 }

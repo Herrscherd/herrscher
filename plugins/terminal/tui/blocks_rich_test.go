@@ -64,7 +64,7 @@ func TestFoldedCodeBlockCollapsesAndRestoresExactly(t *testing.T) {
 	code := strings.Repeat("line\n", foldThreshold+5)
 	text := "before\n```go\n" + code + "```\nafter"
 
-	folded := foldCodeBlocks(text, unicodeGlyphs())
+	folded := foldCodeBlocks(text, unicodeGlyphs(), "⌥C")
 	if strings.Contains(folded, strings.Repeat("line\n", 2)) {
 		t.Fatalf("a folded block must not still contain its body: %q", folded)
 	}
@@ -77,15 +77,15 @@ func TestFoldedCodeBlockCollapsesAndRestoresExactly(t *testing.T) {
 	if got := len(strings.Split(folded, "\n")); got != 3 {
 		t.Fatalf("a folded block is one line: got %d lines in %q", got, folded)
 	}
-	if foldCodeBlocks(text, unicodeGlyphs()) == text {
+	if foldCodeBlocks(text, unicodeGlyphs(), "⌥C") == text {
 		t.Fatalf("the fixture must actually fold")
 	}
 }
 
 func TestShortCodeBlocksAreNotFolded(t *testing.T) {
 	text := "```go\nfmt.Println(1)\n```"
-	if foldCodeBlocks(text, unicodeGlyphs()) != text {
-		t.Fatalf("a short block must be left alone: %q", foldCodeBlocks(text, unicodeGlyphs()))
+	if foldCodeBlocks(text, unicodeGlyphs(), "⌥C") != text {
+		t.Fatalf("a short block must be left alone: %q", foldCodeBlocks(text, unicodeGlyphs(), "⌥C"))
 	}
 }
 
@@ -149,7 +149,7 @@ func TestDiffKeepsFourHunkLinesAndFolds(t *testing.T) {
 		t.Fatalf("got %d lines, want %d: %q", len(lines), diffHunkBudget+2, lines)
 	}
 	last := ansi.Strip(lines[len(lines)-1])
-	if !strings.Contains(last, unicodeGlyphs().fold) || !strings.Contains(last, "2 lignes de plus") {
+	if !strings.Contains(last, unicodeGlyphs().fold) || !strings.Contains(last, "2 ⌥E lignes de plus") {
 		t.Fatalf("fold line = %q", last)
 	}
 }

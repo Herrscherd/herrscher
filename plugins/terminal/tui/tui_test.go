@@ -480,7 +480,7 @@ func TestQuestionMarkTypedWhenInputNonEmpty(t *testing.T) {
 func TestShortcutsPanelListsClaudeKeys(t *testing.T) {
 	m := newTestModel()
 	panel := m.helpView()
-	for _, want := range []string{"échap interrompre", `⇧⏎ ou \⏎ nouvelle ligne`, "/ commandes", "@ fichiers"} {
+	for _, want := range []string{"échap interrompre", "\\⏎ nouvelle ligne", "/ commandes", "@ fichiers"} {
 		if !strings.Contains(panel, want) {
 			t.Fatalf("shortcuts panel missing %q: %q", want, panel)
 		}

@@ -78,7 +78,7 @@ func TestRenderBusyFooterOffersQueue(t *testing.T) {
 	lines := renderAt(t, 200, func(m *model) {
 		m.tabs["a"].busy = true
 	})
-	if !strings.Contains(ansi.Strip(strings.Join(lines, "\n")), "⌃⏎ envoyer la file") {
+	if !strings.Contains(ansi.Strip(strings.Join(lines, "\n")), "⌃X⏎ envoyer la file") {
 		t.Fatal("busy footer must mention ctrl+enter")
 	}
 }

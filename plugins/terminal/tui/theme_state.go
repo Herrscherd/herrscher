@@ -54,6 +54,7 @@ func (m *model) loadTheme(configDir string, detectDark func() bool) {
 		cfg.Glyphs, cfg.Borders, cfg.Density = nil, nil, nil
 	}
 	m.themeCfg = cfg
+	m.loadKeys(configDir)
 	m.themeCat = loadThemeCatalog(themesDirFor(configDir))
 	m.themeStamp = themesStamp(themesDirFor(configDir))
 	m.themeBackground = ""

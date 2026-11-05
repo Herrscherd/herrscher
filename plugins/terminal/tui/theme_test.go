@@ -156,7 +156,7 @@ func TestThemeScreenHeaderAndHelpFitOnOneLine(t *testing.T) {
 		if !strings.Contains(plain, "Thème · /theme · aperçu en direct") {
 			t.Fatalf("%d lines: header must name the screen and the live preview", height)
 		}
-		for _, want := range []string{"↑↓ aperçu en direct · ⏎ garder · échap revenir", "⌃X puis t : thème suivant"} {
+		for _, want := range []string{"⌃P⌃N aperçu en direct · ⏎ garder · échap revenir", "⌃Xt thème, depuis n’importe où"} {
 			if !lineContains(plain, want) {
 				t.Fatalf("%d lines: help %q must sit on one line", height, want)
 			}
@@ -222,11 +222,11 @@ func TestThemeScreenRenderOptionsAreVisibleAndCycle(t *testing.T) {
 			t.Fatalf("RENDU must show %q:\n%s", want, plain)
 		}
 	}
-	m.handleThemeLetter("b")
-	m.handleThemeLetter("d")
-	m.handleThemeLetter("w")
-	m.handleThemeLetter("i")
-	m.handleThemeLetter("a")
+	pressChord(m, "b")
+	pressChord(m, "d")
+	pressChord(m, "w")
+	pressChord(m, "i")
+	pressChord(m, "a")
 	if m.themeScr.look.Borders != borderSquare || m.themeScr.look.Density != densityCompact || m.themeScr.look.Bold || m.themeScr.look.Italic || !m.themeScr.auto {
 		t.Fatalf("the option keys must change the look: %+v auto=%v", m.themeScr.look, m.themeScr.auto)
 	}
@@ -263,7 +263,7 @@ func TestThemeScreenCtrlEOpensPersonalFile(t *testing.T) {
 func TestThemeOverlayCommitWritesOnlyChangedLook(t *testing.T) {
 	m, dir := themeModel(t, 120)
 	m.openTheme()
-	m.handleThemeLetter("g")
+	pressChord(m, "g")
 	m.commitTheme()
 	cfg, err := readTerminalConfig(filepath.Join(dir, terminalConfigFile))
 	if err != nil {
@@ -297,7 +297,7 @@ func TestThemeOverlayEscRevertsPreview(t *testing.T) {
 	}
 }
 
-func TestLeaderOpensThemeOverlay(t *testing.T) {
+func TestChordOpensThemeOverlay(t *testing.T) {
 	m, _ := themeModel(t, 120)
 	m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlX})
 	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
@@ -306,10 +306,10 @@ func TestLeaderOpensThemeOverlay(t *testing.T) {
 	}
 }
 
-func TestLeaderTimesOut(t *testing.T) {
+func TestChordTimesOut(t *testing.T) {
 	m, _ := themeModel(t, 120)
 	m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlX})
-	m.leaderArmed = time.Now().Add(-2 * leaderWindow)
+	m.keyChord.started = time.Now().Add(-2 * defaultChordTimeout)
 	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
 	if m.themeScr != nil {
 		t.Fatal("a late second key must not run the leader binding")

@@ -20,7 +20,6 @@ const (
 	diffNumberWidth    = 5
 	diffTwoColumnsFrom = 70
 	diffTabSpaces      = "  "
-	diffMore           = "lignes de plus (alt+e)"
 )
 
 func renderDiff(body string, width int, display view) string {
@@ -41,7 +40,7 @@ func diffRows(lines []string, width int, display view) []string {
 			continue
 		}
 		if !display.expand && spent == diffHunkBudget {
-			out = append(out, display.st.dim.Render(fmt.Sprintf("%s %d %s", display.st.glyphs.fold, countDiffRows(lines[index:]), diffMore)))
+			out = append(out, display.st.dim.Render(fmt.Sprintf("%s %d %s", display.st.glyphs.fold, countDiffRows(lines[index:]), display.hint(actToggleToolExpand, "lignes de plus"))))
 			break
 		}
 		sign, code := diffSign(line)
@@ -124,7 +123,7 @@ func diffHeader(path string, body []string, display view) string {
 		}
 	}
 	return display.st.dim.Render("╭ ") + display.st.text.Render(path) + display.st.dim.Render(
-		fmt.Sprintf("  +%d −%d   ancien · nouveau   ⌃D panneau de diff", added, removed),
+		fmt.Sprintf("  +%d −%d   ancien · nouveau   %s", added, removed, display.hint(actOpenDiff, "panneau de diff")),
 	)
 }
 
@@ -312,7 +311,7 @@ func codeBlocks(text string) []codeBlock {
 
 const foldThreshold = 12
 
-func foldCodeBlocks(text string, glyphs glyphSet) string {
+func foldCodeBlocks(text string, glyphs glyphSet, toggle string) string {
 	var out []string
 	var buf []string
 	lang := ""
@@ -325,7 +324,7 @@ func foldCodeBlocks(text string, glyphs glyphSet) string {
 		case inFence && fence == codeFence:
 			inFence = false
 			if len(buf) > foldThreshold {
-				out = append(out, foldSummary(lang, len(buf), glyphs))
+				out = append(out, foldSummary(lang, len(buf), glyphs, toggle))
 				continue
 			}
 			out = append(out, codeFence+lang)
@@ -344,11 +343,11 @@ func foldCodeBlocks(text string, glyphs glyphSet) string {
 	return strings.Join(out, "\n")
 }
 
-func foldSummary(lang string, lines int, glyphs glyphSet) string {
+func foldSummary(lang string, lines int, glyphs glyphSet, toggle string) string {
 	if lang == "" {
 		lang = "text"
 	}
-	return fmt.Sprintf("%s %s · %d lines (ctrl+f)", glyphs.fold, lang, lines)
+	return fmt.Sprintf("%s %s · %d lines (%s)", glyphs.fold, lang, lines, toggle)
 }
 
 func (m *model) toggleFold() {

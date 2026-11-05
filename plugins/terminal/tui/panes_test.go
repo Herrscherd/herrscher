@@ -139,7 +139,7 @@ func TestPaneReleaseDoesNotMoveFocus(t *testing.T) {
 func TestPaneScreenNamesItsHeaderAndKeys(t *testing.T) {
 	_, m := paneModel(t)
 	view := m.View()
-	for _, want := range []string{"Vue en volets", "clic pour viser", "Tab volet suivant · clic viser"} {
+	for _, want := range []string{"Vue en volets", "clic pour viser", "⇥ volet suivant · clic viser"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("panes screen must show %q: %s", want, view)
 		}
@@ -160,7 +160,7 @@ func TestNarrowPanesReachTheRowsBelow(t *testing.T) {
 func TestNarrowPanesSayHowManyAreHidden(t *testing.T) {
 	_, m := paneModel(t)
 	m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
-	if view := m.View(); !strings.Contains(view, "+2 volets · Tab pour les voir") {
+	if view := m.View(); !strings.Contains(view, "+2 volets · ⇥ pour les voir") {
 		t.Fatalf("a narrow grid must count the panes it hides: %s", view)
 	}
 }
@@ -209,7 +209,7 @@ func TestPaneComposerShowsThePanePlaceholder(t *testing.T) {
 func TestPaneFooterWithoutApprovalOnlyNamesNavigation(t *testing.T) {
 	_, m := paneModel(t)
 	view := m.View()
-	if !strings.Contains(view, "Tab volet suivant · clic viser") {
+	if !strings.Contains(view, "⇥ volet suivant · clic viser") {
 		t.Fatalf("the pane footer must name navigation: %s", view)
 	}
 	if strings.Contains(view, "approbation de") {

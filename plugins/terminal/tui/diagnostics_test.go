@@ -16,7 +16,7 @@ func TestDiagnosticsNamesEachResolvedValueAndItsFeature(t *testing.T) {
 		Colour:     ColourTrue,
 		Terminal:   "kitty",
 	}
-	out := diagnosticsView(caps, testStyles())
+	out := diagnosticsView(caps, "pgup/pgdn", testStyles())
 	for _, want := range []string{
 		"kitty",
 		"truecolor",
@@ -34,7 +34,7 @@ func TestDiagnosticsNamesEachResolvedValueAndItsFeature(t *testing.T) {
 }
 
 func TestDiagnosticsNamesTheFallbackRatherThanHidingTheRow(t *testing.T) {
-	out := diagnosticsView(Capabilities{Terminal: "xterm"}, testStyles())
+	out := diagnosticsView(Capabilities{Terminal: "xterm"}, "pgup/pgdn", testStyles())
 	for _, want := range []string{"graphismes", "none", "demi-blocs", "hyperliens", "texte stylé"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("a plain terminal must still be told what it gets, missing %q:\n%s", want, out)
@@ -70,5 +70,15 @@ func TestCapabilityScreenSaysRemoteImagesAreOff(t *testing.T) {
 	m.imageHosts = []string{"cdn.example.com"}
 	if on := m.diagView(); !strings.Contains(on, "cdn.example.com") {
 		t.Fatalf("a wired fetcher must name the hosts it may reach:\n%s", on)
+	}
+}
+
+func TestCapabilityScreenNamesTheReboundPageKeys(t *testing.T) {
+	m := newTestModel()
+	m.caps.Mouse = false
+	m.bindings = loadForTest(t, `{"bindings":[{"context":"Chat","bindings":{"alt+u":"scroll:pageUp","alt+d":"scroll:pageDown"}}]}`, "", keysSection{}).table
+	m.openDiagnostics()
+	if out := m.diagView(); !strings.Contains(out, "défilement par ⌥U/⌥D") {
+		t.Fatalf("the mouse row must name the rebound page keys:\n%s", out)
 	}
 }

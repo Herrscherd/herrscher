@@ -35,7 +35,7 @@ func (m *model) emptyState(width int) string {
 	lines := []string{m.st.accent.Render(m.st.glyphs.brand), ""}
 	lines = append(lines, m.sessionFacts()...)
 	lines = append(lines, m.otherSessions()...)
-	lines = append(lines, "", shortcutRow(m.st))
+	lines = append(lines, "", m.shortcutRow())
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
 		if line == "" && len(out) > 0 && out[len(out)-1] == "" {
@@ -101,8 +101,13 @@ func (m *model) otherSessions() []string {
 	return append([]string{"", m.st.dim.Render("  autres sessions")}, rows...)
 }
 
-func shortcutRow(st uiStyles) string {
-	return st.dim.Render("  /  commandes   @  fichiers   Tab  changer de session   échap  interrompre")
+func (m *model) shortcutRow() string {
+	return m.st.dim.Render("  " + joinNonEmpty(
+		"/ commandes",
+		"@ fichiers",
+		m.labelledHint(actTabsNext, "changer de session", chatKeyStack()...),
+		m.labelledHint(actCancel, "interrompre", chatKeyStack()...),
+	))
 }
 
 func joinNonEmpty(parts ...string) string {

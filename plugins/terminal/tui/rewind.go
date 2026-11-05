@@ -24,7 +24,6 @@ const (
 	noConversation     = "none"
 	argTo              = "--to"
 	argWhat            = "--what"
-	doubleEscLabel     = "échap échap"
 )
 
 const rewindUnsupportedNote = "conversation non reprise : le backend de cette session ne garde pas de position par message"
@@ -204,51 +203,66 @@ func (m *model) handleRewindKey(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *model) handleRewindList(msg tea.KeyMsg) tea.Cmd {
-	if m.overlayNav(msg, m.moveRewind) {
+	action := m.stackAction(msg, ctxMessageSelector)
+	if m.overlayNav(action, m.moveRewind) {
 		return nil
 	}
-	switch msg.String() {
-	case keyEnter:
-		m.rwStep = rewindStepOptions
-		m.rwOpt = rewindOptionBoth
-	case "f":
-		m.rwOpt = rewindOptionFork
-		return m.chooseRewindOption()
-	case "u":
-		return m.undoRewind()
-	case keyEsc:
-		m.closeRewind()
-	case keyCtrlC:
-		return m.overlayCtrlC()
+	if run, ok := m.tables().rewindList[action]; ok {
+		return run(m, msg)
 	}
 	return nil
+}
+
+func rewindListRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actSelectAccept, stepKey(func(app *model) {
+			app.rwStep = rewindStepOptions
+			app.rwOpt = rewindOptionBoth
+		})),
+		bind[keyRun](actRewindFork, cmdKey(func(app *model) tea.Cmd {
+			app.rwOpt = rewindOptionFork
+			return app.chooseRewindOption()
+		})),
+		bind[keyRun](actRewindUndo, cmdKey((*model).undoRewind)),
+		bind[keyRun](actSelectCancel, stepKey((*model).closeRewind)),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+	)
 }
 
 func (m *model) handleRewindOptions(msg tea.KeyMsg) tea.Cmd {
-	if m.overlayNav(msg, m.moveRewindOpt) {
+	action := m.stackAction(msg, ctxMessageSelector)
+	if m.overlayNav(action, m.moveRewindOpt) {
 		return nil
 	}
-	switch msg.Type {
-	case tea.KeyEnter:
-		return m.chooseRewindOption()
-	case tea.KeyEsc:
-		m.rwStep = rewindStepList
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC()
+	if run, ok := m.tables().rewindOptions[action]; ok {
+		return run(m, msg)
 	}
 	return nil
 }
 
+func rewindOptionsRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actSelectAccept, cmdKey((*model).chooseRewindOption)),
+		bind[keyRun](actSelectCancel, stepKey(func(app *model) { app.rwStep = rewindStepList })),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+	)
+}
+
 func (m *model) handleRewindSure(msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "y", "Y":
-		return m.restoreRewind()
-	case "n", "N", keyEsc:
-		m.rwStep = rewindStepOptions
-	case keyCtrlC:
-		return m.overlayCtrlC()
+	chosen := m.stackAction(msg, ctxMessageSelector)
+	if run, ok := m.tables().rewindSure[chosen]; ok {
+		return run(m, msg)
 	}
 	return nil
+}
+
+func rewindSureRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actConfirmYes, cmdKey((*model).restoreRewind)),
+		bind[keyRun](actConfirmNo, stepKey(func(app *model) { app.rwStep = rewindStepOptions })),
+		bind[keyRun](actSelectCancel, stepKey(func(app *model) { app.rwStep = rewindStepOptions })),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+	)
 }
 
 func (m *model) moveRewind(delta int) {
@@ -389,7 +403,7 @@ func (m *model) rewindBody(width int) []string {
 }
 
 func (m *model) rewindHeader(width int) string {
-	title := m.st.accent.Render("Revenir en arrière") + m.st.dim.Render(" · "+doubleEscLabel)
+	title := m.st.accent.Render("Revenir en arrière") + m.st.dim.Render(" · "+m.doubleEscGlyphs())
 	return cutText("  "+title, width)
 }
 
@@ -413,7 +427,7 @@ func (m *model) rewindListLines(width int) []string {
 			lines = append(lines, cutText(rewindFileIndent+m.st.dim.Render(summary), width))
 		}
 	}
-	footer := fitSegments([]string{hintChoose, "⏎ revenir à ce message", "f forker d’ici", "u annuler le retour", "échap fermer"}, width-rewindFooterIndent)
+	footer := fitSegments([]string{m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxMessageSelector), m.labelledHint(actSelectAccept, "revenir à ce message", ctxMessageSelector), m.labelledHint(actRewindFork, "forker d’ici", ctxMessageSelector), m.labelledHint(actRewindUndo, "annuler le retour", ctxMessageSelector), m.labelledHint(actSelectCancel, "fermer", ctxMessageSelector)}, width-rewindFooterIndent)
 	return append(lines, "  "+m.st.dim.Render(footer))
 }
 
@@ -444,7 +458,7 @@ func (m *model) rewindOptionLines(width int) []string {
 		}
 		lines = append(lines, m.rewindRow(cutText(line, width), selected, width))
 	}
-	footer := fitSegments([]string{hintChoose, "⏎ valider", "échap retour"}, width-rewindFooterIndent)
+	footer := fitSegments([]string{m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxMessageSelector), m.labelledHint(actSelectAccept, "valider", ctxMessageSelector), m.labelledHint(actSelectCancel, "retour", ctxMessageSelector)}, width-rewindFooterIndent)
 	return append(lines, "  "+m.st.dim.Render(footer))
 }
 
@@ -521,4 +535,9 @@ func rewindFileNames(files []rewindFile) string {
 		names = append(names, file.Path)
 	}
 	return strings.Join(names, ", ")
+}
+
+func (m *model) doubleEscGlyphs() string {
+	glyph := m.hintIn(actCancel, chatKeyStack()...)
+	return joinWith(" ", glyph, glyph)
 }

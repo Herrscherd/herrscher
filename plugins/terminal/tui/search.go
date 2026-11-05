@@ -194,7 +194,7 @@ func (m *model) searchView() string {
 		pos = fmt.Sprintf("%d/%d", m.searchIdx+1, len(m.searchHits))
 	}
 	return m.st.dim.Render("recherche : ") + m.st.text.Render(m.searchQuery+"▏") +
-		m.st.dim.Render("  "+pos+"  ctrl+n/ctrl+p · échap")
+		m.st.dim.Render("  "+pos+"  "+joinNonEmpty(m.pairHint(actSearchPrevious, actSearchNext, "", ctxSearch), m.labelledHint(actSearchClose, "fermer", ctxSearch)))
 }
 
 func (m *model) jumpTurn(delta int) {

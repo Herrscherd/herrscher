@@ -60,9 +60,9 @@ func barFieldSpecs() []barFieldSpec {
 	}
 }
 
-func (s barFieldSpec) labelWith(glyphs glyphSet) string {
+func (s barFieldSpec) labelWith(hint string) string {
 	if s.id == barModeID {
-		return s.label + " " + glyphs.shiftTab
+		return joinWith(" ", s.label, hint)
 	}
 	return s.label
 }

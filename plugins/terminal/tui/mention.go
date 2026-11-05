@@ -200,5 +200,5 @@ func (m *model) mentionView() string {
 		}
 		rows = append(rows, row)
 	}
-	return floatingList(rows, m.mentionIdx, "Tab compléter · Échap fermer", m.overlayWidth(), m.st)
+	return floatingList(rows, m.mentionIdx, joinNonEmpty(m.labelledHint(actAutoAccept, "compléter", ctxMention), m.labelledHint(actCancel, "fermer", ctxMention, ctxChat)), m.overlayWidth(), m.st)
 }

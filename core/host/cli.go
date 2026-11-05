@@ -7,6 +7,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
@@ -43,8 +44,9 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
 		agents.SetUserBudget(n)
 	}
-	hdl := newManagerHandler(deps, options, partDir, hostState, sup, worktrees, updater, agents)
-	wireManagerHandler(ctx, hdl, hostState, instID, worktrees, sessions)
+	models := options.modelDiscovery()
+	hdl := newManagerHandler(deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
+	wireManagerHandler(ctx, hdl, hostState, instID, worktrees, sessions, models)
 	wireSupervisor(sup, hostState, instID)
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
@@ -105,24 +107,28 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 	return nil
 }
 
-func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store) *manager.Handler {
-	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launchVendor)
+func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
+	launch := func(vendor, modelID string) (string, error) { return launchVendor(models, vendor, modelID) }
+	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
 	return hdl
 }
 
-func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable) {
+func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable, models *ModelDiscovery) {
 	hdl.SetSeeder(sessions.Seed)
 	hdl.SetHosts(newHostPlacer(hostState, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
-	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly })
-	hdl.SetDefaultModel(os.Getenv(EnvDefaultModel))
-	hdl.SetModelValidator(validateModelChoice)
+	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly })
+	hdl.SetDefaultModel(envx.Getenv(EnvDefaultModel))
+	hdl.SetVendorDefaultModel(func(vendor string) string { return envx.Getenv(VendorDefaultModelEnv(vendor)) })
+	hdl.SetModelValidator(func(vendor, modelID string) error {
+		return validateModelChoice(models, vendor, modelID)
+	})
 	hdl.SetGateResolver(GateFor)
 }
 
-func launchVendor(vendor, modelID string) (string, error) {
+func launchVendor(models *ModelDiscovery, vendor, modelID string) (string, error) {
 	plugins := contracts.Default.Backends()
-	chosen, _, err := chooseVendor(vendor, modelID, plugins)
+	chosen, _, err := chooseVendor(vendor, modelID, plugins, models)
 	if err != nil {
 		return "", err
 	}
@@ -136,8 +142,8 @@ func launchVendor(vendor, modelID string) (string, error) {
 	return plugin.Manifest.Kind, nil
 }
 
-func validateModelChoice(vendor, modelID string) error {
-	entry, err := LookupModel(contracts.Default.Backends(), ResolvePolicy(os.Getenv), modelID)
+func validateModelChoice(models *ModelDiscovery, vendor, modelID string) error {
+	entry, err := LookupModelWith(contracts.Default.Backends(), ResolvePolicy(envx.Getenv), models.Sources(), modelID)
 	if err != nil {
 		return err
 	}
@@ -191,6 +197,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 	self, execErr := os.Executable()
 	logCleanup(execErr)
 	sup := supervisor.NewSupervisor(ctx, self)
+	sup.SetStatePath(options.StatePath)
 	sup.SetBridgeEnv(append(GatewayEnvPairs(), AnnounceKeyEnvPairs()...))
 	if options.DefaultGateways == nil {
 		options.DefaultGateways = nonTerminalKinds(gws)

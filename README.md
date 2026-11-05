@@ -411,6 +411,46 @@ build may use. `all` runs on this machine's own vendor logins. `gateway-only`
 runs every turn through a gateway you supply, and refuses the two ways around the
 catalog: a free-form `--cmd`, or a session with no model at all.
 
+When a session names no model, the first of these that fits applies:
+
+1. the session's own `--model`;
+2. the agent's model, read from the `model` file in its home;
+3. the vendor's default, from `HERRSCHER_DEFAULT_MODEL_<VENDOR>` (for example `HERRSCHER_DEFAULT_MODEL_CLAUDE`);
+4. the global default, from `HERRSCHER_DEFAULT_MODEL`;
+5. the backend's own default, when none of the above is set.
+
+A fallback that belongs to another vendor than the one requested is skipped, and
+logged unless it is the global default. An explicit `--model` that the catalog
+refuses is an error.
+
+Backends that can list their models are asked at startup, in the background, and
+their answers are cached on disk. Discovered models are added to the static
+catalog; they never remove one. `herrscher models list` shows where each model
+comes from (`catalog` or `discovered`), and `herrscher models refresh` asks again
+right away. Both take `--state FILE`, the daemon state file whose directory holds the
+cache; without it they use the daemon default, the same cache the daemon reads.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `HERRSCHER_MODELS_DISCOVER` | every backend | comma-separated vendors that may be asked (`claude,codex`), or `none`; with `HERRSCHER_ROUTE_POLICY=gateway-only` vendors are asked only through the gateway, and only when its credentials are set |
+| `HERRSCHER_MODELS_TTL` | `24h` | how long a cached list is kept before it is asked again |
+| `HERRSCHER_MODELS_TIMEOUT` | `15s` | longest wait for one vendor's answer |
+| `HERRSCHER_MODELS_HIDDEN` | none | comma-separated model IDs hidden from the list and the selector; a session already on one still resumes it |
+| `HERRSCHER_DEFAULT_MODEL_<VENDOR>` | none | default model of one vendor |
+
+The cache is `models-discovered.json`, next to the daemon state file: the directory of
+`--state` when given, otherwise `HERRSCHER_STATE_DIR`, otherwise `~/.config/herrscher`.
+It is created on first write, readable by its owner only. Writers take an exclusive lock
+(`flock` on Unix, `LockFileEx` on Windows), so two writers never drop each other's vendor.
+A vendor that fails or stays silent past its timeout keeps its last known list, and the
+daemon logs a warning. The daemon never waits for discovery to start.
+A bridge started by a local daemon receives that daemon's `--state` and reads its cache; a
+remote bridge reads the cache of its own machine and receives no `--state`. A clash warning
+is logged once per model ID for the life of the process, and each bridge keeps one
+model discovery for its whole life. Under `gateway-only` the host drops every native answer
+whatever the backend returned; a backend that ignores the policy would still launch its own
+CLI, which only that backend's gate prevents.
+
 ### Also
 
 Cross-backend skills, where one `SKILL.md` works on every backend. The playbooks

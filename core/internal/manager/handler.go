@@ -36,6 +36,7 @@ type Handler struct {
 	gate            func(vendor string) (grain, why string)
 	gatewayOnly     func() bool
 	defaultModel    string
+	vendorDefault   func(vendor string) string
 	hs              Hosts
 	remoteBackend   bool
 }
@@ -77,14 +78,56 @@ func (h *Handler) materializeOn(ctx context.Context, hostName string, profile ag
 // never an override: an explicit --model always wins.
 func (h *Handler) SetDefaultModel(id string) { h.defaultModel = id }
 
-func (h *Handler) resolveModel(modelID, vendor string, cmdExplicit bool) string {
-	if modelID != "" || h.defaultModel == "" || cmdExplicit {
+// SetVendorDefaultModel wires the per-vendor default model lookup.
+func (h *Handler) SetVendorDefaultModel(fn func(vendor string) string) { h.vendorDefault = fn }
+
+type fallbackModel struct {
+	source string
+	id     string
+}
+
+func (h *Handler) resolveModel(modelID, vendor, agentModel string, cmdExplicit bool) string {
+	if modelID != "" || cmdExplicit {
 		return modelID
 	}
-	if vendor != "" && h.checkModel(vendor, h.defaultModel) != nil {
+	candidates := []fallbackModel{
+		{source: "agent", id: agentModel},
+		{source: "vendor", id: h.vendorDefaultFor(vendor)},
+		{source: "global", id: h.defaultModel},
+	}
+	for _, candidate := range candidates {
+		if candidate.id == "" {
+			continue
+		}
+		if vendor != "" {
+			if err := h.checkModel(vendor, candidate.id); err != nil {
+				if candidate.source != "global" {
+					h.log.Warn("default model skipped, it does not fit the vendor", "source", candidate.source, "model", candidate.id, "vendor", vendor, "err", err)
+				}
+				continue
+			}
+		}
+		return candidate.id
+	}
+	return ""
+}
+
+func (h *Handler) vendorDefaultFor(vendor string) string {
+	if vendor == "" || h.vendorDefault == nil {
 		return ""
 	}
-	return h.defaultModel
+	return h.vendorDefault(vendor)
+}
+
+func (h *Handler) agentDefaults(name string) (string, string) {
+	if name == "" || h.agents == nil {
+		return "", ""
+	}
+	profile, ok := h.agents.Get(name)
+	if !ok {
+		return "", ""
+	}
+	return profile.Model, profile.Backend
 }
 
 // SetGatewayOnly wires the active route policy. Under gateway-only every turn

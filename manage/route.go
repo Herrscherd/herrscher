@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
@@ -20,8 +21,10 @@ var (
 
 type catalogFn func(contracts.RoutePolicy) ([]host.CatalogEntry, error)
 
-func liveCatalog(p contracts.RoutePolicy) ([]host.CatalogEntry, error) {
-	return host.Catalog(contracts.Default.Backends(), p)
+func liveCatalog(models *host.ModelDiscovery) catalogFn {
+	return func(p contracts.RoutePolicy) ([]host.CatalogEntry, error) {
+		return host.CatalogWith(contracts.Default.Backends(), p, models.Sources())
+	}
 }
 
 type routeCurrent struct {
@@ -32,8 +35,8 @@ type routeCurrent struct {
 
 func currentRoute() routeCurrent {
 	return routeCurrent{
-		policy:   host.ResolvePolicy(os.Getenv),
-		model:    os.Getenv(host.EnvDefaultModel),
+		policy:   host.ResolvePolicy(envx.Getenv),
+		model:    envx.Getenv(host.EnvDefaultModel),
 		haveCred: len(host.GatewayEnvPairs()) > 0,
 	}
 }
@@ -153,7 +156,8 @@ func chooseDefaultModel(sty style, input *bufio.Reader, entries []host.CatalogEn
 		return "", nil
 	}
 	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, "default model"))
-	for idx, entry := range entries {
+	for idx := range entries {
+		entry := &entries[idx]
 		padded, tag := fmt.Sprintf("%-24s", entry.ID), ""
 		if entry.ID == cur {
 			padded, tag = sty.wrap(sty.green, padded), sty.wrap(sty.dim, "  current")
@@ -178,8 +182,8 @@ func chooseDefaultModel(sty style, input *bufio.Reader, entries []host.CatalogEn
 		}
 		return "", fmt.Errorf("default model: %w: %d", errChoiceOutOfRange, choice)
 	}
-	for _, e := range entries {
-		if e.ID == ans {
+	for idx := range entries {
+		if entries[idx].ID == ans {
 			return ans, nil
 		}
 	}

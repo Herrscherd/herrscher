@@ -577,7 +577,12 @@ func (h *Handler) chooseRuntime(input contracts.Input) (runtimeChoice, error) {
 	runtime.agent, _ = input.Lookup("agent")
 	runtime.vendor, _ = input.Lookup("vendor")
 	model, _ := input.Lookup("model")
-	runtime.model = h.resolveModel(model, runtime.vendor, runtime.explicit)
+	agentModel, agentBackend := h.agentDefaults(runtime.agent)
+	fallbackVendor := runtime.vendor
+	if fallbackVendor == "" {
+		fallbackVendor = agentBackend
+	}
+	runtime.model = h.resolveModel(model, fallbackVendor, agentModel, runtime.explicit)
 	if err := h.checkModel(runtime.vendor, runtime.model); err != nil {
 		return runtimeChoice{}, err
 	}

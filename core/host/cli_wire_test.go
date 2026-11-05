@@ -52,7 +52,7 @@ func TestWiredManagerRefusesAnUnknownAccount(t *testing.T) {
 	if err := st.SetHome(state.HomeRef{ID: "home", Type: "forum"}); err != nil {
 		t.Fatal(err)
 	}
-	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()))
+	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	create := mustCommand(t, hdl.Commands(), "session", "create")
 	if _, runErr := create.Run(t.Context(), sessionCreateInput("ghost-session", "ghost")); !errors.Is(runErr, accounts.ErrNotFound) {
 		t.Fatalf("session create with an unknown account: err %v, want accounts.ErrNotFound", runErr)
@@ -90,7 +90,7 @@ func TestWiredManagerRefusesAccountWithRemoteBackend(t *testing.T) {
 	remote := make(map[contracts.Category]bool)
 	remote[contracts.CategoryBackend] = true
 	options := Options{DefaultCmd: "claude", RemoteCategories: remote}
-	hdl := newManagerHandler(Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()))
+	hdl := newManagerHandler(Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	create := mustCommand(t, hdl.Commands(), "session", "create")
 	if _, runErr := create.Run(t.Context(), sessionCreateInput("remote-session", "perso")); !errors.Is(runErr, manager.ErrAccountRemote) {
 		t.Fatalf("session create with an account and a remote backend: err %v, want manager.ErrAccountRemote before any placement", runErr)
@@ -112,7 +112,7 @@ func TestWiredManagerResolvesTheVendorFromTheBackendEnvironment(t *testing.T) {
 	if err := st.SetHome(state.HomeRef{ID: "home", Type: "forum"}); err != nil {
 		t.Fatal(err)
 	}
-	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "codex"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()))
+	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "codex"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	create := mustCommand(t, hdl.Commands(), "session", "create")
 	noVendor := contracts.Input{Args: map[string]string{"name": "pro-session", "account": "pro"}}
 	if _, runErr := create.Run(t.Context(), noVendor); !errors.Is(runErr, errStopAfterGuard) {
@@ -143,7 +143,7 @@ func TestWiredManagerChecksTheAccountOfAnAgent(t *testing.T) {
 	if err := st.SetHome(state.HomeRef{ID: "home", Type: "forum"}); err != nil {
 		t.Fatal(err)
 	}
-	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agents)
+	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agents, nil)
 	create := mustCommand(t, hdl.Commands(), "session", "create")
 	agentInput := contracts.Input{Args: map[string]string{"name": "bot-session", "agent": "bot", "vendor": "claude"}}
 
@@ -169,7 +169,7 @@ func TestWiredManagerValidatesMemoryProjectBeforeTheAccount(t *testing.T) {
 	if err := st.SetHome(state.HomeRef{ID: "home", Type: "forum"}); err != nil {
 		t.Fatal(err)
 	}
-	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()))
+	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	create := mustCommand(t, hdl.Commands(), "session", "create")
 	input := contracts.Input{Args: map[string]string{"name": "mp-session", "vendor": "claude", "account": "ghost", "memory_project": "a/b"}}
 	_, runErr := create.Run(t.Context(), input)
@@ -200,7 +200,7 @@ func TestWiredManagerWrapsEveryRefusalOfAnAgentAccount(t *testing.T) {
 	if err := st.SetHome(state.HomeRef{ID: "home", Type: "forum"}); err != nil {
 		t.Fatal(err)
 	}
-	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agents)
+	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agents, nil)
 	create := mustCommand(t, hdl.Commands(), "session", "create")
 	_, runErr := create.Run(t.Context(), contracts.Input{Args: map[string]string{"name": "far-session", "agent": "far", "vendor": "claude"}})
 	if !errors.Is(runErr, manager.ErrAccountHost) {

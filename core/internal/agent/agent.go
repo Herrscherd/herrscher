@@ -29,6 +29,7 @@ const (
 	backendFile  = "backend"
 	cmdFile      = "cmd"
 	hostFile     = "host"
+	modelFile    = "model"
 	accountFile  = "account"
 )
 
@@ -204,6 +205,7 @@ type Agent struct {
 	Tags    []string
 	Backend string
 	Cmd     string
+	Model   string
 	// Host is the default place this agent's sessions run, from <home>/host.
 	// Empty = this machine. A session's explicit --host still wins: this is a
 	// default, not a rule.

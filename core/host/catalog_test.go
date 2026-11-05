@@ -117,3 +117,12 @@ func TestResolvePolicyIgnoresGarbage(t *testing.T) {
 		t.Fatalf("ResolvePolicy(garbage) = %q, want PolicyAll", got)
 	}
 }
+
+func TestVendorDefaultModelEnvNamesTheVendor(t *testing.T) {
+	if got := VendorDefaultModelEnv("claude"); got != "HERRSCHER_DEFAULT_MODEL_CLAUDE" {
+		t.Fatalf("claude: %q", got)
+	}
+	if got := VendorDefaultModelEnv("my-vendor"); got != "HERRSCHER_DEFAULT_MODEL_MY_VENDOR" {
+		t.Fatalf("my-vendor: %q", got)
+	}
+}

@@ -47,6 +47,7 @@ type hub struct {
 
 	teardownGrace time.Duration
 	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
+	models        *ModelDiscovery
 
 	approvals *approvalTable
 	sessions  *sessionTable
@@ -194,6 +195,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (string, error) {
 			coordinator: h.coordinator,
 			publish:     h.eventPublisher,
 			backend:     h.seedBackend,
+			models:      h.models,
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
 					warnStderr("herrscher serve: session %q: seed transcript entry dropped: %v\n", session, err)

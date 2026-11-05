@@ -35,6 +35,7 @@ func runBridge(ctx context.Context, args []string) error {
 	extractor := flags.String("extractor", "", "name of a registered curation extractor. It enables the P1 learning loop (empty = plain Curator, no learning)")
 	journal := flags.String("journal", "", "path to the call journal Consolidate reads (worktree-relative ok); only used with --extractor")
 	consolidateEvery := flags.Int("consolidate-every", 0, "run Consolidate every N turns (0 = manual only); only used with --extractor")
+	statePath := flags.String("state", "", "path to the daemon state file whose model cache the bridge reads (empty = the default state file)")
 	envStdin := flags.Bool("env-stdin", false, "read KEY=VALUE lines from stdin until a blank line and put them in this process's environment (how a remote bridge gets its gateway credentials)")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -67,8 +68,9 @@ func runBridge(ctx context.Context, args []string) error {
 		return err
 	}
 	defer host.CloseKeyProxy(ctx, log, keys)
+	requestFor := bridgeRequests(backendFlags, *statePath)
 	newBackend := func(_ string) (contracts.Backend, error) {
-		req := backendFlags.request()
+		req := requestFor()
 		req.Keys = keys
 		return newBackendFor(ctx, resolver, req)
 	}
@@ -124,9 +126,17 @@ func declareBackendFlags(flags *flag.FlagSet) backendFlags {
 	return parsed
 }
 
-func (f backendFlags) request() host.BackendRequest {
+func (f backendFlags) request(models *host.ModelDiscovery) host.BackendRequest {
 	return host.BackendRequest{
 		Vendor: *f.vendor, Cmd: *f.cmd, Kind: *f.kind, Resume: *f.resume, ModelID: *f.modelID, Account: *f.account,
+		Models: models,
+	}
+}
+
+func bridgeRequests(flags backendFlags, statePath string) func() host.BackendRequest {
+	models := host.BridgeModelDiscovery(statePath)
+	return func() host.BackendRequest {
+		return flags.request(models)
 	}
 }
 

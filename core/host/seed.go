@@ -12,6 +12,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/lease"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
@@ -27,6 +28,7 @@ type oneShotSeedRuntime struct {
 	record      func(session string, entry state.TranscriptEntry)
 	timeout     time.Duration
 	backend     func(context.Context, state.Session) (contracts.Backend, error)
+	models      *ModelDiscovery
 }
 
 func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session) (contracts.Backend, error) {
@@ -34,7 +36,7 @@ func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session
 		return r.backend
 	}
 	return func(ctx context.Context, sess state.Session) (contracts.Backend, error) {
-		return newSeedBackend(ctx, sess, nil)
+		return newSeedBackend(ctx, sess, nil, r.models)
 	}
 }
 
@@ -217,6 +219,7 @@ type BackendRequest struct {
 	Account     string
 	AccountRoot string
 	Keys        *keyproxy.Proxy
+	Models      *ModelDiscovery
 
 	resolver remoteBackendResolver
 }
@@ -246,10 +249,10 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 
 func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, func(), error) {
 	plugins := contracts.Default.Backends()
-	if req.ModelID == "" && ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly {
+	if req.ModelID == "" && ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly {
 		return nil, noRelease, errGatewayOnlyNoModel
 	}
-	desired, entry, err := chooseVendor(req.Vendor, req.ModelID, plugins)
+	desired, entry, err := chooseVendor(req.Vendor, req.ModelID, plugins, req.Models)
 	if err != nil {
 		return nil, noRelease, err
 	}
@@ -309,7 +312,7 @@ func (r modelRoute) lease() func() {
 	return r.grant
 }
 
-func chooseVendor(requested, modelID string, plugins []contracts.Plugin) (string, CatalogEntry, error) {
+func chooseVendor(requested, modelID string, plugins []contracts.Plugin, models *ModelDiscovery) (string, CatalogEntry, error) {
 	vendor := requested
 	if vendor == "" {
 		vendor = os.Getenv("HERRSCHER_BACKEND")
@@ -317,7 +320,7 @@ func chooseVendor(requested, modelID string, plugins []contracts.Plugin) (string
 	if modelID == "" {
 		return vendor, CatalogEntry{}, nil
 	}
-	entry, err := LookupModel(plugins, ResolvePolicy(os.Getenv), modelID)
+	entry, err := LookupModelWith(plugins, ResolvePolicy(envx.Getenv), models.Sources(), modelID)
 	if err != nil {
 		return "", CatalogEntry{}, err
 	}
@@ -373,7 +376,7 @@ func setIfPresent(settings map[string]string, key, value string) {
 	}
 }
 
-func newSeedBackend(ctx context.Context, sess state.Session, keys *keyproxy.Proxy) (contracts.Backend, error) {
+func newSeedBackend(ctx context.Context, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery) (contracts.Backend, error) {
 	dir := sess.Dir
 	if dir == "" {
 		dir = sess.Worktree
@@ -387,6 +390,7 @@ func newSeedBackend(ctx context.Context, sess state.Session, keys *keyproxy.Prox
 		ModelID: sess.ModelID,
 		Account: sess.Account,
 		Keys:    keys,
+		Models:  models,
 	})
 }
 

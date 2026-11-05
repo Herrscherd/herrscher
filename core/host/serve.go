@@ -64,6 +64,7 @@ type Deps = contracts.GatewaySet
 // Options holds the parsed flags for the serve daemon.
 type Options struct {
 	StatePath     string
+	Models        *ModelDiscovery
 	DefaultCmd    string
 	HealthAddr    string
 	StatusChannel string
@@ -171,7 +172,7 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 	logCleanup(execErr)
 	startRemotePluginHosts(ctx, self, options.RemoteCategories, base)
 	partDir := filepath.Dir(options.StatePath)
-	sup := newHubSupervisor(ctx, self, base, monitor, partDir)
+	sup := newHubSupervisor(ctx, self, base, monitor, partDir, options.StatePath)
 
 	instID, err := resolveInstanceID(store, options.InstanceID, options.Owner, log)
 	if err != nil {
@@ -209,8 +210,9 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 	}
 	defer CloseKeyProxy(ctx, log, keys)
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
+	runningHub.models = options.modelDiscovery()
 	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
-		return newSeedBackend(seedCtx, sess, keys)
+		return newSeedBackend(seedCtx, sess, keys, runningHub.models)
 	}
 	liveStopped := make(chan struct{})
 	go func() {
@@ -269,8 +271,9 @@ func loadHubState(opts Options) (*state.State, error) {
 	return store, nil
 }
 
-func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, host *health.Health, partDir string) *supervisor.Supervisor {
+func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, host *health.Health, partDir, statePath string) *supervisor.Supervisor {
 	sup := supervisor.NewSupervisor(ctx, self)
+	sup.SetStatePath(statePath)
 	sup.SetLogger(base)
 	sup.SetMetrics(host.Metrics())
 	sup.SetAgentsRoot(filepath.Join(partDir, "agents"))

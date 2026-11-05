@@ -40,7 +40,7 @@ func TestBackendFlagsCarryModelID(t *testing.T) {
 	if err := fs.Parse([]string{"--cmd", "claude", "--vendor", "claude", "--model", "gw-claude-opus-5"}); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	req := f.request()
+	req := f.request(nil)
 	if req.ModelID != "gw-claude-opus-5" {
 		t.Fatalf("BackendRequest.ModelID = %q, want the --model value", req.ModelID)
 	}
@@ -53,7 +53,7 @@ func TestBackendFlagsCarryModelID(t *testing.T) {
 	if err := fs.Parse([]string{"--cmd", "claude"}); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if got := f.request().ModelID; got != "" {
+	if got := f.request(nil).ModelID; got != "" {
 		t.Fatalf("legacy call with no --model produced ModelID %q", got)
 	}
 }

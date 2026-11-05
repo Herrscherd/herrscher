@@ -133,6 +133,14 @@ func readBackend(home string) string {
 	return strings.TrimSpace(string(buf))
 }
 
+func readModel(home string) string {
+	buf, err := os.ReadFile(filepath.Join(home, modelFile))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(buf))
+}
+
 func readCmd(home string) string {
 	buf, err := os.ReadFile(filepath.Join(home, cmdFile))
 	if err != nil {
@@ -281,7 +289,7 @@ func (s *Store) Get(name string) (Agent, bool) {
 	if err != nil || !info.IsDir() {
 		return Agent{}, false
 	}
-	return Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Host: readHost(home), Account: readAccount(home)}, true
+	return Agent{Name: name, Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Model: readModel(home), Host: readHost(home), Account: readAccount(home)}, true
 }
 
 // List returns every agent home under the store root, sorted by name. A missing
@@ -300,7 +308,7 @@ func (s *Store) List() ([]Agent, error) {
 			continue
 		}
 		home := filepath.Join(s.root, entry.Name())
-		out = append(out, Agent{Name: entry.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Host: readHost(home), Account: readAccount(home)})
+		out = append(out, Agent{Name: entry.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Model: readModel(home), Host: readHost(home), Account: readAccount(home)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil

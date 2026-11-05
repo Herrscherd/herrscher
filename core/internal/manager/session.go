@@ -476,6 +476,10 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	if err != nil {
 		return createRequest{}, err
 	}
+	hostName, account, err := h.checkSessionAccount(input, runtime)
+	if err != nil {
+		return createRequest{}, err
+	}
 	options, err := h.parseSessionOptions(input, terminalOnly)
 	if err != nil {
 		return createRequest{}, err
@@ -488,15 +492,6 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 		return createRequest{}, err
 	}
 	base, _ := input.Lookup("base")
-	explicitAccount, _ := input.Lookup("account")
-	hostName := h.resolveHost(input, runtime.agent)
-	account := chooseSessionAccount(explicitAccount, h.agentAccount(runtime.agent))
-	if err := h.checkAccountInLocalStore(hostName, account); err != nil {
-		return createRequest{}, err
-	}
-	if err := h.checkAccount(runtime, explicitAccount); err != nil {
-		return createRequest{}, err
-	}
 	return createRequest{
 		name:     name,
 		base:     base,
@@ -539,6 +534,29 @@ func (h *Handler) chooseHome(ctx context.Context, input contracts.Input, adopted
 		return state.HomeRef{}, nil, &ChannelKindError{Channel: under, Kind: kind, Need: "under must be a category or forum (to run in an existing conversation, pass channel_id)"}
 	}
 	return state.HomeRef{ID: under, Type: kind}, admin, nil
+}
+
+func (h *Handler) checkSessionAccount(input contracts.Input, runtime runtimeChoice) (string, string, error) {
+	explicitAccount, _ := input.Lookup("account")
+	hostName := h.resolveHost(input, runtime.agent)
+	account := chooseSessionAccount(explicitAccount, h.agentAccount(runtime.agent))
+	if err := h.checkAccountUsable(hostName, account); err != nil {
+		return "", "", err
+	}
+	if err := h.checkAccount(runtime, explicitAccount); err != nil {
+		return "", "", err
+	}
+	return hostName, account, nil
+}
+
+// PreflightAccount reports the account refusal that a session create with these arguments would meet, without creating anything.
+func (h *Handler) PreflightAccount(input contracts.Input) error {
+	runtime, err := h.chooseRuntime(input)
+	if err != nil {
+		return err
+	}
+	_, _, err = h.checkSessionAccount(input, runtime)
+	return err
 }
 
 func (h *Handler) chooseRuntime(input contracts.Input) (runtimeChoice, error) {

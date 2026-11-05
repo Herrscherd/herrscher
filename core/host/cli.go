@@ -62,7 +62,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addSessionVerbs(reg, hostState, partDir, instID, approvals, sessions, seedCoord); err != nil {
 		return nil, hostDeps{}, err
 	}
-	handoff, err := sessionHandoffCmd(hdl.Commands(), hostState, sessions, instID, seedCoord)
+	handoff, err := sessionHandoffCmd(hdl.Commands(), hostState, sessions, instID, seedCoord, hdl.PreflightAccount)
 	if err != nil {
 		return nil, hostDeps{}, err
 	}

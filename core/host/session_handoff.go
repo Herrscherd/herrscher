@@ -40,13 +40,14 @@ var (
 )
 
 type handoffDeps struct {
-	exists  func(name string) bool
-	root    func(name string) string
-	account func(name string) string
-	brief   func(ctx context.Context, source string) (string, error)
-	create  func(ctx context.Context, in contracts.Input) (string, error)
-	send    func(ctx context.Context, target, author, text string) error
-	limit   *handoffLimiter
+	exists       func(name string) bool
+	root         func(name string) string
+	account      func(name string) string
+	brief        func(ctx context.Context, source string) (string, error)
+	create       func(ctx context.Context, in contracts.Input) (string, error)
+	send         func(ctx context.Context, target, author, text string) error
+	limit        *handoffLimiter
+	checkAccount func(input contracts.Input) error
 }
 
 type handoffLimiter struct {
@@ -60,13 +61,7 @@ func newHandoffLimiter(now func() time.Time) *handoffLimiter {
 	return &handoffLimiter{now: now, inFlight: make(map[string]bool), granted: make(map[string][]time.Time)}
 }
 
-type handoffTicket struct {
-	limiter *handoffLimiter
-	tree    string
-	at      time.Time
-}
-
-func (l *handoffLimiter) acquire(tree string) (*handoffTicket, error) {
+func (l *handoffLimiter) acquire(tree string) (func(), error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.inFlight[tree] {
@@ -79,25 +74,11 @@ func (l *handoffLimiter) acquire(tree string) (*handoffTicket, error) {
 	}
 	l.granted[tree] = append(l.granted[tree], now)
 	l.inFlight[tree] = true
-	return &handoffTicket{limiter: l, tree: tree, at: now}, nil
-}
-
-func (t *handoffTicket) release() {
-	t.limiter.mu.Lock()
-	defer t.limiter.mu.Unlock()
-	delete(t.limiter.inFlight, t.tree)
-}
-
-func (t *handoffTicket) refund() {
-	t.limiter.mu.Lock()
-	defer t.limiter.mu.Unlock()
-	granted := t.limiter.granted[t.tree]
-	for idx := range granted {
-		if granted[idx].Equal(t.at) {
-			t.limiter.granted[t.tree] = slices.Delete(granted, idx, idx+1)
-			return
-		}
-	}
+	return func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		delete(l.inFlight, tree)
+	}, nil
 }
 
 func (l *handoffLimiter) forgetIdle(now time.Time) {
@@ -113,7 +94,7 @@ func (l *handoffLimiter) forgetIdle(now time.Time) {
 	}
 }
 
-func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, instID string, seedCoord *coordinatorSlot) (contracts.Cmd, error) {
+func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, instID string, seedCoord *coordinatorSlot, checkAccount func(contracts.Input) error) (contracts.Cmd, error) {
 	create, ok := findCommand(managerCmds, nsSession, "create")
 	if !ok {
 		return contracts.Cmd{}, errHandoffNoCreate
@@ -139,7 +120,8 @@ func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions
 			_, err := sendToSession(ctx, sessions, contracts.Input{Args: map[string]string{paramName: target, "author": author, "text": text}})
 			return err
 		},
-		limit: newHandoffLimiter(time.Now),
+		limit:        newHandoffLimiter(time.Now),
+		checkAccount: checkAccount,
 	}), nil
 }
 
@@ -157,7 +139,7 @@ func sessionHandoffVerb(deps handoffDeps) contracts.Cmd {
 		Help("start a new session whose first message is a brief this session writes; without --to it creates nothing and says how to open this session instead. "+
 			"This is not the ⟢ handoff: trailer, which passes a task to another agent inside the coordination flow. "+
 			"An agent caller attaches the new session under its source, cannot pick --under or --channel_id, and gets at most "+
-			"3 handoffs an hour for its whole session tree, one at a time, and a handoff counts once its brief starts, even if it then fails, except when the refusal is the account itself, which gives the slot back; the operator has no such bound. When the operator closes a session, its direct children become roots and their quota starts again. "+
+			"3 handoffs an hour for its whole session tree, one at a time, and a handoff counts once its brief starts, even if it then fails; a refused account costs neither a brief nor a slot; the operator has no such bound. When the operator closes a session, its direct children become roots and their quota starts again. "+
 			"This bound is a local guard, not a security boundary: the operator socket is reachable by the same user, "+
 			"and its state resets when the daemon restarts").
 		Param(paramName, "session to hand off (default: the calling session)", false).
@@ -194,7 +176,11 @@ func (d handoffDeps) run(ctx context.Context, input contracts.Input) (string, er
 	if byAgent {
 		return d.handOffAsAgent(ctx, caller.Session, source, target, input)
 	}
-	reply, brief, account, err := d.open(ctx, source, target, "", input)
+	args, account, err := d.checkedArgs(source, target, "", input)
+	if err != nil {
+		return "", err
+	}
+	reply, brief, err := d.launch(ctx, source, input, account, args)
 	if err != nil {
 		return "", err
 	}
@@ -213,32 +199,41 @@ func checkHandoffTargets(input contracts.Input, byAgent bool) error {
 }
 
 func (d handoffDeps) handOffAsAgent(ctx context.Context, caller, source, target string, input contracts.Input) (string, error) {
-	ticket, err := d.limit.acquire(d.root(caller))
+	args, account, err := d.checkedArgs(source, target, source, input)
 	if err != nil {
 		return "", err
 	}
-	defer ticket.release()
-	reply, brief, account, err := d.open(ctx, source, target, source, input)
+	release, err := d.limit.acquire(d.root(caller))
 	if err != nil {
-		if isAccountRefusal(err) {
-			ticket.refund()
-		}
+		return "", err
+	}
+	defer release()
+	reply, brief, err := d.launch(ctx, source, input, account, args)
+	if err != nil {
 		return "", err
 	}
 	return d.deliver(ctx, source, target, reply, brief, account)
 }
 
-func (d handoffDeps) open(ctx context.Context, source, target, parent string, input contracts.Input) (string, string, string, error) {
+func (d handoffDeps) checkedArgs(source, target, parent string, input contracts.Input) (map[string]string, string, error) {
+	account := handoffAccount(input, d.account(source))
+	args := newSessionArgs(target, account, input, parent)
+	if err := d.checkAccount(contracts.Input{Args: args}); err != nil {
+		return nil, "", inheritedAccountError(input, source, account, err)
+	}
+	return args, account, nil
+}
+
+func (d handoffDeps) launch(ctx context.Context, source string, input contracts.Input, account string, args map[string]string) (string, string, error) {
 	brief, err := d.brief(ctx, source)
 	if err != nil {
-		return "", "", "", fmt.Errorf("the brief from %q: %w", source, err)
+		return "", "", fmt.Errorf("the brief from %q: %w", source, err)
 	}
-	account := handoffAccount(input, d.account(source))
-	reply, err := d.create(ctx, contracts.Input{Args: newSessionArgs(target, account, input, parent)})
+	reply, err := d.create(ctx, contracts.Input{Args: args})
 	if err != nil {
-		return "", "", "", inheritedAccountError(input, source, account, err)
+		return "", "", inheritedAccountError(input, source, account, err)
 	}
-	return reply, brief, account, nil
+	return reply, brief, nil
 }
 
 func handoffAccount(input contracts.Input, inherited string) string {

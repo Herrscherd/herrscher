@@ -46,9 +46,10 @@ func fakeHandoff(rec *handoffRecord, clock func() time.Time, known ...string) ha
 			rec.sentTo, rec.sentText = target, text
 			return nil
 		},
-		root:    func(name string) string { return name },
-		account: func(string) string { return "" },
-		limit:   newHandoffLimiter(clock),
+		root:         func(name string) string { return name },
+		account:      func(string) string { return "" },
+		limit:        newHandoffLimiter(clock),
+		checkAccount: func(contracts.Input) error { return nil },
 	}
 }
 
@@ -356,17 +357,17 @@ func TestAgentConcurrentHandoffInTheSameTreeIsRefused(t *testing.T) {
 func TestHandoffLimiterForgetsTreesIdleForAnHour(t *testing.T) {
 	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 	limit := newHandoffLimiter(func() time.Time { return now })
-	ticket, err := limit.acquire("alpha")
+	release, err := limit.acquire("alpha")
 	if err != nil {
 		t.Fatal(err)
 	}
-	ticket.release()
+	release()
 	now = now.Add(handoffWindow)
-	ticket, err = limit.acquire("beta")
+	release, err = limit.acquire("beta")
 	if err != nil {
 		t.Fatal(err)
 	}
-	ticket.release()
+	release()
 	if _, kept := limit.granted["alpha"]; kept {
 		t.Fatal("a tree whose handoffs are all older than the window must be forgotten")
 	}
@@ -442,8 +443,8 @@ func handoffRefusedWith(t *testing.T, refusal error, args map[string]string) err
 	rec := &handoffRecord{}
 	deps := fakeHandoff(rec, fixedClock(), "alpha")
 	deps.account = func(string) string { return "work" }
-	deps.create = func(context.Context, contracts.Input) (string, error) {
-		return "", fmt.Errorf("refused: %w", refusal)
+	deps.checkAccount = func(contracts.Input) error {
+		return fmt.Errorf("refused: %w", refusal)
 	}
 	_, err := runHandoff(withLocalPrincipal(context.Background()), deps, args)
 	return err
@@ -509,13 +510,12 @@ func TestAgentAccountRefusalsDoNotSpendTheQuota(t *testing.T) {
 	deps := fakeHandoff(rec, fixedClock(), "alpha")
 	deps.account = func(string) string { return "work" }
 	refusals := 0
-	deps.create = func(_ context.Context, in contracts.Input) (string, error) {
+	deps.checkAccount = func(contracts.Input) error {
 		if refusals < handoffAgentPerHour {
 			refusals++
-			return "", fmt.Errorf("refused: %w", manager.ErrAccountRemote)
+			return fmt.Errorf("refused: %w", manager.ErrAccountRemote)
 		}
-		rec.created = append(rec.created, in)
-		return "created " + in.Get(paramName), nil
+		return nil
 	}
 	ctx := withSessionPrincipal(context.Background(), "alpha")
 	for i := range handoffAgentPerHour {
@@ -526,5 +526,35 @@ func TestAgentAccountRefusalsDoNotSpendTheQuota(t *testing.T) {
 	}
 	if _, err := runHandoff(ctx, deps, map[string]string{paramTo: "next"}); err != nil {
 		t.Fatalf("handoff after %d account refusals: err = %v, want it to pass: a refusal must not spend the quota", handoffAgentPerHour, err)
+	}
+}
+
+func TestRefusedAccountNeverCallsTheBriefGenerator(t *testing.T) {
+	for _, byAgent := range []bool{false, true} {
+		rec := &handoffRecord{}
+		deps := fakeHandoff(rec, fixedClock(), "alpha")
+		deps.account = func(string) string { return "work" }
+		deps.checkAccount = func(contracts.Input) error {
+			return fmt.Errorf("refused: %w", manager.ErrAccountRemote)
+		}
+		briefs := 0
+		deps.brief = func(context.Context, string) (string, error) {
+			briefs++
+			return "brief", nil
+		}
+		ctx := withLocalPrincipal(context.Background())
+		if byAgent {
+			ctx = withSessionPrincipal(context.Background(), "alpha")
+		}
+		_, err := runHandoff(ctx, deps, map[string]string{paramName: "alpha", paramTo: "beta"})
+		if !errors.Is(err, manager.ErrAccountRemote) {
+			t.Fatalf("byAgent=%v: err = %v, want manager.ErrAccountRemote", byAgent, err)
+		}
+		if briefs != 0 {
+			t.Fatalf("byAgent=%v: the brief generator was called %d times for a refused account, want 0", byAgent, briefs)
+		}
+		if len(rec.created) != 0 {
+			t.Fatalf("byAgent=%v: a refused account must create no session, got %d", byAgent, len(rec.created))
+		}
 	}
 }

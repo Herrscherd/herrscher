@@ -3,7 +3,10 @@ package manage
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 var (
@@ -60,7 +63,7 @@ func addPlugin(src, module string) (string, bool, error) {
 			return strings.Join(out, "\n"), true, nil
 		}
 	}
-	return src, false, fmt.Errorf("end marker %q: %w", endMarker, errMarkerNotFound)
+	return src, false, failure(errMarkerNotFound, clitext.ManageEndMarkerNotFound, clitext.Params{clitext.ParamMarker: strconv.Quote(endMarker)})
 }
 
 func removePlugin(src, module string) (string, bool, error) {
@@ -110,21 +113,21 @@ func region(src string) ([]string, int, int, error) {
 		switch strings.TrimSpace(line) {
 		case beginMarker:
 			if begin >= 0 {
-				return nil, begin, end, fmt.Errorf("%q: %w", beginMarker, errDuplicateMarker)
+				return nil, begin, end, failure(errDuplicateMarker, clitext.ManageDuplicateMarker, clitext.Params{clitext.ParamMarker: strconv.Quote(beginMarker)})
 			}
 			begin = idx
 		case endMarker:
 			if end >= 0 {
-				return nil, begin, end, fmt.Errorf("%q: %w", endMarker, errDuplicateMarker)
+				return nil, begin, end, failure(errDuplicateMarker, clitext.ManageDuplicateMarker, clitext.Params{clitext.ParamMarker: strconv.Quote(endMarker)})
 			}
 			end = idx
 		}
 	}
 	if begin < 0 || end < 0 {
-		return nil, begin, end, fmt.Errorf("managed region: %w", errMarkerNotFound)
+		return nil, begin, end, failure(errMarkerNotFound, clitext.ManageRegionNotFound, nil)
 	}
 	if end < begin {
-		return nil, begin, end, errMarkerOrder
+		return nil, begin, end, failure(errMarkerOrder, clitext.ManageMarkerOrder, nil)
 	}
 	return all[begin+1 : end], begin, end, nil
 }

@@ -2,9 +2,11 @@ package manage
 
 import (
 	"errors"
-	"fmt"
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 var errNotModulePath = errors.New("not a module path")
@@ -19,7 +21,7 @@ func readPins(src string) (map[string]bool, error) {
 			continue
 		}
 		if strings.ContainsAny(mod, " \t") {
-			return nil, fmt.Errorf("%s line %d: %w: %q", pinFile, idx+1, errNotModulePath, mod)
+			return nil, failure(errNotModulePath, clitext.ManagePinsLine, clitext.Params{clitext.ParamFile: pinFile, clitext.ParamLine: idx + 1, clitext.ParamModule: strconv.Quote(mod)})
 		}
 		pins[mod] = true
 	}

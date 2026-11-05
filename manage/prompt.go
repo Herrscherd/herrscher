@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 var errChoiceOutOfRange = errors.New("choice out of range")
@@ -28,12 +30,12 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 	}
 
 	if compose {
-		sty.header("init", "compose your plugin stack: enter accepts the default")
+		sty.header("init", msg(clitext.ManageWizardCompose, nil))
 		if err := chooseEveryCategory(sty, input, choices); err != nil {
 			return nil, nil, err
 		}
 	} else {
-		sty.header("init", "configure the installed host: enter to skip a field")
+		sty.header("init", msg(clitext.ManageWizardConfigure, nil))
 	}
 
 	secrets := make(map[string]string)
@@ -65,7 +67,7 @@ func chooseEveryCategory(sty style, input *bufio.Reader, choices map[string]stri
 }
 
 func promptDiscordSecrets(sty style, input *bufio.Reader, secrets map[string]string) error {
-	fmt.Fprintf(os.Stderr, "  %s  %s\n", sty.wrap(sty.bold+sty.cyan, "discord · secrets"), sty.wrap(sty.dim, "(token entry is hidden)"))
+	fmt.Fprintf(os.Stderr, "  %s  %s\n", sty.wrap(sty.bold+sty.cyan, msg(clitext.ManageEnvHeader, clitext.Params{clitext.ParamKind: kindDiscord})), sty.wrap(sty.dim, msg(clitext.ManageTokenHidden, nil)))
 	tok, err := readSecret(input, secretLabel(sty, "DISCORD_BOT_TOKEN"))
 	if err != nil {
 		return err
@@ -100,7 +102,7 @@ func chooseKind(sty style, input *bufio.Reader, cat string) (string, error) {
 		tag := ""
 		if kind == def {
 			name = sty.wrap(sty.green, kind)
-			tag = sty.wrap(sty.dim, "  default")
+			tag = sty.wrap(sty.dim, "  "+msg(clitext.ManageDefaultTag, nil))
 		}
 		fmt.Fprintf(os.Stderr, "    %s %s%s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), name, tag)
 	}
@@ -120,17 +122,17 @@ func chooseKind(sty style, input *bufio.Reader, cat string) (string, error) {
 		case choice == len(kinds)+1:
 			return kindNone, nil
 		}
-		return "", fmt.Errorf("%s: %w: %d", cat, errChoiceOutOfRange, choice)
+		return "", failure(errChoiceOutOfRange, clitext.ManageChoiceOutOfRange, clitext.Params{clitext.ParamName: cat, clitext.ParamChoice: choice})
 	}
 	if _, ok := catalog()[cat][ans]; ok {
 		return ans, nil
 	}
-	return "", fmt.Errorf("%s: %w %q", cat, errUnknownKind, ans)
+	return "", failure(errUnknownKind, clitext.ManageUnknownKind, clitext.Params{clitext.ParamCategory: cat, clitext.ParamKind: strconv.Quote(ans)})
 }
 
-func promptLine(input *bufio.Reader, msg string) string {
-	if msg != "" {
-		fmt.Fprint(os.Stderr, msg)
+func promptLine(input *bufio.Reader, label string) string {
+	if label != "" {
+		fmt.Fprint(os.Stderr, label)
 	}
 	line, err := input.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {

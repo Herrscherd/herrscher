@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 // Decision is one operator answer inside a composition change. There are two
@@ -39,7 +41,7 @@ func newAutoDecider() decider { return autoDecider{} }
 type step func(ctx context.Context) (output string, err error)
 
 func composed() []string {
-	return []string{"go.mod", "go.sum", "plugins.go"}
+	return []string{"go.mod", "go.sum", manifestFile}
 }
 
 func apply(ctx context.Context, dir string, findings []string, dec decider, steps []step) (bool, error) {
@@ -57,13 +59,13 @@ func apply(ctx context.Context, dir string, findings []string, dec decider, step
 		if err == nil {
 			continue
 		}
-		failure := fmt.Errorf("%w\n%s", err, out)
+		stepErr := fmt.Errorf("%w\n%s", err, out)
 		if dec.Failed(ctx, out) == Restore {
 			if rerr := restoreComposition(dir, saved); rerr != nil {
-				return false, errors.Join(failure, rerr)
+				return false, errors.Join(stepErr, rerr)
 			}
 		}
-		return false, failure
+		return false, stepErr
 	}
 	return true, nil
 }
@@ -76,7 +78,7 @@ func saveComposition(dir string) (map[string][]byte, error) {
 		case errors.Is(err, os.ErrNotExist):
 			saved[name] = nil
 		case err != nil:
-			return nil, fmt.Errorf("save %s: %w", name, err)
+			return nil, failure(err, clitext.ManageSaveFailed, clitext.Params{clitext.ParamPath: name, clitext.ParamErr: err.Error()})
 		default:
 			saved[name] = body
 		}
@@ -101,7 +103,7 @@ func restoreComposition(dir string, saved map[string][]byte) error {
 			err = os.WriteFile(path, body, modeFile)
 		}
 		if err != nil {
-			return fmt.Errorf("restore %s: %w", name, err)
+			return failure(err, clitext.ManageRestoreFailed, clitext.Params{clitext.ParamPath: name, clitext.ParamErr: err.Error()})
 		}
 	}
 	return nil

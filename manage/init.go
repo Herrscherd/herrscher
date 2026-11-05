@@ -8,8 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/internal/errwriter"
 )
@@ -79,18 +81,18 @@ func InitCmd(ctx context.Context, args []string) int {
 
 func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
 	flags := flag.NewFlagSet("init", flag.ContinueOnError)
-	hostDir := flags.String("host", "", "path to the host module")
-	noBuild := flags.Bool("no-build", false, "write plugins.go but skip go get/build")
-	list := flags.Bool("list", false, "list the module catalog() and exit")
-	yes := flags.Bool("yes", false, "skip the interactive wizard; use flags/defaults")
-	gateway := flags.String(catGateway, defaultStack()[catGateway], "gateway module kind (or none)")
-	backend := flags.String(catBackend, defaultStack()[catBackend], "backend module kind (or none)")
-	memory := flags.String(catMemory, defaultStack()[catMemory], "memory module kind (or none)")
-	orchestrator := flags.String(catOrchestrator, defaultStack()[catOrchestrator], "orchestrator module kind (or none)")
-	extractor := flags.String(catExtractor, defaultStack()[catExtractor], "extractor module kind (or none)")
-	skills := flags.String(catSkills, defaultStack()[catSkills], "skills module kind (or none)")
+	hostDir := flags.String("host", "", msg(clitext.ManageFlagHost, nil))
+	noBuild := flags.Bool("no-build", false, msg(clitext.ManageFlagInitNoBuild, nil))
+	list := flags.Bool("list", false, msg(clitext.ManageFlagList, nil))
+	yes := flags.Bool("yes", false, msg(clitext.ManageFlagInitYes, nil))
+	gateway := flags.String(catGateway, defaultStack()[catGateway], msg(clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catGateway}))
+	backend := flags.String(catBackend, defaultStack()[catBackend], msg(clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catBackend}))
+	memory := flags.String(catMemory, defaultStack()[catMemory], msg(clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catMemory}))
+	orchestrator := flags.String(catOrchestrator, defaultStack()[catOrchestrator], msg(clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catOrchestrator}))
+	extractor := flags.String(catExtractor, defaultStack()[catExtractor], msg(clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catExtractor}))
+	skills := flags.String(catSkills, defaultStack()[catSkills], msg(clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catSkills}))
 	var extras multiFlag
-	flags.Var(&extras, "with", "pin an extra module path verbatim (repeatable)")
+	flags.Var(&extras, "with", msg(clitext.ManageFlagWith, nil))
 	if err := flags.Parse(args); err != nil {
 		return parseExit(err)
 	}
@@ -131,7 +133,7 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 		return exitUsage
 	}
 
-	manifest := filepath.Join(dir, "plugins.go")
+	manifest := filepath.Join(dir, manifestFile)
 	src, code := rewritePlugins(errOut, manifest, modules)
 	if code != 0 {
 		return code
@@ -141,7 +143,7 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 	writeProjectSecrets(out, errOut, dir, secrets)
 
 	if *noBuild {
-		out.Println("wrote plugins.go (--no-build); run `go mod tidy && go build` in the host to apply")
+		out.Println(msg(clitext.ManageInitWroteNoBuild, nil))
 		return 0
 	}
 	return buildOrRestore(ctx, errOut, dir, manifest, src, modules)
@@ -163,7 +165,7 @@ func writeSecretsOnly(errOut *errwriter.Writer, secrets map[string]string) int {
 	path := envTarget()
 	written, err := writeSecretsTo(path, secrets)
 	if err != nil {
-		errOut.Printf("write secrets: %v\n", err)
+		errOut.Println(failure(err, clitext.ManageEnvWriteFailed, clitext.Params{clitext.ParamErr: err.Error()}))
 		return 1
 	}
 	summaryConfig(path, written)
@@ -173,7 +175,7 @@ func writeSecretsOnly(errOut *errwriter.Writer, secrets map[string]string) int {
 func rewritePlugins(errOut *errwriter.Writer, manifest string, modules []string) ([]byte, int) {
 	src, err := os.ReadFile(manifest)
 	if err != nil {
-		errOut.Printf("read %s: %v\n", manifest, err)
+		errOut.Println(failure(err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: manifest, clitext.ParamErr: err.Error()}))
 		return nil, 1
 	}
 	rendered, err := setPlugins(string(src), modules)
@@ -182,7 +184,7 @@ func rewritePlugins(errOut *errwriter.Writer, manifest string, modules []string)
 		return nil, 1
 	}
 	if err := os.WriteFile(manifest, []byte(rendered), modeFile); err != nil {
-		errOut.Printf("write %s: %v\n", manifest, err)
+		errOut.Println(failure(err, clitext.ManageWriteFailed, clitext.Params{clitext.ParamPath: manifest, clitext.ParamErr: err.Error()}))
 		return nil, 1
 	}
 	return src, 0
@@ -190,9 +192,9 @@ func rewritePlugins(errOut *errwriter.Writer, manifest string, modules []string)
 
 func writeProjectSecrets(out, errOut *errwriter.Writer, dir string, secrets map[string]string) {
 	if written, err := writeSecretsTo(filepath.Join(dir, ".env"), secrets); err != nil {
-		errOut.Printf("write secrets: %v\n", err)
+		errOut.Println(failure(err, clitext.ManageEnvWriteFailed, clitext.Params{clitext.ParamErr: err.Error()}))
 	} else if written > 0 {
-		out.Printf("wrote %d setting(s) to .env\n", written)
+		out.Println(msg(clitext.ManageWroteSettings, clitext.Params{clitext.ParamCount: written, clitext.ParamPath: ".env"}))
 	}
 }
 
@@ -202,9 +204,9 @@ func buildOrRestore(ctx context.Context, errOut *errwriter.Writer, dir, manifest
 		return 0
 	}
 	if werr := os.WriteFile(manifest, src, modeFile); werr != nil {
-		errOut.Printf("restore %s: %v\n", manifest, werr)
+		errOut.Println(failure(werr, clitext.ManageRestoreFailed, clitext.Params{clitext.ParamPath: manifest, clitext.ParamErr: werr.Error()}))
 	} else {
-		errOut.Printf("build failed; restored %s\n", manifest)
+		errOut.Println(msg(clitext.ManageBuildRestored, clitext.Params{clitext.ParamPath: manifest}))
 	}
 	return code
 }
@@ -243,18 +245,18 @@ func resolveStack(choices map[string]string, extras []string) ([]string, error) 
 		}
 		module, ok := catalog()[cat][kind]
 		if !ok {
-			return nil, fmt.Errorf("%s: %w %q (try `herrscher init --list`)", cat, errUnknownKind, kind)
+			return nil, failure(errUnknownKind, clitext.ManageUnknownKindListed, clitext.Params{clitext.ParamCategory: cat, clitext.ParamKind: strconv.Quote(kind)})
 		}
 		add(module)
 	}
 	for _, module := range extras {
 		if module == "" || module[0] == '-' {
-			return nil, fmt.Errorf("%w %q", errInvalidModulePath, module)
+			return nil, failure(errInvalidModulePath, clitext.ManageInvalidModulePath, clitext.Params{clitext.ParamModule: strconv.Quote(module)})
 		}
 		add(module)
 	}
 	if len(modules) == 0 {
-		return nil, errEmptyStack
+		return nil, failure(errEmptyStack, clitext.ManageEmptyStack, nil)
 	}
 	return modules, nil
 }
@@ -325,10 +327,10 @@ func seedEnv(out, errOut *errwriter.Writer, dir string) {
 		return
 	}
 	if err := os.WriteFile(dst, src, modeSecret); err != nil {
-		errOut.Printf("seed %s: %v\n", dst, err)
+		errOut.Println(failure(err, clitext.ManageSeedFailed, clitext.Params{clitext.ParamPath: dst, clitext.ParamErr: err.Error()}))
 		return
 	}
-	out.Printf("seeded %s from .env.example: fill in your secrets\n", dst)
+	out.Println(msg(clitext.ManageSeeded, clitext.Params{clitext.ParamPath: dst}))
 }
 
 func writeCatalog(out *errwriter.Writer) {
@@ -341,7 +343,7 @@ func writeCatalog(out *errwriter.Writer) {
 		for _, kind := range kinds {
 			def := ""
 			if defaultStack()[cat] == kind {
-				def = " (default)"
+				def = " " + msg(clitext.ManageDefaultTag, nil)
 			}
 			out.Printf("%-13s %-10s %s%s\n", cat, kind, catalog()[cat][kind], def)
 		}

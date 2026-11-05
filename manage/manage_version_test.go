@@ -129,7 +129,7 @@ func TestManageVersionUpdateSkipsPinned(t *testing.T) {
 	if got := strings.Join(cmds[0], " "); got != "go get -u mod/b" {
 		t.Fatalf("first command = %q, want the unpinned module bumped", got)
 	}
-	if len(skipped) != 1 || skipped[0] != "skipped mod/a (pinned v1.0.0)" {
+	if len(skipped) != 1 || skipped[0] != (pinnedSkip{module: "mod/a", version: "v1.0.0"}) {
 		t.Fatalf("skipped = %v, want a line naming the pin", skipped)
 	}
 }
@@ -139,7 +139,7 @@ func TestManageVersionUpdateAllPinned(t *testing.T) {
 	if cmds != nil {
 		t.Fatalf("commands = %v, want none when every module is pinned", cmds)
 	}
-	if len(skipped) != 1 || !strings.Contains(skipped[0], "mod/a") {
+	if len(skipped) != 1 || skipped[0].module != "mod/a" {
 		t.Fatalf("skipped = %v", skipped)
 	}
 }

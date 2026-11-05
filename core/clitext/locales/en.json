@@ -1,0 +1,152 @@
+[
+  {
+    "id": "cli.usage.tagline",
+    "description": "The one-line tagline under the banner of the usage",
+    "other": "modular Discord ⇄ Claude agent harness host"
+  },
+  {
+    "id": "cli.usage.group.start",
+    "description": "Heading of the commands that start a session",
+    "other": "GET STARTED"
+  },
+  {
+    "id": "cli.usage.group.sessions",
+    "description": "Heading of the commands about sessions, agents and machines",
+    "other": "SESSIONS & AGENTS"
+  },
+  {
+    "id": "cli.usage.group.daemon",
+    "description": "Heading of the commands about the daemon and its service",
+    "other": "DAEMON & SERVICE"
+  },
+  {
+    "id": "cli.usage.group.setup",
+    "description": "Heading of the commands about installation and maintenance",
+    "other": "SETUP & MAINTENANCE"
+  },
+  {
+    "id": "cli.usage.start.task",
+    "description": "Usage line: open a session on a task in the TUI",
+    "other": "open a session on this task, in the TUI"
+  },
+  {
+    "id": "cli.usage.start.print",
+    "description": "Usage line: run one turn and print the reply",
+    "other": "same, but run one turn and print the reply"
+  },
+  {
+    "id": "cli.usage.start.tui",
+    "description": "Usage line: open the multi-session terminal TUI",
+    "other": "open the multi-session terminal TUI"
+  },
+  {
+    "id": "cli.usage.start.version",
+    "description": "Usage line: print the build version",
+    "other": "print the build version"
+  },
+  {
+    "id": "cli.usage.start.init",
+    "description": "Usage line: compose the plugin stack and the secrets",
+    "other": "compose the plugin stack + secrets (wizard)"
+  },
+  {
+    "id": "cli.usage.session.verbs",
+    "description": "Usage line: the session verbs",
+    "other": "bridged channel + worktree + backend"
+  },
+  {
+    "id": "cli.usage.agent.verbs",
+    "description": "Usage line: the agent verbs",
+    "other": "durable companion agents (persona/MCP)"
+  },
+  {
+    "id": "cli.usage.host.verbs",
+    "description": "Usage line: the host verbs",
+    "other": "machines a session can run on (`session create --host`)"
+  },
+  {
+    "id": "cli.usage.approve.verbs",
+    "description": "Usage line: the approve verbs",
+    "other": "actions that need a human's go-ahead before they run"
+  },
+  {
+    "id": "cli.usage.memory.verbs",
+    "description": "Usage line: the memory verbs",
+    "other": "inspect/edit the memory graph"
+  },
+  {
+    "id": "cli.usage.models.verbs",
+    "description": "Usage line: the models verb",
+    "other": "list the models the compiled backends offer"
+  },
+  {
+    "id": "cli.usage.serve",
+    "description": "Usage line: serve",
+    "other": "always-on gateway daemon (24/7)"
+  },
+  {
+    "id": "cli.usage.bridge",
+    "description": "Usage line: bridge",
+    "other": "link a channel to one command"
+  },
+  {
+    "id": "cli.usage.service",
+    "description": "Usage line: service",
+    "other": "run serve as a native boot service"
+  },
+  {
+    "id": "cli.usage.commands",
+    "description": "Usage line: commands",
+    "other": "every verb the running daemon accepts (needs `serve`)"
+  },
+  {
+    "id": "cli.usage.plugin.verbs",
+    "description": "Usage line: the plugin verbs",
+    "other": "edit the compiled-in plugin set + rebuild"
+  },
+  {
+    "id": "cli.usage.update",
+    "description": "Usage line: update",
+    "other": "bump every unpinned plugin + rebuild + reinstall"
+  },
+  {
+    "id": "cli.usage.install",
+    "description": "Usage line: install",
+    "other": "build then run the service install"
+  },
+  {
+    "id": "cli.usage.help.footer",
+    "description": "Hint under the usage lines, about the help of each command",
+    "other": "Run `herrscher <command> --help` for flags and options."
+  },
+  {
+    "id": "cli.usage.env.discord",
+    "description": "Environment line: the Discord variables",
+    "other": "env: DISCORD_BOT_TOKEN (required), DISCORD_USER_ID (the user the bot obeys)"
+  },
+  {
+    "id": "cli.usage.env.owner",
+    "description": "Environment line: the owner and state variables",
+    "other": "     HERRSCHER_OWNER_ID (instance-id fallback), HERRSCHER_STATE_DIR (state dir)"
+  },
+  {
+    "id": "cli.usage.env.route",
+    "description": "Environment line: the route policy variable",
+    "other": "     HERRSCHER_ROUTE_POLICY=gateway-only (offers only the gateway models)"
+  },
+  {
+    "id": "cli.usage.env.gateway",
+    "description": "Environment line: the gateway URL and token",
+    "other": "     NEUBLOX_GATEWAY_URL + NEUBLOX_GATEWAY_TOKEN (both, or a gateway session fails)"
+  },
+  {
+    "id": "cli.usage.env.default_model",
+    "description": "Environment line: the default model variable",
+    "other": "     HERRSCHER_DEFAULT_MODEL (model taken when `session create` names none)"
+  },
+  {
+    "id": "cli.usage.env.init",
+    "description": "Environment line: `herrscher init` asks the questions",
+    "other": "     `herrscher init` asks these three questions, no need to write them by hand"
+  }
+]

@@ -26,6 +26,7 @@ import (
 	"golang.org/x/term"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/manage"
 )
@@ -78,7 +79,9 @@ func run() int {
 
 	switch cmd {
 	case "-h", "--help", "help":
-		usage()
+		if err := usage(clitext.ClientLanguage()); err != nil {
+			return reportError(err)
+		}
 		return 0
 	}
 
@@ -131,7 +134,9 @@ func runWithoutCommand(ctx context.Context) error {
 	if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
 		return runServe(ctx, nil, nil)
 	}
-	usage()
+	if err := usage(clitext.ClientLanguage()); err != nil {
+		return err
+	}
 	return exitStatusError{code: exitUsage}
 }
 
@@ -193,7 +198,9 @@ func runForwarded(ctx context.Context, cmd string, args []string) error {
 	out, code, derr := dispatchUnknown(ctx, cmd, args, forwardUnknownVerb)
 	if code != 0 {
 		fmt.Fprintln(os.Stderr, "herrscher: "+derr.Error())
-		usage()
+		if err := usage(clitext.ClientLanguage()); err != nil {
+			return err
+		}
 		return exitStatusError{code: code}
 	}
 	if derr != nil {

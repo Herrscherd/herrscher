@@ -1,0 +1,152 @@
+[
+  {
+    "id": "cli.usage.tagline",
+    "description": "La devise d'une ligne sous la bannière de l'aide",
+    "other": "hôte modulaire de harnais d'agents Discord ⇄ Claude"
+  },
+  {
+    "id": "cli.usage.group.start",
+    "description": "Titre des commandes qui lancent une session",
+    "other": "DÉMARRER"
+  },
+  {
+    "id": "cli.usage.group.sessions",
+    "description": "Titre des commandes sur les sessions, les agents et les machines",
+    "other": "SESSIONS ET AGENTS"
+  },
+  {
+    "id": "cli.usage.group.daemon",
+    "description": "Titre des commandes sur le démon et son service",
+    "other": "DÉMON ET SERVICE"
+  },
+  {
+    "id": "cli.usage.group.setup",
+    "description": "Titre des commandes d'installation et de maintenance",
+    "other": "INSTALLATION ET MAINTENANCE"
+  },
+  {
+    "id": "cli.usage.start.task",
+    "description": "Ligne d'aide : ouvrir une session sur une tâche dans le TUI",
+    "other": "ouvre une session sur cette tâche, dans le TUI"
+  },
+  {
+    "id": "cli.usage.start.print",
+    "description": "Ligne d'aide : jouer un seul tour et afficher la réponse",
+    "other": "idem, mais joue un seul tour et affiche la réponse"
+  },
+  {
+    "id": "cli.usage.start.tui",
+    "description": "Ligne d'aide : ouvrir le TUI terminal multi-sessions",
+    "other": "ouvre le TUI terminal multi-sessions"
+  },
+  {
+    "id": "cli.usage.start.version",
+    "description": "Ligne d'aide : afficher la version du binaire",
+    "other": "affiche la version du binaire"
+  },
+  {
+    "id": "cli.usage.start.init",
+    "description": "Ligne d'aide : composer la pile de plugins et les secrets",
+    "other": "compose la pile de plugins et les secrets (assistant)"
+  },
+  {
+    "id": "cli.usage.session.verbs",
+    "description": "Ligne d'aide : les verbes de session",
+    "other": "canal relié + worktree + backend"
+  },
+  {
+    "id": "cli.usage.agent.verbs",
+    "description": "Ligne d'aide : les verbes d'agent",
+    "other": "agents compagnons durables (persona/MCP)"
+  },
+  {
+    "id": "cli.usage.host.verbs",
+    "description": "Ligne d'aide : les verbes de machine",
+    "other": "machines où une session peut tourner (`session create --host`)"
+  },
+  {
+    "id": "cli.usage.approve.verbs",
+    "description": "Ligne d'aide : les verbes d'approbation",
+    "other": "actions qui attendent l'accord d'un humain avant de s'exécuter"
+  },
+  {
+    "id": "cli.usage.memory.verbs",
+    "description": "Ligne d'aide : les verbes de mémoire",
+    "other": "inspecte et modifie le graphe de mémoire"
+  },
+  {
+    "id": "cli.usage.models.verbs",
+    "description": "Ligne d'aide : le verbe des modèles",
+    "other": "liste les modèles proposés par les backends compilés"
+  },
+  {
+    "id": "cli.usage.serve",
+    "description": "Ligne d'aide : serve",
+    "other": "démon passerelle permanent (24/7)"
+  },
+  {
+    "id": "cli.usage.bridge",
+    "description": "Ligne d'aide : bridge",
+    "other": "relie un canal à une seule commande"
+  },
+  {
+    "id": "cli.usage.service",
+    "description": "Ligne d'aide : service",
+    "other": "lance serve comme service de démarrage natif"
+  },
+  {
+    "id": "cli.usage.commands",
+    "description": "Ligne d'aide : commands",
+    "other": "chaque verbe accepté par le démon en cours (nécessite `serve`)"
+  },
+  {
+    "id": "cli.usage.plugin.verbs",
+    "description": "Ligne d'aide : les verbes de plugin",
+    "other": "modifie l'ensemble des plugins compilés et recompile"
+  },
+  {
+    "id": "cli.usage.update",
+    "description": "Ligne d'aide : update",
+    "other": "met à jour chaque plugin non épinglé, recompile et réinstalle"
+  },
+  {
+    "id": "cli.usage.install",
+    "description": "Ligne d'aide : install",
+    "other": "compile, puis installe le service"
+  },
+  {
+    "id": "cli.usage.help.footer",
+    "description": "Indication sous les lignes d'aide, sur l'aide de chaque commande",
+    "other": "Lance `herrscher <commande> --help` pour voir les options de chaque commande."
+  },
+  {
+    "id": "cli.usage.env.discord",
+    "description": "Ligne de variables : les variables Discord",
+    "other": "env : DISCORD_BOT_TOKEN (requis), DISCORD_USER_ID (l'utilisateur que le bot écoute)"
+  },
+  {
+    "id": "cli.usage.env.owner",
+    "description": "Ligne de variables : le propriétaire et le dossier d'état",
+    "other": "     HERRSCHER_OWNER_ID (repli sur l'identifiant d'instance), HERRSCHER_STATE_DIR (dossier d'état)"
+  },
+  {
+    "id": "cli.usage.env.route",
+    "description": "Ligne de variables : la politique de routage",
+    "other": "     HERRSCHER_ROUTE_POLICY=gateway-only (n'offre que les modèles passerelle)"
+  },
+  {
+    "id": "cli.usage.env.gateway",
+    "description": "Ligne de variables : l'URL et le jeton de la passerelle",
+    "other": "     NEUBLOX_GATEWAY_URL + NEUBLOX_GATEWAY_TOKEN (les deux, sinon une session passerelle échoue)"
+  },
+  {
+    "id": "cli.usage.env.default_model",
+    "description": "Ligne de variables : le modèle par défaut",
+    "other": "     HERRSCHER_DEFAULT_MODEL (modèle pris quand `session create` n'en nomme aucun)"
+  },
+  {
+    "id": "cli.usage.env.init",
+    "description": "Ligne de variables : `herrscher init` pose les questions",
+    "other": "     `herrscher init` pose ces trois questions, inutile de les écrire à la main"
+  }
+]

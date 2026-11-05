@@ -24,8 +24,6 @@ const (
 	ServeFlagCmd            = "cli.serve.flag.cmd"
 	ServeFlagHealthAddr     = "cli.serve.flag.health_addr"
 	ServeFlagStatusChannel  = "cli.serve.flag.status_channel"
-	ServeFlagInstance       = "cli.serve.flag.instance"
-	ServeFlagEnvFile        = "cli.serve.flag.env_file"
 	ServeAttachFailed       = "cli.serve.attach_failed"
 	ServeGatewaySkipped     = "cli.serve.gateway_skipped"
 	ServeGatewayRetrying    = "cli.serve.gateway_retrying"
@@ -43,8 +41,6 @@ func serveKeys() map[Key][]string {
 		ServeFlagCmd:            nil,
 		ServeFlagHealthAddr:     nil,
 		ServeFlagStatusChannel:  nil,
-		ServeFlagInstance:       nil,
-		ServeFlagEnvFile:        nil,
 		ServeAttachFailed:       {ParamErr},
 		ServeGatewaySkipped:     {ParamFailure},
 		ServeGatewayRetrying:    {ParamFailure, ParamWait},

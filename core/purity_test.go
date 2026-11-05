@@ -45,7 +45,7 @@ func TestCoreNamesNoConcretePlatform(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || filepath.Base(path) == self {
+		if d.IsDir() || !scannedForPlatform(path, self) {
 			return nil
 		}
 		data, err := os.ReadFile(path)
@@ -60,4 +60,11 @@ func TestCoreNamesNoConcretePlatform(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func scannedForPlatform(path, self string) bool {
+	if strings.HasSuffix(path, ".json") {
+		return filepath.Base(filepath.Dir(path)) == "locales"
+	}
+	return strings.HasSuffix(path, ".go") && filepath.Base(path) != self
 }

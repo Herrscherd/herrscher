@@ -1,10 +1,5 @@
 [
   {
-    "id": "cli.usage.tagline",
-    "description": "La devise d'une ligne sous la bannière de l'aide",
-    "other": "hôte modulaire de harnais d'agents Discord ⇄ Claude"
-  },
-  {
     "id": "cli.usage.group.start",
     "description": "Titre des commandes qui lancent une session",
     "other": "DÉMARRER"
@@ -118,11 +113,6 @@
     "id": "cli.usage.help.footer",
     "description": "Indication sous les lignes d'aide, sur l'aide de chaque commande",
     "other": "Lance `herrscher <commande> --help` pour voir les options de chaque commande."
-  },
-  {
-    "id": "cli.usage.env.bot",
-    "description": "Ligne de variables : les variables Discord",
-    "other": "env : DISCORD_BOT_TOKEN (requis), DISCORD_USER_ID (l'utilisateur que le bot écoute)"
   },
   {
     "id": "cli.usage.env.owner",
@@ -343,16 +333,6 @@
     "id": "cli.serve.flag.status_channel",
     "description": "Aide de l'option --status-channel de serve",
     "other": "si renseigné, maintient à jour à cet emplacement un message d'état qui se rafraîchit seul"
-  },
-  {
-    "id": "cli.serve.flag.instance",
-    "description": "Aide de l'option --instance de serve",
-    "other": "identifiant d'instance du démon (slug) qui cloisonne les ressources partagées Discord et git ; par défaut HERRSCHER_INSTANCE_ID, puis config.json"
-  },
-  {
-    "id": "cli.serve.flag.env_file",
-    "description": "Aide de l'option --env-file de serve",
-    "other": "charge DISCORD_BOT_TOKEN et les autres variables de ce fichier avant le démarrage (utilisé par `herrscher service`)"
   },
   {
     "id": "cli.serve.attach_failed",
@@ -1128,7 +1108,7 @@
   },
   {
     "id": "cli.manage.env.header",
-    "description": "Heading of the Discord secrets step, Kind is the gateway kind",
+    "description": "Heading of the secrets step of a gateway, Kind is the gateway kind",
     "other": "{{.Kind}} · secrets"
   },
   {

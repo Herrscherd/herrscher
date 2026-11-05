@@ -1,10 +1,5 @@
 [
   {
-    "id": "cli.usage.tagline",
-    "description": "The one-line tagline under the banner of the usage",
-    "other": "modular Discord ⇄ Claude agent harness host"
-  },
-  {
     "id": "cli.usage.group.start",
     "description": "Heading of the commands that start a session",
     "other": "GET STARTED"
@@ -118,11 +113,6 @@
     "id": "cli.usage.help.footer",
     "description": "Hint under the usage lines, about the help of each command",
     "other": "Run `herrscher <command> --help` for flags and options."
-  },
-  {
-    "id": "cli.usage.env.bot",
-    "description": "Environment line: the Discord variables",
-    "other": "env: DISCORD_BOT_TOKEN (required), DISCORD_USER_ID (the user the bot obeys)"
   },
   {
     "id": "cli.usage.env.owner",
@@ -343,16 +333,6 @@
     "id": "cli.serve.flag.status_channel",
     "description": "Help of the --status-channel flag of serve",
     "other": "if set, maintain a self-updating status embed there"
-  },
-  {
-    "id": "cli.serve.flag.instance",
-    "description": "Help of the --instance flag of serve",
-    "other": "per-daemon instance id (slug) used to namespace shared Discord/git resources; defaults to HERRSCHER_INSTANCE_ID then config.json"
-  },
-  {
-    "id": "cli.serve.flag.env_file",
-    "description": "Help of the --env-file flag of serve",
-    "other": "load DISCORD_BOT_TOKEN and other vars from this file before starting (used by `herrscher service`)"
   },
   {
     "id": "cli.serve.attach_failed",
@@ -1128,7 +1108,7 @@
   },
   {
     "id": "cli.manage.env.header",
-    "description": "Heading of the Discord secrets step, Kind is the gateway kind",
+    "description": "Heading of the secrets step of a gateway, Kind is the gateway kind",
     "other": "{{.Kind}} · secrets"
   },
   {

@@ -2,7 +2,6 @@ package clitext
 
 // Keys of the usage text.
 const (
-	UsageTagline         = "cli.usage.tagline"
 	UsageGroupStart      = "cli.usage.group.start"
 	UsageGroupSessions   = "cli.usage.group.sessions"
 	UsageGroupDaemon     = "cli.usage.group.daemon"
@@ -26,7 +25,6 @@ const (
 	UsageUpdate          = "cli.usage.update"
 	UsageInstall         = "cli.usage.install"
 	UsageHelpFooter      = "cli.usage.help.footer"
-	UsageEnvBot          = "cli.usage.env.bot"
 	UsageEnvOwner        = "cli.usage.env.owner"
 	UsageEnvRoute        = "cli.usage.env.route"
 	UsageEnvGateway      = "cli.usage.env.gateway"
@@ -36,7 +34,6 @@ const (
 
 func usageKeys() map[Key][]string {
 	return map[Key][]string{
-		UsageTagline:         nil,
 		UsageGroupStart:      nil,
 		UsageGroupSessions:   nil,
 		UsageGroupDaemon:     nil,
@@ -60,7 +57,6 @@ func usageKeys() map[Key][]string {
 		UsageUpdate:          nil,
 		UsageInstall:         nil,
 		UsageHelpFooter:      nil,
-		UsageEnvBot:          nil,
 		UsageEnvOwner:        nil,
 		UsageEnvRoute:        nil,
 		UsageEnvGateway:      nil,

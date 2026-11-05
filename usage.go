@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/platformtext"
 )
 
 func usage(lang i18n.Language) error {
@@ -22,6 +24,7 @@ func usage(lang i18n.Language) error {
 		hint    = renderer.NewStyle().Faint(true)
 	)
 	translator := clitext.For(lang)
+	platform := platformtext.For(lang)
 
 	const col = 34
 	row := func(value string, help clitext.Key) string {
@@ -38,7 +41,7 @@ func usage(lang i18n.Language) error {
 
 	blocks := []string{
 		"  " + banner.Render("⛧ HERRSCHER"),
-		"  " + tagline.Render(translator.Text(clitext.UsageTagline, nil)),
+		"  " + tagline.Render(platform.Text(platformtext.UsageTagline)),
 		"",
 		group(clitext.UsageGroupStart,
 			row("herrscher \"<texte>\"", clitext.UsageStartTask),
@@ -72,14 +75,14 @@ func usage(lang i18n.Language) error {
 		"",
 		"  " + hint.Render(translator.Text(clitext.UsageHelpFooter, nil)),
 		"",
-		"  " + hint.Render(translator.Text(clitext.UsageEnvBot, nil)),
+		"  " + hint.Render(platform.Text(platformtext.UsageEnvBot)),
 		"  " + hint.Render(translator.Text(clitext.UsageEnvOwner, nil)),
 		"  " + hint.Render(translator.Text(clitext.UsageEnvRoute, nil)),
 		"  " + hint.Render(translator.Text(clitext.UsageEnvGateway, nil)),
 		"  " + hint.Render(translator.Text(clitext.UsageEnvDefaultModel, nil)),
 		"  " + hint.Render(translator.Text(clitext.UsageEnvInit, nil)),
 	}
-	if err := translator.Err(); err != nil {
+	if err := errors.Join(translator.Err(), platform.Err()); err != nil {
 		return fmt.Errorf("usage: %w", err)
 	}
 

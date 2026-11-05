@@ -50,7 +50,7 @@ func TestTextRefusesAnUndeclaredKey(t *testing.T) {
 }
 
 func TestTextRefusesParamsThatDoNotMatchTheKey(t *testing.T) {
-	_, err := Text(i18n.English, UsageTagline, Params{"Unused": "x"})
+	_, err := Text(i18n.English, UsageGroupStart, Params{"Unused": "x"})
 	if !errors.Is(err, ErrParamsMismatch) {
 		t.Fatalf("Text with an undeclared param = %v, want ErrParamsMismatch", err)
 	}

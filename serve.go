@@ -23,6 +23,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/core/language"
 	"github.com/Herrscherd/herrscher/core/scope"
+	"github.com/Herrscherd/herrscher/platformtext"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
@@ -68,6 +69,7 @@ func prepareLanguages(cfg config.Config) (language.Languages, error) {
 
 func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.Config, langs language.Languages) error {
 	translator := clitext.For(langs.Operator)
+	platform := platformtext.For(langs.Operator)
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.String("config", config.DefaultPath(), translator.Text(clitext.ServeFlagConfig, nil))
 
@@ -75,9 +77,9 @@ func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.
 	defaultCmd := flags.String("cmd", or(cfg.Cmd, "claude"), translator.Text(clitext.ServeFlagCmd, nil))
 	healthAddr := flags.String("health-addr", cfg.HealthAddr, translator.Text(clitext.ServeFlagHealthAddr, nil))
 	statusChannel := flags.String("status-channel", cfg.StatusChannel, translator.Text(clitext.ServeFlagStatusChannel, nil))
-	instanceID := flags.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), translator.Text(clitext.ServeFlagInstance, nil))
-	envFile := flags.String("env-file", "", translator.Text(clitext.ServeFlagEnvFile, nil))
-	if err := translator.Err(); err != nil {
+	instanceID := flags.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), platform.Text(platformtext.ServeFlagInstance))
+	envFile := flags.String("env-file", "", platform.Text(platformtext.ServeFlagEnvFile))
+	if err := errors.Join(translator.Err(), platform.Err()); err != nil {
 		return err
 	}
 	if err := flags.Parse(args); err != nil {

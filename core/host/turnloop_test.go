@@ -12,6 +12,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -986,6 +987,25 @@ func TestCoordinationRefusalStatusUsesStablePublicLabel(t *testing.T) {
 }
 
 func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
+	tests := []struct {
+		name    string
+		trailer string
+		want    string
+	}{
+		{name: "handoff", trailer: "⟢ handoff: scripter \u2014 finir le module", want: "handoff refusé : boom"},
+		{name: "seal", trailer: "⟢ seal: 4", want: "seal refusé : boom"},
+		{name: "merge", trailer: "⟢ merge: worker-1", want: "merge refusé : boom"},
+		{name: "route", trailer: "⟢ route: relire le module", want: "route refusé : boom"},
+	}
+	for index := range tests {
+		t.Run(tests[index].name, func(t *testing.T) {
+			requireCoordinatorRefusalStatus(t, tests[index].trailer, tests[index].want)
+		})
+	}
+}
+
+func requireCoordinatorRefusalStatus(t *testing.T, trailer, want string) {
+	t.Helper()
 	synctest.Test(t, func(t *testing.T) {
 		rec := &sinkRecorder{}
 		from := make(chan contracts.Event, 2)
@@ -993,11 +1013,9 @@ func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
 			[]contracts.GatewaySet{{Gateway: rec}},
 			make(chan contracts.Event, 1), from)
 		d.coordinator = &erroringCoord{err: errors.New("boom")}
+		d.lang = i18n.French
 
-		from <- contracts.Event{
-			T: "reply", Done: true,
-			Text: "fait.\n⟢ handoff: scripter \u2014 finir le module",
-		}
+		from <- contracts.Event{T: "reply", Done: true, Text: "fait.\n" + trailer}
 		if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
 			t.Fatal("awaitTurn should complete on reply{done}")
 		}
@@ -1005,8 +1023,8 @@ func TestDriverSurfacesCoordinatorErrorAsStatus(t *testing.T) {
 		requireSettled(t, func() bool {
 			rec.mu.Lock()
 			defer rec.mu.Unlock()
-			for _, e := range rec.emitted {
-				if e.T == "status" && e.Text == "handoff refusé: boom" {
+			for index := range rec.emitted {
+				if rec.emitted[index].T == "status" && rec.emitted[index].Text == want {
 					return true
 				}
 			}

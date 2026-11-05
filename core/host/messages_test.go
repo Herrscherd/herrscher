@@ -1,0 +1,189 @@
+package host
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io/fs"
+	"testing"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher-contracts/i18n/i18ntest"
+)
+
+func hostLocaleSource(t *testing.T) fs.FS {
+	t.Helper()
+	sub, err := fs.Sub(hostLocales, "locales")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sub
+}
+
+func TestHostCatalogIsParityComplete(t *testing.T) {
+	i18ntest.Check(t, hostLocaleSource(t))
+}
+
+func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
+	declared := map[string][]string{
+		"coordination.fanout_partial":    {"Detail", "Launched"},
+		"coordination.route_refused":     {"Detail"},
+		"coordination.seal_refused":      {"Detail"},
+		"coordination.merge_refused":     {"Detail"},
+		"coordination.handoff_refused":   {"Detail"},
+		"compaction.no_effect":           {"Percent"},
+		"compaction.bridge_gone":         nil,
+		"compaction.no_backend_factory":  nil,
+		"compaction.not_compactor_port":  nil,
+		"compaction.no_compactor_plugin": nil,
+		"compaction.failed":              {"Detail"},
+	}
+	i18ntest.CheckDeclared(t, declared, hostLocaleSource(t))
+}
+
+func TestHostTextRendersEachLanguage(t *testing.T) {
+	tests := []struct {
+		name   string
+		lang   i18n.Language
+		key    string
+		params map[string]any
+		want   string
+	}{
+		{
+			name:   "route refusal in french",
+			lang:   i18n.French,
+			key:    "coordination.route_refused",
+			params: map[string]any{"Detail": "boom"},
+			want:   "route refusé : boom",
+		},
+		{
+			name:   "route refusal in english",
+			lang:   i18n.English,
+			key:    "coordination.route_refused",
+			params: map[string]any{"Detail": "boom"},
+			want:   "route refused: boom",
+		},
+		{
+			name:   "no effect in french",
+			lang:   i18n.French,
+			key:    "compaction.no_effect",
+			params: map[string]any{"Percent": 92},
+			want:   "compaction automatique sans effet : le contexte reste au-dessus de 92 %, pas de nouvelle tentative avant qu'il repasse sous le seuil",
+		},
+		{
+			name:   "no effect in english",
+			lang:   i18n.English,
+			key:    "compaction.no_effect",
+			params: map[string]any{"Percent": 92},
+			want:   "automatic compaction had no effect: the context stays above 92 %, no new attempt until it drops below the threshold",
+		},
+		{
+			name:   "unset language falls back to english",
+			lang:   i18n.Language(0),
+			key:    "compaction.failed",
+			params: map[string]any{"Detail": "disk full"},
+			want:   "compaction failed: disk full",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hostText(tt.lang, tt.key, tt.params); got != tt.want {
+				t.Fatalf("hostText(%v, %q) = %q, want %q", tt.lang, tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompactFailureTextMapsUntypedCauses(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		fr   string
+		en   string
+	}{
+		{
+			name: "bridge closed",
+			err:  fmt.Errorf("stage: %w", errBridgeGone),
+			fr:   "le bridge s'est fermé pendant une compaction",
+			en:   "the bridge closed during a compaction",
+		},
+		{
+			name: "no backend factory",
+			err:  errNoBackendFactory,
+			fr:   "le plugin déclare Capabilities.Compactor mais ne fournit aucune fabrique de backend",
+			en:   "the plugin declares Capabilities.Compactor but provides no backend factory",
+		},
+		{
+			name: "port not implemented",
+			err:  errNotCompactorPort,
+			fr:   "le plugin déclare Capabilities.Compactor mais n'implémente pas le port",
+			en:   "the plugin declares Capabilities.Compactor but does not implement the port",
+		},
+		{
+			name: "no compactor plugin",
+			err:  errNoCompactorPlugin,
+			fr:   "aucun plugin ne déclare Capabilities.Compactor sous ce nom",
+			en:   "no plugin declares Capabilities.Compactor under this name",
+		},
+		{
+			name: "unclassified failure keeps its technical detail",
+			err:  errors.New("disk full"),
+			fr:   "échec de la compaction : disk full",
+			en:   "compaction failed: disk full",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := compactFailureText(i18n.French, tt.err); got != tt.fr {
+				t.Fatalf("french = %q, want %q", got, tt.fr)
+			}
+			if got := compactFailureText(i18n.English, tt.err); got != tt.en {
+				t.Fatalf("english = %q, want %q", got, tt.en)
+			}
+		})
+	}
+}
+
+func TestApprovalFailureCarriesUnexpectedNotice(t *testing.T) {
+	cause := errors.New("store locked")
+	noticed, ok := errors.AsType[contracts.NoticeError](approvalFailure(cause))
+	if !ok {
+		t.Fatal("approvalFailure must be a NoticeError, or the CLI keeps its text in English")
+	}
+	if code := noticed.Notice().Code; code != contracts.CodeUnexpected {
+		t.Fatalf("code = %v, want %v", code, contracts.CodeUnexpected)
+	}
+	if !errors.Is(approvalFailure(cause), cause) {
+		t.Fatal("approvalFailure must keep the cause reachable with errors.Is")
+	}
+}
+
+func TestApprovalFailureKeepsAnExistingNotice(t *testing.T) {
+	typed := compactUnavailableError{cause: errCompactUnsupported, reason: "no compactor"}
+	if got := contracts.NoticeOf(approvalFailure(typed)); got.Code != contracts.CodeCompactUnavailable {
+		t.Fatalf("approvalFailure replaced the typed notice: code %v", got.Code)
+	}
+}
+
+type recallFailingMemory struct {
+	contracts.Memory
+
+	err error
+}
+
+func (m recallFailingMemory) Recall(context.Context, string, int) (contracts.Subgraph, error) {
+	return contracts.Subgraph{}, m.err
+}
+
+func TestSkillApprovalFailureTravelsAsAnUnexpectedNotice(t *testing.T) {
+	input := contracts.Input{Args: map[string]string{"key": "skill/x"}}
+	_, err := setSkillApproval(context.Background(), recallFailingMemory{err: errors.New("store locked")}, input)
+	noticed, ok := errors.AsType[contracts.NoticeError](err)
+	if !ok {
+		t.Fatal("skill approval failure must be a NoticeError")
+	}
+	if code := noticed.Notice().Code; code != contracts.CodeUnexpected {
+		t.Fatalf("code = %v, want %v", code, contracts.CodeUnexpected)
+	}
+}

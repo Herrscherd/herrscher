@@ -838,7 +838,7 @@ func (d *sessionDriver) launchCohort(ctx context.Context, toAgent string, tasks 
 	if err != nil {
 		d.fanOut(ctx, contracts.Event{
 			T:    eventStatus,
-			Text: "fanout partiel: " + strconv.Itoa(len(spawned)) + " lancés puis " + err.Error(),
+			Text: hostText(d.lang, "coordination.fanout_partial", map[string]any{"Launched": len(spawned), detailParam: err.Error()}),
 		})
 		return
 	}
@@ -853,7 +853,7 @@ func (d *sessionDriver) routeTask(ctx context.Context, task string) {
 		FromSession: d.name, Task: task,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "route refusé: " + err.Error()})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: hostText(d.lang, "coordination.route_refused", map[string]any{detailParam: err.Error()})})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "routé vers " + toAgent + " : " + session})
@@ -863,7 +863,7 @@ func (d *sessionDriver) sealCohort(ctx context.Context, node int) {
 	if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
 		FromSession: d.name, Expected: node,
 	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "seal refusé: " + err.Error()})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: hostText(d.lang, "coordination.seal_refused", map[string]any{detailParam: err.Error()})})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "cohorte scellée à " + strconv.Itoa(node)})
@@ -874,7 +874,7 @@ func (d *sessionDriver) mergeWorker(ctx context.Context, worker string) {
 		FromSession: d.name, Worker: worker,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "merge refusé: " + err.Error()})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: hostText(d.lang, "coordination.merge_refused", map[string]any{detailParam: err.Error()})})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "merge traité pour " + lead})
@@ -884,7 +884,7 @@ func (d *sessionDriver) handoffTask(ctx context.Context, toAgent, task string) {
 	if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
 		FromSession: d.name, ToAgent: toAgent, Task: task,
 	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "handoff refusé: " + err.Error()})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: hostText(d.lang, "coordination.handoff_refused", map[string]any{detailParam: err.Error()})})
 	}
 }
 

@@ -1,0 +1,57 @@
+[
+  {
+    "id": "coordination.fanout_partial",
+    "description": "Un lancement de cohorte s'arrête après quelques workers, l'hôte signale combien sont partis et pourquoi il s'arrête",
+    "other": "partial fan-out: {{.Launched}} launched, then {{.Detail}}"
+  },
+  {
+    "id": "coordination.route_refused",
+    "description": "Le coordinateur refuse de router une tâche vers un agent, Detail porte la raison technique",
+    "other": "route refused: {{.Detail}}"
+  },
+  {
+    "id": "coordination.seal_refused",
+    "description": "Le coordinateur refuse de sceller une cohorte, Detail porte la raison technique",
+    "other": "seal refused: {{.Detail}}"
+  },
+  {
+    "id": "coordination.merge_refused",
+    "description": "Le coordinateur refuse de fusionner la branche d'un worker, Detail porte la raison technique",
+    "other": "merge refused: {{.Detail}}"
+  },
+  {
+    "id": "coordination.handoff_refused",
+    "description": "Le coordinateur refuse une passation de tâche à un agent, Detail porte la raison technique",
+    "other": "handoff refused: {{.Detail}}"
+  },
+  {
+    "id": "compaction.no_effect",
+    "description": "La compaction automatique n'a pas fait repasser le contexte sous le seuil, aucune nouvelle tentative n'est faite avant ce passage",
+    "other": "automatic compaction had no effect: the context stays above {{.Percent}} %, no new attempt until it drops below the threshold"
+  },
+  {
+    "id": "compaction.bridge_gone",
+    "description": "Le bridge de la session a été fermé pendant une compaction",
+    "other": "the bridge closed during a compaction"
+  },
+  {
+    "id": "compaction.no_backend_factory",
+    "description": "Un plugin déclare la capacité Compactor mais ne fournit aucune fabrique de backend",
+    "other": "the plugin declares Capabilities.Compactor but provides no backend factory"
+  },
+  {
+    "id": "compaction.not_compactor_port",
+    "description": "Un plugin déclare la capacité Compactor mais n'implémente pas le port correspondant",
+    "other": "the plugin declares Capabilities.Compactor but does not implement the port"
+  },
+  {
+    "id": "compaction.no_compactor_plugin",
+    "description": "Aucun plugin ne déclare la capacité Compactor sous le nom demandé",
+    "other": "no plugin declares Capabilities.Compactor under this name"
+  },
+  {
+    "id": "compaction.failed",
+    "description": "Une compaction échoue pour une raison sans code propre, Detail porte le texte technique",
+    "other": "compaction failed: {{.Detail}}"
+  }
+]

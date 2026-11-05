@@ -241,8 +241,7 @@ func (d *sessionDriver) maybeAutoCompact(ctx context.Context) {
 		return
 	}
 	if crossed(result.TokensAfter, limit, percent) {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: fmt.Sprintf(
-			"compaction automatique sans effet : le contexte reste au-dessus de %d %%, pas de nouvelle tentative avant qu'il repasse sous le seuil", percent)})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: hostText(d.lang, "compaction.no_effect", map[string]any{"Percent": percent})})
 	}
 }
 
@@ -276,11 +275,32 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.CompactTrigger, err error) {
 	typed, ok := errors.AsType[contracts.NoticeError](err)
 	if !ok || !d.noticeRenders(typed.Notice()) {
-		d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: err.Error()})
+		d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: compactFailureText(d.lang, err)})
 		return
 	}
 	d.notifyGateways(typed.Notice())
 	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String()})
+}
+
+func compactFailureText(lang i18n.Language, err error) string {
+	if key, known := knownCompactFailure(err); known {
+		return hostText(lang, key, nil)
+	}
+	return hostText(lang, "compaction.failed", map[string]any{detailParam: err.Error()})
+}
+
+func knownCompactFailure(err error) (string, bool) {
+	switch {
+	case errors.Is(err, errBridgeGone):
+		return "compaction.bridge_gone", true
+	case errors.Is(err, errNoBackendFactory):
+		return "compaction.no_backend_factory", true
+	case errors.Is(err, errNotCompactorPort):
+		return "compaction.not_compactor_port", true
+	case errors.Is(err, errNoCompactorPlugin):
+		return "compaction.no_compactor_plugin", true
+	}
+	return "", false
 }
 
 func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contracts.CompactTrigger, result contracts.CompactResult) {

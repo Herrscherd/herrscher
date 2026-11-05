@@ -12,6 +12,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -217,11 +218,17 @@ func TestZeroPercentDisablesAutomaticCompaction(t *testing.T) {
 }
 
 func TestBackendWithoutCompactorIsRefusedBeforeAnySend(t *testing.T) {
-	f := newCompactFixture(t, "cursor", compactPolicy(92))
+	gateway := newNoticeGateway()
+	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
+		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
+		d.lang = i18n.French
+	})
 	f.driver.requestCompaction("", contracts.Conversation{})
-	failed := waitEmitted(t, f, eventCompactFailed)
-	if !strings.Contains(failed.Text, "does not implement Compactor") {
-		t.Fatalf("compaction_failed = %+v, want the refusal", failed)
+	if failed := waitEmitted(t, f, eventCompactFailed); failed.Text != "" {
+		t.Fatalf("compaction_failed text = %q, want none once the notice carries the refusal", failed.Text)
+	}
+	if got := awaitNotice(t, gateway); got.notice.Code != contracts.CodeCompactUnavailable {
+		t.Fatalf("notice code = %v, want %v", got.notice.Code, contracts.CodeCompactUnavailable)
 	}
 	expectNoFrame(t, f)
 }
@@ -511,5 +518,19 @@ func TestSessionInfosUseTheResolvedModelWindow(t *testing.T) {
 	infos := sessionInfos(st, t.TempDir(), compactPolicy(50), terms)
 	if len(infos) != 1 || infos[0].ContextWindow != 1_000_000 {
 		t.Fatalf("ContextWindow = %+v, want the model's 1000000", infos)
+	}
+}
+
+func TestAutomaticCompactionStillAboveThresholdSaysSoInFrench(t *testing.T) {
+	f := newCompactFixture(t, "claude", compactPolicy(50))
+	f.driver.lang = i18n.French
+	openTurn(t, f, 150_000)
+	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 150_000)) {
+		t.Fatal("automatic compaction did not run")
+	}
+	status := waitEmitted(t, f, eventStatus)
+	want := "compaction automatique sans effet : le contexte reste au-dessus de 50 %, pas de nouvelle tentative avant qu'il repasse sous le seuil"
+	if status.Text != want {
+		t.Fatalf("status = %q, want %q", status.Text, want)
 	}
 }

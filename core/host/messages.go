@@ -40,12 +40,16 @@ func (m *hostMessages) text(lang i18n.Language, key string, params map[string]an
 	catalog, err := m.catalog()
 	if err != nil {
 		slog.Error("host message catalog unavailable", "key", key, "err", err)
-		return key
+		return err.Error()
 	}
 	text, err := catalog.Message(lang, key, params)
+	if err != nil && lang != i18n.English {
+		slog.Error("host message does not render, using english", "key", key, "lang", lang.String(), "err", err)
+		text, err = catalog.Message(i18n.English, key, params)
+	}
 	if err != nil {
-		slog.Error("host message does not render", "key", key, "lang", lang.String(), "err", err)
-		return key
+		slog.Error("host message does not render in english", "key", key, "err", err)
+		return err.Error()
 	}
 	return text
 }

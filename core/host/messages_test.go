@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -227,5 +229,22 @@ func TestHostMessagesBuildTheCatalogOnce(t *testing.T) {
 	}
 	if first != second {
 		t.Fatal("the host catalog is built again on each call, want it memoized")
+	}
+}
+
+func TestHostTextFallsBackToEnglishWhenFrenchDoesNotRender(t *testing.T) {
+	source := fstest.MapFS{
+		"en.json": {Data: []byte(`[{"id":"probe","description":"probe","other":"english {{.Detail}}"},{"id":"broken","description":"broken","other":"english {{.Detail.Nope}}"}]`)},
+		"fr.json": {Data: []byte(`[{"id":"probe","description":"sonde","other":"français {{.Detail.Nope}}"},{"id":"broken","description":"cassé","other":"français {{.Detail.Nope}}"}]`)},
+	}
+	messages := &hostMessages{catalog: func() (*i18n.Catalog, error) {
+		return i18n.NewCatalog(slog.Default(), source)
+	}}
+	params := map[string]any{detailParam: "disk full"}
+	if got := messages.text(i18n.French, "probe", params); got != "english disk full" {
+		t.Fatalf("text in french = %q, want the english text", got)
+	}
+	if got := messages.text(i18n.French, "broken", params); got == "broken" || got == "" {
+		t.Fatalf("text of a key that renders in no language = %q, want the render error", got)
 	}
 }

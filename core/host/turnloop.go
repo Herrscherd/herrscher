@@ -98,6 +98,7 @@ type sessionDriver struct {
 	gate budgetGate
 
 	vendor         string
+	modelWindow    int
 	compaction     compactionPolicy
 	percentOf      func() int
 	turnReading    int
@@ -951,6 +952,7 @@ type sessionIdentity struct {
 	incarnation string
 	agent       string
 	vendor      string
+	window      int
 }
 
 // RunSession drives a session without a declared identity until ctx is done.
@@ -972,6 +974,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.sink = sink
 	driver.emitTap = emit
 	driver.vendor = identity.vendor
+	driver.modelWindow = identity.window
 	driver.compaction = sessions.compaction
 	driver.percentOf = func() int { return sessions.percentOfSession(name) }
 	if gate != nil {

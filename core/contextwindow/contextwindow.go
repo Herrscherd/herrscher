@@ -67,13 +67,23 @@ func NewLimits(envRaw string, perVendor map[string]int) Limits {
 	return limits
 }
 
-// Limit returns the context window size for a vendor.
+// Limit returns the context window size for a vendor, when its model is unknown.
 func (l Limits) Limit(vendor string) int {
+	return l.LimitFor(vendor, 0)
+}
+
+// LimitFor returns the context window size of a session: the environment override
+// and the per-vendor table win, then the resolved model's own window when it
+// declares one, then the built-in vendor size.
+func (l Limits) LimitFor(vendor string, modelWindow int) int {
 	if l.override > 0 {
 		return l.override
 	}
 	if size, ok := l.perVendor[strings.ToLower(vendor)]; ok {
 		return size
+	}
+	if modelWindow > 0 {
+		return modelWindow
 	}
 	if size, ok := vendorLimit(vendor); ok {
 		return size

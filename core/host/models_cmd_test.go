@@ -65,3 +65,26 @@ func TestModelsListJSONEmptyIsAnArrayNotNull(t *testing.T) {
 		t.Fatalf("empty catalog rendered as %s, want an empty array", out)
 	}
 }
+
+func TestModelsListJSONCarriesPricesWindowAndHidden(t *testing.T) {
+	out, err := modelsListJSON([]CatalogEntry{{Vendor: "claude", ModelSpec: contracts.ModelSpec{
+		ID: "claude-long", Label: "Long", Arg: "claude-long", Route: contracts.RouteNative,
+		InputPrice: 5, OutputPrice: 25, CacheReadPrice: 0.5, CacheWritePrice: 6.25, ContextWindow: 1_000_000, Hidden: true,
+	}}})
+	if err != nil {
+		t.Fatalf("modelsListJSON: %v", err)
+	}
+	var got struct {
+		Models []map[string]any `json:"models"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, out)
+	}
+	if len(got.Models) != 1 {
+		t.Fatalf("got %d models, want 1", len(got.Models))
+	}
+	m := got.Models[0]
+	if m["outputPrice"] != 25.0 || m["cacheReadPrice"] != 0.5 || m["cacheWritePrice"] != 6.25 || m["contextWindow"] != 1_000_000.0 || m["hidden"] != true {
+		t.Fatalf("payload lacks prices, window or hidden flag: %v", m)
+	}
+}

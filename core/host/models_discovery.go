@@ -63,11 +63,13 @@ type vendorDiscovery struct {
 }
 
 type cachedModel struct {
-	ID      string   `json:"id"`
-	Label   string   `json:"label"`
-	Arg     string   `json:"arg"`
-	Efforts []string `json:"efforts,omitempty"`
-	Route   string   `json:"route"`
+	ID            string   `json:"id"`
+	Label         string   `json:"label"`
+	Arg           string   `json:"arg"`
+	Efforts       []string `json:"efforts,omitempty"`
+	Route         string   `json:"route"`
+	ContextWindow int      `json:"contextWindow,omitempty"`
+	Hidden        bool     `json:"hidden,omitempty"`
 }
 
 // Sources carries the discovered model lists and the hidden model IDs.
@@ -397,6 +399,7 @@ func (c discoveryCache) modelsOf(vendor string) []contracts.ModelSpec {
 		specs = append(specs, contracts.ModelSpec{
 			ID: model.ID, Label: model.Label, Arg: model.Arg,
 			Efforts: model.Efforts, Route: contracts.Route(model.Route),
+			ContextWindow: model.ContextWindow, Hidden: model.Hidden,
 		})
 	}
 	return specs
@@ -490,10 +493,12 @@ func applyAnswer(next *discoveryCache, job discoveryJob, answer discoveryAnswer,
 
 func toCached(models []contracts.ModelSpec) []cachedModel {
 	cached := make([]cachedModel, 0, len(models))
-	for _, model := range models {
+	for idx := range models {
+		model := models[idx]
 		cached = append(cached, cachedModel{
 			ID: model.ID, Label: model.Label, Arg: model.Arg,
 			Efforts: model.Efforts, Route: string(model.Route),
+			ContextWindow: model.ContextWindow, Hidden: model.Hidden,
 		})
 	}
 	return cached

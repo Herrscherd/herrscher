@@ -580,3 +580,99 @@ func TestBridgeModelDiscoveryReadsTheCacheBesideItsStateFile(t *testing.T) {
 	}
 	t.Fatal("bridge catalog lacks a-live: it did not read the cache beside --state")
 }
+
+func pluginsWithRetiredModel() []contracts.Plugin {
+	return []contracts.Plugin{{Manifest: contracts.Manifest{Kind: "alpha", Category: contracts.CategoryBackend, Models: []contracts.ModelSpec{
+		{ID: "a-visible", Label: "visible", Arg: "av", Route: contracts.RouteNative},
+		{ID: "a-retired", Label: "retired", Arg: "ar", Route: contracts.RouteNative, Hidden: true},
+	}}}}
+}
+
+func TestModelHiddenBySpecLeavesSelectorButResolves(t *testing.T) {
+	plugins := pluginsWithRetiredModel()
+	listed, err := CatalogWith(plugins, contracts.PolicyAll, Sources{})
+	if err != nil {
+		t.Fatalf("CatalogWith: %v", err)
+	}
+	for _, entry := range listed {
+		if entry.ID == "a-retired" {
+			t.Fatal("spec-hidden model a-retired is still offered by the selector")
+		}
+	}
+	entry, err := LookupModelWith(plugins, contracts.PolicyAll, Sources{}, "a-retired")
+	if err != nil {
+		t.Fatalf("hidden model a-retired no longer resolves: %v", err)
+	}
+	if !entry.Hidden {
+		t.Fatal("resolved entry of a-retired is not marked hidden")
+	}
+}
+
+func TestResolvingAHiddenModelWarnsWithoutSwitching(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	entry, err := LookupModelWith(pluginsWithRetiredModel(), contracts.PolicyAll, Sources{hidden: map[string]bool{"a-visible": true}}, "a-visible")
+	if err != nil {
+		t.Fatalf("LookupModelWith: %v", err)
+	}
+	if entry.ID != "a-visible" {
+		t.Fatalf("resolved %q, want the requested a-visible", entry.ID)
+	}
+	if !strings.Contains(logs.String(), "hidden from the selector") || !strings.Contains(logs.String(), "a-visible") {
+		t.Fatalf("no warning for a resolved hidden model, logs: %s", logs.String())
+	}
+}
+
+func TestResolvingAVisibleModelDoesNotWarn(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	if _, err := LookupModelWith(pluginsWithRetiredModel(), contracts.PolicyAll, Sources{}, "a-visible"); err != nil {
+		t.Fatalf("LookupModelWith: %v", err)
+	}
+	if strings.Contains(logs.String(), "hidden from the selector") {
+		t.Fatalf("visible model produced a hidden warning: %s", logs.String())
+	}
+}
+
+func TestCacheWrittenBeforeWindowAndHiddenLoads(t *testing.T) {
+	path := discoveryCacheIn(t.TempDir())
+	legacy := `{"vendors":{"alpha":{"fetchedAt":"2026-11-04T09:00:00Z","models":[{"id":"a-live","label":"A live","arg":"live","route":"native"}]}}}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadDiscoveryCache(path)
+	if err != nil {
+		t.Fatalf("loadDiscoveryCache of a cache without window or hidden: %v", err)
+	}
+	models := got.modelsOf("alpha")
+	if len(models) != 1 || models[0].ID != "a-live" || models[0].ContextWindow != 0 || models[0].Hidden {
+		t.Fatalf("legacy cache entry = %+v", models)
+	}
+}
+
+func TestCacheCarriesContextWindowAndHidden(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "models-discovered.json")
+	want := cacheWith(time.Now(), cachedModel{ID: "a-live", Label: "A live", Arg: "live", Route: "native", ContextWindow: 400_000, Hidden: true})
+	if err := saveDiscoveryCache(path, want); err != nil {
+		t.Fatalf("saveDiscoveryCache: %v", err)
+	}
+	got, err := loadDiscoveryCache(path)
+	if err != nil {
+		t.Fatalf("loadDiscoveryCache: %v", err)
+	}
+	models := got.modelsOf("alpha")
+	if len(models) != 1 || models[0].ContextWindow != 400_000 || !models[0].Hidden {
+		t.Fatalf("round trip lost the window or the hidden flag: %+v", models)
+	}
+}
+
+func TestToCachedKeepsContextWindowAndHidden(t *testing.T) {
+	cached := toCached([]contracts.ModelSpec{{ID: "a-live", Route: contracts.RouteNative, ContextWindow: 400_000, Hidden: true}})
+	if len(cached) != 1 || cached[0].ContextWindow != 400_000 || !cached[0].Hidden {
+		t.Fatalf("toCached dropped the window or the hidden flag: %+v", cached)
+	}
+}

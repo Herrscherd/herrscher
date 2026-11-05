@@ -59,3 +59,20 @@ func TestCheckOverrideReportsOnlyInvalidValues(t *testing.T) {
 		}
 	}
 }
+
+func TestLimitForPrefersOverrideAndTableThenModelWindow(t *testing.T) {
+	if got := (Limits{}).LimitFor("claude", 350_000); got != 350_000 {
+		t.Fatalf("model window ignored: got %d, want 350000", got)
+	}
+	if got := (Limits{}).LimitFor("claude", 0); got != 200_000 {
+		t.Fatalf("zero model window must fall back to the built-in 200000, got %d", got)
+	}
+	table := NewLimits("", map[string]int{"claude": 123_000})
+	if got := table.LimitFor("claude", 350_000); got != 123_000 {
+		t.Fatalf("config table must win over the model window, got %d", got)
+	}
+	env := NewLimits("999", nil)
+	if got := env.LimitFor("claude", 350_000); got != 999 {
+		t.Fatalf("env override must win over the model window, got %d", got)
+	}
+}

@@ -32,10 +32,16 @@ func Catalog(plugins []contracts.Plugin, policy contracts.RoutePolicy) ([]Catalo
 
 // CatalogWith is Catalog with the discovered models and the hidden IDs of the given sources applied.
 func CatalogWith(plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources) ([]CatalogEntry, error) {
-	return buildCatalog(plugins, policy, sources, sources.hidden)
+	entries, err := buildCatalog(plugins, policy, sources, contracts.SelectableModels)
+	if err != nil {
+		return nil, err
+	}
+	return withoutHidden(entries, sources.hidden), nil
 }
 
-func buildCatalog(plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources, hidden map[string]bool) ([]CatalogEntry, error) {
+type modelView func(models []contracts.ModelSpec, policy contracts.RoutePolicy) []contracts.ModelSpec
+
+func buildCatalog(plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources, view modelView) ([]CatalogEntry, error) {
 	owner := make(map[string]string)
 	for idx := range plugins {
 		plugin := &plugins[idx]
@@ -53,7 +59,7 @@ func buildCatalog(plugins []contracts.Plugin, policy contracts.RoutePolicy, sour
 		kind := plugin.Manifest.Kind
 		static := plugin.Manifest.Models
 		merged := mergedModels(kind, static, sources.discovered, owner, sources.notices)
-		out = append(out, offeredEntries(kind, static, merged, policy, hidden)...)
+		out = append(out, offeredEntries(kind, static, merged, policy, view, sources.hidden)...)
 	}
 	sort.SliceStable(out, func(left, right int) bool {
 		if out[left].Vendor != out[right].Vendor {
@@ -75,23 +81,33 @@ func claimModelIDs(owner map[string]string, kind string, models []contracts.Mode
 	return nil
 }
 
-func offeredEntries(kind string, static, merged []contracts.ModelSpec, policy contracts.RoutePolicy, hidden map[string]bool) []CatalogEntry {
+func offeredEntries(kind string, static, merged []contracts.ModelSpec, policy contracts.RoutePolicy, view modelView, envHidden map[string]bool) []CatalogEntry {
 	staticIDs := make(map[string]bool, len(static))
 	for idx := range static {
 		staticIDs[static[idx].ID] = true
 	}
 	var entries []CatalogEntry
-	for _, model := range contracts.FilterModels(merged, policy) {
-		if hidden[model.ID] {
-			continue
-		}
+	offered := view(merged, policy)
+	for idx := range offered {
+		model := &offered[idx]
 		source := sourceDiscovered
 		if staticIDs[model.ID] {
 			source = sourceCatalog
 		}
-		entries = append(entries, CatalogEntry{Vendor: kind, ModelSpec: model, Source: source})
+		model.Hidden = model.Hidden || envHidden[model.ID]
+		entries = append(entries, CatalogEntry{Vendor: kind, ModelSpec: *model, Source: source})
 	}
 	return entries
+}
+
+func withoutHidden(entries []CatalogEntry, hidden map[string]bool) []CatalogEntry {
+	kept := entries[:0]
+	for idx := range entries {
+		if !hidden[entries[idx].ID] {
+			kept = append(kept, entries[idx])
+		}
+	}
+	return kept
 }
 
 // LookupModel resolves a model ID to its catalog entry, under the given
@@ -104,7 +120,18 @@ func LookupModel(plugins []contracts.Plugin, policy contracts.RoutePolicy, model
 
 // LookupModelWith is LookupModel over the catalog with the given sources applied.
 func LookupModelWith(plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources, modelID string) (CatalogEntry, error) {
-	entries, err := buildCatalog(plugins, policy, sources, nil)
+	entry, err := lookupModel(plugins, policy, sources, modelID)
+	if err != nil {
+		return CatalogEntry{}, err
+	}
+	if entry.Hidden {
+		slog.Warn("model hidden from the selector, resolved as requested", "model", entry.ID, "vendor", entry.Vendor)
+	}
+	return entry, nil
+}
+
+func lookupModel(plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources, modelID string) (CatalogEntry, error) {
+	entries, err := buildCatalog(plugins, policy, sources, contracts.FilterModels)
 	if err != nil {
 		return CatalogEntry{}, err
 	}
@@ -161,7 +188,8 @@ func mergedModels(kind string, static []contracts.ModelSpec, discovered discover
 
 func unclaimedBy(kind string, models []contracts.ModelSpec, owner map[string]string, notices *clashNotices) []contracts.ModelSpec {
 	kept := make([]contracts.ModelSpec, 0, len(models))
-	for _, model := range models {
+	for idx := range models {
+		model := models[idx]
 		if other, taken := owner[model.ID]; taken && other != kind {
 			if notices.first(model.ID) {
 				slog.Warn("discovered model ID is served by another backend, discarded", "vendor", kind, "model", model.ID, "owner", other)

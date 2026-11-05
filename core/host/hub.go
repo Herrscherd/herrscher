@@ -12,6 +12,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
@@ -87,6 +88,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 	}
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
+	window := modelWindows(h.models)(sess)
 	done := make(chan struct{})
 	h.mu.Lock()
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done}
@@ -115,7 +117,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
-			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, vendor: sess.Vendor}, h.gate)
+			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, vendor: sess.Vendor, window: window}, h.gate)
 	}()
 
 	serveCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name), asSession{disp: h, session: sess.Name})
@@ -295,10 +297,27 @@ func (h *hub) Close(ctx context.Context, name string, force bool) (string, error
 }
 
 func (h *hub) Sessions() []contracts.SessionInfo {
-	return sessionInfos(h.st, h.partDir, h.sessions.compaction)
+	return sessionInfos(h.st, h.partDir, h.sessions.compaction, modelWindows(h.models))
 }
 
-func sessionInfos(st *state.State, partDir string, policy compactionPolicy) []contracts.SessionInfo {
+func modelWindows(models *ModelDiscovery) func(state.Session) int {
+	sources := models.Sources()
+	policy := ResolvePolicy(envx.Getenv)
+	plugins := contracts.Default.Backends()
+	return func(session state.Session) int {
+		modelID := sessionModel(session)
+		if modelID == "" {
+			return 0
+		}
+		entry, err := lookupModel(plugins, policy, sources, modelID)
+		if err != nil {
+			return 0
+		}
+		return entry.ContextWindow
+	}
+}
+
+func sessionInfos(st *state.State, partDir string, policy compactionPolicy, windows func(state.Session) int) []contracts.SessionInfo {
 	sessions := st.SnapshotSessions()
 	out := make([]contracts.SessionInfo, 0, len(sessions))
 	for idx := range sessions {
@@ -320,7 +339,7 @@ func sessionInfos(st *state.State, partDir string, policy compactionPolicy) []co
 			ContextTokens:      sum.ContextTokens,
 			Dir:                sessionDir(live),
 			AutoCompactPercent: policy.percentFor(live),
-			ContextWindow:      policy.limits.Limit(live.Vendor),
+			ContextWindow:      policy.limits.LimitFor(live.Vendor, windows(live)),
 		})
 	}
 	return out

@@ -12,13 +12,18 @@ import (
 )
 
 type modelJSON struct {
-	ID         string   `json:"id"`
-	Label      string   `json:"label"`
-	Efforts    []string `json:"efforts"`
-	Route      string   `json:"route"`
-	InputPrice float64  `json:"inputPrice"`
-	Vendor     string   `json:"vendor"`
-	Source     string   `json:"source"`
+	ID              string   `json:"id"`
+	Label           string   `json:"label"`
+	Efforts         []string `json:"efforts"`
+	Route           string   `json:"route"`
+	InputPrice      float64  `json:"inputPrice"`
+	OutputPrice     float64  `json:"outputPrice"`
+	CacheReadPrice  float64  `json:"cacheReadPrice"`
+	CacheWritePrice float64  `json:"cacheWritePrice"`
+	ContextWindow   int      `json:"contextWindow"`
+	Hidden          bool     `json:"hidden"`
+	Vendor          string   `json:"vendor"`
+	Source          string   `json:"source"`
 }
 
 func modelsListJSON(entries []CatalogEntry) (string, error) {
@@ -32,6 +37,8 @@ func modelsListJSON(entries []CatalogEntry) (string, error) {
 		models = append(models, modelJSON{
 			ID: entry.ID, Label: entry.Label, Efforts: efforts,
 			Route: string(entry.Route), InputPrice: entry.InputPrice,
+			OutputPrice: entry.OutputPrice, CacheReadPrice: entry.CacheReadPrice, CacheWritePrice: entry.CacheWritePrice,
+			ContextWindow: entry.ContextWindow, Hidden: entry.Hidden,
 			Vendor: entry.Vendor, Source: entry.Source,
 		})
 	}

@@ -20,6 +20,8 @@ const (
 	BridgeFlagModel            = "cli.bridge.flag.model"
 	BridgeFlagAccount          = "cli.bridge.flag.account"
 	BridgeFlagStream           = "cli.bridge.flag.stream"
+	BridgeModelNotRoutable     = "cli.bridge.model_not_routable"
+	BridgeEnvStdinFailed       = "cli.bridge.env_stdin_failed"
 )
 
 func bridgeKeys() map[Key][]string {
@@ -43,5 +45,7 @@ func bridgeKeys() map[Key][]string {
 		BridgeFlagModel:            nil,
 		BridgeFlagAccount:          nil,
 		BridgeFlagStream:           nil,
+		BridgeModelNotRoutable:     {ParamModel},
+		BridgeEnvStdinFailed:       {ParamKey, ParamErr},
 	}
 }

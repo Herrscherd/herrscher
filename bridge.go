@@ -5,10 +5,10 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -159,7 +159,7 @@ func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequ
 			return nil, err
 		}
 		if req.ModelID != "" {
-			return nil, fmt.Errorf("model %q %w (HERRSCHER_REMOTE=backend): the proxy cannot carry the model's spawn environment", req.ModelID, errModelNotRoutable)
+			return nil, renderError(clitext.ClientLanguage(), errModelNotRoutable, clitext.BridgeModelNotRoutable, clitext.Params{clitext.ParamModel: strconv.Quote(req.ModelID)})
 		}
 		return backend, nil
 	}
@@ -284,7 +284,7 @@ func applyEnvFromStdin(r io.Reader) error {
 	}
 	for key, v := range contracts.ParseEnvSetting(block.String()) {
 		if err := os.Setenv(key, v); err != nil {
-			return fmt.Errorf("apply %s from stdin: %w", key, err)
+			return renderError(clitext.ClientLanguage(), err, clitext.BridgeEnvStdinFailed, clitext.Params{clitext.ParamKey: key, clitext.ParamErr: err.Error()})
 		}
 	}
 	return nil

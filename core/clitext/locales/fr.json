@@ -488,5 +488,15 @@
     "id": "cli.bridge.flag.stream",
     "description": "Aide de l'option --stream de bridge, obsolète",
     "other": "obsolète, ignoré (accepté pour la compatibilité)"
+  },
+  {
+    "id": "cli.bridge.model_not_routable",
+    "description": "Erreur quand --model est donné alors que le backend passe par le résolveur distant",
+    "other": "le modèle {{.Model}} ne peut pas passer par le résolveur de backend distant (HERRSCHER_REMOTE=backend) : le proxy ne transporte pas l'environnement de lancement du modèle"
+  },
+  {
+    "id": "cli.bridge.env_stdin_failed",
+    "description": "Erreur quand une ligne KEY=VALUE lue sur l'entrée standard ne peut pas être posée dans l'environnement",
+    "other": "application de {{.Key}} depuis l'entrée standard : {{.Err}}"
   }
 ]

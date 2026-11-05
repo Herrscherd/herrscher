@@ -488,5 +488,15 @@
     "id": "cli.bridge.flag.stream",
     "description": "Help of the deprecated --stream flag of bridge",
     "other": "deprecated, ignored (accepted for backward compatibility)"
+  },
+  {
+    "id": "cli.bridge.model_not_routable",
+    "description": "Error when --model is set while the backend is routed through the remote resolver",
+    "other": "model {{.Model}} cannot be routed through the remote backend resolver (HERRSCHER_REMOTE=backend): the proxy cannot carry the model's spawn environment"
+  },
+  {
+    "id": "cli.bridge.env_stdin_failed",
+    "description": "Error when a KEY=VALUE line read from stdin cannot be set in the environment",
+    "other": "apply {{.Key}} from stdin: {{.Err}}"
   }
 ]

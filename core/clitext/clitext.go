@@ -60,6 +60,7 @@ const (
 	ParamOwner    = "Owner"
 	ParamFailure  = "Failure"
 	ParamWait     = "Wait"
+	ParamModel    = "Model"
 )
 
 // Text renders key in lang with params. It refuses an undeclared key, and params

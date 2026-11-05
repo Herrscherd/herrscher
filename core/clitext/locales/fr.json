@@ -749,5 +749,451 @@
     "id": "cli.transport.announce_key_invalid",
     "description": "Erreur : la clé d'annonce est définie mais refusée par le transport",
     "other": "HERRSCHER_ANNOUNCE_KEY : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.plugin.usage",
+    "description": "Usage line: herrscher plugin, with its subcommands",
+    "other": "usage : herrscher plugin <list|add|remove|pin|unpin> [module[@version]]"
+  },
+  {
+    "id": "cli.manage.plugin.unknown_subcommand",
+    "description": "Error: herrscher plugin got a subcommand it does not know",
+    "other": "sous-commande de plugin inconnue {{.Name}}"
+  },
+  {
+    "id": "cli.manage.plugin.edit_usage",
+    "description": "Usage line: herrscher plugin with a verb that takes one module",
+    "other": "usage : herrscher plugin {{.Verb}} <module>"
+  },
+  {
+    "id": "cli.manage.plugin.pin_usage",
+    "description": "Usage line: herrscher plugin pin, which also takes a version",
+    "other": "usage : herrscher plugin pin <module> [version]"
+  },
+  {
+    "id": "cli.manage.plugin.added",
+    "description": "Confirmation: a plugin was added to plugins.go",
+    "other": "ajouté {{.Module}} dans {{.Path}}"
+  },
+  {
+    "id": "cli.manage.plugin.removed",
+    "description": "Confirmation: a plugin was removed from plugins.go",
+    "other": "retiré {{.Module}} de {{.Path}}"
+  },
+  {
+    "id": "cli.manage.plugin.no_change",
+    "description": "Notice: the plugin edit changes nothing, State names the state it already has",
+    "other": "aucun changement : {{.Module}} est déjà {{.State}}"
+  },
+  {
+    "id": "cli.manage.plugin.moved",
+    "description": "Confirmation: a plugin already present was moved to another version",
+    "other": "{{.Module}} était déjà dans {{.Path}} ; basculé sur {{.Version}}"
+  },
+  {
+    "id": "cli.manage.plugin.skipped_build",
+    "description": "Notice: the build was skipped by --no-build, and how to run it",
+    "other": "compilation ignorée (--no-build) ; lancez `go build` dans l'hôte pour appliquer"
+  },
+  {
+    "id": "cli.manage.plugin.version_not_installed",
+    "description": "Notice: a requested version was not installed by --no-build",
+    "other": "la version n'a pas été installée : {{.Module}}@{{.Version}} demande `go get`"
+  },
+  {
+    "id": "cli.manage.plugin.pinned",
+    "description": "Confirmation: a module was pinned",
+    "other": "{{.Module}} épinglé"
+  },
+  {
+    "id": "cli.manage.plugin.unpinned",
+    "description": "Confirmation: a module was unpinned",
+    "other": "{{.Module}} n'est plus épinglé"
+  },
+  {
+    "id": "cli.manage.pinned_tag",
+    "description": "List: the mark of a module that is pinned",
+    "other": "épinglé"
+  },
+  {
+    "id": "cli.manage.state.added",
+    "description": "Word: the state of a plugin that is compiled in",
+    "other": "ajouté"
+  },
+  {
+    "id": "cli.manage.state.removed",
+    "description": "Word: the state of a plugin that is no longer compiled in",
+    "other": "retiré"
+  },
+  {
+    "id": "cli.manage.aborted",
+    "description": "Notice: the operator refused the change, nothing was written",
+    "other": "annulé ; rien n'a été écrit"
+  },
+  {
+    "id": "cli.manage.aborted_pinned",
+    "description": "Notice: the operator refused the pin, which needed a go get first",
+    "other": "annulé ; rien n'a été écrit ni épinglé"
+  },
+  {
+    "id": "cli.manage.finding.moves_back",
+    "description": "Finding: a requested version is older than the one installed",
+    "other": "{{.Module}} revient de {{.Current}} à {{.Version}}"
+  },
+  {
+    "id": "cli.manage.finding.contracts",
+    "description": "Finding: a requested version wants another minor of contracts than the composition resolves",
+    "other": "{{.Module}}@{{.Version}} demande contracts {{.Want}} ; la composition résout {{.Have}}"
+  },
+  {
+    "id": "cli.manage.no_host_module",
+    "description": "Error: no host module was found where the command looked",
+    "other": "aucun module hôte trouvé (plugins.go recherché) ; passez --host DIR"
+  },
+  {
+    "id": "cli.manage.not_compiled_in",
+    "description": "Error: a module is not compiled in, so it cannot be pinned or unpinned",
+    "other": "{{.Module}} n'est pas compilé ; lancez d'abord `herrscher plugin add {{.Module}}`"
+  },
+  {
+    "id": "cli.manage.read_failed",
+    "description": "Error: a file could not be read",
+    "other": "lecture de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.write_failed",
+    "description": "Error: a file could not be written",
+    "other": "écriture de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.save_failed",
+    "description": "Error: the composition files could not be saved before a change",
+    "other": "sauvegarde de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.restore_failed",
+    "description": "Error: the composition files could not be put back after a failure",
+    "other": "restauration de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.command_failed",
+    "description": "Error: a command run by the verb failed",
+    "other": "échec de {{.Name}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.choice_out_of_range",
+    "description": "Error: a numbered answer is outside the list it names, Name is the list's label",
+    "other": "{{.Name}} : choix hors de la liste : {{.Choice}}"
+  },
+  {
+    "id": "cli.manage.unknown_kind",
+    "description": "Error: a module kind typed at the wizard is not in the catalog",
+    "other": "{{.Category}} : type inconnu {{.Kind}}"
+  },
+  {
+    "id": "cli.manage.unknown_kind.listed",
+    "description": "Error: a module kind given as a flag is not in the catalog, with the way to list it",
+    "other": "{{.Category}} : type inconnu {{.Kind}} (essayez `herrscher init --list`)"
+  },
+  {
+    "id": "cli.manage.invalid_module_path",
+    "description": "Error: a module given with --with is not a usable path",
+    "other": "chemin de module invalide {{.Module}}"
+  },
+  {
+    "id": "cli.manage.empty_stack",
+    "description": "Error: every category of the wizard or flags was set to none",
+    "other": "pile vide : toutes les catégories sont à none"
+  },
+  {
+    "id": "cli.manage.default_tag",
+    "description": "List: the mark of the kind that a category uses by default",
+    "other": "(par défaut)"
+  },
+  {
+    "id": "cli.manage.unknown_policy",
+    "description": "Error: a route policy typed at the wizard is unknown",
+    "other": "politique de routage inconnue {{.Policy}}"
+  },
+  {
+    "id": "cli.manage.unknown_model",
+    "description": "Error: a default model typed at the wizard is not offered under the chosen policy",
+    "other": "modèle inconnu {{.Model}} (non proposé avec cette politique de routage)"
+  },
+  {
+    "id": "cli.manage.unknown_action",
+    "description": "Error: the plugin front end asked for an action the plugin verbs do not know",
+    "other": "action de plugin inconnue {{.Action}}"
+  },
+  {
+    "id": "cli.manage.no_gateway_creds",
+    "description": "Error: the gateway-only policy was chosen with no gateway credentials",
+    "other": "gateway-only sans identifiants de passerelle : chaque session échouerait au démarrage ; renseignez {{.URL}} et {{.Token}}"
+  },
+  {
+    "id": "cli.manage.incomplete_creds",
+    "description": "Error: only one of the two gateway credentials was given",
+    "other": "identifiants de passerelle incomplets : {{.URL}} et {{.Token}} vont ensemble ; l'un sans l'autre ferait tourner les tours sur le compte propre de cette machine"
+  },
+  {
+    "id": "cli.manage.pins.line",
+    "description": "Error: a line of the pins file is not a module path, File is the pins file name",
+    "other": "{{.File}}, ligne {{.Line}} : {{.Module}} n'est pas un chemin de module"
+  },
+  {
+    "id": "cli.manage.marker.end_not_found",
+    "description": "Error: the end marker of the managed region is missing from plugins.go",
+    "other": "marqueur de fin {{.Marker}} : marqueur introuvable"
+  },
+  {
+    "id": "cli.manage.marker.region_not_found",
+    "description": "Error: the managed region of plugins.go is missing its markers",
+    "other": "zone gérée : marqueur introuvable"
+  },
+  {
+    "id": "cli.manage.marker.duplicate",
+    "description": "Error: a marker of the managed region appears twice in plugins.go",
+    "other": "marqueur {{.Marker}} en double"
+  },
+  {
+    "id": "cli.manage.marker.order",
+    "description": "Error: the end marker of the managed region comes before its begin marker",
+    "other": "le marqueur de fin précède le marqueur de début"
+  },
+  {
+    "id": "cli.manage.skipped_pinned",
+    "description": "Notice: a module was left out of the update because it is pinned",
+    "other": "{{.Module}} ignoré (épinglé à {{.Version}})"
+  },
+  {
+    "id": "cli.manage.no_plugins",
+    "description": "Notice: the update found no plugin compiled in",
+    "other": "aucun plugin à mettre à jour"
+  },
+  {
+    "id": "cli.manage.all_pinned",
+    "description": "Notice: the update found every plugin pinned",
+    "other": "tous les plugins sont épinglés ; rien à mettre à jour"
+  },
+  {
+    "id": "cli.manage.updated_no_build",
+    "description": "Confirmation: the plugins were fetched but not built, and how to build them",
+    "other": "plugins mis à jour (--no-build) ; lancez `go mod tidy && go build` dans l'hôte pour appliquer"
+  },
+  {
+    "id": "cli.manage.updated",
+    "description": "Confirmation: the plugins were updated and the host reinstalled",
+    "other": "plugins mis à jour et hôte réinstallé ; redémarrez le service pour le lancer"
+  },
+  {
+    "id": "cli.manage.flag.host",
+    "description": "Flag help: the --host flag of the plugin, init, update and install verbs",
+    "other": "chemin du module hôte"
+  },
+  {
+    "id": "cli.manage.flag.plugin_no_build",
+    "description": "Flag help: the --no-build flag of herrscher plugin",
+    "other": "modifie plugins.go sans lancer go get ni la compilation"
+  },
+  {
+    "id": "cli.manage.flag.update_no_build",
+    "description": "Flag help: the --no-build flag of herrscher update",
+    "other": "lance go get -u sur les plugins, sans tidy ni compilation"
+  },
+  {
+    "id": "cli.manage.flag.init_no_build",
+    "description": "Flag help: the --no-build flag of herrscher init",
+    "other": "écrit plugins.go sans lancer go get ni la compilation"
+  },
+  {
+    "id": "cli.manage.flag.yes",
+    "description": "Flag help: the --yes flag, which answers the confirmations without asking",
+    "other": "répond aux deux confirmations sans les poser"
+  },
+  {
+    "id": "cli.manage.flag.list",
+    "description": "Flag help: the --list flag of herrscher init",
+    "other": "affiche le catalogue catalog() des modules, puis quitte"
+  },
+  {
+    "id": "cli.manage.flag.init_yes",
+    "description": "Flag help: the --yes flag of herrscher init, which skips the wizard",
+    "other": "passe l'assistant interactif ; utilise les options et les valeurs par défaut"
+  },
+  {
+    "id": "cli.manage.flag.category",
+    "description": "Flag help: a stack flag of herrscher init, Category is the flag's category",
+    "other": "type de module {{.Category}} (ou none)"
+  },
+  {
+    "id": "cli.manage.flag.with",
+    "description": "Flag help: the --with flag of herrscher init, which adds a module path",
+    "other": "ajoute un chemin de module tel quel, sans le résoudre (répétable)"
+  },
+  {
+    "id": "cli.manage.init.wrote_no_build",
+    "description": "Confirmation: init wrote plugins.go without building, and how to build it",
+    "other": "plugins.go écrit (--no-build) ; lancez `go mod tidy && go build` dans l'hôte pour appliquer"
+  },
+  {
+    "id": "cli.manage.wrote_settings",
+    "description": "Confirmation: init wrote settings to an env file, Count selects the plural form",
+    "one": "1 réglage écrit dans {{.Path}}",
+    "other": "{{.Count}} réglages écrits dans {{.Path}}"
+  },
+  {
+    "id": "cli.manage.build_restored",
+    "description": "Notice: the build of the wizard failed, and plugins.go was put back",
+    "other": "échec de la compilation ; {{.Path}} restauré"
+  },
+  {
+    "id": "cli.manage.seed_failed",
+    "description": "Error: init could not copy .env.example to .env",
+    "other": "amorçage de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.seeded",
+    "description": "Confirmation: init copied .env.example to .env",
+    "other": "{{.Path}} créé à partir de .env.example : renseignez vos secrets"
+  },
+  {
+    "id": "cli.manage.secrets_write_failed",
+    "description": "Error: init could not write the secrets",
+    "other": "écriture des secrets : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.catalog_failed",
+    "description": "Error: the model catalog could not be read for the wizard",
+    "other": "catalogue des modèles : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.route.default_model_later",
+    "description": "Notice: init skipped the default model question, and how to answer it later",
+    "other": "modèle par défaut : relancez `herrscher init` après la recompilation pour en choisir un"
+  },
+  {
+    "id": "cli.manage.route.no_model_offered",
+    "description": "Notice: no compiled backend offers a default model under the chosen policy",
+    "other": "modèle par défaut : aucun backend compilé n'en propose sous cette politique"
+  },
+  {
+    "id": "cli.manage.route.gateway_no_model",
+    "description": "Warning: gateway-only with no default model forces every session create to name a model",
+    "other": "sans modèle par défaut, chaque `session create` doit passer --model, ce qu'exige gateway-only"
+  },
+  {
+    "id": "cli.manage.route.routing_header",
+    "description": "Heading of the routing step of the wizard",
+    "other": "routage"
+  },
+  {
+    "id": "cli.manage.route.routing_note",
+    "description": "Subtitle of the routing step: where agent turns run",
+    "other": "où tournent les tours des agents"
+  },
+  {
+    "id": "cli.manage.route.policy_header",
+    "description": "Heading of the route policy list of the wizard",
+    "other": "politique de routage"
+  },
+  {
+    "id": "cli.manage.route.policy_all",
+    "description": "Help line of the all route policy in the wizard",
+    "other": "modèles natifs et passerelle (version interne)"
+  },
+  {
+    "id": "cli.manage.route.policy_gateway_only",
+    "description": "Help line of the gateway-only route policy in the wizard",
+    "other": "la passerelle du produit seule (version publique)"
+  },
+  {
+    "id": "cli.manage.route.default_model_header",
+    "description": "Heading of the default model list of the wizard",
+    "other": "modèle par défaut"
+  },
+  {
+    "id": "cli.manage.credentials.header",
+    "description": "Heading of the gateway credentials step of the wizard",
+    "other": "passerelle · identifiants"
+  },
+  {
+    "id": "cli.manage.credentials.required",
+    "description": "Note under the gateway credentials heading when none is set yet",
+    "other": "(les deux sont requis ; la saisie du jeton est masquée)"
+  },
+  {
+    "id": "cli.manage.credentials.keep",
+    "description": "Note under the gateway credentials heading when a pair is already set",
+    "other": "(déjà renseignés : Entrée pour garder ; la saisie du jeton est masquée)"
+  },
+  {
+    "id": "cli.manage.secrets.header",
+    "description": "Heading of the Discord secrets step, Kind is the gateway kind",
+    "other": "{{.Kind}} · secrets"
+  },
+  {
+    "id": "cli.manage.token_hidden",
+    "description": "Note: a token typed at a prompt is not shown on screen",
+    "other": "(la saisie du jeton est masquée)"
+  },
+  {
+    "id": "cli.manage.wizard.compose",
+    "description": "Subtitle of the init wizard when it composes the plugin stack",
+    "other": "composez votre pile de plugins : Entrée accepte la valeur par défaut"
+  },
+  {
+    "id": "cli.manage.wizard.configure",
+    "description": "Subtitle of the init wizard when it configures an installed host",
+    "other": "configurez l'hôte installé : Entrée pour passer un champ"
+  },
+  {
+    "id": "cli.manage.decider.before_writing",
+    "description": "Heading of the warning shown before a composition change is written",
+    "other": "avant l'écriture"
+  },
+  {
+    "id": "cli.manage.decider.nothing_known",
+    "description": "Line shown when no finding is known against a composition change",
+    "other": "rien de connu sur ce changement"
+  },
+  {
+    "id": "cli.manage.decider.build_failed",
+    "description": "Heading shown when the composition does not build",
+    "other": "la composition ne se compile pas"
+  },
+  {
+    "id": "cli.manage.prompt.proceed",
+    "description": "Question: write the change despite the findings",
+    "other": "continuer ?"
+  },
+  {
+    "id": "cli.manage.prompt.restore",
+    "description": "Question: put the host tree back as it was after a failed build",
+    "other": "restaurer les fichiers tels qu'ils étaient ?"
+  },
+  {
+    "id": "cli.manage.prompt.hint_yes_default",
+    "description": "Hint of a yes/no question whose default is yes",
+    "other": "[O/n]"
+  },
+  {
+    "id": "cli.manage.prompt.hint_no_default",
+    "description": "Hint of a yes/no question whose default is no",
+    "other": "[o/N]"
+  },
+  {
+    "id": "cli.manage.nothing_entered",
+    "description": "Notice: the wizard got no value for an env file, which stays as it was",
+    "other": "rien saisi ; {{.Path}} reste inchangé"
+  },
+  {
+    "id": "cli.manage.installed_note",
+    "description": "Note after the wizard: the installed binary already has its plugins compiled in",
+    "other": "le binaire installé a déjà ses plugins compilés."
+  },
+  {
+    "id": "cli.manage.start_with",
+    "description": "Line after the wizard: the command that starts the daemon",
+    "other": "lancez-le avec : {{.Command}}"
   }
 ]

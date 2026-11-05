@@ -334,6 +334,8 @@ func seedEnv(out, errOut *errwriter.Writer, dir string) {
 }
 
 func writeCatalog(out *errwriter.Writer) {
+	translator := clitext.For(clitext.ClientLanguage())
+	defer logRenderErr(translator)
 	for _, cat := range categories() {
 		kinds := make([]string, 0, len(catalog()[cat]))
 		for k := range catalog()[cat] {
@@ -343,7 +345,7 @@ func writeCatalog(out *errwriter.Writer) {
 		for _, kind := range kinds {
 			def := ""
 			if defaultStack()[cat] == kind {
-				def = " " + msg(clitext.ManageDefaultTag, nil)
+				def = " " + translator.Text(clitext.ManageDefaultTag, nil)
 			}
 			out.Printf("%-13s %-10s %s%s\n", cat, kind, catalog()[cat][kind], def)
 		}

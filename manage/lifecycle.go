@@ -92,9 +92,11 @@ func planPluginUpdates(ctx context.Context, out, errOut *errwriter.Writer, dir s
 		installed = nil
 	}
 	cmds, skipped := updatePlan(mods, pins, installed)
+	translator := clitext.For(clitext.ClientLanguage())
 	for _, skip := range skipped {
-		out.Println(msg(clitext.ManageSkippedPinned, clitext.Params{clitext.ParamModule: skip.module, clitext.ParamVersion: skip.version}))
+		out.Println(translator.Text(clitext.ManageSkippedPinned, clitext.Params{clitext.ParamModule: skip.module, clitext.ParamVersion: skip.version}))
 	}
+	logRenderErr(translator)
 	if cmds == nil {
 		out.Println(msg(clitext.ManageAllPinned, nil))
 	}

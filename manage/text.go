@@ -9,10 +9,14 @@ import (
 func msg(key clitext.Key, params clitext.Params) string {
 	translator := clitext.For(clitext.ClientLanguage())
 	text := translator.Text(key, params)
-	if err := translator.Err(); err != nil {
-		slog.Error("render message", "key", key, "err", err)
-	}
+	logRenderErr(translator)
 	return text
+}
+
+func logRenderErr(translator *clitext.Translator) {
+	if err := translator.Err(); err != nil {
+		slog.Error("render message", "err", err)
+	}
 }
 
 func failure(cause error, key clitext.Key, params clitext.Params) error {

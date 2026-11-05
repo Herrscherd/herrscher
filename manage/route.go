@@ -99,14 +99,16 @@ func policyChoices() []struct {
 
 func choosePolicy(sty style, input *bufio.Reader, cur contracts.RoutePolicy) (contracts.RoutePolicy, error) {
 	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, msg(clitext.ManageRoutePolicyHeader, nil)))
+	translator := clitext.For(clitext.ClientLanguage())
 	for idx, choice := range policyChoices() {
 		name, tag := fmt.Sprintf("%-14s", choice.label), fmt.Sprintf("%-8s", "")
 		if choice.policy == cur {
 			name = sty.wrap(sty.green, name)
-			tag = sty.wrap(sty.dim, fmt.Sprintf("%-8s", msg(clitext.ManageCurrentTag, nil)))
+			tag = sty.wrap(sty.dim, fmt.Sprintf("%-8s", translator.Text(clitext.ManageCurrentTag, nil)))
 		}
 		fmt.Fprintf(os.Stderr, "    %s %s %s %s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), name, tag, sty.wrap(sty.dim, choice.help))
 	}
+	logRenderErr(translator)
 
 	ans := promptLine(input, "  "+sty.wrap(sty.dim, "›")+" ")
 	if ans == "" {

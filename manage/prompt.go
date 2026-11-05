@@ -97,15 +97,17 @@ func chooseKind(sty style, input *bufio.Reader, cat string) (string, error) {
 	def := defaultStack()[cat]
 
 	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, cat))
+	translator := clitext.For(clitext.ClientLanguage())
 	for idx, kind := range kinds {
 		name := kind
 		tag := ""
 		if kind == def {
 			name = sty.wrap(sty.green, kind)
-			tag = sty.wrap(sty.dim, "  "+msg(clitext.ManageDefaultTag, nil))
+			tag = sty.wrap(sty.dim, "  "+translator.Text(clitext.ManageDefaultTag, nil))
 		}
 		fmt.Fprintf(os.Stderr, "    %s %s%s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), name, tag)
 	}
+	logRenderErr(translator)
 	fmt.Fprintf(os.Stderr, "    %s %s\n", sty.wrap(sty.dim, strconv.Itoa(len(kinds)+1)), "none")
 
 	ans := promptLine(input, "  "+sty.wrap(sty.dim, "›")+" ")

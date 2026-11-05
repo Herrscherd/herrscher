@@ -409,10 +409,16 @@ func listWithVersions(ctx context.Context, dir, src string, out io.Writer) error
 	if err != nil {
 		return err
 	}
+	return writePluginRows(out, rows)
+}
+
+func writePluginRows(out io.Writer, rows []PluginVersion) error {
+	translator := clitext.For(clitext.ClientLanguage())
+	defer logRenderErr(translator)
 	for _, row := range rows {
 		pin := ""
 		if row.Pinned {
-			pin = "  " + msg(clitext.ManagePinnedTag, nil)
+			pin = "  " + translator.Text(clitext.ManagePinnedTag, nil)
 		}
 		if _, err := fmt.Fprintf(out, "%s  %s  %s%s\n", row.Module, row.Installed, row.Latest, pin); err != nil {
 			return err

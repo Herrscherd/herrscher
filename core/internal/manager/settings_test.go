@@ -2,7 +2,10 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func TestSetHomeCategory(t *testing.T) {
@@ -39,5 +42,17 @@ func TestSetSource(t *testing.T) {
 	}
 	if st.SourceDir() != "/src/herrscher" {
 		t.Fatalf("source not persisted: %q", st.SourceDir())
+	}
+}
+
+func TestSetHomeRejectionIsTheHomeChannelKindNotice(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "text")
+	_, err := h.setHomeRun(context.Background(), args("channel", "c9"))
+	notice, ok := errors.AsType[contracts.NoticeError](err)
+	if !ok {
+		t.Fatalf("%v carries no notice", err)
+	}
+	if got := notice.Notice().Code; got != contracts.CodeChannelKindHome {
+		t.Fatalf("code = %s, want %s", got.Key(), contracts.CodeChannelKindHome.Key())
 	}
 }

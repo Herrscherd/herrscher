@@ -10,7 +10,7 @@ require (
 	github.com/Herrscherd/herrscher-codex-backend v0.8.0
 	github.com/Herrscherd/herrscher-contracts v0.21.0
 	github.com/Herrscherd/herrscher-cursor-backend v0.7.0
-	github.com/Herrscherd/herrscher-discord-gateway v0.26.0
+	github.com/Herrscherd/herrscher-discord-gateway v0.27.0
 	github.com/Herrscherd/herrscher-llm-extractor v0.4.0
 	github.com/Herrscherd/herrscher-obsidian-memory v0.6.0
 	github.com/Herrscherd/herrscher-orchestrator v0.6.0

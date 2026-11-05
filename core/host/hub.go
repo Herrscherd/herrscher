@@ -119,10 +119,18 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
-			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms}, h.gate)
+			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms, lang: sessionLanguage(sess, h.lang)}, h.gate)
 	}()
 
 	serveCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name), asSession{disp: h, session: sess.Name, lang: h.lang})
+}
+
+func sessionLanguage(sess state.Session, operator i18n.Language) i18n.Language {
+	lang, err := i18n.ParseLanguage(sess.Language)
+	if err != nil {
+		return operator
+	}
+	return lang
 }
 
 func (h *hub) stopLive() {

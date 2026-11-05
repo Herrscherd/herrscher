@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
@@ -139,6 +140,25 @@ func TestPostEmitsReplyEvent(t *testing.T) {
 	}
 	if re.Event.Text != "hi" {
 		t.Fatalf("Post reply text = %q, want %q", re.Event.Text, "hi")
+	}
+}
+
+func TestNotifyRendersTheNoticeInTheLanguage(t *testing.T) {
+	tm := New()
+	got := make(chan tui.RoutedEvent, 1)
+	go func() { got <- <-tm.Frontend() }()
+	notice := contracts.Notice{Code: contracts.CodeCompacted}
+	conv := contracts.Conversation{Gateway: "terminal", ID: "terminal"}
+	if _, err := tm.Notify(context.Background(), conv, i18n.French, notice); err != nil {
+		t.Fatalf("Notify: %v", err)
+	}
+	re := <-got
+	inFrench, err := contracts.NewRenderer().Render(i18n.French, notice)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if re.Event.T != eventNotice || re.Event.Text != inFrench {
+		t.Fatalf("Notify emitted %+v, want a notice event with %q", re.Event, inFrench)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
@@ -104,6 +105,7 @@ type sessionDriver struct {
 	compactSpent   bool
 	compactMu      sync.Mutex
 	compactWaiting *compactRequest
+	lang           i18n.Language
 }
 
 type queued struct {
@@ -957,6 +959,7 @@ type sessionIdentity struct {
 	incarnation string
 	agent       string
 	terms       func() modelTerms
+	lang        i18n.Language
 }
 
 // RunSession drives a session without a declared identity until ctx is done.
@@ -978,6 +981,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.sink = sink
 	driver.emitTap = emit
 	driver.terms = identity.terms
+	driver.lang = identity.lang
 	driver.compaction = sessions.compaction
 	driver.percentOf = func() int { return sessions.percentOfSession(name) }
 	if gate != nil {

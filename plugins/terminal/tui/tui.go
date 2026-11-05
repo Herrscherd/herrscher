@@ -90,6 +90,7 @@ const (
 	stateActive = "active"
 	eventReply  = "reply"
 	eventStatus = "status"
+	eventNotice = "notice"
 
 	stateFailed = "failed"
 	stateError  = "error"
@@ -1175,6 +1176,8 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.ctxMeasured = false
 		target.endStream()
 		target.appendEntry(entry{role: roleNotice, text: "tour réinitialisé"})
+	case eventNotice:
+		target.appendEntry(entry{role: roleNotice, text: event.Text})
 	case eventCompactionStarted:
 		target.startCompaction(event)
 	case eventCompactionDone:

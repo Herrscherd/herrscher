@@ -32,7 +32,7 @@ func TestEveryDeclaredKeyHasItsTextInEveryLanguage(t *testing.T) {
 }
 
 func TestEveryKeyFileIsDeclaredOnce(t *testing.T) {
-	groups := []map[Key][]string{usageKeys, serviceKeys, serveKeys, bridgeKeys, manageKeys, accountKeys, sessionKeys, pluginKeys}
+	groups := []map[Key][]string{usageKeys, cliKeys, serviceKeys, serveKeys, bridgeKeys, manageKeys, accountKeys, sessionKeys, pluginKeys}
 	total := 0
 	for _, group := range groups {
 		total += len(group)
@@ -65,5 +65,32 @@ func TestTranslatorKeepsTheFirstFailure(t *testing.T) {
 	}
 	if !errors.Is(tr.Err(), ErrUndeclaredKey) || !strings.Contains(tr.Err().Error(), "cli.nowhere") {
 		t.Fatalf("Err = %v, want the first failure, on cli.nowhere", tr.Err())
+	}
+}
+
+func TestRenderedMessagesInEachLanguage(t *testing.T) {
+	cases := []struct {
+		name   string
+		key    Key
+		params Params
+		en     string
+		fr     string
+	}{
+		{"attach no session", AttachNoSession, nil, "herrscher: no session is bound to this tab any more", "herrscher : aucune session n'est plus liée à cet onglet"},
+		{"error line", ErrorLine, Params{"Message": "boom"}, "herrscher: boom", "herrscher : boom"},
+		{"unknown command", CommandUnknown, Params{"Name": `"x"`}, `unknown command "x"`, `commande inconnue "x"`},
+		{"env set failed", EnvSetFailed, Params{"Key": "A", "Err": "bad"}, "set A: bad", "définition de A : bad"},
+		{"attach not available", AttachNotAvailable, Params{"Verb": `"agent"`}, `command "agent" is not available from the terminal (allowed: session, agent)`, `commande "agent" indisponible depuis le terminal (autorisées : session, agent)`},
+		{"skill duplicate", SkillDuplicate, Params{"Name": "demo", "Kind": "bundle", "Owner": "core"}, "herrscher: skill demo from plugin bundle was left out: plugin core already ships one by that name", "herrscher : la compétence demo du plugin bundle a été écartée : le plugin core en livre déjà une de ce nom"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, err := Text(i18n.English, tc.key, tc.params); err != nil || got != tc.en {
+				t.Fatalf("en = %q, %v; want %q", got, err, tc.en)
+			}
+			if got, err := Text(i18n.French, tc.key, tc.params); err != nil || got != tc.fr {
+				t.Fatalf("fr = %q, %v; want %q", got, err, tc.fr)
+			}
+		})
 	}
 }

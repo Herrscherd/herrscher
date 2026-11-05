@@ -35,7 +35,7 @@ var (
 	ErrParamsMismatch = errors.New("message params do not match the key")
 )
 
-var declared = mergeDeclared(usageKeys, serviceKeys, serveKeys, bridgeKeys, manageKeys, accountKeys, sessionKeys, pluginKeys)
+var declared = mergeDeclared(usageKeys, cliKeys, serviceKeys, serveKeys, bridgeKeys, manageKeys, accountKeys, sessionKeys, pluginKeys)
 
 var catalog = sync.OnceValues(func() (*i18n.Catalog, error) {
 	sources, err := fs.Sub(locales, "locales")

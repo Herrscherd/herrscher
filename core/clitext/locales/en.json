@@ -148,5 +148,175 @@
     "id": "cli.usage.env.init",
     "description": "Environment line: `herrscher init` asks the questions",
     "other": "     `herrscher init` asks these three questions, no need to write them by hand"
+  },
+  {
+    "id": "cli.task.needs_text",
+    "description": "Error when a verb-less prompt has no text",
+    "other": "herrscher: {{.Verb}} needs a task, e.g. herrscher {{.Verb}} refactor"
+  },
+  {
+    "id": "cli.error.line",
+    "description": "Line printed on stderr before a failed command exits",
+    "other": "herrscher: {{.Message}}"
+  },
+  {
+    "id": "cli.command.unknown",
+    "description": "Error for a command that no verb handles",
+    "other": "unknown command {{.Name}}"
+  },
+  {
+    "id": "cli.whoami.unknown_argument",
+    "description": "Error for an argument whoami does not accept",
+    "other": "whoami: unknown argument {{.Arg}} (only --json)"
+  },
+  {
+    "id": "cli.env.continuing",
+    "description": "Warning when the env file named by default cannot be read",
+    "other": "herrscher: {{.Err}} (continuing)"
+  },
+  {
+    "id": "cli.env.open_failed",
+    "description": "Error when an explicitly named env file cannot be opened",
+    "other": "open env file: {{.Err}}"
+  },
+  {
+    "id": "cli.env.set_failed",
+    "description": "Error when a variable of the env file cannot be set",
+    "other": "set {{.Key}}: {{.Err}}"
+  },
+  {
+    "id": "cli.flag.channel",
+    "description": "Help of the --channel flag of bridge",
+    "other": "conversation id this bridge answers in"
+  },
+  {
+    "id": "cli.flag.channel_short",
+    "description": "Help of the -c shorthand of the channel flag",
+    "other": "channel id (shorthand)"
+  },
+  {
+    "id": "cli.plugin_host.flag.category",
+    "description": "Help of the --category flag of plugin-host",
+    "other": "plugin category to host (e.g. memory, orchestrator)"
+  },
+  {
+    "id": "cli.plugin_host.flag.nats",
+    "description": "Help of the --nats flag of plugin-host",
+    "other": "NATS server URL"
+  },
+  {
+    "id": "cli.plugin_host.flag.instance",
+    "description": "Help of the --instance flag of plugin-host",
+    "other": "process instance id"
+  },
+  {
+    "id": "cli.plugin_host.unsupported_category",
+    "description": "Error for a category plugin-host cannot host",
+    "other": "plugin-host: unsupported category {{.Category}}"
+  },
+  {
+    "id": "cli.plugin_host.no_skeleton",
+    "description": "Error for a category that passes the gate but has no skeleton",
+    "other": "plugin-host: category {{.Category}} passed the support gate but has no skeleton"
+  },
+  {
+    "id": "cli.plugin_host.failed",
+    "description": "Error wrapped by plugin-host",
+    "other": "plugin-host: {{.Err}}"
+  },
+  {
+    "id": "cli.plugin_host.orchestrator",
+    "description": "Error of the orchestrator plugin",
+    "other": "orchestrator plugin-host: {{.Err}}"
+  },
+  {
+    "id": "cli.plugin_host.backend",
+    "description": "Error of the backend plugin",
+    "other": "backend plugin-host: {{.Err}}"
+  },
+  {
+    "id": "cli.plugin_host.no_orchestrator",
+    "description": "Error when no orchestrator plugin is registered",
+    "other": "plugin-host: no orchestrator plugin registered"
+  },
+  {
+    "id": "cli.plugin_host.no_backend",
+    "description": "Error when no backend plugin is registered",
+    "other": "plugin-host: no backend plugin registered"
+  },
+  {
+    "id": "cli.skills.retire_failed",
+    "description": "Warning when skills no longer shipped cannot be retired",
+    "other": "herrscher: retire skills no longer shipped: {{.Err}}"
+  },
+  {
+    "id": "cli.skills.removed",
+    "description": "Notice of a skill removed because no build ships it any more",
+    "other": "herrscher: removed skill {{.Name}}: no build ships it any more"
+  },
+  {
+    "id": "cli.skills.retired_diverged",
+    "description": "Notice of a retired skill edited locally, kept as it is",
+    "other": "herrscher: skill {{.Name}} is no longer shipped and was edited here; it was left as it is, delete {{.Path}} to remove it"
+  },
+  {
+    "id": "cli.skills.retired_linked",
+    "description": "Notice of a retired skill that is a symbolic link, kept as it is",
+    "other": "herrscher: skill {{.Name}} is a symbolic link here; it was left as it is, delete {{.Path}} to remove the link"
+  },
+  {
+    "id": "cli.skills.installed",
+    "description": "Notice of a plugin skill installed for the first time",
+    "other": "herrscher: installed plugin skill {{.Name}}"
+  },
+  {
+    "id": "cli.skills.updated",
+    "description": "Notice of a plugin skill brought to the shipped version",
+    "other": "herrscher: updated plugin skill {{.Name}} to the shipped version"
+  },
+  {
+    "id": "cli.skills.diverged",
+    "description": "Notice of a plugin skill that differs from the shipped one, kept as it is",
+    "other": "herrscher: plugin skill {{.Name}} differs from the one this build ships and was left as it is; delete {{.Path}} to take the shipped version"
+  },
+  {
+    "id": "cli.skills.linked",
+    "description": "Notice of a plugin skill that is a symbolic link, kept as it is",
+    "other": "herrscher: plugin skill {{.Name}} is a symbolic link here; it was left as it is, delete {{.Path}} to take the shipped version"
+  },
+  {
+    "id": "cli.skills.not_configured",
+    "description": "Notice of a skills plugin skipped for lack of configuration",
+    "other": "herrscher: skills not configured, skipping: {{.Kind}}: {{.Err}}"
+  },
+  {
+    "id": "cli.skills.plugin_failed",
+    "description": "Notice of a plugin that delivered no skills",
+    "other": "herrscher: no skills from plugin {{.Kind}}: {{.Err}}"
+  },
+  {
+    "id": "cli.skills.no_content",
+    "description": "Notice of a plugin whose factory handed over no skill content",
+    "other": "herrscher: no skills from plugin {{.Kind}}: its factory handed over no playbooks"
+  },
+  {
+    "id": "cli.skills.install_failed",
+    "description": "Notice of a plugin whose skills could not be installed",
+    "other": "herrscher: install skills for plugin {{.Kind}}: {{.Err}}"
+  },
+  {
+    "id": "cli.skills.duplicate",
+    "description": "Notice of a skill left out because another plugin ships one by that name",
+    "other": "herrscher: skill {{.Name}} from plugin {{.Kind}} was left out: plugin {{.Owner}} already ships one by that name"
+  },
+  {
+    "id": "cli.attach.not_available",
+    "description": "Error for a command the attached terminal does not run",
+    "other": "command {{.Verb}} is not available from the terminal (allowed: session, agent)"
+  },
+  {
+    "id": "cli.attach.no_session",
+    "description": "Notice in an attached tab whose session is gone",
+    "other": "herrscher: no session is bound to this tab any more"
   }
 ]

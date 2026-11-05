@@ -148,5 +148,175 @@
     "id": "cli.usage.env.init",
     "description": "Ligne de variables : `herrscher init` pose les questions",
     "other": "     `herrscher init` pose ces trois questions, inutile de les écrire à la main"
+  },
+  {
+    "id": "cli.task.needs_text",
+    "description": "Erreur quand un prompt sans verbe n'a pas de texte",
+    "other": "herrscher : {{.Verb}} attend une tâche, par exemple herrscher {{.Verb}} refactor"
+  },
+  {
+    "id": "cli.error.line",
+    "description": "Ligne écrite sur la sortie d'erreur avant qu'une commande échoue",
+    "other": "herrscher : {{.Message}}"
+  },
+  {
+    "id": "cli.command.unknown",
+    "description": "Erreur pour une commande qu'aucun verbe ne prend en charge",
+    "other": "commande inconnue {{.Name}}"
+  },
+  {
+    "id": "cli.whoami.unknown_argument",
+    "description": "Erreur pour un argument que whoami n'accepte pas",
+    "other": "whoami : argument inconnu {{.Arg}} (seulement --json)"
+  },
+  {
+    "id": "cli.env.continuing",
+    "description": "Avertissement quand le fichier d'environnement par défaut est illisible",
+    "other": "herrscher : {{.Err}} (le démarrage se poursuit)"
+  },
+  {
+    "id": "cli.env.open_failed",
+    "description": "Erreur quand un fichier d'environnement nommé explicitement ne s'ouvre pas",
+    "other": "ouverture du fichier d'environnement : {{.Err}}"
+  },
+  {
+    "id": "cli.env.set_failed",
+    "description": "Erreur quand une variable du fichier d'environnement ne peut pas être définie",
+    "other": "définition de {{.Key}} : {{.Err}}"
+  },
+  {
+    "id": "cli.flag.channel",
+    "description": "Aide de l'option --channel de bridge",
+    "other": "identifiant de la conversation à laquelle répond ce bridge"
+  },
+  {
+    "id": "cli.flag.channel_short",
+    "description": "Aide du raccourci -c de l'option de canal",
+    "other": "identifiant du canal (raccourci)"
+  },
+  {
+    "id": "cli.plugin_host.flag.category",
+    "description": "Aide de l'option --category de plugin-host",
+    "other": "catégorie de plugin à héberger (par exemple memory, orchestrator)"
+  },
+  {
+    "id": "cli.plugin_host.flag.nats",
+    "description": "Aide de l'option --nats de plugin-host",
+    "other": "URL du serveur NATS"
+  },
+  {
+    "id": "cli.plugin_host.flag.instance",
+    "description": "Aide de l'option --instance de plugin-host",
+    "other": "identifiant d'instance du processus"
+  },
+  {
+    "id": "cli.plugin_host.unsupported_category",
+    "description": "Erreur pour une catégorie que plugin-host ne sait pas héberger",
+    "other": "plugin-host : catégorie non prise en charge {{.Category}}"
+  },
+  {
+    "id": "cli.plugin_host.no_skeleton",
+    "description": "Erreur pour une catégorie admise par le filtre mais sans squelette",
+    "other": "plugin-host : la catégorie {{.Category}} est prise en charge mais n'a pas de squelette"
+  },
+  {
+    "id": "cli.plugin_host.failed",
+    "description": "Erreur relayée par plugin-host",
+    "other": "plugin-host : {{.Err}}"
+  },
+  {
+    "id": "cli.plugin_host.orchestrator",
+    "description": "Erreur du plugin orchestrateur",
+    "other": "plugin-host orchestrateur : {{.Err}}"
+  },
+  {
+    "id": "cli.plugin_host.backend",
+    "description": "Erreur du plugin backend",
+    "other": "plugin-host backend : {{.Err}}"
+  },
+  {
+    "id": "cli.plugin_host.no_orchestrator",
+    "description": "Erreur quand aucun plugin orchestrateur n'est enregistré",
+    "other": "plugin-host : aucun plugin orchestrateur enregistré"
+  },
+  {
+    "id": "cli.plugin_host.no_backend",
+    "description": "Erreur quand aucun plugin backend n'est enregistré",
+    "other": "plugin-host : aucun plugin backend enregistré"
+  },
+  {
+    "id": "cli.skills.retire_failed",
+    "description": "Avertissement quand les compétences plus livrées ne peuvent pas être retirées",
+    "other": "herrscher : retrait des compétences qui ne sont plus livrées : {{.Err}}"
+  },
+  {
+    "id": "cli.skills.removed",
+    "description": "Notice d'une compétence retirée parce qu'aucune version ne la livre plus",
+    "other": "herrscher : compétence {{.Name}} retirée, aucune version ne la livre plus"
+  },
+  {
+    "id": "cli.skills.retired_diverged",
+    "description": "Notice d'une compétence retirée, modifiée localement et laissée telle quelle",
+    "other": "herrscher : la compétence {{.Name}} n'est plus livrée et a été modifiée ici ; elle est laissée telle quelle, supprimez {{.Path}} pour la retirer"
+  },
+  {
+    "id": "cli.skills.retired_linked",
+    "description": "Notice d'une compétence retirée qui est un lien symbolique, laissée telle quelle",
+    "other": "herrscher : la compétence {{.Name}} est ici un lien symbolique ; elle est laissée telle quelle, supprimez {{.Path}} pour retirer le lien"
+  },
+  {
+    "id": "cli.skills.installed",
+    "description": "Notice d'une compétence de plugin installée pour la première fois",
+    "other": "herrscher : compétence de plugin {{.Name}} installée"
+  },
+  {
+    "id": "cli.skills.updated",
+    "description": "Notice d'une compétence de plugin mise à la version livrée",
+    "other": "herrscher : compétence de plugin {{.Name}} mise à jour vers la version livrée"
+  },
+  {
+    "id": "cli.skills.diverged",
+    "description": "Notice d'une compétence de plugin qui diffère de la version livrée, laissée telle quelle",
+    "other": "herrscher : la compétence de plugin {{.Name}} diffère de celle livrée par cette version et a été laissée telle quelle ; supprimez {{.Path}} pour reprendre la version livrée"
+  },
+  {
+    "id": "cli.skills.linked",
+    "description": "Notice d'une compétence de plugin qui est un lien symbolique, laissée telle quelle",
+    "other": "herrscher : la compétence de plugin {{.Name}} est ici un lien symbolique ; elle est laissée telle quelle, supprimez {{.Path}} pour reprendre la version livrée"
+  },
+  {
+    "id": "cli.skills.not_configured",
+    "description": "Notice d'un plugin de compétences ignoré faute de configuration",
+    "other": "herrscher : compétences non configurées, ignorées : {{.Kind}} : {{.Err}}"
+  },
+  {
+    "id": "cli.skills.plugin_failed",
+    "description": "Notice d'un plugin qui n'a fourni aucune compétence",
+    "other": "herrscher : aucune compétence du plugin {{.Kind}} : {{.Err}}"
+  },
+  {
+    "id": "cli.skills.no_content",
+    "description": "Notice d'un plugin dont la fabrique n'a fourni aucun contenu de compétence",
+    "other": "herrscher : aucune compétence du plugin {{.Kind}} : sa fabrique n'a fourni aucun contenu de compétence"
+  },
+  {
+    "id": "cli.skills.install_failed",
+    "description": "Notice d'un plugin dont les compétences ne peuvent pas être installées",
+    "other": "herrscher : installation des compétences du plugin {{.Kind}} : {{.Err}}"
+  },
+  {
+    "id": "cli.skills.duplicate",
+    "description": "Notice d'une compétence écartée parce qu'un autre plugin en livre une de ce nom",
+    "other": "herrscher : la compétence {{.Name}} du plugin {{.Kind}} a été écartée : le plugin {{.Owner}} en livre déjà une de ce nom"
+  },
+  {
+    "id": "cli.attach.not_available",
+    "description": "Erreur pour une commande que le terminal attaché n'exécute pas",
+    "other": "commande {{.Verb}} indisponible depuis le terminal (autorisées : session, agent)"
+  },
+  {
+    "id": "cli.attach.no_session",
+    "description": "Notice dans un onglet attaché dont la session a disparu",
+    "other": "herrscher : aucune session n'est plus liée à cet onglet"
   }
 ]

@@ -1,3 +1,11 @@
 package clitext
 
-var sessionKeys = map[Key][]string{}
+const (
+	AttachNotAvailable Key = "cli.attach.not_available"
+	AttachNoSession    Key = "cli.attach.no_session"
+)
+
+var sessionKeys = map[Key][]string{
+	AttachNotAvailable: {"Verb"},
+	AttachNoSession:    nil,
+}

@@ -90,6 +90,7 @@ const (
 	ParamMode      = "Mode"
 )
 
+// ParamRollbackErr names the error of the rollback that followed a failed session switch.
 const ParamRollbackErr = "RollbackErr"
 
 // Text renders key in lang with params. It refuses an undeclared key, and params

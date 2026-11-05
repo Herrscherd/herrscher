@@ -106,7 +106,9 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 }
 
 func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store) *manager.Handler {
-	return manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice)
+	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice)
+	hdl.SetVendorResolver(launchVendor)
+	return hdl
 }
 
 func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable) {
@@ -116,6 +118,33 @@ func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *st
 	hdl.SetDefaultModel(os.Getenv(EnvDefaultModel))
 	hdl.SetModelValidator(validateModelChoice)
 	hdl.SetGateResolver(GateFor)
+}
+
+func launchVendor(vendor, modelID string) (string, error) {
+	plugins := contracts.Default.Backends()
+	desired := vendor
+	if desired == "" {
+		desired = os.Getenv("HERRSCHER_BACKEND")
+	}
+	if modelID != "" {
+		entry, err := LookupModel(plugins, ResolvePolicy(os.Getenv), modelID)
+		if err != nil {
+			return "", err
+		}
+		if desired == "" {
+			desired = entry.Vendor
+		} else if desired != entry.Vendor {
+			return "", &modelBackendMismatchError{Model: modelID, Owner: entry.Vendor, Requested: desired}
+		}
+	}
+	if desired != "" {
+		return desired, nil
+	}
+	plugin, err := selectBackend("", plugins)
+	if err != nil {
+		return "", err
+	}
+	return plugin.Manifest.Kind, nil
 }
 
 func validateModelChoice(vendor, modelID string) error {

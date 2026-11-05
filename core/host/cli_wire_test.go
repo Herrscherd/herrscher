@@ -10,6 +10,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -53,6 +54,11 @@ func TestWiredManagerRefusesAnUnknownAccount(t *testing.T) {
 	create := mustCommand(t, hdl.Commands(), "session", "create")
 	if _, runErr := create.Run(t.Context(), sessionCreateInput("ghost-session", "ghost")); !errors.Is(runErr, accounts.ErrNotFound) {
 		t.Fatalf("session create with an unknown account: err %v, want accounts.ErrNotFound", runErr)
+	}
+	t.Setenv("HERRSCHER_BACKEND", "")
+	noVendor := contracts.Input{Args: map[string]string{"name": "ghost-novendor", "account": "ghost"}}
+	if _, runErr := create.Run(t.Context(), noVendor); !errors.Is(runErr, manager.ErrAccountVendor) {
+		t.Fatalf("session create with an account and no resolvable vendor: err %v, want manager.ErrAccountVendor", runErr)
 	}
 	if _, runErr := create.Run(t.Context(), sessionCreateInput("perso-session", "perso")); !errors.Is(runErr, errStopAfterGuard) {
 		t.Fatalf("session create with a known account: err %v, want the placement to be reached", runErr)

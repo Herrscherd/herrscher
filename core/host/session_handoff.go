@@ -10,6 +10,8 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/accounts"
+	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -142,6 +144,7 @@ func sessionHandoffVerb(deps handoffDeps) contracts.Cmd {
 		Param("project", "workspace sub-dir the new session works on", false).
 		Param("model", "catalog model id for the new session (see `herrscher models list`)", false).
 		Param("vendor", "agent backend vendor for the new session: claude | codex | cursor", false).
+		Param("account", "account profile for the new session, resolved in its vendor (default: the source session's account)", false).
 		Param(paramUnder, "create the new conversation under this category/forum instead of the daemon's home (operator only)", false).
 		Param(paramChannel, "adopt this existing conversation for the new session (operator only)", false).
 		Do(deps.run)
@@ -170,11 +173,11 @@ func (d handoffDeps) run(ctx context.Context, input contracts.Input) (string, er
 	if byAgent {
 		return d.handOffAsAgent(ctx, caller.Session, source, target, input)
 	}
-	reply, brief, err := d.open(ctx, source, target, "", input)
+	reply, brief, account, err := d.open(ctx, source, target, "", input)
 	if err != nil {
 		return "", err
 	}
-	return d.deliver(ctx, source, target, reply, brief)
+	return d.deliver(ctx, source, target, reply, brief, account)
 }
 
 func checkHandoffTargets(input contracts.Input, byAgent bool) error {
@@ -194,30 +197,48 @@ func (d handoffDeps) handOffAsAgent(ctx context.Context, caller, source, target 
 		return "", err
 	}
 	defer release()
-	reply, brief, err := d.open(ctx, source, target, source, input)
+	reply, brief, account, err := d.open(ctx, source, target, source, input)
 	if err != nil {
 		return "", err
 	}
-	return d.deliver(ctx, source, target, reply, brief)
+	return d.deliver(ctx, source, target, reply, brief, account)
 }
 
-func (d handoffDeps) open(ctx context.Context, source, target, parent string, input contracts.Input) (string, string, error) {
+func (d handoffDeps) open(ctx context.Context, source, target, parent string, input contracts.Input) (string, string, string, error) {
 	brief, err := d.brief(ctx, source)
 	if err != nil {
-		return "", "", fmt.Errorf("the brief from %q: %w", source, err)
+		return "", "", "", fmt.Errorf("the brief from %q: %w", source, err)
 	}
-	reply, err := d.create(ctx, contracts.Input{Args: newSessionArgs(target, d.account(source), input, parent)})
+	account := handoffAccount(input, d.account(source))
+	reply, err := d.create(ctx, contracts.Input{Args: newSessionArgs(target, account, input, parent)})
 	if err != nil {
-		return "", "", err
+		return "", "", "", inheritedAccountError(input, source, account, err)
 	}
-	return reply, brief, nil
+	return reply, brief, account, nil
 }
 
-func (d handoffDeps) deliver(ctx context.Context, source, target, reply, brief string) (string, error) {
+func handoffAccount(input contracts.Input, inherited string) string {
+	if explicit := input.Get("account"); explicit != "" {
+		return explicit
+	}
+	return inherited
+}
+
+func inheritedAccountError(input contracts.Input, source, account string, err error) error {
+	if input.Get("account") != "" || account == "" {
+		return err
+	}
+	if !errors.Is(err, accounts.ErrNotFound) && !errors.Is(err, manager.ErrAccountVendor) {
+		return err
+	}
+	return fmt.Errorf("the account %q inherited from session %q is refused for the new session: %w; pass --account <profile> to choose another", account, source, err)
+}
+
+func (d handoffDeps) deliver(ctx context.Context, source, target, reply, brief, account string) (string, error) {
 	if err := d.send(ctx, target, "session "+source, handoffMessage(source, brief)); err != nil {
 		return "", fmt.Errorf("session %q was created but the brief did not reach it: %w", target, err)
 	}
-	return handoffReport(source, target, reply, brief), nil
+	return handoffReport(source, target, reply, brief, account), nil
 }
 
 func newSessionArgs(target, account string, input contracts.Input, parent string) map[string]string {
@@ -250,7 +271,10 @@ func handoffMessage(source, brief string) string {
 	return "[Passation depuis la session " + source + "]\n\n" + brief
 }
 
-func handoffReport(source, target, reply, brief string) string {
-	return fmt.Sprintf("Session %s created from %s, brief sent as its first message.\n\n%s\n\nBrief:\n%s",
-		target, source, strings.TrimSpace(reply), strings.TrimSpace(brief))
+func handoffReport(source, target, reply, brief, account string) string {
+	if account == "" {
+		account = "the vendor default"
+	}
+	return fmt.Sprintf("Session %s created from %s with account %s, brief sent as its first message.\n\n%s\n\nBrief:\n%s",
+		target, source, account, strings.TrimSpace(reply), strings.TrimSpace(brief))
 }

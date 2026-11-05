@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -27,6 +28,7 @@ type Handler struct {
 	defaultCmd      string
 	defaultGateways []string
 	partDir         string
+	resolveVendor   func(vendor, modelID string) (string, error)
 	coord           coordinationReader
 	seed            func(name, task string) bool
 	validateModel   func(vendor, modelID string) error
@@ -125,6 +127,17 @@ func (h *Handler) SetModelValidator(fn func(vendor, modelID string) error) { h.v
 // nothing to ask can give.
 func (h *Handler) SetGateResolver(fn func(vendor string) (grain, why string)) { h.gate = fn }
 
+// SetVendorResolver wires the rule that decides which vendor a session will
+// launch, given its requested vendor and model, so an account is checked
+// against the vendor that will actually run.
+func (h *Handler) SetVendorResolver(fn func(vendor, modelID string) (string, error)) {
+	h.resolveVendor = fn
+}
+
+// ErrAccountVendor is returned when an account is requested for a session whose
+// backend vendor cannot be determined, so the account cannot be checked.
+var ErrAccountVendor = errors.New("no backend vendor is known for this session: pass --vendor, or set HERRSCHER_BACKEND")
+
 type approvalGate struct {
 	enforced bool
 	why      string
@@ -152,11 +165,26 @@ func (h *Handler) checkModel(vendor, modelID string) error {
 	return h.validateModel(vendor, modelID)
 }
 
-func (h *Handler) checkAccount(vendor, profile string) error {
-	if profile == "" || vendor == "" || h.validateAccount == nil {
+func (h *Handler) checkAccount(runtime runtimeChoice, profile string) error {
+	if profile == "" || h.validateAccount == nil {
 		return nil
 	}
+	vendor, err := h.launchVendor(runtime)
+	if err != nil {
+		return fmt.Errorf("account %q: %w: %w", profile, ErrAccountVendor, err)
+	}
+	if vendor == "" {
+		return fmt.Errorf("account %q: %w", profile, ErrAccountVendor)
+	}
 	return h.validateAccount(vendor, profile)
+}
+
+func (h *Handler) launchVendor(runtime runtimeChoice) (string, error) {
+	desired := h.vendorOf(runtime)
+	if h.resolveVendor == nil {
+		return desired, nil
+	}
+	return h.resolveVendor(desired, runtime.model)
 }
 
 // CoordView mirrors host.CoordinationView so the manager stays decoupled from

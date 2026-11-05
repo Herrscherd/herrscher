@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -29,17 +30,40 @@ func TestAccountGateRefusesAnUnknownProfileBeforeCreate(t *testing.T) {
 		}
 		return nil
 	}}
-	if err := h.checkAccount("claude", "ghost"); err == nil {
+	if err := h.checkAccount(runtimeChoice{vendor: "claude"}, "ghost"); err == nil {
 		t.Fatal("checkAccount accepted an unknown profile")
 	}
-	if err := h.checkAccount("claude", "perso"); err != nil {
+	if err := h.checkAccount(runtimeChoice{vendor: "claude"}, "perso"); err != nil {
 		t.Fatalf("checkAccount refused a known profile: %v", err)
 	}
-	if err := h.checkAccount("claude", ""); err != nil {
+	if err := h.checkAccount(runtimeChoice{vendor: "claude"}, ""); err != nil {
 		t.Fatalf("checkAccount refused the vendor default: %v", err)
 	}
-	if err := h.checkAccount("", "ghost"); err != nil {
-		t.Fatalf("checkAccount without a known vendor = %v, want the check left to the spawn", err)
+}
+
+func TestAccountWithoutAResolvableVendorIsRefused(t *testing.T) {
+	h := &Handler{agents: agent.NewStore(t.TempDir()), validateAccount: func(_, _ string) error { return nil }}
+	if err := h.checkAccount(runtimeChoice{}, "ghost"); !errors.Is(err, ErrAccountVendor) {
+		t.Fatalf("checkAccount without a vendor: err %v, want ErrAccountVendor", err)
+	}
+	h.SetVendorResolver(func(string, string) (string, error) { return "", errors.New("no backend") })
+	if err := h.checkAccount(runtimeChoice{}, "ghost"); !errors.Is(err, ErrAccountVendor) {
+		t.Fatalf("checkAccount with an unresolved vendor: err %v, want ErrAccountVendor", err)
+	}
+}
+
+func TestAccountIsCheckedAgainstTheResolvedVendor(t *testing.T) {
+	var checked string
+	h := &Handler{agents: agent.NewStore(t.TempDir()), validateAccount: func(vendor, _ string) error {
+		checked = vendor
+		return nil
+	}}
+	h.SetVendorResolver(func(string, string) (string, error) { return "codex", nil })
+	if err := h.checkAccount(runtimeChoice{}, "perso"); err != nil {
+		t.Fatal(err)
+	}
+	if checked != "codex" {
+		t.Fatalf("account checked against %q, want the resolved vendor codex", checked)
 	}
 }
 

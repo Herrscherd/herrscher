@@ -3,11 +3,14 @@ package host
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/cli"
 )
 
@@ -91,6 +94,78 @@ func TestHandoffForwardsTheAccountOfTheSourceSession(t *testing.T) {
 	}
 	if len(rec.created) != 1 || rec.created[0].Get("account") != "work" {
 		t.Fatalf("create args = %v, want the account of alpha forwarded as work", rec.created)
+	}
+}
+
+func handoffFromWorkAccount(rec *handoffRecord, accepted ...string) handoffDeps {
+	deps := fakeHandoff(rec, fixedClock(), "alpha")
+	deps.account = func(name string) string {
+		if name == "alpha" {
+			return "work"
+		}
+		return ""
+	}
+	deps.create = func(_ context.Context, in contracts.Input) (string, error) {
+		profile := in.Get("account")
+		if profile != "" && !slices.Contains(accepted, in.Get("vendor")+"/"+profile) {
+			return "", fmt.Errorf("account %q: %w", profile, accounts.ErrNotFound)
+		}
+		rec.created = append(rec.created, in)
+		return "created " + in.Get(paramName), nil
+	}
+	return deps
+}
+
+func TestHandoffAccountParameterOverridesTheSourceAccount(t *testing.T) {
+	rec := &handoffRecord{}
+	_, err := runHandoff(withLocalPrincipal(context.Background()), handoffFromWorkAccount(rec, "claude/other"),
+		map[string]string{paramName: "alpha", paramTo: "beta", "vendor": "claude", "account": "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.created) != 1 || rec.created[0].Get("account") != "other" {
+		t.Fatalf("create args = %v, want the explicit account other instead of the source account", rec.created)
+	}
+}
+
+func TestHandoffAccountIsResolvedInTheTargetVendor(t *testing.T) {
+	rec := &handoffRecord{}
+	_, err := runHandoff(withLocalPrincipal(context.Background()), handoffFromWorkAccount(rec, "codex/work"),
+		map[string]string{paramName: "alpha", paramTo: "beta", "vendor": "codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.created) != 1 || rec.created[0].Get("vendor") != "codex" || rec.created[0].Get("account") != "work" {
+		t.Fatalf("create args = %v, want account work resolved in codex", rec.created)
+	}
+}
+
+func TestHandoffReportNamesTheTargetAccount(t *testing.T) {
+	rec := &handoffRecord{}
+	out, err := runHandoff(withLocalPrincipal(context.Background()), handoffFromWorkAccount(rec, "claude/work"),
+		map[string]string{paramName: "alpha", paramTo: "beta", "vendor": "claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "with account work") {
+		t.Fatalf("the report must name the account of the new session, got %q", out)
+	}
+}
+
+func TestHandoffRefusedInheritedAccountSaysWhereItComesFrom(t *testing.T) {
+	rec := &handoffRecord{}
+	_, err := runHandoff(withLocalPrincipal(context.Background()), handoffFromWorkAccount(rec, "claude/other"),
+		map[string]string{paramName: "alpha", paramTo: "beta", "vendor": "claude"})
+	if !errors.Is(err, accounts.ErrNotFound) {
+		t.Fatalf("err = %v, want the refused account to stay an accounts.ErrNotFound", err)
+	}
+	for _, want := range []string{`inherited from session "alpha"`, "--account"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("err = %q, want it to contain %q", err, want)
+		}
+	}
+	if len(rec.created) != 0 {
+		t.Fatal("a refused account must create nothing")
 	}
 }
 

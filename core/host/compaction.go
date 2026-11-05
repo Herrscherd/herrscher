@@ -9,8 +9,10 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
@@ -20,29 +22,51 @@ import (
 const (
 	defaultCompactPercent = 92
 	percentScale          = 100
+	noticeTimeout         = 10 * time.Second
 	eventCompactNow       = "compact_now"
 	eventCompactStarted   = "compaction_started"
 	eventCompactDone      = "compaction_done"
 	eventCompactFailed    = "compaction_failed"
 )
 
-type compactUnavailableError string
+type compactUnavailableError struct {
+	cause  error
+	reason string
+}
 
 func (e compactUnavailableError) Error() string {
-	return string(e)
+	return e.reason
+}
+
+func (e compactUnavailableError) Unwrap() error {
+	return e.cause
 }
 
 func (e compactUnavailableError) Notice() contracts.Notice {
-	return contracts.Notice{Code: contracts.CodeCompactUnavailable, Args: []contracts.Arg{contracts.Text("Reason", string(e))}}
+	return contracts.Notice{Code: contracts.CodeCompactUnavailable, Args: []contracts.Arg{contracts.Text("Reason", e.reason)}}
+}
+
+func unsupportedCompaction(session, vendor string) error {
+	return compactUnavailableError{
+		cause:  errCompactUnsupported,
+		reason: fmt.Sprintf("session %q runs %q: its backend does not implement Compactor", session, vendor),
+	}
+}
+
+func queueFullCompaction(session string) error {
+	return compactUnavailableError{
+		cause:  errCompactQueueFull,
+		reason: fmt.Sprintf("session %q: the turn queue is full, the compaction was not queued", session),
+	}
 }
 
 var (
-	errCompactUnsupported = compactUnavailableError("its backend does not implement Compactor")
+	errCompactUnsupported = errors.New("its backend does not implement Compactor")
 	errBridgeGone         = errors.New("the bridge closed during a compaction")
 	errNoBackendFactory   = errors.New("declares Capabilities.Compactor but provides no backend factory")
 	errNotCompactorPort   = errors.New("declares Capabilities.Compactor but does not implement the port")
 	errNoCompactorPlugin  = errors.New("no plugin declares Capabilities.Compactor under this name")
-	errCompactQueueFull   = compactUnavailableError("the turn queue is full, the compaction was not queued")
+	errCompactQueueFull   = errors.New("the turn queue is full, the compaction was not queued")
 )
 
 type compactionPolicy struct {
@@ -180,7 +204,7 @@ func (d *sessionDriver) compactSupported() bool {
 
 func (d *sessionDriver) compactStages() ([]contracts.CompactStage, error) {
 	if !d.compactSupported() {
-		return nil, fmt.Errorf("session %q runs %q: %w", d.name, d.modelNow().vendor, errCompactUnsupported)
+		return nil, unsupportedCompaction(d.name, d.modelNow().vendor)
 	}
 	stages := make([]contracts.CompactStage, 0, len(d.compaction.names))
 	for _, name := range d.compaction.names {
@@ -224,7 +248,7 @@ func (d *sessionDriver) maybeAutoCompact(ctx context.Context) {
 func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.CompactTrigger, instruction string) (contracts.CompactResult, error) {
 	stages, err := d.compactStages()
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: err.Error()})
+		d.failCompaction(ctx, trigger, err)
 		return contracts.CompactResult{}, err
 	}
 	limit := d.contextLimit()
@@ -240,7 +264,7 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 	d.fanOut(ctx, contracts.Event{T: eventCompactStarted, Value: trigger.String(), Tokens: d.turnReading})
 	result, err := contracts.RunCompactStack(ctx, stages, req, d.compactionProgress(ctx))
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: err.Error()})
+		d.failCompaction(ctx, trigger, err)
 		return contracts.CompactResult{}, err
 	}
 	d.settleCompaction(result, limit)
@@ -248,8 +272,18 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 	return result, nil
 }
 
+func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.CompactTrigger, err error) {
+	typed, ok := errors.AsType[contracts.NoticeError](err)
+	if !ok || !d.noticeRenders(typed.Notice()) {
+		d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: err.Error()})
+		return
+	}
+	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String()})
+	d.notifyGateways(ctx, typed.Notice())
+}
+
 func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contracts.CompactTrigger, result contracts.CompactResult) {
-	if result.Notice.Code == 0 {
+	if result.Notice.Code == 0 || !d.noticeRenders(result.Notice) {
 		d.fanOut(ctx, contracts.Event{T: eventCompactDone, Value: trigger.String(), Text: result.Note, Tokens: measuredTokens(result)})
 		return
 	}
@@ -257,20 +291,27 @@ func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contract
 	d.notifyGateways(ctx, result.Notice)
 }
 
+func (d *sessionDriver) noticeRenders(notice contracts.Notice) bool {
+	_, err := contracts.NewRenderer().Render(d.lang, notice)
+	return err == nil
+}
+
 func (d *sessionDriver) notifyGateways(ctx context.Context, notice contracts.Notice) {
-	if d.saidElsewhere {
-		return
-	}
-	for _, gateway := range d.gateways {
+	d.eachGateway(func(_ int, gateway contracts.GatewaySet) {
 		sink, ok := gateway.Gateway.(contracts.NoticeSink)
 		if !ok {
-			continue
+			return
 		}
 		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
-		_, err := sink.Notify(ctx, conv, d.lang, notice)
-		if err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
-			logCleanup(err)
-		}
+		go deliverNotice(ctx, sink, conv, d.lang, notice)
+	})
+}
+
+func deliverNotice(parent context.Context, sink contracts.NoticeSink, conv contracts.Conversation, lang i18n.Language, notice contracts.Notice) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), noticeTimeout)
+	defer cancel()
+	if _, err := sink.Notify(ctx, conv, lang, notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
+		logCleanup(err)
 	}
 }
 
@@ -361,6 +402,15 @@ func (c bridgeCompactor) Compact(ctx context.Context, req contracts.CompactReque
 	return c.driver.compactThroughBridge(ctx, req, onEvent)
 }
 
+func (d *sessionDriver) decodeCompactResult(frame contracts.Event) (contracts.CompactResult, error) {
+	res, err := compactwire.DecodeResult(frame)
+	if errors.Is(err, compactwire.ErrNoticeMalformed) {
+		warnStderr("herrscher serve: session %q: compaction notice dropped, its note and figures are kept: %v\n", d.name, err)
+		return res, nil
+	}
+	return res, err
+}
+
 func (d *sessionDriver) compactThroughBridge(ctx context.Context, req contracts.CompactRequest, onEvent func(contracts.BackendEvent)) (contracts.CompactResult, error) {
 	frame, err := compactwire.Request(req)
 	if err != nil {
@@ -386,7 +436,7 @@ func (d *sessionDriver) compactThroughBridge(ctx context.Context, req contracts.
 			}
 			switch frame.T {
 			case compactwire.EventResult:
-				return compactwire.DecodeResult(frame)
+				return d.decodeCompactResult(frame)
 			case compactwire.EventError:
 				if frame.Value == compactwire.NoCompactor {
 					d.compaction.warnNoPort(d.modelNow().vendor)

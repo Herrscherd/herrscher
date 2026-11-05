@@ -25,12 +25,17 @@ type compactFixture struct {
 	from     chan contracts.Event
 	mu       sync.Mutex
 	emitted  []contracts.Event
+	seen     chan struct{}
 }
 
 func (f *compactFixture) tap(event contracts.Event) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.emitted = append(f.emitted, event)
+	f.mu.Unlock()
+	select {
+	case f.seen <- struct{}{}:
+	default:
+	}
 }
 
 func (f *compactFixture) emittedOf(kind string) []contracts.Event {
@@ -53,7 +58,7 @@ func newCompactFixture(t *testing.T, vendor string, policy compactionPolicy) *co
 func newConfiguredCompactFixture(t *testing.T, vendor string, policy compactionPolicy, configure func(*sessionDriver)) *compactFixture {
 	t.Helper()
 	t.Setenv(contextwindow.EnvVar(), "")
-	f := &compactFixture{toBridge: make(chan contracts.Event, 16), from: make(chan contracts.Event, 16)}
+	f := &compactFixture{toBridge: make(chan contracts.Event, 16), from: make(chan contracts.Event, 16), seen: make(chan struct{}, 64)}
 	f.driver = newSessionDriver("s1", nil, f.toBridge, f.from)
 	f.driver.terms = func() modelTerms { return modelTerms{vendor: vendor} }
 	f.driver.compaction = policy
@@ -124,15 +129,18 @@ func compactFrameOrQuiet(t *testing.T, f *compactFixture, answer contracts.Event
 
 func waitEmitted(t *testing.T, f *compactFixture, kind string) contracts.Event {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	deadline := time.After(2 * time.Second)
+	for {
 		if events := f.emittedOf(kind); len(events) > 0 {
 			return events[len(events)-1]
 		}
-		time.Sleep(5 * time.Millisecond)
+		select {
+		case <-f.seen:
+		case <-deadline:
+			t.Fatalf("no %s event was emitted", kind)
+			return contracts.Event{}
+		}
 	}
-	t.Fatalf("no %s event was emitted", kind)
-	return contracts.Event{}
 }
 
 func measuredAnswer(t *testing.T, after int) contracts.Event {

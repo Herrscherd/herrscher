@@ -86,10 +86,15 @@ func TestResultUnmeasuredKeepsFlag(t *testing.T) {
 	}
 }
 
-func TestDecodeResultRefusesMalformedNotice(t *testing.T) {
+func TestDecodeResultKeepsTheNoteWhenTheNoticeIsMalformed(t *testing.T) {
 	for _, value := range []string{"{", `{"code":1,"args":[{"name":"X","kind":9,"value":"a"}]}`} {
-		if _, err := DecodeResult(contracts.Event{T: EventResult, Value: value}); err == nil {
-			t.Fatalf("DecodeResult(%q) accepted a malformed notice", value)
+		frame := contracts.Event{T: EventResult, Text: "compacté", Tokens: 42, Done: true, Value: value}
+		got, err := DecodeResult(frame)
+		if !errors.Is(err, ErrNoticeMalformed) {
+			t.Fatalf("DecodeResult(%q) error = %v, want ErrNoticeMalformed", value, err)
+		}
+		if got.Note != "compacté" || got.TokensAfter != 42 || !got.TokensMeasured || got.Notice.Code != 0 {
+			t.Fatalf("DecodeResult(%q) = %+v, want the note and the figures without a notice", value, got)
 		}
 	}
 }

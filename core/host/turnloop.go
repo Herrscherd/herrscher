@@ -904,29 +904,39 @@ func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {
 	if d.emitTap != nil {
 		d.emitTap(event)
 	}
+	d.eachGateway(func(index int, gateway contracts.GatewaySet) {
+		d.emitToGateway(ctx, index, gateway, event)
+	})
+}
+
+func (d *sessionDriver) eachGateway(visit func(index int, gateway contracts.GatewaySet)) {
 	if d.saidElsewhere {
 		return
 	}
 	for index, gateway := range d.gateways {
-		if rs, ok := gateway.Gateway.(contracts.RoutedEventSink); ok {
-			rs.EmitTo(contracts.Conversation{
-				Gateway: gateway.Gateway.Manifest().Kind,
-				ID:      d.renderChannel(gateway),
-			}, event)
-			continue
-		}
-		if sink, ok := gateway.Gateway.(contracts.EventSink); ok {
-			sink.Emit(event)
-			continue
-		}
-		key := strconv.Itoa(index) + ":" + gateway.Gateway.Manifest().Kind
-		renderer := d.renderers[key]
-		if renderer == nil {
-			renderer = newGatewayRenderer(gateway.Gateway, d.renderChannel(gateway))
-			d.renderers[key] = renderer
-		}
-		renderer.handle(ctx, event)
+		visit(index, gateway)
 	}
+}
+
+func (d *sessionDriver) emitToGateway(ctx context.Context, index int, gateway contracts.GatewaySet, event contracts.Event) {
+	if rs, ok := gateway.Gateway.(contracts.RoutedEventSink); ok {
+		rs.EmitTo(contracts.Conversation{
+			Gateway: gateway.Gateway.Manifest().Kind,
+			ID:      d.renderChannel(gateway),
+		}, event)
+		return
+	}
+	if sink, ok := gateway.Gateway.(contracts.EventSink); ok {
+		sink.Emit(event)
+		return
+	}
+	key := strconv.Itoa(index) + ":" + gateway.Gateway.Manifest().Kind
+	renderer := d.renderers[key]
+	if renderer == nil {
+		renderer = newGatewayRenderer(gateway.Gateway, d.renderChannel(gateway))
+		d.renderers[key] = renderer
+	}
+	renderer.handle(ctx, event)
 }
 
 func outsideBoundGateways(origin contracts.Conversation, gws []contracts.GatewaySet) bool {

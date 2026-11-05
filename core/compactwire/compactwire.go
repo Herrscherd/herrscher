@@ -23,6 +23,9 @@ var (
 	errUnknownArgKind  = errors.New("unknown notice argument kind")
 )
 
+// ErrNoticeMalformed reports a compaction notice that cannot be decoded.
+var ErrNoticeMalformed = errors.New("compaction notice malformed")
+
 type noticeFrame struct {
 	Code uint16     `json:"code"`
 	Args []argFrame `json:"args,omitempty"`
@@ -87,16 +90,17 @@ func Result(res contracts.CompactResult) (contracts.Event, error) {
 
 // DecodeResult decodes the outcome of a compaction.
 func DecodeResult(frame contracts.Event) (contracts.CompactResult, error) {
-	notice, err := decodeNotice(frame.Value)
-	if err != nil {
-		return contracts.CompactResult{}, err
-	}
-	return contracts.CompactResult{
+	res := contracts.CompactResult{
 		TokensAfter:    frame.Tokens,
 		TokensMeasured: frame.Done,
 		Note:           frame.Text,
-		Notice:         notice,
-	}, nil
+	}
+	notice, err := decodeNotice(frame.Value)
+	if err != nil {
+		return res, fmt.Errorf("%w: %w", ErrNoticeMalformed, err)
+	}
+	res.Notice = notice
+	return res, nil
 }
 
 func encodeNotice(notice contracts.Notice) (string, error) {

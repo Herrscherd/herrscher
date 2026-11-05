@@ -501,6 +501,27 @@ func TestSessionCreateStoresLanguage(t *testing.T) {
 	}
 }
 
+func TestSessionCreateTrimsTheLanguageValue(t *testing.T) {
+	cases := map[string]string{" fr": "fr", " ": ""}
+	for raw, want := range cases {
+		h, _, _, _, _, st := newTestHandler(t, "")
+		if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+			t.Fatal(err)
+		}
+		name := "gamma" + strings.TrimSpace(raw)
+		if _, err := h.sessionCreateRun(context.Background(), args("name", name, "lang", raw)); err != nil {
+			t.Fatalf("create with lang %q: %v", raw, err)
+		}
+		sess, ok := st.FindSession(name)
+		if !ok {
+			t.Fatalf("session %s not persisted", name)
+		}
+		if sess.Language != want {
+			t.Fatalf("lang %q stored as %q, want %q", raw, sess.Language, want)
+		}
+	}
+}
+
 func TestSessionCreateRejectsUnknownLanguage(t *testing.T) {
 	h, d, _, wt, _, st := newTestHandler(t, "")
 	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
@@ -933,6 +954,52 @@ func TestSessionCloseStopsAndArchives(t *testing.T) {
 	}
 	if _, ok := st.FindSession("demo"); ok {
 		t.Fatal("session should be removed")
+	}
+}
+
+func TestSessionCloseAnswersWithTheClosedNotice(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "")
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddSession(state.Session{Owned: true, Name: "demo", ChannelID: "ch9", Type: "text"}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := h.sessionCloseRun(context.Background(), args("name", "demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	notice, ok := res.Notice()
+	if !ok || notice.Code != contracts.CodeSessionClosed {
+		t.Fatalf("close answered %+v, want the session closed notice", res.Data())
+	}
+	if res.Data() != nil {
+		t.Fatalf("close also answered with text %v, want the notice only", res.Data())
+	}
+}
+
+func TestSessionCloseWithAChannelLeftOpenStillAnswersWithTheNotice(t *testing.T) {
+	h, d, _, _, _, st := newTestHandler(t, "")
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddSession(state.Session{Owned: true, Name: "demo", ChannelID: "ch9", Type: "text"}); err != nil {
+		t.Fatal(err)
+	}
+	d.archiveErr = errors.New("channel refused")
+	res, err := h.sessionCloseRun(context.Background(), args("name", "demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	notice, ok := res.Notice()
+	if !ok || notice.Code != contracts.CodeSessionClosed {
+		t.Fatalf("close with an open channel answered %+v, want the session closed notice", res.Data())
+	}
+	if res.Data() != nil {
+		t.Fatalf("close with an open channel also answered with text %v", res.Data())
+	}
+	if _, stillThere := st.FindSession("demo"); stillThere {
+		t.Fatal("the session must be removed even when its channel stays open")
 	}
 }
 
@@ -1430,15 +1497,15 @@ func TestAChannelThatCannotBeTidiedDoesNotStrandTheSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := cli.Plain(h.sessionCloseRun(context.Background(), args("name", "demo")))
+	res, err := h.sessionCloseRun(context.Background(), args("name", "demo"))
 	if err != nil {
 		t.Fatalf("close: %v", err)
 	}
 	if _, ok := st.FindSession("demo"); ok {
 		t.Fatal("the session must be closed even when the channel could not be")
 	}
-	if !strings.Contains(out, "Missing Permissions") {
-		t.Fatalf("out = %q, want the reason said out loud", out)
+	if notice, ok := res.Notice(); !ok || notice.Code != contracts.CodeSessionClosed {
+		t.Fatalf("close answered %+v, want the session closed notice alone", res.Data())
 	}
 }
 

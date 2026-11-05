@@ -75,6 +75,15 @@ func Text(result contracts.Result, lang i18n.Language) (string, error) {
 	return fmt.Sprint(data), nil
 }
 
+// Render returns the text of a command outcome in lang: the error rendered in lang when it failed,
+// otherwise the result rendered by Text.
+func Render(res contracts.Result, err error, lang i18n.Language) (string, error) {
+	if err != nil {
+		return "", Localize(err, lang)
+	}
+	return Text(res, lang)
+}
+
 // Resolve reports the command args address and the Input parsed for it, without
 // running anything. It exists so a caller that must decide something ABOUT an
 // invocation, rather than perform it, reads the same command path and the same

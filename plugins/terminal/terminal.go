@@ -633,9 +633,5 @@ func slug(text string) string {
 func bestEffort(_ error) {}
 
 func textResult(res contracts.Result, err error) (string, error) {
-	lang := language.Client(slog.Default(), "")
-	if err != nil {
-		return "", cli.Localize(err, lang)
-	}
-	return cli.Text(res, lang)
+	return cli.Render(res, err, language.Active())
 }

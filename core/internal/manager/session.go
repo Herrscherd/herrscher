@@ -862,8 +862,9 @@ func newSessionRecord(req createRequest, space workspace, project, runDir string
 const langParam = "lang"
 
 func parseSessionLanguage(input contracts.Input) (string, error) {
-	raw, ok := input.Lookup(langParam)
-	if !ok || strings.TrimSpace(raw) == "" {
+	raw, _ := input.Lookup(langParam)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
 		return "", nil
 	}
 	lang, err := i18n.ParseLanguage(raw)
@@ -938,10 +939,10 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 	}
 	h.warnIfFailed(state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name)), "remove participants of "+name)
 	h.warnIfFailed(state.RemoveTranscript(state.TranscriptPath(h.partDir, name)), "remove transcript of "+name)
-	if note == "" {
-		return contracts.NoticeResult(sessionNotice(contracts.CodeSessionClosed, name)), nil
+	if note != "" {
+		h.log.Warn("channel left open", "session", name, "note", note)
 	}
-	return contracts.DataResult(fmt.Sprintf("🗄️ Session **%s** closed.%s", name, note)), nil
+	return contracts.NoticeResult(sessionNotice(contracts.CodeSessionClosed, name)), nil
 }
 
 func (h *Handler) sessionArchiveRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {

@@ -2,10 +2,12 @@ package cli_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 )
 
@@ -355,5 +357,61 @@ func TestResolveNamesThePathEvenWhenTheFlagsDoNotParse(t *testing.T) {
 	}
 	if strings.Join(path, " ") != "host add" {
 		t.Fatalf("path = %v, want [host add]", path)
+	}
+}
+
+func closedNotice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeSessionClosed, Args: []contracts.Arg{contracts.Text("Name", "demo")}}
+}
+
+type noticedError struct{ notice contracts.Notice }
+
+func (e noticedError) Error() string            { return "internal english detail" }
+func (e noticedError) Notice() contracts.Notice { return e.notice }
+
+func TestTextRendersANoticeInTheRequestedLanguage(t *testing.T) {
+	res := contracts.NoticeResult(closedNotice())
+	en, err := cli.Text(res, i18n.English)
+	if err != nil || !strings.Contains(en, "session demo closed") {
+		t.Fatalf("English = %q (%v), want the English notice", en, err)
+	}
+	fr, err := cli.Text(res, i18n.French)
+	if err != nil || !strings.Contains(fr, "fermée") || strings.Contains(fr, "closed") {
+		t.Fatalf("French = %q (%v), want the French notice", fr, err)
+	}
+}
+
+func TestLocalizeRendersANoticeErrorInTheRequestedLanguage(t *testing.T) {
+	src := noticedError{notice: closedNotice()}
+	out := cli.Localize(src, i18n.French)
+	if !strings.Contains(out.Error(), "fermée") || strings.Contains(out.Error(), "internal english detail") {
+		t.Fatalf("Localize = %q, want the French notice in place of the internal text", out.Error())
+	}
+	var kept noticedError
+	if !errors.As(out, &kept) {
+		t.Fatal("the rendered error must keep the original error in its chain")
+	}
+}
+
+func TestZeroLanguageFallsBackToEnglish(t *testing.T) {
+	res := contracts.NoticeResult(closedNotice())
+	text, err := cli.Text(res, 0)
+	if err != nil || !strings.Contains(text, "session demo closed") {
+		t.Fatalf("Text with no language = %q (%v), want English", text, err)
+	}
+	out := cli.Localize(noticedError{notice: closedNotice()}, 0)
+	if !strings.Contains(out.Error(), "session demo closed") {
+		t.Fatalf("Localize with no language = %q, want English", out.Error())
+	}
+}
+
+func TestRenderPicksTheErrorOrTheResult(t *testing.T) {
+	text, err := cli.Render(contracts.DataResult("ok"), nil, i18n.French)
+	if err != nil || text != "ok" {
+		t.Fatalf("Render of a result = %q (%v), want ok", text, err)
+	}
+	_, err = cli.Render(contracts.Result{}, noticedError{notice: closedNotice()}, i18n.French)
+	if err == nil || !strings.Contains(err.Error(), "fermée") {
+		t.Fatalf("Render of a failure = %v, want the French error", err)
 	}
 }

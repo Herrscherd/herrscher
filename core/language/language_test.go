@@ -92,3 +92,31 @@ func TestExportPublishesTheResolvedLanguageForThePlugins(t *testing.T) {
 		t.Fatalf("after Export, Operator = %v, want French", got)
 	}
 }
+
+func TestResolveWarnsOnceForAnInvalidConfigLanguage(t *testing.T) {
+	log, buf := silentLog()
+	t.Setenv(EnvVar, "")
+	t.Setenv("LANG", "fr_FR.UTF-8")
+	langs := Resolve(log, "klingon")
+	if langs.Operator != i18n.English || langs.Client != i18n.French {
+		t.Fatalf("Resolve = %+v, want English operator and French client from LANG", langs)
+	}
+	if n := strings.Count(buf.String(), "language ignored"); n != 1 {
+		t.Fatalf("warnings = %d, want exactly one: %s", n, buf.String())
+	}
+}
+
+func TestActiveReadsThePublishedLanguageWithoutWarning(t *testing.T) {
+	t.Setenv(EnvVar, "fr")
+	if got := Active(); got != i18n.French {
+		t.Fatalf("Active = %v, want French from the published value", got)
+	}
+	t.Setenv(EnvVar, "klingon")
+	if got := Active(); got != i18n.English {
+		t.Fatalf("Active = %v, want English for an invalid published value", got)
+	}
+	t.Setenv(EnvVar, "")
+	if got := Active(); got != i18n.English {
+		t.Fatalf("Active = %v, want English when nothing is published", got)
+	}
+}

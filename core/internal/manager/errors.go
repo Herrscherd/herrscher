@@ -119,23 +119,19 @@ func (e *UnsupportedHomeTypeError) Error() string {
 
 // Notice returns the shared notice naming the missing session.
 func (e *SessionNotFoundError) Notice() contracts.Notice {
-	return namedNotice(contracts.CodeSessionNotFound, e.Name)
+	return sessionNotice(contracts.CodeSessionNotFound, e.Name)
 }
 
 // Notice returns the shared notice naming the existing session.
 func (e *SessionExistsError) Notice() contracts.Notice {
-	return namedNotice(contracts.CodeSessionExists, e.Name)
+	return sessionNotice(contracts.CodeSessionExists, e.Name)
 }
 
 // Notice returns the shared notice naming the unknown agent.
 func (e *UnknownAgentError) Notice() contracts.Notice {
-	return namedNotice(contracts.CodeUnknownAgent, e.Name)
+	return sessionNotice(contracts.CodeUnknownAgent, e.Name)
 }
 
 func sessionNotice(code contracts.Code, name string) contracts.Notice {
-	return namedNotice(code, name)
-}
-
-func namedNotice(code contracts.Code, name string) contracts.Notice {
 	return contracts.Notice{Code: code, Args: []contracts.Arg{contracts.Text("Name", name)}}
 }

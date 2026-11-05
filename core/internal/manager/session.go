@@ -466,7 +466,7 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 		return createRequest{}, &SessionExistsError{Name: name}
 	}
 	if n := len(h.st.SnapshotSessions()); n >= maxSessions {
-		return createRequest{}, fmt.Errorf("%w (%d): close a session before creating another", ErrSessionLimit, maxSessions)
+		return createRequest{}, &SessionLimitError{Max: maxSessions}
 	}
 	terminalOnly := input.Bool("terminal_only")
 	adopted, _ := input.Lookup("channel_id")
@@ -928,7 +928,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 		force := input.Bool("force")
 		if err := wtRoot.Remove(ctx, repo, name, force); err != nil {
 			h.sup.Start(sess)
-			return contracts.Result{}, fmt.Errorf("%w; commit, or close with force:true to discard (branch session/%s is kept)", err, name)
+			return contracts.Result{}, &technicalError{msg: fmt.Sprintf("%v; commit, or close with force:true to discard (branch session/%s is kept)", err, name), causes: []error{err}}
 		}
 	}
 	note := h.tidyChannel(ctx, sess)
@@ -1101,7 +1101,7 @@ func (h *Handler) switchApprovalsNote(sess state.Session) string {
 
 func (h *Handler) revertSwitch(name string, prior state.Session, restartErr error) error {
 	if rbErr := h.rollbackSwitch(name, prior.Vendor, prior.Cmd, prior.ModelID, prior.ResumeToken); rbErr != nil {
-		return fmt.Errorf("redémarrage backend: %w; rollback échoué, session %s hors service: %w", restartErr, name, rbErr)
+		return &technicalError{msg: fmt.Sprintf("redémarrage backend: %v; rollback échoué, session %s hors service: %v", restartErr, name, rbErr), causes: []error{restartErr, rbErr}}
 	}
 	return fmt.Errorf("redémarrage backend: %w (session %s restaurée sur %s)", restartErr, name, prior.Vendor)
 }

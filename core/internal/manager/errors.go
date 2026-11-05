@@ -15,7 +15,7 @@ var (
 	// ErrConflictingPlacement is returned when terminal_only and under are both given.
 	ErrConflictingPlacement = errors.New("terminal_only and under contradict each other: one keeps the session in the terminal, the other puts it in a gateway container")
 	// ErrExplicitCmdRefused is returned when a session names a cmd under the gateway-only route policy.
-	ErrExplicitCmdRefused = errors.New("an explicit cmd is refused under the gateway-only route policy: it bypasses the model catalog; select a model instead")
+	ErrExplicitCmdRefused = &sentinelError{text: "an explicit cmd is refused under the gateway-only route policy: it bypasses the model catalog; select a model instead", code: contracts.CodeExplicitCmdRefused}
 	// ErrMissingChannel is returned when a command omits the channel it targets.
 	ErrMissingChannel = errors.New("missing channel")
 	// ErrMissingName is returned when a command omits the session name.
@@ -27,13 +27,13 @@ var (
 	// ErrMissingTo is returned when a rename omits the new name.
 	ErrMissingTo = errors.New("missing to")
 	// ErrModelRequired is returned when a session under the gateway-only route policy names no model.
-	ErrModelRequired = errors.New("a model is required under the gateway-only route policy: without one the session would spawn on this machine's own vendor login")
+	ErrModelRequired = &sentinelError{text: "a model is required under the gateway-only route policy: without one the session would spawn on this machine's own vendor login", code: contracts.CodeModelRequired}
 	// ErrNoHome is returned when a session is created before a home channel is set.
-	ErrNoHome = errors.New("no home set; run `set home` first")
+	ErrNoHome = &sentinelError{text: "no home set; run `set home` first", code: contracts.CodeNoHome}
 	// ErrNoHostRegistered is returned when a remote host is requested but none is registered.
-	ErrNoHostRegistered = errors.New("no host is registered")
+	ErrNoHostRegistered = &sentinelError{text: "no host is registered", code: contracts.CodeNoHostRegistered}
 	// ErrServiceControlUnavailable is returned when the host cannot control its own service.
-	ErrServiceControlUnavailable = errors.New("service control unavailable")
+	ErrServiceControlUnavailable = &sentinelError{text: "service control unavailable", code: contracts.CodeServiceControlUnavailable}
 	// ErrSessionLimit is returned when creating a session would exceed the maximum number of sessions.
 	ErrSessionLimit = errors.New("session limit reached")
 )
@@ -43,10 +43,20 @@ type ChannelKindError struct {
 	Channel string
 	Kind    string
 	Need    string
+	Home    bool
 }
 
 func (e *ChannelKindError) Error() string {
 	return fmt.Sprintf("channel %s is %q: %s", e.Channel, e.Kind, e.Need)
+}
+
+// Notice returns the notice that renders ChannelKindError in the caller's language.
+func (e *ChannelKindError) Notice() contracts.Notice {
+	code := contracts.CodeChannelKindUnder
+	if e.Home {
+		code = contracts.CodeChannelKindHome
+	}
+	return contracts.Notice{Code: code, Args: []contracts.Arg{contracts.Ref("Channel", e.Channel), contracts.Text("Kind", e.Kind)}}
 }
 
 // InvalidValueError reports a command argument whose value is malformed or out of range.
@@ -61,6 +71,15 @@ func (e *InvalidValueError) Error() string {
 		return fmt.Sprintf("invalid %s %q", e.Field, e.Value)
 	}
 	return fmt.Sprintf("invalid %s %q: %s", e.Field, e.Value, e.Hint)
+}
+
+// Notice returns the notice that renders InvalidValueError in the caller's language.
+func (e *InvalidValueError) Notice() contracts.Notice {
+	args := []contracts.Arg{contracts.Text("Field", e.Field), contracts.Text("Value", e.Value)}
+	if e.Hint == "" {
+		return contracts.Notice{Code: contracts.CodeInvalidValue, Args: args}
+	}
+	return contracts.Notice{Code: contracts.CodeInvalidValueHint, Args: append(args, contracts.Text("Hint", e.Hint))}
 }
 
 // SessionNotFoundError reports a reference to a session that does not exist.
@@ -90,6 +109,11 @@ func (e *SharedAgentError) Error() string {
 	return fmt.Sprintf("session create with agent %q cannot be shared: an agent needs a place of its own, and shared:true runs in the main checkout", e.Agent)
 }
 
+// Notice returns the notice that renders SharedAgentError in the caller's language.
+func (e *SharedAgentError) Notice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeSharedAgent, Args: []contracts.Arg{contracts.Text("Agent", e.Agent)}}
+}
+
 // UnknownAgentError reports a reference to an agent that is not registered.
 type UnknownAgentError struct {
 	Name string
@@ -108,6 +132,11 @@ func (e *UnknownApprovalModeError) Error() string {
 	return fmt.Sprintf("unknown approval mode %q: ask, accept-edits, plan, auto, bypass or strict", e.Mode)
 }
 
+// Notice returns the notice that renders UnknownApprovalModeError in the caller's language.
+func (e *UnknownApprovalModeError) Notice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeUnknownApprovalMode, Args: []contracts.Arg{contracts.Text("Mode", e.Mode)}}
+}
+
 // UnsupportedHomeTypeError reports a home channel kind the manager cannot open sessions in.
 type UnsupportedHomeTypeError struct {
 	Type string
@@ -115,6 +144,59 @@ type UnsupportedHomeTypeError struct {
 
 func (e *UnsupportedHomeTypeError) Error() string {
 	return fmt.Sprintf("home type %q unsupported", e.Type)
+}
+
+// Notice returns the notice that renders UnsupportedHomeTypeError in the caller's language.
+func (e *UnsupportedHomeTypeError) Notice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeUnsupportedHomeType, Args: []contracts.Arg{contracts.Text("Type", e.Type)}}
+}
+
+// SessionLimitError reports that creating a session would exceed the maximum number of sessions.
+type SessionLimitError struct {
+	Max int
+}
+
+func (e *SessionLimitError) Error() string {
+	return fmt.Sprintf("%v (%d): close a session before creating another", ErrSessionLimit, e.Max)
+}
+
+func (e *SessionLimitError) Unwrap() error {
+	return ErrSessionLimit
+}
+
+// Notice returns the notice that renders SessionLimitError in the caller's language.
+func (e *SessionLimitError) Notice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeSessionLimit, Args: []contracts.Arg{contracts.Count(e.Max)}}
+}
+
+type technicalError struct {
+	msg    string
+	causes []error
+}
+
+func (e *technicalError) Error() string {
+	return e.msg
+}
+
+func (e *technicalError) Unwrap() []error {
+	return e.causes
+}
+
+func (e *technicalError) Notice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeUnexpected, Args: []contracts.Arg{contracts.Text("Detail", e.msg)}}
+}
+
+type sentinelError struct {
+	text string
+	code contracts.Code
+}
+
+func (e *sentinelError) Error() string {
+	return e.text
+}
+
+func (e *sentinelError) Notice() contracts.Notice {
+	return contracts.Notice{Code: e.code}
 }
 
 // Notice returns the shared notice naming the missing session.

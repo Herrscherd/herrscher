@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -39,6 +41,7 @@ type Handler struct {
 	vendorDefault   func(vendor string) string
 	hs              Hosts
 	remoteBackend   bool
+	lang            i18n.Language
 }
 
 // SetHosts wires the placement resolver. Without it every session is local,
@@ -72,6 +75,19 @@ func (h *Handler) materializeOn(ctx context.Context, hostName string, profile ag
 		return profile.MaterializeAs(ctx, worktreePath, bin)
 	}
 	return h.hs.Materialize(ctx, hostName, profile, worktreePath, hook)
+}
+
+// SetLanguage wires the operator language the messages of the session verbs
+// render in. An undefined language falls back to English.
+func (h *Handler) SetLanguage(lang i18n.Language) { h.lang = i18n.Resolve(lang) }
+
+func (h *Handler) text(key clitext.Key, params clitext.Params) string {
+	text, err := clitext.Text(h.lang, key, params)
+	if err != nil {
+		h.log.Error("render operator text", "key", key, "err", err)
+		return string(key)
+	}
+	return text
 }
 
 // SetDefaultModel wires the operator's configured default. It is a fallback,
@@ -276,7 +292,7 @@ type coordinationReader interface {
 // which per-session participant journals live (participants/<name>.log). agents
 // owns the durable agent homes used to provision sessions.
 func NewHandler(d channelAdmin, sup supervisor, wt Worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string, validateAccount func(vendor, profile string) error, resolveVendor func(vendor, modelID string) (string, error)) *Handler {
-	return &Handler{log: obs.NewLogger(os.Stderr, slog.LevelInfo), d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways, validateAccount: validateAccount, resolveVendor: resolveVendor}
+	return &Handler{log: obs.NewLogger(os.Stderr, slog.LevelInfo), lang: i18n.English, d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways, validateAccount: validateAccount, resolveVendor: resolveVendor}
 }
 
 // SetTerminalAdmin wires the terminal (TUI) channel admin used to route

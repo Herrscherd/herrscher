@@ -111,6 +111,7 @@ func newManagerHandler(deps Deps, options Options, partDir string, hostState *st
 	launch := func(vendor, modelID string) (string, error) { return launchVendor(models, vendor, modelID) }
 	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
+	hdl.SetLanguage(options.Language)
 	return hdl
 }
 

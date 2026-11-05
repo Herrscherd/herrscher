@@ -14,6 +14,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
@@ -940,7 +941,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 	h.warnIfFailed(state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name)), "remove participants of "+name)
 	h.warnIfFailed(state.RemoveTranscript(state.TranscriptPath(h.partDir, name)), "remove transcript of "+name)
 	if note != "" {
-		return contracts.DataResult(fmt.Sprintf("🗄️ Session **%s** closed.%s", name, note)), nil
+		return contracts.DataResult(h.text(clitext.SessionClosed, clitext.Params{clitext.ParamName: name}) + note), nil
 	}
 	return contracts.NoticeResult(sessionNotice(contracts.CodeSessionClosed, name)), nil
 }
@@ -959,7 +960,7 @@ func (h *Handler) sessionArchiveRun(ctx context.Context, input contracts.Input) 
 	if err := h.st.SetArchived(name, true); err != nil {
 		return contracts.Result{}, fmt.Errorf("persist: %w", err)
 	}
-	return contracts.DataResult(fmt.Sprintf("📦 Session **%s** archived. Resume it from /resume.%s", name, note)), nil
+	return contracts.DataResult(h.text(clitext.SessionArchived, clitext.Params{clitext.ParamName: name}) + note), nil
 }
 
 func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
@@ -967,7 +968,7 @@ func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
 		return ""
 	}
 	if err := h.adminFor(sess).Archive(ctx, sess.ChannelID); err != nil {
-		return fmt.Sprintf("\n⚠️ le salon est resté ouvert : %v", err)
+		return "\n" + h.text(clitext.SessionChannelLeftOpen, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	return ""
 }
@@ -990,7 +991,7 @@ func (h *Handler) sessionRenameRun(_ context.Context, input contracts.Input) (co
 		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	if target == name {
-		return contracts.DataResult(fmt.Sprintf("session **%s** porte déjà ce nom", name)), nil
+		return contracts.DataResult(h.text(clitext.SessionRenameSameName, clitext.Params{clitext.ParamName: name})), nil
 	}
 	if _, taken := h.st.FindSession(target); taken {
 		return contracts.Result{}, &SessionExistsError{Name: target}
@@ -1002,17 +1003,21 @@ func (h *Handler) sessionRenameRun(_ context.Context, input contracts.Input) (co
 	}
 	note := ""
 	if err := state.MoveSessionFile(state.TranscriptPath(h.partDir, name), state.TranscriptPath(h.partDir, target)); err != nil {
-		note += fmt.Sprintf("\n⚠️ le transcript est resté sous %#q : %v", name, err)
+		note += "\n" + h.text(clitext.SessionTranscriptLeft, clitext.Params{clitext.ParamName: quoted(name), clitext.ParamErr: err.Error()})
 	}
 	if err := state.MoveSessionFile(state.ParticipantsPath(h.partDir, name), state.ParticipantsPath(h.partDir, target)); err != nil {
-		note += fmt.Sprintf("\n⚠️ le journal des participants est resté sous %#q : %v", name, err)
+		note += "\n" + h.text(clitext.SessionParticipantsLeft, clitext.Params{clitext.ParamName: quoted(name), clitext.ParamErr: err.Error()})
 	}
 	if sc := scheduleOwning(h.st.SnapshotSchedules(), name); sc != "" {
-		note += fmt.Sprintf("\n⚠️ l'horaire %#q possède cette session par son nom : sa prochaine fenêtre en rouvrira une sous %#q.", sc, name)
+		note += "\n" + h.text(clitext.SessionScheduleOwnsSession, clitext.Params{clitext.ParamSchedule: quoted(sc), clitext.ParamName: quoted(name)})
 	}
 	sess.Name = target
 	h.sup.Start(sess)
-	return contracts.DataResult(fmt.Sprintf("✎ Session **%s** renommée en **%s**.%s", name, target, note)), nil
+	return contracts.DataResult(h.text(clitext.SessionRenamed, clitext.Params{clitext.ParamName: name, clitext.ParamTo: target}) + note), nil
+}
+
+func quoted(value string) string {
+	return fmt.Sprintf("%#q", value)
 }
 
 func scheduleOwning(schedules []schedule.Schedule, session string) string {
@@ -1166,10 +1171,10 @@ func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (cont
 		return contracts.DataResult(string(b)), err
 	}
 	if len(sessions) == 0 {
-		return contracts.DataResult("No active sessions."), nil
+		return contracts.DataResult(h.text(clitext.SessionListEmpty, nil)), nil
 	}
 	var out strings.Builder
-	out.WriteString("Active sessions:\n")
+	out.WriteString(h.text(clitext.SessionListHeader, nil) + "\n")
 	for i := range sessions {
 		s := sessions[i]
 		fmt.Fprintf(&out, "• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
@@ -1194,10 +1199,10 @@ func (h *Handler) sessionWhoRun(_ context.Context, input contracts.Input) (contr
 	}
 	ids := state.ReadParticipants(state.ParticipantsPath(h.partDir, name))
 	if len(ids) == 0 {
-		return contracts.DataResult("Personne n'a encore écrit dans cette session."), nil
+		return contracts.DataResult(h.text(clitext.SessionWhoEmpty, nil)), nil
 	}
 	var out strings.Builder
-	fmt.Fprintf(&out, "Participants observed in **%s**:\n", name)
+	out.WriteString(h.text(clitext.SessionWhoHeader, clitext.Params{clitext.ParamName: name}) + "\n")
 	for _, id := range ids {
 		fmt.Fprintf(&out, "• <@%s>\n", id)
 	}
@@ -1224,7 +1229,7 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contr
 		if input.JSON {
 			return contracts.DataResult("[]"), nil
 		}
-		return contracts.DataResult("No transcript yet."), nil
+		return contracts.DataResult(h.text(clitext.SessionLogEmpty, nil)), nil
 	}
 	limit := sessionLogTranscriptCap
 	if lraw, ok := input.Lookup("limit"); ok {
@@ -1241,7 +1246,7 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contr
 		return contracts.DataResult(string(b)), err
 	}
 	if len(entries) == 0 {
-		return contracts.DataResult("No transcript yet."), nil
+		return contracts.DataResult(h.text(clitext.SessionLogEmpty, nil)), nil
 	}
 	var out strings.Builder
 	for _, e := range entries {

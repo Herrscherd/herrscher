@@ -52,8 +52,23 @@ func TestDispatchLiveCommandReportsCancellationBeforeDial(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, _, dispatchErr := dispatchLiveCommand(ctx, path, []string{"status"})
+	_, handled, dispatchErr := dispatchLiveCommand(ctx, path, []string{"status"})
+	if !handled {
+		t.Fatal("a cancelled dial must stay handled, or the caller would run the command locally")
+	}
 	if !errors.Is(dispatchErr, context.Canceled) {
 		t.Fatalf("dispatchLiveCommand error = %v, want context.Canceled", dispatchErr)
+	}
+}
+
+func TestCancellationOrPrefersTheContextError(t *testing.T) {
+	broken := errors.New("write: broken pipe")
+	ctx, cancel := context.WithCancel(context.Background())
+	if got := cancellationOr(ctx, broken); !errors.Is(got, broken) {
+		t.Fatalf("live context: got %v, want the transport error", got)
+	}
+	cancel()
+	if got := cancellationOr(ctx, broken); !errors.Is(got, context.Canceled) {
+		t.Fatalf("cancelled context: got %v, want context.Canceled", got)
 	}
 }

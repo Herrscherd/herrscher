@@ -80,6 +80,26 @@ func TestPrepareLanguagesDefaultsToEnglishWithoutPublishing(t *testing.T) {
 	}
 }
 
+func TestPrepareLanguagesLeavesAnInvalidHerrscherLangToTheGateway(t *testing.T) {
+	clearPublishedLanguage(t)
+	t.Setenv(language.EnvVar, "klingon")
+	t.Setenv("LANG", "")
+	var out bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	langs, err := prepareLanguages(config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if langs.Operator != i18n.English {
+		t.Fatalf("operator = %v, want English", langs.Operator)
+	}
+	if n := strings.Count(out.String(), "language ignored"); n != 0 {
+		t.Fatalf("host warnings = %d, want none: the gateway reports an invalid %s itself:\n%s", n, language.EnvVar, out.String())
+	}
+}
+
 func TestPrepareLanguagesWarnsOnceThroughTheProcessLogger(t *testing.T) {
 	clearPublishedLanguage(t)
 	t.Setenv("LANG", "fr_FR.UTF-8")

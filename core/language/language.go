@@ -37,11 +37,11 @@ func Pick(log *slog.Logger, sources ...Source) i18n.Language {
 	return i18n.English
 }
 
-// Operator resolves the operator language from config.json, then HERRSCHER_LANG.
+// Operator resolves the operator language from config.json, then HERRSCHER_LANG, whose invalid value the gateway reports itself.
 func Operator(log *slog.Logger, configured string) i18n.Language {
 	return Pick(log,
 		Source{Origin: "config.json language", Value: configured},
-		Source{Origin: EnvVar, Value: os.Getenv(EnvVar)},
+		Source{Origin: EnvVar, Value: os.Getenv(EnvVar), Quiet: true},
 	)
 }
 

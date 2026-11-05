@@ -279,8 +279,8 @@ func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.Co
 		d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: err.Error()})
 		return
 	}
+	d.notifyGateways(typed.Notice())
 	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String()})
-	d.notifyGateways(ctx, typed.Notice())
 }
 
 func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contracts.CompactTrigger, result contracts.CompactResult) {
@@ -288,8 +288,8 @@ func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contract
 		d.fanOut(ctx, contracts.Event{T: eventCompactDone, Value: trigger.String(), Text: result.Note, Tokens: measuredTokens(result)})
 		return
 	}
+	d.notifyGateways(result.Notice)
 	d.fanOut(ctx, contracts.Event{T: eventCompactDone, Value: trigger.String(), Tokens: measuredTokens(result)})
-	d.notifyGateways(ctx, result.Notice)
 }
 
 func (d *sessionDriver) noticeRenders(notice contracts.Notice) bool {
@@ -304,27 +304,22 @@ type noticeDelivery struct {
 	notice contracts.Notice
 }
 
-func (d *sessionDriver) notifyGateways(ctx context.Context, notice contracts.Notice) {
+func (d *sessionDriver) notifyGateways(notice contracts.Notice) {
 	d.eachGateway(func(_ int, gateway contracts.GatewaySet) {
 		sink, ok := gateway.Gateway.(contracts.NoticeSink)
 		if !ok {
 			return
 		}
 		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
-		d.enqueueNotice(ctx, noticeDelivery{sink: sink, conv: conv, lang: d.lang, notice: notice})
+		d.enqueueNotice(noticeDelivery{sink: sink, conv: conv, lang: d.lang, notice: notice})
 	})
 }
 
-func (d *sessionDriver) enqueueNotice(ctx context.Context, delivery noticeDelivery) {
+func (d *sessionDriver) enqueueNotice(delivery noticeDelivery) {
 	select {
 	case d.notices <- delivery:
-		return
 	default:
-	}
-	select {
-	case d.notices <- delivery:
-	case <-ctx.Done():
-		warnStderr("herrscher serve: session %q: notice dropped, the session is closing\n", d.name)
+		d.noticeLog.Warn("compaction notice dropped, the gateway's queue is full", keySession, d.name, "code", delivery.notice.Code, "gateway", delivery.conv.Gateway)
 	}
 }
 

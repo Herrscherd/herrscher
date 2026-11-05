@@ -1,9 +1,12 @@
 package host
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -307,7 +310,7 @@ func TestNoticeIsDeliveredWhenTheParentContextIsCancelledDuringANotify(t *testin
 	parent, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go d.deliverNotices(parent)
-	d.notifyGateways(parent, contracts.Notice{Code: contracts.CodeCompacted})
+	d.notifyGateways(contracts.Notice{Code: contracts.CodeCompacted})
 	select {
 	case <-gateway.entered:
 	case <-time.After(2 * time.Second):
@@ -328,11 +331,59 @@ func TestNoticesReachTheGatewayInTheOrderTheyWereRaised(t *testing.T) {
 	go d.deliverNotices(ctx)
 	codes := []contracts.Code{contracts.CodeCompacted, contracts.CodeCompactUnavailable, contracts.Code(99)}
 	for _, code := range codes {
-		d.notifyGateways(ctx, contracts.Notice{Code: code})
+		d.notifyGateways(contracts.Notice{Code: code})
 	}
 	for _, code := range codes {
 		if got := awaitNotice(t, gateway); got.notice.Code != code {
 			t.Fatalf("notice = %d, want %d in raising order", got.notice.Code, code)
 		}
+	}
+}
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func TestFullNoticeQueueDropsTheNoticeAndTheTurnAdvances(t *testing.T) {
+	gateway := newNoticeGateway()
+	gateway.entered = make(chan struct{}, 1)
+	gateway.release = make(chan struct{})
+	t.Cleanup(func() { close(gateway.release) })
+	logs := &lockedBuffer{}
+	f := newConfiguredCompactFixture(t, "claude", compactPolicy(92), func(d *sessionDriver) {
+		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
+		d.lang = i18n.French
+		d.noticeLog = slog.New(slog.NewTextHandler(logs, nil))
+	})
+	blocked := noticeDelivery{sink: gateway, conv: contracts.Conversation{}, lang: i18n.French, notice: contracts.Notice{Code: contracts.CodeCompacted}}
+	for range noticeQueueCapacity + 1 {
+		f.driver.notices <- blocked
+	}
+	select {
+	case <-gateway.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("gateway never started the first notice")
+	}
+	f.driver.requestCompaction("", contracts.Conversation{})
+	nextFrame(t, f)
+	f.from <- mustAnswer(t, contracts.CompactResult{TokensAfter: 4_000, TokensMeasured: true, Note: "compacté", Notice: contracts.Notice{Code: contracts.CodeCompacted}})
+	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 4_000 {
+		t.Fatalf("compaction_done = %+v, want the turn to advance past the full queue", done)
+	}
+	if out := logs.String(); !strings.Contains(out, "dropped") || !strings.Contains(out, "session=s1") || !strings.Contains(out, "code=1") {
+		t.Fatalf("log = %q, want the dropped notice with its session and code", out)
 	}
 }

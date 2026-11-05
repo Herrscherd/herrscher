@@ -70,6 +70,7 @@ type sessionDriver struct {
 	channel       string
 	saidElsewhere bool
 	notices       chan noticeDelivery
+	noticeLog     *slog.Logger
 	gateways      []contracts.GatewaySet
 	toBridge      chan<- contracts.Event
 	from          <-chan contracts.Event
@@ -127,6 +128,7 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		hangup:    make(chan struct{}, 1),
 		seen:      make(map[string]bool),
 		notices:   make(chan noticeDelivery, noticeQueueCapacity),
+		noticeLog: obs.Stderr(false),
 		gate:      noBudgetGate{},
 
 		enqueueTimeout: defaultEnqueueTimeout,

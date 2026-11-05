@@ -117,7 +117,32 @@ func (m *model) runChatAction(action keyAction, msg tea.KeyMsg) (tea.Cmd, bool) 
 	if run, ok := m.tables().chat[action]; ok {
 		return run(m, msg)
 	}
+	m.flash = m.unavailableNotice(action)
 	return nil, true
+}
+
+func movedActions() map[keyAction]keyAction {
+	moved := make(map[keyAction]keyAction)
+	moved[actToggleTodos] = actOpenSessions
+	moved[actChatNewerModel] = actCopyCode
+	moved[actTaskBackground] = actToggleSidebar
+	moved[actChatThinking] = actToggleTurnFold
+	moved[actDiffFileUp] = actPreviousTurn
+	moved[actDiffFileDown] = actNextTurn
+	return moved
+}
+
+func (m *model) unavailableNotice(action keyAction) string {
+	notice := string(action) + " n'est pas encore disponible dans herrscher"
+	target, moved := movedActions()[action]
+	if !moved {
+		return notice
+	}
+	chord := m.hintOf(target)
+	if chord == "" {
+		return notice
+	}
+	return notice + " : la fonction est sur " + chord
 }
 
 func chatRuns() (map[keyAction]chatRun, error) {
@@ -263,7 +288,11 @@ func (m *model) keyHelpLine() string {
 		}
 	}
 	if newline := m.hintsOf(actNewline); newline != "" {
-		entries = append(entries, newline+" ou \\⏎ nouvelle ligne")
+		line := newline + " ou \\⏎ nouvelle ligne"
+		if idle := m.hintsOf(actQueueRedirect); idle != "" {
+			line += ", " + idle + " nouvelle ligne au repos"
+		}
+		entries = append(entries, line)
 	}
 	for _, turn := range []helpEntry{{actPreviousTurn, "tour précédent"}, {actNextTurn, "tour suivant"}} {
 		if glyph := m.hintOf(turn.action); glyph != "" {

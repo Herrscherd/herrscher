@@ -388,7 +388,7 @@ func modalKeyContexts() []keyContext {
 		ctxAutocomplete, ctxMention, ctxPane, ctxQueue, ctxApproval, ctxApprovalReason, ctxBoard,
 		ctxSessions, ctxSearch, ctxContext, ctxStatusline, ctxPlan, ctxSkills, ctxResume, ctxClose,
 		ctxPlugin, ctxThemePicker, ctxThemeInstall, ctxHistorySearch, ctxMessageSelector,
-		ctxDiffPanel, ctxDiffDialog, ctxDiffNote, ctxDiffMessage, ctxDiagnostics,
+		ctxDiffPanel, ctxDiffDialog, ctxDiffMessage, ctxDiagnostics,
 	}
 }
 

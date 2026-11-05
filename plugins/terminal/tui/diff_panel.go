@@ -275,7 +275,6 @@ func stopDiffEditing(app *model) {
 
 func diffNoteRuns() (map[keyAction]keyRun, error) {
 	return dispatchOf(
-		bind[keyRun](actInterrupt, stepKey(closeDiffDialog)),
 		bind[keyRun](actDiffDismiss, stepKey(closeDiffDialog)),
 		bind[keyRun](actDiffSendNote, cmdKey((*model).sendDiffNote)),
 	)

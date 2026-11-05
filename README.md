@@ -945,7 +945,7 @@ Contexts are read in order: Chat first, then Global.
 |---|---|---|
 | `⏎` | `chat:submit` | send; while a turn runs, queue the message |
 | `⌥⏎` | `chat:queueRedirect` | while a turn runs, steer it with the message; when idle, new line. `"alt+enter": null` removes both |
-| `⌃J`, `⇧⏎`, `\⏎` | `chat:newline` | new line |
+| `⌃J`, `⇧⏎`, `\⏎`, and `⌥⏎` at rest | `chat:newline` | new line |
 | `échap` | `chat:cancel` | interrupt the running turn |
 | `⇧⇥` | `chat:cycleMode` | cycle the approval mode (Manuel, Édits acceptés, Plan, Auto) |
 | `⇥` | `tabs:next` | next session tab |
@@ -979,13 +979,6 @@ Contexts are read in order: Chat first, then Global.
 | `⌃X S` | `app:openSessions` | session switcher |
 | `⌃X T` | `app:openTheme` | theme picker |
 | `⌃X V` | `app:toggleSidebar` | toggle the sidebar |
-| `⌃X ⌃A`, `⌃X ⇥` | `abovePrompt:toggle`, `abovePrompt:focus` | no effect yet (see below) |
-| `⌃⇧B` | `app:toggleBrief` | no effect yet |
-| `⌃]` | `app:openArtifact` | no effect yet |
-| `⌥P` | `chat:modelPicker` | no effect yet |
-| `⌥O` | `chat:fastMode` | no effect yet |
-| `⌥W` | `chat:workflowKeywordToggle` | no effect yet |
-| `⌘K` | `chat:clearScreen` | no effect yet |
 | `?` | `chat:helpToggle` | help, when the composer is empty |
 | `n` | `chat:notifyCycle` | cycle the notification, when the composer is empty |
 | `/` `@` `!` | not in the table | command, file mention, shell command |
@@ -996,25 +989,47 @@ so they can be rebound like the other keys but still type a character otherwise.
 #### Moved keys
 
 These herrscher functions had a key that Claude now uses for its own action.
-They moved, and the old key does what Claude says it does.
+They moved. The last column names Claude's action on the old key. When that
+action is listed under Not yet, the old key shows a notice that names the new key.
 
 | Function | Before | Now | Claude's action on the old key |
 |---|---|---|---|
 | diff panel | `⌃D` | `⌃X D` | `app:exit` (quit with an empty composer) |
-| session switcher | `⌃T` | `⌃X S` | `app:toggleTodos` (no effect yet) |
+| session switcher | `⌃T` | `⌃X S` | `app:toggleTodos` |
 | mouse release | `⌃G` | `⌃X M` | `chat:externalEditor` (opens `$EDITOR`) |
 | next link | `⌃L` | `⌃X L` | `chat:clearInput` (clears the composer) |
 | open the link, or fold | `⌃O` | `⌃X O` | `app:toggleTranscript` (now toggles the tool detail, see the main table) |
-| copy the last code block | `⌃Y` | `⌃X C` | `chat:defaultToNewerModel` (no effect yet) |
-| sidebar | `⌃B` | `⌃X V` | `task:background` (no effect yet) |
-| fold the turns | `alt+T` | `⌃X F` | `chat:thinkingToggle` (no effect yet) |
-| previous or next turn | `alt+↑` `alt+↓` | `⌃X K` `⌃X J` | `app:diffFileListUp` and `app:diffFileListDown` (no effect yet) |
+| copy the last code block | `⌃Y` | `⌃X C` | `chat:defaultToNewerModel` |
+| sidebar | `⌃B` | `⌃X V` | `task:background` |
+| fold the turns | `alt+T` | `⌃X F` | `chat:thinkingToggle` |
+| previous or next turn | `alt+↑` `alt+↓` | `⌃X K` `⌃X J` | `app:diffFileListUp` and `app:diffFileListDown` |
 
-#### Claude actions without an effect here
+#### Not yet
 
-The table accepts these names of Claude's reference without a message, because
-herrscher does not run them yet. Each is listed by its action name, grouped by
-context prefix, and none is executed here:
+These are names of Claude's reference that herrscher does not run. The first
+table holds the fourteen keys that are still bound by default. Pressing one of
+them in the chat does nothing but show a short notice that names the action, says
+it is not yet available in herrscher, and names the new key when the action is in
+Moved keys. The draft in the composer stays as it is.
+
+| Keys | Action | Status |
+|---|---|---|
+| `⌃X ⌃A`, `⌃X ⇥` | `abovePrompt:toggle`, `abovePrompt:focus` | reserved, does nothing |
+| `⌃⇧B` | `app:toggleBrief` | reserved, does nothing |
+| `⌃]` | `app:openArtifact` | reserved, does nothing |
+| `⌥P` | `chat:modelPicker` | reserved, does nothing |
+| `⌥O` | `chat:fastMode` | reserved, does nothing |
+| `⌥W` | `chat:workflowKeywordToggle` | reserved, does nothing |
+| `⌘K` | `chat:clearScreen` | reserved, does nothing |
+| `⌃T` | `app:toggleTodos` | moved to `⌃X S` |
+| `⌃Y` | `chat:defaultToNewerModel` | moved to `⌃X C` |
+| `⌃B` | `task:background` | moved to `⌃X V` |
+| `alt+T` | `chat:thinkingToggle` | moved to `⌃X F` |
+| `alt+↑` `alt+↓` | `app:diffFileListUp`, `app:diffFileListDown` | moved to `⌃X K` `⌃X J` |
+
+The table accepts the other names of Claude's reference without a message,
+because herrscher does not run them yet. Each is listed by its action name,
+grouped by context prefix, and none is bound or executed here:
 
 - `abovePrompt:highlightNext`, `abovePrompt:highlightPrevious`, `abovePrompt:leave`, `abovePrompt:next`, `abovePrompt:press`, `abovePrompt:previous`
 - `agents:find`, `agents:nextGroup`, `agents:previousGroup`, `agents:rename`, `agents:switchView`, `agents:togglePin`
@@ -1039,11 +1054,11 @@ context prefix, and none is executed here:
 - `transcript:exit`, `transcript:toggleShowAll`
 - `voice:pushToTalk`
 
-Of Claude's 148 reference names, 44 run here, 14 are bound by default but do
-nothing yet (marked "no effect yet" in the key tables), and these 90 make up the
-rest. The names are kept in `plugins/terminal/tui/keys_claude_reference.go`,
-checked against a frozen copy of the reference in `testdata`, and a test loads a
-Claude file for each of them and requires no warning.
+Of Claude's 148 reference names, 44 run here, the fourteen in the first table are
+bound by default and do nothing yet, and the 90 bullets make up the rest. The
+names are kept in `plugins/terminal/tui/keys_claude_reference.go`, checked against
+a frozen copy of the reference in `testdata`, and a test loads a Claude file for
+each of them and requires no warning.
 
 #### Quitting: `⌃C` and `⌃D`
 
@@ -1051,8 +1066,10 @@ With nothing running, `⌃C` and `⌃D` (with an empty composer) quit at once. W
 a turn runs in the active session, the first press interrupts it and a second
 press quits. When another session is busy, the first press warns and names how
 many sessions will stop, and a second press within 3 seconds quits. Inside a
-dialog (a diff note or commit message, an approval reason), `⌃C` closes it as
-`⎋` does and neither quits nor interrupts the turn. Quitting a served daemon
+dialog (a commit message or its editor, an approval reason), `⌃C` closes it
+as `⎋` does, keeps the text, and neither quits nor interrupts the turn. In the
+diff note `⌃C` does nothing, because closing the note would drop what is typed
+there: `⎋` closes it. Quitting a served daemon
 stops the sessions it runs, as described above.
 
 #### Your keys: `~/.config/herrscher/keybindings.json`
@@ -1105,7 +1122,7 @@ chord_timeout = 3
 `$schema`, `$docs` and `bindings: []` when it does not exist, and reloads the
 table when the editor closes, flashing the problems if there are any.
 
-#### Not yet in the table
+#### Overlays and footers
 
 The overlays (diff, sessions, search, rewind, theme, status bar, plugins) still
 read their own keys, and their footers and the composer placeholder still show

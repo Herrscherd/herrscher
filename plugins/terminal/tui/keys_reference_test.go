@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -137,5 +139,101 @@ func TestEveryClaudeReferenceContextIsAccepted(t *testing.T) {
 		if load := loadForTest(t, "", file, keysSection{}); len(load.problems) > 0 {
 			t.Errorf("reference context %s is rejected: %s", ctx, joinProblems(load.problems))
 		}
+	}
+}
+
+func actionSet(actions []keyAction) map[keyAction]bool {
+	set := make(map[keyAction]bool, len(actions))
+	for _, action := range actions {
+		set[action] = true
+	}
+	return set
+}
+
+func readmeActionNames(line string) []keyAction {
+	var names []keyAction
+	for _, match := range regexp.MustCompile("`([a-zA-Z]+:[a-zA-Z]+)`").FindAllStringSubmatch(line, -1) {
+		names = append(names, keyAction(match[1]))
+	}
+	return names
+}
+
+func readmeNotYetLines(t *testing.T) []string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	inSection := false
+	for _, line := range strings.Split(string(raw), "\n") {
+		if line == "#### Not yet" {
+			inSection = true
+			continue
+		}
+		if !inSection {
+			continue
+		}
+		if strings.HasPrefix(line, "#### ") {
+			break
+		}
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+func readmeNotYet(t *testing.T) ([]keyAction, []keyAction) {
+	t.Helper()
+	var table, all []keyAction
+	for _, line := range readmeNotYetLines(t) {
+		names := readmeActionNames(line)
+		if strings.HasPrefix(line, "|") {
+			table = append(table, names...)
+		}
+		all = append(all, names...)
+	}
+	return table, all
+}
+
+func TestReadmeNotYetNamesTheKeysThatHaveNoEffect(t *testing.T) {
+	var table []string
+	for _, line := range readmeNotYetLines(t) {
+		if strings.HasPrefix(line, "|") {
+			table = append(table, line)
+		}
+	}
+	for _, key := range []string{"⌃X ⌃A", "⌃X ⇥", "⌃⇧B", "⌃]", "⌥P", "⌥O", "⌥W", "⌘K"} {
+		if !slices.ContainsFunc(table, func(row string) bool { return strings.Contains(row, "`"+key+"`") }) {
+			t.Errorf("the Not yet table must name the key %s", key)
+		}
+	}
+}
+
+func TestReadmeNotYetTableListsTheFourteenSilentActions(t *testing.T) {
+	table, _ := readmeNotYet(t)
+	want := defaultsWithoutEffect()
+	if len(table) != len(want) || !maps.Equal(actionSet(table), actionSet(want)) {
+		t.Fatalf("the Not yet table must list exactly defaultsWithoutEffect: got %v, want %v", table, want)
+	}
+}
+
+func TestReadmeNotYetListsEveryUnhandledReferenceAction(t *testing.T) {
+	tables, err := newDispatchTables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handled := actionSet(boundActions(tables))
+	var unhandled []keyAction
+	for _, action := range claudeReferenceActions() {
+		if !handled[action] {
+			unhandled = append(unhandled, action)
+		}
+	}
+	_, all := readmeNotYet(t)
+	if len(all) != len(actionSet(all)) {
+		t.Fatal("the Not yet list repeats an action name")
+	}
+	if !maps.Equal(actionSet(all), actionSet(unhandled)) {
+		t.Fatalf("the Not yet list must hold the %d unhandled reference names, has %d", len(unhandled), len(all))
 	}
 }

@@ -214,3 +214,23 @@ func TestHookNamesACancelledApprovalApartFromAnUnansweredOne(t *testing.T) {
 		t.Fatalf("stderr was %q, want no daemon-absent or could-not-answer wording", msg)
 	}
 }
+
+func TestHookAppliesAnAnswerThatArrivesAfterCancellation(t *testing.T) {
+	for _, decision := range []string{"deny", "allow"} {
+		t.Run(decision, func(t *testing.T) {
+			t.Setenv(SessionVar, "s1")
+			ctx, cancel := context.WithCancel(context.Background())
+			ask := func(context.Context, []string) (string, bool, error) {
+				cancel()
+				return `{"decision":"` + decision + `","reason":"herrscher: answered"}`, true, nil
+			}
+			in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git push"}}`)
+			var out, errOut bytes.Buffer
+			RunPermissionHook(ctx, in, &out, &errOut, testTarget, ask)
+			d, reason := hookDecision(t, out.String())
+			if d != decision || reason != "herrscher: answered" {
+				t.Fatalf("got %q/%q, want %q: a delivered answer must not be replaced by the cancellation", d, reason, decision)
+			}
+		})
+	}
+}

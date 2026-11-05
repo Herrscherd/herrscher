@@ -85,7 +85,7 @@ func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writ
 		logWriteFailure(fmt.Fprintf(errOut, "herrscher: no daemon is listening on %s, allowing\n", target()))
 		writeHookDecision(out, errOut, "allow", "")
 		return
-	case ctx.Err() != nil:
+	case err != nil && ctx.Err() != nil:
 		logWriteFailure(fmt.Fprintln(errOut, "herrscher: the approval was cancelled before the daemon answered, allowing"))
 		writeHookDecision(out, errOut, "allow", "")
 		return

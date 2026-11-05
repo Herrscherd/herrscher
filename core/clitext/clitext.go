@@ -35,7 +35,7 @@ var (
 )
 
 func declaredKeys() map[Key][]string {
-	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys())
+	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys())
 }
 
 func loadCatalog() (*i18n.Catalog, error) {
@@ -74,6 +74,7 @@ const (
 	ParamInstalled = "Installed"
 	ParamRan       = "Ran"
 	ParamVendor    = "Vendor"
+	ParamState     = "State"
 )
 
 // Text renders key in lang with params. It refuses an undeclared key, and params

@@ -32,7 +32,7 @@ func TestEveryDeclaredKeyHasItsTextInEveryLanguage(t *testing.T) {
 }
 
 func TestEveryKeyFileIsDeclaredOnce(t *testing.T) {
-	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys()}
+	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys()}
 	total := 0
 	for _, group := range groups {
 		total += len(group)
@@ -92,6 +92,10 @@ func TestRenderedMessagesInEachLanguage(t *testing.T) {
 		{"bridge env stdin flag", BridgeFlagEnvStdin, nil, "read KEY=VALUE lines from stdin until a blank line and put them in this process's environment (how a remote bridge gets its gateway credentials)", "lit des lignes KEY=VALUE sur l'entrée standard jusqu'à une ligne vide et les place dans l'environnement de ce processus (c'est ainsi qu'un bridge distant reçoit ses identifiants de passerelle)"},
 		{"bridge vendor flag", BridgeFlagVendor, nil, "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)", "fournisseur du backend : claude | codex | cursor (vide = premier enregistré, ou HERRSCHER_BACKEND)"},
 		{"serve session failed", ServeSessionFailed, Params{"Name": "demo", "Err": "boom"}, "session demo: boom", "session demo : boom"},
+		{"account default", AccountDefault, Params{"Vendor": "claude", "Name": "perso"}, "claude default: perso", "claude par défaut : perso"},
+		{"account resuming one", AccountResuming, Params{"Count": 1, "Vendor": "claude", "Sessions": "alpha"}, "attention: 1 session claude will resume under this default: alpha. To keep it on another account, use herrscher session set-account <session> <profile> (or fresh for a new conversation).", "attention : 1 session claude va reprendre sous ce défaut : alpha. Pour la garder sur un autre compte, utilisez herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation)."},
+		{"account resuming many", AccountResuming, Params{"Count": 2, "Vendor": "claude", "Sessions": "alpha, beta"}, "attention: 2 sessions claude will resume under this default: alpha, beta. To keep them on another account, use herrscher session set-account <session> <profile> (or fresh for a new conversation).", "attention : 2 sessions claude vont reprendre sous ce défaut : alpha, beta. Pour les garder sur un autre compte, utilisez herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation)."},
+		{"account in use", AccountInUse, Params{"Vendor": "claude", "Name": "perso", "Sessions": "alpha, beta"}, "claude/perso used by session(s) alpha, beta, move them with herrscher session set-account first", "claude/perso utilisé par la ou les sessions alpha, beta, déplacez-les d'abord avec herrscher session set-account"},
 		{"skill duplicate", SkillDuplicate, Params{"Name": "demo", "Kind": "bundle", "Owner": "core"}, "herrscher: skill demo from plugin bundle was left out: plugin core already ships one by that name", "herrscher : la compétence demo du plugin bundle a été écartée : le plugin core en livre déjà une de ce nom"},
 	}
 	for _, tc := range cases {

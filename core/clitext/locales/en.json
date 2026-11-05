@@ -658,5 +658,81 @@
     "id": "cli.service.note.windows_edit",
     "description": "Notice: on Windows, the secrets file to fill and the command that starts the task now",
     "other": "herrscher service: Edit {{.EnvFile}} with your token; the task runs herrscher at your next logon (or run it now: schtasks /run /tn {{.Task}})."
+  },
+  {
+    "id": "cli.account.usage",
+    "description": "Usage line of herrscher account, with its subcommands",
+    "other": "usage: herrscher account list | add <vendor> <name> | remove <vendor> <name> | default <vendor> <name>"
+  },
+  {
+    "id": "cli.account.resolve_home",
+    "description": "Error: herrscher account cannot find the home directory",
+    "other": "resolve home: {{.Err}}"
+  },
+  {
+    "id": "cli.account.default",
+    "description": "Confirmation: the default account of a vendor is now this profile",
+    "other": "{{.Vendor}} default: {{.Name}}"
+  },
+  {
+    "id": "cli.account.default_marker",
+    "description": "Listing: marks the profile that is the default of its vendor",
+    "other": "(default)"
+  },
+  {
+    "id": "cli.account.native_label",
+    "description": "Listing: row label for the login the vendor keeps outside herrscher profiles",
+    "other": "native"
+  },
+  {
+    "id": "cli.account.state.unknown",
+    "description": "Listing: the login state of a profile could not be read",
+    "other": "unknown status"
+  },
+  {
+    "id": "cli.account.state.connected",
+    "description": "Listing: the profile is logged in",
+    "other": "connected"
+  },
+  {
+    "id": "cli.account.state.disconnected",
+    "description": "Listing: the profile is not logged in",
+    "other": "not connected"
+  },
+  {
+    "id": "cli.account.login_failed",
+    "description": "Error: the vendor login of a new profile failed, and the profile directory is kept",
+    "other": "{{.Vendor}} login for {{.Name}}: {{.Err}} (the profile directory is kept, run add again or remove it)"
+  },
+  {
+    "id": "cli.account.added",
+    "description": "Confirmation: a profile was logged in, with its resulting state",
+    "other": "{{.Vendor}}/{{.Name}}: {{.State}}"
+  },
+  {
+    "id": "cli.account.remove_prompt",
+    "description": "Prompt: asks the operator to confirm the removal of a profile, without a line break",
+    "other": "Remove profile {{.Vendor}}/{{.Name}} and its login directory? (yes/no) "
+  },
+  {
+    "id": "cli.account.read_confirmation",
+    "description": "Error: the answer to the removal prompt could not be read",
+    "other": "read confirmation: {{.Err}}"
+  },
+  {
+    "id": "cli.account.cancelled",
+    "description": "Confirmation: the removal was declined",
+    "other": "cancelled"
+  },
+  {
+    "id": "cli.account.in_use",
+    "description": "Error: a profile cannot be removed or replaced because live sessions use it",
+    "other": "{{.Vendor}}/{{.Name}} used by session(s) {{.Sessions}}, move them with herrscher session set-account first"
+  },
+  {
+    "id": "cli.account.resuming",
+    "description": "Warning: sessions will resume under a new default account of their vendor, with the way to keep them elsewhere (Count selects the plural form)",
+    "one": "attention: 1 session {{.Vendor}} will resume under this default: {{.Sessions}}. To keep it on another account, use herrscher session set-account <session> <profile> (or fresh for a new conversation).",
+    "other": "attention: {{.Count}} sessions {{.Vendor}} will resume under this default: {{.Sessions}}. To keep them on another account, use herrscher session set-account <session> <profile> (or fresh for a new conversation)."
   }
 ]

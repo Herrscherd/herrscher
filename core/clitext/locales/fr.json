@@ -658,5 +658,81 @@
     "id": "cli.service.note.windows_edit",
     "description": "Avis : sous Windows, le fichier de secrets à remplir et la commande qui lance la tâche maintenant",
     "other": "herrscher service : modifiez {{.EnvFile}} avec votre jeton ; la tâche lance herrscher à votre prochaine ouverture de session (ou lancez-la maintenant avec schtasks /run /tn {{.Task}})."
+  },
+  {
+    "id": "cli.account.usage",
+    "description": "Ligne d'usage de herrscher account, avec ses sous-commandes",
+    "other": "usage : herrscher account list | add <vendor> <nom> | remove <vendor> <nom> | default <vendor> <nom>"
+  },
+  {
+    "id": "cli.account.resolve_home",
+    "description": "Erreur : herrscher account ne trouve pas le dossier personnel",
+    "other": "dossier personnel introuvable : {{.Err}}"
+  },
+  {
+    "id": "cli.account.default",
+    "description": "Confirmation : le compte par défaut d'un fournisseur est désormais ce profil",
+    "other": "{{.Vendor}} par défaut : {{.Name}}"
+  },
+  {
+    "id": "cli.account.default_marker",
+    "description": "Liste : marque le profil qui est le défaut de son fournisseur",
+    "other": "(par défaut)"
+  },
+  {
+    "id": "cli.account.native_label",
+    "description": "Liste : libellé de la ligne du compte connecté hors des profils herrscher",
+    "other": "natif"
+  },
+  {
+    "id": "cli.account.state.unknown",
+    "description": "Liste : l'état de connexion d'un profil n'a pas pu être lu",
+    "other": "statut inconnu"
+  },
+  {
+    "id": "cli.account.state.connected",
+    "description": "Liste : le profil est connecté",
+    "other": "connecté"
+  },
+  {
+    "id": "cli.account.state.disconnected",
+    "description": "Liste : le profil n'est pas connecté",
+    "other": "non connecté"
+  },
+  {
+    "id": "cli.account.login_failed",
+    "description": "Erreur : la connexion du fournisseur pour un nouveau profil a échoué, et son dossier est conservé",
+    "other": "connexion {{.Vendor}} pour {{.Name}} : {{.Err}} (le dossier du profil est conservé, relancez add ou supprimez-le)"
+  },
+  {
+    "id": "cli.account.added",
+    "description": "Confirmation : un profil est connecté, avec son état final",
+    "other": "{{.Vendor}}/{{.Name}} : {{.State}}"
+  },
+  {
+    "id": "cli.account.remove_prompt",
+    "description": "Question : demande à l'opérateur de confirmer la suppression d'un profil, sans retour à la ligne",
+    "other": "Supprimer le profil {{.Vendor}}/{{.Name}} et son dossier de connexion ? (oui/non) "
+  },
+  {
+    "id": "cli.account.read_confirmation",
+    "description": "Erreur : la réponse à la question de suppression n'a pas pu être lue",
+    "other": "lecture de la confirmation : {{.Err}}"
+  },
+  {
+    "id": "cli.account.cancelled",
+    "description": "Confirmation : la suppression a été refusée",
+    "other": "annulé"
+  },
+  {
+    "id": "cli.account.in_use",
+    "description": "Erreur : un profil ne peut être supprimé ou remplacé tant que des sessions actives l'utilisent",
+    "other": "{{.Vendor}}/{{.Name}} utilisé par la ou les sessions {{.Sessions}}, déplacez-les d'abord avec herrscher session set-account"
+  },
+  {
+    "id": "cli.account.resuming",
+    "description": "Avertissement : des sessions vont reprendre sous un nouveau compte par défaut de leur fournisseur, avec la manière de les garder ailleurs (Count choisit la forme plurielle)",
+    "one": "attention : 1 session {{.Vendor}} va reprendre sous ce défaut : {{.Sessions}}. Pour la garder sur un autre compte, utilisez herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation).",
+    "other": "attention : {{.Count}} sessions {{.Vendor}} vont reprendre sous ce défaut : {{.Sessions}}. Pour les garder sur un autre compte, utilisez herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation)."
   }
 ]

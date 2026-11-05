@@ -940,7 +940,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 	h.warnIfFailed(state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name)), "remove participants of "+name)
 	h.warnIfFailed(state.RemoveTranscript(state.TranscriptPath(h.partDir, name)), "remove transcript of "+name)
 	if note != "" {
-		h.log.Warn("channel left open", "session", name, "note", note)
+		return contracts.DataResult(fmt.Sprintf("🗄️ Session **%s** closed.%s", name, note)), nil
 	}
 	return contracts.NoticeResult(sessionNotice(contracts.CodeSessionClosed, name)), nil
 }

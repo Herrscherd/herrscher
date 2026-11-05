@@ -978,7 +978,7 @@ func TestSessionCloseAnswersWithTheClosedNotice(t *testing.T) {
 	}
 }
 
-func TestSessionCloseWithAChannelLeftOpenStillAnswersWithTheNotice(t *testing.T) {
+func TestSessionCloseWithAChannelLeftOpenSaysSo(t *testing.T) {
 	h, d, _, _, _, st := newTestHandler(t, "")
 	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
 		t.Fatal(err)
@@ -991,12 +991,9 @@ func TestSessionCloseWithAChannelLeftOpenStillAnswersWithTheNotice(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	notice, ok := res.Notice()
-	if !ok || notice.Code != contracts.CodeSessionClosed {
-		t.Fatalf("close with an open channel answered %+v, want the session closed notice", res.Data())
-	}
-	if res.Data() != nil {
-		t.Fatalf("close with an open channel also answered with text %v", res.Data())
+	text, ok := res.Data().(string)
+	if !ok || !strings.Contains(text, "channel refused") || !strings.Contains(text, "le salon est resté ouvert") {
+		t.Fatalf("close with an open channel answered %+v, want the warning said out loud", res.Data())
 	}
 	if _, stillThere := st.FindSession("demo"); stillThere {
 		t.Fatal("the session must be removed even when its channel stays open")
@@ -1504,8 +1501,9 @@ func TestAChannelThatCannotBeTidiedDoesNotStrandTheSession(t *testing.T) {
 	if _, ok := st.FindSession("demo"); ok {
 		t.Fatal("the session must be closed even when the channel could not be")
 	}
-	if notice, ok := res.Notice(); !ok || notice.Code != contracts.CodeSessionClosed {
-		t.Fatalf("close answered %+v, want the session closed notice alone", res.Data())
+	text, isText := res.Data().(string)
+	if !isText || !strings.Contains(text, "Missing Permissions") {
+		t.Fatalf("close answered %+v, want the reason said out loud", res.Data())
 	}
 }
 

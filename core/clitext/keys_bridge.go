@@ -1,5 +1,6 @@
 package clitext
 
+// Keys of the flags and of the errors of bridge.
 const (
 	BridgeFlagSession          = "cli.bridge.flag.session"
 	BridgeFlagProject          = "cli.bridge.flag.project"

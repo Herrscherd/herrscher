@@ -17,6 +17,7 @@ const (
 	SkillDuplicate       = "cli.skills.duplicate"
 )
 
+// Keys of the flags and of the operator messages of serve.
 const (
 	ServeFlagConfig         = "cli.serve.flag.config"
 	ServeFlagState          = "cli.serve.flag.state"

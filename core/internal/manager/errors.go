@@ -191,10 +191,25 @@ func restartLostError(lang i18n.Language, name string, restartErr, rollbackErr e
 	return localize(lang, english, clitext.SessionSwitchRestartLost, params, restartErr, rollbackErr)
 }
 
-func dirtyWorktreeError(lang i18n.Language, name string, cause error) error {
-	english := fmt.Sprintf("%v; commit, or close with force:true to discard (branch session/%s is kept)", cause, name)
-	params := clitext.Params{clitext.ParamName: name, clitext.ParamErr: cause.Error()}
-	return localize(lang, english, clitext.SessionCloseDirtyWorktree, params, cause)
+func newDirtyWorktreeError(name string, cause error) error {
+	return &dirtyWorktreeError{name: name, cause: cause}
+}
+
+type dirtyWorktreeError struct {
+	name  string
+	cause error
+}
+
+func (e *dirtyWorktreeError) Error() string {
+	return fmt.Sprintf("%v; commit, or close with force:true to discard (branch session/%s is kept)", e.cause, e.name)
+}
+
+func (e *dirtyWorktreeError) Unwrap() error {
+	return e.cause
+}
+
+func (e *dirtyWorktreeError) Notice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeSessionCloseDirty, Args: []contracts.Arg{contracts.Text("Name", e.name)}}
 }
 
 func (e *localizedError) Error() string {

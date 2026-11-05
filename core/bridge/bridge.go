@@ -84,7 +84,7 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 
 	select {
 	case ev := <-input:
-		runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, ev, nil, newSkillEngine(resp), affordances{}, nil)
+		runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, ev, nil, newSkillEngine(resp), affordances{}, nil, 0)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

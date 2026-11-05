@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
@@ -27,12 +28,14 @@ func (plainBackend) Respond(context.Context, contracts.Prompt, func(contracts.Ba
 func (plainBackend) Close() error { return nil }
 
 type captureBackend struct {
-	reply    string
-	contexts []string
+	reply     string
+	contexts  []string
+	languages []i18n.Language
 }
 
 func (b *captureBackend) Respond(_ context.Context, p contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
 	b.contexts = append(b.contexts, p.Context)
+	b.languages = append(b.languages, p.Language)
 	return b.reply, nil
 }
 func (b *captureBackend) Close() error { return nil }
@@ -75,7 +78,7 @@ func TestHubInjectsSkillMenuAndExpandsOnMarker(t *testing.T) {
 	resp := &captureBackend{reply: "ok <use-skill>demo</use-skill>"}
 
 	sink := &recordSink{}
-	runOneTurn(context.Background(), sink, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, eng, affordances{}, nil)
+	runOneTurn(context.Background(), sink, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, eng, affordances{}, nil, 0)
 	last := sink.events[len(sink.events)-1]
 	if last.T != "reply" || last.Text != "ok" {
 		t.Fatalf("marker must be stripped from the delivered reply, got %+v", last)
@@ -87,7 +90,7 @@ func TestHubInjectsSkillMenuAndExpandsOnMarker(t *testing.T) {
 		t.Fatalf("turn 1 must not carry body yet:\n%s", resp.contexts[0])
 	}
 
-	runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "again"}, nil, eng, affordances{}, nil)
+	runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "again"}, nil, eng, affordances{}, nil, 0)
 	if !strings.Contains(resp.contexts[1], "DEMO BODY") {
 		t.Fatalf("turn 2 context missing expanded body:\n%s", resp.contexts[1])
 	}
@@ -95,7 +98,7 @@ func TestHubInjectsSkillMenuAndExpandsOnMarker(t *testing.T) {
 
 func TestHubSkipsInjectionWhenEngineNil(t *testing.T) {
 	resp := &captureBackend{reply: "ok"}
-	runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, nil, affordances{}, nil)
+	runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, nil, affordances{}, nil, 0)
 	if resp.contexts[0] != "" {
 		t.Fatalf("nil engine must leave context empty, got %q", resp.contexts[0])
 	}

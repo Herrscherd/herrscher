@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -48,4 +50,44 @@ func TestAForcedCloseStillRemovesEverything(t *testing.T) {
 	if len(sup.started) != 0 {
 		t.Fatalf("started=%v, want no bridge restarted for a closed session", sup.started)
 	}
+}
+
+func TestARefusedCloseNamesTheDirtySessionInEachLanguage(t *testing.T) {
+	cases := []struct {
+		name string
+		lang i18n.Language
+		want string
+	}{
+		{"english", i18n.English, "session dirty has uncommitted changes: commit them, or close it with force:true to discard them"},
+		{"french", i18n.French, "la session « dirty » a des changements non validés : valide-les, ou ferme-la avec force:true pour les abandonner"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := refusedDirtyClose(t)
+			if got := renderNotice(t, tc.lang, err); got != tc.want {
+				t.Fatalf("rendered %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func refusedDirtyClose(t *testing.T) error {
+	t.Helper()
+	h, _, _, wt, _, st := newTestHandler(t, "")
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddSession(state.Session{Name: "dirty", ChannelID: "42", Type: "text", Worktree: "/wt/x"}); err != nil {
+		t.Fatal(err)
+	}
+	wt.removeErr = errors.New("uncommitted changes")
+	_, err := h.sessionCloseRun(context.Background(), args("name", "dirty"))
+	if err == nil {
+		t.Fatal("a dirty worktree must refuse the close")
+	}
+	noticed, ok := errors.AsType[contracts.NoticeError](err)
+	if !ok || noticed.Notice().Code != contracts.CodeSessionCloseDirty {
+		t.Fatalf("refusal notice = %v, want %s", err, contracts.CodeSessionCloseDirty.Key())
+	}
+	return err
 }

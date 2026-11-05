@@ -25,6 +25,7 @@ const (
 	keyReply        = "reply"
 	eventReply      = "reply"
 	eventInput      = "input"
+	eventLanguage   = "language"
 	eventStatus     = "status"
 	authorSeed      = "seed"
 	valueTrue       = "true"

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
 type recordSink struct{ events []contracts.Event }
@@ -250,7 +251,7 @@ func TestInterruptKeepsPartialOutput(t *testing.T) {
 
 func TestBackendFailureStillReadsAsAFailure(t *testing.T) {
 	sink := &recordSink{}
-	runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil)
+	runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
 	last := sink.events[len(sink.events)-1]
 	if !strings.HasPrefix(last.Text, errPrefix) {
 		t.Fatalf("an uninterrupted failure must keep its banner; got %q", last.Text)
@@ -379,4 +380,20 @@ func sameEvent(a, b contracts.Event) bool {
 	ja, errA := json.Marshal(a)
 	jb, errB := json.Marshal(b)
 	return errA == nil && errB == nil && bytes.Equal(ja, jb)
+}
+
+func TestBridgeAnswersEachTurnInTheLanguageLastSet(t *testing.T) {
+	in := make(chan contracts.Event, 4)
+	be := &captureBackend{reply: "ok"}
+	in <- contracts.Event{T: "language", Value: "fr"}
+	in <- contracts.Event{T: "input", Text: "bonjour"}
+	in <- contracts.Event{T: "language", Value: "en"}
+	in <- contracts.Event{T: "input", Text: "hello"}
+	close(in)
+
+	runHubTurns(context.Background(), in, &recordSink{}, be)
+
+	if want := []i18n.Language{i18n.French, i18n.English}; !slices.Equal(be.languages, want) {
+		t.Fatalf("prompt languages = %v, want %v", be.languages, want)
+	}
 }

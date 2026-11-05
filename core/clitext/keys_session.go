@@ -23,7 +23,6 @@ const (
 	SessionSwitchedResumed        = "cli.session.switch.resumed"
 	SessionSwitchRestartRestored  = "cli.session.switch.restart_restored"
 	SessionSwitchRestartLost      = "cli.session.switch.restart_lost"
-	SessionCloseDirtyWorktree     = "cli.session.close.dirty_worktree"
 	SessionApprovalsUnenforced    = "cli.session.approvals.unenforced"
 	SessionApprovalsUnenforcedNow = "cli.session.approvals.unenforced_now"
 	SessionApprovalsNoChannel     = "cli.session.approvals.no_channel"
@@ -77,7 +76,6 @@ func sessionKeys() map[Key][]string {
 		SessionSwitchedResumed:        {ParamName, ParamVendor, ParamHandoff, ParamNote},
 		SessionSwitchRestartRestored:  {ParamName, ParamVendor, ParamErr},
 		SessionSwitchRestartLost:      {ParamName, ParamErr, ParamRollbackErr},
-		SessionCloseDirtyWorktree:     {ParamName, ParamErr},
 		SessionApprovalsUnenforced:    {ParamVendor, ParamWhy, ParamName},
 		SessionApprovalsUnenforcedNow: {ParamVendor, ParamWhy, ParamName},
 		SessionApprovalsNoChannel:     nil,

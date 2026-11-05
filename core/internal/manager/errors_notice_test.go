@@ -61,6 +61,13 @@ func TestManagerNoticesCarryTheirCodeArgsAndEnglishText(t *testing.T) {
 			wantArgs: []string{"Channel/3=123", "Kind/1=voice"},
 		},
 		{
+			name:     "dirty worktree close",
+			err:      newDirtyWorktreeError("s1", errors.New("worktree has uncommitted changes")),
+			text:     "worktree has uncommitted changes; commit, or close with force:true to discard (branch session/s1 is kept)",
+			wantCode: contracts.CodeSessionCloseDirty,
+			wantArgs: []string{"Name/1=s1"},
+		},
+		{
 			name:     "model required",
 			err:      ErrModelRequired,
 			text:     "a model is required under the gateway-only route policy: without one the session would spawn on this machine's own vendor login",

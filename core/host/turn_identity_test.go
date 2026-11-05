@@ -6,6 +6,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
 func receiveTurnEvent(t *testing.T, ch <-chan contracts.Event) contracts.Event {
@@ -175,5 +176,36 @@ func TestDriversWithSameNameRemainDistinguishableByIncarnation(t *testing.T) {
 	newEvent := run("new-incarnation")
 	if oldEvent.SessionIncarnation == newEvent.SessionIncarnation {
 		t.Fatalf("same-name session events are indistinguishable: old=%+v new=%+v", oldEvent, newEvent)
+	}
+}
+
+func TestDriverTellsTheBridgeTheSessionLanguageBeforeEachTurn(t *testing.T) {
+	toBridge := make(chan contracts.Event, 1)
+	fromBridge := make(chan contracts.Event, 8)
+	d, _ := identifiedTestDriver(toBridge, fromBridge)
+	d.language = func() i18n.Language { return i18n.French }
+	d.terms = func() modelTerms { return modelTerms{} }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go d.pump(ctx)
+
+	frames := make(chan contracts.Event, 2)
+	go func() {
+		frames <- <-toBridge
+		frames <- <-toBridge
+		fromBridge <- contracts.Event{T: eventReply, Text: "done", Done: true}
+	}()
+	if _, ok := d.SeedAndWaitWithTurnID(ctx, "bonjour", "turn-1"); !ok {
+		t.Fatal("the seeded turn must complete")
+	}
+
+	if first := receiveTurnEvent(t, frames); first.T != eventLanguage || first.Value != i18n.French.String() {
+		t.Fatalf("first frame = %q %q, want the language frame fr", first.T, first.Value)
+	}
+	if second := receiveTurnEvent(t, frames); second.T != eventInput || second.Text != "bonjour" {
+		t.Fatalf("second frame = %q %q, want the input", second.T, second.Text)
+	}
+	if got := d.sessionInfo().Language; got != i18n.French {
+		t.Fatalf("sessionInfo Language = %v, want %v", got, i18n.French)
 	}
 }

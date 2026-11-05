@@ -307,33 +307,67 @@ type modelTerms struct {
 }
 
 func modelTermsFor(models *ModelDiscovery) func(state.Session) modelTerms {
-	sources := models.Sources()
-	policy := ResolvePolicy(envx.Getenv)
-	plugins := contracts.Default.Backends()
+	resolve := resolvedTermsFor(models)
 	return func(session state.Session) modelTerms {
-		terms := modelTerms{vendor: session.Vendor}
-		modelID := sessionModel(session)
-		if modelID == "" {
-			return terms
-		}
-		entry, err := lookupModel(plugins, policy, sources, modelID)
+		terms, err := resolve(session)
 		if err != nil {
 			return terms
 		}
-		terms.window = entry.ContextWindow
-		terms.rates = ratesOf(entry.ModelSpec)
 		return terms
 	}
 }
 
+func resolvedTermsFor(models *ModelDiscovery) func(state.Session) (modelTerms, error) {
+	sources := models.Sources()
+	policy := ResolvePolicy(envx.Getenv)
+	plugins := contracts.Default.Backends()
+	return func(session state.Session) (modelTerms, error) {
+		terms := modelTerms{vendor: session.Vendor}
+		modelID := sessionModel(session)
+		if modelID == "" {
+			return terms, nil
+		}
+		entry, err := lookupModel(plugins, policy, sources, modelID)
+		if err != nil {
+			return terms, err
+		}
+		terms.window = entry.ContextWindow
+		terms.rates = ratesOf(entry.ModelSpec)
+		return terms, nil
+	}
+}
+
+type unresolvedWarnings struct {
+	session string
+	mu      sync.Mutex
+	warned  map[string]bool
+}
+
+func (w *unresolvedWarnings) warnOnce(modelID string, err error) {
+	w.mu.Lock()
+	if w.warned[modelID] {
+		w.mu.Unlock()
+		return
+	}
+	w.warned[modelID] = true
+	w.mu.Unlock()
+	slog.Warn("session model no longer resolves, its context window and cost estimate fall back to the defaults",
+		"session", w.session, "model", modelID, "err", err)
+}
+
 func liveModelTerms(store *state.State, models *ModelDiscovery, name string) func() modelTerms {
-	terms := modelTermsFor(models)
+	resolve := resolvedTermsFor(models)
+	warnings := &unresolvedWarnings{session: name, warned: make(map[string]bool)}
 	return func() modelTerms {
 		session, ok := store.FindSession(name)
 		if !ok {
 			return modelTerms{}
 		}
-		return terms(session)
+		terms, err := resolve(session)
+		if err != nil {
+			warnings.warnOnce(sessionModel(session), err)
+		}
+		return terms
 	}
 }
 

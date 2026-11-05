@@ -1,8 +1,11 @@
 package host
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,5 +64,45 @@ func TestLiveTermsFollowAModelSwitch(t *testing.T) {
 	want := 1000 * 1.0 / 1_000_000
 	if len(entries) != 1 || entries[0].Cost != want {
 		t.Fatalf("estimate after switch = %+v, want one entry costing %v at the small model's price", entries, want)
+	}
+}
+
+func TestUnofferedModelWarnsOnceForTheSession(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	for _, plugin := range switchingPlugins() {
+		contracts.Default.Register(plugin)
+	}
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	st, err := state.LoadState(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if err := st.AddSession(state.Session{Name: "s1", ChannelID: "c1", Vendor: "alpha", ModelID: "big"}); err != nil {
+		t.Fatalf("AddSession: %v", err)
+	}
+	if _, err := st.SetBackendTarget("s1", "alpha", "", "gone"); err != nil {
+		t.Fatalf("SetBackendTarget: %v", err)
+	}
+	d := newSessionDriver("s1", nil, nil, nil)
+	d.terms = liveModelTerms(st, nil, "s1")
+	for range 5 {
+		d.contextLimit()
+		d.modelNow()
+	}
+	if got := strings.Count(logs.String(), "no longer resolves"); got != 1 {
+		t.Fatalf("warnings for an unoffered model = %d over 10 uses, want exactly 1: %s", got, logs.String())
+	}
+	for _, want := range []string{"session=s1", "model=gone", "err="} {
+		if !strings.Contains(logs.String(), want) {
+			t.Fatalf("warning lacks %q: %s", want, logs.String())
+		}
+	}
+	if got := d.modelNow().vendor; got != "alpha" {
+		t.Fatalf("vendor after the unoffered model = %q, want the session vendor alpha", got)
 	}
 }

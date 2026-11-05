@@ -95,17 +95,17 @@ func Failure(lang i18n.Language, cause error, key Key, params Params) error {
 	if err != nil {
 		return err
 	}
-	return renderedFailure{text: text, cause: cause}
+	return failureError{text: text, cause: cause}
 }
 
-type renderedFailure struct {
+type failureError struct {
 	text  string
 	cause error
 }
 
-func (e renderedFailure) Error() string { return e.text }
+func (e failureError) Error() string { return e.text }
 
-func (e renderedFailure) Unwrap() error { return e.cause }
+func (e failureError) Unwrap() error { return e.cause }
 
 func render(cat *i18n.Catalog, lang i18n.Language, key Key, params Params) (string, error) {
 	fields, known := declaredKeys()[key]

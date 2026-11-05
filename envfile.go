@@ -41,7 +41,10 @@ func scanEnvFile(r io.Reader, lang i18n.Language) error {
 			return renderError(lang, err, clitext.EnvSetFailed, clitext.Params{clitext.ParamKey: key, clitext.ParamErr: err.Error()})
 		}
 	}
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return renderError(lang, err, clitext.EnvReadFailed, clitext.Params{clitext.ParamErr: err.Error()})
+	}
+	return nil
 }
 
 func parseEnvLine(raw string) (string, string, bool) {

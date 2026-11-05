@@ -734,5 +734,20 @@
     "description": "Avertissement : des sessions vont reprendre sous un nouveau compte par défaut de leur fournisseur, avec la manière de les garder ailleurs (Count choisit la forme plurielle)",
     "one": "attention : 1 session {{.Vendor}} va reprendre sous ce défaut : {{.Sessions}}. Pour la garder sur un autre compte, utilisez herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation).",
     "other": "attention : {{.Count}} sessions {{.Vendor}} vont reprendre sous ce défaut : {{.Sessions}}. Pour les garder sur un autre compte, utilisez herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation)."
+  },
+  {
+    "id": "cli.env.read_failed",
+    "description": "Erreur : le fichier d'environnement a été ouvert mais n'a pas pu être lu jusqu'au bout",
+    "other": "lecture du fichier d'environnement : {{.Err}}"
+  },
+  {
+    "id": "cli.transport.announce_key_unset",
+    "description": "Erreur : le transport distant est activé mais aucune clé d'annonce n'est définie",
+    "other": "HERRSCHER_ANNOUNCE_KEY n'est pas défini : le transport distant en a besoin pour authentifier les annonces"
+  },
+  {
+    "id": "cli.transport.announce_key_invalid",
+    "description": "Erreur : la clé d'annonce est définie mais refusée par le transport",
+    "other": "HERRSCHER_ANNOUNCE_KEY : {{.Err}}"
   }
 ]

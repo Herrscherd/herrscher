@@ -734,5 +734,20 @@
     "description": "Warning: sessions will resume under a new default account of their vendor, with the way to keep them elsewhere (Count selects the plural form)",
     "one": "attention: 1 session {{.Vendor}} will resume under this default: {{.Sessions}}. To keep it on another account, use herrscher session set-account <session> <profile> (or fresh for a new conversation).",
     "other": "attention: {{.Count}} sessions {{.Vendor}} will resume under this default: {{.Sessions}}. To keep them on another account, use herrscher session set-account <session> <profile> (or fresh for a new conversation)."
+  },
+  {
+    "id": "cli.env.read_failed",
+    "description": "Error: the env file was opened but could not be read to the end",
+    "other": "read env file: {{.Err}}"
+  },
+  {
+    "id": "cli.transport.announce_key_unset",
+    "description": "Error: the remote transport is enabled but no announce key is set",
+    "other": "HERRSCHER_ANNOUNCE_KEY is unset: the remote transport needs it to authenticate announcements"
+  },
+  {
+    "id": "cli.transport.announce_key_invalid",
+    "description": "Error: the announce key is set but refused by the transport",
+    "other": "HERRSCHER_ANNOUNCE_KEY: {{.Err}}"
   }
 ]

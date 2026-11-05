@@ -39,6 +39,11 @@ func CatalogWith(plugins []contracts.Plugin, policy contracts.RoutePolicy, sourc
 	return withoutHidden(entries, sources.hidden), nil
 }
 
+// CatalogAll is CatalogWith that keeps the hidden models, each marked Hidden, since they still resolve.
+func CatalogAll(plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources) ([]CatalogEntry, error) {
+	return buildCatalog(plugins, policy, sources, contracts.FilterModels)
+}
+
 type modelView func(models []contracts.ModelSpec, policy contracts.RoutePolicy) []contracts.ModelSpec
 
 func buildCatalog(plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources, view modelView) ([]CatalogEntry, error) {

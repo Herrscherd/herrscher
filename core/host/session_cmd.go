@@ -200,7 +200,7 @@ func compactSession(_ context.Context, store *state.State, sessions *sessionTabl
 		return "", &NotFoundError{Kind: "live session", Name: name}
 	}
 	if !driver.compactSupported() {
-		return "", fmt.Errorf("session %q runs %q: %w", name, driver.vendor, errCompactUnsupported)
+		return "", fmt.Errorf("session %q runs %q: %w", name, driver.modelNow().vendor, errCompactUnsupported)
 	}
 	merged, accepted := driver.requestCompaction(input.Get("instruction"), contracts.Conversation{Gateway: input.Get("origin")})
 	if !accepted {

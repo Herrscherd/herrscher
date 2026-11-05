@@ -57,8 +57,11 @@ func modelsListText(entries []CatalogEntry) string {
 	}
 	var builder strings.Builder
 	for idx := range entries {
-		e := &entries[idx]
-		fmt.Fprintf(&builder, "%-32s %-24s %-8s %-10s %s\n", e.ID, e.Label, e.Route, e.Source, e.Vendor)
+		entry := &entries[idx]
+		fmt.Fprintf(&builder, "%-32s %-24s %-8s %-10s %s\n", entry.ID, entry.Label, entry.Route, entry.Source, entry.Vendor)
+		if entry.Hidden {
+			builder.WriteString("  hidden: resolves when requested, not offered by the selector\n")
+		}
 	}
 	return strings.TrimRight(builder.String(), "\n")
 }
@@ -83,6 +86,13 @@ func outcomeSummary(outcome discoveryOutcome) string {
 	default:
 		return fmt.Sprintf("discovery failed (%v), static catalog only", outcome.Err)
 	}
+}
+
+func listCatalog(all bool, plugins []contracts.Plugin, policy contracts.RoutePolicy, sources Sources) ([]CatalogEntry, error) {
+	if all {
+		return CatalogAll(plugins, policy, sources)
+	}
+	return CatalogWith(plugins, policy, sources)
 }
 
 func modelDiscoveryFor(input contracts.Input) *ModelDiscovery {
@@ -113,9 +123,10 @@ func ModelsCommands() []contracts.Cmd {
 	return []contracts.Cmd{
 		contracts.New("models", "list").
 			ValueParam("state", "daemon state file whose model cache is read (default: the daemon default)", false).
-			Help("list the models every compiled backend offers, under the active route policy, with their source; --json for the app").
+			Param("all", "also list the hidden models, marked hidden, which still resolve when requested", false).
+			Help("list the models every compiled backend offers, under the active route policy, with their source; --all adds the hidden ones; --json for the app").
 			Do(func(_ context.Context, input contracts.Input) (string, error) {
-				entries, err := CatalogWith(contracts.Default.Backends(), ResolvePolicy(envx.Getenv), modelDiscoveryFor(input).Sources())
+				entries, err := listCatalog(input.Bool("all"), contracts.Default.Backends(), ResolvePolicy(envx.Getenv), modelDiscoveryFor(input).Sources())
 				if err != nil {
 					return "", err
 				}

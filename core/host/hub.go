@@ -88,7 +88,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 	}
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
-	terms := modelTermsFor(h.models)(sess)
+	terms := liveModelTerms(h.st, h.models, sess.Name)
 	done := make(chan struct{})
 	h.mu.Lock()
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done}
@@ -117,7 +117,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
-			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, vendor: sess.Vendor, terms: terms}, h.gate)
+			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms}, h.gate)
 	}()
 
 	serveCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name), asSession{disp: h, session: sess.Name})
@@ -301,6 +301,7 @@ func (h *hub) Sessions() []contracts.SessionInfo {
 }
 
 type modelTerms struct {
+	vendor string
 	window int
 	rates  modelRates
 }
@@ -310,15 +311,29 @@ func modelTermsFor(models *ModelDiscovery) func(state.Session) modelTerms {
 	policy := ResolvePolicy(envx.Getenv)
 	plugins := contracts.Default.Backends()
 	return func(session state.Session) modelTerms {
+		terms := modelTerms{vendor: session.Vendor}
 		modelID := sessionModel(session)
 		if modelID == "" {
-			return modelTerms{}
+			return terms
 		}
 		entry, err := lookupModel(plugins, policy, sources, modelID)
 		if err != nil {
+			return terms
+		}
+		terms.window = entry.ContextWindow
+		terms.rates = ratesOf(entry.ModelSpec)
+		return terms
+	}
+}
+
+func liveModelTerms(store *state.State, models *ModelDiscovery, name string) func() modelTerms {
+	terms := modelTermsFor(models)
+	return func() modelTerms {
+		session, ok := store.FindSession(name)
+		if !ok {
 			return modelTerms{}
 		}
-		return modelTerms{window: entry.ContextWindow, rates: ratesOf(entry.ModelSpec)}
+		return terms(session)
 	}
 }
 

@@ -152,17 +152,25 @@ func (d *sessionDriver) compactPercent() int {
 	return d.compaction.percent
 }
 
+func (d *sessionDriver) modelNow() modelTerms {
+	if d.terms == nil {
+		return modelTerms{}
+	}
+	return d.terms()
+}
+
 func (d *sessionDriver) contextLimit() int {
-	return d.compaction.limits.LimitFor(d.vendor, d.terms.window)
+	now := d.modelNow()
+	return d.compaction.limits.LimitFor(now.vendor, now.window)
 }
 
 func (d *sessionDriver) compactSupported() bool {
-	return d.compaction.supports(d.vendor)
+	return d.compaction.supports(d.modelNow().vendor)
 }
 
 func (d *sessionDriver) compactStages() ([]contracts.CompactStage, error) {
 	if !d.compactSupported() {
-		return nil, fmt.Errorf("session %q runs %q: %w", d.name, d.vendor, errCompactUnsupported)
+		return nil, fmt.Errorf("session %q runs %q: %w", d.name, d.modelNow().vendor, errCompactUnsupported)
 	}
 	stages := make([]contracts.CompactStage, 0, len(d.compaction.names))
 	for _, name := range d.compaction.names {
@@ -254,7 +262,7 @@ func (d *sessionDriver) compactionProgress(ctx context.Context) func(contracts.B
 }
 
 func (d *sessionDriver) sessionInfo() contracts.SessionInfo {
-	return contracts.SessionInfo{Name: d.name, Incarnation: d.incarnation, Vendor: d.vendor, AutoCompactPercent: d.compactPercent(), ContextWindow: d.contextLimit()}
+	return contracts.SessionInfo{Name: d.name, Incarnation: d.incarnation, Vendor: d.modelNow().vendor, AutoCompactPercent: d.compactPercent(), ContextWindow: d.contextLimit()}
 }
 
 func (d *sessionDriver) runCompactNow(ctx context.Context, instruction string) {
@@ -345,7 +353,7 @@ func (d *sessionDriver) compactThroughBridge(ctx context.Context, req contracts.
 				return compactwire.DecodeResult(frame), nil
 			case compactwire.EventError:
 				if frame.Value == compactwire.NoCompactor {
-					d.compaction.warnNoPort(d.vendor)
+					d.compaction.warnNoPort(d.modelNow().vendor)
 				}
 				return contracts.CompactResult{}, compactwire.DecodeFailure(frame)
 			case compactwire.EventProgress:

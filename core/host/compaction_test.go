@@ -50,7 +50,7 @@ func newCompactFixture(t *testing.T, vendor string, policy compactionPolicy) *co
 	t.Setenv(contextwindow.EnvVar(), "")
 	f := &compactFixture{toBridge: make(chan contracts.Event, 16), from: make(chan contracts.Event, 16)}
 	f.driver = newSessionDriver("s1", nil, f.toBridge, f.from)
-	f.driver.vendor = vendor
+	f.driver.terms = func() modelTerms { return modelTerms{vendor: vendor} }
 	f.driver.compaction = policy
 	f.driver.emitTap = f.tap
 	ctx, cancel := context.WithCancel(context.Background())

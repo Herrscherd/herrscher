@@ -40,7 +40,7 @@ func TestCompleteTurnStoresEstimatedCostInTranscript(t *testing.T) {
 	var entries []state.TranscriptEntry
 	d := newSessionDriver("s1", nil, nil, nil)
 	d.sink = sessionSink{Transcript: func(e state.TranscriptEntry) { entries = append(entries, e) }}
-	d.terms = modelTerms{rates: sonnetRates()}
+	d.terms = func() modelTerms { return modelTerms{rates: sonnetRates()} }
 	event := contracts.Event{T: "reply", Text: "hello", Done: true, TokensIn: 1000, Tokens: 500}
 
 	d.completeTurn(context.Background(), event, time.Now(), 0)

@@ -436,7 +436,9 @@ session recorded on it resumes it, and an explicit `--model` naming it works. Ea
 time the host resolves such a model it logs a warning, and it never switches to
 another model in its place.
 
-`herrscher models list --json` gives each model its prices and its window. Prices
+`herrscher models list --json` gives each model its prices and its window. `--all`
+also lists the hidden models, marked `hidden: true`, which still resolve when requested;
+without it the output is unchanged. Prices
 are in USD per million tokens (`inputPrice`, `outputPrice`, `cacheReadPrice`,
 `cacheWritePrice`), and a price of 0 means the price is unknown, never free.
 `contextWindow` is the model's window in tokens, 0 when its backend declares none.

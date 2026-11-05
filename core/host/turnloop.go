@@ -97,8 +97,7 @@ type sessionDriver struct {
 
 	gate budgetGate
 
-	vendor         string
-	terms          modelTerms
+	terms          func() modelTerms
 	compaction     compactionPolicy
 	percentOf      func() int
 	turnReading    int
@@ -693,7 +692,7 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		output:        event.Tokens,
 		cacheRead:     event.CacheRead,
 		cacheWrite:    event.CacheCreate,
-	}, d.terms.rates)
+	}, d.modelNow().rates)
 	d.fanOut(ctx, event)
 	if d.sink.Resume != nil && event.Resume != "" {
 		d.sink.Resume(event.Resume)
@@ -957,8 +956,7 @@ func (d *sessionDriver) renderChannel(gateway contracts.GatewaySet) string {
 type sessionIdentity struct {
 	incarnation string
 	agent       string
-	vendor      string
-	terms       modelTerms
+	terms       func() modelTerms
 }
 
 // RunSession drives a session without a declared identity until ctx is done.
@@ -979,7 +977,6 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.coordinator = coord
 	driver.sink = sink
 	driver.emitTap = emit
-	driver.vendor = identity.vendor
 	driver.terms = identity.terms
 	driver.compaction = sessions.compaction
 	driver.percentOf = func() int { return sessions.percentOfSession(name) }

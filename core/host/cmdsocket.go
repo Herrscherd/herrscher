@@ -30,6 +30,9 @@ func dispatchLiveCommand(ctx context.Context, path string, argv []string) (strin
 	defer cancel()
 	conn, err := dialCommandSocket(dialCtx, path)
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", true, ctxErr
+		}
 		return "", false, nil
 	}
 	defer closeRead(conn)
@@ -43,14 +46,11 @@ func dispatchLiveCommand(ctx context.Context, path string, argv []string) (strin
 		return "", true, err
 	}
 	if _, writeErr := conn.Write(append(payload, '\n')); writeErr != nil {
-		return "", true, writeErr
+		return "", true, cancellationOr(ctx, writeErr)
 	}
 	line, err := bufio.NewReader(conn).ReadBytes('\n')
 	if err != nil && len(line) == 0 {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return "", true, ctxErr
-		}
-		return "", true, err
+		return "", true, cancellationOr(ctx, err)
 	}
 	var resp cmdResponse
 	if err := json.Unmarshal(line, &resp); err != nil {
@@ -63,6 +63,13 @@ func dispatchLiveCommand(ctx context.Context, path string, argv []string) (strin
 		return "", true, errCommandSocketEmpty
 	}
 	return *resp.Ok, true, nil
+}
+
+func cancellationOr(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	return err
 }
 
 func serveCommandSocket(ctx context.Context, path string, disp dispatcher) {

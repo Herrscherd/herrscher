@@ -1,14 +1,12 @@
 package tui
 
 import (
-	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -59,13 +57,9 @@ func declaredMessages(dir string) (map[string][]string, error) {
 		}
 		collectMentionedKeys(parsed, mentioned)
 	}
-	english, err := englishFields()
-	if err != nil {
-		return nil, err
-	}
 	for key := range mentioned {
 		if _, known := declared[key]; !known {
-			declared[key] = english[key]
+			declared[key] = []string{}
 		}
 	}
 	return declared, nil
@@ -82,35 +76,6 @@ func collectMentionedKeys(file *ast.File, mentioned map[string]bool) {
 		}
 		return true
 	})
-}
-
-var fieldPlaceholder = regexp.MustCompile(`\{\{\.(\w+)\}\}`)
-
-func englishFields() (map[string][]string, error) {
-	raw, err := localeFiles.ReadFile("locales/en.json")
-	if err != nil {
-		return nil, err
-	}
-	var entries []struct {
-		ID    string `json:"id"`
-		One   string `json:"one"`
-		Other string `json:"other"`
-	}
-	if err := json.Unmarshal(raw, &entries); err != nil {
-		return nil, err
-	}
-	fields := make(map[string][]string)
-	for _, entry := range entries {
-		var names []string
-		for _, text := range []string{entry.One, entry.Other} {
-			for _, match := range fieldPlaceholder.FindAllStringSubmatch(text, -1) {
-				names = append(names, match[1])
-			}
-		}
-		slices.Sort(names)
-		fields[entry.ID] = slices.Compact(names)
-	}
-	return fields, nil
 }
 
 func parseSources(fset *token.FileSet, files []string) ([]*ast.File, error) {
@@ -164,11 +129,11 @@ func collectTrCalls(fset *token.FileSet, file *ast.File, constants map[string]st
 		if !ok || failure != nil {
 			return failure == nil
 		}
-		ident, ok := call.Fun.(*ast.Ident)
-		if !ok || ident.Name != "tr" || len(call.Args) != 3 {
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || selector.Sel.Name != "t" || len(call.Args) != 2 {
 			return true
 		}
-		key, ok := stringLiteral(call.Args[1])
+		key, ok := stringLiteral(call.Args[0])
 		if !ok {
 			return true
 		}
@@ -188,9 +153,9 @@ func collectTrCalls(fset *token.FileSet, file *ast.File, constants map[string]st
 }
 
 func mapFields(fset *token.FileSet, call *ast.CallExpr, constants map[string]string) ([]string, error) {
-	literal, ok := call.Args[2].(*ast.CompositeLit)
+	literal, ok := call.Args[1].(*ast.CompositeLit)
 	if !ok {
-		if isNil(call.Args[2]) {
+		if isNil(call.Args[1]) {
 			return []string{}, nil
 		}
 		return nil, &trError{fset.Position(call.Pos()).String(), "parameters must be a map literal or nil"}

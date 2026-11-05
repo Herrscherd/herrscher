@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -893,10 +894,14 @@ func (d *sessionDriver) handoffTask(ctx context.Context, toAgent, task string) {
 func sanitizeCoordinationError(err error) string {
 	const maxLen = 160
 	message := strings.Join(strings.Fields(err.Error()), " ")
-	if len(message) > maxLen {
-		message = message[:maxLen]
+	if len(message) <= maxLen {
+		return message
 	}
-	return message
+	cut := maxLen
+	for !utf8.RuneStart(message[cut]) {
+		cut--
+	}
+	return message[:cut]
 }
 
 func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {

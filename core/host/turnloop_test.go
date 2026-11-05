@@ -10,6 +10,7 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -941,6 +942,17 @@ func TestSanitizeCoordinationErrorTruncatesTo160Bytes(t *testing.T) {
 	want := strings.Repeat("x", 160)
 	if got != want {
 		t.Fatalf("sanitizeCoordinationError() length = %d, want 160", len(got))
+	}
+}
+
+func TestSanitizeCoordinationErrorCutsOnARuneBoundary(t *testing.T) {
+	got := sanitizeCoordinationError(errors.New(strings.Repeat("x", 159) + "é" + "y"))
+	want := strings.Repeat("x", 159)
+	if got != want {
+		t.Fatalf("sanitizeCoordinationError() = %q, want %q: a cut inside the accented rune must step back", got, want)
+	}
+	if !utf8.ValidString(got) {
+		t.Fatalf("sanitizeCoordinationError() returned invalid UTF-8 %q", got)
 	}
 }
 

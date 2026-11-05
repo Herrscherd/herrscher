@@ -308,7 +308,7 @@ func (s *Store) List() ([]Agent, error) {
 			continue
 		}
 		home := filepath.Join(s.root, entry.Name())
-		out = append(out, Agent{Name: entry.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Host: readHost(home), Account: readAccount(home)})
+		out = append(out, Agent{Name: entry.Name(), Home: home, Tags: readTags(home), Backend: readBackend(home), Cmd: readCmd(home), Model: readModel(home), Host: readHost(home), Account: readAccount(home)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil

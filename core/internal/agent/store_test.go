@@ -318,6 +318,33 @@ func TestListReadsTags(t *testing.T) {
 	}
 }
 
+func TestListReadsModelAndAccount(t *testing.T) {
+	root := t.TempDir()
+	s := NewStore(root)
+	if _, err := s.Create(CreateSpec{Name: "a", Soul: "x"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "a", "model"), []byte("gpt-gateway\n"), 0o644); err != nil {
+		t.Fatalf("write model: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "a", "account"), []byte("perso\n"), 0o644); err != nil {
+		t.Fatalf("write account: %v", err)
+	}
+	list, err := s.List()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("list = %+v", list)
+	}
+	if list[0].Model != "gpt-gateway" {
+		t.Fatalf("List Model = %q, want gpt-gateway", list[0].Model)
+	}
+	if list[0].Account != "perso" {
+		t.Fatalf("List Account = %q, want perso", list[0].Account)
+	}
+}
+
 func TestUserBudgetFromEnv(t *testing.T) {
 	cases := []struct {
 		name string
